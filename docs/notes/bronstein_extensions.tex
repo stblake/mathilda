@@ -2148,6 +2148,972 @@ Each component has one radical fewer, and the pipeline (including the support sp
 decides it. Two or more non-elementary support groups with no free square root remain
 \emph{several non-elementary support groups} (incomplete).
 
+% phase5_theory.tex -- theory notes E2 and E1 of BRONSTEIN_PLAN.md "Phase 5" /
+% "Campaign D" item D3: transcendental Risch over an algebraic base, and the Risch
+% differential equation over a tower on the curve.  A fragment for
+% docs/notes/bronstein_extensions.tex (uses its preamble: \Q, \Z, \C, \Qbar, \lc,
+% \code, and the theorem environments).  Revision 2: addresses the adversarial review
+% phase5_review.md (F1, G1-G7, minor points).  Revision 3: second pass (S1-S3, minor).
+
+\section*{E2. Transcendental Risch over an algebraic base (Phase 5, Campaign D3)}
+\addcontentsline{toc}{section}{E2. Transcendental Risch over an algebraic base}
+\label{sec:E2}
+
+\paragraph{Setting.} $k_0=\Q(x)(y)$ with $y^n=b$, $b\in\Q(x)$, and $Y^n-b$
+\emph{absolutely} irreducible (irreducible over $\Qbar(x)$; \code{componentCurve} exact
+and \code{reducedCurveQ}). Above it a tower
+\[ k_i=k_{i-1}(t_i),\qquad t_i=\log u_i\ (u_i\in k_{i-1}^*)\quad\text{or}\quad
+   t_i=e^{w_i}\ (w_i\in k_{i-1}),\qquad K=k_s, \]
+where the arguments may involve $y$. Today \code{BaseCurve.m} takes $s=1$ with $u_1$ or
+$w_1$ involving $y$, and \code{BaseAlgebraic.m} takes any $s$ with every argument free of
+$y$ (then the Galois projections $y\mapsto\zeta y$ fix every $t_i$ and the integrand
+splits into components). Everything else is refused at \code{Tower.m:205,208}
+(\emph{transcendental Risch over an algebraic base}). Write
+\[ G_i=\{Dt_j: j\le i,\ t_j\text{ a logarithm}\}\cup\{Dw_j: j\le i,\ t_j\text{ an exponential}\}
+   \subset k_i ,\]
+the \emph{structure generators} of $k_i$ ($G_0=\emptyset$), and $T_i=\Q(x)(t_1,\dots,t_i)$
+(a field of rational functions, \emph{not} a differential subfield: $Dt_j$ involves $y$).
+
+\paragraph{Standing hypothesis (H$_\Q$).} Every constant in the presentation of $K$ is
+rational: the integrand's coefficients, the kernel arguments, and the constant offset of every
+eliminated dependent kernel (A3). After the exact normalisation of (A1) the radical appears only
+as $y^k$, and the integrand contains no other algebraic or transcendental constant ($i$,
+$\sqrt2$, \code{Root}, $\pi$, $\log2$, $e$). Every oracle below
+tests membership in $\Q$, so (H$_\Q$) is not a convenience: E2.2 shows a false certificate when
+it fails. Lifting it is open lemma OL2.
+
+The thesis of this note is that nothing new is needed \emph{above} level~0: [SI] Ch.~5--7
+are written for an arbitrary differential field $k$ of characteristic~0 and a Liouvillian
+monomial over it, and $k_{i-1}$ is such a field. What has to be supplied is (a) exact
+arithmetic, a zero test and a constant test in $k_{i-1}$ (E2.1); (b) a proof that each
+$t_i$ is a monomial with no new constants (E2.2), because [SI]'s theorems assume it and
+their certificates are false without it; and (c) the auxiliary problems at level~0
+(E1.2--E1.3).
+
+\subsection*{E2.1. Arithmetic and constants}
+
+\begin{definition}\label{def:E2adm}
+$t_i$ is \emph{admitted} over $k_{i-1}$ when $t_1,\dots,t_{i-1}$ are admitted, its
+argument is given in normal form (Prop.~\ref{prop:E2field}(ii)), and
+\[ Du_i/u_i\notin\operatorname{span}_\Q G_{i-1}\quad(\text{logarithm}),\qquad
+   Dw_i\notin\operatorname{span}_\Q G_{i-1}\quad(\text{exponential}), \]
+the non-membership being \emph{proved} by an inconsistent exact linear system
+(Prop.~\ref{prop:E2span}).
+\end{definition}
+
+\begin{proposition}\label{prop:E2field}
+Let $t_1,\dots,t_i$ be admitted. Then
+(i) $t_1,\dots,t_i$ are algebraically independent over $k_0$;
+(ii) $1,y,\dots,y^{n-1}$ is a basis of $k_i$ over $T_i$, so every element has a unique
+normal form $\sum_{j<n}c_jy^j$, $c_j\in T_i$ (canonical as reduced rational functions);
+(iii) $\operatorname{Const}(k_i)=\Q$;
+(iv) $c\in k_i$ is a constant iff its normal form is $c_0\in\Q$, $c_1=\dots=c_{n-1}=0$.
+\end{proposition}
+\begin{proof}
+(iii) for $i=0$: if $c\in k_0$ and $Dc=0$, differentiating the minimal polynomial of $c$
+over $\Q(x)$ shows that its coefficients are constants of $\Q(x)$, i.e.\ in $\Q$, so $c$ is
+algebraic over $\Q$; and $\Q$ is algebraically closed in $k_0$ exactly when $Y^n-b$ is
+absolutely irreducible ([T] Ch.~3, absolute irreducibility and exact coefficient fields).
+Inductively, Thm~\ref{thm:E2struct} below shows that an admitted $t_i$ is transcendental
+over $k_{i-1}$ with $\operatorname{Const}(k_i)=\operatorname{Const}(k_{i-1})$; this gives
+(i) and (iii). (ii) By (i), $k_i=k_0(t_1,\dots,t_i)$ is purely transcendental over $k_0$,
+so the algebraic closure of $\Q(x)$ in $T_i$ is $\Q(x)$. The coefficients of any monic factor of $Y^n-b$ over $T_i$ are algebraic over
+$\Q(x)$, hence lie in $\Q(x)$, so $Y^n-b$ stays irreducible over $T_i$ and
+$[k_i:T_i]=n$. (iv) follows from (ii) and (iii), since $\Q\subset T_i\cdot1$.
+\end{proof}
+
+The derivation on normal forms is $Dx=1$, $Dy=\frac{b'}{nb}y$, and $Dt_l=Du_l/u_l\in k_{l-1}$
+for a logarithm, $Dt_l=t_l\,Dw_l\in k_l$ for an exponential (in normal form), so
+\[ D\Bigl(\sum_j c_jy^j\Bigr)=\sum_j\Bigl(\partial_xc_j+j\tfrac{b'}{nb}c_j\Bigr)y^j
+   +\sum_l\Bigl(\sum_j\partial_{t_l}c_j\,y^j\Bigr)\cdot Dt_l , \]
+the last products taken in $k_i$ (reduction modulo $Y^n-b$). This is \code{brBCD} with
+several symbols, and \code{K0.m}'s \code{brK0D} with \code{brTowerD} replaced: there the
+$Dt_l$ were free of $y$ and acted coordinatewise; here each $\partial_{t_l}$-term costs one
+multiplication in $k_i$.
+
+\subsection*{E2.2. The structure theorem over the curve: when is $t_i$ a monomial?}
+
+\begin{theorem}\label{thm:E2struct}
+Let $t_1,\dots,t_{i-1}$ be admitted and $u\in k_{i-1}^*$, $w\in k_{i-1}$.
+\begin{itemize}
+\item[(a)] $t=\log u$ is a monomial over $k_{i-1}$ with
+$\operatorname{Const}(k_{i-1}(t))=\Q$ if and only if $Du/u\notin\operatorname{span}_\Q G_{i-1}$.
+\item[(b)] $t=e^w$ is a monomial over $k_{i-1}$ with
+$\operatorname{Const}(k_{i-1}(t))=\Q$ if and only if $Dw\notin\operatorname{span}_\Q G_{i-1}$.
+\item[(c)] $G_{i-1}$ is linearly independent over $\Q$, so in the dependent case the
+coefficients $r_g\in\Q$ with $Du/u=\sum r_gg$ (resp.\ $Dw=\sum r_gg$) are unique.
+\end{itemize}
+\end{theorem}
+\begin{proof}
+$k_{i-1}$ is an elementary extension of $(\Q(x),d/dx)$ in the sense of [SI] Def.~5.1.4
+(the algebraic generator $y$ is allowed there, and is simply absent from the index sets
+$E,L$ of (9.6)--(9.7), which collect the \emph{transcendental} logarithms and
+exponentials), and $\operatorname{Const}(k_{i-1})=\Q$ by Prop.~\ref{prop:E2field}(iii).
+So [SI] Thm~9.3.1 (Risch) and Cor.~9.3.1 apply with $K=k_{i-1}$, $C=\Q$.
+(a) By [SI] Thm~5.1.1, $t$ is a monomial with the same constants iff $Du/u$ is not a
+derivative in $k_{i-1}$, and by Cor.~9.3.1(i) $Du/u\in D(k_{i-1})$ iff
+$Du/u=\sum_{L}r_jDt_j+\sum_Er_jDw_j$ with $r_j\in\Q$, i.e.\ $Du/u\in\operatorname{span}_\Q G_{i-1}$.
+(b) Same with [SI] Thm~5.1.2 (not a logarithmic derivative of a $k_{i-1}$-radical) and
+Cor.~9.3.1(ii).
+(c) A relation $\sum r_gg=0$ integrates to $\sum_Lr_jt_j+\sum_Er_jw_j=c\in\Q$. Let $j$ be
+the largest index with $r_j\ne0$. If $t_j$ is a logarithm, solving for $t_j$ puts it in
+$k_{j-1}$, against its transcendence. If $t_j$ is an exponential, $Dw_j\in\operatorname{span}_\Q G_{j-1}$, against
+its admission.
+\end{proof}
+
+\begin{proposition}\label{prop:E2span}
+Membership $\theta\in\operatorname{span}_\Q G_{i-1}$ ($\theta\in k_{i-1}$) is decided
+exactly by linear algebra over $\Q$: with unknowns $r_g$, write the normal form of
+$\theta-\sum r_gg$ as $\sum_{j<n}N_j(x,t,r)y^j/\Delta$ with $N_j\in\Q[r][x,t_1,\dots,t_{i-1}]$
+and $\Delta$ free of $r$; the identity holds iff every coefficient of every $N_j$ (as a
+polynomial in $x,t$) vanishes.
+\end{proposition}
+\begin{proof}
+By Prop.~\ref{prop:E2field}(ii) a normal form is zero iff each coordinate is, and a
+coordinate in $T_{i-1}$ is zero iff its numerator is the zero polynomial, the $t_l$ being
+algebraically independent over $\Q(x)$. The system is linear in $r$ with rational
+coefficients, so it has a rational solution iff it has one over $\C$; an inconsistent
+system is a proof of independence.
+\end{proof}
+
+\paragraph{Code.} \code{Risch`RationalSpan} (\code{risch\_structure.c}) already does the
+coefficient matching (\code{SolveAlways}, FLINT-backed) and returns \code{False} only as a
+proof. \code{Risch`LogReducible}/\code{ExpReducible} cannot be called as they stand: they
+build the identity with \code{Together} over $x$ and the tower symbols, with the radical
+an opaque \code{Power}, which is the restriction recorded at \code{Tower.m:205}. The new
+wrapper \code{brDFSpan} forms $\theta-\sum r_gg$ in the field record's normal form
+($Y$ a symbol, reduced modulo $Y^n-b$ by \code{brBCNorm}), and hands its numerator to
+\code{RationalSpan} with variables $\{x,Y,t_1,\dots,t_{i-1}\}$. Exactness is
+Prop.~\ref{prop:E2span}: a polynomial of $Y$-degree $<n$ is zero in $k_{i-1}$ iff all its
+coefficients are.
+
+\paragraph{Where divisors and torsion enter, and where they do not.} Admission needs
+\emph{no} divisor or torsion computation: Thm~\ref{thm:E2struct} turns ``is a combination
+of logarithmic derivatives a derivative in $k_{i-1}$'' into rational linear algebra,
+because the only candidates are the given generators. What is \emph{not} available over the
+curve is the device the transcendental code uses to normalise logarithms: splitting
+$\log u$ into logarithms of irreducible factors (\code{rt\_expand\_logs}, E6a, and the
+unique-factorisation argument of \S\ref{sec:A1}). $\Q(x)[y]$ is not a UFD; its divisor
+class group contains the Jacobian, so ``$u$ is an $N$-th power up to a constant'' is a
+principal-divisor question and ``some multiple of a residue divisor is principal'' is a
+torsion question. Those questions arise in exactly two places: inside Trager's algorithm
+(INT$_0$: \code{TorsionModP.m} \code{torsionOrder}, \code{PrincipalGen.m}
+\code{principalGenerator}, \code{Divisors.m}), and in the $N$-th-root test of the
+logarithmic-derivative oracle at level~0 (Prop.~\ref{prop:E1ld}(iii)), which needs a
+principal-divisor test and a generator, including places at infinity. The first is reused
+unchanged; the second is new and not yet an algorithm (OL5). Admission is linear algebra only
+\emph{given} $\operatorname{Const}(k_{i-1})=\Q$; what keeps the constants rational after a
+dependence is found is the zero-offset rule (A3), not the span test.
+
+\paragraph{What must be proved before a level is admitted.}
+\begin{enumerate}
+\item[(A0)] $Y^n-b$ absolutely irreducible (otherwise the constant field of $k_0$ is a
+  number field: open lemma OL2, decline), and (H$_\Q$) holds for the integrand.
+\item[(A1)] The argument is in $k_{i-1}$ in normal form, nonzero for a logarithm, and the
+  conversion from the user's spelling is an identity of functions on $U$. Two kinds of
+  spelling are distinguished.
+  \begin{itemize}
+  \item \emph{Global identities} (principal branches, every $x$): $b^{k/n}=y^k$ for every
+    $k\in\Z$, since $e^{(k/n)\operatorname{Log}b}=(e^{\operatorname{Log}b/n})^k$; and
+    $(q^nb)^{k/n}=q^ky^k$ for rational $q>0$, since $\arg(q^nb)=\arg b$. So
+    $\sqrt{4+4x^3}=2y$ and $(1+x^3)^{3/2}=(1+x^3)y$ are normalised \emph{exactly} and
+    admitted. A positive constant that is not an $n$-th power ($\sqrt{2+2x^3}=\sqrt2\,y$)
+    violates (H$_\Q$) and is declined.
+  \item \emph{Identities only up to a locally constant root of unity.} $(1/b)^{k/n}$ equals
+    $e^{2\pi ik/n}y^{-k}$ where $b$ is a negative real (for $b=1+x^3$, the whole interval
+    $x<-1$), and $\sqrt x\sqrt{1+x}=\pm\sqrt{x^2+x}$ changes sign at $x=-1$. These must
+    \emph{not} be mapped to $y^{-k}$ or $y$ directly. For square roots they are routed through
+    the sign-merge front end \code{brSignMerge} (E6d, Lemma~\ref{lem:E6d1}), which introduces
+    the sign $\epsilon$ explicitly and yields a \emph{region} certificate (``on the region of
+    sign pattern $\{1\}$''). For $n>2$ they are declined (OL6).
+  \end{itemize}
+  Example: $h=\sqrt{1/(1+x^3)}+1/\sqrt{1+x^3}$ is $\equiv0$ on $x<-1$ but $2/y$ off the cut.
+  Mapped directly it would get a global certificate; through \code{brSignMerge} (as today)
+  it gets the region certificate, which is correct.
+\item[(A2)] Independence: \code{brDFSpan} returns \code{False} from an inconsistent exact
+  system. \code{\$Failed} or any undecided solve is a Decline, never an admission.
+\item[(A3)] Dependence is eliminated, never ignored, and \emph{only with a zero offset}.
+  A dependent logarithm satisfies $t_i=\sum_Lr_gt_g+\sum_Er_gw_g+\delta$ on $U$, with
+  $\delta=(\operatorname{Log}\kappa+2\pi i\,m)/d$ as in Prop.~\ref{prop:T10} ($\kappa\in\Q^*$,
+  $m\in\Z$ region-dependent; the proof uses only $D\kappa=0$, and the sample points must use
+  the user's branch of $b^{1/n}$). It is eliminated only when $\kappa=1$ and $m=0$, so that
+  $\delta=0$; then $t_i$ is replaced by an element of $k_{i-1}$. The two halves of the test
+  differ in kind:
+  \begin{itemize}
+  \item $\kappa=v^d\prod_Lu_g^{-dr_g}\prod_Et_g^{-dr_g}$ is an element of $k_{i-1}$ with
+    $D\kappa=0$. It is computed \emph{exactly} in the \code{brDField} normal form, must pass
+    \code{ConstantQ} (Prop.~\ref{prop:E2field}(iv)), and is compared with $1$ exactly. A
+    numerical comparison at tolerance $10^{-8}$ would accept
+    $\kappa=(10^{12}+1)/10^{12}$ (from $\log((10^{12}+1)(x+z))$ beside $\log(10^{12}(x+z))$),
+    i.e.\ a nonzero offset. (\code{rt\_dependent\_log\_rule} also computes $\kappa$
+    symbolically; on the curve that must be the normal form, since \code{Together} leaves
+    $(x-y)(x+y)$ unreduced.)
+  \item Only the integer $m$ is read numerically, as T10 does, at every sample point of T10's
+    integrator set (real and complex). This is integer separation: where the branches are
+    analytic and $\kappa=1$, $m=d\,\delta/(2\pi i)$ is an integer, so reading it needs an error
+    below $1/2$, which machine precision gives with a wide margin (interval evaluation would make it
+    certified). A sample point on a cut of $y$ (every real $x<-1$ for $z=\sqrt{1+x^3}$) reads
+    the $m$ of an adjacent open region; $m=0$ there still gives a region on which the relation
+    holds, and the certificate is a statement about the germ (Prop.~\ref{prop:T0}).
+  \end{itemize} A dependent exponential satisfies $w_i=\sum_Lr_gt_g+
+  \sum_Er_gw_g+c$ with $c\in\Q$ read off the normal form; it is eliminated only when $c=0$ and
+  every $r_g\in\Z$, giving $e^{w_i}=\prod_Lu_g^{r_g}\prod_Et_g^{r_g}\in k_{i-1}$. \emph{Every
+  other dependent kernel is Unimplemented (Decline, never a certificate)}: a nonzero offset
+  ($\log2$, $i\pi$, $e^c$) would put a non-rational constant into the field and violate
+  (H$_\Q$) (Example~3 below shows the false ``no'' it causes); a fractional $r_g$ for an
+  exponential is an algebraic element ($e^{(\log x)/2}=\sqrt x$, or $e^{xy/2}$ after $e^{xy}$),
+  which needs a change of generators (OL6).
+\item[(A4)] The analytic kernels realise the tower (Prop.~\ref{prop:E2analytic}).
+\end{enumerate}
+
+\emph{Why admission is a soundness gate.} Take $y=\sqrt{1+x^3}$, $t_1=\log y$,
+$t_2=\log(1+x^3)$. Then $Dt_2=2Dt_1$, so (A2) fails with $r=2$; for principal branches
+$t_2-2t_1=0$. Admitted anyway, $f=1/(1+t_2-2t_1)$ is a proper fraction in $t_2$ with
+squarefree denominator $d=t_2-2t_1+1$ and $Dd=0$; $\operatorname{Res}_{t_2}(1-z\,Dd,d)=1$
+has no roots, so [SI] Thm~5.6.1(ii) reports ``no elementary integral'' for an integrand
+equal to~$1$. Every theorem of E2 and E1 assumes the monomials are admitted.
+
+\emph{Example~3 (must decline; the zero-offset rule).} Let $z=\sqrt{1+x^3}$, $t_1=\log(x+z)$,
+$t_2=\log(2x+2z)$, and
+\[ g_3=\frac{D\log(x+z)\cdot\log(x+z)}{\log(2x+2z)-\log(x+z)}, \qquad
+   \int g_3=\frac{\log(x+z)^2}{2\log2}. \]
+Admission finds $Dt_2=Dt_1$ ($r=1$), and $t_2-t_1=\log2$ on principal branches ($\kappa=2$).
+Eliminating anyway gives $g_3=(\log2)^{-1}t_1Dt_1$, a polynomial of degree~1 in the
+primitive $t_1$; Thm~\ref{thm:E2level} step~3 asks LI$_0\bigl((\log 2)^{-1}Dt_1;Dt_1\bigr)$,
+whose only solution has $c=1/\log2\notin\Q$, so a $\Q$-only oracle answers ``no solution'' and
+Thm~\ref{thm:E2cert}(b) would certify an elementary integrand. Under (A3) the offset is
+nonzero, so the tower is Unimplemented. (Today $g_3$ is declined at \code{Tower.m:205}; it is
+exactly what lifting that refusal exposes, and it is an M1 gate. The same holds for $\log(x-z)$
+beside $\log(x+z)$ with $z=\sqrt{1+x^2}$, offset $i\pi$ on the real line, and for $e^{xz+1}$
+beside $e^{xz}$, factor $e$.)
+
+\begin{proposition}\label{prop:E2analytic}
+Let $U\subset\C$ be a connected open set on which a branch $\beta$ of $b^{1/n}$ and the
+kernels $\tau_i=\log\iota(u_i)$, $e^{\iota(w_i)}$ are analytic, and let $\iota:k_0\to\mathcal
+M(U)$ send $y\mapsto\beta$. If $t_1,\dots,t_s$ are admitted, $\iota$ extends to an
+injective differential homomorphism $K\to\mathcal M(U)$ with $t_i\mapsto\tau_i$, and
+Prop.~\ref{prop:T0} holds for $K$.
+\end{proposition}
+\begin{proof}
+Induction on $i$. Let $L_{i-1}=\iota(k_{i-1})\cong k_{i-1}$. For a logarithm,
+$D\tau_i=\iota(Du_i/u_i)$, which is not a derivative in $L_{i-1}$ because $Du_i/u_i$ is
+not one in $k_{i-1}$ (Thm~\ref{thm:E2struct}(a)). By [SI] Thm~5.1.1 applied to
+$L_{i-1}(\tau_i)\subset\mathcal M(U)$, $\tau_i$ is transcendental over $L_{i-1}$, so
+$t_i\mapsto\tau_i$ extends $\iota$. The exponential case uses Thm~5.1.2. Injectivity is
+automatic for a homomorphism of fields; the rest is Prop.~\ref{prop:T0}.
+\end{proof}
+
+\subsection*{E2.3. The recursion and what each level needs}
+
+For each level $j$ the following problems are posed over $k_j$ ([SI] Ch.~5--7):
+\begin{itemize}
+\item INT$_j(f)$: decide whether $f\in k_j$ has an elementary integral; if so return one
+  as $v+\sum c_l\log v_l$, $v\in k_j$, $c_l\in\Qbar$, $v_l\in k_j(c)^*$.
+\item RDE$_j(f,g)$: all $q\in k_j$ with $Dq+fq=g$.
+\item PRDE$_j(f;g_1,\dots,g_m)$: the constants $c\in\Q^m$ and $q\in k_j$ with
+  $Dq+fq=\sum c_ig_i$, in [SI] \S7.1's format (a basis $h$ and a constraint matrix).
+\item LI$_j(a;w_1,\dots,w_m)$: $v\in k_j$, $c\in\Q^m$ with $a=Dv+\sum c_iw_i$ ([SI] \S7.2).
+\item LD$_j(\alpha)$: decide $\alpha=Dz/z$ with $z\in k_j^*$, \emph{with the witness $z$};
+  PLD$_j(\alpha;\eta)$: the pairs $(n,m)$, $n\ge1$, with $n\alpha=m\eta+Du/u$, $u\in k_j^*$
+  ([SI] \S7.3).
+\end{itemize}
+
+\begin{theorem}[one level]\label{thm:E2level}
+Let $t_s$ be admitted over $k_{s-1}$, and suppose INT$_{s-1}$ is decided, together with
+LI$_{s-1}$ if $t_s$ is a logarithm, or RDE$_{s-1}$ if $t_s$ is an exponential. Then INT$_s$
+is decided by the following steps, each over the field $k_{s-1}$:
+\begin{enumerate}
+\item \emph{Hermite} in $t_s$ ([SI] Thm~5.3.1): extended Euclid and squarefree factorisation
+  in $k_{s-1}[t_s]$. The special irreducibles are $t_s$ (exponential) or none (logarithm)
+  ([SI] Thm~5.1.1/5.1.2), so the splitting factorisation is a power of $t_s$.
+\item \emph{Residue criterion} ([SI] Thm~5.6.1) on the simple part $a/d$, $d$ normal
+  squarefree: $R(z)=\operatorname{Res}_{t_s}(a-z\,Dd,d)\in k_{s-1}[z]$. The integrand is
+  non-elementary unless $R/\lc(R)\in\Q[z]$ (Lemma~\ref{lem:E2const}); otherwise the logands
+  are $\gcd_{k_{s-1}(\alpha)[t_s]}(d,a-\alpha Dd)$ over the roots $\alpha$ (or Lazard--Rioboo--Trager
+  subresultants in $k_{s-1}[z][t_s]$).
+\item \emph{Polynomial part.} Logarithm: top down, LI$_{s-1}(p_m;Dt_s)$ for each degree
+  $m\ge1$ ([SI] Thm~5.8.1); no solution is a certificate. Exponential: RDE$_{s-1}(jDw_s,p_j)$
+  for each $j\ne0$ of the Laurent part ([SI] Thm~5.9.1); no solution is a certificate. The
+  log part's remainder contributes $-\sum_\alpha\alpha\deg(g_\alpha)Dw_s$ to the $t_s^0$
+  coefficient (an exponential $t_s$ is special), as in [SI] IntegrateHyperexponential. Since
+  $\deg g_\alpha$ is constant on a conjugacy class of residues, the sum is a trace and is
+  rational; it must be \emph{computed} as a rational, never left as an unevaluated
+  \code{RootSum}, which would hand a non-rational constant to the $\Q$-only oracles at level
+  $s-1$.
+\item What remains is $h\in k_{s-1}$, and $f$ has an elementary integral over $k_s$ iff $h$
+  has one over $k_{s-1}$ (INT$_{s-1}$).
+\end{enumerate}
+\end{theorem}
+\begin{proof}
+This is [SI] Thm~5.8.2 (logarithm) and Thm~5.9.2 (exponential) with $k=k_{s-1}$. Their
+hypotheses are: $k$ a differential field of characteristic~0 (yes); $Dt_s$ not a derivative
+in $k$, resp.\ $Dt_s/t_s$ not a logarithmic derivative of a $k$-radical
+(Thm~\ref{thm:E2struct}); LI resp.\ RDE decidable over $k$ (assumed). Their proofs use
+only field operations in $k[t_s]$ and the constant field of $k$, both supplied by
+Prop.~\ref{prop:E2field}. Step~4: $k_s$ is an elementary extension of $k_{s-1}$, so an
+elementary integral of $h\in k_{s-1}$ over $k_s$ is one over $k_{s-1}$, and conversely.
+\end{proof}
+
+\begin{lemma}\label{lem:E2const}
+(i) All roots of $R$ (in an algebraic closure of $k_{s-1}$) are constants iff
+$R/\lc(R)\in\Q[z]$, which by Prop.~\ref{prop:E2field}(iv) is read off the normal forms of
+its coefficients. (ii) If $d$ is squarefree and normal but $q=\gcd(a,d)\ne1$, with
+$a=qa'$, $d=qd'$, then $R=c\,z^{\deg q}\operatorname{Res}_{t_s}(a'-z\,Dd',d')$ for some
+$c\in k_{s-1}^*$, so the criterion and the nonzero residues are unchanged.
+(iii) $R$ may be computed with $y$ an indeterminate and reduced modulo $Y^n-b$ afterwards,
+provided $d$ is monic in $t_s$.
+\end{lemma}
+\begin{proof}
+(i) The coefficients of $R/\lc(R)$ are symmetric functions of the roots; if the roots are
+constants these are constants of $\overline{k_{s-1}}$ lying in $k_{s-1}$, hence in
+$\operatorname{Const}(k_{s-1})=\Q$. Conversely the roots of a polynomial over $\Q$ are algebraic
+over the constants, hence constants (in characteristic~0 an element algebraic over the
+constants is a constant). (ii) For a root $\beta$ of $q$,
+$a(\beta)=0$ and $Dd(\beta)=Dq(\beta)d'(\beta)\ne0$; for a root $\beta$ of $d'$,
+$a(\beta)-zDd(\beta)=q(\beta)\bigl(a'(\beta)-zDd'(\beta)\bigr)$. Take the product over the
+roots of the monic $d$. (iii) For monic $d$, $\operatorname{Res}(d,A)=\prod_{d(\beta)=0}A(\beta)$
+is a polynomial in the coefficients, so it commutes with the ring map
+$\Q(x,t)[Y]\to k_{s-1}$, whatever the formal degree of $A$.
+\end{proof}
+
+Part~(ii) matters because the normal forms have $y$-free denominators: after rationalising,
+the denominator of $D(y+t_1)/(y+t_1)$ is the norm $t_1^2-(1+x^3)$, not $t_1+y$
+(\code{brBCSplitDen}). The fake factor $t_1-y$ only contributes the root $z=0$, which
+\code{brNonzeroResiduePolynomial} drops. The squarefree decomposition of a given
+polynomial over $T_{s-1}[t_s]$ is its decomposition over $k_{s-1}[t_s]$ (gcd and
+$\partial/\partial t_s$ commute with field extension), and every irreducible of
+$k_{s-1}[t_s]$ other than $t_s$ is normal by Thm~5.1.1/5.1.2. But the \emph{norm}
+denominator can have a square factor the true denominator lacks: $(t-y)(t-x)$ has norm
+$(t^2-b)(t-x)^2$. Hermite reduction is correct for any representation $a/d$; the invariant
+Lemma~\ref{lem:E2const} needs (``$d$ squarefree'') is that of the remainder after Hermite,
+whose normal denominator is squarefree as computed, not that of the first norm.
+
+\begin{theorem}[decision procedure]\label{thm:E2decide}
+Assume (H$_\Q$), and that the level-0 problems INT$_0$, RDE$_0$, PRDE$_0$ and the $N$-th-root
+test ROOT$_0$ of Prop.~\ref{prop:E1ld} are decided. Let $K=k_s$ be presented by admitted
+monomials $t_1,\dots,t_s$ (after the zero-offset eliminations of (A3)). Then all the problems
+of E2.3 are decided at every level $j\le s$; in particular INT$_s$ decides elementarity of
+every $f\in K$.
+\end{theorem}
+\noindent\emph{Scope.} The theorem is about the presentation. An integrand whose kernels
+include a dependent kernel with a nonzero offset, a dependent exponential with a fractional
+coefficient, an excluded radical spelling or a non-rational constant is not covered: the
+procedure answers Unimplemented for it, not ``no'' (OL2, OL6). Of the hypotheses, ROOT$_0$ is
+not yet an algorithm (OL5) and RDE$_0$ is complete only where \code{brAlgRDE} does not return
+\code{Unknown} (gap I1); each missing answer becomes Unimplemented, never a certificate.
+\begin{proof}
+Induction on $j$, in the order below; each line uses only the lines above it and level $j-1$:
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+problem at level $j$ & needs & source \\
+\midrule
+INT$_j$ & INT$_{j-1}$; LI$_{j-1}$ (log) or RDE$_{j-1}$ (exp) & Thm~\ref{thm:E2level}\\
+RDE$_j$ & RDE$_{j-1}$, LD$_{j-1}$, LI$_{j-1}$, PLD$_{j-1}$ & Thm~\ref{thm:E1rde}\\
+PRDE$_j$ & PRDE$_{j-1}$, LD$_{j-1}$, LI$_{j-1}$, PLD$_{j-1}$ & [SI] \S7.1, Thm~\ref{thm:E1rde}\\
+LI$_j$ & PRDE$_j$ with $f=0$ & [SI] \S7.2\\
+LD$_j$, PLD$_j$ & INT$_j$, \code{brDFSpan} over $k_j$, ROOT$_j$ & Prop.~\ref{prop:E1ld}\\
+ROOT$_j$ & squarefree decomposition in $k_{j-1}[t_j]$, ROOT$_{j-1}$ & Prop.~\ref{prop:E1ld}\\
+\bottomrule
+\end{tabular}
+\end{center}
+Level~0 is the hypothesis (LI$_0$ = PRDE$_0$ with $f=0$; LD$_0$, PLD$_0$ from INT$_0$ and
+ROOT$_0$ by Prop.~\ref{prop:E1ld}). Every step terminates: each recursive call is at a
+strictly lower level or, within a level, to a problem listed above it.
+\end{proof}
+
+\subsection*{E2.4. Certificates}
+
+\begin{theorem}\label{thm:E2cert}
+Assume (H$_\Q$), every $t_i$ admitted, and every dependent kernel eliminated with a zero
+offset (A3). Then every ``no elementary integral'' produced by the recursion of
+Thm~\ref{thm:E2decide} is a theorem about $f\in K$, and by Prop.~\ref{prop:E2analytic} about
+the function on $U$.
+\end{theorem}
+\begin{proof}
+A verdict ``no'' at level $j$ originates in exactly one of: (a) the residue criterion,
+[SI] Thm~5.6.1(ii): if $f$ had an elementary integral over $k_j$, the normal part of $R$
+would be trivial; (b) LI$_{j-1}$ without solution for some top coefficient, [SI]
+Thm~5.8.1: an elementary integral of the polynomial part would give $p_m=Db+cDt_j$ with
+$b\in k_{j-1}$, $c\in\Q$ (Liouville's theorem in the strong form [SI] Thm~5.5.3, which
+places $v$ in $k_j$ and the logands in $k_j(c_1,\dots,c_r)$, so no constant extension
+of $k_{j-1}$ can supply the missing $b$); (c) RDE$_{j-1}(jDw,p_j)$ without solution, [SI]
+Thm~5.9.1--5.9.2 (same argument); (d) a ``no'' of INT$_{j-1}$ for the remainder $h$, carried
+up by Thm~\ref{thm:E2level} step~4; (e) Trager's certificate at level~0. Each is an
+implication ``$f$ elementary $\Rightarrow$ (decided property)'', and the chain composes.
+In (a)--(c) the decided property is ``a constant of $k_{j-1}$ with a property exists'', and
+the oracles search $\Q$; this is complete exactly because $\operatorname{Const}(k_{j-1})=\Q$
+(Prop.~\ref{prop:E2field}(iii)), which (H$_\Q$) and the zero-offset rule preserve.
+\end{proof}
+
+The theorem has a hypothesis that is easy to violate: the ``no'' answers of RDE and LI are
+proofs only if every \emph{bound} they used is valid, and bounds come from the auxiliary
+answers LD, PLD and LI (E1.2). A wrong ``no'' there shrinks a bound and yields a false
+``no solution''. Hence: auxiliary answers must be sound in \emph{both} directions; an
+undecided auxiliary answer either widens the bound to a valid one or makes the whole verdict
+undecided (T7: auxiliary verdicts are scoped); and every exact identity is decided in the
+normal form of Prop.~\ref{prop:E2field}, never by a numerical zero test. Every
+\emph{positive} auxiliary answer (a witness $z$ of LD, a triple $(n_0,m_0,U)$ of PLD, a
+solution of LI or PRDE) is verified exactly in normal form before it is used, since a wrong
+witness changes the equation that is solved next (the primitive cancellation case).
+
+\paragraph{Where Bronstein stops.} [SI] Ch.~5--7 prove Thm~\ref{thm:E2level} and the
+reductions of E1 for any differential field $k$, given the oracles over $k$; [SI] Thm~9.3.1
+covers algebraic generators. [B] treats the converse shape (an algebraic function field over
+a transcendental tower, Shape~A here) and its Part~3 the Risch DE there. Nowhere is the
+base $k_0=\Q(x)(y)$ instantiated: the oracles LD$_0$, PLD$_0$, PRDE$_0$ and LI$_0$ over a
+curve are not written down ([SI] \S7.2 notes that the integrate-then-rewrite approach to
+LI ``is never made explicit''; \S7.3 says the structure theorems give ``the only known
+complete solution'' of PLD, and assumes the integrand has an elementary integral). E1.4--E1.5
+supply them, and the admission theorem above makes [SI]'s monomial hypothesis checkable.
+
+\subsection*{E2.5. Worked examples}
+
+\paragraph{Example 1.} $y=\sqrt{1+x^3}$,
+\[ f_1=\frac{2e^{xy}x+5e^{xy}x^4-2e^{xy}y+2x^2y\log(x+y)}{2x^2y}. \]
+Tower: $t_1=e^{xy}$, $t_2=\log(x+y)$. Admission of $t_1$: $G_0=\emptyset$ and
+$D(xy)=\frac{2+5x^3}{2y}=\frac{(2+5x^3)}{2(1+x^3)}\,y\ne0$. Admission of $t_2$:
+$G_1=\{D(xy)\}$ and, with $(x+y)(y-x)=x^3-x^2+1$,
+\[ \eta_2=\frac{D(x+y)}{x+y}=\frac{(3x^2-2x)+\frac{2-x^3}{1+x^3}\,y}{2(x^3-x^2+1)} .\]
+Its $y^0$ coordinate is nonzero while that of $D(xy)$ is zero, so
+$\eta_2-rD(xy)=0$ is inconsistent: $t_2$ is admitted. In $K=k_0(t_1)(t_2)$,
+$f_1=t_2+a\,t_1$ with $a=\frac{2+5x^3}{2xy}-\frac1{x^2}$.
+
+Level~2 ($t_2$ a logarithm). No denominator in $t_2$. Top coefficient $p_1=1$: LI$_1(1;\eta_2)$
+gives $(b,c)=(x,0)$ ($c$ is unique, since two values would make $\eta_2$ a derivative in
+$k_1$; $b$ is unique up to an additive constant, which only adds $\kappa'\eta_2$, a
+logarithmic derivative, to the next level).
+So $q_0=x\,t_2$ and $f_1-Dq_0=a\,t_1-x\eta_2\in k_1$.
+
+Level~1 ($t_1$ an exponential). The $t_1^1$ coefficient: RDE$_0(D(xy),a)$, i.e.
+$Db+\frac{2+5x^3}{2y}b=a$ over $\Q(x)(y)$; \code{brRDEAlgebraic} returns $b=1/x$
+(checked at v0.6647). The $t_1^0$ coefficient: INT$_0(-x\eta_2)$, Trager:
+\[ \int\frac{3x^3+2xy}{2xy+2(1+x^3)}\,dx \quad\text{is not elementary} \]
+(\code{Method -> "Trager"}, v0.6647). By Thm~\ref{thm:E2cert}, chain (d) then (e), $f_1$ has
+no elementary integral; $\int f_1=e^{xy}/x+x\log(x+y)-\int x\eta_2$. (At v0.6647
+\code{Method -> "Bronstein"} already certifies $f_1$ as written, which can only come from the
+D1 split by kernels: $\log(x+y)$ alone is \code{BaseCurve.m}'s one-monomial case. The
+recursion above decides it without the split, in particular when the two parts share a
+denominator and no term-wise split exists.)
+
+\paragraph{Example 2.} $y=\sqrt{1+x^3}$,
+\[ f_2=\frac{2e^yx+3x^3+2e^yx^4+2y+2e^yxy\log x}{2x+2x^4+2xy\log x}
+      =e^y+\frac{D(y+\log x)}{y+\log x}, \]
+since the denominator is $2xy(y+\log x)$ and $D(y+\log x)=\frac{3x^3+2y}{2xy}$. Tower:
+$t_1=\log x$ (admitted: $G_0=\emptyset$, $Dx/x\ne0$), $t_2=e^y$ (admitted: $Dy=\frac{3x^2}{2y}$
+is not a rational multiple of $Dt_1=1/x$; the $y^1$ coordinates differ). Then
+$f_2=t_2+D(y+t_1)/(y+t_1)$; this is the integrand that \code{Tower.m:205} refuses today.
+
+Level~2 ($t_2$ exponential): $f_2$ is a Laurent polynomial in $t_2$; the $t_2^1$ coefficient
+needs RDE$_1(Dy,1)$ over $k_1=k_0(\log x)$, worked in E1.5: it has no solution. So $f_2$ is
+not elementary by (c), independently of the $t_2^0$ term. For completeness, that term
+illustrates step~2 with the radical in the coefficients: $d=t_1^2-(1+x^3)$ (the norm of
+$t_1+y$), $R(z)\propto z(z-1)\in\Q[z]$, residue $1$, logand $\gcd(d,a-Dd)=t_1+y$, so
+$\int D(y+t_1)/(y+t_1)=\log(y+\log x)$. By contrast $1/(y+t_1)$ gives $R(z)=1-z\,(Dy+1/x)$ up
+to the fake factor, and $\lc(R)^{-1}R(0)=-2xy/(3x^3+2y)$ has a nonzero $y$-coordinate, so it
+is not in $\Q$: $\int dx/(\sqrt{1+x^3}+\log x)$ is not elementary (agrees with
+\code{Method -> "Bronstein"}, v0.6647).
+
+% ======================================================================
+\section*{E1. The Risch differential equation over a tower on the curve}
+\addcontentsline{toc}{section}{E1. The Risch DE over a tower on the curve}
+\label{sec:E1}
+
+We solve $Dq+fq=g$ with $f,g\in k_j$, $j\ge1$, in the tower of E2, and the parametric
+version. The structural point is that the radical sits at the \emph{bottom}: $k_j=k_{j-1}(t_j)$
+is a monomial extension of the algebraic function field $k_{j-1}$, so [SI] Ch.~6 applies
+with $k=k_{j-1}$ and no coupled system ever appears above level~0. Only at level~0, where
+the unknown coefficients are rational numbers, is the coordinate system of the curve met,
+and there it is linear algebra over $\Q$ (\code{RDEAlgebraic.m}). Contrast the radical in the
+\emph{middle} ($y$ algebraic over $k_{j-1}(t_j)$): there $q=\sum q_iw_i$ with $q_i\in
+k_{j-1}(t_j)$ and the equation is an $n\times n$ coupled first-order system over
+$k_{j-1}(t_j)$ ([B91] \S2), which [B91] uncouples only to find the denominator, leaving the
+degree bound as ``the last computational bottleneck''; [B] Part~3 gives Risch's
+Puiseux-expansion procedure. That case is out of scope here (OL4).
+
+\subsection*{E1.1. The reduction to the base field $k_{j-1}$}
+
+\begin{theorem}\label{thm:E1rde}
+Let $t=t_j$ be admitted over $k=k_{j-1}$, and $f,g\in k(t)$. If RDE, LD, PLD and LI are
+decided over $k$ (and INT over $k$, which LD uses), then RDE$_j(f,g)$ is decided by [SI]
+Ch.~6, with the following calls to $k$:
+\begin{center}\small
+\begin{tabular}{lp{0.33\textwidth}p{0.27\textwidth}}
+\toprule
+step ([SI]) & primitive $t$ ($Dt=\eta$) & exponential $t$ ($Dt/t=\eta=Dw$)\\
+\midrule
+weak normaliser (Thm 6.1.1) & \multicolumn{2}{l}{integer roots of a resultant in $k[z]$: arithmetic}\\
+normal denominator (Thm 6.1.2) & \multicolumn{2}{l}{gcds in $k[t]$: arithmetic}\\
+special denominator (\S6.2) & none ($S=k$) & PLD$_k(-b(0)/a(0);\eta)$\\
+degree bound (\S6.3) & LD$_k(\alpha)$ with witness, LI$_k(\beta;\eta)$, its $c$ used only if $c\in\Z_{>0}$ & PLD$_k(-\lc b/\lc a;\eta)$, $m_0/n_0$ used only if in $\Z$\\
+SPDE, no cancellation (\S6.4--6.5) & \multicolumn{2}{l}{arithmetic in $k[t]$}\\
+cancellation (\S6.6), $b\in k$ & LD$_k(-b)$ \emph{with witness} $z$; $z$-branch: ``is a derivative in $k(t)$'' ($Dp=zc$: INT/LI$_k$ with empty log part); else RDE$_k$ top down & PLD$_k(-b;\eta)$ \emph{with an $n=1$ witness} $(z,m)$; $z$-branch: ``is a derivative in $k(t)$'' ($Dp=c\,z\,t^m$: RDE$_k$ on the Laurent coefficients, INT$_k$ with empty log part at $t^0$); else RDE$_k(b+i\eta,\cdot)$ top down\\
+\bottomrule
+\end{tabular}
+\end{center}
+PRDE$_j$ is decided by [SI] \S7.1 with the same calls, RDE$_k$ replaced by PRDE$_k$; and
+LI$_j$ by PRDE$_j$ with $f=0$ ([SI] \S7.2).
+\end{theorem}
+\begin{proof}
+[SI] Ch.~6 and \S7.1 are stated for an arbitrary differential field $k$ of characteristic~0
+and a monomial $t$ with $\operatorname{Const}(k(t))=\operatorname{Const}(k)$. Their only
+uses of $k$ beyond field arithmetic in $k[t]$ are the calls in the table (the
+primitive-case degree bound is \S\ref{sec:A2}, with the corrected $d_c-d_a+1$; the
+exponential-case bound and special denominator are the two sections after it; the cancellation cases are [SI]
+PolyRischDECancelPrim/Exp and, parametrically, the top-down pass of [SI] p.~241 with fresh
+constants). Every bound is valid when the auxiliary answers are correct, and the SPDE
+recursion ([SI] \S6.4) followed by the non-cancellation and cancellation algorithms is then
+complete; undetermined coefficients appear only in the level-0 base case. The admission of $t$
+supplies the monomial hypothesis, Prop.~\ref{prop:E2field} the arithmetic, zero and
+constant tests.
+\end{proof}
+
+Two remarks on the calls. (1) The primitive bound and the primitive cancellation case need
+LD \emph{with witness}: $q_n=\gamma z$ with $\lc(a)Dz+\lc(b)z=0$, then
+$\beta=(a_{d_a-1}Dz+b_{d_b-1}z)/(z\lc(a))$ (\S\ref{sec:A2}); the witness is verified exactly
+before $\beta$ is formed. LI then returns $c\in\Q$, and the degree $c$ enters the bound only
+when $c$ is a positive integer: a non-integer $c$ is discarded (the bound stays valid), never
+rounded. (2) For the exponential bounds a radical solution suffices: if $n\alpha=m\eta+Du/u$
+and $n'\alpha=m'\eta+Du'/u'$ then $(n'm-nm')\eta=D(u'^{n}/u^{n'})/(u'^{n}/u^{n'})$, so
+$m/n=m'/n'$ since $t$ is admitted (Thm~5.1.2, converse part). Hence the candidate $m$ is $m_0/n_0$ when this is an
+integer, and using it is a valid bound whether or not an $n=1$ solution exists. (3) The
+cancellation cases are different: [SI] PolyRischDECancelExp (p.~213) branches on ``$-b=Dz/z+m\eta$
+with $z\in k^*$, $m\in\Z$'' and then \emph{uses} $z$; the top-down pass it otherwise runs relies
+on the uniqueness of each coefficient's solution, which fails exactly when that homogeneous
+solution exists. So the cancellation case needs an $n=1$ witness, not a ratio. From a radical
+solution with $n_0>1$ and $m_0/n_0\in\Z$, the witness needs ROOT$(U,n_0)$; answering ``not of
+the form'' instead and falling through to the top-down pass could give a false ``no solution''.
+Without ROOT$_0$ this case is declined. ($n_0>1$ arises easily: Trager's coefficient $1/2$ with
+logand $u^2$, $u\in k_0$.)
+
+\subsection*{E1.2. Logarithmic derivatives over $k_j$}
+
+All of this subsection assumes (H$_\Q$). The constant field is then $\Q$ at every level, and
+no projection of constants is needed. In the general setting (OL2) the coefficients of the
+span system lie in a number field $\Q(c)$. Its rational solutions are then those of the
+projections on \emph{every} element of a $\Q$-basis of $\Q(c)$, kept together. [SI] \S7.3
+(last paragraph) says ``project on~1'', and that is wrong. For $\sqrt2\,r_1-\sqrt2\,r_2=0$ the
+1-projection is $0=0$, while the rational solutions are $r_1=r_2$.
+
+\begin{lemma}\label{lem:E1res}
+Let $\alpha\in k_0$, $w\in k_0$, and suppose $n\alpha=m\,Dw+DU/U$ with $n\ge1$, $m\in\Z$,
+$U\in k_0^*$. Then the residue of $\alpha\,dx$ at every place of the curve, including the
+places at infinity, is rational.
+\end{lemma}
+\begin{proof}
+$d w$ is exact, so its residues are zero. $dU/U$ has residue $\operatorname{ord}_PU\in\Z$ at
+$P$. Divide by $n$.
+\end{proof}
+
+\begin{proposition}\label{prop:E1ld}
+Assume (H$_\Q$). Let $j\ge0$, $\alpha\in k_j$, and $\eta=Dw$ with $w\in k_j$ (or $\eta=0$).
+\begin{itemize}
+\item[(i)] Suppose $n\alpha=m\eta+Du/u$ for some $n\ge1$, $m\in\Z$, $u\in k_j^*$. Then $\alpha$
+  has an elementary integral over $k_j$. So INT$_j(\alpha)=$ ``no'' proves that PLD$_j$ has no
+  solution.
+\item[(ii)] Otherwise INT$_j$ returns $\alpha=Dv+\sum_lc_lDv_l/v_l$. The case depends on the
+  coefficients $c_l$.
+  \begin{itemize}
+  \item Some $c_l\notin\Q$, and $j=0$. If each $c_l$ lies in the $\Q$-span of the residues of
+    $\alpha\,dx$ (true of Trager's choice; implementation gap I2), there is no radical solution
+    (Lemma~\ref{lem:E1res}).
+  \item Some $c_l\notin\Q$, and $j\ge1$. PLD$_j$ is undecided (OL3).
+  \item All $c_l\in\Q$, with $v_l\in k_j$. Let $F$ be $k_j$ extended by those $\log v_l$ that
+    are admitted over it; the others are reduced by Thm~\ref{thm:E2struct}. Then $F$ has
+    constants $\Q$, and a radical solution exists iff the system
+    $n\alpha-m\eta\in\operatorname{span}_\Q G_F$ (unknowns $n,m$ and the span coefficients) has
+    a rational solution with $n\ne0$. This is decided exactly by Prop.~\ref{prop:E2span} over
+    $F$. A solution yields $(n_0,m_0)$ and
+    $U=\prod_L(\text{log argument})^{e r}\prod_E(\text{exp monomial})^{e r}\in k_j^*$, with
+    $n_0\alpha=m_0\eta+DU/U$.
+  \end{itemize}
+  The identity $n_0\alpha-m_0\eta-DU/U=0$ is then checked exactly in normal form before the
+  triple is used. A failed check is an internal error, reported as undecided.
+\item[(iii)] ROOT$_j$ asks, for $U\in k_j^*$ and $N\ge1$, whether $U=cz^N$ with $c\in\Q^*$ and
+  $z\in k_j^*$, and asks for $z$.
+  \begin{itemize}
+  \item For $j\ge1$ it reduces to ROOT$_{j-1}$ (proof below).
+  \item ROOT$_0$ is open (OL5).
+  \end{itemize}
+  LD$_j(\alpha)$ is the case $\eta=0$ of (ii). When $n_0=1$, the witness is $z=U$ and no root is
+  needed. When $n_0>1$, LD$_j$ needs ROOT$_j(U,n_0)$. The same holds for a PLD call that needs an
+  $n=1$ witness (the exponential cancellation case, remark~(3) of E1.1): with $m=m_0/n_0\in\Z$
+  it needs ROOT$_j(U,n_0)$ when $n_0>1$. Every witness is verified exactly in normal form.
+\end{itemize}
+\end{proposition}
+\begin{proof}
+(i) $\alpha=D\bigl((mw+\log u)/n\bigr)$.
+
+(ii) The first case is Lemma~\ref{lem:E1res}: a $\Q$-basis that contains an irrational number
+spans an irrational residue. In the third case, the hypotheses that the $c_l$ are rational and
+that $v_l\in k_j$ make $F$ an elementary extension of $\Q(x)$ with constants $\Q$, by
+Thm~\ref{thm:E2struct} applied to $F$. At level~0 the logands can be chosen in $k_0$: a
+divisor with rational coefficients, built from rational residues, is Galois-invariant, and
+Hilbert~90 gives a generator over $\Q$ up to a constant.
+
+If $n\alpha=m\eta+Du/u$ with $u\in k_j\subset F$, then $D(ng-mw)=Du/u$, where $g\in F$ and
+$Dg=\alpha$. [SI] Thm~9.3.1 in $F$ then gives $n\alpha-m\eta\in\operatorname{span}_\Q G_F$.
+Conversely, clear a rational solution to integers with a common denominator $e$. This gives
+$e(n\alpha-m\eta)=DU/U$ with $U$ as stated. Each factor lies in $k_j$: the log arguments by
+hypothesis, and the exponential monomials of $F$ are those of $k_j$.
+
+(iii) Let $j\ge1$. Write the numerator and the denominator of $U$ in $k_{j-1}[t_j]$ as monic
+polynomials times leading coefficients in $k_{j-1}$. Take the squarefree decompositions
+$\prod s_i^{\,i}$. These are field-invariant, so no factorisation over $k_{j-1}$ is needed.
+
+Unique factorisation in $k_{j-1}[t_j]$ gives: $U=cz^N$ iff $N$ divides every $i$ with
+$s_i\notin k_{j-1}$, and the quotient of the leading coefficients is $c\,z'^N$ in $k_{j-1}$.
+For an exponential $t_j$, its power is a factor like any other.
+
+LD: if $\alpha=Dz/z$ then $D(z^{n_0}/U)=0$, so $U=cz^{n_0}$ for any $n_0$ with
+$n_0\alpha=DU/U$. Conversely $U=cz^{n_0}$ gives $n_0\alpha=n_0Dz/z$.
+\end{proof}
+
+\noindent \emph{What ROOT$_0$ would be (OL5).} At level~0, $U=cz^N$ iff two conditions hold:
+\begin{itemize}
+\item $N\mid\operatorname{ord}_PU$ at every place $P$ (finite and infinite);
+\item the divisor $\operatorname{div}(U)/N$ is principal.
+\end{itemize}
+A generator $z_0$ then has $U/z_0^N$ constant. The pieces that are missing:
+\begin{itemize}
+\item the places over $\Qbar$, including those at infinity;
+\item an integral basis normal at infinity, or a M\"obius frame $x\mapsto1/(x-a)$ with $x=a$
+  neither a branch point nor in the support. The frame must transform $b$, the integral basis
+  and the divisor together. \code{principalGenerator} only handles finite support;
+\item the principality test with a generator ([T] Ch.~6; Coates).
+\end{itemize}
+Until this is written and proved, M1 declines every LD call, and every PLD call that needs
+an $n=1$ witness, whose radical solution has $n_0>1$.
+
+So torsion orders are computed only inside Trager, and ROOT$_0$ needs a principal-divisor test
+with a generator.
+
+\subsection*{E1.3. The base: $k_0=\Q(x)(y)$}
+
+RDE$_0$ is [B] Part~3 with $k=\Q$ and $\theta=x$. [B] assumes $x\in k$ with $x'=1$, and $k=\Q$
+does not satisfy this. That is harmless: Lemmas~1.7 and~1.8, on which the bounds rest, use only
+that the Puiseux coefficients are constants. [B] states Part~3 for the \emph{parametric}
+equation (R1) $z'+fz=\sum c_ig_i$, with $\gamma_p=\min_i\nu_p(g_i)$ (p.~160).
+
+\code{brAlgRDE} implements it in three steps:
+\begin{itemize}
+\item the denominator, from Lemma~3.6 and Prop.~3.3;
+\item the order at infinity, from Prop.~3.5;
+\item the degrees, then a linear system over $\Q$.
+\end{itemize}
+INT$_0$ is Trager (\code{TragerIntegrateCurve}). Two choices in the code carry every ``no''
+above level~0, so they are stated and proved here.
+
+\begin{lemma}[bound choice]\label{lem:E1choice}
+All places of $k_0$ above a given point of $\mathbb P^1$ have the same ramification index,
+because $\Qbar(x)(y)/\Qbar(x)$ is a Kummer, hence Galois, extension; this is why a single $r$
+per pole factor $P$ (and at infinity) is used below.
+
+\noindent Let $P\mid H$ be a finite pole factor, and let $T(z)=\operatorname{Res}_x(\chi_P,P)$, with
+$\chi_P$ the characteristic polynomial of $rfP/P'$ over $\Q(x)$ with its poles at $P$ cleared
+by exactly the pole order (a larger power makes $T\equiv0$, reported as \code{Unknown}).
+\begin{itemize}
+\item[(a)] The roots of $T$ include the values $\tau_p$ at every place $p$ above $P$ where
+  $rfP/P'$ is regular.
+\item[(b)] The bound $\alpha_p\ge\min(0,\gamma_P+r,-\max\{\text{positive integer roots of }T\})$
+  holds at every $p$ above $P$.
+\end{itemize}
+Likewise at infinity: $\beta_\infty=\min(\{0,\gamma_\infty-r\}\cup\{ra: a\text{ a rational root of the
+infinity resultant}\})$ bounds $\nu_p(z)$ at every place above infinity. When $T\equiv0$ the
+code returns \code{Unknown}.
+\end{lemma}
+\begin{proof}
+(a) $\chi_P$ is the product over the conjugate branches of $(z-u_\sigma)$. Multiplying all of
+its coefficients by $P^e$, $e$ the pole order, does not change its roots off $P$, and the
+product of the pole branches times $P^e$ tends to a nonzero constant (the coefficient with the
+largest pole has exactly one term of full order). At $x=\xi$, a root of $P$, the
+finite limits of the roots are the values at the places where $u$ is regular, and they are roots
+of the limit polynomial.
+
+(b) [B] Prop.~3.3 gives, per place, $\alpha_p\ge\min(0,\gamma_p-\beta_p)$ when
+$\beta_p<-r$ (case~(i)), and $\alpha_p\ge\min(0,\gamma_p+r)$ or $\alpha_p=-\tau_p$ otherwise.
+In case~(i), $\gamma_p-\beta_p>\gamma_p+r$, so the combined expression is a lower bound in all
+three cases, provided the candidate set contains $\tau_p$. Taking the \emph{most negative}
+candidate over all places above $P$ is then valid at each of them. Choosing one place's value
+could miss a pole at another place, and that would be a false ``no''. The code takes
+\code{-Max[tau]}.
+
+The same argument applies at infinity with [B] Prop.~3.5. The code takes \code{Min} over all
+the candidates.
+\end{proof}
+
+\begin{lemma}[degrees without a basis normal at infinity]\label{lem:E1inf}
+Let $Z=\sum_{i<n}h_iw_i$ with $h_i\in\Q[x]$ and $w_i=y^i/d_i$ (\code{curveBasis}), and suppose
+$\nu_p(Z)\ge\beta_Z$ at every place $p$ above infinity, of (uniform) ramification $r$. Here
+$\{w_i\}$ is an integral basis of the integral closure of $\Q[x]$ (so $h_i\in\Q[x]$), and $G$
+is the polynomial radicand of the reduced curve (\code{componentCurve}). Then, with
+$\ell=\deg G$,
+\[ \deg h_i\le -\beta_Z/r-(i\,\ell/n-\deg d_i)\quad\text{for every }i. \]
+\end{lemma}
+\begin{proof}
+Write $E_i=\deg h_i+i\,\ell/n-\deg d_i$ and $e=\max_iE_i$. On the formal branch
+$y=v\,x^{\ell/n}(1+\cdots)^{1/n}$, where $v^n=\lc(G)$, the coefficient of $x^e$ in $Z$ is
+$\sum_{E_i=e}\lc(h_i)\lc(d_i)^{-1}v^i$. This is a nonzero polynomial in $v$ of degree $<n$, so
+it vanishes at most at $n-1$ of the $n$ values of $v$.
+
+There are $n$ branches, and every place above infinity carries $r$ of them. So at some place
+$\nu_p(Z)=-re\ge\beta_Z$, that is, $E_i\le e\le -\beta_Z/r$. Lower-order terms of the
+$(1+O(1/x))^{1/n}$ expansion do not reach $x^e$.
+\end{proof}
+
+\noindent This is the bound \code{brAlgBounds} uses, with $\beta_Z=\beta_\infty-r\deg\mathcal D$. It replaces
+the hypothesis of [B] Prop.~3.7 that the integral basis be normal at infinity, which
+\code{curveBasis} is not known to satisfy. This settles review point~G4 for the code as it
+stands. The only remaining incompleteness is the \code{Unknown} of $T\equiv0$ (gap I1).
+
+\begin{lemma}[uniform bounds on the curve]\label{lem:E1uniform}
+Let $f,g_1,\dots,g_m\in k_0$. Run \code{brAlgBounds} with the following data:
+\begin{itemize}
+\item the pole factors of $f$ and of all the $g_i$;
+\item $\gamma_P=r\min_i\min_l\nu_P(g_{i,l})$ at each finite pole factor $P$;
+\item $\gamma_\infty=\min_i\gamma_\infty(g_i)$.
+\end{itemize}
+The resulting $\mathcal D$ and $B_0,\dots,B_{n-1}$ are valid for $Dq+fq=\sum c_ig_i$ for every
+$c\in\Q^m$. Consequently PRDE$_0$ is decided by the same ansatz, with the $c_i$ as further
+unknowns of the (still linear) system.
+\end{lemma}
+\begin{proof}
+This is [B] Part~3 read for (R1), with the choices of Lemmas~\ref{lem:E1choice}
+and~\ref{lem:E1inf}.
+
+For every $c$, the coordinate denominators of $\sum c_ig_i$ divide the lcm of those of the
+$g_i$. Also $\nu_P(\sum c_ig_i)\ge\min_i\nu_P(g_i)$ coordinatewise, and the same holds at
+infinity.
+
+Each bound of Lemma~\ref{lem:E1choice}, including case~(i) of Prop.~3.3, is nondecreasing in
+$\gamma$. The candidates $\tau$ and $a$ depend on $f$ only. So a smaller $\gamma$ gives a larger
+$\mathcal D$ and larger $B_i$: a weaker bound, which is still valid (as Lemma~\ref{lem:T11}).
+
+In (R2), $Z'+(f-\mathcal D'/\mathcal D)Z=\mathcal D\sum c_ig_i$ is linear jointly in the
+coefficients of $Z$ and in $c$.
+\end{proof}
+
+LI$_0(a;\eta)$, with $\eta=Dh/h$, is \code{brBCLimited}. It integrates $a$ by Trager, keeps the
+log-free part $v$, and tests whether $(a-Dv)/\eta\in\Q$.
+
+This is complete under (H$_\Q$). Suppose $a=Dw+c\eta$. Then $D(w-v)=\sum c_lDv_l/v_l-c\eta$ is
+a constant combination of logarithmic derivatives that is a derivative in $k_0$. Reduce the
+$c_l$ to a $\Q$-basis. Each component then has zero residues at every place, so its logands are
+constants and the combination is~$0$.
+
+With several $w_i$ (not all logarithmic derivatives), LI$_0$ is PRDE$_0$ with $f=0$. LD$_0$ and
+PLD$_0$ are Prop.~\ref{prop:E1ld} with $j=0$, where $G_F$ consists of the new logarithms only.
+
+\subsection*{E1.4. Decidability, certificates, and where Bronstein stops}
+
+Thm~\ref{thm:E1rde}, Prop.~\ref{prop:E1ld} and E1.3 give the induction of
+Thm~\ref{thm:E2decide}. A ``no solution'' of RDE$_j$ is a proof exactly when every bound it
+used came from correct auxiliary answers. An auxiliary ``undecided'' must do one of two things:
+\begin{itemize}
+\item be replaced by a valid weaker bound. For PLD in a bound this is possible once the radical
+  solution is found (remark~(2) of E1.1). It is not possible when INT$_j(\alpha)$ itself is
+  undecided;
+\item otherwise make RDE$_j$ undecided.
+\end{itemize}
+
+\emph{Where Bronstein stops.}
+\begin{itemize}
+\item [SI] Ch.~6--7 are complete over any $k$, given the oracles.
+\item [B] Part~3 proves the base bounds (Props~3.3--3.7) over $k(\theta)(y)$, for the
+  parametric equation. For $k=\Q$ it reduces to linear algebra; Lemma~\ref{lem:E1uniform} is
+  that reduction made explicit for the code.
+\item [B91] gives a rational algorithm for the denominator on a curve, and the complete
+  algorithm over $\C(x)(y)$ via uncoupling. It leaves the mixed degree bound open.
+\item What is new here:
+  \begin{itemize}
+  \item the logarithmic-derivative oracles over a curve (Prop.~\ref{prop:E1ld});
+  \item the degree bound without normality at infinity (Lemma~\ref{lem:E1inf});
+  \item the admission rule that keeps the constants in~$\Q$.
+  \end{itemize}
+  None of these is in [B], [B91] or [SI].
+\item [SI] \S7.3 states the structure-theorem method under the assumption that $\alpha$ is
+  elementary-integrable; Prop.~\ref{prop:E1ld}(i) turns that assumption into a decided step.
+  Its projection ``on~1'' must be on every basis element.
+\end{itemize}
+
+\subsection*{E1.5. Worked examples}
+
+\paragraph{Example 2, the RDE.} RDE$_1(Dy,1)$ over $k_1=k_0(t_1)$, $t_1=\log x$ primitive,
+$\eta=1/x$. Weak normalisation and the normal denominator: $f=Dy=\frac{3x^2}{2y}$ and $g=1$
+lie in $k_0$, so they have no pole at a normal place of $k_0[t_1]$, and $h=1$: $q\in
+k_0[t_1]$, $a=1$, $b=Dy$, $c=1$, $d_a=d_b=d_c=0$. Degree bound (\S\ref{sec:A2}, case
+$d_b=d_a$): $\alpha=-Dy$; LD$_0(-Dy)$: INT$_0(-Dy)=-y$ has no logarithm, $G_F=\emptyset$, so
+the system $n(-Dy)=0$ forces $n=0$: no solution (no witness and no ROOT$_0$ needed). Hence $n\le d_c-d_b=0$ and $q\in k_0$.
+(Equivalently, the cancellation case $b\in k_0$: LD$_0(-Dy)$ fails, so the top-down pass is
+forced.) What is left is RDE$_0(Dy,1)$: $Dq+\frac{3x^2}{2y}q=1$ over $\Q(x)(y)$, and
+\code{brRDEAlgebraic} answers \code{NoSolution} (v0.6647). By hand, with [B] Lemma~1.7
+($\nu_p(Dq)=\nu_p(q)-r$ at a finite place of ramification $r$ when $\nu_p(q)\ne0$):
+$f$ is regular except at the ramified places over $1+x^3=0$ (three geometric points; $r=2$,
+local parameter $y$),
+where $\nu(f)=-1$. A pole $\nu(q)=\alpha<0$ there gives $\nu(Dq+fq)=\alpha-2<0=\nu(1)$, so
+there is none; elsewhere at finite places Lemma~3.6 applies. At the place over infinity
+($r=2$, parameter $\tau=x^{-1/2}$, $\nu(x)=-2$, $\nu(y)=-3$) we have $\nu(f)=-1$ and
+$\nu(Dq)\ge\nu(q)+2$, so $\nu(Dq+fq)=\nu(q)-1$ must be $\nu(1)=0$: $\nu_\infty(q)=1$. Then $q$
+has no pole at all and vanishes at infinity, so $q=0$, and $D0+f\cdot0\ne1$. So $\int
+e^{\sqrt{1+x^3}}dx$, and with it $f_2$, has no elementary integral. This is the computation
+\code{BaseCurve.m} already performs for $e^y$ alone (\code{brBCPolyExp}); E1.1 is what carries
+it through the extra level $\log x$.
+
+\paragraph{Example 1, the RDE.} RDE$_0(D(xy),a)$, $f=\frac{2+5x^3}{2y}$,
+$a=\frac{2+5x^3}{2xy}-\frac1{x^2}$. Over $x=0$ (two unramified places, $y=\pm1$) $f$ is regular
+and $\nu(a)=-2$, so a pole of $q$ has $\nu(q)-1=-2$: order at most~1. At the ramified places
+$\nu(f)=\nu(a)=-1$; a pole $\alpha<0$ of $q$ would give $\alpha-2=-1$, impossible. At infinity
+$\nu(f)=-1$ and $\nu(a)=\min(\nu(\tfrac{2+5x^3}{2xy}),\nu(x^{-2}))=\min(-1,4)=-1$, so
+$\nu_\infty(q)=0$. Hence $q\in\mathcal L(p_++p_-)$, $p_\pm$ the places over $x=0$; $y/x$ is
+excluded by its pole at infinity, so $q=c_0+c_1/x$, and the equation gives $c_0=0$, $c_1=1$:
+$q=1/x$, the RDE behind the $e^{xy}/x$ term (\code{brRDEAlgebraic} agrees).
+
+\subsection*{Open lemmas and implementation gaps}
+
+\begin{itemize}
+\item[OL1] \emph{Parameters.} Prop.~\ref{prop:T1} (verdicts generic in symbolic parameters)
+  is proved for the transcendental tower and for Trager (E4.4); its extension to admission
+  (Thm~\ref{thm:E2struct} with parameters joining the \code{SolveAlways} variables) and to
+  ROOT$_0$ (principality under specialisation, cf.\ E4.4d) is not proved here.
+\item[OL2] \emph{Constants beyond $\Q$} (review F1, G2). Lifting (H$_\Q$): a constant field
+  $\Q(\gamma)$ from a curve irreducible over $\Q(x)$ but not over $\Qbar(x)$; algebraic constants
+  in the integrand ($\log(x+iy)$); and nonzero elimination offsets ($\log\kappa$, $i\pi$,
+  $e^c$, giving $C=\Q(\alpha)(\tau)$). Thm~\ref{thm:E2struct} and [SI] Thm~9.3.1 hold for any
+  $C$, but every oracle must then search $C$: Lemma~\ref{lem:E2const}(i) with $R/\lc R\in C[z]$,
+  \code{brDFSpan} with the projection on \emph{every} $\Q$-basis element of $C$, PRDE/LI with
+  $c\in C^m$, \code{brBCLimited}'s test, ROOT$_0$ with $c\in C^*$, and Prop.~\ref{prop:E1ld}(ii)
+  over $F$ with constants $\Q(c)$. For transcendental $\tau$ the verdicts must also be generic
+  (as T1/T10, so OL1 first). Until proved, the levels concerned are Unimplemented.
+\item[OL3] \emph{PLD$_j$, $j\ge1$, with irrational log coefficients.} Is every residue met by
+  INT$_j(\alpha)$ rational when PLD$_j$ has a solution (so that an irrational $c_l$ is a proof of
+  ``no'')? Lemma~\ref{lem:E1res} proves it at level~0 only; above, the lower-level residues are
+  those of remainders. Not needed by M1 (PLD is called at level~0 only).
+\item[OL4] \emph{The radical in the middle} ($y$ algebraic over $k_{j}$, $j\ge1$): the
+  coupled system of E1's introduction; out of scope.
+\item[OL5] \emph{ROOT$_0$} (review G3): the principal-divisor test with generator for a divisor
+  with support at the places at infinity, with the frame change transforming $b$, the integral
+  basis and the divisor (E1.2). Until written and proved, LD with $n_0>1$ is declined.
+\item[OL6] \emph{Presentation} (review G5, G6): normalising generators so that a dependent
+  exponential with fractional coefficients becomes a monomial $e^{w/N}$ or the algebraic element
+  it is ($e^{(\log x)/2}=y$ when $y=\sqrt x$); and, for $n>2$, a region-aware treatment of
+  spellings equal to $y^k$ only up to a locally constant root of unity ($(1/b)^{k/n}$, products
+  of radicals), the analogue of \code{brSignMerge} for square roots. The global identities of
+  (A1) need no such check. Both are completeness, not soundness: until done, such towers are
+  declined.
+\item[I1] (implementation) \code{brAlgRDE} returns \code{Unknown} when $T\equiv0$
+  (Lemma~\ref{lem:E1choice}); [B] Props~3.3--3.5 give the per-place values by Puiseux/Newton
+  polygon. A base \code{Unknown} propagates as Unimplemented.
+\item[I2] (implementation) INT$_0$ must return the Liouville data $(v,c_l,v_l)$ explicitly, with
+  the $c_l$ a $\Q$-basis of the $\Q$-span of the residues and, when they are rational, $v_l\in
+  k_0$; Trager's \code{RootSum} answers must expose $(c_l,v_l)$. Until checked, an irrational
+  $c_l$ in Prop.~\ref{prop:E1ld}(ii) gives ``undecided'' rather than ``no''.
+\end{itemize}
+
+% ======================================================================
+\section*{Phase 5 implementation plan (E1, E2)}
+\addcontentsline{toc}{section}{Phase 5 implementation plan}
+\label{sec:P5plan}
+
+\paragraph{1. The field record \code{brDField} (new \code{DField.m}).}
+$\langle x,Y,n,G,B,\{t_1..t_s\},\{\text{kind}_i\},\{\text{arg}_i\},\{Dt_i\}\rangle$, every
+argument and $Dt_i$ in normal form. Operations: \code{Norm} (\code{brBCNorm}), \code{D}
+(\code{brBCD} summed over the symbols, E2.1), \code{ZeroQ}, \code{ConstantQ}
+(Prop.~\ref{prop:E2field}(iv)), \code{Inverse} (\code{brK0Inverse} over
+\code{fieldFn[\{}$t_1,\dots,t_s$\code{\}]}), \code{Coordinates} (\code{brBCList}), \code{Level[j]} (the record
+truncated to $t_1..t_j$). The coordinate arithmetic of \code{K0.m} carries over unchanged
+(the tower symbols are scalars of $F$); only \code{brK0D} changes, as in E2.1.
+
+\paragraph{2. Admission (\code{Tower.m}).} Lift the two refusals at \code{Tower.m:205,208}.
+Check (H$_\Q$) and (A0)--(A1) first: normalise the global identities ($b^{k/n}$, $(q^nb)^{k/n}$)
+exactly to $q^ky^k$; route every other square-root spelling (in particular $(1/b)^{k/2}$ and
+products of square roots) through \code{brSignMerge} first, so that its sign symbols and region
+certificate come with it; decline the rest; no constant other than rationals. Build kernels innermost first; for each, normal-form the argument
+in the current record and run \code{brDFSpan} (E2.2): \code{False} admits; a rational vector
+eliminates only under the zero-offset rule of (A3) ($\kappa$ computed in normal form and
+equal to $1$ exactly, and $m=0$ read by integer separation at every T10 sample point, for a
+logarithm; $c=0$ exactly and integer coefficients for an exponential), and is otherwise
+Unimplemented; \code{\$Failed} declines. The \code{"algebraic"} flag and the ``first and only
+monomial'' rule go.
+
+\paragraph{3. One level of integration (\code{BaseTower.m}, generalising \code{BaseCurve.m}).}
+\code{brBCHermite}, \code{brBCSplit}, \code{brBCLaurent}, \code{brBCLogPart} take the record
+and a level $j$ instead of the single \code{th}: the $\theta$-polynomial operations are in
+$t_j$, the coefficient field is \code{Level[j-1]}. The residue test becomes
+\code{ConstantQ} on the monic resultant (Lemma~\ref{lem:E2const}); \code{brBCIntegrateK0}
+becomes the recursive call at level $j-1$, ending in Trager at level~0.
+
+\paragraph{4. The level-0 oracles.} RDE$_0$: \code{brAlgRDE} (exists; Lemmas~\ref{lem:E1choice}
+and \ref{lem:E1inf} are its proof). PRDE$_0$: \code{brAlgRDE} with parameters
+(Lemma~\ref{lem:E1uniform}: the $c_i$ join \code{unk}, the answer is the solution space). LI$_0$:
+\code{brBCLimited} for one logarithmic derivative, PRDE$_0$ otherwise. LD$_0$/PLD$_0$: new, by
+Prop.~\ref{prop:E1ld} (INT$_0$ plus \code{brDFSpan}, exact verification of every witness);
+ROOT$_0$ is not built in M1 (OL5).
+
+\paragraph{5. RDE and PRDE at level $j\ge1$ (\code{RDETower.m}).} A transcription of [SI]
+Ch.~6 and \S7.1 over \code{Level[j-1]}, following step for step the C reference in
+\code{integrate\_risch\_rde.c} (\code{rde\_tower}, \code{rde\_tower\_param}), including the fixes
+recorded in \S\ref{sec:A2} and T11 (corrected primitive bound; linear parametric cancellation),
+with the integrality rule of remark~(1) of E1.1. Reusing the C code directly would mean teaching
+\code{RtTower} the relation $Y^n=b$ in every zero test; the \code{.m} transcription over
+\code{brDField} is the smaller change, and the C code remains the oracle for the $y$-free
+special case in the tests (a tower over $k_0$ whose arguments are free of $y$ must give the
+answers of \code{BaseAlgebraic.m}).
+
+\paragraph{6. LD/PLD and LI at level $j\ge1$.} Prop.~\ref{prop:E1ld} (INT$_j$, \code{brDFSpan},
+ROOT$_j$ by squarefree decomposition) and LI$_j$ = PRDE$_j$ with $f=0$. Not needed by M1.
+
+\paragraph{First milestone (M1): two monomials over $\Q(x)(y)$.}
+\emph{M1 decides} an integrand $f$ when all of the following hold:
+\begin{itemize}
+\item $f$ and every kernel argument are rational in $x$ and the radical $y=b^{1/n}$, with
+  $b\in\Q(x)$, $Y^n-b$ absolutely irreducible, and the radical spelled so that (A1) normalises
+  it exactly to $y^k$ (directly, or after \code{brSignMerge} for square roots, in which case the
+  verdict is a region certificate);
+\item no constant other than rationals appears;
+\item after admission and zero-offset elimination the tower is $K=k_0(t_1)$ or
+  $k_0(t_1)(t_2)$, with each $t_i$ a logarithm or an exponential of an element of $k_{i-1}$
+  (arguments may involve $y$);
+\item no oracle call hits a declined case below.
+\end{itemize}
+Within that scope every ``no'' is a certificate (Thm~\ref{thm:E2cert}) and every ``yes'' is
+verified by differentiation.
+
+\emph{M1 declines} (Unimplemented, never a certificate):
+\begin{itemize}
+\item a dependent kernel whose offset is nonzero ($g_3$; $\log(x-z)$ beside $\log(x+z)$;
+  $e^{xz+1}$ beside $e^{xz}$), or a dependent exponential with a fractional coefficient
+  ($e^{(\log x)/2}$; $e^{xy/2}$ after $e^{xy}$);
+\item a curve that is not absolutely irreducible; any algebraic or transcendental constant
+  (including $\sqrt{2+2x^3}=\sqrt2\,y$); for $n>2$, any spelling that equals $y^k$ only up to a
+  root of unity ($(1/b)^{k/n}$, products of radicals); several radicals (handled before Phase 5 by E8/E9 or not
+  at all); tangent kernels and Liouvillian primitives;
+\item three or more monomials after elimination;
+\item an LD call whose radical solution has $n_0>1$, and a PLD call in the exponential
+  cancellation case that needs an $n=1$ witness while $n_0>1$ (both need ROOT$_0$);
+\item an irrational log coefficient from INT$_0$ inside PLD$_0$, until I2 is checked; and
+  rational log coefficients whose logands are not given in $k_0$ (a \code{RootSum} answer), since
+  Prop.~\ref{prop:E1ld}(ii) needs $v_l\in k_0$;
+\item \code{Unknown} from \code{brAlgRDE} (I1), and any \code{\$Failed} span solve.
+\end{itemize}
+
+\emph{Order inside M1.}
+\begin{enumerate}
+\item[M1a] \code{brDField}, admission with the zero-offset rule, Hermite/Rothstein--Trager at
+  level~2, exponential top with RDE$_1$ (non-cancellation cases, and the cancellation case
+  decided by LD$_0$): closes Example~2; gate tests $g_3$ (declined), the $\log y$/$\log(1+x^3)$
+  pair ($r=2$, offset~0, eliminated) and E2's false-certificate example.
+\item[M1b] Primitive top: LI$_1$ through PRDE$_1$ and PRDE$_0$: closes Example~1 without the
+  D1 split (e.g.\ on $f_1$ put over one denominator).
+\item[M1c] The two remaining class-B Phase-5 cases of benchmark 256 (\code{bgenusp-2-9},
+  \code{bgenusp-3-6}) and the two-monomial families of benchmark 260.
+\end{enumerate}
+Gates as in the plan: unit tests per routine (each oracle with a solvable, an unsolvable and a
+degenerate case, the unsolvable ones checked against a widened bound as \code{brAlgRDE}'s
+\code{widen} hook does), every answer verified by differentiation, no ``no'' on 260's
+elementary-by-construction family, and every declined class above with a test that it declines.
+General $s$ (item~5 for $j\ge2$) follows by the same code, since every routine takes the level
+as an argument; it needs OL3 only if PLD is called above level~0.
+
 \section*{T1. Parameters are constants, never unknowns (v0.6586, v0.6589, v0.6591, v0.6592)}
 \addcontentsline{toc}{section}{T1. Parameters}
 

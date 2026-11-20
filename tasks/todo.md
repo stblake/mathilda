@@ -6,11 +6,12 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D0 benchmark 260 (generator, corpus, README, make bench-integrate-bottom) (radical at the bottom: elementary-by-construction, non-elementary-by-construction, random)
 - [x] D1 support groups (radicals, then kernels, pairwise merges): 45 of the 47 undecided class B decided
 - [x] D2 free square root split (E8 over any base, E9 note): 260 81% -> 90% (separation lemma still open)
-- [ ] D3 Phase 5: E2, E1 notes; brDField; tower over Q(x)(y); Hermite/RT over k0; curve RDE over a tower; 19 cases
+- [x] D3 theory: E2, E1 notes written and reviewed twice (docs/notes/bronstein_phase5_review.md)
+- [ ] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (scope in the note)
 - [ ] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases with no answer and no certificate
-- [ ] D5 the 8 remaining 259 cases + gausshunt 8 (C2.4, C2.5)
+- [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 open (exponent lattice HNF)
 - [ ] D6 speed: 43 cases over 1 s; evaluator scoping change (user decision: a/b/c)
-- [ ] D7 special-function answers for the 18 cases FriCAS closes
+- [x] D7 (v0.6650): 10 of the 18 special-function cases
 - [ ] D8 submit the FriCAS report (user approval)
 
 # MemoryConstrained (started 2026-11-19)

@@ -1790,6 +1790,20 @@ undecided by every Mathilda method (Bronstein, RischTranscendental, PMT, Automat
 else) took 260 from 81% to 90%, and all 60 `pert-nonelem` cases are certified. The open
 part of D2 is the separation lemma (two non-elementary groups with no free square root).
 
+**Status (2026-11-21, after v0.6650).** D5 (v0.6649): 6 of the 7 corpus-259 cases;
+f12-elem-7 open (needs an HNF basis of the exponent lattice). D7 (v0.6650): 10 of the 18.
+D3: the theory notes E2 and E1 are written (`docs/notes/bronstein_extensions.tex`).
+They passed two rounds of adversarial review, recorded in
+`docs/notes/bronstein_phase5_review.md`.
+- First round: 1 FATAL and 7 GAPs. Elimination offsets brought constants outside Q into
+  oracles that test membership in Q.
+- Second round: 3 GAPs, no FATAL.
+
+All of them are fixed or turned into explicit declines. The first code milestone, M1, is
+scoped exactly in the note (section "Implementation plan"):
+- at most two monomials over Q(x)(y), constants Q, zero-offset eliminations only;
+- M1a (exponential top), M1b (primitive top), M1c (the remaining 256/260 cases).
+
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
 - *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a
