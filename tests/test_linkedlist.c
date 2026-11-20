@@ -549,6 +549,106 @@ void test_mutators_linear_time() {
                    "{1000000, -5, 1000000, 1.0*^6, 1000000}", 0);
 }
 
+
+/* ------------------------------------------------ phase 4: copying heads */
+
+/* Every copying head on a LinkedList agrees with the same head on the List,
+ * for typed (integer, real, complex) and boxed storage, and for a list built
+ * from both ends (front-run spans run downward). */
+void test_copying_heads_match_list() {
+    assert_eval_eq("c4mk[v_] := Module[{l = LinkedList[], h = Floor[Length[v]/2]}, "
+                   "Scan[PrependTo[l, #] &, Reverse[Take[v, h]]]; Scan[AppendTo[l, #] &, Drop[v, h]]; l]; "
+                   "c4ops = {Take[#, 3] &, Take[#, -2] &, Take[#, {2, -2, 2}] &, Take[#, {-1, 1, -3}] &, "
+                   "Take[#, UpTo[100]] &, Take[#, All] &, Drop[#, 2] &, Drop[#, -3] &, Drop[#, {2, 8, 3}] &, "
+                   "Drop[#, {-2, 1, -2}] &, Drop[#, None] &, Most, Rest, Reverse, Append[#, c4q] &, "
+                   "Prepend[#, 1] &, Insert[#, c4q, 2] &, Insert[#, c4q, -1] &, "
+                   "Insert[#, c4q, {{1}, {4}, {4}, {13}}] &, Delete[#, 3] &, Delete[#, -1] &, "
+                   "Delete[#, {{1}, {3}, {3}, {12}}] &, Delete[#, {}] &, ReplacePart[#, {2 -> c4q, -1 -> 5}] &, "
+                   "ReplacePart[#, i_?OddQ :> i] &, ReplacePart[#, {{1}, {4}} -> 0] &, Select[#, NumericQ] &, "
+                   "Select[#, NumericQ, 2] &, Map[c4f, #] &, Map[#^2 &, #] &, Map[c4f, #, {1}] &, "
+                   "Join[#, #] &, Join[{c4q}, #, {2}] &, Sin, Exp, # + 1 &, # + 1.5 &, 2 # &, #^2 &, # + # &, # # &}; "
+                   "c4vs = {Range[12], N[Range[12]]/3, Range[12] + 0.5 I, "
+                   "{c4x, 1, 2.5, c4f[c4y], \"s\", 3, 4, 5, 6, 7, 8, 9}}; "
+                   "Union[Flatten[Table[With[{r = op[mk[v]]}, Head[r] === LinkedList && Normal[r] === op[v]], "
+                   "{op, c4ops}, {v, c4vs}, {mk, {LinkedList, c4mk}}]]]",
+                   "{True}", 0);
+    /* Deeper specifications act inside the elements, as for a List. */
+    assert_eval_eq("c4m = LinkedList[{{1, 2}, {3, 4}, {5, 6}}]; c4n = Normal[c4m]; "
+                   "Union[Table[Normal[op[c4m]] === op[c4n], {op, {Delete[#, {2, 1}] &, "
+                   "Delete[#, {{2, 1}, {3}, {1, 2}}] &, Insert[#, c4x, {3, 2}] &, Reverse[#, {1, 2}] &, "
+                   "Reverse[#, 2] &, Take[#, 2, 1] &, Take[#, All, -1] &, Drop[#, 1, -1] &, "
+                   "ReplacePart[#, {2, 2} -> c4z] &, ReplacePart[#, {_, 1} -> 0] &, Map[c4f, #, {2}] &, "
+                   "Map[c4f, #, 2] &, Map[c4f, #, {-1}] &, Join[#, #, 2] &, # + {10, 20, 30} &}}]]",
+                   "{True}", 0);
+    assert_eval_eq("{Map[c4f, c4m, {0, 1}] // Head, Map[c4f, c4m, {0}][[1]] === c4m, c4h[Delete[c4m, 0]], "
+                   "c4h[Delete[c4m, {{}}]]}",
+                   "{c4f, True, c4h[{1, 2}, {3, 4}, {5, 6}], c4h[]}", 0);
+    /* Nested LinkedLists take the deeper specifications their own way. */
+    assert_eval_eq("c4nn = LinkedList[{LinkedList[{1, 2, 3}], LinkedList[{4, 5}]}]; "
+                   "{Head[Take[c4nn, All, 1][[1]]], Normal[Normal /@ Normal[Take[c4nn, All, -1]]], "
+                   "Normal[Delete[c4nn, {1, 2}][[1]]], Normal[Normal[Reverse[c4nn, 2]][[2]]]}",
+                   "{LinkedList, {{3}, {5}}, {1, 3}, {5, 4}}", 0);
+}
+
+void test_copying_heads_leave_source() {
+    assert_eval_eq("c4s = LinkedList[Range[5]]; c4a = c4s; "
+                   "{Append[c4s, 6], Prepend[c4s, 0], Take[c4s, 2], Drop[c4s, 2], Rest[c4s], Most[c4s], "
+                   "Reverse[c4s], Join[c4s, c4s], Insert[c4s, 9, 2], Delete[c4s, 2], ReplacePart[c4s, 1 -> 0], "
+                   "Map[Minus, c4s], Select[c4s, EvenQ], c4s + 1, Sin[c4s]}; "
+                   "{Normal[c4a], Append[c4s, 6] === c4s, Join[c4s] === c4s}",
+                   "{{1, 2, 3, 4, 5}, False, False}", 0);
+    /* The result is a fresh, independent object. */
+    assert_eval_eq("c4t = Take[c4s, 3]; AppendTo[c4t, 99]; {Normal[c4t], Length[c4s]}",
+                   "{{1, 2, 3, 99}, 5}", 0);
+}
+
+void test_copying_messages() {
+    assert_eval_eq("c4e = LinkedList[{1, 2, 3}]; "
+                   "{Check[Take[c4e, 5], err], Check[Take[c4e, -4], err], Check[Take[c4e, {2, 7}], err], "
+                   "Check[Drop[c4e, 4], err], Check[Take[c4e, c4x], err], Check[Most[LinkedList[]], err], "
+                   "Check[Rest[LinkedList[]], err], Check[Insert[c4e, 0, 5], err], Check[Insert[c4e, 0, {5, 1}], err], "
+                   "Check[Delete[c4e, 4], err], Check[Delete[c4e, {{1}, {-4}}], err], "
+                   "Check[Join[c4e, c4f[1]], err], Check[c4e + {1, 2}, err]}",
+                   "{err, err, err, err, err, err, err, err, err, err, err, err, err}", 0);
+    assert_eval_eq("Quiet[{Take[c4e, 5], Delete[c4e, 4], Insert[c4e, 0, 0], Join[c4e, c4f[1]], c4e + {1, 2}}]",
+                   "{Take[LinkedList[<3>], 5], Delete[LinkedList[<3>], 4], Insert[LinkedList[<3>], 0, 0], "
+                   "Join[LinkedList[<3>], c4f[1]], LinkedList[<3>] + {1, 2}}", 0);
+    /* In range at the boundaries: no message. */
+    assert_eval_eq("Check[{Normal[Take[c4e, {4, 3}]], Normal[Drop[c4e, 3]], Normal[Insert[c4e, 0, 4]], "
+                   "Normal[Insert[c4e, 0, -4]], Normal[Take[c4e, 0]]}, err]",
+                   "{{}, {}, {1, 2, 3, 0}, {0, 1, 2, 3}, {}}", 0);
+}
+
+/* Listable threading over machine reals runs the kernel from chunk to chunk
+ * and must agree with the packed List to the bit -- including where the
+ * packed path declines to the List (overflow to MPFR, exact zeros). */
+void test_listable_threading_bit_parity() {
+    assert_eval_eq("SeedRandom[4]; c4r = Join[RandomReal[{-5, 5}, 70000], {0., -0., 800., -800.}]; "
+                   "c4lr = LinkedList[c4r]; c4fr = LinkedList[]; Scan[PrependTo[c4fr, #] &, Reverse[c4r]]; "
+                   "Union[Flatten[Table[Normal[op[l]] === op[c4r], "
+                   "{op, {Sin, Cos, Exp, Tanh, Abs, Sqrt, Log, # + 1.5 &, 3 # &, # # &, # + # &, # 1.*^307 &, "
+                   "#/3 &, # - 1 &, # + 0 &, 0 # &, #^2 &, Floor, Round}}, {l, {c4lr, c4fr}}]]]",
+                   "{True}", 0);
+    assert_eval_eq("c4i = LinkedList[{1, 2, 2^62, -3}]; "
+                   "{Normal[c4i + 1], Normal[2 c4i], Normal[c4i^2] === {1, 4, 2^124, 9}, Normal[Mod[c4i, 3]]}",
+                   "{{2, 3, 4611686018427387905, -2}, {2, 4, 9223372036854775808, -6}, True, {1, 2, 1, 0}}", 0);
+    /* A user function with Listable threads too, and threading reads every
+     * kind of operand: List, packed List, LinkedList. */
+    assert_eval_eq("SetAttributes[c4g, Listable]; {Normal[c4g[LinkedList[{1, c4x}]]], "
+                   "Normal[LinkedList[{1, 2}] + {c4x, 3} + Range[2] + LinkedList[{0.5, 0.5}]]}",
+                   "{{c4g[1], c4g[c4x]}, {2.5 + c4x, 7.5}}", 0);
+}
+
+void test_copying_heads_scale() {
+    /* 10^6 elements: Insert, Delete and ReplacePart copy spans (a List copies
+     * Expr pointers one by one), so twenty of each stay far under a second. */
+    assert_eval_eq("c4b = LinkedList[N[Range[10^6]]]; "
+                   "c4t = First[AbsoluteTiming[Do[Insert[c4b, 0., 500000]; Delete[c4b, 500000]; "
+                   "ReplacePart[c4b, 7 -> 0.]; Take[c4b, {10, -10}]; Reverse[c4b], {20}]]]; "
+                   "{c4t < 1.5, Length[Insert[c4b, 0., 500000]], Total[Delete[c4b, -1]] == 499999500000}",
+                   "{True, 1000001, True}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -579,6 +679,11 @@ int main() {
     TEST(test_append_prepend_to);
     TEST(test_part_assignment);
     TEST(test_mutators_linear_time);
+    TEST(test_copying_heads_match_list);
+    TEST(test_copying_heads_leave_source);
+    TEST(test_copying_messages);
+    TEST(test_listable_threading_bit_parity);
+    TEST(test_copying_heads_scale);
 
     printf("All LinkedList tests passed!\n");
     symtab_clear();

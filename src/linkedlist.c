@@ -608,6 +608,134 @@ LinkedList* ll_copy(const LinkedList* ll) {
     return c;
 }
 
+/* Elements [lo, hi) of `src` appended to `dst` in logical order. Typed slots
+ * of a matching kind are copied a chunk span at a time (memcpy for the back
+ * run, slot by slot for the downward-growing front run); boxed elements go
+ * through ll_push_back, so a slice that holds only machine numbers of one kind
+ * comes out typed again. */
+void ll_append_range(LinkedList* dst, const LinkedList* src, int64_t lo, int64_t hi) {
+    if (hi <= lo) return;
+    if (src->kind != LL_BOXED && src->kind != LL_EMPTY &&
+        (dst->kind == src->kind || ll_length(dst) == 0)) {
+        ll_admit(dst, src->kind);
+        size_t esz = kind_size(src->kind);
+        for (int64_t i = lo; i < hi; ) {
+            const void* p;
+            int dir;
+            int64_t k = ll_span_at(src, i, &p, &dir);
+            if (k > hi - i) k = hi - i;
+            if (dir > 0) {
+                ll_push_back_buffer(dst, (const unsigned char*)p, k);
+            } else {
+                const unsigned char* q = (const unsigned char*)p;
+                for (int64_t t = 0; t < k; t++) run_push_raw(dst, &dst->back, q - (size_t)t * esz);
+            }
+            i += k;
+        }
+        ll_mutated();
+        return;
+    }
+    for (int64_t i = lo; i < hi; i++) ll_push_back(dst, ll_get(src, i));
+}
+
+/* Append k slots read from `src` at a signed byte stride to the back run,
+ * filling each destination chunk in one tight loop (no per-slot lookup). */
+static void ll_push_back_strided(LinkedList* ll, const unsigned char* src, ptrdiff_t stride,
+                                 int64_t k) {
+    size_t esz = kind_size(ll->kind);
+    LLRun* r = &ll->back;
+    while (k > 0) {
+        run_ensure(ll, r, r->end);
+        int c = chunk_of(r->end);
+        int64_t room = chunk_base(c) + chunk_cap(c) - r->end;
+        int64_t m = k < room ? k : room;
+        unsigned char* d = slot_ptr(r, r->end, esz);
+        for (int64_t t = 0; t < m; t++, d += esz, src += stride) memcpy(d, src, esz);
+        r->end += m;
+        k -= m;
+    }
+}
+
+/* Elements hi-1, hi-2, ..., lo of `src` appended to `dst` (Reverse). The
+ * spans of [lo, hi) are found front to back (O(log n) of them) and copied
+ * back to front, each one reversed in a single strided pass. */
+void ll_append_range_rev(LinkedList* dst, const LinkedList* src, int64_t lo, int64_t hi) {
+    if (hi <= lo) return;
+    if (src->kind != LL_BOXED && src->kind != LL_EMPTY &&
+        (dst->kind == src->kind || ll_length(dst) == 0)) {
+        ll_admit(dst, src->kind);
+        ptrdiff_t esz = (ptrdiff_t)kind_size(src->kind);
+        /* At most 2 * LL_MAXCHUNK spans: each run's chunks, once. */
+        int64_t at[2 * LL_MAXCHUNK + 2], len[2 * LL_MAXCHUNK + 2];
+        int ns = 0;
+        for (int64_t i = lo; i < hi; ) {
+            const void* p;
+            int dir;
+            int64_t k = ll_span_at(src, i, &p, &dir);
+            if (k > hi - i) k = hi - i;
+            at[ns] = i; len[ns] = k; ns++;
+            i += k;
+        }
+        for (int s = ns - 1; s >= 0; s--) {
+            const void* p;
+            int dir;
+            /* The span's LAST logical element, walked toward its first. */
+            ll_span_at(src, at[s], &p, &dir);
+            const unsigned char* q = (const unsigned char*)p + (ptrdiff_t)dir * esz * (len[s] - 1);
+            ll_push_back_strided(dst, q, -(ptrdiff_t)dir * esz, len[s]);
+        }
+        ll_mutated();
+        return;
+    }
+    for (int64_t i = hi - 1; i >= lo; i--) ll_push_back(dst, ll_get(src, i));
+}
+
+/* Size an EMPTY list to n slots of a typed kind, contents unwritten. */
+void ll_reserve_typed(LinkedList* ll, LLKind kind, int64_t n) {
+    ll_admit(ll, kind);
+    for (int64_t j = 0; j < n; j = chunk_base(chunk_of(j) + 1)) run_ensure(ll, &ll->back, j);
+    ll->back.start = 0;
+    ll->back.end = n;
+    ll_mutated();
+}
+
+/* Elements [lo, lo + n) as one value the List machinery consumes directly: a
+ * packed rank-1 array (gathered from the typed slots, no Expr per element) or,
+ * for a boxed list, a List sharing the elements. New reference; n >= 1. */
+Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n) {
+    if (src->kind == LL_I64 || src->kind == LL_REAL || src->kind == LL_CPLX) {
+        NDType dt = src->kind == LL_I64 ? NDT_INT64
+                  : src->kind == LL_REAL ? NDT_FLOAT64 : NDT_COMPLEX64;
+        size_t esz = kind_size(src->kind);
+        unsigned char* buf = malloc((size_t)n * esz);
+        if (!buf) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
+        for (int64_t got = 0; got < n; ) {
+            const void* p;
+            int dir;
+            int64_t k = ll_span_at(src, lo + got, &p, &dir);
+            if (k > n - got) k = n - got;
+            if (dir > 0) {
+                memcpy(buf + (size_t)got * esz, p, (size_t)k * esz);
+            } else {
+                const unsigned char* q = (const unsigned char*)p;
+                for (int64_t t = 0; t < k; t++)
+                    memcpy(buf + (size_t)(got + t) * esz, q - (size_t)t * esz, esz);
+            }
+            got += k;
+        }
+        Expr* out = expr_new_ndarray_raw(1, &n, buf, dt);
+        out->data.ndarray.present_as = NDA_HEAD_LIST;     /* a packed List */
+        pack_g_any_created = true;
+        return out;
+    }
+    Expr** a = malloc((size_t)n * sizeof(Expr*));
+    if (!a) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
+    for (int64_t i = 0; i < n; i++) a[i] = ll_get(src, lo + i);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), a, (size_t)n);
+    free(a);
+    return out;
+}
+
 bool ll_is_list_source(const Expr* src) {
     if (!src) return false;
     if (src->type == EXPR_NDARRAY) return true;          /* packed or visible */
@@ -929,9 +1057,17 @@ void linkedlist_init(void) {
         "\tLinkedList[ll] returns an independent shallow copy of the linked list ll.\n"
         "\tAssignment and argument passing share the same list rather than copying\n"
         "\tit: AppendTo, PrependTo, Push, Pop, PopFirst and Part assignment change it\n"
-        "\tin place, while Part, Take, Drop, Append, Delete, Map, ... return a new\n"
-        "\tLinkedList. Normal[ll] gives the elements as a List. Prints as\n"
-        "\tLinkedList[<n>]; appending, prepending, popping and indexing are O(1).");
+        "\tin place, while Part, Take, Drop, Most, Rest, Reverse, Append, Prepend,\n"
+        "\tJoin, Insert, Delete, ReplacePart, Map, Select and Listable functions\n"
+        "\t(Sin[ll], ll + 1) return a new LinkedList. Normal[ll] gives the elements\n"
+        "\tas a List. Prints as LinkedList[<n>].\n"
+        "\tIt is not a cons list: the elements are stored in chunks whose sizes\n"
+        "\tdouble, reached through a fixed table, so ll[[i]] and ll[[i]] = v are\n"
+        "\tO(1), like an array, and appending, prepending and popping at either end\n"
+        "\tare O(1) without ever moving the existing elements. Inserting or\n"
+        "\tdeleting in the middle copies the list (O(n)), as for a List.\n"
+        "\tA list of machine integers, reals or complex numbers of one kind is\n"
+        "\tstored unboxed, and numeric heads run the packed-array kernels on it.");
 
     symtab_add_builtin(SYM_Push, builtin_push);
     symtab_get_def(SYM_Push)->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;

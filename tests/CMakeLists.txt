@@ -758,6 +758,7 @@ set(COMMON_SRC
     ../src/sowreap.c
     ../src/linkedlist.c
     ../src/linkedlist_ops.c
+    ../src/linkedlist_struct.c
     ../src/stats/stats.c
     ../src/stats/stats_common.c
     ../src/stats/mean.c

@@ -1465,6 +1465,7 @@ Expr* builtin_last(Expr* res) {
 Expr* builtin_most(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_LINKEDLIST) return ll_most_rest(res, true);
     /* An NDArray is atomic, so is_atomic below rejects it and the call comes
      * back UNEVALUATED, while the identical List call works.  Most is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
@@ -1492,6 +1493,7 @@ Expr* builtin_most(Expr* res) {
 Expr* builtin_rest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_LINKEDLIST) return ll_most_rest(res, false);
     /* An NDArray is atomic, so is_atomic below rejects it and the call comes
      * back UNEVALUATED, while the identical List call works.  Rest is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
@@ -1762,6 +1764,7 @@ static Expr* number_atom_delete_insert(Expr* res, Expr* atom, Expr* spec, bool i
 
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_insert(res);
     if (expr_is_number_atom(res->data.function.args[0]))
         return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[2], true);
     if (is_association(res->data.function.args[0]))
@@ -1917,6 +1920,10 @@ Expr* expr_delete(Expr* expr, Expr* pos) {
             
             Expr* current = expr_copy(expr);
             for (size_t i = 0; i < pos->data.function.arg_count; i++) {
+                /* A repeated position names the same original part once:
+                 * Delete[Range[12], {{3}, {3}}] removes 3, not 3 and then the
+                 * 4 that slid into its place. */
+                if (i > 0 && expr_eq(sorted_pos[i - 1], sorted_pos[i])) continue;
                 Expr* next = NULL;
                 if (sorted_pos[i]->type == EXPR_FUNCTION) {
                     next = delete_path(current, sorted_pos[i]->data.function.args, sorted_pos[i]->data.function.arg_count);
@@ -1988,6 +1995,7 @@ Expr* builtin_delete(Expr* res) {
     if (res->data.function.arg_count == 1) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {
+        if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_delete(res);
         return expr_delete(res->data.function.args[0], res->data.function.args[1]);
     }
     return NULL;

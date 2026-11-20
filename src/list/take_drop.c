@@ -3,6 +3,7 @@
 #include "ndarray.h"
 #include "ndstruct.h"
 #include "../sym_names.h"
+#include "../linkedlist.h"
 
 bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t* out_count) {
     int64_t m = 0, n = 0, s = 1;
@@ -173,6 +174,8 @@ static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_ta
 
 Expr* builtin_take(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    /* Take[ll, spec]: a new LinkedList, copied a chunk span at a time. */
+    if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_take_drop(res, true);
     /* Take[ndarray, spec]: contiguous leading-axis slice on the buffer (ndstruct.c). */
     if (is_ndarray(res->data.function.args[0])) return ndstruct_take(res);
     if (expr_is_number_atom(res->data.function.args[0])) return builtin_normal_error("Take", res, 1);
@@ -181,6 +184,7 @@ Expr* builtin_take(Expr* res) {
 
 Expr* builtin_drop(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_take_drop(res, false);
     if (is_ndarray(res->data.function.args[0])) return ndstruct_drop(res);
     if (expr_is_number_atom(res->data.function.args[0])) return builtin_normal_error("Drop", res, 1);
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, false);

@@ -394,6 +394,18 @@ void test_delete() {
     ASSERT_STR_EQ(res4->data.function.args[1]->data.symbol.name, "d");
     expr_free(res4); expr_free(multi_pos); expr_free(list_long);
 
+    /* A repeated position deletes its part once, not the neighbour that slid
+     * into its place: Delete[{a, b, c, d}, {{2}, {2}}] -> {a, c, d}. */
+    Expr* rep_args[] = {expr_new_symbol("a"), expr_new_symbol("b"), expr_new_symbol("c"), expr_new_symbol("d")};
+    Expr* list_rep = expr_new_function(expr_new_symbol("List"), rep_args, 4);
+    Expr* q1 = expr_new_function(expr_new_symbol("List"), (Expr*[]){expr_new_integer(2)}, 1);
+    Expr* q2 = expr_new_function(expr_new_symbol("List"), (Expr*[]){expr_new_integer(2)}, 1);
+    Expr* rep_pos = expr_new_function(expr_new_symbol("List"), (Expr*[]){q1, q2}, 2);
+    Expr* res5 = expr_delete(list_rep, rep_pos);
+    ASSERT(res5 && res5->data.function.arg_count == 3);
+    ASSERT_STR_EQ(res5->data.function.args[1]->data.symbol.name, "c");
+    expr_free(res5); expr_free(rep_pos); expr_free(list_rep);
+
     expr_free(list);
 }
 

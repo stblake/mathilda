@@ -2608,6 +2608,7 @@ Expr* builtin_append(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
     if (is_association(expr)) return assoc_add_rules(expr, elem, false);
+    if (expr->type == EXPR_LINKEDLIST) return ll_append_prepend(res, false);
     /* One allocation and two memcpys on the buffer. Until this existed Append
      * was "correct by omission" in pack.c -- the gate materialised 10^6 Exprs
      * so the generic walk below could add one element to the end. */
@@ -2642,6 +2643,7 @@ Expr* builtin_prepend(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
     if (is_association(expr)) return assoc_add_rules(expr, elem, true);
+    if (expr->type == EXPR_LINKEDLIST) return ll_append_prepend(res, true);
     if (is_ndarray(expr)) {                       /* see builtin_append above */
         Expr* nd = ndstruct_append(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);

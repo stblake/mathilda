@@ -1918,3 +1918,38 @@ can be reused here: `3;;2` is `{}`, `3;;1` is an error. The fix belongs in
 `expr_part` and `span_resolve`. Callers that rely on a silent NULL from `expr_part`
 must keep it, so the messages have to be emitted at `builtin_part`, not in the
 recursion.
+
+## Open (pre-existing, found 2026-11-20 during LinkedList phase 4): List Insert/Delete wrong out of range; Take/Drop/Most/Rest/Join silent
+
+Two are wrong answers:
+- `Insert[{1, 2}, x, 10]` gives `{1, 2, x}`. `insert_path` clamps the index, where the
+  reference raises `Insert::ins` and leaves the call unevaluated.
+- `Delete[{1, 2}, 5]` gives `{1, 2}`. `delete_path` returns a copy, where the reference
+  raises `Delete::partw` and leaves the call unevaluated.
+
+Silent but unevaluated, so `Check` takes the wrong branch:
+- `Take[{1,2,3}, 5]`: no `Take::take`.
+- `Drop[{1,2,3}, 5]`: no `Drop::drop`.
+- `Most[{}]`: no `Most::nomost`.
+- `Join[{1}, f[2]]`: no `Join::heads`.
+
+The LinkedList versions in `src/linkedlist_struct.c` do all of these correctly, with the
+same message texts. `ll_seq_resolve` holds the Take/Drop range rule, and
+`resolve_paths` the Insert slot rule (`[1, len+1]`, `-1` after the last element). Both
+can be reused.
+
+## LinkedList phase 4 (v0.6632): copying heads -- DONE
+
+Delivered: Take, Drop, Most, Rest, Reverse, Append, Prepend, Join, Insert, Delete,
+ReplacePart, Map, Select and Listable threading, each giving a new LinkedList.
+- Span copies for the structural heads.
+- Packed-block streaming for the element-computing heads.
+- A chunk-to-chunk threaded arm for machine reals through unary kernels, Plus and Times.
+- Spec: data-structures.md, "Copying heads".
+- Tests: test_linkedlist.c, phase 4.
+
+Out of scope, documented:
+- ReplacePart's positional forms (3 and 4 arguments) on a LinkedList.
+- Index 0 rules on a LinkedList.
+
+Next is phase 5: Compile[] lowering and auto-compilation.

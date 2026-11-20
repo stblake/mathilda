@@ -3,6 +3,7 @@
 #include "ndarray.h"
 #include "ndstruct.h"
 #include "assoc.h"
+#include "linkedlist.h"
 
 static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     if (!level_spec) return current_level == 1;
@@ -54,6 +55,7 @@ Expr* builtin_reverse(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
 
+    if (expr->type == EXPR_LINKEDLIST) return ll_reverse(res);
     /* Reverse[ndarray]: block-reverse the leading axis on the buffer (ndstruct.c). */
     if (is_ndarray(expr)) return ndstruct_reverse(res);
 

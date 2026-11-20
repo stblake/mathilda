@@ -3,6 +3,7 @@
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "join.h"
 #include "assoc.h"
+#include "linkedlist.h"
 
 /* ------------------- Join ------------------- */
 
@@ -104,6 +105,10 @@ static Expr* join_at_level(Expr** lists, size_t n_lists, int level) {
 Expr* builtin_join(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
         return NULL;
+
+    /* Any LinkedList operand: the result is a LinkedList (linkedlist_struct.c). */
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        if (res->data.function.args[i]->type == EXPR_LINKEDLIST) return ll_join(res);
 
     /* Native buffer path first; ndstruct_delist_repack below stays the fallback
      * for every form it declines. See ndstruct.h. */

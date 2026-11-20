@@ -295,7 +295,7 @@ Applies a rule or list of rules to transform an expression.
 - `Replace[expr, rules, levelspec, Heads -> True]`: Includes heads of expressions and their parts.
 
 **Features**:
-- `Protected`.
+- `Protected` (set since v0.6632; earlier builds left it unprotected).
 - **Whole expressions only** (v0.6174), as in the reference: `Replace`, `ReplaceAt` and `ReplaceList` do not rewrite a subset of a `Flat` head's arguments, so `Replace[a + b + c, a + b -> x]` is `a + b + c` and `Replace[f[a + b + c], a + b -> x, {1}]` is `f[a + b + c]`. Only `ReplaceAll` (`/.`) and `ReplaceRepeated` (`//.`) do: `(a + b + c) /. a + b -> x` is `c + x`. Before, `Replace` gave `c + x` too.
 - Rules must be of the form `lhs -> rhs` (`Rule`) or `lhs :> rhs` (`RuleDelayed`).
 - Tries rules in order. The first one that matches is applied.
@@ -326,6 +326,7 @@ Replaces parts of an expression at specified positions.
 - `ReplacePart[expr, pattern -> new]`: Replaces parts at all positions matching `pattern` (e.g., `_`, `Except[...]`).
 - `ReplacePart[expr, new, pos]`: the older positional form, used by old packages. `pos` is an integer `n`, one position `{i, j, ...}`, or a list of positions `{{...}, {...}}`; so `{}` names no position (`expr` unchanged) and `{{}}` names `expr` itself.
 - `ReplacePart[expr, new, pos, npos]`: the parts at `pos` become the parts of `new` at `npos`, pairwise (a single `npos` serves every position).
+- `ReplacePart[ll, rules]` on a [LinkedList](data-structures.md#linkedlist) gives a new LinkedList, decided by the same rule engine; with literal positions only the named elements are visited and the rest is copied a chunk at a time (10⁶ elements: 0.8 ms, against 214 ms for a packed List). Index 0 is not a part of a LinkedList. The positional forms are not overloaded.
 
 **Features**:
 - `Protected`.

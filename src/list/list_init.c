@@ -44,7 +44,9 @@ void list_init(void) {
         "\tConcatenates lists or other expressions that share the same head.\n"
         "Join[list1, list2, ..., n]\n"
         "\tJoins the objects at level n in each of the lists.\n"
-        "\tHandles ragged arrays by concatenating successive elements at level n.");
+        "\tHandles ragged arrays by concatenating successive elements at level n.\n"
+        "If any argument is a LinkedList the result is a new LinkedList; the other\n"
+        "arguments may be Lists or packed arrays, and anything else gives Join::heads.");
     symtab_add_builtin("Transpose", builtin_transpose);
     symtab_add_builtin("ConjugateTranspose", builtin_conjugate_transpose);
     symtab_add_builtin("Tally", builtin_tally);

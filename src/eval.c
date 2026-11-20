@@ -9,6 +9,7 @@
  */
 
 #include "eval.h"
+#include "linkedlist.h"
 #include "arithmetic.h"   /* g_arith_warnings_muted: internal-probe marker */
 #include "context.h"
 #include "symtab.h"
@@ -1355,22 +1356,25 @@ static bool dv_binds_opaquely(const SymbolDef* def) {
 
 /* Classify the arguments of a Listable call in one pass: LA_LIST if any is an
  * explicit List, LA_ASSOC if any is an Association, LA_SPARSE if any is a
- * SparseArray (any combination). */
-enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4 };
+ * SparseArray, LA_LLIST if any is a LinkedList (any combination). */
+enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4, LA_LLIST = 8 };
 static int listable_arg_kinds(const Expr* e) {
     int kinds = 0;
     size_t n = e->data.function.arg_count;
     for (size_t i = 0; i < n; i++) {
         const Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_SPARSE) { kinds |= LA_SPARSE; continue; }
+        if (arg->type == EXPR_LINKEDLIST) { kinds |= LA_LLIST; continue; }
         if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
             continue;
         const char* h = arg->data.function.head->data.symbol.name;
         if (h == SYM_List) {
             /* List threading wins; only a SparseArray further on still matters
              * (it densifies first), and that is one type test per argument. */
-            for (size_t j = i + 1; j < n; j++)
+            for (size_t j = i + 1; j < n; j++) {
                 if (e->data.function.args[j]->type == EXPR_SPARSE) kinds |= LA_SPARSE;
+                if (e->data.function.args[j]->type == EXPR_LINKEDLIST) kinds |= LA_LLIST;
+            }
             return kinds | LA_LIST;
         }
         if (h == SYM_Association) kinds |= LA_ASSOC;
@@ -3844,6 +3848,25 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * One pass classifies the arguments, so the List path pays only a
              * pointer compare per argument for the association check. */
             int la_kind = (attrs & ATTR_LISTABLE) ? listable_arg_kinds(res) : 0;
+            /* A LinkedList argument threads like a List and the answer is a
+             * LinkedList: the storage streams through this same call in blocks
+             * (packed when typed, so the ND kernels run), linkedlist_struct.c. */
+            if (la_kind & LA_LLIST) {
+                g_trace_suppress++;
+                Expr* ll_res = ll_thread_listable(res);
+                g_trace_suppress--;
+                if (ll_res) {
+                    if (ll_res->type != EXPR_LINKEDLIST && expr_eq(ll_res, res)) {
+                        /* settled after Thread::tdlen */
+                        expr_free(ll_res);
+                        g_step_settled_depth = eval_recursion_depth;
+                        return res;
+                    }
+                    expr_free(res);
+                    *changed = true;
+                    return ll_res;
+                }
+            }
             if (la_kind & LA_SPARSE) {
                 g_trace_suppress++;
                 Expr* sp_res = listable_sparse(res, la_kind);

@@ -1647,7 +1647,9 @@ void info_init(void) {
         "\ttakes elements at successive levels, e.g. a sub-block of a matrix.\n\n"
         "Negative indices count from the end; UpTo[n], All, and None are also accepted\n"
         "as specifications. Indices are 1-based; out-of-range requests leave the\n"
-        "expression unevaluated. Take operates on any expression, not just List.");
+        "expression unevaluated. Take operates on any expression, not just List.\n"
+        "On a LinkedList it gives a new LinkedList, copied a chunk at a time;\n"
+        "out-of-range positions give Take::take.");
     symtab_set_docstring("Drop",
         "Drop[list, n]\n"
         "\tgives list with its first n elements dropped.\n"
@@ -1662,7 +1664,9 @@ void info_init(void) {
         "Drop[list, spec1, spec2, ...]\n"
         "\tdrops elements at successive levels.\n\n"
         "Negative indices count from the end; UpTo[n], All, and None are also accepted.\n"
-        "Indices are 1-based; out-of-range requests leave the expression unevaluated.");
+        "Indices are 1-based; out-of-range requests leave the expression unevaluated.\n"
+        "On a LinkedList it gives a new LinkedList; out-of-range positions give\n"
+        "Drop::drop.");
 
 
     // Linear Algebra
@@ -2668,9 +2672,9 @@ void info_init(void) {
         "axis). Machine and arbitrary-precision (MPFR) input are both supported.");
     symtab_set_docstring("First", "First[expr] gives the first element of expr.");
     symtab_set_docstring("Last", "Last[expr] gives the last element of expr.");
-    symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr.");
-    symtab_set_docstring("Rest", "Rest[expr] gives all but the first element of expr.");
-    symtab_set_docstring("Append", "Append[expr, elem] adds elem to the end of expr.");
+    symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr. On a LinkedList it gives a new LinkedList (Most::nomost when empty).");
+    symtab_set_docstring("Rest", "Rest[expr] gives all but the first element of expr. On a LinkedList it gives a new LinkedList (Rest::norest when empty).");
+    symtab_set_docstring("Append", "Append[expr, elem] adds elem to the end of expr. On a LinkedList it gives a new LinkedList; AppendTo changes one in place.");
     symtab_set_docstring("AppendTo",
         "AppendTo[x, elem]\n"
         "\tappends elem to the value of x and resets x to the result (x = Append[x, elem]).\n\n"
@@ -2682,10 +2686,19 @@ void info_init(void) {
         "\tprepends elem to the value of x and resets x to the result (x = Prepend[x, elem]).\n\n"
         "On a LinkedList the list itself grows at the front in place in O(1) and is returned. "
         "PrependTo::llcyc refuses an element that would make a LinkedList contain itself.");
-    symtab_set_docstring("Prepend", "Prepend[expr, elem] adds elem to the beginning of expr.");
-    symtab_set_docstring("Insert", "Insert[expr, elem, n] inserts elem at position n in expr.");
-    symtab_set_docstring("Delete", "Delete[expr, n] deletes the element at position n in expr.");
-    symtab_set_docstring("Reverse", "Reverse[expr] reverses the order of elements in expr.");
+    symtab_set_docstring("Prepend", "Prepend[expr, elem] adds elem to the beginning of expr. On a LinkedList it gives a new LinkedList; PrependTo changes one in place.");
+    symtab_set_docstring("Insert",
+        "Insert[expr, elem, n]\n\tinserts elem at position n in expr (negative n counts from the end).\n"
+        "Insert[expr, elem, {i, j, ...}]\n\tinserts at the position {i, j, ...} inside expr.\n"
+        "Insert[expr, elem, {{i1, ...}, {i2, ...}, ...}]\n\tinserts at several positions, each naming a place in the original expr.\n"
+        "On a LinkedList it gives a new LinkedList; a position outside the list gives Insert::ins.");
+    symtab_set_docstring("Delete",
+        "Delete[expr, n]\n\tdeletes the element at position n in expr (negative n counts from the end).\n"
+        "Delete[expr, {i, j, ...}]\n\tdeletes the part at position {i, j, ...}.\n"
+        "Delete[expr, {{i1, ...}, {i2, ...}, ...}]\n\tdeletes the parts at several positions.\n"
+        "Delete[expr, 0] replaces the head by Sequence; Delete[expr, {}] deletes nothing. "
+        "On a LinkedList it gives a new LinkedList; a position outside the list gives Delete::partw.");
+    symtab_set_docstring("Reverse", "Reverse[expr] reverses the order of elements in expr. Reverse[expr, n] or Reverse[expr, {n1, n2, ...}] reverses at the given levels. On a LinkedList it gives a new LinkedList.");
     symtab_set_docstring("Rescale",
         "Rescale[x, {min, max}]\n"
         "\tgives x rescaled to run from 0 to 1 over the range min to max, "
@@ -2933,7 +2946,9 @@ void info_init(void) {
         "\tapplies f to each element at level 1 of expr, preserving expr's head.\n"
         "Map[f, expr, levelspec]\n"
         "\tapplies f at the parts of expr selected by levelspec (e.g. {2} for\n"
-        "\tlevel 2 only, Infinity for every level).");
+        "\tlevel 2 only, Infinity for every level).\n"
+        "On a LinkedList it gives a new LinkedList, with the same packed fast paths\n"
+        "as a packed List.");
     symtab_set_docstring("Apply",
         "f @@ expr or Apply[f, expr]\n"
         "\treplaces the head of expr with f.\n"
@@ -2991,7 +3006,8 @@ void info_init(void) {
         "Select[list, crit, n]\n"
         "\tstops after the first n matching elements.\n"
         "Select[crit]\n"
-        "\tis the operator form: Select[crit][list] == Select[list, crit].");
+        "\tis the operator form: Select[crit][list] == Select[list, crit].\n"
+        "On a LinkedList it gives a new LinkedList.");
     symtab_set_docstring("FreeQ",
         "FreeQ[expr, form]\n"
         "\tyields True if no subexpression of expr matches form, False otherwise.\n"

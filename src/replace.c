@@ -9,6 +9,7 @@
 #include "part.h"
 #include "print.h"          /* expr_to_string */
 #include "message.h"        /* mth_message */
+#include "linkedlist.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -349,8 +350,96 @@ static Expr* replace_part_legacy(Expr* res) {
     return result;
 }
 
+/* ReplacePart[ll, rules]: a new LinkedList. The rules are read exactly as
+ * for a List (parse_single_rule) and every replacement is decided by the same
+ * rule engine (replace_part_rec at the path {i}), so precedence, negative
+ * indices, deep positions, patterns and RuleDelayed all agree with the List.
+ *
+ * What differs is which elements are visited. When every position is literal
+ * -- integers all the way down -- only the elements those positions start at
+ * can change: the rest of the list is copied a chunk span at a time, and the
+ * cost is that copy plus O(rules) per named element. A pattern position may
+ * match any index, so then every element is offered to the engine.
+ *
+ * Index 0 (the head) is not a part of a LinkedList: such a rule leaves the
+ * call unevaluated. Replaced elements are evaluated as they are stored, since
+ * the LinkedList atom is never re-evaluated. */
+Expr* ll_replace_part(Expr* res) {
+    const LinkedList* src = res->data.function.args[0]->data.llist;
+    Expr* rules_expr = res->data.function.args[1];
+    int64_t len = ll_length(src);
+
+    size_t cap = 4, nr = 0;
+    RawRule* rules = malloc(sizeof(RawRule) * cap);
+    if (head_is(rules_expr, SYM_List)) {
+        for (size_t i = 0; i < rules_expr->data.function.arg_count; i++)
+            parse_single_rule(rules_expr->data.function.args[i], &rules, &cap, &nr);
+    } else {
+        parse_single_rule(rules_expr, &rules, &cap, &nr);
+    }
+
+    /* Literal positions: the 0-based elements they start at. */
+    bool literal = true, bad_head = false;
+    int64_t* hit = malloc(sizeof(int64_t) * (nr ? nr : 1));
+    size_t nh = 0;
+    for (size_t r = 0; r < nr; r++) {
+        Expr* ps = rules[r].pos_spec;
+        bool lit = head_is(ps, SYM_List) && ps->data.function.arg_count > 0;
+        for (size_t d = 0; lit && d < ps->data.function.arg_count; d++)
+            lit = ps->data.function.args[d]->type == EXPR_INTEGER;
+        if (!lit) { literal = false; continue; }
+        int64_t k = ps->data.function.args[0]->data.integer;
+        if (k == 0) { bad_head = true; break; }
+        int64_t j = k > 0 ? k - 1 : len + k;
+        if (j >= 0 && j < len) hit[nh++] = j;
+    }
+
+    Expr* result = NULL;
+    if (!bad_head) {
+        LinkedList* out = ll_new();
+        PathElement path[1];
+        /* elements to offer: all of them, or the sorted distinct hits */
+        size_t nv = literal ? nh : (size_t)len;
+        if (literal) {
+            for (size_t a = 1; a < nh; a++) {             /* insertion sort: nh is small */
+                int64_t x = hit[a];
+                size_t b = a;
+                while (b > 0 && hit[b - 1] > x) { hit[b] = hit[b - 1]; b--; }
+                hit[b] = x;
+            }
+        }
+        int64_t done = 0;
+        for (size_t t = 0; t < nv; t++) {
+            int64_t i = literal ? hit[t] : (int64_t)t;
+            if (i < done) continue;                       /* a repeated hit */
+            ll_append_range(out, src, done, i);
+            path[0].pos_index = i + 1;
+            path[0].neg_index = i - len;
+            Expr* e = ll_get(src, i);
+            Expr* r = replace_part_rec(e, rules, nr, path, 1);
+            expr_free(e);
+            Expr* v = evaluate(r);
+            expr_free(r);
+            ll_push_back(out, v);
+            done = i + 1;
+        }
+        ll_append_range(out, src, done, len);
+        result = expr_new_linkedlist(out);
+    }
+    free(hit);
+    for (size_t r = 0; r < nr; r++) {
+        expr_free(rules[r].pos_spec);
+        expr_free(rules[r].replacement);
+    }
+    free(rules);
+    return result;
+}
+
 Expr* builtin_replace_part(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count == 2 &&
+        res->data.function.args[0]->type == EXPR_LINKEDLIST)
+        return ll_replace_part(res);
     /* a Rational/Complex number is an atom with no parts: the reference returns
      * it unchanged for every position, {} included (ReplacePart[3/4, 1 -> 5]
      * and ReplacePart[3/4, {} -> 5] are both 3/4) */
@@ -1221,6 +1310,17 @@ Expr* builtin_replace_at(Expr* res) {
 
 void replace_init(void) {
     symtab_add_builtin("ReplacePart", builtin_replace_part);
+    symtab_get_def("ReplacePart")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ReplacePart",
+        "ReplacePart[expr, i -> new]\n\tgives expr with its i-th part replaced by new.\n"
+        "ReplacePart[expr, {i, j, ...} -> new]\n\treplaces the part at position {i, j, ...}.\n"
+        "ReplacePart[expr, {{i1, ...}, {i2, ...}, ...} -> new]\n\treplaces the parts at several positions.\n"
+        "ReplacePart[expr, {rule1, rule2, ...}]\n\tapplies several rules; a position may be a pattern\n"
+        "\t(i_?EvenQ -> 0) and RuleDelayed evaluates the replacement per position.\n"
+        "ReplacePart[expr, new, pos] / ReplacePart[expr, new, pos, npos]\n\tthe positional forms.\n"
+        "Negative indices count from the end; positions that do not exist are left alone.\n"
+        "On a LinkedList (rule forms) it gives a new LinkedList: with literal positions only the\n"
+        "named elements are visited and the rest is copied a chunk at a time.");
     symtab_add_builtin("Replace", builtin_replace);
     symtab_get_def("Replace")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ReplaceAll", builtin_replace_all);

@@ -727,6 +727,10 @@ Out[1]= <|"a" -> 10, "b" -> 2, "c" -> 30|>
 `Delete[l, Position[l, 0]]` with no zeros deletes nothing (v0.586); `{{}}` is the
 path to the whole expression.
 
+A position repeated in a list of positions names one part and deletes it once:
+`Delete[Range[5], {{2}, {2}}]` is `{1, 3, 4, 5}` (before v0.6632 the 3 that
+slid into position 2 was deleted too).
+
 `Delete[assoc, {Key[k]}]` removes an entry by key position; a nested position
 (`{Key[k1], Key[k2]}`) descends into inner associations, and a list of positions
 (`{{Key[k1]}, {Key[k2]}}`) removes several. (`KeyDrop` is the key-oriented
@@ -1799,6 +1803,13 @@ and shrunk in place in `O(1)` at either end, indexed in `O(1)`, and held in a
 variable or passed to a function while it is built. Design:
 [`LINKED_LIST_DESIGN.md`](../../../LINKED_LIST_DESIGN.md).
 
+It is **not a cons list**, despite the name. The elements live in chunks whose
+capacities double (chunk `k` holds `8·2^k`), reached through a fixed table of
+chunk pointers; the chunk holding element `i` is found by one count-leading-zeros,
+so `ll[[i]]` and `ll[[i]] = v` are `O(1)`, like an array. Growing at either end
+never moves an existing element. What a cons list does and this does not is
+splice in the middle in `O(1)`: `Insert` and `Delete` copy, as they do for a List.
+
 - `LinkedList[]` creates an empty list; `LinkedList[list]` one holding the
   elements of `list` (a List, packed array or `NDArray`; a packed argument is
   copied buffer-to-buffer, never unpacked).
@@ -1858,8 +1869,41 @@ the caller's list. A write is all-or-nothing: `Set::partw` (index out of range),
 `PrependTo::llcyc` (the value would make the list contain itself, directly or
 through other lists) leave the list unchanged and the call unevaluated.
 
-The copying heads (`Take`, `Drop`, `Delete`, `Join`, `Map`, ...) come in a later
-phase of the design; until then they see an opaque atom.
+**Copying heads.** A head that gives a List for a List gives a **new
+LinkedList** for a LinkedList, and leaves its argument unchanged. Each works on
+the chunks; none builds a List of the argument.
+
+| Head | On a LinkedList | Cost (n elements) |
+|---|---|---|
+| `Take[ll, spec, ...]`, `Drop[ll, spec, ...]` | every sequence spec: `n`, `-n`, `{m}`, `{m, n}`, `{m, n, s}`, `All`, `None`, `UpTo[n]`; further specs act inside the elements | the copied part, a chunk span (`memcpy`) at a time |
+| `Most[ll]`, `Rest[ll]` | | `O(n)` span copy |
+| `Reverse[ll]`, `Reverse[ll, n \| {n1, ...}]` | levels below 1 reverse inside the elements | `O(n)`, each span reversed in one pass |
+| `Append[ll, e]`, `Prepend[ll, e]` | | `O(n)` span copy |
+| `Join[a, b, ...]`, `Join[a, b, ..., n]` | if any argument is a LinkedList; the others may be Lists or packed arrays | span copies |
+| `Insert[ll, e, n \| {i, j, ...} \| {{...}, ...}]` | several positions name places in the original list | span copies between the positions |
+| `Delete[ll, n \| {i, j, ...} \| {{...}, ...}]` | a repeated position deletes once; `Delete[ll, 0]` is the elements as a `Sequence`, `Delete[ll, {{}}]` is `Sequence[]` | span copies between the positions |
+| `ReplacePart[ll, rules]` | every rule form (deep, negative, patterns, `:>`); index 0 is not a part of a LinkedList | literal positions: a span copy plus the named elements; a pattern position visits every element |
+| `Map[f, ll]`, `Map[f, ll, levelspec]` | the default level streams `Map[f, block]` over packed blocks, so compiled pure functions and kernels apply; other levels map each element | as `Map` on a packed List |
+| `Select[ll, crit]`, `Select[ll, crit, n]` | streamed in packed blocks (compiled predicates apply) | as on a packed List |
+| a `Listable` head: `Sin[ll]`, `ll + 1`, `ll1 ll2`, `ll + {…}` | threads like a List; every threaded operand (LinkedList, List, packed) must have one length, else `Thread::tdlen` | machine reals through a unary kernel, `Plus` or `Times`: read from the chunks into the new list's chunks, threaded, at packed speed; otherwise streamed in packed blocks |
+
+Results agree with the same head on `Normal[ll]`, bit for bit on machine
+numbers: the element-computing heads run the very packed kernels (`Sin`, `Exp`,
+`Plus`, ...), and where the packed path declines (an overflow that the numeric
+tower carries to MPFR, an exact `0`) so does the LinkedList path, the same way.
+
+10⁶ machine reals, LinkedList against a packed List: `Insert` 0.8 ms vs 86 ms,
+`Delete` 0.8 ms vs 85 ms, `ReplacePart` 0.8 ms vs 214 ms, `Reverse` 1.6 ms vs
+3.4 ms, `Join` 4.5 ms vs 7.6 ms; `Sin` 1.39 ms vs 1.35 ms, `ll + 1.` 1.21 ms vs
+1.17 ms; `Take`, `Drop`, `Map`, `Select` within a few percent.
+
+Messages, each leaving the call unevaluated: `Take::take` / `Drop::drop`
+(positions outside the list), `Take::seqs` / `Drop::seqs` (not a sequence
+specification), `Most::nomost` / `Rest::norest` (empty list), `Insert::ins`,
+`Delete::partw`, `Join::heads` (an argument that is neither a list nor a
+LinkedList), `Thread::tdlen`.
+
+Every other head sees an opaque atom (as `Max[ll]` does).
 
 Messages: `LinkedList::list` (argument not a list), `LinkedList::argt` (more
 than one argument).

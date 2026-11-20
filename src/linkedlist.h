@@ -104,6 +104,27 @@ void  ll_push_back_from(LinkedList* dst, const LinkedList* src, int64_t i);
 Expr* ll_pop_back (LinkedList* ll);
 Expr* ll_pop_front(LinkedList* ll);
 
+/* Elements [lo, hi) of src appended to dst, in order / in reverse order.
+ * Typed spans copy without boxing. src and dst must differ. */
+void  ll_append_range    (LinkedList* dst, const LinkedList* src, int64_t lo, int64_t hi);
+void  ll_append_range_rev(LinkedList* dst, const LinkedList* src, int64_t lo, int64_t hi);
+/* Size an EMPTY list to n slots of typed `kind` whose contents are NOT yet
+ * written: the caller fills every slot through ll_span_at (the back run, so
+ * the cursor's direction is +1 and casting its pointer to writable is sound
+ * for a list the caller alone holds) before the list escapes. For kernels
+ * that write their output straight into the chunks. */
+void  ll_reserve_typed(LinkedList* ll, LLKind kind, int64_t n);
+/* Elements [lo, lo + n) (n >= 1) as a packed rank-1 List (typed storage,
+ * gathered raw) or a plain List sharing the elements (boxed): the unit in
+ * which Map, Select and Listable threading stream a list through the List and
+ * packed-array machinery. New reference. */
+Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n);
+/* Elements per streamed block. Large on purpose: the packed kernels thread
+ * across cores only over a large buffer (sixteen 64K-element Sin calls cost
+ * five times one 10^6 call), so a list up to 4M elements streams in a single
+ * call; beyond that the block bounds the temporary at 64 MB. */
+#define LL_STREAM_BLOCK ((int64_t)1 << 22)
+
 /* Append every element of a List, packed List or (any-rank) NDArray `src`
  * (borrowed). Rank-1 int64/float64/complex64 buffers are copied chunk-wise.
  * Returns false (list unchanged) when `src` is none of those. */
@@ -135,6 +156,33 @@ LinkedList* expr_linkedlist(const Expr* e);
  * tree to the bit. NULL for a boxed or empty list, or a float sum that left
  * the machine range (the caller's Plus then answers). */
 Expr* ll_sum_machine(const LinkedList* ll);
+
+/* ---- copying heads (linkedlist_struct.c, funcprog.c, replace.c) ------
+ * Each takes the evaluated call `res` (borrowed) whose list argument is an
+ * EXPR_LINKEDLIST, and returns a NEW LinkedList (the argument is untouched),
+ * or NULL after a message (the call stays unevaluated). The head's own
+ * builtin dispatches here before its List code. */
+Expr* ll_take_drop(Expr* res, bool take);      /* Take / Drop[ll, seq, ...]    */
+Expr* ll_most_rest(Expr* res, bool most);      /* Most / Rest[ll]              */
+Expr* ll_reverse(Expr* res);                   /* Reverse[ll], Reverse[ll, lv] */
+Expr* ll_append_prepend(Expr* res, bool prepend);
+Expr* ll_join(Expr* res);                      /* any argument a LinkedList    */
+Expr* ll_insert(Expr* res);                    /* Insert[ll, e, pos]           */
+Expr* ll_delete(Expr* res);                    /* Delete[ll, pos]              */
+Expr* ll_select(Expr* res);                    /* Select[ll, crit (, n)]       */
+Expr* ll_map(Expr* res);                       /* funcprog.c                   */
+Expr* ll_replace_part(Expr* res);              /* replace.c                    */
+/* A Listable call with a LinkedList argument, threaded as over a List; the
+ * answer is a LinkedList. NULL when no argument is a LinkedList; the call
+ * itself back (a copy) when it settles after Thread::tdlen. */
+Expr* ll_thread_listable(Expr* res);
+/* The direct arm of ll_thread_listable (linkedlist_ops.c): a machine-real
+ * list through a head's unary ND kernel, or Plus/Times of machine-real lists
+ * and machine scalars, computed from the chunks into the chunks of the new
+ * list, threaded. Bit-identical to the packed List; NULL declines (any
+ * element the packed path would not answer at machine precision), and the
+ * caller then streams. */
+Expr* ll_listable_direct(Expr* res);
 
 /* Registers LinkedList, Push, Pop and PopFirst. */
 void linkedlist_init(void);
