@@ -142,6 +142,14 @@ static void test_cascade_keeps_method_results(void) {
           "{Integrate::nonelem}], 20, \"timeout\"]", "\"msg\"");
 }
 
+/* C4: Linearity distributes a sum factor before TrigReduce -- the TrigReduce
+ * route gave a 47156-leaf Weierstrass answer for Tan[1 + x] (-I + Tan[1 + x]). */
+static void test_linearity_distributes_first(void) {
+    BR_TRUE("With[{f = Tan[1 + x] (-I + Tan[1 + x])}, With[{F = Integrate[f, x]}, "
+            "LeafCount[F] < 40 && Abs[N[(D[F, x] - f) /. x -> 1/3, 20]] < 10^-12]]");
+    BR_TRUE("TimeConstrained[Quiet[Integrate[Log[x] Tan[1 + x] (-I + Tan[1 + x]), x]]; True, 10, False]");
+}
+
 /* With the parameters admitted the Automatic cascade closes a parametric
  * Bronstein integrand; by default (Trager only) the Trager one. */
 static void test_cascade_parameters(void) {
@@ -188,6 +196,7 @@ int main(void) {
     test_cascade_closes();
     test_cascade_certificates();
     test_cascade_keeps_method_results();
+    test_linearity_distributes_first();
     test_cascade_parameters();
     test_budgets();
     BR_DONE("integrate_cascade_trager_bronstein_tests");

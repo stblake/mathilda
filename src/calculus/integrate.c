@@ -728,15 +728,6 @@ static Expr* try_linearity(Expr* f, Expr* x) {
     Expr* owned  = NULL;                 /* non-NULL when we built `target` */
     if (head_is(f, SYM_Plus) && f->data.function.arg_count >= 2) {
         target = f;
-    } else if (integrand_has_trig(f) && trig_all_in_x(f, x)
-               && !(is_rational_trig_in_x(f) && trig_in_denominator(f))
-               && node_count_capped(f, 256) < 256) {
-        Expr* tr = apply1_eval("TrigReduce", f);
-        Expr* g  = tr ? apply1_eval("Expand", tr) : NULL;
-        if (tr) expr_free(tr);
-        if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
-            target = g; owned = g;
-        } else { if (g) expr_free(g); return NULL; }
     } else if (times_has_plus_factor(f) && !has_pseudoelliptic_radical(f, x)
                && node_count_capped(f, 256) < 256) {
         /* Distribute a product over a sum factor: Integrate is linear, so
@@ -760,10 +751,24 @@ static Expr* try_linearity(Expr* f, Expr* x) {
         Expr* g = apply1_eval("Expand", f);
         if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
             target = g; owned = g;
-        } else { if (g) expr_free(g); return NULL; }
-    } else {
-        return NULL;
+        } else if (g) expr_free(g);
     }
+    /* TrigReduce only when no sum factor distributed: before (it ran first),
+     * Tan[1 + x] (-I + Tan[1 + x]) was TrigReduce'd into double-angle terms
+     * that Weierstrass integrated into a 47156-leaf answer, where the
+     * distributed -I Tan[1 + x] + Tan[1 + x]^2 closes in 21 leaves; then
+     * LogByParts spent 35 s on Log[x] times it (FriCAS comparison C4) */
+    if (!target && integrand_has_trig(f) && trig_all_in_x(f, x)
+               && !(is_rational_trig_in_x(f) && trig_in_denominator(f))
+               && node_count_capped(f, 256) < 256) {
+        Expr* tr = apply1_eval("TrigReduce", f);
+        Expr* g  = tr ? apply1_eval("Expand", tr) : NULL;
+        if (tr) expr_free(tr);
+        if (g && head_is(g, SYM_Plus) && g->data.function.arg_count >= 2) {
+            target = g; owned = g;
+        } else { if (g) expr_free(g); return NULL; }
+    }
+    if (!target) return NULL;
 
     size_t n = target->data.function.arg_count;
     Expr** parts = malloc(n * sizeof(Expr*));
