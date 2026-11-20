@@ -78,6 +78,25 @@ typedef enum {
 #define CT_BIGCOMPLEX        ((CompileType)42)   /* ncpx = { mpfr_t re,im } */
 #define CT_IS_MANAGED(t)     ((int)(t) >= (int)CT_BIGINT && (int)(t) <= (int)CT_BIGCOMPLEX)
 
+/* A LinkedList handle (src/linkedlist.h) whose elements are machine numbers of
+ * one kind: `CT_LLIST + elem` with elem CT_INT, CT_REAL or CT_COMPLEX in the low
+ * two bits (elem CT_BOOL, 44, is the parser's "element type not given yet"
+ * marker and never reaches the emitter).  Above the managed window, so every
+ * scalar, array, association and managed gate already rejects it.
+ *
+ * The register holds the EXPR_LINKEDLIST node in `.arr`: OWNED in the array
+ * bank (a list the body created, a Module local, a retained reference to an
+ * argument or a folded global), BORROWED in an argument register.  The list has
+ * REFERENCE semantics in the interpreter, and the compiled code keeps them:
+ * `b = a` retains the same list, mutation is in place, and a list passed in is
+ * the caller's own object.  See compile_llist.c. */
+#define CT_LLIST             ((CompileType)44)
+#define CT_LLIST_TYPE(elem)  ((CompileType)((int)CT_LLIST + (int)(elem)))
+#define CT_IS_LLIST(t)       ((int)(t) >= (int)CT_LLIST && (int)(t) < (int)CT_LLIST + 4)
+#define CT_LLIST_ELEM(t)     ((CompileType)(((int)(t) - (int)CT_LLIST) & 3))
+/* A value held through a handle in `.arr` rather than in the Slot itself. */
+#define CT_IS_HANDLE(t)      (CT_IS_ARRAY(t) || CT_IS_ASSOC(t) || CT_IS_LLIST(t))
+
 /* A boxed value (compile-time-known type).  For an array type `a` holds an
  * EXPR_NDARRAY node: BORROWED when passed in as an argument (the program never
  * frees an argument array), OWNED by the caller when returned as a result. */
@@ -216,6 +235,8 @@ char*       compiled_disassemble(const CompiledProgram* p, const char* const* ar
  * CompiledFunction, say) use this to take the unboxed entry point instead of
  * paying for CompileValue boxing on every call. */
 bool        compiled_program_all_real(const CompiledProgram* p);
+/* Does the program use a LinkedList (and so run inside an undo frame)? */
+bool        compiled_program_uses_llist(const CompiledProgram* p);
 
 /* How many repeated subtrees the Expr-level CSE hoisted into reserved registers.
  * Exposed so tests can assert that CSE actually engaged — a pass that silently
@@ -253,6 +274,26 @@ size_t      compiled_num_cse(const CompiledProgram* p);
  * place: floating-point addition is not associative, so partial sums would give
  * a different answer from the serial fold.) */
 #define COMPILE_NO_PAR       0x10u
+
+/* LinkedList (compile_llist.c).  A folded global LinkedList that is still EMPTY
+ * has no element kind yet; these choose the one the program assumes (default
+ * Real), so a caller can retry Integer and Complex when the body pushes those.
+ * MUTATE_GLOBALS lets the program change a folded global list: only a runner
+ * that executes the WHOLE program once (Do / While / For) may set it, because
+ * a per-element program abandoned half way would be re-run by the interpreter
+ * from the start (see compile_llist.c). */
+#define COMPILE_LL_EMPTY_INT        0x100u
+#define COMPILE_LL_EMPTY_CPLX       0x200u
+#define COMPILE_LL_MUTATE_GLOBALS   0x400u
+
+/* Branch joins keep the interpreter's types.  Compile[] unifies the branches
+ * of If / Which / Switch / Piecewise and the values assigned to a local, as the
+ * reference's Compile does: If[EvenQ[i], i, N[i]] is always Real there. The
+ * interpreter keeps each branch's own type (2 stays the Integer 2), and a
+ * program that STANDS IN for the interpreter -- the whole-loop runner, whose
+ * effects (pushes into a list) are observable -- must too: under this flag a
+ * join of two different types bails instead of widening. */
+#define COMPILE_STRICT_JOIN         0x800u
 
 /* Evaluate with `nargs` boxed argument values (coerced to the declared arg
  * types).  Writes *out.  Returns false if the call could not produce a usable

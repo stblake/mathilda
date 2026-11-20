@@ -319,6 +319,27 @@ enum {
      * flags = value_type | free-source<<8.                                        \
      */                                                                            \
     X(ASSOC_SET, K_ARR)                                                   \
+    /* LinkedList (compile_llist.c emits, compile_llist_vm.c runs).  Every one  \
+     * is K_ARR: opaque to the optimiser, never moved, CSE'd or removed, and a  \
+     * loop holding one is left out of LICM -- a list is MUTABLE shared state, \
+     * so even Length must not be hoisted past a push.  Operands (LLF_* flags): \
+     *   LL_NEW     dst list = LinkedList[]                                    \
+     *   LL_FROMARR dst list = LinkedList[R[a] array]                          \
+     *   LL_RETAIN  dst list = R[a] (the same list, one more reference)        \
+     *   LL_REF     dst list = imm.p (a folded global's list, retained)        \
+     *   LL_PUSH    R[dst] list <- R[a] value, at the back or LLF_FRONT        \
+     *   LL_POP     dst value <- R[a] list, last or LLF_FRONT first            \
+     *   LL_GET     dst value = R[a][[R[b]]]     LL_SET  R[dst][[R[a]]] = R[b]  \
+     *   LL_LEN     dst = Length[R[a]]           LL_TOTAL dst = Total[R[a]]     \
+     *   LL_NORMAL  dst array = Normal[R[a]]                                   \
+     *   LL_STRUCT  dst list = imm.i-op[R[a], R[b]] (Most, Take, Join, ...)    \
+     * A failed op (empty Pop, index out of range, an overflowing Total) fails  \
+     * the call: the interpreter then answers, with its message, after the     \
+     * undo log has put back any list the run did not create. */              \
+    X(LL_NEW, K_ARR)  X(LL_FROMARR, K_ARR) X(LL_RETAIN, K_ARR)            \
+    X(LL_REF, K_ARR)  X(LL_PUSH, K_ARR)    X(LL_POP, K_ARR)               \
+    X(LL_GET, K_ARR)  X(LL_SET, K_ARR)     X(LL_LEN, K_ARR)               \
+    X(LL_TOTAL, K_ARR) X(LL_NORMAL, K_ARR) X(LL_STRUCT, K_ARR)            \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
@@ -458,6 +479,19 @@ enum { OPLIST OP__COUNT };
 #define AF_A(f)       (((f) >> AF_A_SHIFT) & 7u)
 #define AF_B(f)       (((f) >> AF_B_SHIFT) & 7u)
 #define AF_R(f)       (((f) >> AF_R_SHIFT) & 3u)
+
+/* LinkedList op flags: the element type (CT_INT / CT_REAL / CT_COMPLEX) in the
+ * low two bits, then the end and the temporaries the op consumes. */
+#define LLF_ELEM(f)   ((CompileType)((f) & 3u))
+#define LLF_FRONT     0x0004u   /* LL_PUSH / LL_POP: the front end              */
+#define LLF_FREE_A    0x0008u   /* the op releases R[a]'s handle after reading */
+#define LLF_FREE_B    0x0010u   /* ... and R[b]'s                              */
+/* LL_STRUCT sub-ops (imm.i) */
+enum { LLS_MOST, LLS_REST, LLS_REVERSE, LLS_TAKE, LLS_DROP, LLS_APPEND, LLS_PREPEND,
+       LLS_JOIN };
+
+/* The LinkedList ops' runtime (compile_llist_vm.c), called from vm_array_op. */
+bool vm_llist_op(const Instr* c, Slot* d, Slot* a, Slot* b);
 /* Operand kinds for the array opcodes. Three bits each (AF_A/AF_B), so there is
  * room; AK_INT was added when int64 buffers stopped being internal to the
  * compiler.
@@ -627,6 +661,9 @@ struct CompiledProgram {
     int         nassocs;
     AssocCalleeSpec** callees; /* [ncallees] B4 higher-order transform specs */
     int         ncallees;
+    Expr**      llrefs;       /* [nllrefs] folded global LinkedLists (LL_REF), one reference each */
+    int         nllrefs;
+    bool        uses_llist;   /* any LL_* op: runs inside an undo frame */
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */

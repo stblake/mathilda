@@ -1273,6 +1273,8 @@ set(COMMON_SRC
     ../src/compile/compile_mgd.c
     ../src/compile/compile_mgd_special.c
     ../src/compile/compile_assoc.c
+    ../src/compile/compile_llist.c
+    ../src/compile/compile_llist_vm.c
     ../src/compile/compile_vm.c
     ../src/compile/compile_infer.c
     ../src/compile/compile_emit_arith.c

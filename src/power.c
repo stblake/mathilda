@@ -1275,7 +1275,24 @@ Expr* builtin_power(Expr* res) {
         return machine ? expr_new_real(1.0) : expr_new_integer(1);
     }
     if (exp->type == EXPR_INTEGER && exp->data.integer == 1) return expr_copy(base);
-    if (base->type == EXPR_INTEGER && base->data.integer == 1) return expr_new_integer(1);
+    if (base->type == EXPR_INTEGER && base->data.integer == 1) {
+        /* 1^x is the exact 1 for an exact x, but an inexact exponent makes the
+         * answer inexact, as for any other base: 1^2. is 1. (not 1), and a
+         * machine complex exponent gives 1. too (its 1. + 0. I collapses). An
+         * arbitrary-precision exponent falls through to the numeric power,
+         * which keeps its precision. */
+        if (exp->type == EXPR_REAL) return expr_new_real(1.0);
+        bool cplx_machine = exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL &&
+            exp->data.function.head->data.symbol.name == SYM_Complex &&
+            exp->data.function.arg_count == 2 &&
+            (exp->data.function.args[0]->type == EXPR_REAL || exp->data.function.args[1]->type == EXPR_REAL);
+        if (cplx_machine) return expr_new_real(1.0);
+        bool cplx_mpfr = exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL &&
+            exp->data.function.head->data.symbol.name == SYM_Complex &&
+            exp->data.function.arg_count == 2 &&
+            (exp->data.function.args[0]->type == EXPR_MPFR || exp->data.function.args[1]->type == EXPR_MPFR);
+        if (exp->type != EXPR_MPFR && !cplx_mpfr) return expr_new_integer(1);
+    }
 
     /* SeriesData arithmetic: a power series base raised to a power, or an
      * ordinary base raised to a series exponent (e.g. 2^series). NULL leaves

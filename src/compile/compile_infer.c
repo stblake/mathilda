@@ -208,6 +208,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         double cv; if (named_const(nm, &cv)) { *out = CT_REAL; return true; }
         Slot gi; CompileType gt;
         if (global_const(c, nm, &gi, &gt)) { *out = gt; return true; }
+        if (llist_global_type(c, nm, out)) return true;        /* a global LinkedList */
         return false;
     }
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
@@ -231,6 +232,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     /* Association read ops (B1): typed by the shared resolver.  Returns false for
      * a non-association Length/Values so the array branch below still handles it. */
     { CompileType at; if (try_infer_assoc(c, h, A, na, &at)) { *out = at; return true; } }
+    { CompileType lt; if (try_infer_llist(c, h, A, na, &lt)) { *out = lt; return true; } }
     CompileType ta, tb;
     #define IT(idx, dst) do { if (!infer_type(c, A[idx], &dst)) return false; } while (0)
     if (h == SYM_Plus || h == SYM_Times) {
@@ -351,6 +353,17 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
          * — the same answer emit_arr_unary reaches. */
         if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
         *out = CT_INT; return true; }
+    if (h == SYM_N && na == 1) {             /* N of a machine number (emit_mathfn) */
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) {
+            if (CT_ELEM(ta) == CT_INT) { *out = CT_ARRAY(CT_REAL, CT_RANK(ta)); return true; }
+            if (CT_ELEM(ta) == CT_REAL || CT_ELEM(ta) == CT_COMPLEX) { *out = ta; return true; }
+            return false;
+        }
+        if (ta == CT_INT) { *out = CT_REAL; return true; }
+        if (ta == CT_REAL || ta == CT_COMPLEX) { *out = ta; return true; }
+        return false;
+    }
     if ((h == SYM_Re || h == SYM_Im || h == SYM_Arg) && na == 1) {
         IT(0, ta);
         if (ta == CT_BOOL) return false;
@@ -678,7 +691,11 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
                      && spec->data.function.head->data.symbol.name == SYM_Set
                      && spec->data.function.arg_count == 2 && spec->data.function.args[0]->type == EXPR_SYMBOL) {
                 vname = spec->data.function.args[0]->data.symbol.name;
-                if (!infer_type(c, spec->data.function.args[1], &vt)) { c->nscope -= pushed; return false; }
+                const char* saved_init = c->ll_init_name;
+                c->ll_init_name = vname;      /* LinkedList[] takes this local's guess */
+                bool okv = infer_type(c, spec->data.function.args[1], &vt);
+                c->ll_init_name = saved_init;
+                if (!okv) { c->nscope -= pushed; return false; }
             } else { c->nscope -= pushed; return false; }
             c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = vt;
             c->nscope++; pushed++;

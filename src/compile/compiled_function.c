@@ -18,6 +18,7 @@
 #include "../ndarray.h"        /* ndarray_from_nested_list — packing a List argument */
 #include "../numeric.h"        /* numeric_digits_to_bits — WorkingPrecision -> MPFR bits */
 #include "../assoc.h"          /* is_association / assoc_prebuild_index — _Association bag */
+#include "../linkedlist.h"     /* _LinkedList arguments; the undo frame around a call */
 #include "../pack.h"           /* pack_offer / pack_repack_like — the packed boundary */
 #include "../checked_int.h"    /* ci_fits_double — decline an inexact int64 cast */
 #include "../symtab.h"         /* symtab_add_builtin / _set_docstring / _get_def */
@@ -252,6 +253,14 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
         out->v.a = (Expr*)e;
         return true;
     }
+    if (CT_IS_LLIST(t)) {
+        /* A LinkedList argument is the caller's own list, BORROWED: the program
+         * mutates it in place, which is the interpreter's reference semantics.
+         * Its element kind is checked when the VM binds it (load_arg). */
+        if (e->type != EXPR_LINKEDLIST) return false;
+        out->v.a = (Expr*)e;
+        return true;
+    }
     if (CT_IS_ASSOC(t)) {
         /* A read-only Association bag is BORROWED, exactly like an NDArray
          * argument: the program never frees it and `owned` stays false.  Build
@@ -327,6 +336,8 @@ static Expr* cf_unbox(const CompileValue* v) {
      * Association node the caller owns.  It carries no packed form, so the
      * CT_IS_ARRAY presentation logic in cf_apply is deliberately skipped. */
     if (CT_IS_ASSOC(v->type)) return v->v.a;
+    /* A LinkedList result is a reference the caller now owns. */
+    if (CT_IS_LLIST(v->type)) return v->v.a;
     return NULL;
 }
 
@@ -354,6 +365,16 @@ static bool parse_typespec(const Expr* ts, CompileType* out) {
         && ts->data.function.args[0]->type == EXPR_SYMBOL)
         return typesym_to_ct(ts->data.function.args[0]->data.symbol.name, out);
     return false;
+}
+
+/* `_LinkedList` or the bare `LinkedList` symbol. */
+static bool is_llist_typespec(const Expr* ts) {
+    if (ts->type == EXPR_SYMBOL) return ts->data.symbol.name == SYM_LinkedList;
+    return ts->type == EXPR_FUNCTION && ts->data.function.head->type == EXPR_SYMBOL
+        && ts->data.function.head->data.symbol.name == SYM_Blank
+        && ts->data.function.arg_count == 1
+        && ts->data.function.args[0]->type == EXPR_SYMBOL
+        && ts->data.function.args[0]->data.symbol.name == SYM_LinkedList;
 }
 
 /* `_Association` (Blank[Association]) or the bare `Association` symbol — the type
@@ -415,6 +436,23 @@ static bool cf_parse_argspec(const Expr* argspec,
                    && el->data.function.head->data.symbol.name == SYM_List
                    && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
                    && el->data.function.args[0]->type == EXPR_SYMBOL
+                   && is_llist_typespec(el->data.function.args[1])) {
+            /* `{b, _LinkedList}` or `{b, _LinkedList, _Integer|_Real|_Complex}`:
+             * the caller's list, mutated in place. Without the element type the
+             * marker CT_LLIST_TYPE(CT_BOOL) asks cf_compile to find one. */
+            CompileType elty = CT_BOOL;
+            if (el->data.function.arg_count == 3) {
+                if (!parse_typespec(el->data.function.args[2], &elty)
+                    || (elty != CT_REAL && elty != CT_INT && elty != CT_COMPLEX)) {
+                    free(names); free(types); return false;
+                }
+            }
+            ty = CT_LLIST_TYPE(elty);
+            nm = el->data.function.args[0]->data.symbol.name;
+        } else if (el->type == EXPR_FUNCTION && el->data.function.head->type == EXPR_SYMBOL
+                   && el->data.function.head->data.symbol.name == SYM_List
+                   && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
+                   && el->data.function.args[0]->type == EXPR_SYMBOL
                    && parse_typespec(el->data.function.args[1], &ty)) {
             /* `{v, _Real, r}` — a rank-r machine array, the same third-element
              * rank spelling Compile[] uses in the Wolfram Language.  All four
@@ -465,6 +503,41 @@ static void cf_apply_precision_types(CompileType* types, size_t n,
     }
 }
 
+/* Compile with the declared types, choosing an element type for every
+ * `{b, _LinkedList}` argument declared without one: each tries Real, then
+ * Integer, then Complex, and the first combination whose body compiles is kept
+ * in `types` (a body that pushes Integers fails under Real, so the order only
+ * matters for a body that just reads the list, where Real is the common case).
+ * At most three such arguments are searched; past that, and when nothing
+ * compiles, they are left Real and the function runs through the interpreter. */
+static CompiledProgram* cf_compile(const Expr* body, const char** names, CompileType* types,
+                                   size_t n, unsigned flags, long prec_bits) {
+    size_t open[3];
+    size_t nopen = 0;
+    for (size_t i = 0; i < n; i++)
+        if (CT_IS_LLIST(types[i]) && CT_LLIST_ELEM(types[i]) == CT_BOOL) {
+            if (nopen == 3) {
+                for (size_t j = 0; j < n; j++)
+                    if (CT_IS_LLIST(types[j]) && CT_LLIST_ELEM(types[j]) == CT_BOOL)
+                        types[j] = CT_LLIST_TYPE(CT_REAL);
+                return NULL;
+            }
+            open[nopen++] = i;
+        }
+    if (nopen == 0) return compile_expr_prec(body, names, types, n, flags, prec_bits);
+    static const CompileType order[3] = { CT_REAL, CT_INT, CT_COMPLEX };
+    int combos = 1;
+    for (size_t k = 0; k < nopen; k++) combos *= 3;
+    for (int m = 0; m < combos; m++) {
+        int q = m;
+        for (size_t k = 0; k < nopen; k++, q /= 3) types[open[k]] = CT_LLIST_TYPE(order[q % 3]);
+        CompiledProgram* p = compile_expr_prec(body, names, types, n, flags, prec_bits);
+        if (p) return p;
+    }
+    for (size_t k = 0; k < nopen; k++) types[open[k]] = CT_LLIST_TYPE(CT_REAL);
+    return compile_expr_prec(body, names, types, n, flags, prec_bits);   /* for the bail reason */
+}
+
 CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
                                         uint32_t runtime_attrs, unsigned compile_flags,
                                         long prec_bits) {
@@ -491,7 +564,7 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
     /* NULL ⇒ fallback only.  COMPILE_FOLD_GLOBALS is deliberately NOT passed: a
      * Compile[] object outlives the scope that defined it, so folding a global's
      * current value into it would go stale (see compile.h). */
-    cf->prog      = compile_expr_prec(cf->body, names, types, n, compile_flags, prec_bits);
+    cf->prog      = cf_compile(cf->body, names, types, n, compile_flags, prec_bits);
     cf->runtime_attrs = runtime_attrs;
     return cf;
 }
@@ -782,6 +855,12 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
             }
             CompileValue out;
             cvm_underflow_clear();
+            /* A program that mutates a list runs inside this frame as well as
+             * compiled_eval's own: a result declined BELOW (underflow, a
+             * degenerate entry) is re-answered by the interpreter, which must
+             * then find the caller's list as it was. */
+            bool llu = compiled_program_uses_llist(cf->prog);
+            if (llu) ll_undo_begin();
             bool cv_ok = compiled_eval(cf->prog, cv, &out);
             /* A scalar machine result that underflowed is the interpreter's
              * to answer (numeric-tower review E9): Compile[{{x, _Real}}, x x]
@@ -808,8 +887,10 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                     cv_ok = false;
                 }
             }
+            if (llu && !cv_ok) ll_undo_rollback();
             if (cv_ok) {
                 Expr* r = cf_unbox(&out);
+                if (llu) { if (r) ll_undo_commit(); else ll_undo_rollback(); }
                 /* The result's PRESENTATION must be the one the interpreter
                  * would give for the same input, or the compiled path answers
                  * with a different Head from its own fallback. Three cases, and
@@ -1111,6 +1192,7 @@ static const char* ct_name(CompileType t) {
         case CT_BIGCOMPLEX: return "MPFRComplex";
         default: break;
     }
+    if (CT_IS_LLIST(t)) return "LinkedList";
     return CT_IS_ARRAY(t) ? "Array" : "Unknown";
 }
 
@@ -1163,7 +1245,7 @@ static Expr* builtin_compile_diagnostics(Expr* res) {
     if (!cf_parse_argspec(argspec, &names, &types, &n)) return NULL;
     cf_apply_precision_types(types, n, prec_bits, (cflags & COMPILE_BIGINT) != 0);
 
-    CompiledProgram* p = compile_expr_prec(body, names, types, n, cflags, prec_bits);
+    CompiledProgram* p = cf_compile(body, names, types, n, cflags, prec_bits);
 
     Expr* items[6];
     size_t ni = 0;

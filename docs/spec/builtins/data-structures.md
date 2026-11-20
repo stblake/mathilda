@@ -1905,6 +1905,41 @@ LinkedList), `Thread::tdlen`.
 
 Every other head sees an opaque atom (as `Max[ll]` does).
 
+**Compile and auto-compilation.** A LinkedList of machine Integers, Reals or
+Complexes (one kind per list) compiles.
+- **Where a compiled list comes from:**
+  - a `Module` local, `Module[{b = LinkedList[]}, …]` or `LinkedList[arr]`;
+  - an argument, `{b, _LinkedList}` or `{b, _LinkedList, _Integer}`;
+  - in auto-compiled code, a global whose value is a LinkedList.
+- **What lowers:**
+
+  | Kind | Heads |
+  |---|---|
+  | creating | `LinkedList[]`, `LinkedList[arr]` |
+  | mutating | `AppendTo`, `PrependTo`, `Push`, `Pop`, `PopFirst`, `b[[i]] = v` |
+  | reading | `Length`, `b[[i]]`, `First`, `Last`, `Total`, `Normal` |
+  | copying | `Most`, `Rest`, `Reverse`, `Take[b, k]`, `Drop[b, k]`, `Append`, `Prepend`, `Join[b1, b2]` |
+
+- **Reference semantics carry over.** `b = a` inside the body is the same list, a
+  list argument is mutated in place, and returning it returns the same object.
+- **Element type.** Every value pushed must have the list's element type. A mixed
+  list such as `{1, 2.5}` is not a machine list, so the body runs through the
+  interpreter.
+- **An abandoned call leaves no trace.** A compiled call that cannot finish (an
+  empty `Pop`, an index out of range, an Integer `Total` past int64) is abandoned
+  and the interpreter answers. Every change it made to a list it did not create is
+  reverted first, so the caller's list ends up exactly as one interpreted run
+  leaves it, with the interpreter's message.
+- **Whole loops.** `Do`, `For` and `While` whose body works on a global LinkedList
+  compile as one program: `ll = LinkedList[]; Do[AppendTo[ll, N[i]], {i, 10^6}]`
+  takes 37 ms, against about 0.5 s interpreted. Branches of two types keep the
+  interpreter's types: `Do[AppendTo[ll, If[EvenQ[i], i, N[i]]], {i, 4}]` gives
+  `{1., 2, 3., 4}`.
+- **Read-only elsewhere.** `Table`, `Map` and the other per-element auto-compiled
+  bodies may read a global list but not change it. They are re-run from the start
+  when an element declines, so a change made by an earlier element would happen
+  twice.
+
 Messages: `LinkedList::list` (argument not a list), `LinkedList::argt` (more
 than one argument).
 

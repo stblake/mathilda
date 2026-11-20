@@ -888,6 +888,11 @@ Exponentiation.
   and `Overflow[]` (`3^(2^62)`, `(2^1000/3)^(10^9)`), where `mpz_pow_ui` used to
   abort the process (v0.6594). The reciprocal of a negative base is canonical:
   `(-3)^-41` is `Rational[-1, 3^41]`, not `Rational[1, -3^41]`.
+- `1^x` is the exact `1` for an exact `x`. An inexact exponent makes the answer
+  inexact, as for any other base: `1^2.`, `1^2.5` and `1^(2. + I)` are `1.`,
+  matching the reference (before v0.6634 they were the exact `1`, so
+  `Compile[{{i, _Integer}}, i^2.][1]` disagreed with the interpreter). An
+  arbitrary-precision exponent keeps its precision.
 - A BigInt exponent: `(-1)^(2^70)` is `1`, `(-1)^(2^70 + 1)` is `-1`, `1^e` is
   `1`, `0^e` is `0` for `e > 0`, and `|b| >= 2` to a positive BigInt exponent is
   `Overflow[]`.

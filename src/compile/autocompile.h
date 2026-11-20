@@ -142,6 +142,24 @@ bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
  * on NULL. */
 Expr* autocompile_eval_closed(const Expr* expr);
 
+/* Run a whole Do / While / For loop compiled when its body works on a GLOBAL
+ * LinkedList (`ll = LinkedList[]; Do[AppendTo[ll, N[i]], {i, 10^6}]`).
+ *
+ * The numeric loop path (numloop) declines such a body: it is not a block of
+ * numeric assignments. The general compiler lowers it, but only as ONE program
+ * that runs the loop to the end -- that is the condition under which mutating a
+ * folded global list is sound (COMPILE_LL_MUTATE_GLOBALS; compile_llist.c): if
+ * the run fails, the undo frame puts every list back and the interpreter runs
+ * the loop instead, so the loop's effect happens exactly once either way.
+ *
+ * `loop` is the loop call itself (borrowed). Returns Null after a compiled run,
+ * NULL when the body names no global list, does not compile, or the run fails
+ * (the caller then interprets). A global list that is still empty has no
+ * element type yet: Real, Integer and Complex are tried in turn. */
+Expr* autocompile_run_closed_stmt(const Expr* loop);
+/* Loops autocompile_run_closed_stmt has run compiled since startup (tests). */
+long  autocompile_closed_stmt_runs(void);
+
 void autocompiled_free(AutoCompiled* ac);
 
 /* Diagnostic counters since startup, for tests and the coverage audit: bodies

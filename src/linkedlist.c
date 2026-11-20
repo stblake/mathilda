@@ -163,6 +163,135 @@ static void run_maybe_rebase(LinkedList* ll, LLRun* r) {
 static inline void ll_mutated(void) { eval_clock_tick(); }
 
 /* ------------------------------------------------------------------------
+ *  Undo log for compiled runs
+ *
+ *  A compiled program that cannot finish (an integer overflow, an index out of
+ *  range, a result the boundary declines) is abandoned and the interpreter
+ *  runs the body again from the start. That is sound only if the abandoned run
+ *  left nothing behind -- and a LinkedList the program did not create (an
+ *  argument, a global the loop appends to) is exactly something it can leave
+ *  behind. So while an undo frame is open, every change to a list that existed
+ *  before the frame opened is logged, and ll_undo_rollback reverts them in
+ *  reverse order. Lists created inside the frame need no entry: whoever made
+ *  them is being thrown away too. "Existed before" is one compare: ids are
+ *  issued in creation order.
+ *
+ *  Consecutive pushes onto the same end of one list merge into one entry, so
+ *  Do[AppendTo[ll, x], {10^6}] logs a single record. Frames nest; an inner
+ *  frame that commits keeps its records for the outer one, which may still
+ *  roll back. Only the outermost commit discards the log.
+ * ---------------------------------------------------------------------- */
+
+enum { LLU_PUSHB, LLU_PUSHF, LLU_POPB, LLU_POPF, LLU_SET };
+
+typedef struct {
+    LinkedList* ll;            /* retained for the life of the record */
+    int         op;
+    int64_t     n;             /* PUSH*: element count; SET: the index */
+    LLKind      kind;          /* POP* / SET: the kind the value was stored as */
+    union { unsigned char raw[16]; Expr* e; } v;   /* POP* / SET: the old value */
+} LLUndo;
+
+#define LL_UNDO_MAX_DEPTH 64
+static LLUndo*  g_undo;
+static size_t   g_undo_n, g_undo_cap;
+static struct { size_t mark; uint64_t threshold; } g_undo_frame[LL_UNDO_MAX_DEPTH];
+static int      g_undo_depth;
+static int      g_undo_paused;      /* > 0 while a rollback replays the log */
+
+static inline bool undo_wanted(const LinkedList* ll) {
+    return g_undo_depth > 0 && !g_undo_paused &&
+           ll->id < g_undo_frame[g_undo_depth - 1].threshold;
+}
+
+static LLUndo* undo_push(LinkedList* ll, int op) {
+    if (g_undo_n == g_undo_cap) {
+        size_t nc = g_undo_cap ? 2 * g_undo_cap : 64;
+        LLUndo* nv = realloc(g_undo, nc * sizeof *nv);
+        if (!nv) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
+        g_undo = nv;
+        g_undo_cap = nc;
+    }
+    LLUndo* u = &g_undo[g_undo_n++];
+    memset(u, 0, sizeof *u);
+    u->ll = ll_retain(ll);
+    u->op = op;
+    return u;
+}
+
+static void undo_note_push(LinkedList* ll, bool front, int64_t count) {
+    if (!undo_wanted(ll)) return;
+    int op = front ? LLU_PUSHF : LLU_PUSHB;
+    size_t lo = g_undo_frame[g_undo_depth - 1].mark;
+    if (g_undo_n > lo && g_undo[g_undo_n - 1].ll == ll && g_undo[g_undo_n - 1].op == op) {
+        g_undo[g_undo_n - 1].n += count;           /* merge a run of pushes */
+        return;
+    }
+    undo_push(ll, op)->n = count;
+}
+
+/* The value in slot p, kept for the log (a boxed element gains a reference). */
+static void undo_keep_value(LLUndo* u, const unsigned char* p, LLKind k) {
+    u->kind = k;
+    if (k == LL_BOXED) u->v.e = expr_copy(*(Expr* const*)p);
+    else memcpy(u->v.raw, p, k == LL_CPLX ? 16 : 8);
+}
+
+static void undo_free_record(LLUndo* u) {
+    if ((u->op == LLU_POPB || u->op == LLU_POPF || u->op == LLU_SET) && u->kind == LL_BOXED)
+        expr_free(u->v.e);
+    ll_release(u->ll);
+}
+
+void ll_undo_begin(void) {
+    if (g_undo_depth == LL_UNDO_MAX_DEPTH) {
+        fprintf(stderr, "LinkedList: undo frames nested too deeply\n");
+        abort();
+    }
+    g_undo_frame[g_undo_depth].mark = g_undo_n;
+    g_undo_frame[g_undo_depth].threshold = g_ll_next_id;
+    g_undo_depth++;
+}
+
+void ll_undo_commit(void) {
+    if (g_undo_depth == 0) return;
+    if (--g_undo_depth > 0) return;              /* the outer frame may still roll back */
+    for (size_t i = 0; i < g_undo_n; i++) undo_free_record(&g_undo[i]);
+    g_undo_n = 0;
+}
+
+static Expr* undo_value_expr(const LLUndo* u) {
+    if (u->kind == LL_BOXED) return expr_copy(u->v.e);
+    NDType dt = u->kind == LL_I64 ? NDT_INT64 : u->kind == LL_REAL ? NDT_FLOAT64 : NDT_COMPLEX64;
+    return ndarray_buffer_element_to_expr(u->v.raw, 0, dt);
+}
+
+void ll_undo_rollback(void) {
+    if (g_undo_depth == 0) return;
+    size_t mark = g_undo_frame[--g_undo_depth].mark;
+    g_undo_paused++;
+    for (size_t i = g_undo_n; i > mark; i--) {
+        LLUndo* u = &g_undo[i - 1];
+        LinkedList* ll = u->ll;
+        switch (u->op) {
+            case LLU_PUSHB:
+                for (int64_t t = 0; t < u->n; t++) { Expr* e = ll_pop_back(ll); if (e) expr_free(e); }
+                break;
+            case LLU_PUSHF:
+                for (int64_t t = 0; t < u->n; t++) { Expr* e = ll_pop_front(ll); if (e) expr_free(e); }
+                break;
+            case LLU_POPB: ll_push_back(ll, undo_value_expr(u)); break;
+            case LLU_POPF: ll_push_front(ll, undo_value_expr(u)); break;
+            case LLU_SET:  ll_set(ll, u->n, undo_value_expr(u)); break;
+            default: break;
+        }
+        undo_free_record(u);
+    }
+    g_undo_n = mark;
+    g_undo_paused--;
+}
+
+/* ------------------------------------------------------------------------
  *  Lifecycle
  * ---------------------------------------------------------------------- */
 
@@ -397,6 +526,7 @@ bool ll_get_cplx(const LinkedList* ll, int64_t i, double* re, double* im) {
 void ll_set(LinkedList* ll, int64_t i, Expr* e) {
     ll_admit(ll, ll_classify(e));
     unsigned char* p = ll_slot(ll, i);
+    if (undo_wanted(ll)) { LLUndo* u = undo_push(ll, LLU_SET); u->n = i; undo_keep_value(u, p, ll->kind); }
     if (ll->kind == LL_BOXED) {
         Expr* old = *(Expr**)p;
         *(Expr**)p = e;
@@ -407,8 +537,16 @@ void ll_set(LinkedList* ll, int64_t i, Expr* e) {
     ll_mutated();
 }
 
+static void undo_note_set(LinkedList* ll, int64_t i) {
+    if (!undo_wanted(ll)) return;
+    LLUndo* u = undo_push(ll, LLU_SET);
+    u->n = i;
+    undo_keep_value(u, ll_slot(ll, i), ll->kind);
+}
+
 bool ll_set_i64(LinkedList* ll, int64_t i, int64_t v) {
     if (ll->kind != LL_I64) return false;
+    undo_note_set(ll, i);
     memcpy(ll_slot(ll, i), &v, sizeof v);
     ll_mutated();
     return true;
@@ -416,7 +554,17 @@ bool ll_set_i64(LinkedList* ll, int64_t i, int64_t v) {
 
 bool ll_set_real(LinkedList* ll, int64_t i, double v) {
     if (ll->kind != LL_REAL) return false;
+    undo_note_set(ll, i);
     memcpy(ll_slot(ll, i), &v, sizeof v);
+    ll_mutated();
+    return true;
+}
+
+bool ll_set_cplx(LinkedList* ll, int64_t i, double re, double im) {
+    if (ll->kind != LL_CPLX) return false;
+    undo_note_set(ll, i);
+    double v[2] = { re, im };
+    memcpy(ll_slot(ll, i), v, sizeof v);
     ll_mutated();
     return true;
 }
@@ -428,6 +576,7 @@ bool ll_set_real(LinkedList* ll, int64_t i, double v) {
 /* Store e at the outer end of run r. The element is written BEFORE `end` is
  * advanced, so an abort can never expose an unwritten slot. */
 static void run_push(LinkedList* ll, LLRun* r, Expr* e) {
+    undo_note_push(ll, r == &ll->front, 1);
     run_ensure(ll, r, r->end);
     slot_store(ll, slot_ptr(r, r->end, kind_size(ll->kind)), e);
     r->end++;
@@ -447,6 +596,7 @@ void ll_push_front(LinkedList* ll, Expr* e) {
 
 /* Typed pushes: no Expr is built when the list already has that kind. */
 static void run_push_raw(LinkedList* ll, LLRun* r, const void* v) {
+    undo_note_push(ll, r == &ll->front, 1);
     run_ensure(ll, r, r->end);
     memcpy(slot_ptr(r, r->end, kind_size(ll->kind)), v, kind_size(ll->kind));
     r->end++;
@@ -516,41 +666,53 @@ static Expr* slot_take(const LinkedList* ll, unsigned char* p) {
     return slot_read(p, ll->kind);
 }
 
-Expr* ll_pop_back(LinkedList* ll) {
+/* Remove the last (front = false) or first element. Exactly one of `e_out`
+ * (the element as an Expr, a boxed one changing owner) and `raw_out` (the
+ * typed slot's bytes) is non-NULL. False when the list is empty. */
+static bool ll_pop_impl(LinkedList* ll, bool front, Expr** e_out, void* raw_out) {
     size_t esz = kind_size(ll->kind);
-    Expr* e;
-    if (run_len(&ll->back) > 0) {
-        ll->back.end--;
-        e = slot_take(ll, slot_ptr(&ll->back, ll->back.end, esz));
-        run_trim_tail(ll, &ll->back);
-    } else if (run_len(&ll->front) > 0) {
-        /* The front run's lowest live slot is the list's last element. */
-        e = slot_take(ll, slot_ptr(&ll->front, ll->front.start, esz));
-        ll->front.start++;
-        run_maybe_rebase(ll, &ll->front);
-    } else {
-        return NULL;
-    }
+    LLRun* outer = front ? &ll->front : &ll->back;   /* the run this end grows */
+    LLRun* inner = front ? &ll->back : &ll->front;   /* reached once outer is empty */
+    LLRun* r;
+    int64_t j;
+    if (run_len(outer) > 0)      { r = outer; j = outer->end - 1; }
+    else if (run_len(inner) > 0) { r = inner; j = inner->start; }
+    else return false;
+    unsigned char* p = slot_ptr(r, j, esz);
+    if (undo_wanted(ll))
+        undo_keep_value(undo_push(ll, front ? LLU_POPF : LLU_POPB), p, ll->kind);
+    if (e_out) *e_out = slot_take(ll, p);
+    else memcpy(raw_out, p, esz);
+    if (r == outer) { r->end--; run_trim_tail(ll, r); }
+    else            { r->start++; run_maybe_rebase(ll, r); }
     ll_mutated();
-    return e;
+    return true;
+}
+
+Expr* ll_pop_back(LinkedList* ll) {
+    Expr* e = NULL;
+    return ll_pop_impl(ll, false, &e, NULL) ? e : NULL;
 }
 
 Expr* ll_pop_front(LinkedList* ll) {
-    size_t esz = kind_size(ll->kind);
-    Expr* e;
-    if (run_len(&ll->front) > 0) {
-        ll->front.end--;
-        e = slot_take(ll, slot_ptr(&ll->front, ll->front.end, esz));
-        run_trim_tail(ll, &ll->front);
-    } else if (run_len(&ll->back) > 0) {
-        e = slot_take(ll, slot_ptr(&ll->back, ll->back.start, esz));
-        ll->back.start++;
-        run_maybe_rebase(ll, &ll->back);
-    } else {
-        return NULL;
-    }
-    ll_mutated();
-    return e;
+    Expr* e = NULL;
+    return ll_pop_impl(ll, true, &e, NULL) ? e : NULL;
+}
+
+bool ll_pop_typed(LinkedList* ll, bool front, void* out) {
+    if (ll->kind != LL_I64 && ll->kind != LL_REAL && ll->kind != LL_CPLX) return false;
+    return ll_pop_impl(ll, front, NULL, out);
+}
+
+uint64_t ll_next_id(void) { return g_ll_next_id; }
+
+/* The elements as a rank-1 array of the typed kind, any length (packed
+ * presentation). NULL for a boxed or empty list. */
+Expr* ll_to_ndarray(const LinkedList* ll) {
+    int64_t n = ll_length(ll);
+    if (n == 0) return NULL;
+    if (ll->kind != LL_I64 && ll->kind != LL_REAL && ll->kind != LL_CPLX) return NULL;
+    return ll_block(ll, 0, n);
 }
 
 /* ------------------------------------------------------------------------
@@ -561,6 +723,7 @@ Expr* ll_pop_front(LinkedList* ll) {
 static void ll_push_back_buffer(LinkedList* ll, const unsigned char* src, int64_t n) {
     size_t esz = kind_size(ll->kind);
     LLRun* r = &ll->back;
+    if (n > 0) undo_note_push(ll, false, n);
     while (n > 0) {
         run_ensure(ll, r, r->end);
         int k = chunk_of(r->end);
@@ -644,6 +807,7 @@ static void ll_push_back_strided(LinkedList* ll, const unsigned char* src, ptrdi
                                  int64_t k) {
     size_t esz = kind_size(ll->kind);
     LLRun* r = &ll->back;
+    if (k > 0) undo_note_push(ll, false, k);
     while (k > 0) {
         run_ensure(ll, r, r->end);
         int c = chunk_of(r->end);

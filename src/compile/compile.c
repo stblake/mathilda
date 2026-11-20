@@ -233,7 +233,7 @@ void pop_tmp(Ctx* c, Val v) {
     /* An owned association temp (B3) lives in the array bank exactly like an
      * array temp — a borrowed-argument association is tmp==false and never
      * reaches here — so both pop the array bank. */
-    if (CT_IS_ARRAY(v.type) || CT_IS_ASSOC(v.type)) c->arr_top--;
+    if (CT_IS_HANDLE(v.type)) c->arr_top--;
     else if (val_is_tile(v)) c->tile_top--;
     else c->temp_top--;
 }
@@ -244,7 +244,7 @@ void free_if_tmp(Ctx* c, Val v) {
     if (!v.tmp) return;
     /* Owned association temps free through the same OP_ARR_FREE as array temps
      * (expr_free handles any Expr in the .arr slot). */
-    if (CT_IS_ARRAY(v.type) || CT_IS_ASSOC(v.type)) {
+    if (CT_IS_HANDLE(v.type)) {
         Slot z = { 0 };
         ins(c, OP_ARR_FREE, (uint32_t)v.reg, 0, 0, z);
         c->arr_top--;
@@ -260,6 +260,7 @@ CompileType num_common(CompileType a, CompileType b) {
     /* An Association bag is never a numeric operand; without this it would fall
      * through to `a > b ? a : b` and be returned as a bogus "wider scalar". */
     if (CT_IS_ASSOC(a) || CT_IS_ASSOC(b)) return CT_ERR;
+    if (CT_IS_LLIST(a) || CT_IS_LLIST(b)) return CT_ERR;     /* a list is not an operand */
     if (CT_IS_ARRAY(a) || CT_IS_ARRAY(b)) {
         CompileType ea = CT_IS_ARRAY(a) ? CT_ELEM(a) : a;
         CompileType eb = CT_IS_ARRAY(b) ? CT_ELEM(b) : b;
@@ -278,6 +279,7 @@ void coerce(Ctx* c, Val* v, CompileType target) {
     if (!c->ok || v->type == target) return;
     if (CT_IS_ARRAY(v->type) || CT_IS_ARRAY(target)) { c->ok = false; return; }
     if (CT_IS_ASSOC(v->type) || CT_IS_ASSOC(target)) { c->ok = false; return; }
+    if (CT_IS_LLIST(v->type) || CT_IS_LLIST(target)) { c->ok = false; return; }
     if (val_is_tile(*v)) {
         /* Tiles only ever hold Real or Complex elements, so the single widening
          * that can arise is real -> complex. */
@@ -314,6 +316,7 @@ bool scalar_only(Ctx* c, CompileType a, CompileType b, CompileType r) {
     /* Same guard for an Association handle: it is not a machine scalar, so any
      * scalar op that receives one must bail rather than read it as a double. */
     if (CT_IS_ASSOC(a) || CT_IS_ASSOC(b) || CT_IS_ASSOC(r)) { c->ok = false; return false; }
+    if (CT_IS_LLIST(a) || CT_IS_LLIST(b) || CT_IS_LLIST(r)) { c->ok = false; return false; }
     return true;
 }
 
@@ -2107,6 +2110,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (named_const(nm, &cv)) { imm.r = cv; *out = emit_const(c, imm, CT_REAL); return c->ok; }
         CompileType gt;
         if (global_const(c, nm, &imm, &gt)) { *out = emit_const(c, imm, gt); return c->ok; }
+        if (llist_global_value(c, nm, out)) return c->ok;     /* a global LinkedList */
         c->ok = false; return false;
     }
 
@@ -2152,6 +2156,9 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
      * operand is an association, else try_emit_assoc returns false and the
      * ordinary lowering below takes it. */
     if (try_emit_assoc(c, h, A, na, out)) return c->ok;
+    /* LinkedList heads (compile_llist.c): handled when the operand is a list,
+     * so Length/Part/Total of an ARRAY fall through to the array lowerings. */
+    if (try_emit_llist(c, h, A, na, out)) return c->ok;
 
     /* Elementwise fusion, tried before the delegated array lowering below.  The
      * `array_args` gate keeps this free for the overwhelmingly common scalar
@@ -2210,7 +2217,10 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             for (size_t i = 0; i < na; i++) {
                 Val v;
                 if (!emit(c, A[i], &v)) return false;
-                if (CT_IS_ARRAY(v.type) || CT_IS_ARRAY(pt[i])) { c->ok = false; return false; }
+                /* A LinkedList parameter mutates its caller's list: never paste
+                 * that into another program (see compile_llist.c, "who may
+                 * mutate a list from outside"). */
+                if (CT_IS_HANDLE(v.type) || CT_IS_HANDLE(pt[i])) { c->ok = false; return false; }
                 coerce(c, &v, pt[i]);
                 if (!c->ok) return false;
                 /* Copy into a dedicated register: the parameter stays live for
@@ -2232,7 +2242,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             c->inlining--;
             c->nscope = saved_scope;
             if (!okb) return false;
-            if (CT_IS_ARRAY(bv.type)) { c->ok = false; return false; }
+            if (CT_IS_HANDLE(bv.type)) { c->ok = false; return false; }
             /* Land the result in the first parameter's register and pop
              * everything the call allocated above it. */
             if (bv.reg != preg[0]) ins(c, OP_MOVE, (uint32_t)preg[0], (uint32_t)bv.reg, 0, z);
@@ -2252,8 +2262,8 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             const CompileType* pt = compiled_function_arg_types(cf);
             bool ok_args = true;
             for (size_t i = 0; i < na && ok_args; i++)
-                if (CT_IS_ARRAY(pt[i])) ok_args = false;
-            if (ok_args && !CT_IS_ARRAY(compiled_result_type(cp))) {
+                if (CT_IS_HANDLE(pt[i])) ok_args = false;
+            if (ok_args && !CT_IS_HANDLE(compiled_result_type(cp))) {
                 EmitMark mk = emit_mark(c);
                 Slot z; memset(&z, 0, sizeof z);
                 /* Reserve the argument block FIRST so it is contiguous: each
@@ -2264,7 +2274,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                 int after_params = c->temp_top;
                 for (size_t i = 0; i < na && c->ok; i++) {
                     Val v;
-                    if (!emit(c, A[i], &v) || CT_IS_ARRAY(v.type)) { c->ok = false; break; }
+                    if (!emit(c, A[i], &v) || CT_IS_HANDLE(v.type)) { c->ok = false; break; }
                     coerce(c, &v, pt[i]);
                     if (!c->ok) break;
                     ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
@@ -2648,6 +2658,11 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
     c.prec_bits = prec_bits;
     c.allow_bigint = (flags & COMPILE_BIGINT) != 0;
     for (size_t k = 0; k < nargs; k++)
+        if (CT_IS_LLIST(arg_types[k]) && CT_LLIST_ELEM(arg_types[k]) == CT_BOOL) {
+            g_bail_reason = "a LinkedList argument needs a machine element type";
+            return NULL;
+        }
+    for (size_t k = 0; k < nargs; k++)
         if (CT_IS_ARRAY(arg_types[k])) {
             /* Rank is bounded only by the packed type encoding: the fused
              * elementwise loop walks a flat index and never looks at the shape,
@@ -2678,6 +2693,15 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
      * the caller owns what it gets back, and freeing an argument would corrupt
      * the caller's value.  A PRODUCED association (KeyDrop/KeyTake) is a tmp and
      * is allowed. */
+    /* A borrowed LinkedList is different: the interpreter hands back the SAME
+     * list (reference semantics), so the result is one more reference to it. */
+    if (ok && CT_IS_LLIST(res.type) && !res.tmp) {
+        Slot z = { 0 };
+        int r = alloc_arr(&c);
+        ins(&c, OP_LL_RETAIN, (uint32_t)r, (uint32_t)res.reg, 0, z);
+        res.reg = r; res.tmp = true;
+        ok = c.ok;
+    }
     if (ok && (CT_IS_ARRAY(res.type) || CT_IS_ASSOC(res.type)) && !res.tmp) {
         ok = false;
         c.bail_node = body;   /* the whole body is a borrowed argument handle */
@@ -2704,6 +2728,8 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
         free(c.assocs);
         for (int i = 0; i < c.ncallees; i++) compile_assoccallee_free(c.callees[i]);
         free(c.callees);
+        for (int i = 0; i < c.nllrefs; i++) expr_free(c.llrefs[i]);
+        free(c.llrefs);
         ctx_free_managed(&c);
         free(c.code); free(c.argdep); return NULL;
     }
@@ -2745,6 +2771,8 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
         free(c.assocs);
         for (int i = 0; i < c.ncallees; i++) compile_assoccallee_free(c.callees[i]);
         free(c.callees);
+        for (int i = 0; i < c.nllrefs; i++) expr_free(c.llrefs[i]);
+        free(c.llrefs);
         ctx_free_managed(&c);
         free(c.code); free(c.argdep); return NULL;
     }
@@ -2753,6 +2781,8 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
     p->parts = c.parts; p->nparts = c.nparts;
     p->assocs = c.assocs; p->nassocs = c.nassocs;   /* AssocSpecs, likewise (B1) */
     p->callees = c.callees; p->ncallees = c.ncallees;   /* B4 callees */
+    p->llrefs = c.llrefs; p->nllrefs = c.nllrefs;        /* folded global lists */
+    p->uses_llist = c.uses_llist;
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
     p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;

@@ -111,6 +111,23 @@ typedef struct {
     AssocCalleeSpec** callees;
     int         ncallees, callees_cap;
 
+    /* LinkedList (compile_llist.c).  `llrefs`: folded global lists an LL_REF
+     * points at, one reference each, handed to the program at finalize.
+     * `ll_guess`: the element type assumed for a list whose kind is not known
+     * yet (a Module local initialised to LinkedList[], keyed by its name);
+     * `ll_want_*`: a push of another type found such a list, and the enclosing
+     * Module retries with that type.  `ll_init_name`: the local whose
+     * initialiser is being lowered, so LinkedList[] knows whose guess it is. */
+    Expr**      llrefs;
+    int         nllrefs, llrefs_cap;
+    struct { const char* name; CompileType elem; } ll_guess[8];
+    int         nll_guess;
+    const char* ll_want_name;
+    CompileType ll_want_elem;
+    const char* ll_init_name;
+    bool        uses_llist;
+    bool        ll_module_inner;   /* emit_ctrl: this Module call is a retry attempt */
+
     /* Expr-level CSE (see cse_plan).  A chosen repeated subtree is computed once
      * into a register reserved below the temp stack, so no temp allocation and
      * none of the explicit temp_top resets in the loop lowerings can reach it. */
@@ -324,6 +341,14 @@ bool emit_mgd(Ctx* c, const Expr* e, Val* out);   /* compile_mgd.c — managed s
  * try_infer_assoc is its inference-pass twin. */
 bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out);
 bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* out);
+/* LinkedList (compile_llist.c): the same pair for the list heads, plus a bare
+ * symbol naming a folded global list, and the Module retry around a body. */
+bool try_emit_llist(Ctx* c, const char* h, Expr** A, size_t na, Val* out);
+bool try_infer_llist(Ctx* c, const char* h, Expr** A, size_t na, CompileType* out);
+bool llist_global_value(Ctx* c, const char* nm, Val* out);
+bool llist_global_type(const Ctx* c, const char* nm, CompileType* out);
+CompileType llist_guess(const Ctx* c, const char* name);
+bool llist_retry(Ctx* c, const Expr* locals);
 /* Type-inference engine (compile_infer.c): infer_type is the entry; the rest
  * type the functional / integer-closed heads for emit_node's result register. */
 bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n, CompileType* out);

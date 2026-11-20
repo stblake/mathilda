@@ -11,6 +11,13 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Widen a branch value to the join type -- or, under COMPILE_STRICT_JOIN, bail
+ * when the two differ (see compile.h). */
+static void join_coerce(Ctx* c, Val* v, CompileType t) {
+    if ((c->flags & COMPILE_STRICT_JOIN) && v->type != t) { c->ok = false; return; }
+    coerce(c, v, t);
+}
+
 /* Thread an already-emitted scalar `val` into every target of a (possibly
  * nested) List LHS -- Wolfram Set semantics for a non-List RHS: {a, b} = c
  * binds a = c and b = c, and {a, {b, c}} = c recurses. Each leaf target must be
@@ -28,7 +35,7 @@ static bool emit_list_thread(Ctx* c, const Expr* lhs, Val val) {
             int vreg = scope_find(c, t->data.symbol.name, &vt, NULL);
             if (vreg < 0 || vt == CT_BOOL) { c->ok = false; return false; }
             Val cp = { val.reg, false, val.type, false };
-            coerce(c, &cp, vt);                 /* widen a borrowed copy to the target */
+            join_coerce(c, &cp, vt);            /* widen a borrowed copy to the target */
             if (!c->ok) return false;
             ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)cp.reg, 0, z);
             if (cp.reg != val.reg) c->temp_top--;   /* free the coercion temp */
@@ -170,7 +177,7 @@ static bool emit_ladder(Ctx* c, int rr, CompileType rt, const Rung* rungs,
         if (rungs[i].value == NULL) { Slot k = { 0 }; v = emit_const(c, k, CT_INT); }  /* default 0 */
         else if (!emit(c, rungs[i].value, &v)) return false;
         if (CT_IS_ARRAY(v.type)) { c->ok = false; return false; }
-        coerce(c, &v, rt);
+        join_coerce(c, &v, rt);
         ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)v.reg, 0, z);
         free_if_tmp(c, v);
         if (!is_default) {
@@ -240,7 +247,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         int rr = -1;
         if (na == 3) {
             if (CT_IS_ARRAY(bv.type)) { c->ok = false; return -1; }
-            coerce(c, &bv, rt);
+            join_coerce(c, &bv, rt);
             rr = alloc_temp(c);
             ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)bv.reg, 0, z);
             free_if_tmp(c, bv);
@@ -251,7 +258,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         if (na == 3) {
             Val fv; if (!emit(c, A[2], &fv)) return -1;
             if (CT_IS_ARRAY(fv.type)) { c->ok = false; return -1; }
-            coerce(c, &fv, rt);
+            join_coerce(c, &fv, rt);
             ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)fv.reg, 0, z);
             free_if_tmp(c, fv);
             out->reg = rr; out->tmp = true; out->type = rt;
@@ -281,14 +288,14 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         free_if_tmp(c, cond);
         Val th; if (!emit(c, A[1], &th)) return -1;
         if (CT_IS_ARRAY(th.type)) { c->ok = false; return -1; }
-        coerce(c, &th, rt);
+        join_coerce(c, &th, rt);
         ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)th.reg, 0, z);
         free_if_tmp(c, th);
         size_t jmp = c->n; ins(c, OP_JMP, 0, 0, 0, z);
         if (c->ok) c->code[jz].b = (uint32_t)c->n;   /* else label */
         Val el; if (!emit(c, A[2], &el)) return -1;
         if (CT_IS_ARRAY(el.type)) { c->ok = false; return -1; }
-        coerce(c, &el, rt);
+        join_coerce(c, &el, rt);
         ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)el.reg, 0, z);
         free_if_tmp(c, el);
         if (c->ok) c->code[jmp].b = (uint32_t)c->n;   /* end label */
@@ -374,7 +381,24 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
     /* With[{v=init,...}, body] / Module[{v or v=init,...}, body]: numeric locals
      * as mutable registers.  The body result is relocated onto the first local's
      * register so the locals free cleanly (LIFO). */
+    if ((strcmp(h, "With") == 0 || strcmp(h, "Module") == 0) && na == 2
+        && !c->ll_module_inner) {
+        /* A LinkedList[] local's element type is a guess until a push shows
+         * it; a push of another type names the type it wants, and the body is
+         * lowered again with it (compile_llist.c, llist_retry). Each attempt is
+         * the ordinary lowering below, entered with ll_module_inner set. */
+        EmitMark mk = emit_mark(c);
+        for (int attempt = 0; ; attempt++) {
+            c->ll_want_name = NULL;
+            c->ll_module_inner = true;
+            int r = emit_ctrl(c, h, e, A, na, out);
+            c->ll_module_inner = false;
+            if (r > 0 || attempt >= 3 || !llist_retry(c, A[0])) return r;
+            emit_rollback(c, mk);
+        }
+    }
     if ((strcmp(h, "With") == 0 || strcmp(h, "Module") == 0) && na == 2) {
+        c->ll_module_inner = false;   /* nested Modules run their own retry */
         const Expr* L = A[0];
         if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
             || L->data.function.head->data.symbol.name != SYM_List
@@ -402,7 +426,30 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             if (base_reg < 0) base_reg = reg;
             CompileType vt = CT_REAL;
             if (init) {
-                Val iv; if (!emit(c, init, &iv)) { c->nscope -= pushed; return -1; }
+                const char* saved_init = c->ll_init_name;
+                c->ll_init_name = vname;      /* LinkedList[] takes this local's guess */
+                Val iv; bool oki = emit(c, init, &iv);
+                c->ll_init_name = saved_init;
+                if (!oki) { c->nscope -= pushed; return -1; }
+                if (CT_IS_LLIST(iv.type)) {
+                    /* A list local holds a REFERENCE: a new list is adopted, an
+                     * existing one (an argument, another local) is retained, so
+                     * `b = a` mutates a, exactly as in the interpreter. */
+                    if (narr >= (int)(sizeof arr_regs / sizeof arr_regs[0])) {
+                        c->nscope -= pushed; c->ok = false; return -1;
+                    }
+                    int areg;
+                    if (iv.tmp && reg_is_owned_arr(iv.reg)) areg = iv.reg;
+                    else {
+                        areg = alloc_arr(c);
+                        ins(c, OP_LL_RETAIN, (uint32_t)areg, (uint32_t)iv.reg, 0, z);
+                    }
+                    arr_regs[narr++] = areg;
+                    c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = areg;
+                    c->scope[c->nscope].type = iv.type; c->scope[c->nscope].built = false;
+                    c->nscope++; pushed++;
+                    continue;
+                }
                 if (CT_IS_ARRAY(iv.type)) {
                     /* A local may be written through (u[[i]] = ...), so it has to
                      * OWN its array.  An initialiser that is already a temporary
@@ -434,7 +481,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         Val body; if (!emit(c, A[1], &body)) { c->nscope -= pushed; return -1; }
         c->nscope -= pushed;
 
-        if (CT_IS_ARRAY(body.type)) {
+        if (CT_IS_ARRAY(body.type) || CT_IS_LLIST(body.type)) {
             /* The result has to outlive the frees below, so every array local
              * EXCEPT the one carrying it is released, the bank is wound back to
              * where the scope started, and the value is moved down into the
@@ -443,7 +490,10 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 if (arr_regs[i] != body.reg) ins(c, OP_ARR_FREE, (uint32_t)arr_regs[i], 0, 0, z);
             c->arr_top = arr_entry;
             int rres = alloc_arr(c);
-            if (!reg_is_owned_arr(body.reg)) {
+            if (!reg_is_owned_arr(body.reg) && CT_IS_LLIST(body.type)) {
+                /* a borrowed list (an argument): the same list, one more reference */
+                ins(c, OP_LL_RETAIN, (uint32_t)rres, (uint32_t)body.reg, 0, z);
+            } else if (!reg_is_owned_arr(body.reg)) {
                 /* borrowed (an argument array): copy, or the caller's node would
                  * be freed twice — once by them and once as our result */
                 uint16_t f = (uint16_t)(((unsigned)CT_ELEM(body.type) & 3u) << AF_R_SHIFT);
@@ -600,7 +650,8 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             }
             Val val; if (!emit(c, A[1], &val)) return -1;
             if (CT_IS_ARRAY(val.type)) { c->ok = false; return -1; }
-            coerce(c, &val, vt); if (!c->ok) return -1;
+            if (kind == 0) join_coerce(c, &val, vt); else coerce(c, &val, vt);
+            if (!c->ok) return -1;
             if (kind == 0) ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)val.reg, 0, z);
             else { uint16_t op = kind == 1 ? (vt == CT_INT ? OP_ADD_I : vt == CT_REAL ? OP_ADD_R : OP_ADD_C)
                               : kind == 2 ? (vt == CT_INT ? OP_SUB_I : vt == CT_REAL ? OP_SUB_R : OP_SUB_C)

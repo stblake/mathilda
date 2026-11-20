@@ -924,6 +924,16 @@ expression would.
   - Not in the subset: array-valued `If` branches, `Sum` accumulators or `Nest`
     state (each would duplicate a handle without duplicating ownership), and
     `Table` as an array constructor.
+- **LinkedList arguments and locals.** An argument spec `{b, _LinkedList}` or
+  `{b, _LinkedList, _Integer|_Real|_Complex}` passes the caller's own
+  [LinkedList](data-structures.md#linkedlist), which the body mutates in place,
+  as the interpreter would. Without the element type, `Compile` tries Real, then
+  Integer, then Complex. `Module[{b = LinkedList[]}, …]` locals compile too. See
+  the LinkedList section for the lowered heads and for the undo log, which
+  keeps an abandoned compiled call from leaving any change on the caller's list.
+- **`N[x]`** of a machine number lowers: an Integer becomes the Real `(double) x`,
+  a Real or Complex passes through, and an Integer array becomes `1. v`.
+  `N[x, prec]` is not lowered.
 - **Association parameter bags (read-only).** An argument spec `{p, _Association}`
   (value element type defaults `_Real`) or `{p, _Association, _Real|_Integer|_Complex}`
   declares a read-only association parameter. The bag is borrowed — the program

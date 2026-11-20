@@ -16,6 +16,7 @@
 #include "eval.h"
 #include "linkedlist.h"
 #include "sym_intern.h"
+#include "compile/autocompile.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -649,6 +650,115 @@ void test_copying_heads_scale() {
                    "{True, 1000001, True}", 0);
 }
 
+
+/* ---------------------------------------- phase 5: Compile and autocompile */
+
+/* Module-local lists compile, at every element type, and answer exactly as the
+ * interpreter does (the same bodies run through CompileDiagnostics and the
+ * interpreter). */
+void test_compile_module_local_lists() {
+    static const char* bodies[] = {
+        "Module[{b = LinkedList[]}, Do[AppendTo[b, i^2.], {i, n}]; Normal[b]]",
+        "Module[{b = LinkedList[]}, Do[AppendTo[b, i^2], {i, n}]; Total[b]]",
+        "Module[{b = LinkedList[]}, Do[PrependTo[b, i + 2. I], {i, n}]; b[[1]] + Last[b] + Length[b]]",
+        "Module[{st = LinkedList[], acc = 0}, Do[Push[st, i]; If[Mod[i, 3] == 0, acc = acc + Pop[st]], {i, n}]; acc + 100 Length[st]]",
+        "Module[{q = LinkedList[], s = 0.}, Do[Push[q, N[i]]; If[i > 3, s = s + PopFirst[q]], {i, n}]; s]",
+        "Module[{b = LinkedList[Range[n]]}, Do[b[[i]] = b[[i]] b[[-i]], {i, n}]; Total[b]]",
+        "Module[{b = LinkedList[N[Range[n]]]}, Normal[Join[Reverse[Rest[b]], Join[Take[b, 2], Drop[b, -3]]]]]",
+        "Module[{b = LinkedList[N[Range[n]]]}, Normal[Join[Append[Most[b], 0.5], Prepend[b, -1.]]]]",
+        "Module[{b = LinkedList[Range[n]], a}, a = 0; Module[{c = b}, Push[c, 100]]; Length[b] + Last[b]]",
+    };
+    char buf[1024];
+    for (size_t k = 0; k < sizeof bodies / sizeof bodies[0]; k++) {
+        snprintf(buf, sizeof buf, "CompileDiagnostics[{{n, _Integer}}, %s][[1, 2]]", bodies[k]);
+        assert_eval_eq(buf, "True", 0);
+        snprintf(buf, sizeof buf, "Compile[{{n, _Integer}}, %s][9] === Block[{n = 9}, %s]",
+                 bodies[k], bodies[k]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* An Integer push into a guessed-Real local retypes it (above); pushes of
+     * two machine types make a mixed list, which is not a machine list, so the
+     * body runs through the interpreter -- with the interpreter's answer. */
+    assert_eval_eq("c5mb = Module[{b = LinkedList[]}, Do[AppendTo[b, i]; AppendTo[b, N[i]], {i, n}]; Normal[b]]; "
+                   "{CompileDiagnostics[{{n, _Integer}}, Module[{b = LinkedList[]}, "
+                   "Do[AppendTo[b, i]; AppendTo[b, N[i]], {i, n}]; Normal[b]]][[1, 2]], "
+                   "Compile[{{n, _Integer}}, Module[{b = LinkedList[]}, Do[AppendTo[b, i]; AppendTo[b, N[i]], {i, n}]; Normal[b]]][2]}",
+                   "{False, {1, 1.0, 2, 2.0}}", 0);
+}
+
+/* A {b, _LinkedList} argument is the caller's own list: mutated in place. */
+void test_compile_list_arguments() {
+    assert_eval_eq("c5h = Compile[{{b, _LinkedList}, {x, _Real}}, AppendTo[b, x]; PrependTo[b, -x]; Length[b]]; "
+                   "c5l = LinkedList[{1., 2.}]; {c5h[c5l, 7.], Normal[c5l], "
+                   "CompileDiagnostics[{{b, _LinkedList}, {x, _Real}}, AppendTo[b, x]; Length[b]][[1, 2]]}",
+                   "{4, {-7.0, 1.0, 2.0, 7.0}, True}", 0);
+    /* The element type is found (Integer here) or given; a list of another kind
+     * at call time is answered by the interpreter, correctly. */
+    assert_eval_eq("c5i = Compile[{{b, _LinkedList}}, b[[1]] = 99; b[[-1]] + First[b]]; "
+                   "c5li = LinkedList[{1, 2, 3}]; c5lr = LinkedList[{1., 2.}]; "
+                   "{c5i[c5li], Normal[c5li], c5i[c5lr], Normal[c5lr]}",
+                   "{102, {99, 2, 3}, 101.0, {99, 2.0}}", 0);
+    assert_eval_eq("c5k = Compile[{{b, _LinkedList, _Integer}}, Pop[b] + Pop[b]]; "
+                   "{c5k[LinkedList[{4, 5, 6}]], Head[Compile[{{b, _LinkedList, _Integer}}, b][LinkedList[{1}]]]}",
+                   "{11, LinkedList}", 0);
+    /* Returning the argument returns the same object. */
+    assert_eval_eq("c5r = Compile[{{b, _LinkedList, _Real}}, Push[b, 1.]]; c5o = LinkedList[]; "
+                   "{c5r[c5o] === c5o, Length[c5o]}", "{True, 1}", 0);
+}
+
+/* A compiled call that fails half way leaves no trace on a list it did not
+ * create: the interpreter's re-run then makes every change exactly once and
+ * emits its message exactly once. */
+void test_compile_failure_is_undone() {
+    assert_eval_eq("c5f = Compile[{{b, _LinkedList, _Integer}}, (AppendTo[b, 1]; PrependTo[b, 0]; b[[1]] = 7; Pop[b]; b[[10]])]; "
+                   "c5q = LinkedList[{1, 2, 3}]; {Quiet[c5f[c5q]], Normal[c5q]}",
+                   "{Part[LinkedList[<4>], 10], {7, 1, 2, 3}}", 0);
+    assert_eval_eq("c5p = Compile[{{b, _LinkedList, _Integer}}, Pop[b]]; c5e = LinkedList[]; "
+                   "{Check[c5p[c5e], failed], Length[c5e]}", "{failed, 0}", 0);
+    /* An Integer Total past int64 is a bignum: the interpreter answers. */
+    assert_eval_eq("Compile[{{b, _LinkedList, _Integer}}, Total[b]][LinkedList[{2^62, 2^62, 2^62}]]",
+                   "13835058055282163712", 0);
+}
+
+/* Do / While / For over a GLOBAL list compile as one program. Same answer as
+ * the interpreter; a failure part way runs the loop through the interpreter,
+ * with the list as the interpreter would leave it. */
+void test_autocompile_loops_over_global_lists() {
+    long runs0 = autocompile_closed_stmt_runs();
+    assert_eval_eq("c5g = LinkedList[]; Do[AppendTo[c5g, N[i]], {i, 10^5}]; "
+                   "c5gi = LinkedList[]; Do[AppendTo[c5gi, i^2], {i, 1000}]; Do[PrependTo[c5gi, -i], {i, 3}]; "
+                   "c5gz = LinkedList[{1. + I}]; Do[AppendTo[c5gz, c5gz[[-1]] I], {4}]; "
+                   "{Length[c5g], Total[c5g], c5gi[[1]], c5gi[[-1]], Normal[c5gz]}",
+                   "{100000, 5.00005*^9, -3, 1000000, {1.0 + 1.0*I, -1.0 + 1.0*I, -1.0 - 1.0*I, 1.0 - 1.0*I, 1.0 + 1.0*I}}", 0);
+    expect_true(autocompile_closed_stmt_runs() >= runs0 + 4, "the loops ran compiled");
+    /* The same loops interpreted give the same lists. */
+    autocompile_set_enabled(false);
+    assert_eval_eq("c5h1 = LinkedList[]; Do[AppendTo[c5h1, N[i]], {i, 10^5}]; Normal[c5h1] === Normal[c5g]", "True", 0);
+    autocompile_set_enabled(true);
+    /* Overflow part way (2^63): undone, then interpreted from the start. */
+    assert_eval_eq("c5ov = LinkedList[{2^61}]; Do[AppendTo[c5ov, 2 c5ov[[-1]]], {i, 4}]; Normal[c5ov]",
+                   "{2305843009213693952, 4611686018427387904, 9223372036854775808, "
+                   "18446744073709551616, 36893488147419103232}", 0);
+    /* Branches of two types keep the interpreter's types (no widening in a
+     * loop that stands in for the interpreter: COMPILE_STRICT_JOIN). */
+    assert_eval_eq("c5mx = LinkedList[]; Do[AppendTo[c5mx, If[EvenQ[i], i, N[i]]], {i, 4}]; Normal[c5mx]",
+                   "{1.0, 2, 3.0, 4}", 0);
+    /* A body that sets a global (acc) is not compiled; still correct. */
+    assert_eval_eq("c5st = LinkedList[Range[5]]; c5acc = 0; Do[c5acc = c5acc + Pop[c5st], {3}]; {c5acc, Normal[c5st]}",
+                   "{12, {1, 2}}", 0);
+    /* A per-element autocompiled body may READ a global list ... */
+    assert_eval_eq("c5rd = LinkedList[N[Range[10]]]; Table[c5rd[[i]]^2, {i, 3}]", "{1.0, 4.0, 9.0}", 0);
+    /* ... but never mutate one (Table re-runs from the start on a decline). */
+    assert_eval_eq("c5tm = LinkedList[]; Table[AppendTo[c5tm, N[i]]; i, {i, 5}]; Normal[c5tm]",
+                   "{1.0, 2.0, 3.0, 4.0, 5.0}", 0);
+}
+
+void test_compile_lists_are_fast() {
+    /* 10^6 appends compiled: tens of milliseconds (interpreted ~0.5 s). */
+    assert_eval_eq("c5big = LinkedList[]; c5t = First[AbsoluteTiming[Do[AppendTo[c5big, N[i]], {i, 10^6}]]]; "
+                   "{c5t < 0.25, Length[c5big]}", "{True, 1000000}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -684,6 +794,11 @@ int main() {
     TEST(test_copying_messages);
     TEST(test_listable_threading_bit_parity);
     TEST(test_copying_heads_scale);
+    TEST(test_compile_module_local_lists);
+    TEST(test_compile_list_arguments);
+    TEST(test_compile_failure_is_undone);
+    TEST(test_autocompile_loops_over_global_lists);
+    TEST(test_compile_lists_are_fast);
 
     printf("All LinkedList tests passed!\n");
     symtab_clear();

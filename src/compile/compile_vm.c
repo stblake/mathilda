@@ -17,6 +17,7 @@
 #include "../memacct.h"   /* MemoryConstrained: charges, refusals, frames */
 #include "compile.h"
 #include "compile_internal.h"    /* Slot / Instr / CompiledProgram / opcodes / VM_TLS */
+#include "../linkedlist.h"       /* LinkedList arguments, undo frames */
 #include "../arithmetic.h"       /* expr_new_* / expr_free / expr_bigint_normalize */
 #include "../symtab.h"
 #include "../ndarray.h"          /* ndarray_part(_set) / map / elementwise / NDType */
@@ -718,6 +719,7 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
     const unsigned f = c->flags, ka = AF_A(f), kb = AF_B(f);
     Expr* r = NULL;
 
+    if (c->op >= OP_LL_NEW && c->op <= OP_LL_STRUCT) return vm_llist_op(c, d, a, b);
     switch (c->op) {
         case OP_ARR_FREE:
             expr_free(d->arr); d->arr = NULL;
@@ -1596,6 +1598,18 @@ vm_loop:
             OP(A_NDFN2):  ARROP();
             OP(V_NDFN2):  ARROP();
             OP(V_LEN):    ARROP();
+            OP(LL_NEW):   ARROP();
+            OP(LL_FROMARR): ARROP();
+            OP(LL_RETAIN): ARROP();
+            OP(LL_REF):   ARROP();
+            OP(LL_PUSH):  ARROP();
+            OP(LL_POP):   ARROP();
+            OP(LL_GET):   ARROP();
+            OP(LL_SET):   ARROP();
+            OP(LL_LEN):   ARROP();
+            OP(LL_TOTAL): ARROP();
+            OP(LL_NORMAL): ARROP();
+            OP(LL_STRUCT): ARROP();
             /* ---- fused elementwise loop (M3b) ----------------------------
              * A_LOAD/A_STORE are the whole point of fusion: an elementwise
              * chain becomes ONE pass over the buffers driven by ordinary scalar
@@ -2107,6 +2121,7 @@ bool        compiled_result_built(const CompiledProgram* p) { return p && p->res
 size_t compiled_num_args(const CompiledProgram* p) { return p->nargs; }
 size_t compiled_num_instructions(const CompiledProgram* p) { return p->n; }
 bool compiled_program_all_real(const CompiledProgram* p) { return p && p->all_real; }
+bool compiled_program_uses_llist(const CompiledProgram* p) { return p && p->uses_llist; }
 size_t compiled_num_cse(const CompiledProgram* p) { return p ? (size_t)p->ncse : 0; }
 
 size_t compiled_arg_deps(const CompiledProgram* p, int* deps, size_t cap) {
@@ -2139,6 +2154,20 @@ static bool load_arg(Slot* s, const CompileValue* v, CompileType want) {
         s->arr = x;
         return true;
     }
+    if (CT_IS_LLIST(want)) {
+        /* A LinkedList argument is BORROWED, in a scalar-bank argument register
+         * (never swept), and it is the caller's own list: the program mutates
+         * it in place, as the interpreter would. Its storage must already be of
+         * the promised element kind -- or empty, which any typed push retypes. */
+        Expr* x = CT_IS_LLIST(v->type) ? v->v.a : NULL;
+        LinkedList* ll = expr_linkedlist(x);
+        if (!ll) return false;
+        CompileType e = CT_LLIST_ELEM(want);
+        LLKind k = e == CT_INT ? LL_I64 : e == CT_REAL ? LL_REAL : LL_CPLX;
+        if (ll_length(ll) > 0 && ll_kind(ll) != k) return false;
+        s->arr = x;
+        return true;
+    }
     if (CT_IS_MANAGED(want)) {
         /* The container is already bound in s->p by managed_frame_enter (which
          * runs before load_arg); set its VALUE from the boxed numeric Expr in
@@ -2152,7 +2181,7 @@ static bool load_arg(Slot* s, const CompileValue* v, CompileType want) {
 #endif
         return false;
     }
-    if (CT_IS_ARRAY(v->type) || CT_IS_ASSOC(v->type)) return false;
+    if (CT_IS_HANDLE(v->type)) return false;
     /* coerce the boxed arg to the register's declared type */
     switch (v->type) {
         case CT_BOOL: s->i = v->v.b ? 1 : 0; return true;
@@ -2399,7 +2428,21 @@ static bool vm_call(const CompiledProgram* cp, const Slot* argv, unsigned nargs,
     return good;
 }
 
+static bool compiled_eval_run(const CompiledProgram* p, const CompileValue* args, CompileValue* out);
+
+/* A program that touches a LinkedList runs inside an undo frame: if the call
+ * fails -- for whatever reason, at whatever point -- every change it made to a
+ * list it did not create is reverted before the interpreter runs the body
+ * again (linkedlist.c, "Undo log"). Programs without list ops pay nothing. */
 bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileValue* out) {
+    if (!p->uses_llist) return compiled_eval_run(p, args, out);
+    ll_undo_begin();
+    bool ok = compiled_eval_run(p, args, out);
+    if (ok) ll_undo_commit(); else ll_undo_rollback();
+    return ok;
+}
+
+static bool compiled_eval_run(const CompiledProgram* p, const CompileValue* args, CompileValue* out) {
     Slot stackframe[VM_STACK_SLOTS];
     Slot* heap = NULL;
     Slot* R = stackframe;
@@ -2423,7 +2466,7 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
     out->type = p->result_type;
     /* An array OR an owned association result (B3) lives in the .arr slot; both
      * transfer ownership to the caller and both leave the array bank to sweep. */
-    if (CT_IS_ARRAY(p->result_type) || CT_IS_ASSOC(p->result_type)) {
+    if (CT_IS_HANDLE(p->result_type)) {
         out->v.a = failed ? NULL : r->arr;
         if (!failed) r->arr = NULL;    /* ownership transfers to the caller */
         arr_sweep(p, R);
@@ -2521,6 +2564,8 @@ void compiled_free(CompiledProgram* p) {
     free(p->assocs);
     for (int i = 0; i < p->ncallees; i++) compile_assoccallee_free(p->callees[i]);
     free(p->callees);
+    for (int i = 0; i < p->nllrefs; i++) expr_free(p->llrefs[i]);
+    free(p->llrefs);
     for (int i = 0; i < p->nmgd_consts; i++) mgd_const_free(&p->mgd_consts[i]);
     free(p->mgd_consts);
     free(p->mgd_slots);

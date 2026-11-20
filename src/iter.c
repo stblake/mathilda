@@ -55,6 +55,7 @@
 #include "ndarray.h"
 #include "checked_int.h"
 #include "numloop.h"
+#include "compile/autocompile.h"   /* whole loops over a global LinkedList */
 #include "numeric.h"
 #include <math.h>
 #include <string.h>
@@ -647,6 +648,11 @@ Expr* builtin_do(Expr* res) {
                                       di_e ? di_e->data.integer : 1);
         if (fast) { iter_spec_free(&s); return fast; }
     }
+    /* A body that works on a global LinkedList: the whole loop compiled. */
+    if (!is_list_iter && !is_inf) {
+        Expr* fast = autocompile_run_closed_stmt(res);
+        if (fast) { iter_spec_free(&s); return fast; }
+    }
 
     /*
      * Shadow any existing OwnValue for the iterator: we temporarily clear
@@ -796,6 +802,8 @@ Expr* builtin_for(Expr* res) {
     if (body) {
         Expr* fast = numloop_for(start, test, incr, body);
         if (fast) return fast;
+        fast = autocompile_run_closed_stmt(res);   /* a global LinkedList body */
+        if (fast) return fast;
     }
 
     /* Initialisation: evaluate `start` for its side-effects; discard result. */
@@ -876,6 +884,8 @@ Expr* builtin_while(Expr* res) {
     /* Automatic numeric fast-path for While[<numeric cmp>, x = <numeric>]. */
     if (body) {
         Expr* fast = numloop_while(test, body);
+        if (fast) return fast;
+        fast = autocompile_run_closed_stmt(res);   /* a global LinkedList body */
         if (fast) return fast;
     }
 

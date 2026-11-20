@@ -103,6 +103,22 @@ void  ll_push_back_from(LinkedList* dst, const LinkedList* src, int64_t i);
 /* Remove and return the last / first element. NULL when empty. */
 Expr* ll_pop_back (LinkedList* ll);
 Expr* ll_pop_front(LinkedList* ll);
+/* Typed pop for the compiled path: the removed slot's bytes (int64_t, double
+ * or a (re, im) pair) into `out`. False when empty or boxed. */
+bool  ll_pop_typed(LinkedList* ll, bool front, void* out);
+bool  ll_set_cplx(LinkedList* ll, int64_t i, double re, double im);
+/* The elements as a packed rank-1 array, any length; NULL if boxed or empty. */
+Expr* ll_to_ndarray(const LinkedList* ll);
+
+/* ---- undo frames (compiled runs; see linkedlist.c, "Undo log") ---------
+ * While a frame is open every change to a list created BEFORE the frame was
+ * opened is logged. ll_undo_rollback reverts the innermost frame's changes;
+ * ll_undo_commit closes it (an inner commit keeps the records for the outer
+ * frame). Frames nest; every begin is paired with one commit or rollback. */
+void     ll_undo_begin(void);
+void     ll_undo_commit(void);
+void     ll_undo_rollback(void);
+uint64_t ll_next_id(void);
 
 /* Elements [lo, hi) of src appended to dst, in order / in reverse order.
  * Typed spans copy without boxing. src and dst must differ. */

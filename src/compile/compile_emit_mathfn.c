@@ -121,6 +121,28 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
             return c->ok ? 1 : -1;
         }
     }
+    /* N[x] of a machine scalar: an Integer becomes the Real (double)x -- the
+     * conversion the interpreter's N makes -- and a Real or Complex is already
+     * numerical. An Integer array becomes 1. v, the same conversion per element
+     * (exact: one rounding of each integer, as N's). N[x, prec] (arbitrary
+     * precision) is not lowered. */
+    if (strcmp(h, "N") == 0 && na == 1) {
+        CompileType ta;
+        if (infer_type(c, A[0], &ta) && CT_IS_ARRAY(ta)) {
+            if (CT_ELEM(ta) == CT_REAL || CT_ELEM(ta) == CT_COMPLEX) return emit(c, A[0], out) ? 1 : -1;
+            if (CT_ELEM(ta) != CT_INT) { c->ok = false; return -1; }
+            Expr* ta2[2] = { expr_new_real(1.0), expr_copy((Expr*)A[0]) };
+            Expr* t = expr_new_function(expr_new_symbol("Times"), ta2, 2);
+            bool r = emit(c, t, out);
+            if (!r && expr_subtree_of(t, c->bail_node)) c->bail_node = A[0];
+            expr_free(t);
+            return r ? 1 : -1;
+        }
+        Val a; if (!emit(c, A[0], &a)) return -1;
+        if (a.type == CT_INT) { coerce(c, &a, CT_REAL); *out = a; return c->ok ? 1 : -1; }
+        if (a.type == CT_REAL || a.type == CT_COMPLEX) { *out = a; return c->ok ? 1 : -1; }
+        c->ok = false; return -1;
+    }
     if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0 || strcmp(h, "Conjugate") == 0) && na == 1) {
         Val a; if (!emit(c, A[0], &a)) return -1;
         if (a.type == CT_INT && strcmp(h, "Conjugate") != 0) {

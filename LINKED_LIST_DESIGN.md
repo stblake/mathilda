@@ -213,46 +213,89 @@ The regression test for this is `ll = LinkedList[]; Table[AppendTo[ll, i]; Lengt
 
 ## 8. Compile[] and auto-compilation
 
+As built in phase 5 (v0.6634). Where this differs from the original plan, the plan's version and the reason for the change are given.
+
 ### 8.1 Type
 
-`CT_LLIST + elem` occupies the free window after the arbitrary-precision types (43..46), following the Association handle types. `elem` is Int, Real or Complex. Every existing scalar or array check rejects these values automatically. `CompileDiagnostics` reports the `ResultType` as "LinkedList".
+`CT_LLIST + elem` is 44..47, above the arbitrary-precision types (40..42). The base is 44 so that `elem` sits in the low two bits, as for the array and Association encodings. `elem` is Integer, Real or Complex. Elem 0 (`CT_BOOL`) is the argument parser's marker for "element type not given" and never reaches the emitter. Every existing scalar, array, Association and managed-type check rejects these values; `num_common`, `coerce`, `scalar_only`, the inliner and `OP_CALL` reject them explicitly. `CompileDiagnostics` reports `ResultType -> "LinkedList"`.
 
-### 8.2 Where a compiled LinkedList comes from
+A register holds the `EXPR_LINKEDLIST` node in `.arr`:
+- **owned, in the array bank:** a list the body created, a Module local, or a retained reference to an argument or a folded global. The per-call sweep releases these on every exit path.
+- **borrowed, in an argument register:** a list passed in. It is the caller's own object and is never released.
 
-- **A Module local**, `Module[{b = LinkedList[]}, …]` or `LinkedList[arr]`. A pre-pass fixes the element type: it combines the types of every `AppendTo`/`PrependTo`/`Push`/Part assignment on `b` with the type of the constructor argument. Int and Real join to Real; anything else bails.
-- **A `Compile` argument** typed `{b, _LinkedList}`. The list is passed by reference. Its kind is checked on entry, and a mismatch falls back to the interpreter.
-- **A global, in auto-compilation only.** Under `COMPILE_FOLD_GLOBALS`, a global whose OwnValue is a LinkedList is captured as a retained object constant, with its current kind as the element type. This is safe because an auto-compiled program lives only inside one builtin call. A body that assigns the global itself bails.
+### 8.2 Element type: one per list, never widened
 
-The register sits in the array bank and holds the `EXPR_LINKEDLIST*`, so the existing per-call sweep releases it on every exit path, including an abort.
+Every value pushed into a compiled list must have the list's element type. The plan joined Int and Real to Real, but that changes the answer: the interpreter keeps `{1, 2.5}` as a mixed, boxed list, and a widened compiled list would give `{1., 2.5}`.
+
+The element type is found as follows:
+- **A Module local `b = LinkedList[]`** has no type until something is pushed, so it is guessed, Real first. A push of another machine type records what it wants (`ll_want_*`), and the enclosing Module lowers its body again with that type (`llist_retry`, at most three attempts). If a second, different type is pushed, the list is mixed: the body bails and the interpreter answers.
+- **`b = LinkedList[arr]`** takes `arr`'s element type.
+- **An argument** is declared `{b, _LinkedList}` or `{b, _LinkedList, _Integer | _Real | _Complex}`, following `{p, _Association, _Real}`. Without the element type, `Compile[]` tries Real, then Integer, then Complex, and keeps the first that compiles. At call time a non-empty list of another kind runs through the interpreter.
+- **A folded global** takes its current kind. If it is still empty, the loop runner tries Real, Integer and Complex in turn (`COMPILE_LL_EMPTY_INT`, `COMPILE_LL_EMPTY_CPLX`). A boxed global is not compiled.
 
 ### 8.3 Lowered operations
 
-Every opcode calls the shared C helpers that the interpreter uses (`ll_push_back_*`, `ll_get`, `ll_set`, `ll_to_ndarray`, …), so compiled and interpreted results cannot drift apart.
+Every opcode calls the shared C helpers the interpreter uses (`ll_push_back_*`, `ll_get_*`, `ll_set_*`, `ll_pop_typed`, `ll_sum_machine`, `ll_append_range`, `ll_to_ndarray`), so the compiled and interpreted results are the same by construction. Every opcode is `K_ARR`:
+- The optimiser treats it as opaque: it never moves, removes or CSEs one.
+- A loop containing one is left out of LICM, because a list is mutable shared state, so even `Length` must not be hoisted past a push.
+- The VM dispatches it out of line (`compile_llist_vm.c`), like the other array ops.
+- The strip-mined parallel loops are generated only for fused array code, so a loop holding a list op never fans out across threads.
 
-| Surface | Opcode | Optimiser kind | Notes |
-|---|---|---|---|
-| `LinkedList[]`, `LinkedList[arr]` | `LL_NEW` | allocating, impure | |
-| `AppendTo`/`Push`, `PrependTo` | `LL_PUSHB`, `LL_PUSHF` | store (impure, never moved) | statement-valued |
-| `b[[i]] = v` (integer index) | `LL_SET` | store | |
-| `Pop`, `PopFirst` | `LL_POPB`, `LL_POPF` | impure | an empty list makes the VM fail, the interpreter reruns the call and emits the message |
-| `Length[b]` | `LL_LEN` | impure | must not be hoisted past a push by LICM or CSE |
-| `b[[i]]`, `First`, `Last` | `LL_GET` | impure | out of range makes the VM fail and the interpreter take over |
-| `Normal[b]` | `LL_NORMAL` | allocating | rank-1 tensor, marked built, with a non-empty guard |
-| `Append`, `Prepend`, `Most`, `Rest`, `Reverse`, `Take`, `Drop`, `Join` | `LL_STRUCT` + sub-op | allocating | result is `CT_LLIST` |
+| Surface | Opcode | Notes |
+|---|---|---|
+| `LinkedList[]`, `LinkedList[arr]` | `LL_NEW`, `LL_FROMARR` | |
+| `b = a` (a local bound to a list) | `LL_RETAIN` | the same list, by reference |
+| a folded global | `LL_REF` | program-owned reference (`p->llrefs`) |
+| `AppendTo`/`Push`, `PrependTo` | `LL_PUSH` (`LLF_FRONT`) | value is the list |
+| `Pop`, `PopFirst` | `LL_POP` | empty: the call fails, and the interpreter answers and emits `Pop::empty` |
+| `b[[i]] = v` (one integer index) | `LL_SET` | value is `v` |
+| `b[[i]]`, `First`, `Last` | `LL_GET` | out of range: the call fails |
+| `Length`, `Total` | `LL_LEN`, `LL_TOTAL` | an Integer Total past int64 fails; a Real or Complex Total is the packed tree, bit for bit |
+| `Normal[b]` | `LL_NORMAL` | rank-1 array, built (so it is packed only past the size threshold); empty: fails |
+| `Most`, `Rest`, `Reverse`, `Take[b, k]`, `Drop[b, k]`, `Append`, `Prepend`, `Join[b1, b2]` | `LL_STRUCT` + sub-op | new list, chunk span copies |
 
-A compiled function may return a LinkedList; the caller receives the object itself.
+A compiled function may return a LinkedList. A returned argument is the same object (`LL_RETAIN`), as in the interpreter.
 
-### 8.4 Auto-compilation
+### 8.4 Failure and the undo log
 
-- **Table, Map, Sum and the rest** already compile their bodies through `autocompile_new` with folded globals, so a body such as `Table[AppendTo[ll, f[i]]; g[i], {i, n}]` compiles once the lowering exists.
-- **Do, For and While** use the arithmetic-only fast path in `numloop`, which declines a body containing any other head. When it declines and the body mentions a LinkedList-valued symbol (a cheap scan), `src/iter.c` makes a second attempt. A new `autocompile_run_closed_stmt` compiles the **whole loop** with folded globals and runs it. It returns `Null` on success and declines otherwise, and the interpreter then runs the loop as before.
+A compiled call that cannot finish is abandoned, and the interpreter runs the body again from the start. Causes include an overflow, an index out of range, an empty `Pop`, or a result the boundary declines (underflow). That was sound only while compiled code had no side effects, and a list the run did not create is a side effect.
 
-### 8.5 Out of scope inside Compile
+- **The undo log.** A program with any list op runs inside an undo frame (`ll_undo_begin` / `_commit` / `_rollback`, `src/linkedlist.c`). While a frame is open, every push, pop and Part write to a list created before the frame is logged, and a rollback reverts them in reverse order.
+- **Which lists.** "Created before" is one compare, because list ids are issued in creation order. Lists the run created need no record, since they are thrown away too.
+- **Merging.** Consecutive pushes onto the same end of one list merge into a single record, so `Do[AppendTo[ll, x], {10^6}]` logs one record.
+- **Nesting.** Frames nest. An inner commit keeps its records for the outer frame, and only the outermost commit discards the log.
+- **Where frames open.** `compiled_eval` opens one, and `compiled_function_apply` opens a second around its post-run checks (underflow, degenerate entries), so a result declined after a successful run is also undone.
 
-The following bail cleanly to the interpreter and are listed, each with its reason, in the `check-compile-coverage` baseline:
+The test: a compiled function that appends, prepends, writes and pops, then reads past the end, leaves the caller's list exactly as one interpreted run leaves it, with one `Part::partw`.
+
+### 8.5 Who may mutate a list from outside
+
+An undo frame covers one run of one program, and that is enough for a `Compile[]` call and for a whole loop. It is not enough for a per-element auto-compiled program (`Table`, `Map`, `Sum`). When a later element fails there after earlier ones succeeded, the interpreter redoes the whole call, earlier elements included. The plan had expected `Table[AppendTo[ll, f[i]]; …]` to compile; it must not. So:
+- **Reads are allowed everywhere.** A folded global list may be read in any auto-compiled body (`Table[ll[[i]]^2, {i, n}]`).
+- **Mutating a folded global, or binding one to a local** (which could then be mutated), needs `COMPILE_LL_MUTATE_GLOBALS`. Only the whole-loop runner sets that flag.
+- **No pasting.** A `CompiledFunction` with a list parameter is never inlined into, or called from, another program, so it always runs as its own call with its own frame.
+
+### 8.6 Auto-compilation of Do, For and While
+
+`numloop` declines a body that is not a block of numeric assignments. When it does, and the loop names a global whose value is a LinkedList (a depth-bounded scan), `src/iter.c` hands the whole loop to `autocompile_run_closed_stmt`, which:
+- compiles the loop as one program with folded globals, `COMPILE_LL_MUTATE_GLOBALS` and `COMPILE_STRICT_JOIN`;
+- runs it inside an undo frame;
+- returns `Null` on success, or declines, after which the interpreter runs the loop.
+
+`ll = LinkedList[]; Do[AppendTo[ll, N[i]], {i, 10^6}]` takes 37 ms, against about 0.5 s interpreted.
+
+**Strict joins.** `Compile[]` unifies the branches of `If`, `Which`, `Switch` and `Piecewise`, and the values assigned to a local, as the reference's Compile does: `If[EvenQ[i], i, N[i]]` is always Real. The loop runner stands in for the interpreter, whose pushes are observable, so under `COMPILE_STRICT_JOIN` a join of two types bails rather than widening, and the list keeps `{1., 2, 3., 4}`.
+
+**`N`.** `N[x]` on a machine number had no lowering, which sent every `Do[AppendTo[ll, N[i]], …]` to the interpreter. It now lowers: an Integer becomes the Real `(double) x`, which is the interpreter's conversion; a Real or Complex passes through; an Integer array becomes `1. v`.
+
+### 8.7 Out of scope inside Compile
+
+These bail cleanly to the interpreter:
 - boxed or nested elements, including lists of lists and lists of LinkedLists;
 - `Delete`, `Insert` and `ReplacePart`;
-- `Map` and `Select` with a symbolic function.
+- `Map`, `Select` and Listable threading over a list;
+- deeper Part, sequence specs in `Take`/`Drop`, and Part writes other than a single integer index;
+- rebinding a list local, `AddTo` on a list element, and `LinkedList[ll]` (a copy).
 
 ## 9. Messages
 

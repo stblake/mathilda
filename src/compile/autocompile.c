@@ -13,6 +13,9 @@
 #include "../arithmetic.h"   /* make_complex */
 #include "../sym_intern.h"   /* intern_symbol */
 #include "../print.h"        /* expr_to_string — the diagnostic below */
+#include "../symtab.h"       /* symtab_get_own_values — global LinkedLists */
+#include "../sym_names.h"    /* SYM_CompoundExpression */
+#include "../linkedlist.h"   /* ll_length */
 
 #define AC_MAX_VARS 16       /* boxed fallback path caps here; real path is unbounded */
 
@@ -291,4 +294,60 @@ void autocompiled_free(AutoCompiled* ac) {
     if (!ac) return;
     if (ac->prog) compiled_free(ac->prog);
     free(ac);
+}
+
+/* ---- Whole loops over a global LinkedList ---------------------------------- */
+
+/* Does `e` name a global symbol whose value is a LinkedList? `*empty` is set
+ * when one of them is still empty (no element kind yet). Depth-bounded: a loop
+ * body is small, and an unbounded walk of a pathological one is not worth the
+ * fast path. */
+static bool names_global_llist(const Expr* e, bool* empty, int depth) {
+    if (!e || depth > 64) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        for (Rule* r = symtab_get_own_values(nm); r; r = r->next) {
+            if (!r->pattern || r->pattern->type != EXPR_SYMBOL) continue;
+            if (strcmp(r->pattern->data.symbol.name, nm) != 0) continue;
+            if (r->replacement && r->replacement->type == EXPR_LINKEDLIST) {
+                if (ll_length(r->replacement->data.llist) == 0) *empty = true;
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    bool any = names_global_llist(e->data.function.head, empty, depth + 1);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        any |= names_global_llist(e->data.function.args[i], empty, depth + 1);
+    return any;
+}
+
+static long g_closed_stmt_runs = 0;
+long autocompile_closed_stmt_runs(void) { return g_closed_stmt_runs; }
+
+Expr* autocompile_run_closed_stmt(const Expr* loop) {
+    if (!loop || !autocompile_enabled()) return NULL;
+    bool empty = false;
+    if (!names_global_llist(loop, &empty, 0)) return NULL;
+    /* A loop is a statement: it lowers to 0 where the interpreter answers Null,
+     * which the compiler refuses in result position. Give the program a value
+     * of its own and discard it. */
+    Expr* a[2] = { expr_copy((Expr*)loop), expr_new_integer(0) };
+    Expr* prog_body = expr_new_function(expr_new_symbol(SYM_CompoundExpression), a, 2);
+    unsigned base = (COMPILE_FOLD_GLOBALS | COMPILE_LL_MUTATE_GLOBALS | COMPILE_STRICT_JOIN)
+                  & ~COMPILE_WRAP_INT;
+    static const unsigned guess[3] = { 0u, COMPILE_LL_EMPTY_INT, COMPILE_LL_EMPTY_CPLX };
+    CompiledProgram* prog = NULL;
+    for (int g = 0; g < (empty ? 3 : 1) && !prog; g++)
+        prog = compile_expr_prec(prog_body, NULL, NULL, 0, base | guess[g], 0);
+    expr_free(prog_body);
+    if (!prog) { ac_report_bail(loop); return NULL; }
+    CompileValue o;
+    bool ok = compiled_eval(prog, NULL, &o);   /* undo frame: a failure leaves no trace */
+    compiled_free(prog);
+    if (!ok) return NULL;
+    g_closed_stmt_runs++;
+    return expr_new_symbol(SYM_Null);
 }

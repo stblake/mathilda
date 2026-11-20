@@ -1257,11 +1257,24 @@ void test_compile_print_builtin(void) {
     assert_eval_eq("CompilePrint[]", "CompilePrint[]", 0);
 }
 
+
+/* 1^x with an inexact exponent is the Real 1. (the reference's answer), so the
+ * interpreter and Compile agree at i = 1; and N of a machine number lowers. */
+static void test_cf_one_to_inexact_power_and_n(void) {
+    assert_eval_eq("{1^2., 1^2.5, 1^(2. + I), 1^(1/2), 1^(2 + 3 I)}", "{1.0, 1.0, 1.0, 1, 1}", 0);
+    assert_eval_eq("Compile[{{i, _Integer}}, i^2.][1] === 1^2.", "True", 0);
+    assert_eval_eq("{CompileDiagnostics[{{i, _Integer}}, N[i]][[1, 2]], "
+                   "Compile[{{i, _Integer}}, N[i]][2^60] === N[2^60], "
+                   "Compile[{{v, _Integer, 1}}, N[v]][{1, 2, 3}]}",
+                   "{True, True, {1.0, 2.0, 3.0}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_cf_integer);
+    TEST(test_cf_one_to_inexact_power_and_n);
     TEST(test_cf_order);
     TEST(test_cf_real);
     TEST(test_cf_complex);
