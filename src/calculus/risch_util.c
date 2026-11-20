@@ -578,6 +578,168 @@ static Expr* rt_together_log_args(Expr* e) {
     return e;
 }
 
+/* ---- Exponential normal form for the exact zero test ----------------------
+ * The same exponential can reach a residual under several spellings that a
+ * rational zero test treats as unrelated atoms: E^(E^(2u)/(1 + E^(2u))) and
+ * E^(1/(1 + E^(2u))) (their exponents sum to 1), E^(a + 2u) beside E^a E^(2u),
+ * E^(-2u) beside E^(2u).  The trig front end's Tanh answers carry all three
+ * (Tanh hunt, 2026-11-20: PossibleZeroQ ran out of a 30 s budget on a residual
+ * numerically 3e-15).  rt_expnorm rewrites, bottom-up, every x-dependent
+ * E^a as E^c * prod z_i^(n_i): the exponent, its own exponentials already
+ * rewritten, is expanded and split into partial fractions in each z (Apart),
+ * the x-free terms collect into c, and each other term n_i m_i (n_i an integer
+ * or I times one) becomes z_i^(n_i) for a fresh symbol z_i keyed on m_i.  A
+ * term with any other coefficient stays an atom E^(term).  Each step is an
+ * identity and z_i -> E^(m_i) maps the result back, so a rational function
+ * that is 0 in the z_i proves the residual is 0; a non-zero proves nothing. */
+typedef struct { Expr** key; Expr** sym; size_t n, cap; } RtExpTab;
+
+static Expr* rt_expnorm_sym(RtExpTab* T, Expr* m) {   /* borrows m */
+    for (size_t i = 0; i < T->n; i++)
+        if (expr_eq(T->key[i], m)) return expr_copy(T->sym[i]);
+    if (T->n == T->cap) {
+        T->cap = T->cap ? 2 * T->cap : 8;
+        T->key = realloc(T->key, T->cap * sizeof(Expr*));
+        T->sym = realloc(T->sym, T->cap * sizeof(Expr*));
+    }
+    char nm[64];
+    snprintf(nm, sizeof nm, "Risch`Private`rtZ%zu", T->n + 1);
+    T->key[T->n] = expr_copy(m);
+    T->sym[T->n] = expr_new_symbol(nm);
+    return expr_copy(T->sym[T->n++]);
+}
+
+/* the integer n of a coefficient n or n I (Complex[0, n]); *imag says which */
+static bool rt_expnorm_unit(const Expr* c, int64_t* n, bool* imag) {
+    if (c->type == EXPR_INTEGER) { *n = c->data.integer; *imag = false; return true; }
+    if (rt_head_is(c, "Complex") && c->data.function.arg_count == 2
+        && c->data.function.args[0]->type == EXPR_INTEGER && c->data.function.args[0]->data.integer == 0
+        && c->data.function.args[1]->type == EXPR_INTEGER) {
+        *n = c->data.function.args[1]->data.integer; *imag = true; return true;
+    }
+    return false;
+}
+
+static bool rt_is_number_node(const Expr* e) {
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL
+        || rt_head_is(e, "Rational") || rt_head_is(e, "Complex");
+}
+
+static Expr* rt_expnorm(Expr* e, Expr* x, RtExpTab* T);
+
+/* the key of E^I (a process-lifetime constant, never freed) */
+static const Expr* rt_expnorm_i(void) {
+    static Expr* i = NULL;
+    if (!i) i = expr_new_function(expr_new_symbol("Complex"),
+                                  (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+    return i;
+}
+
+/* one term of a normalised exponent -> its factor (owned); term borrowed */
+static Expr* rt_expnorm_term(Expr* term, RtExpTab* T) {
+    Expr* c = NULL; Expr* m = NULL;
+    int64_t n0; bool im0;
+    if (rt_expnorm_unit(term, &n0, &im0) && im0) {   /* n I: (E^I)^n */
+        Expr* z = rt_expnorm_sym(T, (Expr*)rt_expnorm_i());
+        return expr_new_function(expr_new_symbol("Power"), (Expr*[]){ z, expr_new_integer(n0) }, 2);
+    }
+    if (rt_head_is(term, "Times") && term->data.function.arg_count >= 2
+        && rt_is_number_node(term->data.function.args[0])) {
+        size_t k = term->data.function.arg_count;
+        c = term->data.function.args[0];
+        if (k == 2) m = expr_copy(term->data.function.args[1]);
+        else {
+            Expr** a = malloc((k - 1) * sizeof(Expr*));
+            for (size_t i = 1; i < k; i++) a[i - 1] = expr_copy(term->data.function.args[i]);
+            m = expr_new_function(expr_new_symbol("Times"), a, k - 1);
+            free(a);
+        }
+    } else {
+        m = expr_copy(term);
+    }
+    int64_t n = 1; bool imag = false;
+    if (!c || rt_expnorm_unit(c, &n, &imag)) {
+        if (imag) m = rt_eval_own(expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_function(expr_new_symbol("Complex"),
+                            (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2), m }, 2));
+        Expr* z = rt_expnorm_sym(T, m);
+        expr_free(m);
+        return expr_new_function(expr_new_symbol("Power"), (Expr*[]){ z, expr_new_integer(n) }, 2);
+    }
+    expr_free(m);
+    return expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_new_symbol("E"), expr_copy(term) }, 2);
+}
+
+/* e borrowed; returns the normalised form (owned) */
+static Expr* rt_expnorm(Expr* e, Expr* x, RtExpTab* T) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (rt_free_of_x(e, x)) return expr_copy(e);
+    size_t k = e->data.function.arg_count;
+    if (rt_head_is(e, "Power") && k == 2 && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        Expr* a = rt_eval1("Expand", rt_expnorm(e->data.function.args[1], x, T));
+        if (!a) return expr_copy(e);
+        for (size_t i = 0; i < T->n && a; i++)
+            if (!rt_free_of_x(a, T->sym[i]))
+                a = rt_eval1("Expand", rt_eval2("Apart", a, expr_copy(T->sym[i])));
+        if (!a) return expr_copy(e);
+        size_t nt = rt_head_is(a, "Plus") ? a->data.function.arg_count : 1;
+        Expr** fac = malloc((nt + 1) * sizeof(Expr*));
+        size_t nf = 0;
+        int64_t ecount = 0;   /* the integer part of the constant term: E^ecount */
+        for (size_t i = 0; i < nt; i++) {
+            Expr* t = (nt == 1 && !rt_head_is(a, "Plus")) ? a : a->data.function.args[i];
+            /* an integer constant stays a power of E; every other term, x-free
+             * ones included (E^(-2 I) of E^(I (1 + u))), gets its symbol: a
+             * transcendental constant left as a coefficient made the Together
+             * over Q(E^I)(z) grind past 60 s on a Tan[1 + u] residual */
+            if (t->type == EXPR_INTEGER) { ecount += t->data.integer; continue; }
+            fac[nf++] = rt_expnorm_term(t, T);
+        }
+        if (ecount || nf == 0) fac[nf++] = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_new_integer(ecount) }, 2);
+        Expr* r = rt_eval_own(expr_new_function(expr_new_symbol("Times"), fac, nf));
+        free(fac);
+        expr_free(a);
+        return r;
+    }
+    Expr** a = malloc((k ? k : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < k; i++) a[i] = rt_expnorm(e->data.function.args[i], x, T);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, k);
+    free(a);
+    return rt_eval_own(r);
+}
+
+/* Exact rational zero test of a residual d (borrowed) in x: Together of
+ * TrigToExp[d] with the exponentials in the normal form of rt_expnorm and
+ * every logarithm's argument in Together normal form (rt_together_log_args)
+ * is 0.  One Together on the normalised form subsumes one on the raw form:
+ * a rational function that is identically 0 in the raw atoms stays 0 under
+ * any substitution for them.  And it is the cheaper one: the raw Together
+ * ground 30 s on a Tanh residual whose normal form is 0 in 0.05 s (2026-11-20).
+ * TrigToExp must come first -- Together on the raw hyperbolic form does GCDs
+ * over the opaque Cosh/Sinh kernels and hangs (the Sech[x] / Sec[x]^3 hang).
+ * A true is a proof; a false proves nothing. */
+bool rt_exact_zero_trigexp(Expr* d, Expr* x) {
+    Expr* te = rt_eval1("TrigToExp", expr_copy(d));
+    if (!te) return false;
+    if (rt_find_exp_of_x(te, x)) {
+        RtExpTab T = { NULL, NULL, 0, 0 };
+        Expr* n = rt_expnorm(te, x, &T);
+        for (size_t i = 0; i < T.n; i++) { expr_free(T.key[i]); expr_free(T.sym[i]); }
+        free(T.key); free(T.sym);
+        expr_free(te);
+        te = n;
+        if (!te) return false;
+    }
+    if (!rt_free_of_head(te, "Log")) te = rt_eval_own(rt_together_log_args(te));
+    Expr* t = te ? rt_eval1("Together", te) : NULL;   /* adopts te */
+    bool z = t && rt_is_zero(t);
+    if (t) expr_free(t);
+    return z;
+}
+
 bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* d = rt_eval2("D", expr_copy(result), expr_copy(x));
     if (!d) return false;
@@ -593,18 +755,7 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
      * GCD over the opaque Cosh/Sinh kernels (the Sech[x] / Sec[x]^3 hang):
      * Simplify[D[2 ArcTan[Cosh x + Sinh x]] - Sech x] and Together of it both hang,
      * yet Together[TrigToExp[...]] = 0 immediately. */
-    Expr* t2 = rt_eval1("Together", rt_eval1("TrigToExp", expr_copy(diff)));
-    if (t2 && rt_is_zero(t2)) { expr_free(t2); expr_free(diff); return true; }
-    if (t2) expr_free(t2);
-    /* the same with every logarithm's argument in Together normal form (see
-     * rt_together_log_args), when a Log survived the plain test */
-    if (!rt_free_of_head(diff, "Log")) {
-        Expr* te = rt_eval1("TrigToExp", expr_copy(diff));
-        Expr* t3 = te ? rt_eval1("Together", rt_eval_own(rt_together_log_args(te))) : NULL;
-        bool z3 = t3 && rt_is_zero(t3);
-        if (t3) expr_free(t3);
-        if (z3) { expr_free(diff); return true; }
-    }
+    if (rt_exact_zero_trigexp(diff, x)) { expr_free(diff); return true; }
     /* Exact single-kernel rational-trig decision (Together over the raw Laurent
      * TrigToExp form above leaves E^(-i x) poles uncombined for a Log/ArcTan-of-Tan
      * diff-back — e.g. the §5.10 hypertangent answer for a rational function of
@@ -637,6 +788,21 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
         bool zz = pz && rt_is_true(pz);
         if (pz) expr_free(pz);
         return zz;
+    }
+    /* PossibleZeroQ, the verifier of record (rt_answer_verified), before the
+     * unbounded Simplify.  The trig front end hands back an answer in its own
+     * TrigToExp spelling of the kernels: E^(E^(1+u)/(E^(-1-u) + E^(1+u))) where
+     * f has E^Tanh[1+u], which equals E^(1/2) times its square root's square,
+     * not the same atom.  No rational normalisation cancels that; Simplify ground
+     * for 120 s, PossibleZeroQ decides in 0.6 s (Tanh hunt, 2026-11-20).  Its False
+     * is not a proof of non-zero, so Simplify still runs after it. */
+    {
+        /* on the TrigToExp form (an exact rewrite): the answer's own spelling,
+         * 0.56 s against 5 s on the raw residual */
+        Expr* pz = rt_eval1("PossibleZeroQ", rt_eval1("TrigToExp", expr_copy(diff)));
+        bool zz = pz && rt_is_true(pz);
+        if (pz) expr_free(pz);
+        if (zz) { expr_free(diff); return true; }
     }
     /* Residual (real algebraic / log) forms fall back to Simplify (original gate). */
     Expr* s = rt_eval1("Simplify", diff);

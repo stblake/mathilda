@@ -17,6 +17,7 @@
 #include "integrate.h"           /* g_integrate_depth (nonelem-message gating) */
 #include "integrate_risch_rde.h"
 #include "risch_util.h"
+#include "mtime.h"
 #include "risch_tower.h"
 #include "risch_field_integrate.h"
 #include "risch_singleext.h"
@@ -364,6 +365,8 @@ static Expr* rt_debase_exponentials(Expr* f, Expr* x, Expr** backsub_out) {
  * (Risch`ElementaryIntegralQ[1/(1 + Log[u] + Log[u]^3), u]: 85 s, review F6). */
 static int g_rt_elementary_only = 0;   /* tc_register_unwind_counter */
 
+bool rt_decision_only(void) { return g_rt_elementary_only != 0; }
+
 static Expr* rt_integrate_core(Expr* f, Expr* x) {
     Expr* r = rt_rational_case(f, x);
     if (r) return r;
@@ -679,14 +682,45 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
  * elementarity.  rt_logcombine_verified stays strict: it guards a retry that
  * is valid off the positive axis only. */
 bool rt_answer_verified(Expr* r, Expr* f, Expr* x) {
-    if (rt_logcombine_verified(r, f, x)) return true;
     Expr* d = rt_eval2("D", expr_copy(r), expr_copy(x));
     if (!d) return false;
     Expr* diff = expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ d, expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+    /* Cheapest first; PossibleZeroQ's cost depends on the spelling, and no one
+     * spelling is cheap for every answer (Tan/Tanh hunts, 2026-11-20):
+     *   1. exact: Together of the TrigToExp residual, logs normalised -- 0.04 s
+     *      where PossibleZeroQ on the TrigToExp form ran past 30 s;
+     *   2. PossibleZeroQ on D[r] - TrigToExp[f], an exact rewrite in a trig
+     *      front-end answer's own exponentials: 0.6 s against 12 s for (3) on a
+     *      Tanh answer that spells E^Tanh[1 + u] another way;
+     *   3. PossibleZeroQ on the residual itself (what rt_logcombine_verified
+     *      checks);
+     *   4. PossibleZeroQ on the PowerExpand (principal-branch convention).
+     * Only a True is taken from any of them. */
+    if (rt_exact_zero_trigexp(diff, x)) { expr_free(diff); return true; }
+    {
+        Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
+        bool okt = false;
+        if (fe && !expr_eq(fe, f)) {
+            Expr* dt = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ rt_eval2("D", expr_copy(r), expr_copy(x)),
+                    expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(-1), fe }, 2) }, 2);   /* adopts fe */
+            Expr* zt = rt_eval1("PossibleZeroQ", dt);     /* adopts dt */
+            okt = zt && rt_is_true(zt);
+            if (zt) expr_free(zt);
+        } else if (fe) expr_free(fe);
+        if (okt) { expr_free(diff); return true; }
+    }
+    {
+        Expr* z0 = rt_eval1("PossibleZeroQ", expr_copy(diff));
+        bool ok0 = z0 && rt_is_true(z0);
+        if (z0) expr_free(z0);
+        if (ok0) { expr_free(diff); return true; }
+    }
     Expr* z = rt_eval1("PossibleZeroQ", rt_eval1("PowerExpand", diff));
-    bool ok = z && z->type == EXPR_SYMBOL && z->data.symbol.name == intern_symbol("True");
+    bool ok = z && rt_is_true(z);
     if (z) expr_free(z);
     return ok;
 }
@@ -888,12 +922,18 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
 static RtDecision rt_decide(Expr* f, Expr* x) {
     int save_eo = g_rt_elementary_only;
     g_rt_elementary_only = 1;
+    double tp0 = rt_profile_on() ? mth_mono_seconds() : 0;
     Expr* anti = rt_integrate(f, x);
     g_rt_elementary_only = save_eo;
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] decide: integrator %.3f s -> %s\n",
+                                 mth_mono_seconds() - tp0, anti ? "answer" : "none");
     if (anti) {
         /* an exhibited antiderivative proves elementarity only once checked:
          * an unverified wrong one (review F1/F2) is no evidence */
+        double tv0 = rt_profile_on() ? mth_mono_seconds() : 0;
         bool elem = rt_expr_is_elementary(anti) && rt_answer_verified(anti, f, x);
+        if (rt_profile_on()) fprintf(stderr, "[rt-stage] decide: answer check %.3f s -> %d\n",
+                                     mth_mono_seconds() - tv0, (int)elem);
         expr_free(anti);
         if (elem) return RT_DEC_ELEMENTARY;   /* elementary closed form exhibited */
     }

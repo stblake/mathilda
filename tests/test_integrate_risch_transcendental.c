@@ -1852,6 +1852,34 @@ static void test_campaign_step4_tanh_groundwork(void) {
     }
 }
 
+/* Step 4: the cost of a verdict that was already found.  Each was a 40 s
+ * timeout in the Tan / Tanh hunts (2026-11-20), its answer found in under 2 s.
+ *  - tan over Q(i): the answer verified in 0.4 s, then the trig front end's
+ *    cosmetic real reconstruction (Simplify) spun; the decision skips it.
+ *  - Tanh: the front end's answers spell E^Tanh[u] as E^(E^(2u)/(1 + E^(2u)))
+ *    beside E^(1/(1 + E^(2u))) and E^(a + 2u); no rational zero test related
+ *    them and the checks fell through to Simplify or a 30 s PossibleZeroQ.
+ *    The exact test now takes the exponentials to a normal form first
+ *    (rt_expnorm), and the residual is 0 there in 0.05 s.
+ *  - a Tan[1 + u] answer from the recursive tower case, already verified in
+ *    the tower, re-verified against f for 39 s; it is not re-checked now.
+ *  - a Log[I + Tan[u^2]] answer: PossibleZeroQ on the TrigToExp residual ran
+ *    past 30 s, the exact test (logs normalised) is 0 at once. */
+static void test_campaign_step4_verify_cost(void) {
+    const char* F[] = {
+        "((-I)*u*Tan[u]^2)/((1 + Tan[u])*(1 + Tan[u]^2))",
+        "(E^Tanh[1 + u]*u)/(Tanh[1 + u]*(1 + Tanh[1 + u]))",
+        "(E^Tanh[u]*u)/(1 + u) + (2*u*Log[1 + Tanh[u]/u])/((1 + Tanh[u]/u)*(2 + Tanh[u]^2/u^2))",
+        "((1 + I)*u*Log[-I + Tan[1 + u]]*Tan[1 + u]^2)/(I + u) + ((1 + I)*E^(I*u)*u)/(-I + Tan[1 + u])^2",
+        "-(Log[I + Tan[u^2]]/(-I + Tan[u^2])^2) + Tan[u^2]^3/(2*(1 + Tan[u^2]))" };
+    for (size_t i = 0; i < sizeof F / sizeof F[0]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf,
+            "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[D[%s, u], u]], 30, $Aborted]", F[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1969,6 +1997,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step3c_monomial);
     TEST(test_campaign_silent_declines);
     TEST(test_campaign_step4_tanh_groundwork);
+    TEST(test_campaign_step4_verify_cost);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

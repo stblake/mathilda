@@ -560,9 +560,14 @@ static Expr* intrat_hermite_reduce(Expr* f, Expr* x) {
     Expr* dbar = intrat_polygcd_monic(d, dprime_e, x);
     expr_free(dprime_e);
     if (!dbar) { expr_free(a); expr_free(d); expr_free(g); return NULL; }
-    /* dstar = d / dbar */
+    /* dstar = d / dbar.  intrat_exquo is NULL when PolynomialQuotientRemainder
+     * did not come back as a pair -- under an abort, a TimeConstrained timeout
+     * mid-reduction -- and each NULL below was handed on to internal_divide,
+     * which dereferenced it (integrate_risch_transcendental_tests, SIGSEGV in
+     * builtin_divide under load, 2026-11-20).  Decline instead. */
     Expr* dstar = intrat_exquo(d, dbar, x);
     expr_free(d);
+    if (!dstar) { expr_free(a); expr_free(dbar); expr_free(g); return NULL; }
 
     while (true) {
         int deg_dbar = get_degree_poly(dbar, x);
@@ -580,6 +585,10 @@ static Expr* intrat_hermite_reduce(Expr* f, Expr* x) {
 
         /* dbarhat = dbar / dbartwo */
         Expr* dbarhat = intrat_exquo(dbar, dbartwo, x);
+        if (!dbarhat) {
+            expr_free(dbartwo); expr_free(a); expr_free(dbar); expr_free(dstar); expr_free(g);
+            return NULL;
+        }
 
         /* dtil = -exquo(dstar * D[dbar, x], dbar, x) */
         Expr* dbar_prime2 = intrat_d(dbar, x);
@@ -587,6 +596,11 @@ static Expr* intrat_hermite_reduce(Expr* f, Expr* x) {
         Expr* numerator_dtil = expr_expand(dt_raw); expr_free(dt_raw);
         Expr* exq = intrat_exquo(numerator_dtil, dbar, x);
         expr_free(numerator_dtil);
+        if (!exq) {
+            expr_free(dbarhat); expr_free(dbartwo);
+            expr_free(a); expr_free(dbar); expr_free(dstar); expr_free(g);
+            return NULL;
+        }
         Expr* dtil_raw = internal_times((Expr*[]){expr_new_integer(-1), exq}, 2);
         Expr* dtil = expr_expand(dtil_raw); expr_free(dtil_raw);
 
@@ -604,6 +618,11 @@ static Expr* intrat_hermite_reduce(Expr* f, Expr* x) {
         Expr* bp_dstar = expr_expand(bp_raw); expr_free(bp_raw);
         Expr* corr = intrat_exquo(bp_dstar, dbarhat, x);
         expr_free(bp_dstar);
+        if (!corr) {
+            expr_free(b_coef); expr_free(c_coef); expr_free(dtil); expr_free(dbarhat); expr_free(dbartwo);
+            expr_free(a); expr_free(dbar); expr_free(dstar); expr_free(g);
+            return NULL;
+        }
         Expr* neg_corr = internal_times(
             (Expr*[]){expr_new_integer(-1), corr}, 2);
         Expr* new_a = internal_plus((Expr*[]){c_coef, neg_corr}, 2);

@@ -71,6 +71,7 @@ bool  rt_kernel_simple(Expr* u, Expr* x);
 
 /* Diff-back verifier: is Simplify[D[result,x] - f] identically 0? */
 bool  rt_verify_antideriv(Expr* result, Expr* f, Expr* x);
+bool  rt_exact_zero_trigexp(Expr* d, Expr* x);   /* exact: Together[TrigToExp[d]] == 0, logs + exps normalised; borrows */
 
 /* Cascade-stage profiler: RT_STAGE(fn, f, x) calls fn(f, x), timing it on
  * stderr when MATHILDA_RT_PROFILE is set (stages slower than 50 ms). */

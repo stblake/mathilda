@@ -73,4 +73,10 @@ void integrate_risch_transcendental_init(void);
  * PowerExpand (principal-branch convention only).  Borrows r, f, x. */
 bool rt_answer_verified(Expr* r, Expr* f, Expr* x);
 
+/* True while Risch`ElementaryIntegralQ's rt_decide is running the integrator:
+ * only the existence of a verified elementary antiderivative matters there,
+ * not its printed form, so cosmetic post-passes (the trig front end's real
+ * reconstruction, an unbounded Simplify) are skipped. */
+bool rt_decision_only(void);
+
 #endif /* MATHILDA_INTEGRATE_RISCH_TRANSCENDENTAL_H */

@@ -2610,6 +2610,54 @@ replacing the mark of Prop.~\ref{prop:T5}); CancelTan with a homogeneous solutio
 (step~5); towers of several tangents (step~6); and the exact tower arithmetic over
 $\Q(\alpha)$ of \S T3.
 
+\section*{T15. The zero test in the tower's exponentials (step 4)}
+\addcontentsline{toc}{section}{T15. Exponential normal form}
+\label{sec:T15}
+
+After v0.6627 most of the remaining $\tanh$ and $\tan$-over-$k(i)$ timeouts had their
+answer within two seconds. The time went into checking it. The trig front end works on
+$\mathrm{TrigToExp}[f]$, and its answers spell the tower's exponentials in their own way:
+$e^{\tanh u}$ comes back as $e^{s/(1+s)}$, $e^{-1/(1+s)}$ and $e^{1/(1+s)+2u}$ with
+$s=e^{2u}$. A rational zero test treats each spelling as a separate atom and never
+cancels them; it fell through to \code{Simplify}, or to a \code{PossibleZeroQ} that ran
+past 30~s on a residual numerically $3\cdot10^{-15}$.
+
+\paragraph{The normal form.} Bottom up, each $e^{a}$ with $a$ depending on $x$ is
+rewritten. Its exponent has its own exponentials already rewritten. It is expanded and
+split into partial fractions in each symbol $z_j$ introduced so far, and written as a sum of
+terms. The $x$-free terms collect into a constant $c$. Every other term is $n\,m$ with
+$n\in\Z$ or $n\in i\Z$; it becomes $z_m^{\,n}$, with $z_m$ a fresh symbol keyed on $m$ (on
+$i m$ for $n\in i\Z$). A term with any other coefficient stays the atom $e^{\text{term}}$.
+So $e^{s/(1+s)}=e\cdot z_2^{-1}$ and $e^{1/(1+s)+2u}=z_2\,z_1^{2}$, where
+$z_1=e^{u}$ and $z_2=e^{1/(1+z_1^2)}$.
+
+\begin{lemma}[soundness]\label{lem:T15}
+Let $d$ be a residual and $N(d)$ its normal form, a rational function of $x$, the $z_m$ and
+the remaining atoms. If $N(d)=0$ as a rational function, then $d=0$ wherever $d$ is defined.
+\end{lemma}
+\begin{proof}
+Expansion, partial fractions and $e^{\sum t_i}=\prod e^{t_i}$, $e^{nm}=(e^{m})^{n}$
+($n\in\Z$, and $e^{n\,i m}=(e^{i m})^{n}$) are identities, so $d=N(d)|_{z_m=e^{m}}$. The
+substitution $z_m\mapsto e^{m}$ is a ring homomorphism on the polynomials and extends to
+the rational functions whose denominators do not vanish under it. An identically zero
+$N(d)$ maps to $0$.
+\end{proof}
+\noindent A non-zero $N(d)$ proves nothing: the normal form does not see every algebraic
+relation among the exponentials (the structure theorem does). The test is one
+\code{Together} of $N(\mathrm{TrigToExp}[d])$, with each logarithm's argument also in
+\code{Together} normal form. It subsumes the plain test, since an identity in the raw atoms
+survives the substitution, and it is cheaper: 0.05~s on a $\tanh$ residual where the plain
+\code{Together} ran 30~s.
+
+\paragraph{Where it is used.} \code{rt\_exact\_zero\_trigexp} is the first step of the
+verifier (\code{rt\_verify\_antideriv}) and of the decision's answer check
+(\code{rt\_answer\_verified}). After it, the answer check asks \code{PossibleZeroQ} of
+$D[r]-\mathrm{TrigToExp}[f]$, of $D[r]-f$, and of its \code{PowerExpand}, taking only a
+\code{True}. Two further costs went with it. The decision no longer runs the front end's
+real reconstruction, which is cosmetic (119~s of \code{Simplify} after a 0.4~s answer).
+And an answer from the recursive tower case, verified exactly in the tower variables
+against $\mathrm{TrigToExp}[f]$, is no longer checked a second time against $f$.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

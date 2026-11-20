@@ -1700,7 +1700,11 @@ is still deficient for every other caller (reproducer and table:
      Liouvillian primitive top (Erf, Erfi, Erfc, Ei) integrated as a primitive monomial,
      LimitedIntegrate through rde_tower_param, and the monomial check replacing the step-0
      demotion (§T12). Follow-ups: li at theta^0, an exponential not directly below theta,
-     eliminating a dependent primitive. Next: steps 2, 4, 5, 6 and 9.
+     eliminating a dependent primitive. **[~] Step 4:** v0.6627 groundwork (tower aliases,
+     hypertanh loop, cascade cost); v0.6631 the cost of checking an answer, with an exact
+     exponential normal form in the zero test (§T15). Tanh 151/160 True, tan over Q(i)
+     157/160. Left: the RDE over a Tanh lower field, a hypertangent top over a field with I,
+     LimitedIntegrate below the top. Next: steps 2, 4 (remaining), 5, 6 and 9.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 
