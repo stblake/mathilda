@@ -2754,6 +2754,42 @@ for algebraic constants $\bar c$, so $f$ has one over $k(t)$ iff it has one over
 $k(i)(t)$. The hypertangent driver runs first, for its real closed form; the map is used
 when it fails or its ``no'' is not a theorem.
 
+\section*{T18. A new logarithm at a primitive coefficient (step 4)}
+\addcontentsline{toc}{section}{T18. New logarithm at a primitive coefficient}
+\label{sec:T18}
+
+Let $t$ be a primitive monomial over $K$ ($Dt\in K$, e.g.\ $t=\log v$) and
+$p=\sum_{i=0}^m p_i t^i\in K[t]$. Bronstein's IntegratePrimitivePolynomial
+(\emph{Symbolic Integration~I}, \S5.8) requires, for each $i\ge1$, that the residual
+$r_i=p_i-(i+1)q_{i+1}Dt$ have an integral in $K+Ct$; otherwise $\int p$ is not elementary.
+
+\begin{proposition}\label{prop:T18}
+Let $R$ be an elementary antiderivative of $r_i$ of the form
+$R=s+\sum_k c_k\log w_k$, with $s\in K+Ct$ (the folded logarithms), constants $c_k\ne0$, and the $\log w_k$
+algebraically independent over $K(t)$. Then $r_i$ has no integral in $K+Ct$.
+\end{proposition}
+\begin{proof}
+If $Ds'+c\,Dt=r_i$ with $s'\in K$, $c\in C$, then $R-s'-ct$ is a constant, so
+$\sum_k c_k\log w_k = s'+ct-s+\text{const}\in K(t)$, against independence.
+\end{proof}
+\noindent The independence is what \code{rt\_reduce\_new\_logs} proves (status 0): it folds
+every logarithm whose log-derivative lies in the $\mathbb{Q}$-span of the tower's
+generators (levels up to and including $t$), and tests the leftovers for a relation
+modulo the tower (Kolchin--Ostrowski). For $\int\log u\tanh u\,du$, $p_1=\tanh u$ over
+$K=C(u,e^{-u})$ and $\int\tanh u=u+\log(1+e^{-2u})$, a new logarithm: the integral is a
+dilogarithm. Before, the fold that follows took $\log(1+e^{-2u})$ for an element of $K$
+(its check saw only logarithms of $x$), and the $t^0$ step integrated it as a constant,
+giving a wrong candidate that the answer check rejected; the verdict was undecided. An
+\emph{undecided} leftover (status $-1$) still goes to the fold: it can be the tower in a
+form the span missed, and what it produces is checked by differentiation. But the $s$ it
+yields may not lie in $K$, and a later step computing with it could ``prove'' a false
+``no'' --- the first version did, on three elementary integrands with $t=\log(e^u+u)$.
+So that fold \emph{taints} the decision run: no certificate raised after it counts,
+while a verified antiderivative still decides \emph{elementary}. A nested decision
+scope carries the taint out to the enclosing one, whose computation uses its result.
+Over a real tower an $\arctan$ of $x$ is not collected, so its presence keeps the step
+undecided.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

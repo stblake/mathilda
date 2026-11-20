@@ -837,7 +837,7 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
                 verdict = okq ? RT_DEC_ELEMENTARY : RT_DEC_UNKNOWN;
                 if (!okq) rde_cert_mark("decide: antiderivative not verified");
             }
-            else if (Q && rem)                           verdict = RT_DEC_NONELEMENTARY;
+            else if (Q && rem && g_rt_decision != RT_DEC_TAINTED) verdict = RT_DEC_NONELEMENTARY;
             else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
             else {
                 verdict = RT_DEC_UNKNOWN;

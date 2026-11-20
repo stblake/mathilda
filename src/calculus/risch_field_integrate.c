@@ -716,10 +716,22 @@ RtDecision g_rt_decision     = RT_DEC_UNKNOWN;
 /* Raise the decision to NONELEMENTARY at an authoritative decline (no-op unless a
  * decision is being requested). */
 static void rt_dec_nonelem_at(int line) {
-    if (g_rt_decide_mode && getenv("MATHILDA_RDE_CERT_DEBUG")) fprintf(stderr, "[rt-nonelem] line %d\n", line);
-    if (g_rt_decide_mode) g_rt_decision = RT_DEC_NONELEMENTARY;
+    if (g_rt_decide_mode && getenv("MATHILDA_RDE_CERT_DEBUG"))
+        fprintf(stderr, "[rt-nonelem] line %d%s\n", line,
+                g_rt_decision == RT_DEC_TAINTED ? " (refused: tainted)" : "");
+    if (g_rt_decide_mode && g_rt_decision != RT_DEC_TAINTED) g_rt_decision = RT_DEC_NONELEMENTARY;
 }
 #define rt_dec_nonelem() rt_dec_nonelem_at(__LINE__)
+/* The run computed with an element not proved to be in the field (see
+ * RT_DEC_TAINTED): no later certificate. */
+static void rt_dec_taint(void) {
+    if (g_rt_decide_mode && g_rt_decision == RT_DEC_UNKNOWN) g_rt_decision = RT_DEC_TAINTED;
+}
+void rt_dec_scope_restore(RtDecision saved) {
+    bool taint = g_rt_decision == RT_DEC_TAINTED;
+    g_rt_decision = saved;
+    if (taint && g_rt_decision == RT_DEC_UNKNOWN) g_rt_decision = RT_DEC_TAINTED;
+}
 
 
 
@@ -1354,7 +1366,8 @@ int rt_tower_prims_certified(RtTower* T, Expr* x) {
         RdeCertState sv = rde_cert_begin();          /* its marks are about eta_i */
         Expr* rem = NULL;
         Expr* Q = rt_field_integrate(T->Dcoef[i], T, (long)i - 1, x, &rem);
-        bool nonelem = (!Q && g_rt_decision == RT_DEC_NONELEMENTARY) || (Q && rem);
+        bool nonelem = (!Q && g_rt_decision == RT_DEC_NONELEMENTARY)
+                    || (Q && rem && g_rt_decision != RT_DEC_TAINTED);
         bool elem = Q && !rem;
         if (elem) {   /* positive evidence only: D_tower Q == eta_i exactly */
             Expr* dq = rt_tower_deriv(Q, T, x);
@@ -2114,7 +2127,7 @@ static int rt_limited_prim(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
         RtDecision save = g_rt_decision;
         Expr *s0 = NULL, *c0 = NULL;
         int r0 = rt_limited_field_integrate_std(r, T, L, x, 1, &s0, &c0);
-        g_rt_decision = save;
+        rt_dec_scope_restore(save);
         if (r0 == 0) { *s_out = s0; *c_out = c0; rc = 0; }
         else rde_cert_mark("LimitedIntegrate(prim): bottom coefficient undecided (li, or an exponential not directly below)");
     }
@@ -2189,6 +2202,25 @@ static int rt_limited_field_integrate_std(Expr* r, RtTower* T, long L, Expr* x, 
     bool tvleft = lstat != 1;
     Expr* tL = T->t[L];
     int rc = -1;
+    /* A theta^{>=1} coefficient whose lower integral keeps a new logarithm
+     * proved independent of the tower (lstat 0, Kolchin-Ostrowski): R differs
+     * from any other antiderivative of r by a constant, so r has none in
+     * K_L + C t_L, and by Bronstein's IntegratePrimitivePolynomial (§5.8) the
+     * integrand has no elementary integral.  Int Log[u] Tanh[u]: Int tanh =
+     * u + Log[1 + E^(-2 u)], a new logarithm, so the dilogarithm.  (Before,
+     * the fold below took Log[1 + t0^2] for an element of K_L -- its check saw
+     * only logarithms of x -- and the bottom then integrated it as a constant:
+     * a wrong candidate, rejected by the answer check, an undecided verdict.)
+     * Not with an ArcTan of x left over a real tower: reduce_new_logs does not
+     * collect those, so their independence is not proved.  An UNDECIDED
+     * leftover (lstat -1) still goes to the fold: it can be the tower in a
+     * form the span missed, and the candidates it gives are checked by
+     * differentiation (rejecting it lost two True verdicts, limhunt seed 1802). */
+    if (!is_bottom && lstat == 0 && !rt_has_arctan_of_x(Rs, x)) {
+        rt_dec_nonelem();
+        expr_free(Rs);
+        return -1;
+    }
     if (is_bottom) {
         /* theta^0 coefficient: accept the complete elementary lower-field
          * antiderivative (new logs / ArcTan permitted — see the header). */
@@ -2216,6 +2248,10 @@ static int rt_limited_field_integrate_std(Expr* r, RtTower* T, long L, Expr* x, 
             if (!S0) expr_free(lower);
             if (S && !rt_find_log_of_x(S, x) && !rt_has_arctan_of_x(S, x)
                 && rt_is_poly(S, tL) && rt_degree(S, tL) <= 0) {
+                /* an undecided leftover logarithm (lstat -1) taken into s:
+                 * s may not be in K_L, so nothing computed from it is a proof
+                 * (three false certificates, limhunt seed 1801) */
+                if (tvleft) rt_dec_taint();
                 if (rt_is_zero(c)) { expr_free(c); *c_out = NULL; } else *c_out = c;
                 *s_out = S;
                 expr_free(Rs);

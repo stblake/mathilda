@@ -28,10 +28,20 @@
  * (a non-constant residue, a Risch DE with no solution, the hypertangent Dc!=0
  * certificate).  The driver (rt_decide) sets g_rt_decide_mode, runs the same
  * path, and reads the verdict back. */
-typedef enum { RT_DEC_UNKNOWN = 0, RT_DEC_ELEMENTARY, RT_DEC_NONELEMENTARY } RtDecision;
+/* RT_DEC_TAINTED is a state of g_rt_decision only, never a verdict: the run
+ * has computed with an element it could not prove to lie in the field (the
+ * fold of an undecided new logarithm, rt_limited_field_integrate_std), so a
+ * later "no" may rest on wrong data and is refused.  A verified antiderivative
+ * still decides ELEMENTARY.  Set only from UNKNOWN: a certificate raised
+ * before it stands. */
+typedef enum { RT_DEC_UNKNOWN = 0, RT_DEC_ELEMENTARY, RT_DEC_NONELEMENTARY,
+               RT_DEC_TAINTED } RtDecision;
 
 extern int        g_rt_decide_mode;   /* int: restored by the TimeConstrained unwind registry */
 extern RtDecision g_rt_decision;
+/* Close a nested decision scope: restore the outer state, carrying a taint
+ * out (the nested result is used by the outer computation). */
+void rt_dec_scope_restore(RtDecision saved);
 
 /* ---- Integration entry points --------------------------------------------- */
 /* (rt_field_integrate itself is declared in integrate_risch_rde.h, where the

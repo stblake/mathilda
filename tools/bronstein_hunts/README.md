@@ -20,6 +20,7 @@ certificate**, the one outcome that must never happen.
 | `primhunt.m`, `primhunt2.m` | Liouvillian primitives (Erf, Erfi, Erfc, Ei, li) |
 | `tanhhunt.m`, `tanihunt.m`, `multitanhunt.m` | Tanh, tan over Q(i), several tangents |
 | `rdetanhunt.m` | `Risch`RischDECertified` over a Tanh or Tan-over-Q(i) level (`g = D[y] + f y`) |
+| `limhunt.m` | LimitedIntegrate below a logarithm: `Log[v]` times functions of `E^w` / `Tanh` / `Tan` (seeds 1801, 1802; random 1810) |
 | `gausshunt.m` | Gaussian exponent offsets (`E^(I (1 + u))` beside `E^(I u)`), constants spelled with u |
 
 The primhunt oracle: a `False` is wrong only when every Liouvillian kernel of `F`

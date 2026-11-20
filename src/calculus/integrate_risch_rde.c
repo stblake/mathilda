@@ -1193,7 +1193,7 @@ static Expr* rc_aux_integrate(Expr* F, RdeCtx* C, Expr** rem, bool* f_nonelem) {
     g_rt_decision = RT_DEC_UNKNOWN;
     Expr* R = rt_field_integrate(F, C->T, C->m, C->x, rem);
     if (f_nonelem) *f_nonelem = (g_rt_decision == RT_DEC_NONELEMENTARY);
-    g_rt_decision = saved;
+    rt_dec_scope_restore(saved);
     return R;
 }
 

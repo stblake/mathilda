@@ -1803,8 +1803,8 @@ static void test_campaign_step3c_monomial(void) {
      * monomial over it; no certificate (E^u (Erf + Erfc) = E^u was the step-0
      * false certificate) */
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u (Erf[u] + Erfc[u]), u]]", "True", 0);
-    assert_eval_eq("Head[Quiet[Risch`ElementaryIntegralQ[Erf[u] Erfc[u]/u, u]]] =!= False", "True", 0);
-    assert_eval_eq("Head[Quiet[Risch`ElementaryIntegralQ[1/u + E^u (ExpIntegralEi[Log[u]] - LogIntegral[u]), u]]] =!= False", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Erf[u] Erfc[u]/u, u]] =!= False", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[1/u + E^u (ExpIntegralEi[Log[u]] - LogIntegral[u]), u]] =!= False", "True", 0);
     /* a single Erf over E^(-x^2): proved a monomial */
     assert_eval_eq("Risch`RischDECertified[0, Erf[x]/x, x]; Risch`RischDECertifiedReason[]", "None", 0);
 }
@@ -1941,6 +1941,35 @@ static void test_campaign_step4_hypertangent_mobius(void) {
                    "True", 0);
 }
 
+/* Campaign step 4, LimitedIntegrate below a logarithm (note T18): the
+ * theta^1 coefficient a of a primitive polynomial a t + b, t = Log[v], must
+ * integrate into K + C t.  A lower integral that keeps a new logarithm proved
+ * independent of the tower is a "no".  Int tanh = u + Log[1 + E^(-2 u)]. */
+static void test_campaign_step4_limited_newlog(void) {
+    const char* no[] = { "Log[u] Tanh[u]", "Log[u] Tan[u]", "I Log[u] Tan[u]", "Log[u] Coth[u]",
+                         "Log[u]/(1 + E^u)", "E^u Log[u]/(1 + E^u)", "Log[1 + u] Tanh[u]" };
+    for (size_t i = 0; i < sizeof no / sizeof no[0]; i++) {
+        char buf[200];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]]", no[i]);
+        assert_eval_eq(buf, "False", 0);
+    }
+    /* their elementary neighbours */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[Log[u] Log[1 + E^u], u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[u Log[u] Log[1 + E^(2 u)], u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[Log[u] Tanh[u], u], u]]", "True", 0);
+    /* a fold of an undecided leftover logarithm taints the run: these are
+       elementary (limhunt seed 1801), and the first version called them
+       non-elementary */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[Log[1 + E^(2 u)/(1 + E^(2 u))^2] Log[E^u + u]"
+                   " + (E^(2 u) Log[E^u + u]^2)/((1 + E^(2 u))^2 (1 + E^(2 u)/(1 + E^(2 u))^2)), u], u]] =!= False",
+                   "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(2 Log[1 + E^u/(1 + E^(2 u))])/(1 + E^(2 u)/(1 + E^(2 u))^2)"
+                   " + (Log[1 + E^u/(1 + E^(2 u))] Log[E^u + u]^2)/2, u], u]] =!= False", "True", 0);
+    /* an undecided leftover logarithm still folds (limhunt seed 1802) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(2 u)/(1 + E^u/(1 + E^(2 u)))"
+                   " + (u Log[1 + E^u/(1 + E^(2 u))] Log[u])/(2 (1 + u)), u], u]]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -2061,6 +2090,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step4_verify_cost);
     TEST(test_campaign_step4_dependent_exp);
     TEST(test_campaign_step4_hypertangent_mobius);
+    TEST(test_campaign_step4_limited_newlog);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
