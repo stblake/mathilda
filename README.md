@@ -4,7 +4,7 @@
 
 [![Build](https://github.com/stblake/mathilda/actions/workflows/build.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/build.yml)
 [![Tests](https://github.com/stblake/mathilda/actions/workflows/tests.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/tests.yml)
-[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-stblake.github.io%2Fmathilda-informational)](https://stblake.github.io/mathilda/)
 [![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstblake%2Fmathilda%2Ftraffic-stats%2Fclones-badge.json&label=downloads&cacheSeconds=3600)](.github/workflows/traffic.yml)
 
@@ -158,4 +158,4 @@ around documentation and versioning.
 ## License
 
 Mathilda is free software, released under the
-[GNU General Public License v3.0](LICENSE).
+[Apache License, Version 2.0](LICENSE).

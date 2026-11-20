@@ -14,7 +14,7 @@ PICOMATH-80.
 - Arbitrary-precision integers via GMP.
 - Interactive REPL with GNU Readline support.
 - Mathematica-compatible surface syntax and evaluation semantics.
-- Licensed under GPLv3.
+- Licensed under the Apache License, Version 2.0.
 
 **External dependencies:**
 - **GMP** — arbitrary-precision integers.

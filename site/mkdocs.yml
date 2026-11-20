@@ -4,7 +4,7 @@ site_url: https://stblake.github.io/mathilda/
 repo_url: https://github.com/stblake/mathilda
 repo_name: stblake/mathilda
 edit_uri: edit/main/site/docs/
-copyright: Mathilda is free software, licensed under GPLv3.
+copyright: Mathilda is free software, licensed under the Apache License 2.0.
 
 docs_dir: docs
 

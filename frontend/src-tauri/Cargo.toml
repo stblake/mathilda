@@ -3,7 +3,7 @@ name = "mathilda-notebook"
 version = "0.1.0"
 description = "Mathilda CAS Notebook"
 authors = ["Michael Sollami"]
-license = "GPL-3.0"
+license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -23,8 +23,8 @@ backtracking, and a rewrite-rule engine — together with an extensive library o
 **more than 1,100 built-in functions**.
 
 It spans roughly **560,000 lines of C99**, uses **GMP** for arbitrary-precision
-integers and **MPFR** for arbitrary-precision reals, and is licensed under
-**GPLv3**.
+integers and **MPFR** for arbitrary-precision reals, and is licensed under the
+**Apache License 2.0**.
 
 ---
 
