@@ -1761,6 +1761,113 @@ is still deficient for every other caller (reproducer and table:
          ones, and so certify over them.
        - **Step 9:** the `.m` sites, through the C LimitedIntegrate.
 
+### Campaign D: every open item of the FriCAS comparison (2026-11-21, planned)
+
+Measured at v0.6646 on the 2026-11-21 results of 256, 257 and 259. "Undecided" is
+undecided by every Mathilda method (Bronstein, RischTranscendental, PMT, Automatic).
+
+| | Item | Evidence | Size | Done when |
+|---|---|---|---|---|
+| D0 | Ground truth for class B | the 47 undecided B cases have `expect = unknown`; FriCAS's "no" is unverified there | small | benchmark 260 exists |
+| D1 | Split by radical support | 28 of the 47 decided by a prototype | small | class B >= 85% |
+| D2 | Several non-elementary groups | 0 in the corpus, common at random | theory + small | E9 note; 260's random family has no Incomplete of this tag |
+| D3 | Phase 5: transcendental Risch over an algebraic base | the other 19 of the 47 (`Tower.m:205,208`) | large | class B >= FriCAS (93%) |
+| D4 | Liouvillian primitive monomials (C2.3) | 45 `prim-*` cases of 259 are SPECIAL/undecided for every system | medium | `prim` decided >= 90% |
+| D5 | The remaining 259 elementary cases (C2.4, C2.5) | 8: `tan-elem-26`, `gauss-elem-19/23/27`, `f12-elem-7`, `gauss-rand-31`, `lim-rand-34`, plus the hunts' `gausshunt` 8 | medium | none undecided where FriCAS decides; gausshunt 0 |
+| D6 | Speed (C4) | 43 cases over 1 s (256: `lccontent` 10, `expcube` 7, Trager 8; 257: `cM` 7, `cA` 3; 259: 7) | medium, plus one design decision | the C4 criterion: no shared case over 5 s, p90 within 2x of FriCAS |
+| D7 | Special-function answers (C5) | 18 cases FriCAS closes and Mathilda only certifies | medium | those 18 closed and verified |
+| D8 | FriCAS upstream report | draft in `benchmarks/FRICAS_UPSTREAM_DRAFT.md` | trivial | submitted (needs the user's approval) |
+
+**D0. Benchmark 260, radical at the bottom.** A generator like 259's
+(`tools/integration_shootout/gen_campaign.m`):
+- *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a
+  simple radical, the `t_i` logs and exponentials of elements of `Q(x)` and of `Q(x)(y)`;
+  any "no" on these is a false certificate;
+- *non-elementary by construction:* `f = g + D[F]` with `g` a known non-elementary
+  single-radical integrand (`E^x/Sqrt[1 + x^3]`, ...) and `F` over a second radical (the
+  shape of the perturbed families);
+- *random:* the same towers, random coefficients;
+- families for one radical, two independent radicals, and a radical in a kernel with
+  further monomials above it. About 600 cases; FriCAS through the existing adapters.
+
+D0 is the gate for D1–D3: a false "no" on the first family fails the item.
+
+**D1. Split by radical support** (`Pipeline.m`, before the Kummer split).
+- Expand `f` into terms and group them by their set of radicals (the prototype groups by
+  the bases of `Power[_, _Rational]`; the stage must group by the radicals of the tower
+  builder, so `Sqrt[x]` and `x^(3/2)` fall together).
+- Integrate each group by `brIntegrateBody`.
+- Every group elementary: the sum of the verified antiderivatives, checked against f.
+- All but one elementary and that one certified: f is not elementary (elementary plus
+  non-elementary is non-elementary). A certificate that holds on a region only (inside
+  `brInRegion`) stays region-local.
+- Two or more non-elementary groups: undecided, a new tag for D2.
+- Prototype on the 47: 28 decided, none with two non-elementary groups.
+
+**D2. Several non-elementary groups over independent radicals.** Theory note E9 extends E8
+to towers: when the radicals `y_1..y_m` are independent and every monomial's argument lies
+in `Q(x)(y_i)` for one i, the Galois group of `Q(x)(y_1..y_m)/Q(x)` acts on the tower
+(the conjugate of `Log[u(y_i)]` is `Log[sigma u]`, adjoined if new), and the eigencomponent
+argument of E8 gives "f elementary iff each component is". Then the stage: close the tower
+under conjugation, split into eigencomponents, decide each. Adversarial review of E9
+before the code.
+
+**D3. Phase 5** (the section below, unchanged in content). Order:
+1. E2 (the recursion over an algebraic base) and E1 (the Risch DE on a curve over a
+   tower), with adversarial review and numeric checks;
+2. `brDField` and the tower over `Q(x)(y)`: lift the two `Tower.m` restrictions;
+3. Hermite and Rothstein–Trager in `t_s` over `k0 = Q(x)(y)(t_1..t_{s-1})`;
+4. the polynomial part: the exponential case through the curve RDE over the tower (E1),
+   the logarithmic case through the parametric RDE / limited integration over the curve;
+5. the 19 cases, then 260's mid-tower families.
+
+**D4. Liouvillian primitive monomials (C2.3).** The `prim` families have `Erf`, `Erfi`,
+`ExpIntegralEi` and `LogIntegral` in the integrand. All are primitives over an exponential
+or logarithmic tower (`D[Ei[u]] = E^u u'/u`, `D[li[x]] = 1/Log[x]`, `D[Erf[x]] = 2/Sqrt[Pi]
+E^(-x^2)`), so the integrand lies in a tower with these as non-elementary primitive
+monomials, and the question "elementary over that field" is the ordinary Risch question
+([B] Ch. 5.8, primitive case).
+- `risch_tower.c`: accept these heads as primitive monomials; their derivative is in the
+  field below. Today the bottom coefficient fails when li sits at `theta^0` or the
+  exponential is not directly below (the C2.3 gap).
+- The primitive case's limited integration then needs `Ei`, `li`, `Erf` as known
+  derivatives in the field.
+- Answers: an antiderivative in the extended field is a closed form; the stage reports it
+  as SPECIAL-decided.
+- Measure: change the comparison's accounting so a verified answer over the extended field
+  counts as decided for both systems (it is decided: a closed form verified by
+  differentiation).
+
+**D5. The remaining 259 cases (C2.4, C2.5).** Profile each one
+(`MATHILDA_INTEGRATE_PROFILE`, `MATHILDA_RT_PROFILE`), then fix:
+- `gauss-elem-19/23/27`, `gauss-rand-31` and the hunts' gausshunt 8: exponentials
+  differing by a constant over Q(i); "reduced equation not polynomial" (C2.4);
+- `tan-elem-26`, `f12-elem-7`: timeouts where FriCAS answers;
+- `lim-rand-34`: `Log[x]^2/(1 + E^x/(1 + E^(2 x)))`.
+
+**D6. Speed (C4).**
+- Profile one of each slow family and fix the dominant stage, as C4 says.
+- The evaluator change. `substitute_scoping` (Module/With renaming in the Bronstein `.m`)
+  dominates the `.m` tail. Options:
+  - (a) a per-node "free symbols" summary in `Expr` (a hash bit-set filled at
+    construction), so scoping skips subtrees that cannot contain the local names. The
+    general fix, it helps everything that uses Module, and it changes the core struct;
+  - (b) a side cache keyed by node pointer, no struct change, weaker;
+  - (c) move the hottest `.m` stages to C (the existing direction for the substrate).
+  This is the user's decision.
+
+**D7. Special-function answers (C5).** For the 18 cases FriCAS closes (polylog, Ei, erf,
+li), after D4: when the decision says "not elementary", try the Liouvillian extension of
+the field by one `Ei`, `Erf`, `li` or `PolyLog[2, .]` with D4's machinery (the existing
+Cherry Ei engine for the `Ei`/`Erf` shapes), and return a verified closed form.
+
+**D8. FriCAS report.** Submit `benchmarks/FRICAS_UPSTREAM_DRAFT.md` once the user approves.
+
+**Order.** D0 and D1 together, then D5 (small, independent), then D4, then the D2 and D3
+theory notes, then D3's code, with D6's profiling done alongside each. D7 after D4. Each item
+ends with the hunts, the unit suites (dsolve excluded) and a rerun of the comparison; each
+substantive step bumps the version and is tagged.
+
 ### Plan from the FriCAS comparison (2026-11-20)
 
 **Status (2026-11-21, v0.6646; benchmarks/BRONSTEIN_VS_FRICAS.md rerun).** Done:
