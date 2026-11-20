@@ -421,7 +421,7 @@ static void pos_message(bool insert, const Expr* llx, const Expr* path) {
     char* ps = shown(path);
     char* ls = shown(llx);
     if (insert)
-        mth_message("Insert", "ins", "Cannot insert at position %s in %s.", ps ? ps : "", ls ? ls : "");
+        mth_message("Insert", "ins", "Cannot insert at position %s in %s", ps ? ps : "", ls ? ls : "");
     else
         mth_message("Delete", "partw", "Part %s of %s does not exist.", ps ? ps : "", ls ? ls : "");
     free(ps);

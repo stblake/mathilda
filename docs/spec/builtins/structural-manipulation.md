@@ -940,6 +940,19 @@ Inserts or removes elements at specified positions.
 **Features**:
 - `pos` can be a single index, a list (path), or a list of paths.
 - `Delete[expr, 0]` replaces the head with `Sequence`.
+- **A position that is not in `expr` is an error.** The call stays unevaluated
+  with `Insert::ins` ("Cannot insert at position {10} in {1, 2}") or
+  `Delete::partw` ("Part {5} of {1, 2} does not exist.").
+  - Insert's slots run from 1 to `Length + 1`, or -1 to `-(Length + 1)` from the
+    end; 0 is not a slot.
+  - A deeper path must reach every level; a path that runs into an atom is
+    reported as `Delete::partw` "Part 1 of 1 does not exist.".
+  - In a list of positions, Insert names the first bad one and Delete the last,
+    since it processes the list from the end, as the reference does.
+  - Before v0.6637, `Insert[{1, 2}, x, 10]` clamped to `{1, 2, x}` and
+    `Delete[{1, 2}, 5]` returned `{1, 2}`, so `Check` took the wrong branch.
+  - A position through an association, or with a `Key[k]` step, keeps its own
+    rules (an absent key deletes nothing).
 
 ```mathematica
 In[1]:= Insert[{a, b, c}, x, 2]

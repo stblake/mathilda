@@ -1762,6 +1762,105 @@ static Expr* assoc_insert(Expr* assoc, Expr* elem, Expr* pos) {
 
 static Expr* number_atom_delete_insert(Expr* res, Expr* atom, Expr* spec, bool insert);
 
+/* ---- Out-of-range positions (Insert::ins, Delete::partw) -----------------
+ *
+ * insert_path and delete_path clamp or ignore a position they cannot reach:
+ * Insert[{1, 2}, x, 10] gave {1, 2, x} and Delete[{1, 2}, 5] gave {1, 2}. The
+ * reference raises a message and leaves the call unevaluated, which is also
+ * what Check and Quiet need. So every position is checked BEFORE anything is
+ * built; a path through an association, or with a non-integer index (Key[k]),
+ * is left to the walkers, which handle those. */
+
+enum { PC_OK, PC_BAD, PC_BAD_ATOM };
+
+/* Can `p` (n indices) be reached in `expr`? For Insert the last index is a
+ * slot, 1 .. len + 1 or -1 .. -(len + 1); for Delete an element, or 0 (the
+ * head, which Delete replaces by Sequence). PC_BAD_ATOM: the path runs into
+ * an atom at depth > 0; *atom / *idx are that atom and the index tried on it. */
+static int pos_check(Expr* expr, Expr** p, size_t n, bool insert, Expr** atom, Expr** idx) {
+    Expr* e = expr;
+    for (size_t d = 0; d < n; d++) {
+        if (p[d]->type != EXPR_INTEGER || is_association(e)) return PC_OK;
+        if (is_atomic(e)) {
+            if (d == 0) return PC_BAD;
+            *atom = e; *idx = p[d];
+            return PC_BAD_ATOM;
+        }
+        int64_t len = (int64_t)e->data.function.arg_count;
+        int64_t k = p[d]->data.integer;
+        if (d + 1 == n) {
+            if (insert) return (k != 0 && (k > 0 ? k <= len + 1 : -k <= len + 1)) ? PC_OK : PC_BAD;
+            return (k == 0 || (k > 0 ? k <= len : -k <= len)) ? PC_OK : PC_BAD;
+        }
+        if (k == 0) { e = e->data.function.head; continue; }
+        int64_t j = k > 0 ? k : len + k + 1;
+        if (j < 1 || j > len) return PC_BAD;
+        e = e->data.function.args[j - 1];
+    }
+    return PC_OK;
+}
+
+static Expr* pos_as_list(Expr* path) {
+    if (path->type == EXPR_FUNCTION && head_is(path, SYM_List)) return expr_copy(path);
+    Expr* one = expr_copy(path);
+    return expr_new_function(expr_new_symbol(SYM_List), &one, 1);
+}
+
+static void pos_message(bool insert, Expr* expr, Expr* path, int why, Expr* atom, Expr* idx) {
+    char* es = expr_to_string(why == PC_BAD_ATOM ? atom : expr);
+    Expr* shown = why == PC_BAD_ATOM ? expr_copy(idx) : pos_as_list(path);
+    char* ps = expr_to_string(shown);
+    if (insert)
+        mth_message("Insert", "ins", "Cannot insert at position %s in %s", ps ? ps : "", es ? es : "");
+    else
+        mth_message("Delete", "partw", "Part %s of %s does not exist.", ps ? ps : "", es ? es : "");
+    free(ps);
+    free(es);
+    expr_free(shown);
+}
+
+/* Check every path of `pos` against `expr`, reading the spec exactly as
+ * expr_insert / expr_delete do. False after the message. A list of positions
+ * names its first bad one for Insert and its last for Delete, which processes
+ * the list from the end -- both as the reference reports them. */
+static bool positions_reachable(Expr* expr, Expr* pos, bool insert) {
+    Expr** paths;
+    size_t np;
+    bool listed = pos->type == EXPR_FUNCTION && pos->data.function.head->type == EXPR_SYMBOL
+               && pos->data.function.head->data.symbol.name == SYM_List;
+    if (pos->type == EXPR_INTEGER) { paths = &pos; np = 1; }
+    else if (!listed) return true;
+    else {
+        size_t m = pos->data.function.arg_count;
+        if (m == 0) return true;                    /* {}: no position */
+        bool several = true;
+        for (size_t i = 0; i < m && several; i++) {
+            Expr* a = pos->data.function.args[i];
+            several = insert ? a->type == EXPR_FUNCTION
+                             : (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+                                && a->data.function.head->data.symbol.name == SYM_List);
+        }
+        if (several) { paths = pos->data.function.args; np = m; }
+        else { paths = &pos; np = 1; }
+    }
+    for (size_t t = 0; t < np; t++) {
+        Expr* path = paths[insert ? t : np - 1 - t];
+        Expr** ix;
+        size_t n;
+        if (path->type == EXPR_INTEGER) { ix = &path; n = 1; }
+        else if (path->type == EXPR_FUNCTION) { ix = path->data.function.args; n = path->data.function.arg_count; }
+        else continue;
+        Expr* atom = NULL;
+        Expr* idx = NULL;
+        int why = pos_check(expr, ix, n, insert, &atom, &idx);
+        /* Insert names the whole position even when it runs into an atom;
+         * Delete names the index and the atom ("Part 1 of 1"). */
+        if (why == PC_BAD_ATOM && insert) why = PC_BAD;
+        if (why != PC_OK) { pos_message(insert, expr, path, why, atom, idx); return false; }
+    }
+    return true;
+}
+
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
     if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_insert(res);
@@ -1770,6 +1869,10 @@ Expr* builtin_insert(Expr* res) {
     if (is_association(res->data.function.args[0]))
         return assoc_insert(res->data.function.args[0], res->data.function.args[1],
                             res->data.function.args[2]);
+    /* An atom at the top keeps the walker's answer (it is not a position error). */
+    if (!is_atomic(res->data.function.args[0]) &&
+        !positions_reachable(res->data.function.args[0], res->data.function.args[2], true))
+        return NULL;
     return expr_insert(res->data.function.args[0], res->data.function.args[1], res->data.function.args[2]);
 }
 
@@ -1996,6 +2099,8 @@ Expr* builtin_delete(Expr* res) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {
         if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_delete(res);
+        if (!positions_reachable(res->data.function.args[0], res->data.function.args[1], false))
+            return NULL;
         return expr_delete(res->data.function.args[0], res->data.function.args[1]);
     }
     return NULL;

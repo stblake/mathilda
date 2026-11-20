@@ -1924,7 +1924,7 @@ can be reused here: `3;;2` is `{}`, `3;;1` is an error. The fix belongs in
 must keep it, so the messages have to be emitted at `builtin_part`, not in the
 recursion.
 
-## Open (pre-existing, found 2026-11-20 during LinkedList phase 4): List Insert/Delete wrong out of range; Take/Drop/Most/Rest/Join silent
+## Open (pre-existing, found 2026-11-20 during LinkedList phase 4): List Insert/Delete wrong out of range (FIXED v0.6637); Take/Drop/Most/Rest/Join silent (open)
 
 Two are wrong answers:
 - `Insert[{1, 2}, x, 10]` gives `{1, 2, x}`. `insert_path` clamps the index, where the
@@ -1958,3 +1958,10 @@ Out of scope, documented:
 - Index 0 rules on a LinkedList.
 
 Phase 5 is done (v0.6634): Compile[] lowering, the undo log, and auto-compiled Do/While/For over global lists. LINKED_LIST_DESIGN.md §8 describes what was built.
+
+## Open (pre-existing, found 2026-11-20): DifferentialForms corpus 228/236 -- 8 REGRESSED
+
+`make check-differentialforms`: pair-tensor, pb-metric-polar, pb-metric-sph, tensor-lists, tensor-tt,
+tensorproduct-XX, tensorproduct-lin and tensorproduct-sc leave `TensorProduct[...]` unevaluated.
+`tensor-tt` fails the same way at 328dd6d96, before the LinkedList work, so it is older than that
+work and is not the Insert/Delete fix (the package uses neither head). Not yet bisected further.

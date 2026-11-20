@@ -350,6 +350,34 @@ void test_insert() {
     expr_free(x);
 }
 
+
+/* A position outside the expression is an error, as in the reference: the
+ * message, and the call left unevaluated. Insert used to clamp the slot
+ * (Insert[{1, 2}, x, 10] was {1, 2, x}) and Delete to ignore it
+ * (Delete[{1, 2}, 5] was {1, 2}), so Check took the wrong branch. */
+void test_insert_delete_out_of_range() {
+    assert_eval_eq("Quiet[{Insert[{1, 2}, x, 10], Insert[{1, 2}, x, -4], Insert[{1, 2}, x, 0], "
+                   "Insert[{{1, 2}}, x, {1, 5}], Insert[{{1, 2}}, x, {3, 1}], Insert[{1, 2}, x, {{1}, {9}}], "
+                   "Insert[{1, 2}, x, {1, 1}]}]",
+                   "{Insert[{1, 2}, x, 10], Insert[{1, 2}, x, -4], Insert[{1, 2}, x, 0], "
+                   "Insert[{{1, 2}}, x, {1, 5}], Insert[{{1, 2}}, x, {3, 1}], Insert[{1, 2}, x, {{1}, {9}}], "
+                   "Insert[{1, 2}, x, {1, 1}]}", 0);
+    assert_eval_eq("Quiet[{Delete[{1, 2}, 5], Delete[{1, 2}, -3], Delete[{{1, 2}}, {1, 5}], "
+                   "Delete[{{1, 2}}, {2, 1}], Delete[{1, 2}, {{1}, {7}}], Delete[f[a], 3], Delete[{1, {2}}, {1, 1}]}]",
+                   "{Delete[{1, 2}, 5], Delete[{1, 2}, -3], Delete[{{1, 2}}, {1, 5}], "
+                   "Delete[{{1, 2}}, {2, 1}], Delete[{1, 2}, {{1}, {7}}], Delete[f[a], 3], Delete[{1, {2}}, {1, 1}]}", 0);
+    assert_eval_eq("{Check[Insert[{1, 2}, x, 10], err], Check[Delete[{1, 2}, 5], err], "
+                   "Check[Insert[{1, 2}, x, {1, 1}], err], Check[Delete[{1, {2}}, {1, 1}], err]}",
+                   "{err, err, err, err}", 0);
+    /* The boundaries are in range, and nothing else changed. */
+    assert_eval_eq("Check[{Insert[{1, 2}, x, 3], Insert[{1, 2}, x, -3], Insert[{1, 2}, x, -1], "
+                   "Insert[{{1, 2}}, x, {1, 3}], Insert[{1, 2, 3}, x, {{1}, {4}}], Delete[{1, 2, 3}, -3], "
+                   "Delete[{{1, 2}}, {1, -2}], Delete[{1, 2, 3}, {{1}, {3}}], Delete[{1, 2}, {}], "
+                   "Insert[{1, 2}, x, {}], Delete[<|\"a\" -> 1, \"b\" -> 2|>, {Key[\"b\"]}]}, err]",
+                   "{{1, 2, x}, {x, 1, 2}, {1, 2, x}, {{1, 2, x}}, {x, 1, 2, 3, x}, {2, 3}, {{2}}, {2}, "
+                   "{1, 2}, {1, 2}, <|\"a\" -> 1|>}", 0);
+}
+
 void test_delete() {
     Expr* args[] = {expr_new_symbol("a"), expr_new_symbol("b"), expr_new_symbol("c"), expr_new_symbol("d")};
     Expr* list = expr_new_function(expr_new_symbol("List"), args, 4);
@@ -647,5 +675,6 @@ void run_part_tests() {
     TEST(test_first_last_most_rest);
     TEST(test_insert);
     TEST(test_delete);
+    TEST(test_insert_delete_out_of_range);
     TEST(test_replace_part);
 }
