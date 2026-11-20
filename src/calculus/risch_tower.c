@@ -409,6 +409,17 @@ void rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs,
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         rt_collect_tangents(e->data.function.args[i], x, args, sigs, n, cap);
 }
+/* True when k occurs in e as a literal subtree.  Not FreeQ: a member value
+ * is built unevaluated, and evaluating it would merge (E^w)^2 into E^(2 w). */
+static bool rt_occurs_literally(const Expr* e, const Expr* k) {
+    if (!e) return false;
+    if (expr_eq((Expr*)e, (Expr*)k)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (rt_occurs_literally(e->data.function.head, k)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_occurs_literally(e->data.function.args[i], k)) return true;
+    return false;
+}
 /* Build the ordered differential tower of f over C(x).  Collect every
  * x-dependent Log and E^ kernel, order them innermost-first (deepest at index 0)
  * by structural containment — tie-breaking independent kernels EXP-before-LOG so
@@ -816,9 +827,27 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
             T->lmk[j] = expr_copy(xk[j]);
             T->lmv[j] = rt_subst_kernels(xr[j], T);   /* sees members 0..j-1 */
             T->nlm = j + 1;
+        }
+        /* A member's value is written in the levels of the tower it was found
+         * in, and a LATER round may eliminate one of those levels in turn
+         * (gauss-elem-27: E^(-I + 2 I x) -> Z^-3 (E^(-I (1 + x)))^-2, then
+         * E^(-I (1 + x)) -> Z^-3 / E^(-2 I + I x)): the earlier value still
+         * names the now-eliminated kernel, a foreign kernel after
+         * substitution.  Resolve it latest-first, each value through the
+         * members after it (each round's value names only the levels of its
+         * own round, so the chain has no cycle). */
+        for (size_t j = nx; j-- > 1; ) {
+            for (size_t m = j; m < nx; m++) {
+                if (!rt_occurs_literally(T->lmv[j - 1], T->lmk[m])) continue;
+                Expr* r = rt_subst_kernels(T->lmv[j - 1], T);
+                expr_free(T->lmv[j - 1]);
+                T->lmv[j - 1] = r;
+                break;
+            }
+        }
+        for (size_t j = 0; j < nx; j++)
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){ expr_copy(T->lmk[j]), expr_copy(T->lmv[j]) }, 2);
-        }
     }
     T->subrules = expr_new_function(expr_new_symbol("List"), rules, nr);
     free(rules);

@@ -39,7 +39,44 @@
  * (the rational Risch base case: Hermite + Lazard-Rioboo-Trager).  Returns
  * NULL when the integrand is not rational in x (BronsteinRational leaves
  * its call unevaluated). */
+/* x occurs in e as a literal subtree. */
+static bool rt_mentions(const Expr* e, const Expr* x) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return x->type == EXPR_SYMBOL && e->data.symbol.name == x->data.symbol.name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (rt_mentions(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_mentions(e->data.function.args[i], x)) return true;
+    return false;
+}
+/* Structurally a rational function of x: x itself, x-free subterms, and
+ * Plus / Times / integer Power of those.  Anything else x-dependent (a Log,
+ * an E^(I x), a radical) makes the integrand not rational in x. */
+static bool rt_rational_shape(const Expr* e, const Expr* x) {
+    if (!rt_mentions(e, x)) return true;
+    if (e->type == EXPR_SYMBOL) return true;          /* x */
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == intern_symbol("Plus") || h == intern_symbol("Times")) {
+        for (size_t i = 0; i < n; i++)
+            if (!rt_rational_shape(e->data.function.args[i], x)) return false;
+        return true;
+    }
+    if (h == intern_symbol("Power") && n == 2) {
+        const Expr* ex = e->data.function.args[1];
+        return (ex->type == EXPR_INTEGER || ex->type == EXPR_BIGINT)
+            && rt_rational_shape(e->data.function.args[0], x);
+    }
+    return false;
+}
+
 Expr* rt_rational_case(Expr* f, Expr* x) {
+    /* Not rational in x: BronsteinRational would only leave its call
+     * unevaluated -- after a Together of the whole integrand over every
+     * kernel, which on a tower of seven exponentials and a logarithm
+     * (gauss-elem-23) ground for two minutes before declining. */
+    if (!rt_rational_shape(f, x)) return NULL;
     Expr* r = rt_eval_call("Integrate`BronsteinRational",
         (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
     if (!r) return NULL;

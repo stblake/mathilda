@@ -643,6 +643,18 @@ static Expr* rt_expnorm_term(Expr* term, RtExpTab* T) {
         Expr* z = rt_expnorm_sym(T, (Expr*)rt_expnorm_i());
         return expr_new_function(expr_new_symbol("Power"), (Expr*[]){ z, expr_new_integer(n0) }, 2);
     }
+    /* a + b I, Gaussian integer: E^a (E^I)^b -- one constant, however the
+     * evaluator merged it (E^(1 + I + x) beside E^x and E^(I + I x)) */
+    if (rt_head_is(term, "Complex") && term->data.function.arg_count == 2
+        && term->data.function.args[0]->type == EXPR_INTEGER
+        && term->data.function.args[1]->type == EXPR_INTEGER) {
+        Expr* z = rt_expnorm_sym(T, (Expr*)rt_expnorm_i());
+        return expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"),
+                expr_copy(term->data.function.args[0]) }, 2),
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ z,
+                expr_copy(term->data.function.args[1]) }, 2) }, 2);
+    }
     if (rt_head_is(term, "Times") && term->data.function.arg_count >= 2
         && rt_is_number_node(term->data.function.args[0])) {
         size_t k = term->data.function.arg_count;
@@ -666,15 +678,72 @@ static Expr* rt_expnorm_term(Expr* term, RtExpTab* T) {
         expr_free(m);
         return expr_new_function(expr_new_symbol("Power"), (Expr*[]){ z, expr_new_integer(n) }, 2);
     }
+    /* a Gaussian-integer coefficient (a + b I) m: E^(a m) E^(b I m), the
+     * product of the two normal forms.  Left raw, E^((1 + I) x) was an atom
+     * unrelated to E^x E^(I x), and a residual that is 0 did not Together to
+     * 0 (gauss-elem-23: the answer check then fell to PossibleZeroQ, which
+     * ran past two minutes) */
+    if (rt_head_is(c, "Complex") && c->data.function.arg_count == 2
+        && c->data.function.args[0]->type == EXPR_INTEGER
+        && c->data.function.args[1]->type == EXPR_INTEGER) {
+        Expr* mi = rt_eval_own(expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Complex"),
+                (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2), expr_copy(m) }, 2));
+        Expr* zr = rt_expnorm_sym(T, m);
+        Expr* zi = mi ? rt_expnorm_sym(T, mi) : NULL;
+        if (mi) expr_free(mi);
+        int64_t a = c->data.function.args[0]->data.integer;
+        int64_t b = c->data.function.args[1]->data.integer;
+        expr_free(m);
+        if (!zi) { expr_free(zr);
+            return expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), expr_copy(term) }, 2); }
+        return expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ zr, expr_new_integer(a) }, 2),
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ zi, expr_new_integer(b) }, 2) }, 2);
+    }
     expr_free(m);
     return expr_new_function(expr_new_symbol("Power"),
         (Expr*[]){ expr_new_symbol("E"), expr_copy(term) }, 2);
 }
 
+/* x-free e (borrowed) with every constant E^(a + b I), b != 0 and a, b
+ * integers, written E^a (E^I)^b in the table's symbol for E^I: a constant
+ * coefficient E^I and the E^I inside a normalised E^(I + I x) are then the
+ * same symbol (gauss-elem-23's residual).  Owned. */
+static Expr* rt_expnorm_const(Expr* e, RtExpTab* T) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        Expr* w = e->data.function.args[1];
+        if (rt_head_is(w, "Complex") && w->data.function.arg_count == 2
+            && w->data.function.args[0]->type == EXPR_INTEGER
+            && w->data.function.args[1]->type == EXPR_INTEGER)
+            return rt_expnorm_term(w, T);
+        return expr_copy(e);
+    }
+    size_t k = e->data.function.arg_count;
+    Expr** a = malloc((k ? k : 1) * sizeof(Expr*));
+    bool changed = false;
+    for (size_t i = 0; i < k; i++) {
+        a[i] = rt_expnorm_const(e->data.function.args[i], T);
+        if (!expr_eq(a[i], e->data.function.args[i])) changed = true;
+    }
+    if (!changed) {
+        for (size_t i = 0; i < k; i++) expr_free(a[i]);
+        free(a);
+        return expr_copy(e);
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, k);
+    free(a);
+    return rt_eval_own(r);
+}
+
 /* e borrowed; returns the normalised form (owned) */
 static Expr* rt_expnorm(Expr* e, Expr* x, RtExpTab* T) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
-    if (rt_free_of_x(e, x)) return expr_copy(e);
+    if (rt_free_of_x(e, x)) return rt_expnorm_const(e, T);
     size_t k = e->data.function.arg_count;
     if (rt_head_is(e, "Power") && k == 2 && e->data.function.args[0]->type == EXPR_SYMBOL
         && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {

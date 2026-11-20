@@ -2000,6 +2000,66 @@ static void test_fricas_c2_dependent_and_rootsum(void) {
                    "FreeQ[F, Integrate] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]]", "True", 0);
 }
 
+/* FriCAS comparison: Gaussian exponent offsets and their verification.
+ *   - risch_rational_span decides the Q-span over Q(i).  Over C, -I against
+ *     {I, 1} had a line of solutions and no rational pinned point (undecided),
+ *     so every tower over Q(i) whose exponents differed by a Gaussian constant
+ *     stayed "dependent" (gauss-elem-27, -19).  The split at iota^2 + 1 is
+ *     used only when every other constant is real.
+ *   - Exponentials eliminated in a later round, but named in an earlier
+ *     member's value, now resolve.
+ *   - A real-tower ArcTan is tested as its complex-logarithm pair (lim-rand-34).
+ *   - The rational base case is gated structurally; tan-elem-26 timed out in a
+ *     whole-integrand Together.
+ *   - The exact residual test spells E^((1 + I) x), E^(1 + I) and E^I through
+ *     one symbol; gauss-elem-23's answer check ran past 120 s in PossibleZeroQ. */
+static const char* const GAUSS_ELEM_27 = "(I*E^(-I + (2*I)*x - I*(1 + x)))/((1 + E^x)*(1 + E^((-I)*(1 + x)))^2) - E^(-I + (1 + 2*I)*x)/((1 + E^x)^2*(1 + E^((-I)*(1 + x)))) + ((2*I)*E^(-I + (2*I)*x))/((1 + E^x)*(1 + E^((-I)*(1 + x))))";
+static const char* const GAUSS_ELEM_19 = "(I*E^(I - I*(1 + x)))/(1 + E^((-I)*(1 + x)))^2 + (2*E^I*x)/((1 + E^x)*(1 + E^(I*(1 + x)))) - (I*E^(I + I*(1 + x))*x^2)/((1 + E^x)*(1 + E^(I*(1 + x)))^2) - (E^(I + x)*x^2)/((1 + E^x)^2*(1 + E^(I*(1 + x))))";
+static const char* const GAUSS_ELEM_23 = "E^I/((1 + E^(I*x))*(1 + E^((-I)*(1 + x)))*(1 + E^(1 + x))) - (E^(1 + I + x)*x)/((1 + E^(I*x))*(1 + E^((-I)*(1 + x)))*(1 + E^(1 + x))^2) + (I*E^(I - I*(1 + x))*x)/((1 + E^(I*x))*(1 + E^((-I)*(1 + x)))^2*(1 + E^(1 + x))) - (I*E^(I + I*x)*x)/((1 + E^(I*x))^2*(1 + E^((-I)*(1 + x)))*(1 + E^(1 + x))) + (E^(-I)*x^2)/((1 + E^(I*(1 + x)))*(I + x)) + (2*E^(-I)*x*Log[I + x])/(1 + E^(I*(1 + x))) - (I*E^(-I + I*(1 + x))*x^2*Log[I + x])/(1 + E^(I*(1 + x)))^2";
+static const char* const TAN_ELEM_26 = "-2*Csc[1 + x]^2*Log[1 + Tan[1 + x]^2] - (E^Tan[1 + x]^2*x*Log[x]*Sec[1 + x]^2)/(1 + Tan[1 + x])^2 + E^Tan[1 + x]^2/(1 + Tan[1 + x]) + (E^Tan[1 + x]^2*Log[x])/(1 + Tan[1 + x]) + (2*E^Tan[1 + x]^2*x*Log[x]*Sec[1 + x]^2*Tan[1 + x])/(1 + Tan[1 + x]) + (4*Sec[1 + x]^2)/(1 + Tan[1 + x]^2)";
+
+/* True, and Integrate[.., Method -> "RischTranscendental"] verified at two points */
+static void assert_elem_verified(const char* f) {
+    char buf[4096];
+    snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[%s, x]], 60, $TO]", f);
+    assert_eval_eq(buf, "True", 0);
+    snprintf(buf, sizeof buf, "With[{f = %s}, With[{F = TimeConstrained[Integrate[f, x, Method -> \"RischTranscendental\"], 60, $TO]}, "
+             "FreeQ[F, Integrate] && F =!= $TO && Abs[Quiet[N[(D[F, x] - f) /. x -> 13/10, 30]]] < 10^-15 "
+             "&& Abs[Quiet[N[(D[F, x] - f) /. x -> -7/10, 30]]] < 10^-15]]", f);
+    assert_eval_eq(buf, "True", 0);
+}
+
+static void test_fricas_gauss_offsets(void) {
+    assert_elem_verified(GAUSS_ELEM_27);
+    assert_elem_verified(GAUSS_ELEM_19);
+    assert_elem_verified(GAUSS_ELEM_23);
+    /* non-elementary: in the first, the Rothstein-Trager residue is not
+       constant; in the second, the top coefficient over Log[x] integrates to a
+       new logarithm independent of the tower */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(-I + x) Tan[1 + x] Tanh[1 + x], x]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Log[x]^2/(1 + E^x/(1 + E^(2 x))), x]]", "False", 0);
+    /* tan-elem-26: 0.1 s now, a timeout before */
+    {
+        char buf[4096];
+        snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[%s, x]], 20, $TO]", TAN_ELEM_26);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* the Q-span over Q(i) */
+    assert_eval_eq("Risch`RationalSpan[-I, {I, 1}, {x}]", "{-1, 0}", 0);
+    assert_eval_eq("Risch`RationalSpan[(1 + 2 I) x, {x, I x}, {x}]", "{1, 2}", 0);
+    assert_eval_eq("Risch`RationalSpan[I Sqrt[3], {I, Sqrt[3]}, {x}]", "False", 0);
+    /* a non-real constant that is not spelled with Complex: 2 (-1)^(1/3) - 1
+       is I Sqrt[3].  The split would read its iota^0 part as nonzero, a false
+       "no", so it must not be used */
+    assert_eval_eq("Risch`RationalSpan[2 (-1)^(1/3) - 1, {I Sqrt[3]}, {x}] =!= False", "True", 0);
+    /* hunt neighbours that must stay True: the gausshunt and limhunt random
+       cases, and the Tanh-hunt case that a rational refinement of E^u to
+       E^(u/2) once lost */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[(1 + I) E^(I + 4 I u) Tan[u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Log[1 + E^u] (1 - Tanh[2 u]^2), u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u (1 - Tanh[1 + u]^2), u]]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -2123,6 +2183,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step4_limited_newlog);
     TEST(test_fricas_c13_decision_answer);
     TEST(test_fricas_c2_dependent_and_rootsum);
+    TEST(test_fricas_gauss_offsets);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

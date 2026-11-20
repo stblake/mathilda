@@ -1852,6 +1852,7 @@ static void rt_collect_tv_arctans(Expr* e, RtTower* T, Expr*** out, size_t* n, s
 static Expr* rt_reduce_new_logs(Expr* Rs, RtTower* T, long L, Expr* x, int* status) {
     *status = 1;
     bool undecided = false;
+    bool real_indep = false;   /* the real-tower ArcTan probe proved independence */
     {
         Expr** ats = NULL; size_t na = 0, acap = 0;
         /* over a complex tower ArcTans of x are rewritten too; over a real one
@@ -1860,8 +1861,9 @@ static Expr* rt_reduce_new_logs(Expr* Rs, RtTower* T, long L, Expr* x, int* stat
         g_rt_tvat_x = rt_tower_has_complex(T, L) ? x : NULL;
         rt_collect_tv_arctans(Rs, T, &ats, &na, &acap);
         g_rt_tvat_x = NULL;
-        if (na && !rt_tower_has_complex(T, L)) undecided = true;   /* a genuinely new ArcTan */
-        else if (na) {
+        bool real_probe = na && !rt_tower_has_complex(T, L);
+        if (real_probe) undecided = true;   /* a genuinely new ArcTan */
+        if (na) {
             Expr** ar = malloc(na * sizeof(Expr*));
             for (size_t i = 0; i < na; i++) {
                 Expr* q = ats[i]->data.function.args[0];
@@ -1885,15 +1887,34 @@ static Expr* rt_reduce_new_logs(Expr* Rs, RtTower* T, long L, Expr* x, int* stat
             }
             Expr* arl = expr_new_function(expr_new_symbol("List"), ar, na);
             free(ar);
-            Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){ Rs, arl }, 2));
-            if (Rs) Rs = rt_eval1("Expand", Rs);
-            if (!Rs) { free(ats); return NULL; }
+            if (real_probe) {
+                /* Over a real tower the new ArcTan is kept in the answer, but
+                 * whether it is new is decided the same way: as the pair of
+                 * complex logarithms it is up to a constant (the Risch DE's
+                 * integrate-in-K does exactly this, rc_arctan_to_logs).  A
+                 * proof of independence of that form (status 0) is the proof
+                 * for this one; anything else leaves it undecided.
+                 * (lim-rand-34: Int (1 + E^(2 x))/(1 + E^x + E^(2 x)) =
+                 * x - (2/Sqrt[3]) ArcTan[(1 + 2 E^x)/Sqrt[3]], the top
+                 * coefficient over Log[x].) */
+                Expr* cp = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ expr_copy(Rs), arl }, 2));
+                if (cp) cp = rt_eval1("Expand", cp);
+                int pst = -1;
+                Expr* pr = cp ? rt_reduce_new_logs(cp, T, L, x, &pst) : NULL;   /* consumes cp */
+                real_indep = pr && pst == 0;
+                if (pr) expr_free(pr);
+            } else {
+                Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){ Rs, arl }, 2));
+                if (Rs) Rs = rt_eval1("Expand", Rs);
+                if (!Rs) { free(ats); return NULL; }
+            }
         }
         free(ats);
     }
     Expr** logs = NULL; size_t nl = 0, cap = 0;
     rt_collect_new_logs(Rs, T, x, &logs, &nl, &cap);
-    if (nl == 0) { free(logs); if (undecided) *status = -1; return Rs; }
+    if (nl == 0) { free(logs); if (undecided) *status = real_indep ? 0 : -1; return Rs; }
     size_t ng = 0;
     Expr** gens = malloc(((size_t)L + 2 + nl) * sizeof(Expr*));
     long*  gidx = malloc(((size_t)L + 2) * sizeof(long));
@@ -1971,6 +1992,7 @@ static Expr* rt_reduce_new_logs(Expr* Rs, RtTower* T, long L, Expr* x, int* stat
     free(left);
     free(logs); free(gens); free(gidx); expr_free(vars);
     *status = undecided ? -1 : (nleft ? 0 : 1);
+    if (real_indep) *status = 0;   /* the probe saw every log of Rs too */
     if (nr == 0) { free(rules); return Rs; }
     Expr* rl = expr_new_function(expr_new_symbol("List"), rules, nr);
     free(rules);

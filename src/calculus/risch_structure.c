@@ -101,6 +101,88 @@ static bool rs_is_list(const Expr* e) {
 /* The rational Q-span decision.                                       */
 /* ------------------------------------------------------------------ */
 
+/* The Gaussian constants of e.  Returns 1 when e carries a Complex[a, b] with
+ * rational a and b, -1 when it carries a Complex of anything else (a machine
+ * or MPFR part), 0 when it carries none. */
+static int rs_gauss_kind(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int k = 0;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == intern_symbol("Complex")) {
+        if (e->data.function.arg_count != 2) return -1;
+        return (rs_is_rational(e->data.function.args[0])
+                && rs_is_rational(e->data.function.args[1])) ? 1 : -1;
+    }
+    int kh = rs_gauss_kind(e->data.function.head);
+    if (kh < 0) return -1;
+    if (kh) k = 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int ki = rs_gauss_kind(e->data.function.args[i]);
+        if (ki < 0) return -1;
+        if (ki) k = 1;
+    }
+    return k;
+}
+/* True when every constant of e is real, so that iota^2 + 1 stays
+ * irreducible over the field they generate: numbers, symbols (variables,
+ * parameters, Pi, E), Complex (spelled with iota), and Plus / Times / Power
+ * / Rational / Equal over those, a Power with a non-integer exponent only of
+ * a positive rational base.  Anything else -- Sqrt[-3] = I Sqrt[3] in another
+ * spelling, a Root, Log[-2], an unknown head -- is not known to be real, and
+ * splitting at iota there could miss a relation. */
+static bool rs_real_constants(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    if (e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == intern_symbol("Complex") || h == intern_symbol("Rational")) return true;
+    if (h == intern_symbol("Power") && n == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* ex = e->data.function.args[1];
+        bool intexp = ex->type == EXPR_INTEGER || ex->type == EXPR_BIGINT;
+        /* E^(I x): iota inside an exponent is not polynomial arithmetic */
+        if (!intexp && rs_gauss_kind(ex) != 0) return false;
+        if (!intexp && (b->type == EXPR_INTEGER || b->type == EXPR_BIGINT || rs_is_rational(b))) {
+            Expr* pos = rs_call1("Positive", rs_cp(b));
+            bool ok = pos && pos->type == EXPR_SYMBOL && pos->data.symbol.name == intern_symbol("True");
+            if (pos) expr_free(pos);
+            if (!ok) return false;
+            return rs_real_constants(ex);
+        }
+        if (!intexp && b->type != EXPR_SYMBOL) {
+            /* a non-integer power of a compound base is real only for a
+             * positive base, which is not checked here: a variable base
+             * (a tower symbol, a parameter) is the identity's business */
+            return false;
+        }
+        return rs_real_constants(b) && rs_real_constants(ex);
+    }
+    if (h == intern_symbol("Plus") || h == intern_symbol("Times") || h == intern_symbol("Equal")
+        || h == intern_symbol("List")) {
+        for (size_t i = 0; i < n; i++)
+            if (!rs_real_constants(e->data.function.args[i])) return false;
+        return true;
+    }
+    return false;
+}
+/* e with every Gaussian constant Complex[a, b] spelled a + b iota (owned,
+ * unevaluated). */
+static Expr* rs_gauss_subst(const Expr* e, const Expr* iota) {
+    if (!e || e->type != EXPR_FUNCTION) return rs_cp(e);
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == intern_symbol("Complex")
+        && e->data.function.arg_count == 2)
+        return expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+            rs_cp(e->data.function.args[0]),
+            rs_times(rs_cp(e->data.function.args[1]), rs_cp(iota)) }, 2);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = rs_gauss_subst(e->data.function.args[i], iota);
+    Expr* r = expr_new_function(rs_gauss_subst(e->data.function.head, iota), a, n);
+    free(a);
+    return r;
+}
+
 Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
                           const Expr* vars, bool* failed) {
     *failed = false;
@@ -134,7 +216,50 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
         (Expr*[]){ rs_cp(theta),
                    expr_new_function(expr_new_symbol("Times"),
                        (Expr*[]){ expr_new_integer(-1), sum }, 2) }, 2);
-    Expr* num = rs_call1("Numerator", rs_call1("Together", diff));
+    /* Gaussian constants.  Matching coefficients over C(vars) finds the
+     * C-span, not the Q-span: -I over {I, 1} is c_0 I + c_1 = -I, a line
+     * of complex solutions whose pinned point c_1 = -I is not rational, so
+     * the decision gave up (gauss-elem-27: E^(-I (1 + x)) beside E^x and
+     * E^(-2 I + I x), every exponential tower over Q(i) stayed "dependent,
+     * undecided").  With the constants in Q(i), spell I as a fresh symbol
+     * iota: an identity in Q(i)(vars) with rational c_i holds iff the
+     * numerator, reduced mod iota^2 + 1, vanishes as a polynomial in vars
+     * and iota -- its iota^0 and iota^1 parts separately.  (The denominator
+     * at iota = I is the original nonzero one.)  The system is then over Q,
+     * its solution space is Q-defined, and an empty one is a proof. */
+    Expr* iota = NULL;
+    if (rs_is_list(vars)) {
+        int gk = rs_gauss_kind(theta);
+        for (size_t i = 0; i < m && gk >= 0; i++) {
+            int g = rs_gauss_kind(gens[i]);
+            if (g < 0) gk = -1; else if (g) gk = 1;
+        }
+        bool real = gk == 1 && rs_real_constants(theta);
+        for (size_t i = 0; i < m && real; i++) real = rs_real_constants(gens[i]);
+        if (real) iota = expr_new_symbol("$RSpanIota");
+    }
+    Expr* num;
+    bool split_bad = false;   /* the reduction mod iota^2 + 1 did not come out linear */
+    if (iota) {
+        Expr* dg = rs_eval_adopt(rs_gauss_subst(diff, iota));
+        expr_free(diff);
+        Expr* nm = rs_call1("Numerator", rs_call1("Together", dg));
+        Expr* mp = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+            rs_pow(rs_cp(iota), 2), expr_new_integer(1) }, 2);
+        num = rs_call1("Expand", rs_fn("PolynomialRemainder",
+            (Expr*[]){ rs_call1("Expand", nm), mp, rs_cp(iota) }, 3));
+        /* only a remainder that is a polynomial of degree <= 1 in iota is
+         * the split; an empty solution set of anything else is no proof */
+        Expr* pq = num ? rs_call2("PolynomialQ", rs_cp(num), rs_cp(iota)) : NULL;
+        Expr* ex = num ? rs_call2("Exponent", rs_cp(num), rs_cp(iota)) : NULL;
+        split_bad = !(pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == intern_symbol("True")
+                      && ex && ex->type == EXPR_INTEGER && ex->data.integer <= 1);
+        if (pq) expr_free(pq);
+        if (ex) expr_free(ex);
+        if (!num) num = expr_new_symbol("$Failed");
+    } else {
+        num = rs_call1("Numerator", rs_call1("Together", diff));
+    }
     Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
         (Expr*[]){ num, expr_new_integer(0) }, 2);   /* num == 0 */
     /* Dependent generators make the system underdetermined by design; mute the
@@ -153,17 +278,20 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
         rt_collect_params(theta, vars, true, &nonrat, &ps, &np, &pcap);
         for (size_t i = 0; i < m; i++)
             rt_collect_params(gens[i], vars, true, &nonrat, &ps, &np, &pcap);
-        if (np) {
+        size_t ni = iota ? 1 : 0;
+        if (np || ni) {
             size_t nv = vars->data.function.arg_count;
-            Expr** vv = malloc((nv + np) * sizeof(Expr*));
+            Expr** vv = malloc((nv + np + ni) * sizeof(Expr*));
             for (size_t i = 0; i < nv; i++) vv[i] = rs_cp(vars->data.function.args[i]);
             for (size_t i = 0; i < np; i++) vv[nv + i] = expr_new_symbol(ps[i]);
+            if (ni) vv[nv + np] = rs_cp(iota);
             expr_free(allvars);
-            allvars = expr_new_function(expr_new_symbol("List"), vv, nv + np);
+            allvars = expr_new_function(expr_new_symbol("List"), vv, nv + np + ni);
             free(vv);
         }
         free(ps);
     }
+    if (iota) expr_free(iota);
     arith_warnings_mute_push();
     Expr* sol = rs_call2("SolveAlways", eqn, allvars);
     arith_warnings_mute_pop();
@@ -176,7 +304,7 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
     if (!rs_is_list(sol)) *failed = true;
     /* ...unless a parameter sits outside a rational position, where SolveAlways
      * treats Sqrt[c] / Log[c] as extra unknowns: then {} is not a proof. */
-    if (rs_is_list(sol) && sol->data.function.arg_count == 0 && nonrat) *failed = true;
+    if (rs_is_list(sol) && sol->data.function.arg_count == 0 && (nonrat || split_bad)) *failed = true;
     if (rs_is_list(sol) && sol->data.function.arg_count >= 1) {
         Expr* first = sol->data.function.args[0];   /* List of Rule[c_i, val] */
         Expr** res = malloc(m * sizeof(Expr*));
