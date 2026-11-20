@@ -451,8 +451,72 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
   (* several independent square roots: the Galois eigencomponents, each one
      radical (brKummerSplit; C3.2) *)
   If[brFailQ[r] && brFailTag[r] === {"Incomplete", "several radicals generating a non-cyclic Kummer extension (not one simple radical)"},
-    With[{k = brKummerSplitIntegrate[g, x]}, If[k =!= None, Return[k, Module]]]];
+    With[{k = brKummerSplitIntegrate[g, x]}, If[k =!= None && !ListQ[k], Return[k, Module]];
+      If[MatchQ[k, {"not elementary", _}], Return[k, Module]]]];
+  (* terms over different radicals: integrated group by group (D1) *)
+  If[brFailQ[r] && MemberQ[{"Incomplete", "Unimplemented"}, First[brFailTag[r]]],
+    With[{s = brSupportSplitIntegrate[g, x]}, If[s =!= None, Return[s, Module]]]];
   If[brFailQ[r], failToList[r], r]];
+
+brSupportSplitIntegrate::usage = "brSupportSplitIntegrate[f, x] integrates f group by group, the groups being its terms (of Expand[f]) joined when they share a radical (a power b^(p/q) with b depending on x, at any depth: inside a logarithm or an exponential too), radical-free terms one group. Each group is integrated by BronsteinIntegrate. Every group elementary: the sum of the antiderivatives, verified against f. All groups but one elementary and that one certified: f is not elementary, since f minus the elementary groups is the certified group (elementary plus non-elementary is non-elementary; the certificate keeps its own strength, on the whole domain or on a region). Two or more non-elementary groups are merged in pairs while a merged pair integrates (its answer verified; each attempt bounded by brOption[\"SupportMergeTime\"] seconds), since two non-elementary groups can add up to an elementary one; two or more left: {\"implementation incomplete\", \"several non-elementary support groups\"} (D2). Any group undecided: None (the caller keeps its own reason). When that leaves a group undecided, the partition by kernels (brSupportGroups[..., True]) is tried: one certified group with the rest elementary is a certificate for every partition. None when f has fewer than two groups or Expand[f] exceeds brOption[\"SupportSplitLeaves\"] leaves (Campaign D1).";
+brSupportSplitIntegrate[f_, x_Symbol] := Module[{e, r},
+  e = Quiet[TimeConstrained[Expand[f], 5, $Failed]];
+  If[e === $Failed || Head[e] =!= Plus || LeafCount[e] > brOption["SupportSplitLeaves"], Return[None]];
+  r = brSupportSplitBy[f, List @@ e, x, False];
+  (* a group left undecided: the partition by kernels *)
+  If[r === None || MatchQ[r, {"implementation incomplete", _}],
+    With[{r2 = brSupportSplitBy[f, List @@ e, x, True]},
+      If[r2 =!= None && (r === None || !MatchQ[r2, {"implementation incomplete", _}]), r = r2]]];
+  r];
+(* a group undecided: None, so the caller keeps the tower's own (more specific) reason *)
+
+brSupportSplitBy::usage = "brSupportSplitBy[f, terms, x, kernelsQ] is brSupportSplitIntegrate on the partition brSupportGroups[terms, x, kernelsQ] of the terms of f; None when it has fewer than two groups.";
+brSupportSplitBy[f_, ts_List, x_Symbol, kq_] := Module[{groups, gs, rs, ne, pair, m, mr, F},
+  groups = brSupportGroups[ts, x, kq];
+  If[Length[groups] < 2, Return[None]];
+  gs = Together[Plus @@ #] & /@ groups;
+  rs = BronsteinIntegrate[#, x] & /@ gs;
+  If[AnyTrue[rs, ListQ[#] && !MatchQ[#, {"not elementary", _}] &], Return[None]];
+  (* two non-elementary groups may add up to an elementary one (an algebraic
+     term and Log[x + y] of the derivative of x Log[x + y], split apart by the
+     partition by kernels): merge pairs while one integrates; every merged
+     answer is verified by BronsteinIntegrate, so the split stays exact *)
+  (* a merge of the last two groups is f itself: nothing to gain *)
+  While[Count[rs, {"not elementary", _}] >= 2 && Length[gs] > 2,
+    ne = Flatten[Position[rs, {"not elementary", _}, {1}]];
+    pair = SelectFirst[Subsets[ne, {2}],
+      (mr = Quiet[TimeConstrained[BronsteinIntegrate[Together[gs[[#[[1]]]] + gs[[#[[2]]]]], x],
+              brOption["SupportMergeTime"], $Failed]];
+       mr =!= $Failed && !ListQ[mr]) &, None];
+    If[pair === None, Break[]];
+    gs = Append[Delete[gs, List /@ pair], Together[gs[[pair[[1]]]] + gs[[pair[[2]]]]]];
+    rs = Append[Delete[rs, List /@ pair], mr]];
+  m = Count[rs, {"not elementary", _}];
+  Which[
+    m == 1, {"not elementary", "a support group (the others elementary): " <> SelectFirst[rs, ListQ][[2]]},
+    m >= 2, {"implementation incomplete", "several non-elementary support groups"},
+    True,
+      F = Total[rs];
+      If[antiderivativeQ[f, F, x], F, {"implementation incomplete", "support split: the sum of the groups' antiderivatives did not verify"}]]];
+
+brSupportGroups::usage = "brSupportGroups[terms, x] partitions terms into groups: two terms are in one group when they share a radical (the base of a power b^(p/q), b depending on x, anywhere in the term), transitively; the radical-free terms form one group. brSupportGroups[terms, x, True] is the partition by kernels instead: two terms are in one group when they share a logarithm or exponential kernel (Log[a], E^a, a depending on x), the kernel-free terms one group. Any partition is sound for the split (linearity); a finer one only risks two non-elementary groups. Returns a list of lists of terms.";
+brSupportGroups[ts_List, x_Symbol] := brSupportGroups[ts, x, False];
+brSupportGroups[ts_List, x_Symbol, kq_] := Module[{rad, gs, merged, out, g, hit},
+  rad[t_] := If[TrueQ[kq],
+    Union[Cases[t, (k : (Log[a_] | Power[E, a_])) /; !FreeQ[a, x] :> k, {0, Infinity}, Heads -> True]],
+    Union[Cases[t, Power[b_, _Rational] /; !FreeQ[b, x] :> b, {0, Infinity}, Heads -> True]]];
+  (* groups {radicals, terms}; the radical-free terms carry the key None *)
+  gs = {If[#1 === {}, {None}, #1], {#2}} & @@@ Transpose[{rad /@ ts, ts}];
+  merged = True;
+  While[merged,
+    merged = False; out = {};
+    Do[
+      hit = SelectFirst[Range[Length[out]], Intersection[out[[#, 1]], g[[1]]] =!= {} &, 0];
+      If[hit === 0, AppendTo[out, g],
+        out = ReplacePart[out, hit -> {Union[out[[hit, 1]], g[[1]]], Join[out[[hit, 2]], g[[2]]]}]; merged = True],
+      {g, gs}];
+    gs = out];
+  gs[[All, 2]]];
 
 brKummerSplitIntegrate::usage = "brKummerSplitIntegrate[f, x] integrates f component by component (brKummerSplit): the sum of the components' antiderivatives when every one has one; {\"not elementary\", ...} as soon as one component is certified non-elementary (then so is f: the component is a combination of Galois conjugates of f); {\"implementation incomplete\", ...} when a component is undecided; None when f does not split.";
 brKummerSplitIntegrate[f_, x_Symbol] := Module[{comps = brKummerSplit[f, x], rs, bad},

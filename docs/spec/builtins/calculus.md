@@ -4057,6 +4057,24 @@ restricted to n-th roots. The design is in `src/internal/bronstein/BRONSTEIN_PLA
 
 All of these are verified like the main path.
 
+**Splits, tried when the single tower is out of reach.** Both are exact, so a split's
+answer is verified and its certificate is one for `f`:
+- *Galois components* (v0.6645). Several independent square roots (`Sqrt[x]` beside
+  `Sqrt[1 + x]`) are split into the eigencomponents `c_e Prod Sqrt[b_i]^e_i`; f is
+  elementary iff every component is (theory note §E8).
+- *Support groups* (v0.6647). The terms of `Expand[f]` are grouped by the radicals
+  they contain, at any depth (inside a `Log` or an exponential too), and, when a group
+  is still undecided, by their `Log`/`Exp` kernels instead. Every group elementary: the
+  sum of the answers. Exactly one group certified and the others elementary: f is not
+  elementary (linearity; §E9). Two or more non-elementary groups: `Integrate::incomplete`
+  (*several non-elementary support groups*). A group the methods cannot decide leaves
+  f's own reason unchanged.
+
+`E^x/Sqrt[1 + x^2] + (x Log[x] + Sqrt[2 + x^2] Log[x + Sqrt[2 + x^2]])/(x Sqrt[2 + x^2])`
+has a radical inside a logarithm and a second radical, so no single tower holds it; the
+groups are `E^x/Sqrt[1 + x^2]` (certified) and the rest (`Log[x] Log[x + Sqrt[2 + x^2]]`),
+so it is not elementary.
+
 **Pipeline.** The integrand is split into its components `a_i y^i`, each one on its
 curve `Y^m = G(θ)` over `k = Q(x)(lower monomials)`. Trager's thesis, Appendix A,
 shows that `f` is elementary iff every component is.
@@ -4110,7 +4128,8 @@ the uncertain steps of the C Risch DE, against a ratchet that only moves down.
 | Input | Result |
 |---|---|
 | `Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x]` | unevaluated, `Integrate::incomplete` (nested radicals) |
-| `Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (non-cyclic compositum) |
+| `Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> "Bronstein"]` | `(2 x^(3/2) + 2 Sqrt[1 + x] + 2 x Sqrt[1 + x])/3` (Galois components, v0.6645) |
+| `Integrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (several non-elementary support groups) |
 | `Integrate[Sin[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (trigonometric kernel, not yet supported) |
 | `Integrate[Erf[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, no message |
 

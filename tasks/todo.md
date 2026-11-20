@@ -3,11 +3,11 @@
 Plan: src/internal/bronstein/BRONSTEIN_PLAN.md "Campaign D". Each item closes with the hunts,
 ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 
-- [ ] D0 benchmark 260 (radical at the bottom: elementary-by-construction, non-elementary-by-construction, random)
-- [ ] D1 split by radical support (prototype: 28 of the 47 undecided class B)
+- [x] D0 benchmark 260 (generator, corpus, README, make bench-integrate-bottom) (radical at the bottom: elementary-by-construction, non-elementary-by-construction, random)
+- [x] D1 support groups (radicals, then kernels, pairwise merges): 45 of the 47 undecided class B decided
 - [ ] D2 theory note E9 + several non-elementary groups over independent radicals
 - [ ] D3 Phase 5: E2, E1 notes; brDField; tower over Q(x)(y); Hermite/RT over k0; curve RDE over a tower; 19 cases
-- [ ] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); 45 prim cases; comparison accounting for special-field answers
+- [ ] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases with no answer and no certificate
 - [ ] D5 the 8 remaining 259 cases + gausshunt 8 (C2.4, C2.5)
 - [ ] D6 speed: 43 cases over 1 s; evaluator scoping change (user decision: a/b/c)
 - [ ] D7 special-function answers for the 18 cases FriCAS closes

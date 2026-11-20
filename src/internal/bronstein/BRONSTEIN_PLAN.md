@@ -1772,11 +1772,19 @@ undecided by every Mathilda method (Bronstein, RischTranscendental, PMT, Automat
 | D1 | Split by radical support | 28 of the 47 decided by a prototype | small | class B >= 85% |
 | D2 | Several non-elementary groups | 0 in the corpus, common at random | theory + small | E9 note; 260's random family has no Incomplete of this tag |
 | D3 | Phase 5: transcendental Risch over an algebraic base | the other 19 of the 47 (`Tower.m:205,208`) | large | class B >= FriCAS (93%) |
-| D4 | Liouvillian primitive monomials (C2.3) | 45 `prim-*` cases of 259 are SPECIAL/undecided for every system | medium | `prim` decided >= 90% |
+| D4 | Liouvillian primitive monomials (C2.3) | 5 `prim-rand` cases no Mathilda method closes or certifies: `Erf[x^2] Log[x]`, `x Log[x] li(x)`, `Erfi[x] Log[x]/x`, `x Erf[x] Log[x]`, `Log[x] li(x)` (FriCAS closes 2) | medium | all 5 decided |
 | D5 | The remaining 259 elementary cases (C2.4, C2.5) | 8: `tan-elem-26`, `gauss-elem-19/23/27`, `f12-elem-7`, `gauss-rand-31`, `lim-rand-34`, plus the hunts' `gausshunt` 8 | medium | none undecided where FriCAS decides; gausshunt 0 |
 | D6 | Speed (C4) | 43 cases over 1 s (256: `lccontent` 10, `expcube` 7, Trager 8; 257: `cM` 7, `cA` 3; 259: 7) | medium, plus one design decision | the C4 criterion: no shared case over 5 s, p90 within 2x of FriCAS |
 | D7 | Special-function answers (C5) | 18 cases FriCAS closes and Mathilda only certifies | medium | those 18 closed and verified |
 | D8 | FriCAS upstream report | draft in `benchmarks/FRICAS_UPSTREAM_DRAFT.md` | trivial | submitted (needs the user's approval) |
+
+**Status (v0.6647).** D0 and D1 landed.
+- D1 grew three steps beyond the prototype: a second partition by kernels, pairwise merges
+  of non-elementary groups (each merge bounded), and no merge into f itself.
+- On the 47 undecided class-B cases of 256: 45 decided (all certificates), 2 still
+  Phase 5 (`bgenusp-2-9`, `bgenusp-3-6`).
+- Found on the way: a held `Integrate::nonelem` raised under an inner `Quiet` printed
+  after it (fixed, `mth_msg_quieted`).
 
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
@@ -1834,9 +1842,9 @@ monomials, and the question "elementary over that field" is the ordinary Risch q
   derivatives in the field.
 - Answers: an antiderivative in the extended field is a closed form; the stage reports it
   as SPECIAL-decided.
-- Measure: change the comparison's accounting so a verified answer over the extended field
-  counts as decided for both systems (it is decided: a closed form verified by
-  differentiation).
+- The comparison already counts a verified answer over the extended field (SPECIAL) as
+  closed; the 5 cases are the ones with neither an answer nor a certificate. (The first
+  draft of this table said 45: it counted SPECIAL as undecided.)
 
 **D5. The remaining 259 cases (C2.4, C2.5).** Profile each one
 (`MATHILDA_INTEGRATE_PROFILE`, `MATHILDA_RT_PROFILE`), then fix:

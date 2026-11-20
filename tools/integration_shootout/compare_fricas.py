@@ -39,7 +39,8 @@ import statistics
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BENCHES = [("256-integration-shootout", "256: the shootout corpus"),
            ("257-compact-integrals", "257: compact integrands, large integrals"),
-           ("259-transcendental-decision", "259: the transcendental decision corpus")]
+           ("259-transcendental-decision", "259: the transcendental decision corpus"),
+           ("260-radical-bottom", "260: a radical at the bottom")]
 DEDICATED = {"R": "RischTranscendental", "T": "RischTranscendental", "A": "Trager", "M": "Bronstein", "B": "Bronstein"}
 CLASSNAME = {"R": "rational", "T": "transcendental", "A": "algebraic", "M": "mixed, radical on top",
              "B": "radical at the bottom"}
@@ -288,7 +289,7 @@ def main():
         order = [g for g in (f"{k} {CLASSNAME[k]}" for k in "RTAMB") if g in by_class]
         L += table(by_class, order, "class")
         L.append("")
-        if bench.startswith("259"):
+        if bench.startswith("259") or bench.startswith("260"):
             by_fam = tally(rows, lambda r: r["family"])
             L.append("By family (`-elem`: f = D[F], elementary by construction; `-rand`: random):")
             L.append("")

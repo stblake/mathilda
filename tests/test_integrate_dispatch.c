@@ -464,6 +464,14 @@ static void test_step_and_impulse_indefinite(void) {
  * variables; a Risch certificate reached through an unevaluated polynomial
  * primitive is demoted to undecided; and the cascade splits a non-rational
  * x-free factor off before any stage sees it.  Every answer must diff back. */
+/* CRC Formula 493, Int x^m Log[x + Sqrt[x^2 + a]], divides by m + 1: at m = -1 it
+ * returned Indeterminate (the integral is not elementary; 260 two-rand-20). */
+static void test_crctable_formula493_m_minus_one(void) {
+    assert_eval_eq("FreeQ[Integrate[Log[x + Sqrt[1 + x^2]]/x, x, Method -> \"CRCTable\"], Indeterminate]", "True", 0);
+    assert_eval_eq("Head[Quiet[Integrate[((1 + x^2) Log[x + Sqrt[1 + x^2]])/x, x]]]", "Integrate", 0);
+    assert_eval_eq("Simplify[D[Integrate[x^2 Log[x + Sqrt[1 + x^2]], x, Method -> \"CRCTable\"], x] - x^2 Log[x + Sqrt[1 + x^2]]]", "0", 0);
+}
+
 static void test_constant_factor_split(void) {
     const char* cases[] = {
         "(-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[a]) Cos[x] Sin[x] Cosh[a x]",
@@ -521,6 +529,7 @@ void test_integrate_dispatch(void) {
     TEST(test_linearity_distributes_product);
     TEST(test_step_and_impulse_indefinite);
     TEST(test_constant_factor_split);
+    TEST(test_crctable_formula493_m_minus_one);
 
     printf("All Integrate dispatch tests passed!\n");
 }

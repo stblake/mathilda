@@ -2091,6 +2091,41 @@ add up. In code, $c_e$ is read off without rationalising: $Y_i$ are symbols,
 $f_e/\prod Y_i^{e_i}$ is multiplied above and below by the conjugates of its denominator,
 and the invariant polynomials that result have only even powers, $Y_i^{2k}\mapsto b_i^k$.
 
+\section*{E9. Support groups (\code{brSupportSplitIntegrate}, Campaign D1)}
+\addcontentsline{toc}{section}{E9. Support groups}
+\label{sec:E9}
+
+Class B of the shootout has many integrands $f=g_1+g_2$ with $g_1$ over one radical and
+$g_2$ over another, with a radical inside a logarithm or an exponential, such as
+$e^x/\sqrt{1+x^2}+\bigl(x\log x+y\log(x+y)\bigr)/(xy)$, $y=\sqrt{2+x^2}$. No single tower
+of the front end holds $f$ (a radical inside a kernel may only be the first monomial),
+but each $g_i$ alone is decided.
+
+\begin{proposition}\label{prop:E9}
+Let $f=g_1+\dots+g_k$ in a differential field $E$ of characteristic $0$, and suppose
+$g_2,\dots,g_k$ have elementary integrals $G_2,\dots,G_k$. Then $f$ has an elementary
+integral if and only if $g_1$ has one.
+\end{proposition}
+\begin{proof}
+If $F$ is an elementary integral of $f$ then $F-G_2-\dots-G_k$ is one of $g_1$: it lies
+in the compositum of elementary extensions, which is elementary. The converse is the sum.
+\end{proof}
+\noindent The partition is arbitrary, so the code may choose it. It groups the terms of
+$\operatorname{Expand}(f)$ by the radicals they contain (joined transitively), and, when a
+group stays undecided, by their \code{Log}/\code{Exp} kernels instead. The $G_i$ are the
+verified answers of the single-radical pipeline, so the proposition applies exactly. The
+certificate for $g_1$ keeps its own strength. A field certificate holds on every region.
+A region certificate (E6a, E6d) holds on its region, and so does the conclusion for $f$,
+since the identity $f-\sum_{i\ge2}g_i=g_1$ holds everywhere.
+
+\emph{Open (D2).} When two or more groups are certified non-elementary, the proposition
+says nothing: $\int e^x/x$ and $\int -e^x/x$ are each non-elementary, and their sum is
+$0$. Over independent radicals the expected statement is a separation lemma. Let
+$g_i\in E_i$, where $E_1,E_2$ are towers over a common $T$, free over $T$ and with
+independent radicals. If $g_1+g_2$ is elementary, then $g_1-h$ and $g_2+h$ are elementary
+for some $h\in T$. It is not proved here, so the code answers \emph{several non-elementary
+support groups} (incomplete) in that case.
+
 \section*{T1. Parameters are constants, never unknowns (v0.6586, v0.6589, v0.6591, v0.6592)}
 \addcontentsline{toc}{section}{T1. Parameters}
 

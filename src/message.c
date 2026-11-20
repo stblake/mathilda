@@ -129,6 +129,8 @@ static void note_fired_for(int q, const char* head, const char* tag) {
 /* Non-zero iff a Quiet that silences every message is active: what a caller
  * can ask without naming the message (mth_message_cont, internal probes). */
 int mth_msg_suppressed(void) { return quiet_cover_index(NULL, NULL) >= 0; }
+int mth_msg_quiet_cover(const char* head, const char* tag) { return quiet_cover_index(head, tag); }
+int mth_msg_quiet_depth(void) { return g_msg_suppress_depth; }
 
 /* Save / restore the Quiet and Check frame depths as one value (Quiet depth in
  * the low 16 bits, Check depth above).  TimeConstrained's timeout siglongjmp

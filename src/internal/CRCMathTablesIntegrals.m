@@ -1929,8 +1929,9 @@ IntegrateTable[Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[a, x] :=
 IntegrateTable[x_ Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[a, x] :=
   (x^2/2 + a/4) Log[x + Sqrt[x^2 + a]] - (x Sqrt[x^2 + a])/4;
 
-(* Formula 493 *)
-IntegrateTable[x_^m_ Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[{a, m}, x] :=
+(* Formula 493 (m = -1 excluded: the 1/(m + 1) is 1/0 there, and the integral of
+   Log[x + Sqrt[x^2 + a]]/x is not elementary; it returned Indeterminate) *)
+IntegrateTable[x_^m_ Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[{a, m}, x] && m =!= -1 :=
   x^(m + 1)/(m + 1) Log[x + Sqrt[x^2 + a]] - 1/(m + 1) IntegrateTable[x^(m + 1)/Sqrt[x^2 + a], x];
 
 (* Formula 494 *)

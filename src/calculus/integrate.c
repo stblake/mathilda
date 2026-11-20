@@ -3318,6 +3318,11 @@ int g_integrate_no_special = 0;
  * runs at depth 0 with only one method active and does not consult it. */
 static int g_integrate_nonelem_announced = 0;
 
+/* The Quiet frame depth when the current top-level cascade began: a held
+ * message raised under a Quiet entered INSIDE the cascade (frame index >= this)
+ * is emitted at once instead (see integrate_announce_nonelementary). */
+static int g_integrate_cascade_quiet_depth = 0;
+
 /* Deferred payload for that diagnostic inside a cascade.  A stage that PROVES
  * non-elementarity is not the last word: a LATER stage may still produce a
  * non-elementary antiderivative in closed form, and since v0.241 it routinely
@@ -3561,6 +3566,17 @@ void integrate_announce_nonelementary(Expr* f, Expr* x) {
     if (g_integrate_depth == 1 && g_integrate_named_f) f = g_integrate_named_f;
     char* fs = expr_to_string(f);
     char* xs = expr_to_string(x);
+    /* Raised under a Quiet entered inside the cascade that covers it (a method's .m code calling
+     * Quiet[Integrate`RischTranscendental[g, u]] on a transformed integrand,
+     * inside an outer cascade): emit it now, silently, for the Check[]s inside
+     * that Quiet.  Held, it was printed at the OUTER cascade's exit, outside
+     * the Quiet, naming the internal integrand -- and its de-dup then dropped
+     * the outer method's own message (Campaign D1, 2026-11-21). */
+    if (g_integrate_depth == 1 && mth_msg_quiet_cover("Integrate", "nonelem") >= g_integrate_cascade_quiet_depth) {
+        mth_message("Integrate", "nonelem", "The integrand %s has no antiderivative elementary in %s.", fs ? fs : "?", xs ? xs : "?");
+        free(fs); free(xs);
+        return;
+    }
     if (g_integrate_depth == 1 && fs && xs) {  /* cascade: at most one stage speaks */
         if (g_integrate_nonelem_announced) { free(fs); free(xs); return; }
         g_integrate_nonelem_announced = 1;
@@ -3606,6 +3622,15 @@ static void integrate_announce_incomplete(Expr* f, Expr* x, const Expr* result) 
     if (g_integrate_depth > 1) return;
     if (g_integrate_quiet != 0) return;
     if (g_integrate_depth == 1 && g_integrate_named_f) f = g_integrate_named_f;
+    if (g_integrate_depth == 1 && mth_msg_quiet_cover("Integrate", "incomplete") >= g_integrate_cascade_quiet_depth) {
+        /* raised under a Quiet entered inside the cascade: never held past it
+         * (see integrate_announce_nonelementary) */
+        char* fs = expr_to_string(f);
+        char* xs = expr_to_string(x);
+        intg_incomplete_message(fs, xs, why);
+        free(fs); free(xs);
+        return;
+    }
     if (g_integrate_depth == 1) {
         if (g_integrate_incomplete_pending_why) return;   /* the first stage wins */
         g_integrate_incomplete_pending_f = expr_to_string(f);
@@ -3994,6 +4019,7 @@ static Expr* builtin_integrate_body(Expr* res) {
      * depth >= 2 and must NOT clear it. */
     if (g_integrate_depth == 1) {
         g_integrate_nonelem_announced = 0;
+        g_integrate_cascade_quiet_depth = mth_msg_quiet_depth();
         intg_nonelem_pending_clear();   /* drop anything a longjmp stranded */
         intg_incomplete_pending_clear();
     }

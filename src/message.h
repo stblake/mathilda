@@ -39,6 +39,14 @@ void mth_msg_suppress_push(void);
 void mth_msg_suppress_pop(void);
 /* Non-zero iff a quiet region silencing every message is active. */
 int  mth_msg_suppressed(void);
+/* The index of the innermost Quiet frame silencing head::tag (Quiet[expr], or
+ * Quiet[expr, {head::tag, ...}]), or -1; and the current Quiet frame depth.
+ * For a caller that HOLDS a message to emit it later: a message raised under a
+ * Quiet entered after the hold point (cover >= the depth recorded there) must be
+ * emitted at once (silent, seen only by the Check[]s inside that Quiet), never
+ * held past the Quiet's end, where it would print. */
+int  mth_msg_quiet_cover(const char* head, const char* tag);
+int  mth_msg_quiet_depth(void);
 /* Save / restore the Quiet and Check frame depths as one value (used by
  * TimeConstrained to undo regions abandoned by a timeout siglongjmp). */
 int  mth_msg_suppress_depth_save(void);

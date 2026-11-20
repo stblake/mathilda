@@ -1060,6 +1060,13 @@ bench-integrate-decision:
 	python3 tools/integration_shootout/shootout.py --bench benchmarks/259-transcendental-decision \
 	    --systems mathilda,fricas --methods Automatic,RischTranscendental
 
+# `make bench-integrate-bottom` -- benchmark 260, a radical at the bottom
+# (tools/integration_shootout/gen_bottom.m): elementary by construction,
+# non-elementary by construction, random; Bronstein, PMT, Automatic and FriCAS.
+bench-integrate-bottom:
+	python3 tools/integration_shootout/shootout.py --bench benchmarks/260-radical-bottom \
+	    --systems mathilda,fricas --methods Automatic,ParallelMixedTower,Bronstein
+
 bench-integrate-vs-fricas:
 	python3 tools/integration_shootout/compare_fricas.py
 	@if command -v pandoc >/dev/null 2>&1; then \
@@ -1320,7 +1327,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact bench-integrate-decision bench-integrate-vs-fricas check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact bench-integrate-decision bench-integrate-bottom bench-integrate-vs-fricas check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage check-machine-boundary \
         check-refine-stress \

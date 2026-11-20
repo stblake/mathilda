@@ -18,6 +18,8 @@ brOption["SpecializationTries"] = 12;
 brOption["SpecializationHeight"] = 97;
 brOption["SpecializationRounds"] = 8;
 brOption["PresentationTime"] = 5;
+brOption["SupportSplitLeaves"] = 20000;
+brOption["SupportMergeTime"] = 4;
 brOption["ArcTanFormTime"] = 20;
 
 brCatch::usage = "brCatch[expr] evaluates expr and returns its value, or the tragerFail[...] object thrown by any stage inside it (Trager's catchTrager).";
