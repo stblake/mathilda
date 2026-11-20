@@ -1349,15 +1349,27 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
                                       Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
 
-    /* 1. Antiderivative via the indefinite cascade. */
-    Expr* F;
+    /* 1. Antiderivative via the indefinite cascade.  Over a finite real
+     * interval it is computed inside Block[{Integrate`$DefiniteInterval =
+     * {a, b}}, ...]: a stage whose antiderivative carries a piecewise-constant
+     * term (PolyLogLadder's Log[G] - L, which jumps by 2 Pi I at a branch
+     * crossing) may then give the form valid on (a, b), whose endpoint values
+     * are finite.  Outside this Block that term stays symbolic, valid on every
+     * interval.  Block restores the variable on an abort or a throw. */
+    Expr* call;
     if (method) {
-        F = eval_take(mk_fn3("Integrate", expr_copy(f), expr_copy(x),
-                             mk_fn2("Rule", mk_sym("Method"),
-                                    expr_new_string(method))));
+        call = mk_fn3("Integrate", expr_copy(f), expr_copy(x),
+                      mk_fn2("Rule", mk_sym("Method"), expr_new_string(method)));
     } else {
-        F = eval_take(mk_fn2("Integrate", expr_copy(f), expr_copy(x)));
+        call = mk_fn2("Integrate", expr_copy(f), expr_copy(x));
     }
+    double av, bv;
+    if (nl_numeric(a, &av) == 1 && nl_numeric(b, &bv) == 1 && av < bv)
+        call = mk_fn2("Block",
+            mk_fn1("List", mk_fn2("Set", mk_sym("Integrate`$DefiniteInterval"),
+                                  mk_fn2("List", expr_copy(a), expr_copy(b)))),
+            call);
+    Expr* F = eval_take(call);
     if (!F) return NULL;
     if (contains_head(F, "Integrate")) { expr_free(F); return NULL; }
 

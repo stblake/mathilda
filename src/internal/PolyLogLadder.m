@@ -416,24 +416,58 @@ PolyLogLadder`LTRun[f_, x_Symbol] := Catch[Module[{logs, Ls, g, P, G, args, cs, 
       If[c =!= 0,
         res += c Total[(-#[[2]] PolyLogLadder`LTLiLadder[n, 1, #[[1]], base, x]) & /@ roots]]],
     {n, 0, Exponent[P, x]}];
-  (* D = Log[G] - L is piecewise constant: G = K T^e Prod (T - rho)^m and
-     (T - rho) = -rho (1 - T/rho) give D = Log[K Prod (-rho)^m] + 2 Pi I n.  The
-     integer n is read numerically at x = 37/100 (where the acceptance check
-     also differentiates); a symbolic G keeps D as Log[G] - L. *)
-  dexact = Module[{K, C0, Dn, n},
-    K = Coefficient[num, T, Exponent[num, T]]/Coefficient[den, T, Exponent[den, T]];
-    C0 = K Times @@ ((-#[[1]])^#[[2]] & /@ roots);
-    Dn = Quiet[N[((Log[G] - L) /. x -> 37/100) - Log[C0], 20]];   (* Re[Dn] is a zero *)
-    If[! NumericQ[Dn] || Abs[Re[Dn]] > 10^-8, Log[G] - L,
-      n = Round[Im[Dn]/(2 Pi)];
-      If[Abs[Im[Dn] - 2 Pi n] > 10^-8, Log[G] - L, Log[C0] + 2 Pi I n]]];
+  (* D = Log[G] - L is piecewise constant: it jumps by 2 Pi I where a factor of
+     G crosses the branch cut.  It is kept SYMBOLIC.  Replacing it by its value
+     at one point (as this stage once did, reading the 2 Pi I multiple at
+     x = 37/100) gives an antiderivative of only the interval around that
+     point: past the pole of Tan[2 x] at Pi/4, Integrate[Log[-I + Tan[2 x]], x]
+     was off by 2 Pi I and I x^2 Log[-I + Tan[2 x]] by 2 Pi I x^2 (found by the
+     FriCAS comparison, benchmark 259, tani-rand-9).  Kept symbolic, D' = 0
+     wherever D is continuous, so D Q + INT P L differentiates to P Log[G] on
+     every interval. *)
+  dexact = PolyLogLadder`IntervalD[G, L, num, den, roots, T, x];
   dexact Q + res], PolyLogLadder`fail];
 
 
-(* Acceptance check: D[F, x] - f vanishes at two points, every other free
+(* D = Log[G] - L over the interval of a definite integral.  Newton-Leibniz
+   computes its antiderivative inside Block[{Integrate`$DefiniteInterval = {a, b}},
+   ...]; there D may be replaced by its constant value on (a, b) -- the form
+   whose endpoint values are finite (Log[2 Cos[x]] - L at Pi/2 is a difference of
+   two divergent logs, which Limit does not resolve).  The constant is
+   Log[K Prod (-rho)^m] + 2 Pi I n, n read at the midpoint and required to be the
+   same at 31 points across the interval; when it is not, the stage declines.
+   Outside a definite integral D stays symbolic.  Newton-Leibniz cross-checks the telescoped value
+   numerically for a PolyLog of an exponential, which a jump between samples would
+   fail. *)
+PolyLogLadder`IntervalD[G_, L_, num_, den_, roots_, T_, x_] := Module[{iv, a, b, K, C0, nOf, n0, ok},
+  iv = Integrate`$DefiniteInterval;
+  If[! MatchQ[iv, {_, _}], Return[Log[G] - L]];
+  {a, b} = iv;
+  If[! (NumericQ[a] && NumericQ[b] && Im[a] == 0 && Im[b] == 0 && a < b), Return[Log[G] - L]];
+  K = Coefficient[num, T, Exponent[num, T]]/Coefficient[den, T, Exponent[den, T]];
+  C0 = K Times @@ ((-#[[1]])^#[[2]] & /@ roots);
+  If[! FreeQ[C0, x], Return[Log[G] - L]];
+  nOf[p_] := Module[{dn = Quiet[N[((Log[G] - L) /. x -> p) - Log[C0], 20]]},
+    If[! NumericQ[dn] || Abs[Re[dn]] > 10^-8, $Failed,
+      With[{n = Round[Im[dn]/(2 Pi)]}, If[Abs[Im[dn] - 2 Pi n] > 10^-8, $Failed, n]]]];
+  n0 = nOf[(a + b)/2];
+  If[n0 === $Failed, Return[Log[G] - L]];
+  ok = AllTrue[Table[a + (b - a) k/32, {k, 1, 31}], nOf[#] === n0 &];
+  (* D jumps inside (a, b): the antiderivative is discontinuous there, and the
+     jump is not reliably found by Newton-Leibniz (Limit misses it for
+     Log[-I + Tan[x]] at Pi/2, where F jumps by -Pi^2 I).  Decline: the definite
+     integral goes to another method, or stays unevaluated -- never a value
+     telescoped across the jump *)
+  If[ok, Log[C0] + 2 Pi I n0, Throw[$Failed, PolyLogLadder`fail]]];
+
+(* Acceptance check: D[F, x] - f vanishes at the CheckPoints, every other free
    symbol fixed at a generic rational.  A differentiation check, not quadrature;
    the constructions above are exact, so this only guards against an
    implementation slip. *)
+(* points on several intervals (both signs, past the first poles of a Tan or a
+   Log of a trig function at Pi/4, Pi/2, Pi): an answer valid on one interval
+   only must fail here *)
+PolyLogLadder`CheckPoints = {37/100, 71/100, 23/10, -17/10, 39/10};
 PolyLogLadder`Check[F_, f_, x_Symbol] := Module[{syms, inst, d, ok = True},
   (* parameters: the non-numeric atoms other than x (Pi, E, Catalan, ... are
      NumericQ; Context[] is not usable to separate system symbols here) *)
@@ -443,8 +477,13 @@ PolyLogLadder`Check[F_, f_, x_Symbol] := Module[{syms, inst, d, ok = True},
   Do[
     d = Quiet[N[(D[F, x] - f) /. inst /. x -> pt, 30]];   (* a zero residual: N::meprec expected *)
     If[! NumericQ[d] || Abs[d] > 10^-12 (1 + Abs[N[f /. inst /. x -> pt, 30]]), ok = False],
-    {pt, {37/100, 71/100}}];
+    {pt, PolyLogLadder`CheckPointsFor[]}];
   ok];
+(* inside a definite integral's interval the answer need only hold there *)
+PolyLogLadder`CheckPointsFor[] := With[{iv = Integrate`$DefiniteInterval},
+  If[MatchQ[iv, {_?NumericQ, _?NumericQ}] && Im[iv[[1]]] == 0 && Im[iv[[2]]] == 0 && iv[[1]] < iv[[2]],
+    iv[[1]] + (iv[[2]] - iv[[1]]) {3/17, 7/13, 15/17},
+    PolyLogLadder`CheckPoints]];
 
 PolyLogLadder`Integrate[f_, x_Symbol] := Module[{r},
   r = PolyLogLadder`Run[f, x];

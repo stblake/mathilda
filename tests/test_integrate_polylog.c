@@ -295,6 +295,34 @@ static void test_polylog_values(void) {
     check_eq("Limit[Log[1 - x] PolyLog[2, 1 - x], x -> 1, Direction -> \"FromBelow\"]", "0");
 }
 
+/* The Log-of-a-trig route kept D = Log[G] - L at its value near x = 37/100:
+ * the antiderivative held only on that interval.  Past the pole of Tan[2 x]
+ * at Pi/4, Integrate[Log[-I + Tan[2 x]], x] was off by 2 Pi I (FriCAS
+ * comparison, benchmark 259 tani-rand-9).  Now D stays symbolic (correct on
+ * every interval); a definite integral fixes it on its own interval. */
+static void test_log_trig_every_interval(void) {
+    const char* fs[] = { "Log[-I + Tan[x]]", "I x^2 Log[-I + Tan[2 x]]", "x Log[Tan[x]]",
+                         "Log[1 + Tan[x]]", "x^2 Log[Sin[x]]", "Log[Cos[x]]", "x Log[1 + Cosh[x]]" };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf,
+            "With[{f = %s}, With[{F = Integrate[f, x]}, FreeQ[F, Integrate] && "
+            "AllTrue[{1/3, 2, 3, -1, -5/2, 5}, Abs[N[(D[F, x] - f) /. x -> #, 30]] < 10^-15 &]]]", fs[i]);
+        check_eq(buf, "True");
+    }
+    /* across the pole at Pi/2 the symbolic antiderivative jumps by -Pi^2 I, and
+     * Newton-Leibniz's Limit does not see the jump: it gave +4.2776 I where the
+     * value is 2.17711201856134 - 4.70236474060939 I (30-digit NIntegrate on
+     * [0, Pi/2] + [Pi/2, 3]).  Now the stage declines there: unevaluated, or
+     * right -- never the telescoped value. */
+    check_eq("With[{r = Quiet[Integrate[Log[-I + Tan[x]], {x, 0, 3}, Method -> \"NewtonLeibniz\"]]}, "
+             "Head[r] === Integrate || Abs[N[r - (2.17711201856134272208 - 4.70236474060939026366 I), 20]] < 10^-12]",
+             "True");
+    /* the definite mode leaves no trace: the indefinite answer stays general */
+    check_eq("(Integrate[x Log[2 Cos[x]], {x, 0, Pi/2}]; "
+             "!FreeQ[Integrate[x Log[2 Cos[x]], x], Log[2 Cos[x]]])", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -309,6 +337,7 @@ int main(void) {
     TEST(test_polylog_branch);
     TEST(test_log_quadratic_and_products);
     TEST(test_polylog_values);
+    TEST(test_log_trig_every_interval);
 
     printf("All Integrate PolyLogLadder tests passed!\n");
     return 0;
