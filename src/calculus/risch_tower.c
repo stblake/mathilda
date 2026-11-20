@@ -464,6 +464,16 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
             if (ex) expr_free(logs[i]); else logs[k++] = logs[i];
         }
         nl = k;
+        /* ... and the dependent exponentials (rt_dependent_exp_rule): xk = E^w */
+        k = 0;
+        for (size_t i = 0; i < ne; i++) {
+            bool ex = false;
+            for (size_t j = 0; j < nx && !ex; j++)
+                if (rt_head_is(xk[j], "Power") && xk[j]->data.function.arg_count == 2
+                    && expr_eq(exps[i], xk[j]->data.function.args[1])) ex = true;
+            if (ex) expr_free(exps[i]); else exps[k++] = exps[i];
+        }
+        ne = k;
     }
     Expr** mprim_pexp = malloc((ne ? ne : 1) * sizeof(Expr*)); /* per-member class primitive (borrowed) */
 
@@ -1095,6 +1105,99 @@ static bool rt_dependent_log_rule(RtTower* T, Expr* x, bool wide, Expr** kern, E
  * demoted every verdict).  At most one transcendental number may enter the
  * constant field this way (Pi from Log[I], or one Log[2]), so the constants
  * stay algebraically independent; otherwise the dependent tower is kept. */
+/* For the first Exp level of T that the structure theorem finds DEPENDENT,
+ * w' = Sum k_j Dcoef_j over the lower Log/Exp levels, so
+ *     w = Sum_{exp j} k_j w_j + Sum_{log j} k_j Log[u_j] + c
+ * with c a constant.  When every k_j is an integer and c is an integer, E^w is
+ * no new monomial: set *kern = E^w and *val = E^c Prod (E^w_j)^k_j Prod u_j^k_j,
+ * built unevaluated (the evaluator would merge the product back into E^w).
+ * c is read exactly in the tower variables, where the lower kernels are
+ * independent symbols.  The case it closes: TrigToExp[E^Tanh[1 + u]] carries
+ * E^(-r^2/(1 + r^2)) and E^(1/(1 + r^2)) over r = E^(-1 - u), whose exponents
+ * differ by exactly 1, and E^(2 + 2 u) beside E^u.  A non-integer k_j makes E^w
+ * algebraic over the lower field (out of scope); a non-integer c would bring in
+ * a constant E^c whose relations to other powers of E rational arithmetic does
+ * not see.  False when no such rule is found. */
+static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) {
+    *kern = NULL; *val = NULL;
+    size_t n = T->n;
+    if (n < 2) return false;
+    Expr** vv = malloc((n + 1) * sizeof(Expr*));
+    vv[0] = expr_copy(x);
+    for (size_t j = 0; j < n; j++) vv[j + 1] = expr_copy(T->t[j]);
+    Expr* vars = expr_new_function(expr_new_symbol("List"), vv, n + 1);
+    free(vv);
+    Expr** gens = malloc(n * sizeof(Expr*));
+    size_t* gi = malloc(n * sizeof(size_t));
+    size_t ng = 0;
+    bool found = false;
+    for (size_t i2 = 0; i2 < n && !found; i2++) {
+        if (T->kind[i2] != RT_LOG && T->kind[i2] != RT_EXP) continue;
+        if (ng > 0 && T->kind[i2] == RT_EXP) {
+            bool failed = false;
+            Expr* co = risch_rational_span(T->Dcoef[i2], gens, ng, vars, &failed);
+            bool okk = co && !failed && co->type == EXPR_FUNCTION && co->data.function.arg_count == ng;
+            for (size_t k = 0; okk && k < ng; k++)
+                if (co->data.function.args[k]->type != EXPR_INTEGER) okk = false;
+            if (okk) {
+                /* c = w - Sum k_j (w_j or t_j), in the tower variables */
+                Expr** tm = malloc((ng + 1) * sizeof(Expr*));
+                size_t nt = 0;
+                tm[nt++] = rt_subst_kernels(T->arg[i2], T);
+                for (size_t k = 0; k < ng; k++) {
+                    int64_t kj = co->data.function.args[k]->data.integer;
+                    if (!kj) continue;
+                    size_t j = gi[k];
+                    Expr* wj = T->kind[j] == RT_EXP ? rt_subst_kernels(T->arg[j], T) : expr_copy(T->t[j]);
+                    tm[nt++] = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(-kj), wj }, 2);
+                }
+                Expr* c = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Plus"), tm, nt)));
+                free(tm);
+                if (c && c->type == EXPR_INTEGER) {
+                    Expr** pf = malloc((ng + 1) * sizeof(Expr*));
+                    size_t np = 0;
+                    if (c->data.integer != 0)
+                        pf[np++] = expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_new_symbol("E"), expr_new_integer(c->data.integer) }, 2);
+                    for (size_t k = 0; k < ng; k++) {
+                        int64_t kj = co->data.function.args[k]->data.integer;
+                        if (!kj) continue;
+                        size_t j = gi[k];
+                        Expr* b = T->kind[j] == RT_EXP ? expr_copy(T->kernel[j]) : expr_copy(T->arg[j]);
+                        pf[np++] = expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ b, expr_new_integer(kj) }, 2);
+                    }
+                    /* the integrand's own spelling of E^w: when the class primitive
+                     * was re-spelled (E^(2 u)/(1 + E^(2 u)) for E^u/(E^-u + E^u)),
+                     * the collected exponent is a multiplicity-1 member of level i2,
+                     * and it is that spelling the rebuild must exclude and map */
+                    Expr* kw = T->kernel[i2];
+                    for (size_t m = 0; m < T->nm; m++)
+                        if (T->mprim[m] == (long)i2 && T->mmult[m] == 1 && T->mval[m]
+                            && rt_head_is(T->mval[m], "Power") && T->mval[m]->data.function.arg_count == 2
+                            && expr_eq(T->mval[m]->data.function.args[0], T->t[i2])) {   /* a simple t^1 member */
+                            kw = NULL;
+                            *kern = expr_new_function(expr_new_symbol("Power"),
+                                (Expr*[]){ expr_new_symbol("E"), expr_copy(T->marg[m]) }, 2);
+                            break;
+                        }
+                    if (kw) *kern = expr_copy(kw);
+                    *val = np == 1 ? pf[0] : expr_new_function(expr_new_symbol("Times"), pf, np);
+                    free(pf);
+                    found = true;
+                }
+                if (c) expr_free(c);
+            }
+            if (co) expr_free(co);
+        }
+        gens[ng] = T->Dcoef[i2]; gi[ng] = i2; ng++;      /* borrowed */
+    }
+    free(gens); free(gi);
+    expr_free(vars);
+    return found;
+}
+
 static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool wide);
 /* The integrator's tower: a dependent logarithm is eliminated only when its
  * constant holds on the wide sample set (Log[1 + I x] = Log[x - I] + I Pi/2
@@ -1117,15 +1220,19 @@ static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool
     Expr** xk = NULL; Expr** xr = NULL; size_t nx = 0;
     for (int round = 0; round < 8; round++) {
         Expr* k = NULL; Expr* v = NULL;
-        if (!rt_dependent_log_rule(T, x, wide, &k, &v)) break;
+        if (!rt_dependent_log_rule(T, x, wide, &k, &v)
+            && !rt_dependent_exp_rule(T, x, &k, &v)) break;
         size_t nt2 = ntc;
         rt_tconst_atoms(v, x, tc, &nt2, 8);
+        if (getenv("MATHILDA_RDE_CERT_DEBUG")) { char* ks = expr_to_string(k); char* vs = expr_to_string(v);   /* trace */
+            fprintf(stderr, "[rt-elim] %.200s -> %.200s (atoms %zu)\n", ks, vs, nt2); free(ks); free(vs); }
         if (nt2 > 1) { expr_free(k); expr_free(v); break; }
         xk = realloc(xk, (nx + 1) * sizeof(Expr*));
         xr = realloc(xr, (nx + 1) * sizeof(Expr*));
         xk[nx] = k; xr[nx] = v; nx++;
         RtTower T2;
         bool ok2 = rt_tower_build_core(f, x, &T2, min_n, xk, xr, nx);
+        if (!ok2 && getenv("MATHILDA_RDE_CERT_DEBUG")) fprintf(stderr, "[rt-elim] rebuild failed\n");   /* trace */
         if (!ok2) { rt_tower_free(&T2); nx--; expr_free(xk[nx]); expr_free(xr[nx]); break; }
         ntc = nt2;
         rt_tower_free(T);

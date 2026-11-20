@@ -2658,6 +2658,48 @@ real reconstruction, which is cosmetic (119~s of \code{Simplify} after a 0.4~s a
 And an answer from the recursive tower case, verified exactly in the tower variables
 against $\mathrm{TrigToExp}[f]$, is no longer checked a second time against $f$.
 
+\section*{T16. Dependent exponentials as members (step 4)}
+\addcontentsline{toc}{section}{T16. Dependent exponentials}
+\label{sec:T16}
+
+The builder's commensurability classes make $e^{w}$ a member $t^{k}$ of a level
+$e^{a}$ when $w/a\in\Q$. The structure theorem (Bronstein Thm~9.3.x) finds every other
+dependence: $e^{w}$ is algebraic over the field below iff $w'$ lies in the $\Q$-span of
+the lower levels' $\eta_j$ (the $a_j'$ and $u_j'/u_j$). Until now a dependence found that
+way only flagged the tower, and every certificate over it was demoted. $\tanh u$ hits this
+at once. With $s=e^{2u}$, \code{TrigToExp} gives $e^{\tanh u}=e^{s/(1+s)}\,e^{-1/(1+s)}$,
+and the two exponents differ by $1$. $\tanh(1+u)$ gives $e^{2+2u}$ beside $e^{u}$.
+
+\begin{proposition}\label{prop:T16}
+Let $K$ be the tower below a level $\theta=e^{w}$, with exponential levels $t_j=e^{a_j}$ and
+logarithmic levels $t_j=\log u_j$. Suppose $w'=\sum_j k_j\eta_j$ with every $k_j\in\Z$.
+Then $c=w-\sum_{\exp}k_ja_j-\sum_{\log}k_j\log u_j$ is a constant. If $c\in\Z$, then
+\[ e^{w}=e^{c}\prod_{\exp}t_j^{k_j}\prod_{\log}u_j^{k_j}\in C(e)\,K, \]
+so $K(\theta)=K$ over the constant field $C(e)$, and replacing $\theta$ by that value is an
+isomorphism of differential fields.
+\end{proposition}
+\begin{proof}
+$c'=w'-\sum k_j\eta_j=0$, so $c$ is constant. Exponentiating gives the identity, and every
+factor on the right lies in $K$ or is the constant $e^{c}$. Both sides have the same
+logarithmic derivative, so the substitution respects $D$.
+\end{proof}
+\noindent Two restrictions keep the certificate exact:
+\begin{itemize}
+\item \emph{$c\in\Z$ only.} The constant $e$ is transcendental (Lindemann), so $C(e)$ is a
+  purely transcendental extension of $C$, a parameter field as in E4, and powers of the
+  symbol \code{E} are arithmetic in $\Q[e,e^{-1}]$. A rational $c$ would bring in
+  $e^{1/2}$ and $e^{1/3}$, which rational arithmetic treats as unrelated atoms. A
+  Gaussian $c$ would bring in $e^{i}$ and $e^{2i}$, which it treats the same way. In both
+  cases a ``no'' over atoms treated as independent proves nothing about their
+  specialisation.
+\item \emph{No second transcendental constant.} The rebuild stops when $e$ would join
+  another constant of the integrand ($\pi$, or a dependent logarithm's $\log\kappa+2\pi i m$).
+  Whether $e$ and $\pi$ are algebraically independent is open.
+\end{itemize}
+The constant $c$ is computed exactly in the tower variables, where the lower kernels are
+independent symbols. The rebuild uses the integrand's own spelling of $e^{w}$, which may
+differ from the class primitive's.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

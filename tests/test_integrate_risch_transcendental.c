@@ -1875,9 +1875,31 @@ static void test_campaign_step4_verify_cost(void) {
     for (size_t i = 0; i < sizeof F / sizeof F[0]; i++) {
         char buf[600];
         snprintf(buf, sizeof buf,
-            "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[D[%s, u], u]], 30, $Aborted]", F[i]);
+            /* 90 s: each case takes 0.1-4 s, and took 120 s or more before the fix;
+             * a 30 s budget timed out once under a ctest -j8 load (2026-11-20) */
+            "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[D[%s, u], u]], 90, $Aborted]", F[i]);
         assert_eval_eq(buf, "True", 0);
     }
+}
+
+/* Step 4: a dependent exponential is a member, not a level.  TrigToExp of
+ * E^Tanh[u] carries E^(E^u/(E^-u + E^u)) and E^(-1/(1 + E^(2u))), whose
+ * exponents differ by exactly 1, and Tanh[1 + u] brings E^(2 + 2u) beside
+ * E^u.  The structure theorem found the dependence and demoted every "no"; the
+ * dependent kernel is now E^c Prod t_j^k_j (integer k_j and c) and the tower
+ * is rebuilt without it (rt_dependent_exp_rule). */
+static void test_campaign_step4_dependent_exp(void) {
+    /* non-elementary: e^tanh is an Ei-type integral; E^2 Ei[2u] */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tanh[u], u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tanh[1 + u], u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(2 + 2 u)/u + E^u, u]]", "False", 0);
+    /* elementary: E^u - (2/E) ArcTan[E^(1 + u)], and two derivatives */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u Tanh[1 + u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[u E^Tanh[u], u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[E^Tanh[1 + u]/(1 + Tanh[1 + u]), u], u]]", "True", 0);
+    /* E beside Pi: their algebraic independence is open, so no certificate */
+    assert_eval_eq("Head[Quiet[Risch`ElementaryIntegralQ[Pi E^(2 + 2 u)/u + E^u, u]]]",
+                   "Risch`ElementaryIntegralQ", 0);
 }
 
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
@@ -1998,6 +2020,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_silent_declines);
     TEST(test_campaign_step4_tanh_groundwork);
     TEST(test_campaign_step4_verify_cost);
+    TEST(test_campaign_step4_dependent_exp);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
