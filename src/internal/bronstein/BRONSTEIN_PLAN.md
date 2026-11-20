@@ -1761,7 +1761,107 @@ is still deficient for every other caller (reproducer and table:
          ones, and so certify over them.
        - **Step 9:** the `.m` sites, through the C LimitedIntegrate.
 
-### Phase 5: the radical anywhere (largest; theory first)
+### Plan from the FriCAS comparison (2026-11-20)
+
+`benchmarks/BRONSTEIN_VS_FRICAS.md` (`make bench-integrate-vs-fricas`) compares, at
+v0.6641, Mathilda's Bronstein-family methods, ParallelMixedTower and the Automatic cascade
+with FriCAS 1.3.6 on benchmarks 256, 257 and 259 (2906 integrands). It counts proofs of
+non-elementarity as well as answers. The plan below is ordered by soundness first, then
+cheap work with a large yield, then the structural gaps. Each item names its evidence, and
+the measure that says it is done. Every item is gated by the hunts
+(`tools/bronstein_hunts/run.sh`) and closes with a rerun of the comparison.
+
+**C0. Soundness (first).**
+- **C0.1 Wrong answer from the PolyLog stage.** `Integrate[I x^2 Log[-I + Tan[2 x]], x]` is
+  wrong past the pole at `Pi/4`, and `Integrate[Log[-I + Tan[2 x]], x]` is off by `2 Pi I`
+  there (pre-existing; 259 `tani-rand-9`). The stage rewrites `Log[-I + Tan[2 x]]` as
+  logarithms of exponentials, an identity on one branch interval. Find the rewrite, keep only
+  identities valid everywhere (or add the piecewise-constant correction), and verify the
+  stage's answers by differentiation the way the Risch stages are.
+  *Done when* the shootout's WRONG list is empty on all three corpora.
+
+**C1. The cascade loses what its methods find (cheap, about 75 decisions).**
+- **C1.1 An `Inactive[Integrate]` rewrite hides Trager's certificate.** On 256 class A,
+  Automatic returns an inactive integral on 35 integrands that `Method -> "Trager"` proves
+  non-elementary (`x^3/Sqrt[2 + x^6]`, `1/Sqrt[-1 + x^6]`; families `trager-genus-hyper`,
+  `-random`, `-binomial-xk`, `-third-kind`). A stage that only rewrites (a substitution)
+  must let a later certificate stand, or itself run the decision on the rewritten integral
+  and report its "no". *Done when* Automatic decides at least what Trager does on class A
+  (364 -> 400).
+- **C1.2 DerivativeDivides ahead of Risch.** On 259, Automatic times out on 34 cases
+  RischTranscendental decides; profiled, DerivativeDivides (stage 12) used 57.7 of 60 s on
+  an integrand Risch closes in 25 ms. Bound it (a budget proportional to the integrand,
+  or a size gate), or run the transcendental decision first when the integrand is in its
+  scope (see `feedback_integrate_cascade_ordering` and the cascade-cost lessons). *Done
+  when* Automatic decides at least what RischTranscendental does on 259 (587 -> 616).
+- **C1.3 `Method -> "RischTranscendental"` returns unevaluated where the decision returns
+  True.** In 4 of 259's cases (`tanh-rand-27`, `tani-elem-30`, `gauss-elem-25`,
+  `gauss-elem-33`), `Risch`ElementaryIntegralQ` builds and verifies an antiderivative and
+  the integrator does not return it. The decision's Q should be the integrator's answer.
+
+**C2. The transcendental decision (RischTranscendental: 26 undecided, and 3 timeouts).**
+These are the uncertain paths behind 259's undecided cases. Each maps onto a campaign step.
+- **C2.1 Dependent monomials (13 cases; campaign step 8, extended).** The structure theorem
+  finds a dependency the tower cannot yet rewrite: composite exponentials with constant
+  offsets (`f12`, `gauss`) and logs with a non-integer relation. Generalise
+  `rt_dependent_exp_rule` / `rt_dependent_log_rule` from integer and Gaussian-integer
+  coefficients to rational ones (a radical member `t^(p/q)` is algebraic, so this needs the
+  algebraic base of C3; until then, mark it exactly).
+- **C2.2 The field integrator gives no verdict (10).** A decline without a mark is a silent
+  decline: find each exit (the hunts' `solo.py` names them) and mark it or decide it.
+- **C2.3 LimitedIntegrate (11: lower integral undecided 6; primitive bottom coefficient 5).**
+  These are campaign step 2 (the generalised new-log certificate, on the step-3a core) and
+  the step-3 follow-ups (li at `theta^0`, an exponential not directly below `theta`).
+- **C2.4 `base: reduced equation not polynomial` (5).** A CAS_FAILURE mark in principle
+  (`a, b, c` are polynomials by construction): find the inputs and the Together/Cancel that
+  leaves a denominator.
+- **C2.5 The 3 elementary cases FriCAS decides and no Mathilda method does**
+  (RischTranscendental / Automatic outcome): `tan-elem-26` (timeout / automatic timeout); `gauss-elem-33` (uneval / automatic timeout); `f12-elem-7` (uneval / automatic timeout). Profile, then fix.
+- *Done when* 259's RischTranscendental undecided count is under 10, with no false "no".
+
+**C3. The radical at the bottom (class B: Mathilda 54%, FriCAS 93%; the largest gap).**
+Bronstein's scope check gives two causes, which cover 78 of the 81 undecided B/M cases:
+- **C3.1 Transcendental Risch over an algebraic base (47 cases, 36 decided by FriCAS).** This
+  is Phase 5 below (`brDField`, Risch over `k_j(y)(t...)`, the Risch DE on a curve over a
+  tower). This comparison moves it up: it is now the largest single completeness gap
+  against FriCAS. Start with the shapes the corpus shows most, `E^x/Sqrt[1 + x^3] + ...`
+  and `Log[x]/Sqrt[2 + x^3] + ...`: one exponential or logarithm over `Q(x)(y)`.
+- **C3.2 Several independent radicals, a non-cyclic Kummer extension (31 cases, all
+  decided by FriCAS).** `Sqrt[1 + x^2]` beside `Sqrt[1 + x^3]`, and `Sqrt[1 + x^3]` beside
+  `Sqrt[3 + x^4]`. Two routes:
+  - (a) a primitive element `y = Sum c_i y_i` and its minimal polynomial, then Trager's
+    general algorithm on `K(x)[y]/(F)`;
+  - (b) integrate component by component, when the integrand is a sum of terms each in one
+    radical's field (the corpus's perturbations are exactly that: `f1(y1) + f2(y2)`). A sum
+    is elementary iff each component is, when the radicals are independent (a Kummer
+    argument, to be written up as a theory note).
+
+  (b) first: it is cheap and covers the whole corpus family.
+- *Done when* class B decided is at least 80%. PMT's 6 B-class certificates are a floor
+  that C3 must cover.
+
+**C4. Speed: the slow tail (50 cases over 1 s; FriCAS has none).**
+- Bronstein on radical-on-top families: `cM` (27 cases over 1 s), `logxy` 16, `constk` 12,
+  `tower2` 12, `lccontent` 10, `expcube` 10. Profile one of each
+  (`MATHILDA_INTEGRATE_PROFILE`, `MATHILDA_RT_PROFILE`, then `sample` on the `.m` stages),
+  and fix the dominant stage. Earlier finding: profile the `.m` phase before the C kernel.
+- RischTranscendental on Tan and Tanh towers (8 cases): the single-kernel stages
+  (`rt_exp_poly_case`, `rt_frac_case`; the step-4 remainder).
+- Trager: 3 timeouts in 257 class A.
+- *Done when* no case both systems close takes Mathilda over 5 s, and the 90th percentile
+  is within 2x of FriCAS's.
+
+**C5. Lower priority.**
+- **Special-function answers for non-elementary integrands.** FriCAS closes 21 cases of 259
+  that no Mathilda method closes: polylog, Ei and erf answers where Mathilda certifies
+  non-elementarity. That is presentation, not decision; Automatic's special stages are the
+  place.
+- **PMT's role.** It decides 19 cases the dedicated methods do not (2 of them FriCAS misses
+  too), and is otherwise a slower subset. Keep it as the fallback after the dedicated
+  methods, and re-measure once C2 and C3 land; its unique cases are a checklist for them.
+- **Report FriCAS's false "no"** on Gaussian offsets upstream (11 cases in `gauss-elem`).
+
+### Phase 5: the radical anywhere (largest; theory first; C3.1 above moves it up)
 
 - **A differential-field record** (`brDField`, a new `DField.m`) abstracts the base field. Its
   operations are arithmetic, D, zero test, RDE, ParamRDE, LimitedIntegrate, parametric log-derivative

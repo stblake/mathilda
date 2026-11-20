@@ -1,12 +1,13 @@
 # Integration shootout: 257-compact-integrals (2026-11-20)
 
-1000 cases, timeout 30 s per run, wall 1.9 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+1000 cases, timeout 30 s per run, wall 5.2 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
 | run | R rational (100) | T transcendental (150) | A algebraic (300) | M mixed (radical on top) (250) | B radical at the bottom (200) | all |
 |---|---|---|---|---|---|---|
 | Mathilda:Automatic | 100% (100) | 100% (150) | 100% (300) | 100% (250) | 100% (200) | 100% (1000) |
+| Mathilda:ParallelMixedTower | 0% (0) | 99% (148) | 99% (297) | 96% (239) | 87% (174) | 86% (858) |
 | Mathilda:RischTranscendental | 100% (100) | 97% (146) | · | · | · | 98% (246) |
 | Mathilda:Trager | · | · | 99% (297) | · | · | 99% (297) |
 | Mathilda:Bronstein | · | · | · | 99% (248) | 100% (200) | 100% (448) |
@@ -17,9 +18,10 @@
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
 | Mathilda:Automatic | 1000 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.03 |
+| Mathilda:ParallelMixedTower | 858 | 0 | 0 | 104 | 38 | 0 | 0 | 0 | 0.10 |
 | Mathilda:RischTranscendental | 246 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0.01 |
-| Mathilda:Trager | 297 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0.11 |
-| Mathilda:Bronstein | 448 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0.15 |
+| Mathilda:Trager | 297 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0.10 |
+| Mathilda:Bronstein | 448 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0.14 |
 | FriCAS | 899 | 0 | 0 | 0 | 4 | 36 | 22 | 39 | 0.09 |
 
 ## Closed by family (Mathilda = best of its methods)

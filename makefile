@@ -1054,7 +1054,7 @@ bench-integrate-compact:
 # Gaussian offsets, LimitedIntegrate, Liouvillian primitives, dependent logs and
 # exponentials) against FriCAS (tools/integration_shootout/gen_campaign.m).
 # `make bench-integrate-vs-fricas` then writes the decision-completeness and speed
-# comparison benchmarks/BRONSTEIN_VS_FRICAS.md from the saved runs of 256,
+# comparison benchmarks/BRONSTEIN_VS_FRICAS.md (and .pdf, with pandoc) from the saved runs of 256,
 # 257 and 259.
 bench-integrate-decision:
 	python3 tools/integration_shootout/shootout.py --bench benchmarks/259-transcendental-decision \
@@ -1062,6 +1062,11 @@ bench-integrate-decision:
 
 bench-integrate-vs-fricas:
 	python3 tools/integration_shootout/compare_fricas.py
+	@if command -v pandoc >/dev/null 2>&1; then \
+	    pandoc benchmarks/BRONSTEIN_VS_FRICAS.md -o benchmarks/BRONSTEIN_VS_FRICAS.pdf --pdf-engine=xelatex \
+	        -V documentclass=extarticle -V fontsize=9pt -V geometry:a4paper,landscape,margin=1.5cm \
+	        -V mainfont=Helvetica -V monofont=Menlo -V colorlinks=true && echo "wrote benchmarks/BRONSTEIN_VS_FRICAS.pdf"; \
+	else echo "pandoc not installed: PDF skipped"; fi
 
 # `make check-feyncalc` — FeynCalc's ~14k upstream unit tests, run UNMODIFIED
 # under a minimal MUnit`Test (tools/feyncalc/run_fc_tests.m), one process per

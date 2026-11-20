@@ -99,43 +99,72 @@ def quant(xs, q):
     return xs[k]
 
 
+# The runs compared, in column order: (label, outcome function).  "Mathilda" is
+# the Bronstein-family method of the case's class; ParallelMixedTower is the
+# Risch-Norman (parallel) heuristic over a mixed tower, run on every class.
+RUNS = [("Mathilda", lambda r: mathilda_outcome(r, DEDICATED[r["class"]])),
+        ("PMT", lambda r: mathilda_outcome(r, "ParallelMixedTower")),
+        ("Automatic", lambda r: mathilda_outcome(r, "Automatic")),
+        ("FriCAS", fricas_outcome)]
+MATHILDA_RUNS = ("Mathilda", "PMT", "Automatic")
+RUN_LABEL = {"Mathilda": "Mathilda:{dedicated}", "PMT": "Mathilda:ParallelMixedTower",
+             "Automatic": "Mathilda:Automatic", "FriCAS": "FriCAS"}
+
+
+def outcomes(r):
+    """{run: outcome} for the runs present on r; a "no" on an elementary-by-
+    construction case is "falseno" (it decides nothing)."""
+    out = {}
+    for name, fn in RUNS:
+        o, _ = fn(r)
+        if o == "no" and r["expect"] == "elem":
+            o = "falseno"
+        if o:
+            out[name] = o
+    return out
+
+
+def run_class(r, name):
+    lab = RUN_LABEL[name].format(dedicated=DEDICATED[r["class"]])
+    return r["runs"].get(lab)
+
+
 def tally(rows, key):
-    """key(row) -> group; returns {group: Counter of outcomes per system}"""
+    """key(row) -> group; returns {group: Counter of outcomes per run}"""
     out = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
     for r in rows:
         g = key(r)
-        m, _ = mathilda_outcome(r, DEDICATED[r["class"]])
-        a, _ = mathilda_outcome(r, "Automatic")
-        f, _ = fricas_outcome(r)
-        for sysname, o in (("Mathilda", m), ("Automatic", a), ("FriCAS", f)):
-            if o == "no" and r["expect"] == "elem":
-                o = "falseno"            # a false "no" is not a decision
-            if o:
-                out[g][sysname][o] += 1
-                out[g][sysname]["n"] += 1
+        for name, o in outcomes(r).items():
+            out[g][name][o] += 1
+            out[g][name]["n"] += 1
     return out
 
 
 def table(groups, order, label):
-    L = [f"| {label} | n | Mathilda closed | Mathilda decided | FriCAS closed | FriCAS decided | "
-         "Automatic closed | Automatic decided |", "|---|---|---|---|---|---|---|---|"]
+    names = [n for n, _ in RUNS]
+    L = [f"| {label} | n | " + " | ".join(f"{s} closed | {s} decided" for s in names) + " |",
+         "|---|---|" + "---|---|" * len(names)]
     tot = collections.defaultdict(collections.Counter)
     for g in order:
         c = groups[g]
-        n = c["FriCAS"]["n"] or c["Mathilda"]["n"]
+        n = max(c[s]["n"] for s in names)
         cells = []
-        for s in ("Mathilda", "FriCAS", "Automatic"):
+        for s in names:
+            if not c[s]["n"]:
+                cells += ["·", "·"]
+                continue
             cl = c[s]["closed"]
             de = cl + c[s]["no"]
             cells += [f"{pct(cl, n)} ({cl})", f"{pct(de, n)} ({de})"]
             tot[s]["closed"] += cl
             tot[s]["dec"] += de
+            tot[s]["present"] = 1
         tot["n"]["n"] += n
         L.append(f"| {g} | {n} | " + " | ".join(cells) + " |")
     n = tot["n"]["n"]
     L.append(f"| **all** | {n} | " + " | ".join(
-        f"**{pct(tot[s][k], n)} ({tot[s][k]})**" for s in ("Mathilda", "FriCAS", "Automatic")
-        for k in ("closed", "dec")) + " |")
+        (f"**{pct(tot[s][k], n)} ({tot[s][k]})**" if tot[s]["present"] else "·")
+        for s in names for k in ("closed", "dec")) + " |")
     return L
 
 
@@ -144,32 +173,30 @@ def soundness(rows):
     verified elementary answer (a special-function answer is consistent)."""
     out = []
     for r in rows:
-        m, _ = mathilda_outcome(r, DEDICATED[r["class"]])
-        a, _ = mathilda_outcome(r, "Automatic")
-        f, _ = fricas_outcome(r)
-        m_elem = "ELEM" in (r["runs"].get(f"Mathilda:{DEDICATED[r['class']]}"), r["runs"].get("Mathilda:Automatic"))
-        f_elem = r["runs"].get("FriCAS") == "ELEM"
-        if r["expect"] == "elem":
-            if m == "no" or a == "no":
-                out.append(("Mathilda false no (expect elem)", r))
-            if f == "no":
-                out.append(("FriCAS false no (expect elem)", r))
-        else:
-            if (m == "no" or a == "no") and f_elem:
-                out.append(("Mathilda no vs FriCAS verified elementary answer", r))
-            if f == "no" and m_elem:
-                out.append(("FriCAS no vs Mathilda verified elementary answer", r))
-        if m == "wrong" or a == "wrong":
-            out.append(("Mathilda answer fails its derivative check", r))
-        if f == "wrong":
-            out.append(("FriCAS answer fails its derivative check", r))
+        oc = {}
+        for name, fn in RUNS:
+            oc[name], _ = fn(r)
+        elem = {name: run_class(r, name) == "ELEM" for name, _ in RUNS}
+        m_elem = any(elem[n] for n in MATHILDA_RUNS)
+        for name in MATHILDA_RUNS + ("FriCAS",):
+            who = "Mathilda" if name == "Mathilda" else name
+            if oc.get(name) == "no":
+                if r["expect"] == "elem":
+                    out.append((f"{who} false no (expect elem)", r))
+                elif name == "FriCAS" and m_elem:
+                    out.append(("FriCAS no vs Mathilda verified elementary answer", r))
+                elif name != "FriCAS" and elem["FriCAS"]:
+                    out.append((f"{who} no vs FriCAS verified elementary answer", r))
+            if oc.get(name) == "wrong":
+                out.append((f"{who} answer fails its derivative check", r))
     return out
 
 
-def speed(rows):
+def speed(rows, name="Mathilda"):
+    fn = dict(RUNS)[name]
     pairs = []
     for r in rows:
-        m, tm = mathilda_outcome(r, DEDICATED[r["class"]])
+        m, tm = fn(r)
         f, tf = fricas_outcome(r)
         if m == "closed" and f == "closed" and tm and tf:
             pairs.append((max(tm, 1e-4), max(tf, 1e-3)))
@@ -180,23 +207,38 @@ def speed(rows):
     faster = sum(1 for a, b in pairs if a < b)
     return {"n": len(pairs), "m_med": statistics.median(ms), "f_med": statistics.median(fs),
             "m_p90": quant(ms, 0.9), "f_p90": quant(fs, 0.9), "gm": gm, "m_faster": faster,
-            "m_tot": sum(ms), "f_tot": sum(fs)}
+            "m_tot": sum(ms), "f_tot": sum(fs), "m_slow": sum(1 for x in ms if x > 1)}
+
+
+def decided_by(r, name):
+    o = outcomes(r).get(name)
+    return o in ("closed", "no")
 
 
 def only_one(rows):
-    """cases decided by one system only, by family"""
+    """cases decided by Mathilda (any method) and not FriCAS, and the reverse,
+    by family"""
     c = collections.Counter()
     for r in rows:
-        m, _ = mathilda_outcome(r, DEDICATED[r["class"]])
-        a, _ = mathilda_outcome(r, "Automatic")
-        f, _ = fricas_outcome(r)
-        ok = ("closed",) if r["expect"] == "elem" else ("closed", "no")   # a false "no" decides nothing
-        md = m in ok or a in ok
-        fd = f in ok
+        md = any(decided_by(r, n) for n in MATHILDA_RUNS)
+        fd = decided_by(r, "FriCAS")
         if md and not fd:
             c[("Mathilda only", r["family"])] += 1
         if fd and not md:
             c[("FriCAS only", r["family"])] += 1
+    return c
+
+
+def method_overlap(rows):
+    """within Mathilda: decided by PMT and not the Bronstein-family method, and
+    the reverse, by class and family"""
+    c = collections.Counter()
+    for r in rows:
+        pd, dd = decided_by(r, "PMT"), decided_by(r, "Mathilda")
+        if pd and not dd:
+            c[("PMT only", r["class"], r["family"])] += 1
+        if dd and not pd:
+            c[("Bronstein-family only", r["class"], r["family"])] += 1
     return c
 
 
@@ -252,13 +294,15 @@ def main():
             L.append("")
             L += table(by_fam, sorted(by_fam), "family")
             L.append("")
-        sp = speed(rows)
-        if sp:
-            L.append(f"Speed on the {sp['n']} cases both close: median {fmt_t(sp['m_med'])} (Mathilda) vs "
-                     f"{fmt_t(sp['f_med'])} (FriCAS); 90th percentile {fmt_t(sp['m_p90'])} vs {fmt_t(sp['f_p90'])}; "
-                     f"total {fmt_t(sp['m_tot'])} vs {fmt_t(sp['f_tot'])}; geometric mean of the ratio "
-                     f"Mathilda/FriCAS {sp['gm']:.2f}; Mathilda faster on {sp['m_faster']} of {sp['n']}.")
-            L.append("")
+        for nm in ("Mathilda", "PMT"):
+            sp = speed(rows, nm)
+            if sp:
+                L.append(f"Speed, {nm} against FriCAS, on the {sp['n']} cases both close: median "
+                         f"{fmt_t(sp['m_med'])} vs {fmt_t(sp['f_med'])}; 90th percentile {fmt_t(sp['m_p90'])} vs "
+                         f"{fmt_t(sp['f_p90'])}; total {fmt_t(sp['m_tot'])} vs {fmt_t(sp['f_tot'])}; geometric mean "
+                         f"of the ratio {nm}/FriCAS {sp['gm']:.2f}; {nm} faster on {sp['m_faster']} of {sp['n']}; "
+                         f"{sp['m_slow']} over 1 s.")
+                L.append("")
         prev = [d for d in dates if d < date]
         if not a.no_progress and prev:
             old = load(bench, prev[-1])
@@ -281,7 +325,9 @@ def main():
             "- **decided**: closed, or proved non-elementary (Mathilda's certificate; FriCAS's unevaluated `integral`). "
             "A \"no\" on a case that is elementary by construction is a false \"no\" (Soundness below) and is not counted.",
             "- **Mathilda** is the Bronstein-family method of each class: RischTranscendental for R and T, Trager "
-            "for A, Bronstein for M and B. **Automatic** is the full cascade.", ""]
+            "for A, Bronstein for M and B. **PMT** is ParallelMixedTower, the parallel Risch (Risch-Norman) "
+            "heuristic over a mixed tower, run on every class; its \"no\" is a certificate too. **Automatic** is "
+            "the full cascade.", ""]
     # the hand-written analysis kept beside the report (interpretation the tables
     # cannot carry: a check of the other system's failures, the timer floor, gaps)
     pre = os.path.splitext(a.out)[0] + ".preface.md"
@@ -300,7 +346,7 @@ def main():
             head.append(f"| {k} | {v} |")
         head.append("")
         shown = collections.Counter()
-        for k, r in sorted(S, key=lambda kr: ("wrong" in kr[0], kr[0])):   # false "no" first
+        for k, r in sorted(S, key=lambda kr: ("fails" in kr[0], kr[0])):   # false "no" first
             shown[k] += 1
             if shown[k] <= 12:
                 head.append(f"- {k}: `{r['id']}` `{r['f'][:140]}`")
@@ -323,6 +369,14 @@ def main():
     for f in rows_oo:
         if oo[("Mathilda only", f)] or oo[("FriCAS only", f)]:
             tail.append(f"| {f} | {oo[('Mathilda only', f)]} | {oo[('FriCAS only', f)]} |")
+    tail.append("")
+    mo = method_overlap(allrows)
+    tail += ["## Within Mathilda: ParallelMixedTower against the Bronstein-family method (all corpora)", "",
+             "Decided by one of the two only, by class and family.", "",
+             "| class | family | PMT only | Bronstein-family only |", "|---|---|---|---|"]
+    keys = sorted({(k[1], k[2]) for k in mo}, key=lambda cf: (-(mo[("PMT only",) + cf] + mo[("Bronstein-family only",) + cf]), cf))
+    for cl, fam in keys:
+        tail.append(f"| {cl} | {fam} | {mo[('PMT only', cl, fam)]} | {mo[('Bronstein-family only', cl, fam)]} |")
     tail.append("")
     fe = fricas_errors(allrows)
     tail += ["## Why FriCAS did not decide (all corpora)", "", "| reason | cases |", "|---|---|"]
