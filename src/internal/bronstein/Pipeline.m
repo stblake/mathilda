@@ -448,4 +448,18 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
      noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at
      complex points).  The trigonometric presentation is checked on its own. *)
   If[!brFailQ[r] && gt =!= f, r = brTrigPresentation[f, r, x]];
+  (* several independent square roots: the Galois eigencomponents, each one
+     radical (brKummerSplit; C3.2) *)
+  If[brFailQ[r] && brFailTag[r] === {"Incomplete", "several radicals generating a non-cyclic Kummer extension (not one simple radical)"},
+    With[{k = brKummerSplitIntegrate[g, x]}, If[k =!= None, Return[k, Module]]]];
   If[brFailQ[r], failToList[r], r]];
+
+brKummerSplitIntegrate::usage = "brKummerSplitIntegrate[f, x] integrates f component by component (brKummerSplit): the sum of the components' antiderivatives when every one has one; {\"not elementary\", ...} as soon as one component is certified non-elementary (then so is f: the component is a combination of Galois conjugates of f); {\"implementation incomplete\", ...} when a component is undecided; None when f does not split.";
+brKummerSplitIntegrate[f_, x_Symbol] := Module[{comps = brKummerSplit[f, x], rs, bad},
+  If[comps === None, Return[None]];
+  rs = BronsteinIntegrate[#, x] & /@ comps;
+  bad = SelectFirst[rs, MatchQ[#, {"not elementary", _}] &, None];
+  If[bad =!= None, Return[{"not elementary", "a Galois component (independent square roots): " <> bad[[2]]}]];
+  bad = SelectFirst[rs, ListQ, None];
+  If[bad =!= None, Return[{"implementation incomplete", "a Galois component (independent square roots): " <> ToString[bad[[2]]]}]];
+  Total[rs]];

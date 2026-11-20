@@ -2058,6 +2058,39 @@ writes it back into the kernels and tests $D Q-f$ with \code{PossibleZeroQ}, or
 (\S\ref{sec:T10}) checks the exact identity $D_K Q=F$ in $K$. Both are positive
 evidence; an unevaluated or undecided sub-step is never read as a proof (v0.6589).
 
+\section*{E8. Several independent square roots: the Galois components (\code{brKummerSplit})}
+\addcontentsline{toc}{section}{E8. Independent square roots}
+\label{sec:E8}
+
+Let $K$ be a differential field (the tower over $\C(x)$), $b_1,\dots,b_m\in K$ whose
+square roots generate a Kummer extension $L=K(y_1,\dots,y_m)$, $y_i^2=b_i$, of the full
+degree $2^m$ (the classes of the $b_i$ in $K^*/K^{*2}$ are independent; constants are
+ignored, as the constant field is algebraically closed). This is the case the single-radical
+front end refuses (\emph{non-cyclic Kummer extension}), and FriCAS decides.
+
+\begin{proposition}\label{prop:E8}
+For $e\in\{0,1\}^m$ let $f_e=2^{-m}\sum_{\sigma}\chi_e(\sigma)\,\sigma(f)$, where $\sigma$
+runs over the sign changes $y_i\mapsto\pm y_i$ and $\chi_e(\sigma)=\prod_i\sigma_i^{e_i}$.
+Then $f=\sum_e f_e$, $f_e=c_e\prod_i y_i^{e_i}$ with $c_e\in K$, and $f$ has an elementary
+integral over $L$ if and only if every $f_e$ has one.
+\end{proposition}
+\begin{proof}
+Each $\sigma$ is a $K$-automorphism of $L$ and commutes with $D$, since
+$Dy_i=\frac{Db_i}{2b_i}y_i$ and $D(-y_i)=\frac{Db_i}{2b_i}(-y_i)$. The $f_e$ are the
+projections onto the characters of $G=\{\pm1\}^m$, so $f=\sum_e f_e$ and
+$f_e/\prod y_i^{e_i}$ is $G$-invariant, an element of $K$. If $f=Dv_0+\sum c_jDv_j/v_j$
+with $v_j$ in $L(\bar c)$ (Liouville; $\bar c$ algebraic constants, which do not change the
+Kummer degree since $\C$ is algebraically closed), then
+$\sigma f=D\sigma v_0+\sum c_jD\sigma v_j/\sigma v_j$, so each $\sigma f$, and each linear
+combination $f_e$, has an elementary integral. The converse is the sum.
+\end{proof}
+\noindent Each $f_e$ lies in $K(\prod_i y_i^{e_i})$, one radical: the product of the user's
+radicals is a cyclic compositum, which the single-radical front end presents pointwise
+(E6b). So a certificate for any component is one for $f$, and the components' antiderivatives
+add up. In code, $c_e$ is read off without rationalising: $Y_i$ are symbols,
+$f_e/\prod Y_i^{e_i}$ is multiplied above and below by the conjugates of its denominator,
+and the invariant polynomials that result have only even powers, $Y_i^{2k}\mapsto b_i^k$.
+
 \section*{T1. Parameters are constants, never unknowns (v0.6586, v0.6589, v0.6591, v0.6592)}
 \addcontentsline{toc}{section}{T1. Parameters}
 
@@ -2789,6 +2822,37 @@ while a verified antiderivative still decides \emph{elementary}. A nested decisi
 scope carries the taint out to the enclosing one, whose computation uses its result.
 Over a real tower an $\arctan$ of $x$ is not collected, so its presence keeps the step
 undecided.
+
+\section*{T19. Dependent exponentials read downwards, and the RootSum log part (FriCAS comparison C2)}
+\addcontentsline{toc}{section}{T19. Dependent exponentials downwards; RootSum log part}
+\label{sec:T19}
+
+\paragraph{Reading a relation downwards.} T16 makes a dependent exponential $e^{w}$ a member when
+$w=\sum k_jw_j+c$ with integer $k_j$. The tower orders its levels by containment, not by
+size, so $e^{1+2x}$ can sit below $e^{x}$; the relation found at $e^x$ is then
+$x=\frac12(1+2x)-\frac12$, with no integer form, though $e^{1+2x}=e\,(e^x)^2$ has one. When
+the coefficients are rational and one exponential generator $j_0$ has $k_{j_0}=\pm1/m$ with
+every $mk_i$ an integer, the relation is inverted and level $j_0$ eliminated:
+$w_{j_0}=\pm m\,w+\sum_{i\ne j_0}(\mp mk_i)w_i+c'$, with $c'$ computed exactly and required to
+be a Gaussian integer, as in T16. Successive eliminations compose: a rule's value may hold a
+kernel eliminated later, and it is rewritten structurally (the values are built unevaluated).
+
+\paragraph{The RootSum log part over an $x$-dependent derivation.} Over $t=e^{x^2}$ the residue
+resultant of $x\,t/(1+t+t^3)$ has an irreducible cubic factor; its log part
+$L=\sum_{\rho}\rho\log S(\rho,t)$ is a RootSum, and the exponential top needs $D L$ to read the
+Laurent leftover $P=h+r-DL$. $DL$ is a RootSum of a rational function of the root whose
+denominator has degree 2 in it, and it was left unevaluated. \code{RootSum[p, R]} with $R$
+rational in the root is now summed exactly: $R\equiv N\,u/g \bmod p$ (from $uD+vp=g$, $g$ free
+of the root) is a polynomial $\sum_k c_kz^k$ of degree below $\deg p$, and
+$\sum_\rho R(\rho)=\sum_k c_ks_k$ with the power sums $s_k$ from Newton's identities.
+
+\paragraph{A lower-layer false certificate.} The first version of the inversion reached a base
+Risch DE $q'+iq=E(iu-1)/(Z^4(u+i))$ whose right side is the constant $iE/Z^4$; Cancel left it
+uncancelled, because the Gaussian field path rejected the numeric constant $E$ and the fallback
+treated $i$ as a free variable, and the base solver certified a false ``no''. Cancel and
+Together now abstract numeric transcendental constants ($E$, $\pi$, $\log 2$) as fresh symbols
+for the Gaussian reduction: an identity in independent indeterminates holds for all values, so
+the reduction cannot be wrong. Algebraic numbers are not abstracted.
 
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}

@@ -60,11 +60,32 @@ static void test_qi_battery(void) {
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x] + I], x][[1]]", "\"not elementary\"");
 }
 
+/* C3.2: several independent square roots, split into Galois eigencomponents
+ * (brKummerSplit); a component's certificate is one for the whole, the
+ * components' answers add up. */
+static void test_kummer_split(void) {
+    BR_EQ("BronsteinIntegrate[E^x Sqrt[x] + Sqrt[1 + x] Log[x], x][[1]]", "\"not elementary\"");
+    BR_EQ("BronsteinIntegrate[E^x/Sqrt[1 + x^3] + Log[x]/Sqrt[2 + x^4], x][[1]]", "\"not elementary\"");
+    BR_TRUE("With[{f = D[Sqrt[x] Log[x] + Sqrt[1 + x^2] E^x, x]}, With[{F = BronsteinIntegrate[f, x]}, "
+            "!ListQ[F] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]]");
+    /* dependent radicals (Sqrt[4 x] = 2 Sqrt[x]) are not split */
+    BR_TRUE("brKummerSplit[Sqrt[x] E^x + Sqrt[4 x] Log[x], x] === None");
+    /* the components: one per Galois character, in the user's radicals */
+    BR_TRUE("Sort[brKummerSplit[Sqrt[x] E^x + Sqrt[1 + x] Log[x], x]] === Sort[{E^x Sqrt[x], Sqrt[1 + x] Log[x]}]");
+    BR_TRUE("Together[Total[brKummerSplit[(Sqrt[x] + Sqrt[1 + x])^2 E^x, x]] - (Sqrt[x] + Sqrt[1 + x])^2 E^x] === 0");
+    /* the Kummer group: independent square roots give 2^m, dependent ones fewer */
+    BR_EQ("brKummerOrder[{{x, 1/2}, {1 + x, 1/2}}, {x}]", "4");
+    BR_EQ("brKummerOrder[{{x, 1/2}, {4 x, 1/2}}, {x}]", "2");
+    BR_TRUE("brKummerSplitIntegrate[Sqrt[x] + Sqrt[1 + x], x] =!= None");
+    BR_TRUE("brKummerSplitIntegrate[Sqrt[x] E^x, x] === None");
+}
+
 int main(void) {
     br_init();
     test_qi_primitives();
     test_qi_scope();
     test_qi_battery();
+    test_kummer_split();
     BR_DONE("bronstein_phase4_tests");
     return 0;
 }

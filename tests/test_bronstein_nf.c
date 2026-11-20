@@ -174,8 +174,10 @@ static void test_nf_radical_content(void) {
        = eps (D Y/2 + (3/4 + 1/Sqrt[2])/Y): a nonzero holomorphic differential
        on a genus-1 curve, not elementary */
     BR_EQ("First[BronsteinIntegrate[1/(Sqrt[2 x] Sqrt[x^3 + 1]) + Sqrt[x^3 + 1]/Sqrt[x], x]]", "\"not elementary\"");
-    /* genuinely two radicals (a sum): still Incomplete */
-    BR_EQ("First[BronsteinIntegrate[1/Sqrt[2 x] + Sqrt[x^3 + 1], x]]", "\"implementation incomplete\"");
+    /* genuinely two radicals (a sum): the Galois components (C3.2, E8) --
+       Sqrt[x^3 + 1] alone is a holomorphic differential on a genus-1 curve,
+       not elementary, so neither is the sum (it was Incomplete) */
+    BR_EQ("First[BronsteinIntegrate[1/Sqrt[2 x] + Sqrt[x^3 + 1], x]]", "\"not elementary\"");
 }
 
 /* Adversarial review of 4.3b (2026-11-15): 14 false certificates from the

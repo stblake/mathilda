@@ -338,5 +338,19 @@ bronsteinPaperExamples = {
   "before" -> "2 (reported squarefree)", "note" -> "z^2 - 2^(1/3) z^3 splits as -z^2 (-1 + 2^(1/3) z) without Extension"|>,
 <|"id" -> "G-core-9", "gap" -> "Together over Q(constants)", "theory" -> "-", "version" -> "v0.6624",
   "kind" -> "Expr", "f" -> Hold[Head[Together[3/(2 z^3 + 2 Sqrt[2] z^6) + (-3 + 3 z + z^2 - 3 Sqrt[2] z^3 - 2 Sqrt[2] z^5)/(2 z^3 - 2 z^4 + 4 Sqrt[2] z^6 - 2 Sqrt[2] z^7 + 4 z^9)]]], "expect" -> Times,
-  "before" -> "Plus (left uncombined)", "note" -> "the common denominator needs Sqrt[2]^2 = 2; combined without Extension"|>
+  "before" -> "Plus (left uncombined)", "note" -> "the common denominator needs Sqrt[2]^2 = 2; combined without Extension"|>,
+(* FriCAS comparison (2026-11-20): independent square roots (C3.2, E8) and the
+   transcendental decision's dependent exponentials and RootSum log part (C2, T19) *)
+<|"id" -> "E8-1", "gap" -> "independent square roots", "theory" -> "E8", "version" -> "v0.6645",
+  "kind" -> "Integrate", "f" -> Hold[E^x Sqrt[x] + Sqrt[1 + x] Log[x]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "Galois components E^x Sqrt[x] (not elementary) and Sqrt[1 + x] Log[x]"|>,
+<|"id" -> "E8-2", "gap" -> "independent square roots", "theory" -> "E8", "version" -> "v0.6645",
+  "kind" -> "Integrate", "f" -> Hold[1/Sqrt[x] + (E^x x)/Sqrt[1 + x^2] + E^x Sqrt[1 + x^2] + Log[x]/(2 Sqrt[x])], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "Sqrt[x] Log[x] + E^x Sqrt[1 + x^2], one component per radical"|>,
+<|"id" -> "T19-1", "gap" -> "dependent exponentials read downwards", "theory" -> "T19", "version" -> "v0.6644",
+  "kind" -> "EIQ", "f" -> Hold[E^(1 + 2 x)/(1 + E^x)], "expect" -> True,
+  "before" -> "undecided (dependent monomials)", "note" -> "E^(1 + 2 x) = E (E^x)^2, the tower had it below E^x"|>,
+<|"id" -> "T19-2", "gap" -> "RootSum log part over E^(x^2)", "theory" -> "T19", "version" -> "v0.6644",
+  "kind" -> "EIQ", "f" -> Hold[x E^(x^2)/(1 + E^(x^2) + E^(3 x^2))], "expect" -> True,
+  "before" -> "undecided (field integrator gave no verdict)", "note" -> "the derivative of the RootSum log part, summed (RootSum of a rational body)"|>
 };

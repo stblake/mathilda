@@ -62,7 +62,6 @@ static const char* const certificates[] = {
 
 static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
-    "Sqrt[Log[x]] + Sqrt[Log[x] + 1]",                                               /* compositum */
     "Log[x] E^(x Sqrt[x^3 + 1])",                                                    /* Shape B, curve monomial over a tower */
     NULL
 };
@@ -99,6 +98,12 @@ static void test_certificates(void) {
           "{\"not elementary\", \"resultant criterion ([B] Prop 2.9): R(z) has non-constant coefficients\"}");
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x]], x]",
           "{\"not elementary\", \"no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18)\"}");
+}
+
+/* two independent square roots, split into Galois components (C3.2): each
+ * Sqrt of a log is non-elementary, so the sum is (it was "incomplete") */
+static void test_kummer_components(void) {
+    BR_EQ("First[BronsteinIntegrate[Sqrt[Log[x]] + Sqrt[Log[x] + 1], x]]", "\"not elementary\"");
 }
 
 static void test_declines(void) {
@@ -262,6 +267,7 @@ int main(void) {
     test_closes();
     test_certificates();
     test_declines();
+    test_kummer_components();
     test_messages_and_glue();
     test_pipeline_routines();
     test_random_derivatives();
