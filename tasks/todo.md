@@ -1955,4 +1955,4 @@ Out of scope, documented:
 - ReplacePart's positional forms (3 and 4 arguments) on a LinkedList.
 - Index 0 rules on a LinkedList.
 
-Next is phase 5: Compile[] lowering and auto-compilation.
+Phase 5 is done (v0.6634): Compile[] lowering, the undo log, and auto-compiled Do/While/For over global lists. LINKED_LIST_DESIGN.md §8 describes what was built.
