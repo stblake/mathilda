@@ -80,6 +80,15 @@ typedef struct {
 
 /* ---- Tower construction & structural operations (defined in risch_tower.c) - */
 
+/* The constant e^i as a symbol (rt_dependent_exp_rule): a Gaussian-integer
+ * offset c = a + b i of a dependent exponential gives E^a Z^b with Z this
+ * symbol.  E and E^I are algebraically independent (Lindemann-Weierstrass:
+ * 1 and i are linearly independent over Q), so Z is a parameter. */
+#define RT_EI_SYMBOL "Risch`Private`rtEI"
+/* The back-substitution of a tower answer (owned List): t_i -> kernel_i for
+ * every level, and RT_EI_SYMBOL -> E^I. */
+Expr* rt_tower_back_rules(const RtTower* T);
+
 /* Build the ordered differential tower of f over C(x): collect every x-dependent
  * kernel, order innermost-first by structural containment, assign tower variables
  * and derivation coefficients, and verify the structure-theorem triangularity.

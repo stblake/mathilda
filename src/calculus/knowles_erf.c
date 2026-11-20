@@ -416,12 +416,7 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
             Q = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"), (Expr*[]){ Q, zl }, 2));
         }
         if (Q) {                                             /* tower vars -> kernels */
-            Expr** br = malloc((T.n ? T.n : 1) * sizeof(Expr*));
-            for (size_t i = 0; i < T.n; i++)
-                br[i] = expr_new_function(mk_sym("Rule"),
-                    (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
-            Expr* bl = expr_new_function(mk_sym("List"), br, T.n);
-            free(br);
+            Expr* bl = rt_tower_back_rules(&T);
             Q = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"), (Expr*[]){ Q, bl }, 2));
         }
         if (Q && rt_free_of_head(Q, "Integrate") && rt_verify_antideriv(Q, f, x))

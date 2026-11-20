@@ -1897,6 +1897,15 @@ static void test_campaign_step4_dependent_exp(void) {
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u Tanh[1 + u], u]]", "True", 0);
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[u E^Tanh[u], u], u]]", "True", 0);
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[E^Tanh[1 + u]/(1 + Tanh[1 + u]), u], u]]", "True", 0);
+    /* over k(i): E^(I (1 + u)) = Z E^(I u), Z the symbol for E^I (E and E^I
+       are independent, Lindemann-Weierstrass).  E^(I u) Tan[1 + u] is the
+       rational -(E^(2 I) s^2 - 1)/(E^(2 I) s^2 + 1) in s = E^(I u): True.  Its
+       TrigToExp spells E^(-I) as E^(I u - I (1 + u)); a level of that, beside
+       Z, made a false "no" while the rule was written. */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(I u) Tan[1 + u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(I u)/(1 + E^(I (1 + u))), u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(I (1 + u))/u + E^(I u), u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^I E^(I u)/(u + I), u]]", "False", 0);
     /* E beside Pi: their algebraic independence is open, so no certificate */
     assert_eval_eq("Head[Quiet[Risch`ElementaryIntegralQ[Pi E^(2 + 2 u)/u + E^u, u]]]",
                    "Risch`ElementaryIntegralQ", 0);

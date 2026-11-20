@@ -728,13 +728,7 @@ bool rt_answer_verified(Expr* r, Expr* f, Expr* x) {
 /* Q (a field-integrator answer in the tower variables) written back in the
  * kernels t_i -> kernel_i, then checked by PossibleZeroQ[D[Q, x] - f]. */
 static bool rt_tower_answer_verified(Expr* Q, RtTower* T, Expr* f, Expr* x) {
-    Expr** rs = malloc((T->n ? T->n : 1) * sizeof(Expr*));
-    for (size_t i = 0; i < T->n; i++)
-        rs[i] = expr_new_function(expr_new_symbol("Rule"),
-            (Expr*[]){ expr_copy(T->t[i]), expr_copy(T->kernel[i]) }, 2);
-    Expr* rules = expr_new_function(expr_new_symbol("List"), rs, T->n);
-    free(rs);
-    Expr* back = rt_eval2("ReplaceAll", expr_copy(Q), rules);
+    Expr* back = rt_eval2("ReplaceAll", expr_copy(Q), rt_tower_back_rules(T));
     bool ok = back && rt_answer_verified(back, f, x);
     if (back) expr_free(back);
     return ok;

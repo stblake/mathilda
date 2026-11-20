@@ -2685,13 +2685,25 @@ logarithmic derivative, so the substitution respects $D$.
 \end{proof}
 \noindent Two restrictions keep the certificate exact:
 \begin{itemize}
-\item \emph{$c\in\Z$ only.} The constant $e$ is transcendental (Lindemann), so $C(e)$ is a
-  purely transcendental extension of $C$, a parameter field as in E4, and powers of the
-  symbol \code{E} are arithmetic in $\Q[e,e^{-1}]$. A rational $c$ would bring in
-  $e^{1/2}$ and $e^{1/3}$, which rational arithmetic treats as unrelated atoms. A
-  Gaussian $c$ would bring in $e^{i}$ and $e^{2i}$, which it treats the same way. In both
-  cases a ``no'' over atoms treated as independent proves nothing about their
-  specialisation.
+\item \emph{$c\in\Z[i]$ only.} By Lindemann--Weierstrass, $e^{\alpha_1},\dots,e^{\alpha_n}$
+  are algebraically independent for algebraic $\alpha_j$ linearly independent over $\Q$.
+  So $e$ and $e^{i}$ are algebraically independent, and $C(e,e^{i})$ is a purely
+  transcendental extension of $C$, a parameter field as in E4. For $c=a+bi$ the value
+  carries $e^{a}Z^{b}$, where $Z$ is a symbol for $e^{i}$ and every power is exact
+  polynomial arithmetic in $e^{\pm1},Z^{\pm1}$. Left as atoms, $e^{i}$ and $e^{2i}$ are
+  unrelated to rational arithmetic. A rational $c$ would bring in $e^{1/2}$ and
+  $e^{1/3}$, which have the same problem. A ``no'' over atoms treated as independent
+  proves nothing about their specialisation.
+\item \emph{Every spelling of such a constant becomes $e^{a}Z^{b}$.} The substitution
+  into the tower maps any $e^{w}$ with $w$ constant and equal to $a+bi$ to $e^{a}Z^{b}$.
+  Here constant means $Dw=0$, not only $x$-free: \code{TrigToExp} spells $e^{-i}$ as
+  $e^{iu-i(1+u)}$. The collector does not make such an exponential a level. While the
+  rule was being written, it did, and that level of derivative $0$ sat beside $Z$ as an
+  independent constant: their relation $tZ=1$ went unseen, and the decision certified
+  the elementary $\int e^{iu}\tan(1+u)\,du$ non-elementary. Any other constant $e^{c}$
+  in the integrand (a non-integer real $c$) stops the rebuild.
+\item \emph{An answer is written back with $Z\mapsto e^{i}$}
+  (\code{rt\_tower\_back\_rules}), so the symbol never leaves the tower.
 \item \emph{No second transcendental constant.} The rebuild stops when $e$ would join
   another constant of the integrand ($\pi$, or a dependent logarithm's $\log\kappa+2\pi i m$).
   Whether $e$ and $\pi$ are algebraically independent is open.

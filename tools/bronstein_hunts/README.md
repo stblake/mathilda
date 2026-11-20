@@ -18,6 +18,8 @@ certificate**, the one outcome that must never happen.
 | `dephunt.m` | dependent logarithms (`Log[-u]` beside `Log[u]`) |
 | `rdehunt.m` | `Risch`RischDECertified` on `g = D[y] + f y` |
 | `primhunt.m`, `primhunt2.m` | Liouvillian primitives (Erf, Erfi, Erfc, Ei, li) |
+| `tanhhunt.m`, `tanihunt.m`, `multitanhunt.m` | Tanh, tan over Q(i), several tangents |
+| `gausshunt.m` | Gaussian exponent offsets (`E^(I (1 + u))` beside `E^(I u)`), constants spelled with u |
 
 The primhunt oracle: a `False` is wrong only when every Liouvillian kernel of `F`
 also occurs in `D[F]`. `D[2 ExpIntegralEi[u]] = 2 E^u/u`, so `False` is right there.

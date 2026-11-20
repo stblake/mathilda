@@ -135,6 +135,7 @@ Expr* rt_powers_to_exp(Expr* e, Expr* x) {
 }
 /* Collect (as owned copies, deduplicated) the exponents of every E^w / Exp[w]
  * kernel of `e` whose exponent depends on x. */
+static bool rt_gauss_const_exponent(Expr* w, int64_t* a, int64_t* b);
 void rt_collect_exp_exponents(Expr* e, Expr* x,
                                      Expr*** arr, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
@@ -149,6 +150,12 @@ void rt_collect_exp_exponents(Expr* e, Expr* x,
         && e->data.function.args[0]->data.symbol.name == intern_symbol("E")
         && !rt_free_of_x(e->data.function.args[1], x))
         w = e->data.function.args[1];
+    /* a constant exponent spelled with x (I u - I (1 + u)) is no monomial:
+     * rt_subst_kernels maps E^(a + b i) to E^a Z^b */
+    if (w && rt_head_is(w, "Plus")) {
+        int64_t ga, gb;
+        if (rt_gauss_const_exponent(w, &ga, &gb)) w = NULL;
+    }
     if (w) {
         bool dup = false;
         for (size_t i = 0; i < *n; i++) if (expr_eq((*arr)[i], w)) { dup = true; break; }
@@ -940,7 +947,14 @@ static void rt_tconst_atoms(Expr* e, Expr* x, Expr** a, size_t* n, size_t cap) {
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
         const char* h = e->data.symbol.name;
-        if (h != intern_symbol("Pi") && h != intern_symbol("E") && h != intern_symbol("EulerGamma")
+        /* E^I (RT_EI_SYMBOL) is counted as E: the two are algebraically
+         * independent (Lindemann-Weierstrass), one group of known constants */
+        if (h == intern_symbol(RT_EI_SYMBOL)) {
+            static Expr* esym = NULL;              /* process-lifetime, never freed */
+            if (!esym) esym = expr_new_symbol("E");
+            e = esym;
+        }
+        else if (h != intern_symbol("Pi") && h != intern_symbol("E") && h != intern_symbol("EulerGamma")
             && h != intern_symbol("Catalan")) return;
     } else if (e->type != EXPR_FUNCTION) return;
     else if (rt_head_is(e, "Power") && e->data.function.arg_count == 2
@@ -1115,9 +1129,13 @@ static bool rt_dependent_log_rule(RtTower* T, Expr* x, bool wide, Expr** kern, E
  * independent symbols.  The case it closes: TrigToExp[E^Tanh[1 + u]] carries
  * E^(-r^2/(1 + r^2)) and E^(1/(1 + r^2)) over r = E^(-1 - u), whose exponents
  * differ by exactly 1, and E^(2 + 2 u) beside E^u.  A non-integer k_j makes E^w
- * algebraic over the lower field (out of scope); a non-integer c would bring in
- * a constant E^c whose relations to other powers of E rational arithmetic does
- * not see.  False when no such rule is found. */
+ * algebraic over the lower field (out of scope).  A Gaussian-integer
+ * c = a + b i is E^a Z^b with Z the symbol RT_EI_SYMBOL for E^I: E and E^I are
+ * algebraically independent (Lindemann-Weierstrass), so both are parameters
+ * and their powers are exact polynomial arithmetic.  (Left as atoms, E^I and
+ * E^(2 I) are unrelated to Together.)  Any other c would bring in a constant
+ * whose relations rational arithmetic does not see (E^(1/2), E^(1/3)).
+ * False when no such rule is found. */
 static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) {
     *kern = NULL; *val = NULL;
     size_t n = T->n;
@@ -1154,12 +1172,27 @@ static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) 
                 }
                 Expr* c = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Plus"), tm, nt)));
                 free(tm);
-                if (c && c->type == EXPR_INTEGER) {
-                    Expr** pf = malloc((ng + 1) * sizeof(Expr*));
+                /* c = ca + cb i, Gaussian integer */
+                int64_t ca = 0, cb = 0;
+                bool gint = false;
+                if (c && c->type == EXPR_INTEGER) { ca = c->data.integer; gint = true; }
+                else if (c && rt_head_is(c, "Complex") && c->data.function.arg_count == 2
+                         && c->data.function.args[0]->type == EXPR_INTEGER
+                         && c->data.function.args[1]->type == EXPR_INTEGER) {
+                    ca = c->data.function.args[0]->data.integer;
+                    cb = c->data.function.args[1]->data.integer;
+                    gint = true;
+                }
+                if (gint) {
+                    Expr** pf = malloc((ng + 2) * sizeof(Expr*));
                     size_t np = 0;
-                    if (c->data.integer != 0)
+                    if (ca != 0)
                         pf[np++] = expr_new_function(expr_new_symbol("Power"),
-                            (Expr*[]){ expr_new_symbol("E"), expr_new_integer(c->data.integer) }, 2);
+                            (Expr*[]){ expr_new_symbol("E"), expr_new_integer(ca) }, 2);
+                    /* E^(cb i) = Z^cb, Z the symbol for E^I (RT_EI_SYMBOL) */
+                    if (cb != 0)
+                        pf[np++] = expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_new_symbol(RT_EI_SYMBOL), expr_new_integer(cb) }, 2);
                     for (size_t k = 0; k < ng; k++) {
                         int64_t kj = co->data.function.args[k]->data.integer;
                         if (!kj) continue;
@@ -1198,6 +1231,34 @@ static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) 
     return found;
 }
 
+/* True when e carries a constant E^c with c not an integer (E^I, E^(1/2)):
+ * a constant the symbol RT_EI_SYMBOL would be treated as independent of.
+ * Constant means D[c] = 0, not only x-free: TrigToExp[E^(I u) Tan[1 + u]]
+ * spells E^(-I) as E^(I u - I (1 + u)), and the tower made that a level of
+ * derivative 0 -- an independent "constant" t = E^(-I) beside Z = E^I, whose
+ * relation t Z = 1 went unseen: a false "no" (2026-11-20). */
+static bool rt_has_nonint_econst(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        Expr* w = e->data.function.args[1];
+        bool cst = rt_free_of_x(w, x);
+        if (!cst) {
+            Expr* dw = rt_eval1("Together", rt_eval2("D", expr_copy(w), expr_copy(x)));
+            cst = dw && rt_is_zero(dw);
+            if (dw) expr_free(dw);
+        }
+        if (cst) {
+            int64_t ga, gb;   /* a Gaussian integer maps to E^a Z^b (rt_subst_kernels) */
+            if (!rt_gauss_const_exponent(w, &ga, &gb)) return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_nonint_econst(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool wide);
 /* The integrator's tower: a dependent logarithm is eliminated only when its
  * constant holds on the wide sample set (Log[1 + I x] = Log[x - I] + I Pi/2
@@ -1224,6 +1285,9 @@ static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool
             && !rt_dependent_exp_rule(T, x, &k, &v)) break;
         size_t nt2 = ntc;
         rt_tconst_atoms(v, x, tc, &nt2, 8);
+        /* Z = E^I next to a literal E^I (or E^(1/2)) of the integrand would be
+         * treated as independent of a constant it is a power of */
+        if (!rt_free_of_head(v, RT_EI_SYMBOL) && rt_has_nonint_econst(f, x)) { expr_free(k); expr_free(v); break; }
         if (getenv("MATHILDA_RDE_CERT_DEBUG")) { char* ks = expr_to_string(k); char* vs = expr_to_string(v);   /* trace */
             fprintf(stderr, "[rt-elim] %.200s -> %.200s (atoms %zu)\n", ks, vs, nt2); free(ks); free(vs); }
         if (nt2 > 1) { expr_free(k); expr_free(v); break; }
@@ -1242,6 +1306,18 @@ static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool
     for (size_t i = 0; i < nx; i++) { expr_free(xk[i]); expr_free(xr[i]); }
     free(xk); free(xr);
     return true;
+}
+Expr* rt_tower_back_rules(const RtTower* T) {
+    Expr** rs = malloc((T->n + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < T->n; i++)
+        rs[i] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(T->t[i]), expr_copy(T->kernel[i]) }, 2);
+    rs[T->n] = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_new_symbol(RT_EI_SYMBOL),
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"),
+            expr_new_function(expr_new_symbol("Complex"), (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2) }, 2) }, 2);
+    Expr* l = expr_new_function(expr_new_symbol("List"), rs, T->n + 1);
+    free(rs);
+    return l;
 }
 /* Dt_i: the derivation of the tower variable t_i — Dcoef (log), Dcoef*t (exp),
  * or Dcoef*(t^2 + sigma) (tan, sigma = +-1).  Owned. */
@@ -1380,8 +1456,48 @@ Expr* rt_expand_exp_sums(Expr* e) {
  * aliased; because the kernels were collected from the very tree being
  * substituted, structural equality holds by construction.  Returns a
  * freshly-owned tree (caller frees). */
+/* When w (borrowed) is a constant exponent -- x-free, or a sum whose
+ * derivative is 0 (TrigToExp spells E^(-I) as E^(I u - I (1 + u))) -- equal to
+ * a Gaussian integer a + b i, set *a, *b and return true.  Expand decides it:
+ * a constant sum such as I u - I (1 + u) expands to its value. */
+static bool rt_gauss_const_exponent(Expr* w, int64_t* a, int64_t* b) {
+    Expr* we = rt_eval1("Expand", expr_copy(w));
+    if (!we) return false;
+    bool ok = false;
+    if (we->type == EXPR_INTEGER) { *a = we->data.integer; *b = 0; ok = true; }
+    else if (rt_head_is(we, "Complex") && we->data.function.arg_count == 2
+             && we->data.function.args[0]->type == EXPR_INTEGER
+             && we->data.function.args[1]->type == EXPR_INTEGER) {
+        *a = we->data.function.args[0]->data.integer;
+        *b = we->data.function.args[1]->data.integer;
+        ok = true;
+    }
+    expr_free(we);
+    return ok;
+}
+
 Expr* rt_subst_kernels(Expr* e, RtTower* T) {
     if (!e) return NULL;
+    /* a constant E^(a + b i), however spelled, is E^a Z^b with Z the symbol for
+     * E^I (RT_EI_SYMBOL): every spelling of the same constant becomes the same
+     * polynomial in E and Z, so a relation between them is an identity the
+     * arithmetic sees.  (Left alone, E^(I u - I (1 + u)) was a level of
+     * derivative 0 -- an independent "constant" beside Z = E^I.) */
+    if (e->type == EXPR_FUNCTION && rt_head_is(e, "Power") && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        Expr* w = e->data.function.args[1];
+        int64_t ga, gb;
+        if ((w->type == EXPR_FUNCTION && (rt_head_is(w, "Complex") || rt_head_is(w, "Plus")))
+            && rt_gauss_const_exponent(w, &ga, &gb) && gb != 0) {
+            Expr* zb = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol(RT_EI_SYMBOL), expr_new_integer(gb) }, 2);
+            if (ga == 0) return zb;
+            return expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_symbol("E"), expr_new_integer(ga) }, 2), zb }, 2);
+        }
+    }
     for (size_t m = 0; m < T->nlm; m++)               /* dependent Log member */
         if (expr_eq(e, T->lmk[m])) return expr_copy(T->lmv[m]);
     for (size_t i = 0; i < T->n; i++) {

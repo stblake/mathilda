@@ -1624,12 +1624,7 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
     }
     /* the integral itself, on positive evidence: D[Rs] == r in kernel form */
     if (ok) {
-        Expr** rs = malloc((T->n ? T->n : 1) * sizeof(Expr*));
-        for (size_t i = 0; i < T->n; i++)
-            rs[i] = expr_new_function(expr_new_symbol("Rule"),
-                (Expr*[]){ expr_copy(T->t[i]), expr_copy(T->kernel[i]) }, 2);
-        Expr* back = expr_new_function(expr_new_symbol("List"), rs, T->n);
-        free(rs);
+        Expr* back = rt_tower_back_rules(T);
         Expr* Rk = rt_eval2("ReplaceAll", expr_copy(Rs), expr_copy(back));
         Expr* rk = rt_eval2("ReplaceAll", expr_copy(r), back);
         Expr* dR = Rk ? rt_eval2("D", Rk, expr_copy(x)) : NULL;
@@ -2501,12 +2496,7 @@ static Expr* rt_recursive_tower_case_min(Expr* f, Expr* x, int min_n) {
                 bool tower_ok = rt_residual_zero(diff, Q, true);   /* consumes diff */
                 if (DQ) expr_free(DQ);
                 if (tower_ok) {
-                    Expr** back = malloc(T.n * sizeof(Expr*));
-                    for (size_t i = 0; i < T.n; i++)
-                        back[i] = expr_new_function(expr_new_symbol("Rule"),
-                            (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
-                    Expr* bl = expr_new_function(expr_new_symbol("List"), back, T.n);
-                    free(back);
+                    Expr* bl = rt_tower_back_rules(&T);
                     result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                         (Expr*[]){ Q, bl }, 2));                   /* adopts Q, bl */
                     if (result) result = rt_eval1("Cancel", result);
@@ -2527,12 +2517,7 @@ static Expr* rt_recursive_tower_case_min(Expr* f, Expr* x, int min_n) {
                      * rem's residues are all non-constant, so re-integrating it
                      * declines (r_s empty ⇒ NULL): a fixed point, no loop. */
                     if (result && rem_tower) {
-                        Expr** back2 = malloc(T.n * sizeof(Expr*));
-                        for (size_t i = 0; i < T.n; i++)
-                            back2[i] = expr_new_function(expr_new_symbol("Rule"),
-                                (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
-                        Expr* bl2 = expr_new_function(expr_new_symbol("List"), back2, T.n);
-                        free(back2);
+                        Expr* bl2 = rt_tower_back_rules(&T);
                         Expr* rem_k = rt_eval1("Cancel", rt_eval_own(
                             expr_new_function(expr_new_symbol("ReplaceAll"),
                                 (Expr*[]){ expr_copy(rem_tower), bl2 }, 2)));
@@ -2681,12 +2666,7 @@ static Expr* rde_solve_tower_core(Expr* f, Expr* g, Expr* x, Expr* extra,
     if (gs) expr_free(gs);
     Expr* y = NULL;
     if (q) {
-        Expr** back = malloc(T.n * sizeof(Expr*));
-        for (size_t i = 0; i < T.n; i++)
-            back[i] = expr_new_function(expr_new_symbol("Rule"),
-                (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
-        Expr* bl = expr_new_function(expr_new_symbol("List"), back, T.n);
-        free(back);
+        Expr* bl = rt_tower_back_rules(&T);
         y = rt_eval1("Cancel", rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
             (Expr*[]){ q, bl }, 2)));
     }

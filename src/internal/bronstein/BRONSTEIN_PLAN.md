@@ -1704,7 +1704,7 @@ is still deficient for every other caller (reproducer and table:
      hypertanh loop, cascade cost); v0.6631 the cost of checking an answer, with an exact
      exponential normal form in the zero test (§T15). Tanh 151/160 True, tan over Q(i)
      157/160. v0.6633: a dependent exponential becomes a tower member (§T16): E^Tanh[u]
-     decided. Left: a Gaussian exponent offset over k(i), the RDE over a Tanh lower field, a hypertangent top over a field with I,
+     decided. v0.6638: Gaussian offsets over k(i) (a symbol for E^I). Left: the RDE over a Tanh lower field, a hypertangent top over a field with I,
      LimitedIntegrate below the top. Next: steps 2, 4 (remaining), 5, 6 and 9.
 
 ### Phase 5: the radical anywhere (largest; theory first)
