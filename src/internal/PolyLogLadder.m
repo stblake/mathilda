@@ -305,21 +305,37 @@ PolyLogLadder`ExpLadder[n_, rho_, base_, x_] :=
 
 PolyLogLadder`TrigRun[f_, x_Symbol] := Module[
   {args, cs, c0, ratios, q, base, g, T, num, den, res = 0, nmax, Nn, poly, rem, roots, qq, h, cb, rs, F1, term, sub},
-  If[FreeQ[f, PolyLogLadder`TrigHeads], Return[$Failed]];
+  (* the kernels: trig/hyperbolic functions and exponentials E^(a x + b) of
+     affine arguments (Campaign D7: Tanh[1 + x], x E^(2 x)/(1 + E^x)); a
+     constant term b becomes the constant factor E^b (or E^(I b)) of a power
+     of T *)
+  If[FreeQ[f, PolyLogLadder`TrigHeads] && FreeQ[f, Power[E, z_] /; ! FreeQ[z, x]], Return[$Failed]];
   If[! FreeQ[f, Log | PolyLog], Return[$Failed]];
-  args = Union[Cases[f, PolyLogLadder`TrigHeads[u_] :> u, {0, Infinity}]];
-  If[! AllTrue[args, PolynomialQ[#, x] && Exponent[#, x] == 1 && Coefficient[#, x, 0] === 0 &], Return[$Failed]];
+  args = Union[Cases[f, PolyLogLadder`TrigHeads[u_] :> u, {0, Infinity}],
+    Cases[f, Power[E, z_] /; ! FreeQ[z, x] :> z, {0, Infinity}]];
+  If[! AllTrue[args, PolynomialQ[#, x] && Exponent[#, x] == 1 && FreeQ[Coefficient[#, x, 1], Complex] &], Return[$Failed]];
   (* an explicit polynomial weight in x: a pure trig rational belongs to Weierstrass *)
-  If[FreeQ[f /. PolyLogLadder`TrigHeads[_] -> 1, x], Return[$Failed]];
-  If[! FreeQ[f, Sin | Cos | Tan | Cot | Sec | Csc] && ! FreeQ[f, Sinh | Cosh | Tanh | Coth | Sech | Csch], Return[$Failed]];
+  If[FreeQ[f /. {PolyLogLadder`TrigHeads[_] -> 1, Power[E, z_] /; ! FreeQ[z, x] -> 1}, x], Return[$Failed]];
+  If[! FreeQ[f, Sin | Cos | Tan | Cot | Sec | Csc] &&
+     (! FreeQ[f, Sinh | Cosh | Tanh | Coth | Sech | Csch] || ! FreeQ[f, Power[E, z_] /; ! FreeQ[z, x]]), Return[$Failed]];
   cs = Coefficient[#, x, 1] & /@ args;
+  (* every argument a multiple of one affine form x + s (Tan[1 + x]^2):
+     integrate in y = x + s, so the kernel T has rational coefficients and
+     clean roots (with s kept as E^s factors the roots were square roots of
+     complex exponentials, Sqrt[-E^(-2 I)], whose branches did not verify) *)
+  With[{sh = Union[Simplify[Coefficient[#, x, 0]/Coefficient[#, x, 1]] & /@ args]},
+    If[Length[sh] === 1 && First[sh] =!= 0 && FreeQ[First[sh], x],
+      With[{y = Unique["PolyLogLadder`y"]},
+        With[{r = PolyLogLadder`TrigRun[Expand[f /. x -> y - First[sh]], y]},
+          Return[If[r === $Failed, $Failed, r /. y -> x + First[sh]], Module]]]]];
   c0 = First[cs];
   ratios = Simplify[cs/c0];
   If[! AllTrue[ratios, Head[#] === Integer || Head[#] === Rational &], Return[$Failed]];
   q = LCM @@ (Denominator /@ ratios);
   base = If[FreeQ[f, Sin | Cos | Tan | Cot | Sec | Csc], c0/q, I c0/q];
   T = Unique["PolyLogLadder`T"];
-  g = TrigToExp[f] /. Power[E, z_] /; ! FreeQ[z, x] :> T^Simplify[z/(base x)];
+  g = TrigToExp[f] /. Power[E, z_] /; ! FreeQ[z, x] :>
+    With[{ze = Expand[z]}, E^Coefficient[ze, x, 0] T^Simplify[Coefficient[ze, x, 1]/base]];
   If[! FreeQ[Cases[g, Power[E, z_] :> z, {0, Infinity}], x], Return[$Failed]];
   g = Together[g];
   num = Expand[Numerator[g]]; den = Expand[Denominator[g]];

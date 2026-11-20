@@ -323,6 +323,45 @@ static void test_log_trig_every_interval(void) {
              "!FreeQ[Integrate[x Log[2 Cos[x]], x], Log[2 Cos[x]]])", "True");
 }
 
+/* Campaign D7: the exponential ladder takes exponentials with no trig head
+ * (x E^(2 x)/(1 + E^x)) and affine kernel arguments (Tanh[1 + x], integrated
+ * in y = 1 + x), and Ei/Erf/li factors close by parts (integrate.c,
+ * integrate_specialbyparts_try). */
+static void test_exp_and_affine_routes(void) {
+    check_antideriv("x E^(2 x)/(1 + E^x)");
+    check_antideriv("x E^((5 x)/2)/(1 + E^x)");
+    check_antideriv("x^2 Tanh[1 + x]^2");
+    check_antideriv("I x^2 Tan[1 + x]^2");
+    check_antideriv("x E^x/(3 - E^x)");
+    check_definite_numeric("x E^(2 x)/(1 + E^x)", "-2", "3");
+    check_definite_numeric("x^2 Tanh[1 + x]^2", "-4", "3");
+    check_definite_numeric("x E^x/(E^x - 5)", "-1", "1");
+    check_definite_numeric("x/(2 + E^(2 x))", "-3", "3");
+    /* no polynomial weight: still the other stages' business */
+    check_eq("PolyLogLadder`TrigRun[E^x/(1 + E^x), x]", "$Failed");
+}
+
+static void test_special_by_parts(void) {
+    check_antideriv_pzq("E^x ExpIntegralEi[x]");
+    check_antideriv_pzq("Log[x] LogIntegral[x]");
+    check_antideriv_pzq("x Log[x] LogIntegral[x]");
+    check_antideriv_pzq("E^x x Erf[x]");
+    check_antideriv_pzq("x Erf[x^2]/E^x^2");
+    check_antideriv_pzq("ExpIntegralEi[x]/x^2");
+    /* LogByParts accepts on PossibleZeroQ when Simplify leaves Cosh/Sinh beside E^x */
+    check_antideriv_pzq("Log[1 + E^x] Tanh[x]^2");
+    /* DerivativeDivides writes ArcTanh[Tanh[x]] back as x (a continuous antiderivative) */
+    check_eq("Integrate[Tanh[x]^2, x]", "x - Tanh[x]");
+    check_eq("Integrate[Tan[x]^2, x]", "-x + Tan[x]");
+    check_eq("Integrate[Tan[x]^2, {x, 0, 1}]", "-1 + Tan[1]");
+    check_eq("Block[{u = 5}, Integrate[Coth[x]^2, x]]", "x - Coth[x]");
+    /* the exponential-only route is for the user's integrand only: through a
+     * substitution it gave cancelling PolyLogs and an open definite integral */
+    check_eq("Integrate[(1 + x)^(-1) - (x Log[x])/(1 + x)^2 + Log[x]/(1 + x), x]",
+             "-2 ArcTanh[1 + 2 x] - Log[x]/(1 + x) + Log[1 + x]");
+    check_eq("Integrate[Log[t]/(1 + t^2)^3, {t, 0, 1}]", "1/16 (-1 - 6 Catalan - 2 Pi)");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -338,6 +377,8 @@ int main(void) {
     TEST(test_log_quadratic_and_products);
     TEST(test_polylog_values);
     TEST(test_log_trig_every_interval);
+    TEST(test_exp_and_affine_routes);
+    TEST(test_special_by_parts);
 
     printf("All Integrate PolyLogLadder tests passed!\n");
     return 0;

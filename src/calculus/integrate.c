@@ -350,10 +350,41 @@ static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x);
  * descent on it: 13-16 s, unbounded by TimeConstraint, before the integral
  * reached the elliptic stage that closes it in 3 s. */
 static bool has_elliptic_sqrt_kernel(const Expr* f, const Expr* x);
+/* ArcTan[Tan[u]] -> u and its five relatives in a back-substituted answer
+ * (u = Tanh[x]: Int Tanh[x]^2 = ArcTanh[u] - u came back as ArcTanh[Tanh[x]] -
+ * Tanh[x]).  Each composition has derivative u' identically, so the rewrite
+ * changes the antiderivative by a locally constant amount only; it removes the
+ * sawtooth ArcTan[Tan[x]] (a jump at every Pi/2 + k Pi, wrong for Newton-Leibniz)
+ * and lets a by-parts residual V g'/g stay in the ladder's class (Campaign D7). */
+static Expr* dd_unwind_inverse_compositions(Expr* r) {
+    static const char* const pairs[][2] = {
+        { "ArcTan", "Tan" }, { "ArcTanh", "Tanh" }, { "ArcCot", "Cot" },
+        { "ArcCoth", "Coth" }, { "ArcTanh", "Coth" }, { "ArcCoth", "Tanh" } };
+    bool any = false;
+    for (size_t k = 0; k < sizeof(pairs) / sizeof(pairs[0]) && !any; k++)
+        if (result_contains_head(r, pairs[k][0])) any = true;
+    if (!any) return r;
+    /* a private pattern name: a string-built rule's u_ would see a user's u */
+    Expr* rules = parse_expression(
+        "{ArcTan[Tan[Integrate`DDu_]] :> Integrate`DDu, ArcTanh[Tanh[Integrate`DDu_]] :> Integrate`DDu, "
+        "ArcCot[Cot[Integrate`DDu_]] :> Integrate`DDu, ArcCoth[Coth[Integrate`DDu_]] :> Integrate`DDu, "
+        "ArcTanh[Coth[Integrate`DDu_]] :> Integrate`DDu, ArcCoth[Tanh[Integrate`DDu_]] :> Integrate`DDu}");
+    if (!rules) return r;
+    Expr* call = expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){ expr_copy(r), rules }, 2);
+    Expr* out = evaluate(call);
+    expr_free(call);
+    if (!out) return r;
+    expr_free(r);
+    return out;
+}
+
 static Expr* try_derivdivides(Expr* f, Expr* x) {
+    Expr* r;
     if (has_pseudoelliptic_radical(f, x) || has_elliptic_sqrt_kernel(f, x))
-        return integrate_derivdivides_try_cascade(f, x);
-    return integrate_derivdivides_full_cascade(f, x);
+        r = integrate_derivdivides_try_cascade(f, x);
+    else
+        r = integrate_derivdivides_full_cascade(f, x);
+    return r ? dd_unwind_inverse_compositions(r) : NULL;
 }
 
 /* Stage 1c: linear-radical substitution.  Recognises a rational function of x
@@ -858,7 +889,33 @@ static Expr* try_logbyparts(Expr* f, Expr* x) {
 static unsigned pll_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool pll_load_succeeded = false;
 
+static bool pll_has_head(const Expr* e, const char* name) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == intern_symbol(name))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (pll_has_head(e->data.function.args[i], name)) return true;
+    return false;
+}
+/* f has no Log/PolyLog and no trig/hyperbolic head: only the ladder's
+ * exponential-only route (Campaign D7) can take it. */
+static bool pll_exponential_only(const Expr* f) {
+    static const char* const heads[] = { "Log", "PolyLog", "Sin", "Cos", "Tan", "Cot", "Sec", "Csc",
+                                         "Sinh", "Cosh", "Tanh", "Coth", "Sech", "Csch" };
+    for (size_t k = 0; k < sizeof(heads) / sizeof(heads[0]); k++)
+        if (pll_has_head(f, heads[k])) return false;
+    return true;
+}
+
 static Expr* try_polylogladder(Expr* f, Expr* x) {
+    /* The exponential-only route answers the user's integrand, not a piece of
+     * another stage's reduction: a substitution x = E^u (u = Log[x]) turns a
+     * NON-elementary piece of an elementary integrand into u E^(2 u)/(1 + E^u)^2,
+     * and its dilogarithm answer made Linearity close Int (1/(1 + x) - x Log[x]/
+     * (1 + x)^2 + Log[x]/(1 + x)) with cancelling, uncombined PolyLogs (259
+     * prim-elem-3) and gave Int Log[t]/(1 + t^2)^3 a PolyLog[2, I/t] form whose
+     * limit at t = 0 failed (the definite integral stayed open). */
+    if (g_integrate_depth > 1 && pll_exponential_only(f)) return NULL;
     if (pll_load_gen != symtab_generation()) {
         pll_load_gen = symtab_generation();
         mth_msg_suppress_push();
@@ -3153,7 +3210,7 @@ typedef enum {
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_GRTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_TRAGER, IP_BRONSTEIN, IP_PMT,
-    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_NSTAGES
+    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_SPECIALBYPARTS, IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
@@ -3163,7 +3220,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
     "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
-    "19 RoachMeijerG", "08d RischEarly"
+    "19 RoachMeijerG", "08d RischEarly", "15b SpecialByParts"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -4140,6 +4197,10 @@ static Expr* builtin_integrate_body(Expr* res) {
              * Bessel-product antiderivative exists. */
             IP_STAGE(IP_BESSELHYPER,  try_besselhyper(effective_f, x));
             IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
+            /* an Ei/Erf/Erfi/Erfc/li factor by parts (Campaign D7): the Risch
+             * decision has no closed form for these, the by-parts residual is
+             * elementary and often closes with another special function */
+            IP_STAGE(IP_SPECIALBYPARTS, integrate_specialbyparts_try(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
              * cheaply rather than paying this stage's package load and search

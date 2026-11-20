@@ -19,4 +19,10 @@
 
 Expr* integrate_logbyparts_try(Expr* f, Expr* x);
 
+/* c S K with exactly one S in {ExpIntegralEi, Erf, Erfi, Erfc, LogIntegral} of
+ * an x-dependent argument and K free of special functions: INT S K = S V -
+ * INT V S', V = INT K elementary (INT E^x Ei[x] = E^x Ei[x] - Ei[2 x]).
+ * PossibleZeroQ-verified, or NULL. */
+Expr* integrate_specialbyparts_try(Expr* f, Expr* x);
+
 #endif /* MATHILDA_INTEGRATE_LOGBYPARTS_H */
