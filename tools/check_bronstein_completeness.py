@@ -100,7 +100,6 @@ BASELINE_C = {
     "base: identity gate",
     "base: reduced equation not polynomial",
     "tower: antidifferentiation D H = c",
-    "tower: hyperbolic-tangent top",
     # a theta^(>=1) coefficient whose integral carries an ArcTan over a tower
     # with a complex logarithm, and the derivative fold (ArcTan' = sum c_j t_j')
     # did not absorb it: the dilogarithm obstruction (Thm 5.6.1(ii)) is proved
@@ -118,10 +117,6 @@ BASELINE_C = {
     "LimitedIntegrate: lower integral undecided",
     # - an integral of the coefficient outside K + C t (degree >= 2 in t_L).
     "LimitedIntegrate: coefficient integral outside K + C t",
-    # Phase 2b F8/F13 (v0.6599): the field Risch DE over a lower field whose top
-    # is a hyperbolic tangent (sigma = -1, special part t^2 - 1 splits) is a
-    # scope decline; the hypertangent top runs rde_tower since v0.6601.
-    "RDE: lower field outside the recursive RDE (hyperbolic tangent)",
     # Phase 2b F9 (v0.6599): over algebraic constants the base RDE's polynomial
     # solve / SPDE zero tests are only as good as the normaliser; a failure there
     # is not a proof (a released false certificate: q' + (2 + Sqrt[2]) q = p).
@@ -145,9 +140,6 @@ BASELINE_C = {
     # a tower of several tangents needs the tangent structure theorem to prove
     # the monomials independent (Tan[2 x] = 2 Tan[x]/(1 - Tan[x]^2))
     "tower: more than one tangent",
-    # over k(i) t^2 + 1 splits (t - i, t + i): the hypertangent boxes assume it
-    # irreducible; the split case is the exponential-like two-factor special part
-    "tower: hypertangent top over a field containing I",
     # step 3c: a Liouvillian primitive level whose Int eta is elementary below it
     # (Erfc beside Erf, li[u] beside Ei[Log[u]]) is dependent, and one whose Int eta
     # is undecided is unproved; eliminating a dependent primitive from the tower
@@ -191,6 +183,13 @@ BASELINE_C = {
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
 # or an input outside the solver's scope, not a missing branch of the algorithm.
 CAS_FAILURE_MARKS = {
+    # every RtKind is dispatched to rde_tower since campaign step 4 (a Tanh level by
+    # rde_tower_mobius): rt_field_rde's fall-through is unreachable
+    "RDE: a lower field of no known kind",
+    "tower: a top of no known kind",
+    # Prop. T17 (campaign step 4): D theta/theta = 2 alpha Dt/(alpha^2 - t^2) is in k
+    # for a split tangent level; a reading with t left in it is a Together failure
+    "tower: split tangent top, Dtheta/theta not in k",
     # Step 0.3 of the C completeness campaign (v0.6603): defensive marks a hunt
     # over every constant field never reached; each is a state the mathematics rules out.
     # deg a = deg b >= 0 makes lc(a) nonzero; a zero reading is an uncanonical coefficient

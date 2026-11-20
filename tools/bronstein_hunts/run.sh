@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="${1:-$HERE/../../Mathilda}"
 OUT="${2:-$HERE/out}"
 mkdir -p "$OUT"
-HUNTS="hunt hunt2 hunt_exp f8hunt f9hunt2 f12hunt dephunt rdehunt primhunt primhunt2 tanhhunt tanihunt multitanhunt gausshunt"
+HUNTS="hunt hunt2 hunt_exp f8hunt f9hunt2 f12hunt dephunt rdehunt primhunt primhunt2 tanhhunt tanihunt multitanhunt gausshunt rdetanhunt"
 WRAP='SetAttributes[eiq, HoldAll]; eiq[f_, x_] := Module[{v}, WriteString["stderr", "CASE\n"]; v = Risch`ElementaryIntegralQ[f, x]; WriteString["stderr", "VERDICT ", If[Head[v] === Risch`ElementaryIntegralQ, "undec", ToString[v]], "\n"]; v];'
 for h in $HUNTS; do
   { echo "$WRAP"; sed 's/Risch`ElementaryIntegralQ\[/eiq[/g' "$HERE/$h.m"; } > "$OUT/blk_$h.m"

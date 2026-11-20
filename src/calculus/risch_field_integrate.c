@@ -2340,7 +2340,7 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
      * primitive stack on it; this dispatch was missed then) */
     if (L >= 1 && (T->kind[L - 1] == RT_LOG || T->kind[L - 1] == RT_EXP
                    || T->kind[L - 1] == RT_PRIM
-                   || (T->kind[L - 1] == RT_TAN && T->tsg[L - 1] == 1))) {
+                   || T->kind[L - 1] == RT_TAN)) {   /* Tanh (sigma = -1): rde_tower_mobius */
         Expr* fco = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(i), expr_copy(T->Dcoef[L]) }, 2));
         RdeCtx C = { T, L - 1, x, T->t[L - 1] };
@@ -2363,19 +2363,14 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         return NULL;
     }
 
-    /* The lower field's top monomial is a hyperbolic tangent (RT_TAN with
-     * sigma = -1) or a Liouvillian primitive, outside the recursive RDE's current
-     * scope (Gap 3; the hypertangent sigma = +1 top runs rde_tower since review
-     * F8, v0.6601): the field Risch DE was
-     * NOT solved here at all.  This is a SCOPE decline, NOT a theorem — so return
-     * NULL WITHOUT raising the non-elementary certificate, leaving
-     * ElementaryIntegralQ `undec` rather than a false `False`.  Previously an
-     * unconditional rt_dec_nonelem() here declared elementary integrands such as
-     * Sec[x]^2 E^Tan[x] (antiderivative E^Tan[x]) "provably non-elementary".
-     * See RISCH_AUDIT_A4.md Finding 2.  Marked, so the completeness gate counts
-     * it (review F8/F13: the missing piece is Bronstein §6.2's special
-     * denominator for a hypertangent t, and the §6.3 bound for delta(t) = 2). */
-    rde_cert_mark("RDE: lower field outside the recursive RDE (hyperbolic tangent)");
+    /* Every level kind is dispatched above -- a Tanh (sigma = -1) top runs
+     * rde_tower's Moebius change to an exponential since campaign step 4
+     * (rde_tower_mobius) -- so this is unreachable: a defensive SCOPE decline,
+     * never a theorem.  Returning NULL WITHOUT the non-elementary certificate
+     * keeps ElementaryIntegralQ `undec` rather than a false `False` (the
+     * unconditional rt_dec_nonelem() once here declared Sec[x]^2 E^Tan[x]
+     * non-elementary; RISCH_AUDIT_A4.md Finding 2). */
+    rde_cert_mark("RDE: a lower field of no known kind");
     return NULL;
 }
 

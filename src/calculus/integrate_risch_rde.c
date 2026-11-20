@@ -2664,6 +2664,90 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
  * NULL so the caller falls back to the bounded ansatz until later increments land.
  * Returns y (owned), or NULL.  Correct by construction: the returned y is checked
  * by the exact tower identity D_tower[y] + f y == g, so a reduction slip declines. */
+/* A tangent top whose special polynomial splits -- Tanh (t^2 - 1), or Tan over
+ * a field containing I (t^2 + 1 = (t - I)(t + I)) -- is an exponential in
+ * disguise (Bronstein, Symbolic Integration I, p. 166).  With alpha = 1 (Tanh)
+ * or I (Tan), theta = (alpha + t)/(alpha - t) has
+ *     D theta / theta = 2 alpha Dt / (alpha^2 - t^2) = a,  a in k,
+ * so theta is an exponential monomial over k (E^(2 v) for Tanh[v], E^(-2 I v)
+ * for Tan[v]) and k(t) = k(theta), t = alpha (theta - 1)/(theta + 1).  The
+ * Risch DE D y + f y = g over k(t) is the one over k(theta) after that
+ * substitution: an isomorphism of differential fields over k, so the
+ * exponential stack's answer maps back exactly, and its authoritative "no
+ * solution" is one here.  The tower is copied with level m replaced (levels
+ * 0..m only; the lower ones are shared, borrowed).  f, g borrowed; y owned. */
+static Expr* rde_tower_mobius(Expr* f, Expr* g, RdeCtx* C, Expr* alpha) {
+    RtTower* T = C->T;
+    long m = C->m;
+    Expr* t = T->t[m];
+    Expr* a2 = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(alpha), expr_new_integer(2) }, 2);
+    Expr* t2 = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2);
+    Expr* den = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ a2,
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), t2 }, 2) }, 2);
+    Expr* a = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_integer(2), expr_copy(alpha), rt_dt_i(T, (size_t)m),
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 4)));
+    if (!a || !rt_free_of_x(a, t)) {
+        if (a) expr_free(a);
+        rde_cert_mark("tower: split tangent top, Dtheta/theta not in k");
+        return NULL;
+    }
+    /* the copy: levels 0..m, level m the exponential theta */
+    size_t n = (size_t)m + 1;
+    RtTower T2 = *T;
+    T2.n = n;
+    T2.kind = malloc(n * sizeof(RtKind));
+    T2.t = malloc(n * sizeof(Expr*));
+    T2.Dcoef = malloc(n * sizeof(Expr*));
+    T2.tsg = malloc(n * sizeof(long));
+    T2.kernel = malloc(n * sizeof(Expr*));
+    T2.arg = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        T2.kind[i] = T->kind[i]; T2.t[i] = T->t[i]; T2.Dcoef[i] = T->Dcoef[i];
+        T2.tsg[i] = T->tsg[i]; T2.kernel[i] = T->kernel[i]; T2.arg[i] = T->arg[i];
+    }
+    char nm[48];
+    snprintf(nm, sizeof nm, "Risch`Private`rmMob%ld", m);
+    Expr* th = expr_new_symbol(nm);
+    /* theta's exponent, 2 v / alpha: 2 v for Tanh[v], -2 I v for Tan[v]
+     * (D of it is a; recorded for completeness, the RDE reads only Dcoef) */
+    Expr* argm = rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_integer(2), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(alpha), expr_new_integer(-1) }, 2), expr_copy(T->arg[m]) }, 3));
+    T2.kind[m] = RT_EXP; T2.tsg[m] = 0; T2.t[m] = th; T2.Dcoef[m] = a; T2.arg[m] = argm;
+    T2.kernel[m] = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"), expr_copy(argm) }, 2);
+    /* t = alpha (theta - 1)/(theta + 1) */
+    Expr* tin = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(alpha),
+        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(th), expr_new_integer(-1) }, 2),
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(th), expr_new_integer(1) }, 2),
+            expr_new_integer(-1) }, 2) }, 3);
+    Expr* r1 = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(t), tin }, 2);
+    Expr* f2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(f), expr_copy(r1)));
+    Expr* g2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(g), r1));
+    Expr* y = NULL;
+    if (f2 && g2) {
+        RdeCtx C2 = { &T2, m, C->x, th };
+        Expr* y2 = rde_tower(f2, g2, &C2);
+        if (y2) {
+            /* theta = (alpha + t)/(alpha - t) */
+            Expr* tout = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(alpha), expr_copy(t) }, 2),
+                expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(alpha),
+                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(t) }, 2) }, 2),
+                    expr_new_integer(-1) }, 2) }, 2);
+            y = rt_eval1("Together", rt_eval2("ReplaceAll", y2,
+                expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(th), tout }, 2)));
+        }
+    }
+    if (f2) expr_free(f2);
+    if (g2) expr_free(g2);
+    expr_free(T2.kernel[m]); expr_free(argm); expr_free(a); expr_free(th);
+    free(T2.kind); free(T2.t); free(T2.Dcoef); free(T2.tsg); free(T2.kernel); free(T2.arg);
+    return y;
+}
+
 Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
     if (rt_is_zero(g)) return expr_new_integer(0);
     if (C->m < 0) return rde_base(f, g, C->x);
@@ -2677,8 +2761,17 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
      * with eta absent -- every box reads Dcoef, not the kernel (campaign step
      * 3b).  Its LimitedIntegrate goes through the field integrator's RT_PRIM
      * branch. */
+    /* a split special part (Tanh, or Tan over k(i)): the Moebius change to the
+     * exponential theta (rde_tower_mobius) */
+    if (kind == RT_TAN && C->T->tsg[C->m] == -1) {
+        Expr* one = expr_new_integer(1);
+        Expr* y = rde_tower_mobius(f, g, C, one);
+        expr_free(one);
+        return y;
+    }
     if (kind != RT_LOG && kind != RT_EXP && kind != RT_PRIM && !tan) {
-        rde_cert_mark("tower: hyperbolic-tangent top");
+        /* unreachable: every RtKind is handled (a Tanh top just above) */
+        rde_cert_mark("tower: a top of no known kind");
         return NULL;
     }
     /* Over algebraic constants the tower stack's arithmetic (Together, Cancel,
@@ -2696,8 +2789,13 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
      * t + i, two special factors with independent orders, and a one-sided pole
      * (1/(Tan[x] - I)) is invisible to the combined t^2 + 1 valuation.  Solve
      * anyway (the identity gate certifies any solution) but prove nothing. */
-    if (tan && (!rt_free_of_head(f, "Complex") || !rt_free_of_head(g, "Complex")))
-        rde_cert_mark("tower: hypertangent top over a field containing I");
+    if (tan && (!rt_free_of_head(f, "Complex") || !rt_free_of_head(g, "Complex"))) {
+        Expr* ii = expr_new_function(expr_new_symbol("Complex"),
+            (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+        Expr* y = rde_tower_mobius(f, g, C, ii);
+        expr_free(ii);
+        return y;
+    }
     /* the parametric conversion covers the log and exponential stacks; the
      * tangent boxes (NoCancel2/3, CancelTan's re/im split) are not converted */
     if (tan && rde_par_in(g)) { rde_cert_mark("parametric: hypertangent top"); return NULL; }

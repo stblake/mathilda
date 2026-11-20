@@ -2712,6 +2712,36 @@ The constant $c$ is computed exactly in the tower variables, where the lower ker
 independent symbols. The rebuild uses the integrand's own spelling of $e^{w}$, which may
 differ from the class primitive's.
 
+\section*{T17. The Risch DE over a split tangent level (step 4)}
+\addcontentsline{toc}{section}{T17. Split tangent levels}
+\label{sec:T17}
+
+Let $t$ be a tangent monomial over $k$: $Dt=\eta(t^2+1)$ ($t=\tan v$), or
+$Dt=\eta(1-t^2)$ ($t=\tanh v$). When the special polynomial splits over $k$ --- always for
+$\tanh$, and for $\tan$ when $\sqrt{-1}\in k$ --- Bronstein notes that $t$ generates
+an exponential (\emph{Symbolic Integration~I}, p.~166).
+
+\begin{proposition}\label{prop:T17}
+Let $\alpha=1$ for $\tanh$ and $\alpha=i$ for $\tan$ ($i\in k$), and let
+$\theta=(\alpha+t)/(\alpha-t)$. Then $D\theta/\theta=2\alpha\,Dt/(\alpha^2-t^2)\in k$
+($=2v'$, resp.\ $-2iv'$). So $\theta$ is an exponential monomial over $k$, and
+$k(t)=k(\theta)$ with $t=\alpha(\theta-1)/(\theta+1)$. For $f,g\in k(t)$, $y\in k(t)$ solves
+$Dy+fy=g$ iff $\tilde y=y(\theta)$ solves the transformed equation over $k(\theta)$.
+\end{proposition}
+\begin{proof}
+$D\theta=2\alpha\,Dt/(\alpha-t)^2$, so $D\theta/\theta=2\alpha\,Dt/(\alpha^2-t^2)$. For
+$\tanh$, $\alpha^2-t^2=1-t^2$ divides $Dt$; for $\tan$, $\alpha^2-t^2=-(1+t^2)$ does. The
+quotient is $2v'$ or $-2iv'$, in $k$. $\theta$ is transcendental over $k$ because $t$ is,
+and the M\"obius map is a $k$-isomorphism $k(t)\to k(\theta)$ commuting with $D$,
+so it carries solutions to solutions in both directions.
+\end{proof}
+\noindent Hence the exponential stack's certificate --- ``no $\tilde y\in k(\theta)$'' ---
+is one for $k(t)$. The implementation solves over a copy of the tower whose level $m$ is
+$\theta$ (levels $0,\dots,m$; the lower ones shared). The old routes were weaker: the
+$\delta=2$ hypertangent boxes assume $t^2+1$ irreducible, and over $k(i)$ they missed a
+one-sided pole such as $1/(\tan x-i)$, so a ``no'' proved nothing; a $\tanh$ level had no
+Risch~DE at all.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

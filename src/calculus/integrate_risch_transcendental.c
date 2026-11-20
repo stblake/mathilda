@@ -1117,7 +1117,10 @@ static const char* g_rde_cert_last_reason = NULL;
  * (Sec[x]^2 = 1 + Tan[x]^2), which rt_subst_kernels rationalises. */
 static bool rt_has_tan_of_x(const Expr* e, Expr* x) {
     if (e->type != EXPR_FUNCTION) return false;
-    static const char* heads[] = { "Tan", "Cot", "Sec", "Csc", "Sin", "Cos" };
+    /* the hyperbolic family too: a Tanh level runs the exponential stack after
+     * the Moebius change (rde_tower_mobius, campaign step 4) */
+    static const char* heads[] = { "Tan", "Cot", "Sec", "Csc", "Sin", "Cos",
+                                   "Tanh", "Coth", "Sech", "Csch", "Sinh", "Cosh" };
     for (size_t h = 0; h < sizeof heads / sizeof heads[0]; h++)
         if (rt_head_is(e, heads[h]) && e->data.function.arg_count == 1
             && !rt_free_of_x(e->data.function.args[0], x)) return true;
