@@ -1763,6 +1763,26 @@ is still deficient for every other caller (reproducer and table:
 
 ### Plan from the FriCAS comparison (2026-11-20)
 
+**Status (2026-11-21, v0.6646; benchmarks/BRONSTEIN_VS_FRICAS.md rerun).** Done:
+- C0.1 (v0.6642);
+- C1.1–C1.3 (v0.6643);
+- C2.1, C2.2 and the Q(i) Cancel fix (v0.6644);
+- C3.2 (v0.6645);
+- the Linearity order in C4 (v0.6646).
+
+Decided, before -> after: 256 93% -> 96% (FriCAS 75%), class B 54% -> 72% (FriCAS 93%);
+257 99% -> 100%; 259 96% -> 98% (FriCAS 95%). No Mathilda false "no" or wrong answer.
+
+Open:
+- C2.3 (the Liouvillian primitive's bottom coefficient: li at theta^0, an exponential not
+  directly below);
+- C2.4 (`gauss-rand` reduced equation not polynomial);
+- C3.1 (Phase 5);
+- C4's evaluator change (substitute_scoping dominates the Bronstein `.m` tail; needs a
+  per-node symbol summary in Expr);
+- C5: special-function answers, and submitting `benchmarks/FRICAS_UPSTREAM_DRAFT.md`
+  (14 FriCAS false "no", minimal case verified).
+
 `benchmarks/BRONSTEIN_VS_FRICAS.md` (`make bench-integrate-vs-fricas`) compares, at
 v0.6641, Mathilda's Bronstein-family methods, ParallelMixedTower and the Automatic cascade
 with FriCAS 1.3.6 on benchmarks 256, 257 and 259 (2906 integrands). It counts proofs of

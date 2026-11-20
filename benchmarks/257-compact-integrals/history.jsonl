@@ -4,3 +4,4 @@
 {"date": "2026-11-13", "cases": 1000, "closed": {"Mathilda:Automatic": 1000, "Mathilda:ParallelMixedTower": 850, "Mathilda:RischTranscendental": 223, "Mathilda:Trager": 297, "Mathilda:Bronstein": 419, "FriCAS": 899, "Maxima": 680, "sympy": 323, "Wolfram": 998}}
 {"date": "2026-11-20", "cases": 1000, "closed": {"Mathilda:Automatic": 1000, "Mathilda:RischTranscendental": 246, "Mathilda:Trager": 297, "Mathilda:Bronstein": 448, "FriCAS": 899}}
 {"date": "2026-11-20", "cases": 1000, "closed": {"Mathilda:Automatic": 1000, "Mathilda:ParallelMixedTower": 858, "Mathilda:RischTranscendental": 246, "Mathilda:Trager": 297, "Mathilda:Bronstein": 448, "FriCAS": 899}}
+{"date": "2026-11-21", "cases": 1000, "closed": {"Mathilda:Automatic": 1000, "Mathilda:ParallelMixedTower": 858, "Mathilda:RischTranscendental": 250, "Mathilda:Trager": 297, "Mathilda:Bronstein": 448, "FriCAS": 899}}

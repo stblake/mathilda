@@ -1,12 +1,12 @@
-# Integration shootout: 256-integration-shootout (2026-11-20)
+# Integration shootout: 256-integration-shootout (2026-11-21)
 
-1266 cases, timeout 30 s per run, wall 10.4 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+1266 cases, timeout 30 s per run, wall 9.9 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
 | run | R rational (72) | T transcendental (217) | A algebraic (400) | M mixed (radical on top) (408) | B radical at the bottom (169) | all |
 |---|---|---|---|---|---|---|
-| Mathilda:Automatic | 100% (72) | 97% (210) | 57% (227) | 84% (343) | 45% (76) | 73% (928) |
+| Mathilda:Automatic | 100% (72) | 98% (212) | 58% (230) | 84% (343) | 45% (76) | 74% (933) |
 | Mathilda:ParallelMixedTower | 0% (0) | 64% (138) | 52% (210) | 79% (323) | 40% (68) | 58% (739) |
 | Mathilda:RischTranscendental | 100% (72) | 67% (145) | · | · | · | 75% (217) |
 | Mathilda:Trager | · | · | 53% (211) | · | · | 53% (211) |
@@ -17,11 +17,11 @@
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 829 | 99 | 226 | 103 | 9 | 0 | 0 | 0 | 0.05 |
+| Mathilda:Automatic | 832 | 101 | 278 | 46 | 8 | 0 | 1 | 0 | 0.04 |
 | Mathilda:ParallelMixedTower | 739 | 0 | 234 | 235 | 58 | 0 | 0 | 0 | 0.07 |
 | Mathilda:RischTranscendental | 210 | 7 | 67 | 5 | 0 | 0 | 0 | 0 | 0.00 |
 | Mathilda:Trager | 211 | 0 | 189 | 0 | 0 | 0 | 0 | 0 | 0.04 |
-| Mathilda:Bronstein | 410 | 0 | 88 | 78 | 1 | 0 | 0 | 0 | 0.08 |
+| Mathilda:Bronstein | 410 | 0 | 117 | 49 | 1 | 0 | 0 | 0 | 0.09 |
 | FriCAS | 644 | 69 | 0 | 239 | 52 | 261 | 0 | 1 | 0.07 |
 
 ## Closed by family (Mathilda = best of its methods)
@@ -36,7 +36,7 @@
 | T | tnested | 13 | 13 | 13 |
 | T | ttrig | 18 | 18 | 18 |
 | T | tconstk | 26 | 26 | 26 |
-| T | tlog-perturbed | 35 | 32 | 30 |
+| T | tlog-perturbed | 35 | 34 | 30 |
 | T | texp-perturbed | 36 | 33 | 31 |
 | A | agen | 36 | 36 | 35 |
 | B | bbottom | 20 | 20 | 20 |
@@ -61,10 +61,10 @@
 | M | classic-nonelem | 3 | 2 | 0 |
 | A | classic-nonelem | 2 | 2 | 0 |
 | B | classic-nonelem | 1 | 1 | 1 |
-| A | trager-binomial-xk | 45 | 22 | 20 |
+| A | trager-binomial-xk | 45 | 23 | 20 |
 | A | trager-third-kind | 30 | 18 | 14 |
 | A | trager-rational-times-radical | 50 | 19 | 16 |
-| A | trager-chebyshev | 40 | 22 | 20 |
+| A | trager-chebyshev | 40 | 24 | 20 |
 | A | trager-goursat | 20 | 12 | 11 |
 | A | trager-pseudo-elliptic-recip | 10 | 10 | 10 |
 | A | trager-even-substitution | 6 | 6 | 6 |
