@@ -1983,6 +1983,23 @@ static void test_fricas_c13_decision_answer(void) {
     }
 }
 
+/* FriCAS comparison C2.1: a dependent exponential whose relation is integral
+ * only read downwards (E^(1 + 2 x) = E (E^x)^2 when the tower puts E^(1 + 2 x)
+ * below E^x), and successive eliminations composed; C2.2: the log part's
+ * RootSum derivative summed (RootSum of a rational body). */
+static void test_fricas_c2_dependent_and_rootsum(void) {
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(1 + 2 x)/(1 + E^x), x]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(1 + 2 I x)/(1 + E^(I x)), x]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(I + 2 I x)/(1 + E^(I x)), x]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(1 + 2 I x) Tan[x], x]]", "True", 0);
+    /* the false "no" of the first version (a Cancel over Q(i) with E): elementary */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(E^(1 + 2 I u) Log[I + u])/(1 + E^(I (2 + u))), u], u]] =!= False",
+                   "True", 0);
+    /* an irreducible cubic resultant over E^(x^2): the RootSum log part */
+    assert_eval_eq("With[{f = x E^(x^2)/(1 + E^(x^2) + E^(3 x^2))}, With[{F = Integrate[f, x, Method -> \"RischTranscendental\"]}, "
+                   "FreeQ[F, Integrate] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -2105,6 +2122,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step4_hypertangent_mobius);
     TEST(test_campaign_step4_limited_newlog);
     TEST(test_fricas_c13_decision_answer);
+    TEST(test_fricas_c2_dependent_and_rootsum);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

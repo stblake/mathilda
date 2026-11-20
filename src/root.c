@@ -483,6 +483,150 @@ static Expr* rootsum_try_numeric(Expr* poly_fn, Expr* body_fn) {
     return sum;
 }
 
+/* Evaluate head[a] / head[a, b] / head[a, b, c] (adopts the arguments). */
+static Expr* rs_ev(const char* head, Expr** args, size_t n) {
+    Expr* call = expr_new_function(expr_new_symbol(head), args, n);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+static bool rs_is_true(Expr* e) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True;
+}
+
+/* RootSum[p, R] for a body R RATIONAL in the root (FriCAS comparison C2.2).
+ * The Lagrange path above needs a denominator linear in the root; a log part
+ * differentiated in a tower -- D_tower of RootSum[p, z Log[S(z, t)]] -- gives
+ * N(z)/D(z) with D of any degree in z, and left unevaluated it stopped the
+ * Risch integrator's exponential top (x E^(x^2)/(1 + E^(x^2) + E^(3 x^2)) was
+ * undecided).  With p squarefree of degree n and gcd(D, p) = 1:
+ *   D^(-1) = u/g mod p  (PolynomialExtendedGCD: u D + v p = g, g free of z),
+ *   R = N u/g mod p = Sum_{k<n} c_k z^k,  RootSum[p, R] = Sum c_k s_k,
+ * s_k the power sums of the roots, from Newton's identities on the monic p:
+ *   s_0 = n,  s_k = -(k a_{n-k} + Sum_{i=1}^{k-1} a_{n-i} s_{k-i})  (k < n).
+ * Exact for any coefficients free of the root.  NULL when R is not rational
+ * in the root, p is not squarefree, or D shares a factor with p. */
+/* Structural pre-check, one pass: only arithmetic (Plus, Times, an integer
+ * Power) over slots, symbols and numbers, and at most `budget` nodes.  RootSum
+ * is held and re-evaluated whenever the expression around it is: the algebra
+ * below must not run on every Log-bodied log part (Trager's log terms slowed
+ * from 9 s to over 120 s before this gate). */
+static bool rootsum_body_arith(const Expr* e, long* budget) {
+    if (--*budget < 0) return false;
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    if (hn == SYM_Slot || hn == SYM_Rational || hn == SYM_Complex) return true;
+    if (hn == SYM_Power) {
+        if (e->data.function.arg_count != 2 || e->data.function.args[1]->type != EXPR_INTEGER) return false;
+        return rootsum_body_arith(e->data.function.args[0], budget);
+    }
+    if (hn != SYM_Plus && hn != SYM_Times) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!rootsum_body_arith(e->data.function.args[i], budget)) return false;
+    return true;
+}
+
+static Expr* rootsum_try_rational(Expr* poly_fn, Expr* body_fn) {
+    Expr* poly = rootsum_fn_body_slot(poly_fn);
+    Expr* body = rootsum_fn_body_slot(body_fn);
+    if (!poly || !body) { if (poly) expr_free(poly); if (body) expr_free(body); return NULL; }
+    long budget = 400;
+    if (!rootsum_body_arith(body, &budget)) { expr_free(poly); expr_free(body); return NULL; }
+    Expr* z = expr_new_symbol("RootSum$rz");
+    Expr* p = eval_and_free(subst_slot1(poly, z));
+    Expr* B = eval_and_free(subst_slot1(body, z));
+    expr_free(poly); expr_free(body);
+    Expr* out = NULL;
+    int n = p ? get_degree_poly(p, z) : -1;
+    if (n < 1 || n > 12 || !B || !rootsum_poly_squarefree(p, z)) goto done;
+    {
+        Expr* tg = rs_ev("Together", (Expr*[]){ expr_copy(B) }, 1);
+        Expr* N = tg ? rs_ev("Numerator", (Expr*[]){ expr_copy(tg) }, 1) : NULL;
+        Expr* D = tg ? rs_ev("Denominator", (Expr*[]){ expr_copy(tg) }, 1) : NULL;
+        if (tg) expr_free(tg);
+        Expr* pn = N ? rs_ev("PolynomialQ", (Expr*[]){ expr_copy(N), expr_copy(z) }, 2) : NULL;
+        Expr* pd = D ? rs_ev("PolynomialQ", (Expr*[]){ expr_copy(D), expr_copy(z) }, 2) : NULL;
+        bool rat = rs_is_true(pn) && rs_is_true(pd);
+        if (pn) expr_free(pn);
+        if (pd) expr_free(pd);
+        /* the linear case belongs to Lagrange; a body free of the root to n R */
+        Expr* eg = rat ? rs_ev("PolynomialExtendedGCD",
+            (Expr*[]){ expr_copy(D), expr_copy(p), expr_copy(z) }, 3) : NULL;
+        Expr* g = NULL; Expr* u = NULL;
+        if (eg && eg->type == EXPR_FUNCTION && eg->data.function.arg_count == 2) {
+            Expr* uv = eg->data.function.args[1];
+            Expr* g0 = eg->data.function.args[0];
+            Expr* fq = rs_ev("FreeQ", (Expr*[]){ expr_copy(g0), expr_copy(z) }, 2);
+            if (rs_is_true(fq) && !(g0->type == EXPR_INTEGER && g0->data.integer == 0)
+                && uv->type == EXPR_FUNCTION && uv->data.function.arg_count == 2) {
+                g = expr_copy(g0);
+                u = expr_copy(uv->data.function.args[0]);
+            }
+            if (fq) expr_free(fq);
+        }
+        if (eg) expr_free(eg);
+        if (g && u) {
+            Expr* Nu = rs_ev("Expand", (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy(N), u }, 2) }, 1);
+            u = NULL;
+            Expr* R = Nu ? rs_ev("PolynomialRemainder", (Expr*[]){ Nu, expr_copy(p), expr_copy(z) }, 3) : NULL;
+            Expr* cl = R ? rs_ev("CoefficientList", (Expr*[]){ R, expr_copy(z) }, 2) : NULL;
+            Expr* pl = rs_ev("CoefficientList", (Expr*[]){ expr_copy(p), expr_copy(z) }, 2);
+            if (cl && pl && cl->type == EXPR_FUNCTION && pl->type == EXPR_FUNCTION
+                && pl->data.function.arg_count == (size_t)n + 1
+                && cl->data.function.arg_count <= (size_t)n) {
+                /* monic coefficients a_i = p_i / p_n */
+                Expr* lc = pl->data.function.args[n];
+                Expr** a = malloc((size_t)(n + 1) * sizeof(Expr*));
+                for (int i = 0; i <= n; i++)
+                    a[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                        expr_copy(pl->data.function.args[i]),
+                        expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(lc), expr_new_integer(-1) }, 2) }, 2));
+                size_t m = cl->data.function.arg_count;
+                Expr** sp = malloc((m ? m : 1) * sizeof(Expr*));
+                for (size_t k = 0; k < m; k++) {
+                    if (k == 0) { sp[0] = expr_new_integer(n); continue; }
+                    size_t nt = k;   /* k a_{n-k} and a_{n-i} s_{k-i}, i = 1..k-1 */
+                    Expr** tt = malloc(nt * sizeof(Expr*));
+                    tt[0] = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer((int64_t)k), expr_copy(a[n - (int)k]) }, 2);
+                    for (size_t i = 1; i < k; i++)
+                        tt[i] = expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_copy(a[n - (int)i]), expr_copy(sp[k - i]) }, 2);
+                    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), tt, nt);
+                    free(tt);
+                    sp[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), sum }, 2));
+                }
+                Expr** terms = malloc((m ? m : 1) * sizeof(Expr*));
+                for (size_t k = 0; k < m; k++)
+                    terms[k] = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_copy(cl->data.function.args[k]), sp[k] }, 2);
+                Expr* tot = expr_new_function(expr_new_symbol(SYM_Plus), terms, m);
+                free(terms); free(sp);
+                for (int i = 0; i <= n; i++) expr_free(a[i]);
+                free(a);
+                Expr* val = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ tot,
+                    expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2) }, 2);
+                out = rs_ev("Together", (Expr*[]){ val }, 1);
+            }
+            if (cl) expr_free(cl);
+            if (pl) expr_free(pl);
+        }
+        if (u) expr_free(u);
+        if (g) expr_free(g);
+        if (N) expr_free(N);
+        if (D) expr_free(D);
+    }
+done:
+    if (p) expr_free(p);
+    if (B) expr_free(B);
+    expr_free(z);
+    return out;
+}
+
 static Expr* builtin_rootsum(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* fn1 = res->data.function.args[0];
@@ -493,6 +637,7 @@ static Expr* builtin_rootsum(Expr* res) {
     Expr* ev1 = (fn1->type == EXPR_SYMBOL) ? evaluate(fn1) : NULL;
     Expr* ev2 = (fn2->type == EXPR_SYMBOL) ? evaluate(fn2) : NULL;
     Expr* simplified = rootsum_try_lagrange(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
+    if (!simplified) simplified = rootsum_try_rational(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
     if (!simplified) simplified = rootsum_try_numeric(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
     if (ev1) expr_free(ev1);
     if (ev2) expr_free(ev2);

@@ -288,6 +288,19 @@ static void test_numeric_radical_denominator(void) {
              "- (1/(Sqrt[2] a + Sqrt[3] + Sqrt[5] + Sqrt[7]) + 1/(a + Sqrt[2]))]");
 }
 
+/* A numeric constant (E, Pi, Log[2], Sqrt[2]) beside I sent the fraction to a
+ * path where I is a free variable, and (-E + I E u)/(I + u) did not cancel:
+ * Risch's base Risch DE then saw a pole at u = -I that is not there and
+ * certified a false "no" (FriCAS comparison C2).  The atoms are now fresh
+ * symbols for the reduction. */
+static void test_gaussian_numeric_constants(void) {
+    run_true("Cancel[(-E + I E u)/(I + u)] === I E");
+    run_true("Cancel[(-Pi + I Pi u)/(I + u)] === I Pi");
+    run_true("Cancel[(-Log[2] + I u Log[2])/(I + u)] === I Log[2]");
+    run_true("Cancel[(-E + I E u)/(I Z^4 + Z^4 u)] === I E/Z^4");
+    run_true("Together[Together[E/(u + I) + E/(u - I)] - (2 E u)/(1 + u^2)] === 0");
+}
+
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -306,6 +319,7 @@ int main(int argc, char** argv) {
     TEST(test_nested_radical_guards);
     TEST(test_gaussian_two_stage);
     TEST(test_numeric_radical_denominator);
+    TEST(test_gaussian_numeric_constants);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

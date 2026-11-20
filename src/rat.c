@@ -2376,9 +2376,97 @@ static bool rat_plain_gaussian(const Expr* e) {
     }
 }
 
+/* Numeric non-rational atoms of e (E, Pi, Log[2], ...): a numeric
+ * constant symbol, or a numeric function application that is not arithmetic
+ * (Plus, Times, an integer Power, Rational, Complex).  Collected once each. */
+static void rat_gauss_numeric_atoms(const Expr* e, Expr*** atoms, size_t* n, size_t* cap) {
+    if (!e || *n == (size_t)-1) return;
+    /* cheap leaf tests only (this runs on every Gaussian Together/Cancel): a
+     * numeric constant symbol, or Log of a rational number.  An algebraic
+     * number (a non-integer power of a number, Root, AlgebraicNumber) stops
+     * the abstraction altogether: its relation (Sqrt[2]^2 = 2) is what the
+     * radical paths use (nested-radical Together, the d2 test). */
+    bool atom = false;
+    if (e->type == EXPR_SYMBOL) atom = expr_is_numeric_quantity(e);
+    else if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* hn = e->data.function.head->data.symbol.name;
+        if (hn == SYM_Log && e->data.function.arg_count == 1) {
+            const Expr* a = e->data.function.args[0];
+            atom = a->type == EXPR_INTEGER || a->type == EXPR_BIGINT ||
+                   (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+                    a->data.function.head->data.symbol.name == SYM_Rational);
+        } else if (hn == SYM_Root || hn == SYM_AlgebraicNumber ||
+                   (hn == SYM_Power && e->data.function.arg_count == 2 &&
+                    e->data.function.args[1]->type != EXPR_INTEGER &&
+                    (e->data.function.args[0]->type == EXPR_INTEGER ||
+                     e->data.function.args[0]->type == EXPR_BIGINT ||
+                     (e->data.function.args[0]->type == EXPR_FUNCTION &&
+                      e->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                      e->data.function.args[0]->data.function.head->data.symbol.name == SYM_Rational)))) {
+            *n = (size_t)-1; return;
+        }
+    }
+    if (atom) {
+        for (size_t i = 0; i < *n; i++) if (expr_eq((*atoms)[i], (Expr*)e)) return;
+        if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *atoms = realloc(*atoms, *cap * sizeof(Expr*)); }
+        (*atoms)[(*n)++] = (Expr*)e;   /* borrowed */
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count && *n != (size_t)-1; i++)
+        rat_gauss_numeric_atoms(e->data.function.args[i], atoms, n, cap);
+}
+
+/* e with each atom replaced by the matching symbol (structural; owned). */
+static Expr* rat_gauss_subst(const Expr* e, Expr* const* from, Expr* const* to, size_t n) {
+    for (size_t i = 0; i < n; i++) if (expr_eq((Expr*)e, from[i])) return expr_copy(to[i]);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc((m ? m : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) a[i] = rat_gauss_subst(e->data.function.args[i], from, to, n);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, m);
+    free(a);
+    return out;
+}
+
+static Expr* rat_gaussian_field_core(const Expr* arg, const char* head);
+
+/* Gaussian reduction with numeric constants abstracted.  The field path
+ * accepts Gaussian-rational coefficients only, and a numeric constant (E, Pi,
+ * Log[2]) sent the whole fraction to a path with I a free variable,
+ * where (-E + I E u)/(I + u) does not cancel to I E: then Risch's base Risch DE
+ * saw a pole at u = -I that is not there and certified a false "no" (FriCAS
+ * comparison C2, gauss hunt).  Each such atom is a fresh symbol for the
+ * reduction and is put back after: an identity in independent indeterminates
+ * holds for every value of them, so this is never wrong -- at worst an unknown
+ * relation among the atoms goes unused.  Algebraic numbers are not abstracted
+ * (an input with a radical keeps its old path). */
 static Expr* rat_gaussian_field(const Expr* arg, const char* head) {
     if (rat_gaussian_field_active) return NULL;
     if (!rat_contains_i(arg) || rat_i_inside_binder(arg)) return NULL;
+    Expr** atoms = NULL; size_t na = 0, cap = 0;
+    rat_gauss_numeric_atoms(arg, &atoms, &na, &cap);
+    if (na == 0 || na == (size_t)-1) { free(atoms); return rat_gaussian_field_core(arg, head); }
+    if (na > 16) { free(atoms); return NULL; }
+    Expr** syms = malloc(na * sizeof(Expr*));
+    for (size_t i = 0; i < na; i++) {
+        char nm[32]; snprintf(nm, sizeof nm, "Rat$gaussK%zu", i + 1);
+        syms[i] = expr_new_symbol(nm);
+    }
+    Expr* abs_arg = rat_gauss_subst(arg, atoms, syms, na);
+    Expr* red = rat_gaussian_field_core(abs_arg, head);
+    expr_free(abs_arg);
+    Expr* out = NULL;
+    if (red) {
+        out = eval_and_free(rat_gauss_subst(red, syms, atoms, na));
+        expr_free(red);
+    }
+    for (size_t i = 0; i < na; i++) expr_free(syms[i]);
+    free(syms); free(atoms);
+    return out;
+}
+
+static Expr* rat_gaussian_field_core(const Expr* arg, const char* head) {
     Expr* alg_i = expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
         (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Complex),
                        (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2),

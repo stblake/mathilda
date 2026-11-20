@@ -270,6 +270,20 @@ static void test_rootsum_inexact(void) {
     check_eq("RootSum[#1^2 - a &, Log[x - #1] &] // Head", "RootSum");
 }
 
+/* RootSum[p, R] for R rational in the root (any degree of denominator):
+ * R reduced mod p and summed by Newton's power sums.  The derivative of a
+ * Risch log part over a tower, RootSum[p, (9 #)/(4 + 9 t + 62 # - 248 #^2) &],
+ * stayed unevaluated and stopped the exponential top (FriCAS comparison C2). */
+static void test_rootsum_rational_body(void) {
+    check_true("RootSum[-1 - 6 #1 + 248 #1^3 &, (9 #1)/(4 + 9 t + 62 #1 - 248 #1^2) &] === 1/(2 + 2 t + 2 t^3)");
+    check_true("RootSum[1 - #1 + 2 #1^4 &, 1/(1 + #1 + #1^2) &] === 7");
+    check_true("RootSum[#1^2 - 2 &, 1/(t + #1^2) &] === 2/(2 + t)");
+    check_true("Module[{p = 1 + #1 + #1^3 &, b = (#1^2 + t)/(1 + t #1^2) &}, "
+               "Abs[N[(RootSum[p, b] - Sum[b[Root[p, k]], {k, 3}]) /. t -> 7/3, 30]] < 10^-25]");
+    /* not rational in the root: left alone */
+    check_eq("Head[RootSum[#1^3 - #1 - 1 &, Log[t - #1] &]]", "RootSum");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -298,6 +312,7 @@ int main(void) {
 
     TEST(test_machine_coefficients_high_precision);
     TEST(test_rootsum_inexact);
+    TEST(test_rootsum_rational_body);
 
     printf("All N[Root[..]] tests passed!\n");
     return 0;

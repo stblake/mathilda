@@ -1136,6 +1136,19 @@ static bool rt_dependent_log_rule(RtTower* T, Expr* x, bool wide, Expr** kern, E
  * E^(2 I) are unrelated to Together.)  Any other c would bring in a constant
  * whose relations rational arithmetic does not see (E^(1/2), E^(1/3)).
  * False when no such rule is found. */
+/* n/d of an Integer or Rational expression; false otherwise. */
+static bool rt_rat_parts(const Expr* e, int64_t* n, int64_t* d) {
+    if (e->type == EXPR_INTEGER) { *n = e->data.integer; *d = 1; return true; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == intern_symbol("Rational")
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_INTEGER && e->data.function.args[1]->type == EXPR_INTEGER) {
+        *n = e->data.function.args[0]->data.integer; *d = e->data.function.args[1]->data.integer;
+        return *d != 0;
+    }
+    return false;
+}
+
 static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) {
     *kern = NULL; *val = NULL;
     size_t n = T->n;
@@ -1155,20 +1168,54 @@ static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) 
             bool failed = false;
             Expr* co = risch_rational_span(T->Dcoef[i2], gens, ng, vars, &failed);
             bool okk = co && !failed && co->type == EXPR_FUNCTION && co->data.function.arg_count == ng;
-            for (size_t k = 0; okk && k < ng; k++)
-                if (co->data.function.args[k]->type != EXPR_INTEGER) okk = false;
-            if (okk) {
-                /* c = w - Sum k_j (w_j or t_j), in the tower variables */
-                Expr** tm = malloc((ng + 1) * sizeof(Expr*));
+            /* the relation w_i2 = Sum k_j w_j + c, with rational k_j */
+            int64_t* kn = calloc(ng + 1, sizeof(int64_t));
+            int64_t* kd = calloc(ng + 1, sizeof(int64_t));
+            bool allint = okk;
+            for (size_t k = 0; okk && k < ng; k++) {
+                if (!rt_rat_parts(co->data.function.args[k], &kn[k], &kd[k])) okk = false;
+                else if (kd[k] != 1) allint = false;
+            }
+            /* the level eliminated, and the integer multipliers of the others:
+             *   allint:  target i2,  w_i2 = Sum k_j w_j + c;
+             *   inverted (C2.1): the lower EXPONENTIAL level j0 with k_j0 = +-1/m,
+             *     every m k_i an integer -- w_j0 = (1/k_j0) w_i2 - Sum_{i != j0}
+             *     (k_i/k_j0) w_i + c'.  The tower orders E^(1 + 2 x) below E^x,
+             *     and E^x = (E^(1 + 2 x))^(1/2) E^(-1/2) has no integer form,
+             *     while E^(1 + 2 x) = E (E^x)^2 does (benchmark 259: f12/gauss
+             *     cases were undecided, "dependent monomials"). */
+            long target = -1;                 /* tower index of the eliminated level */
+            int64_t* mult = calloc(ng + 1, sizeof(int64_t));   /* per gen; [ng] = i2's */
+            if (okk && allint) {
+                target = (long)i2;
+                for (size_t k = 0; k < ng; k++) mult[k] = kn[k];
+                mult[ng] = 0;
+            } else if (okk) {
+                for (size_t j0 = 0; j0 < ng && target < 0; j0++) {
+                    if (T->kind[gi[j0]] != RT_EXP || kn[j0] == 0) continue;
+                    if (kn[j0] != 1 && kn[j0] != -1) continue;
+                    int64_t m = kd[j0], s = kn[j0];          /* 1/k_j0 = s m */
+                    bool ok = true;
+                    for (size_t k = 0; k < ng && ok; k++) {
+                        if (k == j0) continue;
+                        /* -k_k/k_j0 = -k_k s m */
+                        if ((kn[k] * m) % kd[k] != 0) ok = false;
+                        else mult[k] = -(kn[k] * m / kd[k]) * s;
+                    }
+                    if (ok) { target = (long)gi[j0]; mult[j0] = 0; mult[ng] = s * m; }
+                }
+            }
+            if (target >= 0) {
+                /* c = w_target - Sum mult w, exactly, in the tower variables */
+                Expr** tm = malloc((ng + 2) * sizeof(Expr*));
                 size_t nt = 0;
-                tm[nt++] = rt_subst_kernels(T->arg[i2], T);
-                for (size_t k = 0; k < ng; k++) {
-                    int64_t kj = co->data.function.args[k]->data.integer;
-                    if (!kj) continue;
-                    size_t j = gi[k];
+                tm[nt++] = rt_subst_kernels(T->arg[target], T);
+                for (size_t k = 0; k <= ng; k++) {
+                    if (!mult[k]) continue;
+                    size_t j = k < ng ? gi[k] : i2;
                     Expr* wj = T->kind[j] == RT_EXP ? rt_subst_kernels(T->arg[j], T) : expr_copy(T->t[j]);
                     tm[nt++] = expr_new_function(expr_new_symbol("Times"),
-                        (Expr*[]){ expr_new_integer(-kj), wj }, 2);
+                        (Expr*[]){ expr_new_integer(-mult[k]), wj }, 2);
                 }
                 Expr* c = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Plus"), tm, nt)));
                 free(tm);
@@ -1184,7 +1231,7 @@ static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) 
                     gint = true;
                 }
                 if (gint) {
-                    Expr** pf = malloc((ng + 2) * sizeof(Expr*));
+                    Expr** pf = malloc((ng + 3) * sizeof(Expr*));
                     size_t np = 0;
                     if (ca != 0)
                         pf[np++] = expr_new_function(expr_new_symbol("Power"),
@@ -1193,23 +1240,22 @@ static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) 
                     if (cb != 0)
                         pf[np++] = expr_new_function(expr_new_symbol("Power"),
                             (Expr*[]){ expr_new_symbol(RT_EI_SYMBOL), expr_new_integer(cb) }, 2);
-                    for (size_t k = 0; k < ng; k++) {
-                        int64_t kj = co->data.function.args[k]->data.integer;
-                        if (!kj) continue;
-                        size_t j = gi[k];
+                    for (size_t k = 0; k <= ng; k++) {
+                        if (!mult[k]) continue;
+                        size_t j = k < ng ? gi[k] : i2;
                         Expr* b = T->kind[j] == RT_EXP ? expr_copy(T->kernel[j]) : expr_copy(T->arg[j]);
                         pf[np++] = expr_new_function(expr_new_symbol("Power"),
-                            (Expr*[]){ b, expr_new_integer(kj) }, 2);
+                            (Expr*[]){ b, expr_new_integer(mult[k]) }, 2);
                     }
                     /* the integrand's own spelling of E^w: when the class primitive
                      * was re-spelled (E^(2 u)/(1 + E^(2 u)) for E^u/(E^-u + E^u)),
-                     * the collected exponent is a multiplicity-1 member of level i2,
-                     * and it is that spelling the rebuild must exclude and map */
-                    Expr* kw = T->kernel[i2];
+                     * the collected exponent is a multiplicity-1 member of level
+                     * target, and it is that spelling the rebuild must exclude and map */
+                    Expr* kw = T->kernel[target];
                     for (size_t m = 0; m < T->nm; m++)
-                        if (T->mprim[m] == (long)i2 && T->mmult[m] == 1 && T->mval[m]
+                        if (T->mprim[m] == target && T->mmult[m] == 1 && T->mval[m]
                             && rt_head_is(T->mval[m], "Power") && T->mval[m]->data.function.arg_count == 2
-                            && expr_eq(T->mval[m]->data.function.args[0], T->t[i2])) {   /* a simple t^1 member */
+                            && expr_eq(T->mval[m]->data.function.args[0], T->t[target])) {   /* a simple t^1 member */
                             kw = NULL;
                             *kern = expr_new_function(expr_new_symbol("Power"),
                                 (Expr*[]){ expr_new_symbol("E"), expr_copy(T->marg[m]) }, 2);
@@ -1222,6 +1268,7 @@ static bool rt_dependent_exp_rule(RtTower* T, Expr* x, Expr** kern, Expr** val) 
                 }
                 if (c) expr_free(c);
             }
+            free(kn); free(kd); free(mult);
             if (co) expr_free(co);
         }
         gens[ng] = T->Dcoef[i2]; gi[ng] = i2; ng++;      /* borrowed */
@@ -1259,6 +1306,19 @@ static bool rt_has_nonint_econst(const Expr* e, Expr* x) {
     return false;
 }
 
+/* e with every subexpression equal to k replaced by a copy of v, without
+ * evaluation (owned result). */
+static Expr* rt_struct_subst(const Expr* e, const Expr* k, const Expr* v) {
+    if (expr_eq((Expr*)e, (Expr*)k)) return expr_copy((Expr*)v);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = rt_struct_subst(e->data.function.args[i], k, v);
+    Expr* out = expr_new_function(rt_struct_subst(e->data.function.head, k, v), a, n);
+    free(a);
+    return out;
+}
+
 static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool wide);
 /* The integrator's tower: a dependent logarithm is eliminated only when its
  * constant holds on the wide sample set (Log[1 + I x] = Log[x - I] + I Pi/2
@@ -1293,6 +1353,14 @@ static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool
         if (nt2 > 1) { expr_free(k); expr_free(v); break; }
         xk = realloc(xk, (nx + 1) * sizeof(Expr*));
         xr = realloc(xr, (nx + 1) * sizeof(Expr*));
+        /* compose: an earlier rule's value may hold the kernel eliminated now
+         * (E^(1 + 3 I x) -> E/(E^(-I x))^3, then E^(-I x) -> E/E^(1 + I x)):
+         * substitute it there too, structurally -- the values are built
+         * unevaluated, and evaluating would merge them back into one E^w */
+        for (size_t i = 0; i < nx; i++) {
+            Expr* r = rt_struct_subst(xr[i], k, v);
+            expr_free(xr[i]); xr[i] = r;
+        }
         xk[nx] = k; xr[nx] = v; nx++;
         RtTower T2;
         bool ok2 = rt_tower_build_core(f, x, &T2, min_n, xk, xr, nx);
