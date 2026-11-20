@@ -376,6 +376,29 @@ static void test_flint_exception_recovery(void) {
     check("Quiet[TestFlintThrow[]]; 2 + 2", "$Aborted");
     check("2 + 2", "4");
     check("Quiet[Check[TimeConstrained[TestFlintThrow[], 100], \"msg\", {FLINT::exc}]]", "\"msg\"");
+    /* A jump out of a render in flight (here a Format rule ToString applies;
+     * in the wild, TimeConstrained's timeout siglongjmp landing in
+     * print_standard) skipped expr_to_string's sink pop: the abandoned
+     * open_memstream stayed the print sink and wrote through pointers into the
+     * dead frame -- random stack corruption for the rest of the session
+     * (integrate_risch_transcendental_tests, 2026-11-20) -- and ToString's
+     * OutputForm flag stayed set, so every later string printed unquoted.
+     * The unwind now restores the printer's state (mth_print_unwind). */
+    check("Format[fmtThrow[x_]] := TestFlintThrow[]; "
+          "Quiet[TimeConstrained[ToString[fmtThrow[1]], 100, \"recovered\"]]", "\"recovered\"");
+    if (mth_out() != stdout) {
+        fprintf(stderr, "FAIL: the print sink was left on an abandoned string capture\n");
+        exit(1);
+    }
+    check("\"quoted\"", "\"quoted\"");
+    check("ToString[{1, \"a\"}]", "\"{1, a}\"");
+    /* the same at top level (the evaluator's own fault guard) */
+    check("Quiet[ToString[fmtThrow[1]]]", "$Aborted");
+    if (mth_out() != stdout) {
+        fprintf(stderr, "FAIL: the print sink was left on an abandoned string capture (top level)\n");
+        exit(1);
+    }
+    check("\"quoted\"", "\"quoted\"");
 #endif
 }
 

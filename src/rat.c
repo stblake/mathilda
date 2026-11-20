@@ -3081,4 +3081,11 @@ void rat_init(void) {
     symtab_get_def("Cancel")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_add_builtin("Together", builtin_together);
     symtab_get_def("Together")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    /* Nesting counters a TimeConstrained timeout jump would leave raised: one
+     * leaked level per jump out of a Together/Cancel in flight (measured), and
+     * at RAT_TOGETHER_CANCEL_MAX_DEPTH every later Together/Cancel silently
+     * returns its input; a stuck re-entry guard disables the Gaussian pass. */
+    tc_register_unwind_counter(&rat_together_cancel_depth);
+    tc_register_unwind_counter(&rat_gaussian_field_active);
+    tc_register_unwind_counter(&cancel_recursive_inside_gcd);
 }

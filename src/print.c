@@ -2046,9 +2046,28 @@ void expr_print(Expr* e) {
  * rendering is a per-result operation, not an inner numeric loop, so the Windows
  * disk round-trip is acceptable -- the packed/NDArray hot paths never touch it.
  *
- * str_capture_open() returns a FILE* to push as the sink (NULL on failure);
- * str_capture_finish() closes it and returns a freshly malloc'd, NUL-terminated
- * string the caller frees (NULL on failure).
+ * str_capture_open() returns a capture whose FILE* (->f) is pushed as the sink
+ * (NULL on failure); str_capture_finish() closes it and returns a freshly
+ * malloc'd, NUL-terminated string the caller frees (NULL on failure).
+ *
+ * The capture records live in a STATIC pool, not in the caller's frame.
+ * open_memstream keeps the addresses of buf/len and writes through them on
+ * every flush, so a capture abandoned by a non-local exit -- TimeConstrained's
+ * timeout siglongjmp landing inside print_standard, or a FLINT exception --
+ * would otherwise keep a FILE that writes into a DEAD stack frame.  Worse, the
+ * skipped mth_out_pop left that FILE installed as the sink, so every later
+ * print went into it: each write grew the buffer and stored the new pointer and
+ * length into whatever frame now occupied that stack slot.  That was the
+ * random stack corruption behind integrate_risch_transcendental_tests'
+ * intermittent failures (2026-11-20): an early test's millisecond
+ * TimeConstrained budgets unwound mid-print, and a later, unrelated case
+ * recursed without end (risch_integrate_hypertangent_reduced overflowed the
+ * stack), returned $Aborted, or the process aborted in exit() flushing the
+ * orphan stream.  With the records here, mth_print_unwind can find and close
+ * every abandoned capture and put the sink back (see mth_print_mark).
+ *
+ * The pool only grows; a slot's address never changes once handed out (the
+ * FILE points into it), so it is an array of individually allocated slots.
  * ------------------------------------------------------------------------- */
 typedef struct {
     FILE*  f;
@@ -2058,7 +2077,24 @@ typedef struct {
 #endif
 } StrCapture;
 
-static FILE* str_capture_open(StrCapture* c) {
+static StrCapture** g_cap = NULL;   /* g_cap[0 .. g_ncap) are open, innermost last */
+static int g_ncap = 0, g_cap_alloc = 0;
+
+static StrCapture* str_capture_open(void) {
+    if (g_ncap == g_cap_alloc) {
+        int na = g_cap_alloc ? 2 * g_cap_alloc : 16;
+        StrCapture** a = realloc(g_cap, (size_t)na * sizeof *a);
+        if (!a) return NULL;
+        for (int i = g_cap_alloc; i < na; i++) a[i] = NULL;
+        g_cap = a;
+        g_cap_alloc = na;
+    }
+    if (!g_cap[g_ncap] && !(g_cap[g_ncap] = malloc(sizeof(StrCapture)))) return NULL;
+    StrCapture* c = g_cap[g_ncap];
+    /* f is NULL until the stream exists and the slot is counted before it is
+     * opened, so an unwind at any point sees either no stream or a live one */
+    c->f = NULL;
+    g_ncap++;
 #ifdef _WIN32
     c->f = tmpfile();
 #else
@@ -2066,10 +2102,12 @@ static FILE* str_capture_open(StrCapture* c) {
     c->len = 0;
     c->f = open_memstream(&c->buf, &c->len);
 #endif
-    return c->f;
+    if (!c->f) { g_ncap--; return NULL; }
+    return c;
 }
 
 static char* str_capture_finish(StrCapture* c) {
+    g_ncap--;              /* released first: an unwind never closes it twice */
 #ifdef _WIN32
     if (fflush(c->f) != 0) { fclose(c->f); return NULL; }
     long n = ftell(c->f);
@@ -2087,6 +2125,38 @@ static char* str_capture_finish(StrCapture* c) {
 #endif
 }
 
+/* See print.h.  The mark is taken where a non-local exit can land
+ * (tc_run_guarded_mode in core.c) and every capture opened after it, with the
+ * sink and the formatting flags set inside it, is undone by the unwind. */
+void mth_print_mark(MthPrintMark* m) {
+    m->sink = g_print_sink;
+    m->ncap = g_ncap;
+    m->inputform_depth = g_inputform_depth;
+    m->format_depth = g_format_depth;
+    m->numberform_ctx = g_numberform_ctx;
+    m->output_form = g_print_output_form;
+    m->apply_formats = g_apply_formats;
+}
+
+void mth_print_unwind(const MthPrintMark* m) {
+    /* the sink first: nothing may print into a stream about to be closed */
+    g_print_sink = m->sink;
+    while (g_ncap > m->ncap) {
+        StrCapture* c = g_cap[--g_ncap];
+        if (!c->f) continue;
+        fclose(c->f);
+#ifndef _WIN32
+        free(c->buf);      /* the abandoned render's partial text */
+#endif
+        c->f = NULL;
+    }
+    g_inputform_depth = m->inputform_depth;
+    g_format_depth = m->format_depth;
+    g_numberform_ctx = m->numberform_ctx;
+    g_print_output_form = m->output_form;
+    g_apply_formats = m->apply_formats;
+}
+
 /* expr_to_string with display rules (Format) applied: what the front end shows
  * for a result. Caller frees. */
 char* expr_to_string_display(Expr* e) {
@@ -2102,14 +2172,14 @@ char* expr_to_string_display(Expr* e) {
 
 char* expr_to_string(Expr* e) {
     // Print to a memory buffer by diverting the print sink to it.
-    StrCapture c;
-    if (!str_capture_open(&c)) return NULL;
+    StrCapture* c = str_capture_open();
+    if (!c) return NULL;
 
-    FILE* prev = mth_out_push(c.f);
+    FILE* prev = mth_out_push(c->f);
     print_standard(e, 0);
     mth_out_pop(prev);
 
-    return str_capture_finish(&c);
+    return str_capture_finish(c);
 }
 
 /* OutputForm rendering into a heap string (caller frees): as expr_to_string,
@@ -2117,10 +2187,10 @@ char* expr_to_string(Expr* e) {
  * Print shows them -- ToString[{"a", 1}] is "{a, 1}". Linear syntax is kept
  * (Mathilda has no 2-D OutputForm), so ToString[1/2] is "1/2". */
 char* expr_to_string_outputform(Expr* e) {
-    StrCapture c;
-    if (!str_capture_open(&c)) return NULL;
+    StrCapture* c = str_capture_open();
+    if (!c) return NULL;
 
-    FILE* prev = mth_out_push(c.f);
+    FILE* prev = mth_out_push(c->f);
     bool saved_of = g_print_output_form;
     bool saved_af = g_apply_formats;
     int saved_if = g_inputform_depth;
@@ -2136,7 +2206,7 @@ char* expr_to_string_outputform(Expr* e) {
     g_print_output_form = saved_of;
     mth_out_pop(prev);
 
-    return str_capture_finish(&c);
+    return str_capture_finish(c);
 }
 
 /* InputForm text for ToString[expr, InputForm]: Format[..., InputForm]
@@ -2157,14 +2227,14 @@ char* expr_to_string_inputform_display(Expr* e) {
 }
 
 char* expr_to_string_fullform(Expr* e) {
-    StrCapture c;
-    if (!str_capture_open(&c)) return NULL;
+    StrCapture* c = str_capture_open();
+    if (!c) return NULL;
 
-    FILE* prev = mth_out_push(c.f);
+    FILE* prev = mth_out_push(c->f);
     expr_print_fullform(e);
     mth_out_pop(prev);
 
-    return str_capture_finish(&c);
+    return str_capture_finish(c);
 }
 
 /* Render `e` (the result of a NumberForm NumberFormat function) to a heap
@@ -2172,10 +2242,10 @@ char* expr_to_string_fullform(Expr* e) {
  * NumberForm context is suspended so already-formatted mantissa/exponent
  * strings are not re-processed. Caller frees. */
 char* numberform_format_result_to_string(const Expr* e) {
-    StrCapture c;
-    if (!str_capture_open(&c)) return NULL;
+    StrCapture* c = str_capture_open();
+    if (!c) return NULL;
 
-    FILE* prev = mth_out_push(c.f);
+    FILE* prev = mth_out_push(c->f);
 
     const NumberFormCtx* saved_ctx = g_numberform_ctx;
     bool saved_of = g_print_output_form;
@@ -2188,7 +2258,7 @@ char* numberform_format_result_to_string(const Expr* e) {
     g_numberform_ctx = saved_ctx;
     mth_out_pop(prev);
 
-    return str_capture_finish(&c);
+    return str_capture_finish(c);
 }
 
 #include "symtab.h"

@@ -17,6 +17,25 @@ FILE* mth_out(void);
 FILE* mth_out_push(FILE* f);
 void  mth_out_pop(FILE* prev);
 
+/* The printer's dynamic state -- the output sink, the open string captures and
+ * the formatting flags the capture helpers set and restore around a render --
+ * recorded by mth_print_mark and put back by mth_print_unwind.  For a
+ * non-local exit (TimeConstrained's timeout siglongjmp, a FLINT exception)
+ * that skips the restore code of an expr_to_string in flight; see
+ * mth_print_unwind in print.c.  The fields are private to print.c. */
+struct NumberFormCtx;
+typedef struct {
+    FILE* sink;
+    int   ncap;
+    int   inputform_depth;
+    int   format_depth;
+    const struct NumberFormCtx* numberform_ctx;
+    bool  output_form;
+    bool  apply_formats;
+} MthPrintMark;
+void mth_print_mark(MthPrintMark* m);
+void mth_print_unwind(const MthPrintMark* m);
+
 void expr_print(Expr* e);
 void expr_print_fullform(Expr* e);
 char* expr_to_string(Expr* e);

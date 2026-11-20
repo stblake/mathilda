@@ -5834,6 +5834,13 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
      * jump it would outlive the definition, possibly a reclaimed Module
      * local's, that set it). */
     const char* volatile saved_rule_head = match_get_rule_head();
+    /* The printer's sink, open string captures and formatting flags: a jump
+     * out of an expr_to_string in flight skipped its mth_out_pop and left an
+     * open_memstream installed as the sink, writing through pointers into the
+     * dead frame (print.c, StrCapture).  Written only before the setjmp, so
+     * its value after the jump is well defined (C99 7.13.2.1p3). */
+    MthPrintMark print_mark;
+    mth_print_mark(&print_mark);
     volatile int saved_ctr[TC_MAX_UNWIND_COUNTERS];
     volatile int n_ctr = tc_n_unwind_counters;
     for (int i = 0; i < n_ctr; i++) saved_ctr[i] = *tc_unwind_counters[i];
@@ -5845,6 +5852,7 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
         tc_body_live = 0; \
         for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i]; \
         match_set_rule_head(saved_rule_head); \
+        mth_print_unwind(&print_mark); \
         context_unwind_to(saved_ctxdep); \
         cf_unwind_to(saved_cfdep); \
         context_restore(saved_ctx, saved_path); saved_ctx = NULL; saved_path = NULL; \
