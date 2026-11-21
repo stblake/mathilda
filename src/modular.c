@@ -310,7 +310,7 @@ static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
  * returned at once without being visited (docs/design/scoping_substitution.md):
  * the env's names are registered as binders first, so their bits exist and a
  * summary that predates a registration is invalid by its epoch. */
-static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
+static Expr* substitute_scoping_in(Expr* e, ScopingEnv* env, bool frozen) {
     if (!e) return NULL;
     SCOPE_STAT(ss_top);
     SsCtx c = { 0, false };
@@ -324,7 +324,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
         c.fast = g_symsum_on != 0;   /* a registration can exhaust the epoch */
     }
 #endif
-    Expr* r = ss_rec(e, env, &c, e->refcount >= 2);
+    Expr* r = ss_rec(e, env, &c, frozen || e->refcount >= 2);
 #ifndef MTH_NO_SYMSUM
     if (c.fast && g_symsum_diff) {
         SsCtx slow = { 0, false };
@@ -339,6 +339,10 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     }
 #endif
     return r;
+}
+
+static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
+    return substitute_scoping_in(e, env, false);
 }
 
 /* Counter for the "$"-less names of Unique["x"] / Unique[] (x12, $13). It is
@@ -692,7 +696,8 @@ Expr* builtin_module(Expr* res) {
     if (module_thrown) {
         final_res = module_thrown;
     } else {
-        Expr* substituted_body = substitute_scoping(body, env);
+        /* The body of a shared Module/With node is immutable: fill summaries. */
+        Expr* substituted_body = substitute_scoping_in(body, env, res->refcount >= 2);
         final_res = evaluate(substituted_body);
         expr_free(substituted_body);
     }
@@ -1242,7 +1247,8 @@ Expr* builtin_with(Expr* res) {
         }
     }
 
-    Expr* substituted_body = substitute_scoping(body, env);
+    /* The body of a shared Module/With node is immutable: fill summaries. */
+    Expr* substituted_body = substitute_scoping_in(body, env, res->refcount >= 2);
     Expr* final_res = evaluate(substituted_body);
     expr_free(substituted_body);
 

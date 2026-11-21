@@ -1,4 +1,5 @@
 #include "purefunc.h"
+#include "symsum.h"
 #include "symtab.h"
 #include "eval.h"
 #include <string.h>
@@ -154,18 +155,28 @@ static Expr* subst_children(Expr* e, SubstFn sub, void* ctx) {
     return res;
 }
 
-typedef struct { Expr** args; size_t arg_count; Expr* fn; } SlotCtx;
-static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn);
+/* Binder-summary context of one application (symsum.h): the mask of the
+ * names the walk substitutes -- the parameters, or Slot and SlotSequence for
+ * a slot-form function -- and whether summaries may be consulted. */
+typedef struct { uint64_t mask; bool fast; } PfSum;
+
+typedef struct { Expr** args; size_t arg_count; Expr* fn; const PfSum* s; bool frozen; } SlotCtx;
+static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const PfSum* s, bool frozen);
 static Expr* slots_sub(Expr* e, void* ctx) {
     SlotCtx* c = ctx;
-    return substitute_slots(e, c->args, c->arg_count, c->fn);
+    return slots_rec(e, c->args, c->arg_count, c->fn, c->s, c->frozen);
 }
 
 /* `fn` is the Function being applied (for diagnostics only; may be NULL). */
-static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn) {
+static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const PfSum* s, bool frozen) {
     if (!e) return NULL;
 
     if (e->type == EXPR_FUNCTION) {
+        /* No Slot / SlotSequence below: nothing to substitute. */
+        uint64_t sb;
+        if (s->fast && symsum_get(e, &sb) && !(sb & s->mask)) { SCOPE_STAT(pf_skip); return expr_copy(e); }
+        bool cfrozen = frozen || e->refcount >= 2;
+        SCOPE_STAT(pf_nodes);
         // A nested *slot-form* Function establishes its own # scope, so the
         // enclosing function's slots must not be substituted into it. A nested
         // *named* Function does not rebind slots, so an enclosing slot-form's #
@@ -220,11 +231,49 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn) 
         }
         
         // Standard recursion for other functions
-        SlotCtx c = { args, arg_count, fn };
-        return subst_children(e, slots_sub, &c);
+        SlotCtx c = { args, arg_count, fn, s, cfrozen };
+        Expr* r = subst_children(e, slots_sub, &c);
+        if (r == e && s->fast && cfrozen) { symsum_fill(e); SCOPE_STAT(pf_fill); }
+        return r;
     }
     
     return expr_copy(e);
+}
+
+static uint64_t g_slot_mask = 0;   /* bits of Slot | SlotSequence */
+
+/* `frozen`: `e` is part of a shared (hence immutable) Function node. */
+static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn, bool frozen) {
+    if (!e) return NULL;
+    SCOPE_STAT(pf_top);
+    PfSum s = { 0, false };
+#ifndef MTH_NO_SYMSUM
+    if (g_symsum_on) {
+        if (!g_slot_mask) {
+            SymbolDef* a = intern_symbol_node(SYM_Slot);
+            SymbolDef* b = intern_symbol_node(SYM_SlotSequence);
+            symsum_register_binder(a);
+            symsum_register_binder(b);
+            g_slot_mask = symsum_def_bit(a) | symsum_def_bit(b);
+        }
+        s.mask = g_slot_mask;
+        s.fast = g_symsum_on != 0;
+    }
+#endif
+    Expr* r = slots_rec(e, args, arg_count, fn, &s, frozen || e->refcount >= 2);
+#ifndef MTH_NO_SYMSUM
+    /* Not re-run when a named slot could message (#name over an association). */
+    if (s.fast && g_symsum_diff && !(arg_count >= 1 && is_association(args[0]))) {
+        PfSum slow = { 0, false };
+        Expr* r2 = slots_rec(e, args, arg_count, fn, &slow, false);
+        if (!expr_eq(r, r2)) {
+            fprintf(stderr, "MATHILDA_SYMSUM_DIFF: substitute_slots differs\n");
+            abort();
+        }
+        expr_free(r2);
+    }
+#endif
+    return r;
 }
 
 /*
@@ -274,17 +323,18 @@ static int function_binds_name(Expr* fn, const char* name) {
  * The returned expression is freshly allocated; the caller owns it and
  * `vals` is not consumed (copies are made as needed).
  */
-typedef struct { char** names; Expr** vals; size_t count; } NameCtx;
-static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count);
+typedef struct { char** names; Expr** vals; size_t count; const PfSum* s; bool frozen; } NameCtx;
+static Expr* names_rec(Expr* e, char** names, Expr** vals, size_t count, const PfSum* s, bool frozen);
 static Expr* names_sub(Expr* e, void* ctx) {
     NameCtx* c = ctx;
-    return substitute_names(e, c->names, c->vals, c->count);
+    return names_rec(e, c->names, c->vals, c->count, c->s, c->frozen);
 }
 
-static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) {
+static Expr* names_rec(Expr* e, char** names, Expr** vals, size_t count, const PfSum* s, bool frozen) {
     if (!e) return NULL;
 
     if (e->type == EXPR_SYMBOL) {
+        if (s->fast && !(symsum_sym_bit(e) & s->mask)) return expr_copy(e);
         for (size_t i = 0; i < count; i++) {
             const char* nm = e->data.symbol.name;
             /* names are interned, so the pointer test decides almost always;
@@ -297,6 +347,12 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
     }
 
     if (e->type == EXPR_FUNCTION) {
+        /* No parameter name below: nothing to substitute.  (The mask is the
+         * outermost set's; a nested Function's shadowing only shrinks it.) */
+        uint64_t sb;
+        if (s->fast && symsum_get(e, &sb) && !(sb & s->mask)) { SCOPE_STAT(pf_skip); return expr_copy(e); }
+        bool cfrozen = frozen || e->refcount >= 2;
+        SCOPE_STAT(pf_nodes);
         /* For a nested Function, drop from the substitution set any name it
          * rebinds as a named parameter (a slot-form inner function rebinds
          * none). Non-Function heads keep the full set. */
@@ -327,14 +383,48 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
             }
         }
 
-        NameCtx c = { use_names, use_vals, use_count };
+        NameCtx c = { use_names, use_vals, use_count, s, cfrozen };
         Expr* res = subst_children(e, names_sub, &c);
         free(alloc_names);
         free(alloc_vals);
+        if (res == e && s->fast && cfrozen) { symsum_fill(e); SCOPE_STAT(pf_fill); }
         return res;
     }
 
     return expr_copy(e);
+}
+
+/* Replace the free occurrences of the parameters `names` by `vals` in a
+ * Function body (lexical; nested Functions shadow).  A subtree whose binder
+ * summary holds none of the parameters' bits is returned shared unvisited. */
+static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count, bool frozen) {
+    if (!e) return NULL;
+    SCOPE_STAT(pf_top);
+    PfSum s = { 0, false };
+#ifndef MTH_NO_SYMSUM
+    if (g_symsum_on) {
+        for (size_t i = 0; i < count; i++) {
+            if (!names[i]) continue;
+            SymbolDef* d = intern_symbol_node(names[i]);
+            symsum_register_binder(d);
+            s.mask |= symsum_def_bit(d);
+        }
+        s.fast = g_symsum_on != 0;
+    }
+#endif
+    Expr* r = names_rec(e, names, vals, count, &s, frozen || e->refcount >= 2);
+#ifndef MTH_NO_SYMSUM
+    if (s.fast && g_symsum_diff) {
+        PfSum slow = { 0, false };
+        Expr* r2 = names_rec(e, names, vals, count, &slow, false);
+        if (!expr_eq(r, r2)) {
+            fprintf(stderr, "MATHILDA_SYMSUM_DIFF: substitute_names differs\n");
+            abort();
+        }
+        expr_free(r2);
+    }
+#endif
+    return r;
 }
 
 /*
@@ -384,7 +474,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     /* Function[body] -- slot form with 1 argument */
     if (head_argc == 1) {
         Expr* body = head->data.function.args[0];
-        Expr* substituted = substitute_slots(body, args, arg_count, head);
+        Expr* substituted = substitute_slots(body, args, arg_count, head, head->refcount >= 2);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
         return trap_return(result);
@@ -398,7 +488,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     /* Function[Null, body, ...] -- slot form with attributes.
      * (Null indicates "use slots" rather than named parameters.) */
     if (params->type == EXPR_SYMBOL && params->data.symbol.name == SYM_Null) {
-        Expr* substituted = substitute_slots(body, args, arg_count, head);
+        Expr* substituted = substitute_slots(body, args, arg_count, head, head->refcount >= 2);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
         return trap_return(result);
@@ -408,7 +498,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     if (params->type == EXPR_SYMBOL) {
         char* name = params->data.symbol.name;
         Expr* val = (arg_count >= 1) ? args[0] : params;
-        Expr* substituted = substitute_names(body, &name, &val, 1);
+        Expr* substituted = substitute_names(body, &name, &val, 1, head->refcount >= 2);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
         return trap_return(result);
@@ -439,7 +529,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
             }
         }
 
-        Expr* substituted = substitute_names(body, names, vals, var_count);
+        Expr* substituted = substitute_names(body, names, vals, var_count, head->refcount >= 2);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
         free(names);
