@@ -74,6 +74,10 @@ Expr* stats_standardized_moment(Expr* res, int p) {
     if (ndred_call_has_ndarray(res))
         return (p == 3) ? ndred_skewness(res) : ndred_kurtosis(res);
 
+    /* LinkedList: the packed kernel on the chunks, or columnwise (stats_ll.c);
+     * otherwise CentralMoment below reads the LinkedList itself. */
+    { Expr* r; if (stats_ll_arm(res, p == 3 ? STATS_SKEWNESS : STATS_KURTOSIS, &r)) return r; }
+
     /* m_p = CentralMoment[data, p] and m_2 = CentralMoment[data, 2]. Both reduce
      * for any list/vector/matrix/array (numeric, exact, or symbolic); if either
      * stays a CentralMoment[...] the data was not reducible, so leave the caller's

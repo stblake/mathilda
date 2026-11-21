@@ -50,6 +50,7 @@
 
 #include "picostrings.h"
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of subjects */
 #include "sym_names.h"
 #include "symtab.h"
 #include "common.h"
@@ -88,20 +89,22 @@ static Expr* sq_build_result(Expr* subject, RegexRule* rules, int nr, SqKind kin
     if (subject->type == EXPR_STRING)
         return sq_answer(sq_match(subject->data.string, rules, nr), kind);
 
-    if (!head_is(subject, SYM_List)) return NULL;
+    LLElems sv;                             /* a List or a LinkedList of subjects */
+    if (!ll_elems_open(subject, &sv)) return NULL;
 
-    size_t n = subject->data.function.arg_count;
-    Expr** elems = subject->data.function.args;
+    size_t n = sv.n;
+    Expr** elems = sv.v;
     for (size_t i = 0; i < n; i++)
-        if (elems[i]->type != EXPR_STRING) return NULL;
+        if (elems[i]->type != EXPR_STRING) { ll_elems_close(&sv); return NULL; }
 
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!out) return NULL;
+    if (!out) { ll_elems_close(&sv); return NULL; }
     for (size_t i = 0; i < n; i++)
         out[i] = sq_answer(sq_match(elems[i]->data.string, rules, nr), kind);
+    ll_elems_close(&sv);
 
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
-    free(out);                              /* expr_new_function copies the array */
+    Expr* result = ll_seq_like(subject, out, n);
+    free(out);                              /* the constructors copy the array */
     return result;
 }
 
@@ -195,7 +198,8 @@ static Expr* sq_dispatch(Expr* res, SqKind kind, const char* head) {
     /* An empty pattern list matches nothing.  regex_rules_build_ex reports that
      * as -1, indistinguishable from a genuine failure, so answer it directly:
      * sq_build_result with an empty rule set is exactly "no match". */
-    if (head_is(patt, SYM_List) && patt->data.function.arg_count == 0)
+    if ((head_is(patt, SYM_List) && patt->data.function.arg_count == 0) ||
+        (patt->type == EXPR_LINKEDLIST && ll_length(patt->data.llist) == 0))
         return sq_build_result(subject, NULL, 0, kind);
 
     /* StringStartsQ / StringEndsQ anchor by wrapping the pattern; the wrapper

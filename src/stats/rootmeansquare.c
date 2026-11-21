@@ -7,47 +7,18 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "ndreduce.h"
+#include "linkedlist.h" /* LLElems */
 #include <stdlib.h>
 #include <math.h>
 
-Expr* builtin_rootmeansquare(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    Expr* data = res->data.function.args[0];
-
-    /* NDArray fast path (see ndreduce.c). */
-    if (ndred_call_has_ndarray(res)) return ndred_rms(res);
-
-    // Check if it's a matrix
-    Expr* matrixq_args[1] = { expr_copy(data) };
-    Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
-    Expr* is_matrix = evaluate(matrixq_call);
-    expr_free(matrixq_call);
-    if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol.name == SYM_True) {
-        expr_free(is_matrix);
-        return stats_apply_columnwise("RootMeanSquare", data);
-    }
-    expr_free(is_matrix);
-
-    // Check if it's a vector (list)
-    Expr* listq_args[1] = { expr_copy(data) };
-    Expr* listq_call = expr_new_function(expr_new_symbol(SYM_ListQ), listq_args, 1);
-    Expr* is_list = evaluate(listq_call);
-    expr_free(listq_call);
-    if (is_list->type == EXPR_SYMBOL && is_list->data.symbol.name == SYM_False) {
-        expr_free(is_list);
-        return NULL;
-    }
-    expr_free(is_list);
-
-    size_t n = data->data.function.arg_count;
+static Expr* rms_vec(Expr** el, size_t n) {
     if (n == 0) return NULL;
 
-    // Check if all elements are purely real numeric
     bool all_numeric = true;
     bool has_real = false;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = data->data.function.args[i];
+        Expr* elem = el[i];
         if (elem->type == EXPR_REAL) {
             has_real = true;
         } else if (elem->type == EXPR_INTEGER) {
@@ -64,7 +35,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
         double sum_sq = 0;
         for (size_t i = 0; i < n; i++) {
             double v = 0.0;
-            stats_is_numeric(data->data.function.args[i], &v, NULL);
+            stats_is_numeric(el[i], &v, NULL);
             sum_sq += v * v;
         }
         double r = sqrt(sum_sq / (double)n);
@@ -74,7 +45,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
         bool any_nonzero = false;
         for (size_t i = 0; i < n && !any_nonzero; i++) {
             double v = 0.0;
-            stats_is_numeric(data->data.function.args[i], &v, NULL);
+            stats_is_numeric(el[i], &v, NULL);
             any_nonzero = v != 0.0;
         }
         if (stats_machine_ok(r) && (r != 0.0 || !any_nonzero)) return expr_new_real(r);
@@ -83,7 +54,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
     // Fallback to symbolic (also used for exact rationals/integers to ensure correct square root distribution)
     Expr** sq_args = malloc(n * sizeof(Expr*));
     for (size_t i = 0; i < n; i++) {
-        Expr* power_args[2] = { expr_copy(data->data.function.args[i]), expr_new_integer(2) };
+        Expr* power_args[2] = { expr_copy(el[i]), expr_new_integer(2) };
         Expr* power_call = expr_new_function(expr_new_symbol(SYM_Power), power_args, 2);
         sq_args[i] = evaluate(power_call);
         expr_free(power_call);
@@ -140,4 +111,32 @@ Expr* builtin_rootmeansquare(Expr* res) {
         expr_free(sqrt_call);
         return result;
     }
+}
+
+Expr* builtin_rootmeansquare(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* data = res->data.function.args[0];
+
+    /* NDArray fast path (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_rms(res);
+
+    /* LinkedList: the packed kernel on the chunks, or columnwise (stats_ll.c). */
+    { Expr* r; if (stats_ll_arm(res, STATS_RMS, &r)) return r; }
+
+    if (data->type != EXPR_LINKEDLIST) {
+        Expr* matrixq_args[1] = { expr_copy(data) };
+        Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
+        Expr* is_matrix = evaluate(matrixq_call);
+        expr_free(matrixq_call);
+        bool mat = is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol.name == SYM_True;
+        expr_free(is_matrix);
+        if (mat) return stats_apply_columnwise("RootMeanSquare", data);
+    }
+
+    /* A vector: a List's arguments or a LinkedList's elements. */
+    LLElems e;
+    if (!ll_elems_open(data, &e)) return NULL;
+    Expr* r = rms_vec(e.v, e.n);
+    ll_elems_close(&e);
+    return r;
 }

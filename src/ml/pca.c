@@ -18,6 +18,8 @@
 #include "predict.h"
 #include "dist.h"
 #include "classify.h"
+#include "linkedlist.h"      /* LLElems: Standardize of a LinkedList */
+#include "common.h"          /* common_machine_real_value */
 
 void ml_column_mean(const double* x, size_t n, size_t dim, double* mean) {
     for (size_t j = 0; j < dim; j++) mean[j] = 0.0;
@@ -313,10 +315,64 @@ bool ml_reduce(const double* x, size_t n, size_t dim, size_t target,
 /* Builtins                                                                   */
 /* ------------------------------------------------------------------------- */
 
+/* Standardize's data with a LinkedList in it -- a LinkedList vector, or a
+ * matrix (List or LinkedList of equal-length rows) with a LinkedList among
+ * its rows -- read from the slots into the row-major double buffer
+ * ml_read_data would have made, every element a machine real number. */
+static bool std_read_ll(const Expr* e, size_t* n, size_t* dim, double** buf, bool* vec) {
+    LLElems rows;
+    if (!ll_elems_open(e, &rows)) return false;
+    bool any_ll = e->type == EXPR_LINKEDLIST, ok = rows.n > 0;
+    *vec = ok && !ll_is_seq(rows.v[0]);
+    size_t d = *vec ? 1 : (ok ? (size_t)ll_seq_length(rows.v[0]) : 0);
+    double* x = ok && d ? malloc(sizeof(double) * rows.n * d) : NULL;
+    ok = ok && x;
+    for (size_t i = 0; ok && i < rows.n; i++) {
+        if (*vec) { ok = common_machine_real_value(rows.v[i], &x[i]); continue; }
+        LLElems r;
+        if (!ll_is_seq(rows.v[i]) || !ll_elems_open(rows.v[i], &r)) { ok = false; break; }
+        if (rows.v[i]->type == EXPR_LINKEDLIST) any_ll = true;
+        ok = r.n == d;
+        for (size_t j = 0; ok && j < d; j++) ok = common_machine_real_value(r.v[j], &x[i * d + j]);
+        ll_elems_close(&r);
+    }
+    *n = rows.n;
+    *dim = d;
+    ll_elems_close(&rows);
+    if (!ok || !any_ll) { free(x); return false; }
+    *buf = x;
+    return true;
+}
+
+/* The standardized values in the image of the data: a LinkedList vector, or
+ * rows whose container follows the input's rows (and the outer container the
+ * input's). */
+static Expr* std_build_ll(const Expr* data, const double* x, size_t n, size_t dim, bool vec) {
+    if (vec) return expr_new_linkedlist(ll_from_buffer(LL_REAL, x, (int64_t)n));
+    LLElems rows;
+    ll_elems_open(data, &rows);
+    Expr** out = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++)
+        out[i] = rows.v[i]->type == EXPR_LINKEDLIST
+                     ? expr_new_linkedlist(ll_from_buffer(LL_REAL, x + i * dim, (int64_t)dim))
+                     : ml_list_of_reals(x + i * dim, dim);
+    ll_elems_close(&rows);
+    Expr* r = ll_seq_like(data, out, n);
+    free(out);
+    return r;
+}
+
 static Expr* builtin_standardize(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return NULL;
     size_t n, dim; double* x = NULL; bool vec = false;
+    Expr* data = res->data.function.args[0];
+    if (std_read_ll(data, &n, &dim, &x, &vec)) {
+        ml_standardize(x, n, dim, true);
+        Expr* out = std_build_ll(data, x, n, dim, vec);
+        free(x);
+        return out;
+    }
     if (!ml_read_data(res->data.function.args[0], &n, &dim, &x, &vec)) return NULL;
     ml_standardize(x, n, dim, true);
     Expr* out = vec ? ml_list_of_reals(x, n) : ml_list_matrix(x, n, dim);

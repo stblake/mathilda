@@ -2,6 +2,8 @@
 #include "rescale.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
+#include "linkedlist.h" /* LLElems */
+#include <stdlib.h>
 
 /* ====================================================================
  * Rescale[x, {min, max}]          -> (x - min)/(max - min)
@@ -38,6 +40,42 @@ static Expr* rescale_emit_argb(size_t argc) {
     return NULL;
 }
 
+/* Min[x] / Max[x], unevaluated. When x holds a LinkedList (at any list level)
+ * the call is built over its leaves instead -- Min[leaf1, leaf2, ...], which is
+ * what Min[x] means for a List, since Min flattens its List arguments -- read
+ * from the LinkedList's slots, so no LinkedList is ever handed to Min. */
+static bool rescale_has_ll(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) return true;
+    if (!is_listq((Expr*)e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rescale_has_ll(e->data.function.args[i])) return true;
+    return false;
+}
+static void rescale_leaves(const Expr* e, Expr*** buf, size_t* n, size_t* cap) {
+    if (e->type == EXPR_LINKEDLIST || is_listq((Expr*)e)) {
+        LLElems el;
+        ll_elems_open(e, &el);
+        for (size_t i = 0; i < el.n; i++) rescale_leaves(el.v[i], buf, n, cap);
+        ll_elems_close(&el);
+        return;
+    }
+    if (*n == *cap) {
+        *cap = *cap ? 2 * *cap : 16;
+        *buf = realloc(*buf, sizeof(Expr*) * *cap);
+    }
+    (*buf)[(*n)++] = expr_copy((Expr*)e);
+}
+static Expr* rescale_extreme(const char* head, Expr* x) {
+    if (!rescale_has_ll(x))
+        return expr_new_function(expr_new_symbol(head), (Expr*[]){ expr_copy(x) }, 1);
+    Expr** leaves = NULL;
+    size_t n = 0, cap = 0;
+    rescale_leaves(x, &leaves, &n, &cap);
+    Expr* call = expr_new_function(expr_new_symbol(head), leaves, n);
+    free(leaves);
+    return call;
+}
+
 Expr* builtin_rescale(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -55,10 +93,8 @@ Expr* builtin_rescale(Expr* res) {
      * for a lone scalar Min[x] == Max[x] and the result is Indeterminate,
      * matching Mathematica. */
     if (argc == 1) {
-        Expr* min_x = expr_new_function(expr_new_symbol(SYM_Min),
-            (Expr*[]){ expr_copy(x) }, 1);
-        Expr* max_x = expr_new_function(expr_new_symbol(SYM_Max),
-            (Expr*[]){ expr_copy(x) }, 1);
+        Expr* min_x = rescale_extreme(SYM_Min, x);
+        Expr* max_x = rescale_extreme(SYM_Max, x);
         Expr* range = expr_new_function(expr_new_symbol(SYM_List),
             (Expr*[]){ min_x, max_x }, 2);
         Expr* call = expr_new_function(expr_new_symbol(SYM_Rescale),

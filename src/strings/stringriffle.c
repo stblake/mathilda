@@ -27,18 +27,34 @@
 #include "regex_common.h"   /* RegexBuf */
 #include "common.h"
 #include "sym_names.h"
+#include "linkedlist.h"   /* a LinkedList riffles as its elements */
 #include "print.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-/* True iff e is a List[...] expression. */
+/* True iff e is a List[...] expression or a LinkedList (riffled as the List
+ * of its elements, read from the slots). */
 static bool is_list(const Expr* e) {
-    return e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_List;
+    return e->type == EXPR_LINKEDLIST
+        || (e->type == EXPR_FUNCTION
+            && e->data.function.head->type == EXPR_SYMBOL
+            && e->data.function.head->data.symbol.name == SYM_List);
 }
+
+/* Element count and element i of a list (is_list): a List's argument, or a
+ * LinkedList's slot viewed through ll_elem_view (release with seq_done). */
+static size_t seq_len(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ? (size_t)ll_length(e->data.llist)
+                                      : e->data.function.arg_count;
+}
+static Expr* seq_at(const Expr* e, size_t i, bool* owned) {
+    if (e->type == EXPR_LINKEDLIST) return ll_elem_view(e->data.llist, (int64_t)i, owned);
+    *owned = false;
+    return e->data.function.args[i];
+}
+static void seq_done(Expr* x, bool owned) { ll_elem_done(x, owned); }
 
 /*
  * SepSpec:
@@ -67,11 +83,18 @@ static bool parse_sep(Expr* e, SepSpec* out) {
         out->right = "";
         return true;
     }
-    if (is_list(e) && e->data.function.arg_count == 3) {
-        Expr** a = e->data.function.args;
-        if (a[0]->type != EXPR_STRING || a[1]->type != EXPR_STRING
-            || a[2]->type != EXPR_STRING)
-            return false;
+    if (is_list(e) && seq_len(e) == 3) {
+        /* Strings are boxed: a LinkedList's slots are borrowed in place. */
+        const Expr* a[3];
+        for (size_t i = 0; i < 3; i++) {
+            bool own;
+            Expr* x = seq_at(e, i, &own);
+            bool str = x->type == EXPR_STRING;
+            seq_done(x, own);
+            if (!str) return false;
+            a[i] = e->type == EXPR_LINKEDLIST ? ll_peek_boxed(e->data.llist, (int64_t)i)
+                                              : e->data.function.args[i];
+        }
         out->left = a[0]->data.string;
         out->sep = a[1]->data.string;
         out->right = a[2]->data.string;
@@ -89,8 +112,11 @@ static bool parse_sep(Expr* e, SepSpec* out) {
 static size_t depth_from_bottom(const Expr* e) {
     if (!is_list(e)) return 0;
     size_t max_child = 0;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        size_t d = depth_from_bottom(e->data.function.args[i]);
+    for (size_t i = 0, n = seq_len(e); i < n; i++) {
+        bool own;
+        Expr* x = seq_at(e, i, &own);
+        size_t d = depth_from_bottom(x);
+        seq_done(x, own);
         if (d > max_child) max_child = d;
     }
     return max_child + 1;
@@ -134,7 +160,7 @@ static int riffle_build(Expr* e, const SepSpec* seps, size_t nseps,
     }
 
     if (regexbuf_add(out, left, strlen(left))) return -1;
-    size_t n = e->data.function.arg_count;
+    size_t n = seq_len(e);
     for (size_t i = 0; i < n; i++) {
         if (i > 0) {
             if (sep) {
@@ -144,9 +170,11 @@ static int riffle_build(Expr* e, const SepSpec* seps, size_t nseps,
                     if (regexbuf_add(out, "\n", 1)) return -1;
             }
         }
-        if (riffle_build(e->data.function.args[i], seps, nseps,
-                         level + 1, df ? df - 1 : 0, out))
-            return -1;
+        bool own;
+        Expr* x = seq_at(e, i, &own);
+        int rc = riffle_build(x, seps, nseps, level + 1, df ? df - 1 : 0, out);
+        seq_done(x, own);
+        if (rc) return -1;
     }
     return regexbuf_add(out, right, strlen(right));
 }

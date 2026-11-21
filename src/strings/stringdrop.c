@@ -114,27 +114,30 @@ Expr* builtin_stringdrop(Expr* res) {
     Expr* arg0 = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
-    bool threaded = strings_is_list(arg0);
-    if (!(arg0->type == EXPR_STRING || (threaded && strings_all_strings(arg0))))
+    bool threaded = strings_is_seq(arg0);
+    if (!(arg0->type == EXPR_STRING || (threaded && strings_seq_all_strings(arg0))))
         return strings_msg_strse("StringDrop", res, 1);
 
     StrSeq q;
-    if (strings_is_list(spec) && spec->data.function.arg_count == 0)
+    if (strings_is_seq(spec) && ll_seq_length(spec) == 0)
         q.kind = SSEQ_NONE;                       /* {} drops nothing */
     else if (!strings_seq_parse(spec, &q))
         return sd_emit_seqs(res);
 
     if (!threaded) return strings_drop_seq(arg0, &q);
 
-    size_t n = arg0->data.function.arg_count;
+    LLElems sv;                           /* a List or a LinkedList of strings */
+    ll_elems_open(arg0, &sv);
+    size_t n = sv.n;
     Expr** results = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!results) return NULL;
+    if (!results) { ll_elems_close(&sv); return NULL; }
     for (size_t i = 0; i < n; i++) {
-        Expr* si = arg0->data.function.args[i];
+        Expr* si = sv.v[i];
         results[i] = strings_drop_seq(si, &q);
         if (!results[i]) results[i] = strings_uneval(SYM_StringDrop, si, spec, NULL);
     }
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), results, n);
+    ll_elems_close(&sv);
+    Expr* out = ll_seq_like(arg0, results, n);
     free(results);
     return out;
 }

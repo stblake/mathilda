@@ -28,6 +28,7 @@
 #include "utf8.h"
 #include "common.h"       /* builtin_arg_error */
 #include "sym_names.h"    /* SYM_List */
+#include "linkedlist.h"   /* a LinkedList of strings */
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -127,21 +128,22 @@ static Expr* pad_dispatch(Expr* res, const char* head, bool left) {
     Expr* arg0 = args[0];
     Expr* result = NULL;
 
-    if (arg0->type == EXPR_FUNCTION &&
-        arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol.name == SYM_List) {
-        /* --- List of strings: pad each, to n or to the longest ---------- */
-        size_t m = arg0->data.function.arg_count;
-        Expr** elems = arg0->data.function.args;
+    LLElems sv;
+    if (ll_elems_open(arg0, &sv)) {
+        /* --- List (or LinkedList) of strings: pad each, to n or to the longest */
+        size_t m = sv.n;
+        Expr** elems = sv.v;
         for (size_t i = 0; i < m; i++)
             if (elems[i]->type != EXPR_STRING) {
+                ll_elems_close(&sv);
                 u8_view_free(&pv);
                 return strings_arg_message(head, "strlist", "List of strings", 1, res);
             }
         if (m == 0) {   /* Mathematica: StringPadLeft[{}, n] is "", StringPadLeft[{}] is {} */
+            ll_elems_close(&sv);
             u8_view_free(&pv);
             return argc >= 2 ? expr_new_string("")
-                             : expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+                             : ll_seq_like(arg0, NULL, 0);
         }
 
         int64_t n = 0;
@@ -157,11 +159,16 @@ static Expr* pad_dispatch(Expr* res, const char* head, bool left) {
             n = (int64_t)maxlen;
         }
 
-        result = expr_new_function(expr_new_symbol(SYM_List), NULL, m);
-        for (size_t i = 0; result && i < m; i++) {
-            result->data.function.args[i] = pad_one(elems[i]->data.string, n, &pv, left);
-            if (!result->data.function.args[i]) { expr_free(result); result = NULL; }
+        Expr** out = malloc(sizeof(Expr*) * m);
+        size_t built = 0;
+        for (; out && built < m; built++) {
+            out[built] = pad_one(elems[built]->data.string, n, &pv, left);
+            if (!out[built]) break;
         }
+        if (out && built == m) result = ll_seq_like(arg0, out, m);
+        else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
+        free(out);
+        ll_elems_close(&sv);
     } else if (arg0->type == EXPR_STRING && argc >= 2) {
         /* --- Single string ---------------------------------------------- */
         int64_t n = 0;

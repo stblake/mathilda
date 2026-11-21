@@ -18,6 +18,8 @@
 #include "ndreduce.h"
 #include "pack.h"      /* pack_unpack */
 #include "print.h"     /* expr_to_string */
+#include "linkedlist.h" /* LLElems */
+#include "message.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -29,29 +31,34 @@ Expr* builtin_interquartilerange(Expr* res) {
     if (unpacked) data = unpacked;
 #define IQR_RET(x) do { Expr* _r = (x); if (unpacked) expr_free(unpacked); return _r; } while (0)
 
-    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL ||
-        data->data.function.head->data.symbol.name != SYM_List) {
-        IQR_RET(expr_copy(res));
-    }
-    size_t n = data->data.function.arg_count;
-    if (n == 0) IQR_RET(expr_copy(res));
+    /* LinkedList: columnwise (stats_ll.c), or the vector below. */
+    { Expr* r; if (stats_ll_arm(res, STATS_IQR, &r)) IQR_RET(r ? r : expr_copy(res)); }
 
-    /* Matrix FIRST -- see the header comment. */
-    if (data->data.function.args[0]->type == EXPR_FUNCTION &&
+    if (!ll_is_seq(data)) IQR_RET(expr_copy(res));
+    if (ll_seq_length(data) == 0) IQR_RET(expr_copy(res));
+
+    if (data->type != EXPR_LINKEDLIST &&
+        data->data.function.args[0]->type == EXPR_FUNCTION &&
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
         Expr* r = stats_apply_columnwise("InterquartileRange", data);
         IQR_RET(r ? r : expr_copy(res));
     }
 
+    LLElems e;
+    ll_elems_open(data, &e);
+    size_t n = e.n;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(data->data.function.args[i])) {
+        if (!stats_is_real_numeric(e.v[i])) {
+            ll_elems_close(&e);
             char* str = expr_to_string(res);
-            printf("InterquartileRange::rectn: Rectangular array of real numbers is expected at position 1 in %s.\n", str);
+            mth_message("InterquartileRange", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
             IQR_RET(expr_copy(res));
         }
     }
+
+    ll_elems_close(&e);
 
     Expr* q_call = expr_new_function(expr_new_symbol(SYM_Quartiles), (Expr*[]){expr_copy(data)}, 1);
     Expr* q_eval = evaluate(q_call);

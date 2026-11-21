@@ -13,6 +13,8 @@
 #include "ndreduce.h"
 #include "pack.h"      /* pack_unpack */
 #include "print.h"     /* expr_to_string */
+#include "linkedlist.h" /* LLElems */
+#include "message.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -42,36 +44,52 @@ Expr* builtin_meandeviation(Expr* res) {
     if (unpacked) data = unpacked;
 #define MD_RET(x) do { Expr* _r = (x); if (unpacked) expr_free(unpacked); return _r; } while (0)
 
-    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL ||
-        data->data.function.head->data.symbol.name != SYM_List) {
-        MD_RET(expr_copy(res));
-    }
-    size_t n = data->data.function.arg_count;
-    if (n == 0) MD_RET(expr_copy(res));
+    /* LinkedList: columnwise (stats_ll.c), or the vector below. */
+    { Expr* r; if (stats_ll_arm(res, STATS_MEAN_DEVIATION, &r)) MD_RET(r ? r : expr_copy(res)); }
 
-    if (data->data.function.args[0]->type == EXPR_FUNCTION &&
+    if (!ll_is_seq(data)) MD_RET(expr_copy(res));
+    if (ll_seq_length(data) == 0) MD_RET(expr_copy(res));
+
+    if (data->type != EXPR_LINKEDLIST &&
+        data->data.function.args[0]->type == EXPR_FUNCTION &&
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
         Expr* r = stats_apply_columnwise("MeanDeviation", data);
         MD_RET(r ? r : expr_copy(res));
     }
 
+    LLElems e;
+    ll_elems_open(data, &e);
+    size_t n = e.n;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(data->data.function.args[i]) ||
-            has_nonfinite(data->data.function.args[i])) {
+        if (!stats_is_real_numeric(e.v[i]) || has_nonfinite(e.v[i])) {
+            ll_elems_close(&e);
             char* str = expr_to_string(res);
-            printf("MeanDeviation::rectn: Rectangular array of real numbers is expected at position 1 in %s.\n", str);
+            mth_message("MeanDeviation", "rectn",
+                        "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
             MD_RET(expr_copy(res));
         }
     }
 
-    /* Mean[Abs[data - Mean[data]]], one tree, one evaluation. All-numeric input
-     * was just verified, so every layer reduces. */
-    Expr* inner_mean = expr_new_function(expr_new_symbol(SYM_Mean), (Expr*[]){expr_copy(data)}, 1);
-    Expr* neg_mean = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), inner_mean}, 2);
-    Expr* centered = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(data), neg_mean}, 2);
-    Expr* absdev = expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){centered}, 1);
-    Expr* outer = expr_new_function(expr_new_symbol(SYM_Mean), (Expr*[]){absdev}, 1);
-    MD_RET(eval_and_free(outer));
+    /* Mean[Abs[data - Mean[data]]] over the elements: the vector Mean core
+     * (stats_mean_vec), the centring and Abs one element at a time -- what the
+     * Listable Plus and Abs do over the List, so the List and the LinkedList
+     * (and an unpacked packed array) agree to the bit. All-numeric input was
+     * just verified, so every layer reduces. */
+    Expr* mu = stats_mean_vec(e.v, n);
+    Expr* neg_mu = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), mu }, 2));
+    Expr** dev = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                      (Expr*[]){ expr_copy(e.v[i]), expr_copy(neg_mu) }, 2));
+        dev[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ c }, 1));
+    }
+    expr_free(neg_mu);
+    ll_elems_close(&e);
+    Expr* r = stats_mean_vec(dev, n);
+    for (size_t i = 0; i < n; i++) expr_free(dev[i]);
+    free(dev);
+    MD_RET(r ? r : expr_copy(res));
 }

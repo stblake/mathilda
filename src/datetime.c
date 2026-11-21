@@ -7,6 +7,7 @@
 #endif
 
 #include "datetime.h"
+#include "linkedlist.h"   /* a LinkedList date specification */
 #include "common.h"
 #include "eval.h"
 #include "symtab.h"
@@ -268,6 +269,19 @@ static int expr_to_double_strict(const Expr* e, double* out) {
  * {2022,3,3}). Shared by AbsoluteTime and DateList so the two heads agree
  * bit-for-bit on the epoch and the accumulation order.
  */
+/* Part i of a date specification {y, m, d, h, mi, s} that is a List or a
+ * LinkedList (read from its slot; a LinkedList date spec is never converted),
+ * through expr_to_double_strict. */
+static int dt_spec_part(const Expr* arg, size_t i, double* out) {
+    const LinkedList* ll = expr_linkedlist(arg);
+    if (!ll) return expr_to_double_strict(arg->data.function.args[i], out);
+    bool own;
+    Expr* e = ll_elem_view(ll, (int64_t)i, &own);
+    int ok = expr_to_double_strict(e, out);
+    ll_elem_done(e, own);
+    return ok;
+}
+
 static int datelist_parts_to_abstime(const double parts[6], double* total) {
     if (parts[0] != floor(parts[0])) return 0;   /* year  */
     if (parts[1] != floor(parts[1])) return 0;   /* month */
@@ -409,15 +423,15 @@ Expr* builtin_absolute_time(Expr* res) {
     }
 
     /* AbsoluteTime[{y, m, d, h, m, s}] -- list with possible elision. */
-    if (head_is(arg, SYM_List)) {
+    if (head_is(arg, SYM_List) || arg->type == EXPR_LINKEDLIST) {
 
-        size_t n = arg->data.function.arg_count;
+        size_t n = (size_t)ll_seq_length(arg);
         if (n < 1 || n > 6) return NULL;
 
         /* Defaults match Mathematica: {y, 1, 1, 0, 0, 0}. */
         double parts[6] = {0.0, 1.0, 1.0, 0.0, 0.0, 0.0};
         for (size_t i = 0; i < n; i++) {
-            if (!expr_to_double_strict(arg->data.function.args[i], &parts[i])) {
+            if (!dt_spec_part(arg, i, &parts[i])) {
                 return NULL;
             }
         }
@@ -767,11 +781,11 @@ Expr* builtin_date_list(Expr* res) {
         return datelist_from_string(arg->data.string);
     }
 
-    if (head_is(arg, SYM_List)) {
-        size_t n = arg->data.function.arg_count;
+    if (head_is(arg, SYM_List) || arg->type == EXPR_LINKEDLIST) {
+        size_t n = (size_t)ll_seq_length(arg);
 
         /* {"string", ...} -- a DateString / format specification. */
-        if (n >= 1 && arg->data.function.args[0]->type == EXPR_STRING) {
+        if (n >= 1 && arg->type != EXPR_LINKEDLIST && arg->data.function.args[0]->type == EXPR_STRING) {
             return datelist_from_format(arg);
         }
 
@@ -779,7 +793,7 @@ Expr* builtin_date_list(Expr* res) {
         if (n < 1 || n > 6) return NULL;
         double parts[6] = {0.0, 1.0, 1.0, 0.0, 0.0, 0.0};
         for (size_t i = 0; i < n; i++) {
-            if (!expr_to_double_strict(arg->data.function.args[i], &parts[i])) {
+            if (!dt_spec_part(arg, i, &parts[i])) {
                 return NULL;   /* non-numeric element: leave unevaluated */
             }
         }
@@ -872,11 +886,11 @@ Expr* builtin_unix_time(Expr* res) {
         return ok ? unixtime_from_abstime(total) : NULL;
     }
 
-    if (head_is(arg, SYM_List)) {
-        size_t n = arg->data.function.arg_count;
+    if (head_is(arg, SYM_List) || arg->type == EXPR_LINKEDLIST) {
+        size_t n = (size_t)ll_seq_length(arg);
 
         /* {"string", ...} -- reuse the DateList format-element parser. */
-        if (n >= 1 && arg->data.function.args[0]->type == EXPR_STRING) {
+        if (n >= 1 && arg->type != EXPR_LINKEDLIST && arg->data.function.args[0]->type == EXPR_STRING) {
             Expr* dl = datelist_from_format(arg);
             if (!dl) return NULL;
             double total;
@@ -889,7 +903,7 @@ Expr* builtin_unix_time(Expr* res) {
         if (n < 1 || n > 6) return NULL;
         double parts[6] = {0.0, 1.0, 1.0, 0.0, 0.0, 0.0};
         for (size_t i = 0; i < n; i++) {
-            if (!expr_to_double_strict(arg->data.function.args[i], &parts[i])) {
+            if (!dt_spec_part(arg, i, &parts[i])) {
                 return NULL;   /* non-numeric element: leave unevaluated */
             }
         }

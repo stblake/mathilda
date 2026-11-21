@@ -56,7 +56,7 @@ typedef enum { SPK_INVALID, SPK_INDEX, SPK_LIST, SPK_ALL, SPK_SPAN, SPK_SPAN_BAD
 
 static SpKind sp_classify(Expr* spec, int64_t* m, int64_t* n, int64_t* s) {
     if (spec->type == EXPR_INTEGER || spec->type == EXPR_BIGINT) return SPK_INDEX;
-    if (strings_is_list(spec)) return SPK_LIST;
+    if (strings_is_seq(spec)) return SPK_LIST;   /* a List or a LinkedList */
     if (strings_is_sym(spec, SYM_All)) return SPK_ALL;
     if (strings_has_head(spec, SYM_Span) &&
         (spec->data.function.arg_count == 2 || spec->data.function.arg_count == 3)) {
@@ -106,24 +106,28 @@ static Expr* part_scalar(Expr* str, Expr* spec, SpKind kind,
     if (kind == SPK_LIST) {
         /* Every index must be a machine integer in range, else the whole
          * list is reported. Validate first, then view once. */
-        size_t k = spec->data.function.arg_count;
-        Expr** idx = spec->data.function.args;
+        LLElems ie;                       /* a List or a LinkedList of indices */
+        ll_elems_open(spec, &ie);
+        size_t k = ie.n;
+        Expr** idx = ie.v;
         int64_t pos;
         for (size_t i = 0; i < k; i++) {
             if (idx[i]->type != EXPR_INTEGER || !sp_index(idx[i]->data.integer, len, &pos)) {
+                ll_elems_close(&ie);
                 sp_emit_partw(spec, str);
                 return NULL;
             }
         }
         U8View v;
-        if (u8_view_init(&v, c.s, c.nbytes) != 0) return NULL;
+        if (u8_view_init(&v, c.s, c.nbytes) != 0) { ll_elems_close(&ie); return NULL; }
         Expr** items = malloc(sizeof(Expr*) * (k ? k : 1));
-        if (!items) { u8_view_free(&v); return NULL; }
+        if (!items) { ll_elems_close(&ie); u8_view_free(&v); return NULL; }
         for (size_t i = 0; i < k; i++) {
             sp_index(idx[i]->data.integer, len, &pos);
             items[i] = strings_char_at(&v, pos);
         }
-        Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, k);
+        ll_elems_close(&ie);
+        Expr* out = ll_seq_like(spec, items, k);
         free(items);
         u8_view_free(&v);
         return out;
@@ -177,8 +181,8 @@ Expr* builtin_stringpart(Expr* res) {
     Expr* arg0 = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
-    bool threaded = strings_is_list(arg0);
-    if (!(arg0->type == EXPR_STRING || (threaded && strings_all_strings(arg0))))
+    bool threaded = strings_is_seq(arg0);
+    if (!(arg0->type == EXPR_STRING || (threaded && strings_seq_all_strings(arg0))))
         return strings_msg_strse("StringPart", res, 1);
 
     int64_t m = 1, n = -1, s = 1;
@@ -187,15 +191,18 @@ Expr* builtin_stringpart(Expr* res) {
 
     if (!threaded) return part_scalar(arg0, spec, kind, m, n, s);
 
-    size_t cnt = arg0->data.function.arg_count;
+    LLElems sv;                           /* a List or a LinkedList of strings */
+    ll_elems_open(arg0, &sv);
+    size_t cnt = sv.n;
     Expr** results = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
-    if (!results) return NULL;
+    if (!results) { ll_elems_close(&sv); return NULL; }
     for (size_t i = 0; i < cnt; i++) {
-        Expr* si = arg0->data.function.args[i];
+        Expr* si = sv.v[i];
         results[i] = part_scalar(si, spec, kind, m, n, s);
         if (!results[i]) results[i] = strings_uneval(SYM_StringPart, si, spec, NULL);
     }
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), results, cnt);
+    ll_elems_close(&sv);
+    Expr* out = ll_seq_like(arg0, results, cnt);
     free(results);
     return out;
 }

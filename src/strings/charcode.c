@@ -127,21 +127,26 @@ Expr* builtin_tocharactercode(Expr* res) {
     Expr* a = res->data.function.args[0];
     if (a->type == EXPR_STRING) return codes_of_any(a->data.string, enc);
 
-    int ok = a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
-             a->data.function.head->data.symbol.name == SYM_List;
-    for (size_t i = 0; ok && i < a->data.function.arg_count; i++)
-        if (a->data.function.args[i]->type != EXPR_STRING) ok = 0;
-    if (!ok)
+    /* A List or a LinkedList of strings; the answer in its image. */
+    if (!strings_is_seq(a) || !strings_seq_all_strings(a))
         return strings_arg_message("ToCharacterCode", "strse",
                                    "String or list of strings", 1, res);
 
-    size_t m = a->data.function.arg_count;
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, m);
-    for (size_t i = 0; out && i < m; i++) {
-        out->data.function.args[i] = codes_of_any(a->data.function.args[i]->data.string, enc);
-        if (!out->data.function.args[i]) { expr_free(out); out = NULL; }
+    LLElems sv;
+    ll_elems_open(a, &sv);
+    size_t m = sv.n;
+    Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
+    size_t built = 0;
+    for (; out && built < m; built++) {
+        out[built] = codes_of_any(sv.v[built]->data.string, enc);
+        if (!out[built]) break;
     }
-    return out;
+    ll_elems_close(&sv);
+    Expr* r = NULL;
+    if (out && built == m) r = ll_seq_like(a, out, m);
+    else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
+    free(out);
+    return r;
 }
 
 /* ------------------------------------------------------------------ */
@@ -276,27 +281,46 @@ static Expr* string_of_codes(const int64_t* codes, size_t n, Expr* res, const Ex
     return expr_new_string_adopt(buf);
 }
 
-/* A List of Integer codes -> String; NULL if not all are valid codes. */
+/* A List -- or LinkedList -- of Integer codes -> String; NULL if not all are
+ * valid codes. An int64 LinkedList's slots are the codes already (gathered raw,
+ * as the packed buffer is read in place). */
 static Expr* string_of_list(const Expr* lst, CharEnc enc, Expr* res) {
-    size_t n = lst->data.function.arg_count;
+    const LinkedList* ll = expr_linkedlist(lst);
+    if (ll && ll_kind(ll) == LL_I64) {
+        int64_t n = ll_length(ll);
+        int64_t* codes = malloc((size_t)(n ? n : 1) * sizeof(int64_t));
+        if (!codes) return NULL;
+        ll_gather(ll, 0, n, codes);
+        Expr* s = string_of_codes_enc(codes, (size_t)n, enc, res, lst);
+        free(codes);
+        return s;
+    }
+    LLElems e;
+    ll_elems_open(lst, &e);
+    size_t n = e.n;
     int64_t* codes = malloc((n ? n : 1) * sizeof(int64_t));
-    if (!codes) return NULL;
+    if (!codes) { ll_elems_close(&e); return NULL; }
     for (size_t k = 0; k < n; k++) {
-        const Expr* c = lst->data.function.args[k];
+        const Expr* c = e.v[k];
         if (c->type != EXPR_INTEGER || !code_ok(c->data.integer)) {
             free(codes);
-            return fcc_bad(res, c, k + 1, lst);
+            Expr* r = fcc_bad(res, c, k + 1, lst);
+            ll_elems_close(&e);
+            return r;
         }
         codes[k] = c->data.integer;
     }
+    ll_elems_close(&e);
     Expr* s = string_of_codes_enc(codes, n, enc, res, lst);
     free(codes);
     return s;
 }
 
+/* A List or a LinkedList of codes (or of code lists). */
 static int is_list(const Expr* e) {
-    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == SYM_List;
+    return e->type == EXPR_LINKEDLIST ||
+           (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_List);
 }
 
 /* FromCharacterCode of the value `a`; `res` is the call, for diagnostics. */
@@ -338,18 +362,30 @@ static Expr* fcc_value(Expr* a, CharEnc enc, Expr* res) {
 
     if (!is_list(a)) return fcc_bad(res, a, 1, NULL);
 
-    /* {{codes}, {codes}, ...}: one string per sublist. */
-    size_t m = a->data.function.arg_count;
-    if (m > 0 && is_list(a->data.function.args[0])) {
-        Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, m);
-        for (size_t i = 0; out && i < m; i++) {
-            const Expr* sub = a->data.function.args[i];
-            out->data.function.args[i] = is_list(sub) ? string_of_list(sub, enc, res)
-                                                      : fcc_bad(res, sub, i + 1, NULL);
-            if (!out->data.function.args[i]) { expr_free(out); out = NULL; }
+    /* {{codes}, {codes}, ...}: one string per sublist, in the image of the
+     * outer list. A typed LinkedList holds codes, never sublists. */
+    const LinkedList* al = expr_linkedlist(a);
+    if (al && ll_kind(al) != LL_BOXED) return string_of_list(a, enc, res);
+    LLElems e;
+    ll_elems_open(a, &e);
+    size_t m = e.n;
+    if (m > 0 && is_list(e.v[0])) {
+        Expr** out = malloc(sizeof(Expr*) * m);
+        size_t built = 0;
+        for (; out && built < m; built++) {
+            const Expr* sub = e.v[built];
+            out[built] = is_list(sub) ? string_of_list(sub, enc, res)
+                                      : fcc_bad(res, sub, built + 1, NULL);
+            if (!out[built]) break;
         }
-        return out;
+        ll_elems_close(&e);
+        Expr* r = NULL;
+        if (out && built == m) r = ll_seq_like(a, out, m);
+        else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
+        free(out);
+        return r;
     }
+    ll_elems_close(&e);
     return string_of_list(a, enc, res);
 }
 

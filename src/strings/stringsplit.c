@@ -22,6 +22,7 @@
 
 #include "picostrings.h"
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of subjects */
 #include "sym_names.h"
 #include "common.h"
 #include "eval.h"
@@ -216,13 +217,12 @@ Expr* builtin_stringsplit(Expr* res) {
     }
 
     Expr* result;
-    if (subject->type == EXPR_FUNCTION &&
-        subject->data.function.head->type == EXPR_SYMBOL &&
-        subject->data.function.head->data.symbol.name == SYM_List) {
-        size_t m = subject->data.function.arg_count;
+    LLElems sv;
+    if (ll_elems_open(subject, &sv)) {   /* a List or a LinkedList of subjects */
+        size_t m = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
         for (size_t i = 0; i < m; i++) {
-            Expr* si = subject->data.function.args[i];
+            Expr* si = sv.v[i];
             if (si->type != EXPR_STRING)
                 out[i] = expr_copy(si);
             else
@@ -230,8 +230,9 @@ Expr* builtin_stringsplit(Expr* res) {
                                       : ss_scalar(si->data.string, rules, nr,
                                                   n_limit, keep_ends);
         }
-        result = expr_new_function(expr_new_symbol(SYM_List), out, m);
+        result = ll_seq_like(subject, out, m);
         free(out);
+        ll_elems_close(&sv);
     } else if (subject->type == EXPR_STRING) {
         result = patt_is_null ? ss_null(subject->data.string)
                               : ss_scalar(subject->data.string, rules, nr,

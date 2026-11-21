@@ -7,6 +7,7 @@
 #include "picostrings.h"
 #include "strings_internal.h"
 #include "sym_names.h"
+#include "linkedlist.h"   /* a LinkedList of strings */
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,6 +40,17 @@ static int collect_strings(Expr* e, JoinVec* jv, Expr** bad) {
         && e->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             int rc = collect_strings(e->data.function.args[i], jv, bad);
+            if (rc != 1) return rc;
+        }
+        return 1;
+    }
+    /* A LinkedList flattens like a List, its strings borrowed from the boxed
+     * slots (no code runs during the join, so the slots stay put). A typed
+     * list holds numbers, never strings. */
+    const LinkedList* ll = expr_linkedlist(e);
+    if (ll && (ll_kind(ll) == LL_BOXED || ll_length(ll) == 0)) {
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++) {
+            int rc = collect_strings((Expr*)ll_peek_boxed(ll, i), jv, bad);
             if (rc != 1) return rc;
         }
         return 1;

@@ -25,6 +25,7 @@
 
 #include "picostrings.h"
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of subjects */
 #include "sym_names.h"
 #include "symtab.h"
 #include "common.h"
@@ -142,15 +143,14 @@ Expr* builtin_stringcases(Expr* res) {
     for (int i = 0; i < nr; i++) if (rules[i].rhs) { want_captures = 1; break; }
 
     Expr* result;
-    if (subject->type == EXPR_FUNCTION &&
-        subject->data.function.head->type == EXPR_SYMBOL &&
-        subject->data.function.head->data.symbol.name == SYM_List) {
-        size_t m = subject->data.function.arg_count;
+    LLElems sv;
+    if (ll_elems_open(subject, &sv)) {       /* a List or a LinkedList of subjects */
+        size_t m = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
-        if (!out) { regex_rules_free(rules, nr); return NULL; }
+        if (!out) { ll_elems_close(&sv); regex_rules_free(rules, nr); return NULL; }
         size_t built = 0;
         for (; built < m; built++) {
-            Expr* si = subject->data.function.args[built];
+            Expr* si = sv.v[built];
             Expr* one = (si->type == EXPR_STRING)
                             ? sc_scalar(si->data.string, rules, nr, mode, want_captures, limit)
                             : expr_copy(si);
@@ -160,11 +160,12 @@ Expr* builtin_stringcases(Expr* res) {
         if (built < m) {                         /* partial: free and leave unevaluated */
             for (size_t k = 0; k < built; k++) expr_free(out[k]);
             free(out);
-            regex_rules_free(rules, nr);
+            ll_elems_close(&sv); regex_rules_free(rules, nr);
             return NULL;
         }
-        result = expr_new_function(expr_new_symbol(SYM_List), out, m);
+        result = ll_seq_like(subject, out, m);
         free(out);
+        ll_elems_close(&sv);
     } else if (subject->type == EXPR_STRING) {
         result = sc_scalar(subject->data.string, rules, nr, mode, want_captures, limit);
     } else {

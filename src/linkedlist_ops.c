@@ -27,6 +27,7 @@
 #include "arithmetic.h"        /* power_scalar_components */
 #include "common.h"            /* head_is */
 #include "numloop.h"           /* NumFn, NumPred */
+#include "pack.h"              /* pack_enabled, pack_min_elements */
 
 #include <float.h>
 #include <gmp.h>
@@ -592,4 +593,109 @@ Expr* ll_rebuild(const LinkedList* src, Expr* (*fn)(Expr* elem, int64_t i, void*
     ll_release(snap);
     if (*unwind) { if (out) ll_release(out); return NULL; }
     return out ? expr_new_linkedlist(out) : NULL;
+}
+
+/* ------------------------------------------------------------------------
+ *  Element vectors (linkedlist.h, LLElems)
+ * ---------------------------------------------------------------------- */
+bool ll_is_seq(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST || (e->type == EXPR_FUNCTION && head_is(e, SYM_List));
+}
+
+bool ll_elems_open(const Expr* seq, LLElems* out) {
+    if (seq->type == EXPR_FUNCTION && head_is(seq, SYM_List)) {
+        out->v = seq->data.function.args;
+        out->n = seq->data.function.arg_count;
+        out->owned = false;
+        return true;
+    }
+    const LinkedList* ll = expr_linkedlist(seq);
+    if (!ll) return false;
+    int64_t n = ll_length(ll);
+    Expr** v = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+    if (!v) abort();                                  /* out of memory */
+    if (ll_kind(ll) == LL_BOXED) {
+        ll_gather(ll, 0, n, v);                       /* borrowed slots ... */
+        for (int64_t i = 0; i < n; i++) v[i] = expr_copy(v[i]);   /* ... held */
+    } else {
+        for (int64_t i = 0; i < n; i++) v[i] = ll_get(ll, i);
+    }
+    out->v = v;
+    out->n = (size_t)n;
+    out->owned = true;
+    return true;
+}
+
+void ll_elems_close(LLElems* e) {
+    if (e->owned) {
+        for (size_t i = 0; i < e->n; i++) expr_free(e->v[i]);
+        free(e->v);
+    }
+    e->v = NULL;
+    e->n = 0;
+    e->owned = false;
+}
+
+Expr* ll_seq_like(const Expr* proto, Expr** out, size_t n) {
+    if (proto->type != EXPR_LINKEDLIST)
+        return expr_new_function(expr_new_symbol(SYM_List), out, n);
+    LinkedList* r = ll_new();
+    for (size_t i = 0; i < n; i++) ll_push_back(r, out[i]);
+    return expr_new_linkedlist(r);
+}
+
+/* ------------------------------------------------------------------------
+ *  Pairwise reductions with any leaf (linkedlist.h, ll_pairwise_reduce)
+ * ---------------------------------------------------------------------- */
+typedef struct { const LinkedList* ll; size_t w; LLRunLeaf leaf; void* ctx; int ncomp; } LLPairCtx;
+
+/* ndreduce.c's strided recursion (stride 1) over logical indices. */
+static void ll_pairwise_range(const LLPairCtx* x, int64_t base, int64_t count, double* out) {
+    if ((size_t)count <= ND_PAIRWISE_BLOCK) {
+        double tmp[2 * ND_PAIRWISE_BLOCK];
+        const double* d = ll_run_f64(x->ll, base, count, x->w, tmp);
+        x->leaf(d, (size_t)count, x->ctx, out);
+        return;
+    }
+    int64_t half = count / 2;
+    double a[2] = { 0.0, 0.0 }, b[2] = { 0.0, 0.0 };
+    ll_pairwise_range(x, base, half, a);
+    ll_pairwise_range(x, base + half, count - half, b);
+    for (int c = 0; c < x->ncomp; c++) out[c] = a[c] + b[c];
+}
+
+static void ll_pairwise_chunk(void* c, size_t lo, size_t hi, double* slot) {
+    const LLPairCtx* x = (const LLPairCtx*)c;
+    ll_pairwise_range(x, (int64_t)lo, (int64_t)(hi - lo), slot);
+}
+
+void ll_pairwise_reduce(const LinkedList* ll, LLRunLeaf leaf, void* ctx, int ncomp,
+                        double* out) {
+    LLPairCtx x = { ll, ll_kind(ll) == LL_CPLX ? 2u : 1u, leaf, ctx, ncomp };
+    double slots[NDARRAY_MAX_THREADS * 2];
+    int k = nd_parallel_reduce((size_t)ll_length(ll), ll_pairwise_chunk, &x, ncomp, slots);
+    for (int c = 0; c < ncomp; c++) out[c] = 0.0;
+    for (int t = 0; t < k; t++)
+        for (int c = 0; c < ncomp; c++) out[c] += slots[ncomp * t + c];
+}
+
+/* ------------------------------------------------------------------------
+ *  Packed-or-plain counterparts (linkedlist.h)
+ * ---------------------------------------------------------------------- */
+bool ll_normal_packs(const LinkedList* ll) {
+    LLKind k = ll_kind(ll);
+    if (k != LL_I64 && k != LL_REAL && k != LL_CPLX) return false;
+    return pack_enabled() && (size_t)ll_length(ll) >= pack_min_elements();
+}
+
+LinkedList* ll_new_boxed(Expr** v, size_t n) {
+    LinkedList* ll = ll_new();
+    if (n == 0) return ll;
+    /* The first nonconforming element converts a list to boxed storage for
+     * good, and a list that is not emptied keeps its kind: admit a symbol,
+     * then the elements, then drop the symbol. */
+    ll_push_back(ll, expr_new_symbol(SYM_Null));
+    for (size_t i = 0; i < n; i++) ll_push_back(ll, expr_copy(v[i]));
+    expr_free(ll_pop_front(ll));
+    return ll;
 }

@@ -259,7 +259,7 @@ double nd_sum_block_f64(const double* p, size_t count) {
  * (*re, *im). Strided so the same routine sums a contiguous run (stride == 1,
  * full/flatten reductions) or one column of a leading-axis reduction
  * (stride == trailing size). float64 gets a tight raw-pointer inner loop. */
-static void nd_sum_strided(const void* buf, NDType dt, size_t base,
+void nd_sum_strided(const void* buf, NDType dt, size_t base,
                            size_t stride, size_t count, double* re, double* im) {
     if (count <= ND_PAIRWISE_BLOCK) {
         double sr = 0.0, si = 0.0;
@@ -290,7 +290,7 @@ static void nd_sum_strided(const void* buf, NDType dt, size_t base,
 /* Pairwise sum of squared deviations |buf[k] - (mr,mi)|^2 over the same strided
  * range (mr = mi = 0 gives the plain sum of |buf[k]|^2, used by RMS). Returns a
  * real accumulation. */
-static double nd_sumsq_strided(const void* buf, NDType dt, size_t base,
+double nd_sumsq_strided(const void* buf, NDType dt, size_t base,
                                size_t stride, size_t count, double mr, double mi) {
     if (count <= ND_PAIRWISE_BLOCK) {
         double s = 0.0;
@@ -474,7 +474,7 @@ void nd_sort_ascending(double* s, size_t n) {
 
 /* Median of `count` reals gathered at (base, stride). Uses quickselect (O(n))
  * rather than a full sort. Even length averages the two central order stats. */
-static double nd_median_of(const void* buf, NDType dt, size_t base,
+double nd_median_of(const void* buf, NDType dt, size_t base,
                            size_t stride, size_t count) {
     double* s = malloc(sizeof(double) * count);
     nd_gather_real(buf, dt, base, stride, count, s);
@@ -675,6 +675,34 @@ static bool nd_int64_degrade(const Expr* a) {
     return a && a->type == EXPR_NDARRAY && a->data.ndarray.dtype == NDT_INT64;
 }
 
+/* The default-parameter quartiles of `n` (>= 1) reals in s (sorted IN PLACE
+ * here) into q[0..3): the rank-1 kernel of ndred_quartiles, shared with the
+ * LinkedList statistics (src/stats/stats_ll.c) so the two agree to the bit. */
+void nd_quartiles_f64(double* s, size_t n, double qv[3]) {
+    nd_sort_ascending(s, n);
+    const double q[3] = { 0.25, 0.5, 0.75 };
+    for (int k = 0; k < 3; k++) {
+        double h = 0.5 + (double)n * q[k];
+        double val;
+        if (h <= 1.0) val = s[0];
+        else if (h >= (double)n) val = s[n - 1];
+        else {
+            int64_t j = (int64_t)floor(h);
+            if (j < 1) j = 1;
+            if (j >= (int64_t)n) j = (int64_t)n - 1;
+            double g = h - (double)j;                    /* fractional part, in [0,1) */
+            /* Convex combination, not s[j-1] + g*(s[j] - s[j-1]): the two agree
+             * in exact arithmetic, but the difference overflows to infinity for
+             * neighbours of opposite sign near the double range, and infinity
+             * then survives the multiply and the add. This kernel must give the
+             * same answer as the boxed path in stats_common.c, which uses the
+             * same form. 1-based order stats. */
+            val = (1.0 - g) * s[j - 1] + g * s[j];
+        }
+        qv[k] = val;
+    }
+}
+
 /* Mathematica's default Quartiles parameters {{1/2, 0}, {0, 1}}: for the k-th
  * quantile q, h = 1/2 + n*q, clamped, then linear interpolation between the
  * bracketing order statistics of the ascending-sorted data. */
@@ -694,31 +722,11 @@ Expr* ndred_quartiles(Expr* res) {
     NDType dt = a->data.ndarray.dtype;
     double* s = malloc(sizeof(double) * n);
     nd_gather_real(a->data.ndarray.data, dt, 0, 1, n, s);
-    nd_sort_ascending(s, n);
-
-    const double q[3] = { 0.25, 0.5, 0.75 };
+    double qv[3];
+    nd_quartiles_f64(s, n, qv);
     NDType odt = nd_real_of(dt);
     void* out = malloc(ndt_elem_size(odt) * 3);
-    for (int k = 0; k < 3; k++) {
-        double h = 0.5 + (double)n * q[k];
-        double val;
-        if (h <= 1.0) val = s[0];
-        else if (h >= (double)n) val = s[n - 1];
-        else {
-            int64_t j = (int64_t)floor(h);
-            if (j < 1) j = 1;
-            if (j >= (int64_t)n) j = (int64_t)n - 1;
-            double g = h - (double)j;                    /* fractional part, in [0,1) */
-            /* Convex combination, not s[j-1] + g*(s[j] - s[j-1]): the two agree
-             * in exact arithmetic, but the difference overflows to infinity for
-             * neighbours of opposite sign near the double range, and infinity
-             * then survives the multiply and the add. This kernel must give the
-             * same answer as the boxed path in stats_common.c, which uses the
-             * same form. 1-based order stats. */
-            val = (1.0 - g) * s[j - 1] + g * s[j];
-        }
-        ndt_set(out, (size_t)k, odt, val, 0.0);
-    }
+    for (int k = 0; k < 3; k++) ndt_set(out, (size_t)k, odt, qv[k], 0.0);
     free(s);
     int64_t odims[1] = { 3 };
     return expr_new_ndarray_like(a, 1, odims, out, odt);
@@ -1174,6 +1182,17 @@ Expr* ndred_commonest(Expr* res) {
     return expr_new_ndarray_like(a, 1, dims, buf, dt);
 }
 
+/* The windowed means of n reals at window r (1 <= r <= n) into out[0, n-r]:
+ * MovingAverage's float64 kernel, shared with the LinkedList statistics. */
+void nd_moving_average_f64(const double* x, size_t n, size_t r, double* out) {
+    double inv = 1.0 / (double)r;
+    for (size_t i = 0; i + r <= n; i++) {
+        double sr, si;
+        nd_sum_strided(x, NDT_FLOAT64, i, 1, r, &sr, &si);   /* window [i, i+r) */
+        out[i] = sr * inv;
+    }
+}
+
 static Expr* ndred_moving_average_raw(Expr* res) {
     Expr* a; size_t r;
     if (!nd_moving_window(res, &a, &r)) return ndarray_delist_and_reeval(res);
@@ -1184,11 +1203,14 @@ static Expr* ndred_moving_average_raw(Expr* res) {
 
     void* out = malloc(ndt_elem_size(dt) * L);
     if (!out) return ndarray_delist_and_reeval(res);
-    double inv = 1.0 / (double)r;
-    for (size_t i = 0; i < L; i++) {
-        double sr, si;
-        nd_sum_strided(buf, dt, i, 1, r, &sr, &si);   /* window [i, i+r) */
-        ndt_set(out, i, dt, sr * inv, si * inv);
+    if (dt == NDT_FLOAT64) nd_moving_average_f64(buf, n, r, out);
+    else {
+        double inv = 1.0 / (double)r;
+        for (size_t i = 0; i < L; i++) {
+            double sr, si;
+            nd_sum_strided(buf, dt, i, 1, r, &sr, &si);   /* window [i, i+r) */
+            ndt_set(out, i, dt, sr * inv, si * inv);
+        }
     }
     int64_t odims[1] = { (int64_t)L };
     return expr_new_ndarray_like(a, 1, odims, out, dt);
@@ -1462,7 +1484,7 @@ static Expr* ndred_mean_raw(Expr* res) {
 
 /* One column's second moment at (base, stride) over `blocks` summands, serial
  * (used per-column in the columnwise path). mode: 0=Variance, 1=Std, 2=RMS. */
-static double nd_moment_at(const void* buf, NDType dt, size_t base, size_t stride,
+double nd_moment_at(const void* buf, NDType dt, size_t base, size_t stride,
                            size_t blocks, int mode) {
     if (mode == 2) {
         double ss = nd_sumsq_strided(buf, dt, base, stride, blocks, 0.0, 0.0);
@@ -1568,7 +1590,7 @@ static double nd_ipow(double b, int64_t e) {
  * leading kernel degrades int64/complex before ever calling this). The pairwise
  * split mirrors nd_sumsq_strided so the accumulation order — hence rounding —
  * matches the other reductions across the packed / visible / List surfaces. */
-static double nd_summoment_strided(const void* buf, NDType dt, size_t base,
+double nd_summoment_strided(const void* buf, NDType dt, size_t base,
                                    size_t stride, size_t count, double mean, int64_t r) {
     if (count <= ND_PAIRWISE_BLOCK) {
         double s = 0.0;
@@ -1605,7 +1627,7 @@ static double nd_full_moment(const void* buf, NDType dt, size_t n, double mean, 
 }
 
 /* One column's r-th central moment at (base, stride) over `blocks` summands. */
-static double nd_cm_at(const void* buf, NDType dt, size_t base, size_t stride,
+double nd_cm_at(const void* buf, NDType dt, size_t base, size_t stride,
                        size_t blocks, int64_t r) {
     double sr, si;
     nd_sum_strided(buf, dt, base, stride, blocks, &sr, &si);
@@ -1674,7 +1696,7 @@ static Expr* ndred_central_moment_raw(Expr* res) {
 /* One column's r-th RAW moment at (base, stride): Sum[x^r]/blocks. Reuses the
  * CentralMoment summation with mean = 0 — nd_summoment_strided computes
  * Sum[(x - mean)^r], so mean = 0 is exactly Sum[x^r]. */
-static double nd_rawmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+double nd_rawmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
                               size_t blocks, int64_t r) {
     return nd_summoment_strided(buf, dt, base, stride, blocks, 0.0, r) / (double)blocks;
 }
@@ -1739,7 +1761,7 @@ static Expr* ndred_moment_raw(Expr* res) {
  * summation helpers. Real dtypes only; int64 / complex degrade to the exact
  * List path (an integer sample's standardized moment is a radical, e.g.
  * Skewness[{1,2,3,10}] = 18 Sqrt[2]/25 — no machine slot holds it). */
-static double nd_stdmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+double nd_stdmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
                               size_t blocks, int p, double half_p) {
     double sr, si;
     nd_sum_strided(buf, dt, base, stride, blocks, &sr, &si);
@@ -2101,3 +2123,4 @@ Expr* ndred_kurtosis(Expr* res) { return nd_guard(ndred_kurtosis_raw(res), res);
 Expr* ndred_accumulate(Expr* res) { return nd_guard(ndred_accumulate_raw(res), res); }
 Expr* ndred_moving_average(Expr* res) { return nd_guard(ndred_moving_average_raw(res), res); }
 Expr* ndred_ema(Expr* res) { return nd_guard(ndred_ema_raw(res), res); }
+

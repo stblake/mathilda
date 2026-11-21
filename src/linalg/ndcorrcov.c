@@ -93,31 +93,29 @@ static void nd_centered_sums(const double* x, const double* y, size_t n,
     }
 }
 
-/* Covariance[v, w] on two rank-1 real vectors -> Real, or NULL to signal the
- * caller should degrade (wrong dtype / rank, unequal length, n < 2). */
-static Expr* cov_vec(const Expr* av, const Expr* aw) {
-    size_t nv, nw;
-    const double* v = nd_real_vec(av, &nv);
-    const double* w = nd_real_vec(aw, &nw);
-    if (!v || !w || nv != nw || nv < 2) return NULL;
-    double mv = nd_vec_mean(v, nv), mw = nd_vec_mean(w, nv);
+bool nd_corrcov_vec_f64(const double* v, const double* w, size_t n, int correlate,
+                        double* out) {
+    if (n < 2) return false;
+    double mv = nd_vec_mean(v, n), mw = nd_vec_mean(w, n);
     double s[3];
-    nd_centered_sums(v, w, nv, mv, mw, s);
-    return expr_new_real(s[0] / (double)(nv - 1));
+    nd_centered_sums(v, w, n, mv, mw, s);
+    if (!correlate) { *out = s[0] / (double)(n - 1); return true; }
+    if (s[1] <= 0.0 || s[2] <= 0.0) return false;   /* Indeterminate: let generic path answer */
+    *out = s[0] / sqrt(s[1] * s[2]);
+    return true;
 }
 
-/* Correlation[v, w] = Cov/(sigma_v sigma_w); the (n-1) cancels. NULL to degrade
- * (wrong shape, or a zero-variance vector whose correlation is Indeterminate). */
-static Expr* corr_vec(const Expr* av, const Expr* aw) {
-    size_t nv, nw;
+/* Covariance[v, w] / Correlation[v, w] on two rank-1 real vectors -> Real, or
+ * NULL to signal the caller should degrade (wrong dtype / rank, unequal
+ * length, n < 2, or a zero-variance vector whose correlation is
+ * Indeterminate). The (n-1) cancels in the correlation. */
+static Expr* corrcov_vec(const Expr* av, const Expr* aw, int correlate) {
+    size_t nv = 0, nw = 0;
     const double* v = nd_real_vec(av, &nv);
     const double* w = nd_real_vec(aw, &nw);
-    if (!v || !w || nv != nw || nv < 2) return NULL;
-    double mv = nd_vec_mean(v, nv), mw = nd_vec_mean(w, nv);
-    double s[3];
-    nd_centered_sums(v, w, nv, mv, mw, s);
-    if (s[1] <= 0.0 || s[2] <= 0.0) return NULL;   /* Indeterminate: let generic path answer */
-    return expr_new_real(s[0] / sqrt(s[1] * s[2]));
+    double r;
+    if (!v || !w || nv != nw || !nd_corrcov_vec_f64(v, w, nv, correlate, &r)) return NULL;
+    return expr_new_real(r);
 }
 
 /* ---------------------------------------------------------------- matrix core */
@@ -183,34 +181,17 @@ static const Expr* first_ndarray(const Expr* res) {
     return NULL;
 }
 
-/* Shared matrix driver. `correlate` selects Correlation (normalize by the outer
- * product of column standard deviations) over Covariance. */
-static Expr* matrix_form(Expr* res, const Expr* a, const Expr* b, int correlate) {
-    int an, ap, bn, bq;
-    double *A = NULL, *B = NULL;
-    int same = (a == b);
-    if (!na_load_matrix(a, false, false, &an, &ap, &A))
-        return ndarray_delist_and_reeval(res);
-    if (same) { B = A; bn = an; bq = ap; }
-    else if (!na_load_matrix(b, false, false, &bn, &bq, &B)) {
-        free(A);
-        return ndarray_delist_and_reeval(res);
-    }
-    if (an != bn || an < 2) {
-        free(A); if (!same) free(B);
-        return ndarray_delist_and_reeval(res);
-    }
-    int n = an, p = ap, q = bq;
+/* The matrix forms on raw row-major buffers: A is n x p, B is n x q (B == A
+ * for the auto form), both centered IN PLACE; C (p x q, row-major) receives
+ * the covariance or correlation matrix. False when the correlation is
+ * degenerate (a zero-variance column), C then unspecified. Shared by the
+ * NDArray path below and the LinkedList statistics (src/stats/corrcov.c). */
+bool nd_corrcov_matrix_f64(double* A, double* B, int n, int p, int q, int correlate,
+                           double* C) {
+    int same = (A == B);
 
     center_columns(A, n, p);
     if (!same) center_columns(B, n, q);
-
-    double* C = malloc(sizeof(double) * (size_t)p * (size_t)q);
-    if (!C) {
-        free(A);
-        if (!same) free(B);
-        return ndarray_delist_and_reeval(res);
-    }
 
     if (!correlate) {
         gram(A, B, C, n, p, q, 1.0 / (double)(n - 1), same);
@@ -230,10 +211,7 @@ static Expr* matrix_form(Expr* res, const Expr* a, const Expr* b, int correlate)
         if (degenerate) {                               /* degrade to the exact path */
             free(ssa);
             if (!same) free(ssb);
-            free(C);
-            free(A);
-            if (!same) free(B);
-            return ndarray_delist_and_reeval(res);
+            return false;
         }
         for (int i = 0; i < p; i++)
             for (int j = 0; j < q; j++) {
@@ -242,6 +220,35 @@ static Expr* matrix_form(Expr* res, const Expr* a, const Expr* b, int correlate)
             }
         free(ssa);
         if (!same) free(ssb);
+    }
+
+    return true;
+}
+
+/* Shared matrix driver. `correlate` selects Correlation (normalize by the outer
+ * product of column standard deviations) over Covariance. */
+static Expr* matrix_form(Expr* res, const Expr* a, const Expr* b, int correlate) {
+    int an, ap, bn, bq;
+    double *A = NULL, *B = NULL;
+    int same = (a == b);
+    if (!na_load_matrix(a, false, false, &an, &ap, &A))
+        return ndarray_delist_and_reeval(res);
+    if (same) { B = A; bn = an; bq = ap; }
+    else if (!na_load_matrix(b, false, false, &bn, &bq, &B)) {
+        free(A);
+        return ndarray_delist_and_reeval(res);
+    }
+    if (an != bn || an < 2) {
+        free(A); if (!same) free(B);
+        return ndarray_delist_and_reeval(res);
+    }
+    int n = an, p = ap, q = bq;
+    double* C = malloc(sizeof(double) * (size_t)p * (size_t)q);
+    if (!C || !nd_corrcov_matrix_f64(A, same ? A : B, n, p, q, correlate, C)) {
+        free(C);
+        free(A);
+        if (!same) free(B);
+        return ndarray_delist_and_reeval(res);
     }
 
     free(A);
@@ -286,7 +293,7 @@ static Expr* corrcov_dispatch(Expr* res, int correlate) {
         Expr* a = res->data.function.args[0];
         Expr* b = res->data.function.args[1];
         if (is_rank1_nd(a) && is_rank1_nd(b)) {         /* vector . vector -> scalar */
-            Expr* r = correlate ? corr_vec(a, b) : cov_vec(a, b);
+            Expr* r = corrcov_vec(a, b, correlate);
             return r ? r : ndarray_delist_and_reeval(res);
         }
         return matrix_form(res, a, b, correlate);       /* matrix x matrix -> matrix */
