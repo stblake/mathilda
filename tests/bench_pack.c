@@ -129,56 +129,60 @@ typedef struct { const char* label; const char* expr; double base_darwin; double
  * v0.6612, a deliberate correctness cost) and Det 1.75x (all of it inside
  * Accelerate's threaded LAPACK -- dispatch variance, not this code).  The
  * columns are base_darwin (median of three runs, Intel i9-9880H, the new unit)
- * and base_linux (0.0 = not yet recorded: the row prints, does not gate; to be
- * taken from the serial CI run of this commit).  The Linux runner needed its own
- * column all along: on it a 10^5-element RotateLeft costs ~7x macOS (~800 us
- * against ~110 us) on every nightly back to the first one (2026-10-27), so this
- * file had never passed there. */
+ * and base_linux (median of three serial CI runs of v0.6661 on ubuntu-latest:
+ * Actions runs 44890318762, 44890626189, 44890855505; run-to-run spread up to
+ * 2.2x, every sample within 1.9x of its median).  Open: on Linux a 10^5 Real
+ * RotateLeft costs ~12x the identical int64 one (732 vs 60 us; equal on macOS),
+ * though nd_rotate_axes is a dtype-blind memcpy -- the baseline records today's
+ * cost, so this row will not flag it; it needs a look on a Linux host.
+ * The Linux runner needed its own column all along: on it that RotateLeft costs
+ * ~7x macOS (~800 us against ~110 us) on every nightly back to the first one
+ * (2026-10-27), so this file had never passed there. */
 static Bench BENCHES[] = {
     /* ---- the structural family: native buffer walks in src/ndstruct.c ----
      * Slow path for all of these is ndstruct_delist_repack -- one Expr per
      * element, the generic List implementation, then a re-sniff and re-pack. */
-    { "RotateLeft matrix (200^2)",   "Length[RotateLeft[pm, {1, 0}]]",        0.0087, 0.0 },
-    { "RotateLeft vector (10^5)",    "Length[RotateLeft[pv, 3]]",             0.0207, 0.0 },
-    { "Reverse matrix (200^2)",      "Length[Reverse[pm]]",                   0.0056, 0.0 },
-    { "Join two vectors (10^5)",     "Length[Join[pv, pv]]",                  0.0202, 0.0 },
-    { "Partition (10^5, 2)",         "Length[Partition[pv, 2]]",              0.0101, 0.0 },
-    { "Differences (10^5)",          "Length[Differences[pv]]",               0.0180, 0.0 },
-    { "Riffle Real sep (10^5)",      "Length[Riffle[pv, 0.]]",                0.1792, 0.0 },
-    { "PadRight Real fill (10^5)",   "Length[PadRight[pv, 100001, 0.]]",      0.0101, 0.0 },
+    { "RotateLeft matrix (200^2)",   "Length[RotateLeft[pm, {1, 0}]]",        0.0087, 0.0059 },
+    { "RotateLeft vector (10^5)",    "Length[RotateLeft[pv, 3]]",             0.0207, 0.2695 },
+    { "Reverse matrix (200^2)",      "Length[Reverse[pm]]",                   0.0056, 0.0031 },
+    { "Join two vectors (10^5)",     "Length[Join[pv, pv]]",                  0.0202, 0.0256 },
+    { "Partition (10^5, 2)",         "Length[Partition[pv, 2]]",              0.0101, 0.0084 },
+    { "Differences (10^5)",          "Length[Differences[pv]]",               0.0180, 0.0225 },
+    { "Riffle Real sep (10^5)",      "Length[Riffle[pv, 0.]]",                0.1792, 0.2328 },
+    { "PadRight Real fill (10^5)",   "Length[PadRight[pv, 100001, 0.]]",      0.0101, 0.0087 },
 
     /* ---- the iteration family (Nest et al.) ----
      * Slow path: the gate materialises the state on EVERY iteration, so the cost
      * is O(iterations x elements) instead of O(elements). Was 118x. */
-    { "Nest over packed (20x)",      "Length[Nest[Reverse, pm, 20]]",         0.0928, 0.0 },
-    { "FoldList over packed (10^4)", "Length[FoldList[Plus, 0., fv]]",        0.0044, 0.0 },
+    { "Nest over packed (20x)",      "Length[Nest[Reverse, pm, 20]]",         0.0928, 0.0536 },
+    { "FoldList over packed (10^4)", "Length[FoldList[Plus, 0., fv]]",        0.0044, 0.0111 },
 
     /* ---- user DownValues that bind opaquely (dv_binds_opaquely, src/eval.c) --
      * Slow path: a user symbol has no packed_aware bit, so `jac[u_]` used to
      * materialise on every call. Was 158x on the composite stencil below. */
-    { "user f[v_] over packed",      "Length[usr[pv]]",                       0.0141, 0.0 },
-    { "Jacobi stencil (200^2, 20)",  "Length[Nest[jac, pm, 20]]",             3.0989, 0.0 },
+    { "user f[v_] over packed",      "Length[usr[pv]]",                       0.0141, 0.0112 },
+    { "Jacobi stencil (200^2, 20)",  "Length[Nest[jac, pm, 20]]",             3.0989, 4.2351 },
 
     /* ---- linear algebra (the 26 heads; ndla_* in src/linalg/ndlinalg.c) ----
      * Slow path is not merely slow: with the buffer materialised first,
      * linalg_call_has_ndarray reads false and a machine-real solve takes the
      * exact fraction-free path, which recurses. This row is a crash canary. */
-    { "LinearSolve (120^2)",         "Length[LinearSolve[sm, sv]]",           0.0553, 0.0 },
-    { "Det (120^2)",                 "Head[Det[sm]]",                         0.1143, 0.0 },
-    { "Inverse (120^2)",             "Length[Inverse[sm]]",                   0.2338, 0.0 },
+    { "LinearSolve (120^2)",         "Length[LinearSolve[sm, sv]]",           0.0553, 0.0643 },
+    { "Det (120^2)",                 "Head[Det[sm]]",                         0.1143, 0.0640 },
+    { "Inverse (120^2)",             "Length[Inverse[sm]]",                   0.2338, 0.1519 },
 
     /* ---- reductions and order statistics already on the buffer ----
      * Regression guards for paths that are currently fast. */
-    { "Total (10^5)",                "Total[pv]",                             0.0135, 0.0 },
-    { "Sort (10^5)",                 "Length[Sort[pv]]",                      1.1368, 0.0 },
-    { "Accumulate (10^5)",           "Length[Accumulate[pv]]",                0.0565, 0.0 },
+    { "Total (10^5)",                "Total[pv]",                             0.0135, 0.0128 },
+    { "Sort (10^5)",                 "Length[Sort[pv]]",                      1.1368, 1.1370 },
+    { "Accumulate (10^5)",           "Length[Accumulate[pv]]",                0.0565, 0.0394 },
 
     /* ---- exact int64 buffers ----
      * Slow path: any head not on INT64_OK materialises an integer buffer. The
      * answers must stay exact Integers either way, so only the timing tells. */
-    { "Total int64 (10^5)",          "Head[Total[iv]]",                       0.0190, 0.0 },
-    { "RotateLeft int64 (10^5)",     "Length[RotateLeft[iv, 3]]",             0.0189, 0.0 },
-    { "Differences int64 (10^5)",    "Length[Differences[iv]]",               0.0178, 0.0 },
+    { "Total int64 (10^5)",          "Head[Total[iv]]",                       0.0190, 0.0273 },
+    { "RotateLeft int64 (10^5)",     "Length[RotateLeft[iv, 3]]",             0.0189, 0.0223 },
+    { "Differences int64 (10^5)",    "Length[Differences[iv]]",               0.0178, 0.0252 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 

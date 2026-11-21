@@ -143,8 +143,9 @@ typedef struct { const char* label; const char* expr; double base_darwin; double
  * host), the third time a WL-spelled unit moved under the gate.  Row by row the
  * same A/B was 1.02-1.25x (nested plus collapse and both orderless sorts at the
  * top), so no row regressed past noise.  base_darwin is the median of three
- * runs on the Intel i9-9880H host; base_linux is 0.0 (prints, does not gate)
- * until the serial CI run of this commit records it. */
+ * runs on the Intel i9-9880H host; base_linux is the median of three serial
+ * CI runs of v0.6661 on ubuntu-latest (Actions 44890318762, 44890626189,
+ * 44890855505). */
 static Bench BENCHES[] = {
     /* 8000 structurally DISTINCT undefined nodes hh[k, k] (k differs each row),
      * so no eval-clock cache hit or refcount DAG-sharing collapses them. No rule
@@ -152,46 +153,46 @@ static Bench BENCHES[] = {
      * apply_down_values miss + builtin-lookup miss. The cleanest dispatch signal
      * in the set. (A Nest[f[u,u]] tree would instead share args by refcount and
      * collapse to a ~13-node DAG -- not a dispatch test.) */
-    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.83, 0.0 },
+    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.83, 1.40 },
 
     /* 4000 sequential DownValue rewrites g[k] -> k+1. Exercises
      * apply_down_values + get_attributes on the user symbol g every step. */
-    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.62, 0.0 },
+    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.62, 1.15 },
 
     /* Listable threading of Cos over a 4000-element list: 4000 threaded
      * sub-evaluations, each dispatching Cos[k] (stays symbolic). */
-    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.33, 0.0 },
+    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.33, 0.48 },
 
     /* Build a 1200-term Plus and let Orderless sort it: stresses eval_sort_args
      * + expr_compare in addition to per-term dispatch. */
-    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.34, 0.0 },
+    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.34, 0.71 },
 
     /* Pairwise fold of a 400-element list to a fixed point via ReplaceRepeated:
      * ~399 rewrites, each a full matcher + re-evaluation pass (O(n^2), so kept
      * small). Stresses the pattern matcher, not just dispatch. */
-    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 0.82, 0.0 },
+    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 0.82, 0.86 },
 
     /* 3000 sequential Plus re-evaluations (each Nest step re-evaluates the
      * running sum). Exercises Flat/Orderless combination on every pass. */
-    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 1.88, 0.0 },
+    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 1.88, 2.02 },
 
     /* Naive fib[24]: exponential DownValue dispatch on a trivial body -- the
      * flagship per-call dispatch signal from MATHILDA_EVALUATOR_PERFORMANCE.md.
      * Definition installed in main(). */
-    { "naive recursion (fib 24)", "fib[24]", 28.03, 0.0 },
+    { "naive recursion (fib 24)", "fib[24]", 28.03, 32.87 },
 
     /* Case B (typed): the matcher per-attempt constant. Both engines walk the
      * identical search space, so the row isolates the evaluator constant behind
      * each guard evaluation (Length/Plus/Equal per attempt). */
     { "matcher constant (Case B)",
       "MatchQ[Range[500], {xx : Repeated[_Integer], yy : Repeated[_Integer], "
-      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 2.97, 0.0 },
+      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 2.97, 3.12 },
 
     /* Orderless canonicalisation of a 2000-term symbolic sum built via Apply --
      * the arithmetic sentinel this optimisation targeted (Table build + Apply +
      * Plus grouping). The 1200-term sibling above tracks the same shape; this
      * pins the doc's headline size. */
-    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.59, 0.0 },
+    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.59, 0.77 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 
