@@ -44,6 +44,17 @@ void symsum_register_binder(SymbolDef* d) {
     if (d->ss_seen_epoch == (uint16_t)g_symsum_epoch) symsum_bump();
 }
 
+void symsum_register_pattern(const Expr* pat) {
+    if (!g_symsum_on || !pat || pat->type != EXPR_FUNCTION) return;
+    const Expr* h = pat->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Pattern &&
+        pat->data.function.arg_count >= 1 && pat->data.function.args[0]->type == EXPR_SYMBOL)
+        symsum_register_binder(symsum_node_def(pat->data.function.args[0]));
+    symsum_register_pattern(h);
+    for (size_t i = 0; i < pat->data.function.arg_count; i++)
+        symsum_register_pattern(pat->data.function.args[i]);
+}
+
 static void scope_head(const char* name) {
     SymbolDef* d = intern_symbol_node(name);
     if (!d) return;

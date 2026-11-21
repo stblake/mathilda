@@ -1,4 +1,5 @@
 #include "symtab.h"
+#include "symsum.h"
 #include "match.h"
 #include "print.h"
 #include "sym_intern.h"
@@ -1891,6 +1892,10 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
     if (g_add_rule_no_bump) g_add_rule_no_bump = false;
     else if (binding) eval_clock_bump_binding(binding);
     else         eval_clock_bump();
+    /* Give the rule's pattern variables their binder bits now, while the
+     * package loads, rather than at first application -- where a variable a
+     * summary has already seen would invalidate every summary (symsum.h). */
+    symsum_register_pattern(pattern);
 
     /* §3.4 canonicalize the LHS before deriving any dispatch keys or
      * doing duplicate-rule detection. Held LHSs would otherwise sit in
@@ -2446,7 +2451,7 @@ Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
     for (Rule* rule = def->sub_values; rule; rule = rule->next) {
         MatchEnv* env = env_new();
         const char* prev_head = match_set_rule_head(def->symbol_name);
-        Expr* result = match(expr, rule->pattern, env) ? replace_bindings(rule->replacement, env) : NULL;
+        Expr* result = match(expr, rule->pattern, env) ? replace_bindings_stored(rule->replacement, env) : NULL;
         match_set_rule_head(prev_head);
         if (!result) { env_free(env); continue; }
         Expr* opts = env_get(env, SYM_EnvOptionsPattern);
@@ -2699,7 +2704,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
          * failed match falls through to Flat-head leftover matching (Phase 2). */
         const char* prev_head = match_set_rule_head(def->symbol_name);
         Expr* result = match(expr, rule->pattern, env)
-            ? replace_bindings(rule->replacement, env)
+            ? replace_bindings_stored(rule->replacement, env)
             : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
         match_set_rule_head(prev_head);
         if (result && rule->scoped_cond) {
@@ -2785,7 +2790,7 @@ Expr* apply_own_values(Expr* expr) {
         }
         MatchEnv* env = env_new();
         if (match(expr, rule->pattern, env)) {
-            Expr* result = replace_bindings(rule->replacement, env);
+            Expr* result = replace_bindings_stored(rule->replacement, env);
             env_free(env);
             return rule_result(rule, result, def->symbol_name);
         }
@@ -2883,7 +2888,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
             (expr->data.function.head && expr->data.function.head->type == EXPR_SYMBOL)
                 ? expr->data.function.head->data.symbol.name : def->symbol_name);
         Expr* result = match(expr, rule->pattern, env)
-            ? replace_bindings(rule->replacement, env)
+            ? replace_bindings_stored(rule->replacement, env)
             : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
         match_set_rule_head(prev_head);
         if (result && rule->scoped_cond) {

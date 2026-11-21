@@ -1,4 +1,5 @@
 #include "match.h"
+#include "symsum.h"
 #include "options.h"   /* optionvalue_inject_context: OptionValue in /; guards */
 #include <gmp.h>
 #include "part.h"
@@ -2984,6 +2985,13 @@ typedef struct {
     const char* buf[RB_DANGER_CAP];
     size_t n;
     bool built;
+    /* Binder summaries (symsum.h): the pattern variables' bits | SCOPE.  A
+     * subtree whose summary misses the mask holds no pattern variable (nothing
+     * to substitute or splice) and no binding scope (nothing to rename), which
+     * is exactly the subtree the slow walk hands back shared. */
+    uint64_t mask;
+    bool fast;
+    int renames;        /* capture-avoiding renames made (MATHILDA_SYMSUM_DIFF) */
 } RbDanger;
 
 static void rb_danger_build(RbDanger* d) {
@@ -3006,29 +3014,81 @@ static void rb_danger_build(RbDanger* d) {
     }
 }
 
-static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger);
+static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger, bool frozen);
 
-Expr* replace_bindings(Expr* expr, MatchEnv* env) {
+/* One rule application.  `frozen`: `expr` belongs to a stored rule (immutable
+ * while stored), so the summaries the walk fills on it stay true; otherwise
+ * only nodes below a shared one are filled. */
+static Expr* replace_bindings_ex(Expr* expr, MatchEnv* env, bool frozen) {
     if (!expr) return NULL;
     /* No bindings: nothing to substitute, splice or rename, so the result is
      * the expression itself.  A literal rule (res[14] = <135135-term sum>)
      * otherwise walked its whole right-hand side on every application, only
      * to share every node back (issue #112: 20 ms per read of res[12]). */
     if (!env || env->count == 0) return expr_copy(expr);
+    SCOPE_STAT(rb_top);
     RbDanger danger;
     danger.env = env; danger.n = 0; danger.built = false;
-    return rb_rec(expr, env, &danger);
+    danger.mask = SYMSUM_SCOPE; danger.fast = false; danger.renames = 0;
+#ifndef MTH_NO_SYMSUM
+    if (g_symsum_on) {
+        /* Pattern variables are normally registered when their rule is stored
+         * (symsum_register_rule); this covers ReplaceAll and the rest.
+         * env->symbols may hold a literal, not interned, name: intern it. */
+        for (size_t i = 0; i < env->count; i++) {
+            if (!env->symbols[i]) continue;
+            SymbolDef* d = intern_symbol_node(env->symbols[i]);
+            symsum_register_binder(d);
+            danger.mask |= symsum_def_bit(d);
+        }
+        danger.fast = g_symsum_on != 0;
+    }
+#endif
+    Expr* r = rb_rec(expr, env, &danger, frozen || expr->refcount >= 2);
+#ifndef MTH_NO_SYMSUM
+    if (danger.fast && g_symsum_diff && danger.renames == 0) {
+        RbDanger slow;
+        slow.env = env; slow.n = 0; slow.built = false;
+        slow.mask = 0; slow.fast = false; slow.renames = 0;
+        Expr* r2 = rb_rec(expr, env, &slow, false);
+        if (slow.renames == 0 && !expr_eq(r, r2)) {
+            char* a = expr_to_string(r); char* b = expr_to_string(r2);
+            fprintf(stderr, "MATHILDA_SYMSUM_DIFF: replace_bindings differs\n  fast: %s\n  slow: %s\n",
+                    a ? a : "?", b ? b : "?");
+            abort();
+        }
+        expr_free(r2);
+    }
+#endif
+    return r;
 }
 
-static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
+Expr* replace_bindings(Expr* expr, MatchEnv* env) {
+    return replace_bindings_ex(expr, env, false);
+}
+
+Expr* replace_bindings_stored(Expr* expr, MatchEnv* env) {
+    return replace_bindings_ex(expr, env, true);
+}
+
+static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger, bool frozen) {
     if (!expr) return NULL;
+    SCOPE_STAT(rb_nodes);
 
     if (expr->type == EXPR_SYMBOL) {
+        /* Not a pattern variable's bit: not bound (skips the env lookup). */
+        if (danger->fast && !(symsum_sym_bit(expr) & danger->mask)) return expr_copy(expr);
         Expr* bound = env_get(env, expr->data.symbol.name);
         if (bound) {
             return expr_copy(bound);
         }
     }
+
+    if (expr->type == EXPR_FUNCTION && danger->fast) {
+        uint64_t b;
+        if (symsum_get(expr, &b) && !(b & danger->mask)) { SCOPE_STAT(rb_skip); return expr_copy(expr); }
+    }
+    bool cfrozen = frozen || expr->refcount >= 2;
 
     if (expr->type == EXPR_FUNCTION) {
         /* Capture-avoiding substitution: if this is a scoping construct whose
@@ -3039,14 +3099,16 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
             if (danger->n > 0) {
                 Expr* safe = scoping_capture_avoid(expr, danger->buf, danger->n);
                 if (safe) {
-                    Expr* result = rb_rec(safe, env, danger);
+                    danger->renames++;
+                    SCOPE_STAT(rb_renames);
+                    Expr* result = rb_rec(safe, env, danger, false);   /* fresh copy */
                     expr_free(safe);
                     return result;
                 }
             }
         }
 
-        Expr* new_head = rb_rec(expr->data.function.head, env, danger);
+        Expr* new_head = rb_rec(expr->data.function.head, env, danger, cfrozen);
         
         bool skip_flattening = false;
         if (new_head->type == EXPR_SYMBOL && (
@@ -3078,7 +3140,7 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
             /* rb_rec, not replace_bindings: the danger set belongs to the whole
              * substitution and must not be rebuilt once per argument node. */
             Expr* a = expr->data.function.args[i];
-            temp_args[i] = rb_rec(a, env, danger);
+            temp_args[i] = rb_rec(a, env, danger, cfrozen);
             spliced[i] = !skip_flattening && a->type == EXPR_SYMBOL &&
                 env_get(env, a->data.symbol.name) != NULL &&
                 temp_args[i]->type == EXPR_FUNCTION &&
@@ -3111,6 +3173,7 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
                 expr_free(new_head);
                 if (temp_args != temp_stack) free(temp_args);
                 if (spliced != spliced_stack) free(spliced);
+                if (danger->fast && cfrozen) { symsum_fill(expr); SCOPE_STAT(rb_fill); }
                 return expr_copy(expr);
             }
         }

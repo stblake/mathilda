@@ -45,6 +45,9 @@ const char* match_get_rule_head(void);
 // Replace bound variables in expr with their values from env.
 // Returns a new expression (caller must free).
 Expr* replace_bindings(Expr* expr, MatchEnv* env);
+/* replace_bindings for a STORED rule's right-hand side (a DownValue, OwnValue,
+ * SubValue, UpValue): the walk may fill binder summaries on it (symsum.h). */
+Expr* replace_bindings_stored(Expr* expr, MatchEnv* env);
 
 // Flat-head "leftover" rule application, Phase 2. Call this ONLY after an
 // ordinary match(expr, pattern, env) has already failed (keep that match inline

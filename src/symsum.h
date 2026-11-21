@@ -75,6 +75,9 @@ void symsum_init(void);
 /* Give `d` a binder bit if it has none (advancing the epoch when a current
  * summary has already seen it bitless).  Idempotent. */
 void symsum_register_binder(SymbolDef* d);
+/* Register every pattern variable (Pattern[name, ...]) of a rule's left-hand
+ * side as a binder.  Called when the rule is stored. */
+void symsum_register_pattern(const Expr* pattern);
 /* Statistics for MATHILDA_DISPATCH_STATS-style reports and tests. */
 uint64_t symsum_epoch_bumps(void);
 
