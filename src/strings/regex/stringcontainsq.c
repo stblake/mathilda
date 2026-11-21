@@ -89,19 +89,18 @@ static Expr* sq_build_result(Expr* subject, RegexRule* rules, int nr, SqKind kin
     if (subject->type == EXPR_STRING)
         return sq_answer(sq_match(subject->data.string, rules, nr), kind);
 
-    LLElems sv;                             /* a List or a LinkedList of subjects */
-    if (!ll_elems_open(subject, &sv)) return NULL;
+    LLReader sv;                             /* a List or a LinkedList of subjects */
+    if (!ll_rd_open(subject, &sv)) return NULL;
 
     size_t n = sv.n;
-    Expr** elems = sv.v;
     for (size_t i = 0; i < n; i++)
-        if (elems[i]->type != EXPR_STRING) { ll_elems_close(&sv); return NULL; }
+        if (ll_rd_at(&sv, i)->type != EXPR_STRING) { ll_rd_close(&sv); return NULL; }
 
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!out) { ll_elems_close(&sv); return NULL; }
+    if (!out) { ll_rd_close(&sv); return NULL; }
     for (size_t i = 0; i < n; i++)
-        out[i] = sq_answer(sq_match(elems[i]->data.string, rules, nr), kind);
-    ll_elems_close(&sv);
+        out[i] = sq_answer(sq_match(ll_rd_at(&sv, i)->data.string, rules, nr), kind);
+    ll_rd_close(&sv);
 
     Expr* result = ll_seq_like(subject, out, n);
     free(out);                              /* the constructors copy the array */

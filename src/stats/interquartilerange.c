@@ -18,7 +18,7 @@
 #include "ndreduce.h"
 #include "pack.h"      /* pack_unpack */
 #include "print.h"     /* expr_to_string */
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,12 +45,12 @@ Expr* builtin_interquartilerange(Expr* res) {
         IQR_RET(r ? r : expr_copy(res));
     }
 
-    LLElems e;
-    ll_elems_open(data, &e);
+    LLReader e;
+    ll_rd_open(data, &e);
     size_t n = e.n;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(e.v[i])) {
-            ll_elems_close(&e);
+        if (!stats_is_real_numeric(ll_rd_at(&e, i))) {
+            ll_rd_close(&e);
             char* str = expr_to_string(res);
             mth_message("InterquartileRange", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
@@ -58,7 +58,7 @@ Expr* builtin_interquartilerange(Expr* res) {
         }
     }
 
-    ll_elems_close(&e);
+    ll_rd_close(&e);
 
     Expr* q_call = expr_new_function(expr_new_symbol(SYM_Quartiles), (Expr*[]){expr_copy(data)}, 1);
     Expr* q_eval = evaluate(q_call);

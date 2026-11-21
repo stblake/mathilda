@@ -9,17 +9,18 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 
-Expr* stats_variance_vec(Expr** el, size_t n) {
+Expr* stats_variance_vec(LLReader* rd) {
+    size_t n = rd->n;
     if (n <= 1) return NULL;
 
     // Check if all elements are purely real numeric
     bool all_numeric = true;
     bool has_real = false;
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = el[i];
+        Expr* elem = ll_rd_at(rd, i);
         if (elem->type == EXPR_REAL) {
             has_real = true;
         } else if (elem->type == EXPR_INTEGER || is_rational(elem, NULL, NULL)) {
@@ -40,7 +41,7 @@ Expr* stats_variance_vec(Expr** el, size_t n) {
             if (!xs) return NULL;
             for (size_t i = 0; i < n; i++) {
                 xs[i] = 0.0;
-                stats_is_numeric(el[i], &xs[i], NULL);
+                stats_is_numeric(ll_rd_at(rd, i), &xs[i], NULL);
             }
             double v = ndred_variance_f64(xs, n);
             free(xs);
@@ -68,7 +69,7 @@ Expr* stats_variance_vec(Expr** el, size_t n) {
             int64_t sum_d = 1;
             bool overflow = false;
             for (size_t i = 0; i < n && !overflow; i++) {
-                Expr* elem = el[i];
+                Expr* elem = ll_rd_at(rd, i);
                 int64_t cur_n, cur_d;
                 if (elem->type == EXPR_INTEGER) { cur_n = elem->data.integer; cur_d = 1; }
                 else is_rational(elem, &cur_n, &cur_d);
@@ -85,7 +86,7 @@ Expr* stats_variance_vec(Expr** el, size_t n) {
             int64_t sq_sum_n = 0;
             int64_t sq_sum_d = 1;
             for (size_t i = 0; i < n && !overflow; i++) {
-                Expr* elem = el[i];
+                Expr* elem = ll_rd_at(rd, i);
                 int64_t cur_n, cur_d;
                 if (elem->type == EXPR_INTEGER) { cur_n = elem->data.integer; cur_d = 1; }
                 else is_rational(elem, &cur_n, &cur_d);
@@ -126,13 +127,13 @@ Expr* stats_variance_vec(Expr** el, size_t n) {
     }
 
     // Fallback to symbolic: Compute Mean
-    Expr* mu = stats_mean_vec(el, n);
+    Expr* mu = stats_mean_vec(rd);
     if (!mu) return NULL;
 
     // Sum[(x - mu) * Conjugate[x - mu]]
     Expr** diffs = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
-        Expr* x = el[i];
+        Expr* x = ll_rd_at(rd, i);
         Expr* sub_args[2] = { expr_copy(x), expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(mu)}, 2) };
         Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sub_args, 2));
 
@@ -183,9 +184,9 @@ Expr* builtin_variance(Expr* res) {
     }
 
     /* A vector: a List's arguments or a LinkedList's elements. */
-    LLElems e;
-    if (!ll_elems_open(data, &e)) return NULL;
-    Expr* r = stats_variance_vec(e.v, e.n);
-    ll_elems_close(&e);
+    LLReader e;
+    if (!ll_rd_open(data, &e)) return NULL;
+    Expr* r = stats_variance_vec(&e);
+    ll_rd_close(&e);
     return r;
 }

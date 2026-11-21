@@ -278,8 +278,11 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         CompileType rt = (tt == te) ? tt : num_common(tt, te);
         /* An array result would have to be copied into the branch-join register;
          * a MOVE only duplicates the handle, so array-valued branches are not in
-         * the M3a subset (see docs/design/compile_state.md). */
-        if ((int)rt < 0 || CT_IS_ARRAY(rt)) { c->ok = false; return -1; }
+         * the M3a subset (see docs/design/compile_state.md). A LinkedList value
+         * (AppendTo[l, v] in both branches) is the same: its handle lives in an
+         * array register, and moving it into the scalar join register corrupted
+         * the run -- If[c, AppendTo[l, 1.], PrependTo[l, 2.]] in a Do aborted. */
+        if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_LLIST(rt)) { c->ok = false; return -1; }
         int rr = alloc_temp(c);                     /* persistent result reg */
         Slot z = { 0 };
         Val cond; if (!emit(c, A[0], &cond)) return -1;
@@ -308,7 +311,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
     if (strcmp(h, "Which") == 0 || strcmp(h, "Switch") == 0 || strcmp(h, "Piecewise") == 0) {
         Rung rungs[COND_CHAIN_MAX]; int nr; bool has_default; CompileType rt;
         if (!collect_ladder(c, h, A, na, rungs, &nr, &has_default, &rt)) { c->ok = false; return -1; }
-        if (CT_IS_ARRAY(rt)) { c->ok = false; return -1; }
+        if (CT_IS_ARRAY(rt) || CT_IS_LLIST(rt)) { c->ok = false; return -1; }   /* see If */
         int rr = alloc_temp(c);                       /* persistent result register */
         if (strcmp(h, "Switch") == 0) {
             /* The discriminant is emitted once and stays live across every rung

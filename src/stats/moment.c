@@ -28,7 +28,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 
 /* Integer power by squaring on a double (exponent >= 0). */
@@ -49,7 +49,7 @@ static bool mom_is_list(const Expr* e) {
            e->data.function.head->data.symbol.name == SYM_List;
 }
 
-/* A sequence argument: a List, or a LinkedList (read through LLElems). */
+/* A sequence argument: a List, or a LinkedList (read through LLReader). */
 static bool mom_is_seq(const Expr* e) { return e && ll_is_seq(e); }
 
 /* Exact / symbolic base case: Mean[data^r]. Power is Listable, so data^r threads
@@ -58,12 +58,13 @@ static bool mom_is_seq(const Expr* e) { return e && ll_is_seq(e); }
  * scalar moment, the matrix's columnwise vector of moments, or the array's
  * columnwise array. Reuses Mean's exact-rational and symbolic paths (and the
  * evaluator's MPFR path for arbitrary-precision reals). */
-Expr* stats_moment_elements(Expr** el, size_t n, Expr* order) {
+Expr* stats_moment_elements(LLReader* rd, Expr* order) {
+    size_t n = rd->n;
     Expr** p = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++)
         p[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-                   (Expr*[]){ expr_copy(el[i]), expr_copy(order) }, 2));
-    Expr* r = stats_mean_vec(p, n);
+                   (Expr*[]){ expr_copy(ll_rd_at(rd, i)), expr_copy(order) }, 2));
+    Expr* r = stats_mean_of(p, n);
     for (size_t i = 0; i < n; i++) expr_free(p[i]);
     free(p);
     return r;
@@ -74,10 +75,10 @@ static Expr* mom_symbolic(Expr* data, Expr* order) {
         /* The same tree over a LinkedList's elements (stats_moment_elements):
          * a LinkedList reaching here is one the packed path declined, so its
          * List counterpart is answered on the elements too. */
-        LLElems e;
-        ll_elems_open(data, &e);
-        Expr* r = stats_moment_elements(e.v, e.n, order);
-        ll_elems_close(&e);
+        LLReader e;
+        ll_rd_open(data, &e);
+        Expr* r = stats_moment_elements(&e, order);
+        ll_rd_close(&e);
         return r;
     }
     Expr* powered = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
@@ -94,25 +95,25 @@ static Expr* mom_symbolic(Expr* data, Expr* order) {
  * length to equal Length[rvec]. Mirrors CentralMoment's multivariate case with
  * the centering removed. */
 static Expr* mom_multivariate(Expr* data, Expr* rvec) {
-    LLElems rows;
-    if (!ll_elems_open(data, &rows)) return NULL;
-    Expr* first = rows.v[0];
+    LLReader rows;
+    if (!ll_rd_open(data, &rows)) return NULL;
+    Expr* first = ll_rd_at(&rows, 0);
     size_t m = rvec->data.function.arg_count;
     if (!mom_is_seq(first) || ll_seq_length(first) != (int64_t)m) {   /* depth >= 2, axis 2 = order */
-        ll_elems_close(&rows);
+        ll_rd_close(&rows);
         return NULL;
     }
 
     size_t n = rows.n;
     Expr** terms = malloc(sizeof(Expr*) * n);
-    if (!terms) { ll_elems_close(&rows); return NULL; }
+    if (!terms) { ll_rd_close(&rows); return NULL; }
     for (size_t i = 0; i < n; i++) {
-        Expr* sub = rows.v[i];                               /* borrowed, rank k-1 */
+        Expr* sub = ll_rd_at(&rows, i);                               /* borrowed, rank k-1 */
         Expr* powered = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                             (Expr*[]){ expr_copy(sub), expr_copy(rvec) }, 2));  /* threads r over axis 2 */
         terms[i] = eval_and_free(stats_apply_head(SYM_Times, powered));   /* Times @@ powered */
     }
-    ll_elems_close(&rows);
+    ll_rd_close(&rows);
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), terms, n);
     free(terms);
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
@@ -145,14 +146,14 @@ Expr* builtin_moment(Expr* res) {
      * a real number, at least one is inexact (approximate input -> approximate
      * output), and the order is a non-negative machine integer. A matrix / array
      * (data[[1]] is a List) skips this and takes the symbolic columnwise path. */
-    LLElems e;
-    ll_elems_open(data, &e);
+    LLReader e;
+    ll_rd_open(data, &e);
     size_t n = e.n;
-    if (!mom_is_seq(e.v[0]) &&
+    if (!mom_is_seq(ll_rd_at(&e, 0)) &&
         order->type == EXPR_INTEGER && order->data.integer >= 0) {
         bool all_numeric = true, has_real = false;
         for (size_t i = 0; i < n; i++) {
-            Expr* x = e.v[i];
+            Expr* x = ll_rd_at(&e, i);
             if (x->type == EXPR_REAL) has_real = true;
             else if (x->type == EXPR_INTEGER || is_rational(x, NULL, NULL)) { /* numeric */ }
             else { all_numeric = false; break; }
@@ -162,14 +163,14 @@ Expr* builtin_moment(Expr* res) {
             double acc = 0.0;
             for (size_t i = 0; i < n; i++) {
                 double v = 0.0;
-                stats_is_numeric(e.v[i], &v, NULL);
+                stats_is_numeric(ll_rd_at(&e, i), &v, NULL);
                 acc += mom_ipow(v, r);
             }
             double m = acc / (double)n;
-            if (stats_machine_ok(m)) { ll_elems_close(&e); return expr_new_real(m); }   /* else decline (C3) */
+            if (stats_machine_ok(m)) { ll_rd_close(&e); return expr_new_real(m); }   /* else decline (C3) */
         }
     }
-    ll_elems_close(&e);
+    ll_rd_close(&e);
 
     /* Exact / symbolic vector, matrix, or array; or symbolic / non-integer order. */
     return mom_symbolic(data, order);

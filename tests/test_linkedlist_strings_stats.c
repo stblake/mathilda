@@ -108,13 +108,25 @@ void test_stats_matrices() {
 /* The machine reductions read the chunks of a list grown at both ends (the
  * front run is stored downward) and agree with the packed kernel to the bit. */
 void test_stats_both_runs_bit_parity() {
-    assert_eval_eq("s9q = LinkedList[N[Sin[Range[1500]]]]; Do[PrependTo[s9q, N[Cos[s9i]]], {s9i, 1500}]; "
+    assert_eval_eq("s9q = LinkedList[]; Do[If[EvenQ[s9i], AppendTo[s9q, N[Sin[s9i]]], "
+                   "PrependTo[s9q, N[Cos[s9i]]]], {s9i, 3000}]; "
                    "s9p = Normal[s9q]; "
                    "Union[Table[(h[s9q] /. s9l_LinkedList :> Normal[s9l]) === h[s9p], "
                    "{h, {Mean, Variance, StandardDeviation, RootMeanSquare, Skewness, Kurtosis, Median, "
                    "Quartiles, CentralMoment[#, 5] &, Moment[#, 4] &, MovingAverage[#, 7] &, "
                    "MovingMedian[#, 4] &, ExponentialMovingAverage[#, 0.2] &}}]]",
                    "{True}", 0);
+}
+
+/* An autocompiled loop whose If (or Which) yields a LinkedList in its branches
+ * -- AppendTo / PrependTo return the list -- stays out of Compile[]: moving the
+ * list's handle into the scalar branch-join register corrupted the run (the
+ * process aborted or spun). */
+void test_if_with_list_valued_branches() {
+    assert_eval_eq("s9c = LinkedList[]; Do[If[EvenQ[s9k], AppendTo[s9c, 1.], PrependTo[s9c, 2.]], {s9k, 30}]; "
+                   "{Length[s9c], Total[s9c], Normal[s9c][[{1, -1}]]}", "{30, 45.0, {2.0, 1.0}}", 0);
+    assert_eval_eq("s9d = LinkedList[]; Do[Which[EvenQ[s9k], AppendTo[s9d, s9k], True, PrependTo[s9d, -s9k]], {s9k, 6}]; "
+                   "Normal[s9d]", "{-5, -3, -1, 2, 4, 6}", 0);
 }
 
 /* --------------------------------------------------------------- strings */
@@ -171,6 +183,7 @@ int main() {
     TEST(test_stats_two_vectors);
     TEST(test_stats_matrices);
     TEST(test_stats_both_runs_bit_parity);
+    TEST(test_if_with_list_valued_branches);
     TEST(test_string_subjects);
     TEST(test_string_pattern_and_spec_lists);
     TEST(test_dates);

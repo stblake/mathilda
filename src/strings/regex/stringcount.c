@@ -97,14 +97,14 @@ Expr* builtin_stringcount(Expr* res) {
     if (nr < 0) return NULL;
 
     Expr* result;
-    LLElems sv;
-    if (ll_elems_open(subject, &sv)) {       /* a List or a LinkedList of subjects */
+    LLReader sv;
+    if (ll_rd_open(subject, &sv)) {       /* a List or a LinkedList of subjects */
         size_t m = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
-        if (!out) { ll_elems_close(&sv); regex_rules_free(rules, nr); return NULL; }
+        if (!out) { ll_rd_close(&sv); regex_rules_free(rules, nr); return NULL; }
         size_t built = 0;
         for (; built < m; built++) {
-            Expr* si = sv.v[built];
+            Expr* si = ll_rd_at(&sv, built);
             Expr* one = (si->type == EXPR_STRING)
                             ? sct_scalar(si->data.string, rules, nr, mode)
                             : expr_copy(si);   /* non-string element passes through */
@@ -114,12 +114,12 @@ Expr* builtin_stringcount(Expr* res) {
         if (built < m) {                       /* partial: free and leave unevaluated */
             for (size_t k = 0; k < built; k++) expr_free(out[k]);
             free(out);
-            ll_elems_close(&sv); regex_rules_free(rules, nr);
+            ll_rd_close(&sv); regex_rules_free(rules, nr);
             return NULL;
         }
         result = ll_seq_like(subject, out, m);
         free(out);
-        ll_elems_close(&sv);
+        ll_rd_close(&sv);
     } else if (subject->type == EXPR_STRING) {
         result = sct_scalar(subject->data.string, rules, nr, mode);
     } else {

@@ -132,16 +132,16 @@ Expr* builtin_tocharactercode(Expr* res) {
         return strings_arg_message("ToCharacterCode", "strse",
                                    "String or list of strings", 1, res);
 
-    LLElems sv;
-    ll_elems_open(a, &sv);
+    LLReader sv;
+    ll_rd_open(a, &sv);
     size_t m = sv.n;
     Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
     size_t built = 0;
     for (; out && built < m; built++) {
-        out[built] = codes_of_any(sv.v[built]->data.string, enc);
+        out[built] = codes_of_any(ll_rd_at(&sv, built)->data.string, enc);
         if (!out[built]) break;
     }
-    ll_elems_close(&sv);
+    ll_rd_close(&sv);
     Expr* r = NULL;
     if (out && built == m) r = ll_seq_like(a, out, m);
     else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
@@ -295,22 +295,22 @@ static Expr* string_of_list(const Expr* lst, CharEnc enc, Expr* res) {
         free(codes);
         return s;
     }
-    LLElems e;
-    ll_elems_open(lst, &e);
+    LLReader e;
+    ll_rd_open(lst, &e);
     size_t n = e.n;
     int64_t* codes = malloc((n ? n : 1) * sizeof(int64_t));
-    if (!codes) { ll_elems_close(&e); return NULL; }
+    if (!codes) { ll_rd_close(&e); return NULL; }
     for (size_t k = 0; k < n; k++) {
-        const Expr* c = e.v[k];
+        const Expr* c = ll_rd_at(&e, k);
         if (c->type != EXPR_INTEGER || !code_ok(c->data.integer)) {
             free(codes);
             Expr* r = fcc_bad(res, c, k + 1, lst);
-            ll_elems_close(&e);
+            ll_rd_close(&e);
             return r;
         }
         codes[k] = c->data.integer;
     }
-    ll_elems_close(&e);
+    ll_rd_close(&e);
     Expr* s = string_of_codes_enc(codes, n, enc, res, lst);
     free(codes);
     return s;
@@ -366,26 +366,26 @@ static Expr* fcc_value(Expr* a, CharEnc enc, Expr* res) {
      * outer list. A typed LinkedList holds codes, never sublists. */
     const LinkedList* al = expr_linkedlist(a);
     if (al && ll_kind(al) != LL_BOXED) return string_of_list(a, enc, res);
-    LLElems e;
-    ll_elems_open(a, &e);
+    LLReader e;
+    ll_rd_open(a, &e);
     size_t m = e.n;
-    if (m > 0 && is_list(e.v[0])) {
+    if (m > 0 && is_list(ll_rd_at(&e, 0))) {
         Expr** out = malloc(sizeof(Expr*) * m);
         size_t built = 0;
         for (; out && built < m; built++) {
-            const Expr* sub = e.v[built];
+            const Expr* sub = ll_rd_at(&e, built);
             out[built] = is_list(sub) ? string_of_list(sub, enc, res)
                                       : fcc_bad(res, sub, built + 1, NULL);
             if (!out[built]) break;
         }
-        ll_elems_close(&e);
+        ll_rd_close(&e);
         Expr* r = NULL;
         if (out && built == m) r = ll_seq_like(a, out, m);
         else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
         free(out);
         return r;
     }
-    ll_elems_close(&e);
+    ll_rd_close(&e);
     return string_of_list(a, enc, res);
 }
 

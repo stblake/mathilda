@@ -8,7 +8,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <math.h>
 
 Expr* builtin_standard_deviation(Expr* res) {
@@ -36,13 +36,12 @@ Expr* builtin_standard_deviation(Expr* res) {
     }
 
     // Optimization for real numeric data: a List's arguments or a LinkedList's elements
-    LLElems e = { NULL, 0, false };
+    LLReader e;
     bool seq = false;
     if (data->type == EXPR_LINKEDLIST) {
-        seq = ll_elems_open(data, &e);
+        seq = ll_rd_open(data, &e);
     } else if (data->type == EXPR_FUNCTION) {
-        e.v = data->data.function.args;          /* borrowed */
-        e.n = data->data.function.arg_count;
+        ll_rd_wrap(&e, data->data.function.args, data->data.function.arg_count);
         seq = true;
     }
     if (seq) {
@@ -50,12 +49,12 @@ Expr* builtin_standard_deviation(Expr* res) {
         size_t n = e.n;
         for (size_t i = 0; i < n; i++) {
             bool complex;
-            if (!stats_is_numeric(e.v[i], NULL, &complex) || complex) {
+            if (!stats_is_numeric(ll_rd_at(&e, i), NULL, &complex) || complex) {
                 all_real = false;
                 break;
             }
         }
-        ll_elems_close(&e);
+        ll_rd_close(&e);
         if (all_real && n > 1) {
             Expr* var_call = expr_new_function(expr_new_symbol(SYM_Variance), (Expr*[]){ expr_copy(data) }, 1);
             Expr* var_e = evaluate(var_call);

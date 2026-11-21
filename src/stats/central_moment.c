@@ -26,7 +26,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 
 /* Integer power by squaring on a double (exponent >= 0). */
@@ -50,20 +50,21 @@ static bool cm_is_list(const Expr* e) {
 /* Exact / symbolic vector base case: Mean[(data - Mean[data])^r]. Plus and Power
  * are Listable, so (data - mu) and (...)^r thread over the vector elementwise and
  * the outer Mean divides by n. Reuses Mean's exact-rational and symbolic paths. */
-Expr* stats_cm_elements(Expr** el, size_t n, Expr* order) {
-    Expr* mu = stats_mean_vec(el, n);
+Expr* stats_cm_elements(LLReader* rd, Expr* order) {
+    size_t n = rd->n;
+    Expr* mu = stats_mean_vec(rd);
     if (!mu) return NULL;
     Expr* neg_mu = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ expr_new_integer(-1), mu }, 2));
     Expr** p = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
-                      (Expr*[]){ expr_copy(el[i]), expr_copy(neg_mu) }, 2));
+                      (Expr*[]){ expr_copy(ll_rd_at(rd, i)), expr_copy(neg_mu) }, 2));
         p[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                    (Expr*[]){ c, expr_copy(order) }, 2));
     }
     expr_free(neg_mu);
-    Expr* r = stats_mean_vec(p, n);
+    Expr* r = stats_mean_of(p, n);
     for (size_t i = 0; i < n; i++) expr_free(p[i]);
     free(p);
     return r;
@@ -72,10 +73,10 @@ Expr* stats_cm_elements(Expr** el, size_t n, Expr* order) {
 static Expr* cm_vector_symbolic(Expr* data, Expr* order) {
     if (data->type == EXPR_LINKEDLIST) {
         /* The same tree over a LinkedList's elements (stats_cm_elements). */
-        LLElems e;
-        ll_elems_open(data, &e);
-        Expr* r = stats_cm_elements(e.v, e.n, order);
-        ll_elems_close(&e);
+        LLReader e;
+        ll_rd_open(data, &e);
+        Expr* r = stats_cm_elements(&e, order);
+        ll_rd_close(&e);
         return r;
     }
     Expr* mu = eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
@@ -125,12 +126,12 @@ static Expr* cm_columnwise(Expr* data, Expr* order) {
  * The result is Mean over the slices (dividing the first axis by n). Requires the
  * slice's second-axis length to equal Length[rvec]. */
 static Expr* cm_multivariate(Expr* data, Expr* rvec) {
-    LLElems rows;
-    if (!ll_elems_open(data, &rows)) return NULL;
-    Expr* first = rows.v[0];
+    LLReader rows;
+    if (!ll_rd_open(data, &rows)) return NULL;
+    Expr* first = ll_rd_at(&rows, 0);
     size_t m = rvec->data.function.arg_count;
     if (!ll_is_seq(first) || ll_seq_length(first) != (int64_t)m) {   /* depth >= 2, axis 2 = order */
-        ll_elems_close(&rows);
+        ll_rd_close(&rows);
         return NULL;
     }
 
@@ -138,9 +139,9 @@ static Expr* cm_multivariate(Expr* data, Expr* rvec) {
     Expr* mu = eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
                    (Expr*[]){ expr_copy(data) }, 1));
     Expr** terms = malloc(sizeof(Expr*) * n);
-    if (!terms) { expr_free(mu); ll_elems_close(&rows); return NULL; }
+    if (!terms) { expr_free(mu); ll_rd_close(&rows); return NULL; }
     for (size_t i = 0; i < n; i++) {
-        Expr* sub = rows.v[i];                               /* borrowed, rank k-1 */
+        Expr* sub = ll_rd_at(&rows, i);                               /* borrowed, rank k-1 */
         Expr* neg_mu = expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(mu) }, 2);
         Expr* centered = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
@@ -150,7 +151,7 @@ static Expr* cm_multivariate(Expr* data, Expr* rvec) {
         terms[i] = eval_and_free(stats_apply_head(SYM_Times, powered));   /* Times @@ powered */
     }
     expr_free(mu);
-    ll_elems_close(&rows);
+    ll_rd_close(&rows);
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), terms, n);
     free(terms);
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
@@ -179,12 +180,12 @@ Expr* builtin_central_moment(Expr* res) {
     /* Multivariate order {r1, ..., rm}. */
     if (cm_is_list(order)) return cm_multivariate(data, order);
 
-    LLElems e;
-    ll_elems_open(data, &e);
+    LLReader e;
+    ll_rd_open(data, &e);
     size_t n = e.n;
 
     /* Scalar order over an array (depth >= 2): columnwise over the first axis. */
-    if (cm_is_list(e.v[0])) { ll_elems_close(&e); return cm_columnwise(data, order); }
+    if (cm_is_list(ll_rd_at(&e, 0))) { ll_rd_close(&e); return cm_columnwise(data, order); }
 
     /* Scalar order over a vector (depth 1). Fast real path: every element is a
      * real number, at least one is inexact (approximate input -> approximate
@@ -192,7 +193,7 @@ Expr* builtin_central_moment(Expr* res) {
     if (order->type == EXPR_INTEGER && order->data.integer >= 0) {
         bool all_numeric = true, has_real = false;
         for (size_t i = 0; i < n; i++) {
-            Expr* x = e.v[i];
+            Expr* x = ll_rd_at(&e, i);
             if (x->type == EXPR_REAL) has_real = true;
             else if (x->type == EXPR_INTEGER || is_rational(x, NULL, NULL)) { /* numeric */ }
             else { all_numeric = false; break; }
@@ -202,21 +203,21 @@ Expr* builtin_central_moment(Expr* res) {
             double mean = 0.0;
             for (size_t i = 0; i < n; i++) {
                 double v = 0.0;
-                stats_is_numeric(e.v[i], &v, NULL);
+                stats_is_numeric(ll_rd_at(&e, i), &v, NULL);
                 mean += v;
             }
             mean /= (double)n;
             double acc = 0.0;
             for (size_t i = 0; i < n; i++) {
                 double v = 0.0;
-                stats_is_numeric(e.v[i], &v, NULL);
+                stats_is_numeric(ll_rd_at(&e, i), &v, NULL);
                 acc += cm_ipow(v - mean, r);
             }
             double m = acc / (double)n;
-            if (stats_machine_ok(m)) { ll_elems_close(&e); return expr_new_real(m); }   /* else decline (C3) */
+            if (stats_machine_ok(m)) { ll_rd_close(&e); return expr_new_real(m); }   /* else decline (C3) */
         }
     }
-    ll_elems_close(&e);
+    ll_rd_close(&e);
 
     /* Exact / symbolic vector, or symbolic / non-integer order. */
     return cm_vector_symbolic(data, order);

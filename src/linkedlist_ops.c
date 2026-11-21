@@ -596,47 +596,61 @@ Expr* ll_rebuild(const LinkedList* src, Expr* (*fn)(Expr* elem, int64_t i, void*
 }
 
 /* ------------------------------------------------------------------------
- *  Element vectors (linkedlist.h, LLElems)
+ *  On-demand readers (linkedlist.h, LLReader)
  * ---------------------------------------------------------------------- */
 bool ll_is_seq(const Expr* e) {
     return e->type == EXPR_LINKEDLIST || (e->type == EXPR_FUNCTION && head_is(e, SYM_List));
 }
 
-bool ll_elems_open(const Expr* seq, LLElems* out) {
+bool ll_rd_open(const Expr* seq, LLReader* r) {
+    r->tmp = NULL;
+    r->snap = NULL;
     if (seq->type == EXPR_FUNCTION && head_is(seq, SYM_List)) {
-        out->v = seq->data.function.args;
-        out->n = seq->data.function.arg_count;
-        out->owned = false;
+        r->v = seq->data.function.args;
+        r->n = seq->data.function.arg_count;
         return true;
     }
     const LinkedList* ll = expr_linkedlist(seq);
     if (!ll) return false;
-    /* An array of every element is a List in all but its head: counted (see
-     * ll_note_materialised); read elements on demand instead. */
-    ll_note_materialised();
-    int64_t n = ll_length(ll);
-    Expr** v = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
-    if (!v) abort();                                  /* out of memory */
-    if (ll_kind(ll) == LL_BOXED) {
-        ll_gather(ll, 0, n, v);                       /* borrowed slots ... */
-        for (int64_t i = 0; i < n; i++) v[i] = expr_copy(v[i]);   /* ... held */
-    } else {
-        for (int64_t i = 0; i < n; i++) v[i] = ll_get(ll, i);
-    }
-    out->v = v;
-    out->n = (size_t)n;
-    out->owned = true;
+    r->v = NULL;
+    r->snap = ll_copy(ll);
+    r->n = (size_t)ll_length(r->snap);
     return true;
 }
 
-void ll_elems_close(LLElems* e) {
-    if (e->owned) {
-        for (size_t i = 0; i < e->n; i++) expr_free(e->v[i]);
-        free(e->v);
-    }
-    e->v = NULL;
-    e->n = 0;
-    e->owned = false;
+void ll_rd_wrap(LLReader* r, Expr** v, size_t n) {
+    r->v = v;
+    r->n = n;
+    r->snap = NULL;
+    r->tmp = NULL;
+}
+
+Expr* ll_rd_at(LLReader* r, size_t i) {
+    if (!r->snap) return r->v[i];
+    const Expr* b = ll_peek_boxed(r->snap, (int64_t)i);
+    if (b) return (Expr*)b;
+    if (r->tmp) expr_free(r->tmp);
+    r->tmp = ll_get(r->snap, (int64_t)i);
+    return r->tmp;
+}
+
+Expr* ll_rd_call(Expr* head, LLReader* r) {
+    if (r->snap) return ll_call_with_elements(head, r->snap);
+    Expr** a = malloc(sizeof(Expr*) * (r->n ? r->n : 1));
+    if (!a) abort();
+    for (size_t i = 0; i < r->n; i++) a[i] = expr_copy(r->v[i]);
+    Expr* call = expr_new_function(head, a, r->n);
+    free(a);
+    return call;
+}
+
+void ll_rd_close(LLReader* r) {
+    if (r->tmp) expr_free(r->tmp);
+    if (r->snap) ll_release(r->snap);
+    r->tmp = NULL;
+    r->snap = NULL;
+    r->v = NULL;
+    r->n = 0;
 }
 
 Expr* ll_seq_like(const Expr* proto, Expr** out, size_t n) {
@@ -691,16 +705,17 @@ bool ll_normal_packs(const LinkedList* ll) {
     return pack_enabled() && (size_t)ll_length(ll) >= pack_min_elements();
 }
 
-LinkedList* ll_new_boxed(Expr** v, size_t n) {
+/* The first nonconforming element converts a list to boxed storage for good,
+ * and a list that is not emptied keeps its kind: a placeholder symbol goes in
+ * first and comes out last. */
+LinkedList* ll_boxed_begin(void) {
     LinkedList* ll = ll_new();
-    if (n == 0) return ll;
-    /* The first nonconforming element converts a list to boxed storage for
-     * good, and a list that is not emptied keeps its kind: admit a symbol,
-     * then the elements, then drop the symbol. */
     ll_push_back(ll, expr_new_symbol(SYM_Null));
-    for (size_t i = 0; i < n; i++) ll_push_back(ll, expr_copy(v[i]));
-    expr_free(ll_pop_front(ll));
     return ll;
+}
+
+void ll_boxed_end(LinkedList* ll) {
+    expr_free(ll_pop_front(ll));
 }
 
 /* ------------------------------------------------------------------------
@@ -714,7 +729,7 @@ bool ll_elems_of(const Expr* e, LLElemsC* out) {
     if (e->type == EXPR_LINKEDLIST) {
         const LinkedList* ll = e->data.llist;
         int64_t n = ll_length(ll);
-        ll_note_materialised();       /* an all-elements array: see ll_elems_open */
+        ll_note_materialised();       /* an all-elements array (linkedlist.h) */
         out->ll = true;
         out->owned = true;
         out->n = n;

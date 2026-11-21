@@ -13,7 +13,7 @@
 #include "ndreduce.h"
 #include "pack.h"      /* pack_unpack */
 #include "print.h"     /* expr_to_string */
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,12 +58,12 @@ Expr* builtin_meandeviation(Expr* res) {
         MD_RET(r ? r : expr_copy(res));
     }
 
-    LLElems e;
-    ll_elems_open(data, &e);
+    LLReader e;
+    ll_rd_open(data, &e);
     size_t n = e.n;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(e.v[i]) || has_nonfinite(e.v[i])) {
-            ll_elems_close(&e);
+        if (!stats_is_real_numeric(ll_rd_at(&e, i)) || has_nonfinite(ll_rd_at(&e, i))) {
+            ll_rd_close(&e);
             char* str = expr_to_string(res);
             mth_message("MeanDeviation", "rectn",
                         "Rectangular array of real numbers is expected at position 1 in %s.", str);
@@ -77,18 +77,18 @@ Expr* builtin_meandeviation(Expr* res) {
      * Listable Plus and Abs do over the List, so the List and the LinkedList
      * (and an unpacked packed array) agree to the bit. All-numeric input was
      * just verified, so every layer reduces. */
-    Expr* mu = stats_mean_vec(e.v, n);
+    Expr* mu = stats_mean_vec(&e);
     Expr* neg_mu = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ expr_new_integer(-1), mu }, 2));
     Expr** dev = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
-                      (Expr*[]){ expr_copy(e.v[i]), expr_copy(neg_mu) }, 2));
+                      (Expr*[]){ expr_copy(ll_rd_at(&e, i)), expr_copy(neg_mu) }, 2));
         dev[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ c }, 1));
     }
     expr_free(neg_mu);
-    ll_elems_close(&e);
-    Expr* r = stats_mean_vec(dev, n);
+    ll_rd_close(&e);
+    Expr* r = stats_mean_of(dev, n);
     for (size_t i = 0; i < n; i++) expr_free(dev[i]);
     free(dev);
     MD_RET(r ? r : expr_copy(res));

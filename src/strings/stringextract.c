@@ -96,13 +96,13 @@ static Expr* apply_position(Expr* blocks, Expr* pos, int* is_multi) {
     }
     /* {n1, n2, ...} -> collection of blocks, in the image of the position
      * list (a LinkedList of positions gives a LinkedList of blocks). */
-    LLElems pe;
-    if (ll_elems_open(pos, &pe)) {
+    LLReader pe;
+    if (ll_rd_open(pos, &pe)) {
         *is_multi = 1;
         size_t m = pe.n;
         Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
         for (size_t i = 0; i < m; i++) {
-            Expr* pi = pe.v[i];
+            Expr* pi = ll_rd_at(&pe, i);
             if (pi->type == EXPR_INTEGER) {
                 out[i] = pos_single(blocks, pi->data.integer);
             } else {
@@ -111,7 +111,7 @@ static Expr* apply_position(Expr* blocks, Expr* pos, int* is_multi) {
                 out[i] = v ? v : expr_copy(pi);
             }
         }
-        ll_elems_close(&pe);
+        ll_rd_close(&pe);
         Expr* r = ll_seq_like(pos, out, m);
         free(out);
         return r;
@@ -153,18 +153,18 @@ static Expr* extract(Expr* str, LevelSpec* specs, int k, int level) {
 
     /* sel is a List (or a LinkedList, from a LinkedList of positions): map
      * the next level over its string elements, in its image. */
-    LLElems se;
-    if (!ll_elems_open(sel, &se)) { expr_free(sel); return NULL; }
+    LLReader se;
+    if (!ll_rd_open(sel, &se)) { expr_free(sel); return NULL; }
     size_t m = se.n;
     Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
     for (size_t i = 0; i < m; i++) {
-        Expr* e = se.v[i];
+        Expr* e = ll_rd_at(&se, i);
         if (e->type == EXPR_STRING) {
             out[i] = extract(e, specs, k, level + 1);
             if (!out[i]) {                       /* bail: free partials */
                 for (size_t j = 0; j < i; j++) expr_free(out[j]);
                 free(out);
-                ll_elems_close(&se);
+                ll_rd_close(&se);
                 expr_free(sel);
                 return NULL;
             }
@@ -172,7 +172,7 @@ static Expr* extract(Expr* str, LevelSpec* specs, int k, int level) {
             out[i] = expr_copy(e);               /* Missing / non-string kept */
         }
     }
-    ll_elems_close(&se);
+    ll_rd_close(&se);
     Expr* r = ll_seq_like(sel, out, m);
     free(out);
     expr_free(sel);
@@ -221,14 +221,14 @@ Expr* builtin_stringextract(Expr* res) {
 
     /* Apply. Thread over a list subject; a single string extracts directly. */
     Expr* result;
-    LLElems sv;
-    if (ll_elems_open(subject, &sv)) {    /* a List or a LinkedList of strings */
+    LLReader sv;
+    if (ll_rd_open(subject, &sv)) {    /* a List or a LinkedList of strings */
         size_t m = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
         int ok = 1;
         size_t i;
         for (i = 0; i < m; i++) {
-            Expr* si = sv.v[i];
+            Expr* si = ll_rd_at(&sv, i);
             if (si->type == EXPR_STRING) {
                 out[i] = extract(si, specs, k, 0);
                 if (!out[i]) ok = 0;
@@ -240,7 +240,7 @@ Expr* builtin_stringextract(Expr* res) {
         }
         result = ok ? ll_seq_like(subject, out, m) : NULL;
         free(out);
-        ll_elems_close(&sv);
+        ll_rd_close(&sv);
     } else if (subject->type == EXPR_STRING) {
         result = extract(subject, specs, k, 0);
     } else {

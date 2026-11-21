@@ -8,7 +8,7 @@
 #include "sym_names.h"
 #include "ndreduce.h"
 #include "sort.h"      /* expr_orderless_sort: Sort's canonical order */
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include "print.h"     /* expr_to_string */
 #include <stdio.h>
@@ -66,20 +66,20 @@ Expr* builtin_quartiles(Expr* res) {
         return res_list;
     }
 
-    LLElems e;
-    ll_elems_open(data, &e);
+    LLReader e;
+    ll_rd_open(data, &e);
     size_t n = e.n;
 
     bool all_real = true;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(e.v[i])) {
+        if (!stats_is_real_numeric(ll_rd_at(&e, i))) {
             all_real = false;
             break;
         }
     }
 
     if (!all_real) {
-        ll_elems_close(&e);
+        ll_rd_close(&e);
         char* str = expr_to_string(res);
         mth_message("Quartiles", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
         free(str);
@@ -112,16 +112,15 @@ Expr* builtin_quartiles(Expr* res) {
         d = expr_new_integer(1);
     }
 
-    /* Sort's canonical order (expr_compare) over a copy of the elements. */
-    Expr** sorted_A = malloc(sizeof(Expr*) * n);
-    if (!sorted_A) {
-        ll_elems_close(&e);
+    /* Sort's canonical order (expr_compare), as a permutation over the elements
+     * where they lie. */
+    size_t* perm = stats_sort_order(&e);
+    if (!perm) {
+        ll_rd_close(&e);
         expr_free(a); expr_free(b); expr_free(c); expr_free(d);
         return expr_copy(res);
     }
-    for (size_t i = 0; i < n; i++) sorted_A[i] = expr_copy(e.v[i]);
-    ll_elems_close(&e);
-    expr_orderless_sort(sorted_A, n);
+    StatsOrder ord = { &e, perm };
     Expr* q_vals[3];
     q_vals[0] = make_rational(1, 4);
     q_vals[1] = make_rational(1, 2);
@@ -132,15 +131,15 @@ Expr* builtin_quartiles(Expr* res) {
      * see stats_quantile_point's header comment for the one semantic difference
      * (integer h), which Quartiles' c=0 default cannot observe. */
     for (int k = 0; k < 3; k++) {
-        results[k] = stats_quantile_point(sorted_A, n, q_vals[k], a, b, c, d);
+        results[k] = stats_quantile_point(&ord, n, q_vals[k], a, b, c, d);
     }
 
     expr_free(q_vals[0]);
     expr_free(q_vals[1]);
     expr_free(q_vals[2]);
 
-    for (size_t i = 0; i < n; i++) expr_free(sorted_A[i]);
-    free(sorted_A);
+    free(perm);
+    ll_rd_close(&e);
     expr_free(a);
     expr_free(b);
     expr_free(c);

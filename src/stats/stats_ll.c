@@ -26,7 +26,7 @@
  *      typed) and the head is applied to it.
  *
  *   3. Anything else: not handled; a LinkedList vector continues into the
- *      builtin's element path, which reads it through LLElems (linkedlist.h).
+ *      builtin's element path, which reads it through LLReader (linkedlist.h).
  *
  * Result container: a vector derived element for element from the argument
  * (MovingAverage, ...) is a LinkedList; a columnwise statistic is in the image
@@ -277,11 +277,14 @@ static bool row_is_vector(const Expr* row) {
 }
 
 typedef struct {
-    Expr** rows;      /* borrowed (List) or owned (LinkedList data) */
-    LLElems e;
+    LLReader rd;      /* the rows, read one at a time (a List's or a snapshot's) */
     size_t nrows, ncols;
     bool packed_ref;  /* the reference matrix is a PACKED machine-real array */
 } Matrix;
+
+/* Row i, borrowed: rows are boxed (Lists, LinkedLists, packed vectors), so
+ * the pointer stays valid for the matrix's lifetime. */
+static Expr* mrow(Matrix* m, size_t i) { return ll_rd_at(&m->rd, i); }
 
 /* A row whose Normal is a packed machine-real vector: a machine-real
  * LinkedList long enough to pack, or a packed real List. The List of the rows'
@@ -299,14 +302,13 @@ static bool row_packs_real(const Expr* r) {
 static bool matrix_open(const Expr* data, Matrix* m) {
     if (!ll_is_seq(data)) return false;
     bool any_ll = data->type == EXPR_LINKEDLIST;
-    if (!ll_elems_open(data, &m->e)) return false;
-    m->rows = m->e.v;
-    m->nrows = m->e.n;
+    if (!ll_rd_open(data, &m->rd)) return false;
+    m->nrows = m->rd.n;
     m->packed_ref = true;
     if (m->nrows == 0) goto no;
     int64_t len = -1;
     for (size_t i = 0; i < m->nrows; i++) {
-        const Expr* r = m->rows[i];
+        const Expr* r = mrow(m, i);
         int64_t k = ll_seq_length(r);
         if (k < 1 || (len >= 0 && k != len)) goto no;
         len = k;
@@ -318,31 +320,29 @@ static bool matrix_open(const Expr* data, Matrix* m) {
     m->ncols = (size_t)len;
     return true;
 no:
-    ll_elems_close(&m->e);
+    ll_rd_close(&m->rd);
     return false;
 }
 
-static void matrix_close(Matrix* m) { ll_elems_close(&m->e); }
+static void matrix_close(Matrix* m) { ll_rd_close(&m->rd); }
 
 /* Column j as a fresh BOXED LinkedList: the counterpart of the plain column
  * the List code's Transpose hands each per-column call. */
-static Expr* matrix_column(const Matrix* m, size_t j) {
-    Expr** v = malloc(sizeof(Expr*) * m->nrows);
-    for (size_t i = 0; i < m->nrows; i++) v[i] = ll_seq_element(m->rows[i], (int64_t)j);
-    LinkedList* c = ll_new_boxed(v, m->nrows);
-    for (size_t i = 0; i < m->nrows; i++) expr_free(v[i]);
-    free(v);
+static Expr* matrix_column(Matrix* m, size_t j) {
+    LinkedList* c = ll_boxed_begin();
+    for (size_t i = 0; i < m->nrows; i++) ll_push_back(c, ll_seq_element(mrow(m, i), (int64_t)j));
+    ll_boxed_end(c);
     return expr_new_linkedlist(c);
 }
 
 /* The column answers out[0..n) (consumed) in the image of the rows. */
-static Expr* matrix_answer(const Matrix* m, Expr** out, size_t n) {
-    return ll_seq_like(m->rows[0], out, n);
+static Expr* matrix_answer(Matrix* m, Expr** out, size_t n) {
+    return ll_seq_like(mrow(m, 0), out, n);
 }
 
 /* The packed rank-2 kernels: ndreduce.c's strided column reductions over the
  * rows gathered row-major. NULL declines (the per-column path answers). */
-static Expr* machine_columns(Expr* res, StatsOp op, const Matrix* m) {
+static Expr* machine_columns(Expr* res, StatsOp op, Matrix* m) {
     size_t argc = res->data.function.arg_count;
     size_t R = m->nrows, C = m->ncols;
     int64_t ord = 0;
@@ -367,9 +367,10 @@ static Expr* machine_columns(Expr* res, StatsOp op, const Matrix* m) {
     Expr* r = NULL;
     if (buf && out) {
         for (size_t i = 0; i < R; i++) {
-            const LinkedList* rl = expr_linkedlist(m->rows[i]);
+            const Expr* row = mrow(m, i);
+            const LinkedList* rl = expr_linkedlist(row);
             if (rl) ll_gather(rl, 0, (int64_t)C, buf + i * C);
-            else memcpy(buf + i * C, m->rows[i]->data.ndarray.data, sizeof(double) * C);
+            else memcpy(buf + i * C, row->data.ndarray.data, sizeof(double) * C);
         }
         for (size_t j = 0; j < C; j++) {
             double re, im;
@@ -421,20 +422,21 @@ static bool columnwise_op(StatsOp op) {
  * stats_moment_elements) -- not the vector fast loops a column would take --
  * and Skewness / Kurtosis as m_p / m_2^(p/2) of those, as
  * stats_standardized_moment threads Power and Divide over the columns. */
-static Expr* moment_column(Expr* res, StatsOp op, const Matrix* m, size_t j) {
-    Expr** v = malloc(sizeof(Expr*) * m->nrows);
-    for (size_t i = 0; i < m->nrows; i++) v[i] = ll_seq_element(m->rows[i], (int64_t)j);
+static Expr* moment_column(Expr* res, StatsOp op, Matrix* m, size_t j) {
+    Expr* col = matrix_column(m, j);         /* read through a reader, on demand */
+    LLReader v;
+    ll_rd_open(col, &v);
     Expr* r;
     if (op == STATS_MOMENT) {
-        r = stats_moment_elements(v, m->nrows, res->data.function.args[1]);
+        r = stats_moment_elements(&v, res->data.function.args[1]);
     } else if (op == STATS_CENTRAL_MOMENT) {
-        r = stats_cm_elements(v, m->nrows, res->data.function.args[1]);
+        r = stats_cm_elements(&v, res->data.function.args[1]);
     } else {
         int p = op == STATS_SKEWNESS ? 3 : 4;
         Expr* pe = expr_new_integer(p);
         Expr* two = expr_new_integer(2);
-        Expr* mp = stats_cm_elements(v, m->nrows, pe);
-        Expr* m2 = stats_cm_elements(v, m->nrows, two);
+        Expr* mp = stats_cm_elements(&v, pe);
+        Expr* m2 = stats_cm_elements(&v, two);
         expr_free(pe);
         expr_free(two);
         if (!mp || !m2) {
@@ -447,13 +449,13 @@ static Expr* moment_column(Expr* res, StatsOp op, const Matrix* m, size_t j) {
                     (Expr*[]){ mp, denom }, 2));
         }
     }
-    for (size_t i = 0; i < m->nrows; i++) expr_free(v[i]);
-    free(v);
+    ll_rd_close(&v);
+    expr_free(col);
     return r;
 }
 
 /* head[column_j, rest...] for every column, in the image of the rows. */
-static Expr* per_column(Expr* res, StatsOp op, const Matrix* m) {
+static Expr* per_column(Expr* res, StatsOp op, Matrix* m) {
     size_t argc = res->data.function.arg_count;
     Expr** out = malloc(sizeof(Expr*) * m->ncols);
     if (!out) return NULL;

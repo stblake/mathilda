@@ -217,12 +217,12 @@ Expr* builtin_stringsplit(Expr* res) {
     }
 
     Expr* result;
-    LLElems sv;
-    if (ll_elems_open(subject, &sv)) {   /* a List or a LinkedList of subjects */
+    LLReader sv;
+    if (ll_rd_open(subject, &sv)) {   /* a List or a LinkedList of subjects */
         size_t m = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
         for (size_t i = 0; i < m; i++) {
-            Expr* si = sv.v[i];
+            Expr* si = ll_rd_at(&sv, i);
             if (si->type != EXPR_STRING)
                 out[i] = expr_copy(si);
             else
@@ -232,7 +232,7 @@ Expr* builtin_stringsplit(Expr* res) {
         }
         result = ll_seq_like(subject, out, m);
         free(out);
-        ll_elems_close(&sv);
+        ll_rd_close(&sv);
     } else if (subject->type == EXPR_STRING) {
         result = patt_is_null ? ss_null(subject->data.string)
                               : ss_scalar(subject->data.string, rules, nr,

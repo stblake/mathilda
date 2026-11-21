@@ -2,7 +2,7 @@
 #include "rescale.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 
 /* ====================================================================
@@ -41,9 +41,9 @@ static Expr* rescale_emit_argb(size_t argc) {
 }
 
 /* Min[x] / Max[x], unevaluated. When x holds a LinkedList (at any list level)
- * the call is built over its leaves instead -- Min[leaf1, leaf2, ...], which is
- * what Min[x] means for a List, since Min flattens its List arguments -- read
- * from the LinkedList's slots, so no LinkedList is ever handed to Min. */
+ * the extreme is folded over its leaves, read one at a time from the slots --
+ * Min[Min[l1, l2], l3] ... is Min[x] for a List, Min being Flat and flattening
+ * its List arguments -- so no LinkedList is ever handed to Min. */
 static bool rescale_has_ll(const Expr* e) {
     if (e->type == EXPR_LINKEDLIST) return true;
     if (!is_listq((Expr*)e)) return false;
@@ -51,29 +51,25 @@ static bool rescale_has_ll(const Expr* e) {
         if (rescale_has_ll(e->data.function.args[i])) return true;
     return false;
 }
-static void rescale_leaves(const Expr* e, Expr*** buf, size_t* n, size_t* cap) {
-    if (e->type == EXPR_LINKEDLIST || is_listq((Expr*)e)) {
-        LLElems el;
-        ll_elems_open(e, &el);
-        for (size_t i = 0; i < el.n; i++) rescale_leaves(el.v[i], buf, n, cap);
-        ll_elems_close(&el);
+static void rescale_fold(const char* head, Expr* e, Expr** acc) {
+    if (e->type == EXPR_LINKEDLIST || is_listq(e)) {
+        LLReader el;
+        ll_rd_open(e, &el);
+        for (size_t i = 0; i < el.n; i++) rescale_fold(head, ll_rd_at(&el, i), acc);
+        ll_rd_close(&el);
         return;
     }
-    if (*n == *cap) {
-        *cap = *cap ? 2 * *cap : 16;
-        *buf = realloc(*buf, sizeof(Expr*) * *cap);
-    }
-    (*buf)[(*n)++] = expr_copy((Expr*)e);
+    *acc = *acc ? eval_and_free(expr_new_function(expr_new_symbol(head),
+                                    (Expr*[]){ *acc, expr_copy(e) }, 2))
+                : expr_copy(e);
 }
 static Expr* rescale_extreme(const char* head, Expr* x) {
     if (!rescale_has_ll(x))
         return expr_new_function(expr_new_symbol(head), (Expr*[]){ expr_copy(x) }, 1);
-    Expr** leaves = NULL;
-    size_t n = 0, cap = 0;
-    rescale_leaves(x, &leaves, &n, &cap);
-    Expr* call = expr_new_function(expr_new_symbol(head), leaves, n);
-    free(leaves);
-    return call;
+    Expr* acc = NULL;
+    rescale_fold(head, x, &acc);
+    return acc ? expr_new_function(expr_new_symbol(head), (Expr*[]){ acc }, 1)
+               : expr_new_function(expr_new_symbol(head), NULL, 0);
 }
 
 Expr* builtin_rescale(Expr* res) {

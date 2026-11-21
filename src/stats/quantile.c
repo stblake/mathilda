@@ -74,7 +74,10 @@ static Expr* quantile_one(Expr** sorted_A, size_t n, Expr* q,
         if (!ok) return NULL;
     }
     if (qv < 0.0 || qv > 1.0) { *out_of_range = true; return NULL; }
-    return stats_quantile_point(sorted_A, n, q, a, b, c, d);
+    LLReader r;
+    ll_rd_wrap(&r, sorted_A, n);
+    StatsOrder ord = { &r, NULL };
+    return stats_quantile_point(&ord, n, q, a, b, c, d);
 }
 
 Expr* builtin_quantile(Expr* res) {

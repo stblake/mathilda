@@ -128,19 +128,18 @@ static Expr* pad_dispatch(Expr* res, const char* head, bool left) {
     Expr* arg0 = args[0];
     Expr* result = NULL;
 
-    LLElems sv;
-    if (ll_elems_open(arg0, &sv)) {
+    LLReader sv;
+    if (ll_rd_open(arg0, &sv)) {
         /* --- List (or LinkedList) of strings: pad each, to n or to the longest */
         size_t m = sv.n;
-        Expr** elems = sv.v;
         for (size_t i = 0; i < m; i++)
-            if (elems[i]->type != EXPR_STRING) {
-                ll_elems_close(&sv);
+            if (ll_rd_at(&sv, i)->type != EXPR_STRING) {
+                ll_rd_close(&sv);
                 u8_view_free(&pv);
                 return strings_arg_message(head, "strlist", "List of strings", 1, res);
             }
         if (m == 0) {   /* Mathematica: StringPadLeft[{}, n] is "", StringPadLeft[{}] is {} */
-            ll_elems_close(&sv);
+            ll_rd_close(&sv);
             u8_view_free(&pv);
             return argc >= 2 ? expr_new_string("")
                              : ll_seq_like(arg0, NULL, 0);
@@ -152,7 +151,7 @@ static Expr* pad_dispatch(Expr* res, const char* head, bool left) {
         } else {
             size_t maxlen = 0;
             for (size_t i = 0; i < m; i++) {
-                const char* si = elems[i]->data.string;
+                const char* si = ll_rd_at(&sv, i)->data.string;
                 size_t li = u8_length(si, strlen(si));
                 if (li > maxlen) maxlen = li;
             }
@@ -162,13 +161,13 @@ static Expr* pad_dispatch(Expr* res, const char* head, bool left) {
         Expr** out = malloc(sizeof(Expr*) * m);
         size_t built = 0;
         for (; out && built < m; built++) {
-            out[built] = pad_one(elems[built]->data.string, n, &pv, left);
+            out[built] = pad_one(ll_rd_at(&sv, built)->data.string, n, &pv, left);
             if (!out[built]) break;
         }
         if (out && built == m) result = ll_seq_like(arg0, out, m);
         else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
         free(out);
-        ll_elems_close(&sv);
+        ll_rd_close(&sv);
     } else if (arg0->type == EXPR_STRING && argc >= 2) {
         /* --- Single string ---------------------------------------------- */
         int64_t n = 0;

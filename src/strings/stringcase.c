@@ -140,17 +140,17 @@ static Expr* capitalize_builtin(Expr* res, const char* head, int upper) {
         return map_case(a->data.string, strlen(a->data.string), upper, 0, 1);
     if (!(a->type == EXPR_LINKEDLIST ? strings_seq_all_strings(a) : is_string_list(a)))
         return strings_arg_message(head, "strse", "String or list of strings", 1, res);
-    LLElems sv;                          /* a List or a LinkedList of strings */
-    ll_elems_open(a, &sv);
+    LLReader sv;                          /* a List or a LinkedList of strings */
+    ll_rd_open(a, &sv);
     size_t n = sv.n;
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t built = 0;
     for (; out && built < n; built++) {
-        const char* s = sv.v[built]->data.string;
+        const char* s = ll_rd_at(&sv, built)->data.string;
         out[built] = map_case(s, strlen(s), upper, 0, 1);
         if (!out[built]) break;
     }
-    ll_elems_close(&sv);
+    ll_rd_close(&sv);
     Expr* r = NULL;
     if (out && built == n) r = ll_seq_like(a, out, n);
     else for (size_t k = 0; out && k < built; k++) expr_free(out[k]);

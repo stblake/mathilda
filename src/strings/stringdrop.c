@@ -126,17 +126,17 @@ Expr* builtin_stringdrop(Expr* res) {
 
     if (!threaded) return strings_drop_seq(arg0, &q);
 
-    LLElems sv;                           /* a List or a LinkedList of strings */
-    ll_elems_open(arg0, &sv);
+    LLReader sv;                           /* a List or a LinkedList of strings */
+    ll_rd_open(arg0, &sv);
     size_t n = sv.n;
     Expr** results = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!results) { ll_elems_close(&sv); return NULL; }
+    if (!results) { ll_rd_close(&sv); return NULL; }
     for (size_t i = 0; i < n; i++) {
-        Expr* si = sv.v[i];
+        Expr* si = ll_rd_at(&sv, i);
         results[i] = strings_drop_seq(si, &q);
         if (!results[i]) results[i] = strings_uneval(SYM_StringDrop, si, spec, NULL);
     }
-    ll_elems_close(&sv);
+    ll_rd_close(&sv);
     Expr* out = ll_seq_like(arg0, results, n);
     free(results);
     return out;

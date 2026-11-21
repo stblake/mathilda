@@ -37,7 +37,7 @@
 #include "list_common.h"
 #include "internal.h"
 #include "distance.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 
 /* Shape check, in two strictnesses.
  *
@@ -82,26 +82,26 @@ static bool dist_shape(Expr* u, Expr* v) {
     return true;
 }
 
-/* A point's components as an array (borrowed): a compound expression's
- * arguments, a LinkedList's elements (through LLElems: the point is read from
- * its slots, never converted), or a scalar as a 1-vector.
+/* A point's components through a reader (linkedlist.h, LLReader): a compound
+ * expression's arguments, a LinkedList read component by component from its
+ * slots (never converted), or a scalar as a 1-vector.
  *
  * Keyed on EXPR_FUNCTION rather than on List, so RGBColor[r, g, b] yields its
  * three channels. Testing is_listq here would hand back the whole colour as if
  * it were a scalar and silently compute nonsense. */
-typedef struct { Expr** v; size_t n; LLElems e; Expr* one; } DistPt;
+typedef struct { LLReader r; Expr* one; size_t n; } DistPt;
 static void dist_pt_open(Expr* u, DistPt* p) {
-    p->e.v = NULL; p->e.n = 0; p->e.owned = false;
     if (u->type == EXPR_LINKEDLIST) {
-        ll_elems_open(u, &p->e);
-        p->v = p->e.v; p->n = p->e.n;
+        ll_rd_open(u, &p->r);
     } else if (u->type == EXPR_FUNCTION) {
-        p->v = u->data.function.args; p->n = u->data.function.arg_count;
+        ll_rd_wrap(&p->r, u->data.function.args, u->data.function.arg_count);
     } else {
-        p->one = u; p->v = &p->one; p->n = 1;
+        p->one = u;
+        ll_rd_wrap(&p->r, &p->one, 1);
     }
+    p->n = p->r.n;
 }
-static void dist_pt_close(DistPt* p) { ll_elems_close(&p->e); }
+static void dist_pt_close(DistPt* p) { ll_rd_close(&p->r); }
 
 /* Absolute value. Takes ownership of `e` and returns a new expression.
  *
@@ -140,17 +140,17 @@ static Expr* dist_abs(Expr* e) {
  * Neither internal_subtract nor internal_abs can return NULL: internal_call_impl
  * hands back the unevaluated node when a builtin declines, so a symbolic operand
  * comes back as Abs[...] and flows into the sum. */
-static Expr* dist_sum_v(Expr** u, Expr** v, int p, size_t n) {
+static Expr* dist_sum_v(LLReader* u, LLReader* v, int p, size_t n) {
     Expr** terms = malloc(sizeof(Expr*) * n);
     if (!terms) return NULL;
 
     for (size_t i = 0; i < n; i++) {
         Expr* d;
         if (v) {
-            Expr* sub[2] = { expr_copy(u[i]), expr_copy(v[i]) };
+            Expr* sub[2] = { expr_copy(ll_rd_at(u, i)), expr_copy(ll_rd_at(v, i)) };
             d = eval_and_free(internal_subtract(sub, 2));
         } else {
-            d = expr_copy(u[i]);
+            d = expr_copy(ll_rd_at(u, i));
         }
         /* Squaring a real number makes the absolute value redundant, so skip it:
          * one less node, and it cannot meet the Abs gap described above. */
@@ -177,14 +177,14 @@ static Expr* dist_sum_v(Expr** u, Expr** v, int p, size_t n) {
 /* Sum_i u_i Conjugate[v_i] -- the cosine numerator. Conjugate is what makes the
  * definition correct for complex vectors and is a no-op on reals; Mathematica
  * writes it the same way. Not internal_dot, which is undefined on two scalars. */
-static Expr* dist_dot_conj_v(Expr** u, Expr** v, size_t n) {
+static Expr* dist_dot_conj_v(LLReader* u, LLReader* v, size_t n) {
     Expr** terms = malloc(sizeof(Expr*) * n);
     if (!terms) return NULL;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* cj[1] = { expr_copy(v[i]) };
+        Expr* cj[1] = { expr_copy(ll_rd_at(v, i)) };
         Expr* c = eval_and_free(internal_conjugate(cj, 1));
-        Expr* mul[2] = { expr_copy(u[i]), c };
+        Expr* mul[2] = { expr_copy(ll_rd_at(u, i)), c };
         Expr* t = eval_and_free(internal_times(mul, 2));
         if (!t) {
             for (size_t j = 0; j < i; j++) expr_free(terms[j]);
@@ -199,7 +199,7 @@ static Expr* dist_dot_conj_v(Expr** u, Expr** v, size_t n) {
 }
 
 /* Sqrt[Sum Abs[u_i]^2] -- the Euclidean norm of one point. */
-static Expr* dist_norm_v(Expr** u, size_t n) {
+static Expr* dist_norm_v(LLReader* u, size_t n) {
     Expr* s = dist_sum_v(u, NULL, 2, n);
     if (!s) return NULL;
     Expr* sq[1] = { s };
@@ -211,14 +211,14 @@ static Expr* dist_sum(Expr* u, Expr* v, int p, size_t n) {
     DistPt pu, pv;
     dist_pt_open(u, &pu);
     if (v) dist_pt_open(v, &pv);
-    Expr* r = dist_sum_v(pu.v, v ? pv.v : NULL, p, n);
+    Expr* r = dist_sum_v(&pu.r, v ? &pv.r : NULL, p, n);
     dist_pt_close(&pu);
     if (v) dist_pt_close(&pv);
     return r;
 }
 
 /* 1 - (u . Conjugate[v]) / (Norm[u] Norm[v]) over component arrays. */
-static Expr* distance_cosine_v(Expr** u, Expr** v, size_t n);
+static Expr* distance_cosine_v(LLReader* u, LLReader* v, size_t n);
 
 /* True when `e` is a real number we can see is exactly zero. Deliberately
  * conservative: a symbolic norm answers false, so the symbolic form is built
@@ -268,13 +268,13 @@ Expr* distance_cosine(Expr* u, Expr* v) {
     DistPt pu, pv;
     dist_pt_open(u, &pu);
     dist_pt_open(v, &pv);
-    Expr* r = distance_cosine_v(pu.v, pv.v, n);
+    Expr* r = distance_cosine_v(&pu.r, &pv.r, n);
     dist_pt_close(&pu);
     dist_pt_close(&pv);
     return r;
 }
 
-static Expr* distance_cosine_v(Expr** u, Expr** v, size_t n) {
+static Expr* distance_cosine_v(LLReader* u, LLReader* v, size_t n) {
     Expr* nu = dist_norm_v(u, n);
     Expr* nv = dist_norm_v(v, n);
     if (!nu || !nv) { expr_free(nu); expr_free(nv); return NULL; }
@@ -310,7 +310,7 @@ static Expr* distance_cosine_v(Expr** u, Expr** v, size_t n) {
  * Comparison is by expr_eq on elements, which makes the same routine serve
  * strings (compared character by character) and lists of arbitrary expressions,
  * matching Mathematica: EditDistance[{1, 2, 3}, {1, 3}] is 1 there. */
-static long dist_levenshtein(Expr** a, size_t m, Expr** b, size_t n) {
+static long dist_levenshtein(LLReader* a, size_t m, LLReader* b, size_t n) {
     if (m == 0) return (long)n;
     if (n == 0) return (long)m;
 
@@ -321,8 +321,9 @@ static long dist_levenshtein(Expr** a, size_t m, Expr** b, size_t n) {
     for (size_t j = 0; j <= n; j++) prev[j] = j;
     for (size_t i = 1; i <= m; i++) {
         cur[0] = i;
+        Expr* ai = ll_rd_at(a, i - 1);       /* held for the row: b is another reader */
         for (size_t j = 1; j <= n; j++) {
-            size_t sub = prev[j - 1] + (expr_eq(a[i - 1], b[j - 1]) ? 0 : 1);
+            size_t sub = prev[j - 1] + (expr_eq(ai, ll_rd_at(b, j - 1)) ? 0 : 1);
             size_t del = prev[j] + 1;
             size_t ins = cur[j - 1] + 1;
             size_t best = sub < del ? sub : del;
@@ -336,49 +337,37 @@ static long dist_levenshtein(Expr** a, size_t m, Expr** b, size_t n) {
     return r;
 }
 
-/* Explode a String into one Expr per character, or borrow a List's elements.
- * `*owned` says whether the caller must free the array's elements.
+/* A sequence through a reader: a List's elements (borrowed), a LinkedList read
+ * element by element, or a String exploded into one Expr per character (the
+ * array returned in *chars, which the caller frees with dist_seq_close).
  *
  * Bytes, not code points: a multi-byte UTF-8 character counts as several
  * elements. That matches the ASCII and DNA cases these functions are used for
  * and is noted in the docstring rather than silently assumed. */
-static Expr** dist_seq(Expr* e, size_t* n, bool* owned) {
-    if (is_listq(e)) {
-        *n = e->data.function.arg_count;
-        *owned = false;
-        return e->data.function.args;
-    }
-    if (e->type == EXPR_LINKEDLIST) {               /* its elements, held */
-        LLElems el;
-        ll_elems_open(e, &el);
-        *n = el.n;
-        *owned = true;
-        return el.v;
-    }
-    if (e->type != EXPR_STRING) return NULL;
+static bool dist_seq_open(Expr* e, LLReader* r, Expr*** chars) {
+    *chars = NULL;
+    if (is_listq(e) || e->type == EXPR_LINKEDLIST) return ll_rd_open(e, r);
+    if (e->type != EXPR_STRING) return false;
 
     const char* s = e->data.string;
     size_t len = strlen(s);
     Expr** out = malloc(sizeof(Expr*) * (len ? len : 1));
-    if (!out) return NULL;
+    if (!out) return false;
     for (size_t i = 0; i < len; i++) {
         char buf[2] = { s[i], '\0' };
         out[i] = expr_new_string(buf);
-        if (!out[i]) {
-            for (size_t j = 0; j < i; j++) expr_free(out[j]);
-            free(out);
-            return NULL;
-        }
     }
-    *n = len;
-    *owned = true;
-    return out;
+    *chars = out;
+    ll_rd_wrap(r, out, len);
+    return true;
 }
 
-static void dist_seq_free(Expr** a, size_t n, bool owned) {
-    if (!owned) return;
-    for (size_t i = 0; i < n; i++) expr_free(a[i]);
-    free(a);
+static void dist_seq_close(LLReader* r, Expr** chars) {
+    if (chars) {
+        for (size_t i = 0; i < r->n; i++) expr_free(chars[i]);
+        free(chars);
+    }
+    ll_rd_close(r);
 }
 
 /* Both arguments Strings, or both Lists (a LinkedList is one). Mixed shapes
@@ -391,17 +380,13 @@ static bool dist_seq_pair(Expr* u, Expr* v) {
 
 Expr* distance_edit(Expr* u, Expr* v) {
     if (!dist_seq_pair(u, v)) return NULL;
-
-    size_t m = 0, n = 0;
-    bool om = false, on = false;
-    Expr** a = dist_seq(u, &m, &om);
-    Expr** b = dist_seq(v, &n, &on);
-    /* An empty List has no argument array (a NULL `args`): that is a sequence
-     * of length 0, not a failure. */
-    bool ok = (a || (m == 0 && dist_is_seq(u))) && (b || (n == 0 && dist_is_seq(v)));
-    long r = ok ? dist_levenshtein(a, m, b, n) : -1;
-    dist_seq_free(a, m, om);
-    dist_seq_free(b, n, on);
+    LLReader a, b;
+    Expr **ca, **cb;
+    if (!dist_seq_open(u, &a, &ca)) return NULL;
+    if (!dist_seq_open(v, &b, &cb)) { dist_seq_close(&a, ca); return NULL; }
+    long r = dist_levenshtein(&a, a.n, &b, b.n);
+    dist_seq_close(&a, ca);
+    dist_seq_close(&b, cb);
     return (r < 0) ? NULL : expr_new_integer(r);
 }
 
@@ -410,21 +395,19 @@ Expr* distance_edit(Expr* u, Expr* v) {
  * declining is the faithful behaviour. */
 Expr* distance_hamming(Expr* u, Expr* v) {
     if (!dist_seq_pair(u, v)) return NULL;
-
-    size_t m = 0, n = 0;
-    bool om = false, on = false;
-    Expr** a = dist_seq(u, &m, &om);
-    Expr** b = dist_seq(v, &n, &on);
-
+    LLReader a, b;
+    Expr **ca, **cb;
+    if (!dist_seq_open(u, &a, &ca)) return NULL;
+    if (!dist_seq_open(v, &b, &cb)) { dist_seq_close(&a, ca); return NULL; }
     Expr* out = NULL;
-    bool ok = (a || (m == 0 && dist_is_seq(u))) && (b || (n == 0 && dist_is_seq(v)));
-    if (ok && m == n) {
+    if (a.n == b.n) {
         long c = 0;
-        for (size_t i = 0; i < n; i++) if (!expr_eq(a[i], b[i])) c++;
+        for (size_t i = 0; i < a.n; i++)
+            if (!expr_eq(ll_rd_at(&a, i), ll_rd_at(&b, i))) c++;
         out = expr_new_integer(c);
     }
-    dist_seq_free(a, m, om);
-    dist_seq_free(b, n, on);
+    dist_seq_close(&a, ca);
+    dist_seq_close(&b, cb);
     return out;
 }
 
@@ -449,7 +432,7 @@ static bool dist_ll_pair(Expr* u, Expr* v, DistPt* pu, DistPt* pv) {
     dist_pt_open(v, pv);
     bool ok = pu->n == pv->n && pu->n > 0;
     for (size_t i = 0; ok && i < pu->n; i++)
-        if (dist_is_seq(pu->v[i]) || dist_is_seq(pv->v[i])) ok = false;
+        if (dist_is_seq(ll_rd_at(&pu->r, i)) || dist_is_seq(ll_rd_at(&pv->r, i))) ok = false;
     if (!ok) { dist_pt_close(pu); dist_pt_close(pv); }
     return ok;
 }
@@ -463,7 +446,7 @@ static Expr* dist_builtin(Expr* res, int p, bool root) {
     Expr* sum;
     DistPt pu, pv;
     if (dist_ll_pair(u, v, &pu, &pv)) {
-        sum = dist_sum_v(pu.v, pv.v, p, pu.n);
+        sum = dist_sum_v(&pu.r, &pv.r, p, pu.n);
         dist_pt_close(&pu);
         dist_pt_close(&pv);
     } else {
@@ -496,7 +479,7 @@ Expr* builtin_cosine_distance(Expr* res) {
     Expr* v = res->data.function.args[1];
     DistPt pu, pv;
     if (dist_ll_pair(u, v, &pu, &pv)) {
-        Expr* r = distance_cosine_v(pu.v, pv.v, pu.n);
+        Expr* r = distance_cosine_v(&pu.r, &pv.r, pu.n);
         dist_pt_close(&pu);
         dist_pt_close(&pv);
         return r;
