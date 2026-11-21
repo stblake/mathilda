@@ -1514,8 +1514,8 @@ static Expr* builtin_meijer_g_reduce(Expr* res) {
     if (na != 2) return builtin_arg_error("MeijerGReduce", na, 2, 2);
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
-    if (mgr_load_gen != symtab_generation()) {
-        mgr_load_gen = symtab_generation();
+    if (mgr_load_gen != mathilda_module_generation()) {
+        mgr_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         mgr_load_ok = mathilda_load_module("RoachIntegrate.m") != 0;
         mth_msg_suppress_pop();

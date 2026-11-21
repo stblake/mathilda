@@ -107,6 +107,13 @@ void   context_unwind_to(size_t depth);
 void context_capture(Expr** ctx, Expr** path);
 void context_restore(Expr* ctx, Expr* path);
 void context_release(Expr* ctx, Expr* path);
+/* After a context_restore on a non-local exit: re-add to $ContextPath the
+ * packages that completed EndPackage since `mark` (context_endpackage_mark()
+ * taken before the body), so a package loaded to completion inside an aborted
+ * body keeps its context on the path -- it is marked loaded and never read
+ * again.  A half-read package never reached EndPackage and stays off. */
+size_t context_endpackage_mark(void);
+void   context_reapply_endpackages(size_t mark);
 
 /* True when `ctx` is listed in $Packages (the contexts of loaded packages;
  * BeginPackage prepends to it).  Needs loads only contexts not yet listed. */

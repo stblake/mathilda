@@ -225,6 +225,25 @@ static void test_lu_machine_singular_returns_triple(void) {
     printf("  PASS: singular machine-precision matrix returns a triple\n");
 }
 
+static void test_lu_machine_singular_condition_infinity(void) {
+    /* A singular matrix's condition number is Infinity (the reference), with
+     * no General::ovfl: an infinite double handed to expr_new_real became
+     * Overflow[] after the numeric-tower review (sparse oracle case #923). */
+    const char* srcs[] = {
+        "Quiet[Check[LUDecomposition[{{1., 2.}, {2., 4.}}][[3]], ovfl, General::ovfl], LUDecomposition::sing]",
+        "Quiet[Check[LUDecomposition[SparseArray[{{1., 2.}, {2., 4.}}]][[3]], ovfl, General::ovfl], LUDecomposition::sing]",
+        "Quiet[Check[LUDecomposition[N[{{1, 2}, {2, 4}}, 30]][[3]], ovfl, General::ovfl], LUDecomposition::sing]",
+    };
+    for (int i = 0; i < 3; i++) {
+        Expr* res = run(srcs[i]);
+        char* s = expr_to_string(res);
+        ASSERT(strcmp(s, "Infinity") == 0);
+        free(s);
+        expr_free(res);
+    }
+    printf("  PASS: singular machine / MPFR matrix has condition number Infinity\n");
+}
+
 static void test_lu_machine_mixed_int_real(void) {
     /* Mixed numeric input -- a single Real promotes the whole matrix
      * into the machine kernel. */
@@ -403,6 +422,7 @@ int main(void) {
     TEST(test_lu_machine_complex);
     TEST(test_lu_machine_identity);
     TEST(test_lu_machine_singular_returns_triple);
+    TEST(test_lu_machine_singular_condition_infinity);
     TEST(test_lu_machine_mixed_int_real);
 
     /* Rectangular */

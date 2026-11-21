@@ -80,6 +80,16 @@ int mathilda_installation_directory(char* out, size_t outsz);
  */
 int mathilda_load_module(const char* relpath);
 
+/*
+ * The generation a lazy loader's attempt-once flag is keyed on: it moves on
+ * with symtab_generation() AND whenever a module read was interrupted (an
+ * abort or a timeout jump in the middle of the file), so a loader whose read
+ * was cut short loads again instead of trusting a half-defined module.  A read
+ * cut short is never marked loaded; mathilda_load_module returns 1 for it (the
+ * file exists; the abort itself propagates).
+ */
+unsigned mathilda_module_generation(void);
+
 /* Builtin: LoadModule["relpath"] -> True (loaded) or False (not found). */
 Expr* builtin_loadmodule(Expr* res);
 

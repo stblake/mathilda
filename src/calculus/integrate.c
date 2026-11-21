@@ -886,7 +886,7 @@ static Expr* try_logbyparts(Expr* f, Expr* x) {
  * unevaluated (Mathar corpus, the largest failure class).  The package accepts
  * a result only after a differentiation check; anything outside the class
  * returns $Failed and the cascade continues. */
-static unsigned pll_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned pll_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool pll_load_succeeded = false;
 
 static bool pll_has_head(const Expr* e, const char* name) {
@@ -916,8 +916,8 @@ static Expr* try_polylogladder(Expr* f, Expr* x) {
      * prim-elem-3) and gave Int Log[t]/(1 + t^2)^3 a PolyLog[2, I/t] form whose
      * limit at t = 0 failed (the definite integral stayed open). */
     if (g_integrate_depth > 1 && pll_exponential_only(f)) return NULL;
-    if (pll_load_gen != symtab_generation()) {
-        pll_load_gen = symtab_generation();
+    if (pll_load_gen != mathilda_module_generation()) {
+        pll_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         pll_load_succeeded = mathilda_load_module("PolyLogLadder.m") != 0;
         mth_msg_suppress_pop();
@@ -956,7 +956,7 @@ static Expr* try_polylogladder(Expr* f, Expr* x) {
  * BesselY[nu, x], x] used to come back unevaluated).  Exact by construction
  * and re-checked symbolically; anything else is $Failed and the cascade
  * continues.  Gated on a Bessel or Airy head, so it costs nothing elsewhere. */
-static unsigned hol_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned hol_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool hol_load_succeeded = false;
 
 static bool hol_has_kernel(const Expr* e) {
@@ -977,8 +977,8 @@ static bool hol_has_kernel(const Expr* e) {
 
 static Expr* try_holonomic(Expr* f, Expr* x) {
     if (!hol_has_kernel(f)) return NULL;
-    if (hol_load_gen != symtab_generation()) {
-        hol_load_gen = symtab_generation();
+    if (hol_load_gen != mathilda_module_generation()) {
+        hol_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         hol_load_succeeded = mathilda_load_module("Holonomic.m") != 0;
         mth_msg_suppress_pop();
@@ -1014,13 +1014,13 @@ static Expr* try_holonomic(Expr* f, Expr* x) {
  * functions keeps that form; this covers the ones that do not
  * (Integrate[BesselJ[1/3, x]^2, x], Integrate[BesselK[0, x], x], ...).
  * Exact by construction; anything outside the class is $Failed. */
-static unsigned bh_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned bh_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool bh_load_succeeded = false;
 
 static Expr* try_besselhyper(Expr* f, Expr* x) {
     if (!hol_has_kernel(f)) return NULL;
-    if (bh_load_gen != symtab_generation()) {
-        bh_load_gen = symtab_generation();
+    if (bh_load_gen != mathilda_module_generation()) {
+        bh_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         bh_load_succeeded = mathilda_load_module("BesselHyper.m") != 0;
         mth_msg_suppress_pop();
@@ -1143,30 +1143,38 @@ static Expr* try_rischtranscendental_early(Expr* f, Expr* x, bool* completed) {
  * (lazy) so unaffected sessions pay nothing for it. */
 #define MAX_CRC_DEPTH 256
 static int crc_depth = 0;
-static unsigned crc_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned crc_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool crc_load_succeeded  = false;
 
 /* Load the CRC integral table lazily. Path resolution (mathilda_resolve_
  * internal) is CWD-independent and matches what LoadModule uses, so this works
  * from a relocated/installed binary as well as from the repo root or tests/. */
 static void crc_lazy_load(void) {
-    if (crc_load_gen == symtab_generation()) return;
-    crc_load_gen = symtab_generation();
+    unsigned gen = mathilda_module_generation();
+    if (crc_load_gen == gen) return;
 
     char path[2048];
     if (!mathilda_resolve_internal("CRCMathTablesIntegrals.m",
                                    path, sizeof(path))) {
+        crc_load_gen = gen;
         mth_message("Integrate`CRCTable", "nofile",
             "cannot locate src/internal/CRCMathTablesIntegrals.m on disk.");
         return;
     }
 
+    /* The attempt is consumed only once the read has run to its end: a read
+     * cut short by an abort (or a timeout jump, which never returns here) left
+     * the table half defined, and the next call reads it again (see
+     * mathilda_module_generation). */
     int opened = 0;
     Expr* res = mathilda_run_file(path, &opened);
+    bool aborted = res && eval_is_inflight_abort(res);
     bool failed = res && res->type == EXPR_SYMBOL
                       && res->data.symbol.name == SYM_DollarFailed;
     if (res) expr_free(res);
-    if (opened && !failed) crc_load_succeeded = true;
+    if (aborted) return;
+    crc_load_gen = gen;
+    crc_load_succeeded = opened && !failed;
 }
 
 static Expr* try_crctable(Expr* f, Expr* x) {
@@ -1211,12 +1219,12 @@ static Expr* try_crctable(Expr* f, Expr* x) {
  * $Failed or a surviving engine head is a decline. */
 #define MAX_GR_DEPTH 8
 static int gr_depth = 0;
-static unsigned gr_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned gr_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool gr_load_succeeded = false;
 
 static bool gr_lazy_load(void) {
-    if (gr_load_gen != symtab_generation()) {
-        gr_load_gen = symtab_generation();
+    if (gr_load_gen != mathilda_module_generation()) {
+        gr_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         gr_load_succeeded = mathilda_load_module("GRTable.m") != 0;
         mth_msg_suppress_pop();
@@ -1303,7 +1311,7 @@ static Expr* try_grtable_definite(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assu
  * language package in src/internal/mixed/ParallelMixed.m and loaded lazily on
  * first use exactly like the CRC table above -- sessions that never reach this
  * cascade stage pay nothing for it. */
-static unsigned pmt_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned pmt_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool pmt_load_succeeded  = false;
 /* Async-jump defer (crash-safety inside TimeConstrained) + re-entry guard; see
  * core.c.  tc_async_region_active is non-zero while a heavy method is already
@@ -1314,8 +1322,8 @@ void tc_async_defer_pop(void);
 int  tc_async_region_active(void);
 
 static void pmt_lazy_load(void) {
-    if (pmt_load_gen == symtab_generation()) return;
-    pmt_load_gen = symtab_generation();
+    if (pmt_load_gen == mathilda_module_generation()) return;
+    pmt_load_gen = mathilda_module_generation();
     /* mathilda_load_module rather than a bare mathilda_run_file: it carries a
      * load-once memo keyed on the relpath, which ParallelMixedSpecial.m also
      * loads Part II through.  Without the shared memo a session that reaches
@@ -1646,12 +1654,12 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x, bool cascade) {
  * decides, or a branch of the algorithm is not implemented yet. */
 static void integrate_announce_incomplete(Expr* f, Expr* x, const Expr* result);
 
-static unsigned trager_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned trager_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool trager_load_succeeded = false;
 
 static void trager_lazy_load(void) {
-    if (trager_load_gen == symtab_generation()) return;
-    trager_load_gen = symtab_generation();
+    if (trager_load_gen == mathilda_module_generation()) return;
+    trager_load_gen = mathilda_module_generation();
     if (mathilda_load_module("trager/Trager.m")) {
         trager_load_succeeded = true;
         return;
@@ -1725,12 +1733,12 @@ static Expr* try_trager(Expr* f, Expr* x, const char* head) {
  * Bronstein`BronsteinIntegrate[f, x] returns the antiderivative (verified by
  * PossibleZeroQ before it is returned), {"not elementary", reason} -- a proof
  * -- or {"failed", reason}. */
-static unsigned bronstein_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned bronstein_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool bronstein_load_succeeded = false;
 
 static void bronstein_lazy_load(void) {
-    if (bronstein_load_gen == symtab_generation()) return;
-    bronstein_load_gen = symtab_generation();
+    if (bronstein_load_gen == mathilda_module_generation()) return;
+    bronstein_load_gen = mathilda_module_generation();
     if (mathilda_load_module("bronstein/Bronstein.m")) {
         bronstein_load_succeeded = true;
         return;
@@ -2042,12 +2050,12 @@ static Expr* try_bronstein_cascade(Expr* f, Expr* x, bool* nonelem) {
  * the package said -- an unverified pair included.  Nothing is invented here, so
  * the qualified-symbol surface still shows the package's own words, and
  * `Head[r] === List` remains the caller's test for "no answer". */
-static unsigned pms_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned pms_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool pms_load_succeeded = false;
 
 static void pms_lazy_load(void) {
-    if (pms_load_gen == symtab_generation()) return;
-    pms_load_gen = symtab_generation();
+    if (pms_load_gen == mathilda_module_generation()) return;
+    pms_load_gen = mathilda_module_generation();
     /* mathilda_load_module, not mathilda_run_file: the module has its own
      * load-once memo keyed on the relpath, and the special module loads Part II
      * through the same mechanism.  Going through the memo is what stops the
@@ -2538,15 +2546,15 @@ static bool def_has_undefined_function(const Expr* e, const Expr* x) {
  * Log[2 Pi]/2 for the constant.  Loaded lazily; only the interval {x, 0, 1}
  * and an integrand carrying LogGamma or Gamma reach the package.  $Failed
  * or a surviving Integrate is a decline. */
-static unsigned klg_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned klg_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool klg_load_succeeded = false;
 
 static Expr* try_kummer_loggamma(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
     if (!(b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
     if (!result_contains_head(f, "LogGamma") && !result_contains_head(f, "Gamma")) return NULL;
-    if (klg_load_gen != symtab_generation()) {
-        klg_load_gen = symtab_generation();
+    if (klg_load_gen != mathilda_module_generation()) {
+        klg_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         klg_load_succeeded = mathilda_load_module("KummerLogGamma.m") != 0;
         mth_msg_suppress_pop();
@@ -2571,14 +2579,14 @@ static Expr* try_kummer_loggamma(Expr* f, Expr* x, Expr* a, Expr* b) {
 /* Definite stage: Meijer G convolution (src/internal/MeijerConvolution.m),
  * loaded lazily.  Half-line (0, Infinity) only; any atom result (the package's
  * $Failed) or a surviving Integrate is a decline. */
-static unsigned mcv_load_gen = 0;   /* symtab_generation() of the attempt */
+static unsigned mcv_load_gen = 0;   /* mathilda_module_generation() of the attempt */
 static bool mcv_load_succeeded = false;
 
 static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
     if (!(b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_Infinity)) return NULL;
-    if (mcv_load_gen != symtab_generation()) {
-        mcv_load_gen = symtab_generation();
+    if (mcv_load_gen != mathilda_module_generation()) {
+        mcv_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         mcv_load_succeeded = mathilda_load_module("MeijerConvolution.m") != 0;
         mth_msg_suppress_pop();
@@ -2624,8 +2632,8 @@ static bool roach_load_succeeded = false;
  * and the answer is checked by a symmetric-excision quadrature). */
 static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, int budget,
                        bool pv, bool early) {
-    if (roach_load_gen != symtab_generation()) {
-        roach_load_gen = symtab_generation();
+    if (roach_load_gen != mathilda_module_generation()) {
+        roach_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         roach_load_succeeded = mathilda_load_module("RoachIntegrate.m") != 0;
         mth_msg_suppress_pop();
@@ -2685,8 +2693,8 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
  * budget > 0 caps it under TimeConstrained (the automatic cascade). */
 #define ROACH_INDEFINITE_BUDGET_SECONDS 5
 static Expr* try_roach_indefinite(Expr* f, Expr* x, int budget) {
-    if (roach_load_gen != symtab_generation()) {
-        roach_load_gen = symtab_generation();
+    if (roach_load_gen != mathilda_module_generation()) {
+        roach_load_gen = mathilda_module_generation();
         mth_msg_suppress_push();
         roach_load_succeeded = mathilda_load_module("RoachIntegrate.m") != 0;
         mth_msg_suppress_pop();

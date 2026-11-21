@@ -909,8 +909,6 @@ static Expr* lum_build_perm(const int* perm, int n)
  * ------------------------------------------------------------------ */
 Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
 {
-    static uint64_t sing_warn_counter = 0;
-
     CommonInexactInfo info = common_scan_inexact(m);
     if (!info.has_inexact) return NULL;
     mpfr_prec_t bits = (mpfr_prec_t)info.min_bits;
@@ -956,10 +954,10 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
     }
 
     if (singular) {
-        /* While an interrupt unwinds, the message is muted (message.c), so
-         * the once-per-session flag must not be spent on it. */
-        if (!sing_warn_counter && !mth_interrupt_pending()) {
-            sing_warn_counter = 1;
+        /* every singular call says so (the reference); there was a
+         * once-per-process latch here, so later singular matrices in a
+         * session factored silently */
+        if (!mth_interrupt_pending()) {
             char* s = expr_to_string(m);
             mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
             free(s);
@@ -984,7 +982,6 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
      * LUDecomposition::luc behaviour; suppressed if ::sing already
      * fired (the kernel only computes condition for nonsing, so the
      * branch ordering naturally handles this). */
-    static uint64_t luc_warn_counter = 0;
     Expr* c;
     if (!square) {
         c = expr_new_integer(0);
@@ -1003,20 +1000,20 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
         if (nonsing) mpfr_mul(cond, anorm, inv_norm, MPFR_RNDN);
         else         mpfr_set_inf(cond, 1);
 
-        if (nonsing && !luc_warn_counter && !mth_interrupt_pending()) {
+        if (nonsing && !mth_interrupt_pending()) {
             /* threshold = 2^(bits).  Compare cond > threshold. */
             mpfr_t threshold;
             mpfr_init2(threshold, bits);
             mpfr_set_ui_2exp(threshold, 1, (mpfr_exp_t)bits, MPFR_RNDN);
             if (mpfr_cmp(cond, threshold) > 0) {
-                luc_warn_counter = 1;
                 char* s = expr_to_string(m);
                 mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
                 free(s);
             }
             mpfr_clear(threshold);
         }
-        c = expr_new_mpfr_copy(cond);
+        /* singular: Infinity (an infinite MPFR value would become Overflow[]) */
+        c = mpfr_inf_p(cond) ? expr_new_symbol("Infinity") : expr_new_mpfr_copy(cond);
         mpfr_clear(inv_norm);
         mpfr_clear(cond);
     }

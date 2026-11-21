@@ -6,7 +6,11 @@
  * src/sparse/sparse_la_factor.c); each application loads the right-hand side,
  * runs the triangular solves, and builds a packed answer.  An
  * arbitrary-precision matrix is factored once at its own precision (an MPFR
- * LU, ludecomp_mpfr.c) and each application is two triangular solves.
+ * LU, ludecomp_mpfr.c) and each application is two triangular solves.  A
+ * singular symbolic matrix keeps its LUDecomposition (the reference's
+ * construction, ::sing included) and each application substitutes through
+ * it, dividing by the zero pivots as the reference does (ComplexInfinity /
+ * Indeterminate with ::infy / ::indet).
  */
 #include "linsolvefn.h"
 #include "ludecomp_internal.h"
@@ -33,6 +37,7 @@ typedef struct {
     int64_t key;
     SpFactor* f;      /* machine factor, or NULL */
     MpfrLU* mp;       /* arbitrary-precision factor, or NULL */
+    Expr* lu;         /* symbolic LUDecomposition {lu, perm, c}, or NULL */
     uint64_t used;
 } CacheEnt;
 
@@ -45,13 +50,15 @@ void linsolvefn_cache_clear(void) {
     for (int i = 0; i < LSF_CACHE; i++) {
         spf_free(g_cache[i].f);
         mpfr_lu_free(g_cache[i].mp);
+        expr_free(g_cache[i].lu);
         g_cache[i].f = NULL;
         g_cache[i].mp = NULL;
+        g_cache[i].lu = NULL;
         g_cache[i].key = 0;
     }
 }
 
-static bool ent_live(const CacheEnt* e) { return e->f || e->mp; }
+static bool ent_live(const CacheEnt* e) { return e->f || e->mp || e->lu; }
 
 static CacheEnt* cache_get(int64_t key) {
     for (int i = 0; i < LSF_CACHE; i++)
@@ -62,9 +69,9 @@ static CacheEnt* cache_get(int64_t key) {
     return NULL;
 }
 
-/* Store a factor (exactly one of f / mp non-NULL), evicting the least
- * recently used entry. */
-static void cache_put(int64_t key, SpFactor* f, MpfrLU* mp) {
+/* Store a factor (exactly one of f / mp / lu non-NULL; owned), evicting the
+ * least recently used entry. */
+static void cache_put(int64_t key, SpFactor* f, MpfrLU* mp, Expr* lu) {
     if (!g_atexit) { atexit(linsolvefn_cache_clear); g_atexit = true; }
     int victim = 0;
     for (int i = 0; i < LSF_CACHE; i++) {
@@ -73,9 +80,11 @@ static void cache_put(int64_t key, SpFactor* f, MpfrLU* mp) {
     }
     spf_free(g_cache[victim].f);
     mpfr_lu_free(g_cache[victim].mp);
+    expr_free(g_cache[victim].lu);
     g_cache[victim].key = key;
     g_cache[victim].f = f;
     g_cache[victim].mp = mp;
+    g_cache[victim].lu = lu;
     g_cache[victim].used = ++g_tick;
 }
 
@@ -215,6 +224,85 @@ static Expr* evaluate_owned(Expr* e) {
     return r;
 }
 
+/* True when some entry of m is not a number (MatrixQ[m, NumericQ] fails):
+ * the reference factors such a matrix symbolically at construction. */
+static bool has_symbolic_entry(const Expr* m) {
+    Expr* a[2] = { expr_copy((Expr*)m), expr_new_symbol("NumericQ") };
+    Expr* r = evaluate_owned(expr_new_function(expr_new_symbol("MatrixQ"), a, 2));
+    bool numeric = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    expr_free(r);
+    return !numeric;
+}
+
+/* LUDecomposition[m] (Quiet when `quiet`: a re-factor after eviction must not
+ * repeat construction's ::sing), or NULL unless it answers {lu, perm, c}. */
+static Expr* symbolic_lu(const Expr* m, bool quiet) {
+    Expr* a[1] = { expr_copy((Expr*)m) };
+    Expr* call = expr_new_function(expr_new_symbol("LUDecomposition"), a, 1);
+    if (quiet) {
+        Expr* q[1] = { call };
+        call = expr_new_function(expr_new_symbol("Quiet"), q, 1);
+    }
+    Expr* r = evaluate_owned(call);
+    if (!is_list(r) || r->data.function.arg_count != 3 || !is_list(r->data.function.args[0]) ||
+        !is_list(r->data.function.args[1])) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+/* x with P.L.U x == b, by forward and back substitution through the
+ * evaluator: entries are symbolic, and a zero pivot divides by zero exactly
+ * as the reference's LinearSolveFunction does. NULL unless b is a vector of
+ * length n matching the factor. */
+static Expr* symbolic_lu_solve(const Expr* fac, const Expr* b, int64_t n) {
+    const Expr* lu = fac->data.function.args[0];
+    const Expr* pm = fac->data.function.args[1];
+    if (!is_list(b) || (int64_t)b->data.function.arg_count != n ||
+        (int64_t)lu->data.function.arg_count != n || (int64_t)pm->data.function.arg_count != n)
+        return NULL;
+    for (int64_t i = 0; i < n; i++) {
+        const Expr* row = lu->data.function.args[i];
+        const Expr* pi = pm->data.function.args[i];
+        if (!is_list(row) || (int64_t)row->data.function.arg_count != n || is_list(b->data.function.args[i]) ||
+            pi->type != EXPR_INTEGER || pi->data.integer < 1 || pi->data.integer > n)
+            return NULL;
+    }
+    Expr** x = calloc((size_t)n, sizeof(Expr*));
+    Expr** t = malloc(sizeof(Expr*) * (size_t)(n + 1));
+    if (!x || !t) { free(x); free(t); return NULL; }
+#define LU_AT(i, j) (lu->data.function.args[i]->data.function.args[j])
+    /* L y = P b (unit lower triangle), y held in x */
+    for (int64_t i = 0; i < n; i++) {
+        size_t k = 0;
+        t[k++] = expr_copy(b->data.function.args[pm->data.function.args[i]->data.integer - 1]);
+        for (int64_t j = 0; j < i; j++) {
+            Expr* f3[3] = { expr_new_integer(-1), expr_copy(LU_AT(i, j)), expr_copy(x[j]) };
+            t[k++] = expr_new_function(expr_new_symbol(SYM_Times), f3, 3);
+        }
+        x[i] = evaluate_owned(expr_new_function(expr_new_symbol(SYM_Plus), t, k));
+    }
+    /* U x = y */
+    for (int64_t i = n - 1; i >= 0; i--) {
+        size_t k = 0;
+        t[k++] = x[i];
+        for (int64_t j = i + 1; j < n; j++) {
+            Expr* f3[3] = { expr_new_integer(-1), expr_copy(LU_AT(i, j)), expr_copy(x[j]) };
+            t[k++] = expr_new_function(expr_new_symbol(SYM_Times), f3, 3);
+        }
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), t, k);
+        Expr* pw[2] = { expr_copy(LU_AT(i, i)), expr_new_integer(-1) };
+        Expr* f2[2] = { sum, expr_new_function(expr_new_symbol(SYM_Power), pw, 2) };
+        x[i] = evaluate_owned(expr_new_function(expr_new_symbol(SYM_Times), f2, 2));
+    }
+#undef LU_AT
+    free(t);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), x, (size_t)n);
+    free(x);
+    return out;
+}
+
 static Expr* build_object(int64_t r, int64_t c, int64_t key, const Expr* m, Expr* const* opts, size_t nopts) {
     Expr* dims[2] = { mk_int(r), mk_int(c) };
     Expr* dl = expr_new_function(expr_new_symbol(SYM_List), dims, 2);
@@ -257,7 +345,7 @@ Expr* linsolvefn_make(const Expr* call) {
         if (!mp && tc_deadline_passed()) return NULL;   /* stopped: no slower path */
         if (mp && !sing) {
             int64_t key = g_next_key++;
-            cache_put(key, NULL, mp);
+            cache_put(key, NULL, mp, NULL);
             return build_object(r, c, key, m, opts, nopts);
         }
         if (mp) {
@@ -275,6 +363,18 @@ Expr* linsolvefn_make(const Expr* call) {
         bool singular = tried && st == SPF_SINGULAR;
         if (!tried && exact_rank_deficient(m, r))
             singular = true;          /* exact / MPFR / symbolic: the reference says so too */
+        if (singular && !tried && has_symbolic_entry(m)) {
+            /* a symbolic matrix: the reference factors it (LUDecomposition,
+             * ::sing) instead of refusing (::sing1), and the function
+             * substitutes through the factor (the sparse linear-algebra
+             * oracle's case #968) */
+            Expr* lu = symbolic_lu(m, false);
+            if (lu) {
+                int64_t key = g_next_key++;
+                cache_put(key, NULL, NULL, lu);
+                return build_object(r, c, key, m, opts, nopts);
+            }
+        }
         if (singular)
             msg_with_expr("LinearSolve", "sing1",
                           "The matrix %s is singular so a factorization will not be saved.", m);
@@ -287,7 +387,7 @@ Expr* linsolvefn_make(const Expr* call) {
                           m);
     }
     int64_t key = g_next_key++;
-    cache_put(key, f, NULL);
+    cache_put(key, f, NULL, NULL);
     return build_object(r, c, key, m, opts, nopts);
 }
 
@@ -365,17 +465,22 @@ Expr* linsolvefn_apply(const Expr* head, Expr* const* args, size_t nargs) {
     CacheEnt* ent = key ? cache_get(key) : NULL;
     SpFactor* f = ent ? ent->f : NULL;
     MpfrLU* mp = ent ? ent->mp : NULL;
-    if (key && !ent) {
+    const Expr* slu = ent ? ent->lu : NULL;
+    if (key && !ent && has_symbolic_entry(m)) {
+        /* evicted symbolic factor: factor again, quietly */
+        Expr* lu = symbolic_lu(m, true);
+        if (lu) { cache_put(key, NULL, NULL, lu); slu = lu; }
+    } else if (key && !ent) {
         /* evicted: factor again from the matrix the object carries */
         SpfStatus st;
         bool tried;
         f = factor_of(m, ol->data.function.args, ol->data.function.arg_count, &st, &tried);
-        if (f) cache_put(key, f, NULL);
+        if (f) cache_put(key, f, NULL, NULL);
         else if (!tried) {
             bool sing = false;
             mp = mp_factor_of(m, rows, ol->data.function.args, ol->data.function.arg_count, &sing);
             if (mp && sing) { mpfr_lu_free(mp); mp = NULL; }
-            if (mp) cache_put(key, NULL, mp);
+            if (mp) cache_put(key, NULL, mp, NULL);
         }
     }
 
@@ -409,6 +514,13 @@ Expr* linsolvefn_apply(const Expr* head, Expr* const* args, size_t nargs) {
         return NULL;
     }
 
+    if (slu) {
+        /* held across the evaluation (which could, in principle, evict it) */
+        Expr* fac = expr_copy((Expr*)slu);
+        Expr* x = mode == 'N' ? symbolic_lu_solve(fac, b, rows) : NULL;
+        expr_free(fac);
+        return x ? x : solve_afresh(m, mode, b, ol);
+    }
     if (mp) {
         /* The factor's precision is the answer's precision, so a right-hand
          * side that would lower it (a machine number, fewer MPFR bits) takes

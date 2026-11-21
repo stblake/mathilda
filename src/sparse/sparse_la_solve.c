@@ -40,6 +40,18 @@
  * of a small matrix is faster than any sparse one. */
 #define SPLA_DENSE_N 128
 
+/* Without a sparse direct solver (no UMFPACK), a matrix whose band does not
+ * pay is factored as a dense LU: O(n^3), 7.6 s at n = 11020 (the sparse
+ * oracle's case #1005, a TIMEOUT under load). Above this order a strictly
+ * diagonally dominant matrix with a small Varah condition bound
+ * (spla_dominance_cond) is solved by the refined Krylov default instead: it is
+ * provably nonsingular and well conditioned, so no ::sing or ::luc the direct
+ * solve would report is lost, and ILU0-preconditioned BiCGSTAB converges in a
+ * few iterations. Anything else, or a Krylov run that does not converge, keeps
+ * the direct solve. */
+#define SPLA_KRYLOV_FIRST_N 1000
+#define SPLA_KRYLOV_FIRST_COND 1e6
+
 /* ---- small helpers -------------------------------------------------------- */
 
 static bool is_str(const Expr* e, const char* s) {
@@ -342,6 +354,28 @@ static bool user_prec_cb(void* c, const double* r, double* z) {
 
 /* ---- the Krylov fallback of Automatic, refined ----------------------------- */
 
+/* For a strictly diagonally dominant square A (|a_ii| > sum_{j != i} |a_ij|
+ * in every row), Varah's bound ||A^-1||_inf <= 1 / min_i (|a_ii| - sum |a_ij|)
+ * gives cond_inf(A) <= ||A||_inf / min_i delta_i. Returns that bound, or
+ * HUGE_VAL when A is not strictly dominant. O(nnz). */
+static double spla_dominance_cond(const SpMat* A) {
+    if (A->m != A->n) return HUGE_VAL;
+    double dmin = HUGE_VAL, rowmax = 0.0;
+    for (int64_t i = 0; i < A->m; i++) {
+        double diag = 0.0, off = 0.0;
+        for (int64_t k = A->rp[i]; k < A->rp[i + 1]; k++) {
+            double a = A->cplx ? hypot(A->x[2 * k], A->x[2 * k + 1]) : fabs(A->x[k]);
+            if (A->ci[k] == i) diag += a;
+            else off += a;
+        }
+        double delta = diag - off;
+        if (!(delta > 0.0)) return HUGE_VAL;
+        if (delta < dmin) dmin = delta;
+        if (diag + off > rowmax) rowmax = diag + off;
+    }
+    return A->m > 0 ? rowmax / dmin : HUGE_VAL;
+}
+
 static double vnorm_inf(const double* v, int64_t n, bool cplx) {
     double m = 0.0;
     for (int64_t i = 0; i < n; i++) {
@@ -419,7 +453,17 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
                             "arbitrary-precision or exact arguments.");
                 return expr_copy((Expr*)call);
             case MS_CHOLESKY: {
-                if (ca == NC_BIGNUM || cb == NC_BIGNUM) return plain_solve(Ae, Be);
+                if (ca == NC_BIGNUM || cb == NC_BIGNUM) {
+                    /* arbitrary precision: the Cholesky precondition is
+                     * decided at the matrix's own precision (a symmetric
+                     * indefinite 30-digit matrix is ::npdef, as in the
+                     * reference -- it was solved by LU) */
+                    if (!pred_true("PositiveDefiniteMatrixQ", Ae, NULL)) {
+                        msg_with_expr("LinearSolve", "npdef", "The matrix %s is not positive definite.", Ae);
+                        return expr_copy((Expr*)call);
+                    }
+                    return plain_solve(Ae, Be);
+                }
                 Expr* an = machine_n(Ae);
                 Expr* bn = machine_n(Be);
                 Expr* r = (an && bn && num_class(an) == NC_MACHINE)
@@ -469,8 +513,15 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
     if (!X) { rhs_free(&b); spla_view_free(&A); return NULL; }
     Expr* result = NULL;
     bool auto_krylov = false;       /* Automatic, no direct factor: refine */
+    bool krylov_first = false;      /* ... tried before the dense LU (see SPLA_KRYLOV_FIRST_N) */
+#ifndef USE_UMFPACK
+    if (o.sel == MS_AUTO && A.n > SPLA_KRYLOV_FIRST_N &&
+        spla_dominance_cond(&A) <= SPLA_KRYLOV_FIRST_COND)
+        krylov_first = auto_krylov = true;
+#endif
 
-    if (o.sel != MS_KRYLOV) {
+direct:   /* re-entered once when a Krylov-first run does not converge */
+    if (o.sel != MS_KRYLOV && !krylov_first) {
         SpfWant want = o.sel == MS_CHOLESKY ? SPF_WANT_CHOL
                      : o.sel == MS_MULTIFRONTAL ? SPF_WANT_LU
                      : (A.n <= SPLA_DENSE_N ? SPF_WANT_DENSE : SPF_WANT_AUTO);
@@ -530,6 +581,11 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
             else if (auto_krylov) krylov_refine(&A, b.buf + (size_t)r * len, xr, &o.kry);
         }
         free(x0);
+        if (krylov_first && (fail || any_maxit)) {
+            /* not converged after all: the direct solve answers */
+            krylov_first = auto_krylov = false;
+            goto direct;
+        }
         if (fail) {
             free(X); rhs_free(&b); spla_view_free(&A);
             return NULL;     /* breakdown or preconditioner failure: the direct solve answers */

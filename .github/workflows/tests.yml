@@ -87,12 +87,22 @@ jobs:
           if [ -n "$FILTER" ]; then
             # Build targets are the tests' EXECUTABLES, not the test names: a
             # corpus test (mathar_definite_corpus_tests) runs a shared driver
-            # (mathar_corpus_tests) with arguments.
-            tg=$(cd tests/build && ctest -N -V -R "$FILTER" \
-                   | sed -n 's/^[0-9]*: Test command: \([^ ]*\).*/\1/p' \
-                   | xargs -n1 basename | sort -u | tr '\n' ' ')
+            # (mathar_corpus_tests) with arguments.  Read from ctest's JSON
+            # model, which comes from the configure step -- `ctest -N -V` prints
+            # a "Test command" only for an executable that is ALREADY built, so
+            # here (before the build) it printed none.  Only executables inside
+            # the build tree are targets; a test run by python3 adds none.
+            tg=$(cd tests/build && ctest --show-only=json-v1 -R "$FILTER" | python3 -c '
+          import json, os, sys
+          b = os.getcwd()
+          cmds = [t.get("command") or [""] for t in json.load(sys.stdin)["tests"]]
+          print(" ".join(sorted({os.path.basename(c[0]) for c in cmds if c[0].startswith(b + "/")})))')
             echo "targets: $tg"
-            cmake --build tests/build -j"$(nproc)" --target $tg
+            if [ -n "$tg" ]; then
+              cmake --build tests/build -j"$(nproc)" --target $tg
+            else
+              echo "filter '$FILTER' names no C test executable (script-driven tests only)"
+            fi
           else
             cmake --build tests/build -j"$(nproc)"
           fi

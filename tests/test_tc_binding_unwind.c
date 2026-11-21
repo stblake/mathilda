@@ -154,6 +154,15 @@ static void test_context_restored_after_timeout(void) {
     assert_eval_eq("cp0 = $ContextPath; {TimeConstrained[BeginPackage[\"TcPkg2`\"]; "
                    "Do[" SLOW("k") ", {k, 10^6}], 0.1, ab], $Context === \"Global`\", $ContextPath === cp0}",
                    "{ab, True, True}", 0);
+    /* ...but a package the body read TO COMPLETION keeps its $ContextPath entry:
+     * it is marked loaded and never read again, and dropping ParallelMixed` here
+     * left ParallelMixedSpecial.m (read later, through it) resolving BuildTower
+     * to a fresh symbol for the session (m63: a separable DSolve after a
+     * timed-out one changed its answer) */
+    assert_eval_eq("{TimeConstrained[BeginPackage[\"TcDone`\"]; tcDoneF::usage = \"u\"; "
+                   "EndPackage[]; Do[" SLOW("k") ", {k, 10^6}], 0.1, ab], "
+                   "MemberQ[$ContextPath, \"TcDone`\"], $Context === \"Global`\"}",
+                   "{ab, True, True}", 0);
     /* a body that COMPLETES keeps what it did (a Begin may be left open) */
     assert_eval_eq("TimeConstrained[Begin[\"TcOpen`\"], 10]; {$Context === \"TcOpen`\", End[]; $Context === \"Global`\"}",
                    "{True, True}", 0);

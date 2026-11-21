@@ -1174,8 +1174,11 @@ The matrix exponential.
   precision class) and `Parameter -> t` (computes `MatrixExp[t m]`).
 - **SparseArray** `m` (v0.6188, `src/sparse/sparse_la_func.c`): a machine
   SparseArray answers a **SparseArray**, the reference's head, computed on the
-  dense form within the 2^27-element densify cap. An exact, MPFR or symbolic
-  one answers a List through the dense path. `MatrixExp[s, v]` for a machine
+  dense form within the 2^27-element densify cap. An exact or symbolic one
+  answers a List through the dense path. An **MPFR** SparseArray answers a
+  SparseArray only at order 1 or when it is diagonal with its diagonal entries
+  within 1 of each other (the reference's choice, probed); any other MPFR
+  SparseArray answers the dense List (v0.6661; it was a SparseArray). `MatrixExp[s, v]` for a machine
   SparseArray runs the Al-Mohy–Higham truncated Taylor action on SpMV and
   never forms the exponential, so it scales with the SpMV: the 90000 x 90000
   2-D Laplacian takes 76 ms. The answer is a dense vector, as in the reference.
@@ -2225,7 +2228,9 @@ Gives the LU decomposition of a matrix.
   - `c` is an L∞-condition-number estimate for approximate numerical
     square inputs, or the exact Integer `0` for exact / symbolic /
     rectangular `m` (the condition number is mathematically undefined
-    for non-square matrices).
+    for non-square matrices).  A singular numerical matrix has `c =
+    Infinity` (v0.6661: an infinite estimate had become `Overflow[]`, with a
+    spurious `General::ovfl`, since the numeric-tower review).
 
 **Features**:
 - `Protected`.
@@ -3009,13 +3014,21 @@ Out[8]= {6, 4, 5}
   re-eliminated.) A square arbitrary-precision `LinearSolve[m, b]` takes the
   same LU and two triangular solves (`n^3/3` fused multiply-adds instead of
   Gauss-Jordan's `n^3`); a matrix singular to working precision falls back to
-  the tolerance-aware elimination. Exact and symbolic matrices, the `"Krylov"` method, and
+  the tolerance-aware elimination. A **singular symbolic** matrix (an entry
+  that is not a number) is factored as the reference does, by
+  `LUDecomposition[m]` (`LUDecomposition::sing`, not `LinearSolve::sing1`),
+  and each application substitutes through the factor, dividing by the zero
+  pivot: `LinearSolve[SparseArray[{{2,2} -> 3, {3,2} -> x, {3,3} -> 8}, {3,3}]][b]`
+  is `{Indeterminate, ...}` with `::infy` / `::indet` (v0.6661). Exact numeric
+  matrices, the `"Krylov"` method, and
   singular (`LinearSolve::sing1`) or rectangular (`LinearSolve::sqmat1`)
   matrices make an object that solves afresh on every application. Errors:
   `LinearSolveFunction::lslc` (wrong length), `LinearSolve::notrhsm` (bad mode).
 - **Machine methods**, for a dense or SparseArray machine matrix:
   `Method -> "Multifrontal"` (sparse LU), `"Cholesky"` (`LinearSolve::npdef`
-  when not positive definite), `"Krylov"` or
+  when not positive definite -- for an arbitrary-precision SparseArray decided
+  at its own precision by `PositiveDefiniteMatrixQ`, then solved at that
+  precision; v0.6661, it was solved by LU), `"Krylov"` or
   `{"Krylov", Method -> "ConjugateGradient" | "BiCGSTAB" | "GMRES",
   "Preconditioner" -> "ILU0" | "ILUT" | "ILUTP" | None | Automatic | f,
   "MaxIterations" -> k, Tolerance -> t, "StartingVector" -> v}`. The Krylov
@@ -3045,8 +3058,13 @@ Out[8]= {6, 4, 5}
   doubled precision (compensated products and sums), corrections by the same
   BiCGSTAB/ILU0 -- until the correction reaches rounding level, so it is as
   accurate as a direct solve (SIAM 100-digit problem 7, 20000 x 20000: 12
-  correct digits -> 16). An explicit `Method -> "Krylov"` keeps its own
-  `Tolerance` and is not refined.
+  correct digits -> 16). A matrix of order above 1000 that is **strictly
+  diagonally dominant** with Varah condition bound `||A||_inf / min_i (|a_ii| -
+  sum_j |a_ij|) <= 10^6` -- provably nonsingular and well conditioned -- skips
+  the dense LU and takes that refined Krylov solve first (v0.6661; a scattered
+  11020 x 11020 SPD system 7.6 s -> 27 ms, residual 2e-15 -> 9e-17); a run
+  that does not converge falls back to the direct solve. An explicit
+  `Method -> "Krylov"` keeps its own `Tolerance` and is not refined.
   The answer is a packed List (a SparseArray right-hand side gives a dense
   answer too). As in the reference, and unlike the dense matrix, a **singular**
   machine SparseArray gives `LinearSolve::sing` and stays unevaluated (even for

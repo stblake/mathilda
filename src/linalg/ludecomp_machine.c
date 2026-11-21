@@ -369,7 +369,10 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
             mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
             free(s);
         }
-        c = expr_new_real(cond_est);
+        /* a singular matrix's condition number is Infinity (the
+         * reference), not an infinite double: expr_new_real makes that
+         * Overflow[] with a General::ovfl */
+        c = isfinite(cond_est) ? expr_new_real(cond_est) : expr_new_symbol("Infinity");
     }
 
     Expr* lu = lu_mach_build_lu(A_cm, rows, cols, is_complex);
@@ -455,7 +458,7 @@ Expr* ndla_ludecomposition(Expr* res)
     Expr* lu = na_build_matrix_as(A, n, n, cplx, /*colmajor=*/true,
                                   na_result_presentation(arg));
     Expr* p = lu_mach_build_perm(ipiv, n, n);
-    Expr* c = expr_new_real(cond_est);
+    Expr* c = isfinite(cond_est) ? expr_new_real(cond_est) : expr_new_symbol("Infinity");
     free(A); free(ipiv);
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);

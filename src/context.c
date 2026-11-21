@@ -546,12 +546,43 @@ bool context_end(char** out_ended_ctx) {
     return frame_pop(out_ended_ctx);
 }
 
+/* The packages that have completed EndPackage this session, in order (each
+ * once).  A non-local exit -- a timeout's abort or jump -- puts $Context and
+ * $ContextPath back to their values before the aborted body (context_restore),
+ * which also took off the context of a package the body had loaded TO
+ * COMPLETION: that package is marked loaded and never read again, so its
+ * context stayed off $ContextPath for the session.  ParallelMixed` lost so,
+ * ParallelMixedSpecial.m (read later, through it) resolved BuildTower to a
+ * fresh symbol and the special stage declined every integrand at once -- a
+ * separable DSolve after a timed-out one then answered differently.  The log
+ * lets the restore re-add exactly those contexts (context_reapply_endpackages). */
+static char** g_endpkg_log = NULL;
+static size_t g_endpkg_n = 0, g_endpkg_cap = 0;
+
+static void endpkg_log(const char* ctx) {
+    for (size_t i = 0; i < g_endpkg_n; i++)
+        if (strcmp(g_endpkg_log[i], ctx) == 0) return;
+    if (g_endpkg_n == g_endpkg_cap) {
+        size_t nc = g_endpkg_cap ? 2 * g_endpkg_cap : 16;
+        char** nl = (char**)realloc(g_endpkg_log, nc * sizeof(char*));
+        if (!nl) return;
+        g_endpkg_log = nl; g_endpkg_cap = nc;
+    }
+    g_endpkg_log[g_endpkg_n++] = ctx_strdup(ctx);
+}
+
+size_t context_endpackage_mark(void) { return g_endpkg_n; }
+
+void context_reapply_endpackages(size_t mark) {
+    for (size_t i = mark; i < g_endpkg_n; i++) path_prepend(g_endpkg_log[i]);
+}
+
 bool context_end_package(char** out_ended_ctx) {
     if (!g_stack) return false;
     char* closed = NULL;
     if (!frame_pop(&closed)) return false;
     /* Prepend the closed package context to $ContextPath (if not already on it). */
-    if (closed) path_prepend(closed);
+    if (closed) { path_prepend(closed); endpkg_log(closed); }
     if (out_ended_ctx) *out_ended_ctx = closed;
     else free(closed);
     return true;
@@ -898,5 +929,8 @@ void context_shutdown(void) {
         expr_free(f->saved_path);
         free(f);
     }
+    for (size_t i = 0; i < g_endpkg_n; i++) free(g_endpkg_log[i]);
+    free(g_endpkg_log);
+    g_endpkg_log = NULL; g_endpkg_n = g_endpkg_cap = 0;
     g_inited = false;
 }

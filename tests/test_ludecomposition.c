@@ -321,6 +321,20 @@ static void test_lu_truly_singular(void) {
     printf("  PASS: singular matrix returns a {lu, p, c} triple\n");
 }
 
+static void test_lu_singular_warns_every_call(void) {
+    /* ::sing on every singular call -- it was latched once per process, so
+     * a second singular symbolic matrix in a session factored silently */
+    Expr* res = run("Quiet[{Check[LUDecomposition[{{0, 0}, {0, x}}]; 0, 1, LUDecomposition::sing], "
+                    "Check[LUDecomposition[{{0, 0}, {0, y}}]; 0, 1, LUDecomposition::sing], "
+                    "Check[LUDecomposition[N[{{1, 1}, {1, 1}}, 30]]; 0, 1, LUDecomposition::sing], "
+                    "Check[LUDecomposition[N[{{2, 2}, {1, 1}}, 30]]; 0, 1, LUDecomposition::sing]}]");
+    char* s = expr_to_string(res);
+    ASSERT(strcmp(s, "{1, 1, 1, 1}") == 0);
+    free(s);
+    expr_free(res);
+    printf("  PASS: every singular call says LUDecomposition::sing\n");
+}
+
 static void test_lu_p_indexing_works(void) {
     /* Cross-check m[[p]] indexing produces the expected permuted rows.
      * We rebuild L (unit lower) and U (upper) explicitly via Table so
@@ -481,6 +495,7 @@ int main(void) {
     /* ---- singular handling ---- */
     TEST(test_lu_singular_zero_pivot);
     TEST(test_lu_truly_singular);
+    TEST(test_lu_singular_warns_every_call);
 
     /* ---- regression ---- */
     TEST(test_lu_p_indexing_works);

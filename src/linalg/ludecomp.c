@@ -359,11 +359,12 @@ static Expr* tidy_matrix(Expr* m) {
         expr_new_symbol(SYM_Together), (Expr*[]){expr_copy(m)}, 1));
 }
 
-/* One-shot singular warning. */
-static void lu_warn_singular_once(uint64_t* counter, Expr* m)
+/* The singular warning, once per call (as the reference: every singular
+ * LUDecomposition says ::sing; the funnel applies Quiet / Check).  It was a
+ * once-per-process latch, so every later singular symbolic matrix in a
+ * session factored silently. */
+static void lu_warn_singular(Expr* m)
 {
-    if (*counter) return;
-    *counter = 1;
     char* s = expr_to_string(m);
     mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
     free(s);
@@ -374,8 +375,6 @@ static void lu_warn_singular_once(uint64_t* counter, Expr* m)
  * ------------------------------------------------------------------ */
 Expr* lu_symbolic_dispatch(Expr* m, int rows, int cols)
 {
-    static uint64_t sing_warn_counter = 0;
-
     size_t total = (size_t)rows * (size_t)cols;
 
     /* Inexact-preprocessing pipeline (same shape as PseudoInverse /
@@ -416,7 +415,7 @@ Expr* lu_symbolic_dispatch(Expr* m, int rows, int cols)
         return NULL;
     }
 
-    if (singular) lu_warn_singular_once(&sing_warn_counter, m);
+    if (singular) lu_warn_singular(m);
 
     Expr* lu = wrap_matrix(LU_flat, rows, cols);
     free(LU_flat);

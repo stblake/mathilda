@@ -5826,6 +5826,12 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
     volatile int          saved_cfdep = cf_depth();
     Expr* saved_ctx0; Expr* saved_path0;                /* + the values themselves */
     context_capture(&saved_ctx0, &saved_path0);
+    /* ...less the packages the body loads TO COMPLETION: they keep their
+     * $ContextPath entry after the restore (context_reapply_endpackages) --
+     * marked loaded, they are never read again, and a ParallelMixed` dropped
+     * here left ParallelMixedSpecial.m resolving BuildTower to a fresh symbol
+     * for the rest of the session. */
+    volatile size_t       saved_pkgmark = context_endpackage_mark();
     Expr* volatile        saved_ctx = saved_ctx0;
     Expr* volatile        saved_path = saved_path0;
     /* Registered nesting counters (tc_register_unwind_counter), volatile like the
@@ -5856,6 +5862,7 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
         context_unwind_to(saved_ctxdep); \
         cf_unwind_to(saved_cfdep); \
         context_restore(saved_ctx, saved_path); saved_ctx = NULL; saved_path = NULL; \
+        context_reapply_endpackages(saved_pkgmark); \
         flint_cert_binding_clear(); \
         TC_MPFR_STATE_RESET(); } while (0)
     /* setjmp may only be a whole controlling expression (C99 7.13.1.1), so the
@@ -5875,6 +5882,7 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
          * the same way; only a body that COMPLETES keeps its context. */
         context_unwind_to(saved_ctxdep);
         context_restore(saved_ctx, saved_path);
+        context_reapply_endpackages(saved_pkgmark);
     } else {
         context_release(saved_ctx, saved_path);   /* normal completion: nothing to undo */
     }

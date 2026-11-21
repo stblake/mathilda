@@ -388,6 +388,17 @@ EXEMPT.update({
         "the reference's CG with ILU0 on a complex Hermitian matrix stalls "
         "(::krymit) -- ILU0 of a Hermitian matrix is not Hermitian; Mathilda's "
         "converges to the residual tolerance (checked by the value rows)",
+    ("LinearSolve-CG", "spd", "complex", "msg"):
+        "as for herm: the reference's CG stalls on a complex Hermitian positive "
+        "definite matrix (::krymit) even without a preconditioner -- 70 "
+        "iterations on a 7 x 7 HPD matrix (case #127) leave residual 0.31, where "
+        "CG terminates in 7 steps in exact arithmetic; Mathilda's converges "
+        "(checked by the inv and scipy rows)",
+    ("LinearSolve-CG", "spd", "mpfrc", "msg"): "as for spd/complex",
+    ("LinearSolveFunction*", "zero", "*", "msg"):
+        "the reference's LinearSolveFunction of an all-zero matrix answers the "
+        "consistent 0 . x == 0 with ::nosol (both leave it unevaluated); "
+        "Mathilda says ::sing, as the reference's own LinearSolve[A, b] does",
 })
 
 
@@ -887,11 +898,14 @@ SLeres1[a_, v_] := Module[{vv = Conjugate[v] . v, l},
 SLeres2[a_, l_, v_] := If[Conjugate[v] . v == 0, 0, SLrr[a . v - l v, (SLnrm[a] + Abs[l]) SLnrm[v]]];
 SLsig[r_, hd_] := Which[
   r === $TIMEOUT, "T",
-  Head[r] === hd || Head[Head[r]] === hd, "U",
+  Head[r] === hd || Head[Head[r]] === hd || Head[Head[r]] === LinearSolveFunction, "U",
   Head[r] === SparseArray, "S",
   r === $Failed || r === $Aborted, "E",
   ListQ[r] && ArrayQ[r] && FreeQ[r, _SparseArray], "L",
   ListQ[r], "{" <> StringRiffle[Map[SLsig[#, hd] &, r], ","] <> "}",
+  (* an infinity (a singular matrix's condition number) is DirectedInfinity[1]
+     in the reference and an atom in Mathilda: the same answer *)
+  MatchQ[r, Infinity | -Infinity | ComplexInfinity | _DirectedInfinity], "DirectedInfinity",
   AtomQ[r] || NumericQ[r] || MemberQ[{Plus, Times, Power, Rational, Complex}, Head[r]], "x",
   True, ToString[Head[r]]];
 SLbad = {"U", "T", "E"};
@@ -1074,26 +1088,51 @@ class MathildaRunner:
 # --------------------------------------------------------------------------
 
 def run_reference(cases, workdir, timelimit, wolframscript, log):
+    """id -> result dict.  A kernel that dies part-way through the batch (rc
+    139, reported as "exited because of a license error": a full seed-1 run
+    lost every answer after case 446, the 8x8 complex LeastSquares of case 447
+    answering fine on its own) is restarted on the cases it had not reached;
+    a case that kills a fresh kernel at once is dropped (no reference
+    answer)."""
     if not cases:
         return {}
-    path = os.path.join(workdir, "reference.m")
-    with open(path, "w") as fh:
-        fh.write(program(cases, timelimit))
-    timeout = 300 + len(cases) * (2 * timelimit + 5)
-    for attempt in (1, 2):
-        t0 = time.time()
-        rc, out, err = _run([wolframscript, "-file", path], timeout)
-        with open(os.path.join(workdir, "reference.out"), "w") as fh:
-            fh.write(out + "\n(* stderr *)\n" + err[-200000:])
-        res = parse_result_lines(out)
-        log(f"reference: {len(res)}/{len(cases)} answers in {time.time() - t0:.0f} s"
-            + ("" if rc == 0 else f" (rc={rc})"))
-        if res or attempt == 2:
-            return res
-        log("reference: no answers (licence busy?); retrying once in 30 s: "
-            + (out + err).strip()[-200:].replace("\n", " "))
-        time.sleep(30)
-    return {}
+    results = {}
+    todo = list(cases)
+    restarts = 0
+    while todo:
+        path = os.path.join(workdir, "reference.m")
+        with open(path, "w") as fh:
+            fh.write(program(todo, timelimit))
+        timeout = 300 + len(todo) * (2 * timelimit + 5)
+        res = {}
+        for attempt in (1, 2):
+            t0 = time.time()
+            rc, out, err = _run([wolframscript, "-file", path], timeout)
+            mode = "w" if not results else "a"
+            with open(os.path.join(workdir, "reference.out"), mode) as fh:
+                fh.write(out + "\n(* stderr *)\n" + err[-200000:])
+            res = parse_result_lines(out)
+            log(f"reference: {len(res)}/{len(todo)} answers in {time.time() - t0:.0f} s"
+                + ("" if rc == 0 else f" (rc={rc})"))
+            if res or attempt == 2 or results:
+                break
+            log("reference: no answers (licence busy?); retrying once in 30 s: "
+                + (out + err).strip()[-200:].replace("\n", " "))
+            time.sleep(30)
+        results.update(res)
+        if rc == 0 or restarts >= 20:
+            break
+        # resume after the last case answered; the next one is where the
+        # kernel died -- retried in the fresh kernel unless it was first
+        done = [i for i, c in enumerate(todo) if c.id in res]
+        start = done[-1] + 1 if done else 1
+        if not done:
+            log(f"reference: case {todo[0].id} kills the kernel; no reference answer for it")
+        todo = todo[start:]
+        restarts += 1
+        if todo:
+            log(f"reference: kernel died (rc={rc}); restarting at case {todo[0].id}")
+    return results
 
 
 # --------------------------------------------------------------------------
@@ -1686,10 +1725,29 @@ def evaluate_case(case, mt, crash, ref, sp, mx, leak):
         ok, det = compare(case, ref_v, sp_v, scipy_tol(case))
         if not ok:
             disagree = "reference and scipy disagree with each other (" + det + ")"
+    # the reference is no oracle for a value it disowns: an iteration it
+    # reports unconverged (::krymit, "the currently computed solution has
+    # been returned"), or a sparse answer its own dense call contradicts
+    # when Mathilda's agrees with the dense one (LeastSquares of a singular
+    # 30-digit matrix, case #370: the reference's sparse answer is a
+    # particular solution, not the documented minimum-norm one its dense
+    # LeastSquares -- and Mathilda, and the exact solution -- give)
+    ref_skip = disagree
+    if ref_v is not None and not disagree:
+        if any(m.endswith("::krymit") for m in ref_msgs):
+            ref_skip = "the reference reports its iteration unconverged (::krymit)"
+        elif ref.get("dval") is not None and ref.get("dsig") == rsig:
+            ok, _ = compare(case, mine, ref_v, value_tol(case, ref_v))
+            if not ok:
+                ref_d = parse_val(ref["dval"])
+                if not compare(case, ref_v, ref_d, value_tol(case, ref_d))[0] and \
+                        compare(case, mine, ref_d, value_tol(case, ref_d))[0]:
+                    ref_skip = ("the reference's sparse and dense answers disagree; "
+                                "Mathilda's agrees with the reference's dense answer")
     if ref_v is not None:
         ok, det = compare(case, mine, ref_v, value_tol(case, ref_v))
-        if disagree and not ok:
-            row("ref", "SKIP", disagree)
+        if ref_skip and not ok:
+            row("ref", "SKIP", ref_skip)
         else:
             row("ref", "PASS" if ok else "FAIL", det)
     if sp_v is not None:

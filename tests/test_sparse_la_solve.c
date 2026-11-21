@@ -112,6 +112,16 @@ static void test_band(void) {
     chk_true("SeedRandom[3]; pp = RandomSample[Range[2000]]; "
              "a = pm[2000, {1, 2, 3}, Range[2000] + 10.][[pp, pp]]; b = N[Range[2000]]; "
              "res[a, LinearSolve[a, b], b] < 10^-14");
+    /* scattered (no band), strictly diagonally dominant, n > 1000: without
+     * UMFPACK this was a dense O(n^3) LU (7.6 s at n = 11020, the sparse
+     * oracle's #1005); the refined Krylov default answers, as accurately */
+    chk("dd[n_] := SparseArray[Join[Table[{i, i} -> 10. + Mod[i, 7], {i, n}], "
+        "Table[{i, Mod[37 i^2, n] + 1} -> 1., {i, n}], Table[{i, Mod[101 i + 7, n] + 1} -> -2., {i, n}], "
+        "Table[{Mod[53 i, n] + 1, i} -> 1.5 I, {i, n}]], {n, n}]; Null", "Null");
+    chk_true("With[{a = dd[6000], b = N[Range[6000]]}, "
+             "t = AbsoluteTiming[x = LinearSolve[a, b]][[1]]; res[a, x, b] < 10^-15 && t < 1]");
+    chk_true("With[{a = Re[dd[3000]], b = N[Range[3000]]}, "
+             "Max[Abs[LinearSolve[a, b] - LinearSolve[Normal[a], b]]] < 10^-12]");
     /* symmetric with a positive diagonal but indefinite (eigenvalues
      * 1 + 2 cos(k pi / 401)): the Cholesky fails,
      * the band LU answers */
@@ -324,9 +334,12 @@ static void test_lsf(void) {
     chk_msg("LinearSolve[{{1., 2.}, {2., 4.}}]", "LinearSolve::sing1");
     chk("Head[Quiet[LinearSolve[{{1., 2.}, {2., 4.}}]]]", "LinearSolveFunction");
     chk_msg("LinearSolve[{{1., 2., 3.}, {4., 5., 6.}}]", "LinearSolve::sqmat1");
-    /* exact / symbolic singular matrices say sing1 too; badly conditioned luc */
+    /* exact singular matrices say sing1 too; a symbolic one is factored by
+     * LUDecomposition (::sing), as in the reference, and its function gives
+     * {Indeterminate, Indeterminate} for {1, 2}; badly conditioned luc */
     chk_msg("LinearSolve[SparseArray[{}, {3, 3}]]", "LinearSolve::sing1");
-    chk_msg("LinearSolve[{{a, b}, {2 a, 2 b}}]", "LinearSolve::sing1");
+    chk_msg("LinearSolve[{{a, b}, {2 a, 2 b}}]", "LUDecomposition::sing");
+    chk("Quiet[LinearSolve[{{a, b}, {2 a, 2 b}}][{1, 2}]]", "{Indeterminate, Indeterminate}");
     chk_msg("LinearSolve[N[HilbertMatrix[14]]]", "LinearSolve::luc");
     chk("Quiet[LinearSolve[{{1, 2, 3}, {4, 5, 6}}]][{1, 2}]", "{-1/3, 2/3, 0}");
     /* sparse: reuse the factor many times */
@@ -381,6 +394,30 @@ static void test_exact(void) {
 
 /* ---- MatrixExp of a SparseArray (sparse_la_func.c) ------------------------- */
 
+/* ---- arbitrary-precision Cholesky and a symbolic singular LinearSolve[m] ---- */
+
+static void test_mpfr_cholesky_and_symbolic_lsf(void) {
+    /* Method -> "Cholesky" on a symmetric indefinite 30-digit matrix is
+     * ::npdef, unevaluated, as in the reference (oracle cases #118, #866);
+     * a positive definite one still solves at its precision */
+    chk("mi = SparseArray[{{1,1} -> N[2,30], {1,2} -> N[3,30], {2,1} -> N[3,30], {2,2} -> N[1,30]}]; Null", "Null");
+    chk_msg("LinearSolve[mi, N[{1, 2}, 30], Method -> \"Cholesky\"]", "LinearSolve::npdef");
+    chk("Head[Quiet[LinearSolve[mi, N[{1, 2}, 30], Method -> \"Cholesky\"]]]", "LinearSolve");
+    chk("mp = SparseArray[{{1,1} -> N[4,30], {1,2} -> N[1,30], {2,1} -> N[1,30], {2,2} -> N[3,30]}]; Null", "Null");
+    chk_true("Precision[LinearSolve[mp, N[{1, 2}, 30], Method -> \"Cholesky\"]] > 25");
+    chk("mh = SparseArray[{{1,1} -> N[1,30], {1,2} -> N[2 I,30], {2,1} -> N[-2 I,30], {2,2} -> N[1,30]}]; Null", "Null");
+    chk_msg("LinearSolve[mh, N[{1, 2}, 30], Method -> \"Cholesky\"]", "LinearSolve::npdef");
+    /* a singular symbolic matrix: LinearSolve[m] factors it (::sing from
+     * LUDecomposition, not ::sing1) and the function divides by the zero
+     * pivot, as the reference (oracle case #968) */
+    chk("sy = SparseArray[{{2, 2} -> 3, {3, 2} -> xa, {3, 3} -> 8}, {3, 3}]; Null", "Null");
+    chk_msg("LinearSolve[sy]", "LUDecomposition::sing");
+    chk("Quiet[LinearSolve[sy][{0, 2, 2 xa/3 - 6}]]", "{Indeterminate, 2/3, -3/4}");
+    chk_msg("Quiet[fs = LinearSolve[sy]]; fs[{0, 2, 2 xa/3 - 6}]", "Infinity::indet");
+    /* an exact singular matrix keeps ::sing1 */
+    chk_msg("LinearSolve[SparseArray[{{1, 1}, {1, 1}}]]", "LinearSolve::sing1");
+}
+
 static void test_matrixexp(void) {
     /* a machine SparseArray answers a SparseArray (reference head); exact a List */
     chk("Head[MatrixExp[SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]]]", "SparseArray");
@@ -391,6 +428,12 @@ static void test_matrixexp(void) {
     chk("Head[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30]]]", "SparseArray");
     /* Precision of a vector is one number, the least over its entries */
     chk("Precision[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30], {1,1}]]", "30.0");
+    /* ... but only at order 1 or a narrow diagonal: a general MPFR matrix
+     * answers the dense List, as in the reference (oracle cases #58, #299) */
+    chk("Head[MatrixExp[SparseArray[{{1,1}->N[2+I,30]}, {1,1}]]]", "SparseArray");
+    chk("Head[MatrixExp[SparseArray[{{1,1}->N[2,30],{2,2}->N[4,30]}, {2,2}]]]", "List");
+    chk("Head[MatrixExp[SparseArray[{{1,2}->N[2,30],{2,1}->N[1,30]}, {2,2}]]]", "List");
+    chk("Head[MatrixExp[SparseArray[{{1,1}->N[1,30],{1,2}->N[1/2,30],{2,2}->N[2,30],{3,3}->N[1,30]}, {3,3}]]]", "List");
     chk_true("With[{s = SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]}, "
              "Max[Abs[Normal[MatrixExp[s]] - MatrixExp[Normal[s]]]] < 10^-14]");
     /* the action on a vector, on SpMV: real, complex, against the dense action */
@@ -419,6 +462,7 @@ int main(void) {
     test_det_inverse();
     test_lsf();
     test_matrixexp();
+    test_mpfr_cholesky_and_symbolic_lsf();
     test_exact();
     if (failures) {
         fprintf(stderr, "%d failure(s)\n", failures);

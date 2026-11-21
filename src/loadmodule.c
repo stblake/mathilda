@@ -30,6 +30,7 @@
 #include "eval.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "quit.h"
+#include "core.h"      /* tc_register_unwind_counter: an abandoned module read */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,8 +143,11 @@ Expr* mathilda_run_file(const char* path, int* opened) {
      * file's End[] / EndPackage[] never run, and the session would be left in
      * the package's private context (every later bare symbol a fresh
      * Private` one).  A lazily loaded package (Integrate's) is read inside the
-     * caller's TimeConstrained, whose timeout is such an abort. */
+     * caller's TimeConstrained, whose timeout is such an abort.  A package the
+     * file loaded TO COMPLETION before the abort keeps its $ContextPath entry
+     * (context_reapply_endpackages; see tc_run_guarded_mode). */
     size_t ctx_depth = context_stack_depth();
+    size_t pkg_mark = context_endpackage_mark();
     Expr* saved_ctx; Expr* saved_path;
     context_capture(&saved_ctx, &saved_path);
     const char* ptr = buffer;
@@ -181,6 +185,7 @@ Expr* mathilda_run_file(const char* path, int* opened) {
     if (eval_is_inflight_abort(last_eval)) {
         context_unwind_to(ctx_depth);
         context_restore(saved_ctx, saved_path);
+        context_reapply_endpackages(pkg_mark);
     } else {
         context_release(saved_ctx, saved_path);   /* a file may leave a Begin open */
     }
@@ -469,17 +474,60 @@ int mathilda_installation_directory(char* out, size_t outsz) {
     return ok;
 }
 
+/* ---- an interrupted read ------------------------------------------------- *
+ * A module read can be cut short: by the cooperative Abort[] a caller's
+ * TimeConstrained raises on timeout (since v0.6623; the read stops at the
+ * statement that saw it), or by a timeout siglongjmp that leaves
+ * mathilda_load_module altogether.  Either way the module is HALF defined.  It
+ * is never marked loaded, so the next mathilda_load_module reads the whole
+ * file -- but the lazy loaders (Integrate's cascade packages, the BVP and
+ * Meijer-G modules) keep their own attempt-once flag, keyed on
+ * mathilda_module_generation().  That generation moves on whenever a read was
+ * interrupted, so a loader whose attempt was cut short asks again instead of
+ * running its stage on a half-read package for the rest of the session.
+ * (Measured: DSolve`Separable's budget expiring inside the lazy load of
+ * ParallelMixedSpecial.m left that stage declining every later integrand at
+ * once, and a later, unrelated separable equation shipped an implicit relation
+ * where the full cascade would have handed it on to Linearizable.)
+ *
+ * The jump is detected afterwards: lm_depth is a TimeConstrained unwind
+ * counter (restored to its pre-body value by the jump), lm_depth_raw is not,
+ * so raw > depth means a read was abandoned mid-way. */
+static int      lm_depth = 0;       /* reads in progress (unwind-restored) */
+static int      lm_depth_raw = 0;   /* the same, never restored            */
+static unsigned lm_interrupted = 0; /* reads cut short so far              */
+
+static void lm_note_jumped_reads(void) {
+    if (lm_depth_raw > lm_depth) { lm_interrupted++; lm_depth_raw = lm_depth; }
+}
+
+unsigned mathilda_module_generation(void) {
+    lm_note_jumped_reads();
+    return symtab_generation() * 2654435761u + lm_interrupted;
+}
+
 int mathilda_load_module(const char* relpath) {
     if (!relpath || !*relpath) return 0;
+    lm_note_jumped_reads();
     if (lm_already_loaded(relpath)) return 1;
 
     char full[LM_PATH_MAX];
     if (mathilda_resolve_internal(relpath, full, sizeof(full))) {
         int opened = 0;
+        lm_depth++; lm_depth_raw++;
         intern_system_scope_push();     /* heads this module defines are System */
         Expr* last = mathilda_run_file(full, &opened);
         intern_system_scope_pop();
+        lm_depth--; lm_depth_raw--;
+        bool aborted = last && eval_is_inflight_abort(last);
         if (last) expr_free(last);
+        if (aborted) {
+            /* Half read: not marked loaded, and the loaders' generation moves
+             * on.  Reported as found (1) -- the file is there, and the abort
+             * itself travels on -- so no caller says "cannot locate". */
+            lm_interrupted++;
+            return 1;
+        }
         if (opened) { lm_mark_loaded(relpath); return 1; }
     }
 
@@ -499,6 +547,7 @@ Expr* builtin_loadmodule(Expr* res) {
 }
 
 void loadmodule_init(void) {
+    tc_register_unwind_counter(&lm_depth);   /* see mathilda_module_generation */
     symtab_add_builtin("LoadModule", builtin_loadmodule);
     symtab_get_def("LoadModule")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LoadModule",
