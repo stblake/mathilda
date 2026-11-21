@@ -21,6 +21,7 @@
 #include "print.h"
 #include "message.h"
 #include "utf8.h"
+#include "linkedlist.h"
 
 /* True if e is the symbol whose interned name is `name`. */
 static inline bool strings_is_sym(const Expr* e, const char* name) {
@@ -42,6 +43,26 @@ static inline bool strings_is_list(const Expr* e) {
 static inline bool strings_all_strings(const Expr* e) {
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (e->data.function.args[i]->type != EXPR_STRING) return false;
+    return true;
+}
+
+/* A List or a LinkedList: a sequence of subjects the string heads thread over.
+ * A LinkedList is read through LLElems (linkedlist.h) -- never converted --
+ * and the answer is built in its image with ll_seq_like. */
+static inline bool strings_is_seq(const Expr* e) {
+    return strings_is_list(e) || e->type == EXPR_LINKEDLIST;
+}
+
+/* True if the sequence e (strings_is_seq) holds only Strings. A typed
+ * LinkedList holds numbers, so only a boxed (or empty) one can qualify. */
+static inline bool strings_seq_all_strings(const Expr* e) {
+    const LinkedList* ll = expr_linkedlist(e);
+    if (!ll) return strings_all_strings(e);
+    int64_t n = ll_length(ll);
+    if (n == 0) return true;
+    if (ll_kind(ll) != LL_BOXED) return false;
+    for (int64_t i = 0; i < n; i++)
+        if (ll_peek_boxed(ll, i)->type != EXPR_STRING) return false;
     return true;
 }
 
@@ -177,14 +198,23 @@ static inline bool strings_seq_parse(Expr* spec, StrSeq* out) {
         }
         return false;
     }
-    if (!strings_is_list(spec)) return false;
-    size_t k = spec->data.function.arg_count;
-    Expr** v = spec->data.function.args;
+    /* {n}, {m, n} or {m, n, s}: a List, or a LinkedList read from its slots. */
+    const LinkedList* sl = expr_linkedlist(spec);
+    if (!sl && !strings_is_list(spec)) return false;
+    size_t k = sl ? (size_t)ll_length(sl) : spec->data.function.arg_count;
     if (k < 1 || k > 3) return false;
-    if (!strings_machine_int(v[0], true, &a)) return false;
+    Expr* tmp[3] = { NULL, NULL, NULL };
+    Expr** v = spec->data.function.args;
+    if (sl) {
+        for (size_t i = 0; i < k; i++) tmp[i] = ll_get(sl, (int64_t)i);
+        v = tmp;
+    }
+    bool ok = strings_machine_int(v[0], true, &a);
     b = a; c = 1;
-    if (k >= 2 && !strings_machine_int(v[1], true, &b)) return false;
-    if (k == 3 && (!strings_machine_int(v[2], true, &c) || c == 0)) return false;
+    if (ok && k >= 2) ok = strings_machine_int(v[1], true, &b);
+    if (ok && k == 3) ok = strings_machine_int(v[2], true, &c) && c != 0;
+    for (size_t i = 0; i < 3; i++) if (tmp[i]) expr_free(tmp[i]);
+    if (!ok) return false;
     out->kind = SSEQ_RANGE;
     out->m = a; out->n = b; out->s = c;
     return true;

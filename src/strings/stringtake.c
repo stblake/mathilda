@@ -190,8 +190,8 @@ Expr* builtin_stringtake(Expr* res) {
     Expr* arg0 = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
-    bool threaded = strings_is_list(arg0);
-    if (!(arg0->type == EXPR_STRING || (threaded && strings_all_strings(arg0))))
+    bool threaded = strings_is_seq(arg0);
+    if (!(arg0->type == EXPR_STRING || (threaded && strings_seq_all_strings(arg0))))
         return strings_msg_strse("StringTake", res, 1);
 
     StSpec p;
@@ -201,12 +201,15 @@ Expr* builtin_stringtake(Expr* res) {
     if (!threaded) {
         out = take_one_string(arg0, spec, &p, true);
     } else {
-        size_t n = arg0->data.function.arg_count;
+        LLElems sv;                       /* a List or a LinkedList of strings */
+        ll_elems_open(arg0, &sv);
+        size_t n = sv.n;
         Expr** results = malloc(sizeof(Expr*) * (n ? n : 1));
-        if (!results) { free(p.seqs); return NULL; }
+        if (!results) { ll_elems_close(&sv); free(p.seqs); return NULL; }
         for (size_t i = 0; i < n; i++)
-            results[i] = take_one_string(arg0->data.function.args[i], spec, &p, false);
-        out = expr_new_function(expr_new_symbol(SYM_List), results, n);
+            results[i] = take_one_string(sv.v[i], spec, &p, false);
+        ll_elems_close(&sv);
+        out = ll_seq_like(arg0, results, n);
         free(results);
     }
     free(p.seqs);

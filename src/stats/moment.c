@@ -28,6 +28,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
+#include "linkedlist.h" /* LLElems */
 #include <stdlib.h>
 
 /* Integer power by squaring on a double (exponent >= 0). */
@@ -48,13 +49,37 @@ static bool mom_is_list(const Expr* e) {
            e->data.function.head->data.symbol.name == SYM_List;
 }
 
+/* A sequence argument: a List, or a LinkedList (read through LLElems). */
+static bool mom_is_seq(const Expr* e) { return e && ll_is_seq(e); }
+
 /* Exact / symbolic base case: Mean[data^r]. Power is Listable, so data^r threads
  * over the elements at every rank (a vector's scalars, a matrix's / array's
  * entries), and the outer Mean divides the first axis by n — giving the vector's
  * scalar moment, the matrix's columnwise vector of moments, or the array's
  * columnwise array. Reuses Mean's exact-rational and symbolic paths (and the
  * evaluator's MPFR path for arbitrary-precision reals). */
+Expr* stats_moment_elements(Expr** el, size_t n, Expr* order) {
+    Expr** p = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        p[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                   (Expr*[]){ expr_copy(el[i]), expr_copy(order) }, 2));
+    Expr* r = stats_mean_vec(p, n);
+    for (size_t i = 0; i < n; i++) expr_free(p[i]);
+    free(p);
+    return r;
+}
+
 static Expr* mom_symbolic(Expr* data, Expr* order) {
+    if (data->type == EXPR_LINKEDLIST) {
+        /* The same tree over a LinkedList's elements (stats_moment_elements):
+         * a LinkedList reaching here is one the packed path declined, so its
+         * List counterpart is answered on the elements too. */
+        LLElems e;
+        ll_elems_open(data, &e);
+        Expr* r = stats_moment_elements(e.v, e.n, order);
+        ll_elems_close(&e);
+        return r;
+    }
     Expr* powered = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ expr_copy(data), expr_copy(order) }, 2));
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
@@ -69,21 +94,25 @@ static Expr* mom_symbolic(Expr* data, Expr* order) {
  * length to equal Length[rvec]. Mirrors CentralMoment's multivariate case with
  * the centering removed. */
 static Expr* mom_multivariate(Expr* data, Expr* rvec) {
-    Expr* first = data->data.function.args[0];
-    if (!mom_is_list(first)) return NULL;                 /* need depth >= 2 */
+    LLElems rows;
+    if (!ll_elems_open(data, &rows)) return NULL;
+    Expr* first = rows.v[0];
     size_t m = rvec->data.function.arg_count;
-    if (first->data.function.arg_count != m) return NULL; /* second axis must match order length */
+    if (!mom_is_seq(first) || ll_seq_length(first) != (int64_t)m) {   /* depth >= 2, axis 2 = order */
+        ll_elems_close(&rows);
+        return NULL;
+    }
 
-    size_t n = data->data.function.arg_count;
+    size_t n = rows.n;
     Expr** terms = malloc(sizeof(Expr*) * n);
-    if (!terms) return NULL;
+    if (!terms) { ll_elems_close(&rows); return NULL; }
     for (size_t i = 0; i < n; i++) {
-        Expr* sub = data->data.function.args[i];             /* borrowed, rank k-1 */
+        Expr* sub = rows.v[i];                               /* borrowed, rank k-1 */
         Expr* powered = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                             (Expr*[]){ expr_copy(sub), expr_copy(rvec) }, 2));  /* threads r over axis 2 */
-        terms[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Apply),
-                       (Expr*[]){ expr_new_symbol(SYM_Times), powered }, 2)); /* Times @@ powered */
+        terms[i] = eval_and_free(stats_apply_head(SYM_Times, powered));   /* Times @@ powered */
     }
+    ll_elems_close(&rows);
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), terms, n);
     free(terms);
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
@@ -103,9 +132,11 @@ Expr* builtin_moment(Expr* res) {
      * degrades back to a nested List and re-enters here. */
     if (ndred_call_has_ndarray(res)) return ndred_moment(res);
 
-    if (!mom_is_list(data)) return NULL;
-    size_t n = data->data.function.arg_count;
-    if (n == 0) return NULL;
+    /* LinkedList: the packed kernel on the chunks, or columnwise (stats_ll.c). */
+    { Expr* r; if (!mom_is_list(order) && stats_ll_arm(res, STATS_MOMENT, &r)) return r; }
+
+    if (!mom_is_seq(data)) return NULL;
+    if (ll_seq_length(data) == 0) return NULL;
 
     /* Multivariate order {r1, ..., rm}. */
     if (mom_is_list(order)) return mom_multivariate(data, order);
@@ -114,13 +145,16 @@ Expr* builtin_moment(Expr* res) {
      * a real number, at least one is inexact (approximate input -> approximate
      * output), and the order is a non-negative machine integer. A matrix / array
      * (data[[1]] is a List) skips this and takes the symbolic columnwise path. */
-    if (!mom_is_list(data->data.function.args[0]) &&
+    LLElems e;
+    ll_elems_open(data, &e);
+    size_t n = e.n;
+    if (!mom_is_seq(e.v[0]) &&
         order->type == EXPR_INTEGER && order->data.integer >= 0) {
         bool all_numeric = true, has_real = false;
         for (size_t i = 0; i < n; i++) {
-            Expr* e = data->data.function.args[i];
-            if (e->type == EXPR_REAL) has_real = true;
-            else if (e->type == EXPR_INTEGER || is_rational(e, NULL, NULL)) { /* numeric */ }
+            Expr* x = e.v[i];
+            if (x->type == EXPR_REAL) has_real = true;
+            else if (x->type == EXPR_INTEGER || is_rational(x, NULL, NULL)) { /* numeric */ }
             else { all_numeric = false; break; }
         }
         if (all_numeric && has_real) {
@@ -128,13 +162,14 @@ Expr* builtin_moment(Expr* res) {
             double acc = 0.0;
             for (size_t i = 0; i < n; i++) {
                 double v = 0.0;
-                stats_is_numeric(data->data.function.args[i], &v, NULL);
+                stats_is_numeric(e.v[i], &v, NULL);
                 acc += mom_ipow(v, r);
             }
             double m = acc / (double)n;
-            if (stats_machine_ok(m)) return expr_new_real(m);   /* else decline (C3) */
+            if (stats_machine_ok(m)) { ll_elems_close(&e); return expr_new_real(m); }   /* else decline (C3) */
         }
     }
+    ll_elems_close(&e);
 
     /* Exact / symbolic vector, matrix, or array; or symbolic / non-integer order. */
     return mom_symbolic(data, order);

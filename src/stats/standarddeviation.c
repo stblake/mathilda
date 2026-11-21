@@ -8,6 +8,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
+#include "linkedlist.h" /* LLElems */
 #include <math.h>
 
 Expr* builtin_standard_deviation(Expr* res) {
@@ -20,28 +21,41 @@ Expr* builtin_standard_deviation(Expr* res) {
     /* NDArray fast path (see ndreduce.c). */
     if (ndred_call_has_ndarray(res)) return ndred_std(res);
 
-    // Check if it's a matrix
-    Expr* matrixq_args[1] = { expr_copy(data) };
-    Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
-    Expr* is_matrix = evaluate(matrixq_call);
-    expr_free(matrixq_call);
-    if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol.name == SYM_True) {
-        expr_free(is_matrix);
-        return stats_apply_columnwise("StandardDeviation", data);
-    }
-    expr_free(is_matrix);
+    /* LinkedList: the packed kernel on the chunks, or columnwise (stats_ll.c). */
+    { Expr* r; if (stats_ll_arm(res, STATS_STD, &r)) return r; }
 
-    // Optimization for real numeric data
-    if (data->type == EXPR_FUNCTION) {
+    // Check if it's a matrix
+    if (data->type != EXPR_LINKEDLIST) {
+        Expr* matrixq_args[1] = { expr_copy(data) };
+        Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
+        Expr* is_matrix = evaluate(matrixq_call);
+        expr_free(matrixq_call);
+        bool mat = is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol.name == SYM_True;
+        expr_free(is_matrix);
+        if (mat) return stats_apply_columnwise("StandardDeviation", data);
+    }
+
+    // Optimization for real numeric data: a List's arguments or a LinkedList's elements
+    LLElems e = { NULL, 0, false };
+    bool seq = false;
+    if (data->type == EXPR_LINKEDLIST) {
+        seq = ll_elems_open(data, &e);
+    } else if (data->type == EXPR_FUNCTION) {
+        e.v = data->data.function.args;          /* borrowed */
+        e.n = data->data.function.arg_count;
+        seq = true;
+    }
+    if (seq) {
         bool all_real = true;
-        size_t n = data->data.function.arg_count;
+        size_t n = e.n;
         for (size_t i = 0; i < n; i++) {
             bool complex;
-            if (!stats_is_numeric(data->data.function.args[i], NULL, &complex) || complex) {
+            if (!stats_is_numeric(e.v[i], NULL, &complex) || complex) {
                 all_real = false;
                 break;
             }
         }
+        ll_elems_close(&e);
         if (all_real && n > 1) {
             Expr* var_call = expr_new_function(expr_new_symbol(SYM_Variance), (Expr*[]){ expr_copy(data) }, 1);
             Expr* var_e = evaluate(var_call);

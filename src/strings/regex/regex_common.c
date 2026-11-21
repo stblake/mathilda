@@ -3,6 +3,7 @@
  */
 
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of patterns */
 #include "sym_names.h"
 
 #include <stdio.h>
@@ -293,6 +294,15 @@ int regex_rules_build_ex(Expr* patt, int anchored, int caseless,
                                   caseless ? REGEX_CASELESS : 0u, out, head);
 }
 
+/* True when a LinkedList occurs anywhere in a (small) pattern expression. */
+static bool rx_has_linkedlist(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rx_has_linkedlist(e->data.function.args[i])) return true;
+    return false;
+}
+
 int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags,
                            RegexRule** out, const char* head) {
     if (!regex_available()) {
@@ -303,45 +313,69 @@ int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags
     }
     regex_flags |= REGEX_UTF;              /* strings are UTF-8, classes Unicode */
 
-    uint64_t h = expr_hash(patt);
-    RulesBlock* hit = cache_lookup(patt, h, rule_flags, regex_flags);
+    /* A LinkedList anywhere in the pattern is a mutable object compared by
+     * identity: a rule set keyed on it would go stale when it changed, so such
+     * a pattern is built afresh every call and never cached. */
+    bool mutable_patt = rx_has_linkedlist(patt);
+    uint64_t h = mutable_patt ? 0 : expr_hash(patt);
+    RulesBlock* hit = mutable_patt ? NULL : cache_lookup(patt, h, rule_flags, regex_flags);
     if (hit) {
         hit->refs++;
         *out = hit->rules;
         return hit->nr;
     }
 
+    /* A top-level List -- or LinkedList -- of patterns is one rule per
+     * element. The rules borrow into the elements, so a LinkedList is read
+     * from a snapshot (ll_copy) that the block keeps as its key: its boxed
+     * slots stay alive for the block's lifetime whatever happens to the list.
+     * A typed (numeric) LinkedList holds no string pattern at all. */
     Expr** elems;
     int n;
-    if (patt->type == EXPR_FUNCTION &&
+    Expr* key;
+    const LinkedList* pl = expr_linkedlist(patt);
+    LLElems snap_elems = { NULL, 0, false };
+    if (pl) {
+        if (ll_kind(pl) != LL_BOXED) return -1;
+        key = expr_new_linkedlist(ll_copy(pl));
+        ll_elems_open(key, &snap_elems);
+        n = (int)snap_elems.n;
+        elems = snap_elems.v;
+    } else if (patt->type == EXPR_FUNCTION &&
         patt->data.function.head->type == EXPR_SYMBOL &&
         patt->data.function.head->data.symbol.name == SYM_List) {
         n = (int)patt->data.function.arg_count;
         elems = patt->data.function.args;
         if (n == 0) return -1;
+        key = NULL;
     } else {
         n = 1;
         elems = &patt;
+        key = NULL;
     }
+    if (n == 0) { ll_elems_close(&snap_elems); expr_free(key); return -1; }
 
     RulesBlock* b = calloc(1, sizeof(RulesBlock) + (size_t)n * sizeof(RegexRule));
-    if (!b) return -1;
+    if (!b) { ll_elems_close(&snap_elems); expr_free(key); return -1; }
     b->refs = 1;
+    /* The snapshot's elements are held by the snapshot itself (the key). */
+    b->key = key ? key : expr_copy(patt);
     for (int i = 0; i < n; i++) {
         if (build_one(elems[i], rule_flags, regex_flags, &b->rules[i], head) != 0) {
             b->nr = i;                      /* free the i already built */
+            ll_elems_close(&snap_elems);
             block_destroy(b);
             return -1;
         }
         int gc = regex_group_count(b->rules[i].prog) + 1;
         b->rules[i].npairs = (gc > REGEX_MAX_PAIRS) ? (size_t)REGEX_MAX_PAIRS : (size_t)gc;
     }
+    ll_elems_close(&snap_elems);
     b->nr = n;
-    b->key = expr_copy(patt);
     b->hash = h;
     b->rule_flags = rule_flags;
     b->regex_flags = regex_flags;
-    cache_insert(b);
+    if (!mutable_patt) cache_insert(b);
     *out = b->rules;
     return n;
 }

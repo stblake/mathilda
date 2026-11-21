@@ -63,6 +63,7 @@
  */
 
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of patterns */
 #include "sym_names.h"
 
 #include <stdlib.h>
@@ -373,6 +374,22 @@ static void sp_emit(SpCtx* ctx, Expr* patt) {
         return;
     }
 
+    /* A nested LinkedList is alternatives, as a nested List is (below), read
+     * from its slots. A typed list holds numbers, which are no string pattern,
+     * so only a boxed list's slots (borrowed for the translation) are walked. */
+    if (patt->type == EXPR_LINKEDLIST) {
+        const LinkedList* ll = patt->data.llist;
+        int64_t n = ll_length(ll);
+        if (n == 0) { put(ctx, "(*FAIL)"); return; }
+        if (ll_kind(ll) != LL_BOXED) { ctx->failed = 1; return; }
+        Expr** el = malloc(sizeof(Expr*) * (size_t)n);
+        if (!el) { ctx->failed = 1; return; }
+        ll_gather(ll, 0, n, el);                       /* borrowed slots */
+        emit_join(ctx, el, (size_t)n, "|");
+        free(el);
+        return;
+    }
+
     if (patt->type != EXPR_FUNCTION) { ctx->failed = 1; return; }
 
     size_t argc;
@@ -402,6 +419,7 @@ static void sp_emit(SpCtx* ctx, Expr* patt) {
         emit_join(ctx, args, argc, "|");
         return;
     }
+
 
     if (is_fn(patt, SYM_Repeated, &argc, &args))     { emit_repeated(ctx, args, argc, 1); return; }
     if (is_fn(patt, SYM_RepeatedNull, &argc, &args)) { emit_repeated(ctx, args, argc, 0); return; }

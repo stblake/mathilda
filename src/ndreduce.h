@@ -82,6 +82,14 @@ Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
  * reduction, hence named nd_* rather than ndred_*. */
 Expr* nd_covariance(Expr* res);     /* Covariance[v,w] / [a] / [a,b] */
 Expr* nd_correlation(Expr* res);    /* Correlation[v,w] / [a] / [a,b] */
+/* Their raw cores (for containers that are not one NDArray -- LinkedList): the
+ * two-vector form of n >= 2 reals into *out (false: n < 2 or a degenerate
+ * correlation), and the matrix form, A (n x p) and B (n x q, B == A for the
+ * auto form) row-major and centered in place, into C (p x q). */
+bool nd_corrcov_vec_f64(const double* v, const double* w, size_t n, int correlate,
+                        double* out);
+bool nd_corrcov_matrix_f64(double* A, double* B, int n, int p, int q, int correlate,
+                           double* C);
 
 /* RankedMin[v, n] / RankedMax[v, n] — the n-th smallest / largest element of a
  * rank-1 machine vector (n<0 counts from the other end; RankedMax[v,n] ==
@@ -142,5 +150,35 @@ Expr* ndred_scan(const Expr* a, NDScanOp op, const Expr* seed, bool as_list);
 Expr* ndred_moving_average(Expr* res);  /* MovingAverage[a, r] */
 Expr* ndred_moving_median(Expr* res);   /* MovingMedian[a, r] */
 Expr* ndred_ema(Expr* res);             /* ExponentialMovingAverage[a, alpha] */
+
+/* The strided kernels behind the reductions above, over a raw buffer, for a
+ * container that is not one NDArray (LinkedList; src/stats/stats_ll.c): the
+ * packed kernels' own code, so the answers agree to the bit. Each reads the
+ * `count` (or `blocks`) elements buf[base], buf[base + stride], ...
+ *   nd_sum_strided       pairwise sum into (*re, *im)
+ *   nd_sumsq_strided     pairwise Sum |x - (mr, mi)|^2
+ *   nd_summoment_strided pairwise Sum (x - mean)^r (real part)
+ *   nd_median_of         median (quickselect on a copy)
+ *   nd_moment_at         mode 0 Variance, 1 StandardDeviation, 2 RootMeanSquare
+ *   nd_cm_at / nd_rawmoment_at  CentralMoment / Moment of order r
+ *   nd_stdmoment_at      m_p / m_2^half_p (Skewness p = 3, Kurtosis p = 4)
+ * nd_quartiles_f64 sorts s in place; nd_moving_average_f64 writes n-r+1 means. */
+void   nd_sum_strided(const void* buf, NDType dt, size_t base, size_t stride,
+                      size_t count, double* re, double* im);
+double nd_sumsq_strided(const void* buf, NDType dt, size_t base, size_t stride,
+                        size_t count, double mr, double mi);
+double nd_summoment_strided(const void* buf, NDType dt, size_t base, size_t stride,
+                            size_t count, double mean, int64_t r);
+double nd_median_of(const void* buf, NDType dt, size_t base, size_t stride, size_t count);
+double nd_moment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                    size_t blocks, int mode);
+double nd_cm_at(const void* buf, NDType dt, size_t base, size_t stride,
+                size_t blocks, int64_t r);
+double nd_rawmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                       size_t blocks, int64_t r);
+double nd_stdmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                       size_t blocks, int p, double half_p);
+void   nd_quartiles_f64(double* s, size_t n, double qv[3]);
+void   nd_moving_average_f64(const double* x, size_t n, size_t r, double* out);
 
 #endif /* MATHILDA_NDREDUCE_H */

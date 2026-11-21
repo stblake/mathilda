@@ -9,6 +9,8 @@
 #include "ndreduce.h"
 #include "print.h"     /* expr_to_string */
 #include <stdio.h>
+#include "linkedlist.h" /* LLElems */
+#include "message.h"
 #include <stdlib.h>
 #include <gmp.h>
 
@@ -22,21 +24,8 @@
  * a column-wise median vector. Non-numeric data triggers the MovingMedian::arg1
  * message and the expression remains unevaluated.
  */
-Expr* builtin_moving_median(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    Expr* data = res->data.function.args[0];
-    Expr* spec = res->data.function.args[1];
-
-    /* NDArray fast path: sliding-window median on the buffer (see ndreduce.c). */
-    if (is_ndarray(data)) return ndred_moving_median(res);
-
-    if (data->type != EXPR_FUNCTION ||
-        data->data.function.head->type != EXPR_SYMBOL ||
-        data->data.function.head->data.symbol.name != SYM_List) {
-        return NULL;
-    }
-
-    size_t n = data->data.function.arg_count;
+/* MovingMedian over the n elements el of `data` (a List or a LinkedList). */
+static Expr* moving_median_vec(Expr* res, Expr* data, Expr** el, size_t n, Expr* spec) {
     size_t r = 0;
     if (spec->type == EXPR_INTEGER) {
         if (spec->data.integer < 1) return NULL;
@@ -55,16 +44,16 @@ Expr* builtin_moving_median(Expr* res) {
     if (n == 0) return NULL;
 
     /* Decide vector vs matrix based on whether the first element is a List. */
-    bool matrix_mode = (data->data.function.args[0]->type == EXPR_FUNCTION &&
-                        data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-                        data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List);
+    bool matrix_mode = (el[0]->type == EXPR_FUNCTION &&
+                        el[0]->data.function.head->type == EXPR_SYMBOL &&
+                        el[0]->data.function.head->data.symbol.name == SYM_List);
 
     /* Validate that every leaf is a real-valued numeric. Matrices must be rectangular. */
     bool ok = true;
     if (matrix_mode) {
-        size_t cols = data->data.function.args[0]->data.function.arg_count;
+        size_t cols = el[0]->data.function.arg_count;
         for (size_t i = 0; i < n && ok; i++) {
-            Expr* row = data->data.function.args[i];
+            Expr* row = el[i];
             if (row->type != EXPR_FUNCTION ||
                 row->data.function.head->type != EXPR_SYMBOL ||
                 row->data.function.head->data.symbol.name != SYM_List ||
@@ -78,13 +67,14 @@ Expr* builtin_moving_median(Expr* res) {
         }
     } else {
         for (size_t i = 0; i < n && ok; i++) {
-            if (!stats_is_real_numeric(data->data.function.args[i])) ok = false;
+            if (!stats_is_real_numeric(el[i])) ok = false;
         }
     }
 
     if (!ok) {
         char* str = expr_to_string(data);
-        printf("MovingMedian::arg1: The first argument %s must be a vector or matrix of real values.\n", str);
+        mth_message("MovingMedian", "arg1",
+                    "The first argument %s must be a vector or matrix of real values.", str);
         free(str);
         return expr_copy(res);
     }
@@ -94,17 +84,32 @@ Expr* builtin_moving_median(Expr* res) {
     if (!out) return NULL;
 
     for (size_t i = 0; i < out_n; i++) {
-        Expr** sub = malloc(sizeof(Expr*) * r);
-        for (size_t k = 0; k < r; k++) {
-            sub[k] = expr_copy(data->data.function.args[i + k]);
-        }
-        Expr* sublist = expr_new_function(expr_new_symbol(SYM_List), sub, r);
-        free(sub);
+        Expr* sublist = stats_moving_window(data, el, i, r);
         out[i] = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Median), (Expr*[]){ sublist }, 1));
     }
 
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, out_n);
+    Expr* result = ll_seq_like(data, out, out_n);
     free(out);
     return result;
+}
+
+Expr* builtin_moving_median(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* data = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+
+    /* NDArray fast path: sliding-window median on the buffer (see ndreduce.c). */
+    if (is_ndarray(data)) return ndred_moving_median(res);
+
+    /* LinkedList: the packed kernel on the chunks (stats_ll.c). */
+    { Expr* r; if (stats_ll_arm(res, STATS_MOVING_MEDIAN, &r)) return r; }
+
+    /* A List's arguments or a LinkedList's elements; the answer is in the
+     * image of the data. */
+    LLElems e;
+    if (!ll_elems_open(data, &e)) return NULL;
+    Expr* r = moving_median_vec(res, data, e.v, e.n, spec);
+    ll_elems_close(&e);
+    return r;
 }

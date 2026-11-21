@@ -21,6 +21,7 @@
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
 #include "regex_common.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -71,12 +72,8 @@ Expr* builtin_stringtrim(Expr* res) {
     if (pargc < 1 || pargc > 2) return builtin_arg_error("StringTrim", argc, 1, 2);
 
     Expr* subject = a[0];
-    int is_list = subject->type == EXPR_FUNCTION &&
-                  subject->data.function.head->type == EXPR_SYMBOL &&
-                  subject->data.function.head->data.symbol.name == SYM_List;
-    int ok = is_list || subject->type == EXPR_STRING;
-    for (size_t i = 0; is_list && i < subject->data.function.arg_count; i++)
-        if (subject->data.function.args[i]->type != EXPR_STRING) ok = 0;
+    int is_list = strings_is_seq(subject);      /* a List or a LinkedList */
+    int ok = is_list ? strings_seq_all_strings(subject) : subject->type == EXPR_STRING;
     if (!ok) {
         char* shown = expr_to_string_outputform(res);
         mth_message("StringTrim", "strse",
@@ -94,6 +91,10 @@ Expr* builtin_stringtrim(Expr* res) {
         patt = expr_unshare(patt);
         expr_free(patt->data.function.head);
         patt->data.function.head = expr_new_symbol(SYM_Alternatives);
+    } else if (patt->type == EXPR_LINKEDLIST) {    /* the same, from the slots */
+        Expr* alt = ll_call_with_elements(expr_new_symbol(SYM_Alternatives), patt->data.llist);
+        expr_free(patt);
+        patt = alt;
     }
 
     RegexRule* front = NULL;
@@ -106,15 +107,17 @@ Expr* builtin_stringtrim(Expr* res) {
     Expr* result = NULL;
     if (nf == 1 && nb == 1) {
         if (is_list) {
-            size_t m = subject->data.function.arg_count;
+            LLElems sv;
+            ll_elems_open(subject, &sv);
+            size_t m = sv.n;
             Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
             if (out) {
                 for (size_t i = 0; i < m; i++)
-                    out[i] = st_scalar(subject->data.function.args[i]->data.string,
-                                       front, back);
-                result = expr_new_function(expr_new_symbol(SYM_List), out, m);
+                    out[i] = st_scalar(sv.v[i]->data.string, front, back);
+                result = ll_seq_like(subject, out, m);
                 free(out);
             }
+            ll_elems_close(&sv);
         } else {
             result = st_scalar(subject->data.string, front, back);
         }

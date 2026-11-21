@@ -22,6 +22,7 @@
 #include "ndreduce.h"
 #include "pack.h"      /* pack_eval_plain, pack_unpack */
 #include "print.h"     /* expr_to_string */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -139,7 +140,7 @@ Expr* builtin_quantile(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         if (!stats_is_real_numeric(data->data.function.args[i])) {
             char* str = expr_to_string(res);
-            printf("Quantile::rectn: Rectangular array of real numbers is expected at position 1 in %s.\n", str);
+            mth_message("Quantile", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
             QUANTILE_RET(expr_copy(res));
         }
@@ -181,7 +182,7 @@ Expr* builtin_quantile(Expr* res) {
         if (!r) {
             if (out_of_range) {
                 char* str = expr_to_string(res);
-                printf("Quantile::q100: The quantile q is expected to be a number between 0 and 1 in %s.\n", str);
+                mth_message("Quantile", "q100", "The quantile q is expected to be a number between 0 and 1 in %s.", str);
                 free(str);
             }
             expr_free(sorted);
@@ -199,7 +200,7 @@ Expr* builtin_quantile(Expr* res) {
         if (!r) {
             if (out_of_range) {
                 char* str = expr_to_string(res);
-                printf("Quantile::q100: The quantile q is expected to be a number between 0 and 1 in %s.\n", str);
+                mth_message("Quantile", "q100", "The quantile q is expected to be a number between 0 and 1 in %s.", str);
                 free(str);
             }
             for (size_t k = 0; k < i; k++) expr_free(out[k]);

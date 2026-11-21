@@ -29,7 +29,9 @@
 #include "ndreduce.h"     /* nd_covariance / nd_correlation */
 #include "ndarray.h"      /* is_ndarray */
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
+#include "linkedlist.h" /* LLElems */
 
 /* ------------------------------------------------------------ small helpers */
 
@@ -61,37 +63,48 @@ static bool corrcov_has_ndarray(const Expr* res) {
  * n >= 2), or NULL to leave the call unevaluated. Mirrors the numeric split of
  * builtin_variance: a real-double fast path, otherwise build & evaluate the
  * exact/complex/symbolic expression. */
+static Expr* g_cov_core(Expr** ve, Expr** we, size_t n);
+
+/* Covariance of two vectors, each a List or a LinkedList (read through
+ * LLElems, so both containers run g_cov_core). */
 static Expr* g_cov_vectors(Expr* v, Expr* w) {
-    if (v->type != EXPR_FUNCTION || w->type != EXPR_FUNCTION) return NULL;
-    size_t n = v->data.function.arg_count;
-    if (n != w->data.function.arg_count || n < 2) return NULL;
+    LLElems ev, ew;
+    if (!ll_elems_open(v, &ev)) return NULL;
+    if (!ll_elems_open(w, &ew)) { ll_elems_close(&ev); return NULL; }
+    Expr* r = (ev.n == ew.n && ev.n >= 2) ? g_cov_core(ev.v, ew.v, ev.n) : NULL;
+    ll_elems_close(&ev);
+    ll_elems_close(&ew);
+    return r;
+}
+
+static Expr* g_cov_core(Expr** ve, Expr** we, size_t n) {
 
     bool all_numeric = true, has_real = false, has_complex = false;
     for (size_t i = 0; i < n; i++) {
         bool cplx = false;
-        if (!stats_is_numeric(v->data.function.args[i], NULL, &cplx)) { all_numeric = false; break; }
+        if (!stats_is_numeric(ve[i], NULL, &cplx)) { all_numeric = false; break; }
         if (cplx) has_complex = true;
-        else if (v->data.function.args[i]->type == EXPR_REAL) has_real = true;
+        else if (ve[i]->type == EXPR_REAL) has_real = true;
         cplx = false;
-        if (!stats_is_numeric(w->data.function.args[i], NULL, &cplx)) { all_numeric = false; break; }
+        if (!stats_is_numeric(we[i], NULL, &cplx)) { all_numeric = false; break; }
         if (cplx) has_complex = true;
-        else if (w->data.function.args[i]->type == EXPR_REAL) has_real = true;
+        else if (we[i]->type == EXPR_REAL) has_real = true;
     }
 
     if (all_numeric && has_real && !has_complex) {
         double mv = 0.0, mw = 0.0;
         for (size_t i = 0; i < n; i++) {
             double xv = 0.0, xw = 0.0;
-            stats_is_numeric(v->data.function.args[i], &xv, NULL);
-            stats_is_numeric(w->data.function.args[i], &xw, NULL);
+            stats_is_numeric(ve[i], &xv, NULL);
+            stats_is_numeric(we[i], &xw, NULL);
             mv += xv; mw += xw;
         }
         mv /= (double)n; mw /= (double)n;
         double s = 0.0;
         for (size_t i = 0; i < n; i++) {
             double xv = 0.0, xw = 0.0;
-            stats_is_numeric(v->data.function.args[i], &xv, NULL);
-            stats_is_numeric(w->data.function.args[i], &xw, NULL);
+            stats_is_numeric(ve[i], &xv, NULL);
+            stats_is_numeric(we[i], &xw, NULL);
             s += (xv - mv) * (xw - mw);
         }
         double c = s / (double)(n - 1);
@@ -100,18 +113,16 @@ static Expr* g_cov_vectors(Expr* v, Expr* w) {
     }
 
     /* Exact / complex / symbolic: (1/(n-1)) Sum (v_i - mu_v) Conjugate[w_i - mu_w]. */
-    Expr* mu_v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
-                                                 (Expr*[]){ expr_copy(v) }, 1));
-    Expr* mu_w = eval_and_free(expr_new_function(expr_new_symbol(SYM_Mean),
-                                                 (Expr*[]){ expr_copy(w) }, 1));
+    Expr* mu_v = stats_mean_vec(ve, n);
+    Expr* mu_w = stats_mean_vec(we, n);
     Expr** terms = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* dv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
-            (Expr*[]){ expr_copy(v->data.function.args[i]),
+            (Expr*[]){ expr_copy(ve[i]),
                        expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(mu_v) }, 2) }, 2));
         Expr* dw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
-            (Expr*[]){ expr_copy(w->data.function.args[i]),
+            (Expr*[]){ expr_copy(we[i]),
                        expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(mu_w) }, 2) }, 2));
         Expr* cw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Conjugate),
@@ -231,10 +242,224 @@ static Expr* g_matrix(Expr* a, Expr* b, int correlate, int auto_form) {
 
 /* ------------------------------------------------------------ dispatch */
 
+/* ------------------------------------------------------------------------
+ * LinkedList arguments. A vector is a List or LinkedList none of whose
+ * elements is a sequence; a matrix a List or LinkedList of such vectors, all
+ * of one length. Two machine-real LinkedList vectors take the packed kernel
+ * (nd_corrcov_vec_f64) on raw gathers of their slots, a matrix of machine-real
+ * LinkedList rows the packed matrix kernel (nd_corrcov_matrix_f64) on the rows
+ * gathered row-major; everything else reads the elements (g_cov_vectors) and
+ * the columns as fresh LinkedLists. A matrix answer is in the image of the
+ * rows (LinkedList rows, LinkedList of LinkedLists).
+ * ---------------------------------------------------------------------- */
+
+static bool cc_is_vector(const Expr* e) {
+    const LinkedList* ll = expr_linkedlist(e);
+    if (ll) {
+        if (ll_kind(ll) != LL_BOXED) return true;
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++)
+            if (ll_is_seq(ll_peek_boxed(ll, i))) return false;
+        return true;
+    }
+    if (!ll_is_seq(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ll_is_seq(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Rows of a matrix (owned through *rows); *cols their common length. */
+static bool cc_matrix(const Expr* e, LLElems* rows, size_t* cols) {
+    if (!ll_elems_open(e, rows)) return false;
+    bool ok = rows->n >= 1;
+    int64_t len = -1;
+    for (size_t i = 0; ok && i < rows->n; i++) {
+        int64_t k = ll_seq_length(rows->v[i]);
+        if (k < 1 || (len >= 0 && k != len) || !cc_is_vector(rows->v[i])) ok = false;
+        len = k;
+    }
+    if (!ok) { ll_elems_close(rows); return false; }
+    *cols = (size_t)len;
+    return true;
+}
+
+static bool cc_involves_ll(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) return true;
+    if (!ll_is_seq(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (e->data.function.args[i]->type == EXPR_LINKEDLIST) return true;
+    return false;
+}
+
+/* A machine-real vector whose Normal is PACKED (a typed LinkedList long enough
+ * to pack, or a packed real List): the packed kernels are then the reference
+ * algorithms; a plain Normal is answered on the elements. */
+static bool cc_real_packed(const Expr* e) {
+    const LinkedList* ll = expr_linkedlist(e);
+    if (ll) return ll_kind(ll) == LL_REAL && ll_normal_packs(ll);
+    return is_ndarray(e) && e->data.ndarray.rank == 1 && e->data.ndarray.dtype == NDT_FLOAT64;
+}
+
+/* Rows gathered row-major (n x cols) when every one packs as machine reals --
+ * the reference matrix is then a packed array -- else NULL. */
+static double* cc_gather_rows(const LLElems* rows, size_t cols) {
+    for (size_t i = 0; i < rows->n; i++)
+        if (!cc_real_packed(rows->v[i])) return NULL;
+    double* A = malloc(sizeof(double) * rows->n * cols);
+    if (!A) return NULL;
+    for (size_t i = 0; i < rows->n; i++) {
+        const LinkedList* rl = expr_linkedlist(rows->v[i]);
+        if (rl) ll_gather(rl, 0, (int64_t)cols, A + i * cols);
+        else memcpy(A + i * cols, rows->v[i]->data.ndarray.data, sizeof(double) * cols);
+    }
+    return A;
+}
+
+/* Column j of a matrix as a fresh BOXED LinkedList: the counterpart of the
+ * plain column g_matrix's Transpose makes. */
+static Expr* cc_column(const LLElems* rows, size_t j) {
+    Expr** v = malloc(sizeof(Expr*) * rows->n);
+    for (size_t i = 0; i < rows->n; i++) v[i] = ll_seq_element(rows->v[i], (int64_t)j);
+    LinkedList* c = ll_new_boxed(v, rows->n);
+    for (size_t i = 0; i < rows->n; i++) expr_free(v[i]);
+    free(v);
+    return expr_new_linkedlist(c);
+}
+
+/* A p x q matrix in the image of the rows (`proto_row` is one of them):
+ * cells[i*q + j] consumed. */
+static Expr* cc_build_matrix(const Expr* proto_row, Expr** cells, size_t p, size_t q) {
+    Expr** rows = malloc(sizeof(Expr*) * p);
+    for (size_t i = 0; i < p; i++) rows[i] = ll_seq_like(proto_row, cells + i * q, q);
+    Expr* r = ll_seq_like(proto_row, rows, p);
+    free(rows);
+    return r;
+}
+
+static Expr* cc_matrix_ll(Expr* a, Expr* b, int correlate, int auto_form) {
+    LLElems ra, rb;
+    size_t p, q;
+    if (!cc_matrix(a, &ra, &p)) return NULL;
+    if (auto_form) { rb = ra; q = p; }
+    else if (!cc_matrix(b, &rb, &q)) { ll_elems_close(&ra); return NULL; }
+    Expr* result = NULL;
+    size_t n = ra.n;
+    if (n != rb.n || n < 2) goto done;
+
+    /* The packed matrix kernel, when every row is machine-real. */
+    double* A = cc_gather_rows(&ra, p);
+    double* B = auto_form ? A : (A ? cc_gather_rows(&rb, q) : NULL);
+    if (A && B) {
+        double* C = malloc(sizeof(double) * p * q);
+        if (C && nd_corrcov_matrix_f64(A, B, (int)n, (int)p, (int)q, correlate, C)) {
+            Expr** cells = malloc(sizeof(Expr*) * p * q);
+            for (size_t k = 0; k < p * q; k++) cells[k] = expr_new_real(C[k]);
+            result = cc_build_matrix(ra.v[0], cells, p, q);
+            free(cells);
+        }
+        free(C);
+    }
+    if (A) free(A);
+    if (B && B != A) free(B);
+    if (result) goto done;
+
+    {   /* Generic: the columns as LinkedLists, cell by cell as g_matrix. */
+        Expr** ca = malloc(sizeof(Expr*) * p);
+        Expr** cb = auto_form ? ca : malloc(sizeof(Expr*) * q);
+        for (size_t i = 0; i < p; i++) ca[i] = cc_column(&ra, i);
+        if (!auto_form) for (size_t j = 0; j < q; j++) cb[j] = cc_column(&rb, j);
+        bool real_diag = false;
+        for (size_t i = 0; i < n && !real_diag; i++) {
+            const LinkedList* rl = expr_linkedlist(ra.v[i]);
+            if (rl) {
+                if (ll_kind(rl) == LL_REAL || ll_kind(rl) == LL_CPLX) real_diag = true;
+                else if (ll_kind(rl) == LL_BOXED)
+                    for (int64_t j = 0; j < ll_length(rl) && !real_diag; j++)
+                        real_diag = common_has_machine_real(ll_peek_boxed(rl, j));
+            } else {
+                real_diag = common_has_machine_real(ra.v[i]);
+            }
+        }
+        Expr** cells = malloc(sizeof(Expr*) * p * q);
+        for (size_t i = 0; i < p; i++)
+            for (size_t j = 0; j < q; j++) {
+                Expr** cell = &cells[i * q + j];
+                if (correlate && auto_form && i == j) {
+                    *cell = real_diag ? expr_new_real(1.0) : expr_new_integer(1);
+                    continue;
+                }
+                Expr* cov = g_cov_vectors(ca[i], cb[j]);
+                if (!cov) cov = expr_new_integer(0);      /* degenerate column; keep shape */
+                if (correlate) {
+                    *cell = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ cov,
+                                   expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ g_std(ca[i]), expr_new_integer(-1) }, 2),
+                                   expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ g_std(cb[j]), expr_new_integer(-1) }, 2) }, 3));
+                } else {
+                    *cell = cov;
+                }
+            }
+        result = cc_build_matrix(ra.v[0], cells, p, q);
+        free(cells);
+        for (size_t i = 0; i < p; i++) expr_free(ca[i]);
+        free(ca);
+        if (!auto_form) { for (size_t j = 0; j < q; j++) expr_free(cb[j]); free(cb); }
+    }
+done:
+    ll_elems_close(&ra);
+    if (!auto_form) ll_elems_close(&rb);
+    return result;
+}
+
+/* The n doubles of a cc_real_packed vector. */
+static void cc_gather_vec(const Expr* e, double* out, int64_t n) {
+    const LinkedList* ll = expr_linkedlist(e);
+    if (ll) ll_gather(ll, 0, n, out);
+    else memcpy(out, e->data.ndarray.data, sizeof(double) * (size_t)n);
+}
+
+/* Two vectors with a LinkedList among them. */
+static Expr* cc_vectors_ll(Expr* a, Expr* b, int correlate) {
+    if (cc_real_packed(a) && cc_real_packed(b)) {
+        int64_t n = ll_seq_length(a);
+        if (n == ll_seq_length(b)) {
+            double* v = malloc(sizeof(double) * (size_t)(n ? n : 1));
+            double* w = malloc(sizeof(double) * (size_t)(n ? n : 1));
+            double r;
+            bool ok = v && w;
+            if (ok) { cc_gather_vec(a, v, n); cc_gather_vec(b, w, n); }
+            ok = ok && nd_corrcov_vec_f64(v, w, (size_t)n, correlate, &r);
+            free(v);
+            free(w);
+            if (ok) return expr_new_real(r);
+        }
+    }
+    return correlate ? g_corr_vectors(a, b) : g_cov_vectors(a, b);
+}
+
+static bool corrcov_ll(Expr* res, int correlate, Expr** out) {
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
+    if (argc == 2 && (cc_involves_ll(a[0]) || cc_involves_ll(a[1]))) {
+        if (cc_is_vector(a[0]) && cc_is_vector(a[1])) *out = cc_vectors_ll(a[0], a[1], correlate);
+        else *out = cc_matrix_ll(a[0], a[1], correlate, 0);
+        return true;
+    }
+    if (argc == 1 && cc_involves_ll(a[0])) {
+        *out = cc_is_vector(a[0]) ? NULL : cc_matrix_ll(a[0], a[0], correlate, 1);
+        return true;
+    }
+    return false;
+}
+
 static Expr* corrcov_dispatch(Expr* res, int correlate, const char* head) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 3) return builtin_arg_error(head, argc, 1, 3);
+
+    /* A LinkedList argument: computed on its slots (above). */
+    { Expr* r; if (corrcov_ll(res, correlate, &r)) return r; }
 
     /* NDArray / packed-array buffer fast path. */
     if (corrcov_has_ndarray(res))

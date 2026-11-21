@@ -762,6 +762,7 @@ set(COMMON_SRC
     ../src/linkedlist_struct.c
     ../src/stats/stats.c
     ../src/stats/stats_common.c
+    ../src/stats/stats_ll.c
     ../src/stats/mean.c
     ../src/stats/rootmeansquare.c
     ../src/stats/median.c
@@ -1794,6 +1795,11 @@ add_executable(linkedlist_tests test_linkedlist.c $<TARGET_OBJECTS:mathilda_comm
 target_link_libraries(linkedlist_tests m)
 target_include_directories(linkedlist_tests PRIVATE ../src)
 add_test(NAME linkedlist_tests COMMAND linkedlist_tests)
+# LinkedList strings, statistics, distances and dates (on the chunks, never converted).
+add_executable(linkedlist_strings_stats_tests test_linkedlist_strings_stats.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(linkedlist_strings_stats_tests m)
+target_include_directories(linkedlist_strings_stats_tests PRIVATE ../src)
+add_test(NAME linkedlist_strings_stats_tests COMMAND linkedlist_strings_stats_tests)
 # Randomised differential stress of the storage core (nightly, by name).
 add_executable(linkedlist_stress_tests test_linkedlist_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(linkedlist_stress_tests m)

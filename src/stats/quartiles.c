@@ -7,7 +7,9 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "ndreduce.h"
-#include "pack.h"      /* pack_eval_plain — the internal Sort can return a buffer */
+#include "sort.h"      /* expr_orderless_sort: Sort's canonical order */
+#include "linkedlist.h" /* LLElems */
+#include "message.h"
 #include "print.h"     /* expr_to_string */
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,14 +26,14 @@ Expr* builtin_quartiles(Expr* res) {
     /* NDArray fast path: sort the flat buffer, default quartile method (ndreduce.c). */
     if (ndred_call_has_ndarray(res)) return ndred_quartiles(res);
 
-    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || data->data.function.head->data.symbol.name != SYM_List) {
-        return expr_copy(res);
-    }
+    /* LinkedList: the packed kernel on the chunks, or columnwise (stats_ll.c). */
+    { Expr* r; if (stats_ll_arm(res, STATS_QUARTILES, &r)) return r; }
 
-    size_t n = data->data.function.arg_count;
-    if (n == 0) return expr_copy(res);
+    if (!ll_is_seq(data)) return expr_copy(res);
+    if (ll_seq_length(data) == 0) return expr_copy(res);
 
-    if (data->data.function.args[0]->type == EXPR_FUNCTION &&
+    if (data->type != EXPR_LINKEDLIST &&
+        data->data.function.args[0]->type == EXPR_FUNCTION &&
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
 
@@ -64,17 +66,22 @@ Expr* builtin_quartiles(Expr* res) {
         return res_list;
     }
 
+    LLElems e;
+    ll_elems_open(data, &e);
+    size_t n = e.n;
+
     bool all_real = true;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(data->data.function.args[i])) {
+        if (!stats_is_real_numeric(e.v[i])) {
             all_real = false;
             break;
         }
     }
 
     if (!all_real) {
+        ll_elems_close(&e);
         char* str = expr_to_string(res);
-        printf("Quartiles::rectn: Rectangular array of real numbers is expected at position 1 in %s.\n", str);
+        mth_message("Quartiles", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
         free(str);
         return expr_copy(res);
     }
@@ -105,21 +112,16 @@ Expr* builtin_quartiles(Expr* res) {
         d = expr_new_integer(1);
     }
 
-    /* pack_eval_plain, not evaluate: Sort now returns a PACKED list for a large
-     * machine-number input, and the args walk below reads .data.function.args.
-     * The gate only covers a builtin's arguments, never what its own internal
-     * evaluate() hands back. */
-    Expr* sort_expr = expr_new_function(expr_new_symbol(SYM_Sort), (Expr*[]){expr_copy(data)}, 1);
-    Expr* sorted = pack_eval_plain(sort_expr);
-    expr_free(sort_expr);
-
-    if (sorted->type != EXPR_FUNCTION || sorted->data.function.arg_count != n) {
-        expr_free(sorted);
+    /* Sort's canonical order (expr_compare) over a copy of the elements. */
+    Expr** sorted_A = malloc(sizeof(Expr*) * n);
+    if (!sorted_A) {
+        ll_elems_close(&e);
         expr_free(a); expr_free(b); expr_free(c); expr_free(d);
         return expr_copy(res);
     }
-
-    Expr** sorted_A = sorted->data.function.args;
+    for (size_t i = 0; i < n; i++) sorted_A[i] = expr_copy(e.v[i]);
+    ll_elems_close(&e);
+    expr_orderless_sort(sorted_A, n);
     Expr* q_vals[3];
     q_vals[0] = make_rational(1, 4);
     q_vals[1] = make_rational(1, 2);
@@ -137,7 +139,8 @@ Expr* builtin_quartiles(Expr* res) {
     expr_free(q_vals[1]);
     expr_free(q_vals[2]);
 
-    expr_free(sorted);
+    for (size_t i = 0; i < n; i++) expr_free(sorted_A[i]);
+    free(sorted_A);
     expr_free(a);
     expr_free(b);
     expr_free(c);

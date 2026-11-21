@@ -9,6 +9,7 @@
 
 #include "picostrings.h"
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of subjects */
 #include "symtab.h"
 #include "sym_names.h"
 
@@ -51,20 +52,20 @@ Expr* builtin_stringmatchq(Expr* res) {
     if (nr < 0) return NULL;
 
     /* StringMatchQ[{s1, s2, ...}, patt] threads over the subject list. */
-    if (arg0->type == EXPR_FUNCTION &&
-        arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol.name == SYM_List) {
-        size_t n = arg0->data.function.arg_count;
+    LLElems sv;
+    if (ll_elems_open(arg0, &sv)) {          /* a List or a LinkedList of subjects */
+        size_t n = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-        if (!out) { regex_rules_free(rules, nr); return NULL; }
+        if (!out) { ll_elems_close(&sv); regex_rules_free(rules, nr); return NULL; }
         for (size_t i = 0; i < n; i++) {
-            Expr* si = arg0->data.function.args[i];
+            Expr* si = sv.v[i];
             out[i] = (si->type == EXPR_STRING)
                          ? smq_scalar(si->data.string, rules, nr)
                          : expr_copy(si);   /* non-string element: leave as-is */
         }
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
+        Expr* result = ll_seq_like(arg0, out, n);
         free(out);
+        ll_elems_close(&sv);
         regex_rules_free(rules, nr);
         return result;
     }

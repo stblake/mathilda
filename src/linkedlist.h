@@ -279,4 +279,46 @@ Expr* ll_select_compiled(const Expr* crit, const LinkedList* src);
 /* Registers LinkedList, Push, Pop and PopFirst. */
 void linkedlist_init(void);
 
+/* ---- element vectors and pairwise reductions (strings, statistics) -----
+ * (linkedlist_ops.c) */
+
+/* The elements of a List or a LinkedList `seq` (borrowed) as a flat array,
+ * for an algorithm that indexes them or reads them more than once -- the
+ * (Expr* const* elems, size_t n) core a List head factors its loop into, so
+ * the List and the LinkedList call one algorithm. A List's arguments are
+ * borrowed; a LinkedList's elements are new references (a boxed slot's
+ * refcount bumped, a typed slot boxed), so the vector stays valid even if code
+ * run per element mutates the list. Nothing is materialised: no List is
+ * built. False (out untouched) when `seq` is neither. */
+typedef struct { Expr** v; size_t n; bool owned; } LLElems;
+bool ll_elems_open(const Expr* seq, LLElems* out);
+void ll_elems_close(LLElems* e);
+/* True for a List or a LinkedList: a sequence ll_elems_open accepts. */
+bool ll_is_seq(const Expr* e);
+/* The answer container in the image of `proto`: a LinkedList of out[0..n)
+ * when proto is a LinkedList, else List[out...]. Consumes the elements (not
+ * the array). Element i of the answer derives from element i of proto. */
+Expr* ll_seq_like(const Expr* proto, Expr** out, size_t n);
+
+/* ndreduce.c's packed pairwise reduction over a REAL or CPLX list: the same
+ * nd_parallel_reduce split into thread ranges and the same halving down to
+ * ND_PAIRWISE_BLOCK, over logical indices; `leaf` reduces one contiguous run
+ * (raw doubles, or (re, im) pairs for CPLX) of at most ND_PAIRWISE_BLOCK
+ * elements into ncomp (<= 2) partials, which combine by addition. With a leaf
+ * that IS the packed kernel's leaf the result matches the packed List to the
+ * bit (the generalisation of ll_sum_machine to any summand). */
+typedef void (*LLRunLeaf)(const double* run, size_t count, void* ctx, double* out);
+
+/* True when Normal[ll] is a PACKED List (typed storage, packing on, at least
+ * the packing threshold of elements): the representation whose machine
+ * answers a typed list's statistics must reproduce. Otherwise Normal is a
+ * plain List and the boxed (element) algorithms are the reference. */
+bool ll_normal_packs(const LinkedList* ll);
+/* A new BOXED list of copies of v[0..n), even when every element is a machine
+ * number: the counterpart of a plain (unpacked) List, so the heads applied to
+ * it take their boxed paths exactly as on that List. */
+LinkedList* ll_new_boxed(Expr** v, size_t n);
+void ll_pairwise_reduce(const LinkedList* ll, LLRunLeaf leaf, void* ctx, int ncomp,
+                        double* out);
+
 #endif /* MATHILDA_LINKEDLIST_H */

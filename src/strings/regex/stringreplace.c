@@ -13,6 +13,7 @@
 
 #include "picostrings.h"
 #include "regex_common.h"
+#include "linkedlist.h"   /* a LinkedList of subjects or patterns */
 #include "sym_names.h"
 #include "symtab.h"
 #include "message.h"
@@ -148,6 +149,14 @@ static Expr* sr_finish(SrOut* o) {
 /* Is e a List[...] of Strings (or a String)? */
 static int strings_or_list(const Expr* e) {
     if (e->type == EXPR_STRING) return 1;
+    const LinkedList* ll = expr_linkedlist(e);      /* a LinkedList of strings */
+    if (ll) {
+        if (ll_length(ll) == 0) return 1;
+        if (ll_kind(ll) != LL_BOXED) return 0;
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++)
+            if (ll_peek_boxed(ll, i)->type != EXPR_STRING) return 0;
+        return 1;
+    }
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
         e->data.function.head->data.symbol.name != SYM_List)
         return 0;
@@ -261,21 +270,24 @@ static Expr* meta_auto_rules(const Expr* patt) {
 
 /* Is e the empty list {}? */
 static int is_empty_list(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) return ll_length(e->data.llist) == 0;
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == SYM_List && e->data.function.arg_count == 0;
 }
 
 /* rules for StringDelete: each pattern p becomes p -> "". Returns a new Expr. */
 static Expr* delete_rules(Expr* patt) {
-    int is_list = patt->type == EXPR_FUNCTION && patt->data.function.head->type == EXPR_SYMBOL &&
-                  patt->data.function.head->data.symbol.name == SYM_List;
-    size_t n = is_list ? patt->data.function.arg_count : 1;
+    /* A List or a LinkedList of patterns, read element by element. */
+    LLElems pe;
+    int is_list = ll_elems_open(patt, &pe);
+    size_t n = is_list ? pe.n : 1;
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
     for (size_t i = 0; i < n; i++) {
-        Expr* p = is_list ? patt->data.function.args[i] : patt;
+        Expr* p = is_list ? pe.v[i] : patt;
         Expr* rargs[2] = { expr_copy(p), expr_new_string("") };
         out->data.function.args[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
     }
+    if (is_list) ll_elems_close(&pe);
     return out;
 }
 
@@ -330,16 +342,27 @@ static Expr* sr_dispatch(Expr* res, const char* head, SrKind kind) {
         result = (kind == SR_LIST)
             ? sr_list_scalar(arg0->data.string, rules, nr, limit, has_limit)
             : sr_scalar(arg0->data.string, rules, nr, limit);
-    } else {
-        size_t n = arg0->data.function.arg_count;
-        result = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
-        for (size_t i = 0; result && i < n; i++) {
-            const char* si = arg0->data.function.args[i]->data.string;
-            result->data.function.args[i] = (kind == SR_LIST)
+    } else {                              /* a List or a LinkedList of strings */
+        LLElems sv;
+        ll_elems_open(arg0, &sv);
+        size_t n = sv.n;
+        Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+        size_t built = 0;
+        for (; out && built < n; built++) {
+            const char* si = sv.v[built]->data.string;
+            out[built] = (kind == SR_LIST)
                 ? sr_list_scalar(si, rules, nr, limit, has_limit)
                 : sr_scalar(si, rules, nr, limit);
-            if (!result->data.function.args[i]) { expr_free(result); result = NULL; }
+            if (!out[built]) break;
         }
+        ll_elems_close(&sv);
+        if (out && built == n) {
+            result = ll_seq_like(arg0, out, n);
+        } else {
+            for (size_t k = 0; out && k < built; k++) expr_free(out[k]);
+            result = NULL;
+        }
+        free(out);
     }
     regex_rules_free(rules, nr);
     if (owned) expr_free(owned);          /* after the rules: they borrow into it */
