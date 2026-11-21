@@ -1,6 +1,6 @@
 # Proposal: making scoping substitution cheap (Module / With / rule application / Function)
 
-Status: proposal, for decision. Nothing in the repository was changed. All measurements
+Status: **implemented in v0.6653–v0.6657**; the design as built, and three corrections to the prototype (the epoch wrap, the capture-rename skip, root frozenness), are in `docs/design/scoping_substitution.md`. Original status: proposal, for decision. Nothing in the repository was changed. All measurements
 were made on 2026-11-21 against `main` at `78f8ba58a` (v0.6650), on the shared development
 Mac (16 logical CPUs, x86-64, `gcc-16 -O3`). Every number below is labelled **measured**,
 **simulated** (computed exactly by instrumentation over a real run, but for a mechanism that

@@ -5541,3 +5541,20 @@ returns a List for a List returns a LinkedList for a LinkedList).
   functions vs overloads vs method calls) before planning around either.
 - Ask the API-shape question first; storage and compilation questions only make sense
   once the surface is fixed.
+
+## 2026-11-21 — Implementing EVAL_CHANGE_PROPOSAL (scoping summaries, v0.6653–57)
+
+- **Check a prototype's invariants against its own measurements.** The prototype
+  compared an 8-bit epoch modulo 256 and bumped it on every binder registration, and the
+  proposal itself counted 294 registrations in the case it benchmarked. So the measured
+  gains came from a build that could trust stale summaries. A cheap fix (16-bit epoch,
+  bump only when a current summary has already seen the name) made the bumps rare.
+- **"Skipping only drops visits that return the node unchanged" must be checked
+  against every side duty of the walk.** `rb_rec` also alpha-renames binding scopes
+  that contain no pattern variable, so a pattern-variable-only mask changed the output.
+  The SCOPE bit restored exactness. Pin such a case in a probe before optimising.
+- **Frozenness belongs to the parent.** A body's own refcount is 1, because only its
+  Function, Module or With node holds it, so `body->refcount >= 2` is never true for a
+  stored function. Pass the shared parent's status down from the call site.
+- **Diff modes must not skip the case they exist to catch.** Comparing only walks that
+  made no renames hid exactly the dropped-rename bug. Compare rename counts as well.

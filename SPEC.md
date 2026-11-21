@@ -185,6 +185,11 @@ return new trees.
 | `expr_to_mpz(e, out)` | Coerce int-like to GMP |
 | `expr_is_integer_like(e)` | True for `EXPR_INTEGER` or `EXPR_BIGINT` |
 
+A FUNCTION node's `data.function.index` slot has two meanings: an Association's
+key-index pointer (even), or a scoping walker's binder summary (odd word). Read it only
+through `expr_fn_assoc_index()`. See
+[`docs/design/scoping_substitution.md`](docs/design/scoping_substitution.md).
+
 ### 3.2 Parser (`parse.{c,h}`)
 
 Pratt parser (top-down operator precedence). Lexing is inline — no separate

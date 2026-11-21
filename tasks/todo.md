@@ -10,7 +10,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [ ] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (scope in the note)
 - [ ] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases with no answer and no certificate
 - [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 open (exponent lattice HNF)
-- [ ] D6 speed: 43 cases over 1 s; evaluator scoping change (user decision: a/b/c)
+- [ ] D6 speed: 43 cases over 1 s; evaluator scoping change DONE (v0.6653-57: D + A3 summaries; Trager -14.4%, cM-1-292 -12.8% instructions; docs/design/scoping_substitution.md) -- the algebra-bound remainder is open
 - [x] D7 (v0.6650): 10 of the 18 special-function cases
 - [x] D8 FriCAS report submitted: https://github.com/fricas/fricas/issues/249
 
