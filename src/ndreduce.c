@@ -58,6 +58,13 @@ static Expr* nd_scalar(double re, double im, bool cplx) {
 static bool nd_leaf_degenerate(double v) {
     return !isfinite(v) || numeric_machine_subnormal(v);
 }
+/* One float64 value against the machine-boundary policy (branch-free):
+ * non-finite, or a nonzero value below DBL_MIN. */
+static inline int nd_f64_degenerate(double v) {
+    double m = fabs(v);
+    return (int)!(m <= DBL_MAX) | ((m < DBL_MIN) & (v != 0.0));
+}
+
 bool ndred_result_degenerate(const Expr* r) {
     if (!r) return false;
     if (r->type == EXPR_REAL) return nd_leaf_degenerate(r->data.real);
@@ -2088,15 +2095,30 @@ static Expr* ndred_accumulate_raw(Expr* res) {
              * the index multiplies and the trip test around a single add, which
              * is ~10 operations per element instead of one. That, not the serial
              * dependency, was the 4x against np.cumsum. */
+            /* The machine-boundary check (nd_guard's) is fused in: the loop
+             * is bound by the latency of its one serial add, so the
+             * branch-free test rides in the spare slots, where a second pass
+             * over the output cost ~1.5x (v0.6612 -> v0.6662). */
             double acc = in[0];
             o[0] = acc;
-            for (size_t b = 1; b < blocks; b++) { acc += in[b]; o[b] = acc; }
+            int bad = nd_f64_degenerate(acc);
+            for (size_t b = 1; b < blocks; b++) {
+                acc += in[b];
+                o[b] = acc;
+                bad |= nd_f64_degenerate(acc);
+            }
+            if (bad) { free(out); return ndarray_delist_and_reeval(res); }
             return expr_new_ndarray_like(a, rank, dims, out, dt);
         }
-        for (size_t j = 0; j < T; j++) o[j] = in[j];
+        int bad = 0;
+        for (size_t j = 0; j < T; j++) { o[j] = in[j]; bad |= nd_f64_degenerate(o[j]); }
         for (size_t b = 1; b < blocks; b++)
-            for (size_t j = 0; j < T; j++)
-                o[b * T + j] = o[(b - 1) * T + j] + in[b * T + j];
+            for (size_t j = 0; j < T; j++) {
+                double v = o[(b - 1) * T + j] + in[b * T + j];
+                o[b * T + j] = v;
+                bad |= nd_f64_degenerate(v);
+            }
+        if (bad) { free(out); return ndarray_delist_and_reeval(res); }
         return expr_new_ndarray_like(a, rank, dims, out, dt);
     }
     /* First block copies through; each later block adds the running total. */
@@ -2136,7 +2158,15 @@ Expr* ndred_central_moment(Expr* res) { return nd_guard(ndred_central_moment_raw
 Expr* ndred_moment(Expr* res) { return nd_guard(ndred_moment_raw(res), res); }
 Expr* ndred_skewness(Expr* res) { return nd_guard(ndred_skewness_raw(res), res); }
 Expr* ndred_kurtosis(Expr* res) { return nd_guard(ndred_kurtosis_raw(res), res); }
-Expr* ndred_accumulate(Expr* res) { return nd_guard(ndred_accumulate_raw(res), res); }
+/* Accumulate checks its own float64 / int64 results (fused into the loops,
+ * above); only the generic-dtype arm needs nd_guard's separate pass. */
+Expr* ndred_accumulate(Expr* res) {
+    Expr* r = ndred_accumulate_raw(res);
+    if (r && r->type == EXPR_NDARRAY &&
+        (r->data.ndarray.dtype == NDT_FLOAT64 || r->data.ndarray.dtype == NDT_INT64))
+        return r;
+    return nd_guard(r, res);
+}
 Expr* ndred_moving_average(Expr* res) { return nd_guard(ndred_moving_average_raw(res), res); }
 Expr* ndred_ema(Expr* res) { return nd_guard(ndred_ema_raw(res), res); }
 

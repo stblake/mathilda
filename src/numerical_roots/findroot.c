@@ -914,6 +914,29 @@ static bool fr_polish_done(double step, double prev, double noise, int polished)
     return step <= noise || step > 0.5 * prev || polished >= FR_POLISH_MAX;
 }
 
+/* Scalar Newton's line search: should the trial that produced residual `r`,
+ * a fraction `lam` (1, 1/2, 1/4, ...) of the Newton step from a point whose
+ * residual was `r_prev`, be halved again instead of taken?  When it fails the
+ * Armijo condition |f| <= (1 - FR_ARMIJO lam) |f_prev|: a full Newton step
+ * predicts |f| falling to 0, so a trial that does not deliver even a small
+ * fraction of the predicted decrease is not progress.
+ *
+ * Before v0.6662 the scalar iteration took every step: FindRoot[Zeta[z], {z,
+ * 1 + 300 I}] stepped 0.53 + 298.9 I -> 12.3 + 301.4 I -> 45 + 7410 I ->
+ * -6.3*10^13, where Zeta is ComplexInfinity, and failed with ::nlnum; the
+ * reference backtracks there and converges to the zero 1/2 + 299.8403 I.  A
+ * plain "any decrease" test is not enough: from 2 + 100 I Newton runs off
+ * towards Re z = +Infinity, where |Zeta| falls from 1 + eps towards 1 at every
+ * step, and reached 10^189 (the reference stops at 627 + 916 I with ::lstol).
+ * Not once the step test has passed (`polished`), nor from a residual already
+ * within the accuracy goal: there it is in the noise of f and need not fall. */
+#define FR_ARMIJO 1e-4
+static bool fr_newton_should_back_off(double r, double r_prev, double lam,
+                                      double tol_acc, int polished) {
+    return polished < 0 && r_prev >= tol_acc && isfinite(r_prev)
+        && !(r <= (1.0 - FR_ARMIJO * lam) * r_prev);
+}
+
 /* Returns NULL on failure (NaN, non-numeric eval, MaxIterations with
  * no fallback). On success, returns a fresh EXPR_REAL. */
 static Expr* fr_run_newton_real(Expr* f, Expr* df,
@@ -936,10 +959,21 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         double fv = 0.0;
         bool ok_f = fv_expr && fr_value_real_d(fv_expr, &fv);
         expr_free(fv_expr);
-        if (!ok_f && k > 0 && backs < FR_LS_MAX) {
+        bool weak = k > 0 && ok_f &&
+            fr_newton_should_back_off(fabs(fv), resid, ldexp(1.0, -backs), tol_acc, polished);
+        if (weak && backs >= FR_LS_MAX) {
+            /* No sufficient decrease within FR_LS_MAX halvings: stop at the
+             * last good point, as the reference does. */
+            fr_warn("lstol", "The line search decreased the step size to within the "
+                    "tolerance but was unable to find a sufficient decrease in the "
+                    "merit function.");
+            return expr_new_real(x_prev);
+        }
+        if (k > 0 && backs < FR_LS_MAX && (!ok_f || weak)) {
             /* The step left the domain where f is real (a Log or a
-             * fractional power of an argument Newton overshot past zero):
-             * halve it from the last good point instead of giving up. */
+             * fractional power of an argument Newton overshot past zero), or
+             * did not decrease the residual enough: halve it from the last
+             * good point instead of taking it (see fr_newton_should_back_off). */
             backs++;
             last_step *= 0.5;
             x = x_prev - last_step;
@@ -1022,17 +1056,37 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
     int polished = -1;          /* see fr_polish_done */
     double prev_step = INFINITY;
+    double complex z_prev = z, last_step = 0.0;   /* for backing off a step */
+    int backs = 0;
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_d(z);
         Expr* arr[1] = { zv };
         Expr* fv_expr = fr_eval_with_bindings(f, bind, arr, 1, opts);
         expr_free(zv);
-        if (!fv_expr) { fr_warn("nlnum", "could not evaluate f"); return NULL; }
-        double complex fv;
-        bool ok_f = fr_expr_to_complex(fv_expr, &fv);
+        double complex fv = 0.0;
+        bool ok_f = fv_expr && fr_expr_to_complex(fv_expr, &fv);
         expr_free(fv_expr);
+        /* The line search of the real iteration (fr_newton_should_back_off):
+         * a step to where f is not a number (Zeta's ComplexInfinity far out),
+         * or one that made |f| worse, is halved from the last good point. */
+        bool weak = k > 0 && ok_f &&
+            fr_newton_should_back_off(cabs(fv), resid, ldexp(1.0, -backs), tol_acc, polished);
+        if (weak && backs >= FR_LS_MAX) {
+            fr_warn("lstol", "The line search decreased the step size to within the "
+                    "tolerance but was unable to find a sufficient decrease in the "
+                    "merit function.");
+            return fr_expr_from_complex_d(z_prev);
+        }
+        if (k > 0 && backs < FR_LS_MAX && (!ok_f || weak)) {
+            backs++;
+            last_step *= 0.5;
+            z = z_prev - last_step;
+            prev_step = cabs(last_step);
+            continue;
+        }
         if (!ok_f) { fr_warn("nlnum", "non-numeric value"); return NULL; }
+        backs = 0;
         resid = cabs(fv);
         bool resid_ok = cabs(fv) < tol_acc;       /* both tests, as in the real case */
         if (fv == 0.0 || (resid_ok && prev_step < tol_acc + cabs(z) * tol_prec
@@ -1065,6 +1119,8 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
             fr_warn("noconv", "divergence (non-finite step)");
             return NULL;
         }
+        z_prev = z;
+        last_step = step;
         z -= step;
         double abs_step = cabs(step);
         if (opts->step_monitor) {
@@ -1341,7 +1397,20 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         expr_free(xv);
         bool ok_f = fr_value_real_m(fv_e, bits, fv);
         expr_free(fv_e);
-        if (!ok_f && k > 0 && backs < FR_LS_MAX) {
+        /* The machine twin's line search (fr_newton_should_back_off), on the
+         * residual as a double: the test is a ratio, not a digit count. */
+        bool weak = k > 0 && ok_f &&
+            fr_newton_should_back_off(fabs(mpfr_get_d(fv, MPFR_RNDN)), resid,
+                                      ldexp(1.0, -backs), mpfr_get_d(tol_acc, MPFR_RNDN),
+                                      polished);
+        if (weak && backs >= FR_LS_MAX) {
+            fr_warn("lstol", "The line search decreased the step size to within the "
+                    "tolerance but was unable to find a sufficient decrease in the "
+                    "merit function.");
+            result = expr_new_mpfr_copy(x_prev);
+            goto cleanup;
+        }
+        if (k > 0 && backs < FR_LS_MAX && (!ok_f || weak)) {
             backs++;
             mpfr_mul_2si(last_step, last_step, -1, MPFR_RNDN);
             mpfr_sub(x, x_prev, last_step, MPFR_RNDN);
@@ -1824,29 +1893,56 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
     bool converged = false;
     double resid = INFINITY;    /* last |f(z)|, the goal-shortfall error estimate */
     int polished = -1;          /* see fr_polish_done */
-    mpfr_t prev_step;
+    mpfr_t prev_step, zpr, zpi;        /* zp: the last good point, for backing off */
     mpfr_init2(prev_step, bits);
     mpfr_set_inf(prev_step, +1);
+    mpfr_inits2(bits, zpr, zpi, (mpfr_ptr)0);
+    mpfr_set(zpr, zr, MPFR_RNDN);
+    mpfr_set(zpi, zi, MPFR_RNDN);
+    int backs = 0;
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_mpfr(zr, zi);
         Expr* a0[1] = { zv };
         Expr* fv_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
         expr_free(zv);
-        if (!fv_e) {
-            fr_warn("nlnum", "could not evaluate f at MPFR precision");
+        bool ok_f = fv_e && get_approx_mpfr(fv_e, fr_, fi, &inexact_dummy);
+        expr_free(fv_e);
+        if (ok_f) {                                /* tmp1 = |f| */
+            mpfr_mul(tmp1, fr_, fr_, MPFR_RNDN);
+            mpfr_mul(tmp2, fi, fi, MPFR_RNDN);
+            mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+            mpfr_sqrt(tmp1, tmp1, MPFR_RNDN);
+        }
+        /* The machine twin's line search (fr_newton_should_back_off): a step
+         * to where f is not a number, or one without a sufficient decrease of
+         * |f|, is halved from the last good point (step_r/step_i still hold
+         * the step that was taken). */
+        bool weak = k > 0 && ok_f &&
+            fr_newton_should_back_off(mpfr_get_d(tmp1, MPFR_RNDN), resid,
+                                      ldexp(1.0, -backs), mpfr_get_d(tol_acc, MPFR_RNDN),
+                                      polished);
+        if (weak && backs >= FR_LS_MAX) {
+            fr_warn("lstol", "The line search decreased the step size to within the "
+                    "tolerance but was unable to find a sufficient decrease in the "
+                    "merit function.");
+            result = fr_expr_from_complex_mpfr(zpr, zpi);
             goto cleanup;
         }
-        bool ok_f = get_approx_mpfr(fv_e, fr_, fi, &inexact_dummy);
-        expr_free(fv_e);
+        if (k > 0 && backs < FR_LS_MAX && (!ok_f || weak)) {
+            backs++;
+            mpfr_mul_2si(step_r, step_r, -1, MPFR_RNDN);
+            mpfr_mul_2si(step_i, step_i, -1, MPFR_RNDN);
+            mpfr_sub(zr, zpr, step_r, MPFR_RNDN);
+            mpfr_sub(zi, zpi, step_i, MPFR_RNDN);
+            mpfr_hypot(prev_step, step_r, step_i, MPFR_RNDN);
+            continue;
+        }
         if (!ok_f) {
             fr_warn("nlnum", "non-numeric f during iteration"); goto cleanup;
         }
-        /* Pre-step convergence on |f|. */
-        mpfr_mul(tmp1, fr_, fr_, MPFR_RNDN);
-        mpfr_mul(tmp2, fi, fi, MPFR_RNDN);
-        mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
-        mpfr_sqrt(tmp1, tmp1, MPFR_RNDN);
+        backs = 0;
+        /* Pre-step convergence on |f| (tmp1). */
         resid = mpfr_get_d(tmp1, MPFR_RNDN);
         bool resid_ok = mpfr_cmp(tmp1, tol_acc) < 0;
         bool f_zero = mpfr_zero_p(fr_) && mpfr_zero_p(fi);
@@ -1879,6 +1975,8 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
             fr_warn("nlnum", "could not evaluate finite-difference derivative");
             goto cleanup;
         }
+        mpfr_set(zpr, zr, MPFR_RNDN);
+        mpfr_set(zpi, zi, MPFR_RNDN);
         if (!fr_mpc_newton_step(zr, zi, fr_, fi, dr, di,
                                 opts->damping, step_r, step_i, bits)) {
             if (polished >= 0 || resid_ok) {
@@ -1935,7 +2033,7 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
     }
 cleanup:
     mpfr_clears(zr, zi, fr_, fi, dr, di, step_r, step_i,
-                tol_acc, tol_prec, tmp1, tmp2, prev_step, (mpfr_ptr)0);
+                tol_acc, tol_prec, tmp1, tmp2, prev_step, zpr, zpi, (mpfr_ptr)0);
     return result;
 }
 #endif /* USE_MPFR */

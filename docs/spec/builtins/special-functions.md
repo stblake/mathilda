@@ -1693,6 +1693,14 @@ Out[5]= {-1.0, -1.6031}
 Attributes: `Listable`, `NumericFunction`, `Protected`. Options:
 `IncludeSingularTerm -> False`.
 
+- **Machine complex `s` with `Re s >= 20`** (v0.6662): the Dirichlet series
+  `1 + Sum[n^-s, {n, 2, 8}]` on the machine, as the real path already did.
+  Terms beyond `n = 8` are below `2^-60` of the leading 1. A term is used only
+  while its phase error (`|Im s Log[n]|` ulps) times its modulus stays far
+  below an ulp; otherwise the call declines to the arbitrary-precision path.
+  Before, every `|s| >= 10^4` declined: `Zeta[1.*^6 + 5. I]` took 1.7 s
+  (now ~60 us), and `Zeta` at `Re s ~ 10^189` did not return. Accurate to
+  1 ulp against 40-digit references.
 - **Exact integer arguments** (via Bernoulli numbers):
   - Even positive integers are rational multiples of πⁿ:
     `Zeta[2] = Pi^2/6`, `Zeta[4] = Pi^4/90`, `Zeta[6] = Pi^6/945`.

@@ -53,6 +53,38 @@ static void test_fresnel(void) {
     assert_fresnel("Sin[2 x^2 + 4 x + 3]");
 }
 
+/* As assert_fresnel, in the variable `v`, verified by PossibleZeroQ (the
+ * verifier; an exact Simplify need not reduce the Sqrt[v] chain-rule forms),
+ * and within a time bound that the ParallelMixedSpecial fall-through (~11 s
+ * per call, v0.6661) cannot meet. */
+static void assert_fresnel_in(const char* f, const char* v) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+        "With[{tr = AbsoluteTiming[Integrate[%s, %s]]}, "
+        " Head[tr[[2]]] =!= Integrate && (!FreeQ[tr[[2]], FresnelS] || !FreeQ[tr[[2]], FresnelC]) "
+        " && PossibleZeroQ[D[tr[[2]], %s] - (%s)] && tr[[1]] < 1]", f, v, v, f);
+    ASSERT_MSG(eval_is(buf, "True"), "Integrate[%s, %s]: expected a fast, verified Fresnel form", f, v);
+}
+
+/* v0.6662: the kernel's answer template spelled the variable as the literal
+ * symbol x, so in any other variable the candidate failed its own diff-back
+ * and the stage declined (Integrate[Cos[t^2], t] was ::nonelem).  And the
+ * power family -- x^(half-integer) Trig[a x + c], x^(2m) Trig[a x^2 + c] --
+ * reduces to the kernel by parts. */
+static void test_fresnel_other_variables_and_powers(void) {
+    assert_fresnel_in("Cos[t^2]", "t");
+    assert_fresnel_in("Sin[3 u^2 + u - 2]", "u");
+    assert_fresnel_in("Sqrt[t] Sin[t]", "t");               /* DSolve 2.2.23-2299's quadrature */
+    assert_fresnel_in("t^(3/2) Cos[3 t]", "t");
+    assert_fresnel_in("Sin[t]/Sqrt[t]", "t");
+    assert_fresnel_in("Cos[2 t + 1]/t^(3/2)", "t");
+    assert_fresnel_in("5 t^(5/2) Sin[t/2 - 3]", "t");
+    assert_fresnel_in("2 t^2 Sin[t^2]", "t");
+    assert_fresnel_in("t^4 Cos[3 t^2 + 1]", "t");
+    assert_fresnel_in("Sin[t^2]/t^2", "t");
+    assert_fresnel_in("x^(5/2) Cos[x]", "x");
+}
+
 /* Non-Fresnel integrands must NOT be mis-handled: linear/cubic phase and a
  * genuinely elementary sibling. */
 static void test_fresnel_declines(void) {
@@ -68,6 +100,7 @@ int main(void) {
     core_init();
     TEST(test_fresnel);
     TEST(test_fresnel_declines);
+    TEST(test_fresnel_other_variables_and_powers);
     printf("All Fresnel integration tests passed.\n");
     return 0;
 }

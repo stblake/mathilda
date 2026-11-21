@@ -4176,6 +4176,12 @@ static Expr* builtin_integrate_body(Expr* res) {
             IP_STAGE(IP_LINARG,       try_linarg(effective_f, x));
             IP_STAGE(IP_WEIERSTRASS,  try_weierstrass(effective_f, x));
             IP_STAGE(IP_DERIVDIVIDES, try_derivdivides(effective_f, x));
+            /* Chebychev binomials whose base is a binomial only after expansion
+             * (Sqrt[2 c x^(5/2) + 4 d x^3] = x^(5/4) Sqrt[2 c + 4 d Sqrt[x]]).
+             * After DerivativeDivides, which closes some of these (Sqrt[x +
+             * Sqrt[x]]) in the integrand's own radical; the strict form keeps
+             * its early slot above.  Profiled under the same stage. */
+            IP_STAGE(IP_CHEBYCHEV,    integrate_chebychev_general_try(effective_f, x));
             /* Recursive transcendental Risch: correct by construction, adding
              * closed forms the earlier stages missed (logarithmic polynomials,
              * Gaussians -> Erf, exp/x -> ExpIntegralEi, 1/Log -> LogIntegral,
@@ -4310,7 +4316,7 @@ static Expr* builtin_integrate_body(Expr* res) {
             result = try_linratiorad(effective_f, x);
             break;
         case METHOD_CHEBYCHEV:
-            result = try_chebychev(effective_f, x);
+            result = integrate_chebychev_general_try(effective_f, x);
             break;
         case METHOD_GOURSAT:
             result = try_goursat(effective_f, x);

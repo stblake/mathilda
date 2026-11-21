@@ -39,6 +39,7 @@
 #include "sf_machine.h"   /* sf_machine_lerchphi, sf_machine_polylog */
 
 #include <math.h>
+#include <float.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -499,6 +500,27 @@ bool sf_zeta_c(double sr, double si, double* vr, double* vi) {
      * relative ulp of the result): measured 18 ulp median, 70 max on
      * Re s in [-10, 1/2]. The arbitrary-precision path answers instead. */
     if (!(sr >= 0.5)) return false;
+    if (sr >= 20.0) {
+        /* The Dirichlet series, as sf_zeta_r does: n^-s has modulus n^-Re s,
+         * below 2^-60 of the leading 1 for n >= 9.  Without this every
+         * |s| >= 10^4 declined to the arbitrary-precision path -- 1.7 s for
+         * Zeta[1.*^6 + 5. I], and a Newton iterate at Re s ~ 10^189 did not
+         * return.  The phase Im s Log[n] is a rounded double, so a term is
+         * used only while its phase error (|Im s Log n| ulps) times its modulus
+         * stays far below an ulp of the result (~1); a term whose modulus has
+         * underflowed is exactly 0 whatever its phase.  Otherwise decline. */
+        double Sr = 1.0, Si = 0.0;
+        for (int n = 8; n >= 2; n--) {
+            double mag = pow((double)n, -sr);
+            if (mag == 0.0) continue;
+            double ph = si * log((double)n);
+            if (!(mag * fabs(ph) * DBL_EPSILON <= 0x1p-58)) return false;
+            Sr += mag * cos(ph);
+            Si -= mag * sin(ph);
+        }
+        *vr = Sr; *vi = Si;
+        return true;
+    }
     return zm_hurwitz_em_c(sr, si, 1.0, 0.0, vr, vi);
 }
 

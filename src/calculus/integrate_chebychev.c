@@ -10,9 +10,12 @@
  * 1. Recognition (single structural scan, no expansion): split f into the
  *    constant prefactor C (factors free of x), the pure power x^p, and the
  *    binomial power (a x^r + b)^q.  Extract p, q, r as reduced rationals and
- *    a, b as expressions free of x.  Reject anything that is not exactly of
- *    this shape (trinomial base, two binomials, x inside a transcendental,
- *    non-rational exponents, ...).
+ *    a, b as expressions free of x.  A base that is not literally a x^r + b
+ *    but expands to x^s (a x^r + b) -- a monomial shared by both terms, or a
+ *    product of constants, x^s and a binomial -- is normalised: p += s q and
+ *    the locally constant factor W = base^q / (x^(s q) (a x^r + b)^q) joins C
+ *    (parse_binom_general).  Reject anything else (trinomial base, two
+ *    binomials, x inside a transcendental, non-rational exponents, ...).
  *
  * 2. Type selection (Chebychev):
  *      q in Z, N = LCM(den p, den r) >= 2   -> Type I   : x = u^N
@@ -269,12 +272,113 @@ static bool parse_binom(Expr* base, Expr* x, Expr** a_out, Expr** b_out,
     return true;
 }
 
+/* True iff e is the exact Integer 0. */
+static bool is_int_zero(const Expr* e) {
+    return e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
+/* Cheap structural gate for parse_binom_general, so the Expand is paid only on
+ * a base that can expand to a sum of monomials without multiplying out powers:
+ * a Plus of terms each free of x or a monomial c x^e, or (allow_times) a Times
+ * of factors each free of x, a power of x, or such a Plus.  Borrows base, x. */
+static bool plausible_monomial_sum(Expr* base, Expr* x, bool allow_times) {
+    if (head_is(base, SYM_Plus)) {
+        for (size_t i = 0; i < base->data.function.arg_count; i++) {
+            Expr* T = base->data.function.args[i];
+            Expr* c = NULL; int64_t tn, td;
+            if (expr_free_of(T, x)) continue;
+            if (!parse_monomial(T, x, &c, &tn, &td)) return false;
+            expr_free(c);
+        }
+        return true;
+    }
+    if (allow_times && head_is(base, SYM_Times)) {
+        for (size_t i = 0; i < base->data.function.arg_count; i++) {
+            Expr* h = base->data.function.args[i];
+            int64_t en, ed;
+            if (expr_free_of(h, x) || is_x_power(h, x, &en, &ed)) continue;
+            if (!plausible_monomial_sum(h, x, false)) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+/* Generalised binomial base: base = x^s (a x^r + b) up to expansion, i.e.
+ * Expand[base] is a sum whose terms are monomials c x^e (or free of x, e = 0)
+ * carrying exactly two distinct exponents e1 < e2.  Then s = e1, r = e2 - e1,
+ * b = (sum of the coefficients at e1), a = (sum at e2).  This covers the shapes
+ * the strict parse_binom misses: a common monomial factor shared by both terms
+ * (2 c2 x^(5/2) + 4 c3 x^3 = x^(5/2) (2 c2 + 4 c3 x^(1/2))), and a base written
+ * as a product of constants, a power of x and a binomial
+ * (-12 x^3 (-1 - 2 c3 x^3/c2)/c2).  Called only after parse_binom has declined,
+ * and only on a Plus/Times base, so the Expand is never paid on the fast path.
+ * Fills owned a, b and r = rn/rd, s = sn/sd (reduced).  Returns false
+ * (allocating nothing) otherwise.  Borrows base, x. */
+static bool parse_binom_general(Expr* base, Expr* x, Expr** a_out, Expr** b_out,
+                                int64_t* rn, int64_t* rd,
+                                int64_t* sn, int64_t* sd) {
+    if (!plausible_monomial_sum(base, x, true)) return false;
+    Expr* E =eval_take(internal_expand((Expr*[]){ expr_copy(base) }, 1));
+    if (!E) return false;
+    bool ok = false;
+    Expr* acc[2] = { NULL, NULL };      /* coefficient sums at e[0], e[1] */
+    int64_t en[2] = { 0, 0 }, ed[2] = { 1, 1 };
+    int nclass = 0;
+    if (!head_is(E, SYM_Plus)) goto out;
+
+    for (size_t i = 0; i < E->data.function.arg_count; i++) {
+        Expr* T = E->data.function.args[i];
+        Expr* c = NULL; int64_t tn, td;
+        if (expr_free_of(T, x)) { c = expr_copy(T); tn = 0; td = 1; }
+        else if (!parse_monomial(T, x, &c, &tn, &td)) goto out;
+        frac_reduce(&tn, &td);
+        int k = -1;
+        for (int j = 0; j < nclass; j++)
+            if (en[j] == tn && ed[j] == td) { k = j; break; }
+        if (k < 0) {
+            if (nclass == 2) { expr_free(c); goto out; }   /* trinomial */
+            k = nclass++;
+            en[k] = tn; ed[k] = td;
+            acc[k] = c;
+        } else {
+            acc[k] = mk_fn2("Plus", acc[k], c);
+        }
+    }
+    if (nclass != 2) goto out;
+
+    /* Order the classes so class 0 carries the lower exponent. */
+    if (en[0] * ed[1] > en[1] * ed[0]) {
+        Expr* t = acc[0]; acc[0] = acc[1]; acc[1] = t;
+        int64_t tn = en[0], td = ed[0];
+        en[0] = en[1]; ed[0] = ed[1]; en[1] = tn; ed[1] = td;
+    }
+    Expr* bb = eval_take(acc[0]); acc[0] = NULL;
+    Expr* aa = eval_take(acc[1]); acc[1] = NULL;
+    if (!aa || !bb || is_int_zero(aa) || is_int_zero(bb)) {
+        if (aa) expr_free(aa);
+        if (bb) expr_free(bb);
+        goto out;
+    }
+    *sn = en[0]; *sd = ed[0];
+    frac_add(en[1], ed[1], -en[0], ed[0], rn, rd);
+    *a_out = aa;
+    *b_out = bb;
+    ok = true;
+
+out:
+    if (acc[0]) expr_free(acc[0]);
+    if (acc[1]) expr_free(acc[1]);
+    expr_free(E);
+    return ok;
+}
+
 /* Recognise f = C * x^p * (a x^r + b)^q.  On success returns true and fills:
  *   *C  owned constant prefactor (Integer 1 when none),
  *   p = pn/pd, q = qn/qd, r = rn/rd  (reduced, denominators > 0),
  *   *a, *b owned, free of x.
  * On false nothing is allocated.  Borrows f, x. */
-static bool recognise(Expr* f, Expr* x,
+static bool recognise(Expr* f, Expr* x, bool general,
                       Expr** C, int64_t* pn, int64_t* pd,
                       int64_t* qn, int64_t* qd, int64_t* rn, int64_t* rd,
                       Expr** a, Expr** b) {
@@ -318,11 +422,46 @@ static bool recognise(Expr* f, Expr* x,
                 /* candidate binomial power */
                 if (have_binom) goto fail;        /* a second binomial */
                 Expr* pa = NULL; Expr* pb = NULL; int64_t prn, prd;
-                if (!parse_binom(gb, x, &pa, &pb, &prn, &prd)) goto fail;
-                la = pa; lb = pb;
                 lqn = tqn; lqd = tqd; frac_reduce(&lqn, &lqd);
+                int64_t psn = 0, psd = 1;
+                if (!parse_binom(gb, x, &pa, &pb, &prn, &prd) &&
+                    !(general && parse_binom_general(gb, x, &pa, &pb, &prn, &prd,
+                                         &psn, &psd)))
+                    goto fail;
+                la = pa; lb = pb;
                 lrn = prn; lrd = prd; frac_reduce(&lrn, &lrd);
                 have_binom = true;
+                if (psn != 0) {
+                    /* gb = x^s B with B = a x^r + b: integrate
+                     * x^(p + s q) B^q instead, times the locally constant
+                     * W = gb^q / (x^(s q) B^q)  (D[W, x] = 0 wherever
+                     * analytic, so W F0 is an antiderivative on every
+                     * interval).  W = 1 identically only when q is an
+                     * integer.  Otherwise W is kept even where it is 1 on
+                     * the real line (x > 0): for x < 0 it can be -1
+                     * (Sqrt[x^3 B] vs x^(3/2) Sqrt[B]), and off the real
+                     * line a phase, so dropping it would leave an
+                     * antiderivative that is right only on part of the
+                     * domain.  The B^q in W cancels structurally against
+                     * the B^(q+k) of the back-substituted F0, so the
+                     * result is typically gb^q times a rational function
+                     * of x^(1/N). */
+                    int64_t sqn = psn * lqn, sqd = psd * lqd, nn, dd;
+                    frac_reduce(&sqn, &sqd);
+                    frac_add(ppn, ppd, sqn, sqd, &nn, &dd);
+                    ppn = nn; ppd = dd;
+                    if (lqd != 1) {
+                        Expr* B = mk_fn2("Plus",
+                            mk_fn2("Times", expr_copy(la),
+                                   mk_pow_rat(expr_copy(x), lrn, lrd)),
+                            expr_copy(lb));
+                        Expr* W = mk_fn3("Times",
+                            expr_copy(g),
+                            mk_pow_rat(expr_copy(x), -sqn, sqd),
+                            mk_pow_rat(B, -lqn, lqd));
+                        c = mk_fn2("Times", c, W);
+                    }
+                }
                 continue;
             }
             goto fail;   /* x-dependent power that is not a binomial */
@@ -351,14 +490,14 @@ fail:
 /* Core driver                                                            */
 /* ---------------------------------------------------------------------- */
 
-static Expr* ch_core(Expr* f, Expr* x) {
+static Expr* ch_core(Expr* f, Expr* x, bool general) {
     if (x->type != EXPR_SYMBOL)   return NULL;
     if (expr_free_of(f, x))       return NULL;   /* nothing to integrate in x */
     if (ch_depth >= CH_MAX_DEPTH) return NULL;
 
     Expr* C = NULL; Expr* a = NULL; Expr* b = NULL;
     int64_t pn, pd, qn, qd, rn, rd;
-    if (!recognise(f, x, &C, &pn, &pd, &qn, &qd, &rn, &rd, &a, &b))
+    if (!recognise(f, x, general, &C, &pn, &pd, &qn, &qd, &rn, &rd, &a, &b))
         return NULL;
 
     /* Fresh substitution variable. */
@@ -498,7 +637,11 @@ done:
 /* ---------------------------------------------------------------------- */
 
 Expr* integrate_chebychev_try(Expr* f, Expr* x) {
-    return ch_core(f, x);
+    return ch_core(f, x, false);
+}
+
+Expr* integrate_chebychev_general_try(Expr* f, Expr* x) {
+    return ch_core(f, x, true);
 }
 
 Expr* builtin_integrate_chebychev(Expr* res) {
@@ -506,7 +649,7 @@ Expr* builtin_integrate_chebychev(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
-    return ch_core(f, x);
+    return ch_core(f, x, true);
 }
 
 void integrate_chebychev_init(void) {

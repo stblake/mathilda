@@ -118,6 +118,16 @@ static void test_two_distinct_bases(void) {
              "List[List[Rule[x, Rational[85, 36]]]]");
 }
 
+/* A nested radical whose INNER generator is introduced first: x^(1/2) -> u_0,
+ * then Sqrt[2 u_0^5 + 4 x^3] -> u_1 with side equation u_1^2 - 2 u_0^5 - 4 x^3.
+ * The resultant chain must eliminate u_0 from that later side equation too, or
+ * the internal $radu0$ placeholder leaks into a Root[] answer (and a spurious
+ * Solve::nongen fires).  x = 1/3: both sides are 1/3 + 3^(-3/2). */
+static void test_nested_inner_generator_first(void) {
+    run_test("Solve[Sqrt[2 x^(5/2) + 4 x^3] == x + x^(3/2), x]",
+             "List[List[Rule[x, 0]], List[Rule[x, Rational[1, 3]]]]");
+}
+
 /* Sqrt[x + 5] + Sqrt[x] == -1.  Both radicals are real-non-negative
  * on the real line, so the sum cannot equal -1.  Polynomial
  * elimination yields a candidate x = 4 (where Sqrt[9] + Sqrt[4] = 5);
@@ -179,6 +189,7 @@ int main(void) {
     TEST(test_extraneous_root_filter);
     TEST(test_two_distinct_bases);
     TEST(test_no_real_solution);
+    TEST(test_nested_inner_generator_first);
     TEST(test_parametric_nongen);
     TEST(test_hang_parametric_rational_radical);
     TEST(test_qualified_builtin);

@@ -42,7 +42,10 @@
 
 /* Without a sparse direct solver (no UMFPACK), a matrix whose band does not
  * pay is factored as a dense LU: O(n^3), 7.6 s at n = 11020 (the sparse
- * oracle's case #1005, a TIMEOUT under load). Above this order a strictly
+ * oracle's case #1005, a TIMEOUT under load); with UMFPACK, a scattered
+ * pattern fills in (dd[6000] in test_sparse_la_solve.c missed its bound on
+ * the Linux CI), so the route below is taken with or without it -- which also
+ * gives one answer path on every platform. Above this order a strictly
  * diagonally dominant matrix with a small Varah condition bound
  * (spla_dominance_cond) is solved by the refined Krylov default instead: it is
  * provably nonsingular and well conditioned, so no ::sing or ::luc the direct
@@ -513,12 +516,10 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
     if (!X) { rhs_free(&b); spla_view_free(&A); return NULL; }
     Expr* result = NULL;
     bool auto_krylov = false;       /* Automatic, no direct factor: refine */
-    bool krylov_first = false;      /* ... tried before the dense LU (see SPLA_KRYLOV_FIRST_N) */
-#ifndef USE_UMFPACK
+    bool krylov_first = false;      /* ... tried before the direct solve (see SPLA_KRYLOV_FIRST_N) */
     if (o.sel == MS_AUTO && A.n > SPLA_KRYLOV_FIRST_N &&
         spla_dominance_cond(&A) <= SPLA_KRYLOV_FIRST_COND)
         krylov_first = auto_krylov = true;
-#endif
 
 direct:   /* re-entered once when a Krylov-first run does not converge */
     if (o.sel != MS_KRYLOV && !krylov_first) {

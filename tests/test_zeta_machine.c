@@ -162,6 +162,23 @@ void test_zeta_family_declines() {
     ASSERT(fabs(re - 2.8340491566946109) < 1e-14);
 }
 
+/* Re s >= 20, complex: the Dirichlet series on the machine (v0.6662).  Every
+ * |s| >= 10^4 used to decline to the arbitrary-precision path -- 1.7 s for
+ * Zeta[1.*^6 + 5. I], and FindRoot's iterate near Re s = 10^189 never
+ * returned.  References at 40 digits. */
+void test_zeta_large_real_part_complex() {
+    double re, im;
+    ASSERT(eval_num("Zeta[20. + 3. I]", &re, &im));
+    ASSERT(fabs(re - 0.999999535282062328) < 4e-16 && fabs(im - (-8.32899148367607721e-7)) < 4e-16);
+    ASSERT(eval_num("Zeta[25.5 - 7. I]", &re, &im));
+    ASSERT(fabs(re - 1.00000000293327626) < 4e-16 && fabs(im - (-2.08676231340347526e-8)) < 4e-16);
+    ASSERT(eval_num("Zeta[1000. + 5. I]", &re, &im));
+    ASSERT(re == 1.0 && fabs(im - 2.97241446425992725e-302) < 1e-315);
+    /* far out: n^-Re s underflows, so the answer is exactly 1, at once */
+    assert_eval_eq("Zeta[1.06*^189 + 1.1*^188 I]", "1.0", 0);
+    assert_eval_eq("First[AbsoluteTiming[Do[Zeta[1.*^6 + 5. I], {200}]]] < 0.5", "True", 0);
+}
+
 /* scalar == unpacked List == packed List == NDArray == Compile[], bit for bit. */
 void test_zeta_family_surfaces() {
     static const char* real_cases[] = {
@@ -227,6 +244,7 @@ int main() {
     TEST(test_lerchphi_machine_spots);
     TEST(test_polylog_machine_spots);
     TEST(test_zeta_family_declines);
+    TEST(test_zeta_large_real_part_complex);
     TEST(test_zeta_family_surfaces);
 
     printf("All zeta-family machine-kernel tests passed.\n");

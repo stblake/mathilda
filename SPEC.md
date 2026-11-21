@@ -557,6 +557,15 @@ is covered without being listed; only the corpus drivers and `EXCLUDE_FROM_ALL`
 targets are left out. Until 2026-10-27, 175 suites were built and never run,
 and wrong answers accumulated in them unseen.
 
+The kernel sources compile once into the `mathilda_common` object library and
+link once into the shared `mathilda_testlib`, which every suite loads. A loop
+at the end of `tests/CMakeLists.txt` swaps each executable's
+`$<TARGET_OBJECTS:mathilda_common>` for the library, so new suites still name
+the object library. Splicing the objects into each of the ~730 binaries made
+one build tree ~14 GB (~19 MB per suite); it is now ~360 MB. The `bench_*`
+gates keep the objects statically linked, because their recorded baselines are
+for that build.
+
 Tests fall into two tiers by name. `*corpus*`, `*stress*` and the `bench_*`
 wall-clock gates carry the `nightly` label; everything else is a unit suite.
 [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs:

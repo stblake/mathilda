@@ -1176,9 +1176,15 @@ The matrix exponential.
   SparseArray answers a **SparseArray**, the reference's head, computed on the
   dense form within the 2^27-element densify cap. An exact or symbolic one
   answers a List through the dense path. An **MPFR** SparseArray answers a
-  SparseArray only at order 1 or when it is diagonal with its diagonal entries
-  within 1 of each other (the reference's choice, probed); any other MPFR
-  SparseArray answers the dense List (v0.6661; it was a SparseArray). `MatrixExp[s, v]` for a machine
+  SparseArray exactly when its trace-shifted 1-norm is small,
+  `Norm[s - Tr[s]/n IdentityMatrix[n], 1] <= 1/2` compared as a machine double
+  (order 1 always qualifies), with the exponential's zeros left as the exact
+  `0` background; any other MPFR SparseArray answers the dense List. The rule is
+  the reference's, established on ~560 probes (orders 1-12; diagonal,
+  triangular, nilpotent, banded, block, permutation and random real/complex
+  patterns; 17-50 digits) with no exception. A machine SparseArray with no
+  stored value but a machine background (`N` of a zero matrix) answers the
+  identity SparseArray. `MatrixExp[s, v]` for a machine
   SparseArray runs the Al-Mohy–Higham truncated Taylor action on SpMV and
   never forms the exponential, so it scales with the SpMV: the 90000 x 90000
   2-D Laplacian takes 76 ms. The answer is a dense vector, as in the reference.

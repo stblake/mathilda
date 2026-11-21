@@ -39,6 +39,7 @@
 
 #include "linkedlist_seq.h"   /* LLSeq: RandomChoice / RandomSample over LinkedLists */
 #include "random.h"
+#include "core.h"     /* tc_register_unwind_counter */
 #include "memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "dist.h"   /* ml_dist_reset_cache -- SeedRandom must clear the Gaussian cache */
 #include "checked_int.h"   /* ci_add_i64 */
@@ -298,14 +299,25 @@ void random_push_seed(uint64_t seed) {
     seed_all(seed);
 }
 
+/* The restore MOVES the saved state into place (a struct copy: the struct owns
+ * its buffers through pointers) and then releases the displaced one, so the pop
+ * never allocates.  It used to clear the live state and then rebuild it with
+ * gmp_randinit_set, whose allocation is a TimeConstrained safe point: a timeout
+ * taken there jumped out with g_rand_state cleared and half rebuilt and the
+ * saved slot not yet released, and a later clear of either freed the same
+ * buffers twice (SIGABRT in free under random_pop_seed, from PossibleZeroQ's
+ * sampler; seen only under load, when budgets expire at random points).  A
+ * free is never a safe point (see tc_alloc_safepoint_after_malloc_only). */
 void random_pop_seed(void) {
     if (g_rand_saved_depth <= 0) return;            /* unbalanced pop */
-    g_rand_saved_depth--;
-    if (g_rand_saved_depth >= RANDOM_SEED_STACK_DEPTH) return;  /* overflow push */
-    gmp_randclear(g_rand_state);
-    gmp_randinit_set(g_rand_state, g_rand_saved[g_rand_saved_depth]);
-    gmp_randclear(g_rand_saved[g_rand_saved_depth]);
-    for (int i = 0; i < 4; i++) g_xs[i] = g_xs_saved[g_rand_saved_depth][i];
+    int d = g_rand_saved_depth - 1;
+    if (d >= RANDOM_SEED_STACK_DEPTH) { g_rand_saved_depth = d; return; }  /* overflow push */
+    gmp_randstate_t displaced;
+    memcpy(displaced, g_rand_state, sizeof(gmp_randstate_t));
+    memcpy(g_rand_state, g_rand_saved[d], sizeof(gmp_randstate_t));
+    for (int i = 0; i < 4; i++) g_xs[i] = g_xs_saved[d][i];
+    g_rand_saved_depth = d;
+    gmp_randclear(displaced);
 }
 
 /*
@@ -2842,6 +2854,11 @@ done:
 }
 
 void random_init(void) {
+    /* A timeout that unwinds between a push and its pop (the zero-test sampler
+     * runs inside every TimeConstrained budget) would otherwise leave the
+     * seed stack one deeper for the rest of the session; after four, pushes
+     * stop saving and the sampler perturbs the user's random stream. */
+    tc_register_unwind_counter(&g_rand_saved_depth);
     symtab_add_builtin("RandomInteger", builtin_randominteger);
     symtab_get_def("RandomInteger")->attributes |= ATTR_PROTECTED;
 

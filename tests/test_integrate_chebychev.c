@@ -110,6 +110,27 @@ static void test_problem4_nonelementary(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Bases that are x^s (a x^r + b) only after expansion: a monomial    */
+/* shared by both terms, or constants * x^s * binomial (DSolve        */
+/* AutonomousReduction quadratures 2.1.2-267 / 2.1.2-1168).            */
+/* ------------------------------------------------------------------ */
+static void test_common_monomial_base(void) {
+    ok("1/Sqrt[x^(5/2) + x^3]");              /* x^(-5/4)(1+x^(1/2))^(-1/2) */
+    ok("-(1/Sqrt[2 a x^(5/2) + 4 b x^3])");   /* 2.1.2-267, symbolic       */
+    ok("(-6 x^2)/(a Sqrt[(-12 x^3 (-1 - (2 b x^3)/a))/a])"); /* 2.1.2-1168 */
+    ok("Sqrt[x^2 + x^4]");                    /* integer s: W kept         */
+    ok("x Sqrt[a x^2 + b x^4]");
+    ok("x^(1/3) (x^2 + x^(8/3))^(1/3)");      /* odd-denominator s         */
+    /* The x < 0 branch: Sqrt[x^2 + x^4] = -x Sqrt[1 + x^2] there, so the
+     * antiderivative must carry the locally constant Sqrt[x^2+x^4]/(x Sqrt[..])
+     * rather than x Sqrt[1 + x^2]: its derivative is real and equal at x = -2. */
+    check_eq("With[{F = Integrate[Sqrt[x^2 + x^4], x]}, "
+             "Chop[N[(D[F, x] - Sqrt[x^2 + x^4]) /. x -> -2]] == 0]", "True");
+    /* Still non-elementary after normalisation: x^(9/2)(1+x^2)^(1/2). */
+    declines("x^2 Sqrt[x^5 + x^7]");
+}
+
+/* ------------------------------------------------------------------ */
 /* Method plumbing + strictness.                                      */
 /* ------------------------------------------------------------------ */
 static void test_plumbing(void) {
@@ -142,6 +163,7 @@ int main(void) {
     TEST(test_problem3_nonelementary);
     TEST(test_worked_example);
     TEST(test_problem4_nonelementary);
+    TEST(test_common_monomial_base);
     TEST(test_plumbing);
 
     printf("All Integrate ChebychevAlgebraic tests passed!\n");

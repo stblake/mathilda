@@ -4,8 +4,8 @@
  *                    reference's head); the exponential is computed on the
  *                    dense form (it is dense in general) within the densify
  *                    cap. Exact / symbolic input, and most MPFR input
- *                    (mpfr_answers_sparse), keeps the dense path's List
- *                    answer (the gate).
+ *                    (mpfr_answers_sparse: unless ||s - mu I||_1 <= 1/2),
+ *                    keeps the dense path's List answer (the gate).
  *   MatrixExp[s, v]  the action exp(s) v for a machine SparseArray, by the
  *                    Al-Mohy--Higham truncated Taylor method on SpMV -- no
  *                    exp(s) is formed, so it scales to any size the SpMV
@@ -133,6 +133,9 @@ static bool sp_expmv(const SpMat* A, const double* b, double* out) {
  * machine SparseArray with a SparseArray and of an exact one with a List; of
  * an MPFR one see mpfr_answers_sparse. */
 static int sparse_class(const SparseArray* sa) {
+    /* no stored value: a machine background (N of an exact zero matrix)
+     * makes it machine -- the reference answers the identity SparseArray */
+    if (sa->pat->nnz == 0 && sa->bg && sa->bg->type == EXPR_REAL) return 1;
     if (sa->kind == SPV_F64 || sa->kind == SPV_C128) return 1;
     if (sa->kind != SPV_EXPR) return 0;
     Expr* const* v = sa->vals;
@@ -144,53 +147,99 @@ static int sparse_class(const SparseArray* sa) {
     return bits == 0 ? 0 : bits <= 53 ? 1 : 2;
 }
 
+/* An arbitrary-precision zero (0``p, or a complex one with both parts so). */
+static bool mpfr_zero_entry(const Expr* e) {
+    if (e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.head->data.symbol.name, "Complex") == 0)
+        return e->data.function.args[0]->type != EXPR_INTEGER && spla_is_zero(e->data.function.args[0]) &&
+               e->data.function.args[1]->type != EXPR_INTEGER && spla_is_zero(e->data.function.args[1]);
+    return e && e->type != EXPR_INTEGER && spla_is_zero(e);
+}
+
+/* The arbitrary-precision exponential's zeros (the structurally zero blocks
+ * of a reducible matrix come out as 0``p) are not stored: the reference's
+ * SparseArray holds the numerically nonzero entries over an exact 0
+ * background, so they become that background. */
+static Expr* mpfr_zeros_to_background(Expr* m) {
+    if (!m || m->type != EXPR_FUNCTION) return m;
+    m = expr_unshare(m);                        /* copy-on-write, both levels */
+    for (size_t i = 0; i < m->data.function.arg_count; i++) {
+        Expr* row = m->data.function.args[i];
+        if (!row || row->type != EXPR_FUNCTION) continue;
+        bool any = false;
+        for (size_t j = 0; j < row->data.function.arg_count && !any; j++)
+            any = mpfr_zero_entry(row->data.function.args[j]);
+        if (!any) continue;
+        row = m->data.function.args[i] = expr_unshare(row);
+        for (size_t j = 0; j < row->data.function.arg_count; j++)
+            if (mpfr_zero_entry(row->data.function.args[j])) {
+                expr_free(row->data.function.args[j]);
+                row->data.function.args[j] = expr_new_integer(0);
+            }
+    }
+    return m;
+}
+
 static Expr* eval_owned(Expr* e) {
     Expr* r = evaluate(e);
     expr_free(e);
     return r;
 }
 
-/* MatrixExp of an MPFR SparseArray: the reference answers a SparseArray at
- * order 1, and for a diagonal matrix whose diagonal entries lie within 1 of
- * each other (N[SparseArray[{{1,1}->1,{2,2}->2}], 30]); any other MPFR
- * matrix -- one with an off-diagonal entry, or a diagonal one with a wider
- * spread, diag(2, 4) -- answers the dense List (the sparse linear-algebra
- * oracle's cases #58 and #299, 7 x 7 30-digit complex matrices, were
- * SparseArrays here and Lists in the reference). The spread is read from a
- * machine copy: it only chooses the head. */
-static bool mpfr_answers_sparse(const Expr* s, const SparseArray* sa) {
-    if (sa->dims[0] == 1) return true;
+/* MatrixExp of an MPFR SparseArray: the reference answers a SparseArray
+ * exactly when the trace-shifted matrix is small,
+ *
+ *     || A - mu I ||_1 <= 1/2,   mu = Tr[A] / n,
+ *
+ * the 1-norm (largest column sum of absolute values; |z| for a complex
+ * entry) compared as a machine double -- presumably the branch on which its
+ * exponential needs no squaring and keeps the sparse arithmetic. Every other
+ * MPFR matrix answers the dense List. Established on ~560 reference probes
+ * (orders 1..12; diagonal, triangular, nilpotent, banded, block, permutation
+ * and random real/complex patterns; 17..50 digits) with no exception:
+ * {{0,t},{0,0}} is sparse for t = 1/2 + 10^-17 and dense for 1/2 + 10^-16
+ * (the double rounding of the norm), the 1-norm and not the infinity-,
+ * 2- or Frobenius norm decides ({{0,.3,.3},{0,0,0},{0,0,0}} sparse, its
+ * transpose dense), and the shift is the mean, not the midpoint, of the
+ * diagonal (diag(0,0,1) dense, diag(0,1/2,1) sparse). Order 1 shifts to 0
+ * and is always sparse. The norm is read from a machine copy, as the
+ * reference compares it: it only chooses the head. */
+static bool mpfr_answers_sparse(const Expr* s) {
     Expr* na[1] = { expr_copy((Expr*)s) };
     Expr* ms = eval_owned(expr_new_function(expr_new_symbol("N"), na, 1));
     bool sparse = false;
     SpMat A;
-    if (ms && ms->type == EXPR_SPARSE && spla_view(sp_of(ms), true, &A)) {
-        bool diag = true;
-        for (int64_t i = 0; i < A.m && diag; i++)
-            for (int64_t k = A.rp[i]; k < A.rp[i + 1]; k++)
-                if (A.ci[k] != i) { diag = false; break; }
-        if (diag) {
-            /* the diagonal's spread: the diagonal of the bounding box of
-             * the n entries in the complex plane (an absent one is 0) */
-            double lo_r = HUGE_VAL, hi_r = -HUGE_VAL, lo_i = HUGE_VAL, hi_i = -HUGE_VAL;
-            int64_t stored = 0;
-            for (int64_t i = 0; i < A.m; i++)
+    if (ms && ms->type == EXPR_SPARSE && spla_view(sp_of(ms), true, &A)) {   /* square: checked by the caller */
+        int64_t n = A.n;
+        double* col = calloc((size_t)(n > 0 ? n : 1), sizeof(double));
+        bool* hasd = calloc((size_t)(n > 0 ? n : 1), sizeof(bool));
+        if (col && hasd) {
+            double mr = 0.0, mi = 0.0;              /* mu = Tr[A] / n */
+            for (int64_t i = 0; i < n; i++)
+                for (int64_t k = A.rp[i]; k < A.rp[i + 1]; k++)
+                    if (A.ci[k] == i) {
+                        mr += A.cplx ? A.x[2 * k] : A.x[k];
+                        mi += A.cplx ? A.x[2 * k + 1] : 0.0;
+                    }
+            mr /= (double)n;
+            mi /= (double)n;
+            for (int64_t i = 0; i < n; i++)
                 for (int64_t k = A.rp[i]; k < A.rp[i + 1]; k++) {
+                    int64_t j = A.ci[k];
                     double re = A.cplx ? A.x[2 * k] : A.x[k], im = A.cplx ? A.x[2 * k + 1] : 0.0;
-                    if (re < lo_r) lo_r = re;
-                    if (re > hi_r) hi_r = re;
-                    if (im < lo_i) lo_i = im;
-                    if (im > hi_i) hi_i = im;
-                    stored++;
+                    if (j == i) { re -= mr; im -= mi; hasd[i] = true; }
+                    col[j] += hypot(re, im);
                 }
-            if (stored < A.m) {           /* an implicit 0 on the diagonal */
-                if (0.0 < lo_r) lo_r = 0.0;
-                if (0.0 > hi_r) hi_r = 0.0;
-                if (0.0 < lo_i) lo_i = 0.0;
-                if (0.0 > hi_i) hi_i = 0.0;
+            double norm = 0.0;
+            for (int64_t j = 0; j < n; j++) {
+                if (!hasd[j]) col[j] += hypot(mr, mi);   /* an implicit 0 on the diagonal */
+                if (col[j] > norm || isnan(col[j])) norm = col[j];
             }
-            sparse = stored == 0 || hypot(hi_r - lo_r, hi_i - lo_i) <= 1.0 + 1e-12;
+            sparse = norm <= 0.5;
         }
+        free(col);
+        free(hasd);
         spla_view_free(&A);
     }
     expr_free(ms);
@@ -206,7 +255,7 @@ static Expr* native_matrixexp(const Expr* call) {
     /* a nonzero background: the reference answers a List (the gate's dense
      * path) */
     if (sa->rank != 2 || sa->dims[0] != sa->dims[1] || cls == 0 || !spla_is_zero(sa->bg)) return NULL;
-    if (na == 1 && cls == 2 && !mpfr_answers_sparse(a[0], sa)) return NULL;   /* the dense List */
+    if (na == 1 && cls == 2 && !mpfr_answers_sparse(a[0])) return NULL;   /* the dense List */
 
     if (na == 1) {
         /* SparseArray[MatrixExp[Normal[s]]]: the dense exponential, answered
@@ -222,6 +271,7 @@ static Expr* native_matrixexp(const Expr* call) {
             expr_free(ex);
             return NULL;
         }
+        if (cls == 2) ex = mpfr_zeros_to_background(ex);
         Expr* sa_args[1] = { ex };
         return eval_owned(expr_new_function(expr_new_symbol("SparseArray"), sa_args, 1));
     }
