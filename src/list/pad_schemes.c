@@ -102,25 +102,29 @@ bool pad_scheme_needs_two(PadScheme sc) {
  * For the non-arithmetic value schemes, a pad element at offset t (t < 0 or
  * t >= L; the caller never asks for 0 <= t < L here) is a copy (possibly
  * negated) of some original element.  Returns an owned Expr*. */
-static Expr* ps_direct_at(const Expr** v, size_t L, PadScheme sc, int64_t t) {
+/* The fiber: element i on demand (a List's argument, a LinkedList's slot). */
+typedef struct { PadAt at; void* ctx; } PSrc;
+#define PS_EL(v, i) ((v)->at((v)->ctx, (size_t)(i)))
+
+static Expr* ps_direct_at(const PSrc* v, size_t L, PadScheme sc, int64_t t) {
     int64_t Li = (int64_t)L;
     switch (sc) {
     case PS_FIXED:
-        return expr_copy((Expr*)v[t < 0 ? 0 : Li - 1]);
+        return expr_copy(PS_EL(v, t < 0 ? 0 : Li - 1));
     case PS_PERIODIC:
-        return expr_copy((Expr*)v[floormod(t, Li)]);
+        return expr_copy(PS_EL(v, floormod(t, Li)));
     case PS_REVERSED: {
         int64_t p = floormod(t, 2 * Li);
-        return expr_copy((Expr*)v[p < Li ? p : 2 * Li - 1 - p]);
+        return expr_copy(PS_EL(v, p < Li ? p : 2 * Li - 1 - p));
     }
     case PS_REFLECTED: {
         int64_t p = floormod(t, 2 * Li - 2);
-        return expr_copy((Expr*)v[p < Li ? p : 2 * Li - 2 - p]);
+        return expr_copy(PS_EL(v, p < Li ? p : 2 * Li - 2 - p));
     }
     case PS_REVERSEDNEG: {
         int64_t p = floormod(t, 2 * Li);
-        if (p < Li) return expr_copy((Expr*)v[p]);
-        return ps_neg(expr_copy((Expr*)v[2 * Li - 1 - p]));
+        if (p < Li) return expr_copy(PS_EL(v, p));
+        return ps_neg(expr_copy(PS_EL(v, 2 * Li - 1 - p)));
     }
     default:
         return NULL;
@@ -131,16 +135,24 @@ static Expr* ps_direct_at(const Expr** v, size_t L, PadScheme sc, int64_t t) {
  * w(t) for any t, folded into [0, L-1] applying `2*edge - x` at each boundary
  * reflection.  `repeat` selects the Reversed (boundary duplicated) variant.
  * Requires L >= 2 (guaranteed by the caller's mindimsize guard). */
-static Expr* ps_fold_diff(const Expr** v, size_t L, int64_t t, bool repeat) {
+static Expr* ps_fold_diff(const PSrc* v, size_t L, int64_t t, bool repeat) {
     int64_t Li = (int64_t)L;
-    if (t >= 0 && t < Li) return expr_copy((Expr*)v[t]);
+    if (t >= 0 && t < Li) return expr_copy(PS_EL(v, t));
     if (t >= Li) {
         int64_t tp = repeat ? (2 * Li - 1 - t) : (2 * (Li - 1) - t);
-        return ps_two_edge_minus(v[Li - 1], ps_fold_diff(v, L, tp, repeat));
+        Expr* in = ps_fold_diff(v, L, tp, repeat);
+        Expr* edge = expr_copy(PS_EL(v, Li - 1));
+        Expr* r = ps_two_edge_minus(edge, in);
+        expr_free(edge);
+        return r;
     }
     /* t < 0 */
     int64_t tp = repeat ? (-1 - t) : (-t);
-    return ps_two_edge_minus(v[0], ps_fold_diff(v, L, tp, repeat));
+    Expr* in = ps_fold_diff(v, L, tp, repeat);
+    Expr* edge = expr_copy(PS_EL(v, 0));
+    Expr* r = ps_two_edge_minus(edge, in);
+    expr_free(edge);
+    return r;
 }
 
 /* ---- Extrapolated: one extrapolated value from a nearest-first window ---- *
@@ -173,9 +185,19 @@ static Expr* ps_extrap_combo(const Expr** window, int d) {
 
 /* ---- the public engine -------------------------------------------------- */
 
+static Expr* ps_array_at(void* ctx, size_t i) { return ((Expr**)ctx)[i]; }
+
 bool pad_scheme_extend(const Expr** v, size_t L, int64_t front, int64_t back,
                        const Expr* scheme, PadScheme sc, int64_t order,
                        Expr*** out, size_t* out_len) {
+    return pad_scheme_extend_at(ps_array_at, (void*)v, L, front, back, scheme, sc, order, out, out_len);
+}
+
+bool pad_scheme_extend_at(PadAt at, void* ctx, size_t L, int64_t front, int64_t back,
+                          const Expr* scheme, PadScheme sc, int64_t order,
+                          Expr*** out, size_t* out_len) {
+    PSrc src = { at, ctx };
+    const PSrc* v = &src;
     if (sc == PS_INVALID) return false;
     if (front < 0) front = 0;
     if (back < 0) back = 0;
@@ -188,7 +210,7 @@ bool pad_scheme_extend(const Expr** v, size_t L, int64_t front, int64_t back,
     Expr** res = malloc(sizeof(Expr*) * (N == 0 ? 1 : N));
 
     /* original region */
-    for (size_t j = 0; j < L; j++) res[front + j] = expr_copy((Expr*)v[j]);
+    for (size_t j = 0; j < L; j++) res[front + j] = expr_copy(PS_EL(v, j));
 
     if (sc == PS_EXTRAPOLATED) {
         int d = 0;

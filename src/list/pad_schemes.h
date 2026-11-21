@@ -52,5 +52,12 @@ bool pad_scheme_needs_two(PadScheme sc);
 bool pad_scheme_extend(const Expr** v, size_t L, int64_t front, int64_t back,
                        const Expr* scheme, PadScheme sc, int64_t order,
                        Expr*** out, size_t* out_len);
+/* The same over a fiber read on demand: at(ctx, i) is element i (borrowed,
+ * valid until the next few calls -- each is copied at once), so a LinkedList's
+ * elements are read from its slots, never collected into an array. */
+typedef Expr* (*PadAt)(void* ctx, size_t i);
+bool pad_scheme_extend_at(PadAt at, void* ctx, size_t L, int64_t front, int64_t back,
+                          const Expr* scheme, PadScheme sc, int64_t order,
+                          Expr*** out, size_t* out_len);
 
 #endif /* PAD_SCHEMES_H */

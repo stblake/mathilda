@@ -181,4 +181,8 @@ double nd_stdmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
 void   nd_quartiles_f64(double* s, size_t n, double qv[3]);
 void   nd_moving_average_f64(const double* x, size_t n, size_t r, double* out);
 
+/* Raw first-appearance tally of an int64 / float64 buffer (see ndreduce.c). */
+bool ndred_tally_words_raw(const void* data, NDType dt, size_t n,
+                           uint64_t** keys, int64_t** cnts, size_t* nuniq);
+
 #endif /* MATHILDA_NDREDUCE_H */

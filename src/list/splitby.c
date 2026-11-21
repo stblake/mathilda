@@ -38,48 +38,41 @@ static Expr* splitby_key(Expr* f, Expr* e) {
     return key;
 }
 
-/* Build one run: elems[0..n) copied into a container of the source's kind
- * (its head, or a LinkedList). */
-static Expr* splitby_make_run(Expr** elems, size_t n, const LLView* v) {
-    Expr** args = n ? malloc(sizeof(Expr*) * n) : NULL;
-    for (size_t i = 0; i < n; i++) args[i] = expr_copy(elems[i]);
-    Expr* run = ll_view_result(v, args, n);
-    free(args);
-    return run;
-}
-
-/* Split elems[0..n) into runs by fs[0], recursing into fs[1..nfs) so each run
- * is itself split one level deeper. Returns the runs collected under `head`;
- * n == 0 yields an empty expression, so SplitBy[{}, f] is {}. */
-static Expr* splitby_level(Expr** elems, size_t n, const LLView* head,
-                           Expr* const* fs, size_t nfs) {
+/* Split elements [lo, hi) of q into runs by f_k (element k of fq, a List or
+ * LinkedList of functions -- or the single function `f1` when fq is NULL),
+ * recursing with k + 1 so each run is split one level deeper. Elements are
+ * read on demand; a run is copied span-wise (llq_range). An empty range
+ * yields an empty expression, so SplitBy[{}, f] is {}. */
+static Expr* splitby_level(LLSeq* q, size_t lo, size_t hi, LLSeq* fq, Expr* f1, size_t k, size_t nfs) {
+    size_t n = hi - lo;
     Expr** runs = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t num_runs = 0;
-    size_t run_start = 0;
+    size_t run_start = lo;
+    Expr* f = expr_copy(fq ? llq_peek(fq, k) : f1);
 
-    /* Key of elems[i-1], carried across iterations so f runs once per element. */
-    Expr* prev_key = n ? splitby_key(fs[0], elems[0]) : NULL;
+    /* Key of element i-1, carried across iterations so f runs once per element. */
+    Expr* prev_key = n ? splitby_key(f, llq_peek(q, lo)) : NULL;
 
-    for (size_t i = 1; i <= n; i++) {
-        bool cut = (i == n);          /* the final run always closes at the end */
+    for (size_t i = lo + 1; i <= hi; i++) {
+        bool cut = (i == hi);          /* the final run always closes at the end */
         Expr* key = NULL;
         if (!cut) {
-            key = splitby_key(fs[0], elems[i]);
+            key = splitby_key(f, llq_peek(q, i));
             cut = !expr_eq(key, prev_key);
         }
         if (key) { expr_free(prev_key); prev_key = key; }
 
         if (cut) {
-            size_t len = i - run_start;
-            runs[num_runs++] = (nfs > 1)
-                ? splitby_level(elems + run_start, len, head, fs + 1, nfs - 1)
-                : splitby_make_run(elems + run_start, len, head);
+            runs[num_runs++] = (k + 1 < nfs)
+                ? splitby_level(q, run_start, i, fq, f1, k + 1, nfs)
+                : llq_range(q, run_start, i);
             run_start = i;
         }
     }
     expr_free(prev_key);
+    expr_free(f);
 
-    Expr* result = ll_view_result(head, runs, num_runs);
+    Expr* result = llq_result(q, runs, num_runs);
     free(runs);
     return result;
 }
@@ -93,33 +86,23 @@ Expr* builtin_splitby(Expr* res) {
     /* Atoms have no elements to split; leave the call unevaluated. */
     if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return NULL;
 
-    /* fspec is either a single key function or a List of them. An empty list
-     * specifies no split at all, which we leave unevaluated rather than
-     * guessing at an interpretation. */
-    Expr* single[1];
-    Expr* const* fs;
-    size_t nfs;
-    LLView fv = { NULL, 0, NULL, false };
-    if (head_is(fspec, SYM_List)) {
-        nfs = fspec->data.function.arg_count;
-        if (nfs == 0) return NULL;
-        fs = fspec->data.function.args;
-    } else if (fspec->type == EXPR_LINKEDLIST) {   /* a LinkedList of functions */
-        ll_view(fspec, &fv);
-        nfs = fv.n;
-        if (nfs == 0) return NULL;
-        fs = fv.a;
-    } else {
-        single[0] = fspec;
-        fs = single;
-        nfs = 1;
+    /* fspec is either a single key function or a List (or LinkedList) of
+     * them. An empty list specifies no split at all, which we leave
+     * unevaluated rather than guessing at an interpretation. */
+    LLSeq fq;
+    bool multi = head_is(fspec, SYM_List) || fspec->type == EXPR_LINKEDLIST;
+    size_t nfs = 1;
+    if (multi) {
+        llq_open(fspec, &fq);
+        nfs = fq.n;
+        if (nfs == 0) { llq_close(&fq); return NULL; }
     }
 
     /* A LinkedList splits from a snapshot of its slots into LinkedList runs. */
-    LLView lv;
-    ll_view(list, &lv);
-    Expr* r = splitby_level(lv.a, lv.n, &lv, fs, nfs);
-    ll_view_done(&lv);
-    ll_view_done(&fv);
+    LLSeq q;
+    llq_open(list, &q);
+    Expr* r = splitby_level(&q, 0, q.n, multi ? &fq : NULL, fspec, 0, nfs);
+    llq_close(&q);
+    if (multi) llq_close(&fq);
     return r;
 }

@@ -5,7 +5,7 @@
 #include "ndreduce.h"
 #include "interval.h"
 #include "numeric.h"
-#include "linkedlist_seq.h"  /* LLView: LinkedList arguments splice like Lists */
+#include "linkedlist_seq.h"  /* LLSeq: LinkedList arguments splice like Lists */
 
 /* Max / Min of a typed LinkedList straight on its slots (the extreme of the
  * raw int64 or double values, as ndred_max / ndred_min scan a packed
@@ -49,24 +49,52 @@ static bool minmax_spliced(const Expr* arg) {
             arg->data.function.head->data.symbol.name == SYM_List);
 }
 
-/* head[args...] with every List / LinkedList argument replaced by its elements
- * (read from the slots for a LinkedList). */
+/* Max / Min (`head`) of a LinkedList's elements, read one at a time from a
+ * snapshot: head[acc, e] evaluated element by element (Max and Min are Flat,
+ * so an unevaluated head[acc, e] splices into the next step and the answer is
+ * head[all elements]'s) -- or the typed raw scan. NULL for an empty list,
+ * which contributes nothing. */
+static Expr* minmax_ll_reduce(const Expr* head, const Expr* arg) {
+    const LinkedList* ll = arg->data.llist;
+    if (ll_length(ll) == 0) return NULL;
+    bool want_max = head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Max;
+    Expr* fast = minmax_ll_machine(ll, want_max);
+    if (fast) return fast;
+    LLSeq q;
+    llq_open(arg, &q);
+    Expr* acc = expr_copy(llq_peek(&q, 0));
+    for (size_t i = 1; i < q.n; i++) {
+        Expr* two[2] = { acc, expr_copy(llq_peek(&q, i)) };
+        acc = eval_and_free(expr_new_function(expr_copy((Expr*)head), two, 2));
+    }
+    size_t nq = q.n;
+    llq_close(&q);
+    if (nq == 1) {                 /* head[e] alone: the evaluator's answer */
+        Expr* one[1] = { acc };
+        acc = eval_and_free(expr_new_function(expr_copy((Expr*)head), one, 1));
+    }
+    return acc;
+}
+
+/* head[args...] with every List argument replaced by its elements and every
+ * LinkedList argument by the reduction of its elements (minmax_ll_reduce). */
 static Expr* minmax_splice(Expr* res) {
     size_t n = res->data.function.arg_count;
     size_t new_count = 0;
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        new_count += minmax_spliced(arg) ? (size_t)ll_seq_length(arg) : 1;
+        new_count += (minmax_spliced(arg) && arg->type != EXPR_LINKEDLIST) ? arg->data.function.arg_count : 1;
     }
     Expr** new_args = malloc(sizeof(Expr*) * (new_count ? new_count : 1));
     size_t k = 0;
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (minmax_spliced(arg)) {
-            LLView v;
-            ll_view(arg, &v);
-            for (size_t j = 0; j < v.n; j++) new_args[k++] = expr_copy(v.a[j]);
-            ll_view_done(&v);
+        if (arg->type == EXPR_LINKEDLIST) {
+            Expr* r = minmax_ll_reduce(res->data.function.head, arg);
+            if (r) new_args[k++] = r;
+        } else if (minmax_spliced(arg)) {
+            for (size_t j = 0; j < arg->data.function.arg_count; j++)
+                new_args[k++] = expr_copy(arg->data.function.args[j]);
         } else {
             new_args[k++] = expr_copy(arg);
         }

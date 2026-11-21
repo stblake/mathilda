@@ -23,7 +23,9 @@
 
 #include "assoc_ops.h"
 #include "linkedlist.h"
-#include "linkedlist_seq.h"   /* LLView: LinkedList operands of the set heads */
+#include "linkedlist_seq.h"
+#include "ndarray_internal.h"   /* nd_sort_i64_asc */
+#include "ndreduce.h"         /* ndred_tally_words_raw */   /* LLSeq: LinkedList operands of the set heads */
 #include "assoc.h"
 #include "attr.h"
 #include "common.h"
@@ -531,9 +533,35 @@ static Expr* builtin_discard(Expr* res) {
  * ====================================================================== */
 /* Element i of a set operand through its view: an association's value, a
  * List's (any head) argument, a LinkedList's slot. Borrowed. */
-static Expr* view_elem(const Expr* x, const LLView* v, size_t i) {
-    Expr* a = v->a[i];
+static Expr* view_elem(const Expr* x, LLSeq* v, size_t i) {
+    Expr* a = llq_peek(v, i);
     return is_association(x) && is_rule2(a) ? RVAL(a) : a;
+}
+
+/* view_elem as an LLPeekFn, for an index set over a set operand. */
+typedef struct { const Expr* x; LLSeq* q; } ViewCtx;
+static Expr* view_elem_fn(void* c, size_t i) {
+    ViewCtx* v = c;
+    return view_elem(v->x, v->q, i);
+}
+
+/* The distinct machine words of a typed LinkedList (its gathered slots, the
+ * packed Tally's kernel); SIZE_MAX for a boxed / complex list or a word that
+ * cannot be keyed (non-finite). */
+static size_t ll_distinct_machine(const LinkedList* ll) {
+    LLKind k = ll_kind(ll);
+    size_t n = (size_t)ll_length(ll);
+    if (n == 0) return 0;
+    if (k != LL_I64 && k != LL_REAL) return SIZE_MAX;
+    void* buf = malloc(sizeof(double) * n);
+    if (!buf) return SIZE_MAX;
+    ll_gather(ll, 0, (int64_t)n, buf);
+    uint64_t* w; int64_t* c; size_t nu;
+    bool ok = ndred_tally_words_raw(buf, k == LL_I64 ? NDT_INT64 : NDT_FLOAT64, n, &w, &c, &nu);
+    free(buf);
+    if (!ok) return SIZE_MAX;
+    free(w); free(c);
+    return nu;
 }
 
 static Expr* count_distinct(Expr* res, const Expr* f, const char* name) {
@@ -545,21 +573,35 @@ static Expr* count_distinct(Expr* res, const Expr* f, const char* name) {
         free(s);
         return NULL;
     }
-    LLView v;                       /* a LinkedList: a snapshot of its slots */
-    ll_view(x, &v);
-    size_t n = v.n;
-    Expr** owned = f ? malloc(sizeof(Expr*) * (n ? n : 1)) : NULL;
-    ExprSet s;
-    es_init(&s, n);
-    for (size_t i = 0; i < n; i++) {
-        Expr* el = view_elem(x, &v, i);
-        if (f) { owned[i] = eval_call1(f, el); el = owned[i]; }
-        es_add(&s, el, NULL);
+    if (!f && x->type == EXPR_LINKEDLIST) {
+        size_t nu = ll_distinct_machine(x->data.llist);
+        if (nu != SIZE_MAX) return expr_new_integer((int64_t)nu);
     }
-    Expr* r = expr_new_integer((int64_t)s.n);
-    es_free(&s);
-    if (owned) free_array(owned, n);
-    ll_view_done(&v);
+    LLSeq v;                       /* a LinkedList: a snapshot, read on demand */
+    llq_open(x, &v);
+    size_t n = v.n;
+    Expr* r;
+    if (f) {                       /* the distinct f-values (computed keys) */
+        Expr** owned = malloc(sizeof(Expr*) * (n ? n : 1));
+        ExprSet s;
+        es_init(&s, n);
+        for (size_t i = 0; i < n; i++) {
+            owned[i] = eval_call1(f, view_elem(x, &v, i));
+            es_add(&s, owned[i], NULL);
+        }
+        r = expr_new_integer((int64_t)s.n);
+        es_free(&s);
+        free_array(owned, n);
+    } else {                       /* the distinct elements, by index */
+        ViewCtx c = { x, &v };
+        LLIdxSet h;
+        llis_init(&h, n);
+        size_t nd = 0;
+        for (size_t i = 0; i < n; i++) if (llis_add(&h, view_elem_fn, &c, i) == SIZE_MAX) nd++;
+        llis_free(&h);
+        r = expr_new_integer((int64_t)nd);
+    }
+    llq_close(&v);
     return r;
 }
 
@@ -614,18 +656,37 @@ static Expr* builtin_subsetq(Expr* res) {
         free(ha); free(hb);
         return NULL;
     }
-    LLView va, vb;
-    ll_view(a, &va);
-    ll_view(b, &vb);
-    ExprSet s;
-    es_init(&s, va.n);
-    for (size_t i = 0; i < va.n; i++) es_add(&s, view_elem(a, &va, i), NULL);
+    if (lla && llb && ll_kind(a->data.llist) == LL_I64 && ll_kind(b->data.llist) == LL_I64) {
+        /* Two LinkedLists of machine integers: the words of a sorted, each of
+         * b's searched for. */
+        size_t na = (size_t)ll_length(a->data.llist), nb = (size_t)ll_length(b->data.llist);
+        int64_t* av = malloc(sizeof(int64_t) * na);
+        int64_t* bv = malloc(sizeof(int64_t) * nb);
+        ll_gather(a->data.llist, 0, (int64_t)na, av);
+        ll_gather(b->data.llist, 0, (int64_t)nb, bv);
+        nd_sort_i64_asc(av, na);
+        bool subset = true;
+        for (size_t i = 0; i < nb && subset; i++) {
+            size_t lo = 0, hi = na;
+            while (lo < hi) { size_t mid = (lo + hi) / 2; if (av[mid] < bv[i]) lo = mid + 1; else hi = mid; }
+            subset = lo < na && av[lo] == bv[i];
+        }
+        free(av); free(bv);
+        return expr_new_symbol(subset ? SYM_True : SYM_False);
+    }
+    LLSeq va, vb;
+    llq_open(a, &va);
+    llq_open(b, &vb);
+    ViewCtx ca = { a, &va };
+    LLIdxSet s;                    /* a's elements by index, read on demand */
+    llis_init(&s, va.n);
+    for (size_t i = 0; i < va.n; i++) llis_add(&s, view_elem_fn, &ca, i);
     bool subset = true;
     for (size_t i = 0; i < vb.n && subset; i++)
-        subset = es_find(&s, view_elem(b, &vb, i)) != SIZE_MAX;
-    es_free(&s);
-    ll_view_done(&va);
-    ll_view_done(&vb);
+        subset = llis_find(&s, view_elem_fn, &ca, view_elem(b, &vb, i)) != SIZE_MAX;
+    llis_free(&s);
+    llq_close(&va);
+    llq_close(&vb);
     return expr_new_symbol(subset ? SYM_True : SYM_False);
 }
 

@@ -1,4 +1,4 @@
-#include "linkedlist_seq.h"   /* LLView: LinkedList rows pad into LinkedLists */
+#include "linkedlist_seq.h"   /* LLSeq: LinkedList rows pad into LinkedLists */
 #include "list_common.h"
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_pad / ndstruct_delist_repack */
@@ -66,15 +66,15 @@ static void pr_scan_dims(Expr* node, size_t level,
         for (size_t i = *cap; i < newcap; i++) (*dims)[i] = 0;
         *cap = newcap;
     }
-    LLView v;
-    ll_view(node, &v);
+    LLSeq v;
+    llq_open(node, &v);
     int64_t w = (int64_t)v.n;
     if (w > (*dims)[level]) (*dims)[level] = w;
     if (level + 1 > *depth) *depth = level + 1;
     for (size_t i = 0; i < v.n; i++) {
-        pr_scan_dims(v.a[i], level + 1, dims, depth, cap);
+        pr_scan_dims(llq_peek(&v, i), level + 1, dims, depth, cap);
     }
-    ll_view_done(&v);
+    llq_close(&v);
 }
 
 /* Margin to leave at a given level.  margins may be a single integer
@@ -117,12 +117,13 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
     size_t L = 0;
     /* A row is a List-like function or a LinkedList (whose padded row is a
      * LinkedList); a pure-padding row takes the kind of the row above it. */
-    LLView rv = { NULL, 0, NULL, false };
+    LLSeq rv;
+    llq_open(NULL, &rv);
     bool linked = parent_linked;
     if (node && !pr_is_atomic(node)) {
         head_src = node;
-        ll_view(node, &rv);
-        linked = ll_view_linked(&rv);
+        llq_open(node, &rv);
+        linked = llq_linked(&rv);
         L = rv.n;
     } else if (node) {
         atom_row = 1;           /* e.g. {a, {b,c}} -> a becomes a 1-row; a
@@ -153,9 +154,30 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
     Expr* head = (head_src && !linked) ? expr_copy(head_src->data.function.head)
                                        : expr_new_symbol(SYM_List);
     if (N == 0) {
-        ll_view_done(&rv);
+        llq_close(&rv);
         if (linked) { expr_free(head); return ll_seq_of(true, NULL, 0); }
         return expr_new_function(head, NULL, 0);
+    }
+
+    if (linked && head_src && level + 1 == k) {
+        /* The last level of a LinkedList row: its slots copied straight
+         * across (span-wise), the padding beside them. */
+        expr_free(head);
+        LinkedList* ol = ll_new();
+        size_t i = 0;
+        for (; i < N && (int64_t)i < list_start; i++) {
+            coords[level] = (int64_t)i - coord_base;
+            ll_push_back(ol, pr_pad_at(P, coords, k));
+        }
+        int64_t a = (int64_t)i - list_start;
+        int64_t b = (int64_t)N - list_start < (int64_t)L ? (int64_t)N - list_start : (int64_t)L;
+        if (a < b) { ll_append_range(ol, rv.snap, a, b); i += (size_t)(b - a); }
+        for (; i < N; i++) {
+            coords[level] = (int64_t)i - coord_base;
+            ll_push_back(ol, pr_pad_at(P, coords, k));
+        }
+        llq_close(&rv);
+        return expr_new_linkedlist(ol);
     }
 
     Expr** out = malloc(sizeof(Expr*) * N);
@@ -163,7 +185,7 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
         int64_t j = (int64_t)i - list_start;     /* index into the original row */
         Expr* child = NULL;
         if (j >= 0 && j < (int64_t)L) {
-            child = atom_row ? node : rv.a[j];
+            child = atom_row ? node : llq_peek(&rv, j);
         }
         coords[level] = (int64_t)i - coord_base;
         out[i] = pr_build(child, dimv, margins, k, level + 1, P, coords,
@@ -173,7 +195,7 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
     if (linked) { expr_free(head); result = ll_seq_of(true, out, N); }
     else        result = expr_new_function(head, out, N);
     free(out);
-    ll_view_done(&rv);
+    llq_close(&rv);
     return result;
 }
 

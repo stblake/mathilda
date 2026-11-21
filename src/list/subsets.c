@@ -28,7 +28,7 @@
  * never sized from the theoretical subset count (which would overflow for
  * moderate lengths anyway). */
 
-#include "linkedlist_seq.h"   /* LLView: a LinkedList's subsets are LinkedLists */
+#include "linkedlist_seq.h"   /* LLSeq: a LinkedList's subsets are LinkedLists */
 #include "list_common.h"
 #include "subsets.h"
 
@@ -225,35 +225,34 @@ Expr* builtin_subsets(Expr* res) {
 
     Expr* list = res->data.function.args[0];
     /* atoms have no sublists; a LinkedList's are LinkedLists, in a LinkedList */
-    LLView lv;
-    if (!ll_view(list, &lv)) return NULL;
-    bool linked = ll_view_linked(&lv);
+    LLSeq lv;
+    if (!llq_open(list, &lv)) return NULL;
+    bool linked = llq_linked(&lv);
 
-    Expr** elems = lv.a;
     size_t n = lv.n;
 
     size_t kmin, kmax, kstep;
     bool empty = false;
     if (!subsets_decode_lengths(argc >= 2 ? res->data.function.args[1] : NULL,
                                 n, &kmin, &kmax, &kstep, &empty)) {
-        ll_view_done(&lv);
+        llq_close(&lv);
         return NULL;
     }
 
     size_t limit = SIZE_MAX;
     if (argc >= 3 && !subsets_decode_count(res->data.function.args[2], &limit)) {
-        ll_view_done(&lv);
+        llq_close(&lv);
         return NULL;
     }
 
-    if (empty || limit == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
+    if (empty || limit == 0) { llq_close(&lv); return ll_seq_of(linked, NULL, 0); }
 
     /* One scratch buffer sized for the largest length we will emit, reused
      * across every k so the generator allocates no per-combination state. */
     size_t* idx = NULL;
     if (kmax > 0) {
         idx = malloc(kmax * sizeof(size_t));
-        if (!idx) { ll_view_done(&lv); return NULL; }
+        if (!idx) { llq_close(&lv); return NULL; }
     }
 
     SubsetBuf out = {NULL, 0, 0};
@@ -268,14 +267,9 @@ Expr* builtin_subsets(Expr* res) {
 
         for (size_t i = 0; i < k; i++) idx[i] = i;
         do {
-            Expr** sub = NULL;
-            if (k > 0) {
-                sub = malloc(k * sizeof(Expr*));
-                if (!sub) { ok = false; break; }
-                for (size_t i = 0; i < k; i++) sub[i] = expr_copy(elems[idx[i]]);
-            }
-            Expr* subset = ll_view_result(&lv, sub, k);
-            free(sub);
+            /* the subset, built from its indices (slot to slot for a
+             * LinkedList) */
+            Expr* subset = llq_emit(&lv, idx, k);
             if (!subset || !subsets_buf_push(&out, subset)) {
                 expr_free(subset);
                 ok = false;
@@ -290,7 +284,7 @@ Expr* builtin_subsets(Expr* res) {
     }
 
     free(idx);
-    ll_view_done(&lv);
+    llq_close(&lv);
     if (!ok) {
         subsets_buf_free(&out);
         return NULL;
