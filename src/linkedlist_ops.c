@@ -611,6 +611,9 @@ bool ll_elems_open(const Expr* seq, LLElems* out) {
     }
     const LinkedList* ll = expr_linkedlist(seq);
     if (!ll) return false;
+    /* An array of every element is a List in all but its head: counted (see
+     * ll_note_materialised); read elements on demand instead. */
+    ll_note_materialised();
     int64_t n = ll_length(ll);
     Expr** v = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
     if (!v) abort();                                  /* out of memory */
@@ -711,6 +714,7 @@ bool ll_elems_of(const Expr* e, LLElemsC* out) {
     if (e->type == EXPR_LINKEDLIST) {
         const LinkedList* ll = e->data.llist;
         int64_t n = ll_length(ll);
+        ll_note_materialised();       /* an all-elements array: see ll_elems_open */
         out->ll = true;
         out->owned = true;
         out->n = n;
@@ -878,6 +882,7 @@ void ll_tensor_leaves(const Expr* e, int rank, Expr** out, size_t* idx) {
         return;
     }
     int64_t n = seq_len_any(e);
+    if (e->type == EXPR_LINKEDLIST) ll_note_materialised();   /* every leaf, at once */
     if (e->type == EXPR_LINKEDLIST && rank == 1) {
         for (int64_t i = 0; i < n; i++) out[(*idx)++] = ll_get(e->data.llist, i);
         return;

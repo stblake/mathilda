@@ -45,6 +45,11 @@ bool ll_view(const Expr* coll, LLView* v) {
     v->n = (size_t)n;
     v->owned = true;
     if (n == 0) return true;
+    /* An array of every element -- borrowed refs of a boxed list as much as
+     * boxes of a typed one -- is a List in all but its head: counted, so the
+     * audit names every head still taking this path. Read on demand instead
+     * (ll_seq_view over a snapshot), or a raw kernel for a typed list. */
+    if (ll_kind(ll) == LL_BOXED) ll_note_materialised();
     v->a = malloc(sizeof(Expr*) * (size_t)n);
     if (!v->a) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
     if (ll_kind(ll) == LL_BOXED) {
