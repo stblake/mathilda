@@ -304,7 +304,7 @@ static Expr* assoc_scan(const Expr* assoc, const Expr* key) {
  * the parallel compiled evaluator.  Also accepts a bare List of rules (index
  * absent -> scan), matching the callers that take is_assoc_or_rule_list. */
 Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
-    AssocIndex* idx = assoc->data.function.index;
+    AssocIndex* idx = expr_fn_assoc_index(assoc);
     if (!idx && is_association(assoc) && assoc->data.function.arg_count > 0) {
         /* Lazily build and cache the index on the FIRST single-key read. Eager
          * attachment at canonicalisation does not survive: evaluate()'s
@@ -322,7 +322,7 @@ Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
          * thread. assoc_index_build returns NULL for a non-canonical node
          * (an entry that is not a 2-arg rule), leaving the scan below correct. */
         idx = assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
-        ((Expr*)assoc)->data.function.index = idx;
+        if (idx) expr_fn_set_assoc_index((Expr*)assoc, idx);
     }
     if (idx) {
         int64_t e = assoc_index_lookup(idx, assoc->data.function.args, key);
@@ -338,10 +338,10 @@ Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
  * a no-op if the index already exists, the node is empty, or it is not a
  * canonical association (assoc_index_build returns NULL for a non-2-arg entry). */
 void assoc_prebuild_index(const Expr* assoc) {
-    if (!assoc || assoc->data.function.index) return;
+    if (!assoc || expr_fn_assoc_index(assoc)) return;
     if (!is_association(assoc) || assoc->data.function.arg_count == 0) return;
-    ((Expr*)assoc)->data.function.index =
-        assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
+    AssocIndex* idx = assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
+    if (idx) expr_fn_set_assoc_index((Expr*)assoc, idx);
 }
 
 /* Machine-scalar key lookup for the compiled evaluator (B2 runtime keys).

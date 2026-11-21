@@ -1875,6 +1875,9 @@ static LitIndex* litidx_get(SymbolDef* d) {
 /* `owner`: the symbol whose DownValues `list` is, so its literal index is
  * used and kept; NULL for every other rule list.  `binding`: the symbol whose
  * OwnValues `list` is, NULL for every other rule list. */
+/* Set by symtab_bind_fresh_local for the one add_rule_in call it makes. */
+static bool g_add_rule_no_bump = false;
+
 static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool delayed,
                         SymbolDef* owner, SymbolDef* binding) {
     /* Any change to an OwnValue/DownValue list could change the meaning
@@ -1882,8 +1885,11 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
      * eval clock. This invalidates every cached evaluation in one shot
      * (conservative variant of EVAL_IMPROVEMENTS_PLAN §3.3).  An OwnValue
      * binding bumps the clock too, but invalidates the INERT fixed points
-     * only if one of them relied on this symbol being unbound (eval.c). */
-    if (binding) eval_clock_bump_binding(binding);
+     * only if one of them relied on this symbol being unbound (eval.c).
+     * The one exception is the first binding of a just-minted Module local
+     * (symtab_bind_fresh_local), which no stamp can depend on. */
+    if (g_add_rule_no_bump) g_add_rule_no_bump = false;
+    else if (binding) eval_clock_bump_binding(binding);
     else         eval_clock_bump();
 
     /* §3.4 canonicalize the LHS before deriving any dispatch keys or
@@ -2076,6 +2082,27 @@ void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replace
 
 void symtab_add_own_value_def(SymbolDef* def, Expr* pattern, Expr* replacement) {
     add_rule_in(&def->own_values, pattern, replacement, false, NULL, def);
+    if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
+}
+
+/* The initial value of a Module local whose name was created this call
+ * (symtab_intern_def reported it fresh): an OwnValue binding WITHOUT the
+ * evaluation-clock bump every other binding makes.
+ *
+ * Why it is safe: the bump exists to invalidate fixed-point stamps and open
+ * dependency frames that could have read the symbol's old state.  A fresh
+ * local has no old state anyone read -- no node named it before Module built
+ * its replacement node a moment ago, so no stamp, INERT certificate or frame
+ * mentions it.  Later Sets to the local (in the body) are ordinary bindings
+ * and bump as usual.  Why it matters: Module ran two global clock bumps per
+ * call (this one and $ModuleNumber's), each invalidating every exact-clock
+ * stamp in the session and failing every open frame; dropping them cut 3.5%
+ * of the Trager case's instructions and 10% of a Log-tower case's
+ * (docs/design/scoping_substitution.md, Option D). */
+void symtab_bind_fresh_local(SymbolDef* def, Expr* pattern, Expr* replacement) {
+    g_add_rule_no_bump = true;
+    add_rule_in(&def->own_values, pattern, replacement, false, NULL, def);
+    g_add_rule_no_bump = false;   /* consumed by add_rule_in; defensive */
     if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
 }
 

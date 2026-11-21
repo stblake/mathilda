@@ -6,24 +6,85 @@
 #include "message.h"
 #include "print.h"
 #include "iter.h"
+#include "symsum.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
+/* ---- $ModuleNumber -------------------------------------------------------
+ * The C counter `module_number` is authoritative.  The user-visible symbol
+ * holds a DELAYED OwnValue, $ModuleNumber :> Internal`ModuleNumber[], whose
+ * builtin reads the counter, so Module and Unique can advance it without
+ * rewriting an OwnValue.  That rewrite used to run add_rule_in (pattern
+ * canonicalisation, duplicate detection) and bump the evaluation clock on
+ * every Module call, invalidating every exact-clock fixed point in the
+ * session and failing every open dependency frame.  Internal`ModuleNumber is
+ * NOT eval_pure, so a dependency frame that reads $ModuleNumber is tainted
+ * instead of certified against a value that moves without a clock bump.
+ *
+ * A user Set/SetDelayed/Clear of $ModuleNumber replaces the sentinel rule;
+ * module_number_sync() notices (the stored replacement is no longer our
+ * node), adopts an integer value, and reinstalls the sentinel.  Module and
+ * Unique both call it, and nothing else reads or writes the counter -- the
+ * first prototype of this change left Unique reading the OwnValue and moved
+ * the counter backwards, re-minting existing x$n names.
+ *
+ * MATHILDA_MODULE_CLOCK_BUMP=1 restores the two per-call clock bumps (this
+ * counter's and a fresh local's first binding), for A/B measurement. */
 static int64_t module_number = 1;
+static Expr* g_mn_sentinel = NULL;       /* Internal`ModuleNumber[]: our own reference */
+static SymbolDef* g_mn_def = NULL;       /* $ModuleNumber */
+static int g_module_clock_bump = 0;      /* MATHILDA_MODULE_CLOCK_BUMP=1 */
+
+static Expr* builtin_internal_module_number(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) return NULL;
+    return expr_new_integer(module_number);
+}
+
+static void module_number_install_sentinel(void) {
+    Expr* lhs = expr_new_symbol(SYM_DollarModuleNumber);
+    symtab_add_own_value_as(SYM_DollarModuleNumber, lhs, g_mn_sentinel, true);
+    expr_free(lhs);
+}
+
+/* Bring the counter up to date with a user assignment of $ModuleNumber, if
+ * there was one since the last call.  O(1) when there was not. */
+static void module_number_sync(void) {
+    Rule* r = g_mn_def->own_values;
+    if (r && !r->next && r->delayed && r->replacement == g_mn_sentinel) return;
+    if (r) {
+        Expr* sym = expr_new_symbol(SYM_DollarModuleNumber);
+        Expr* v = evaluate(sym);
+        if (v->type == EXPR_INTEGER) module_number = v->data.integer;
+        expr_free(v);
+        expr_free(sym);
+    }
+    module_number_install_sentinel();
+}
+
+/* The number for the next Module (or Unique[x] batch base) without taking it. */
+static int64_t module_number_peek(void) {
+    module_number_sync();
+    return module_number;
+}
 
 void modular_init(void) {
+    symsum_init();   /* the scoping walkers' binder summaries (symsum.h) */
     symtab_add_builtin("Module", builtin_module);
     symtab_add_builtin("Block", builtin_block);
     symtab_add_builtin("With", builtin_with);
     symtab_add_builtin("Unique", builtin_unique);
+    symtab_add_builtin("Internal`ModuleNumber", builtin_internal_module_number);
+    symtab_get_def("Internal`ModuleNumber")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Internal`ModuleNumber",
+        "Internal`ModuleNumber[] gives the current value of the Module/Unique counter; $ModuleNumber reads it.");
 
-    // Initial value for $ModuleNumber
-    Expr* mn = expr_new_integer(module_number);
-    Expr* sym_mn = expr_new_symbol(SYM_DollarModuleNumber);
-    symtab_add_own_value("$ModuleNumber", sym_mn, mn);
-    expr_free(mn);
-    expr_free(sym_mn);
+    const char* e = getenv("MATHILDA_MODULE_CLOCK_BUMP");
+    g_module_clock_bump = (e && *e == '1');
+
+    g_mn_def = symtab_get_def(SYM_DollarModuleNumber);
+    g_mn_sentinel = expr_new_function(expr_new_symbol("Internal`ModuleNumber"), NULL, 0);
+    module_number_install_sentinel();
 }
 
 typedef struct ScopingEnv {
@@ -223,17 +284,6 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     return res;
 }
 
-/* Re-register the user-visible $ModuleNumber OwnValue from the static counter,
- * mirroring builtin_module so Unique and Module share one monotone source. */
-static void unique_sync_module_number(void) {
-    Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
-    Expr* val = expr_new_integer(module_number);
-    symtab_add_own_value("$ModuleNumber", mn_sym, val);
-    expr_free(mn_sym);
-    expr_free(val);
-}
-
-
 /* Counter for the "$"-less names of Unique["x"] / Unique[] (x12, $13). It is
  * deliberately separate from $ModuleNumber, which numbers only the x$nnn names
  * that Module and Unique[x] produce. */
@@ -277,10 +327,7 @@ static void unique_make_batch(const UniqueSrc* srcs, size_t count, Expr** out) {
         else if (n + 1 > next_str) next_str = n + 1;
     }
     unique_string_number = next_str;
-    if (any_mod) {
-        module_number = next_mod;
-        unique_sync_module_number();
-    }
+    if (any_mod) module_number = next_mod;
 }
 
 /* Unique::usym -- the argument is neither a symbol nor a name string. */
@@ -311,11 +358,7 @@ Expr* builtin_unique(Expr* res) {
 
     /* $ModuleNumber may have been reassigned by the user; honour it, as
      * Module does. */
-    Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
-    Expr* mn = evaluate(mn_sym);
-    if (mn->type == EXPR_INTEGER) module_number = mn->data.integer;
-    expr_free(mn);
-    expr_free(mn_sym);
+    (void)module_number_peek();
 
     /* Unique[{a, b, ...}] -> list of fresh symbols, one per element. */
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
@@ -526,18 +569,10 @@ Expr* builtin_module(Expr* res) {
     size_t var_count = vars->data.function.arg_count;
     ScopingEnv* env = NULL;
 
-    // Increment $ModuleNumber
-    Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
-    Expr* mn_val_expr = evaluate(mn_sym);
-    if (mn_val_expr->type == EXPR_INTEGER) {
-        module_number = mn_val_expr->data.integer;
-    }
-    expr_free(mn_val_expr);
-    int64_t current_mn = module_number++;
-    Expr* next_mn = expr_new_integer(module_number);
-    symtab_add_own_value(SYM_DollarModuleNumber, mn_sym, next_mn);   /* interned: no rehash */
-    expr_free(mn_sym);
-    expr_free(next_mn);
+    /* Take this call's $ModuleNumber (see module_number_sync). */
+    int64_t current_mn = module_number_peek();
+    module_number++;
+    if (g_module_clock_bump) eval_clock_bump_binding(g_mn_def);
 
     typedef struct {
         char* new_name;
@@ -587,7 +622,11 @@ Expr* builtin_module(Expr* res) {
             new_node->next = env;
             env = new_node;
             if (init_val) {
-                symtab_add_own_value_def(ld, new_node->replacement, init_val);
+                /* A fresh name's first binding needs no clock bump. */
+                if (fresh && !g_module_clock_bump)
+                    symtab_bind_fresh_local(ld, new_node->replacement, init_val);
+                else
+                    symtab_add_own_value_def(ld, new_node->replacement, init_val);
             }
         }
     }

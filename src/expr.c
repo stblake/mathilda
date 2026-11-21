@@ -659,7 +659,14 @@ Expr* expr_ref(Expr* e) {
 /* M3 phase-2 copy-on-write helper. See header doc. */
 Expr* expr_unshare(Expr* e) {
     if (!e) return NULL;
-    if (e->refcount == 1) return e;
+    if (e->refcount == 1) {
+        /* Exclusively owned: the caller mutates it in place next, so drop a
+         * binder summary (symsum.h) the change could make stale.  The node
+         * may have been summarised while it was still shared. */
+        if (e->type == EXPR_FUNCTION && ((uintptr_t)e->data.function.index & 1))
+            e->data.function.index = NULL;
+        return e;
+    }
 
     /* Build a one-level private copy. Children stay shared (inc-ref). */
     Expr* fresh = expr_alloc_node();
@@ -820,7 +827,7 @@ void expr_free(Expr* e) {
         case EXPR_FUNCTION:
             /* Free the cached Association index (NULL for every non-association
              * function node; assoc_index_free is a no-op on NULL). */
-            assoc_index_free(e->data.function.index);
+            assoc_index_free(expr_fn_assoc_index(e));
             if (e->data.function.head) expr_free(e->data.function.head);
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (e->data.function.args && e->data.function.args[i]) {

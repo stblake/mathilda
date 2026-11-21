@@ -203,7 +203,9 @@ typedef struct Expr {
             struct Expr* head;
             struct Expr** args;
             size_t arg_count;
-            /* Persistent key->position hash index, non-NULL ONLY for canonical
+            /* Read through expr_fn_assoc_index(): this slot also carries the
+             * scoping walkers' binder summary, as an odd word (symsum.h).
+             * Persistent key->position hash index, non-NULL ONLY for canonical
              * Association nodes (built at canonicalisation; see assoc_index.h).
              * Benign acceleration metadata: NULL for every other function node,
              * ignored by expr_eq/expr_hash/expr_compare, freed with the node,
@@ -283,6 +285,22 @@ uint64_t expr_hash(const Expr* e);
 static inline void expr_invalidate_hash(Expr* e) {
     if (!e) return;
     e->hash_cache = 0;
+    /* The binder summary (symsum.h) describes the same structure: drop it too
+     * (an odd word in the index slot; an AssocIndex pointer is left alone). */
+    if (e->type == EXPR_FUNCTION && ((uintptr_t)e->data.function.index & 1))
+        e->data.function.index = NULL;
+}
+
+/* The `data.function.index` slot holds one of three things: NULL; an
+ * AssocIndex pointer (canonical Associations only; malloc-aligned, so even);
+ * or a binder summary (symsum.h; odd).  Read and write the AssocIndex only
+ * through these. */
+static inline struct AssocIndex* expr_fn_assoc_index(const Expr* e) {
+    uintptr_t w = (uintptr_t)e->data.function.index;
+    return (w & 1) ? NULL : (struct AssocIndex*)w;
+}
+static inline void expr_fn_set_assoc_index(Expr* e, struct AssocIndex* ix) {
+    e->data.function.index = ix;
 }
 
 /* BigInt constructors */

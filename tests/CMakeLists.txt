@@ -754,6 +754,7 @@ set(COMMON_SRC
     ../src/minus.c
     ../src/opform.c
     ../src/modular.c
+    ../src/symsum.c
     ../src/sort.c
     ../src/sowreap.c
     ../src/linkedlist.c
@@ -2106,6 +2107,12 @@ target_include_directories(purefunc_tests PRIVATE ../src)
 
 add_executable(modular_tests test_modular.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(modular_tests PRIVATE ../src)
+
+add_executable(scoping_semantics_tests test_scoping_semantics.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(scoping_semantics_tests PRIVATE ../src)
+
+add_executable(symsum_tests test_symsum.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(symsum_tests PRIVATE ../src)
 
 add_executable(primitive_root_tests test_primitive_root.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(primitive_root_tests PRIVATE ../src)

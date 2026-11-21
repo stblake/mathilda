@@ -24,6 +24,15 @@ Implements lexical scoping by creating unique local variables.
 **Features**:
 - `HoldAll`, `Protected`.
 - Variables are renamed to `name$nnn` using `$ModuleNumber`.
+- **`$ModuleNumber` is a counter, read through `Internal`ModuleNumber[]`** (v0.6653).
+  The symbol holds the delayed OwnValue `$ModuleNumber :> Internal`ModuleNumber[]`, so
+  `Module` and `Unique` advance the counter without rewriting a definition or moving the
+  evaluation clock. A user `$ModuleNumber = n`, or `Clear[$ModuleNumber]`, takes effect
+  at the next `Module` or `Unique`. A fresh local's initial value is bound without a
+  clock bump.
+  - Divergences: `OwnValues[$ModuleNumber]` shows the sentinel rule. Modules run inside
+    `Block[{$ModuleNumber = n}, …]` leave the counter where they left it.
+  - See `docs/design/scoping_substitution.md`.
 - Created symbols have the `Temporary` attribute.
 - **Temporary locals are removed once nothing refers to them** (v0.6056), as
   in the reference.

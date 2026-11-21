@@ -171,6 +171,10 @@ typedef struct SymbolDef {
      * builtins lets the head's failed dispatch be certified as a fixed point
      * (see eval.c, "dependency-recorded fixed points").  Internal. */
     uint8_t  eval_pure;
+    /* Binder bit for the scoping summaries (symsum.h): 0 = none, 1..46 a
+     * binder name's bit, 47 the SCOPE bit of Module/With/Function.  Assigned
+     * once (symsum_register_binder) and never changed. */
+    uint8_t  ss_bit;
     /* Full 32-bit hash of symbol_name (the bucket is this mod the table size):
      * a chain walk compares it before strcmp.  Module mints a fresh name per
      * call, so a long session interns 10^5-10^6 symbols and every miss used to
@@ -183,6 +187,10 @@ typedef struct SymbolDef {
      * for a reclamation retry.  Never set for a pre-existing name. */
     uint8_t  module_temp;
     uint8_t  temp_pending;
+    /* The summary epoch in which a summary last saw this symbol as a bitless
+     * leaf: registering it as a binder in that same epoch must invalidate the
+     * summaries (symsum_register_binder).  Fills existing padding. */
+    uint16_t ss_seen_epoch;
     uint32_t temp_nodes;
     /* The symbol's canonical Expr node, shared by every occurrence (made on
      * first use by expr_new_symbol, holding one reference of its own).  A
@@ -372,6 +380,9 @@ SymbolDef* intern_symbol_node(const char* name);
 SymbolDef* symtab_intern_def(const char* symbol_name, bool* created);
 /* symtab_add_own_value for a SymbolDef already in hand (no name lookup). */
 void symtab_add_own_value_def(SymbolDef* def, Expr* pattern, Expr* replacement);
+/* symtab_add_own_value_def for a Module local minted this call: no clock
+ * bump (no stamp can depend on a fresh symbol). See symtab.c. */
+void symtab_bind_fresh_local(SymbolDef* def, Expr* pattern, Expr* replacement);
 /* Module-local reclamation: mark a FRESH local (returns false and leaves the
  * symbol uncounted when the name already existed), and try to reclaim locals
  * at Module exit / in deferred sweeps.  See symtab.c. */
