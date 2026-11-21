@@ -47,7 +47,7 @@ static inline bool strings_all_strings(const Expr* e) {
 }
 
 /* A List or a LinkedList: a sequence of subjects the string heads thread over.
- * A LinkedList is read through LLElems (linkedlist.h) -- never converted --
+ * A LinkedList is read through LLReader (linkedlist.h) -- never converted --
  * and the answer is built in its image with ll_seq_like. */
 static inline bool strings_is_seq(const Expr* e) {
     return strings_is_list(e) || e->type == EXPR_LINKEDLIST;

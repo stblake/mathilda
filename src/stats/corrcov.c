@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 
 /* ------------------------------------------------------------ small helpers */
 
@@ -63,48 +63,48 @@ static bool corrcov_has_ndarray(const Expr* res) {
  * n >= 2), or NULL to leave the call unevaluated. Mirrors the numeric split of
  * builtin_variance: a real-double fast path, otherwise build & evaluate the
  * exact/complex/symbolic expression. */
-static Expr* g_cov_core(Expr** ve, Expr** we, size_t n);
+static Expr* g_cov_core(LLReader* ve, LLReader* we, size_t n);
 
 /* Covariance of two vectors, each a List or a LinkedList (read through
- * LLElems, so both containers run g_cov_core). */
+ * LLReader, so both containers run g_cov_core). */
 static Expr* g_cov_vectors(Expr* v, Expr* w) {
-    LLElems ev, ew;
-    if (!ll_elems_open(v, &ev)) return NULL;
-    if (!ll_elems_open(w, &ew)) { ll_elems_close(&ev); return NULL; }
-    Expr* r = (ev.n == ew.n && ev.n >= 2) ? g_cov_core(ev.v, ew.v, ev.n) : NULL;
-    ll_elems_close(&ev);
-    ll_elems_close(&ew);
+    LLReader ev, ew;
+    if (!ll_rd_open(v, &ev)) return NULL;
+    if (!ll_rd_open(w, &ew)) { ll_rd_close(&ev); return NULL; }
+    Expr* r = (ev.n == ew.n && ev.n >= 2) ? g_cov_core(&ev, &ew, ev.n) : NULL;
+    ll_rd_close(&ev);
+    ll_rd_close(&ew);
     return r;
 }
 
-static Expr* g_cov_core(Expr** ve, Expr** we, size_t n) {
+static Expr* g_cov_core(LLReader* ve, LLReader* we, size_t n) {
 
     bool all_numeric = true, has_real = false, has_complex = false;
     for (size_t i = 0; i < n; i++) {
         bool cplx = false;
-        if (!stats_is_numeric(ve[i], NULL, &cplx)) { all_numeric = false; break; }
+        if (!stats_is_numeric(ll_rd_at(ve, i), NULL, &cplx)) { all_numeric = false; break; }
         if (cplx) has_complex = true;
-        else if (ve[i]->type == EXPR_REAL) has_real = true;
+        else if (ll_rd_at(ve, i)->type == EXPR_REAL) has_real = true;
         cplx = false;
-        if (!stats_is_numeric(we[i], NULL, &cplx)) { all_numeric = false; break; }
+        if (!stats_is_numeric(ll_rd_at(we, i), NULL, &cplx)) { all_numeric = false; break; }
         if (cplx) has_complex = true;
-        else if (we[i]->type == EXPR_REAL) has_real = true;
+        else if (ll_rd_at(we, i)->type == EXPR_REAL) has_real = true;
     }
 
     if (all_numeric && has_real && !has_complex) {
         double mv = 0.0, mw = 0.0;
         for (size_t i = 0; i < n; i++) {
             double xv = 0.0, xw = 0.0;
-            stats_is_numeric(ve[i], &xv, NULL);
-            stats_is_numeric(we[i], &xw, NULL);
+            stats_is_numeric(ll_rd_at(ve, i), &xv, NULL);
+            stats_is_numeric(ll_rd_at(we, i), &xw, NULL);
             mv += xv; mw += xw;
         }
         mv /= (double)n; mw /= (double)n;
         double s = 0.0;
         for (size_t i = 0; i < n; i++) {
             double xv = 0.0, xw = 0.0;
-            stats_is_numeric(ve[i], &xv, NULL);
-            stats_is_numeric(we[i], &xw, NULL);
+            stats_is_numeric(ll_rd_at(ve, i), &xv, NULL);
+            stats_is_numeric(ll_rd_at(we, i), &xw, NULL);
             s += (xv - mv) * (xw - mw);
         }
         double c = s / (double)(n - 1);
@@ -113,16 +113,16 @@ static Expr* g_cov_core(Expr** ve, Expr** we, size_t n) {
     }
 
     /* Exact / complex / symbolic: (1/(n-1)) Sum (v_i - mu_v) Conjugate[w_i - mu_w]. */
-    Expr* mu_v = stats_mean_vec(ve, n);
-    Expr* mu_w = stats_mean_vec(we, n);
+    Expr* mu_v = stats_mean_vec(ve);
+    Expr* mu_w = stats_mean_vec(we);
     Expr** terms = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* dv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
-            (Expr*[]){ expr_copy(ve[i]),
+            (Expr*[]){ expr_copy(ll_rd_at(ve, i)),
                        expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(mu_v) }, 2) }, 2));
         Expr* dw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
-            (Expr*[]){ expr_copy(we[i]),
+            (Expr*[]){ expr_copy(ll_rd_at(we, i)),
                        expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(mu_w) }, 2) }, 2));
         Expr* cw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Conjugate),
@@ -268,16 +268,16 @@ static bool cc_is_vector(const Expr* e) {
 }
 
 /* Rows of a matrix (owned through *rows); *cols their common length. */
-static bool cc_matrix(const Expr* e, LLElems* rows, size_t* cols) {
-    if (!ll_elems_open(e, rows)) return false;
+static bool cc_matrix(const Expr* e, LLReader* rows, size_t* cols) {
+    if (!ll_rd_open(e, rows)) return false;
     bool ok = rows->n >= 1;
     int64_t len = -1;
     for (size_t i = 0; ok && i < rows->n; i++) {
-        int64_t k = ll_seq_length(rows->v[i]);
-        if (k < 1 || (len >= 0 && k != len) || !cc_is_vector(rows->v[i])) ok = false;
+        int64_t k = ll_seq_length(ll_rd_at(rows, i));
+        if (k < 1 || (len >= 0 && k != len) || !cc_is_vector(ll_rd_at(rows, i))) ok = false;
         len = k;
     }
-    if (!ok) { ll_elems_close(rows); return false; }
+    if (!ok) { ll_rd_close(rows); return false; }
     *cols = (size_t)len;
     return true;
 }
@@ -301,27 +301,26 @@ static bool cc_real_packed(const Expr* e) {
 
 /* Rows gathered row-major (n x cols) when every one packs as machine reals --
  * the reference matrix is then a packed array -- else NULL. */
-static double* cc_gather_rows(const LLElems* rows, size_t cols) {
+static double* cc_gather_rows(LLReader* rows, size_t cols) {
     for (size_t i = 0; i < rows->n; i++)
-        if (!cc_real_packed(rows->v[i])) return NULL;
+        if (!cc_real_packed(ll_rd_at(rows, i))) return NULL;
     double* A = malloc(sizeof(double) * rows->n * cols);
     if (!A) return NULL;
     for (size_t i = 0; i < rows->n; i++) {
-        const LinkedList* rl = expr_linkedlist(rows->v[i]);
+        const LinkedList* rl = expr_linkedlist(ll_rd_at(rows, i));
         if (rl) ll_gather(rl, 0, (int64_t)cols, A + i * cols);
-        else memcpy(A + i * cols, rows->v[i]->data.ndarray.data, sizeof(double) * cols);
+        else memcpy(A + i * cols, ll_rd_at(rows, i)->data.ndarray.data, sizeof(double) * cols);
     }
     return A;
 }
 
 /* Column j of a matrix as a fresh BOXED LinkedList: the counterpart of the
  * plain column g_matrix's Transpose makes. */
-static Expr* cc_column(const LLElems* rows, size_t j) {
-    Expr** v = malloc(sizeof(Expr*) * rows->n);
-    for (size_t i = 0; i < rows->n; i++) v[i] = ll_seq_element(rows->v[i], (int64_t)j);
-    LinkedList* c = ll_new_boxed(v, rows->n);
-    for (size_t i = 0; i < rows->n; i++) expr_free(v[i]);
-    free(v);
+static Expr* cc_column(LLReader* rows, size_t j) {
+    LinkedList* c = ll_boxed_begin();
+    for (size_t i = 0; i < rows->n; i++)
+        ll_push_back(c, ll_seq_element(ll_rd_at(rows, i), (int64_t)j));
+    ll_boxed_end(c);
     return expr_new_linkedlist(c);
 }
 
@@ -336,11 +335,11 @@ static Expr* cc_build_matrix(const Expr* proto_row, Expr** cells, size_t p, size
 }
 
 static Expr* cc_matrix_ll(Expr* a, Expr* b, int correlate, int auto_form) {
-    LLElems ra, rb;
+    LLReader ra, rb;
     size_t p, q;
     if (!cc_matrix(a, &ra, &p)) return NULL;
     if (auto_form) { rb = ra; q = p; }
-    else if (!cc_matrix(b, &rb, &q)) { ll_elems_close(&ra); return NULL; }
+    else if (!cc_matrix(b, &rb, &q)) { ll_rd_close(&ra); return NULL; }
     Expr* result = NULL;
     size_t n = ra.n;
     if (n != rb.n || n < 2) goto done;
@@ -353,7 +352,7 @@ static Expr* cc_matrix_ll(Expr* a, Expr* b, int correlate, int auto_form) {
         if (C && nd_corrcov_matrix_f64(A, B, (int)n, (int)p, (int)q, correlate, C)) {
             Expr** cells = malloc(sizeof(Expr*) * p * q);
             for (size_t k = 0; k < p * q; k++) cells[k] = expr_new_real(C[k]);
-            result = cc_build_matrix(ra.v[0], cells, p, q);
+            result = cc_build_matrix(ll_rd_at(&ra, 0), cells, p, q);
             free(cells);
         }
         free(C);
@@ -369,14 +368,14 @@ static Expr* cc_matrix_ll(Expr* a, Expr* b, int correlate, int auto_form) {
         if (!auto_form) for (size_t j = 0; j < q; j++) cb[j] = cc_column(&rb, j);
         bool real_diag = false;
         for (size_t i = 0; i < n && !real_diag; i++) {
-            const LinkedList* rl = expr_linkedlist(ra.v[i]);
+            const LinkedList* rl = expr_linkedlist(ll_rd_at(&ra, i));
             if (rl) {
                 if (ll_kind(rl) == LL_REAL || ll_kind(rl) == LL_CPLX) real_diag = true;
                 else if (ll_kind(rl) == LL_BOXED)
                     for (int64_t j = 0; j < ll_length(rl) && !real_diag; j++)
                         real_diag = common_has_machine_real(ll_peek_boxed(rl, j));
             } else {
-                real_diag = common_has_machine_real(ra.v[i]);
+                real_diag = common_has_machine_real(ll_rd_at(&ra, i));
             }
         }
         Expr** cells = malloc(sizeof(Expr*) * p * q);
@@ -400,15 +399,15 @@ static Expr* cc_matrix_ll(Expr* a, Expr* b, int correlate, int auto_form) {
                     *cell = cov;
                 }
             }
-        result = cc_build_matrix(ra.v[0], cells, p, q);
+        result = cc_build_matrix(ll_rd_at(&ra, 0), cells, p, q);
         free(cells);
         for (size_t i = 0; i < p; i++) expr_free(ca[i]);
         free(ca);
         if (!auto_form) { for (size_t j = 0; j < q; j++) expr_free(cb[j]); free(cb); }
     }
 done:
-    ll_elems_close(&ra);
-    if (!auto_form) ll_elems_close(&rb);
+    ll_rd_close(&ra);
+    if (!auto_form) ll_rd_close(&rb);
     return result;
 }
 

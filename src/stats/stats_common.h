@@ -6,6 +6,7 @@
  * src/numbertheory/). Each helper is defined once in stats_common.c. */
 
 #include "expr.h"
+#include "linkedlist.h"   /* LLReader */
 #include <stdbool.h>
 
 /* True for a real/rational/complex numeric leaf. On success stores the real
@@ -39,7 +40,20 @@ bool stats_is_real_numeric(Expr* e);
  * Arithmetic stays in the evaluator (exact in, exact out); doubles are read
  * only for clamping and the integer test, mirroring the original loop.
  * Returns a fresh Expr*; Indeterminate when h does not evaluate numerically. */
-Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
+/* The order statistics of a sequence: element of rank k (0-based) is
+ * ll_rd_at(rd, perm[k]) (perm NULL: the reader is already sorted). Borrowed,
+ * valid until the next read of rd. */
+typedef struct { LLReader* rd; const size_t* perm; } StatsOrder;
+static inline Expr* stats_order_at(const StatsOrder* o, size_t k) {
+    return ll_rd_at(o->rd, o->perm ? o->perm[k] : k);
+}
+/* The permutation that sorts the reader's elements into Sort's canonical
+ * order (expr_compare): a raw index buffer the caller frees, the elements
+ * compared where they lie (a List argument, a boxed slot) or through their raw
+ * typed slots -- never gathered into an element array. NULL on OOM. */
+size_t* stats_sort_order(LLReader* rd);
+
+Expr* stats_quantile_point(const StatsOrder* sorted, size_t n, Expr* q,
                            Expr* a, Expr* b, Expr* c, Expr* d);
 
 /* Standardized central moment m_p / m_2^(p/2), the shared body of Skewness
@@ -51,16 +65,22 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
 Expr* stats_standardized_moment(Expr* res, int p);
 
 /* The vector cores over n elements el[0..n) (borrowed): a List's arguments or
- * a LinkedList's elements (LLElems), so both containers run one algorithm.
+ * a LinkedList's elements (LLReader), so both containers run one algorithm.
  * NULL when the statistic is undefined there (n too small). */
-Expr* stats_mean_vec(Expr** el, size_t n);
-Expr* stats_variance_vec(Expr** el, size_t n);
+Expr* stats_mean_vec(LLReader* rd);
+Expr* stats_variance_vec(LLReader* rd);
+/* Mean of an array of computed values v[0..n) (borrowed). */
+static inline Expr* stats_mean_of(Expr** v, size_t n) {
+    LLReader r;
+    ll_rd_wrap(&r, v, n);
+    return stats_mean_vec(&r);
+}
 /* The exact / symbolic trees of Moment and CentralMoment over elements: Mean
  * of el^r, and Mean of (el - Mean[el])^r, one element at a time -- what the
  * Listable Power and Plus do over a List (and a matrix's columns: the List
  * code reduces a matrix through these trees, not the vector fast loops). */
-Expr* stats_moment_elements(Expr** el, size_t n, Expr* order);
-Expr* stats_cm_elements(Expr** el, size_t n, Expr* order);
+Expr* stats_moment_elements(LLReader* rd, Expr* order);
+Expr* stats_cm_elements(LLReader* rd, Expr* order);
 
 /* head @@ seq, unevaluated: head[elements...] of a List or a LinkedList (read
  * from the slots), else Apply[head, seq]. Consumes seq. */
@@ -68,7 +88,7 @@ Expr* stats_apply_head(const char* head, Expr* seq);
 
 /* The moving window el[i, i + r) of `data` (List or LinkedList) as a sequence
  * of the same kind: a List, or a LinkedList whose slots are copied. */
-Expr* stats_moving_window(const Expr* data, Expr** el, size_t i, size_t r);
+Expr* stats_moving_window(const Expr* data, LLReader* rd, size_t i, size_t r);
 
 /* The statistics with a LinkedList arm (stats_ll.c). */
 typedef enum {
@@ -82,7 +102,7 @@ typedef enum {
  * LinkedList vector through the packed kernels on its chunks, or a matrix with
  * a LinkedList in it columnwise. True (answer, or NULL for unevaluated, in
  * *out) when handled; false otherwise -- a LinkedList vector then continues
- * into the builtin's element path, read through LLElems (linkedlist.h). */
+ * into the builtin's element path, read through LLReader (linkedlist.h). */
 bool stats_ll_arm(Expr* res, StatsOp op, Expr** out);
 
 #endif

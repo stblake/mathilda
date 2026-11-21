@@ -7,7 +7,7 @@
 #include "sym_names.h"
 #include "ndarray.h"
 #include "ndreduce.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 
 /*
@@ -27,7 +27,7 @@
  *      evaluator handle exact rational arithmetic, bignum promotion, and
  *      symbolic simplification. Works for arbitrary alpha (including symbolic).
  */
-static Expr* ema_vec(Expr* data, Expr** el, size_t n, Expr* alpha);
+static Expr* ema_vec(Expr* data, LLReader* rd, Expr* alpha);
 
 Expr* builtin_exponential_moving_average(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
@@ -42,14 +42,15 @@ Expr* builtin_exponential_moving_average(Expr* res) {
 
     /* A List's arguments or a LinkedList's elements; the answer is in the
      * image of the data. */
-    LLElems e;
-    if (!ll_elems_open(data, &e)) return NULL;
-    Expr* r = ema_vec(data, e.v, e.n, alpha);
-    ll_elems_close(&e);
+    LLReader e;
+    if (!ll_rd_open(data, &e)) return NULL;
+    Expr* r = ema_vec(data, &e, alpha);
+    ll_rd_close(&e);
     return r;
 }
 
-static Expr* ema_vec(Expr* data, Expr** el, size_t n, Expr* alpha) {
+static Expr* ema_vec(Expr* data, LLReader* rd, Expr* alpha) {
+    size_t n = rd->n;
     if (n == 0) return NULL;
 
     /* Decide whether the fast double-precision path applies: at least one
@@ -60,7 +61,7 @@ static Expr* ema_vec(Expr* data, Expr** el, size_t n, Expr* alpha) {
     bool any_real = (alpha->type == EXPR_REAL);
     if (!any_real) {
         for (size_t i = 0; i < n; i++) {
-            if (el[i]->type == EXPR_REAL) {
+            if (ll_rd_at(rd, i)->type == EXPR_REAL) {
                 any_real = true;
                 break;
             }
@@ -74,7 +75,7 @@ static Expr* ema_vec(Expr* data, Expr** el, size_t n, Expr* alpha) {
     if (fast_ok) {
         for (size_t i = 0; i < n && fast_ok; i++) {
             bool cplx = false;
-            if (!stats_is_numeric(el[i], NULL, &cplx) || cplx) {
+            if (!stats_is_numeric(ll_rd_at(rd, i), NULL, &cplx) || cplx) {
                 fast_ok = false;
             }
         }
@@ -86,11 +87,11 @@ static Expr* ema_vec(Expr* data, Expr** el, size_t n, Expr* alpha) {
         Expr** out = malloc(sizeof(Expr*) * n);
         if (!out) return NULL;
         double y = 0.0;
-        stats_is_numeric(el[0], &y, NULL);
+        stats_is_numeric(ll_rd_at(rd, 0), &y, NULL);
         out[0] = expr_new_real(y);
         for (size_t i = 1; i < n; i++) {
             double x = 0.0;
-            stats_is_numeric(el[i], &x, NULL);
+            stats_is_numeric(ll_rd_at(rd, i), &x, NULL);
             y = y + a * (x - y);
             out[i] = expr_new_real(y);
         }
@@ -102,9 +103,9 @@ static Expr* ema_vec(Expr* data, Expr** el, size_t n, Expr* alpha) {
     /* Symbolic / exact-rational / bignum path. */
     Expr** out = malloc(sizeof(Expr*) * n);
     if (!out) return NULL;
-    out[0] = expr_copy(el[0]);
+    out[0] = expr_copy(ll_rd_at(rd, 0));
     for (size_t i = 1; i < n; i++) {
-        Expr* x_i = expr_copy(el[i]);
+        Expr* x_i = expr_copy(ll_rd_at(rd, i));
         Expr* neg_y_prev = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_new_integer(-1), expr_copy(out[i-1]) }, 2));

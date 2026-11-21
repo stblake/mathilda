@@ -277,17 +277,22 @@ static int is_empty_list(const Expr* e) {
 
 /* rules for StringDelete: each pattern p becomes p -> "". Returns a new Expr. */
 static Expr* delete_rules(Expr* patt) {
-    /* A List or a LinkedList of patterns, read element by element. */
-    LLElems pe;
-    int is_list = ll_elems_open(patt, &pe);
+    /* A List or a LinkedList of patterns, read element by element; the rules
+     * in its image (a LinkedList of patterns gives a LinkedList of rules,
+     * which the rule builder reads from its slots). */
+    LLReader pe;
+    int is_list = ll_rd_open(patt, &pe);
     size_t n = is_list ? pe.n : 1;
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+    Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
-        Expr* p = is_list ? pe.v[i] : patt;
+        Expr* p = is_list ? ll_rd_at(&pe, i) : patt;
         Expr* rargs[2] = { expr_copy(p), expr_new_string("") };
-        out->data.function.args[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
     }
-    if (is_list) ll_elems_close(&pe);
+    if (is_list) ll_rd_close(&pe);
+    Expr* out = patt->type == EXPR_LINKEDLIST ? ll_seq_like(patt, rules, n)
+                                              : expr_new_function(expr_new_symbol(SYM_List), rules, n);
+    free(rules);
     return out;
 }
 
@@ -343,19 +348,19 @@ static Expr* sr_dispatch(Expr* res, const char* head, SrKind kind) {
             ? sr_list_scalar(arg0->data.string, rules, nr, limit, has_limit)
             : sr_scalar(arg0->data.string, rules, nr, limit);
     } else {                              /* a List or a LinkedList of strings */
-        LLElems sv;
-        ll_elems_open(arg0, &sv);
+        LLReader sv;
+        ll_rd_open(arg0, &sv);
         size_t n = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
         size_t built = 0;
         for (; out && built < n; built++) {
-            const char* si = sv.v[built]->data.string;
+            const char* si = ll_rd_at(&sv, built)->data.string;
             out[built] = (kind == SR_LIST)
                 ? sr_list_scalar(si, rules, nr, limit, has_limit)
                 : sr_scalar(si, rules, nr, limit);
             if (!out[built]) break;
         }
-        ll_elems_close(&sv);
+        ll_rd_close(&sv);
         if (out && built == n) {
             result = ll_seq_like(arg0, out, n);
         } else {

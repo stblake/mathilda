@@ -171,7 +171,7 @@ bool stats_is_real_numeric(Expr* e) {
     return true;
 }
 
-Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
+Expr* stats_quantile_point(const StatsOrder* sorted, size_t n, Expr* q,
                            Expr* a, Expr* b, Expr* c, Expr* d) {
     Expr* n_expr = expr_new_integer((int64_t)n);
     Expr* n_plus_b = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){n_expr, expr_copy(b)}, 2));
@@ -194,11 +194,11 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
 
     if (h_val <= 1.0) {
         expr_free(h);
-        return expr_copy(sorted_args[0]);
+        return expr_copy(stats_order_at(sorted, 0));
     }
     if (h_val >= (double)n) {
         expr_free(h);
-        return expr_copy(sorted_args[n - 1]);
+        return expr_copy(stats_order_at(sorted, n - 1));
     }
 
     Expr* j_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){expr_copy(h)}, 1));
@@ -241,7 +241,7 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
     if (w_is_zero || w_is_one) {
         int64_t pick = w_is_zero ? j_idx : upper_idx;
         expr_free(g_weight);
-        return expr_copy(sorted_args[pick - 1]);
+        return expr_copy(stats_order_at(sorted, pick - 1));
     }
 
     /* Two algebraically identical forms, each with a floating-point failure the
@@ -278,21 +278,83 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
                            (Expr*[]){expr_new_integer(-1), expr_copy(g_weight)}, 2)) }, 2));
 
         Expr* lo_term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-            (Expr*[]){one_minus_w, expr_copy(sorted_args[j_idx-1])}, 2));
+            (Expr*[]){one_minus_w, expr_copy(stats_order_at(sorted, j_idx-1))}, 2));
         Expr* hi_term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-            (Expr*[]){g_weight, expr_copy(sorted_args[upper_idx-1])}, 2));
+            (Expr*[]){g_weight, expr_copy(stats_order_at(sorted, upper_idx-1))}, 2));
 
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){lo_term, hi_term}, 2));
     }
 
-    Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_args[j_idx-1])}, 2));
-    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[upper_idx-1]), neg_Aj1}, 2));
+    Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(stats_order_at(sorted, j_idx-1))}, 2));
+    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(stats_order_at(sorted, upper_idx-1)), neg_Aj1}, 2));
 
     Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){g_weight, diff}, 2));
-    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[j_idx-1]), weight_diff}, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(stats_order_at(sorted, j_idx-1)), weight_diff}, 2));
 }
 
 bool stats_machine_ok(double v) {
     return isfinite(v) && !(v != 0.0 && fabs(v) < DBL_MIN);
+}
+
+/* ------------------------------------------------------------------------
+ * stats_sort_order: an index sort (bottom-up merge, stable) whose comparator
+ * reads the two elements in place. A typed LinkedList is compared on its raw
+ * slots, gathered into a machine buffer: machine integers and reals order
+ * numerically, which is their canonical order.
+ * ---------------------------------------------------------------------- */
+typedef struct { LLReader* rd; const int64_t* iv; const double* dv; } SortCtx;
+
+static const Expr* sort_elem(const SortCtx* c, size_t i, Expr** owned) {
+    *owned = NULL;
+    if (!c->rd->snap) return c->rd->v[i];
+    const Expr* b = ll_peek_boxed(c->rd->snap, (int64_t)i);
+    if (b) return b;
+    *owned = ll_get(c->rd->snap, (int64_t)i);       /* complex slots */
+    return *owned;
+}
+
+static int sort_cmp(const SortCtx* c, size_t i, size_t j) {
+    if (c->iv) return (c->iv[i] > c->iv[j]) - (c->iv[i] < c->iv[j]);
+    if (c->dv) return (c->dv[i] > c->dv[j]) - (c->dv[i] < c->dv[j]);
+    Expr *oi, *oj;
+    const Expr* a = sort_elem(c, i, &oi);
+    const Expr* b = sort_elem(c, j, &oj);
+    int r = expr_compare(a, b);
+    if (oi) expr_free(oi);
+    if (oj) expr_free(oj);
+    return r;
+}
+
+size_t* stats_sort_order(LLReader* rd) {
+    size_t n = rd->n;
+    size_t* p = malloc(sizeof(size_t) * (n ? n : 1));
+    size_t* t = malloc(sizeof(size_t) * (n ? n : 1));
+    if (!p || !t) { free(p); free(t); return NULL; }
+    SortCtx c = { rd, NULL, NULL };
+    void* raw = NULL;
+    if (rd->snap && n > 0) {
+        LLKind k = ll_kind(rd->snap);
+        if (k == LL_I64 || k == LL_REAL) {
+            raw = malloc(8 * n);
+            if (raw) {
+                ll_gather(rd->snap, 0, (int64_t)n, raw);
+                if (k == LL_I64) c.iv = raw; else c.dv = raw;
+            }
+        }
+    }
+    for (size_t i = 0; i < n; i++) p[i] = i;
+    for (size_t w = 1; w < n; w *= 2) {
+        for (size_t lo = 0; lo < n; lo += 2 * w) {
+            size_t mid = lo + w < n ? lo + w : n, hi = lo + 2 * w < n ? lo + 2 * w : n;
+            size_t a = lo, b = mid, o = lo;
+            while (a < mid && b < hi) t[o++] = sort_cmp(&c, p[b], p[a]) < 0 ? p[b++] : p[a++];
+            while (a < mid) t[o++] = p[a++];
+            while (b < hi) t[o++] = p[b++];
+        }
+        size_t* x = p; p = t; t = x;
+    }
+    free(t);
+    free(raw);
+    return p;
 }

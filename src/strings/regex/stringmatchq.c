@@ -52,20 +52,20 @@ Expr* builtin_stringmatchq(Expr* res) {
     if (nr < 0) return NULL;
 
     /* StringMatchQ[{s1, s2, ...}, patt] threads over the subject list. */
-    LLElems sv;
-    if (ll_elems_open(arg0, &sv)) {          /* a List or a LinkedList of subjects */
+    LLReader sv;
+    if (ll_rd_open(arg0, &sv)) {          /* a List or a LinkedList of subjects */
         size_t n = sv.n;
         Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-        if (!out) { ll_elems_close(&sv); regex_rules_free(rules, nr); return NULL; }
+        if (!out) { ll_rd_close(&sv); regex_rules_free(rules, nr); return NULL; }
         for (size_t i = 0; i < n; i++) {
-            Expr* si = sv.v[i];
+            Expr* si = ll_rd_at(&sv, i);
             out[i] = (si->type == EXPR_STRING)
                          ? smq_scalar(si->data.string, rules, nr)
                          : expr_copy(si);   /* non-string element: leave as-is */
         }
         Expr* result = ll_seq_like(arg0, out, n);
         free(out);
-        ll_elems_close(&sv);
+        ll_rd_close(&sv);
         regex_rules_free(rules, nr);
         return result;
     }

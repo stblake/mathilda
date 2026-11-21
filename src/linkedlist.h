@@ -285,18 +285,31 @@ void linkedlist_init(void);
 /* ---- element vectors and pairwise reductions (strings, statistics) -----
  * (linkedlist_ops.c) */
 
-/* The elements of a List or a LinkedList `seq` (borrowed) as a flat array,
- * for an algorithm that indexes them or reads them more than once -- the
- * (Expr* const* elems, size_t n) core a List head factors its loop into, so
- * the List and the LinkedList call one algorithm. A List's arguments are
- * borrowed; a LinkedList's elements are new references (a boxed slot's
- * refcount bumped, a typed slot boxed), so the vector stays valid even if code
- * run per element mutates the list. Nothing is materialised: no List is
- * built. False (out untouched) when `seq` is neither. */
-typedef struct { Expr** v; size_t n; bool owned; } LLElems;
-bool ll_elems_open(const Expr* seq, LLElems* out);
-void ll_elems_close(LLElems* e);
-/* True for a List or a LinkedList: a sequence ll_elems_open accepts. */
+/* An on-demand reader over a sequence: a List, a LinkedList, or a plain
+ * array of computed values -- the one cursor a List head's core is written
+ * over, so a List and a LinkedList run one algorithm and the LinkedList is
+ * read element by element, never gathered (an array of every element would
+ * be a List in all but its head).
+ *
+ *   ll_rd_open   a List (its arguments, borrowed) or a LinkedList (an
+ *                ll_copy snapshot, so code run per element may change the
+ *                list); false for anything else.
+ *   ll_rd_wrap   an array v[0..n) the caller owns (borrowed).
+ *   ll_rd_at     element i, borrowed: a List argument or a boxed slot of the
+ *                snapshot stays valid until ll_rd_close; a typed slot is a
+ *                box that stays valid only until the next ll_rd_at on this
+ *                reader (copy it to keep it).
+ */
+typedef struct { Expr** v; size_t n; LinkedList* snap; Expr* tmp; } LLReader;
+bool  ll_rd_open(const Expr* seq, LLReader* r);
+void  ll_rd_wrap(LLReader* r, Expr** v, size_t n);
+Expr* ll_rd_at(LLReader* r, size_t i);
+void  ll_rd_close(LLReader* r);
+/* head[e_1, ..., e_n] (unevaluated) from the reader's elements -- an answer
+ * built from them (Plus of the elements, ...), from a LinkedList's slots
+ * through ll_call_with_elements. Consumes head. */
+Expr* ll_rd_call(Expr* head, LLReader* r);
+/* True for a List or a LinkedList: a sequence ll_rd_open accepts. */
 bool ll_is_seq(const Expr* e);
 /* The answer container in the image of `proto`: a LinkedList of out[0..n)
  * when proto is a LinkedList, else List[out...]. Consumes the elements (not
@@ -317,10 +330,12 @@ typedef void (*LLRunLeaf)(const double* run, size_t count, void* ctx, double* ou
  * answers a typed list's statistics must reproduce. Otherwise Normal is a
  * plain List and the boxed (element) algorithms are the reference. */
 bool ll_normal_packs(const LinkedList* ll);
-/* A new BOXED list of copies of v[0..n), even when every element is a machine
- * number: the counterpart of a plain (unpacked) List, so the heads applied to
- * it take their boxed paths exactly as on that List. */
-LinkedList* ll_new_boxed(Expr** v, size_t n);
+/* A list kept in BOXED storage even when every element is a machine number:
+ * the counterpart of a plain (unpacked) List, so the heads applied to it take
+ * their boxed paths exactly as on that List. ll_boxed_begin returns a new list
+ * to ll_push_back the elements into, one at a time; ll_boxed_end seals it. */
+LinkedList* ll_boxed_begin(void);
+void        ll_boxed_end(LinkedList* ll);
 void ll_pairwise_reduce(const LinkedList* ll, LLRunLeaf leaf, void* ctx, int ncomp,
                         double* out);
 

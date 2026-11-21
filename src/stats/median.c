@@ -8,7 +8,7 @@
 #include "assoc.h"
 #include "ndreduce.h"
 #include "sort.h"      /* expr_orderless_sort: Sort's canonical order */
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include "print.h"     /* expr_to_string */
 #include <stdio.h>
@@ -30,10 +30,10 @@ Expr* builtin_median(Expr* res) {
     // Check if it's a vector or tensor. If it's empty or not a list, return NULL.
     if (!ll_is_seq(data)) return expr_copy(res);
 
-    LLElems e;
-    ll_elems_open(data, &e);
+    LLReader e;
+    ll_rd_open(data, &e);
     size_t n = e.n;
-    if (n == 0) { ll_elems_close(&e); return expr_copy(res); }
+    if (n == 0) { ll_rd_close(&e); return expr_copy(res); }
 
     // Check if it's a matrix/tensor by checking if the first element is a List.
     if (data->type != EXPR_LINKEDLIST &&
@@ -41,43 +41,40 @@ Expr* builtin_median(Expr* res) {
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
         // Apply columnwise via Transpose and Map
-        ll_elems_close(&e);
+        ll_rd_close(&e);
         return stats_apply_columnwise("Median", data);
     }
 
     // Now it's a 1D vector. Check if all elements are real numbers.
     bool all_real = true;
     for (size_t i = 0; i < n; i++) {
-        if (!stats_is_real_numeric(e.v[i])) {
+        if (!stats_is_real_numeric(ll_rd_at(&e, i))) {
             all_real = false;
             break;
         }
     }
 
     if (!all_real) {
-        ll_elems_close(&e);
+        ll_rd_close(&e);
         char* str = expr_to_string(res);
         mth_message("Median", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
         free(str);
         return expr_copy(res);
     }
 
-    /* The canonical order Sort uses (expr_compare), over a copy of the elements:
-     * no Sort call, so no container is built for it and no packed buffer comes
-     * back to be unpacked. */
-    Expr** sorted = malloc(sizeof(Expr*) * n);
-    if (!sorted) { ll_elems_close(&e); return expr_copy(res); }
-    for (size_t i = 0; i < n; i++) sorted[i] = expr_copy(e.v[i]);
-    ll_elems_close(&e);
-    expr_orderless_sort(sorted, n);
+    /* The canonical order Sort uses (expr_compare), as a permutation over the
+     * elements where they lie: no Sort call and no element array. */
+    size_t* perm = stats_sort_order(&e);
+    if (!perm) { ll_rd_close(&e); return expr_copy(res); }
+    StatsOrder ord = { &e, perm };
 
     Expr* result = NULL;
     if (n % 2 == 1) {
-        result = expr_copy(sorted[n / 2]);
+        result = expr_copy(stats_order_at(&ord, n / 2));
     } else {
-        Expr* m1 = sorted[n / 2 - 1];
-        Expr* m2 = sorted[n / 2];
-        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(m1), expr_copy(m2)}, 2);
+        Expr* m1 = expr_copy(stats_order_at(&ord, n / 2 - 1));
+        Expr* m2 = expr_copy(stats_order_at(&ord, n / 2));
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){m1, m2}, 2);
         Expr* sum_eval = evaluate(sum);
         expr_free(sum);
 
@@ -86,7 +83,7 @@ Expr* builtin_median(Expr* res) {
         expr_free(div);
     }
 
-    for (size_t i = 0; i < n; i++) expr_free(sorted[i]);
-    free(sorted);
+    free(perm);
+    ll_rd_close(&e);
     return result;
 }

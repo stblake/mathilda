@@ -106,27 +106,26 @@ static Expr* part_scalar(Expr* str, Expr* spec, SpKind kind,
     if (kind == SPK_LIST) {
         /* Every index must be a machine integer in range, else the whole
          * list is reported. Validate first, then view once. */
-        LLElems ie;                       /* a List or a LinkedList of indices */
-        ll_elems_open(spec, &ie);
+        LLReader ie;                       /* a List or a LinkedList of indices */
+        ll_rd_open(spec, &ie);
         size_t k = ie.n;
-        Expr** idx = ie.v;
         int64_t pos;
         for (size_t i = 0; i < k; i++) {
-            if (idx[i]->type != EXPR_INTEGER || !sp_index(idx[i]->data.integer, len, &pos)) {
-                ll_elems_close(&ie);
+            if (ll_rd_at(&ie, i)->type != EXPR_INTEGER || !sp_index(ll_rd_at(&ie, i)->data.integer, len, &pos)) {
+                ll_rd_close(&ie);
                 sp_emit_partw(spec, str);
                 return NULL;
             }
         }
         U8View v;
-        if (u8_view_init(&v, c.s, c.nbytes) != 0) { ll_elems_close(&ie); return NULL; }
+        if (u8_view_init(&v, c.s, c.nbytes) != 0) { ll_rd_close(&ie); return NULL; }
         Expr** items = malloc(sizeof(Expr*) * (k ? k : 1));
-        if (!items) { ll_elems_close(&ie); u8_view_free(&v); return NULL; }
+        if (!items) { ll_rd_close(&ie); u8_view_free(&v); return NULL; }
         for (size_t i = 0; i < k; i++) {
-            sp_index(idx[i]->data.integer, len, &pos);
+            sp_index(ll_rd_at(&ie, i)->data.integer, len, &pos);
             items[i] = strings_char_at(&v, pos);
         }
-        ll_elems_close(&ie);
+        ll_rd_close(&ie);
         Expr* out = ll_seq_like(spec, items, k);
         free(items);
         u8_view_free(&v);
@@ -191,17 +190,17 @@ Expr* builtin_stringpart(Expr* res) {
 
     if (!threaded) return part_scalar(arg0, spec, kind, m, n, s);
 
-    LLElems sv;                           /* a List or a LinkedList of strings */
-    ll_elems_open(arg0, &sv);
+    LLReader sv;                           /* a List or a LinkedList of strings */
+    ll_rd_open(arg0, &sv);
     size_t cnt = sv.n;
     Expr** results = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
-    if (!results) { ll_elems_close(&sv); return NULL; }
+    if (!results) { ll_rd_close(&sv); return NULL; }
     for (size_t i = 0; i < cnt; i++) {
-        Expr* si = sv.v[i];
+        Expr* si = ll_rd_at(&sv, i);
         results[i] = part_scalar(si, spec, kind, m, n, s);
         if (!results[i]) results[i] = strings_uneval(SYM_StringPart, si, spec, NULL);
     }
-    ll_elems_close(&sv);
+    ll_rd_close(&sv);
     Expr* out = ll_seq_like(arg0, results, cnt);
     free(results);
     return out;

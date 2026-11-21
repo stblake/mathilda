@@ -92,9 +92,9 @@ Expr* builtin_stringtrim(Expr* res) {
         expr_free(patt->data.function.head);
         patt->data.function.head = expr_new_symbol(SYM_Alternatives);
     } else if (patt->type == EXPR_LINKEDLIST) {    /* the same, from the slots */
-        Expr* alt = ll_call_with_elements(expr_new_symbol(SYM_Alternatives), patt->data.llist);
-        expr_free(patt);
-        patt = alt;
+        /* Alternatives[ll]: the translator reads a nested LinkedList as
+         * alternatives, from its slots (string_pattern.c). */
+        patt = expr_new_function(expr_new_symbol(SYM_Alternatives), (Expr*[]){ patt }, 1);
     }
 
     RegexRule* front = NULL;
@@ -107,17 +107,17 @@ Expr* builtin_stringtrim(Expr* res) {
     Expr* result = NULL;
     if (nf == 1 && nb == 1) {
         if (is_list) {
-            LLElems sv;
-            ll_elems_open(subject, &sv);
+            LLReader sv;
+            ll_rd_open(subject, &sv);
             size_t m = sv.n;
             Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
             if (out) {
                 for (size_t i = 0; i < m; i++)
-                    out[i] = st_scalar(sv.v[i]->data.string, front, back);
+                    out[i] = st_scalar(ll_rd_at(&sv, i)->data.string, front, back);
                 result = ll_seq_like(subject, out, m);
                 free(out);
             }
-            ll_elems_close(&sv);
+            ll_rd_close(&sv);
         } else {
             result = st_scalar(subject->data.string, front, back);
         }

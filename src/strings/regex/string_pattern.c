@@ -376,17 +376,21 @@ static void sp_emit(SpCtx* ctx, Expr* patt) {
 
     /* A nested LinkedList is alternatives, as a nested List is (below), read
      * from its slots. A typed list holds numbers, which are no string pattern,
-     * so only a boxed list's slots (borrowed for the translation) are walked. */
+     * so only a boxed list's slots (borrowed for the translation) are walked,
+     * one at a time. */
     if (patt->type == EXPR_LINKEDLIST) {
         const LinkedList* ll = patt->data.llist;
         int64_t n = ll_length(ll);
         if (n == 0) { put(ctx, "(*FAIL)"); return; }
         if (ll_kind(ll) != LL_BOXED) { ctx->failed = 1; return; }
-        Expr** el = malloc(sizeof(Expr*) * (size_t)n);
-        if (!el) { ctx->failed = 1; return; }
-        ll_gather(ll, 0, n, el);                       /* borrowed slots */
-        emit_join(ctx, el, (size_t)n, "|");
-        free(el);
+        put(ctx, "(?:");                               /* emit_join, slot by slot */
+        for (int64_t i = 0; i < n; i++) {
+            if (i) put(ctx, "|");
+            put(ctx, "(?:");
+            sp_emit(ctx, (Expr*)ll_peek_boxed(ll, i));
+            put(ctx, ")");
+        }
+        put(ctx, ")");
         return;
     }
 

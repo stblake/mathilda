@@ -10,12 +10,13 @@
 #include "assoc.h"
 #include "ndreduce.h"
 #include "numeric.h"   /* numeric_machine_subnormal */
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 
 /* Mean of the n elements v[0..n): the vector core, shared by a List's
- * arguments and a LinkedList's elements (LLElems). */
-Expr* stats_mean_vec(Expr** el, size_t n) {
+ * arguments and a LinkedList's elements (LLReader). */
+Expr* stats_mean_vec(LLReader* rd) {
+    size_t n = rd->n;
     if (n == 0) return NULL;
 
     // Check if all elements are purely real numeric
@@ -23,7 +24,7 @@ Expr* stats_mean_vec(Expr** el, size_t n) {
     bool has_real = false;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = el[i];
+        Expr* elem = ll_rd_at(rd, i);
         if (elem->type == EXPR_REAL) {
             has_real = true;
         } else if (elem->type == EXPR_INTEGER) {
@@ -41,7 +42,7 @@ Expr* stats_mean_vec(Expr** el, size_t n) {
             double sum_val = 0;
             for (size_t i = 0; i < n; i++) {
                 double v = 0.0;
-                stats_is_numeric(el[i], &v, NULL);
+                stats_is_numeric(ll_rd_at(rd, i), &v, NULL);
                 sum_val += v;
             }
             /* A sum that overflowed (Mean[{1.*^308, 1.*^308}] was Overflow[])
@@ -73,7 +74,7 @@ Expr* stats_mean_vec(Expr** el, size_t n) {
             int64_t sum_d = 1;
             bool overflow = false;
             for (size_t i = 0; i < n; i++) {
-                Expr* elem = el[i];
+                Expr* elem = ll_rd_at(rd, i);
                 int64_t cur_n, cur_d;
                 if (elem->type == EXPR_INTEGER) {
                     cur_n = elem->data.integer;
@@ -100,11 +101,7 @@ Expr* stats_mean_vec(Expr** el, size_t n) {
     }
 
     // Fallback to symbolic: Mean = (1/n) * Plus @@ data
-    Expr** terms = malloc(sizeof(Expr*) * n);
-    if (!terms) return NULL;
-    for (size_t i = 0; i < n; i++) terms[i] = expr_copy(el[i]);
-    Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, n));
-    free(terms);
+    Expr* sum = eval_and_free(ll_rd_call(expr_new_symbol(SYM_Plus), rd));
 
     Expr* n_inv = make_rational(1, (int64_t)n);
     Expr* mean_args[2] = { n_inv, sum };
@@ -139,9 +136,9 @@ Expr* builtin_mean(Expr* res) {
     }
 
     /* A vector: a List's arguments or a LinkedList's elements. */
-    LLElems e;
-    if (!ll_elems_open(data, &e)) return NULL;
-    Expr* r = stats_mean_vec(e.v, e.n);
-    ll_elems_close(&e);
+    LLReader e;
+    if (!ll_rd_open(data, &e)) return NULL;
+    Expr* r = stats_mean_vec(&e);
+    ll_rd_close(&e);
     return r;
 }

@@ -9,7 +9,7 @@
 #include "ndreduce.h"
 #include "print.h"     /* expr_to_string */
 #include <stdio.h>
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include <stdlib.h>
 #include <gmp.h>
@@ -25,7 +25,8 @@
  * message and the expression remains unevaluated.
  */
 /* MovingMedian over the n elements el of `data` (a List or a LinkedList). */
-static Expr* moving_median_vec(Expr* res, Expr* data, Expr** el, size_t n, Expr* spec) {
+static Expr* moving_median_vec(Expr* res, Expr* data, LLReader* rd, Expr* spec) {
+    size_t n = rd->n;
     size_t r = 0;
     if (spec->type == EXPR_INTEGER) {
         if (spec->data.integer < 1) return NULL;
@@ -44,16 +45,16 @@ static Expr* moving_median_vec(Expr* res, Expr* data, Expr** el, size_t n, Expr*
     if (n == 0) return NULL;
 
     /* Decide vector vs matrix based on whether the first element is a List. */
-    bool matrix_mode = (el[0]->type == EXPR_FUNCTION &&
-                        el[0]->data.function.head->type == EXPR_SYMBOL &&
-                        el[0]->data.function.head->data.symbol.name == SYM_List);
+    bool matrix_mode = (ll_rd_at(rd, 0)->type == EXPR_FUNCTION &&
+                        ll_rd_at(rd, 0)->data.function.head->type == EXPR_SYMBOL &&
+                        ll_rd_at(rd, 0)->data.function.head->data.symbol.name == SYM_List);
 
     /* Validate that every leaf is a real-valued numeric. Matrices must be rectangular. */
     bool ok = true;
     if (matrix_mode) {
-        size_t cols = el[0]->data.function.arg_count;
+        size_t cols = ll_rd_at(rd, 0)->data.function.arg_count;
         for (size_t i = 0; i < n && ok; i++) {
-            Expr* row = el[i];
+            Expr* row = ll_rd_at(rd, i);
             if (row->type != EXPR_FUNCTION ||
                 row->data.function.head->type != EXPR_SYMBOL ||
                 row->data.function.head->data.symbol.name != SYM_List ||
@@ -67,7 +68,7 @@ static Expr* moving_median_vec(Expr* res, Expr* data, Expr** el, size_t n, Expr*
         }
     } else {
         for (size_t i = 0; i < n && ok; i++) {
-            if (!stats_is_real_numeric(el[i])) ok = false;
+            if (!stats_is_real_numeric(ll_rd_at(rd, i))) ok = false;
         }
     }
 
@@ -84,7 +85,7 @@ static Expr* moving_median_vec(Expr* res, Expr* data, Expr** el, size_t n, Expr*
     if (!out) return NULL;
 
     for (size_t i = 0; i < out_n; i++) {
-        Expr* sublist = stats_moving_window(data, el, i, r);
+        Expr* sublist = stats_moving_window(data, rd, i, r);
         out[i] = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Median), (Expr*[]){ sublist }, 1));
     }
@@ -107,9 +108,9 @@ Expr* builtin_moving_median(Expr* res) {
 
     /* A List's arguments or a LinkedList's elements; the answer is in the
      * image of the data. */
-    LLElems e;
-    if (!ll_elems_open(data, &e)) return NULL;
-    Expr* r = moving_median_vec(res, data, e.v, e.n, spec);
-    ll_elems_close(&e);
+    LLReader e;
+    if (!ll_rd_open(data, &e)) return NULL;
+    Expr* r = moving_median_vec(res, data, &e, spec);
+    ll_rd_close(&e);
     return r;
 }

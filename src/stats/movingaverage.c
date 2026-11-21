@@ -7,7 +7,7 @@
 #include "ndarray.h"
 #include "ndreduce.h"
 #include "stats_common.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 #include <gmp.h>
 
@@ -21,10 +21,10 @@
  * Mean's exact rational / bigint / real / symbolic handling.  The weighted form builds
  * Plus[Times[w_k/wsum, x_{i+k}], ...] and lets the evaluator simplify.
  */
-/* The window el[i, i + r) as a sequence of the data's kind: a List of the
+/* The window [i, i + r) of the reader as a sequence of the data's kind: a List of the
  * elements, or a LinkedList -- a sub-sequence of a LinkedList is a
  * LinkedList, its slots copied (typed stays typed). */
-Expr* stats_moving_window(const Expr* data, Expr** el, size_t i, size_t r) {
+Expr* stats_moving_window(const Expr* data, LLReader* rd, size_t i, size_t r) {
     const LinkedList* ll = expr_linkedlist(data);
     if (ll) {
         LinkedList* wl = ll_new();
@@ -32,7 +32,7 @@ Expr* stats_moving_window(const Expr* data, Expr** el, size_t i, size_t r) {
         return expr_new_linkedlist(wl);
     }
     Expr** sub = malloc(sizeof(Expr*) * r);
-    for (size_t k = 0; k < r; k++) sub[k] = expr_copy(el[i + k]);
+    for (size_t k = 0; k < r; k++) sub[k] = expr_copy(ll_rd_at(rd, i + k));
     Expr* sublist = expr_new_function(expr_new_symbol(SYM_List), sub, r);
     free(sub);
     return sublist;
@@ -41,9 +41,10 @@ Expr* stats_moving_window(const Expr* data, Expr** el, size_t i, size_t r) {
 /* MovingAverage over the n elements el (of `data`, a List or LinkedList) with
  * window spec `spec`; a weight sequence is read into *w (the caller closes
  * it). */
-static Expr* moving_average_vec(Expr* data, Expr** el, size_t n, Expr* spec, LLElems* w) {
+static Expr* moving_average_vec(Expr* data, LLReader* rd, Expr* spec, LLReader* w) {
+    size_t n = rd->n;
     size_t r = 0;
-    Expr** weights = NULL; /* borrowed; non-NULL means weighted form */
+    bool weighted = false;   /* a weight sequence was read into *w */
 
     if (spec->type == EXPR_INTEGER) {
         if (spec->data.integer < 1) return NULL;
@@ -55,10 +56,10 @@ static Expr* moving_average_vec(Expr* data, Expr** el, size_t n, Expr* spec, LLE
         unsigned long rr = mpz_get_ui(spec->data.bigint);
         if ((size_t)rr > n) return NULL;
         r = (size_t)rr;
-    } else if (ll_elems_open(spec, w)) {
+    } else if (ll_rd_open(spec, w)) {
         r = w->n;
         if (r == 0 || r > n) return NULL;
-        weights = w->v;
+        weighted = true;
     } else {
         return NULL;
     }
@@ -67,18 +68,14 @@ static Expr* moving_average_vec(Expr* data, Expr** el, size_t n, Expr* spec, LLE
     Expr** out = malloc(sizeof(Expr*) * out_n);
     if (!out) return NULL;
 
-    if (weights == NULL) {
+    if (!weighted) {
         for (size_t i = 0; i < out_n; i++) {
-            Expr* sublist = stats_moving_window(data, el, i, r);
+            Expr* sublist = stats_moving_window(data, rd, i, r);
             out[i] = eval_and_free(expr_new_function(
                 expr_new_symbol(SYM_Mean), (Expr*[]){ sublist }, 1));
         }
     } else {
-        Expr** w_copies = malloc(sizeof(Expr*) * r);
-        for (size_t k = 0; k < r; k++) w_copies[k] = expr_copy(weights[k]);
-        Expr* wsum = eval_and_free(expr_new_function(
-            expr_new_symbol(SYM_Plus), w_copies, r));
-        free(w_copies);
+        Expr* wsum = eval_and_free(ll_rd_call(expr_new_symbol(SYM_Plus), w));
 
         Expr* wsum_inv = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Power),
@@ -88,7 +85,7 @@ static Expr* moving_average_vec(Expr* data, Expr** el, size_t n, Expr* spec, LLE
         for (size_t k = 0; k < r; k++) {
             coefs[k] = eval_and_free(expr_new_function(
                 expr_new_symbol(SYM_Times),
-                (Expr*[]){ expr_copy(weights[k]), expr_copy(wsum_inv) }, 2));
+                (Expr*[]){ expr_copy(ll_rd_at(w, k)), expr_copy(wsum_inv) }, 2));
         }
         expr_free(wsum_inv);
 
@@ -98,7 +95,7 @@ static Expr* moving_average_vec(Expr* data, Expr** el, size_t n, Expr* spec, LLE
                 terms[k] = eval_and_free(expr_new_function(
                     expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_copy(coefs[k]),
-                               expr_copy(el[i + k]) }, 2));
+                               expr_copy(ll_rd_at(rd, i + k)) }, 2));
             }
             out[i] = eval_and_free(expr_new_function(
                 expr_new_symbol(SYM_Plus), terms, r));
@@ -127,10 +124,11 @@ Expr* builtin_moving_average(Expr* res) {
 
     /* The data and a weight list may each be a List or a LinkedList; the
      * answer is in the image of the data. */
-    LLElems d, w = { NULL, 0, false };
-    if (!ll_elems_open(data, &d)) return NULL;
-    Expr* out_seq = moving_average_vec(data, d.v, d.n, spec, &w);
-    ll_elems_close(&d);
-    ll_elems_close(&w);
+    LLReader d, w;
+    ll_rd_wrap(&w, NULL, 0);                 /* closed whether or not a weight list is read */
+    if (!ll_rd_open(data, &d)) return NULL;
+    Expr* out_seq = moving_average_vec(data, &d, spec, &w);
+    ll_rd_close(&d);
+    ll_rd_close(&w);
     return out_seq;
 }

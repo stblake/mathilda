@@ -201,14 +201,14 @@ Expr* builtin_stringtake(Expr* res) {
     if (!threaded) {
         out = take_one_string(arg0, spec, &p, true);
     } else {
-        LLElems sv;                       /* a List or a LinkedList of strings */
-        ll_elems_open(arg0, &sv);
+        LLReader sv;                       /* a List or a LinkedList of strings */
+        ll_rd_open(arg0, &sv);
         size_t n = sv.n;
         Expr** results = malloc(sizeof(Expr*) * (n ? n : 1));
-        if (!results) { ll_elems_close(&sv); free(p.seqs); return NULL; }
+        if (!results) { ll_rd_close(&sv); free(p.seqs); return NULL; }
         for (size_t i = 0; i < n; i++)
-            results[i] = take_one_string(sv.v[i], spec, &p, false);
-        ll_elems_close(&sv);
+            results[i] = take_one_string(ll_rd_at(&sv, i), spec, &p, false);
+        ll_rd_close(&sv);
         out = ll_seq_like(arg0, results, n);
         free(results);
     }

@@ -7,18 +7,19 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "ndreduce.h"
-#include "linkedlist.h" /* LLElems */
+#include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
 #include <math.h>
 
-static Expr* rms_vec(Expr** el, size_t n) {
+static Expr* rms_vec(LLReader* rd) {
+    size_t n = rd->n;
     if (n == 0) return NULL;
 
     bool all_numeric = true;
     bool has_real = false;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = el[i];
+        Expr* elem = ll_rd_at(rd, i);
         if (elem->type == EXPR_REAL) {
             has_real = true;
         } else if (elem->type == EXPR_INTEGER) {
@@ -35,7 +36,7 @@ static Expr* rms_vec(Expr** el, size_t n) {
         double sum_sq = 0;
         for (size_t i = 0; i < n; i++) {
             double v = 0.0;
-            stats_is_numeric(el[i], &v, NULL);
+            stats_is_numeric(ll_rd_at(rd, i), &v, NULL);
             sum_sq += v * v;
         }
         double r = sqrt(sum_sq / (double)n);
@@ -45,7 +46,7 @@ static Expr* rms_vec(Expr** el, size_t n) {
         bool any_nonzero = false;
         for (size_t i = 0; i < n && !any_nonzero; i++) {
             double v = 0.0;
-            stats_is_numeric(el[i], &v, NULL);
+            stats_is_numeric(ll_rd_at(rd, i), &v, NULL);
             any_nonzero = v != 0.0;
         }
         if (stats_machine_ok(r) && (r != 0.0 || !any_nonzero)) return expr_new_real(r);
@@ -54,7 +55,7 @@ static Expr* rms_vec(Expr** el, size_t n) {
     // Fallback to symbolic (also used for exact rationals/integers to ensure correct square root distribution)
     Expr** sq_args = malloc(n * sizeof(Expr*));
     for (size_t i = 0; i < n; i++) {
-        Expr* power_args[2] = { expr_copy(el[i]), expr_new_integer(2) };
+        Expr* power_args[2] = { expr_copy(ll_rd_at(rd, i)), expr_new_integer(2) };
         Expr* power_call = expr_new_function(expr_new_symbol(SYM_Power), power_args, 2);
         sq_args[i] = evaluate(power_call);
         expr_free(power_call);
@@ -134,9 +135,9 @@ Expr* builtin_rootmeansquare(Expr* res) {
     }
 
     /* A vector: a List's arguments or a LinkedList's elements. */
-    LLElems e;
-    if (!ll_elems_open(data, &e)) return NULL;
-    Expr* r = rms_vec(e.v, e.n);
-    ll_elems_close(&e);
+    LLReader e;
+    if (!ll_rd_open(data, &e)) return NULL;
+    Expr* r = rms_vec(&e);
+    ll_rd_close(&e);
     return r;
 }

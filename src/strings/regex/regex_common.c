@@ -330,17 +330,16 @@ int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags
      * from a snapshot (ll_copy) that the block keeps as its key: its boxed
      * slots stay alive for the block's lifetime whatever happens to the list.
      * A typed (numeric) LinkedList holds no string pattern at all. */
-    Expr** elems;
+    Expr** elems = NULL;
     int n;
     Expr* key;
     const LinkedList* pl = expr_linkedlist(patt);
-    LLElems snap_elems = { NULL, 0, false };
+    const LinkedList* snap = NULL;          /* elements read slot by slot */
     if (pl) {
         if (ll_kind(pl) != LL_BOXED) return -1;
         key = expr_new_linkedlist(ll_copy(pl));
-        ll_elems_open(key, &snap_elems);
-        n = (int)snap_elems.n;
-        elems = snap_elems.v;
+        snap = key->data.llist;
+        n = (int)ll_length(snap);
     } else if (patt->type == EXPR_FUNCTION &&
         patt->data.function.head->type == EXPR_SYMBOL &&
         patt->data.function.head->data.symbol.name == SYM_List) {
@@ -353,24 +352,23 @@ int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags
         elems = &patt;
         key = NULL;
     }
-    if (n == 0) { ll_elems_close(&snap_elems); expr_free(key); return -1; }
+    if (n == 0) { expr_free(key); return -1; }
 
     RulesBlock* b = calloc(1, sizeof(RulesBlock) + (size_t)n * sizeof(RegexRule));
-    if (!b) { ll_elems_close(&snap_elems); expr_free(key); return -1; }
+    if (!b) { expr_free(key); return -1; }
     b->refs = 1;
     /* The snapshot's elements are held by the snapshot itself (the key). */
     b->key = key ? key : expr_copy(patt);
     for (int i = 0; i < n; i++) {
-        if (build_one(elems[i], rule_flags, regex_flags, &b->rules[i], head) != 0) {
+        Expr* el = snap ? (Expr*)ll_peek_boxed(snap, i) : elems[i];
+        if (build_one(el, rule_flags, regex_flags, &b->rules[i], head) != 0) {
             b->nr = i;                      /* free the i already built */
-            ll_elems_close(&snap_elems);
             block_destroy(b);
             return -1;
         }
         int gc = regex_group_count(b->rules[i].prog) + 1;
         b->rules[i].npairs = (gc > REGEX_MAX_PAIRS) ? (size_t)REGEX_MAX_PAIRS : (size_t)gc;
     }
-    ll_elems_close(&snap_elems);
     b->nr = n;
     b->hash = h;
     b->rule_flags = rule_flags;

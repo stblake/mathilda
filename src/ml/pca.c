@@ -18,7 +18,7 @@
 #include "predict.h"
 #include "dist.h"
 #include "classify.h"
-#include "linkedlist.h"      /* LLElems: Standardize of a LinkedList */
+#include "linkedlist.h"      /* LLReader: Standardize of a LinkedList */
 #include "common.h"          /* common_machine_real_value */
 
 void ml_column_mean(const double* x, size_t n, size_t dim, double* mean) {
@@ -320,25 +320,25 @@ bool ml_reduce(const double* x, size_t n, size_t dim, size_t target,
  * its rows -- read from the slots into the row-major double buffer
  * ml_read_data would have made, every element a machine real number. */
 static bool std_read_ll(const Expr* e, size_t* n, size_t* dim, double** buf, bool* vec) {
-    LLElems rows;
-    if (!ll_elems_open(e, &rows)) return false;
+    LLReader rows;
+    if (!ll_rd_open(e, &rows)) return false;
     bool any_ll = e->type == EXPR_LINKEDLIST, ok = rows.n > 0;
-    *vec = ok && !ll_is_seq(rows.v[0]);
-    size_t d = *vec ? 1 : (ok ? (size_t)ll_seq_length(rows.v[0]) : 0);
+    *vec = ok && !ll_is_seq(ll_rd_at(&rows, 0));
+    size_t d = *vec ? 1 : (ok ? (size_t)ll_seq_length(ll_rd_at(&rows, 0)) : 0);
     double* x = ok && d ? malloc(sizeof(double) * rows.n * d) : NULL;
     ok = ok && x;
     for (size_t i = 0; ok && i < rows.n; i++) {
-        if (*vec) { ok = common_machine_real_value(rows.v[i], &x[i]); continue; }
-        LLElems r;
-        if (!ll_is_seq(rows.v[i]) || !ll_elems_open(rows.v[i], &r)) { ok = false; break; }
-        if (rows.v[i]->type == EXPR_LINKEDLIST) any_ll = true;
+        if (*vec) { ok = common_machine_real_value(ll_rd_at(&rows, i), &x[i]); continue; }
+        LLReader r;
+        if (!ll_is_seq(ll_rd_at(&rows, i)) || !ll_rd_open(ll_rd_at(&rows, i), &r)) { ok = false; break; }
+        if (ll_rd_at(&rows, i)->type == EXPR_LINKEDLIST) any_ll = true;
         ok = r.n == d;
-        for (size_t j = 0; ok && j < d; j++) ok = common_machine_real_value(r.v[j], &x[i * d + j]);
-        ll_elems_close(&r);
+        for (size_t j = 0; ok && j < d; j++) ok = common_machine_real_value(ll_rd_at(&r, j), &x[i * d + j]);
+        ll_rd_close(&r);
     }
     *n = rows.n;
     *dim = d;
-    ll_elems_close(&rows);
+    ll_rd_close(&rows);
     if (!ok || !any_ll) { free(x); return false; }
     *buf = x;
     return true;
@@ -349,14 +349,14 @@ static bool std_read_ll(const Expr* e, size_t* n, size_t* dim, double** buf, boo
  * input's). */
 static Expr* std_build_ll(const Expr* data, const double* x, size_t n, size_t dim, bool vec) {
     if (vec) return expr_new_linkedlist(ll_from_buffer(LL_REAL, x, (int64_t)n));
-    LLElems rows;
-    ll_elems_open(data, &rows);
+    LLReader rows;
+    ll_rd_open(data, &rows);
     Expr** out = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++)
-        out[i] = rows.v[i]->type == EXPR_LINKEDLIST
+        out[i] = ll_rd_at(&rows, i)->type == EXPR_LINKEDLIST
                      ? expr_new_linkedlist(ll_from_buffer(LL_REAL, x + i * dim, (int64_t)dim))
                      : ml_list_of_reals(x + i * dim, dim);
-    ll_elems_close(&rows);
+    ll_rd_close(&rows);
     Expr* r = ll_seq_like(data, out, n);
     free(out);
     return r;
