@@ -37,7 +37,7 @@
  * Uses GMP's random state (gmp_randstate_t) for bignum support.
  */
 
-#include "linkedlist_seq.h"   /* LLView: RandomChoice / RandomSample over LinkedLists */
+#include "linkedlist_seq.h"   /* LLSeq: RandomChoice / RandomSample over LinkedLists */
 #include "random.h"
 #include "memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "dist.h"   /* ml_dist_reset_cache -- SeedRandom must clear the Gaussian cache */
@@ -1742,19 +1742,20 @@ static size_t cum_search(const double* cum_weights, size_t count, double u) {
  */
 /* ---- LinkedList operands of RandomChoice / RandomSample ----------------
  * A LinkedList (the choices, or either side of a weights -> elements rule) is
- * read through an element-array view opened once per call (rc_open); the
- * List code below finds it by is_nonempty_list, so both containers draw from
- * the same code and the same random stream. The answer is a LinkedList when
+ * read through a sequence reader opened once per call (rc_open), element by
+ * element on demand (RCSrc: a List's arguments or a LinkedList snapshot);
+ * the List code below finds it by is_nonempty_list, so both containers draw
+ * from the same code and the same random stream. The answer is a LinkedList when
  * the elements came from one (rc_list). Neither head runs user code, so one
  * file-level context (saved and restored around each call) suffices. */
-typedef struct { const Expr* ll; LLView v; } RCView;
+typedef struct { const Expr* ll; LLSeq v; } RCView;
 typedef struct { RCView v[2]; int n; bool linked; } RCCtx;
 static RCCtx g_rc = { .n = 0, .linked = false };
 
 static void rc_add(RCCtx* c, const Expr* e) {
     if (!e || e->type != EXPR_LINKEDLIST || c->n >= 2) return;
     c->v[c->n].ll = e;
-    ll_view(e, &c->v[c->n].v);
+    llq_open(e, &c->v[c->n].v);
     c->n++;
 }
 
@@ -1776,7 +1777,7 @@ static RCCtx rc_open(const Expr* first) {
 }
 
 static void rc_close(RCCtx saved) {
-    for (int i = 0; i < g_rc.n; i++) ll_view_done(&g_rc.v[i].v);
+    for (int i = 0; i < g_rc.n; i++) llq_close(&g_rc.v[i].v);
     g_rc = saved;
 }
 
@@ -1784,7 +1785,12 @@ static void rc_close(RCCtx saved) {
  * elements came from one, else a List. */
 static Expr* rc_list(Expr** items, size_t n) { return ll_seq_of(g_rc.linked, items, n); }
 
-static Expr* random_choice_array(Expr** choices, size_t choice_count,
+/* The choices: a List's arguments, or a LinkedList read on demand. */
+typedef struct { Expr* const* a; LLSeq* q; } RCSrc;
+/* Element i, borrowed (a LinkedList's typed slot: a short-lived box). */
+static Expr* rc_at(RCSrc s, size_t i) { return s.q ? llq_peek(s.q, i) : s.a[i]; }
+
+static Expr* random_choice_array(RCSrc choices, size_t choice_count,
                                  Expr* dims, size_t dim_idx) {
     if (dim_idx >= dims->data.function.arg_count)
         return NULL;
@@ -1802,7 +1808,7 @@ static Expr* random_choice_array(Expr** choices, size_t choice_count,
     for (size_t i = 0; i < n; i++) {
         if (is_last) {
             size_t idx = random_index(choice_count);
-            elems[i] = expr_copy(choices[idx]);
+            elems[i] = expr_copy(rc_at(choices, idx));
         } else {
             elems[i] = random_choice_array(choices, choice_count,
                                            dims, dim_idx + 1);
@@ -1822,7 +1828,7 @@ static Expr* random_choice_array(Expr** choices, size_t choice_count,
 /*
  * Build a multi-dimensional array of weighted random choices.
  */
-static Expr* weighted_choice_array(Expr** choices, size_t choice_count,
+static Expr* weighted_choice_array(RCSrc choices, size_t choice_count,
                                    double* cum_weights, double total,
                                    Expr* dims, size_t dim_idx) {
     if (dim_idx >= dims->data.function.arg_count)
@@ -1841,7 +1847,7 @@ static Expr* weighted_choice_array(Expr** choices, size_t choice_count,
     for (size_t i = 0; i < n; i++) {
         if (is_last) {
             size_t idx = weighted_random_index(cum_weights, choice_count, total);
-            elems[i] = expr_copy(choices[idx]);
+            elems[i] = expr_copy(rc_at(choices, idx));
         } else {
             elems[i] = weighted_choice_array(choices, choice_count,
                                              cum_weights, total,
@@ -1879,10 +1885,11 @@ static bool is_rule(Expr* e, Expr** wlist, Expr** elist) {
  * Check if an expression is a List with at least one element.
  * If so, set *args and *count.
  */
-static bool is_nonempty_list(Expr* e, Expr*** args, size_t* count) {
-    for (int i = 0; i < g_rc.n; i++)            /* a LinkedList operand: its view */
+static bool is_nonempty_list(Expr* e, RCSrc* args, size_t* count) {
+    args->a = NULL; args->q = NULL;
+    for (int i = 0; i < g_rc.n; i++)            /* a LinkedList operand: its reader */
         if (g_rc.v[i].ll == e) {
-            *args = g_rc.v[i].v.a;
+            args->q = &g_rc.v[i].v;
             *count = g_rc.v[i].v.n;
             return *count > 0;
         }
@@ -1890,7 +1897,7 @@ static bool is_nonempty_list(Expr* e, Expr*** args, size_t* count) {
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_List &&
         e->data.function.arg_count > 0) {
-        *args = e->data.function.args;
+        args->a = e->data.function.args;
         *count = e->data.function.arg_count;
         return true;
     }
@@ -1955,12 +1962,13 @@ static void choice_cell_flatten(const Expr* e, double* d, int64_t* z, size_t* at
         choice_cell_flatten(e->data.function.args[i], d, z, at);
 }
 
-static Expr* choice_buffer(Expr** choices, size_t choice_count,
+static Expr* choice_buffer(RCSrc csrc, size_t choice_count,
                            const int64_t* dims, int rank,
                            double* cum_weights, double total) {
     if (rank < 1 || choice_count == 0) return NULL;
     /* A LinkedList answer is built element by element (the same draws). */
-    if (g_rc.linked) return NULL;
+    if (g_rc.linked || csrc.q) return NULL;
+    Expr* const* choices = csrc.a;
     /* Every choice a machine number, or every one a rectangular array of them
      * of one shape (RandomChoice[w -> {{3, 1}, {3, -1}}, n] is an n x 2
      * array): one element type, one cell shape. */
@@ -2093,9 +2101,9 @@ static Expr* randomchoice_core(Expr* res) {
     /* Check if first arg is Rule[wlist, elist] (weighted form) */
     if (is_rule(first_arg, &wlist_expr, &elist_expr)) {
         /* Weighted random choice */
-        Expr** weights_args;
+        RCSrc weights_args;
         size_t weights_count;
-        Expr** elems_args;
+        RCSrc elems_args;
         size_t elems_count;
 
         if (!is_nonempty_list(wlist_expr, &weights_args, &weights_count))
@@ -2113,7 +2121,7 @@ static Expr* randomchoice_core(Expr* res) {
         bool valid = true;
         for (size_t i = 0; i < weights_count; i++) {
             double w;
-            if (!expr_to_real(weights_args[i], &w) || w < 0.0) {
+            if (!expr_to_real(rc_at(weights_args, i), &w) || w < 0.0) {
                 valid = false;
                 break;
             }
@@ -2130,7 +2138,7 @@ static Expr* randomchoice_core(Expr* res) {
             /* Single weighted choice */
             size_t idx = weighted_random_index(cum_weights, elems_count, total);
             free(cum_weights);
-            return expr_copy(elems_args[idx]);
+            return expr_copy(rc_at(elems_args, idx));
         }
 
         /* argc == 2 */
@@ -2152,7 +2160,7 @@ static Expr* randomchoice_core(Expr* res) {
             if (!result_elems) { free(cum_weights); return NULL; }
             for (size_t i = 0; i < n; i++) {
                 size_t idx = weighted_random_index(cum_weights, elems_count, total);
-                result_elems[i] = expr_copy(elems_args[idx]);
+                result_elems[i] = expr_copy(rc_at(elems_args, idx));
             }
             free(cum_weights);
             Expr* list = rc_list(result_elems, n);
@@ -2183,7 +2191,7 @@ static Expr* randomchoice_core(Expr* res) {
     }
 
     /* Uniform random choice: first arg must be a non-empty list */
-    Expr** choices;
+    RCSrc choices;
     size_t choice_count;
     if (!is_nonempty_list(first_arg, &choices, &choice_count))
         return NULL;
@@ -2191,7 +2199,7 @@ static Expr* randomchoice_core(Expr* res) {
     if (argc == 1) {
         /* Single uniform choice */
         size_t idx = random_index(choice_count);
-        return expr_copy(choices[idx]);
+        return expr_copy(rc_at(choices, idx));
     }
 
     /* argc == 2 */
@@ -2212,7 +2220,7 @@ static Expr* randomchoice_core(Expr* res) {
         if (!elems) return NULL;
         for (size_t i = 0; i < n; i++) {
             size_t idx = random_index(choice_count);
-            elems[i] = expr_copy(choices[idx]);
+            elems[i] = expr_copy(rc_at(choices, idx));
         }
         Expr* list = rc_list(elems, n);
         free(elems);
@@ -2408,9 +2416,9 @@ static Expr* randomsample_core(Expr* res) {
     /* Check if first arg is Rule[wlist, elist] (weighted form) */
     if (is_rule(first_arg, &wlist_expr, &elist_expr)) {
         /* Weighted random sample */
-        Expr** weights_args;
+        RCSrc weights_args;
         size_t weights_count;
-        Expr** elems_args;
+        RCSrc elems_args;
         size_t elems_count;
 
         if (!is_nonempty_list(wlist_expr, &weights_args, &weights_count))
@@ -2426,7 +2434,7 @@ static Expr* randomsample_core(Expr* res) {
 
         bool valid = true;
         for (size_t i = 0; i < weights_count; i++) {
-            if (!expr_to_real(weights_args[i], &weights[i]) || weights[i] < 0.0) {
+            if (!expr_to_real(rc_at(weights_args, i), &weights[i]) || weights[i] < 0.0) {
                 valid = false;
                 break;
             }
@@ -2464,7 +2472,7 @@ static Expr* randomsample_core(Expr* res) {
         Expr** result_elems = malloc(sizeof(Expr*) * sample_n);
         if (!result_elems) { free(selected); return NULL; }
         for (size_t i = 0; i < sample_n; i++) {
-            result_elems[i] = expr_copy(elems_args[selected[i]]);
+            result_elems[i] = expr_copy(rc_at(elems_args, selected[i]));
         }
         free(selected);
 
@@ -2474,7 +2482,7 @@ static Expr* randomsample_core(Expr* res) {
     }
 
     /* Uniform random sample: first arg must be a non-empty list */
-    Expr** choices;
+    RCSrc choices;
     size_t choice_count;
     if (!is_nonempty_list(first_arg, &choices, &choice_count))
         return NULL;
@@ -2507,7 +2515,7 @@ static Expr* randomsample_core(Expr* res) {
     Expr** result_elems = malloc(sizeof(Expr*) * sample_n);
     if (!result_elems) { free(selected); return NULL; }
     for (size_t i = 0; i < sample_n; i++) {
-        result_elems[i] = expr_copy(choices[selected[i]]);
+        result_elems[i] = expr_copy(rc_at(choices, selected[i]));
     }
     free(selected);
 

@@ -1011,6 +1011,22 @@ static bool nd_tally_words(const Expr* a, NDWordTally* out) {
     return nd_tally_hash(data, dt, n, out);
 }
 
+/* The counted distinct machine words of a raw rank-1 int64 / float64 buffer
+ * in first-appearance order -- nd_tally_words without the NDArray, for a typed
+ * LinkedList's gathered slots (so its Tally / Counts / Commonest agree with
+ * the packed List's by construction). False when a word cannot be keyed
+ * faithfully (a non-finite double) or an allocation fails; on true the caller
+ * frees *keys and *cnts. */
+bool ndred_tally_words_raw(const void* data, NDType dt, size_t n,
+                           uint64_t** keys, int64_t** cnts, size_t* nuniq) {
+    NDWordTally t = { NULL, NULL, 0 };
+    bool ok = (dt == NDT_INT64 && n > 0 && nd_tally_direct_i64((const int64_t*)data, n, &t)) ||
+              nd_tally_hash(data, dt, n, &t);
+    if (!ok) return false;
+    *keys = t.keys; *cnts = t.cnts; *nuniq = t.nuniq;
+    return true;
+}
+
 Expr* ndred_tally(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];

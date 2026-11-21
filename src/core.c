@@ -14,7 +14,7 @@
 
 #include "core.h"
 #include "linkedlist.h"
-#include "linkedlist_seq.h"   /* LLView: ComposeList over a LinkedList */
+#include "linkedlist_seq.h"   /* LLSeq: ComposeList over a LinkedList */
 #include "poly/solvepoly.h"   /* roots-of-unity counter for the TC unwind registry */
 #include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
@@ -3144,23 +3144,23 @@ Expr* builtin_compose_list(Expr* res) {
 
     /* A LinkedList of functions is read from its slots; the compositions
      * form a LinkedList. */
-    LLView fv;
-    ll_view(fns, &fv);
+    LLSeq fv;
+    llq_open(fns, &fv);
     size_t n = fv.n;
     size_t out_count = n + 1;
     Expr** out = malloc(sizeof(Expr*) * out_count);
-    if (!out) { ll_view_done(&fv); return NULL; }
+    if (!out) { llq_close(&fv); return NULL; }
 
     out[0] = expr_copy(x);
     for (size_t i = 0; i < n; i++) {
-        Expr* fi = fv.a[i];
+        Expr* fi = llq_peek(&fv, i);
         Expr* arg = expr_copy(out[i]);
         out[i + 1] = expr_new_function(expr_copy(fi), &arg, 1);
     }
 
-    Expr* result = ll_seq_of(ll_view_linked(&fv), out, out_count);
+    Expr* result = ll_seq_of(llq_linked(&fv), out, out_count);
     free(out);
-    ll_view_done(&fv);
+    llq_close(&fv);
     return result;
 }
 

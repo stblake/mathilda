@@ -3,7 +3,7 @@
 #include "ndarray.h"
 #include "ndstruct.h"
 #include "message.h"
-#include "linkedlist_seq.h" /* LLView: LinkedList levels flatten like List levels */
+#include "linkedlist_seq.h" /* LLSeq: LinkedList levels flatten like List levels */
 
 static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, size_t* count, size_t* cap) {
     /* A visible NDArray nested inside an ordinary List. `head_is` is false for
@@ -33,11 +33,11 @@ static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, 
     }
     if (level != 0 && e->type == EXPR_LINKEDLIST && h == SYM_List) {
         /* a LinkedList is a List level, read from its slots */
-        LLView v;
-        ll_view(e, &v);
+        LLSeq v;
+        llq_open(e, &v);
         for (size_t i = 0; i < v.n; i++)
-            flatten_rec(v.a[i], h, level == -1 ? -1 : level - 1, results, count, cap);
-        ll_view_done(&v);
+            flatten_rec(llq_peek(&v, i), h, level == -1 ? -1 : level - 1, results, count, cap);
+        llq_close(&v);
         return;
     }
     if (level != 0 && head_is(e, intern_symbol(h))) {
@@ -51,6 +51,34 @@ static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, 
         }
         (*results)[(*count)++] = expr_copy(e);
     }
+}
+
+/* flatten_rec for a LinkedList answer: each kept element pushed into `out`
+ * as it is reached -- a typed LinkedList level appended span-wise, a boxed one
+ * read element by element from a snapshot -- so no element array is built. */
+static void flatten_ll_rec(LinkedList* out, Expr* e, const char* h, int64_t level) {
+    int64_t next = level == -1 ? -1 : level - 1;
+    if (level != 0 && e->type == EXPR_LINKEDLIST && h == SYM_List) {
+        const LinkedList* ll = e->data.llist;
+        if (ll_kind(ll) != LL_BOXED) {             /* machine numbers: atoms */
+            ll_append_range(out, ll, 0, ll_length(ll));
+            return;
+        }
+        LLSeq v;
+        llq_open(e, &v);
+        for (size_t i = 0; i < v.n; i++) flatten_ll_rec(out, llq_peek(&v, i), h, next);
+        llq_close(&v);
+        return;
+    }
+    if (level != 0 && (head_is(e, intern_symbol(h)) || (is_ndarray(e) && h == SYM_List))) {
+        size_t cap = 16, count = 0;
+        Expr** tmp = malloc(sizeof(Expr*) * cap);
+        flatten_rec(e, h, level, &tmp, &count, &cap);     /* a List level */
+        for (size_t i = 0; i < count; i++) ll_push_back(out, tmp[i]);
+        free(tmp);
+        return;
+    }
+    ll_push_back(out, expr_copy(e));
 }
 
 bool flatten_level_is_infinity(const Expr* lv) {
@@ -117,19 +145,25 @@ Expr* builtin_flatten(Expr* res) {
     if (list->type == EXPR_LINKEDLIST && ll_kind(list->data.llist) != LL_BOXED)
         return expr_new_linkedlist(ll_copy(list->data.llist));
 
+    if (list->type == EXPR_LINKEDLIST) {          /* a LinkedList, pushed as reached */
+        LinkedList* out = ll_new();
+        LLSeq v;
+        llq_open(list, &v);
+        for (size_t i = 0; i < v.n; i++) flatten_ll_rec(out, llq_peek(&v, i), h, n);
+        llq_close(&v);
+        return expr_new_linkedlist(out);
+    }
+
     size_t cap = 16;
     size_t count = 0;
     Expr** results = malloc(sizeof(Expr*) * cap);
 
     // Initial call: we flatten children of the head if they also have head h.
-    LLView v;
-    ll_view(list, &v);
-    for (size_t i = 0; i < v.n; i++) {
-        flatten_rec(v.a[i], h, n, &results, &count, &cap);
+    for (size_t i = 0; i < list->data.function.arg_count; i++) {
+        flatten_rec(list->data.function.args[i], h, n, &results, &count, &cap);
     }
 
-    Expr* result = ll_view_result(&v, results, count);
+    Expr* result = expr_new_function(expr_copy(list->data.function.head), results, count);
     free(results);
-    ll_view_done(&v);
     return result;
 }

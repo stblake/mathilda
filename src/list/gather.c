@@ -35,19 +35,19 @@
 static Expr* gather_with_test(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* test = res->data.function.args[1];
-    LLView lv;
-    if (!ll_view(list, &lv)) return builtin_normal_error("Gather", res, 1);
-    size_t n = lv.n;
-    /* group g holds members[g][0 .. len[g]-1], indices into list */
+    LLSeq q;                       /* a LinkedList: a snapshot, read on demand */
+    if (!llq_open(list, &q)) return builtin_normal_error("Gather", res, 1);
+    size_t n = q.n;
+    /* group g holds the element indices members[g][0 .. len[g]-1] */
     size_t* group_of = malloc(sizeof(size_t) * (n ? n : 1));
     size_t* rep = malloc(sizeof(size_t) * (n ? n : 1));     /* first index per group */
     size_t ng = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = lv.a[i];
         size_t g = 0;
         for (; g < ng; g++) {
-            Expr* call = expr_new_function(expr_copy(test),
-                (Expr*[]){ expr_copy(lv.a[rep[g]]), expr_copy(elem) }, 2);
+            Expr* a = expr_copy(llq_peek(&q, rep[g]));
+            Expr* b = expr_copy(llq_peek(&q, i));
+            Expr* call = expr_new_function(expr_copy(test), (Expr*[]){ a, b }, 2);
             Expr* r = eval_callback(call);
             bool same = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
             if (r) expr_free(r);
@@ -59,21 +59,19 @@ static Expr* gather_with_test(Expr* res) {
     }
     size_t* len = calloc(ng ? ng : 1, sizeof(size_t));
     for (size_t i = 0; i < n; i++) len[group_of[i]]++;
-    Expr** groups = malloc(sizeof(Expr*) * (ng ? ng : 1));
+    size_t* start = malloc(sizeof(size_t) * (ng ? ng : 1));
     size_t* fill = calloc(ng ? ng : 1, sizeof(size_t));
-    Expr*** members = malloc(sizeof(Expr**) * (ng ? ng : 1));
-    for (size_t g = 0; g < ng; g++) members[g] = malloc(sizeof(Expr*) * len[g]);
+    for (size_t g = 0, at = 0; g < ng; g++) { start[g] = at; at += len[g]; }
+    size_t* members = malloc(sizeof(size_t) * (n ? n : 1));   /* grouped indices */
     for (size_t i = 0; i < n; i++) {
         size_t g = group_of[i];
-        members[g][fill[g]++] = expr_copy(lv.a[i]);
+        members[start[g] + fill[g]++] = i;
     }
-    for (size_t g = 0; g < ng; g++) {
-        groups[g] = ll_view_result(&lv, members[g], len[g]);
-        free(members[g]);
-    }
-    Expr* out = ll_seq_of(ll_view_linked(&lv), groups, ng);
-    ll_view_done(&lv);
-    free(members); free(fill); free(groups); free(len); free(rep); free(group_of);
+    Expr** groups = malloc(sizeof(Expr*) * (ng ? ng : 1));
+    for (size_t g = 0; g < ng; g++) groups[g] = llq_emit(&q, members + start[g], len[g]);
+    Expr* out = ll_seq_of(llq_linked(&q), groups, ng);
+    llq_close(&q);
+    free(members); free(start); free(fill); free(groups); free(len); free(rep); free(group_of);
     return out;
 }
 

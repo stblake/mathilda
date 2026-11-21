@@ -53,7 +53,13 @@
 #define LL_MAXCHUNK 60
 
 typedef struct {
-    unsigned char* dir[LL_MAXCHUNK];   /* chunk k: LL_B << k slots, or NULL */
+    /* chunk k: LL_B << k slots, or NULL. The directory itself is allocated on
+     * the first chunk and grown (doubling, at most LL_MAXCHUNK entries) as
+     * chunks are added, so a small list costs its header plus one chunk --
+     * not a fixed 2 x LL_MAXCHUNK pointer table (~1 KB), which made the many
+     * small LinkedLists a Partition or Split answers with cost ~10x a List. */
+    unsigned char** dir;
+    int             ndir;               /* entries allocated in dir         */
     int64_t        start, end;          /* live slots [start, end)          */
 } LLRun;
 
@@ -113,6 +119,7 @@ static inline int64_t run_len(const LLRun* r) { return r->end - r->start; }
 
 /* Address of run slot j; the chunk must exist. */
 static inline unsigned char* slot_ptr(const LLRun* r, int64_t j, size_t esz) {
+    /* the chunk exists, so chunk_of(j) < r->ndir */
     int k = chunk_of(j);
     return r->dir[k] + (size_t)(j - chunk_base(k)) * esz;
 }
@@ -120,6 +127,17 @@ static inline unsigned char* slot_ptr(const LLRun* r, int64_t j, size_t esz) {
 /* Make sure the chunk holding slot j exists. */
 static void run_ensure(LinkedList* ll, LLRun* r, int64_t j) {
     int k = chunk_of(j);
+    if (k >= r->ndir) {                       /* grow the directory */
+        int nd = r->ndir ? 2 * r->ndir : 4;
+        while (nd <= k) nd *= 2;
+        if (nd > LL_MAXCHUNK) nd = LL_MAXCHUNK;
+        unsigned char** d = realloc(r->dir, sizeof(unsigned char*) * (size_t)nd);
+        if (!d) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
+        for (int t = r->ndir; t < nd; t++) d[t] = NULL;
+        MTH_MEM_CHARGE_BLOCK(sizeof(unsigned char*) * (size_t)(nd - r->ndir));
+        r->dir = d;
+        r->ndir = nd;
+    }
     if (r->dir[k]) return;
     size_t bytes = (size_t)chunk_cap(k) * kind_size(ll->kind);
     r->dir[k] = malloc(bytes);
@@ -129,7 +147,7 @@ static void run_ensure(LinkedList* ll, LLRun* r, int64_t j) {
 }
 
 static void run_free_chunk(LinkedList* ll, LLRun* r, int k) {
-    if (!r->dir[k]) return;
+    if (k >= r->ndir || !r->dir[k]) return;
     size_t bytes = (size_t)chunk_cap(k) * kind_size(ll->kind);
     free(r->dir[k]);
     r->dir[k] = NULL;
@@ -141,7 +159,7 @@ static void run_free_chunk(LinkedList* ll, LLRun* r, int k) {
  * one the next write lands in (hysteresis against push/pop thrash). */
 static void run_trim_tail(LinkedList* ll, LLRun* r) {
     int keep = chunk_of(r->end) + 1;
-    for (int k = keep + 1; k < LL_MAXCHUNK; k++) run_free_chunk(ll, r, k);
+    for (int k = keep + 1; k < r->ndir; k++) run_free_chunk(ll, r, k);
 }
 
 /* Move the live slots of a run down to [0, n) once the dead prefix is at
@@ -334,9 +352,14 @@ static void ll_free_storage(LinkedList* ll) {
         run_release_boxed(&ll->front);
         run_release_boxed(&ll->back);
     }
-    for (int k = 0; k < LL_MAXCHUNK; k++) {
-        run_free_chunk(ll, &ll->front, k);
-        run_free_chunk(ll, &ll->back, k);
+    LLRun* runs[2] = { &ll->front, &ll->back };
+    for (int ri = 0; ri < 2; ri++) {
+        LLRun* r = runs[ri];
+        for (int k = 0; k < r->ndir; k++) run_free_chunk(ll, r, k);
+        if (r->dir) MTH_MEM_RELEASE(sizeof(unsigned char*) * (size_t)r->ndir);
+        free(r->dir);
+        r->dir = NULL;
+        r->ndir = 0;
     }
     ll->front.start = ll->front.end = 0;
     ll->back.start = ll->back.end = 0;
@@ -377,7 +400,8 @@ uint64_t ll_id(const LinkedList* ll)          { return ll ? ll->id : 0; }
 int64_t  ll_length(const LinkedList* ll)      { return run_len(&ll->front) + run_len(&ll->back); }
 LLKind   ll_kind(const LinkedList* ll)        { return ll->kind; }
 int64_t  ll_payload_bytes(const LinkedList* ll) {
-    return (int64_t)sizeof *ll + ll->chunk_bytes;
+    return (int64_t)sizeof *ll + ll->chunk_bytes +
+           (int64_t)(sizeof(unsigned char*) * (size_t)(ll->front.ndir + ll->back.ndir));
 }
 
 LinkedList* expr_linkedlist(const Expr* e) {
@@ -450,7 +474,9 @@ static void ll_convert(LinkedList* ll, LLKind to) {
             Expr* e = slot_read(slot_ptr(r, j, fsz), from);
             *(Expr**)slot_ptr(&nr, j, tsz) = e;
         }
-        for (int k = 0; k < LL_MAXCHUNK; k++) run_free_chunk(ll, r, k);
+        for (int k = 0; k < r->ndir; k++) run_free_chunk(ll, r, k);
+        if (r->dir) MTH_MEM_RELEASE(sizeof(unsigned char*) * (size_t)r->ndir);
+        free(r->dir);
         *r = nr;
     }
     ll->kind = to;

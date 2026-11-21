@@ -4,7 +4,7 @@
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "partition.h"
 #include "assoc.h"      /* is_association */
-#include "linkedlist_seq.h" /* LLView: a LinkedList partitions from its slots */
+#include "linkedlist_seq.h" /* LLSeq: a LinkedList partitions from its slots */
 
 /* Level k of a Partition size/offset spec -- element k of a List or a
  * LinkedList of them, or a bare spec at level 0. New reference, or NULL. */
@@ -45,8 +45,8 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
     if (d <= 0) return expr_copy(list);
 
     /* A LinkedList (at any level) partitions into LinkedLists. */
-    LLView lv;
-    ll_view(list, &lv);
+    LLSeq lv;
+    llq_open(list, &lv);
     size_t len = lv.n;
     size_t num_sublists = 0;
     if (n_upto) {
@@ -57,24 +57,31 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
         }
     }
 
-    Expr** sublists = malloc(sizeof(Expr*) * num_sublists);
+    /* With no specification for the next level, the elements are copied as
+     * they are: each sublist is a range of the source (span-wise for a
+     * LinkedList, so a typed slot is never boxed). */
+    Expr* deeper = partition_spec_at(n_spec, level_idx + 1);
+    if (deeper) expr_free(deeper);
+
+    Expr** sublists = malloc(sizeof(Expr*) * (num_sublists ? num_sublists : 1));
     for (size_t i = 0; i < num_sublists; i++) {
         size_t start = i * (size_t)d;
         size_t end = start + (size_t)n;
         if (end > len) end = len;
+        if (!deeper) { sublists[i] = llq_range(&lv, start, end); continue; }
         
         size_t sub_count = end - start;
         Expr** sub_args = malloc(sizeof(Expr*) * sub_count);
         for (size_t j = 0; j < sub_count; j++) {
-            sub_args[j] = partition_rec(lv.a[start + j], n_spec, d_spec, level_idx + 1);
+            sub_args[j] = partition_rec(llq_peek(&lv, start + j), n_spec, d_spec, level_idx + 1);
         }
-        sublists[i] = ll_view_result(&lv, sub_args, sub_count);
+        sublists[i] = llq_result(&lv, sub_args, sub_count);
         free(sub_args);
     }
 
-    Expr* result = ll_view_result(&lv, sublists, num_sublists);
+    Expr* result = llq_result(&lv, sublists, num_sublists);
     free(sublists);
-    ll_view_done(&lv);
+    llq_close(&lv);
     return result;
 }
 
@@ -159,38 +166,51 @@ static Expr* partition_overhang(Expr* res) {
         if (pad_m == 0) pad_none = true;
     }
 
-    LLView lv;
-    ll_view(list, &lv);
+    LLSeq lv;
+    llq_open(list, &lv);
     int64_t len = (int64_t)lv.n;
-    if (len == 0) { Expr* r = ll_view_result(&lv, NULL, 0); ll_view_done(&lv); return r; }
+    if (len == 0) { Expr* r = llq_result(&lv, NULL, 0); llq_close(&lv); return r; }
 
     /* Sublists i = 0 .. count-1 with s0 + i d <= len - kr + 1. */
     int64_t s0 = 2 - kl;
     int64_t span = len - kr + 1 - s0;
     int64_t count = span < 0 ? 0 : span / d + 1;
-    if (count > (int64_t)100000000 / (n > 0 ? n : 1)) { ll_view_done(&lv); return NULL; }  /* absurd size */
+    if (count > (int64_t)100000000 / (n > 0 ? n : 1)) { llq_close(&lv); return NULL; }  /* absurd size */
 
     Expr** subs = malloc(sizeof(Expr*) * (size_t)(count ? count : 1));
     Expr** items = malloc(sizeof(Expr*) * (size_t)n);
-    if (!subs || !items) { free(subs); free(items); ll_view_done(&lv); return NULL; }
+    if (!subs || !items) { free(subs); free(items); llq_close(&lv); return NULL; }
     for (int64_t i = 0; i < count; i++) {
         int64_t start = s0 + i * d;
+        if (llq_linked(&lv)) {
+            /* a LinkedList sublist: the slots copied across, padding beside */
+            LinkedList* sub = ll_new();
+            for (int64_t j = start; j < start + n; j++) {
+                if (j >= 1 && j <= len)       llq_push(sub, &lv, (size_t)(j - 1));
+                else if (pad_none)            continue;
+                else if (pad_cyclic_self)     llq_push(sub, &lv, (size_t)partition_mod(j - 1, len));
+                else if (pad_items)           ll_push_back(sub, expr_copy(pad_items[partition_mod(j - 1, pad_m)]));
+                else                          ll_push_back(sub, expr_copy(pad));
+            }
+            subs[i] = expr_new_linkedlist(sub);
+            continue;
+        }
         size_t m = 0;
         for (int64_t j = start; j < start + n; j++) {
             Expr* src;
-            if (j >= 1 && j <= len)       src = lv.a[j - 1];
+            if (j >= 1 && j <= len)       src = llq_peek(&lv, j - 1);
             else if (pad_none)            continue;
-            else if (pad_cyclic_self)     src = lv.a[partition_mod(j - 1, len)];
+            else if (pad_cyclic_self)     src = llq_peek(&lv, partition_mod(j - 1, len));
             else if (pad_items)           src = pad_items[partition_mod(j - 1, pad_m)];
             else                          src = pad;
             items[m++] = expr_copy(src);
         }
-        subs[i] = ll_view_result(&lv, items, m);
+        subs[i] = llq_result(&lv, items, m);
     }
     free(items);
-    Expr* out = ll_view_result(&lv, subs, (size_t)count);
+    Expr* out = llq_result(&lv, subs, (size_t)count);
     free(subs);
-    ll_view_done(&lv);
+    llq_close(&lv);
     return out;
 }
 

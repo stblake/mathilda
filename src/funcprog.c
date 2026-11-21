@@ -1,4 +1,4 @@
-#include "linkedlist_seq.h"   /* LLView: Tuples / Permutations over LinkedLists */
+#include "linkedlist_seq.h"   /* LLSeq: Tuples / Permutations over LinkedLists */
 #include "print.h"
 
 #include "funcprog.h"
@@ -3197,13 +3197,39 @@ Expr* builtin_outer(Expr* res) {
 /* Each operand of Tuples is read through an element-array view (a List's
  * arguments, a LinkedList's slots); `tv` is the view whose container kind each
  * tuple takes (its head, or a LinkedList). */
-static void tuples_rec(const LLView* lists, size_t num_lists, size_t curr_list, Expr** current_tuple,
-                       const LLView* tv, Expr*** results, size_t* res_count, size_t* res_cap) {
+/* Tuples enumerates INDEX tuples cur[0..k) -- index cur[t] into operand
+ * lists[t] (each a List or a LinkedList snapshot, read on demand) -- and
+ * builds each tuple from them as it completes: a container of tv's kind (its
+ * head, or a LinkedList filled slot to slot), reshaped to dims when given. */
+static Expr* tuple_build(LLSeq** lists, const size_t* cur, size_t* at, const int64_t* dims,
+                         size_t dims_count, size_t d, LLSeq* tv) {
+    size_t n = dims ? (size_t)dims[d] : 0;
+    bool leaf = !dims || d == dims_count - 1;
+    if (!dims) n = *at;                        /* the flat tuple: all k slots */
+    if (llq_linked(tv)) {
+        LinkedList* out = ll_new();
+        for (size_t i = 0; i < n; i++) {
+            if (leaf) { size_t t = dims ? (*at)++ : i; llq_push(out, lists[t], cur[t]); }
+            else ll_push_back(out, tuple_build(lists, cur, at, dims, dims_count, d + 1, tv));
+        }
+        return expr_new_linkedlist(out);
+    }
+    Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        if (leaf) { size_t t = dims ? (*at)++ : i; items[i] = expr_copy(llq_peek(lists[t], cur[t])); }
+        else items[i] = tuple_build(lists, cur, at, dims, dims_count, d + 1, tv);
+    }
+    Expr* r = llq_result(tv, items, n);
+    free(items);
+    return r;
+}
+
+static void tuples_rec(LLSeq** lists, size_t num_lists, size_t curr_list, size_t* cur,
+                       const int64_t* dims, size_t dims_count, LLSeq* tv,
+                       Expr*** results, size_t* res_count, size_t* res_cap) {
     if (curr_list == num_lists) {
-        Expr** t_args = malloc(sizeof(Expr*) * num_lists);
-        for(size_t i=0; i<num_lists; i++) t_args[i] = expr_copy(current_tuple[i]);
-        Expr* t = ll_view_result(tv, t_args, num_lists);
-        free(t_args);  /* the container copies the array; free it */
+        size_t at = dims ? 0 : num_lists;
+        Expr* t = tuple_build(lists, cur, &at, dims, dims_count, 0, tv);
         if (*res_count >= *res_cap) {
             *res_cap = (*res_cap == 0) ? 16 : (*res_cap * 2);
             *results = realloc(*results, sizeof(Expr*) * (*res_cap));
@@ -3211,28 +3237,25 @@ static void tuples_rec(const LLView* lists, size_t num_lists, size_t curr_list, 
         (*results)[(*res_count)++] = t;
         return;
     }
-    
-    const LLView* lst = &lists[curr_list];
-    size_t count = lst->n;
-    if (count == 0) return;
-    
+    size_t count = lists[curr_list]->n;
     for (size_t i = 0; i < count; i++) {
-        current_tuple[curr_list] = lst->a[i];
-        tuples_rec(lists, num_lists, curr_list + 1, current_tuple, tv, results, res_count, res_cap);
+        cur[curr_list] = i;
+        tuples_rec(lists, num_lists, curr_list + 1, cur, dims, dims_count, tv, results, res_count, res_cap);
     }
 }
 
-static Expr* reshape_rec(Expr** flat_args, size_t* offset, int64_t* dims, size_t dims_count,
-                         size_t current_dim, const LLView* tv) {
-    size_t n = dims[current_dim];
-    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++)
-        args[i] = (current_dim == dims_count - 1)
-            ? expr_copy(flat_args[(*offset)++])
-            : reshape_rec(flat_args, offset, dims, dims_count, current_dim + 1, tv);
-    Expr* ret = ll_view_result(tv, args, n);
-    free(args);
-    return ret;
+/* Tuples of k copies of one operand q (optionally reshaped to dims). */
+static Expr* tuples_of_one(LLSeq* q, size_t k, const int64_t* dims, size_t dims_count, bool linked) {
+    LLSeq** lists = malloc(sizeof(LLSeq*) * (k ? k : 1));
+    for (size_t i = 0; i < k; i++) lists[i] = q;
+    size_t* cur = malloc(sizeof(size_t) * (k ? k : 1));
+    Expr** results = NULL;
+    size_t res_count = 0, res_cap = 0;
+    tuples_rec(lists, k, 0, cur, dims, dims_count, q, &results, &res_count, &res_cap);
+    free(cur); free(lists);
+    Expr* out = ll_seq_of(linked, results, res_count);
+    free(results);
+    return out;
 }
 
 Expr* builtin_tuples(Expr* res) {
@@ -3240,43 +3263,45 @@ Expr* builtin_tuples(Expr* res) {
     
     if (res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
-        LLView av;                         /* the operands: a List's or a LinkedList's */
-        if (!ll_view(arg, &av)) return expr_copy(res);
+        LLSeq av;                         /* the operands: a List's or a LinkedList's */
+        if (!llq_open(arg, &av)) return expr_copy(res);
         
         size_t num_lists = av.n;
         
         if (num_lists == 0) {
-            Expr* t = ll_view_result(&av, NULL, 0);
-            Expr* final_res = ll_view_result(&av, (Expr*[]){t}, 1);
-            ll_view_done(&av);
+            Expr* t = llq_result(&av, NULL, 0);
+            Expr* final_res = llq_result(&av, (Expr*[]){t}, 1);
+            llq_close(&av);
             return final_res;
         }
 
-        /* An operand that is neither a List-like function nor a LinkedList has
-         * no elements (an empty view): no tuples. */
-        LLView* lists = malloc(sizeof(LLView) * num_lists);
-        for (size_t i = 0; i < num_lists; i++)
-            if (!ll_view(av.a[i], &lists[i])) lists[i].n = 0;
+        /* Each operand read on demand; one that is neither a List-like
+         * function nor a LinkedList has no elements: no tuples. */
+        LLSeq* ops = malloc(sizeof(LLSeq) * num_lists);
+        LLSeq** lists = malloc(sizeof(LLSeq*) * num_lists);
+        for (size_t i = 0; i < num_lists; i++) {
+            if (!llq_open(llq_peek(&av, i), &ops[i])) llq_open(NULL, &ops[i]);
+            lists[i] = &ops[i];
+        }
 
         Expr** results = NULL;
         size_t res_count = 0, res_cap = 0;
-        Expr** current_tuple = malloc(sizeof(Expr*) * num_lists);
-        
-        tuples_rec(lists, num_lists, 0, current_tuple, &av, &results, &res_count, &res_cap);
-        free(current_tuple);
-        for (size_t i = 0; i < num_lists; i++) ll_view_done(&lists[i]);
-        free(lists);
+        size_t* cur = malloc(sizeof(size_t) * num_lists);
+        tuples_rec(lists, num_lists, 0, cur, NULL, 0, &av, &results, &res_count, &res_cap);
+        free(cur);
+        for (size_t i = 0; i < num_lists; i++) llq_close(&ops[i]);
+        free(ops); free(lists);
 
-        Expr* final_res = ll_view_result(&av, results, res_count);
+        Expr* final_res = llq_result(&av, results, res_count);
         free(results);  /* the container copied the pointers into its own storage */
-        ll_view_done(&av);
+        llq_close(&av);
         return final_res;
     } else {
         Expr* list = res->data.function.args[0];
         Expr* n_expr = res->data.function.args[1];
-        LLView lv;
-        if (!ll_view(list, &lv)) return expr_copy(res);
-        bool linked = ll_view_linked(&lv);
+        LLSeq lv;
+        if (!llq_open(list, &lv)) return expr_copy(res);
+        bool linked = llq_linked(&lv);
         Expr* head = linked ? NULL : list->data.function.head;
         Expr* out = NULL;
         
@@ -3284,72 +3309,39 @@ Expr* builtin_tuples(Expr* res) {
             int64_t n = n_expr->data.integer;
             if (n < 0) n = 0;
             if (n == 0) {
-                Expr* t = ll_view_result(&lv, NULL, 0);
-                out = ll_view_result(&lv, (Expr*[]){t}, 1);
+                Expr* t = llq_result(&lv, NULL, 0);
+                out = llq_result(&lv, (Expr*[]){t}, 1);
             } else {
-                LLView* lists = malloc(sizeof(LLView) * n);
-                for (int64_t i = 0; i < n; i++) lists[i] = lv;     /* borrowed: one view */
-                
-                Expr** results = NULL;
-                size_t res_count = 0, res_cap = 0;
-                Expr** current_tuple = malloc(sizeof(Expr*) * n);
-                
-                tuples_rec(lists, n, 0, current_tuple, &lv, &results, &res_count, &res_cap);
-                free(current_tuple);
-                free(lists);
-
-                out = ll_seq_of(linked, results, res_count);
-                free(results);
+                out = tuples_of_one(&lv, (size_t)n, NULL, 0, linked);
             }
         } else if ((n_expr->type == EXPR_FUNCTION && head && expr_eq(n_expr->data.function.head, head)) ||
                    (linked && head_is(n_expr, SYM_List)) ||
                    (n_expr->type == EXPR_LINKEDLIST && (linked || head_is(list, SYM_List)))) {
             /* {n1, n2, ...}: a List (or LinkedList) of dimensions */
-            LLView dv;
-            ll_view(n_expr, &dv);
+            LLSeq dv;
+            llq_open(n_expr, &dv);
             size_t dims_count = dv.n;
             int64_t total_elements = 1;
             int64_t* dims = malloc(sizeof(int64_t) * (dims_count ? dims_count : 1));
-            bool ok = true;
+            bool ok = dims_count > 0;
             for (size_t i = 0; i < dims_count && ok; i++) {
-                if (dv.a[i]->type != EXPR_INTEGER) { ok = false; break; }
-                dims[i] = dv.a[i]->data.integer;
+                Expr* d = llq_peek(&dv, i);
+                if (d->type != EXPR_INTEGER) { ok = false; break; }
+                dims[i] = d->data.integer;
                 if (dims[i] < 0) dims[i] = 0;
                 total_elements *= dims[i];
             }
-            ll_view_done(&dv);
+            llq_close(&dv);
             if (!ok) {
                 out = NULL;
             } else if (total_elements == 0) {
-                out = ll_view_result(&lv, NULL, 0);
+                out = llq_result(&lv, NULL, 0);
             } else {
-                LLView* lists = malloc(sizeof(LLView) * total_elements);
-                for (int64_t i = 0; i < total_elements; i++) lists[i] = lv;
-                
-                Expr** results = NULL;
-                size_t res_count = 0, res_cap = 0;
-                Expr** current_tuple = malloc(sizeof(Expr*) * total_elements);
-                
-                tuples_rec(lists, total_elements, 0, current_tuple, &lv, &results, &res_count, &res_cap);
-                free(current_tuple);
-                free(lists);
-                
-                for (size_t i = 0; i < res_count; i++) {
-                    size_t offset = 0;
-                    LLView tvw;
-                    ll_view(results[i], &tvw);
-                    Expr* reshaped = reshape_rec(tvw.a, &offset, dims, dims_count, 0, &lv);
-                    ll_view_done(&tvw);
-                    expr_free(results[i]);
-                    results[i] = reshaped;
-                }
-                
-                out = ll_seq_of(linked, results, res_count);
-                free(results);
+                out = tuples_of_one(&lv, (size_t)total_elements, dims, dims_count, linked);
             }
             free(dims);
         }
-        ll_view_done(&lv);
+        llq_close(&lv);
         if (out) return out;
     }
     return expr_copy(res);
@@ -3357,21 +3349,17 @@ Expr* builtin_tuples(Expr* res) {
 
 /* ------------------- Permutations ------------------- */
 
+/* A distinct element (by the index of its first occurrence) and how many
+ * copies of it remain to place. */
 typedef struct {
-    Expr* expr;
+    size_t idx;
     int count;
 } UniqueElement;
 
 static void permutations_rec(UniqueElement* elements, size_t num_unique, size_t target_len, size_t current_len, 
-                             Expr** current_perm, const LLView* head, Expr*** results, size_t* res_count, size_t* res_cap) {
+                             size_t* current_perm, LLSeq* q, Expr*** results, size_t* res_count, size_t* res_cap) {
     if (current_len == target_len) {
-        Expr** p_args = NULL;
-        if (target_len > 0) {
-            p_args = malloc(sizeof(Expr*) * target_len);
-            for (size_t i = 0; i < target_len; i++) p_args[i] = expr_copy(current_perm[i]);
-        }
-        Expr* p = ll_view_result(head, p_args, target_len);
-        if (p_args) free(p_args);
+        Expr* p = llq_emit(q, current_perm, target_len);
         if (*res_count >= *res_cap) {
             *res_cap = (*res_cap == 0) ? 16 : (*res_cap * 2);
             *results = realloc(*results, sizeof(Expr*) * (*res_cap));
@@ -3383,8 +3371,8 @@ static void permutations_rec(UniqueElement* elements, size_t num_unique, size_t 
     for (size_t i = 0; i < num_unique; i++) {
         if (elements[i].count > 0) {
             elements[i].count--;
-            current_perm[current_len] = elements[i].expr;
-            permutations_rec(elements, num_unique, target_len, current_len + 1, current_perm, head, results, res_count, res_cap);
+            current_perm[current_len] = elements[i].idx;
+            permutations_rec(elements, num_unique, target_len, current_len + 1, current_perm, q, results, res_count, res_cap);
             elements[i].count++;
         }
     }
@@ -3394,10 +3382,10 @@ Expr* builtin_permutations(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     
     Expr* list = res->data.function.args[0];
-    /* A LinkedList permutes from a snapshot of its slots into a LinkedList of
-     * LinkedList permutations. */
-    LLView lv;
-    if (!ll_view(list, &lv)) return expr_copy(res); 
+    /* A LinkedList permutes from a snapshot of its slots (read on demand) into
+     * a LinkedList of LinkedList permutations, each copied slot to slot. */
+    LLSeq lv;
+    if (!llq_open(list, &lv)) return expr_copy(res); 
     
     size_t len = lv.n;
     
@@ -3437,17 +3425,18 @@ Expr* builtin_permutations(Expr* res) {
     UniqueElement* elements = malloc(sizeof(UniqueElement) * (len ? len : 1));
     size_t num_unique = 0;
     for (size_t i = 0; i < len; i++) {
-        Expr* e = lv.a[i];
+        Expr* e = expr_copy(llq_peek(&lv, i));
         bool found = false;
         for (size_t j = 0; j < num_unique; j++) {
-            if (expr_eq(e, elements[j].expr)) {
+            if (expr_eq(e, llq_peek(&lv, elements[j].idx))) {
                 elements[j].count++;
                 found = true;
                 break;
             }
         }
+        expr_free(e);
         if (!found) {
-            elements[num_unique].expr = e;
+            elements[num_unique].idx = i;
             elements[num_unique].count = 1;
             num_unique++;
         }
@@ -3455,7 +3444,7 @@ Expr* builtin_permutations(Expr* res) {
     
     Expr** results = NULL;
     size_t res_count = 0, res_cap = 0;
-    Expr** current_perm = malloc(sizeof(Expr*) * (n_min > n_max ? n_min : n_max) + sizeof(Expr*) * len); 
+    size_t* current_perm = malloc(sizeof(size_t) * ((n_min > n_max ? n_min : n_max) + len + 1));
     
     if (dn != 0) {
         if (dn > 0) {
@@ -3476,9 +3465,9 @@ Expr* builtin_permutations(Expr* res) {
     free(current_perm);
     free(elements);
     
-    Expr* final_res = ll_seq_of(ll_view_linked(&lv), results, res_count);
+    Expr* final_res = ll_seq_of(llq_linked(&lv), results, res_count);
     if (results) free(results);
-    ll_view_done(&lv);
+    llq_close(&lv);
     return final_res;
 }
 

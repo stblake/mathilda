@@ -6,7 +6,7 @@
 #include "../numloop.h"
 #include "numeric.h"
 #include "checked_int.h"     /* ci_add_i64 */
-#include "linkedlist_seq.h"  /* LLView: a LinkedList accumulates from its slots */
+#include "linkedlist_seq.h"  /* LLSeq: a LinkedList accumulates from its slots */
 #include <math.h>
 
 /* Accumulate of a typed LinkedList straight on its slots: gathered into one
@@ -97,13 +97,13 @@ Expr* builtin_accumulate(Expr* res) {
     }
 
     /* The elements: a List's own, or a LinkedList's read from its slots. */
-    LLView lv;
-    ll_view(lst, &lv);
+    LLSeq lv;
+    llq_open(lst, &lv);
     size_t n = lv.n;
 
     if (n == 0) {
-        Expr* r = ll_view_linked(&lv) ? ll_view_result(&lv, NULL, 0) : expr_copy(lst);
-        ll_view_done(&lv);
+        Expr* r = llq_linked(&lv) ? llq_result(&lv, NULL, 0) : expr_copy(lst);
+        llq_close(&lv);
         return r;
     }
 
@@ -113,28 +113,28 @@ Expr* builtin_accumulate(Expr* res) {
         bool all_numeric = true;
         for (size_t i = 0; i < n; i++) {
             double tmp;
-            if (!accumulate_to_double(lv.a[i], &tmp)) {
+            if (!accumulate_to_double(llq_peek(&lv, i), &tmp)) {
                 all_numeric = false;
                 break;
             }
         }
         if (all_numeric) {
             Expr** out = malloc(sizeof(Expr*) * n);
-            if (!out) { ll_view_done(&lv); return NULL; }
+            if (!out) { llq_close(&lv); return NULL; }
             double sum = 0.0;
             double c = 0.0;
             for (size_t i = 0; i < n; i++) {
                 double x = 0.0;
-                accumulate_to_double(lv.a[i], &x);
+                accumulate_to_double(llq_peek(&lv, i), &x);
                 double y = x - c;
                 double t = sum + y;
                 c = (t - sum) - y;
                 sum = t;
                 out[i] = expr_new_real(sum);
             }
-            Expr* result = ll_view_result(&lv, out, n);
+            Expr* result = llq_result(&lv, out, n);
             free(out);
-            ll_view_done(&lv);
+            llq_close(&lv);
             return result;
         }
         /* Mixed/symbolic input: fall through to the standard accumulator. */
@@ -145,31 +145,31 @@ Expr* builtin_accumulate(Expr* res) {
      * NULL means the list is not uniformly Real -- fall through. */
     if (lst->type == EXPR_FUNCTION) {
         Expr* fast = numloop_accumulate(lst);
-        if (fast) { ll_view_done(&lv); return fast; }
+        if (fast) { llq_close(&lv); return fast; }
     }
 
     Expr** out = malloc(sizeof(Expr*) * n);
-    if (!out) { ll_view_done(&lv); return NULL; }
+    if (!out) { llq_close(&lv); return NULL; }
 
-    out[0] = expr_copy(lv.a[0]);
+    out[0] = expr_copy(llq_peek(&lv, 0));
     for (size_t i = 1; i < n; i++) {
         Expr** plus_args = malloc(sizeof(Expr*) * 2);
         if (!plus_args) {
             for (size_t j = 0; j < i; j++) expr_free(out[j]);
             free(out);
-            ll_view_done(&lv);
+            llq_close(&lv);
             return NULL;
         }
         plus_args[0] = expr_copy(out[i - 1]);
-        plus_args[1] = expr_copy(lv.a[i]);
+        plus_args[1] = expr_copy(llq_peek(&lv, i));
         Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
         free(plus_args);
         out[i] = evaluate(plus_expr);
         expr_free(plus_expr);
     }
 
-    Expr* result = ll_view_result(&lv, out, n);
+    Expr* result = llq_result(&lv, out, n);
     free(out);
-    ll_view_done(&lv);
+    llq_close(&lv);
     return result;
 }

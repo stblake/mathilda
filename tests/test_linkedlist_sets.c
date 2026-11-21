@@ -129,6 +129,10 @@ void test_restructuring() {
                  "{{LinkedList[{1, 2}], LinkedList[{3}]}, {LinkedList[{s4a}], {s4b, s4c}}}");
     assert_eval_eq("Normal[ComposeList[LinkedList[{s4f, s4g}], s4x]]", "{s4x, s4f[s4x], s4g[s4f[s4x]]}", 0);
     assert_eval_eq("Head /@ Normal[Partition[LinkedList[{1, 2, 3, 4}], 2]]", "{LinkedList, LinkedList}", 0);
+    /* Sub-sequences are small LinkedLists: header plus one chunk, on the
+     * order of a List node (the chunk directory is sized to the list). */
+    assert_eval_eq("s4s = Partition[LinkedList[Range[10]], 2][[1]]; "
+                   "{Head[s4s], Normal[s4s], ByteCount[s4s] < 400}", "{LinkedList, {1, 2}, True}", 0);
     /* Fixed-shape records stay Lists. */
     assert_eval_eq("{Head[MinMax[LinkedList[{3, 1}]]], Head[First[Tally[LinkedList[{3, 1}]]]]}",
                    "{List, List}", 0);

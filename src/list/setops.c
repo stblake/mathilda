@@ -6,7 +6,7 @@
 #include "ndarray.h"    /* is_ndarray */
 #include "ndarray_internal.h"  /* nd_sort_i64_asc — the packed set-op fast path */
 #include "ndreduce.h"   /* ndred_tally — Tally's packed-buffer fast path */
-#include "linkedlist_seq.h" /* LLView: a LinkedList operand's elements */
+#include "linkedlist_seq.h" /* LLSeq: LinkedList operands, read element by element */
 
 /* ---------------------------------------------------------------------------
  *  Packed integer set operations.
@@ -31,27 +31,26 @@
 /* True when `e` is a rank-1 int64 buffer -- the only shape below.
  *
  * `is_ndarray`, NOT `is_packed_list`: a VISIBLE NDArray[...] holds the same
- * int64 buffer and is the same fast domain. Testing for the packed form alone
- * meant the visible surface fell straight through to ndarray_delist_and_reeval
- * and ran the boxed hash path on a materialised List -- measured at 10^6
- * elements, Union 5.85 ms packed against 850 ms visible (145x) and
- * DeleteDuplicates 2.05 ms against 147 ms (72x), on identical data.
- *
- * Presentation follows the input either way: every result here is built with
- * expr_new_ndarray_like(args[0], ...), which copies `present_as` from the
- * operand, so a packed argument still answers with a packed List and a visible
- * one with a visible NDArray. */
+ * int64 buffer and is the same fast domain. Presentation follows the input:
+ * every packed result is built with expr_new_ndarray_like(args[0], ...). */
 static bool setop_i64(const Expr* e) {
     return is_ndarray(e) && e->data.ndarray.rank == 1 &&
            e->data.ndarray.dtype == NDT_INT64;
 }
 
-/* Sorted, deduplicated copy of `a`'s buffer. Caller owns `*out`. */
-static bool setop_sorted_unique(const Expr* a, int64_t** out, size_t* n_out) {
-    size_t n = (size_t)a->data.ndarray.dims[0];
+/* ---- raw int64 cores ------------------------------------------------------
+ * Every packed int64 set operation runs on raw (values, count) spans, so a
+ * packed List and a typed LinkedList (its slots gathered into one scratch
+ * buffer) run the same kernel and cannot disagree. Each core writes an owned
+ * buffer to *out (count *m) and returns false only to decline (range too wide
+ * for a direct index, allocation failure). */
+typedef struct { const int64_t* v; size_t n; } I64Span;
+
+/* Sorted, deduplicated copy of a span. */
+static bool raw_sorted_unique(const int64_t* src, size_t n, int64_t** out, size_t* n_out) {
     int64_t* v = malloc(sizeof(int64_t) * (n ? n : 1));
     if (!v) return false;
-    memcpy(v, a->data.ndarray.data, sizeof(int64_t) * n);
+    memcpy(v, src, sizeof(int64_t) * n);
     nd_sort_i64_asc(v, n);
     size_t m = 0;
     for (size_t i = 0; i < n; i++)
@@ -60,30 +59,13 @@ static bool setop_sorted_unique(const Expr* a, int64_t** out, size_t* n_out) {
     return true;
 }
 
-/* Wrap an owned int64 buffer as a packed list shaped like `src`. Frees `v` and
- * returns NULL on allocation failure, so callers can degrade. */
-static Expr* setop_emit(const Expr* src, int64_t* v, size_t m) {
-    int64_t dims[1] = { (int64_t)m };
-    if (m == 0) { free(v); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
-    int64_t* buf = malloc(sizeof(int64_t) * m);
-    if (!buf) { free(v); return NULL; }
-    memcpy(buf, v, sizeof(int64_t) * m);
-    free(v);
-    return expr_new_ndarray_like(src, 1, dims, buf, NDT_INT64);
-}
-
 /* ---- Direct-index membership -------------------------------------------
  *
- * Sorting to deduplicate costs O(n log n) comparisons and a full permutation of
- * the buffer. When the values come from a bounded range -- labels, ids, indices,
- * RandomInteger bounds, which is what integer set operations are usually made of
- * -- membership is just a byte lookup, and walking the range in order emits the
- * unique values ALREADY SORTED, so Union needs no sort at all.
- *
- * The table is one byte per value in the range and is only built when the range
- * is no wider than the input it replaces, so it is never larger than the buffer
- * already in hand. Returns 0 (decline) otherwise, and the caller keeps the
- * sort-merge path, which has no range restriction. */
+ * When the values come from a bounded range -- labels, ids, indices -- set
+ * membership is a byte lookup, and walking the range in order emits the unique
+ * values ALREADY SORTED. The table is only built when the range is no wider
+ * than the input it replaces. Declines otherwise; the sort-merge path has no
+ * range restriction. */
 #define SETOP_DIRECT_MAX_RANGE ((uint64_t)1 << 26)
 
 static uint64_t setop_direct_range(const int64_t* v, size_t n, int64_t* mn_out) {
@@ -93,29 +75,23 @@ static uint64_t setop_direct_range(const int64_t* v, size_t n, int64_t* mn_out) 
         if (v[i] < mn) mn = v[i];
         if (v[i] > mx) mx = v[i];
     }
-    /* Unsigned: mx - mn as int64 overflows on a full-width spread, which is UB
-     * rather than a big number. The uint64 difference is exact when mx >= mn. */
+    /* Unsigned: mx - mn as int64 overflows on a full-width spread. */
     uint64_t span = (uint64_t)mx - (uint64_t)mn;
     if (span >= SETOP_DIRECT_MAX_RANGE || span + 1 > (uint64_t)n) return 0;
     *mn_out = mn;
     return span + 1;
 }
 
-/* Deduplicate `a`'s buffer by direct indexing. `sorted` picks the output order:
- * true walks the range (ascending -- Union), false walks the input (first
- * appearance -- DeleteDuplicates). Returns NULL when the range declines. */
-static Expr* setop_direct_unique(const Expr* a, bool sorted) {
-    size_t n = (size_t)a->data.ndarray.dims[0];
-    const int64_t* v = (const int64_t*)a->data.ndarray.data;
+/* Deduplicate by direct indexing: `sorted` walks the range (ascending --
+ * Union), else the input (first appearance -- DeleteDuplicates). */
+static bool raw_direct_unique(const int64_t* v, size_t n, bool sorted, int64_t** outp, size_t* mp) {
     int64_t mn = 0;
     uint64_t range = setop_direct_range(v, n, &mn);
-    if (!range) return NULL;
-
+    if (!range) return false;
     unsigned char* seen = calloc((size_t)range, 1);
-    if (!seen) return NULL;
+    if (!seen) return false;
     int64_t* out = malloc(sizeof(int64_t) * n);
-    if (!out) { free(seen); return NULL; }
-
+    if (!out) { free(seen); return false; }
     size_t m = 0;
     if (sorted) {
         for (size_t i = 0; i < n; i++) seen[(uint64_t)v[i] - (uint64_t)mn] = 1;
@@ -128,106 +104,72 @@ static Expr* setop_direct_unique(const Expr* a, bool sorted) {
         }
     }
     free(seen);
-
-    int64_t dims[1] = { (int64_t)m };
-    if (m == 0) { free(out); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
-    int64_t* buf = realloc(out, sizeof(int64_t) * m);   /* shrink to fit */
-    if (buf) out = buf;
-    return expr_new_ndarray_like(a, 1, dims, out, NDT_INT64);
+    *outp = out; *mp = m;
+    return true;
 }
 
-/* The two- and many-list forms, by the same direct index. One int32 per value
- * in the global range holds a BITMASK of which lists contain it, which makes all
- * three operations the same walk with a different predicate:
- *
- *      Union         mask != 0
- *      Intersection  mask == all-lists
- *      Complement    mask == 1          (in the first list and no other)
- *
- * Walking the range ascending emits sorted-and-deduplicated output directly, so
- * none of the three sorts. Capped at 32 lists because the mask is 32 bits; past
- * that (and for a range too wide to index) the sort-merge below still runs, and
- * it has no such restriction. */
-static Expr* setop_direct_multi(Expr** args, size_t nl, int mode) {
-    if (nl < 2 || nl > 32) return NULL;
-
+/* The many-list forms by the same direct index: one int32 per value holds a
+ * BITMASK of the lists containing it, so Union (mask != 0), Intersection
+ * (mask == all) and Complement (mask == 1) are one ascending walk. At most 32
+ * lists. */
+static bool raw_direct_multi(const I64Span* sp, size_t nl, int mode, int64_t** outp, size_t* mp) {
+    if (nl < 2 || nl > 32) return false;
     int64_t mn = 0, mx = 0;
     size_t total = 0;
     bool seeded = false;
     for (size_t i = 0; i < nl; i++) {
-        size_t ni = (size_t)args[i]->data.ndarray.dims[0];
-        const int64_t* vi = (const int64_t*)args[i]->data.ndarray.data;
-        total += ni;
-        for (size_t j = 0; j < ni; j++) {
-            if (!seeded) { mn = mx = vi[j]; seeded = true; continue; }
-            if (vi[j] < mn) mn = vi[j];
-            if (vi[j] > mx) mx = vi[j];
+        total += sp[i].n;
+        for (size_t j = 0; j < sp[i].n; j++) {
+            int64_t x = sp[i].v[j];
+            if (!seeded) { mn = mx = x; seeded = true; continue; }
+            if (x < mn) mn = x;
+            if (x > mx) mx = x;
         }
     }
-    if (!seeded || total == 0)                     /* every list empty */
-        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-
+    if (!seeded || total == 0) { *outp = NULL; *mp = 0; return true; }   /* every list empty */
     uint64_t span = (uint64_t)mx - (uint64_t)mn;
-    if (span >= SETOP_DIRECT_MAX_RANGE || span + 1 > (uint64_t)total) return NULL;
+    if (span >= SETOP_DIRECT_MAX_RANGE || span + 1 > (uint64_t)total) return false;
     uint64_t range = span + 1;
-
     uint32_t* mask = calloc((size_t)range, sizeof(uint32_t));
-    if (!mask) return NULL;
+    if (!mask) return false;
     for (size_t i = 0; i < nl; i++) {
-        size_t ni = (size_t)args[i]->data.ndarray.dims[0];
-        const int64_t* vi = (const int64_t*)args[i]->data.ndarray.data;
         uint32_t bit = (uint32_t)1 << i;
-        for (size_t j = 0; j < ni; j++)
-            mask[(uint64_t)vi[j] - (uint64_t)mn] |= bit;
+        for (size_t j = 0; j < sp[i].n; j++)
+            mask[(uint64_t)sp[i].v[j] - (uint64_t)mn] |= bit;
     }
-
     uint32_t all = (nl == 32) ? 0xFFFFFFFFu : (((uint32_t)1 << nl) - 1);
     int64_t* out = malloc(sizeof(int64_t) * (size_t)range);
-    if (!out) { free(mask); return NULL; }
+    if (!out) { free(mask); return false; }
     size_t m = 0;
     for (uint64_t d = 0; d < range; d++) {
         uint32_t k = mask[d];
-        bool keep = (mode == 0) ? (k != 0)
-                  : (mode == 1) ? (k == all)
-                                : (k == 1u);
+        bool keep = (mode == 0) ? (k != 0) : (mode == 1) ? (k == all) : (k == 1u);
         if (keep) out[m++] = mn + (int64_t)d;
     }
     free(mask);
-
-    int64_t dims[1] = { (int64_t)m };
-    if (m == 0) { free(out); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
-    int64_t* buf = realloc(out, sizeof(int64_t) * m);
-    if (buf) out = buf;
-    return expr_new_ndarray_like(args[0], 1, dims, out, NDT_INT64);
+    *outp = out; *mp = m;
+    return true;
 }
 
-/* Wide-range fallback for DeleteDuplicates: an open-addressed int64 set. The
- * key sits in the slot rather than behind an index, so a probe is ONE dependent
- * load -- the same reason ndred_tally stores its entries inline. Still far
- * cheaper than the generic path, which boxes every element into an Expr first. */
+/* Wide-range DeleteDuplicates: an open-addressed int64 set, the key in the
+ * slot so a probe is one dependent load. */
 typedef struct { int64_t key; uint8_t used; } SetSlot;
 
-static Expr* setop_hash_first_unique(const Expr* a) {
-    size_t n = (size_t)a->data.ndarray.dims[0];
-    const int64_t* v = (const int64_t*)a->data.ndarray.data;
-
+static bool raw_hash_first_unique(const int64_t* v, size_t n, int64_t** outp, size_t* mp) {
     size_t cap = 1024;
     while (cap * 7 < n * 10) {              /* keep load factor under 0.7 */
-        if (cap > ((size_t)1 << 40)) return NULL;
+        if (cap > ((size_t)1 << 40)) return false;
         cap *= 2;
     }
     size_t mask = cap - 1;
     SetSlot* tab = calloc(cap, sizeof(SetSlot));
-    if (!tab) return NULL;
-    int64_t* out = malloc(sizeof(int64_t) * n);
-    if (!out) { free(tab); return NULL; }
-
+    if (!tab) return false;
+    int64_t* out = malloc(sizeof(int64_t) * (n ? n : 1));
+    if (!out) { free(tab); return false; }
     size_t m = 0;
     for (size_t i = 0; i < n; i++) {
-        uint64_t k = (uint64_t)v[i];
-        /* splitmix64 finalizer: consecutive integers would otherwise collide in
-         * long runs under linear probing. */
-        uint64_t z = k;
+        /* splitmix64 finalizer: consecutive integers would otherwise collide */
+        uint64_t z = (uint64_t)v[i];
         z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
         z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
         size_t h = (size_t)(z ^ (z >> 31)) & mask;
@@ -238,53 +180,33 @@ static Expr* setop_hash_first_unique(const Expr* a) {
         }
     }
     free(tab);
-
-    int64_t dims[1] = { (int64_t)m };
-    if (m == 0) { free(out); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
-    int64_t* buf = realloc(out, sizeof(int64_t) * m);
-    if (buf) out = buf;
-    return expr_new_ndarray_like(a, 1, dims, out, NDT_INT64);
+    *outp = out; *mp = m;
+    return true;
 }
 
-/* DeleteDuplicates[packed int64 list] -- first-appearance order, like the List
- * path. NULL means "not my shape", and the caller degrades. */
-static Expr* setop_packed_delete_duplicates(const Expr* a) {
-    if (!setop_i64(a)) return NULL;
-    if ((size_t)a->data.ndarray.dims[0] == 0)
-        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    Expr* direct = setop_direct_unique(a, false);
-    return direct ? direct : setop_hash_first_unique(a);
+/* DeleteDuplicates of a span, first-appearance order. */
+static bool raw_delete_duplicates(const int64_t* v, size_t n, int64_t** outp, size_t* mp) {
+    if (n == 0) { *outp = NULL; *mp = 0; return true; }
+    return raw_direct_unique(v, n, false, outp, mp) || raw_hash_first_unique(v, n, outp, mp);
 }
 
-/* Union / Intersection / Complement over `nl` packed int64 lists. `mode` is 0,
- * 1, 2 respectively. Returns NULL when the shape is outside the fast domain. */
-static Expr* setop_packed(Expr** args, size_t nl, int mode) {
-    for (size_t i = 0; i < nl; i++) if (!setop_i64(args[i])) return NULL;
-    if (nl == 0) return NULL;
-
-    /* Union[list] is the overwhelmingly common single-list call, and it is
-     * exactly "sorted unique" -- which direct indexing produces without a sort,
-     * because walking the range emits ascending by construction. */
-    if (nl == 1 && mode == 0 && (size_t)args[0]->data.ndarray.dims[0] > 0) {
-        Expr* direct = setop_direct_unique(args[0], true);
-        if (direct) return direct;
-    }
-    if (nl > 1) {
-        Expr* direct = setop_direct_multi(args, nl, mode);
-        if (direct) return direct;
-    }
+/* Union / Intersection / Complement (mode 0, 1, 2) over `nl` spans. */
+static bool raw_setop(const I64Span* sp, size_t nl, int mode, int64_t** outp, size_t* mp) {
+    if (nl == 0) return false;
+    if (nl == 1 && mode == 0 && sp[0].n > 0 && raw_direct_unique(sp[0].v, sp[0].n, true, outp, mp))
+        return true;
+    if (nl > 1 && raw_direct_multi(sp, nl, mode, outp, mp)) return true;
 
     int64_t* acc; size_t accn;
-    if (!setop_sorted_unique(args[0], &acc, &accn)) return NULL;
-
+    if (!raw_sorted_unique(sp[0].v, sp[0].n, &acc, &accn)) return false;
     for (size_t i = 1; i < nl; i++) {
         int64_t* b; size_t bn;
-        if (!setop_sorted_unique(args[i], &b, &bn)) { free(acc); return NULL; }
+        if (!raw_sorted_unique(sp[i].v, sp[i].n, &b, &bn)) { free(acc); return false; }
         size_t p = 0, q = 0, m = 0;
         if (mode == 0) {                              /* Union: merge */
             size_t cap = accn + bn;
             int64_t* merged = malloc(sizeof(int64_t) * (cap ? cap : 1));
-            if (!merged) { free(acc); free(b); return NULL; }
+            if (!merged) { free(acc); free(b); return false; }
             while (p < accn || q < bn) {
                 int64_t v;
                 if (q >= bn)                 v = acc[p++];
@@ -311,244 +233,193 @@ static Expr* setop_packed(Expr** args, size_t nl, int mode) {
             free(b); accn = m;
         }
     }
-    return setop_emit(args[0], acc, accn);
+    *outp = acc; *mp = accn;
+    return true;
+}
+
+/* ---- packed wrappers ---- */
+
+/* An owned result buffer as a packed list shaped like `src` ({} when empty).
+ * Frees `v`; NULL on allocation failure, so callers can degrade. */
+static Expr* setop_emit(const Expr* src, int64_t* v, size_t m) {
+    int64_t dims[1] = { (int64_t)m };
+    if (m == 0) { free(v); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
+    int64_t* buf = realloc(v, sizeof(int64_t) * m);   /* shrink to fit */
+    if (!buf) buf = v;
+    return expr_new_ndarray_like(src, 1, dims, buf, NDT_INT64);
+}
+
+static Expr* setop_packed_delete_duplicates(const Expr* a) {
+    if (!setop_i64(a)) return NULL;
+    int64_t* out; size_t m;
+    if (!raw_delete_duplicates((const int64_t*)a->data.ndarray.data, (size_t)a->data.ndarray.dims[0], &out, &m))
+        return NULL;
+    return setop_emit(a, out, m);
+}
+
+static Expr* setop_packed(Expr** args, size_t nl, int mode) {
+    if (nl == 0) return NULL;
+    for (size_t i = 0; i < nl; i++) if (!setop_i64(args[i])) return NULL;
+    I64Span* sp = malloc(sizeof(I64Span) * nl);
+    if (!sp) return NULL;
+    for (size_t i = 0; i < nl; i++) {
+        sp[i].v = (const int64_t*)args[i]->data.ndarray.data;
+        sp[i].n = (size_t)args[i]->data.ndarray.dims[0];
+    }
+    int64_t* out; size_t m;
+    bool ok = raw_setop(sp, nl, mode, &out, &m);
+    free(sp);
+    return ok ? setop_emit(args[0], out, m) : NULL;
 }
 
 /* True when any of args[0..n) is an ndarray -- the guard every generic set
- * operation needs before it runs, because the code below tests
- * `type != EXPR_FUNCTION` and an NDArray is not one, so it would answer with
- * the array itself or with {}. */
+ * operation needs, because the code below would read an NDArray as an atom. */
 static bool setop_any_nd(Expr** args, size_t n) {
     for (size_t i = 0; i < n; i++) if (is_ndarray(args[i])) return true;
     return false;
 }
 
-typedef struct HashNode {
-    Expr* key;
-    size_t index; // Original index or position in unique_elems
-    struct HashNode* next;
-} HashNode;
-
-typedef struct {
-    HashNode** buckets;
-    size_t size;
-} HashTable;
-
-static HashTable* ht_create(size_t size) {
-    HashTable* ht = malloc(sizeof(HashTable));
-    ht->size = size;
-    ht->buckets = calloc(size, sizeof(HashNode*));
-    return ht;
-}
-
-static void ht_free(HashTable* ht, bool free_keys) {
-    for (size_t i = 0; i < ht->size; i++) {
-        HashNode* node = ht->buckets[i];
-        while (node) {
-            HashNode* next = node->next;
-            if (free_keys) expr_free(node->key);
-            free(node);
-            node = next;
-        }
+/* ---- typed LinkedList wrappers ----
+ * The int64 slots of LinkedList operands gathered into scratch spans (raw
+ * buffers, not Lists), for the raw cores above. False unless every operand is
+ * a LinkedList of machine integers (or empty). */
+static bool setop_ll_spans(Expr** args, size_t nl, I64Span* sp) {
+    for (size_t i = 0; i < nl; i++) {
+        const LinkedList* ll = expr_linkedlist(args[i]);
+        if (!ll || (ll_kind(ll) != LL_I64 && ll_length(ll) != 0)) return false;
     }
-    free(ht->buckets);
-    free(ht);
-}
-
-static HashNode* ht_find(HashTable* ht, Expr* key) {
-    uint64_t h = expr_hash(key);
-    size_t bucket = (size_t)(h % ht->size);
-    HashNode* node = ht->buckets[bucket];
-    while (node) {
-        if (expr_eq(node->key, key)) return node;
-        node = node->next;
+    for (size_t i = 0; i < nl; i++) {
+        const LinkedList* ll = args[i]->data.llist;
+        size_t n = (size_t)ll_length(ll);
+        int64_t* b = malloc(sizeof(int64_t) * (n ? n : 1));
+        if (!b) { while (i-- > 0) free((void*)sp[i].v); return false; }
+        if (n) ll_gather(ll, 0, (int64_t)n, b);
+        sp[i].v = b; sp[i].n = n;
     }
-    return NULL;
+    return true;
 }
 
-static void ht_insert(HashTable* ht, Expr* key, size_t index) {
-    uint64_t h = expr_hash(key);
-    size_t bucket = (size_t)(h % ht->size);
-    HashNode* node = malloc(sizeof(HashNode));
-    node->key = key;
-    node->index = index;
-    node->next = ht->buckets[bucket];
-    ht->buckets[bucket] = node;
+static void setop_ll_spans_free(I64Span* sp, size_t nl) {
+    for (size_t i = 0; i < nl; i++) free((void*)sp[i].v);
 }
 
-/* The operands args[0..nl) of a set operation as element views (a LinkedList
- * stands for the List of its elements). Every List operand must share one
- * head -- List, when any operand is a LinkedList -- and the result is a
- * LinkedList when any operand is one. Returns 0 with views[0..nl) open, the
- * 1-based position of an atom operand (views closed), or -1 on a head
- * mismatch (views closed). */
-typedef struct { LLView* v; size_t n; bool linked; const Expr* head; } SetOps;
+/* An owned int64 buffer as a new LinkedList (consumes v). */
+static Expr* setop_ll_emit(int64_t* v, size_t m) {
+    LinkedList* ll = m ? ll_from_buffer(LL_I64, v, (int64_t)m) : ll_new();
+    free(v);
+    return expr_new_linkedlist(ll);
+}
 
+/* Union / Intersection / Complement of LinkedLists of machine integers on the
+ * packed kernels; NULL for any other operand shape. */
+static Expr* setop_ll_typed(Expr** args, size_t nl, int mode) {
+    if (nl == 0) return NULL;
+    I64Span* sp = malloc(sizeof(I64Span) * nl);
+    if (!sp) return NULL;
+    if (!setop_ll_spans(args, nl, sp)) { free(sp); return NULL; }
+    int64_t* out; size_t m;
+    bool ok = raw_setop(sp, nl, mode, &out, &m);
+    setop_ll_spans_free(sp, nl);
+    free(sp);
+    return ok ? setop_ll_emit(out, m) : NULL;
+}
+
+/* ---- the operands of a generic set operation -------------------------------
+ * Lists of one head, or LinkedLists (each standing for the List of its
+ * elements; the answer is a LinkedList when any operand is one), read element
+ * by element. The operands' elements are numbered consecutively ("global"
+ * indices) so one index set or one sort can span them all. */
+typedef struct { LLSeq* q; size_t n; size_t* off; bool linked; const Expr* head; } SetOps;
+
+/* 0 with every operand open, the 1-based position of an atom operand, or -1
+ * on a head mismatch (nothing left open either way). */
 static int setops_open(Expr** args, size_t nl, SetOps* so) {
-    so->v = malloc(sizeof(LLView) * (nl ? nl : 1));
+    so->q = malloc(sizeof(LLSeq) * (nl ? nl : 1));
+    so->off = malloc(sizeof(size_t) * (nl + 1));
     so->n = 0; so->linked = false; so->head = NULL;
     int bad = 0;
     for (size_t i = 0; i < nl && !bad; i++) {
-        if (!ll_view(args[i], &so->v[i])) { bad = (int)i + 1; break; }
+        if (!llq_open(args[i], &so->q[i])) { bad = (int)i + 1; break; }
         so->n = i + 1;
-        if (ll_view_linked(&so->v[i])) so->linked = true;
-        else if (!so->head) so->head = so->v[i].head;
-        else if (!expr_eq((Expr*)so->head, (Expr*)so->v[i].head)) bad = -1;
+        if (llq_linked(&so->q[i])) so->linked = true;
+        else if (!so->head) so->head = so->q[i].head;
+        else if (!expr_eq((Expr*)so->head, (Expr*)so->q[i].head)) bad = -1;
     }
     if (!bad && so->linked && so->head &&
         !(so->head->type == EXPR_SYMBOL && so->head->data.symbol.name == SYM_List))
         bad = -1;
     if (bad) {
-        for (size_t i = 0; i < so->n; i++) ll_view_done(&so->v[i]);
-        free(so->v);
-        so->v = NULL;
+        for (size_t i = 0; i < so->n; i++) llq_close(&so->q[i]);
+        free(so->q); free(so->off);
+        so->q = NULL; so->off = NULL;
+        return bad;
     }
-    return bad;
+    so->off[0] = 0;
+    for (size_t i = 0; i < nl; i++) so->off[i + 1] = so->off[i] + so->q[i].n;
+    return 0;
 }
 
 static void setops_close(SetOps* so) {
-    for (size_t i = 0; i < so->n; i++) ll_view_done(&so->v[i]);
-    free(so->v);
+    for (size_t i = 0; i < so->n; i++) llq_close(&so->q[i]);
+    free(so->q); free(so->off);
 }
 
-/* The result container for items[0..n) (consumed). */
-static Expr* setops_result(const SetOps* so, Expr** items, size_t n) {
-    if (so->linked) return ll_seq_of(true, items, n);
-    return expr_new_function(expr_copy((Expr*)so->head), items, n);
+static size_t setops_total(const SetOps* so) { return so->off[so->n]; }
+
+/* The operand holding global index g, and g's index within it. */
+static size_t setops_which(const SetOps* so, size_t g, size_t* local) {
+    size_t lo = 0, hi = so->n;                  /* off[lo] <= g < off[hi] */
+    while (hi - lo > 1) {
+        size_t mid = (lo + hi) / 2;
+        if (so->off[mid] <= g) lo = mid; else hi = mid;
+    }
+    *local = g - so->off[lo];
+    return lo;
 }
 
-static int compare_expr_ptrs(const void* a, const void* b) {
-    Expr* ea = *(Expr**)a;
-    Expr* eb = *(Expr**)b;
-    return expr_compare(ea, eb);
+static Expr* setops_peek(void* ctx, size_t g) {
+    SetOps* so = ctx;
+    size_t local, k = setops_which(so, g, &local);
+    return llq_peek(&so->q[k], local);
 }
 
-Expr* builtin_union(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
-    
-    // Find options
-    Expr* same_test = NULL;
-    size_t last_arg = res->data.function.arg_count;
-    for (size_t i = 0; i < res->data.function.arg_count; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol.name == SYM_Rule &&
-            arg->data.function.arg_count == 2 &&
-            arg->data.function.args[0]->type == EXPR_SYMBOL &&
-            arg->data.function.args[0]->data.symbol.name == SYM_SameTest) {
-            same_test = arg->data.function.args[1];
-            if (i < last_arg) last_arg = i;
+/* The answer holding the elements at global indices g[0..k): a LinkedList
+ * copied slot to slot, else head[copies]. */
+static Expr* setops_emit(SetOps* so, const size_t* g, size_t k) {
+    if (so->linked) {
+        LinkedList* out = ll_new();
+        for (size_t t = 0; t < k; t++) {
+            size_t local, w = setops_which(so, g[t], &local);
+            llq_push(out, &so->q[w], local);
         }
+        return expr_new_linkedlist(out);
     }
-    
-    if (last_arg == 0) return NULL;
-
-    /* Packed operands: take the buffer merge, or degrade. Never fall through --
-     * the test just below is `type != EXPR_FUNCTION`, and an NDArray is not one,
-     * so Union[packedList] would answer with the array itself unchanged. */
-    if (setop_any_nd(res->data.function.args, last_arg)) {
-        if (!same_test) {
-            Expr* fast = setop_packed(res->data.function.args, last_arg, 0);
-            if (fast) return fast;
-        }
-        return ndarray_delist_and_reeval(res);
-    }
-
-    /* Operands: Lists of one head, or LinkedLists (read from their slots). */
-    SetOps so;
-    int bad = setops_open(res->data.function.args, last_arg, &so);
-    if (bad > 0) return builtin_normal_error("Union", res, bad);
-    if (bad < 0) return NULL;                      /* heads must match */
-
-    // Total count of elements
-    size_t total_count = 0;
-    for (size_t i = 0; i < last_arg; i++) total_count += so.v[i].n;
-
-    if (total_count == 0) {
-        Expr* r = so.linked ? setops_result(&so, NULL, 0) : expr_copy(res->data.function.args[0]);
-        setops_close(&so);
-        return r;
-    }
-    
-    if (same_test == NULL) {
-        /* Default path: deduplicate through the hash set first, then sort only
-         * the distinct elements.  Sorting every element first cost
-         * O(total log total) expr_compare calls -- 946k elements reduced to 91
-         * in a Dirac-trace Cases[...] // Union (issue #112) -- where the hash
-         * pass is O(total) and the sort is O(unique log unique). */
-        Expr** uniq = malloc(sizeof(Expr*) * total_count);
-        size_t nu = 0;
-        HashTable* seen = ht_create(total_count + 1);
-        for (size_t i = 0; i < last_arg; i++) {
-            for (size_t j = 0; j < so.v[i].n; j++) {
-                Expr* e = so.v[i].a[j];
-                if (!ht_find(seen, e)) {
-                    Expr* c = expr_copy(e);
-                    uniq[nu++] = c;
-                    ht_insert(seen, c, 0);
-                }
-            }
-        }
-        ht_free(seen, false);
-        qsort(uniq, nu, sizeof(Expr*), compare_expr_ptrs);
-        Expr* result = setops_result(&so, uniq, nu);
-        free(uniq);
-        setops_close(&so);
-        return result;
-    }
-
-    Expr** all_args = malloc(sizeof(Expr*) * total_count);
-    size_t idx = 0;
-    for (size_t i = 0; i < last_arg; i++)
-        for (size_t j = 0; j < so.v[i].n; j++)
-            all_args[idx++] = expr_copy(so.v[i].a[j]);
-    
-    // Sort elements
-    qsort(all_args, total_count, sizeof(Expr*), compare_expr_ptrs);
-    
-    // Remove duplicates
-    Expr** unique_args = malloc(sizeof(Expr*) * total_count);
-    size_t unique_count = 0;
-    
-    if (total_count > 0) {
-        unique_args[unique_count++] = all_args[0];
-        for (size_t i = 1; i < total_count; i++) {
-            bool is_dup = false;
-            if (same_test == NULL) {
-                if (expr_eq(all_args[i], unique_args[unique_count - 1])) {
-                    is_dup = true;
-                }
-            } else {
-                Expr* call_args[2] = { expr_copy(all_args[i]), expr_copy(unique_args[unique_count - 1]) };
-                Expr* call = expr_new_function(expr_copy(same_test), call_args, 2);
-                Expr* eval_res = eval_callback(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
-                    is_dup = true;
-                }
-                expr_free(eval_res);
-                expr_free(call);
-            }
-            
-            if (is_dup) {
-                expr_free(all_args[i]);
-            } else {
-                unique_args[unique_count++] = all_args[i];
-            }
-        }
-    }
-    
-    free(all_args);
-    
-    Expr* result = setops_result(&so, unique_args, unique_count);
-    if (unique_args) free(unique_args);
-    setops_close(&so);
-
-    return result;
+    Expr** items = malloc(sizeof(Expr*) * (k ? k : 1));
+    for (size_t t = 0; t < k; t++) items[t] = expr_copy(setops_peek(so, g[t]));
+    Expr* r = expr_new_function(expr_copy((Expr*)so->head), items, k);
+    free(items);
+    return r;
 }
 
-/* Evaluate test[a, b] and report whether it yields the symbol True. Used by
- * Intersection's SameTest path (a and b are borrowed; the call is built from
- * fresh copies and freed here). */
+/* qsort over global indices by canonical order (file-static context, saved
+ * and restored: expr_compare runs no user code, but stay reentrant). */
+static SetOps* g_cmp_so = NULL;
+static int setops_idx_cmp(const void* a, const void* b) {
+    size_t ia = *(const size_t*)a, ib = *(const size_t*)b;
+    Expr* ea = expr_copy(setops_peek(g_cmp_so, ia));
+    int c = expr_compare(ea, setops_peek(g_cmp_so, ib));
+    expr_free(ea);
+    return c;
+}
+static void setops_sort(SetOps* so, size_t* idx, size_t k) {
+    SetOps* saved = g_cmp_so;
+    g_cmp_so = so;
+    qsort(idx, k, sizeof(size_t), setops_idx_cmp);
+    g_cmp_so = saved;
+}
+
+/* Evaluate test[a, b] and report whether it yields True (a and b borrowed;
+ * the call is built from fresh copies). */
 static bool same_test_equal(Expr* test, Expr* a, Expr* b) {
     Expr* call_args[2] = { expr_copy(a), expr_copy(b) };
     Expr* call = expr_new_function(expr_copy(test), call_args, 2);
@@ -559,27 +430,19 @@ static bool same_test_equal(Expr* test, Expr* a, Expr* b) {
     return eq;
 }
 
-/* Intersection[l1, l2, ...] gives the sorted list of elements common to every
- * li, deduplicated, using the head of the first argument (need not be List).
- *
- * Default comparison is canonical structural equality, computed in O(total)
- * with the file-local hash set: deduplicate the first operand, then keep only
- * the candidates that survive a membership test against each later operand.
- *
- * SameTest -> f switches to an O(n^2) path using f[a,b]===True as the
- * equivalence relation. Wolfram keeps the canonically-greatest member of each
- * equivalence class as its representative, so we sort the first operand
- * ascending and, on a class collision, replace the stored representative with
- * the later (hence greater) element. */
-Expr* builtin_intersection(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
-        return builtin_arg_error("Intersection",
-            (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0,
-            1, SIZE_MAX);
+/* test[element ga, element gb] of the operands. */
+static bool setops_test(SetOps* so, Expr* test, size_t ga, size_t gb) {
+    Expr* a = expr_copy(setops_peek(so, ga));
+    Expr* b = expr_copy(setops_peek(so, gb));
+    bool eq = same_test_equal(test, a, b);
+    expr_free(a); expr_free(b);
+    return eq;
+}
 
-    /* Locate a trailing SameTest option, mirroring builtin_union. */
+/* A trailing SameTest -> f option: *last_arg is where the operands end. */
+static Expr* setops_same_test(Expr* res, size_t* last_arg) {
     Expr* same_test = NULL;
-    size_t last_arg = res->data.function.arg_count;
+    *last_arg = res->data.function.arg_count;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
@@ -588,353 +451,287 @@ Expr* builtin_intersection(Expr* res) {
             arg->data.function.args[0]->type == EXPR_SYMBOL &&
             arg->data.function.args[0]->data.symbol.name == SYM_SameTest) {
             same_test = arg->data.function.args[1];
-            if (i < last_arg) last_arg = i;
+            if (i < *last_arg) *last_arg = i;
         }
     }
+    return same_test;
+}
 
-    if (last_arg == 0) return NULL;   /* only an option, no list operands */
+/* Union[l1, l2, ...]: the sorted distinct elements of all the li. Default
+ * comparison: the hash set over every element (O(total)), then a sort of the
+ * distinct ones only (issue #112: 946k elements reduced to 91). SameTest -> f:
+ * sort everything, then drop an element f calls equal to the last kept. */
+Expr* builtin_union(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    size_t last_arg;
+    Expr* same_test = setops_same_test(res, &last_arg);
+    if (last_arg == 0) return NULL;
 
+    /* Packed operands: take the buffer merge, or degrade. */
     if (setop_any_nd(res->data.function.args, last_arg)) {
         if (!same_test) {
-            Expr* fast = setop_packed(res->data.function.args, last_arg, 1);
+            Expr* fast = setop_packed(res->data.function.args, last_arg, 0);
             if (fast) return fast;
         }
         return ndarray_delist_and_reeval(res);
     }
+    if (!same_test) {               /* LinkedLists of machine integers: the same kernel */
+        Expr* fast = setop_ll_typed(res->data.function.args, last_arg, 0);
+        if (fast) return fast;
+    }
 
-    /* Every operand must share the head of the first; an atom is the
-     * reference's Intersection::normal, not an answer. A LinkedList operand stands
-     * for the List of its elements. */
     SetOps so;
     int bad = setops_open(res->data.function.args, last_arg, &so);
-    if (bad > 0) return builtin_normal_error("Intersection", res, bad);
-    if (bad < 0) return NULL;
-    Expr* const* first_a = so.v[0].a;
+    if (bad > 0) return builtin_normal_error("Union", res, bad);
+    if (bad < 0) return NULL;                      /* heads must match */
 
-    size_t first_count = so.v[0].n;
-    Expr** cand = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
+    size_t total = setops_total(&so);
+    if (total == 0) {
+        Expr* r = so.linked ? setops_emit(&so, NULL, 0) : expr_copy(res->data.function.args[0]);
+        setops_close(&so);
+        return r;
+    }
+    size_t* keep = malloc(sizeof(size_t) * total);
+    size_t nk = 0;
+    if (same_test == NULL) {
+        LLIdxSet seen;
+        llis_init(&seen, total);
+        for (size_t g = 0; g < total; g++)
+            if (llis_add(&seen, setops_peek, &so, g) == SIZE_MAX) keep[nk++] = g;
+        llis_free(&seen);
+        setops_sort(&so, keep, nk);
+    } else {
+        size_t* all = malloc(sizeof(size_t) * total);
+        for (size_t g = 0; g < total; g++) all[g] = g;
+        setops_sort(&so, all, total);
+        for (size_t i = 0; i < total; i++)
+            if (nk == 0 || !setops_test(&so, same_test, all[i], keep[nk - 1])) keep[nk++] = all[i];
+        free(all);
+    }
+    Expr* result = setops_emit(&so, keep, nk);
+    free(keep);
+    setops_close(&so);
+    return result;
+}
+
+/* Intersection[l1, l2, ...] (mode 1) and Complement[eall, e1, ...] (mode 2):
+ * the sorted distinct elements of the first operand present in every later
+ * one / absent from all of them, under the head of the first.
+ *
+ * Default comparison: canonical structural equality through hash sets,
+ * O(total). SameTest -> f is O(n^2) with f[a,b]===True as the equivalence;
+ * Intersection keeps the canonically-GREATEST member of each class as its
+ * representative, Complement the SMALLEST (the reference's choices), so the
+ * first operand is walked in ascending canonical order. */
+static Expr* setops_filter(Expr* res, int mode, const char* name) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
+        return builtin_arg_error(name, (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0,
+                                 1, SIZE_MAX);
+    size_t last_arg;
+    Expr* same_test = setops_same_test(res, &last_arg);
+    /* SameTest -> Automatic means "use the default comparison" (Complement). */
+    if (mode == 2 && same_test != NULL && same_test->type == EXPR_SYMBOL &&
+        same_test->data.symbol.name == SYM_Automatic)
+        same_test = NULL;
+    if (last_arg == 0) return NULL;   /* only an option, no list operands */
+
+    if (setop_any_nd(res->data.function.args, last_arg)) {
+        if (!same_test) {
+            Expr* fast = setop_packed(res->data.function.args, last_arg, mode);
+            if (fast) return fast;
+        }
+        return ndarray_delist_and_reeval(res);
+    }
+    if (!same_test) {
+        Expr* fast = setop_ll_typed(res->data.function.args, last_arg, mode);
+        if (fast) return fast;
+    }
+
+    /* Every operand must share the head of the first; an atom is ::normal. */
+    SetOps so;
+    int bad = setops_open(res->data.function.args, last_arg, &so);
+    if (bad > 0) return builtin_normal_error(name, res, bad);
+    if (bad < 0) return NULL;
+
+    size_t n0 = so.q[0].n;              /* operand 0 holds global indices 0..n0-1 */
+    size_t* cand = malloc(sizeof(size_t) * (n0 ? n0 : 1));
     size_t ncand = 0;
 
     if (same_test == NULL) {
-        /* --- Default path: hash-based, O(total). --- */
-        HashTable* seen = ht_create(first_count * 2 + 1);
-        for (size_t j = 0; j < first_count; j++) {
-            Expr* e = first_a[j];
-            if (!ht_find(seen, e)) {
-                Expr* c = expr_copy(e);
-                cand[ncand++] = c;
-                ht_insert(seen, c, 0);
-            }
-        }
-        ht_free(seen, false);
-
+        LLIdxSet seen;
+        llis_init(&seen, n0);
+        for (size_t j = 0; j < n0; j++)
+            if (llis_add(&seen, llq_peek_fn, &so.q[0], j) == SIZE_MAX) cand[ncand++] = j;
+        llis_free(&seen);
         for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* const* aa = so.v[i].a;
-            size_t m = so.v[i].n;
-            HashTable* h = ht_create(m * 2 + 1);
-            for (size_t j = 0; j < m; j++)
-                if (!ht_find(h, aa[j]))
-                    ht_insert(h, aa[j], 0);
+            LLSeq* qi = &so.q[i];
+            LLIdxSet h;
+            llis_init(&h, qi->n);
+            for (size_t j = 0; j < qi->n; j++) llis_add(&h, llq_peek_fn, qi, j);
             size_t w = 0;
             for (size_t k = 0; k < ncand; k++) {
-                if (ht_find(h, cand[k])) cand[w++] = cand[k];
-                else expr_free(cand[k]);
+                bool present = llis_find(&h, llq_peek_fn, qi, llq_peek(&so.q[0], cand[k])) != SIZE_MAX;
+                if (present == (mode == 1)) cand[w++] = cand[k];
             }
             ncand = w;
-            ht_free(h, false);
+            llis_free(&h);
         }
     } else {
-        /* --- SameTest path: O(n^2), greatest representative per class. --- */
-        Expr** sorted0 = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
-        for (size_t j = 0; j < first_count; j++)
-            sorted0[j] = first_a[j];   /* borrowed */
-        qsort(sorted0, first_count, sizeof(Expr*), compare_expr_ptrs);
-        for (size_t j = 0; j < first_count; j++) {
-            Expr* e = sorted0[j];
+        size_t* sorted0 = malloc(sizeof(size_t) * (n0 ? n0 : 1));
+        for (size_t j = 0; j < n0; j++) sorted0[j] = j;
+        setops_sort(&so, sorted0, n0);
+        for (size_t j = 0; j < n0; j++) {
             size_t match = SIZE_MAX;
             for (size_t k = 0; k < ncand; k++)
-                if (same_test_equal(same_test, e, cand[k])) { match = k; break; }
-            if (match == SIZE_MAX) {
-                cand[ncand++] = expr_copy(e);
-            } else {
-                /* e is canonically >= cand[match]; keep the greater one. */
-                expr_free(cand[match]);
-                cand[match] = expr_copy(e);
-            }
+                if (setops_test(&so, same_test, sorted0[j], cand[k])) { match = k; break; }
+            if (match == SIZE_MAX) cand[ncand++] = sorted0[j];
+            else if (mode == 1) cand[match] = sorted0[j];   /* the greater one */
         }
         free(sorted0);
-
         for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* const* aa = so.v[i].a;
-            size_t m = so.v[i].n;
             size_t w = 0;
             for (size_t k = 0; k < ncand; k++) {
                 bool present = false;
-                for (size_t j = 0; j < m; j++)
-                    if (same_test_equal(same_test, cand[k], aa[j])) {
-                        present = true; break;
-                    }
-                if (present) cand[w++] = cand[k];
-                else expr_free(cand[k]);
+                for (size_t g = so.off[i]; g < so.off[i + 1] && !present; g++)
+                    present = setops_test(&so, same_test, cand[k], g);
+                if (present == (mode == 1)) cand[w++] = cand[k];
             }
             ncand = w;
         }
     }
 
-    qsort(cand, ncand, sizeof(Expr*), compare_expr_ptrs);
-    Expr* result = setops_result(&so, cand, ncand);
+    setops_sort(&so, cand, ncand);
+    Expr* result = setops_emit(&so, cand, ncand);
     free(cand);
     setops_close(&so);
     return result;
 }
 
-/* Complement[eall, e1, e2, ...] gives the sorted list of the distinct elements
- * of eall that appear in none of the ei, using the head of the first argument
- * (need not be List). It is the structural twin of Intersection with the
- * membership test inverted: a candidate survives when it is ABSENT from every
- * later operand, rather than present in all of them. Unlike Intersection,
- * Complement is order-sensitive in its first argument, hence not Flat.
- *
- * Default comparison is canonical structural equality, computed in O(total)
- * with the file-local hash set: deduplicate the first operand, then drop the
- * candidates that hit any later operand.
- *
- * SameTest -> f switches to an O(n^2) path using f[a,b]===True as the
- * equivalence relation. Unlike Intersection (which keeps the canonically-
- * greatest member of each class), Wolfram's Complement keeps the canonically-
- * smallest member as the representative, so we sort the first operand ascending
- * and keep the first element seen for each class. SameTest -> Automatic is
- * treated as the default (hash) path. */
-Expr* builtin_complement(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
-        return builtin_arg_error("Complement",
-            (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0,
-            1, SIZE_MAX);
+Expr* builtin_intersection(Expr* res) { return setops_filter(res, 1, "Intersection"); }
+Expr* builtin_complement(Expr* res)   { return setops_filter(res, 2, "Complement"); }
 
-    /* Locate a trailing SameTest option, mirroring builtin_intersection. */
-    Expr* same_test = NULL;
-    size_t last_arg = res->data.function.arg_count;
-    for (size_t i = 0; i < res->data.function.arg_count; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol.name == SYM_Rule &&
-            arg->data.function.arg_count == 2 &&
-            arg->data.function.args[0]->type == EXPR_SYMBOL &&
-            arg->data.function.args[0]->data.symbol.name == SYM_SameTest) {
-            same_test = arg->data.function.args[1];
-            if (i < last_arg) last_arg = i;
+/* ---- Tally / Commonest / DeleteDuplicates --------------------------------- */
+
+/* The distinct elements of q (first appearance) and their multiplicities:
+ * *uniq holds element INDICES. With a test, element i joins the first class
+ * whose representative r gives test[i, r] === True (O(n g)). */
+static size_t tally_indices(LLSeq* q, Expr* test, size_t** uniq, int64_t** mult) {
+    size_t n = q->n;
+    *uniq = malloc(sizeof(size_t) * (n ? n : 1));
+    *mult = malloc(sizeof(int64_t) * (n ? n : 1));
+    size_t nu = 0;
+    if (!test) {
+        LLIdxSet seen;
+        llis_init(&seen, n);
+        size_t* cls = malloc(sizeof(size_t) * (n ? n : 1));   /* element index -> class */
+        for (size_t i = 0; i < n; i++) {
+            size_t j = llis_add(&seen, llq_peek_fn, q, i);
+            if (j == SIZE_MAX) { cls[i] = nu; (*uniq)[nu] = i; (*mult)[nu] = 1; nu++; }
+            else { cls[i] = cls[j]; (*mult)[cls[j]]++; }
         }
+        free(cls);
+        llis_free(&seen);
+        return nu;
     }
-
-    /* SameTest -> Automatic means "use the default comparison". */
-    if (same_test != NULL && same_test->type == EXPR_SYMBOL &&
-        same_test->data.symbol.name == SYM_Automatic)
-        same_test = NULL;
-
-    if (last_arg == 0) return NULL;   /* only an option, no list operands */
-
-    if (setop_any_nd(res->data.function.args, last_arg)) {
-        if (!same_test) {
-            Expr* fast = setop_packed(res->data.function.args, last_arg, 2);
-            if (fast) return fast;
+    for (size_t i = 0; i < n; i++) {
+        size_t found = SIZE_MAX;
+        for (size_t u = 0; u < nu && found == SIZE_MAX; u++) {
+            Expr* a = expr_copy(llq_peek(q, i));
+            Expr* b = expr_copy(llq_peek(q, (*uniq)[u]));
+            if (same_test_equal(test, a, b)) found = u;
+            expr_free(a); expr_free(b);
         }
-        return ndarray_delist_and_reeval(res);
+        if (found != SIZE_MAX) (*mult)[found]++;
+        else { (*uniq)[nu] = i; (*mult)[nu] = 1; nu++; }
     }
+    return nu;
+}
 
-    /* Every operand must share the head of the first; an atom is the
-     * reference's Complement::normal, not an answer. A LinkedList operand stands
-     * for the List of its elements. */
-    SetOps so;
-    int bad = setops_open(res->data.function.args, last_arg, &so);
-    if (bad > 0) return builtin_normal_error("Complement", res, bad);
-    if (bad < 0) return NULL;
-    Expr* const* first_a = so.v[0].a;
-
-    size_t first_count = so.v[0].n;
-    Expr** cand = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
-    size_t ncand = 0;
-
-    if (same_test == NULL) {
-        /* --- Default path: hash-based, O(total). --- */
-        HashTable* seen = ht_create(first_count * 2 + 1);
-        for (size_t j = 0; j < first_count; j++) {
-            Expr* e = first_a[j];
-            if (!ht_find(seen, e)) {
-                Expr* c = expr_copy(e);
-                cand[ncand++] = c;
-                ht_insert(seen, c, 0);
-            }
-        }
-        ht_free(seen, false);
-
-        for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* const* aa = so.v[i].a;
-            size_t m = so.v[i].n;
-            HashTable* h = ht_create(m * 2 + 1);
-            for (size_t j = 0; j < m; j++)
-                if (!ht_find(h, aa[j]))
-                    ht_insert(h, aa[j], 0);
-            size_t w = 0;
-            for (size_t k = 0; k < ncand; k++) {
-                if (!ht_find(h, cand[k])) cand[w++] = cand[k];
-                else expr_free(cand[k]);
-            }
-            ncand = w;
-            ht_free(h, false);
-        }
-    } else {
-        /* --- SameTest path: O(n^2), smallest representative per class. --- */
-        Expr** sorted0 = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
-        for (size_t j = 0; j < first_count; j++)
-            sorted0[j] = first_a[j];   /* borrowed */
-        qsort(sorted0, first_count, sizeof(Expr*), compare_expr_ptrs);
-        for (size_t j = 0; j < first_count; j++) {
-            Expr* e = sorted0[j];
-            bool seen = false;
-            for (size_t k = 0; k < ncand; k++)
-                if (same_test_equal(same_test, e, cand[k])) { seen = true; break; }
-            /* Sorted ascending: the first member seen for each class is its
-             * canonically-smallest element, which we keep as representative. */
-            if (!seen) cand[ncand++] = expr_copy(e);
-        }
-        free(sorted0);
-
-        for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* const* aa = so.v[i].a;
-            size_t m = so.v[i].n;
-            size_t w = 0;
-            for (size_t k = 0; k < ncand; k++) {
-                bool present = false;
-                for (size_t j = 0; j < m; j++)
-                    if (same_test_equal(same_test, cand[k], aa[j])) {
-                        present = true; break;
-                    }
-                if (!present) cand[w++] = cand[k];
-                else expr_free(cand[k]);
-            }
-            ncand = w;
-        }
+/* Tally of a typed LinkedList on the packed Tally's own kernel (the gathered
+ * slots as machine words): a LinkedList of {value, count} Lists. NULL when the
+ * list is boxed / complex / empty or a word is not keyable (non-finite). */
+static Expr* tally_ll_machine(const LinkedList* ll) {
+    LLKind k = ll_kind(ll);
+    int64_t n = ll_length(ll);
+    if (n == 0 || (k != LL_I64 && k != LL_REAL)) return NULL;
+    void* buf = malloc(sizeof(double) * (size_t)n);
+    if (!buf) return NULL;
+    ll_gather(ll, 0, n, buf);
+    uint64_t* keys; int64_t* cnts; size_t nu;
+    bool ok = ndred_tally_words_raw(buf, k == LL_I64 ? NDT_INT64 : NDT_FLOAT64, (size_t)n, &keys, &cnts, &nu);
+    free(buf);
+    if (!ok) return NULL;
+    LinkedList* out = ll_new();
+    for (size_t u = 0; u < nu; u++) {
+        Expr* pair[2];
+        if (k == LL_I64) pair[0] = expr_new_integer((int64_t)keys[u]);
+        else { double x; memcpy(&x, &keys[u], sizeof x); pair[0] = expr_new_real(x); }
+        pair[1] = expr_new_integer(cnts[u]);
+        ll_push_back(out, expr_new_function(expr_new_symbol(SYM_List), pair, 2));
     }
-
-    qsort(cand, ncand, sizeof(Expr*), compare_expr_ptrs);
-    Expr* result = setops_result(&so, cand, ncand);
-    free(cand);
-    setops_close(&so);
-    return result;
+    free(keys); free(cnts);
+    return expr_new_linkedlist(out);
 }
 
 Expr* builtin_tally(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
-    
     Expr* list = res->data.function.args[0];
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
     /* Tally[assoc] (and Tally[assoc, test]) tallies the association's values. */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
-    /* A packed buffer hashes as machine words. A user-supplied test has to see
-     * the elements as expressions, so that form is handed back as a List call --
-     * NOT left to fall through, because everything below indexes `list` as an
-     * EXPR_FUNCTION and an NDArray is not one: it would answer {}. */
+    /* A packed buffer hashes as machine words; a user test needs expressions. */
     if (is_ndarray(list))
         return test ? ndarray_delist_and_reeval(res) : ndred_tally(res);
+    if (!test && list->type == EXPR_LINKEDLIST) {
+        Expr* fast = tally_ll_machine(list->data.llist);
+        if (fast) return fast;
+    }
 
-    /* A LinkedList tallies its elements, read from the slots; the answer is a
+    /* A LinkedList tallies its elements read from its slots; the answer is a
      * LinkedList of {element, count} Lists. */
-    LLView lv;
-    if (!ll_view(list, &lv)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    bool linked = ll_view_linked(&lv);
-
-    size_t count = lv.n;
-    if (count == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
-
-    Expr** unique_elems = malloc(sizeof(Expr*) * count);
-    int64_t* multiplicities = malloc(sizeof(int64_t) * count);
-    size_t unique_count = 0;
-
-    if (test == NULL) {
-        HashTable* ht = ht_create(count * 2 + 1);
-        for (size_t i = 0; i < count; i++) {
-            Expr* elem = lv.a[i];
-            HashNode* node = ht_find(ht, elem);
-            if (node) {
-                multiplicities[node->index]++;
-            } else {
-                unique_elems[unique_count] = expr_copy(elem);
-                multiplicities[unique_count] = 1;
-                ht_insert(ht, unique_elems[unique_count], unique_count);
-                unique_count++;
-            }
-        }
-        ht_free(ht, false);
-    } else {
-        // Fallback to O(N^2) for custom test
-        for (size_t i = 0; i < count; i++) {
-            Expr* elem = lv.a[i];
-            int found_idx = -1;
-            for (size_t j = 0; j < unique_count; j++) {
-                Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_elems[j]) };
-                Expr* call = expr_new_function(expr_copy(test), call_args, 2);
-                Expr* eval_res = eval_callback(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
-                    found_idx = (int)j;
-                    expr_free(eval_res);
-                    expr_free(call);
-                    break;
-                }
-                expr_free(eval_res);
-                expr_free(call);
-            }
-            if (found_idx != -1) {
-                multiplicities[found_idx]++;
-            } else {
-                unique_elems[unique_count] = expr_copy(elem);
-                multiplicities[unique_count] = 1;
-                unique_count++;
-            }
-        }
+    LLSeq q;
+    if (!llq_open(list, &q)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    bool linked = llq_linked(&q);
+    size_t* uniq; int64_t* mult;
+    size_t nu = tally_indices(&q, test, &uniq, &mult);
+    Expr** pairs = malloc(sizeof(Expr*) * (nu ? nu : 1));
+    for (size_t u = 0; u < nu; u++) {
+        Expr* pair[2] = { expr_copy(llq_peek(&q, uniq[u])), expr_new_integer(mult[u]) };
+        pairs[u] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
     }
-    
-    Expr** result_args = malloc(sizeof(Expr*) * unique_count);
-    for (size_t i = 0; i < unique_count; i++) {
-        Expr** pair_args = malloc(sizeof(Expr*) * 2);
-        pair_args[0] = unique_elems[i];
-        pair_args[1] = expr_new_integer(multiplicities[i]);
-        result_args[i] = expr_new_function(expr_new_symbol(SYM_List), pair_args, 2);
-        free(pair_args);
-    }
-    
-    free(unique_elems);
-    free(multiplicities);
-    
-    Expr* result = ll_seq_of(linked, result_args, unique_count);
-    free(result_args);
-    ll_view_done(&lv);
-    
+    Expr* result = ll_seq_of(linked, pairs, nu);
+    free(pairs); free(uniq); free(mult);
+    llq_close(&q);
     return result;
+}
+
+/* DeleteDuplicates of a typed LinkedList of machine integers on the packed
+ * kernel; NULL otherwise. */
+static Expr* dedup_ll_machine(const LinkedList* ll) {
+    if (ll_kind(ll) != LL_I64) return NULL;
+    size_t n = (size_t)ll_length(ll);
+    int64_t* v = malloc(sizeof(int64_t) * (n ? n : 1));
+    if (!v) return NULL;
+    ll_gather(ll, 0, (int64_t)n, v);
+    int64_t* out; size_t m;
+    bool ok = raw_delete_duplicates(v, n, &out, &m);
+    free(v);
+    return ok ? setop_ll_emit(out, m) : NULL;
 }
 
 Expr* builtin_deleteduplicates(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
-    
     Expr* list = res->data.function.args[0];
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
-    /* DeleteDuplicates[assoc] keeps the first entry for each distinct value,
-     * returning an association (Wolfram semantics). Only the default (no custom
-     * test) case is hash-indexed here; a custom test falls through unhandled. */
+    /* DeleteDuplicates[assoc] keeps the first entry for each distinct value. */
     if (test == NULL && is_association(list)) return assoc_delete_duplicate_values(list);
 
-    /* Packed int64 with the default test: dedup on the machine words. Without
-     * this the transparency gate materialised the whole buffer into one Expr per
-     * element before the hash table below could start -- 1.3 s over 10^7.
-     *
-     * EVERY other array shape must delist here, not fall through. Once this head
-     * is on pack.c's AWARE list the gate stops materialising for it, so an
-     * NDArray reaches the code below -- which tests `type != EXPR_FUNCTION` and
-     * would return the input UNCHANGED, silently deduplicating nothing. That is
-     * what a custom SameTest over a packed list did until this branch covered
-     * it; the differential check in tests/test_packed_list.c pins it. */
+    /* Packed int64 with the default test: dedup on the machine words. Every
+     * other array shape must delist here, not fall through (it would be read
+     * as an atom and returned unchanged). */
     if (is_ndarray(list)) {
         if (test == NULL) {
             Expr* fast = setop_packed_delete_duplicates(list);
@@ -942,81 +739,39 @@ Expr* builtin_deleteduplicates(Expr* res) {
         }
         return ndarray_delist_and_reeval(res);
     }
-
-    LLView lv;
-    if (!ll_view(list, &lv)) return builtin_normal_error("DeleteDuplicates", res, 1);
-    
-    size_t count = lv.n;
-    if (count == 0) {
-        Expr* r = ll_view_linked(&lv) ? ll_view_result(&lv, NULL, 0) : expr_copy(list);
-        ll_view_done(&lv);
-        return r;
+    if (test == NULL && list->type == EXPR_LINKEDLIST) {
+        Expr* fast = dedup_ll_machine(list->data.llist);
+        if (fast) return fast;
     }
-    
-    Expr** unique_args = malloc(sizeof(Expr*) * count);
-    size_t unique_count = 0;
 
-    if (test == NULL) {
-        HashTable* ht = ht_create(count * 2 + 1);
-        for (size_t i = 0; i < count; i++) {
-            Expr* elem = lv.a[i];
-            if (!ht_find(ht, elem)) {
-                Expr* copy = expr_copy(elem);
-                unique_args[unique_count++] = copy;
-                ht_insert(ht, copy, 0);
-            }
-        }
-        ht_free(ht, false);
-    } else {
-        // Fallback to O(N^2) for custom test
-        for (size_t i = 0; i < count; i++) {
-            Expr* elem = lv.a[i];
-            bool is_duplicate = false;
-            for (size_t j = 0; j < unique_count; j++) {
-                Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_args[j]) };
-                Expr* call = expr_new_function(expr_copy(test), call_args, 2);
-                Expr* eval_res = eval_callback(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
-                    is_duplicate = true;
-                    expr_free(eval_res);
-                    expr_free(call);
-                    break;
-                }
-                expr_free(eval_res);
-                expr_free(call);
-            }
-            if (!is_duplicate) {
-                unique_args[unique_count++] = expr_copy(elem);
-            }
-        }
-    }
-    
-    Expr* result = ll_view_result(&lv, unique_args, unique_count);
-    if (unique_args) free(unique_args);
-    ll_view_done(&lv);
-
+    LLSeq q;
+    if (!llq_open(list, &q)) return builtin_normal_error("DeleteDuplicates", res, 1);
+    if (q.n == 0 && !llq_linked(&q)) { llq_close(&q); return expr_copy(list); }
+    size_t* uniq; int64_t* mult;
+    size_t nu = tally_indices(&q, test, &uniq, &mult);
+    Expr* result = llq_emit(&q, uniq, nu);
+    free(uniq); free(mult);
+    llq_close(&q);
     return result;
 }
 
-/* DeleteDuplicatesBy[expr, f] keeps the first element for each distinct value of
- * f[element], preserving order. Over an association f is applied to each value
- * and the surviving entries are returned as an association (keys preserved).
- * The distinct f-values seen so far are compared directly (expr_eq); the count
- * of survivors is typically small, so this stays well within budget. */
+/* DeleteDuplicatesBy[expr, f] keeps the first element for each distinct value
+ * of f[element], preserving order. Over an association f is applied to each
+ * value and the surviving entries form an association. The distinct f-values
+ * (keys, not elements) are compared directly. */
 Expr* builtin_deleteduplicatesby(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
     bool assoc = is_association(coll);
-    LLView lv;
-    if (!ll_view(coll, &lv)) return NULL;
-
-    size_t n = lv.n;
-    Expr** kept = malloc(sizeof(Expr*) * (n ? n : 1));   /* surviving elements/rules */
-    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));   /* their f-values (owned) */
+    LLSeq q;
+    if (!llq_open(coll, &q)) return NULL;
+    size_t n = q.n;
+    size_t* kept = malloc(sizeof(size_t) * (n ? n : 1));  /* surviving element indices */
+    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));    /* their f-values (owned) */
     size_t nkept = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = lv.a[i];
+        Expr* elem = llq_peek(&q, i);
         Expr* val  = assoc ? elem->data.function.args[1] : elem;  /* value for assoc */
         Expr* fcall = expr_new_function(expr_copy(f), (Expr*[]){ expr_copy(val) }, 1);
         Expr* fk = eval_callback(fcall);
@@ -1026,19 +781,17 @@ Expr* builtin_deleteduplicatesby(Expr* res) {
             if (expr_eq(fk, keys[j])) { dup = true; break; }
         if (dup) { expr_free(fk); continue; }
         keys[nkept] = fk;
-        kept[nkept] = expr_copy(elem);
-        nkept++;
+        kept[nkept++] = i;
     }
-    Expr* out = assoc ? expr_new_function(expr_new_symbol(SYM_Association), kept, nkept)
-                      : ll_view_result(&lv, kept, nkept);
+    Expr* out = llq_emit(&q, kept, nkept);
     for (size_t j = 0; j < nkept; j++) expr_free(keys[j]);
     free(keys); free(kept);
-    ll_view_done(&lv);
+    llq_close(&q);
     return out;
 }
 
 typedef struct {
-    Expr* element;
+    size_t elem;          /* the element's index */
     int64_t count;
     size_t first_index;
 } CommonestItem;
@@ -1061,26 +814,14 @@ static int compare_commonest_items_index(const void* a, const void* b) {
 
 Expr* builtin_commonest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
-    
     Expr* list = res->data.function.args[0];
 
     /* Commonest[assoc] (and Commonest[assoc, n]) uses the association's values. */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
-    /* A packed buffer counts as machine words -- Commonest is a Tally plus a
-     * selection, and ndred_commonest shares Tally's counting routine so the two
-     * cannot disagree on how count ties break. It hands back every shape it does
-     * not handle (rank >= 2, a complex dtype, an n that is not an Integer or
-     * UpTo[Integer]) rather than falling through, because everything below
-     * indexes `list` as an EXPR_FUNCTION and an NDArray is not one. */
+    /* A packed buffer counts as machine words (ndred_commonest shares Tally's
+     * counting routine, so count ties break the same way). */
     if (is_ndarray(list)) return ndred_commonest(res);
-
-    LLView lv;
-    if (!ll_view(list, &lv)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    bool linked = ll_view_linked(&lv);
-
-    size_t count = lv.n;
-    if (count == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
 
     Expr* n_arg = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     int64_t n = 0;
@@ -1094,54 +835,46 @@ Expr* builtin_commonest(Expr* res) {
             if (n_arg->data.function.args[0]->type == EXPR_INTEGER) {
                 n = n_arg->data.function.args[0]->data.integer;
                 n_upto = true;
-            } else { ll_view_done(&lv); return NULL; }
-        } else { ll_view_done(&lv); return NULL; }
+            } else return NULL;
+        } else return NULL;
     }
 
-    // Tally
-    Expr** unique_elems = malloc(sizeof(Expr*) * count);
-    int64_t* multiplicities = malloc(sizeof(int64_t) * count);
-    size_t unique_count = 0;
+    LLSeq q;
+    if (!llq_open(list, &q)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    bool linked = llq_linked(&q);
+    if (q.n == 0) { llq_close(&q); return ll_seq_of(linked, NULL, 0); }
 
-    HashTable* ht = ht_create(count * 2 + 1);
-    for (size_t i = 0; i < count; i++) {
-        Expr* elem = lv.a[i];
-        HashNode* node = ht_find(ht, elem);
-        if (node) {
-            multiplicities[node->index]++;
-        } else {
-            unique_elems[unique_count] = expr_copy(elem);
-            multiplicities[unique_count] = 1;
-            ht_insert(ht, unique_elems[unique_count], unique_count);
-            unique_count++;
-        }
+    /* The tally: a typed LinkedList's on the packed kernel (the same first-
+     * appearance order, so ties break as on the packed List), else by index. */
+    size_t* uniq = NULL; int64_t* mult = NULL; size_t unique_count;
+    uint64_t* words = NULL;
+    LLKind kind = llq_kind(&q);
+    if (linked && (kind == LL_I64 || kind == LL_REAL)) {
+        void* buf = malloc(sizeof(double) * q.n);
+        ll_gather(q.snap, 0, (int64_t)q.n, buf);
+        if (!ndred_tally_words_raw(buf, kind == LL_I64 ? NDT_INT64 : NDT_FLOAT64, q.n, &words, &mult,
+                                   &unique_count))
+            words = NULL;
+        free(buf);
     }
-    ht_free(ht, false);
-    ll_view_done(&lv);
+    if (!words) unique_count = tally_indices(&q, NULL, &uniq, &mult);
 
     CommonestItem* items = malloc(sizeof(CommonestItem) * unique_count);
     for (size_t i = 0; i < unique_count; i++) {
-        items[i].element = unique_elems[i];
-        items[i].count = multiplicities[i];
+        items[i].elem = uniq ? uniq[i] : i;      /* word i, for the machine tally */
+        items[i].count = mult[i];
         items[i].first_index = i;
     }
-    free(multiplicities);
-    free(unique_elems);
+    free(mult); free(uniq);
 
-    // Sort by count DESC, first_index ASC
     qsort(items, unique_count, sizeof(CommonestItem), compare_commonest_items_desc);
 
-    /* `have_n` rather than a sentinel value of n: n == -1 used to mean "no count
-     * given", which made Commonest[list, -1] answer with the most common
-     * elements where every other negative count gives {}. */
+    /* `have_n` rather than a sentinel value of n: Commonest[list, -1] is {}. */
     size_t target_n;
     if (!have_n) {
-        // Just the most common ones (highest count)
         int64_t max_count = items[0].count;
         target_n = 0;
-        while (target_n < unique_count && items[target_n].count == max_count) {
-            target_n++;
-        }
+        while (target_n < unique_count && items[target_n].count == max_count) target_n++;
     } else {
         if (n < 0) n = 0;
         if ((size_t)n > unique_count) {
@@ -1153,27 +886,31 @@ Expr* builtin_commonest(Expr* res) {
             target_n = (size_t)n;
         }
     }
+    if (target_n > 0) qsort(items, target_n, sizeof(CommonestItem), compare_commonest_items_index);
 
-    // Sort target_n items by first_index ASC to preserve original order
-    if (target_n > 0) {
-        qsort(items, target_n, sizeof(CommonestItem), compare_commonest_items_index);
-    }
-
-    Expr** result_args = malloc(sizeof(Expr*) * target_n);
-    for (size_t i = 0; i < target_n; i++) {
-        result_args[i] = items[i].element;
-    }
-    // Free unused elements
-    for (size_t i = target_n; i < unique_count; i++) {
-        expr_free(items[i].element);
+    Expr* out;
+    if (words) {
+        LinkedList* ol = ll_new();
+        for (size_t i = 0; i < target_n; i++) {
+            uint64_t w = words[items[i].elem];
+            if (kind == LL_I64) ll_push_back_i64(ol, (int64_t)w);
+            else { double x; memcpy(&x, &w, sizeof x); ll_push_back_real(ol, x); }
+        }
+        out = expr_new_linkedlist(ol);
+        free(words);
+    } else if (linked) {
+        size_t* idx = malloc(sizeof(size_t) * (target_n ? target_n : 1));
+        for (size_t i = 0; i < target_n; i++) idx[i] = items[i].elem;
+        out = llq_emit(&q, idx, target_n);
+        free(idx);
+    } else {
+        Expr** result_args = malloc(sizeof(Expr*) * (target_n ? target_n : 1));
+        for (size_t i = 0; i < target_n; i++) result_args[i] = expr_copy(llq_peek(&q, items[i].elem));
+        out = expr_new_function(expr_new_symbol(SYM_List), result_args, target_n);
+        free(result_args);
     }
     free(items);
-
-    /* expr_new_function COPIES the argument array (it does not adopt it), so
-     * result_args is ours to release -- valgrind found this leaking one array
-     * per call. */
-    Expr* out = ll_seq_of(linked, result_args, target_n);
-    free(result_args);
+    llq_close(&q);
     return out;
 }
 
@@ -1195,10 +932,10 @@ static void setop_call_message(const char* head, const char* tag, const char* wh
 /* IntersectingQ[a, b] / IntersectingQ[a, b, SameTest -> f]
  *
  * True when a and b share at least one element: SameQ by default (so 1 and
- * 1. do not), f[x, y] === True under SameTest.  Both must be non-atomic with
- * the same head.  The default test hashes b and probes each element of a,
- * O(|a| + |b|); two packed int64 lists intersect on the machine words.
- * SameTest is O(|a| |b|). */
+ * 1. do not), f[x, y] === True under SameTest. Both must be non-atomic with
+ * the same head (a LinkedList stands for a List). The default test hashes b
+ * and probes each element of a; two int64 buffers (packed, or a typed
+ * LinkedList's slots) intersect on the machine words. */
 Expr* builtin_intersectingq(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1231,6 +968,14 @@ Expr* builtin_intersectingq(Expr* res) {
         }
         return ndarray_delist_and_reeval(res);
     }
+    if (!test) {
+        Expr* common = setop_ll_typed(res->data.function.args, 2, 1);
+        if (common) {
+            bool any = ll_length(common->data.llist) > 0;
+            expr_free(common);
+            return expr_new_symbol(any ? SYM_True : SYM_False);
+        }
+    }
     for (size_t i = 0; i < 2; i++) {
         Expr* x = res->data.function.args[i];
         if (x->type != EXPR_FUNCTION && x->type != EXPR_LINKEDLIST) {
@@ -1253,21 +998,19 @@ Expr* builtin_intersectingq(Expr* res) {
         free(ha); free(hb);
         return NULL;
     }
-    size_t na = so.v[0].n, nb = so.v[1].n;
-    Expr* const* xa = so.v[0].a;
-    Expr* const* xb = so.v[1].a;
+    size_t na = so.q[0].n, nb = so.q[1].n;
     bool found = false;
     if (test) {
         for (size_t i = 0; i < na && !found; i++)
             for (size_t j = 0; j < nb && !found; j++)
-                found = same_test_equal(test, xa[i], xb[j]);
+                found = setops_test(&so, test, i, so.off[1] + j);
     } else if (na && nb) {
-        HashTable* ht = ht_create(nb * 2 + 1);
-        for (size_t j = 0; j < nb; j++)
-            if (!ht_find(ht, xb[j])) ht_insert(ht, xb[j], j);
+        LLIdxSet h;
+        llis_init(&h, nb);
+        for (size_t j = 0; j < nb; j++) llis_add(&h, llq_peek_fn, &so.q[1], j);
         for (size_t i = 0; i < na && !found; i++)
-            found = ht_find(ht, xa[i]) != NULL;
-        ht_free(ht, false);
+            found = llis_find(&h, llq_peek_fn, &so.q[1], llq_peek(&so.q[0], i)) != SIZE_MAX;
+        llis_free(&h);
     }
     setops_close(&so);
     return expr_new_symbol(found ? SYM_True : SYM_False);
@@ -1276,9 +1019,9 @@ Expr* builtin_intersectingq(Expr* res) {
 /* DuplicateFreeQ[list] / DuplicateFreeQ[list, test]
  *
  * True when no two elements are the same: SameQ by default, test[x, y] ===
- * True otherwise.  Any head is accepted; an atom gives DuplicateFreeQ::normal.
- * The default test is one hash pass that stops at the first repeat; a packed
- * int64 list compares its deduplicated length on the machine words. */
+ * True otherwise. Any head is accepted; an atom gives DuplicateFreeQ::normal.
+ * The default test is one hash pass that stops at the first repeat; an int64
+ * buffer compares its deduplicated length on the machine words. */
 Expr* builtin_duplicatefreeq(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1297,26 +1040,35 @@ Expr* builtin_duplicatefreeq(Expr* res) {
         }
         return ndarray_delist_and_reeval(res);
     }
-    LLView lv;
-    if (!ll_view(list, &lv)) {
+    if (!test && list->type == EXPR_LINKEDLIST) {
+        Expr* uniq = dedup_ll_machine(list->data.llist);
+        if (uniq) {
+            bool free_q = ll_length(uniq->data.llist) == ll_length(list->data.llist);
+            expr_free(uniq);
+            return expr_new_symbol(free_q ? SYM_True : SYM_False);
+        }
+    }
+    LLSeq q;
+    if (!llq_open(list, &q)) {
         setop_call_message("DuplicateFreeQ", "normal", "Nonatomic expression expected at position 1", res);
         return NULL;
     }
-    size_t n = lv.n;
-    Expr** xs = lv.a;
+    size_t n = q.n;
     bool dup = false;
     if (test) {
         for (size_t i = 1; i < n && !dup; i++)
-            for (size_t j = 0; j < i && !dup; j++)
-                dup = same_test_equal(test, xs[j], xs[i]);
+            for (size_t j = 0; j < i && !dup; j++) {
+                Expr* x = expr_copy(llq_peek(&q, j));
+                Expr* y = expr_copy(llq_peek(&q, i));
+                dup = same_test_equal(test, x, y);
+                expr_free(x); expr_free(y);
+            }
     } else if (n > 1) {
-        HashTable* ht = ht_create(n * 2 + 1);
-        for (size_t i = 0; i < n && !dup; i++) {
-            if (ht_find(ht, xs[i])) dup = true;
-            else ht_insert(ht, xs[i], i);
-        }
-        ht_free(ht, false);
+        LLIdxSet h;
+        llis_init(&h, n);
+        for (size_t i = 0; i < n && !dup; i++) dup = llis_add(&h, llq_peek_fn, &q, i) != SIZE_MAX;
+        llis_free(&h);
     }
-    ll_view_done(&lv);
+    llq_close(&q);
     return expr_new_symbol(dup ? SYM_False : SYM_True);
 }

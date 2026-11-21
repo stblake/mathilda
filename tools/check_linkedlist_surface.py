@@ -174,7 +174,11 @@ fix[] := (ClearAll[ff];
   n = mk[{{1, 2}, {3, 4}, {5, 6}}];
   nn = mk[{mk[{1, 2}], mk[{3, x0}], mk[{}]}]);
 SetAttributes[dn, HoldAll];
-dn[r_] := Hold[r] //. l_LinkedList :> With[{v = Normal[l]}, v /; True];
+(* Association keys are atomic to ReplaceAll (assoc_struct.h), so an
+   association is first opened into AssocN[rules] -- on both sides alike --
+   and a LinkedList used as a key (Counts[{x, x}]) is then normalised too. *)
+dn[r_] := Hold[r] //. {a_Association :> With[{v = AssocN @@ Normal[a]}, v /; True],
+   l_LinkedList :> With[{v = Normal[l]}, v /; True]};
 shape[r_] := r /. l_LinkedList :> With[{v = LLk[Length[l]]}, v /; True];
 R[id_, e_] := Module[{c0, c1, r, m, orig, mut, hd},
   fix[]; orig = If[TrueQ[$LL], Normal[x], x];

@@ -1,4 +1,4 @@
-#include "linkedlist_seq.h"   /* LLView: Catenate over LinkedLists */
+#include "linkedlist_seq.h"   /* LLSeq: Catenate over LinkedLists */
 #include "list_common.h"
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
@@ -162,33 +162,34 @@ Expr* builtin_catenate(Expr* res) {
         /* A LinkedList collection, or LinkedList parts: the parts' elements
          * read from their slots, concatenated into a new LinkedList. Every
          * part is a LinkedList or a List (a LinkedList stands for one). */
-        LLView cv;
-        ll_view(lst, &cv);
-        bool linked = ll_view_linked(&cv), ok = true;
-        for (size_t i = 0; i < cv.n && !linked; i++) linked = cv.a[i]->type == EXPR_LINKEDLIST;
+        LLSeq cv;
+        llq_open(lst, &cv);
+        bool linked = llq_linked(&cv), ok = true;
+        for (size_t i = 0; i < cv.n && !linked; i++) linked = llq_peek(&cv, i)->type == EXPR_LINKEDLIST;
         if (linked) {
-            LLView* pv = malloc(sizeof(LLView) * (cv.n ? cv.n : 1));
+            LLSeq* pv = malloc(sizeof(LLSeq) * (cv.n ? cv.n : 1));
             size_t opened = 0, total = 0;
             for (size_t i = 0; i < cv.n && ok; i++) {
-                Expr* e = cv.a[i];
+                Expr* e = llq_peek(&cv, i);
                 ok = e->type == EXPR_LINKEDLIST || head_is(e, SYM_List);
-                if (ok) { ll_view(e, &pv[opened++]); total += pv[opened - 1].n; }
+                if (ok) { llq_open(e, &pv[opened++]); total += pv[opened - 1].n; }
             }
             Expr* out = NULL;
-            if (ok) {
-                Expr** out_args = malloc(sizeof(Expr*) * (total ? total : 1));
-                size_t k = 0;
-                for (size_t i = 0; i < opened; i++)
-                    for (size_t j = 0; j < pv[i].n; j++) out_args[k++] = expr_copy(pv[i].a[j]);
-                out = ll_seq_of(true, out_args, k);
-                free(out_args);
+            if (ok) {       /* LinkedList parts copied span-wise, List parts element by element */
+                LinkedList* ol = ll_new();
+                for (size_t i = 0; i < opened; i++) {
+                    if (llq_linked(&pv[i])) ll_append_range(ol, pv[i].snap, 0, (int64_t)pv[i].n);
+                    else for (size_t j = 0; j < pv[i].n; j++) llq_push(ol, &pv[i], j);
+                }
+                out = expr_new_linkedlist(ol);
             }
-            for (size_t i = 0; i < opened; i++) ll_view_done(&pv[i]);
+            (void)total;
+            for (size_t i = 0; i < opened; i++) llq_close(&pv[i]);
             free(pv);
-            ll_view_done(&cv);
+            llq_close(&cv);
             return out;
         }
-        ll_view_done(&cv);
+        llq_close(&cv);
     }
     bool coll_assoc = is_association(lst);
     if (!coll_assoc && !(lst->type == EXPR_FUNCTION && lst->data.function.head->type == EXPR_SYMBOL &&

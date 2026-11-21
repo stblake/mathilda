@@ -3,7 +3,7 @@
 #include "ndstruct.h"   /* NDArray buffer fast paths */
 #include "ratios.h"
 #include "assoc.h"
-#include "linkedlist_seq.h"  /* LLView: a LinkedList's ratios from its slots */
+#include "linkedlist_seq.h"  /* LLSeq: a LinkedList's ratios from its slots */
 #include <math.h>
 
 /* ---- Ratios ----------------------------------------------------------------
@@ -62,26 +62,26 @@ static Expr* ratio_once(Expr* lst) {
         Expr* fast = ratio_once_ll_machine(lst->data.llist);
         if (fast) return fast;
     }
-    LLView lv;
-    ll_view(lst, &lv);
+    LLSeq lv;
+    llq_open(lst, &lv);
     size_t n = lv.n;
 
     if (n <= 1) {
-        Expr* r = ll_view_result(&lv, NULL, 0);
-        ll_view_done(&lv);
+        Expr* r = llq_result(&lv, NULL, 0);
+        llq_close(&lv);
         return r;
     }
 
     size_t outn = n - 1;
     Expr** out = malloc(sizeof(Expr*) * outn);
     for (size_t i = 0; i < outn; i++) {
-        Expr* lo = lv.a[i];
-        Expr* hi = lv.a[i + 1];
+        Expr* lo = llq_peek(&lv, i);
+        Expr* hi = llq_peek(&lv, i + 1);
         out[i] = ratio_divide(hi, lo);
     }
-    Expr* result = ll_view_result(&lv, out, outn);
+    Expr* result = llq_result(&lv, out, outn);
     free(out);
-    ll_view_done(&lv);
+    llq_close(&lv);
     return result;
 }
 
@@ -111,16 +111,16 @@ static Expr* ratio_levels(Expr* lst, const int64_t* levels, size_t num) {
         return cur;
     }
 
-    LLView cv;
-    ll_view(cur, &cv);
+    LLSeq cv;
+    llq_open(cur, &cv);
     size_t m = cv.n;
     Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
     for (size_t i = 0; i < m; i++) {
-        out[i] = ratio_levels(cv.a[i], levels + 1, num - 1);
+        out[i] = ratio_levels(llq_peek(&cv, i), levels + 1, num - 1);
     }
-    Expr* result = ll_view_result(&cv, out, m);
+    Expr* result = llq_result(&cv, out, m);
     free(out);
-    ll_view_done(&cv);
+    llq_close(&cv);
     expr_free(cur);
     return result;
 }
