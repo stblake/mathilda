@@ -1883,9 +1883,9 @@ the chunks; none builds a List of the argument.
 | `Insert[ll, e, n \| {i, j, ...} \| {{...}, ...}]` | several positions name places in the original list | span copies between the positions |
 | `Delete[ll, n \| {i, j, ...} \| {{...}, ...}]` | a repeated position deletes once; `Delete[ll, 0]` is the elements as a `Sequence`, `Delete[ll, {{}}]` is `Sequence[]` | span copies between the positions |
 | `ReplacePart[ll, rules]` | every rule form (deep, negative, patterns, `:>`); index 0 is not a part of a LinkedList | literal positions: a span copy plus the named elements; a pattern position visits every element |
-| `Map[f, ll]`, `Map[f, ll, levelspec]` | the default level streams `Map[f, block]` over packed blocks, so compiled pure functions and kernels apply; other levels map each element | as `Map` on a packed List |
-| `Select[ll, crit]`, `Select[ll, crit, n]` | streamed in packed blocks (compiled predicates apply) | as on a packed List |
-| a `Listable` head: `Sin[ll]`, `ll + 1`, `ll1 ll2`, `ll + {…}` | threads like a List; every threaded operand (LinkedList, List, packed) must have one length, else `Thread::tdlen` | machine reals through a unary kernel, `Plus` or `Times`: read from the chunks into the new list's chunks, threaded, at packed speed; otherwise streamed in packed blocks |
+| `Map[f, ll]`, `Map[f, ll, levelspec]` | a numeric pure function runs compiled on each typed slot (as `Map` on a packed List); any other `f` is applied element by element; deeper levels map inside the elements | as `Map` on a packed List |
+| `Select[ll, crit]`, `Select[ll, crit, n]` | a compiled predicate on machine reals reads each slot; otherwise `crit[e]` per element | as on a packed List |
+| a `Listable` head: `Sin[ll]`, `ll + 1`, `ll1 ll2`, `ll^2`, `Mod[ll, 3]`, `ll + {…}` | threads like a List; every threaded operand (LinkedList, List, packed) must have one length, else `Thread::tdlen` | the very kernel or buffer arithmetic a packed List reaches, fed from the slots (`NDOperand`); otherwise `head[e_i, ...]` per element |
 
 Results agree with the same head on `Normal[ll]`, bit for bit on machine
 numbers: the element-computing heads run the very packed kernels (`Sin`, `Exp`,
@@ -1903,7 +1903,43 @@ specification), `Most::nomost` / `Rest::norest` (empty list), `Insert::ins`,
 `Delete::partw`, `Join::heads` (an argument that is neither a list nor a
 LinkedList), `Thread::tdlen`.
 
-Every other head sees an opaque atom (as `Max[ll]` does).
+**Everywhere else.** Every other head treats a LinkedList as the List of its
+elements, and works on the chunks directly: no List, packed List or NDArray of
+the elements is built (`Internal`LinkedListConversionCount[]` counts any that
+is; only `Normal` may, and `make check-linkedlist` checks every head against
+`H[Normal[ll]]`, the counter and the argument). The rules:
+
+- **Same answer as `Normal[ll]`.** `H[ll, ...]` gives `H[Normal[ll], ...]`, with
+  every LinkedList in the answer standing for its elements; machine numbers to
+  the bit (the packed List's own kernels run on the slots).
+- **Closure.** A head that gives a List for a List gives a new LinkedList:
+  `Sort`, `Union`, `Cases`, `DeleteCases`, `Accumulate`, `Partition` (whose
+  pieces are LinkedLists too), `Split`, `Gather`, `Riffle`, `StringSplit`,
+  `Standardize`, `ll /. rules`, `MapIndexed`, `MapThread`, `Outer`,
+  `FoldList`, .... Records keep their List: `Position`, `Tally` pairs,
+  `MinMax`, `Quartiles`, `Dimensions`; constructors such as `Table` and
+  `Level` give Lists. Scalars stay scalars (`Max`, `Mean`, `Fold`, `FreeQ`,
+  `Norm`, `Dot` of vectors).
+- **A rank-1 container.** `VectorQ`, `MatrixQ`, `ArrayQ`, `Dimensions`,
+  `Depth`, `Level`, `Position`, `Cases`, `FreeQ`, `Apply`, `Replace` and the
+  iterators see its elements one level down (a LinkedList has no head part);
+  a LinkedList of equal-length lists or LinkedLists is a matrix. `ListQ[ll]` is
+  `False` and `{__}` does not match it: its head is `LinkedList`.
+- **Iterators.** `Table`, `Do`, `Sum` and `Product` iterate `{i, ll}` over the
+  values the list had when the loop began: `Do[AppendTo[ll, i], {i, ll}]` runs
+  once per original element.
+- **Callbacks see a snapshot.** A head that runs user code per element (`Map`,
+  `Select`, `Scan`, `Fold`, `SortBy`, `GroupBy`, a `:>` rule, ...) reads the
+  elements the list had when it was called, so a callback may change the list.
+- **Identity.** `ll /. rules` that matches nothing is `ll` itself.
+- **Specifications.** A LinkedList of indices works in `Part` and `Extract`, a
+  LinkedList of rules in `ReplaceAll`/`Replace`, of separators or patterns in
+  the string functions; a LinkedList used as a level, position or dimension
+  specification elsewhere (`Delete`, `Reverse[l, levels]`, `Array`,
+  `RotateLeft[l, {n}]`) is not supported.
+
+Not covered: matrix-only linear algebra (`Det`, `Inverse`, `Minors`, the
+decompositions), graphs, machine learning, plotting and images take Lists.
 
 **Compile and auto-compilation.** A LinkedList of machine Integers, Reals or
 Complexes (one kind per list) compiles.
