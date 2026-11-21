@@ -1468,6 +1468,10 @@ static bool k1_divisor(const Expr* v) {
     if (v->type == EXPR_NDARRAY)
         return (v->data.ndarray.dtype == NDT_FLOAT64 ||
                 v->data.ndarray.dtype == NDT_COMPLEX64) && ndarray_size(v) > 0;
+    /* a LinkedList of machine Reals / Complexes, as the buffer it stands for */
+    if (v->type == EXPR_LINKEDLIST)
+        return (ll_kind(v->data.llist) == LL_REAL || ll_kind(v->data.llist) == LL_CPLX) &&
+               ll_length(v->data.llist) > 0;
     return k1_machine_complex(v, true) || k1_machine_list(v, 0);
 }
 
@@ -1480,7 +1484,7 @@ static bool k1_numerator(const Expr* v) {
     if (v->type == EXPR_NDARRAY)
         return v->data.ndarray.dtype == NDT_FLOAT64 || v->data.ndarray.dtype == NDT_INT64 ||
                v->data.ndarray.dtype == NDT_COMPLEX64;
-    return k1_machine_complex(v, false) || k1_is_list(v);
+    return k1_machine_complex(v, false) || k1_is_list(v) || v->type == EXPR_LINKEDLIST;
 }
 
 /* Evaluate one Power[b, -1] argument of Times. A machine divisor comes back as
@@ -1510,8 +1514,10 @@ static Expr* k1_eval_reciprocal(Expr* orig, size_t* pending) {
  * product reports the mismatch once, as it always did. */
 static bool k1_shapes_meet(const Expr* num, const Expr* den) {
     int64_t ln = num->type == EXPR_NDARRAY ? (num->data.ndarray.rank ? num->data.ndarray.dims[0] : -1)
+               : num->type == EXPR_LINKEDLIST ? ll_length(num->data.llist)
                : k1_is_list(num) ? (int64_t)num->data.function.arg_count : -1;
     int64_t ld = den->type == EXPR_NDARRAY ? (den->data.ndarray.rank ? den->data.ndarray.dims[0] : -1)
+               : den->type == EXPR_LINKEDLIST ? ll_length(den->data.llist)
                : k1_is_list(den) ? (int64_t)den->data.function.arg_count : -1;
     if (ln < 0 || ld < 0) return true;
     if (ln != ld) return false;

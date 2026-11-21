@@ -6,7 +6,8 @@
 #include "print.h"
 #include "checked_int.h"
 #include "numeric.h"       /* numeric_contagion_args: one-kind Complex */
-#include "ndarray.h"       /* ndarray_divide: one-rounding buffer quotient (K1) */
+#include "ndarray.h"
+#include "linkedlist.h"       /* ndarray_divide: one-rounding buffer quotient (K1) */
 #include "mth_machine_pow.h" /* mth_cdiv_machine: the one machine complex quotient */
 #include <stdio.h>
 #include <math.h>
@@ -385,6 +386,12 @@ Expr* builtin_divide(Expr* res) {
     
     Expr* num = res->data.function.args[0];
     Expr* den = res->data.function.args[1];
+
+    /* A LinkedList operand threads as the List it stands for, one rounding per
+     * element (linkedlist_ops.c: a raw quotient loop for machine reals, else
+     * Divide per element), exactly as a packed operand's ndarray_divide. */
+    if (num->type == EXPR_LINKEDLIST || den->type == EXPR_LINKEDLIST)
+        return ll_thread_listable(res);
 
     /* A machine array is not a scalar, and the Real branch below cannot be
      * allowed to think it is.  That branch fires when EITHER operand is Real

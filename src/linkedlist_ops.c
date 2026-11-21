@@ -362,6 +362,51 @@ static bool ll_nd_operand(const Expr* a, NDOperand* o, void** scratch, bool* is_
     return true;
 }
 
+/* A machine real (Real, or an Integer a double holds exactly) for Divide. */
+static bool div_scalar(const Expr* e, double* v) {
+    if (e->type == EXPR_REAL) { *v = e->data.real; return isfinite(*v); }
+    if (e->type == EXPR_INTEGER && e->data.integer >= -(INT64_C(1) << 53) &&
+        e->data.integer <= (INT64_C(1) << 53)) { *v = (double)e->data.integer; return true; }
+    return false;
+}
+
+/* Divide[a, b] with machine-real LinkedList / Real operands: one IEEE
+ * division per element, ndarray_divide's f64 lane and its lane test (a
+ * non-machine quotient -- division by zero, overflow, a subnormal, a zero from
+ * a nonzero numerator -- declines, and the element path answers it exactly as
+ * the delisted packed path does). NULL declines. */
+static Expr* ll_divide_machine(Expr* res, int64_t len) {
+    const Expr* a = res->data.function.args[0];
+    const Expr* b = res->data.function.args[1];
+    const LinkedList* la = a->type == EXPR_LINKEDLIST ? a->data.llist : NULL;
+    const LinkedList* lb = b->type == EXPR_LINKEDLIST ? b->data.llist : NULL;
+    double sa = 0.0, sb = 0.0;
+    if (la ? ll_kind(la) != LL_REAL : !div_scalar(a, &sa)) return NULL;
+    if (lb ? ll_kind(lb) != LL_REAL : !div_scalar(b, &sb)) return NULL;
+    LinkedList* out = ll_new();
+    ll_reserve_typed(out, LL_REAL, len);
+    for (int64_t i = 0; i < len; ) {
+        const void *pa = NULL, *pb = NULL, *po;
+        int da = 1, db = 1, dout;
+        int64_t k = ll_span_at(out, i, &po, &dout);
+        if (la) { int64_t ka = ll_span_at(la, i, &pa, &da); if (ka < k) k = ka; }
+        if (lb) { int64_t kb = ll_span_at(lb, i, &pb, &db); if (kb < k) k = kb; }
+        double* o = (double*)po;
+        for (int64_t t = 0; t < k; t++) {
+            double x = la ? LL_SLOT(double, pa, da, t) : sa;
+            double y = lb ? LL_SLOT(double, pb, db, t) : sb;
+            double q = x / y, m = fabs(q);
+            if (!(m <= DBL_MAX) || (m < DBL_MIN && q != 0.0) || (q == 0.0 && x != 0.0)) {
+                ll_release(out);
+                return NULL;
+            }
+            o[t] = q;
+        }
+        i += k;
+    }
+    return expr_new_linkedlist(out);
+}
+
 /* The engine the evaluator would pick for `res` were its LinkedList operands
  * packed Lists: a registered kernel (eval.c, step 4b), else the Plus / Times /
  * Power builtins' buffer arithmetic. NULL declines. */
@@ -375,6 +420,7 @@ static Expr* ll_listable_engine(Expr* res, int64_t len) {
     if (argc == 0 || argc > NDN_MAX_ARGS) return NULL;
     bool plus_times = (name == SYM_Plus || name == SYM_Times);
     bool power = (name == SYM_Power && argc == 2);
+    if (name == SYM_Divide && argc == 2) return ll_divide_machine(res, len);
     if (!plus_times && !power &&
         !(argc == 1 && d->ndarray_unary_kernel) &&
         !(argc == 2 && d->ndarray_binary_kernel) &&
