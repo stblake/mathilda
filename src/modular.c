@@ -132,9 +132,19 @@ static bool scoping_binds_in_arg0(Expr* e) {
     return e->data.function.arg_count >= 1;
 }
 
-static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
+/* The per-walk summary context of substitute_scoping (symsum.h): the binder
+ * bits of every name the walk may substitute, and whether summaries may be
+ * consulted at all.  The mask is the OUTER env's: an inner scope's filtered
+ * env is a subset, so the mask stays a superset there -- conservative. */
+typedef struct { uint64_t mask; bool fast; } SsCtx;
+
+static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
     if (!e) return NULL;
+    SCOPE_STAT(ss_nodes);
     if (e->type == EXPR_SYMBOL) {
+        /* A symbol without one of the env's bits names none of its locals:
+         * skip the env scan (it averaged 9 entries in the Trager case). */
+        if (c->fast && !(symsum_sym_bit(e) & c->mask)) return expr_copy(e);
         ScopingEnv* curr = env;
         while (curr) {
             if (e->data.symbol.name == curr->old_name) {   /* interned */
@@ -145,6 +155,13 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
         return expr_copy(e);
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (c->fast) {
+        uint64_t b;
+        if (symsum_get(e, &b) && !(b & c->mask)) { SCOPE_STAT(ss_skip); return expr_copy(e); }
+    }
+    /* Everything below a shared node is immutable (copy-on-write), so the
+     * summaries this walk fills there stay true. */
+    bool cfrozen = frozen || e->refcount >= 2;
 
     // Handle shadowing in scoping constructs
     ScopingEnv* filtered_env = env;
@@ -221,7 +238,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
                         && (b->data.function.head->data.symbol.name == SYM_Set
                             || b->data.function.head->data.symbol.name == SYM_SetDelayed)
                         && b->data.function.arg_count == 2) {
-                        Expr* rhs = substitute_scoping(b->data.function.args[1], env);
+                        Expr* rhs = ss_rec(b->data.function.args[1], env, c, cfrozen);
                         if (rhs == b->data.function.args[1]) {
                             expr_free(rhs);
                             new_b[bi] = expr_copy(b);
@@ -250,10 +267,10 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
                 new_args[i] = expr_copy(vars_list);
             }
         } else {
-            new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
+            new_args[i] = ss_rec(e->data.function.args[i], filtered_env, c, cfrozen);
         }
     }
-    Expr* new_head = substitute_scoping(e->data.function.head, filtered_env);
+    Expr* new_head = ss_rec(e->data.function.head, filtered_env, c, cfrozen);
     /* Share a subtree no local occurs in: the node comes back as itself, as in
      * replace_bindings, so applying f[x_] := Module[...] copies only the paths
      * that change -- once by the rule's substitution, once by the renaming --
@@ -266,6 +283,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     if (unchanged) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) expr_free(new_args[i]);
         expr_free(new_head);
+        if (c->fast && cfrozen) { symsum_fill(e); SCOPE_STAT(ss_fill); }
         res = expr_copy(e);
     } else {
         res = expr_new_function(new_head, new_args, e->data.function.arg_count);
@@ -282,6 +300,45 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     }
 
     return res;
+}
+
+
+/* Rename (Module, scoping_apply_rename) or substitute values (With) for the
+ * env's names throughout `e`, lexically: inner scopes shadow, binding lists
+ * see the outer env, held code is renamed too.  Unchanged subtrees come back
+ * shared.  A subtree whose binder summary holds none of the env's bits is
+ * returned at once without being visited (docs/design/scoping_substitution.md):
+ * the env's names are registered as binders first, so their bits exist and a
+ * summary that predates a registration is invalid by its epoch. */
+static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
+    if (!e) return NULL;
+    SCOPE_STAT(ss_top);
+    SsCtx c = { 0, false };
+#ifndef MTH_NO_SYMSUM
+    if (g_symsum_on) {
+        for (ScopingEnv* n = env; n; n = n->next) {
+            SymbolDef* d = intern_symbol_node(n->old_name);
+            symsum_register_binder(d);
+            c.mask |= symsum_def_bit(d);
+        }
+        c.fast = g_symsum_on != 0;   /* a registration can exhaust the epoch */
+    }
+#endif
+    Expr* r = ss_rec(e, env, &c, e->refcount >= 2);
+#ifndef MTH_NO_SYMSUM
+    if (c.fast && g_symsum_diff) {
+        SsCtx slow = { 0, false };
+        Expr* r2 = ss_rec(e, env, &slow, false);
+        if (!expr_eq(r, r2)) {
+            char* a = expr_to_string(r); char* b = expr_to_string(r2);
+            fprintf(stderr, "MATHILDA_SYMSUM_DIFF: substitute_scoping differs\n  fast: %s\n  slow: %s\n",
+                    a ? a : "?", b ? b : "?");
+            abort();
+        }
+        expr_free(r2);
+    }
+#endif
+    return r;
 }
 
 /* Counter for the "$"-less names of Unique["x"] / Unique[] (x12, $13). It is
