@@ -115,15 +115,16 @@ static void test_band(void) {
     /* scattered (no band), strictly diagonally dominant, n > 1000: without
      * UMFPACK this was a dense O(n^3) LU (7.6 s at n = 11020, the sparse
      * oracle's #1005; ~30 s here at 6000); the refined Krylov default answers,
-     * as accurately.  With SuiteSparse (the Linux CI) UMFPACK's direct LU
-     * answers instead, at an LU's residual (~1e-15, not Krylov's ~1e-16), so
-     * the bounds are the solver-independent ones: an accurate answer, and far
-     * below the dense fallback's time (5 s, not 1: a shared runner's noise). */
+     * as accurately.  v0.6663: the same route with SuiteSparse (the Linux CI),
+     * where UMFPACK's LU of this scattered pattern fills in and missed the
+     * bound; 5 s, not 1, for a shared runner's noise. */
     chk("dd[n_] := SparseArray[Join[Table[{i, i} -> 10. + Mod[i, 7], {i, n}], "
         "Table[{i, Mod[37 i^2, n] + 1} -> 1., {i, n}], Table[{i, Mod[101 i + 7, n] + 1} -> -2., {i, n}], "
         "Table[{Mod[53 i, n] + 1, i} -> 1.5 I, {i, n}]], {n, n}]; Null", "Null");
     chk_true("With[{a = dd[6000], b = N[Range[6000]]}, "
-             "t = AbsoluteTiming[x = LinearSolve[a, b]][[1]]; res[a, x, b] < 10^-14 && t < 5]");
+             "t = AbsoluteTiming[x = LinearSolve[a, b]][[1]]; "
+             "If[res[a, x, b] < 10^-14 && t < 5, True, "
+             "Print[\"  dd[6000]: residual \", res[a, x, b], \", seconds \", t]; False]]");
     chk_true("With[{a = Re[dd[3000]], b = N[Range[3000]]}, "
              "Max[Abs[LinearSolve[a, b] - LinearSolve[Normal[a], b]]] < 10^-12]");
     /* symmetric with a positive diagonal but indefinite (eigenvalues
