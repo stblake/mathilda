@@ -21,6 +21,7 @@
 #include "root_numeric.h"
 #include "root.h"        /* rootsum_expand_over_roots: N over a RootSum */
 #include "sparse/sparse.h"  /* N over a SparseArray */
+#include "linkedlist.h"
 #include "ndarray.h"    /* ndt_get_i / ndarray_to_nested_list: N over a packed
                          * integer buffer widens it to float64 in place. */
 
@@ -1896,6 +1897,43 @@ static Expr* numericalize_sparse(const Expr* e, NumericSpec spec) {
     return r ? r : expr_copy((Expr*)e);
 }
 
+/* ll_walk adapter: N of one LinkedList element. */
+static Expr* numericalize_ll_elem(const Expr* el, void* ctx) {
+    return numericalize_rec(el, *(const NumericSpec*)ctx);
+}
+
+/* N over a LinkedList: the List of its elements, read from the slots. A
+ * machine-real or machine-complex list is already numeric (the list itself);
+ * a machine-integer list becomes a machine-real list slot for slot, with the
+ * packed int64 path's own (double) conversion; anything else is numericalised
+ * element by element into a new LinkedList. */
+static Expr* numericalize_linkedlist(const Expr* e, NumericSpec spec) {
+    const LinkedList* ll = e->data.llist;
+    LLKind k = ll_kind(ll);
+    if (spec.mode == NUMERIC_MODE_MACHINE && (k == LL_REAL || k == LL_CPLX || k == LL_EMPTY))
+        return expr_copy((Expr*)e);
+    if (spec.mode == NUMERIC_MODE_MACHINE && k == LL_I64) {
+        int64_t n = ll_length(ll);
+        LinkedList* out = ll_new();
+        ll_reserve_typed(out, LL_REAL, n);
+        LLCursor ci, co;
+        ll_cursor(&ci, ll, 0, n);
+        ll_cursor(&co, out, 0, n);
+        const void *p, *q;
+        int di, dq;
+        int64_t bi, bq, ki, kq = 0, tq = 0;
+        while ((ki = ll_cursor_next(&ci, &p, &di, &bi)) > 0) {
+            for (int64_t t = 0; t < ki; t++) {
+                if (tq == kq) { kq = ll_cursor_next(&co, &q, &dq, &bq); tq = 0; }
+                ((double*)q)[tq++] = (double)LL_SLOT(int64_t, p, di, t);
+            }
+        }
+        return expr_new_linkedlist(out);
+    }
+    Expr* r = ll_walk(e, numericalize_ll_elem, &spec);
+    return r ? r : expr_copy((Expr*)e);
+}
+
 static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
     if (!e) return NULL;
     /* N[Underflow[]] is a zero of the requested kind (the reference's 0.): a
@@ -1964,7 +2002,7 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
             }
             return expr_copy((Expr*)e); /* already machine-precision */
         case EXPR_COMPILED: return expr_copy((Expr*)e); /* opaque object; N[] is a no-op */
-        case EXPR_LINKEDLIST: return expr_copy((Expr*)e); /* mutable object; N[] is a no-op */
+        case EXPR_LINKEDLIST: return numericalize_linkedlist(e, spec);
         case EXPR_SYMBOL:  return numericalize_symbol(e, spec);
         case EXPR_FUNCTION: return numericalize_function(e, spec);
 #ifdef USE_MPFR

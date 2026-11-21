@@ -18,6 +18,7 @@
  * the rest. */
 
 #include "linalg.h"
+#include "linkedlist.h"
 #include "sym_names.h"
 #include "common.h"
 #include "pack.h"
@@ -97,6 +98,54 @@ static Expr* tri_list(const Expr* m, int64_t k, bool upper) {
     return out;
 }
 
+/* A matrix with a LinkedList level (a LinkedList of rows, or LinkedList
+ * rows): tri_list's rule over the leaves read from the slots, the answer
+ * shaped as the argument (a LinkedList level stays a LinkedList). NULL after
+ * the message tri_list's caller would give. */
+static Expr* tri_ll(Expr* res, const Expr* m, bool upper, const char* head) {
+    const char* notmat = "Argument %s at position 1 is not a non-empty rectangular matrix.";
+    int64_t dims[3];
+    int rank = ll_tensor_dims(m, dims, 3);
+    if (rank == 3) return NULL;                       /* an array of rank 3 or more */
+    if (rank != 2 || dims[0] == 0) {
+        if (rank == 1 && dims[0] == 0) return NULL;
+        msg_with_call(head, "matrix", notmat, m);
+        return NULL;
+    }
+    int64_t k = 0;
+    if (res->data.function.arg_count == 2) {
+        const Expr* ke = res->data.function.args[1];
+        if (ke->type != EXPR_INTEGER) {
+            msg_with_call(head, "intm", "Machine-sized integer expected at position 2 in %s.", res);
+            return NULL;
+        }
+        k = ke->data.integer;
+    }
+    int64_t R = dims[0], C = dims[1];
+    int64_t lim = R + C + 1;
+    if (k > lim) k = lim;
+    if (k < -lim) k = -lim;
+    Expr** leaves = malloc(sizeof(Expr*) * (size_t)(R * C > 0 ? R * C : 1));
+    size_t n = 0;
+    ll_tensor_leaves(m, 2, leaves, &n);
+    bool mach = false;
+    for (size_t t = 0; t < n && !mach; t++) mach = has_machine(leaves[t]);
+    for (int64_t r = 0; r < R; r++) {
+        int64_t lo, hi;
+        kept(r, C, k, upper, &lo, &hi);
+        for (int64_t c = 0; c < C; c++) {
+            if (c >= lo && c < hi) continue;
+            expr_free(leaves[r * C + c]);
+            leaves[r * C + c] = mach ? expr_new_real(0.0) : expr_new_integer(0);
+        }
+    }
+    bool lvl[2];
+    ll_tensor_levels(m, 2, lvl);
+    Expr* out = ll_tensor_build(dims, 2, leaves, lvl);
+    free(leaves);
+    return out;
+}
+
 static Expr* triangularize(Expr* res, bool upper) {
     const char* head = upper ? "UpperTriangularize" : "LowerTriangularize";
     size_t argc = res->data.function.arg_count;
@@ -114,6 +163,7 @@ static Expr* triangularize(Expr* res, bool upper) {
         return NULL;
     }
     const Expr* m = res->data.function.args[0];
+    if (ll_has_ll_level1(m)) return tri_ll(res, m, upper, head);
 
     /* The matrix: a full array of rank 2 (a deeper array stays unevaluated). */
     const char* notmat = "Argument %s at position 1 is not a non-empty rectangular matrix.";

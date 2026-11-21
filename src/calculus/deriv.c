@@ -47,6 +47,7 @@
  * sub-expressions that need to be reused are always deep-copied.
  */
 
+#include "linkedlist.h"
 #include "deriv.h"
 #include "eval.h"
 #include "symtab.h"
@@ -139,6 +140,16 @@ static bool is_lit_zero(const Expr* e) {
  * FreeQ builtin to keep the inner loop allocation-free. */
 static bool expr_free_of(const Expr* f, const Expr* x) {
     if (expr_eq(f, x)) return false;
+    if (f->type == EXPR_LINKEDLIST) {       /* the List of its elements */
+        const LinkedList* ll = f->data.llist;
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(ll, i, &own);
+            bool fr = expr_free_of(el, x);
+            ll_elem_done(el, own);
+            if (!fr) return false;
+        }
+    }
     if (f->type == EXPR_FUNCTION) {
         if (!expr_free_of(f->data.function.head, x)) return false;
         for (size_t i = 0; i < f->data.function.arg_count; i++) {
@@ -741,6 +752,26 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
              * implicit parameter -- their total derivative is Dt[x]. */
             return mk_fn1("Dt", expr_copy(f));
         }
+    }
+
+    /* A LinkedList threads element-wise as a List does (below), into a new
+     * LinkedList; the elements are evaluated here, since a LinkedList is an
+     * atom the evaluator does not re-enter. */
+    if (f->type == EXPR_LINKEDLIST) {
+        LLElemsC el;
+        ll_elems_of(f, &el);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < el.n; i++) {
+            Expr* d = eval_and_free(deriv_of(el.v[i], x, nonconsts));
+            if (eval_is_inflight_unwind(d)) {
+                ll_elems_release(&el);
+                ll_release(out);
+                return d;
+            }
+            ll_push_back(out, d);
+        }
+        ll_elems_release(&el);
+        return expr_new_linkedlist(out);
     }
 
     /* At this point f must be compound. */
@@ -3695,16 +3726,29 @@ static Expr* higher_order_partial(Expr* f, Expr* x, int64_t order,
  *   - For an array spec, *is_array is set to true and *var points at the
  *     inner array List expression (so its args are the variables).
  * Returns false if the spec cannot be interpreted. */
+/* Element i of a List spec, or of a boxed LinkedList spec (its slot,
+ * borrowed for the call); NULL for a typed slot, which no spec needs. */
+static Expr* spec_elem(Expr* spec, size_t i) {
+    if (spec->type == EXPR_LINKEDLIST) return (Expr*)ll_peek_boxed(spec->data.llist, (int64_t)i);
+    return spec->data.function.args[i];
+}
+
 static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
                            Expr** order_expr, bool* is_array) {
     if (order_expr) *order_expr = NULL;
     if (is_array) *is_array = false;
-    if (spec->type == EXPR_FUNCTION &&
-        is_sym(spec->data.function.head, "List")) {
-        size_t ac = spec->data.function.arg_count;
-        Expr* first = (ac >= 1) ? spec->data.function.args[0] : NULL;
-        bool first_is_list = (first && first->type == EXPR_FUNCTION &&
-                              is_sym(first->data.function.head, "List"));
+    /* A LinkedList spec reads as the List of its elements: {x, n}, {{x, y}},
+     * and the array of variables in {ll} are all read from the slots. */
+    if (spec->type == EXPR_LINKEDLIST && ll_kind(spec->data.llist) != LL_BOXED)
+        return false;                       /* a spec of machine numbers: malformed */
+    if (spec->type == EXPR_LINKEDLIST ||
+        (spec->type == EXPR_FUNCTION && is_sym(spec->data.function.head, "List"))) {
+        size_t ac = spec->type == EXPR_LINKEDLIST ? (size_t)ll_length(spec->data.llist)
+                                                  : spec->data.function.arg_count;
+        Expr* first = (ac >= 1) ? spec_elem(spec, 0) : NULL;
+        bool first_is_list = (first && (first->type == EXPR_LINKEDLIST ||
+                              (first->type == EXPR_FUNCTION &&
+                               is_sym(first->data.function.head, "List"))));
 
         /* Array specs: {{x1,...,xN}} or {{x1,...,xN}, n}. */
         if (first_is_list) {
@@ -3715,7 +3759,7 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
                 return true;
             }
             if (ac == 2) {
-                Expr* k = spec->data.function.args[1];
+                Expr* k = spec_elem(spec, 1);
                 if (k->type == EXPR_INTEGER) {
                     if (k->data.integer < 0) return false;
                     if (is_array) *is_array = true;
@@ -3743,9 +3787,9 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
         if (ac != 2) {
             return false;
         }
-        Expr* k = spec->data.function.args[1];
+        Expr* k = spec_elem(spec, 1);
         if (k->type == EXPR_INTEGER) {
-            *var = spec->data.function.args[0];
+            *var = spec_elem(spec, 0);
             *order = k->data.integer;
             return *order >= 0;
         }
@@ -3759,7 +3803,7 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
             return false;
         }
         /* Symbolic order. */
-        *var = spec->data.function.args[0];
+        *var = spec_elem(spec, 0);
         *order = -1;
         if (order_expr) *order_expr = k;
         return true;
@@ -3782,6 +3826,16 @@ static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts);
  * When the inner D cannot be reduced, we leave a literal D[leaf, v]
  * wrapper so the outer evaluator can re-attempt later. */
 static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array, Expr* nonconsts) {
+    if (array->type == EXPR_LINKEDLIST) {
+        /* an array of variables given as a LinkedList: its structure kept */
+        LLElemsC el;
+        ll_elems_of(array, &el);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < el.n; i++)
+            ll_push_back(out, eval_and_free(d_at_array_leaves(leaf_of_f, el.v[i], nonconsts)));
+        ll_elems_release(&el);
+        return expr_new_linkedlist(out);
+    }
     if (array->type == EXPR_FUNCTION &&
         is_sym(array->data.function.head, "List")) {
         size_t n = array->data.function.arg_count;
@@ -3812,6 +3866,17 @@ static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array, Expr* nonconsts) {
  *     shape(f) ++ shape(array)
  * matching Mathematica's definition. */
 static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts) {
+    if (f->type == EXPR_LINKEDLIST) {
+        /* f's own structure outermost, as for a List (below): a LinkedList of
+         * the steps of its elements, each evaluated (an atom is not re-entered) */
+        LLElemsC el;
+        ll_elems_of(f, &el);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < el.n; i++)
+            ll_push_back(out, eval_and_free(outer_d_step(el.v[i], array, nonconsts)));
+        ll_elems_release(&el);
+        return expr_new_linkedlist(out);
+    }
     if (f->type == EXPR_FUNCTION &&
         is_sym(f->data.function.head, "List")) {
         size_t n = f->data.function.arg_count;
@@ -3844,8 +3909,8 @@ static Expr* array_higher_order(Expr* f, Expr* array, int64_t order,
 /* Emit MMA-style D::dvar message for malformed multiple-derivative
  * specifiers. Only called when parse_var_spec rejects a List spec. */
 static void emit_dvar_message(Expr* spec) {
-    if (spec->type != EXPR_FUNCTION ||
-        !is_sym(spec->data.function.head, "List")) {
+    if (spec->type != EXPR_LINKEDLIST &&
+        (spec->type != EXPR_FUNCTION || !is_sym(spec->data.function.head, "List"))) {
         return;
     }
     char* s = expr_to_string(spec);

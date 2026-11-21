@@ -28,7 +28,9 @@ static bool is_list(const Expr* e) {
            e->data.function.head->data.symbol.name == SYM_List;
 }
 static bool is_array(const Expr* e) {
-    return is_list(e) || e->type == EXPR_NDARRAY || e->type == EXPR_SPARSE;
+    /* a LinkedList is the List of its elements; Outer reads its slots */
+    return is_list(e) || e->type == EXPR_NDARRAY || e->type == EXPR_SPARSE ||
+           e->type == EXPR_LINKEDLIST;
 }
 static bool is_number(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;

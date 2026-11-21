@@ -46,6 +46,7 @@
  */
 
 #include "linalg.h"
+#include "linkedlist.h"
 #include "ndlinalg.h"
 #include "symtab.h"
 #include "attr.h"
@@ -701,56 +702,12 @@ static void finv_msg(const char* tag, const char* body, Expr* list) {
     free(s);
 }
 
-Expr* builtin_findintegernullvector(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
-    Expr** av = res->data.function.args;
-
-    /* --- peel trailing options (WorkingPrecision, ZeroTest) --- */
-    size_t pos_end = argc;
-    Expr* zerotest_fn = NULL;       /* borrowed; NULL = Automatic       */
-    bool wp_explicit = false;
-    long wp_bits = 0;               /* explicit working precision (bits)*/
-    while (pos_end > 0) {
-        Expr* o = av[pos_end - 1];
-        if (o->type != EXPR_FUNCTION
-            || o->data.function.head->type != EXPR_SYMBOL
-            || (o->data.function.head->data.symbol.name != SYM_Rule
-             && o->data.function.head->data.symbol.name != SYM_RuleDelayed)
-            || o->data.function.arg_count != 2
-            || o->data.function.args[0]->type != EXPR_SYMBOL)
-            break;
-        const char* opt = o->data.function.args[0]->data.symbol.name;
-        Expr* val = o->data.function.args[1];
-        if (opt == SYM_WorkingPrecision) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
-                double digits;
-                if (!finv_num_to_double(val, &digits) || digits <= 0.0) return NULL;
-                wp_explicit = true;
-                /* bits of precision: the scale 2^bits of the lattice */
-                wp_bits = numeric_width_precision_bits(numeric_digits_to_bits(digits));
-                if (wp_bits < 8) wp_bits = 8;
-            }
-        } else if (opt == SYM_ZeroTest) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic))
-                zerotest_fn = val;
-        } else {
-            break;                  /* unknown trailing rule: not an option */
-        }
-        pos_end--;
-    }
-
-    /* --- positional arguments: list, optional norm bound d --- */
-    if (pos_end < 1 || pos_end > 2) return NULL;
-    Expr* list = av[0];
-    if (list->type != EXPR_FUNCTION
-        || list->data.function.head->type != EXPR_SYMBOL
-        || list->data.function.head->data.symbol.name != SYM_List)
-        return NULL;
-    size_t n = list->data.function.arg_count;
-    if (n < 2) return NULL;
-    Expr** entries = list->data.function.args;
+/* FindIntegerNullVector over entries[0..n): a List's elements or a
+ * LinkedList's. */
+static Expr* finv_core(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
+                       bool wp_explicit, long wp_bits, Expr** entries, size_t n) {
+    (void)res;
+    Expr* list = av[0];                      /* the argument, for messages */
 
     bool has_bound = (pos_end == 2);
     double d_val = 0.0;
@@ -954,4 +911,59 @@ Expr* builtin_findintegernullvector(Expr* res) {
         finv_msg("rnfb", buf, list);
     }
     return NULL;
+}
+
+Expr* builtin_findintegernullvector(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** av = res->data.function.args;
+
+    /* --- peel trailing options (WorkingPrecision, ZeroTest) --- */
+    size_t pos_end = argc;
+    Expr* zerotest_fn = NULL;       /* borrowed; NULL = Automatic       */
+    bool wp_explicit = false;
+    long wp_bits = 0;               /* explicit working precision (bits)*/
+    while (pos_end > 0) {
+        Expr* o = av[pos_end - 1];
+        if (o->type != EXPR_FUNCTION
+            || o->data.function.head->type != EXPR_SYMBOL
+            || (o->data.function.head->data.symbol.name != SYM_Rule
+             && o->data.function.head->data.symbol.name != SYM_RuleDelayed)
+            || o->data.function.arg_count != 2
+            || o->data.function.args[0]->type != EXPR_SYMBOL)
+            break;
+        const char* opt = o->data.function.args[0]->data.symbol.name;
+        Expr* val = o->data.function.args[1];
+        if (opt == SYM_WorkingPrecision) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
+                double digits;
+                if (!finv_num_to_double(val, &digits) || digits <= 0.0) return NULL;
+                wp_explicit = true;
+                /* bits of precision: the scale 2^bits of the lattice */
+                wp_bits = numeric_width_precision_bits(numeric_digits_to_bits(digits));
+                if (wp_bits < 8) wp_bits = 8;
+            }
+        } else if (opt == SYM_ZeroTest) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic))
+                zerotest_fn = val;
+        } else {
+            break;                  /* unknown trailing rule: not an option */
+        }
+        pos_end--;
+    }
+
+    /* --- positional arguments: list, optional norm bound d --- */
+    if (pos_end < 1 || pos_end > 2) return NULL;
+    Expr* list = av[0];
+    /* A LinkedList is the List of its entries, read from its slots; the
+     * vector found comes back as a LinkedList. */
+    LLElemsC ents;
+    if (!ll_elems_of(list, &ents)) return NULL;
+    Expr* out = ents.n < 2 ? NULL
+              : finv_core(res, av, pos_end, zerotest_fn, wp_explicit, wp_bits,
+                          ents.v, (size_t)ents.n);
+    if (out && ents.ll) out = ll_from_list_result(out);
+    ll_elems_release(&ents);
+    return out;
 }

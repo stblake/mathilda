@@ -107,6 +107,9 @@ EXEMPT = {
     "RandomChoice": "nondeterministic: two calls never agree",
     "RandomSample": "nondeterministic: two calls never agree",
     "Unique": "makes a fresh symbol every call",
+    "Minors": "matrix-only linear algebra: out of scope (user decision)",
+    "Orthogonalize": "matrix-only linear algebra (a basis of rows): out of scope (user decision)",
+    "PrincipalComponents": "matrix-only linear algebra: out of scope (user decision)",
 }
 
 # Matrix-only linear algebra, graphs, ML and plotting are out of scope

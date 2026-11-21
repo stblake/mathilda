@@ -214,6 +214,9 @@ Consolidate[r_, fns_, score_] := Module[{cands},
 (* ---------------------------------------------------------------------- *)
 (* Driver. FullSimplify[expr, opts...] -> simplest form found.               *)
 (* ---------------------------------------------------------------------- *)
+(* A LinkedList is simplified as the List of its elements is: element by
+   element (Map reads the slots), the answers in a new LinkedList. *)
+FullSimplify[expr_LinkedList, opts___] := Map[FullSimplify[#, opts] &, expr];
 FullSimplify[expr_, opts___] := Core[expr, {opts}];
 
 Core[expr_, allOpts_List] := Module[
@@ -250,7 +253,7 @@ Core[expr_, allOpts_List] := Module[
        during the consolidation sweep, and a domain-guarded identity (the
        real-log family in logexp.m) reads its facts from $Assumptions. *)
     assum = If[positional === {}, True,
-        If[Head[First[positional]] === List, Apply[And, First[positional]],
+        If[MatchQ[Head[First[positional]], List | LinkedList], Apply[And, First[positional]],
            First[positional]]];
 
     simpArgs = Join[{expr},

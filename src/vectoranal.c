@@ -38,6 +38,7 @@
  */
 
 #include "vectoranal.h"
+#include "linkedlist.h"
 #include "symtab.h"
 #include "attr.h"
 #include "eval.h"
@@ -82,17 +83,27 @@ static Expr* mk_d(Expr* f, Expr* x) { return mk_fn2("D", f, x); }
 /* Predicates and shape helpers                                            */
 /* ---------------------------------------------------------------------- */
 
-static bool is_list(const Expr* e) {
-    return e && e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == SYM_List;
+/* A field level is a List or a LinkedList (the List of its elements): its
+ * length and its i-th component as a new reference. */
+static bool va_seq(const Expr* e) { return e && ll_is_seq(e); }
+static size_t va_n(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ? (size_t)ll_length(e->data.llist)
+                                      : e->data.function.arg_count;
+}
+static Expr* va_at(const Expr* e, size_t i) {
+    return e->type == EXPR_LINKEDLIST ? ll_get(e->data.llist, (int64_t)i)
+                                      : expr_copy(e->data.function.args[i]);
 }
 
 /* True iff `f` is a flat List of exactly `n` non-list elements (a vector). */
 static bool is_vector_len(const Expr* f, int n) {
-    if (!is_list(f) || (int)f->data.function.arg_count != n) return false;
-    for (size_t i = 0; i < f->data.function.arg_count; i++)
-        if (is_list(f->data.function.args[i])) return false;
+    if (!va_seq(f) || (int)va_n(f) != n) return false;
+    for (size_t i = 0; i < va_n(f); i++) {
+        Expr* c = va_at(f, i);
+        bool sub = va_seq(c);
+        expr_free(c);
+        if (sub) return false;
+    }
     return true;
 }
 
@@ -101,12 +112,16 @@ static bool is_vector_len(const Expr* f, int n) {
  * branches share the same depth.  Returns -1 for a ragged shape or a level
  * whose length is not n. */
 static int ncube_depth(const Expr* f, int n) {
-    if (!is_list(f)) return 0;
-    if ((int)f->data.function.arg_count != n) return -1;
-    int d0 = ncube_depth(f->data.function.args[0], n);
-    if (d0 < 0) return -1;
-    for (size_t i = 1; i < f->data.function.arg_count; i++)
-        if (ncube_depth(f->data.function.args[i], n) != d0) return -1;
+    if (!va_seq(f)) return 0;
+    if ((int)va_n(f) != n) return -1;
+    int d0 = -1;
+    for (size_t i = 0; i < va_n(f); i++) {
+        Expr* c = va_at(f, i);
+        int d = ncube_depth(c, n);
+        expr_free(c);
+        if (d < 0 || (i > 0 && d != d0)) return -1;
+        d0 = d;
+    }
     return d0 + 1;
 }
 
@@ -168,15 +183,19 @@ static Expr* laplacian_cartesian(Expr* f, Expr** vars, int n) {
  * innermost slot of `f` with `vars`.  Returns NULL for a scalar or a
  * shape/length mismatch. */
 static Expr* build_div(const Expr* f, Expr** vars, int n) {
-    if (!is_list(f)) return NULL;                 /* scalar has no divergence */
-    size_t m = f->data.function.arg_count;
+    if (!va_seq(f)) return NULL;                  /* scalar has no divergence */
+    size_t m = va_n(f);
 
     /* Tensor (list of lists): map Div over the outer structure. */
-    if (m > 0 && is_list(f->data.function.args[0])) {
+    Expr* c0 = m > 0 ? va_at(f, 0) : NULL;
+    bool tensor = c0 && va_seq(c0);
+    expr_free(c0);
+    if (tensor) {
         Expr** kids = malloc(m * sizeof(Expr*));
         for (size_t i = 0; i < m; i++) {
-            Expr* d = is_list(f->data.function.args[i])
-                        ? build_div(f->data.function.args[i], vars, n) : NULL;
+            Expr* ci = va_at(f, i);
+            Expr* d = va_seq(ci) ? build_div(ci, vars, n) : NULL;
+            expr_free(ci);
             if (!d) {
                 for (size_t t = 0; t < i; t++) expr_free(kids[t]);
                 free(kids);
@@ -189,11 +208,10 @@ static Expr* build_div(const Expr* f, Expr** vars, int n) {
 
     /* Vector: Sum_i D[f_i, x_i]; require length n and no nested lists. */
     if ((int)m != n) return NULL;
-    for (size_t i = 0; i < m; i++)
-        if (is_list(f->data.function.args[i])) return NULL;
+    if (!is_vector_len(f, n)) return NULL;
     Expr** terms = malloc(m * sizeof(Expr*));
     for (size_t i = 0; i < m; i++)
-        terms[i] = mk_d(expr_copy(f->data.function.args[i]), expr_copy(vars[i]));
+        terms[i] = mk_d(va_at(f, i), expr_copy(vars[i]));
     return mk_fnN_adopt("Plus", terms, m);
 }
 
@@ -231,10 +249,13 @@ static void curl_cell_append(curl_ctx* c, size_t idx, Expr* term) {
 static void curl_emit_perm(curl_ctx* c, const int* perm) {
     int s = perm_sign(perm, c->n);
     int i = perm[c->dep];
-    const Expr* leaf = c->f;
-    for (int t = 0; t < c->k; t++)
-        leaf = leaf->data.function.args[perm[c->dep + 1 + t] - 1];
-    Expr* d = mk_d(expr_copy((Expr*)leaf), expr_copy(c->vars[i - 1]));
+    Expr* leaf = expr_copy(c->f);
+    for (int t = 0; t < c->k; t++) {
+        Expr* next = va_at(leaf, (size_t)(perm[c->dep + 1 + t] - 1));
+        expr_free(leaf);
+        leaf = next;
+    }
+    Expr* d = mk_d(leaf, expr_copy(c->vars[i - 1]));
     Expr* term = (s == 1) ? d : mk_neg(d);
     size_t idx = 0;
     for (int t = 0; t < c->dep; t++)
@@ -391,7 +412,7 @@ static void free_h(Expr** h, int n) {
 /* Grad[scalar f, vars, chart] = { (1/h_i) D[f, x_i] }. */
 static Expr* grad_chart(Expr* f, Expr** vars, int n, Expr* chart,
                         const char* head) {
-    if (is_list(f)) return NULL;                 /* vector grad needs a metric */
+    if (va_seq(f)) return NULL;                  /* vector grad needs a metric */
     Expr** h;
     if (!resolve_chart(chart, vars, n, head, &h)) return NULL;
     Expr** comps = malloc((size_t)n * sizeof(Expr*));
@@ -426,7 +447,7 @@ static Expr* div_chart(Expr* f, Expr** vars, int n, Expr* chart,
 /* Laplacian[scalar f, vars, chart] = (1/J) Sum_i D[(J/h_i^2) D[f, x_i], x_i]. */
 static Expr* laplacian_chart(Expr* f, Expr** vars, int n, Expr* chart,
                              const char* head) {
-    if (is_list(f)) return NULL;                 /* vector Laplacian: Christoffel */
+    if (va_seq(f)) return NULL;                  /* vector Laplacian: Christoffel */
     Expr** h;
     if (!resolve_chart(chart, vars, n, head, &h)) return NULL;
     Expr** terms = malloc((size_t)n * sizeof(Expr*));
@@ -495,9 +516,11 @@ static Expr* vecop(Expr* res, const char* head, cart_fn cart, chart_fn chart) {
     if (argc < 2 || argc > 3) return NULL;
 
     Expr* vlist = normalized_copy(res->data.function.args[1]);
-    if (!is_list(vlist)) { expr_free(vlist); return NULL; }
-    int n = (int)vlist->data.function.arg_count;
-    Expr** vars = vlist->data.function.args;
+    /* the coordinates: a List, or a LinkedList read from its slots */
+    LLElemsC vv;
+    if (!ll_elems_of(vlist, &vv)) { expr_free(vlist); return NULL; }
+    int n = (int)vv.n;
+    Expr** vars = vv.v;
 
     Expr* f = normalized_copy(res->data.function.args[0]);
     Expr* result = (argc == 2)
@@ -505,6 +528,7 @@ static Expr* vecop(Expr* res, const char* head, cart_fn cart, chart_fn chart) {
         : chart(f, vars, n, res->data.function.args[2], head);
 
     expr_free(f);
+    ll_elems_release(&vv);
     expr_free(vlist);
     return result;
 }

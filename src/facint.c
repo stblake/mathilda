@@ -3,6 +3,7 @@
  * facint_factor_complete API.  Integer factorisation itself (FactorInteger and every
  * FactorInteger`Method) lives in src/numbertheory/factorinteger/.
  */
+#include "linkedlist.h"
 #include "facint.h"
 #include "numbertheory.h"   /* nt_parse_gaussian_options */
 #include "fi_internal.h"
@@ -613,6 +614,15 @@ Expr* builtin_nextprime(Expr* res) {
         return NULL;
     }
     Expr** args = res->data.function.args;
+
+    /* A LinkedList in either position threads as a List does, every List /
+     * LinkedList argument in step; the answer is a LinkedList. */
+    for (size_t i = 0; i < argc; i++)
+        if (args[i]->type == EXPR_LINKEDLIST) {
+            Expr* t = ll_thread_listable(res);
+            if (t && t->type != EXPR_LINKEDLIST && expr_eq(t, res)) { expr_free(t); return NULL; }
+            return t;
+        }
 
     /* Thread over a List in either position. (Not on pack.c's AWARE list, so a
      * packed buffer has already been unpacked by the gate.) */

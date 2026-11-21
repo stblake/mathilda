@@ -27,6 +27,7 @@
  * evaluated Expr*.  The builtin never frees `res` (the evaluator owns it).
  */
 
+#include "linkedlist.h"
 #include "complex_expand.h"
 
 #include <stdio.h>
@@ -852,6 +853,11 @@ static Expr* cx_expand_thread(const Expr* arg, const CxCtx* ctx) {
 Expr* builtin_complex_expand(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** argv = res->data.function.args;
+    /* A LinkedList integrand / expression maps as a List does: one call per
+     * element, the answers in a new LinkedList (linkedlist.h, ll_map_arg). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
+        res->data.function.args[0]->type == EXPR_LINKEDLIST)
+        return ll_map_arg(res, 0);
 
     /* Split trailing TargetFunctions -> ... option Rules from positionals. */
     TargetMode target = TF_REIM;
@@ -896,12 +902,19 @@ Expr* builtin_complex_expand(Expr* res) {
     /* Build complex-variable list from the optional second positional. */
     Expr** cvars = NULL;
     size_t ncvars = 0;
+    LLElemsC cv_ll = { NULL, 0, false, false };
     if (npos == 2) {
         Expr* spec = argv[1];
         if (head_is(spec, SYM_List)) {
             ncvars = spec->data.function.arg_count;
             cvars = ncvars ? malloc(sizeof(Expr*) * ncvars) : NULL;
             for (size_t k = 0; k < ncvars; k++) cvars[k] = spec->data.function.args[k];
+        } else if (spec->type == EXPR_LINKEDLIST) {
+            /* a LinkedList of complex variables, read from its slots */
+            ll_elems_of(spec, &cv_ll);
+            ncvars = (size_t)cv_ll.n;
+            cvars = ncvars ? malloc(sizeof(Expr*) * ncvars) : NULL;
+            for (size_t k = 0; k < ncvars; k++) cvars[k] = cv_ll.v[k];
         } else {
             ncvars = 1;
             cvars = malloc(sizeof(Expr*));
@@ -912,6 +925,7 @@ Expr* builtin_complex_expand(Expr* res) {
     CxCtx ctx = { cvars, ncvars, target };
     Expr* out = cx_expand_thread(argv[0], &ctx);
     if (cvars) free(cvars);
+    ll_elems_release(&cv_ll);
     return out;
 }
 

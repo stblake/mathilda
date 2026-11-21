@@ -51,6 +51,7 @@
  * precision bignums are supported uniformly.
  */
 
+#include "linkedlist.h"
 #include "int.h"
 #include "ndarray.h"      /* is_ndarray, ndarray_delist_and_reeval */
 #include "pack.h"         /* ndbuild_open_i64 */
@@ -716,6 +717,27 @@ Expr* builtin_digitcount(Expr* res) {
 
     Expr** dargs = res->data.function.args;
 
+    /* A LinkedList of numbers threads as the List of them does (below): the
+     * same ::int check on every element, then one count per element. */
+    if (dargs[0]->type == EXPR_LINKEDLIST) {
+        LLElemsC ns;
+        ll_elems_of(dargs[0], &ns);
+        bool numeric = true;
+        for (int64_t i = 0; i < ns.n && numeric; i++) {
+            Expr* e = ns.v[i];
+            numeric = expr_is_integer_like(e) || e->type == EXPR_REAL
+#ifdef USE_MPFR
+                || e->type == EXPR_MPFR
+#endif
+                ;
+        }
+        ll_elems_release(&ns);
+        if (!numeric) return dc_emit_int(1, res);
+        return ll_map_arg(res, 0);
+    }
+    if (argc >= 2 && dargs[1]->type == EXPR_LINKEDLIST) return dc_emit_base(dargs[1], res);
+    if (argc == 3 && dargs[2]->type == EXPR_LINKEDLIST) return ll_map_arg(res, 2);
+
     /* DigitCount[{n1, n2, ...}, ...] threads over the first argument only
      * (it is not Listable): one count per
      * number, integer or real.  A non-numeric element is ::int for the
@@ -1000,10 +1022,9 @@ static int fd_char_to_digit(int c) {
 
 /* True iff every element of `list` is integer-like (EXPR_INTEGER or
  * EXPR_BIGINT).  `list` must be a List[]-headed function. */
-static bool fd_all_integer_digits(Expr* list) {
-    size_t n = list->data.function.arg_count;
+static bool fd_all_integer_digits(Expr* const* dg, size_t n) {
     for (size_t i = 0; i < n; i++) {
-        if (!expr_is_integer_like(list->data.function.args[i])) return false;
+        if (!expr_is_integer_like(dg[i])) return false;
     }
     return true;
 }
@@ -1017,8 +1038,7 @@ static bool fd_all_integer_digits(Expr* list) {
  * per-iteration `digit` is paired with a matching `mpz_clear` at the
  * bottom of the loop -- skipping that clear leaks an mp_limb_t per
  * digit. */
-static Expr* fd_compute_integer_list(Expr* list, const mpz_t base) {
-    size_t n = list->data.function.arg_count;
+static Expr* fd_compute_integer_list(Expr* const* dg, size_t n, const mpz_t base) {
     mpz_t acc;
     mpz_init_set_ui(acc, 0);
 
@@ -1028,14 +1048,14 @@ static Expr* fd_compute_integer_list(Expr* list, const mpz_t base) {
     bool simple = mpz_cmp_ui(base, 2) >= 0 && mpz_cmp_ui(base, 62) <= 0 && n > 0;
     unsigned long b = simple ? mpz_get_ui(base) : 0;
     for (size_t i = 0; i < n && simple; i++) {
-        Expr* d = list->data.function.args[i];
+        Expr* d = dg[i];
         simple = d->type == EXPR_INTEGER && d->data.integer >= 0 &&
                  (uint64_t)d->data.integer < b;
     }
     if (simple) {
         char* str = malloc(n + 1);
         for (size_t i = 0; i < n; i++) {
-            int64_t d = list->data.function.args[i]->data.integer;
+            int64_t d = dg[i]->data.integer;
             str[i] = (char)(d < 10 ? '0' + d : (b <= 36 ? 'a' + (d - 10)
                                                 : (d < 36 ? 'A' + (d - 10) : 'a' + (d - 36))));
         }
@@ -1047,7 +1067,7 @@ static Expr* fd_compute_integer_list(Expr* list, const mpz_t base) {
         mpz_init(tmp);
         for (size_t i = 0; i < n; i++) {
             mpz_t digit;
-            expr_to_mpz(list->data.function.args[i], digit);
+            expr_to_mpz(dg[i], digit);
             mpz_mul(tmp, acc, base);
             mpz_add(acc, tmp, digit);
             mpz_clear(digit);
@@ -1121,14 +1141,13 @@ static Expr* fd_compute_integer_string(const char* s, const mpz_t base,
  * so digits-larger-than-base, negative digits, Real or symbolic bases,
  * etc. all collapse onto a single code path.  Caller owns `list` and
  * `base_expr`; we deep-copy what we need into the new tree. */
-static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
-    size_t n = list->data.function.arg_count;
+static Expr* fd_build_symbolic(Expr* const* dg, size_t n, Expr* base_expr) {
     if (n == 0) return expr_new_integer(0);
 
     Expr** plus_args = malloc(sizeof(Expr*) * n);
 
     for (size_t i = 0; i < n; i++) {
-        Expr* digit = expr_copy(list->data.function.args[i]);
+        Expr* digit = expr_copy(dg[i]);
         size_t exponent = n - 1 - i;
 
         if (exponent == 0) {
@@ -1168,14 +1187,13 @@ static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
 /* Nested Horner form b (b (d0) + d1) + d2 ..., the form
  * given for symbolic digits in a numeric base: FromDigits[{a, b, c}] is
  * 10 (10 a + b) + c. */
-static Expr* fd_build_horner(Expr* list, Expr* base_expr) {
-    size_t n = list->data.function.arg_count;
+static Expr* fd_build_horner(Expr* const* dg, size_t n, Expr* base_expr) {
     if (n == 0) return expr_new_integer(0);
-    Expr* acc = expr_copy(list->data.function.args[0]);
+    Expr* acc = expr_copy(dg[0]);
     for (size_t i = 1; i < n; i++) {
         Expr* t_args[2] = { expr_copy(base_expr), acc };
         Expr* t = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
-        Expr* p_args[2] = { t, expr_copy(list->data.function.args[i]) };
+        Expr* p_args[2] = { t, expr_copy(dg[i]) };
         acc = expr_new_function(expr_new_symbol(SYM_Plus), p_args, 2);
     }
     return acc;
@@ -1192,21 +1210,23 @@ static bool fd_is_list(const Expr* e) {
  * RealDigits form): (FromDigits[d] + R / (b^p - 1)) b^(e - m) with R the
  * repeating block's value and p its length. Built as an expression and
  * evaluated, so it is exact for integer b and e and symbolic otherwise. */
+static Expr* fd_digits(Expr* const* fv, size_t fn, Expr* base_expr);
+
+/* `digits` is a List or a LinkedList (read from its slots). */
 static Expr* fd_mantissa(Expr* digits, Expr* e, Expr* base_expr) {
-    size_t n = digits->data.function.arg_count;
-    Expr* rec = (n > 0 && fd_is_list(digits->data.function.args[n - 1]))
-                    ? digits->data.function.args[n - 1] : NULL;
+    LLElemsC dg;
+    ll_elems_of(digits, &dg);
+    size_t n = (size_t)dg.n;
+    Expr* rec = (n > 0 && ll_is_seq(dg.v[n - 1])) ? expr_copy(dg.v[n - 1]) : NULL;
     size_t m = rec ? n - 1 : n;
-    Expr** dv = malloc((m ? m : 1) * sizeof(Expr*));
-    for (size_t i = 0; i < m; i++) dv[i] = expr_copy(digits->data.function.args[i]);
-    Expr* dl = expr_new_function(expr_new_symbol(SYM_List), dv, m);
-    free(dv);
-    Expr* fd_args[2] = { dl, expr_copy(base_expr) };
-    Expr* mant = expr_new_function(expr_new_symbol("FromDigits"), fd_args, 2);
+    Expr* mant = fd_digits(dg.v, m, base_expr);
+    ll_elems_release(&dg);
+    if (!mant) { expr_free(rec); return NULL; }
     if (rec) {
         /* + FromDigits[rec, b] / (b^p - 1) */
-        size_t p = rec->data.function.arg_count;
-        Expr* r_args[2] = { expr_copy(rec), expr_copy(base_expr) };
+        size_t p = rec->type == EXPR_LINKEDLIST ? (size_t)ll_length(rec->data.llist)
+                                                : rec->data.function.arg_count;
+        Expr* r_args[2] = { rec, expr_copy(base_expr) };
         Expr* r = expr_new_function(expr_new_symbol("FromDigits"), r_args, 2);
         Expr* bp_args[2] = { expr_copy(base_expr), expr_new_integer((int64_t)p) };
         Expr* bp = expr_new_function(expr_new_symbol(SYM_Power), bp_args, 2);
@@ -1266,6 +1286,74 @@ static Expr* fd_roman(const char* s) {
         return expr_new_symbol("$Failed");
     }
     return expr_new_integer(total);
+}
+
+/* FromDigits of the digit sequence fv[0..fn) -- a List's elements, or a
+ * LinkedList's read from its slots -- in base base_expr (NULL: 10). */
+static Expr* fd_digits(Expr* const* fv, size_t fn, Expr* base_expr) {
+
+    Expr* base_for_poly = base_expr ? expr_copy(base_expr) : expr_new_integer(10);
+
+    /* {{digits...}, exponent}: the mantissa-exponent (RealDigits) form. */
+    if (fn == 2 && ll_is_seq(fv[0]) &&
+        !ll_is_seq(fv[1])) {
+        Expr* out = fd_mantissa(fv[0], fv[1],
+                                base_for_poly);
+        expr_free(base_for_poly);
+        return out;
+    }
+    /* {{digits...}, {e1, e2, ...}} threads over the exponents:
+     * FromDigits[{{1, 2}, {3, 4}}] is {120, 1200}. */
+    if (fn == 2 && ll_is_seq(fv[0]) &&
+        ll_is_seq(fv[1])) {
+        LLElemsC ex;
+        ll_elems_of(fv[1], &ex);
+        size_t ne = (size_t)ex.n;
+        bool flat = true;
+        for (size_t i = 0; i < ne && flat; i++) flat = !ll_is_seq(ex.v[i]);
+        if (flat) {
+            Expr** items = malloc((ne ? ne : 1) * sizeof(Expr*));
+            size_t got = 0;
+            for (; got < ne; got++) {
+                items[got] = fd_mantissa(fv[0], ex.v[got], base_for_poly);
+                if (!items[got]) break;
+            }
+            if (got < ne) {
+                for (size_t i = 0; i < got; i++) expr_free(items[i]);
+                free(items);
+                expr_free(base_for_poly);
+                ll_elems_release(&ex);
+                return NULL;
+            }
+            Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, ne);
+            free(items);
+            expr_free(base_for_poly);
+            if (ex.ll) out = ll_from_list_result(out);   /* a LinkedList of exponents */
+            ll_elems_release(&ex);
+            return out;
+        }
+        ll_elems_release(&ex);
+    }
+
+    /* Integer digits in an integer base (any base: 0, 1, -10 are all just
+     * Horner): exact in GMP. */
+    if (fd_all_integer_digits(fv, fn) && expr_is_integer_like(base_for_poly)) {
+        mpz_t base;
+        expr_to_mpz(base_for_poly, base);
+        Expr* out = fd_compute_integer_list(fv, fn, base);
+        mpz_clear(base);
+        expr_free(base_for_poly);
+        return out;
+    }
+
+    /* Otherwise an expression: nested Horner in a numeric base
+     * (10 (10 a + b) + c), the expanded sum in a symbolic one
+     * (3 + 2 b + b^2). */
+    Expr* out = expr_is_numeric_like(base_for_poly)
+                    ? fd_build_horner(fv, fn, base_for_poly)
+                    : fd_build_symbolic(fv, fn, base_for_poly);
+    expr_free(base_for_poly);
+    return out;
 }
 
 Expr* builtin_fromdigits(Expr* res) {
@@ -1354,69 +1442,13 @@ Expr* builtin_fromdigits(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    /* --- Case 2: first argument is a List -------------------------- */
-    if (first->type == EXPR_FUNCTION
-        && first->data.function.head
-        && first->data.function.head->type == EXPR_SYMBOL
-        && first->data.function.head->data.symbol.name == SYM_List) {
-
-        Expr* base_for_poly = base_expr ? expr_copy(base_expr) : expr_new_integer(10);
-
-        /* {{digits...}, exponent}: the mantissa-exponent (RealDigits) form. */
-        if (first->data.function.arg_count == 2 && fd_is_list(first->data.function.args[0]) &&
-            !fd_is_list(first->data.function.args[1])) {
-            Expr* out = fd_mantissa(first->data.function.args[0], first->data.function.args[1],
-                                    base_for_poly);
-            expr_free(base_for_poly);
-            return out;
-        }
-        /* {{digits...}, {e1, e2, ...}} threads over the exponents:
-         * FromDigits[{{1, 2}, {3, 4}}] is {120, 1200}. */
-        if (first->data.function.arg_count == 2 && fd_is_list(first->data.function.args[0]) &&
-            fd_is_list(first->data.function.args[1])) {
-            Expr* exps = first->data.function.args[1];
-            size_t ne = exps->data.function.arg_count;
-            bool flat = true;
-            for (size_t i = 0; i < ne && flat; i++) flat = !fd_is_list(exps->data.function.args[i]);
-            if (flat) {
-                Expr** items = malloc((ne ? ne : 1) * sizeof(Expr*));
-                size_t got = 0;
-                for (; got < ne; got++) {
-                    items[got] = fd_mantissa(first->data.function.args[0],
-                                             exps->data.function.args[got], base_for_poly);
-                    if (!items[got]) break;
-                }
-                if (got < ne) {
-                    for (size_t i = 0; i < got; i++) expr_free(items[i]);
-                    free(items);
-                    expr_free(base_for_poly);
-                    return NULL;
-                }
-                Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, ne);
-                free(items);
-                expr_free(base_for_poly);
-                return out;
-            }
-        }
-
-        /* Integer digits in an integer base (any base: 0, 1, -10 are all just
-         * Horner): exact in GMP. */
-        if (fd_all_integer_digits(first) && expr_is_integer_like(base_for_poly)) {
-            mpz_t base;
-            expr_to_mpz(base_for_poly, base);
-            Expr* out = fd_compute_integer_list(first, base);
-            mpz_clear(base);
-            expr_free(base_for_poly);
-            return out;
-        }
-
-        /* Otherwise an expression: nested Horner in a numeric base
-         * (10 (10 a + b) + c), the expanded sum in a symbolic one
-         * (3 + 2 b + b^2). */
-        Expr* out = expr_is_numeric_like(base_for_poly)
-                        ? fd_build_horner(first, base_for_poly)
-                        : fd_build_symbolic(first, base_for_poly);
-        expr_free(base_for_poly);
+    /* --- Case 2: first argument is a List (or a LinkedList) -------- */
+    if (fd_is_list(first)) return fd_digits(first->data.function.args, first->data.function.arg_count, base_expr);
+    if (first->type == EXPR_LINKEDLIST) {
+        LLElemsC dg;
+        ll_elems_of(first, &dg);
+        Expr* out = fd_digits(dg.v, (size_t)dg.n, base_expr);
+        ll_elems_release(&dg);
         return out;
     }
 

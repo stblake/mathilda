@@ -53,6 +53,7 @@
 #include <time.h>               /* clock() — C99, for the per-call deadline */
 
 #include "attr.h"
+#include "linkedlist.h"
 #include "eval.h"
 #include "expr.h"
 #include "symtab.h"
@@ -2597,12 +2598,21 @@ static Expr* mz_run_body(Expr* res, const char* head, bool is_max) {
     }
 
     Expr** vars = NULL; size_t n = 0;
-    if (!(arg1->type == EXPR_SYMBOL ||
+    if (!(arg1->type == EXPR_SYMBOL || arg1->type == EXPR_LINKEDLIST ||
           (arg1->type == EXPR_FUNCTION && mz_is_sym(arg1->data.function.head, SYM_List)))) {
         if (cons_owned) expr_free(cons);
         return NULL;
     }
-    if (arg1->type == EXPR_SYMBOL) {
+    if (arg1->type == EXPR_LINKEDLIST) {
+        /* a LinkedList of variables, read from its slots (owned copies) */
+        LLElemsC vl;
+        ll_elems_of(arg1, &vl);
+        bool syms = vl.n > 0;
+        for (int64_t i = 0; i < vl.n && syms; i++) syms = vl.v[i]->type == EXPR_SYMBOL;
+        if (!syms) { ll_elems_release(&vl); if (cons_owned) expr_free(cons); return NULL; }
+        vars = vl.v;                        /* the owned references move here */
+        n = (size_t)vl.n;
+    } else if (arg1->type == EXPR_SYMBOL) {
         vars = (Expr**)malloc(sizeof(Expr*));
         vars[0] = expr_copy(arg1);
         n = 1;

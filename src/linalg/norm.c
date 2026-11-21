@@ -16,6 +16,8 @@
  */
 
 #include "linalg.h"
+#include "linkedlist.h"
+#include "common.h"
 #include "ndlinalg.h"
 #include "linsolve.h"  /* matsol_is_inexact — the exact/inexact gate below */
 #include "ndarray.h"   /* ndarray_from_nested_list, NDT_* */
@@ -41,6 +43,251 @@ static bool norm_p_is_nd_compatible(const Expr* p) {
     return false;
 }
 
+/* The vector (or Frobenius) norm of the leaves flat[0..N): Max of Abs for
+ * p = Infinity, else (Sum Abs^p)^(1/p). Shared by the List path and the
+ * LinkedList arm. */
+/* The spectral norm from the Gram matrix g (consumed): Sqrt of its largest
+ * eigenvalue, or the Max over the Sqrt of every eigenvalue of a symbolic one. */
+static Expr* norm_from_gram(Expr* g, bool numeric) {
+    Expr* ev = numeric
+        ? expr_new_function(expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ g, expr_new_integer(1) }, 2)
+        : expr_new_function(expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ g }, 1);
+    ev = eval_and_free(ev);
+    if (!head_is(ev, SYM_List) || ev->data.function.arg_count == 0) {
+        expr_free(ev);
+        return NULL;
+    }
+    Expr* out;
+    if (numeric) {
+        Expr* top = expr_copy(ev->data.function.args[0]);
+        expr_free(ev);
+        /* the reference's form of a quadratic surd: Sqrt[21 + Sqrt[41]],
+         * Sqrt[(91 + Sqrt[8065])/2] -- one fraction, content cancelled */
+        top = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                                              (Expr*[]){ top }, 1));
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ top }, 1));
+    } else {
+        Expr* sq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ ev }, 1));
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Apply),
+                                (Expr*[]){ expr_new_symbol(SYM_Max), sq }, 2));
+    }
+    return out;
+}
+
+static Expr* norm_flat(Expr** flat, int64_t N, const Expr* p) {
+    Expr* result = NULL;
+
+    if (p && p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity) {
+        if (N == 0) {
+            result = expr_new_integer(0);
+        } else {
+            Expr** max_args = malloc(sizeof(Expr*) * N);
+            for (int64_t i = 0; i < N; i++) {
+                max_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
+            }
+            result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), max_args, N));
+            free(max_args);
+        }
+    } else {
+        Expr* norm_p = NULL;
+        if (!p || (p->type == EXPR_STRING && strcmp(p->data.string, "Frobenius") == 0)) {
+            norm_p = expr_new_integer(2);
+        } else {
+            norm_p = expr_copy((Expr*)p);
+        }
+
+        if (N == 0) {
+            result = expr_new_integer(0);
+        } else {
+            Expr** plus_args = malloc(sizeof(Expr*) * N);
+            for (int64_t i = 0; i < N; i++) {
+                Expr* abs_val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
+                plus_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){abs_val, expr_copy(norm_p)}, 2));
+            }
+            Expr* sum = NULL;
+            if (N == 1) {
+                sum = plus_args[0];
+            } else {
+                sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), plus_args, N));
+            }
+            free(plus_args);
+
+            Expr* inv_p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(norm_p), expr_new_integer(-1)}, 2));
+            result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){sum, inv_p}, 2));
+        }
+        expr_free(norm_p);
+    }
+
+    return result;
+}
+
+
+/* ---- Norm of a LinkedList (a vector, a LinkedList of rows, or a List with
+ * LinkedList rows): the List paths above over the leaves read from the slots.
+ * A machine vector or matrix runs the packed path's raw kernels
+ * (ndla_vec_norm_buf / ndla_matrix_norm_buf); exact and symbolic ones the
+ * same element formulas. */
+
+/* The leaves as doubles (interleaved (re, im) when *cplx): every leaf a
+ * machine-convertible Integer/Real/Complex, as ndarray_from_nested_list packs. */
+static bool norm_leaves_machine(Expr** v, int64_t n, bool* cplx, double** out) {
+    bool c = false;
+    for (int64_t i = 0; i < n; i++) {
+        const Expr* e = v[i];
+        if (e->type == EXPR_INTEGER || e->type == EXPR_REAL) continue;
+        if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
+            (e->data.function.args[0]->type == EXPR_INTEGER || e->data.function.args[0]->type == EXPR_REAL) &&
+            (e->data.function.args[1]->type == EXPR_INTEGER || e->data.function.args[1]->type == EXPR_REAL)) {
+            c = true;
+            continue;
+        }
+        return false;
+    }
+    double* b = malloc(sizeof(double) * (size_t)(c ? 2 : 1) * (size_t)(n ? n : 1));
+    for (int64_t i = 0; i < n; i++) {
+        const Expr* e = v[i];
+        double re, im = 0.0;
+        if (head_is(e, SYM_Complex)) {
+            const Expr* r = e->data.function.args[0];
+            const Expr* m = e->data.function.args[1];
+            re = r->type == EXPR_REAL ? r->data.real : (double)r->data.integer;
+            im = m->type == EXPR_REAL ? m->data.real : (double)m->data.integer;
+        } else {
+            re = e->type == EXPR_REAL ? e->data.real : (double)e->data.integer;
+        }
+        if (c) { b[2 * i] = re; b[2 * i + 1] = im; } else b[i] = re;
+    }
+    *cplx = c;
+    *out = b;
+    return true;
+}
+
+static CommonInexactInfo norm_scan_leaves(Expr** v, int64_t n) {
+    CommonInexactInfo all = { false, 0 };
+    for (int64_t i = 0; i < n; i++) {
+        CommonInexactInfo ii = common_scan_inexact(v[i]);
+        if (!ii.has_inexact) continue;
+        if (!all.has_inexact || ii.min_bits < all.min_bits) all.min_bits = ii.min_bits;
+        all.has_inexact = true;
+    }
+    return all;
+}
+
+static Expr* norm_ll(Expr* expr, const Expr* p) {
+    /* A machine-real or machine-complex LinkedList vector: its slots straight
+     * into the packed path's kernel (the List path packs such a vector). */
+    if (expr->type == EXPR_LINKEDLIST && norm_p_is_nd_compatible(p) &&
+        (ll_kind(expr->data.llist) == LL_REAL || ll_kind(expr->data.llist) == LL_CPLX)) {
+        const LinkedList* ll = expr->data.llist;
+        bool cplx = ll_kind(ll) == LL_CPLX;
+        int64_t n = ll_length(ll);
+        double* buf = malloc(sizeof(double) * (cplx ? 2 : 1) * (size_t)n);
+        ll_gather(ll, 0, n, buf);
+        double pv = 2.0;
+        bool p_inf = false;
+        if (p && p->type == EXPR_SYMBOL) p_inf = true;
+        else if (p && p->type == EXPR_INTEGER) pv = (double)p->data.integer;
+        else if (p && p->type == EXPR_REAL) pv = p->data.real;
+        Expr* r = expr_new_real(ndla_vec_norm_buf(buf, (int)n, cplx, pv, p_inf));
+        free(buf);
+        return r;
+    }
+    int64_t dims[64];
+    int rank = ll_tensor_dims(expr, dims, 64);
+    if (rank <= 0) return NULL;                         /* jagged */
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    Expr** flat = malloc(sizeof(Expr*) * (size_t)(N > 0 ? N : 1));
+    size_t got = 0;
+    ll_tensor_leaves(expr, rank, flat, &got);
+    Expr* result = NULL;
+    bool frob = p && p->type == EXPR_STRING && strcmp(p->data.string, "Frobenius") == 0;
+    CommonInexactInfo ii = norm_scan_leaves(flat, N);
+    bool machine = ii.has_inexact && ii.min_bits <= 53;
+
+    if (rank == 1 && norm_p_is_nd_compatible(p) && machine) {
+        double* buf;
+        bool cplx;
+        if (norm_leaves_machine(flat, N, &cplx, &buf)) {
+            double pv = 2.0;
+            bool p_inf = false;
+            if (p && p->type == EXPR_SYMBOL) p_inf = true;
+            else if (p && p->type == EXPR_INTEGER) pv = (double)p->data.integer;
+            else if (p && p->type == EXPR_REAL) pv = p->data.real;
+            result = expr_new_real(ndla_vec_norm_buf(buf, (int)N, cplx, pv, p_inf));
+            free(buf);
+        }
+    }
+    if (!result && (rank == 1 || (rank >= 2 && frob))) {
+        result = norm_flat(flat, N, p);
+    } else if (!result && rank == 2 && dims[0] > 0 && dims[1] > 0) {
+        int64_t R = dims[0], C = dims[1];
+        double* buf;
+        bool cplx;
+        if (machine && norm_leaves_machine(flat, N, &cplx, &buf)) {
+            /* column-major for LAPACK, as na_load_matrix lays it out */
+            size_t w = cplx ? 2 : 1;
+            double* A = malloc(sizeof(double) * w * (size_t)N);
+            for (int64_t r = 0; r < R; r++)
+                for (int64_t c = 0; c < C; c++)
+                    for (size_t t = 0; t < w; t++)
+                        A[w * (size_t)(c * R + r) + t] = buf[w * (size_t)(r * C + c) + t];
+            free(buf);
+            result = ndla_matrix_norm_buf(A, (int)R, (int)C, cplx, p);
+        } else if (!machine && p &&
+                   ((p->type == EXPR_INTEGER && p->data.integer == 1) ||
+                    (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity))) {
+            /* the largest absolute column (1) or row (Infinity) sum */
+            bool rows = p->type == EXPR_SYMBOL;
+            int64_t L = rows ? R : C, M = rows ? C : R;
+            Expr** sums = malloc(sizeof(Expr*) * (size_t)L);
+            for (int64_t a = 0; a < L; a++) {
+                Expr** t = malloc(sizeof(Expr*) * (size_t)M);
+                for (int64_t b = 0; b < M; b++) {
+                    Expr* e = rows ? flat[a * C + b] : flat[b * C + a];
+                    t[b] = expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(e) }, 1);
+                }
+                sums[a] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), t, (size_t)M));
+                free(t);
+            }
+            result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), sums, (size_t)L));
+            free(sums);
+        } else if (!machine && (!p || (p->type == EXPR_INTEGER && p->data.integer == 2))) {
+            /* the spectral norm through the smaller Gram matrix, as above:
+             * m.m^H (R <= C) or m^H.m, entry by entry from the leaves -- the
+             * Times/Plus Dot forms of the List path */
+            int64_t G = R <= C ? R : C, K = R <= C ? C : R;
+            Expr** rows = malloc(sizeof(Expr*) * (size_t)G);
+            for (int64_t i = 0; i < G; i++) {
+                Expr** cells = malloc(sizeof(Expr*) * (size_t)G);
+                for (int64_t j = 0; j < G; j++) {
+                    Expr** t = malloc(sizeof(Expr*) * (size_t)K);
+                    for (int64_t k = 0; k < K; k++) {
+                        Expr* u = R <= C ? flat[i * C + k] : flat[k * C + i];
+                        Expr* w = R <= C ? flat[j * C + k] : flat[k * C + j];
+                        Expr* cw = expr_new_function(expr_new_symbol(SYM_Conjugate),
+                                                     (Expr*[]){ expr_copy(R <= C ? w : u) }, 1);
+                        t[k] = expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ R <= C ? expr_copy(u) : cw, R <= C ? cw : expr_copy(w) }, 2);
+                    }
+                    cells[j] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), t, (size_t)K));
+                    free(t);
+                }
+                rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)G);
+                free(cells);
+            }
+            Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)G));
+            free(rows);
+            bool numeric = true;
+            for (int64_t i = 0; i < N && numeric; i++) numeric = la_all_numeric(flat[i]);
+            result = norm_from_gram(g, numeric);
+        }
+    }
+    for (size_t i = 0; i < got; i++) expr_free(flat[i]);
+    free(flat);
+    return result;
+}
+
 Expr* builtin_norm(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_norm(res);
@@ -50,6 +297,7 @@ Expr* builtin_norm(Expr* res) {
     if (res->data.function.arg_count == 2) {
         p = res->data.function.args[1];
     }
+    if (ll_has_ll_level1(expr)) return norm_ll(expr, p);
 
     int64_t dims[64];
     int rank = get_tensor_dims(expr, dims);
@@ -101,48 +349,7 @@ Expr* builtin_norm(Expr* res) {
             flatten_tensor(expr, flat, &idx);
         }
 
-        Expr* result = NULL;
-
-        if (p && p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity) {
-            if (N == 0) {
-                result = expr_new_integer(0);
-            } else {
-                Expr** max_args = malloc(sizeof(Expr*) * N);
-                for (int64_t i = 0; i < N; i++) {
-                    max_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
-                }
-                result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), max_args, N));
-                free(max_args);
-            }
-        } else {
-            Expr* norm_p = NULL;
-            if (!p || (p->type == EXPR_STRING && strcmp(p->data.string, "Frobenius") == 0)) {
-                norm_p = expr_new_integer(2);
-            } else {
-                norm_p = expr_copy(p);
-            }
-
-            if (N == 0) {
-                result = expr_new_integer(0);
-            } else {
-                Expr** plus_args = malloc(sizeof(Expr*) * N);
-                for (int64_t i = 0; i < N; i++) {
-                    Expr* abs_val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
-                    plus_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){abs_val, expr_copy(norm_p)}, 2));
-                }
-                Expr* sum = NULL;
-                if (N == 1) {
-                    sum = plus_args[0];
-                } else {
-                    sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), plus_args, N));
-                }
-                free(plus_args);
-
-                Expr* inv_p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(norm_p), expr_new_integer(-1)}, 2));
-                result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){sum, inv_p}, 2));
-            }
-            expr_free(norm_p);
-        }
+        Expr* result = norm_flat(flat, N, p);
 
         if (flat) {
             for (int64_t i = 0; i < N; i++) expr_free(flat[i]);
@@ -250,29 +457,7 @@ Expr* builtin_norm(Expr* res) {
             : expr_new_function(expr_new_symbol(SYM_Dot), (Expr*[]){ ct, expr_copy(expr) }, 2);
         g = eval_and_free(g);
         bool numeric = la_all_numeric(expr);
-        Expr* ev = numeric
-            ? expr_new_function(expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ g, expr_new_integer(1) }, 2)
-            : expr_new_function(expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ g }, 1);
-        ev = eval_and_free(ev);
-        if (!head_is(ev, SYM_List) || ev->data.function.arg_count == 0) {
-            expr_free(ev);
-            return NULL;
-        }
-        Expr* out;
-        if (numeric) {
-            Expr* top = expr_copy(ev->data.function.args[0]);
-            expr_free(ev);
-            /* the reference's form of a quadratic surd: Sqrt[21 + Sqrt[41]],
-             * Sqrt[(91 + Sqrt[8065])/2] -- one fraction, content cancelled */
-            top = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
-                                                  (Expr*[]){ top }, 1));
-            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ top }, 1));
-        } else {
-            Expr* sq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ ev }, 1));
-            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Apply),
-                                    (Expr*[]){ expr_new_symbol(SYM_Max), sq }, 2));
-        }
-        return out;
+        return norm_from_gram(g, numeric);
     }
 
     return NULL;

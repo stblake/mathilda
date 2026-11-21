@@ -6,6 +6,7 @@
  */
 
 #include "tonumberfield.h"
+#include "linkedlist.h"
 
 #include "flint_qqbar.h"
 #include "symtab.h"
@@ -16,9 +17,11 @@
 #include <string.h>
 
 static int is_list(const Expr* e) {
-    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == SYM_List;
+    /* a LinkedList is the List of its elements */
+    return e && (e->type == EXPR_LINKEDLIST ||
+                 (e->type == EXPR_FUNCTION && e->data.function.head &&
+                  e->data.function.head->type == EXPR_SYMBOL &&
+                  e->data.function.head->data.symbol.name == SYM_List));
 }
 
 static int is_symbol_named(const Expr* e, const char* name) {
@@ -27,24 +30,29 @@ static int is_symbol_named(const Expr* e, const char* name) {
 }
 
 /* ToNumberField[{a1..ak}] / [{a1..ak}, All]: common field via primitive element. */
+/* The list's elements: a List's, or a LinkedList's read from its slots; a
+ * LinkedList answers with a LinkedList. */
 static Expr* common_form(const Expr* list, int smallest) {
-    size_t n = list->data.function.arg_count;
-    if (n == 0) return NULL;
-    const Expr** as = malloc(sizeof(Expr*) * n);
-    for (size_t i = 0; i < n; i++) as[i] = list->data.function.args[i];
-    Expr* r = flint_qqbar_to_number_field_common((const Expr* const*)as, n, smallest);
-    free(as);
+    LLElemsC el;
+    ll_elems_of(list, &el);
+    size_t n = (size_t)el.n;
+    Expr* r = n == 0 ? NULL
+            : flint_qqbar_to_number_field_common((const Expr* const*)el.v, n, smallest);
+    if (r && el.ll) r = ll_from_list_result(r);
+    ll_elems_release(&el);
     return r;
 }
 
 /* ToNumberField[{a1..ak}, theta]: express each ai in Q(theta). */
 static Expr* list_in_field(const Expr* list, const Expr* theta) {
-    size_t n = list->data.function.arg_count;
+    LLElemsC el;
+    ll_elems_of(list, &el);
+    size_t n = (size_t)el.n;
     Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t built = 0;
     int good = 1;
     for (size_t i = 0; i < n; i++) {
-        items[i] = flint_qqbar_to_number_field(list->data.function.args[i], theta);
+        items[i] = flint_qqbar_to_number_field(el.v[i], theta);
         if (!items[i]) { good = 0; break; }   /* some ai not in Q(theta) */
         built++;
     }
@@ -52,6 +60,8 @@ static Expr* list_in_field(const Expr* list, const Expr* theta) {
     if (good) r = expr_new_function(expr_new_symbol(SYM_List), items, n);
     else for (size_t i = 0; i < built; i++) expr_free(items[i]);
     free(items);
+    if (r && el.ll) r = ll_from_list_result(r);
+    ll_elems_release(&el);
     return r;
 }
 

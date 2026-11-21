@@ -808,26 +808,21 @@ bool ndarray_part_set(Expr* a, Expr* const* indices, size_t nindices,
     return true;
 }
 
-Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
-    int rankA = a->data.ndarray.rank;
-    int rankB = b->data.ndarray.rank;
+void* nd_dot2_buf(const void* pa, NDType dta, int rankA, const int64_t* dimsA,
+                  const void* pb, NDType dtb, int rankB, const int64_t* dimsB,
+                  NDType* dtc_out, bool* shape_error) {
     if (rankA < 1 || rankA > 2 || rankB < 1 || rankB > 2) return NULL;
-
-    const int64_t* dimsA = a->data.ndarray.dims;
-    const int64_t* dimsB = b->data.ndarray.dims;
     int64_t K = dimsA[rankA - 1];
     if (K != dimsB[0]) { *shape_error = true; return NULL; }
 
     int64_t Ra = (rankA == 2) ? dimsA[0] : 1;
     int64_t Sb = (rankB == 2) ? dimsB[1] : 1;
 
-    NDType dta = a->data.ndarray.dtype, dtb = b->data.ndarray.dtype;
     if (dta == NDT_BOOL || dtb == NDT_BOOL) return NULL;  /* not numeric; see ndarray_map_unary */
     NDType dtc = ndt_promote(dta, dtb);
-    const void* pa = a->data.ndarray.data;
-    const void* pb = b->data.ndarray.data;
+    *dtc_out = dtc;
     size_t count = (size_t)(Ra * Sb);
-    void* out = malloc(ndt_elem_size(dtc) * count);
+    void* out = malloc(ndt_elem_size(dtc) * (count ? count : 1));
 
     if (dta == NDT_INT64 || dtb == NDT_INT64) {
         /* Range[10^6] . Range[10^6] is about 3.3e17 -- well past 2^53, so the
@@ -878,6 +873,21 @@ Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
     }
 
 dot_done:;
+    return out;
+}
+
+Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
+    int rankA = a->data.ndarray.rank;
+    int rankB = b->data.ndarray.rank;
+    const int64_t* dimsA = a->data.ndarray.dims;
+    const int64_t* dimsB = b->data.ndarray.dims;
+    NDType dtc = NDT_FLOAT64;
+    void* out = nd_dot2_buf(a->data.ndarray.data, a->data.ndarray.dtype, rankA, dimsA,
+                            b->data.ndarray.data, b->data.ndarray.dtype, rankB, dimsB,
+                            &dtc, shape_error);
+    if (!out) return NULL;
+    int64_t Ra = (rankA == 2) ? dimsA[0] : 1;
+    int64_t Sb = (rankB == 2) ? dimsB[1] : 1;
     int rankC = rankA + rankB - 2;
     if (rankC == 0) {
         Expr* leaf = ndarray_buffer_element_to_expr(out, 0, dtc);

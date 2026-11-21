@@ -28,6 +28,7 @@
 #endif
 
 #include "integrate.h"
+#include "linkedlist.h"
 #include "mtime.h"   /* mth_mono_seconds */
 #include "core.h"    /* tc_register_unwind_counter */
 #include "integrate_interp.h"
@@ -3887,6 +3888,11 @@ static Expr* int_zero_algebraic_constants(const Expr* e) {
 }
 
 Expr* builtin_integrate(Expr* res) {
+    /* A LinkedList integrand / expression maps as a List does: one call per
+     * element, the answers in a new LinkedList (linkedlist.h, ll_map_arg). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&
+        res->data.function.args[0]->type == EXPR_LINKEDLIST)
+        return ll_map_arg(res, 0);
     bool overflow_before = eval_overflow_fired();
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&
         int_algebraic_constant_marker(res->data.function.args[0])) {

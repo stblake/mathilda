@@ -952,22 +952,31 @@ Expr* ndla_tr(Expr* res)
  * largest singular value, via LAPACK gesdd); p==1 / Infinity / "Frobenius" go
  * through LAPACK lange. Returns NULL to signal "defer" (no LAPACK, or an
  * unsupported p). */
+/* The norm kind ndla_matrix_norm_buf computes for order `pe`, or 0. */
+static char nd_matrix_norm_kind(const Expr* pe) {
+    if (!pe) return 'S';                              /* S = spectral (2-norm) */
+    if (pe->type == EXPR_INTEGER && pe->data.integer == 2) return 'S';
+    if (pe->type == EXPR_INTEGER && pe->data.integer == 1) return '1';
+    if (pe->type == EXPR_SYMBOL && pe->data.symbol.name == SYM_Infinity) return 'I';
+    if (pe->type == EXPR_STRING && pe->data.string &&
+        strcmp(pe->data.string, "Frobenius") == 0) return 'F';
+    return 0;
+}
+
 Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe)
 {
-    char kind = 'S';                                  /* S = spectral (2-norm) */
-    if (pe) {
-        if (pe->type == EXPR_INTEGER && pe->data.integer == 2) kind = 'S';
-        else if (pe->type == EXPR_INTEGER && pe->data.integer == 1) kind = '1';
-        else if (pe->type == EXPR_SYMBOL && pe->data.symbol.name == SYM_Infinity) kind = 'I';
-        else if (pe->type == EXPR_STRING && pe->data.string &&
-                 strcmp(pe->data.string, "Frobenius") == 0) kind = 'F';
-        else return NULL;
-    }
+    if (!nd_matrix_norm_kind(pe)) return NULL;
     if (!mathilda_lapack_probe()) return NULL;
     bool cplx = nd_arg_is_complex(v);
     int r, c; double* A = NULL;                        /* column-major r x c */
     if (!na_load_matrix(v, cplx, true, &r, &c, &A)) return NULL;
+    return ndla_matrix_norm_buf(A, r, c, cplx, pe);
+}
 
+Expr* ndla_matrix_norm_buf(double* A, int r, int c, bool cplx, const Expr* pe)
+{
+    char kind = nd_matrix_norm_kind(pe);
+    if (!kind || !mathilda_lapack_probe()) { free(A); return NULL; }
     double out;
     if (kind == 'S') {
         int mn = r < c ? r : c;
@@ -1015,35 +1024,8 @@ static double nd_vec_2norm(const double* buf, int n, bool cplx)
     return scale * sqrt(ssq);
 }
 
-Expr* ndla_norm(Expr* res)
+double ndla_vec_norm_buf(const double* buf, int n, bool cplx, double p, bool p_inf)
 {
-    size_t argc = res->data.function.arg_count;
-    if (argc < 1 || argc > 2) return linalg_delist_and_reeval(res);
-    Expr* v = res->data.function.args[0];
-    if (!is_ndarray(v)) return linalg_delist_and_reeval(res);
-
-    if (v->data.ndarray.rank == 2) {                  /* matrix norm via LAPACK */
-        Expr* r = ndla_matrix_norm_direct(v, argc == 2 ? res->data.function.args[1] : NULL);
-        return r ? r : linalg_delist_and_reeval(res);
-    }
-    if (v->data.ndarray.rank != 1)
-        return linalg_delist_and_reeval(res);
-
-    /* Resolve p: default 2, positive Integer/Real, or Infinity. */
-    double p = 2.0; bool p_inf = false;
-    if (argc == 2) {
-        Expr* pe = res->data.function.args[1];
-        if (pe->type == EXPR_SYMBOL && pe->data.symbol.name == SYM_Infinity) p_inf = true;
-        else if (pe->type == EXPR_INTEGER && pe->data.integer > 0) p = (double)pe->data.integer;
-        else if (pe->type == EXPR_REAL && pe->data.real > 0.0) p = pe->data.real;
-        else return linalg_delist_and_reeval(res);
-    }
-
-    int n; double* buf = NULL;
-    bool cplx = nd_arg_is_complex(v);
-    if (!na_load_vector(v, cplx, &n, &buf))
-        return linalg_delist_and_reeval(res);
-
     double out;
     if (p_inf) {
         out = 0.0;
@@ -1073,6 +1055,39 @@ Expr* ndla_norm(Expr* res)
             out = mx * pow(s, 1.0 / p);
         }
     }
+    return out;
+}
+
+Expr* ndla_norm(Expr* res)
+{
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return linalg_delist_and_reeval(res);
+    Expr* v = res->data.function.args[0];
+    if (!is_ndarray(v)) return linalg_delist_and_reeval(res);
+
+    if (v->data.ndarray.rank == 2) {                  /* matrix norm via LAPACK */
+        Expr* r = ndla_matrix_norm_direct(v, argc == 2 ? res->data.function.args[1] : NULL);
+        return r ? r : linalg_delist_and_reeval(res);
+    }
+    if (v->data.ndarray.rank != 1)
+        return linalg_delist_and_reeval(res);
+
+    /* Resolve p: default 2, positive Integer/Real, or Infinity. */
+    double p = 2.0; bool p_inf = false;
+    if (argc == 2) {
+        Expr* pe = res->data.function.args[1];
+        if (pe->type == EXPR_SYMBOL && pe->data.symbol.name == SYM_Infinity) p_inf = true;
+        else if (pe->type == EXPR_INTEGER && pe->data.integer > 0) p = (double)pe->data.integer;
+        else if (pe->type == EXPR_REAL && pe->data.real > 0.0) p = pe->data.real;
+        else return linalg_delist_and_reeval(res);
+    }
+
+    int n; double* buf = NULL;
+    bool cplx = nd_arg_is_complex(v);
+    if (!na_load_vector(v, cplx, &n, &buf))
+        return linalg_delist_and_reeval(res);
+
+    double out = ndla_vec_norm_buf(buf, n, cplx, p, p_inf);
     free(buf);
     return expr_new_real(out);
 }
@@ -1080,6 +1095,15 @@ Expr* ndla_norm(Expr* res)
 /* ------------------------------------------------------------------ */
 /*  Normalize (vector / its 2-norm)                                    */
 /* ------------------------------------------------------------------ */
+
+void ndla_vec_normalize_buf(double* buf, int n, bool cplx)
+{
+    double nrm = nd_vec_2norm(buf, n, cplx);
+    if (nrm > 0.0) {
+        int comps = cplx ? 2 * n : n;
+        for (int i = 0; i < comps; i++) buf[i] /= nrm;
+    }
+}
 
 Expr* ndla_normalize(Expr* res)
 {
@@ -1092,11 +1116,7 @@ Expr* ndla_normalize(Expr* res)
     if (!na_load_vector(v, cplx, &n, &buf))
         return linalg_delist_and_reeval(res);
 
-    double nrm = nd_vec_2norm(buf, n, cplx);
-    if (nrm > 0.0) {
-        int comps = cplx ? 2 * n : n;
-        for (int i = 0; i < comps; i++) buf[i] /= nrm;
-    }
+    ndla_vec_normalize_buf(buf, n, cplx);
     Expr* out = nd_result_like(v, NULL, na_build_vector(buf, n, cplx));
     free(buf);
     return out;

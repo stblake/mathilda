@@ -3,6 +3,7 @@
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
 #include "findmin_internal.h"
+#include "linkedlist.h"
 #include "../modular.h"
 
 
@@ -1427,11 +1428,18 @@ static bool nm_one_var(Expr* sub, Expr** var_out, bool* is_int_out,
 bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn) {
     bool system = false;
     size_t na = 0;
-    if (nm_is_head(var_arg, SYM_List) && var_arg->data.function.arg_count > 0) {
-        na = var_arg->data.function.arg_count;
+    /* The specs of a List, or of a LinkedList read from its slots. */
+    LLElemsC sp = { NULL, 0, false, false };
+    if (var_arg->type == EXPR_LINKEDLIST) ll_elems_of(var_arg, &sp);
+    else if (nm_is_head(var_arg, SYM_List)) {
+        sp.v = var_arg->data.function.args;
+        sp.n = (int64_t)var_arg->data.function.arg_count;
+    }
+    if (sp.n > 0) {
+        na = (size_t)sp.n;
         bool any_sub = false, all_subsym = true, all_atom = true;
         for (size_t i = 0; i < na; i++) {
-            Expr* e = var_arg->data.function.args[i];
+            Expr* e = sp.v[i];
             bool inner = nm_is_head(e, SYM_List);
             bool elem  = nm_is_head(e, SYM_Element);
             bool atom  = nm_is_var_atom(e);         /* symbol or x[i] */
@@ -1456,7 +1464,7 @@ bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn) {
     bool ok = true;
     if (system) {
         for (size_t i = 0; i < n && ok; i++) {
-            ok = nm_one_var(var_arg->data.function.args[i], &vs->vars[i],
+            ok = nm_one_var(sp.v[i], &vs->vars[i],
                             &vs->is_int[i], &vs->has_rlo[i], &vs->rlo[i],
                             &vs->has_rhi[i], &vs->rhi[i], fn);
         }
@@ -1471,6 +1479,7 @@ bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn) {
     }
     if (ok) for (size_t i = 0; i < n; i++) if (vs->is_int[i]) vs->any_int = true;
     if (!ok) nm_varset_free(vs);
+    ll_elems_release(&sp);
     return ok;
 }
 

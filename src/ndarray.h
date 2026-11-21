@@ -231,6 +231,13 @@ Expr* builtin_datatype(Expr* res);
  * either rank is > 2 (caller should fall back to the generic tensor path);
  * sets *shape_error and returns NULL if the contracted dimensions disagree. */
 Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error);
+/* ndarray_dot2's kernel over raw row-major buffers (rank 1 or 2 each): a new
+ * buffer of the Ra x Sb result in *dtc_out, or NULL (a shape mismatch sets
+ * *shape_error; an int64 overflow or a bool operand declines). The packed
+ * path and the LinkedList arm of Dot share it. */
+void* nd_dot2_buf(const void* pa, NDType dta, int rankA, const int64_t* dimsA,
+                  const void* pb, NDType dtb, int rankB, const int64_t* dimsB,
+                  NDType* dtc_out, bool* shape_error);
 
 /* Fast C-level elementwise Plus (is_plus=true) or Times (is_plus=false) over
  * n NDArray operands: loops over the flat double buffers directly, no

@@ -182,4 +182,13 @@ Expr* ndla_leastsquares_direct(const Expr* a, const Expr* b,
 }
 #endif
 
+/* Raw-buffer cores of Norm / Normalize (shared by the packed path and the
+ * LinkedList arms, so the two cannot drift). `buf` is n doubles, or n
+ * interleaved (re, im) pairs when cplx; ndla_matrix_norm_buf takes a
+ * column-major r x c matrix it frees, and order `pe` (NULL, 1, 2, Infinity,
+ * "Frobenius"), NULL when it declines. */
+double ndla_vec_norm_buf(const double* buf, int n, bool cplx, double p, bool p_inf);
+void   ndla_vec_normalize_buf(double* buf, int n, bool cplx);
+Expr*  ndla_matrix_norm_buf(double* A, int r, int c, bool cplx, const Expr* pe);
+
 #endif /* MATHILDA_LINALG_NDLINALG_H */

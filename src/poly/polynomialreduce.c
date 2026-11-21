@@ -39,6 +39,8 @@
  */
 
 #include "poly.h"
+#include "linkedlist.h"
+#include "common.h"
 #include "expr.h"
 #include "eval.h"
 #include "symtab.h"
@@ -275,6 +277,12 @@ static Expr* pr_normalise(const Expr* p) {
 /* All free symbols (constants excluded) of {poly, divisors...}, canonical
  * order, via Variables[].  Returns an owned List Expr; caller frees. */
 static Expr* pr_all_variables(const Expr* poly, Expr* divisors_list) {
+    if (divisors_list->type == EXPR_LINKEDLIST) {
+        /* Variables[{poly, ll}]: Variables reads the LinkedList's slots */
+        Expr* lst = expr_new_function(expr_new_symbol(SYM_List),
+                        (Expr*[]){ expr_copy((Expr*)poly), expr_copy(divisors_list) }, 2);
+        return internal_variables((Expr*[]){ lst }, 1);
+    }
     size_t nd = divisors_list->data.function.arg_count;
     Expr** items = (Expr**)malloc(sizeof(Expr*) * (nd + 1));
     items[0] = expr_copy((Expr*)poly);
@@ -697,6 +705,9 @@ static Expr* pr_reduce_modular(const Expr* polyN, Expr** divsN, int ndiv,
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
+static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, Expr** dv, int ndiv,
+                     Expr* vars_arg, Expr** vll, int nvll);
+
 Expr* builtin_polynomialreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -709,9 +720,30 @@ Expr* builtin_polynomialreduce(Expr* res) {
     Expr* divisors  = res->data.function.args[1];
     Expr* vars_arg  = (n_pos == 3) ? res->data.function.args[2] : NULL;
 
-    if (!pr_is_list(divisors)) return NULL;
-    int ndiv = (int)divisors->data.function.arg_count;
-    if (ndiv == 0) return NULL;
+    /* The divisors, and a variable list: a List's elements, or a
+     * LinkedList's read from its slots. */
+    LLElemsC dl, vl = { NULL, 0, false, false };
+    if (!ll_elems_of(divisors, &dl)) return NULL;
+    if (vars_arg && vars_arg->type == EXPR_LINKEDLIST) ll_elems_of(vars_arg, &vl);
+    Expr* r = dl.n == 0 ? NULL : pr_core(res, &opt, poly, divisors, dl.v, (int)dl.n,
+                                         vars_arg, vl.ll ? vl.v : NULL, (int)vl.n);
+    if (r && dl.ll && head_is(r, SYM_List) && r->data.function.arg_count == 2 &&
+        head_is(r->data.function.args[0], SYM_List)) {
+        /* the quotients of a LinkedList of divisors are a LinkedList */
+        Expr* q = ll_from_list_result(expr_copy(r->data.function.args[0]));
+        Expr* rem = expr_copy(r->data.function.args[1]);
+        expr_free(r);
+        r = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ q, rem }, 2);
+    }
+    ll_elems_release(&dl);
+    ll_elems_release(&vl);
+    return r;
+}
+
+static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, Expr** dv, int ndiv,
+                     Expr* vars_arg, Expr** vll, int nvll) {
+    PROptions opt = *optp;
+    (void)res;
 
     /* Deferred domains / options: decline (leave unevaluated) with a note. */
     if (opt.domain == PR_DOM_DEFERRED || opt.tolerance_nonzero) {
@@ -729,7 +761,11 @@ Expr* builtin_polynomialreduce(Expr* res) {
     Expr** mainvars = NULL; int k = 0;
     Expr* wrap = NULL;   /* synthetic single-var list to free later */
     if (vars_arg) {
-        if (pr_is_list(vars_arg)) {
+        if (vll) {
+            k = nvll;
+            mainvars = (Expr**)malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+            for (int i = 0; i < k; i++) mainvars[i] = vll[i];
+        } else if (pr_is_list(vars_arg)) {
             k = (int)vars_arg->data.function.arg_count;
             mainvars = (Expr**)malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
             for (int i = 0; i < k; i++) mainvars[i] = vars_arg->data.function.args[i];
@@ -782,7 +818,7 @@ Expr* builtin_polynomialreduce(Expr* res) {
     /* ---- Normalise inputs (expand / rationalise / evaluate). ---- */
     Expr* polyN = pr_normalise(poly);
     Expr** divsN = (Expr**)malloc(sizeof(Expr*) * (size_t)ndiv);
-    for (int i = 0; i < ndiv; i++) divsN[i] = pr_normalise(divisors->data.function.args[i]);
+    for (int i = 0; i < ndiv; i++) divsN[i] = pr_normalise(dv[i]);
 
     /* ---- Dispatch. ---- */
     Expr* out = NULL;

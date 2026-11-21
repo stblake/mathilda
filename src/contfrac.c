@@ -46,6 +46,7 @@
  */
 
 #include "expr.h"
+#include "linkedlist.h"
 #include "symtab.h"
 #include "eval.h"
 #include "attr.h"
@@ -835,15 +836,27 @@ static Expr* fcf_periodic(Expr** lead, size_t m, Expr** per, size_t k) {
     return result;
 }
 
+static Expr* fcf_terms(Expr** terms, size_t n);
+
 Expr* builtin_from_continued_fraction(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1) return NULL;
 
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_LINKEDLIST) {
+        /* the terms read from the slots, through the List code below */
+        LLElemsC t;
+        ll_elems_of(arg, &t);
+        Expr* r = fcf_terms(t.v, (size_t)t.n);
+        ll_elems_release(&t);
+        return r;
+    }
     if (!fcf_is_list(arg)) return NULL;
+    return fcf_terms(arg->data.function.args, arg->data.function.arg_count);
+}
 
-    Expr** terms = arg->data.function.args;
-    size_t n = arg->data.function.arg_count;
+/* FromContinuedFraction over the terms terms[0..n). */
+static Expr* fcf_terms(Expr** terms, size_t n) {
     if (n == 0) return expr_new_integer(0);   /* {} -> 0 */
 
     /* A trailing sub-list marks the cyclic (period) block. */

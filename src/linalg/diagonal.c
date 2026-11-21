@@ -13,6 +13,7 @@
  */
 
 #include "linalg.h"
+#include "linkedlist.h"
 #include "ndstruct.h"
 #include "ndarray.h"
 #include "sym_names.h"
@@ -24,6 +25,49 @@ static bool diag_is_list(const Expr* e) {
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* Diagonal of a matrix with a LinkedList level -- a LinkedList of rows, or a
+ * List with LinkedList rows: the List walk below over element views (a
+ * LinkedList is the List of its elements). A LinkedList of rows gives a
+ * LinkedList, a List of rows a List. */
+static Expr* diagonal_ll(const Expr* m, int64_t k) {
+    int64_t nrows = m->type == EXPR_LINKEDLIST ? ll_length(m->data.llist)
+                                               : (int64_t)m->data.function.arg_count;
+    if (nrows == 0) return NULL;
+    {
+        bool own;
+        Expr* r0 = ll_seq_view(m, 0, &own);
+        bool ok = r0 && ll_is_seq(r0);
+        if (r0) ll_elem_done(r0, own);
+        if (!ok) return NULL;
+    }
+    int64_t start_row, start_col;
+    if (k >= 0)          { start_row = 0;     start_col = k; }
+    else if (k > -nrows) { start_row = -k;    start_col = 0; }
+    else                 { start_row = nrows; start_col = 0; }
+    LinkedList* out = ll_new();
+    for (int64_t t = 0; ; t++) {
+        int64_t i = start_row + t, j = start_col + t;
+        if (i >= nrows) break;
+        bool own;
+        Expr* row = ll_seq_view(m, i, &own);
+        int64_t len = !ll_is_seq(row) ? -1
+                    : row->type == EXPR_LINKEDLIST ? ll_length(row->data.llist)
+                    : (int64_t)row->data.function.arg_count;
+        if (len < 0 || j >= len) { ll_elem_done(row, own); break; }
+        ll_push_back(out, row->type == EXPR_LINKEDLIST ? ll_get(row->data.llist, j)
+                                                       : expr_copy(row->data.function.args[j]));
+        ll_elem_done(row, own);
+    }
+    Expr* r = expr_new_linkedlist(out);
+    if (m->type != EXPR_LINKEDLIST) {
+        /* the List of rows answers with a List */
+        Expr* l = ll_call_with_elements(expr_new_symbol(SYM_List), out);
+        expr_free(r);
+        return l;
+    }
+    return r;
 }
 
 Expr* builtin_diagonal(Expr* res) {
@@ -43,6 +87,8 @@ Expr* builtin_diagonal(Expr* res) {
         if (ke->type != EXPR_INTEGER) return NULL;
         k = ke->data.integer;
     }
+
+    if (ll_has_ll_level1(m)) return diagonal_ll(m, k);
 
     /* Require a rank >= 2 structure (a List whose rows are Lists); a vector or a
      * non-list is not a matrix, so leave the call unevaluated as Mathematica does. */

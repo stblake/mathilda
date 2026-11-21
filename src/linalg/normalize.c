@@ -21,6 +21,7 @@
  */
 
 #include "linalg.h"
+#include "linkedlist.h"
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include "eval.h"
@@ -34,6 +35,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* True iff `e` is an exact numeric zero.  We use *exact* equality (not a
  * symbolic-zero predicate) deliberately: short-circuiting on a symbolic
@@ -65,6 +67,23 @@ Expr* builtin_normalize(Expr* res) {
     }
 
     Expr* expr = res->data.function.args[0];
+
+    /* A machine LinkedList whose Normal is packed takes the packed path's own
+     * kernel (ndla_vec_normalize_buf: divide by the scaled 2-norm) on its
+     * slots; anything else the generic Norm-and-Times below, which threads over
+     * a LinkedList as over a List. */
+    if (argc == 1 && expr->type == EXPR_LINKEDLIST && ll_normal_is_packed(expr->data.llist) &&
+        ll_kind(expr->data.llist) != LL_I64) {
+        const LinkedList* ll = expr->data.llist;
+        bool cplx = ll_kind(ll) == LL_CPLX;
+        int64_t n = ll_length(ll);
+        double* buf = malloc(sizeof(double) * (cplx ? 2 : 1) * (size_t)n);
+        ll_gather(ll, 0, n, buf);
+        ndla_vec_normalize_buf(buf, (int)n, cplx);
+        Expr* out = expr_new_linkedlist(ll_from_buffer(cplx ? LL_CPLX : LL_REAL, buf, n));
+        free(buf);
+        return out;
+    }
 
     /* Build `f[expr]`.  Default `f` is Norm (which itself reduces to
      * Abs for scalars).  Owns its own copy of both head and arg so the

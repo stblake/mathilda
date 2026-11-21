@@ -699,3 +699,245 @@ LinkedList* ll_new_boxed(Expr** v, size_t n) {
     expr_free(ll_pop_front(ll));
     return ll;
 }
+
+/* ------------------------------------------------------------------------
+ *  Element views and per-element threading (linkedlist.h)
+ * ---------------------------------------------------------------------- */
+
+
+bool ll_elems_of(const Expr* e, LLElemsC* out) {
+    out->v = NULL; out->n = 0; out->owned = false; out->ll = false;
+    if (!e) return false;
+    if (e->type == EXPR_LINKEDLIST) {
+        const LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll);
+        out->ll = true;
+        out->owned = true;
+        out->n = n;
+        out->v = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+        if (ll_kind(ll) == LL_BOXED) {
+            ll_gather(ll, 0, n, out->v);              /* borrowed slots ... */
+            for (int64_t i = 0; i < n; i++) out->v[i] = expr_copy(out->v[i]); /* ... owned */
+        } else {
+            for (int64_t i = 0; i < n; i++) out->v[i] = ll_get(ll, i);
+        }
+        return true;
+    }
+    if (head_is(e, SYM_List)) {
+        out->v = e->data.function.args;
+        out->n = (int64_t)e->data.function.arg_count;
+        return true;
+    }
+    return false;
+}
+
+void ll_elems_release(LLElemsC* x) {
+    if (x->owned) {
+        for (int64_t i = 0; i < x->n; i++) expr_free(x->v[i]);
+        free(x->v);
+    }
+    x->v = NULL; x->n = 0; x->owned = false;
+}
+
+Expr* ll_seq_view(const Expr* e, int64_t i, bool* owned) {
+    *owned = false;
+    if (e->type == EXPR_LINKEDLIST) return ll_elem_view(e->data.llist, i, owned);
+    if (head_is(e, SYM_List)) return e->data.function.args[i];
+    return NULL;
+}
+
+typedef struct { const Expr* res; size_t k; } LLMapArgCtx;
+
+static Expr* ll_map_arg_elem(Expr* elem, int64_t i, void* ctx) {
+    (void)i;
+    const LLMapArgCtx* c = (const LLMapArgCtx*)ctx;
+    size_t argc = c->res->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * argc);
+    for (size_t j = 0; j < argc; j++)
+        a[j] = expr_copy(j == c->k ? elem : c->res->data.function.args[j]);
+    Expr* call = expr_new_function(expr_copy(c->res->data.function.head), a, argc);
+    free(a);
+    Expr* v = evaluate(call);
+    expr_free(call);
+    if (eval_is_inflight_unwind(v)) return v;
+    if (expr_eq(v, elem)) { expr_free(v); return NULL; }   /* unchanged: keep the slot */
+    return v;
+}
+
+Expr* ll_map_arg(const Expr* res, size_t k) {
+    if (res->type != EXPR_FUNCTION || k >= res->data.function.arg_count) return NULL;
+    const Expr* a = res->data.function.args[k];
+    if (a->type != EXPR_LINKEDLIST) return NULL;
+    LLMapArgCtx c = { res, k };
+    Expr* unwind = NULL;
+    Expr* r = ll_rebuild(a->data.llist, ll_map_arg_elem, &c, &unwind);
+    if (unwind) return unwind;
+    return r ? r : expr_copy((Expr*)a);
+}
+
+Expr* ll_from_list_result(Expr* list) {
+    if (!list) return NULL;
+    if (head_is(list, SYM_List)) {
+        LinkedList* ll = ll_new();
+        for (size_t i = 0; i < list->data.function.arg_count; i++)
+            ll_push_back(ll, expr_copy(list->data.function.args[i]));
+        expr_free(list);
+        return expr_new_linkedlist(ll);
+    }
+    if (is_ndarray(list) && list->data.ndarray.rank == 1) {
+        LinkedList* ll = ll_new();
+        if (ll_append_elements(ll, list)) { expr_free(list); return expr_new_linkedlist(ll); }
+        ll_release(ll);
+    }
+    return list;
+}
+
+bool ll_expr_has_linkedlist(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_LINKEDLIST) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ll_expr_has_linkedlist(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ll_expr_has_linkedlist(e->data.function.args[i])) return true;
+    return false;
+}
+
+typedef struct { Expr* (*fn)(const Expr*, void*); void* ctx; bool failed; } LLWalkCtx;
+
+static Expr* ll_walk_elem(Expr* elem, int64_t i, void* ctx) {
+    (void)i;
+    LLWalkCtx* c = (LLWalkCtx*)ctx;
+    if (c->failed) return NULL;
+    Expr* r = c->fn(elem, c->ctx);
+    if (!r) { c->failed = true; return NULL; }
+    if (r == elem || (r->type == elem->type && r->type != EXPR_FUNCTION && expr_eq(r, elem))) {
+        expr_free(r);
+        return NULL;                                   /* unchanged: keep the slot */
+    }
+    return r;
+}
+
+Expr* ll_walk(const Expr* e, Expr* (*fn)(const Expr* el, void* ctx), void* ctx) {
+    if (!e || e->type != EXPR_LINKEDLIST) return NULL;
+    LLWalkCtx c = { fn, ctx, false };
+    Expr* unwind = NULL;
+    Expr* r = ll_rebuild(e->data.llist, ll_walk_elem, &c, &unwind);
+    if (unwind) { if (r) expr_free(r); return unwind; }
+    if (c.failed) { if (r) expr_free(r); return NULL; }
+    return r ? r : expr_copy((Expr*)e);
+}
+
+/* ------------------------------------------------------------------------
+ *  Rectangular nests of Lists and LinkedLists (linkedlist.h)
+ * ---------------------------------------------------------------------- */
+
+static int64_t seq_len_any(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) return ll_length(e->data.llist);
+    if (head_is(e, SYM_List)) return (int64_t)e->data.function.arg_count;
+    return -1;
+}
+
+int ll_tensor_dims(const Expr* e, int64_t* dims, int maxrank) {
+    if (maxrank <= 0) return 0;
+    if (is_ndarray(e)) {
+        int r = e->data.ndarray.rank;
+        if (r > maxrank) r = maxrank;
+        for (int k = 0; k < r; k++) dims[k] = e->data.ndarray.dims[k];
+        return r;
+    }
+    int64_t n = seq_len_any(e);
+    if (n < 0) return 0;
+    dims[0] = n;
+    if (n == 0) return 1;
+    if (e->type == EXPR_LINKEDLIST && ll_kind(e->data.llist) != LL_BOXED) return 1;  /* numbers */
+    int64_t sub[64], cur[64];
+    int lim = maxrank - 1 > 63 ? 63 : maxrank - 1;
+    bool own;
+    Expr* el = ll_seq_view(e, 0, &own);
+    int depth = ll_tensor_dims(el, sub, lim);
+    ll_elem_done(el, own);
+    if (depth < 0) return -1;
+    for (int64_t i = 1; i < n; i++) {
+        el = ll_seq_view(e, i, &own);
+        int d = ll_tensor_dims(el, cur, lim);
+        ll_elem_done(el, own);
+        if (d != depth) return -1;
+        for (int k = 0; k < depth; k++) if (cur[k] != sub[k]) return -1;
+    }
+    for (int k = 0; k < depth; k++) dims[k + 1] = sub[k];
+    return depth + 1;
+}
+
+void ll_tensor_leaves(const Expr* e, int rank, Expr** out, size_t* idx) {
+    if (rank == 0) { out[(*idx)++] = expr_copy((Expr*)e); return; }
+    if (is_ndarray(e)) {
+        /* a packed block below a LinkedList level: its leaves boxed */
+        Expr* l = ndarray_to_nested_list(e);
+        ll_tensor_leaves(l, rank, out, idx);
+        expr_free(l);
+        return;
+    }
+    int64_t n = seq_len_any(e);
+    if (e->type == EXPR_LINKEDLIST && rank == 1) {
+        for (int64_t i = 0; i < n; i++) out[(*idx)++] = ll_get(e->data.llist, i);
+        return;
+    }
+    for (int64_t i = 0; i < n; i++) {
+        bool own;
+        Expr* el = ll_seq_view(e, i, &own);
+        ll_tensor_leaves(el, rank - 1, out, idx);
+        ll_elem_done(el, own);
+    }
+}
+
+void ll_tensor_levels(const Expr* e, int rank, bool* lvl) {
+    Expr* cur = expr_copy((Expr*)e);
+    for (int k = 0; k < rank; k++) {
+        lvl[k] = cur->type == EXPR_LINKEDLIST;
+        int64_t n = seq_len_any(cur);
+        if (n <= 0) { for (int j = k + 1; j < rank; j++) lvl[j] = false; break; }
+        Expr* next = cur->type == EXPR_LINKEDLIST ? ll_get(cur->data.llist, 0)
+                                                  : expr_copy(cur->data.function.args[0]);
+        expr_free(cur);
+        cur = next;
+    }
+    expr_free(cur);
+}
+
+static Expr* ll_tensor_build_rec(const int64_t* dims, int rank, Expr** leaves, size_t* idx,
+                                 const bool* lvl) {
+    if (rank == 0) return leaves[(*idx)++];
+    int64_t n = dims[0];
+    if (lvl && lvl[0]) {
+        LinkedList* ll = ll_new();
+        for (int64_t i = 0; i < n; i++)
+            ll_push_back(ll, ll_tensor_build_rec(dims + 1, rank - 1, leaves, idx, lvl + 1));
+        return expr_new_linkedlist(ll);
+    }
+    Expr** a = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+    for (int64_t i = 0; i < n; i++)
+        a[i] = ll_tensor_build_rec(dims + 1, rank - 1, leaves, idx, lvl ? lvl + 1 : NULL);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), a, (size_t)n);
+    free(a);
+    return r;
+}
+
+Expr* ll_tensor_build(const int64_t* dims, int rank, Expr** leaves, const bool* lvl) {
+    size_t idx = 0;
+    return ll_tensor_build_rec(dims, rank, leaves, &idx, lvl);
+}
+
+bool ll_has_ll_level1(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_LINKEDLIST) return true;
+    if (!head_is(e, SYM_List)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (e->data.function.args[i]->type == EXPR_LINKEDLIST) return true;
+    return false;
+}
+
+bool ll_normal_is_packed(const LinkedList* ll) {
+    LLKind k = ll_kind(ll);
+    if (k == LL_EMPTY || k == LL_BOXED || !pack_enabled()) return false;
+    return (size_t)ll_length(ll) >= pack_min_elements();
+}

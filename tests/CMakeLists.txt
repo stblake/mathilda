@@ -1807,6 +1807,12 @@ add_executable(linkedlist_strings_stats_tests test_linkedlist_strings_stats.c $<
 target_link_libraries(linkedlist_strings_stats_tests m)
 target_include_directories(linkedlist_strings_stats_tests PRIVATE ../src)
 add_test(NAME linkedlist_strings_stats_tests COMMAND linkedlist_strings_stats_tests)
+
+# LinkedList arguments to the vector-numeric, structural and symbolic heads.
+add_executable(linkedlist_numeric_tests test_linkedlist_numeric.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(linkedlist_numeric_tests m)
+target_include_directories(linkedlist_numeric_tests PRIVATE ../src)
+add_test(NAME linkedlist_numeric_tests COMMAND linkedlist_numeric_tests)
 # Randomised differential stress of the storage core (nightly, by name).
 add_executable(linkedlist_stress_tests test_linkedlist_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(linkedlist_stress_tests m)

@@ -37,6 +37,7 @@
  *   non-NULL return.
  * ==================================================================== */
 
+#include "linkedlist.h"
 #include "internal.h"
 #include "poly.h"
 #include "common.h"
@@ -721,6 +722,17 @@ static bool is_number(Expr* e) {
 
 void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacity) {
     if (!e || is_number(e)) return;
+    if (e->type == EXPR_LINKEDLIST) {
+        /* A LinkedList is a container like List: its elements' variables. */
+        const LinkedList* ll = e->data.llist;
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(ll, i, &own);
+            collect_variables(el, vars_ptr, count, capacity);
+            ll_elem_done(el, own);
+        }
+        return;
+    }
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL) ? e->data.function.head->data.symbol.name : "";
         /* A Root[poly&, k] object is a CONSTANT algebraic number, not a
@@ -1508,12 +1520,32 @@ Expr* builtin_polynomialq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars_expr = res->data.function.args[1];
     Expr** vars = NULL; size_t var_count = 0; bool free_vars = false;
-    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol.name == SYM_List) {
+    LLElemsC vll = { NULL, 0, false, false };
+    if (vars_expr->type == EXPR_LINKEDLIST) {
+        /* a LinkedList of variables, read from its slots */
+        ll_elems_of(vars_expr, &vll);
+        vars = vll.v; var_count = (size_t)vll.n;
+    } else if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol.name == SYM_List) {
         var_count = vars_expr->data.function.arg_count;
         if (var_count > 0) { vars = malloc(sizeof(Expr*) * var_count); for (size_t i = 0; i < var_count; i++) vars[i] = vars_expr->data.function.args[i]; free_vars = true; }
     } else { vars = &res->data.function.args[1]; var_count = 1; }
-    bool poly = is_polynomial(res->data.function.args[0], vars, var_count);
+    bool poly;
+    const Expr* p = res->data.function.args[0];
+    if (p->type == EXPR_LINKEDLIST) {
+        /* As for the List of its elements: a container is a polynomial only
+         * when it is free of every variable (a constant). */
+        LLElemsC el;
+        ll_elems_of(p, &el);
+        poly = true;
+        for (int64_t i = 0; i < el.n && poly; i++)
+            for (size_t j = 0; j < var_count && poly; j++)
+                if (contains_any_symbol_from(el.v[i], vars[j])) poly = false;
+        ll_elems_release(&el);
+    } else {
+        poly = is_polynomial(res->data.function.args[0], vars, var_count);
+    }
     if (free_vars) free(vars);
+    ll_elems_release(&vll);
     return expr_new_symbol(poly ? "True" : "False");
 }
 
@@ -5385,15 +5417,22 @@ Expr* builtin_coefficientlist(Expr* res) {
 
     size_t num_vars = 1;
     Expr** vars = &vars_expr;
+    LLElemsC vll = { NULL, 0, false, false };
 
-    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol.name == SYM_List) {
+    if (vars_expr->type == EXPR_LINKEDLIST) {
+        /* a LinkedList of variables, read from its slots */
+        ll_elems_of(vars_expr, &vll);
+        num_vars = (size_t)vll.n;
+        vars = vll.v;
+        if (num_vars == 0) { ll_elems_release(&vll); return expr_copy(expr); }
+    } else if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol.name == SYM_List) {
         num_vars = vars_expr->data.function.arg_count;
         vars = vars_expr->data.function.args;
         if (num_vars == 0) return expr_copy(expr);
     }
 
     Expr* expanded = expr_expand(expr);
-    if (!expanded) return expr_copy(expr);
+    if (!expanded) { ll_elems_release(&vll); return expr_copy(expr); }
 
     int* max_degrees = malloc(sizeof(int) * num_vars);
     for (size_t i = 0; i < num_vars; i++) {
@@ -5404,6 +5443,7 @@ Expr* builtin_coefficientlist(Expr* res) {
     Expr* result = coeff_list_rec(expanded, vars, max_degrees, num_vars, 0);
     free(max_degrees);
     expr_free(expanded);
+    ll_elems_release(&vll);
     return result;
 }
 
@@ -5806,18 +5846,22 @@ Expr* builtin_hornerform(Expr* res) {
         vars2_expr = expr_copy(res->data.function.args[2]);
     }
     
-    if (vars1_expr && (vars1_expr->type != EXPR_FUNCTION || vars1_expr->data.function.head->type != EXPR_SYMBOL || vars1_expr->data.function.head->data.symbol.name != SYM_List)) {
+    if (vars1_expr && vars1_expr->type != EXPR_LINKEDLIST && (vars1_expr->type != EXPR_FUNCTION || vars1_expr->data.function.head->type != EXPR_SYMBOL || vars1_expr->data.function.head->data.symbol.name != SYM_List)) {
         vars1_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){vars1_expr}, 1));
     }
-    if (vars2_expr && (vars2_expr->type != EXPR_FUNCTION || vars2_expr->data.function.head->type != EXPR_SYMBOL || vars2_expr->data.function.head->data.symbol.name != SYM_List)) {
+    if (vars2_expr && vars2_expr->type != EXPR_LINKEDLIST && (vars2_expr->type != EXPR_FUNCTION || vars2_expr->data.function.head->type != EXPR_SYMBOL || vars2_expr->data.function.head->data.symbol.name != SYM_List)) {
         vars2_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){vars2_expr}, 1));
     }
     
-    Expr** vars1 = vars1_expr ? vars1_expr->data.function.args : NULL;
-    size_t num_vars1 = vars1_expr ? vars1_expr->data.function.arg_count : 0;
+    /* a LinkedList of variables is read from its slots */
+    LLElemsC v1 = { NULL, 0, false, false }, v2 = { NULL, 0, false, false };
+    if (vars1_expr) ll_elems_of(vars1_expr, &v1);
+    if (vars2_expr) ll_elems_of(vars2_expr, &v2);
+    Expr** vars1 = v1.v;
+    size_t num_vars1 = (size_t)v1.n;
     
-    Expr** vars2 = vars2_expr ? vars2_expr->data.function.args : NULL;
-    size_t num_vars2 = vars2_expr ? vars2_expr->data.function.arg_count : 0;
+    Expr** vars2 = v2.v;
+    size_t num_vars2 = (size_t)v2.n;
     
     Expr* h_num = horner_form_rec(num, vars1, num_vars1);
     if (!h_num) {
@@ -5825,6 +5869,7 @@ Expr* builtin_hornerform(Expr* res) {
         char* s = expr_to_string(expr);
         printf("%s is not a polynomial.\n", s);
         free(s);
+        ll_elems_release(&v1); ll_elems_release(&v2);
         if (vars1_expr) expr_free(vars1_expr);
         if (vars2_expr) expr_free(vars2_expr);
         expr_free(num);
@@ -5842,6 +5887,7 @@ Expr* builtin_hornerform(Expr* res) {
             char* s = expr_to_string(expr);
             printf("%s is not a polynomial.\n", s);
             free(s);
+            ll_elems_release(&v1); ll_elems_release(&v2);
             if (vars1_expr) expr_free(vars1_expr);
             if (vars2_expr) expr_free(vars2_expr);
             expr_free(num);
@@ -5860,6 +5906,7 @@ Expr* builtin_hornerform(Expr* res) {
         result = internal_times((Expr*[]){h_num, inv_den}, 2);
     }
     
+    ll_elems_release(&v1); ll_elems_release(&v2);
     if (vars1_expr) expr_free(vars1_expr);
     if (vars2_expr) expr_free(vars2_expr);
     expr_free(num);
@@ -6863,6 +6910,23 @@ Expr* builtin_polynomialmod(Expr* res) {
     
     Expr* expr = res->data.function.args[0];
     Expr* m = res->data.function.args[1];
+    if (expr->type == EXPR_LINKEDLIST) return ll_map_arg(res, 0);   /* as over a List */
+    if (m->type == EXPR_LINKEDLIST) {
+        /* A LinkedList of moduli, reduced by in turn as a List of them is. */
+        LLElemsC ms;
+        ll_elems_of(m, &ms);
+        Expr* curr = expr_copy(expr);
+        bool has_integer = false;
+        for (int64_t i = 0; i < ms.n; i++)
+            if (ms.v[i]->type == EXPR_INTEGER) { has_integer = true; break; }
+        for (int64_t i = 0; i < ms.n; i++) {
+            Expr* next = polynomial_mod_single(curr, ms.v[i], has_integer);
+            expr_free(curr);
+            curr = next;
+        }
+        ll_elems_release(&ms);
+        return curr;
+    }
     
     if (expr->type == EXPR_FUNCTION) {
         const char* head = expr->data.function.head->type == EXPR_SYMBOL ? expr->data.function.head->data.symbol.name : "";

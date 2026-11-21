@@ -8336,6 +8336,9 @@ Expr* builtin_series(Expr* res) {
     }
 
     Expr* f = res->data.function.args[0];
+    /* A LinkedList maps as a List does (below): one Series per element, the
+     * answers in a new LinkedList (linkedlist.h, ll_map_arg). */
+    if (f->type == EXPR_LINKEDLIST) return ll_map_arg(res, 0);
 
     /* List threading on the first argument (not ATTR_LISTABLE since the
      * specs must not thread). */

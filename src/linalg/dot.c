@@ -6,6 +6,8 @@
  */
 
 #include "linalg.h"
+#include "linkedlist.h"
+#include "common.h"
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
@@ -21,6 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_LAPACK
@@ -75,54 +78,70 @@ static double nd_ddot_threaded(const double* x, const double* y, size_t n) {
  * ndarray_dot2's scalar loop, measured at 12.3 ms for 10^7 elements against
  * Mathematica's 5.19 ms. Nothing needs marshalling here -- an NDArray is already
  * a contiguous row-major float64 buffer, which is exactly what BLAS wants. */
-static Expr* nd_blas_matmul(const Expr* a, const Expr* b) {
-    if (a->data.ndarray.dtype != NDT_FLOAT64 ||
-        b->data.ndarray.dtype != NDT_FLOAT64) return NULL;
-    int ra = a->data.ndarray.rank, rb = b->data.ndarray.rank;
-    const double* A = (const double*)a->data.ndarray.data;
-    const double* B = (const double*)b->data.ndarray.data;
-
+/* The BLAS contraction over raw row-major float64 buffers: the Ra x Sb result
+ * (a scalar when both are vectors), or NULL when the shapes do not contract
+ * (the caller reports). Shared by the packed path and the LinkedList arm. */
+static double* nd_blas_buf(const double* A, int ra, const int64_t* da,
+                           const double* B, int rb, const int64_t* db) {
     if (ra == 1 && rb == 1) {                          /* inner product */
-        int64_t k = a->data.ndarray.dims[0];
-        if (k != b->data.ndarray.dims[0]) return NULL;
-        /* A scalar, so there is no presentation to inherit. */
-        return expr_new_real(nd_ddot_threaded(A, B, (size_t)k));
+        int64_t k = da[0];
+        if (k != db[0]) return NULL;
+        double* out = malloc(sizeof(double));
+        if (out) out[0] = nd_ddot_threaded(A, B, (size_t)k);
+        return out;
     }
-
     if (ra == 2 && rb == 1) {                          /* matrix * vector */
-        int64_t m = a->data.ndarray.dims[0], k = a->data.ndarray.dims[1];
-        if (k != b->data.ndarray.dims[0]) return NULL;
-        double* out = malloc(sizeof(double) * (size_t)m);
+        int64_t m = da[0], k = da[1];
+        if (k != db[0]) return NULL;
+        double* out = malloc(sizeof(double) * (size_t)(m ? m : 1));
         if (!out) return NULL;
         cblas_dgemv(CblasRowMajor, CblasNoTrans, (int)m, (int)k,
                     1.0, A, (int)k, B, 1, 0.0, out, 1);
-        int64_t dims[1] = { m };
-        return expr_new_ndarray_like(nd_present_src2(a, b), 1, dims, out, NDT_FLOAT64);
+        return out;
     }
-
     if (ra == 1 && rb == 2) {                          /* vector * matrix */
-        int64_t k = a->data.ndarray.dims[0];
-        int64_t k2 = b->data.ndarray.dims[0], n = b->data.ndarray.dims[1];
+        int64_t k = da[0];
+        int64_t k2 = db[0], n = db[1];
         if (k != k2) return NULL;
-        double* out = malloc(sizeof(double) * (size_t)n);
+        double* out = malloc(sizeof(double) * (size_t)(n ? n : 1));
         if (!out) return NULL;
         /* x^T B == (B^T x), so gemv over B with the transpose flag. */
         cblas_dgemv(CblasRowMajor, CblasTrans, (int)k2, (int)n,
                     1.0, B, (int)n, A, 1, 0.0, out, 1);
-        int64_t dims[1] = { n };
-        return expr_new_ndarray_like(nd_present_src2(a, b), 1, dims, out, NDT_FLOAT64);
+        return out;
     }
-
     if (ra != 2 || rb != 2) return NULL;
-    int64_t m = a->data.ndarray.dims[0], k = a->data.ndarray.dims[1];
-    int64_t k2 = b->data.ndarray.dims[0], n = b->data.ndarray.dims[1];
+    int64_t m = da[0], k = da[1];
+    int64_t k2 = db[0], n = db[1];
     if (k != k2) return NULL;                 /* shape error: let ndarray_dot2 report */
-    double* out = malloc(sizeof(double) * (size_t)m * (size_t)n);
+    double* out = malloc(sizeof(double) * (size_t)(m * n > 0 ? m * n : 1));
     if (!out) return NULL;
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 (int)m, (int)n, (int)k, 1.0, A, (int)k, B, (int)n, 0.0, out, (int)n);
-    int64_t dims[2] = { m, n };
-    return expr_new_ndarray_like(nd_present_src2(a, b), 2, dims, out, NDT_FLOAT64); /* adopts out */
+    return out;
+}
+
+static Expr* nd_blas_matmul(const Expr* a, const Expr* b) {
+    if (a->data.ndarray.dtype != NDT_FLOAT64 ||
+        b->data.ndarray.dtype != NDT_FLOAT64) return NULL;
+    int ra = a->data.ndarray.rank, rb = b->data.ndarray.rank;
+    const int64_t* da = a->data.ndarray.dims;
+    const int64_t* db = b->data.ndarray.dims;
+    double* out = nd_blas_buf((const double*)a->data.ndarray.data, ra, da,
+                              (const double*)b->data.ndarray.data, rb, db);
+    if (!out) return NULL;
+    if (ra == 1 && rb == 1) {
+        /* A scalar, so there is no presentation to inherit. */
+        Expr* r = expr_new_real(out[0]);
+        free(out);
+        return r;
+    }
+    int64_t dims[2];
+    int rc;
+    if (ra == 2 && rb == 1)      { dims[0] = da[0]; rc = 1; }
+    else if (ra == 1 && rb == 2) { dims[0] = db[1]; rc = 1; }
+    else                         { dims[0] = da[0]; dims[1] = db[1]; rc = 2; }
+    return expr_new_ndarray_like(nd_present_src2(a, b), rc, dims, out, NDT_FLOAT64); /* adopts out */
 }
 #endif
 
@@ -258,6 +277,77 @@ static bool dot_decline_degenerate(Expr* r, const Expr* a, const Expr* b) {
     }
     if (bad) expr_free(r);
     return bad;
+}
+
+/* The generic contraction of two flattened tensors (row-major leaves, owned
+ * and freed here): FLINT for exact rationals, else Times/Plus per entry. The
+ * nested-List result. Shared by dot2 and the LinkedList arm. */
+static Expr* dot_generic_flat(Expr** flatA, size_t idxA, const int64_t* dimsA, int rankA,
+                              Expr** flatB, size_t idxB, const int64_t* dimsB, int rankB) {
+    int64_t K = dimsA[rankA - 1];
+    int64_t N_A = 1; for (int i = 0; i < rankA; i++) N_A *= dimsA[i];
+    int64_t N_B = 1; for (int i = 0; i < rankB; i++) N_B *= dimsB[i];
+    /* Outer sizes: the product of the NON-contracted dimensions of each operand
+     * (all but A's last axis, all but B's first). Computed as an explicit product
+     * rather than N/K so that a zero contraction axis (K == 0, i.e. empty vectors)
+     * still gives R = S = 1 for the rank1.rank1 case: the empty inner product then
+     * fills the single result slot with the scalar 0 below, instead of leaving R
+     * and S at 0 -- which produced a NULL flatC and a rank-0 build_tensor deref
+     * (segfault on `{} . {}`). For K > 0 this is exactly N_A/K and N_B/K. */
+    int64_t R = 1; for (int i = 0; i < rankA - 1; i++) R *= dimsA[i];
+    int64_t S = 1; for (int i = 1; i < rankB; i++)     S *= dimsB[i];
+
+    Expr** flatC = NULL;
+    /* Integer / rational operands of rank <= 2: one exact matrix product in
+     * FLINT (common denominator, multimodular integer product) instead of a
+     * Times and a Plus evaluated per element.  The 21 x 101 by 101 x 21
+     * normal matrix of a degree-20 polynomial fit (entries ((2i - 100)/100)^j)
+     * took 154 ms on that path.  Declines (NULL) at the first non-rational
+     * entry, so a symbolic or mixed product keeps the generic loop. */
+    if (rankA <= 2 && rankB <= 2 && K > 0 && R * S > 0 &&
+        R <= INT32_MAX && S <= INT32_MAX && K <= INT32_MAX &&
+        (int64_t)idxA == N_A && (int64_t)idxB == N_B)
+        flatC = flint_mat_mul(flatA, (int)R, (int)K, flatB, (int)S);
+    if (!flatC && R * S > 0) {
+        flatC = malloc(sizeof(Expr*) * (R * S));
+        for (int64_t r = 0; r < R; r++) {
+            for (int64_t s = 0; s < S; s++) {
+                Expr** sum_args = NULL;
+                if (K > 0) sum_args = malloc(sizeof(Expr*) * K);
+                for (int64_t k = 0; k < K; k++) {
+                    Expr* a_elem = flatA[r * K + k];
+                    Expr* b_elem = flatB[k * S + s];
+                    Expr* t_args[2] = { expr_copy(a_elem), expr_copy(b_elem) };
+                    sum_args[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
+                }
+                if (K == 0) {
+                    flatC[r * S + s] = expr_new_integer(0);
+                } else if (K == 1) {
+                    flatC[r * S + s] = sum_args[0];
+                } else {
+                    flatC[r * S + s] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, K));
+                }
+                if (sum_args) free(sum_args);
+            }
+        }
+    }
+
+    if (flatA) { for(size_t i=0; i<idxA; i++) expr_free(flatA[i]); free(flatA); }
+    if (flatB) { for(size_t i=0; i<idxB; i++) expr_free(flatB[i]); free(flatB); }
+
+    int64_t dimsC[64];
+    int rankC = rankA + rankB - 2;
+    for (int i = 0; i < rankA - 1; i++) dimsC[i] = dimsA[i];
+    for (int i = 0; i < rankB - 1; i++) dimsC[rankA - 1 + i] = dimsB[i + 1];
+
+    size_t c_idx = 0;
+    Expr* result = build_tensor(dimsC, rankC, flatC, &c_idx);
+    if (flatC) {
+        for (int64_t i = 0; i < R * S; i++) expr_free(flatC[i]);
+        free(flatC);
+    }
+
+    return result;
 }
 
 Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
@@ -401,68 +491,242 @@ generic:
     size_t idxA = 0; if (N_A > 0) flatten_tensor(a, flatA, &idxA);
     size_t idxB = 0; if (N_B > 0) flatten_tensor(b, flatB, &idxB);
 
-    /* Outer sizes: the product of the NON-contracted dimensions of each operand
-     * (all but A's last axis, all but B's first). Computed as an explicit product
-     * rather than N/K so that a zero contraction axis (K == 0, i.e. empty vectors)
-     * still gives R = S = 1 for the rank1.rank1 case: the empty inner product then
-     * fills the single result slot with the scalar 0 below, instead of leaving R
-     * and S at 0 -- which produced a NULL flatC and a rank-0 build_tensor deref
-     * (segfault on `{} . {}`). For K > 0 this is exactly N_A/K and N_B/K. */
-    int64_t R = 1; for (int i = 0; i < rankA - 1; i++) R *= dimsA[i];
-    int64_t S = 1; for (int i = 1; i < rankB; i++)     S *= dimsB[i];
+    Expr* result = dot_generic_flat(flatA, idxA, dimsA, rankA, flatB, idxB, dimsB, rankB);
+    if (conv_a) expr_free(conv_a);
+    if (conv_b) expr_free(conv_b);
+    return result;
+}
 
-    Expr** flatC = NULL;
-    /* Integer / rational operands of rank <= 2: one exact matrix product in
-     * FLINT (common denominator, multimodular integer product) instead of a
-     * Times and a Plus evaluated per element.  The 21 x 101 by 101 x 21
-     * normal matrix of a degree-20 polynomial fit (entries ((2i - 100)/100)^j)
-     * took 154 ms on that path.  Declines (NULL) at the first non-rational
-     * entry, so a symbolic or mixed product keeps the generic loop. */
-    if (rankA <= 2 && rankB <= 2 && K > 0 && R * S > 0 &&
-        R <= INT32_MAX && S <= INT32_MAX && K <= INT32_MAX &&
-        (int64_t)idxA == N_A && (int64_t)idxB == N_B)
-        flatC = flint_mat_mul(flatA, (int)R, (int)K, flatB, (int)S);
-    if (!flatC && R * S > 0) {
-        flatC = malloc(sizeof(Expr*) * (R * S));
-        for (int64_t r = 0; r < R; r++) {
-            for (int64_t s = 0; s < S; s++) {
-                Expr** sum_args = NULL;
-                if (K > 0) sum_args = malloc(sizeof(Expr*) * K);
-                for (int64_t k = 0; k < K; k++) {
-                    Expr* a_elem = flatA[r * K + k];
-                    Expr* b_elem = flatB[k * S + s];
-                    Expr* t_args[2] = { expr_copy(a_elem), expr_copy(b_elem) };
-                    sum_args[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
-                }
-                if (K == 0) {
-                    flatC[r * S + s] = expr_new_integer(0);
-                } else if (K == 1) {
-                    flatC[r * S + s] = sum_args[0];
-                } else {
-                    flatC[r * S + s] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, K));
-                }
-                if (sum_args) free(sum_args);
-            }
+
+/* ---- Dot with a LinkedList operand ----------------------------------------
+ * A LinkedList is the List of its elements: a LinkedList vector, a LinkedList
+ * of rows, or a List with LinkedList rows. The operands' leaves are read from
+ * the slots; nothing is converted to a List or an array. The arithmetic is
+ * dot2's: both operands machine (as dot_pack_operand would pack them) runs the
+ * same kernels on raw buffers -- BLAS for two float64 operands, else
+ * ndarray_dot2's loop (nd_dot2_buf) -- so the answer is the packed List's to
+ * the bit; otherwise the generic contraction (dot_generic_flat). The result is
+ * a LinkedList at its outer level when either operand is a LinkedList. */
+
+/* A packed operand's buffer, or the leaves as a machine buffer the way
+ * dot_pack_operand would pack them: every leaf a machine integer -> int64;
+ * else, with at least one machine-inexact leaf, every numeric leaf at machine
+ * precision -> float64 or complex128. False when the operand is not machine. */
+static bool dot_machine_buf(const Expr* op, Expr** leaves, size_t n, NDType* dt, void** buf) {
+    if (is_ndarray(op)) {
+        NDType d = op->data.ndarray.dtype;
+        if (d != NDT_INT64 && d != NDT_FLOAT64 && d != NDT_COMPLEX64) return false;
+        size_t es = ndt_elem_size(d);
+        *buf = malloc(es * (n ? n : 1));
+        memcpy(*buf, op->data.ndarray.data, es * n);
+        *dt = d;
+        return true;
+    }
+    bool all_int = true, inexact = false, cplx = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* e = leaves[i];
+        if (e->type != EXPR_INTEGER) all_int = false;
+        if (e->type == EXPR_REAL) inexact = true;
+        else if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
+            cplx = true;
+            if (e->data.function.args[0]->type == EXPR_REAL ||
+                e->data.function.args[1]->type == EXPR_REAL) inexact = true;
         }
     }
+    if (n > 0 && all_int) {
+        int64_t* b = malloc(sizeof(int64_t) * n);
+        for (size_t i = 0; i < n; i++) b[i] = leaves[i]->data.integer;
+        *dt = NDT_INT64; *buf = b;
+        return true;
+    }
+    if (!inexact) return false;
+    double* b = malloc(sizeof(double) * (cplx ? 2 : 1) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        const Expr* e = leaves[i];
+        double re = 0.0, im = 0.0;
+        if (e->type == EXPR_REAL) re = e->data.real;
+        else if (e->type == EXPR_INTEGER) re = (double)e->data.integer;
+        else {
+            Expr* v = numericalize(e, numeric_machine_spec());
+            bool ok = v != NULL;
+            if (ok && v->type == EXPR_REAL) re = v->data.real;
+            else if (ok && v->type == EXPR_INTEGER) re = (double)v->data.integer;
+            else if (ok && head_is(v, SYM_Complex) && v->data.function.arg_count == 2 &&
+                     numeric_machine_value(v->data.function.args[0], &re) &&
+                     numeric_machine_value(v->data.function.args[1], &im)) { /* complex */ }
+            else ok = false;
+            if (v) expr_free(v);
+            if (!ok) { free(b); return false; }
+        }
+        if (cplx) { b[2 * i] = re; b[2 * i + 1] = im; } else b[i] = re;
+    }
+    *dt = cplx ? NDT_COMPLEX64 : NDT_FLOAT64;
+    *buf = b;
+    return true;
+}
 
-    if (flatA) { for(size_t i=0; i<idxA; i++) expr_free(flatA[i]); free(flatA); }
-    if (flatB) { for(size_t i=0; i<idxB; i++) expr_free(flatB[i]); free(flatB); }
+/* A machine result that is not a machine number, or an inner product to which
+ * a nonzero term underflowed (dot_decline_degenerate, on raw buffers). */
+static bool dot_raw_degenerate(const void* out, NDType dt, size_t n, const void* pa,
+                               NDType dta, const void* pb, NDType dtb, size_t K, bool vv) {
+    if (dt == NDT_INT64) return false;
+    size_t w = dt == NDT_COMPLEX64 ? 2 : 1;
+    const double* o = (const double*)out;
+    for (size_t i = 0; i < n * w; i++) {
+        double x = o[i];
+        if (!isfinite(x) || (x != 0.0 && fabs(x) < DBL_MIN)) return true;
+    }
+    if (vv && w == 1 && fabs(o[0]) < DBL_MIN) {
+        for (size_t k = 0; k < K; k++) {
+            double x, xi, y, yi;
+            ndt_get(pa, k, dta, &x, &xi);
+            ndt_get(pb, k, dtb, &y, &yi);
+            double t = x * y;
+            if (x != 0.0 && y != 0.0 && fabs(t) < DBL_MIN) return true;
+        }
+    }
+    return false;
+}
 
-    int64_t dimsC[64];
+/* A machine-typed LinkedList vector's slots as the raw buffer
+ * dot_machine_buf would make of its leaves; false for anything else. */
+static bool dot_typed_ll_buf(const Expr* op, NDType* dt, void** buf) {
+    if (op->type != EXPR_LINKEDLIST) return false;
+    const LinkedList* ll = op->data.llist;
+    LLKind k = ll_kind(ll);
+    if (k != LL_I64 && k != LL_REAL && k != LL_CPLX) return false;
+    int64_t n = ll_length(ll);
+    *buf = malloc(ll_slot_size(ll) * (size_t)n);
+    ll_gather(ll, 0, n, *buf);
+    *dt = k == LL_I64 ? NDT_INT64 : k == LL_REAL ? NDT_FLOAT64 : NDT_COMPLEX64;
+    return true;
+}
+
+static Expr* dot_ll(Expr* a, Expr* b, bool* error_printed) {
+    int64_t dimsA[64], dimsB[64];
+    int rankA = ll_tensor_dims(a, dimsA, 64);
+    int rankB = ll_tensor_dims(b, dimsB, 64);
+    if (rankA <= 0 || rankB <= 0) return NULL;
+    /* Two machine vectors (typed LinkedLists or packed): the slots straight
+     * into the packed path's inner product, no leaf boxed. */
+    if (rankA == 1 && rankB == 1 && dimsA[0] == dimsB[0] && dimsA[0] > 0) {
+        NDType dta, dtb;
+        void *pa = NULL, *pb = NULL;
+        bool okA = dot_typed_ll_buf(a, &dta, &pa) ||
+                   (is_ndarray(a) && dot_machine_buf(a, NULL, (size_t)dimsA[0], &dta, &pa));
+        bool okB = okA && (dot_typed_ll_buf(b, &dtb, &pb) ||
+                   (is_ndarray(b) && dot_machine_buf(b, NULL, (size_t)dimsB[0], &dtb, &pb)));
+        if (okA && okB) {
+            void* out = NULL;
+            NDType dtc = NDT_FLOAT64;
+            bool shape_error = false;
+#ifdef USE_LAPACK
+            if (dta == NDT_FLOAT64 && dtb == NDT_FLOAT64)
+                out = nd_blas_buf((const double*)pa, 1, dimsA, (const double*)pb, 1, dimsB);
+#endif
+            if (!out) out = nd_dot2_buf(pa, dta, 1, dimsA, pb, dtb, 1, dimsB, &dtc, &shape_error);
+            if (out && dot_raw_degenerate(out, dtc, 1, pa, dta, pb, dtb, (size_t)dimsA[0], true)) {
+                free(out);
+                out = NULL;
+            }
+            free(pa);
+            free(pb);
+            if (out) {
+                Expr* r = ndarray_buffer_element_to_expr(out, 0, dtc);
+                free(out);
+                return r;
+            }
+        } else {
+            free(pa);
+            free(pb);
+        }
+    }
+    if (dimsA[rankA - 1] != dimsB[0]) {
+        if (!*error_printed) {
+            char* a_str = expr_to_string(a);
+            char* b_str = expr_to_string(b);
+            mth_message("Dot", "dotsh", "Tensors %s and %s have incompatible shapes.", a_str, b_str);
+            free(a_str);
+            free(b_str);
+            *error_printed = true;
+        }
+        return NULL;
+    }
+    int64_t NA = 1, NB = 1;
+    for (int i = 0; i < rankA; i++) NA *= dimsA[i];
+    for (int i = 0; i < rankB; i++) NB *= dimsB[i];
+    Expr** flatA = malloc(sizeof(Expr*) * (size_t)(NA > 0 ? NA : 1));
+    Expr** flatB = malloc(sizeof(Expr*) * (size_t)(NB > 0 ? NB : 1));
+    size_t idxA = 0, idxB = 0;
+    ll_tensor_leaves(a, rankA, flatA, &idxA);
+    ll_tensor_leaves(b, rankB, flatB, &idxB);
+    bool outer_ll = a->type == EXPR_LINKEDLIST || b->type == EXPR_LINKEDLIST;
     int rankC = rankA + rankB - 2;
+    int64_t dimsC[64];
     for (int i = 0; i < rankA - 1; i++) dimsC[i] = dimsA[i];
     for (int i = 0; i < rankB - 1; i++) dimsC[rankA - 1 + i] = dimsB[i + 1];
 
-    size_t c_idx = 0;
-    Expr* result = build_tensor(dimsC, rankC, flatC, &c_idx);
-    if (flatC) {
-        for (int64_t i = 0; i < R * S; i++) expr_free(flatC[i]);
-        free(flatC);
+    /* machine operands: the packed path's kernels on raw buffers */
+    NDType dta, dtb;
+    void *pa = NULL, *pb = NULL;
+    if (rankA <= 2 && rankB <= 2 && NA > 0 && NB > 0 &&
+        dot_machine_buf(a, flatA, idxA, &dta, &pa) && dot_machine_buf(b, flatB, idxB, &dtb, &pb)) {
+        void* out = NULL;
+        NDType dtc = NDT_FLOAT64;
+        bool shape_error = false;
+#ifdef USE_LAPACK
+        if (dta == NDT_FLOAT64 && dtb == NDT_FLOAT64)
+            out = nd_blas_buf((const double*)pa, rankA, dimsA, (const double*)pb, rankB, dimsB);
+#endif
+        if (!out) out = nd_dot2_buf(pa, dta, rankA, dimsA, pb, dtb, rankB, dimsB, &dtc, &shape_error);
+        int64_t NC = 1;
+        for (int i = 0; i < rankC; i++) NC *= dimsC[i];
+        if (out && dot_raw_degenerate(out, dtc, (size_t)NC, pa, dta, pb, dtb,
+                                      (size_t)dimsA[rankA - 1], rankC == 0)) {
+            free(out);
+            out = NULL;
+        }
+        free(pa);
+        free(pb);
+        pa = pb = NULL;
+        if (out) {
+            for (size_t i = 0; i < idxA; i++) expr_free(flatA[i]);
+            for (size_t i = 0; i < idxB; i++) expr_free(flatB[i]);
+            free(flatA);
+            free(flatB);
+            Expr* r;
+            if (rankC == 0) {
+                r = ndarray_buffer_element_to_expr(out, 0, dtc);
+            } else if (rankC == 1 && outer_ll) {
+                r = expr_new_linkedlist(ll_from_buffer(dtc == NDT_INT64 ? LL_I64 :
+                                                       dtc == NDT_FLOAT64 ? LL_REAL : LL_CPLX,
+                                                       out, NC));
+            } else {
+                void* dst = NULL;
+                Expr* nd = ndbuild_open(rankC, dimsC, dtc, &dst);
+                if (nd) {
+                    memcpy(dst, out, ndt_elem_size(dtc) * (size_t)NC);
+                    r = nd;
+                } else {
+                    Expr** lv = malloc(sizeof(Expr*) * (size_t)NC);
+                    for (int64_t i = 0; i < NC; i++) lv[i] = ndarray_buffer_element_to_expr(out, (size_t)i, dtc);
+                    r = ll_tensor_build(dimsC, rankC, lv, NULL);
+                    free(lv);
+                }
+                if (outer_ll) {
+                    Expr* l = is_ndarray(r) ? ndarray_to_nested_list(r) : expr_copy(r);
+                    expr_free(r);
+                    r = ll_from_list_result(l);
+                }
+            }
+            free(out);
+            return r;
+        }
     }
-
-    if (conv_a) expr_free(conv_a);
-    if (conv_b) expr_free(conv_b);
+    free(pa);
+    free(pb);
+    Expr* result = dot_generic_flat(flatA, idxA, dimsA, rankA, flatB, idxB, dimsB, rankB);
+    if (result && outer_ll && rankC >= 1) result = ll_from_list_result(result);
     return result;
 }
 
@@ -483,6 +747,24 @@ Expr* builtin_dot(Expr* res) {
         Expr* b = new_args[i+1];
 
         int64_t dA[64], dB[64];
+        if (ll_has_ll_level1(a) || ll_has_ll_level1(b)) {
+            /* a LinkedList operand: its leaves from the slots (dot_ll) */
+            Expr* d = dot_ll(a, b, &error_printed);
+            if (d) {
+                expr_free(a);
+                expr_free(b);
+                new_args[i] = d;
+                for (size_t j = i + 2; j < new_count; j++) new_args[j - 1] = new_args[j];
+                new_count--;
+                changed = true;
+                i--;
+            } else if (error_printed) {
+                for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
+                free(new_args);
+                return NULL;
+            }
+            continue;
+        }
         bool a_is_tensor = (a->type == EXPR_NDARRAY) || get_tensor_dims(a, dA) > 0;
         bool b_is_tensor = (b->type == EXPR_NDARRAY) || get_tensor_dims(b, dB) > 0;
         if (a_is_tensor && b_is_tensor) {

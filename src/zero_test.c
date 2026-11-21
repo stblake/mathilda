@@ -42,6 +42,7 @@
  *             structural hash, so the verdict is a pure function of the input
  *             (no run-to-run flakiness) and the user's RNG stream is untouched.
  */
+#include "linkedlist.h"
 #include "zero_test.h"
 #include "zero_test_distrib.h"
 
@@ -3069,6 +3070,7 @@ Expr* builtin_possible_zero_q(Expr* res) {
     if (argc < 1) return NULL;
 
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_LINKEDLIST) return ll_map_arg(res, 0);   /* as over a List */
 
     /* Manual threading over the FIRST argument only (PossibleZeroQ is no longer
      * ATTR_LISTABLE, so the assumption argument is never mis-threaded): a list

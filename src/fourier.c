@@ -27,6 +27,7 @@
  */
 
 #include "fourier.h"
+#include "linkedlist.h"
 #include "sym_names.h"
 #include "symtab.h"
 #include "attr.h"
@@ -943,6 +944,163 @@ static Expr* fourier_compute(Expr* data, Expr* a_expr, Expr* b_expr, int inverse
     return result;
 }
 
+
+/* ==================================================================== *
+ *  LinkedList data
+ *
+ *  A LinkedList is the List of its elements: a LinkedList vector, a
+ *  LinkedList of rows, or a List with LinkedList rows. The leaves are read
+ *  from the slots and run through the List regimes below (symbolic, machine,
+ *  arbitrary precision); the answer keeps a LinkedList at every level the data
+ *  had one. A machine-typed LinkedList whose Normal is a packed List follows
+ *  the packed path instead -- its raw slots straight into the same transform
+ *  -- so it agrees with Normal[ll] to the bit.
+ * ==================================================================== */
+
+typedef struct {
+    Expr** leaves;                  /* owned, row-major */
+    size_t n;
+    int64_t dims[FOURIER_MAX_RANK];
+    int rank;
+    bool lvl[FOURIER_MAX_RANK];
+} FtLL;
+
+static bool ftll_open(const Expr* data, FtLL* f) {
+    f->leaves = NULL; f->n = 0;
+    f->rank = ll_tensor_dims(data, f->dims, FOURIER_MAX_RANK + 1);
+    if (f->rank < 1 || f->rank > FOURIER_MAX_RANK) return false;
+    int64_t N = 1;
+    for (int i = 0; i < f->rank; i++) {
+        if (f->dims[i] <= 0) return false;
+        N *= f->dims[i];
+    }
+    f->leaves = malloc(sizeof(Expr*) * (size_t)N);
+    ll_tensor_leaves(data, f->rank, f->leaves, &f->n);
+    for (size_t i = 0; i < f->n; i++)
+        if (ll_is_seq(f->leaves[i]) || is_ndarray(f->leaves[i])) {   /* deeper than rank */
+            for (size_t j = 0; j < f->n; j++) expr_free(f->leaves[j]);
+            free(f->leaves);
+            f->leaves = NULL;
+            return false;
+        }
+    ll_tensor_levels(data, f->rank, f->lvl);
+    return true;
+}
+
+static void ftll_close(FtLL* f) {
+    for (size_t i = 0; i < f->n; i++) expr_free(f->leaves[i]);
+    free(f->leaves);
+    f->leaves = NULL;
+}
+
+/* The leaves at machine precision as interleaved (re, im) doubles, as
+ * machine_path reads a numericalised nest; NULL when one is not a number. */
+static double* ftll_machine_buf(const FtLL* f) {
+    double* buf = malloc(f->n * 2 * sizeof(double));
+    for (size_t o = 0; o < f->n; o++) {
+        Expr* v = numericalize(f->leaves[o], numeric_machine_spec());
+        bool ok = v && leaf_to_cdouble(v, &buf[2 * o], &buf[2 * o + 1]);
+        if (v) expr_free(v);
+        if (!ok) { free(buf); return NULL; }
+    }
+    return buf;
+}
+
+/* A machine-typed top-level LinkedList whose Normal packs: its slots as the
+ * interleaved buffer nd_gather_interleaved makes of the packed List. */
+static double* ftll_packed_buf(const Expr* data, int64_t* n) {
+    if (data->type != EXPR_LINKEDLIST || !ll_normal_is_packed(data->data.llist)) return NULL;
+    const LinkedList* ll = data->data.llist;
+    *n = ll_length(ll);
+    double* buf = malloc((size_t)*n * 2 * sizeof(double));
+    LLKind k = ll_kind(ll);
+    if (k == LL_CPLX) {
+        ll_gather(ll, 0, *n, buf);
+    } else if (k == LL_REAL) {
+        double* t = malloc((size_t)*n * sizeof(double));
+        ll_gather(ll, 0, *n, t);
+        for (int64_t i = 0; i < *n; i++) { buf[2 * i] = t[i]; buf[2 * i + 1] = 0.0; }
+        free(t);
+    } else {
+        int64_t* t = malloc((size_t)*n * sizeof(int64_t));
+        ll_gather(ll, 0, *n, t);
+        for (int64_t i = 0; i < *n; i++) { buf[2 * i] = (double)t[i]; buf[2 * i + 1] = 0.0; }
+        free(t);
+    }
+    return buf;
+}
+
+/* A result (an NDArray or a nested List of the data's shape) with a
+ * LinkedList at each level the data had one; consumes `r`. */
+static Expr* ftll_relevel(Expr* r, const FtLL* f) {
+    if (!r) return NULL;
+    bool any = false;
+    for (int i = 0; i < f->rank; i++) any = any || f->lvl[i];
+    if (any && f->rank == 1 && is_ndarray(r) && !ndt_is_complex(r->data.ndarray.dtype))
+        return ll_from_list_result(r);          /* a machine-real answer, slot for slot */
+    /* the List path's own delisting (a zero imaginary part boxes as a Real) */
+    Expr* l = is_ndarray(r) ? ndarray_to_nested_list(r) : expr_copy(r);
+    expr_free(r);
+    if (!any) return l;
+    int64_t N = 1;
+    for (int i = 0; i < f->rank; i++) N *= f->dims[i];
+    Expr** lv = malloc(sizeof(Expr*) * (size_t)N);
+    size_t got = 0;
+    ll_tensor_leaves(l, f->rank, lv, &got);
+    expr_free(l);
+    /* as the evaluator canonicalises the List's elements: a machine complex
+     * with a zero imaginary part is its real part (Complex[4., 0.] is 4.) */
+    for (size_t i = 0; i < got; i++) {
+        Expr* e = lv[i];
+        if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
+            e->data.function.args[1]->type == EXPR_REAL && e->data.function.args[1]->data.real == 0.0) {
+            lv[i] = expr_copy(e->data.function.args[0]);
+            expr_free(e);
+        }
+    }
+    Expr* out = ll_tensor_build(f->dims, f->rank, lv, f->lvl);
+    free(lv);
+    return out;
+}
+
+static Expr* fourier_compute_ll(Expr* data, Expr* a_expr, Expr* b_expr, int inverse) {
+    int base_sign = inverse ? -1 : +1;
+    double a;
+    long b;
+    int64_t pn;
+    double* pbuf = ftll_packed_buf(data, &pn);
+    if (pbuf) {
+        if (!expr_to_double_num(a_expr, &a) || !expr_to_long_int(b_expr, &b)) { free(pbuf); return NULL; }
+        int64_t dims[1] = { pn };
+        double* out = machine_transform_buf(pbuf, dims, 1, a, b, base_sign);
+        FtLL f1 = { NULL, 0, { pn }, 1, { true } };
+        return ftll_relevel(machine_build_ndarray(out, pn, dims, 1, NULL, false), &f1);
+    }
+    FtLL f;
+    if (!ftll_open(data, &f)) return NULL;
+    long arb_bits = 0;
+    Regime reg = classify(f.leaves, f.n, &arb_bits);
+    Expr* result = NULL;
+    if (reg == REG_SYMBOLIC) {
+        result = symbolic_path(f.leaves, f.dims, f.rank, a_expr, b_expr, base_sign, (int64_t)f.n);
+    } else if (expr_to_double_num(a_expr, &a) && expr_to_long_int(b_expr, &b)) {
+        if (reg == REG_MACHINE) {
+            double* buf = ftll_machine_buf(&f);
+            if (buf) {
+                double* out = machine_transform_buf(buf, f.dims, f.rank, a, b, base_sign);
+                result = machine_build_ndarray(out, (int64_t)f.n, f.dims, f.rank, NULL, false);
+            }
+        } else {
+#ifdef USE_MPFR
+            result = arb_path(f.leaves, f.dims, f.rank, a, b, base_sign, arb_bits);
+#endif
+        }
+    }
+    result = ftll_relevel(result, &f);
+    ftll_close(&f);
+    return result;
+}
+
 static Expr* fourier_core(Expr* res, int inverse) {
     const char* name = inverse ? "InverseFourier" : "Fourier";
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -965,7 +1123,7 @@ static Expr* fourier_core(Expr* res, int inverse) {
         if (parse_fourier_option(arg, &ao, &bo)) {
             a_expr = ao;
             b_expr = bo;
-        } else if (head_is(arg, SYM_List) && poslist == NULL) {
+        } else if ((head_is(arg, SYM_List) || arg->type == EXPR_LINKEDLIST) && poslist == NULL) {
             poslist = arg;                         /* position-selection form */
         } else {
             expr_free(a_default); expr_free(b_default);
@@ -973,7 +1131,8 @@ static Expr* fourier_core(Expr* res, int inverse) {
         }
     }
 
-    Expr* full = fourier_compute(data, a_expr, b_expr, inverse);
+    Expr* full = ll_has_ll_level1(data) ? fourier_compute_ll(data, a_expr, b_expr, inverse)
+                                        : fourier_compute(data, a_expr, b_expr, inverse);
     expr_free(a_default);
     expr_free(b_default);
     if (!full) return NULL;
@@ -1414,6 +1573,38 @@ static Expr* dct_compute(Expr* data, int type, bool sine) {
     return result;
 }
 
+
+static Expr* dct_compute_ll(Expr* data, int type, bool sine) {
+    int64_t pn;
+    double* pbuf = ftll_packed_buf(data, &pn);
+    if (pbuf) {
+        int64_t dims[1] = { pn };
+        double* out = dct_transform_buf(pbuf, dims, 1, type, sine);
+        if (!out) return NULL;
+        FtLL f1 = { NULL, 0, { pn }, 1, { true } };
+        return ftll_relevel(machine_build_ndarray(out, pn, dims, 1, NULL, false), &f1);
+    }
+    FtLL f;
+    if (!ftll_open(data, &f)) return NULL;
+    long arb_bits = 0;
+    Regime reg = classify(f.leaves, f.n, &arb_bits);
+    Expr* result = NULL;
+    if (reg == REG_MACHINE) {
+        double* buf = ftll_machine_buf(&f);
+        if (buf) {
+            double* out = dct_transform_buf(buf, f.dims, f.rank, type, sine);
+            if (out) result = machine_build_ndarray(out, (int64_t)f.n, f.dims, f.rank, NULL, false);
+        }
+    } else if (reg == REG_ARB) {
+#ifdef USE_MPFR
+        result = dct_arb_path(f.leaves, f.dims, f.rank, type, sine, arb_bits);
+#endif
+    }
+    result = ftll_relevel(result, &f);
+    ftll_close(&f);
+    return result;
+}
+
 static Expr* dct_core(Expr* res, bool sine) {
     const char* name = sine ? "FourierDST" : "FourierDCT";
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -1425,6 +1616,7 @@ static Expr* dct_core(Expr* res, bool sine) {
     if (argc == 2) {
         if (!parse_dct_type(res->data.function.args[1], &type)) return NULL;
     }
+    if (ll_has_ll_level1(data)) return dct_compute_ll(data, type, sine);
     return dct_compute(data, type, sine);
 }
 

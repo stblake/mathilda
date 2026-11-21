@@ -49,6 +49,7 @@
 #include <string.h>
 
 #include "expr.h"
+#include "linkedlist.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -796,10 +797,42 @@ static Expr* nsolve_seed_transcendental(Expr* expr, Expr* var, bool reals_only,
  *  Builtin entry
  * ------------------------------------------------------------------ */
 
+/* A LinkedList of equations is a system, as the List of them is: their
+ * conjunction, And of its elements read from the slots (a List of
+ * LinkedLists: each one's conjunction). The system with that done, or NULL
+ * when it holds no LinkedList. */
+static Expr* nsolve_ll_system(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST)
+        return eval_and_free(ll_call_with_elements(expr_new_symbol(SYM_And), e->data.llist));
+    if (!ll_has_ll_level1(e)) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* c = nsolve_ll_system(e->data.function.args[i]);
+        a[i] = c ? c : expr_copy(e->data.function.args[i]);
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
 Expr* builtin_nsolve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
+    {
+        Expr* sys = nsolve_ll_system(res->data.function.args[0]);
+        if (sys) {
+            Expr** a = malloc(sizeof(Expr*) * argc);
+            a[0] = sys;
+            for (size_t i = 1; i < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+            Expr* again = eval_and_free(expr_new_function(expr_copy(res->data.function.head), a, argc));
+            free(a);
+            /* the conjunction declined too: the call stays as it was written */
+            if (head_is(again, SYM_NSolve)) { expr_free(again); return NULL; }
+            return again;
+        }
+    }
 
     /* Peel trailing options. */
     size_t pos_end = argc;

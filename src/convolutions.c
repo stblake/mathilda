@@ -30,6 +30,7 @@
  * zero-padded FFT product; it then slices out the L outputs. */
 
 #include "convolutions.h"
+#include "linkedlist.h"
 #include "sym_names.h"
 #include "symtab.h"
 #include "attr.h"
@@ -149,6 +150,13 @@ static void nest_flatten(const Expr* e, int level, int rank, Expr** out, size_t*
  * already carries its rank and dims; a nested List has to be verified
  * rectangular and measured. */
 static bool conv_operand_dims(const Expr* e, int64_t* dims, int* rank_out) {
+    if (ll_has_ll_level1(e)) {
+        /* a LinkedList level: the nest measured through its slots */
+        int r = ll_tensor_dims(e, dims, CONV_MAX_RANK);
+        if (r < 1) return false;
+        *rank_out = r;
+        return true;
+    }
     if (is_ndarray(e)) {
         int r = e->data.ndarray.rank;
         if (r < 1 || r > CONV_MAX_RANK) return false;
@@ -1105,6 +1113,16 @@ static bool parse_klist(const Expr* kl, ConvMode mode, int rank,
  *  Engine entry point
  * ==================================================================== */
 
+/* Frees the leaf arrays of `s`, and the leaves themselves where they were read
+ * from a LinkedList (owned references). */
+static void conv_free_leaves(ConvSpec* s, bool ker_ll, int64_t ktot, bool list_ll, int64_t ltot) {
+    if (ker_ll && s->ker_leaves) for (int64_t i = 0; i < ktot; i++) expr_free(s->ker_leaves[i]);
+    if (list_ll && s->list_leaves) for (int64_t i = 0; i < ltot; i++) expr_free(s->list_leaves[i]);
+    free(s->ker_leaves);
+    free(s->list_leaves);
+    s->ker_leaves = s->list_leaves = NULL;
+}
+
 Expr* conv_engine(Expr* res, ConvMode mode) {
     const char* name = (mode == CONV_MODE_CONVOLVE) ? "ListConvolve" : "ListCorrelate";
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -1132,8 +1150,12 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     /* A packed operand keeps its buffer; only an unpacked one is flattened into
      * leaves below. Every value in a machine buffer is machine-numeric, so a
      * packed operand also settles the classification without a scan. */
-    if (is_ndarray(ker))  { s.ker_arr = ker;   s.want_packed = true; }
-    if (is_ndarray(list)) { s.list_arr = list; s.want_packed = true; }
+    /* With a LinkedList anywhere every operand is read as leaves (a
+     * LinkedList's from its slots), so one engine sees them all. */
+    bool any_ll = ll_has_ll_level1(ker) || ll_has_ll_level1(list) ||
+                  (pad_arg && ll_has_ll_level1(pad_arg));
+    if (!any_ll && is_ndarray(ker))  { s.ker_arr = ker;   s.want_packed = true; }
+    if (!any_ll && is_ndarray(list)) { s.list_arr = list; s.want_packed = true; }
     if (krank != lrank) return NULL;          /* differing ranks: unsupported */
     s.rank = krank;
     for (int ax = 0; ax < s.rank; ax++)
@@ -1163,16 +1185,28 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     /* Kernel + list leaves. */
     int64_t ktot = 1, ltot = 1;
     for (int ax = 0; ax < s.rank; ax++) { ktot *= s.kdims[ax]; ltot *= s.ldims[ax]; }
+    /* A LinkedList operand's leaves are read from its slots into an owned
+     * array (freed below); a List's are borrowed. */
+    bool ker_ll = any_ll, list_ll = any_ll;
     if (!s.ker_arr) {
         s.ker_leaves = malloc((size_t)ktot * sizeof(Expr*));
         size_t kidx = 0;
-        nest_flatten(ker, 0, s.rank, s.ker_leaves, &kidx);
+        if (ker_ll) ll_tensor_leaves(ker, s.rank, s.ker_leaves, &kidx);
+        else nest_flatten(ker, 0, s.rank, s.ker_leaves, &kidx);
     }
     if (!s.list_arr) {
         s.list_leaves = malloc((size_t)ltot * sizeof(Expr*));
         size_t lidx = 0;
-        nest_flatten(list, 0, s.rank, s.list_leaves, &lidx);
+        if (list_ll) ll_tensor_leaves(list, s.rank, s.list_leaves, &lidx);
+        else nest_flatten(list, 0, s.rank, s.list_leaves, &lidx);
     }
+    bool deep = false;                 /* a LinkedList nest deeper than the kernel's rank */
+    for (int64_t i = 0; ker_ll && i < ktot && !deep; i++)
+        deep = ll_is_seq(s.ker_leaves[i]) || is_ndarray(s.ker_leaves[i]);
+    for (int64_t i = 0; list_ll && i < ltot && !deep; i++)
+        deep = ll_is_seq(s.list_leaves[i]) || is_ndarray(s.list_leaves[i]);
+    int64_t pad_tot = 0;
+    bool pad_ll = false;
 
     /* Padding. */
     Expr** pad_leaves_owned = NULL;
@@ -1183,32 +1217,41 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
         memcpy(s.pstride, s.lstride, sizeof(s.pstride));
         s.pad_leaves = s.list_leaves;
         s.pad_arr = s.list_arr;          /* cyclic default tiles the list itself */
-    } else if (head_is(pad_arg, SYM_List)) {
-        if (pad_arg->data.function.arg_count == 0) {
+    } else if (head_is(pad_arg, SYM_List) || pad_arg->type == EXPR_LINKEDLIST) {
+        if (pad_arg->type == EXPR_LINKEDLIST ? ll_length(pad_arg->data.llist) == 0
+                                             : pad_arg->data.function.arg_count == 0) {
             s.pad_kind = PAD_EMPTY;
         } else {
             int prank = 0;
-            if (!conv_operand_dims(pad_arg, s.pdims, &prank) || prank != s.rank) {
-                free(s.ker_leaves); free(s.list_leaves); return NULL;
+            if (deep || !conv_operand_dims(pad_arg, s.pdims, &prank) || prank != s.rank) {
+                conv_free_leaves(&s, ker_ll, ktot, list_ll, ltot);
+                return NULL;
             }
-            if (is_ndarray(pad_arg)) s.pad_arr = pad_arg;
+            if (!any_ll && is_ndarray(pad_arg)) s.pad_arr = pad_arg;
             s.pad_kind = PAD_LIST;
             int64_t ptot = 1;
             for (int ax = 0; ax < s.rank; ax++) {
-                if (s.pdims[ax] <= 0) { free(s.ker_leaves); free(s.list_leaves); return NULL; }
+                if (s.pdims[ax] <= 0) { conv_free_leaves(&s, ker_ll, ktot, list_ll, ltot); return NULL; }
                 ptot *= s.pdims[ax];
             }
             row_major_strides(s.pdims, s.rank, s.pstride);
             if (!s.pad_arr) {
                 pad_leaves_owned = malloc((size_t)ptot * sizeof(Expr*));
                 size_t pidx = 0;
-                nest_flatten(pad_arg, 0, s.rank, pad_leaves_owned, &pidx);
+                pad_ll = any_ll;
+                pad_tot = ptot;
+                if (pad_ll) ll_tensor_leaves(pad_arg, s.rank, pad_leaves_owned, &pidx);
+                else nest_flatten(pad_arg, 0, s.rank, pad_leaves_owned, &pidx);
                 s.pad_leaves = pad_leaves_owned;
             }
         }
     } else {
         s.pad_kind = PAD_CONST;
         s.pad_scalar = pad_arg;
+    }
+    if (deep) {
+        conv_free_leaves(&s, ker_ll, ktot, list_ll, ltot);
+        return NULL;
     }
 
     /* Decide numeric regime. FFT only for default Times/Plus, non-empty pad. */
@@ -1274,9 +1317,13 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     }
     if (!result) result = conv_direct(&s);
 
-    free(s.ker_leaves);
-    free(s.list_leaves);
+    if (pad_ll) for (int64_t i = 0; i < pad_tot; i++) expr_free(pad_leaves_owned[i]);
     free(pad_leaves_owned);
+    conv_free_leaves(&s, ker_ll, ktot, list_ll, ltot);
+    /* the answer of a LinkedList list (or kernel) is a LinkedList */
+    if (result && (list->type == EXPR_LINKEDLIST || ker->type == EXPR_LINKEDLIST))
+        result = ll_from_list_result(is_ndarray(result) && result->data.ndarray.rank > 1
+                                     ? ndarray_to_nested_list(result) : result);
     return result;
 }
 
