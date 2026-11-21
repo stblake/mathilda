@@ -1,4 +1,4 @@
-# DownValues are ordered by specificity, not by when they were entered.
+# DownValues are ordered by generality (v0.6022), not by when they were entered.
 fib[n_] := fib[n - 1] + fib[n - 2]
 fib[0] = 0;
 fib[1] = 1;

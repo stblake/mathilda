@@ -440,8 +440,14 @@ From \(x = 1\), Brent finds the shallow one.}
 the search interval explicitly.}
 \pair{optimization/brent/4}{Brent needs no derivative, so a kink is no obstacle.
 The minimum of \(|x - 1/3|\) is found to the default tolerance.}
-\pair{optimization/brent/5}{Twelve evaluations of the objective are enough for
-a smooth minimum. \mcode{EvaluationMonitor} counts them.}
+\pair{optimization/brent/5}{\mcode{EvaluationMonitor} counts the evaluations of
+the objective: 29. Twelve of them are the bracket and Brent's iteration. The other
+seventeen are the final polish described in the next subsection, which samples a
+difference stencil around the point Brent returned.}
+\pair{optimization/brent/6}{The polish is worth its cost. The exact minimizer is
+\(\pi - \arcsin\frac15\), and the answer is within \(2\times10^{-13}\) of it. Brent's
+own last iterates were about \(10^{-8}\) away, at the square-root limit of the next
+subsection.}
 \end{codepairs}
 
 When \B{FindMinimum} is given a single starting value, it first builds a
@@ -473,16 +479,17 @@ value is printed to 40 digits.}
 \B{FindRoot}.}
 \end{codepairs}
 
-Compare the two locations digit by digit. They agree for the first 21
-significant digits and then part company, even though both computations
-carried 40 digits. The minimizer is not wrong. It has reached the limit that
-every minimizer faces.
+Compare the two locations digit by digit. They agree for the first 36
+significant digits, and the root found by \B{FindRoot} is correct to all 40. That
+the minimizer comes so close is not to be taken for granted, because every search
+that compares function values meets a limit.
 
 \begin{theorem}[Accuracy of a minimizer]
 \index{minimizer!attainable accuracy}
 Let \(f\) be twice differentiable with \(f'(x^*) = 0\) and \(f''(x^*) > 0\).
-If \(f\) can be evaluated only to relative precision \(\varepsilon\), then
-\(x^*\) can be located only to relative precision about
+If \(f\) can be evaluated only to relative precision \(\varepsilon\), then a
+method that compares values of \(f\) can locate
+\(x^*\) only to relative precision about
 \(\sqrt{\varepsilon}\).
 \end{theorem}
 
@@ -490,17 +497,31 @@ The reason is Taylor's theorem. Near the minimum,
 \(f(x^* + h) \approx f(x^*) + \tfrac12 f''(x^*)\,h^2\). A displacement \(h\)
 changes \(f\) by an amount proportional to \(h^2\). Once \(h^2\) falls below the
 rounding level \(\varepsilon\,|f(x^*)|\), the function values at \(x^*\) and at
-\(x^* + h\) are indistinguishable, and no method can tell which is lower. With
-40 digits, \(\sqrt{\varepsilon}\) is about \(10^{-20}\), which is exactly the
-agreement in the session. A root has no such limit, because \(\psi(x^* + h)\)
-changes linearly in \(h\). This is why \B{FindRoot} on the derivative is the
-better tool when a minimizer must be known to full precision. It is also why
-the default \B{PrecisionGoal} of \B{FindMinimum} is half the working precision.
+\(x^* + h\) are indistinguishable, and no comparison can tell which is lower. With
+40 digits, \(\sqrt{\varepsilon}\) is about \(10^{-20}\). A root has no such limit,
+because \(\psi(x^* + h)\) changes linearly in \(h\). This is why the default
+\B{PrecisionGoal} of \B{FindMinimum} is half the working precision, and it is why
+the search does not end with the comparisons.
+
+When the value-based search has stopped, \B{FindMinimum} finishes with Newton's
+method on the \emph{gradient}: it solves \(\nabla f = 0\), which is a root-finding
+problem and has no square-root limit.\index{minimizer!gradient polish} The gradient
+is the symbolic derivative when \B{D} can give one, and otherwise a difference
+quotient: a five-point formula at machine precision, and at
+\mcode{WorkingPrecision} a nine-point formula of order eight, with a step chosen per
+coordinate to balance truncation against rounding. A Newton step is kept only when it
+stays inside any box constraints, lowers \(\lVert\nabla f\rVert\), and does not raise
+\(f\). The polish runs after every unconstrained method and after every
+\B{NMinimize} method, for problems of up to ten variables. It is what carries pair~2
+from the twenty digits the theorem allows to thirty-six, and it is behind pair~6 of the
+Brent session above.
 
 \calloutnote{Pitfall}{The value \(f(x^*)\) is accurate to nearly the full working
 precision even when \(x^*\) is not, for the same reason. An error \(h\) in the
 location costs only \(h^2\) in the value. A reported minimum value is usually
-far more trustworthy than the reported location.}
+more trustworthy than the reported location. When the location itself must be known
+to every digit, and \(f'\) has a closed form, \B{FindRoot} on \(f'\) is still the
+surest tool.}
 
 \section{Descent in several variables}
 \label{sec:opt-descent}
@@ -591,8 +612,8 @@ bottom of a long, curved, nearly flat valley. The usual starting point is
 
 \begin{codepairs}
 \pair{optimization/bfgs/1}{Name the objective once for the session.}
-\pair{optimization/bfgs/2}{BFGS reaches \((1,1)\). The value
-\(7\times10^{-21}\) is zero to machine precision.}
+\pair{optimization/bfgs/2}{BFGS reaches \((1,1)\). The value prints as
+\texttt{0.0}: the final gradient polish lands on the minimizer to the last bit.}
 \pair{optimization/bfgs/3}{The gradient that BFGS uses is computed
 symbolically by \B{D}, once, before the search starts.}
 \pair{optimization/bfgs/4}{\mcode{StepMonitor} runs after every accepted step.
@@ -784,17 +805,18 @@ maximum, \(h \approx 181.617\).}
 \subsection{A non-smooth objective}
 
 The function \(g = |x - 1| + |y + 2| + |x - y|\) has corners along three lines.
-Its minimum value is \(3\), attained on the whole segment \(x = y\),
-\(-2 \le x \le 1\). The gradient methods still work here because the objective
+Its minimum value is \(3\), attained on the whole triangle
+\(-2 \le y \le x \le 1\), where the three absolute values open as
+\((1-x) + (y+2) + (x-y) = 3\). The gradient methods still work here because the objective
 is smooth almost everywhere, and the finite-difference fallback steps across
 the kinks. Nelder--Mead makes no smoothness assumption at all:
 
 \begin{codepairs}
 \pair{optimization/nonsmooth/1}{A sum of absolute values.}
-\pair{optimization/nonsmooth/2}{The default method lands on the segment of
-minima, at \(x = y \approx 0.88\).}
-\pair{optimization/nonsmooth/3}{Nelder--Mead lands at a different point with
-the same value, because the minimizer is not unique.}
+\pair{optimization/nonsmooth/2}{The default method lands on the diagonal edge of
+the triangle of minima, at \(x = y \approx 0.88\).}
+\pair{optimization/nonsmooth/3}{Nelder--Mead lands at a different point inside the
+triangle, with the same value, because the minimizer is not unique.}
 \end{codepairs}
 
 \calloutnote{Pitfall}{A non-unique minimizer is common in practice, and
@@ -818,9 +840,10 @@ is a \emph{box constraint}\index{box constraint}. Box constraints are enforced
 exactly by \emph{projection}. After every trial step, each coordinate is clipped
 back into its interval. The iterate never leaves the box.
 
-Every other inequality or equality is a \emph{general constraint}, and the
-default treatment is an \emph{augmented Lagrangian}\index{augmented Lagrangian}
-method. The idea starts from the simpler \emph{quadratic
+Every other inequality or equality is a \emph{general constraint}. When all of them
+are linear, the default is sequential quadratic programming
+(\S\ref{ssec:opt-sqp-minimax}). Otherwise the default treatment is an \emph{augmented
+Lagrangian}\index{augmented Lagrangian} method. The idea starts from the simpler \emph{quadratic
 penalty}\index{penalty method}. Replace the constrained problem by the
 unconstrained one
 \[
@@ -872,8 +895,8 @@ minimum \((3,3)\) is outside the box, so the answer is the nearest corner.}
 \((2,1)\) is \((2,1)/\sqrt5\).}
 \pair{optimization/local-constraints/3}{A linear program. The minimum of
 \(x+y\) on this region is the corner \((7/3, 0)\).}
-\pair{optimization/local-constraints/4}{SLSQP reaches the same corner with
-\(y\) exactly \(0\).}
+\pair{optimization/local-constraints/4}{Naming \mcode{"SLSQP"} gives the same
+corner. With only linear constraints, it is the method the default already ran.}
 \pair{optimization/local-constraints/5}{An equality constraint: the minimum of
 \(xy\) on the unit circle is \(-1/2\).}
 \pair{optimization/local-constraints/6}{\B{FindMaximum} with a linear
@@ -920,6 +943,65 @@ five trust-region methods accept general constraints. They reject such a
 problem with the message \mcode{FindMinimum::nimpl}. Use the default method,
 \mcode{"SLSQP"}, or one of the COBY methods instead.}
 
+\subsection{Linear constraints, minimax objectives, and high precision}
+\label{ssec:opt-sqp-minimax}
+
+The default method chooses between the two constrained approaches by the form of the
+constraints. When every general constraint is \emph{linear}, \B{FindMinimum} uses SQP
+directly, and falls back to the augmented Lagrangian only if SQP fails. For a linear
+constraint the linearization is exact, so the quadratic subproblem sees the true
+feasible set, and SQP needs far fewer iterations: a 64-cell optimal-design problem
+went from 488~s to 24~s.\index{sequential quadratic programming!linear constraints}
+
+A second shape is common enough to be recognised on sight. A best-approximation
+problem asks for the parameters that make the \emph{largest} error smallest, and its
+objective is \(\max_k p_k(x)\), often a \B{Max} of \B{Abs} terms or a \B{Norm} with
+\(p = \infty\). Such an objective has a kink wherever two pieces tie, which is exactly
+where the minimum lies. A gradient method stalls there. The minimax\index{minimax
+optimization} problem is solved instead in \emph{epigraph form},
+\[
+  \min_{x,\,t}\; t \quad \text{subject to} \quad p_k(x) \le t \;\text{ for every } k,
+\]
+which is smooth. SQP solves it, then Newton's method is applied to the KKT system of
+the pieces that tie, and the answer is certified against every piece and against the
+signs of the multipliers.
+
+\begin{codepairs}
+\pair{optimization/minimax/1}{A quadratic with two linear constraints, solved by SQP.
+The answer is the projection of \((3,2)\) onto the half-plane \(x + y \le 1\).}
+\pair{optimization/minimax/2}{The three absolute values of the non-smooth example in
+\S\ref{sec:opt-local-methods}, combined by \B{Max} instead of a sum. The value is
+\(1\), because \((1-x) + (x-y) + (y+2) = 3\) forces the largest of the three to be at
+least \(1\).}
+\pair{optimization/minimax/3}{The Chebyshev problem: the straight line \(a + bt\) that
+best approximates \(e^t\) at eleven points of \([0,1]\), in the largest error.}
+\pair{optimization/minimax/4}{By Chebyshev's alternation theorem the optimal error
+equioscillates: it reaches \(0.10521\), with alternating signs, at \(t = 0\), at an
+interior point, and at \(t = 1\).}
+\pair{optimization/minimax/5}{Equal errors at the two ends force the slope to be
+\(e - 1\).}
+\pair{optimization/minimax/6}{\B{NMinimize} recognises the same form and agrees.}
+\end{codepairs}
+
+Constraints no longer bar \mcode{WorkingPrecision}. The machine solution is found
+first. With linear constraints, its active set is then eliminated exactly and the
+reduced problem refined in arbitrary precision. With nonlinear constraints, Newton's
+method is applied to the KKT system of the active set, with a difference Hessian of
+the Lagrangian. Before the iteration starts, the objective and its gradient are
+compiled once at the working precision (Chapter~\ref{ch:compilation}), so each
+evaluation runs on the register machine rather than through the interpreter. That
+made point-energy minimizations at 60 digits five to six times faster.
+
+\begin{codepairs}
+\pair{optimization/minimax/7}{The SQP problem with one linear constraint, refined to
+thirty digits.}
+\pair{optimization/minimax/8}{A nonlinear inequality at thirty digits: the minimum of
+\(x^2 + 2y^2\) outside the open unit disk. The \(y\) coordinate, \(3\times10^{-40}\), is
+zero to the working precision.}
+\pair{optimization/minimax/9}{An unconstrained problem in three indexed variables at
+forty digits, run compiled.}
+\end{codepairs}
+
 \section{Global search with NMinimize}
 \label{sec:opt-global}
 
@@ -940,7 +1022,8 @@ dimple. \B{NMinimize} does not need a starting point:
 \pair{optimization/nminimize/2}{\B{FindMinimum} from \((2.3, -1.6)\) stops in
 the dimple at \((1, -2)\), with value about \(5\).}
 \pair{optimization/nminimize/3}{\B{NMinimize} finds the global minimum \(0\) at
-the origin.}
+the origin. A coordinate such as \texttt{1.21821*\^{}-114} is zero to the polish's
+resolution; the \texttt{*\^{}} notation is the exponent, as in \B{InputForm}.}
 \pair{optimization/nminimize/4}{Box constraints set the search region
 explicitly.}
 \pair{optimization/nminimize/5}{\B{SeedRandom} does not affect \B{NMinimize}.

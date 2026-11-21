@@ -5570,3 +5570,24 @@ raw machine buffers (`ll_gather` into double/int64) for raw kernels are allowed.
 Rule: make the forbidden thing MEASURABLE before delegating (the materialisation
 counter must count every helper that could be misused), and put the exact
 boundary, with the cheap-looking loophole named, in the worker brief.
+
+## Book update pass v0.507 -> v0.6664 (2026-11-22)
+
+- **The book's NDJSON pipe drops stderr, so no message ever appears in a transcript**
+  (true at v0.507 too). An example that must *show* a message uses
+  `Check[expr, Last[$MessageList]]` or reads `$MessageList` inside
+  `Block[{$MessageList = {}}, ...]` (it is not reset per pipe input); otherwise the
+  caption says what the REPL prints. `%` is `Out[-1]` over the pipe: assign instead.
+- **Parallel chapter agents need a scoped example builder.** `book/tools/build_examples.py
+  <subpath>...` regenerates only those sessions; a bare run rewrites all 444 and races
+  other writers. Snapshot `book/generated/` (git-ignored) before a full regeneration so
+  the transcript diff can be reviewed per chapter.
+- **Non-ASCII output in transcripts: map it in the listings style, never in the example.**
+  pdflatex `listings` takes multi-byte UTF-8 through `literate={∀}{{$\forall$}}1`; an
+  in-session "ascii[...]" helper put a visible junk pair in seven sessions. Keep the
+  `mathildarepl` and `mathildacsrc` literate lists in sync.
+- **Removing an input line from an example renumbers every later `\pair`** — script the
+  renumbering (drop the pair, decrement N>k) and delete stale `generated/<f>/<n>.tex`.
+- **Large book passes go faster triaged first, then fanned out by chapter file:** three
+  read-only triage agents (version slices + headline deep dive) re-running all sessions
+  against the old transcripts found ~20 falsified passages a changelog read alone misses.

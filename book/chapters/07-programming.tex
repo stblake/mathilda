@@ -33,8 +33,11 @@ We take pattern matching first, because it is the most characteristic style and
 the one the other two lean on. Then procedural programming---scoping, branching,
 and loops---for the moments when a plain imperative recipe is the clearest thing
 to write. Then functional programming, the shortest and often the fastest code.
-And finally evaluation control: how to stop the evaluator, restart it, and hold a
-head inert, which is where the attribute story comes home.
+Then evaluation control: how to stop the evaluator, restart it, and hold a
+head inert, which is where the attribute story comes home. The last three sections
+are about programs as programs: timing them and bounding their time, leaving a
+computation early through returns, aborts and messages, and organizing code into
+packages with their own namespaces.
 
 \section{Pattern matching and rules}
 \label{sec:prog-patterns}
@@ -273,16 +276,49 @@ the Collatz orbit of \(27\).}
 
 The \texttt{fib} definition shows why the ordering of rules matters and how
 recursion falls out for free. The two base cases \texttt{fib[0]} and
-\texttt{fib[1]} are \emph{more specific} than the general \texttt{fib[n\_]}, and
-Mathilda tries specific rules before general ones, so the recursion bottoms out
-correctly. The \texttt{collatz} pair shows dispatch by \emph{guard}: two rules
-with the same shape but disjoint conditions act as a single case-split function.
+\texttt{fib[1]} contain no pattern at all, and pattern-free rules always lead the
+list, so they are tried before the general \texttt{fib[n\_]} and the recursion
+bottoms out correctly. The \texttt{collatz} pair shows dispatch by \emph{guard}:
+two rules with the same shape but disjoint conditions act as a single case-split
+function.
+
+The general principle is \emph{generality}, not a measure of how specific a rule
+looks.\index{DownValues!ordering by generality} When you add a definition, it goes
+ahead of a stored one only if the stored pattern is \emph{more general}---if it
+matches everything the new one matches, and more. Two patterns neither of which
+covers the other stay in the order you wrote them:
+
+\begin{codepairs}
+\pair{07-programming/generality/1}{A rule for integers.}
+\pair{07-programming/generality/2}{A rule for even numbers. To a structural
+comparison neither pattern covers the other: one constrains the head, the other runs
+an opaque test.}
+\pair{07-programming/generality/3}{So definition order decides, and \(4\), which fits
+both, takes the first rule.}
+\pair{07-programming/generality/4}{A rule for any pair of arguments.}
+\pair{07-programming/generality/5}{A rule for a pair of \emph{equal} arguments,
+entered second.}
+\pair{07-programming/generality/6}{It still fires on \texttt{p[3, 3]}, because the
+stored \texttt{p[a\_, b\_]} is more general and the new rule went ahead of it.}
+\pair{07-programming/generality/7}{\B{DownValues} shows the order the matcher will
+try.}
+\pair{07-programming/generality/8}{A conditioned rule, entered first.}
+\pair{07-programming/generality/9}{A catch-all.}
+\pair{07-programming/generality/10}{A rule for numbers, entered last.}
+\pair{07-programming/generality/11}{\texttt{s[x\_?NumberQ]} went ahead of the more
+general \texttt{s[x\_]}, but not ahead of the conditioned rule: a condition or test
+narrows a pattern without promoting it.}
+\end{codepairs}
 
 \calloutnote{Under the hood}{DownValues live on the head symbol in the symbol
-table (\texttt{src/symtab.c}) as a linked list, kept in order of
-\emph{specificity}---genuinely more-specific patterns ahead of more-general ones,
-with insertion order breaking ties---so that \texttt{fib[0]} is tried before
-\texttt{fib[n\_]} however the two were entered (\S\ref{sec:int-symtab}). Evaluating
+table (\texttt{src/symtab.c}) as a linked list. When a rule is stored, a
+structural comparison (\texttt{pattern\_subsumes}) decides whether the new pattern
+is covered by each stored one, reading typed blanks, sequences, defaults,
+alternatives and repeated names. When it cannot tell, it keeps definition order.
+Until v0.6022 the list was sorted by a numeric specificity score, and until
+v0.6010 each \texttt{/;} added to that score, so a conditioned rule could jump
+ahead of an earlier one and a different rule fired, with no message. Both are fixed
+now (\S\ref{sec:int-symtab}). Evaluating
 \texttt{square[7]} is then just \texttt{apply\_down\_values}: walk the list, and
 the first pattern that matches wins---the same matcher, the same first-match
 rule, as \texttt{/.}. There is no separate ``function call'' machinery in the
@@ -307,7 +343,11 @@ idiom for dynamic programming. The cost is memory---each computed value becomes 
 permanent DownValue on the symbol---so it is a space-for-time trade, not a free
 lunch; a long-running kernel that memoizes over a wide domain will accumulate
 rules until the symbol is cleared. The win is asymptotic and often enormous, but
-the stored table is real, and \B{Clear} is how you reclaim it.}
+the stored table is real, and \B{Clear} is how you reclaim it. Lookup in that
+table is cheap: pattern-free rules such as \texttt{fib[57] -> \ldots} are kept in a
+per-symbol hash index (v0.6023), so a call finds its stored value without scanning
+the others. Memoizing \(20{,}000\) values takes a few hundredths of a second, where a
+scan over the list took about forty seconds.}
 
 \subsection{Rules on the argument: UpValues}
 \label{ssec:prog-upvalues}
@@ -532,6 +572,92 @@ work settled all three behaviors above, along with a handful of subtler ones
 (\S\ref{sec:int-match}).
 \index{pattern matching!reference-graded corpus}}
 
+\subsection{More kinds of rule and definition}
+\label{ssec:prog-moredefs}
+
+DownValues and UpValues are the two places a rule most often lives, but not the
+only ones, and the rule engine has a few controls you have not yet needed. A large
+set of literal rules can be compiled into a \texttt{Dispatch} table, which
+\B{ReplaceAll} and \B{ReplaceRepeated} index by left-hand side, so each part of the
+expression tries only the rules that could match it. \B{ReplaceRepeated} stops at a
+fixed point or after \texttt{MaxIterations} sweeps, whichever comes first. A
+definition can also be filed under a \emph{compound} head (a \emph{SubValue}, as in
+\texttt{scale[a\_][x\_] := a x}), under \B{N} (an \emph{NValue}, the number a symbol
+becomes when you ask for a numerical value), or under \texttt{Format} (a
+\emph{FormatValue}, which changes how an expression prints and nothing else).
+
+\begin{codepairs}
+\pair{07-programming/ruletools/1}{Four thousand literal rules \(i \to i^2\).}
+\pair{07-programming/ruletools/2}{The same rules as a \texttt{Dispatch} table.}
+\pair{07-programming/ruletools/3}{Two thousand random keys to look up.}
+\pair{07-programming/ruletools/4}{Wall-clock seconds for the plain list and for the
+table. The plain list tries the rules in turn for each element; the table goes
+straight to the one that can match.}
+\pair{07-programming/ruletools/5}{The answers are identical.}
+\pair{07-programming/ruletools/6}{\texttt{x -> x + 1} never reaches a fixed point;
+\texttt{MaxIterations -> 5} stops it after five sweeps.}
+\pair{07-programming/ruletools/7}{\B{Replace} matches the \emph{whole} expression,
+and \(a + b + c\) is not \(a + b\), so nothing happens.}
+\pair{07-programming/ruletools/8}{\texttt{/.} may rewrite part of a \texttt{Flat}
+head (\S\ref{ssec:prog-flatmatch}), so the same rule fires here.}
+\pair{07-programming/ruletools/9}{A SubValue: the rule's head is the compound
+\texttt{scale[a\_]}.}
+\pair{07-programming/ruletools/10}{\texttt{scale[3]} is a function that triples.}
+\pair{07-programming/ruletools/11}{The rule is filed under \texttt{scale}, as a
+SubValue rather than a DownValue.}
+\pair{07-programming/ruletools/12}{An NValue: \texttt{g0} has no value, but a
+numerical value.}
+\pair{07-programming/ruletools/13}{So \texttt{g0} stays symbolic, while \B{N}
+substitutes the number.}
+\pair{07-programming/ruletools/14}{The stored rule, keyed by the precision \B{N} was
+asked for.}
+\pair{07-programming/ruletools/15}{A FormatValue: print \texttt{cx[a, b]} as a
+complex number.}
+\pair{07-programming/ruletools/16}{It prints as the complex number \(1 + 2i\),
+which Mathilda writes with an explicit \texttt{*}\ldots}
+\pair{07-programming/ruletools/17}{\ldots but it is still \texttt{cx[1, 2]}: only the
+display changed.}
+\end{codepairs}
+
+Pairs~7 and~8 settle a point that is easy to get backwards. \B{Replace} asks one
+question of the expression as a whole, as \B{MatchQ} does; only the traversals
+\texttt{/.} and \texttt{//.} take a sub-collection of a \texttt{Flat} head's operands.
+(Until v0.6174 \B{Replace} took one too, and \texttt{Replace[a + b + c, a + b -> z]}
+was \texttt{c + z}.)\index{Replace!whole-expression matching}
+
+\calloutnote{Performance}{How much a \texttt{Dispatch} table saves depends on the
+keys. For atomic left-hand sides, as in pair~4, the lookup is a hash probe and the
+saving grows with the number of rules. Left-hand sides that share a head, such as
+\texttt{f[1] -> \ldots, f[2] -> \ldots}, are not separated by the current index,
+and a table of them is no faster than the list. Within a definition, as opposed to
+a rule list, pattern-free rules are hash-indexed whatever their shape
+(\S\ref{ssec:prog-downvalues}).}
+
+The last piece is \emph{options}, the \texttt{name -> value} arguments that so many
+builtins take. Give a function its defaults with \B{Options}, accept them with
+\texttt{OptionsPattern[]}, and read them with \B{OptionValue}. \texttt{OptionQ} tests
+whether something is an option or a list of them, and \texttt{FilterRules} keeps the
+options a given function knows, which is how a wrapper passes the right subset on to
+each function it calls.\index{options}
+
+\begin{codepairs}
+\pair{07-programming/options/1}{Declare the defaults.}
+\pair{07-programming/options/2}{\texttt{OptionsPattern[]} matches any run of
+options, including none.}
+\pair{07-programming/options/3}{With no options given, \B{OptionValue} reads the
+defaults. (\texttt{Red} is a colour directive.)}
+\pair{07-programming/options/4}{A given option overrides its default.}
+\pair{07-programming/options/5}{\texttt{OptionsPattern[]} need not come last, and
+\texttt{OptionValue[f, name]} names the function whose defaults to use.}
+\pair{07-programming/options/6}{The leading options are taken, and the rest is left
+for \texttt{x\_}.}
+\pair{07-programming/options/7}{\texttt{OptionQ} on a rule, a list of rules, and a
+number.}
+\pair{07-programming/options/8}{\texttt{FilterRules} keeps the options \texttt{draw}
+declares\ldots}
+\pair{07-programming/options/9}{\ldots or, with \mcode{Except}, the ones it does not.}
+\end{codepairs}
+
 \section{Procedural programming}
 \label{sec:prog-procedural}
 
@@ -602,9 +728,36 @@ happens \emph{before} the body evaluates, it is the one scoping construct that
 penetrates a \B{Hold} (pair~5). \B{Block} saves the symbol's current value, installs
 the new one, and restores the old value on exit even if the body throws. All
 three are \texttt{HoldAll}, so the body is not evaluated until the locals are in
-place.}
+place. A local that nothing refers to once its \B{Module} exits is reclaimed, symbol
+and all, so a loop of a million \B{Module} calls does not leave a million dead
+symbols behind (\S\ref{sec:int-memory}).}
 
 \usagebox{Module}
+
+\B{Block} localizes more than a value. Inside \texttt{Block[\{f\}, \ldots]} the
+symbol \texttt{f} has no attributes and, if it is a builtin, no C code either; both
+come back on exit (v0.6170).\index{Block@\mcode{Block}!localizing attributes} The
+fresh names \B{Module} invents are also available on their own, from \B{Unique}:
+
+\begin{codepairs}
+\pair{07-programming/localize/1}{Make \texttt{g} \texttt{Orderless}.}
+\pair{07-programming/localize/2}{Its arguments are sorted.}
+\pair{07-programming/localize/3}{Inside a \B{Block}, \texttt{g} has no attributes
+at all.}
+\pair{07-programming/localize/4}{So a call built inside is not sorted. (\B{Hold}
+keeps it from being evaluated again, and sorted, once the \B{Block} has exited.)}
+\pair{07-programming/localize/5}{Outside, the attribute is back.}
+\pair{07-programming/localize/6}{The same holds for a builtin: a blocked
+\texttt{Times} is not even \texttt{Flat}: inside such a \B{Block}, not even two
+numbers are multiplied.}
+\pair{07-programming/localize/7}{\B{Unique} of a symbol gives a fresh
+\texttt{x\$}\textit{nnn}, numbered by \texttt{\$ModuleNumber}, the counter
+\B{Module} uses.}
+\pair{07-programming/localize/8}{In a list, each element is fresh on its own, so a
+repeated \texttt{x} gets two different symbols.}
+\pair{07-programming/localize/9}{A string gives a name with no \texttt{\$}, from a
+separate counter.}
+\end{codepairs}
 
 \subsection{Branching}
 \label{ssec:prog-branching}
@@ -1071,11 +1224,16 @@ no work while asleep, so it reports a time near zero.}
 second pauses for \(0.25\)\,s.}
 \pair{07-programming/timing/5}{By now the session has spent nearly a second
 \emph{waiting}, and \mcode{SessionTime} counts all of it.}
-\pair{07-programming/timing/6}{But \mcode{TimeUsed}, the CPU meter, has
-barely moved---the pauses cost time, not computation.}
+\pair{07-programming/timing/6}{\mcode{TimeUsed}, the CPU meter, is not near zero:
+it counts the start-up too, the work of building the symbol table and loading the
+bootstrap \texttt{.m} files before the first input is read.}
+\pair{07-programming/timing/7}{So read the meter as a difference. Note it\ldots}
+\pair{07-programming/timing/8}{\ldots sleep for half a second\ldots}
+\pair{07-programming/timing/9}{\ldots and the CPU meter has barely moved: the pause
+cost time, not computation.}
 \end{codepairs}
 
-Pairs~2 and~3 are the reveal, and pairs~5 and~6 make it cumulative: the same
+Pairs~2 and~3 are the reveal, and pairs~5 to~9 make it cumulative: the same
 \texttt{Pause} that adds three-tenths of a second to \mcode{AbsoluteTiming} and to
 \mcode{SessionTime} adds almost nothing to \mcode{Timing} or \mcode{TimeUsed}. If
 you only ever measured with \mcode{Timing}, a program that spent its afternoon
@@ -1100,34 +1258,343 @@ argument you supply instead. The budget is \emph{wall-clock} time, the clock of
 \mcode{AbsoluteTiming}:\index{TimeConstrained@\mcode{TimeConstrained}!wall-clock budget}
 
 \begin{codepairs}
-\pair{07-programming/timing/7}{A five-second pause under a half-second budget is cut
+\pair{07-programming/timing/10}{A five-second pause under a half-second budget is cut
 off after half a second.}
-\pair{07-programming/timing/8}{\mcode{Timing} of the same thing is near zero: the time
+\pair{07-programming/timing/11}{\mcode{Timing} of the same thing is near zero: the time
 was spent asleep, yet it was still charged to the budget.}
-\pair{07-programming/timing/9}{A third argument replaces \texttt{\$Aborted} as the
+\pair{07-programming/timing/12}{A third argument replaces \texttt{\$Aborted} as the
 answer on a timeout.}
 \end{codepairs}
 
 Charging wall-clock time is the choice that makes the budget mean what you expect
-when the work is not a single busy thread. Idle time counts, as pair~8 shows, and so
+when the work is not a single busy thread. Idle time counts, as pair~11 shows, and so
 does parallel work: a multithreaded region such as a large \B{FactorInteger} burns
 CPU time on many cores at once, and a CPU-time budget would expire several times
 faster than the clock on the wall. (Before v0.463 that is what happened---a 16-thread
 factoring run used a 3-second budget in 0.3 seconds, and
-\texttt{TimeConstrained[Pause[5], 1]} slept the full five.) On native Windows the
-abort is \emph{cooperative}: there is no asynchronous timer signal, so the
-evaluation is stopped at the next point where the kernel checks its deadline rather
-than at the instant it expires, and a long stretch of C code with no check in it can
+\texttt{TimeConstrained[Pause[5], 1]} slept the full five.)
+
+How the evaluation is stopped matters as much as when. Since v0.6623 a timeout is
+an ordinary \texttt{Abort[]}: when the deadline passes, the evaluator raises the
+abort at its next step, and every construct between there and the
+\B{TimeConstrained} unwinds through its own cleanup, exactly as it would for an
+abort you raised yourself (\S\ref{sec:prog-messages}). That is what lets a
+\texttt{CheckAbort} inside the body run its cleanup, and an \texttt{AbortProtect}
+finish its protected work, before the budget takes effect.\index{TimeConstrained@\mcode{TimeConstrained}!cooperative abort}
+The cost of being cooperative is that a long stretch of C code that never returns
+to the evaluator does not see the deadline. On Linux and macOS a timer signal backs
+the deadline up, and forces an unwind if the abort has not been taken 50~ms of CPU
+time after the deadline. Native Windows has no such signal, so there the cooperative
+abort is the only one, and such a stretch of C code can
 overrun.\index{TimeConstrained@\mcode{TimeConstrained}!on Windows}
+
+\calloutnote{Under the hood}{Before v0.6623 the timeout was a \texttt{siglongjmp}
+from the signal handler straight back to the \B{TimeConstrained}. That skipped every C
+frame in between, leaking whatever they held, and it bypassed \texttt{CheckAbort} and
+\texttt{AbortProtect} entirely. Now \B{TimeConstrained} pushes a \emph{time frame} on a
+constraint stack (\texttt{src/memacct.h}) that it shares with
+\texttt{MemoryConstrained}; the deadline \emph{trips} the frame, and the evaluator's
+per-step poll, the same one that notices Ctrl-C, turns the trip into the abort. The
+jump survives only as the backstop described above, and is never taken inside an
+\texttt{AbortProtect}.}
+
+\subsection{Echo, and the parallel heads}
+\label{ssec:prog-echo}
+
+Two small tools help while a program is being written. \texttt{Echo[expr]} prints
+\texttt{expr} and returns it unchanged, so it can be dropped into the middle of an
+expression to watch a value go by; \texttt{Echo[expr, label, f]} prints the label and
+\texttt{f[expr]} instead. \texttt{EchoTiming[expr]} prints the wall-clock time the
+evaluation took and returns the result. Both print to the terminal, which the batch
+sessions that produce this book's transcripts do not capture, so below you see only
+the values they pass through:\index{Echo@\mcode{Echo}}
+
+\begin{codepairs}
+\pair{07-programming/utilities/1}{\texttt{Echo} prints \(4\) and hands it on, so the
+sum is \(5\).}
+\pair{07-programming/utilities/2}{With a label and a function it prints
+\texttt{total: 6}, and still returns the list itself.}
+\pair{07-programming/utilities/3}{\texttt{EchoTiming} prints the seconds taken and
+returns the sum.}
+\pair{07-programming/utilities/4}{\texttt{ParallelMap} gives the answer
+\B{Map} would\ldots}
+\pair{07-programming/utilities/5}{\ldots and \texttt{ParallelTable} the answer of
+\B{Table}\ldots}
+\pair{07-programming/utilities/6}{\ldots because there are no subkernels to send work
+to.}
+\end{codepairs}
+
+The parallel heads deserve a word of honesty. Mathilda runs one kernel, so
+\texttt{\$KernelCount} is \(0\), and \texttt{ParallelMap}, \texttt{ParallelTable},
+\texttt{ParallelEvaluate}, \texttt{LaunchKernels} and \texttt{DistributeDefinitions}
+have the meaning they would have in a kernel with no subkernels: \texttt{ParallelMap}
+is \B{Map}, \texttt{ParallelTable} is \B{Table}, and the rest return empty
+lists.\index{parallel heads!serial semantics} They exist so that code written for a
+parallel kernel runs and gives the right answer here, serially. Real parallelism in
+Mathilda lives lower down, in the multithreaded C kernels (factoring, dense linear
+algebra) that a single call can use without your asking.
+
+\section{Messages, aborts and non-local exits}
+\label{sec:prog-messages}
+
+Most evaluations run to the end and return a value. This section is about the ones
+that do not: a function that returns early, a loop that is abandoned, a computation
+that hits an error and says so, or one that runs out of time or memory. Each of
+these leaves the ordinary flow of evaluation, and Mathilda gives you a matching tool
+to catch it.\index{non-local exit}
+
+\subsection{Leaving early: Return, Throw and Abort}
+\label{ssec:prog-exits}
+
+\B{Return}\texttt{[v]} ends the definition that is running and makes \texttt{v} its
+value. \B{Throw}\texttt{[v]} is more general: it unwinds through any number of
+enclosing calls to the nearest \B{Catch}, which returns \texttt{v}. \texttt{Abort[]}
+abandons the whole evaluation. It unwinds through everything except
+\texttt{CheckAbort[expr, failexpr]}, which catches it and evaluates
+\texttt{failexpr} instead, and \texttt{AbortProtect[expr]}, which lets \texttt{expr}
+finish before the abort goes on.
+
+\begin{codepairs}
+\pair{07-programming/exits/1}{\B{Return} inside an \B{If}, inside a
+definition\ldots}
+\pair{07-programming/exits/2}{\ldots ends the definition with that value.}
+\pair{07-programming/exits/3}{\B{Return} also leaves a loop: the first prime in the
+list.}
+\pair{07-programming/exits/4}{\B{Do} is abandoned at \(11\).}
+\pair{07-programming/exits/5}{\B{Throw} unwinds to the nearest \B{Catch}: the first
+\(i\) with \(i^2 > 50\).}
+\pair{07-programming/exits/6}{\texttt{CheckAbort} catches an abort and gives its
+second argument.}
+\pair{07-programming/exits/7}{The abort is contained: the list around it is built as
+usual.}
+\pair{07-programming/exits/8}{\texttt{AbortProtect} lets its body run to the end and
+\emph{then} delivers the abort, which the outer \texttt{CheckAbort} catches\ldots}
+\pair{07-programming/exits/9}{\ldots so the assignment after \texttt{Abort[]} did
+happen.}
+\end{codepairs}
+
+A definition is a \B{Return} boundary, and only the outermost \texttt{Return} is
+stripped: \texttt{Return[Return[x]]} gives \texttt{Return[x]}, and a
+\texttt{Return} buried inside a sum is left alone. That rule is old in the reference
+system and new in Mathilda (v0.600). Before it, the literal \texttt{Return[v]}
+leaked out of the definition, and a FeynCalc predicate that answered
+\texttt{Return[True]} was read as not \texttt{True}: a wrong branch, with no
+message.\index{Return@\mcode{Return}!from a definition}
+
+\calloutnote{Under the hood}{None of these exits is a C \texttt{longjmp}. A
+\B{Throw} or an abort is an \emph{in-flight sentinel}, an ordinary expression that the
+evaluator recognizes and passes straight back up the return path, skipping the rest of
+each enclosing computation. Every builtin that calls back into user code has to pass
+the sentinel up too. A 2026 sweep found 22 that read it as ``not \texttt{True}'' and
+carried on, among them \B{Select}; they were silently dropping a \B{Throw}. Because
+the unwind is a series of ordinary returns, every C frame on the way frees what it
+holds, which is why a caught abort leaks nothing.}
+
+\subsection{Messages, Check and Quiet}
+\label{ssec:prog-check}
+
+A builtin that meets something it cannot do well emits a \emph{message}: a named
+diagnostic \texttt{symbol::tag}, such as \texttt{Power::infy} for a division by
+zero, printed as a warning while the evaluation goes on.\index{message} Two
+functions act on messages. \B{Check}\texttt{[expr, failexpr]} evaluates
+\texttt{expr} and returns \texttt{failexpr} instead if any message was issued (or
+only one of the messages you list). \B{Quiet}\texttt{[expr]} evaluates
+\texttt{expr} without printing its messages (or only the ones you list). The two
+nest, and which one is outside matters. You can issue your own messages with
+\B{Message}, after giving the text with \texttt{sym::tag = "\ldots"}; \texttt{Off}
+and \texttt{On} switch a message off and on for the session; and
+\texttt{\$MessageList} lists the messages issued during the current input.
+
+\begin{codepairs}
+\pair{07-programming/messages/1}{\(1/0\) issues \texttt{Power::infy}, so \B{Check}
+gives its second argument.}
+\pair{07-programming/messages/2}{No message, so \B{Check} returns the value.}
+\pair{07-programming/messages/3}{\B{Check} restricted to one message: \(0^0\) issues
+\texttt{Power::indet}.}
+\pair{07-programming/messages/4}{\(1/0\) issues a different message, which this
+\B{Check} ignores.}
+\pair{07-programming/messages/5}{\B{Quiet} restricted to one message: the
+\texttt{infy} warning is silenced, the \texttt{indet} warning still prints.}
+\pair{07-programming/messages/6}{\B{Quiet} inside \B{Check}: a silenced message is
+not seen by the \B{Check} around it.}
+\pair{07-programming/messages/7}{\B{Check} inside \B{Quiet}: nothing prints, but the
+\B{Check} still sees the message.}
+\pair{07-programming/messages/8}{The messages one evaluation issued, collected in a
+\B{Block}-scoped \texttt{\$MessageList}.}
+\pair{07-programming/messages/9}{Give a message its text; \texttt{`1`} is filled
+from the first argument of \B{Message}.}
+\pair{07-programming/messages/10}{A function that warns on a negative argument and
+carries on.}
+\pair{07-programming/messages/11}{\B{Check} sees the user's message just as it sees a
+builtin's.}
+\pair{07-programming/messages/12}{Switch the message off\ldots}
+\pair{07-programming/messages/13}{\ldots and it is neither printed nor seen by
+\B{Check}.}
+\pair{07-programming/messages/14}{\texttt{On} restores it.}
+\pair{07-programming/messages/15}{\B{Delete} at a position that does not exist issues
+a message and returns unevaluated\ldots}
+\pair{07-programming/messages/16}{\ldots and so does \B{Insert} past the end.}
+\end{codepairs}
+
+Pairs~6 and~7 are the rule to remember. \B{Quiet} is a request to silence a
+message, not to pretend it did not happen, so a \B{Check} \emph{outside} it is the
+only one that is blind: \texttt{Check[Quiet[expr], f]} cannot see what the
+\B{Quiet} swallowed, while \texttt{Quiet[Check[expr, f]]} sees it and prints nothing.
+The idiom for ``try this, and fall back quietly'' is therefore the second one.
+
+Pairs~15 and~16 show why a message is part of the answer and not decoration. Until
+v0.6637, \texttt{Insert[\{1, 2, 3\}, x, 10]} clamped the position and appended
+\texttt{x}, and \texttt{Delete[\{1, 2, 3\}, 5]} returned the list unchanged, both
+silently. Wrapped in \B{Check}, both took the success branch with a wrong value.
+
+\calloutnote{Under the hood}{\B{Check} and \B{Quiet} are not a central dispatcher,
+but a two-step convention every message must follow: note that a message
+\emph{fired}, so an enclosing \B{Check} sees it, and then print it unless a
+\B{Quiet} is active. Every diagnostic in the C kernel goes through one funnel,
+\texttt{mth\_message(head, tag, fmt, \ldots)} in \texttt{src/message.c}, which does
+both. A warning written straight to \texttt{stderr} would do neither: \B{Quiet} would
+not silence it, and \B{Check} would return the wrong branch, which is a wrong answer,
+not a cosmetic slip. About 300 such sites once existed. A build-time audit,
+\texttt{make check-messages}, now fails on any new one
+(\texttt{docs/design/message\_routing.md}). The funnel has one more mode, for the
+internal probes a subsystem runs on purpose. When \B{Limit} tries \(0 \cdot
+\infty\) on its way to \texttt{Limit[Sin[x]/x, x -> 0]}, the warning it raises is
+sampling noise, not an event in your computation, so it is neither printed nor
+counted, and \texttt{Check[Limit[Sin[x]/x, x -> 0], bad]} is
+\(1\).\index{message!funnel}\index{Check@\mcode{Check}!and Quiet}}
+
+\subsection{Bounding memory: MemoryConstrained}
+\label{ssec:prog-memconstrained}
+
+\texttt{MemoryConstrained[expr, b]} is the memory twin of \B{TimeConstrained}: it
+abandons \texttt{expr} once the memory it holds has grown by more than \(b\) bytes,
+and returns \texttt{\$Aborted}, or a third argument you supply. The count is
+\emph{net}: memory a computation allocates and frees again does not count against
+it.\index{MemoryConstrained@\mcode{MemoryConstrained}}
+
+\begin{codepairs}
+\pair{07-programming/constraints/1}{Ten million integers need about 80~MB, far over a
+1~MB budget.}
+\pair{07-programming/constraints/2}{The third argument replaces \texttt{\$Aborted}. The
+\emph{intermediate} \texttt{Range} is what overruns, though the answer is one
+integer.}
+\pair{07-programming/constraints/3}{A request that could never fit, 80~GB of random
+reals, is refused before anything is allocated.}
+\pair{07-programming/constraints/4}{Net, not gross: a hundred 800~kB lists, each
+freed before the next, never hold more than one at a time, and the loop finishes.}
+\pair{07-programming/constraints/5}{A plain \texttt{Abort[]} is not the constraint's
+own, so it passes through to the \texttt{CheckAbort}.}
+\pair{07-programming/constraints/6}{A \texttt{CheckAbort} inside a
+\B{TimeConstrained} runs its cleanup on a timeout\ldots}
+\pair{07-programming/constraints/7}{\ldots as the assignment shows.}
+\pair{07-programming/constraints/8}{With \texttt{PropagateAborts -> False}, the
+\texttt{CheckAbort} absorbs the timeout instead of passing it on.}
+\pair{07-programming/constraints/9}{Nested constraints: the memory budget runs out
+first, and only its frame answers.}
+\end{codepairs}
+
+Pairs~6 to~8 are \texttt{CheckAbort}'s \texttt{PropagateAborts} option at work. Its
+default, \texttt{Automatic}, runs the cleanup and then passes on an abort that
+belongs to a constraint, so the \B{TimeConstrained} or \texttt{MemoryConstrained} that
+raised it still answers; it absorbs a plain \texttt{Abort[]} or a Ctrl-C. \texttt{True}
+passes every abort on, and \texttt{False} absorbs every abort, after which the
+absorbed constraint does not fire again.
+
+\calloutnote{Under the hood}{The kernel keeps one net count of the bytes it holds:
+expression nodes, strings, array buffers and GMP/MPFR limbs, charged when they are
+allocated and released when they are freed (\texttt{src/memacct.h}). It is charged only
+while some \texttt{MemoryConstrained} is open, so an idle kernel pays one predicted
+branch per allocation. The large allocators (\B{Range}, \B{RandomReal},
+\B{ConstantArray}, the compiled VM's array opcodes) ask first, which is how pair~3
+is refused without touching 80~GB. An overrun \emph{trips} the frame on the same
+constraint stack \B{TimeConstrained} uses, and from there it is the same story: the
+evaluator's poll raises an ordinary abort, every frame unwinds, and the frame that
+tripped consumes the abort and answers. One stack gives one answer to the question
+``whose abort is this?'', for both constraints nested in any order.
+\texttt{MemoryConstrained} also lowers natively in \B{Compile}.}
+
+\section{Packages and contexts}
+\label{sec:prog-packages}
+
+A program bigger than a page wants a namespace. Mathilda's is the \emph{context}:
+every symbol's full name is \texttt{context`name}, as in \texttt{System`Sin}, and
+two settings decide what a bare name like \texttt{Sin} means.
+\B{\$Context} is where a new symbol is created, normally \texttt{"Global`"};
+\B{\$ContextPath} is the list of contexts searched for an existing
+one.\index{context}\index{package} A \emph{package} is a file that sets these
+deliberately. \B{BeginPackage}\texttt{["Name`"]} makes \texttt{Name`} the current
+context and the only one on the path apart from \texttt{System`}; the symbols
+mentioned next are the package's public interface. \B{Begin}\texttt{["`Private`"]}
+then opens a sub-context for the implementation, \B{End} closes it, and
+\B{EndPackage} restores the old context and puts \texttt{Name`} at the front of
+\B{\$ContextPath}, so its public symbols are visible and its private ones are not.
+\B{Get}\texttt{["file"]}, written \texttt{<< file}, reads and evaluates a file;
+\texttt{Needs["Name`"]} loads a package only if it is not already in
+\texttt{\$Packages}.
+
+The session below writes a two-function package to a temporary file, then loads it:
+
+\begin{codepairs}
+\pair{07-programming/packages/1}{New symbols go into \texttt{Global`}.}
+\pair{07-programming/packages/2}{The search path. Besides \texttt{Global`} and
+\texttt{System`}, it holds \texttt{Mathilda`} and the contexts of three packages the
+kernel itself loaded at start-up.}
+\pair{07-programming/packages/3}{The standard builtins live in
+\texttt{System`}\ldots}
+\pair{07-programming/packages/4}{\ldots and Mathilda's own additions in
+\texttt{Mathilda`}.}
+\pair{07-programming/packages/5}{A file name in the system's temporary directory.}
+\pair{07-programming/packages/6}{Write the package: a public \texttt{DiskArea} with a
+usage message, and a private helper \texttt{square}.}
+\pair{07-programming/packages/7}{\B{Get} reads and evaluates it.}
+\pair{07-programming/packages/8}{The public function works.}
+\pair{07-programming/packages/9}{Its usage message came with it.}
+\pair{07-programming/packages/10}{It lives in the package's context\ldots}
+\pair{07-programming/packages/11}{\ldots which \B{EndPackage} put first on the
+path\ldots}
+\pair{07-programming/packages/12}{\ldots and recorded as loaded.}
+\pair{07-programming/packages/13}{The helper is invisible: this \texttt{square} is a
+new, unrelated \texttt{Global`square}.}
+\pair{07-programming/packages/14}{Its full name still reaches it.}
+\pair{07-programming/packages/15}{\B{Names} lists the package's public symbols: just
+one.}
+\pair{07-programming/packages/16}{The package is already loaded, so
+\texttt{Needs} does nothing.}
+\pair{07-programming/packages/17}{\B{EndPackage} restored the context.}
+\pair{07-programming/packages/18}{\texttt{<< file} is \B{Get} spelled as an
+operator.}
+\end{codepairs}
+
+The \texttt{Private} sub-context is the whole trick. While the package was being
+read, \texttt{square} was created as \texttt{Geometry`Private`square}, and that
+context is not on \B{\$ContextPath} afterwards, so the name \texttt{square} at the
+prompt finds nothing and creates a fresh \texttt{Global`square} (pair~13). A helper
+called \texttt{square} in your own code and the package's helper can therefore never
+collide, which is what lets independently written packages be loaded side by side.
+
+\calloutnote{Under the hood}{Contexts are the machinery that real packages stress
+hardest, and FeynCalc, a large package for particle-physics calculations, has
+been the test. It loads unmodified, and at v0.6119 it passed 13{,}214 of its
+13{,}412 unit tests. Two context bugs it exposed are worth knowing. Until v0.565
+every kernel name was in \texttt{System`}, so a package defining its own
+\texttt{DataType} wrote onto Mathilda's protected builtin of that name; the 65 names
+that are Mathilda's own extensions are now in \texttt{Mathilda`},
+where a package's own symbol of the same name shadows them. And a package could see
+the user's \texttt{Global`} symbols through a fallback in the name resolver, so a
+variable \texttt{x} set at the prompt leaked into package code; the resolver now uses
+a bare name's home context only if that context is visible. An abort or timeout
+during \B{Get} unwinds any \B{Begin}/\B{BeginPackage} the file opened, so an
+interrupted load does not leave the session in a package's private context.}
 
 \section*{Where this connects}
 
 Programming in Mathilda is not a layer on top of the algebra system; it is the
 same system, used deliberately. A function you define with \texttt{:=} is a rule
 in the symbol table, matched by the same engine that powers \B{Solve}'s
-case analysis and the derivative rules of Chapter~\ref{ch:mathematics}; the
+case analysis and the integration algorithms of Chapter~\ref{ch:mathematics}; the
 pattern language of \S\ref{sec:prog-patterns} is the language those internal rule
-sets are written in. The functional iteration of \S\ref{ssec:prog-iterate} and the
+sets and packages are written in, and the contexts of \S\ref{sec:prog-packages} are
+how they keep their names apart. The functional iteration of \S\ref{ssec:prog-iterate} and the
 loops of \S\ref{ssec:prog-loops} share one numeric fast path, and both lower into
 the bytecode compiler---so the \B{Map}, \B{Fold}, and \B{Nest} you write here are
 exactly what \B{Compile} accelerates in Chapter~\ref{ch:compilation}, where the
@@ -1135,5 +1602,7 @@ compilable subset and its cliff are the subject. The attributes of
 \S\ref{sec:prog-attributes} are the same bits Chapter~\ref{ch:internals} traces
 through the evaluator, and the ``everything is an expression'' model that lets
 \B{Map} and \B{ReplaceAll} work on rules, patterns, and functions alike is the
-data model of Chapter~\ref{ch:datastructures}. As always, the exhaustive options
+data model of Chapter~\ref{ch:datastructures}. The aborts, messages and constraint
+frames of \S\ref{sec:prog-messages} reappear in Chapter~\ref{ch:internals} too, as
+the evaluator's per-step poll and its memory accounting. As always, the exhaustive options
 of any function named here are one \texttt{?Name} away at the prompt.

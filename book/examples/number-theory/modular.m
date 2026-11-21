@@ -12,3 +12,7 @@ PowerMod[3, EulerPhi[10], 10]
 JacobiSymbol[2, 7]
 JacobiSymbol[3, 7]
 MultiplicativeOrder[3, 7, {5}]
+p = 2^127 - 1;
+g = PrimitiveRoot[p]
+b = PowerMod[g, 123456789012345678901234567890, p]
+MultiplicativeOrder[g, p, {b}]

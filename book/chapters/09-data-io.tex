@@ -15,12 +15,14 @@ actually does today and is explicit about what it does not. What exists is a
 genuine, Mathematica-shaped \emph{stream layer}---you open a file, get a stream
 object, and read or write through it---together with \B{ReadList} for reading a
 data file field by field, \B{Get} and \B{Put} for saving and reloading whole
-Mathilda expressions, and a handful of pure path utilities. What does \emph{not}
-yet exist is just as important to know: there is no general \B{Import}/\B{Export}
-of data formats (those two are confined to raster images and graphics,
-\S\ref{sec:io-importexport}), no binary read/write, and no file-management verbs
-such as copying or deleting. Where a gap matters, this chapter names it rather
-than papering over it.
+Mathilda expressions, a working-directory and file-system layer (listing,
+testing, and deleting files), and \B{Import}/\B{Export} for raster images and
+graphics, with \mcode{Import} reading plain text as well. What does \emph{not} yet exist is just as important to know:
+\mcode{Import} reads no structured data format---no CSV, JSON, or spreadsheet
+(\S\ref{sec:io-importexport})---and \mcode{Export} writes none; there is no binary
+read/write; and of the file-management verbs only deleting is there, not copying,
+renaming, or creating a directory. Where a gap matters, this chapter names it
+rather than papering over it.
 
 Because every example in this book is re-run from scratch at build time (this
 chapter is no exception), each one here is self-contained: it writes a
@@ -274,12 +276,13 @@ any script.}
 
 \usagebox{Get}
 
-\section{File names and existence}
+\section{Files, directories, and names}
 \label{sec:io-filenames}
 
 The last group of functions is the plumbing around the files themselves: testing
-whether a path exists and taking a file name apart. \mcode{FileExistsQ} is the one
-that touches the disk; the rest are pure string operations on the path, and never
+whether a path exists, taking a file name apart, and moving around the file
+system. Start with the two kinds. \mcode{FileExistsQ} touches the disk; the
+name functions after it are pure string operations on the path, and never
 open anything.
 
 \begin{codepairs}
@@ -309,14 +312,105 @@ appear in the verified transcripts of this chapter---there is no value to
 capture. Throughout, we have shown a file's contents by reading them back as data
 with \mcode{ReadList}; \mcode{FilePrint} is the quick look when you are at the prompt.
 
-\section{Import and Export: images and graphics}
+\subsection{The working directory}
+\index{working directory}
+
+A relative file name such as \texttt{"data.csv"} is looked up in the session's
+\emph{working directory}. \mcode{Directory[]}\bidx{Directory} reports it and
+\mcode{SetDirectory["dir"]}\bidx{SetDirectory} changes it, pushing the old one
+onto a stack so that \mcode{ResetDirectory[]}\bidx{ResetDirectory} can return you
+there. Both report full paths, which differ from machine to machine, so the
+session below only ever prints their last component, with
+\mcode{FileNameTake}\bidx{FileNameTake}. It moves to \texttt{/tmp}, writes two
+small files there under relative names, and looks around:
+
+\begin{codepairs}
+\pair{09-data-io/filenames/13}{\mcode{SetDirectory} returns the new working
+directory; \mcode{FileNameTake} with one argument keeps its last component.}
+\pair{09-data-io/filenames/14}{\mcode{Directory[]} agrees. Relative names now
+resolve inside \texttt{/tmp}.}
+\pair{09-data-io/filenames/17}{\mcode{FileNames}\bidx{FileNames} lists the files
+matching a string pattern---here the two just written, sorted, and named relative
+to the working directory.}
+\pair{09-data-io/filenames/18}{\mcode{FileType}\bidx{FileType} says what is at a
+name: a \texttt{File}\ldots}
+\pair{09-data-io/filenames/19}{\ldots a \texttt{Directory}\ldots}
+\pair{09-data-io/filenames/20}{\ldots or \texttt{None}, when nothing is there.}
+\pair{09-data-io/filenames/21}{\mcode{ParentDirectory[]}\bidx{ParentDirectory} is
+the directory one level up, and \mcode{DirectoryQ}\bidx{DirectoryQ} confirms it is
+one.}
+\pair{09-data-io/filenames/22}{\mcode{AbsoluteFileName}\bidx{AbsoluteFileName}
+turns a relative name into the full, canonical path of an existing file; its last
+component is the name we started with.}
+\end{codepairs}
+
+\noindent
+\mcode{FileNames} takes more than a single wildcard. Its first argument may be a
+list of patterns, a \B{StringExpression}, or a \B{RegularExpression}; a second
+argument names the directories to search, and a third the depth of subdirectories
+to descend into, up to \mcode{Infinity}. Matching ignores case on macOS and Windows,
+whose file systems do, and respects it elsewhere.
+
+Two more functions finish the tour. \mcode{ReadString}\bidx{ReadString} reads a
+file's whole contents into one string---the quickest way to get text into the
+session---or, given a terminator, reads up to it. And
+\mcode{DeleteFile}\bidx{DeleteFile} removes files, which lets a script clean up
+after itself:
+
+\begin{codepairs}
+\pair{09-data-io/filenames/23}{The whole file as one string, newlines included.}
+\pair{09-data-io/filenames/24}{With a terminator, \mcode{ReadString} stops just
+before it: the first line.}
+\pair{09-data-io/filenames/25}{\mcode{FileNameTake} with a count: \(-2\) keeps the
+last two components.}
+\pair{09-data-io/filenames/26}{With \texttt{\{k\}} it takes the \(k\)th
+component; the leading \texttt{""} of an absolute path is the first.}
+\pair{09-data-io/filenames/27}{\mcode{DeleteFile} takes one name or a list, and
+returns \mcode{Null}, so there is no \texttt{Out[]}.}
+\pair{09-data-io/filenames/28}{The two files are gone. A final
+\mcode{ResetDirectory[]} (line 29, suppressed) returns to where the session
+began.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\mcode{DeleteFile} acts at once and cannot be undone, and a
+pattern handed to \mcode{FileNames} matches whatever happens to be in the
+directory, not just the files your script made. Give scratch files a prefix of their
+own, as the session above does, so that \texttt{DeleteFile[FileNames["prefix*"]]}
+cannot reach anything else. Deleting a name that does not exist, or a directory,
+gives a message and \mcode{\$Failed}.}
+
+\subsection{Strings as streams, and the environment}
+
+Everything the stream layer of \S\ref{sec:io-streams} does to a file it can do to a
+string. \mcode{StringToStream}\bidx{StringToStream} opens an
+\mcode{InputStream} on the string's characters, and \mcode{Read},
+\mcode{ReadList}, \mcode{ReadString}, \mcode{StreamPosition}, and
+\mcode{Close} all work on it unchanged---convenient for parsing text you already
+hold, or for testing a reader without touching the disk.
+\mcode{Skip}\bidx{Skip} is the other half of \mcode{Read}: it reads objects of a
+type and throws them away. Finally, \mcode{Environment}\bidx{Environment} reads an
+operating-system environment variable.
+
+\begin{codepairs}
+\pair{09-data-io/filenames/31}{\mcode{Skip} passes over two numbers. It returns
+\mcode{Null}, or \mcode{EndOfFile} if the stream ran out first.}
+\pair{09-data-io/filenames/32}{So the next \mcode{Read} gets the third.}
+\pair{09-data-io/filenames/33}{\mcode{ReadString} on a stream reads from the
+current point to the end.}
+\pair{09-data-io/filenames/35}{An environment variable that is not set gives
+\mcode{\$Failed}.}
+\pair{09-data-io/filenames/36}{One that is set gives its value as a string. We test
+the shape rather than print a value that differs between machines.}
+\end{codepairs}
+
+\section{Import and Export: images, graphics, and text}
 \label{sec:io-importexport}
 
 A reader coming from Mathematica will expect \mcode{Import} and \mcode{Export} to be the
 universal front door for data---CSV, JSON, spreadsheets, and a hundred other
 formats. In Mathilda today they are far narrower, and it is important to be plain
-about it: \mcode{Import} and \mcode{Export} handle \emph{raster images and graphics
-only}. An image round-trips cleanly through a file---
+about it: they handle raster images and graphics, and \mcode{Import} also reads plain
+text. An image round-trips cleanly through a file---
 
 \begin{codepairs}
 \pair{09-data-io/importexport/2}{\mcode{Export} writes an image to a PNG and returns
@@ -325,32 +419,134 @@ the file name.}
 the round trip.}
 \end{codepairs}
 
----but a data file is not something they claim, and they say so by declining
-rather than guessing:
+\noindent
+---and a text file comes in as a string, or as a list of lines.\index{Import@\mcode{Import}!text}
+A file ending in \texttt{.txt} imports as text by default; for any other name you
+ask for the element you want by naming it as a second argument:
 
 \begin{codepairs}
-\pair{09-data-io/importexport/7}{Handed a plain text file, \mcode{Import} stays
+\pair{09-data-io/importexport/7}{A \texttt{.txt} file imports as \texttt{"Text"}:
+the contents as one string. (Shown in input form, the line breaks print as
+\texttt{\textbackslash n}.)}
+\pair{09-data-io/importexport/8}{\texttt{"Lines"} gives one string per line.}
+\pair{09-data-io/importexport/9}{\texttt{"Text"} drops one trailing line break:
+\(22\) characters\ldots}
+\pair{09-data-io/importexport/10}{\ldots where \texttt{"String"} keeps the file
+exactly, \(23\). Line ends are normalised to \texttt{\textbackslash n} in all three.}
+\pair{09-data-io/importexport/11}{From lines to numbers is ordinary string work:
+split each line into words, keep the last, and convert.}
+\end{codepairs}
+
+\noindent
+A structured data format is not something either function claims, and they say so
+by declining rather than guessing:
+
+\begin{codepairs}
+\pair{09-data-io/importexport/12}{Asked for \texttt{"CSV"}, \mcode{Import} stays
 unevaluated---its head comes back as \texttt{Import}, the sign of a call left
 alone, not a \mcode{\$Failed}.}
-\pair{09-data-io/importexport/8}{Likewise \mcode{Export} declines to write a bare list
+\pair{09-data-io/importexport/13}{Likewise \mcode{Export} declines to write a bare list
 to a \texttt{.csv}: there is no data-format writer behind it yet.}
+\pair{09-data-io/importexport/14}{A file that does not exist is different: that is
+a failure, reported with an \texttt{Import::nffil} message and \mcode{\$Failed}.}
 \end{codepairs}
 
 The image and graphics side of \mcode{Import}/\mcode{Export} is real and useful---PNG,
 JPEG, BMP, and a resolution-independent vector PDF for plots---and it belongs to
-the graphics story, so the graphics chapter (Chapter~\ref{ch:graphics}) develops
-it in full. For structured \emph{data}, the honest advice is to reach for the
-tools of this chapter instead: \mcode{ReadList} with the right separators for tabular
-text, and \mcode{Put}/\mcode{Get} for anything expressible as Mathilda expressions. A
-general format layer is future work, not a present feature.
+the graphics story, which the graphics chapter (Chapter~\ref{ch:graphics}, still
+being written) will tell; until then the \mcode{Import} and \mcode{Export}
+reference pages are the full account. For structured \emph{data}, the honest advice is to reach for the
+tools of this chapter instead: \mcode{Import} or \mcode{ReadString} to get text into
+the session, \mcode{ReadList} with the right separators for tabular text, and
+\mcode{Put}/\mcode{Get} for anything expressible as Mathilda expressions. A general
+format layer is future work, not a present feature.
 
 \calloutnote{Pitfall}{The difference between an unevaluated result and
 \mcode{\$Failed} is a real signal, not a quirk. \mcode{\$Failed} means ``I tried
 and could not''---a missing file, a malformed number. A call that comes back with
-its own head, like \texttt{Import[\ldots]} above, means ``I do not handle this at
+its own head, like \texttt{Import[\ldots, "CSV"]} above, means ``I do not handle this at
 all,'' leaving the expression untouched so a rule of your own could still act on
 it. Reading that distinction saves you from debugging a failure that never
 happened.}
+
+\section{Writing code for other languages}
+\label{sec:io-codeforms}
+\index{code generation}
+
+A symbolic result is often wanted somewhere else: in a C simulation, a Fortran
+solver, a GPU kernel. Retyping a long derivative by hand is how sign errors are
+born. \mcode{FortranForm}\bidx{FortranForm} and \mcode{CForm}\bidx{CForm} print an
+expression in the syntax of those languages instead, and \B{ToString} with a
+\texttt{FormatType} gives the same text as a string, ready to \mcode{WriteString}
+into a source file:
+
+\begin{codepairs}
+\pair{09-data-io/codeforms/1}{Fortran writes powers as \texttt{**} and calls with
+parentheses; the rational \(1/3\) becomes the real literal \texttt{3.}, so the
+division is not an integer one.}
+\pair{09-data-io/codeforms/2}{In C a power is a call, \texttt{Power(x,2)}.}
+\pair{09-data-io/codeforms/3}{Square roots and exponentials keep their Mathilda
+names; \(e^{-x}\) is written as a power of \texttt{E}.}
+\pair{09-data-io/codeforms/4}{C's own operators where they exist: \texttt{\%} for
+\B{Mod}, \texttt{[\,]} for \B{Part}, \texttt{==} and \texttt{\&\&} for the
+logic.}
+\pair{09-data-io/codeforms/5}{A complex number in Fortran is the literal pair
+\texttt{(re,im)}.}
+\pair{09-data-io/codeforms/6}{The derivative of \(\arctan(x/y)\), as a string of C
+code.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The output is a faithful transliteration, not a complete
+program. The function names keep Mathilda's capitalisation (\texttt{Sin},
+\texttt{Sqrt}, \texttt{Power}) and \(e\) appears as a name \texttt{E}, so the
+receiving program must supply definitions for them---in C, for instance, a few
+\texttt{\#define}s mapping \texttt{Power} to \texttt{pow} and \texttt{Sin} to
+\texttt{sin}, and a constant \texttt{E}. Exact rationals become real literals.
+Written to a stream opened with \texttt{FormatType -> FortranForm}, an expression
+wider than the page is laid out as fixed-form Fortran with continuation lines, and a
+\texttt{Format[f[\ldots], CForm]} rule of your own changes how \mcode{f} is
+printed.}
+
+\section{The system you are running on}
+\label{sec:io-system}
+\index{system variables}
+
+A script that reads and writes files sometimes needs to know where it is. A few
+system variables answer that. \B{\$Version} you met in Chapter~\ref{ch:building};
+alongside it:
+
+\begin{itemize}
+  \item \mcode{\$System}\bidx{\$System} describes the platform in words, such as
+        \texttt{"Linux x86 (64-bit)"}, and \mcode{\$SystemID}\bidx{\$SystemID}
+        gives the short, dash-separated form, such as \texttt{"Linux-x86-64"}:
+        systems with the same \mcode{\$SystemID} are binary compatible.
+  \item \mcode{\$ProcessorCount}\bidx{\$ProcessorCount} is the number of logical
+        processors online, the number the parallel kernels count.
+  \item \mcode{\$InstallationDirectory}\bidx{\$InstallationDirectory} is the top of
+        the installation: the source tree for a binary run from it, or the
+        install prefix for an installed build.
+  \item \mcode{\$BaseDirectory}\bidx{\$BaseDirectory} is where system-wide files
+        for Mathilda conventionally go (\texttt{/usr/share/Mathilda} on Unix,
+        \texttt{/Library/Mathilda} on macOS; the \texttt{MATHILDA\_BASE}
+        environment variable overrides it), and
+        \mcode{\$PreferencesDirectory}\bidx{\$PreferencesDirectory} the per-user
+        one.
+\end{itemize}
+
+\noindent
+Every one of these depends on the machine, which is exactly why this book does not
+print them. A verified example can still check their \emph{shape}:
+
+\begin{codepairs}
+\pair{09-data-io/system/1}{\mcode{\$System} is a string.}
+\pair{09-data-io/system/2}{\mcode{\$SystemID} uses only letters, digits, and
+dashes, so it is safe as a directory name.}
+\pair{09-data-io/system/3}{At least one processor, as an integer.}
+\pair{09-data-io/system/4}{\mcode{\$InstallationDirectory} is a real directory on
+this machine.}
+\pair{09-data-io/system/5}{And the two configuration directories are strings,
+whether or not they exist yet.}
+\end{codepairs}
 
 \subsection*{Where this connects}
 
@@ -364,7 +560,10 @@ the linear algebra of \S\ref{sec:linalg} operates on. The \emph{expression}
 side---\mcode{Put} and \mcode{Get}---is how a symbolic result outlives its session and how
 Mathilda loads its own definitions at startup, a thread the internals chapter
 (Chapter~\ref{ch:internals}) picks up. The image and graphics forms of \mcode{Import}
-and \mcode{Export} are taken up in Chapter~\ref{ch:graphics}. And for the exhaustive
+and \mcode{Export} belong to Chapter~\ref{ch:graphics}, and \mcode{CForm} and
+\mcode{FortranForm} are the way out of the system for a formula bound for compiled
+code---the counterpart, for other languages, of the \B{Compile} of
+Chapter~\ref{ch:compilation}. And for the exhaustive
 options of any function named here---every read type, every separator, every
 edge case of a path utility---its reference page is one \texttt{?Name} away at the
 prompt.

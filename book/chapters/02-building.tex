@@ -79,8 +79,11 @@ explicitly, for example \texttt{make CC=gcc-16}.
   \item \textbf{MPFR}\index{MPFR}---correctly rounded arbitrary-precision reals, so that \B{N}
         can give you a hundred trustworthy digits. It is on by default; you can build
         without it, but almost no one should.
-  \item \textbf{GNU~Readline}\index{GNU Readline}---the line editing, history, and command recall of the
-        interactive session.
+  \item \textbf{GNU~Readline}\index{GNU Readline}---the interactive session's fallback line
+        reader. On an ordinary terminal Mathilda uses its own line editor
+        (\S\ref{sec:editing}), but a build with Readline is what turns the
+        terminal features on at all; without it (\texttt{USE\_READLINE=0}, as on
+        native Windows) the session reads plain lines.
 \end{itemize}
 
 \paragraph{Optional.} Each of these unlocks a family of features when present and is
@@ -88,8 +91,12 @@ simply omitted when absent:
 \begin{itemize}
   \item \textbf{FLINT}\index{FLINT} (version~3.0 or newer)---fast, rigorous polynomial arithmetic
         over algebraic number fields and rigorous numerics for many special
-        functions. Distributions that ship only FLINT~2.x are detected as too old
-        and the accelerated paths are switched off automatically.
+        functions. Every FLINT~3 release builds, from the 3.0.1 that Ubuntu~24.04
+        ships to the current one: the two interfaces that changed in FLINT~3.3 are
+        selected at compile time by the library's own version
+        macro.\index{FLINT!supported versions} Distributions that ship only
+        FLINT~2.x are detected as too old and the accelerated paths are switched off
+        automatically.
   \item \textbf{GMP-ECM}\index{GMP-ECM}---the Elliptic Curve Method for the harder cases of integer
         factorization.
   \item \textbf{LAPACK}\index{LAPACK} and \textbf{BLAS}---fast machine-precision linear algebra. On
@@ -232,7 +239,8 @@ Windows lacks the POSIX facility behind them. \B{TimeConstrained} is
 a runaway computation is stopped at its next check, but there are no asynchronous
 signals to interrupt a single long-running C routine that never returns to the loop.
 And POSIX threads are off, so the packed-array kernels run on one core. There is no
-GNU Readline either, so the REPL has plain line input; the script and pipe modes of
+GNU Readline either, so the REPL reads plain lines, without the editor, history,
+completion, colour, and status line of \S\ref{sec:repl}; the script and pipe modes of
 \S\ref{sec:scripts} are unaffected. Everything else---timing, memory reporting,
 \mcode{Pause}---goes through a small portability layer and behaves as on the other
 platforms.
@@ -248,23 +256,25 @@ $ ./Mathilda
 
 Mathilda <version> - A small, open source computer algebra system.
 
-This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.
+Free, open source software with ABSOLUTELY NO WARRANTY.
 
-Press Return to evaluate. An open bracket, string or comment continues
-on the next line; press Esc then Return to force evaluation.
-Ctrl-C interrupts an evaluation (twice within a second force-quits).
-Exit by evaluating Quit[] or pressing Ctrl-D.
+Return evaluates (Esc Return forces an incomplete input); Tab completes,
+Ctrl-R searches the history, Ctrl-C interrupts (twice quits).
+Type / for commands and /help for keys; Ctrl-D or Quit[] exits.
 
 In[1]:=
 \end{shell}
 
 \noindent
-The banner's first line names the version you just built and the libraries it was
-compiled against; the same information is available at any time from
+The banner is a summary of the keys this chapter goes on to explain
+(\S\ref{sec:repl}), and its first line names the version you just built. (If the
+session is using the Readline fallback rather than Mathilda's own editor,
+\S\ref{sec:editing}, the banner is a longer paragraph saying the same things.) The
+libraries the binary was compiled against are available at any time from
 \B{\$Version}\index{version!\$Version}, and the version number alone from \B{\$VersionNumber}:
 
 \begin{codepairs}
-\pair{02-building/version/1}{The full banner: Mathilda's version and every library
+\pair{02-building/version/1}{The full version string: Mathilda's version and every library
 it was built against---exactly the build you are running.}
 \pair{02-building/version/2}{Just the number, as a machine-readable value you can
 compare against in a script.}
@@ -333,15 +343,27 @@ the assignment still happens.}
 is $9$.}
 \end{codepairs}
 
-\subsection{Editing, history, and multiline input}
+\subsection{The line editor}
 \label{sec:editing}
-\index{REPL!line editing and history}
+\index{REPL!line editor}
 
-Because the session is built on GNU~Readline, it behaves like a modern shell prompt.
-You can move along the line with the arrow keys, edit in place, and---most
-usefully---press the up arrow to recall previous inputs and re-run or tweak them. The
-Emacs-style key bindings work too: \texttt{Ctrl-A} to the start of the line,
-\texttt{Ctrl-E} to the end, \texttt{Ctrl-R} to search backwards through history.
+When both ends of the session are a terminal, Mathilda reads your input with its
+own line editor, which lives in the source tree under \texttt{src/term/}. It behaves
+like a modern shell prompt, with three things a shell prompt does not do. The input
+is coloured as you type it: builtins, your own defined symbols, numbers, strings,
+comments, and patterns such as \mcode{x\_} each get their own colour, and the
+bracket at the cursor is underlined together with its partner, while a closing
+bracket that matches nothing turns red. An input may run over several lines, and
+the up and down arrows move between those lines before they reach the history.
+And \texttt{Tab} and \texttt{Ctrl-R} open lists in place under the cursor, described
+below.
+
+The keys are the familiar Emacs-style ones. \texttt{Ctrl-A} and \texttt{Ctrl-E} go to
+the start and the end of the line, \texttt{Alt-B} and \texttt{Alt-F} move a word
+at a time, \texttt{Ctrl-K} and \texttt{Ctrl-U} kill to the end and to the start of
+the line, \texttt{Ctrl-Y} yanks the last kill back, and \texttt{Ctrl-\_} undoes.
+\texttt{Ctrl-L} clears the screen. \texttt{/help} (\S\ref{sec:customising}) prints
+the full table.
 
 For an expression too long or too structured to sit comfortably on one line, you need
 do nothing special: just keep typing.\index{REPL!multiline input} Pressing Return
@@ -360,14 +382,68 @@ Out[1]= {1, 4, 9, 16}
 \noindent
 You close the final brace, press Return, and the whole thing runs as one
 expression---the line breaks inside it are just whitespace, exactly as they are in a
-script. Should you ever want to submit an \emph{incomplete} line as it stands---to
+script. (On screen the editor indents the continuation lines under the prompt;
+what is evaluated, and what goes into the history, is exactly what you typed.)
+Should you ever want to submit an \emph{incomplete} line as it stands---to
 see the parser's error, say, rather than being carried onto a new line
 forever---press \texttt{Esc} then \texttt{Return} (or \texttt{Alt-Return}), which
-forces evaluation regardless.%
-\calloutnote{Under the hood}{This in-place multiline editing needs a genuine
-GNU~Readline. macOS ships a \texttt{libedit} stand-in under the same header name that
-cannot do it, so the build prefers a Homebrew \texttt{readline} when one is present
-and otherwise falls back to plain one-line-at-a-time entry.}
+forces evaluation regardless. A block you paste is inserted as typed text, so its
+line breaks never submit it half-way.
+
+\paragraph{Completion.}\index{REPL!completion} \texttt{Tab} completes the word at the
+cursor. With one candidate it is inserted; with several, the common prefix is
+inserted and a list opens under the word, and the row beneath the list shows the
+first line of the selected name's documentation---the same text \mcode{?Name}
+prints (\S\ref{sec:help}). Typing narrows the list, \texttt{Tab} and the arrows move
+through it, and \texttt{Return} inserts the choice without evaluating. Completion
+reads the symbol table; it never evaluates anything, and it never creates a symbol.
+It also knows where it is: directly after the \mcode{[} of a call, or after a comma
+at that depth, the head's \emph{options} come first, so typing \texttt{Tab} after
+\texttt{NIntegrate[f, \{x, 0, 1\}, } offers \texttt{AccuracyGoal -> } and its
+siblings.
+
+\paragraph{History.}\index{REPL!history} The up arrow recalls earlier inputs, a
+multi-line one whole. \texttt{Ctrl-R} opens the history as a list, newest first and
+each distinct input once, under a \texttt{search:} prompt; whatever you type filters
+it by substring, \texttt{Return} puts the selected input back in the editor (a
+second \texttt{Return} evaluates it), and \texttt{Esc} restores what you had.
+\index{REPL!history file}The history outlives the session. Every accepted input is
+appended, the moment you press Return, to the file \texttt{\textasciitilde/.mathilda\_history}, so a
+crash or a forced quit loses nothing, and the next session's up arrow reaches it.
+Two environment variables control it:
+
+\begin{shell}
+$ MATHILDA_HISTFILE=~/work/proj.history ./Mathilda   # a history per project
+$ MATHILDA_HISTSIZE=5000 ./Mathilda                  # keep 5000 entries (default 1000)
+$ MATHILDA_HISTSIZE=0 ./Mathilda                     # no history at all
+\end{shell}
+
+\noindent
+Setting \texttt{MATHILDA\_HISTFILE} to the empty string keeps the up arrow for the
+current session but writes no file. Blank lines, comment-only lines, and an input
+identical to the one before it are not recorded.
+
+\paragraph{Colour.}\index{REPL!colour} Prompts, results, message heads, and the
+syntax colouring all come from a colour \emph{theme} (\S\ref{sec:customising}).
+Colour follows the usual conventions: setting \texttt{NO\_COLOR} turns it off,
+setting \texttt{CLICOLOR\_FORCE} turns it on even when the output is not a terminal,
+and otherwise each of standard output and standard error is coloured only when it
+is a terminal---so \texttt{./Mathilda 2>err.txt} leaves \texttt{err.txt} plain.
+Without colour, the session writes no escape sequence at all.
+
+\paragraph{The Readline fallback.}\index{GNU Readline!fallback} Setting
+\texttt{MATHILDA\_EDITOR=readline}, or running on a terminal that declares
+itself \texttt{TERM=dumb}, makes the session read with GNU~Readline instead. History,
+the history file, completion, \texttt{Ctrl-C}, colour, the slash commands, and the
+status line all still work; what is lost is the editor's colouring as you type and
+its popup lists. (Readline completes an ambiguous prefix to its common part and lists
+the candidates on a second \texttt{Tab}.)%
+\calloutnote{Pitfall}{Multi-line input under the fallback needs a genuine GNU~Readline.
+macOS ships a \texttt{libedit} stand-in under the same header name that cannot do it,
+so the build prefers a Homebrew \texttt{readline} when one is present. Linked against
+\texttt{libedit}, the fallback reads one line at a time, its prompts are uncoloured,
+and \texttt{Ctrl-C} at the prompt is ignored rather than clearing the line. None of
+this affects the default editor, which needs no Readline features at all.}
 
 \subsection{Getting help}
 \label{sec:help}
@@ -392,13 +468,193 @@ matching a string pattern---a quick way to see what a fresh session already know
 \noindent
 For the fuller machine-readable story about a symbol---its attributes and
 definitions as well as its usage---there is also \B{Information}, of which
-\mcode{?name} is the everyday shorthand.
+\mcode{?name} is the everyday shorthand. At the prompt, \texttt{Tab} is often
+quicker still: the completion list (\S\ref{sec:editing}) shows each candidate's
+first line of documentation as you move through it.
 
-\subsection{Leaving the session}
+\subsection{While it runs: the status line and \texttt{Monitor}}
+\label{sec:statusline}
+\index{REPL!status line}
+
+Most inputs return before you notice. One that takes longer than 200~milliseconds
+gets a live line at the bottom of the terminal, redrawn about ten times a second
+and erased just before the result is printed. Two examples from the REPL's own
+documentation (\texttt{docs/spec/repl.md}), in the plain-ASCII form the line takes
+when the terminal has no UTF-8 locale:
+
+\begin{shell}
+| Integrate | Together | 3.2s | cpu 3.1s | mem 412 MB (2.5%) | peak 1.17 GB
+/ Table 3400/10000 [###.......] 34% | eta 6.4s | 2.1s | cpu 2.1s | mem 96 MB (0.6%)
+\end{shell}
+
+\noindent
+Reading left to right: a spinner, the head of what you asked for, the builtin
+running at this moment (the first line is an \B{Integrate} that has handed work to
+\B{Together}), the elapsed and CPU time, the resident memory as a share of the
+machine's RAM, and the peak. The memory figure turns yellow at 60\% and red at 85\%,
+which is usually your cue to press \texttt{Ctrl-C} before the machine starts to
+swap. The second line shows \emph{loop progress}\index{REPL!loop progress}:
+\B{Do}, \B{Table}, \B{Sum}, \B{Product}, \B{Nest}, \B{NestList}, \B{Fold},
+\B{FoldList}, \B{NestWhile}, and \B{FixedPoint} report their step and their total,
+so the line can draw a bar and, after a second of progress, an estimate of the time
+remaining. For nested loops the outer loop and the one directly inside it are both
+shown. (With a UTF-8 locale the spinner is an animated Braille glyph, the separators
+are middle dots, and the bar is drawn with block characters.)
+
+The line is careful not to get in the way. Anything printed while it is showing---a
+\B{Print}, a message, the output of a C library---goes through the thread that
+draws it, which erases the line, writes the output, and redraws, so the two never
+overwrite each other. A quick evaluation draws nothing, so its output is byte for
+byte what it would be without the feature. \texttt{MATHILDA\_SPINNER=0} turns the
+line off, as do a dumb terminal, a redirected standard stream, a script, and the
+pipe protocol.
+
+\index{Monitor@\mcode{Monitor}}%
+\mcode{Monitor[expr, mon]} puts a value of your own into the line: it evaluates
+\mcode{expr} and, while that runs, shows the current value of \mcode{mon}. A
+typical use is to watch a loop variable, or a running quantity, in a long
+computation:
+
+\begin{shell}
+In[1]:= x = 0.5; Monitor[Do[x = Sin[x] + 0.01; Pause[0.02], {i, 100}], {i, x}]
+\end{shell}
+
+\noindent
+Here the line shows \texttt{Do 41/100}, the bar, and the current
+\mcode{\{i, x\}} pair, refreshed as it changes. The monitor expression is
+evaluated only when the line wants a fresh value, about ten times a second, and its
+messages are suppressed, so watching costs almost nothing. Outside the interactive
+session there is no line to draw, and \mcode{Monitor} simply evaluates
+\mcode{expr} and returns its value---so it is safe to leave in a script:
+
+\begin{codepairs}
+\pair{02-building/monitor/1}{In the pipe that builds this book there is no status
+line, so \mcode{Monitor} just returns the value of the sum.}
+\end{codepairs}
+
+\paragraph{After the result.}\index{REPL!took note} When a result took a second or
+more, a dim line beneath it records what it cost: the wall time, the CPU time, and
+the peak resident memory during the evaluation, in the form
+\texttt{took 3.21 s \(\cdot\) cpu 3.18 s \(\cdot\) peak 412 MB}. A CPU time much larger
+than the wall time means the work ran on several cores; much smaller means it was
+waiting. \texttt{/timing off} drops the note and \texttt{/timing always} shows it
+after every result. Separately, \texttt{/statusline} (or \texttt{MATHILDA\_STATUSLINE=1}
+at start-up) prints a one-line summary after every result---the last time, the
+memory in use, and the current context---which is off by default.
+
+\subsection{Interrupting and leaving}
 \label{sec:leaving}
+\index{REPL!interrupting}
 
-To quit, evaluate \mcode{Quit[]} or press \texttt{Ctrl-D} (end-of-input) at the
-prompt. \texttt{Ctrl-C} interrupts as well. Any of them returns you to your shell.
+\texttt{Ctrl-C} during an evaluation stops it. The result is
+\texttt{Out[n]= \$Aborted} and the session carries on, with everything you defined
+before the interrupted input still in place. The interrupt is the same abort that
+evaluating \mcode{Abort[]} raises, so every frame on the way out cleans up after
+itself---a \B{Block} or \B{Module} restores its variables, \mcode{CheckAbort} can
+catch it, and \mcode{AbortProtect} defers it to the end of its body. The heavy C
+kernels that poll for a deadline (Gr\"obner bases, cylindrical decomposition,
+\B{FactorInteger}, compiled numeric loops, and others) stop within their polling
+period.%
+\calloutnote{Pitfall}{A few computations never come back to the evaluator and never
+poll: the compiled virtual machine's innermost loop, a LAPACK call, stage two of
+GMP-ECM. A single \texttt{Ctrl-C} cannot reach them. For those, a \emph{second}
+\texttt{Ctrl-C} within one second ends the whole process, with the terminal
+restored and the exit status 130, the shell's convention for ``killed by
+\texttt{Ctrl-C}''. Your inputs survive in the history file; your session's
+definitions do not.}
+
+\texttt{Ctrl-C} at the prompt, with nothing running, discards what you have typed
+(a multi-line input included) and shows the same \texttt{In[n]:=} again; it does
+not end the session. To leave, evaluate \mcode{Quit[]}\index{Quit@\mcode{Quit}} (or type
+\texttt{/quit}), or press \texttt{Ctrl-D} on an empty line. Either way
+\B{\$Epilog} runs first, if you have set it. \texttt{Ctrl-Z} suspends the session
+to the shell in the usual way, and \texttt{fg} brings it back with your input
+redrawn.
+
+\subsection{Customising the session}
+\label{sec:customising}
+\index{REPL!customising}
+
+\paragraph{Slash commands.}\index{REPL!slash commands} A line that begins with
+\texttt{/} is a command to the session, not an expression. It is never evaluated,
+gets no \texttt{In[n]} or \texttt{Out[n]}, and leaves the line counter alone.
+(No Mathilda input can begin with \texttt{/}: \mcode{/.}, \mcode{//}, \mcode{/@}, and
+\mcode{/;} all need something on their left, so nothing is lost.) Typing \texttt{/}
+into an empty input opens a menu of the commands with a summary of each, filtered as
+you type. The built-in ones are:
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabular}{@{}lp{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Command} & \textbf{Effect} \\
+    \midrule
+    \texttt{/help}                       & the commands, the keys, and the per-user files \\
+    \texttt{/theme [name]}               & the theme picker, or choose a theme by name \\
+    \texttt{/history [n]}                & the last \texttt{n} inputs (default 20), numbered \\
+    \texttt{/timing [on|off|always]}     & the \texttt{took} note: after results of 1\,s or more (the default), never, or always \\
+    \texttt{/statusline [on|off]}        & the summary line after each result \\
+    \texttt{/clear}                      & clear the screen and the scrollback \\
+    \texttt{/mods}                       & the mods loaded, their status, commands, and hooks \\
+    \texttt{/quit}                       & end the session, as \mcode{Quit[]} \\
+    \bottomrule
+  \end{tabular}
+  \caption{The REPL's built-in slash commands.}
+  \label{tab:slash-commands}
+\end{table}
+
+\paragraph{Themes.}\index{REPL!colour themes} Every colour the session draws comes
+from one of five themes: \texttt{dark} (the default), \texttt{light} (chosen
+automatically when the terminal reports a light background), \texttt{high-contrast},
+\texttt{mono} (no colour, only bold, dim, underline, and reverse), and
+\texttt{ansi} (the terminal's own sixteen-colour palette). \texttt{/theme} opens a
+picker whose preview---a prompt, a result, a message, the status line, a took
+note---switches as you move through the list; \texttt{Return} applies and saves the
+choice and \texttt{Esc} puts back the theme you had. \texttt{/theme light} sets one
+directly. The choice is saved as a line \texttt{theme = light} in
+\texttt{\textasciitilde/.mathilda/config}, and \texttt{MATHILDA\_THEME=}\emph{name} overrides
+the file for one session.
+
+\paragraph{Mods.}\index{REPL!mods} After the banner, the interactive session
+evaluates the file \texttt{\textasciitilde/.mathilda/init.m}, if there is one, and then every
+\texttt{\textasciitilde/.mathilda/mods/}\emph{name}\texttt{.m}, in name order. A mod is ordinary
+Mathilda code, so it can define functions you always want to hand. It can also set
+the session hooks \B{\$PreRead} (applied to the input text), \B{\$Pre} (to each
+input before evaluation), \B{\$Post} (to each result), and \B{\$PrePrint} (to each
+result before printing). And it can add slash commands of its own with
+\mcode{SlashCommand}\index{SlashCommand@\mcode{SlashCommand}}:
+\mcode{SlashCommand["name", f, "summary"]} makes \texttt{/name rest} evaluate
+\mcode{f["rest"]}, with the rest of the line as a trimmed string, and print the result
+unless it is \mcode{Null}. Two such commands, from the REPL's documentation:
+
+\begin{shell}
+(* ~/.mathilda/init.m *)
+SlashCommand["vars", Function[s, Names["Global`*"]], "list my symbols"];
+SlashCommand["n", Function[s, N[ToExpression[s], 30]], "30 digits: /n Pi"];
+\end{shell}
+
+\noindent
+After that, \texttt{/n Pi} prints thirty digits of \(\pi\), and both commands appear
+in the \texttt{/} menu and in \texttt{/help} under the name of the file that added
+them. \mcode{SlashCommand["name", None]} removes a command and
+\mcode{SlashCommand[]} lists them all; the built-in commands cannot be redefined. A
+mod that emits messages, is interrupted, or calls \mcode{Quit[]} is reported in one
+dim line and the session goes on without it, so a broken mod cannot lock you out.
+\texttt{MATHILDA\_MODS=0} skips \texttt{init.m} and the mods for one session, and
+\texttt{MATHILDA\_CONFIG\_DIR} moves the whole \texttt{\textasciitilde/.mathilda} directory
+elsewhere.%
+\calloutnote{Under the hood}{None of this machinery is visible outside the
+interactive session. A \texttt{-file} script, the pipe protocol, and a build without
+Readline install no signal handler, print no colour, complete nothing, read no
+configuration file, load no mods, and write no history, so their output is byte
+for byte what it was before the editor existed. The terminal is handed back and
+forth between two owners: the editor holds it, in raw mode, while you type; for the
+evaluation it passes to a status thread that points standard output and standard
+error at a pipe it drains, which is how a \mcode{Print} and the status line can
+share the screen. The editor itself is terminal-free---bytes in, drawing out through
+a callback---so its unit tests drive it with a small terminal emulator, and a
+latency gate holds its slowest keystroke on a 200-line input under 2~ms.}
 
 \section{Running scripts and other modes}
 \label{sec:scripts}
@@ -430,6 +686,34 @@ This is the mode to use for batch work, for reproducible computations kept under
 version control, and for anything you want to pipe into another program. (It is also
 how this very book is built: every transcript you see was produced by feeding its
 inputs to the real binary.)
+
+\paragraph{Exit status.}\index{exit status}\index{scripts!exit status} A script ends
+when its last expression has been evaluated, with exit status~0. It can also end
+itself: \mcode{Quit[]}\index{Quit@\mcode{Quit}} stops the script at that statement, and
+\mcode{Quit[n]}---or its synonym \mcode{Exit[n]}---stops it with exit
+status~\(n\), which is what a shell, a \texttt{makefile}, or a continuous-integration
+job reads to decide whether a step succeeded. Because \mcode{Quit} is an ordinary
+function, it works anywhere evaluation reaches: inside an \B{If}, inside a file read
+with \B{Get} (which then ends the outer script too), deep in a function. A script
+that checks an identity and reports the verdict to the shell:
+
+\begin{shell}
+$ cat check.m
+(* check.m -- exit 0 if the identity holds, 1 if it does not. *)
+ok = Simplify[Sin[x]^2 + Cos[x]^2] === 1;
+Print["identity holds: ", ok]
+If[ok, Exit[0], Exit[1]]
+Print["never reached"]
+
+$ ./Mathilda -file check.m; echo "status $?"
+identity holds: True
+status 0
+\end{shell}
+
+\noindent
+In the interactive session \mcode{Quit[n]} likewise exits with status~\(n\), after
+running \B{\$Epilog}; the pipe protocol ignores it, since a front-end, not the
+kernel, decides when its kernel goes away.
 
 \paragraph{The command line.} A few options round out the picture; \texttt{--help}
 lists them all:

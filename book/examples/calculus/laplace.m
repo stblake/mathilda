@@ -1,0 +1,13 @@
+# LaplaceTransform (v0.6491)
+LaplaceTransform[t^3, t, s]
+LaplaceTransform[{1, t, Sin[t]}, t, s]
+LaplaceTransform[t^2 E^(3 t), t, s]
+LaplaceTransform[E^(-2 t) Cos[t], t, s]
+LaplaceTransform[Sin[b t], t, s, Assumptions -> b > 0]
+LaplaceTransform[t^n, t, s, Assumptions -> n > -1]
+LaplaceTransform[UnitStep[t - 2], t, s]
+LaplaceTransform[BesselJ[0, t], t, s]
+LaplaceTransform[Sin[t]/t, t, s]
+LaplaceTransform[Log[t], t, s]
+LaplaceTransform[Abs[Sin[t]], t, s]
+LaplaceTransform[Cosh[2 t], t, s]

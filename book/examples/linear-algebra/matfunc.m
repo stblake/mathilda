@@ -1,0 +1,11 @@
+# 4.4.3 Minors, adjugate, and functions of a matrix
+Minors[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]
+Adjugate[{{a, b}, {c, d}}]
+Adjugate[{{1, 2}, {2, 4}}]
+MatrixExp[{{0, 1}, {-1, 0}}]
+MatrixExp[{{0, t}, {0, 0}}]
+MatrixLog[{{1, 1}, {0, 1}}]
+MatrixFunction[f, {{a, 1}, {0, a}}]
+MatrixPower[{{5, 4}, {4, 5}}, 1/2]
+MatrixPower[{{2., 1.}, {1., 3.}}, 0.5]
+CompileDiagnostics[{{m, _Real, 2}, {s, _Real}}, MatrixPower[m, s]]

@@ -1,0 +1,10 @@
+# Ch.7 -- Block localises attributes as well as values (v0.6170); Unique names (v0.6113)
+SetAttributes[g, Orderless]
+g[b, a]
+Block[{g}, Attributes[g]]
+Block[{g}, Hold[Evaluate[g[b, a]]]]
+Attributes[g]
+Block[{Times}, Attributes[Times]]
+Unique[x]
+Unique[{x, x, y}]
+Unique["tmp"]

@@ -24,9 +24,10 @@ classical arithmetic functions built on that factorization (\B{Divisors},
 \B{DivisorSigma}, \B{EulerPhi}, \B{MoebiusMu}, \B{LiouvilleLambda}, \B{PrimeOmega},
 \B{PrimeNu}); modular arithmetic and the structure of the residues (\B{PowerMod},
 \B{MultiplicativeOrder}, \B{PrimitiveRoot}, \B{JacobiSymbol}); continued fractions
-(\B{ContinuedFraction}, \B{FromContinuedFraction}); the digit and combinatorial functions
-(\B{IntegerDigits}, \B{Binomial}, \B{PartitionsP}); and we close by assembling almost all
-of it into a working RSA cryptosystem.
+(\B{ContinuedFraction}, \B{FromContinuedFraction}); the digit, bitwise and combinatorial
+functions (\B{IntegerDigits}, \mcode{BitXor}, \B{Binomial}, \B{PartitionsP}); permutations
+and the groups they generate; and we close by assembling almost all of it into a working
+RSA cryptosystem.
 
 \subsection{The Euclidean algorithm and B\'ezout}
 \label{ssec:nt-euclid}
@@ -425,7 +426,7 @@ prime, the first after \(7\cdot10^{29}\).}
 \pair{number-theory/rbd/5}{Told the base \(22/7\), the paper's reference descent
 (\mcode{Classic}) splits it instantly.}
 \pair{number-theory/rbd/6}{The default variant does not even need the base: it enumerates
-candidate bases and finds a working one in about ten milliseconds.}
+candidate bases and finds a working one in a few milliseconds.}
 \pair{number-theory/rbd/7}{\texttt{Automatic} \mcode{FactorInteger} does not use RBD. Facing a
 \(30\)-digit factor of a \(105\)-digit number---too large for its sieve, a hard case
 for ECM---it is still searching when two seconds run out.}
@@ -446,7 +447,7 @@ the \emph{larger} factor, and that against a balanced RSA modulus the tolerance
 \((a/b)^{k}/M\) shrinks to about one, so an unstructured \(n\) needs on the order of
 \(\sqrt n\) candidate bases---no threat to RSA. The bases that work form a ``comb'' of
 isolated teeth\index{rational base descent!comb of bases} of relative width about
-\(1/(kM)\): nothing signals a nearby base, so bases are enumerated, breadth-first over the
+\(1/(kM)\): nothing signals a nearby base, so bases are enumerated from the
 Stern--Brocot tree\index{Stern--Brocot tree}, which lists every positive rational once,
 coarse to fine.}
 
@@ -500,14 +501,22 @@ detector call.
 FLINT's LLL when it is available and an exact native LLL otherwise. A many-base search
 runs blocks of \(2048\) bases on every thread, and a lattice base runs its depths two per
 thread; in both, the lowest-indexed success wins, so the answer does not depend on the
-thread count. Suboptions set the search: \texttt{"Base"} (one base or a list),
-\texttt{"Order"} (Stern--Brocot or by \(a+b\)), \texttt{"Height"} and \texttt{"Bases"}
+thread count. The order in which bases are tried matters more than the cost of each
+one, which is about \(5\)~ms on a large input. The default \texttt{"Order" -> "Weighted"}
+enumerates in ascending \(a/\log_{2}(a/b)\)---the base's height times the length of its
+descent, a ``shortest job first'' schedule---streamed in doubling bands of pruned
+Stern--Brocot walks. On a \(1190\)-bit \(P\) near \((355/113)^{720}\) times a \(441\)-bit
+cofactor, breadth-first order tried \(189\,654\) bases before reaching \(355/113\) and took
+\(62.9\)~s; the weighted order takes \(2.8\)~s on sixteen threads. Suboptions set the
+search: \texttt{"Base"} (one base or a list), \texttt{"Order"} (\texttt{"Weighted"},
+\texttt{"HeightDoubling"}, breadth-first \texttt{"SternBrocot"}, or \texttt{"Sum"} by
+\(a+b\)), \texttt{"Height"} and \texttt{"Bases"}
 (the enumeration limits), \texttt{"MaxCoefficient"}, \texttt{"Multiplier"}, and the
 lattice parameters \texttt{"Tolerance"}, \texttt{"Beta"}, \texttt{"Dimension"} and
 \texttt{"Multiplicity"}. The method's \texttt{?} documentation, which is unusually long,
 explains each one. The repository's tests reproduce every example in the two papers; the
 papers' \(2048\)-bit challenge modulus is factored from scratch, with no base given, in
-about two minutes on sixteen threads.}
+under two minutes on sixteen threads.}
 
 \subsection{Arithmetic functions}
 \label{ssec:nt-arith}
@@ -552,7 +561,17 @@ multiplicity: \(360=2^3\cdot3^2\cdot5\) has \(\Omega=6\).}
 \(\nu(360)=3\).}
 \pair{number-theory/arithmetic-functions/11}{Like the divisor functions, these extend to
 \(\mathbb{Z}[i]\): the Gaussian divisors of \(5\) exhibit its splitting \(5=(2+i)(2-i)\).}
+\pair{number-theory/arithmetic-functions/12}{The von Mangoldt function
+\mcode{MangoldtLambda}\index{MangoldtLambda@\mcode{MangoldtLambda}}\index{von Mangoldt
+function} is \(\log p\) on a prime power \(p^{k}\) and \(0\) elsewhere---kept exact, as
+\texttt{Log[2]}, not as a decimal.}
+\pair{number-theory/arithmetic-functions/13}{Its divisor sum is \(\log n\): the identity
+\(\sum_{d\mid n}\Lambda(d)=\log n\) is unique factorization read through a logarithm.}
 \end{codepairs}
+
+\noindent \(\Lambda\) is \emph{not} multiplicative; it is the function that makes the
+primes visible to analysis, since \(\sum_{n\le x}\Lambda(n)\sim x\) is an equivalent form
+of the Prime Number Theorem of \S\ref{ssec:nt-primes}.
 
 \usagebox{DivisorSigma}
 \usagebox{EulerPhi}
@@ -634,6 +653,12 @@ lands in a given residue set:
 \begin{codepairs}
 \pair{number-theory/modular/13}{The discrete logarithm of \(5\) to base \(3\) modulo \(7\):
 the least \(x\) with \(3^{x}\equiv5\), namely \(x=5\) (indeed \(3^{5}=243\equiv5\)).}
+\pair{number-theory/modular/14}{Now a real one. The Mersenne prime \(p=2^{127}-1\)\dots}
+\pair{number-theory/modular/15}{\dots has least primitive root \(43\).}
+\pair{number-theory/modular/16}{Raise it to a thirty-digit exponent and keep only the
+\(39\)-digit residue.}
+\pair{number-theory/modular/17}{The discrete logarithm recovers the exponent exactly, in
+about a tenth of a second.}
 \end{codepairs}
 
 \calloutnote{Theory}{Computing the order of \(a\) is easy---it divides \(\varphi(n)\) and is
@@ -643,9 +668,24 @@ general prime field, and that presumed hardness is the foundation of Diffie--Hel
 exchange and the ElGamal and DSA signature schemes\index{discrete logarithm problem!in
 cryptography}. The best general methods---baby-step giant-step, Pollard's rho for logarithms,
 Pohlig--Hellman (which reduces the problem to the prime-power factors of the group order),
-and index calculus---are surveyed in~\cite{hac}. Mathilda's three-argument form simply walks
-the orbit \(a^{1},a^{2},\dots\), so it is a teaching tool for small moduli, not a break of
-the problem at cryptographic sizes.}
+and index calculus---are surveyed in~\cite{hac}.} The last session is fast for a reason
+that is also a warning.\calloutnote{Under the hood}{The three-argument
+\B{MultiplicativeOrder} runs the scheme of PARI's \texttt{znlog}
+(\texttt{src/numbertheory/nt\_dlog.c}). It factors the order of \(a\) and applies
+\emph{Pohlig--Hellman}\index{Pohlig--Hellman algorithm}, solving for the exponent one
+digit at a time in each prime-power factor; each prime-sized subproblem is solved by
+\emph{baby-step giant-step}\index{baby-step giant-step} for primes up to \(2^{36}\), one
+table reused across digits and targets, and by \emph{Pollard's \(\rho\)}\index{Pollard's
+rho!for logarithms} (a Teske \(r\)-adding walk with Brent's cycle detection) above that.
+Arithmetic runs in \(64\)-bit Montgomery form below \(2^{63}\) and in GMP above, and every
+answer is verified. The cost is governed by the \emph{largest prime factor} of the group
+order, not by the size of \(p\): \(2^{127}-2\) factors into primes no larger than
+\(7.7\times10^{10}\), so the hardest subproblem takes about
+\(\sqrt{7.7\times10^{10}}\approx3\times10^{5}\) group operations. A prime whose \(p-1\) has a large prime factor---the kind
+cryptography chooses---is out of reach, which is exactly the hardness the Theory note
+describes. The engine replaced a linear walk of the orbit that took \(380\)~ms on a
+\(24\)-bit logarithm and left any order of \(32\) bits or more unevaluated; the
+\(24\)-bit case now takes about \(0.1\)~ms.}
 
 Finally, the \B{JacobiSymbol}\index{Jacobi symbol} \(\left(\tfrac{a}{n}\right)\) encodes quadratic
 residues\index{quadratic reciprocity}---whether \(a\) is a square modulo \(n\):
@@ -797,6 +837,43 @@ above.}
 needs \(101\) bits, the leading one plus a hundred zeros.}
 \end{codepairs}
 
+The binary digits can also be operated on directly. \mcode{BitAnd}, \mcode{BitOr},
+\mcode{BitXor} and \mcode{BitNot}\index{bitwise operations} combine integers bit by bit;
+\mcode{BitSet} and \mcode{BitGet} write and read single bits (bit \(0\) is the units
+bit); and \mcode{BitShiftLeft} and \mcode{BitShiftRight} multiply and divide by powers of
+two. All of them work on integers of any size, and a negative integer behaves as its
+\emph{two's complement}\index{two's complement!unlimited width} with infinitely many
+leading ones:
+
+\begin{codepairs}
+\pair{number-theory/bitwise/1}{\(12=1100_2\) and \(10=1010_2\) share only the bit
+\(1000_2\).}
+\pair{number-theory/bitwise/2}{Either has \(1110_2=14\).}
+\pair{number-theory/bitwise/3}{Exactly one has \(0110_2=6\).}
+\pair{number-theory/bitwise/4}{\mcode{BitNot} flips every bit, infinitely many of them,
+so \(\lnot n=-n-1\).}
+\pair{number-theory/bitwise/5}{\(-8\) is \(\ldots11111000_2\); masking it to eight bits
+gives \(11111000_2=248\).}
+\pair{number-theory/bitwise/6}{\mcode{BitSet} turns on bit \(100\) of zero.}
+\pair{number-theory/bitwise/7}{\mcode{BitGet} reads several bits at once.}
+\pair{number-theory/bitwise/8}{There is no separate bit-clearing function: mask with
+the complement. Clearing bits \(0\) and \(7\) of \(255\) leaves \(126\).}
+\pair{number-theory/bitwise/9}{A left shift by \(70\) is multiplication by \(2^{70}\),
+past the machine word without comment.}
+\pair{number-theory/bitwise/10}{A right shift is division by a power of two
+\emph{truncated toward zero}, \(\mathrm{IntegerPart}(n/2^{k})\): \(-5\) shifts to \(-2\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Pair~10 is where the two's complement picture and the arithmetic
+part company. A C programmer expects \texttt{-5 >> 1} to be \(-3\), the floor, which is
+what an arithmetic shift of \(\ldots11011_2\) gives. \mcode{BitShiftRight} is defined as
+\texttt{IntegerPart[n/2\textasciicircum k]} instead, so it truncates and is odd: shifting \(-n\) gives minus the
+shift of \(n\). When you want the floor, write \texttt{Floor[n/2\textasciicircum k]}.}
+\calloutnote{Performance}{The bitwise heads are listable and have machine-integer kernels
+on packed arrays and in \texttt{Compile[]}; the shifts run at parity with NumPy on
+\(10^{7}\)-element arrays. A left shift that would overflow \(64\) bits leaves the buffer for exact
+arithmetic rather than wrapping.}
+
 Not every positional-looking notation is positional. \B{FromDigits} also reads Roman
 numerals\index{Roman numerals}, an additive system with subtractive pairs (\texttt{IV},
 \texttt{XC}) rather than a base, and \mcode{IntegerString} writes them:
@@ -846,6 +923,26 @@ are \(7153\) ways to write \(100\) as a sum of exactly four positive integers.}
 filtering: \mcode{IntegerPartitions} walks the restricted partitions directly, so the
 list above costs about two milliseconds.
 
+The binomial coefficient has a many-part generalisation and a life beyond the
+non-negative integers:
+
+\begin{codepairs}
+\pair{number-theory/combinatorial/16}{\mcode{Multinomial}\index{Multinomial@\mcode{Multinomial}}%
+\texttt{[2, 3, 4]} counts the ways to split nine objects into labelled groups of two,
+three and four\dots}
+\pair{number-theory/combinatorial/17}{\dots which is \(9!/(2!\,3!\,4!)\).}
+\pair{number-theory/combinatorial/18}{With both arguments negative the poles of the
+Gamma functions cancel, and \(\binom{-2}{-5}=-4\)\index{binomial coefficient!negative
+arguments}.}
+\pair{number-theory/combinatorial/19}{A half-integer top gives the coefficient of
+Newton's binomial series: \(\binom{1/2}{2}=\tfrac{(1/2)(-1/2)}{2}=-\tfrac18\).}
+\pair{number-theory/combinatorial/20}{When all three of \(n\), \(m\) and \(n-m\) are
+half-integers the answer closes over \(\sqrt\pi\): \(\binom{0}{1/2}=2/\pi\).}
+\end{codepairs}
+
+\noindent All of these are \(\Gamma(n+1)/\big(\Gamma(m+1)\Gamma(n-m+1)\big)\), read as a
+limit where the Gamma functions have poles, taken by fixed conventions.
+
 Finally the Fibonacci and Lucas numbers, the archetypal integer sequences:
 
 \begin{codepairs}
@@ -868,6 +965,47 @@ fast doubling---computing \(F_{2k}\) and \(F_{2k+1}\) from \(F_k\) and \(F_{k+1}
 \(F_n\) costs \(O(\log n)\) big-integer multiplications rather than \(n\) additions. The
 close relatives \B{BernoulliB}, \B{EulerE}, and \B{Zeta}, whose values encode still deeper
 number theory, belong to the special functions of \S\ref{sec:specialfns}.}
+
+\subsection{Permutations and permutation groups}
+\label{ssec:nt-permutations}
+
+A permutation of \(\{1,\ldots,n\}\) is the combinatorial object underneath symmetry, and
+Mathilda writes one in \emph{cycle notation}\index{permutation!cycle notation}:
+\mcode{Cycles}\texttt{[\{\{1, 2, 3\}\}]} sends \(1\to2\to3\to1\). A set of generators
+spans a \emph{permutation group}\index{permutation group}, whose elements and size are
+computable:
+
+\begin{codepairs}
+\pair{number-theory/permutations/1}{\mcode{Cycles}\index{Cycles@\mcode{Cycles}} puts a
+permutation in canonical form: each cycle starts at its smallest point, and the cycles
+are ordered.}
+\pair{number-theory/permutations/2}{\mcode{PermutationList} writes it as the list of
+images, here of the transposition \((1\,3)\) on four points.}
+\pair{number-theory/permutations/3}{\mcode{PermutationCycles} goes the other way;
+fixed points are dropped.}
+\pair{number-theory/permutations/4}{\mcode{Permute} applies a permutation to a list:
+the entry in position \(i\) moves to position \(\sigma(i)\).}
+\pair{number-theory/permutations/5}{\mcode{Signature}\index{Signature@\mcode{Signature}}
+is \(+1\) for an even permutation, a product of an even number of transpositions\dots}
+\pair{number-theory/permutations/6}{\dots and \(-1\) for an odd one.}
+\pair{number-theory/permutations/7}{A transposition and a \(3\)-cycle generate the
+symmetric group \(S_{3}\).}
+\pair{number-theory/permutations/8}{\mcode{GroupOrder}\index{GroupOrder@\mcode{GroupOrder}}
+is \(3!=6\).}
+\pair{number-theory/permutations/9}{\mcode{GroupElements} lists all six, the identity
+\texttt{Cycles[\{\}]} first.}
+\pair{number-theory/permutations/10}{\mcode{Permute} by a whole group gives the orbit of
+the list: every arrangement of \(a,b,c\).}
+\pair{number-theory/permutations/11}{An \(8\)-cycle and a transposition of adjacent
+points generate all of \(S_{8}\), of order \(8!=40320\).}
+\end{codepairs}
+
+\noindent Pair~11 is a classical theorem\index{symmetric group!generators}: an
+\(n\)-cycle together with a transposition of two adjacent points of it generates the
+whole symmetric group \(S_{n}\). \mcode{GroupOrder} finds the order by closing the
+generators under composition, so it is meant for groups of modest size, not for the
+Schreier--Sims computations a dedicated group-theory system performs on groups with
+billions of elements.
 
 \subsection{Putting it together: textbook RSA}
 \label{ssec:nt-rsa}

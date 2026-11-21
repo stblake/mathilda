@@ -1,3 +1,24 @@
+# Book update pass v0.507 -> v0.6664 (started 2026-11-22)
+
+Plan: ~/.claude/plans/mathilda-has-grown-significant-sharded-brooks-of-765472b2-95d0-4752-97b9-a881e445cda8.md
+Backlog/checklist: book/BOOK_UPDATE_REVIEW.md (R1-R19, I1-I27, U1-U19). Docs-only: no version bump.
+
+- [x] P0 triage recorded in book/BOOK_UPDATE_REVIEW.md
+- [x] P1 regenerate all transcripts; fix REVIEW R1-R19
+- [x] P2 new chapter "Symbolic integration" (Risch tower, Trager, Bronstein, cascade)
+- [x] P3 Ch.6 SparseArray + LinkedList sections
+- [x] P4 Ch.7 messages/aborts, packages; Ch.10 internals callouts
+- [x] P5 Ch.2 REPL rewrite, Ch.1 about
+- [x] P6 Part II math chapters (arith, algebra, NT, linalg, special fns full coverage, calculus, numerics, geometry)
+- [x] P7 Ch.9 I/O; new chapter "Certified answers" (Lean 4)
+- [x] P8 index, make pdf, check-links, ROADMAP, changelog, lessons
+
+Review (2026-11-22): nine parallel chapter agents (disjoint file ownership) + serial integration.
+make pdf: 702 pp (was 564), 444 transcripts, no undefined refs/cites, check-links OK.
+21 kernel issues found while writing -> BOOK_UPDATE_REVIEW.md "New, found in this pass" (none fixed here).
+Open: ~25 new builtins (LinkedList, Push/Pop, MatrixExp, LaplaceTransform, Lean heads, bitwise, ...)
+have no site reference page, so the book sets them as \mcode + manual index, not \B links.
+
 # LinkedList everywhere List is supported (started 2026-11-21)
 
 Plan: ~/.claude/plans/i-want-to-thoroughly-keen-frost-of-89e504f6-76f1-49cc-9efb-805f21fb0395.md

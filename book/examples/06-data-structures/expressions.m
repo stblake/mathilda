@@ -24,3 +24,7 @@ Depth[f[g[h[x]]]]
 Depth[{{1, 2}, {3, 4}}]
 Level[a + f[x, y^n], {-1}]
 Level[a + f[x, y^n], 2]
+# Rational and Complex are atoms to every structural builtin (v0.6535).
+{Length[3/4], Dimensions[3/4], Length[2 + 3 I]}
+Apply[g, 3/4]
+MatchQ[1/2, Rational[a_, b_]]

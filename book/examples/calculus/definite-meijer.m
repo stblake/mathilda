@@ -1,0 +1,11 @@
+# Definite integrals by Meijer G functions, elliptic reduction, and the G&R table
+Integrate[Exp[-a x] BesselJ[0, b x]^2, {x, 0, Infinity}, Assumptions -> a > 0 && b > 0]
+Integrate[(SinIntegral[a x] - Pi/2) Exp[-b x], {x, 0, Infinity}, Assumptions -> a > 0 && b > 0]
+Integrate[x/(E^(3 x) - 1)^(1/3), {x, 0, Infinity}]
+Integrate[x^2 Csch[x] Exp[-2 n x], {x, 0, Infinity}, Assumptions -> n > 0]
+Integrate[BesselK[0, x]^2, {x, 0, Infinity}]
+Integrate[1/Sqrt[(1 - x^2) (4 - x^2)], {x, 0, 1}]
+Integrate[Sqrt[1 - k^2 Sin[t]^2], {t, 0, Pi/2}, Assumptions -> 0 < k < 1]
+Integrate[BesselJ[1/3, x]^2, x]
+Integrate[BesselK[0, x], x]
+Integrate[x^(-x), {x, 0, 1}]

@@ -8,9 +8,10 @@ coefficients grow by a fixed ratio, or the solution of a second-order linear
 differential equation with a variable coefficient, you have left the elementary
 world and entered the realm of the \emph{special functions}: the gamma and zeta
 functions, the error function, the Bessel and Airy functions, the Legendre
-functions and the classical orthogonal polynomials, the elliptic integrals, the
-hypergeometric family up to Meijer's \(G\), and the Dirichlet
-\(L\)-functions of number theory.\index{special functions} They are ``special'' only in
+functions and the classical orthogonal polynomials, the elliptic integrals and the
+elliptic functions of Jacobi and Weierstrass, the hypergeometric family in one and two
+variables up to Meijer's \(G\), the Mathieu functions of periodic media, and the
+Dirichlet \(L\)-functions of number theory.\index{special functions} They are ``special'' only in
 the sense that they were named and tabulated before computers existed; today they
 are as ordinary as \(\sin\), and Mathilda treats them so.
 
@@ -114,6 +115,43 @@ auto-applied---applying them blindly would fight as often as it helps---so produ
 of gammas at rational points are carried symbolically until you rewrite them by
 hand. This is the honest cost of not over-simplifying.}
 
+Cut the beta integral off at \(z\) and divide by its full value, and you have the
+\emph{regularized incomplete beta function}\index{beta function!regularized incomplete}
+\[
+  I_z(a,b)=\frac{B(z;a,b)}{B(a,b)}=\frac{1}{B(a,b)}\int_0^z t^{a-1}(1-t)^{b-1}\,dt,
+\]
+\bidx{BetaRegularized}\mcode{BetaRegularized[z, a, b]} (and \mcode{BetaRegularized[z0, z1, a, b]}
+for \(I_{z_1}-I_{z_0}\)). It is the cumulative distribution function of the beta
+distribution, and through it of the binomial, Student-\(t\) and \(F\) distributions:
+the probability of at most \(k\) successes in \(n\) trials is \(I_{1-p}(n-k,k+1)\).
+
+\begin{codepairs}
+\pair{special-functions/betareg/1}{Positive integer parameters give a terminating
+binomial sum, so the value is rational.}
+\pair{special-functions/betareg/2}{A machine value.}
+\pair{special-functions/betareg/3}{Thirty digits of the same number\ldots}
+\pair{special-functions/betareg/4}{\ldots and the same digits from its definition, the
+incomplete \B{Beta} over the complete one.}
+\pair{special-functions/betareg/5}{The reflection \(I_z(a,b)+I_{1-z}(b,a)=1\), which
+is the substitution \(t\to1-t\).}
+\pair{special-functions/betareg/6}{The \(z\)-derivative is the beta density.}
+\pair{special-functions/betareg/7}{A far tail at large parameters, about
+\(10^{-6}\), with every digit significant.}
+\end{codepairs}
+
+Pair~7 is where a naive implementation fails: the integrand \(t^{199}(1-t)^{299}\)
+spans hundreds of orders of magnitude, and the answer is a small number that no
+subtraction from \(1\) could deliver.\calloutnote{Under the hood}{The machine kernel
+(v0.6481) evaluates \(I_z(a,b)\) or \(1-I_{1-z}(b,a)\), whichever converges faster, by
+the modified Lentz algorithm on the continued fraction of DLMF~8.17.22, times the
+prefactor \(z^a(1-z)^b/(a\,B(a,b))\). For \(a,b\ge10\) that prefactor is formed in
+Stirling's form with an exponent \(\log(1+u)-u\), whose linear parts cancel exactly,
+and \(1-z\) is carried in double-double. Whatever the double route cannot certify---a
+complex argument, \(z\) outside \([0,1]\), a negative parameter, a fraction that will
+not converge---goes to Arb's \texttt{acb\_hypgeom\_beta\_lower} inside the same kernel,
+which also answers at arbitrary precision. One kernel serves both arities and every
+surface: scalar, packed array, \mcode{NDArray} and \mcode{Compile}.}
+
 Two functions read the shape of the gamma function near its poles and along the
 real axis. \B{LogGamma} is the log-gamma function \(\log\Gamma(z)\): the analytic
 continuation of \(\log(\Gamma(z))\), not the same thing as \(\log(\Gamma(z))\)
@@ -133,8 +171,8 @@ near the top of the machine range; the largest double is about
 through it, never through \(\Gamma\) directly.}
 \pair{special-functions/polygamma/4}{The digamma at a positive integer is a rational
 minus Euler's constant: \(\psi(5)=\tfrac{25}{12}-\gamma\).}
-\pair{special-functions/polygamma/5}{Gauss's digamma theorem closes rational
-arguments into elementary form: \(\psi(1/2)=-\gamma-\log 4\).}
+\pair{special-functions/polygamma/5}{The digamma at a rational is left as it is, and
+\B{FunctionExpand} applies Gauss's digamma theorem: \(\psi(1/2)=-\gamma-\log 4\).}
 \pair{special-functions/polygamma/6}{The trigamma at \(1\) is \(\zeta(2)=\pi^2/6\).}
 \pair{special-functions/polygamma/7}{\B{LogGamma} differentiates to digamma.}
 \pair{special-functions/polygamma/8}{Each further derivative raises the
@@ -146,9 +184,13 @@ first-class head rather than a shorthand for \texttt{Log[Gamma[z]]}: it stays fi
 across a range where the gamma function runs from \(10^{-300}\) to \(10^{300}\), and
 its imaginary part tracks the \emph{continued} argument past \(\pi\), where a naive
 \(\log(\Gamma(z))\) would wrap.\calloutnote{Under the hood}{\B{PolyGamma}
-(\texttt{src/special\_functions/polygamma.c}) handles order \(n=0\) at rational
-arguments through the Gauss digamma theorem---a finite trigonometric sum---and closes
-odd orders through \(\zeta(n{+}1)\). Numerically it uses MPFR's digamma for
+(\texttt{src/special\_functions/polygamma.c}) evaluates on its own in exactly two
+places: at the integers, where the closed form runs through
+\(\zeta(n{+}1)\), and at an odd order at a half-integer (\(\psi^{(1)}(1/2)=\pi^2/2\)).
+A digamma at another rational stays symbolic (v0.6131), so that a rule written for
+\(\psi(3/2)\) can still match it; \mcode{FunctionExpand} then applies the Gauss
+digamma theorem---a finite trigonometric sum---at every positive rational, with its
+logarithms merged into one.\index{digamma function!Gauss's theorem} Numerically it uses MPFR's digamma for
 \(n=0\) and a recurrence-shift plus a Bernoulli asymptotic expansion for higher
 orders; complex arbitrary-precision values are handed to FLINT's \texttt{acb\_polygamma}.
 The negative order \(\psi^{(-1)}(z)\) is \B{LogGamma} itself.}
@@ -263,6 +305,53 @@ and \(0^{-2}\) is a pole.}
 The machine path agrees: a real \(a\le0\) runs the same peel-and-shift in double
 precision, with the peeled terms summed compensatedly, and it is the same kernel that
 a packed array of offsets or a compiled function calls.
+
+On the critical line \(\zeta\) is complex, but a phase makes it real. The
+\emph{Riemann--Siegel theta function} and \emph{Hardy's \(Z\) function}
+are\index{Riemann zeta function!Hardy Z function}\index{Riemann--Siegel theta function}
+\[
+  \vartheta(t)=\operatorname{Im}\log\Gamma\bigl(\tfrac14+\tfrac{it}{2}\bigr)-\tfrac t2\log\pi,
+  \qquad
+  Z(t)=e^{i\vartheta(t)}\,\zeta\bigl(\tfrac12+it\bigr),
+\]
+\bidx{RiemannSiegelTheta}\mcode{RiemannSiegelTheta} and
+\bidx{RiemannSiegelZ}\mcode{RiemannSiegelZ}. The functional equation makes \(Z\) real
+for real \(t\) with \(|Z(t)|=|\zeta(\tfrac12+it)|\), so the zeros on the critical line
+are sign changes of a real function---which is how they are found and counted. A third
+head, \bidx{RiemannR}\mcode{RiemannR}, is Riemann's own approximation to the
+prime-counting function, \(R(x)=\sum_{k\ge1}\mu(k)\,\operatorname{li}(x^{1/k})/k\),
+evaluated through Gram's series \(R(x)=1+\sum_{k\ge1}(\log x)^k/(k\,k!\,\zeta(k+1))\).
+
+\begin{codepairs}
+\pair{special-functions/riemann/1}{The exact values at the origin: \(\vartheta(0)=0\),
+\(Z(0)=\zeta(\tfrac12)\).}
+\pair{special-functions/riemann/2}{A machine value of \(\vartheta\).}
+\pair{special-functions/riemann/3}{Twenty-five digits of it\ldots}
+\pair{special-functions/riemann/4}{\ldots agreeing with the defining log-gamma
+expression.}
+\pair{special-functions/riemann/5}{\(Z\) is real, and threads over a list.}
+\pair{special-functions/riemann/6}{Its modulus is \(|\zeta|\) on the line.}
+\pair{special-functions/riemann/7}{An exact \(R(2)\) stays symbolic, as in the reference
+system.}
+\pair{special-functions/riemann/8}{\(R(10^6)\) to twenty digits\ldots}
+\pair{special-functions/riemann/9}{\ldots against the true count \(\pi(10^6)=78498\) and
+the cruder \(\operatorname{li}(10^6)\): \(R\) is off by 29, \(\operatorname{li}\) by
+130.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\mcode{RiemannSiegelTheta} and \mcode{RiemannSiegelZ}
+(v0.6276) go to Arb's \texttt{acb\_dirichlet\_hardy\_theta} and
+\texttt{acb\_dirichlet\_hardy\_z} on the precision ladder, so \(Z\) beside a zero is a
+tight ball around \(0\) and a large \(t\) climbs in precision to keep its digits; the
+machine helper rounds a 53-bit Arb result and is shared with the packed and
+\mcode{Compile} paths. \mcode{RiemannR} (v0.6403) sums the Gram series in double-double
+at machine precision, with \(\log x\) itself in double-double, because an ulp of
+\(\log x\) is an ulp of \(R\). For \(0<x<1\) the series cancels violently---at the
+largest zero of \(R\), the SIAM 100-digit challenge's \(x\approx10^{-14828}\), its terms
+reach \(10^{14820}\) and sum to \(10^{-13}\)---so the MPFR path carries guard bits for
+the largest term, re-runs adaptively when the answer falls below its error budget, and
+streams \(1/\zeta(k+1)\) as Dirichlet series instead of computing a fresh zeta per
+term. \(R'\) has a numeric value as well, which \B{FindRoot} uses for Newton steps.}
 
 \subsection{Dirichlet characters and \texorpdfstring{\(L\)}{L}-functions}
 \label{ssec:sf-dirichlet}
@@ -586,6 +675,118 @@ predicts the smaller error at that point; it serves the scalar call, packed arra
 alike. \mcode{BesselJZero} likewise gained a numeric kernel shared by all three
 surfaces in v0.477.}
 
+Change the sign of the \(x^2\) term and Bessel's equation becomes the modified one,
+whose driven solution is the \emph{modified Struve function}
+\bidx{StruveL}\mcode{StruveL}, \(\mathbf L_\nu(x)=-ie^{-i\nu\pi/2}\mathbf H_\nu(ix)\),
+with the all-positive series \(\mathbf L_\nu(x)=(x/2)^{\nu+1}\sum_k
+(x/2)^{2k}/(\Gamma(k+\tfrac32)\Gamma(k+\nu+\tfrac32))\). Two relatives are defined by
+integrals instead: the \emph{Anger} and \emph{Weber} functions\index{Anger function}%
+\index{Weber function}
+\[
+  \mathbf J_\nu(z)=\frac1\pi\int_0^\pi\cos(\nu\theta-z\sin\theta)\,d\theta,\qquad
+  \mathbf E_\nu(z)=\frac1\pi\int_0^\pi\sin(\nu\theta-z\sin\theta)\,d\theta,
+\]
+\bidx{AngerJ}\mcode{AngerJ} and \bidx{WeberE}\mcode{WeberE}. At an integer order the
+first integral is Bessel's own, so \(\mathbf J_n=J_n\); at a non-integer order the two
+are new functions.
+
+\begin{codepairs}
+\pair{special-functions/struvel/1}{Half-odd orders are elementary, now in hyperbolic
+functions: \(\mathbf L_{1/2}(z)=\sqrt{2/(\pi z)}\,(\cosh z-1)\).}
+\pair{special-functions/struvel/2}{\(\mathbf L_{-1/2}=I_{1/2}\), the
+\(\sinh z/\sqrt z\) of the modified Bessel family.}
+\pair{special-functions/struvel/3}{A machine value.}
+\pair{special-functions/struvel/4}{Thirty digits at a fractional order.}
+\pair{special-functions/struvel/5}{The analogue of \(\mathbf H_0-Y_0\): for large \(x\),
+\(\mathbf L_0-I_0\approx-2/(\pi x)\).}
+\pair{special-functions/struvel/6}{The recurrence for the derivative has
+\(+\mathbf L_{\nu+1}\) where \(\mathbf H\) had \(-\mathbf H_{\nu+1}\).}
+\pair{special-functions/struvel/7}{An integer-order Anger function is a Bessel
+function.}
+\pair{special-functions/struvel/8}{An integer-order Weber function is a polynomial
+minus a Struve function, here \(\mathbf E_1=2/\pi-\mathbf H_1\).}
+\pair{special-functions/struvel/9}{At the origin the Anger integral is
+\(\sin(\nu\pi)/(\nu\pi)\).}
+\pair{special-functions/struvel/10}{Machine values at a fractional order.}
+\pair{special-functions/struvel/11}{Twenty-five digits of \(\mathbf J_{1/3}(2)\)\ldots}
+\pair{special-functions/struvel/12}{\ldots and the defining integral, by quadrature,
+to the same digits.}
+\end{codepairs}
+
+The \emph{Kelvin functions}\index{Kelvin functions} are Bessel functions on the ray
+\(\arg z=3\pi/4\), split into real and imaginary parts: for \(x>0\),
+\[
+  \operatorname{ber}_\nu x+i\operatorname{bei}_\nu x=J_\nu\bigl(xe^{3\pi i/4}\bigr),\qquad
+  \operatorname{ker}_\nu x+i\operatorname{kei}_\nu x=e^{-\nu\pi i/2}K_\nu\bigl(xe^{\pi i/4}\bigr).
+\]
+They are the current density in a wire carrying alternating current (the skin
+effect) and are \bidx{KelvinBer}\mcode{KelvinBer}, \bidx{KelvinBei}\mcode{KelvinBei},
+\bidx{KelvinKer}\mcode{KelvinKer} and \bidx{KelvinKei}\mcode{KelvinKei}; the one-argument
+forms are order zero.
+
+\begin{codepairs}
+\pair{special-functions/kelvin/1}{A bare argument means order zero.}
+\pair{special-functions/kelvin/2}{The values at the origin: \(\operatorname{ber}_0 0=1\),
+\(\operatorname{bei}_00=0\), \(\operatorname{kei}_00=-\pi/4\).}
+\pair{special-functions/kelvin/3}{\(\operatorname{ber}_0+i\operatorname{bei}_0\) at
+\(x=2\)\ldots}
+\pair{special-functions/kelvin/4}{\ldots is \(J_0\) on the rotated ray, digit for
+digit.}
+\pair{special-functions/kelvin/5}{The functions continue to the complex plane, cut
+along the negative real axis.}
+\pair{special-functions/kelvin/6}{The derivative mixes the real and imaginary parts:
+\(\operatorname{ber}_0'=(\operatorname{ber}_1+\operatorname{bei}_1)/\sqrt2\).}
+\end{codepairs}
+
+Finally, the \emph{Hankel functions} \(H^{(1,2)}_\nu=J_\nu\pm iY_\nu\)\index{Hankel
+functions} are the combinations that behave like outgoing and incoming waves,
+\(H^{(1)}_\nu(z)\sim\sqrt{2/(\pi z)}\,e^{i(z-\nu\pi/2-\pi/4)}\), and the \emph{spherical
+Bessel functions}\index{Bessel functions!spherical}
+\(j_n(z)=\sqrt{\pi/(2z)}\,J_{n+1/2}(z)\) and \(y_n\) are the half-integer orders
+that pairs~2--3 of \S\ref{ssec:sf-bessel} showed to be elementary, renormalised for the
+radial equation in three dimensions. The heads are \bidx{HankelH1}\mcode{HankelH1},
+\bidx{HankelH2}\mcode{HankelH2}, \bidx{SphericalBesselJ}\mcode{SphericalBesselJ},
+\bidx{SphericalBesselY}\mcode{SphericalBesselY},
+\bidx{SphericalHankelH1}\mcode{SphericalHankelH1} and
+\bidx{SphericalHankelH2}\mcode{SphericalHankelH2}.
+
+\begin{codepairs}
+\pair{special-functions/hankel/1}{A machine Hankel value\ldots}
+\pair{special-functions/hankel/2}{\ldots is \(J+iY\).}
+\pair{special-functions/hankel/3}{\(Y\)'s logarithm makes the origin a singularity.}
+\pair{special-functions/hankel/4}{\(j_0(0)=1\), and every higher \(j_n\) vanishes
+there.}
+\pair{special-functions/hankel/5}{Other exact calls stay unevaluated.}
+\pair{special-functions/hankel/6}{Thirty digits of \(j_2(3/2)\)\ldots}
+\pair{special-functions/hankel/7}{\ldots and the same digits from the elementary form
+\(j_2(z)=(3/z^3-1/z)\sin z-3\cos z/z^2\).}
+\pair{special-functions/hankel/8}{The spherical Hankel pair are complex conjugates on
+the positive axis.}
+\pair{special-functions/hankel/9}{The derivative, from the recurrence.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Mathilda leaves \mcode{SphericalBesselJ[2, z]} unevaluated, by
+design, but it does not yet rewrite it into its elementary form
+under \mcode{FunctionExpand} either---\mcode{FunctionExpand[SphericalBesselJ[1, z]]}
+comes back unchanged. When you want \(\sin\) and \(\cos\), write
+\mcode{Sqrt[Pi/(2 z)] BesselJ[n + 1/2, z]}, which the half-integer rule of
+\S\ref{ssec:sf-bessel} reduces.}\calloutnote{Under the hood}{All thirteen heads
+(\mcode{StruveL}, \mcode{AngerJ}, \mcode{WeberE} and the Kelvin functions, v0.6204; the
+Hankel family, v0.6478) have one raw-double kernel each, shared bit for bit by the
+scalar call, packed arrays, \mcode{NDArray} and \mcode{Compile}. \mcode{StruveL}'s
+series has terms of one sign for \(\nu>-3/2\), so it is cancellation-free at every real
+\(x\) (\(1.2\times10^{-15}\) relative against 40-digit Arb) and switches to
+\(I_{-\nu}\) plus an asymptotic series past \(x=30\). The Anger--Weber kernel chooses
+between the power series and a Bessel-plus-Laplace-integral form by their
+\emph{measured} errors; a fixed error estimate for the integral once let it win where
+it was wrong, at a negative order and small \(z\) (fixed in v0.6489). The Kelvin
+kernels are the complex Bessel kernels at the rotated argument. A Hankel function is
+never formed as \(J\pm iY\) where that cancels---in the upper half-plane \(H^{(1)}\) is
+\((2/\pi)e^{-i\pi(\nu+1)/2}K_\nu(-iz)\) instead (DLMF~10.27.8)---and the integer-order
+spherical functions on the positive axis run the upward recurrence from \(j_0,j_1,y_0,
+y_1\). Arbitrary precision is Arb throughout: two regularized \({}_1F_2\)'s for Anger
+and Weber, two \({}_0F_1\)'s at \(\pm iz^2/4\) for ber and bei.}
+
 \subsection{Legendre functions of the first and second kind}
 \label{ssec:sf-legendre}
 
@@ -731,6 +932,65 @@ full-buffer \texttt{pow}; that change (v0.376)
 took \texttt{LegendreP[30, 4, xs]} over a million points from not finishing in
 85~seconds to about a tenth of a second on this build.}
 
+Two more families generalize the ones above by putting parameters into the weight.
+The \emph{Jacobi polynomials} \(P_n^{(a,b)}\), \bidx{JacobiP}\mcode{JacobiP}, are
+orthogonal on \([-1,1]\) against \((1-x)^a(1+x)^b\),\index{orthogonal
+polynomials!Jacobi}
+\[
+  P_n^{(a,b)}(x)=\binom{n+a}{n}\,{}_2F_1\!\Bigl(-n,\,n+a+b+1;\,a+1;\,\tfrac{1-x}{2}\Bigr),
+\]
+and contain every classical family on the interval: \(a=b=0\) is Legendre, \(a=b=\mp\tfrac12\)
+are the two Chebyshev kinds up to normalization. The \emph{Gegenbauer} (ultraspherical)
+polynomials \(C_n^{(\lambda)}\), \bidx{GegenbauerC}\mcode{GegenbauerC}, are the
+symmetric case \(a=b=\lambda-\tfrac12\) normalized so that
+\((1-2xt+t^2)^{-\lambda}=\sum_n C_n^{(\lambda)}(x)\,t^n\);\index{orthogonal
+polynomials!Gegenbauer} they are the zonal harmonics on the sphere in \(2\lambda+2\)
+dimensions.
+
+\begin{codepairs}
+\pair{special-functions/jacobip/1}{A symbolic weight gives a polynomial in the
+parameters too.}
+\pair{special-functions/jacobip/2}{\(P_3^{(1/2,1/2)}\), a multiple of \(U_3\).}
+\pair{special-functions/jacobip/3}{The value at \(x=1\) is \(\binom{n+a}{n}\) for every
+\(n\).}
+\pair{special-functions/jacobip/4}{\(a=b=0\) is \mcode{LegendreP}.}
+\pair{special-functions/jacobip/5}{Orthogonality against the weight
+\((1-x)(1+x)^2\), exactly.}
+\pair{special-functions/jacobip/6}{The derivative raises both parameters.}
+\pair{special-functions/jacobip/7}{Degree 300 near \(x=1\), at machine precision, in a
+microsecond\ldots}
+\pair{special-functions/jacobip/8}{\ldots and the exact polynomial at the exact point
+agrees.}
+\pair{special-functions/jacobip/9}{A non-integer degree goes through the \({}_2F_1\).}
+\pair{special-functions/gegenbauer/1}{The explicit Gegenbauer polynomial, for a symbolic
+\(\lambda\).}
+\pair{special-functions/gegenbauer/2}{\(\lambda=1\) is \(U_n\) and \(\lambda=\tfrac12\) is
+\(P_n\), for symbolic \(n\).}
+\pair{special-functions/gegenbauer/3}{The two-argument form is the \(\lambda\to0\) limit
+of \(C_n^{(\lambda)}/\lambda\).}
+\pair{special-functions/gegenbauer/4}{\(\frac{d}{dx}C_n^{(\lambda)}=2\lambda
+C_{n-1}^{(\lambda+1)}\).}
+\pair{special-functions/gegenbauer/5}{A non-integer degree is a function, not a
+polynomial.}
+\pair{special-functions/gegenbauer/6}{Thirty digits of it\ldots}
+\pair{special-functions/gegenbauer/7}{\ldots and the same digits from the
+\({}_2F_1\) definition, \(\frac{\Gamma(n+2\lambda)}{\Gamma(2\lambda)\Gamma(n+1)}
+{}_2F_1(-n,n+2\lambda;\lambda+\tfrac12;\tfrac{1-x}2)\).}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Both follow the lesson of \(H_{100}(5)\): a number never
+comes from the expanded polynomial. \mcode{JacobiP} (v0.6275) runs the three-term
+recurrence of DLMF~18.9.2 in double, or in MPFR at arbitrary precision; near \(x=1\) the
+expanded \(P_{300}^{(3,1/2)}\) would cancel catastrophically. The exact polynomial uses
+the sum \(\sum_l\frac{(n+a+b+1)_l(a+l+1)_{n-l}}{l!\,(n-l)!}(\tfrac{x-1}2)^l\), which has no
+division by a parameter and so is valid for a negative integer \(a\) as well.
+\mcode{GegenbauerC} (v0.6476) runs its integer-degree recurrence in double, or in
+double-double when a step cancels (at most 6~ulp up to \(n=3000\)); a non-integer degree
+uses a \({}_2F_1\) series with double-double parameters, Taylor steps of the Gegenbauer
+equation on \((-1,-0.2)\) where that series converges slowly, and Arb for whatever is
+left. At arbitrary precision the \({}_2F_1\) form is folded through the duplication
+formula, so \(\lambda=-\tfrac12,-\tfrac32,\ldots\) has its finite limit.}
+
 \subsection{Legendre elliptic integrals}
 \label{ssec:sf-elliptic}
 
@@ -826,6 +1086,151 @@ absolute error is the size of the answer, which once cost eight digits of
 a few ulp and \emph{decline} outside it, where FLINT's \texttt{acb\_elliptic\_*}
 answers in rigorous ball arithmetic on the whole complex plane. Everything is in
 \texttt{src/special\_functions/elliptic.c}.}
+
+\subsection{Elliptic functions: Jacobi, theta and Weierstrass}
+\label{ssec:sf-ellfun}
+
+Abel's and Jacobi's great idea was to stop integrating and start inverting. The
+integral \(u=F(\phi\,|\,m)\) is a messy function of the amplitude \(\phi\), but its
+inverse \(\phi=\operatorname{am}(u\,|\,m)\), the \emph{Jacobi amplitude}, is beautiful,
+and so are
+\[
+  \operatorname{sn}(u\,|\,m)=\sin\operatorname{am}(u\,|\,m),\qquad
+  \operatorname{cn}(u\,|\,m)=\cos\operatorname{am}(u\,|\,m),\qquad
+  \operatorname{dn}(u\,|\,m)=\sqrt{1-m\operatorname{sn}^2(u\,|\,m)}.
+\]
+These are the \emph{Jacobi elliptic functions}\index{elliptic functions!Jacobi}:
+\bidx{JacobiSN}\mcode{JacobiSN}, \bidx{JacobiCN}\mcode{JacobiCN},
+\bidx{JacobiDN}\mcode{JacobiDN}, the nine ratios (\mcode{JacobiCD}, \mcode{JacobiNS},
+\ldots, \(\operatorname{pq}=\operatorname{p}/\operatorname{q}\) with
+\(\operatorname{n}=1\)), \bidx{JacobiAmplitude}\mcode{JacobiAmplitude}, and the
+inverses \bidx{InverseJacobiSN}\mcode{InverseJacobiSN}, \mcode{InverseJacobiCN} and
+\mcode{InverseJacobiDN}. They use the same parameter \(m=k^2\) as \mcode{EllipticK}.
+Each is \emph{doubly periodic}: \(\operatorname{sn}\) has the real period \(4K(m)\) and
+the imaginary period \(2iK(1-m)\), and interpolates between \(\sin\) at \(m=0\) and
+\(\tanh\) at \(m=1\). The exact pendulum, the rigid-body top and the cnoidal waves of
+shallow water are written in them.
+
+\begin{codepairs}
+\pair{special-functions/jacobi-elliptic/1}{At \(m=0\) they are circular functions.}
+\pair{special-functions/jacobi-elliptic/2}{At \(m=1\) they are hyperbolic; the periods
+have run off to infinity.}
+\pair{special-functions/jacobi-elliptic/3}{A machine value.}
+\pair{special-functions/jacobi-elliptic/4}{The same value to thirty digits.}
+\pair{special-functions/jacobi-elliptic/5}{Thirty-digit values of all three at one point.}
+\pair{special-functions/jacobi-elliptic/6}{The identities \(\operatorname{sn}^2+
+\operatorname{cn}^2=1\) and \(m\operatorname{sn}^2+\operatorname{dn}^2=1\).}
+\pair{special-functions/jacobi-elliptic/7}{\(\operatorname{sn}\) reaches its maximum
+\(1\) at the quarter period \(K(m)\).}
+\pair{special-functions/jacobi-elliptic/8}{\(\operatorname{sn}'=\operatorname{cn}
+\operatorname{dn}\).}
+\pair{special-functions/jacobi-elliptic/9}{\(\operatorname{am}'=\operatorname{dn}\),
+the integrand of \(F\) turned upside down.}
+\pair{special-functions/jacobi-elliptic/10}{The inverse of \(\operatorname{sn}\) is an
+elliptic integral: at \(1\) it is \(K(m)\).}
+\pair{special-functions/jacobi-elliptic/11}{Inverse and function undo each other.}
+\pair{special-functions/jacobi-elliptic/12}{The amplitude winds by \(2\pi\) per period
+\(4K\), continuously, for every real \(m\)---here \(m>1\).}
+\pair{special-functions/jacobi-elliptic/13}{A complex argument.}
+\end{codepairs}
+
+The deeper structure is carried by Jacobi's \emph{theta functions}, the Fourier series
+in \(u\) with Gaussian coefficients in the \emph{nome} \(q\),\index{theta
+functions}\index{elliptic functions!theta}
+\[
+  \vartheta_3(u,q)=1+2\sum_{n\ge1}q^{n^2}\cos 2nu,\qquad
+  \vartheta_1(u,q)=2\sum_{n\ge0}(-1)^nq^{(n+1/2)^2}\sin(2n+1)u,
+\]
+with \(\vartheta_2\) and \(\vartheta_4\) the shifted variants;
+\bidx{EllipticTheta}\mcode{EllipticTheta[a, u, q]} gives \(\vartheta_a(u,q)\),
+\bidx{EllipticThetaPrime}\mcode{EllipticThetaPrime} its \(u\)-derivative, and the
+two-argument forms the values at \(u=0\). They converge for \(|q|<1\) faster than any
+geometric series, and every elliptic function is a ratio of them: with
+\(q=e^{-\pi K(1-m)/K(m)}\) and \(v=u/\vartheta_3(q)^2\),
+\(\operatorname{sn}(u\,|\,m)=\vartheta_3(q)\,\vartheta_1(v,q)/(\vartheta_2(q)\,
+\vartheta_4(v,q))\).
+
+\begin{codepairs}
+\pair{special-functions/theta/1}{At \(q=0\) only the constant term of \(\vartheta_3\)
+survives.}
+\pair{special-functions/theta/2}{\(\vartheta_1(0,q)=0\), returned with the condition
+under which the series exists.}
+\pair{special-functions/theta/3}{A machine value.}
+\pair{special-functions/theta/4}{Thirty digits.}
+\pair{special-functions/theta/5}{The \(u\)-derivative has its own head.}
+\pair{special-functions/theta/6}{A thirty-digit nome\ldots}
+\pair{special-functions/theta/7}{\ldots for Jacobi's quartic identity
+\(\vartheta_3^4=\vartheta_2^4+\vartheta_4^4\), which holds to the last digit.}
+\pair{special-functions/theta/8}{And \(\vartheta_1'(0)=\vartheta_2\vartheta_3\vartheta_4\).}
+\end{codepairs}
+
+Weierstrass took the other road to the same functions: start from the lattice of
+periods \(\Lambda=\{2m\omega_1+2n\omega_3\}\) and write down the simplest even function
+with a double pole at every lattice point,\index{elliptic functions!Weierstrass}
+\[
+  \wp(u)=\frac1{u^2}+\sum_{\lambda\in\Lambda\setminus0}
+  \Bigl(\frac1{(u-\lambda)^2}-\frac1{\lambda^2}\Bigr),\qquad
+  \wp'(u)^2=4\wp(u)^3-g_2\,\wp(u)-g_3 .
+\]
+The \emph{invariants} \(g_2,g_3\) determine the lattice, and Mathilda's heads take
+them as the second argument: \bidx{WeierstrassP}\mcode{WeierstrassP[u, \{g2, g3\}]},
+\bidx{WeierstrassPPrime}\mcode{WeierstrassPPrime}, the zeta function
+\bidx{WeierstrassZeta}\mcode{WeierstrassZeta} (\(\zeta'=-\wp\)) and the sigma function
+\bidx{WeierstrassSigma}\mcode{WeierstrassSigma} (\(\sigma'/\sigma=\zeta\)), with
+\bidx{WeierstrassHalfPeriods}\mcode{WeierstrassHalfPeriods} and
+\bidx{WeierstrassInvariants}\mcode{WeierstrassInvariants} converting between
+invariants and half-periods. The differential equation says that \((\wp,\wp')\) is a
+point on the cubic curve \(y^2=4x^3-g_2x-g_3\): this is the parametrization of an
+elliptic curve.\index{elliptic curve!Weierstrass parametrization}
+
+\begin{codepairs}
+\pair{special-functions/weierstrass/1}{\(g_2=g_3=0\) is the degenerate lattice:
+\(\wp=1/u^2\).}
+\pair{special-functions/weierstrass/2}{When the cubic has a double root, one period
+becomes infinite and \(\wp\) is hyperbolic.}
+\pair{special-functions/weierstrass/3}{A machine value.}
+\pair{special-functions/weierstrass/4}{Thirty digits.}
+\pair{special-functions/weierstrass/5}{Thirty-digit \(\wp\) and \(\wp'\) at one
+point\ldots}
+\pair{special-functions/weierstrass/6}{\ldots lie on the cubic curve.}
+\pair{special-functions/weierstrass/7}{The half-periods: one real, one in the upper
+half-plane.}
+\pair{special-functions/weierstrass/8}{\(\wp\) is unchanged by either period, to more
+than thirty digits.}
+\pair{special-functions/weierstrass/9}{And the half-periods give back the
+invariants.}
+\pair{special-functions/weierstrass/10}{Differentiating the cubic:
+\(\wp''=6\wp^2-g_2/2\).}
+\pair{special-functions/weierstrass/11}{\(\zeta'=-\wp\).}
+\pair{special-functions/weierstrass/12}{\(\sigma'=\sigma\zeta\).}
+\end{codepairs}
+
+\calloutnote{Theory}{An \emph{elliptic function} is a meromorphic function with two
+periods whose ratio \(\tau=\omega_3/\omega_1\) is not real. Liouville's theorems pin the
+class down: such a function without poles is constant, it has at least two poles in a
+period parallelogram (counted with multiplicity), and the elliptic functions for one
+lattice form the field \(\mathbb C(\wp,\wp')\). So \(\operatorname{sn}\), \(\operatorname{cn}\)
+and \(\operatorname{dn}\)---each with two simple poles per cell---are rational in the
+\(\wp\) and \(\wp'\) of their own lattice, and the theta functions, which are only
+\emph{quasi}-periodic, are the building blocks of both: \(\wp\) is
+\(-(\log\sigma)''\), and \(\sigma\) is \(\vartheta_1\) times a Gaussian.}%
+\calloutnote{Under the hood}{All three families were added in v0.6477--v0.6480, each
+with one machine kernel shared by scalar, packed, \mcode{NDArray} and \mcode{Compile}.
+The Jacobi kernel reduces \(u\) modulo \(4K\) and then to the nearest quarter period in
+double-double, with \(4K=2\pi/\operatorname{AGM}(1,\sqrt{1-m})\), and runs the
+arithmetic--geometric-mean method of DLMF~22.20 on the small residual, so values near
+the zeros of \(\operatorname{sn}\) and \(\operatorname{cn}\) keep their relative
+accuracy; \(m>1\) and \(m<0\) go through the reciprocal and imaginary-modulus
+transformations. Theta sums its \(q\)-series for \(|q|\le0.9\) and hands larger nomes to
+Arb's \texttt{acb\_modular\_theta}, which first reduces \(\tau\) to the fundamental
+domain; the arbitrary-precision ladder insists on \emph{relative} accuracy even for a
+ball that contains zero, so a value like \(10^{-206}\) is computed rather than guessed.
+Weierstrass builds one plan per \((g_2,g_3)\): the roots of the cubic, a basis from the
+complex AGM, the reduced \(\tau\), and a \emph{certificate}---the invariants recomputed
+from the theta constants must reproduce \((g_2,g_3)\)---before \(u\) is reduced modulo
+the lattice in double-double and \(\wp\) read off theta quotients with
+\(|q|\le0.066\). The half-period normalization was checked against 380
+tabulated values.}
 
 \subsection{The hypergeometric family: one function to rule them all}
 \label{ssec:sf-hypergeometric}
@@ -966,6 +1371,64 @@ the cut. A machine kernel (v0.479) runs the same methods in double precision and
 declines to Arb when its error estimate passes \(2\times10^{-14}\); over a 479-value
 test grid it is within \(6.1\times10^{-15}\) of 30-digit values.}
 
+\subsection{Appell functions: hypergeometric series in two variables}
+\label{ssec:sf-appell}
+
+Multiply two Gauss series and let the Pochhammer symbols share an index, and you get the
+four \emph{Appell functions}\index{Appell functions}\index{hypergeometric
+function!two variables} of 1880, the hypergeometric functions of two variables:
+\[
+  F_1(a;b_1,b_2;c;x,y)=\sum_{m,n\ge0}\frac{(a)_{m+n}(b_1)_m(b_2)_n}{(c)_{m+n}\,m!\,n!}\,x^my^n,
+\]
+and \(F_2\), \(F_3\), \(F_4\) with the \(m+n\) placed differently (DLMF~16.13). Mathilda
+has all four, \bidx{AppellF1}\mcode{AppellF1}, \bidx{AppellF2}\mcode{AppellF2},
+\bidx{AppellF3}\mcode{AppellF3} and \bidx{AppellF4}\mcode{AppellF4}, in the reference
+system's argument order, continued analytically beyond the regions where the double
+series converge. \(F_1\) also has Picard's integral
+\[
+  F_1=\frac{\Gamma(c)}{\Gamma(a)\Gamma(c-a)}\int_0^1
+  t^{a-1}(1-t)^{c-a-1}(1-xt)^{-b_1}(1-yt)^{-b_2}\,dt,
+\]
+which makes it the natural home of integrals of a product of two binomials: the
+incomplete elliptic integral of \S\ref{ssec:sf-elliptic} is one,
+\(F(\phi\,|\,m)=\sin\phi\,F_1(\tfrac12;\tfrac12,\tfrac12;\tfrac32;\sin^2\phi,m\sin^2\phi)\).
+
+\begin{codepairs}
+\pair{special-functions/appell/1}{At \(y=0\) the second variable drops out, leaving the
+Gauss function (here in its \mcode{HypergeometricPFQ} spelling).}
+\pair{special-functions/appell/2}{On the diagonal \(x=y\) the two series merge:
+\(F_1={}_2F_1(a,b_1+b_2;c;x)\).}
+\pair{special-functions/appell/3}{When \(a=c\) the series factor into two binomials.}
+\pair{special-functions/appell/4}{A negative integer \(a\) terminates the series, so the
+value is rational.}
+\pair{special-functions/appell/5}{A machine value inside the unit bidisk.}
+\pair{special-functions/appell/6}{Thirty digits of the same point\ldots}
+\pair{special-functions/appell/7}{\ldots and Picard's integral, by quadrature, to the
+same twenty-five digits.}
+\pair{special-functions/appell/8}{Far outside the series region, by analytic
+continuation; the value is complex because \(x=10\) lies on the cut.}
+\pair{special-functions/appell/9}{\(F_2\), \(F_3\) and \(F_4\) at machine precision.}
+\pair{special-functions/appell/10}{Derivatives shift the parameters, as for
+\({}_2F_1\).}
+\pair{special-functions/appell/11}{\(F(\phi\,|\,m)\) as an \(F_1\), at \(\phi=0.7\),
+\(m=0.3\).}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Every Appell function is evaluated as one outer series
+\(\sum_mT_mG_m\) whose terms carry an analytically continued Gauss function of the other
+variable---for \(F_1\), \(G_m=x^m\,{}_2F_1(a+m,b_2;c+m;y)\). The planner chooses which
+variable is outer and, for \(F_1\), which of five Euler substitutions (\(F_2\): three
+Pfaff transformations) gives the smallest outer ratio; the \(G_m\) come from two Gauss
+values and a three-term recurrence in \(m\) run in its stable direction. Where no
+expansion converges, \(F_1\) is its Euler integral, with series at the singular
+endpoints and Arb's \texttt{acb\_calc\_integrate} between. The machine kernel runs the
+plan in double complex and declines to Arb at 53 bits on any sign of cancellation; at
+arbitrary precision the plan runs in ball arithmetic. Measured against mpmath at 400
+points the machine values are a median 0.4--1.0~ulp off (v0.6485), and mpmath itself
+was found to lose digits near the region boundaries. Still open: \(F_2\), \(F_3\),
+\(F_4\) beyond their series regions, and elementary closed forms at integer
+parameters.}
+
 \subsection{Kummer, Tricomi and Whittaker: the confluent family}
 \label{ssec:sf-whittaker}
 
@@ -1019,6 +1482,125 @@ FLINT's \texttt{acb\_hypgeom\_u}, which also answers at arbitrary precision and 
 \(m\to|m|\), since \(W_{k,m}=W_{k,-m}\)), so it inherits the accuracy and the
 array and \mcode{Compile} surfaces of \(U\) unchanged.}
 
+One Whittaker function has a name and an equation of its own. The \emph{parabolic
+cylinder function}\index{parabolic cylinder functions} \(D_\nu(z)\),
+\bidx{ParabolicCylinderD}\mcode{ParabolicCylinderD}, is the solution of Weber's equation
+\(w''+(\nu+\tfrac12-\tfrac{z^2}4)w=0\) that decays as \(z\to+\infty\),
+\[
+  D_\nu(z)=2^{\nu/2}e^{-z^2/4}\,U\bigl(-\tfrac\nu2,\tfrac12,\tfrac{z^2}2\bigr)
+  =2^{\nu/2+1/4}z^{-1/2}\,W_{\nu/2+1/4,\,-1/4}\bigl(\tfrac{z^2}2\bigr)\qquad(\operatorname{Re}z>0).
+\]
+Weber's equation is the Schr\"odinger equation of the harmonic oscillator, and at a
+non-negative integer \(\nu=n\) the decaying solution is a Hermite function,
+\(D_n(z)=2^{-n/2}e^{-z^2/4}H_n(z/\sqrt2)\)---which is why the oscillator's energies are
+quantized.
+
+\begin{codepairs}
+\pair{special-functions/pcfd/1}{The value at the origin, for every order.}
+\pair{special-functions/pcfd/2}{Other exact calls stay unevaluated, as in the reference
+system\ldots}
+\pair{special-functions/pcfd/3}{\ldots and \mcode{FunctionExpand} gives the Hermite form,
+here \((z^2-1)e^{-z^2/4}\) after \mcode{Simplify}.}
+\pair{special-functions/pcfd/4}{A negative integer order comes out through
+\(\operatorname{erfc}\).}
+\pair{special-functions/pcfd/5}{A machine value.}
+\pair{special-functions/pcfd/6}{Thirty digits at a fractional order.}
+\pair{special-functions/pcfd/7}{The derivative, \(D_\nu'=\tfrac z2D_\nu-D_{\nu+1}\).}
+\pair{special-functions/pcfd/8}{A value below the smallest double, returned as an
+extended-range real rather than \(0.\)}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The machine kernel (v0.6475) splits the real line four
+ways: the Poincar\'e asymptotic expansion for \(z\ge9\); for \(1.5<z<9\), the recessive
+solution integrated \emph{backward} by Taylor steps of the equation itself---stable,
+because the decaying solution grows towards the origin---from a point where the
+expansion holds; the Maclaurin form, in double or double-double, on \([-12,1.5]\); and a
+connection formula below \(-12\). Every exponential is applied through an exactly
+reduced exponent, so nothing overflows on the way to a representable answer, and
+whatever the double algorithms decline is answered inside the kernel by Arb at 53 bits.
+Measured against mpmath, the real median is 0.7~ulp.}
+
+\subsection{Mathieu functions}
+\label{ssec:sf-mathieu}
+
+Separate the wave equation in elliptic coordinates---a vibrating elliptical drum, an
+elliptical waveguide, a particle in a periodic potential---and the angular part is
+\emph{Mathieu's equation}\index{Mathieu functions}
+\[
+  y''+\bigl(a-2q\cos 2z\bigr)\,y=0 .
+\]
+Its coefficient is periodic, so Floquet's theorem applies: there is a solution
+\(F(z)=\sum_k c_k e^{i(\nu+2k)z}\) with \(F(z+\pi)=e^{i\pi\nu}F(z)\), where the
+\emph{characteristic exponent} \(\nu\) depends on \(a\) and \(q\).\index{Floquet
+theory} Its even and odd parts are \bidx{MathieuC}\mcode{MathieuC[a, q, z]} and
+\bidx{MathieuS}\mcode{MathieuS[a, q, z]}, and their \(z\)-derivatives
+\bidx{MathieuCPrime}\mcode{MathieuCPrime} and \bidx{MathieuSPrime}\mcode{MathieuSPrime}.
+A solution is periodic, with period \(\pi\) or \(2\pi\), only when \(\nu\) is an integer,
+and that happens at a discrete set of \emph{characteristic values}: \(a=a_r(q)\) for the
+even solution \(\operatorname{ce}_r\), and \(a=b_r(q)\) for the odd \(\operatorname{se}_r\).
+These are \bidx{MathieuCharacteristicA}\mcode{MathieuCharacteristicA[r, q]} and
+\bidx{MathieuCharacteristicB}\mcode{MathieuCharacteristicB[r, q]}, and they are what a
+physical problem asks for: the eigenfrequencies of the drum, the band edges of the
+crystal.\index{Mathieu functions!characteristic values}
+
+\begin{codepairs}
+\pair{special-functions/mathieu/1}{At \(q=0\) the equation is \(y''+ay=0\), and the even
+solution is a cosine\ldots}
+\pair{special-functions/mathieu/2}{\ldots and the odd one a sine.}
+\pair{special-functions/mathieu/3}{A machine value.}
+\pair{special-functions/mathieu/4}{Thirty digits of the odd function.}
+\pair{special-functions/mathieu/5}{A complex argument at thirty digits; the function is
+entire in \(z\).}
+\pair{special-functions/mathieu/6}{The characteristic values \(a_2(1)\) and \(b_2(1)\);
+both tend to \(r^2=4\) as \(q\to0\).}
+\pair{special-functions/mathieu/7}{\(a_0(25)\) to thirty digits: a large \(q\) pushes the
+lowest value far below zero.}
+\pair{special-functions/mathieu/8}{Store \(a_2(1)\) to thirty digits\ldots}
+\pair{special-functions/mathieu/9}{\ldots and the even solution there is
+\(\pi\)-periodic: \(\operatorname{ce}_2\).}
+\pair{special-functions/mathieu/10}{It carries the DLMF normalization
+\(\int_0^{2\pi}\operatorname{ce}_r^2\,dz=\pi\).}
+\pair{special-functions/mathieu/11}{At an even characteristic value no periodic
+\emph{odd} solution exists, and \mcode{MathieuS} returns the limit of its
+normalization, \(0\).}
+\pair{special-functions/mathieu/12}{The second derivative closes on the pair: it is the
+equation itself.}
+\pair{special-functions/mathieu/13}{The Wronskian \(CS'-C'S\) is constant, as for any
+equation without a first-derivative term.}
+\pair{special-functions/mathieu/14}{The Maclaurin series follows from the equation, in
+multiples of the value at the origin.}
+\end{codepairs}
+
+\calloutnote{Theory}{Substituting the Floquet series into the equation gives the
+three-term recurrence \((a-(\nu+2k)^2)\,c_k=q\,(c_{k-1}+c_{k+1})\): an infinite
+tridiagonal eigenproblem. For an integer \(r\) the periodic solutions split into four
+classes by parity and period---\(\cos 2kz\), \(\cos(2k{+}1)z\), \(\sin(2k{+}1)z\),
+\(\sin(2k{+}2)z\)---and in each class the recurrence is a \emph{symmetric} tridiagonal
+matrix whose eigenvalues are the \(a_r(q)\) or \(b_r(q)\) of that class. For real \(q\) an
+unreduced symmetric tridiagonal matrix has simple eigenvalues, so the curves
+\(a_r(q)\) never cross within a class and \(a_r\) is simply the eigenvalue of rank
+\(r\). For \(q>0\) they interlace, \(a_0<b_1<a_1<b_2<a_2<\cdots\): the intervals
+\((a_r,b_{r+1})\) are the \emph{stability bands} of the Mathieu chart, where \(\nu\) is
+real and every solution stays bounded, and the gaps \((b_r,a_r)\) the instability
+bands, where \(\nu\) is complex and solutions grow.}%
+\calloutnote{Under the hood}{\emph{Characteristic values} (v0.6344): the eigenvalue of
+fixed rank of the truncated tridiagonal matrix, truncated where its error falls below
+\(2^{-(\text{bits}+30)}\). At machine precision it is found by Sturm-sequence
+bisection---counting sign changes of the leading minors tells how many eigenvalues lie
+below a trial \(x\)---and at arbitrary precision the machine value is refined by Newton
+on \(\det(T-x)\) in MPFR, its logarithmic derivative a sum over the \(LDL^T\) pivots,
+then certified by two Sturm counts at \(x\mp2^{-(\text{bits}+2)}\). \emph{Functions}
+(v0.6165--66): one plan per \((a,q)\). The exponent \(\nu\) comes from Hill's determinant
+rewritten without its poles at \(a=(2k)^2\), refined by Newton on the
+continued-fraction consistency condition; inverse iteration locates the dominant
+coefficient, and the \(c_k\) come from two Miller sweeps glued there. Each \(z\) is then
+one centred Horner sum. The \emph{normalization} is \(\sum c_k^2=1\) with
+\(\operatorname{Re}c_0>0\) for a generic \(\nu\)---the plain square, so the function is
+analytic in \(a\) and \(q\)---and the DLMF one at the characteristic values; wherever
+\(\nu\) is real this agrees with the other common choice, the non-analytic
+\(\sum|c_k|^2=1\); in an instability band or for complex parameters the two differ by a
+\(z\)-independent factor. At \(10^4\) digits a value takes about 0.15~s.}
+
 \subsection{The Meijer \texorpdfstring{\(G\)}{G}-function}
 \label{ssec:sf-meijerg}
 
@@ -1050,7 +1632,7 @@ functions it contains.
 \pair{special-functions/meijerg/5}{\(G^{2,0}_{0,2}\) is a Bessel \(K\).}
 \pair{special-functions/meijerg/6}{Three \(b\)'s have no single classical name; the
 parameters come back sorted into canonical order.}
-\pair{special-functions/meijerg/7}{\B{FunctionExpand} writes out the Slater sum: three
+\pair{special-functions/meijerg/7}{\mcode{FunctionExpand} writes out the Slater sum: three
 \({}_0F_2\) terms with gamma-function weights.}
 \pair{special-functions/meijerg/8}{Machine values, threaded over a list.}
 \pair{special-functions/meijerg/9}{The second point, \(z=0.7\), to twenty-five digits.}
@@ -1068,8 +1650,8 @@ The automatic reductions (pairs~1--5 and~12) and \mcode{FunctionExpand} (pair~7)
 strengths of the same rewrite: \mcode{MeijerG} applies Slater's theorem only when the
 result is a classical function, while \mcode{FunctionExpand} applies it whenever an
 expansion exists. \mcode{FunctionExpand} carries a few other rules as well, among them
-\mcode{PolyLog} and \mcode{Log} at roots of unity and \mcode{PolyGamma} at
-\(\tfrac14\), \(\tfrac12\) and \(\tfrac34\) (pair~13); an expression none of its rules
+\mcode{PolyLog} and \mcode{Log} at roots of unity (pair~13) and \mcode{PolyGamma} at
+every positive rational (\S\ref{ssec:sf-gamma}); an expression none of its rules
 covers passes through it unchanged. A definite \B{Integrate} applies the same rules to
 its result, which is how an integral that the Meijer-\(G\) machinery closes comes back
 as a named constant or function rather than as a \mcode{MeijerG}.\calloutnote{Theory}{When two \(b_j\) among the
@@ -1092,6 +1674,130 @@ scalar call went from \(456\,\mu\)s to about \(3\,\mu\)s, a \(10^6\)-element buf
 the fastest engine in all nine \mcode{MeijerG} cells.}
 
 \usagebox{MeijerG}
+
+The reduction runs the other way too. \bidx{MeijerGReduce}\mcode{MeijerGReduce[expr, x]}
+rewrites an expression as \B{Inactive} Meijer \(G\)-functions of \(x\), valid for
+\(x>0\)---the first step of the Mellin-transform integrator, which has to see an
+integrand as a product of \(G\)'s before it can apply the closure theorem above.
+
+\begin{codepairs}
+\pair{special-functions/meijerg-reduce/1}{\(e^{-x}=G^{1,0}_{0,1}(x\,|\,0)\), the reverse of
+pair~1.}
+\pair{special-functions/meijerg-reduce/2}{A power argument uses the four-argument form:
+\mcode{MeijerG[a, b, w, r]} is the \(G\) at \(w^{1/r}\), here \((x/2)^2\).}
+\pair{special-functions/meijerg-reduce/3}{Sums map term by term, and powers of \(x\) stay
+outside.}
+\pair{special-functions/meijerg-reduce/4}{\(\arctan x\) is a \(G^{1,2}_{2,2}\) of \(x^2\).}
+\pair{special-functions/meijerg-reduce/5}{\B{Activate} evaluates the inactive form, and
+gives back the function.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{\mcode{MeijerGReduce} (v0.6220) uses the same
+function-to-\(G\) table as \texttt{Integrate[..., Method -> "Roach"]}
+(\S\ref{ssec:calc-definite}), so the two cannot drift apart: exponentials, the
+trigonometric and hyperbolic functions, \(\log(1+cx^q)\), the inverse tangent, binomial
+powers, the error and exponential integrals, the incomplete gamma function, the four
+Bessel functions, \mcode{StruveH} and the complete elliptic integrals. Its test suite
+checks that \mcode{Activate} returns the input, numerically, for fifty inputs.}
+
+\subsection{Zeros of special functions}
+\label{ssec:sf-zeros}
+
+Many questions about a special function are questions about where it vanishes: the
+vibration frequencies of a drum are the zeros \(j_{\nu,k}\) of \(J_\nu\), the energy
+levels of a particle in a linear potential are the zeros of \(\operatorname{Ai}\), and
+the distribution of the primes is written in the zeros of \(\zeta\). Mathilda names the
+\(k\)-th zero as a function of an exact index\index{special functions!zeros}:
+\bidx{ZetaZero}\mcode{ZetaZero[k]} is the \(k\)-th nontrivial zero \(\tfrac12+it_k\) of
+\(\zeta\) above the real axis, \bidx{AiryAiZero}\mcode{AiryAiZero},
+\bidx{AiryAiPrimeZero}\mcode{AiryAiPrimeZero}, \bidx{AiryBiZero}\mcode{AiryBiZero} and
+\bidx{AiryBiPrimeZero}\mcode{AiryBiPrimeZero} the negative real zeros of the Airy
+functions and their derivatives, and \mcode{BesselJZero} (\S\ref{ssec:sf-bessel}) and
+\bidx{BesselYZero}\mcode{BesselYZero} the positive zeros of \(J_\nu\) and \(Y_\nu\).
+An exact index stays symbolic, a genuine constant like \(\zeta(3)\); \B{N} gives its
+digits.
+
+\begin{codepairs}
+\pair{special-functions/zeros/1}{The first zeta zero is a symbol\ldots}
+\pair{special-functions/zeros/2}{\ldots at the height probed in pair~9 of
+\S\ref{ssec:sf-zeta}, now to thirty digits and certified.}
+\pair{special-functions/zeros/3}{\(\zeta\) vanishes at the third zero to all thirty
+digits.}
+\pair{special-functions/zeros/4}{The thousandth zero, at height \(t\approx1419\).}
+\pair{special-functions/zeros/5}{The millionth, in about 75~ms.}
+\pair{special-functions/zeros/6}{The first zeros of \(\operatorname{Ai}\),
+\(\operatorname{Ai}'\), \(\operatorname{Bi}\) and \(\operatorname{Bi}'\): all on the
+negative axis, where the functions oscillate.}
+\pair{special-functions/zeros/7}{\(a_1\) to thirty digits\ldots}
+\pair{special-functions/zeros/8}{\ldots where \(\operatorname{Ai}\) is zero to the
+working precision.}
+\pair{special-functions/zeros/9}{The five-hundredth Airy zero.}
+\pair{special-functions/zeros/10}{The first five zeros of \(J_0\): their spacing tends to
+\(\pi\).}
+\pair{special-functions/zeros/11}{The second zero of \(Y_1\)\ldots}
+\pair{special-functions/zeros/12}{\ldots checked.}
+\end{codepairs}
+
+The certification in pair~2 is not decoration.\calloutnote{Theory}{The zeros of \(Z(t)\)
+are sign changes, but a sign change between two sample points could hide two zeros or
+miss a close pair, so ``the \(k\)-th zero'' needs proof that none was skipped. Gram
+points (where \(\vartheta(t)\) is a multiple of \(\pi\)) give the expected interlacing,
+Rosser's rule groups the exceptions into blocks, and Turing's method bounds the total
+count up to height \(t\) through the argument of \(\zeta\), so the zeros found can be
+matched one-for-one against the zeros that exist. Arb's
+\texttt{acb\_dirichlet\_hardy\_z\_zero} does exactly this, and Mathilda's
+\mcode{ZetaZero} (v0.6344) calls it, so \texttt{ZetaZero[k]} is provably the \(k\)-th.}%
+\calloutnote{Under the hood}{The Airy zeros are Arb's \texttt{arb\_hypgeom\_airy\_zero}:
+the asymptotic expansion of DLMF~9.9.6--9.9.9 polished by Newton's method with a
+certified enclosure. The Bessel zeros share one implementation: McMahon's expansion
+\(j_{\nu,k}\approx(k+\nu/2-\tfrac14)\pi-\cdots\) when \(k>\nu+20\), and otherwise a scan of
+\(J_\nu\) from the origin in steps of \(\tfrac14\) for sign changes (consecutive zeros are
+more than \(2\) apart), then Newton on \(J_\nu/J_\nu'\); arbitrary precision refines the
+machine zero by Newton in Arb, one step per doubling of the precision. The Bessel zeros
+have a machine kernel and so compile; the indexed heads (\mcode{ZetaZero}, the Airy
+zeros) take an exact integer, which no machine buffer holds.}
+
+\subsection{Wavelets}
+\label{ssec:sf-wavelets}
+
+A family of functions defined by a \emph{functional} equation rather than a
+differential one closes the catalogue.\index{wavelets} A \emph{scaling function}
+\(\phi\) satisfies the refinement (two-scale) equation
+\[
+  \phi(x)=2\sum_k h_k\,\phi(2x-k),\qquad \sum_k h_k=1,
+\]
+and its \emph{wavelet} is \(\psi(x)=2\sum_kg_k\,\phi(2x-k)\) with
+\(g_k=(-1)^kh_{1-k}\). The Haar wavelet, whose \(\phi\) is the indicator of \([0,1)\), is
+the simplest; Daubechies' wavelets of order \(n\) have \(2n\) coefficients chosen so that
+\(\psi\) has \(n\) vanishing moments; they gain smoothness only slowly with \(n\), and the
+order-2 \(\phi\) is continuous but not differentiable.
+\bidx{WaveletPhi}\mcode{WaveletPhi[wave, x]} and \bidx{WaveletPsi}\mcode{WaveletPsi[wave, x]}
+evaluate them for \bidx{HaarWavelet}\mcode{HaarWavelet[]} and
+\bidx{DaubechiesWavelet}\mcode{DaubechiesWavelet[n]}, and
+\bidx{WaveletFilterCoefficients}\mcode{WaveletFilterCoefficients} gives the \(h_k\).
+
+\begin{codepairs}
+\pair{special-functions/wavelets/1}{Haar's \(\psi\) is a step function, given exactly
+for a symbolic \(x\).}
+\pair{special-functions/wavelets/2}{The four Daubechies-2 coefficients,
+\((1+\sqrt3)/8\), \((3+\sqrt3)/8\), \ldots}
+\pair{special-functions/wavelets/3}{They sum to \(1\).}
+\pair{special-functions/wavelets/4}{\(\phi\) at the integers comes from the eigenvector
+of the refinement equation: \((1\pm\sqrt3)/2\).}
+\pair{special-functions/wavelets/5}{The refinement equation itself, at a point of the
+dyadic grid.}
+\pair{special-functions/wavelets/6}{Between grid points the value is interpolated.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{There is no formula for a Daubechies \(\phi\); there is an
+algorithm. Mathilda finds \(h\) by spectral factorization of
+\(P(y)=\sum_{k<n}\binom{n-1+k}{k}y^k\), with the roots found by Durand--Kerner in MPFR.
+It finds \(\phi\) at the integers as the eigenvector of the two-scale equation, and
+refines level by level on the dyadic grid of spacing \(2^{-\text{MaxRecursion}}\)
+(\(2^{-8}\) by default), interpolating linearly in between, which is what the reference
+system returns. The grid is memoized, since \mcode{NIntegrate} and \mcode{NDSolve} sample
+\(\phi\) thousands of times. These heads (v0.6406) take a wavelet object rather than a
+number, so they have no packed or \mcode{Compile} surface.}
 
 \subsection{Machine precision: one kernel, five surfaces}
 \label{ssec:sf-machine}
@@ -1161,6 +1867,33 @@ and \mcode{BesselK}. The machine regimes were closed (v0.436--v0.444) by routing
 scalar call through one gate to the kernel the array paths already used, and by
 writing native double re/im complex kernels in place of MPFR pairs.}
 
+The same holds one level up. Since v0.6482 every special function in this section that takes
+a numeric argument (not an index or a wavelet object) also compiles at arbitrary
+precision: \texttt{Compile[..., WorkingPrecision -> n]}, and the
+automatic compilation behind \mcode{NIntegrate}, \mcode{NSum}, \mcode{FindRoot} and
+\mcode{NDSolve} at a \mcode{WorkingPrecision}, lower all of them, for real and complex
+arguments.\index{Compile@\mcode{Compile}!arbitrary precision}
+
+\begin{codepairs}
+\pair{special-functions/compile-precision/1}{A thirty-digit compiled function with two
+special functions in its body.}
+\pair{special-functions/compile-precision/2}{Its value at a thirty-digit point\ldots}
+\pair{special-functions/compile-precision/3}{\ldots is the interpreter's, digit for
+digit.}
+\pair{special-functions/compile-precision/4}{\mcode{MathieuC} lowers at thirty digits.}
+\end{codepairs}
+
+\calloutnote{Performance}{The lowering adds no numerics: one opcode hands its MPFR
+operands to the head's \emph{own} arbitrary-precision evaluator, the one \mcode{N}
+reaches, so compiled and interpreted values agree by construction, and a registry
+decides which heads lower. Before v0.6482 only 23 of 151 numeric heads lowered for a real
+argument; one unlowered head sent a whole high-precision \mcode{NIntegrate} body back to
+the interpreter at every sample. A lone special function runs at about the
+interpreter's speed, because the Arb evaluation dominates; the gain is in the arithmetic
+around it---\texttt{NIntegrate[Sin[3 x] Erf[x] Exp[-x] (1 + x\^{}2)/(2 + x), \{x, 0, 1\}]} at
+thirty digits went from 13.1 to 5.5~ms (\texttt{docs/design/compile-arbitrary-precision.md},
+\S19).}
+
 \subsection*{Where this connects}
 
 The special functions are the point where the three layers of Mathilda meet on a
@@ -1174,8 +1907,10 @@ elliptic families under \B{D}, the series expansions, the antiderivatives that
 arithmetic in the complex plane, are what the numerical methods of
 \S\ref{sec:numcalc} call when an integral or a differential equation resolves into
 one of these functions. The orthogonality of the Legendre polynomials underwrites
-Gaussian quadrature; the gamma and zeta functions, and the Dirichlet
-\(L\)-functions that twist them, thread through analytic number theory; and the
+Gaussian quadrature; the gamma and zeta functions, the Dirichlet
+\(L\)-functions that twist them, and the zeros that \mcode{ZetaZero} certifies, thread
+through analytic number theory; the elliptic functions parametrize the curves behind the
+elliptic-curve factoring of \S\ref{sec:numbertheory}; and the
 hypergeometric family, with Meijer's \(G\) at its summit, is the organizing idea that keeps the whole
 collection from being a bag of unrelated formulas. For the exhaustive options and
 corner cases of any function named here---the branch-cut conventions, the incomplete

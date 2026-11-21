@@ -1,0 +1,899 @@
+\chapter{Certified Answers}
+\label{ch:certified}
+
+% Written in the v0.507 -> v0.6664 book pass (BOOK_UPDATE_REVIEW.md I27).
+
+Every answer in this book so far has been a \emph{claim}. When \B{Factor} prints
+\((x-1)(x+1)(x^2+1)\), Mathilda is asserting that the product expands back to
+\(x^4-1\) and that no factor splits further. When \B{Minimize} returns \(\{-1,
+\{x\to-1\}\}\), it is asserting that no real \(x\) does better. The assertions are
+made by a few hundred thousand lines of C and Mathilda-language rules. That code is
+tested, and the earlier chapters show it doing a great deal correctly, but it is
+still a program, and programs have bugs. This chapter is about the other way of
+trusting an answer: having it checked by a second program that is small, simple,
+and independent of the first.
+
+Since version 0.6536 Mathilda can hand its answers to the
+\emph{Lean~4}\index{Lean 4} theorem prover. \mcode{Certify}\bidx{Certify} computes a
+result, writes a self-contained Lean file that states the result as a theorem and
+proves it from a \emph{certificate}, and runs the Lean kernel on that file. The
+answer comes back as a \mcode{ProofObject}\bidx{ProofObject} that records exactly what
+was proved, how, and what was \emph{not} checked. Around \mcode{Certify} sit
+\mcode{LeanForm}\bidx{LeanForm} (Mathilda expressions in Lean syntax),
+\mcode{Refute}\bidx{Refute} (a counterexample, with a proof that it is one),
+\mcode{Conjecture}\bidx{Conjecture} (guess a closed form, then certify it),
+\mcode{LeanVerify}\bidx{LeanVerify} (check a Lean source string), and a small Lean
+package that lets a Lean user call Mathilda from inside a proof.%
+\calloutnote{Pitfall}{The machine that built this edition of the book has no Lean
+toolchain installed. That is deliberate, and it is worth seeing: everything in this
+chapter that does not need Lean really runs, and every place where Lean would be
+consulted says so honestly, with \mcode{Missing["NotAvailable"]} rather than a
+made-up \mcode{True}. Where the chapter shows Lean code that Mathilda did not print,
+it is in a tinted box labelled \emph{not build-verified}.}
+
+The chapter starts with why certificates matter and how they relate to the evidence
+Mathilda already produces for itself. It then takes each function in turn, describes
+the architecture and the trust boundary, shows the Lean side, and ends with an honest
+list of limits.
+
+% ---------------------------------------------------------------------------
+\section{Why certificates}
+\label{sec:cert-why}
+
+There is a basic asymmetry in mathematics between \emph{finding} and
+\emph{checking}. Finding the factors of \(2^{64}+1\) was a celebrated hand computation by Landry in 1880;
+checking that \(274177 \times 67280421310721 = 18446744073709551617\) takes a
+pocket calculator a moment. Finding an antiderivative needs the Risch machinery of
+Chapter~\ref{ch:integration}; checking one needs only differentiation. Finding the
+minimum of a polynomial needs a search; checking that the polynomial minus the
+claimed minimum is a sum of squares needs only multiplication.
+
+A \emph{certificate}\index{certificate} is the extra data that makes checking cheap:
+the factors themselves, a list of squares, a set of cofactors, a primality witness.
+The hard, clever, bug-prone search produces the certificate. A short, dull, reliable
+procedure checks it. If the check passes, the answer is right \emph{regardless of how
+the search was done}, and a bug in the search can cost you an answer but never give
+you a wrong one.%
+\calloutnote{Theory}{This is the \emph{de Bruijn criterion}\index{de Bruijn
+criterion}, named after the designer of the Automath proof checker: a proof system is
+trustworthy when its proofs can be checked by a small, independently auditable
+program, however large and clever the system that \emph{produced} them. Lean~4
+follows it. Its \emph{kernel}\index{Lean 4!kernel} type-checks every definition and
+theorem against the rules of dependent type theory, and everything else (the
+elaborator, the tactics such as \texttt{grind} and \texttt{decide}, the libraries) only
+proposes proof terms that the kernel must accept.}
+
+Mathilda adopts the same division of labour. In the language of the design
+note\index{Lean 4!trust model}, Mathilda is an \emph{untrusted oracle} and the Lean
+kernel is the \emph{trusted checker}. Mathilda's algorithms (Risch, Gröbner bases,
+semidefinite programming, factoring) are never trusted; they only have to be right
+often enough to be useful. A bug in Mathilda can make \mcode{Certify} fail to find a
+certificate, or produce one that Lean rejects. It cannot produce a wrong
+\mcode{"Verified" -> True}, except through steps that the \mcode{ProofObject} lists
+explicitly as trusted, or through a bug in Lean itself.
+
+% ---------------------------------------------------------------------------
+\section{The certificates Mathilda already makes}
+\label{sec:cert-internal}
+
+Certificates are not new to Mathilda. Several subsystems described elsewhere in this
+book already produce evidence for their answers and check it exactly before they
+answer. What is new is that the evidence can now leave the system.
+
+\begin{itemize}
+\item \B{PossibleZeroQ} has a \emph{structural non-zero certificate} that settles
+  many \texttt{False} answers with no numeric work, and its \texttt{True} answers are
+  evidence, not proofs (\S\ref{ssec:alg-possiblezeroq}). When certainty is needed,
+  \B{Simplify} can sometimes reduce a difference to the literal \(0\) by an exact
+  argument, which \emph{is} a proof.
+\item \B{Reduce} tries a sum-of-squares (Putinar) certificate before running the
+  cylindrical decomposition, and re-verifies the rounded certificate in exact rational
+  arithmetic (\S\ref{ssec:alg-reduce}).
+\item The exact optimizers \B{Minimize} and \B{Maximize} finish with a certificate:
+  a \B{Reduce} decision of \(\forall x\,(\text{constraints}\Rightarrow f(x)\ge v)\)
+  (\S\ref{ssec:opt-exact-method}).
+\item \B{Refine}'s sign reasoning is backed by a \B{Reduce} entailment
+  (\S\ref{ssec:alg-refine}).
+\item The Risch decision procedure can \emph{prove} that an integral is not
+  elementary (Chapter~\ref{ch:integration}); the proof is the failure of a complete
+  algorithm.
+\end{itemize}
+
+The sum-of-squares engine behind \B{Reduce} is exposed directly, which makes the idea
+concrete.
+
+\begin{codepairs}
+\pair{certified-answers/internal/1}{\mcode{Reduce\textasciigrave SOSCertificate}
+proves \(q\ge0\) by returning blocks \(\{m, b, Q\}\): a multiplier \(m\), a basis of
+polynomials \(b\), and an exact rational positive semidefinite Gram matrix \(Q\).}
+\pair{certified-answers/internal/2}{Anyone can check it: \(q=\sum m\,b^{\mathsf T}Qb\)
+must hold identically. The difference expands to \(0\).}
+\pair{certified-answers/internal/3}{\(x^2-1\) is negative at \(x=0\), so there is no
+certificate, and the engine says so.}
+\pair{certified-answers/internal/4}{The zero test's \texttt{True} here is a strong
+verdict but, as \S\ref{ssec:alg-possiblezeroq} explains, not a proof.}
+\pair{certified-answers/internal/5}{The exact optimizer's answer rests on an internal
+\B{Reduce} certificate.}
+\end{codepairs}
+
+All of these share one weakness: the certificate is checked by \emph{the same system
+that produced it}. Exact rational arithmetic is a strong check, but if
+\B{Expand} had a bug, the check and the computation would share it. \mcode{Certify}
+closes that gap by sending the certificate to a checker with nothing in common with
+Mathilda. Several of its generators reuse the internal machinery directly: the
+nonnegativity kind takes its squares from \mcode{Reduce\textasciigrave
+SOSCertificate}, and the optimality kind takes the optimum from \B{Minimize} or
+\B{Maximize} and then builds its own Lagrange-multiplier certificate. Others have no
+external form yet. \B{PossibleZeroQ} answers are never certified (they are
+heuristic), and Risch non-elementarity proofs are not exported: a proof that
+\emph{no} elementary antiderivative exists is a statement about differential fields
+that core Lean cannot yet state (\S\ref{sec:cert-limits}).
+
+% ---------------------------------------------------------------------------
+\section{Speaking Lean: \texttt{LeanForm}}
+\label{sec:cert-leanform}
+
+Before Mathilda can ask Lean anything it has to say it in Lean. \mcode{LeanForm} is
+a display wrapper, like \mcode{FortranForm}: it prints an expression as Lean~4
+syntax, with Lean's precedences (\(\leftrightarrow\) 20, \(\to\) 25, \(\lor\) 30,
+\(\land\) 35, relations 50, \texttt{+ -} 65, \texttt{* /} 70, \texttt{\^{}} 75),
+Lean's explicit \texttt{*}, and Mathlib's names for the elementary functions.
+
+\begin{codepairs}
+\pair{certified-answers/leanform/1}{Multiplication is explicit and \texttt{==} becomes
+Lean's \texttt{=}.}
+\pair{certified-answers/leanform/2}{Negative powers are division, a rational
+coefficient is parenthesised, and negative terms print as subtraction.}
+\pair{certified-answers/leanform/3}{\B{Function} is \texttt{fun}, application is
+juxtaposition with compound arguments in parentheses, and \B{Log} and \B{Pi} are
+Mathlib's \texttt{Real.log} and \texttt{Real.pi}.}
+\pair{certified-answers/leanform/4}{An inequality chain becomes a conjunction, and
+\mcode{Not} is \(\neg\).}
+\end{codepairs}
+
+A display form may be approximate. A theorem statement may not: if the Lean text
+means something slightly different from the Mathilda expression, Lean proves the wrong
+theorem. The certificate generators therefore use a \emph{strict
+translator}\index{LeanForm@\mcode{LeanForm}!strict translator},
+\mcode{Lean\textasciigrave Internal\textasciigrave ToLean[expr, type, coreOnly,
+heads, closed]}, which refuses every node whose Lean reading would differ. Each
+refusal issues \mcode{LeanForm::untrans} with the reason and returns
+\mcode{\$Failed}.
+
+\begin{codepairs}
+\pair{certified-answers/leanform/5}{Over \texttt{Int}, Lean's \texttt{/} is floor
+division, so \(x/2\) is refused (``division over Int'').}
+\pair{certified-answers/leanform/6}{An inexact number has no faithful Lean literal:
+``inexact number; Rationalize it first''.}
+\pair{certified-answers/leanform/7}{With \texttt{coreOnly} set, \B{Log} needs Mathlib,
+the Tier~1 library, and is refused.}
+\pair{certified-answers/leanform/8}{In closed mode a variable not bound by a quantifier
+is refused: a free \texttt{id} or \texttt{default} would silently mean Lean's own
+global.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The most dangerous difference is division by zero. In Lean,
+\(x/0=0\) by definition, for every field. A statement that divides by a quantity that
+can vanish is therefore not the statement a mathematician reads. This is why
+\mcode{Certify} clears denominators before stating a rational identity, why it lists
+the denominators in \mcode{"Hypotheses"}, and why a \B{Solve} certificate states every
+denominator nonzero at every solution: otherwise Lean's \(x/0=0\) would accept the
+spurious root \(x=1\) of \((x-1)/(x^2-1) = (x-1)/(2x-2)\).}
+
+% ---------------------------------------------------------------------------
+\section{Certify}
+\label{sec:cert-certify}
+
+\mcode{Certify[comp]} evaluates a computation and certifies its result;
+\mcode{Certify[a == b]} certifies a claim; \mcode{Certify[\{c1, c2, \ldots\}]}
+certifies a batch in a single Lean run. The result is a \mcode{ProofObject}, an
+association with a fixed set of properties.
+
+\subsection{A first certificate}
+
+\begin{codepairs}
+\pair{certified-answers/first/1}{No Lean executable was found on this machine.
+\mcode{\$LeanExecutable} is \texttt{Automatic}: it tries \texttt{MATHILDA\_LEAN},
+the newest \texttt{\textasciitilde/.elan} toolchain, then \texttt{lean} on the
+\texttt{PATH}.}
+\pair{certified-answers/first/2}{Certify a factorization. The Lean file is written and
+Lean is called; since it cannot be run, the message \mcode{LeanVerify::nolean} is
+issued (``no Lean 4 executable found'').}
+\pair{certified-answers/first/3}{So the verdict is \mcode{Missing["NotAvailable"]}. A
+missing checker is not a refutation, so it is never \texttt{False}.}
+\pair{certified-answers/first/4}{The certificate kind.}
+\pair{certified-answers/first/5}{\mcode{"Result"} is \B{Factor}'s own answer.}
+\pair{certified-answers/first/6}{\mcode{"Theorem"} is the statement handed to Lean, as
+a held Mathilda expression: for every \(x\), \(x^4-1\) equals the product.}
+\pair{certified-answers/first/7}{What Lean does \emph{not} check. The theorem proves
+that the product is right, not that the factors are irreducible.}
+\pair{certified-answers/first/8}{The full property list. \mcode{"Axioms"},
+\mcode{"Logs"} and \mcode{"LeanVersion"} report what the Lean run said.}
+\end{codepairs}
+
+The property \mcode{"TrustedSteps"}\index{certificate!trusted steps} is the heart of
+the design. It is a precise statement of the gap between what was proved and what was
+claimed. For a polynomial identity it is empty: the theorem \emph{is} the claim. For a
+factorization it says that irreducibility is not proved. A reader who needs the
+irreducibility as well knows exactly what is missing.
+
+\subsection{What Lean is given}
+
+\mcode{"Verify" -> False} builds the whole Lean file without running anything. It is
+the way to look at a certificate on a machine without Lean, and the way to take the
+file to a machine that has it.
+
+\begin{codepairs}
+\pair{certified-answers/source/1}{Generate, but do not check.}
+\pair{certified-answers/source/2}{\mcode{Missing["NotChecked"]}: nothing was run.}
+\pair{certified-answers/source/3}{The statement in Lean. All coefficients are
+integers and there is no division, so the theorem is over \texttt{Int}.}
+\pair{certified-answers/source/4}{The proof script, split into its lines: introduce
+the variable, then let \texttt{grind} decide the ring identity.}
+\pair{certified-answers/source/5}{The end of the file, after the prelude. The theorem
+\texttt{mathilda\_cert\_1}, then a \emph{trusted footer} that restates the statement
+and asks Lean for the axioms the proof uses.}
+\pair{certified-answers/source/6}{The whole file is about 70 lines: most of it is the
+prelude, a fixed block of definitions (\texttt{powMod}, \texttt{prattCheck},
+\texttt{matMul}, \texttt{det}, \ldots) inlined into every file.}
+\end{codepairs}
+
+\calloutnote{Theory}{Why is \texttt{Int} enough? A polynomial identity with integer
+coefficients that holds for every integer holds identically in \(\mathbb{Z}[x]\) (a
+nonzero polynomial has finitely many roots), and therefore in every commutative ring,
+\(\mathbb{Q}\), \(\mathbb{R}\) and \(\mathbb{C}\) included. Stating it over
+\texttt{Int} loses nothing and lets the tactic work in the simplest ring there is.}
+
+The footer is what turns ``Lean printed no error'' into a precise
+guarantee\index{Lean 4!what Verified means}. \mcode{"Verified" -> True} means all of
+the following:
+\begin{enumerate}
+\item no message of severity \texttt{error}, and no \texttt{sorry}, lies in the
+  theorem's lines or its footer lines, or in the header and prelude;
+\item the axiom report printed \emph{on the theorem's own footer line} names only
+  \texttt{propext}, \texttt{Classical.choice} and \texttt{Quot.sound}, the three
+  standard axioms (\texttt{sorryAx}, and the extra axiom that \texttt{native\_decide}
+  introduces, both fail);
+\item Lean exited cleanly, or every error it reported belongs to a sibling theorem of
+  the same batch;
+\item a \emph{kernel replay}\index{Lean 4!kernel replay} accepted it: the file is
+  compiled to an \texttt{.olean}, and a second, fresh \texttt{lean} process, running
+  none of the checked file's code, re-checks every declaration in a new kernel
+  environment and computes the axioms itself.
+\end{enumerate}
+The replay catches a declaration that was added without a kernel check. Behind it is
+a simpler foundation: the generated file contains no user-defined code at all, only
+the fixed prelude, the strictly translated statement, and a proof script
+(\S\ref{sec:cert-leanverify}).
+
+\subsection{The claim as written}
+\label{ssec:cert-as-written}
+
+A certificate is only as good as the faithfulness of its statement. The subtle danger
+is that a CAS evaluates things. If \mcode{Certify} evaluated the claim
+\mcode{Simplify[(x\^{}2 - 1)/(x - 1)] == x + 1} before translating it, the left side
+would become \(1+x\) and Lean would prove the tautology \(1+x=1+x\), which certifies
+nothing about \B{Simplify}. So \mcode{Certify} and \mcode{ProofObject} hold their
+arguments, and the claim is walked \emph{held}\index{certificate!claim as written}.
+Arithmetic, relations, logic, quantifiers and the value-preserving heads \B{Expand},
+\B{Together}, \B{Cancel}, \B{Apart}, \B{Factor} and \B{Collect} are read through; any
+other computation is refused.
+
+\begin{codepairs}
+\pair{certified-answers/aswritten/1}{Refused, with \mcode{Certify::eval}: the claim
+applies \B{Simplify}, which Mathilda would have to evaluate before Lean sees it.
+Certify the computation \mcode{Certify[Simplify[\ldots]]} instead.}
+\pair{certified-answers/aswritten/2}{The same claim with arithmetic only.}
+\pair{certified-answers/aswritten/3}{Denominators are cleared \emph{as written},
+without cancellation: Lean proves \(x^2-1=(x-1)(1+x)\), not \(1+x=1+x\).}
+\pair{certified-answers/aswritten/4}{The side condition, \(x\ne1\).}
+\pair{certified-answers/aswritten/5}{And the one trusted step: the field algebra from
+the cross-multiplied identity back to the rational one, where the denominators are
+nonzero.}
+\pair{certified-answers/aswritten/6}{Give \(x\) a value.}
+\pair{certified-answers/aswritten/7}{Refused with \mcode{Certify::value} (``x has a
+value (5)''). The claim is certified as written, never with values substituted.}
+\pair{certified-answers/aswritten/8}{}
+\pair{certified-answers/aswritten/9}{A transcendental identity has no Tier~0
+generator: \B{Sin} is refused with \mcode{Certify::eval}.}
+\pair{certified-answers/aswritten/10}{An identity under a hypothesis.}
+\pair{certified-answers/aswritten/11}{It is stated for every field \(K\) of
+characteristic~0, so \(\mathbb{Q}\), \(\mathbb{R}\) and \(\mathbb{C}\) at once.}
+\pair{certified-answers/aswritten/12}{Hence \mcode{"Domain"} is \mcode{Complexes}.}
+\end{codepairs}
+
+\calloutnote{Theory}{Why a generic field when there are hypotheses? Over
+\(\mathbb{Q}\) a hypothesis can be unsatisfiable, and an implication with a false
+hypothesis is vacuously true. ``For all rational \(x\), \(x^2=-4\Rightarrow x=7\)'' is
+a theorem, because no rational \(x\) has \(x^2=-4\); but Mathilda treats \(x\) as
+complex, and \(x=2i\) is a counterexample. Stating the claim for every
+characteristic-0 field closes the hole: \(\mathbb{C}\) is such a field, so a proof
+covers it. When the hypotheses contain an order relation, every variable must be
+real, and the statement is made over every ordered field instead
+(\mcode{"Domain" -> Reals}).}
+
+Two further details complete the picture. Mathilda puts the held \B{Plus},
+\B{Times} and \B{Power} nodes in its canonical arithmetic form before translation
+(flattened, ordered, rationals reduced), so Lean checks \((1+x)^2\) where you typed
+\((x+1)^2\). That normalisation is part of the trust base, and
+\mcode{"LeanTheorem"} shows exactly what was proved. And a \mcode{ProofObject} is
+\emph{authenticated}: \mcode{Certify} registers each object it produces by its
+\B{Hash}, so a hand-made \mcode{ProofObject[<|"Verified" -> True|>]} reports
+\mcode{Missing["Unauthenticated"]} (\S\ref{sec:cert-engines}).
+
+\subsection{A tour of certificate kinds}
+\label{ssec:cert-kinds}
+
+Each kind of computation has its own generator, its own certificate, and its own
+proof strategy. Table~\ref{tab:cert-kinds} summarises them.
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{@{}p{0.20\linewidth}p{0.27\linewidth}p{0.22\linewidth}p{0.23\linewidth}@{}}
+\toprule
+Kind & Certificate & Lean proof & Trusted steps \\
+\midrule
+Identity & the claim itself, denominators cleared & \texttt{grind} & none (polynomial) \\
+Factorization & the product & \texttt{grind} & irreducibility \\
+Antiderivative & cleared derivative identity, surds as variables & \texttt{grind} & derivative rules, \B{Together} forms \\
+Bezout & \(s,t\) and the quotients & \texttt{grind} & none \\
+IdealMembership & cofactors \(c_i\) & \texttt{grind} & none \\
+Roots & the factorization into linear factors & \texttt{grind} & none if it splits over \(\mathbb{Q}\) \\
+Matrix kinds & the matrices & \texttt{decide +kernel} & \B{NullSpace} completeness \\
+Nonnegativity & weighted squares \(d_k\ell_k^2 m_k\) & hints, \texttt{grind} & none \\
+Optimality & KKT multipliers, squares & hints, \texttt{grind} & none \\
+Primality & a Pratt tree & \texttt{decide +kernel} & Lucas's theorem \\
+ClosedFormSum & the closed form & induction & integer \(n\ge a\) only \\
+\bottomrule
+\end{tabular}
+\caption{The \mcode{"Kind"}s of \mcode{Certify} at Tier~0 (core Lean, no Mathlib).}
+\label{tab:cert-kinds}
+\end{table}
+
+\paragraph{Antiderivatives.} \mcode{Certify[Integrate[f, x]]} proves, in core Lean,
+that \(f\) equals the derivative of Mathilda's antiderivative \(F\). Core Lean knows
+nothing about \(\log\) or \(\arctan\), so the derivative is taken by Mathilda, the
+result is cleared of denominators, and Lean checks the polynomial identity that
+remains.
+
+\begin{codepairs}
+\pair{certified-answers/antideriv/1}{Make \mcode{"Verify" -> False} the session
+default, so that each certificate is built but not run.}
+\pair{certified-answers/antideriv/2}{A rational integrand whose antiderivative
+contains \(\sqrt2\).}
+\pair{certified-answers/antideriv/3}{Mathilda's answer.}
+\pair{certified-answers/antideriv/4}{The theorem. \(\sqrt2\) has become a fresh
+variable \texttt{s1}, and the right side is a multiple of \(s_1^2-2\).}
+\pair{certified-answers/antideriv/5}{Four trusted steps: the elementary derivative
+rules, Mathilda's \B{D} of the polynomials, the \B{Together} normal forms, and that
+the cleared denominators are not identically zero.}
+\pair{certified-answers/antideriv/6}{The famous three-arctangent integral, re-checked
+by the exact engine (\S\ref{sec:cert-engines}).}
+\pair{certified-answers/antideriv/7}{A claimed antiderivative is certified by its
+derivative, \(D[F,x]=f\), with the message \mcode{Certify::antideriv}: Lean cannot
+know \emph{which} antiderivative \B{Integrate} returns, so the claim
+\(\int x\,dx = x^2/2+7\) is true only up to a constant.}
+\end{codepairs}
+
+\calloutnote{Theory}{Why is it sound to replace \(\sqrt2\) by a variable \(s\)? The
+statement Lean proves is an identity \(P(x,s) = (s^2-2)K(x,s)\) in the polynomial ring
+\(\mathbb{Q}[x,s]\), with no assumption about \(s\) at all. Substituting \(s\mapsto\sqrt2\)
+is a ring homomorphism into \(\mathbb{R}[x]\), so the identity survives it, and the right
+side becomes \(0\). The tempting alternative, ``assume \(s^2=2\) over \(\mathbb{Q}\)'', would
+be vacuous, because no rational \(s\) satisfies it, and a theorem with an unsatisfiable
+hypothesis proves nothing. Square roots are written over primes
+(\(\sqrt{12}=2\sqrt3\), \(\sqrt6=\sqrt2\sqrt3\)) so that the relations between them stay
+visible to the identity.}
+
+An antiderivative with a \B{RootSum}, as for \(1/(x^3+x+1)\), is outside the Tier~0
+shape (\mcode{Certify::tier}, ``needs Tier 1 (Mathlib)''). With a Lake project with
+Mathlib built (\mcode{\$LeanProject}), \mcode{Tier -> 1} proves the analytic statement
+\(\forall x\in\mathbb{R},\ d_1\ne0\to\dots\to\texttt{HasDerivAt}\,(\lambda x.\,F)\,f\,x\)
+directly, with no trusted steps. Mathilda then also checks that the hypotheses
+\(d_i\neq 0\) are satisfiable (it finds a rational witness point), because Lean's
+\(\log x = \log|x|\) can make an innocent-looking hypothesis false for every real \(x\),
+and the theorem vacuous.
+
+\paragraph{Sums of squares and optimality.} A claim \(\forall x\,(p\ge q)\) is
+certified by writing \(p-q=\sum_k d_k\,\ell_k^2\,m_k\), with rational \(d_k>0\),
+polynomials \(\ell_k\), and each \(m_k\) either \(1\) or a hypothesis \(g\ge0\). Lean
+then needs only the facts \(0\le\ell^2\) and the identity.
+
+\begin{codepairs}
+\pair{certified-answers/sos/1}{The arithmetic--geometric mean inequality for two
+numbers.}
+\pair{certified-answers/sos/2}{The proof: the hint \(0\le(x-y)^2\), the identity
+\(x^2-2xy+y^2=(x-y)^2\) by \texttt{grind}, then \texttt{grind} closes the goal.}
+\pair{certified-answers/sos/3}{A quartic, checked exactly.}
+\pair{certified-answers/sos/4}{Its squares came from \B{Reduce}'s Putinar engine,
+the one shown in \S\ref{sec:cert-internal}.}
+\pair{certified-answers/sos/5}{A linear program.}
+\pair{certified-answers/sos/6}{The optimum, and the exact re-check of its
+certificate.}
+\pair{certified-answers/sos/7}{One Lagrange multiplier per inequality. The two
+inactive constraints get \(0\).}
+\pair{certified-answers/sos/8}{The leftover \(\sigma\) is zero, so the problem is an LP
+and the multipliers are its dual certificate.}
+\end{codepairs}
+
+\calloutnote{Theory}{An optimality certificate has two halves. Attainment is a
+calculation: the point \(x^*\) is feasible and \(f(x^*)=m\). The bound needs
+multipliers \(\lambda_j\ge0\) such that \(\sigma = f-m-\sum_j\lambda_j g_j\) is a sum
+of squares; then on the feasible set every \(g_j\ge0\), so \(f-m\ge\sigma\ge0\). For a
+linear program \(\sigma\equiv0\) and this is weak LP duality. The Gram matrices for
+\(\sigma\) are found numerically, but the certificate Lean sees is exact: the matrix is
+factored by an exact rational \(LDL^{\mathsf T}\), \(Q = L\,\mathrm{diag}(d)\,L^{\mathsf T}\),
+and \(\ell = L^{\mathsf T} b\). Both kinds are stated over \emph{every ordered field},
+which includes \(\mathbb{R}\), so nothing about the reals is left unchecked.}
+
+\paragraph{Primes.} A prime is certified by a \emph{Pratt
+certificate}\index{Pratt certificate}\index{primality!certificate}: a witness \(a\)
+with \(a^{p-1}\equiv1\) and \(a^{(p-1)/q}\not\equiv1 \pmod p\) for every prime \(q\)
+dividing \(p-1\), together with Pratt certificates for those \(q\), recursively. The
+prelude's \texttt{Mathilda.prattCheck} checks such a tree, and Lean's kernel evaluates
+it with \texttt{decide +kernel}.
+
+\begin{codepairs}
+\pair{certified-answers/primes/1}{Landry's factorization of the Fermat number
+\(F_6\).}
+\pair{certified-answers/primes/2}{The theorem: the product is right, and each factor
+has a Pratt certificate.}
+\pair{certified-answers/primes/3}{The exact engine replays the certificates with
+\B{PowerMod}.}
+\pair{certified-answers/primes/4}{A composite is certified by a divisor, against the
+prelude's definition of a prime. This one needs no trusted step.}
+\pair{certified-answers/primes/5}{The flat certificate for \(274177\), in dependency
+order: \((p, a, \text{factors of } p-1)\), with \(2\) as the base.}
+\end{codepairs}
+
+\calloutnote{Theory}{Lucas's theorem says that if \(a^{p-1}\equiv 1\) and
+\(a^{(p-1)/q}\not\equiv 1\pmod p\) for every prime \(q\mid p-1\), then \(a\) has order
+\(p-1\) in \((\mathbb{Z}/p)^\times\), so that group has \(p-1\) elements and \(p\) is
+prime. Pratt observed (1975) that recursing on the \(q\) gives a certificate of
+polynomial size, which shows that primality is in NP. Lean checks the certificate;
+it does not prove Lucas's theorem, which is therefore listed as a trusted step.
+The kernel's \texttt{powMod} unfolds one step per bit of the exponent, so even a
+prime of more than 260 bits, such as \(51\cdot2^{257}+1\), checks in well under a
+second.}
+
+\paragraph{Sums, roots, matrices and ideals.} The remaining kinds follow the same
+pattern.
+
+\begin{codepairs}
+\pair{certified-answers/kinds/1}{Build, do not run.}
+\pair{certified-answers/kinds/2}{\(\sum_{k=0}^n k\,2^k\): Lean defines the partial sum
+\texttt{mathilda\_cert\_1\_S} by recursion and proves the closed form by induction on
+\(m\), with \(n=m\).}
+\pair{certified-answers/kinds/3}{A cubic that splits over \(\mathbb{Q}\): the
+certificate proves \emph{completeness}, an ``if and only if'', not just that the three
+roots work.}
+\pair{certified-answers/kinds/4}{A matrix inverse. The shapes are stated too, because
+the prelude's list functions would silently truncate ragged input.}
+\pair{certified-answers/kinds/5}{An implication between polynomial equations.}
+\pair{certified-answers/kinds/6}{The cofactors: \(2y^2-1 = 1\cdot(x^2+y^2-1)
++(-x-y)(x-y)\).}
+\pair{certified-answers/kinds/7}{Stated over every field of characteristic~0.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The ideal-membership cofactors come from
+\B{PolynomialReduce} when its remainder is \(0\), and otherwise from a degree-bounded
+ansatz (degrees \(0\) to \(4\)) whose coefficient equations are solved exactly by
+\B{LinearSolve}. In Lean the proof is: \texttt{have} \(k_i: l_i - r_i = 0\) from each
+hypothesis, \texttt{have} the cofactor identity by \texttt{grind}, rewrite with the
+\(k_i\), and close with \texttt{grind}. The \B{Solve} kind certifies completeness only
+for a single univariate equation that splits into linear factors over \(\mathbb{Q}\);
+for systems, constraints and irreducible factors it certifies soundness (every
+solution satisfies every constraint) and lists completeness as a trusted step.}
+
+% ---------------------------------------------------------------------------
+\section{Engines and consensus}
+\label{sec:cert-engines}
+
+Lean is one \emph{engine}\index{certificate!engine}. The option \mcode{"Engine"}
+chooses among three, and each declares how much it may be trusted.
+
+\begin{description}
+\item[\texttt{"Lean"}] (the default) is a kernel (\texttt{"Trust" -> "Kernel"}). It is
+  the only engine whose verdict can be \texttt{True}.
+\item[\texttt{"Exact"}] re-checks the certificate with Mathilda's own exact rational
+  arithmetic and polynomial \B{Expand}, with no Lean. It recomputes the obligations from
+  the certified statement, never from the generator's own pre-check. Because it is the
+  same system that produced the certificate, its verdicts are
+  \mcode{Missing["Exact", True]} or \mcode{Missing["Exact", False]}, never \texttt{True}.
+\item[\texttt{"Mathilda"}] is a heuristic check through \B{PossibleZeroQ} and
+  \B{Simplify}, reported as \mcode{Missing["Heuristic", \ldots]}.
+\end{description}
+
+The labels are enforced, not merely declared: a \texttt{True} from any backend whose
+trust is not \texttt{"Kernel"} is rewritten to \mcode{Missing[name, True]} before it
+reaches a \mcode{ProofObject}.
+
+\begin{codepairs}
+\pair{certified-answers/engines/1}{The exact engine, on a machine without Lean.}
+\pair{certified-answers/engines/2}{Every check passed.}
+\pair{certified-answers/engines/3}{The checks themselves: the cleared identity expands
+to \(0\), and the cleared denominator is not identically zero.}
+\pair{certified-answers/engines/4}{A false identity (\(2x\) should be \(3x\)). The
+exact check fails, with \mcode{Certify::exactfail} (quieted here).}
+\pair{certified-answers/engines/5}{The heuristic engine's answer is labelled as such.}
+\pair{certified-answers/engines/6}{A list of engines runs them all.}
+\pair{certified-answers/engines/7}{Each engine's verdict.}
+\pair{certified-answers/engines/8}{The combined verdict. A kernel was listed but could
+not run, so the verdict is the kernel's: not available.}
+\pair{certified-answers/engines/9}{With no kernel listed, agreement is reported as
+\mcode{Missing["Consensus", True]}: two checks agree, but neither is a proof.}
+\pair{certified-answers/engines/10}{A forged object.}
+\pair{certified-answers/engines/11}{It was not produced by \mcode{Certify} in this
+session, so its claimed verdict is not reported.}
+\end{codepairs}
+
+The consensus rule\index{certificate!consensus} for a list of engines is
+conservative. Any \texttt{False} or \mcode{Missing[\_, False]} makes the result
+\texttt{False}, and if a kernel said \texttt{True} at the same time,
+\mcode{Certify::disagree} reports that some checker or translation is wrong. Otherwise
+the result is \texttt{True} only when every kernel listed said \texttt{True}; with no
+kernel listed it is at best \mcode{Missing["Consensus", True]}.
+
+A second engine earns its place when it disagrees. When the Lean integration landed,
+the following near miss was its showcase: \B{PossibleZeroQ} called the difference
+\((1+x)^{20} - \operatorname{Expand}[(1+x)^{20}] + 10^{-25}x\) zero, the heuristic
+engine agreed, and Lean refuted the identity. The zero test has since been fixed, and
+today every engine on this machine gets it right.
+
+\begin{codepairs}
+\pair{certified-answers/catches/1}{A polynomial that is exactly \(x/10^{25}\).}
+\pair{certified-answers/catches/2}{The zero test now sees that it is not zero.}
+\pair{certified-answers/catches/3}{The claim that it \emph{is} an identity, checked by
+two non-kernel engines. Both reject it. \B{Expand} is one of the value-preserving
+heads that the claim walker reads through, so the claim is checked as written.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\mcode{Missing["Exact", True]} is a strong answer. It means that
+an exact rational computation, independent of the code path that produced the
+answer, came out right. But it is a check by the same system, sharing its arithmetic
+and its \B{Expand}, and the book reports it as what it is. Only a run of the Lean
+kernel turns it into \texttt{True}.}
+
+% ---------------------------------------------------------------------------
+\section{Refute}
+\label{sec:cert-refute}
+
+A false claim deserves a certificate too. \mcode{Refute[claim]} searches for a
+counterexample and then proves the \emph{negation} of the statement \mcode{Certify}
+would have tried to prove. The witness is the certificate, and the Lean proof is short:
+instantiate the universal statement at the witness and let the kernel compute that the
+result is false.
+
+\begin{codepairs}
+\pair{certified-answers/refute/1}{Refute a wrong expansion of \((x+1)^3\) (generate
+only).}
+\pair{certified-answers/refute/2}{The witness.}
+\pair{certified-answers/refute/3}{The theorem is the negation of the statement
+\mcode{Certify} would prove.}
+\pair{certified-answers/refute/4}{Its proof: apply the hypothesis \(h\) at \(x=-1\)
+and evaluate.}
+\pair{certified-answers/refute/5}{An inequality that fails at the origin.}
+\pair{certified-answers/refute/6}{A pole is not a counterexample: \(x=0\) falsifies the
+cleared statement but the claim is undefined there, so the witness is \(x=-1\).}
+\pair{certified-answers/refute/7}{A hypothesis with no rational solution.}
+\pair{certified-answers/refute/8}{The witness \(x=-2i\) is algebraic. Core Lean has no
+kernel proof for it, so the refutation is exact-only.}
+\pair{certified-answers/refute/9}{The witness must satisfy the assumptions too: with
+\(x>0\), the counterexample is \(x=1/2\).}
+\pair{certified-answers/refute/10}{No witness within the search bounds:
+\mcode{Refute::none}, ``this is not a proof of the claim''. (The polynomial is
+Motzkin's, which is nonnegative but not a sum of squares.)}
+\end{codepairs}
+
+\calloutnote{Theory}{A witness refutes a statement only if it lies in the statement's
+quantifier domain\index{Refute@\mcode{Refute}!faithfulness}. An integer witness
+refutes a statement over \texttt{Int}; a rational witness refutes ``for every field of
+characteristic~0'', because \(\mathbb{Q}\) is such a field, and also the user's claim
+over \(\mathbb{C}\), because \(\mathbb{Q}\subset\mathbb{C}\). The search is
+deterministic: an exact grid by increasing height (integers \(-5\ldots5\), or small
+fractions), then \B{FindInstance} over the integers or rationals, and finally, exact
+only, \B{FindInstance} over \(\mathbb{C}\) or \(\mathbb{R}\). Every candidate is checked by
+exact arithmetic before a refutation is built; \B{FindInstance}'s domain argument is
+not trusted.}
+
+\mcode{Certify} uses the same machinery on its own. When Lean \emph{rejects} a
+certificate, \mcode{Certify} searches for a counterexample for up to two seconds (the
+option \mcode{"Counterexample"}); if it finds one, the object gains
+\mcode{"Counterexample"}, \mcode{"Refuted"} and \mcode{"RefutationTheorem"}, and is
+displayed as \emph{Refuted} rather than merely \emph{not verified}.
+
+% ---------------------------------------------------------------------------
+\section{Conjecture}
+\label{sec:cert-conjecture}
+
+Experimental mathematics works in three steps: compute some values, guess a pattern,
+prove it. \mcode{Conjecture[expr, n]} does all three. It evaluates \texttt{expr}
+exactly at \(n = s, s+1, \ldots\) for twelve fit points and forty test points, guesses a
+closed form from the fit points, checks it on the test points, and hands the claim
+\(\texttt{expr} = \text{guess}\) to \mcode{Certify} with the engines Lean and Exact.
+
+\begin{codepairs}
+\pair{certified-answers/conjecture/1}{The sum of fourth powers.}
+\pair{certified-answers/conjecture/2}{The guess: Faulhaber's formula, factored.}
+\pair{certified-answers/conjecture/3}{It was fitted on \(n=1\ldots12\) and tested on
+\(n=1\ldots52\).}
+\pair{certified-answers/conjecture/4}{\texttt{"Checked"}: the certificate passed the
+exact re-check, but no kernel ran. With Lean installed it would be
+\texttt{"Proved"}.}
+\pair{certified-answers/conjecture/5}{The two engines' verdicts.}
+\pair{certified-answers/conjecture/6}{A polynomial times a geometric term.}
+\pair{certified-answers/conjecture/7}{Found as the solution of a linear recurrence.}
+\pair{certified-answers/conjecture/8}{A Fibonacci identity.}
+\pair{certified-answers/conjecture/9}{\(\sum F_k^2 = F_nF_{n+1}\), certified with a
+Lean definition of the Fibonacci numbers.}
+\pair{certified-answers/conjecture/10}{The Vandermonde-type sum
+\(\sum_k\binom nk^2\).}
+\pair{certified-answers/conjecture/11}{The guess \(\binom{2n}{n}\) is right, but there
+is no certificate kind for a binomial sum yet, so it is only
+\texttt{"Tested"}, on the points in \mcode{"TestedOn"}.}
+\end{codepairs}
+
+The four statuses\index{Conjecture@\mcode{Conjecture}!status} are graded by
+evidence: \texttt{"Proved"} (a kernel accepted), \texttt{"Checked"} (no kernel
+verdict, but the exact re-check passed), \texttt{"Refuted"} (the certification found a
+counterexample), and \texttt{"Tested"} (anything else: the guess agrees with the data,
+and nothing more is claimed).%
+\calloutnote{Under the hood}{The guessers are tried in order. \texttt{"Polynomial"}
+interpolates with \B{InterpolatingPolynomial} (degree at most 10).
+\texttt{"Geometric"} finds the smallest linear recurrence with constant coefficients
+(order at most 6) from the exact \B{NullSpace} of a Hankel matrix of the values; the
+rational roots \(r\) of its characteristic polynomial, with multiplicities \(\mu\),
+give the ansatz \(\sum_r p_r(n)\,r^n\) with \(\deg p_r<\mu\). \texttt{"Fibonacci"},
+\texttt{"Rational"} (\(p(n)/q(n)\) from an exact null space) and
+\texttt{"Hypergeometric"} (central binomials, factorials, or a term ratio with rational
+roots) follow. A guess is accepted only if it reproduces every fit value
+\emph{exactly}; testing on further points is a guard against overfitting, but only the
+certificate turns it into a theorem. The closed-form-sum certificate itself is an
+induction: Lean checks the base case and the step \(C(n+1)-C(n)=t(n+1)\).}
+
+% ---------------------------------------------------------------------------
+\section{LeanVerify}
+\label{sec:cert-leanverify}
+
+\mcode{LeanVerify[src]} checks an arbitrary Lean~4 source string and returns an
+association: \mcode{"Success"}, Lean's \mcode{"ExitCode"} and \mcode{"Messages"},
+the axiom reports, the timing, the command run, and the result of the kernel replay.
+It is the tool for a certificate that has been saved and carried to another session,
+where its \mcode{ProofObject} would no longer be authenticated: check
+\mcode{obj["LeanSource"]} again.
+
+What makes \mcode{LeanVerify} interesting is what it refuses to run. A Lean file can
+contain code that runs \emph{while it is being elaborated}: a macro, a custom tactic, a
+\texttt{\#eval}. Such code could write the very \texttt{.olean} that the replay reads,
+and forge any result. So before Lean starts, the source is checked against a minimal
+surface\index{LeanVerify@\mcode{LeanVerify}!source check}, in three layers:
+\begin{description}
+\item[Lexical] no strings, no comments, no character literals, no \texttt{\#}, no
+  \texttt{\$}, \texttt{\%}, backquotes or backslashes, no \texttt{@[}, and only an
+  allowlist of Unicode. With these gone, Lean's lexer skips nothing, so the checker
+  does not have to reproduce it (\mcode{LeanVerify::lex}).
+\item[Words] the command keywords of Lean's parser, derived from its parser tables and
+  tested against them, and the escape words such as \texttt{native\_decide},
+  \texttt{run\_tac}, \texttt{by\_elab}, \texttt{sorry} and \texttt{unsafe}
+  (\mcode{LeanVerify::unsafe}).
+\item[Grammar] no imports (or only \texttt{import Mathlib} with a project); commands
+  only \texttt{theorem}, \texttt{example}, \texttt{section}, \texttt{end},
+  \texttt{variable}, \texttt{universe} and a few numeric or Boolean
+  \texttt{set\_option}s (\mcode{LeanVerify::import}, \mcode{LeanVerify::cmd}).
+\end{description}
+These checks are Mathilda's, so they run without Lean.
+
+\begin{codepairs}
+\pair{certified-answers/leanverify/1}{A correct Lean theorem, which passes the source
+check.}
+\pair{certified-answers/leanverify/2}{Lean itself cannot run here. The shell reports
+``command not found'' (exit code 127, with \mcode{LeanVerify::nolean}), the replay is
+\texttt{"not run"}, and \mcode{"Success"} is \texttt{False}: nothing was checked.}
+\pair{certified-answers/leanverify/3}{\texttt{native\_decide} trusts compiled code
+instead of the kernel: refused before Lean would run.}
+\pair{certified-answers/leanverify/4}{Imports are refused: \texttt{import Lean} would
+bring meta-programming into scope.}
+\pair{certified-answers/leanverify/5}{A user definition is refused.}
+\pair{certified-answers/leanverify/6}{So is a comment, which Lean's lexer would skip.}
+\pair{certified-answers/leanverify/7}{A refused source is never handed to the shell:
+its exit code is \mcode{Missing["NotRun"]}, not 127.}
+\end{codepairs}
+
+On a machine with Lean, the first input returns \mcode{"Success" -> True}. The
+command it runs, for core Lean, has this shape (illustrative, with the temporary
+directory abbreviated; it is not output from this build):
+
+\begin{shell}
+lean --json -R DIR -o DIR/MathildaCert.olean DIR/MathildaCert.lean
+lean --run src/internal/lean/Replay.lean DIR/MathildaCert.olean
+\end{shell}
+
+\calloutnote{Under the hood}{Strict C99 has exactly one way to start a process,
+\texttt{system()}, and that is what \texttt{src/lean\_run.c} uses. No user text ever
+reaches the shell: the command line holds only executable paths, flags written by
+Mathilda, and temporary-file paths, each single-quoted for the POSIX shell. The Lean
+source, the claim and any tactic string go into the \texttt{.lean} file. Each run gets a
+private directory from \texttt{mkdtemp} (mode \texttt{0700}); the source is created in it
+with \texttt{O\_CREAT|O\_EXCL|O\_NOFOLLOW}, so no other user can plant a file or a
+symbolic link there, and the directory is removed afterwards. A Lean run is bounded by
+the deterministic \texttt{maxHeartbeats} of each theorem (the option
+\mcode{TimeConstraint}, 60 by default), not by a wall clock.}
+
+% ---------------------------------------------------------------------------
+\section{The architecture and the trust boundary}
+\label{sec:cert-architecture}
+
+\mcode{Certify} does not know Lean. Each generator emits a prover-neutral
+intermediate form\index{certificate!prover-neutral IR}: the kind, the theorem, the
+certificate data, the trusted steps, and a typed \emph{obligation}
+(\texttt{"Identity"}, \texttt{"WeightedSOS"}, \texttt{"KKT"}, \texttt{"Primality"},
+\texttt{"Induction"}, \ldots) together with a \emph{domain form} that says over what the
+statement quantifies (\texttt{"Int"}, \texttt{"Rat"}, \texttt{"CharZeroField"},
+\texttt{"OrderedField"}, \ldots). Registered backends\index{certificate!backend} then
+encode and run the obligations, in this order:
+
+\begin{ccode}[Pipeline sketch, after docs/design/lean\_integration.md]
+Certify[c, opts]
+  per item:   held claim walker -> generator -> neutral IR (Kind, Theorem,
+              Certificate, TrustedSteps, Obligation, DomainForm)
+              each engine's "Encode" hook (Lean text, exact checks)
+  per engine: "Run" on the whole batch (Lean: cache, one file, lean --json,
+              axiom reports, kernel replay)
+              guard: a True from a non-kernel engine -> Missing[engine, True]
+  per item:   one engine -> its ProofObject; a list -> consensus
+              kernel False -> counterexample search -> kernel-checked "not S"
+\end{ccode}
+
+The package is written in Mathilda's own language, in \texttt{src/internal/lean/}:
+\texttt{Lean.m} is the prover-neutral core (claim walker, one generator per kind, the
+backend registry, \mcode{ProofObject}); \texttt{LeanBackend.m} the Lean backend and
+\mcode{LeanVerify}; \texttt{ExactBackend.m} the exact re-check; \texttt{Engines.m} the
+heuristic engine and consensus; \texttt{Refute.m} and \texttt{Conjecture.m} the last two
+functions. Only the translator \mcode{LeanForm} (\texttt{src/print\_lean.c}), the
+process runner (\texttt{src/lean\_run.c}) and the source checker are C. This follows
+the book's recurring split between C for performance and rules for mathematics: the
+generators only orchestrate builtins and assemble text. A new backend (an SMT solver,
+say) is one more file that registers \texttt{"Name"}, \texttt{"Trust"},
+\texttt{"Encode"}, \texttt{"Run"} and \texttt{"Present"} hooks, and it must prove only
+what its domain form says: an SMT solver over the reals proves ``for all reals'', not
+``for every ordered field''.
+
+The trust boundary\index{Lean 4!trust base} can now be drawn precisely.
+
+\paragraph{Trusted.} The Lean kernel; the Lean toolchain as installed (elaborator,
+compiler, \texttt{.olean} writer and reader); the imported modules as built (core
+\texttt{Init}, and Mathlib at Tier~1); the source check, whose two parts are either
+trivially inspectable (the minimal lexical surface) or tested against Lean's own
+parser tables (the keyword list); the assumption that Lean's built-in tactics do not
+run user-supplied code through ordinary syntax; Mathilda's canonical arithmetic form
+of the claim; and, per certificate, the steps listed in \mcode{"TrustedSteps"}.
+
+\paragraph{Checked.} Everything else: every algorithm that produced the answer and
+the certificate (\B{Factor}, \B{Integrate}, \B{Reduce}'s semidefinite programming,
+\B{PrimitiveRoot}, \B{Minimize}), the proof script, and the arithmetic of the
+certificate itself. Mathilda cannot make Lean accept a false theorem. It can make the
+theorem differ from the claim only through the listed trusted steps and the
+arithmetic normalisation, and \mcode{"Theorem"} and \mcode{"LeanTheorem"} show exactly
+what was proved.%
+\calloutnote{Performance}{A Tier~0 run takes about half a second of Lean time plus
+about a second for the kernel replay; the design note's whole-call figures (on a
+loaded machine, not idle) are about 1.8~s for an accepted \mcode{Certify} and 2.3~s for
+a rejection followed by a kernel-checked refutation. A batch \mcode{Certify[\{\ldots\}]}
+shares one Lean run, and verdicts are cached for the session by the theorem text, so
+certifying the same thing twice costs nothing. \texttt{import Mathlib} adds 10--40~s,
+which is why Tier~1 is opt-in. The exact engine, which needs no Lean, answers every
+example in this chapter in milliseconds.}
+
+% ---------------------------------------------------------------------------
+\section{Using Mathilda from inside Lean}
+\label{sec:cert-from-lean}
+
+The same division of labour works in the other direction. The repository's
+\texttt{lean/} directory is a small Lake package\index{Lean 4!tactics}, with only core
+Lean and no Mathlib, whose tactics ask Mathilda for a certificate while a Lean user
+writes a proof, and then check that certificate in Lean.
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{@{}p{0.27\linewidth}p{0.18\linewidth}p{0.22\linewidth}p{0.25\linewidth}@{}}
+\toprule
+Tactic & Goal & Mathilda supplies & Lean checks with \\
+\midrule
+\texttt{mathilda\_linear\_combination} & \(a=b\) from \(h_i: l_i=r_i\) & cofactors \(c_i\) with \(a-b=\sum c_i(l_i-r_i)\) & \texttt{grind}, rewriting \\
+\texttt{mathilda\_sos} & \(0\le p\), \(p\le q\) from \(0\le g_i\) & triples \((d,\ell,i)\), \(q-p=\sum d\,\ell^2 g_i\) & hints \(0\le\ell^2\), \texttt{grind} \\
+\texttt{mathilda\_prime} & \(\exists c,\ \texttt{PrattCertifies}\ p\ c\) & a Pratt certificate & \texttt{decide +kernel} \\
+\texttt{\#mathilda "expr"} & none & \mcode{LeanForm} of the value & nothing; it proves nothing \\
+\bottomrule
+\end{tabular}
+\caption{The tactics of the \texttt{lean/} package.}
+\label{tab:cert-tactics}
+\end{table}
+
+A Lean file that uses them looks like this. It is Lean source from the package's
+README, not Mathilda output, and it was not checked by this
+book's build.
+
+\begin{ccode}[Lean 4 source, illustrative (lean/README.md)]
+import Mathilda
+
+example (x y : Rat) (h1 : x^2 + y^2 = 1) (h2 : x = y) : 2*y^2 = 1 := by
+  mathilda_linear_combination
+
+example (x y : Rat) : 2*x*y ≤ x^2 + y^2 := by
+  mathilda_sos
+
+example : ∃ c, Mathilda.PrattCertifies 274177 c := by
+  mathilda_prime
+
+#mathilda "Factor[x^10-1]"
+\end{ccode}
+
+Each tactic serializes the goal and its hypotheses (local variables become
+\texttt{v1}, \texttt{v2}, \ldots), starts \texttt{Mathilda -file} on a short script, and
+reads back an answer. The server side is \mcode{Lean\textasciigrave
+Internal\textasciigrave Oracle}, and it needs no Lean at all, so it can be shown here.
+
+\begin{codepairs}
+\pair{certified-answers/oracle/1}{The first example's query: the goal \(2v_2^2=1\),
+the hypotheses \(v_1^2+v_2^2=1\) and \(v_1=v_2\). The answer is the list of cofactors.}
+\pair{certified-answers/oracle/2}{The second: \(2v_1v_2\le v_1^2+v_2^2\). One square,
+\(1\cdot(v_1-v_2)^2\), times the trivial multiplier \(g_0=1\).}
+\pair{certified-answers/oracle/3}{\(0\le v_1^3\) under \(0\le v_1\): the square
+\(v_1^2\) times the first hypothesis.}
+\pair{certified-answers/oracle/4}{No certificate exists for a composite; the tactic
+fails with Mathilda's reason.}
+\pair{certified-answers/oracle/5}{What \texttt{\#mathilda} prints: an information
+message, never a proof.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The answer is never elaborated as Lean syntax. The
+package's \texttt{Mathilda/Answer.lean} is a hand-written parser, a pure function on
+strings, that accepts only natural-number literals, the variables \texttt{v<i>}, the
+operators \texttt{+ - * / \^{}} with a literal exponent, lists and tuples, with bounded
+sizes (an answer of at most \(10^6\) characters, numerals of at most 2000 digits).
+Anything else (\texttt{by}, \texttt{fun}, \texttt{sorry}, an unknown identifier) is
+refused. The tactic builds terms from the parsed data with fixed quotations, at the
+goal's own type, and the kernel checks the resulting proof. The package's test suite
+runs the tactics against a fake Mathilda that lies, returning wrong cofactors,
+\texttt{sorry}, and Lean code that tries to write a file, and checks that each one makes
+the tactic fail without proving anything.}
+
+% ---------------------------------------------------------------------------
+\section{Limits}
+\label{sec:cert-limits}
+
+A certificate system earns trust by being precise about what it does not do.
+
+\begin{itemize}
+\item \textbf{Scope.} Tier~0 covers polynomial and rational identities, factorizations,
+  antiderivatives built from rational functions, quadratic surds and one level of
+  \B{Log}, \B{ArcTan} or \mcode{ArcTanh}, Bezout identities, ideal membership, rational
+  roots, rational matrices (\B{Det} up to \(6\times6\)), sums of squares, polynomial
+  optimization, primality, and closed-form sums of polynomial and geometric terms.
+  Transcendental identities (\(\sin^2x+\cos^2x=1\)), \B{RootSum} and complex
+  antiderivatives, radical roots of \B{Solve}, and hypergeometric sums such as
+  \(\sum_k\binom nk^2\) have no certificate yet.
+\item \textbf{Trusted steps.} Factor irreducibility, Risch non-elementarity,
+  \B{NullSpace} completeness and Lucas's theorem are not proved. Each is named in
+  \mcode{"TrustedSteps"} when it applies.
+\item \textbf{Mathlib.} Analytic statements need Tier~1, a Lake project with Mathlib
+  built for the same toolchain, and pay \(10\)--\(40\)~s for \texttt{import Mathlib}.
+\item \textbf{The claim as written.} A claim that contains a computation other than
+  the value-preserving rational ones, or a symbol with any kind of value, is refused.
+  Certify the computation itself, or \mcode{Certify[Evaluate[claim]]} if the
+  value-substituted claim is what you mean.
+\item \textbf{\mcode{LeanVerify}'s surface.} It runs no source with user definitions,
+  strings, comments or \texttt{\#} commands. A development of your own has to be
+  checked by Lean and Lake directly.
+\item \textbf{Exact is not kernel.} Without Lean, the best verdict available is
+  \mcode{Missing["Exact", True]}, a re-check by the system that made the
+  certificate.
+\item \textbf{Time.} \texttt{system()} blocks, and \B{TimeConstrained} measures
+  Mathilda's own CPU time, so it does not interrupt a Lean run; the bound is Lean's
+  deterministic heartbeat count.
+\end{itemize}
+
+The next chapter returns to computation, but the habit this one teaches is worth
+keeping. A CAS is most useful when you can tell which of its answers are proved,
+which are checked, and which are only very probably right, and Mathilda now labels
+each one.

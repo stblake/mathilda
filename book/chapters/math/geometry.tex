@@ -28,7 +28,9 @@ polygon, its \emph{area} and \emph{perimeter} (\B{Area}, \B{Perimeter}); then it
 \emph{centroid} (\B{RegionCentroid}); then the \emph{point-in-polygon} test
 (\B{RegionMember}); and finally the \emph{convex hull} of a point set
 (\B{ConvexHullRegion}), the one construction here that must invent its own output
-shape rather than measure a given one.
+shape rather than measure a given one. A last subsection leaves straight edges behind:
+the length of a curve, the measure of disks and annuli, and the rotation matrices that
+move figures around.
 
 \subsection{Area and perimeter of a polygon}
 \label{ssec:geo-area}
@@ -253,6 +255,65 @@ queried on the machine path, is declined outright---an overflow to infinity woul
 turn every cross product into a \mcode{NaN} that silently reads as ``collinear,''
 so the honest answer is to decline. Keep the coordinates exact and that trap never
 arises.}
+
+\subsection{Curves, disks, and rotations}
+\label{ssec:geo-curves}
+
+A polygon's perimeter is a finite sum. The length of a smooth curve is the limit of such
+sums, the integral
+\[
+  L = \int_a^b \lVert \mathbf r'(t)\rVert\,dt ,
+\]
+and \mcode{ArcLength}\index{arc length} computes it, from either a \mcode{Line} of
+points or a parametrisation \(\mathbf r(t)\) in two or three dimensions. For a
+parametrisation the integral goes to \B{Integrate}, so the answer is exact whenever
+the integral has a closed form, and a number when it does not.
+\mcode{RegionMeasure} gives the natural measure of a region: length for a curve, area
+for a planar region. The disk and the \mcode{Annulus} (the ring between two
+concentric circles) are regions in their own right: \B{Area}, \B{Perimeter},
+\B{RegionCentroid}, and \B{RegionMember} all accept them.
+
+\begin{codepairs}
+\pair{geometry/curves/1}{A polyline: the segments have lengths \(5\) and \(4\).}
+\pair{geometry/curves/2}{One turn of a helix of radius \(1\) and pitch \(2\pi\):
+\(\lVert\mathbf r'\rVert = \sqrt2\), so \(L = 2\sqrt2\,\pi\).}
+\pair{geometry/curves/3}{The parabola \(y = x^2\) on \([0,1]\), in closed form.}
+\pair{geometry/curves/4}{One arch of the sine curve is an elliptic integral:
+\(\int_0^\pi\sqrt{1+\cos^2 t}\,dt = 2\sqrt2\,E(\tfrac12)\).}
+\pair{geometry/curves/5}{The measure of a disk of symbolic radius.}
+\pair{geometry/curves/6}{An annulus has area \(\pi(r_2^2 - r_1^2)\).}
+\pair{geometry/curves/7}{Its perimeter counts both circles: \(2\pi + 4\pi\).}
+\pair{geometry/curves/8}{A point in the ring is a member; a point in the hole is
+not.}
+\pair{geometry/curves/9}{The centroid of a full ring is its centre.}
+\end{codepairs}
+
+\mcode{RotationMatrix}\index{rotation matrix} builds the linear maps that move such
+figures rigidly. \texttt{RotationMatrix[t]} is the plane rotation by \(t\);
+\texttt{RotationMatrix[t, w]} turns space by \(t\) about the axis \(w\); and
+\texttt{RotationMatrix[\{u, v\}]} is the rotation that takes the direction of \(u\)
+to the direction of \(v\).
+
+\begin{codepairs}
+\pair{geometry/curves/10}{The plane rotation by a symbolic angle.}
+\pair{geometry/curves/11}{A sixth of a turn applied to \((1,0)\): the exact point
+\((\tfrac12, \tfrac{\sqrt3}2)\).}
+\pair{geometry/curves/12}{A rotation about the \(z\)-axis leaves \(z\) fixed.}
+\pair{geometry/curves/13}{The rotation taking \((1,2,3)\) to the direction of
+\((3,2,1)\). The two vectors have the same length, and every entry is rational.}
+\pair{geometry/curves/14}{It maps the first vector onto the second, and its
+determinant is \(1\), as a rotation's must be.}
+\end{codepairs}
+
+\calloutnote{Theory}{The rotation by angle \(\theta\) about a unit axis \(\hat w\) is
+Rodrigues' formula, \(R = I + \sin\theta\,[\hat w]_\times +
+(1-\cos\theta)\,[\hat w]_\times^2\), where \([\hat w]_\times\) is the matrix of the
+cross product with \(\hat w\). For the rotation from \(u\) to \(v\), the axis is
+\(u\times v\), and \(\sin\theta\) and \(\cos\theta\) are proportional to
+\(\lVert u\times v\rVert\) and \(u\cdot v\). Normalising the axis would introduce a
+square root, \(\lVert u\times v\rVert\), that cancels again in the product. Mathilda
+writes the formula with the axis left unnormalised, so exact input gives an exact
+matrix without the intermediate radicals: pair~13 is all rationals.}
 
 \subsection*{Where this connects}
 

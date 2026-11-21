@@ -1,0 +1,10 @@
+# Symbolic Integration -- the transcendental tower, one level at a time
+Integrate[1/(x Log[x] Log[Log[x]]), x]
+Integrate[Log[Log[x]]/x, x]
+Integrate[(1 + Log[x]) x^x, x]
+Integrate[E^x/(E^(2 x) + 1), x]
+Integrate[(1 + Tan[x]^2) E^Tan[x], x]
+Integrate[Tan[x]^3, x]
+Integrate[Erf[x] E^(-x^2), x]
+Integrate[ExpIntegralEi[x] E^(-x), x]
+Integrate[LogIntegral[x], x]

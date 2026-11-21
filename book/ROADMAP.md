@@ -65,6 +65,33 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 | 4.9 | Computational Geometry | `chapters/math/geometry.tex` | **Verified** |
 | 4.10 | Graphs | `chapters/math/graphs.tex` | **Verified** |
 
+**Chapters after Ch. 4 (added in the v0.507 → v0.6664 pass, 2026-11-22).** Two new
+chapters sit beside the Ch. 4 sections, and the Ch. 4 sections were brought current
+(see `BOOK_UPDATE_REVIEW.md` for the row-by-row record):
+
+| # | Chapter | File | Status |
+|---|---------|------|--------|
+| — | Symbolic Integration | `chapters/integration.tex` | **Drafting** (first pass written) |
+| — | Certified Answers (Lean 4) | `chapters/certified-answers.tex` | **Drafting** (first pass written) |
+
+**Symbolic Integration scope.** Liouville's theorem and the shape of an answer;
+rational functions (Hermite, Lazard–Rioboo–Trager); the transcendental tower (log,
+exp, hypertangent and Liouvillian levels, the structure theorem, the certified and
+parametric RDE); algebraic functions by Trager's algorithm (integral basis,
+residues by Galois orbit, divisor torsion, parameters); mixed towers by Bronstein's
+algorithm (special places, Phase 5 over a curve, Galois components); the
+ParallelMixedTower method; the cascade, its messages (`nonelem` only with a proof,
+`incomplete`), the FriCAS comparison, and an open-gaps box. The calculus section keeps
+a short pointer subsection under the old label `ssec:calc-integrate`.
+
+**Certified Answers scope.** Why a CAS answer should come with a certificate; the
+certificates Mathilda already makes (PossibleZeroQ, Reduce/SOS, Risch, Minimize);
+`LeanForm`, `Certify` (kinds, engines, consensus), `Refute`, `Conjecture`,
+`LeanVerify`, the trust boundary, the `lean/` tactics, and the limits. The build
+machine has no Lean, so the transcripts show what Mathilda does without one
+(`"Verify" -> False`, `Engine -> "Exact"`); Lean source appears only in labelled
+illustrative listings.
+
 **§4.1 Arithmetic scope** (broadened beyond the original three-subsection outline):
 - **Types & operators** — the numeric heads (`Head`), and how `+ - * / ^` reduce to
   the `Plus`/`Times`/`Power` primitives (`FullForm`).
@@ -91,8 +118,8 @@ moved here from the linear-algebra ZeroTest discussion).)*
 
 **§4.3 Calculus scope** (Verified): 4.3.1 Derivatives (`D`/`Dt`/`Derivative` +
 `Grad`/`Div`/`Curl`/`Laplacian`), 4.3.2 Limits, 4.3.3 Series, 4.3.4 Residues,
-4.3.5 Indefinite integration — the Risch story (incl. the `ParallelMixedTower`,
-Cherry di/polylog, and `DiffUnderInt` engines as `Integrate` methods), 4.3.6 Definite
+4.3.5 Indefinite integration (since 2026-11-22 a pointer to the Symbolic Integration
+chapter), 4.3.6 Definite
 integration (contour methods, Mellin, symmetry), and **4.3.7 Differential equations
 (`DSolve`)** — first-order families, linear const-/variable-coefficient (Kovacic,
 Frobenius), special-function ODEs, systems, Lie point symmetry, integrating factors,
@@ -102,8 +129,8 @@ PDEs, and BVP/Sturm–Liouville. Written 2026-09-25.
 Dot/Det/Inverse; solving & reduction (`LinearSolve`/`LeastSquares`/`RowReduce`/
 `NullSpace`, and the `ZeroTest` option for exact reduction); the decompositions
 (LU/QR/SVD/**Schur**/**Jordan**); eigen-problems; the machine-precision (LAPACK) vs
-exact/MPFR split; packed arrays for speed. (`CholeskyDecomposition` is not yet
-implemented, so it is not covered.)
+exact/MPFR split; packed arrays for speed; functions of a matrix; sparse matrices
+(`sec:linalg-sparse`: direct, Krylov and eigen solvers on `SparseArray`).
 
 **§4.5 Numerical Calculus scope.** `ND`, `NIntegrate`, `NSum`/`NProduct`, `NDSolve`,
 `NLimit`/`NSeries`, `FindRoot`; accuracy/precision goals; when and why to go numeric.

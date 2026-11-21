@@ -14,3 +14,8 @@ Fibonacci[200]
 LucasL[10]
 GCD[Fibonacci[12], Fibonacci[18]] == Fibonacci[GCD[12, 18]]
 Length[IntegerPartitions[100, {4}]]
+Multinomial[2, 3, 4]
+9!/(2! 3! 4!)
+Binomial[-2, -5]
+Binomial[1/2, 2]
+Binomial[0, 1/2]

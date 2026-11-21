@@ -49,7 +49,7 @@ typedef enum {
 typedef struct Expr {
     ExprType type;
     unsigned refcount;            /* shared ownership / copy-on-write         */
-    uint64_t last_evaluated_at;   /* eval-clock stamp; top bit = GROUND flag  */
+    uint64_t last_evaluated_at;   /* eval-clock stamp; top bits = GROUND/INERT */
     uint64_t hash_cache;          /* memoized structural hash; 0 = unset      */
     union {
         int64_t integer;
@@ -60,7 +60,8 @@ typedef struct Expr {
             struct Expr*  head;
             struct Expr** args;
             size_t        arg_count;
-            struct AssocIndex*  index;         /* Association key->position   */
+            struct AssocIndex*  index;         /* Association index, or (odd)
+                                                  binder summary: see 10.3   */
             struct SymSetCache* symset_cache;  /* symbol set of the subtree  */
         } function;
         mpz_t bigint;                          /* GMP arbitrary-precision int */
@@ -111,8 +112,8 @@ explains most of what makes Mathilda fast.
 \texttt{refcount} is the reference count: shared ownership, discussed in full in
 \S\ref{sec:int-memory}. \texttt{last\_evaluated\_at} is a timestamp the evaluator
 stamps on a node when it reaches a fixed point, so a later evaluation of the same
-node can return instantly (\S\ref{sec:int-eval}); its top bit is a flag for
-loop-invariant values. \texttt{hash\_cache} memoizes the node's structural hash the
+node can return instantly (\S\ref{sec:int-eval}); its top two bits flag values whose
+fixed point survives later definition changes. \texttt{hash\_cache} memoizes the node's structural hash the
 first time anything asks for it, turning the repeated subtree walks in \texttt{Plus}
 grouping, \texttt{Association} indexing and set operations into
 \(O(1)\) reads.\calloutnote{Under the hood}{Because these three fields are metadata,
@@ -255,8 +256,8 @@ carries. That is the whole subject of \S\ref{sec:int-nonstd}.
 
 \emph{Rules come before the builtin.} Steps~11 and~12 are ahead of step~14 on purpose:
 a rule the user or a library has installed is tried before \texttt{f}'s own C code, so mathematics expressed as a rewrite rule (the integral tables, the
-derivative rules of \S\ref{sec:int-boot}) can extend or override a primitive without
-touching C. The \texttt{UpValues} of step~11 come first of all, because they are the
+\texttt{HeavisideTheta} values of \S\ref{sec:int-boot}) can extend or override a
+primitive without touching C. The \texttt{UpValues} of step~11 come first of all, because they are the
 more specific claim: \mcode{area[sq[s\_]] \textasciicircum= s\textasciicircum2} says
 something about \emph{this} kind of argument, which should win over whatever
 \texttt{area} says in general (\S\ref{ssec:prog-upvalues}). Only
@@ -276,6 +277,41 @@ is \texttt{HoldAll}; \texttt{Set} is \texttt{HoldFirst}. Watch the effect of eac
 \texttt{Flat} to \texttt{f} makes \texttt{f[f[a, b], c]} flatten to
 \texttt{f[a, b, c]}; adding \texttt{Listable} to \texttt{h} makes it thread over a
 list. Nothing about the main loop changed between those heads---only their bits did.
+
+``Canonical order'' deserves a precise meaning, because every \texttt{Orderless} head
+relies on it, and so do \B{Sort}, \B{Order} and \B{OrderedQ}. It is one total order on
+expressions, \texttt{expr\_compare} in \texttt{src/sort.c}, and since v0.597 it follows
+these rules:\index{canonical order}
+
+\begin{codepairs}
+\pair{10-internals/canonical-order/1}{Numbers come first, by value, whatever their
+type.}
+\pair{10-internals/canonical-order/2}{A complex number orders by its real part, then
+by the size of its imaginary part, negative first.}
+\pair{10-internals/canonical-order/3}{Products compare their non-numeric factors
+first and their coefficients last, so the multiples of \(x\) gather around \(x\).}
+\pair{10-internals/canonical-order/4}{Factors are compared from the \emph{last} one
+backwards, so \(2y\) sorts after anything ending in \(x\); a power sorts before a
+sum.}
+\pair{10-internals/canonical-order/5}{Symbols use a collation in which case folds:
+\(a < A < b < B\).}
+\pair{10-internals/canonical-order/6}{So a product prints in that order too.}
+\pair{10-internals/canonical-order/7}{Atoms before compound expressions, strings
+before symbols; then head, length, and arguments in turn.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The order Mathilda used before v0.597 compared
+polynomial degree vectors, which suits a polynomial but not much else, and put capital
+letters first, so a product printed as \texttt{C a b d}. Replacing it reordered
+several hundred unit-test expectations; each was checked to be a pure reordering of
+the same value. It also exposed code that had silently depended
+on term order---one of the Meijer-G convolution rules trusted whichever factor came
+first and gave a wrong answer when the factors swapped. The order matters beyond
+printing: \texttt{Plus} and \texttt{Times} sort with it, so it decides which term a
+rule like \texttt{a\_ + b\_} binds first, and so which branch a program takes. The new comparator is also
+faster: sorting \(10^5\) mixed polynomial terms went from 2.5\,s to 1.6\,s. A sum of
+already-sorted sums is merged run by run, in \(O(n \log k)\) for \(k\) runs, rather
+than re-sorted.}
 
 \begin{table}[h]
 \centering
@@ -315,20 +351,65 @@ a structural comparison. When a step fires no rule, the loop stops without walki
 tree at all.
 
 Stability across \emph{calls} is handled by the \texttt{last\_evaluated\_at} stamp. A
-global evaluation clock ticks forward on every definition change---every \texttt{Set},
+global evaluation clock ticks forward on definition changes---a \texttt{Set},
 \texttt{SetDelayed}, \texttt{Clear} or \texttt{SetAttributes}. When
 \texttt{evaluate} reaches a fixed point it stamps the result with the current clock;
 a later \texttt{evaluate} of a node already carrying the current stamp returns an
-inc-ref'd view immediately, skipping the loop and all of \texttt{evaluate\_step}. A
-single definition change, by bumping the clock, invalidates every cached evaluation in
-the system at once.\calloutnote{Under the hood}{The stamp's top bit is a second,
-finer cache. A node built entirely from literals under one of six pure structural
-constructors (\texttt{List}, \texttt{Association}, \texttt{Rule},
-\texttt{RuleDelayed}, \texttt{Complex}, \texttt{Rational}) is marked \emph{ground}:
-its value cannot depend on any symbol's definition, so it survives clock churn and can
-be re-validated as a fixed point in \(O(1)\) even after an ordinary assignment. This
-is what keeps a loop that rebuilds a constant list on every iteration from
-re-evaluating it every time.}
+inc-ref'd view immediately, skipping the loop and all of \texttt{evaluate\_step}.
+
+A bare clock is a blunt instrument, though: one tick invalidates every stamp in the
+session, and a symbolic program ticks constantly, because every iterator step and
+every \B{Module} local is a binding. So the stamp has grown two finer layers, each
+recording what a cached result actually depends on.\index{fixed point!certified}
+An \emph{INERT} fixed point (v0.6053) is one built only from numbers, symbols with no
+value or rules, and calls of \texttt{Plus}, \texttt{Times}, \texttt{Power} or a
+rule-free head. Each symbol it relied on is flagged, and only a change to a flagged
+symbol invalidates it; an unrelated assignment does not. A \emph{dependency-recorded}
+fixed point (v0.6119) extends this to a call whose head \emph{has} rules, none of
+which fired. While those rules are tried, every definition the attempt consults is
+flagged, whether it was dispatched on or read as a value or an option, and a later
+change to any of them invalidates the certificate. A frame that read something no
+flag can watch, such as an impure builtin or a message that fired, is never
+certified. A certified call is also remembered per head in a small \emph{no-fire
+memo}, keyed by structural hash, so an equal call built afresh skips the dispatch
+too.
+
+\begin{codepairs}
+\pair{10-internals/fixedpoint-deps/1}{A global value for \texttt{x}.}
+\pair{10-internals/fixedpoint-deps/2}{The \B{Block} result \texttt{x + y} is
+re-evaluated after the \B{Block} has restored \texttt{x}. A stamp made inside the
+\B{Block} must not survive the restore, and it does not.}
+\pair{10-internals/fixedpoint-deps/3}{A rule that fires only while \texttt{flag} is
+not \texttt{True}.}
+\pair{10-internals/fixedpoint-deps/4}{Set the flag\ldots}
+\pair{10-internals/fixedpoint-deps/5}{\ldots so \texttt{k[2]} is a fixed point, and is
+certified as one, with \texttt{flag} among its dependencies.}
+\pair{10-internals/fixedpoint-deps/6}{Inside a \B{Block} the flag has no value, and the
+certificate is not trusted.}
+\pair{10-internals/fixedpoint-deps/7}{After the \B{Block}, the flag is back.}
+\pair{10-internals/fixedpoint-deps/8}{Change it\ldots}
+\pair{10-internals/fixedpoint-deps/9}{\ldots and the same call, certified a moment
+ago, now fires.}
+\end{codepairs}
+
+\B{Block} is the stress test of all of this, because it changes a symbol's values on
+entry and changes them back on exit. Each exit used to advance the global clock,
+which reset every cached fixed point in the session; FeynCalc exits about fifty
+thousand \B{Block}s in one tensor-reduction call. A restore is now invalidated as the
+change it is: stamps that relied on that symbol are dropped, the rest stand, and a
+restore that changes nothing invalidates nothing. Together with the certificates,
+this took FeynCalc's microbenchmarks from 0.30 to 0.86 times the reference kernel's
+speed.\calloutnote{Under the hood}{The stamp's two top bits are the flags. Bit 63
+marks a \emph{ground} node, built entirely from literals under one of six pure
+structural constructors (\texttt{List}, \texttt{Association}, \texttt{Rule},
+\texttt{RuleDelayed}, \texttt{Complex}, \texttt{Rational}): its value cannot depend on
+any definition, so it is re-validated in \(O(1)\) after any amount of clock churn.
+Bit 62 marks an INERT node, re-validated against a separate epoch that advances only
+when a flagged symbol changes. The certified dispatches carry the same bit. Mathilda
+is stricter here than the reference kernel, which reuses such a result even when only
+a global read by a condition has changed, and offers \texttt{Update[]} for that case;
+Mathilda invalidates. Reading a stored 2002-term symbolic sum 200 times in a loop went
+from 0.90\,s to 42\,\(\mu\)s when INERT stamps arrived.}
 
 Two limits bound the process, and they are deliberately asymmetric.
 \(\mathtt{\$RecursionLimit}\) caps how deep evaluation may nest; it is a real,
@@ -395,6 +476,36 @@ held body. \texttt{Table} and the other iterators are dynamic scoping too, savin
 iterator symbol's value around the loop. The uniform ``everything is an expression''
 model means a binding is just a value on a symbol, and scoping is just deciding when to
 put it there and when to take it away.}
+
+Renaming and substitution are walks over the body, and a walk that visits every node
+costs time proportional to the body even when almost nothing in it is touched. That
+was the common case. On the slowest integration problems, 97\% of the nodes those
+walks visited came back unchanged, and the worst offender was a large
+\B{Association} that a rule injects into a \B{Module} body four times per call, which
+the renaming then traversed in full every time. Since v0.6653--v0.6657 each compound
+node can carry a \emph{binder summary}, a bit set recording which bound names, if any,
+occur below it.\index{binder summary}\index{scoping!binder summary} A walk that renames
+\texttt{x} and \texttt{y} skips, and shares unchanged, any subtree whose summary has
+neither bit, without visiting it. The four walks that use it are \B{Module} and
+\B{With} renaming, rule application, and the two kinds of pure-function substitution,
+named parameters and \texttt{\#}-slots. A pure function applied to a body of
+\(10^4\) leaves now costs about \(0.7\,\mu\)s where it cost \(84\,\mu\)s.
+
+\calloutnote{Under the hood}{The summary is a 64-bit word stored in the
+\texttt{index} slot of a function node, the same slot an \B{Association} uses for its
+key index (\S\ref{sec:int-expr}). An index pointer is aligned and so even, and a summary
+is tagged odd by its low bit, so \texttt{sizeof(Expr)} did not grow. Bits 1--16 hold an
+epoch, bits 17--62 are 46 binder bits shared round-robin among all the names ever
+registered as binders, and bit 63 is a \texttt{SCOPE} bit, set when the subtree
+contains a \B{Module}, \B{With} or \B{Function}. Two names may share a bit, so a set
+bit means ``look inside'' and only a clear bit is a proof. The \texttt{SCOPE} bit is
+there for capture avoidance: in \texttt{f[x\_] := \{x, Module[\{e\}, e]\}; f[e + 1]}
+the \B{Module}'s \texttt{e} must be renamed although no pattern variable occurs inside
+it. A summary is computed only on nodes that are shared, which copy-on-write makes
+immutable, so it cannot go stale. The same change stopped \B{Module} from moving the
+evaluation clock: a freshly minted \texttt{x\$}\textit{n} cannot be named by any
+existing node, so binding it cannot invalidate a stamp. \texttt{\$ModuleNumber} became
+a read of a C counter rather than an assignment, and so moves no clock either.}
 
 \section{The pattern matcher}
 \label{sec:int-match}
@@ -550,20 +661,22 @@ typedef struct Rule {
     Expr* replacement;
     int32_t     dispatch_arity;        /* arg count, or -1 for variable arity   */
     const char* first_arg_head_canon;  /* interned head of arg 1, or NULL        */
-    int32_t     specificity;           /* larger = more specific; sorts the list */
+    uint8_t     literal;               /* pattern-free: leads the list, hashed  */
     struct Rule* next;
 } Rule;
 \end{ccode}
 
-\subsection*{Specificity, not recency}
+\subsection*{Generality, not recency}
 
 \texttt{DownValues} are kept in a linked list, and the order of that list is the order
 the matcher tries them---so it decides which of several applicable rules wins. The
-ordering is by \emph{specificity}: a more specific pattern (a literal
-\texttt{fib[0]}) sorts ahead of a more general one (\texttt{fib[n\_]}), with insertion
-order breaking ties. It is a common misconception that new definitions simply go to
-the front of the list. They do not. A general rule entered \emph{after} a specific one
-still yields to it:
+ordering is by \emph{generality} (v0.6022).
+Pattern-free rules (\texttt{fib[0]}) lead the list, in definition order. A new rule
+with a pattern goes ahead of a stored one only when the stored pattern is \emph{more
+general}, meaning it matches everything the new one does, and more; otherwise it goes
+after. It is a common misconception that new definitions simply go to the front of
+the list. They do not. A general rule entered \emph{after} a specific one still
+yields to it:\index{DownValues!ordering by generality}
 
 \mtranscript{10-internals/matcher-downvalues}
 
@@ -571,7 +684,24 @@ The Fibonacci base cases \texttt{fib[0]} and \texttt{fib[1]}, though entered aft
 recursive rule, are tried first, and \texttt{DownValues[fib]} shows them at the front
 of the list. The decisive case is \texttt{r}: the specific \texttt{r[0]} is entered
 first, the general \texttt{r[x\_]} second, and yet \texttt{r[0]} still returns
-\texttt{special}---specificity beat recency.
+\texttt{special}. The general rule did not go ahead, because the stored rule it met
+was not more general than itself.
+
+\calloutnote{Under the hood}{``More general'' is decided by
+\texttt{pattern\_subsumes}, a structural comparison of the two patterns that reads
+typed blanks, sequence blanks, \texttt{Repeated}, defaults, alternatives, repeated
+names, tests and conditions. A test or a condition only narrows a pattern; it never
+promotes a rule past one it would not otherwise pass. When the comparison cannot
+decide, it keeps definition order, which is always safe. This replaced a numeric
+\emph{specificity} score. The score mostly agreed, but where it did not a different
+rule fired with no message. It put a FeynCalc Dirac-algebra rule ahead of an earlier
+rule it was incomparable with, and, because each \texttt{/;} used to add to the score,
+a rule written \texttt{rhs /; c1 /; c2} jumped ahead of the rules before it. Every
+ordering decision on about 100 pattern pairs now agrees with the reference. Two
+patterns that cover each other, such as \texttt{x\_} and \texttt{x\_\^{}n\_.}, put the
+newer first; two that are the same up to renaming are one rule, and the newer
+replaces the older. The \texttt{literal} flag in the \texttt{Rule} struct records,
+once, that a rule has no pattern at all.}
 
 \usagebox{DownValues}
 
@@ -585,6 +715,17 @@ survivors reach the backtracking matcher of \S\ref{sec:int-match}.
 \texttt{OwnValues} get an even shorter path: the overwhelmingly common
 \texttt{x = value} binding is recognised and returned without building a match
 environment at all.
+
+Pattern-free DownValues get a path of their own. Because they lead the list and each
+matches only the expression equal to it, they can be kept in a per-symbol hash index
+(v0.6023), and a call or a redefinition finds its rule with one probe instead of a
+scan.\index{DownValues!hash index} This matters most for memoization
+(\S\ref{ssec:prog-downvalues}), which stores one such rule per computed value: filling
+a memo table of \(20{,}000\) values took about 38\,s when every call matched against
+every stored value, and takes 0.024\,s with the index. The index is trusted only while
+it still records the current head of the list, so a \B{Block} or
+\texttt{DownValues[f] = \ldots} that swaps the whole list cannot leave it stale, and
+every removal drops it.
 
 \subsection*{Interning and contexts}
 
@@ -603,7 +744,23 @@ Layered over interning is the \B{Context} system: symbols live in namespaces, an
 A fresh symbol is born in \texttt{Global`}; a builtin lives in \texttt{System`};
 \B{Begin} switches the current context so that symbols mentioned inside it are
 namespaced (\texttt{here} becomes \texttt{MyPkg`here}), and \B{End} restores the
-previous context. This is the machinery packages are built on.
+previous context. This is the machinery packages are built on
+(\S\ref{sec:prog-packages}). The last line shows the kernel's second context. Since
+v0.565 the builtins split in two. The ones that share a name with the reference
+system's live in \texttt{System`}, and the 65 that are Mathilda's own
+(\texttt{NDArray}, \texttt{DataType}, \texttt{CompileDiagnostics}, \ldots) live in
+\texttt{Mathilda`}, which is on the default \B{\$ContextPath}.\index{context!Mathilda`}
+
+\calloutnote{Under the hood}{A context is not a separate table. Each \texttt{SymbolDef}
+records its home, and \texttt{System`} and \texttt{Global`} symbols are stored under
+their bare names, so the common case needs no prefix at all. The split exists for
+packages. When every kernel name was \texttt{System`}, a package that defined its own
+\texttt{DataType} wrote onto Mathilda's protected builtin instead (FeynCalc hit this
+69 times), and lost the definition. A \texttt{Mathilda`} name, by contrast, is shadowed
+by a package's own symbol of the same name. The kernel's own \texttt{.m} modules are
+loaded inside a ``system scope'' (v0.533), so a head they define, such as
+\texttt{DiracDelta}, is \texttt{System`} rather than a stray \texttt{Global`} symbol
+that \texttt{Names["Global`*"]} would list.}
 
 The rule \emph{engine}---\B{Replace}, \B{ReplaceAll} (\texttt{/.}) and
 \B{ReplaceRepeated} (\texttt{//.})---applies rules without installing them on a symbol:
@@ -648,6 +805,18 @@ first calls \texttt{expr\_unshare}, which returns a private one-level copy (its
 children still shared) and resets the metadata caches. This copy-on-write discipline
 is what lets the cached hash and evaluation stamp of \S\ref{sec:int-expr} be trusted.
 
+Immutability buys one more saving: identical atoms need not be separate nodes at all.
+Since v0.6059 every symbol owns one canonical node, made on first use, and
+\texttt{expr\_new\_symbol} hands out a reference to it instead of allocating; the
+integers from \(-256\) to \(1024\) likewise share one node per
+value.\index{memory!shared atoms} In a large symbolic result the saving is not small.
+The 135{,}135-term result of a Dirac-trace benchmark (issue \#112) held 5.4 nodes per
+term, two of them a private
+\texttt{Times} symbol and a private coefficient \texttt{4} or \texttt{-4}; sharing them
+took the peak from 120\,MB to 94.5\,MB, below the reference kernel's 102\,MB. A canonical
+node is never freed. If a miscounted free ever brings one to its last reference, it is
+re-pinned rather than released.
+
 \subsection*{The builtin ownership contract}
 
 Every builtin obeys one contract, and getting it right is the single most important
@@ -678,6 +847,69 @@ but the resident figure does not fall: freed memory returns to the process's own
 and allocator, not immediately to the operating system, so \B{MaxMemoryUsed} records
 the high-water mark. The numbers here are re-measured on every build and depend on the
 machine; it is their shape that is the lesson.
+
+\subsection*{Reclaiming Module locals}
+
+Reference counting reclaims a tree the moment its last reference goes, but a symbol is
+not a tree: it lives in the symbol table, which refers to it for as long as the session
+lasts. That made \B{Module} a slow leak. Each call minted fresh locals
+\texttt{x\$}\textit{n}, marked them \texttt{Temporary}, and never removed them: about
+550 bytes per call, and 44\,MB of dead symbols after one run of that Dirac-trace
+benchmark. Since
+v0.6056 a local is removed as soon as nothing outside its own definitions refers to
+it:\index{Module@\mcode{Module}!reclaiming locals}
+
+\begin{codepairs}
+\pair{10-internals/module-reclaim/1}{Note the symbols that exist now.}
+\pair{10-internals/module-reclaim/2}{Ten thousand \B{Module} calls, each with two
+locals.}
+\pair{10-internals/module-reclaim/3}{None of the twenty thousand locals is left. The
+two new names are this session's own: \texttt{before}, and the iterator \texttt{i}.}
+\pair{10-internals/module-reclaim/4}{A local that \emph{escapes}, here inside the
+returned \B{Hold}\ldots}
+\pair{10-internals/module-reclaim/5}{\ldots is kept, because \texttt{kept} still
+refers to it.}
+\pair{10-internals/module-reclaim/6}{Warm up, then note the footprint.}
+\pair{10-internals/module-reclaim/7}{Ten thousand more calls, each binding its local to
+a 100-element list.}
+\pair{10-internals/module-reclaim/8}{Little or nothing: at most allocator slack, not
+the several megabytes the dead locals and their values once held.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{A local is safe to remove when every node that names it
+is reachable only from the local's own rules. A self-reference such as
+\texttt{x\$1 = \{x\$1\}} must not keep it alive. Each live node naming a counted local
+is tallied in the local's \texttt{temp\_nodes}, and the reclaim test walks the
+local's own rule lists, looking for every one of those nodes behind refcount-1
+parents. If they are all there, nothing else holds the symbol. The test runs when the
+\B{Module} exits. An escaped local (returned, stored, captured in a closure) is queued
+and retried in sweeps, during long evaluations as well as at the end of each input,
+with a threshold that doubles with the number of survivors so that each held local is
+re-examined an amortized \(O(1)\) times. The name string is freed with the symbol.
+That needed an audit of everything that might hold a raw name pointer longer than the
+symbol, and it found three holders, among them a compiled function's parameter list.
+\texttt{MATHILDA\_NO\_TEMP\_RECLAIM=1} switches the mechanism off.}
+
+\subsection*{Constraint frames}
+
+The kernel also counts what it holds, for \texttt{MemoryConstrained}
+(\S\ref{ssec:prog-memconstrained}). \texttt{src/memacct.h} keeps one net count of live
+bytes: expression nodes, strings, array buffers, and GMP and MPFR limbs, charged on
+allocation and released on free. Each \texttt{MemoryConstrained} pushes a \emph{frame}
+whose limit is the live count at entry plus its budget, and the effective limit is the
+smallest open one, so the hot-path test is a single comparison; with no frame open,
+nothing is charged and an allocation pays one predicted branch.\index{constraint
+frame} \B{TimeConstrained} pushes a frame on the same stack, carrying a deadline
+instead of a byte limit. Neither constraint jumps out of the evaluation. A frame that
+overruns is \emph{tripped}. The evaluator's per-step poll, the one that also notices
+Ctrl-C, turns the trip into an ordinary \texttt{Abort[]}, and every C frame and
+evaluator frame between the poll and the constraint unwinds through its own cleanup.
+The frame that tripped consumes the abort and returns its fallback. A plain
+\texttt{Abort[]} does not belong to any frame and passes through, and an
+\texttt{AbortProtect} opened \emph{inside} the tripped frame defers the abort until it
+finishes. Sharing one stack is what makes the nesting rules come out the same for both
+constraints, in either order. It also made the old timeout leak go away: valgrind's
+definitely-lost count over six timeout scenarios now equals that of an empty script.
 
 \section{The parser and the printer}
 \label{sec:int-parse}
@@ -724,7 +956,12 @@ the default \texttt{OutputForm} the familiar two-dimensional-ish notation. The p
 restores \texttt{Times[a, Power[b, -1]]} to \texttt{a/b}, \texttt{Rational[3, 4]} to
 \texttt{3/4}, and parenthesises \texttt{(a + b) c} because \texttt{Plus} binds looser
 than \texttt{Times}. It is the same precedence table the parser used, which is what
-guarantees the round trip.
+guarantees the round trip. The two text forms differ in layout, though. Since v0.6133
+\B{InputForm} writes every product with an explicit \texttt{*}, as \texttt{(a + b)*c}
+in the fourth line, and puts a rational coefficient over its denominator, as in
+\texttt{(3*x)/4} and \texttt{a/100 + 5*x}, a layout meant to be read back
+unambiguously. \texttt{OutputForm} keeps the space and writes
+\texttt{3/4 x}.\index{printing!InputForm layout}
 
 For machine reals the round trip has a numerical side as well. The default output
 shows six significant digits, which is friendly but lossy; \mcode{InputForm} instead
@@ -734,16 +971,32 @@ prints the \emph{shortest} decimal that reads back to exactly the same
 \begin{codepairs}
 \pair{10-internals/printer-roundtrip/1}{The familiar display rounds to six digits.}
 \pair{10-internals/printer-roundtrip/2}{\texttt{InputForm} shows the binary truth: the
-sum is not the double nearest \(0.3\). It needs seventeen digits, and the trailing
-backtick marks it as a machine number, because the parser reads a 17-digit literal
-without one as arbitrary precision.}
+sum is not the double nearest \(0.3\), and it takes seventeen digits to say which
+double it is. No precision mark is needed: a literal of up to seventeen significant
+digits is read back as a machine real.}
 \pair{10-internals/printer-roundtrip/3}{Most values need far fewer: \(0.1\) prints as
 \texttt{0.1}, because that short decimal already identifies the double. A very small
 number is written with the \texttt{*\^{}} exponent notation.}
 \pair{10-internals/printer-roundtrip/4}{The guarantee, tested: printing in
 \texttt{InputForm} and reading back with \B{ToExpression} gives an identical
 (\mcode{SameQ}) number.}
+\pair{10-internals/printer-roundtrip/5}{Seventeen significant digits: still a machine
+real.}
+\pair{10-internals/printer-roundtrip/6}{Eighteen: an arbitrary-precision number, with
+the precision its digits carry.}
+\pair{10-internals/printer-roundtrip/7}{Even the six-digit display of a large machine
+real is valid input: a decimal point and \texttt{*\^{}}, never \texttt{1e+15}.}
 \end{codepairs}
+
+The cut at seventeen digits is what makes the round trip close. Seventeen significant
+decimal digits always suffice to identify a \texttt{double}, so the parser reads any
+literal of up to seventeen as a machine real and only a longer one as arbitrary
+precision (v0.6136); the printer, for its part, never needs more than seventeen. Until
+then the cut was an implied precision of about 16 digits, so the shortest form of some
+doubles read back as arbitrary-precision numbers, and \texttt{InputForm} had to append
+a backtick to keep them machine reals. Since v0.6604 no machine number prints with a
+precision mark, including a 53-bit value outside the range of a
+\texttt{double}.\index{printing!machine reals}
 
 \section{The read--eval--print loop and session state}
 \label{sec:int-repl}
@@ -788,9 +1041,15 @@ evaluator.\calloutnote{Under the hood}{The loop chooses one of three modes at st
 A script given with \texttt{-file} is evaluated statement by statement with nothing
 echoed. A non-terminal standard input (a pipe) selects a line-oriented NDJSON protocol
 ---the one that drives this book's build. Only a real terminal runs the interactive
-loop, with GNU Readline and the completeness-driven multi-line editing described in
-\texttt{SPEC.md}~\S11, where pressing Return submits only when brackets, strings and
-comments are all balanced.}
+loop. Since v0.6538 it reads through an in-tree line editor
+(\texttt{src/term/term\_editor*.c}) with live syntax colouring, a completion popup and
+a history search; GNU Readline remains as the fallback, used when
+\texttt{MATHILDA\_EDITOR=readline} is set or the terminal is \texttt{dumb}. Both
+implement the completeness-driven Return described in \texttt{SPEC.md}~\S11, which
+submits only when brackets, strings and comments are all balanced. During an
+evaluation a background thread draws a status line, and Ctrl-C reaches the evaluator
+through the same per-step poll that delivers \texttt{Abort[]} and the constraint
+frames of \S\ref{sec:int-memory}.}
 
 \section{Numbers and the packed-array substrate}
 \label{sec:int-packed}
@@ -804,8 +1063,14 @@ representations that the system chooses between automatically. The
 An exact integer is a machine \texttt{int64} promoted to a GMP bignum as needed
 (\S\ref{sec:int-expr}); a rational is a \texttt{Rational} of two integers; a machine
 real is a \texttt{double}; and at higher precision the arithmetic moves onto MPFR,
-which is why \texttt{Precision[N[Pi, 40]]} reports about forty digits rather than the
-\texttt{MachinePrecision} of a bare \texttt{N}. Exactness is contagious in the usual
+which is why \texttt{Precision[N[Pi, 40]]} reports exactly \texttt{40.0} rather than the
+\texttt{MachinePrecision} of a bare \texttt{N}. That figure is exact because the
+precision a number reports is its mantissa width \emph{minus sixteen guard bits}
+(v0.6292): \texttt{N[x, 40]} allocates \(\lceil 40 \log_2 10\rceil + 16\) bits, every
+MPFR kernel carries the extra sixteen, and \B{Precision}, the printer and the
+comparisons read only the forty digits asked for, so the forty digits printed for
+\(\pi\) are all correct.\index{precision!guard bits} Without the guard, the last
+displayed digit was wrong for 68 of 360 sampled square roots. Exactness is contagious in the usual
 way: \texttt{1/2 + 1/3} stays the exact \texttt{5/6}, but a single machine real, as in
 \texttt{1/2 + 0.5}, makes the whole result inexact. This numeric tower is the subject
 of \S\ref{sec:numcalc} from the mathematics side; here it is enough to see that one
@@ -851,16 +1116,26 @@ Then comes the seam that gives the system its character. After the C side is bui
 \texttt{main()} loads \texttt{src/internal/init.m}, which in turn reads the remaining
 bootstrap \texttt{.m} files. This is Mathilda's \emph{two-tier design}:
 performance-sensitive primitives are written in C, while a great deal of the actual
-mathematics is expressed as ordinary rewrite rules in Mathilda's own language. The
-derivative rules live in \texttt{deriv.m}; the integral tables are \texttt{.m} data;
-and the same fixed-point evaluator that runs your rules runs these:
+mathematics is expressed as ordinary rewrite rules and programs in Mathilda's own
+language. The values of the distributions \texttt{HeavisideTheta} and
+\texttt{DiracDelta} are rules in \texttt{distributions.m}; the integral tables are
+\texttt{.m} data; whole integration algorithms, Trager's for algebraic functions and
+Bronstein's for mixed towers among them, are \texttt{.m} packages, loaded the first time
+a call needs one so that start-up stays cheap. The boundary moves in both directions.
+Derivatives began as rules in a \texttt{deriv.m} file, and are now native C
+(\texttt{src/calculus/deriv.c}). The same fixed-point evaluator that runs your rules runs
+the ones that remain:
 
 \mtranscript{10-internals/twotier-rules}
 
-\texttt{D[Sin[x], x]}, the chain rule for \texttt{D[f[g[x]], x]}, and the
-antiderivative of \(1/(1+x^2)\) are not special-cased in C---they are
-\texttt{DownValues} loaded at startup, tried at step~12 of every relevant evaluation
-(\S\ref{sec:int-eval}) exactly as a rule you write would be. This is the deepest
+\texttt{HeavisideTheta} carries six DownValues, and its values at \(3\), \(-2\) and
+\(0\) are those rules firing, tried at step~12 of the evaluation
+(\S\ref{sec:int-eval}) exactly as a rule you write would be. They are \texttt{System`}
+symbols even though a \texttt{.m} file defines them, because the kernel's own modules
+are loaded in a system scope. \B{D} has no DownValues at all, and the chain rule
+\(f'(g(x))\,g'(x)\) comes from C, with its two factors in canonical order. And the
+\texttt{Trager`} context is empty until the first integral that asks for Trager's method
+loads the package. This is the deepest
 reason the architecture holds together: because everything is an expression and the
 evaluator is a generic fixed-point loop, extending the system's mathematics most often
 means adding a rule, not writing C. The recipes for doing so---adding a builtin, a

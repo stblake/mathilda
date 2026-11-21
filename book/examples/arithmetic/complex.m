@@ -5,3 +5,6 @@ Abs[1 + I]
 Arg[1 + I]
 ReIm[2 + 3 I]
 ComplexExpand[(a + b I)^2]
+(-8)^(1/3)
+N[(-8)^(1/3)]
+CubeRoot[-8]

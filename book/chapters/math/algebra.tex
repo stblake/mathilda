@@ -139,10 +139,11 @@ pairs, the square-free analogue of \B{FactorList}.
 $\mathbb{Q}$: two linear and two quadratic (the cyclotomic factors).}
 \pair{algebra/factor/2}{\B{FactorList} gives the factors with their multiplicities, the
 leading numeric factor $2$ among them.}
-\pair{algebra/factor/3}{\B{FactorSquareFree} groups the repeated factors: it finds that
-$x^4+2x^3+x^2$ is a perfect square, but leaves the base $x+x^2$ \emph{unfactored}.}
-\pair{algebra/factor/4}{\B{Factor} finishes the job, splitting that base into $x$ and
-$1+x$: the full irreducible factorization is $x^2(1+x)^2$.}
+\pair{algebra/factor/3}{\B{FactorSquareFree} groups the factors by multiplicity: in
+$x^6-x^4-x^2+1$ it finds $x^2-1$ twice and $x^2+1$ once, but leaves $x^2-1$
+\emph{unsplit}.}
+\pair{algebra/factor/4}{\B{Factor} finishes the job, splitting $x^2-1$ into $x-1$ and
+$x+1$: the full irreducible factorization is $(x-1)^2(x+1)^2(x^2+1)$.}
 \pair{algebra/factor/5}{\B{FactorTerms} extracts only the numeric content $3$, leaving
 the primitive part untouched.}
 \pair{algebra/factor/6}{Factoring $x^{15}-1$ recovers the cyclotomic polynomials
@@ -221,8 +222,56 @@ factor $g$. So the recipe is: form the norm, factor it over $\mathbb{Q}$ with th
 machinery of the previous subsection, and lift each factor back by a GCD. A tower
 $\mathbb{Q}(\alpha_1,\ldots,\alpha_n)$ is first collapsed to a single
 \emph{primitive element}\index{primitive element theorem} $\gamma$ by the same
-resultant construction, so the multi-generator case needs no new ideas. The code is in
-\texttt{src/poly/qafactor.c}.} Mathilda has two complementary ways to name an
+resultant construction, so the multi-generator case needs no new ideas. The univariate
+code is in \texttt{src/poly/qafactor.c}; in any number of variables,
+\texttt{src/poly/flint\_trager.c} runs the same method on FLINT, takes the shifted norm
+with \texttt{fmpq\_mpoly\_resultant}, recovers the factors with a certified modular
+field GCD, and checks the whole answer by exact division. A polynomial over
+$\mathbb{Q}$ is first factored over $\mathbb{Q}$, and only its irreducible factors are
+sent to the field.}
+
+The number fields are one direction in which to change the coefficients; the finite
+fields $\mathrm{GF}(p)$ are another, and \B{Factor} takes both, in any number of
+variables:
+
+\begin{codepairs}
+\pair{algebra/factor-domains/1}{$x^4+1$ is irreducible over $\mathbb{Q}$\dots}
+\pair{algebra/factor-domains/2}{\dots but modulo $2$ it is $(x+1)^4$, because squaring is
+additive in characteristic~$2$\index{finite field!factoring over}.}
+\pair{algebra/factor-domains/3}{Modulo $3$ it splits into two quadratics. In fact $x^4+1$
+is reducible modulo \emph{every} prime, though irreducible over $\mathbb{Q}$---the
+classic warning that a factorization mod $p$ need not lift.}
+\pair{algebra/factor-domains/4}{\texttt{Extension} works for multivariate polynomials
+too: $x^2-2y^2$ splits over $\mathbb{Q}(\sqrt2)$.}
+\pair{algebra/factor-domains/5}{\texttt{GaussianIntegers -> True} is the extension by
+$i$: $x^2+y^2=(x-iy)(x+iy)$.}
+\pair{algebra/factor-domains/6}{Exponentials are generators of their own: $e^{2x}-1$ is
+the difference of squares $(e^x-1)(e^x+1)$.}
+\pair{algebra/factor-domains/7}{A binomial $x^{m}-1$ goes straight to its cyclotomic
+factors, one per divisor of $m$: $1260$ has $36$ divisors, and the factorization of
+$x^{1260}-1$ takes about a millisecond.}
+\pair{algebra/factor-domains/8}{The sign convention: every polynomial factor has a
+positive leading coefficient, and the sign is gathered in front.}
+\end{codepairs}
+
+\noindent The sign convention of pair~8 is the reason the outputs of
+\S\ref{ssec:alg-factor} read as they do.\calloutnote{Pitfall}{``Leading'' means
+lexicographically leading, over the variables in the order they first appear in the
+input, so $(1-4x)(1+3y)$ comes back as $-(4x-1)(3y+1)$ printed in Mathilda's
+constant-first order, \texttt{-(-1 + 4 x) (1 + 3 y)}. A single irreducible factor with no
+numeric content keeps the form it came in (\texttt{Factor[1 - x]} is \texttt{1 - x}).
+Over a number field the factors need not have a positive coefficient of the leading
+power of~$x$: pair~4 above, and pair~3 of the previous session,
+\texttt{-(Sqrt[2] - x) (Sqrt[2] + x) (-3 + x\textasciicircum 2)}, are written with the
+sign elsewhere. Either way the product is an identity; only the placement of the
+signs differs.}\calloutnote{Performance}{The whole \B{Factor} family was
+reviewed in the autumn of 2026 against four other engines on $79$ cases in $17$
+families. Plain polynomials go straight to FLINT; products and powers are factored base
+by base, so $(x+1)^{500}(x-1)^{500}$ takes $0.06$~ms instead of $1.4$~s; univariate
+factoring modulo a word-size prime uses FLINT's \texttt{nmod\_poly\_factor}; and a
+degree-$40$ product over $\mathbb{Q}(2^{1/6})$ fell from $88$~s to $0.4$~s. Mathilda was
+the fastest engine, or within $1.2\times$ of it, on every family but one, univariate
+factoring modulo~$2$ at degree~$1250$, where the time is FLINT's own.} Mathilda has two complementary ways to name an
 algebraic number. A \B{Root} object---``the $k$-th root of this polynomial''---is the
 implicit form the equation solvers return, and \B{ToRadicals} re-expresses one in
 radicals when a radical form exists. When instead you want to \emph{compute} inside a
@@ -365,16 +414,29 @@ simplest possible denominators---the partial-fraction decomposition.}
 \end{codepairs}
 
 Two behaviours are worth noting. \B{Together} deliberately does \emph{not}
-expand\index{numeric contagion}: it puts the sum over one denominator and cancels, but
-leaves the result factored, because expanding is a separate decision you make with
-\B{Expand}. And \B{Cancel} works by polynomial GCD rather than by factoring, so it
-reduces even fractions whose numerator and denominator are hard to factor.\calloutnote{Under
-the hood}{\B{Apart} over $\mathbb{Q}$ uses a fast FLINT path
-(\texttt{flint\_apart\_over\_q}): it splits the denominator into coprime factors, solves
-the associated B\'ezout relations with an extended-GCD, and reads off each partial
-fraction by a $p$-adic expansion---replacing the $O(S^2)$ symbolic linear solve that a
-naive method of undetermined coefficients would require. Multivariate and
-algebraic-extension cases fall back to the classical elimination approach.} These
+expand\index{rational function!factored form}: it puts the sum over one denominator and
+cancels, but leaves the denominator as a product of its factors---$x(1+x)$ in pair~1,
+not $x+x^2$---because expanding is a separate decision you make with \B{Expand}.
+\B{Cancel} and \B{Apart} answer in the same factored form. And \B{Cancel} works by
+polynomial GCD rather than by factoring, so it reduces even fractions whose numerator
+and denominator are hard to factor.\calloutnote{Under the hood}{All three heads run on
+one rational-function engine (\texttt{src/poly/ratfun.c}). A rational function over
+$\mathbb{Q}$---in symbols, or in kernels such as \texttt{Log[x]} and
+\texttt{E\textasciicircum(k x)}---is converted into FLINT once, as
+$c\prod p_i^{e_i}$ with each $p_i$ primitive, and reduced there. \B{Together} combines
+a sum through a \emph{gcd-free basis}\index{gcd-free basis} of the denominator factors:
+pairwise coprime, square-free polynomials from which every denominator is a product of
+powers. The numerator then comes from a product tree with no exact divisions, and a
+single GCD against the square-free denominator settles the cancellation. \B{Cancel}
+splits numerator factors against denominator factors by GCD and keeps them factored.
+\B{Apart} factors the denominator, splits it by the Chinese remainder theorem and reads
+each partial fraction off a $p$-adic expansion, over $\mathbb{Q}$ or over the field of
+rational functions in the parameters, which replaced a symbolic linear solve:
+$1/((x+a)(x+b)(x+c)(x+d)(x+f))$ went from $2$~s to under $2$~ms. One variable over
+$\mathbb{Q}(i)$ or a number field is reduced natively, and \texttt{Modulus -> p} works
+over $\mathrm{GF}(p)$. The factored form is for \emph{you}: when \B{Together} is called
+from inside another builtin, such as \texttt{Simplify} or \B{Integrate}, it hands back
+the expanded form that caller was written against.} These
 partial fractions are exactly what \S\ref{sec:calculus} reaches for when integrating a
 rational function.
 
@@ -413,18 +475,59 @@ The choice of order is the whole story. The lexicographic order (pair~1) forces 
 basis into a triangular, ``solved'' shape---ideal for eliminating variables and solving,
 which is why it underlies system solving in \S\ref{ssec:alg-solve-systems}---but it is
 the most expensive to compute, and its coefficients can grow enormously. The degree
-orders (pair~3) are far cheaper but do not triangulate.\calloutnote{Under the
-hood}{\B{GroebnerBasis} implements \emph{Buchberger's algorithm}\index{Buchberger's
-algorithm}: for every pair of basis polynomials it forms their $S$-polynomial---the
-combination engineered to cancel the two leading terms---reduces it modulo the current
-basis, and adjoins any nonzero remainder, repeating until every $S$-polynomial reduces to
-zero. The Gebauer--M\"oller criteria discard, in advance, the many pairs that must reduce
-to zero, which is what makes the algorithm practical. Because the lexicographic order is
-so costly directly, \texttt{Method -> "GroebnerWalk"} instead computes a cheap
-degree-order basis and \emph{walks} it across the Gr\"obner fan to the target order, one
-cone wall at a time. The core is \texttt{src/poly/groebner.c}, with the walk in
-\texttt{groebnerwalk.c} and a dedicated finite-field engine in \texttt{gbmod.c}; the
-standard text is Cox--Little--O'Shea~\cite{clo}.}
+orders (pair~3) are far cheaper but do not triangulate.\calloutnote{Theory}{The classical
+method is \emph{Buchberger's algorithm}\index{Buchberger's algorithm}: for every pair of
+basis polynomials form their $S$-polynomial---the combination engineered to cancel the
+two leading terms---reduce it modulo the current basis, and adjoin any nonzero
+remainder, until every $S$-polynomial reduces to zero. The Gebauer--M\"oller criteria
+discard, in advance, the many pairs that must reduce to zero. \emph{F4}\index{F4
+algorithm} (Faug\`ere) reorganises the same computation as linear algebra: it takes a
+whole batch of pairs at once, writes their reductions as the rows of one sparse
+\emph{Macaulay matrix}, and row-reduces it. \emph{FGLM}\index{FGLM algorithm} converts a
+basis of a zero-dimensional ideal from one order to another by linear algebra in the
+finite-dimensional quotient ring, which is how a cheap degree-order basis becomes a
+lexicographic one. The standard text is Cox--Little--O'Shea~\cite{clo}.}
+
+Mathilda uses all of these, chosen by the coefficient domain and the order, and lets
+you pick:
+
+\begin{codepairs}
+\pair{algebra/groebner-engines/1}{The cyclic-$5$ system, a standard benchmark in five
+variables.}
+\pair{algebra/groebner-engines/2}{Its lexicographic basis over $\mathbb{Q}$ has $11$
+elements; it is computed in a few tens of milliseconds.}
+\pair{algebra/groebner-engines/3}{\texttt{Method -> "F4"} and \texttt{Method ->
+"Buchberger"} reach the identical reduced basis---as they must, since a reduced Gr\"obner
+basis is unique.}
+\pair{algebra/groebner-engines/4}{Over $\mathrm{GF}(32003)$ the degree-reverse-lexicographic
+basis has $20$ elements, computed by F4 in a few milliseconds.}
+\pair{algebra/groebner-engines/5}{\texttt{CoefficientDomain -> InexactNumbers[20]} gives a
+basis with $20$-digit coefficients.}
+\pair{algebra/groebner-engines/6}{\texttt{CoefficientDomain -> RationalFunctions} treats
+the other symbols, here $r$ and $t$, as parameters: the basis is over
+$\mathbb{Q}(r,t)$.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Over $\mathrm{GF}(p)$ the engine is F4
+(\texttt{src/poly/gb\_f4.c}): pair selection by the normal strategy with the
+Gebauer--M\"oller criteria, symbolic preprocessing over a monomial hash table, and block
+elimination of the Macaulay matrix mod~$p$. Over $\mathbb{Q}$ a basis is computed by
+\emph{certified multi-modular lifting}\index{Gr\"obner basis!multi-modular}: F4 runs
+modulo many $62$-bit primes, in batches on worker threads; the images are combined by the
+Chinese remainder theorem and rational reconstruction; and the candidate is then
+\emph{proved}, by checking that every input and every $S$-pair reduces to zero over
+$\mathbb{Z}$ and, through its Hilbert series, that its ideal is no larger than the
+input's. A wrong prime is detected and replaced, so the answer is exact, not
+probable. A lexicographic basis of a zero-dimensional ideal goes degree-reverse-lex
+first, then FGLM. Small systems first try a direct FLINT Buchberger, with the sugar
+strategy, under a CPU-time budget. Inexact coefficients are handled by FGLM with the
+linear algebra in MPFR, checked by agreement at two precisions, and the parametric
+case reduces on FLINT's rational functions with a block order (lex on the variables,
+degree-reverse-lex on the parameters). \texttt{Method -> "F4"} forces F4 over
+$\mathbb{Q}$, \texttt{"Buchberger"} switches it off, and \texttt{"GroebnerWalk"}
+walks a degree-order basis across the Gr\"obner fan to the target order. Cyclic-$7$
+in degree-reverse-lex order takes about $10$~s over $\mathbb{Q}$ and $0.3$~s modulo
+$2^{31}-1$.}
 
 That triangular shape pays off directly in \emph{variable
 elimination}\index{elimination!via Gr\"obner basis}. Order the variables you want gone
@@ -525,6 +628,27 @@ value that \B{N} can evaluate and arithmetic can combine.} The quartic behaves t
 way: \texttt{Quartics -> True} produces Ferrari's radical solution, which is larger
 still and best left named.
 
+Sometimes you need only to know \emph{how many} roots there are, and where.
+\mcode{CountRoots}\index{CountRoots@\mcode{CountRoots}} answers that exactly, without
+computing a single root:
+
+\begin{codepairs}
+\pair{algebra/countroots/1}{The quintic $x^5-3x+1$ has three real roots.}
+\pair{algebra/countroots/2}{Two of them lie in $[0,2]$.}
+\pair{algebra/countroots/3}{A complex range is a closed rectangle, given by its
+corners; all five roots lie in $[-2,2]\times[-2i,2i]$.}
+\pair{algebra/countroots/4}{Roots are counted with multiplicity: the triple root $1$
+counts three times, and the roots $\pm i$ are not real.}
+\end{codepairs}
+
+\noindent The real counts come from \emph{Sturm sequences}\index{Sturm sequence}: after a
+square-free factorization, the number of sign changes in the sequence
+$p, p', -\operatorname{rem}(p,p'), \ldots$ drops by exactly one at each real root, so
+evaluating it at the two ends of an interval counts the roots inside. On a rectangle,
+roots on the boundary are counted exactly and interior ones from certified Arb root
+balls~\cite{arb}. Wilkinson's notoriously ill-conditioned polynomial, perturbed so that
+only ten of its roots stay real, is counted in under a millisecond.
+
 \subsection{Solving a system}
 \label{ssec:alg-solve-systems}
 
@@ -616,8 +740,7 @@ solutions, surfaced by name.
 \begin{codepairs}
 \pair{algebra/reduce/6}{The closed unit disk $x^2+y^2\le1$ laid out as a single cylindrical
 cell: $x$ sweeps the interval $[-1,1]$, and for each such $x$ the fibre in $y$ is the segment
-between the two arcs $\pm\sqrt{1-x^2}$ (printed here in the equivalent form
-$\pm\frac12\sqrt{4-4x^2}$).}
+between the two arcs $\pm\sqrt{1-x^2}$.}
 \end{codepairs}
 
 \B{Reduce} is not confined to polynomials. It also solves \emph{transcendental}
@@ -672,8 +795,15 @@ rewritten with its standard six-digit anchor.}
 \(\sqrt2\): \mcode{N} computes it to any precision you ask.}
 \pair{algebra/reduce-transcendental-roots/4}{An equation with a single real solution, the
 fixed point of the cosine.}
-\pair{algebra/reduce-transcendental-roots/5}{And an exponential against a line: \(e^x>3x\)
-fails only on the interval between the two crossings.}
+\pair{algebra/reduce-transcendental-roots/5}{An exponential against a line: \(e^x>3x\)
+fails only between the two crossings---and these crossings have a closed form.
+\(e^x=3x\) is \(-x e^{-x}=-\tfrac13\), so \(x=-W(-\tfrac13)\) on the two real branches of
+the Lambert \(W\) function\index{Lambert W function} (\B{ProductLog}), and \mcode{Reduce}
+returns them exactly.}
+\pair{algebra/reduce-transcendental-roots/6}{Numerically they are the two crossings,
+\(0.619\) and \(1.512\).}
+\pair{algebra/reduce-transcendental-roots/7}{Against a parabola, \(e^x=4-x^2\), no such
+form exists, and the two breakpoints are certified \texttt{Root} objects.}
 \end{codepairs}
 
 The anchor \(x_0\) is a label, not an approximation the answer depends on. Behind
@@ -1034,6 +1164,96 @@ is negative and the logarithm picks up \(i\pi\).}
 \pair{algebra/trig-algebraic/6}{On \(-\pi/2<x<\pi/2\), where \(\sec x+\tan x>0\),
 \mcode{FullSimplify} rewrites it as \(\operatorname{artanh}(\sin x)\).}
 \end{codepairs}
+
+\subsection{Simplification beyond polynomials}
+\label{ssec:alg-simplify-engines}
+
+\B{Simplify} is a search: it tries many transformations and keeps the form it scores
+simplest. The transformations are where the mathematics lives, and for polynomials and
+rational functions they are the operations of this section. Beyond polynomials, three
+kinds of knowledge matter: identities among the \emph{special functions}, the arithmetic
+of \emph{radicals}, and the structure of polynomials in several sets of variables. Some
+of it is so cheap that the evaluator applies it without being asked.
+
+\begin{codepairs}
+\pair{algebra/simplify-engines/1}{Not a \texttt{Simplify} at all: powers with one
+symbolic exponent merge their numeric bases on evaluation, so $2^a3^a5^{-a}$ is
+$(6/5)^a$.}
+\pair{algebra/simplify-engines/2}{$\Gamma(n+2)/\Gamma(n)=n(n+1)$, by the recurrence
+$\Gamma(z+1)=z\Gamma(z)$ applied twice.}
+\pair{algebra/simplify-engines/3}{Euler's reflection formula
+$\Gamma(x)\Gamma(1-x)=\pi/\sin\pi x$.}
+\pair{algebra/simplify-engines/4}{At $x=\tfrac13$ the same formula gives an exact
+constant.}
+\pair{algebra/simplify-engines/5}{The Bessel recurrence
+$J_{n+1}(z)+J_{n-1}(z)=\tfrac{2n}{z}J_n(z)$.}
+\pair{algebra/simplify-engines/6}{The digamma function's recurrence
+$\psi(x+1)-\psi(x)=1/x$.}
+\pair{algebra/simplify-engines/7}{The defining identity of the Lambert $W$ function,
+$W(z)e^{W(z)}=z$.}
+\end{codepairs}
+
+These are not entered one by one.\index{simplification!special functions}\calloutnote{Under
+the hood}{\texttt{Simplify} treats special functions the way \B{Together} treats rational
+functions. A pass in \texttt{src/simp/simp\_sf\_engine.c} groups the special-function
+atoms of an expression into \emph{families}: the same head and the same fixed
+arguments, with shift arguments that differ by integers, such as $J_{n-1}$, $J_n$ and
+$J_{n+1}$. Each family is rewritten onto one basis through \emph{affine shift
+matrices}---a descriptor states only the raising relation, and the engine inverts it to
+step down---and then reflections, multiplication formulas and Wronskian identities are
+applied before \B{Together}, \B{Expand} and \B{Factor} decide the result. Descriptor
+modules cover the Bessel functions, \texttt{Gamma} and its relatives
+(\texttt{Pochhammer}, \texttt{Beta}, \texttt{Binomial}, \texttt{BarnesG}), the zeta and
+polygamma family, the error and exponential integrals, the hypergeometric functions,
+the orthogonal polynomials, Airy, Struve and Whittaker functions, and the elliptic
+integrals, \texttt{ProductLog} and \texttt{QPochhammer}. A rewrite is kept only when the
+score strictly drops, or when it eliminates special-function atoms at a bounded score
+cost, and every identity is gated to the region where it holds, found by numeric probes
+in all four quadrants and on the branch cuts.}
+
+Radicals are the second kind. A nested radical sometimes \emph{denests}, and finding out
+when is a question in Galois theory\index{radical!denesting}:
+
+\begin{codepairs}
+\pair{algebra/simplify-engines/8}{Ramanujan's identity
+$\sqrt[3]{\sqrt[3]2-1}=\tfrac13\big(\sqrt[3]{12}+\sqrt[3]{3}-\sqrt[3]{6}\big)$,
+printed with $\sqrt[3]{12}/3=(2/3)^{2/3}$ and $\sqrt[3]3/3=1/3^{2/3}$.}
+\pair{algebra/simplify-engines/9}{\B{FunctionExpand} writes $\cos(2\pi/17)$ in square
+roots---Gauss's proof that the regular $17$-gon is constructible with ruler and
+compass.}
+\end{codepairs}
+
+\calloutnote{Theory}{A radical $r^{1/n}$ with $r$ in the field $K$ generated by the
+radicals inside it denests exactly when $r^{1/n}=c^{1/n}u$ with $c\in\mathbb{Q}$ and
+$u\in K$. Kummer theory\index{Kummer theory} limits the candidates for $c$ to products
+of the primes in the radicands and of $2$, $3$ and $5$, and a congruence on the norm of
+$r$ prunes the list further. For each surviving $c$, Mathilda
+finds $u$ as an integer relation, by LLL lattice reduction on $320$-bit values, and then
+\emph{proves} it by checking $cu^n=r$ in exact arithmetic. The cosine of pair~9 is
+computed from \emph{Gauss periods}\index{Gauss period}: sums of roots of unity over the
+subgroups of the cyclic Galois group $(\mathbb{Z}/17)^\times$, which halve at each step,
+each child period being $(\eta\pm\sqrt\Delta)/2$ for an integer $\Delta$. The same
+descent handles the $257$-gon in about $0.2$~s.}
+
+The third kind is structure in a polynomial of many variables that neither expansion
+nor factoring shows. \mcode{SeparablePolynomialDecomposition}\index{SeparablePolynomialDecomposition@\mcode{SeparablePolynomialDecomposition}}%
+\texttt{[p, S, T]} writes $p$ as a shortest sum of products $B(S)\,Q(T)$, a factor in
+the variables $S$ times a factor in the variables $T$:
+
+\begin{codepairs}
+\pair{algebra/simplify-engines/10}{The expanded polynomial in $a,b,x,y$ is recovered as
+a sum of two separated products. The number of terms is the rank of the matrix of
+coefficients indexed by the monomials in $S$ and in $T$.}
+\end{codepairs}
+
+\noindent A rank-one answer would be a product of a factor in $S$ and a factor in $T$,
+which is simply a factorization; the decomposition earns its keep when the rank is two or
+more.\calloutnote{Pitfall}{\texttt{Simplify} has a stage that is meant to try this
+decomposition after \B{Factor}, on exact polynomials in two to five variables, keeping
+it only when it is a genuine sum and strictly smaller. On the build that produced this
+book the stage does not reach the decomposed form, even for the polynomial of pair~10:
+\texttt{Simplify} returns a collected form of $44$ leaves against the decomposition's $23$. Until that is repaired,
+call \mcode{SeparablePolynomialDecomposition} yourself.}
 
 \subsection{Is it zero?}
 \label{ssec:alg-possiblezeroq}

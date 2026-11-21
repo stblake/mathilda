@@ -8,3 +8,5 @@ Begin["MyPkg`"];
 Context[here]
 End[]
 $Context
+# Kernel names that have no reference counterpart live in Mathilda` (v0.565):
+Context[NDArray]

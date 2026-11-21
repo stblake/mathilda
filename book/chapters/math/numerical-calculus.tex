@@ -167,6 +167,64 @@ one yields an \texttt{NIntegrate::method} message rather than a silent substitut
 \texttt{"AdaptiveMonteCarlo"} currently runs the same sampler as \texttt{"MonteCarlo"} without the
 adaptive stratification its name promises. The book prefers to say so plainly.
 
+The \texttt{Automatic} strategy has also learned to recognise several integrands that
+defeat a general-purpose rule. An oscillation that speeds up without bound at an
+endpoint, such as \(\cos(e^{1/x})\) at \(x=0\), cannot be sampled at all near that
+end, so the integral is rewritten in the phase variable \(v = e^{1/x}\), where it
+becomes a Fourier integral on a half-line with equally spaced zeros.\index{NIntegrate@\mcode{NIntegrate}!oscillatory endpoints}
+A Fourier integral on \([0,\infty)\) itself goes to the Ooura--Mori double-exponential
+rule\index{Ooura--Mori rule}, whose nodes approach the zeros of the oscillation. And a
+two- or three-dimensional integrand with an integrable singularity at a corner of
+the box is handed to nested one-dimensional QUADPACK rules, which adapt to it far
+faster than a cubature does:\index{NIntegrate@\mcode{NIntegrate}!vertex singularities}
+
+\begin{codepairs}
+\pair{numerical-calculus/nintegrate-hard/1}{\(\int_0^1\cos(e^{1/x})\,dx\): infinitely many
+oscillations near \(0\), integrated in the phase coordinate in about ten milliseconds.}
+\pair{numerical-calculus/nintegrate-hard/2}{\(\int_0^\infty \sin(x^3)\,dx\) by Ooura--Mori, in
+about a millisecond.}
+\pair{numerical-calculus/nintegrate-hard/3}{The exact value is \(\Gamma(4/3)\sin(\pi/6) =
+\Gamma(1/3)/6\).}
+\pair{numerical-calculus/nintegrate-hard/4}{A squared Bessel function touches zero at
+every root of \(J_0\). The double-exponential rule once read a tiny sample next to a root
+as the end of the tail and stopped early, returning \(0.636355\). The value is
+\(0.642638\).}
+\pair{numerical-calculus/nintegrate-hard/5}{\(1/\sqrt{x^2+y^2}\) is singular at the corner
+\((0,0)\) of the unit square. Twelve digits are asked for and delivered.}
+\pair{numerical-calculus/nintegrate-hard/6}{The exact value, \(2\operatorname{arcsinh}1\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Pair~4 is a warning about every adaptive method, not only this one.
+A rule that decides convergence from sample values can be fooled by an integrand that
+happens to be small where it looks. The double-exponential rules now stop early only when
+the terms stay below the noise floor across a whole stretch of the quadrature variable. A
+sweep of 46 integrals of this kind, at three precisions, had 103 wrong results out of 138
+before that change and none after it. When an integrand has many zeros, compare two
+methods or two precisions before you trust a digit.}
+
+The nodes and weights of a Gauss rule are available on their own.
+\mcode{GaussianQuadratureWeights[n, a, b]} gives the \(n\)-point Gauss--Legendre rule
+on \([a, b]\) as \(\{x_i, w_i\}\) pairs, at machine precision or, with a fourth argument,
+to any number of digits. \mcode{GaussianQuadratureError[n, f, a, b]} gives the rule's
+error term, \(c_n f^{(2n)}(\xi)\) for some \(\xi\) in the interval:\index{Gauss--Legendre
+quadrature}
+
+\begin{codepairs}
+\pair{numerical-calculus/quadrature-weights/1}{The three-point rule on \([-1,1]\): nodes
+\(0, \pm\sqrt{3/5}\), weights \(8/9\) and \(5/9\).}
+\pair{numerical-calculus/quadrature-weights/2}{The two-point rule on \([0,1]\) to twenty
+digits: nodes \(\tfrac12 \pm \tfrac{1}{2\sqrt3}\).}
+\pair{numerical-calculus/quadrature-weights/3}{Keep a five-point rule.}
+\pair{numerical-calculus/quadrature-weights/4}{Applied by hand to \(e^x\) on \([0,1]\), five
+points give twelve correct digits.}
+\pair{numerical-calculus/quadrature-weights/5}{The error term of the three-point rule on
+\([-1,1]\) is \(f^{(6)}(\xi)/15750\): the rule is exact for polynomials of degree five.}
+\pair{numerical-calculus/quadrature-weights/6}{Five points on \([0,1]\): the constant is
+\(1/2534876467200 \approx 3.9\times10^{-13}\). With \(f = e^x\), \(f^{(10)}(\xi)\) lies
+between \(1\) and \(e\), and the size of the actual error in pair~4, \(6.5\times10^{-13}\),
+lies inside that range.}
+\end{codepairs}
+
 \subsection{Numerical summation and products}
 \label{ssec:nsum}
 
@@ -203,6 +261,29 @@ geometric terms and cancels them. It is spectacular on alternating and geometric
 weak on the slow algebraic decay of a monotone \(p\)-series---exactly the failure the pair above shows.
 The Euler--Maclaurin formula, by contrast, replaces the monotone tail with an integral plus a
 correction series in the Bernoulli numbers, which is why \texttt{Automatic} prefers it there.}
+
+Euler--Maclaurin has a weak point of its own: it replaces the sum by an integral of the
+summand's continuous extension, and for \(\sin n/n\) that extension oscillates. A
+single-iterator infinite sum is therefore first split by \emph{frequency}\index{NSum@\mcode{NSum}!frequency splitting}.
+Its trigonometric factors are rewritten as exponentials \(b^{cn+d}\), and each frequency goes
+to its own method: the non-oscillating part to the usual dispatch, an alternating part to
+Cohen--Villegas--Zagier, and any other frequency to the Abel--Plana formula, rotated onto the
+imaginary axis. A second weak point is a tail that decays only logarithmically, such as
+\(1/(n\log^2 n)\), whose Euler--Maclaurin tail integral converges far beyond the largest
+\texttt{double}. There the tail is recomputed after the substitution \(n = e^t\) (or
+\(n = e^{e^t}\)), with the summand sampled in arbitrary precision.
+
+\begin{codepairs}
+\pair{numerical-calculus/nsum-hard/1}{\(\sum \sin n/n\), split into the frequencies
+\(e^{\pm in}\). Before the split, Euler--Maclaurin returned \(1.11244\).}
+\pair{numerical-calculus/nsum-hard/2}{The exact value is \((\pi-1)/2\).}
+\pair{numerical-calculus/nsum-hard/3}{\(\sum\cos n/\sqrt n\) converges only conditionally.}
+\pair{numerical-calculus/nsum-hard/4}{The first term of \((-1)^n\log n/n\) is zero, which
+once hid the alternation. The frequency split finds it.}
+\pair{numerical-calculus/nsum-hard/5}{The value is \(\gamma\log 2 - \tfrac12\log^2 2\).}
+\pair{numerical-calculus/nsum-hard/6}{A logarithmically slow tail. The machine answer was
+\(2.10831\); it is \(2.109743\).}
+\end{codepairs}
 
 \B{NProduct}\index{NProduct@\mcode{NProduct}} handles infinite products by the obvious device---it sums
 the logarithms and exponentiates, so \(\prod f = \exp\!\sum \log f\)---and therefore inherits \B{NSum}'s
@@ -289,8 +370,10 @@ limit is delicate or defined only through a hard special function:
 The contour trick that powers \B{NSeries} is a tool in its own right. \B{NResidue}\index{NResidue@%
 \mcode{NResidue}} computes the residue of a function at a point---the coefficient of \((z-z_0)^{-1}\) in
 its Laurent expansion---by integrating around a small circle with the periodic trapezoidal rule, which
-is exponentially accurate on a smooth closed contour. Its reach is exactly the symbolic \B{Residue}'s
-blind spot: essential singularities, where no Laurent series terminates.
+is exponentially accurate on a smooth closed contour. Its reach is the symbolic \B{Residue}'s
+blind spot. \B{Residue} reads an essential singularity in closed form only for the exponential
+family \(P(w)\,e^{c+aw+b/w}\) (\S\ref{ssec:calc-residue}); \B{NResidue} needs no such
+pattern.
 
 \begin{codepairs}
 \pair{numerical-calculus/nresidue/1}{The simplest pole: \(\operatorname{Res}_{z=0}\tfrac1z = 1\).}
@@ -315,7 +398,8 @@ contour.}
 Most differential equations have no closed-form solution, which makes \B{NDSolve}\index{NDSolve@%
 \mcode{NDSolve}!methods} one of the most important functions in the system. It integrates an initial-value
 problem---a single ODE, a coupled system, a higher-order equation reduced automatically to first order,
-or a partial differential equation over a rectangle---and returns the solution not as a formula but as an
+a partial differential equation in time and one or two space variables, or an elliptic
+equation over a planar region---and returns the solution not as a formula but as an
 \B{InterpolatingFunction}\index{InterpolatingFunction@\mcode{InterpolatingFunction}}: a callable object
 you can evaluate, differentiate, or plot anywhere in the solved interval.
 
@@ -367,6 +451,99 @@ right-hand side for speed, and---because diffusion is stiff---integrates the sem
 BDF method by default. The returned object is then a two-dimensional \texttt{InterpolatingFunction} in
 \(t\) and \(x\).}
 
+\subsection{Events, boundary values, and finite elements}
+\label{ssec:ndsolve-events}
+
+Three extensions make \B{NDSolve} useful beyond a plain initial-value problem.
+
+An \emph{event}\index{NDSolve@\mcode{NDSolve}!events} is a condition the solver watches
+for. \mcode{WhenEvent[event, action]}, placed among the equations, fires when a zero
+crossing \mcode{lhs == rhs} occurs or an inequality becomes true. The action may stop the
+integration (\mcode{"StopIntegration"}), reset a state (\mcode{y'[t] -> expr}), or
+evaluate any expression, such as \B{Sow}\texttt{[t]}. The event time is located to the
+integrator's own accuracy, by the Illinois variant of regula falsi inside the step where
+the sign changed, on the method's own interpolant for that step. \mcode{NDSolveValue} is the companion that returns an expression
+in the solution, such as \texttt{y[1]}, instead of a rule.
+
+\begin{codepairs}
+\pair{numerical-calculus/ndsolve-events/1}{A stone dropped from \(10\)~m. The event
+\(y = 0\) stops the integration, so the solution's domain ends at the moment of impact.}
+\pair{numerical-calculus/ndsolve-events/2}{The exact impact time, \(\sqrt{2h/g}\).}
+\pair{numerical-calculus/ndsolve-events/3}{A bouncing ball. At each impact the velocity
+is reversed and reduced by \(10\%\), and the impact time is sown and collected by
+\B{Reap}.}
+\pair{numerical-calculus/ndsolve-events/4}{\mcode{NDSolveValue} returns the requested
+expression: here \(y(1)\) and \(y'(1)\).}
+\end{codepairs}
+
+A condition at a second point makes a \emph{boundary-value problem}\index{boundary-value
+problem!shooting}. \B{NDSolve} solves it by shooting. The missing initial values are
+unknowns, each trial set is integrated as an initial-value problem, and Newton's method
+on the mismatch at the far end corrects the guess. A linear problem converges in one
+Newton step. A nonlinear one, such as the Bratu problem \(u'' + e^u = 0\), takes a few.
+Each shot is an ordinary \B{NDSolve} call with your options, so a boundary-value problem at
+\texttt{WorkingPrecision -> 50} has a 50-digit answer. With \texttt{WorkingPrecision}, an
+equation with an elementary right-hand side is integrated by a Taylor-series method that
+also locates events to the full precision:\index{Taylor-series integrator}
+
+\begin{codepairs}
+\pair{numerical-calculus/ndsolve-events/5}{\(-u'' = e^{2x}\) with \(u(0)=0\) and
+\(u'(1)=0\).}
+\pair{numerical-calculus/ndsolve-events/6}{The exact value \(u(1) = (1+e^2)/4\).}
+\pair{numerical-calculus/ndsolve-events/7}{The Bratu problem with \(\lambda = 1\): the
+lower of its two solutions has \(u(1/2) = 0.1405\).}
+\pair{numerical-calculus/ndsolve-events/8}{\(y'=y\) at forty digits: \(e\), to the last
+digit.}
+\pair{numerical-calculus/ndsolve-events/9}{An event at forty digits. The solution of
+\(y'=y\) reaches \(2\) at \(t = \log 2\).}
+\pair{numerical-calculus/ndsolve-events/10}{All forty digits agree.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Until the shooting method was written, conditions at two points were
+read as initial values at the \emph{last} point, and the answer was silently wrong:
+\(u(1)\) in pair~5 came out as \(-6.6\times10^{-23}\). If a boundary-value problem
+cannot be solved now, \B{NDSolve} says so, with \mcode{NDSolve::berr} (residual above the
+goal), \mcode{NDSolve::bvdim} (the number of conditions does not match the order), or
+\mcode{NDSolve::bvfail}.}
+
+The third extension leaves the line for the plane. Over a region \(\{x, y\} \in R\),
+\B{NDSolve} and \mcode{NDSolveValue} solve linear elliptic equations
+\(-\nabla\cdot(c\nabla u) + b\cdot\nabla u + du = f\) by the \emph{finite element
+method}\index{finite element method}. Boundary values are given by
+\mcode{DirichletCondition[u == h, pred]}, and flux conditions by \mcode{NeumannValue}.
+\mcode{NDEigenvalues} and \mcode{NDEigensystem} find the eigenvalues, and eigenfunctions,
+of the same operators. The region may be a \mcode{Rectangle}, a \mcode{Polygon}
+(non-convex allowed), a \mcode{Triangle}, a \mcode{Disk} or a sector, or an
+\mcode{Annulus}.
+
+\begin{codepairs}
+\pair{numerical-calculus/ndsolve-fem/1}{The Dirichlet Laplacian on the square
+\([0,\pi]^2\) has the eigenvalues \(m^2 + n^2\): \(2, 5, 5, 8\).}
+\pair{numerical-calculus/ndsolve-fem/2}{On the unit disk, the eigenvalues are squared
+zeros of Bessel functions.}
+\pair{numerical-calculus/ndsolve-fem/3}{The first is \(j_{0,1}^2\).}
+\pair{numerical-calculus/ndsolve-fem/4}{The L-shaped membrane. Its first eigenfunction is
+singular at the re-entrant corner, and the mesh is graded there. The value agrees with the
+known \(9.6397238\) to all six digits shown.}
+\pair{numerical-calculus/ndsolve-fem/5}{Poisson's equation \(-\Delta u = 1\) on the disk,
+with \(u = 0\) on the boundary. The solution is an \B{InterpolatingFunction} on the mesh.}
+\pair{numerical-calculus/ndsolve-fem/6}{The exact solution is \((1 - x^2 - y^2)/4\).
+Quadratic elements reproduce it.}
+\pair{numerical-calculus/ndsolve-fem/7}{\B{NIntegrate} over the region integrates element
+by element on the solution's own mesh.}
+\pair{numerical-calculus/ndsolve-fem/8}{The exact integral is \(\pi/8\).}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The meshes are Delaunay triangulations with quadratic
+(isoparametric) elements, so a curved boundary is followed by curved element sides. The
+mesh is graded towards re-entrant corners and towards points where the boundary condition
+changes type. The finite element systems are factored by a sparse Cholesky decomposition
+with nested-dissection ordering, and eigenpairs come from a shift-and-invert Krylov
+iteration. \mcode{NDEigenvalues} solves on three nested meshes, each a uniform refinement of
+the last, and Richardson-extrapolates every eigenvalue on the error exponents \(4\) and
+\(5\). That takes smooth eigenvalues from about \(10^{-6}\) relative error to about
+\(10^{-10}\).}
+
 \subsection{Interpolation}
 \label{ssec:nc-interpolation}
 
@@ -399,6 +576,24 @@ by a Horner evaluation of the local polynomial. It is the natural bridge from sa
 data back to the continuous operations---\B{D}, \B{NIntegrate}, \B{FindRoot}---of the
 rest of this section.}
 
+When the data is an expression that is expensive to evaluate, such as an integral
+with a variable limit, \mcode{FunctionInterpolation[expr, \{x, xmin, xmax\}]}
+samples it for you.\index{FunctionInterpolation@\mcode{FunctionInterpolation}} It binds
+\(x\) to a number at each sample, so an inner \B{NIntegrate} works, and refines the
+sampling adaptively until the interpolant meets its accuracy goal:
+
+\begin{codepairs}
+\pair{numerical-calculus/function-interpolation/1}{An interpolant of
+\(\int_0^x e^{-t^2}\,dt\) on \([0,3]\).}
+\pair{numerical-calculus/function-interpolation/2}{It agrees with
+\(\tfrac{\sqrt\pi}2\operatorname{erf}(1.5)\) to the digits shown.}
+\pair{numerical-calculus/function-interpolation/3}{Its derivative at \(1\) is the
+integrand \(e^{-1}\).}
+\pair{numerical-calculus/function-interpolation/4}{A damped sine on \([0,10]\).}
+\pair{numerical-calculus/function-interpolation/5}{The interpolation error at a point
+between the samples is about \(2\times10^{-9}\).}
+\end{codepairs}
+
 \subsection{Roots of polynomials}
 \label{ssec:nroots}
 
@@ -423,9 +618,11 @@ hardest and numerics earn their keep:
 \calloutnote{Under the hood}{At machine precision \B{NRoots}'s \texttt{Automatic} method forms the
 companion matrix and finds its eigenvalues with LAPACK---exactly what \texttt{numpy.roots} does---then
 polishes each root with one Newton step, which is what keeps Wilkinson's polynomial (pair~5) honest. At
-higher precision it switches to the Aberth--Ehrlich method\index{Aberth--Ehrlich method}, which refines
-\emph{all} the roots simultaneously, each Newton correction repelled from the others so they cannot
-collide~\cite{aberth}. A note on options: unlike its siblings, \B{NRoots} takes no \texttt{WorkingPrecision}---%
+higher precision, and for high degree, it switches to an adaptive-precision engine. Each root gets its
+own working precision, raised until a rounding-error bound proves the root to the target. The real
+roots are found largest first by Laguerre's method, and the Aberth--Ehrlich
+method\index{Aberth--Ehrlich method} finishes the rest, refining \emph{all} of them simultaneously,
+each Newton correction repelled from the others so they cannot collide~\cite{aberth}. A note on options: unlike its siblings, \B{NRoots} takes no \texttt{WorkingPrecision}---%
 you steer its precision with \B{PrecisionGoal} alone.}
 
 \subsection{Equations and systems}
@@ -446,6 +643,28 @@ grid-seeded \B{FindRoot}: two roots.}
 \end{codepairs}
 
 \usagebox{NSolve}
+
+The same engines scale a long way. The Laguerre polynomial \(L_{200}\) has 200 real roots spread
+over \([0, 768]\), and its coefficients span hundreds of orders of magnitude, so a machine-precision
+companion matrix cannot even represent it faithfully. A polynomial system is solved completely:
+every eigenvector candidate is Newton-refined on the original equations and judged by a relative
+residual, and an attempt that loses a candidate is redone at twice the
+precision.\index{NSolve@\mcode{NSolve}!completeness}
+
+\begin{codepairs}
+\pair{numerical-calculus/roots-adaptive/1}{All roots of \(L_{200}\) to thirty digits, from the
+exact polynomial.}
+\pair{numerical-calculus/roots-adaptive/2}{There are 200, all real; the largest is \(767.81\ldots\).}
+\pair{numerical-calculus/roots-adaptive/3}{Three equations in three unknowns, with Bézout
+number \(1\cdot2\cdot3 = 6\): all six solutions.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Do not round a high-degree polynomial before solving it.
+\texttt{NSolve[N[Expand[LaguerreL[200, x]]] == 0, x]} answers quickly, but the roots of the
+\emph{rounded} polynomial are mostly complex, scattered over a disk of radius about \(2000\). They are
+the correct roots of the wrong polynomial: rounding each coefficient to sixteen digits moves the roots
+of an ill-conditioned polynomial by far more than sixteen digits. Keep the coefficients exact and let
+\texttt{WorkingPrecision} decide how hard to work.}
 
 \calloutnote{Theory}{For a zero-dimensional polynomial system Mathilda computes a Gröbner basis
 (\S\ref{sec:algebra}), which makes the quotient ring \(\mathbb{Q}[x]/I\) a finite-dimensional vector space.
@@ -469,6 +688,18 @@ bracket.}
 \pair{numerical-calculus/findroot/5}{A \(2\times2\) system solved by Newton with an exact Jacobian.}
 \end{codepairs}
 
+Every one of these methods runs at \texttt{WorkingPrecision}, with each value, step, and test in
+arbitrary precision. A machine-precision solve whose function values overflow the \texttt{double}
+range is rerun in arbitrary precision automatically and returned as a machine number. Near the largest
+root of \(L_{1000}\) the polynomial is about \(10^{867}\) in size:
+
+\begin{codepairs}
+\pair{numerical-calculus/roots-adaptive/4}{Two starting values select the secant method, here at
+forty digits. It converges to the largest root, \(x \approx 3943.25\).}
+\pair{numerical-calculus/roots-adaptive/5}{At machine precision the values overflow, and the solve
+is rerun in arbitrary precision behind the scenes.}
+\end{codepairs}
+
 \usagebox{FindRoot}
 
 \subsection{Optimization}
@@ -487,7 +718,8 @@ method in one; it handles box and general constraints, and honors \texttt{Workin
 \pair{numerical-calculus/findminimum/1}{The Rosenbrock ``banana'' function, a standard hard case: the
 minimum sits at \((1,1)\) in a curved valley, and BFGS threads it.}
 \pair{numerical-calculus/findminimum/2}{A constrained problem: minimize \(x\cos x\) on \([1,15]\).}
-\pair{numerical-calculus/findminimum/3}{Fifty digits of the minimizer of \((x-\pi)^2\)---it is \(\pi\).}
+\pair{numerical-calculus/findminimum/3}{Fifty digits of the minimizer of \((x-\pi)^2\)---it is \(\pi\).
+The value \texttt{0.*\^{}-50} is an arbitrary-precision zero, known to fifty decimal places.}
 \pair{numerical-calculus/findminimum/4}{\B{FindMaximum} is the mirror image: the first peak of
 \(\sin(x)\,e^{-x/10}\).}
 \end{codepairs}
@@ -498,6 +730,9 @@ Beyond the default, \B{FindMinimum} offers a large menu of local methods---\text
 \texttt{"ConjugateGradient"}, \texttt{"LBFGSB"}, \texttt{"NelderMead"}, and the constrained solvers
 \texttt{"COBYLA"}, \texttt{"COBYQA"}, and \texttt{"SLSQP"}, among others. A few names it recognizes
 (\texttt{"LevenbergMarquardt"}, \texttt{"InteriorPoint"}) are not yet implemented and say so.
+Linear constraints go to sequential quadratic programming, objectives of the form
+\(\max_k p_k\) to a minimax solver, and all of it runs at \texttt{WorkingPrecision}; Chapter~\ref{ch:optimization}
+covers these in depth.
 
 Now global. A function like Rastrigin's, whose graph is an egg-carton of local minima over a single global
 one, would trap any purely local method; \B{NMinimize}'s default differential-evolution search is built to

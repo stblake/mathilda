@@ -14,3 +14,5 @@ StringRiffle[{"red", "green", "blue"}, ", "]
 ToString[x^2 + 1]
 ToExpression["x^2 + 1"]
 ToExpression["Sum[k, {k, 1, 100}]"]
+# Canonical order of strings: punctuation is ignored at first, lower case before upper (v0.530)
+Sort[{"b", "a-b", "B", "ab", ".hid", "a.m", "A"}]

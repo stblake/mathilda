@@ -1,0 +1,11 @@
+# NDSolve: events, NDSolveValue, boundary values, arbitrary precision
+sol = NDSolve[{y''[t] == -9.81, y[0] == 10, y'[0] == 0, WhenEvent[y[t] == 0, "StopIntegration"]}, y, {t, 0, 5}]
+N[Sqrt[2 10/9.81]]
+Reap[NDSolve[{y''[t] == -9.81, y[0] == 1, y'[0] == 0, WhenEvent[y[t] == 0, {Sow[t], y'[t] -> -0.9 y'[t]}]}, y, {t, 0, 3}]][[2, 1]]
+NDSolveValue[{y'[t] == -y[t] + Sin[t], y[0] == 1}, {y[1], y'[1]}, {t, 0, 1}]
+NDSolveValue[{-u''[x] == Exp[2 x], u[0] == 0, u'[1] == 0}, u[1], {x, 0, 1}]
+N[(1 + E^2)/4]
+NDSolveValue[{u''[x] + Exp[u[x]] == 0, u[0] == 0, u[1] == 0}, u[1/2], {x, 0, 1}]
+NDSolveValue[{y'[t] == y[t], y[0] == 1}, y[1], {t, 0, 1}, WorkingPrecision -> 40]
+NDSolveValue[{y'[t] == y[t], y[0] == 1, WhenEvent[y[t] == 2, "StopIntegration"]}, y["Domain"][[1, 2]], {t, 0, 2}, WorkingPrecision -> 40]
+N[Log[2], 40]

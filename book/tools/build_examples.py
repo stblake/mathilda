@@ -58,6 +58,16 @@ def main():
     if not MATHILDA.exists():
         sys.exit(f"error: {MATHILDA} not found -- run `make` in the repo root first.")
     mfiles = sorted(EXDIR.rglob("*.m"))
+    # Optional filter: `build_examples.py calculus integration/trager.m` regenerates
+    # only the sessions under those example sub-paths (relative to book/examples), so
+    # several chapters can be rebuilt concurrently without touching each other's output.
+    if len(sys.argv) > 1:
+        wanted = [a.rstrip("/") for a in sys.argv[1:]]
+        mfiles = [mf for mf in mfiles
+                  if any(str(mf.relative_to(EXDIR)) == w
+                         or str(mf.relative_to(EXDIR)).startswith(w + "/")
+                         or str(mf.relative_to(EXDIR).with_suffix("")) == w
+                         for w in wanted)]
     if not mfiles:
         print(f"build_examples: no example files under {EXDIR.relative_to(ROOT)}")
         return

@@ -49,7 +49,12 @@ free-software licence. You may run it for any purpose, read every line of its
 source, modify it, and redistribute it or your modifications---in source or binary
 form, in free or commercial work---provided you keep its copyright and licence
 notices and mark the files you changed. This is not an incidental legal choice; it
-follows directly from the mission.
+follows directly from the mission. A permissive licence puts the fewest conditions
+between the system and the people who could use it: a student can study it, a
+laboratory can build it into its own instrument software, and a company can ship it
+inside a product, all on the same terms. It also includes an explicit patent grant
+from every contributor, so the freedom to run the code is not undercut by a claim on
+the ideas in it.
 
 For a computer algebra system in particular, openness is a matter of
 \emph{mathematical integrity}\index{mathematical integrity}. When a system tells you that
@@ -66,7 +71,9 @@ open system are.
 
 Openness also buys \emph{longevity}\index{longevity}. Proprietary formats and products are
 abandoned; a licence server goes dark and a decade of work becomes unreadable.
-Free software cannot be taken away. As long as one copy of the source survives, so
+Free software cannot be taken away: the Apache licence's grant is perpetual and
+irrevocable, so a copy you have received stays yours to use and share whatever
+becomes of the project. As long as one copy of the source survives, so
 does the ability to build it, study it, and carry it forward. A system meant to
 serve mathematics---which measures its lifetimes in centuries---should be built to
 last, and only free software can make that promise.
@@ -100,8 +107,10 @@ Behind that one line stands an enormous amount of work by other people:
   \item \textbf{GMP-ECM}\index{GMP-ECM} supplies the Elliptic Curve Method for the harder cases
         of integer factorization.
   \item \textbf{Raylib}\index{Raylib} renders the interactive graphics produced by \B{Plot} and
-        \B{Show}, and \textbf{GNU~Readline}\index{GNU Readline} gives the interactive session its
-        line editing and history.
+        \B{Show}, and \textbf{GNU~Readline}\index{GNU Readline} is the interactive session's
+        fallback line reader. (On an ordinary terminal the session uses an editor
+        of Mathilda's own, with syntax colouring, completion popups, and a live
+        status line; Chapter~\ref{ch:building} shows it.)
 \end{itemize}
 
 The art is not in rewriting these libraries but in \emph{orchestrating} them: in

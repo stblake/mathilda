@@ -35,7 +35,7 @@ exactly, far beyond what a single machine word can hold.}
 \pair{03-introduction/numbers/5}{To get a decimal you ask, with \B{N}: here a quick
 machine-precision value of $\sqrt2$, six figures by default.}
 \pair{03-introduction/numbers/6}{Ask \B{N} for more digits and it obliges: here is
-$\sqrt2$ to thirty places.}
+$\sqrt2$ to thirty significant digits.}
 \pair{03-introduction/numbers/7}{And here is $\pi$ to fifty digits, computed to
 arbitrary precision.}
 \end{codepairs}
@@ -175,8 +175,24 @@ irreducible over~$\mathbb{Q}$.}
 \pair{03-introduction/algebra-factor/3}{Allow the imaginary unit, with
 \texttt{Extension}, and it becomes\index{field extension} $(x-i)(x+i)$.}
 \pair{03-introduction/algebra-factor/4}{Allow $\sqrt2$ and $x^{4}+1$ splits into two
-real quadratics. Extensions return in Section~\ref{sec:algebra}.}
+real quadratics, $(x^{2}-\sqrt2\,x+1)(x^{2}+\sqrt2\,x+1)$. The leading minus and the
+negated first factor cancel.}
+\pair{03-introduction/algebra-factor/5}{Multiplying back out recovers $x^{4}+1$, a
+check worth making on any factorization. Extensions return in
+Section~\ref{sec:algebra}.}
 \end{codepairs}
+
+\noindent
+The sign in \texttt{Out[4]} is not an accident of printing.\index{polynomial!factorization!sign convention}%
+\calloutnote{Pitfall}{\B{Factor} fixes the sign of every factor by one rule: each
+factor gets a positive leading coefficient, and the signs taken out are collected
+into the overall numerical factor. ``Leading'' is lexicographic over the variables,
+so it is not always the highest power of~$x$, and with \texttt{Extension -> Sqrt[2]}
+the generator $\sqrt2$ behaves as a variable ranked ahead of~$x$. In
+\texttt{-1 + Sqrt[2] x - x\^{}2} the leading term is therefore $\sqrt2\,x$, whose
+coefficient is already~$+1$; by the same rule \texttt{Factor[x\^{}2 - 2, Extension ->
+Sqrt[2]]} prints as \texttt{-(Sqrt[2] - x) (Sqrt[2] + x)}. The form looks odd, but the
+rule is fixed, so the same polynomial always factors to the same printed product.}
 
 Closely related to factoring is the polynomial greatest common divisor\index{polynomial!greatest common divisor}. Just as \B{GCD}
 finds the largest integer dividing two whole numbers, \B{PolynomialGCD} finds the
@@ -195,7 +211,7 @@ polynomials. Mathilda provides the three everyday operations:
 \pair{03-introduction/algebra-rational/1}{\B{Cancel} divides out the common factor
 (the $x-1$ above), reducing the fraction to lowest terms.}
 \pair{03-introduction/algebra-rational/2}{\B{Together} combines a sum of fractions
-over one common denominator.}
+over one common denominator, which it leaves in factored form.}
 \pair{03-introduction/algebra-rational/3}{\B{Apart} does the reverse---the partial-%
 fraction decomposition you reach for\index{partial fraction decomposition} before integrating. More in
 Section~\ref{sec:algebra}.}
@@ -320,7 +336,9 @@ $x$-coordinate.}
 the root of $\cos x = x$, the ``Dottie number''\index{Dottie number}---a transcendental equation with no
 closed form.}
 \pair{03-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
-transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
+transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$. The pair
+has more than one solution, and a local method returns the one its iteration
+reaches from the start you give it.}
 \end{codepairs}
 
 \subsection{Equations with a continuum of solutions}

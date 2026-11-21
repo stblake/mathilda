@@ -22,7 +22,8 @@ The whole of this section is about how these five representations behave and how
 they hand off to one another. We begin with the way numbers are typed and the
 operators that combine them; then we take the representations in two groups---the
 machine numbers (fast, fixed-size) and the arbitrary-precision numbers (exact integers
-and rationals, and MPFR reals)---before turning to complex numbers and the everyday
+and rationals, and MPFR reals)---then at the seams between the layers and at how two
+numbers are compared, before turning to complex numbers and the everyday
 functions that round, divide, and dissect a number. We close with interval arithmetic,
 which computes with \emph{guaranteed enclosures}\index{interval arithmetic!enclosure}
 rather than points.
@@ -135,7 +136,9 @@ printed to six figures by default.}
 \pair{arithmetic/machine-doubles/2}{$0.1+0.2$ \emph{prints} as \texttt{0.3}, because
 six figures round to that.}
 \pair{arithmetic/machine-doubles/3}{But it is not exactly $0.3$: the residual is the
-true IEEE rounding error\index{rounding error}, shown plainly rather than hidden.}
+true IEEE rounding error\index{rounding error}, shown plainly rather than hidden. The
+exponent is written \texttt{*\textasciicircum}, the input syntax, so the printed
+text reads back as the same machine real.}
 \pair{arithmetic/machine-doubles/4}{The precision of any machine real is the symbol
 \texttt{MachinePrecision}\index{machine precision}.}
 \end{codepairs}
@@ -199,12 +202,23 @@ a small subtlety:
 
 \begin{codepairs}
 \pair{arithmetic/precision/1}{Exact numbers have \emph{infinite} precision\index{precision!of exact numbers}.}
-\pair{arithmetic/precision/2}{But \B{N}\texttt{[Pi, 50]} reports about $50.27$ digits,
-not $50$: fifty decimal digits are stored as $\lceil 50\log_2 10\rceil = 167$ bits\index{precision!decimal digits vs bits},
-which is a hair more than fifty digits' worth.}
+\pair{arithmetic/precision/2}{\B{N}\texttt{[Pi, 50]} has precision exactly $50$: you
+get the digits you asked for, no more and no less.}
 \pair{arithmetic/precision/3}{You can also state a number's precision on input: the
-literal \texttt{1.5`20}\index{precision!input notation (backtick)} is $1.5$ carried at twenty digits.}
+literal \texttt{1.5`20}\index{precision!input notation (backtick)} is $1.5$ carried at
+twenty digits, and it prints all twenty.}
 \end{codepairs}
+
+\noindent Behind pair~2 there is a little more storage than the reported
+precision.\calloutnote{Under the hood}{Fifty decimal digits need
+$\lceil 50\log_2 10\rceil = 167$ bits\index{precision!decimal digits vs bits}, and
+Mathilda allocates $16$ \emph{guard bits}\index{precision!guard bits} on top of that.
+The precision a number reports is its MPFR mantissa width \emph{minus} the guard, so
+\texttt{Precision} reads $50$ and the printer shows fifty digits, while every MPFR
+kernel works with the extra bits underneath. Without the guard the last printed digit
+could be wrong: before the change, $68$ of $360$ values
+\texttt{N[Sqrt[k], d]} ($k<100$, $d=20,30,50,100$) ended in a wrong digit, and after
+it none do.}
 
 Precision is \emph{contagious}\index{numeric contagion}, and when representations of different precision meet, the
 lowest wins---machine precision being the floor\index{machine precision!as floor}:
@@ -226,6 +240,125 @@ unlimited exponent range (\texttt{mpfr\_to\_machine} in \texttt{src/numeric.c}).
 value survives; the precision does not grow.}, so its magnitude survives where a raw
 double would not.}
 \end{codepairs}
+
+\subsection{Where the layers meet}
+\label{ssec:numeric-tower}
+
+A tower of representations is only as sound as its seams: the places where a machine
+number would overflow, where an MPFR number loses its digits to cancellation, where a
+number is printed and read back. Mathilda's rules for those seams were reviewed as a
+whole in late 2026\index{number!tower of representations!boundary policy}, and the
+session below walks across each of them.
+
+\begin{codepairs}
+\pair{arithmetic/numeric-tower/1}{An arbitrary-precision real prints exactly the digits
+it carries: \texttt{1.5`20} shows twenty.}
+\pair{arithmetic/numeric-tower/2}{\B{InputForm} writes the precision mark, so the text
+reads back as the identical number.}
+\pair{arithmetic/numeric-tower/3}{Machine reals always print with a decimal point and the
+\texttt{*\textasciicircum} exponent of the input syntax, never C's \texttt{1e+15}.}
+\pair{arithmetic/numeric-tower/4}{Subtracting two equal $20$-digit numbers leaves a zero
+that knows how little it knows: \texttt{0.*\textasciicircum-19} means ``zero, to about
+nineteen decimal places''\index{precision!approximate zero}.}
+\pair{arithmetic/numeric-tower/5}{\B{Accuracy} gives that count of places exactly. An
+approximate zero has an accuracy but no meaningful precision.}
+\pair{arithmetic/numeric-tower/6}{$e^{1000}$ is past the largest double, yet the answer
+is not \texttt{Infinity}.}
+\pair{arithmetic/numeric-tower/7}{It is still reported as a machine-precision
+number\dots}
+\pair{arithmetic/numeric-tower/8}{\dots but it is not a machine number: \B{MachineNumberQ}
+says \texttt{False}, because it lives in a $53$-bit MPFR.}
+\pair{arithmetic/numeric-tower/9}{Bring the value back into range and it becomes an
+ordinary double again.}
+\pair{arithmetic/numeric-tower/10}{$\cos(10^{-20})-1$ at machine precision is lost to
+cancellation: the double nearest $\cos(10^{-20})$ is $1$.}
+\pair{arithmetic/numeric-tower/11}{Asked for $20$ digits, \B{N} sees the cancellation and
+re-evaluates at higher working precision until twenty digits are honoured:
+$-5\times10^{-41}$.}
+\pair{arithmetic/numeric-tower/12}{Past the range of MPFR itself the result is the
+number-like \texttt{Overflow[]}, with a \texttt{General::ovfl} message.}
+\pair{arithmetic/numeric-tower/13}{And below it, \texttt{Underflow[]} with
+\texttt{General::unfl}---not a silent \texttt{0.} that would look like an exact zero.}
+\pair{arithmetic/numeric-tower/14}{\B{Precision} of a list is that of its least precise
+element.}
+\pair{arithmetic/numeric-tower/15}{\texttt{\$MaxPrecision}\index{precision!bounds
+(\texttt{\$MinPrecision}, \texttt{\$MaxPrecision})} caps every arbitrary-precision number;
+under a bound of $30$, a request for $50$ digits gets $30$, with an \texttt{N::preclg}
+message.}
+\end{codepairs}
+
+Pairs~6--9 are the heart of the policy.\calloutnote{Under the hood}{The rule is one
+sentence: \emph{a machine number has a 53-bit mantissa and a normal exponent}. A
+machine-arithmetic result outside $[\mathtt{DBL\_MIN}, \mathtt{DBL\_MAX}]$---an overflow,
+an underflow to zero from nonzero operands, or a subnormal---is kept as the same value
+at machine precision in a $53$-bit MPFR, which has MPFR's vast exponent range; it reports
+\texttt{MachinePrecision} and prints like a machine real. When a later operation brings
+it back into range it is demoted to a double. \texttt{Overflow[]} and \texttt{Underflow[]}
+are reserved for values past even MPFR's range. The rule is enforced at a handful of
+choke points---machine \texttt{Plus} and \texttt{Times}, the results of numeric calls,
+\B{N} of an exact value, and the parser's machine literals---and it holds on the packed
+and \texttt{Compile[]} surfaces too, so no path leaks an \texttt{inf}, a flushed zero or
+a subnormal. Inside the arbitrary-precision layer, the elementary functions are computed
+by Arb~\cite{arb} and kept only when the whole error ball rounds to a single MPFR
+number, so they are \emph{correctly rounded}\index{correctly-rounded arithmetic} and
+bit-identical to MPFR, two to eight times faster. The review, with every finding and its
+fix, is \texttt{docs/design/numeric\_tower\_review.md}; its regression corpus is
+\texttt{tests/test\_numeric\_tower\_review.c}.} Pair~11 is the other half. \B{N}\texttt{[\emph{expr},
+\emph{p}]} is a promise of $p$ correct digits\index{N@\mcode{N}!adaptive precision}:
+the MPFR additions record how many leading bits each sum cancelled, and when that
+exceeds the guard, \B{N} re-evaluates with $64$ more bits, until two successive results
+agree to $p$ digits or \texttt{\$MaxExtraPrecision} is spent. A part that keeps
+shrinking at the limit is the residue of an exact cancellation and becomes $0$; any
+other part that never settles gives an \texttt{N::meprec} message rather than digits
+that look right and are not.
+
+Notice what these rules do \emph{not} do. Mathilda's arbitrary-precision numbers are
+fixed precision: the MPFR width \emph{is} the precision, and arithmetic does not
+shrink it to account for cancellation, exactly as \S\ref{ssec:machine-precision}
+described for machine reals. The policy makes every digit a number claims to have a
+correctly computed one; deciding how many of them survive a long computation is left to
+the adaptive \B{N} above, or to the interval arithmetic of \S\ref{ssec:interval}.
+
+\subsection{Deciding equality and order}
+\label{ssec:comparisons}
+
+\B{Equal} and \B{Less} between exact quantities look easy and are not. \(22/7\) and
+\(\pi\) differ by about \(0.00126\); \(\pi+10^{-400}\) and \(\pi\) differ by an amount no
+double can see. A comparison that quietly settles for machine accuracy will get the
+second wrong, and an earlier Mathilda got even the first wrong.
+
+\begin{codepairs}
+\pair{arithmetic/comparisons/1}{$22/7$ is not $\pi$.}
+\pair{arithmetic/comparisons/2}{It is a little larger\dots}
+\pair{arithmetic/comparisons/3}{\dots and so is Zu Chongzhi's far better $355/113$.}
+\pair{arithmetic/comparisons/4}{A difference of $10^{-400}$ is decided exactly: the
+difference of the two sides is formed symbolically before any number is computed.}
+\pair{arithmetic/comparisons/5}{Two values beyond the double range compare correctly,
+because each is a $53$-bit MPFR rather than \texttt{Infinity}.}
+\pair{arithmetic/comparisons/6}{The ordering heads decide against the real infinities:
+every real number is below \texttt{Infinity}\dots}
+\pair{arithmetic/comparisons/7}{\dots and \texttt{Infinity} is not below itself.}
+\pair{arithmetic/comparisons/8}{\mcode{Unitize}\index{Unitize@\mcode{Unitize}} maps each
+number to $0$ if it is zero and $1$ otherwise, always as an exact integer. The last
+entry is a disguised zero, $\sqrt2+\sqrt3=\sqrt{5+2\sqrt6}$, and the same zero test that
+\mcode{Equal} uses sees through it.}
+\end{codepairs}
+
+Pair~1 deserves its history.\calloutnote{Pitfall}{Until version 0.6584, \texttt{22/7 == Pi}
+was \texttt{True}---and so, at the same time, was \texttt{22/7 != Pi}. A sweep of the
+continued-fraction convergents of $22$ constants found $263$ of $550$ rational
+approximations judged equal to the constant, or ordered both ways, or neither. The
+cause was the zero test (\S\ref{ssec:alg-possiblezeroq}): $22/7-\pi$ is small enough
+to climb its precision ladder, and a residual that never shrank was taken for a zero.
+Now a value that honours each higher precision keeps climbing until the top rung
+decides, and \mcode{Equal} and \B{Unequal} read every pair through one shared verdict, so
+they can no longer disagree. An order found exactly, or by the comparison tolerance, is
+final; doubles may decide only between operands with no sum in them, where they cannot
+hide a cancellation.} The tolerance itself is the familiar one for approximate
+numbers\index{Equal@\mcode{Equal}!tolerance}: two machine reals are \mcode{Equal} when they
+agree except in their last seven bits or so, so \texttt{1. == 1. + 2\textasciicircum-50}
+is \texttt{True}. For exact operands there is no tolerance at all, which is what pairs~1
+to~4 rely on.
 
 \subsection{Complex numbers}
 \label{ssec:complex}
@@ -252,6 +385,13 @@ for $1+i$ it is $\pi/4$.}
 pair (\B{Re} and \B{Im} give them singly).}
 \pair{arithmetic/complex/7}{For symbolic work, \B{ComplexExpand} expands on the
 assumption that the variables are \emph{real}, so $(a+bi)^2$ becomes $a^2-b^2+2ab\,i$.}
+\pair{arithmetic/complex/8}{A fractional power of a negative number is the
+\emph{principal} root, so $(-8)^{1/3}$ is $2(-1)^{1/3}$, not $-2$.}
+\pair{arithmetic/complex/9}{Numerically that is $1+\sqrt3\,i$, the root at angle
+$\pi/3$.}
+\pair{arithmetic/complex/10}{When you mean the real cube root,
+\mcode{CubeRoot}\index{CubeRoot@\mcode{CubeRoot}}\index{root!principal vs real} says so:
+\texttt{CubeRoot[-8]} is $-2$.}
 \end{codepairs}
 
 That an exact modulus like $\sqrt2$ is \emph{kept} as $\sqrt2$ is the same principle

@@ -1,0 +1,13 @@
+# Sums and products: closed forms, and the soundness gates
+Sum[k^10/k!, {k, 0, Infinity}]
+Sum[k 2^k, {k, 1, n}]
+Sum[(-1)^k Binomial[2 n, n + k]^3, {k, -n, n}]
+Product[4 k^2/(4 k^2 - 1), {k, 1, Infinity}]
+Sum[1/k^2, {k, 0, Infinity}]
+Sum[1/k, {k, 1, Infinity}]
+Product[1 - 2^k, {k, 1, Infinity}]
+Product[1/2, {k, 1, Infinity}]
+Product[(k - 3)/(k + 1), {k, 1, n}]
+Sum[1/(k - m), {k, 1, n}]
+HarmonicNumber[10]
+N[HarmonicNumber[10^5], 30]

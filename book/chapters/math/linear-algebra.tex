@@ -17,12 +17,16 @@ mathematics that runs, whichever world the data lives in.
 We climb from structure to spectrum. First the matrix as an expression---its
 shape, its constructors, and the packed-array substrate that makes it
 fast---then the products and norms that turn vectors into geometry; the
-determinant, inverse, and matrix powers; solving linear systems exactly and in
+determinant, inverse, and matrix powers; functions of a matrix such as
+\(e^{A}\) and \(\sqrt{A}\); solving linear systems exactly and in
 the least-squares sense; rank, row reduction, and the null space, with the
 user-facing \texttt{ZeroTest} option that makes exact reduction possible where a
-structural pivot would fail; the classical matrix decompositions (LU, QR, SVD,
-Schur); and finally the eigenproblem---eigenvalues, eigenvectors, and the Jordan
-canonical form---closing with the machine--exact divide that governs all of it.
+structural pivot would fail; the matrix decompositions (LU, QR, SVD,
+Schur, Cholesky, Hessenberg); and the eigenproblem---eigenvalues, eigenvectors,
+and the Jordan canonical form. Then come the machine--exact divide that governs
+all of it, with arbitrary precision as its third world, and finally sparse
+matrices, where a matrix with \(1.6\) billion entries is stored as its two hundred
+thousand nonzeros.
 
 \subsection{Vectors and matrices as expressions}
 \label{ssec:la-matrices}
@@ -122,6 +126,45 @@ infinity first. Both \B{Norm} and \B{Dot} lower inside \B{Compile}, so a norm or
 inner product inside a tight numerical loop runs at buffer speed
 (\texttt{src/linalg/norm.c}, \texttt{dot.c}).}
 
+\texttt{Dot} contracts indices; three relatives build bigger objects or split vectors
+apart. The \emph{Kronecker product}\index{Kronecker product} \(A\otimes B\) replaces
+each entry \(a_{ij}\) of \(A\) by the block \(a_{ij}B\); the \emph{tensor
+product}\index{tensor product} keeps every index of every factor; and a
+\emph{projection} splits a vector into the part along a direction and the part
+perpendicular to it. \texttt{Orthogonalize}\index{Orthogonalize@\mcode{Orthogonalize}} turns a list of vectors into an orthonormal
+one by the Gram--Schmidt process\index{Gram-Schmidt process}.
+
+\begin{codepairs}
+\pair{linear-algebra/products2/1}{\texttt{KroneckerProduct}\index{KroneckerProduct@\mcode{KroneckerProduct}} of two \(2\times2\) matrices
+is \(4\times4\): each entry of the first scales a copy of the second (here a swap
+matrix, so each block is a reflected copy).}
+\pair{linear-algebra/products2/2}{Of two vectors it is the column-times-row outer
+product, a matrix.}
+\pair{linear-algebra/products2/3}{\texttt{TensorProduct}\index{TensorProduct@\mcode{TensorProduct}} is the full outer product,
+symbolic entries and all.}
+\pair{linear-algebra/products2/4}{The rank of a tensor product is the sum of the
+ranks, so three vectors give a \(2\times3\times2\) array.}
+\pair{linear-algebra/products2/5}{\texttt{Projection}\index{Projection@\mcode{Projection}} of \(\{1,1\}\) onto \(\{3,4\}\) is
+\(\frac{u\cdot v}{v\cdot v}\,v = \frac{7}{25}\{3,4\}\), exactly.}
+\pair{linear-algebra/products2/6}{What is left over is perpendicular to \(\{3,4\}\):
+\(3\cdot\frac{4}{25} - 4\cdot\frac{3}{25} = 0\).}
+\pair{linear-algebra/products2/7}{\texttt{Orthogonalize} returns an orthonormal basis,
+with exact radicals for exact input.}
+\pair{linear-algebra/products2/8}{A dependent vector has nothing left once its
+projections are removed, and becomes a zero vector, so the output still lines up
+with the input.}
+\end{codepairs}
+
+Gram--Schmidt is one projection after another: each new vector loses its
+projections onto the vectors already accepted, and what is left is normalised.
+The classical form, as written, loses orthogonality in floating point when the
+vectors are nearly dependent, so \texttt{Orthogonalize} also takes
+\texttt{Method -> "ModifiedGramSchmidt"}, \texttt{"Householder"}, and
+\texttt{"Reorthogonalization"}. The Kronecker product, for its part, is how
+multidimensional operators are assembled from one-dimensional ones:
+\S\ref{sec:linalg-sparse} builds the two-dimensional Laplacian as
+\(T\otimes I + I\otimes T\).
+
 \subsection{Determinant, inverse, and matrix powers}
 \label{ssec:la-det}
 
@@ -131,8 +174,9 @@ when the matrix is singular; the inverse undoes the linear map when it does not.
 \begin{codepairs}
 \pair{linear-algebra/det/1}{\B{Det} of a numeric matrix is exact: \(1\cdot4 -
 2\cdot3 = -2\).}
-\pair{linear-algebra/det/2}{For a symbolic matrix it returns the Laplace
-(cofactor) expansion along the first row.}
+\pair{linear-algebra/det/2}{For a symbolic matrix it returns the determinant
+multiplied out: the six signed products \(\pm a_{1\sigma(1)}a_{2\sigma(2)}a_{3\sigma(3)}\),
+one for each permutation \(\sigma\) of three columns (the Leibniz formula).}
 \pair{linear-algebra/det/3}{\B{Inverse} of an integer matrix comes back with exact
 rational entries.}
 \pair{linear-algebra/det/4}{Symbolically, the \(2\times2\) inverse is the classical
@@ -152,6 +196,25 @@ generate the Fibonacci sequence, because that matrix encodes the recurrence
 \B{MatrixPower} reaches them in \(\lceil\log_2 10\rceil=4\) matrix multiplications
 rather than nine, by repeated squaring.
 
+The determinant and the inverse are both built from \emph{minors}\index{minor (of a
+matrix)}, the determinants of square submatrices. The \emph{adjugate}
+\(\operatorname{adj}A\)\index{adjugate} is the transposed matrix of signed
+\((n-1)\times(n-1)\) minors, and it satisfies
+\(A\,\operatorname{adj}A = (\det A)\,I\). So \(A^{-1}=\operatorname{adj}A/\det A\)
+when \(\det A\neq0\), but the adjugate itself exists for every square matrix.
+
+\begin{codepairs}
+\pair{linear-algebra/matfunc/1}{\texttt{Minors}\index{Minors@\mcode{Minors}} lists the \(2\times2\) minors. Entry
+\((i,j)\) keeps the \(i\)-th pair of rows and the \(j\)-th pair of columns, pairs in
+lexicographic order \(\{1,2\},\{1,3\},\{2,3\}\): the corner \(-3\) is
+\(1\cdot5-2\cdot4\).}
+\pair{linear-algebra/matfunc/2}{\texttt{Adjugate}\index{Adjugate@\mcode{Adjugate}} of the general \(2\times2\): swap the
+diagonal, negate the off-diagonal. Divide by \(ad-bc\) and you have the symbolic
+inverse above.}
+\pair{linear-algebra/matfunc/3}{A singular matrix has no inverse but still has an
+adjugate.}
+\end{codepairs}
+
 \calloutnote{Under the hood}{\B{Det} and \B{Inverse} each choose a path by the kind
 of entries they see. An all-integer or rational matrix is handed to FLINT's
 \texttt{fmpq\_mat\_det} / \texttt{fmpq\_mat\_inv}, which work in polynomial time and
@@ -159,11 +222,68 @@ return the exact answer---so a \(12\times12\) Hilbert determinant is instant, no
 \(O(n!)\) Laplace expansion. A machine-real matrix factorises through LAPACK's
 \texttt{dgetrf} LU; a genuinely arbitrary-precision (MPFR) matrix uses an
 \(O(n^3)\) MPFR LU. Only a \emph{symbolic} matrix falls to cofactor expansion,
-which is why pair~2 shows it. The determinant of a large machine matrix is the
+and the cofactor form is then expanded, so pair~2 shows the flat sum of
+products rather than the nested expansion along the first row. (A matrix with a
+sum in a denominator keeps the cofactor form, because expanding a rational-function
+determinant can blow up.) The determinant of a large machine matrix is the
 product of the LU pivots and can exceed the IEEE-double range---a
 \(200\times200\) random matrix has \(\lvert\det\rvert\approx10^{340}\)---so Mathilda
 re-accumulates the pivot product in an MPFR value of unbounded exponent rather than
 returning \texttt{inf} (\texttt{src/linalg/det.c}, \texttt{inv.c}, \texttt{matpow.c}).}
+
+\subsection{Functions of a matrix}
+\label{ssec:la-matfunc}
+
+An integer power of a matrix needs only multiplication. To give \(e^{A}\),
+\(\log A\), or \(\sqrt{A}\) a meaning, extend the function through the eigenvalues. If
+\(A = S\,\mathrm{diag}(\lambda_1,\dots,\lambda_n)\,S^{-1}\) then
+\(f(A) = S\,\mathrm{diag}(f(\lambda_1),\dots,f(\lambda_n))\,S^{-1}\), and for a
+power series such as \(e^{x}=\sum x^k/k!\) this agrees with substituting \(A\) into
+the series.\index{matrix function} \texttt{MatrixExp}\index{MatrixExp@\mcode{MatrixExp}}, \texttt{MatrixLog}\index{MatrixLog@\mcode{MatrixLog}}, and the general
+\texttt{MatrixFunction}\index{MatrixFunction@\mcode{MatrixFunction}} compute these, and \B{MatrixPower} accepts any exponent, not
+only an integer.
+
+\begin{codepairs}
+\pair{linear-algebra/matfunc/4}{The exponential of the rotation generator is a
+rotation by one radian. The matrix is real with eigenvalues \(\pm i\), and the
+answer is still real, in \(\cos\) and \(\sin\).}
+\pair{linear-algebra/matfunc/5}{A nilpotent matrix \(N\) has \(N^2=0\), so the series
+stops: \(e^{N}=I+N\).}
+\pair{linear-algebra/matfunc/6}{\texttt{MatrixLog} inverts it: \(\log(I+N) = N - N^2/2 +
+\cdots = N\).}
+\pair{linear-algebra/matfunc/7}{On a Jordan block an undefined \(f\) shows the
+general rule: \(f\) on the diagonal and \(f'\) on the superdiagonal.}
+\pair{linear-algebra/matfunc/8}{A rational exponent is a matrix root. The
+eigenvalues \(9\) and \(1\) become \(3\) and \(1\), and the principal square root
+is again an integer matrix: \(\left(\begin{smallmatrix}2&1\\1&2\end{smallmatrix}\right)^2
+= \left(\begin{smallmatrix}5&4\\4&5\end{smallmatrix}\right)\).}
+\pair{linear-algebra/matfunc/9}{A machine exponent gives a machine answer.}
+\pair{linear-algebra/matfunc/10}{And a real-exponent \B{MatrixPower} compiles, as do
+\texttt{MatrixExp} and \texttt{MatrixLog}.}
+\end{codepairs}
+
+Pair~7 is why a defective matrix needs more than its eigenvalues. A Jordan block
+\(\lambda I + N\) is not diagonalizable, and Taylor's theorem about \(\lambda\) gives
+\(f(\lambda I+N) = f(\lambda)I + f'(\lambda)N + \tfrac12 f''(\lambda)N^2+\cdots\),
+which stops once \(N^k=0\). So an exact or symbolic matrix goes through
+\B{JordanDecomposition} (\S\ref{ssec:la-eigen}) and applies \(f\) block by block.
+That is exact, but it is the wrong method for floating point, where the Jordan
+form is not even continuous in the entries.
+
+\calloutnote{Under the hood}{The numerical methods are the standard modern
+ones. \texttt{MatrixExp} of a machine matrix uses
+scaling and squaring with a Pad\'e approximant of degree \(3\) to \(13\), chosen
+by the Al-Mohy--Higham backward-error bounds: \(e^{A} = (e^{A/2^s})^{2^s}\), with
+\(s\) just large enough that the Pad\'e error is below rounding. An MPFR matrix uses
+Taylor scaling and squaring with guard bits. \texttt{MatrixLog} runs inverse scaling and
+squaring on the Schur form (MPFR: Denman--Beavers square roots), and
+\texttt{MatrixFunction} uses the Schur--Parlett algorithm, taking the derivatives it needs
+from \B{D}, with Bj\"orck--Hammarling for square roots. \texttt{MatrixExp[m, v]}
+computes the \emph{action} \(e^{A}v\) by a truncated Taylor series without ever
+forming \(e^{A}\), which is what a time-stepping code wants. On a
+\B{SparseArray} it runs on sparse matrix--vector products (the \(90000\times90000\)
+Laplacian in \(76\)~ms). \texttt{MatrixFunction} itself does not compile: its first
+argument is a function, not a number (\texttt{src/linalg/matfunc*.c}).}
 
 \subsection{Solving linear systems}
 \label{ssec:la-linsolve}
@@ -253,6 +373,39 @@ into \B{RowReduce} through the evaluator, so every improvement to it propagates 
 them for free (\texttt{src/linalg/linsolve.c}, \texttt{matrank.c},
 \texttt{nullspace.c}).}
 
+The entries need not be rational functions of the symbols. Radicals of the
+parameters are allowed too, and the elimination still decides every pivot
+exactly.\index{row reduction!over radicals}
+
+\begin{codepairs}
+\pair{linear-algebra/radicals/1}{The second row is \(\sqrt{c}\) times the first,
+but only if you know that \(\sqrt{c}\cdot c = c^{3/2}\).}
+\pair{linear-algebra/radicals/2}{\B{MatrixRank} knows it: rank \(2\).}
+\pair{linear-algebra/radicals/3}{So the null space is one-dimensional, with
+\(\sqrt{c}\) in its denominators.}
+\pair{linear-algebra/radicals/4}{Check it: \(m\) times the vector is zero once
+\B{Together} combines the fractions.}
+\pair{linear-algebra/radicals/5}{\B{LinearSolve} over the same field
+\(\mathbb{Q}(c)(\sqrt{c})\).}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The fraction-free elimination divides each entry
+exactly by the previous pivot. That division used to treat \(c\), \(\sqrt{c}\), and
+\(c^{3/2}\) as three unrelated variables, so a quotient such as
+\((5440a^3c^2+\cdots)/(-10\sqrt{c})\) was judged inexact. The leftover fraction then
+hid a zero pivot, and an \(11\times8\) system of rank \(6\) came back with rank
+\(8\) and an empty null space. Now each radical base \(B\) with root index \(m\) is
+renamed \(g^m\) for a fresh generator \(g\). The division is done in the polynomial
+ring in \(g\), the result is mapped back by \(g\mapsto B^{1/m}\), and it is checked
+in the original ring. For larger systems over \(\mathbb{Q}(\text{params})(\text{radicals})\),
+\B{RowReduce} maps the whole field onto a purely transcendental one and runs a
+fraction-free Gauss--Jordan in FLINT's multivariate polynomials. A \(17\times6\)
+system whose entries had some \(200\) terms each never finished before. It now
+reduces in a second. Radicals of numbers, such as \(\sqrt2\), are left out of the
+renaming, because \(\sqrt2\) treated as a free \(g\) would forget that \(g^2=2\)
+(\texttt{src/linalg/util.c}, \texttt{src/poly/flint\_bridge.c}). Systems like these
+arise as the ansatz solves of symbolic integration.}
+
 \subsection{Exact reduction and the \texttt{ZeroTest} option}
 \label{ssec:la-zerotest}
 
@@ -315,7 +468,7 @@ a different one.
 
 A decomposition rewrites a matrix as a product of simpler factors---triangular,
 orthogonal, diagonal---and almost every serious numerical algorithm is a
-decomposition in disguise. Mathilda ships the classical four.
+decomposition in disguise. We start with the classical four.
 
 \begin{codepairs}
 \pair{linear-algebra/decomp/1}{\B{LUDecomposition} returns the combined
@@ -369,6 +522,49 @@ input rather than answered wrongly (\texttt{src/linalg/ludecomp.c},
 \texttt{qrdecomp.c}, \texttt{svdecomp.c}, \texttt{schurdecomp.c},
 \texttt{lapack.c}).}
 
+Several more factorisations serve special purposes. A Hermitian positive-definite
+matrix factors as \(A = C^{*}C\) with \(C\) upper triangular, the \emph{Cholesky
+decomposition}\index{Cholesky decomposition}. It costs half an LU and needs no
+pivoting. The \emph{Hessenberg form}\index{Hessenberg form} is zero below the first
+subdiagonal and is reached by a finite sequence of unitary similarities; it is the
+first stage of every practical eigenvalue algorithm. \texttt{SingularValueList}\index{SingularValueList@\mcode{SingularValueList}} gives the
+singular values without the singular vectors, and \texttt{LUBackSubstitution}\index{LUBackSubstitution@\mcode{LUBackSubstitution}} reuses an
+\B{LUDecomposition} for new right-hand sides.
+
+\begin{codepairs}
+\pair{linear-algebra/decomp2/1}{\texttt{CholeskyDecomposition}\index{CholeskyDecomposition@\mcode{CholeskyDecomposition}} of an exact matrix is
+exact: \(C\) is upper triangular with a \(\sqrt2\) in the corner.}
+\pair{linear-algebra/decomp2/2}{And \(C^{*}C\) gives the matrix back.}
+\pair{linear-algebra/decomp2/3}{This matrix is symmetric but indefinite (its
+eigenvalues are \(3\) and \(-1\)), so it has no Cholesky factor. The call stays
+unevaluated, and at the prompt it also prints
+\texttt{CholeskyDecomposition::npdef}.}
+\pair{linear-algebra/decomp2/4}{\texttt{HessenbergDecomposition}\index{HessenbergDecomposition@\mcode{HessenbergDecomposition}} gives a unitary
+\texttt{p} and the Hessenberg \texttt{h}.}
+\pair{linear-algebra/decomp2/5}{\texttt{h} has one zero, below the subdiagonal---for
+a \(3\times3\) that is all the structure there is.}
+\pair{linear-algebra/decomp2/6}{The similarity \(A = P\,H\,P^{*}\) holds to rounding.}
+\pair{linear-algebra/decomp2/7}{Exact singular values are square roots of the
+eigenvalues of \(A^{*}A\), here nested radicals.}
+\pair{linear-algebra/decomp2/8}{A rank-\(1\) machine matrix has one nonzero singular
+value. \texttt{SingularValueList} drops the values below its tolerance, so the list has
+length \(1\), and its length is the numerical rank.}
+\pair{linear-algebra/decomp2/9}{Factor once.}
+\pair{linear-algebra/decomp2/10}{Then each right-hand side is two triangular solves.
+The answer matches \texttt{LinearSolve[\{\{1, 2\}, \{3, 4\}\}, \{5, 6\}]}.}
+\pair{linear-algebra/decomp2/11}{A matrix right-hand side solves for every column;
+with the identity, that is the inverse.}
+\end{codepairs}
+
+\texttt{HessenbergDecomposition} is numerical only, as \B{SchurDecomposition} is: an
+exact matrix gives \texttt{HessenbergDecomposition::schurf} and is left
+unevaluated. Its machine factors come from LAPACK's \texttt{dgehrd} and
+\texttt{dorghr}, and its MPFR factors follow LAPACK's reflector convention, so the two
+agree to machine precision. Cholesky, the singular-value list, and the Hessenberg
+form all lower inside \B{Compile}, each on the same machine kernel as the
+interpreter, so the compiled and interpreted answers agree entry for entry
+(\texttt{src/linalg/cholesky.c}, \texttt{lapack.c}).
+
 \subsection{Eigenvalues, eigenvectors, and the Jordan form}
 \label{ssec:la-eigen}
 
@@ -382,7 +578,9 @@ whose roots are the eigenvalues: \(x^2 - 5x - 2\) here.}
 \pair{linear-algebra/eigen/2}{\B{Eigenvalues} of an exact matrix stays exact,
 returning genuine surds---and a \(0\), certifying the matrix is singular.}
 \pair{linear-algebra/eigen/3}{Symbolically, the \(2\times2\) eigenvalues are the
-trace-and-determinant quadratic formula.}
+trace-and-determinant quadratic formula. With free symbols there is no modulus to
+sort by, so the two roots come in the order \B{Solve} returns them: here the
+minus root first.}
 \pair{linear-algebra/eigen/4}{A \(90^\circ\) rotation has no real eigenvectors, so
 its eigenvalues are the complex pair \(\pm i\).}
 \pair{linear-algebra/eigen/5}{\B{Eigenvectors} of a defective matrix: the repeated
@@ -444,7 +642,8 @@ It is worth watching the choice happen on one matrix. The Hilbert matrix---entri
 \B{HilbertMatrix} is the precise rational \(1/266716800000\).}
 \pair{linear-algebra/precision/2}{Machine: the same determinant over doubles is a
 single \texttt{Real}---accurate to the digits shown, but a rounded number, not an
-exact one.}
+exact one. (\texttt{3.7493*\^{}-12} is the input-form spelling of
+\(3.7493\times10^{-12}\).)}
 \pair{linear-algebra/precision/3}{Arbitrary precision: at \(40\) digits (MPFR) the
 determinant of the \(7\times7\) Hilbert matrix comes back to full requested
 precision.}
@@ -479,6 +678,199 @@ prompt runs at full speed inside a compiled numerical loop
 (\texttt{src/pack.c}, \texttt{src/linalg/ndlinalg.c}; see also
 \S\ref{sec:statistics} on packed reductions).}
 
+The third world, arbitrary precision, is the one to reach for when a matrix is
+too ill-conditioned for doubles but too large or too irrational for exact
+arithmetic.\index{arbitrary precision!linear algebra} A condition number
+\(\kappa\) costs about \(\log_{10}\kappa\) digits, so a machine computation with
+\(\kappa\approx10^{16}\) has nothing left. Give the same computation \(100\) digits
+and it keeps more than eighty.
+
+\begin{codepairs}
+\pair{linear-algebra/mpfr/1}{The \(40\times40\) Hilbert matrix is invertible, but at
+machine precision \B{MatrixRank} sees only \(21\) directions above rounding level.}
+\pair{linear-algebra/mpfr/2}{At \(100\) digits the elimination runs at that precision,
+and all \(40\) pivots are resolved.}
+\pair{linear-algebra/mpfr/3}{Solving \(H_{12}\mathbf x=\mathbf 1\) at \(40\) digits.
+The exact first component is \(-12\); \(\kappa(H_{12})\approx1.7\times10^{16}\), and
+the last ten digits printed are rounding error, amplified.}
+\pair{linear-algebra/mpfr/4}{Eigenvalues of a \emph{nonsymmetric} matrix at
+\(30\) digits. Their sum is the trace, \(16\).}
+\pair{linear-algebra/mpfr/5}{A generalized eigenproblem \(A\mathbf x=\lambda B\mathbf x\),
+given as the pencil \(\{A, B\}\): \(\det(A-\lambda B) = (2\lambda-5)(\lambda-1)\).}
+\pair{linear-algebra/mpfr/6}{Singular values at \(30\) digits, spanning four orders
+of magnitude.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Pair~3 prints forty digits, but only about thirty are right.
+Mathilda's arbitrary-precision numbers carry a fixed working precision, not an
+error estimate, so a result is printed to the precision it was computed at, however
+much the conditioning has eaten. When the answer matters, estimate the condition
+number, or compute at two precisions and keep the digits on which they agree.}
+
+\calloutnote{Under the hood}{An MPFR matrix used to be multiplied the way a symbolic
+one is, with an evaluator \B{Times} and \B{Plus} for every term. Now each output entry
+of \B{Dot} is one \emph{fused} dot product\index{fused dot product}
+(\texttt{arb\_approx\_dot}), a single library call instead of \(n\) multiplications
+and \(n-1\) additions, and the rows are spread over threads: a \(256\times256\)
+matrix times a vector at \(800\) digits went from \(0.35\)~s to \(0.02\)~s. The MPFR
+\B{LUDecomposition}, and the square \B{LinearSolve} built on it, compute each
+entry the same way (about \(4.5\times\) faster), and \B{LinearSolve} judges a pivot
+zero relative to the working precision. Until that change both \B{MatrixRank} and the
+singularity test of \B{LinearSolve} rounded MPFR entries to doubles:
+\texttt{MatrixRank[N[HilbertMatrix[40], 100]]} said \(21\), the machine answer of
+pair~1. A nonsymmetric \B{Eigenvalues} reduces to
+Hessenberg form with fused products and runs Francis QR sweeps on the active block
+only. A pencil \(\{A, B\}\) with symmetric \(A\) and positive-definite \(B\) is
+reduced by a Cholesky factor of \(B\), so its eigenvalues are real by construction.
+Before that, an MPFR pencil was silently computed in doubles. \texttt{SingularValueList}
+uses Householder bidiagonalisation followed by the Golub--Kahan implicit-shift QR
+iteration\index{Golub-Kahan SVD} at the input precision plus \(32\) bits. A
+\(50\times50\) Vandermonde matrix at \(100\) digits takes \(74\)~ms where one-sided
+Jacobi took \(2\)~s, and every digit agrees with a recomputation at \(200\). (The full
+\B{SingularValueDecomposition} still uses Jacobi.) One benchmark is problem~1 of the
+ISSAC~'97 challenge, the eigenvalues of \texttt{N[HilbertMatrix[256], 800]}, which went from
+\(16\)~s to about \(6.5\)~s.}
+
+\subsection{Sparse matrices}
+\label{sec:linalg-sparse}
+
+The matrices that arise from differential equations, networks, and finite
+elements are large and almost entirely zero.\index{sparse matrix} The
+second-difference matrix of a grid of \(n\) points has three nonzeros per row,
+whatever \(n\) is. Storing all \(n^2\) entries wastes memory, and multiplying
+by them wastes time. A \B{SparseArray} stores only the nonzero entries, with their
+positions, and the linear algebra of this section works on it directly, without
+ever building the dense matrix. (Its construction, storage and element-wise
+arithmetic are covered with the other data structures in \S\ref{sec:ds-sparse}.)
+The usual constructor is a list of rules, and \texttt{Band}\index{Band@\mcode{Band}}
+fills a whole diagonal at once.
+
+\begin{codepairs}
+\pair{linear-algebra/sparse/1}{The \(6\times6\) second-difference matrix: \(2\) on the
+diagonal, \(-1\) on the two diagonals beside it. It prints as its count of stored
+entries and its dimensions.}
+\pair{linear-algebra/sparse/2}{\B{Normal} gives the dense matrix, when you want to
+see it.}
+\pair{linear-algebra/sparse/3}{A sparse product stays sparse: the square of a
+tridiagonal matrix is pentadiagonal.}
+\pair{linear-algebra/sparse/4}{Exact entries give an exact solution,
+\(x_i = i(7-i)/2\), the discrete parabola.}
+\pair{linear-algebra/sparse/5}{The determinant of the \(n\times n\)
+second-difference matrix is \(n+1\).}
+\end{codepairs}
+
+Real problems are bigger. The two-dimensional Laplacian on a \(k\times k\) grid is
+built from the one-dimensional \(T\) as \(T\otimes I + I\otimes T\), the
+\texttt{KroneckerProduct} of \S\ref{ssec:la-products} applied to sparse factors.
+
+\begin{codepairs}
+\pair{linear-algebra/sparse/6}{A grid of \(200\times200\) points.}
+\pair{linear-algebra/sparse/7}{The one-dimensional operator, now with machine
+entries.}
+\pair{linear-algebra/sparse/8}{\texttt{IdentityMatrix[k, SparseArray]} is the sparse
+identity.}
+\pair{linear-algebra/sparse/9}{The Laplacian is \(40000\times40000\): \(1.6\times10^9\)
+entries, of which \(199200\) are stored.}
+\pair{linear-algebra/sparse/10}{About one entry in eight thousand is nonzero.}
+\pair{linear-algebra/sparse/11}{A right-hand side of ones.}
+\pair{linear-algebra/sparse/12}{\B{LinearSolve} factors the sparse matrix directly.}
+\pair{linear-algebra/sparse/13}{The residual \(\lVert L\mathbf u - \mathbf b\rVert\),
+over all forty thousand equations, is at rounding level.}
+\pair{linear-algebra/sparse/14}{\texttt{LinearSolve[m]} with no right-hand side
+returns a \texttt{LinearSolveFunction}\index{LinearSolveFunction@\mcode{LinearSolveFunction}}, which holds the factorisation for reuse.}
+\pair{linear-algebra/sparse/15}{Applying it to \(\mathbf b\) gives the same solution
+again, without refactoring.}
+\pair{linear-algebra/sparse/16}{An iterative method instead: conjugate gradients,
+which needs only products \(L\mathbf v\).}
+\pair{linear-algebra/sparse/17}{It agrees with the direct solve to about
+\(10^{-14}\), relative.}
+\pair{linear-algebra/sparse/18}{\texttt{Eigenvalues[m, -3]} asks for the three
+eigenvalues smallest in magnitude, by a Krylov method that never forms the dense
+matrix.}
+\pair{linear-algebra/sparse/19}{They match the closed form (see the Theory note below)
+to every digit shown.}
+\pair{linear-algebra/sparse/20}{\texttt{SingularValueList} with a count works the same
+way. For a symmetric positive-definite matrix the singular values are the
+eigenvalues.}
+\end{codepairs}
+
+\calloutnote{Theory}{The one-dimensional matrix \(T\) of order \(k\) has
+eigenvalues \(4\sin^2\!\bigl(j\pi/(2(k+1))\bigr)\), \(j=1,\dots,k\), with sine vectors
+as eigenvectors. The eigenvalues of \(T\otimes I + I\otimes T\) are all the sums
+\(\lambda_i+\lambda_j\), so the smallest is \(\lambda_1+\lambda_1\) and the next is
+the double value \(\lambda_1+\lambda_2=\lambda_2+\lambda_1\). Pair~18 lists them in
+order of decreasing magnitude, as \B{Eigenvalues} always does, so the double value
+comes first. The smallest eigenvalue is about \(2\pi^2/k^2\), and the condition
+number \(\lambda_{\max}/\lambda_{\min}\approx 4k^2/\pi^2\) grows with the grid. That
+growth is why conjugate gradients needs more iterations on finer grids, and why
+preconditioners exist.}
+
+The sparse solvers are not limited to machine numbers. An exact sparse system is
+eliminated exactly, and an arbitrary-precision one is solved at its own
+precision.
+
+\begin{codepairs}
+\pair{linear-algebra/sparse/21}{The \(1000\times1000\) second-difference matrix, exact.}
+\pair{linear-algebra/sparse/22}{Its exact solution; the middle component is
+\(500\cdot501/2\).}
+\pair{linear-algebra/sparse/23}{The same system at \(40\) digits.}
+\end{codepairs}
+
+\B{LinearSolve} takes a \texttt{Method} option for a machine matrix, dense or sparse:
+\texttt{"Multifrontal"} (sparse LU), \texttt{"Cholesky"}, or \texttt{"Krylov"}. The
+Krylov method takes its own sub-options, \texttt{Method -> "ConjugateGradient"},
+\texttt{"BiCGSTAB"} (the default) or \texttt{"GMRES"}, and
+\texttt{"Preconditioner" -> "ILU0"} (the default), \texttt{"ILUT"} or
+\texttt{"ILUTP"}, with \texttt{Tolerance}, \texttt{"MaxIterations"} and a
+\texttt{"StartingVector"}.\index{Krylov methods} The eigensolvers take
+\texttt{Method -> \{"Arnoldi", "Shift" -> s\}} for the eigenvalues nearest
+\(s\), and \texttt{Eigenvalues}, \texttt{Eigensystem}\index{Eigensystem@\mcode{Eigensystem}}, \texttt{SingularValueList} and
+\texttt{SingularValueDecomposition} all accept a count \(k\) (largest), \(-k\)
+(smallest), or a pencil \(\{A, B\}\).
+
+\calloutnote{Pitfall}{A singular \emph{dense} machine matrix gives the minimum-norm
+solution of a consistent system. A singular machine \B{SparseArray} gives
+\texttt{LinearSolve::sing} and stays unevaluated, even when the system is
+consistent. This difference from the dense path is deliberate. If you need the minimum-norm answer, use \texttt{Normal} or \B{LeastSquares}. A head with no sparse
+kernel densifies its argument, and refuses with \texttt{SparseArray::dense} beyond
+\(2^{27}\) entries, so check that a very large computation stays on the sparse
+path.}
+
+\calloutnote{Under the hood}{A \B{SparseArray} is stored as compressed sparse rows
+(\S\ref{sec:ds-sparse}). \B{Dot} has native kernels for
+sparse--vector (SpMV), sparse--dense (SpMM) and sparse--sparse products, the last by
+Gustavson's two-pass algorithm, threaded, with an exact fallback on integer
+overflow. \B{MatrixPower} of a \B{SparseArray} squares sparsely. For
+\B{LinearSolve}, a machine matrix up to order \(128\) is factored by a dense LAPACK
+LU. Above that it goes to UMFPACK or CHOLMOD when Mathilda is built with
+SuiteSparse. Without SuiteSparse, as in the build that produced this book, a
+\emph{band solver} renumbers the matrix by reverse Cuthill--McKee and factors it in
+LAPACK band storage (band Cholesky, else band LU), in \(O(n\,b^2)\) for bandwidth
+\(b\). That takes a \(10000\times10000\) pentadiagonal system from \(5.4\)~s with the
+dense LU to a few milliseconds. When no band pays, Krylov iterations take over, refined
+in doubled precision until they are as accurate as a direct solve. The eigensolvers
+use ARPACK when it is linked and a native Krylov--Schur (thick-restart Lanczos
+for Hermitian matrices) otherwise. The \(-k\) form works by shift-and-invert about
+\(0\), through the same sparse factorisation. An exact sparse system is eliminated
+over FLINT rationals with Markowitz pivoting, so a fill-free system costs \(O(\mathrm{nnz})\)
+rational operations. An MPFR system is factored once in machine arithmetic and then
+refined, with residuals in MPFR over the nonzeros. The corrections must shrink
+geometrically, and that certifies the result: \(60\) digits of a
+\(20000\times20000\) tridiagonal system take \(0.08\)~s (\texttt{src/sparse/}).}
+
+\calloutnote{Performance}{Against \texttt{scipy.sparse} (benchmarks
+\texttt{120-sparse-arrays}, \texttt{124-sparse-linalg}). On a \(10^5\times10^5\)
+matrix with \(10^6\) nonzeros, a hundred SpMVs take \(49\)~ms (scipy \(245\)~ms) and
+\(A\cdot A\) takes \(36\)~ms (\(174\)~ms). With SuiteSparse linked, a direct solve of the
+\(500\times500\)-grid Poisson problem takes \(0.70\)~s against \(10.3\)~s for scipy's
+SuperLU, and GMRES with ILUT on a \(300^2\) convection--diffusion operator \(1.35\)~s
+against \(20.9\)~s. The six smallest eigenvalues of the \(90000\times90000\)
+Laplacian take \(2.2\)~s (scipy's shift-invert \texttt{eigsh}: \(3.4\)~s). The six
+\emph{largest} eigenvalues of the same Laplacian, which take ARPACK many restarts,
+cost \(69\)~s against scipy's \(64\)~s, which is parity. Mathilda is behind in one
+place: unpreconditioned conjugate gradients at \(10^6\) unknowns is \(2.3\times\)
+slower, because scipy's loop is BLAS calls on contiguous buffers.}
+
 \subsection*{Where this connects}
 
 Linear algebra is the substrate the rest of the system computes on. The
@@ -492,5 +884,8 @@ the packed substrate reappear wherever numbers are crunched in bulk---the numeri
 calculus, the optimizers, the machine-learning primitives---and every machine head
 named here lowers inside \B{Compile} (Chapter~\ref{ch:compilation}), so the
 linear algebra you write interactively is the linear algebra that runs in a tight
-loop. For the exhaustive options of any function above, its reference page is one
+loop. The sparse solvers and eigensolvers of \S\ref{sec:linalg-sparse} are what a
+discretised differential equation or a large graph needs: the same
+\texttt{LinearSolve} and \texttt{Eigenvalues}, on matrices far beyond what a dense
+array could hold. For the exhaustive options of any function above, its reference page is one
 \texttt{?Name} away at the prompt.

@@ -8,21 +8,25 @@ is the foundation everything else rests on: there is only one kind of value, the
 ever type is one. That uniformity is what lets a single handful of tools---\B{Part},
 \B{Map}, \B{ReplaceAll}---work on everything without special cases. But simplicity at
 the surface is not the same as naivety underneath. Behind the uniform tree, Mathilda
-keeps two specialized structures that make real work fast: the \emph{association},
-a hash-backed key--value store with amortized \(O(1)\) lookup, and the \emph{packed
-array}, a dense machine-precision buffer that runs numeric code at the speed of C.
+keeps specialized structures that make real work fast: the \emph{association},
+a hash-backed key--value store with amortized \(O(1)\) lookup; the \emph{packed
+array}, a dense machine-precision buffer that runs numeric code at the speed of C;
+the \emph{sparse array}, which stores only the entries that are not zero; and the
+\emph{linked list}, the one value that is changed in place.
 The theme of the chapter is precisely this tension---one uniform data model on top,
 invisible acceleration beneath---and how Mathilda keeps the two from ever
 contradicting each other.
 
-We build up in five steps. First the expression tree itself: head and arguments,
+We build up in seven steps. First the expression tree itself: head and arguments,
 atoms and compounds, and the tools that read a value's shape. Then lists---the
 workhorse aggregate---their parts, spans, and the newer array operations. Then
 associations, the key--value store. Then strings, the one atom with an internal
-structure of its own, and the pattern language that takes them apart. And finally
+structure of its own, and the pattern language that takes them apart. Then
 the packed-array substrate, where
 most of the chapter's ``under the hood'' weight lies, because that is where a
-transparent list quietly becomes a C buffer and back again.
+transparent list quietly becomes a C buffer and back again. The last two sections
+apply the same idea, an atom that behaves like a list, to sparse arrays and to the
+mutable \texttt{LinkedList}.
 
 \section{Everything is an expression}
 \label{sec:ds-expressions}
@@ -38,8 +42,9 @@ that underlying tree with the surface syntax stripped away.
 shorthand for named heads.}
 \pair{06-data-structures/expressions/2}{A list is no different---\(\{1,2,3\}\) is
 \texttt{List[1, 2, 3]}, the head \B{List} applied to three arguments.}
-\pair{06-data-structures/expressions/3}{Even a fraction is a compound: \(1/2\) is
-\texttt{Rational[1, 2]}. What prints as a number is a two-argument tree.}
+\pair{06-data-structures/expressions/3}{A fraction's full form is
+\texttt{Rational[1, 2]}, which names its numerator and denominator. That is how it is
+spelled, not what it is: as the next pairs show, \(1/2\) is a single number.}
 \end{codepairs}
 
 Because there is only one representation, the head of a value tells you what kind of
@@ -85,9 +90,27 @@ the atoms; only \texttt{EXPR\_FUNCTION} has parts. Expressions are treated as
 immutable during evaluation---a transformation returns a new tree rather than
 editing one in place---and \texttt{expr\_copy} is a reference-count bump, not a deep
 clone, so this costs far less than it sounds. A \texttt{Rational} and a
-\texttt{Complex} are \texttt{EXPR\_FUNCTION} nodes at the level of storage, but
-\B{AtomQ} reports them atomic because they behave as single numbers; that deliberate
-override is the gap between the two answers above.}
+\texttt{Complex} are \texttt{EXPR\_FUNCTION} nodes at the level of storage, but they
+are numbers, and every structural builtin treats them as atoms. One helper,
+\texttt{expr\_is\_number\_atom} (\texttt{src/common.h}), makes the decision for
+\B{AtomQ}, \B{Length}, \B{Dimensions}, \B{Apply}, \texttt{ReplacePart}, \B{Take},
+\B{Append}, \B{Sort}, and the rest, so they cannot disagree. Before v0.6535 they did:
+\texttt{Length[3/4]} was \(2\) and \texttt{Append[3/4, 1]} built the malformed
+\texttt{Rational[3, 4, 1]}.}
+
+\index{atom!Rational and Complex}The structural builtins agree with \B{AtomQ}. The
+pattern matcher alone still sees the two integers inside, which is what lets a rule
+take a fraction apart into numerator and denominator.
+
+\begin{codepairs}
+\pair{06-data-structures/expressions/22}{A fraction and a complex number have no
+parts to count: \B{Length} is \(0\) and \B{Dimensions} is \(\{\}\), as for any
+other number.}
+\pair{06-data-structures/expressions/23}{\B{Apply} has no head to replace, so the
+number comes back unchanged.}
+\pair{06-data-structures/expressions/24}{Patterns still match the stored form:
+\texttt{Rational[a\_, b\_]} matches \(1/2\), binding \(a=1\) and \(b=2\).}
+\end{codepairs}
 
 The shape of a tree---how deeply it nests, and what lives at each level---is itself
 queryable. \bidx{Depth}\mcode{Depth} gives one more than the longest path from the
@@ -485,6 +508,18 @@ the bridge to every list operation of \S\ref{sec:ds-lists}.}
 between the elements of a list and joins the result.}
 \end{codepairs}
 
+Strings also have a canonical \emph{order}\index{string!canonical order}, which
+\B{Sort}, \B{Union}, \B{Order}, and every other ordered result use. It is not byte
+order. Strings are compared first on their letters and digits alone, with punctuation
+ignored and case folded; ties are then broken by where the punctuation falls, and
+last by punctuation rank or letter case, lower case first.
+
+\begin{codepairs}
+\pair{06-data-structures/strings/16}{\texttt{"a-b"} sorts beside \texttt{"ab"}
+because the hyphen is ignored at first, \texttt{"a.m"} after them because \(m\) follows
+\(b\), and \texttt{".hid"} last because it is compared as \texttt{hid}.}
+\end{codepairs}
+
 The last pair of tools crosses the boundary between text and expressions.
 \B{ToString} renders any expression as the string you would see printed, and
 \B{ToExpression} parses a string back into an expression \emph{and evaluates
@@ -655,6 +690,40 @@ its own, so malformed input is never split mid-character and round-trips unchang
 The regular-expression side is put in the same frame by compiling every pattern in
 PCRE2's UTF and Unicode-property modes, which is what makes \mcode{LetterCharacter}
 match \(\alpha\) and \texttt{IgnoreCase -> True} fold Greek as well as Latin.}
+
+The same escapes work outside strings. Since v0.587 the parser reads every
+non-ASCII character in source code, whether escaped (\texttt{\textbackslash[Mu]},
+\texttt{\textbackslash:03bc}) or typed raw (\(\mu\) as UTF-8), the way the reference
+parser does\index{named character!in source code}. A letter forms part of an
+identifier, so \texttt{\textbackslash[Alpha]} and a raw \(\alpha\) are the same
+symbol. A constant letter on its own is the constant (\texttt{\textbackslash[Pi]} is
+\B{Pi}). An operator character such as \texttt{\textbackslash[Rule]} or
+\texttt{\textbackslash[Element]} has the head, precedence and grouping the reference
+gives it. Since v0.6001 the parser also reads the \emph{linear box syntax}
+\texttt{\textbackslash!\textbackslash(\ldots\textbackslash)}\index{linear box
+syntax}, the form a notebook uses when typeset input is copied out as text. The boxes
+are read as the expressions they display.
+
+\begin{codepairs}
+\pair{06-data-structures/string-unicode/10}{\texttt{\textbackslash[Alpha]} in source
+is an ordinary symbol, so a rule can replace it.}
+\pair{06-data-structures/string-unicode/11}{Its name is the Greek letter itself:
+\B{SymbolName} gives the one-character string \(\mu\), code point 956.}
+\pair{06-data-structures/string-unicode/12}{\texttt{\textbackslash[Pi]} is the
+constant \B{Pi}, \texttt{\textbackslash[Rule]} is \texttt{->}, and
+\texttt{\textbackslash[Element]} is the infix form of \B{Element}.}
+\pair{06-data-structures/string-unicode/13}{A \texttt{FractionBox} and a
+\texttt{SqrtBox} in linear syntax read as \(\tfrac12\) and \(\sqrt{16}\), and they
+evaluate.}
+\pair{06-data-structures/string-unicode/14}{A \texttt{SubscriptBox} reads as
+\texttt{Subscript}.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Only the explicit box forms, \texttt{\textbackslash*Box[\ldots]}
+inside \texttt{\textbackslash!\textbackslash(\ldots\textbackslash)}, are read. The
+short operators of linear syntax, such as \texttt{\textbackslash\^{}} for a superscript
+in \texttt{\textbackslash!\textbackslash(x\textbackslash\^{}2\textbackslash)}, are
+not, and that input is a syntax error.}
 
 \subsection{Worked example: from text to data}
 \label{ssec:ds-string-worked}
@@ -942,6 +1011,522 @@ packed buffer is exactly the representation \B{Compile} wants, these same arrays
 the compiled-code boundary without being unpacked and repacked at each end---the
 subject of Chapter~\ref{ch:compilation}.}
 
+\section{SparseArray}
+\label{sec:ds-sparse}
+
+A packed array saves the cost of one node per element. It still stores every element,
+and many of the arrays that matter are almost all zeros: the matrix of a finite-difference
+stencil, the adjacency matrix of a graph, a term--document table. A
+\(10^6\times10^6\) tridiagonal matrix has three million nonzero entries and
+\(10^{12}\) zeros, and a dense buffer for it would need eight terabytes. The
+\B{SparseArray}\index{sparse array} stores only the entries that differ from a
+\emph{background} value\index{sparse array!background}, which is usually \(0\), and
+records where they are.
+
+\subsection{Building one}
+\label{ssec:ds-sparse-build}
+
+The basic constructor takes a list of rules from positions to values, and a list of
+dimensions. Like an association, the result is an atom: \B{AtomQ} is
+\texttt{True} and it prints as a summary, the number of stored entries and the shape.
+Yet \B{Length} and \B{Dimensions} answer exactly as they would for the dense
+array it stands for. \B{Normal} gives that dense array, and \texttt{ArrayRules} gives the
+rules back.
+
+\begin{codepairs}
+\pair{06-data-structures/sparse/1}{Three explicit entries in a \(3\times3\) array,
+one of them symbolic. The output is a summary: three stored entries, shape
+\(\{3,3\}\).}
+\pair{06-data-structures/sparse/2}{It is an atom with head \texttt{SparseArray},
+but its length and dimensions are those of the matrix.}
+\pair{06-data-structures/sparse/3}{\B{Normal} fills in the background.}
+\pair{06-data-structures/sparse/4}{\texttt{ArrayRules} lists the explicit entries and
+ends with the background rule \texttt{\{\_, \_\} -> 0}, so that
+\texttt{SparseArray[ArrayRules[s]]} rebuilds \(s\).}
+\pair{06-data-structures/sparse/5}{\B{InputForm} shows the stored form: the shape,
+the background, the row pointers \(\{0,1,2,3\}\), the column of each entry, and the
+values.}
+\pair{06-data-structures/sparse/6}{\B{Part} reads an element directly.}
+\pair{06-data-structures/sparse/7}{A property call reads the structure itself: here
+the positions of the stored entries.}
+\end{codepairs}
+
+A rule's left-hand side need not be a single position. A third argument changes the
+background. A pattern fills every position it matches, and the pattern
+\texttt{\{i\_, i\_\}} walks only the diagonal. \texttt{Band} fills a diagonal starting at a
+given position. And \B{SparseArray} applied to an ordinary array keeps its nonzero
+entries.
+
+\begin{codepairs}
+\pair{06-data-structures/sparse/8}{A vector of length five with background \(1\) and
+a single \(7\).}
+\pair{06-data-structures/sparse/9}{A pattern rule: \(i\) on the diagonal.}
+\pair{06-data-structures/sparse/10}{Three \texttt{Band}s give the second-difference
+matrix, the discrete \(-d^2/dx^2\).}
+\pair{06-data-structures/sparse/11}{A dense matrix with two nonzero entries becomes a
+sparse array with two stored entries.}
+\end{codepairs}
+
+When several rules name the same position, the first one wins. An entry equal to the
+background is not stored. A sparse array's elements cannot themselves be lists. The
+full list of constructor forms, and the messages for malformed input, are on the
+\B{SparseArray} reference page.
+
+\calloutnote{Under the hood}{A SparseArray is a native atom, \texttt{EXPR\_SPARSE}
+(\texttt{src/sparse/}), and it is always held in one standard form: the one that
+\B{InputForm} printed above. The storage is compressed sparse row
+(CSR)\index{sparse array!compressed sparse row}, generalized to any rank. A row-pointer
+vector \texttt{rowptr} (0-based) marks where each index of the \emph{first} dimension
+begins in the entry list. For each entry, \texttt{colidx} holds its remaining
+coordinates as a 1-based tuple, sorted within each slice. The values sit in one typed
+machine buffer when they are all machine integers, all reals or all complex numbers,
+and are boxed only otherwise. Column indices are 32-bit when the dimensions allow it.
+Because the standard form is unique, \B{SameQ} is equality of arrays, and a sparse
+array can be a key in an association or an element of a set. An array derived
+element-wise from another (\(2s\), \(s+1\), \(\sin s\), \texttt{N[s]}) shares its
+parent's index structure by reference count and allocates only a new value vector.}
+
+\subsection{Working with a sparse array}
+\label{ssec:ds-sparse-ops}
+
+A sparse array is an atom, so it meets the same problem a packed buffer does: most
+builtins know nothing about its storage. The answer is the same as well, a
+\emph{transparency gate}\index{sparse array!transparency gate}
+(\texttt{src/sparse/sparse\_gate.c}). Every builtin accepts a SparseArray, and for
+each head the gate settles, call shape by call shape, which of four ways the head sees
+it:
+\begin{itemize}
+\item \emph{as its dense form}: the head answers what it would answer on
+\texttt{Normal[s]} (\B{Accumulate}, \B{Det}, \B{Tally}, \B{Union});
+\item \emph{as an array that stays sparse}: the answer is a SparseArray again
+(\B{Sort}, \B{Chop}, \B{PadRight});
+\item \emph{at level 1}: \B{Map}, \B{Apply}, \B{Scan}, and \B{Select} see the rows,
+which are themselves sparse arrays;
+\item \emph{as an atom}: \B{Count}, \B{Cases}, \B{MemberQ}, \B{ReplaceAll}, and user
+functions see the SparseArray itself, not its entries.
+\end{itemize}
+The rule \(\mathtt{Normal}[f[s]] = f[\mathtt{Normal}[s]]\) holds for every head in the
+first three groups, and a stress tool (\texttt{tools/sparse\_stress.py}) re-checks it
+on random arrays.
+
+The heads that matter for numerical work do not go through the dense form at all. They
+have native kernels that read the stored entries:
+\begin{itemize}
+\item every \texttt{Listable} head (\B{Plus}, \B{Times}, \B{Power}, \B{Sin},
+\B{Exp}, \ldots), applied to the explicit values and once to the background;
+\item the reductions \B{Total}, \B{Mean}, \B{Max}, \B{Min}, \B{Norm}, \B{Tr}, and
+\B{Equal}, which add in the background arithmetically, once for each implicit
+position;
+\item the structural heads \B{Transpose}, \B{Flatten}, \B{Take}, \B{Join},
+\B{Diagonal}, \texttt{KroneckerProduct}, \B{ArrayFlatten}, and the padding and
+triangularizing heads, each at a cost of \(O(\text{rows}+\text{nnz})\);
+\item \B{Map} at the leaf level, which visits the stored values and the
+background in \(O(\text{nnz})\);
+\item \B{Dot} in every combination: sparse matrix times vector (SpMV), sparse times
+dense matrix (SpMM), and sparse times sparse (SpGEMM), together with \B{MatrixPower}.
+\end{itemize}
+\B{IdentityMatrix} builds a sparse identity directly when its second argument is
+\texttt{SparseArray}.
+
+The session below builds the \(10^6\times10^6\) second-difference matrix and works on
+it. None of these calls ever forms the \(10^{12}\)-element dense array.
+
+\begin{codepairs}
+\pair{06-data-structures/sparse-ops/2}{About three million stored entries, from three
+\texttt{Band} rules.}
+\pair{06-data-structures/sparse-ops/3}{The fraction of positions that are stored:
+\(3\times10^{-6}\).}
+\pair{06-data-structures/sparse-ops/4}{A \(4\times4\) corner, read through a span
+\B{Part} and made dense.}
+\pair{06-data-structures/sparse-ops/5}{Adding \(1\) changes the background to \(1\)
+and adds \(1\) to each stored entry. The \(-1\) at position \((1,2)\) becomes an
+explicit \(0\): nothing is re-minimized.}
+\pair{06-data-structures/sparse-ops/6}{The reductions add in the implicit zeros
+arithmetically. Each interior row sums to \(0\) and the two end rows to \(1\).}
+\pair{06-data-structures/sparse-ops/7}{The matrix is symmetric. Since the stored form
+is unique, \B{SameQ} can say so.}
+\pair{06-data-structures/sparse-ops/8}{SpMV with the vector \(1,2,\ldots,n\). A
+second difference of a linear function vanishes, so every entry is \(0\) except at
+the boundary.}
+\pair{06-data-structures/sparse-ops/9}{SpGEMM: the square of the matrix, a
+five-diagonal sparse array.}
+\pair{06-data-structures/sparse-ops/10}{Its corner is the fourth-difference stencil
+\(1,-4,6,-4,1\), with the boundary rows modified.}
+\end{codepairs}
+
+A short vector shows the four ways a head can see a sparse array.
+
+\begin{codepairs}
+\pair{06-data-structures/sparse-ops/12}{\B{Accumulate} answers as on the dense form,
+with a dense list.}
+\pair{06-data-structures/sparse-ops/13}{\B{Sort} answers as on the dense form, but the
+result stays sparse.}
+\pair{06-data-structures/sparse-ops/14}{\B{Map} over a vector applies \(f\) to the
+stored value and to the background, giving \(f[0]\) in every implicit slot.}
+\pair{06-data-structures/sparse-ops/15}{\B{MemberQ} and \B{Count} see one atom, not
+its entries, so they find no \(2\) and no \(-1\).}
+\pair{06-data-structures/sparse-ops/16}{\texttt{KroneckerProduct} of a sparse identity and
+a \(2\times2\) block is a block-diagonal sparse array.}
+\pair{06-data-structures/sparse-ops/17}{\texttt{IdentityMatrix[n, SparseArray]} stores
+\(n\) entries, not \(n^2\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Because a SparseArray is an atom, the pattern functions do not
+look inside it: \texttt{s /.\ x -> 2} leaves a symbolic entry \(x\) alone, and
+\B{Cases} finds nothing. Apply them to \texttt{Normal[s]}, or to the values,
+\texttt{s["NonzeroValues"]}. A head that has to visit every position of a very large
+array refuses rather than densify it: the dense form is built implicitly only up to
+\(2^{27}\) elements, and beyond that the call stays unevaluated with
+\texttt{SparseArray::dense}. Two differences from the reference are deliberate.
+\B{Sort}, \B{Union}, \B{Split}, \B{Gather}, \B{Ordering}, and \B{Fold} compute an
+answer where the reference refuses with \texttt{::normal}. And \B{Scan}, \B{Select},
+\B{Do}, and \B{Table} visit the elements in order, background included, where the
+reference visits the stored values first.}
+
+\calloutnote{Under the hood}{Against \texttt{scipy.sparse} 1.18 on a
+\(10^5\times10^5\) matrix with \(10^6\) entries (benchmark
+\texttt{benchmarks/120-sparse-arrays}, minimum of three runs on an i9-9880H), every
+case is at parity or faster\index{sparse array!performance}. Building the array from
+the coordinates takes \(29.6\) ms against \(46.0\); \(A+B\) takes \(7.0\) ms against
+\(11.5\); \(\sin A\) takes \(2.8\) ms against \(15.2\); a thousand single-element reads
+take \(0.33\) ms against \(16.7\); and the \(2000\times2000\) sparse-to-dense
+conversion is level at \(5.4\) against \(5.2\). For products, a hundred SpMVs take
+\(49\) ms against \(245\), and \(A\cdot A\) takes \(36\) ms against \(174\). The
+differences come from a few choices. Element-wise results share the parent's index
+arrays, where scipy copies them. A transcendental function runs the same ND kernel
+the packed surface uses, over the value vector. Construction is a single stable radix
+sort on a composite row--column key. And SpGEMM is a two-pass Gustavson product,
+threaded, with a typed kernel for integers, reals, and complex numbers and an exact
+fallback for overflow and symbolic entries.}
+
+Sparse \emph{linear algebra}, meaning direct and iterative solvers, preconditioners,
+and eigenvalues of large sparse matrices, belongs to the linear-algebra chapter and is
+covered in Section~\ref{sec:linalg-sparse}.
+
+\usagebox{SparseArray}
+
+\section{LinkedList: the mutable list}
+\label{sec:ds-linkedlist}
+
+Every value in this chapter so far has been immutable. A transformation returns a new
+value and leaves the old one alone, and that is what lets the evaluator share
+subexpressions freely. The price is paid when a program builds a list one element at a
+time. \texttt{LinkedList}\index{LinkedList@\mcode{LinkedList}}\index{linked list} is the exception: a list object that is
+changed in place.
+
+\subsection{Why it exists}
+\label{ssec:ds-ll-why}
+
+The natural way to accumulate results is \texttt{AppendTo}. On a List, every
+\texttt{AppendTo} copies the whole list into a new one with one more element, so
+\(n\) appends copy \(1+2+\cdots+n\approx n^2/2\) elements in all. The cost of the loop
+is \(O(n^2)\)\index{AppendTo@\mcode{AppendTo}!quadratic cost}. The usual way out is
+\B{Sow} and \B{Reap}, which is \(O(n)\). But the accumulator then exists only inside
+the \texttt{Reap}. You cannot keep it in a variable, look at it halfway through, or
+pass it to a helper that adds to it. A LinkedList gives \(O(1)\) appends and removals
+at both ends and \(O(1)\) indexing, and it is an ordinary value that a variable holds.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-perf/3}{Fifty thousand appends to a List, with
+auto-compilation switched off so that only the data structure differs. The
+time is in seconds.}
+\pair{06-data-structures/linkedlist-perf/4}{The same loop on a LinkedList, more than
+ten times faster here, and the ratio grows linearly with \(n\).}
+\pair{06-data-structures/linkedlist-perf/5}{Both hold the same elements.}
+\end{codepairs}
+
+\subsection{The object}
+\label{ssec:ds-ll-object}
+
+\texttt{LinkedList[]} creates an empty list. \texttt{LinkedList[\(\mathit{list}\)]}
+creates one holding the elements of a List, a packed array, or an \B{NDArray}; a packed
+argument is copied buffer to buffer, never unpacked. Like a SparseArray, the result is
+an atom\index{linked list!atom}: \B{ListQ} is \texttt{False}, \texttt{\{\_\_\}} does
+not match it, and it prints as \texttt{LinkedList[<\(n\)>]} in every form, because a
+mutable object has no literal that could be read back. \B{Normal} returns the
+elements as a List, packed when they are all machine numbers of one kind.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist/1}{An empty list.}
+\pair{06-data-structures/linkedlist/2}{\texttt{AppendTo} grows it in place. The value of
+\texttt{ll} is the same object as before, now holding five squares.}
+\pair{06-data-structures/linkedlist/3}{An atom, not a List, with head
+\texttt{LinkedList}. \B{Length} is \(O(1)\).}
+\pair{06-data-structures/linkedlist/4}{\B{Normal} gives the elements.}
+\pair{06-data-structures/linkedlist/5}{\B{Part} reads one element in \(O(1)\). A span
+gives a \emph{new} LinkedList of the selected elements.}
+\end{codepairs}
+
+What sets a LinkedList apart from every other value is that it has \emph{reference
+semantics}\index{linked list!reference semantics}. Assigning it to a second variable,
+or passing it to a function, shares the one object: a change made through either name
+is seen through both. It is the only shared mutable value in the system. Equality is
+therefore identity. \B{SameQ} is \texttt{True} only for the same object, and two
+distinct lists with equal elements are not \texttt{SameQ}. Compare contents with
+\texttt{Normal}, and copy with \texttt{LinkedList[\(\mathit{ll}\)]}.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist/6}{\texttt{ll2 = ll} copies a reference, not the
+list.}
+\pair{06-data-structures/linkedlist/7}{\texttt{PrependTo} through the second name\ldots}
+\pair{06-data-structures/linkedlist/8}{\ldots changes the list that \texttt{ll} holds.}
+\pair{06-data-structures/linkedlist/9}{They are the same object.}
+\pair{06-data-structures/linkedlist/10}{\texttt{LinkedList[ll]} makes an independent
+shallow copy. \texttt{Push} on the copy leaves the original at six elements.}
+\pair{06-data-structures/linkedlist/11}{Two separate lists are never \B{SameQ}, even
+with equal elements\ldots}
+\pair{06-data-structures/linkedlist/12}{\ldots so compare their \B{Normal} forms.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Aliasing is deliberate. Three models were considered (design
+record, \texttt{LINKED\_LIST\_DESIGN.md} \S3.4). Copying on \B{Set} alone was rejected
+because values also travel by argument passing, \B{With}, rule replacement, and
+return values, and \texttt{f[ll]} would mutate while \texttt{b = ll; Push[b, 1]} did
+not. Copy-on-write value semantics was rejected because a helper could then never add
+to its caller's list, and because ``nothing else refers to it'' is fragile:
+\texttt{Out[n]} and memo tables hold references and would turn an apparent \(O(1)\)
+append into a silent \(O(n)\) copy. With pointer semantics every assignment is
+\(O(1)\) and the costs are predictable, but you have to copy explicitly when you want
+a copy.}
+
+The mutating heads are few, and only they change a list in place: \texttt{AppendTo},
+\texttt{PrependTo}, \texttt{Push}, \texttt{Pop}, \texttt{PopFirst}, and a \B{Part} assignment
+\texttt{ll[[\(i\)]] = \(v\)}. All six are \(O(1)\). \texttt{Push}\index{Push@\mcode{Push}} appends; \texttt{Pop}\index{Pop@\mcode{Pop}} removes
+and returns the last element, and \texttt{PopFirst}\index{PopFirst@\mcode{PopFirst}} the first. Push and Pop together make a
+last-in first-out \emph{stack}\index{stack}; Push and PopFirst make a first-in
+first-out \emph{queue}\index{queue}.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-worked/1}{Push three symbols onto an empty
+stack.}
+\pair{06-data-structures/linkedlist-worked/2}{They come off in reverse order, leaving
+\(a\).}
+\pair{06-data-structures/linkedlist-worked/3}{A queue of \(1,2\), with \(3\) pushed on
+the back.}
+\pair{06-data-structures/linkedlist-worked/4}{\texttt{PopFirst} takes from the front.}
+\pair{06-data-structures/linkedlist-worked/5}{Popping an empty list stays unevaluated
+(at the REPL it also prints \texttt{Pop::empty}).}
+\end{codepairs}
+
+\texttt{Push}, \texttt{Pop}, and \texttt{PopFirst} hold their first argument, and they also accept a
+variable holding a plain List, which they rebind as \texttt{AppendTo} does. That costs
+\(O(n)\), but it means code written for a stack runs on either representation.
+
+\subsection{Representation and complexity}
+\label{ssec:ds-ll-repr}
+
+Despite its name, a LinkedList is not a chain of one cell per element. A chain of
+cells would give \(O(1)\) appends but \(O(n)\) indexing, one allocation per element,
+and poor locality. A full \B{Part} specification needs indexing to be fast.
+
+\calloutnote{Under the hood}{The storage (\texttt{src/linkedlist.\{c,h\}}) is a deque
+of two \emph{runs} of chunks\index{linked list!chunked storage}: a front run that grows
+leftward under \texttt{PrependTo}, and a back run that grows rightward under \texttt{AppendTo}.
+In each run, chunk \(k\) holds \(8\cdot2^k\) elements, so the capacities double, and a
+directory of chunk pointers (64 entries, enough for any addressable length, allocated
+on demand) reaches each chunk without following links. Element \(j\) of a run lies in
+chunk \(k=\lfloor\log_2(j/8+1)\rfloor\), which is one count-leading-zeros instruction,
+at offset \(j-8(2^k-1)\). A logical index \(i\) is in the front run if \(i\) is less
+than the front run's length, and in the back run otherwise. Growth writes into the
+last chunk of a run and links a new chunk when that one is full, so \emph{elements
+never move}: there is no reallocate-and-copy step as in a doubling vector, and \(n\)
+appends make only \(O(\log n)\) allocations. Removal at an end advances a start
+offset and frees a chunk that empties, and a queue's consumed prefix is reclaimed, so
+memory stays proportional to the live elements: \(10^6\) push--pop pairs on a
+ten-element queue hold under 4 KB. The storage is \emph{typed}\index{linked
+list!typed storage}. While every element is a machine integer, real, or complex number
+of one kind (the same rule that decides whether a List packs), the chunks hold raw
+\texttt{int64}, \texttt{double}, or \((\mathrm{re},\mathrm{im})\) pairs. The first
+element that does not conform converts the list to boxed \texttt{Expr} pointers, once,
+in \(O(n)\), and a list never converts back. Typed storage is what lets \B{Normal}
+return a packed array by \texttt{memcpy}, and what lets machine kernels and compiled
+code read the slots directly. Equality and hashing use a stable per-list id rather
+than the contents. A hash cached in a parent List or Association therefore never goes
+stale when the list is mutated, and the evaluator never caches a result computed from
+a LinkedList.}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+operation & LinkedList & List \\
+\midrule
+\texttt{AppendTo}, \texttt{PrependTo}, \texttt{Push} & \(O(1)\) amortized & \(O(n)\) \\
+\texttt{Pop}, \texttt{PopFirst} & \(O(1)\) & \(O(n)\) (rebinds \texttt{Most}/\texttt{Rest}) \\
+\texttt{ll[[i]]}, \texttt{ll[[i]] = v}, \B{First}, \B{Last}, \B{Length} & \(O(1)\) & \(O(1)\) read, \(O(n)\) write \\
+span, list, or \texttt{All} selection & \(O(k)\) for \(k\) selected & \(O(k)\) \\
+\B{Insert}, \B{Delete} in the middle & \(O(n)\) & \(O(n)\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The last row is what a cons list would do better: splicing in the middle copies, as
+it does for a List.
+
+\calloutnote{Performance}{On \(10^6\) machine reals the design record measures a
+LinkedList against a packed List. \B{Insert}, \B{Delete}, and \texttt{ReplacePart} take
+\(0.8\) ms against \(86\), \(85\), and \(214\) ms, because they copy whole chunk spans
+with \texttt{memcpy}. \B{Reverse} takes \(1.6\) ms against \(3.4\), and \B{Join}
+\(4.5\) against \(7.6\). \B{Sin} and \texttt{ll + 1.} run the packed List's own
+kernels on the slots, so they cost the same, \(1.39\) against \(1.35\) ms and \(1.21\)
+against \(1.17\) ms. \B{Take}, \B{Drop}, \B{Map}, and \B{Select} are within a few
+percent. The weak spot is \B{Partition}, whose pieces are themselves LinkedLists:
+\texttt{Partition[ll, 2]} over \(10^6\) elements builds half a million small objects,
+and takes \(0.24\) s against \(0.004\) s for the packed List.}
+
+\subsection{It works everywhere a List does}
+\label{ssec:ds-ll-everywhere}
+
+A LinkedList is an atom, but no head treats it as an opaque one. Every builtin that
+works on a List works on a LinkedList and gives the same answer it would give for
+\texttt{Normal[ll]}. Machine numbers agree to the bit, because a typed list runs the
+very kernels a packed List reaches. The rules:
+\begin{itemize}
+\item \emph{Closure}\index{linked list!closure}. A head that returns a List for a List
+returns a new LinkedList for a LinkedList: \B{Sort}, \B{Select}, \B{Cases},
+\B{Accumulate}, the Listable arithmetic, and \B{Partition}, whose pieces are
+LinkedLists too. Fixed-shape records stay Lists: \B{Position} index lists, the pairs
+of \B{Tally}, \B{MinMax}, \B{Dimensions}. Scalars stay scalars.
+\item \emph{A rank-1 container}. \B{Level}, \B{Position}, \B{Apply}, \B{Dimensions},
+and the iterators see the elements one level down, and a LinkedList of equal-length
+lists is a matrix.
+\item \emph{Snapshots}. A head that runs your code per element (\B{Map}, \B{Select},
+\B{Scan}, \B{Fold}) or an iterator \texttt{\{i, ll\}} reads the elements the list had
+when it began, so a callback that changes the list changes neither the walk nor its
+length.
+\end{itemize}
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-everywhere/2}{\B{Sort} of a LinkedList is a new
+LinkedList\ldots}
+\pair{06-data-structures/linkedlist-everywhere/3}{\ldots holding the sorted
+elements.}
+\pair{06-data-structures/linkedlist-everywhere/4}{Reductions give scalars, exact where
+the elements are.}
+\pair{06-data-structures/linkedlist-everywhere/5}{\B{Position} returns an index list,
+a record, so it stays a List.}
+\pair{06-data-structures/linkedlist-everywhere/6}{\B{Select} gives a LinkedList of
+the even elements.}
+\pair{06-data-structures/linkedlist-everywhere/7}{\B{Partition} gives a LinkedList of
+LinkedLists, here made Lists at both levels to print.}
+\pair{06-data-structures/linkedlist-everywhere/8}{Listable arithmetic threads over the
+elements, as over a List.}
+\pair{06-data-structures/linkedlist-everywhere/12}{The iterator takes its snapshot
+when the loop begins, so the loop runs six times and appends six elements, even
+though the list grows as it runs.}
+\end{codepairs}
+
+None of this converts the list to a List. A head reads the chunks one slot at a time,
+or gathers a typed list's slots into a raw scratch buffer when an algorithm needs
+random access (a sort, an FFT). Only \B{Normal} builds a List of the elements. This
+\emph{no-element-arrays invariant}\index{linked list!no-element-arrays invariant} is
+checkable: \texttt{Internal`LinkedListConversionCount[]} counts every conversion.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-everywhere/10}{A sort, a sum, a vectorized
+\B{Sin}, and a partition: the counter does not move.}
+\pair{06-data-structures/linkedlist-everywhere/11}{\B{Normal} is the one head that
+converts, and it counts.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The invariant is enforced by \texttt{make
+check-linkedlist} (\texttt{tools/check\_linkedlist\_surface.py}). It runs every
+\texttt{System`} head over List and LinkedList fixtures in seven call shapes, and checks
+each LinkedList call four ways: the answer against \texttt{H[Normal[ll]]}, the
+conversion counter, that the argument is unchanged, and that the messages match the
+List call's. When the gate was introduced it reported 552 findings. When the work
+finished (v0.6664) it reported 12, and those 12 are deliberate: a LinkedList used as
+a level, position, or dimension \emph{specification} (\B{Delete}, \B{Reverse},
+\B{Array}, \B{ConstantArray}, \B{RotateLeft}, the range of \B{Integrate}), and as the
+variable list of \B{CoefficientRules}, \B{CoefficientArrays}, and the \B{Minimize}
+family. The machine engines reach the slots through container-free \texttt{NDOperand}
+cores (\texttt{src/ndarray.h}). Those are the cores the packed-array entry points now
+wrap, which is why a LinkedList and a packed List give bit-identical answers. Matrix
+linear algebra (\B{Det}, \B{Inverse}, the decompositions), graphs, machine learning,
+plotting, and images still take Lists.}
+
+\subsection{Compiled loops}
+\label{ssec:ds-ll-compile}
+
+A LinkedList of machine integers, reals, or complex numbers (one kind per list)
+compiles\index{linked list!in compiled code}. Inside \B{Compile} it can be a
+\B{Module} local or an argument declared \texttt{\{b, \_LinkedList, \_Real\}}. The
+mutators, the reads (\B{Length}, \B{Part}, \B{First}, \B{Last}, \B{Total},
+\B{Normal}), and the copying heads (\B{Most}, \B{Rest}, \B{Reverse}, \B{Take},
+\B{Drop}, \B{Append}, \B{Prepend}, \B{Join}) all lower to bytecode. Reference
+semantics carry over: an argument is the caller's own list, mutated in place.
+Auto-compilation goes further. An interpreted \B{Do}, \B{For}, or \B{While} whose body
+works on a global LinkedList compiles as one program, with no change to the code.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-perf/6}{A million appends, interpreted (still
+with \B{\$AutoCompilation} off). The time is in seconds.}
+\pair{06-data-structures/linkedlist-perf/8}{The same loop with auto-compilation on:
+the whole \B{Do} runs as bytecode.}
+\pair{06-data-structures/linkedlist-perf/9}{About an order of magnitude faster. The
+design record measured \(37\) ms against \(0.5\) s.}
+\pair{06-data-structures/linkedlist-perf/10}{A compiled function that takes a
+LinkedList of reals and pushes \(k\) squares onto it.}
+\pair{06-data-structures/linkedlist-perf/11}{Calling it on an empty list\ldots}
+\pair{06-data-structures/linkedlist-perf/12}{\ldots fills the caller's list in place.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{Two rules keep compiled code exactly as correct as the
+interpreter. First, a list has one element type and it is never widened: widening
+integers and reals to reals would turn the interpreter's mixed \(\{1, 2.5\}\) into
+\(\{1., 2.5\}\), so a body that pushes two types runs interpreted. Second, a compiled
+call can be abandoned partway (an empty \texttt{Pop}, an index out of range, an integer
+\B{Total} past \texttt{int64}), and the interpreter then re-runs it from the start.
+That is sound only if the abandoned run left no trace, so every push, pop, and write
+to a list created \emph{before} the call is recorded in an undo log and rolled back
+first. The caller's list ends exactly as one interpreted run leaves it, with the
+interpreter's message. For the same reason a per-element auto-compiled body (\B{Table},
+\B{Map}, \B{Sum}) may read a global list but not change it, since it can be re-run
+from its first element. Compilation in general is the subject of
+Chapter~\ref{ch:compilation}.}
+
+\subsection{Worked examples: a stack and a queue}
+\label{ssec:ds-ll-worked}
+
+Two classic algorithms show the shared, mutable list at work. Each passes the list to
+a helper that changes it. That would be impossible with a List, and awkward with
+\B{Sow} and \B{Reap}.
+
+The first checks whether the brackets in a string are balanced. An opening bracket is
+pushed on a stack, and a closing bracket must match the opener on top, which it pops.
+The string is balanced if no closer fails to match and the stack is empty at the end.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-worked/6}{Each closer, keyed to the opener it
+must match.}
+\pair{06-data-structures/linkedlist-worked/7}{One character. A closer pops the stack
+and compares; an opener is pushed. \texttt{st} is the caller's list, so the push and
+pop happen there.}
+\pair{06-data-structures/linkedlist-worked/8}{\B{AllTrue} stops at the first
+mismatch; then the stack must be empty.}
+\pair{06-data-structures/linkedlist-worked/9}{Properly nested; crossed; and two
+openers never closed.}
+\end{codepairs}
+
+The second is breadth-first search\index{breadth-first search} on a small directed
+graph, given as an association from each vertex to its successors. A queue holds the
+frontier. Each vertex taken from the front pushes its unvisited successors onto the
+back, one step further from the start, so vertices leave the queue in order of
+distance.
+
+\begin{codepairs}
+\pair{06-data-structures/linkedlist-worked/10}{Six vertices; \(4\) is reached from
+both \(2\) and \(3\).}
+\pair{06-data-structures/linkedlist-worked/11}{The queue starts with the source. A
+vertex seen for the first time gets a distance one more than its parent's, and is
+pushed.}
+\pair{06-data-structures/linkedlist-worked/12}{The distance of every vertex from
+vertex \(1\).}
+\end{codepairs}
+
+Every \texttt{Push} and \texttt{PopFirst} here is \(O(1)\), so the search is \(O(V+E)\), as it
+should be. Written with a List and \B{Rest}, each dequeue would copy the frontier.
+
+
 \section*{Where this connects}
 
 Data structures are the substrate the rest of Mathilda stands on. The uniform
@@ -957,7 +1542,11 @@ and their \(O(1)\) keyed store underlies any code that indexes data by name. The
 packed-array substrate of \S\ref{sec:ds-packed} is where numeric Mathilda gets its
 speed: it feeds the machine-precision linear algebra of \S\ref{sec:linalg}, and it is
 half of the story of \B{Compile} (Chapter~\ref{ch:compilation}), the other half being
-the bytecode VM that consumes those buffers. For the exhaustive options of any
+the bytecode VM that consumes those buffers. The sparse arrays of
+\S\ref{sec:ds-sparse} carry the large sparse systems of the linear-algebra chapter
+(Section~\ref{sec:linalg-sparse}), and the \texttt{LinkedList} of
+\S\ref{sec:ds-linkedlist} is the accumulator to reach for in the procedural loops of
+Chapter~\ref{ch:programming}. For the exhaustive options of any
 function named here, its reference page is one \texttt{?Name} away at the prompt---and
 the full machinery of the evaluator, the matcher, and the transparency gate is laid
 out in Chapter~\ref{ch:internals}.

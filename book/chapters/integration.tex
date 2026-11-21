@@ -1,0 +1,1018 @@
+\chapter{Symbolic Integration}
+\label{ch:integration}
+
+% Written in the v0.507 -> v0.6664 book pass (BOOK_UPDATE_REVIEW.md I1-I6, R18).
+
+Differentiation is a finite recursion. Apply the sum, product and chain rules, and
+any formula built from the elementary functions has a derivative of the same kind.
+Integration runs the other way and is a different kind of problem. There is no
+chain rule in reverse. The antiderivative of a short formula can be long, can
+involve logarithms of expressions that appear nowhere in the integrand, or can fail
+to exist among the elementary functions at all. For two centuries the subject was
+a catalogue of tricks. The Risch algorithm and its successors replaced the
+catalogue with a theorem. For a large and precisely defined class of integrands,
+the question ``does this function have an elementary antiderivative, and if so,
+what is it?'' can be \emph{decided} by a finite computation.
+
+\B{Integrate} is built on that theory. This chapter follows it from the easiest
+case to the hardest. Section~\ref{sec:int-shape} states the problem precisely and
+gives Liouville's theorem, which makes it decidable.
+Section~\ref{sec:int-rational} integrates rational functions, the case every
+other case reduces to. Section~\ref{sec:int-tower} builds the transcendental
+\emph{tower} of logarithms, exponentials, tangents and Liouvillian special
+functions, and decides integrability in it with the Risch differential equation.
+Section~\ref{sec:int-trager} turns to algebraic functions, where the answer lives
+on an algebraic curve and Trager's algorithm decides it.
+Section~\ref{sec:int-bronstein} combines the two: a radical over a tower of
+logarithms and exponentials, in Bronstein's algorithm.
+Section~\ref{sec:int-pmt} describes the \texttt{"ParallelMixedTower"} method, a
+parallel Risch--Norman search that reaches integrands outside the decided
+classes. Section~\ref{sec:int-cascade} puts the methods together in the order
+\B{Integrate} tries them, explains what its messages promise, compares the result
+with FriCAS, and lists what is still open.
+
+One promise runs through the chapter. When \B{Integrate} returns an
+antiderivative, it has differentiated it and checked that the derivative equals
+the integrand. When it prints \texttt{Integrate::nonelem}, it holds a proof that no
+elementary antiderivative exists. When it cannot decide, it says so with
+\texttt{Integrate::incomplete}, or returns the integral unevaluated. It does not
+guess.
+
+%======================================================================
+\section{The shape of the problem}
+\label{sec:int-shape}
+
+Start with what \B{Integrate} returns on a few familiar integrands.
+
+\begin{codepairs}
+\pair{integration/integrate-special/1}{Integration by parts, done for you:
+\(\int x e^x = (x-1)e^x\).}
+\pair{integration/integrate-special/2}{\(e^{-x^2}\) has no elementary integral, so
+the answer is the error function \B{Erf}.}
+\pair{integration/integrate-special/3}{\(e^x/x\) gives the exponential integral
+\B{ExpIntegralEi}.}
+\pair{integration/integrate-special/4}{\(1/\log x\) is the logarithmic integral,
+returned as \(\operatorname{Ei}(\log x)\).}
+\pair{integration/integrate-special/5}{\(\sin x/x\) gives the sine integral
+\B{SinIntegral}.}
+\end{codepairs}
+
+Pairs 2 to 5 are not approximations or placeholders. Each special function is
+\emph{defined} as the integral in question, and each appears because the
+elementary functions have been shown not to contain an antiderivative. To make
+``elementary'' precise we need a little algebra.
+
+\begin{definition}
+A \emph{differential field}\index{differential field} is a field \(K\) with a
+derivation \(D\colon K\to K\), a map that satisfies \(D(a+b)=Da+Db\) and
+\(D(ab)=a\,Db+b\,Da\). Its \emph{constants} are the elements with \(Dc=0\). The
+\emph{elementary extensions}\index{elementary extension} of \(K\) are built by
+adjoining, one at a time, elements \(\theta\) of three kinds:
+\begin{itemize}
+\item a \emph{logarithm}: \(D\theta = Du/u\) for some \(u\) in the field so far;
+\item an \emph{exponential}: \(D\theta = \theta\,Du\);
+\item an \emph{algebraic} element: \(P(\theta)=0\) for a polynomial \(P\) with
+coefficients in the field so far.
+\end{itemize}
+A function is \emph{elementary} if it lies in an elementary extension of
+\(\mathbb{C}(x)\) with \(D=d/dx\).
+\end{definition}
+
+The trigonometric and inverse trigonometric functions are elementary in this
+sense, because \(\sin x = (e^{ix}-e^{-ix})/(2i)\) and \(\arctan x =
+\tfrac{i}{2}\log\frac{1-ix}{1+ix}\). So are all the radicals. The adjoined
+elements are called \emph{monomials}\index{monomial (differential algebra)}, and
+the chain of fields \(\mathbb{Q}(x)=K_0\subset K_1\subset\cdots\subset K_n\) is a
+\emph{tower}\index{tower (differential fields)}.
+
+\begin{theorem}[Liouville, 1835; Rosenlicht, 1968]
+\label{thm:liouville}
+\index{Liouville's theorem}
+Let \(K\) be a differential field of characteristic zero, and let \(f\in K\). If
+\(f\) has an antiderivative in some elementary extension of \(K\) with the same
+constants, then there are constants \(c_1,\dots,c_m\), algebraic over the constants of
+\(K\), and elements \(v, u_1,\dots,u_m\) of \(K(c_1,\dots,c_m)\), such that
+\[
+  f \;=\; Dv + \sum_{i=1}^{m} c_i\,\frac{Du_i}{u_i},
+  \qquad\text{that is,}\qquad
+  \int f \;=\; v + \sum_{i=1}^{m} c_i \log u_i .
+\]
+\end{theorem}
+
+The theorem is the reason integration is decidable. An elementary antiderivative,
+if one exists, cannot be anything: it is an element of the integrand's own field,
+plus a finite sum of constant multiples of logarithms of elements of that field.
+New exponentials, new radicals and nested logarithms never help. The algorithms of
+this chapter are all ways of searching that restricted space in finitely many
+steps, so that an empty search is a proof. The proofs Mathilda uses come from
+Bronstein's \emph{Symbolic Integration~I}~\cite{bronstein2005} for the
+transcendental case, from Trager's thesis~\cite{trager1984} for the algebraic
+case, and from Bronstein's 1990 paper~\cite{bronstein1990} for the mixed case.
+
+The decision is exposed as a predicate of its own:
+
+\begin{codepairs}
+\pair{integration/elementary-q/1}{\(e^x/x\) is \emph{not} elementary. This is a
+proof, not a timeout.}
+\pair{integration/elementary-q/2}{Nor is \(e^{x^2}\).}
+\pair{integration/elementary-q/4}{But \(e^x/(1+e^x)\) is: its integral is
+\(\log(1+e^x)\).}
+\pair{integration/elementary-q/5}{And \(\sin x/x\) is not. The sine integral
+exists because it is not.}
+\end{codepairs}
+
+\mcode{Risch\textasciigrave ElementaryIntegralQ} has three answers.
+\texttt{True} means an elementary antiderivative has been \emph{exhibited} and
+verified by differentiation. \texttt{False} means a theorem has been applied: the
+decision procedure found an exact certificate that no antiderivative of the
+Liouville form exists. Anything else leaves the call unevaluated, with a
+\texttt{::undec} message. Section~\ref{ssec:int-verdicts} returns to this.
+
+%======================================================================
+\section{Rational functions}
+\label{sec:int-rational}
+
+Rational functions are the base of every tower, and for them integration is
+completely solved.
+
+\begin{codepairs}
+\pair{integration/integrate-elementary/1}{Term-by-term integration of a
+polynomial.}
+\pair{integration/integrate-elementary/2}{A logarithmic derivative recognised
+directly: \(\int 2x/(x^2+1) = \log(1+x^2)\).}
+\pair{integration/integrate-elementary/3}{The arctangent, from an irreducible
+quadratic denominator.}
+\pair{integration/integrate-elementary/4}{A partial-fraction case. The answer
+combines two of the three logarithms into a single quadratic \(\log\).}
+\pair{integration/integrate-elementary/5}{Two irreducible quadratic factors give a
+mixed \(\log\)/\(\arctan\) answer.}
+\end{codepairs}
+
+The algorithm has two stages. \emph{Hermite reduction}\index{Hermite reduction}
+removes the repeated factors of the denominator. Write \(f=A/D\) and let
+\(D=D_1D_2^2\cdots D_k^k\) be its squarefree factorization. Repeatedly solving a
+linear congruence with the extended Euclidean algorithm writes
+\[
+  \int \frac{A}{D} \;=\; \frac{B}{E} + \int \frac{C}{D^{*}},
+\]
+where \(D^{*}=D_1D_2\cdots D_k\) is squarefree. The rational part \(B/E\) is
+found by linear algebra alone, with no factoring. What is left has only simple
+poles, so its integral is a sum of logarithms. Its coefficients are the residues
+\(c=C(a)/D^{*\prime}(a)\) at the roots \(a\) of \(D^{*}\). Rothstein and Trager
+observed that the residues are exactly the roots of the resultant
+\[
+  R(z) \;=\; \operatorname{Res}_x\bigl(C - z\,D^{*\prime},\; D^{*}\bigr),
+\]
+and that the logarithm belonging to a residue \(c\) is
+\(\log\gcd(C-c\,D^{*\prime}, D^{*})\). Lazard, Rioboo and Trager showed how to
+read those gcds from the subresultant sequence of the same resultant computation,
+so the splitting field of \(D^{*}\) is never needed. Only the residues need
+algebraic numbers, and then only the roots of the factors of \(R\).
+\calloutnote{Under the hood}{The rational integrator is
+\texttt{src/calculus/intrat.c}, called by the cascade as the
+\texttt{"BronsteinRational"} stage. It implements Hermite reduction and
+Lazard--Rioboo--Trager\index{Lazard--Rioboo--Trager algorithm}\index{Rothstein--Trager resultant},
+never an undetermined-coefficient solve. Rioboo's conversion turns each
+complex-conjugate pair of logarithms into a real \(\arctan\), which is why pair~5
+comes out in real form. For plain rational input the polynomial arithmetic is
+handed to FLINT~\cite{flint}. The classical account is
+Geddes--Czapor--Labahn~\cite{gcl} and Chapter~2 of Bronstein's
+book~\cite{bronstein2005}. Every branch ends at the same check:
+\(D[\text{result}]-f\) must simplify to \(0\).}
+
+Rational functions of a radical come next. The simplest of them are rationalized
+by a substitution, and the cascade tries those first:
+
+\begin{codepairs}
+\pair{integration/integrate-elementary/6}{A rational function of \(\sqrt x\),
+rationalized by \(u=\sqrt x\).}
+\pair{integration/integrate-elementary/7}{A square root of a quadratic, handled by
+an Euler substitution.}
+\end{codepairs}
+
+A substitution works when the curve \(y^2=x^2-1\) can be parametrized by rational
+functions, that is, when it has genus~\(0\). Section~\ref{sec:int-trager} deals with
+the curves that cannot.
+
+%======================================================================
+\section{The transcendental tower}
+\label{sec:int-tower}
+
+\subsection{Logarithms, exponentials and tangents}
+\label{ssec:int-levels}
+
+A transcendental integrand is first written in a tower. Mathilda reads the
+kernels \(\log u\), \(e^u\) and \(\tan u\) out of the integrand, orders them so that
+each one's argument lies in the field below it, and integrates from the top down.
+At the top level the integrand is a rational function of one monomial \(\theta\)
+over the field \(k\) below, and the algorithm is a version of the rational one:
+Hermite reduction in \(\theta\), a resultant for the logarithmic part, and then a
+\emph{polynomial part} that needs a new tool, depending on the kind of \(\theta\).
+
+\begin{codepairs}
+\pair{integration/tower/1}{Three logarithm levels: \(\theta_1=\log x\),
+\(\theta_2=\log\theta_1\), and an answer one level higher still.}
+\pair{integration/tower/2}{A polynomial in \(\log\log x\). Its coefficients are
+integrated in the field below.}
+\pair{integration/tower/3}{\(x^x=e^{x\log x}\): an exponential over a logarithm.}
+\pair{integration/tower/4}{A rational function of \(e^x\). The residues are
+\(\pm i/2\), and the conjugate logarithms combine into a real \(\arctan\).}
+\pair{integration/tower/5}{A \emph{hypertangent} level: \(\theta=\tan x\) with
+\(D\theta = 1+\theta^2\).}
+\pair{integration/tower/6}{A polynomial in \(\tan x\), reduced degree by
+degree.}
+\end{codepairs}
+
+For a logarithm, \(D\theta\) lies in \(k\), and the polynomial part
+\(\sum a_i\theta^i\) is integrated coefficient by coefficient from the top. Each
+coefficient's integral must lie in \(k\), except that it may produce one new
+multiple of \(\theta\) itself. This is \emph{limited integration}\index{limited
+integration}: integrate \(a\) in \(k\) modulo a given finite set of logarithmic
+derivatives. For an exponential \(\theta = e^u\), \(D(\theta^i)=i\,Du\,\theta^i\),
+so \(\int a_i\theta^i = y_i\theta^i\) requires
+\[
+  Dy_i + i\,Du\;y_i \;=\; a_i ,
+\]
+with \(y_i\in k\). That is the \emph{Risch differential equation}, the heart of the
+algorithm and the subject of \S\ref{ssec:int-rde}.
+
+Tangents became monomials of Mathilda's tower in v0.6601. Since
+\(\tan u\) is elementary, it could always be rewritten with \(e^{iu}\), and for a
+long time that was the only route. But the rewritten integrand often leaves any
+tower: \(e^{\tan u}\) becomes the exponential of a rational function of \(e^{2iu}\).
+So \(\theta=\tan u\) is now a monomial in its own right, a
+\emph{hypertangent}\index{hypertangent monomial}, with \(D\theta = Du\,(1+\theta^2)\).
+\calloutnote{Theory}{The hypertangent case of the Risch differential equation is
+Bronstein's \(\delta=2\) case~\cite[Ch.~6]{bronstein2005}: special
+denominators at the factor \(\theta^2+1\), a degree bound for a nonlinear
+derivation, and a cancellation case solved through \(k(i)\). Mathilda adds a
+change of variable that links it back to the exponential case. With
+\(\alpha=i\) for \(\tan\) and \(\alpha=1\) for \(\tanh\), put
+\[
+  \eta \;=\; \frac{\alpha+\theta}{\alpha-\theta}.
+\]
+Then \(\eta\) is the exponential \(e^{-2iu}\) or \(e^{2u}\), and
+\(\theta=\alpha(\eta-1)/(\eta+1)\). This Moebius map\index{Moebius change of
+variable} is an isomorphism of differential fields over \(k(\alpha)\), so a
+``no solution'' found in the exponential field is a theorem about the tangent field
+as well. Liouville's theorem allows algebraic constants, so integrating a real
+\(\tan\) over \(k(i)\) loses nothing. The one exception is a second tangent level:
+\(\tan 2u\) is rational in \(\tan u\), so two tangents can be dependent, and that
+case is left undecided.}
+
+\subsection{Liouvillian levels}
+\label{ssec:int-liouvillian}
+
+The error function and the exponential and logarithmic integrals are not
+elementary, but they are \emph{Liouvillian}\index{Liouvillian monomial}: each is
+the integral of an element of the field below. \(\operatorname{erf}u\) has
+derivative \(\tfrac{2}{\sqrt\pi}\,Du\,e^{-u^2}\), \(\operatorname{Ei}u\) has
+\(Du\,e^u/u\), and \(\operatorname{li}u\) has \(Du/\log u\). So each can be adjoined
+as a \emph{primitive} monomial over a field that already contains \(e^{-u^2}\),
+\(e^u\) or \(\log u\), and integrated like a logarithm.
+
+\begin{codepairs}
+\pair{integration/tower/7}{An \B{Erf} level over \(e^{-x^2}\):
+\(\int\operatorname{erf}x\,e^{-x^2} = \tfrac{\sqrt\pi}{4}\operatorname{erf}^2 x\).}
+\pair{integration/tower/8}{An \(\operatorname{Ei}\) level over \(e^x\), by the
+same coefficient matching.}
+\pair{integration/tower/9}{The logarithmic integral \B{LogIntegral} integrates to
+an answer with \(\operatorname{Ei}(2\log x)\) in it.}
+\end{codepairs}
+
+A level has to be proved \emph{independent} before it is trusted.
+\(\operatorname{erfc}u=1-\operatorname{erf}u\), and
+\(\operatorname{li}u=\operatorname{Ei}(\log u)\). A tower that held both \B{Erf}
+and \B{Erfc} of the same argument as separate monomials would miss that they
+differ by a constant.\calloutnote{Pitfall}{This happened. Up to v0.6602,
+\(e^u(\operatorname{erf}u+\operatorname{erfc}u)\), which is just \(e^u\), was
+certified \emph{non-elementary}. The fix (v0.6603) stopped all certificates over
+Liouvillian levels until a proof of independence could be added; v0.6621 then
+added that proof for each level. \S\ref{ssec:int-structure} shows the case now
+decided correctly. It is the reason every Liouvillian level is now proved
+independent before a verdict over it is trusted.}
+
+The same section of the cascade handles the polylogarithm answers. They come from
+integrands with a logarithm in a rational function, and they are not decided by
+the tower; a separate stage recognises them.
+
+\begin{codepairs}
+\pair{integration/integrate-special/6}{A dilogarithm\index{dilogarithm} appears:
+\(\int\log x/(1+x) = \log x\log(1+x) + \operatorname{Li}_2(-x)\).}
+\pair{integration/integrate-special/7}{A polylogarithm ladder\index{polylogarithm
+ladder} for \(x/(e^x-1)\), the Bose--Einstein integrand.}
+\end{codepairs}
+
+\subsection{The constant field}
+\label{ssec:int-constants}
+
+The constants of the tower matter. Over \(\mathbb{Q}\) the residues of the
+logarithmic part are algebraic numbers, and the answer must be written in a field
+that holds them. Mathilda's transcendental integrator works over \(\mathbb{Q}\),
+over \(\mathbb{Q}(i)\), over number fields generated by the radicals that appear in
+the input, and over fields \(\mathbb{Q}(a,b,\dots)\) of symbolic parameters.
+
+\begin{codepairs}
+\pair{integration/constants/1}{\(\mathbb{Q}(i)\): the exponential \(e^{ix}\) is a
+monomial with \(D\theta = i\theta\).}
+\pair{integration/constants/2}{A number field: \(\sqrt2\) in an exponent. The
+second term is decided separately, and is an \(\operatorname{Ei}\).}
+\pair{integration/constants/3}{A rational function over \(\mathbb{Q}(\sqrt2)\).}
+\pair{integration/constants/4}{A parameter \(a\) in the exponent.}
+\pair{integration/constants/5}{And a proof over \(\mathbb{Q}(a)\): \(\log(a+x)/x\)
+is not elementary for a generic \(a\). Its integral is a dilogarithm.}
+\end{codepairs}
+
+A parameter changes what a verdict means. An antiderivative computed over
+\(\mathbb{Q}(a)\) is valid for every value of \(a\) except those that make a
+denominator, a leading coefficient or a discriminant vanish. Those exceptions form
+a finite set, or more generally a proper Zariski-closed set. A certificate of
+non-elementarity is weaker in a precise way: it holds for all values of \(a\)
+outside a \emph{countable} union of such sets. The standard example is
+\(x^a e^x\). It has no elementary integral over \(\mathbb{Q}(a)\), yet for every
+\(a\in\{0,1,2,\dots\}\) integration by parts gives one.
+\index{generic certificate}\calloutnote{Under the hood}{With parameters present,
+the linear systems of the ansatz are solved over \(\mathbb{Q}(\text{params})\)
+(\texttt{rt\_solve\_ansatz}, v0.6589--v0.6592). The unknowns are named, so the
+parameters are never solved for. Before that, the solver could ``solve'' for \(a\)
+itself, pick a special value, and report the special case as the generic one;
+five false certificates were traced to it and fixed in v0.6592. The constants \(\pi\), \(e\) and
+\(\log 2\) are never treated as parameters.}
+
+\subsection{The structure theorem}
+\label{ssec:int-structure}
+
+Before a kernel becomes a monomial it must be shown to be new. \(\log 2x\) is not
+independent of \(\log x\), since it is \(\log 2+\log x\). \(\arctan e^x\) is a
+combination of \(\log(1\pm ie^x)\), and \(e^{\tanh x}\) is the exponential of a
+rational function of \(e^{2x}\). A tower that treated such kernels as independent
+would be wrong in both directions. It could miss an antiderivative, and its
+certificates would be about a field that does not exist.
+
+The \emph{Risch structure theorem}\index{Risch structure theorem} settles the
+question with linear algebra. A new \(\log u\) is algebraic over the tower exactly
+when \(Du/u\) is a \(\mathbb{Q}\)-linear combination of the logarithmic derivatives
+already present (the \(Du_j/u_j\) of the logarithms and the \(Dv_j\) of the
+exponentials \(e^{v_j}\)). A new \(e^v\) is dependent exactly when \(v\) is such a
+combination, up to a constant.
+
+\begin{codepairs}
+\pair{integration/structure/1}{\(\log 2x\) is folded into the tower as
+\(\log 2+\log x\), so this is a polynomial in a single logarithm.}
+\pair{integration/structure/2}{The derivative of \(\arctan^3 e^x\) \dots}
+\pair{integration/structure/3}{\dots\ integrates back. The \(\arctan\) is folded
+as complex logarithms of \(e^x\).}
+\pair{integration/structure/4}{\(e^{\tanh x}\): the dependent exponential becomes a
+member of the tower, and the verdict is a proof.}
+\pair{integration/structure/5}{And the case from the Pitfall above:
+\(e^x(\operatorname{erf}x+\operatorname{erfc}x)=e^x\) is now decided
+correctly.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The structure theorem is applied when the tower is
+built (\texttt{risch\_tower.c}). A dependent logarithm becomes the member
+\(\sum r_j t_j + c\), with \(c=(\log\kappa+2\pi i m)/d\) (v0.6609). At most one
+transcendental constant (\(\pi\) or one \(\log 2\)) may enter, and before v0.6609
+every verdict over such a tower was demoted to undecided. A dependent exponential
+becomes \(\prod t_j^{k_j}\) times a constant when the exponents are integers
+(v0.6633), and for exponents \(1/m\) the dependency is read the other way
+(v0.6644). The relations themselves come from
+\mcode{Risch\textasciigrave RationalSpan}, which decides \(\mathbb{Q}\)-linear
+relations over algebraic constants; a unique non-rational solution, reduced with
+\B{RootReduce}, is a proof.}
+
+\subsection{The Risch differential equation}
+\label{ssec:int-rde}
+
+At an exponential level the whole question comes down to
+\[
+  Dy + f\,y \;=\; g, \qquad f, g\in k,
+\]
+for an unknown \(y\in k\). Mathilda exposes its solver as
+\mcode{Risch\textasciigrave RischDECertified[f, g, x]}. It returns the
+solution \(y\), or the string \texttt{"NoSolution"}, or \texttt{\$Failed} when it
+cannot decide. \texttt{"NoSolution"} is returned only when every step on the path
+to it is a theorem of Chapter~6 of Bronstein's book~\cite{bronstein2005}.
+
+\begin{codepairs}
+\pair{integration/rde/1}{\(Dy - y = x\) gives \(y=-1-x\), so
+\(\int xe^{-x}=-(1+x)e^{-x}\).}
+\pair{integration/rde/2}{\(Dy + 2xy = 1\) has no rational solution. This is the
+proof that \(\int e^{x^2}\) is not elementary.}
+\pair{integration/rde/3}{\(Dy + y = 1/x\) has none either: \(\int e^x/x\) is not
+elementary.}
+\pair{integration/rde/4}{The \emph{parametric} equation: for which constant \(c\)
+is \(e^x/x + c\,e^x/x^2\) of the form \(Dy+y\)? For \(c=-1/2\), with
+\(y=e^x/(2x)\).}
+\pair{integration/rde/5}{No constant \(c\) makes \(1/\log x + c/x\) a derivative in
+\(\mathbb{Q}(x,\log x)\).}
+\end{codepairs}
+
+\calloutnote{Theory}{The solver follows Bronstein~\cite[Ch.~6]{bronstein2005}.
+\emph{Weak normalization} and the \emph{normal denominator} bound the denominator
+of \(y\) from the poles of \(f\) and \(g\). At \emph{special} polynomials, the
+factors of \(\theta\) itself for an exponential or of \(\theta^2+1\) for a tangent,
+the power is bounded separately. A degree bound then limits the numerator. The
+remaining polynomial equation \(a\,Dq+b\,q=c\) is shrunk by Rothstein's \emph{SPDE}
+(\emph{special polynomial differential equation}) reduction\index{SPDE reduction},
+which lowers the degree bound one division at a time instead of solving one large
+linear system, and the last step is a non-cancellation or cancellation solve.
+\emph{Limited integration} and the \emph{parametric} Risch equation
+\(Dy+fy=\sum_i c_i g_i\) are what the polynomial parts of logarithmic and
+Liouvillian levels reduce to: integrate in \(k\) up to an unknown constant
+combination of given functions. \mcode{Risch\textasciigrave ParametricRischDE}
+(v0.6620) returns \(\{y,\{c_1,\dots\}\}\) or a proof that no constants exist.}
+
+\subsection{Verdicts}
+\label{ssec:int-verdicts}
+
+The decision is three-valued, and the three values are not symmetric.
+\texttt{True} needs an antiderivative \emph{exhibited} and verified;
+\texttt{False} needs a theorem. Everything else is ``undecided.''
+
+\begin{codepairs}
+\pair{integration/verdicts/1}{\(\int e^{\tan x}\) is not elementary, decided over
+the hypertangent level.}
+\pair{integration/verdicts/2}{But \(e^{\tan u}\sec^2u\) integrates to
+\(e^{\tan u}\).}
+\pair{integration/verdicts/3}{\(e^x\tan x\): not elementary. The Moebius map turns
+the tangent into an exponential over \(\mathbb{Q}(i)\).}
+\pair{integration/verdicts/4}{A Liouvillian level: \(\operatorname{erf}x/x\) has
+no elementary integral.}
+\pair{integration/verdicts/5}{\(e^{-x^2}\operatorname{erf}x\) does, as
+\S\ref{ssec:int-liouvillian} showed.}
+\pair{integration/verdicts/6}{A radical of \(x\) is outside the transcendental
+decision, so the call stays unevaluated (with a \texttt{::undec} message) rather than
+guess.}
+\end{codepairs}
+
+A \texttt{False} is backed by one of four certificates: a non-constant residue in
+the simple part (Bronstein's Theorem~5.6.1), a Risch differential equation with no
+solution, a primitive level whose constant term cannot be matched, or the
+dilogarithm obstruction in a polynomial in \(\log\). \texttt{True} was once
+believed correct ``by construction'' and is now checked: since v0.6589 it is given
+only for an antiderivative that differentiates back. The predicate is
+transcendental-only. Algebraic integrands are decided by \B{Integrate} itself, with
+\texttt{Method -> "Trager"} or \texttt{"Bronstein"}, as the next two sections
+show.
+
+Soundness has a cost in presentation, which is worth seeing.
+
+\begin{codepairs}
+\pair{integration/elementary-q/6}{A correct answer in an awkward form:
+\(\int\cos(\log x)\) is real, but printed with complex powers of \(x\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The output of pair~6 is exactly
+\(\tfrac{x}{2}(\cos\log x + \sin\log x)\). Mathilda returns it as
+\((\tfrac14+\tfrac{i}4)x^{1-i}+(\tfrac14-\tfrac{i}4)x^{1+i}\), a real quantity
+written with conjugate complex exponents. The transcendental integrator reaches
+trigonometric integrands by exponentializing, \(\cos\log x =
+(x^{i}+x^{-i})/2\), and the simplifier does not fold the result back into real
+form. The value is right, and \B{N} confirms it; the form is a known cosmetic
+limitation, not an error.}
+
+%======================================================================
+\section{Algebraic functions: Trager's algorithm}
+\label{sec:int-trager}
+
+An algebraic integrand such as \(1/\sqrt{x^3+1}\) lives on a curve, here
+\(y^2=x^3+1\), and its antiderivative, if elementary, lives in the function field
+\(\mathbb{Q}(x,y)\) of that curve together with logarithms of elements of it. When
+the curve has genus~\(0\) it can be parametrized and the integral rationalized, as
+in \S\ref{sec:int-rational}. When the genus is positive it cannot, and the problem
+becomes one about divisors on the curve. Trager's 1984 thesis~\cite{trager1984}
+gave the first complete algorithm for it. Mathilda implements it in
+\texttt{src/internal/trager/}, one file per chapter of the thesis.
+
+\begin{codepairs}
+\pair{integration/trager/1}{\(y^4=x^4+1\) is the Fermat quartic, of genus~3. The
+integral is elementary all the same.}
+\pair{integration/trager/2}{A cube root on a genus-1 curve, with an
+\(\arctan\) and two logarithms.}
+\pair{integration/trager/3}{\(\sqrt{x^4+1}\) with a rational factor: one real
+\(\arctan\).}
+\pair{integration/trager/4}{A \emph{pseudo-elliptic} integral: an elliptic curve,
+yet an elementary answer, with a degree-8 logand.}
+\pair{integration/trager/5}{Two different radicals. Each component is integrated
+on its own curve.}
+\pair{integration/trager/6}{Chebyshev's binomial \(\sqrt x\,(x+1)^{1/3}\) \dots}
+\pair{integration/trager/7}{\dots\ is not elementary, and the message is a
+proof.}
+\end{codepairs}
+
+\subsection{The stages}
+\label{ssec:int-trager-stages}
+\index{Trager's algorithm!stages}
+
+The algorithm takes a rational function of \(x\) and one radical
+\(y=r(x)^{1/n}\). Powers of the same radicand are merged first:
+\(\sqrt{x}\) and \(x^{1/3}\) are both powers of \(x^{1/6}\).
+\begin{enumerate}
+\item \emph{Canonical form.} Clear the radicand's denominator, \(\hat
+y=q\,y\), so that \(\hat y^n\) is a polynomial, and write the integrand as
+\(f=\sum_{i=0}^{n-1}a_i(x)\,\hat y^{\,i}\). This is an exact identity in the field;
+no branch of the radical is chosen.
+\item \emph{Components.} The term \(a_0\) is rational and goes to the rational
+integrator. Each other term \(a_i\hat y^{\,i}\) is integrated \emph{on its own
+curve} \(Y^m=G\), where \(Y\) is \(\hat y^{\,i}\) with its rational part removed and
+\(m=n/\gcd(n,i)\). The integrand is elementary if and only if every component is
+(Trager, Appendix~A). This is why pair~5 can split into an \(\arctan\) from the
+square root and an \(\arctan\) and logarithms from the cube root.
+\item \emph{Integral basis.} For a curve \(Y^m=G\) the integral basis has a closed
+form, \(w_i=Y^i/d_i\) with \(d_i=\prod p_j^{\lfloor i e_j/m\rfloor}\) over the
+factorization \(G=\prod p_j^{e_j}\). It is diagonal for the derivation and normal
+at infinity, so no general integral-basis algorithm is needed.
+\item \emph{Hermite reduction} in that basis. The congruences decouple coordinate
+by coordinate, and the algebraic part of the answer comes out by linear algebra,
+as in the rational case.
+\item \emph{Residues.} If a pole at infinity survives Hermite reduction, the
+integral is not elementary. Otherwise the residues at the finite poles are the
+roots of a resultant, the closed form of Trager's double resultant.
+\item \emph{Divisors.} For each residue the places where the differential has that
+residue form a divisor \(\delta\) on the curve, generated as an ideal of the
+integral closure.
+\item \emph{Torsion.} The logarithmic part exists if and only if some multiple
+\(N\delta\) is \emph{principal}, the divisor of a function \(u\); then the
+contribution is \(\tfrac{1}{N}\log u\). Deciding whether such an \(N\) exists is the
+hard step (below).
+\item \emph{Log part and check.} Build the logarithms, subtract their derivatives,
+and verify that nothing is left. With Trager's construction a nonzero remainder is
+a proof of non-elementarity.
+\item \emph{Real form.} \texttt{LogToArcTan} rewrites conjugate complex logarithms
+as \(\tfrac{c_1}{2}\log(A^2+B^2) - c_2\arctan(B/A)\), and keeps the complex form if
+the real one fails its check.
+\end{enumerate}
+The last guard is \(D[\text{result}]-f=0\), tested with \B{PossibleZeroQ}. A
+failure there is an internal error. It produces a decline, never an answer, so a
+bug cannot become a wrong answer or a false certificate.
+
+\subsection{Torsion, one Galois orbit at a time}
+\label{ssec:int-torsion}
+\index{Trager's algorithm!torsion}
+
+The divisor \(\delta\) of degree zero defines a point of the curve's Jacobian, an
+abelian group. The question in step~7 is whether that point has finite order. On
+an elliptic curve, \(1/\sqrt{x^3+1}\) gives a point of infinite order, and its
+integral is a genuine elliptic integral. For pair~4 the point is torsion, and that
+is what makes the integral \emph{pseudo-elliptic}\index{pseudo-elliptic integral}:
+the logand is the function whose divisor is the corresponding multiple.
+
+Trager decides finiteness by reduction modulo primes. Over a finite field
+\(\mathbb{F}_p\) the Jacobian is a finite group, with at most \((1+\sqrt p)^{2g}\)
+elements by the Weil bound, so the order \(o_p\) of the reduced point can be found
+by trying \(M=1,2,\dots\). Reduction is injective on torsion of order prime to
+\(p\). So take two good primes \(p\) and \(q\). If the parts of \(o_p\) and \(o_q\)
+prime to \(pq\) differ, the point cannot have finite order, and the integral is
+not elementary. If they agree, there is exactly one candidate \(N\), and one
+principality test decides.
+\calloutnote{Under the hood}{\texttt{TorsionModP.m} accepts a prime only if the
+reduction is \emph{good}: \(p\) divides neither \(m\) nor any denominator, the
+squarefree part of \(G\) keeps its degree (so the integral basis and the genus are
+preserved), and the residues stay distinct and nonzero. The genus comes from the
+Riemann--Hurwitz formula (\texttt{Genus.m}), and divisor classes are added in
+reduced form, read off a Popov form of the module (\texttt{Jacobian.m}). The
+principality test (\texttt{PrincipalGen.m}) is exact: \(\delta\) is principal if
+and only if some row of a basis normal at infinity is regular at infinity.}
+
+The residues need not be rational. Their minimal polynomial over \(\mathbb{Q}\)
+splits them into Galois orbits, and Mathilda builds the logarithmic part one orbit
+at a time, as a \B{RootSum} over each irreducible factor. In genus~\(0\) this always
+succeeds. In higher genus an orbit's divisor can have infinite order while some
+\(\mathbb{Q}\)-linear combination across orbits is torsion. That failure is not a
+certificate, and the code then falls back to Trager's full construction over a
+\(\mathbb{Q}\)-basis of the residues.
+
+The Chebyshev example of pairs 6 and 7 is a classical theorem, and a good test.
+
+\begin{theorem}[Chebyshev, 1853]
+\index{Chebyshev's theorem (binomial differentials)}
+For rational \(m,n,p\) and nonzero \(a,b\), the binomial differential
+\(x^m(a+bx^n)^p\,dx\) has an elementary integral if and only if one of \(p\),
+\(\tfrac{m+1}{n}\), \(\tfrac{m+1}{n}+p\) is an integer.
+\end{theorem}
+
+For \(\sqrt x\,(x+1)^{1/3}\) the three numbers are \(\tfrac13\), \(\tfrac32\) and
+\(\tfrac{11}{6}\), so no elementary integral exists. Mathilda does not consult the
+theorem here: \texttt{Method -> "Trager"} reaches the same verdict from the
+divisor computation.
+
+\subsection{Constants and parameters}
+\label{ssec:int-trager-fields}
+
+The constant field can be \(\mathbb{Q}(i)\), a number field generated by radicals of
+rationals in the input, or a field of parameters \(\mathbb{Q}(a,b,\dots)\).
+
+\begin{codepairs}
+\pair{integration/trager-fields/1}{Over \(\mathbb{Q}(i)\): reduction then uses
+primes \(p\equiv1\pmod 4\), where \(-1\) has a square root for \(i\) to map
+to.}
+\pair{integration/trager-fields/2}{Over \(\mathbb{Q}(\sqrt2)\), with the radical
+constant kept literal.}
+\pair{integration/trager-fields/3}{A pole at the irrational point \(x=\sqrt2\).}
+\pair{integration/trager-fields/4}{A parameter: the answer holds for every
+\(a\neq0\).}
+\pair{integration/trager-fields/5}{One more \(x\) term in the radicand, and the
+integral is not elementary for generic \(a\).}
+\pair{integration/trager-fields/6}{\(1/\sqrt{x^3+a}\): an elliptic integral over
+\(\mathbb{Q}(a)\), certified.}
+\pair{integration/trager-fields/7}{Two parameters, and a derivative recognised.}
+\end{codepairs}
+
+\calloutnote{Theory}{Over \(\mathbb{Q}(a)\) the torsion test cannot reduce modulo a
+prime directly, so Mathilda first \emph{specializes} the parameter to a good
+rational value \(a_0\). A value is good when it preserves the degree, genus and
+squarefree profile of the curve, the degrees of the places, and the
+irreducibility of each residue factor. Specialization is injective on torsion, so
+if the specialized point has infinite order, so has the generic one; otherwise
+the generic order is the specialized order \(N_0\) exactly when \(N_0\delta\) is
+principal over \(\mathbb{Q}(a)\). Hilbert's irreducibility theorem guarantees that
+good values exist. The verdicts carry the generic meaning of
+\S\ref{ssec:int-constants}.}
+
+\subsection{Choosing the method}
+\label{ssec:int-trager-method}
+\index{Trager method}
+
+\texttt{Method -> "Trager"} runs the algorithm alone, with no time budget.
+\texttt{Method -> "TragerKauers"} replaces the divisor computation in the
+logarithmic part with Kauers' heuristic~\cite{kauers2008}, which uses Gr\"obner bases to look
+for the least \(k\) for which the \(k\)-th power of an ideal attached to the
+residues is principal. It is often
+as fast, but it is a heuristic: when it does not close, it declines, and only the
+shared stages can give it a certificate.
+\calloutnote{Performance}{The stress report \texttt{tests/data/trager\_stress\_report.md}
+(2026-11-22) runs 378 algebraic integrands through both methods and FriCAS, with a
+60~s limit. \texttt{"Trager"} agrees with FriCAS on 180 elementary and 132
+non-elementary cases, decides 3 that FriCAS does not, and has no case FriCAS
+decides that it misses, no disagreement, no wrong answer and no timeout. 63 of its
+certificates are ``unconfirmed'' only because FriCAS errored or timed out on them.
+\texttt{"TragerKauers"} misses 55 cases FriCAS decides. Trager's median time is
+78~ms, against FriCAS's 120~ms.}
+
+%======================================================================
+\section{Mixed integrands: Bronstein's algorithm}
+\label{sec:int-bronstein}
+
+A radical can sit on top of a tower of logarithms and exponentials:
+\(\sqrt{x+\log x}\) is algebraic over \(\mathbb{Q}(x,\log x)\). Bronstein's 1990
+paper~\cite{bronstein1990} extends Trager's algorithm to such integrands, and
+Mathilda implements it, with extensions, in \texttt{src/internal/bronstein/}.
+
+\begin{codepairs}
+\pair{integration/bronstein/1}{An elementary case: a derivative recognised over
+\(\mathbb{Q}(x,\log x)(y)\), \(y^2=x+\log x\).}
+\pair{integration/bronstein/2}{\(\int\sqrt{x+\log x}\) \dots}
+\pair{integration/bronstein/3}{\dots\ is not elementary. \texttt{Last[\$MessageList]}
+names the message that \B{Check} caught.}
+\pair{integration/bronstein/4}{A radical over an exponential.}
+\pair{integration/bronstein/5}{Two radicals and an exponential \dots}
+\pair{integration/bronstein/6}{\dots\ and the integral of the derivative is the
+function back.}
+\pair{integration/bronstein/7}{A radical at the bottom, a logarithm above it: no
+elementary integral.}
+\pair{integration/bronstein/8}{A kernel whose argument contains the radical: no
+elementary integral either.}
+\end{codepairs}
+
+There are two shapes. In \emph{shape~A}, ``radical on top,'' the field is
+\(k(\theta)(y)\) with \(y^n=P\in k[\theta]\), where \(k\) is a tower and \(\theta\)
+its top monomial, as in pairs 1 to 3. In \emph{shape~B}\index{Bronstein's
+algorithm!shape B}, ``radical at the bottom,'' the field is
+\(\mathbb{Q}(x)(y)(\theta_1,\dots,\theta_r)\) with \(y^n=g(x)\): transcendental
+Risch over an algebraic base, as in pairs 7 and 8.
+
+\calloutnote{Under the hood}{Shape~A follows Bronstein's pipeline: Hermite
+reduction at the normal places, a separate reduction at the \emph{special}
+places (the zeros and the pole of \(\theta\) for an exponential), the resultant
+criterion for the residues (a non-constant residue is a certificate), divisors,
+torsion, and the logarithmic part. Two choices simplify it. Each component
+\(c\,Y\) is handled on its own, as in Trager, and its algebraic part is then the
+Risch differential equation \(Db+sb=\tilde c\) over \(k(\theta)\) with
+\(s=DG/(mG)\), solved by \mcode{Risch\textasciigrave RischDECertified}. That
+replaces Bronstein's Puiseux-based systems for the algebraic part. At the
+special places, the binomial curve needs no Newton polygon: the Puiseux
+expansions\index{Puiseux expansion} have the closed form
+\(Y=\zeta\gamma\,\theta^{g/m}\hat G^{1/m}\), and their coefficients come from
+J.~C.~P.~Miller's recurrence. Torsion is decided by specializing \(x\) and the
+lower monomials to rationals and then reducing modulo~\(p\) as in Trager. That
+step is new: Bronstein notes~\cite[p.~130]{bronstein1990} that the Weil bound does
+not apply over a transcendental \(k\).}
+
+\subsection{Risch over the curve}
+\label{ssec:int-phase5}
+\index{Bronstein's algorithm!over an algebraic base}
+
+Shape~B with a kernel whose argument is free of \(y\) splits by components: every
+Risch differential equation it needs is over the transcendental field \(k\), and
+\texttt{RDEAlgebraic.m} solves the rest by bounds and undetermined coefficients
+over \(\mathbb{Q}(x)(y)\), where ``no solution'' is again a proof. The general
+case, a radical anywhere in the tower, needs the Risch algorithm over the curve
+itself: a differential field \(\mathbb{Q}(x)(y)(t_1,\dots)\) whose base is an
+algebraic function field, with the Risch differential equation solved on the curve.
+This is the project's ``Phase~5.''
+
+The theory note \texttt{docs/notes/bronstein\_extensions.tex} (sections E1 and E2)
+works out what that requires. Three of its ingredients do not appear in
+Bronstein's paper~\cite{bronstein1990}, his paper on the Risch equation on a
+curve~\cite{bronstein1991}, or his book~\cite{bronstein2005}: oracles for
+logarithmic derivatives over a curve, a degree bound that does not assume
+normality at infinity, and an admission rule that keeps the constants in
+\(\mathbb{Q}\). The note also observes that the base field \(\mathbb{Q}(x)(y)\) is
+not worked out in those sources. One kernel whose argument contains \(y\), as in
+pair~8, was already handled (\texttt{BaseCurve.m}). The first milestone of the
+general case handles at most two monomials over \(\mathbb{Q}(x)(y)\), and decided
+two class-B cases of the integration shootout (\S\ref{ssec:int-fricas}) that no
+other stage did. More monomials, and a radical in the
+middle of the tower, are still open.
+
+\subsection{Several radicals}
+\label{ssec:int-galois}
+
+Two independent square roots \(y_1, y_2\) generate a field with Galois group
+\(\{\pm1\}^2\) over the base. The projections
+\[
+  f_e \;=\; 2^{-m}\sum_{\sigma}\chi_e(\sigma)\,\sigma(f)
+\]
+onto the characters \(\chi_e\) of that group split \(f\) into \emph{Galois
+components}\index{Galois components (integration)}, each a single radical
+\(\prod y_i^{e_i}\) times an element of the base. Since \(f\) is elementary if and
+only if every component is, each can go to the one-radical algorithm.
+When the radicals are not independent in that way, Mathilda groups the terms of the
+integrand by the radicals and kernels they share, into \emph{support
+groups}\index{support groups (integration)}. If every group is elementary, the
+answers add. If exactly one group is certified non-elementary and the others are
+elementary, the whole integrand is non-elementary.
+
+\begin{codepairs}
+\pair{integration/bronstein-split/1}{Two square roots, each times \(\log x\):
+two components, both elementary.}
+\pair{integration/bronstein-split/2}{One support group elementary, the other
+\(e^x/x\): so the sum is not elementary.}
+\end{codepairs}
+
+With two or more non-elementary groups no conclusion follows. Their
+non-elementary parts might cancel, and the separation lemma that would rule this
+out is not proved. Mathilda then reports the case as incomplete.
+\index{Bronstein method}\texttt{Method -> "Bronstein"} runs this stage alone. It
+hands a radical-free integrand to the transcendental integrator and an integrand
+with no logarithm or exponential to Trager.
+
+%======================================================================
+\section{ParallelMixedTower}
+\label{sec:int-pmt}
+\index{ParallelMixedTower method}
+
+The decision procedures cover precisely defined classes. Many integrands fall just
+outside them: several radicals at once, a nested radical, a radical of a
+trigonometric function. The \texttt{"ParallelMixedTower"} method reaches them by a
+different route. It is a \emph{parallel} Risch--Norman integrator: it writes the
+whole integrand in a mixed tower built from rational operations, radicals, and
+\(\log\)/\(\exp\)/\(\tan\) kernels, guesses the shape of the antiderivative from
+the denominator and the kernels, and finds the unknown coefficients by one linear
+solve. It verifies every result by differentiating it before returning it. A case
+it cannot realize correctly declines. It does not return a wrong answer.
+
+\begin{codepairs}
+\pair{integration/integrate-special/8}{\(\int\sqrt{\tan x}\,dx\): a radical of a
+tangent, closed in real \(\arctan\)/\(\log\) form.}
+\pair{integration/pmt/1}{Two radicals, \(\sqrt x\) and \(\sqrt{x+1}\): the
+\emph{Kummer split}.}
+\pair{integration/pmt/2}{A conic with two parameters, parametrized from a point
+over \(\mathbb{Q}(a,b)\).}
+\pair{integration/pmt/3}{A radical of \(\log x\): the substitution \(x=e^u\).}
+\pair{integration/pmt/4}{A radical of \(e^x\): the substitution \(u=e^x\).}
+\pair{integration/pmt/5}{A nested radical.}
+\end{codepairs}
+
+Three preprocessing steps, added in v0.6099--v0.6112, account for most of what the
+method gains on hard corpora.
+\begin{itemize}
+\item The \emph{Kummer split}\index{Kummer split} (v0.6099, v0.6103) writes an
+integrand that no single tower holds as \(\sum g_j M_j\), where each \(M_j\) is a
+product of radicals, groups the terms by Kummer class, and integrates each group
+with one radical, trying Trager first. A non-elementary group is a certificate for
+the whole integrand.
+\item \emph{Kernel substitutions} (v0.6105) are the differential-field
+isomorphisms \(u=\sin x\), \(u=\cos x\), \(u=e^x\), \(x=u^k\), \(x=e^u\) (for
+radicals of \(\log\)) and \(x=\tan u\) (for radicals of \(\arctan\)), plus an Euler
+parametrization for \(\sqrt{Q(x^k)}\).
+\item \emph{Conics with parameters} (v0.6106): a conic radicand over
+\(\mathbb{Q}(\text{params})\) is parametrized from a point found by
+\texttt{ParametricPoint}, and radicals of parameters become new indeterminates. No
+certificate is issued over \(\mathbb{Q}(\text{params})\) here; a certificate needs
+the generic argument of \S\ref{ssec:int-trager-fields}, which this method does not
+make.
+\end{itemize}
+\calloutnote{Performance}{On \emph{Diabolically Difficult Integrals},
+Volume~1, a book of 803 integrands, \texttt{"Trager"} and
+\texttt{"ParallelMixedTower"} together decide 664 cases: an antiderivative, or a
+proof that none is elementary (v0.6112). FriCAS decides 528 of the 803. The
+parallel method alone went from 490 to 564 in the last of those releases, with no
+case lost and no wrong answer. It is also slower than the dedicated methods, which
+is why it is placed after the decision procedures.}
+
+%======================================================================
+\section{The cascade and its guarantees}
+\label{sec:int-cascade}
+\index{Integrate!cascade}
+
+With no \texttt{Method} option, \B{Integrate} runs a \emph{cascade}: a fixed
+sequence of stages, each correct on the family it accepts. The first stage that
+returns a verified answer wins. In order, the indefinite cascade runs:
+\begin{enumerate}
+\item cheap structural stages, the rational integrator, and the classical radical
+substitutions (linear, quadratic and linear-ratio radicals, Chebyshev's binomials,
+Fresnel and power-of-Gamma forms);
+\item \texttt{"Trager"} and then \texttt{"Bronstein"}, each with a budget;
+\item the early transcendental Risch stage, for large integrands with an
+exponential, logarithmic or trigonometric kernel;
+\item linearity, linear-argument substitution, the Weierstrass substitution,
+derivative-divides, and the general transcendental Risch stage;
+\item the special-function stages: the integral tables, the polylogarithm ladder,
+holonomic modules, Bessel and hypergeometric forms, and integration by parts with
+logarithms and special functions;
+\item \texttt{"ParallelMixedTower"}, then Goursat's pseudo-elliptic forms, then a
+special-function search over the mixed tower;
+\item Meijer-G and the Gradshteyn--Ryzhik table, last.
+\end{enumerate}
+\calloutnote{Under the hood}{The order is in \texttt{src/calculus/integrate.c}.
+Trager and Bronstein moved ahead of linearity and the transcendental stage in
+v0.6521: each of those had been measured grinding for 60~s on integrands Bronstein
+closes in under 5~s. A certificate from either stage skips the stages that can
+only answer elementarily (ParallelMixedTower and Goursat), since they can no longer
+succeed, but not the special-function stages, since an \(\operatorname{erf}\) or
+elliptic form may still exist. The variable \texttt{Integrate\textasciigrave
+\$CascadeParameters} (default \texttt{\{"Trager"\}}) names the stages that accept
+an integrand with symbolic parameters; Bronstein over parameters is opt-in.}
+
+Many of the cascade's stages are small. Four illustrate the range:
+
+\begin{codepairs}
+\pair{integration/integrate-newer/1}{A shared linear argument \(3x\) is
+substituted away before the Weierstrass stage sees it, so \(\int\sec^2 3x =
+\tfrac13\tan 3x\) rather than a high-degree rational function of \(\tan(x/2)\).}
+\pair{integration/integrate-newer/2}{A logarithm times a trigonometric kernel, by
+one integration by parts. The leftover \(\int\cos x/x\) is the cosine integral
+\B{CosIntegral}.}
+\pair{integration/integrate-newer/3}{A \emph{holonomic} answer:
+\(1/\operatorname{Ai}^2\) integrates to \(\pi\operatorname{Bi}/\operatorname{Ai}\),
+by the Wronskian of the two Airy functions.}
+\pair{integration/integrate-newer/4}{A Bessel product closed in its own differential
+module: \(\int xJ_0^2 = \tfrac{x^2}2(J_0^2+J_1^2)\).}
+\end{codepairs}
+
+Pair~2 is the log-by-parts stage\index{integration by parts!logarithmic}. For
+\(c\log g(x)\,K(x)\) with a trigonometric or hyperbolic kernel \(K\), it does the
+single step \(\int\log g\,K=\log g\,V-\int V\,g'/g\) with \(V=\int K\), and accepts
+the result only if it differentiates back exactly. Pairs 3 and 4 are the
+\texttt{"Holonomic"}\index{holonomic function} stage. Bessel, Airy, and sine/cosine
+kernels of a linear argument each span a two-dimensional space closed under
+\(d/dx\), so a power of \(x\) times a product of them lies in a finite-dimensional
+\emph{differential module}. One linear system then finds the antiderivative inside
+that module, or the stage declines. For \(1/\operatorname{Ai}^2\) another route
+applies: with \(t=\operatorname{Bi}/\operatorname{Ai}\), \(t'=W/\operatorname{Ai}^2\)
+where the Wronskian \(W=1/\pi\) is constant, so the integral is \(\pi t\).
+\calloutnote{Performance}{Before the log-by-parts stage existed, \(\int\log
+x\sin x\) fell through to the general \texttt{"ParallelMixedSpecial"} search and
+took about \(5\)~s; the stage closes it in roughly a tenth of a second. The saving
+matters most inside \B{DSolve}, whose variation-of-parameters quadratures produce
+exactly this shape: \(y''+4y=\log x\) dropped from over \(9\)~s to about a third
+of a second.}
+
+\subsection{Budgets and messages}
+\label{ssec:int-messages}
+
+The two decision stages run under wall-clock budgets, in seconds. When a budget
+expires the stage declines, and the cascade continues. \texttt{Infinity} removes a
+budget, and an explicit \texttt{Method} runs with none.
+
+\begin{codepairs}
+\pair{integration/cascade/1}{\mcode{\$TragerCascadeBudget} and
+\mcode{\$BronsteinCascadeBudget}: ten seconds each.}
+\pair{integration/cascade/2}{The full cascade proves \(\log x/\sqrt{1+x^3}\) not
+elementary.}
+\end{codepairs}
+
+The two messages make different promises.
+\begin{itemize}
+\item \texttt{Integrate::nonelem}\index{Integrate::nonelem@\texttt{Integrate::nonelem}}
+(``The integrand \dots\ has no antiderivative elementary in \dots'') is printed only
+with a proof: a certificate from the transcendental Risch stage, from Trager, from
+Bronstein, or a rigorous one from ParallelMixedTower. It is held until the cascade
+ends, and printed only if no later stage finds a special-function answer. It names
+the user's integrand once, never an inner integral.
+\item \texttt{Integrate::incomplete}\index{Integrate::incomplete@\texttt{Integrate::incomplete}}
+(``The integrand \dots\ was not decided in \dots: implementation incomplete
+(\dots)'') means the integrand is algebraic over an elementary tower, but outside
+what is implemented. Either it is outside one simple radical extension (nested
+radicals, several radicals whose Kummer group is not cyclic, a general algebraic
+function), or it is inside it on a branch not yet written. The reason in
+parentheses says which.
+\end{itemize}
+A third outcome, a \emph{decline}, prints nothing: an approximate number, a
+non-elementary function in the input, or a budget that ran out. The integral is
+returned unevaluated.
+
+\calloutnote{Performance}{Holding the certificate has a cost. Because the
+special-function stages still run after a proof, a non-elementary integrand pays
+for them. On this build, \(\int dx/(x\sqrt{x^3+ax+1})\) takes about 11~s in the
+full cascade and under 1~s with \texttt{Method -> "Trager"}, with the same
+verdict; Chebyshev's \(\sqrt x\,(x+1)^{1/3}\) takes about 8~s against under 1~s.
+That is why the examples above that end in a proof name the method. When you
+expect a ``no,'' ask the decision procedure directly.}
+
+\subsection{How it compares}
+\label{ssec:int-fricas}
+\index{FriCAS}
+
+FriCAS, the descendant of Axiom, has the most complete implementation of the
+Risch--Trager--Bronstein algorithm in any other system; Bronstein wrote much of it.
+Mathilda's methods were measured against FriCAS~1.3.6 on four corpora. Every
+answer was verified by the system that gave it.
+
+\begin{center}
+\small
+\begin{tabular}{@{}llrr@{}}
+\hline
+Corpus & Cases & Mathilda decides & FriCAS decides\\
+\hline
+256, integration shootout & 1266 & 96\% (1211) & 75\% (952)\\
+257, compact integrands, large answers & 1000 & 100\% (995) & 90\% (899)\\
+259, transcendental decision & 640 & 98\% (625) & 95\% (610)\\
+260, radicals at the bottom & 420 & 90\% (377) & 95\% (397)\\
+\hline
+\end{tabular}
+\end{center}
+
+``Decides'' means a verified closed form, or a proof that no elementary integral
+exists. The first three rows are from the 2026-11-21 report
+(\texttt{benchmarks/BRONSTEIN\_VS\_FRICAS.md}, Mathilda v0.6646); the last is from
+v0.6648. On algebraic integrands (class~A of corpus 256) Mathilda decides 100\%
+against 82\%, and on a radical over a logarithm or exponential (class~M) 100\%
+against 44\%. Radicals at the bottom (class~B, and corpus 260) are where FriCAS led,
+and where most of the recent work went: class~B rose from 72\% to 168 of 169 by
+v0.6648, and by v0.6651 every family of corpus 260 decides at least 56 of its 60
+cases. No Mathilda method gave a false ``no'' or a wrong answer on any corpus.
+FriCAS gave 14 false ``no''s on corpus 259, all exponentials over
+\(\mathbb{Q}(i)\), now reported upstream. FriCAS still \emph{closes} more
+transcendental cases with special functions where Mathilda proves
+non-elementarity. Mathilda is faster on the typical case (medians of 16--71~ms
+against 70--110~ms) but has a slow tail: 51 common cases take over a second, against
+none for FriCAS. Most of that tail is the Bronstein package, which is written in
+Mathilda's own language.
+
+\subsection{What is still open}
+\label{ssec:int-open}
+
+The decision procedures are complete only on the classes they implement. The
+transcript below shows where those classes end today.
+
+\begin{codepairs}
+\pair{integration/cascade/3}{A radical in the middle of the tower,
+\(\log(1+\sqrt{\log x})/x\): the decision procedure reports it incomplete.}
+\pair{integration/cascade/4}{The cascade closes this one anyway, by the
+substitution \(u=\log x\). Not every case has such a route.}
+\pair{integration/cascade/5}{A nested radical: incomplete.}
+\pair{integration/cascade/6}{\(\int\sqrt{\tan x}\) over \(\mathbb{Q}(i)\) by
+\texttt{"Bronstein"} carries \B{Root} objects. (ParallelMixedTower gives the real
+form shown in \S\ref{sec:int-pmt}.)}
+\end{codepairs}
+
+\begin{tcolorbox}[enhanced, breakable, colback=black!2, colframe=black!45,
+  boxrule=0.4pt, left=7pt, right=7pt, top=4pt, bottom=5pt,
+  colbacktitle=black!7, coltitle=black, fonttitle=\bfseries,
+  title={What is still open (v0.6664)}]
+\begin{itemize}
+\item \emph{A radical in the middle of a tower.} \(\log(1+\sqrt{\log x})/x\) has a
+radical inside a logarithm, with the radicand itself transcendental. Bronstein's
+method reports \texttt{Integrate::incomplete}. The general case is the unfinished
+part of Phase~5.
+\item \emph{Nested radicals.} \(\sqrt{\log x+\sqrt{\log x}}\) is outside one simple
+radical extension, and is incomplete. Several square roots with two or more
+non-elementary support groups are also undecided.
+\item \emph{Answers over \(\mathbb{Q}(i)\)} from Trager and Bronstein carry
+\B{Root} objects of the residue field, with no radicals and no real form.
+\item \emph{\mcode{Risch\textasciigrave ElementaryIntegralQ} is
+transcendental-only.} An algebraic integrand such as \(1/\sqrt{1+x^3}\) stays
+unevaluated; use \B{Integrate} with \texttt{Method -> "Trager"} or
+\texttt{"Bronstein"}. A transcendental constant such as \(\log 2\) beside the tower
+demotes a correct ``no'' to undecided.
+\item \emph{Real forms.} \(\int\cos(\log x)\) is returned with complex powers of
+\(x\) (\S\ref{ssec:int-verdicts}).
+\item \emph{Speed.} A non-elementary integrand pays for the special-function stages
+after its proof, and the Bronstein package has a slow tail
+(\S\ref{ssec:int-fricas}).
+\end{itemize}
+\end{tcolorbox}
+
+\usagebox{Integrate}
+
+Integration has a second half. A definite integral is not an antiderivative
+evaluated at two points when the integrand has poles, the interval is infinite, or
+the antiderivative crosses a branch cut; \S\ref{ssec:calc-definite} describes the
+definite integrator, which uses residues, Mellin transforms and differentiation
+under the integral sign as well as the antiderivatives of this chapter. And the
+algorithms here are the quadratures behind \B{DSolve}
+(\S\ref{ssec:calc-dsolve}): every integrating factor and every
+variation-of-parameters step is a call to \B{Integrate}.

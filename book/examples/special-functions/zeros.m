@@ -1,0 +1,13 @@
+# Zeros of special functions, indexed by an exact k
+ZetaZero[1]
+N[ZetaZero[1], 30]
+Zeta[N[ZetaZero[3], 30]]
+N[Im[ZetaZero[1000]], 30]
+N[ZetaZero[10^6]]
+N[{AiryAiZero[1], AiryAiPrimeZero[1], AiryBiZero[1], AiryBiPrimeZero[1]}]
+N[AiryAiZero[1], 30]
+AiryAi[N[AiryAiZero[1], 30]]
+N[AiryAiZero[500], 30]
+N[Table[BesselJZero[0, k], {k, 1, 5}]]
+N[BesselYZero[1, 2], 30]
+BesselY[1, N[BesselYZero[1, 2], 30]]

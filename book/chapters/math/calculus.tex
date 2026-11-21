@@ -6,7 +6,7 @@ Algebra computes with expressions as static objects; calculus computes with the
 where a computer algebra system does its most characteristic work---turning the
 limit processes of the calculus into finite, exact algebra. We climb in the
 order the subject is usually taught, but with the machinery on show throughout:
-differentiation, limits, power series, residues, then the two faces of
+differentiation, limits, power series, sums and products, residues, then the two faces of
 integration---first the indefinite integral and the deep decision problem
 beneath it, then the definite integral and the complex-analytic and
 transform methods that evaluate it---and finally differential equations, where
@@ -83,6 +83,50 @@ ordinary expression:
 \texttt{f'[x]} evaluates the operator: \(18x^2+5x^4\).}
 \pair{calculus/derivatives/14}{And \texttt{f'[5]} is a plain number.}
 \end{codepairs}
+
+Because \B{D} is a recursion on the head of an expression, teaching it a new head
+is a matter of writing that head's product or chain rule once. A few heads that
+used to stop the recursion now carry their own rule. The product rule holds for any
+bilinear product, commutative or not, so it applies to \B{Dot},
+\B{NonCommutativeMultiply}, and \B{Cross} with the order of the factors kept. A
+derivative of a \B{Sum} or \B{Product} moves inside the bound index, and the order
+of a Bessel function is a variable like any other:\index{differentiation!of sums
+and products}\index{differentiation!non-commutative products}
+
+\begin{codepairs}
+\pair{calculus/derivatives-structure/1}{\texttt{D[f, \{x\}]}, a one-element
+derivative spec, is the first derivative. The PDE literature writes equations this
+way, and \B{DSolve} reads them.}
+\pair{calculus/derivatives-structure/2}{The product rule for a matrix product
+\(a\cdot b\). The order of the factors is kept, because \(a\) and \(b\) need not
+commute.}
+\pair{calculus/derivatives-structure/3}{The same rule for the formal
+non-commutative product \texttt{**}.}
+\pair{calculus/derivatives-structure/4}{A cross product of two explicit vectors,
+differentiated component by component.}
+\pair{calculus/derivatives-structure/5}{A sum over a symbolic range is
+differentiated term by term, inside the sum. The index \(k\) stays bound.}
+\pair{calculus/derivatives-structure/6}{When the differentiated sum closes, the
+closed form is returned: \(\sum_{k=1}^n x^{k-1} = (x^n-1)/(x-1)\), written over the
+denominator \(x^2-x\).}
+\pair{calculus/derivatives-structure/7}{A product gives the logarithmic
+derivative: \(\bigl(\prod f_k\bigr)' = \prod f_k \cdot \sum f_k'/f_k\).}
+\pair{calculus/derivatives-structure/8}{The derivative of \(J_\nu(z)\) in its
+argument, by the recurrence \(J_\nu' = \tfrac12(J_{\nu-1}-J_{\nu+1})\).}
+\pair{calculus/derivatives-structure/9}{The derivative in the \emph{order}
+\(\nu\) has no closed form. It stays an inert \B{Derivative}\texttt{[1, 0]}.}
+\pair{calculus/derivatives-structure/10}{The inert order derivative still has
+numerical values. They are computed from a power series in the order, in ball
+arithmetic, to any precision.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{The derivative of a \B{Sum} with respect to a variable that
+also appears in its \emph{limits} is not the derivative of the summand.
+\texttt{D[Sum[f[k] x\^{}k, \{k, 1, x\}], x]} is therefore left unevaluated rather
+than guessed. (A sum that closes first, such as \(\sum_{k=1}^{x} x^k\), is
+differentiated as the closed form.) Before the rule existed, the
+general chain rule differentiated \B{Sum} as if it were an ordinary function of two
+arguments, and the bound index leaked out into the answer.}
 
 \calloutnote{Under the hood}{Differentiation is the textbook example of the
 system's two-tier design---C for speed, rewrite rules for mathematics---and of
@@ -325,7 +369,22 @@ real part is positive, whatever the (real) frequency \(b\).}
 \pair{calculus/limits-assumptions/7}{The Hurwitz zeta function decays like
 \(x^{1-s}/(s-1)\), so \(x^s\zeta(s,x)\sim x/(s-1)\) grows without bound when
 \(s>1\).}
+\pair{calculus/limits-assumptions/8}{For \(a>0\), \(\arctan(ax) = \pi/2 - 1/(ax) +
+\cdots\), so \(x(\arctan(ax)-\pi/2)\to -1/a\).}
+\pair{calculus/limits-assumptions/9}{For \(a<0\) the arctangent tends to \(-\pi/2\)
+instead, and the product diverges.}
 \end{codepairs}
+
+Pairs~8 and~9 need more than the limit engine's own layers. The answer comes from
+the asymptotic series of \(\arctan(ax)\), and that series depends on the sign of
+\(a\) (compare \S\ref{ssec:calc-series}, pair~5 of the series under assumptions).
+The \texttt{Assumptions} option therefore has to reach every tool the limit calls,
+not only the limit's own rules. \B{Limit} evaluates its work inside a scope in which
+\B{\$Assumptions} is set to the option's value, as \B{Assuming} does, so \B{Series},
+\B{Simplify}, and the zero tests all see \(a>0\).\index{assumptions!scoped
+\$Assumptions@scoped \mcode{\$Assumptions}} Before that change, \B{Series} expanded
+the arctangent without the assumption, and the limit came back as a
+\mcode{DirectedInfinity} of an expression in \(\sqrt{a^2}/a\).
 
 Each of these is a separate, narrowly gated layer of the limit cascade---a
 dominant-term rule that needs the sign of an exponent (pairs~2 and~4), a decay test
@@ -410,6 +469,90 @@ a leading zero there. Sign questions about the expansion point, such as the sign
 \(-a\) in pair~2, are settled by the same real decision procedure that proves the
 \(\varepsilon\)--\(\delta\) limits of \S\ref{ssec:calc-limit}.
 
+\subsection{Sums and products}
+\label{ssec:calc-sums}
+
+A series is a sum whose terms come from an expansion. \B{Sum} and \B{Product}
+start from the terms and ask for the closed form of the whole. Like \B{Integrate},
+each is a cascade of methods: Gosper's algorithm for hypergeometric terms over a
+symbolic range, the classical summation theorems for hypergeometric series at
+\(z=\pm1\) (Gauss, Kummer, Pfaff--Saalsch\"utz, Dixon, Dougall), rational sums by
+polygamma functions, zeta and Lambert series, and telescoping, \(q\)-, and Euler
+products.\index{summation!closed form}\index{Gosper's algorithm}
+
+\begin{codepairs}
+\pair{calculus/sums/1}{Dobinski's formula: \(\sum_k k^{10}/k!\) is \(e\) times the
+Bell number \(B_{10} = 115975\).}
+\pair{calculus/sums/2}{A Gosper sum over a symbolic range: \(\sum_{k=1}^n k\,2^k =
+2 + 2^{n+1}(n-1)\).}
+\pair{calculus/sums/3}{Dixon's identity, \(\sum_k (-1)^k\binom{2n}{n+k}^3 =
+(3n)!/(n!)^3\), written with \B{Gamma}.}
+\pair{calculus/sums/4}{The Wallis product \(\prod 4k^2/(4k^2-1) = \pi/2\).}
+\end{codepairs}
+
+A closed-form method sums an \emph{analytic continuation}. Given
+\(\sum_{k\ge0}1/k^2\), a zeta-function method sees \(\zeta(2)\) and answers
+\(\pi^2/6\), although the \(k=0\) term is \(1/0\). Given \(\sum 1/k\), a method
+that continues analytically returns a finite value for a series that diverges. The
+summation cascade therefore runs two gates before any closed-form method sees the
+terms.\index{summation!soundness gates}
+
+\begin{codepairs}
+\pair{calculus/sums/5}{A pole on the range: the \(k=0\) term is infinite, so the
+sum is \mcode{ComplexInfinity} (with a \mcode{Power::infy} message at the
+terminal). It is not \(\pi^2/6\).}
+\pair{calculus/sums/6}{The harmonic series diverges. The sum prints \mcode{Sum::div}
+and stays unevaluated.}
+\pair{calculus/sums/7}{A divergent product prints \mcode{Product::div} and stays
+unevaluated. Its \(q\)-Pochhammer ``closed form'' \((2; 2)_\infty\) would have been
+meaningless.}
+\pair{calculus/sums/8}{A product whose partial products tend to \(0\) is \(0\).}
+\pair{calculus/sums/9}{The factor \(k-3\) vanishes at \(k=3\). A telescoping
+answer would hide that zero, so the Pochhammer form is returned. It is right for
+every \(n\): \((-2)_n\) is \(0\) from \(n=3\) on.}
+\pair{calculus/sums/10}{With a symbolic pole \(m\) that the range may or may not
+reach, the sum is left alone.}
+\end{codepairs}
+
+The first gate reads the integer poles of the summand off the linear factors of its
+denominator. Every integer pole of a rational function is one of them. A pole the
+range reaches makes the sum that term's value. A pole that a symbolic bound may or
+may not reach leaves the sum unevaluated. The second gate is a convergence
+classifier for infinite series and products. For a series it uses the ratio test,
+Raabe's test, the \(p\)-test and Bertrand's test on \(k^a\log^b k\) growth, and the
+term test. For a product it uses the limit \(\lambda = \lim k(f_k - 1)\) and the
+same tests on \(f_k - 1\). A term the classifier cannot decide, such as a symbolic
+\(x^k\), does not block a closed form: \(\sum x^k = 1/(1-x)\) is still returned, as
+the formal answer a user expects.
+
+\calloutnote{Under the hood}{Both gates were added in a soundness campaign driven
+by an oracle (\texttt{src/sum/sum\_converge.c} holds the classifier). Every record
+of the oracle compares \B{Sum} or \B{Product} against an independent value: a direct
+enumeration for a finite range, and a high-precision numerical sum for an infinite
+one. Each failure is either fixed or kept in a checked-in baseline, and the baseline
+may only shrink. The campaign removed some twenty silent wrong answers, among them
+\(\sum_{k\ge1}1/(k-3)^2 = 5/4+\pi^2/6\) (the \(k=3\) term is infinite) and
+\(\sum_k (k-3)^2/k!\), which was cut off at the interior zero \(k=3\) and returned
+as \(27/2\) instead of \(5e\).}
+
+\B{HarmonicNumber}\index{harmonic number} is the finite partner of the divergent
+series in pair~6, \(H_n = \sum_{k=1}^n 1/k\).
+
+\begin{codepairs}
+\pair{calculus/sums/11}{\(H_{10}\) is an exact rational.}
+\pair{calculus/sums/12}{\(H_{10^5}\) to thirty digits. The exact rational has a
+denominator of more than 43\,000 digits, and the value is computed in a fraction of
+a second.}
+\end{codepairs}
+
+\calloutnote{Performance}{For a positive integer order, \(H_n^{(r)}\) is computed as
+an exact rational by binary splitting in GMP, with a single gcd at the end:
+\(H_{10^5}\) takes about \(0.2\)~s. The older code built an \(n\)-term \B{Plus} and
+evaluated it, so every addition cost more than the one before it, and
+\(N[H_{10^5}, 30]\) did not finish. A machine-real \(n\) goes to the same
+\texttt{double} helper as the packed-array kernel, so the scalar, packed, and
+\B{Compile} results agree bit for bit.}
+
 \subsection{Residues}
 \label{ssec:calc-residue}
 
@@ -435,6 +578,23 @@ gives \(3/8\).}
 the call is left unevaluated.}
 \end{codepairs}
 
+At an \emph{essential} singularity\index{residue!at an essential singularity} the
+Laurent series has infinitely many negative powers, and no finite expansion can read
+off the \((z-z_0)^{-1}\) coefficient. For the commonest family, a Laurent polynomial
+\(P(w)\) times \(e^{c + aw + b/w}\) with \(w = z - z_0\), the coefficient is known in
+closed form. The coefficient of \(w^{-1}\) in \(w^j e^{aw+b/w}\) is the convolution
+\(\sum_m a^m b^{m+j+1}/\bigl(m!\,(m+j+1)!\bigr)\), which is a modified Bessel function,
+and reduces to \(b^{j+1}/(j+1)!\) when \(a=0\):
+
+\begin{codepairs}
+\pair{calculus/residues/8}{\(e^{1/z} = \sum_m z^{-m}/m!\), so the residue at \(0\)
+is the \(m=1\) coefficient, \(1\).}
+\pair{calculus/residues/9}{\(z^{20}e^{z+1/z}\) at \(0\): the Bessel series
+\(\sum_m 1/(m!\,(m+21)!) = I_{21}(2)\).}
+\pair{calculus/residues/10}{A polynomial factor at a shifted point:
+\(z^2 = (1+w)^2\) contributes \(b + 2\cdot b^2/2! + b^3/3!\).}
+\end{codepairs}
+
 \calloutnote{Under the hood}{For a general integrand the residue is the \(-1\)
 coefficient of \B{Series}; the engine raises the expansion order automatically
 when the pole's order is hidden behind an unknown factor. But a rational function
@@ -451,187 +611,31 @@ where Mathilda uses it as a definite-integration engine in its own right.
 \subsection{Indefinite integration: the Risch story}
 \label{ssec:calc-integrate}
 
-Integration is the centre of this section and the deepest single algorithm in the
-system. Where differentiation is a finite recursion, integration in closed form
-is a genuine decision problem, and the theory that settles it is one of the
-triumphs of twentieth-century computer algebra. We start with the cases that look
-familiar and work toward the machinery that makes them possible.
+Integration is the deepest single algorithm in the system, and it now has a
+chapter of its own: Chapter~\ref{ch:integration}. Where differentiation is a
+finite recursion, integration in closed form is a decision problem. For an
+elementary integrand, \B{Integrate} returns an antiderivative that it has
+differentiated back and checked, or proves that no elementary antiderivative
+exists, or says that it cannot decide. A first look:
 
 \begin{codepairs}
-\pair{calculus/integrate-elementary/1}{Term-by-term integration of a polynomial.}
-\pair{calculus/integrate-elementary/2}{A logarithmic derivative recognised
-directly: \(\int 2x/(x^2+1) = \log(1+x^2)\).}
-\pair{calculus/integrate-elementary/3}{The arctangent, from an irreducible
-quadratic denominator.}
-\pair{calculus/integrate-elementary/4}{A partial-fraction case; the answer combines
-two of the three logarithms into a single quadratic \(\log\).}
-\pair{calculus/integrate-elementary/5}{Two irreducible quadratic factors give a
-mixed \(\log\)/\(\arctan\) answer.}
+\pair{calculus/integrate-intro/1}{A rational function: Hermite reduction and the
+Lazard--Rioboo--Trager algorithm give a real \(\log\)/\(\arctan\) answer.}
+\pair{calculus/integrate-intro/2}{\(e^{-x^2}\) has no elementary integral, so the
+answer is the special function named for it, \B{Erf}.}
+\pair{calculus/integrate-intro/3}{An algebraic function on a curve of genus~3,
+integrated by Trager's algorithm.}
+\pair{calculus/integrate-intro/4}{\(\int\sqrt{x+\log x}\,dx\): a radical over a
+logarithm. Bronstein's algorithm proves it is not elementary, and the message is
+the proof's verdict.}
 \end{codepairs}
 
-These are all \emph{rational} integrands, and for them integration is completely
-solved.\calloutnote{Under the hood}{The rational integrator
-(\texttt{src/calculus/intrat.c}) is a faithful implementation of the modern
-pipeline: \emph{Hermite reduction}\index{Hermite reduction} splits off the part
-of the answer that is itself rational (the repeated-pole part), leaving a
-residual with a square-free denominator; the \emph{Lazard--Rioboo--Trager}
-algorithm\index{Rothstein--Trager} then produces the logarithmic part as a sum
-\(\sum_i c_i\log(g_i)\) whose constants \(c_i\) are the roots of a
-resultant---never by an undetermined-coefficient solve. Rioboo's conversion turns
-each complex-conjugate pair of logarithms into a real \(\arctan\), which is why
-pair~5 comes out in real form. For plain rational inputs the heavy polynomial
-arithmetic is handed to FLINT~\cite{flint}; the classical account is
-Geddes--Czapor--Labahn~\cite{gcl}. Every branch ends at the same universal check:
-\(\operatorname{Cancel}[\operatorname{Together}[D[\text{result}]-f]]\) must be
-\(0\).} Rational functions of radicals are next, rationalised by the right
-substitution:
-
-\begin{codepairs}
-\pair{calculus/integrate-elementary/6}{A rational function of \(\sqrt x\),
-rationalised by \(u=\sqrt x\).}
-\pair{calculus/integrate-elementary/7}{A square root of a quadratic, handled by a
-Euler substitution.}
-\end{codepairs}
-
-Now the mathematics deepens. Many perfectly innocent-looking integrands have
-\emph{no} antiderivative among the elementary functions---and this is a theorem,
-not a gap. \emph{Liouville's theorem}\index{Liouville's theorem} says that if an
-elementary function has an elementary antiderivative, that antiderivative has a
-very restricted shape: the original function plus a sum of constant multiples of
-logarithms of elementary functions. When no such shape exists, the integral is
-provably non-elementary, and the honest answer is a \emph{new} function named for
-exactly that integral.
-
-\begin{codepairs}
-\pair{calculus/integrate-special/1}{Integration by parts, done for you:
-\(\int x e^x = (x-1)e^x\).}
-\pair{calculus/integrate-special/2}{\(e^{-x^2}\) has no elementary integral, so
-the answer is the error function \B{Erf}.}
-\pair{calculus/integrate-special/3}{\(e^x/x\) gives the exponential integral
-\B{ExpIntegralEi}.}
-\pair{calculus/integrate-special/4}{\(1/\log x\) is the logarithmic integral,
-returned as \(\operatorname{Ei}(\log x)\).}
-\pair{calculus/integrate-special/5}{\(\sin x/x\) gives the sine integral
-\B{SinIntegral}.}
-\pair{calculus/integrate-special/6}{A dilogarithm\index{dilogarithm} appears:
-\(\int \log x/(1+x) = \log x\log(1+x) + \operatorname{Li}_2(-x)\).}
-\pair{calculus/integrate-special/7}{And a genuine polylogarithm ladder for
-\(x/(e^x-1)\), the Bose--Einstein integrand.}
-\end{codepairs}
-
-Each of these is correct \emph{by construction}: the algorithm certifies that no
-elementary form exists before it reaches for the special function, so \B{Erf},
-\B{ExpIntegralEi}, \B{SinIntegral}, and \B{PolyLog} are not approximations or
-placeholders---they are the exact antiderivatives, and their appearance is a
-statement about the integrand.\calloutnote{Theory}{The engine behind pairs~2--7
-is the \emph{Risch algorithm}\index{Risch algorithm}
-(\texttt{src/calculus/integrate\_risch\_transcendental.c}), the decision
-procedure for integration in a differential field built by adjoining
-exponentials and logarithms one at a time. Its heart is the
-\emph{Risch differential equation}: closing the exponential part of an integral
-amounts to solving \(q' + f'q = p\) for a polynomial \(q\), which Mathilda does by
-Bronstein's polynomial-time SPDE reduction rather than an undetermined-coefficient
-blow-up. Layered above the base algorithm are engines for the special-function
-answers: a Gaussian recogniser for \B{Erf}, Cherry's algorithms for the exponential
-and logarithmic integrals and the \emph{polylogarithm ladder}\index{polylogarithm
-ladder} \(\int x^n/(e^{cx}-\rho)\), and a dilogarithm recogniser. When the field
-decision proves an integral non-elementary but the special-function engines cannot
-name it, the integral is returned unevaluated with an \texttt{Integrate::nonelem}
-message explaining why.}
-
-The book promised to be explicit about what is decidable, and integration lets it
-keep the promise directly. The predicate that decides elementary integrability is
-exposed:
-
-\begin{codepairs}
-\pair{calculus/elementary-q/1}{\(e^x/x\) is \emph{not} elementary---a proof, not a
-timeout.}
-\pair{calculus/elementary-q/2}{Nor is \(e^{x^2}\).}
-\pair{calculus/elementary-q/4}{But \(e^x/(1+e^x)\) is: its integral is
-\(\log(1+e^x)\).}
-\pair{calculus/elementary-q/5}{And \(\sin x/x\) is not---the sine integral is the
-statement that it is not.}
-\end{codepairs}
-
-A \texttt{False} here is backed by an exact certificate---a non-constant residue,
-or a Risch differential equation with no rational solution---so it means ``no
-elementary antiderivative exists,'' never ``I gave up.'' This soundness is
-purchased at a real cost, which is worth seeing:
-
-\begin{codepairs}
-\pair{calculus/elementary-q/6}{A correct answer in an awkward dress:
-\(\int\cos(\log x)\) is real, but printed through complex powers of \(x\).}
-\end{codepairs}
-
-\calloutnote{Pitfall}{The output of pair~6 is exactly
-\(\tfrac{x}{2}(\cos\log x + \sin\log x)\)---but Mathilda returns it as
-\((\tfrac14-\tfrac{i}4)x^{1+i}+(\tfrac14+\tfrac{i}4)x^{1-i}\), a genuinely real
-quantity written with conjugate complex exponents. The transcendental integrator
-reaches trigonometric integrands by exponentialising with \(\cos =
-(e^{i\cdot}+e^{-i\cdot})/2\), and the current simplifier does not always fold the
-result back to real form. The value is right and \(\B{N}\) confirms it; the form is
-a known cosmetic limitation, not an error. Prefer the algebraic routes when a real
-closed form matters.}
-
-Two further capabilities of \B{Integrate} deserve mention, because they reach
-integrands the classical Risch algorithm alone cannot. The first is the
-\texttt{"ParallelMixedTower"}\index{ParallelMixedTower method} method, a parallel
-Risch--Norman integrator over a \emph{mixed} transcendental tower that may contain
-a square root anywhere in its structure. It is what closes hard algebraic-function
-integrals such as the classic \(\int\sqrt{\tan x}\):
-
-\begin{codepairs}
-\pair{calculus/integrate-special/8}{\(\int\sqrt{\tan x}\,dx\): a mixed radical
-tower, closed in real \(\arctan\)/\(\log\) form.}
-\end{codepairs}
-
-The parallel method treats the whole integrand as living in a differential field
-built over rational operations, one square root, and \(\log\)/\(\exp\)/\(\tan\) of
-field elements, and solves for the antiderivative by an ansatz whose unknowns are
-found by linear algebra---then verifies every result by re-differentiating before
-returning it, so a case it cannot realise correctly declines rather than escaping
-as a wrong answer. The second is Feynman's trick,
-\texttt{"DiffUnderInt"}---differentiation under the integral sign---which belongs
-to definite integration and is taken up next.
-
-Much of the cascade's day-to-day work is less glamorous, and it is where speed is
-won or lost. Three smaller stages illustrate the range:
-
-\begin{codepairs}
-\pair{calculus/integrate-newer/1}{A shared linear argument \(3x\) is substituted
-away before the Weierstrass stage sees it, so \(\int\sec^2 3x = \tfrac13\tan 3x\)
-rather than a high-degree rational in \(\tan(x/2)\).}
-\pair{calculus/integrate-newer/2}{A logarithm times a trigonometric kernel, by one
-integration by parts: the residual \(\int\cos x/x\) is the cosine integral
-\B{CosIntegral}.}
-\pair{calculus/integrate-newer/3}{A \emph{holonomic} answer: \(1/\operatorname{Ai}^2\)
-integrates to \(\pi\operatorname{Bi}/\operatorname{Ai}\), by the Wronskian of the two
-Airy functions.}
-\pair{calculus/integrate-newer/4}{A Bessel product closed in its own differential
-module: \(\int xJ_0^2 = \tfrac{x^2}2(J_0^2+J_1^2)\).}
-\end{codepairs}
-
-Pair~2 is the log-by-parts\index{integration by parts!logarithmic} stage: for \(c\log g(x)\,K(x)\) with a trigonometric
-or hyperbolic kernel \(K\), it does the single step \(\int\log g\,K=\log g\,V-\int
-V\,g'/g\) with \(V=\int K\), and accepts the result only if it differentiates back
-exactly.\calloutnote{Performance}{Before the stage existed, \(\int\log x\sin x\)
-fell through to the general \texttt{"ParallelMixedSpecial"} search and took about
-\(5\)~s; the stage closes it in roughly a tenth of a second, and the integral now
-costs well under that on this build. The saving matters most inside \mcode{DSolve},
-whose variation-of-parameters quadratures produce exactly this shape:
-\(y''+4y=\log x\) dropped from over \(9\)~s to about a third of a second, and solves
-in under that here.} Pairs~3 and~4 are
-the \texttt{"Holonomic"}\index{holonomic function} stage. Bessel, Airy, and
-sine/cosine kernels of a linear argument each span a two-dimensional space closed
-under \(d/dx\), so a power of \(x\) times a product of them lies in a
-finite-dimensional \emph{differential module}; one linear system then finds the
-antiderivative inside that module, or the stage declines. For
-\(1/\operatorname{Ai}^2\) a second route applies: with \(t=\operatorname{Bi}/\operatorname{Ai}\)
-we have \(t' = W/\operatorname{Ai}^2\) where the Wronskian \(W=1/\pi\) is constant, so the
-integral is \(\pi t\). Every holonomic answer is re-checked symbolically before it
-is returned.
-
-\usagebox{Integrate}
+Chapter~\ref{ch:integration} explains each of these: rational functions
+(\S\ref{sec:int-rational}), the transcendental Risch tower
+(\S\ref{sec:int-tower}), Trager's algorithm for algebraic functions
+(\S\ref{sec:int-trager}), Bronstein's algorithm for mixed integrands
+(\S\ref{sec:int-bronstein}), and the cascade that combines them
+(\S\ref{sec:int-cascade}).
 
 \subsection{Definite integration}
 \label{ssec:calc-definite}
@@ -929,6 +933,156 @@ indefinite records, each checked numerically, whose construction exposed and fix
 seven correctness bugs elsewhere in the system. Coverage there is far from complete;
 the wrong-answer count is zero.}
 
+\subsection{Meijer \texorpdfstring{\(G\)}{G}-functions, elliptic integrals, and the reference table}
+\label{ssec:calc-meijer}
+
+The convolution stage of the previous subsection handles a few kernel pairs. The
+same idea, carried through in full, is an algorithm in its own right. Adamchik and
+Marichev observed that almost every special function of mathematical physics is a
+Meijer \(G\)-function of a power of \(x\), and that the Mellin transform of a product
+of two \(G\)-functions is again one \(G\)-function.\index{Adamchik--Marichev
+algorithm}\index{Meijer G-function@Meijer \(G\)-function!integration by} Kelly Roach
+turned that observation into a working integrator, and \texttt{Method -> "Roach"}
+implements it. The steps are these:
+\begin{enumerate}
+\item Map the interval to \((0,\infty)\). A finite interval becomes an indicator
+function, \(\theta(1-y)\).
+\item Write every factor as a \(G\)-function, from the table of Prudnikov,
+Brychkov, and Marichev (\S8.4).
+\item Apply the Mellin transform to one \(G\), or the convolution theorem to two,
+after Gauss's multiplication formula has brought their arguments to a common power.
+\item Decide the theorem's validity conditions under your assumptions, condition by
+condition. An undecided condition yields a \B{ConditionalExpression}.
+\item Reduce the resulting \(G\)-function to named functions where it can be
+reduced, by the Formula algorithm behind \B{FunctionExpand}.
+\end{enumerate}
+Every answer is then checked against \B{NIntegrate} at a point the assumptions
+allow, before it is returned. The stage runs in the automatic cascade as a late
+fallback, after Newton--Leibniz and every table stage, so it only sees integrals
+that all of them declined.
+
+\begin{codepairs}
+\pair{calculus/definite-meijer/1}{A Laplace transform of \(J_0^2\): the product of
+two Bessel functions becomes one \(G\)-function, which reduces to a complete
+elliptic integral, \(2K(-4b^2/a^2)/(\pi a)\).}
+\pair{calculus/definite-meijer/2}{The sine integral against an exponential:
+\((\arctan(a/b)-\pi/2)/b\).}
+\pair{calculus/definite-meijer/3}{A Bose--Einstein-type kernel with a cube root.
+Here two indicator \(G\)-functions jump at the same point, a case the conditions of
+the convolution theorem exclude, so the stage takes another route. The value is the
+one Roach printed.}
+\pair{calculus/definite-meijer/4}{A Lerch-type kernel: \(\int_0^\infty x^2
+\operatorname{csch}(x)\,e^{-2nx}\,dx = \tfrac12\zeta(3, n+\tfrac12)\).}
+\pair{calculus/definite-meijer/5}{The square of a \(G\)-function factor is treated
+as two \(G\)-functions: \(\int_0^\infty K_0^2 = \pi^2/4\).}
+\end{codepairs}
+
+Most of these come from Roach's own test set of thirty integrals. Through the default
+\B{Integrate}, the set went from seven closed forms to twenty-five as these stages
+were added.
+
+Seven of Roach's thirty are \emph{elliptic}: the integrand is a rational function of
+\(x\) and \(\sqrt{P(x)}\), with \(P\) a squarefree cubic or quartic. Such an integral
+reduces to the Legendre forms \B{EllipticF}, \B{EllipticE}, \B{EllipticPi}, and
+\B{EllipticK}, plus elementary terms.\index{elliptic integral!definite} A real change
+of variables makes \(P\) even, in each of the root configurations (four real roots,
+two real and a complex pair, two complex pairs, and cubics). Carlson's symmetric
+reduction then gives the value, which is converted exactly to Legendre form. Every
+result is checked at 30 digits against the stage's own 90-digit double-exponential
+quadrature, and a mismatch returns the integral unevaluated:
+
+\begin{codepairs}
+\pair{calculus/definite-meijer/6}{Four real roots \(\pm1, \pm2\), integrated
+between two of them: \(\tfrac12K(\tfrac14)\).}
+\pair{calculus/definite-meijer/7}{The arc length of an ellipse, in the trigonometric
+spelling: \(E(k^2)\). \B{EllipticE} takes the parameter \(m=k^2\), not the modulus.}
+\end{codepairs}
+
+The same Meijer-\(G\) tables serve the indefinite integrator. A product of two
+Bessel functions of one family, \(x^m Z_\mu(bx^p)\,Z_\nu(bx^p)\), has a
+hypergeometric antiderivative. The series route multiplies the two series, sums the
+product by Chu--Vandermonde into a \({}_2F_3\), and integrates term by term. When the
+reflection formula of a \(Y\) or \(K\) of integer order would divide by zero, a
+Mellin--Barnes integral gives a \(G\)-function instead:\index{Bessel
+function!integrals of products}
+
+\begin{codepairs}
+\pair{calculus/definite-meijer/8}{\(\int J_{1/3}^2\,dx\) as a \({}_2F_3\).}
+\pair{calculus/definite-meijer/9}{\(\int K_0\,dx\) as a \(G\)-function of
+\(x^2/4\).}
+\end{codepairs}
+
+The last stage of both cascades is a reference table. \texttt{Method -> "GRTable"}
+answers from 3\,745 formulas of Gradshteyn and Ryzhik (seventh edition, chapters
+2--7 and 17): 432 antiderivatives and 3\,313 definite
+integrals.\index{Gradshteyn and Ryzhik table} The table holds only formulas that
+the rest of the cascade does not close, so it never changes an answer the
+algorithms give. A formula is matched by unification. Each \(x\)-free subterm of
+the integrand becomes a slot, the record's parameters are solved from the slots, and
+the book's side conditions are settled by \B{Refine} under your assumptions:
+
+\begin{codepairs}
+\pair{calculus/definite-meijer/10}{The ``sophomore's dream'',
+\(\int_0^1 x^{-x}\,dx = \sum_{n\ge1} n^{-n}\), served by the table as an exact
+series.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{A printed table of integrals has errors. Before a formula was
+admitted, its stated conditions were audited: points the conditions allow were
+sampled, and each value was compared with \B{NIntegrate}. 267 of the definite
+formulas disagreed somewhere on their stated domain, and they were left out.
+Two more were corrected by hand from first principles. Three records gave a decimal
+where the value is exact, and these now have their exact values. Every answer the
+table gives is also checked numerically when it is returned: by \B{NIntegrate} for a
+definite integral, and by differentiation for an antiderivative.}
+
+\subsection{The Laplace transform}
+\label{ssec:calc-laplace}
+
+The one-sided Laplace transform\index{Laplace transform}
+\[
+  \mathcal{L}[f](s) = \int_0^\infty f(t)\,e^{-st}\,dt
+\]
+turns differentiation into multiplication by \(s\), which is why engineers use it
+to solve linear differential equations with step and impulse forcing.
+\mcode{LaplaceTransform[f, t, s]} computes it in four steps. It applies linearity
+and threads over lists. It moves an exponential factor into a shift,
+\(e^{at+b}g(t) \mapsto e^b G(s-a)\). It sends a \(t\)-free term \(c\) to \(c/s\).
+Anything else goes to the defining integral, under the assumption \(s>0\):
+
+\begin{codepairs}
+\pair{calculus/laplace/1}{The power rule, \(\mathcal{L}[t^n] = n!/s^{n+1}\), at
+\(n=3\).}
+\pair{calculus/laplace/2}{A list is transformed element by element.}
+\pair{calculus/laplace/3}{The shift theorem moves \(e^{3t}\) into \(s-3\).}
+\pair{calculus/laplace/4}{A damped cosine: the shift \(s \mapsto s+2\) applied to
+\(s/(1+s^2)\).}
+\pair{calculus/laplace/5}{A symbolic frequency needs its sign.}
+\pair{calculus/laplace/6}{A symbolic power gives \(\Gamma(n+1)/s^{n+1}\) for
+\(n>-1\).}
+\pair{calculus/laplace/7}{A delayed step: \(e^{-2s}/s\).}
+\pair{calculus/laplace/8}{Lipschitz's integral, \(\mathcal{L}[J_0] =
+1/\sqrt{1+s^2}\).}
+\pair{calculus/laplace/9}{\(\mathcal{L}[\sin t/t] = \arctan(1/s)\), the integral
+of \(\mathcal{L}[\sin t]\) from \(s\) to \(\infty\).}
+\pair{calculus/laplace/10}{A logarithm brings in Euler's constant.}
+\pair{calculus/laplace/11}{A rectified sine, periodic with period \(\pi\):
+\((1+e^{\pi s})/\bigl((e^{\pi s}-1)(1+s^2)\bigr)\).}
+\pair{calculus/laplace/12}{\(\cosh 2t\) grows like \(e^{2t}\). Its defining
+integral does not converge for every \(s>0\), so the transform is returned
+unevaluated.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Pair~12 is a real limitation, not a divergence. The transform
+of \(\cosh 2t\) is \(s/(s^2-4)\) on \(s>2\), but the defining integral is attempted
+only under \(s>0\), so a kernel that grows exponentially is declined. Write it as
+exponentials (\B{TrigToExp}) and the shift rule applies term by term. Two more gaps
+are worth knowing. There is no \mcode{InverseLaplaceTransform}. And the transform of
+an unknown function's derivative, \mcode{LaplaceTransform[f'[t], t, s]}, is not
+rewritten as \(s\,\mathcal{L}[f] - f(0)\). So the transform is not yet a route to
+solving a differential equation. For that, \B{DSolve} has its own step and impulse
+solvers (\S\ref{ssec:calc-dsolve}).}
+
 \subsection{Differential equations}
 \label{ssec:calc-dsolve}
 
@@ -1087,9 +1241,41 @@ with several leading derivatives in one equation, and an \emph{inverse orientati
 method\index{inverse orientation} that retries a stubborn \(y'=F(x,y)\) as
 \(dx/dy=1/F\), where it is often a Bernoulli or linear equation, and returns the
 implicit first integral. Their yardstick is Nasser Abbasi's public corpus of
-textbook differential equations; on its most recent batch of 500 problems
-(Problems 5001--5500), \mcode{DSolve} solves 462, and every section of the corpus is
-gated at zero wrong answers: what it cannot solve, it returns unevaluated.
+textbook differential equations\index{DSolve corpus@\mcode{DSolve} corpus}. On the
+thousand problems most recently added to it (Problems 5501--6500, the Kamke and
+Polyanin equations of its sections 2.2.56--2.2.65), \mcode{DSolve} solves 843, up from
+699 before the methods below were written. Every section of the corpus is gated at zero
+wrong answers: what it cannot solve, it returns unevaluated, and a verifier built on
+\B{PossibleZeroQ} alone checks each answer by back-substitution.
+
+Three of the newer families are easy to show:
+
+\begin{codepairs}
+\pair{calculus/dsolve-newmethods/1}{A Fuchsian equation with exactly three regular
+singular points, \(0\), \(1\), and \(\infty\). A M\"obius map and an exponent shift
+bring any such equation to Gauss's hypergeometric equation. Here the exponents are
+logarithmic, and the answer is elementary.}
+\pair{calculus/dsolve-newmethods/2}{\(\sin y' + y' = x\) cannot be solved for \(y'\).
+With \(y' = t\) as a parameter, \(x = t + \sin t\), and \(y\) is one quadrature. The
+answer is a parametric curve.}
+\pair{calculus/dsolve-newmethods/3}{A cubic in \(y'\), parametrised the same way.}
+\pair{calculus/dsolve-newmethods/4}{A nonlinear second-order equation that is
+homogeneous in \(y\). The substitution \(u = y'/y\) lowers its order, and the solution
+is \(y = e^{C_2}x^{C_1}\).}
+\end{codepairs}
+
+\calloutnote{Theory}{Pair~1 is the method of \emph{Riemann's
+\(P\)-symbol}\index{Riemann P-symbol@Riemann \(P\)-symbol}. A second-order linear
+equation whose only singular points are three regular singular points is fixed by
+those points and the two exponents at each, and a M\"obius transformation moving the
+points to \(0, 1, \infty\), followed by the factor \(x^\alpha(1-x)^\beta\), turns it
+into the hypergeometric equation. The finite points may be symbolic or radical.
+\mcode{DSolve`RiemannP} tries all six assignments of the points to \(\{0, 1,
+\infty\}\) and checks every answer numerically at complex sample points. Pairs~2
+and~3 belong to a parametric-quadrature method for equations with \(x\) or \(y\)
+missing, and pair~4 to \mcode{DSolve`ScalingReduction}, which tries three linear
+symmetries: homogeneity in \(y\) (\(u = y'/y\)), isobaric scaling (\(y = x^k
+u(\log x)\)), and translation (\(v = y + \rho x\)).}
 
 Two engines stand out for their generality. The first is the Lie point-symmetry
 method, the general backstop for first-order equations.\calloutnote{Theory}{A
@@ -1119,8 +1305,8 @@ mathematical physics.
 characteristics\index{method of characteristics}: an arbitrary function of
 \(x-ct\).}
 \pair{calculus/dsolve-pde/2}{A first-order PDE with a lower-order term and forcing.}
-\pair{calculus/dsolve-pde/3}{The wave equation as an initial-value problem, by
-d'Alembert's formula\index{d'Alembert's formula}.}
+\pair{calculus/dsolve-pde/3}{The wave equation as an initial-value problem. The
+data \(\sin x\) give the standing wave \(\cos(ct)\sin x\).}
 \pair{calculus/dsolve-pde/5}{A Sturm--Liouville\index{Sturm--Liouville problem}
 eigenvalue problem: the eigenvalues \(n^2\) and eigenfunctions \(\sin(nx)\).}
 \end{codepairs}
@@ -1128,13 +1314,50 @@ eigenvalue problem: the eigenvalues \(n^2\) and eigenfunctions \(\sin(nx)\).}
 The arbitrary function \texttt{C[1][\ldots]} in pairs~1 and~2 is the PDE analogue
 of an integration constant---a first-order PDE's general solution contains an
 arbitrary \emph{function}, not merely a constant, and it is a function of the
-characteristic coordinate the equation is constant along. Pair~3 is d'Alembert's
-formula for the vibrating string, and pair~5 is the eigenvalue quantisation that
-underlies every separated boundary-value problem, returned as a
-\B{ConditionalExpression} indexed by an integer. The heat equation is solved by
-its Gaussian kernel; because that convolution is non-elementary for a general
-initial condition, Mathilda keeps it as an integral rather than inventing a closed
-form---the same honesty about non-elementarity that governs \B{Integrate}.
+characteristic coordinate the equation is constant along. Pair~3 is still
+d'Alembert's formula\index{d'Alembert's formula} for the vibrating string,
+\(u = \tfrac12\bigl(u_0(x+ct) + u_0(x-ct)\bigr)\), but in a different spelling: for
+\(u_0 = \sin x\) the two travelling waves add to \(\cos(ct)\sin x\) by the
+sum-to-product identity. The answer comes in that form because a newer layer, described
+below, solves the problem first and finds the separated solution. Pair~5 is the
+eigenvalue quantisation that underlies every separated boundary-value problem,
+returned as a \B{ConditionalExpression} indexed by an integer. The heat equation is
+solved by its Gaussian kernel; because that convolution is non-elementary for a
+general initial condition, Mathilda keeps it as an integral rather than inventing a
+closed form---the same honesty about non-elementarity that governs \B{Integrate}.
+
+For concrete initial data, the PDE cascade has an \emph{initial-value
+layer}\index{partial differential equation!initial-value problems} that runs before
+d'Alembert's formula and the heat kernel. It looks for a family of solutions that
+contains the data. Three families are tried: an amplitude \(\theta(t)\,u_0(x)\), a
+travelling wave \(u_0(x-ct)\), and an exponential polynomial
+\(c_0\exp\bigl(\sum_m \theta_m(t)\,x^m\bigr)\). Substituting a family into the
+equation, the \(x\)-dependence must cancel. What is left is an ordinary differential
+equation in \(t\) for the family's parameters, which \B{DSolve} solves with the data as
+initial values. Half-line problems with a boundary value get a similarity variable
+\(y/\sqrt t\) instead.
+
+\begin{codepairs}
+\pair{calculus/dsolve-pde-ivp/1}{The heat equation with Gaussian data stays
+Gaussian. Its width grows like \(\sqrt{1+4t}\).}
+\pair{calculus/dsolve-pde-ivp/2}{The wave equation with Gaussian data: here
+d'Alembert's two travelling halves are visible. The speed appears as
+\(\sqrt{c^2}\) because the sign of \(c\) is not known.}
+\pair{calculus/dsolve-pde-ivp/3}{The inviscid Burgers equation \(u_t + uu_x = 0\)
+with linear data. The amplitude family \(\theta(t)\,x\) gives \(\theta' = -\theta^2\),
+so \(u = x/(1+t)\).}
+\pair{calculus/dsolve-pde-ivp/4}{The Korteweg--de Vries equation with
+soliton data. The travelling-wave family finds the speed \(c = 1\).}
+\pair{calculus/dsolve-pde-ivp/5}{Stokes' first problem: a fluid at rest above a
+plate set moving at speed \(U\). The similarity variable gives an error-function
+profile.}
+\pair{calculus/dsolve-pde-ivp/6}{Liouville's equation \(u_{xy} = e^u\) has a general
+solution in two arbitrary functions, \(C_1(x)\) and \(C_2(y)\).}
+\end{codepairs}
+
+Every one of these answers is substituted back into the equation and into each
+condition before it is returned. A condition at a point where the answer is singular,
+such as Stokes' profile at \(t=0\), is checked as a one-sided limit.
 
 \usagebox{DSolve}
 

@@ -1,0 +1,11 @@
+# D: the one-element spec, products of non-commuting factors, sums and products, Bessel order
+D[x^3 Sin[x], {x}]
+D[a[x] . b[x], x]
+D[a[x] ** b[x], x]
+D[Cross[{x, x^2, 1}, {1, x, x^3}], x]
+D[Sum[c[k] x^k, {k, 0, n}], x]
+D[Sum[x^k/k, {k, 1, n}], x]
+D[Product[f[k, x], {k, 1, n}], x]
+D[BesselJ[nu, z], z]
+D[BesselJ[nu, z], nu]
+N[Derivative[1, 0][BesselJ][3/8, 5/8]]
