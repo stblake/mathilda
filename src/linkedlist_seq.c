@@ -51,6 +51,11 @@ bool ll_view(const Expr* coll, LLView* v) {
         ll_gather(ll, 0, n, v->a);                     /* borrowed ... */
         for (int64_t i = 0; i < n; i++) v->a[i] = expr_copy(v->a[i]);   /* ... held */
     } else {
+        /* Boxing every typed slot into one array IS a List of the elements
+         * in all but its head: counted, so the audit names every head that
+         * still takes this path (a typed list wants a raw kernel or a span
+         * copy instead). */
+        ll_note_materialised();
         for (int64_t i = 0; i < n; i++) v->a[i] = ll_get(ll, i);
     }
     return true;

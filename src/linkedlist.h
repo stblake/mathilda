@@ -194,6 +194,9 @@ Expr* ll_to_list(const LinkedList* ll);
 /* Whole-list materialisations since startup (ll_to_list, ll_block). Only
  * Normal may materialise a LinkedList; every other head reads the chunks. */
 uint64_t ll_materialise_count(void);
+/* Count a materialisation that bypasses ll_to_list: an array of boxes of
+ * every element of a typed list (ll_view) is a List in all but its head. */
+void     ll_note_materialised(void);
 
 /* Would storing `e` (borrowed) into `target` make `target` reachable from
  * itself -- a reference cycle no refcount could free? Mutators reject it. */

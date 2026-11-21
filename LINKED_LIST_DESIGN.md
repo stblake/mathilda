@@ -74,7 +74,19 @@ Legend:
 
 **Plain Lists.** `Push`, `Pop` and `PopFirst` also accept a symbol whose value is a plain List. They rebind it the way `AppendTo` does, which is O(n), so code written for a stack works on either representation.
 
-**Every other head** sees an opaque atom and treats it as it would an atom it does not know about. The table above is the complete overload set; growing it is a deliberate, documented change.
+**Every other head** (phase 6, the "LinkedList everywhere" campaign of 2026-11) treats a LinkedList as the List of its elements, so `H[ll, ...]` answers what `H[Normal[ll], ...]` answers. The table above lists the heads that predate that campaign. The rules that govern the rest are below.
+
+- **No conversion.** A head reads the chunks through `ll_span_at` / `LLCursor`, `ll_elem_view` or `ll_seq_element`. It never builds a List, packed List or NDArray of the elements; only `Normal` does. The counter `Internal`LinkedListConversionCount[]` makes this checkable, and `make check-linkedlist` asserts it for every head.
+  - An algorithm that needs random access across the whole sequence (sorting, a median, an FFT) may gather the slots into a raw scratch buffer (`ll_gather`).
+  - The machine engines take their operands through the container-free `NDOperand` cores (`src/ndarray.h`), which is how Listable threading reaches the very kernels a packed List does.
+- **Bit-identical to `Normal`.** `Normal[ll]` of typed storage is packed, and where the List heads answer a packed and a plain List differently, a LinkedList follows its own `Normal`.
+- **Closure.** A head that returns a List for a List returns a LinkedList for a LinkedList.
+  - Sub-sequences of the argument (Partition, Split and Gather groups, Subsets, Cases, Select) are LinkedLists.
+  - Fixed-shape records (Position index lists, Tally pairs, MinMax, Dimensions) and constructors such as `Table` and `Level` stay Lists.
+- **A rank-1 container, not a List.** VectorQ, MatrixQ, ArrayQ, Dimensions, Depth, Level, Position, Cases, FreeQ, Apply, Replace and the iterators see its elements one level down, with no head part. `ListQ[ll]` is False and `{__}` does not match it.
+- **Snapshots.** A head that runs user code per element (Map, Select, Scan, Fold, the tests, the iterators `{i, ll}`, a `:>` replacement) reads a shallow `ll_copy` taken first. A callback that changes the list therefore changes neither the walk nor its length, just as for a List: `Do[AppendTo[ll, i], {i, ll}]` runs once per original element.
+- **Identity.** ReplaceAll and Replace return the list itself when nothing matched. Any change gives a new LinkedList.
+- **Values are stored evaluated.** The evaluator never looks inside a LinkedList, so a walker that builds new elements (Map at a level, MapIndexed, MapAt, Apply below level 0) evaluates each one as it stores it. A Throw or Abort raised there leaves the head instead of being stored.
 
 ### 3.3 Examples
 
@@ -207,7 +219,12 @@ The regression test for this is `ll = LinkedList[]; Table[AppendTo[ll, i]; Lengt
 
 - **Into typed storage.** `LinkedList[packed | NDArray]`, `Join[ll, packed]` and Part assignment with a packed right-hand side copy the buffer straight into typed chunks.
 - **Out of typed storage.** `Normal[ll]` builds an NDArray buffer straight from the chunks and returns it through `pack_offer`, so whether it comes back packed follows the usual rule.
-- **Listable threading.** A LinkedList argument threads like a List (every LinkedList argument the same length, the rest scalars) and the result is a LinkedList. With typed storage and a registered machine kernel (`src/ndkernels.c` and the rest), the kernel runs on each chunk's raw buffer. The kernel is the same one that serves packed arrays and `Compile[]`, so a LinkedList, a packed List and compiled code give bit-identical results.
+- **Listable threading.** A LinkedList argument threads like a List (every LinkedList argument the same length, the rest scalars) and the result is a LinkedList. There are three paths, in order:
+  1. Machine reals through a unary kernel, `Plus` or `Times` go chunk to chunk (`ll_listable_direct`).
+  2. Every other registered kernel, and the buffer arithmetic of `Plus`, `Times` and `Power`, runs through the engines' `NDOperand` cores (`ll_listable_engine`). The slots are handed over in place when one ascending span holds them, else gathered once into a raw buffer.
+  3. Anything else evaluates `head[a1_i, ...]` element by element from snapshots.
+
+  The kernels are the ones that serve packed arrays and `Compile[]`, so a LinkedList, a packed List and compiled code give bit-identical results.
 - **`AWARE` list.** `LinkedList` goes on `AWARE` (and `INT64_OK`) in `src/pack.c`, and `Join`, `Append` and `Part` must be on it too, so packed operands reach the LinkedList code without being unpacked first.
 - **Audit probes.** `check-nd-surfaces` and `check-array-exactness` get LinkedList probes over all three input representations.
 
@@ -393,3 +410,4 @@ Each phase is one commit with a version bump and a tag.
 | 3 | mutators (`AppendTo`, `PrependTo`, `Push`/`Pop`/`PopFirst`, full-spec Part assignment), cycle check |
 | 4 | copying heads, full-spec `Delete`, Listable threading with machine kernels |
 | 5 | `Compile[]` lowering, then auto-compilation |
+| 6 | everywhere a List works: the audit (`make check-linkedlist`) and conversion counter; Map, Select and Listable reading the slots (`NDOperand` cores, `NumFn`); level walkers, functional and threading heads, structure queries, iterators; sorting, sets and grouping; strings and statistics; vector numerics and symbolic mappers (§3.2) |

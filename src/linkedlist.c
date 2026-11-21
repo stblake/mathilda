@@ -77,6 +77,7 @@ static uint64_t g_ll_next_id = 1;
 static uint64_t g_ll_materialised = 0;
 
 uint64_t ll_materialise_count(void) { return g_ll_materialised; }
+void     ll_note_materialised(void) { g_ll_materialised++; }
 
 static Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n);
 
@@ -1277,10 +1278,13 @@ void linkedlist_init(void) {
         "\tLinkedList[ll] returns an independent shallow copy of the linked list ll.\n"
         "\tAssignment and argument passing share the same list rather than copying\n"
         "\tit: AppendTo, PrependTo, Push, Pop, PopFirst and Part assignment change it\n"
-        "\tin place, while Part, Take, Drop, Most, Rest, Reverse, Append, Prepend,\n"
-        "\tJoin, Insert, Delete, ReplacePart, Map, Select and Listable functions\n"
-        "\t(Sin[ll], ll + 1) return a new LinkedList. Normal[ll] gives the elements\n"
-        "\tas a List. Prints as LinkedList[<n>].\n"
+        "\tin place. Every other function treats it as the List of its elements,\n"
+        "\tworking on the chunks directly (never converting it to a List): one that\n"
+        "\tgives a List for a List (Take, Reverse, Map, Select, Sort, Partition,\n"
+        "\tSin[ll], ll + 1, ...) gives a new LinkedList, one that gives a number or\n"
+        "\trecord (Total, Mean, Position, Tally) gives the same as for the List;\n"
+        "\t{i, ll} iterates in Table, Do, Sum and Product. ListQ[ll] is False.\n"
+        "\tNormal[ll] gives the elements as a List. Prints as LinkedList[<n>].\n"
         "\tIt is not a cons list: the elements are stored in chunks whose sizes\n"
         "\tdouble, reached through a fixed table, so ll[[i]] and ll[[i]] = v are\n"
         "\tO(1), like an array, and appending, prepending and popping at either end\n"
