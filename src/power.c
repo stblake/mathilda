@@ -2233,10 +2233,22 @@ rat_imag_fallthrough: ;
          * real" guard in (b), symbolic p collapses incorrectly: e.g. (E^x)^y
          * and (2^x)^y would fold to E^(x y) / 2^(x y), but x may be complex, so
          * they must stay unevaluated (matching Mathematica). */
+        /* (d) B = Abs[u], a nonnegative real, and p, q both exact rationals:
+         * (|u|^p)^q = |u|^(p q), so Sqrt[Abs[x]^2] = Abs[x] and
+         * (Abs[x]^3)^(1/3) = Abs[x] -- which is what makes the 2-norm of a
+         * one-element vector (and the Frobenius norm of a 1x1 matrix) Abs[x],
+         * as in the reference. An inexact or irrational exponent
+         * ((Abs[x]^2)^Pi, (Abs[x]^2.)^0.5) is left alone, also as there. */
+        int64_t ap_, aq_, bp_, bq_;
+        bool abs_rational = head_is(inner_base, SYM_Abs)
+                         && inner_base->data.function.arg_count == 1
+                         && is_rational(inner_exp, &ap_, &aq_)
+                         && is_rational(exp, &bp_, &bq_);
         bool can_compose = (exp->type == EXPR_INTEGER)
                         || (is_known_positive_pwr(inner_base)
                             && is_real_number(inner_exp))
-                        || inner_exp_abs_lt_one(inner_exp);
+                        || inner_exp_abs_lt_one(inner_exp)
+                        || abs_rational;
         if (can_compose) {
             Expr* t_args[2] = { expr_copy(inner_exp), expr_copy(exp) };
             Expr* new_exp = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);

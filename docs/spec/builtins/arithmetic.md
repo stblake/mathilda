@@ -963,6 +963,13 @@ Exponentiation.
   assumption: `Sqrt[a^(2/3)] → a^(1/3)`, `Sqrt[Sqrt[a]] → a^(1/4)`. Inner
   exponents with `|p| ≥ q` (e.g. `a^(3/2)`) and symbolic inner exponents (e.g.
   `2^a`) still stay unevaluated.
+- **An `Abs` base composes under exact rational exponents**:
+  `(Abs[u]^p)^q → Abs[u]^(p q)` when `p` and `q` are both integers or
+  `Rational`s, since `Abs[u]` is a nonnegative real. `Sqrt[Abs[x]^2]` is
+  `Abs[x]`, `(Abs[x]^3)^(1/3)` is `Abs[x]`, `(Abs[x]^2)^(1/3)` is
+  `Abs[x]^(2/3)`. This is what makes `Norm[{x}]` and `Norm[{{x}}, "Frobenius"]`
+  `Abs[x]`. An irrational, inexact or symbolic exponent is left alone, as in the
+  reference: `(Abs[x]^2)^Pi`, `(Abs[x]^2.)^0.5`, `(Abs[x]^2)^y`.
 - **Positive numeric coefficient splits out of a mixed `Times` base** under a
   rational power: `(c·w)^(p/q) → c^(p/q) · w^(p/q)` when `c > 0` is a numeric
   rational/integer/real that fully reduces under `q` and `w` is the symbolic
@@ -1990,6 +1997,19 @@ Complex number functions.
 - `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
   (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).
+- **`Abs` and `Conjugate` of a product split off its numeric factors**
+ . Both are multiplicative for every complex value of the symbols,
+  so each finite `NumericQ` factor `c` of a `Times` comes out as its own
+  `Abs[c]` / `Conjugate[c]`, and the symbolic factors stay together inside:
+  `Abs[2 x] = 2 Abs[x]`, `Abs[-x] = Abs[x]`, `Abs[(1 + I) x] = Sqrt[2] Abs[x]`,
+  `Abs[Pi x y] = Pi Abs[x y]`, `Abs[x Log[2]] = Abs[x] Log[2]`;
+  `Conjugate[2 x] = 2 Conjugate[x]`, `Conjugate[(1 + I) x] = (1 - I)
+  Conjugate[x]`, `Conjugate[-x y] = -Conjugate[x y]`. A product of symbols
+  alone (`Abs[x y]`) is not split, and an `Infinity` factor stays inside.
+  `Abs[Abs[u]]` is `Abs[u]`. Before this, `Norm[SparseArray[{{2 xb}}], 1]` was
+  `Abs[2 xb]` where the reference gives `2 Abs[xb]` (oracle case #99).
+  Not yet followed: the reference also writes `Abs[x^2]` as `Abs[x]^2` and
+  `Abs[E^y]` as `E^Re[y]`.
 - `Arg[z]`: Phase angle. Pure-real MPFR returns symbolic `0` or `Pi`;
   `Complex[MPFR, MPFR]` evaluates via `mpfr_atan2` at the working
   precision.  A **root-of-unity-like constant** — a product of real-rational

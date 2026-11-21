@@ -318,6 +318,73 @@ static void test_complex_pure_imaginary_diag(void) {
         "N[{{2 I, 0}, {0, 3 + 4 I}}, 30]", 1e-25);
 }
 
+/* ============== singular input: U stays orthonormal ============== */
+
+/* Max |entry| of U^H U - I (or V^H V - I) for the cached decomposition. */
+static double cached_orth_err(int which, int dim) {
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+        "Flatten[ConjugateTranspose[TestSVDMpfr$S[[%d]]] . TestSVDMpfr$S[[%d]] "
+        "- IdentityMatrix[%d]]", which, which, dim);
+    Expr* r = run(buf);
+    double e = max_abs_flat(r);
+    expr_free(r);
+    return e;
+}
+
+/* Sparse-oracle case 18 (seed 7): a 30-digit complex 6 x 6 with rows 1 and 3
+ * equal.  The Jacobi sweeps left the null column with norm 1.8e-907 -- rounding
+ * residue, not a singular value -- and normalising it gave a U column of pure
+ * noise: U^H U - I was 1.0 while U S V^H still reconstructed m.  A singular
+ * value at or below max(n, p) 2^-bits sigma_max is now an exact zero and its U
+ * column comes from the orthonormal completion.  The real kernel shares the
+ * cut, so guard it on a singular real matrix too. */
+static void assert_singular_orthonormal(const char* m_src, int dim) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "TestSVDMpfr$S = SingularValueDecomposition[%s];", m_src);
+    expr_free(run(buf));
+    double eu = cached_orth_err(1, dim);
+    double ev = cached_orth_err(3, dim);
+    snprintf(buf, sizeof(buf), "TestSVDMpfr$S[[2, %d, %d]] == 0", dim, dim);
+    Expr* z = run(buf);
+    int zero = z->type == EXPR_SYMBOL && strcmp(z->data.symbol.name, "True") == 0;
+    expr_free(z);
+    expr_free(run("ClearAll[TestSVDMpfr$S]"));
+    if (eu > 1e-25 || ev > 1e-25 || !zero) {
+        fprintf(stderr, "FAIL: %s  |U^H U - I| = %g, |V^H V - I| = %g, "
+                        "last sigma zero = %d\n", m_src, eu, ev, zero);
+        ASSERT(0);
+    }
+    assert_reconstruction(m_src, 1e-25);
+    printf("  PASS: singular %s: U, V orthonormal (%g, %g), sigma_min = 0\n",
+           m_src, eu, ev);
+}
+
+static void test_singular_complex_oracle18(void) {
+    assert_singular_orthonormal(
+        "Normal[SparseArray[{{1, 1} -> N[-216/35, 30], {1, 6} -> N[-4/7 - 3/5 I, 30], "
+        "{2, 2} -> N[3, 30], {3, 1} -> N[-216/35, 30], {3, 6} -> N[-4/7 - 3/5 I, 30], "
+        "{4, 3} -> N[6/7 - 5/7 I, 30], {4, 4} -> N[74/7, 30], "
+        "{5, 1} -> N[-7/2 - 1/7 I, 30], {5, 2} -> N[4/3 - 5/3 I, 30], "
+        "{5, 4} -> N[-9 - 8/3 I, 30], {5, 5} -> N[1021/42, 30], {6, 6} -> N[6, 30]}, "
+        "{6, 6}]]", 6);
+}
+
+static void test_singular_real_3x3(void) {
+    assert_singular_orthonormal("N[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 30]", 3);
+}
+
+/* A small but RESOLVABLE singular value is not cut: 10^-25 relative at 30
+ * digits is well above the max(n, p) 2^-bits threshold. */
+static void test_small_sigma_kept(void) {
+    Expr* r = run("SingularValueDecomposition[N[{{1, 0}, {0, 10^-25}}, 30]][[2, 2, 2]] "
+                  "> 0");
+    ASSERT(r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0);
+    expr_free(r);
+    printf("  PASS: sigma = 10^-25 at 30 digits is kept\n");
+}
+
 /* ============== truncation ============== */
 
 static void test_truncation_positive(void) {
@@ -361,6 +428,10 @@ int main(void) {
     test_complex_recon_tall_30digit();
     test_complex_hermitian_2x2_50digit();
     test_complex_pure_imaginary_diag();
+
+    test_singular_complex_oracle18();
+    test_singular_real_3x3();
+    test_small_sigma_kept();
 
     test_truncation_positive();
     test_truncation_upto();

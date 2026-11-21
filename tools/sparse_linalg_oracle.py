@@ -952,14 +952,30 @@ def program(cases, timelimit):
 
 
 def parse_result_lines(text, tag="@@R "):
+    """The result records in `text`, by case id.
+
+    A record need not start its line: the reference writes a message to the
+    same stdout asynchronously, so a long one (the ::posdef / ::sing text of
+    a 332x332 matrix, printed whole) can be left unterminated when the record
+    is written, and the record lands at the END of the message line. Reading
+    only line-initial tags lost those answers and reported the case UNEVAL
+    "no oracle to tell" (#268, and the same race on #72). So the tag is
+    looked for anywhere in a line, and the JSON object is decoded from there,
+    ignoring any message text that follows it. (A record spliced into the
+    middle of a message cannot be recovered here; run_reference therefore
+    also sends the reference's messages to a file, off stdout.)"""
     out = {}
+    dec = json.JSONDecoder()
     for line in text.splitlines():
-        if line.startswith(tag):
+        k = line.find(tag)
+        while k >= 0:
             try:
-                d = json.loads(line[len(tag):])
+                d, _ = dec.raw_decode(line, k + len(tag))
             except ValueError:
-                continue
-            out[d["id"]] = d
+                d = None
+            if isinstance(d, dict) and "id" in d:
+                out[d["id"]] = d
+            k = line.find(tag, k + len(tag))
     return out
 
 
@@ -1102,6 +1118,14 @@ def run_reference(cases, workdir, timelimit, wolframscript, log):
     while todo:
         path = os.path.join(workdir, "reference.m")
         with open(path, "w") as fh:
+            # The kernel's messages go to a file of their own, not stdout:
+            # written there they interleave with the @@R records, and the
+            # ::posdef / ::sing text of a large matrix (printed whole, ~1 MB)
+            # was seen to splice a record into its middle and lose it (#268:
+            # "no oracle to tell"; #72 by the same race). $MessageList, which
+            # the records report, is unaffected by where $Messages writes.
+            msgs = os.path.join(workdir, "reference.msgs").replace("\\", "/")
+            fh.write(f'$Messages = {{OpenAppend["{msgs}"]}};\n')
             fh.write(program(todo, timelimit))
         timeout = 300 + len(todo) * (2 * timelimit + 5)
         res = {}

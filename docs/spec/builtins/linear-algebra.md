@@ -829,6 +829,18 @@ reference's form: `Norm[{{4, 1}, {0, 5}}]` is `Sqrt[21 + Sqrt[41]]`,
 eigenvalue (it has no order). An MPFR matrix answers its largest singular value
 (one-sided Jacobi) at the input precision; both were left unevaluated.
 
+### Norm: symbolic entries, and a one-element vector or 1 x 1 matrix
+A symbolic `SparseArray` answers as its `Normal` does, and both now agree with
+the reference head for head: the numeric factor of an entry comes out of `Abs`
+(`Norm[SparseArray[{{2 xb}}], 1]`, `..., Infinity]` and `..., "Frobenius"]` are
+`2 Abs[xb]`, where `Abs[2 xb]` was given), and a single nonzero entry's 2-norm
+is `Abs[x]`, not `Sqrt[Abs[x]^2]`: `Norm[{x}]`, `Norm[{x, 0}]`,
+`Norm[{{x}}, "Frobenius"]` and `Norm[{x}, 3]` are `Abs[x]`. Neither is a `Norm`
+rule. They are the reference's general `Abs` rule (a product's numeric factors
+split off, see `Abs` in arithmetic.md) and `Power` rule
+(`(Abs[u]^p)^q = Abs[u]^(p q)` for exact rationals). The matrix 2-norm of
+`{{x}}` stays `Sqrt[x Conjugate[x]]`, the largest singular value, as there.
+
 ## Normalize
 Gives the normalized form of a scalar, vector, or tensor.
 - `Normalize[v]`
@@ -2390,9 +2402,11 @@ Gives the singular value decomposition of a matrix.
   currently evaluates back to a dense matrix because Mathilda has no
   unevaluated structured-matrix head yet).
 - Works on every input family:
-  - exact integer / rational matrices (output stays exact, with
-    `Sqrt[lambda]` forms for the singular values when the
-    characteristic polynomial of `m^H . m` doesn't simplify further);
+  - exact integer / rational matrices (output stays exact: the singular
+    values are `Sqrt[lambda]` of the eigenvalues of `m^H . m`, radicals
+    where those are real -- quadratic and biquadratic factors -- and
+    `Sqrt[Root[...]]` for an irreducible cubic or quartic factor, as
+    `Eigenvalues` gives them by default);
   - complex matrices (`u` and `v` are unitary in the Hermitian inner
     product);
   - machine-precision Real matrices (output Real at machine precision
@@ -2412,7 +2426,12 @@ Gives the singular value decomposition of a matrix.
     was `2^(-bits/2)`, which left `u` and `v` accurate to only half the
     displayed digits), column norms of `A` are the
     singular values and `A[:, i] / sigma_i` are the left singular
-    vectors.  Orthonormal completion of the `n - rank` remaining
+    vectors.  A singular value at or below `max(n, p) 2^(-bits)
+    sigma_max` is rounding residue, not a value the input precision
+    resolves: it is reported as an exact zero and its `u` column comes
+    from the completion (2026-11-22; before, normalising the residue gave
+    a `u` column of noise, so `u^H u - I` was `O(1)` on a singular
+    input).  Orthonormal completion of the `n - rank` remaining
     columns of `u` uses Gram-Schmidt at the working precision.  Real
     and complex MPFR inputs are both supported: the complex path uses
     paired (re, im) MPFR buffers throughout and factors each 2x2
@@ -2436,6 +2455,29 @@ Gives the singular value decomposition of a matrix.
     route documented under `Eigenvectors`; it now reconstructs to
     `1.7e-34` in 0.81 s. **Radical depth, not rank deficiency, was the
     trigger** — that is a separate failure, fixed 2026-08-02.
+
+    The eigendecomposition runs at the default `Cubics`/`Quartics`
+    settings (2026-11-22; it forced both to `True`). The gram is
+    Hermitian, so an irreducible cubic factor always has three real
+    roots and its Cardano form is always the complex casus-irreducibilis
+    nest; normalising the vectors and forming `m . v / sigma` on that nest
+    took 7.7 s for the 3 x 3 `{{-4,0,0},{9,14,1},{2,-9,-14}}`, against
+    18 ms with `Root` eigenvalues. `Root` objects are accepted only for a
+    purely numeric matrix; with free symbols a `Root` still declines.
+
+    Within a group of **equal** eigenvalues of the gram, the eigenvectors
+    are Gram-Schmidt orthogonalised (Hermitian inner product, on the
+    unnormalised vectors, so rational eigenvectors stay rational until
+    the final `1/Sqrt[w^H w]`) before they are normalised (2026-11-22).
+    `Eigenvectors` returns a basis of each eigenspace that need not be
+    orthogonal, and normalising alone gave `u^T u - I = 0.5` for
+    `{{2,1,1},{1,2,1},{1,1,2}}` (singular values `4, 1, 1`). Group
+    membership is structural equality of the eigenvalues, which is how
+    `Eigenvalues` reports a repeated one. The `u` columns `m . v / sigma`
+    of a repeated `sigma` are then orthogonal automatically, and the
+    null-space completion is orthogonal to them by construction. All
+    three invariants hold exactly (`Simplify` to the zero matrix) for
+    repeated nonzero, repeated zero, complex, tall and wide cases.
   - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`),
     machine-precision inputs transparently route to the symbolic
     kernel; similarly `USE_MPFR=0` routes MPFR inputs to symbolic.

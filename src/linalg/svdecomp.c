@@ -227,7 +227,7 @@ bool svd_parse_args(Expr* res, SvdArgs* args) {
         }
     }
 
-    /* Truncation is undefined for the generalized form (Mathematica
+    /* Truncation is undefined for the generalized form (the reference
      * raises SingularValueDecomposition::nopart).  Reject at parse
      * time so the dispatchers can assume non-generalized when
      * args->k_form != SVD_FORM_FULL. */
@@ -297,23 +297,27 @@ static Expr* sv_together(Expr* a) {
     return eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Together), (Expr*[]){a}, 1));
 }
-/* Rule[opt, True] — SVD asks Eigenvalues/Eigenvectors for closed radical
- * forms (Cubics/Quartics -> True) even though the global default is False:
- * the symbolic SVD pipeline manipulates the eigenvalues with Sqrt/rational
- * idioms and cannot consume held Root[] objects. */
-static Expr* sv_true_opt(const char* opt) {
-    return expr_new_function(expr_new_symbol(SYM_Rule),
-        (Expr*[]){ expr_new_symbol(opt), expr_new_symbol("True") }, 2);
-}
+/* Eigen-decomposition of the Gram matrix at the DEFAULT Cubics/Quartics
+ * settings: closed radicals where they are real (quadratic and biquadratic
+ * factors), Root[] objects for an irreducible cubic or quartic.
+ *
+ * Forcing Cubics -> True / Quartics -> True here is always the wrong trade for
+ * an SVD.  The Gram matrix m^H m is Hermitian, so every eigenvalue is real; an
+ * irreducible cubic with three real roots is exactly the casus irreducibilis,
+ * whose Cardano form is a nest of complex cube roots.  The normalisation below
+ * (Together on every entry and on |v|^2) and the left vectors m v / sigma then
+ * square that nest at every step, and the radical Power canonicaliser factors
+ * each large integer it meets: a 3 x 3 banded integer matrix took 7.7 s
+ * (sparse oracle case 110, a timeout) where the Root form takes 3 ms.  Root[]
+ * is also the form the reference answer is in, and Sqrt, Together, Dot and N
+ * all consume it. */
 static Expr* sv_eigenvalues(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol(SYM_Eigenvalues),
-        (Expr*[]){ a, sv_true_opt(SYM_Cubics), sv_true_opt(SYM_Quartics) }, 3));
+        expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ a }, 1));
 }
 static Expr* sv_eigenvectors(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol(SYM_Eigenvectors),
-        (Expr*[]){ a, sv_true_opt(SYM_Cubics), sv_true_opt(SYM_Quartics) }, 3));
+        expr_new_symbol(SYM_Eigenvectors), (Expr*[]){ a }, 1));
 }
 
 /* Squared-norm zero test, robust on Sqrt / rational forms (same idiom
@@ -411,9 +415,10 @@ static bool sv_is_nonneg_numeric(const Expr* e) {
     return false;
 }
 
-/* True iff `e` contains any Root[...] head -- a sign that
- * Eigenvalues / Eigenvectors couldn't reduce to a closed form we can
- * lift through Sqrt cleanly.  The symbolic SVD then declines. */
+/* True iff `e` contains any Root[...] head.  For a matrix with free symbols
+ * that means Eigenvalues found no closed form (a Root of a parametric
+ * polynomial), and the symbolic SVD declines.  For a purely numeric matrix a
+ * Root is an exact algebraic number and is accepted -- see sv_eigenvalues. */
 static bool sv_contains_root(const Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
@@ -427,8 +432,10 @@ static bool sv_contains_root(const Expr* e) {
 }
 
 /* Eigenvalues / Eigenvectors returned the same head (couldn't evaluate),
- * or any leaf is a Root[...] -- bail out to the caller. */
-static bool sv_eig_usable(Expr* eigvals, Expr* eigvecs, int expected) {
+ * or (unless `allow_root`, i.e. the matrix is purely numeric) any leaf is a
+ * Root[...] -- bail out to the caller. */
+static bool sv_eig_usable(Expr* eigvals, Expr* eigvecs, int expected,
+                          bool allow_root) {
     if (!eigvals || !eigvecs) return false;
     if (eigvals->type != EXPR_FUNCTION
         || eigvals->data.function.head->type != EXPR_SYMBOL
@@ -439,14 +446,16 @@ static bool sv_eig_usable(Expr* eigvals, Expr* eigvecs, int expected) {
         || eigvecs->data.function.head->data.symbol.name != SYM_List
         || (int)eigvecs->data.function.arg_count != expected) return false;
     for (int i = 0; i < expected; i++) {
-        if (sv_contains_root(eigvals->data.function.args[i])) return false;
+        if (!allow_root && sv_contains_root(eigvals->data.function.args[i]))
+            return false;
         Expr* row = eigvecs->data.function.args[i];
         if (row->type != EXPR_FUNCTION
             || row->data.function.head->type != EXPR_SYMBOL
             || row->data.function.head->data.symbol.name != SYM_List
             || (int)row->data.function.arg_count != expected) return false;
         for (int k = 0; k < expected; k++) {
-            if (sv_contains_root(row->data.function.args[k])) return false;
+            if (!allow_root && sv_contains_root(row->data.function.args[k]))
+                return false;
         }
     }
     return true;
@@ -765,6 +774,7 @@ bool svd_symbolic_core(Expr** A_flat, int n, int p, bool use_conj,
      */
     bool use_AHA = (p >= n);
     int  g = use_AHA ? p : n;    /* size of the Gram matrix / primary V or U */
+    if (n <= 0 || p <= 0) return false;   /* (the caller never passes one) */
 
     /* 1. Build the gram matrix. */
     Expr* A_expr = sv_matrix_from_flat(A_flat, n, p);
@@ -775,7 +785,8 @@ bool svd_symbolic_core(Expr** A_flat, int n, int p, bool use_conj,
     Expr* eigvecs = sv_eigenvectors(expr_copy(B));
     expr_free(B);
 
-    if (!sv_eig_usable(eigvals, eigvecs, g)) {
+    if (!sv_eig_usable(eigvals, eigvecs, g,
+                       sv_matrix_is_purely_numeric(A_expr, n, p))) {
         if (eigvals) expr_free(eigvals);
         if (eigvecs) expr_free(eigvecs);
         expr_free(A_expr);
@@ -798,35 +809,60 @@ bool svd_symbolic_core(Expr** A_flat, int n, int p, bool use_conj,
     /* 4. Sort by descending eigenvalue. */
     sv_sort_pairs(lams, vecs_rm, g);
 
-    /* 5. Normalise each eigenvector individually to unit length.
+    /* 5. Orthonormalise the eigenvectors.
      *
-     *    Why not full QR-orthonormalisation: a Hermitian B has
-     *    pairwise-orthogonal eigenvectors for distinct eigenvalues,
-     *    so we only need per-vector normalisation in the common case.
-     *    The full qr_symbolic_core path was tried first; it pays
-     *    Together on every inner product as part of its is-zero rank
-     *    test, and for raw Mathilda Eigenvectors[...] output (deeply
-     *    nested Sqrt forms) that explodes combinatorially.
+     *    A Hermitian B has pairwise-orthogonal eigenvectors for DISTINCT
+     *    eigenvalues, so across groups only per-vector normalisation is
+     *    needed.  (Full qr_symbolic_core over all g vectors was tried first;
+     *    it pays Together on every inner product, and on deeply nested
+     *    Eigenvectors output that explodes.)
      *
-     *    Repeated-eigenvalue groups would need within-group Gram-
-     *    Schmidt; this implementation accepts that as a known
-     *    limitation and emits a non-orthonormal V when the user has
-     *    sufficient degeneracy that Mathilda's Eigenvectors returns
-     *    a linearly-dependent in-group basis.  In that case the
-     *    reconstruction sigma . V^T . V . sigma != sigma^2 and the
-     *    user should fall through to the machine kernel.  For the
-     *    typical SVD case (random / structured matrices with simple
-     *    eigenvalues) this is correct.
+     *    Within a group of EQUAL eigenvalues, Eigenvectors returns a basis
+     *    of the eigenspace that need not be orthogonal ({{2,1,1},{1,2,1},
+     *    {1,1,2}}: {-1,0,1} and {-1,1,0} for lambda = 1), and normalising
+     *    alone left V^T V - I = 0.5 -- and U, whose columns are m v / sigma,
+     *    inherited the defect.  So each vector is first Gram-Schmidt
+     *    orthogonalised against the earlier members of its group, on the
+     *    UNNORMALISED vectors: w_j = v_j - sum_i (w_i^H v_j / w_i^H w_i) w_i.
+     *    For rational eigenvectors that keeps every entry rational, and the
+     *    only radical is the final 1/Sqrt[w^H w].  Group membership is
+     *    structural equality of the eigenvalues: Eigenvalues returns a
+     *    repeated eigenvalue as the same expression (4, 1, 1; Root[f, 1]
+     *    twice), and a structural test cannot cost a zero test on nested
+     *    radicals.
      *
-     *    First Together each entry so the per-vector norm is computed
-     *    on a single canonical rational form rather than the original
-     *    nested-fraction Mathilda Eigenvectors output. */
+     *    Entries are Together-canonicalised first so the norms are computed
+     *    on one rational form rather than nested Eigenvectors output. */
     Expr** Qe = (Expr**)malloc(sizeof(Expr*) * (size_t)g * (size_t)g);
+    /* W: the orthogonalised, unnormalised vectors (row j = vector j) and
+     * their squared norms, kept for the in-group projections. */
+    Expr** W = (Expr**)calloc((size_t)g * (size_t)g, sizeof(Expr*));
+    Expr** W_nsq = (Expr**)calloc((size_t)g, sizeof(Expr*));
     for (int j = 0; j < g; j++) {
         /* Together-canonicalise the j-th eigenvector entries. */
         Expr** vj = (Expr**)malloc(sizeof(Expr*) * (size_t)g);
         for (int k = 0; k < g; k++) {
             vj[k] = sv_together(expr_copy(vecs_rm[j * g + k]));
+        }
+        /* Project out the earlier members of this eigenvalue's group. */
+        for (int i = 0; i < j; i++) {
+            if (!expr_eq(lams[i], lams[j])) continue;
+            Expr* dot = expr_new_integer(0);
+            for (int k = 0; k < g; k++) {
+                Expr* lhs = use_conj ? sv_conjugate(expr_copy(W[i * g + k]))
+                                     : expr_copy(W[i * g + k]);
+                dot = sv_plus(dot, sv_times(lhs, expr_copy(vj[k])));
+            }
+            Expr* coef = sv_together(sv_times(dot,
+                             sv_power(expr_copy(W_nsq[i]), expr_new_integer(-1))));
+            if (!sv_is_zero(coef)) {
+                for (int k = 0; k < g; k++)
+                    vj[k] = sv_together(sv_plus(vj[k],
+                              sv_times(expr_new_integer(-1),
+                                       sv_times(expr_copy(coef),
+                                                expr_copy(W[i * g + k])))));
+            }
+            expr_free(coef);
         }
         /* nsq = Sum_k Conjugate[v_k] * v_k  (Hermitian inner product). */
         Expr* nsq = expr_new_integer(0);
@@ -845,19 +881,31 @@ bool svd_symbolic_core(Expr** A_flat, int n, int p, bool use_conj,
             free(lams);
             for (int i = 0; i < g * g; i++) expr_free(vecs_rm[i]);
             free(vecs_rm);
-            for (int i = 0; i < j * g; i++) expr_free(Qe[i]);
+            /* Qe is filled column by column: columns [0, j) are set. */
+            for (int r = 0; r < g; r++)
+                for (int c = 0; c < j; c++) expr_free(Qe[r * g + c]);
             free(Qe);
+            for (int t = 0; t < g * g; t++) if (W[t]) expr_free(W[t]);
+            free(W);
+            for (int t = 0; t < g; t++) if (W_nsq[t]) expr_free(W_nsq[t]);
+            free(W_nsq);
             expr_free(A_expr);
             return false;
         }
-        Expr* inv_norm = sv_power(sv_sqrt(nsq), expr_new_integer(-1));
+        Expr* inv_norm = sv_power(sv_sqrt(expr_copy(nsq)), expr_new_integer(-1));
         for (int k = 0; k < g; k++) {
             /* Qe is column-major g x g: Qe[i * g + j] stores (i, j). */
+            W[j * g + k] = expr_copy(vj[k]);
             Qe[k * g + j] = sv_times(vj[k], expr_copy(inv_norm));
         }
+        W_nsq[j] = nsq;
         expr_free(inv_norm);
         free(vj);
     }
+    for (int t = 0; t < g * g; t++) if (W[t]) expr_free(W[t]);
+    free(W);
+    for (int t = 0; t < g; t++) if (W_nsq[t]) expr_free(W_nsq[t]);
+    free(W_nsq);
     for (int i = 0; i < g * g; i++) expr_free(vecs_rm[i]);
     free(vecs_rm);
 
@@ -1406,7 +1454,7 @@ Expr* svd_apply_postprocess(Expr* result, const SvdArgs* args,
     } else if (args->k_form == SVD_FORM_UPTO) {
         do_truncate = true;
         /* "UpTo" clamps to rank, not to mn -- the docstring says
-         * "as many as are available", and Mathematica uses MatrixRank. */
+         * "as many as are available", and the reference uses MatrixRank. */
         k_eff = args->k_value;
         if (k_eff > rank) k_eff = rank;
         if (k_eff > mn) k_eff = mn;

@@ -345,8 +345,30 @@ static double dd_deadline = HUGE_VAL;
  * the decision procedures later in the cascade (Trager, Bronstein, ...) must not
  * wait behind it (stress run 2026-11-12: 89.7 s of a 90 s cascade spent here
  * on integrands Bronstein closes in 0.05 s). */
-#define DD_CASCADE_CANDIDATE_SECONDS 0.2
+#define DD_CASCADE_CANDIDATE_SECONDS 0.5
 static double dd_candidate_budget = 0.0;
+
+/* The candidate budget is CPU time of this process, not elapsed time.  Measured
+ * in elapsed time it made the ANSWER depend on what else the machine was
+ * running: Integrate[2/(2 + a + E^(2 x))^(1/3), x] closes here in 0.16 s with a
+ * 114-leaf form, but on a loaded machine (or a slow CI runner) the candidate
+ * crossed 0.2 s of wall clock, was abandoned, and Trager answered with a
+ * 253-leaf RootSum (integrate_cascade_trager_bronstein_tests:166, flaky on CI).
+ * Other processes do not consume this one's CPU time, so the cutoff is now a
+ * property of the integrand.  Two wall-clock pieces remain, because
+ * TimeConstrained (dd_eval_bounded) only measures elapsed time:
+ *   - a nested TimeConstrained gets the CPU budget left, scaled by the load
+ *     the candidate has seen so far (elapsed/CPU, clamped to [1, 8]) -- on an
+ *     idle machine exactly the old budget;
+ *   - a hard elapsed backstop of DD_CANDIDATE_WALL_FACTOR budgets.
+ * clock() is C99 and process CPU time on POSIX; on Windows it is elapsed time,
+ * which is the old behaviour. */
+#define DD_CANDIDATE_WALL_FACTOR 8.0
+static double dd_cand_cpu_deadline = HUGE_VAL;   /* CPU seconds; HUGE_VAL = none */
+static double dd_cand_cpu_start = 0.0, dd_cand_wall_start = 0.0;
+static double dd_last_load_ratio = 1.0;          /* elapsed/CPU of the last candidate */
+static double dd_cpu_seconds(void) { return (double)clock() / (double)CLOCKS_PER_SEC; }
+static double dd_clamp_ratio(double r) { return r < 1.0 ? 1.0 : (r > DD_CANDIDATE_WALL_FACTOR ? DD_CANDIDATE_WALL_FACTOR : r); }
 
 /* Monotonic seconds; CLOCK_MONOTONIC is immune to NTP steps, with the CPU clock
  * as fallback.  Mirrors simp_mono_seconds() / dt_wall_seconds(). */
@@ -357,7 +379,16 @@ static bool   dd_expired(void);
  * unbounded (so callers pass no TimeConstrained wrapper at all). */
 static double dd_remaining(void) {
     if (dd_deadline >= HUGE_VAL) return 0.0;
-    double left = dd_deadline - dd_mono_seconds();
+    double now = dd_mono_seconds();
+    double left = dd_deadline - now;
+    if (dd_cand_cpu_deadline < HUGE_VAL) {           /* inside a cascade candidate */
+        double cpu = dd_cpu_seconds();
+        double cpu_el = cpu - dd_cand_cpu_start;
+        double ratio = cpu_el >= 0.005 ? dd_clamp_ratio((now - dd_cand_wall_start) / cpu_el)
+                                       : dd_last_load_ratio;
+        double cl = (dd_cand_cpu_deadline - cpu) * ratio;
+        if (cl < left) left = cl;
+    }
     return left > 0.0 ? left : 0.001;      /* expired: ask for the minimum */
 }
 
@@ -405,7 +436,8 @@ void integrate_derivdivides_set_budget(double seconds) {
 }
 
 static bool dd_expired(void) {
-    return dd_deadline < HUGE_VAL && dd_mono_seconds() >= dd_deadline;
+    return (dd_deadline < HUGE_VAL && dd_mono_seconds() >= dd_deadline)
+        || (dd_cand_cpu_deadline < HUGE_VAL && dd_cpu_seconds() >= dd_cand_cpu_deadline);
 }
 
 /* Canonical integrands already attempted in the current top-level descent.
@@ -763,9 +795,15 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     double outer_deadline = dd_deadline;
     bool per_candidate = outermost && dd_candidate_budget > 0.0;
 #define DD_CANDIDATE_BEGIN() do { if (per_candidate) { \
-        double cd = dd_mono_seconds() + dd_candidate_budget; \
+        dd_cand_wall_start = dd_mono_seconds(); dd_cand_cpu_start = dd_cpu_seconds(); \
+        dd_cand_cpu_deadline = dd_cand_cpu_start + dd_candidate_budget; \
+        double cd = dd_cand_wall_start + DD_CANDIDATE_WALL_FACTOR * dd_candidate_budget; \
         dd_deadline = cd < outer_deadline ? cd : outer_deadline; } } while (0)
-#define DD_CANDIDATE_END() do { if (per_candidate) dd_deadline = outer_deadline; } while (0)
+#define DD_CANDIDATE_END() do { if (per_candidate) { \
+        double cpu_el = dd_cpu_seconds() - dd_cand_cpu_start; \
+        if (cpu_el >= 0.005) \
+            dd_last_load_ratio = dd_clamp_ratio((dd_mono_seconds() - dd_cand_wall_start) / cpu_el); \
+        dd_cand_cpu_deadline = HUGE_VAL; dd_deadline = outer_deadline; } } while (0)
 
     /* Pass 1: the cheap, quiet, branch-correct direct quotient. */
     for (size_t i = 0; i < kernels.n && !result; i++) {
@@ -812,7 +850,7 @@ Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
     /* Explicit Method -> "DerivativeDivides": direct strategy, then the
      * thorough Eliminate/Solve branch-search, no per-candidate budget (reset in
      * case a timeout unwound a cascade call before it restored it). */
-    if (dd_depth == 0) dd_candidate_budget = 0.0;
+    if (dd_depth == 0) { dd_candidate_budget = 0.0; dd_cand_cpu_deadline = HUGE_VAL; }
     return dd_core(f, x, true, NULL);
 }
 
@@ -821,6 +859,7 @@ Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
  * A nested cascade pass (dd_depth > 0) keeps the deadline it inherited. */
 static Expr* dd_cascade(Expr* f, Expr* x, bool use_eliminate) {
     if (dd_depth > 0) return dd_core(f, x, use_eliminate, NULL);
+    dd_cand_cpu_deadline = HUGE_VAL;   /* a timeout may have unwound a candidate */
     double saved = dd_candidate_budget;
     dd_candidate_budget = DD_CASCADE_CANDIDATE_SECONDS;
     Expr* r = dd_core(f, x, use_eliminate, NULL);

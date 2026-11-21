@@ -489,6 +489,38 @@ static void test_matrixexp(void) {
              "x = MatrixExp[a, v]; Length[x] == 90000 && Max[Abs[x]] <= 1.]");
 }
 
+/* ---- Norm of a symbolic SparseArray (oracle #99) ------------------------
+ * The 1-, Infinity- and Frobenius norms of the 1x1 SparseArray {{2 xb}} are
+ * 2 Abs[xb]: Abs splits off a product's numeric factors and
+ * Sqrt[Abs[u]^2] = Abs[u], so the sparse answer equals the dense one and
+ * the reference's, head included. */
+static void test_symbolic_norm(void) {
+    chk("With[{a = SparseArray[{{1, 1} -> 2 xb}, {1, 1}]}, "
+        "{Norm[a, 1], Norm[a, Infinity], Norm[a, \"Frobenius\"], Norm[a]}]",
+        "{2 Abs[xb], 2 Abs[xb], 2 Abs[xb], 2 Sqrt[xb Conjugate[xb]]}");
+    chk("{Norm[SparseArray[{{px}}], 1], Norm[{{px}}, 1], Norm[SparseArray[{px}], 1], Norm[{px}], "
+        "Norm[SparseArray[{{px}}], \"Frobenius\"], Norm[{-3 px}, 3]}",
+        "{Abs[px], Abs[px], Abs[px], Abs[px], Abs[px], 3 Abs[px]}");
+    chk_true("With[{a = SparseArray[{{1, 1} -> -2 px, {1, 2} -> 3 py}, {2, 2}]}, "
+             "Norm[a, 1] === Norm[Normal[a], 1] && Norm[a, Infinity] === Norm[Normal[a], Infinity]]");
+}
+
+/* ---- singular / indefinite inputs stay unevaluated (oracle #72, #268) -----
+ * MatrixPower[s, -1] of an exactly singular complex SparseArray says
+ * MatrixPower::sing and stays unevaluated; CholeskyDecomposition of an
+ * indefinite Hermitian one says ::posdef. Both are the reference's answers
+ * (the UNEVAL reports were the oracle losing the reference's records). */
+static void test_singular_indefinite(void) {
+    chk("cs = SparseArray[{{1, 1} -> 2. + I, {1, 2} -> 1., {2, 1} -> 4. + 2 I, {2, 2} -> 2., "
+        "{3, 3} -> 5.}, {3, 3}]; Null", "Null");
+    chk_msg("MatrixPower[cs, -1]", "MatrixPower::sing");
+    chk("Head[Quiet[MatrixPower[cs, -1]]]", "MatrixPower");
+    chk("hi = SparseArray[{{1, 1} -> 4., {1, 2} -> 1. + I, {2, 1} -> 1. - I, {2, 2} -> -5., "
+        "{3, 3} -> 2.}, {3, 3}]; Null", "Null");
+    chk_msg("CholeskyDecomposition[hi]", "CholeskyDecomposition::posdef");
+    chk("Head[Quiet[CholeskyDecomposition[hi]]]", "CholeskyDecomposition");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -504,6 +536,8 @@ int main(void) {
     test_matrixexp();
     test_mpfr_cholesky_and_symbolic_lsf();
     test_exact();
+    test_symbolic_norm();
+    test_singular_indefinite();
     if (failures) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

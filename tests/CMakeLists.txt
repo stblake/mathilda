@@ -6751,6 +6751,8 @@ add_test(NAME trager_integrate_tests COMMAND trager_integrate_tests)
 add_executable(trager_torsion_stress_tests test_trager_torsion_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trager_torsion_stress_tests PRIVATE ../src)
 add_test(NAME trager_torsion_stress_tests COMMAND trager_torsion_stress_tests)
+# ~27 min on the Linux CI, ~75 min on an Intel Mac: past ctest's 3600 s default.
+set_tests_properties(trager_torsion_stress_tests PROPERTIES TIMEOUT 7200)
 
 # Bronstein integration (src/internal/bronstein/, BRONSTEIN_PLAN.md): one suite
 # per module, all on the push tier.
@@ -6914,6 +6916,12 @@ if(PYTHON3_EXE)
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/sparse_linalg_oracle.py --quick
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set_tests_properties(sparse_linalg_oracle_quick PROPERTIES SKIP_RETURN_CODE 77)
+    # TimeConstrained timeouts at random points of PossibleZeroQ's sampler, in
+    # parallel copies (the async-unwind crash class); nightly by its name.
+    add_test(NAME tc_unwind_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/tc_unwind_stress.py
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(tc_unwind_stress PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME sparse_linalg_oracle_stress
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/sparse_linalg_oracle.py -n 1000 --seed 1 --large 6
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)

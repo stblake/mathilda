@@ -5541,6 +5541,9 @@ static int    tc_deadline_active = 0;
  * timer would otherwise siglongjmp into tc_run_guarded's dead frame. */
 static volatile sig_atomic_t tc_body_live = 0;
 
+/* tc_check_deadline's poll count, and the count the SIGPROF handler last saw (see tc_sigprof_handler). */
+static volatile sig_atomic_t tc_poll_seq = 0;
+
 #ifndef _WIN32
 /* Arm ITIMER_PROF one-shot for `us` microseconds of process CPU time (never
  * (0,0), which would disarm).  setitimer is a plain system call, safe to make
@@ -5563,6 +5566,7 @@ static void tc_arm_prof_us(long long us) {
  * handler unwinds it asynchronously (see tc_sigprof_handler). */
 #define TC_ASYNC_GRACE_US 50000LL
 
+static volatile sig_atomic_t tc_poll_seen = -1;
 static void tc_sigprof_handler(int sig, siginfo_t* info, void* uctx) {
     (void)sig; (void)info;
     if (!tc_body_live) return;          /* body finished; teardown disarms */
@@ -5611,6 +5615,22 @@ static void tc_sigprof_handler(int sig, siginfo_t* info, void* uctx) {
      * its lock just the same.  Try again in a millisecond. */
     if (tc_interrupted_in_libc(uctx)) {
         tc_arm_prof_us(TC_REARM_MIN_US);
+        return;
+    }
+    /* Still reaching the evaluator's poll: not a pure C loop, but C code that
+     * keeps calling evaluate() and discards the Abort[] it gets back (the
+     * zero-test sampler, numericalize).  tc_check_deadline takes the forced
+     * jump at its next poll -- between evaluator steps, with no structure
+     * half-updated -- so do not jump from here.  Jumping from an arbitrary
+     * instruction of that code left the evaluator's shared state torn: a
+     * 3000-timeout PossibleZeroQ loop segfaulted in ~6% of runs under load
+     * (expr_alloc_node, expr_hash, eval_valueless_symbol), 0% with this
+     * jump disabled.  Only a computation that makes NO poll for a whole
+     * grace period is unwound asynchronously, which is what the backstop
+     * exists for. */
+    if (tc_poll_seq != tc_poll_seen) {
+        tc_poll_seen = tc_poll_seq;
+        tc_arm_prof_us(TC_ASYNC_GRACE_US);
         return;
     }
     siglongjmp(tc_jmp_env, 1);
@@ -5772,6 +5792,7 @@ int  tc_async_region_active(void) { return tc_async_deferred > 0; }
 
 void tc_check_deadline(void) {
     if (!tc_deadline_active) return;
+    tc_poll_seq++;   /* heartbeat for the SIGPROF handler: still stepping the evaluator */
     /* mth_mono_seconds never fails (it falls back to CPU clock() if the OS
      * monotonic clock is unavailable), so no spurious-abort guard is needed.
      * On Windows this is the ONLY thing that enforces a TimeConstrained budget

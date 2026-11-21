@@ -502,6 +502,54 @@ Expr* builtin_reim(Expr* res) {
     return exact_constant_head(arg, CX_REIM);
 }
 
+/* A factor of a product that Abs / Conjugate may pull out as its own
+ * f[c]: a finite numeric quantity (NumericQ: numbers, Pi, Sqrt[2], Log[2],
+ * E^I, ...). The infinity symbols stay inside (NumericQ admits them here,
+ * but they are not quantities the identity is about). */
+static bool cx_pullable_factor(const Expr* f) {
+    if (f->type == EXPR_SYMBOL
+        && (f->data.symbol.name == SYM_Infinity || f->data.symbol.name == SYM_ComplexInfinity
+            || f->data.symbol.name == SYM_Indeterminate))
+        return false;
+    if (head_is(f, SYM_DirectedInfinity)) return false;
+    return expr_is_numeric_quantity(f);
+}
+
+/* f[c1 ... ck u1 ... um] -> f[c1] ... f[ck] f[u1 ... um] for f = Abs or
+ * Conjugate, both multiplicative (|ab| = |a||b|, conj(ab) = conj(a)conj(b))
+ * for every complex value of the symbols, so the split is unconditional, as
+ * in the reference. The numeric factors c_i are split off one by one and
+ * evaluated (Abs[-2] = 2, Conjugate[1 + I] = 1 - I, Abs[Sin[1]] = Sin[1]);
+ * the symbolic factors stay together inside (Abs[x y] is not split). Fires
+ * only when the product has at least one numeric AND one non-numeric
+ * factor, so it cannot recur on its own output. NULL when it does not
+ * apply; otherwise a new evaluated expression (the argument is borrowed). */
+static Expr* cx_split_numeric_factors(const Expr* arg, const char* fsym) {
+    if (!head_is(arg, SYM_Times)) return NULL;
+    size_t na = arg->data.function.arg_count, nnum = 0;
+    for (size_t i = 0; i < na; i++)
+        if (cx_pullable_factor(arg->data.function.args[i])) nnum++;
+    if (nnum == 0 || nnum == na) return NULL;
+    Expr** outer = malloc(sizeof(Expr*) * (nnum + 1));
+    Expr** inner = malloc(sizeof(Expr*) * (na - nnum));
+    size_t no = 0, ni = 0;
+    for (size_t i = 0; i < na; i++) {
+        Expr* f = arg->data.function.args[i];
+        if (cx_pullable_factor(f))
+            outer[no++] = eval_and_free(expr_new_function(
+                expr_new_symbol(fsym), (Expr*[]){ expr_copy(f) }, 1));
+        else
+            inner[ni++] = expr_copy(f);
+    }
+    Expr* rest = ni == 1 ? inner[0]
+        : expr_new_function(expr_new_symbol(SYM_Times), inner, ni);
+    free(inner);
+    outer[no++] = expr_new_function(expr_new_symbol(fsym), (Expr*[]){ rest }, 1);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times), outer, no);
+    free(outer);
+    return eval_and_free(out);
+}
+
 Expr* builtin_abs(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -529,6 +577,17 @@ Expr* builtin_abs(Expr* res) {
             return eval_and_free(neg);
         }
     }
+
+    /* |c u| = |c| |u|: a product's numeric factors come out of Abs, each as
+     * its own |c| -- Abs[2 x] = 2 Abs[x], Abs[-x] = Abs[x], Abs[(1+I) x] =
+     * Sqrt[2] Abs[x], Abs[Pi x y] = Pi Abs[x y] (see cx_split_numeric_factors). */
+    {
+        Expr* split = cx_split_numeric_factors(arg, SYM_Abs);
+        if (split) return split;
+    }
+    /* Abs[Abs[u]] = Abs[u] (so a split 2 Abs[Abs[x]] settles at 2 Abs[x]). */
+    if (head_is(arg, SYM_Abs) && arg->data.function.arg_count == 1)
+        return expr_copy(arg);
 
     Expr *re, *im;
     bool from_complex = is_complex(arg, &re, &im);
@@ -787,6 +846,13 @@ Expr* builtin_conjugate(Expr* res) {
          head_is(arg, SYM_Abs) || head_is(arg, SYM_Arg)) &&
         arg->data.function.arg_count == 1) {
         return expr_copy(arg);
+    }
+    /* Conjugate[c u] = Conjugate[c] Conjugate[u] for the numeric factors c
+     * of a product: Conjugate[2 x] = 2 Conjugate[x], Conjugate[(1+I) x] =
+     * (1-I) Conjugate[x], Conjugate[-x y] = -Conjugate[x y]. */
+    {
+        Expr* split = cx_split_numeric_factors(arg, SYM_Conjugate);
+        if (split) return split;
     }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {

@@ -964,6 +964,37 @@ static Expr* svdm_sigma_rect(const mpfr_t* sigma, int n, int p,
     return m;
 }
 
+/* ---------------------------------------------------------------------
+ * Round a singular value at the rounding-noise level to an exact zero.
+ *
+ * After the Jacobi sweeps a column whose true norm is zero still carries
+ * the rounding residue of every rotation applied to it -- anything from
+ * ~ 2^-bits ||A|| down to far below it (1.8e-907 for sparse-oracle case 18,
+ * a 30-digit singular complex 6 x 6).  Dividing that residue by its own
+ * norm makes a unit vector of pure noise, NOT orthogonal to the other
+ * columns of U, so U^H U - I was O(1) although U S V^H still reconstructed
+ * m.  A value that small is not a singular value the input's precision can
+ * resolve: it is zero, and its U column belongs to the orthonormal
+ * completion (svdm_complete_U*), which builds it orthogonal to the rest.
+ *
+ * The cut is  sigma_j <= max(n, p) 2^-bits sigma_max  -- the backward-error
+ * bound of the decomposition at `bits` -- and matches the reference's
+ * behaviour at 30 digits (sigma = 10^-29 kept, 10^-31 reported as 0 for a
+ * unit-scale matrix).  `sigma` is sorted descending on entry, so the cut
+ * values are already the tail and the completion fills exactly those
+ * columns. */
+static void svdm_zero_negligible(mpfr_t* sigma, int n, int p, mpfr_prec_t bits)
+{
+    if (p <= 0 || mpfr_zero_p(sigma[0])) return;
+    mpfr_t cut;
+    mpfr_init2(cut, bits);
+    mpfr_mul_si(cut, sigma[0], n > p ? n : p, MPFR_RNDN);
+    mpfr_mul_2si(cut, cut, -(long)bits, MPFR_RNDN);
+    for (int j = 1; j < p; j++)
+        if (mpfr_cmp(sigma[j], cut) <= 0) mpfr_set_zero(sigma[j], 1);
+    mpfr_clear(cut);
+}
+
 /* ------------------------------------------------------------------ *
  *  Thin-or-square Jacobi core (n >= p).                               *
  *                                                                     *
@@ -1007,6 +1038,7 @@ static bool svdm_core_complex(Expr* m, int n, int p, mpfr_prec_t bits,
     (void)svdm_jacobi_sweeps_complex(A_re, A_im, n, p, V_re, V_im, bits);
     svdm_extract_U_sigma_complex(A_re, A_im, n, p, U_re, U_im, sigma, bits);
     svdm_sort_descending_complex(sigma, U_re, U_im, n, V_re, V_im, p);
+    svdm_zero_negligible(sigma, n, p, bits);
     (void)svdm_complete_U_complex(U_re, U_im, sigma, n, p, bits);
 
     *U_out = svdm_wrap_cm_complex(U_re, U_im, n, n, n, bits);
@@ -1048,6 +1080,7 @@ static bool svdm_core_real(Expr* m, int n, int p, mpfr_prec_t bits,
     (void)svdm_jacobi_sweeps(A, n, p, V, bits);
     svdm_extract_U_sigma(A, n, p, U, sigma, bits);
     svdm_sort_descending(sigma, U, n, V, p);
+    svdm_zero_negligible(sigma, n, p, bits);
     (void)svdm_complete_U(U, sigma, n, p, bits);
 
     *U_out = svdm_wrap_cm(U, n, n, n, bits);

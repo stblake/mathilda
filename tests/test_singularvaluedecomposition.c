@@ -404,6 +404,94 @@ static void test_full_rank_irreducible_cubic(void) {
     printf("  PASS: U and V orthonormal for the irreducible-cubic matrix\n");
 }
 
+/* Sparse-oracle case 110 (seed 7): a 3 x 3 banded integer matrix whose gram
+ * has the irreducible cubic x^3 - 575 x^2 + 70818 x - 559504.  The SVD forced
+ * Cubics -> True on Eigenvalues/Eigenvectors, so the three real eigenvalues
+ * came back as casus-irreducibilis Cardano nests, and normalising the vectors
+ * and forming m v / sigma took 7.7 s (an oracle TIMEOUT).  The eigenvalues are
+ * now Root objects -- the reference form -- and the call is milliseconds.
+ * Guard the form, the time (a generous wall-clock bound, as a cliff detector),
+ * the singular values at 30 digits, and the three invariants. */
+static void test_banded_integer_root_eigenvalues(void) {
+    const char* m = "{{-4, 0, 0}, {9, 14, 1}, {2, -9, -14}}";
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "TestSVD$T = AbsoluteTiming[TestSVD$R = SingularValueDecomposition[%s];][[1]];"
+        "TestSVD$T < 2", m);
+    Expr* fast = run(buf);
+    if (!(fast->type == EXPR_SYMBOL && strcmp(fast->data.symbol.name, "True") == 0)) {
+        Expr* t = run("TestSVD$T");
+        char* s = expr_to_string(t);
+        fprintf(stderr, "FAIL: SVD of the banded 3x3 took %s s\n", s);
+        free(s);
+        expr_free(t);
+        ASSERT(0);
+    }
+    expr_free(fast);
+
+    /* Singular values: Sqrt of the Root eigenvalues, descending. */
+    Expr* hasroot = run("! FreeQ[TestSVD$R[[2]], Root]");
+    ASSERT(hasroot->type == EXPR_SYMBOL && strcmp(hasroot->data.symbol.name, "True") == 0);
+    expr_free(hasroot);
+    Expr* sv = run("Max[Abs[N[{TestSVD$R[[2, 1, 1]], TestSVD$R[[2, 2, 2]], "
+                   "TestSVD$R[[2, 3, 3]]}, 40] - {20.062757267178196620660251971254915626, "
+                   "12.806661059658157310682981323825442543, "
+                   "2.9112202495386471419106472762928538964}]] < 10^-30");
+    ASSERT(sv->type == EXPR_SYMBOL && strcmp(sv->data.symbol.name, "True") == 0);
+    expr_free(sv);
+
+    snprintf(buf, sizeof(buf),
+        "Module[{u = N[TestSVD$R[[1]], 40], s = N[TestSVD$R[[2]], 40], "
+        "v = N[TestSVD$R[[3]], 40], a = %s}, "
+        "Max[Abs[Flatten[{a . v - u . s, Transpose[u] . u - IdentityMatrix[3], "
+        "Transpose[v] . v - IdentityMatrix[3]}]]] < 10^-30]", m);
+    Expr* inv = run(buf);
+    ASSERT(inv->type == EXPR_SYMBOL && strcmp(inv->data.symbol.name, "True") == 0);
+    expr_free(inv);
+    expr_free(run("ClearAll[TestSVD$T, TestSVD$R]"));
+    printf("  PASS: banded 3x3 integer SVD in Root form, fast, invariants hold\n");
+}
+
+/* Repeated eigenvalues of m^H m.  Eigenvectors returns a basis of each
+ * eigenspace that need not be orthogonal; normalising alone gave
+ * U^T U - I = 0.5 for {{2,1,1},{1,2,1},{1,1,2}} (singular values 4, 1, 1).
+ * The kernel now Gram-Schmidts within each group of equal eigenvalues.
+ * All three invariants must hold EXACTLY (Simplify to the zero matrix). */
+static void assert_exact_invariants(const char* m_src) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Module[{r = SingularValueDecomposition[%s], m = %s, u, s, v}, "
+        "If[Head[r] =!= List, False, {u, s, v} = r; "
+        "Simplify[ConjugateTranspose[u] . u - IdentityMatrix[Length[u]]] === "
+        "0 IdentityMatrix[Length[u]] && "
+        "Simplify[ConjugateTranspose[v] . v - IdentityMatrix[Length[v]]] === "
+        "0 IdentityMatrix[Length[v]] && "
+        "Simplify[u . s . ConjugateTranspose[v] - m] === 0 m]]", m_src, m_src);
+    Expr* ok = run(buf);
+    if (!(ok->type == EXPR_SYMBOL && strcmp(ok->data.symbol.name, "True") == 0)) {
+        fprintf(stderr, "FAIL: exact SVD invariants for %s\n", m_src);
+        expr_free(ok);
+        ASSERT(0);
+    }
+    expr_free(ok);
+    printf("  PASS: exact invariants (U^H U = I, V^H V = I, U S V^H = m) for %s\n", m_src);
+}
+
+static void test_repeated_singular_values(void) {
+    assert_exact_invariants("{{2, 1, 1}, {1, 2, 1}, {1, 1, 2}}");       /* 4, 1, 1 */
+    assert_exact_invariants("{{1, 1, 1}, {1, 1, 1}, {1, 1, 1}}");       /* 3, 0, 0 */
+    assert_exact_invariants("{{2, 1, 0, 0}, {1, 2, 0, 0}, "
+                            "{0, 0, 2, 1}, {0, 0, 1, 2}}");             /* 3, 3, 1, 1 */
+    assert_exact_invariants("{{1, 1, 0, 0}, {1, 1, 0, 0}, "
+                            "{0, 0, 1, 1}, {0, 0, 1, 1}}");             /* 2, 2, 0, 0 */
+    assert_exact_invariants("{{2, I, 0}, {-I, 2, 0}, {0, 0, 1}}");      /* 3, 1, 1 */
+    assert_exact_invariants("{{1, I, 0}, {-I, 1, 0}, {0, 0, 2}}");      /* 2, 2, 0 */
+    assert_exact_invariants("{{1, I}, {-I, 1}, {1, I}}");               /* tall, complex */
+    assert_exact_invariants("{{1, 0}, {0, 1}, {1, 1}, {1, -1}}");       /* tall: Sqrt[3] twice */
+    assert_exact_invariants("{{2, 1, 1, 0}, {1, 2, 1, 0}, {1, 1, 2, 0}}"); /* wide: 4, 1, 1 */
+    assert_exact_invariants("{{1, 1, 1}, {1, 1, 1}}");                  /* wide, rank 1 */
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -432,6 +520,8 @@ int main(void) {
     test_generalized_free_symbol_nogsymb();
     test_rank_deficient_exact_terminates();
     test_full_rank_irreducible_cubic();
+    test_banded_integer_root_eigenvalues();
+    test_repeated_singular_values();
 
     test_exact_rational_shape();
 

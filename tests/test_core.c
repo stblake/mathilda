@@ -666,6 +666,19 @@ void test_exact_constant_complex_heads(void) {
     /* symbolic / off-language arguments are untouched */
     expect_true("SameQ[{Abs[x], Sign[a b], Abs[1 + I x], Re[Pi + x]}, {Abs[x], Sign[a b], Abs[1 + I x], Re[Pi + x]}]");
     expect_true("MatchQ[Abs[ArcSin[2]], _Abs]");
+    /* a product's numeric factors come out of Abs and Conjugate (the symbolic
+     * factors stay together); Abs is idempotent */
+    expect_true("SameQ[{Abs[2 x], Abs[-x], Abs[-x y], Abs[(1 + I) x], Abs[Pi x], Abs[x Log[2]], "
+                "Abs[2/3 x y], Abs[0.5 I x], Abs[2 Abs[x]]}, {2 Abs[x], Abs[x], Abs[x y], "
+                "Sqrt[2] Abs[x], Pi Abs[x], Abs[x] Log[2], 2/3 Abs[x y], 0.5 Abs[x], 2 Abs[x]}]");
+    expect_true("SameQ[{Conjugate[2 x], Conjugate[(1 + I) x], Conjugate[-x y]}, "
+                "{2 Conjugate[x], (1 - I) Conjugate[x], -Conjugate[x y]}]");
+    expect_true("MatchQ[Abs[x Infinity], _Abs]");
+    /* (Abs[u]^p)^q = Abs[u]^(p q) for exact rational p, q only */
+    expect_true("SameQ[{Sqrt[Abs[x]^2], (Abs[x]^3)^(1/3), (Abs[x]^3)^(-1/3), (Abs[x]^2)^(1/3)}, "
+                "{Abs[x], Abs[x], 1/Abs[x], Abs[x]^(2/3)}]");
+    expect_true("MatchQ[{(Abs[x]^2)^Pi, (Abs[x]^2.)^0.5, (Abs[x]^2)^y}, "
+                "{Power[Power[_Abs, 2], Pi], Power[Power[_Abs, 2.], 0.5], Power[Power[_Abs, 2], y]}]");
 }
 
 void test_arg(void) {

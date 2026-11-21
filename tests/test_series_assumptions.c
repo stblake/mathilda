@@ -126,9 +126,11 @@ static void test_abs_sign_at_point(void) {
         "SeriesData[x, 0, List[a, -1, 0], 0, 3, 1]");                      /* a - x */
     assert_fullform("Series[Abs[x - a], {x, 0, 2}, Assumptions -> a < 0]",
         "SeriesData[x, 0, List[Times[-1, a], 1, 0], 0, 3, 1]");           /* x - a */
-    /* negative control: no assumption => legacy Derivative-of-Abs husk */
+    /* negative control: no assumption => legacy Derivative-of-Abs husk (its
+     * value term is Abs[a]: Abs[-a] evaluates, a product's numeric factor
+     * coming out of Abs) */
     assert_fullform("Series[Abs[x - a], {x, 0, 2}]",
-        "SeriesData[x, 0, List[Abs[Times[-1, a]], Derivative[1][Abs][Times[-1, a]], "
+        "SeriesData[x, 0, List[Abs[a], Derivative[1][Abs][Times[-1, a]], "
         "Times[Rational[1, 2], Derivative[2][Abs][Times[-1, a]]]], 0, 3, 1]");
 }
 
