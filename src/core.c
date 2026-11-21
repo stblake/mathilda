@@ -2105,8 +2105,17 @@ static double chop_to_double(const Expr* e) {
     return 0.0;
 }
 
+static Expr* chop_recursive(Expr* e, double delta);
+/* ll_walk adapter: Chop of one LinkedList element. */
+static Expr* chop_ll_elem(const Expr* el, void* ctx) {
+    return chop_recursive((Expr*)el, *(const double*)ctx);
+}
+
 static Expr* chop_recursive(Expr* e, double delta) {
     if (!e) return NULL;
+    /* A LinkedList is the List of its elements: chopped element by element
+     * into a new LinkedList (the list itself when nothing chops). */
+    if (e->type == EXPR_LINKEDLIST) return ll_walk(e, chop_ll_elem, &delta);
 
     /* Underflow[] is a magnitude below every representable number, so below
      * any positive tolerance; -Underflow[] chops through its Times. */
@@ -2384,6 +2393,41 @@ Expr* builtin_clip(Expr* res) {
 
     /* Clip[ndarray, ...]: elementwise clamp on the flat buffer (see ndstruct.c). */
     if (is_ndarray(x)) return ndstruct_clip(res);
+
+    /* Clip[ll, ...] threads over the first argument as over a List: a
+     * machine-real list against two finite bounds is clamped straight off its
+     * slots (the List fast path below: a clamped element is a copy of the
+     * bound), anything else one Clip per element. */
+    if (x->type == EXPR_LINKEDLIST) {
+        const LinkedList* ll = x->data.llist;
+        Expr* iv = argc == 2 ? res->data.function.args[1] : NULL;
+        double lo, hi;
+        if (iv && ll_kind(ll) == LL_REAL && head_is(iv, SYM_List) && iv->data.function.arg_count == 2
+            && clip_classify_infinity(iv->data.function.args[0]) == 0
+            && clip_classify_infinity(iv->data.function.args[1]) == 0
+            && clip_to_double_value(iv->data.function.args[0], &lo)
+            && clip_to_double_value(iv->data.function.args[1], &hi)
+            && lo <= hi) {
+            Expr* lo_e = iv->data.function.args[0];
+            Expr* hi_e = iv->data.function.args[1];
+            int64_t n = ll_length(ll);
+            LinkedList* out = ll_new();
+            LLCursor c;
+            const void* p;
+            int dir;
+            int64_t base, k;
+            ll_cursor(&c, ll, 0, n);
+            while ((k = ll_cursor_next(&c, &p, &dir, &base)) > 0)
+                for (int64_t t = 0; t < k; t++) {
+                    double v = LL_SLOT(double, p, dir, t);
+                    if (v < lo) ll_push_back(out, expr_copy(lo_e));
+                    else if (v > hi) ll_push_back(out, expr_copy(hi_e));
+                    else ll_push_back_real(out, v);
+                }
+            return expr_new_linkedlist(out);
+        }
+        return ll_map_arg(res, 0);
+    }
 
     /* Manual first-argument threading: Clip[{x1, x2, ...}, ...]
      *   -> {Clip[x1, ...], Clip[x2, ...], ...}.

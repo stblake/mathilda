@@ -3,6 +3,7 @@
 #include "ndarray.h"
 #include "ndstruct.h"
 #include "message.h"
+#include "linkedlist.h"
 
 static int get_array_dimensions(Expr* e, int64_t* dims, const char* head_name) {
     if (!head_is(e, intern_symbol(head_name))) {
@@ -180,6 +181,140 @@ static int transpose_perm_spec(const Expr* spec, int in_depth, const int64_t* in
     return (int)L;
 }
 
+/* ---- a nest with a LinkedList level --------------------------------------
+ * A LinkedList is the List of its elements, so these are the List walks above
+ * over element views. The answer keeps a LinkedList at every level the
+ * argument had one (along the first-element spine). */
+
+static int64_t seq_n(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ? ll_length(e->data.llist)
+                                      : (int64_t)e->data.function.arg_count;
+}
+
+/* get_array_dimensions over Lists and LinkedLists: the depth to which `e` is
+ * rectangular. */
+static int ll_array_dimensions(const Expr* e, int64_t* dims) {
+    if (!ll_is_seq(e)) return 0;
+    dims[0] = seq_n(e);
+    if (dims[0] == 0) return 1;
+    if (e->type == EXPR_LINKEDLIST && ll_kind(e->data.llist) != LL_BOXED) return 1;
+    int64_t sub[64], cur[64];
+    bool own;
+    Expr* el = ll_seq_view(e, 0, &own);
+    int depth = ll_array_dimensions(el, sub);
+    ll_elem_done(el, own);
+    for (int64_t i = 1; i < dims[0]; i++) {
+        el = ll_seq_view(e, i, &own);
+        int d = ll_array_dimensions(el, cur);
+        ll_elem_done(el, own);
+        if (d != depth) return 1;
+        for (int j = 0; j < depth; j++) if (cur[j] != sub[j]) return 1;
+    }
+    for (int i = 0; i < depth; i++) dims[i + 1] = sub[i];
+    return depth + 1;
+}
+
+/* Leaves at depth `d` of a rectangular nest, row-major, as new references. */
+static void ll_leaves(const Expr* e, int d, Expr** out, size_t* idx) {
+    if (d == 0) { out[(*idx)++] = expr_copy((Expr*)e); return; }
+    for (int64_t i = 0, n = seq_n(e); i < n; i++) {
+        bool own;
+        Expr* el = ll_seq_view(e, i, &own);
+        ll_leaves(el, d - 1, out, idx);
+        ll_elem_done(el, own);
+    }
+}
+
+static Expr* transpose_ll(Expr* res) {
+    Expr* list = res->data.function.args[0];
+    size_t argc = res->data.function.arg_count;
+    int64_t in_dims[64];
+    int in_depth = ll_array_dimensions(list, in_dims);
+    bool vector = in_depth == 1;
+    if (vector) {
+        for (int64_t i = 0, n = seq_n(list); i < n && vector; i++) {
+            bool own;
+            Expr* el = ll_seq_view(list, i, &own);
+            if (ll_is_seq(el) || el->type == EXPR_NDARRAY) vector = false;
+            ll_elem_done(el, own);
+        }
+    }
+    if (vector && list->type == EXPR_LINKEDLIST) {
+        /* a vector is its own transpose: a copy, as the copying heads give */
+        const Expr* sp = argc == 2 ? res->data.function.args[1] : NULL;
+        if (!sp || (head_is(sp, SYM_List) && sp->data.function.arg_count == 1 &&
+                    sp->data.function.args[0]->type == EXPR_INTEGER &&
+                    sp->data.function.args[0]->data.integer == 1))
+            return expr_new_linkedlist(ll_copy(list->data.llist));
+    }
+    if (in_depth < 2 && argc == 1) {
+        if (vector) return expr_copy(list);
+        /* the top two levels, deeper entries opaque (A8) */
+        int64_t nr = seq_n(list), nc = -1;
+        bool ok = nr > 0;
+        for (int64_t i = 0; i < nr && ok; i++) {
+            bool own;
+            Expr* row = ll_seq_view(list, i, &own);
+            if (!ll_is_seq(row)) ok = false;
+            else if (nc < 0) nc = seq_n(row);
+            else if (seq_n(row) != nc) ok = false;
+            ll_elem_done(row, own);
+        }
+        if (!ok) {
+            tr_msg("nmtx", "The first two levels of %s cannot be transposed.", list, NULL);
+            return NULL;
+        }
+        in_depth = 2;
+        in_dims[0] = nr;
+        in_dims[1] = nc;
+    }
+    if (in_depth < 2 && !vector) return NULL;
+
+    int64_t perm[64];
+    if (argc == 1) {
+        perm[0] = 2; perm[1] = 1;
+        for (int i = 2; i < in_depth; i++) perm[i] = i + 1;
+    } else {
+        int L = transpose_perm_spec(res->data.function.args[1], in_depth, in_dims, res, perm);
+        if (L <= 0) return L < 0 ? (list->type == EXPR_LINKEDLIST
+                                     ? expr_new_linkedlist(ll_copy(list->data.llist))
+                                     : expr_copy(list)) : NULL;
+    }
+    int out_depth = 0;
+    for (int i = 0; i < in_depth; i++) if (perm[i] > out_depth) out_depth = (int)perm[i];
+    int64_t out_dims[64];
+    for (int i = 0; i < out_depth; i++) out_dims[i] = -1;
+    for (int i = 0; i < in_depth; i++) {
+        int t = (int)perm[i] - 1;
+        if (out_dims[t] == -1 || in_dims[i] < out_dims[t]) out_dims[t] = in_dims[i];
+    }
+    int64_t nin = 1, nout = 1;
+    for (int i = 0; i < in_depth; i++) nin *= in_dims[i];
+    for (int i = 0; i < out_depth; i++) nout *= out_dims[i];
+    Expr** in = malloc(sizeof(Expr*) * (size_t)(nin ? nin : 1));
+    size_t got = 0;
+    ll_leaves(list, in_depth, in, &got);
+    Expr** out = malloc(sizeof(Expr*) * (size_t)(nout ? nout : 1));
+    int64_t stride[64];
+    { int64_t s = 1; for (int i = in_depth - 1; i >= 0; i--) { stride[i] = s; s *= in_dims[i]; } }
+    int64_t oi[64];
+    for (int64_t o = 0; o < nout; o++) {
+        int64_t rem = o;
+        for (int i = out_depth - 1; i >= 0; i--) { oi[i] = rem % out_dims[i]; rem /= out_dims[i]; }
+        int64_t src = 0;
+        for (int k = 0; k < in_depth; k++) src += oi[perm[k] - 1] * stride[k];
+        out[o] = expr_copy(in[src]);
+    }
+    for (size_t t = 0; t < got; t++) expr_free(in[t]);
+    free(in);
+    bool lvl[64];
+    ll_tensor_levels(list, out_depth < in_depth ? out_depth : in_depth, lvl);
+    for (int i = in_depth; i < out_depth; i++) lvl[i] = false;
+    Expr* r = ll_tensor_build(out_dims, out_depth, out, lvl);
+    free(out);
+    return r;
+}
+
 Expr* builtin_transpose(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* list = res->data.function.args[0];
@@ -196,6 +331,9 @@ Expr* builtin_transpose(Expr* res) {
 
     /* Transpose[ndarray] (rank 2) swaps axes on the buffer (see ndstruct.c). */
     if (is_ndarray(list)) return ndstruct_transpose(res);
+
+    /* A LinkedList level: the same walk over element views (above). */
+    if (ll_has_ll_level1(list)) return transpose_ll(res);
 
     if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* head = list->data.function.head->data.symbol.name;
@@ -301,7 +439,9 @@ Expr* builtin_conjugate_transpose(Expr* res) {
 
     int64_t dims[64];
     int depth = 0;
-    if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL &&
+    if (ll_has_ll_level1(m)) {
+        depth = ll_array_dimensions(m, dims);
+    } else if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL &&
         m->data.function.head->data.symbol.name == SYM_List) {
         depth = get_array_dimensions(m, dims, "List");
     }

@@ -33,6 +33,7 @@
  */
 
 #include "poly.h"
+#include "linkedlist.h"
 #include "expr.h"
 #include "sym_names.h"
 #include "internal.h"
@@ -167,9 +168,29 @@ static int64_t* order_weight_matrix(const Expr* order_arg, int k, int* rows_out)
  * vars_arg is NULL, computes Variables[poly] (stored in *owned, caller frees
  * with expr_free). A List borrows its elements; a bare expression is one
  * variable. Returns NULL on allocation trouble only. */
+/* The elements of a LinkedList (read from its slots) as the arguments of an
+ * owned Hold, so a borrowed Expr* array into them lives exactly as long as the
+ * holder: the ownership the callers below already give `owned`. */
+static Expr* ll_elem_holder(const Expr* ll) {
+    LLElems el;
+    ll_elems_of(ll, &el);
+    Expr* h = expr_new_function(expr_new_symbol(SYM_Hold), el.v, (size_t)el.n);
+    free(el.v);                    /* the references moved into the holder */
+    return h;
+}
+
 static Expr** resolve_vars(Expr* poly, Expr* vars_arg, int* k, Expr** owned) {
     *owned = NULL;
     Expr* list = NULL;         /* the List whose args are the variables */
+    if (vars_arg && vars_arg->type == EXPR_LINKEDLIST) {
+        /* a LinkedList of variables */
+        *owned = ll_elem_holder(vars_arg);
+        int n = (int)(*owned)->data.function.arg_count;
+        Expr** vv = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+        for (int i = 0; i < n; i++) vv[i] = (*owned)->data.function.args[i];
+        *k = n;
+        return vv;
+    }
     if (!vars_arg) {
         *owned = internal_variables((Expr*[]){ expr_copy(poly) }, 1);
         list = *owned;
@@ -469,8 +490,9 @@ static Mono* parse_and_build(Expr* res, Expr*** vars_out, Expr** owned_out,
     if (npos < 1 || npos > 3) return NULL;
 
     Expr* poly = args[0];
-    /* Symbolic/structural head only: a bare List or NDArray is not a polynomial. */
-    if (poly->type == EXPR_NDARRAY || is_list_head(poly)) return NULL;
+    /* Symbolic/structural head only: a bare List or NDArray is not a polynomial
+     * (nor a LinkedList, the List of its elements). */
+    if (poly->type == EXPR_NDARRAY || poly->type == EXPR_LINKEDLIST || is_list_head(poly)) return NULL;
 
     Expr* vars_arg  = (npos >= 2) ? args[1] : NULL;
     Expr* order_arg = (npos >= 3) ? args[2] : NULL;
@@ -665,6 +687,54 @@ Expr* builtin_coefficientarrays(Expr* res) {
      * the evaluator.  A relation that is not an equation (x < 2) is not a
      * polynomial: say so and stay unevaluated.  Without this an equation was
      * read as a variable-free constant -- a silently wrong {SparseArray[eqns]}. */
+    if (polys->type == EXPR_LINKEDLIST) {
+        /* a LinkedList system: the same equation / relation screen over its
+         * elements; equations become lhs - rhs in a new LinkedList */
+        LLElems el;
+        ll_elems_of(polys, &el);
+        bool has_eq = false;
+        for (int64_t i = 0; i < el.n; i++) {
+            Expr* q = el.v[i];
+            if (q->type != EXPR_FUNCTION || q->data.function.head->type != EXPR_SYMBOL) continue;
+            const char* h = q->data.function.head->data.symbol.name;
+            if (h == SYM_Equal && q->data.function.arg_count == 2) { has_eq = true; continue; }
+            if (h == SYM_Equal || h == SYM_Unequal || h == SYM_Less ||
+                h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual) {
+                char* qs = expr_to_string(q);
+                mth_message("CoefficientArrays", "poly", "%s is not a polynomial.", qs ? qs : "");
+                free(qs);
+                ll_elems_release(&el);
+                return NULL;
+            }
+        }
+        if (has_eq) {
+            LinkedList* sys = ll_new();
+            for (int64_t i = 0; i < el.n; i++) {
+                Expr* q = el.v[i];
+                if (head_is(q, SYM_Equal) && q->data.function.arg_count == 2) {
+                    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(q->data.function.args[1]) }, 2);
+                    ll_push_back(sys, eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy(q->data.function.args[0]), neg }, 2)));
+                } else {
+                    ll_push_back(sys, expr_copy(q));
+                }
+            }
+            ll_elems_release(&el);
+            Expr** a = malloc(sizeof(Expr*) * argc);
+            a[0] = expr_new_linkedlist(sys);
+            for (size_t i = 1; i < argc; i++) a[i] = expr_copy(args[i]);
+            Expr* out = eval_and_free(expr_new_function(expr_copy(res->data.function.head), a, argc));
+            free(a);
+            if (out && out->type == EXPR_FUNCTION && out->data.function.head->type == EXPR_SYMBOL &&
+                strcmp(out->data.function.head->data.symbol.name, "CoefficientArrays") == 0) {
+                expr_free(out);   /* the rewritten system also declined */
+                return NULL;
+            }
+            return out;
+        }
+        ll_elems_release(&el);
+    }
     {
         size_t ne = is_list_head(polys) ? polys->data.function.arg_count : 1;
         bool has_eq = false;
@@ -728,11 +798,15 @@ Expr* builtin_coefficientarrays(Expr* res) {
 
     /* A List argument is a SYSTEM (equation index becomes the leading axis);
      * anything else is one polynomial and the arrays carry no leading axis. */
-    int      is_system = is_list_head(polys);
-    size_t   m         = is_system ? polys->data.function.arg_count : 1;
+    /* A LinkedList is a system too: its equations read from the slots into a
+     * holder that every exit below frees (as `unpacked`). */
+    if (polys->type == EXPR_LINKEDLIST) unpacked = ll_elem_holder(polys);
+    const Expr* sys = polys->type == EXPR_LINKEDLIST ? unpacked : polys;
+    int      is_system = is_list_head(polys) || polys->type == EXPR_LINKEDLIST;
+    size_t   m         = is_system ? sys->data.function.arg_count : 1;
     Expr**   eqs       = malloc(sizeof(Expr*) * (m > 0 ? m : 1));
     for (size_t i = 0; i < m; i++)
-        eqs[i] = is_system ? polys->data.function.args[i] : polys;
+        eqs[i] = is_system ? sys->data.function.args[i] : polys;
 
     /* Variables. `All` or omitted means Variables[] of the whole input -- taken
      * over the List as a unit so every equation shares one column order. */

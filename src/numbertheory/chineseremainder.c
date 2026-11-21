@@ -3,6 +3,7 @@
  * numbertheory_internal.h for the subsystem layout. */
 
 #include "numbertheory.h"
+#include "linkedlist.h"
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
 #include "eval.h"
@@ -67,46 +68,26 @@ static bool cr_is_number(Expr* e) {
         ;
 }
 
-Expr* builtin_chineseremainder(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
-    /* The message says "2 arguments are expected" even though 3 are accepted:
-     * argr for one argument, argrx otherwise. */
-    if (argc < 2 || argc > 3) {
-        if (argc == 1)
-            mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "argr",
-                "ChineseRemainder called with 1 argument; 2 arguments are expected.");
-        else
-            mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "argrx",
-                "ChineseRemainder called with %zu arguments; 2 arguments are expected.", argc);
-        return NULL;
-    }
-
-    Expr* rlist = res->data.function.args[0];
-    Expr* mlist = res->data.function.args[1];
-
-    /* Optional offset d must be an exact integer (ChineseRemainder::int). */
-    Expr* d_expr = (argc == 3) ? res->data.function.args[2] : NULL;
-    if (d_expr && !expr_is_integer_like(d_expr))
-        return nt_emit_int("ChineseRemainder", 3, res);
-
+/* The CRT over residues rv[0..nr) and moduli mv[0..nm): the elements of two
+ * Lists, or of LinkedLists read from their slots. */
+static Expr* cr_core(Expr** rv, size_t nr, Expr** mv, size_t nm, Expr* d_expr) {
     /* Symbolic arguments leave the call unevaluated silently, so symbolic flow
      * and rules still apply. */
-    if (!head_is(rlist, SYM_List) || !head_is(mlist, SYM_List)) return NULL;
-    size_t n = rlist->data.function.arg_count;
-    if (n == 0 && mlist->data.function.arg_count == 0) return NULL;
+    size_t n = nr;
+    if (n == 0 && nm == 0) return NULL;
     for (size_t k = 0; k < 2; k++) {
-        Expr* l = k ? mlist : rlist;
-        for (size_t i = 0; i < l->data.function.arg_count; i++)
-            if (!cr_is_number(l->data.function.args[i])) return NULL;
+        Expr** l = k ? mv : rv;
+        size_t ln = k ? nm : nr;
+        for (size_t i = 0; i < ln; i++)
+            if (!cr_is_number(l[i])) return NULL;
     }
 
     /* Numbers, but not two equal-length lists of integers with positive moduli
      * -- ChineseRemainder::pilist. */
-    bool valid = mlist->data.function.arg_count == n;
+    bool valid = nm == n;
     for (size_t i = 0; i < n && valid; i++) {
-        Expr* r = rlist->data.function.args[i];
-        Expr* m = mlist->data.function.args[i];
+        Expr* r = rv[i];
+        Expr* m = mv[i];
         if (!expr_is_integer_like(r) || !expr_is_integer_like(m)) valid = false;
         else if (m->type == EXPR_INTEGER ? m->data.integer <= 0
                                          : mpz_sgn(m->data.bigint) <= 0) valid = false;
@@ -127,8 +108,8 @@ Expr* builtin_chineseremainder(Expr* res) {
     bool ok = true;
     for (size_t i = 0; i < n; i++) {
         mpz_t ri, mi;
-        expr_to_mpz(rlist->data.function.args[i], ri); /* inits ri */
-        expr_to_mpz(mlist->data.function.args[i], mi); /* inits mi */
+        expr_to_mpz(rv[i], ri); /* inits ri */
+        expr_to_mpz(mv[i], mi); /* inits mi */
 
         /* A zero modulus has no residues to constrain against -- reject it
          * (it would also make the lcm zero and break the [0, L) contract). */
@@ -174,5 +155,39 @@ Expr* builtin_chineseremainder(Expr* res) {
 
     Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(x_acc));
     mpz_clears(x_acc, m_acc, g, u, v, diff, t, lcm, NULL);
+    return out;
+}
+
+Expr* builtin_chineseremainder(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    /* The message says "2 arguments are expected" even though 3 are accepted:
+     * argr for one argument, argrx otherwise. */
+    if (argc < 2 || argc > 3) {
+        if (argc == 1)
+            mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "argr",
+                "ChineseRemainder called with 1 argument; 2 arguments are expected.");
+        else
+            mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "argrx",
+                "ChineseRemainder called with %zu arguments; 2 arguments are expected.", argc);
+        return NULL;
+    }
+
+    Expr* rlist = res->data.function.args[0];
+    Expr* mlist = res->data.function.args[1];
+
+    /* Optional offset d must be an exact integer (ChineseRemainder::int). */
+    Expr* d_expr = (argc == 3) ? res->data.function.args[2] : NULL;
+    if (d_expr && !expr_is_integer_like(d_expr))
+        return nt_emit_int("ChineseRemainder", 3, res);
+
+    /* Symbolic arguments leave the call unevaluated silently, so symbolic flow
+     * and rules still apply. A LinkedList is the List of its elements. */
+    LLElems re, me;
+    if (!ll_elems_of(rlist, &re)) return NULL;
+    if (!ll_elems_of(mlist, &me)) { ll_elems_release(&re); return NULL; }
+    Expr* out = cr_core(re.v, (size_t)re.n, me.v, (size_t)me.n, d_expr);
+    ll_elems_release(&re);
+    ll_elems_release(&me);
     return out;
 }

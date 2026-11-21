@@ -15,6 +15,7 @@
  */
 
 #include "groebnerbasis.h"
+#include "linkedlist.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -428,6 +429,16 @@ static void push_var_list(Expr* lst_or_sym, ExprSet* dst) {
         exprset_push_borrowed(dst, lst_or_sym);
         return;
     }
+    if (lst_or_sym->type == EXPR_LINKEDLIST) {
+        /* a LinkedList of variables: its boxed symbol slots, borrowed for as
+         * long as the argument lives (the call) */
+        const LinkedList* ll = lst_or_sym->data.llist;
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++) {
+            const Expr* v = ll_peek_boxed(ll, i);
+            if (v && v->type == EXPR_SYMBOL) exprset_push_borrowed(dst, (Expr*)v);
+        }
+        return;
+    }
     if (!is_list(lst_or_sym)) return;
     for (size_t i = 0; i < lst_or_sym->data.function.arg_count; i++) {
         Expr* v = lst_or_sym->data.function.args[i];
@@ -513,7 +524,15 @@ static bool gb_structural_head(const Expr* e) {
     return false;
 }
 
+static Expr* gb_abstract(const Expr* e, GbAtoms* at);
+static Expr* gb_abstract_ll_elem(const Expr* el, void* ctx) { return gb_abstract(el, (GbAtoms*)ctx); }
+
 static Expr* gb_abstract(const Expr* e, GbAtoms* at) {
+    /* a LinkedList of polynomials: its elements abstracted, in a LinkedList */
+    if (e->type == EXPR_LINKEDLIST) {
+        Expr* r = ll_walk(e, gb_abstract_ll_elem, at);
+        return r ? r : expr_copy((Expr*)e);
+    }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     if (!gb_structural_head(e)) {
         if (expr_is_numeric_quantity(e)) return expr_copy((Expr*)e);
@@ -585,6 +604,9 @@ static Expr* gb_with_generalised_atoms(Expr* res, Expr* (*self)(Expr*)) {
     return out;
 }
 
+static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t n_polys,
+                     Expr* vars_list, Expr* elim_list);
+
 Expr* builtin_groebner_basis(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -618,7 +640,19 @@ Expr* builtin_groebner_basis(Expr* res) {
     Expr* vars_list  = (n_pos >= 2) ? res->data.function.args[1] : NULL;
     Expr* elim_list  = (n_pos == 3) ? res->data.function.args[2] : NULL;
 
-    if (!is_list(polys_list)) return NULL;
+    /* The polynomials: a List's elements, or a LinkedList's read from its
+     * slots (released with `pl` at every exit below). */
+    LLElems pl;
+    if (!ll_elems_of(polys_list, &pl)) return NULL;
+    Expr* r = gb_core(res, n_pos, &opt, pl.v, (size_t)pl.n, vars_list, elim_list);
+    ll_elems_release(&pl);
+    return r;
+}
+
+static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t n_polys,
+                     Expr* vars_list, Expr* elim_list) {
+    GBOptions opt = *optp;
+    (void)res;
 
     /* Accept a single-symbol shorthand for the variable list:
      *   GroebnerBasis[polys, x]    -> GroebnerBasis[polys, {x}]
@@ -627,7 +661,7 @@ Expr* builtin_groebner_basis(Expr* res) {
      * processing.  The wrappers are freed at the end of the function. */
     Expr* wrap_vars = NULL;
     Expr* wrap_elim = NULL;
-    if (vars_list && !is_list(vars_list)) {
+    if (vars_list && !is_list(vars_list) && vars_list->type != EXPR_LINKEDLIST) {
         if (vars_list->type != EXPR_SYMBOL) return NULL;
         Expr** wrapped = (Expr**)malloc(sizeof(Expr*));
         wrapped[0] = expr_copy(vars_list);
@@ -635,7 +669,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         free(wrapped);
         vars_list = wrap_vars;
     }
-    if (n_pos == 3 && !is_list(elim_list)) {
+    if (n_pos == 3 && !is_list(elim_list) && elim_list->type != EXPR_LINKEDLIST) {
         if (elim_list->type != EXPR_SYMBOL) {
             if (wrap_vars) expr_free(wrap_vars);
             return NULL;
@@ -648,7 +682,6 @@ Expr* builtin_groebner_basis(Expr* res) {
     }
 
     /* Empty polynomial list -> empty basis. */
-    size_t n_polys = polys_list->data.function.arg_count;
     if (n_polys == 0) {
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
@@ -720,7 +753,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     {
         const ExprSet* excl[3] = { &main_set, &elim_set, &param_explicit };
         for (size_t i = 0; i < n_polys; i++) {
-            collect_free_symbols(polys_list->data.function.args[i],
+            collect_free_symbols(pv[i],
                                  excl, 3, &param_auto);
         }
     }
@@ -738,7 +771,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (main_set.n == 0 && !vars_list && param_explicit.n > 0) {
         const ExprSet* excl[3] = { &param_explicit, &elim_set, NULL };
         for (size_t i = 0; i < n_polys; i++) {
-            collect_free_symbols(polys_list->data.function.args[i],
+            collect_free_symbols(pv[i],
                                  excl, 2, &main_set);
         }
     }
@@ -885,7 +918,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     size_t nF = 0;
     bool failed = false;
     for (size_t i = 0; i < n_polys; i++) {
-        Expr* norm = normalise_polynomial(polys_list->data.function.args[i]);
+        Expr* norm = normalise_polynomial(pv[i]);
         GBPoly* p = gb_from_expr(norm, all_vars, (int)n_vars,
                                  use_order, elim_pivot, wmat_ptr);
         expr_free(norm);

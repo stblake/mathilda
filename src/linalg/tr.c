@@ -6,34 +6,50 @@
  */
 
 #include "linalg.h"
+#include "linkedlist.h"
 #include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
 
+/* The levels of a List or LinkedList (a LinkedList is the List of its
+ * elements) nested along the first-element spine. */
 static int64_t get_default_trace_depth(Expr* list) {
     int64_t depth = 0;
-    Expr* curr = list;
-    while (curr->type == EXPR_FUNCTION && curr->data.function.head->type == EXPR_SYMBOL && curr->data.function.head->data.symbol.name == SYM_List) {
+    const Expr* curr = list;
+    bool own = false;
+    Expr* held = NULL;                    /* a boxed slot read from a typed list */
+    while (ll_is_seq(curr)) {
         depth++;
-        if (curr->data.function.arg_count == 0) break;
-        curr = curr->data.function.args[0];
+        int64_t n = curr->type == EXPR_LINKEDLIST ? ll_length(curr->data.llist)
+                                                  : (int64_t)curr->data.function.arg_count;
+        if (n == 0) break;
+        bool o;
+        Expr* next = ll_seq_view(curr, 0, &o);
+        if (held) ll_elem_done(held, own);
+        held = next; own = o;
+        curr = next;
     }
+    if (held) ll_elem_done(held, own);
     return depth;
 }
 
+/* Element {index, index, ..., index} (n levels) of a nest of Lists /
+ * LinkedLists, as a new reference; NULL when a level is not a container or
+ * is too short. */
 static Expr* extract_diagonal_element(Expr* list, int64_t n, size_t index) {
-    Expr* curr = list;
+    Expr* curr = expr_copy(list);
     for (int64_t level = 0; level < n; level++) {
-        if (curr->type != EXPR_FUNCTION || curr->data.function.head->type != EXPR_SYMBOL || curr->data.function.head->data.symbol.name != SYM_List) {
-            return NULL; // Not a list at this level
-        }
-        if (index >= curr->data.function.arg_count) {
-            return NULL; // Index out of bounds
-        }
-        curr = curr->data.function.args[index];
+        if (!ll_is_seq(curr)) { expr_free(curr); return NULL; }
+        int64_t len = curr->type == EXPR_LINKEDLIST ? ll_length(curr->data.llist)
+                                                    : (int64_t)curr->data.function.arg_count;
+        if ((int64_t)index >= len) { expr_free(curr); return NULL; }
+        Expr* next = curr->type == EXPR_LINKEDLIST ? ll_get(curr->data.llist, (int64_t)index)
+                                                   : expr_copy(curr->data.function.args[index]);
+        expr_free(curr);
+        curr = next;
     }
-    return expr_copy(curr);
+    return curr;
 }
 
 Expr* builtin_tr(Expr* res) {
@@ -44,9 +60,7 @@ Expr* builtin_tr(Expr* res) {
 
     Expr* list = res->data.function.args[0];
 
-    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol.name != SYM_List) {
-        return expr_copy(list);
-    }
+    if (!ll_is_seq(list)) return expr_copy(list);
 
     Expr* f = NULL;
     bool free_f = false;

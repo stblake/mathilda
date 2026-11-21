@@ -1,3 +1,4 @@
+#include "linkedlist.h"
 #include "simp.h"
 #include "simp_internal.h"
 #include "radrat.h"
@@ -2231,7 +2232,46 @@ static Expr* simp_nested_constant_field(const Expr* expr, const Expr* complexity
     return r;
 }
 
+/* Simplify[e, ll] / Simplify[e, Assumptions -> ll]: a LinkedList of
+ * assumptions means what the List of them means, their conjunction. The call
+ * again with each such LinkedList replaced by And of its elements (read from
+ * the slots), or NULL when no assumption is a LinkedList. */
+static Expr* simp_ll_assumptions(const Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr** args = NULL;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = res->data.function.args[i];
+        bool opt = is_rule_with_lhs((Expr*)a, "Assumptions");
+        const Expr* v = opt ? a->data.function.args[1] : a;
+        if (v->type != EXPR_LINKEDLIST) continue;
+        if (!args) {
+            args = malloc(sizeof(Expr*) * argc);
+            for (size_t j = 0; j < argc; j++) args[j] = expr_copy(res->data.function.args[j]);
+        }
+        Expr* conj = eval_and_free(ll_call_with_elements(expr_new_symbol(SYM_And), v->data.llist));
+        if (opt) {
+            Expr* r = expr_copy(a->data.function.args[0]);
+            conj = expr_new_function(expr_copy(a->data.function.head), (Expr*[]){ r, conj }, 2);
+        }
+        expr_free(args[i]);
+        args[i] = conj;
+    }
+    if (!args) return NULL;
+    Expr* out = expr_new_function(expr_copy(res->data.function.head), args, argc);
+    free(args);
+    return out;
+}
+
 Expr* builtin_simplify(Expr* res) {
+    /* A LinkedList expression maps as a List does: one call per element, the
+     * answers in a new LinkedList (linkedlist.h, ll_map_arg). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
+        res->data.function.args[0]->type == EXPR_LINKEDLIST)
+        return ll_map_arg(res, 0);
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
+        Expr* again = simp_ll_assumptions(res);
+        if (again) return again;
+    }
     Expr* out = builtin_simplify_inner(res);
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
         const Expr* opt = NULL;

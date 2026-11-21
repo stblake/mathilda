@@ -3488,19 +3488,21 @@ Expr* builtin_signature(Expr* res) {
     if (argc != 1) return NULL;
     Expr* x = res->data.function.args[0];
     if (is_ndarray(x)) return ndred_signature(res);
-    if (x->type != EXPR_FUNCTION) {
+    LLElems lle = { NULL, 0, false, false };
+    if (x->type == EXPR_LINKEDLIST) ll_elems_of(x, &lle);   /* its elements, from the slots */
+    if (x->type != EXPR_FUNCTION && !lle.ll) {
         char* txt = expr_to_string_outputform(res);
         mth_message("Signature", "normal", "Nonatomic expression expected at position 1 in %s.",
                     txt ? txt : "");
         free(txt);
         return NULL;
     }
-    size_t n = x->data.function.arg_count;
-    if (n < 2) return expr_new_integer(1);
+    size_t n = lle.ll ? (size_t)lle.n : x->data.function.arg_count;
+    if (n < 2) { ll_elems_release(&lle); return expr_new_integer(1); }
     size_t* perm = malloc(n * sizeof(size_t));
     unsigned char* seen = calloc(n, 1);
     for (size_t k = 0; k < n; k++) perm[k] = k;
-    g_sig_elems = x->data.function.args;
+    g_sig_elems = lle.ll ? lle.v : x->data.function.args;
     qsort(perm, n, sizeof(size_t), sig_cmp);
     int64_t sign = 0;
     bool dup = false;
@@ -3518,6 +3520,7 @@ Expr* builtin_signature(Expr* res) {
     g_sig_elems = NULL;
     free(perm);
     free(seen);
+    ll_elems_release(&lle);
     return expr_new_integer(sign);
 }
 

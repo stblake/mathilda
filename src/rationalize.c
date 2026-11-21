@@ -51,6 +51,7 @@
  * evaluator releases res itself — the builtin must not free res.
  */
 
+#include "linkedlist.h"
 #include "rationalize.h"
 
 #include "arithmetic.h"
@@ -569,8 +570,23 @@ static Expr* rationalize_numeric_quantity(const Expr* e, const mpq_t dx,
     return expr_copy((Expr*)e);
 }
 
+typedef struct { const __mpq_struct* dx; RationalizeMode mode; } RzLLCtx;
+static Expr* rationalize_walk(const Expr* e, const mpq_t dx, RationalizeMode mode);
+/* ll_walk adapter: Rationalize of one LinkedList element. */
+static Expr* rationalize_ll_elem(const Expr* el, void* ctx) {
+    const RzLLCtx* c = (const RzLLCtx*)ctx;
+    return rationalize_walk(el, c->dx, c->mode);
+}
+
 static Expr* rationalize_walk(const Expr* e, const mpq_t dx, RationalizeMode mode) {
     if (!e) return NULL;
+
+    /* A LinkedList is the List of its elements: walked element by element
+     * into a new LinkedList (the list itself when nothing changes). */
+    if (e->type == EXPR_LINKEDLIST) {
+        RzLLCtx c = { dx, mode };
+        return ll_walk(e, rationalize_ll_elem, &c);
+    }
 
     /* Numeric leaves: handle directly. */
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT
@@ -706,6 +722,17 @@ Expr* builtin_rationalize(Expr* res) {
 bool internal_contains_inexact(const Expr* e) {
     if (!e) return false;
     if (is_inexact_leaf(e)) return true;
+    if (e->type == EXPR_LINKEDLIST) {
+        /* the List of its elements: a machine-real/complex list is inexact,
+         * a machine-integer one exact, a boxed one as its elements are */
+        const LinkedList* ll = e->data.llist;
+        LLKind k = ll_kind(ll);
+        if (k == LL_REAL || k == LL_CPLX) return true;
+        if (k != LL_BOXED) return false;
+        for (int64_t i = 0, n = ll_length(ll); i < n; i++)
+            if (internal_contains_inexact(ll_peek_boxed(ll, i))) return true;
+        return false;
+    }
     if (e->type != EXPR_FUNCTION) return false;
     if (internal_contains_inexact(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -843,8 +870,18 @@ static Expr* force_rationalize_leaf(const Expr* e, long bits) {
     return out;
 }
 
+static Expr* force_rationalize_ll_elem(const Expr* el, void* ctx) {
+    return internal_force_rationalize_bits(el, *(const long*)ctx);
+}
+
 Expr* internal_force_rationalize_bits(const Expr* e, long bits) {
     if (!e) return NULL;
+
+    /* A LinkedList: its elements, rationalised into a new LinkedList. */
+    if (e->type == EXPR_LINKEDLIST) {
+        Expr* r = ll_walk(e, force_rationalize_ll_elem, &bits);
+        return r ? r : expr_copy((Expr*)e);
+    }
 
     /* Inexact numeric leaves get the "lenient → bit-exact" treatment
      * (bits == 0) or the precision-respecting interval search (bits > 0). */

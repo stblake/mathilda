@@ -48,6 +48,7 @@
 #include <math.h>
 
 #include "interp.h"
+#include "linkedlist.h"
 #include "fem.h"          /* finite element mesh functions */
 #include "expr.h"
 #include "ndarray.h"
@@ -2178,7 +2179,7 @@ static Expr* interp_packed_table(double* buf, size_t npts, size_t m) {
  * values and exact arithmetic.  Returns the packed table and sets *domain_out on
  * success, or NULL (leaving *domain_out untouched) so the caller falls back to
  * the boxed path.  Does not consume `data`. */
-static Expr* interp_try_pack_data(Expr* data, size_t npts, size_t m,
+static Expr* interp_try_pack_data(Expr** pts, size_t npts, size_t m,
                                   bool synth_x, Expr** domain_out) {
     if (m == 0 || m > 64 || npts < 2) return NULL;
     double* buf   = malloc(sizeof(double) * npts * (m + 1));
@@ -2192,7 +2193,7 @@ static Expr* interp_try_pack_data(Expr* data, size_t npts, size_t m,
 
     bool has_inexact = false, ok = true;
     for (size_t i = 0; i < npts && ok; i++) {
-        Expr* e = data->data.function.args[i];
+        Expr* e = pts[i];
         double* row = buf + i * (m + 1);
         Expr* coordE[64];
         if (synth_x) {
@@ -2328,13 +2329,27 @@ static int coord_exact_cmp(const Expr* a, const Expr* b) {
     return 0;
 }
 
+/* Interpolation over the data points pts[0..npts): a List's elements, or a
+ * LinkedList's read from its slots (res supplies the options). */
+static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts);
+
 static Expr* builtin_interpolation_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
-    if (argc < 1) return NULL;
+    if (res->data.function.arg_count < 1) return NULL;
     Expr* data = res->data.function.args[0];
+    if (data->type == EXPR_LINKEDLIST) {
+        LLElems pt;
+        ll_elems_of(data, &pt);
+        Expr* r = interp_impl_pts(res, pt.v, (size_t)pt.n);
+        ll_elems_release(&pt);
+        return r;
+    }
     if (!interp_is_list(data)) return NULL;
-    size_t npts = data->data.function.arg_count;
+    return interp_impl_pts(res, data->data.function.args, data->data.function.arg_count);
+}
+
+static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
+    size_t argc = res->data.function.arg_count;
     if (npts < 2) return NULL;
 
     /* options / immediate evaluation point */
@@ -2358,7 +2373,7 @@ static Expr* builtin_interpolation_impl(Expr* res) {
     }
 
     /* determine the data form */
-    Expr* e0 = data->data.function.args[0];
+    Expr* e0 = pts[0];
     size_t m;
     bool synth_x = false;     /* form 1 */
     int Ksupplied = 0;
@@ -2390,7 +2405,7 @@ static Expr* builtin_interpolation_impl(Expr* res) {
      * leaves `periodic` untouched for the boxed path, which frees it. */
     if (Ksupplied == 0 && method != METHOD_HERMITE) {
         Expr* pdomain = NULL;
-        Expr* ptable = interp_try_pack_data(data, npts, m, synth_x, &pdomain);
+        Expr* ptable = interp_try_pack_data(pts, npts, m, synth_x, &pdomain);
         if (ptable)
             return interp_finish_object(pdomain, ptable, m, explicit_order, method,
                                         periodic, any_periodic, eval_point);
@@ -2409,7 +2424,7 @@ static Expr* builtin_interpolation_impl(Expr* res) {
     bool ok = true;
     size_t built = 0;
     for (size_t i = 0; i < npts && ok; i++) {
-        Expr* e = data->data.function.args[i];
+        Expr* e = pts[i];
         double coord[64];
         Expr* coordE[64];
         if (m > 64) { ok = false; break; }
@@ -2585,20 +2600,33 @@ static Expr* builtin_interpolation(Expr* res) {
  *   rectangularity (every sibling the same length) is enforced later by
  *   listinterp_emit, which visits every node.
  */
+/* A List level or a LinkedList level (the List of its elements). */
+static size_t li_seq_n(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ? (size_t)ll_length(e->data.llist)
+                                      : e->data.function.arg_count;
+}
+
 static bool listinterp_shape(const Expr* array, size_t want_m,
                              size_t* shape, size_t* m_out) {
     const Expr* node = array;
     size_t m = 0;
+    Expr* held = NULL;                                 /* a boxed typed slot */
+    bool own = false;
     for (;;) {
-        if (!interp_is_list(node)) break;              /* reached the value level */
+        if (!ll_is_seq(node)) break;                   /* reached the value level */
         if (want_m != 0 && m == want_m) break;         /* reached requested depth */
-        if (m >= LISTINTERP_MAXDIM) return false;
-        size_t n = node->data.function.arg_count;
-        if (n == 0) return false;                      /* empty axis */
+        if (m >= LISTINTERP_MAXDIM) { if (held) ll_elem_done(held, own); return false; }
+        size_t n = li_seq_n(node);
+        if (n == 0) { if (held) ll_elem_done(held, own); return false; }   /* empty axis */
         shape[m] = n;
         m++;
-        node = node->data.function.args[0];            /* descend representative */
+        bool o;
+        Expr* next = ll_seq_view(node, 0, &o);          /* descend representative */
+        if (held) ll_elem_done(held, own);
+        held = next; own = o;
+        node = next;
     }
+    if (held) ll_elem_done(held, own);
     if (want_m != 0 && m != want_m) return false;      /* array shallower than domain */
     if (m == 0) return false;                          /* array must be a list */
     *m_out = m;
@@ -2741,13 +2769,15 @@ static bool listinterp_emit(Expr* node, size_t depth, size_t m,
                             const size_t* shape, Expr*** xs,
                             size_t* idx, Expr** out, size_t* count) {
     if (depth < m) {
-        if (!interp_is_list(node) || node->data.function.arg_count != shape[depth])
+        if (!ll_is_seq(node) || li_seq_n(node) != shape[depth])
             return false;
         for (size_t i = 0; i < shape[depth]; i++) {
             idx[depth] = i;
-            if (!listinterp_emit(node->data.function.args[i], depth + 1, m,
-                                 shape, xs, idx, out, count))
-                return false;
+            bool own;
+            Expr* el = ll_seq_view(node, (int64_t)i, &own);
+            bool ok = listinterp_emit(el, depth + 1, m, shape, xs, idx, out, count);
+            ll_elem_done(el, own);
+            if (!ok) return false;
         }
         return true;
     }
@@ -2810,13 +2840,16 @@ static bool listinterp_pack_emit(Expr* node, size_t depth, size_t m,
                                  size_t* idx, double* buf, size_t ncol,
                                  size_t* lin, bool* has_inexact) {
     if (depth < m) {
-        if (!interp_is_list(node) || node->data.function.arg_count != shape[depth])
+        if (!ll_is_seq(node) || li_seq_n(node) != shape[depth])
             return false;
         for (size_t i = 0; i < shape[depth]; i++) {
             idx[depth] = i;
-            if (!listinterp_pack_emit(node->data.function.args[i], depth + 1, m,
-                                      shape, xd, idx, buf, ncol, lin, has_inexact))
-                return false;
+            bool own;
+            Expr* el = ll_seq_view(node, (int64_t)i, &own);
+            bool ok = listinterp_pack_emit(el, depth + 1, m, shape, xd, idx, buf, ncol,
+                                           lin, has_inexact);
+            ll_elem_done(el, own);
+            if (!ok) return false;
         }
         return true;
     }
@@ -2857,7 +2890,8 @@ static Expr* builtin_listinterpolation(Expr* res) {
 
     Expr* array = res->data.function.args[0];
     bool arr_is_nd = is_ndarray(array);
-    if (!arr_is_nd && !interp_is_list(array)) return NULL;
+    /* a LinkedList level is walked through its slots (listinterp_shape/emit) */
+    if (!arr_is_nd && !interp_is_list(array) && !ll_has_ll_level1(array)) return NULL;
     /* An empty array has no points to interpolate; answer exactly as the
      * empty List does rather than build a function over the domain {1, 0}. */
     if (arr_is_nd && ndarray_size(array) == 0) return ndarray_delist_and_reeval(res);
@@ -3202,23 +3236,22 @@ static void ip_tensor_cb(const int* alpha, void* vctx) {
 
 /* Parse `data`/`vars` into the condition list. Returns false on malformed data
  * (caller leaves the call unevaluated). */
-static bool ip_collect(Expr* data, size_t m, IPData* D) {
+static bool ip_collect_pts(Expr** dv, size_t npts, size_t m, IPData* D) {
     memset(D, 0, sizeof(*D));
     D->m = m;
     D->coords_numeric = true;
-    if (!interp_is_list(data) || data->data.function.arg_count < 1) return false;
-    size_t npts = data->data.function.arg_count;
+    if (npts < 1) return false;
 
     if (m == 1) {
         /* value-form if any top-level element is a scalar; else pairs-form. */
         bool all_lists = true;
         for (size_t i = 0; i < npts; i++)
-            if (!interp_is_list(data->data.function.args[i])) { all_lists = false; break; }
+            if (!interp_is_list(dv[i])) { all_lists = false; break; }
 
         if (!all_lists) {
             /* value form: point = i+1; scalar -> value; list -> {f, df, ...}. */
             for (size_t i = 0; i < npts; i++) {
-                Expr* e = data->data.function.args[i];
+                Expr* e = dv[i];
                 double xd = (double)(i + 1);
                 Expr* xE = expr_new_integer((int64_t)(i + 1));
                 Expr* coordE[1] = { xE }; double coordD[1] = { xd };
@@ -3240,7 +3273,7 @@ static bool ip_collect(Expr* data, size_t m, IPData* D) {
         } else {
             /* pairs form: entry = {x, f, df, ...}. x may be symbolic. */
             for (size_t i = 0; i < npts; i++) {
-                Expr* e = data->data.function.args[i];
+                Expr* e = dv[i];
                 if (e->data.function.arg_count < 2) return false;
                 Expr* xE = e->data.function.args[0];
                 double xd = 0.0;
@@ -3261,7 +3294,7 @@ static bool ip_collect(Expr* data, size_t m, IPData* D) {
     /* m >= 2: entry = {{x1,...,xm}, f, t1, t2, ...} with tk the order-k tensor. */
     if (m > 64) return false;
     for (size_t i = 0; i < npts; i++) {
-        Expr* e = data->data.function.args[i];
+        Expr* e = dv[i];
         if (!interp_is_list(e) || e->data.function.arg_count < 2) return false;
         Expr* coord = e->data.function.args[0];
         if (!interp_is_list(coord) || coord->data.function.arg_count != m) return false;
@@ -3286,6 +3319,15 @@ static bool ip_collect(Expr* data, size_t m, IPData* D) {
         }
     }
     return true;
+}
+
+/* The data points of a List, or of a LinkedList read from its slots. */
+static bool ip_collect(Expr* data, size_t m, IPData* D) {
+    LLElems dv;
+    if (!ll_elems_of(data, &dv)) { memset(D, 0, sizeof(*D)); return false; }
+    bool ok = ip_collect_pts(dv.v, (size_t)dv.n, m, D);
+    ll_elems_release(&dv);
+    return ok;
 }
 
 /* ---- Engine A: 1-D Newton (confluent) divided differences ---- */
@@ -3628,6 +3670,28 @@ static Expr* ip_impl(Expr* res) {
         m = vars->data.function.arg_count;
         varr = vars->data.function.args;
         for (size_t k = 0; k < m; k++) if (varr[k]->type != EXPR_SYMBOL) { mpz_clear(modulus); return NULL; }
+    } else if (vars->type == EXPR_LINKEDLIST && ll_length(vars->data.llist) >= 1) {
+        /* a LinkedList of variables, read from its slots (the solvers take
+         * an Expr* array) */
+        LLElems vv;
+        ll_elems_of(vars, &vv);
+        bool syms = true;
+        for (int64_t k = 0; k < vv.n; k++) if (vv.v[k]->type != EXPR_SYMBOL) syms = false;
+        Expr* r = NULL;
+        if (syms) {
+            IPData D;
+            if (ip_collect(data, (size_t)vv.n, &D)) {
+                if (mpz_sgn(modulus) > 0) r = ip_solve_modular(&D, vv.v, modulus);
+                else if (vv.n == 1 && !D.any_automatic) {
+                    r = ip_newton_1d(&D, vv.v[0]);
+                    if (!r) r = ip_solve_general(&D, vv.v);
+                } else r = ip_solve_general(&D, vv.v);
+            }
+            ipdata_free(&D);
+        }
+        ll_elems_release(&vv);
+        mpz_clear(modulus);
+        return r;
     } else { mpz_clear(modulus); return NULL; }
 
     IPData D;

@@ -31,6 +31,7 @@
  * layer rather than re-plumbing the whole pipeline.
  * ========================================================================= */
 
+#include "linkedlist.h"
 #include "limit.h"
 #include "expr.h"
 #include "eval.h"
@@ -6160,6 +6161,11 @@ Expr* builtin_limit(Expr* res) {
     if (internal_args_contain_inexact(res)) {
         return internal_rationalize_then_numericalize(res, builtin_limit);
     }
+    /* A LinkedList maps as a List does: one Limit per element, the answers in
+     * a new LinkedList (linkedlist.h, ll_map_arg). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&
+        res->data.function.args[0]->type == EXPR_LINKEDLIST)
+        return ll_map_arg(res, 0);
     /* Factorial, Pochhammer and Binomial of the limit variable are Gamma
      * ratios everywhere (Factorial[u] = Gamma[1+u], Pochhammer[a, b] =
      * Gamma[a+b]/Gamma[a], Binomial[a, b] = Gamma[1+a]/(Gamma[1+b] Gamma[1+a-b])),
