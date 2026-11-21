@@ -420,19 +420,18 @@ static Expr* map_ndarray_axis(Expr* f, Expr* a) {
     return map_try_repack(a, list, a->data.ndarray.dtype);
 }
 
-/* Map over a LinkedList gives a new LinkedList.
+/* Map over a LinkedList gives a new LinkedList, read from the slots.
  *
- * At the default level {1} the list STREAMS through Map itself in blocks:
- * ll_block hands a typed block over as a packed array gathered straight from
- * the slots, so Map[#^2 &, ll] takes the compiled numloop_map path and the
- * packed kernels exactly as Map over a packed List does, and agrees with it to
- * the bit; each result block is appended natively (memcpy when packed).
+ * At the default level {1} a numeric f runs numloop's compiled function per
+ * slot (ll_map_compiled), as Map over a packed List runs numloop_map, so the
+ * two agree to the bit; any other f is applied element by element.
  *
  * Any other level specification (or Heads -> True) maps each element with the
  * List walker at level 1 -- map_at_level, which handles positive, negative
  * and mixed bounds -- and evaluates it at once: the LinkedList atom is never
  * re-evaluated, so its elements must be values when stored. Level 0 wraps f
- * around the new list. */
+ * around the new list. Either way the elements come from a snapshot, since f
+ * may change the list it is mapping over. */
 Expr* ll_map(Expr* res) {
     Expr* f = res->data.function.args[0];
     const LinkedList* src = res->data.function.args[1]->data.llist;
@@ -440,35 +439,35 @@ Expr* ll_map(Expr* res) {
     if (is_rule2(ls)) ls = NULL;
     LevelSpec spec = parse_level_spec(ls, 1, 1);
     parse_options(res, ls ? 3 : 2, &spec);
-    int64_t len = ll_length(src);
     /* Only level 0: f wraps the list itself (no element changes, so no copy). */
     if (spec.min == 0 && spec.max == 0) {
         Expr* a[1] = { expr_copy(res->data.function.args[1]) };
         return expr_new_function(expr_copy(f), a, 1);
     }
-    LinkedList* out = ll_new();
-    if (spec.min == 1 && spec.max == 1 && !spec.heads) {
-        for (int64_t lo = 0; lo < len; lo += LL_STREAM_BLOCK) {
-            int64_t n = len - lo < LL_STREAM_BLOCK ? len - lo : LL_STREAM_BLOCK;
-            Expr* a[2] = { expr_copy(f), ll_block(src, lo, n) };
-            Expr* call = expr_new_function(expr_new_symbol(SYM_Map), a, 2);
-            Expr* r = evaluate(call);
-            expr_free(call);
-            /* Not a list: an abort or throw passing through -- hand it on. */
-            if (!ll_is_list_source(r)) { ll_release(out); return r; }
-            ll_append_elements(out, r);
-            expr_free(r);
-        }
-        return expr_new_linkedlist(out);
+    bool level1 = spec.min == 1 && spec.max == 1 && !spec.heads;
+    if (level1) {
+        Expr* fast = ll_map_compiled(f, src);
+        if (fast) return fast;
     }
+    LinkedList* snap = ll_copy(src);
+    int64_t len = ll_length(snap);
+    LinkedList* out = ll_new();
     for (int64_t i = 0; i < len; i++) {
-        Expr* e = ll_get(src, i);
-        Expr* m = map_at_level(f, e, 1, spec);
-        expr_free(e);
+        Expr* e = ll_get(snap, i);
+        Expr* m;
+        if (level1) {
+            Expr* a[1] = { e };
+            m = expr_new_function(expr_copy(f), a, 1);
+        } else {
+            m = map_at_level(f, e, 1, spec);
+            expr_free(e);
+        }
         Expr* v = evaluate(m);
         expr_free(m);
+        if (eval_is_inflight_unwind(v)) { ll_release(snap); ll_release(out); return v; }
         ll_push_back(out, v);
     }
+    ll_release(snap);
     Expr* r = expr_new_linkedlist(out);
     if (spec.min == 0) {
         Expr* a[1] = { r };

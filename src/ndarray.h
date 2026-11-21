@@ -119,6 +119,37 @@ const Expr* nd_present_src2(const Expr* a, const Expr* b);
 /* Total element count (product of dims). */
 size_t ndarray_size(const Expr* a);
 
+/* One operand of a machine element-wise engine, independent of the container
+ * that holds it: `sz` elements of dtype `dt` at `data`, or -- data == NULL --
+ * the broadcast scalar `scalar`. The engines below read nothing else, so an
+ * NDArray (nd_operand_of) and a LinkedList's typed chunks (src/linkedlist_ops.c)
+ * reach the same category decisions, lane checks and loops, and agree to the
+ * bit. Every nd_op_* returns true with a malloc'd buffer of the result (the
+ * operands' length, dtype *out_dt) that the caller owns, or false to decline:
+ * the caller's element-by-element path then answers, as an NDArray's List
+ * path does. Rank and presentation are the caller's (the NDArray wrappers
+ * ndarray_map_unary, ndarray_elementwise, ... reattach them). */
+typedef struct {
+    const void* data;      /* NULL: a broadcast scalar                      */
+    NDType      dt;
+    size_t      sz;
+    const Expr* scalar;    /* the scalar operand (borrowed), when data is NULL */
+} NDOperand;
+
+static inline NDOperand nd_operand_of(const Expr* e) {
+    NDOperand o;
+    o.data = NULL; o.dt = NDT_FLOAT64; o.sz = 0; o.scalar = NULL;
+    if (is_ndarray(e)) {
+        o.data = e->data.ndarray.data;
+        o.dt = e->data.ndarray.dtype;
+        o.sz = ndarray_size(e);
+    } else {
+        o.scalar = e;
+    }
+    return o;
+}
+
+
 /* Probe a nested List for machine-precision-packable shape: rejects jagged
  * lists and any leaf that isn't EXPR_INTEGER/EXPR_REAL. On success returns
  * a newly built NDArray[...] (caller owns it); on failure (jagged, empty,
@@ -480,6 +511,24 @@ Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* 
  * non-numeric operand, or any element the kernel declines (all-or-nothing, as
  * the unary and binary maps). */
 Expr* ndarray_map_nary(Expr* const* args, size_t n, const NDNaryKernel* k);
+
+/* Most operands an n-ary kernel map takes. */
+#define NDN_MAX_ARGS 8
+
+/* The container-free cores of the maps and arithmetic above (see NDOperand). */
+bool nd_op_map_unary(const NDOperand* a, const NDUnaryKernel* k, void** out_buf, NDType* out_dt);
+/* Either operand may be a buffer; both buffers need one length. */
+bool nd_op_map_binary(const NDOperand* a0, const NDOperand* a1, const NDBinaryKernel* k,
+                      void** out_buf, NDType* out_dt);
+bool nd_op_map_nary(const NDOperand* ops, size_t n, const NDNaryKernel* k,
+                    void** out_buf, NDType* out_dt);
+/* Plus (is_plus) or Times over buffers of one length and scalars. */
+bool nd_op_elementwise(const NDOperand* ops, size_t n, bool is_plus, bool* degenerate,
+                       void** out_buf, NDType* out_dt);
+bool nd_op_elementwise_power(const NDOperand* a, const NDOperand* b, void** out_buf, NDType* out_dt);
+bool nd_op_scalar_power(const NDOperand* a, double er, double ei, void** out_buf, NDType* out_dt);
+bool nd_op_base_scalar_power(double br, double bi, const NDOperand* exp_arr,
+                             void** out_buf, NDType* out_dt);
 
 /* Faithful degrade path: rebuild `call` with every NDArray arg replaced by its
  * equivalent nested List and re-evaluate, so the result matches f[{...}] exactly

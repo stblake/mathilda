@@ -651,6 +651,47 @@ void test_copying_heads_scale() {
 }
 
 
+/* ------------------------------- everywhere: List heads on the chunks */
+
+/* llchk[h, l]: h on a LinkedList of l agrees with h[Normal[ll]] -- held, so an
+ * unevaluated h[ll] is never rescued by evaluating h[{...}] afterwards --
+ * without materialising the list (only Normal may) and without changing it. */
+static const char* LLCHK =
+    "llchk[h_, l0_] := Module[{ll = LinkedList[l0], l, c0, r, c1}, l = Normal[ll]; "
+    "c0 = Internal`LinkedListConversionCount[]; r = h[ll]; "
+    "c1 = Internal`LinkedListConversionCount[]; "
+    "{c1 == c0, (Hold[Evaluate[r]] //. x_LinkedList :> With[{v = Normal[x]}, v /; True]) === "
+    "Hold[Evaluate[h[l]]], Normal[ll] === l}]; ";
+
+static void expect_llchk(const char* heads, const char* fixtures) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+             "%sUnion[Flatten[Quiet[Table[llchk[h, l], {h, %s}, {l, %s}]]]]", LLCHK, heads, fixtures);
+    assert_eval_eq(buf, "{True}", 0);
+}
+
+/* Map, Select and Listable threading read the slots: compiled functions and
+ * predicates per slot, every ND kernel and the buffer arithmetic through the
+ * engines' container-free cores, else f[e] per element -- never a List. */
+void test_map_select_listable_direct() {
+    const char* fx = "{N[Range[-6, 13]]/7, Range[-5, 14], N[Range[12]] - 0.5 I, {m1a, 2, m1b, 3.5}, {}}";
+    expect_llchk("{Sin, Sqrt, Log, Floor, Abs, Round, # + 1 &, # 2 &, #^2 &, #^0.5 &, 2^# &, #^# &, "
+                 "Mod[#, 3] &, ArcTan[#, #] &, BesselJ[1, #] &, LerchPhi[0.5, 2, #] &, # - 1 &, #/3 &, "
+                 "-# &, # + # &, # # &, # + 2.5 &, IntegerLength, Map[#^2 + 1 &, #] &, Map[# + 0.5 &, #] &, "
+                 "Map[m1f, #] &, Select[#, # > 0 &] &, Select[#, EvenQ] &, Select[#, EvenQ, 2] &}", fx);
+    /* bignum promotion, exact Rationals and messages, as on the List */
+    expect_llchk("{# + 2^62 &, #^-1 &, # 2^62 &, #^3 &}", "{{2^62, 1, 0, -2}}");
+    /* the callback may change the list: the elements come from a snapshot */
+    assert_eval_eq("m1x = LinkedList[{1, 2, 3}]; {Normal[Map[(AppendTo[m1x, 0]; #) &, m1x]], Length[m1x], "
+                   "Normal[Select[m1x, (PrependTo[m1x, 9]; True) &]] === {1, 2, 3, 0, 0, 0}, Length[m1x]}",
+                   "{{1, 2, 3}, 6, True, 12}", 0);
+    /* a Throw or an Abort leaves the head */
+    assert_eval_eq("{Catch[Map[If[# == 2, Throw[m1t], #] &, LinkedList[{1, 2, 3}]]], "
+                   "Catch[Select[LinkedList[{1, 2, 3}], If[# == 2, Throw[m1u], True] &]], "
+                   "CheckAbort[Map[If[# == 2, Abort[], #] &, LinkedList[{1, 2, 3}]], m1ab]}",
+                   "{m1t, m1u, m1ab}", 0);
+}
+
 /* ---------------------------------------- phase 5: Compile and autocompile */
 
 /* Module-local lists compile, at every element type, and answer exactly as the
@@ -793,6 +834,7 @@ int main() {
     TEST(test_copying_heads_leave_source);
     TEST(test_copying_messages);
     TEST(test_listable_threading_bit_parity);
+    TEST(test_map_select_listable_direct);
     TEST(test_copying_heads_scale);
     TEST(test_compile_module_local_lists);
     TEST(test_compile_list_arguments);

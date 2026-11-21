@@ -3171,3 +3171,43 @@ static bool pred_run_node(const NumPredNode* n, const double* regs,
 bool numloop_pred_run(NumPred* p, double x, bool* out) {
     return pred_run_node(p->root, &x, p->stack, out);
 }
+
+/* ========================================================================
+ *  Compiled unary functions over raw machine values (numloop.h, NumFn)
+ *
+ *  numloop_map's body, without the container: the same compile_function and
+ *  numprog_run, so a caller that holds machine numbers in its own storage --
+ *  a LinkedList's chunks -- maps them at exactly the speed and to exactly the
+ *  bit of Map over a packed List, without gathering them into one.
+ * ==================================================================== */
+struct NumFn {
+    NumProg p;
+    double* stack;
+    bool    body_inexact;
+};
+
+NumFn* numloop_fn_compile(const Expr* f) {
+    if (numloop_off()) return NULL;
+    NumFn* fn = calloc(1, sizeof(*fn));
+    if (!fn) return NULL;
+    if (!compile_function(&fn->p, f, 1, &fn->body_inexact)) { free(fn); return NULL; }
+    fn->stack = malloc((fn->p.max_stack ? fn->p.max_stack : 1) * sizeof(double));
+    if (!fn->stack) { prog_free(&fn->p); free(fn); return NULL; }
+    return fn;
+}
+
+bool numloop_fn_body_inexact(const NumFn* fn) { return fn->body_inexact; }
+
+bool numloop_fn_run(NumFn* fn, double x, double* out) {
+    double r = numprog_run(&fn->p, &x, fn->stack);
+    if (!isfinite(r)) return false;
+    *out = r;
+    return true;
+}
+
+void numloop_fn_free(NumFn* fn) {
+    if (!fn) return;
+    prog_free(&fn->p);
+    free(fn->stack);
+    free(fn);
+}

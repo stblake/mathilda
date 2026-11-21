@@ -78,6 +78,8 @@ static uint64_t g_ll_materialised = 0;
 
 uint64_t ll_materialise_count(void) { return g_ll_materialised; }
 
+static Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n);
+
 /* ------------------------------------------------------------------------
  *  Geometry
  * ---------------------------------------------------------------------- */
@@ -767,6 +769,15 @@ static void ll_push_back_buffer(LinkedList* ll, const unsigned char* src, int64_
     }
 }
 
+LinkedList* ll_from_buffer(LLKind kind, const void* buf, int64_t n) {
+    LinkedList* ll = ll_new();
+    if (n > 0) {
+        ll->kind = kind;
+        ll_push_back_buffer(ll, (const unsigned char*)buf, n);
+    }
+    return ll;
+}
+
 LinkedList* ll_copy(const LinkedList* ll) {
     LinkedList* c = ll_new();
     int64_t n = ll_length(ll);
@@ -897,7 +908,10 @@ void ll_reserve_typed(LinkedList* ll, LLKind kind, int64_t n) {
 /* Elements [lo, lo + n) as one value the List machinery consumes directly: a
  * packed rank-1 array (gathered from the typed slots, no Expr per element) or,
  * for a boxed list, a List sharing the elements. New reference; n >= 1. */
-Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n) {
+/* Elements [lo, lo + n) as a packed rank-1 List (typed) or a plain List
+ * sharing the elements (boxed). Only Normal's compiled twin (ll_to_ndarray)
+ * materialises a list; every other head reads the slots. */
+static Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n) {
     g_ll_materialised++;
     if (src->kind == LL_I64 || src->kind == LL_REAL || src->kind == LL_CPLX) {
         NDType dt = src->kind == LL_I64 ? NDT_INT64

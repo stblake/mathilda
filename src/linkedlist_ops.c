@@ -22,10 +22,16 @@
 #include "ndarray_internal.h"  /* nd_parallel_reduce */
 #include "checked_int.h"       /* ci_add_i64 */
 #include "sym_names.h"
+#include "eval.h"              /* evaluate, eval_is_inflight_unwind */
+#include "attr.h"              /* ATTR_LISTABLE */
+#include "arithmetic.h"        /* power_scalar_components */
+#include "common.h"            /* head_is */
+#include "numloop.h"           /* NumFn, NumPred */
 
 #include <float.h>
 #include <gmp.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ------------------------------------------------------------------------
@@ -287,5 +293,255 @@ Expr* ll_listable_direct(Expr* res) {
         c.out = out;
         if (!nd_parallel_for((size_t)n, ll_map_chunk, &c)) { ll_release(out); return NULL; }
     }
+    return expr_new_linkedlist(out);
+}
+
+/* ------------------------------------------------------------------------
+ *  Listable threading through the machine engines
+ *
+ *  Everything ll_listable_direct does not cover -- every registered unary,
+ *  binary and n-ary kernel, Plus and Times of any machine kind (exact int64
+ *  included), Power -- runs the very engine a packed List reaches, through its
+ *  container-free core (ndarray.h, NDOperand). A list held in one ascending
+ *  chunk span is handed over in place; any other is gathered into one raw
+ *  scratch buffer of its slots (no List, packed List or NDArray is built), and
+ *  the answer buffer becomes the new list's chunks. Same engine, same
+ *  category decisions, same lane checks: bit-identical to the packed List, and
+ *  declining exactly where it declines.
+ * ---------------------------------------------------------------------- */
+
+
+static NDType ll_dtype(LLKind k) {
+    return k == LL_I64 ? NDT_INT64 : k == LL_REAL ? NDT_FLOAT64 : NDT_COMPLEX64;
+}
+
+static bool ll_kind_of_dtype(NDType dt, LLKind* k) {
+    if (dt == NDT_INT64)     { *k = LL_I64;  return true; }
+    if (dt == NDT_FLOAT64)   { *k = LL_REAL; return true; }
+    if (dt == NDT_COMPLEX64) { *k = LL_CPLX; return true; }
+    return false;
+}
+
+/* One engine operand. A typed LinkedList: in place when one ascending span
+ * holds it, else gathered into *scratch (the caller frees). A rank-1 array, or
+ * a scalar, as nd_operand_of gives it. False for a boxed list, a plain List or
+ * a higher-rank array: the element path answers those. */
+static bool ll_nd_operand(const Expr* a, NDOperand* o, void** scratch, bool* is_buf) {
+    *scratch = NULL;
+    *is_buf = false;
+    const LinkedList* l = expr_linkedlist(a);
+    if (l) {
+        LLKind k = ll_kind(l);
+        if (k != LL_I64 && k != LL_REAL && k != LL_CPLX) return false;
+        int64_t n = ll_length(l);
+        const void* p;
+        int dir;
+        o->dt = ll_dtype(k);
+        o->sz = (size_t)n;
+        o->scalar = NULL;
+        if (ll_span_at(l, 0, &p, &dir) >= n && dir > 0) {
+            o->data = p;
+        } else {
+            *scratch = malloc((size_t)n * ll_slot_size(l));
+            if (!*scratch) return false;
+            ll_gather(l, 0, n, *scratch);
+            o->data = *scratch;
+        }
+        *is_buf = true;
+        return true;
+    }
+    if (is_ndarray(a)) {
+        if (a->data.ndarray.rank != 1) return false;
+        *o = nd_operand_of(a);
+        *is_buf = true;
+        return true;
+    }
+    if (a->type == EXPR_FUNCTION && head_is(a, SYM_List)) return false;
+    *o = nd_operand_of(a);
+    return true;
+}
+
+/* The engine the evaluator would pick for `res` were its LinkedList operands
+ * packed Lists: a registered kernel (eval.c, step 4b), else the Plus / Times /
+ * Power builtins' buffer arithmetic. NULL declines. */
+static Expr* ll_listable_engine(Expr* res, int64_t len) {
+    const Expr* h = res->data.function.head;
+    if (h->type != EXPR_SYMBOL) return NULL;
+    const char* name = h->data.symbol.name;
+    const SymbolDef* d = symtab_lookup(name);
+    if (!d || d->down_values) return NULL;          /* a user rule fires first */
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0 || argc > NDN_MAX_ARGS) return NULL;
+    bool plus_times = (name == SYM_Plus || name == SYM_Times);
+    bool power = (name == SYM_Power && argc == 2);
+    if (!plus_times && !power &&
+        !(argc == 1 && d->ndarray_unary_kernel) &&
+        !(argc == 2 && d->ndarray_binary_kernel) &&
+        !(argc >= 3 && d->ndarray_nary_kernel && (d->attributes & ATTR_LISTABLE)))
+        return NULL;
+
+    NDOperand ops[NDN_MAX_ARGS];
+    void* scratch[NDN_MAX_ARGS];
+    bool buf[NDN_MAX_ARGS];
+    size_t got = 0;
+    bool ok = true;
+    for (; got < argc && ok; got++)
+        ok = ll_nd_operand(res->data.function.args[got], &ops[got], &scratch[got], &buf[got]);
+    void* out = NULL;
+    NDType dto = NDT_FLOAT64;
+    if (ok) {
+        if (plus_times) {
+            bool degenerate = false;
+            ok = nd_op_elementwise(ops, argc, name == SYM_Plus, &degenerate, &out, &dto);
+        } else if (power) {
+            double r, i;
+            if (buf[0] && buf[1])
+                ok = nd_op_elementwise_power(&ops[0], &ops[1], &out, &dto);
+            else if (buf[0])
+                ok = power_scalar_components(ops[1].scalar, &r, &i) &&
+                     nd_op_scalar_power(&ops[0], r, i, &out, &dto);
+            else
+                ok = power_scalar_components(ops[0].scalar, &r, &i) &&
+                     nd_op_base_scalar_power(r, i, &ops[1], &out, &dto);
+            (void)ndarray_take_degenerate();        /* the element path answers */
+        } else if (argc == 1) {
+            ok = nd_op_map_unary(&ops[0], (const NDUnaryKernel*)d->ndarray_unary_kernel, &out, &dto);
+        } else if (argc == 2) {
+            ok = nd_op_map_binary(&ops[0], &ops[1], (const NDBinaryKernel*)d->ndarray_binary_kernel,
+                                  &out, &dto);
+        } else {
+            ok = nd_op_map_nary(ops, argc, (const NDNaryKernel*)d->ndarray_nary_kernel, &out, &dto);
+        }
+    }
+    for (size_t i = 0; i < got; i++) free(scratch[i]);
+    LLKind k;
+    if (!ok || !ll_kind_of_dtype(dto, &k)) { free(out); return NULL; }
+    LinkedList* r = ll_from_buffer(k, out, len);
+    free(out);
+    return expr_new_linkedlist(r);
+}
+
+/* Element i of a threaded operand, as List threading hands it to the head:
+ * slot i of a LinkedList (read from the snapshot), part i of a List, element
+ * (or row) i of an array; a scalar operand as it stands. New reference. */
+static Expr* ll_thread_arg(const Expr* a, const LinkedList* snap, int64_t i) {
+    if (snap) return ll_get(snap, i);
+    if (a->type == EXPR_FUNCTION && head_is(a, SYM_List)) return expr_copy(a->data.function.args[i]);
+    if (is_ndarray(a) && a->data.ndarray.rank >= 1) {
+        if (a->data.ndarray.rank == 1) return ndarray_element_to_expr(a, (size_t)i);
+        Expr* ix = expr_new_integer(i + 1);
+        bool degrade = false;
+        Expr* row = ndarray_part(a, &ix, 1, &degrade);
+        expr_free(ix);
+        if (row) return row;
+        Expr* nested = ndarray_to_nested_list(a);
+        Expr* e = expr_copy(nested->data.function.args[i]);
+        expr_free(nested);
+        return e;
+    }
+    return expr_copy((Expr*)a);
+}
+
+/* The element path: head[a1_i, a2_i, ...] evaluated for each i, exactly the
+ * calls List threading makes, read from the slots of a snapshot of each
+ * LinkedList operand (the head may run user code that changes the list). */
+static Expr* ll_listable_elements(Expr* res, int64_t len) {
+    size_t argc = res->data.function.arg_count;
+    LinkedList** snap = calloc(argc ? argc : 1, sizeof(LinkedList*));
+    Expr** a = malloc(sizeof(Expr*) * (argc ? argc : 1));
+    if (!snap || !a) { free(snap); free(a); return NULL; }
+    for (size_t j = 0; j < argc; j++) {
+        const LinkedList* l = expr_linkedlist(res->data.function.args[j]);
+        if (l) snap[j] = ll_copy(l);
+    }
+    LinkedList* out = ll_new();
+    Expr* unwind = NULL;
+    for (int64_t i = 0; i < len && !unwind; i++) {
+        for (size_t j = 0; j < argc; j++)
+            a[j] = ll_thread_arg(res->data.function.args[j], snap[j], i);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        if (eval_is_inflight_unwind(v)) { unwind = v; break; }
+        ll_push_back(out, v);
+    }
+    for (size_t j = 0; j < argc; j++) if (snap[j]) ll_release(snap[j]);
+    free(snap);
+    free(a);
+    if (unwind) { ll_release(out); return unwind; }
+    return expr_new_linkedlist(out);
+}
+
+Expr* ll_listable_threaded(Expr* res, int64_t len) {
+    if (len == 0) return expr_new_linkedlist(ll_new());
+    Expr* r = ll_listable_direct(res);
+    if (r) return r;
+    r = ll_listable_engine(res, len);
+    if (r) return r;
+    return ll_listable_elements(res, len);
+}
+
+/* ------------------------------------------------------------------------
+ *  Map with a compiled numeric function (numloop.h, NumFn)
+ * ---------------------------------------------------------------------- */
+
+Expr* ll_map_compiled(const Expr* f, const LinkedList* src) {
+    LLKind k = ll_kind(src);
+    int64_t n = ll_length(src);
+    if ((k != LL_REAL && k != LL_I64) || n == 0) return NULL;
+    NumFn* fn = numloop_fn_compile(f);
+    if (!fn) return NULL;
+    /* numloop_map's rule: every result must be inexact -- the element is a
+     * Real, or the body carries a Real literal. */
+    if (k == LL_I64 && !numloop_fn_body_inexact(fn)) { numloop_fn_free(fn); return NULL; }
+    LinkedList* out = ll_new();
+    ll_reserve_typed(out, LL_REAL, n);
+    bool ok = true;
+    for (int64_t i = 0; ok && i < n; ) {
+        /* the source span and the (reserved, ascending) destination span */
+        const void *p, *q;
+        int dir, dq;
+        int64_t m = ll_span_at(src, i, &p, &dir);
+        int64_t mq = ll_span_at(out, i, &q, &dq);
+        if (mq < m) m = mq;
+        double* o = (double*)q;
+        for (int64_t t = 0; t < m; t++) {
+            double x = k == LL_REAL ? LL_SLOT(double, p, dir, t)
+                                    : (double)LL_SLOT(int64_t, p, dir, t);
+            if (!numloop_fn_run(fn, x, &o[t])) { ok = false; break; }
+        }
+        i += m;
+    }
+    numloop_fn_free(fn);
+    if (!ok) { ll_release(out); return NULL; }
+    return expr_new_linkedlist(out);
+}
+
+/* ------------------------------------------------------------------------
+ *  Select with a compiled predicate (numloop.h, NumPred) -- machine reals only,
+ *  the contract numloop_pred_run carries.
+ * ---------------------------------------------------------------------- */
+Expr* ll_select_compiled(const Expr* crit, const LinkedList* src) {
+    int64_t n = ll_length(src);
+    if (ll_kind(src) != LL_REAL || n == 0) return NULL;
+    NumPred* pr = numloop_pred_compile(crit);
+    if (!pr) return NULL;
+    LinkedList* out = ll_new();
+    LLCursor c;
+    const void* p;
+    int dir;
+    int64_t base, m;
+    bool ok = true;
+    ll_cursor(&c, src, 0, n);
+    while (ok && (m = ll_cursor_next(&c, &p, &dir, &base)) > 0) {
+        for (int64_t t = 0; t < m; t++) {
+            double x = LL_SLOT(double, p, dir, t);
+            bool keep;
+            if (!numloop_pred_run(pr, x, &keep)) { ok = false; break; }
+            if (keep) ll_push_back_real(out, x);
+        }
+    }
+    numloop_pred_free(pr);
+    if (!ok) { ll_release(out); return NULL; }
     return expr_new_linkedlist(out);
 }

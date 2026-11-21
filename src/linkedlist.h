@@ -55,6 +55,11 @@ LinkedList* ll_retain(LinkedList* ll);       /* returns ll                      
 void        ll_release(LinkedList* ll);      /* frees at refcount 0             */
 uint64_t    ll_id(const LinkedList* ll);     /* stable identity (hash / order)  */
 
+/* A new list of `n` raw slots of typed `kind` (I64, REAL or CPLX) copied from
+ * `buf` chunk-wise: where a kernel that computed into a scratch buffer hands
+ * its answer over. */
+LinkedList* ll_from_buffer(LLKind kind, const void* buf, int64_t n);
+
 /* Shallow copy: an independent list with the same elements and kind (boxed
  * elements shared by Expr refcount). O(n). */
 LinkedList* ll_copy(const LinkedList* ll);
@@ -164,16 +169,6 @@ void  ll_append_range_rev(LinkedList* dst, const LinkedList* src, int64_t lo, in
  * for a list the caller alone holds) before the list escapes. For kernels
  * that write their output straight into the chunks. */
 void  ll_reserve_typed(LinkedList* ll, LLKind kind, int64_t n);
-/* Elements [lo, lo + n) (n >= 1) as a packed rank-1 List (typed storage,
- * gathered raw) or a plain List sharing the elements (boxed): the unit in
- * which Map, Select and Listable threading stream a list through the List and
- * packed-array machinery. New reference. */
-Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n);
-/* Elements per streamed block. Large on purpose: the packed kernels thread
- * across cores only over a large buffer (sixteen 64K-element Sin calls cost
- * five times one 10^6 call), so a list up to 4M elements streams in a single
- * call; beyond that the block bounds the temporary at 64 MB. */
-#define LL_STREAM_BLOCK ((int64_t)1 << 22)
 
 /* Append every element of a List, packed List or (any-rank) NDArray `src`
  * (borrowed). Rank-1 int64/float64/complex64 buffers are copied chunk-wise.
@@ -236,6 +231,16 @@ Expr* ll_thread_listable(Expr* res);
  * element the packed path would not answer at machine precision), and the
  * caller then streams. */
 Expr* ll_listable_direct(Expr* res);
+/* The whole of Listable threading once the operand lengths are known to agree
+ * (`len` elements): ll_listable_direct, else the machine engine a packed List
+ * would reach (ndarray.h, NDOperand) over the slots, else head[a1_i, ...]
+ * evaluated element by element from snapshots of the list operands. */
+Expr* ll_listable_threaded(Expr* res, int64_t len);
+/* Map[f, ll] at level 1 / Select[ll, crit] through numloop's compiled function
+ * or predicate, straight from the typed slots; NULL declines (the caller maps
+ * element by element). */
+Expr* ll_map_compiled(const Expr* f, const LinkedList* src);
+Expr* ll_select_compiled(const Expr* crit, const LinkedList* src);
 
 /* Registers LinkedList, Push, Pop and PopFirst. */
 void linkedlist_init(void);

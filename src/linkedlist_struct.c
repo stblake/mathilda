@@ -16,13 +16,14 @@
  *   removed positions; Insert copies the ranges between insertion points.
  *
  *   Element-computing heads (Select, Listable threading, and Map in
- *   funcprog.c) STREAM the list through the existing List machinery in blocks
- *   of LL_STREAM_BLOCK elements: ll_block hands a typed block over as a packed
- *   array gathered straight from the slots, so Sin[ll], ll + 1, Select[ll,
- *   EvenQ] run the very packed kernels and compiled predicates a packed List
- *   would, and agree with them to the bit; each result block is appended
- *   natively (memcpy when it comes back packed). See LL_STREAM_BLOCK for the
- *   block size.
+ *   funcprog.c) read the slots directly too. Machine work runs the very
+ *   engines a packed List reaches -- numloop's compiled functions and
+ *   predicates per slot (ll_map_compiled, ll_select_compiled), and the ND
+ *   kernels and buffer arithmetic through their container-free cores
+ *   (ll_listable_threaded; ndarray.h, NDOperand) -- so Sin[ll], ll + 1,
+ *   Select[ll, # > 0 &] agree with the packed List to the bit. Anything else
+ *   evaluates f[e] per element, as the List heads do, over a snapshot of the
+ *   list (the callback may change it).
  *
  * Messages: an out-of-range position is reported with the head's own tag
  * (Take::take, Drop::drop, Insert::ins, Delete::partw, Most::nomost,
@@ -576,14 +577,6 @@ Expr* ll_delete(Expr* res) { return ll_insert_delete(res, false); }
  *  Streaming: Select and Listable threading
  * ---------------------------------------------------------------------- */
 
-/* Append one evaluated result block. False when the result is not a list --
- * an abort or a throw passing through -- which the caller then returns. */
-static bool stream_take(LinkedList* out, const Expr* r) {
-    if (!ll_is_list_source(r)) return false;
-    ll_append_elements(out, r);
-    return true;
-}
-
 Expr* ll_select(Expr* res) {
     const LinkedList* src = res->data.function.args[0]->data.llist;
     Expr* crit = res->data.function.args[1];
@@ -593,20 +586,27 @@ Expr* ll_select(Expr* res) {
         if (n->type != EXPR_INTEGER || n->data.integer < 0) return NULL;
         want = n->data.integer;
     }
-    int64_t len = ll_length(src);
-    LinkedList* out = ll_new();
-    for (int64_t lo = 0; lo < len && want != 0; lo += LL_STREAM_BLOCK) {
-        int64_t n = len - lo < LL_STREAM_BLOCK ? len - lo : LL_STREAM_BLOCK;
-        Expr* a[3] = { ll_block(src, lo, n), expr_copy(crit),
-                       want > 0 ? expr_new_integer(want) : NULL };
-        Expr* call = sym_call(SYM_Select, a, want > 0 ? 3 : 2);
-        Expr* r = evaluate(call);
-        expr_free(call);
-        int64_t before = ll_length(out);
-        if (!stream_take(out, r)) { ll_release(out); return r; }
-        expr_free(r);
-        if (want > 0) want -= ll_length(out) - before;
+    /* A compiled predicate over machine reals, as Select over a packed List. */
+    if (want < 0) {
+        Expr* fast = ll_select_compiled(crit, src);
+        if (fast) return fast;
     }
+    /* Otherwise crit[e] per element, as the List Select evaluates it, over a
+     * snapshot: the criterion may change the list. */
+    LinkedList* snap = ll_copy(src);
+    int64_t len = ll_length(snap);
+    LinkedList* out = ll_new();
+    for (int64_t i = 0; i < len && (want < 0 || ll_length(out) < want); i++) {
+        Expr* a[1] = { ll_get(snap, i) };
+        Expr* call = expr_new_function(expr_copy(crit), a, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        if (eval_is_inflight_unwind(v)) { ll_release(snap); ll_release(out); return v; }
+        if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True)
+            ll_push_back_from(out, snap, i);
+        expr_free(v);
+    }
+    ll_release(snap);
     return ll_wrap(out);
 }
 
@@ -617,30 +617,6 @@ static int64_t thread_len(const Expr* a) {
     if (is_plain_list(a)) return (int64_t)a->data.function.arg_count;
     if (is_ndarray(a) && a->data.ndarray.rank >= 1) return a->data.ndarray.dims[0];
     return -1;
-}
-
-/* Elements [lo, lo + n) of a threaded operand, as the List machinery takes
- * them: a LinkedList block (packed when typed), a List of the shared
- * elements, or the array's leading-axis slice (one memcpy of whole rows). */
-static Expr* thread_slice(const Expr* a, int64_t lo, int64_t n) {
-    if (a->type == EXPR_LINKEDLIST) return ll_block(a->data.llist, lo, n);
-    if (is_plain_list(a)) {
-        Expr** v = malloc(sizeof(Expr*) * (size_t)n);
-        for (int64_t i = 0; i < n; i++) v[i] = expr_copy(a->data.function.args[lo + i]);
-        Expr* r = sym_call(SYM_List, v, (size_t)n);
-        free(v);
-        return r;
-    }
-    const NDArrayData* d = &a->data.ndarray;
-    size_t row = ndt_elem_size(d->dtype);
-    for (int k = 1; k < d->rank; k++) row *= (size_t)d->dims[k];
-    int64_t dims[NDARRAY_MAX_RANK];
-    for (int k = 0; k < d->rank; k++) dims[k] = d->dims[k];
-    dims[0] = n;
-    void* buf = malloc(row * (size_t)n);
-    if (!buf) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
-    memcpy(buf, (const unsigned char*)d->data + row * (size_t)lo, row * (size_t)n);
-    return expr_new_ndarray_like(a, d->rank, dims, buf, d->dtype);
 }
 
 /* A Listable call with at least one LinkedList argument threads over it, as
@@ -666,21 +642,5 @@ Expr* ll_thread_listable(Expr* res) {
         len = li;
     }
     if (!any_ll) return NULL;
-    { Expr* d = ll_listable_direct(res); if (d) return d; }
-    LinkedList* out = ll_new();
-    Expr** a = malloc(sizeof(Expr*) * (argc ? argc : 1));
-    for (int64_t lo = 0; lo < len; lo += LL_STREAM_BLOCK) {
-        int64_t n = len - lo < LL_STREAM_BLOCK ? len - lo : LL_STREAM_BLOCK;
-        for (size_t i = 0; i < argc; i++) {
-            const Expr* x = res->data.function.args[i];
-            a[i] = thread_len(x) >= 0 ? thread_slice(x, lo, n) : expr_copy((Expr*)x);
-        }
-        Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
-        Expr* r = evaluate(call);
-        expr_free(call);
-        if (!stream_take(out, r)) { free(a); ll_release(out); return r; }
-        expr_free(r);
-    }
-    free(a);
-    return ll_wrap(out);
+    return ll_listable_threaded(res, len);
 }

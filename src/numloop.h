@@ -169,4 +169,25 @@ void     numloop_pred_free(NumPred* p);
  * on a non-finite element. */
 bool numloop_pred_run(NumPred* p, double x, bool* out);
 
+/* ------------------------------------------------------------------------
+ *  Compiled unary functions over raw machine values
+ *
+ *  numloop_map without the container, for storage that is not a List -- a
+ *  LinkedList's typed chunks. The same compiler and interpreter loop, so the
+ *  answers are numloop_map's to the bit. Same contract: the result of one
+ *  element is a Real only if the element is a Real or the body is inexact
+ *  (numloop_fn_body_inexact); an int64 element widens through `double` as
+ *  numloop_map's packed path does. ------------------------------------------ */
+typedef struct NumFn NumFn;
+
+/* Compile `f` as a numeric function of one argument, or NULL (outside the
+ * subset, or the fast path is off). Free with numloop_fn_free. */
+NumFn* numloop_fn_compile(const Expr* f);
+void   numloop_fn_free(NumFn* fn);
+/* Does the body carry a Real literal (every result is inexact)? */
+bool   numloop_fn_body_inexact(const NumFn* fn);
+/* f[x]: false on a non-finite result, which hands the whole map back to the
+ * interpreter, as numloop_map does. */
+bool   numloop_fn_run(NumFn* fn, double x, double* out);
+
 #endif /* NUMLOOP_H */

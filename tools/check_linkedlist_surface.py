@@ -9,7 +9,11 @@ section 3.2) is that wherever a List works, a LinkedList works too:
 
   * the same answer: H[ll], with every LinkedList in the result replaced by
     its elements, equals H[Normal[ll]] -- held, so an unevaluated H[ll] is
-    never "fixed" by evaluating H[{...}] afterwards;
+    never "fixed" by evaluating H[{...}] afterwards. The reference is
+    Normal[ll] itself, not the literal it was built from: a typed list's
+    Normal is packed, and where the List heads answer a packed and a plain
+    List differently (x^0.5 over mixed signs promotes a packed buffer to
+    Complex throughout) the LinkedList follows its own Normal;
   * computed ON THE CHUNKS: no List, packed List or NDArray of the list's
     elements is built (Internal`LinkedListConversionCount[] does not move;
     only Normal may materialise a list);
@@ -29,6 +33,10 @@ Findings, by kind:
     MSG       a message on one side only
     CONV      the right answer, but the list was materialised to get it
     MUTATED   a non-mutating call changed its LinkedList argument
+    LISTSIDE  a DIFF that is not LinkedList's: the List head itself answers a
+              packed List (what Normal[ll] gives) and the same plain List
+              differently, and the LinkedList follows one of them. Reported
+              for the List head's owner; never gated.
 
 The gate RATCHETS (as check-compile-coverage does): BASELINE_FILE lists the
 known findings, one line per (head, kind); a finding not in it fails the run, and a baseline entry no
@@ -150,7 +158,11 @@ EXTRA = [
 ]
 
 PRELUDE = r"""
-mk[l_] := If[TrueQ[$LL], LinkedList[l], l];
+(* The List side is Normal of the same LinkedList: the representation (packed
+   or not) a LinkedList's elements have, so a packed/unpacked difference of the
+   List heads themselves is never charged to LinkedList. *)
+mk[l_] := Which[TrueQ[$LL], LinkedList[l], TrueQ[$UNPACKED], Developer`FromPackedArray[Normal[LinkedList[l]]],
+  True, Normal[LinkedList[l]]];
 fix[] := (ClearAll[ff];
   x = mk[$X];
   n = mk[{{1, 2}, {3, 4}, {5, 6}}];
@@ -208,8 +220,8 @@ def calls(heads, extra=True):
     return out
 
 
-def program(cs, ll):
-    lines = [f"$LL = {'True' if ll else 'False'};", PRELUDE]
+def program(cs, ll, unpacked=False):
+    lines = [f"$LL = {'True' if ll else 'False'}; $UNPACKED = {'True' if unpacked else 'False'};", PRELUDE]
     for cid, _h, _fn, fx, c in cs:
         lines.append(f'$X = {fx}; R["{cid}", {c}];')
     return "\n".join(lines) + "\n"
@@ -225,27 +237,27 @@ def parse(text):
     return res
 
 
-def run_batch(mathilda, cs, ll):
+def run_batch(mathilda, cs, ll, unpacked=False):
     with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False) as f:
-        f.write(program(cs, ll))
+        f.write(program(cs, ll, unpacked))
         path = f.name
     got = parse(run([mathilda, "-file", path], 60 + 6 * len(cs)))
     os.unlink(path)
     missing = [c for c in cs if c[0] not in got]
     if missing and len(cs) > 1:          # a crash ends the batch: one by one
         for c in missing:
-            got.update(run_batch(mathilda, [c], ll) or {})
+            got.update(run_batch(mathilda, [c], ll, unpacked) or {})
     elif missing:
         got[missing[0][0]] = {"head": "CRASH", "msg": False, "conv": 0,
                               "mut": False, "ll": False, "val": ""}
     return got
 
 
-def run_all(mathilda, cs, ll, jobs, chunk=120):
+def run_all(mathilda, cs, ll, jobs, chunk=120, unpacked=False):
     res = {}
     parts = [cs[i:i + chunk] for i in range(0, len(cs), chunk)]
     with cf.ThreadPoolExecutor(jobs) as ex:
-        for got in ex.map(lambda p: run_batch(mathilda, p, ll), parts):
+        for got in ex.map(lambda p: run_batch(mathilda, p, ll, unpacked), parts):
             res.update(got)
     return res
 
@@ -254,7 +266,7 @@ def evaluated(r, head):
     return r and r["head"] not in (head, "CRASH", "$TimedOut", "TimeConstrained")
 
 
-def classify(cs, plain, linked):
+def classify(cs, plain, linked, unpacked=None):
     rows = []
     for cid, h, fn, _fx, call in cs:
         if h in EXEMPT or EXEMPT_RE.search(h):
@@ -269,7 +281,8 @@ def classify(cs, plain, linked):
         elif (l["head"] == h and l["ll"]) or l["head"] == "$TimedOut":
             kind = "UNEVAL"
         elif l["val"] != p["val"]:
-            kind = "DIFF"
+            u = (unpacked or {}).get(cid)
+            kind = "LISTSIDE" if u and u["val"] != p["val"] else "DIFF"
         elif l["msg"] != p["msg"]:
             kind = "MSG"
         elif l["mut"]:
@@ -302,6 +315,12 @@ def main():
     todo = [c for c in cs if evaluated(plain.get(c[0]), c[1])]
     linked = run_all(a.mathilda, todo, True, a.j)
     rows = classify(cs, plain, linked)
+    # A DIFF whose List side itself depends on packing is the List head's bug.
+    diff_ids = {r[2] for r in rows if r[0] == "DIFF"}
+    diffs = [c for c in cs if c[0] in diff_ids]
+    if diffs:
+        unpacked = run_all(a.mathilda, diffs, False, a.j, unpacked=True)
+        rows = classify(cs, plain, linked, unpacked)
 
     if a.report:
         with open(a.report, "w") as f:
@@ -309,6 +328,11 @@ def main():
             for r in sorted(rows):
                 f.write("\t".join(r) + "\n")
 
+    listside = sorted({r[1] for r in rows if r[0] == "LISTSIDE"})
+    if listside:
+        print("check-linkedlist: List heads that answer packed and plain Lists differently "
+              "(not gated): " + ", ".join(listside))
+    rows = [r for r in rows if r[0] != "LISTSIDE"]
     found = {f"{r[1]}\t{r[0]}" for r in rows}
     if a.update or not os.path.exists(BASELINE_FILE):
         os.makedirs(os.path.dirname(BASELINE_FILE), exist_ok=True)
