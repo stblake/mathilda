@@ -3877,6 +3877,88 @@ Together now abstract numeric transcendental constants ($E$, $\pi$, $\log 2$) as
 for the Gaussian reduction: an identity in independent indeterminates holds for all values, so
 the reduction cannot be wrong. Algebraic numbers are not abstracted.
 
+\section*{T20. Reordering independent levels, and the exponent lattice (Campaign D4, D5)}
+\addcontentsline{toc}{section}{T20. Reordering levels; exponent lattice}
+\label{sec:T20}
+
+\paragraph{Exchanging two independent levels.} Prop.~\ref{prop:T12b} decouples
+LimitedIntegrate over a Liouvillian primitive $\theta_L$ with $D\theta_L=g\tau^k$ only when
+$\tau$ is level $L-1$. The builder orders levels by containment, with exponentials before
+logarithms, so $\int\operatorname{erf}(x^2)\log x$ had the tower $e^{-x^4},\log x,\operatorname{erf}(x^2)$
+and stopped undecided (likewise $\operatorname{erfi}(x)\log(x)/x$ and $x\operatorname{erf}(x)\log x$).
+
+\begin{proposition}\label{prop:T20a}
+Let $K_{i+1}=K_{i-1}(\theta_i,\theta_{i+1})$ be two consecutive levels of a tower over the
+constant field $C$, such that $\theta_{i+1}$'s kernel does not contain $\theta_i$ and
+$D\theta_{i+1}$ (resp.\ $D\theta_{i+1}/\theta_{i+1}$) lies in $K_{i-1}$. Then
+$K'_i=K_{i-1}(\theta_{i+1})$ is a differential field, $\theta_{i+1}$ is a monomial over $K_{i-1}$
+of the same kind, $\theta_i$ is a monomial of the same kind over $K'_i$, and
+$K'_i(\theta_i)=K_{i+1}$. Every other $K_j$ is unchanged.
+\end{proposition}
+\begin{proof}
+$D\theta_{i+1}\in K_{i-1}[\theta_{i+1}]$, so $K'_i$ is closed under $D$, and the kind of each
+level is read off a coefficient in $K_{i-1}\subseteq K'_i$. Since $\theta_i$ is transcendental over
+$K_{i-1}$ and $\theta_{i+1}$ over $K_{i-1}(\theta_i)$, the two are algebraically independent over
+$K_{i-1}$; independence is symmetric, so $\theta_{i+1}$ is transcendental over $K_{i-1}$ and
+$\theta_i$ over $K'_i$. Both new fields are subfields of $K_{i+1}$, whose constants are $C$, so no
+new constant appears. The generated field is the same set.
+\end{proof}
+\noindent Every statement the decision makes (Liouville's theorem, the structure theorem,
+[SI] \S5.8--5.9) is about the top field and its integrand, so a certificate over the
+exchanged tower is one over the original. \code{rt\_order\_prims\_over\_their\_exp} applies
+the exchange only between adjacent levels neither of which needs the other (its kernel, or
+its derivative, names the other's kernel), first moving $\tau$ up and then $\theta_L$ down; the
+triangularity check and \code{rt\_tower\_prims\_certified} then run on the final order, so an
+order that is not a tower is refused, never used. Li is not moved ($D\operatorname{li}u=u'/\log u$
+has no $\tau^k$ shape). On the three integrands the decoupled step (b) fails for every $c$:
+for $\operatorname{erf}(x^2)\log x$, the $\theta^1$ coefficient integrates to $s_1=x\log x-x$
+($c=0$), and the $\theta^0$ residual $-s_1\eta=a\tau$ with $\tau=e^{-x^4}$ needs
+$Ds-4x^3s=a-c\,\frac{4x}{\sqrt\pi}$ over $C(x,\log x)$, which the parametric Risch~DE (T11)
+proves has no solution; the level itself is a monomial ($\int\eta$ not elementary). All
+three, and $x\operatorname{erf}(x^2)\log x$, are \code{False}; FriCAS leaves each unevaluated.
+Test: \code{test\_campaign\_d4\_prim\_exp\_order}.
+
+\paragraph{The exponent lattice.} The commensurability classes give one level per class of
+rational multiples, and the composite classes (T4) eliminate a primitive that is an integer
+combination of the others. Neither produces a generator that no exponent is: the exponents
+$x+x^2$, $\frac52x+x^2$, $\frac32x+2x^2$, $\frac32x+x^2$, $x$, $x^2$ of f12-elem-7 span
+$\frac x2\Z+x^2\Z$, the tower stayed dependent, and the decision was undecided.
+\code{rt\_exp\_lattice} computes the lattice directly. Over a $\Q$-basis $B$ of the class
+primitives $p_i$ modulo constants (\code{risch\_rational\_span} of $p_i'$ against the $b_k'$),
+$p_i=\sum_km_{ik}b_k+\kappa_i$ with $\kappa_i$ constant; the Hermite normal form of the integer rows $Dm_i$, with its
+unimodular transform $U$, gives a basis $h_j=\sum_iU_{ji}Dm_i$ of their $\Z$-span.
+
+\begin{proposition}\label{prop:T20b}
+Let $g_j=\sum_iU_{ji}p_i$ (an exact integer combination) and $p_i=\sum_jn_{ij}g_j+c_i$ with
+$n_{ij}\in\Z$ and $c_i$ constant. If every $c_i=0$, then $e^{p_i}=\prod_j(e^{g_j})^{n_{ij}}$ and
+$e^{g_j}=\prod_i(e^{p_i})^{U_{ji}}$, so $K(e^{g_1},\dots,e^{g_r})=K(e^{p_1},\dots,e^{p_s})$, and the
+$e^{g_j}$ are algebraically independent exponential monomials over $K$.
+\end{proposition}
+\begin{proof}
+Both identities exponentiate an exact integer relation between the exponents, so they hold
+as functions and the two fields contain each other. The $g_j'$ have the coordinates
+$h_j/D$ over $B'$, linearly independent over $\Q$ because $H$ is nonsingular and $B$ is
+independent modulo constants; by the structure theorem the $e^{g_j}$ are algebraically
+independent over $K$ (the builder's independence check re-verifies this on the final tower).
+\end{proof}
+\noindent Two choices keep the refinement exact. The generators are \emph{integer}
+combinations of the exponents, never rational ones: refining $e^u$ to $e^{u/2}$ on a
+relation that held only up to a constant ($e^{2+2u}$ beside $e^u$, from $\tanh(1+u)$) once
+introduced $e^{1/2}$ and lost $\int e^u(1-\tanh^2(1+u))=\text{True}$. And a $p_i$ with
+$c_i\ne0$ (computed exactly: $\pi+2u$ beside $u$, $-i-iu$ beside $2iu$) or whose span test
+fails is left out of the lattice and the lattice recomputed; it keeps its own level and the
+T16 rule with its Gaussian-integer test, exactly as before. Independence must be modulo
+\emph{all} constants, which is why it is read off the derivatives. The first version spanned
+the exponents themselves against $\{1\}$, which sees rational offsets only: it took $-i-iu$
+and $2iu$ for independent, the lattice acquired the constant generator $e^{-i}$ (a level of
+derivative $0$ beside $Z=e^i$, the T16 trap), and an elementary $D[F]$ of the Gaussian hunt was
+certified \code{False}. The builder now also refuses any tower with a level of derivative
+$0$. The lattice is consulted only
+when the tower built without it is dependent and has at least three classes (two exponents in
+an exact relation are one class). It is used only when some $h_j$ is not $\pm$ a row $Dm_i$,
+i.e.\ it has a generator the classes lack; otherwise the tower is built as before. f12-elem-7 now has the levels $e^{x/2}$, $e^{x^2}$ and a verified
+antiderivative. Test: \code{test\_campaign\_d5\_exp\_lattice}.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

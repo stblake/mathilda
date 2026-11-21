@@ -41,6 +41,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "arithmetic.h"
+#include "checked_int.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -265,6 +266,86 @@ static bool rt_kernel_needs(Expr* K, RtTower* T, size_t j) {
     return T->kind[j] == RT_EXP && T->arg[j] && rt_has_exp_multiple(K, T->arg[j]);
 }
 
+/* ---- A Liouvillian primitive directly above its exponential (D4, T20) ----- */
+
+/* The exponent of the exponential that D theta carries for a Liouvillian
+ * primitive theta: Erf/Erfc[u] -> -u^2, Erfi[u] -> u^2, ExpIntegralEi[u] -> u
+ * (owned); NULL for li and anything else. */
+static Expr* rt_prim_exp_exponent(const Expr* K) {
+    if (!K || K->type != EXPR_FUNCTION || K->data.function.arg_count != 1) return NULL;
+    Expr* u = K->data.function.args[0];
+    Expr* sq = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(u), expr_new_integer(2) }, 2);
+    if (rt_head_is(K, "Erf") || rt_head_is(K, "Erfc"))
+        return rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), sq }, 2));
+    if (rt_head_is(K, "Erfi")) return rt_eval_own(sq);
+    expr_free(sq);
+    if (rt_head_is(K, "ExpIntegralEi")) return expr_copy(u);
+    return NULL;
+}
+
+/* Does level a need level b below it: its kernel, or its derivative (which
+ * for a primitive names the exponential or logarithm below it), names b?
+ * Conservative: an undecidable derivative counts as a need. */
+static bool rt_level_needs(RtTower* T, size_t a, size_t b, Expr* x) {
+    if (rt_kernel_needs(T->kernel[a], T, b)) return true;
+    Expr* d = rt_eval2("D", expr_copy(T->kernel[a]), expr_copy(x));
+    Expr* de = d ? rt_expand_exp_sums(d) : NULL;
+    bool r = !de || rt_kernel_needs(de, T, b);
+    if (d) expr_free(d);
+    if (de) expr_free(de);
+    return r;
+}
+
+static void rt_swap_levels(RtTower* T, size_t i, size_t j) {
+    RtKind kk = T->kind[i]; T->kind[i] = T->kind[j]; T->kind[j] = kk;
+    long sg = T->tsg[i]; T->tsg[i] = T->tsg[j]; T->tsg[j] = sg;
+    Expr* a = T->kernel[i]; T->kernel[i] = T->kernel[j]; T->kernel[j] = a;
+    a = T->arg[i]; T->arg[i] = T->arg[j]; T->arg[j] = a;
+}
+
+/* LimitedIntegrate's decoupled step over a Liouvillian primitive level L
+ * (T12, Prop. T12b) needs the exponential tau of D theta_L = g tau^k at level
+ * L - 1.  The containment order can leave unrelated monomials between them
+ * (Erf[x^2] Log[x]: E^(-x^4), Log[x], Erf[x^2]).  Two adjacent levels neither
+ * of which needs the other are each a monomial over the same lower field, so
+ * exchanging them leaves every K_i of the tower except the one between them
+ * unchanged, and the top field the same (T20).  Move tau up past such levels,
+ * then the primitive down past such levels; stop at the first level that
+ * needs (or is needed by) the one moving.  The Dcoef triangularity check that
+ * follows still validates the final order. */
+static void rt_order_prims_over_their_exp(RtTower* T, size_t n, Expr* x) {
+    for (size_t p = 0; p < n; p++) {
+        if (T->kind[p] != RT_PRIM) continue;
+        Expr* w = rt_prim_exp_exponent(T->kernel[p]);
+        if (!w) continue;
+        long j = -1;
+        for (size_t i = 0; i < p && j < 0; i++) {
+            if (T->kind[i] != RT_EXP) continue;
+            Expr* q = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(w), expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(T->arg[i]), expr_new_integer(-1) }, 2) }, 2));
+            if (q && q->type == EXPR_INTEGER && q->data.integer != 0) j = (long)i;
+            if (q) expr_free(q);
+        }
+        expr_free(w);
+        if (j < 0 || (size_t)j + 1 == p) continue;
+        size_t q = (size_t)j;
+        while (q + 1 < p && !rt_level_needs(T, q + 1, q, x) && !rt_level_needs(T, q, q + 1, x)) {
+            rt_swap_levels(T, q, q + 1); q++;
+        }
+        size_t pp = p;
+        while (pp > q + 1 && !rt_level_needs(T, pp, pp - 1, x) && !rt_level_needs(T, pp - 1, pp, x)) {
+            rt_swap_levels(T, pp - 1, pp); pp--;
+        }
+        if (getenv("MATHILDA_RDE_CERT_DEBUG")) {
+            char* s = expr_to_string(T->kernel[pp]);
+            fprintf(stderr, "[rt-tower] primitive %s: exponential at %zu, primitive at %zu%s\n",
+                    s, q, pp, q + 1 == pp ? "" : " (not adjacent)");
+            free(s);
+        }
+    }
+}
+
 /* Build the monomial  prod_j lv[j]^e[j]  (a Times of Powers; owned). */
 Expr* rt_build_monomial(Expr** lv, const long* e, size_t nlv) {
     Expr** fs = malloc((nlv ? nlv : 1) * sizeof(Expr*));
@@ -420,6 +501,259 @@ static bool rt_occurs_literally(const Expr* e, const Expr* k) {
         if (rt_occurs_literally(e->data.function.args[i], k)) return true;
     return false;
 }
+/* ---- The Z-lattice of the exponents modulo constants (D5, T20) ------------ */
+
+static bool rt_rat_parts(const Expr* e, int64_t* n, int64_t* d);
+
+static int64_t rt_gcd_i64(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; }
+    return a;
+}
+/* row_a += q row_b over the first w entries; true on overflow */
+static bool rt_row_axpy(int64_t* ra, const int64_t* rb, int64_t q, size_t w) {
+    for (size_t c = 0; c < w; c++) {
+        int64_t t;
+        if (ci_mul_i64(q, rb[c], &t) || ci_add_i64(ra[c], t, &ra[c])) return true;
+    }
+    return false;
+}
+static void rt_row_swap(int64_t** M, size_t a, size_t b) { int64_t* t = M[a]; M[a] = M[b]; M[b] = t; }
+
+/* Row Hermite normal form of the s x r integer matrix A, by unimodular row
+ * operations (swap, negate, add an integer multiple) applied to U (s x s,
+ * the identity on entry) as well: on success rows 0..r-1 of A are an upper
+ * triangular basis H of the row lattice with positive diagonal, rows r.. are
+ * zero, and A_final = U A_initial.  False on overflow or rank < r. */
+static bool rt_hnf_rows(int64_t** A, int64_t** U, size_t s, size_t r) {
+    size_t k = 0;
+    for (size_t c = 0; c < r; c++) {
+        for (;;) {                                  /* Euclid down column c */
+            size_t piv = s;
+            for (size_t i = k; i < s; i++)
+                if (A[i][c] != 0 && (piv == s || llabs((long long)A[i][c]) < llabs((long long)A[piv][c]))) piv = i;
+            if (piv == s) return false;             /* no pivot: rank < r */
+            rt_row_swap(A, k, piv); rt_row_swap(U, k, piv);
+            bool clear = true;
+            for (size_t i = k + 1; i < s; i++) {
+                if (A[i][c] == 0) continue;
+                int64_t q = -(A[i][c] / A[k][c]);
+                if (rt_row_axpy(A[i], A[k], q, r) || rt_row_axpy(U[i], U[k], q, s)) return false;
+                if (A[i][c] != 0) clear = false;
+            }
+            if (clear) break;
+        }
+        if (A[k][c] < 0) {
+            for (size_t j = 0; j < r; j++) if (ci_neg_i64(A[k][j], &A[k][j])) return false;
+            for (size_t j = 0; j < s; j++) if (ci_neg_i64(U[k][j], &U[k][j])) return false;
+        }
+        for (size_t i = 0; i < k; i++) {            /* reduce above the pivot */
+            int64_t q = A[i][c] / A[k][c];
+            if (A[i][c] % A[k][c] < 0) q--;         /* floor */
+            if (q && (rt_row_axpy(A[i], A[k], -q, r) || rt_row_axpy(U[i], U[k], -q, s))) return false;
+        }
+        k++;
+    }
+    return k == r;
+}
+
+/* The exponential lattice.  The commensurability classes and the composite
+ * classes give a level to every class primitive p_i that is not a rational
+ * multiple, or an integer combination, of the others.  That misses a lattice
+ * with a generator none of the p_i is: x + x^2, 5 x/2 + x^2, x and x^2 span
+ * (x/2) Z + x^2 Z, so E^(5 x/2 + x^2) = (E^(x/2))^5 E^(x^2) needs a level
+ * E^(x/2) that does not occur (f12-elem-7: "dependent monomials").
+ *
+ * Over a Q-basis B of the p_i modulo constants (risch_rational_span of p_i'
+ * against the b_k'), each p_i = sum_k m_ik b_k + kappa_i, kappa_i constant.
+ * The Hermite normal
+ * form of the rows D m_i (D the common denominator) gives a basis h_j of their
+ * Z-span and the unimodular U with h_j = sum_i U_ji D m_i.  The generator
+ * g_j = sum_i U_ji p_i is an INTEGER combination of the p_i (so E^(g_j) is a
+ * monomial in their kernels' field up to a constant, and no fractional
+ * constant such as E^(1/2) is introduced by choosing it), and
+ * p_i = sum_j n_ij g_j + c_i with n_ij integers.  The constant c_i is computed
+ * exactly; a p_i with c_i != 0 is left out of the lattice (its relation holds
+ * only up to a constant, which rt_dependent_exp_rule handles with its own
+ * Gaussian-integer test, or not at all), and the lattice is recomputed
+ * without it (Pi + 2 u beside u, -I - I u beside 2 I u).  A p_i whose span
+ * test fails is left out from the start.  A generator is never constant:
+ * H is nonsingular over a basis independent modulo constants (and each g_j'
+ * is checked nonzero).
+ *
+ * Consulted only for a tower found dependent without it (rt_tower_build_elim
+ * sets g_rt_lattice), so an independent tower never pays for it.
+ *
+ * Returns the number r of generators, with *syn_out (owned exponents g_j) and
+ * *coord_out[i] (owned n_i, or NULL for a p_i left out); 0 when the lattice
+ * brings nothing the existing classes do not (every h_j is +-D m_i of some
+ * p_i, or no relation), or on any failure -- the caller then builds the tower
+ * exactly as before. */
+/* Set by rt_tower_build_elim while it rebuilds a dependent tower. */
+static bool g_rt_lattice = false;
+
+static size_t rt_exp_lattice(Expr** p, size_t s, Expr* x, Expr*** syn_out, int64_t*** coord_out) {
+    *syn_out = NULL; *coord_out = NULL;
+    if (s < 2) return 0;
+    /* independence MODULO CONSTANTS is read off the derivatives: a span of
+     * the exponents themselves against {1} sees rational offsets only, and
+     * took -I - I u and 2 I u for independent -- the lattice then had the
+     * constant generator E^(-I), a level of derivative 0 beside Z = E^I,
+     * and the decision a false "no" (gausshunt seed 1702) */
+    bool* act = malloc(s * sizeof(bool));
+    Expr** dp = malloc(s * sizeof(Expr*));
+    for (size_t i = 0; i < s; i++) {
+        dp[i] = rt_eval1("Together", rt_eval2("D", expr_copy(p[i]), expr_copy(x)));
+        act[i] = dp[i] && !rt_is_zero(dp[i]);
+    }
+    Expr* xl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+    size_t result = 0;
+    for (int round = 0; round < (int)s + 1 && result == 0; round++) {
+        /* (a) the basis B and the rational coordinates mn/md of each active p_i */
+        size_t* B = malloc(s * sizeof(size_t));
+        size_t nb = 0;
+        int64_t** mn = calloc(s, sizeof(int64_t*));
+        int64_t** md = calloc(s, sizeof(int64_t*));
+        bool bad = false;
+        /* smallest first, so B (and the generators) are the simplest exponents */
+        size_t* ord = malloc(s * sizeof(size_t));
+        for (size_t i = 0; i < s; i++) ord[i] = i;
+        for (size_t a = 1; a < s; a++)
+            for (size_t b = a; b > 0 && rt_leaves(p[ord[b]]) < rt_leaves(p[ord[b - 1]]); b--) {
+                size_t t = ord[b]; ord[b] = ord[b - 1]; ord[b - 1] = t;
+            }
+        for (size_t oi = 0; oi < s && !bad; oi++) {
+            size_t i = ord[oi];
+            if (!act[i]) continue;
+            mn[i] = calloc(s, sizeof(int64_t));
+            md[i] = calloc(s, sizeof(int64_t));
+            for (size_t k = 0; k < s; k++) md[i][k] = 1;
+            Expr** gens = malloc((nb + 1) * sizeof(Expr*));
+            for (size_t k = 0; k < nb; k++) gens[k] = dp[B[k]];
+            bool failed = false;
+            Expr* co = risch_rational_span(dp[i], gens, nb, xl, &failed);
+            free(gens);
+            if (failed) { act[i] = false; free(mn[i]); free(md[i]); mn[i] = md[i] = NULL; if (co) expr_free(co); continue; }
+            if (!co) { mn[i][nb] = 1; B[nb++] = i; continue; }
+            if (co->type != EXPR_FUNCTION || co->data.function.arg_count != nb) bad = true;
+            for (size_t k = 0; k < nb && !bad; k++)
+                if (!rt_rat_parts(co->data.function.args[k], &mn[i][k], &md[i][k])) bad = true;
+            expr_free(co);
+        }
+        free(ord);
+        size_t sa = 0;
+        for (size_t i = 0; i < s; i++) if (act[i]) sa++;
+        size_t r = nb;
+        if (bad || sa <= r || r == 0) {             /* no relation left (or failure) */
+            for (size_t i = 0; i < s; i++) { free(mn[i]); free(md[i]); }
+            free(mn); free(md); free(B);
+            break;
+        }
+        /* (b) integer rows R_i = D m_i over the active p_i */
+        int64_t D = 1;
+        for (size_t i = 0; i < s && !bad; i++) {
+            if (!act[i]) continue;
+            for (size_t k = 0; k < r && !bad; k++) {
+                int64_t g = rt_gcd_i64(D, md[i][k]);
+                if (ci_mul_i64(D / g, md[i][k] < 0 ? -md[i][k] : md[i][k], &D)) bad = true;
+            }
+        }
+        size_t* ai = malloc(sa * sizeof(size_t));   /* active row -> p index */
+        int64_t** A = calloc(sa, sizeof(int64_t*));
+        int64_t** R = calloc(sa, sizeof(int64_t*));
+        int64_t** U = calloc(sa, sizeof(int64_t*));
+        size_t q = 0;
+        for (size_t i = 0; i < s; i++) {
+            if (!act[i]) continue;
+            ai[q] = i;
+            A[q] = calloc(r, sizeof(int64_t)); R[q] = calloc(r, sizeof(int64_t));
+            U[q] = calloc(sa, sizeof(int64_t)); U[q][q] = 1;
+            for (size_t k = 0; k < r && !bad; k++)
+                if (ci_mul_i64(mn[i][k], D / md[i][k], &A[q][k])) bad = true;
+            for (size_t k = 0; k < r; k++) R[q][k] = A[q][k];
+            q++;
+        }
+        for (size_t i = 0; i < s; i++) { free(mn[i]); free(md[i]); }
+        free(mn); free(md); free(B);
+        if (!bad) bad = !rt_hnf_rows(A, U, sa, r);
+        /* (c) the generators g_j = sum_i U_ji p_i, exactly */
+        Expr** syn = calloc(r, sizeof(Expr*));
+        for (size_t j = 0; j < r && !bad; j++) {
+            Expr** tm = malloc(sa * sizeof(Expr*));
+            size_t nt = 0;
+            for (size_t i = 0; i < sa; i++)
+                if (U[j][i]) tm[nt++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(U[j][i]), expr_copy(p[ai[i]]) }, 2);
+            syn[j] = nt ? rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Plus"), tm, nt))) : NULL;
+            free(tm);
+            if (!syn[j] || rt_is_zero(syn[j])) bad = true;
+            else {                                  /* never a constant level */
+                Expr* dg = rt_eval1("Together", rt_eval2("D", expr_copy(syn[j]), expr_copy(x)));
+                if (!dg || rt_is_zero(dg)) bad = true;
+                if (dg) expr_free(dg);
+            }
+        }
+        /* (d) integer coordinates n_i (H is triangular) and the exact constants */
+        int64_t** co = calloc(s, sizeof(int64_t*));
+        bool dropped = false;
+        for (size_t i = 0; i < sa && !bad; i++) {
+            int64_t* v = malloc(r * sizeof(int64_t));
+            memcpy(v, R[i], r * sizeof(int64_t));
+            int64_t* nc = calloc(r, sizeof(int64_t));
+            for (size_t j = 0; j < r && !bad; j++) {
+                if (v[j] % A[j][j] != 0) { bad = true; break; }
+                nc[j] = v[j] / A[j][j];
+                if (nc[j] && rt_row_axpy(v, A[j], -nc[j], r)) bad = true;
+            }
+            for (size_t j = 0; j < r && !bad; j++) if (v[j] != 0) bad = true;
+            free(v);
+            if (bad) { free(nc); break; }
+            Expr** tm = malloc((r + 1) * sizeof(Expr*));
+            size_t nt = 0;
+            tm[nt++] = expr_copy(p[ai[i]]);
+            for (size_t j = 0; j < r; j++)
+                if (nc[j]) tm[nt++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-nc[j]), expr_copy(syn[j]) }, 2);
+            Expr* c = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Plus"), tm, nt)));
+            free(tm);
+            bool zero = c && rt_is_zero(c);
+            if (c) expr_free(c);
+            if (!zero) { act[ai[i]] = false; dropped = true; free(nc); }
+            else co[ai[i]] = nc;
+        }
+        /* (e) is there a generator the classes do not already have? */
+        bool novel = false;
+        for (size_t j = 0; j < r && !bad && !dropped && !novel; j++) {
+            bool seen = false;
+            for (size_t i = 0; i < sa && !seen; i++) {
+                bool pl = true, mi = true;
+                for (size_t k = 0; k < r; k++) {
+                    if (R[i][k] != A[j][k]) pl = false;
+                    if (R[i][k] != -A[j][k]) mi = false;
+                }
+                seen = pl || mi;
+            }
+            if (!seen) novel = true;
+        }
+        if (!bad && !dropped && novel) {
+            result = r;
+            *syn_out = syn; syn = NULL;
+            *coord_out = co; co = NULL;
+        }
+        if (syn) { for (size_t j = 0; j < r; j++) if (syn[j]) expr_free(syn[j]); free(syn); }
+        if (co) { for (size_t i = 0; i < s; i++) free(co[i]); free(co); }
+        for (size_t i = 0; i < sa; i++) { free(A[i]); free(R[i]); free(U[i]); }
+        free(A); free(R); free(U); free(ai);
+        if (bad || (!dropped && result == 0)) break;  /* failure, or nothing novel */
+    }
+    expr_free(xl);
+    for (size_t i = 0; i < s; i++) if (dp[i]) expr_free(dp[i]);
+    free(dp);
+    free(act);
+    return result;
+}
+
 /* Build the ordered differential tower of f over C(x).  Collect every
  * x-dependent Log and E^ kernel, order them innermost-first (deepest at index 0)
  * by structural containment — tie-breaking independent kernels EXP-before-LOG so
@@ -554,10 +888,51 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
     bool* elim = calloc((ne ? ne : 1), sizeof(bool));
     bool* used = calloc((ne ? ne : 1), sizeof(bool));
     long** ccoef = calloc((ne ? ne : 1), sizeof(long*));   /* per eliminated rep: k over reps */
+    /* The exponent lattice (rt_exp_lattice): when it has a generator no class
+     * primitive is, the primitives in it get no level of their own; the
+     * generators E^(g_j) are the levels and each such class member is the
+     * monomial Prod t_j^(multof n_j).  The rest keep the path below. */
+    bool* latm = calloc((ne ? ne : 1), sizeof(bool));
+    int64_t** latc = calloc((ne ? ne : 1), sizeof(int64_t*));  /* per lattice rep: n over syn */
+    Expr** syn = NULL;
+    size_t nsyn = 0;
+    if (okc) {
+        size_t* rl = malloc((ne ? ne : 1) * sizeof(size_t));
+        Expr** pl = malloc((ne ? ne : 1) * sizeof(Expr*));
+        size_t nrl = 0;
+        for (size_t rep = 0; rep < ne; rep++)
+            if (clsrep[rep] == (long)rep) { rl[nrl] = rep; pl[nrl] = clsprim[rep]; nrl++; }
+        int64_t** co = NULL;
+        /* two classes have no novel generator: an exact (c = 0) relation
+         * between two exponents makes them one commensurability class */
+        nsyn = g_rt_lattice && nrl >= 3 ? rt_exp_lattice(pl, nrl, x, &syn, &co) : 0;
+        for (size_t k = 0; k < nrl && nsyn; k++)
+            if (co[k]) { latm[rl[k]] = true; latc[rl[k]] = co[k]; co[k] = NULL; }
+        if (co) { for (size_t k = 0; k < nrl; k++) free(co[k]); free(co); }
+        /* a generator equal to a primitive kept out of the lattice would be
+         * the same level twice */
+        bool clash = false;
+        for (size_t j = 0; j < nsyn && !clash; j++)
+            for (size_t k = 0; k < nrl && !clash; k++)
+                if (!latm[rl[k]] && expr_eq(syn[j], clsprim[rl[k]])) clash = true;
+        if (clash) {
+            for (size_t j = 0; j < nsyn; j++) expr_free(syn[j]);
+            free(syn); syn = NULL; nsyn = 0;
+            for (size_t rep = 0; rep < ne; rep++) { latm[rep] = false; free(latc[rep]); latc[rep] = NULL; }
+        }
+        if (nsyn && getenv("MATHILDA_RDE_CERT_DEBUG")) {
+            for (size_t j = 0; j < nsyn; j++) {
+                char* a = expr_to_string(syn[j]);
+                fprintf(stderr, "[rt-tower] exponent lattice generator E^(%s)\n", a);
+                free(a);
+            }
+        }
+        free(rl); free(pl);
+    }
     if (okc) {
         size_t* order = malloc((ne ? ne : 1) * sizeof(size_t));
         size_t no = 0;
-        for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) order[no++] = rep;
+        for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep && !latm[rep]) order[no++] = rep;
         for (size_t a = 1; a < no; a++)                  /* by descending size */
             for (size_t b = a; b > 0 && rt_leaves(clsprim[order[b]]) > rt_leaves(clsprim[order[b - 1]]); b--) {
                 size_t tmp = order[b]; order[b] = order[b - 1]; order[b - 1] = tmp;
@@ -597,7 +972,8 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
         free(order);
     }
     size_t np = 0;
-    for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep && !elim[rep]) np++;
+    for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep && !elim[rep] && !latm[rep]) np++;
+    np += nsyn;
     size_t n = nl + np + nt + npr;
     if (!okc || n < min_n) {                         /* no upper depth cap */
         if (getenv("MATHILDA_RDE_CERT_DEBUG"))
@@ -606,6 +982,10 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
         free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
         for (size_t rep = 0; rep < ne; rep++) free(ccoef[rep]);
         free(ccoef); free(elim); free(used);
+        for (size_t rep = 0; rep < ne; rep++) free(latc[rep]);
+        free(latc); free(latm);
+        for (size_t j = 0; j < nsyn; j++) expr_free(syn[j]);
+        free(syn);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
         for (size_t i = 0; i < nt; i++) expr_free(tans[i]);
@@ -636,11 +1016,18 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
     free(logs);
     /* One EXP tower kernel per synthesized class primitive. */
     for (size_t rep = 0; rep < ne; rep++) {
-        if (clsrep[rep] != (long)rep || elim[rep]) continue;
+        if (clsrep[rep] != (long)rep || elim[rep] || latm[rep]) continue;
         T->kind[idx] = RT_EXP;
         T->arg[idx] = expr_copy(clsprim[rep]);                     /* primitive exponent */
         T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
             (Expr*[]){ expr_new_symbol("E"), expr_copy(clsprim[rep]) }, 2);
+        idx++;
+    }
+    for (size_t j = 0; j < nsyn; j++) {                 /* the lattice generators */
+        T->kind[idx] = RT_EXP;
+        T->arg[idx] = expr_copy(syn[j]);
+        T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy(syn[j]) }, 2);
         idx++;
     }
     /* One RT_TAN tower kernel per collected tangent monomial (Tan/Tanh spelling). */
@@ -667,7 +1054,7 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
     /* Every exp member that is not itself the class primitive is an alias
      * E^w -> t[prim]^k; store its primitive exponent for the post-reorder remap. */
     for (size_t i = 0; i < ne; i++) {
-        if (!elim[clsrep[i]] && expr_eq(exps[i], clsprim[clsrep[i]]))
+        if (!elim[clsrep[i]] && !latm[clsrep[i]] && expr_eq(exps[i], clsprim[clsrep[i]]))
             continue;                                         /* realized by the primitive kernel */
         T->marg[T->nm] = expr_copy(exps[i]);                  /* member exponent w */
         T->mmult[T->nm] = multof[i];                          /* w = k * clsprim[rep]  */
@@ -734,6 +1121,7 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
                 a = T->arg[i]; T->arg[i] = T->arg[i + 1]; T->arg[i + 1] = a;
             }
         }
+    if (npr > 0) rt_order_prims_over_their_exp(T, n, x);
 
     /* Tower variables t_i and the combined substitution rule list.  Each member
      * kernel E^(marg) contributes a rule E^(marg) -> t[prim]^mmult (both the
@@ -786,7 +1174,24 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
     }
     for (size_t m = 0; m < T->nm; m++) {
         Expr* tk;
-        if (!elim[mrep[m]]) {
+        if (latm[mrep[m]]) {
+            /* lattice member: w = multof * Sum_j n_j g_j  ->  Prod t_j^(multof n_j) */
+            int64_t* nc = latc[mrep[m]];
+            Expr** fs = malloc((nsyn ? nsyn : 1) * sizeof(Expr*));
+            size_t nf = 0;
+            T->mprim[m] = -1;
+            for (size_t j = 0; j < nsyn; j++) {
+                if (!nc[j]) continue;
+                long ti = -1;
+                for (size_t i = 0; i < n; i++)
+                    if (T->kind[i] == RT_EXP && expr_eq(T->arg[i], syn[j])) { ti = (long)i; break; }
+                if (T->mprim[m] < 0) T->mprim[m] = ti;
+                fs[nf++] = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(T->t[ti]), expr_new_integer((int64_t)T->mmult[m] * nc[j]) }, 2);
+            }
+            tk = nf == 1 ? fs[0] : expr_new_function(expr_new_symbol("Times"), fs, nf);
+            free(fs);
+        } else if (!elim[mrep[m]]) {
             Expr* pw = mprim_pexp[m];              /* class primitive exponent value */
             long ti = -1;
             for (size_t i = 0; i < n; i++)
@@ -855,6 +1260,10 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
     free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
     for (size_t rep = 0; rep < ne; rep++) free(ccoef[rep]);
     free(ccoef); free(elim); free(used); free(mrep);
+    for (size_t rep = 0; rep < ne; rep++) free(latc[rep]);
+    free(latc); free(latm);
+    for (size_t j = 0; j < nsyn; j++) expr_free(syn[j]);
+    free(syn);
     for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
     free(exps);
 
@@ -927,6 +1336,13 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
         Expr* ds = dsub ? rt_eval1("Cancel", dsub) : NULL;
         if (!ds) { ok = false; break; }
         T->Dcoef[i] = ds;
+        /* a level of derivative 0 is a constant, not a monomial: beside the
+         * constant symbol Z = E^I it is an independent "constant" whose
+         * relations nothing sees (T16, T20) */
+        if (T->kind[i] != RT_PRIM && rt_is_zero(ds)) {
+            ok = false;
+            if (getenv("MATHILDA_RDE_CERT_DEBUG")) fprintf(stderr, "[rt-tower] not built: a constant level\n");
+        }
         if (rt_find_exp_of_x(ds, x) != NULL || rt_find_log_of_x(ds, x) != NULL) ok = false;
         for (size_t j = i; j < n && ok; j++)
             if (!rt_free_of_x(ds, T->t[j])) ok = false;
@@ -1365,6 +1781,18 @@ bool rt_tower_build_decide(Expr* f, Expr* x, RtTower* T, size_t min_n) {
 static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool wide) {
     bool ok = rt_tower_build_core(f, x, T, min_n, NULL, NULL, 0);
     if (!ok || !T->dependent) return ok;
+    /* a dependent tower: rebuild over the exponent lattice (T20), which may
+     * remove the dependence outright; the rounds below then rebuild with it
+     * too, so every member value is read in the same levels.  An independent
+     * tower never pays for the lattice. */
+    bool lat_saved = g_rt_lattice;
+    if (!lat_saved) {
+        RtTower TL;
+        g_rt_lattice = true;
+        if (rt_tower_build_core(f, x, &TL, min_n, NULL, NULL, 0)) { rt_tower_free(T); *T = TL; }
+        else { rt_tower_free(&TL); g_rt_lattice = false; }
+        if (!T->dependent) { g_rt_lattice = lat_saved; return true; }
+    }
     Expr* tc[8]; size_t ntc = 0;
     rt_tconst_atoms(f, x, tc, &ntc, 8);
     Expr** xk = NULL; Expr** xr = NULL; size_t nx = 0;
@@ -1402,6 +1830,7 @@ static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool
     }
     for (size_t i = 0; i < nx; i++) { expr_free(xk[i]); expr_free(xr[i]); }
     free(xk); free(xr);
+    g_rt_lattice = lat_saved;
     return true;
 }
 Expr* rt_tower_back_rules(const RtTower* T) {

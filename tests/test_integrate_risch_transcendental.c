@@ -2060,6 +2060,43 @@ static void test_fricas_gauss_offsets(void) {
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u (1 - Tanh[1 + u]^2), u]]", "True", 0);
 }
 
+/* Campaign D4 (T20): a Liouvillian primitive's exponential moved directly
+ * below it past independent levels, so LimitedIntegrate's decoupled step
+ * (Prop. T12b) applies.  Each of the first three was undecided, with Log[x]
+ * between E^(-x^4) (E^(x^2)) and the primitive; FriCAS leaves them
+ * unevaluated. */
+static void test_campaign_d4_prim_exp_order(void) {
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Erf[x^2] Log[x], x]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Erfi[x] Log[x]/x, x]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[x Erf[x] Log[x], x]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[x Erf[x^2] Log[x], x]]", "False", 0);
+    /* the same towers, elementary by construction */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(x Log[x] - x) Erf[x^2] + x E^(-x^4), x], x]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[Log[x]^2 Erfi[x]/2 + E^(x^2) Log[x], x], x]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[x^2 Log[x] Erf[x]/2 + E^(-x^2) x Log[x], x], x]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[ExpIntegralEi[x] Log[x], x]]", "True", 0);
+}
+
+/* Campaign D5 (T20): the exponent lattice.  f12-elem-7's exponents span
+ * (x/2) Z + x^2 Z; E^(x/2), which does not occur, is a level.  A relation
+ * that holds only up to a constant (E^(2 + 2 u) beside E^u) stays out of it. */
+static void test_campaign_d5_exp_lattice(void) {
+    assert_elem_verified("E^(x + x^2)/(2*x) + (E^((5*x)/2 + x^2)*Log[1 + E^x])/((1 + E^x)*(1 + E^x^2)) "
+        "- (E^((3*x)/2 + 2*x^2)*x*Log[1 + E^x]^2)/(1 + E^x^2)^2 + (E^((3*x)/2 + x^2)*(3/2 + 2*x)*Log[1 + E^x]^2)/(2*(1 + E^x^2)) "
+        "+ (E^(x + x^2)*(1 + 2*x)*Log[x])/2");
+    assert_elem_verified("D[E^(x/3 + x^2)/(1 + E^(x/2)), x]");
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(x/3 + x^2)/(1 + E^(x/2)), x]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(x/2) E^(x^2) Log[x] + E^(3 x/2 + x^2), x]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u (1 - Tanh[1 + u]^2), u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[(1 + I) E^(I + 4 I u) Tan[u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Log[1 + E^u] (1 - Tanh[2 u]^2), u]]", "True", 0);
+    /* the first version took -I - I u and 2 I u for independent modulo
+       constants (a span against {1} sees rational offsets only): the lattice
+       had the constant generator E^(-I), and this D[F] was certified False */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(2*I)*u*Log[I + u] + (E^(I*u - I*(1 + u))*u)/((1 + E^((2*I)*u))"
+                   "*(1 + E^((-I)*(1 + u)))*(-I + Tan[u])), u], u]] =!= False", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -2184,6 +2221,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_fricas_c13_decision_answer);
     TEST(test_fricas_c2_dependent_and_rootsum);
     TEST(test_fricas_gauss_offsets);
+    TEST(test_campaign_d4_prim_exp_order);
+    TEST(test_campaign_d5_exp_lattice);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
