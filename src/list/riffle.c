@@ -43,6 +43,7 @@
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "riffle.h"
+#include "linkedlist_seq.h" /* LLView: LinkedList list or separators */
 
 Expr* builtin_riffle(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
@@ -59,17 +60,25 @@ Expr* builtin_riffle(Expr* res) {
     }
 
     /* Anything without arguments to interleave — an atom — stays unevaluated. */
-    if (list->type != EXPR_FUNCTION) return NULL;
+    /* A LinkedList riffles from its slots into a new LinkedList. */
+    LLView lv;
+    if (!ll_view(list, &lv)) return NULL;
 
-    size_t n = list->data.function.arg_count;
+    size_t n = lv.n;
 
-    /* Normalise the separator to a borrowed vector: a List cycles through its
-     * elements, any other expression is one separator used in every gap. */
+    /* Normalise the separator to a borrowed vector: a List (or a LinkedList)
+     * cycles through its elements, any other expression is one separator used
+     * in every gap. */
+    LLView sv = { NULL, 0, NULL, false };
     Expr** seps;
     size_t k;
     if (is_listq(sep)) {
         seps = sep->data.function.args;
         k = sep->data.function.arg_count;
+    } else if (sep->type == EXPR_LINKEDLIST) {
+        ll_view(sep, &sv);
+        seps = sv.a;
+        k = sv.n;
     } else {
         seps = &sep;
         k = 1;
@@ -77,20 +86,35 @@ Expr* builtin_riffle(Expr* res) {
 
     /* No gaps (n <= 1), or nothing to put in them (k == 0): copy through.
      * Must precede the 2n - 1 sizing below — see the header comment. */
-    if (n <= 1 || k == 0) return expr_copy(list);
+    if (n <= 1 || k == 0) {
+        Expr* r;
+        if (ll_view_linked(&lv)) {
+            Expr** cp = malloc(sizeof(Expr*) * (n ? n : 1));
+            for (size_t i = 0; i < n; i++) cp[i] = expr_copy(lv.a[i]);
+            r = ll_view_result(&lv, cp, n);
+            free(cp);
+        } else {
+            r = expr_copy(list);
+        }
+        ll_view_done(&sv);
+        ll_view_done(&lv);
+        return r;
+    }
 
     size_t out_count = 2 * n - 1;
     Expr** out = malloc(out_count * sizeof(Expr*));
-    if (!out) return NULL;
+    if (!out) { ll_view_done(&sv); ll_view_done(&lv); return NULL; }
 
     for (size_t i = 0; i < n; i++) {
-        out[2 * i] = expr_copy(list->data.function.args[i]);
+        out[2 * i] = expr_copy(lv.a[i]);
         /* The gap following element i is gap i + 1 in 1-based terms, so it
          * takes separator index i mod k. */
         if (i + 1 < n) out[2 * i + 1] = expr_copy(seps[i % k]);
     }
 
-    Expr* result = expr_new_function(expr_copy(list->data.function.head), out, out_count);
+    Expr* result = ll_view_result(&lv, out, out_count);
     free(out);
+    ll_view_done(&sv);
+    ll_view_done(&lv);
     return result;
 }

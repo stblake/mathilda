@@ -99,7 +99,9 @@ static Expr* builtin_arrayrules(Expr* res) {
         Expr* args[3] = { a, dims, res->data.function.args[1] };
         s = to_sparse(args, 3);
         expr_free(dims);
-    } else if (head_is_sym(a, SYM_List) || a->type == EXPR_NDARRAY) {
+    } else if (head_is_sym(a, SYM_List) || a->type == EXPR_NDARRAY || a->type == EXPR_LINKEDLIST) {
+        /* A LinkedList (rows may be LinkedLists too) is read from its slots by
+         * the dense SparseArray builder; the rules are a List either way. */
         if (na == 2) {
             /* ArrayRules[list, val] */
             Expr* sp = to_sparse(&a, 1);

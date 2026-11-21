@@ -2,6 +2,7 @@
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "rotate.h"
+#include "linkedlist_seq.h" /* LLView: a LinkedList rotates from its slots */
 
 /*
  * Is the rotation spec usable -- an Integer, or a List of Integers?
@@ -34,7 +35,7 @@ static bool rotate_spec_ok(const Expr* n_spec) {
 }
 
 static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
-    if (expr->type != EXPR_FUNCTION) return expr_copy(expr);
+    if (expr->type != EXPR_FUNCTION && expr->type != EXPR_LINKEDLIST) return expr_copy(expr);
 
     int64_t n = 0;
     if (n_spec->type == EXPR_INTEGER) {
@@ -46,8 +47,25 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
         }
     }
 
-    size_t len = expr->data.function.arg_count;
-    Expr** new_args = malloc(sizeof(Expr*) * len);
+    if (expr->type == EXPR_LINKEDLIST && n_spec->type == EXPR_INTEGER) {
+        /* One level: the two ranges of the storage, copied span-wise (typed
+         * slots move without boxing). */
+        const LinkedList* src = expr->data.llist;
+        int64_t len = ll_length(src);
+        LinkedList* out = ll_new();
+        if (len > 0) {
+            int64_t offset = n % len;
+            if (offset < 0) offset += len;
+            ll_append_range(out, src, offset, len);
+            ll_append_range(out, src, 0, offset);
+        }
+        return expr_new_linkedlist(out);
+    }
+
+    LLView lv;
+    ll_view(expr, &lv);
+    size_t len = lv.n;
+    Expr** new_args = malloc(sizeof(Expr*) * (len ? len : 1));
 
     if (len > 0) {
         int64_t offset = n % (int64_t)len;
@@ -55,12 +73,13 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
 
         for (size_t i = 0; i < len; i++) {
             size_t old_idx = (i + (size_t)offset) % len;
-            new_args[i] = rotate_rec(expr->data.function.args[old_idx], n_spec, level_idx + 1);
+            new_args[i] = rotate_rec(lv.a[old_idx], n_spec, level_idx + 1);
         }
     }
 
-    Expr* result = expr_new_function(expr_copy(expr->data.function.head), new_args, len);
+    Expr* result = ll_view_result(&lv, new_args, len);
     free(new_args);
+    ll_view_done(&lv);
     return result;
 }
 

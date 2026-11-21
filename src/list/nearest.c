@@ -41,6 +41,7 @@
 #include "list_common.h"
 #include "internal.h"
 #include "nearest.h"
+#include "linkedlist_seq.h"  /* LLView: a LinkedList is searched on its slots */
 
 /* Abs[e - x], fully evaluated. Caller owns the result.
  *
@@ -75,17 +76,22 @@ Expr* builtin_nearest(Expr* res) {
      * not a List either, so it lands here and stays unevaluated rather than
      * being silently truncated. Following RankedMin (sort.c:1014) rather than
      * MinimalBy, which accepts and preserves any head. */
-    if (!is_listq(list)) return NULL;
+    if (!is_listq(list) && list->type != EXPR_LINKEDLIST) return NULL;
 
-    size_t n = list->data.function.arg_count;
-    Expr** elem = list->data.function.args;
+    /* A LinkedList is read from its slots; the nearest elements form a
+     * LinkedList. */
+    LLView lv;
+    ll_view(list, &lv);
+    bool linked = ll_view_linked(&lv);
+    size_t n = lv.n;
+    Expr** elem = lv.a;
 
     /* Empty in, empty out -- checked before the gate, so Nearest[{}, a] is {}
      * and not unevaluated. Matches MaximalBy (sort.c:684). */
-    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (n == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
 
     Expr** dist = malloc(sizeof(Expr*) * n);
-    if (!dist) return NULL;
+    if (!dist) { ll_view_done(&lv); return NULL; }
 
     /* One pass to build the distances. A distance that is not a real number
      * means there is no definite answer: free what we built and decline. */
@@ -94,6 +100,7 @@ Expr* builtin_nearest(Expr* res) {
         if (!list_real_number_q(dist[i])) {
             for (size_t j = 0; j <= i; j++) expr_free(dist[j]);
             free(dist);
+            ll_view_done(&lv);
             return NULL;
         }
     }
@@ -110,6 +117,7 @@ Expr* builtin_nearest(Expr* res) {
     if (!out) {
         for (size_t i = 0; i < n; i++) expr_free(dist[i]);
         free(dist);
+        ll_view_done(&lv);
         return NULL;
     }
 
@@ -121,6 +129,7 @@ Expr* builtin_nearest(Expr* res) {
 
     for (size_t i = 0; i < n; i++) expr_free(dist[i]);
     free(dist);
+    ll_view_done(&lv);
 
     if (!ok) {
         for (size_t i = 0; i < nout; i++) expr_free(out[i]);
@@ -130,6 +139,7 @@ Expr* builtin_nearest(Expr* res) {
 
     /* The wrapper is always List. Stated explicitly because the input head is
      * necessarily List here, but the n-nearest follow-up keeps the same rule. */
+    if (linked) { Expr* r = ll_seq_of(true, out, nout); free(out); return r; }
     Expr* head = expr_new_symbol(SYM_List);
     Expr* result = expr_new_function(head, out, nout);
     if (!result) {                       /* OOM: expr_new_function took nothing */

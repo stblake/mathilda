@@ -6,6 +6,7 @@
 #include "ndstruct.h"    /* ndstruct_arraypad */
 #include "arithmetic.h"  /* is_infinity_sym */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "linkedlist_seq.h" /* LLView: LinkedList levels pad into LinkedLists */
 
 /* ArrayPad[array, m]            pad m elements of padding on every side/level.
  * ArrayPad[array, {m, n}]       m before, n after, on every dimension.
@@ -21,37 +22,42 @@
 #define AP_MAX_RANK 64
 
 /* Nesting depth of a nested-List array (0 for an atom). {{},{}} has depth 2. */
+static bool ap_is_list(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* A level of the array: a List, or a LinkedList (read through an LLView). */
+static bool ap_row(const Expr* e) { return ap_is_list(e) || e->type == EXPR_LINKEDLIST; }
+
 static size_t ap_depth(const Expr* e) {
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol.name != SYM_List)
-        return 0;
+    if (!ap_row(e)) return 0;
+    LLView v;
+    ll_view(e, &v);
     size_t best = 0;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        size_t d = ap_depth(e->data.function.args[i]);
+    for (size_t i = 0; i < v.n; i++) {
+        size_t d = ap_depth(v.a[i]);
         if (d > best) best = d;
     }
+    ll_view_done(&v);
     return 1 + best;
 }
 
 /* Rectangular dimension along each level, following the first-child spine. */
 static void ap_dims(const Expr* e, int64_t* dims, size_t num_levels, size_t level) {
     if (level >= num_levels) return;
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol.name != SYM_List) {
-        dims[level] = 0; return;
-    }
-    dims[level] = (int64_t)e->data.function.arg_count;
-    if (e->data.function.arg_count > 0)
-        ap_dims(e->data.function.args[0], dims, num_levels, level + 1);
+    if (!ap_row(e)) { dims[level] = 0; return; }
+    LLView v;
+    ll_view(e, &v);
+    dims[level] = (int64_t)v.n;
+    if (v.n > 0)
+        ap_dims(v.a[0], dims, num_levels, level + 1);
     else
         for (size_t k = level + 1; k < num_levels; k++) dims[k] = 0;
+    ll_view_done(&v);
 }
 
 /* True for a List[...] expression. */
-static bool ap_is_list(const Expr* e) {
-    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_List;
-}
 
 /* ---- amounts parsing --------------------------------------------------- *
  * Fill lo[]/hi[] for each of *num_levels levels.  Returns false on a bad spec. */
@@ -108,28 +114,38 @@ static Expr* ap_pad_at(const Expr* block, const int64_t* coords, size_t n) {
  * width at each level is orig_dim[level]+lo+hi (rectangular target). */
 static Expr* ap_build_const(const Expr* node, const int64_t* lo, const int64_t* hi,
                             const int64_t* orig_dim, size_t num_levels, size_t level,
-                            const Expr* block, int64_t* coords) {
+                            const Expr* block, int64_t* coords, bool linked) {
     if (level == num_levels)
         return node ? expr_copy((Expr*)node) : ap_pad_at(block, coords, num_levels);
 
     int64_t N = orig_dim[level] + lo[level] + hi[level];
     if (N < 0) N = 0;
-    int64_t L = (node && ap_is_list(node)) ? (int64_t)node->data.function.arg_count : 0;
-    Expr* head = (node && ap_is_list(node))
-                 ? expr_copy(node->data.function.head) : expr_new_symbol(SYM_List);
-    if (N == 0) return expr_new_function(head, NULL, 0);
+    /* A LinkedList level pads into a LinkedList; a pure-padding level takes
+     * the kind of the level above it. */
+    LLView v = { NULL, 0, NULL, false };
+    bool row = node && ap_row(node);
+    if (row) { ll_view(node, &v); linked = ll_view_linked(&v); }
+    int64_t L = (int64_t)v.n;
+    Expr* head = (row && !linked) ? expr_copy((Expr*)v.head) : expr_new_symbol(SYM_List);
+    if (N == 0) {
+        ll_view_done(&v);
+        if (linked) { expr_free(head); return ll_seq_of(true, NULL, 0); }
+        return expr_new_function(head, NULL, 0);
+    }
 
     Expr** out = malloc(sizeof(Expr*) * (size_t)N);
     for (int64_t i = 0; i < N; i++) {
         int64_t src = i - lo[level];               /* original element index */
-        const Expr* child = (node && ap_is_list(node) && src >= 0 && src < L)
-                            ? node->data.function.args[src] : NULL;
+        const Expr* child = (row && src >= 0 && src < L) ? v.a[src] : NULL;
         coords[level] = src;
         out[i] = ap_build_const(child, lo, hi, orig_dim, num_levels, level + 1,
-                                block, coords);
+                                block, coords, linked);
     }
-    Expr* r = expr_new_function(head, out, (size_t)N);
+    Expr* r;
+    if (linked) { expr_free(head); r = ll_seq_of(true, out, (size_t)N); }
+    else        r = expr_new_function(head, out, (size_t)N);
     free(out);
+    ll_view_done(&v);
     return r;
 }
 
@@ -140,9 +156,11 @@ static Expr* ap_build_const(const Expr* node, const int64_t* lo, const int64_t* 
 static Expr* ap_pad_valdep(const Expr* node, const int64_t* lo, const int64_t* hi,
                            size_t num_levels, size_t level, PadScheme sc,
                            int64_t order) {
-    if (level == num_levels || !ap_is_list(node)) return expr_copy((Expr*)node);
+    if (level == num_levels || !ap_row(node)) return expr_copy((Expr*)node);
 
-    int64_t L = (int64_t)node->data.function.arg_count;
+    LLView v;
+    ll_view(node, &v);
+    int64_t L = (int64_t)v.n;
     int64_t l = lo[level], h = hi[level];
     int64_t start = l < 0 ? -l : 0;
     int64_t end = L - (h < 0 ? -h : 0);
@@ -155,7 +173,7 @@ static Expr* ap_pad_valdep(const Expr* node, const int64_t* lo, const int64_t* h
     if (src_len == 0) { front = 0; back = 0; }
 
     const Expr** src = (const Expr**)malloc(sizeof(Expr*) * (size_t)(src_len == 0 ? 1 : src_len));
-    for (int64_t j = 0; j < src_len; j++) src[j] = node->data.function.args[start + j];
+    for (int64_t j = 0; j < src_len; j++) src[j] = v.a[start + j];
 
     Expr** cur;            /* owned when padded, else borrowed slice */
     size_t cur_len;
@@ -164,6 +182,7 @@ static Expr* ap_pad_valdep(const Expr* node, const int64_t* lo, const int64_t* h
         if (!pad_scheme_extend(src, (size_t)src_len, front, back, NULL, sc, order,
                                &cur, &cur_len)) {
             free(src);
+            ll_view_done(&v);
             return NULL;
         }
         cur_owned = true;
@@ -184,12 +203,13 @@ static Expr* ap_pad_valdep(const Expr* node, const int64_t* lo, const int64_t* h
 
     Expr* r = NULL;
     if (!failed)
-        r = expr_new_function(expr_copy(node->data.function.head), out, cur_len);
+        r = ll_view_result(&v, out, cur_len);
     else
         for (size_t i = 0; i < built; i++) expr_free(out[i]);
     free(out);
     if (cur_owned) { for (size_t i = 0; i < cur_len; i++) expr_free(cur[i]); free(cur); }
     free(src);
+    ll_view_done(&v);
     return r;
 }
 
@@ -240,7 +260,7 @@ Expr* builtin_array_pad(Expr* res) {
         array = owned_array;
     }
 
-    if (!ap_is_list(array)) { if (owned_array) expr_free(owned_array); return NULL; }
+    if (!ap_row(array)) { if (owned_array) expr_free(owned_array); return NULL; }
 
     size_t rank = ap_depth(array);
     if (rank == 0 || rank > AP_MAX_RANK) { if (owned_array) expr_free(owned_array); return NULL; }
@@ -263,7 +283,7 @@ Expr* builtin_array_pad(Expr* res) {
         ap_dims(array, orig_dim, num_levels, 0);
         int64_t coords[AP_MAX_RANK];
         Expr* block = padding ? (Expr*)padding : NULL;
-        result = ap_build_const(array, lo, hi, orig_dim, num_levels, 0, block, coords);
+        result = ap_build_const(array, lo, hi, orig_dim, num_levels, 0, block, coords, false);
     } else {
         /* mindimsize guard for the difference/reflected schemes. */
         if (pad_scheme_needs_two(sc)) {

@@ -556,6 +556,8 @@ typedef struct {
     Expr* replacement;
     bool delayed;
     Expr* owned;     /* a hoisted pattern lhs /; t (owned), else NULL */
+    Expr* hold;      /* a reference on the rule itself when it came from a
+                      * LinkedList (whose slots a callback could rewrite), else NULL */
 } ReplaceRule;
 
 /* Append the rule(s) `r` to a growable rule array: a two-argument Rule or
@@ -570,6 +572,7 @@ static void rules_push(ReplaceRule** rules, size_t* cap, size_t* count, Expr* r)
     }
     ReplaceRule* slot = &(*rules)[(*count)++];
     slot->owned = NULL;
+    slot->hold = NULL;
     if (dict) {
         slot->pattern = NULL;
         slot->replacement = r;
@@ -596,8 +599,10 @@ static void rules_push(ReplaceRule** rules, size_t* cap, size_t* count, Expr* r)
 
 /* Release a rule array from rules_collect, with any hoisted patterns. */
 static void rules_free(ReplaceRule* rules, size_t count) {
-    for (size_t i = 0; i < count; i++)
+    for (size_t i = 0; i < count; i++) {
         if (rules[i].owned) expr_free(rules[i].owned);
+        if (rules[i].hold) expr_free(rules[i].hold);
+    }
     free(rules);
 }
 
@@ -621,6 +626,19 @@ static ReplaceRule* rules_collect(Expr* rules_expr, size_t* out_count) {
     if (head_is(rules_expr, SYM_List)) {
         for (size_t i = 0; i < rules_expr->data.function.arg_count; i++)
             rules_push(&rules, &cap, &count, rules_expr->data.function.args[i]);
+    } else if (rules_expr->type == EXPR_LINKEDLIST) {
+        /* A LinkedList of rules, read from its slots: each rule taken is held
+         * by reference, so the set outlives any change to the list. */
+        const LinkedList* ll = rules_expr->data.llist;
+        int64_t n = ll_length(ll);
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* r = ll_elem_view(ll, i, &own);
+            size_t before = count;
+            rules_push(&rules, &cap, &count, r);
+            if (count > before) rules[count - 1].hold = own ? r : expr_copy(r);
+            else ll_elem_done(r, own);
+        }
     } else {
         rules_push(&rules, &cap, &count, rules_expr);
     }
@@ -788,7 +806,30 @@ static bool is_rule(Expr* e) {
     return (h == SYM_Rule || h == SYM_RuleDelayed);
 }
 
+/* A LinkedList whose first element is not a rule: a LinkedList of rule sets,
+ * each applied separately (as a List of rule lists is). */
+static bool ll_rule_sets(const Expr* rules_expr) {
+    if (rules_expr->type != EXPR_LINKEDLIST || ll_length(rules_expr->data.llist) == 0) return false;
+    bool own;
+    Expr* first = ll_elem_view(rules_expr->data.llist, 0, &own);
+    bool sets = !is_rule(first);
+    ll_elem_done(first, own);
+    return sets;
+}
+
 static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, int64_t max_l, bool heads) {
+    if (ll_rule_sets(rules_expr)) {
+        LinkedList* snap = ll_copy(rules_expr->data.llist);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < ll_length(snap); i++) {
+            bool own;
+            Expr* a = ll_elem_view(snap, i, &own);
+            ll_push_back(out, apply_replace_nested(expr, a, min_l, max_l, heads));
+            ll_elem_done(a, own);
+        }
+        ll_release(snap);
+        return expr_new_linkedlist(out);
+    }
     if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
@@ -1055,6 +1096,18 @@ static Expr* dispatch_unwrap(Expr* rules_expr, bool* indexed) {
 }
 
 static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr, bool indexed) {
+    if (ll_rule_sets(rules_expr)) {                /* a LinkedList of rule sets */
+        LinkedList* snap = ll_copy(rules_expr->data.llist);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < ll_length(snap); i++) {
+            bool own;
+            Expr* a = ll_elem_view(snap, i, &own);
+            ll_push_back(out, apply_replace_all_nested(expr, a, indexed));
+            ll_elem_done(a, own);
+        }
+        ll_release(snap);
+        return expr_new_linkedlist(out);
+    }
     if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
@@ -1120,6 +1173,21 @@ Expr* builtin_replace_all(Expr* res) {
  * expression reached. */
 static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr, int64_t max_scans,
                                            bool indexed) {
+    if (ll_rule_sets(rules_expr)) {
+        /* A LinkedList of rule sets: each set to its own fixed point, as for a
+         * List of them -- never the whole LinkedList per scan, whose answer is
+         * a new object every time and so would never reach a fixed point. */
+        LinkedList* snap = ll_copy(rules_expr->data.llist);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < ll_length(snap); i++) {
+            bool own;
+            Expr* a = ll_elem_view(snap, i, &own);
+            ll_push_back(out, apply_replace_repeated_nested(expr, a, max_scans, indexed));
+            ll_elem_done(a, own);
+        }
+        ll_release(snap);
+        return expr_new_linkedlist(out);
+    }
     if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;

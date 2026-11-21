@@ -5,6 +5,76 @@
 #include "ndreduce.h"
 #include "interval.h"
 #include "numeric.h"
+#include "linkedlist_seq.h"  /* LLView: LinkedList arguments splice like Lists */
+
+/* Max / Min of a typed LinkedList straight on its slots (the extreme of the
+ * raw int64 or double values, as ndred_max / ndred_min scan a packed
+ * buffer). NULL for a boxed, complex or empty list. */
+static Expr* minmax_ll_machine(const LinkedList* ll, bool want_max) {
+    LLKind k = ll_kind(ll);
+    int64_t n = ll_length(ll);
+    if (n == 0 || (k != LL_I64 && k != LL_REAL)) return NULL;
+    LLCursor c;
+    const void* p;
+    int dir;
+    int64_t base, m;
+    ll_cursor(&c, ll, 0, n);
+    if (k == LL_I64) {
+        int64_t best = 0;
+        bool first = true;
+        while ((m = ll_cursor_next(&c, &p, &dir, &base)) > 0)
+            for (int64_t t = 0; t < m; t++) {
+                int64_t v = LL_SLOT(int64_t, p, dir, t);
+                if (first || (want_max ? v > best : v < best)) best = v;
+                first = false;
+            }
+        return expr_new_integer(best);
+    }
+    double best = 0.0;
+    bool first = true;
+    while ((m = ll_cursor_next(&c, &p, &dir, &base)) > 0)
+        for (int64_t t = 0; t < m; t++) {
+            double v = LL_SLOT(double, p, dir, t);
+            if (first || (want_max ? v > best : v < best)) best = v;
+            first = false;
+        }
+    return expr_new_real(best);
+}
+
+/* A List argument, or a LinkedList (which stands for one): the arguments
+ * Max and Min splice into themselves. */
+static bool minmax_spliced(const Expr* arg) {
+    return arg->type == EXPR_LINKEDLIST ||
+           (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+            arg->data.function.head->data.symbol.name == SYM_List);
+}
+
+/* head[args...] with every List / LinkedList argument replaced by its elements
+ * (read from the slots for a LinkedList). */
+static Expr* minmax_splice(Expr* res) {
+    size_t n = res->data.function.arg_count;
+    size_t new_count = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* arg = res->data.function.args[i];
+        new_count += minmax_spliced(arg) ? (size_t)ll_seq_length(arg) : 1;
+    }
+    Expr** new_args = malloc(sizeof(Expr*) * (new_count ? new_count : 1));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* arg = res->data.function.args[i];
+        if (minmax_spliced(arg)) {
+            LLView v;
+            ll_view(arg, &v);
+            for (size_t j = 0; j < v.n; j++) new_args[k++] = expr_copy(v.a[j]);
+            ll_view_done(&v);
+        } else {
+            new_args[k++] = expr_copy(arg);
+        }
+    }
+    Expr* ret = expr_new_function(expr_copy(res->data.function.head), new_args, k);
+    free(new_args);
+    return ret;
+}
 
 /* A real numeric quantity that is not a number: Pi, Sqrt[2], Log[3]. Max and
  * Min order these with the numbers, keeping the exact form of the winner
@@ -66,7 +136,8 @@ Expr* builtin_minmax(Expr* res) {
      *
      * Nothing below needs changing: expr_copy is a refcount bump, so the buffer
      * is handed to Min and Max intact and each takes its own fast path. */
-    if (!is_list && !is_ndarray(arg) && !is_association(arg)) return NULL;
+    if (!is_list && !is_ndarray(arg) && !is_association(arg) && arg->type != EXPR_LINKEDLIST)
+        return NULL;
 
     Expr* min_arg[1] = { expr_copy(arg) };
     Expr* min_call = expr_new_function(expr_new_symbol(SYM_Min), min_arg, 1);
@@ -124,6 +195,11 @@ Expr* builtin_min(Expr* res) {
 
     /* Min[ndarray] scans the flat buffer (see ndreduce.c). */
     if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_min(res);
+    /* Min[ll] of a typed LinkedList scans its slots. */
+    if (n == 1 && res->data.function.args[0]->type == EXPR_LINKEDLIST) {
+        Expr* fast = minmax_ll_machine(res->data.function.args[0]->data.llist, false);
+        if (fast) return fast;
+    }
     /* Min[nd, x, ...]: see minmax_reduce_array_args. */
     if (n > 1) { Expr* r = minmax_reduce_array_args(res, SYM_Min); if (r) return r; }
 
@@ -134,46 +210,10 @@ Expr* builtin_min(Expr* res) {
         return expr_copy(interval_pair_lo(iv, 0));
     }
 
-    // Check for List arguments to flatten
+    // Check for List (or LinkedList) arguments to flatten
     bool has_list = false;
-    for (size_t i = 0; i < n; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol.name == SYM_List) {
-            has_list = true;
-            break;
-        }
-    }
-
-    if (has_list) {
-        size_t new_count = 0;
-        for (size_t i = 0; i < n; i++) {
-            Expr* arg = res->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-                arg->data.function.head->data.symbol.name == SYM_List) {
-                new_count += arg->data.function.arg_count;
-            } else {
-                new_count++;
-            }
-        }
-
-        Expr** new_args = malloc(sizeof(Expr*) * new_count);
-        size_t k = 0;
-        for (size_t i = 0; i < n; i++) {
-            Expr* arg = res->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-                arg->data.function.head->data.symbol.name == SYM_List) {
-                for (size_t j = 0; j < arg->data.function.arg_count; j++) {
-                    new_args[k++] = expr_copy(arg->data.function.args[j]);
-                }
-            } else {
-                new_args[k++] = expr_copy(arg);
-            }
-        }
-        Expr* ret = expr_new_function(expr_copy(res->data.function.head), new_args, new_count);
-        free(new_args);
-        return ret;
-    }
+    for (size_t i = 0; i < n && !has_list; i++) has_list = minmax_spliced(res->data.function.args[i]);
+    if (has_list) return minmax_splice(res);
 
     /* Min of a single element is that element (Min[5] -> 5, Min[x] -> x). Lists
      * were flattened above, so a lone argument here is a genuine scalar. */
@@ -261,6 +301,11 @@ Expr* builtin_max(Expr* res) {
 
     /* Max[ndarray] scans the flat buffer (see ndreduce.c). */
     if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_max(res);
+    /* Max[ll] of a typed LinkedList scans its slots. */
+    if (n == 1 && res->data.function.args[0]->type == EXPR_LINKEDLIST) {
+        Expr* fast = minmax_ll_machine(res->data.function.args[0]->data.llist, true);
+        if (fast) return fast;
+    }
     /* Max[nd, x, ...]: see minmax_reduce_array_args. */
     if (n > 1) { Expr* r = minmax_reduce_array_args(res, SYM_Max); if (r) return r; }
 
@@ -271,46 +316,10 @@ Expr* builtin_max(Expr* res) {
         return expr_copy(interval_pair_hi(iv, interval_pair_count(iv) - 1));
     }
 
-    // Check for List arguments to flatten
+    // Check for List (or LinkedList) arguments to flatten
     bool has_list = false;
-    for (size_t i = 0; i < n; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-            arg->data.function.head->data.symbol.name == SYM_List) {
-            has_list = true;
-            break;
-        }
-    }
-    
-    if (has_list) {
-        size_t new_count = 0;
-        for (size_t i = 0; i < n; i++) {
-            Expr* arg = res->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                arg->data.function.head->data.symbol.name == SYM_List) {
-                new_count += arg->data.function.arg_count;
-            } else {
-                new_count++;
-            }
-        }
-        
-        Expr** new_args = malloc(sizeof(Expr*) * new_count);
-        size_t k = 0;
-        for (size_t i = 0; i < n; i++) {
-            Expr* arg = res->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                arg->data.function.head->data.symbol.name == SYM_List) {
-                for (size_t j = 0; j < arg->data.function.arg_count; j++) {
-                    new_args[k++] = expr_copy(arg->data.function.args[j]);
-                }
-            } else {
-                new_args[k++] = expr_copy(arg);
-            }
-        }
-        Expr* ret = expr_new_function(expr_copy(res->data.function.head), new_args, new_count);
-        free(new_args);
-        return ret;
-    }
+    for (size_t i = 0; i < n && !has_list; i++) has_list = minmax_spliced(res->data.function.args[i]);
+    if (has_list) return minmax_splice(res);
 
     /* Max of a single element is that element (Max[5] -> 5, Max[x] -> x). Lists
      * were flattened above, so a lone argument here is a genuine scalar. */

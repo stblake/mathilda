@@ -28,6 +28,7 @@
  * never sized from the theoretical subset count (which would overflow for
  * moderate lengths anyway). */
 
+#include "linkedlist_seq.h"   /* LLView: a LinkedList's subsets are LinkedLists */
 #include "list_common.h"
 #include "subsets.h"
 
@@ -223,30 +224,36 @@ Expr* builtin_subsets(Expr* res) {
     if (argc < 1 || argc > 3) return NULL;
 
     Expr* list = res->data.function.args[0];
-    if (list->type != EXPR_FUNCTION) return NULL;   /* atoms have no sublists */
+    /* atoms have no sublists; a LinkedList's are LinkedLists, in a LinkedList */
+    LLView lv;
+    if (!ll_view(list, &lv)) return NULL;
+    bool linked = ll_view_linked(&lv);
 
-    Expr* head = list->data.function.head;
-    Expr** elems = list->data.function.args;
-    size_t n = list->data.function.arg_count;
+    Expr** elems = lv.a;
+    size_t n = lv.n;
 
     size_t kmin, kmax, kstep;
     bool empty = false;
     if (!subsets_decode_lengths(argc >= 2 ? res->data.function.args[1] : NULL,
                                 n, &kmin, &kmax, &kstep, &empty)) {
+        ll_view_done(&lv);
         return NULL;
     }
 
     size_t limit = SIZE_MAX;
-    if (argc >= 3 && !subsets_decode_count(res->data.function.args[2], &limit)) return NULL;
+    if (argc >= 3 && !subsets_decode_count(res->data.function.args[2], &limit)) {
+        ll_view_done(&lv);
+        return NULL;
+    }
 
-    if (empty || limit == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (empty || limit == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
 
     /* One scratch buffer sized for the largest length we will emit, reused
      * across every k so the generator allocates no per-combination state. */
     size_t* idx = NULL;
     if (kmax > 0) {
         idx = malloc(kmax * sizeof(size_t));
-        if (!idx) return NULL;
+        if (!idx) { ll_view_done(&lv); return NULL; }
     }
 
     SubsetBuf out = {NULL, 0, 0};
@@ -267,7 +274,7 @@ Expr* builtin_subsets(Expr* res) {
                 if (!sub) { ok = false; break; }
                 for (size_t i = 0; i < k; i++) sub[i] = expr_copy(elems[idx[i]]);
             }
-            Expr* subset = expr_new_function(expr_copy(head), sub, k);
+            Expr* subset = ll_view_result(&lv, sub, k);
             free(sub);
             if (!subset || !subsets_buf_push(&out, subset)) {
                 expr_free(subset);
@@ -283,12 +290,13 @@ Expr* builtin_subsets(Expr* res) {
     }
 
     free(idx);
+    ll_view_done(&lv);
     if (!ok) {
         subsets_buf_free(&out);
         return NULL;
     }
 
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out.items, out.count);
+    Expr* result = ll_seq_of(linked, out.items, out.count);
     free(out.items);
     return result;
 }

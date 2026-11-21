@@ -3,6 +3,9 @@
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "differences.h"
 #include "assoc.h"
+#include "checked_int.h"     /* ci_sub_i64 */
+#include "linkedlist_seq.h"  /* LLView: a LinkedList differences from its slots */
+#include <math.h>
 
 /* ---- Differences ----------------------------------------------------------
  *
@@ -36,31 +39,71 @@ static Expr* diff_minus(Expr* minuend, Expr* subtrahend) {
  * (an EXPR_FUNCTION). The result keeps lst's head. For s > 0 the i-th element
  * is elem[i+s] - elem[i]; for s < 0 it is elem[i] - elem[i+|s|]. A list whose
  * length does not exceed |s| yields the empty list. */
+/* One differencing pass over a typed LinkedList's slots, gathered into a
+ * scratch buffer: one int64 or one double subtraction per element, as the
+ * packed Differences computes it. NULL for a boxed or complex list, an int64
+ * overflow, or a non-finite double (the element path answers). */
+static Expr* diff_once_ll_machine(const LinkedList* ll, int64_t s) {
+    LLKind k = ll_kind(ll);
+    int64_t n = ll_length(ll);
+    int64_t a = (s < 0) ? -s : s;
+    if (n <= a || (k != LL_I64 && k != LL_REAL)) return NULL;
+    void* buf = malloc(sizeof(double) * (size_t)n);
+    if (!buf) return NULL;
+    ll_gather(ll, 0, n, buf);
+    int64_t outn = n - a;
+    bool ok = true;
+    if (k == LL_I64) {
+        int64_t* v = buf;
+        for (int64_t i = 0; i < outn && ok; i++)
+            ok = !(s > 0 ? ci_sub_i64(v[i + a], v[i], &v[i]) : ci_sub_i64(v[i], v[i + a], &v[i]));
+    } else {
+        double* v = buf;
+        for (int64_t i = 0; i < outn && ok; i++) {
+            v[i] = s > 0 ? v[i + a] - v[i] : v[i] - v[i + a];
+            ok = isfinite(v[i]);
+        }
+    }
+    Expr* r = ok ? expr_new_linkedlist(ll_from_buffer(k, buf, outn)) : NULL;
+    free(buf);
+    return r;
+}
+
 static Expr* diff_once(Expr* lst, int64_t s) {
-    Expr* head = lst->data.function.head;
-    size_t n = lst->data.function.arg_count;
+    if (lst->type == EXPR_LINKEDLIST) {
+        Expr* fast = diff_once_ll_machine(lst->data.llist, s);
+        if (fast) return fast;
+    }
+    LLView lv;
+    ll_view(lst, &lv);
+    size_t n = lv.n;
     int64_t a = (s < 0) ? -s : s;
 
     if ((int64_t)n <= a) {
-        return expr_new_function(expr_copy(head), NULL, 0);
+        Expr* r = ll_view_result(&lv, NULL, 0);
+        ll_view_done(&lv);
+        return r;
     }
 
     size_t outn = n - (size_t)a;
     Expr** out = malloc(sizeof(Expr*) * outn);
     for (size_t i = 0; i < outn; i++) {
-        Expr* lo = lst->data.function.args[i];
-        Expr* hi = lst->data.function.args[i + (size_t)a];
+        Expr* lo = lv.a[i];
+        Expr* hi = lv.a[i + (size_t)a];
         out[i] = (s > 0) ? diff_minus(hi, lo) : diff_minus(lo, hi);
     }
-    Expr* result = expr_new_function(expr_copy(head), out, outn);
+    Expr* result = ll_view_result(&lv, out, outn);
     free(out);
+    ll_view_done(&lv);
     return result;
 }
 
 /* Apply diff_once with step s a total of n times. Returns a fresh expression
  * (a copy of lst when n == 0). */
 static Expr* diff_n_step(Expr* lst, int64_t n, int64_t s) {
-    Expr* cur = expr_copy(lst);
+    /* Zero passes still answer a NEW LinkedList, never the argument itself. */
+    Expr* cur = lst->type == EXPR_LINKEDLIST ? expr_new_linkedlist(ll_copy(lst->data.llist))
+                                             : expr_copy(lst);
     for (int64_t k = 0; k < n; k++) {
         Expr* nxt = diff_once(cur, s);
         expr_free(cur);
@@ -72,7 +115,7 @@ static Expr* diff_n_step(Expr* lst, int64_t n, int64_t s) {
 /* Multidimensional differences: apply levels[0] step-1 first differences at the
  * top level, then recurse into each element with the remaining levels. */
 static Expr* diff_levels(Expr* lst, const int64_t* levels, size_t num) {
-    if (num == 0 || lst->type != EXPR_FUNCTION) {
+    if (num == 0 || (lst->type != EXPR_FUNCTION && lst->type != EXPR_LINKEDLIST)) {
         return expr_copy(lst);
     }
 
@@ -81,14 +124,16 @@ static Expr* diff_levels(Expr* lst, const int64_t* levels, size_t num) {
         return cur;
     }
 
-    size_t m = cur->data.function.arg_count;
-    Expr* head = cur->data.function.head;
+    LLView cv;
+    ll_view(cur, &cv);
+    size_t m = cv.n;
     Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
     for (size_t i = 0; i < m; i++) {
-        out[i] = diff_levels(cur->data.function.args[i], levels + 1, num - 1);
+        out[i] = diff_levels(cv.a[i], levels + 1, num - 1);
     }
-    Expr* result = expr_new_function(expr_copy(head), out, m);
+    Expr* result = ll_view_result(&cv, out, m);
     free(out);
+    ll_view_done(&cv);
     expr_free(cur);
     return result;
 }
@@ -112,22 +157,25 @@ Expr* builtin_differences(Expr* res) {
      * trailing key of each pair (so the leading key drops, as in Wolfram). */
     if (is_association(lst)) { Expr* r = assoc_rekey_over_values(res); if (r) return r; }
 
-    if (lst->type != EXPR_FUNCTION) return NULL;
+    if (lst->type != EXPR_FUNCTION && lst->type != EXPR_LINKEDLIST) return NULL;
 
     /* Differences[list, {n1, n2, ...}] — per-level differences. */
-    if (argc == 2 && is_listq(res->data.function.args[1])) {
-        Expr* spec = res->data.function.args[1];
-        size_t num = spec->data.function.arg_count;
-        if (num == 0) return expr_copy(lst);
+    if (argc == 2 && (is_listq(res->data.function.args[1]) ||
+                      res->data.function.args[1]->type == EXPR_LINKEDLIST)) {
+        Expr* spec = res->data.function.args[1];      /* a List or a LinkedList */
+        size_t num = (size_t)ll_seq_length(spec);
+        if (num == 0) return diff_n_step(lst, 0, 1);
 
         int64_t* levels = malloc(sizeof(int64_t) * num);
         for (size_t i = 0; i < num; i++) {
-            Expr* e = spec->data.function.args[i];
-            if (e->type != EXPR_INTEGER || e->data.integer < 0) {
+            Expr* e = ll_seq_element(spec, (int64_t)i);
+            bool ok = e->type == EXPR_INTEGER && e->data.integer >= 0;
+            if (ok) levels[i] = e->data.integer;
+            expr_free(e);
+            if (!ok) {
                 free(levels);
                 return NULL;
             }
-            levels[i] = e->data.integer;
         }
         Expr* result = diff_levels(lst, levels, num);
         free(levels);

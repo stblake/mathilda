@@ -27,6 +27,7 @@
 #include "ndarray.h"
 #include "print.h"
 #include "pack.h"
+#include "linkedlist.h"   /* dense rows may be LinkedLists */
 #include <stdlib.h>
 #include <string.h>
 
@@ -234,6 +235,19 @@ static void dims_set_rank(DimSpec* ds, int rank) {
 /* Dense arrays                                                             */
 /* ======================================================================== */
 
+/* A dense row: a List, a buffer, or a LinkedList -- whose elements are read
+ * from its slots (dl_at: borrowed for a boxed list, a fresh box of a typed
+ * slot, *own set, otherwise). The rule paths below keep lv_is_list. */
+static bool dl_is_row(const Expr* e) { return lv_is_list(e) || (e && e->type == EXPR_LINKEDLIST); }
+static int64_t dl_len(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ? ll_length(e->data.llist) : lv_len(e);
+}
+static Expr* dl_at(const Expr* e, int64_t i, bool* own) {
+    if (e->type == EXPR_LINKEDLIST) return ll_elem_view(e->data.llist, i, own);
+    *own = false;
+    return e->data.function.args[i];
+}
+
 /* Full-depth dimensions of a rectangular nested list; false when ragged, or
  * when a leaf is itself a List at a shallower level. Packed buffers answer
  * from their shape. */
@@ -246,34 +260,46 @@ static bool dense_dims(const Expr* e, int* rank, int64_t* dims) {
     /* Walk the first branch for the candidate shape, then verify. */
     int r = 0;
     const Expr* x = e;
-    while (lv_is_list(x)) {
+    Expr* held = NULL;     /* a boxed typed slot: a leaf, so the walk ends there */
+    bool ok = true;
+    while (dl_is_row(x)) {
         if (x->type == EXPR_NDARRAY) {
             for (int k = 0; k < x->data.ndarray.rank && r < SP_MAX_RANK; k++)
                 dims[r++] = x->data.ndarray.dims[k];
             break;
         }
-        if (r >= SP_MAX_RANK) return false;
-        int64_t n = lv_len(x);
+        if (r >= SP_MAX_RANK) { ok = false; break; }
+        int64_t n = dl_len(x);
         dims[r++] = n;
         if (n == 0) break;
-        x = x->data.function.args[0];
+        bool own;
+        Expr* nx = dl_at(x, 0, &own);
+        if (own) { if (held) expr_free(held); held = nx; }
+        x = nx;
     }
+    if (held) expr_free(held);
     *rank = r;
-    return true;
+    return ok;
 }
 
 /* Does every element of `e` at level `level` agree with the shape? */
 static bool dense_check(const Expr* e, int level, int rank, const int64_t* dims) {
-    if (level == rank) return !is_array_value(e);
-    if (!lv_is_list(e) || lv_len(e) != dims[level]) return false;
+    if (level == rank) return !is_array_value(e) && e->type != EXPR_LINKEDLIST;
+    if (!dl_is_row(e) || dl_len(e) != dims[level]) return false;
     if (e->type == EXPR_NDARRAY) {
         if (e->data.ndarray.rank != rank - level) return false;
         for (int k = 0; k < e->data.ndarray.rank; k++)
             if (e->data.ndarray.dims[k] != dims[level + k]) return false;
         return true;
     }
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (!dense_check(e->data.function.args[i], level + 1, rank, dims)) return false;
+    int64_t n = dl_len(e);
+    for (int64_t i = 0; i < n; i++) {
+        bool own;
+        Expr* x = dl_at(e, i, &own);
+        bool ok = dense_check(x, level + 1, rank, dims);
+        ll_elem_done(x, own);
+        if (!ok) return false;
+    }
     return true;
 }
 
@@ -299,8 +325,13 @@ static void scan_leaves(const Expr* e, int level, int rank, LeafScan* s) {
         if (!real && e->type != EXPR_INTEGER) s->all_machine_real_or_int = false;
         return;
     }
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        scan_leaves(e->data.function.args[i], level + 1, rank, s);
+    int64_t n = dl_len(e);
+    for (int64_t i = 0; i < n; i++) {
+        bool own;
+        Expr* x = dl_at(e, i, &own);
+        scan_leaves(x, level + 1, rank, s);
+        ll_elem_done(x, own);
+    }
 }
 
 /* Push the entries of a dense list (with dims `src` cropped to `dims`) in
@@ -363,11 +394,15 @@ static bool push_dense(SpCoo* c, const Expr* e, int level, int64_t* coord,
         if (sp_value_is_background(v, bg)) { expr_free(v); return true; }
         return sp_coo_push_expr(c, coord, v);
     }
-    int64_t n = lv_len(e);
+    int64_t n = dl_len(e);
     if (n > c->dims[level]) n = c->dims[level];
     for (int64_t i = 0; i < n; i++) {
         coord[level] = i;
-        if (!push_dense(c, e->data.function.args[i], level + 1, coord, bg, to_real)) return false;
+        bool own;
+        Expr* x = dl_at(e, i, &own);
+        bool ok = push_dense(c, x, level + 1, coord, bg, to_real);
+        ll_elem_done(x, own);
+        if (!ok) return false;
     }
     return true;
 }
@@ -1209,7 +1244,7 @@ static Expr* sparsearray_impl(Expr* res) {
         if (all_rules)
             return from_rules(res, spec, spec->data.function.args, n, dims_arg, bg_arg);
     }
-    if (lv_is_list(spec)) {
+    if (lv_is_list(spec) || spec->type == EXPR_LINKEDLIST) {
         if (bg_arg && is_array_value(bg_arg)) {
             sa_msg("ilist", "The implicit value %s in %s cannot be a list.", bg_arg, res, NULL);
             return NULL;

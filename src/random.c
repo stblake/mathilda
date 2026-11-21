@@ -37,6 +37,7 @@
  * Uses GMP's random state (gmp_randstate_t) for bignum support.
  */
 
+#include "linkedlist_seq.h"   /* LLView: RandomChoice / RandomSample over LinkedLists */
 #include "random.h"
 #include "memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "dist.h"   /* ml_dist_reset_cache -- SeedRandom must clear the Gaussian cache */
@@ -1739,6 +1740,50 @@ static size_t cum_search(const double* cum_weights, size_t count, double u) {
  * Build a multi-dimensional array of random choices from a list.
  * Uses uniform selection (each element equally likely).
  */
+/* ---- LinkedList operands of RandomChoice / RandomSample ----------------
+ * A LinkedList (the choices, or either side of a weights -> elements rule) is
+ * read through an element-array view opened once per call (rc_open); the
+ * List code below finds it by is_nonempty_list, so both containers draw from
+ * the same code and the same random stream. The answer is a LinkedList when
+ * the elements came from one (rc_list). Neither head runs user code, so one
+ * file-level context (saved and restored around each call) suffices. */
+typedef struct { const Expr* ll; LLView v; } RCView;
+typedef struct { RCView v[2]; int n; bool linked; } RCCtx;
+static RCCtx g_rc = { .n = 0, .linked = false };
+
+static void rc_add(RCCtx* c, const Expr* e) {
+    if (!e || e->type != EXPR_LINKEDLIST || c->n >= 2) return;
+    c->v[c->n].ll = e;
+    ll_view(e, &c->v[c->n].v);
+    c->n++;
+}
+
+/* Open views on the LinkedList operands of RandomChoice/RandomSample[arg, ...]. */
+static RCCtx rc_open(const Expr* first) {
+    RCCtx saved = g_rc;
+    g_rc.n = 0;
+    g_rc.linked = false;
+    if (first->type == EXPR_LINKEDLIST) {
+        rc_add(&g_rc, first);
+        g_rc.linked = true;
+    } else if (first->type == EXPR_FUNCTION && first->data.function.arg_count == 2 &&
+               head_is(first, SYM_Rule)) {
+        rc_add(&g_rc, first->data.function.args[0]);
+        rc_add(&g_rc, first->data.function.args[1]);
+        g_rc.linked = first->data.function.args[1]->type == EXPR_LINKEDLIST;
+    }
+    return saved;
+}
+
+static void rc_close(RCCtx saved) {
+    for (int i = 0; i < g_rc.n; i++) ll_view_done(&g_rc.v[i].v);
+    g_rc = saved;
+}
+
+/* The answer container for items[0..n) (consumed): a LinkedList when the
+ * elements came from one, else a List. */
+static Expr* rc_list(Expr** items, size_t n) { return ll_seq_of(g_rc.linked, items, n); }
+
 static Expr* random_choice_array(Expr** choices, size_t choice_count,
                                  Expr* dims, size_t dim_idx) {
     if (dim_idx >= dims->data.function.arg_count)
@@ -1769,7 +1814,7 @@ static Expr* random_choice_array(Expr** choices, size_t choice_count,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
+    Expr* list = rc_list(elems, n);
     free(elems);
     return list;
 }
@@ -1809,7 +1854,7 @@ static Expr* weighted_choice_array(Expr** choices, size_t choice_count,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
+    Expr* list = rc_list(elems, n);
     free(elems);
     return list;
 }
@@ -1835,6 +1880,12 @@ static bool is_rule(Expr* e, Expr** wlist, Expr** elist) {
  * If so, set *args and *count.
  */
 static bool is_nonempty_list(Expr* e, Expr*** args, size_t* count) {
+    for (int i = 0; i < g_rc.n; i++)            /* a LinkedList operand: its view */
+        if (g_rc.v[i].ll == e) {
+            *args = g_rc.v[i].v.a;
+            *count = g_rc.v[i].v.n;
+            return *count > 0;
+        }
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_List &&
@@ -1908,6 +1959,8 @@ static Expr* choice_buffer(Expr** choices, size_t choice_count,
                            const int64_t* dims, int rank,
                            double* cum_weights, double total) {
     if (rank < 1 || choice_count == 0) return NULL;
+    /* A LinkedList answer is built element by element (the same draws). */
+    if (g_rc.linked) return NULL;
     /* Every choice a machine number, or every one a rectangular array of them
      * of one shape (RandomChoice[w -> {{3, 1}, {3, -1}}, n] is an n x 2
      * array): one element type, one cell shape. */
@@ -2014,7 +2067,17 @@ static bool choice_dims(const Expr* dim_arg, int64_t* dims, int* rank) {
  *   RandomChoice[wlist->elist, n]                    -> list of n weighted choices
  *   RandomChoice[wlist->elist, {n1, n2, ...}]        -> array of weighted choices
  */
+static Expr* randomchoice_core(Expr* res);
+
 Expr* builtin_randomchoice(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    RCCtx saved = rc_open(res->data.function.args[0]);
+    Expr* r = randomchoice_core(res);
+    rc_close(saved);
+    return r;
+}
+
+static Expr* randomchoice_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 
@@ -2092,7 +2155,7 @@ Expr* builtin_randomchoice(Expr* res) {
                 result_elems[i] = expr_copy(elems_args[idx]);
             }
             free(cum_weights);
-            Expr* list = expr_new_function(expr_new_symbol(SYM_List), result_elems, n);
+            Expr* list = rc_list(result_elems, n);
             free(result_elems);
             return list;
         }
@@ -2151,7 +2214,7 @@ Expr* builtin_randomchoice(Expr* res) {
             size_t idx = random_index(choice_count);
             elems[i] = expr_copy(choices[idx]);
         }
-        Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
+        Expr* list = rc_list(elems, n);
         free(elems);
         return list;
     }
@@ -2315,7 +2378,17 @@ static bool is_upto(Expr* e, int64_t* val) {
  *   RandomSample[{w1,...}->{e1,...}, n]                 -> weighted sample of n elements
  *   RandomSample[{w1,...}->{e1,...}, UpTo[n]]           -> weighted sample of min(n, len)
  */
+static Expr* randomsample_core(Expr* res);
+
 Expr* builtin_randomsample(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    RCCtx saved = rc_open(res->data.function.args[0]);
+    Expr* r = randomsample_core(res);
+    rc_close(saved);
+    return r;
+}
+
+static Expr* randomsample_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 
@@ -2395,7 +2468,7 @@ Expr* builtin_randomsample(Expr* res) {
         }
         free(selected);
 
-        Expr* list = expr_new_function(expr_new_symbol(SYM_List), result_elems, sample_n);
+        Expr* list = rc_list(result_elems, sample_n);
         free(result_elems);
         return list;
     }
@@ -2438,7 +2511,7 @@ Expr* builtin_randomsample(Expr* res) {
     }
     free(selected);
 
-    Expr* list = expr_new_function(expr_new_symbol(SYM_List), result_elems, sample_n);
+    Expr* list = rc_list(result_elems, sample_n);
     free(result_elems);
     return list;
 }

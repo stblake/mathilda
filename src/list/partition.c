@@ -1,19 +1,26 @@
 #include "list_common.h"
+#include "common.h"     /* head_is */
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "partition.h"
 #include "assoc.h"      /* is_association */
+#include "linkedlist_seq.h" /* LLView: a LinkedList partitions from its slots */
+
+/* Level k of a Partition size/offset spec -- element k of a List or a
+ * LinkedList of them, or a bare spec at level 0. New reference, or NULL. */
+static Expr* partition_spec_at(Expr* spec, size_t k) {
+    int64_t len = (spec->type == EXPR_LINKEDLIST || head_is(spec, SYM_List)) ? ll_seq_length(spec) : -1;
+    if (len >= 0) return (int64_t)k < len ? ll_seq_element(spec, (int64_t)k) : NULL;
+    return k == 0 ? expr_copy(spec) : NULL;
+}
 
 static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_idx) {
-    if (list->type != EXPR_FUNCTION) return expr_copy(list);
+    if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
     // Get n and d for this level
     int64_t n = -1;
     bool n_upto = false;
-    Expr* n_e = (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol.name == SYM_List) ? 
-                (level_idx < n_spec->data.function.arg_count ? n_spec->data.function.args[level_idx] : NULL) : 
-                (level_idx == 0 ? n_spec : NULL);
-    
+    Expr* n_e = partition_spec_at(n_spec, level_idx);
     if (!n_e) return expr_copy(list);
 
     if (n_e->type == EXPR_INTEGER) {
@@ -24,20 +31,23 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
             n_upto = true;
         }
     }
+    expr_free(n_e);
     if (n <= 0) return expr_copy(list);
 
     int64_t d = n;
     if (d_spec) {
-        Expr* d_e = (d_spec->type == EXPR_FUNCTION && d_spec->data.function.head->data.symbol.name == SYM_List) ? 
-                    (level_idx < d_spec->data.function.arg_count ? d_spec->data.function.args[level_idx] : NULL) : 
-                    (level_idx == 0 ? d_spec : NULL);
+        Expr* d_e = partition_spec_at(d_spec, level_idx);
         if (d_e && d_e->type == EXPR_INTEGER) {
             d = d_e->data.integer;
         }
+        if (d_e) expr_free(d_e);
     }
     if (d <= 0) return expr_copy(list);
 
-    size_t len = list->data.function.arg_count;
+    /* A LinkedList (at any level) partitions into LinkedLists. */
+    LLView lv;
+    ll_view(list, &lv);
+    size_t len = lv.n;
     size_t num_sublists = 0;
     if (n_upto) {
         num_sublists = (len > 0) ? (len - 1) / d + 1 : 0;
@@ -56,14 +66,15 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
         size_t sub_count = end - start;
         Expr** sub_args = malloc(sizeof(Expr*) * sub_count);
         for (size_t j = 0; j < sub_count; j++) {
-            sub_args[j] = partition_rec(list->data.function.args[start + j], n_spec, d_spec, level_idx + 1);
+            sub_args[j] = partition_rec(lv.a[start + j], n_spec, d_spec, level_idx + 1);
         }
-        sublists[i] = expr_new_function(expr_copy(list->data.function.head), sub_args, sub_count);
+        sublists[i] = ll_view_result(&lv, sub_args, sub_count);
         free(sub_args);
     }
 
-    Expr* result = expr_new_function(expr_copy(list->data.function.head), sublists, num_sublists);
+    Expr* result = ll_view_result(&lv, sublists, num_sublists);
     free(sublists);
+    ll_view_done(&lv);
     return result;
 }
 
@@ -148,36 +159,38 @@ static Expr* partition_overhang(Expr* res) {
         if (pad_m == 0) pad_none = true;
     }
 
-    int64_t len = (int64_t)list->data.function.arg_count;
-    Expr* head = list->data.function.head;
-    if (len == 0) return expr_new_function(expr_copy(head), NULL, 0);
+    LLView lv;
+    ll_view(list, &lv);
+    int64_t len = (int64_t)lv.n;
+    if (len == 0) { Expr* r = ll_view_result(&lv, NULL, 0); ll_view_done(&lv); return r; }
 
     /* Sublists i = 0 .. count-1 with s0 + i d <= len - kr + 1. */
     int64_t s0 = 2 - kl;
     int64_t span = len - kr + 1 - s0;
     int64_t count = span < 0 ? 0 : span / d + 1;
-    if (count > (int64_t)100000000 / (n > 0 ? n : 1)) return NULL;  /* absurd size */
+    if (count > (int64_t)100000000 / (n > 0 ? n : 1)) { ll_view_done(&lv); return NULL; }  /* absurd size */
 
     Expr** subs = malloc(sizeof(Expr*) * (size_t)(count ? count : 1));
     Expr** items = malloc(sizeof(Expr*) * (size_t)n);
-    if (!subs || !items) { free(subs); free(items); return NULL; }
+    if (!subs || !items) { free(subs); free(items); ll_view_done(&lv); return NULL; }
     for (int64_t i = 0; i < count; i++) {
         int64_t start = s0 + i * d;
         size_t m = 0;
         for (int64_t j = start; j < start + n; j++) {
             Expr* src;
-            if (j >= 1 && j <= len)       src = list->data.function.args[j - 1];
+            if (j >= 1 && j <= len)       src = lv.a[j - 1];
             else if (pad_none)            continue;
-            else if (pad_cyclic_self)     src = list->data.function.args[partition_mod(j - 1, len)];
+            else if (pad_cyclic_self)     src = lv.a[partition_mod(j - 1, len)];
             else if (pad_items)           src = pad_items[partition_mod(j - 1, pad_m)];
             else                          src = pad;
             items[m++] = expr_copy(src);
         }
-        subs[i] = expr_new_function(expr_copy(head), items, m);
+        subs[i] = ll_view_result(&lv, items, m);
     }
     free(items);
-    Expr* out = expr_new_function(expr_copy(head), subs, (size_t)count);
+    Expr* out = ll_view_result(&lv, subs, (size_t)count);
     free(subs);
+    ll_view_done(&lv);
     return out;
 }
 
@@ -187,7 +200,8 @@ Expr* builtin_partition(Expr* res) {
     if (res->data.function.arg_count >= 4) {
         Expr* list = res->data.function.args[0];
         if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
-        if (list->type != EXPR_FUNCTION || is_association(list)) return NULL;
+        if ((list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) || is_association(list))
+            return NULL;
         return partition_overhang(res);
     }
     
@@ -203,7 +217,7 @@ Expr* builtin_partition(Expr* res) {
         return ndstruct_delist_repack(res, list);
     }
 
-    if (list->type != EXPR_FUNCTION) return expr_copy(list);
+    if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
     /* Mathematica 15 does not partition an association: Partition[<|...|>, 2]
      * stays unevaluated (it used to come back as the input, truncated). */

@@ -3,6 +3,7 @@
 #include "ndarray.h"
 #include "ndstruct.h"
 #include "message.h"
+#include "linkedlist_seq.h" /* LLView: LinkedList levels flatten like List levels */
 
 static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, size_t* count, size_t* cap) {
     /* A visible NDArray nested inside an ordinary List. `head_is` is false for
@@ -28,6 +29,15 @@ static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, 
             flatten_rec(rows->data.function.args[i], h,
                         level == -1 ? -1 : level - 1, results, count, cap);
         expr_free(rows);
+        return;
+    }
+    if (level != 0 && e->type == EXPR_LINKEDLIST && h == SYM_List) {
+        /* a LinkedList is a List level, read from its slots */
+        LLView v;
+        ll_view(e, &v);
+        for (size_t i = 0; i < v.n; i++)
+            flatten_rec(v.a[i], h, level == -1 ? -1 : level - 1, results, count, cap);
+        ll_view_done(&v);
         return;
     }
     if (level != 0 && head_is(e, intern_symbol(h))) {
@@ -95,7 +105,7 @@ Expr* builtin_flatten(Expr* res) {
      * keep the identity result, which the reference also rejects with ::normal:
      * internal code relies on Flatten[atom] === atom, so that stays.) */
     if (expr_is_number_atom(list)) return builtin_normal_error("Flatten", res, 1);
-    if (list->type != EXPR_FUNCTION) return expr_copy(list);
+    if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
     const char* h = SYM_List;
     if (res->data.function.arg_count == 3) {
@@ -103,16 +113,23 @@ Expr* builtin_flatten(Expr* res) {
         h = res->data.function.args[2]->data.symbol.name;
     }
 
+    /* A typed LinkedList has no levels below its own: a copy of its slots. */
+    if (list->type == EXPR_LINKEDLIST && ll_kind(list->data.llist) != LL_BOXED)
+        return expr_new_linkedlist(ll_copy(list->data.llist));
+
     size_t cap = 16;
     size_t count = 0;
     Expr** results = malloc(sizeof(Expr*) * cap);
 
     // Initial call: we flatten children of the head if they also have head h.
-    for (size_t i = 0; i < list->data.function.arg_count; i++) {
-        flatten_rec(list->data.function.args[i], h, n, &results, &count, &cap);
+    LLView v;
+    ll_view(list, &v);
+    for (size_t i = 0; i < v.n; i++) {
+        flatten_rec(v.a[i], h, n, &results, &count, &cap);
     }
 
-    Expr* result = expr_new_function(expr_copy(list->data.function.head), results, count);
+    Expr* result = ll_view_result(&v, results, count);
     free(results);
+    ll_view_done(&v);
     return result;
 }

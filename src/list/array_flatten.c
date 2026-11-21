@@ -1,5 +1,48 @@
 #include "list_common.h"
 #include "array_flatten.h"
+#include "linkedlist.h"   /* LinkedList levels, read from their slots */
+
+/* Element i of a level (a List or a LinkedList), borrowed until the keep list
+ * is released: a boxed LinkedList lends its slot, a typed one a fresh box the
+ * keep list owns. */
+typedef struct { Expr** e; size_t n, cap; } AFKeep;
+
+static bool af_is_level(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ||
+           (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_List);
+}
+
+static int64_t af_len(const Expr* e) {
+    return e->type == EXPR_LINKEDLIST ? ll_length(e->data.llist) : (int64_t)e->data.function.arg_count;
+}
+
+static Expr* af_at(Expr* e, int64_t i, AFKeep* keep) {
+    if (e->type != EXPR_LINKEDLIST) return e->data.function.args[i];
+    bool own;
+    Expr* x = ll_elem_view(e->data.llist, i, &own);
+    if (own) {
+        if (keep->n == keep->cap) {
+            keep->cap = keep->cap ? 2 * keep->cap : 16;
+            keep->e = realloc(keep->e, sizeof(Expr*) * keep->cap);
+        }
+        keep->e[keep->n++] = x;
+    }
+    return x;
+}
+
+static void af_keep_free(AFKeep* keep) {
+    for (size_t i = 0; i < keep->n; i++) expr_free(keep->e[i]);
+    free(keep->e);
+}
+
+/* A row of the result: a LinkedList when the argument was one. */
+static Expr* af_row(bool linked, Expr** items, size_t n) {
+    if (!linked) return expr_new_function(expr_new_symbol(SYM_List), items, n);
+    LinkedList* ll = ll_new();
+    for (size_t i = 0; i < n; i++) ll_push_back(ll, items[i]);
+    return expr_new_linkedlist(ll);
+}
 
 /* ArrayFlatten[a]      -> a single flattened matrix from a matrix of matrices
  *                         (block matrix). Equivalent to ArrayFlatten[a, 2].
@@ -34,19 +77,18 @@
  * no cross-module link dependency. Returns the rank of a rectangular
  * nested-List tensor (0 for a non-List atom/head), filling dims[0..rank-1], or
  * -1 if the structure is jagged (non-rectangular). dims must hold >= 64 slots. */
-static int af_tensor_dims(Expr* e, int64_t* dims) {
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol.name != SYM_List) {
+static int af_tensor_dims(Expr* e, int64_t* dims, AFKeep* keep) {
+    if (!af_is_level(e)) {
         return 0; /* rank 0 */
     }
-    int64_t len = (int64_t)e->data.function.arg_count;
+    int64_t len = af_len(e);
     dims[0] = len;
     if (len == 0) return 1;
 
-    int sub_rank = af_tensor_dims(e->data.function.args[0], dims + 1);
+    int sub_rank = af_tensor_dims(af_at(e, 0, keep), dims + 1, keep);
     for (int64_t i = 1; i < len; i++) {
         int64_t cur_dims[64];
-        int cur_rank = af_tensor_dims(e->data.function.args[i], cur_dims);
+        int cur_rank = af_tensor_dims(af_at(e, i, keep), cur_dims, keep);
         if (cur_rank != sub_rank) return -1; /* jagged */
         for (int j = 0; j < sub_rank; j++) {
             if (cur_dims[j] != dims[j + 1]) return -1; /* jagged */
@@ -60,7 +102,7 @@ static int af_tensor_dims(Expr* e, int64_t* dims) {
  * level in D and enforces that the grid is rectangular. Returns 1 on success,
  * 0 if the structure is not a rectangular rank-r List grid. */
 static int af_collect_grid(Expr* node, int level, int r, int64_t* D,
-                           Expr*** blocks, size_t* nblocks, size_t* cap) {
+                           Expr*** blocks, size_t* nblocks, size_t* cap, AFKeep* keep) {
     if (level == r) {
         if (*nblocks == *cap) {
             *cap *= 2;
@@ -69,16 +111,15 @@ static int af_collect_grid(Expr* node, int level, int r, int64_t* D,
         (*blocks)[(*nblocks)++] = node;
         return 1;
     }
-    if (node->type != EXPR_FUNCTION || node->data.function.head->type != EXPR_SYMBOL
-        || node->data.function.head->data.symbol.name != SYM_List) {
+    if (!af_is_level(node)) {
         return 0;
     }
-    int64_t len = (int64_t)node->data.function.arg_count;
+    int64_t len = af_len(node);
     if (D[level] == -1) D[level] = len;
     else if (D[level] != len) return 0; /* ragged grid */
     for (int64_t i = 0; i < len; i++) {
-        if (!af_collect_grid(node->data.function.args[i], level + 1, r,
-                             D, blocks, nblocks, cap)) {
+        if (!af_collect_grid(af_at(node, i, keep), level + 1, r,
+                             D, blocks, nblocks, cap, keep)) {
             return 0;
         }
     }
@@ -95,6 +136,8 @@ typedef struct {
     int* is_arr;         /* per block: 1 if an array block, 0 if scalar */
     int64_t* gstride;    /* grid strides, length r */
     int64_t* o_idx;      /* scratch: current output multi-index, length r */
+    AFKeep* keep;        /* boxes of typed LinkedList slots */
+    bool linked;         /* the argument was a LinkedList: so are the rows */
 } AFCtx;
 
 /* Build the rank-r output nested List by recursion over the output axes. */
@@ -111,7 +154,7 @@ static Expr* af_build(AFCtx* c, int level) {
         if (c->is_arr[bflat]) {
             Expr* cur = block;
             for (int k = 0; k < c->r; k++) {
-                cur = cur->data.function.args[j[k]];
+                cur = af_at(cur, j[k], c->keep);
             }
             return expr_copy(cur);
         }
@@ -119,14 +162,14 @@ static Expr* af_build(AFCtx* c, int level) {
     }
 
     int64_t n = c->O[level];
-    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (n == 0) return af_row(c->linked, NULL, 0);
 
     Expr** args = malloc(sizeof(Expr*) * (size_t)n);
     for (int64_t o = 0; o < n; o++) {
         c->o_idx[level] = o;
         args[o] = af_build(c, level + 1);
     }
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), args, (size_t)n);
+    Expr* out = af_row(c->linked, args, (size_t)n);
     free(args);
     return out;
 }
@@ -156,8 +199,10 @@ Expr* builtin_array_flatten(Expr* res) {
 
     size_t nblocks = 0, cap = 16;
     Expr** blocks = malloc(sizeof(Expr*) * cap);
-    if (!af_collect_grid(a, 0, (int)r, D, &blocks, &nblocks, &cap)) {
+    AFKeep keep = { NULL, 0, 0 };
+    if (!af_collect_grid(a, 0, (int)r, D, &blocks, &nblocks, &cap, &keep)) {
         free(blocks);
+        af_keep_free(&keep);
         return NULL; /* not a rectangular rank-r List grid */
     }
 
@@ -179,7 +224,7 @@ Expr* builtin_array_flatten(Expr* res) {
     int mismatch = 0;
     for (size_t f = 0; f < nblocks && !mismatch; f++) {
         int64_t bdims[64];
-        int rank = af_tensor_dims(blocks[f], bdims);
+        int rank = af_tensor_dims(blocks[f], bdims, &keep);
         is_arr[f] = (rank >= (int)r);
         if (!is_arr[f]) continue;
         for (int k = 0; k < (int)r; k++) {
@@ -193,6 +238,7 @@ Expr* builtin_array_flatten(Expr* res) {
         for (int k = 0; k < (int)r; k++) free(len[k]);
         free(is_arr);
         free(blocks);
+        af_keep_free(&keep);
         return NULL; /* blocks do not fit together */
     }
 
@@ -224,7 +270,8 @@ Expr* builtin_array_flatten(Expr* res) {
     }
 
     int64_t o_idx[AF_MAX_R];
-    AFCtx ctx = { (int)r, O, map_i, map_j, blocks, is_arr, gstride, o_idx };
+    AFCtx ctx = { (int)r, O, map_i, map_j, blocks, is_arr, gstride, o_idx, &keep,
+                  a->type == EXPR_LINKEDLIST };
     Expr* result = af_build(&ctx, 0);
 
     for (int k = 0; k < (int)r; k++) {
@@ -234,5 +281,6 @@ Expr* builtin_array_flatten(Expr* res) {
     }
     free(is_arr);
     free(blocks);
+    af_keep_free(&keep);
     return result;
 }

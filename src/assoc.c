@@ -21,6 +21,7 @@
 #include "eval.h"
 #include "print.h"     /* expr_to_string: AssociationThread::idim */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "linkedlist_seq.h" /* LLView: LinkedList arguments */
 
 #include <stdlib.h>
 #include <string.h>
@@ -184,8 +185,27 @@ Expr* assoc_from_rules(Expr** rules, size_t count) {
 
 /* Append every rule reachable from `arg` to the (dynamic) collector.
  * Returns false if `arg` is not a rule / list-of-rules / association. */
+/* The views a LinkedList argument lends its rules from, held open until the
+ * entries are copied into the association. */
+typedef struct { LLView* v; size_t n, cap; } EntryViews;
+
 static bool collect_entries(Expr* arg, Expr*** buf, size_t* n, size_t* cap,
-                            bool* spliced) {
+                            bool* spliced, EntryViews* hold) {
+    if (arg->type == EXPR_LINKEDLIST) {         /* a LinkedList of rules */
+        *spliced = true;
+        if (hold->n == hold->cap) {
+            hold->cap = hold->cap ? 2 * hold->cap : 2;
+            hold->v = realloc(hold->v, sizeof(LLView) * hold->cap);
+        }
+        LLView* v = &hold->v[hold->n++];
+        ll_view(arg, v);
+        for (size_t i = 0; i < v->n; i++) {
+            if (!is_rule2(v->a[i])) return false;
+            if (*n == *cap) { *cap *= 2; *buf = realloc(*buf, sizeof(Expr*) * *cap); }
+            (*buf)[(*n)++] = v->a[i];
+        }
+        return true;
+    }
     if (is_rule2(arg)) {
         if (*n == *cap) { *cap *= 2; *buf = realloc(*buf, sizeof(Expr*) * *cap); }
         (*buf)[(*n)++] = arg;
@@ -210,10 +230,13 @@ Expr* builtin_association(Expr* res) {
     size_t cap = argc ? argc : 1, n = 0;
     Expr** entries = malloc(sizeof(Expr*) * cap);
     bool spliced = false;
+    EntryViews hold = { NULL, 0, 0 };
 
     for (size_t i = 0; i < argc; i++) {
-        if (!collect_entries(res->data.function.args[i], &entries, &n, &cap, &spliced)) {
+        if (!collect_entries(res->data.function.args[i], &entries, &n, &cap, &spliced, &hold)) {
             free(entries);
+            for (size_t j = 0; j < hold.n; j++) ll_view_done(&hold.v[j]);
+            free(hold.v);
             return NULL; /* invalid argument: leave unevaluated */
         }
     }
@@ -226,6 +249,8 @@ Expr* builtin_association(Expr* res) {
         changed = true; /* de-duplication removed some keys */
     }
     free(entries);
+    for (size_t j = 0; j < hold.n; j++) ll_view_done(&hold.v[j]);
+    free(hold.v);
 
     if (!changed) {
         expr_free(result);
@@ -369,11 +394,87 @@ static bool is_assoc_or_rule_list(const Expr* e) {
 /* The body of Lookup once its first two arguments are evaluated.  `deflt` is
  * still HELD: it is evaluated only where a key is actually absent (once per
  * absent key), so Lookup[<|a -> 1|>, a, Print["x"]] prints nothing. */
+/* A LinkedList of rules, read from its slots: the value of the first rule
+ * whose key is `key` (borrowed from the view), or NULL. The bare-List-of-rules
+ * form of Lookup / KeyExistsQ / KeyMemberQ / KeyFreeQ. */
+static Expr* ll_rules_value(const LLView* v, const Expr* key) {
+    for (size_t i = 0; i < v->n; i++) {
+        Expr* r = v->a[i];
+        if (is_rule2(r) && expr_eq(rule_key(r), (Expr*)key)) return rule_val(r);
+    }
+    return NULL;
+}
+
+static Expr* lookup_core(Expr* res);
+
+/* Lookup[ll, ...]: a LinkedList of associations threads (a LinkedList of the
+ * lookups), a LinkedList of rules is looked up like a List of rules. */
+static Expr* lookup_ll(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr* key   = res->data.function.args[1];
+    Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
+    LLView v;
+    ll_view(res->data.function.args[0], &v);
+    bool all_assoc = v.n > 0;
+    for (size_t i = 0; i < v.n && all_assoc; i++) all_assoc = is_association(v.a[i]);
+    Expr* out;
+    if (all_assoc) {
+        Expr** rs = malloc(sizeof(Expr*) * v.n);
+        for (size_t i = 0; i < v.n; i++) {
+            Expr* largs[3] = { expr_copy(v.a[i]), expr_copy(key), deflt ? expr_copy(deflt) : NULL };
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), largs, argc);
+            rs[i] = eval_callback(call);
+            expr_free(call);
+        }
+        out = ll_seq_of(true, rs, v.n);
+        free(rs);
+    } else if (head_is(key, SYM_Key) && key->data.function.arg_count == 1) {
+        Expr* inner = key->data.function.args[0];
+        Expr* val = ll_rules_value(&v, inner);
+        out = val ? expr_copy(val) : deflt ? evaluate(deflt) : make_missing(inner);
+    } else if (head_is(key, SYM_List)) {
+        size_t nk = key->data.function.arg_count;
+        Expr** vals = malloc(sizeof(Expr*) * (nk ? nk : 1));
+        for (size_t j = 0; j < nk; j++) {
+            Expr* qk = key->data.function.args[j];
+            if (head_is(qk, SYM_Key) && qk->data.function.arg_count == 1)
+                qk = qk->data.function.args[0];
+            Expr* val = ll_rules_value(&v, qk);
+            vals[j] = val ? expr_copy(val) : deflt ? evaluate(deflt) : make_missing(qk);
+        }
+        out = make_list(vals, nk);
+        free(vals);
+    } else {
+        Expr* val = ll_rules_value(&v, key);
+        out = val ? expr_copy(val) : deflt ? evaluate(deflt) : make_missing(key);
+    }
+    ll_view_done(&v);
+    return out;
+}
+
 static Expr* lookup_core(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
+    if (key->type == EXPR_LINKEDLIST && (assoc->type == EXPR_LINKEDLIST || is_assoc_or_rule_list(assoc))) {
+        /* A LinkedList of keys: a LinkedList of the lookups, key by key. */
+        LLView kv;
+        ll_view(key, &kv);
+        Expr** rs = malloc(sizeof(Expr*) * (kv.n ? kv.n : 1));
+        for (size_t i = 0; i < kv.n; i++) {
+            Expr* largs[3] = { expr_copy(assoc), expr_copy(kv.a[i]), deflt ? expr_copy(deflt) : NULL };
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), largs, argc);
+            rs[i] = lookup_core(call);
+            if (!rs[i]) rs[i] = eval_callback(call);
+            expr_free(call);
+        }
+        Expr* out = ll_seq_of(true, rs, kv.n);
+        free(rs);
+        ll_view_done(&kv);
+        return out;
+    }
+    if (assoc->type == EXPR_LINKEDLIST) return lookup_ll(res);
     if (!is_assoc_or_rule_list(assoc)) return NULL;
 
     /* Lookup threads over a (non-empty) list of associations, extracting the
@@ -478,6 +579,13 @@ Expr* builtin_keyexistsq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
+    if (assoc->type == EXPR_LINKEDLIST) {        /* a LinkedList of rules */
+        LLView v;
+        ll_view(assoc, &v);
+        bool found = ll_rules_value(&v, key) != NULL;
+        ll_view_done(&v);
+        return expr_new_symbol(found ? SYM_True : SYM_False);
+    }
     if (!is_assoc_or_rule_list(assoc)) return NULL;
     return expr_new_symbol(assoc_lookup_value(assoc, key) ? SYM_True : SYM_False);
 }
@@ -508,6 +616,21 @@ static bool key_contains_pattern(const Expr* e) {
  * Mathematica (KeyMemberQ[a, _] is True for any non-empty a); KeyExistsQ does
  * not (KeyExistsQ[a, _] looks for the literal key `_`). */
 static bool assoc_some_key_matches(const Expr* assoc, Expr* patt) {
+    if (assoc->type == EXPR_LINKEDLIST) {        /* a LinkedList of rules */
+        LLView v;
+        ll_view(assoc, &v);
+        bool any = false;
+        for (size_t i = 0; i < v.n && !any; i++) {
+            Expr* r = v.a[i];
+            if (!is_rule2(r)) continue;
+            if (!key_contains_pattern(patt)) { any = expr_eq(rule_key(r), patt); continue; }
+            MatchEnv* env = env_new();
+            any = match(rule_key(r), patt, env);
+            env_free(env);
+        }
+        ll_view_done(&v);
+        return any;
+    }
     if (!key_contains_pattern(patt)) return assoc_lookup_value(assoc, patt) != NULL;
     for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
         Expr* r = assoc->data.function.args[i];
@@ -525,14 +648,14 @@ static bool assoc_some_key_matches(const Expr* assoc, Expr* patt) {
 Expr* builtin_keymemberq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
-    if (!is_assoc_or_rule_list(assoc)) return NULL;
+    if (!is_assoc_or_rule_list(assoc) && assoc->type != EXPR_LINKEDLIST) return NULL;
     return expr_new_symbol(assoc_some_key_matches(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
 }
 
 Expr* builtin_keyfreeq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
-    if (!is_assoc_or_rule_list(assoc)) return NULL;
+    if (!is_assoc_or_rule_list(assoc) && assoc->type != EXPR_LINKEDLIST) return NULL;
     return expr_new_symbol(assoc_some_key_matches(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
 }
 
@@ -789,12 +912,18 @@ Expr* builtin_associationthread(Expr* res) {
     } else {
         return NULL;
     }
-    if (!head_is(keys, SYM_List)) return NULL;
-    size_t n = keys->data.function.arg_count;
+    if (!head_is(keys, SYM_List) && keys->type != EXPR_LINKEDLIST) return NULL;
+    /* Keys and values may be LinkedLists, read from their slots. */
+    LLView kv, vv = { NULL, 0, NULL, false };
+    ll_view(keys, &kv);
+    size_t n = kv.n;
     /* A non-List value is given to every key: AssociationThread[{a, b} -> 1]
      * is <|a -> 1, b -> 1|>. */
-    bool scalar = !head_is(vals, SYM_List);
-    if (!scalar && n != vals->data.function.arg_count) {
+    bool scalar = !head_is(vals, SYM_List) && vals->type != EXPR_LINKEDLIST;
+    if (!scalar) ll_view(vals, &vv);
+    if (!scalar && n != vv.n) {
+        ll_view_done(&kv);
+        ll_view_done(&vv);
         char* ks = expr_to_string(keys);
         char* vs = expr_to_string(vals);
         mth_message("AssociationThread", "idim", "%s and %s must have the same length.",
@@ -805,11 +934,12 @@ Expr* builtin_associationthread(Expr* res) {
 
     Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++)
-        rules[i] = make_rule(expr_copy(keys->data.function.args[i]),
-                             expr_copy(scalar ? vals : vals->data.function.args[i]));
+        rules[i] = make_rule(expr_copy(kv.a[i]), expr_copy(scalar ? vals : vv.a[i]));
     Expr* assoc = assoc_from_rules(rules, n);
     for (size_t i = 0; i < n; i++) expr_free(rules[i]);
     free(rules);
+    ll_view_done(&kv);
+    ll_view_done(&vv);
     return assoc;
 }
 
@@ -901,17 +1031,20 @@ Expr* builtin_counts(Expr* res) {
     if (is_ndarray(list)) { Expr* r = counts_from_ndarray(list); if (r) return r; }
     /* Counts over an association tallies its values (Counts[Values[assoc]]). */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
-    if (!head_is(list, SYM_List)) return NULL;
-    size_t n = list->data.function.arg_count;
+    if (!head_is(list, SYM_List) && list->type != EXPR_LINKEDLIST) return NULL;
+    /* A LinkedList is counted from its slots. */
+    LLView lv;
+    ll_view(list, &lv);
+    size_t n = lv.n;
 
     KeyIndex ki;
-    if (!ki_init(&ki, n)) return NULL;
+    if (!ki_init(&ki, n)) { ll_view_done(&lv); return NULL; }
     Expr** keys  = malloc(sizeof(Expr*) * (n ? n : 1)); /* borrowed */
     int64_t* cnt = malloc(sizeof(int64_t) * (n ? n : 1));
     size_t ndistinct = 0;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* x = list->data.function.args[i];
+        Expr* x = lv.a[i];
         size_t slot, idx = ki_lookup(&ki, keys, x, &slot);
         if (idx == SIZE_MAX) {
             keys[ndistinct] = x;
@@ -928,6 +1061,7 @@ Expr* builtin_counts(Expr* res) {
         rules[i] = make_rule(expr_copy(keys[i]), expr_new_integer(cnt[i]));
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, ndistinct);
     free(rules); free(keys); free(cnt); ki_free(&ki);
+    ll_view_done(&lv);
     return assoc;
 }
 
@@ -947,29 +1081,34 @@ Expr* builtin_groupby(Expr* res) {
      * keyfn -> valfn transform form is list-only, so leave it unevaluated on an
      * association. */
     bool assoc_in = is_association(list);
-    if (!head_is(list, SYM_List) && !assoc_in) return NULL;
+    if (!head_is(list, SYM_List) && !assoc_in && list->type != EXPR_LINKEDLIST) return NULL;
 
     /* GroupBy[list, {f1, f2, ...}(, red)]: multi-level grouping into nested
      * associations -- group by f1, then each group by {f2, ...}, the reducer
      * applying only at the innermost level (Mathematica 15). A level given as
      * keyfn -> valfn transforms the elements the next level sees. */
-    if (head_is(f, SYM_List)) {
-        size_t nf = f->data.function.arg_count;
-        if (nf == 0) return NULL;
+    if (head_is(f, SYM_List) || f->type == EXPR_LINKEDLIST) {
+        /* the functions, from a List or a LinkedList (whose rest stays one) */
+        LLView fv;
+        ll_view(f, &fv);
+        size_t nf = fv.n;
+        if (nf == 0) { ll_view_done(&fv); return NULL; }
         if (nf == 1) {   /* GroupBy[list, {f}(, red)] == GroupBy[list, f(, red)] */
-            Expr* a3[3] = { expr_copy(list), expr_copy(f->data.function.args[0]),
+            Expr* a3[3] = { expr_copy(list), expr_copy(fv.a[0]),
                             reducer ? expr_copy(reducer) : NULL };
+            ll_view_done(&fv);
             return expr_new_function(expr_new_symbol(SYM_GroupBy), a3, reducer ? 3 : 2);
         }
-        Expr* first_args[2] = { expr_copy(list), expr_copy(f->data.function.args[0]) };
+        Expr* first_args[2] = { expr_copy(list), expr_copy(fv.a[0]) };
         Expr* first_call = expr_new_function(expr_new_symbol(SYM_GroupBy), first_args, 2);
         Expr* outer = evaluate(first_call);
         expr_free(first_call);
-        if (!is_association(outer)) { expr_free(outer); return NULL; }
+        if (!is_association(outer)) { expr_free(outer); ll_view_done(&fv); return NULL; }
         Expr** rest = malloc(sizeof(Expr*) * (nf - 1));
-        for (size_t i = 1; i < nf; i++) rest[i - 1] = expr_copy(f->data.function.args[i]);
-        Expr* rest_list = make_list(rest, nf - 1);
+        for (size_t i = 1; i < nf; i++) rest[i - 1] = expr_copy(fv.a[i]);
+        Expr* rest_list = ll_seq_of(ll_view_linked(&fv), rest, nf - 1);
         free(rest);
+        ll_view_done(&fv);
         size_t ng = outer->data.function.arg_count;
         Expr** rules = malloc(sizeof(Expr*) * (ng ? ng : 1));
         for (size_t i = 0; i < ng; i++) {
@@ -987,7 +1126,12 @@ Expr* builtin_groupby(Expr* res) {
     }
 
     if (assoc_in && is_rule2(f)) return NULL;
-    size_t n = list->data.function.arg_count;
+    /* A LinkedList groups from a snapshot of its slots; each group is a
+     * LinkedList. */
+    LLView lv;
+    ll_view(list, &lv);
+    bool linked = ll_view_linked(&lv);
+    size_t n = lv.n;
 
     /* GroupBy[list, keyfn -> valfn, ...]: group by keyfn[x] but collect
      * valfn[x] in each group (Wolfram's key -> value transform form). */
@@ -996,7 +1140,7 @@ Expr* builtin_groupby(Expr* res) {
     if (is_rule2(f)) { keyfn = rule_key(f); valfn = rule_val(f); }
 
     KeyIndex ki;
-    if (!ki_init(&ki, n)) return NULL;
+    if (!ki_init(&ki, n)) { ll_view_done(&lv); return NULL; }
     Expr** keys   = malloc(sizeof(Expr*) * (n ? n : 1)); /* owned group keys */
     Expr*** groups = malloc(sizeof(Expr**) * (n ? n : 1)); /* owned element copies */
     size_t* gcap  = malloc(sizeof(size_t) * (n ? n : 1));
@@ -1004,7 +1148,7 @@ Expr* builtin_groupby(Expr* res) {
     size_t ngroups = 0;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* x = list->data.function.args[i];
+        Expr* x = lv.a[i];
         /* For an association, group by f applied to the value; the entry (the
          * whole Rule) is what gets collected so keys survive in each group. */
         Expr* key_input = assoc_in ? rule_val(x) : x;
@@ -1045,7 +1189,7 @@ Expr* builtin_groupby(Expr* res) {
         /* Each group is a sub-association for an association input, else a list. */
         Expr* group_list = assoc_in
             ? expr_new_function(expr_new_symbol(SYM_Association),groups[i], gcnt[i])
-            : make_list(groups[i], gcnt[i]);
+            : ll_seq_of(linked, groups[i], gcnt[i]);
         /* GroupBy[list, f, g] applies the reducer g to each group; the
          * g[{group}] application is left for the evaluator to reduce. */
         Expr* value = reducer
@@ -1056,6 +1200,7 @@ Expr* builtin_groupby(Expr* res) {
     }
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, ngroups);
     free(rules); free(keys); free(groups); free(gcap); free(gcnt); ki_free(&ki);
+    ll_view_done(&lv);
     return assoc;
 }
 
@@ -1076,11 +1221,16 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
      * (keys preserved), returned as a list in first-appearance order -- like
      * GroupBy[assoc, f] but without the outer group keys. */
     bool assoc_in = is_association(list);
-    if (!head_is(list, SYM_List) && !assoc_in) return NULL;
-    size_t n = list->data.function.arg_count;
+    if (!head_is(list, SYM_List) && !assoc_in && list->type != EXPR_LINKEDLIST) return NULL;
+    /* A LinkedList gathers from a snapshot of its slots into a LinkedList of
+     * LinkedList groups. */
+    LLView lv;
+    ll_view(list, &lv);
+    bool linked = ll_view_linked(&lv);
+    size_t n = lv.n;
 
     KeyIndex ki;
-    if (!ki_init(&ki, n)) return NULL;
+    if (!ki_init(&ki, n)) { ll_view_done(&lv); return NULL; }
     Expr**  keys   = malloc(sizeof(Expr*)  * (n ? n : 1)); /* owned group keys */
     Expr*** groups = malloc(sizeof(Expr**) * (n ? n : 1)); /* owned element copies */
     size_t* gcap   = malloc(sizeof(size_t) * (n ? n : 1));
@@ -1088,7 +1238,7 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
     size_t ng = 0;
 
     for (size_t i = 0; i < n; i++) {
-        Expr* x = list->data.function.args[i];
+        Expr* x = lv.a[i];
         Expr* key_input = assoc_in ? rule_val(x) : x;   /* group by f[value] */
         /* Identity key (f == NULL): the element is its own group key, so no
          * function application is built or evaluated -- just a copy. */
@@ -1117,12 +1267,13 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
     for (size_t i = 0; i < ng; i++) {
         outer[i] = assoc_in
             ? expr_new_function(expr_new_symbol(SYM_Association),groups[i], gcnt[i])
-            : make_list(groups[i], gcnt[i]);
+            : ll_seq_of(linked, groups[i], gcnt[i]);
         expr_free(keys[i]);   /* the groups are returned bare; keys are dropped */
         free(groups[i]);
     }
-    Expr* result = make_list(outer, ng);
+    Expr* result = ll_seq_of(linked, outer, ng);
     free(outer); free(keys); free(groups); free(gcap); free(gcnt); ki_free(&ki);
+    ll_view_done(&lv);
     return result;
 }
 
@@ -1586,16 +1737,18 @@ Expr* builtin_countsby(Expr* res) {
     Expr* f    = res->data.function.args[1];
     /* CountsBy over an association tallies its values by f. */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
-    if (!head_is(list, SYM_List)) return NULL;
-    size_t n = list->data.function.arg_count;
+    if (!head_is(list, SYM_List) && list->type != EXPR_LINKEDLIST) return NULL;
+    LLView lv;                                  /* a LinkedList: a snapshot of its slots */
+    ll_view(list, &lv);
+    size_t n = lv.n;
 
     KeyIndex ki;
-    if (!ki_init(&ki, n)) return NULL;
+    if (!ki_init(&ki, n)) { ll_view_done(&lv); return NULL; }
     Expr** keys  = malloc(sizeof(Expr*) * (n ? n : 1)); /* owned f-values */
     int64_t* cnt = malloc(sizeof(int64_t) * (n ? n : 1));
     size_t nd = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* key = apply1(f, list->data.function.args[i]);
+        Expr* key = apply1(f, lv.a[i]);
         size_t slot, idx = ki_lookup(&ki, keys, key, &slot);
         if (idx == SIZE_MAX) { keys[nd] = key; cnt[nd] = 1; ki_insert(&ki, slot, nd); nd++; }
         else { cnt[idx]++; expr_free(key); }
@@ -1604,6 +1757,7 @@ Expr* builtin_countsby(Expr* res) {
     for (size_t i = 0; i < nd; i++) rules[i] = make_rule(keys[i], expr_new_integer(cnt[i]));
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, nd);
     free(rules); free(keys); free(cnt); ki_free(&ki);
+    ll_view_done(&lv);
     return assoc;
 }
 
@@ -1613,18 +1767,20 @@ Expr* builtin_countsby(Expr* res) {
 Expr* builtin_positionindex(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     Expr* list = res->data.function.args[0];
-    if (!head_is(list, SYM_List)) return NULL;
-    size_t n = list->data.function.arg_count;
+    if (!head_is(list, SYM_List) && list->type != EXPR_LINKEDLIST) return NULL;
+    LLView lv;                                  /* a LinkedList: read from its slots */
+    ll_view(list, &lv);
+    size_t n = lv.n;
 
     KeyIndex ki;
-    if (!ki_init(&ki, n)) return NULL;
+    if (!ki_init(&ki, n)) { ll_view_done(&lv); return NULL; }
     Expr**  keys = malloc(sizeof(Expr*)  * (n ? n : 1)); /* borrowed */
     Expr*** pos  = malloc(sizeof(Expr**) * (n ? n : 1)); /* owned integer positions */
     size_t* pcap = malloc(sizeof(size_t) * (n ? n : 1));
     size_t* pcnt = malloc(sizeof(size_t) * (n ? n : 1));
     size_t nd = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* x = list->data.function.args[i];
+        Expr* x = lv.a[i];
         size_t slot, idx = ki_lookup(&ki, keys, x, &slot);
         if (idx == SIZE_MAX) {
             keys[nd] = x; pcap[nd] = 4; pcnt[nd] = 0;
@@ -1642,6 +1798,7 @@ Expr* builtin_positionindex(Expr* res) {
     }
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, nd);
     free(rules); free(keys); free(pos); free(pcap); free(pcnt); ki_free(&ki);
+    ll_view_done(&lv);
     return assoc;
 }
 
@@ -1652,11 +1809,13 @@ Expr* builtin_associationmap(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* f    = res->data.function.args[0];
     Expr* keys = res->data.function.args[1];
-    if (!head_is(keys, SYM_List)) return NULL;
-    size_t n = keys->data.function.arg_count;
+    if (!head_is(keys, SYM_List) && keys->type != EXPR_LINKEDLIST) return NULL;
+    LLView kv;                                  /* a LinkedList: read from its slots */
+    ll_view(keys, &kv);
+    size_t n = kv.n;
     Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
-        Expr* k = keys->data.function.args[i];
+        Expr* k = kv.a[i];
         Expr* karg = expr_copy(k);
         Expr* fv = expr_new_function(expr_copy(f), &karg, 1); /* f[k], evaluated later */
         rules[i] = make_rule(expr_copy(k), fv);
@@ -1664,6 +1823,7 @@ Expr* builtin_associationmap(Expr* res) {
     Expr* assoc = assoc_from_rules(rules, n);
     for (size_t i = 0; i < n; i++) expr_free(rules[i]);
     free(rules);
+    ll_view_done(&kv);
     return assoc;
 }
 

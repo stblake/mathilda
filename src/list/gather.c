@@ -29,23 +29,25 @@
 #include "list_common.h"
 #include "gather.h"
 #include "assoc.h"
+#include "linkedlist_seq.h"
 
 /* Gather[list, test]: see the file comment. */
 static Expr* gather_with_test(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* test = res->data.function.args[1];
-    if (list->type != EXPR_FUNCTION) return builtin_normal_error("Gather", res, 1);
-    size_t n = list->data.function.arg_count;
+    LLView lv;
+    if (!ll_view(list, &lv)) return builtin_normal_error("Gather", res, 1);
+    size_t n = lv.n;
     /* group g holds members[g][0 .. len[g]-1], indices into list */
     size_t* group_of = malloc(sizeof(size_t) * (n ? n : 1));
     size_t* rep = malloc(sizeof(size_t) * (n ? n : 1));     /* first index per group */
     size_t ng = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = list->data.function.args[i];
+        Expr* elem = lv.a[i];
         size_t g = 0;
         for (; g < ng; g++) {
             Expr* call = expr_new_function(expr_copy(test),
-                (Expr*[]){ expr_copy(list->data.function.args[rep[g]]), expr_copy(elem) }, 2);
+                (Expr*[]){ expr_copy(lv.a[rep[g]]), expr_copy(elem) }, 2);
             Expr* r = eval_callback(call);
             bool same = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
             if (r) expr_free(r);
@@ -63,13 +65,14 @@ static Expr* gather_with_test(Expr* res) {
     for (size_t g = 0; g < ng; g++) members[g] = malloc(sizeof(Expr*) * len[g]);
     for (size_t i = 0; i < n; i++) {
         size_t g = group_of[i];
-        members[g][fill[g]++] = expr_copy(list->data.function.args[i]);
+        members[g][fill[g]++] = expr_copy(lv.a[i]);
     }
     for (size_t g = 0; g < ng; g++) {
-        groups[g] = expr_new_function(expr_copy(list->data.function.head), members[g], len[g]);
+        groups[g] = ll_view_result(&lv, members[g], len[g]);
         free(members[g]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), groups, ng);
+    Expr* out = ll_seq_of(ll_view_linked(&lv), groups, ng);
+    ll_view_done(&lv);
     free(members); free(fill); free(groups); free(len); free(rep); free(group_of);
     return out;
 }

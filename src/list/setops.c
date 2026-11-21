@@ -6,6 +6,7 @@
 #include "ndarray.h"    /* is_ndarray */
 #include "ndarray_internal.h"  /* nd_sort_i64_asc — the packed set-op fast path */
 #include "ndreduce.h"   /* ndred_tally — Tally's packed-buffer fast path */
+#include "linkedlist_seq.h" /* LLView: a LinkedList operand's elements */
 
 /* ---------------------------------------------------------------------------
  *  Packed integer set operations.
@@ -375,6 +376,47 @@ static void ht_insert(HashTable* ht, Expr* key, size_t index) {
     ht->buckets[bucket] = node;
 }
 
+/* The operands args[0..nl) of a set operation as element views (a LinkedList
+ * stands for the List of its elements). Every List operand must share one
+ * head -- List, when any operand is a LinkedList -- and the result is a
+ * LinkedList when any operand is one. Returns 0 with views[0..nl) open, the
+ * 1-based position of an atom operand (views closed), or -1 on a head
+ * mismatch (views closed). */
+typedef struct { LLView* v; size_t n; bool linked; const Expr* head; } SetOps;
+
+static int setops_open(Expr** args, size_t nl, SetOps* so) {
+    so->v = malloc(sizeof(LLView) * (nl ? nl : 1));
+    so->n = 0; so->linked = false; so->head = NULL;
+    int bad = 0;
+    for (size_t i = 0; i < nl && !bad; i++) {
+        if (!ll_view(args[i], &so->v[i])) { bad = (int)i + 1; break; }
+        so->n = i + 1;
+        if (ll_view_linked(&so->v[i])) so->linked = true;
+        else if (!so->head) so->head = so->v[i].head;
+        else if (!expr_eq((Expr*)so->head, (Expr*)so->v[i].head)) bad = -1;
+    }
+    if (!bad && so->linked && so->head &&
+        !(so->head->type == EXPR_SYMBOL && so->head->data.symbol.name == SYM_List))
+        bad = -1;
+    if (bad) {
+        for (size_t i = 0; i < so->n; i++) ll_view_done(&so->v[i]);
+        free(so->v);
+        so->v = NULL;
+    }
+    return bad;
+}
+
+static void setops_close(SetOps* so) {
+    for (size_t i = 0; i < so->n; i++) ll_view_done(&so->v[i]);
+    free(so->v);
+}
+
+/* The result container for items[0..n) (consumed). */
+static Expr* setops_result(const SetOps* so, Expr** items, size_t n) {
+    if (so->linked) return ll_seq_of(true, items, n);
+    return expr_new_function(expr_copy((Expr*)so->head), items, n);
+}
+
 static int compare_expr_ptrs(const void* a, const void* b) {
     Expr* ea = *(Expr**)a;
     Expr* eb = *(Expr**)b;
@@ -412,26 +454,21 @@ Expr* builtin_union(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    // Check if first arg is a function
-    Expr* first_list = res->data.function.args[0];
-    for (size_t i = 0; i < last_arg; i++)
-        if (res->data.function.args[i]->type != EXPR_FUNCTION)
-            return builtin_normal_error("Union", res, (int)i + 1);
-    
-    Expr* common_head = first_list->data.function.head;
-    
+    /* Operands: Lists of one head, or LinkedLists (read from their slots). */
+    SetOps so;
+    int bad = setops_open(res->data.function.args, last_arg, &so);
+    if (bad > 0) return builtin_normal_error("Union", res, bad);
+    if (bad < 0) return NULL;                      /* heads must match */
+
     // Total count of elements
     size_t total_count = 0;
-    for (size_t i = 0; i < last_arg; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (!expr_eq(arg->data.function.head, common_head)) {
-            // Heads must match
-            return NULL;
-        }
-        total_count += arg->data.function.arg_count;
+    for (size_t i = 0; i < last_arg; i++) total_count += so.v[i].n;
+
+    if (total_count == 0) {
+        Expr* r = so.linked ? setops_result(&so, NULL, 0) : expr_copy(res->data.function.args[0]);
+        setops_close(&so);
+        return r;
     }
-    
-    if (total_count == 0) return expr_copy(first_list);
     
     if (same_test == NULL) {
         /* Default path: deduplicate through the hash set first, then sort only
@@ -443,9 +480,8 @@ Expr* builtin_union(Expr* res) {
         size_t nu = 0;
         HashTable* seen = ht_create(total_count + 1);
         for (size_t i = 0; i < last_arg; i++) {
-            Expr* arg = res->data.function.args[i];
-            for (size_t j = 0; j < arg->data.function.arg_count; j++) {
-                Expr* e = arg->data.function.args[j];
+            for (size_t j = 0; j < so.v[i].n; j++) {
+                Expr* e = so.v[i].a[j];
                 if (!ht_find(seen, e)) {
                     Expr* c = expr_copy(e);
                     uniq[nu++] = c;
@@ -455,19 +491,17 @@ Expr* builtin_union(Expr* res) {
         }
         ht_free(seen, false);
         qsort(uniq, nu, sizeof(Expr*), compare_expr_ptrs);
-        Expr* result = expr_new_function(expr_copy(common_head), uniq, nu);
+        Expr* result = setops_result(&so, uniq, nu);
         free(uniq);
+        setops_close(&so);
         return result;
     }
 
     Expr** all_args = malloc(sizeof(Expr*) * total_count);
     size_t idx = 0;
-    for (size_t i = 0; i < last_arg; i++) {
-        Expr* arg = res->data.function.args[i];
-        for (size_t j = 0; j < arg->data.function.arg_count; j++) {
-            all_args[idx++] = expr_copy(arg->data.function.args[j]);
-        }
-    }
+    for (size_t i = 0; i < last_arg; i++)
+        for (size_t j = 0; j < so.v[i].n; j++)
+            all_args[idx++] = expr_copy(so.v[i].a[j]);
     
     // Sort elements
     qsort(all_args, total_count, sizeof(Expr*), compare_expr_ptrs);
@@ -505,8 +539,9 @@ Expr* builtin_union(Expr* res) {
     
     free(all_args);
     
-    Expr* result = expr_new_function(expr_copy(common_head), unique_args, unique_count);
+    Expr* result = setops_result(&so, unique_args, unique_count);
     if (unique_args) free(unique_args);
+    setops_close(&so);
 
     return result;
 }
@@ -567,20 +602,16 @@ Expr* builtin_intersection(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    Expr* first = res->data.function.args[0];
     /* Every operand must share the head of the first; an atom is the
-     * reference's Intersection::normal, not an answer. */
-    for (size_t i = 0; i < last_arg; i++)
-        if (res->data.function.args[i]->type != EXPR_FUNCTION)
-            return builtin_normal_error("Intersection", res, (int)i + 1);
-    Expr* common_head = first->data.function.head;
-    for (size_t i = 0; i < last_arg; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (!expr_eq(arg->data.function.head, common_head))
-            return NULL;
-    }
+     * reference's Intersection::normal, not an answer. A LinkedList operand stands
+     * for the List of its elements. */
+    SetOps so;
+    int bad = setops_open(res->data.function.args, last_arg, &so);
+    if (bad > 0) return builtin_normal_error("Intersection", res, bad);
+    if (bad < 0) return NULL;
+    Expr* const* first_a = so.v[0].a;
 
-    size_t first_count = first->data.function.arg_count;
+    size_t first_count = so.v[0].n;
     Expr** cand = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
     size_t ncand = 0;
 
@@ -588,7 +619,7 @@ Expr* builtin_intersection(Expr* res) {
         /* --- Default path: hash-based, O(total). --- */
         HashTable* seen = ht_create(first_count * 2 + 1);
         for (size_t j = 0; j < first_count; j++) {
-            Expr* e = first->data.function.args[j];
+            Expr* e = first_a[j];
             if (!ht_find(seen, e)) {
                 Expr* c = expr_copy(e);
                 cand[ncand++] = c;
@@ -598,12 +629,12 @@ Expr* builtin_intersection(Expr* res) {
         ht_free(seen, false);
 
         for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* arg = res->data.function.args[i];
-            size_t m = arg->data.function.arg_count;
+            Expr* const* aa = so.v[i].a;
+            size_t m = so.v[i].n;
             HashTable* h = ht_create(m * 2 + 1);
             for (size_t j = 0; j < m; j++)
-                if (!ht_find(h, arg->data.function.args[j]))
-                    ht_insert(h, arg->data.function.args[j], 0);
+                if (!ht_find(h, aa[j]))
+                    ht_insert(h, aa[j], 0);
             size_t w = 0;
             for (size_t k = 0; k < ncand; k++) {
                 if (ht_find(h, cand[k])) cand[w++] = cand[k];
@@ -616,7 +647,7 @@ Expr* builtin_intersection(Expr* res) {
         /* --- SameTest path: O(n^2), greatest representative per class. --- */
         Expr** sorted0 = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
         for (size_t j = 0; j < first_count; j++)
-            sorted0[j] = first->data.function.args[j];   /* borrowed */
+            sorted0[j] = first_a[j];   /* borrowed */
         qsort(sorted0, first_count, sizeof(Expr*), compare_expr_ptrs);
         for (size_t j = 0; j < first_count; j++) {
             Expr* e = sorted0[j];
@@ -634,13 +665,13 @@ Expr* builtin_intersection(Expr* res) {
         free(sorted0);
 
         for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* arg = res->data.function.args[i];
-            size_t m = arg->data.function.arg_count;
+            Expr* const* aa = so.v[i].a;
+            size_t m = so.v[i].n;
             size_t w = 0;
             for (size_t k = 0; k < ncand; k++) {
                 bool present = false;
                 for (size_t j = 0; j < m; j++)
-                    if (same_test_equal(same_test, cand[k], arg->data.function.args[j])) {
+                    if (same_test_equal(same_test, cand[k], aa[j])) {
                         present = true; break;
                     }
                 if (present) cand[w++] = cand[k];
@@ -651,8 +682,9 @@ Expr* builtin_intersection(Expr* res) {
     }
 
     qsort(cand, ncand, sizeof(Expr*), compare_expr_ptrs);
-    Expr* result = expr_new_function(expr_copy(common_head), cand, ncand);
+    Expr* result = setops_result(&so, cand, ncand);
     free(cand);
+    setops_close(&so);
     return result;
 }
 
@@ -709,20 +741,16 @@ Expr* builtin_complement(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    Expr* first = res->data.function.args[0];
     /* Every operand must share the head of the first; an atom is the
-     * reference's Complement::normal, not an answer. */
-    for (size_t i = 0; i < last_arg; i++)
-        if (res->data.function.args[i]->type != EXPR_FUNCTION)
-            return builtin_normal_error("Complement", res, (int)i + 1);
-    Expr* common_head = first->data.function.head;
-    for (size_t i = 0; i < last_arg; i++) {
-        Expr* arg = res->data.function.args[i];
-        if (!expr_eq(arg->data.function.head, common_head))
-            return NULL;
-    }
+     * reference's Complement::normal, not an answer. A LinkedList operand stands
+     * for the List of its elements. */
+    SetOps so;
+    int bad = setops_open(res->data.function.args, last_arg, &so);
+    if (bad > 0) return builtin_normal_error("Complement", res, bad);
+    if (bad < 0) return NULL;
+    Expr* const* first_a = so.v[0].a;
 
-    size_t first_count = first->data.function.arg_count;
+    size_t first_count = so.v[0].n;
     Expr** cand = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
     size_t ncand = 0;
 
@@ -730,7 +758,7 @@ Expr* builtin_complement(Expr* res) {
         /* --- Default path: hash-based, O(total). --- */
         HashTable* seen = ht_create(first_count * 2 + 1);
         for (size_t j = 0; j < first_count; j++) {
-            Expr* e = first->data.function.args[j];
+            Expr* e = first_a[j];
             if (!ht_find(seen, e)) {
                 Expr* c = expr_copy(e);
                 cand[ncand++] = c;
@@ -740,12 +768,12 @@ Expr* builtin_complement(Expr* res) {
         ht_free(seen, false);
 
         for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* arg = res->data.function.args[i];
-            size_t m = arg->data.function.arg_count;
+            Expr* const* aa = so.v[i].a;
+            size_t m = so.v[i].n;
             HashTable* h = ht_create(m * 2 + 1);
             for (size_t j = 0; j < m; j++)
-                if (!ht_find(h, arg->data.function.args[j]))
-                    ht_insert(h, arg->data.function.args[j], 0);
+                if (!ht_find(h, aa[j]))
+                    ht_insert(h, aa[j], 0);
             size_t w = 0;
             for (size_t k = 0; k < ncand; k++) {
                 if (!ht_find(h, cand[k])) cand[w++] = cand[k];
@@ -758,7 +786,7 @@ Expr* builtin_complement(Expr* res) {
         /* --- SameTest path: O(n^2), smallest representative per class. --- */
         Expr** sorted0 = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
         for (size_t j = 0; j < first_count; j++)
-            sorted0[j] = first->data.function.args[j];   /* borrowed */
+            sorted0[j] = first_a[j];   /* borrowed */
         qsort(sorted0, first_count, sizeof(Expr*), compare_expr_ptrs);
         for (size_t j = 0; j < first_count; j++) {
             Expr* e = sorted0[j];
@@ -772,13 +800,13 @@ Expr* builtin_complement(Expr* res) {
         free(sorted0);
 
         for (size_t i = 1; i < last_arg && ncand > 0; i++) {
-            Expr* arg = res->data.function.args[i];
-            size_t m = arg->data.function.arg_count;
+            Expr* const* aa = so.v[i].a;
+            size_t m = so.v[i].n;
             size_t w = 0;
             for (size_t k = 0; k < ncand; k++) {
                 bool present = false;
                 for (size_t j = 0; j < m; j++)
-                    if (same_test_equal(same_test, cand[k], arg->data.function.args[j])) {
+                    if (same_test_equal(same_test, cand[k], aa[j])) {
                         present = true; break;
                     }
                 if (!present) cand[w++] = cand[k];
@@ -789,8 +817,9 @@ Expr* builtin_complement(Expr* res) {
     }
 
     qsort(cand, ncand, sizeof(Expr*), compare_expr_ptrs);
-    Expr* result = expr_new_function(expr_copy(common_head), cand, ncand);
+    Expr* result = setops_result(&so, cand, ncand);
     free(cand);
+    setops_close(&so);
     return result;
 }
 
@@ -810,10 +839,14 @@ Expr* builtin_tally(Expr* res) {
     if (is_ndarray(list))
         return test ? ndarray_delist_and_reeval(res) : ndred_tally(res);
 
-    if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    /* A LinkedList tallies its elements, read from the slots; the answer is a
+     * LinkedList of {element, count} Lists. */
+    LLView lv;
+    if (!ll_view(list, &lv)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    bool linked = ll_view_linked(&lv);
 
-    size_t count = list->data.function.arg_count;
-    if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    size_t count = lv.n;
+    if (count == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
 
     Expr** unique_elems = malloc(sizeof(Expr*) * count);
     int64_t* multiplicities = malloc(sizeof(int64_t) * count);
@@ -822,7 +855,7 @@ Expr* builtin_tally(Expr* res) {
     if (test == NULL) {
         HashTable* ht = ht_create(count * 2 + 1);
         for (size_t i = 0; i < count; i++) {
-            Expr* elem = list->data.function.args[i];
+            Expr* elem = lv.a[i];
             HashNode* node = ht_find(ht, elem);
             if (node) {
                 multiplicities[node->index]++;
@@ -837,7 +870,7 @@ Expr* builtin_tally(Expr* res) {
     } else {
         // Fallback to O(N^2) for custom test
         for (size_t i = 0; i < count; i++) {
-            Expr* elem = list->data.function.args[i];
+            Expr* elem = lv.a[i];
             int found_idx = -1;
             for (size_t j = 0; j < unique_count; j++) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_elems[j]) };
@@ -874,8 +907,9 @@ Expr* builtin_tally(Expr* res) {
     free(unique_elems);
     free(multiplicities);
     
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), result_args, unique_count);
+    Expr* result = ll_seq_of(linked, result_args, unique_count);
     free(result_args);
+    ll_view_done(&lv);
     
     return result;
 }
@@ -909,10 +943,15 @@ Expr* builtin_deleteduplicates(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    if (list->type != EXPR_FUNCTION) return builtin_normal_error("DeleteDuplicates", res, 1);
+    LLView lv;
+    if (!ll_view(list, &lv)) return builtin_normal_error("DeleteDuplicates", res, 1);
     
-    size_t count = list->data.function.arg_count;
-    if (count == 0) return expr_copy(list);
+    size_t count = lv.n;
+    if (count == 0) {
+        Expr* r = ll_view_linked(&lv) ? ll_view_result(&lv, NULL, 0) : expr_copy(list);
+        ll_view_done(&lv);
+        return r;
+    }
     
     Expr** unique_args = malloc(sizeof(Expr*) * count);
     size_t unique_count = 0;
@@ -920,7 +959,7 @@ Expr* builtin_deleteduplicates(Expr* res) {
     if (test == NULL) {
         HashTable* ht = ht_create(count * 2 + 1);
         for (size_t i = 0; i < count; i++) {
-            Expr* elem = list->data.function.args[i];
+            Expr* elem = lv.a[i];
             if (!ht_find(ht, elem)) {
                 Expr* copy = expr_copy(elem);
                 unique_args[unique_count++] = copy;
@@ -931,7 +970,7 @@ Expr* builtin_deleteduplicates(Expr* res) {
     } else {
         // Fallback to O(N^2) for custom test
         for (size_t i = 0; i < count; i++) {
-            Expr* elem = list->data.function.args[i];
+            Expr* elem = lv.a[i];
             bool is_duplicate = false;
             for (size_t j = 0; j < unique_count; j++) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_args[j]) };
@@ -952,8 +991,9 @@ Expr* builtin_deleteduplicates(Expr* res) {
         }
     }
     
-    Expr* result = expr_new_function(expr_copy(list->data.function.head), unique_args, unique_count);
+    Expr* result = ll_view_result(&lv, unique_args, unique_count);
     if (unique_args) free(unique_args);
+    ll_view_done(&lv);
 
     return result;
 }
@@ -968,14 +1008,15 @@ Expr* builtin_deleteduplicatesby(Expr* res) {
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
     bool assoc = is_association(coll);
-    if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
+    LLView lv;
+    if (!ll_view(coll, &lv)) return NULL;
 
-    size_t n = coll->data.function.arg_count;
+    size_t n = lv.n;
     Expr** kept = malloc(sizeof(Expr*) * (n ? n : 1));   /* surviving elements/rules */
     Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));   /* their f-values (owned) */
     size_t nkept = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = coll->data.function.args[i];
+        Expr* elem = lv.a[i];
         Expr* val  = assoc ? elem->data.function.args[1] : elem;  /* value for assoc */
         Expr* fcall = expr_new_function(expr_copy(f), (Expr*[]){ expr_copy(val) }, 1);
         Expr* fk = eval_callback(fcall);
@@ -988,11 +1029,11 @@ Expr* builtin_deleteduplicatesby(Expr* res) {
         kept[nkept] = expr_copy(elem);
         nkept++;
     }
-    Expr* head = assoc ? expr_new_symbol(SYM_Association)
-                       : expr_copy(coll->data.function.head);
-    Expr* out = expr_new_function(head, kept, nkept);
+    Expr* out = assoc ? expr_new_function(expr_new_symbol(SYM_Association), kept, nkept)
+                      : ll_view_result(&lv, kept, nkept);
     for (size_t j = 0; j < nkept; j++) expr_free(keys[j]);
     free(keys); free(kept);
+    ll_view_done(&lv);
     return out;
 }
 
@@ -1034,10 +1075,12 @@ Expr* builtin_commonest(Expr* res) {
      * indexes `list` as an EXPR_FUNCTION and an NDArray is not one. */
     if (is_ndarray(list)) return ndred_commonest(res);
 
-    if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    LLView lv;
+    if (!ll_view(list, &lv)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    bool linked = ll_view_linked(&lv);
 
-    size_t count = list->data.function.arg_count;
-    if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    size_t count = lv.n;
+    if (count == 0) { ll_view_done(&lv); return ll_seq_of(linked, NULL, 0); }
 
     Expr* n_arg = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     int64_t n = 0;
@@ -1051,8 +1094,8 @@ Expr* builtin_commonest(Expr* res) {
             if (n_arg->data.function.args[0]->type == EXPR_INTEGER) {
                 n = n_arg->data.function.args[0]->data.integer;
                 n_upto = true;
-            } else return NULL;
-        } else return NULL;
+            } else { ll_view_done(&lv); return NULL; }
+        } else { ll_view_done(&lv); return NULL; }
     }
 
     // Tally
@@ -1062,7 +1105,7 @@ Expr* builtin_commonest(Expr* res) {
 
     HashTable* ht = ht_create(count * 2 + 1);
     for (size_t i = 0; i < count; i++) {
-        Expr* elem = list->data.function.args[i];
+        Expr* elem = lv.a[i];
         HashNode* node = ht_find(ht, elem);
         if (node) {
             multiplicities[node->index]++;
@@ -1074,6 +1117,7 @@ Expr* builtin_commonest(Expr* res) {
         }
     }
     ht_free(ht, false);
+    ll_view_done(&lv);
 
     CommonestItem* items = malloc(sizeof(CommonestItem) * unique_count);
     for (size_t i = 0; i < unique_count; i++) {
@@ -1128,7 +1172,7 @@ Expr* builtin_commonest(Expr* res) {
     /* expr_new_function COPIES the argument array (it does not adopt it), so
      * result_args is ours to release -- valgrind found this leaking one array
      * per call. */
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), result_args, target_n);
+    Expr* out = ll_seq_of(linked, result_args, target_n);
     free(result_args);
     return out;
 }
@@ -1189,7 +1233,7 @@ Expr* builtin_intersectingq(Expr* res) {
     }
     for (size_t i = 0; i < 2; i++) {
         Expr* x = res->data.function.args[i];
-        if (x->type != EXPR_FUNCTION) {
+        if (x->type != EXPR_FUNCTION && x->type != EXPR_LINKEDLIST) {
             char* txt = expr_to_string_outputform(x);
             mth_message("IntersectingQ", "lsa", "List or association expected instead of %s.",
                         txt ? txt : "");
@@ -1197,29 +1241,35 @@ Expr* builtin_intersectingq(Expr* res) {
             return NULL;
         }
     }
-    if (!expr_eq(a->data.function.head, b->data.function.head)) {
-        char* ha = expr_to_string_outputform(a->data.function.head);
-        char* hb = expr_to_string_outputform(b->data.function.head);
+    SetOps so;
+    if (setops_open(res->data.function.args, 2, &so) != 0) {
+        Expr* sl = expr_new_symbol(SYM_List);
+        char* ha = expr_to_string_outputform(a->type == EXPR_FUNCTION ? a->data.function.head : sl);
+        char* hb = expr_to_string_outputform(b->type == EXPR_FUNCTION ? b->data.function.head : sl);
+        expr_free(sl);
         mth_message("IntersectingQ", "heads",
                     "Heads %s and %s at positions 1 and 2 are expected to be the same.",
                     ha ? ha : "", hb ? hb : "");
         free(ha); free(hb);
         return NULL;
     }
-    size_t na = a->data.function.arg_count, nb = b->data.function.arg_count;
+    size_t na = so.v[0].n, nb = so.v[1].n;
+    Expr* const* xa = so.v[0].a;
+    Expr* const* xb = so.v[1].a;
     bool found = false;
     if (test) {
         for (size_t i = 0; i < na && !found; i++)
             for (size_t j = 0; j < nb && !found; j++)
-                found = same_test_equal(test, a->data.function.args[i], b->data.function.args[j]);
+                found = same_test_equal(test, xa[i], xb[j]);
     } else if (na && nb) {
         HashTable* ht = ht_create(nb * 2 + 1);
         for (size_t j = 0; j < nb; j++)
-            if (!ht_find(ht, b->data.function.args[j])) ht_insert(ht, b->data.function.args[j], j);
+            if (!ht_find(ht, xb[j])) ht_insert(ht, xb[j], j);
         for (size_t i = 0; i < na && !found; i++)
-            found = ht_find(ht, a->data.function.args[i]) != NULL;
+            found = ht_find(ht, xa[i]) != NULL;
         ht_free(ht, false);
     }
+    setops_close(&so);
     return expr_new_symbol(found ? SYM_True : SYM_False);
 }
 
@@ -1247,12 +1297,13 @@ Expr* builtin_duplicatefreeq(Expr* res) {
         }
         return ndarray_delist_and_reeval(res);
     }
-    if (list->type != EXPR_FUNCTION) {
+    LLView lv;
+    if (!ll_view(list, &lv)) {
         setop_call_message("DuplicateFreeQ", "normal", "Nonatomic expression expected at position 1", res);
         return NULL;
     }
-    size_t n = list->data.function.arg_count;
-    Expr** xs = list->data.function.args;
+    size_t n = lv.n;
+    Expr** xs = lv.a;
     bool dup = false;
     if (test) {
         for (size_t i = 1; i < n && !dup; i++)
@@ -1266,5 +1317,6 @@ Expr* builtin_duplicatefreeq(Expr* res) {
         }
         ht_free(ht, false);
     }
+    ll_view_done(&lv);
     return expr_new_symbol(dup ? SYM_False : SYM_True);
 }

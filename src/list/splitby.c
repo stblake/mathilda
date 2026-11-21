@@ -27,6 +27,7 @@
 #include "eval.h"
 #include "list_common.h"
 #include "splitby.h"
+#include "linkedlist_seq.h"
 
 /* Evaluate f[e] and return the resulting key. Caller owns the result. */
 static Expr* splitby_key(Expr* f, Expr* e) {
@@ -37,11 +38,12 @@ static Expr* splitby_key(Expr* f, Expr* e) {
     return key;
 }
 
-/* Build one run: elems[0..n) copied under a fresh `head`. */
-static Expr* splitby_make_run(Expr** elems, size_t n, Expr* head) {
+/* Build one run: elems[0..n) copied into a container of the source's kind
+ * (its head, or a LinkedList). */
+static Expr* splitby_make_run(Expr** elems, size_t n, const LLView* v) {
     Expr** args = n ? malloc(sizeof(Expr*) * n) : NULL;
     for (size_t i = 0; i < n; i++) args[i] = expr_copy(elems[i]);
-    Expr* run = expr_new_function(expr_copy(head), args, n);
+    Expr* run = ll_view_result(v, args, n);
     free(args);
     return run;
 }
@@ -49,7 +51,7 @@ static Expr* splitby_make_run(Expr** elems, size_t n, Expr* head) {
 /* Split elems[0..n) into runs by fs[0], recursing into fs[1..nfs) so each run
  * is itself split one level deeper. Returns the runs collected under `head`;
  * n == 0 yields an empty expression, so SplitBy[{}, f] is {}. */
-static Expr* splitby_level(Expr** elems, size_t n, Expr* head,
+static Expr* splitby_level(Expr** elems, size_t n, const LLView* head,
                            Expr* const* fs, size_t nfs) {
     Expr** runs = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t num_runs = 0;
@@ -77,7 +79,7 @@ static Expr* splitby_level(Expr** elems, size_t n, Expr* head,
     }
     expr_free(prev_key);
 
-    Expr* result = expr_new_function(expr_copy(head), runs, num_runs);
+    Expr* result = ll_view_result(head, runs, num_runs);
     free(runs);
     return result;
 }
@@ -89,7 +91,7 @@ Expr* builtin_splitby(Expr* res) {
     Expr* fspec = res->data.function.args[1];
 
     /* Atoms have no elements to split; leave the call unevaluated. */
-    if (list->type != EXPR_FUNCTION) return NULL;
+    if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return NULL;
 
     /* fspec is either a single key function or a List of them. An empty list
      * specifies no split at all, which we leave unevaluated rather than
@@ -97,16 +99,27 @@ Expr* builtin_splitby(Expr* res) {
     Expr* single[1];
     Expr* const* fs;
     size_t nfs;
+    LLView fv = { NULL, 0, NULL, false };
     if (head_is(fspec, SYM_List)) {
         nfs = fspec->data.function.arg_count;
         if (nfs == 0) return NULL;
         fs = fspec->data.function.args;
+    } else if (fspec->type == EXPR_LINKEDLIST) {   /* a LinkedList of functions */
+        ll_view(fspec, &fv);
+        nfs = fv.n;
+        if (nfs == 0) return NULL;
+        fs = fv.a;
     } else {
         single[0] = fspec;
         fs = single;
         nfs = 1;
     }
 
-    return splitby_level(list->data.function.args, list->data.function.arg_count,
-                         list->data.function.head, fs, nfs);
+    /* A LinkedList splits from a snapshot of its slots into LinkedList runs. */
+    LLView lv;
+    ll_view(list, &lv);
+    Expr* r = splitby_level(lv.a, lv.n, &lv, fs, nfs);
+    ll_view_done(&lv);
+    ll_view_done(&fv);
+    return r;
 }

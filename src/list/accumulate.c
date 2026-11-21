@@ -5,6 +5,38 @@
 #include "ndreduce.h"
 #include "../numloop.h"
 #include "numeric.h"
+#include "checked_int.h"     /* ci_add_i64 */
+#include "linkedlist_seq.h"  /* LLView: a LinkedList accumulates from its slots */
+#include <math.h>
+
+/* Accumulate of a typed LinkedList straight on its slots: gathered into one
+ * scratch buffer and prefix-summed exactly as the packed Accumulate does
+ * (ndred_accumulate: one running int64 sum, or one running double add per
+ * element), so the answers agree to the bit. NULL when the list is boxed,
+ * complex or empty, or the sum leaves the machine range (int64 overflow, a
+ * non-finite double) -- the element path then answers as the List one does. */
+static Expr* accumulate_ll_machine(const LinkedList* ll) {
+    LLKind k = ll_kind(ll);
+    int64_t n = ll_length(ll);
+    if (n == 0 || (k != LL_I64 && k != LL_REAL)) return NULL;
+    void* buf = malloc(sizeof(double) * (size_t)n);
+    if (!buf) return NULL;
+    ll_gather(ll, 0, n, buf);
+    bool ok = true;
+    if (k == LL_I64) {
+        int64_t* v = buf;
+        for (int64_t i = 1; i < n && ok; i++) ok = !ci_add_i64(v[i - 1], v[i], &v[i]);
+    } else {
+        double* v = buf;
+        double acc = v[0];
+        for (int64_t i = 1; i < n; i++) { acc += v[i]; v[i] = acc; }
+        ok = isfinite(acc);
+        for (int64_t i = 0; i < n && ok; i++) ok = isfinite(v[i]);
+    }
+    Expr* r = ok ? expr_new_linkedlist(ll_from_buffer(k, buf, n)) : NULL;
+    free(buf);
+    return r;
+}
 
 /* Accumulate[list] returns the running cumulative totals of list, with the
  * same head and the same length as the input. The intermediate sums are
@@ -51,7 +83,7 @@ Expr* builtin_accumulate(Expr* res) {
     /* Accumulate[ndarray] prefix-sums the leading axis on the buffer (ndreduce.c). */
     if (argc == 1 && is_ndarray(lst)) return ndred_accumulate(res);
 
-    if (lst->type != EXPR_FUNCTION) return NULL;
+    if (lst->type != EXPR_FUNCTION && lst->type != EXPR_LINKEDLIST) return NULL;
 
     bool kahan_requested = false;
     if (argc == 2) {
@@ -59,10 +91,21 @@ Expr* builtin_accumulate(Expr* res) {
         kahan_requested = true;
     }
 
-    Expr* head = lst->data.function.head;
-    size_t n = lst->data.function.arg_count;
+    if (!kahan_requested && lst->type == EXPR_LINKEDLIST) {
+        Expr* fast = accumulate_ll_machine(lst->data.llist);
+        if (fast) return fast;
+    }
 
-    if (n == 0) return expr_copy(lst);
+    /* The elements: a List's own, or a LinkedList's read from its slots. */
+    LLView lv;
+    ll_view(lst, &lv);
+    size_t n = lv.n;
+
+    if (n == 0) {
+        Expr* r = ll_view_linked(&lv) ? ll_view_result(&lv, NULL, 0) : expr_copy(lst);
+        ll_view_done(&lv);
+        return r;
+    }
 
     /* Kahan compensated summation in double precision when every element
      * is a machine number. */
@@ -70,27 +113,28 @@ Expr* builtin_accumulate(Expr* res) {
         bool all_numeric = true;
         for (size_t i = 0; i < n; i++) {
             double tmp;
-            if (!accumulate_to_double(lst->data.function.args[i], &tmp)) {
+            if (!accumulate_to_double(lv.a[i], &tmp)) {
                 all_numeric = false;
                 break;
             }
         }
         if (all_numeric) {
             Expr** out = malloc(sizeof(Expr*) * n);
-            if (!out) return NULL;
+            if (!out) { ll_view_done(&lv); return NULL; }
             double sum = 0.0;
             double c = 0.0;
             for (size_t i = 0; i < n; i++) {
                 double x = 0.0;
-                accumulate_to_double(lst->data.function.args[i], &x);
+                accumulate_to_double(lv.a[i], &x);
                 double y = x - c;
                 double t = sum + y;
                 c = (t - sum) - y;
                 sum = t;
                 out[i] = expr_new_real(sum);
             }
-            Expr* result = expr_new_function(expr_copy(head), out, n);
+            Expr* result = ll_view_result(&lv, out, n);
             free(out);
+            ll_view_done(&lv);
             return result;
         }
         /* Mixed/symbolic input: fall through to the standard accumulator. */
@@ -99,31 +143,33 @@ Expr* builtin_accumulate(Expr* res) {
     /* Automatic numeric fast-path: an all-machine-Real list accumulates as a
      * running double sum, in place of the evaluate(Plus[..]) per element below.
      * NULL means the list is not uniformly Real -- fall through. */
-    {
+    if (lst->type == EXPR_FUNCTION) {
         Expr* fast = numloop_accumulate(lst);
-        if (fast) return fast;
+        if (fast) { ll_view_done(&lv); return fast; }
     }
 
     Expr** out = malloc(sizeof(Expr*) * n);
-    if (!out) return NULL;
+    if (!out) { ll_view_done(&lv); return NULL; }
 
-    out[0] = expr_copy(lst->data.function.args[0]);
+    out[0] = expr_copy(lv.a[0]);
     for (size_t i = 1; i < n; i++) {
         Expr** plus_args = malloc(sizeof(Expr*) * 2);
         if (!plus_args) {
             for (size_t j = 0; j < i; j++) expr_free(out[j]);
             free(out);
+            ll_view_done(&lv);
             return NULL;
         }
         plus_args[0] = expr_copy(out[i - 1]);
-        plus_args[1] = expr_copy(lst->data.function.args[i]);
+        plus_args[1] = expr_copy(lv.a[i]);
         Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
         free(plus_args);
         out[i] = evaluate(plus_expr);
         expr_free(plus_expr);
     }
 
-    Expr* result = expr_new_function(expr_copy(head), out, n);
+    Expr* result = ll_view_result(&lv, out, n);
     free(out);
+    ll_view_done(&lv);
     return result;
 }

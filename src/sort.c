@@ -1,5 +1,5 @@
 #include "sort.h"
-#include "linkedlist.h"
+#include "linkedlist_seq.h"
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
@@ -12,6 +12,7 @@
 #include "common.h"    /* builtin_arg_error */
 #include "take_drop.h" /* get_seq_spec_indices — Ordering[list, seq] reuses Take's spec */
 #include "list/list_common.h" /* is_real_numeric / is_infinity / is_minus_infinity / is_listq */
+#include "ndarray_internal.h" /* nd_sort_i64_asc / nd_sort_ascending / nd_argsort_* -- typed LinkedLists */
 #include "ndreduce.h"  /* ndred_ranked_min / ndred_ranked_max — NDArray order-statistic path */
 #include "numeric.h"   /* numericalize / numeric_machine_spec — key for symbolic reals */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
@@ -959,29 +960,66 @@ static Expr* sort_subject(Expr* elem, bool assoc) {
     return elem;
 }
 
-/* `coll` with its elements permuted by perm (entries, for an association).
- * The head is kept. Caller owns the result. */
-static Expr* permute_collection(const Expr* coll, const size_t* perm) {
-    size_t n = coll->data.function.arg_count;
+/* Sort a collection's elements (an association's entries by value; a
+ * LinkedList's from its slots) with the merge sort above, into a collection of
+ * the same kind. Caller owns the result. */
+static Expr* sort_collection_p(const Expr* coll, Expr* p, bool swap, bool desc) {
+    LLView v;
+    ll_view(coll, &v);
+    size_t n = v.n;
+    bool assoc = is_association(coll);
+    Expr** subj = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) subj[i] = sort_subject(v.a[i], assoc);
+    size_t* perm = p_sort_perm(subj, n, p, swap, desc);
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) out[i] = expr_copy(coll->data.function.args[perm[i]]);
-    Expr* r = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    for (size_t i = 0; i < n; i++) out[i] = expr_copy(v.a[perm[i]]);
+    Expr* r = ll_view_result(&v, out, n);
     free(out);
+    free(perm);
+    free(subj);
+    ll_view_done(&v);
     return r;
 }
 
-/* Sort a collection's elements (an association's entries by value) with the
- * merge sort above. Caller owns the result. */
-static Expr* sort_collection_p(const Expr* coll, Expr* p, bool swap, bool desc) {
-    size_t n = coll->data.function.arg_count;
-    bool assoc = is_association(coll);
-    Expr** subj = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) subj[i] = sort_subject(coll->data.function.args[i], assoc);
-    size_t* perm = p_sort_perm(subj, n, p, swap, desc);
-    Expr* r = permute_collection(coll, perm);
-    free(perm);
-    free(subj);
-    return r;
+/* Sort / Ordering of a typed (machine-number) LinkedList: the raw slots
+ * gathered into one scratch buffer and ordered by the very kernels the packed
+ * List's Sort and Ordering run (ndstruct_sort / ndstruct_ordering), so the
+ * answers agree to the bit. NULL for a boxed, complex or empty list (the
+ * element path answers). */
+static Expr* sort_ll_machine(const LinkedList* ll, bool desc) {
+    LLKind k = ll_kind(ll);
+    int64_t n = ll_length(ll);
+    if (n == 0 || (k != LL_I64 && k != LL_REAL)) return NULL;
+    void* buf = malloc(sizeof(double) * (size_t)n);
+    if (!buf) return NULL;
+    ll_gather(ll, 0, n, buf);
+    if (k == LL_I64) nd_sort_i64_asc((int64_t*)buf, (size_t)n);
+    else             nd_sort_ascending((double*)buf, (size_t)n);
+    LinkedList* out = ll_from_buffer(k, buf, n);
+    free(buf);
+    Expr* r = expr_new_linkedlist(out);
+    if (!desc) return r;
+    LinkedList* rv = ll_new();
+    ll_append_range_rev(rv, out, 0, n);
+    expr_free(r);
+    return expr_new_linkedlist(rv);
+}
+
+/* 0-based argsort of a typed LinkedList's slots (ndstruct_ordering's kernel),
+ * or NULL. Caller frees. */
+static int64_t* ordering_ll_machine(const LinkedList* ll) {
+    LLKind k = ll_kind(ll);
+    int64_t n = ll_length(ll);
+    if (n == 0 || (k != LL_I64 && k != LL_REAL)) return NULL;
+    void* buf = malloc(sizeof(double) * (size_t)n);
+    int64_t* idx = malloc(sizeof(int64_t) * (size_t)n);
+    if (!buf || !idx) { free(buf); free(idx); return NULL; }
+    ll_gather(ll, 0, n, buf);
+    bool ok = (k == LL_I64) ? nd_argsort_i64((const int64_t*)buf, (size_t)n, idx)
+                            : nd_argsort_real((const double*)buf, (size_t)n, idx);
+    free(buf);
+    if (!ok) { free(idx); return NULL; }
+    return idx;
 }
 
 Expr* builtin_sort(Expr* res) {
@@ -994,8 +1032,14 @@ Expr* builtin_sort(Expr* res) {
     /* Sort[ndarray]: sort the flat buffer directly (see ndstruct.c). */
     if (is_ndarray(list)) return ndstruct_sort(res);
 
+    if (list->type == EXPR_LINKEDLIST && res->data.function.arg_count == 1) {
+        Expr* fast = sort_ll_machine(list->data.llist, false);
+        if (fast) return fast;
+    }
+
     /* a Rational/Complex number is an atom: Sort[3/4] is not 3/4 sorted as {3, 4} */
-    if (list->type != EXPR_FUNCTION || expr_is_number_atom(list)) return builtin_normal_error("Sort", res, 1);
+    if ((list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) || expr_is_number_atom(list))
+        return builtin_normal_error("Sort", res, 1);
 
     /* Sort[assoc] orders the entries by their values (keys follow). */
     if (res->data.function.arg_count == 1 && is_association(list))
@@ -1003,19 +1047,23 @@ Expr* builtin_sort(Expr* res) {
 
     Expr* p = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
-    size_t count = list->data.function.arg_count;
-    if (count == 0) {
-        return expr_copy(list);
-    }
-
     /* Sort[list, p] / Sort[assoc, p]: Mathematica's merge sort, so ties under a
      * strict p land where Mathematica puts them (an association compares its
      * values; the entries move with them). */
     if (p) return pack_offer(sort_collection_p(list, p, false, false));
 
+    LLView v;
+    ll_view(list, &v);
+    size_t count = v.n;
+    if (count == 0) {
+        Expr* r = ll_view_linked(&v) ? ll_view_result(&v, NULL, 0) : expr_copy(list);
+        ll_view_done(&v);
+        return r;
+    }
+
     Expr** sorted_args = malloc(sizeof(Expr*) * count);
     for (size_t i = 0; i < count; i++) {
-        sorted_args[i] = expr_copy(list->data.function.args[i]);
+        sorted_args[i] = expr_copy(v.a[i]);
     }
     
     // Set global context for comparison
@@ -1026,8 +1074,9 @@ Expr* builtin_sort(Expr* res) {
     
     current_sort_p = old_p;
     
-    Expr* result = expr_new_function(expr_copy(list->data.function.head), sorted_args, count);
+    Expr* result = ll_view_result(&v, sorted_args, count);
     free(sorted_args);
+    ll_view_done(&v);
 
     /* A sorted machine-number list is worth packing: it is the shape most
      * likely to be reduced or indexed next. Declines when the head is not List
@@ -1077,12 +1126,14 @@ static int subject_pair_cmp(const void* a, const void* b) {
  * f-values (p[b, a] for ReverseSortBy) -- see p_merge_sort. Reproduces e.g.
  * SortBy[<|a -> {1, z}, b -> {1, y}|>, First, Greater] = <|a -> .., b -> ..|>. */
 static Expr* sort_by_with_p(const Expr* coll, Expr* f, Expr* p, bool swap) {
-    size_t n = coll->data.function.arg_count;
+    LLView v;
+    ll_view(coll, &v);
+    size_t n = v.n;
     bool assoc = is_association(coll);
     SortByPair* pre = malloc(sizeof(SortByPair) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
-        pre[i].payload = coll->data.function.args[i];                /* borrowed */
-        pre[i].key = sort_subject(coll->data.function.args[i], assoc); /* borrowed */
+        pre[i].payload = v.a[i];                       /* borrowed */
+        pre[i].key = sort_subject(v.a[i], assoc);      /* borrowed */
         pre[i].pos = i;
         pre[i].multi = false;
     }
@@ -1099,9 +1150,10 @@ static Expr* sort_by_with_p(const Expr* coll, Expr* f, Expr* p, bool swap) {
 
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) out[i] = expr_copy(pre[perm[i]].payload);
-    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    Expr* result = ll_view_result(&v, out, n);
     for (size_t i = 0; i < n; i++) expr_free(fv[i]);
     free(out); free(perm); free(fv); free(pre);
+    ll_view_done(&v);
     return result;
 }
 
@@ -1130,14 +1182,21 @@ Expr* builtin_sort_by(Expr* res) {
 
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
-    if (coll->type != EXPR_FUNCTION || expr_is_number_atom(coll)) return builtin_normal_error("SortBy", res, 1);
-
-    bool assoc = is_association(coll);
-    size_t n = coll->data.function.arg_count;
-    if (n == 0) return expr_copy(coll);
+    if ((coll->type != EXPR_FUNCTION && coll->type != EXPR_LINKEDLIST) || expr_is_number_atom(coll))
+        return builtin_normal_error("SortBy", res, 1);
 
     /* SortBy[coll, f, p]: compare the f-values with the ordering function p. */
     if (argc == 3) return sort_by_with_p(coll, f, res->data.function.args[2], false);
+
+    bool assoc = is_association(coll);
+    LLView v;
+    ll_view(coll, &v);
+    size_t n = v.n;
+    if (n == 0) {
+        Expr* r = ll_view_linked(&v) ? ll_view_result(&v, NULL, 0) : expr_copy(coll);
+        ll_view_done(&v);
+        return r;
+    }
 
     SortByPair* pairs = malloc(sizeof(SortByPair) * n);
     /* SortBy[list, {f1, f2, ...}] sorts by f1, breaking ties with f2, ... .
@@ -1147,7 +1206,7 @@ Expr* builtin_sort_by(Expr* res) {
                   f->data.function.head->data.symbol.name == SYM_List);
 
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = coll->data.function.args[i];
+        Expr* elem = v.a[i];
         /* For an association, sort by f applied to the value; else by f[elem]. */
         Expr* subject = elem;
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
@@ -1180,8 +1239,9 @@ Expr* builtin_sort_by(Expr* res) {
     for (size_t i = 0; i < n; i++) { out[i] = pairs[i].payload; expr_free(pairs[i].key); }
     free(pairs);
 
-    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    Expr* result = ll_view_result(&v, out, n);
     free(out);
+    ll_view_done(&v);
     return result;
 }
 
@@ -1211,15 +1271,20 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
 
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
-    if (coll->type != EXPR_FUNCTION) return NULL;
+    LLView v;
+    if (!ll_view(coll, &v)) return NULL;
 
     bool assoc = is_association(coll);
-    size_t n = coll->data.function.arg_count;
-    if (n == 0) return expr_copy(coll);  /* empty in, empty out */
+    size_t n = v.n;
+    if (n == 0) {                           /* empty in, empty out */
+        Expr* r = ll_view_linked(&v) ? ll_view_result(&v, NULL, 0) : expr_copy(coll);
+        ll_view_done(&v);
+        return r;
+    }
 
     Expr** keys = malloc(sizeof(Expr*) * n);   /* f-value per element (owned) */
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = coll->data.function.args[i];
+        Expr* elem = v.a[i];
         Expr* subject = elem;
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
             subject = elem->data.function.args[1];
@@ -1239,13 +1304,14 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
     size_t nout = 0;
     for (size_t i = 0; i < n; i++)
         if (expr_compare(keys[i], keys[best]) == 0)
-            out[nout++] = expr_copy(coll->data.function.args[i]);
+            out[nout++] = expr_copy(v.a[i]);
 
     for (size_t i = 0; i < n; i++) expr_free(keys[i]);
     free(keys);
 
-    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, nout);
+    Expr* result = ll_view_result(&v, out, nout);
     free(out);
+    ll_view_done(&v);
     return result;
 }
 
@@ -1289,6 +1355,12 @@ static Expr* reverse_top_level(Expr* e) {
         return e;
     }
 
+    if (e->type == EXPR_LINKEDLIST) {        /* a fresh list: its reverse */
+        LinkedList* rv = ll_new();
+        ll_append_range_rev(rv, e->data.llist, 0, ll_length(e->data.llist));
+        expr_free(e);
+        return expr_new_linkedlist(rv);
+    }
     if (e->type != EXPR_FUNCTION) return e;
     Expr** a = e->data.function.args;
     size_t n = e->data.function.arg_count;
@@ -1327,6 +1399,10 @@ Expr* builtin_reverse_sort(Expr* res) {
      * With an ordering function it is Reverse[Sort[assoc, p]], below. */
     if (res->data.function.arg_count == 1 && is_association(res->data.function.args[0]))
         return sort_collection_p(res->data.function.args[0], NULL, false, true);
+    if (res->data.function.arg_count == 1 && res->data.function.args[0]->type == EXPR_LINKEDLIST) {
+        Expr* fast = sort_ll_machine(res->data.function.args[0]->data.llist, true);
+        if (fast) return fast;
+    }
     Expr* call = sort_call_as(res, "Sort");
     Expr* asc = builtin_sort(call);   /* borrows call, returns a new expr */
     expr_free(call);
@@ -1340,6 +1416,8 @@ Expr* builtin_reverse_sort_by(Expr* res) {
      * 15), which differs from Reverse[SortBy[coll, f, p]] on ties. */
     if (res->data.function.arg_count == 3) {
         Expr* coll = res->data.function.args[0];
+        if (coll->type == EXPR_LINKEDLIST)
+            return sort_by_with_p(coll, res->data.function.args[1], res->data.function.args[2], true);
         if (coll->type != EXPR_FUNCTION || is_ndarray(coll)) return NULL;
         if (coll->data.function.arg_count == 0) return expr_copy(coll);
         return sort_by_with_p(coll, res->data.function.args[1], res->data.function.args[2], true);
@@ -1395,15 +1473,16 @@ static int take_largest_cmp(const void* a, const void* b) {
 }
 
 static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
-    if (coll->type != EXPR_FUNCTION || nreq < 0) return NULL;
+    LLView v;
+    if (nreq < 0 || !ll_view(coll, &v)) return NULL;
     bool assoc = is_association(coll);
-    size_t n = coll->data.function.arg_count;
+    size_t n = v.n;
 
     SortByPair* pairs = malloc(sizeof(SortByPair) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
         pairs[i].pos = i;
         pairs[i].multi = false;
-        Expr* elem = coll->data.function.args[i];
+        Expr* elem = v.a[i];
         Expr* subject = elem;
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
             subject = elem->data.function.args[1];
@@ -1427,8 +1506,9 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
     for (size_t i = 0; i < n; i++) { expr_free(pairs[i].payload); expr_free(pairs[i].key); }
     free(pairs);
 
-    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, k);
+    Expr* result = ll_view_result(&v, out, k);
     free(out);
+    ll_view_done(&v);
     return result;
 }
 
@@ -1547,15 +1627,12 @@ static void ranked_select_idx(size_t* idx, size_t m, size_t k, const RankedCtx* 
  * n). Selects and returns the EXACT r-th ascending element, or NULL to leave the
  * call unevaluated (empty list, |n| out of range, or a non-real element -- a
  * definite result needs every element to be a real number). */
-static Expr* ranked_select(Expr* list, int64_t n0, bool is_max) {
-    size_t m = list->data.function.arg_count;
+static Expr* ranked_select(Expr** elem, size_t m, int64_t n0, bool is_max) {
     if (m == 0) return NULL;
 
     int64_t n = is_max ? -n0 : n0;
     int64_t r = (n > 0) ? n : ((int64_t)m + n + 1);       /* ascending rank, 1-based */
     if (r < 1 || r > (int64_t)m) return NULL;             /* |n| out of range */
-
-    Expr** elem = list->data.function.args;
 
     /* One scan chooses the path: exact (expr_compare, BigInt/Rational-safe) when
      * every element is a real numeric atom, else the double-key path (which also
@@ -1585,6 +1662,17 @@ static Expr* ranked_select(Expr* list, int64_t n0, bool is_max) {
     return out;
 }
 
+/* ranked_select over a List's arguments or a LinkedList's elements. */
+static Expr* ranked_select_coll(Expr* list, int64_t n, bool is_max) {
+    if (is_listq(list))
+        return ranked_select(list->data.function.args, list->data.function.arg_count, n, is_max);
+    LLView v;
+    if (list->type != EXPR_LINKEDLIST || !ll_view(list, &v)) return NULL;
+    Expr* r = ranked_select(v.a, v.n, n, is_max);
+    ll_view_done(&v);
+    return r;
+}
+
 /* RankedMin[list, n] -- the n-th smallest element (n<0: the n-th largest).
  * RankedMin[list, 1] == Min[list], RankedMin[list, -1] == Max[list]. Yields a
  * definite result iff every element is a real number; +/-Infinity rank as
@@ -1598,8 +1686,7 @@ Expr* builtin_ranked_min(Expr* res) {
     Expr* nexpr = res->data.function.args[1];
     if (nexpr->type != EXPR_INTEGER || nexpr->data.integer == 0) return NULL;
     if (is_ndarray(list)) return ndred_ranked_min(res);
-    if (!is_listq(list)) return NULL;
-    return ranked_select(list, nexpr->data.integer, false);
+    return ranked_select_coll(list, nexpr->data.integer, false);
 }
 
 /* RankedMax[list, n] -- the n-th largest element (n<0: the n-th smallest);
@@ -1612,8 +1699,7 @@ Expr* builtin_ranked_max(Expr* res) {
     Expr* nexpr = res->data.function.args[1];
     if (nexpr->type != EXPR_INTEGER || nexpr->data.integer == 0) return NULL;
     if (is_ndarray(list)) return ndred_ranked_max(res);
-    if (!is_listq(list)) return NULL;
-    return ranked_select(list, nexpr->data.integer, true);
+    return ranked_select_coll(list, nexpr->data.integer, true);
 }
 
 Expr* builtin_orderedq(Expr* res) {
@@ -1736,12 +1822,14 @@ Expr* builtin_ordering(Expr* res) {
         if (nd) return nd;
     }
 
-    if (list->type != EXPR_FUNCTION) return NULL;  /* Ordering[atom]: leave unevaluated */
+    LLView v;
+    if (!ll_view(list, &v)) return NULL;  /* Ordering[atom]: leave unevaluated */
+    bool linked = ll_view_linked(&v);
 
     Expr* seq = (argc >= 2) ? res->data.function.args[1] : NULL;
     Expr* p   = (argc == 3) ? res->data.function.args[2] : NULL;
 
-    size_t n = list->data.function.arg_count;
+    size_t n = v.n;
     bool assoc = is_association(list);
 
     /* Borrowed subject pointers -- the comparator only reads them, never frees.
@@ -1749,15 +1837,17 @@ Expr* builtin_ordering(Expr* res) {
      * otherwise by the element itself. */
     Expr** subjects = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
-        Expr* elem = list->data.function.args[i];
+        Expr* elem = v.a[i];
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
             subjects[i] = elem->data.function.args[1];
         else
             subjects[i] = elem;
     }
 
-    int64_t* idx = malloc(sizeof(int64_t) * (n ? n : 1));
-    if (p) {
+    int64_t* idx = (linked && !p) ? ordering_ll_machine(list->data.llist) : NULL;
+    if (idx) {
+        /* a typed LinkedList: the packed Ordering's argsort, above */
+    } else if ((idx = malloc(sizeof(int64_t) * (n ? n : 1))) && p) {
         /* A user ordering function: Mathematica's merge sort, so a strict p
          * places ties exactly as Sort[list, p] does (Ordering[{1, 1, 0, 1},
          * All, Greater] is {4, 2, 1, 3}). */
@@ -1782,8 +1872,20 @@ Expr* builtin_ordering(Expr* res) {
         if (!get_seq_spec_indices(seq, (int64_t)n, &sel, &sel_count)) {
             free(subjects);
             free(idx);
+            ll_view_done(&v);
             return NULL;      /* malformed / out-of-range spec: leave unevaluated */
         }
+    }
+
+    if (linked) {             /* the positions, as a LinkedList of machine integers */
+        LinkedList* ol = ll_new();
+        for (size_t i = 0; i < sel_count; i++)
+            ll_push_back_i64(ol, idx[(sel ? sel[i] : (int64_t)(i + 1)) - 1] + 1);
+        free(sel);
+        free(subjects);
+        free(idx);
+        ll_view_done(&v);
+        return expr_new_linkedlist(ol);
     }
 
     Expr** out = (sel_count > 0) ? malloc(sizeof(Expr*) * sel_count) : NULL;
@@ -1795,6 +1897,7 @@ Expr* builtin_ordering(Expr* res) {
     free(sel);
     free(subjects);
     free(idx);
+    ll_view_done(&v);
 
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, sel_count);
     if (out) free(out);

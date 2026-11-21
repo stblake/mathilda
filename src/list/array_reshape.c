@@ -3,6 +3,7 @@
 #include "pad_schemes.h"
 #include "ndarray.h"     /* is_ndarray */
 #include "ndstruct.h"    /* ndstruct_arrayreshape */
+#include "linkedlist_seq.h" /* LLView: LinkedList input levels */
 
 /* ArrayReshape[list, dims]           arrange the flattened elements of list into
  *                                    a rectangular dims array, dropping extras.
@@ -24,15 +25,18 @@ static bool ar_parse_dims(const Expr* spec, int64_t* d, size_t* count, int64_t* 
     if (spec->type == EXPR_INTEGER) {
         if (spec->data.integer < 0) return false;
         d[0] = spec->data.integer; k = 1;
-    } else if (spec->type == EXPR_FUNCTION
-               && spec->data.function.head->type == EXPR_SYMBOL
-               && spec->data.function.head->data.symbol.name == SYM_List) {
-        k = spec->data.function.arg_count;
+    } else if ((spec->type == EXPR_FUNCTION
+                && spec->data.function.head->type == EXPR_SYMBOL
+                && spec->data.function.head->data.symbol.name == SYM_List)
+               || spec->type == EXPR_LINKEDLIST) {
+        k = (size_t)ll_seq_length(spec);
         if (k == 0 || k > AR_MAX_RANK) return false;
         for (size_t i = 0; i < k; i++) {
-            const Expr* di = spec->data.function.args[i];
-            if (di->type != EXPR_INTEGER || di->data.integer < 0) return false;
-            d[i] = di->data.integer;
+            Expr* di = ll_seq_element(spec, (int64_t)i);
+            bool ok = di->type == EXPR_INTEGER && di->data.integer >= 0;
+            if (ok) d[i] = di->data.integer;
+            expr_free(di);
+            if (!ok) return false;
         }
     } else {
         return false;
@@ -48,11 +52,25 @@ static bool ar_parse_dims(const Expr* spec, int64_t* d, size_t* count, int64_t* 
 
 /* Collect the leaves of `e` (descending List heads only) as borrowed pointers
  * into a growing buffer. */
-static void ar_collect(Expr* e, Expr*** buf, size_t* n, size_t* cap) {
+/* The LinkedList views a collection borrows its leaves from, kept open until
+ * the leaves have been copied out. */
+typedef struct { LLView* v; size_t n, cap; } ARViews;
+
+static void ar_collect(Expr* e, Expr*** buf, size_t* n, size_t* cap, ARViews* hold) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            ar_collect(e->data.function.args[i], buf, n, cap);
+            ar_collect(e->data.function.args[i], buf, n, cap, hold);
+        return;
+    }
+    if (e->type == EXPR_LINKEDLIST) {          /* a level, read from its slots */
+        if (hold->n == hold->cap) {
+            hold->cap = hold->cap ? 2 * hold->cap : 4;
+            hold->v = realloc(hold->v, sizeof(LLView) * hold->cap);
+        }
+        LLView* v = &hold->v[hold->n++];
+        ll_view(e, v);
+        for (size_t i = 0; i < v->n; i++) ar_collect(v->a[i], buf, n, cap, hold);
         return;
     }
     if (*n == *cap) { *cap *= 2; *buf = realloc(*buf, sizeof(Expr*) * (*cap)); }
@@ -62,14 +80,14 @@ static void ar_collect(Expr* e, Expr*** buf, size_t* n, size_t* cap) {
 /* Build the nested rectangular array, adopting owned leaves from flat[] in
  * row-major order via *cursor. */
 static Expr* ar_build(Expr** flat, size_t* cursor, const int64_t* d,
-                      size_t dim_count, size_t level) {
+                      size_t dim_count, size_t level, bool linked) {
     if (level == dim_count) return flat[(*cursor)++];   /* adopt */
     int64_t n = d[level];
-    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (n == 0) return ll_seq_of(linked, NULL, 0);
     Expr** kids = malloc(sizeof(Expr*) * (size_t)n);
     for (int64_t i = 0; i < n; i++)
-        kids[i] = ar_build(flat, cursor, d, dim_count, level + 1);
-    Expr* r = expr_new_function(expr_new_symbol(SYM_List), kids, (size_t)n);
+        kids[i] = ar_build(flat, cursor, d, dim_count, level + 1, linked);
+    Expr* r = ll_seq_of(linked, kids, (size_t)n);    /* LinkedLists for a LinkedList */
     free(kids);
     return r;
 }
@@ -85,7 +103,9 @@ Expr* builtin_array_reshape(Expr* res) {
     /* Packed / NDArray input: buffer fast path (declines to materialize). */
     if (is_ndarray(list)) return ndstruct_arrayreshape(res);
 
-    if (list->type != EXPR_FUNCTION) return NULL;   /* not a list: leave alone */
+    if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST)
+        return NULL;   /* not a list: leave alone */
+    bool linked = list->type == EXPR_LINKEDLIST;
 
     int64_t d[AR_MAX_RANK];
     size_t dim_count;
@@ -96,8 +116,13 @@ Expr* builtin_array_reshape(Expr* res) {
     /* Flatten the input to a borrowed leaf sequence. */
     size_t cap = 16, nleaves = 0;
     Expr** leaves = malloc(sizeof(Expr*) * cap);
-    for (size_t i = 0; i < list->data.function.arg_count; i++)
-        ar_collect(list->data.function.args[i], &leaves, &nleaves, &cap);
+    ARViews hold = { NULL, 0, 0 };
+    if (linked) {
+        ar_collect(list, &leaves, &nleaves, &cap, &hold);
+    } else {
+        for (size_t i = 0; i < list->data.function.arg_count; i++)
+            ar_collect(list->data.function.args[i], &leaves, &nleaves, &cap, &hold);
+    }
 
     /* Produce exactly `total` owned leaves: copy/truncate, or pad the tail. */
     Expr** flat;
@@ -113,13 +138,17 @@ Expr* builtin_array_reshape(Expr* res) {
                                total - (int64_t)nleaves, padding, sc, /*order=*/1,
                                &flat, &flat_len)) {
             free(leaves);
+            for (size_t i = 0; i < hold.n; i++) ll_view_done(&hold.v[i]);
+            free(hold.v);
             return NULL;
         }
     }
     free(leaves);
+    for (size_t i = 0; i < hold.n; i++) ll_view_done(&hold.v[i]);
+    free(hold.v);
 
     size_t cursor = 0;
-    Expr* out = ar_build(flat, &cursor, d, dim_count, 0);
+    Expr* out = ar_build(flat, &cursor, d, dim_count, 0, linked);
     free(flat);
     return out;
 }

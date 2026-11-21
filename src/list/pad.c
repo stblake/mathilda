@@ -1,3 +1,4 @@
+#include "linkedlist_seq.h"   /* LLView: LinkedList rows pad into LinkedLists */
 #include "list_common.h"
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_pad / ndstruct_delist_repack */
@@ -43,6 +44,7 @@ static Expr* pr_pad_at(Expr* P, const int64_t* coords, size_t n) {
  * the builder must not descend into them, or PadRight[{{1}, {0, 1/8}}] treats
  * Rational[1, 8] as a 2-element sub-row and pads to a spurious extra level. */
 static int pr_is_atomic(const Expr* e) {
+    if (e && e->type == EXPR_LINKEDLIST) return 0;    /* a row, read from its slots */
     if (!e || e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
@@ -64,12 +66,15 @@ static void pr_scan_dims(Expr* node, size_t level,
         for (size_t i = *cap; i < newcap; i++) (*dims)[i] = 0;
         *cap = newcap;
     }
-    int64_t w = (int64_t)node->data.function.arg_count;
+    LLView v;
+    ll_view(node, &v);
+    int64_t w = (int64_t)v.n;
     if (w > (*dims)[level]) (*dims)[level] = w;
     if (level + 1 > *depth) *depth = level + 1;
-    for (size_t i = 0; i < node->data.function.arg_count; i++) {
-        pr_scan_dims(node->data.function.args[i], level + 1, dims, depth, cap);
+    for (size_t i = 0; i < v.n; i++) {
+        pr_scan_dims(v.a[i], level + 1, dims, depth, cap);
     }
+    ll_view_done(&v);
 }
 
 /* Margin to leave at a given level.  margins may be a single integer
@@ -94,7 +99,7 @@ static int64_t pr_margin_at(Expr* margins, size_t level) {
  * call fills coords[level] as it lays out the level. */
 static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
                       size_t k, size_t level, Expr* P, int64_t* coords,
-                      int pad_left, int empty_anchor) {
+                      int pad_left, int empty_anchor, bool parent_linked) {
     if (level == k) {
         /* Leaf of the padded structure: keep the original element (whatever
          * its remaining depth) or synthesise a padding leaf. */
@@ -110,9 +115,15 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
     Expr*  head_src = NULL;     /* function whose head we copy */
     int    atom_row = 0;        /* node is a non-list atom -> 1-element row */
     size_t L = 0;
-    if (node && node->type == EXPR_FUNCTION && !pr_is_atomic(node)) {
+    /* A row is a List-like function or a LinkedList (whose padded row is a
+     * LinkedList); a pure-padding row takes the kind of the row above it. */
+    LLView rv = { NULL, 0, NULL, false };
+    bool linked = parent_linked;
+    if (node && !pr_is_atomic(node)) {
         head_src = node;
-        L = node->data.function.arg_count;
+        ll_view(node, &rv);
+        linked = ll_view_linked(&rv);
+        L = rv.n;
     } else if (node) {
         atom_row = 1;           /* e.g. {a, {b,c}} -> a becomes a 1-row; a
                                  * Rational/Complex is atomic and stays whole */
@@ -139,9 +150,11 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
         ? 0
         : (pad_on_left ? list_start + (int64_t)L : list_start);
 
-    Expr* head = head_src ? expr_copy(head_src->data.function.head)
-                          : expr_new_symbol(SYM_List);
+    Expr* head = (head_src && !linked) ? expr_copy(head_src->data.function.head)
+                                       : expr_new_symbol(SYM_List);
     if (N == 0) {
+        ll_view_done(&rv);
+        if (linked) { expr_free(head); return ll_seq_of(true, NULL, 0); }
         return expr_new_function(head, NULL, 0);
     }
 
@@ -150,14 +163,17 @@ static Expr* pr_build(Expr* node, const int64_t* dimv, Expr* margins,
         int64_t j = (int64_t)i - list_start;     /* index into the original row */
         Expr* child = NULL;
         if (j >= 0 && j < (int64_t)L) {
-            child = atom_row ? node : head_src->data.function.args[j];
+            child = atom_row ? node : rv.a[j];
         }
         coords[level] = (int64_t)i - coord_base;
         out[i] = pr_build(child, dimv, margins, k, level + 1, P, coords,
-                          pad_left, /*empty_anchor=*/0);
+                          pad_left, /*empty_anchor=*/0, linked);
     }
-    Expr* result = expr_new_function(head, out, N);
+    Expr* result;
+    if (linked) { expr_free(head); result = ll_seq_of(true, out, N); }
+    else        result = expr_new_function(head, out, N);
     free(out);
+    ll_view_done(&rv);
     return result;
 }
 
@@ -178,7 +194,8 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
     if (argc < 1 || argc > 4) return pad_emit_argb(name, argc);
 
     Expr* list = res->data.function.args[0];
-    if (list->type != EXPR_FUNCTION) return NULL;   /* not an array: leave alone */
+    if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST)
+        return NULL;   /* not an array: leave alone */
 
     /* ---- dimensions (arg 1) ---- */
     int64_t* dimv = NULL;
@@ -196,22 +213,30 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
             free(dimv);
             return expr_copy(list);
         }
+        if (list->type == EXPR_LINKEDLIST && dimv[0] == 0) {
+            free(dimv);
+            return ll_seq_of(true, NULL, 0);   /* a new (empty) list, not the argument */
+        }
         k = depth;
         own_dimv = 1;
     } else if (nspec->type == EXPR_INTEGER) {
         scalar_dim[0] = nspec->data.integer;
         dimv = scalar_dim;
         k = 1;
-    } else if (nspec->type == EXPR_FUNCTION &&
-               nspec->data.function.head->type == EXPR_SYMBOL &&
-               nspec->data.function.head->data.symbol.name == SYM_List) {
-        size_t kk = nspec->data.function.arg_count;
+    } else if ((nspec->type == EXPR_FUNCTION &&
+                nspec->data.function.head->type == EXPR_SYMBOL &&
+                nspec->data.function.head->data.symbol.name == SYM_List) ||
+               nspec->type == EXPR_LINKEDLIST) {
+        /* {n1, n2, ...}, as a List or a LinkedList */
+        size_t kk = (size_t)ll_seq_length(nspec);
         if (kk == 0) return expr_copy(list);
         dimv = malloc(sizeof(int64_t) * kk);
         for (size_t i = 0; i < kk; i++) {
-            Expr* d = nspec->data.function.args[i];
-            if (d->type != EXPR_INTEGER) { free(dimv); return NULL; }
-            dimv[i] = d->data.integer;
+            Expr* d = ll_seq_element(nspec, (int64_t)i);
+            bool okd = d->type == EXPR_INTEGER;
+            if (okd) dimv[i] = d->data.integer;
+            expr_free(d);
+            if (!okd) { free(dimv); return NULL; }
         }
         k = kk;
         own_dimv = 1;
@@ -225,8 +250,9 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
     Expr* margins = (argc >= 4) ? res->data.function.args[3] : NULL;
 
     int64_t* coords = malloc(sizeof(int64_t) * k);
-    int empty_anchor = (list->data.function.arg_count == 0);
-    Expr* out = pr_build(list, dimv, margins, k, 0, P, coords, pad_left, empty_anchor);
+    int empty_anchor = list->type == EXPR_LINKEDLIST ? (ll_length(list->data.llist) == 0)
+                                                   : (list->data.function.arg_count == 0);
+    Expr* out = pr_build(list, dimv, margins, k, 0, P, coords, pad_left, empty_anchor, false);
 
     free(coords);
     if (own_dimv) free(dimv);

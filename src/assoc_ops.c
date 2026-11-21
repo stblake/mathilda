@@ -23,6 +23,7 @@
 
 #include "assoc_ops.h"
 #include "linkedlist.h"
+#include "linkedlist_seq.h"   /* LLView: LinkedList operands of the set heads */
 #include "assoc.h"
 #include "attr.h"
 #include "common.h"
@@ -528,27 +529,37 @@ static Expr* builtin_discard(Expr* res) {
  *   The number of distinct elements (values, for an association), or of
  *   distinct f[element] values.  One hash pass.
  * ====================================================================== */
+/* Element i of a set operand through its view: an association's value, a
+ * List's (any head) argument, a LinkedList's slot. Borrowed. */
+static Expr* view_elem(const Expr* x, const LLView* v, size_t i) {
+    Expr* a = v->a[i];
+    return is_association(x) && is_rule2(a) ? RVAL(a) : a;
+}
+
 static Expr* count_distinct(Expr* res, const Expr* f, const char* name) {
     { Expr* d = ops_delist_visible(res, 1); if (d) return d; }
     Expr* x = ARG(res, 0);
-    if (!is_fn(x)) {
+    if (!is_fn(x) && x->type != EXPR_LINKEDLIST) {
         char* s = expr_to_string(res);
         ops_msg("%s::normal: Nonatomic expression expected at position 1 in %s.", name, s);
         free(s);
         return NULL;
     }
-    size_t n = ARGC(x);
+    LLView v;                       /* a LinkedList: a snapshot of its slots */
+    ll_view(x, &v);
+    size_t n = v.n;
     Expr** owned = f ? malloc(sizeof(Expr*) * (n ? n : 1)) : NULL;
     ExprSet s;
     es_init(&s, n);
     for (size_t i = 0; i < n; i++) {
-        Expr* el = elem_at(x, i);
+        Expr* el = view_elem(x, &v, i);
         if (f) { owned[i] = eval_call1(f, el); el = owned[i]; }
         es_add(&s, el, NULL);
     }
     Expr* r = expr_new_integer((int64_t)s.n);
     es_free(&s);
     if (owned) free_array(owned, n);
+    ll_view_done(&v);
     return r;
 }
 
@@ -588,11 +599,13 @@ static Expr* builtin_subsetq(Expr* res) {
     { Expr* d = ops_delist_visible(res, 2); if (d) return d; }
     Expr* a = ARG(res, 0);
     Expr* b = ARG(res, 1);
-    bool seqlike_a = is_list(a) || is_association(a);
-    bool seqlike_b = is_list(b) || is_association(b);
-    bool ok = is_fn(a) && is_fn(b) &&
+    /* A LinkedList stands for the List of its elements. */
+    bool lla = a->type == EXPR_LINKEDLIST, llb = b->type == EXPR_LINKEDLIST;
+    bool seqlike_a = is_list(a) || is_association(a) || lla;
+    bool seqlike_b = is_list(b) || is_association(b) || llb;
+    bool ok = (is_fn(a) || lla) && (is_fn(b) || llb) &&
               ((seqlike_a && seqlike_b) ||
-               expr_eq(a->data.function.head, b->data.function.head));
+               (!lla && !llb && expr_eq(a->data.function.head, b->data.function.head)));
     if (!ok) {
         char* ha = head_string(a);
         char* hb = head_string(b);
@@ -601,13 +614,18 @@ static Expr* builtin_subsetq(Expr* res) {
         free(ha); free(hb);
         return NULL;
     }
+    LLView va, vb;
+    ll_view(a, &va);
+    ll_view(b, &vb);
     ExprSet s;
-    es_init(&s, ARGC(a));
-    for (size_t i = 0; i < ARGC(a); i++) es_add(&s, elem_at(a, i), NULL);
+    es_init(&s, va.n);
+    for (size_t i = 0; i < va.n; i++) es_add(&s, view_elem(a, &va, i), NULL);
     bool subset = true;
-    for (size_t i = 0; i < ARGC(b) && subset; i++)
-        subset = es_find(&s, elem_at(b, i)) != SIZE_MAX;
+    for (size_t i = 0; i < vb.n && subset; i++)
+        subset = es_find(&s, view_elem(b, &vb, i)) != SIZE_MAX;
     es_free(&s);
+    ll_view_done(&va);
+    ll_view_done(&vb);
     return expr_new_symbol(subset ? SYM_True : SYM_False);
 }
 
