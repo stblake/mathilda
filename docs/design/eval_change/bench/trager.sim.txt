@@ -1,0 +1,42 @@
+Integrate::nonelem: The integrand ((1 + x^2) (2 + x^4)^(1/6))/x has no antiderivative elementary in x.
+trager 62.8491 wall-since-start 62.8501 MN 117854 MemInUse 64577536
+
+==== SCOPESTAT ====
+Module calls 117823 (locals 190943)  With calls 1442 (bindings 2668)
+substitute_scoping: top 119265 nodes 101148312 (fn 31028432 sym 42867436 sym_hits 1013975) rebuilt 1956203 unchanged 98178134 unchanged_roots 3114082 avg_env_len 9.06 filters 4665
+time: ss(Module) 5.516 s  ss(With) 0.003 s  ss(rename) 0.000 s
+time: Module prologue(locals) 0.629 s  epilogue(env+reclaim) 0.365 s  free(body) 0.349 s ; With free(body) 0.003 s
+replace_bindings: top 273802 nodes 22731251 rebuilt 4422743 unchanged 3732335 unchanged_roots 3306967 scopes_seen 129314 danger_builds 119197 danger_nodes 0 renames 30
+time: replace_bindings 2.116 s (danger build 0.398 s, capture-avoid rename 0.064 s)
+pure Function named-arg subst: calls 232 nodes 261778 time 0.012 s
+-- hottest Module bodies by nodes walked (key = binding-list node) --
+   1947983 nodes    1026 calls    1899 nodes/call  {Trager`Private`r} :: CompoundExpression[If[Not[Trager`Private`nativeQ[<|"Type" -> "GF", "p" -> 17|>]], Return[None]], Trager`Private`r = FLINT`PolynomialHermiteForm[{{1, 6
+   1361505 nodes     400 calls    3404 nodes/call  {Trager`Private`J, Trager`Private`r, Trager`Private`H, Trager`Private`g} :: CompoundExpression[Trager`Private`g = Lookup[<|"J" -> <|"M" -> {{1, 0, 11, 0, 2, 0}, {0, 1, 0, 2, 0, 5}, {0, 0, 12 + t12, 0, 0, 0}, {0, 0, 0, 12 + t12
+   1197693 nodes      56 calls   21387 nodes/call  {Trager`Private`r = 1/42336 (-6578 t18^2 + 13 t18^8)} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "NF", "t" -> t18, "mu" -> 470596 + 572 t18^6 + t18^12, "theta" -> Root[470596 + 572 #1^6 + #1^12 &, 10]|>
+   1196602 nodes      59 calls   20281 nodes/call  {Trager`Private`m = <|"m" -> 6, "G" -> 3 + 12 t13 + 25 t13^2 + 31 t13^3 + 4 t13^4 + 26 t13 :: CompoundExpression[Trager`Private`out = Table[0, {Trager`Private`m}], Do[If[Part[{0, 0, 1, 0, 0, 0}, Trager`Private`i + 1] =!= 0 && Part[{36 + 14 t13 
+   1141587 nodes      74 calls   15427 nodes/call  {Trager`Private`phi = 215, Trager`Private`prec = 1, Trager`Private`mod, Trager`Private`inv :: CompoundExpression[While[Trager`Private`prec < 1, CompoundExpression[Trager`Private`prec = Min[2 Trager`Private`prec, 1], Trager`Private`mod = Trager`
+   1141216 nodes      66 calls   17291 nodes/call  {Trager`Private`x = <|"m" -> 6, "G" -> 3 + 66 t15 + 53 t15^2 + 106 t15^3 + 7 t15^4 + 88 t1 :: CompoundExpression[D = Trager`Private`kc[<|"Type" -> "GF", "p" -> 113|>, Apply[Times, Diagonal[<|"M" -> {{1, 26, 91, 21 + 7 t15, 105 + 94 t15, 25 + 6 
+   1138330 nodes      36 calls   31620 nodes/call  {Trager`Private`x = <|"m" -> 6, "G" -> 3 + 14 t51 + 31 t51^2 + 453 t51^3 + 593 t51^4 + 136 :: CompoundExpression[Trager`Private`nat = If[Trager`Private`nativeQ[<|"Type" -> "GF", "p" -> 601|>], FLINT`PolynomialDetAdjugate[IdentityMatrix[<|"m" ->
+   1135117 nodes      59 calls   19239 nodes/call  {Trager`Private`e1 = 0} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+   1133785 nodes      52 calls   21804 nodes/call  {Trager`Private`t = <|"m" -> 6, "G" -> 3 + 12 t13 + 25 t13^2 + 31 t13^3 + 4 t13^4 + 26 t13 :: CompoundExpression[Trager`Private`dd = Trager`Private`kDeg[<|"Type" -> "GF", "p" -> 41|>, 1, Trager`Private`t], Trager`Private`ords = Table[If[Part[{0
+   1131361 nodes      59 calls   19176 nodes/call  {Trager`Private`e1 = (59 + t43) (19 + 18 t43 + 24 t43^2 + 10 t43^3 + 58 t43^4 + 74 t43^5)} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+   1129395 nodes      52 calls   21719 nodes/call  {Trager`Private`r = 1} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "NF", "t" -> tg42, "mu" -> -2 + tg42^6, "theta" -> None|>, "I"], Trager`Private`r = ReplaceAll[Trager`Pri
+   1127680 nodes      39 calls   28915 nodes/call  {Trager`Private`e1 = 64} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+   1092803 nodes      65 calls   16812 nodes/call  {Trager`Private`r = -(-545338/1915305 t18 + 2147/1915305 t18^7) (-74989/4926852 t18^4 + 41 :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "NF", "t" -> t18, "mu" -> 470596 + 572 t18^6 + t18^12, "theta" -> Root[470596 + 572 #1^6 + #1^12 &, 10]|>
+   1063658 nodes      51 calls   20856 nodes/call  {Trager`Private`e1 = 13 + t12} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    850471 nodes      57 calls   14921 nodes/call  {Trager`Private`e1 = (27 + t13)^4} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    845370 nodes      51 calls   16576 nodes/call  {Trager`Private`e1 = 15 + 15 t12 + 4 t12^2} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    839510 nodes      55 calls   15264 nodes/call  {Trager`Private`e1 = 109 + 92 t44 + 67 t44^2} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    835003 nodes      53 calls   15755 nodes/call  {Trager`Private`e1 = 1} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    818950 nodes      49 calls   16713 nodes/call  {Trager`Private`e1 = 0} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    818640 nodes      43 calls   19038 nodes/call  {Trager`Private`e1 = 1} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    749734 nodes      74 calls   10132 nodes/call  {Trager`Private`t = Together[0, Modulus -> <|"Type" -> "GF", "p" -> 17|>["p"]], Trager`Pri :: CompoundExpression[Trager`Private`num = Trager`Private`gfMod[Numerator[Trager`Private`t], <|"Type" -> "GF", "p" -> 17|>["p"]], Trager`Private`den = Tr
+    738788 nodes      78 calls    9472 nodes/call  {Trager`Private`e1 = -2 + tg11^6} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    734243 nodes      38 calls   19322 nodes/call  {Trager`Private`e1 = 1492992} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    733018 nodes      43 calls   17047 nodes/call  {Trager`Private`e1 = 710842928124323093147657890850564986213918226693464338940821504000000 :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+    730043 nodes      27 calls   27039 nodes/call  {Trager`Private`e1 = 0} :: CompoundExpression[If[Trager`Private`tragerParams =!= {} && Not[FreeQ[Trager`Private`e1, Apply[Alternatives, Trager`Private`tragerParams]]], Trager`Pr
+SIM[trust all nodes] calls 119265 baseline visits 101158295 :  bloom16 80173445 (79.3%)  bloom32 52457659 (51.9%)  bloom63 14272315 (14.1%)  bloom63-nosys 11513102 (11.4%)
+SIM[trust refcount>=2 only] calls 119265 baseline visits 101158295 :  bloom16 95084829 (94.0%)  bloom32 79200298 (78.3%)  bloom63 69199306 (68.4%)  bloom63-nosys 16865022 (16.7%)
+real 66.84
+user 39.38
+sys 1.34

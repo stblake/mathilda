@@ -1,0 +1,39 @@
+loglog 4.41712 2493
+
+==== SCOPESTAT ====
+Module calls 96175 (locals 233385)  With calls 233 (bindings 417)
+substitute_scoping: top 96408 nodes 18874475 (fn 6431946 sym 8535795 sym_hits 950632) rebuilt 1571273 unchanged 16352570 unchanged_roots 2319637 avg_env_len 2.40 filters 79
+time: ss(Module) 0.250 s  ss(With) 0.000 s  ss(rename) 0.000 s
+time: Module prologue(locals) 0.140 s  epilogue(env+reclaim) 0.076 s  free(body) 0.037 s ; With free(body) 0.000 s
+replace_bindings: top 284151 nodes 12340674 rebuilt 2908013 unchanged 1464225 unchanged_roots 2014271 scopes_seen 98313 danger_builds 96781 danger_nodes 0 renames 0
+time: replace_bindings 0.317 s (danger build 0.031 s, capture-avoid rename 0.020 s)
+pure Function named-arg subst: calls 5 nodes 327 time 0.000 s
+-- hottest Module bodies by nodes walked (key = binding-list node) --
+     40031 nodes       2 calls   20016 nodes/call  {Trager`Private`tidy} :: CompoundExpression[If[Trager`Private`tragerParams === {} || LeafCount[1/6 Log[-2 - Log[1 + 2 x] + 6 (1 + Log[1 + 2 x])^(1/6) - 15 (1 + Log[1 + 2 x])^(
+     39240 nodes     197 calls     199 nodes/call  {Trager`Private`r = 0} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "Fn", "vars" -> {x}|>, "I"], Trager`Private`r = ReplaceAll[Trager`Private`r, Trager`Private`a_ + Trager`P
+     38244 nodes     183 calls     209 nodes/call  {Trager`Private`r = -1 - 37316684/172125 Bronstein`Private`brT1 - 2377439/6885 Bronstein`P :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "Fn", "vars" -> {x}|>, "I"], Trager`Private`r = ReplaceAll[Trager`Private`r, Trager`Private`a_ + Trager`P
+     37322 nodes     179 calls     209 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     36305 nodes     183 calls     198 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     35756 nodes     177 calls     202 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     34576 nodes     176 calls     196 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     34149 nodes     163 calls     210 nodes/call  {Trager`Private`q = Trager`Private`kc[<|"Type" -> "Fn", "vars" -> {x}|>, -284158/172125 -  :: If[Trager`Private`q === 0, 0, Trager`Private`kc[<|"Type" -> "Fn", "vars" -> {x}|>, Coefficient[Trager`Private`q, Bronstein`Private`brT1, Exponent[Trag
+     33429 nodes     158 calls     212 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     33314 nodes     172 calls     194 nodes/call  {Trager`Private`num = Expand[-44638383647], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     32877 nodes     149 calls     221 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     32453 nodes     166 calls     196 nodes/call  {Trager`Private`num = Expand[120249], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     32431 nodes     172 calls     189 nodes/call  {Trager`Private`num = Expand[1], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     32400 nodes     179 calls     181 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     32300 nodes     152 calls     212 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     32240 nodes     164 calls     197 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     32012 nodes     163 calls     196 nodes/call  {Trager`Private`r = 0} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "Fn", "vars" -> {x}|>, "I"], Trager`Private`r = ReplaceAll[Trager`Private`r, Trager`Private`a_ + Trager`P
+     31715 nodes     164 calls     193 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     31509 nodes     151 calls     209 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     31446 nodes     167 calls     188 nodes/call  {Trager`Private`cc = Trager`Private`kc[<|"Type" -> "Fn", "vars" -> {x}|>, 1]} :: CompoundExpression[If[Trager`Private`cc === 0, Trager`Private`throwInternal["kInvZero"]], If[Not[Trager`Private`fieldScalarQ[<|"Type" -> "Fn", "vars" 
+     31372 nodes     150 calls     209 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     31326 nodes     145 calls     216 nodes/call  {Trager`Private`num = Expand[1], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     30970 nodes     139 calls     223 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     30798 nodes     149 calls     207 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     30132 nodes     157 calls     192 nodes/call  {Trager`Private`num = Expand[-179], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+real 4.91
+user 4.80
+sys 0.05

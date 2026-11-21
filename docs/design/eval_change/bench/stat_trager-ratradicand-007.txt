@@ -1,0 +1,13 @@
+trager-ratradicand-007 cpu 10.7971 wall 18.4195 hash 689314825984075096 leaves 214
+
+==== SCOPESTAT ====
+Module calls 0 (locals 0)  With calls 1 (bindings 1)
+substitute_scoping: top 1 nodes 13 (fn 4 sym 8 sym_hits 3) rebuilt 4 unchanged 6 unchanged_roots 6 avg_env_len 1.00 filters 0
+time: ss(Module) 0.000 s  ss(With) 0.000 s  ss(rename) 0.000 s
+time: Module prologue(locals) 0.000 s  epilogue(env+reclaim) 0.000 s  free(body) 0.000 s ; With free(body) 0.000 s
+replace_bindings: top 3 nodes 126 rebuilt 39 unchanged 3 unchanged_roots 21 scopes_seen 0 danger_builds 0 danger_nodes 0 renames 0
+time: replace_bindings 0.000 s (danger build 0.000 s, capture-avoid rename 0.000 s)
+pure Function named-arg subst: calls 0 nodes 0 time 0.000 s
+PROTO: binder=0 epoch_bumps=0
+PROTO: symsum=0 rbsum=0 nobump=0  ss_skip 0 ss_store 0 ss_sys_local_calls 0 rb_skip 0 rb_store 0
+-- hottest Module bodies by nodes walked (key = binding-list node) --

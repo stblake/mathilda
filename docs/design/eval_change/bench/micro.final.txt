@@ -1,0 +1,26 @@
+== [0000]
+deadstmts=0 bodyLeaves~2  rule-only 1.5  Module 7.0  With 3.2  Block 3.7  Function 1.2  us/call
+deadstmts=10 bodyLeaves~103  rule-only 4.3  Module 12.3  With 6.7  Block 7.6  Function 3.4  us/call
+deadstmts=100 bodyLeaves~1003  rule-only 29.6  Module 55.3  With 47.2  Block 28.7  Function 22.0  us/call
+deadstmts=1000 bodyLeaves~10003  rule-only 231.7  Module 386.8  With 422.9  Block 252.6  Function 183.1  us/call
+nest depth=1  43.5 us/call
+nest depth=2  73.3 us/call
+nest depth=4  117.4 us/call
+nest depth=8  209.6 us/call
+locals=1  50.3 us/call
+locals=4  51.7 us/call
+locals=16  65.9 us/call
+locals=32  100.6 us/call
+== [1211]
+deadstmts=0 bodyLeaves~2  rule-only 2.1  Module 4.5  With 3.3  Block 4.7  Function 1.8  us/call
+deadstmts=10 bodyLeaves~103  rule-only 1.2  Module 7.3  With 2.8  Block 4.0  Function 2.9  us/call
+deadstmts=100 bodyLeaves~1003  rule-only 2.1  Module 7.2  With 2.0  Block 3.2  Function 17.7  us/call
+deadstmts=1000 bodyLeaves~10003  rule-only 1.1  Module 4.2  With 2.0  Block 2.6  Function 191.5  us/call
+nest depth=1  2.8 us/call
+nest depth=2  4.7 us/call
+nest depth=4  10.5 us/call
+nest depth=8  22.9 us/call
+locals=1  7.4 us/call
+locals=4  7.0 us/call
+locals=16  20.9 us/call
+locals=32  39.3 us/call

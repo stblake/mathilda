@@ -1,0 +1,721 @@
+--- /Users/user/Mathilda_dev/Mathilda/src/expr.h	2026-11-19 22:47:09
++++ inst/src/expr.h	2026-11-21 10:14:16
+@@ -182,6 +182,9 @@
+      * at 0. The MATHILDA_HASH_VERIFY build recomputes and asserts every hit to
+      * catch a missed invalidation deterministically. */
+     uint64_t hash_cache;
++    /* PROTOTYPE (scoping study): free-symbol summary. Bit 63 = valid; bits
++     * 0..62 = 1-hash Bloom filter of the non-System symbols in the subtree. */
++    uint64_t symsum;
+     union {
+         int64_t integer;
+         double real;
+@@ -283,6 +286,7 @@
+ static inline void expr_invalidate_hash(Expr* e) {
+     if (!e) return;
+     e->hash_cache = 0;
++    e->symsum = 0;
+ }
+ 
+ /* BigInt constructors */
+--- /Users/user/Mathilda_dev/Mathilda/src/expr.c	2026-11-19 22:47:09
++++ inst/src/expr.c	2026-11-21 10:14:16
+@@ -116,6 +116,7 @@
+         g_expr_pool = e->data.function.head;   /* pop */
+         g_expr_pool_size--;
+         e->hash_cache = 0;   /* recycled node: drop any stale memoized hash */
++        e->symsum = 0;
+         MTH_MEM_CHARGE(sizeof(Expr));
+         return e;
+     }
+@@ -124,7 +125,7 @@
+         atexit(expr_pool_free_all);
+     }
+     e = (Expr*)malloc(sizeof(Expr));
+-    if (e) { e->hash_cache = 0; MTH_MEM_CHARGE(sizeof(Expr)); }   /* fresh node: "not yet hashed" */
++    if (e) { e->hash_cache = 0; e->symsum = 0; MTH_MEM_CHARGE(sizeof(Expr)); }   /* fresh node: "not yet hashed" */
+     return e;
+ }
+ 
+--- /Users/user/Mathilda_dev/Mathilda/src/modular.c	2026-11-12 15:46:42
++++ inst/src/modular.c	2026-11-21 10:48:09
+@@ -7,6 +7,8 @@
+ #include "print.h"
+ #include "iter.h"
+ #include <string.h>
++#include "scopestat.h"
++static uint64_t g_ss_mask = 0; static int g_ss_fast = 0;
+ #include <stdlib.h>
+ #include <stdio.h>
+ 
+@@ -71,19 +73,118 @@
+     return e->data.function.arg_count >= 1;
+ }
+ 
+-static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
++
++/* ---- Bloom-filter simulation (scratch instrumentation) ---------------- */
++#define SIMW 4   /* widths: 16, 32, 63, exact-ish(63 sys-excluded) */
++typedef struct { Expr* k; uint64_t b[SIMW]; uint32_t size; } SimEnt;
++static SimEnt* sim_tab; static size_t sim_cap;
++uint64_t g_sim_visits[2][SIMW+1];  /* [trust: all / refcount>=2][width] ; [.][SIMW] = baseline */
++uint64_t g_sim_calls;
++static inline uint64_t sim_h(const char* p) { uint64_t x = (uint64_t)(uintptr_t)p; x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; return x; }
++static int sim_is_sys(const char* name) { SymbolDef* d = symtab_lookup(name); return d && d->is_system; }
++static void sim_bits(const char* name, uint64_t* out) {
++    uint64_t h = sim_h(name);
++    out[0] = 1ULL << (h % 16); out[1] = 1ULL << (h % 32); out[2] = 1ULL << (h % 63);
++    out[3] = sim_is_sys(name) ? 0 : (1ULL << (h % 63));
++}
++static SimEnt* sim_get(Expr* e) {
++    size_t h = (((uintptr_t)e) >> 4) * 0x9E3779B97F4A7C15ULL >> 20;
++    for (size_t i = h & (sim_cap - 1);; i = (i + 1) & (sim_cap - 1)) {
++        if (sim_tab[i].k == e) return &sim_tab[i];
++        if (!sim_tab[i].k) { sim_tab[i].k = e; return &sim_tab[i]; }
++    }
++}
++static size_t sim_count(Expr* e) {
++    if (!e || e->type != EXPR_FUNCTION) return 1;
++    size_t n = 1 + sim_count(e->data.function.head);
++    for (size_t i = 0; i < e->data.function.arg_count; i++) n += sim_count(e->data.function.args[i]);
++    return n;
++}
++static void sim_fill(Expr* e, uint64_t* out) {
++    if (e->type == EXPR_SYMBOL) { sim_bits(e->data.symbol.name, out); return; }
++    if (e->type != EXPR_FUNCTION) { for (int w = 0; w < SIMW; w++) out[w] = 0; return; }
++    SimEnt* se = sim_get(e);
++    if (se->size) { for (int w = 0; w < SIMW; w++) out[w] = se->b[w]; return; }
++    uint64_t acc[SIMW], c[SIMW];
++    sim_fill(e->data.function.head, acc);
++    for (size_t i = 0; i < e->data.function.arg_count; i++) {
++        sim_fill(e->data.function.args[i], c);
++        for (int w = 0; w < SIMW; w++) acc[w] |= c[w];
++    }
++    se = sim_get(e); se->size = 1;
++    for (int w = 0; w < SIMW; w++) { se->b[w] = acc[w]; out[w] = acc[w]; }
++}
++/* visits under a filter: a node is visited; a FUNCTION node whose summary
++ * misses the env mask is not descended into. trust_shared: summary only
++ * available on nodes with refcount>=2 (proxy for "frozen, shared with a stored
++ * rule"). */
++static uint64_t sim_walk(Expr* e, uint64_t mask, int w, int trust_shared) {
++    if (e->type != EXPR_FUNCTION) return 1;
++    if (!trust_shared || e->refcount >= 2) {
++        uint64_t b[SIMW]; sim_fill(e, b);
++        if (!(b[w] & mask)) return 1;
++    }
++    uint64_t n = 1 + sim_walk(e->data.function.head, mask, w, trust_shared);
++    for (size_t i = 0; i < e->data.function.arg_count; i++) n += sim_walk(e->data.function.args[i], mask, w, trust_shared);
++    return n;
++}
++static void ss_sim(Expr* body, ScopingEnv* env) {
++    static int on = -1; if (on < 0) { const char* v = getenv("MTH_SCOPESIM"); on = v && *v == '1'; }
++    if (!on) return;
++    size_t n = sim_count(body);
++    size_t cap = 64; while (cap < 2 * n) cap <<= 1;
++    sim_tab = calloc(cap, sizeof(SimEnt)); sim_cap = cap;
++    uint64_t mask[SIMW] = {0}, b[SIMW];
++    int sys_local = 0;
++    for (ScopingEnv* c = env; c; c = c->next) {
++        sim_bits(c->old_name, b);
++        for (int w = 0; w < SIMW; w++) mask[w] |= b[w];
++        if (sim_is_sys(c->old_name)) sys_local = 1;
++    }
++    g_sim_calls++;
++    for (int t = 0; t < 2; t++) {
++        g_sim_visits[t][SIMW] += n;
++        for (int w = 0; w < SIMW; w++)
++            g_sim_visits[t][w] += (w == 3 && sys_local) ? n : sim_walk(body, mask[w], w, t);
++    }
++    free(sim_tab); sim_tab = NULL;
++}
++__attribute__((destructor)) static void ss_sim_report(void) {
++    if (!g_sim_calls) return;
++    const char* wn[SIMW] = {"bloom16", "bloom32", "bloom63", "bloom63-nosys"};
++    for (int t = 0; t < 2; t++) {
++        fprintf(stderr, "SIM[%s] calls %llu baseline visits %llu :", t ? "trust refcount>=2 only" : "trust all nodes",
++                (unsigned long long)g_sim_calls, (unsigned long long)g_sim_visits[t][SIMW]);
++        for (int w = 0; w < SIMW; w++) fprintf(stderr, "  %s %llu (%.1f%%)", wn[w], (unsigned long long)g_sim_visits[t][w],
++                100.0 * g_sim_visits[t][w] / g_sim_visits[t][SIMW]);
++        fprintf(stderr, "\n");
++    }
++}
++
++static Expr* substitute_scoping_rec(Expr* e, ScopingEnv* env, int frozen) {
+     if (!e) return NULL;
++    g_ss.ss_nodes++;
+     if (e->type == EXPR_SYMBOL) {
++        g_ss.ss_sym++;
+         ScopingEnv* curr = env;
+         while (curr) {
++            g_ss.ss_envlen_sum++;
+             if (e->data.symbol.name == curr->old_name) {   /* interned */
++                g_ss.ss_sym_hit++;
+                 return expr_copy(curr->replacement);
+             }
+             curr = curr->next;
+         }
++        g_ss.ss_unch++;
+         return expr_copy(e);
+     }
+-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
++    if (e->type != EXPR_FUNCTION) { g_ss.ss_unch++; return expr_copy(e); }
++    g_ss.ss_fn++;
++    if (g_p_symsum && g_ss_fast && ss_ok(e->symsum) && !(e->symsum & g_ss_mask)) {
++        g_p_ss_skip++;
++        return expr_copy(e);
++    }
++    int cfrozen = frozen || e->refcount >= 2;
+ 
+     // Handle shadowing in scoping constructs
+     ScopingEnv* filtered_env = env;
+@@ -113,6 +214,7 @@
+         }
+ 
+         if (nshadow > 0) {
++            g_ss.ss_filter++;
+             // Rebuild the env list skipping every shadowed name.
+             ScopingEnv* new_env = NULL;
+             for (ScopingEnv* curr = env; curr; curr = curr->next) {
+@@ -160,7 +262,7 @@
+                         && (b->data.function.head->data.symbol.name == SYM_Set
+                             || b->data.function.head->data.symbol.name == SYM_SetDelayed)
+                         && b->data.function.arg_count == 2) {
+-                        Expr* rhs = substitute_scoping(b->data.function.args[1], env);
++                        Expr* rhs = substitute_scoping_rec(b->data.function.args[1], env, frozen);
+                         if (rhs == b->data.function.args[1]) {
+                             expr_free(rhs);
+                             new_b[bi] = expr_copy(b);
+@@ -189,10 +291,10 @@
+                 new_args[i] = expr_copy(vars_list);
+             }
+         } else {
+-            new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
++            new_args[i] = substitute_scoping_rec(e->data.function.args[i], filtered_env, cfrozen);
+         }
+     }
+-    Expr* new_head = substitute_scoping(e->data.function.head, filtered_env);
++    Expr* new_head = substitute_scoping_rec(e->data.function.head, filtered_env, cfrozen);
+     /* Share a subtree no local occurs in: the node comes back as itself, as in
+      * replace_bindings, so applying f[x_] := Module[...] copies only the paths
+      * that change -- once by the rule's substitution, once by the renaming --
+@@ -205,9 +307,23 @@
+     if (unchanged) {
+         for (size_t i = 0; i < e->data.function.arg_count; i++) expr_free(new_args[i]);
+         expr_free(new_head);
++        if (g_p_symsum && cfrozen && !ss_ok(e->symsum)) {
++            uint64_t acc = 0; int ok = 1;
++            for (size_t i = 0; ok && i <= e->data.function.arg_count; i++) {
++                Expr* c = i == 0 ? e->data.function.head : e->data.function.args[i - 1];
++                if (c->type == EXPR_SYMBOL) acc |= ss_symbit(c->data.symbol.name);
++                else if (c->type == EXPR_FUNCTION) { if (ss_ok(c->symsum)) acc |= c->symsum & SS_BITS; else ok = 0; }
++            }
++            if (ok) { e->symsum = ss_mk(acc); g_p_ss_store++; }
++        }
+         res = expr_copy(e);
++        g_ss.ss_unch++;
+     } else {
++        for (size_t i = 0; i < e->data.function.arg_count; i++)
++            if (new_args[i] == e->data.function.args[i]) g_ss.ss_unch_roots++;
++        if (new_head == e->data.function.head) g_ss.ss_unch_roots++;
+         res = expr_new_function(new_head, new_args, e->data.function.arg_count);
++        g_ss.ss_rebuilt++;
+     }
+     if (new_args != args_stack) free(new_args);
+ 
+@@ -223,6 +339,26 @@
+     return res;
+ }
+ 
++
++/* PROTOTYPE: env-mask wrapper around the recursive walk. */
++static Expr* substitute_scoping_rec(Expr* e, ScopingEnv* env, int frozen);
++static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
++    uint64_t om = g_ss_mask; int of = g_ss_fast;
++    if (g_p_symsum) {
++        uint64_t m = 0; int fast = 1;
++        if (g_p_binder) for (ScopingEnv* c = env; c; c = c->next) ss_register_binder(c->old_name);
++        for (ScopingEnv* c = env; c; c = c->next) {
++            uint64_t b = ss_symbit(c->old_name);
++            if (!b) { fast = 0; break; }
++            m |= b;
++        }
++        if (!fast) g_p_ss_sysloc++;
++        g_ss_mask = m; g_ss_fast = fast;
++    }
++    Expr* r = substitute_scoping_rec(e, env, e && e->refcount >= 2);
++    g_ss_mask = om; g_ss_fast = of;
++    return r;
++}
+ /* Re-register the user-visible $ModuleNumber OwnValue from the static counter,
+  * mirroring builtin_module so Unique and Module share one monotone source. */
+ static void unique_sync_module_number(void) {
+@@ -279,7 +415,7 @@
+     unique_string_number = next_str;
+     if (any_mod) {
+         module_number = next_mod;
+-        unique_sync_module_number();
++        if (!g_p_nobump) unique_sync_module_number();
+     }
+ }
+ 
+@@ -309,13 +445,13 @@
+     if (argc != 1) return NULL;
+     Expr* arg = res->data.function.args[0];
+ 
+-    /* $ModuleNumber may have been reassigned by the user; honour it, as
+-     * Module does. */
++    if (!g_p_nobump) {
+     Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
+     Expr* mn = evaluate(mn_sym);
+     if (mn->type == EXPR_INTEGER) module_number = mn->data.integer;
+     expr_free(mn);
+     expr_free(mn_sym);
++    }
+ 
+     /* Unique[{a, b, ...}] -> list of fresh symbols, one per element. */
+     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
+@@ -505,7 +641,9 @@
+         ren = node;
+     }
+ 
++    double _t0 = ss_now();
+     Expr* result = scoping_apply_rename(e, ren);
++    g_ss.t_ss_ren += ss_now() - _t0;
+ 
+     while (ren) {
+         ScopingEnv* nx = ren->next;
+@@ -525,19 +663,26 @@
+ 
+     size_t var_count = vars->data.function.arg_count;
+     ScopingEnv* env = NULL;
++    g_ss.mod_calls++; g_ss.mod_vars += var_count;
++    double _tp0 = ss_now(); double _tinit = 0;
+ 
+     // Increment $ModuleNumber
++    int64_t current_mn;
++    if (g_p_nobump) {
++        current_mn = module_number++;
++    } else {
+     Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
+     Expr* mn_val_expr = evaluate(mn_sym);
+     if (mn_val_expr->type == EXPR_INTEGER) {
+         module_number = mn_val_expr->data.integer;
+     }
+     expr_free(mn_val_expr);
+-    int64_t current_mn = module_number++;
++    current_mn = module_number++;
+     Expr* next_mn = expr_new_integer(module_number);
+     symtab_add_own_value(SYM_DollarModuleNumber, mn_sym, next_mn);   /* interned: no rehash */
+     expr_free(mn_sym);
+     expr_free(next_mn);
++    }
+ 
+     typedef struct {
+         char* new_name;
+@@ -557,7 +702,9 @@
+         } else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol.name == SYM_Set && v->data.function.arg_count == 2) {
+             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
+                 orig_name = v->data.function.args[0]->data.symbol.name;
++                { double _ti = ss_now();
+                 init_val = evaluate(v->data.function.args[1]);
++                _tinit += ss_now() - _ti; }
+                 /* A Throw out of an initializer leaves the Module at once (the
+                  * body is skipped); the locals made so far are released below. */
+                 if (eval_is_inflight_throw(init_val)) { module_thrown = init_val; break; }
+@@ -587,19 +734,34 @@
+             new_node->next = env;
+             env = new_node;
+             if (init_val) {
++                if (g_p_nobump && fresh) g_proto_nobump_now = 1;
+                 symtab_add_own_value_def(ld, new_node->replacement, init_val);
++                g_proto_nobump_now = 0;
+             }
+         }
+     }
+ 
++    g_ss.t_mod_pro += ss_now() - _tp0 - _tinit;
+     Expr* final_res;
+     if (module_thrown) {
+         final_res = module_thrown;
+     } else {
++        ss_sim(body, env);
++        uint64_t _n0 = g_ss.ss_nodes;
++        double _t0 = ss_now();
+         Expr* substituted_body = substitute_scoping(body, env);
++        g_ss.t_ss_mod += ss_now() - _t0; g_ss.ss_top++;
++        if (g_ss_on == 1) {
++            uintptr_t k = 1469598103934665603ULL;
++            for (ScopingEnv* c = env; c; c = c->next) k = (k ^ (uintptr_t)c->old_name) * 1099511628211ULL;
++            ss_note_module_body((void*)(k | 1), vars, body, g_ss.ss_nodes - _n0);
++        }
+         final_res = evaluate(substituted_body);
++        _t0 = ss_now();
+         expr_free(substituted_body);
++        g_ss.t_mod_free += ss_now() - _t0;
+     }
++    double _te0 = ss_now();
+ 
+     /* Trap Return targeting this Module. Return[v] (1-arg) is consumed
+      * unconditionally; Return[v, h] is consumed only when h == Module,
+@@ -631,6 +793,7 @@
+     for (size_t i = 0; i < var_count; i++)
+         if (info[i].temp) symtab_temp_release(info[i].temp);
+     free(info);
++    g_ss.t_mod_epi += ss_now() - _te0;
+ 
+     return final_res;
+ }
+@@ -1146,9 +1309,15 @@
+         }
+     }
+ 
++    g_ss.with_calls++; g_ss.with_vars += var_count;
++    ss_sim(body, env);
++    double _t0 = ss_now();
+     Expr* substituted_body = substitute_scoping(body, env);
++    g_ss.t_ss_with += ss_now() - _t0; g_ss.ss_top++;
+     Expr* final_res = evaluate(substituted_body);
++    _t0 = ss_now();
+     expr_free(substituted_body);
++    g_ss.t_with_free += ss_now() - _t0;
+ 
+     /* Trap Return targeting this With. Symmetric to Module / Block. */
+     {
+--- /Users/user/Mathilda_dev/Mathilda/src/match.c	2026-11-19 22:48:02
++++ inst/src/match.c	2026-11-21 10:48:09
+@@ -1,3 +1,5 @@
++#include "sym_intern.h"
++#include "scopestat.h"
+ #include "match.h"
+ #include "options.h"   /* optionvalue_inject_context: OptionValue in /; guards */
+ #include <gmp.h>
+@@ -2984,11 +2986,14 @@
+     const char* buf[RB_DANGER_CAP];
+     size_t n;
+     bool built;
++    uint64_t mask; int fast;   /* PROTOTYPE: pattern-variable Bloom mask */
+ } RbDanger;
+ 
+ static void rb_danger_build(RbDanger* d) {
+     if (d->built) return;
+     d->built = true;
++    g_ss.rb_danger++;
++    double _t0 = ss_now();
+     MatchEnv* env = d->env;
+     if (!env) return;
+     for (size_t i = 0; i < env->count && d->n < RB_DANGER_CAP; i++) {
+@@ -3004,9 +3009,10 @@
+             if (!seen) d->buf[d->n++] = env->symbols[i];
+         }
+     }
++    g_ss.t_rb_danger += ss_now() - _t0;
+ }
+ 
+-static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger);
++static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger, int frozen);
+ 
+ Expr* replace_bindings(Expr* expr, MatchEnv* env) {
+     if (!expr) return NULL;
+@@ -3017,11 +3023,29 @@
+     if (!env || env->count == 0) return expr_copy(expr);
+     RbDanger danger;
+     danger.env = env; danger.n = 0; danger.built = false;
+-    return rb_rec(expr, env, &danger);
++    danger.mask = 0; danger.fast = 0;
++    if (g_p_rbsum) {
++        danger.fast = 1;
++        if (g_p_binder) for (size_t i = 0; i < env->count; i++) if (env->symbols[i]) ss_register_binder(intern_symbol(env->symbols[i]));
++        for (size_t i = 0; i < env->count; i++) {
++            const char* nm = env->symbols[i];
++            if (!nm) continue;
++            uint64_t b = ss_symbit(intern_symbol(nm));
++            if (!b) { danger.fast = 0; break; }
++            danger.mask |= b;
++        }
++    }
++    g_ss.rb_top++;
++    double _t0 = ss_now();
++    Expr* _r = rb_rec(expr, env, &danger, g_p_rbsum == 2 || expr->refcount >= 2);
++    g_ss.t_rb += ss_now() - _t0;
++    return _r;
+ }
+ 
+-static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
++static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger, int frozen) {
+     if (!expr) return NULL;
++    int cfrozen = frozen || expr->refcount >= 2;
++    g_ss.rb_nodes++;
+ 
+     if (expr->type == EXPR_SYMBOL) {
+         Expr* bound = env_get(env, expr->data.symbol.name);
+@@ -3030,23 +3054,32 @@
+         }
+     }
+ 
++    if (expr->type == EXPR_FUNCTION && danger->fast && ss_ok(expr->symsum)
++        && !(expr->symsum & danger->mask)) {
++        g_p_rb_skip++;
++        return expr_copy(expr);
++    }
+     if (expr->type == EXPR_FUNCTION) {
+         /* Capture-avoiding substitution: if this is a scoping construct whose
+          * bound locals collide with a name in a value we are about to inject,
+          * alpha-rename those locals first, then substitute into the safe copy. */
+         if (expr_is_binding_scope(expr)) {
++            g_ss.rb_scope_seen++;
+             rb_danger_build(danger);                 /* only now is the set needed */
+             if (danger->n > 0) {
++                double _tr = ss_now();
+                 Expr* safe = scoping_capture_avoid(expr, danger->buf, danger->n);
++                g_ss.t_rb_rename += ss_now() - _tr;
+                 if (safe) {
+-                    Expr* result = rb_rec(safe, env, danger);
++                    g_ss.rb_renames++;
++                    Expr* result = rb_rec(safe, env, danger, 0);
+                     expr_free(safe);
+                     return result;
+                 }
+             }
+         }
+ 
+-        Expr* new_head = rb_rec(expr->data.function.head, env, danger);
++        Expr* new_head = rb_rec(expr->data.function.head, env, danger, cfrozen);
+         
+         bool skip_flattening = false;
+         if (new_head->type == EXPR_SYMBOL && (
+@@ -3078,7 +3111,7 @@
+             /* rb_rec, not replace_bindings: the danger set belongs to the whole
+              * substitution and must not be rebuilt once per argument node. */
+             Expr* a = expr->data.function.args[i];
+-            temp_args[i] = rb_rec(a, env, danger);
++            temp_args[i] = rb_rec(a, env, danger, cfrozen);
+             spliced[i] = !skip_flattening && a->type == EXPR_SYMBOL &&
+                 env_get(env, a->data.symbol.name) != NULL &&
+                 temp_args[i]->type == EXPR_FUNCTION &&
+@@ -3111,9 +3144,22 @@
+                 expr_free(new_head);
+                 if (temp_args != temp_stack) free(temp_args);
+                 if (spliced != spliced_stack) free(spliced);
++                if (g_p_rbsum && cfrozen && !ss_ok(expr->symsum)) {
++                    uint64_t acc = 0; int ok = 1;
++                    for (size_t i = 0; ok && i <= expr->data.function.arg_count; i++) {
++                        Expr* c = i == 0 ? expr->data.function.head : expr->data.function.args[i - 1];
++                        if (c->type == EXPR_SYMBOL) acc |= ss_symbit(c->data.symbol.name);
++                        else if (c->type == EXPR_FUNCTION) { if (ss_ok(c->symsum)) acc |= c->symsum & SS_BITS; else ok = 0; }
++                    }
++                    if (ok) { expr->symsum = ss_mk(acc); g_p_rb_store++; }
++                }
++                g_ss.rb_unch++;
+                 return expr_copy(expr);
+             }
+         }
++        g_ss.rb_rebuilt++;
++        for (size_t i = 0; i < expr->data.function.arg_count; i++)
++            if (temp_args[i] == expr->data.function.args[i]) g_ss.rb_unch_roots++;
+ 
+         Expr* final_stack[RB_STACK_N];
+         Expr** final_args = new_count <= RB_STACK_N ? final_stack
+--- /Users/user/Mathilda_dev/Mathilda/src/purefunc.c	2026-11-15 21:04:16
++++ inst/src/purefunc.c	2026-11-21 10:05:10
+@@ -1,3 +1,4 @@
++#include "scopestat.h"
+ #include "purefunc.h"
+ #include "symtab.h"
+ #include "eval.h"
+@@ -283,6 +284,7 @@
+ 
+ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) {
+     if (!e) return NULL;
++    g_ss.pf_nodes++;
+ 
+     if (e->type == EXPR_SYMBOL) {
+         for (size_t i = 0; i < count; i++) {
+@@ -408,7 +410,9 @@
+     if (params->type == EXPR_SYMBOL) {
+         char* name = params->data.symbol.name;
+         Expr* val = (arg_count >= 1) ? args[0] : params;
++        double _tq = ss_now(); g_ss.pf_calls++;
+         Expr* substituted = substitute_names(body, &name, &val, 1);
++        g_ss.t_pf += ss_now() - _tq;
+         Expr* result = evaluate(substituted);
+         expr_free(substituted);
+         return trap_return(result);
+@@ -439,7 +443,9 @@
+             }
+         }
+ 
++        double _tq = ss_now(); g_ss.pf_calls++;
+         Expr* substituted = substitute_names(body, names, vals, var_count);
++        g_ss.t_pf += ss_now() - _tq;
+         Expr* result = evaluate(substituted);
+         expr_free(substituted);
+         free(names);
+--- /Users/user/Mathilda_dev/Mathilda/src/eval.c	2026-11-20 12:24:01
++++ inst/src/eval.c	2026-11-21 10:14:38
+@@ -181,6 +181,7 @@
+ }
+ 
+ void     eval_clock_bump_binding(SymbolDef* def) {
++    { extern int g_proto_nobump_now; if (g_proto_nobump_now) return; }
+     g_eval_clock++;
+     if (!def) { g_inert_epoch = g_eval_clock; g_epoch_counts[1]++; return; }
+     dep_scoped_bump(def);
+--- /dev/null	2026-11-21 10:53:17
++++ inst/src/scopestat.h	2026-11-21 10:48:09
+@@ -0,0 +1,36 @@
++/* Instrumentation for the scoping-cost study (scratch copy only). */
++#ifndef SCOPESTAT_H
++#define SCOPESTAT_H
++#include <stdint.h>
++#include <mach/mach_time.h>
++typedef struct {
++    uint64_t ss_top, ss_nodes, ss_fn, ss_rebuilt, ss_unch, ss_unch_roots, ss_sym, ss_sym_hit;
++    uint64_t ss_envlen_sum;     /* env length summed over symbol visits */
++    uint64_t ss_filter;         /* shadow filters built */
++    double   t_ss_mod, t_ss_with, t_ss_ren;
++    uint64_t mod_calls, mod_vars, with_calls, with_vars;
++    double   t_mod_pro, t_mod_epi, t_mod_free, t_with_free;
++    uint64_t rb_top, rb_nodes, rb_unch, rb_unch_roots, rb_rebuilt, rb_danger, rb_danger_nodes, rb_scope_seen, rb_renames;
++    double   t_rb, t_rb_danger, t_rb_rename;
++    uint64_t pf_calls, pf_nodes; double t_pf;
++} ScopeStat;
++extern ScopeStat g_ss;
++extern int g_ss_on;
++extern int g_ss_depth;     /* >0 while inside a timed region (nesting guard) */
++double ss_now(void);
++void ss_note_module_body(void* key, void* vars, void* body, uint64_t nodes);
++extern int g_p_symsum, g_p_rbsum, g_p_nobump, g_proto_nobump_now;
++extern uint64_t g_p_ss_skip, g_p_ss_store, g_p_rb_skip, g_p_rb_store, g_p_ss_sysloc;
++uint64_t ss_symbit(const char* name);
++#define SS_VALID (1ULL << 63)
++#define SS_BITS  ((1ULL << 55) - 1)
++extern int g_p_binder; extern uint64_t g_ss_epoch, g_p_epoch_bumps;
++void ss_register_binder(const char* canon_name);
++static inline int ss_ok(uint64_t s) {
++    if (!(s & SS_VALID)) return 0;
++    return !g_p_binder || ((s >> 55) & 0xFF) == (g_ss_epoch & 0xFF);
++}
++static inline uint64_t ss_mk(uint64_t bits) {
++    return SS_VALID | (g_p_binder ? ((g_ss_epoch & 0xFF) << 55) : 0) | bits;
++}
++#endif
+--- /dev/null	2026-11-21 10:53:17
++++ inst/src/scopestat.c	2026-11-21 10:48:09
+@@ -0,0 +1,116 @@
++#include "scopestat.h"
++#include "expr.h"
++#include "print.h"
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include "symtab.h"
++#include "attr.h"
++
++ScopeStat g_ss;
++int g_p_symsum, g_p_rbsum, g_p_nobump, g_proto_nobump_now;
++uint64_t g_p_ss_skip, g_p_ss_store, g_p_rb_skip, g_p_rb_store, g_p_ss_sysloc;
++int g_p_binder; uint64_t g_ss_epoch = 1, g_p_epoch_bumps;
++/* binder table: canonical name pointer -> bit index (round robin over 55 bits) */
++#define BT 65536
++static const char* bt_k[BT]; static unsigned char bt_v[BT]; static unsigned bt_next;
++static size_t bt_slot(const char* p) { uint64_t x = (uint64_t)(uintptr_t)p; x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; return x & (BT - 1); }
++void ss_register_binder(const char* p) {
++    size_t i = bt_slot(p);
++    while (bt_k[i] && bt_k[i] != p) i = (i + 1) & (BT - 1);
++    if (bt_k[i]) return;
++    bt_k[i] = p; bt_v[i] = (unsigned char)(bt_next++ % 55);
++    g_ss_epoch++; g_p_epoch_bumps++;          /* summaries built without this bit are stale */
++}
++static int bt_get(const char* p) {
++    size_t i = bt_slot(p);
++    while (bt_k[i]) { if (bt_k[i] == p) return bt_v[i]; i = (i + 1) & (BT - 1); }
++    return -1;
++}
++uint64_t ss_symbit(const char* name) {
++    if (g_p_binder) {
++        SymbolDef* d0 = intern_symbol_node(name);
++        int b = bt_get(d0 ? d0->symbol_name : name);
++        return b < 0 ? 0 : (1ULL << b);
++    }
++    SymbolDef* d = intern_symbol_node(name);
++    if (d && (d->builtin_func || (d->attributes & ATTR_PROTECTED))) return 0;   /* exempt: builtins / Protected */
++    uint64_t x = (uint64_t)(uintptr_t)(d ? d->symbol_name : name);
++    x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33;
++    return 1ULL << (x % 63);
++} int g_ss_on = -1; int g_ss_depth = 0;
++static mach_timebase_info_data_t tb;
++double ss_now(void) {
++    if (!tb.denom) mach_timebase_info(&tb);
++    return (double)mach_absolute_time() * tb.numer / tb.denom * 1e-9;
++}
++#define HB 8192
++typedef struct { void* key; uint64_t calls, nodes; char* desc; } HB_t;
++static HB_t hb[HB];
++void ss_note_module_body(void* key, void* vars, void* body, uint64_t nodes) {
++    size_t h = ((uintptr_t)key >> 4) & (HB - 1);
++    for (int p = 0; p < HB; p++, h = (h + 1) & (HB - 1)) {
++        if (hb[h].key == key || !hb[h].key) {
++            if (!hb[h].key) {
++                hb[h].key = key;
++                /* locals only (names), then the start of the body */
++                char a[200]; a[0] = 0; Expr* v = (Expr*)vars;
++                for (size_t i = 0; i < v->data.function.arg_count; i++) {
++                    Expr* x = v->data.function.args[i];
++                    if (x->type == EXPR_FUNCTION && x->data.function.arg_count == 2) x = x->data.function.args[0];
++                    if (x->type == EXPR_SYMBOL) { size_t L = strlen(a); snprintf(a + L, sizeof a - L, "%s ", x->data.symbol.name); }
++                }
++                char* b = expr_to_string((Expr*)body);
++                char buf[300];
++                snprintf(buf, sizeof buf, "{%.110s} :: %.150s", a, b ? b : "?");
++                hb[h].desc = strdup(buf); free(b);
++            }
++            hb[h].calls++; hb[h].nodes += nodes; return;
++        }
++    }
++}
++static int cmpn(const void* a, const void* b) {
++    const HB_t* x = a; const HB_t* y = b;
++    return (y->nodes > x->nodes) - (y->nodes < x->nodes);
++}
++static void ss_report(void) {
++    if (g_ss_on != 1) return;
++    FILE* f = stderr;
++    fprintf(f, "\n==== SCOPESTAT ====\n");
++    fprintf(f, "Module calls %llu (locals %llu)  With calls %llu (bindings %llu)\n",
++        (unsigned long long)g_ss.mod_calls, (unsigned long long)g_ss.mod_vars,
++        (unsigned long long)g_ss.with_calls, (unsigned long long)g_ss.with_vars);
++    fprintf(f, "substitute_scoping: top %llu nodes %llu (fn %llu sym %llu sym_hits %llu) rebuilt %llu unchanged %llu unchanged_roots %llu avg_env_len %.2f filters %llu\n",
++        (unsigned long long)g_ss.ss_top, (unsigned long long)g_ss.ss_nodes, (unsigned long long)g_ss.ss_fn,
++        (unsigned long long)g_ss.ss_sym, (unsigned long long)g_ss.ss_sym_hit,
++        (unsigned long long)g_ss.ss_rebuilt, (unsigned long long)g_ss.ss_unch, (unsigned long long)g_ss.ss_unch_roots,
++        g_ss.ss_sym ? (double)g_ss.ss_envlen_sum / g_ss.ss_sym : 0.0, (unsigned long long)g_ss.ss_filter);
++    fprintf(f, "time: ss(Module) %.3f s  ss(With) %.3f s  ss(rename) %.3f s\n", g_ss.t_ss_mod, g_ss.t_ss_with, g_ss.t_ss_ren);
++    fprintf(f, "time: Module prologue(locals) %.3f s  epilogue(env+reclaim) %.3f s  free(body) %.3f s ; With free(body) %.3f s\n",
++        g_ss.t_mod_pro, g_ss.t_mod_epi, g_ss.t_mod_free, g_ss.t_with_free);
++    fprintf(f, "replace_bindings: top %llu nodes %llu rebuilt %llu unchanged %llu unchanged_roots %llu scopes_seen %llu danger_builds %llu danger_nodes %llu renames %llu\n",
++        (unsigned long long)g_ss.rb_top, (unsigned long long)g_ss.rb_nodes, (unsigned long long)g_ss.rb_rebuilt,
++        (unsigned long long)g_ss.rb_unch, (unsigned long long)g_ss.rb_unch_roots, (unsigned long long)g_ss.rb_scope_seen,
++        (unsigned long long)g_ss.rb_danger, (unsigned long long)g_ss.rb_danger_nodes, (unsigned long long)g_ss.rb_renames);
++    fprintf(f, "time: replace_bindings %.3f s (danger build %.3f s, capture-avoid rename %.3f s)\n", g_ss.t_rb, g_ss.t_rb_danger, g_ss.t_rb_rename);
++    fprintf(f, "pure Function named-arg subst: calls %llu nodes %llu time %.3f s\n",
++        (unsigned long long)g_ss.pf_calls, (unsigned long long)g_ss.pf_nodes, g_ss.t_pf);
++    fprintf(f, "PROTO: binder=%d epoch_bumps=%llu\n", g_p_binder, (unsigned long long)g_p_epoch_bumps);
++    fprintf(f, "PROTO: symsum=%d rbsum=%d nobump=%d  ss_skip %llu ss_store %llu ss_sys_local_calls %llu rb_skip %llu rb_store %llu\n",
++        g_p_symsum, g_p_rbsum, g_p_nobump, (unsigned long long)g_p_ss_skip, (unsigned long long)g_p_ss_store,
++        (unsigned long long)g_p_ss_sysloc, (unsigned long long)g_p_rb_skip, (unsigned long long)g_p_rb_store);
++    qsort(hb, HB, sizeof(HB_t), cmpn);
++    fprintf(f, "-- hottest Module bodies by nodes walked (key = binding-list node) --\n");
++    for (int i = 0; i < 25 && hb[i].key; i++)
++        fprintf(f, "%10llu nodes %7llu calls  %6.0f nodes/call  %s\n", (unsigned long long)hb[i].nodes,
++            (unsigned long long)hb[i].calls, (double)hb[i].nodes / hb[i].calls, hb[i].desc);
++}
++__attribute__((constructor)) static void ss_init(void) {
++    const char* e = getenv("MTH_SCOPESTAT");
++    g_ss_on = (e && *e == '1') ? 1 : 0;
++    e = getenv("MTH_P_SYMSUM"); g_p_symsum = e && *e == '1';
++    e = getenv("MTH_P_RBSUM");  g_p_rbsum = e ? atoi(e) : 0;
++    e = getenv("MTH_P_NOBUMP"); g_p_nobump = e && *e == '1';
++    e = getenv("MTH_P_BINDER"); g_p_binder = e && *e == '1';
++    atexit(ss_report);
++}

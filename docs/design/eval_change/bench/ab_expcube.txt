@@ -1,0 +1,6 @@
+[000] expcube cpu 3.05251 wall 3.73308 hash 9504510456632771538 leaves 593 | Ginstr 10.387 Gcyc 9.734
+[110] expcube cpu 2.92643 wall 3.58377 hash 9504510456632771538 leaves 593 | Ginstr 10.261 Gcyc 9.690
+[111] expcube cpu 2.92457 wall 3.7698 hash 9504510456632771538 leaves 593 | Ginstr 10.259 Gcyc 9.725
+[000] expcube cpu 2.7885 wall 4.02384 hash 12643721339204806217 leaves 399 | Ginstr 9.957 Gcyc 9.389
+[110] expcube cpu 2.95175 wall 3.77676 hash 9504510456632771538 leaves 593 | Ginstr 10.289 Gcyc 9.860
+[111] expcube cpu 2.91804 wall 3.6367 hash 9504510456632771538 leaves 593 | Ginstr 10.276 Gcyc 9.736

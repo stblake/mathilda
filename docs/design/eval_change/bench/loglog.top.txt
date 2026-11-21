@@ -1,0 +1,23 @@
+Sort by top of stack, same collapsed (when >= 5):
+        evaluate_step_core        135
+        rb_rec        86
+        expr_free.part.0        85
+        substitute_scoping.part.0        58
+        _nanov2_free        55
+        expr_new_function        40
+        evaluate_core        37
+        nanov2_malloc_type        35
+        is_packed_list        34
+        match_args_internal        20
+        nanov2_calloc_type        18
+        expr_free        14
+        expr_is_binding_scope        14
+        node_intern_ex.part.0        14
+        _platform_bzero$VARIANT$Haswell        13
+        fmpz_mpoly_mul_monomial        13
+        _platform_memmove$VARIANT$Haswell        12
+        _platform_strcmp        11
+        match_internal_impl        11
+        _free        10
+        is_complex        10
+        rb_collect_symbol_names.constprop.0        10

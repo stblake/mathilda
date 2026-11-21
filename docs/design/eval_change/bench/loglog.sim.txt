@@ -1,0 +1,41 @@
+loglog 10.1623 146
+
+==== SCOPESTAT ====
+Module calls 51985 (locals 123222)  With calls 184 (bindings 330)
+substitute_scoping: top 52169 nodes 7969570 (fn 2781203 sym 3741651 sym_hits 497967) rebuilt 798306 unchanged 6673297 unchanged_roots 1170047 avg_env_len 2.40 filters 69
+time: ss(Module) 0.717 s  ss(With) 0.000 s  ss(rename) 0.000 s
+time: Module prologue(locals) 0.332 s  epilogue(env+reclaim) 0.169 s  free(body) 0.148 s ; With free(body) 0.003 s
+replace_bindings: top 163926 nodes 6752718 rebuilt 1611264 unchanged 788596 unchanged_roots 1110150 scopes_seen 53292 danger_builds 52358 danger_nodes 0 renames 0
+time: replace_bindings 0.766 s (danger build 0.084 s, capture-avoid rename 0.025 s)
+pure Function named-arg subst: calls 19 nodes 705 time 0.000 s
+-- hottest Module bodies by nodes walked (key = binding-list node) --
+     20119 nodes     111 calls     181 nodes/call  {Trager`Private`num = Expand[-23015396129546 + 5594927338579 Bronstein`Private`brT1], Trag :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     19502 nodes     129 calls     151 nodes/call  {Trager`Private`r = -82103/153207} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "Fn", "vars" -> {x}|>, "I"], Trager`Private`r = ReplaceAll[Trager`Private`r, Trager`Private`a_ + Trager`P
+     18479 nodes     120 calls     154 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     18416 nodes     123 calls     150 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     18287 nodes     123 calls     149 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     17829 nodes     108 calls     165 nodes/call  {Trager`Private`r = 0} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "Fn", "vars" -> {x}|>, "I"], Trager`Private`r = ReplaceAll[Trager`Private`r, Trager`Private`a_ + Trager`P
+     17783 nodes     107 calls     166 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     17623 nodes     105 calls     168 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     17580 nodes      93 calls     189 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     17501 nodes     106 calls     165 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     17299 nodes      99 calls     175 nodes/call  {Trager`Private`r = 0} :: CompoundExpression[If[KeyExistsQ[<|"Type" -> "Fn", "vars" -> {x}|>, "I"], Trager`Private`r = ReplaceAll[Trager`Private`r, Trager`Private`a_ + Trager`P
+     17182 nodes     109 calls     158 nodes/call  {Trager`Private`num = Expand[-44638383647], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16998 nodes     113 calls     150 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16940 nodes     103 calls     164 nodes/call  {Trager`Private`num = Expand[1], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16806 nodes     139 calls     121 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16419 nodes      89 calls     184 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16292 nodes     121 calls     135 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16230 nodes      91 calls     178 nodes/call  {Trager`Private`num = Expand[Bronstein`Private`brT1], Trager`Private`pv, Trager`Private`ru :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     16187 nodes      84 calls     193 nodes/call  {Trager`Private`num = Expand[1], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     15964 nodes     105 calls     152 nodes/call  {Trager`Private`ech = Trager`Private`kRowEchelon[<|"Type" -> "Fn", "vars" -> {x}|>, {{0, 0 :: CompoundExpression[Trager`Private`r = Length[Part[Trager`Private`ech, 2]], If[Trager`Private`r === Length[{{0, 0, 0, 0, 0, 7/1215}, {0, 0, 0, 0, 0, -1
+     15910 nodes      87 calls     183 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     15804 nodes     113 calls     140 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+     15670 nodes      59 calls     266 nodes/call  {Trager`Private`num = Expand[1], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}, "t" -> Bronstein`Private`brTo9, "mu" -> 1 - Bronstein`Private`brTo9 + 
+     15652 nodes      97 calls     161 nodes/call  {Trager`Private`tt = Together[Trager`Private`fieldSubI[<|"Type" -> "Fn", "vars" -> {x}|>,  :: CompoundExpression[{Trager`Private`num, Trager`Private`den} = {Numerator[Trager`Private`tt], Denominator[Trager`Private`tt]}, If[Trager`Private`fieldE
+     15637 nodes     104 calls     150 nodes/call  {Trager`Private`num = Expand[0], Trager`Private`pv, Trager`Private`rules} :: CompoundExpression[If[Trager`Private`fieldExtQ[<|"Type" -> "Fn", "vars" -> {x}|>], Trager`Private`num = Expand[PolynomialRemainder[Trager`Private`num,
+SIM[trust all nodes] calls 52169 baseline visits 7969970 :  bloom16 4440720 (55.7%)  bloom32 2663989 (33.4%)  bloom63 2549470 (32.0%)  bloom63-nosys 2535626 (31.8%)
+SIM[trust refcount>=2 only] calls 52169 baseline visits 7969970 :  bloom16 5731079 (71.9%)  bloom32 3766776 (47.3%)  bloom63 3619233 (45.4%)  bloom63-nosys 3578549 (44.9%)
+real 14.19
+user 5.16
+sys 0.12

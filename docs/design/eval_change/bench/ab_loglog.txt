@@ -1,0 +1,6 @@
+[000] loglog cpu 8.1853 wall 10.0523 hash 8603020930189458920 leaves 146 | Ginstr 19.033 Gcyc 22.066
+[110] loglog cpu 8.14202 wall 10.0519 hash 8603020930189458920 leaves 146 | Ginstr 18.247 Gcyc 21.951
+[111] loglog cpu 7.81169 wall 10.0685 hash 8603020930189458920 leaves 146 | Ginstr 18.173 Gcyc 21.163
+[000] loglog cpu 6.28841 wall 10.051 hash 8603020930189458920 leaves 146 | Ginstr 15.276 Gcyc 17.540
+[110] loglog cpu 7.96218 wall 10.0483 hash 8603020930189458920 leaves 146 | Ginstr 18.134 Gcyc 21.398
+[111] loglog cpu 7.98358 wall 10.0558 hash 8603020930189458920 leaves 146 | Ginstr 18.527 Gcyc 20.963

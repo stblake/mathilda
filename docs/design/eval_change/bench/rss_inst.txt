@@ -1,0 +1,20 @@
+Integrate::nonelem: The integrand ((1 + x^2) (2 + x^4)^(1/6))/x has no antiderivative elementary in x.
+trager cpu 20.9414 wall 21.2896 hash 16516875992732354430
+       22.07 real        21.61 user         0.10 sys
+            55136256  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               14319  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                4107  involuntary context switches
+         65134814922  instructions retired
+         61223571935  cycles elapsed
+            41447424  peak memory footprint

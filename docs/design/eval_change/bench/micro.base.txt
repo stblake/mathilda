@@ -1,0 +1,12 @@
+deadstmts=0 bodyLeaves~2  rule-only 2.4  Module 8.7  With 3.8  Block 6.2  Function 2.4  us/call
+deadstmts=10 bodyLeaves~103  rule-only 5.7  Module 15.8  With 9.6  Block 9.1  Function 5.0  us/call
+deadstmts=100 bodyLeaves~1003  rule-only 29.4  Module 63.8  With 55.1  Block 32.3  Function 25.9  us/call
+deadstmts=1000 bodyLeaves~10003  rule-only 260.2  Module 477.9  With 468.8  Block 251.0  Function 236.5  us/call
+nest depth=1  60.3 us/call
+nest depth=2  90.3 us/call
+nest depth=4  151.4 us/call
+nest depth=8  265.5 us/call
+locals=1  59.8 us/call
+locals=4  66.2 us/call
+locals=16  89.8 us/call
+locals=32  129.8 us/call

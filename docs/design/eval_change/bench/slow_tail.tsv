@@ -1,0 +1,46 @@
+333
+22.61	mperturb-1-3	Mathilda:Automatic	UNEVAL	(3*x^2*Log[1 + x^2]^2 + 6*x^2*Log[1 + x^2]^3 + 3*x^2*Log[1 + x^2]^3*Sqrt[1 + Log[1 + x^2]^3] + 2*(1 + Log[1 + x^2]^3) + 6*x^2*(1 + Log[1 + x^2]^3) + (1 + Log[1 + x^2]^3)^(3/2) + 3*x^2*(1 + Log[1 + x^2]^3)^(3/2))/(2*x*Sqrt[1 + Log[1 + x^2]^3] + 2*x^3*Sqrt[1 + Log[1 + x^2]^3] + x*(1 + Log[1 + x^2]^3) + x^3*(1 + Log[1 + x^2]^3))
+20.35	trager-torsion-009	Mathilda:Automatic	UNEVAL	((1 + x^2)*(2 + x^4)^(1/6))/x
+20.21	trager-random-010	Mathilda:Automatic	UNEVAL	(-3*x - 3*x^2)/((-1 + 2*x - 2*x^2)*(2 + 3*x - 3*x^2 + 3*x^3 - 2*x^4)^(5/6))
+20.20	trager-ratrad-016	Mathilda:Automatic	UNEVAL	((1 + x^2)*(3 + x^4)^(1/6))/x
+20.10	trager-torsion-010	Mathilda:Automatic	UNEVAL	((-1 + x^2)*(5 + x^4)^(1/6))/x
+19.65	trager-random-010	Mathilda:Trager	UNEVAL	(-3*x - 3*x^2)/((-1 + 2*x - 2*x^2)*(2 + 3*x - 3*x^2 + 3*x^3 - 2*x^4)^(5/6))
+16.59	trager-torsion-010	Mathilda:Trager	UNEVAL	((-1 + x^2)*(5 + x^4)^(1/6))/x
+16.45	trager-random-037	Mathilda:Automatic	UNEVAL	(-3 - 3*x - x^2)/((1 + 2*x)*(-2 - 3*x + 3*x^2 + 3*x^3 + x^4)^(5/6))
+16.44	trager-torsion-009	Mathilda:Trager	UNEVAL	((1 + x^2)*(2 + x^4)^(1/6))/x
+15.93	trager-random-012	Mathilda:Automatic	UNEVAL	(-3 + 3*x)/((1 + 2*x)*(x + x^2)^(5/6))
+15.50	trager-torsion-017	Mathilda:Automatic	UNEVAL	(-1 - x - x^2)/((3 + 2*x)*(-1 - x + 2*x^2 + x^3 + x^4)^(5/6))
+13.07	trager-torsion-008	Mathilda:Automatic	UNEVAL	x/((2 + x^2)*(1 + x^3)^(3/4))
+13.03	trager-ratrad-016	Mathilda:Trager	UNEVAL	((1 + x^2)*(3 + x^4)^(1/6))/x
+12.73	trager-ratrad-019	Mathilda:Automatic	UNEVAL	1/((2 + x^2)*(1 + x^3)^(1/4))
+12.51	trager-random-032	Mathilda:Automatic	UNEVAL	((3 + 2*x)*(2 - x + x^2)^(1/4))/(3 - 2*x - 3*x^2)
+12.31	trager-torsion-006	Mathilda:Automatic	UNEVAL	1/((1 + x^2)*(1 + x^3)^(1/4))
+12.25	trager-random-014	Mathilda:Automatic	UNEVAL	((3 + x + x^2)^(4/5)*(2 + 3*x + 3*x^2))/(1 - 2*x)
+12.24	trager-ratrad-010	Mathilda:Automatic	UNEVAL	((-1 + 2*x)*(1 - x + x^2)^(1/5))/(1 + x)
+12.23	trager-torsion-013	Mathilda:Automatic	UNEVAL	((1 + 2*x)*(3 - x + x^2)^(1/4))/(1 - 2*x - 3*x^2)
+12.20	trager-ratrad-049	Mathilda:Automatic	UNEVAL	(-1 + 2*x)/((-2 + x)*(1 + x^2)^(3/5))
+11.91	trager-ratrad-032	Mathilda:Automatic	UNEVAL	((-1 + 2*x)*(1 + x^2)^(2/5))/(1 + x)
+11.91	trager-goursat-015	Mathilda:Automatic	UNEVAL	(-1 + x^2)/((1 + x^2)*(1 + x^4)^(1/4))
+11.73	trager-ratrad-002	Mathilda:Automatic	UNEVAL	(x^3*(1 + x^2)^(1/6))/(-2 + x)
+11.73	trager-ratrad-050	Mathilda:Automatic	UNEVAL	(x*(1 - x + x^2)^(1/3))/(1 + x)
+11.67	trager-torsion-016	Mathilda:Automatic	UNEVAL	((-1 + x)*(2 + x^2)^(2/5))/(1 + x)
+11.63	trager-ratrad-048	Mathilda:Automatic	UNEVAL	((-1 + 2*x)*(1 - x + x^2)^(1/3))/(2 + x^2)
+11.59	trager-ratrad-008	Mathilda:Automatic	UNEVAL	(-1 + 2*x)/((1 + x)*(1 + x^2)^(2/3))
+11.42	trager-ratrad-021	Mathilda:Automatic	UNEVAL	x^3/((-2 + x)*(1 - x + x^2)^(1/6))
+11.39	trager-torsion-015	Mathilda:Automatic	UNEVAL	(x*(3 + x^2)^(1/5))/(2 + x)
+11.30	trager-random-002	Mathilda:Automatic	UNEVAL	((3 + 3*x)*(2 + 3*x + x^2 + 3*x^3)^(2/3))/(-2 - x)
+11.26	trager-random-033	Mathilda:Automatic	UNEVAL	(3*(2*x - 3*x^2)^(1/4))/(-3 + 3*x - 2*x^2)
+11.09	trager-ratrad-031	Mathilda:Automatic	UNEVAL	(x*(1 + x^2)^(1/5))/(1 + x)
+10.85	mperturb-2-10	Mathilda:Automatic	ANSWER	(-3*(1 + E^x^2)^(2/3) + 6*(1 + E^x^2) + 3*(1 + E^x^2)^(4/3) - 2*E^x^2*x + 9*(1 + E^x^2)*x + 3*(1 + E^x^2)^(4/3)*x + 4*E^x^2*x^2 + 2*E^x^2*(1 + E^x^2)^(1/3)*x^2 + 3*(1 + E^x^2)*x^2 + 2*E^x^2*x^3)/(6*(1 + E^x^2)^(2/3) + 3*(1 + E^x^2) + 3*(1 + E^x^2)^(2/3)*x)
+10.68	trager-ratrad-044	Mathilda:Automatic	UNEVAL	x/((-2 + x)*(-2*x + x^3)^(1/3))
+10.56	trager-goursat-021	Mathilda:Automatic	UNEVAL	1/((-2 + x^2)*(1 - 4*x^2 + x^4)^(1/4))
+10.52	trager-ratrad-013	Mathilda:Automatic	UNEVAL	(1 - x + x^2)^(3/4)/x
+10.51	trager-random-003	Mathilda:Automatic	UNEVAL	(2 + 3*x)/((3 - 2*x)*(3 - x + 2*x^2 + x^4)^(3/4))
+10.48	trager-goursat-014	Mathilda:Automatic	UNEVAL	1/((1 + x^2)*(1 + x^4)^(1/4))
+10.44	trager-torsion-012	Mathilda:Automatic	UNEVAL	1/((2 + x^2)*(4 + x^4)^(1/4))
+10.43	trager-torsion-011	Mathilda:Automatic	UNEVAL	1/((-3 + x^2)*(1 - 6*x^2 + x^4)^(1/4))
+10.43	trager-torsion-001	Mathilda:Automatic	UNEVAL	1/((-3 + x)*(1 + x^3)^(1/3))
+10.42	trager-goursat-009	Mathilda:Automatic	UNEVAL	(-2 + x^3)/((1 + x^3)^(2/3)*(4 + x^3))
+10.40	tlogp-3-5	Mathilda:Automatic	UNEVAL	(2*x + 6*x^2 + 3*Log[1 + x^2] + 5*x^2*Log[1 + x^2] + Log[1 + x^2]^2 + x^2*Log[1 + x^2]^2 + 3*Log[Log[x]] + 3*x^2*Log[Log[x]] + Log[1 + x^2]*Log[Log[x]] + x^2*Log[1 + x^2]*Log[Log[x]])/((1 + x^2)*(3 + Log[1 + x^2]))
+10.32	trager-torsion-007	Mathilda:Automatic	UNEVAL	1/((3 + x^2)*(1 + x^3)^(1/4))
+10.30	trager-ratrad-037	Mathilda:Automatic	UNEVAL	1/((1 + x)*(-2*x + x^3)^(1/4))

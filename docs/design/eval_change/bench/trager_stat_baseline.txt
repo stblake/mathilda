@@ -1,0 +1,9 @@
+==== SCOPESTAT ====
+Module calls 117823 (locals 190943)  With calls 1442 (bindings 2668)
+substitute_scoping: top 119265 nodes 101148312 (fn 31028432 sym 42867436 sym_hits 1013975) rebuilt 1956203 unchanged 98178134 unchanged_roots 3114082 avg_env_len 9.06 filters 4665
+time: ss(Module) 2.358 s  ss(With) 0.002 s  ss(rename) 0.000 s
+time: Module prologue(locals) 0.309 s  epilogue(env+reclaim) 0.207 s  free(body) 0.093 s ; With free(body) 0.001 s
+replace_bindings: top 273802 nodes 22731251 rebuilt 4422743 unchanged 3732335 unchanged_roots 3306967 scopes_seen 129314 danger_builds 119197 danger_nodes 0 renames 30
+time: replace_bindings 1.232 s (danger build 0.213 s, capture-avoid rename 0.040 s)
+pure Function named-arg subst: calls 232 nodes 261778 time 0.006 s
+PROTO: symsum=0 rbsum=0 nobump=0  ss_skip 0 ss_store 0 ss_sys_local_calls 0 rb_skip 0 rb_store 0
