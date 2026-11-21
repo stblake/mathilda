@@ -46,6 +46,17 @@ static bool is_atomic_number(const Expr* e) {
 }
 
 static int64_t get_depth(Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) {
+        /* nests like the List it stands for */
+        const LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll), max_d = 0;
+        if (ll_kind(ll) != LL_BOXED) return n ? 2 : 1;
+        for (int64_t i = 0; i < n; i++) {
+            int64_t d = get_depth((Expr*)ll_peek_boxed(ll, i));
+            if (d > max_d) max_d = d;
+        }
+        return max_d + 1;
+    }
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
@@ -188,7 +199,45 @@ static Expr* apply_child(Expr* f, Expr* child, int64_t child_level, LevelSpec sp
     return apply_at_level(f, child, child_level, spec);
 }
 
+/* Apply inside a LinkedList, which stands for the List of its elements. At a
+ * level f applies to, f[e1, ...] with each e_i walked one level down; else a
+ * new LinkedList of the walked elements (the list itself when none changed).
+ * Each element is evaluated as it is stored: the evaluator never looks inside
+ * a LinkedList. */
+typedef struct { Expr* f; int64_t level; LevelSpec spec; } ApplyLLCtx;
+
+static Expr* apply_ll_elem(Expr* el, int64_t i, void* vc) {
+    (void)i;
+    const ApplyLLCtx* c = (const ApplyLLCtx*)vc;
+    Expr* r = apply_child(c->f, el, c->level + 1, c->spec);
+    if (r == el) { expr_free(r); return NULL; }
+    return eval_and_free(r);
+}
+
+static Expr* apply_at_level_ll(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
+    const LinkedList* ll = expr->data.llist;
+    bool should_apply;
+    if (spec.min >= 0 && spec.max >= 0) {
+        if (current_level > spec.max) return expr_copy(expr);
+        should_apply = (current_level >= spec.min && current_level <= spec.max);
+    } else {
+        int64_t d = get_depth(expr);
+        bool lo = (spec.min >= 0) ? (current_level >= spec.min) : (-d >= spec.min);
+        bool hi = (spec.max >= 0) ? (current_level <= spec.max) : (-d <= spec.max);
+        should_apply = lo && hi;
+    }
+    ApplyLLCtx c = { f, current_level, spec };
+    Expr* unwind;
+    Expr* walked = ll_rebuild(ll, apply_ll_elem, &c, &unwind);
+    if (unwind) return unwind;
+    if (!should_apply) return walked ? walked : expr_copy(expr);
+    Expr* call = ll_call_with_elements(expr_copy(f), walked ? walked->data.llist : ll);
+    if (walked) expr_free(walked);
+    return eval_and_free(call);
+}
+
 static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
+    if (expr->type == EXPR_LINKEDLIST) return apply_at_level_ll(f, expr, current_level, spec);
     if (expr->type != EXPR_FUNCTION || is_atomic_number(expr)) {
         return expr_copy(expr);
     }
@@ -288,6 +337,9 @@ Expr* builtin_apply(Expr* res) {
     /* a Rational/Complex number is an atom: g @@ (3/4) is 3/4 (the level
      * walker below already leaves it alone at an explicit level) */
     if (expr_is_number_atom(expr)) return expr_copy(expr);
+    /* f @@ ll: f[e1, ...] straight from the slots (a snapshot: f may change it) */
+    if (ls == NULL && expr->type == EXPR_LINKEDLIST)
+        return eval_and_free(ll_call_with_elements(expr_copy(f), expr->data.llist));
     if (ls == NULL && expr->type == EXPR_FUNCTION) {
         size_t count = expr->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (count ? count : 1));
@@ -322,6 +374,25 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
         return expr_copy(expr);
 
     Expr* intermediate = NULL;
+    /* A LinkedList: a new LinkedList of the mapped elements, each evaluated as
+     * it is stored (the evaluator never looks inside one); the list itself
+     * when no element is at a mapped level. */
+    if (expr->type == EXPR_LINKEDLIST && !(nonneg && current_level + 1 > spec.max)) {
+        LinkedList* snap = ll_copy(expr->data.llist);
+        int64_t n = ll_length(snap);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            Expr* m = map_at_level(f, el, current_level + 1, spec);
+            ll_elem_done(el, own);
+            Expr* v = eval_and_free(m);
+            if (eval_is_inflight_unwind(v)) { ll_release(snap); ll_release(out); return v; }
+            ll_push_back(out, v);
+        }
+        ll_release(snap);
+        intermediate = expr_new_linkedlist(out);
+    } else
     /* Descend (bottom-up) only while a deeper level can still be mapped. When the
      * children are all one level past max, none of them maps, so the node is
      * shared wholesale as `intermediate` -- no per-child recursion and no
@@ -643,6 +714,29 @@ static Expr* mi_at_level(Expr* f, Expr* expr, int64_t level, LevelSpec spec,
         }
         rebuilt = expr_new_function(expr_new_symbol(SYM_Association), out, n);
         free(out);
+        depth = maxpart + 1;
+    } else if (expr->type == EXPR_LINKEDLIST) {
+        /* A LinkedList: element i at position {..., i}, as in the List, into a
+         * new LinkedList. Each element is evaluated as it is stored -- the
+         * evaluator never looks inside a LinkedList. */
+        LinkedList* snap = ll_copy(expr->data.llist);
+        int64_t n = ll_length(snap);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < n; i++) {
+            Expr* comp = expr_new_integer(i + 1);
+            MIPath frame = { path, comp, plen + 1 };
+            int64_t vd = 1;
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            Expr* nv = eval_and_free(mi_at_level(f, el, level + 1, spec, &frame, &vd));
+            ll_elem_done(el, own);
+            expr_free(comp);
+            if (vd > maxpart) maxpart = vd;
+            if (eval_is_inflight_unwind(nv)) { ll_release(snap); ll_release(out); *out_depth = 1; return nv; }
+            ll_push_back(out, nv);
+        }
+        ll_release(snap);
+        rebuilt = expr_new_linkedlist(out);
         depth = maxpart + 1;
     } else if (expr->type == EXPR_FUNCTION &&
                !head_is(expr, SYM_Rational) && !head_is(expr, SYM_Complex)) {
@@ -1140,10 +1234,71 @@ static size_t leading_run_length(Expr* crit, Expr** elems, size_t n, bool over_v
     return k;
 }
 
+/* ------------------- predicates over a LinkedList -------------------
+ *
+ * The test heads (AllTrue, AnyTrue, NoneTrue, SelectFirst, TakeWhile,
+ * LengthWhile) read a LinkedList's slots from a snapshot (the test may change
+ * the list). Machine reals go through the compiled predicate, as a packed
+ * List does; an element it declines (a non-finite intermediate) and every
+ * other element is tested by the interpreter, which gives the same verdict. */
+typedef struct { LinkedList* snap; Expr* crit; NumPred* pred; } LLPred;
+
+static void llp_open(LLPred* p, const LinkedList* src, Expr* crit) {
+    p->snap = ll_copy(src);
+    p->crit = crit;
+    p->pred = ll_kind(p->snap) == LL_REAL ? numloop_pred_compile(crit) : NULL;
+}
+
+static void llp_close(LLPred* p) {
+    if (p->pred) numloop_pred_free(p->pred);
+    ll_release(p->snap);
+}
+
+/* crit[element i]: 1 True, 0 False, -1 neither; a Throw/Abort in *unwind. */
+static int llp_test(LLPred* p, int64_t i, Expr** unwind) {
+    *unwind = NULL;
+    if (p->pred) {
+        double x;
+        bool t;
+        if (ll_get_real(p->snap, i, &x) && numloop_pred_run(p->pred, x, &t)) return t ? 1 : 0;
+    }
+    Expr* a[1] = { ll_get(p->snap, i) };
+    Expr* call = expr_new_function(expr_copy(p->crit), a, 1);
+    Expr* v = evaluate(call);
+    expr_free(call);
+    if (eval_is_inflight_unwind(v)) { *unwind = v; return -1; }
+    int r = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True) ? 1
+          : (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False) ? 0 : -1;
+    expr_free(v);
+    return r;
+}
+
+/* The length of the leading run whose test is True, or -1 with *unwind set. */
+static int64_t llp_run_length(const LinkedList* src, Expr* crit, Expr** unwind) {
+    *unwind = NULL;
+    LLPred p;
+    llp_open(&p, src, crit);
+    int64_t n = ll_length(p.snap), k = 0;
+    for (; k < n; k++) {
+        if (llp_test(&p, k, unwind) != 1) break;
+        if (*unwind) break;
+    }
+    llp_close(&p);
+    return *unwind ? -1 : k;
+}
+
 Expr* builtin_takewhile(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
+    if (coll->type == EXPR_LINKEDLIST) {
+        Expr* unwind;
+        int64_t k = llp_run_length(coll->data.llist, crit, &unwind);
+        if (unwind) return unwind;
+        LinkedList* out = ll_new();
+        ll_append_range(out, coll->data.llist, 0, k);
+        return expr_new_linkedlist(out);
+    }
     /* Compiled-predicate fast path: the leading run is found on the buffer and
      * Take does the copy, so neither the scan nor the result materialises. */
     {
@@ -1177,6 +1332,11 @@ Expr* builtin_lengthwhile(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
+    if (coll->type == EXPR_LINKEDLIST) {
+        Expr* unwind;
+        int64_t k = llp_run_length(coll->data.llist, crit, &unwind);
+        return unwind ? unwind : expr_new_integer(k);
+    }
     /* Compiled-predicate fast path: LengthWhile needs only the count, so
      * nothing is built at all. */
     {
@@ -1208,6 +1368,22 @@ Expr* builtin_select_first(Expr* res) {
     Expr* coll = res->data.function.args[0];
     Expr* pred = res->data.function.args[1];
     Expr* deflt = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    if (coll->type == EXPR_LINKEDLIST) {
+        LLPred p;
+        llp_open(&p, coll->data.llist, pred);
+        int64_t n = ll_length(p.snap);
+        Expr* unwind = NULL;
+        Expr* found = NULL;
+        for (int64_t i = 0; i < n && !found && !unwind; i++)
+            if (llp_test(&p, i, &unwind) == 1) found = ll_get(p.snap, i);
+        llp_close(&p);
+        if (unwind) return unwind;
+        if (found) return found;
+        if (deflt) return expr_copy(deflt);
+        Expr* ma[1] = { expr_new_string("NotFound") };
+        return expr_new_function(expr_new_symbol(SYM_Missing), ma, 1);
+    }
 
     /* Compiled-predicate fast path. Cheap when a match comes early, but a
      * predicate nothing satisfies is a full scan and paid the interpreted
@@ -1516,6 +1692,21 @@ static Expr* scan_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec
     if (spec.max >= 0 && current_level > spec.max)
         return NULL;
 
+    if (expr->type == EXPR_LINKEDLIST) {
+        /* the elements, one level down, from a snapshot (f may change the list) */
+        LinkedList* snap = ll_copy(expr->data.llist);
+        int64_t n = ll_length(snap);
+        Expr* stop = NULL;
+        for (int64_t i = 0; i < n && !stop; i++) {
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            stop = scan_at_level(f, el, current_level + 1, spec);
+            ll_elem_done(el, own);
+        }
+        ll_release(snap);
+        if (stop) return stop;
+    }
+
     if (expr->type == EXPR_FUNCTION && !is_atomic_number(expr)) {
         if (spec.heads) {
             Expr* s = scan_at_level(f, expr->data.function.head, current_level + 1, spec);
@@ -1648,6 +1839,27 @@ static Expr* all_any_none_true(Expr* res, int mode) {
         for (size_t i = 0; i < n; i++) if (b[i]) { any = true; break; }
         if (mode == 1) return expr_new_symbol(any ? SYM_True : SYM_False);
         return expr_new_symbol(any ? SYM_False : SYM_True);      /* NoneTrue */
+    }
+
+    if (coll->type == EXPR_LINKEDLIST) {
+        LLPred p;
+        llp_open(&p, coll->data.llist, test);
+        int64_t n = ll_length(p.snap);
+        Expr* unwind = NULL;
+        int verdict = -2;                   /* -2: no short-circuit yet */
+        bool indeterminate = false;
+        for (int64_t i = 0; i < n && verdict == -2; i++) {
+            int t = llp_test(&p, i, &unwind);
+            if (unwind) break;
+            if (t == 1 && mode != 0) verdict = (mode == 1);      /* Any: True; None: False */
+            else if (t == 0 && mode == 0) verdict = 0;           /* All: False */
+            else if (t == -1) indeterminate = true;
+        }
+        llp_close(&p);
+        if (unwind) return unwind;
+        if (verdict != -2) return expr_new_symbol(verdict ? SYM_True : SYM_False);
+        if (indeterminate) return NULL;
+        return expr_new_symbol(mode == 1 ? SYM_False : SYM_True);
     }
 
     /* Compiled-predicate fast path (numloop.h) before the materialising one:
@@ -1885,7 +2097,7 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
     bool should_check = false;
     
     if (spec.min == -1 && spec.max == -1) {
-        if (expr->type != EXPR_FUNCTION || (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Rational || expr->data.function.head->data.symbol.name == SYM_Complex))) {
+        if ((expr->type != EXPR_FUNCTION && !(expr->type == EXPR_LINKEDLIST && ll_length(expr->data.llist) > 0)) || (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Rational || expr->data.function.head->data.symbol.name == SYM_Complex))) {
             should_check = true;
         }
     } else {
@@ -1933,6 +2145,22 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
             env_free(henv);
             if (hit) return false;
         }
+    }
+
+    /* A LinkedList: its elements one level down, read from a snapshot (a
+     * pattern condition may change the list). */
+    if (expr->type == EXPR_LINKEDLIST && !(spec.max >= 0 && current_level >= spec.max)) {
+        LinkedList* snap = ll_copy(expr->data.llist);
+        int64_t n = ll_length(snap);
+        bool free_ = true;
+        for (int64_t i = 0; i < n && free_; i++) {
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            free_ = freeq_at_level(el, form, current_level + 1, spec);
+            ll_elem_done(el, own);
+        }
+        ll_release(snap);
+        if (!free_) return false;
     }
 
     if (expr->type == EXPR_FUNCTION && !(expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Rational || expr->data.function.head->data.symbol.name == SYM_Complex))) {
@@ -2301,6 +2529,203 @@ static Expr* inner_A(Expr* f, Expr* A, Expr* B, Expr* g, Expr* head) {
     }
 }
 
+/* ------------------- threading heads over LinkedLists -------------------
+ *
+ * MapThread, Inner and Outer index their sequence operands element by element
+ * (ll_seq_length / ll_seq_element: a LinkedList, a List or an array alike),
+ * so a LinkedList operand is read from its slots and never turned into a
+ * List. A level built from LinkedList operands is a LinkedList, one built
+ * only from Lists a List. Each LinkedList operand is snapshotted first: f may
+ * change the list it is threading over. */
+
+static bool seq_any_ll(Expr* const* a, size_t k) {
+    for (size_t j = 0; j < k; j++) if (a[j]->type == EXPR_LINKEDLIST) return true;
+    return false;
+}
+
+/* Snapshot the LinkedList operands (new references; caller frees all). */
+static Expr** seq_snapshot(Expr* const* a, size_t k) {
+    Expr** s = malloc(sizeof(Expr*) * (k ? k : 1));
+    for (size_t j = 0; j < k; j++)
+        s[j] = a[j]->type == EXPR_LINKEDLIST ? expr_new_linkedlist(ll_copy(a[j]->data.llist))
+                                             : expr_copy(a[j]);
+    return s;
+}
+
+static void seq_free(Expr** a, size_t k) {
+    for (size_t j = 0; j < k; j++) expr_free(a[j]);
+    free(a);
+}
+
+/* A container of the kind the level is made of, filled from `items` (consumed). */
+static Expr* seq_container(bool ll, Expr** items, size_t n) {
+    if (ll) {
+        LinkedList* out = ll_new();
+        for (size_t i = 0; i < n; i++) ll_push_back(out, items[i]);
+        return expr_new_linkedlist(out);
+    }
+    return expr_new_function(expr_new_symbol(SYM_List), items, n);
+}
+
+/* MapThread[f, {a1, ..., ak}, level] over operands of which some is a
+ * LinkedList. NULL declines (an operand that is not a sequence of the common
+ * length: the List path reports it). */
+static Expr* mapthread_ll(Expr* f, Expr* const* ents, size_t k, int64_t level) {
+    if (level == 0) {
+        Expr** a = malloc(sizeof(Expr*) * (k ? k : 1));
+        for (size_t j = 0; j < k; j++) a[j] = expr_copy(ents[j]);
+        Expr* call = expr_new_function(expr_copy(f), a, k);
+        free(a);
+        return eval_and_free(call);
+    }
+    int64_t L = -1;
+    for (size_t j = 0; j < k; j++) {
+        int64_t lj = ll_seq_length(ents[j]);
+        if (lj < 0 || (L >= 0 && lj != L)) return NULL;
+        L = lj;
+    }
+    if (L < 0) return NULL;                  /* no operands: the List path */
+    bool ll = seq_any_ll(ents, k);
+    Expr** snap = seq_snapshot(ents, k);
+    Expr** items = malloc(sizeof(Expr*) * (size_t)(L ? L : 1));
+    Expr** sub = malloc(sizeof(Expr*) * (k ? k : 1));
+    int64_t done = 0;
+    Expr* fail = NULL;
+    bool decline = false;
+    for (; done < L; done++) {
+        for (size_t j = 0; j < k; j++) sub[j] = ll_seq_element(snap[j], done);
+        Expr* r = mapthread_ll(f, sub, k, level - 1);
+        for (size_t j = 0; j < k; j++) expr_free(sub[j]);
+        if (!r) { decline = true; break; }
+        if (eval_is_inflight_unwind(r)) { fail = r; break; }
+        items[done] = r;
+    }
+    free(sub);
+    seq_free(snap, k);
+    if (decline || fail) {
+        for (int64_t i = 0; i < done; i++) expr_free(items[i]);
+        free(items);
+        return fail;
+    }
+    Expr* out = seq_container(ll, items, (size_t)L);
+    free(items);
+    return out;
+}
+
+/* Outer[f, a1, ..., an] (full depth) with some LinkedList operand: the first
+ * operand that is still a sequence is expanded, element by element, until
+ * every operand is a leaf and f applies. */
+static Expr* outer_ll(Expr* f, Expr* const* args, size_t n) {
+    size_t p = n;
+    for (size_t j = 0; j < n && p == n; j++) if (ll_seq_length(args[j]) >= 0) p = j;
+    if (p == n) {
+        Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t j = 0; j < n; j++) a[j] = expr_copy(args[j]);
+        Expr* call = expr_new_function(expr_copy(f), a, n);
+        free(a);
+        return eval_and_free(call);
+    }
+    bool ll = args[p]->type == EXPR_LINKEDLIST;
+    Expr* src = ll ? expr_new_linkedlist(ll_copy(args[p]->data.llist)) : expr_copy(args[p]);
+    int64_t L = ll_seq_length(src);
+    Expr** items = malloc(sizeof(Expr*) * (size_t)(L ? L : 1));
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t j = 0; j < n; j++) a[j] = args[j];
+    int64_t done = 0;
+    Expr* fail = NULL;
+    for (; done < L; done++) {
+        Expr* el = ll_seq_element(src, done);
+        a[p] = el;
+        Expr* r = outer_ll(f, a, n);
+        expr_free(el);
+        if (eval_is_inflight_unwind(r)) { fail = r; break; }
+        items[done] = r;
+    }
+    free(a);
+    expr_free(src);
+    if (fail) {
+        for (int64_t i = 0; i < done; i++) expr_free(items[i]);
+        free(items);
+        return fail;
+    }
+    Expr* out = seq_container(ll, items, (size_t)L);
+    free(items);
+    return out;
+}
+
+/* Inner[f, a, b, g] with a LinkedList operand, for the vector-vector,
+ * matrix-vector and vector-matrix shapes (a matrix being a sequence of
+ * sequences). NULL declines every other shape. */
+static Expr* inner_ll(Expr* f, Expr* A, Expr* B, Expr* g) {
+    int64_t la = ll_seq_length(A), lb = ll_seq_length(B);
+    if (la < 0 || lb < 0) return NULL;
+    Expr* sa = A->type == EXPR_LINKEDLIST ? expr_new_linkedlist(ll_copy(A->data.llist)) : expr_copy(A);
+    Expr* sb = B->type == EXPR_LINKEDLIST ? expr_new_linkedlist(ll_copy(B->data.llist)) : expr_copy(B);
+    Expr* out = NULL;
+    Expr* a0 = la ? ll_seq_element(sa, 0) : NULL;
+    Expr* b0 = lb ? ll_seq_element(sb, 0) : NULL;
+    bool a_mat = a0 && ll_seq_length(a0) >= 0;
+    bool b_mat = b0 && ll_seq_length(b0) >= 0;
+    expr_free(a0); expr_free(b0);
+    if (a_mat) {
+        /* row i of the result: Inner of row i of a with b */
+        Expr** items = malloc(sizeof(Expr*) * (size_t)(la ? la : 1));
+        int64_t i = 0;
+        for (; i < la; i++) {
+            Expr* row = ll_seq_element(sa, i);
+            Expr* r = inner_ll(f, row, sb, g);
+            if (!r) {                         /* rows of Lists: the builtin */
+                Expr* ia[4] = { expr_copy(f), row, expr_copy(sb), expr_copy(g) };
+                r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Inner), ia, 4));
+            } else expr_free(row);
+            items[i] = r;
+        }
+        out = seq_container(sa->type == EXPR_LINKEDLIST, items, (size_t)la);
+        free(items);
+    } else if (la == lb) {
+        if (!b_mat) {
+            /* g[f[a1, b1], f[a2, b2], ...] */
+            Expr** terms = malloc(sizeof(Expr*) * (size_t)(la ? la : 1));
+            for (int64_t k = 0; k < la; k++) {
+                Expr* fa[2] = { ll_seq_element(sa, k), ll_seq_element(sb, k) };
+                terms[k] = eval_and_free(expr_new_function(expr_copy(f), fa, 2));
+            }
+            out = eval_and_free(expr_new_function(expr_copy(g), terms, (size_t)la));
+            free(terms);
+        } else {
+            /* column j: g over k of f[a_k, b_kj] */
+            Expr* b0r = ll_seq_element(sb, 0);
+            int64_t m = ll_seq_length(b0r);
+            bool col_ll = b0r->type == EXPR_LINKEDLIST || sb->type == EXPR_LINKEDLIST;
+            expr_free(b0r);
+            Expr** rows = malloc(sizeof(Expr*) * (size_t)(la ? la : 1));
+            bool ok = true;
+            for (int64_t k = 0; k < la; k++) {
+                rows[k] = ll_seq_element(sb, k);
+                if (ll_seq_length(rows[k]) != m) ok = false;
+            }
+            if (ok) {
+                Expr** items = malloc(sizeof(Expr*) * (size_t)(m ? m : 1));
+                for (int64_t j = 0; j < m; j++) {
+                    Expr** terms = malloc(sizeof(Expr*) * (size_t)(la ? la : 1));
+                    for (int64_t k = 0; k < la; k++) {
+                        Expr* fa[2] = { ll_seq_element(sa, k), ll_seq_element(rows[k], j) };
+                        terms[k] = eval_and_free(expr_new_function(expr_copy(f), fa, 2));
+                    }
+                    items[j] = eval_and_free(expr_new_function(expr_copy(g), terms, (size_t)la));
+                    free(terms);
+                }
+                out = seq_container(col_ll, items, (size_t)m);
+                free(items);
+            }
+            for (int64_t k = 0; k < la; k++) expr_free(rows[k]);
+            free(rows);
+        }
+    }
+    expr_free(sa); expr_free(sb);
+    return out;
+}
+
 Expr* builtin_inner(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
     
@@ -2310,6 +2735,12 @@ Expr* builtin_inner(Expr* res) {
     Expr* g = (res->data.function.arg_count >= 4) ? res->data.function.args[3] : expr_new_symbol(SYM_Plus);
     
     Expr* n_expr = (res->data.function.arg_count >= 5) ? res->data.function.args[4] : NULL;
+
+    if (!n_expr && (A->type == EXPR_LINKEDLIST || B->type == EXPR_LINKEDLIST)) {
+        Expr* r = inner_ll(f, A, B, g);
+        if (res->data.function.arg_count < 4) expr_free(g);
+        return r;
+    }
 
     /* Inner[Times, a, b, Plus] IS Dot -- that is the definition of a Dot, and
      * the pair is how a contraction gets written when the reader wants the
@@ -2658,6 +3089,15 @@ Expr* builtin_outer(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
     Expr* f = res->data.function.args[0];
+
+    /* A LinkedList operand (default depth): expanded from its slots. */
+    if (res->data.function.arg_count >= 2 &&
+        seq_any_ll(res->data.function.args + 1, res->data.function.arg_count - 1)) {
+        bool plain = true;
+        for (size_t i = 1; i < res->data.function.arg_count; i++)
+            if (ll_seq_length(res->data.function.args[i]) < 0) plain = false;
+        if (plain) return outer_ll(f, res->data.function.args + 1, res->data.function.arg_count - 1);
+    }
 
     if (res->data.function.arg_count == 3) {
         /* One operand packed and the other an ordinary List: pack the plain one
@@ -3518,12 +3958,55 @@ typedef struct {
     Expr** elems;    /* borrowed; elements to consume */
     size_t total;
     size_t idx;
+    const LinkedList* ll;   /* instead of elems: a LinkedList snapshot, from `base` */
+    int64_t base;
 } FoldCtx;
 
 static IterStep fold_step(ExprBuf* hist, void* vctx, Expr** out) {
     FoldCtx* c = (FoldCtx*)vctx;
+    if (c->ll) {
+        bool own;
+        Expr* e = ll_elem_view(c->ll, c->base + (int64_t)c->idx++, &own);
+        *out = apply_binary(c->f, hist->items[hist->count - 1], e);
+        ll_elem_done(e, own);
+        return ITER_STEP_CONT;
+    }
     *out = apply_binary(c->f, hist->items[hist->count - 1], c->elems[c->idx++]);
     return ITER_STEP_CONT;
+}
+
+/* Fold / FoldList over a LinkedList, read from a snapshot (f may change the
+ * list); FoldList's history is a LinkedList, as a List's is a List. */
+static Expr* fold_ll(Expr* f, Expr* seed_src, const LinkedList* src, bool as_list) {
+    LinkedList* snap = ll_copy(src);
+    int64_t n = ll_length(snap), start = 0;
+    Expr* seed = seed_src ? expr_copy(seed_src) : NULL;
+    if (!seed) {
+        if (n == 0) { ll_release(snap); return as_list ? expr_new_linkedlist(ll_new()) : NULL; }
+        seed = ll_get(snap, 0);
+        start = 1;
+    }
+    ExprBuf buf;
+    ebuf_init(&buf);
+    ebuf_push(&buf, seed);
+    FoldCtx ctx = { .f = f, .elems = NULL, .total = (size_t)(n - start), .idx = 0,
+                    .ll = snap, .base = start };
+    Expr* early = NULL;
+    IterRunResult r = iter_run(&buf, fold_step, &ctx, n - start, false,
+                               as_list ? SIZE_MAX : 1, &early);
+    Expr* out;
+    if (r == ITER_RUN_SAFETY)     out = NULL;          /* iter_run freed buf */
+    else if (r == ITER_RUN_EARLY) out = early;
+    else if (as_list) {
+        LinkedList* hist = ll_new();
+        for (size_t i = 0; i < buf.count; i++) ll_push_back(hist, buf.items[i]);
+        free(buf.items);
+        out = expr_new_linkedlist(hist);
+    } else {
+        out = ebuf_finalize(&buf, false, expr_new_symbol(SYM_List));
+    }
+    ll_release(snap);
+    return out;
 }
 
 static Expr* fold_impl(Expr* res, bool as_list) {
@@ -3605,6 +4088,9 @@ static Expr* fold_impl(Expr* res, bool as_list) {
      * `materialized` is freed on every exit below; nothing returned aliases it,
      * because both the seed and each element are copied on the way into the
      * history buffer. */
+    if (list->type == EXPR_LINKEDLIST)
+        return fold_ll(f, seed_from_list ? NULL : seed_src, list->data.llist, as_list);
+
     Expr* materialized = NULL;
     const Expr* list_src = NULL;      /* the array we materialised, for the repack */
     NDType list_src_dtype = NDT_FLOAT64;
@@ -4132,6 +4618,19 @@ Expr* builtin_thread(Expr* res) {
     Expr* h_spec = (argc >= 2) ? res->data.function.args[1] : NULL;
     Expr* n_spec = (argc >= 3) ? res->data.function.args[2] : NULL;
 
+    /* A LinkedList argument threads as a List does (Thread[f[ll, x]], or with
+     * the head given as List or LinkedList): f[a_i, ...] per element, read
+     * from the slots, into a LinkedList -- the same threading a Listable head
+     * gets, Thread::tdlen included. */
+    if (!n_spec && (!h_spec || (h_spec->type == EXPR_SYMBOL &&
+                                (h_spec->data.symbol.name == SYM_List ||
+                                 h_spec->data.symbol.name == SYM_LinkedList)))) {
+        bool any_ll = false;
+        for (size_t i = 0; i < expr->data.function.arg_count && !any_ll; i++)
+            any_ll = expr->data.function.args[i]->type == EXPR_LINKEDLIST;
+        if (any_ll) return ll_thread_listable(expr);
+    }
+
     /* Default threading head is List. We use the interned symbol so
      * pointer comparisons in expr_eq work. */
     Expr* h = h_spec ? expr_ref(h_spec) : expr_new_symbol(SYM_List);
@@ -4409,6 +4908,30 @@ Expr* builtin_mapthread(Expr* res) {
     if (argc == 2) {                          /* level 1, the default */
         Expr* fast = nd_mapthread2(f, lists);
         if (fast) return fast;
+    }
+
+    /* Sequences of which some is a LinkedList (or a LinkedList of them). */
+    {
+        int64_t lv = 1;
+        if (argc == 3 && res->data.function.args[2]->type == EXPR_INTEGER)
+            lv = res->data.function.args[2]->data.integer;
+        if (lv >= 0 && (argc == 2 || res->data.function.args[2]->type == EXPR_INTEGER)) {
+            if (lists->type == EXPR_LINKEDLIST) {
+                LinkedList* snap = ll_copy(lists->data.llist);
+                int64_t k = ll_length(snap);
+                Expr** ents = malloc(sizeof(Expr*) * (size_t)(k ? k : 1));
+                for (int64_t j = 0; j < k; j++) ents[j] = ll_get(snap, j);
+                Expr* r = mapthread_ll(f, ents, (size_t)k, lv);
+                for (int64_t j = 0; j < k; j++) expr_free(ents[j]);
+                free(ents);
+                ll_release(snap);
+                if (r) return r;
+            } else if (head_is(lists, SYM_List) &&
+                       seq_any_ll(lists->data.function.args, lists->data.function.arg_count)) {
+                Expr* r = mapthread_ll(f, lists->data.function.args, lists->data.function.arg_count, lv);
+                if (r) return r;
+            }
+        }
     }
 
     int64_t level = 1;                       /* default threading level */

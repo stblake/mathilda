@@ -23,6 +23,7 @@
 #include "match.h"
 #include "pick.h"
 #include "assoc.h"
+#include "linkedlist.h"
 
 /* True when `sel` matches `patt`. Bindings are irrelevant here (Pick has no
  * right-hand side to substitute into), so the environment is discarded. */
@@ -35,7 +36,47 @@ static bool pick_selects(Expr* sel, Expr* patt) {
 
 /* Pick one level. On structure mismatch sets *ok to false and returns NULL;
  * callers must check *ok before using the result. */
+static Expr* pick_rec(Expr* expr, Expr* sel, Expr* patt, bool* ok);
+
+/* Pick where the expression or the selector is a LinkedList: elements are
+ * paired by index straight from the slots (ll_seq_element), and the kept
+ * ones form a LinkedList when the expression is one, else a List. */
+static Expr* pick_rec_ll(Expr* expr, Expr* sel, Expr* patt, bool* ok) {
+    int64_t n = ll_seq_length(expr);
+    if (n < 0 || ll_seq_length(sel) != n || is_association(expr)) { *ok = false; return NULL; }
+    bool to_ll = expr->type == EXPR_LINKEDLIST;
+    Expr* e_src = to_ll ? expr_new_linkedlist(ll_copy(expr->data.llist)) : expr_copy(expr);
+    LinkedList* out = to_ll ? ll_new() : NULL;
+    Expr** kept = to_ll ? NULL : malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+    size_t nk = 0;
+    for (int64_t i = 0; i < n && *ok; i++) {
+        Expr* s_i = ll_seq_element(sel, i);
+        Expr* keep = NULL;
+        if (pick_selects(s_i, patt)) {
+            keep = ll_seq_element(e_src, i);
+        } else if ((s_i->type == EXPR_FUNCTION || s_i->type == EXPR_LINKEDLIST) && !is_association(s_i)) {
+            Expr* e_i = ll_seq_element(e_src, i);
+            keep = pick_rec(e_i, s_i, patt, ok);
+            expr_free(e_i);
+        }
+        expr_free(s_i);
+        if (keep) { if (to_ll) ll_push_back(out, keep); else kept[nk++] = keep; }
+    }
+    expr_free(e_src);
+    if (!*ok) {
+        if (to_ll) ll_release(out);
+        else { for (size_t j = 0; j < nk; j++) expr_free(kept[j]); free(kept); }
+        return NULL;
+    }
+    if (to_ll) return expr_new_linkedlist(out);
+    Expr* r = expr_new_function(expr_copy(expr->data.function.head), kept, nk);
+    free(kept);
+    return r;
+}
+
 static Expr* pick_rec(Expr* expr, Expr* sel, Expr* patt, bool* ok) {
+    if (expr->type == EXPR_LINKEDLIST || sel->type == EXPR_LINKEDLIST)
+        return pick_rec_ll(expr, sel, patt, ok);
     if (expr->type != EXPR_FUNCTION || sel->type != EXPR_FUNCTION ||
         expr->data.function.arg_count != sel->data.function.arg_count) {
         *ok = false;

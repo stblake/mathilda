@@ -33,7 +33,7 @@ Findings, by kind:
     MSG       a message on one side only
     CONV      the right answer, but the list was materialised to get it
     MUTATED   a non-mutating call changed its LinkedList argument
-    LISTSIDE  a DIFF that is not LinkedList's: the List head itself answers a
+    LISTSIDE  a DIFF or UNEVAL that is not LinkedList's: the List head itself answers a
               packed List (what Normal[ll] gives) and the same plain List
               differently, and the LinkedList follows one of them. Reported
               for the List head's owner; never gated.
@@ -104,6 +104,9 @@ EXEMPT = {
     "Short": "prints the object",
     "Shallow": "prints the object",
     "MatchQ": "{__} patterns do not match a LinkedList (head LinkedList)",
+    "RandomChoice": "nondeterministic: two calls never agree",
+    "RandomSample": "nondeterministic: two calls never agree",
+    "Unique": "makes a fresh symbol every call",
 }
 
 # Matrix-only linear algebra, graphs, ML and plotting are out of scope
@@ -279,7 +282,8 @@ def classify(cs, plain, linked, unpacked=None):
         if l["head"] == "CRASH":
             kind = "CRASH"
         elif (l["head"] == h and l["ll"]) or l["head"] == "$TimedOut":
-            kind = "UNEVAL"
+            u = (unpacked or {}).get(cid)
+            kind = "LISTSIDE" if u and u["val"] != p["val"] else "UNEVAL"
         elif l["val"] != p["val"]:
             u = (unpacked or {}).get(cid)
             kind = "LISTSIDE" if u and u["val"] != p["val"] else "DIFF"
@@ -316,7 +320,7 @@ def main():
     linked = run_all(a.mathilda, todo, True, a.j)
     rows = classify(cs, plain, linked)
     # A DIFF whose List side itself depends on packing is the List head's bug.
-    diff_ids = {r[2] for r in rows if r[0] == "DIFF"}
+    diff_ids = {r[2] for r in rows if r[0] in ("DIFF", "UNEVAL")}
     diffs = [c for c in cs if c[0] in diff_ids]
     if diffs:
         unpacked = run_all(a.mathilda, diffs, False, a.j, unpacked=True)

@@ -421,11 +421,29 @@ static Expr* ll_listable_engine(Expr* res, int64_t len) {
     return expr_new_linkedlist(r);
 }
 
+static Expr* ll_thread_arg_any(const Expr* a, int64_t i);
+
+int64_t ll_seq_length(const Expr* a) {
+    if (a->type == EXPR_LINKEDLIST) return ll_length(a->data.llist);
+    if (a->type == EXPR_FUNCTION && head_is(a, SYM_List)) return (int64_t)a->data.function.arg_count;
+    if (is_ndarray(a) && a->data.ndarray.rank >= 1) return a->data.ndarray.dims[0];
+    return -1;
+}
+
+Expr* ll_seq_element(const Expr* a, int64_t i) {
+    if (a->type == EXPR_LINKEDLIST) return ll_get(a->data.llist, i);
+    return ll_thread_arg_any(a, i);
+}
+
 /* Element i of a threaded operand, as List threading hands it to the head:
  * slot i of a LinkedList (read from the snapshot), part i of a List, element
  * (or row) i of an array; a scalar operand as it stands. New reference. */
 static Expr* ll_thread_arg(const Expr* a, const LinkedList* snap, int64_t i) {
     if (snap) return ll_get(snap, i);
+    return ll_thread_arg_any(a, i);
+}
+
+static Expr* ll_thread_arg_any(const Expr* a, int64_t i) {
     if (a->type == EXPR_FUNCTION && head_is(a, SYM_List)) return expr_copy(a->data.function.args[i]);
     if (is_ndarray(a) && a->data.ndarray.rank >= 1) {
         if (a->data.ndarray.rank == 1) return ndarray_element_to_expr(a, (size_t)i);
@@ -544,4 +562,34 @@ Expr* ll_select_compiled(const Expr* crit, const LinkedList* src) {
     numloop_pred_free(pr);
     if (!ok) { ll_release(out); return NULL; }
     return expr_new_linkedlist(out);
+}
+
+/* ------------------------------------------------------------------------
+ *  Rebuilding walkers (linkedlist.h, ll_rebuild)
+ * ---------------------------------------------------------------------- */
+Expr* ll_rebuild(const LinkedList* src, Expr* (*fn)(Expr* elem, int64_t i, void* ctx),
+                 void* ctx, Expr** unwind) {
+    *unwind = NULL;
+    LinkedList* snap = ll_copy(src);
+    int64_t n = ll_length(snap);
+    LinkedList* out = NULL;
+    for (int64_t i = 0; i < n; i++) {
+        bool own;
+        Expr* el = ll_elem_view(snap, i, &own);
+        Expr* r = fn(el, i, ctx);
+        ll_elem_done(el, own);
+        if (r && eval_is_inflight_unwind(r)) { *unwind = r; break; }
+        if (r && !out) {
+            /* the first change: the unchanged prefix, slot for slot */
+            out = ll_new();
+            ll_append_range(out, snap, 0, i);
+        }
+        if (out) {
+            if (r) ll_push_back(out, r);
+            else ll_push_back_from(out, snap, i);
+        }
+    }
+    ll_release(snap);
+    if (*unwind) { if (out) ll_release(out); return NULL; }
+    return out ? expr_new_linkedlist(out) : NULL;
 }

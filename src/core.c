@@ -1865,10 +1865,58 @@ Expr* builtin_length(Expr* res) {
  * max_depth levels have been recorded. Returns the number of dimensions
  * written into dims (which must hold at least max_depth slots).
  */
+/* A LinkedList level of a nest of Lists or LinkedLists (each stands for the
+ * List of its elements): its length, then -- when every element has one
+ * common shape -- the elements' dimensions, read in place. */
+static int get_dimensions_ll(Expr* e, int64_t* dims, int max_depth);
+
+static int seq_dimensions(Expr* e, int64_t* dims, int max_depth) {
+    if (e->type == EXPR_LINKEDLIST) return get_dimensions_ll(e, dims, max_depth);
+    if (max_depth <= 0 || !head_is(e, SYM_List)) return 0;
+    dims[0] = (int64_t)e->data.function.arg_count;
+    if (dims[0] == 0 || max_depth == 1) return 1;
+    int64_t sub[DIMENSIONS_MAX_DEPTH];
+    int sd = seq_dimensions(e->data.function.args[0], sub, max_depth - 1);
+    if (sd == 0) return 1;
+    for (size_t i = 1; i < e->data.function.arg_count; i++) {
+        int64_t cur[DIMENSIONS_MAX_DEPTH];
+        int cd = seq_dimensions(e->data.function.args[i], cur, max_depth - 1);
+        if (cd != sd) return 1;
+        for (int j = 0; j < sd; j++) if (cur[j] != sub[j]) return 1;
+    }
+    for (int i = 0; i < sd; i++) dims[i + 1] = sub[i];
+    return sd + 1;
+}
+
+static int get_dimensions_ll(Expr* e, int64_t* dims, int max_depth) {
+    if (max_depth <= 0) return 0;
+    const LinkedList* ll = e->data.llist;
+    int64_t n = ll_length(ll);
+    dims[0] = n;
+    if (n == 0 || max_depth == 1 || ll_kind(ll) != LL_BOXED) return 1;
+    int64_t sub[DIMENSIONS_MAX_DEPTH];
+    int sd = seq_dimensions((Expr*)ll_peek_boxed(ll, 0), sub, max_depth - 1);
+    if (sd == 0) return 1;
+    for (int64_t i = 1; i < n; i++) {
+        int64_t cur[DIMENSIONS_MAX_DEPTH];
+        int cd = seq_dimensions((Expr*)ll_peek_boxed(ll, i), cur, max_depth - 1);
+        if (cd != sd) return 1;
+        for (int j = 0; j < sd; j++) if (cur[j] != sub[j]) return 1;
+    }
+    for (int i = 0; i < sd; i++) dims[i + 1] = sub[i];
+    return sd + 1;
+}
+
 static int get_dimensions(Expr* e, int64_t* dims, int max_depth, const char* head_name) {
     if (max_depth <= 0) return 0;
     if (!head_is(e, intern_symbol(head_name))) {
         return 0;
+    }
+    /* a List level whose elements include LinkedLists: they count as Lists */
+    if (intern_symbol(head_name) == SYM_List) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (e->data.function.args[i]->type == EXPR_LINKEDLIST)
+                return seq_dimensions(e, dims, max_depth);
     }
 
     dims[0] = (int64_t)e->data.function.arg_count;
@@ -1929,6 +1977,8 @@ Expr* builtin_dimensions(Expr* res) {
         depth = arg->data.ndarray.rank;
         if (depth > max_depth) depth = max_depth;
         for (int i = 0; i < depth; i++) dims[i] = arg->data.ndarray.dims[i];
+    } else if (arg->type == EXPR_LINKEDLIST) {
+        depth = get_dimensions_ll(arg, dims, max_depth);
     } else if (arg->type == EXPR_SPARSE) {
         depth = arg->data.sparse->rank;
         if (depth > max_depth) depth = max_depth;
@@ -4428,6 +4478,20 @@ static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
     /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
      * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
     if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
+    /* A LinkedList nests like the List it stands for. */
+    if (e->type == EXPR_LINKEDLIST) {
+        const LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll), max_d = empty_is_two ? 1 : 0;
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(ll, i, &own);
+            int64_t d = get_expr_depth_ex(el, heads, empty_is_two);
+            ll_elem_done(el, own);
+            if (d > max_d) max_d = d;
+            if (own && max_d >= 1) break;        /* typed: every element is an atom */
+        }
+        return max_d + 1;
+    }
     if (e->type != EXPR_FUNCTION) return 1;
 
     // Rational and Complex are considered atomic in terms of Depth/Length in Mathematica
@@ -4470,6 +4534,20 @@ Expr* builtin_depth(Expr* res) {
 
 int64_t leaf_count_internal(Expr* e, bool heads) {
     if (!e) return 0;
+    if (e->type == EXPR_LINKEDLIST) {
+        /* As the List it stands for: a head leaf and the elements' leaves. */
+        const LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll), count = heads ? 1 : 0;
+        if (ll_kind(ll) != LL_BOXED && ll_kind(ll) != LL_CPLX) return count + n;
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(ll, i, &own);
+            count += leaf_count_internal(el, heads);
+            ll_elem_done(el, own);
+        }
+        if (!heads && count == 0 && n == 0) return 0;
+        return count;
+    }
     if (e->type != EXPR_FUNCTION) return 1;
     
     /* An atomic association contributes its head and its values only:
@@ -4669,6 +4747,18 @@ static void level_rec(Expr* e, int64_t current_level, int64_t min_l, int64_t max
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) atomic = true;
+    }
+
+    if (e->type == EXPR_LINKEDLIST && !(max_l >= 0 && current_level >= max_l)) {
+        LinkedList* snap = ll_copy(e->data.llist);
+        int64_t n = ll_length(snap);
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            level_rec(el, current_level + 1, min_l, max_l, heads, results, count, cap);
+            ll_elem_done(el, own);
+        }
+        ll_release(snap);
     }
 
     if (e->type == EXPR_FUNCTION && !atomic) {

@@ -172,6 +172,22 @@ static bool pat_number_atom(const Expr* e) {
 static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr* replacement, bool delayed, Expr*** results, size_t* count, size_t* cap, int64_t max_results) {
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
 
+    /* A LinkedList is walked like the List it stands for: an atom at its own
+     * level (no head part), its elements one level down, read in place from
+     * a snapshot (a :> replacement may change the list). */
+    if (e->type == EXPR_LINKEDLIST && !(min_l >= 0 && max_l >= 0 && current_level >= max_l)) {
+        LinkedList* snap = ll_copy(e->data.llist);
+        int64_t n = ll_length(snap);
+        for (int64_t i = 0; i < n; i++) {
+            if (max_results >= 0 && (int64_t)(*count) >= max_results) break;
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            do_cases_at_level(el, current_level + 1, min_l, max_l, heads, pattern, replacement, delayed, results, count, cap, max_results);
+            ll_elem_done(el, own);
+        }
+        ll_release(snap);
+    }
+
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             do_cases_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, replacement, delayed, results, count, cap, max_results);
@@ -264,6 +280,8 @@ Expr* builtin_first_case(Expr* res) {
         matches->data.function.head->data.symbol.name == SYM_List &&
         matches->data.function.arg_count >= 1) {
         result = expr_copy(matches->data.function.args[0]);
+    } else if (matches && matches->type == EXPR_LINKEDLIST && ll_length(matches->data.llist) > 0) {
+        result = ll_get(matches->data.llist, 0);     /* Cases of a LinkedList */
     }
     if (matches) expr_free(matches);
     if (result) return result;
@@ -445,6 +463,13 @@ Expr* builtin_cases(Expr* res) {
     do_cases_at_level(expr, 0, min_l, max_l, heads, pattern, replacement, delayed, &results, &count, &cap, max_results);
     if (owned_pattern) expr_free(owned_pattern);
 
+    /* The cases found in a LinkedList are a LinkedList (as Select gives). */
+    if (expr->type == EXPR_LINKEDLIST) {
+        LinkedList* out = ll_new();
+        for (size_t i = 0; i < count; i++) ll_push_back(out, results[i]);
+        free(results);
+        return expr_new_linkedlist(out);
+    }
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);
     return list;
@@ -553,6 +578,25 @@ static Expr* do_delete_cases_at_level(Expr* e, int64_t current_level, int64_t mi
             result = expr_new_function(new_head, new_args, new_count);
         }
         free(new_args);
+    } else if (e->type == EXPR_LINKEDLIST &&
+               !(min_l >= 0 && max_l >= 0 && current_level >= max_l)) {
+        /* A new LinkedList of the kept elements, transformed below; a kept
+         * element that comes back unchanged is copied slot for slot. */
+        LinkedList* snap = ll_copy(e->data.llist);
+        int64_t n = ll_length(snap);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < n; i++) {
+            bool own, del = false;
+            Expr* el = ll_elem_view(snap, i, &own);
+            Expr* ne = do_delete_cases_at_level(el, current_level + 1, min_l, max_l, heads, pattern, count_remaining, &del);
+            bool same = !del && expr_eq(ne, el);
+            ll_elem_done(el, own);
+            if (del) { expr_free(ne); continue; }
+            if (same) { expr_free(ne); ll_push_back_from(out, snap, i); }
+            else ll_push_back(out, ne);
+        }
+        ll_release(snap);
+        result = expr_new_linkedlist(out);
     } else {
         result = expr_copy(e);
     }
@@ -655,6 +699,30 @@ Expr* builtin_delete_cases(Expr* res) {
  * instead of an integer: Position[{<|a -> 1|>}, 1] is {{1, Key[a]}}. */
 static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr*** results, size_t* count, size_t* cap, int64_t max_results, int64_t* current_path, Expr** current_keys, size_t path_len) {
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
+
+    /* A LinkedList: element i is part {..., i}, as in the List; no head part. */
+    if (e->type == EXPR_LINKEDLIST && !(min_l >= 0 && max_l >= 0 && current_level >= max_l)) {
+        LinkedList* snap = ll_copy(e->data.llist);
+        int64_t n = ll_length(snap);
+        int64_t* next_path = malloc(sizeof(int64_t) * (path_len + 1));
+        Expr** next_keys = malloc(sizeof(Expr*) * (path_len + 1));
+        if (path_len > 0) {
+            memcpy(next_path, current_path, sizeof(int64_t) * path_len);
+            memcpy(next_keys, current_keys, sizeof(Expr*) * path_len);
+        }
+        for (int64_t i = 0; i < n; i++) {
+            if (max_results >= 0 && (int64_t)(*count) >= max_results) break;
+            next_path[path_len] = i + 1;
+            next_keys[path_len] = NULL;
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            do_position_at_level(el, current_level + 1, min_l, max_l, heads, pattern, results, count, cap, max_results, next_path, next_keys, path_len + 1);
+            ll_elem_done(el, own);
+        }
+        free(next_path);
+        free(next_keys);
+        ll_release(snap);
+    }
 
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         int64_t* next_path = malloc(sizeof(int64_t) * (path_len + 1));

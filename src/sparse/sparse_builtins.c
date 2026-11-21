@@ -16,6 +16,7 @@
 #include "eval.h"
 #include "message.h"
 #include "ndarray.h"
+#include "linkedlist.h"
 #include "print.h"
 #include "pack.h"
 #include <stdlib.h>
@@ -138,6 +139,30 @@ static bool array_shape(const Expr* e, int* rank, int64_t* dims, int cap) {
         for (int k = 0; k < *rank && k < cap; k++) dims[k] = e->data.ndarray.dims[k];
         return true;
     }
+    if (e->type == EXPR_LINKEDLIST) {
+        /* the List it stands for: elements read in place */
+        const LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll);
+        dims[0] = n;
+        if (n == 0 || ll_kind(ll) != LL_BOXED) { *rank = 1; return true; }
+        int r0 = 0;
+        int64_t d0[SP_MAX_RANK];
+        bool first_arr = array_shape(ll_peek_boxed(ll, 0), &r0, d0, SP_MAX_RANK);
+        if (!first_arr) r0 = 0;
+        for (int64_t i = 1; i < n; i++) {
+            int ri = 0;
+            int64_t di[SP_MAX_RANK];
+            bool arr = array_shape(ll_peek_boxed(ll, i), &ri, di, SP_MAX_RANK);
+            if (arr != first_arr) return false;
+            if (!arr) continue;
+            if (ri != r0) return false;
+            for (int k = 0; k < ri && k < SP_MAX_RANK; k++) if (di[k] != d0[k]) return false;
+        }
+        if (1 + r0 > cap || 1 + r0 > SP_MAX_RANK) return false;
+        *rank = 1 + r0;
+        for (int k = 0; k < r0; k++) dims[k + 1] = d0[k];
+        return true;
+    }
     if (!head_is_sym(e, SYM_List)) { *rank = 0; return false; }
     size_t n = e->data.function.arg_count;
     if (n == 0) { *rank = 1; dims[0] = 0; return true; }
@@ -212,6 +237,23 @@ static bool prefix_shape(const Expr* e, int n, int64_t* dims) {
                                              : e->data.ndarray.dims[k];
         return true;
     }
+    if (e->type == EXPR_LINKEDLIST) {
+        const LinkedList* ll = e->data.llist;
+        int64_t len = ll_length(ll);
+        dims[0] = len;
+        if (n == 1) return true;
+        if (len == 0 || ll_kind(ll) != LL_BOXED) return false;   /* atoms below */
+        if (n - 1 > SP_MAX_RANK) return false;
+        int64_t d0[SP_MAX_RANK];
+        if (!prefix_shape(ll_peek_boxed(ll, 0), n - 1, d0)) return false;
+        for (int64_t i = 1; i < len; i++) {
+            int64_t di[SP_MAX_RANK];
+            if (!prefix_shape(ll_peek_boxed(ll, i), n - 1, di)) return false;
+            for (int k = 0; k < n - 1; k++) if (di[k] != d0[k]) return false;
+        }
+        for (int k = 0; k < n - 1; k++) dims[k + 1] = d0[k];
+        return true;
+    }
     if (!head_is_sym(e, SYM_List)) return false;
     size_t len = e->data.function.arg_count;
     dims[0] = (int64_t)len;
@@ -264,6 +306,19 @@ static bool level_parts_pass(const Expr* e, int n, const Expr* test) {
             if (!ok) return false;
         }
         return true;
+    }
+    if (e->type == EXPR_LINKEDLIST) {
+        LinkedList* snap = ll_copy(e->data.llist);
+        int64_t len = ll_length(snap);
+        bool ok = true;
+        for (int64_t i = 0; i < len && ok; i++) {
+            bool own;
+            Expr* el = ll_elem_view(snap, i, &own);
+            ok = level_parts_pass(el, n - 1, test);
+            ll_elem_done(el, own);
+        }
+        ll_release(snap);
+        return ok;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (!level_parts_pass(e->data.function.args[i], n - 1, test)) return false;

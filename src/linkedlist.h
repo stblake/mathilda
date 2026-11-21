@@ -128,6 +128,17 @@ void ll_set(LinkedList* ll, int64_t i, Expr* e);        /* consumes e      */
 bool ll_set_i64 (LinkedList* ll, int64_t i, int64_t v);
 bool ll_set_real(LinkedList* ll, int64_t i, double v);
 
+/* Element i for code that only reads it (a matcher, a level walker): the
+ * slot itself, borrowed, for a boxed list; a fresh box of a typed slot
+ * otherwise. Release with ll_elem_done. No List is built either way. */
+static inline Expr* ll_elem_view(const LinkedList* ll, int64_t i, bool* owned) {
+    const Expr* b = ll_peek_boxed(ll, i);
+    if (b) { *owned = false; return (Expr*)b; }
+    *owned = true;
+    return ll_get(ll, i);
+}
+static inline void ll_elem_done(Expr* e, bool owned) { if (owned) expr_free(e); }
+
 /* ---- growth and removal ---------------------------------------------- */
 void  ll_push_back (LinkedList* ll, Expr* e);           /* consumes e      */
 void  ll_push_front(LinkedList* ll, Expr* e);           /* consumes e      */
@@ -194,6 +205,29 @@ void  ll_cycle_message(const char* head, Expr* e);
 /* Bytes held by `ll` and, recursively, by its elements -- iterative through
  * nested LinkedLists; `elem` measures every other boxed element. */
 int64_t ll_byte_count(const LinkedList* ll, int64_t (*elem)(Expr*));
+
+/* A walker that may rebuild elements (ReplaceAll, Map at a level, N, ...):
+ * fn(elem, i, ctx) returns a NEW element, or NULL to keep elem as it is
+ * (elem is borrowed, see ll_elem_view). The answer is a new LinkedList when
+ * some element changed and NULL when none did, so the caller can hand back
+ * the list itself. Reads a snapshot: fn may run code that changes `src`.
+ * *unwind receives a Throw/Abort sentinel fn returned (the walk stops; the
+ * caller hands it on). */
+Expr* ll_rebuild(const LinkedList* src, Expr* (*fn)(Expr* elem, int64_t i, void* ctx),
+                 void* ctx, Expr** unwind);
+
+/* The sequences the threading heads (MapThread, Inner, Outer, ...) index into
+ * alike: a LinkedList, a List, or an array along its leading axis.
+ * ll_seq_length is -1 for anything else; ll_seq_element(a, i) is element i
+ * (0-based, in range) as a new reference -- read from the slots of a
+ * LinkedList, a row (sub-array) of a rank >= 2 array. */
+int64_t ll_seq_length(const Expr* a);
+Expr*   ll_seq_element(const Expr* a, int64_t i);
+
+/* head[e1, ..., en] (unevaluated) from the elements of `ll`, read from the
+ * slots; consumes `head`. The call Apply, Thread and their kin build from a
+ * List's arguments -- here from the chunks, with no List in between. */
+Expr* ll_call_with_elements(Expr* head, const LinkedList* ll);
 
 /* ---- Expr-level helpers ----------------------------------------------- */
 /* The payload of an EXPR_LINKEDLIST node, or NULL for anything else. */

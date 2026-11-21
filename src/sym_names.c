@@ -337,6 +337,7 @@ const char* SYM_Indeterminate = NULL;
 const char* SYM_InexactNumbers = NULL;
 const char* SYM_Inequality = NULL;
 const char* SYM_Infinity = NULL;
+const char* SYM_Inner = NULL;
 const char* SYM_InputForm = NULL;
 const char* SYM_CharacterRange = NULL;
 const char* SYM_WordBoundary = NULL;
@@ -1518,6 +1519,7 @@ void sym_names_init(void) {
     SYM_InexactNumbers             = intern_symbol("InexactNumbers");
     SYM_Inequality                 = intern_symbol("Inequality");
     SYM_Infinity                   = intern_symbol("Infinity");
+    SYM_Inner                      = intern_symbol("Inner");
     SYM_InputForm                  = intern_symbol("InputForm");
     SYM_CharacterRange                 = intern_symbol("CharacterRange");
     SYM_WordBoundary                   = intern_symbol("WordBoundary");

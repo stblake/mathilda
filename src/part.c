@@ -1223,6 +1223,51 @@ Expr* builtin_part(Expr* res) {
     Expr** indices = res->data.function.args + 1;
     size_t nindices = res->data.function.arg_count - 1;
 
+    /* A LinkedList of indices names parts as a List of them does:
+     * expr[[..., {i1, i2, ...}, ...]] is the parts expr[[..., ik, ...]], under
+     * expr's own head (a LinkedList for a LinkedList). Read from the slots. */
+    for (size_t j = 0; j < nindices; j++) {
+        if (indices[j]->type != EXPR_LINKEDLIST) continue;
+        LinkedList* ix = ll_copy(indices[j]->data.llist);
+        int64_t m = ll_length(ix);
+        bool to_ll = expr->type == EXPR_LINKEDLIST;
+        Expr** parts = malloc(sizeof(Expr*) * (size_t)(m ? m : 1));
+        int64_t got = 0;
+        for (; got < m; got++) {
+            Expr** a = malloc(sizeof(Expr*) * (nindices + 1));
+            a[0] = expr_copy(expr);
+            for (size_t t = 0; t < nindices; t++)
+                a[t + 1] = (t == j) ? ll_get(ix, got) : expr_copy(indices[t]);
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Part), a, nindices + 1));
+            free(a);
+            if (head_is(r, SYM_Part) || eval_is_inflight_unwind(r)) {
+                /* an index out of range: the message has been given; the call
+                 * stays as it stands */
+                bool unwind = eval_is_inflight_unwind(r);
+                for (int64_t k = 0; k < got; k++) expr_free(parts[k]);
+                free(parts);
+                ll_release(ix);
+                if (unwind) return r;
+                expr_free(r);
+                return NULL;
+            }
+            parts[got] = r;
+        }
+        ll_release(ix);
+        Expr* out;
+        if (to_ll) {
+            LinkedList* o = ll_new();
+            for (int64_t k = 0; k < m; k++) ll_push_back(o, parts[k]);
+            out = expr_new_linkedlist(o);
+        } else if (expr->type == EXPR_FUNCTION) {
+            out = pack_offer(expr_new_function(expr_copy(expr->data.function.head), parts, (size_t)m));
+        } else {
+            out = pack_offer(expr_new_function(expr_new_symbol(SYM_List), parts, (size_t)m));
+        }
+        free(parts);
+        return out;
+    }
+
     /* PACK THE SMALL SOURCE UP. A gather's cost is set by the number of
      * INDICES, but the packing decision was made about the SOURCE in isolation:
      * a 65-entry lookup table is correctly left unpacked, and a 262144-entry
@@ -1358,6 +1403,48 @@ Expr* builtin_extract(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* pos = res->data.function.args[1];
     Expr* h = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    /* A LinkedList position: one path when its elements are indices
+     * (Extract[e, LinkedList[{i, j}]] is e[[i, j]]), else a list of positions
+     * (a List of the extracts, as for a List of positions). */
+    if (pos->type == EXPR_LINKEDLIST) {
+        LinkedList* pl = ll_copy(pos->data.llist);
+        int64_t m = ll_length(pl);
+        bool paths = false;
+        for (int64_t i = 0; i < m && !paths; i++) {
+            bool own;
+            Expr* el = ll_elem_view(pl, i, &own);
+            paths = ll_seq_length(el) >= 0;
+            ll_elem_done(el, own);
+        }
+        Expr* out;
+        if (!paths) {
+            Expr** a = malloc(sizeof(Expr*) * (size_t)(m + 1));
+            a[0] = expr_copy(expr);
+            for (int64_t i = 0; i < m; i++) a[i + 1] = ll_get(pl, i);
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Part), a, (size_t)m + 1));
+            free(a);
+            if (head_is(out, SYM_Part)) {          /* no such part: as for a List */
+                expr_free(out);
+                ll_release(pl);
+                return NULL;
+            }
+            if (h) {
+                Expr* ha[1] = { out };
+                out = expr_new_function(expr_copy(h), ha, 1);
+            }
+        } else {
+            Expr** items = malloc(sizeof(Expr*) * (size_t)(m ? m : 1));
+            for (int64_t i = 0; i < m; i++) {
+                Expr* a[3] = { expr_copy(expr), ll_get(pl, i), h ? expr_copy(h) : NULL };
+                items[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Extract), a, h ? 3 : 2));
+            }
+            out = expr_new_function(expr_new_symbol(SYM_List), items, (size_t)m);
+            free(items);
+        }
+        ll_release(pl);
+        return out;
+    }
 
     bool is_list_of_pos = false;
     if (pos->type == EXPR_FUNCTION && pos->data.function.head->type == EXPR_SYMBOL &&
@@ -2175,6 +2262,39 @@ Expr* expr_apply_at_path(Expr* expr, Expr** path, size_t plen,
     if (!expr || !fn) return NULL;
     if (plen == 0) return fn(ctx, expr);
     if (!path) return NULL;
+    /* A LinkedList: a new LinkedList with the named elements walked (an
+     * integer, negative from the end, All or a Span; position 0 -- the head --
+     * is not a part of a LinkedList). A walked element is evaluated as it is
+     * stored, since the evaluator never looks inside a LinkedList. */
+    if (expr->type == EXPR_LINKEDLIST) {
+        Expr* idx = path[0];
+        int64_t len = ll_length(expr->data.llist), start = 1, step = 1, count = 0;
+        if (idx->type == EXPR_INTEGER && idx->data.integer != 0) {
+            int64_t k = idx->data.integer;
+            if (k < 0) k = len + k + 1;
+            if (k < 1 || k > len) return NULL;
+            start = k; count = 1;
+        } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
+            count = len;
+        } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+                   idx->data.function.head->data.symbol.name == SYM_Span) {
+            if (!span_resolve(idx, len, &start, &step, &count)) return NULL;
+        } else {
+            return NULL;
+        }
+        LinkedList* out = ll_copy(expr->data.llist);
+        int64_t cur = start;
+        for (int64_t c = 0; c < count; c++, cur += step) {
+            Expr* el = ll_get(out, cur - 1);
+            Expr* r = expr_apply_at_path(el, path + 1, plen - 1, fn, ctx);
+            expr_free(el);
+            if (!r) { ll_release(out); return NULL; }
+            r = eval_and_free(r);
+            if (eval_is_inflight_unwind(r)) { ll_release(out); return r; }
+            ll_set(out, cur - 1, r);
+        }
+        return expr_new_linkedlist(out);
+    }
     /* Cannot descend into an atom. is_atomic (not a bare type check) so that
      * Rational and Complex -- stored as EXPR_FUNCTION nodes -- stay leaves, as
      * they do for Part and MapIndexed: MapAt[f, 1/2, 1] must not manufacture

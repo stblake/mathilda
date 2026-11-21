@@ -344,6 +344,7 @@ extern const char* SYM_Indeterminate;
 extern const char* SYM_InexactNumbers;
 extern const char* SYM_Inequality;
 extern const char* SYM_Infinity;
+extern const char* SYM_Inner;
 extern const char* SYM_InputForm;
 extern const char* SYM_CharacterRange;
 extern const char* SYM_WordBoundary;

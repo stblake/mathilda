@@ -29,6 +29,7 @@
  */
 
 #include "product.h"
+#include "linkedlist.h"
 #include "compile/compile_underflow.h"   /* S6: underflow -> interpreter */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "product_internal.h"   /* g_product_verify_convergence */
@@ -259,8 +260,8 @@ static Expr* fold_times(Expr** terms, size_t count) {
 
 /* Iterate an explicit list spec, binding var to each element and collecting
  * the evaluated body.  Returns the folded Times.  Never fails. */
-static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
-    size_t n = list->data.function.arg_count;
+static Expr* expand_list(Expr* f, Expr* var, const IterSpec* sp) {
+    size_t n = (size_t)iter_list_length(sp);
     Expr** terms = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t count = 0;
 
@@ -268,7 +269,10 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
     int ptok = mth_progress_push(SYM_Product, (long)n);
     for (size_t i = 0; i < n; i++) {
         mth_progress_step(ptok, (long)i);
-        iter_bind(var, list->data.function.args[i]);
+        bool own;
+        Expr* xv = iter_list_element(sp, (int64_t)i, &own);
+        iter_bind(var, xv);
+        ll_elem_done(xv, own);
         terms[count++] = evaluate(f);
     }
     mth_progress_pop(ptok);
@@ -632,7 +636,7 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
     }
 
     if (s.kind == ITER_KIND_LIST) {
-        Expr* r = expand_list(f, s.var, s.list);
+        Expr* r = expand_list(f, s.var, &s);
         iter_spec_free(&s);
         return r;
     }

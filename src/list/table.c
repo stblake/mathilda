@@ -1,4 +1,5 @@
 #include "list_common.h"
+#include "linkedlist.h"
 #include "table.h"
 #include "../mth_machine_elem.h"   /* the builtins' machine elementary functions */
 #include "../term/term_progress.h"   /* the REPL spinner's loop progress */
@@ -1014,17 +1015,18 @@ Expr* builtin_table(Expr* res) {
          * precision and each element runs through it; any element the program
          * declines (another type or precision, a value outside its real
          * domain) is interpreted, exactly as before. */
-        size_t nl = list_e->data.function.arg_count;
+        size_t nl = (size_t)iter_list_length(&s);
         AutoCompiled* acp = NULL;
 #ifdef USE_MPFR
-        long lbits = table_mpfr_list_bits(list_e);
+        long lbits = list_e ? table_mpfr_list_bits(list_e) : 0;
         if (lbits > 0 && var_sym->type == EXPR_SYMBOL)
             acp = autocompile_new_prec(expr, (const Expr* const*)&var_sym, 1, lbits);
 #endif
         int ptok = mth_progress_push(SYM_Table, (long)nl);
         for (size_t i = 0; i < nl; i++) {
             mth_progress_step(ptok, (long)i);
-            const Expr* xe = list_e->data.function.args[i];
+            bool xown;
+            const Expr* xe = iter_list_element(&s, (int64_t)i, &xown);
             Expr* eval_expr = NULL;
 #ifdef USE_MPFR
             if (acp && xe->type == EXPR_MPFR && (long)mpfr_get_prec(xe->data.mpfr) == lbits)
@@ -1034,6 +1036,7 @@ Expr* builtin_table(Expr* res) {
                 iter_bind(var_sym, (Expr*)xe);
                 eval_expr = evaluate(expr);
             }
+            ll_elem_done((Expr*)xe, xown);
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }
             results[results_count++] = eval_expr;
         }

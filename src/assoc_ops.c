@@ -22,6 +22,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "assoc_ops.h"
+#include "linkedlist.h"
 #include "assoc.h"
 #include "attr.h"
 #include "common.h"
@@ -1396,6 +1397,22 @@ static bool has_missing_within(const Expr* e, int64_t d) {
 }
 
 static Expr* dm_rec(const Expr* e, int64_t level, int64_t maxlev, int64_t d) {
+    if (e->type == EXPR_LINKEDLIST) {
+        /* the List it stands for, element by element into a new LinkedList */
+        if (level >= maxlev) return expr_copy((Expr*)e);
+        const LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll);
+        LinkedList* out = ll_new();
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(ll, i, &own);
+            Expr* nc = dm_rec(el, level + 1, maxlev, d);
+            ll_elem_done(el, own);
+            if (has_missing_within(nc, d)) { expr_free(nc); continue; }
+            ll_push_back(out, nc);
+        }
+        return expr_new_linkedlist(out);
+    }
     bool assoc = assoc_ok(e);
     if (!assoc && !is_list(e)) return expr_copy((Expr*)e);
     if (level >= maxlev) return expr_copy((Expr*)e);
@@ -1416,7 +1433,8 @@ static Expr* dm_rec(const Expr* e, int64_t level, int64_t maxlev, int64_t d) {
 static Expr* ops_deletemissing(Expr* res) {
     size_t argc = ARGC(res);
     Expr* x = argc ? ARG(res, 0) : NULL;
-    if (argc >= 1 && argc <= 3 && !is_list(x) && !is_association(x) && !is_packed_list(x)) {
+    if (argc >= 1 && argc <= 3 && !is_list(x) && !is_association(x) && !is_packed_list(x) &&
+        x->type != EXPR_LINKEDLIST) {
         char* s = expr_to_string(x);
         ops_msg("DeleteMissing::invrp: The argument %s is not a valid Association or a list.", s);
         free(s);

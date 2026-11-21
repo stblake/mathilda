@@ -692,6 +692,45 @@ void test_map_select_listable_direct() {
                    "{m1t, m1u, m1ab}", 0);
 }
 
+/* The level walkers and functional heads see a LinkedList's elements one level
+ * down, as a List's: patterns, replacement, Apply, Fold, Scan, the threading
+ * heads, MapIndexed, MapAt, Pick, Part/Extract with a LinkedList of indices. */
+void test_walkers_and_functional() {
+    const char* fx = "{Range[-3, 4], N[Range[5]]/3, {m2a, m2f[m2b], 2, {m2c, 2}}, {}}";
+    expect_llchk("{Cases[#, 2] &, Cases[#, _Integer, Infinity] &, Position[#, 2] &, DeleteCases[#, 2] &, "
+                 "DeleteCases[#, 2, Infinity] &, FreeQ[#, 2] &, FreeQ[#, m2c] &, Level[#, {1}] &, Level[#, {-1}] &, "
+                 "Depth, LeafCount, FirstCase[#, _m2f] &, FirstPosition[#, 2] &, # /. 2 -> 5 &, "
+                 "Replace[#, 2 -> 5, {1}] &, # //. 1 -> 2 &, m2g @@ # &, Apply[m2g, #, {1}] &, "
+                 "Fold[m2h, 0, #] &, FoldList[m2h, 0, #] &, FoldList[Plus, #] &, Map[m2g, #, {2}] &, MapAll[m2g, #] &, "
+                 "MapIndexed[m2g, #] &, MapAt[m2g, #, -1] &, MapThread[m2h, {#, #}] &, Outer[m2h, #, {1, 2}] &, "
+                 "Inner[m2h, #, #, m2g] &, Thread[m2g[#, 1]] &, AllTrue[#, IntegerQ] &, AnyTrue[#, EvenQ] &, "
+                 "NoneTrue[#, EvenQ] &, SelectFirst[#, EvenQ] &, LengthWhile[#, IntegerQ] &, TakeWhile[#, IntegerQ] &, "
+                 "Pick[#, EvenQ /@ #] &, Part[{9, 8, 7, 6, 5, 4, 3, 2}, LinkedList[{1, 3}]] &, "
+                 "Module[{m2s = {}}, Scan[(m2s = Append[m2s, #]) &, #]; m2s] &}", fx);
+    /* ReplaceAll that matches nothing keeps the object; a change makes a new one */
+    assert_eval_eq("m2x = LinkedList[{1, 2}]; {(m2x /. 7 -> 8) === m2x, (m2x /. 2 -> 8) === m2x}",
+                   "{True, False}", 0);
+    /* nested LinkedLists are walked at every depth */
+    assert_eval_eq("m2n = LinkedList[{LinkedList[{1, 2}], LinkedList[{3, m2y}]}]; "
+                   "{Position[m2n, m2y], Normal /@ Normal[m2n /. m2y -> 4], Depth[m2n], Level[m2n, {2}]}",
+                   "{{{2, 2}}, {{1, 2}, {3, 4}}, 3, {1, 2, 3, m2y}}", 0);
+}
+
+/* Structure queries and the discrete iterators. */
+void test_structure_and_iterators() {
+    const char* fx = "{Range[-3, 4], N[Range[5]]/3, {m3a, 2}, {{1, 2}, {3, 4}}, {}}";
+    expect_llchk("{VectorQ, VectorQ[#, NumberQ] &, MatrixQ, ArrayQ, Dimensions, ArrayDepth, Precision, Accuracy, "
+                 "Table[m3i^2, {m3i, #}] &, Sum[m3i, {m3i, #}] &, Product[m3i, {m3i, #}] &, "
+                 "Module[{m3s = 0}, Do[m3s += m3i, {m3i, #}]; m3s] &}", fx);
+    /* a LinkedList of rows counts as a matrix; a LinkedList level of LinkedLists too */
+    assert_eval_eq("{Dimensions[LinkedList[{LinkedList[{1, 2}], LinkedList[{3, 4}]}]], "
+                   "MatrixQ[LinkedList[{LinkedList[{1, 2}], {3, 4}}]], VectorQ[LinkedList[{1, {2}}]]}",
+                   "{{2, 2}, True, False}", 0);
+    /* the iterator runs over the values the list had: the body may grow it */
+    assert_eval_eq("m3y = LinkedList[{1, 2, 3}]; Do[AppendTo[m3y, m3i], {m3i, m3y}]; Normal[m3y]",
+                   "{1, 2, 3, 1, 2, 3}", 0);
+}
+
 /* ---------------------------------------- phase 5: Compile and autocompile */
 
 /* Module-local lists compile, at every element type, and answer exactly as the
@@ -835,6 +874,8 @@ int main() {
     TEST(test_copying_messages);
     TEST(test_listable_threading_bit_parity);
     TEST(test_map_select_listable_direct);
+    TEST(test_walkers_and_functional);
+    TEST(test_structure_and_iterators);
     TEST(test_copying_heads_scale);
     TEST(test_compile_module_local_lists);
     TEST(test_compile_list_arguments);

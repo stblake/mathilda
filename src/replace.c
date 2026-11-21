@@ -680,6 +680,45 @@ static int64_t get_expr_depth_replace(Expr* e, bool heads) {
     return max_d + 1;
 }
 
+
+/* ---- LinkedList elements ---------------------------------------------------
+ * A LinkedList is walked like the List it stands for: the rules are tried on
+ * the list object itself first, then on each element one level down (no head
+ * part). The answer is the list ITSELF when no element changed and a new
+ * LinkedList otherwise (ll_rebuild), so `ll /. rules` that matches nothing
+ * keeps the identity a mutable object must keep. */
+enum { LLR_ALL, LLR_IDX, LLR_LEVEL };
+typedef struct {
+    int mode;
+    ReplaceRule* rules; size_t num_rules; const void* ix;              /* const RuleIndex*, LLR_IDX */
+    int64_t level, min_l, max_l; bool heads;
+} LLRepCtx;
+
+static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules);
+static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, ReplaceRule* rules, size_t num_rules);
+static Expr* ll_rep_idx_elem(Expr* el, const LLRepCtx* c);
+
+static Expr* ll_rep_elem(Expr* el, int64_t i, void* vc) {
+    (void)i;
+    const LLRepCtx* c = (const LLRepCtx*)vc;
+    Expr* r = c->mode == LLR_ALL ? do_replace_all(el, c->rules, c->num_rules)
+            : c->mode == LLR_IDX ? ll_rep_idx_elem(el, c)
+            : do_replace_at_level(el, c->level + 1, c->min_l, c->max_l, c->heads, c->rules, c->num_rules);
+    if (r == el || (!eval_is_inflight_unwind(r) && expr_eq(r, el))) { expr_free(r); return NULL; }
+    return r;
+}
+
+/* The elements of LinkedList `e` replaced per `c`: the new list, the list
+ * itself (a new reference) when nothing changed, or a Throw/Abort a delayed
+ * right-hand side raised (the walk stops there and hands it on, as it would
+ * leave a List). */
+static Expr* ll_replace_elems(Expr* e, LLRepCtx* c) {
+    Expr* unwind;
+    Expr* r = ll_rebuild(e->data.llist, ll_rep_elem, c, &unwind);
+    if (unwind) return unwind;
+    return r ? r : expr_copy(e);
+}
+
 static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, ReplaceRule* rules, size_t num_rules) {
     if (max_l >= 0 && current_level > max_l) return expr_copy(e);
 
@@ -719,6 +758,10 @@ static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, 
 
         new_e = struct_rebuild(e, assoc, new_head, new_args, count, true);
         if (new_args) free(new_args);
+    } else if (e->type == EXPR_LINKEDLIST && !(max_l >= 0 && current_level >= max_l)) {
+        LLRepCtx c = { LLR_LEVEL, rules, num_rules, NULL, current_level, min_l, max_l, heads };
+        new_e = ll_replace_elems(e, &c);
+        if (eval_is_inflight_unwind(new_e)) return new_e;
     } else {
         new_e = expr_copy(e);
     }
@@ -835,6 +878,10 @@ static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
         Expr* new_e = struct_rebuild(e, assoc, new_head, new_args, count, true);
         if (new_args) free(new_args);
         return new_e;
+    }
+    if (e->type == EXPR_LINKEDLIST) {
+        LLRepCtx c = { LLR_ALL, rules, num_rules, NULL, 0, 0, 0, false };
+        return ll_replace_elems(e, &c);
     }
 
     return expr_copy(e);
@@ -985,7 +1032,15 @@ static Expr* do_replace_all_idx(Expr* e, ReplaceRule* rules, const RuleIndex* ix
         free(new_args);
         return new_e;
     }
+    if (e->type == EXPR_LINKEDLIST) {
+        LLRepCtx c = { LLR_IDX, rules, 0, (const void*)ix, 0, 0, 0, false };
+        return ll_replace_elems(e, &c);
+    }
     return expr_copy(e);
+}
+
+static Expr* ll_rep_idx_elem(Expr* el, const LLRepCtx* c) {
+    return do_replace_all_idx(el, c->rules, (const RuleIndex*)c->ix);
 }
 
 /* Dispatch[rules] -> rules (borrowed), noting that an index was asked for. */

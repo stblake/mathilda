@@ -21,6 +21,7 @@
  */
 
 #include "precision.h"
+#include "linkedlist.h"
 #include "rationalize.h"
 
 #include "arithmetic.h"
@@ -124,9 +125,21 @@ static Expr* precision_of(const Expr* e) {
                 return make_infinity();
             return make_machineprecision();
         case EXPR_COMPILED:
-        case EXPR_LINKEDLIST:
             /* Opaque object; carries no numeric value → exact. */
             return make_infinity();
+        case EXPR_LINKEDLIST: {
+            /* The List it stands for: the minimum over the elements -- O(1)
+             * for typed storage (machine Integers are exact, machine Reals
+             * and Complexes machine precision). */
+            const LinkedList* ll = e->data.llist;
+            LLKind k = ll_kind(ll);
+            if (ll_length(ll) == 0 || k == LL_I64) return make_infinity();
+            if (k == LL_REAL || k == LL_CPLX) return make_machineprecision();
+            Expr* best = make_infinity();
+            for (int64_t i = 0; i < ll_length(ll); ++i)
+                best = precision_min(best, precision_of(ll_peek_boxed(ll, i)));
+            return best;
+        }
         case EXPR_SPARSE:
             /* Precision of the array it represents. */
             return sparse_min_of(e, precision_of);
@@ -271,9 +284,21 @@ static Expr* accuracy_of(const Expr* e) {
         }
 #endif
         case EXPR_COMPILED:
-        case EXPR_LINKEDLIST:
             /* Opaque object; carries no numeric value → exact (infinite accuracy). */
             return make_infinity();
+        case EXPR_LINKEDLIST: {
+            /* The List it stands for: the minimum over the elements. */
+            const LinkedList* ll = e->data.llist;
+            if (ll_kind(ll) == LL_I64) return make_infinity();
+            Expr* best = make_infinity();
+            for (int64_t i = 0; i < ll_length(ll); ++i) {
+                bool own;
+                Expr* el = ll_elem_view(ll, i, &own);
+                best = precision_min(best, accuracy_of(el));
+                ll_elem_done(el, own);
+            }
+            return best;
+        }
         case EXPR_SPARSE:
             return sparse_min_of(e, accuracy_of);
         case EXPR_NDARRAY: {

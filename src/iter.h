@@ -40,7 +40,16 @@ typedef struct {
     Expr*    imax;   /* owned; RANGE upper bound, or COUNT count            */
     Expr*    di;     /* owned; RANGE step (defaults to Integer 1)           */
     Expr*    list;   /* owned List[...] of values; LIST only                */
+    struct LinkedList* ll;  /* LIST only, instead of `list`: an owned snapshot
+                              * of a LinkedList bound ({i, ll}), iterated from
+                              * its slots -- never turned into a List          */
 } IterSpec;
+
+/* The values of a LIST spec, whichever holds them: how many, and value i
+ * (borrowed from the List, or a fresh box of a LinkedList slot when *owned;
+ * free it after binding). */
+int64_t iter_list_length(const IterSpec* s);
+Expr*   iter_list_element(const IterSpec* s, int64_t i, bool* owned);
 
 /*
  * Parse a held iterator spec into `out`.  Bound expressions are evaluate()d

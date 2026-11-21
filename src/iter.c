@@ -39,6 +39,7 @@
  */
 
 #include "modular.h"
+#include "linkedlist.h"
 #include "iter.h"
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "message.h"
@@ -76,6 +77,7 @@ void iter_spec_free(IterSpec* s) {
     if (s->imax) expr_free(s->imax);
     if (s->di)   expr_free(s->di);
     if (s->list) expr_free(s->list);
+    if (s->ll) ll_release(s->ll);
     memset(s, 0, sizeof(*s));
 }
 
@@ -304,6 +306,15 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
                 if (!parts) { iter_spec_free(out); return false; }
                 bound = parts;
             }
+            /* A LinkedList bound, for the discrete iterators: its values are
+             * read from the slots of a snapshot (the body may change the
+             * list; the loop runs over the values it had, as over a List). */
+            if (bound->type == EXPR_LINKEDLIST && g_iter_allow_indexed) {
+                out->kind = ITER_KIND_LIST;
+                out->ll = ll_copy(bound->data.llist);
+                expr_free(bound);
+                return true;
+            }
             if (is_list_expr(bound)) {
                 out->kind = ITER_KIND_LIST;
                 out->list = bound;
@@ -342,6 +353,17 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
     /* Bare count: f[..., n] */
     out->imax = evaluate(spec);
     return true;
+}
+
+int64_t iter_list_length(const IterSpec* s) {
+    if (s->ll) return ll_length(s->ll);
+    return s->list ? (int64_t)s->list->data.function.arg_count : 0;
+}
+
+Expr* iter_list_element(const IterSpec* s, int64_t i, bool* owned) {
+    if (s->ll) return ll_elem_view(s->ll, i, owned);
+    *owned = false;
+    return s->list->data.function.args[i];
 }
 
 bool iter_spec_parse_lattice(Expr* spec, IterSpec* out) {
@@ -629,7 +651,6 @@ Expr* builtin_do(Expr* res) {
     Expr* imin_e  = s.imin;
     Expr* imax_e  = s.imax;
     Expr* di_e    = s.di;
-    Expr* list_e  = s.list;
 
     /* Automatic numeric fast-path: compile the body's arithmetic (a single
      * assignment or a CompoundExpression of assignments) to doubles and iterate
@@ -682,10 +703,14 @@ Expr* builtin_do(Expr* res) {
         mth_progress_pop(ptok);
     } else if (is_list_iter) {
         /* {i, {a, b, c, ...}} -- iterate over explicit list elements. */
-        int ptok = mth_progress_push(SYM_Do, (long)list_e->data.function.arg_count);
-        for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
+        int64_t nl = iter_list_length(&s);
+        int ptok = mth_progress_push(SYM_Do, (long)nl);
+        for (int64_t i = 0; i < nl; i++) {
             mth_progress_step(ptok, (long)i);
-            iter_bind(var_sym, list_e->data.function.args[i]);
+            bool own;
+            Expr* xv = iter_list_element(&s, i, &own);
+            iter_bind(var_sym, xv);
+            ll_elem_done(xv, own);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
             IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);

@@ -769,6 +769,16 @@ static void ll_push_back_buffer(LinkedList* ll, const unsigned char* src, int64_
     }
 }
 
+Expr* ll_call_with_elements(Expr* head, const LinkedList* ll) {
+    int64_t n = ll_length(ll);
+    Expr** a = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+    if (!a) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
+    for (int64_t i = 0; i < n; i++) a[i] = ll_get(ll, i);
+    Expr* call = expr_new_function(head, a, (size_t)n);
+    free(a);
+    return call;
+}
+
 LinkedList* ll_from_buffer(LLKind kind, const void* buf, int64_t n) {
     LinkedList* ll = ll_new();
     if (n > 0) {
