@@ -5558,3 +5558,15 @@ returns a List for a List returns a LinkedList for a LinkedList).
   stored function. Pass the shared parent's status down from the call site.
 - **Diff modes must not skip the case they exist to catch.** Comparing only walks that
   made no renames hid exactly the dropped-rename bug. Compare rename counts as well.
+
+## LinkedList "no conversion" means no all-elements array either (2026-11-22)
+
+When the user asked for LinkedList support "using the linked lists directly, not
+converting to a List", three parallel workers each still built an `Expr*` array
+of every element (`ll_view`, `LLElems`, `ll_tensor_leaves`) to reuse the List
+algorithms, calling it "not a List". The user ruled it is one: elements must be
+read on demand from the slots (`ll_seq_view` over an `ll_copy` snapshot); only
+raw machine buffers (`ll_gather` into double/int64) for raw kernels are allowed.
+Rule: make the forbidden thing MEASURABLE before delegating (the materialisation
+counter must count every helper that could be misused), and put the exact
+boundary, with the cheap-looking loophole named, in the worker brief.

@@ -11,10 +11,15 @@ read through spans/peek, write into chunks. Gate: make check-linkedlist (convers
 - [x] P2 level walkers (Position/Cases/DeleteCases/FreeQ/Level/Replace*/MapIndexed/Scan/Depth/LeafCount); Apply, Fold*, MapThread, Inner, Outer, Thread, *True, SelectFirst, TakeWhile, Pick, Association
 - [x] P3 VectorQ/ArrayQ/MatrixQ/Dimensions/ArrayDepth/Precision; iterators {i, ll}
 - [ ] P2 left: the Association family (Counts, GroupBy, AssociationThread, Lookup, ...) moved to P4; LinkedList as a SPEC argument (Delete/Reverse/Array/RotateLeft levels, rule lists) unsupported except Part/Extract/Pick
-- [ ] P4 sort/sets/tally/gather/split/partition/subsets/rotate/pad/flatten/accumulate/max/min/...
-- [ ] P5 strings + statistics
-- [ ] P6 vector numerics, symbolic mappers, Compile lowering
-- [ ] P7 design doc, data-structures.md, docstrings, changelog; review section
+- [x] P4 sort/sets/tally/gather/split/partition/subsets/rotate/pad/flatten/accumulate/max/min/...
+- [x] P5 strings + statistics
+- [x] P6 vector numerics, symbolic mappers, Compile lowering
+- [x] P7 design doc, data-structures.md, docstrings, changelog; review section
+
+Review (2026-11-22):
+- Audit 552 -> 12 findings, 0 CONV (no head converts a LinkedList); the 12 left are deliberate (spec arguments; variable lists of CoefficientRules/Arrays, Minimize family).
+- Phases 4-6 ran as three parallel worktree workers. In round 1 all three built all-elements Expr* arrays (ll_view / LLElems / ll_tensor_leaves). The user ruled that out (elements on demand, per slot), so round 2 removed them; the counter now counts any such array.
+- Open: Compile[] lowering of the newly supported numeric heads on _LinkedList registers; the List-side defects listed in the changelog.
 
 # Campaign D: every open FriCAS-comparison item (planned 2026-11-21)
 
