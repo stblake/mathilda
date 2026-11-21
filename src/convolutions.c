@@ -203,7 +203,23 @@ typedef struct {
 
     const Expr* g_head;              /* NULL => Times */
     const Expr* h_head;              /* NULL => Plus */
+    /* With a LinkedList operand the leaves are read on demand from the nests
+     * (ll_leaf) instead of the borrowed arrays above. */
+    bool     use_L;
+    LLLeaves kL, lL, pL;
+    bool     out_ll;                 /* answer with a LinkedList outer level */
 } ConvSpec;
+
+/* Leaf i of the kernel / list / padding as a new reference. */
+static Expr* cv_get(const ConvSpec* s, Expr** arr, const LLLeaves* L, int64_t i) {
+    if (!s->use_L) return expr_copy(arr[i]);
+    bool o;
+    Expr* e = ll_leaf(L, i, &o);
+    return o ? e : expr_copy(e);
+}
+#define cv_ker(s, i)  cv_get((s), (s)->ker_leaves, &(s)->kL, (i))
+#define cv_list(s, i) cv_get((s), (s)->list_leaves, &(s)->lL, (i))
+#define cv_pad(s, i)  cv_get((s), (s)->pad_leaves, &(s)->pL, (i))
 
 /* Per-axis list index touched by output t and kernel r (1-based). */
 static int64_t axis_j(const ConvSpec* s, int ax, int64_t t, int64_t r) {
@@ -211,7 +227,7 @@ static int64_t axis_j(const ConvSpec* s, int ax, int64_t t, int64_t r) {
                                             : (t + s->KL[ax]) - r;
 }
 
-/* Resolve the list value at multi-index jvec. Returns a borrowed Expr* leaf, or
+/* Resolve the list value at multi-index jvec. Returns a new reference, or
  * NULL with *dropped = true when the position is out of range under empty
  * padding (the list factor is dropped from the term). */
 static Expr* listval_leaf(const ConvSpec* s, const int64_t* jvec, bool* dropped) {
@@ -222,10 +238,10 @@ static Expr* listval_leaf(const ConvSpec* s, const int64_t* jvec, bool* dropped)
     if (inrange) {
         int64_t flat = 0;
         for (int ax = 0; ax < s->rank; ax++) flat += (jvec[ax] - 1) * s->lstride[ax];
-        return s->list_leaves[flat];
+        return cv_list(s, flat);
     }
     if (s->pad_kind == PAD_EMPTY) { *dropped = true; return NULL; }
-    if (s->pad_kind == PAD_CONST) return s->pad_scalar;
+    if (s->pad_kind == PAD_CONST) return expr_copy(s->pad_scalar);
     /* PAD_LIST */
     int64_t flat = 0;
     for (int ax = 0; ax < s->rank; ax++) {
@@ -237,7 +253,7 @@ static Expr* listval_leaf(const ConvSpec* s, const int64_t* jvec, bool* dropped)
         }
         flat += idx * s->pstride[ax];
     }
-    return s->pad_leaves[flat];
+    return cv_pad(s, flat);
 }
 
 /* Numeric sibling of listval_leaf: resolve the list value at jvec straight to a
@@ -251,7 +267,9 @@ static bool listval_value(const ConvSpec* s, const int64_t* jvec,
     if (!s->list_arr && !s->pad_arr) {
         Expr* v = listval_leaf(s, jvec, dropped);
         if (*dropped) return true;
-        return v && leaf_to_cdouble(v, re, im);
+        bool ok = v && leaf_to_cdouble(v, re, im);
+        expr_free(v);
+        return ok;
     }
     *dropped = false;
     bool inrange = true;
@@ -265,7 +283,10 @@ static bool listval_value(const ConvSpec* s, const int64_t* jvec,
                     s->list_arr->data.ndarray.dtype, re, im);
             return true;
         }
-        return leaf_to_cdouble(s->list_leaves[flat], re, im);
+        Expr* v = cv_list(s, flat);
+        bool ok = leaf_to_cdouble(v, re, im);
+        expr_free(v);
+        return ok;
     }
     if (s->pad_kind == PAD_EMPTY) { *dropped = true; return true; }
     if (s->pad_kind == PAD_CONST) return leaf_to_cdouble(s->pad_scalar, re, im);
@@ -281,7 +302,10 @@ static bool listval_value(const ConvSpec* s, const int64_t* jvec,
                 s->pad_arr->data.ndarray.dtype, re, im);
         return true;
     }
-    return leaf_to_cdouble(s->pad_leaves[flat], re, im);
+    Expr* v = cv_pad(s, flat);
+    bool ok = leaf_to_cdouble(v, re, im);
+    expr_free(v);
+    return ok;
 }
 
 /* ==================================================================== *
@@ -296,17 +320,17 @@ static Expr* make_term(const ConvSpec* s, const int64_t* tvec, const int64_t* rv
         jvec[ax] = axis_j(s, ax, tvec[ax], rvec[ax]);
         kflat += (rvec[ax] - 1) * s->kstride[ax];
     }
-    Expr* kleaf = s->ker_leaves[kflat];
+    Expr* kleaf = cv_ker(s, kflat);
     bool dropped;
     Expr* val = listval_leaf(s, jvec, &dropped);
     if (dropped) {
         Expr** ga = malloc(sizeof(Expr*));
-        ga[0] = expr_copy(kleaf);
+        ga[0] = kleaf;
         return mk_head_fn(SYM_Times, s->g_head, ga, 1);
     }
     Expr** ga = malloc(2 * sizeof(Expr*));
-    ga[0] = expr_copy(kleaf);
-    ga[1] = expr_copy(val);
+    ga[0] = kleaf;
+    ga[1] = val;
     return mk_head_fn(SYM_Times, s->g_head, ga, 2);
 }
 
@@ -339,6 +363,12 @@ static Expr* build_output(const ConvSpec* s, int oax, int64_t* tvec) {
     for (int64_t t = 1; t <= L; t++) {
         tvec[oax] = t;
         els[t - 1] = build_output(s, oax + 1, tvec);
+    }
+    if (oax == 0 && s->out_ll) {                 /* straight into a LinkedList */
+        LinkedList* ll = ll_new();
+        for (int64_t t = 0; t < L; t++) ll_push_back(ll, els[t]);
+        free(els);
+        return expr_new_linkedlist(ll);
     }
     return mk_head_fn(SYM_List, NULL, els, (size_t)L);
 }
@@ -388,12 +418,17 @@ static void convnum_free(ConvNum* c) {
 /* Convert `n` leaves into a fresh (re, im) pair of arrays. false if any leaf is
  * not machine-numeric -- the caller then abandons the fast path entirely, which
  * is the same outcome the old per-iteration check produced. */
-static bool convnum_leaves(Expr** leaves, int64_t n, double** re, double** im) {
+static bool convnum_leaves(const ConvSpec* s, Expr** arr, const LLLeaves* L, int64_t n,
+                           double** re, double** im) {
     *re = malloc((size_t)(n ? n : 1) * sizeof(double));
     *im = malloc((size_t)(n ? n : 1) * sizeof(double));
     if (!*re || !*im) return false;
-    for (int64_t i = 0; i < n; i++)
-        if (!leaf_to_cdouble(leaves[i], &(*re)[i], &(*im)[i])) return false;
+    for (int64_t i = 0; i < n; i++) {
+        Expr* e = cv_get(s, arr, L, i);
+        bool ok = leaf_to_cdouble(e, &(*re)[i], &(*im)[i]);
+        expr_free(e);
+        if (!ok) return false;
+    }
     return true;
 }
 
@@ -417,15 +452,26 @@ static bool convnum_ndarray(const Expr* a, int64_t n, double** re, double** im) 
 }
 
 /* One operand's numeric image, from whichever representation it arrived in. */
-static bool convnum_operand(const Expr* arr, Expr** leaves, int64_t n,
-                            double** re, double** im) {
+static bool convnum_operand(const Expr* arr, const ConvSpec* s, Expr** leaves,
+                            const LLLeaves* L, int64_t n, double** re, double** im) {
     return arr ? convnum_ndarray(arr, n, re, im)
-               : convnum_leaves(leaves, n, re, im);
+               : convnum_leaves(s, leaves, L, n, re, im);
 }
 
 /* The result of a machine convolution over packed input, as a buffer.
  * Real values only -- a complex result keeps the nested-List shape, which is
  * what the List path produces for it too. */
+static Expr* build_nested(Expr** leaves, const int64_t* dims, int rank,
+                          int level, size_t* idx);
+/* The engines' row-major results as the answer: nested Lists, or with a
+ * LinkedList outer level built directly (out_ll). */
+static Expr* conv_build(const ConvSpec* s, Expr** leaves, size_t* idx) {
+    if (!s->out_ll) return build_nested(leaves, s->Ldims, s->rank, 0, idx);
+    bool lvl[CONV_MAX_RANK] = { false };
+    lvl[0] = true;
+    return ll_tensor_build(s->Ldims, s->rank, leaves, lvl);
+}
+
 static Expr* conv_pack_result(const ConvSpec* s, const double* vals, int64_t n) {
     double* out = malloc((size_t)(n ? n : 1) * sizeof(double));
     if (!out) return NULL;
@@ -490,13 +536,13 @@ static Expr* conv_direct_machine(const ConvSpec* s, bool any_complex) {
 
     ConvNum c;
     memset(&c, 0, sizeof(c));
-    if (!convnum_operand(s->ker_arr, s->ker_leaves, mtot, &c.kr, &c.ki) ||
-        !convnum_operand(s->list_arr, s->list_leaves, ltot, &c.lr, &c.li)) {
+    if (!convnum_operand(s->ker_arr, s, s->ker_leaves, &s->kL, mtot, &c.kr, &c.ki) ||
+        !convnum_operand(s->list_arr, s, s->list_leaves, &s->lL, ltot, &c.lr, &c.li)) {
         convnum_free(&c);
         return NULL;
     }
     if (s->pad_kind == PAD_LIST) {
-        if (!convnum_operand(s->pad_arr, s->pad_leaves, ptot, &c.pr, &c.pi)) {
+        if (!convnum_operand(s->pad_arr, s, s->pad_leaves, &s->pL, ptot, &c.pr, &c.pi)) {
             convnum_free(&c);
             return NULL;
         }
@@ -660,7 +706,7 @@ static Expr* conv_direct_machine(const ConvSpec* s, bool any_complex) {
         return packed;
     }
     size_t idx = 0;
-    Expr* result = build_nested(leaves, s->Ldims, s->rank, 0, &idx);
+    Expr* result = conv_build(s, leaves, &idx);
     free(leaves);
     return result;
 }
@@ -696,12 +742,17 @@ static Expr* conv_direct_mpfr(const ConvSpec* s, bool any_complex, long target_b
                 jvec[ax] = axis_j(s, ax, tvec[ax], r);
             }
             bool inexact;
-            if (!get_approx_mpfr(s->ker_leaves[kf], re, im, &inexact)) { ok = 0; break; }
+            Expr* kl = cv_ker(s, kf);
+            bool kg = get_approx_mpfr(kl, re, im, &inexact);
+            expr_free(kl);
+            if (!kg) { ok = 0; break; }
             mpfr_set(kv.re, re, MPFR_RNDN); mpfr_set(kv.im, im, MPFR_RNDN);
             bool dropped;
             Expr* v = listval_leaf(s, jvec, &dropped);
             if (dropped) { ncpx_add(&acc, &acc, &kv); continue; }
-            if (!get_approx_mpfr(v, re, im, &inexact)) { ok = 0; break; }
+            bool vg = get_approx_mpfr(v, re, im, &inexact);
+            expr_free(v);
+            if (!vg) { ok = 0; break; }
             mpfr_set(vv.re, re, MPFR_RNDN); mpfr_set(vv.im, im, MPFR_RNDN);
             ncpx_mul(&prod, &kv, &vv, wp);
             ncpx_add(&acc, &acc, &prod);
@@ -734,7 +785,7 @@ static Expr* conv_direct_mpfr(const ConvSpec* s, bool any_complex, long target_b
         return NULL;
     }
     size_t idx = 0;
-    Expr* result = build_nested(leaves, s->Ldims, s->rank, 0, &idx);
+    Expr* result = conv_build(s, leaves, &idx);
     free(leaves);
     return result;
 }
@@ -784,8 +835,11 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
         if (s->ker_arr) {
             ndt_get(s->ker_arr->data.ndarray.data, (size_t)o,
                     s->ker_arr->data.ndarray.dtype, &re, &im);
-        } else if (!leaf_to_cdouble(s->ker_leaves[o], &re, &im)) {
-            free(Kbuf); free(Abuf); return NULL;
+        } else {
+            Expr* kl = cv_ker(s, o);
+            bool kg = leaf_to_cdouble(kl, &re, &im);
+            expr_free(kl);
+            if (!kg) { free(Kbuf); free(Abuf); return NULL; }
         }
         Kbuf[2 * pos] = re; Kbuf[2 * pos + 1] = im;
     }
@@ -854,7 +908,7 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
         return packed;
     }
     size_t idx = 0;
-    Expr* result = build_nested(leaves, s->Ldims, s->rank, 0, &idx);
+    Expr* result = conv_build(s, leaves, &idx);
     free(leaves);
     return result;
 }
@@ -927,7 +981,10 @@ static Expr* conv_fft_mpfr(const ConvSpec* s, bool any_complex, long target_bits
             pos += p * Pstr[ax];
         }
         bool inexact;
-        if (!get_approx_mpfr(s->ker_leaves[o], re, im, &inexact)) { ok = 0; break; }
+        Expr* kl = cv_ker(s, o);
+        bool kg = get_approx_mpfr(kl, re, im, &inexact);
+        expr_free(kl);
+        if (!kg) { ok = 0; break; }
         mpfr_set(Kbuf[pos].re, re, MPFR_RNDN);
         mpfr_set(Kbuf[pos].im, im, MPFR_RNDN);
     }
@@ -944,7 +1001,9 @@ static Expr* conv_fft_mpfr(const ConvSpec* s, bool any_complex, long target_bits
         }
         bool dropped, inexact;
         Expr* v = listval_leaf(s, jvec, &dropped);
-        if (!v || !get_approx_mpfr(v, re, im, &inexact)) { ok = 0; break; }
+        bool vg = v && get_approx_mpfr(v, re, im, &inexact);
+        expr_free(v);
+        if (!vg) { ok = 0; break; }
         mpfr_set(Abuf[pos].re, re, MPFR_RNDN);
         mpfr_set(Abuf[pos].im, im, MPFR_RNDN);
     }
@@ -993,7 +1052,7 @@ static Expr* conv_fft_mpfr(const ConvSpec* s, bool any_complex, long target_bits
         }
         mpfr_clear(invP);
         size_t idx = 0;
-        result = build_nested(leaves, s->Ldims, s->rank, 0, &idx);
+        result = conv_build(s, leaves, &idx);
         free(leaves);
     }
 
@@ -1023,12 +1082,13 @@ static bool leaf_is_inexact(const Expr* e) {
     return false;
 }
 
-static NumClass classify_leaves(Expr** a, int64_t na, Expr** b, int64_t nb,
+static NumClass classify_leaves(const ConvSpec* s, Expr** a, int64_t na, Expr** b, int64_t nb,
                                 bool* any_complex, long* arb_bits) {
     bool all_num = true, any_inexact = false;
     *any_complex = false;
     (void)arb_bits;
     Expr** arrs[2] = { a, b };
+    const LLLeaves* Ls[2] = { &s->kL, &s->lL };
     int64_t counts[2] = { na, nb };
 #ifdef USE_MPFR
     bool any_mpfr = false;
@@ -1036,7 +1096,7 @@ static NumClass classify_leaves(Expr** a, int64_t na, Expr** b, int64_t nb,
 #endif
     for (int k = 0; k < 2; k++) {
         for (int64_t i = 0; i < counts[k]; i++) {
-            Expr* e = arrs[k][i];
+            Expr* e = cv_get(s, arrs[k], Ls[k], i);
             if (!expr_is_numeric_like(e)) all_num = false;
             Expr *cr, *ci;
             if (is_complex(e, &cr, &ci)) *any_complex = true;
@@ -1048,6 +1108,7 @@ static NumClass classify_leaves(Expr** a, int64_t na, Expr** b, int64_t nb,
                 if (ib > 0 && (minb == 0 || ib < minb)) minb = ib;
             }
 #endif
+            expr_free(e);
         }
     }
     if (!all_num) return CLS_SYMBOLIC;
@@ -1185,28 +1246,39 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     /* Kernel + list leaves. */
     int64_t ktot = 1, ltot = 1;
     for (int ax = 0; ax < s.rank; ax++) { ktot *= s.kdims[ax]; ltot *= s.ldims[ax]; }
-    /* A LinkedList operand's leaves are read from its slots into an owned
-     * array (freed below); a List's are borrowed. */
-    bool ker_ll = any_ll, list_ll = any_ll;
-    if (!s.ker_arr) {
-        s.ker_leaves = malloc((size_t)ktot * sizeof(Expr*));
-        size_t kidx = 0;
-        if (ker_ll) ll_tensor_leaves(ker, s.rank, s.ker_leaves, &kidx);
-        else nest_flatten(ker, 0, s.rank, s.ker_leaves, &kidx);
+    /* With a LinkedList anywhere the leaves are read on demand from the
+     * operands (ll_leaf, every operand alike); otherwise a List's leaves are
+     * flattened into borrowed arrays. */
+    bool ker_ll = false, list_ll = false;
+    bool deep = false;                 /* a nest deeper than the kernel's rank */
+    s.use_L = any_ll;
+    /* the answer of a LinkedList list (or kernel) is a LinkedList */
+    s.out_ll = list->type == EXPR_LINKEDLIST || ker->type == EXPR_LINKEDLIST;
+    if (any_ll) {
+        ll_leaves_nest(&s.kL, ker, s.rank, s.kdims);
+        ll_leaves_nest(&s.lL, list, s.rank, s.ldims);
+        for (int k = 0; k < 2 && !deep; k++) {
+            const LLLeaves* L = k ? &s.lL : &s.kL;
+            int64_t tot = k ? ltot : ktot;
+            for (int64_t i = 0; i < tot && !deep; i++) {
+                bool own;
+                Expr* e = ll_leaf(L, i, &own);
+                deep = ll_is_seq(e) || is_ndarray(e);
+                ll_elem_done(e, own);
+            }
+        }
+    } else {
+        if (!s.ker_arr) {
+            s.ker_leaves = malloc((size_t)ktot * sizeof(Expr*));
+            size_t kidx = 0;
+            nest_flatten(ker, 0, s.rank, s.ker_leaves, &kidx);
+        }
+        if (!s.list_arr) {
+            s.list_leaves = malloc((size_t)ltot * sizeof(Expr*));
+            size_t lidx = 0;
+            nest_flatten(list, 0, s.rank, s.list_leaves, &lidx);
+        }
     }
-    if (!s.list_arr) {
-        s.list_leaves = malloc((size_t)ltot * sizeof(Expr*));
-        size_t lidx = 0;
-        if (list_ll) ll_tensor_leaves(list, s.rank, s.list_leaves, &lidx);
-        else nest_flatten(list, 0, s.rank, s.list_leaves, &lidx);
-    }
-    bool deep = false;                 /* a LinkedList nest deeper than the kernel's rank */
-    for (int64_t i = 0; ker_ll && i < ktot && !deep; i++)
-        deep = ll_is_seq(s.ker_leaves[i]) || is_ndarray(s.ker_leaves[i]);
-    for (int64_t i = 0; list_ll && i < ltot && !deep; i++)
-        deep = ll_is_seq(s.list_leaves[i]) || is_ndarray(s.list_leaves[i]);
-    int64_t pad_tot = 0;
-    bool pad_ll = false;
 
     /* Padding. */
     Expr** pad_leaves_owned = NULL;
@@ -1216,6 +1288,7 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
         memcpy(s.pdims, s.ldims, sizeof(s.pdims));
         memcpy(s.pstride, s.lstride, sizeof(s.pstride));
         s.pad_leaves = s.list_leaves;
+        s.pL = s.lL;
         s.pad_arr = s.list_arr;          /* cyclic default tiles the list itself */
     } else if (head_is(pad_arg, SYM_List) || pad_arg->type == EXPR_LINKEDLIST) {
         if (pad_arg->type == EXPR_LINKEDLIST ? ll_length(pad_arg->data.llist) == 0
@@ -1235,13 +1308,12 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
                 ptot *= s.pdims[ax];
             }
             row_major_strides(s.pdims, s.rank, s.pstride);
-            if (!s.pad_arr) {
+            if (any_ll) {
+                ll_leaves_nest(&s.pL, pad_arg, s.rank, s.pdims);
+            } else if (!s.pad_arr) {
                 pad_leaves_owned = malloc((size_t)ptot * sizeof(Expr*));
                 size_t pidx = 0;
-                pad_ll = any_ll;
-                pad_tot = ptot;
-                if (pad_ll) ll_tensor_leaves(pad_arg, s.rank, pad_leaves_owned, &pidx);
-                else nest_flatten(pad_arg, 0, s.rank, pad_leaves_owned, &pidx);
+                nest_flatten(pad_arg, 0, s.rank, pad_leaves_owned, &pidx);
                 s.pad_leaves = pad_leaves_owned;
             }
         }
@@ -1267,7 +1339,7 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
          * needs none -- a machine buffer is machine-numeric by construction, and
          * its dtype already says whether it is complex. Pass only the unpacked
          * side, and fold the packed side's dtype in afterwards. */
-        NumClass cls = classify_leaves(s.ker_arr  ? NULL : s.ker_leaves,
+        NumClass cls = classify_leaves(&s, s.ker_arr  ? NULL : s.ker_leaves,
                                        s.ker_arr  ? 0    : ktot,
                                        s.list_arr ? NULL : s.list_leaves,
                                        s.list_arr ? 0    : ltot,
@@ -1317,13 +1389,8 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     }
     if (!result) result = conv_direct(&s);
 
-    if (pad_ll) for (int64_t i = 0; i < pad_tot; i++) expr_free(pad_leaves_owned[i]);
     free(pad_leaves_owned);
     conv_free_leaves(&s, ker_ll, ktot, list_ll, ltot);
-    /* the answer of a LinkedList list (or kernel) is a LinkedList */
-    if (result && (list->type == EXPR_LINKEDLIST || ker->type == EXPR_LINKEDLIST))
-        result = ll_from_list_result(is_ndarray(result) && result->data.ndarray.rank > 1
-                                     ? ndarray_to_nested_list(result) : result);
     return result;
 }
 

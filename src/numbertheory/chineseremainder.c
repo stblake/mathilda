@@ -70,24 +70,34 @@ static bool cr_is_number(Expr* e) {
 
 /* The CRT over residues rv[0..nr) and moduli mv[0..nm): the elements of two
  * Lists, or of LinkedLists read from their slots. */
-static Expr* cr_core(Expr** rv, size_t nr, Expr** mv, size_t nm, Expr* d_expr) {
+/* Element i of a List (borrowed) or a LinkedList (its slot, held in *hold
+ * until the next read): residues and moduli are read one at a time. */
+static Expr* cr_at(const Expr* seq, size_t i, Expr** hold) {
+    if (seq->type != EXPR_LINKEDLIST) return seq->data.function.args[i];
+    expr_free(*hold);
+    *hold = ll_get(seq->data.llist, (int64_t)i);
+    return *hold;
+}
+
+static Expr* cr_core_impl(const Expr* rs, size_t nr, const Expr* ms, size_t nm, Expr* d_expr,
+                          Expr** hr, Expr** hm) {
     /* Symbolic arguments leave the call unevaluated silently, so symbolic flow
      * and rules still apply. */
     size_t n = nr;
     if (n == 0 && nm == 0) return NULL;
     for (size_t k = 0; k < 2; k++) {
-        Expr** l = k ? mv : rv;
+        const Expr* l = k ? ms : rs;
         size_t ln = k ? nm : nr;
         for (size_t i = 0; i < ln; i++)
-            if (!cr_is_number(l[i])) return NULL;
+            if (!cr_is_number(cr_at(l, i, k ? hm : hr))) return NULL;
     }
 
     /* Numbers, but not two equal-length lists of integers with positive moduli
      * -- ChineseRemainder::pilist. */
     bool valid = nm == n;
     for (size_t i = 0; i < n && valid; i++) {
-        Expr* r = rv[i];
-        Expr* m = mv[i];
+        Expr* r = cr_at(rs, i, hr);
+        Expr* m = cr_at(ms, i, hm);
         if (!expr_is_integer_like(r) || !expr_is_integer_like(m)) valid = false;
         else if (m->type == EXPR_INTEGER ? m->data.integer <= 0
                                          : mpz_sgn(m->data.bigint) <= 0) valid = false;
@@ -108,8 +118,8 @@ static Expr* cr_core(Expr** rv, size_t nr, Expr** mv, size_t nm, Expr* d_expr) {
     bool ok = true;
     for (size_t i = 0; i < n; i++) {
         mpz_t ri, mi;
-        expr_to_mpz(rv[i], ri); /* inits ri */
-        expr_to_mpz(mv[i], mi); /* inits mi */
+        expr_to_mpz(cr_at(rs, i, hr), ri); /* inits ri */
+        expr_to_mpz(cr_at(ms, i, hm), mi); /* inits mi */
 
         /* A zero modulus has no residues to constrain against -- reject it
          * (it would also make the lcm zero and break the [0, L) contract). */
@@ -158,6 +168,14 @@ static Expr* cr_core(Expr** rv, size_t nr, Expr** mv, size_t nm, Expr* d_expr) {
     return out;
 }
 
+static Expr* cr_core(const Expr* rs, const Expr* ms, Expr* d_expr) {
+    Expr *hr = NULL, *hm = NULL;
+    Expr* r = cr_core_impl(rs, (size_t)ll_seq_len(rs), ms, (size_t)ll_seq_len(ms), d_expr, &hr, &hm);
+    expr_free(hr);
+    expr_free(hm);
+    return r;
+}
+
 Expr* builtin_chineseremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -183,11 +201,6 @@ Expr* builtin_chineseremainder(Expr* res) {
 
     /* Symbolic arguments leave the call unevaluated silently, so symbolic flow
      * and rules still apply. A LinkedList is the List of its elements. */
-    LLElemsC re, me;
-    if (!ll_elems_of(rlist, &re)) return NULL;
-    if (!ll_elems_of(mlist, &me)) { ll_elems_release(&re); return NULL; }
-    Expr* out = cr_core(re.v, (size_t)re.n, me.v, (size_t)me.n, d_expr);
-    ll_elems_release(&re);
-    ll_elems_release(&me);
-    return out;
+    if (ll_seq_len(rlist) < 0 || ll_seq_len(mlist) < 0) return NULL;
+    return cr_core(rlist, mlist, d_expr);
 }

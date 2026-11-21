@@ -604,8 +604,17 @@ static Expr* gb_with_generalised_atoms(Expr* res, Expr* (*self)(Expr*)) {
     return out;
 }
 
-static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t n_polys,
-                     Expr* vars_list, Expr* elim_list);
+static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, const Expr* pv, size_t n_polys,
+                     Expr* vars_list, Expr* elim_list, Expr** hold);
+
+/* Polynomial i of a List (borrowed) or a LinkedList (its slot, held in *hold
+ * until the next read): the polynomials are read one at a time. */
+static Expr* gb_at(const Expr* seq, size_t i, Expr** hold) {
+    if (seq->type != EXPR_LINKEDLIST) return seq->data.function.args[i];
+    expr_free(*hold);
+    *hold = ll_get(seq->data.llist, (int64_t)i);
+    return *hold;
+}
 
 Expr* builtin_groebner_basis(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -642,15 +651,16 @@ Expr* builtin_groebner_basis(Expr* res) {
 
     /* The polynomials: a List's elements, or a LinkedList's read from its
      * slots (released with `pl` at every exit below). */
-    LLElemsC pl;
-    if (!ll_elems_of(polys_list, &pl)) return NULL;
-    Expr* r = gb_core(res, n_pos, &opt, pl.v, (size_t)pl.n, vars_list, elim_list);
-    ll_elems_release(&pl);
+    int64_t np = ll_seq_len(polys_list);
+    if (np < 0) return NULL;
+    Expr* hold = NULL;
+    Expr* r = gb_core(res, n_pos, &opt, polys_list, (size_t)np, vars_list, elim_list, &hold);
+    expr_free(hold);
     return r;
 }
 
-static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t n_polys,
-                     Expr* vars_list, Expr* elim_list) {
+static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, const Expr* pv, size_t n_polys,
+                     Expr* vars_list, Expr* elim_list, Expr** hold) {
     GBOptions opt = *optp;
     (void)res;
 
@@ -753,7 +763,7 @@ static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t
     {
         const ExprSet* excl[3] = { &main_set, &elim_set, &param_explicit };
         for (size_t i = 0; i < n_polys; i++) {
-            collect_free_symbols(pv[i],
+            collect_free_symbols(gb_at(pv, i, hold),
                                  excl, 3, &param_auto);
         }
     }
@@ -771,7 +781,7 @@ static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t
     if (main_set.n == 0 && !vars_list && param_explicit.n > 0) {
         const ExprSet* excl[3] = { &param_explicit, &elim_set, NULL };
         for (size_t i = 0; i < n_polys; i++) {
-            collect_free_symbols(pv[i],
+            collect_free_symbols(gb_at(pv, i, hold),
                                  excl, 2, &main_set);
         }
     }
@@ -918,7 +928,7 @@ static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, Expr** pv, size_t
     size_t nF = 0;
     bool failed = false;
     for (size_t i = 0; i < n_polys; i++) {
-        Expr* norm = normalise_polynomial(pv[i]);
+        Expr* norm = normalise_polynomial(gb_at(pv, i, hold));
         GBPoly* p = gb_from_expr(norm, all_vars, (int)n_vars,
                                  use_order, elim_pivot, wmat_ptr);
         expr_free(norm);

@@ -559,6 +559,22 @@ static bool g_dt_total_mode = false;
  * option in effect) or a fully canonicalised List[sym1, ...] of
  * symbols treated as implicit functions of x. */
 static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts);
+static Expr* deriv_of(Expr* g, Expr* x, Expr* nonconsts);
+static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array, Expr* nonconsts);
+static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts);
+
+/* One element of a LinkedList through the derivative walkers, read from a
+ * snapshot one at a time (ll_map_new) and evaluated -- a LinkedList is an
+ * atom the evaluator does not re-enter. kind 0: D[el, a]; 1: the array
+ * derivative of a (the leaf) by the variable el; 2: one array step of el. */
+typedef struct { Expr* a; Expr* nonconsts; int kind; } DerivLLCtx;
+static Expr* deriv_ll_elem(Expr* el, void* ctx) {
+    DerivLLCtx* c = (DerivLLCtx*)ctx;
+    Expr* d = c->kind == 0 ? deriv_of(el, c->a, c->nonconsts)
+            : c->kind == 1 ? d_at_array_leaves(c->a, el, c->nonconsts)
+                           : outer_d_step(el, c->a, c->nonconsts);
+    return eval_and_free(d);
+}
 
 /* Shortcut: return D[g, x] as a fresh tree. When x is NULL, return
  * Dt[g] instead. For symbols and numeric atoms the answer is folded
@@ -758,20 +774,8 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
      * LinkedList; the elements are evaluated here, since a LinkedList is an
      * atom the evaluator does not re-enter. */
     if (f->type == EXPR_LINKEDLIST) {
-        LLElemsC el;
-        ll_elems_of(f, &el);
-        LinkedList* out = ll_new();
-        for (int64_t i = 0; i < el.n; i++) {
-            Expr* d = eval_and_free(deriv_of(el.v[i], x, nonconsts));
-            if (eval_is_inflight_unwind(d)) {
-                ll_elems_release(&el);
-                ll_release(out);
-                return d;
-            }
-            ll_push_back(out, d);
-        }
-        ll_elems_release(&el);
-        return expr_new_linkedlist(out);
+        DerivLLCtx c = { x, nonconsts, 0 };
+        return ll_map_new(f, deriv_ll_elem, &c);
     }
 
     /* At this point f must be compound. */
@@ -3828,13 +3832,8 @@ static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts);
 static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array, Expr* nonconsts) {
     if (array->type == EXPR_LINKEDLIST) {
         /* an array of variables given as a LinkedList: its structure kept */
-        LLElemsC el;
-        ll_elems_of(array, &el);
-        LinkedList* out = ll_new();
-        for (int64_t i = 0; i < el.n; i++)
-            ll_push_back(out, eval_and_free(d_at_array_leaves(leaf_of_f, el.v[i], nonconsts)));
-        ll_elems_release(&el);
-        return expr_new_linkedlist(out);
+        DerivLLCtx c = { leaf_of_f, nonconsts, 1 };
+        return ll_map_new(array, deriv_ll_elem, &c);
     }
     if (array->type == EXPR_FUNCTION &&
         is_sym(array->data.function.head, "List")) {
@@ -3869,13 +3868,8 @@ static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts) {
     if (f->type == EXPR_LINKEDLIST) {
         /* f's own structure outermost, as for a List (below): a LinkedList of
          * the steps of its elements, each evaluated (an atom is not re-entered) */
-        LLElemsC el;
-        ll_elems_of(f, &el);
-        LinkedList* out = ll_new();
-        for (int64_t i = 0; i < el.n; i++)
-            ll_push_back(out, eval_and_free(outer_d_step(el.v[i], array, nonconsts)));
-        ll_elems_release(&el);
-        return expr_new_linkedlist(out);
+        DerivLLCtx c = { array, nonconsts, 2 };
+        return ll_map_new(f, deriv_ll_elem, &c);
     }
     if (f->type == EXPR_FUNCTION &&
         is_sym(f->data.function.head, "List")) {

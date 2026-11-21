@@ -3485,9 +3485,22 @@ Expr* builtin_permutations(Expr* res) {
 /* Comparator context for Signature's index sort (qsort has no user pointer;
  * the sort is not reentrant through evaluation, so a file-static is safe). */
 static Expr** g_sig_elems;
+static const LinkedList* g_sig_ll;     /* a LinkedList: elements read per compare */
+static const int64_t* g_sig_i64;       /* ... or its int64 slots, gathered raw */
+static int sig_elem_cmp(size_t i, size_t j) {
+    if (g_sig_i64) return (g_sig_i64[i] > g_sig_i64[j]) - (g_sig_i64[i] < g_sig_i64[j]);
+    if (!g_sig_ll) return expr_compare(g_sig_elems[i], g_sig_elems[j]);
+    bool oi, oj;
+    Expr* a = ll_elem_view(g_sig_ll, (int64_t)i, &oi);
+    Expr* b = ll_elem_view(g_sig_ll, (int64_t)j, &oj);
+    int c = expr_compare(a, b);
+    ll_elem_done(a, oi);
+    ll_elem_done(b, oj);
+    return c;
+}
 static int sig_cmp(const void* a, const void* b) {
     size_t i = *(const size_t*)a, j = *(const size_t*)b;
-    int c = expr_compare(g_sig_elems[i], g_sig_elems[j]);
+    int c = sig_elem_cmp(i, j);
     return c ? c : (i > j) - (i < j);
 }
 
@@ -3505,26 +3518,33 @@ Expr* builtin_signature(Expr* res) {
     if (argc != 1) return NULL;
     Expr* x = res->data.function.args[0];
     if (is_ndarray(x)) return ndred_signature(res);
-    LLElemsC lle = { NULL, 0, false, false };
-    if (x->type == EXPR_LINKEDLIST) ll_elems_of(x, &lle);   /* its elements, from the slots */
-    if (x->type != EXPR_FUNCTION && !lle.ll) {
+    /* a LinkedList's elements are compared straight from the slots */
+    bool is_ll = x->type == EXPR_LINKEDLIST;
+    if (x->type != EXPR_FUNCTION && !is_ll) {
         char* txt = expr_to_string_outputform(res);
         mth_message("Signature", "normal", "Nonatomic expression expected at position 1 in %s.",
                     txt ? txt : "");
         free(txt);
         return NULL;
     }
-    size_t n = lle.ll ? (size_t)lle.n : x->data.function.arg_count;
-    if (n < 2) { ll_elems_release(&lle); return expr_new_integer(1); }
+    size_t n = is_ll ? (size_t)ll_length(x->data.llist) : x->data.function.arg_count;
+    if (n < 2) return expr_new_integer(1);
     size_t* perm = malloc(n * sizeof(size_t));
     unsigned char* seen = calloc(n, 1);
     for (size_t k = 0; k < n; k++) perm[k] = k;
-    g_sig_elems = lle.ll ? lle.v : x->data.function.args;
+    int64_t* raw = NULL;
+    if (is_ll && ll_kind(x->data.llist) == LL_I64) {
+        raw = malloc(sizeof(int64_t) * n);
+        ll_gather(x->data.llist, 0, (int64_t)n, raw);
+    }
+    g_sig_elems = is_ll ? NULL : x->data.function.args;
+    g_sig_ll = is_ll ? x->data.llist : NULL;
+    g_sig_i64 = raw;
     qsort(perm, n, sizeof(size_t), sig_cmp);
     int64_t sign = 0;
     bool dup = false;
     for (size_t k = 1; k < n && !dup; k++)
-        dup = expr_compare(g_sig_elems[perm[k]], g_sig_elems[perm[k - 1]]) == 0;
+        dup = sig_elem_cmp(perm[k], perm[k - 1]) == 0;
     if (!dup) {
         size_t cycles = 0;
         for (size_t k = 0; k < n; k++) {
@@ -3535,9 +3555,11 @@ Expr* builtin_signature(Expr* res) {
         sign = ((n - cycles) & 1) ? -1 : 1;
     }
     g_sig_elems = NULL;
+    g_sig_ll = NULL;
+    g_sig_i64 = NULL;
+    free(raw);
     free(perm);
     free(seen);
-    ll_elems_release(&lle);
     return expr_new_integer(sign);
 }
 

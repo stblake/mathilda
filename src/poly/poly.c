@@ -1465,87 +1465,106 @@ Expr* builtin_variables(Expr* res) {
     free(vars); return list;
 }
 
-bool is_polynomial(Expr* e, Expr** vars, size_t var_count) {
+/* The variables of is_polynomial, read one at a time: from an array, or from
+ * a LinkedList's slots (vl set). */
+typedef struct { Expr** arr; const LinkedList* vl; size_t n; } PolyVars;
+static Expr* pv_get(const PolyVars* V, size_t i, bool* own) {
+    if (!V->vl) { *own = false; return V->arr[i]; }
+    return ll_elem_view(V->vl, (int64_t)i, own);
+}
+
+static bool is_polynomial_v(Expr* e, const PolyVars* V) {
     if (!e) return false;
-    
+    size_t var_count = V->n;
+
     // Check if e is one of the variables
     for (size_t i = 0; i < var_count; i++) {
-        if (expr_eq(e, vars[i])) return true;
+        bool o;
+        Expr* v = pv_get(V, i, &o);
+        bool eq = expr_eq(e, v);
+        ll_elem_done(v, o);
+        if (eq) return true;
     }
-    
+
     // Check if e contains any of the variables.
     // If it DOES NOT contain any variable, it is a constant (polynomial of degree 0).
     bool contains_var = false;
-    for (size_t i = 0; i < var_count; i++) {
-        if (contains_any_symbol_from(e, vars[i])) {
-            contains_var = true;
-            break;
-        }
+    for (size_t i = 0; i < var_count && !contains_var; i++) {
+        bool o;
+        Expr* v = pv_get(V, i, &o);
+        contains_var = contains_any_symbol_from(e, v);
+        ll_elem_done(v, o);
     }
     if (!contains_var) return true;
 
     // If it contains a variable but didn't match expr_eq, we check its structure.
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL) ? e->data.function.head->data.symbol.name : "";
-        
+
         if (head == SYM_Plus || head == SYM_Times) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                if (!is_polynomial(e->data.function.args[i], vars, var_count)) return false;
+                if (!is_polynomial_v(e->data.function.args[i], V)) return false;
             }
             return true;
         }
-        
+
         if (head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
             Expr* exp = e->data.function.args[1];
-            
-            // Power[base, exp] is a polynomial if:
-            // 1. exp is a non-negative integer AND base is a polynomial.
+
+            // Power[base, exp] is a polynomial if exp is a non-negative
+            // integer AND base is a polynomial.
             if (exp->type == EXPR_INTEGER && exp->data.integer >= 0) {
-                return is_polynomial(base, vars, var_count);
+                return is_polynomial_v(base, V);
             }
-            // Note: if base and exp are both constants (free of vars), 
-            // it would have been caught by the !contains_var check above.
             return false;
         }
     }
-    
-    // If we reach here, it contains a variable but isn't a simple Plus/Times/Power 
-    // and didn't match expr_eq. Thus it's not a polynomial in those variables.
-    // e.g. Sin[x] is not a polynomial in x.
+
+    // It contains a variable but isn't a simple Plus/Times/Power and didn't
+    // match expr_eq: not a polynomial in those variables (Sin[x] in x).
     return false;
+}
+
+bool is_polynomial(Expr* e, Expr** vars, size_t var_count) {
+    PolyVars V = { vars, NULL, var_count };
+    return is_polynomial_v(e, &V);
 }
 
 Expr* builtin_polynomialq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars_expr = res->data.function.args[1];
-    Expr** vars = NULL; size_t var_count = 0; bool free_vars = false;
-    LLElemsC vll = { NULL, 0, false, false };
+    PolyVars V = { NULL, NULL, 0 };
     if (vars_expr->type == EXPR_LINKEDLIST) {
-        /* a LinkedList of variables, read from its slots */
-        ll_elems_of(vars_expr, &vll);
-        vars = vll.v; var_count = (size_t)vll.n;
+        /* a LinkedList of variables, read from its slots one at a time */
+        V.vl = vars_expr->data.llist;
+        V.n = (size_t)ll_length(V.vl);
     } else if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol.name == SYM_List) {
-        var_count = vars_expr->data.function.arg_count;
-        if (var_count > 0) { vars = malloc(sizeof(Expr*) * var_count); for (size_t i = 0; i < var_count; i++) vars[i] = vars_expr->data.function.args[i]; free_vars = true; }
-    } else { vars = &res->data.function.args[1]; var_count = 1; }
+        V.arr = vars_expr->data.function.args;
+        V.n = vars_expr->data.function.arg_count;
+    } else { V.arr = &res->data.function.args[1]; V.n = 1; }
     bool poly;
     const Expr* p = res->data.function.args[0];
     if (p->type == EXPR_LINKEDLIST) {
         /* As for the List of its elements: a container is a polynomial only
-         * when it is free of every variable (a constant). */
-        LLElemsC el;
-        ll_elems_of(p, &el);
+         * when it is free of every variable (a constant). Each element read
+         * on demand. */
+        const LinkedList* pl = p->data.llist;
         poly = true;
-        for (int64_t i = 0; i < el.n && poly; i++)
-            for (size_t j = 0; j < var_count && poly; j++)
-                if (contains_any_symbol_from(el.v[i], vars[j])) poly = false;
-        ll_elems_release(&el);
+        for (int64_t i = 0, n = ll_length(pl); i < n && poly; i++) {
+            bool oe;
+            Expr* el = ll_elem_view(pl, i, &oe);
+            for (size_t j = 0; j < V.n && poly; j++) {
+                bool ov;
+                Expr* v = pv_get(&V, j, &ov);
+                if (contains_any_symbol_from(el, v)) poly = false;
+                ll_elem_done(v, ov);
+            }
+            ll_elem_done(el, oe);
+        }
     } else {
-        poly = is_polynomial(res->data.function.args[0], vars, var_count);
+        poly = is_polynomial_v(res->data.function.args[0], &V);
     }
-    if (free_vars) free(vars);
-    ll_elems_release(&vll);
     return expr_new_symbol(poly ? "True" : "False");
 }
 
@@ -5382,12 +5401,13 @@ Expr* builtin_collect(Expr* res) {
 /* nested list whose shape mirrors the variable order. Uses the bulk    */
 /* coefficient-extraction helper so each level walks `expanded` once    */
 /* instead of (degree+1) times.                                         */
-static Expr* coeff_list_rec(Expr* expr, Expr** vars, int* max_degrees, size_t num_vars, size_t var_idx) {
+static Expr* coeff_list_rec(Expr* expr, const PolyVars* vars, int* max_degrees, size_t num_vars, size_t var_idx) {
     if (var_idx == num_vars) return expr_copy(expr);
-    Expr* var = vars[var_idx];
+    bool vown;
+    Expr* var = pv_get(vars, var_idx, &vown);     /* read on demand */
     int d = max_degrees[var_idx];
     Expr* expanded = expr_expand(expr);
-    if (!expanded) return expr_copy(expr);
+    if (!expanded) { ll_elem_done(var, vown); return expr_copy(expr); }
 
     Expr** coeffs = NULL;
     bool bulk = get_all_coeffs_expanded(expanded, var, d, &coeffs);
@@ -5400,6 +5420,7 @@ static Expr* coeff_list_rec(Expr* expr, Expr** vars, int* max_degrees, size_t nu
     }
     free(coeffs);
     expr_free(expanded);
+    ll_elem_done(var, vown);
 
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), args, d + 1);
     free(args);
@@ -5415,35 +5436,35 @@ Expr* builtin_coefficientlist(Expr* res) {
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
-    size_t num_vars = 1;
-    Expr** vars = &vars_expr;
-    LLElemsC vll = { NULL, 0, false, false };
-
+    PolyVars V = { &vars_expr, NULL, 1 };
     if (vars_expr->type == EXPR_LINKEDLIST) {
-        /* a LinkedList of variables, read from its slots */
-        ll_elems_of(vars_expr, &vll);
-        num_vars = (size_t)vll.n;
-        vars = vll.v;
-        if (num_vars == 0) { ll_elems_release(&vll); return expr_copy(expr); }
+        /* a LinkedList of variables, read from its slots one at a time */
+        V.arr = NULL;
+        V.vl = vars_expr->data.llist;
+        V.n = (size_t)ll_length(V.vl);
+        if (V.n == 0) return expr_copy(expr);
     } else if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol.name == SYM_List) {
-        num_vars = vars_expr->data.function.arg_count;
-        vars = vars_expr->data.function.args;
-        if (num_vars == 0) return expr_copy(expr);
+        V.n = vars_expr->data.function.arg_count;
+        V.arr = vars_expr->data.function.args;
+        if (V.n == 0) return expr_copy(expr);
     }
+    size_t num_vars = V.n;
 
     Expr* expanded = expr_expand(expr);
-    if (!expanded) { ll_elems_release(&vll); return expr_copy(expr); }
+    if (!expanded) return expr_copy(expr);
 
     int* max_degrees = malloc(sizeof(int) * num_vars);
     for (size_t i = 0; i < num_vars; i++) {
-        int d = get_degree_poly(expanded, vars[i]);
+        bool o;
+        Expr* v = pv_get(&V, i, &o);
+        int d = get_degree_poly(expanded, v);
+        ll_elem_done(v, o);
         max_degrees[i] = (d < 0) ? 0 : d;
     }
 
-    Expr* result = coeff_list_rec(expanded, vars, max_degrees, num_vars, 0);
+    Expr* result = coeff_list_rec(expanded, &V, max_degrees, num_vars, 0);
     free(max_degrees);
     expr_free(expanded);
-    ll_elems_release(&vll);
     return result;
 }
 
@@ -5703,9 +5724,18 @@ Expr* builtin_decompose(Expr* res) {
 /*       => c_0 + x (c_1 + x (c_2 + ... + x c_n))                      */
 /* For multivariate inputs, recurses into each coefficient using the   */
 /* tail of the variable list.                                          */
-static Expr* horner_form_rec(Expr* expr, Expr** vars, size_t num_vars) {
-    if (num_vars == 0) return expr_copy(expr);
-    Expr* v = vars[0];
+static Expr* horner_form_rec_v(Expr* expr, const PolyVars* vars, size_t k, Expr* v);
+/* The variables vars[k..) read one at a time (an array or a LinkedList). */
+static Expr* horner_form_rec(Expr* expr, const PolyVars* vars, size_t k) {
+    if (k >= vars->n) return expr_copy(expr);
+    bool own;
+    Expr* v = pv_get(vars, k, &own);
+    Expr* r = horner_form_rec_v(expr, vars, k, v);
+    ll_elem_done(v, own);
+    return r;
+}
+
+static Expr* horner_form_rec_v(Expr* expr, const PolyVars* vars, size_t k, Expr* v) {
     
     Expr* expanded = expr_expand(expr);
     
@@ -5732,14 +5762,14 @@ static Expr* horner_form_rec(Expr* expr, Expr** vars, size_t num_vars) {
         return expr_new_integer(0);
     }
     
-    Expr* H = horner_form_rec(cl->data.function.args[count - 1], vars + 1, num_vars - 1);
+    Expr* H = horner_form_rec(cl->data.function.args[count - 1], vars, k + 1);
     if (!H) {
         expr_free(cl);
         return NULL;
     }
     
     for (int i = (int)count - 2; i >= 0; i--) {
-        Expr* c_i = horner_form_rec(cl->data.function.args[i], vars + 1, num_vars - 1);
+        Expr* c_i = horner_form_rec(cl->data.function.args[i], vars, k + 1);
         if (!c_i) {
             expr_free(cl);
             expr_free(H);
@@ -5853,24 +5883,28 @@ Expr* builtin_hornerform(Expr* res) {
         vars2_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){vars2_expr}, 1));
     }
     
-    /* a LinkedList of variables is read from its slots */
-    LLElemsC v1 = { NULL, 0, false, false }, v2 = { NULL, 0, false, false };
-    if (vars1_expr) ll_elems_of(vars1_expr, &v1);
-    if (vars2_expr) ll_elems_of(vars2_expr, &v2);
-    Expr** vars1 = v1.v;
-    size_t num_vars1 = (size_t)v1.n;
+    /* the variables of a List, or of a LinkedList read one slot at a time */
+    PolyVars v1 = { NULL, NULL, 0 }, v2 = { NULL, NULL, 0 };
+    PolyVars* vv[2] = { &v1, &v2 };
+    Expr* ve[2] = { vars1_expr, vars2_expr };
+    for (int t = 0; t < 2; t++) {
+        if (!ve[t]) continue;
+        if (ve[t]->type == EXPR_LINKEDLIST) {
+            vv[t]->vl = ve[t]->data.llist;
+            vv[t]->n = (size_t)ll_length(vv[t]->vl);
+        } else {
+            vv[t]->arr = ve[t]->data.function.args;
+            vv[t]->n = ve[t]->data.function.arg_count;
+        }
+    }
     
-    Expr** vars2 = v2.v;
-    size_t num_vars2 = (size_t)v2.n;
-    
-    Expr* h_num = horner_form_rec(num, vars1, num_vars1);
+    Expr* h_num = horner_form_rec(num, &v1, 0);
     if (!h_num) {
         printf("HornerForm::poly: "); 
         char* s = expr_to_string(expr);
         printf("%s is not a polynomial.\n", s);
         free(s);
-        ll_elems_release(&v1); ll_elems_release(&v2);
-        if (vars1_expr) expr_free(vars1_expr);
+                if (vars1_expr) expr_free(vars1_expr);
         if (vars2_expr) expr_free(vars2_expr);
         expr_free(num);
         expr_free(den);
@@ -5881,14 +5915,13 @@ Expr* builtin_hornerform(Expr* res) {
     if (den->type == EXPR_INTEGER && den->data.integer == 1) {
         h_den = expr_copy(den);
     } else {
-        h_den = horner_form_rec(den, vars2, num_vars2);
+        h_den = horner_form_rec(den, &v2, 0);
         if (!h_den) {
             printf("HornerForm::poly: "); 
             char* s = expr_to_string(expr);
             printf("%s is not a polynomial.\n", s);
             free(s);
-            ll_elems_release(&v1); ll_elems_release(&v2);
-            if (vars1_expr) expr_free(vars1_expr);
+                        if (vars1_expr) expr_free(vars1_expr);
             if (vars2_expr) expr_free(vars2_expr);
             expr_free(num);
             expr_free(den);
@@ -5906,8 +5939,7 @@ Expr* builtin_hornerform(Expr* res) {
         result = internal_times((Expr*[]){h_num, inv_den}, 2);
     }
     
-    ll_elems_release(&v1); ll_elems_release(&v2);
-    if (vars1_expr) expr_free(vars1_expr);
+        if (vars1_expr) expr_free(vars1_expr);
     if (vars2_expr) expr_free(vars2_expr);
     expr_free(num);
     expr_free(den);
@@ -6913,18 +6945,21 @@ Expr* builtin_polynomialmod(Expr* res) {
     if (expr->type == EXPR_LINKEDLIST) return ll_map_arg(res, 0);   /* as over a List */
     if (m->type == EXPR_LINKEDLIST) {
         /* A LinkedList of moduli, reduced by in turn as a List of them is. */
-        LLElemsC ms;
-        ll_elems_of(m, &ms);
+        /* each modulus read on demand from its slot */
+        const LinkedList* ml = m->data.llist;
+        int64_t mn = ll_length(ml);
         Expr* curr = expr_copy(expr);
-        bool has_integer = false;
-        for (int64_t i = 0; i < ms.n; i++)
-            if (ms.v[i]->type == EXPR_INTEGER) { has_integer = true; break; }
-        for (int64_t i = 0; i < ms.n; i++) {
-            Expr* next = polynomial_mod_single(curr, ms.v[i], has_integer);
+        bool has_integer = ll_kind(ml) == LL_I64;
+        for (int64_t i = 0; i < mn && !has_integer && ll_kind(ml) == LL_BOXED; i++)
+            if (ll_peek_boxed(ml, i)->type == EXPR_INTEGER) has_integer = true;
+        for (int64_t i = 0; i < mn; i++) {
+            bool own;
+            Expr* mi = ll_elem_view(ml, i, &own);
+            Expr* next = polynomial_mod_single(curr, mi, has_integer);
+            ll_elem_done(mi, own);
             expr_free(curr);
             curr = next;
         }
-        ll_elems_release(&ms);
         return curr;
     }
     

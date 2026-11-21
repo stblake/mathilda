@@ -95,6 +95,12 @@ Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* theta);
  * is advisory (Automatic and All both use the qqbar primitive element). */
 Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
                                          int smallest);
+/* The same, the numbers read one at a time through get(ctx, i, &owned)
+ * (an owned answer is freed after use), or from the array ctx when get is
+ * NULL: a LinkedList's slots are read on demand this way; out_ll answers
+ * with a LinkedList. */
+Expr* flint_qqbar_to_number_field_common_fn(Expr* (*get)(const void*, size_t, bool*),
+                                            const void* ctx, size_t n, int smallest, bool out_ll);
 
 /* ToNumberField[x]: express the single algebraic number x as an explicit
  * AlgebraicNumber in Q(x). */

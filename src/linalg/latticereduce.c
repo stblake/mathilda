@@ -667,12 +667,23 @@ static double finv_sysreal(const char* name, double fallback) {
 }
 
 /* Build the exact dot product Plus[Times[a_i, x_i], ...] for validation. */
-static Expr* finv_build_dot(Expr** a_list, Expr** entries, size_t n) {
+/* Entry i of a List (borrowed) or a LinkedList (its slot, held in *hold
+ * until the next read): the entries are read one at a time. */
+static Expr* finv_at(const Expr* seq, size_t i, Expr** hold) {
+    if (seq->type != EXPR_LINKEDLIST) return seq->data.function.args[i];
+    expr_free(*hold);
+    *hold = ll_get(seq->data.llist, (int64_t)i);
+    return *hold;
+}
+
+static Expr* finv_build_dot(Expr** a_list, const Expr* entries, size_t n) {
     Expr** terms = malloc(sizeof(Expr*) * n);
+    Expr* hold = NULL;
     for (size_t i = 0; i < n; i++) {
-        Expr* factors[2] = { expr_copy(a_list[i]), expr_copy(entries[i]) };
+        Expr* factors[2] = { expr_copy(a_list[i]), expr_copy(finv_at(entries, i, &hold)) };
         terms[i] = expr_new_function(expr_new_symbol(SYM_Times), factors, 2);
     }
+    expr_free(hold);
     Expr* dot = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
     free(terms);
     return dot;
@@ -704,8 +715,9 @@ static void finv_msg(const char* tag, const char* body, Expr* list) {
 
 /* FindIntegerNullVector over entries[0..n): a List's elements or a
  * LinkedList's. */
-static Expr* finv_core(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
-                       bool wp_explicit, long wp_bits, Expr** entries, size_t n) {
+static Expr* finv_core_impl(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
+                            bool wp_explicit, long wp_bits, const Expr* entries, size_t n,
+                            Expr** hold) {
     (void)res;
     Expr* list = av[0];                      /* the argument, for messages */
 
@@ -715,7 +727,7 @@ static Expr* finv_core(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
 
     bool inexact = false;
     for (size_t i = 0; i < n; i++)
-        if (finv_is_inexact(entries[i])) { inexact = true; break; }
+        if (finv_is_inexact(finv_at(entries, i, hold))) { inexact = true; break; }
 
     /* --- precision schedule --- */
     double mach_digits = finv_sysreal("$MachinePrecision",
@@ -729,7 +741,7 @@ static Expr* finv_core(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
         long ib = 0;
 #ifdef USE_MPFR
         for (size_t i = 0; i < n; i++) {
-            long b = finv_max_prec_bits(entries[i]);
+            long b = finv_max_prec_bits(finv_at(entries, i, hold));
             if (b > ib) ib = b;
         }
 #endif
@@ -759,7 +771,7 @@ static Expr* finv_core(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
         bool any_complex = false;
         bool numeric_ok = true;
         for (size_t i = 0; i < n; i++) {
-            if (!finv_scaled_value(entries[i], bits, Xre[i], Xim[i], &any_complex)) {
+            if (!finv_scaled_value(finv_at(entries, i, hold), bits, Xre[i], Xim[i], &any_complex)) {
                 numeric_ok = false; break;
             }
         }
@@ -844,6 +856,15 @@ static Expr* finv_core(Expr* res, Expr** av, size_t pos_end, Expr* zerotest_fn,
          * expr_new_function (which copies only the array); free the array. */
         free(a_cells);
 
+        if (ok && list->type == EXPR_LINKEDLIST) {
+            /* the relation of a LinkedList's entries is a LinkedList, its
+             * integer cells pushed straight into the slots */
+            LinkedList* ll = ll_new();
+            for (size_t c = 0; c < A->data.function.arg_count; c++)
+                ll_push_back(ll, expr_copy(A->data.function.args[c]));
+            expr_free(A);
+            A = expr_new_linkedlist(ll);
+        }
         if (ok) { result = A; accepted = true; }
         else { expr_free(A); ztest1 = false; }
 
@@ -958,12 +979,11 @@ Expr* builtin_findintegernullvector(Expr* res) {
     Expr* list = av[0];
     /* A LinkedList is the List of its entries, read from its slots; the
      * vector found comes back as a LinkedList. */
-    LLElemsC ents;
-    if (!ll_elems_of(list, &ents)) return NULL;
-    Expr* out = ents.n < 2 ? NULL
-              : finv_core(res, av, pos_end, zerotest_fn, wp_explicit, wp_bits,
-                          ents.v, (size_t)ents.n);
-    if (out && ents.ll) out = ll_from_list_result(out);
-    ll_elems_release(&ents);
+    int64_t n = ll_seq_len(list);
+    if (n < 2) return NULL;
+    Expr* hold = NULL;
+    Expr* out = finv_core_impl(res, av, pos_end, zerotest_fn, wp_explicit, wp_bits,
+                               list, (size_t)n, &hold);
+    expr_free(hold);
     return out;
 }

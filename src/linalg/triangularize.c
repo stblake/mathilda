@@ -125,18 +125,31 @@ static Expr* tri_ll(Expr* res, const Expr* m, bool upper, const char* head) {
     int64_t lim = R + C + 1;
     if (k > lim) k = lim;
     if (k < -lim) k = -lim;
-    Expr** leaves = malloc(sizeof(Expr*) * (size_t)(R * C > 0 ? R * C : 1));
-    size_t n = 0;
-    ll_tensor_leaves(m, 2, leaves, &n);
+    /* every cell read on demand from its row (ll_leaf); the answer's cells
+     * are a copy of the kept entry or the zero */
+    LLLeaves L;
+    ll_leaves_nest(&L, m, 2, dims);
     bool mach = false;
-    for (size_t t = 0; t < n && !mach; t++) mach = has_machine(leaves[t]);
+    for (int64_t t = 0; t < R * C && !mach; t++) {
+        bool own;
+        Expr* e = ll_leaf(&L, t, &own);
+        mach = has_machine(e);
+        ll_elem_done(e, own);
+    }
+    Expr** leaves = malloc(sizeof(Expr*) * (size_t)(R * C > 0 ? R * C : 1));
     for (int64_t r = 0; r < R; r++) {
         int64_t lo, hi;
         kept(r, C, k, upper, &lo, &hi);
         for (int64_t c = 0; c < C; c++) {
-            if (c >= lo && c < hi) continue;
-            expr_free(leaves[r * C + c]);
-            leaves[r * C + c] = mach ? expr_new_real(0.0) : expr_new_integer(0);
+            Expr* cell;
+            if (c >= lo && c < hi) {
+                bool own;
+                Expr* e = ll_leaf(&L, r * C + c, &own);
+                cell = own ? e : expr_copy(e);
+            } else {
+                cell = mach ? expr_new_real(0.0) : expr_new_integer(0);
+            }
+            leaves[r * C + c] = cell;
         }
     }
     bool lvl[2];

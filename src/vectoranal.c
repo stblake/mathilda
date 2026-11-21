@@ -156,10 +156,11 @@ static Expr* normalized_copy(Expr* a) {
 
 /* Grad[f, {{vars}}]: build the double-list array-derivative spec and evaluate.
  * Handles scalar -> vector, vector -> Jacobian, tensor -> +1 rank uniformly. */
-static Expr* grad_cartesian(Expr* f, Expr** vars, int n) {
-    Expr** vcopy = malloc((size_t)n * sizeof(Expr*));
-    for (int i = 0; i < n; i++) vcopy[i] = expr_copy(vars[i]);
-    Expr* varlist = mk_fnN_adopt("List", vcopy, (size_t)n);   /* {v1,...,vn} */
+static Expr* grad_cartesian(Expr* f, const Expr* vars, int n) {
+    /* {v1,...,vn}: the List as given; a LinkedList of coordinates is passed
+     * as itself (D reads an array spec {ll} from its slots) */
+    Expr* varlist = expr_copy((Expr*)vars);
+    (void)n;
     Expr* spec    = mk_fn1("List", varlist);                  /* {{v1,...,vn}} */
     Expr* dcall   = mk_d(expr_copy(f), spec);                 /* D[f, {{...}}] */
     return eval_and_free(dcall);
@@ -167,11 +168,11 @@ static Expr* grad_cartesian(Expr* f, Expr** vars, int n) {
 
 /* Laplacian[f, vars] = Sum_i D[f, {x_i, 2}].  D threads over an explicit array
  * f, so the result carries f's own dimensions (element-wise Laplacian). */
-static Expr* laplacian_cartesian(Expr* f, Expr** vars, int n) {
+static Expr* laplacian_cartesian(Expr* f, const Expr* vars, int n) {
     if (n < 1) return NULL;
     Expr** terms = malloc((size_t)n * sizeof(Expr*));
     for (int i = 0; i < n; i++) {
-        Expr* spec = mk_fn2("List", expr_copy(vars[i]), mk_int(2)); /* {x_i, 2} */
+        Expr* spec = mk_fn2("List", va_at(vars, (size_t)(i)), mk_int(2)); /* {x_i, 2} */
         terms[i] = mk_d(expr_copy(f), spec);
     }
     Expr* sum = (n == 1) ? terms[0] : mk_fnN_adopt("Plus", terms, (size_t)n);
@@ -182,7 +183,7 @@ static Expr* laplacian_cartesian(Expr* f, Expr** vars, int n) {
 /* Build the (unevaluated) Cartesian divergence expression, contracting the
  * innermost slot of `f` with `vars`.  Returns NULL for a scalar or a
  * shape/length mismatch. */
-static Expr* build_div(const Expr* f, Expr** vars, int n) {
+static Expr* build_div(const Expr* f, const Expr* vars, int n) {
     if (!va_seq(f)) return NULL;                  /* scalar has no divergence */
     size_t m = va_n(f);
 
@@ -211,11 +212,11 @@ static Expr* build_div(const Expr* f, Expr** vars, int n) {
     if (!is_vector_len(f, n)) return NULL;
     Expr** terms = malloc(m * sizeof(Expr*));
     for (size_t i = 0; i < m; i++)
-        terms[i] = mk_d(va_at(f, i), expr_copy(vars[i]));
+        terms[i] = mk_d(va_at(f, i), va_at(vars, (size_t)(i)));
     return mk_fnN_adopt("Plus", terms, m);
 }
 
-static Expr* div_cartesian(Expr* f, Expr** vars, int n) {
+static Expr* div_cartesian(Expr* f, const Expr* vars, int n) {
     Expr* pre = build_div(f, vars, n);
     return pre ? eval_and_free(pre) : NULL;
 }
@@ -226,7 +227,7 @@ static Expr* div_cartesian(Expr* f, Expr** vars, int n) {
 
 typedef struct {
     Expr* f;          /* the uniform n-cube field (owned by the caller) */
-    Expr** vars;      /* n coordinate expressions (borrowed) */
+    const Expr* vars; /* the n coordinates: a List, or a LinkedList read per slot */
     int n, k, dep;    /* dim, depth of f, result depth = n - k - 1 */
     int64_t kf;       /* k! */
     size_t ncells;    /* n^dep */
@@ -255,7 +256,7 @@ static void curl_emit_perm(curl_ctx* c, const int* perm) {
         expr_free(leaf);
         leaf = next;
     }
-    Expr* d = mk_d(leaf, expr_copy(c->vars[i - 1]));
+    Expr* d = mk_d(leaf, va_at(c->vars, (size_t)(i - 1)));
     Expr* term = (s == 1) ? d : mk_neg(d);
     size_t idx = 0;
     for (int t = 0; t < c->dep; t++)
@@ -304,7 +305,7 @@ static Expr* curl_build_nested(curl_ctx* c, int level, size_t base) {
     return mk_fnN_adopt("List", kids, (size_t)c->n);
 }
 
-static Expr* curl_cartesian(Expr* f, Expr** vars, int n) {
+static Expr* curl_cartesian(Expr* f, const Expr* vars, int n) {
     if (n < 2 || n > 6) return NULL;            /* bound the n! enumeration */
     int k = ncube_depth(f, n);
     if (k < 1) return NULL;                     /* need a vector/tensor field */
@@ -345,7 +346,7 @@ static Expr* curl_cartesian(Expr* f, Expr** vars, int n) {
  * the positional coordinates `vars`.  Returns true on success; sets *known to
  * whether the chart name is recognized at all (false + known==true means the
  * name is known but its dimension does not match n). */
-static bool chart_scale_factors(const char* chart, Expr** vars, int n,
+static bool chart_scale_factors(const char* chart, const Expr* vars, int n,
                                 Expr** h, bool* known) {
     *known = true;
     if (strcmp(chart, "Cartesian") == 0) {
@@ -355,22 +356,22 @@ static bool chart_scale_factors(const char* chart, Expr** vars, int n,
     if (strcmp(chart, "Polar") == 0) {
         if (n != 2) return false;
         h[0] = mk_int(1);
-        h[1] = expr_copy(vars[0]);                     /* r */
+        h[1] = va_at(vars, (size_t)(0));                     /* r */
         return true;
     }
     if (strcmp(chart, "Cylindrical") == 0) {
         if (n != 3) return false;
         h[0] = mk_int(1);
-        h[1] = expr_copy(vars[0]);                     /* r */
+        h[1] = va_at(vars, (size_t)(0));                     /* r */
         h[2] = mk_int(1);
         return true;
     }
     if (strcmp(chart, "Spherical") == 0) {
         if (n != 3) return false;
         h[0] = mk_int(1);
-        h[1] = expr_copy(vars[0]);                     /* r */
-        h[2] = mk_fn2("Times", expr_copy(vars[0]),
-                      mk_fn1("Sin", expr_copy(vars[1]))); /* r Sin[theta] */
+        h[1] = va_at(vars, (size_t)(0));                     /* r */
+        h[2] = mk_fn2("Times", va_at(vars, (size_t)(0)),
+                      mk_fn1("Sin", va_at(vars, (size_t)(1)))); /* r Sin[theta] */
         return true;
     }
     *known = false;
@@ -387,7 +388,7 @@ static Expr* mk_jacobian(Expr** h, int n) {
 
 /* Resolve the chart string and its scale factors; emits Head::chart for an
  * unrecognized name.  On success the caller owns h[0..n-1] and *h_out. */
-static bool resolve_chart(Expr* chart, Expr** vars, int n, const char* head,
+static bool resolve_chart(Expr* chart, const Expr* vars, int n, const char* head,
                           Expr*** h_out) {
     if (chart->type != EXPR_STRING) return false;    /* nested/metric spec */
     Expr** h = malloc((size_t)n * sizeof(Expr*));
@@ -410,14 +411,14 @@ static void free_h(Expr** h, int n) {
 }
 
 /* Grad[scalar f, vars, chart] = { (1/h_i) D[f, x_i] }. */
-static Expr* grad_chart(Expr* f, Expr** vars, int n, Expr* chart,
+static Expr* grad_chart(Expr* f, const Expr* vars, int n, Expr* chart,
                         const char* head) {
     if (va_seq(f)) return NULL;                  /* vector grad needs a metric */
     Expr** h;
     if (!resolve_chart(chart, vars, n, head, &h)) return NULL;
     Expr** comps = malloc((size_t)n * sizeof(Expr*));
     for (int i = 0; i < n; i++)
-        comps[i] = mk_fn2("Divide", mk_d(expr_copy(f), expr_copy(vars[i])),
+        comps[i] = mk_fn2("Divide", mk_d(expr_copy(f), va_at(vars, (size_t)(i))),
                           expr_copy(h[i]));
     Expr* pre = mk_fnN_adopt("List", comps, (size_t)n);
     free_h(h, n);
@@ -425,7 +426,7 @@ static Expr* grad_chart(Expr* f, Expr** vars, int n, Expr* chart,
 }
 
 /* Div[vector f, vars, chart] = (1/J) Sum_i D[(J/h_i) f_i, x_i]. */
-static Expr* div_chart(Expr* f, Expr** vars, int n, Expr* chart,
+static Expr* div_chart(Expr* f, const Expr* vars, int n, Expr* chart,
                        const char* head) {
     if (!is_vector_len(f, n)) return NULL;       /* tensor div needs a metric */
     Expr** h;
@@ -435,7 +436,7 @@ static Expr* div_chart(Expr* f, Expr** vars, int n, Expr* chart,
         Expr* coeff = mk_fn2("Divide", mk_jacobian(h, n), expr_copy(h[i]));
         Expr* inner = mk_fn2("Times", coeff,
                              expr_copy(f->data.function.args[i]));
-        terms[i] = mk_d(inner, expr_copy(vars[i]));
+        terms[i] = mk_d(inner, va_at(vars, (size_t)(i)));
     }
     Expr* sum = (n == 1) ? terms[0] : mk_fnN_adopt("Plus", terms, (size_t)n);
     if (n == 1) free(terms);
@@ -445,7 +446,7 @@ static Expr* div_chart(Expr* f, Expr** vars, int n, Expr* chart,
 }
 
 /* Laplacian[scalar f, vars, chart] = (1/J) Sum_i D[(J/h_i^2) D[f, x_i], x_i]. */
-static Expr* laplacian_chart(Expr* f, Expr** vars, int n, Expr* chart,
+static Expr* laplacian_chart(Expr* f, const Expr* vars, int n, Expr* chart,
                              const char* head) {
     if (va_seq(f)) return NULL;                  /* vector Laplacian: Christoffel */
     Expr** h;
@@ -455,8 +456,8 @@ static Expr* laplacian_chart(Expr* f, Expr** vars, int n, Expr* chart,
         Expr* h2 = mk_fn2("Power", expr_copy(h[i]), mk_int(2));
         Expr* coeff = mk_fn2("Divide", mk_jacobian(h, n), h2);
         Expr* inner = mk_fn2("Times", coeff,
-                             mk_d(expr_copy(f), expr_copy(vars[i])));
-        terms[i] = mk_d(inner, expr_copy(vars[i]));
+                             mk_d(expr_copy(f), va_at(vars, (size_t)(i))));
+        terms[i] = mk_d(inner, va_at(vars, (size_t)(i)));
     }
     Expr* sum = (n == 1) ? terms[0] : mk_fnN_adopt("Plus", terms, (size_t)n);
     if (n == 1) free(terms);
@@ -466,20 +467,20 @@ static Expr* laplacian_chart(Expr* f, Expr** vars, int n, Expr* chart,
 }
 
 /* One orthonormal curl component (1/(h_j h_k))[D[h_k f_k, x_j] - D[h_j f_j, x_k]]. */
-static Expr* curl_component(Expr* f, Expr** vars, Expr** h, int j, int k) {
+static Expr* curl_component(Expr* f, const Expr* vars, Expr** h, int j, int k) {
     Expr* fj = f->data.function.args[j];
     Expr* fk = f->data.function.args[k];
     Expr* a = mk_d(mk_fn2("Times", expr_copy(h[k]), expr_copy(fk)),
-                   expr_copy(vars[j]));
+                   va_at(vars, (size_t)(j)));
     Expr* b = mk_d(mk_fn2("Times", expr_copy(h[j]), expr_copy(fj)),
-                   expr_copy(vars[k]));
+                   va_at(vars, (size_t)(k)));
     Expr* num = mk_fn2("Plus", a, mk_neg(b));
     Expr* den = mk_fn2("Times", expr_copy(h[j]), expr_copy(h[k]));
     return mk_fn2("Divide", num, den);
 }
 
 /* Curl[vector f, vars, chart]: 3-D vector or 2-D scalar in the orthonormal basis. */
-static Expr* curl_chart(Expr* f, Expr** vars, int n, Expr* chart,
+static Expr* curl_chart(Expr* f, const Expr* vars, int n, Expr* chart,
                         const char* head) {
     if (n != 2 && n != 3) return NULL;
     if (!is_vector_len(f, n)) return NULL;       /* tensor curl needs a metric */
@@ -506,8 +507,8 @@ static Expr* curl_chart(Expr* f, Expr** vars, int n, Expr* chart,
 /* Common front end: validate arity, normalize the coordinate list, and hand
  * off to the Cartesian (argc==2) or chart (argc==3) implementation.  The two
  * function pointers build a fully-evaluated result or return NULL. */
-typedef Expr* (*cart_fn)(Expr* f, Expr** vars, int n);
-typedef Expr* (*chart_fn)(Expr* f, Expr** vars, int n, Expr* chart,
+typedef Expr* (*cart_fn)(Expr* f, const Expr* vars, int n);
+typedef Expr* (*chart_fn)(Expr* f, const Expr* vars, int n, Expr* chart,
                           const char* head);
 
 static Expr* vecop(Expr* res, const char* head, cart_fn cart, chart_fn chart) {
@@ -516,19 +517,16 @@ static Expr* vecop(Expr* res, const char* head, cart_fn cart, chart_fn chart) {
     if (argc < 2 || argc > 3) return NULL;
 
     Expr* vlist = normalized_copy(res->data.function.args[1]);
-    /* the coordinates: a List, or a LinkedList read from its slots */
-    LLElemsC vv;
-    if (!ll_elems_of(vlist, &vv)) { expr_free(vlist); return NULL; }
-    int n = (int)vv.n;
-    Expr** vars = vv.v;
+    /* the coordinates: a List, or a LinkedList read one slot at a time */
+    if (!va_seq(vlist)) { expr_free(vlist); return NULL; }
+    int n = (int)va_n(vlist);
 
     Expr* f = normalized_copy(res->data.function.args[0]);
     Expr* result = (argc == 2)
-        ? cart(f, vars, n)
-        : chart(f, vars, n, res->data.function.args[2], head);
+        ? cart(f, vlist, n)
+        : chart(f, vlist, n, res->data.function.args[2], head);
 
     expr_free(f);
-    ll_elems_release(&vv);
     expr_free(vlist);
     return result;
 }

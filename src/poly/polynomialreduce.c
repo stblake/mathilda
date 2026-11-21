@@ -491,6 +491,16 @@ static bool exp_divides(const int* lm, const int* e, int* q, int k) {
 
 /* On success returns a freshly-built List {List{a1,...,an}, b}.  divisors and
  * poly are the (normalised) Exprs; mainvars are the k division variables. */
+/* The quotients of a LinkedList of divisors are a LinkedList, built directly
+ * (set around the reduction by the builtin; saved and restored). */
+static bool g_pr_ll_quotients = false;
+static Expr* pr_qlist(Expr** qs, size_t n) {
+    if (!g_pr_ll_quotients) return expr_new_function(expr_new_symbol(SYM_List), qs, n);
+    LinkedList* ll = ll_new();
+    for (size_t i = 0; i < n; i++) ll_push_back(ll, qs[i]);
+    return expr_new_linkedlist(ll);
+}
+
 static Expr* pr_reduce_field(const Expr* poly, Expr* const* divs, int ndiv,
                              Expr* const* mainvars, int k,
                              const int64_t* W, int rows) {
@@ -545,7 +555,7 @@ static Expr* pr_reduce_field(const Expr* poly, Expr* const* divs, int ndiv,
     /* Assemble {List{a1..an}, b}. */
     Expr** qs = (Expr**)malloc(sizeof(Expr*) * (size_t)(ndiv > 0 ? ndiv : 1));
     for (int i = 0; i < ndiv; i++) qs[i] = rpoly_to_expr(&Q[i], mainvars);
-    Expr* qlist = expr_new_function(expr_new_symbol(SYM_List), qs, (size_t)ndiv);
+    Expr* qlist = pr_qlist(qs, (size_t)ndiv);
     free(qs);
     Expr* rem = rpoly_to_expr(&r, mainvars);
     Expr* out = expr_new_function(expr_new_symbol(SYM_List),
@@ -630,7 +640,7 @@ static Expr* pr_reduce_rational(const Expr* polyN, Expr** divsN, int ndiv,
 
     Expr** qs = (Expr**)malloc(sizeof(Expr*) * (size_t)ndiv);
     for (int i = 0; i < ndiv; i++) qs[i] = gb_to_expr(quot[i], mainvars);
-    Expr* qlist = expr_new_function(expr_new_symbol(SYM_List), qs, (size_t)ndiv);
+    Expr* qlist = pr_qlist(qs, (size_t)ndiv);
     free(qs);
     Expr* remE = gb_to_expr(rem, mainvars);
     Expr* out = expr_new_function(expr_new_symbol(SYM_List),
@@ -688,7 +698,7 @@ static Expr* pr_reduce_modular(const Expr* polyN, Expr** divsN, int ndiv,
         qs[i] = gb_to_expr(qg, mainvars);
         gb_poly_free(qg);
     }
-    Expr* qlist = expr_new_function(expr_new_symbol(SYM_List), qs, (size_t)ndiv);
+    Expr* qlist = pr_qlist(qs, (size_t)ndiv);
     free(qs);
     GBPoly* rg = gbpoly_from_gfp(rem);
     Expr* remE = gb_to_expr(rg, mainvars);
@@ -705,8 +715,8 @@ static Expr* pr_reduce_modular(const Expr* polyN, Expr** divsN, int ndiv,
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
-static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, Expr** dv, int ndiv,
-                     Expr* vars_arg, Expr** vll, int nvll);
+static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, int ndiv,
+                     Expr* vars_arg);
 
 Expr* builtin_polynomialreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -720,28 +730,22 @@ Expr* builtin_polynomialreduce(Expr* res) {
     Expr* divisors  = res->data.function.args[1];
     Expr* vars_arg  = (n_pos == 3) ? res->data.function.args[2] : NULL;
 
-    /* The divisors, and a variable list: a List's elements, or a
-     * LinkedList's read from its slots. */
-    LLElemsC dl, vl = { NULL, 0, false, false };
-    if (!ll_elems_of(divisors, &dl)) return NULL;
-    if (vars_arg && vars_arg->type == EXPR_LINKEDLIST) ll_elems_of(vars_arg, &vl);
-    Expr* r = dl.n == 0 ? NULL : pr_core(res, &opt, poly, divisors, dl.v, (int)dl.n,
-                                         vars_arg, vl.ll ? vl.v : NULL, (int)vl.n);
-    if (r && dl.ll && head_is(r, SYM_List) && r->data.function.arg_count == 2 &&
-        head_is(r->data.function.args[0], SYM_List)) {
-        /* the quotients of a LinkedList of divisors are a LinkedList */
-        Expr* q = ll_from_list_result(expr_copy(r->data.function.args[0]));
-        Expr* rem = expr_copy(r->data.function.args[1]);
-        expr_free(r);
-        r = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ q, rem }, 2);
-    }
-    ll_elems_release(&dl);
-    ll_elems_release(&vl);
+    /* The divisors: a List's elements, or a LinkedList's read one slot at a
+     * time. A LinkedList of variables would have to be handed to the core as
+     * an array of every variable, which a LinkedList does not give: left
+     * unevaluated. */
+    int64_t nd = ll_seq_len(divisors);
+    if (nd <= 0) return NULL;
+    if (vars_arg && vars_arg->type == EXPR_LINKEDLIST) return NULL;
+    bool saved = g_pr_ll_quotients;
+    g_pr_ll_quotients = divisors->type == EXPR_LINKEDLIST;
+    Expr* r = pr_core(res, &opt, poly, divisors, (int)nd, vars_arg);
+    g_pr_ll_quotients = saved;
     return r;
 }
 
-static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, Expr** dv, int ndiv,
-                     Expr* vars_arg, Expr** vll, int nvll) {
+static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, int ndiv,
+                     Expr* vars_arg) {
     PROptions opt = *optp;
     (void)res;
 
@@ -761,11 +765,7 @@ static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, Exp
     Expr** mainvars = NULL; int k = 0;
     Expr* wrap = NULL;   /* synthetic single-var list to free later */
     if (vars_arg) {
-        if (vll) {
-            k = nvll;
-            mainvars = (Expr**)malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
-            for (int i = 0; i < k; i++) mainvars[i] = vll[i];
-        } else if (pr_is_list(vars_arg)) {
+        if (pr_is_list(vars_arg)) {
             k = (int)vars_arg->data.function.arg_count;
             mainvars = (Expr**)malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
             for (int i = 0; i < k; i++) mainvars[i] = vars_arg->data.function.args[i];
@@ -818,7 +818,13 @@ static Expr* pr_core(Expr* res, PROptions* optp, Expr* poly, Expr* divisors, Exp
     /* ---- Normalise inputs (expand / rationalise / evaluate). ---- */
     Expr* polyN = pr_normalise(poly);
     Expr** divsN = (Expr**)malloc(sizeof(Expr*) * (size_t)ndiv);
-    for (int i = 0; i < ndiv; i++) divsN[i] = pr_normalise(dv[i]);
+    for (int i = 0; i < ndiv; i++) {
+        /* each divisor read on demand (a LinkedList's slot) */
+        bool own;
+        Expr* d = ll_seq_view(divisors, i, &own);
+        divsN[i] = pr_normalise(d);
+        ll_elem_done(d, own);
+    }
 
     /* ---- Dispatch. ---- */
     Expr* out = NULL;
