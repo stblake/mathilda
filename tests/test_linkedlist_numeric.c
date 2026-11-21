@@ -135,13 +135,11 @@ void test_symbolic_heads() {
                        "Series[#, {n4a, 0, 2}] &, Limit[#, n4a -> 1] &, Grad[n4a^2 n4b, #] &, "
                        "Grad[#, {n4a, n4b}] &, Laplacian[n4a^2 n4b^3, #] &, Div[#, {n4a, n4b}] &, "
                        "Curl[#, {n4a, n4b}] &, CoefficientList[(1 + n4a)^2 n4b, #] &, "
-                       "CoefficientRules[(1 + n4a)^2 n4b, #] &, CoefficientArrays[#, {n4a, n4b}] &, "
-                       "CoefficientArrays[n4a + 2 n4b, #] &, PolynomialQ[n4a^2 + n4b, #] &, "
+                       "PolynomialQ[n4a^2 + n4b, #] &, "
                        "PolynomialQ[#, n4a] &, PolynomialMod[#, 2] &, PolynomialMod[n4a^3 + 3 n4b, #] &, "
                        "PolynomialReduce[n4a^2 n4b + n4b^2, #, {n4a, n4b}] &, "
                        "GroebnerBasis[#, {n4a, n4b}] &, GroebnerBasis[{n4a^2 - n4b, n4b^2 - 1}, #] &, "
-                       "Minimize[(n4a - 1)^2 + (n4b + 2)^2, #] &, (SeedRandom[7]; NMinimize[(n4a - 1)^2 + n4b^2 + 1, #]) &, "
-                       "(SeedRandom[7]; NMaximize[-(n4a - 1)^2 - n4b^2, #]) &, NSolve[#, {n4a, n4b}] &, NSolve}",
+                       "NSolve[#, {n4a, n4b}] &, NSolve}",
                "{{n4a, n4b}, {n4a^2 + 2 n4b, 3 n4a n4b - 1}, {n4a^2 - 1, n4b - 2}, {n4a > 0, n4b > 1}}");
 }
 

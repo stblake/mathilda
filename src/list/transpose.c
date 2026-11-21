@@ -214,17 +214,6 @@ static int ll_array_dimensions(const Expr* e, int64_t* dims) {
     return depth + 1;
 }
 
-/* Leaves at depth `d` of a rectangular nest, row-major, as new references. */
-static void ll_leaves(const Expr* e, int d, Expr** out, size_t* idx) {
-    if (d == 0) { out[(*idx)++] = expr_copy((Expr*)e); return; }
-    for (int64_t i = 0, n = seq_n(e); i < n; i++) {
-        bool own;
-        Expr* el = ll_seq_view(e, i, &own);
-        ll_leaves(el, d - 1, out, idx);
-        ll_elem_done(el, own);
-    }
-}
-
 static Expr* transpose_ll(Expr* res) {
     Expr* list = res->data.function.args[0];
     size_t argc = res->data.function.arg_count;
@@ -291,9 +280,10 @@ static Expr* transpose_ll(Expr* res) {
     int64_t nin = 1, nout = 1;
     for (int i = 0; i < in_depth; i++) nin *= in_dims[i];
     for (int i = 0; i < out_depth; i++) nout *= out_dims[i];
-    Expr** in = malloc(sizeof(Expr*) * (size_t)(nin ? nin : 1));
-    size_t got = 0;
-    ll_leaves(list, in_depth, in, &got);
+    /* each input cell read on demand (ll_leaf), never all of them at once */
+    LLLeaves L;
+    if (!ll_leaves_nest(&L, list, in_depth, in_dims)) return NULL;
+    (void)nin;
     Expr** out = malloc(sizeof(Expr*) * (size_t)(nout ? nout : 1));
     int64_t stride[64];
     { int64_t s = 1; for (int i = in_depth - 1; i >= 0; i--) { stride[i] = s; s *= in_dims[i]; } }
@@ -303,10 +293,10 @@ static Expr* transpose_ll(Expr* res) {
         for (int i = out_depth - 1; i >= 0; i--) { oi[i] = rem % out_dims[i]; rem /= out_dims[i]; }
         int64_t src = 0;
         for (int k = 0; k < in_depth; k++) src += oi[perm[k] - 1] * stride[k];
-        out[o] = expr_copy(in[src]);
+        bool own;
+        Expr* e = ll_leaf(&L, src, &own);
+        out[o] = own ? e : expr_copy(e);
     }
-    for (size_t t = 0; t < got; t++) expr_free(in[t]);
-    free(in);
     bool lvl[64];
     ll_tensor_levels(list, out_depth < in_depth ? out_depth : in_depth, lvl);
     for (int i = in_depth; i < out_depth; i++) lvl[i] = false;

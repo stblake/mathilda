@@ -74,7 +74,14 @@ static Expr* norm_from_gram(Expr* g, bool numeric) {
     return out;
 }
 
-static Expr* norm_flat(Expr** flat, int64_t N, const Expr* p) {
+/* Leaf i as a new reference, read on demand (a borrowed array or a nest). */
+static Expr* nleaf(const LLLeaves* L, int64_t i) {
+    bool o;
+    Expr* e = ll_leaf(L, i, &o);
+    return o ? e : expr_copy(e);
+}
+
+static Expr* norm_flat(const LLLeaves* flat, int64_t N, const Expr* p) {
     Expr* result = NULL;
 
     if (p && p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity) {
@@ -83,7 +90,7 @@ static Expr* norm_flat(Expr** flat, int64_t N, const Expr* p) {
         } else {
             Expr** max_args = malloc(sizeof(Expr*) * N);
             for (int64_t i = 0; i < N; i++) {
-                max_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
+                max_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){nleaf(flat, i)}, 1));
             }
             result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), max_args, N));
             free(max_args);
@@ -101,7 +108,7 @@ static Expr* norm_flat(Expr** flat, int64_t N, const Expr* p) {
         } else {
             Expr** plus_args = malloc(sizeof(Expr*) * N);
             for (int64_t i = 0; i < N; i++) {
-                Expr* abs_val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
+                Expr* abs_val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){nleaf(flat, i)}, 1));
                 plus_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){abs_val, expr_copy(norm_p)}, 2));
             }
             Expr* sum = NULL;
@@ -130,22 +137,23 @@ static Expr* norm_flat(Expr** flat, int64_t N, const Expr* p) {
 
 /* The leaves as doubles (interleaved (re, im) when *cplx): every leaf a
  * machine-convertible Integer/Real/Complex, as ndarray_from_nested_list packs. */
-static bool norm_leaves_machine(Expr** v, int64_t n, bool* cplx, double** out) {
+static bool norm_leaves_machine(const LLLeaves* v, int64_t n, bool* cplx, double** out) {
     bool c = false;
     for (int64_t i = 0; i < n; i++) {
-        const Expr* e = v[i];
-        if (e->type == EXPR_INTEGER || e->type == EXPR_REAL) continue;
-        if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
+        Expr* e = nleaf(v, i);
+        bool ok = e->type == EXPR_INTEGER || e->type == EXPR_REAL;
+        if (!ok && head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
             (e->data.function.args[0]->type == EXPR_INTEGER || e->data.function.args[0]->type == EXPR_REAL) &&
             (e->data.function.args[1]->type == EXPR_INTEGER || e->data.function.args[1]->type == EXPR_REAL)) {
             c = true;
-            continue;
+            ok = true;
         }
-        return false;
+        expr_free(e);
+        if (!ok) return false;
     }
     double* b = malloc(sizeof(double) * (size_t)(c ? 2 : 1) * (size_t)(n ? n : 1));
     for (int64_t i = 0; i < n; i++) {
-        const Expr* e = v[i];
+        Expr* e = nleaf(v, i);
         double re, im = 0.0;
         if (head_is(e, SYM_Complex)) {
             const Expr* r = e->data.function.args[0];
@@ -155,6 +163,7 @@ static bool norm_leaves_machine(Expr** v, int64_t n, bool* cplx, double** out) {
         } else {
             re = e->type == EXPR_REAL ? e->data.real : (double)e->data.integer;
         }
+        expr_free(e);
         if (c) { b[2 * i] = re; b[2 * i + 1] = im; } else b[i] = re;
     }
     *cplx = c;
@@ -162,10 +171,12 @@ static bool norm_leaves_machine(Expr** v, int64_t n, bool* cplx, double** out) {
     return true;
 }
 
-static CommonInexactInfo norm_scan_leaves(Expr** v, int64_t n) {
+static CommonInexactInfo norm_scan_leaves(const LLLeaves* v, int64_t n) {
     CommonInexactInfo all = { false, 0 };
     for (int64_t i = 0; i < n; i++) {
-        CommonInexactInfo ii = common_scan_inexact(v[i]);
+        Expr* e = nleaf(v, i);
+        CommonInexactInfo ii = common_scan_inexact(e);
+        expr_free(e);
         if (!ii.has_inexact) continue;
         if (!all.has_inexact || ii.min_bits < all.min_bits) all.min_bits = ii.min_bits;
         all.has_inexact = true;
@@ -197,9 +208,10 @@ static Expr* norm_ll(Expr* expr, const Expr* p) {
     if (rank <= 0) return NULL;                         /* jagged */
     int64_t N = 1;
     for (int i = 0; i < rank; i++) N *= dims[i];
-    Expr** flat = malloc(sizeof(Expr*) * (size_t)(N > 0 ? N : 1));
-    size_t got = 0;
-    ll_tensor_leaves(expr, rank, flat, &got);
+    /* every leaf read on demand from its row (ll_leaf) */
+    LLLeaves FL;
+    if (!ll_leaves_nest(&FL, expr, rank, dims)) return NULL;
+    const LLLeaves* flat = &FL;
     Expr* result = NULL;
     bool frob = p && p->type == EXPR_STRING && strcmp(p->data.string, "Frobenius") == 0;
     CommonInexactInfo ii = norm_scan_leaves(flat, N);
@@ -244,8 +256,8 @@ static Expr* norm_ll(Expr* expr, const Expr* p) {
             for (int64_t a = 0; a < L; a++) {
                 Expr** t = malloc(sizeof(Expr*) * (size_t)M);
                 for (int64_t b = 0; b < M; b++) {
-                    Expr* e = rows ? flat[a * C + b] : flat[b * C + a];
-                    t[b] = expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(e) }, 1);
+                    Expr* e = nleaf(flat, rows ? a * C + b : b * C + a);
+                    t[b] = expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ e }, 1);
                 }
                 sums[a] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), t, (size_t)M));
                 free(t);
@@ -263,12 +275,14 @@ static Expr* norm_ll(Expr* expr, const Expr* p) {
                 for (int64_t j = 0; j < G; j++) {
                     Expr** t = malloc(sizeof(Expr*) * (size_t)K);
                     for (int64_t k = 0; k < K; k++) {
-                        Expr* u = R <= C ? flat[i * C + k] : flat[k * C + i];
-                        Expr* w = R <= C ? flat[j * C + k] : flat[k * C + j];
+                        Expr* u = nleaf(flat, R <= C ? i * C + k : k * C + i);
+                        Expr* w = nleaf(flat, R <= C ? j * C + k : k * C + j);
                         Expr* cw = expr_new_function(expr_new_symbol(SYM_Conjugate),
                                                      (Expr*[]){ expr_copy(R <= C ? w : u) }, 1);
                         t[k] = expr_new_function(expr_new_symbol(SYM_Times),
                                    (Expr*[]){ R <= C ? expr_copy(u) : cw, R <= C ? cw : expr_copy(w) }, 2);
+                        expr_free(u);
+                        expr_free(w);
                     }
                     cells[j] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), t, (size_t)K));
                     free(t);
@@ -279,12 +293,14 @@ static Expr* norm_ll(Expr* expr, const Expr* p) {
             Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)G));
             free(rows);
             bool numeric = true;
-            for (int64_t i = 0; i < N && numeric; i++) numeric = la_all_numeric(flat[i]);
+            for (int64_t i = 0; i < N && numeric; i++) {
+                Expr* e = nleaf(flat, i);
+                numeric = la_all_numeric(e);
+                expr_free(e);
+            }
             result = norm_from_gram(g, numeric);
         }
     }
-    for (size_t i = 0; i < got; i++) expr_free(flat[i]);
-    free(flat);
     return result;
 }
 
@@ -349,7 +365,9 @@ Expr* builtin_norm(Expr* res) {
             flatten_tensor(expr, flat, &idx);
         }
 
-        Expr* result = norm_flat(flat, N, p);
+        LLLeaves FL;
+        ll_leaves_array(&FL, flat);
+        Expr* result = norm_flat(&FL, N, p);
 
         if (flat) {
             for (int64_t i = 0; i < N; i++) expr_free(flat[i]);

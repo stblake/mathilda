@@ -512,7 +512,7 @@ generic:
  * dot_pack_operand would pack them: every leaf a machine integer -> int64;
  * else, with at least one machine-inexact leaf, every numeric leaf at machine
  * precision -> float64 or complex128. False when the operand is not machine. */
-static bool dot_machine_buf(const Expr* op, Expr** leaves, size_t n, NDType* dt, void** buf) {
+static bool dot_machine_buf(const Expr* op, const LLLeaves* L, size_t n, NDType* dt, void** buf) {
     if (is_ndarray(op)) {
         NDType d = op->data.ndarray.dtype;
         if (d != NDT_INT64 && d != NDT_FLOAT64 && d != NDT_COMPLEX64) return false;
@@ -522,9 +522,11 @@ static bool dot_machine_buf(const Expr* op, Expr** leaves, size_t n, NDType* dt,
         *dt = d;
         return true;
     }
+    /* two passes over the leaves, each read on demand: classify, then fill */
     bool all_int = true, inexact = false, cplx = false;
     for (size_t i = 0; i < n; i++) {
-        const Expr* e = leaves[i];
+        bool own;
+        const Expr* e = ll_leaf(L, (int64_t)i, &own);
         if (e->type != EXPR_INTEGER) all_int = false;
         if (e->type == EXPR_REAL) inexact = true;
         else if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
@@ -532,23 +534,31 @@ static bool dot_machine_buf(const Expr* op, Expr** leaves, size_t n, NDType* dt,
             if (e->data.function.args[0]->type == EXPR_REAL ||
                 e->data.function.args[1]->type == EXPR_REAL) inexact = true;
         }
+        ll_elem_done((Expr*)e, own);
     }
     if (n > 0 && all_int) {
         int64_t* b = malloc(sizeof(int64_t) * n);
-        for (size_t i = 0; i < n; i++) b[i] = leaves[i]->data.integer;
+        for (size_t i = 0; i < n; i++) {
+            bool own;
+            Expr* e = ll_leaf(L, (int64_t)i, &own);
+            b[i] = e->data.integer;
+            ll_elem_done(e, own);
+        }
         *dt = NDT_INT64; *buf = b;
         return true;
     }
     if (!inexact) return false;
     double* b = malloc(sizeof(double) * (cplx ? 2 : 1) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
-        const Expr* e = leaves[i];
+        bool own;
+        Expr* e = ll_leaf(L, (int64_t)i, &own);
         double re = 0.0, im = 0.0;
+        bool ok = true;
         if (e->type == EXPR_REAL) re = e->data.real;
         else if (e->type == EXPR_INTEGER) re = (double)e->data.integer;
         else {
             Expr* v = numericalize(e, numeric_machine_spec());
-            bool ok = v != NULL;
+            ok = v != NULL;
             if (ok && v->type == EXPR_REAL) re = v->data.real;
             else if (ok && v->type == EXPR_INTEGER) re = (double)v->data.integer;
             else if (ok && head_is(v, SYM_Complex) && v->data.function.arg_count == 2 &&
@@ -556,13 +566,40 @@ static bool dot_machine_buf(const Expr* op, Expr** leaves, size_t n, NDType* dt,
                      numeric_machine_value(v->data.function.args[1], &im)) { /* complex */ }
             else ok = false;
             if (v) expr_free(v);
-            if (!ok) { free(b); return false; }
         }
+        ll_elem_done(e, own);
+        if (!ok) { free(b); return false; }
         if (cplx) { b[2 * i] = re; b[2 * i + 1] = im; } else b[i] = re;
     }
     *dt = cplx ? NDT_COMPLEX64 : NDT_FLOAT64;
     *buf = b;
     return true;
+}
+
+/* dot_generic_flat's Times/Plus contraction with the leaves read on demand
+ * (no FLINT shortcut: that needs every entry at once, and the exact entries
+ * it would produce are the same). The R*S entries, row-major. */
+static Expr** dot_generic_leaves(const LLLeaves* LA, const LLLeaves* LB,
+                                 int64_t R, int64_t K, int64_t S) {
+    Expr** flatC = malloc(sizeof(Expr*) * (size_t)(R * S > 0 ? R * S : 1));
+    for (int64_t r = 0; r < R; r++)
+        for (int64_t c = 0; c < S; c++) {
+            if (K == 0) { flatC[r * S + c] = expr_new_integer(0); continue; }
+            Expr** sum = malloc(sizeof(Expr*) * (size_t)K);
+            for (int64_t k = 0; k < K; k++) {
+                bool oa, ob;
+                Expr* x = ll_leaf(LA, r * K + k, &oa);
+                Expr* y = ll_leaf(LB, k * S + c, &ob);
+                Expr* t[2] = { expr_copy(x), expr_copy(y) };
+                ll_elem_done(x, oa);
+                ll_elem_done(y, ob);
+                sum[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t, 2));
+            }
+            flatC[r * S + c] = K == 1 ? sum[0]
+                : eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum, (size_t)K));
+            free(sum);
+        }
+    return flatC;
 }
 
 /* A machine result that is not a machine number, or an inner product to which
@@ -655,22 +692,25 @@ static Expr* dot_ll(Expr* a, Expr* b, bool* error_printed) {
     int64_t NA = 1, NB = 1;
     for (int i = 0; i < rankA; i++) NA *= dimsA[i];
     for (int i = 0; i < rankB; i++) NB *= dimsB[i];
-    Expr** flatA = malloc(sizeof(Expr*) * (size_t)(NA > 0 ? NA : 1));
-    Expr** flatB = malloc(sizeof(Expr*) * (size_t)(NB > 0 ? NB : 1));
-    size_t idxA = 0, idxB = 0;
-    ll_tensor_leaves(a, rankA, flatA, &idxA);
-    ll_tensor_leaves(b, rankB, flatB, &idxB);
+    LLLeaves LA, LB;
+    if (!ll_leaves_nest(&LA, a, rankA, dimsA) || !ll_leaves_nest(&LB, b, rankB, dimsB)) return NULL;
     bool outer_ll = a->type == EXPR_LINKEDLIST || b->type == EXPR_LINKEDLIST;
     int rankC = rankA + rankB - 2;
     int64_t dimsC[64];
     for (int i = 0; i < rankA - 1; i++) dimsC[i] = dimsA[i];
     for (int i = 0; i < rankB - 1; i++) dimsC[rankA - 1 + i] = dimsB[i + 1];
+    int64_t NC = 1;
+    for (int i = 0; i < rankC; i++) NC *= dimsC[i];
+    bool lvl[64];
+    for (int i = 0; i < 64; i++) lvl[i] = false;
+    lvl[0] = outer_ll;
 
     /* machine operands: the packed path's kernels on raw buffers */
     NDType dta, dtb;
     void *pa = NULL, *pb = NULL;
     if (rankA <= 2 && rankB <= 2 && NA > 0 && NB > 0 &&
-        dot_machine_buf(a, flatA, idxA, &dta, &pa) && dot_machine_buf(b, flatB, idxB, &dtb, &pb)) {
+        dot_machine_buf(a, &LA, (size_t)NA, &dta, &pa) &&
+        dot_machine_buf(b, &LB, (size_t)NB, &dtb, &pb)) {
         void* out = NULL;
         NDType dtc = NDT_FLOAT64;
         bool shape_error = false;
@@ -679,8 +719,6 @@ static Expr* dot_ll(Expr* a, Expr* b, bool* error_printed) {
             out = nd_blas_buf((const double*)pa, rankA, dimsA, (const double*)pb, rankB, dimsB);
 #endif
         if (!out) out = nd_dot2_buf(pa, dta, rankA, dimsA, pb, dtb, rankB, dimsB, &dtc, &shape_error);
-        int64_t NC = 1;
-        for (int i = 0; i < rankC; i++) NC *= dimsC[i];
         if (out && dot_raw_degenerate(out, dtc, (size_t)NC, pa, dta, pb, dtb,
                                       (size_t)dimsA[rankA - 1], rankC == 0)) {
             free(out);
@@ -690,18 +728,15 @@ static Expr* dot_ll(Expr* a, Expr* b, bool* error_printed) {
         free(pb);
         pa = pb = NULL;
         if (out) {
-            for (size_t i = 0; i < idxA; i++) expr_free(flatA[i]);
-            for (size_t i = 0; i < idxB; i++) expr_free(flatB[i]);
-            free(flatA);
-            free(flatB);
             Expr* r;
             if (rankC == 0) {
                 r = ndarray_buffer_element_to_expr(out, 0, dtc);
             } else if (rankC == 1 && outer_ll) {
+                /* straight into the LinkedList's typed slots */
                 r = expr_new_linkedlist(ll_from_buffer(dtc == NDT_INT64 ? LL_I64 :
                                                        dtc == NDT_FLOAT64 ? LL_REAL : LL_CPLX,
                                                        out, NC));
-            } else {
+            } else if (!outer_ll) {
                 void* dst = NULL;
                 Expr* nd = ndbuild_open(rankC, dimsC, dtc, &dst);
                 if (nd) {
@@ -713,11 +748,26 @@ static Expr* dot_ll(Expr* a, Expr* b, bool* error_printed) {
                     r = ll_tensor_build(dimsC, rankC, lv, NULL);
                     free(lv);
                 }
-                if (outer_ll) {
-                    Expr* l = is_ndarray(r) ? ndarray_to_nested_list(r) : expr_copy(r);
-                    expr_free(r);
-                    r = ll_from_list_result(l);
+            } else {
+                /* a LinkedList of machine rows, each built from the buffer */
+                int64_t rows = dimsC[0], w = NC / (rows ? rows : 1);
+                LinkedList* ll = ll_new();
+                size_t es = ndt_elem_size(dtc);
+                for (int64_t i = 0; i < rows; i++) {
+                    void* dst = NULL;
+                    int64_t rd[1] = { w };
+                    Expr* row = rankC == 2 ? ndbuild_open(1, rd, dtc, &dst) : NULL;
+                    if (row) memcpy(dst, (char*)out + es * (size_t)(i * w), es * (size_t)w);
+                    else {
+                        Expr** lv = malloc(sizeof(Expr*) * (size_t)(w ? w : 1));
+                        for (int64_t j = 0; j < w; j++)
+                            lv[j] = ndarray_buffer_element_to_expr(out, (size_t)(i * w + j), dtc);
+                        row = ll_tensor_build(dimsC + 1, rankC - 1, lv, NULL);
+                        free(lv);
+                    }
+                    ll_push_back(ll, row);
                 }
+                r = expr_new_linkedlist(ll);
             }
             free(out);
             return r;
@@ -725,8 +775,12 @@ static Expr* dot_ll(Expr* a, Expr* b, bool* error_printed) {
     }
     free(pa);
     free(pb);
-    Expr* result = dot_generic_flat(flatA, idxA, dimsA, rankA, flatB, idxB, dimsB, rankB);
-    if (result && outer_ll && rankC >= 1) result = ll_from_list_result(result);
+    int64_t R = 1, S = 1, K = dimsA[rankA - 1];
+    for (int i = 0; i < rankA - 1; i++) R *= dimsA[i];
+    for (int i = 1; i < rankB; i++) S *= dimsB[i];
+    Expr** flatC = dot_generic_leaves(&LA, &LB, R, K, S);
+    Expr* result = ll_tensor_build(dimsC, rankC, flatC, lvl);
+    free(flatC);
     return result;
 }
 

@@ -654,8 +654,19 @@ static bool fcf_is_list(const Expr* e) {
            e->data.function.head->data.symbol.name == SYM_List;
 }
 
+/* Term i of a List (its argument, borrowed) or a LinkedList (its slot, held
+ * in *hold until the next read; the caller frees *hold): the terms are read
+ * one at a time, never gathered. */
+static Expr* fcf_at(const Expr* seq, size_t i, Expr** hold) {
+    if (seq->type != EXPR_LINKEDLIST) return seq->data.function.args[i];
+    expr_free(*hold);
+    *hold = ll_get(seq->data.llist, (int64_t)i);
+    return *hold;
+}
+
 /* --- Simple (possibly symbolic) convergent h_{n-1} / k_{n-1}. --- */
-static Expr* fcf_simple(Expr** terms, size_t n) {
+static Expr* fcf_simple(const Expr* seq, size_t n) {
+    Expr* hold = NULL;
     if (n == 0) return expr_new_integer(0);
 
     Expr* hp2 = expr_new_integer(0);   /* h_{-2} */
@@ -664,7 +675,7 @@ static Expr* fcf_simple(Expr** terms, size_t n) {
     Expr* kp1 = expr_new_integer(0);   /* k_{-1} */
 
     for (size_t i = 0; i < n; i++) {
-        Expr* t = terms[i];
+        Expr* t = fcf_at(seq, i, &hold);
         /* h_i = t h_{i-1} + h_{i-2}, evaluated each step to keep trees small
          * (numeric terms collapse; symbolic ones stay in convergent form). */
         Expr* h = eval_and_free(fcf_bin("Plus",
@@ -675,6 +686,7 @@ static Expr* fcf_simple(Expr** terms, size_t n) {
         expr_free(kp2); kp2 = kp1; kp1 = k;
     }
 
+    expr_free(hold);
     /* result = h_{n-1} / k_{n-1}; consumes hp1 and kp1. */
     Expr* result = eval_and_free(fcf_bin("Times", hp1,
         fcf_bin("Power", kp1, expr_new_integer(-1))));
@@ -761,14 +773,15 @@ static Expr* fcf_qirr_to_expr(mpz_t P, mpz_t Q, mpz_t S, mpz_t R) {
 }
 
 /* --- Periodic (eventually cyclic) -> exact quadratic irrational. --- */
-static Expr* fcf_periodic(Expr** lead, size_t m, Expr** per, size_t k) {
+static Expr* fcf_periodic(const Expr* lseq, size_t m, const Expr* pseq, size_t k) {
+    Expr* hold = NULL;
     /* Period convergents: after the loop hp1=h_{k-1}, hp2=h_{k-2}, etc. */
     mpz_t hp2, hp1, kp2, kp1, h, kk;
     mpz_inits(hp2, hp1, kp2, kp1, h, kk, (mpz_ptr)0);
     mpz_set_ui(hp2, 0); mpz_set_ui(hp1, 1);
     mpz_set_ui(kp2, 1); mpz_set_ui(kp1, 0);
     for (size_t i = 0; i < k; i++) {
-        mpz_t t; expr_to_mpz(per[i], t);
+        mpz_t t; expr_to_mpz(fcf_at(pseq, i, &hold), t);
         mpz_mul(h, t, hp1);  mpz_add(h, h, hp2);
         mpz_mul(kk, t, kp1); mpz_add(kk, kk, kp2);
         mpz_set(hp2, hp1); mpz_set(hp1, h);
@@ -806,7 +819,7 @@ static Expr* fcf_periodic(Expr** lead, size_t m, Expr** per, size_t k) {
         mpz_set_ui(Hp2, 0); mpz_set_ui(Hp1, 1);
         mpz_set_ui(Kp2, 1); mpz_set_ui(Kp1, 0);
         for (size_t i = 0; i < m; i++) {
-            mpz_t t; expr_to_mpz(lead[i], t);
+            mpz_t t; expr_to_mpz(fcf_at(lseq, i, &hold), t);
             mpz_mul(th, t, Hp1); mpz_add(th, th, Hp2);
             mpz_mul(tk, t, Kp1); mpz_add(tk, tk, Kp2);
             mpz_set(Hp2, Hp1); mpz_set(Hp1, th);
@@ -833,52 +846,48 @@ static Expr* fcf_periodic(Expr** lead, size_t m, Expr** per, size_t k) {
 
     mpz_clears(hp2, hp1, kp2, kp1, h, kk, (mpz_ptr)0);
     mpz_clears(A, B, C, Delta, P, Q, S, R, f, sf, tmp, (mpz_ptr)0);
+    expr_free(hold);
     return result;
 }
 
-static Expr* fcf_terms(Expr** terms, size_t n);
+static Expr* fcf_terms(const Expr* seq, size_t n);
 
 Expr* builtin_from_continued_fraction(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1) return NULL;
 
     Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_LINKEDLIST) {
-        /* the terms read from the slots, through the List code below */
-        LLElemsC t;
-        ll_elems_of(arg, &t);
-        Expr* r = fcf_terms(t.v, (size_t)t.n);
-        ll_elems_release(&t);
-        return r;
-    }
-    if (!fcf_is_list(arg)) return NULL;
-    return fcf_terms(arg->data.function.args, arg->data.function.arg_count);
+    /* the terms of a List, or of a LinkedList read one at a time */
+    if (!fcf_is_list(arg) && arg->type != EXPR_LINKEDLIST) return NULL;
+    return fcf_terms(arg, (size_t)ll_seq_len(arg));
 }
 
 /* FromContinuedFraction over the terms terms[0..n). */
-static Expr* fcf_terms(Expr** terms, size_t n) {
+static Expr* fcf_terms(const Expr* seq, size_t n) {
     if (n == 0) return expr_new_integer(0);   /* {} -> 0 */
+    Expr* hold = NULL;
 
     /* A trailing sub-list marks the cyclic (period) block. */
-    bool periodic = fcf_is_list(terms[n - 1]);
     for (size_t i = 0; i + 1 < n; i++)
-        if (fcf_is_list(terms[i])) return NULL;   /* sub-list only allowed last */
+        if (fcf_is_list(fcf_at(seq, i, &hold))) { expr_free(hold); return NULL; }   /* sub-list only allowed last */
+    Expr* lastv = fcf_at(seq, n - 1, &hold);
+    Expr* block = fcf_is_list(lastv) ? expr_copy(lastv) : NULL;
 
-    if (!periodic) return fcf_simple(terms, n);
+    if (!block) { expr_free(hold); return fcf_simple(seq, n); }
 
     /* Periodic: leading terms[0..n-2], period = terms[n-1]. */
-    Expr* block = terms[n - 1];
-    Expr** per = block->data.function.args;
+    Expr* r = NULL;
     size_t k = block->data.function.arg_count;
-    if (k == 0) return NULL;                   /* empty period block */
-
+    bool ok = k > 0;                           /* empty period block */
     /* The quadratic-irrational path requires exact integer terms throughout. */
-    for (size_t i = 0; i + 1 < n; i++)
-        if (!expr_is_integer_like(terms[i])) return NULL;
-    for (size_t i = 0; i < k; i++)
-        if (!expr_is_integer_like(per[i])) return NULL;
-
-    return fcf_periodic(terms, n - 1, per, k);
+    for (size_t i = 0; ok && i + 1 < n; i++)
+        ok = expr_is_integer_like(fcf_at(seq, i, &hold));
+    for (size_t i = 0; ok && i < k; i++)
+        ok = expr_is_integer_like(block->data.function.args[i]);
+    expr_free(hold);
+    if (ok) r = fcf_periodic(seq, n - 1, block, k);
+    expr_free(block);
+    return r;
 }
 
 /* ------------------------------------------------------------------ */

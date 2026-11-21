@@ -324,17 +324,8 @@ LinkedList* ll_new_boxed(Expr** v, size_t n);
 void ll_pairwise_reduce(const LinkedList* ll, LLRunLeaf leaf, void* ctx, int ncomp,
                         double* out);
 
-/* ---- element views and per-element threading (numeric / symbolic heads) --
- * For a List core written over (Expr* const* elems, size_t n), so a List and
- * a LinkedList run one algorithm. A List lends its argument array (borrowed);
- * a LinkedList's elements are read from the slots into a malloc'd array of
- * owned references (a refcount bump for a boxed slot, a fresh box for a typed
- * one) -- an element array, not a List: no List Expr is built. */
-typedef struct { Expr** v; int64_t n; bool owned; bool ll; } LLElemsC;
-/* False (out cleared) when `e` is neither a List nor a LinkedList. */
-bool  ll_elems_of(const Expr* e, LLElemsC* out);
-void  ll_elems_release(LLElemsC* x);
-/* Element i of a List (its argument, borrowed) or a LinkedList (ll_elem_view);
+/* ---- per-element access and threading (numeric / symbolic heads) -------
+ * Element i of a List (its argument, borrowed) or a LinkedList (ll_elem_view);
  * release with ll_elem_done. NULL for anything else. */
 Expr* ll_seq_view(const Expr* e, int64_t i, bool* owned);
 /* H[a1, ..., ll, ..., an] for a head whose List form maps over the elements of
@@ -344,10 +335,6 @@ Expr* ll_seq_view(const Expr* e, int64_t i, bool* owned);
  * Throw/Abort sentinel is handed back as it came. NULL when argument k is not
  * a LinkedList. */
 Expr* ll_map_arg(const Expr* res, size_t k);
-/* A List answer as the LinkedList of its elements (consumes `list`): the
- * result side of a head that computed through a shared element core. A rank-1
- * packed List is copied chunk-wise; anything else is returned unchanged. */
-Expr* ll_from_list_result(Expr* list);
 /* True when `e` holds a LinkedList anywhere (one walk, no evaluation). */
 bool  ll_expr_has_linkedlist(const Expr* e);
 /* A copying tree walker (Rationalize, Chop, N, ...) at a LinkedList node:
@@ -360,15 +347,13 @@ Expr* ll_walk(const Expr* e, Expr* (*fn)(const Expr* el, void* ctx), void* ctx);
  * A level may be a List, a LinkedList, or (below the top) an NDArray block.
  * ll_tensor_dims: the rank of the rectangular nest `e` (0 for a leaf), dims
  * in `dims` (at most `maxrank` levels are descended); -1 when ragged.
- * ll_tensor_leaves: its leaves in row-major order as new references (the
- * caller sized `out` from the dims). ll_tensor_levels: lvl[k] true when level
+ * ll_tensor_levels: lvl[k] true when level
  * k (0 = outermost) is a LinkedList along the first-element spine.
  * ll_tensor_build: the nest of shape dims[0..rank) over `leaves` (consumed,
  * row-major), each level a LinkedList where lvl[k] says so, else a List.
  * ll_has_ll_level1: `e` is a LinkedList, or a List with a LinkedList element:
  * the cheap gate a List head's LinkedList arm tests before anything else. */
 int   ll_tensor_dims(const Expr* e, int64_t* dims, int maxrank);
-void  ll_tensor_leaves(const Expr* e, int rank, Expr** out, size_t* idx);
 void  ll_tensor_levels(const Expr* e, int rank, bool* lvl);
 Expr* ll_tensor_build(const int64_t* dims, int rank, Expr** leaves, const bool* lvl);
 bool  ll_has_ll_level1(const Expr* e);
@@ -376,5 +361,28 @@ bool  ll_has_ll_level1(const Expr* e);
  * least pack_min_elements)? Where the List heads answer a packed and a plain
  * List differently, a LinkedList follows its own Normal. */
 bool  ll_normal_is_packed(const LinkedList* ll);
+
+/* ---- leaves read on demand (no all-elements array of a LinkedList) -----
+ * A rectangular nest's leaves by row-major index: from a borrowed array (the
+ * List code's own flattened leaves), or walked level by level through a nest
+ * of Lists / LinkedLists / arrays, one leaf per call, straight from the slots.
+ * ll_leaf returns leaf i borrowed or as a new reference (*owned); release it
+ * with ll_elem_done. ll_seq_len: the length of a List or a LinkedList, -1
+ * for anything else. ll_map_new: fn(element, ctx) for every element of a
+ * snapshot of the LinkedList `e`, in a new LinkedList (fn returns a new
+ * reference, or an unwind sentinel, which is handed back). */
+#define LL_LEAVES_MAX_RANK 32
+typedef struct {
+    Expr* const* arr;
+    const Expr* nest;
+    int rank;
+    int64_t dims[LL_LEAVES_MAX_RANK];
+    int64_t stride[LL_LEAVES_MAX_RANK];
+} LLLeaves;
+void    ll_leaves_array(LLLeaves* L, Expr* const* arr);
+bool    ll_leaves_nest(LLLeaves* L, const Expr* nest, int rank, const int64_t* dims);
+Expr*   ll_leaf(const LLLeaves* L, int64_t i, bool* owned);
+int64_t ll_seq_len(const Expr* e);
+Expr*   ll_map_new(const Expr* e, Expr* (*fn)(Expr* el, void* ctx), void* ctx);
 
 #endif /* MATHILDA_LINKEDLIST_H */

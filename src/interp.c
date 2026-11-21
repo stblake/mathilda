@@ -2179,7 +2179,7 @@ static Expr* interp_packed_table(double* buf, size_t npts, size_t m) {
  * values and exact arithmetic.  Returns the packed table and sets *domain_out on
  * success, or NULL (leaving *domain_out untouched) so the caller falls back to
  * the boxed path.  Does not consume `data`. */
-static Expr* interp_try_pack_data(Expr** pts, size_t npts, size_t m,
+static Expr* interp_try_pack_data(const Expr* seq, size_t npts, size_t m,
                                   bool synth_x, Expr** domain_out) {
     if (m == 0 || m > 64 || npts < 2) return NULL;
     double* buf   = malloc(sizeof(double) * npts * (m + 1));
@@ -2192,8 +2192,13 @@ static Expr* interp_try_pack_data(Expr** pts, size_t npts, size_t m,
     }
 
     bool has_inexact = false, ok = true;
+    Expr* cur_e = NULL;          /* the point being read (new reference) */
     for (size_t i = 0; i < npts && ok; i++) {
-        Expr* e = pts[i];
+        expr_free(cur_e);
+        bool vo;
+        Expr* ve = ll_seq_view(seq, (int64_t)i, &vo);
+        cur_e = vo ? ve : expr_copy(ve);
+        Expr* e = cur_e;
         double* row = buf + i * (m + 1);
         Expr* coordE[64];
         if (synth_x) {
@@ -2223,6 +2228,7 @@ static Expr* interp_try_pack_data(Expr** pts, size_t npts, size_t m,
             }
         }
     }
+    expr_free(cur_e);
     if (!ok || !has_inexact) { free(buf); free(dmin); free(dmax); free(dminE); free(dmaxE); return NULL; }
 
     Expr** dom_items = malloc(sizeof(Expr*) * m);
@@ -2331,25 +2337,27 @@ static int coord_exact_cmp(const Expr* a, const Expr* b) {
 
 /* Interpolation over the data points pts[0..npts): a List's elements, or a
  * LinkedList's read from its slots (res supplies the options). */
-static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts);
+static Expr* interp_impl_pts(Expr* res, const Expr* seq);
+
+/* Point i of a List or a LinkedList, as a new reference, read on demand. */
+static Expr* ip_at(const Expr* seq, size_t i) {
+    bool o;
+    Expr* e = ll_seq_view(seq, (int64_t)i, &o);
+    return o ? e : expr_copy(e);
+}
 
 static Expr* builtin_interpolation_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 1) return NULL;
     Expr* data = res->data.function.args[0];
-    if (data->type == EXPR_LINKEDLIST) {
-        LLElemsC pt;
-        ll_elems_of(data, &pt);
-        Expr* r = interp_impl_pts(res, pt.v, (size_t)pt.n);
-        ll_elems_release(&pt);
-        return r;
-    }
-    if (!interp_is_list(data)) return NULL;
-    return interp_impl_pts(res, data->data.function.args, data->data.function.arg_count);
+    /* the points of a List, or of a LinkedList read one at a time */
+    if (data->type != EXPR_LINKEDLIST && !interp_is_list(data)) return NULL;
+    return interp_impl_pts(res, data);
 }
 
-static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
+static Expr* interp_impl_pts(Expr* res, const Expr* seq) {
     size_t argc = res->data.function.arg_count;
+    size_t npts = (size_t)ll_seq_len(seq);
     if (npts < 2) return NULL;
 
     /* options / immediate evaluation point */
@@ -2373,7 +2381,8 @@ static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
     }
 
     /* determine the data form */
-    Expr* e0 = pts[0];
+    Expr* e0_ref = ip_at(seq, 0);              /* held for the form checks below */
+    Expr* e0 = e0_ref;
     size_t m;
     bool synth_x = false;     /* form 1 */
     int Ksupplied = 0;
@@ -2381,14 +2390,15 @@ static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
         m = 1; synth_x = true;
     } else if (interp_is_list(e0)) {
         size_t L = e0->data.function.arg_count;
-        if (L < 2) return NULL;
+        if (L < 2) { expr_free(e0_ref); return NULL; }
         Expr* first = e0->data.function.args[0];
         if (L == 2 && is_scalar_real(first)) { m = 1; }
         else if (interp_is_list(first)) {
             m = first->data.function.arg_count;
-            if (m < 1) return NULL;
+            if (m < 1) { expr_free(e0_ref); return NULL; }
             Ksupplied = (int)(L - 2);   /* L==2 -> value-only n-D; L>2 -> derivatives */
-        } else return NULL;
+        } else { expr_free(e0_ref); return NULL; }
+    expr_free(e0_ref);
     } else return NULL;
 
     /* Resolve PeriodicInterpolation against the dimensionality. */
@@ -2405,7 +2415,7 @@ static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
      * leaves `periodic` untouched for the boxed path, which frees it. */
     if (Ksupplied == 0 && method != METHOD_HERMITE) {
         Expr* pdomain = NULL;
-        Expr* ptable = interp_try_pack_data(pts, npts, m, synth_x, &pdomain);
+        Expr* ptable = interp_try_pack_data(seq, npts, m, synth_x, &pdomain);
         if (ptable)
             return interp_finish_object(pdomain, ptable, m, explicit_order, method,
                                         periodic, any_periodic, eval_point);
@@ -2423,8 +2433,11 @@ static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
 
     bool ok = true;
     size_t built = 0;
+    Expr* cur_e = NULL;          /* the point being read (new reference) */
     for (size_t i = 0; i < npts && ok; i++) {
-        Expr* e = pts[i];
+        expr_free(cur_e);
+        cur_e = ip_at(seq, i);
+        Expr* e = cur_e;
         double coord[64];
         Expr* coordE[64];
         if (m > 64) { ok = false; break; }
@@ -2458,6 +2471,7 @@ static Expr* interp_impl_pts(Expr* res, Expr** pts, size_t npts) {
         else         entries[i] = expr_copy(e);
         built = i + 1;
     }
+    expr_free(cur_e);
 
     if (!ok) {
         free_exprs(entries, built);
@@ -3236,7 +3250,16 @@ static void ip_tensor_cb(const int* alpha, void* vctx) {
 
 /* Parse `data`/`vars` into the condition list. Returns false on malformed data
  * (caller leaves the call unevaluated). */
-static bool ip_collect_pts(Expr** dv, size_t npts, size_t m, IPData* D) {
+/* Point i of the data, read on demand: a List's argument (borrowed), or a
+ * LinkedList's slot held in *hold until the next read (the caller frees it). */
+static Expr* ip_pt(const Expr* seq, size_t i, Expr** hold) {
+    if (seq->type != EXPR_LINKEDLIST) return seq->data.function.args[i];
+    expr_free(*hold);
+    *hold = ll_get(seq->data.llist, (int64_t)i);
+    return *hold;
+}
+
+static bool ip_collect_pts(const Expr* seq, size_t npts, size_t m, IPData* D, Expr** hold) {
     memset(D, 0, sizeof(*D));
     D->m = m;
     D->coords_numeric = true;
@@ -3246,12 +3269,12 @@ static bool ip_collect_pts(Expr** dv, size_t npts, size_t m, IPData* D) {
         /* value-form if any top-level element is a scalar; else pairs-form. */
         bool all_lists = true;
         for (size_t i = 0; i < npts; i++)
-            if (!interp_is_list(dv[i])) { all_lists = false; break; }
+            if (!interp_is_list(ip_pt(seq, i, hold))) { all_lists = false; break; }
 
         if (!all_lists) {
             /* value form: point = i+1; scalar -> value; list -> {f, df, ...}. */
             for (size_t i = 0; i < npts; i++) {
-                Expr* e = dv[i];
+                Expr* e = ip_pt(seq, i, hold);
                 double xd = (double)(i + 1);
                 Expr* xE = expr_new_integer((int64_t)(i + 1));
                 Expr* coordE[1] = { xE }; double coordD[1] = { xd };
@@ -3273,7 +3296,7 @@ static bool ip_collect_pts(Expr** dv, size_t npts, size_t m, IPData* D) {
         } else {
             /* pairs form: entry = {x, f, df, ...}. x may be symbolic. */
             for (size_t i = 0; i < npts; i++) {
-                Expr* e = dv[i];
+                Expr* e = ip_pt(seq, i, hold);
                 if (e->data.function.arg_count < 2) return false;
                 Expr* xE = e->data.function.args[0];
                 double xd = 0.0;
@@ -3294,7 +3317,7 @@ static bool ip_collect_pts(Expr** dv, size_t npts, size_t m, IPData* D) {
     /* m >= 2: entry = {{x1,...,xm}, f, t1, t2, ...} with tk the order-k tensor. */
     if (m > 64) return false;
     for (size_t i = 0; i < npts; i++) {
-        Expr* e = dv[i];
+        Expr* e = ip_pt(seq, i, hold);
         if (!interp_is_list(e) || e->data.function.arg_count < 2) return false;
         Expr* coord = e->data.function.args[0];
         if (!interp_is_list(coord) || coord->data.function.arg_count != m) return false;
@@ -3323,10 +3346,11 @@ static bool ip_collect_pts(Expr** dv, size_t npts, size_t m, IPData* D) {
 
 /* The data points of a List, or of a LinkedList read from its slots. */
 static bool ip_collect(Expr* data, size_t m, IPData* D) {
-    LLElemsC dv;
-    if (!ll_elems_of(data, &dv)) { memset(D, 0, sizeof(*D)); return false; }
-    bool ok = ip_collect_pts(dv.v, (size_t)dv.n, m, D);
-    ll_elems_release(&dv);
+    int64_t n = ll_seq_len(data);
+    if (n < 0) { memset(D, 0, sizeof(*D)); return false; }
+    Expr* hold = NULL;
+    bool ok = ip_collect_pts(data, (size_t)n, m, D, &hold);
+    expr_free(hold);
     return ok;
 }
 
@@ -3671,25 +3695,23 @@ static Expr* ip_impl(Expr* res) {
         varr = vars->data.function.args;
         for (size_t k = 0; k < m; k++) if (varr[k]->type != EXPR_SYMBOL) { mpz_clear(modulus); return NULL; }
     } else if (vars->type == EXPR_LINKEDLIST && ll_length(vars->data.llist) >= 1) {
-        /* a LinkedList of variables, read from its slots (the solvers take
-         * an Expr* array) */
-        LLElemsC vv;
-        ll_elems_of(vars, &vv);
-        bool syms = true;
-        for (int64_t k = 0; k < vv.n; k++) if (vv.v[k]->type != EXPR_SYMBOL) syms = false;
+        /* a LinkedList holding one variable, read from its slot; a longer
+         * one would need every variable at once (the solvers take an array of
+         * them), which a LinkedList does not hand out: left unevaluated */
+        const Expr* v0 = ll_length(vars->data.llist) == 1 ? ll_peek_boxed(vars->data.llist, 0) : NULL;
         Expr* r = NULL;
-        if (syms) {
+        if (v0 && v0->type == EXPR_SYMBOL) {
+            Expr* varr1[1] = { (Expr*)v0 };
             IPData D;
-            if (ip_collect(data, (size_t)vv.n, &D)) {
-                if (mpz_sgn(modulus) > 0) r = ip_solve_modular(&D, vv.v, modulus);
-                else if (vv.n == 1 && !D.any_automatic) {
-                    r = ip_newton_1d(&D, vv.v[0]);
-                    if (!r) r = ip_solve_general(&D, vv.v);
-                } else r = ip_solve_general(&D, vv.v);
+            if (ip_collect(data, 1, &D)) {
+                if (mpz_sgn(modulus) > 0) r = ip_solve_modular(&D, varr1, modulus);
+                else if (!D.any_automatic) {
+                    r = ip_newton_1d(&D, varr1[0]);
+                    if (!r) r = ip_solve_general(&D, varr1);
+                } else r = ip_solve_general(&D, varr1);
             }
             ipdata_free(&D);
         }
-        ll_elems_release(&vv);
         mpz_clear(modulus);
         return r;
     } else { mpz_clear(modulus); return NULL; }

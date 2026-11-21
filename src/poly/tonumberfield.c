@@ -30,38 +30,46 @@ static int is_symbol_named(const Expr* e, const char* name) {
 }
 
 /* ToNumberField[{a1..ak}] / [{a1..ak}, All]: common field via primitive element. */
-/* The list's elements: a List's, or a LinkedList's read from its slots; a
- * LinkedList answers with a LinkedList. */
+/* Element i of a List or a LinkedList, read on demand (new reference when
+ * *own). The getter the common-field search reads its numbers through. */
+static Expr* tnf_get(const void* seq, size_t i, bool* own) {
+    return ll_seq_view((const Expr*)seq, (int64_t)i, own);
+}
+
+/* The list's elements read one at a time; a LinkedList answers with a
+ * LinkedList. */
 static Expr* common_form(const Expr* list, int smallest) {
-    LLElemsC el;
-    ll_elems_of(list, &el);
-    size_t n = (size_t)el.n;
-    Expr* r = n == 0 ? NULL
-            : flint_qqbar_to_number_field_common((const Expr* const*)el.v, n, smallest);
-    if (r && el.ll) r = ll_from_list_result(r);
-    ll_elems_release(&el);
-    return r;
+    size_t n = (size_t)ll_seq_len(list);
+    if (n == 0) return NULL;
+    return flint_qqbar_to_number_field_common_fn(tnf_get, list, n, smallest,
+                                                 list->type == EXPR_LINKEDLIST);
 }
 
 /* ToNumberField[{a1..ak}, theta]: express each ai in Q(theta). */
 static Expr* list_in_field(const Expr* list, const Expr* theta) {
-    LLElemsC el;
-    ll_elems_of(list, &el);
-    size_t n = (size_t)el.n;
+    size_t n = (size_t)ll_seq_len(list);
     Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t built = 0;
     int good = 1;
     for (size_t i = 0; i < n; i++) {
-        items[i] = flint_qqbar_to_number_field(el.v[i], theta);
+        bool own;
+        Expr* a = ll_seq_view(list, (int64_t)i, &own);       /* read on demand */
+        items[i] = flint_qqbar_to_number_field(a, theta);
+        ll_elem_done(a, own);
         if (!items[i]) { good = 0; break; }   /* some ai not in Q(theta) */
         built++;
     }
     Expr* r = NULL;
-    if (good) r = expr_new_function(expr_new_symbol(SYM_List), items, n);
-    else for (size_t i = 0; i < built; i++) expr_free(items[i]);
+    if (good && list->type == EXPR_LINKEDLIST) {            /* a LinkedList, built directly */
+        LinkedList* ll = ll_new();
+        for (size_t i = 0; i < n; i++) ll_push_back(ll, items[i]);
+        r = expr_new_linkedlist(ll);
+    } else if (good) {
+        r = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    } else {
+        for (size_t i = 0; i < built; i++) expr_free(items[i]);
+    }
     free(items);
-    if (r && el.ll) r = ll_from_list_result(r);
-    ll_elems_release(&el);
     return r;
 }
 

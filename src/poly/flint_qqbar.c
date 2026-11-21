@@ -8,6 +8,7 @@
  */
 
 #include "flint_qqbar.h"
+#include "linkedlist.h"
 
 #include "sym_names.h"
 #include "eval.h"
@@ -1641,13 +1642,23 @@ Expr* flint_qqbar_to_number_field_self(const Expr* x) {
 
 Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
                                          int smallest) {
+    return flint_qqbar_to_number_field_common_fn(NULL, as, n, smallest, false);
+}
+
+Expr* flint_qqbar_to_number_field_common_fn(Expr* (*get)(const void*, size_t, bool*),
+                                            const void* ctx, size_t n, int smallest, bool out_ll) {
     (void)smallest;                            /* Automatic and All coincide here */
-    if (!as || n == 0) return NULL;
+    if (!ctx || n == 0) return NULL;
 
     qqbar_ptr vals = _qqbar_vec_init((slong)n);
     int ok = 1;
-    for (size_t i = 0; i < n && ok; i++)
-        if (!to_qqbar(as[i], vals + i)) ok = 0;
+    for (size_t i = 0; i < n && ok; i++) {
+        /* each number read on demand: from the array, or through `get` */
+        bool own = false;
+        const Expr* a = get ? get(ctx, i, &own) : ((const Expr* const*)ctx)[i];
+        if (!to_qqbar(a, vals + i)) ok = 0;
+        if (own) expr_free((Expr*)a);
+    }
 
     /* Primitive element of Q(alpha, b), chosen by DEGREE rather than by trial
      * membership.
@@ -1710,6 +1721,11 @@ Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
             fmpq_poly_clear(f);
         }
         if (good) {
+            if (out_ll) {                      /* straight into a LinkedList */
+                LinkedList* ll = ll_new();
+                for (size_t t = 0; t < n; t++) ll_push_back(ll, items[t]);
+                result = expr_new_linkedlist(ll);
+            } else
             result = expr_new_function(expr_new_symbol(SYM_List), items, n);
         } else {
             for (size_t i = 0; i < n; i++) if (items[i]) expr_free(items[i]);
@@ -2132,6 +2148,8 @@ Expr* flint_qqbar_algebraic_number(const Expr* g, const Expr* c) { (void)g; (voi
 Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* t) { (void)a; (void)t; return NULL; }
 Expr* flint_qqbar_to_number_field_self(const Expr* x) { (void)x; return NULL; }
 Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n, int s) { (void)as; (void)n; (void)s; return NULL; }
+Expr* flint_qqbar_to_number_field_common_fn(Expr* (*get)(const void*, size_t, bool*),
+                                            const void* ctx, size_t n, int s, bool o) { (void)get; (void)ctx; (void)n; (void)s; (void)o; return NULL; }
 Expr* flint_qqbar_integral_basis(const Expr* a) { (void)a; return NULL; }
 int   flint_qqbar_algebraic_integer_q(const Expr* x) { (void)x; return -1; }
 int   flint_qqbar_algebraic_number_denominator(const Expr* x, Expr** out) { (void)x; (void)out; return -1; }

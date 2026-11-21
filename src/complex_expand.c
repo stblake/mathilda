@@ -117,14 +117,18 @@ typedef struct {
     Expr** cvars;    /* borrowed complex-variable patterns */
     size_t ncvars;
     TargetMode target;
+    const LinkedList* cvll;   /* ... or a LinkedList of them, read per slot */
 } CxCtx;
 
 /* True iff atom `e` matches one of the complex-variable patterns in ctx. */
 static bool cx_is_complex_atom(const Expr* e, const CxCtx* ctx) {
     for (size_t i = 0; i < ctx->ncvars; i++) {
+        bool own = false;
+        Expr* pat = ctx->cvll ? ll_elem_view(ctx->cvll, (int64_t)i, &own) : ctx->cvars[i];
         MatchEnv* env = env_new();
-        bool ok = match((Expr*)e, ctx->cvars[i], env);
+        bool ok = match((Expr*)e, pat, env);
         env_free(env);
+        ll_elem_done(pat, own);
         if (ok) return true;
     }
     return false;
@@ -902,7 +906,7 @@ Expr* builtin_complex_expand(Expr* res) {
     /* Build complex-variable list from the optional second positional. */
     Expr** cvars = NULL;
     size_t ncvars = 0;
-    LLElemsC cv_ll = { NULL, 0, false, false };
+    const LinkedList* cvll = NULL;
     if (npos == 2) {
         Expr* spec = argv[1];
         if (head_is(spec, SYM_List)) {
@@ -911,10 +915,8 @@ Expr* builtin_complex_expand(Expr* res) {
             for (size_t k = 0; k < ncvars; k++) cvars[k] = spec->data.function.args[k];
         } else if (spec->type == EXPR_LINKEDLIST) {
             /* a LinkedList of complex variables, read from its slots */
-            ll_elems_of(spec, &cv_ll);
-            ncvars = (size_t)cv_ll.n;
-            cvars = ncvars ? malloc(sizeof(Expr*) * ncvars) : NULL;
-            for (size_t k = 0; k < ncvars; k++) cvars[k] = cv_ll.v[k];
+            cvll = spec->data.llist;           /* patterns read one slot at a time */
+            ncvars = (size_t)ll_length(cvll);
         } else {
             ncvars = 1;
             cvars = malloc(sizeof(Expr*));
@@ -922,10 +924,9 @@ Expr* builtin_complex_expand(Expr* res) {
         }
     }
 
-    CxCtx ctx = { cvars, ncvars, target };
+    CxCtx ctx = { cvars, ncvars, target, cvll };
     Expr* out = cx_expand_thread(argv[0], &ctx);
     if (cvars) free(cvars);
-    ll_elems_release(&cv_ll);
     return out;
 }
 
