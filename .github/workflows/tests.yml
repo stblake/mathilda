@@ -87,16 +87,23 @@ jobs:
           if [ -n "$FILTER" ]; then
             # Build targets are the tests' EXECUTABLES, not the test names: a
             # corpus test (mathar_definite_corpus_tests) runs a shared driver
-            # (mathar_corpus_tests) with arguments.  Read from ctest's JSON
-            # model, which comes from the configure step -- `ctest -N -V` prints
-            # a "Test command" only for an executable that is ALREADY built, so
-            # here (before the build) it printed none.  Only executables inside
-            # the build tree are targets; a test run by python3 adds none.
-            tg=$(cd tests/build && ctest --show-only=json-v1 -R "$FILTER" | python3 -c '
-          import json, os, sys
+            # (mathar_corpus_tests) with arguments.  The command is read from
+            # CTestTestfile.cmake, which the configure step writes: ctest itself
+            # (`-N -V`, `--show-only=json-v1`) reports a command only for an
+            # executable that is ALREADY built, so here, before the build, both
+            # gave nothing.  Names come from `ctest -N -R` (which needs no
+            # build).  Only executables inside the build tree are targets; a
+            # test run by python3 adds none.
+            tg=$(cd tests/build && ctest -N -R "$FILTER" | sed -n 's/^ *Test *#[0-9]*: //p' | python3 -c '
+          import os, re, sys
           b = os.getcwd()
-          cmds = [t.get("command") or [""] for t in json.load(sys.stdin)["tests"]]
-          print(" ".join(sorted({os.path.basename(c[0]) for c in cmds if c[0].startswith(b + "/")})))')
+          want = set(sys.stdin.read().split())
+          src = open("CTestTestfile.cmake").read()
+          cmd = {}
+          for m in re.finditer(r"add_test\((?:\[=\[(.*?)\]=\]|(\S+))\s+\"([^\"]+)\"", src):
+              cmd[m.group(1) or m.group(2)] = m.group(3)
+          print(" ".join(sorted({os.path.basename(cmd[n]) for n in want
+                                 if n in cmd and cmd[n].startswith(b + "/")})))')
             echo "targets: $tg"
             if [ -n "$tg" ]; then
               cmake --build tests/build -j"$(nproc)" --target $tg
