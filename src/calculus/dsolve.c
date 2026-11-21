@@ -198,6 +198,7 @@ extern void dsolve_homog_g_init(void);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_elliptic_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_autonomous_subsolve_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
@@ -616,6 +617,11 @@ Expr* builtin_dsolve(Expr* res) {
             /* Liouville: y'' + g(y)(y')^2 + h(x)y' == 0 (has both y and x, so
              * missing-y/missing-x reductions above decline).  Two quadratures. */
             if (!result) result = dsolve_run(&P, dsolve_liouville_try);
+            /* ...and inside a sub-solve only (depth > 1), the autonomous implicit
+             * companion for a spin-guarded quadrature, AFTER Liouville (which may
+             * answer explicitly) but ahead of the heuristic searches below, which
+             * cost 4 s per sub-solve before arriving at the same inert relation. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_autonomous_subsolve_try);
             /* ScalingReduction (2nd order): a deterministic similarity reduction --
              * homogeneous in y -> u = y'/y (first order); isobaric x -> l x,
              * y -> l^k y -> y = x^k u(Log[x]); translation along (1, -rho) ->

@@ -85,7 +85,12 @@ jobs:
       - name: Build test suites
         run: |
           if [ -n "$FILTER" ]; then
-            tg=$(cd tests/build && ctest -N -R "$FILTER" | sed -n 's/^ *Test *#[0-9]*: //p' | tr '\n' ' ')
+            # Build targets are the tests' EXECUTABLES, not the test names: a
+            # corpus test (mathar_definite_corpus_tests) runs a shared driver
+            # (mathar_corpus_tests) with arguments.
+            tg=$(cd tests/build && ctest -N -V -R "$FILTER" \
+                   | sed -n 's/^[0-9]*: Test command: \([^ ]*\).*/\1/p' \
+                   | xargs -n1 basename | sort -u | tr '\n' ' ')
             echo "targets: $tg"
             cmake --build tests/build -j"$(nproc)" --target $tg
           else

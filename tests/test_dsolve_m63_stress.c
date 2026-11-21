@@ -259,12 +259,20 @@ static void t_m63_repaired_record_shapes(void) {
                 "DSolve[y'[x] + a y[x] == 0, y, x][[1]]]]");
     ASSERT_TRUE("Head[DSolve[y'[x] == a y[x] + b y[x]^2, y, x]] === List");
 
-    /* §2.2.2-170, the constant-radius-of-curvature equation.  It is an honest
-     * decline today (recorded in STATUS.md); the assertion is that it is not a
-     * WRONG answer, which is what the mis-transcribed reading risked. */
-    ASSERT_TRUE("Module[{s = DSolve[r y''[x] == (1 + y'[x]^2)^(3/2), y, x]}, "
+    /* §2.2.2-170, the constant-radius-of-curvature equation; the assertion is that
+     * the answer is not a WRONG one.  No closed form solves it for every r: the
+     * circles y = C[2] -+ Sqrt[r^2 - (x + c)^2] (the reference's answer) each hold
+     * for ONE sign of r, since (r^2)^(3/2) == r^3 only for r > 0, so the residual is
+     * judged at r = 2 and at r = -2 and every branch must vanish identically in x
+     * and the constants at one of them.  That still rejects what this used to ship:
+     * C[2] + Inactive[Integrate][Sqrt[(x + c)^2 (r^2 - (x + c)^2)]/((x + c)^2 - r^2),
+     * x] (up to the shift of c), a body with Sqrt[s^2] for s, so a solution only on
+     * the part of the line where Sqrt[s^2] == s -- for EITHER sign of r. */
+    ASSERT_TRUE("Module[{s = DSolve[r y''[x] == (1 + y'[x]^2)^(3/2), y, x], res}, "
                 "s === {} || Head[s] === DSolve || "
-                "PossibleZeroQ[Simplify[(r y''[x] - (1 + y'[x]^2)^(3/2)) /. s[[1]]]]]");
+                "(res = (r y''[x] - (1 + y'[x]^2)^(3/2)) /. s; FreeQ[s, Inactive] && "
+                " And @@ MapThread[TrueQ[PossibleZeroQ[#1]] || TrueQ[PossibleZeroQ[#2]] &, "
+                "                  {res /. r -> 2, res /. r -> -2}])]");
 }
 
 int main(void) {

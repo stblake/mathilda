@@ -130,3 +130,71 @@
 /* EulerE — defined for integer index only; a non-integer index stays symbolic */
 { "EulerE@22/7", "defined for integer index only; a non-integer index stays symbolic" },
 { "EulerE@-3/2", "defined for integer index only; a non-integer index stays symbolic" },
+
+/* Underflow (v0.66, 1ff092b98): a value below MPFR's exponent range is
+ * Underflow[] with General::unfl at N[.., p], and machine N[] reports the machine
+ * 0. (N[Underflow[]] == 0., v0.6660) -- the mirror image of the
+ * Sinh/Cosh/Exp overflow gaps above, and the reference's answer too. */
+
+/* Sech */
+{ "Sech@2^53", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@10^20", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@2^53+1", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@pi-digits", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@10^25", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@10^40", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@-10^25", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Sech@10^20/3", "e^-|x| below MPFR's exponent range (~10^-323228458): machine 0., Underflow[] at 30 digits, as the reference" },
+
+/* Csch */
+{ "Csch@2^53", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@10^20", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@2^53+1", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@pi-digits", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@10^25", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@10^40", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@-10^25", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Csch@10^20/3", "e^-|x| below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+
+/* Erfc */
+{ "Erfc@2^53", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Erfc@10^20", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Erfc@2^53+1", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Erfc@pi-digits", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Erfc@10^25", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "Erfc@10^20/3", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+
+/* ExpIntegralEi */
+{ "ExpIntegralEi@-10^25", "e^x/x at x = -10^25 below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+
+/* AiryAi */
+{ "AiryAi@2^53", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAi@10^20", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAi@2^53+1", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAi@pi-digits", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAi@10^25", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAi@10^20/3", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+
+/* AiryAiPrime */
+{ "AiryAiPrime@2^53", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAiPrime@10^20", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAiPrime@2^53+1", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAiPrime@pi-digits", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAiPrime@10^25", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAiPrime@10^20/3", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+
+/* BesselK0 */
+{ "BesselK0@2^53", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "BesselK0@10^20", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "BesselK0@2^53+1", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "BesselK0@pi-digits", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "BesselK0@10^25", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "BesselK0@10^40", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "BesselK0@10^20/3", "e^-x below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+
+/* The same underflow at 10^40, where machine N[] already answered 0. through
+ * the raised MPFR pass; since v0.6660 both magnitudes give machine 0. and
+ * N[.., 30] Underflow[], exactly as the reference. */
+{ "Erfc@10^40", "e^-x^2 below MPFR's exponent range: machine 0., Underflow[] at 30 digits, as the reference" },
+{ "AiryAi@10^40", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., Underflow[] at 30 digits" },
+{ "AiryAiPrime@10^40", "e^-(2/3)x^(3/2) below MPFR's exponent range: machine 0., -Underflow[] at 30 digits" },

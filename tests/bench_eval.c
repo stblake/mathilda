@@ -40,6 +40,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "core.h"
+#include "bench_calibrate.h"
 
 #define N_TRIALS 5
 
@@ -89,7 +90,8 @@ static double median_us(const char* expr) {
 /* Each workload is chosen to stress the evaluator dispatch path with many small
  * function nodes and/or many evaluation passes, rather than a single heavy
  * builtin body (which would swamp the dispatch signal we care about). */
-typedef struct { const char* label; const char* expr; double baseline_norm; } Bench;
+typedef struct { const char* label; const char* expr; double base_darwin; double base_linux; } Bench;
+#define BASELINE(b) BENCH_BASELINE((b).base_darwin, (b).base_linux)
 
 /* Fail a workload only if it is this many times slower (relative to the
  * calibration) than its recorded baseline -- loose enough to absorb machine and
@@ -133,7 +135,16 @@ typedef struct { const char* label; const char* expr; double baseline_norm; } Be
  * is exactly a list of fresh Rationals (11.2 ms -> 6.8 ms, the same load, the
  * workloads' absolute times unchanged or faster). Dividing by the faster unit
  * raised every norm 1.65x, a gate 1.65x tighter than recorded; the factor
- * restores the recorded absolute budgets. */
+ * restores the recorded absolute budgets.
+ *
+ * 2026-11-21  New unit, re-recorded (v0.6660).  The calibration is the C
+ * workload of bench_calibrate.h: Table[k/3, {k, 12000}] got 2.3x faster again
+ * with the v0.6653-57 scoping work (6788 -> 2948 us, interleaved A/B on one
+ * host), the third time a WL-spelled unit moved under the gate.  Row by row the
+ * same A/B was 1.02-1.25x (nested plus collapse and both orderless sorts at the
+ * top), so no row regressed past noise.  base_darwin is the median of three
+ * runs on the Intel i9-9880H host; base_linux is 0.0 (prints, does not gate)
+ * until the serial CI run of this commit records it. */
 static Bench BENCHES[] = {
     /* 8000 structurally DISTINCT undefined nodes hh[k, k] (k differs each row),
      * so no eval-clock cache hit or refcount DAG-sharing collapses them. No rule
@@ -141,46 +152,46 @@ static Bench BENCHES[] = {
      * apply_down_values miss + builtin-lookup miss. The cleanest dispatch signal
      * in the set. (A Nest[f[u,u]] tree would instead share args by refcount and
      * collapse to a ~13-node DAG -- not a dispatch test.) */
-    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.59 },
+    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.83, 0.0 },
 
     /* 4000 sequential DownValue rewrites g[k] -> k+1. Exercises
      * apply_down_values + get_attributes on the user symbol g every step. */
-    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.33 },
+    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.62, 0.0 },
 
     /* Listable threading of Cos over a 4000-element list: 4000 threaded
      * sub-evaluations, each dispatching Cos[k] (stays symbolic). */
-    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.20 },
+    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.33, 0.0 },
 
     /* Build a 1200-term Plus and let Orderless sort it: stresses eval_sort_args
      * + expr_compare in addition to per-term dispatch. */
-    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.45 },
+    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.34, 0.0 },
 
     /* Pairwise fold of a 400-element list to a fixed point via ReplaceRepeated:
      * ~399 rewrites, each a full matcher + re-evaluation pass (O(n^2), so kept
      * small). Stresses the pattern matcher, not just dispatch. */
-    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 11.88 },
+    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 0.82, 0.0 },
 
     /* 3000 sequential Plus re-evaluations (each Nest step re-evaluates the
      * running sum). Exercises Flat/Orderless combination on every pass. */
-    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 0.58 },
+    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 1.88, 0.0 },
 
     /* Naive fib[24]: exponential DownValue dispatch on a trivial body -- the
      * flagship per-call dispatch signal from MATHILDA_EVALUATOR_PERFORMANCE.md.
      * Definition installed in main(). */
-    { "naive recursion (fib 24)", "fib[24]", 22.27 },
+    { "naive recursion (fib 24)", "fib[24]", 28.03, 0.0 },
 
     /* Case B (typed): the matcher per-attempt constant. Both engines walk the
      * identical search space, so the row isolates the evaluator constant behind
      * each guard evaluation (Length/Plus/Equal per attempt). */
     { "matcher constant (Case B)",
       "MatchQ[Range[500], {xx : Repeated[_Integer], yy : Repeated[_Integer], "
-      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 1.73 },
+      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 2.97, 0.0 },
 
     /* Orderless canonicalisation of a 2000-term symbolic sum built via Apply --
      * the arithmetic sentinel this optimisation targeted (Table build + Apply +
      * Plus grouping). The 1200-term sibling above tracks the same shape; this
      * pins the doc's headline size. */
-    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.66 },
+    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.59, 0.0 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 
@@ -219,9 +230,9 @@ int main(void) {
      * live in one. ndarray_from_nested_list's probe rejects the FIRST element
      * here, so a packing attempt is O(1) and does not perturb the timing either.
      * Do not "simplify" this back to a list of Integers or Reals. */
-    double calib_us = median_us("Length[Table[k/3, {k, 12000}]]");
+    double calib_us = bench_calibrate_us(N_TRIALS, 5);
     if (calib_us <= 0.0) calib_us = 1e-6;
-    printf("calibration  Length[Table[k/3, {k, 12000}]]  = %.1f us\n\n", calib_us);
+    printf("calibration  bench_calibrate_us (C, %s)  = %.1f us\n\n", BENCH_PLATFORM, calib_us);
 
     printf("%-30s %12s %10s %10s %8s\n",
            "workload", "median(us)", "norm", "baseline", "x base");
@@ -231,15 +242,15 @@ int main(void) {
     for (int i = 0; i < N_BENCH; i++) {
         double us = median_us(BENCHES[i].expr);
         double norm = us / calib_us;
-        if (BENCHES[i].baseline_norm <= 0.0) {
+        if (BASELINE(BENCHES[i]) <= 0.0) {
             printf("%-30s %12.1f %10.2f %10s %8s   (record as baseline)\n",
                    BENCHES[i].label, us, norm, "-", "-");
             continue;
         }
-        double x = norm / BENCHES[i].baseline_norm;
+        double x = norm / BASELINE(BENCHES[i]);
         int bad = (x > SLOWDOWN_MAX);
         printf("%-30s %12.1f %10.2f %10.2f %8.2f%s\n",
-               BENCHES[i].label, us, norm, BENCHES[i].baseline_norm, x,
+               BENCHES[i].label, us, norm, BASELINE(BENCHES[i]), x,
                bad ? "  <== MUCH SLOWER" : "");
         if (bad) slow++;
     }

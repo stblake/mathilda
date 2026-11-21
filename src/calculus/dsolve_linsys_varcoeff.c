@@ -28,6 +28,7 @@
 #include "dsolve_common.h"
 #include "../sym_names.h"
 #include "../eval.h"
+#include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
 #include "../common.h"
@@ -83,8 +84,27 @@ Expr** dsolve_linsys_varcoeff_solve(DSolveProblem* P) {
         expr_free(A); expr_free(b); expr_free(f); expr_free(B); expr_free(t); return NULL;
     }
 
-    /* Phi = e^{B t}, then Y = tidy(Phi . (C + Integrate[Phi^{-1} b, x])). */
-    Expr** Y = dsolve_linsys_assemble(B, t, xvar, b, b_zero, n);
+    /* Phi = e^{B t}, then Y = tidy(Phi . (C + Integrate[Phi^{-1} b, x])).
+     *
+     * Homogeneous: assemble in an opaque real symbol tau and substitute
+     * tau -> t afterwards.  The system IS the constant-coefficient one in tau,
+     * and the tidy's ComplexExpand treats every symbol as real but possibly
+     * negative: handed t = Log[x] directly, a complex spectrum's E^(I Log[x])
+     * (which evaluates to x^I) splits into E^(-Arg[x]) Cos[Log[Sqrt[x^2]]] + ...
+     * -- correct for real x, but Arg'[x] is not decided zero, so the branch failed
+     * back-substitution.  In tau it is Cos[tau] / Sin[tau], so Cos[Log[x]].  The
+     * forced case integrates Phi^{-1} b over x, so Phi must carry x itself. */
+    Expr** Y;
+    if (b_zero) {
+        const char* tau = intern_symbol("DSolve`varTau");
+        Expr* tau_e = expr_new_symbol(tau);          /* borrowed by assemble */
+        Y = dsolve_linsys_assemble(B, tau_e, tau, b, b_zero, n);
+        expr_free(tau_e);
+        for (size_t i = 0; Y && i < n; i++)
+            if (Y[i]) Y[i] = ds_subst(Y[i], expr_new_symbol(tau), expr_copy(t));
+    } else {
+        Y = dsolve_linsys_assemble(B, t, xvar, b, b_zero, n);
+    }
 
     expr_free(A); expr_free(b); expr_free(f); expr_free(B); expr_free(t);
     return Y;   /* NULL on decline (Jordan / non-elementary VoP) */

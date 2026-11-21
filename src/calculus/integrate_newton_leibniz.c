@@ -729,8 +729,14 @@ static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
     if (dir == NL_DIR_NONE && !as) {
         call = mk_fn2("Limit", expr_copy(F), rule);
     } else {
-        /* Build the trailing options: Direction (if directed) and Assumptions. */
-        Expr** opts = malloc(3 * sizeof(Expr*));
+        /* Build the trailing options: Direction (if directed) and Assumptions.
+         * Four slots: F, the rule, and both options.  This held three until
+         * v0.6660, so a DIRECTED limit under assumptions wrote one pointer past
+         * the block -- invisible on macOS (the 24-byte block is rounded up),
+         * glibc's next chunk header on Linux, where an unrelated later free()
+         * aborted with "double free or corruption" (30 Mathar corpus integrals,
+         * integrate_gr132_2_tests). */
+        Expr* opts[4];
         size_t no = 0;
         opts[no++] = expr_copy(F);
         opts[no++] = rule;
@@ -740,7 +746,6 @@ static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
         if (as)
             opts[no++] = mk_fn2("Rule", mk_sym("Assumptions"), expr_copy(as));
         call = expr_new_function(mk_sym("Limit"), opts, no);
-        free(opts);
     }
     return eval_take(call);
 }

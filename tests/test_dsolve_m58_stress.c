@@ -94,11 +94,14 @@ static void t_m58_guard_implicit(void) {
                 "Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive[Integrate]]]");
 }
 
-/* M59: the order-3 autonomous residue whose stage-2 quadrature is non-elementary
- * (the reduced p is a Sqrt of a non-quadratic radicand) each returns a verified inert
- * first integral instead of declining.  Every branch is back-substitution verified by
- * the method's own numeric self-verify (0 FAIL by construction), so asserting the
- * inert-integral form is sufficient; a decline would make Head =!= List. */
+/* M59: the order-3 autonomous residue whose stage-2 quadrature has a Sqrt of a
+ * non-quadratic radicand each returns a verified first integral instead of
+ * declining.  Every branch is back-substitution verified by the method's own
+ * numeric self-verify (0 FAIL by construction), so the assertion is only that it
+ * does not decline (a decline would make Head =!= List).  The first integral may
+ * be inert or, when Integrate finds the quadrature, closed-form: for 2.1.2-268,
+ * Integrate[y^(-4/3) (2 C2 + 3 C3 y^(2/3))^(-1/2), y] is a Chebyshev-elementary
+ * binomial and now comes back closed-form -- checked exactly in t_m59_closed_form. */
 static void t_m59_implicit_family(void) {
     const char* odes[] = {
         "y[x]^3 y'[x] - y'[x] y''[x] + y[x] y'''[x] == 0",           /* 2.1.2-263 */
@@ -110,9 +113,23 @@ static void t_m59_implicit_family(void) {
         char buf[512];
         snprintf(buf, sizeof(buf),
             "With[{s = DSolve`AutonomousReduction[%s, y[x], x]}, "
-            "Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive[Integrate]]]", odes[i]);
+            "Head[s] === List && Length[s] >= 1 && FreeQ[s, DSolve`AutonomousReduction]]", odes[i]);
         ASSERT_TRUE(buf);
     }
+}
+
+/* 2.1.2-268 as a closed-form first integral F(y) - x == C[1]: the ODE must hold
+ * exactly along it.  With p = y' = 1/F'(y), q = y'' = p dp/dy and r = y''' =
+ * p dq/dy, the residual is a function of y alone and must vanish identically.
+ * (An inert answer is covered by t_m59_implicit_family.) */
+static void t_m59_closed_form(void) {
+    ASSERT_TRUE("Module[{s, F, p, q, r, u}, "
+                "s = DSolve`AutonomousReduction[40 y'[x]^3 - 45 y[x] y'[x] y''[x] + "
+                "9 y[x]^2 y'''[x] == 0, y[x], x]; "
+                "If[!FreeQ[s, Inactive[Integrate]], True, "
+                "F = (s[[1, 1, 1]] + x) /. y[x] -> u; p = 1/D[F, u]; "
+                "q = D[p, u] p; r = D[q, u] p; "
+                "FreeQ[F, x] && PossibleZeroQ[40 p^3 - 45 u p q + 9 u^2 r]]]");
 }
 
 int main(void) {
@@ -125,6 +142,7 @@ int main(void) {
     TEST(t_m58_order3);
     TEST(t_m58_guard_implicit);
     TEST(t_m59_implicit_family);
+    TEST(t_m59_closed_form);
 
     printf("All DSolve M58 stress tests passed.\n");
     return 0;

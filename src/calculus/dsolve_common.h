@@ -404,7 +404,11 @@ Expr* ds_call2(const char* head, Expr* a, Expr* b);
  * after Together); gates the polynomial coefficient normaliser. */
 bool ds_is_rational_in(const Expr* e, const char* xvar);
 
-/* D[e, v] / Integrate[e, v] / Solve[eq, v] from C; args consumed, result owned. */
+/* D[e, v] / Integrate[e, v] / Solve[eq, v] from C; args consumed, result owned.
+ * ds_integrate (and ds_integrate_or_inert) hand the integrator every generated
+ * constant C[k] as a symbol (ds_sym_consts), restored in the answer: the
+ * integrator reads a symbol, not the application C[k], as a symbolic parameter, and
+ * its tower stages decline a radicand in C[k] that they close in a symbol. */
 Expr* ds_d(Expr* e, Expr* v);
 Expr* ds_integrate(Expr* e, Expr* v);
 Expr* ds_solve(Expr* eq, Expr* v);
@@ -417,6 +421,10 @@ Expr* ds_make_funcapp(const char* fname, int order, const char* xvar);
 
 /* The generated constant C[k]. */
 Expr* ds_const(int k);
+
+/* forward: every C[k] (k an integer) -> the symbol DSolve`symK<k>; !forward: back.
+ * Evaluated; `e` consumed (returned unchanged when there is nothing to rename). */
+Expr* ds_sym_consts(Expr* e, bool forward);
 
 /* Rewrite every generated constant C[k] in `e` to head[k] (the GeneratedParameters
  * head).  `e` borrowed, result owned (a no-op deep copy when head == "C"). */

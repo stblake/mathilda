@@ -46,6 +46,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "core.h"
+#include "bench_calibrate.h"
 #include "pack.h"
 
 #define N_TRIALS 5
@@ -89,7 +90,8 @@ static double median_us(const char* expr) {
     return s[N_TRIALS / 2];
 }
 
-typedef struct { const char* label; const char* expr; double baseline_norm; } Bench;
+typedef struct { const char* label; const char* expr; double base_darwin; double base_linux; } Bench;
+#define BASELINE(b) BENCH_BASELINE((b).base_darwin, (b).base_linux)
 
 #define SLOWDOWN_MAX 2.5
 
@@ -115,52 +117,68 @@ typedef struct { const char* label; const char* expr; double baseline_norm; } Be
  * fixed-point re-evaluation), and Table[k/3, {k, 1200}] is exactly a list of
  * fresh Rationals (0.96 ms -> 0.56 ms, the same load). Every row's absolute
  * time was unchanged, yet 14 of 21 norms read 2.5-4x and the gate failed; the
- * factor restores the recorded absolute budgets. */
+ * factor restores the recorded absolute budgets.
+ *
+ * 2026-11-21  New unit, re-recorded (v0.6660).  The calibration is now the C
+ * workload in bench_calibrate.h, not Length[Table[k/3, {k, 1200}]]: the
+ * v0.6653-57 scoping work made that Table 3.0x faster (576 -> 191 us, an A/B of
+ * the 11-07 and current binaries interleaved on one host), which raised every
+ * norm 3x and failed 18 of 21 rows with no workload slower.  The same A/B, row
+ * by row (new/old): 1.0-1.25x everywhere except Jacobi stencil 1.66x and
+ * Accumulate 1.51x (buffer arithmetic: the default per-lane range checks of
+ * v0.6612, a deliberate correctness cost) and Det 1.75x (all of it inside
+ * Accelerate's threaded LAPACK -- dispatch variance, not this code).  The
+ * columns are base_darwin (median of three runs, Intel i9-9880H, the new unit)
+ * and base_linux (0.0 = not yet recorded: the row prints, does not gate; to be
+ * taken from the serial CI run of this commit).  The Linux runner needed its own
+ * column all along: on it a 10^5-element RotateLeft costs ~7x macOS (~800 us
+ * against ~110 us) on every nightly back to the first one (2026-10-27), so this
+ * file had never passed there. */
 static Bench BENCHES[] = {
     /* ---- the structural family: native buffer walks in src/ndstruct.c ----
      * Slow path for all of these is ndstruct_delist_repack -- one Expr per
      * element, the generic List implementation, then a re-sniff and re-pack. */
-    { "RotateLeft matrix (200^2)",   "Length[RotateLeft[pm, {1, 0}]]",        0.0258 },
-    { "RotateLeft vector (10^5)",    "Length[RotateLeft[pv, 3]]",             0.0599 },
-    { "Reverse matrix (200^2)",      "Length[Reverse[pm]]",                   0.0153 },
-    { "Join two vectors (10^5)",     "Length[Join[pv, pv]]",                  0.0588 },
-    { "Partition (10^5, 2)",         "Length[Partition[pv, 2]]",              0.0304 },
-    { "Differences (10^5)",          "Length[Differences[pv]]",               0.8113 },
-    { "Riffle Real sep (10^5)",      "Length[Riffle[pv, 0.]]",                0.6622 },
-    { "PadRight Real fill (10^5)",   "Length[PadRight[pv, 100001, 0.]]",      0.0304 },
+    { "RotateLeft matrix (200^2)",   "Length[RotateLeft[pm, {1, 0}]]",        0.0087, 0.0 },
+    { "RotateLeft vector (10^5)",    "Length[RotateLeft[pv, 3]]",             0.0207, 0.0 },
+    { "Reverse matrix (200^2)",      "Length[Reverse[pm]]",                   0.0056, 0.0 },
+    { "Join two vectors (10^5)",     "Length[Join[pv, pv]]",                  0.0202, 0.0 },
+    { "Partition (10^5, 2)",         "Length[Partition[pv, 2]]",              0.0101, 0.0 },
+    { "Differences (10^5)",          "Length[Differences[pv]]",               0.0180, 0.0 },
+    { "Riffle Real sep (10^5)",      "Length[Riffle[pv, 0.]]",                0.1792, 0.0 },
+    { "PadRight Real fill (10^5)",   "Length[PadRight[pv, 100001, 0.]]",      0.0101, 0.0 },
 
     /* ---- the iteration family (Nest et al.) ----
      * Slow path: the gate materialises the state on EVERY iteration, so the cost
      * is O(iterations x elements) instead of O(elements). Was 118x. */
-    { "Nest over packed (20x)",      "Length[Nest[Reverse, pm, 20]]",         0.2740 },
-    { "FoldList over packed (10^4)", "Length[FoldList[Plus, 0., fv]]",        3.9171 },
+    { "Nest over packed (20x)",      "Length[Nest[Reverse, pm, 20]]",         0.0928, 0.0 },
+    { "FoldList over packed (10^4)", "Length[FoldList[Plus, 0., fv]]",        0.0044, 0.0 },
 
     /* ---- user DownValues that bind opaquely (dv_binds_opaquely, src/eval.c) --
      * Slow path: a user symbol has no packed_aware bit, so `jac[u_]` used to
      * materialise on every call. Was 158x on the composite stencil below. */
-    { "user f[v_] over packed",      "Length[usr[pv]]",                       0.0409 },
-    { "Jacobi stencil (200^2, 20)",  "Length[Nest[jac, pm, 20]]",             5.3583 },
+    { "user f[v_] over packed",      "Length[usr[pv]]",                       0.0141, 0.0 },
+    { "Jacobi stencil (200^2, 20)",  "Length[Nest[jac, pm, 20]]",             3.0989, 0.0 },
 
     /* ---- linear algebra (the 26 heads; ndla_* in src/linalg/ndlinalg.c) ----
      * Slow path is not merely slow: with the buffer materialised first,
      * linalg_call_has_ndarray reads false and a machine-real solve takes the
      * exact fraction-free path, which recurses. This row is a crash canary. */
-    { "LinearSolve (120^2)",         "Length[LinearSolve[sm, sv]]",           0.1791 },
-    { "Det (120^2)",                 "Head[Det[sm]]",                         0.2245 },
-    { "Inverse (120^2)",             "Length[Inverse[sm]]",                   0.6835 },
+    { "LinearSolve (120^2)",         "Length[LinearSolve[sm, sv]]",           0.0553, 0.0 },
+    { "Det (120^2)",                 "Head[Det[sm]]",                         0.1143, 0.0 },
+    { "Inverse (120^2)",             "Length[Inverse[sm]]",                   0.2338, 0.0 },
 
     /* ---- reductions and order statistics already on the buffer ----
      * Regression guards for paths that are currently fast. */
-    { "Total (10^5)",                "Total[pv]",                             0.0397 },
-    { "Sort (10^5)",                 "Length[Sort[pv]]",                      2.9761 },
-    { "Accumulate (10^5)",           "Length[Accumulate[pv]]",                0.8658 },
+    { "Total (10^5)",                "Total[pv]",                             0.0135, 0.0 },
+    { "Sort (10^5)",                 "Length[Sort[pv]]",                      1.1368, 0.0 },
+    { "Accumulate (10^5)",           "Length[Accumulate[pv]]",                0.0565, 0.0 },
 
     /* ---- exact int64 buffers ----
      * Slow path: any head not on INT64_OK materialises an integer buffer. The
      * answers must stay exact Integers either way, so only the timing tells. */
-    { "Total int64 (10^5)",          "Head[Total[iv]]",                       0.0387 },
-    { "RotateLeft int64 (10^5)",     "Length[RotateLeft[iv, 3]]",             0.0599 },
-    { "Differences int64 (10^5)",    "Length[Differences[iv]]",               0.0841 },
+    { "Total int64 (10^5)",          "Head[Total[iv]]",                       0.0190, 0.0 },
+    { "RotateLeft int64 (10^5)",     "Length[RotateLeft[iv, 3]]",             0.0189, 0.0 },
+    { "Differences int64 (10^5)",    "Length[Differences[iv]]",               0.0178, 0.0 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 
@@ -224,9 +242,9 @@ int main(void) {
      * exact Rational leaf can never live in a machine buffer, so pack_sniff
      * rejects the FIRST element and the packing attempt is O(1) -- immune by
      * construction, not by luck. */
-    double calib_us = median_us("Length[Table[k/3, {k, 1200}]]");
+    double calib_us = bench_calibrate_us(N_TRIALS, 5);
     if (calib_us <= 0.0) calib_us = 1e-6;
-    printf("calibration  Length[Table[k/3, {k, 1200}]]  = %.1f us\n\n", calib_us);
+    printf("calibration  bench_calibrate_us (C, %s)  = %.1f us\n\n", BENCH_PLATFORM, calib_us);
 
     printf("%-30s %12s %10s %10s %8s\n",
            "workload", "median(us)", "norm", "baseline", "x base");
@@ -236,15 +254,15 @@ int main(void) {
     for (int i = 0; i < N_BENCH; i++) {
         double us = median_us(BENCHES[i].expr);
         double norm = us / calib_us;
-        if (BENCHES[i].baseline_norm <= 0.0) {
+        if (BASELINE(BENCHES[i]) <= 0.0) {
             printf("%-30s %12.1f %10.4f %10s %8s   (record as baseline)\n",
                    BENCHES[i].label, us, norm, "-", "-");
             continue;
         }
-        double x = norm / BENCHES[i].baseline_norm;
+        double x = norm / BASELINE(BENCHES[i]);
         int bad = (x > SLOWDOWN_MAX);
         printf("%-30s %12.1f %10.4f %10.4f %8.2f%s\n",
-               BENCHES[i].label, us, norm, BENCHES[i].baseline_norm, x,
+               BENCHES[i].label, us, norm, BASELINE(BENCHES[i]), x,
                bad ? "  <== MUCH SLOWER" : "");
         if (bad) slow++;
     }

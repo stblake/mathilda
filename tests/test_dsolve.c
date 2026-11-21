@@ -3647,9 +3647,16 @@ static void t_scaling_reduction(void) {
     /* isobaric k = -1/2: Lane-Emden index 5, inert elliptic relation in Sqrt[x] y */
     check_true("Module[{r = DSolve[x y''[x] + 2 y'[x] + x y[x]^5 == 0, y[x], x]}, "
                "Length[r] == 2 && !FreeQ[r, Log[x]] && !FreeQ[r, Sqrt[x] y[x]]]");
-    /* translation along (1, 1): v = y - x makes it autonomous */
+    /* translation along (1, 1): v = y - x makes it autonomous.  The v-equation's
+     * separable stage now closes (its quadrature carries the stage-1 C[2], which the
+     * integrator only reads as a parameter once symbolized), so the answer is the
+     * explicit two-constant family y = -C[1] - 1/(C[2] (x + C[1])), verified by
+     * back-substitution, where it used to be the two implicit relations in -x + y[x]
+     * (and then nothing at all once the sub-solve outran its budget). */
     check_true("Module[{r = DSolve[2 y'[x] (y'[x] + 1) + (x - y[x]) y''[x] == 0, y[x], x]}, "
-               "Length[r] == 2 && !FreeQ[r, -x + y[x]]]");
+               "ListQ[r] && r =!= {} && !FreeQ[r, C[2]] && AllTrue[r, "
+               "PossibleZeroQ[Together[(2 y'[x] (y'[x] + 1) + (x - y[x]) y''[x]) /. "
+               "y -> Function[{x}, Evaluate[y[x] /. #]]]] &]]");
     /* translation along (b, -a), reached ahead of the heuristic searches */
     check_true("ListQ[TimeConstrained[DSolve[(a x + b y[x]) y'[x]^3 + y''[x] == 0, y[x], x], "
                "6, $Aborted]]");

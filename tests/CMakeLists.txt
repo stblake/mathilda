@@ -6915,10 +6915,19 @@ endforeach()
 #                          load turns into noise on a per-push run.
 # Large unit suites (dsolve_tests, intrat_tests, ...) stay on the push tier on
 # purpose: dsolve_tests sat broken for weeks because nothing ran it.
+#
+# The bench_* gates also run SERIALLY (RUN_SERIAL: ctest starts nothing else
+# while one runs).  Under `ctest -j` they shared the runner with corpus suites
+# fanning out eight jobs each, and the calibration swung 2x night to night
+# (151-331 us), so a 2.5x gate failed on noise: LinearSolve read 0.48-1290 x
+# its norm in the parallel pass and 0.65-0.81 in the serial gdb rerun.
 get_property(_mathilda_all_tests DIRECTORY PROPERTY TESTS)
 foreach(_t IN LISTS _mathilda_all_tests)
     if(_t MATCHES "corpus|stress|^bench_")
         set_tests_properties(${_t} PROPERTIES LABELS nightly)
+    endif()
+    if(_t MATCHES "^bench_")
+        set_tests_properties(${_t} PROPERTIES RUN_SERIAL TRUE)
     endif()
 endforeach()
 add_executable(osp_famous_tests test_osp_famous.c $<TARGET_OBJECTS:mathilda_common>)

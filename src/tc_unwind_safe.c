@@ -198,7 +198,18 @@ void tc_unwind_safe_init(void) {
     g_ready = g_nranges > 0;
 }
 
-int tc_interrupted_in_libc(const void* ucontext) {
+/* This reads the INTERRUPTED code's stack -- the word at its sp and its
+ * frame-pointer chain, every address bounds-checked against the main stack --
+ * which AddressSanitizer reports as a stack-buffer-underflow (another frame's
+ * redzone) whenever a timeout lands mid-call.  The reads are deliberate, so the
+ * function is exempt from instrumentation in a sanitizer build only; without
+ * the exemption a sanitize: true CI run "crashes" on every timed-out record. */
+#if defined(__SANITIZE_ADDRESS__)
+#  define TC_NO_ASAN __attribute__((no_sanitize_address))
+#else
+#  define TC_NO_ASAN
+#endif
+TC_NO_ASAN int tc_interrupted_in_libc(const void* ucontext) {
     if (!g_ready || !ucontext) return 0;
     uintptr_t pc, fp, sp, lr;
     read_context(ucontext, &pc, &fp, &sp, &lr);

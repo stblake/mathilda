@@ -43,7 +43,12 @@ Expr* ds_call2(const char* head, Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol(head), (Expr*[]){ a, b }, 2);
 }
 Expr* ds_d(Expr* e, Expr* v)         { return eval_and_free(ds_call2(SYM_D, e, v)); }
-Expr* ds_integrate(Expr* e, Expr* v) { return eval_and_free(ds_call2(SYM_Integrate, e, v)); }
+/* Integrate[e, v] with every generated constant C[k] symbolized for the integrator
+ * (ds_sym_consts) and restored in the answer. */
+Expr* ds_integrate(Expr* e, Expr* v) {
+    e = ds_sym_consts(e, true);
+    return ds_sym_consts(eval_and_free(ds_call2(SYM_Integrate, e, v)), false);
+}
 Expr* ds_solve(Expr* eq, Expr* v)    { return eval_and_free(ds_call2(SYM_Solve, eq, v)); }
 
 Expr* ds_subst(Expr* body, Expr* from, Expr* to) {
@@ -350,6 +355,64 @@ Expr* ds_rename_param(const Expr* e, const char* head) {
     Expr* r = expr_new_function(nh, args, n);
     free(args);
     return r;
+}
+
+/* The parameter symbol standing for C[k] inside a quadrature. */
+#define DS_SYMK_PREFIX "DSolve`symK"
+
+static bool ds_has_const_app(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C && e->data.function.arg_count == 1
+        && e->data.function.args[0]->type == EXPR_INTEGER) return true;
+    if (ds_has_const_app(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_const_app(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool ds_has_symk(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return strncmp(e->data.symbol.name, DS_SYMK_PREFIX, sizeof(DS_SYMK_PREFIX) - 1) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ds_has_symk(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_symk(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Fresh tree: C[k] -> DSolve`symK<k> (forward) or back.  `e` borrowed. */
+static Expr* ds_sym_consts_rec(const Expr* e, bool forward) {
+    if (!e) return NULL;
+    if (!forward && e->type == EXPR_SYMBOL
+        && strncmp(e->data.symbol.name, DS_SYMK_PREFIX, sizeof(DS_SYMK_PREFIX) - 1) == 0) {
+        long long k = atoll(e->data.symbol.name + sizeof(DS_SYMK_PREFIX) - 1);
+        return ds_const((int)k);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (forward && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C && n == 1
+        && e->data.function.args[0]->type == EXPR_INTEGER) {
+        char nm[48];
+        snprintf(nm, sizeof nm, DS_SYMK_PREFIX "%lld",
+                 (long long)e->data.function.args[0]->data.integer);
+        return expr_new_symbol(intern_symbol(nm));
+    }
+    Expr* nh = ds_sym_consts_rec(h, forward);
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) args[i] = ds_sym_consts_rec(e->data.function.args[i], forward);
+    Expr* r = expr_new_function(nh, args, n);
+    free(args);
+    return r;
+}
+
+Expr* ds_sym_consts(Expr* e, bool forward) {
+    if (!e || !(forward ? ds_has_const_app(e) : ds_has_symk(e))) return e;
+    Expr* r = ds_sym_consts_rec(e, forward);
+    expr_free(e);
+    return eval_and_free(r);
 }
 
 Expr* ds_expand_power_exponents(const Expr* e) {
@@ -1480,25 +1543,63 @@ static Expr* ds_generic_step_derivative(Expr* e) {
  * y==0 meets y[0]==0 but not y'[0]==1/2 -- a WRONG answer the first-order-only ODE
  * backstop never saw).  Conservative: rejects only when a condition residual
  * numericizes to a robustly-nonzero value; a non-numericizable or free-parameter
- * residual (which a genuine fit drives to an identical 0) is kept. */
+ * residual (which a genuine fit drives to an identical 0) is kept.
+ *
+ * A value that is NOT FINITE at the point (0/0, a pole) means the condition is the
+ * two-sided limit there: a removable singularity ((x^2/2)^(1/4)/Sqrt[x] at 0) fits,
+ * but a pole does not -- Solve's spurious root E^(2 C[1]) == 1 of
+ * Sqrt[E^(2 C[1]) (1 - E^(2 C[1]))]/(1 - E^(2 C[1])) == 1 (a 0/0 it did not reject)
+ * made y' == 2 x y (1 + y^2), y(0) == 1 (§2.2.16-1592) infinite at x = 0.  The limit
+ * is bounded and muted; one that does not come back numeric keeps the body. */
+static double ds_cond_mag(Expr* R) {                 /* R consumed */
+    Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", R))));
+    double mag = (mg && mg->type == EXPR_REAL)    ? mg->data.real
+               : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer
+               : (mg && (ds_contains(mg, SYM_ComplexInfinity) || ds_contains(mg, SYM_Infinity)))
+                     ? INFINITY : NAN;
+    if (mg && ds_contains(mg, SYM_Indeterminate)) mag = NAN;
+    expr_free(mg);
+    return mag;
+}
+
 static bool ds_fit_meets_conditions(const DSolveProblem* P, const Expr* body) {
     if (P->nfun != 1) return true;                 /* systems fit/verified separately */
     const char* xvar = P->ind_names[0];
     for (size_t c = 0; c < P->ncond; c++) {
         if (P->conds[c].fi != 0) continue;
-        Expr* bexpr = expr_copy((Expr*)body);
+        Expr* dexpr = expr_copy((Expr*)body);
         for (int d = 0; d < P->conds[c].order; d++)
-            bexpr = ds_d(bexpr, expr_new_symbol(xvar));
-        bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+            dexpr = ds_d(dexpr, expr_new_symbol(xvar));
+        mth_msg_suppress_push();
+        Expr* bexpr = ds_subst(expr_copy(dexpr), expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        mth_msg_suppress_pop();
         bexpr = ds_generic_step_derivative(bexpr);
         Expr* resid = ds_call2(SYM_Subtract, bexpr, expr_copy((Expr*)P->conds[c].value));
         Expr* R = ds_subst_generics(resid, xvar);  /* instantiate free params; consumes resid */
-        if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) { expr_free(R); continue; }
-        Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", R))));
-        double mag = (mg && mg->type == EXPR_REAL)    ? mg->data.real
-                   : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
-        expr_free(mg);
-        if (!isnan(mag) && isfinite(mag) && mag > 1e-4) return false;   /* condition violated */
+        if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) {
+            expr_free(R); expr_free(dexpr); continue;
+        }
+        bool nonfinite = ds_contains(R, SYM_Indeterminate) || ds_contains(R, SYM_ComplexInfinity)
+                      || ds_contains(R, SYM_Infinity);
+        double mag = ds_cond_mag(R);
+        if (nonfinite && ds_free_of(P->conds[c].point, xvar)) {
+            /* the two-sided limit at the point */
+            Expr* rule = ds_call2(SYM_Rule, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+            Expr* lim = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                            (Expr*[]){ ds_call2(SYM_Limit, expr_copy(dexpr), rule), expr_new_integer(2),
+                                       expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+            mth_msg_suppress_push();
+            Expr* L = eval_and_free(lim);
+            mth_msg_suppress_pop();
+            mag = NAN;
+            if (L && !ds_has_head(L, SYM_Limit) && !ds_contains(L, intern_symbol("$Aborted"))) {
+                Expr* lr = ds_subst_generics(ds_call2(SYM_Subtract, L,
+                               expr_copy((Expr*)P->conds[c].value)), xvar);
+                mag = ds_cond_mag(lr);
+            } else if (L) expr_free(L);
+        }
+        expr_free(dexpr);
+        if (!isnan(mag) && mag > 1e-4) return false;   /* condition violated (incl. a pole) */
     }
     return true;
 }
@@ -2176,7 +2277,11 @@ static Expr* dsolve_fit_constants_impl(const DSolveProblem* P, const Expr* body,
                  * defaulting to args[0] (the wrong odd-multiple branch, 2.2.24-2329). */
                 cand = ds_collapse_principal(cand);
                 bool ok = ds_branch_num_ok(P, cand);
-                if (ok && pass < 2) ok = ds_branch_ic_local_ok(P, cand);
+                /* ...and meets the conditions themselves: Solve can keep a root at
+                 * which the fitted value is 0/0 (§2.2.16-1592), and that root solves
+                 * the ODE, so only the condition check tells it apart */
+                if (ok && pass < 2) ok = ds_branch_ic_local_ok(P, cand)
+                                      && ds_fit_meets_conditions(P, cand);
                 expr_free(cand);
                 if (ok) { branch = cb; picked = true; break; }
             }
@@ -4401,11 +4506,11 @@ static Expr* linfac_simplify_exponents(Expr* e, const char* xvar) {
 Expr* ds_integrate_or_inert(Expr* f, const char* xvar, int secs) {
     g_integrate_quiet++;
     Expr* call = expr_new_function(expr_new_symbol(SYM_Integrate),
-                     (Expr*[]){ expr_copy(f), expr_new_symbol(xvar) }, 2);
+                     (Expr*[]){ ds_sym_consts(expr_copy(f), true), expr_new_symbol(xvar) }, 2);
     Expr* guarded = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
                         (Expr*[]){ call, expr_new_integer(secs > 0 ? secs : 1),
                                    expr_new_symbol(intern_symbol("$Aborted")) }, 3);
-    Expr* r = eval_and_free(guarded);
+    Expr* r = ds_sym_consts(eval_and_free(guarded), false);
     g_integrate_quiet--;
     if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol("$Aborted")) {
         expr_free(r);

@@ -268,11 +268,17 @@ static int sep_remaining(void) {
     return (g_sep_deadline > now) ? (int)(g_sep_deadline - now) : 0;
 }
 
-/* Integrate[integrand, var] inside what is left of the budget.  Consumes
- * `integrand`; returns NULL and sets *spent when the deadline is reached. */
+/* Integrate[integrand, var] inside what is left of the budget, the constants C[k]
+ * symbolized for the integrator (ds_sym_consts: a sub-solve's integrand carries the
+ * constants of the stage that produced it, AutonomousReduction's frozen stage-1
+ * C[2], and the Bronstein stage declines 1/(-2 + C[2] v^2/2 - Sqrt[C[2] v^2
+ * (C[2] v^2 - 4)]/2) as "radicand is not rational in the tower" while the same
+ * integrand in a symbol closes in 0.05 s).  Consumes `integrand`; returns
+ * NULL and sets *spent when the deadline is reached. */
 static Expr* sep_integrate_bounded(Expr* integrand, const char* var, bool* spent) {
     int left = sep_remaining();
     if (left <= 0) { expr_free(integrand); *spent = true; return NULL; }
+    integrand = ds_sym_consts(integrand, true);
     Expr* call = expr_new_function(expr_new_symbol(SYM_Integrate),
                      (Expr*[]){ integrand, expr_new_symbol(var) }, 2);
     Expr* guarded = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
@@ -285,7 +291,7 @@ static Expr* sep_integrate_bounded(Expr* integrand, const char* var, bool* spent
         *spent = true;
         return NULL;
     }
-    return out;
+    return out ? ds_sym_consts(out, false) : NULL;
 }
 
 static bool sep_integrals(Expr* g, Expr* h, const char* Yname, const char* xvar,
@@ -384,6 +390,134 @@ static bool sep_log_radical_mix(const Expr* lhsInt, const char* Yname) {
     return ny >= 2 && rooted;
 }
 
+/* ---- the +/- pair of an inverted square root, with the square pulled out ---- *
+ * Solve inverts a relation quadratic in the radical (p/Sqrt[1 + p^2] == w) as the
+ * pair  +-Sqrt[R]/D  with the radicand R = s^2 t carrying a SQUARE factor:
+ * Sqrt[w^2 (1 - w^2)]/(1 - w^2) instead of w/Sqrt[1 - w^2].  Each body is then a
+ * solution only where Sqrt[s^2] == s, i.e. on part of the line -- the separable
+ * x^2 y y' == (y^2 - 1)^(3/2) came back as two such halves (§2.2.16-1582),
+ * and the curvature equation r y'' == (1 + y'^2)^(3/2) shipped an answer wrong at
+ * x = 5/2 (r = 2).  Pointwise Sqrt[s^2 t] == e s Sqrt[t] with e = +-1, so when the
+ * two bodies are b and -b with b ODD in the radical, the SET {b(Sqrt[R]),
+ * b(-Sqrt[R])} equals {b(s Sqrt[t]), b(-s Sqrt[t])} at every point: the pair is
+ * replaced by the two analytic branches, which the per-branch checks below then
+ * judge each on its own.  s collects the even powers of Factor[R] and the square
+ * roots of its exponential factors (E^a == (E^(a/2))^2: the 0/0 form
+ * Sqrt[E^(2 x^2) (1 - E^(2 x^2))]/(1 - E^(2 x^2)) of §2.2.16-1592 fitted its
+ * initial condition at the removable singularity, a wrong IVP answer). */
+
+/* The single radical base (exponent k/2, k odd) depending on x; NULL when there is
+ * none or more than one.  Borrowed pointer into `e`. */
+static const Expr* sep_half_base(const Expr* e, const char* xvar, const Expr* found, bool* many) {
+    if (!e || e->type != EXPR_FUNCTION || *many) return found;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* q = e->data.function.args[1];
+        if (head_is(q, SYM_Rational) && q->data.function.args[1]->type == EXPR_INTEGER
+            && q->data.function.args[1]->data.integer == 2
+            && !ds_free_of(e->data.function.args[0], xvar)) {
+            if (found && !expr_eq((Expr*)found, e->data.function.args[0])) { *many = true; return found; }
+            found = e->data.function.args[0];
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        found = sep_half_base(e->data.function.args[i], xvar, found, many);
+    return found;
+}
+
+/* Fresh tree: every Power[R, q] (q = k/2) -> sgn^k * rep^(2q), rep = s Sqrt[t] (or
+ * -Sqrt[R] for the oddness probe, with rep NULL and sgn -1).  `e` borrowed. */
+static Expr* sep_half_subst(const Expr* e, const Expr* R, const Expr* rep) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[0], (Expr*)R)
+        && head_is(e->data.function.args[1], SYM_Rational)) {
+        const Expr* q = e->data.function.args[1];
+        if (q->data.function.args[1]->type == EXPR_INTEGER && q->data.function.args[1]->data.integer == 2) {
+            Expr* q2 = eval_and_free(ds_call2(SYM_Times, expr_new_integer(2), expr_copy((Expr*)q)));
+            if (rep) return ds_call2(SYM_Power, expr_copy((Expr*)rep), q2);
+            /* the conjugate root: Sqrt[R]^k -> (-1)^k Sqrt[R]^k */
+            return ds_call2(SYM_Times, ds_call2(SYM_Power, expr_new_integer(-1), q2),
+                            expr_copy((Expr*)e));
+        }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr* nh = sep_half_subst(e->data.function.head, R, rep);
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) args[i] = sep_half_subst(e->data.function.args[i], R, rep);
+    Expr* r = expr_new_function(nh, args, n);
+    free(args);
+    return r;
+}
+
+static bool sep_sum_zero(Expr* a, Expr* b) {                 /* a, b consumed */
+    Expr* z = eval_and_free(ds_call1(SYM_Together, ds_call2(SYM_Plus, a, b)));
+    bool zero = ds_is_zero(z);
+    expr_free(z);
+    return zero;
+}
+
+static void sep_unsquare_pair(Expr** bodies, size_t nb, const char* xvar) {
+    if (nb != 2 || !bodies[0] || !bodies[1]) return;
+    bool many = false;
+    const Expr* R = sep_half_base(bodies[0], xvar, NULL, &many);
+    if (!R || many) return;
+    const Expr* R1 = sep_half_base(bodies[1], xvar, NULL, &many);
+    if (!R1 || many || !expr_eq((Expr*)R, (Expr*)R1)) return;
+    /* the pair is {b, -b} with b odd in Sqrt[R] */
+    if (!sep_sum_zero(expr_copy(bodies[0]), expr_copy(bodies[1]))) return;
+    if (!sep_sum_zero(expr_copy(bodies[0]), eval_and_free(sep_half_subst(bodies[0], R, NULL))))
+        return;
+    /* R = s^2 t from Factor[R] */
+    Expr* F = eval_and_free(ds_call1(SYM_Factor, expr_copy((Expr*)R)));
+    size_t nf = head_is(F, SYM_Times) ? F->data.function.arg_count : 1;
+    Expr** sa = malloc(nf * sizeof(Expr*));
+    Expr** ta = malloc(nf * sizeof(Expr*));
+    size_t ns = 0, nt = 0;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* f = head_is(F, SYM_Times) ? F->data.function.args[i] : F;
+        if (head_is(f, SYM_Power) && f->data.function.arg_count == 2) {
+            const Expr* b = f->data.function.args[0];
+            const Expr* m = f->data.function.args[1];
+            if (m->type == EXPR_INTEGER && !ds_free_of(b, xvar)) {
+                int64_t k = m->data.integer, h = (k >= 0) ? k / 2 : -((1 - k) / 2);
+                if (h != 0) sa[ns++] = ds_call2(SYM_Power, expr_copy((Expr*)b), expr_new_integer(h));
+                if (k - 2 * h) ta[nt++] = expr_copy((Expr*)b);
+                continue;
+            }
+            if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E && !ds_free_of(m, xvar)) {
+                sa[ns++] = ds_call2(SYM_Power, expr_new_symbol(SYM_E),
+                                    ds_call2(SYM_Times, ds_call2(SYM_Power, expr_new_integer(2),
+                                                                 expr_new_integer(-1)),
+                                             expr_copy((Expr*)m)));
+                continue;
+            }
+        }
+        ta[nt++] = expr_copy((Expr*)f);
+    }
+    expr_free(F);
+    if (ns == 0) {
+        for (size_t i = 0; i < nt; i++) expr_free(ta[i]);
+        free(sa); free(ta);
+        return;
+    }
+    Expr* s = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), sa, ns));
+    Expr* t = (nt == 0) ? expr_new_integer(1)
+                        : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), ta, nt));
+    free(sa); free(ta);
+    Expr* rep = eval_and_free(ds_call2(SYM_Times, s,
+                    ds_call2(SYM_Power, t, ds_call2(SYM_Power, expr_new_integer(2),
+                                                    expr_new_integer(-1)))));
+    Expr* c0 = eval_and_free(ds_call1(SYM_Cancel, eval_and_free(sep_half_subst(bodies[0], R, rep))));
+    expr_free(rep);
+    Expr* c1 = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(c0)));
+    if (ds_contains(c0, SYM_Indeterminate) || ds_contains(c0, SYM_ComplexInfinity)) {
+        expr_free(c0); expr_free(c1);
+        return;
+    }
+    expr_free(bodies[0]); expr_free(bodies[1]);
+    bodies[0] = c0; bodies[1] = c1;
+}
+
 Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar = P->ind_names[0];
     Expr* g = NULL; Expr* h = NULL; const char* Yname = NULL;
@@ -426,6 +560,7 @@ Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     Expr** bodies = dsolve_extract_solutions(solres, Yname, &nb);
     if (solres) expr_free(solres);
     if (!bodies) return NULL;
+    if (!getenv("MATHILDA_NO_SEP_UNSQUARE")) sep_unsquare_pair(bodies, nb, xvar);
 
     /* Drop a spurious inversion body that is free of the independent variable: a
      * genuine general solution of a non-autonomous separable ODE always depends on

@@ -409,7 +409,18 @@ static void decide_case(const char* lo, const char* hi, int fd) {
     ResKind klo = classify(elo, lre, lim);
     ResKind khi = classify(ehi, hre, him);
 
-    if (klo != RES_NUMBER || khi != RES_NUMBER) {
+    /* An underflow is one answer spelled two ways: N[f[x], p] keeps
+     * Underflow[] (MPFR's exponent range is what ran out), and machine N[]
+     * reports it as the machine 0. -- the reference's rule, N[Underflow[]] ==
+     * 0. Neither path has a finite nonzero value, so this is a coverage gap
+     * like the overflow cases, never a split between the two paths. */
+    bool hi_unfl = shi && (strcmp(shi, "Underflow[]") == 0 || strcmp(shi, "-Underflow[]") == 0);
+    bool lo_unfl = slo && (strcmp(slo, "Underflow[]") == 0 || strcmp(slo, "-Underflow[]") == 0);
+    bool lo_zero = klo == RES_NUMBER && mpfr_zero_p(lre) && mpfr_zero_p(lim);
+    if (hi_unfl && (lo_unfl || lo_zero)) {
+        snprintf(reply, sizeof(reply), "%c|N[..] = %s ; N[.., %d] = %s (underflow)",
+                 OUT_GAP, slo, STRESS_DIGITS, shi);
+    } else if (klo != RES_NUMBER || khi != RES_NUMBER) {
         /* Both declining is a coverage gap even when they decline in
          * different words (unevaluated vs ComplexInfinity). Only one side
          * answering is a genuine divergence between the two paths. */

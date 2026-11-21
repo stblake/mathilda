@@ -869,11 +869,25 @@ static bool ar_stage1_fitted(const Expr* pbody, int n) {
  * (ar_elliptic_quadrature): there the inert relation IS the answer, and the
  * integrating-factor and point-symmetry searches between the two slots only burn
  * the budget (6 s on y'' == a0 + a1 y + a2 y^2 + a3 y^3) before arriving at nothing
- * better. */
-static Expr** ar_implicit_impl(DSolveProblem* P, size_t* nbranch, bool elliptic_only) {
+ * better.
+ *
+ * `AR_IMPL_SUBSOLVE`: inside a sub-solve (depth > 1: ScalingReduction's autonomous
+ * u-equation) a branch whose quadrature was not attempted at all (spin-guarded) is
+ * claimed too -- the inert relation is what the caller maps back anyway, and the
+ * point-symmetry search further down cost 4 s per call.  That claim runs AFTER the
+ * Liouville slot, not in the early one: a spin guard is a cost heuristic, not a
+ * proof, and Liouville answers (1 + u) (u'' + u') == u'^2 explicitly in 0.02 s where
+ * the early claim shipped Inactive[Integrate][1/((1 + u) (C[2] - Log[1 + u])), u]
+ * (an elementary integral the guard never tried) and the isobaric reduction of
+ * x^2 (x + y) y'' == (x y' - y)^2 came back as an inert definite integral. */
+enum { AR_IMPL_LATE = 0, AR_IMPL_EARLY = 1, AR_IMPL_SUBSOLVE = 2 };
+static Expr** ar_implicit_impl(DSolveProblem* P, size_t* nbranch, int mode) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
-    uint64_t memo_h = expr_hash(P->eq_residuals[0])
-                    ^ (elliptic_only ? 0x7F4A7C159E3779B9ull : 0x9E3779B97F4A7C15ull);
+    if (mode == AR_IMPL_SUBSOLVE && g_dsolve_depth <= 1) return NULL;
+    bool elliptic_only = mode != AR_IMPL_LATE;
+    static const uint64_t salt[3] = { 0x9E3779B97F4A7C15ull, 0x7F4A7C159E3779B9ull,
+                                      0x5851F42D4C957F2Dull };
+    uint64_t memo_h = expr_hash(P->eq_residuals[0]) ^ salt[mode];
     ar_memo_sync(eval_toplevel_id());
     if (ar_memo_seen(memo_h)) return NULL;
     int n = 0; size_t nb = 0;
@@ -917,12 +931,10 @@ static Expr** ar_implicit_impl(DSolveProblem* P, size_t* nbranch, bool elliptic_
         /* The early pass claims a branch whose quadrature is provably elliptic, or
          * one Integrate DECLINED (returned unevaluated in budget -- the same
          * quadrature the explicit pass needed, so nothing later can close it); a
-         * spin-guarded or closed quadrature is left to the late slot -- except
-         * inside a sub-solve (depth > 1: ScalingReduction's autonomous u-equation),
-         * where the inert relation is what the caller maps back anyway and the
-         * point-symmetry search in between cost 4 s per call. */
+         * spin-guarded or closed quadrature is left to the late slot -- or, inside
+         * a sub-solve, to the AR_IMPL_SUBSOLVE slot after Liouville. */
         if (elliptic_only && !(elliptic || (!may_spin && !closed)
-                               || (g_dsolve_depth > 1 && !integ))) all_elliptic = false;
+                               || (mode == AR_IMPL_SUBSOLVE && !integ))) all_elliptic = false;
         if (!all_elliptic) { expr_free(invp); if (integ) expr_free(integ); continue; }
         if (!integ) {
             Expr* inactHead = expr_new_function(expr_new_symbol(SYM_Inactive),
@@ -961,10 +973,13 @@ static Expr** ar_implicit_impl(DSolveProblem* P, size_t* nbranch, bool elliptic_
 }
 
 Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch) {
-    return ar_implicit_impl(P, nbranch, false);
+    return ar_implicit_impl(P, nbranch, AR_IMPL_LATE);
 }
 Expr** dsolve_autonomous_elliptic_try(DSolveProblem* P, size_t* nbranch) {
-    return ar_implicit_impl(P, nbranch, true);
+    return ar_implicit_impl(P, nbranch, AR_IMPL_EARLY);
+}
+Expr** dsolve_autonomous_subsolve_try(DSolveProblem* P, size_t* nbranch) {
+    return ar_implicit_impl(P, nbranch, AR_IMPL_SUBSOLVE);
 }
 
 static Expr* builtin_dsolve_autonomous(Expr* res) {

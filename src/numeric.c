@@ -2478,6 +2478,16 @@ static bool expr_has_overflow_or_indeterminate(const Expr* e) {
     return false;
 }
 
+/* True when the tree carries an Underflow[] (bare, or signed as -Underflow[]). */
+static bool expr_has_underflow(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (numeric_is_underflow_expr(e)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+        if (expr_has_underflow(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
 /* True when some MPFR leaf is finite and nonzero yet its magnitude is outside
  * the machine-double range — a value only an extended-exponent (promoted)
  * representation can hold (Exp[1000.] -> 1.97*10^434, Exp[-1000.] -> 1.9*10^-434).
@@ -3815,6 +3825,19 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             }
             expr_free(alt);
         }
+    }
+    /* N[Underflow[]] is the machine 0. (numericalize_rec), and that holds for
+     * an Underflow[] the evaluation PRODUCED as well as one it was handed:
+     * N[Erfc[10^20]] evaluates Erfc[1.*10^20] to Underflow[], which must come
+     * back 0. -- as N[Erfc[10^40]] already did, through the raised MPFR pass
+     * and the rounding back to machine.  The reference answers 0. for both;
+     * only N[..., p] keeps Underflow[] (MPFR's range is what it ran out of).
+     * The N builtin's answer only (from_n): an internal machine numericalization
+     * -- Equal's, the zero tests' -- must keep the surrogate, or
+     * Underflow[] == E^(-10^10) would decide True on two flushed zeros. */
+    if (from_n && spec.mode == NUMERIC_MODE_MACHINE && r && expr_has_underflow(r)) {
+        Expr* z = numericalize_pass(r, spec);
+        if (z) { expr_free(r); r = z; }
     }
     return r;
 #endif

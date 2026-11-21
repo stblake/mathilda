@@ -706,7 +706,10 @@ with MPFR's exponent range: a 53-bit MPFR. Such a value:
   (`3. Underflow[]` is `0.`); an exact or arbitrary-precision factor leaves it, signed
   (`-3 Underflow[]` is `-Underflow[]`); an exact `0` gives `0`; an inexact term absorbs it
   (`1. + Underflow[]` is `1.`), an exact one does not; with `Overflow[]` the product is
-  `Indeterminate`; `N[Underflow[]]` is `0.`.
+  `Indeterminate`; `N[Underflow[]]` is `0.`. That holds for an `Underflow[]` the
+  evaluation *produces* too (v0.6660): machine `N[Erfc[10^20]]`, `N[Sech[10^40]]` and
+  `N[AiryAi[10^40]]` are all `0.`, whichever internal pass computed them, while
+  `N[Erfc[10^20], 30]` keeps `Underflow[]` -- the reference's answers.
 - `Overflow[]` (no sign): a numeric factor or term is absorbed (`2 Pi Overflow[]`,
   `Overflow[] + 1.` are `Overflow[]`), a symbolic one stays (`x Overflow[]`,
   `x + Overflow[]`); an exact `0` factor gives `0`; `Infinity`, `ComplexInfinity` and
