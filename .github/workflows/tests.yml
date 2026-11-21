@@ -120,7 +120,10 @@ jobs:
         working-directory: tests/build
         run: |
           if [ "$FULL" = "true" ]; then sel=""; to=3600; else sel="-LE nightly"; to=900; fi
-          [ -n "$FILTER" ] && sel="$sel -R $FILTER"
+          # A dispatched filter names the suites someone wants to READ (a bench
+          # table to record a baseline from, a corpus summary): print their
+          # output even when they pass.
+          [ -n "$FILTER" ] && sel="$sel -R $FILTER -V"
           export ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 UBSAN_OPTIONS=print_stacktrace=1
           ctest $sel -j"$(nproc)" --timeout "$to" --output-on-failure \
                 --output-junit ctest-junit.xml
