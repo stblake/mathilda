@@ -3016,6 +3016,74 @@ static void rb_danger_build(RbDanger* d) {
 
 static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger, bool frozen);
 
+/* Can a capture-avoiding rename of the binding scope `scope` be needed at
+ * all?  A rename happens only when one of the scope's locals is in the danger
+ * set: a free symbol of some binding value, or a pattern variable's own name.
+ * Every local is registered as a binder here, so a local in a value shows up
+ * in that value's summary; when every value's summary is valid and none of
+ * them, nor the pattern-variable mask, shares a bit with the locals, the
+ * scope is left alone without building the danger set -- which walks every
+ * binding value, and on the Trager case was built 119,197 times to rename
+ * 30.  Any doubt (a value with no valid summary, a bit in common) returns
+ * true and the exact path decides. */
+/* A binding value's binder bits: its own summary, or -- for a node that has
+ * none, such as an Association whose slot holds its key index -- the OR of
+ * its children's, one level down.  False when that is not known. */
+static bool rb_value_bits(const Expr* v, uint64_t* out) {
+    if (symsum_get(v, out)) return true;
+    uint64_t acc = 0;
+    for (size_t i = 0; i <= v->data.function.arg_count; i++) {
+        const Expr* c = i == 0 ? v->data.function.head : v->data.function.args[i - 1];
+        uint64_t b = 0;
+        if (!c) return false;
+        if (c->type == EXPR_SYMBOL) b = symsum_sym_bit(c);
+        else if (c->type == EXPR_FUNCTION && !symsum_get(c, &b)) return false;
+        acc |= b;
+    }
+    *out = acc;
+    return true;
+}
+
+static bool rb_scope_may_clash(Expr* scope, RbDanger* d) {
+    if (!d->fast) return true;
+    uint64_t locals = 0;
+    Expr* vars = scope->data.function.args[0];
+    if (vars->type == EXPR_SYMBOL) {
+        SymbolDef* ld = symsum_node_def(vars);
+        symsum_register_binder(ld);
+        locals |= symsum_def_bit(ld);
+    } else if (vars->type == EXPR_FUNCTION && vars->data.function.head->type == EXPR_SYMBOL
+               && vars->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+            Expr* v = vars->data.function.args[i];
+            if (v->type == EXPR_FUNCTION && v->data.function.arg_count == 2
+                && v->data.function.head->type == EXPR_SYMBOL
+                && v->data.function.head->data.symbol.name == SYM_Set)
+                v = v->data.function.args[0];
+            if (v->type != EXPR_SYMBOL) return true;
+            SymbolDef* ld = symsum_node_def(v);
+            symsum_register_binder(ld);
+            locals |= symsum_def_bit(ld);
+        }
+    } else {
+        return true;
+    }
+    if (!g_symsum_on) return true;            /* a registration exhausted the epoch */
+    if (locals & d->mask & ~SYMSUM_SCOPE) return true;   /* shadows a pattern variable */
+    MatchEnv* env = d->env;
+    for (size_t i = 0; i < env->count; i++) {
+        Expr* v = env->values[i];
+        if (!v) continue;
+        uint64_t b;
+        if (v->type == EXPR_SYMBOL) b = symsum_sym_bit(v);
+        else if (v->type == EXPR_FUNCTION) { if (!rb_value_bits(v, &b)) return true; }
+        else continue;                        /* an atom carries no symbol */
+        if (b & locals) return true;
+    }
+    SCOPE_STAT(dg_avoided);
+    return false;
+}
+
 /* One rule application.  `frozen`: `expr` belongs to a stored rule (immutable
  * while stored), so the summaries the walk fills on it stay true; otherwise
  * only nodes below a shared one are filled. */
@@ -3046,12 +3114,16 @@ static Expr* replace_bindings_ex(Expr* expr, MatchEnv* env, bool frozen) {
 #endif
     Expr* r = rb_rec(expr, env, &danger, frozen || expr->refcount >= 2);
 #ifndef MTH_NO_SYMSUM
-    if (danger.fast && g_symsum_diff && danger.renames == 0) {
+    if (danger.fast && g_symsum_diff) {
+        /* Renames mint fresh names, so two walks that rename differ in those
+         * names: compare the rename COUNTS always (a skip that dropped a
+         * needed rename shows here) and the trees when neither renamed. */
         RbDanger slow;
         slow.env = env; slow.n = 0; slow.built = false;
         slow.mask = 0; slow.fast = false; slow.renames = 0;
         Expr* r2 = rb_rec(expr, env, &slow, false);
-        if (slow.renames == 0 && !expr_eq(r, r2)) {
+        if (slow.renames != danger.renames ||
+            (slow.renames == 0 && !expr_eq(r, r2))) {
             char* a = expr_to_string(r); char* b = expr_to_string(r2);
             fprintf(stderr, "MATHILDA_SYMSUM_DIFF: replace_bindings differs\n  fast: %s\n  slow: %s\n",
                     a ? a : "?", b ? b : "?");
@@ -3094,7 +3166,8 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger, bool frozen) {
         /* Capture-avoiding substitution: if this is a scoping construct whose
          * bound locals collide with a name in a value we are about to inject,
          * alpha-rename those locals first, then substitute into the safe copy. */
-        if (expr_is_binding_scope(expr)) {
+        if (expr_is_binding_scope(expr) && rb_scope_may_clash(expr, danger)) {
+            SCOPE_STAT(dg_builds);
             rb_danger_build(danger);                 /* only now is the set needed */
             if (danger->n > 0) {
                 Expr* safe = scoping_capture_avoid(expr, danger->buf, danger->n);
