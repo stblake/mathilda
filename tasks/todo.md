@@ -1,3 +1,19 @@
+# LinkedList everywhere List is supported (started 2026-11-21)
+
+Plan: ~/.claude/plans/i-want-to-thoroughly-keen-frost-of-89e504f6-76f1-49cc-9efb-805f21fb0395.md
+Worktree ../Mathilda-llist, branch linkedlist-everywhere (a concurrent session shares the main tree).
+Rule: no List/packed/NDArray Expr of a LinkedList argument is ever built (except Normal);
+read through spans/peek, write into chunks. Gate: make check-linkedlist (conversion counter = 0).
+
+- [ ] P0 audit gate tools/check_linkedlist_surface.py + Internal`LinkedListConversionCount; substrate (cursor, gather, builder, snapshot); series.c ll_to_list removed
+- [ ] P1 Map / Select / Listable direct (ll_block deleted)
+- [ ] P2 level walkers (Position/Cases/DeleteCases/FreeQ/Level/Replace*/MapIndexed/Scan/Depth/LeafCount); Apply, Fold*, MapThread, Inner, Outer, Thread, *True, SelectFirst, TakeWhile, Pick, Association
+- [ ] P3 VectorQ/ArrayQ/MatrixQ/Dimensions/ArrayDepth/Precision; iterators {i, ll}
+- [ ] P4 sort/sets/tally/gather/split/partition/subsets/rotate/pad/flatten/accumulate/max/min/...
+- [ ] P5 strings + statistics
+- [ ] P6 vector numerics, symbolic mappers, Compile lowering
+- [ ] P7 design doc, data-structures.md, docstrings, changelog; review section
+
 # Campaign D: every open FriCAS-comparison item (planned 2026-11-21)
 
 Plan: src/internal/bronstein/BRONSTEIN_PLAN.md "Campaign D". Each item closes with the hunts,

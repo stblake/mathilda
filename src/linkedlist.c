@@ -68,6 +68,16 @@ struct LinkedList {
 
 static uint64_t g_ll_next_id = 1;
 
+/* Whole-list materialisations (a List, packed List or NDArray Expr built from
+ * a list's elements, or from a block of them): ll_to_list (Normal) and
+ * ll_block. Every other head works on the chunks directly, so the LinkedList
+ * surface audit (tools/check_linkedlist_surface.py) asserts this counter does
+ * not move across a call to any head but Normal. Exposed as
+ * Internal`LinkedListConversionCount[]. */
+static uint64_t g_ll_materialised = 0;
+
+uint64_t ll_materialise_count(void) { return g_ll_materialised; }
+
 /* ------------------------------------------------------------------------
  *  Geometry
  * ---------------------------------------------------------------------- */
@@ -493,6 +503,27 @@ int64_t ll_span_at(const LinkedList* ll, int64_t i, const void** p, int* dir) {
     return hi - j;
 }
 
+size_t ll_slot_size(const LinkedList* ll) { return kind_size(ll->kind); }
+
+void ll_gather(const LinkedList* ll, int64_t lo, int64_t n, void* dst) {
+    size_t esz = kind_size(ll->kind);
+    unsigned char* out = dst;
+    LLCursor c;
+    const void* p;
+    int dir;
+    int64_t base, k;
+    ll_cursor(&c, ll, lo, lo + n);
+    while ((k = ll_cursor_next(&c, &p, &dir, &base)) > 0) {
+        if (dir > 0) {
+            memcpy(out, p, (size_t)k * esz);
+        } else {
+            const unsigned char* q = p;
+            for (int64_t t = 0; t < k; t++) memcpy(out + (size_t)t * esz, q - (size_t)t * esz, esz);
+        }
+        out += (size_t)k * esz;
+    }
+}
+
 Expr* ll_get(const LinkedList* ll, int64_t i) {
     return slot_read(ll_slot(ll, i), ll->kind);
 }
@@ -867,26 +898,14 @@ void ll_reserve_typed(LinkedList* ll, LLKind kind, int64_t n) {
  * packed rank-1 array (gathered from the typed slots, no Expr per element) or,
  * for a boxed list, a List sharing the elements. New reference; n >= 1. */
 Expr* ll_block(const LinkedList* src, int64_t lo, int64_t n) {
+    g_ll_materialised++;
     if (src->kind == LL_I64 || src->kind == LL_REAL || src->kind == LL_CPLX) {
         NDType dt = src->kind == LL_I64 ? NDT_INT64
                   : src->kind == LL_REAL ? NDT_FLOAT64 : NDT_COMPLEX64;
         size_t esz = kind_size(src->kind);
         unsigned char* buf = malloc((size_t)n * esz);
         if (!buf) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
-        for (int64_t got = 0; got < n; ) {
-            const void* p;
-            int dir;
-            int64_t k = ll_span_at(src, lo + got, &p, &dir);
-            if (k > n - got) k = n - got;
-            if (dir > 0) {
-                memcpy(buf + (size_t)got * esz, p, (size_t)k * esz);
-            } else {
-                const unsigned char* q = (const unsigned char*)p;
-                for (int64_t t = 0; t < k; t++)
-                    memcpy(buf + (size_t)(got + t) * esz, q - (size_t)t * esz, esz);
-            }
-            got += k;
-        }
+        ll_gather(src, lo, n, buf);
         Expr* out = expr_new_ndarray_raw(1, &n, buf, dt);
         out->data.ndarray.present_as = NDA_HEAD_LIST;     /* a packed List */
         pack_g_any_created = true;
@@ -945,6 +964,7 @@ bool ll_append_elements(LinkedList* ll, const Expr* src) {
 
 Expr* ll_to_list(const LinkedList* ll) {
     int64_t n = ll_length(ll);
+    g_ll_materialised++;
     if (n > 0 && ll->kind != LL_BOXED) {
         NDType dt = ll->kind == LL_I64 ? NDT_INT64
                   : ll->kind == LL_REAL ? NDT_FLOAT64 : NDT_COMPLEX64;
@@ -1212,7 +1232,19 @@ static Expr* pop_impl(Expr* res, bool first) {
 static Expr* builtin_pop(Expr* res)      { return pop_impl(res, false); }
 static Expr* builtin_popfirst(Expr* res) { return pop_impl(res, true); }
 
+/* Internal`LinkedListConversionCount[]: the materialisation counter. */
+static Expr* builtin_ll_conversion_count(Expr* res) {
+    if (res->data.function.arg_count != 0) return NULL;
+    return expr_new_integer((int64_t)g_ll_materialised);
+}
+
 void linkedlist_init(void) {
+    symtab_add_builtin("Internal`LinkedListConversionCount", builtin_ll_conversion_count);
+    symtab_get_def("Internal`LinkedListConversionCount")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Internal`LinkedListConversionCount",
+        "Internal`LinkedListConversionCount[]\n\tThe number of times a List, packed List or\n"
+        "\tNDArray has been built from the elements of a LinkedList since startup.\n"
+        "\tOnly Normal may do so; the LinkedList surface audit asserts it.");
     symtab_add_builtin(SYM_LinkedList, builtin_linkedlist);
     symtab_get_def(SYM_LinkedList)->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LinkedList",

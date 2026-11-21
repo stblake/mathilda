@@ -1176,6 +1176,19 @@ check-pipe-protocol:
 check-nd-surfaces:
 	python3 tools/nd_surface_audit.py --survival
 
+# `make check-linkedlist` — does every head treat a LinkedList as it treats the
+# List of the same elements, WITHOUT converting it to one?
+#
+# Calls every live System` head in a handful of shapes over int / real / boxed /
+# string fixtures, once on Lists and once on the same data as LinkedLists, and
+# compares the answers held (an unevaluated H[ll] is never rescued by evaluating
+# H[{...}]). Internal`LinkedListConversionCount[] must not move -- only Normal
+# may build a List from a LinkedList -- and the argument must be unchanged.
+# Ratchets against tools/data/linkedlist_surface_baseline.tsv (one line per
+# head and finding kind); `--update` rewrites it. About 4 minutes at -j8.
+check-linkedlist:
+	python3 tools/check_linkedlist_surface.py -j 8
+
 # `make check-machine-boundary` — do all five numeric surfaces agree at the
 # edges of the machine range?
 #
@@ -1329,7 +1342,7 @@ print-libs:
 
 .PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact bench-integrate-decision bench-integrate-bottom bench-integrate-vs-fricas check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
-        check-array-exactness check-nd-surfaces check-compile-coverage check-machine-boundary \
+        check-array-exactness check-nd-surfaces check-linkedlist check-compile-coverage check-machine-boundary \
         check-refine-stress \
         check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc print-flags print-libs
 

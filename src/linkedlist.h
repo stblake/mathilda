@@ -78,6 +78,40 @@ Expr* ll_get(const LinkedList* ll, int64_t i);          /* new reference   */
  * (re, im) double pair, or Expr*. A full scan is O(n) with O(log n) cursor
  * calls -- chunk capacities double. */
 int64_t ll_span_at(const LinkedList* ll, int64_t i, const void** p, int* dir);
+/* Span cursor over elements [lo, hi): the loop every native LinkedList
+ * algorithm runs, so none hand-rolls ll_span_at bookkeeping.
+ *
+ *     LLCursor c; const void* p; int dir; int64_t base, k;
+ *     ll_cursor(&c, ll, 0, ll_length(ll));
+ *     while ((k = ll_cursor_next(&c, &p, &dir, &base)) > 0)
+ *         for (int64_t t = 0; t < k; t++)
+ *             use(LL_SLOT(double, p, dir, t));       (element base + t)
+ *
+ * A complex slot is a (re, im) pair: LL_CSLOT(p, dir, t) points at re. */
+typedef struct { const LinkedList* ll; int64_t i, end; } LLCursor;
+static inline void ll_cursor(LLCursor* c, const LinkedList* ll, int64_t lo, int64_t hi) {
+    c->ll = ll; c->i = lo; c->end = hi;
+}
+static inline int64_t ll_cursor_next(LLCursor* c, const void** p, int* dir, int64_t* base) {
+    if (c->i >= c->end) return 0;
+    int64_t k = ll_span_at(c->ll, c->i, p, dir);
+    if (k > c->end - c->i) k = c->end - c->i;
+    *base = c->i;
+    c->i += k;
+    return k;
+}
+#define LL_SLOT(T, p, dir, t) (((const T*)(p))[(dir) > 0 ? (t) : -(t)])
+#define LL_CSLOT(p, dir, t)   ((const double*)(p) + 2 * ((dir) > 0 ? (t) : -(t)))
+
+/* Bytes per slot of the list's storage kind (0 for an empty list). */
+size_t ll_slot_size(const LinkedList* ll);
+/* Elements [lo, lo + n) copied into dst in logical order as raw slots
+ * (int64_t, double, (re, im) pairs, or BORROWED Expr* for a boxed list):
+ * the scratch buffer of an algorithm that needs random access across the
+ * whole sequence (Sort, Median, Fourier). Not a List: nothing is boxed and
+ * no Expr is built. */
+void ll_gather(const LinkedList* ll, int64_t lo, int64_t n, void* dst);
+
 /* Borrowed pointer to a boxed element (LL_BOXED only), else NULL. */
 const Expr* ll_peek_boxed(const LinkedList* ll, int64_t i);
 /* Typed reads for the compiled path; false when the list is not that kind. */
@@ -151,6 +185,9 @@ bool  ll_is_list_source(const Expr* src);
 /* The elements as a List: a packed List when the storage is typed and the
  * result is large enough to pack, otherwise a plain List. New reference. */
 Expr* ll_to_list(const LinkedList* ll);
+/* Whole-list materialisations since startup (ll_to_list, ll_block). Only
+ * Normal may materialise a LinkedList; every other head reads the chunks. */
+uint64_t ll_materialise_count(void);
 
 /* Would storing `e` (borrowed) into `target` make `target` reachable from
  * itself -- a reference cycle no refcount could free? Mutators reject it. */
