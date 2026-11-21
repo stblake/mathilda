@@ -2408,8 +2408,14 @@ static void t_exact_xayb(void) {
     check_true("PossibleZeroQ[((x y[x] - 2 x) y'[x] - (y[x] - y[x]^2 + 3 x^2 y[x]^3)) /. "
                "DSolve[(x y[x] - 2 x) y'[x] == y[x] - y[x]^2 + 3 x^2 y[x]^3, y, x][[1]]]");
     check_form("Head[DSolve`Exact[(x y[x] - 2 x) y'[x] == y[x] - y[x]^2 + 3 x^2 y[x]^3, y, x]]", "List");
-    /* a non-x^a y^b equation still declines the exact method (no wrong answer) */
-    check_form("Head[DSolve`Exact[y'[x] == Sqrt[y[x]^4 + 1], y, x]]", "DSolve`Exact");
+    /* a non-x^a y^b equation: the exact method now finds the integrating
+     * factor 1/Sqrt[y^4+1], giving the implicit solution
+     * -x + Integrate[1/Sqrt[y^4+1], y] == C[1] (an EllipticF).  What matters is
+     * that no WRONG answer comes back: the y-derivative of the implicit
+     * relation's y-part must be exactly 1/Sqrt[y^4+1]. */
+    check_true("Module[{e = DSolve`Exact[y'[x] == Sqrt[y[x]^4 + 1], y, x][[1, 1]], g, u}, "
+               "g = (e[[1]] /. y[x] -> u) + x; "
+               "FreeQ[g, x] && PossibleZeroQ[D[g, u] - 1/Sqrt[u^4 + 1]]]");
 }
 
 /* ---- M9: SymPy deterministic parity gaps ---- */

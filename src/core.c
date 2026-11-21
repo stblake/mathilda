@@ -5867,7 +5867,17 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
     }
 #undef TC_GUARDED_RUN
 #undef TC_GUARDED_UNWOUND
-    context_release(saved_ctx, saved_path);   /* normal completion: nothing to undo */
+    if (eval_is_inflight_abort(result)) {
+        /* The body was aborted without a jump -- since v0.6623 the usual
+         * shape of a timeout (the constraint frame trips, the evaluator
+         * returns the Abort[] sentinel).  An abort unwinds the body as surely
+         * as the jump does, so a Begin / BeginPackage it left open is closed
+         * the same way; only a body that COMPLETES keeps its context. */
+        context_unwind_to(saved_ctxdep);
+        context_restore(saved_ctx, saved_path);
+    } else {
+        context_release(saved_ctx, saved_path);   /* normal completion: nothing to undo */
+    }
     mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;
     mth_msg_suppress_depth_load(saved_msgdep);

@@ -131,20 +131,24 @@ int main(void) {
     /* Worst case: a quote on the first line relexes all 200 lines (twice:
      * insert, then delete). */
     term_editor_feed(ed, "\x1b[5~", 4);                /* PageUp: buffer start */
-    double worst = 0;
-    for (int i = 0; i < 20; i++) {
+    enum { NRELEX = 40 };
+    double relex[NRELEX];
+    for (int i = 0; i < NRELEX / 2; i++) {
         double t0 = now_us();
         term_editor_feed(ed, "\"", 1);
         double t1 = now_us();
         term_editor_feed(ed, "\x7f", 1);
         double t2 = now_us();
-        if (t1 - t0 > worst) worst = t1 - t0;
-        if (t2 - t1 > worst) worst = t2 - t1;
+        relex[2 * i] = t1 - t0;
+        relex[2 * i + 1] = t2 - t1;
     }
+    qsort(relex, NRELEX, sizeof(double), cmp_double);
+    double relex_med = relex[NRELEX / 2], worst = relex[NRELEX - 1];
 
     printf("latency (200-line buffer, 120x40, colour, %d keystrokes):\n", NKEYS);
     printf("  mean %.1f us  p50 %.1f us  p99 %.1f us  max %.1f us\n", mean, p50, p99, mx);
-    printf("  whole-buffer relex (a quote at the top): max %.1f us\n", worst);
+    printf("  whole-buffer relex (a quote at the top): median %.1f us  max %.1f us\n",
+           relex_med, worst);
     printf("  keystrokes with more than one write: %zu  with none (no change): %zu\n",
            bad_writes, g_silent);
     printf("  bytes/keystroke %.1f  allocations %zu\n", (double)bytes / NKEYS, allocs);
@@ -155,7 +159,12 @@ int main(void) {
      * pathology (an O(buffer) redraw is tens of ms here). */
     ASSERT_MSG(p99 < 2000.0, "p99 keystroke %.1f us >= 2 ms", p99);
     ASSERT_MSG(mx < 25000.0, "slowest keystroke %.1f us >= 25 ms", mx);
-    ASSERT_MSG(worst < 2000.0, "whole-buffer relex %.1f us >= 2 ms", worst);
+    /* Same reasoning for the relex: every one of the 40 trials does the same
+     * O(buffer) work, so a real regression moves the MEDIAN; the max of 40
+     * single samples is one deschedule away from failing on a shared runner
+     * (3-4 ms seen on CI with a ~0.3 ms median). */
+    ASSERT_MSG(relex_med < 2000.0, "whole-buffer relex median %.1f us >= 2 ms", relex_med);
+    ASSERT_MSG(worst < 25000.0, "slowest whole-buffer relex %.1f us >= 25 ms", worst);
     ASSERT_MSG(bad_writes == 0, "%zu keystrokes made more than one write", bad_writes);
     ASSERT_MSG(allocs == 0, "%zu allocations in steady-state editing", allocs);
 

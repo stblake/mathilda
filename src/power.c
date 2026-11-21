@@ -1287,11 +1287,15 @@ Expr* builtin_power(Expr* res) {
             exp->data.function.arg_count == 2 &&
             (exp->data.function.args[0]->type == EXPR_REAL || exp->data.function.args[1]->type == EXPR_REAL);
         if (cplx_machine) return expr_new_real(1.0);
+#ifdef USE_MPFR
         bool cplx_mpfr = exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL &&
             exp->data.function.head->data.symbol.name == SYM_Complex &&
             exp->data.function.arg_count == 2 &&
             (exp->data.function.args[0]->type == EXPR_MPFR || exp->data.function.args[1]->type == EXPR_MPFR);
         if (exp->type != EXPR_MPFR && !cplx_mpfr) return expr_new_integer(1);
+#else
+        return expr_new_integer(1);
+#endif
     }
 
     /* SeriesData arithmetic: a power series base raised to a power, or an

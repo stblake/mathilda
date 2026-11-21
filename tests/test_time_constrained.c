@@ -347,9 +347,11 @@ void test_tc_nested_pause_clamped_by_outer(void) {
     char* s = eval_string(
         "Module[{t, r}, {t, r} = AbsoluteTiming[TimeConstrained["
         "TimeConstrained[Pause[5], 30, inner], 0.3, outer]]; {r, t < 2}]");
-    /* The inner deadline is clamped to the outer's, so the inner scope is the
-     * one that times out (and returns its failexpr) -- at 0.3 s, not 5 s. */
-    ASSERT_STR_EQ(s, "{inner, True}");
+    /* The inner deadline is clamped to the outer's, so the timeout fires at
+     * 0.3 s, not 5 s.  The budget that is broken is the OUTER one, so the
+     * outer scope answers with its failexpr (the reference does too; since
+     * v0.6623 the constraint-frame stack charges the outermost expired frame). */
+    ASSERT_STR_EQ(s, "{outer, True}");
     free(s);
 }
 
