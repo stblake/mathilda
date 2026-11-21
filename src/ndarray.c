@@ -1002,7 +1002,7 @@ static int nd_ew_chunk_f64(const nd_ew_ctx* x, size_t lo, size_t hi) {
     size_t m = x->mnd;
     if (m == 0 || m > ND_EW_FAST_MAX) return -1;
     const double* src[ND_EW_FAST_MAX];
-    for (size_t j = 0; j < m; j++) src[j] = (const double*)x->ndops[j]->data.ndarray.data;
+    for (size_t j = 0; j < m; j++) src[j] = (const double*)x->ndops[j]->data;
     double* restrict od = (double*)x->out;
     const double sc = x->sc_re;
     int bad = 0;
