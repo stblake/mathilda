@@ -47,6 +47,7 @@
 (*   BaseAlgebraic.m  Shape B, the component method (radical below the tower) *)
 (*   RDEAlgebraic.m   the Risch DE over Q(x)(Y) ([B] Part 3)                  *)
 (*   BaseCurve.m      Shape B, a kernel whose argument contains the radical   *)
+(*   BaseTower.m      Shape B, two monomials over the curve (Phase 5 M1)      *)
 (* ========================================================================== *)
 
 LoadModule["trager/Trager.m"];
@@ -84,6 +85,7 @@ LoadModule["bronstein/K0.m"];
 LoadModule["bronstein/RDEAlgebraic.m"];
 LoadModule["bronstein/BaseAlgebraic.m"];
 LoadModule["bronstein/BaseCurve.m"];
+LoadModule["bronstein/BaseTower.m"];
 LoadModule["bronstein/Pipeline.m"];
 
 End[];

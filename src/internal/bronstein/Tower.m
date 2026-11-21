@@ -16,9 +16,11 @@
 (*     a fractional r_i re-bases t_i = u^q, u = E^(b_i/q), the same identity;  *)
 (*   - a REDUCIBLE logarithm (Log[x^2] next to Log[x]) is declined: Log[x^2]  *)
 (*     = 2 Log[x] fails off the positive axis, so the rewrite is not one.     *)
-(*   - Log[a]/E^b with a radical inside is admitted only as the single       *)
-(*     monomial of Shape B's curve-monomial case ("BCurve"); every head other *)
-(*     than rational operations, Log, Exp and rational powers is declined.    *)
+(*   - Log[a]/E^b with a radical inside: one such monomial is Shape B's      *)
+(*     curve-monomial case ("BCurve"), two monomials over the curve are       *)
+(*     "BTower" (BaseTower.m, admitted by brDTAdmit with the zero-offset      *)
+(*     rule); every head other than rational operations, Log, Exp and        *)
+(*     rational powers is declined.                                           *)
 (*                                                                            *)
 (* The record (an Association):                                               *)
 (*   "x"        the integration variable                                      *)
@@ -33,8 +35,9 @@
 (*   "f"        the integrand in the symbols (radicals still as Power)        *)
 (*   "radical"  <|"b" -> b, "n" -> n|> in the symbols, or None                *)
 (*   "shape"    "Rational" | "Transcendental" | "Algebraic" | "A" | "B" |     *)
-(*              "BCurve" (B: radicand in Q(x), kernel arguments free of the   *)
-(*              radical; BCurve: one kernel whose argument contains it)       *)
+(*              "BCurve" | "BTower" (B: radicand in Q(x), kernel arguments    *)
+(*              free of the radical; BCurve: one kernel whose argument        *)
+(*              contains it; BTower: two monomials, one such kernel)          *)
 (*   "theta"    the top monomial (Shape A), else None                         *)
 (*   "kind"     "Log" | "Exp" for theta, else None                            *)
 (*   "lower"    the monomials below theta (Shape A), else "syms"              *)
@@ -188,7 +191,7 @@ brReducibleLogSplit[f_, x_Symbol] := Module[{r, fs, monos, Ks, poly, rules, term
   <|"kappas" -> r[[2]], "terms" -> terms|>];
 
 brKernelsToSymbols::usage = "brKernelsToSymbols[f, x] replaces the Log/Exp kernels of f innermost first by tower monomials. It returns {fs, monos}: fs the integrand in x and the symbols, monos the monomial list (Associations with \"sym\", \"kind\", \"arg\", \"D\", \"kernel\"). Throws a Decline for a reducible logarithm, a radical inside a kernel, or a fractional power of a logarithm's argument.";
-brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, arg, kind, step, t, res, rule, guard = 0},
+brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, arg, kind, step, t, res, rule, guard = 0, cv = None},
   While[True,
     vars = Prepend[#["sym"] & /@ monos, x];
     ks = brInnermostKernels[f, vars];
@@ -196,19 +199,27 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
     If[++guard > 200, throwDecline["tower too large"]];  (* a resource bound *)
     k = First[ks];
     {kind, arg} = Switch[k, Log[_], {"Log", First[k]}, _, {"Exp", Last[k]}];
-    (* A radical inside a kernel: Shape B's curve-monomial case (BaseCurve.m)
-       takes exactly one such kernel, its argument in Q(x)(y) with y^n = b(x).
-       The reducibility tests (Risch`LogReducible / ExpReducible) do not know
-       the relation y^n = b, so a radical argument is only admitted as the
-       FIRST and ONLY monomial, and no monomial may follow it. *)
-    If[AnyTrue[monos, TrueQ[#["algebraic"]] &],
-      throwUnimplemented["Tower:curve-monomial-tower", "a further monomial over a kernel with a radical argument (transcendental Risch over an algebraic base)"]];
-    If[brRadicalQ[arg, vars],
-      If[monos =!= {} || !brRadicalOverXQ[arg, x],
-        throwUnimplemented["Tower:radical-in-kernel", "radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)"]];
-      {monos, t} = brAddMonomial[x, monos, kind, Together[arg], k];
-      monos[[-1]] = Append[monos[[-1]], "algebraic" -> True];
-      f = f /. k -> t;
+    (* A radical inside a kernel: the tower over the curve k0 = Q(x)(y), y^n =
+       b(x) (Phase 5, theory note E2).  The first such kernel with nothing
+       below it is admitted as before (BaseCurve.m's one-monomial case: a
+       nonconstant argument is a monomial, G_0 is empty).  Every later kernel
+       -- and every kernel above a y-free monomial -- is admitted by the
+       structure theorem over the curve (brDTAdmit: Risch`LogReducible and
+       ExpReducible do not know y^n = b), with the zero-offset rule (A3) for a
+       dependent one.  Once a monomial over the curve exists, every further
+       kernel takes this path. *)
+    If[brRadicalQ[arg, vars] || AnyTrue[monos, TrueQ[#["curve"]] &],
+      If[brRadicalQ[arg, vars] && !AllTrue[Cases[arg, Power[b_, _Rational] /; brDependsQ[b, vars] :> b, {0, Infinity}],
+                                           brRationalInQ[#, {x}] &],
+        throwUnimplemented["Tower:radical-in-kernel", "a radical whose radicand is not rational in x inside a logarithm or exponential"]];
+      If[monos === {},
+        {monos, t} = brAddMonomial[x, monos, kind, Together[arg], k];
+        monos[[-1]] = Join[monos[[-1]], <|"algebraic" -> True, "curve" -> True|>];
+        f = f /. k -> t;
+        Continue[]];
+      If[cv === None, cv = brDTCurveOf[Join[{arg}, #["arg"] & /@ Select[monos, TrueQ[#["algebraic"]] &]], x]];
+      With[{ad = brDTAdmit[x, monos, kind, arg, k, cv]},
+        If[First[ad] === "new", monos = ad[[2]]; f = f /. k -> Last[monos]["sym"], f = f /. k -> ad[[2]]]];
       Continue[]];
     If[kind === "Log" && TrueQ[brKappaMode],
       (* the transcendental integrator expands the argument of every logarithm
@@ -358,6 +369,11 @@ brKummerSplit[f_, x_Symbol] := Module[{ks, fs, monos, vars, toSurf, pows, atoms,
   ks = brCatch[brKernelsToSymbols[f, x]];
   If[brFailQ[ks], Return[None]];
   {fs, monos} = ks;
+  (* the sign changes Y_i -> -Y_i fix the base field only when no kernel's
+     argument involves a radical: Log[1 + Sqrt[1 + x^3]] is not fixed by
+     Sqrt[1 + x^3] -> -Sqrt[1 + x^3], so its symbol may not be treated as a
+     scalar of the components (a false certificate at 260 two-elem-46) *)
+  If[AnyTrue[monos, TrueQ[#["algebraic"]] || TrueQ[#["curve"]] &], Return[None]];
   vars = Prepend[#["sym"] & /@ monos, x];
   toSurf = brBack[monos];
   pows = DeleteDuplicates[Cases[fs, Power[b_, r_Rational] /; brDependsQ[b, vars], {0, Infinity}]];
@@ -588,11 +604,18 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
     rad === None, "Transcendental",
     monos === {}, "Algebraic",
     AnyTrue[monos, TrueQ[#["algebraic"]] &],
-      (* brKernelsToSymbols admitted the radical-argument kernel as the only
-         monomial, its radicand rational in x *)
-      If[Length[monos] =!= 1 || brDependsQ[rad["b"], #["sym"] & /@ monos],
-        throwInternal["brTowerCurveMonomialShape", <|"f" -> fs|>]];
-      "BCurve",
+      (* a kernel with a radical argument: one monomial is BaseCurve.m's case,
+         two are the tower over the curve (BaseTower.m, Phase 5 M1); more
+         were declined when the third was admitted (brDTAdmit) *)
+      Which[
+        Length[monos] === 1,
+          If[brDependsQ[rad["b"], #["sym"] & /@ monos], throwInternal["brTowerCurveMonomialShape", <|"f" -> fs|>]];
+          "BCurve",
+        Length[monos] === 2,
+          If[brDependsQ[rad["b"], #["sym"] & /@ monos],
+            throwUnimplemented["BaseTower:radicand-in-tower", "a radicand involving a monomial above a kernel with a radical argument (radical in the middle of the tower over the curve)"]];
+          "BTower",
+        True, throwInternal["brTowerCurveMonomialCount", <|"f" -> fs|>]],
     True,
       bsyms = Select[#["sym"] & /@ monos, !FreeQ[rad["b"], #] &];
       If[bsyms === {}, "B", "A"]];

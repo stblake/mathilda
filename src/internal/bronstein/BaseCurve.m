@@ -67,11 +67,14 @@ brBCList[C_Association, e_, F_Association] := afFromY[F, C["B"], brBCNorm[C, e],
 brBCExpr::usage = "brBCExpr[C, a] is the coordinate list a as the expression Sum c_i Y^i/d_i in x, Y and theta.";
 brBCExpr[C_Association, a_List] := brBCNorm[C, afToY[C["B"], a, C["Y"]]];
 
-brBCD::usage = "brBCD[C, e] is the derivative of e (in x, Y, theta) on K: D x = 1, D Y = sY Y, D theta = C[\"Dth\"], in normal form.";
-brBCD[C_Association, e_] := brBCNorm[C, D[e, C["x"]] + D[e, C["Y"]] C["sY"] C["Y"] + D[e, C["th"]] C["Dth"]];
+brBCD::usage = "brBCD[C, e] is the derivative of e (in x, Y, theta) on K: D x = 1, D Y = sY Y, D theta = C[\"Dth\"], in normal form. For a level record of a tower over the curve (BaseTower.m, brDTLevel: keys \"lsyms\" -> {t_1..t_j}, \"lDs\" -> {D t_1..D t_j}) every monomial of the level is differentiated (E2.1: D t_l times the partial derivative, each product reduced modulo Y^m - G).";
+brBCD[C_Association, e_] := If[KeyExistsQ[C, "lsyms"],
+  brBCNorm[C, D[e, C["x"]] + D[e, C["Y"]] C["sY"] C["Y"] + Sum[D[e, C["lsyms"][[l]]] C["lDs"][[l]], {l, Length[C["lsyms"]]}]],
+  brBCNorm[C, D[e, C["x"]] + D[e, C["Y"]] C["sY"] C["Y"] + D[e, C["th"]] C["Dth"]]];
 
-brBCSurface::usage = "brBCSurface[C, e] writes the expression e in x, Y and theta in the user's surface form: Y -> C[\"Ysurf\"], theta -> the kernel.";
-brBCSurface[C_Association, e_] := e /. {C["Y"] -> C["Ysurf"], C["th"] -> C["kernel"]};
+brBCSurface::usage = "brBCSurface[C, e] writes the expression e in x, Y and theta in the user's surface form: Y -> C[\"Ysurf\"], theta -> the kernel (for a level record of BaseTower.m, every monomial -> its kernel, C[\"back\"]).";
+brBCSurface[C_Association, e_] := If[KeyExistsQ[C, "back"], e /. C["Y"] -> C["Ysurf"] /. C["back"],
+  e /. {C["Y"] -> C["Ysurf"], C["th"] -> C["kernel"]}];
 
 brBCSplitDen::usage = "brBCSplitDen[C, e] is {N, d}: e = N/d with d the theta-dependent part of the denominator (a polynomial in x and theta over Q, free of Y) and N in normal form, polynomial in theta.";
 brBCSplitDen[C_Association, e_] := Module[{th = C["th"], t = Together[brBCNorm[C, e]], den, dth},
@@ -131,12 +134,18 @@ brBCSplit[C_Association, R_] := Module[{th = C["th"], N, d, q = 0, dn, a, inv, L
   <|"L" -> L, "a" -> a, "d" -> dn|>];
 
 brBCLogPart::usage = "brBCLogPart[C, a, d] is the Rothstein-Trager log part of a/d (d squarefree normal in k[theta], deg a < deg d) over k0: <|\"Logs\" -> {{c, u}, ..., {1, rootsum, \"RootSum\"}}, \"Rem\" -> a/d - Sum c Du/u|> (Rem in k0[theta, 1/theta]). Throws NonElementary when the monic R(z) has a non-constant coefficient.";
-brBCLogPart[C_Association, a_, d0_] := Module[
+brBCLogPart[C_Association, a0_, d0_] := Module[
   {th = C["th"], Y = C["Y"], m = C["m"], B = C["B"], F = C["F"], z = Unique["Bronstein`Private`brZc"],
-   d, lcd, Dd, R, cl, lc, lcInv, P, facs, logs = {}, sumDl, v, mu, t, Ft, val, w, dL},
-  If[Together[a] === 0, Return[<|"Logs" -> {}, "Rem" -> 0|>]];
+   a, d, lcd, Dd, R, cl, lc, lcInv, P, facs, logs = {}, sumDl, v, mu, t, Ft, val, w, dL},
+  If[Together[a0] === 0, Return[<|"Logs" -> {}, "Rem" -> 0|>]];
   lcd = Coefficient[d0, th, Exponent[d0, th]];
   d = Expand[Together[d0/lcd]];
+  (* a/d0 = (a/lcd)/d: the resultant, the logands and the remainder are all
+     taken for the MONIC d, so the numerator is divided by the leading
+     coefficient (lcd may involve x or a lower monomial: with a0 kept, every
+     residue was scaled by lcd, a false "non-constant residues" on
+     D[Log[x Log[x + Sqrt[1 + x^3]] + 1]]) *)
+  a = brBCNorm[C, a0/lcd];
   Dd = brBCD[C, d];
   R = Expand[Resultant[Expand[Numerator[Together[a - z Dd]]], d, th]/
              Denominator[Together[a - z Dd]]^Exponent[d, th]];
@@ -147,7 +156,9 @@ brBCLogPart[C_Association, a_, d0_] := Module[
   lcInv = brK0Inverse[F, B, lc];
   P = 0;
   Do[With[{cc = brK0Times[F, B, brBCList[C, cl[[k]]], lcInv]},
-      If[AnyTrue[Rest[cc], Together[#] =!= 0 &] || !FreeQ[cc[[1]], C["x"] | th | Y],
+      (* a constant of k_(j-1): free of x, Y and EVERY monomial of the level
+         (Lemma E2const(i); the lower monomials are scalars of F) *)
+      If[AnyTrue[Rest[cc], Together[#] =!= 0 &] || !FreeQ[cc[[1]], Alternatives @@ Join[{C["x"], th, Y}, Lookup[C, "lsyms", {}]]],
         throwNonElementary["non-constant residues (resultant criterion over the algebraic base, [B] Prop 2.9)"]];
       P = P + Together[cc[[1]]] z^(k - 1)],
     {k, Length[cl]}];
@@ -164,7 +175,7 @@ brBCLogPart[C_Association, a_, d0_] := Module[
         sumDl = afPlus[F, sumDl, afScale[F, val,
           brK0Times[F, B, brBCList[C, brBCD[C, brBCExpr[C, v]]], brK0Inverse[F, B, v]]]]],
       t = Unique["Bronstein`Private`brTc"];
-      Ft = brFn[{th}, t, mu /. z -> t];
+      Ft = brFn[Lookup[C, "lsyms", {th}], t, mu /. z -> t];
       v = brK0PolyGCD[Ft, B, dL, brBCList[C, a - t Dd, Ft], th];
       If[brK0Degree[v, th] > 0,
         w = afScale[Ft, t, brK0Times[Ft, B, brBCList[C, brBCD[C, afToY[B, v, Y]], Ft], brK0Inverse[Ft, B, v]]];

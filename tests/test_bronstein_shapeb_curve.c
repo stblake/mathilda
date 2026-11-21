@@ -76,8 +76,8 @@ static void test_integrals(void) {
                  certificates[i][0], certificates[i][1]);
         BR_TRUE(buf);
     }
-    /* scope: a radical-argument kernel over or under another monomial declines */
-    BR_TRUE("First[BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]] === \"implementation incomplete\"");
+    /* two monomials (Phase 5 M1, BaseTower.m): LI_1(E^(x y); D Log[x]) has no solution */
+    BR_TRUE("First[BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]] === \"not elementary\"");
 }
 
 static void test_properties(void) {

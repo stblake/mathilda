@@ -62,7 +62,7 @@ static const char* const certificates[] = {
 
 static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
-    "Log[x] E^(x Sqrt[x^3 + 1])",                                                    /* Shape B, curve monomial over a tower */
+    "Log[x] Log[1 + x] E^(x Sqrt[x^3 + 1])",                                         /* three monomials over the curve (beyond Phase 5 M1) */
     NULL
 };
 
@@ -115,8 +115,9 @@ static void test_declines(void) {
         BR_EQ(buf, "Integrate");
     }
     BR_EQ("BronsteinIntegrate[Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]], x]", "{\"implementation incomplete\", \"nested radicals\"}");
+    /* two monomials over the curve are decided since Phase 5 M1 (BaseTower.m) */
     BR_EQ("BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]",
-          "{\"implementation incomplete\", \"a further monomial over a kernel with a radical argument (transcendental Risch over an algebraic base)\"}");
+          "{\"not elementary\", \"no algebraic part: the limited integration problem has no solution over the tower on the curve (its integrand is not elementary over k1; [SI] Thm 5.8.1)\"}");
     /* a non-elementary input is a silent decline, not "incomplete" */
     BR_EQ("BronsteinIntegrate[Erf[x] Sqrt[Log[x]], x]", "{\"failed\", \"non-elementary function in the integrand\"}");
 }

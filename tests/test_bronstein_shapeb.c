@@ -19,11 +19,10 @@ static void test_front_end(void) {
     BR_TRUE("Module[{r = brKernelsToSymbols[Log[Sqrt[x] + 1], x]}, r[[1]] === r[[2, 1]][\"sym\"] && TrueQ[r[[2, 1]][\"algebraic\"]]]");
     BR_TRUE("brTower[Log[x + Sqrt[1 + x^3]] x, x][\"shape\"] === \"BCurve\"");
     BR_TRUE("brTower[Log[x] Sqrt[1 + x^3], x][\"shape\"] === \"B\"");
-    /* ... but not over or under another monomial, nor with a radical over the tower */
-    BR_TRUE("MemberQ[{{\"Unimplemented\", \"radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)\"},"
-            " {\"Unimplemented\", \"a further monomial over a kernel with a radical argument (transcendental Risch over an algebraic base)\"}},"
-            " brFailTag[brCatch[brKernelsToSymbols[Log[x] + Log[Sqrt[x] + 1], x]]]]");
-    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Unimplemented", "radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)");
+    /* ... over or under another monomial it is admitted by the span over the curve
+     * (Phase 5 M1, BaseTower.m), but a radical over the tower is not */
+    BR_TRUE("Length[brKernelsToSymbols[Log[x] + Log[Sqrt[x] + 1], x][[2]]] === 2");
+    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Unimplemented", "a radical whose radicand is not rational in x inside a logarithm or exponential");
 }
 
 static void test_genus0(void) {

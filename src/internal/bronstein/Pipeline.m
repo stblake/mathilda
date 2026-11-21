@@ -348,7 +348,11 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
       Return[brPresentable[f, r, x], Module]]];
   T = brTower[f, x];
   F = Switch[T["shape"],
-    "Rational" | "Transcendental", brIntegrateTranscendental[f, x],
+    (* a tower over the curve whose radical kernels were all eliminated (A3:
+       Log[1 + x^3] - 2 Log[Sqrt[1 + x^3]] -> 0) is integrated in its rewritten
+       form; the answer is verified against f below *)
+    "Rational" | "Transcendental",
+      brIntegrateTranscendental[If[FreeQ[f, (Log[a_] | Power[E, a_]) /; brRadicalQ[a, {x}]], f, T["f"] /. T["back"]], x],
     "Algebraic",
       r = Trager`TragerIntegrate[f, x, "Trager"];
       Which[
@@ -358,6 +362,7 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
         True, r],
     "B", With[{sb = brShapeB[T, f, x]}, sb["F"]],
     "BCurve", With[{sb = brShapeBMono[T, f, x]}, sb["F"]],
+    "BTower", With[{sb = brShapeBTower[T, f, x]}, sb["F"]],
     "A", With[{sa = brShapeA[T, f, x]}, If[sa["verified"], verified = True]; sa["F"]],
     _, throwInternal["brUnknownShape"]];
   If[!verified && !antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];

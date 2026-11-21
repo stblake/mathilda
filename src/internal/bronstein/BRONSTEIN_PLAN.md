@@ -1804,6 +1804,19 @@ scoped exactly in the note (section "Implementation plan"):
 - at most two monomials over Q(x)(y), constants Q, zero-offset eliminations only;
 - M1a (exponential top), M1b (primitive top), M1c (the remaining 256/260 cases).
 
+**Status (2026-11-21, M1 implemented, no version bump).** `BaseTower.m` (shape `"BTower"`):
+admission over the curve with the zero-offset rule, one level of Hermite/Rothstein-Trager
+on a level record, `RDE_1` ([SI] Ch. 6 over `k0`), `LI_1` (integrate over `k1`, then the
+span), LD_0/PLD_0 by Trager plus the span.
+- M1a: Example 2 (`bgenusp-2-9`) certified. M1b: Example 1 over one denominator certified
+  without the D1 split. M1c: `bgenusp-3-6` decided (D2 split, then the tower); 260
+  `mid-elem` 41 -> 59, `mid-rand` 36 -> 59 (one timeout; 60 in a second run).
+- Two false certificates fixed: `brBCLogPart`'s residues for a non-monic denominator (also
+  the one-monomial case), `brKummerSplit` over a radical kernel.
+- Not built (declines): three or more monomials, ROOT_0 (OL5), I2, nonzero offsets (OL2),
+  fractional exponentials and other radical spellings (OL6), RDE_1 cancellation with a
+  homogeneous solution, RDE_1 for an `f` that is not a derivative (only `i Dw` is called).
+
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
 - *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a

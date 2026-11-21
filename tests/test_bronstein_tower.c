@@ -81,7 +81,7 @@ static void test_kernels_to_symbols(void) {
     BR_THROWS("brKernelsToSymbols[Log[x] + Log[x^2], x]", "Unimplemented", "reducible logarithm (rewrite with an explicit constant)");
     /* a radical inside a kernel: admitted as the single curve monomial (Shape B,
      * test_bronstein_shapeb.c), declined over the tower */
-    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Unimplemented", "radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)");
+    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Unimplemented", "a radical whose radicand is not rational in x inside a logarithm or exponential");
 }
 
 static void test_detect_radical(void) {
