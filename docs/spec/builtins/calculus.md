@@ -1688,7 +1688,13 @@ monotonically down.
      with substitutions `x = u^N` (Type I), `u^s = a x^r + b` (Type II), or
      `u = x^r` then `t^s = (a u + b)/u` (Type III) that rationalise `f`.
      Recognition is a single structural scan, so it runs ahead of
-     `DerivativeDivides`'s Eliminate/Solve search.  Non-elementary binomials
+     `DerivativeDivides`'s Eliminate/Solve search.  A base that is a binomial
+     only after expansion -- `x^s (a x^r + b)`, a monomial shared by both terms
+     (`Sqrt[2 c x^(5/2) + 4 d x^3]`) or constants times `x^s` times a binomial
+     -- is normalised to `x^(p + s q) (a x^r + b)^q` times the locally constant
+     `base^q/(x^(s q) (a x^r + b)^q)` (kept, so the answer is right for `x < 0`
+     and off the real line too).  In the Automatic cascade this generalised
+     recognition runs in a second slot after `DerivativeDivides`.  Non-elementary binomials
      return `NULL` (the cascade falls through to later methods).
   7. `Integrate\`GoursatAlgebraic[f, x]` — pseudo-elliptic integrands
      `F(x) R(x)^q` (`F` rational, `R` a polynomial) with `q` any rational of
@@ -1754,6 +1760,18 @@ monotonically down.
        Sqrt[Pi/2] FresnelS[Sqrt[2/Pi] x]`, `Integrate[Cos[x^2],x] =
        Sqrt[Pi/2] FresnelC[Sqrt[2/Pi] x]`, and completing-square cases like
        `Sin[x^2+x+1]`.
+       Since v0.6662 the stage works in any variable: its answer template
+       spelled the variable as the literal symbol `x`, so it declined everything
+       else (`Integrate[Cos[t^2], t]` was `Integrate::nonelem`). It also
+       reduces two power shapes to that kernel by parts:
+       - `K x^p Trig[a x + c]` with half-integer `p`, through `x = u^2`
+         (`Sqrt[t] Sin[t]`, `t^(3/2) Cos[3 t]`, `Sin[t]/Sqrt[t]`,
+         `Cos[2 t + 1]/t^(3/2)`);
+       - `K x^(2m) Trig[a x^2 + c]` (`t^4 Cos[3 t^2 + 1]`, `Sin[t^2]/t^2`).
+
+       These used to fall through to ParallelMixedSpecial, which spent ~11 s
+       declining each one before a later stage closed it in an `Erfi` form. They
+       now close in milliseconds, diff-back verified.
   8. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
      `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
      kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution
@@ -6327,6 +6345,25 @@ runs entirely in MPFR (values, Jacobian, elimination) and, once both goals
 hold, polishes like the scalar Newton below, so it returns the working
 precision rather than half of it; it used to ignore the option and return
 machine numbers.
+
+**Scalar line search (v0.6662).** The one-variable Newton iteration (real
+and complex, machine and `WorkingPrecision -> p`) backtracks too, with an
+Armijo test: a step is taken only if `|f|` falls by at least `10^-4 lambda`
+of itself (`lambda` the step fraction, 1, 1/2, 1/4, ...), and a step to a
+point where `f` is not a number is halved from the last good point. When 10
+halvings find no sufficient decrease, the search stops at the last good
+point with `FindRoot::lstol`, as the reference does.
+- `FindRoot[Zeta[z], {z, 1 + 300 I}]` is `{z -> 0.5 + 299.84 I}` (it was
+  `FindRoot::nlnum`: the full step ran out to `-6.3*10^13`, where `Zeta` is
+  `ComplexInfinity`), and at `WorkingPrecision -> 30` it agrees with the
+  reference to all 30 digits.
+- From `2 + 100 I`, Newton heads for `Re z = +Infinity`, where `|Zeta| -> 1`
+  without a sufficient decrease. It stops at `627.41 + 915.69 I` with
+  `::lstol`, the reference's answer; it used to reach `10^189`.
+- `ArcTan` from `1.5` and `x^(1/3)` from `1`, where undamped Newton diverges,
+  now converge. `x^3 - 2 x + 2` from `0` (the 0 <-> 1 cycle) stops with
+  `::lstol` near the local minimum of `|f|` at `Sqrt[2/3]`, as the reference
+  does; before, undamped Newton reached the root `-1.769` by a lucky jump.
 
 **Real values.** A real search reads `x + 0. I`, or any complex value whose
 imaginary part is round-off of its real part (`|im| <= 2^-(p-8) (|re| + 1)`),

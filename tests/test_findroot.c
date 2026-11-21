@@ -642,6 +642,36 @@ static void test_bigint_rational_coefficients(void) {
 /* 13. Memory: many calls in a row (smoke test for leaks)              */
 /* ------------------------------------------------------------------ */
 
+/* v0.6662: the scalar Newton iteration (machine and MPFR, real and complex)
+ * has the Armijo line search the system iteration had -- a step without a
+ * sufficient decrease of |f|, or to where f is not a number, is halved from
+ * the last good point; when the halvings run out it stops there with
+ * FindRoot::lstol.  Each answer below is the reference's. */
+static void test_scalar_newton_line_search(void) {
+    /* was ::nlnum: the undamped step ran out to -6*10^13, Zeta = ComplexInfinity */
+    check_true("Module[{r = z /. FindRoot[Zeta[z], {z, 1 + 300 I}]}, "
+               "Abs[r - (1/2 + 299.8403260537213 I)] < 10^-9]");
+    check_true("Module[{r = z /. FindRoot[Zeta[z], {z, 1 + 300 I}, WorkingPrecision -> 30]}, "
+               "Abs[r - (1/2 + 299.840326053721312960027052525 I)] < 10^-25]");
+    /* runs towards Re z = +Infinity, where |Zeta| -> 1 without a sufficient
+     * decrease: the reference stops at 627.41 + 915.69 I with ::lstol (this
+     * reached 10^189 and hung in Zeta) */
+    check_true("Module[{r}, r = Quiet[z /. FindRoot[Zeta[z], {z, 2 + 100 I}]]; "
+               "Abs[r - (627.41 + 915.692 I)] < 0.01]");
+    check_eq("Check[FindRoot[Zeta[z], {z, 2 + 100 I}]; ok, lstol, FindRoot::lstol]", "lstol");
+    /* Newton's classic failures: diverging (ArcTan from 1.5 overshoots by a
+     * growing factor; x^(1/3) doubles away from its root) now converge */
+    check_true("Abs[x /. FindRoot[ArcTan[x], {x, 1.5}]] < 10^-10");
+    check_true("Abs[x /. FindRoot[ArcTan[x], {x, 3}, WorkingPrecision -> 30]] < 10^-20");
+    check_true("Abs[x /. FindRoot[x^(1/3), {x, 1}]] < 10^-6");
+    /* the 0 <-> 1 cycle of x^3 - 2x + 2: no root nearby, a local minimum of
+     * |f| at Sqrt[2/3] -- ::lstol near it, as the reference (0.8165) */
+    check_true("Module[{r = Quiet[x /. FindRoot[x^3 - 2 x + 2, {x, 0}]]}, Abs[r - 0.8165] < 0.01]");
+    /* ordinary starts are unaffected */
+    check_true("Abs[(x /. FindRoot[Cos[x] == x, {x, 1}]) - 0.7390851332151607] < 10^-14");
+    check_true("Abs[(x /. FindRoot[Exp[x] - 1/2, {x, 5}]) + Log[2.]] < 10^-14");
+}
+
 static void test_no_leak_many_calls(void) {
     /* Just exercise the code paths repeatedly.  valgrind / leak-checks
      * run as a separate `make valgrind` step (see CLAUDE.md). */
@@ -744,6 +774,8 @@ int main(void) {
     TEST(test_option_values_evaluated);
     TEST(test_machine_overflow_escalates);
     TEST(test_jacobian_matrix_forms);
+
+    TEST(test_scalar_newton_line_search);
 
     TEST(test_no_leak_many_calls);
 

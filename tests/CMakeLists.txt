@@ -1396,6 +1396,22 @@ endif()
 # include_directories() and add_compile_definitions() set above.
 add_library(mathilda_common OBJECT ${COMMON_SRC})
 
+# ...and link those objects ONCE, into a shared library the suites load,
+# instead of splicing all of them into every executable.  Spliced, each of the
+# ~730 test binaries carried the whole kernel (~19 MB apiece): ~14 GB per build
+# tree, which is what filled the disk once a few agent worktrees each had one.
+# The swap is made centrally at the end of this file (see "Link the suites
+# against mathilda_testlib"), so the add_executable() calls below still name
+# $<TARGET_OBJECTS:mathilda_common> and nothing about their sources changes.
+# PIC is required for a shared object on Linux; -fno-semantic-interposition
+# lets GCC keep calls inside the library direct (no PLT/GOT detour), so the
+# interpreter's hot paths pay essentially nothing for it.
+set_target_properties(mathilda_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mathilda_common PRIVATE -fno-semantic-interposition)
+endif()
+add_library(mathilda_testlib SHARED $<TARGET_OBJECTS:mathilda_common>)
+
 add_executable(expr_tests test_expr.c test_part.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(expr_tests PRIVATE ../src)
 
@@ -7076,3 +7092,26 @@ else()
     target_link_libraries(term_menus_tests gmp m)
 endif()
 add_test(NAME term_menus_tests COMMAND term_menus_tests)
+
+# Link the suites against mathilda_testlib (see the comment at
+# add_library(mathilda_testlib ...)).  Every executable whose sources name
+# $<TARGET_OBJECTS:mathilda_common> drops those objects and links the shared
+# library instead -- found from its SOURCES property, so the four executables
+# that never used the kernel are left alone and no add_executable() above had
+# to change.  The bench_* gates keep the objects statically linked: their
+# recorded baselines (bench_pack.c, bench_eval.c, ...) are for that build.
+# Must stay at the END of this file, after the last add_executable().
+get_property(_mathilda_link_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_t IN LISTS _mathilda_link_targets)
+    get_target_property(_type ${_t} TYPE)
+    if(NOT _type STREQUAL "EXECUTABLE" OR _t MATCHES "^bench_")
+        continue()
+    endif()
+    get_target_property(_srcs ${_t} SOURCES)
+    list(FIND _srcs "$<TARGET_OBJECTS:mathilda_common>" _at)
+    if(_at GREATER -1)
+        list(REMOVE_AT _srcs ${_at})
+        set_property(TARGET ${_t} PROPERTY SOURCES "${_srcs}")
+        target_link_libraries(${_t} mathilda_testlib)
+    endif()
+endforeach()

@@ -615,6 +615,35 @@ Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
             return NULL;
         }
         poly = eval_and_free(internal_expand((Expr*[]){ r }, 1));
+        /* Eliminate u_i from the side equations still to come as well.  A
+         * later side equation can carry an EARLIER generator: an inner
+         * radical found first (x^(1/2) -> u_0 in Sqrt[2 x^(5/2) + 4 x^3])
+         * leaves u_0 in the outer base, so side_1 = u_1^2 - 2 u_0^5 - 4 x^3.
+         * Without this, Resultant_{u_1}(poly, side_1) re-introduces u_0
+         * after it was eliminated and the internal placeholder leaks into
+         * the Root[] answer.  Resultant_{u_i}(side_j, side_i) is a relation
+         * in the same ideal, so the chain stays sound (candidates are still
+         * verified against e_orig below). */
+        for (size_t j = i + 1; j < uvars.count && poly; j++) {
+            if (!walk_contains_name(uvars.items[j].side_eq,
+                                    uvars.items[i].name))
+                continue;
+            Expr* sj = eval_and_free(internal_expand(
+                (Expr*[]){ expr_copy(uvars.items[j].side_eq) }, 1));
+            Expr* si = eval_and_free(internal_expand(
+                (Expr*[]){ expr_copy(uvars.items[i].side_eq) }, 1));
+            Expr* rj = internal_resultant(
+                (Expr*[]){ sj, si, mk_sym(uvars.items[i].name) }, 3);
+            if (!rj) {
+                expr_free(poly);
+                uvars_free(&uvars);
+                expr_free(e_orig);
+                return NULL;
+            }
+            expr_free(uvars.items[j].side_eq);
+            uvars.items[j].side_eq =
+                eval_and_free(internal_expand((Expr*[]){ rj }, 1));
+        }
         /* Sanity: if Resultant degenerated to a non-zero constant, the
          * system is inconsistent (no solutions).  Return the empty
          * list rather than handing a constant equation to solvepoly. */

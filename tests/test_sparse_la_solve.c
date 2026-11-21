@@ -114,12 +114,16 @@ static void test_band(void) {
              "res[a, LinearSolve[a, b], b] < 10^-14");
     /* scattered (no band), strictly diagonally dominant, n > 1000: without
      * UMFPACK this was a dense O(n^3) LU (7.6 s at n = 11020, the sparse
-     * oracle's #1005); the refined Krylov default answers, as accurately */
+     * oracle's #1005; ~30 s here at 6000); the refined Krylov default answers,
+     * as accurately.  With SuiteSparse (the Linux CI) UMFPACK's direct LU
+     * answers instead, at an LU's residual (~1e-15, not Krylov's ~1e-16), so
+     * the bounds are the solver-independent ones: an accurate answer, and far
+     * below the dense fallback's time (5 s, not 1: a shared runner's noise). */
     chk("dd[n_] := SparseArray[Join[Table[{i, i} -> 10. + Mod[i, 7], {i, n}], "
         "Table[{i, Mod[37 i^2, n] + 1} -> 1., {i, n}], Table[{i, Mod[101 i + 7, n] + 1} -> -2., {i, n}], "
         "Table[{Mod[53 i, n] + 1, i} -> 1.5 I, {i, n}]], {n, n}]; Null", "Null");
     chk_true("With[{a = dd[6000], b = N[Range[6000]]}, "
-             "t = AbsoluteTiming[x = LinearSolve[a, b]][[1]]; res[a, x, b] < 10^-15 && t < 1]");
+             "t = AbsoluteTiming[x = LinearSolve[a, b]][[1]]; res[a, x, b] < 10^-14 && t < 5]");
     chk_true("With[{a = Re[dd[3000]], b = N[Range[3000]]}, "
              "Max[Abs[LinearSolve[a, b] - LinearSolve[Normal[a], b]]] < 10^-12]");
     /* symmetric with a positive diagonal but indefinite (eigenvalues
@@ -428,12 +432,47 @@ static void test_matrixexp(void) {
     chk("Head[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30]]]", "SparseArray");
     /* Precision of a vector is one number, the least over its entries */
     chk("Precision[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30], {1,1}]]", "30.0");
-    /* ... but only at order 1 or a narrow diagonal: a general MPFR matrix
-     * answers the dense List, as in the reference (oracle cases #58, #299) */
+    /* ... but only when ||s - (Tr[s]/n) I||_1 <= 1/2 (a machine double
+     * compare); any other MPFR matrix answers the dense List, as in the
+     * reference (oracle cases #58, #299; ~560 reference probes) */
     chk("Head[MatrixExp[SparseArray[{{1,1}->N[2+I,30]}, {1,1}]]]", "SparseArray");
+    chk("Head[MatrixExp[SparseArray[{{1,1}->N[100,30]}, {1,1}]]]", "SparseArray");
     chk("Head[MatrixExp[SparseArray[{{1,1}->N[2,30],{2,2}->N[4,30]}, {2,2}]]]", "List");
     chk("Head[MatrixExp[SparseArray[{{1,2}->N[2,30],{2,1}->N[1,30]}, {2,2}]]]", "List");
     chk("Head[MatrixExp[SparseArray[{{1,1}->N[1,30],{1,2}->N[1/2,30],{2,2}->N[2,30],{3,3}->N[1,30]}, {3,3}]]]", "List");
+    chk("pe[m_] := With[{r = MatrixExp[SparseArray[N[m, 30]]]}, "
+        "If[Head[r] === SparseArray, {SparseArray, r[\"Background\"], Length[r[\"NonzeroValues\"]]}, Head[r]]]; Null", "Null");
+    /* off-diagonal entries: sparse when the shifted norm is small */
+    chk("pe[{{1, 1/10}, {0, 1}}]", "{SparseArray, 0, 3}");
+    chk("pe[{{1, 1}, {0, 2}}]", "List");
+    chk("pe[{{1/10, 1/10}, {1/10, 1/10}}]", "{SparseArray, 0, 4}");
+    chk("pe[{{0, 1}, {-1, 0}}]", "List");
+    chk("pe[ArrayFlatten[{{{{0, 1/10}, {1/10, 0}}, 0}, {0, {{0, 1/10}, {1/10, 0}}}}]]", "{SparseArray, 0, 8}");
+    chk("pe[IdentityMatrix[8]]", "{SparseArray, 0, 8}");
+    /* the shift is the mean of the diagonal, not the midpoint; any spread */
+    chk("pe[DiagonalMatrix[{1, 2}]]", "{SparseArray, 0, 2}");
+    chk("pe[DiagonalMatrix[{1, 21/10}]]", "List");
+    chk("pe[DiagonalMatrix[{100, 201/2}]]", "{SparseArray, 0, 2}");
+    chk("pe[DiagonalMatrix[{0, 0, 1}]]", "List");
+    chk("pe[DiagonalMatrix[{0, 1/2, 1}]]", "{SparseArray, 0, 3}");
+    chk("pe[DiagonalMatrix[{2 + I, 2}]]", "{SparseArray, 0, 2}");
+    chk("pe[DiagonalMatrix[{2 + 2 I, 2}]]", "List");
+    /* the 1-norm (column sums), not the infinity, 2- or Frobenius norm */
+    chk("pe[{{0, 3/10, 3/10}, {0, 0, 0}, {0, 0, 0}}]", "{SparseArray, 0, 5}");
+    chk("pe[{{0, 0, 0}, {3/10, 0, 0}, {3/10, 0, 0}}]", "List");
+    chk("pe[{{0, (3 + 4 I)/10}, {0, 0}}]", "{SparseArray, 0, 3}");
+    chk("pe[{{0, (3 + 4 I)/10 + 1/100}, {0, 0}}]", "List");
+    /* the boundary is <= 1/2 on the double-rounded norm */
+    chk("pe[{{0, 1/2}, {0, 0}}]", "{SparseArray, 0, 3}");
+    chk("pe[{{0, 1/2 + 10^-17}, {0, 0}}]", "{SparseArray, 0, 3}");
+    chk("pe[{{0, 1/2 + 10^-16}, {0, 0}}]", "List");
+    /* zeros of the MPFR exponential are background, not stored 0``30 */
+    chk("pe[{{1, 1/5, 0}, {0, 1, 0}, {0, 0, 1}}]", "{SparseArray, 0, 4}");
+    /* an MPFR array with no stored value is exact: List; a machine one
+     * (machine background) answers the identity SparseArray */
+    chk("Head[MatrixExp[N[SparseArray[ConstantArray[0, {3, 3}]], 30]]]", "List");
+    chk("With[{r = MatrixExp[N[SparseArray[ConstantArray[0, {3, 3}]]]]}, {Head[r], Length[r[\"NonzeroValues\"]]}]",
+        "{SparseArray, 3}");
     chk_true("With[{s = SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]}, "
              "Max[Abs[Normal[MatrixExp[s]] - MatrixExp[Normal[s]]]] < 10^-14]");
     /* the action on a vector, on SpMV: real, complex, against the dense action */

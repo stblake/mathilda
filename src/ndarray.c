@@ -973,10 +973,73 @@ static inline int nd_ew_degenerate(double r, int nonzero_factors) {
     return (int)!(m <= DBL_MAX) | ((m < DBL_MIN) & ((r != 0.0) | nonzero_factors));
 }
 
+/* The float64 lanes of nd_ew_chunk, fast.  One generic loop -- the
+ * Plus/Times choice inside the innermost loop, every operand's data pointer
+ * re-read through x->ndops[j] for every element, and the output possibly
+ * aliasing them -- could not be vectorised, and the v0.6612 lane check (the
+ * nonzero-factor tracking and the degeneracy reduction) then made it ~1.6x
+ * slower still (Nest of a 4-term RotateLeft stencil, Accumulate's callers).
+ * Here the pointers are hoisted into restrict locals and Plus/Times are
+ * separate loops; one or two operands are a single fused pass, more are
+ * folded two per pass.  The association is unchanged -- ((sc op a) op b) op
+ * ... -- so every lane is bit-for-bit the generic loop's.  Times' "zero from
+ * nonzero factors" (an underflow) re-reads the operands only for a lane that
+ * came out exactly 0.  Returns false (a degenerate lane), true otherwise; -1
+ * when the operand count is beyond the hoisting limit (the caller then uses
+ * the generic loop). */
+#define ND_EW_FAST_MAX 16
+static int nd_ew_chunk_f64(const nd_ew_ctx* x, size_t lo, size_t hi) {
+    size_t m = x->mnd;
+    if (m == 0 || m > ND_EW_FAST_MAX) return -1;
+    const double* src[ND_EW_FAST_MAX];
+    for (size_t j = 0; j < m; j++) src[j] = (const double*)x->ndops[j]->data.ndarray.data;
+    double* restrict od = (double*)x->out;
+    const double sc = x->sc_re;
+    int bad = 0;
+    /* first pass: operands 0 and (if present) 1 */
+    {
+        const double* restrict a = src[0];
+        if (m == 1) {
+            if (x->is_plus) for (size_t k = lo; k < hi; k++) od[k] = sc + a[k];
+            else            for (size_t k = lo; k < hi; k++) od[k] = sc * a[k];
+        } else {
+            const double* restrict b = src[1];
+            if (x->is_plus) for (size_t k = lo; k < hi; k++) od[k] = (sc + a[k]) + b[k];
+            else            for (size_t k = lo; k < hi; k++) od[k] = (sc * a[k]) * b[k];
+        }
+    }
+    /* further passes: two operands each, in order */
+    for (size_t j = 2; j < m; j += 2) {
+        const double* restrict a = src[j];
+        if (j + 1 < m) {
+            const double* restrict b = src[j + 1];
+            if (x->is_plus) for (size_t k = lo; k < hi; k++) od[k] = (od[k] + a[k]) + b[k];
+            else            for (size_t k = lo; k < hi; k++) od[k] = (od[k] * a[k]) * b[k];
+        } else {
+            if (x->is_plus) for (size_t k = lo; k < hi; k++) od[k] = od[k] + a[k];
+            else            for (size_t k = lo; k < hi; k++) od[k] = od[k] * a[k];
+        }
+    }
+    /* the lane check: non-finite or nonzero-subnormal (branch-free) ... */
+    for (size_t k = lo; k < hi; k++) bad |= nd_ew_degenerate(od[k], 0);
+    /* ... and, for a product, an exact 0 from nonzero factors */
+    if (!x->is_plus && sc != 0.0 && !bad) {
+        for (size_t k = lo; k < hi; k++) {
+            if (od[k] != 0.0) continue;
+            int nz = 1;
+            for (size_t j = 0; j < m; j++) nz &= (src[j][k] != 0.0);
+            if (nz) { bad = 1; break; }
+        }
+    }
+    return !bad;
+}
+
 static bool nd_ew_chunk(void* c, size_t lo, size_t hi) {
     const nd_ew_ctx* x = (const nd_ew_ctx*)c;
     int bad = 0;
     if (x->all_f64) {
+        int fast = nd_ew_chunk_f64(x, lo, hi);
+        if (fast >= 0) return fast != 0;
         double* od = (double*)x->out;
         for (size_t k = lo; k < hi; k++) {
             double acc = x->sc_re;

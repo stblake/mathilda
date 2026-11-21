@@ -220,10 +220,17 @@ static Expr* nd_rotate_axes(Expr* a, const int64_t* rots, int nrots) {
     size_t total = nd_prod(dims, 0, rank);
     if (total == 0) return NULL;
 
-    char* cur = malloc(total * esz);
-    if (!cur) return NULL;
-    memcpy(cur, a->data.ndarray.data, total * esz);
-
+    /* The first axis that actually moves reads straight from the source
+     * buffer; only a second moving axis needs a scratch buffer to ping-pong
+     * with.  This used to copy the whole source into `cur` first and then
+     * rotate cur -> tmp: for the common single-axis rotate, two full-size
+     * allocations and four passes over memory where one allocation and two
+     * memcpys suffice.  (On glibc each fresh large block can be a new mmap
+     * whose every page faults on first touch, so the extra block was not
+     * cheap: a 10^5 RotateLeft cost ~730 us on the Linux runner against
+     * ~55 us on macOS.) */
+    const char* src_buf = (const char*)a->data.ndarray.data;
+    char* cur = NULL;                               /* result so far (owned) */
     char* tmp = NULL;
     for (int ax = 0; ax < nrots && ax < rank; ax++) {
         int64_t d = dims[ax];
@@ -232,24 +239,38 @@ static Expr* nd_rotate_axes(Expr* a, const int64_t* rots, int nrots) {
         if (r < 0) r += d;
         if (r == 0) continue;                       /* identity on this axis */
 
-        if (!tmp) {
-            tmp = malloc(total * esz);
-            if (!tmp) { free(cur); return NULL; }
+        char* dst_buf;
+        if (!cur) {                                 /* first moving axis */
+            cur = malloc(total * esz);
+            if (!cur) return NULL;
+            dst_buf = cur;
+        } else {
+            if (!tmp) {
+                tmp = malloc(total * esz);
+                if (!tmp) { free(cur); return NULL; }
+            }
+            src_buf = cur;
+            dst_buf = tmp;
         }
         size_t outer = nd_prod(dims, 0, ax);
         size_t inner = nd_prod(dims, ax + 1, rank) * esz;
         size_t slice = (size_t)d * inner;           /* bytes per outer block */
         for (size_t o = 0; o < outer; o++) {
-            const char* src = cur + o * slice;
-            char* dst = tmp + o * slice;
+            const char* src = src_buf + o * slice;
+            char* dst = dst_buf + o * slice;
             /* Rotating LEFT by r: out[i] = in[i + r]. Two contiguous runs. */
             size_t head = (size_t)(d - r) * inner;  /* in[r .. d) -> out[0 ..) */
             memcpy(dst, src + (size_t)r * inner, head);
             memcpy(dst + head, src, (size_t)r * inner);
         }
-        char* swap = cur; cur = tmp; tmp = swap;
+        if (dst_buf == tmp) { char* swap = cur; cur = tmp; tmp = swap; }
     }
     free(tmp);
+    if (!cur) {                                     /* no axis moved: a copy */
+        cur = malloc(total * esz);
+        if (!cur) return NULL;
+        memcpy(cur, a->data.ndarray.data, total * esz);
+    }
     return expr_new_ndarray_like(a, rank, dims, cur, dt);
 }
 

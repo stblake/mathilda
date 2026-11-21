@@ -7,6 +7,7 @@
 #include "parse.h"
 #include "print.h"
 #include "facint.h"   /* mth_is_prime_u64/_mpz: RandomPrime's (and PrimeQ's) test */
+#include "random.h"   /* random_push_seed / random_pop_seed */
 #include <gmp.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1420,6 +1421,39 @@ static void test_randomchoice_batch_stream(void) {
     assert_eval_eq("SeedRandom[3]; RandomChoice[{5}, 4]", "{5, 5, 5, 5}", 0);
 }
 
+/* v0.6662: random_pop_seed must not allocate.  It used to clear the live GMP
+ * state and rebuild it with gmp_randinit_set; that allocation is a
+ * TimeConstrained safe point, and a timeout taken there left the state cleared
+ * and half rebuilt, so a later clear freed the same buffers twice (SIGABRT in
+ * free under PossibleZeroQ's sampler -- bronstein_stress, under load).  The
+ * pop now moves the saved state into place and only frees.  Checked with a
+ * counting allocator wrapped around the installed one. */
+static void* (*rp_alloc0)(size_t);
+static void* (*rp_realloc0)(void*, size_t, size_t);
+static void  (*rp_free0)(void*, size_t);
+static int rp_allocs = 0;
+static void* rp_alloc(size_t n) { rp_allocs++; return rp_alloc0(n); }
+static void* rp_realloc(void* p, size_t a, size_t b) { rp_allocs++; return rp_realloc0(p, a, b); }
+static void  rp_free(void* p, size_t n) { rp_free0(p, n); }
+
+static void test_random_pop_seed_does_not_allocate(void) {
+    eval_to_int("SeedRandom[11]; RandomInteger[10^40]");   /* initialise the GMP stream */
+    random_push_seed(12345u);
+    mp_get_memory_functions(&rp_alloc0, &rp_realloc0, &rp_free0);
+    mp_set_memory_functions(rp_alloc, rp_realloc, rp_free);
+    rp_allocs = 0;
+    random_pop_seed();
+    int during_pop = rp_allocs;
+    mp_set_memory_functions(rp_alloc0, rp_realloc0, rp_free0);
+    ASSERT_MSG(during_pop == 0, "random_pop_seed made %d allocation(s)", during_pop);
+    /* and the restore is exact: a push/pop pair leaves the user's stream alone */
+    int64_t a = eval_to_int("SeedRandom[7]; RandomInteger[10^15]");
+    eval_to_int("SeedRandom[7]");
+    random_push_seed(999u); random_pop_seed();
+    int64_t b = eval_to_int("RandomInteger[10^15]");
+    ASSERT_MSG(a == b, "push/pop perturbed the stream: %lld vs %lld", (long long)a, (long long)b);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1541,6 +1575,7 @@ int main(void) {
     TEST(test_randomsample_sample_zero);
     TEST(test_randomchoice_rows_packed);
     TEST(test_randomchoice_batch_stream);
+    TEST(test_random_pop_seed_does_not_allocate);
 
     printf("All random tests passed!\n");
     return 0;

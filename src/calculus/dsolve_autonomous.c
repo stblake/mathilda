@@ -28,6 +28,7 @@
  */
 #include "dsolve_common.h"
 #include "integrate_elliptic.h"   /* integrate_elliptic_trig_indefinite */
+#include "integrate_chebychev.h"  /* integrate_chebychev_try */
 #include "dsolve.h"          /* g_dsolve_depth */
 #include "../sym_names.h"
 #include "../eval.h"
@@ -926,6 +927,26 @@ static Expr** ar_implicit_impl(DSolveProblem* P, size_t* nbranch, int mode) {
         if (!integ && may_spin) {
             Expr* ys = expr_new_symbol(Ysym);
             integ = integrate_elliptic_trig_indefinite(invp, ys);
+            /* Likewise a Chebyshev-elementary binomial x^m (a + b x^n)^p (the
+             * y-denominator radical y^2/Sqrt[y^3 (a + b y^3)] of 2.1.2-1168):
+             * the stage is a structural match plus one rational quadrature, so
+             * it cannot spin.  Kept only when D[F] re-checks to the integrand.
+             * C[k] become plain symbols for the attempt (as in
+             * ar_try_quadrature: the zero test samples symbols, not C[k]). */
+            if (!integ && !elliptic) {
+                Expr* sym = ar_symbolize_constants(expr_copy(invp), n, true);
+                Expr* F = integrate_chebychev_general_try(sym, ys);
+                if (F) {
+                    Expr* chk = eval_and_free(ds_call2(SYM_Subtract,
+                                    ds_d(expr_copy(F), expr_new_symbol(Ysym)),
+                                    expr_copy(sym)));
+                    bool ok = ds_is_zero(chk);
+                    expr_free(chk);
+                    if (ok) integ = ar_symbolize_constants(F, n, false);
+                    else expr_free(F);
+                }
+                expr_free(sym);
+            }
             expr_free(ys);
         }
         /* The early pass claims a branch whose quadrature is provably elliptic, or

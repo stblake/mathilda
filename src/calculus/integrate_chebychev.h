@@ -41,6 +41,15 @@
  * close.  Does NOT take ownership of `f` or `x`. */
 Expr* integrate_chebychev_try(Expr* f, Expr* x);
 
+/* As integrate_chebychev_try, but also accepts a base that is a binomial only
+ * after expansion, x^s (a x^r + b) (a monomial shared by both terms, or
+ * constants * x^s * binomial), normalised to x^(p + s q) (a x^r + b)^q times the
+ * locally constant base^q / (x^(s q) (a x^r + b)^q).  The cascade runs it AFTER
+ * DerivativeDivides, which keeps the integrand's own radical on shapes such as
+ * Sqrt[x + Sqrt[x]] where both close; the Method option, the package head and
+ * DSolve`AutonomousReduction's spin-guarded quadrature use it directly. */
+Expr* integrate_chebychev_general_try(Expr* f, Expr* x);
+
 /* `Integrate`ChebychevAlgebraic[f, x]` builtin.  Same algorithm as the cascade
  * entry.  Strict: returns NULL (unevaluated) when the integrand is not a
  * Chebychev binomial or the integral is non-elementary. */
