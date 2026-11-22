@@ -3,5 +3,6 @@ cyclic5 = {a + b + c + d + e, a b + b c + c d + d e + e a, a b c + b c d + c d e
 Length[GroebnerBasis[cyclic5, {a, b, c, d, e}]]
 GroebnerBasis[cyclic5, {a, b, c, d, e}, Method -> "F4"] === GroebnerBasis[cyclic5, {a, b, c, d, e}, Method -> "Buchberger"]
 Length[GroebnerBasis[cyclic5, {a, b, c, d, e}, Modulus -> 32003, MonomialOrder -> DegreeReverseLexicographic]]
+GroebnerBasis[{x^2 + y^2 - 1.5, x - 2.1 y}, {x, y}]
 GroebnerBasis[{x^2 + y^2 - 1, x - 2 y}, {x, y}, CoefficientDomain -> InexactNumbers[20]]
 GroebnerBasis[{x^2 + y^2 - r^2, x - t y}, {x, y}, CoefficientDomain -> RationalFunctions]

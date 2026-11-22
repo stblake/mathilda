@@ -914,13 +914,21 @@ A third outcome, a \emph{decline}, prints nothing: an approximate number, a
 non-elementary function in the input, or a budget that ran out. The integral is
 returned unevaluated.
 
-\calloutnote{Performance}{Holding the certificate has a cost. Because the
-special-function stages still run after a proof, a non-elementary integrand pays
-for them. On this build, \(\int dx/(x\sqrt{x^3+ax+1})\) takes about 11~s in the
-full cascade and under 1~s with \texttt{Method -> "Trager"}, with the same
-verdict; Chebyshev's \(\sqrt x\,(x+1)^{1/3}\) takes about 8~s against under 1~s.
-That is why the examples above that end in a proof name the method. When you
-expect a ``no,'' ask the decision procedure directly.}
+\calloutnote{Performance}{A proof does not end the cascade. The stages after it
+may still find a special-function antiderivative, as one does for
+\(1/\sqrt{1-x^4}\) (an \B{EllipticF}), so they cannot simply be skipped, and a
+non-elementary integrand pays for whatever they try. The certificate itself is
+cheap; the cost is in those later stages, and it depends on the integrand. On this
+build \(\int dx/(x\sqrt{x^3+ax+1})\) takes about 16~s in the full cascade against
+under 0.1~s with \texttt{Method -> "Trager"}, with the same verdict. Nearly all of
+it is ParallelMixedSpecial: it finds a special-function antiderivative quickly, then
+spends its time building the elliptic integral of the third kind over the cubic's
+irrational roots, until its budget cuts it off. Chebyshev's
+\(\sqrt x\,(x+1)^{1/3}\) takes about 7~s against under 0.1~s, spent in
+DerivativeDivides (about 1.7~s) and the Roach MeijerG stage (about 5~s).
+(\texttt{MATHILDA\_INTEGRATE\_PROFILE=1} in the environment prints this per-stage
+breakdown.) That is why the slower examples above that end in a proof name the method. When
+you expect a ``no,'' ask the decision procedure directly.}
 
 \subsection{How it compares}
 \label{ssec:int-fricas}
@@ -973,8 +981,11 @@ transcript below shows where those classes end today.
 \(\log(1+\sqrt{\log x})/x\): the decision procedure reports it incomplete.}
 \pair{integration/cascade/4}{The cascade closes this one anyway, by the
 substitution \(u=\log x\). Not every case has such a route.}
-\pair{integration/cascade/5}{A nested radical: incomplete.}
-\pair{integration/cascade/6}{\(\int\sqrt{\tan x}\) over \(\mathbb{Q}(i)\) by
+\pair{integration/cascade/5}{A nested radical: incomplete, for Bronstein's
+method.}
+\pair{integration/cascade/6}{The full cascade decides it all the same:
+ParallelMixedTower's rigorous certificate proves it non-elementary.}
+\pair{integration/cascade/7}{\(\int\sqrt{\tan x}\) over \(\mathbb{Q}(i)\) by
 \texttt{"Bronstein"} carries \B{Root} objects. (ParallelMixedTower gives the real
 form shown in \S\ref{sec:int-pmt}.)}
 \end{codepairs}
@@ -989,8 +1000,10 @@ radical inside a logarithm, with the radicand itself transcendental. Bronstein's
 method reports \texttt{Integrate::incomplete}. The general case is the unfinished
 part of Phase~5.
 \item \emph{Nested radicals.} \(\sqrt{\log x+\sqrt{\log x}}\) is outside one simple
-radical extension, and is incomplete. Several square roots with two or more
-non-elementary support groups are also undecided.
+radical extension, and Bronstein's method reports it incomplete; this one the
+cascade still proves non-elementary through ParallelMixedTower (pair~6), but the
+class is open. Several square roots with two or more non-elementary support groups
+are also undecided.
 \item \emph{Answers over \(\mathbb{Q}(i)\)} from Trager and Bronstein carry
 \B{Root} objects of the residue field, with no radicals and no real form.
 \item \emph{\mcode{Risch\textasciigrave ElementaryIntegralQ} is

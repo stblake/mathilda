@@ -839,8 +839,8 @@ needs \(101\) bits, the leading one plus a hundred zeros.}
 
 The binary digits can also be operated on directly. \mcode{BitAnd}, \mcode{BitOr},
 \mcode{BitXor} and \mcode{BitNot}\index{bitwise operations} combine integers bit by bit;
-\mcode{BitSet} and \mcode{BitGet} write and read single bits (bit \(0\) is the units
-bit); and \mcode{BitShiftLeft} and \mcode{BitShiftRight} multiply and divide by powers of
+\mcode{BitSet}, \mcode{BitClear}\index{BitClear@\mcode{BitClear}} and \mcode{BitGet}
+set, clear and read single bits (bit \(0\) is the units bit); and \mcode{BitShiftLeft} and \mcode{BitShiftRight} multiply and divide by powers of
 two. All of them work on integers of any size, and a negative integer behaves as its
 \emph{two's complement}\index{two's complement!unlimited width} with infinitely many
 leading ones:
@@ -856,12 +856,15 @@ so \(\lnot n=-n-1\).}
 gives \(11111000_2=248\).}
 \pair{number-theory/bitwise/6}{\mcode{BitSet} turns on bit \(100\) of zero.}
 \pair{number-theory/bitwise/7}{\mcode{BitGet} reads several bits at once.}
-\pair{number-theory/bitwise/8}{There is no separate bit-clearing function: mask with
-the complement. Clearing bits \(0\) and \(7\) of \(255\) leaves \(126\).}
+\pair{number-theory/bitwise/8}{\mcode{BitClear} turns a bit off. It is listable, so
+a list of bit positions gives one result per position: \(255\) without bit \(0\) is
+\(254\), and without bit \(7\) it is \(127\).}
 \pair{number-theory/bitwise/9}{A left shift by \(70\) is multiplication by \(2^{70}\),
 past the machine word without comment.}
 \pair{number-theory/bitwise/10}{A right shift is division by a power of two
 \emph{truncated toward zero}, \(\mathrm{IntegerPart}(n/2^{k})\): \(-5\) shifts to \(-2\).}
+\pair{number-theory/bitwise/11}{Clearing works in two's complement too: \(-1\) is all
+ones, and without bit \(3\) it is \(\ldots11110111_2=-9\).}
 \end{codepairs}
 
 \calloutnote{Pitfall}{Pair~10 is where the two's complement picture and the arithmetic

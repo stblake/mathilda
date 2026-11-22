@@ -512,6 +512,8 @@ answer would hide that zero, so the Pochhammer form is returned. It is right for
 every \(n\): \((-2)_n\) is \(0\) from \(n=3\) on.}
 \pair{calculus/sums/10}{With a symbolic pole \(m\) that the range may or may not
 reach, the sum is left alone.}
+\pair{calculus/sums/11}{The interior zero at \(k=3\) is harmless here:
+\(\sum_{k\ge0}(k-3)^2/k! = 5e\).}
 \end{codepairs}
 
 The first gate reads the integer poles of the summand off the linear factors of its
@@ -533,14 +535,16 @@ one. Each failure is either fixed or kept in a checked-in baseline, and the base
 may only shrink. The campaign removed some twenty silent wrong answers, among them
 \(\sum_{k\ge1}1/(k-3)^2 = 5/4+\pi^2/6\) (the \(k=3\) term is infinite) and
 \(\sum_k (k-3)^2/k!\), which was cut off at the interior zero \(k=3\) and returned
-as \(27/2\) instead of \(5e\).}
+as \(27/2\) instead of \(5e\). The fix made it correct but left an unreduced
+hypergeometric tail; since v0.6676 a polynomial times \(x^k/k!\) is expanded in
+falling factorials and summed in closed form, which gives \(5e\) (pair~11).}
 
 \B{HarmonicNumber}\index{harmonic number} is the finite partner of the divergent
 series in pair~6, \(H_n = \sum_{k=1}^n 1/k\).
 
 \begin{codepairs}
-\pair{calculus/sums/11}{\(H_{10}\) is an exact rational.}
-\pair{calculus/sums/12}{\(H_{10^5}\) to thirty digits. The exact rational has a
+\pair{calculus/sums/12}{\(H_{10}\) is an exact rational.}
+\pair{calculus/sums/13}{\(H_{10^5}\) to thirty digits. The exact rational has a
 denominator of more than 43\,000 digits, and the value is computed in a fraction of
 a second.}
 \end{codepairs}
@@ -626,8 +630,8 @@ answer is the special function named for it, \B{Erf}.}
 \pair{calculus/integrate-intro/3}{An algebraic function on a curve of genus~3,
 integrated by Trager's algorithm.}
 \pair{calculus/integrate-intro/4}{\(\int\sqrt{x+\log x}\,dx\): a radical over a
-logarithm. Bronstein's algorithm proves it is not elementary, and the message is
-the proof's verdict.}
+logarithm. The cascade proves it is not elementary (Bronstein's algorithm is the
+decision procedure for this shape), and the message is the proof's verdict.}
 \end{codepairs}
 
 Chapter~\ref{ch:integration} explains each of these: rational functions
@@ -755,6 +759,21 @@ part that survives. Pair~8 is the \(d=1\) member of a family closed as a whole,
 \(\mathrm{PV}\!\int_0^\infty x^{c-1}/(1-x^d)\,dx=(\pi/d)\cot(\pi c/d)\) for \(0<c<d\):
 the formula is matched directly, because the \(d\)-th roots of unity that are the
 poles cannot be enumerated for a symbolic \(d\).}
+
+The poles themselves may be symbolic, as long as the assumptions place them inside the
+interval and, when there are several, put them in order:\index{Cauchy principal
+value!symbolic poles}
+
+\begin{codepairs}
+\pair{calculus/contour/10}{One symbolic pole \(b\) in \((-1,1)\):
+\(\log(1-b)-\log(1+b)\), real for every admissible \(b\).}
+\pair{calculus/contour/11}{Two poles, ordered by the chain \(-1<a<b<1\). The
+principal value is the sum of one piece per pole\ldots}
+\pair{calculus/contour/12}{\ldots which \B{Simplify} collects over the common factor
+\(1/(a-b)\) from the partial fractions.}
+\pair{calculus/contour/13}{At \(a=-\tfrac13\), \(b=\tfrac12\) it agrees with the
+principal value computed from the numeric poles.}
+\end{codepairs}
 
 Finally, differentiation under the integral sign---\emph{Feynman's
 trick}\index{Feynman's trick}\index{differentiation under the integral sign}---is
@@ -1045,10 +1064,15 @@ The one-sided Laplace transform\index{Laplace transform}
 \]
 turns differentiation into multiplication by \(s\), which is why engineers use it
 to solve linear differential equations with step and impulse forcing.
-\mcode{LaplaceTransform[f, t, s]} computes it in four steps. It applies linearity
+\mcode{LaplaceTransform[f, t, s]} computes it by a few rules. It applies linearity
 and threads over lists. It moves an exponential factor into a shift,
-\(e^{at+b}g(t) \mapsto e^b G(s-a)\). It sends a \(t\)-free term \(c\) to \(c/s\).
-Anything else goes to the defining integral, under the assumption \(s>0\):
+\(e^{at+b}g(t) \mapsto e^b G(s-a)\), and writes \(\cosh\) and \(\sinh\) of a linear
+argument as two such shifts. It sends a \(t\)-free term \(c\) to \(c/s\), and a
+derivative \(f^{(n)}(t)\) of an unknown function to
+\(s^n\mathcal{L}[f]-s^{n-1}f(0)-\dots-f^{(n-1)}(0)\). Anything else goes to the
+defining integral, under the assumption \(s>0\). When that integral converges only on
+a condition, the generic value is the transform, because the transform is defined
+where it converges:
 
 \begin{codepairs}
 \pair{calculus/laplace/1}{The power rule, \(\mathcal{L}[t^n] = n!/s^{n+1}\), at
@@ -1057,7 +1081,9 @@ Anything else goes to the defining integral, under the assumption \(s>0\):
 \pair{calculus/laplace/3}{The shift theorem moves \(e^{3t}\) into \(s-3\).}
 \pair{calculus/laplace/4}{A damped cosine: the shift \(s \mapsto s+2\) applied to
 \(s/(1+s^2)\).}
-\pair{calculus/laplace/5}{A symbolic frequency needs its sign.}
+\pair{calculus/laplace/5}{A symbolic frequency. The defining integral converges
+only for \(\operatorname{Re} s>|\operatorname{Im} b|\); the transform is the value
+there.}
 \pair{calculus/laplace/6}{A symbolic power gives \(\Gamma(n+1)/s^{n+1}\) for
 \(n>-1\).}
 \pair{calculus/laplace/7}{A delayed step: \(e^{-2s}/s\).}
@@ -1068,20 +1094,29 @@ of \(\mathcal{L}[\sin t]\) from \(s\) to \(\infty\).}
 \pair{calculus/laplace/10}{A logarithm brings in Euler's constant.}
 \pair{calculus/laplace/11}{A rectified sine, periodic with period \(\pi\):
 \((1+e^{\pi s})/\bigl((e^{\pi s}-1)(1+s^2)\bigr)\).}
-\pair{calculus/laplace/12}{\(\cosh 2t\) grows like \(e^{2t}\). Its defining
-integral does not converge for every \(s>0\), so the transform is returned
-unevaluated.}
+\pair{calculus/laplace/12}{\(\cosh 2t\) grows like \(e^{2t}\), so its transform
+exists only for \(s>2\). Written as \((e^{2t}+e^{-2t})/2\), it is two shifts of
+\(1/s\).}
+\pair{calculus/laplace/13}{The derivative rule, \(\mathcal{L}[f'] = s\,\mathcal{L}[f]
+- f(0)\)\ldots\index{Laplace transform!derivative rule}}
+\pair{calculus/laplace/14}{\ldots and its second-order form, with \(f'(0)\) printed
+as \texttt{Derivative[1][f][0]}.}
+\pair{calculus/laplace/15}{So a linear equation with constant coefficients,
+\(y'+2y=1\), becomes an algebraic equation in \(Y=\mathcal{L}[y]\).}
+\pair{calculus/laplace/16}{With \(y(0)=0\), \B{Solve} gives \(Y = 1/(s(s+2))\).}
+\pair{calculus/laplace/17}{\B{Apart} splits it into terms from the table:
+\(1/(2s)\) is the transform of \(\tfrac12\), and \(-1/(2(s+2))\) that of
+\(-\tfrac12e^{-2t}\).}
+\pair{calculus/laplace/18}{So \(y = (1-e^{-2t})/2\), and its transform checks.}
 \end{codepairs}
 
-\calloutnote{Pitfall}{Pair~12 is a real limitation, not a divergence. The transform
-of \(\cosh 2t\) is \(s/(s^2-4)\) on \(s>2\), but the defining integral is attempted
-only under \(s>0\), so a kernel that grows exponentially is declined. Write it as
-exponentials (\B{TrigToExp}) and the shift rule applies term by term. Two more gaps
-are worth knowing. There is no \mcode{InverseLaplaceTransform}. And the transform of
-an unknown function's derivative, \mcode{LaplaceTransform[f'[t], t, s]}, is not
-rewritten as \(s\,\mathcal{L}[f] - f(0)\). So the transform is not yet a route to
-solving a differential equation. For that, \B{DSolve} has its own step and impulse
-solvers (\S\ref{ssec:calc-dsolve}).}
+\calloutnote{Pitfall}{There is no \mcode{InverseLaplaceTransform} yet, so the last
+step of pairs~15--18, from \(Y(s)\) back to \(y(t)\), is yours: split \(Y\) with
+\B{Apart} and read each term off a table, as pair~17 does, then check the guess by
+transforming it forward. Note too that \mcode{LaplaceTransform} does not thread over
+an equation; transform each side, as pair~15 does. For solving a differential
+equation outright, \B{DSolve} has its own step and impulse solvers
+(\S\ref{ssec:calc-dsolve}).}
 
 \subsection{Differential equations}
 \label{ssec:calc-dsolve}
@@ -1198,8 +1233,8 @@ the right moment. The same block shows three
 newer tools for variable-coefficient and nonlinear equations:
 
 \begin{codepairs}
-\pair{calculus/dsolve-forcing/1}{A step switched on at \(t=1\). Every term carries
-the factor \(\theta(t-1)\), so the solution is zero before the step and
+\pair{calculus/dsolve-forcing/1}{A step switched on at \(t=1\). The answer is
+collected by its step, \((1-e^{1-t})\,\theta(t-1)\): zero before the step and
 \(1-e^{1-t}\) after it.}
 \pair{calculus/dsolve-forcing/2}{An impulse at \(t=3\) kicks the decaying solution
 up by \(e^{-2(t-3)}\).}

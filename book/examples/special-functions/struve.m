@@ -13,3 +13,6 @@ BesselJ[0, N[BesselJZero[0, 1], 30]]
 StruveH[1/2, x]
 StruveH[-1/2, x]
 D[StruveH[nu, x], x]
+# At order 0 the recurrence closes on itself; a negative integer order reduces to a positive one
+D[StruveH[0, x], x]
+StruveH[-2, x]

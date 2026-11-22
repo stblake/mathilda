@@ -660,6 +660,11 @@ which is also \(J_{1/2}(x)\).}
 \pair{special-functions/struve/11}{The derivative follows from the recurrence
 \(2\mathbf H_\nu'=\mathbf H_{\nu-1}-\mathbf H_{\nu+1}+(x/2)^\nu/(\sqrt\pi\,
 \Gamma(\nu+\tfrac32))\).}
+\pair{special-functions/struve/12}{At \(\nu=0\) the same recurrence, with
+\(\mathbf H_{-1}=2/\pi-\mathbf H_1\), gives \(\mathbf H_0'=2/\pi-\mathbf H_1\), the
+Struve analogue of \(J_0'=-J_1\).}
+\pair{special-functions/struve/13}{A negative integer order is reduced to positive
+orders by the same recurrence, run downward.}
 \end{codepairs}
 
 FLINT, which backs most of this section's arbitrary-precision numerics, ships no Struve
@@ -763,14 +768,19 @@ there.}
 \pair{special-functions/hankel/8}{The spherical Hankel pair are complex conjugates on
 the positive axis.}
 \pair{special-functions/hankel/9}{The derivative, from the recurrence.}
+\pair{special-functions/hankel/10}{\mcode{FunctionExpand} gives the elementary form of
+pair~7 symbolically.}
+\pair{special-functions/hankel/11}{It does the same for \(y_1\) and for the
+spherical Hankel functions: \(h^{(1)}_0(z)=-ie^{iz}/z\), written in \(\sin\) and
+\(\cos\).}
+\pair{special-functions/hankel/12}{And for the ordinary Hankel functions at
+half-integer order: \(H^{(1)}_{1/2}(z)=\sqrt{2/(\pi z)}\,(\sin z-i\cos z)\).}
 \end{codepairs}
 
 \calloutnote{Pitfall}{Mathilda leaves \mcode{SphericalBesselJ[2, z]} unevaluated, by
-design, but it does not yet rewrite it into its elementary form
-under \mcode{FunctionExpand} either---\mcode{FunctionExpand[SphericalBesselJ[1, z]]}
-comes back unchanged. When you want \(\sin\) and \(\cos\), write
-\mcode{Sqrt[Pi/(2 z)] BesselJ[n + 1/2, z]}, which the half-integer rule of
-\S\ref{ssec:sf-bessel} reduces.}\calloutnote{Under the hood}{All thirteen heads
+design, as pair~5 shows, even though its elementary form is known. Evaluation keeps the
+compact head; the rewrite into \(\sin\) and \(\cos\) is something you ask for, with
+\mcode{FunctionExpand} (pairs~10--12).}\calloutnote{Under the hood}{All thirteen heads
 (\mcode{StruveL}, \mcode{AngerJ}, \mcode{WeberE} and the Kelvin functions, v0.6204; the
 Hankel family, v0.6478) have one raw-double kernel each, shared bit for bit by the
 scalar call, packed arrays, \mcode{NDArray} and \mcode{Compile}. \mcode{StruveL}'s
@@ -1156,7 +1166,9 @@ survives.}
 \pair{special-functions/theta/2}{\(\vartheta_1(0,q)=0\), returned with the condition
 under which the series exists.}
 \pair{special-functions/theta/3}{A machine value.}
-\pair{special-functions/theta/4}{Thirty digits.}
+\pair{special-functions/theta/4}{Thirty digits of \(\vartheta_1(\tfrac12,\tfrac1{10})\).
+At real \(u\) and \(0<q<1\) the value is real at every precision; until v0.6674 the
+arbitrary-precision path left an imaginary residue of order \(10^{-49}\) on it.}
 \pair{special-functions/theta/5}{The \(u\)-derivative has its own head.}
 \pair{special-functions/theta/6}{A thirty-digit nome\ldots}
 \pair{special-functions/theta/7}{\ldots for Jacobi's quartic identity

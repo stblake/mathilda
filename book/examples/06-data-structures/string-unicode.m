@@ -15,3 +15,7 @@ ToCharacterCode[SymbolName[\[Mu]]]
 # The linear box syntax \!\( ... \) reads boxes as the expressions they display (v0.6001).
 \!\(\*FractionBox[\(1\), \(2\)]\) + \!\(\*SqrtBox[\(16\)]\)
 FullForm[\!\(\*SubscriptBox[\(x\), \(1\)]\)]
+# The short infix operators of linear syntax are read too (v0.6673).
+{\!\(x\^2\), \!\(y\_1\)}
+\!\(1\/2\) + \!\(\@16\)
+FullForm[{\!\(x\_a\%b\), \!\(x\&y\), \!\(x\+y\)}]

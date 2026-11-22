@@ -2,4 +2,4 @@
 Integrate[1/(x^4 + x^2 + 1), x]
 Integrate[Exp[-x^2], x]
 Integrate[1/(x^4 + 1)^(1/4), x]
-Check[Integrate[Sqrt[x + Log[x]], x, Method -> "Bronstein"], Last[$MessageList]]
+Check[Integrate[Sqrt[x + Log[x]], x], Last[$MessageList]]

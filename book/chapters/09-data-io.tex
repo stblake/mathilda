@@ -16,10 +16,10 @@ genuine, Mathematica-shaped \emph{stream layer}---you open a file, get a stream
 object, and read or write through it---together with \B{ReadList} for reading a
 data file field by field, \B{Get} and \B{Put} for saving and reloading whole
 Mathilda expressions, a working-directory and file-system layer (listing,
-testing, and deleting files), and \B{Import}/\B{Export} for raster images and
-graphics, with \mcode{Import} reading plain text as well. What does \emph{not} yet exist is just as important to know:
-\mcode{Import} reads no structured data format---no CSV, JSON, or spreadsheet
-(\S\ref{sec:io-importexport})---and \mcode{Export} writes none; there is no binary
+testing, and deleting files), and \B{Import}/\B{Export} for raster images,
+graphics, and plain text. What does \emph{not} yet exist is just as important to know:
+neither \mcode{Import} nor \mcode{Export} handles a structured data format---no CSV,
+JSON, or spreadsheet (\S\ref{sec:io-importexport}); there is no binary
 read/write; and of the file-management verbs only deleting is there, not copying,
 renaming, or creating a directory. Where a gap matters, this chapter names it
 rather than papering over it.
@@ -409,8 +409,8 @@ the shape rather than print a value that differs between machines.}
 A reader coming from Mathematica will expect \mcode{Import} and \mcode{Export} to be the
 universal front door for data---CSV, JSON, spreadsheets, and a hundred other
 formats. In Mathilda today they are far narrower, and it is important to be plain
-about it: they handle raster images and graphics, and \mcode{Import} also reads plain
-text. An image round-trips cleanly through a file---
+about it: they handle raster images, graphics, and plain text. An image round-trips
+cleanly through a file---
 
 \begin{codepairs}
 \pair{09-data-io/importexport/2}{\mcode{Export} writes an image to a PNG and returns
@@ -420,34 +420,52 @@ the round trip.}
 \end{codepairs}
 
 \noindent
----and a text file comes in as a string, or as a list of lines.\index{Import@\mcode{Import}!text}
-A file ending in \texttt{.txt} imports as text by default; for any other name you
-ask for the element you want by naming it as a second argument:
+---and so does text.\index{Import@\mcode{Import}!text}\index{Export@\mcode{Export}!text}
+A file ending in \texttt{.txt} is written and read as \texttt{"Text"} by default; for
+any other name you say which element you mean by naming it as an extra argument:
 
 \begin{codepairs}
-\pair{09-data-io/importexport/7}{A \texttt{.txt} file imports as \texttt{"Text"}:
+\pair{09-data-io/importexport/4}{\mcode{Export} writes a string to a \texttt{.txt}
+file, ending it with a line break, and returns the file name.}
+\pair{09-data-io/importexport/5}{A \texttt{.txt} file imports as \texttt{"Text"}:
 the contents as one string. (Shown in input form, the line breaks print as
 \texttt{\textbackslash n}.)}
-\pair{09-data-io/importexport/8}{\texttt{"Lines"} gives one string per line.}
-\pair{09-data-io/importexport/9}{\texttt{"Text"} drops one trailing line break:
+\pair{09-data-io/importexport/6}{\texttt{"Lines"} gives one string per line.}
+\pair{09-data-io/importexport/7}{\texttt{"Text"} drops one trailing line break:
 \(22\) characters\ldots}
-\pair{09-data-io/importexport/10}{\ldots where \texttt{"String"} keeps the file
+\pair{09-data-io/importexport/8}{\ldots where \texttt{"String"} keeps the file
 exactly, \(23\). Line ends are normalised to \texttt{\textbackslash n} in all three.}
-\pair{09-data-io/importexport/11}{From lines to numbers is ordinary string work:
+\pair{09-data-io/importexport/9}{From lines to numbers is ordinary string work:
 split each line into words, keep the last, and convert.}
+\pair{09-data-io/importexport/10}{A string that already ends in a line break\ldots}
+\pair{09-data-io/importexport/11}{\ldots still round-trips: \texttt{"Text"} adds one
+line break on the way out and removes one on the way in, so
+\texttt{Import[Export[f, s], "Text"]} is \texttt{s} exactly.}
+\pair{09-data-io/importexport/12}{\texttt{"Lines"} writes a list of strings, one per
+line. The name has no recognised extension, so the format is given.}
+\pair{09-data-io/importexport/13}{Read back as \texttt{"String"}, the file is exactly
+those lines, each with its line break.}
+\pair{09-data-io/importexport/14}{An expression that is not a string is written as it
+prints\ldots}
+\pair{09-data-io/importexport/15}{\ldots so it comes back as text, not as the
+expression. Use \mcode{Put} and \mcode{Get} to save an expression itself.}
+\pair{09-data-io/importexport/16}{A directory that does not exist is reported with
+\texttt{Export::nodir}, and the result is \mcode{\$Failed}.}
 \end{codepairs}
 
 \noindent
-A structured data format is not something either function claims, and they say so
-by declining rather than guessing:
+The other failures are named too: \texttt{OpenWrite::noopen} for a file that cannot be
+opened for writing, and \texttt{Export::infer} for a name with no extension and no
+format to say what to write. A structured data format is not something either
+function claims, and they say so by declining rather than guessing:
 
 \begin{codepairs}
-\pair{09-data-io/importexport/12}{Asked for \texttt{"CSV"}, \mcode{Import} stays
+\pair{09-data-io/importexport/17}{Asked for \texttt{"CSV"}, \mcode{Import} stays
 unevaluated---its head comes back as \texttt{Import}, the sign of a call left
 alone, not a \mcode{\$Failed}.}
-\pair{09-data-io/importexport/13}{Likewise \mcode{Export} declines to write a bare list
+\pair{09-data-io/importexport/18}{Likewise \mcode{Export} declines to write a bare list
 to a \texttt{.csv}: there is no data-format writer behind it yet.}
-\pair{09-data-io/importexport/14}{A file that does not exist is different: that is
+\pair{09-data-io/importexport/19}{A file that does not exist is different: that is
 a failure, reported with an \texttt{Import::nffil} message and \mcode{\$Failed}.}
 \end{codepairs}
 
@@ -457,7 +475,7 @@ the graphics story, which the graphics chapter (Chapter~\ref{ch:graphics}, still
 being written) will tell; until then the \mcode{Import} and \mcode{Export}
 reference pages are the full account. For structured \emph{data}, the honest advice is to reach for the
 tools of this chapter instead: \mcode{Import} or \mcode{ReadString} to get text into
-the session, \mcode{ReadList} with the right separators for tabular text, and
+the session and \mcode{Export} or \mcode{WriteString} to write it out, \mcode{ReadList} with the right separators for tabular text, and
 \mcode{Put}/\mcode{Get} for anything expressible as Mathilda expressions. A general
 format layer is future work, not a present feature.
 

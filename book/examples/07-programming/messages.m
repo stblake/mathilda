@@ -6,7 +6,7 @@ Check[1/0, "caught", Power::indet]
 Quiet[{1/0, 0^0}, {Power::infy}]
 Check[Quiet[1/0], "caught"]
 Quiet[Check[1/0, "caught"]]
-Block[{$MessageList = {}}, 1/0; 0^0; $MessageList]
+1/0; 0^0; $MessageList
 nonneg::neg = "Argument `1` should be non-negative.";
 safeSqrt[x_] := (If[x < 0, Message[nonneg::neg, x]]; Sqrt[Abs[x]])
 Check[safeSqrt[-4], $Failed]

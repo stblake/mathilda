@@ -1,3 +1,30 @@
+# Kernel fixes for the book-pass findings (started 2026-11-22)
+
+Plan: ~/.claude/plans/mathilda-has-grown-significant-sharded-brooks-of-765472b2-95d0-4752-97b9-a881e445cda8.md
+7 worktree workers, one commit per bug, lead integrates serially with +0.0001 bumps and tags.
+Dropped: ReadString (matches expected). B9 not a regression (moved to FullSimplify v0.6178).
+
+- [x] W1 core-io: B1 pipe $MessageList, B2 PatternTest printing, B4 kernel package contexts, B5 Dispatch compound keys, B6 linear box infix escapes
+- [x] W2 rules-deriv: B3 RHS-condition listing, B15 Derivative[n][builtin], B23 StruveH negative order
+- [x] W3 io-bitwise: B7 Export text, B10 BitClear (+ND/compile)
+- [x] W4 algebra: B8 inexact GroebnerBasis, B21 Refine chain, B22 Simplify E^x factor
+- [x] W5 special-sums: B11 theta real, B12 FunctionExpand spherical/Hankel, B17 Sum 5E, B20 PolyGamma even order
+- [x] W6 integration: B18 nonelem gates PMS, B19 log-to-arctanh real, B26 lazy reload, D1 calculus.md stages
+- [x] W7 calc-numerics: B13 wavelet NIntegrate, B14 FindRoot exp, B16 Laplace, B24 PV, B25 DSolve step
+- [x] Integrate serially (bump, changelog, tag), rebuild, re-verify each repro
+- [ ] Book: remove workarounds, mark FIXED in BOOK_UPDATE_REVIEW.md, make pdf
+
+Review (2026-11-22): 23 fixes on main, v0.6666-v0.6688, one tagged commit each, every repro
+re-verified on the rebuilt binary; union of 33 touched suites green; check-messages/check-c99 OK;
+valgrind identical to the trivial-script baseline (13,440 B definitely lost, 584 errors).
+Declined with cause: B9 (deliberately FullSimplify since v0.6178), B18 (time is real
+elliptic third-kind work; gating PMS would lose EllipticF answers), B20 (PolyGamma[2,1] stays
+by design; FunctionExpand gives -2 Zeta[3]), ReadString (expected).
+Left open: InverseLaplaceTransform (deferred by user); machine-path Piecewise breakpoints in
+NIntegrate; LaplaceTransform of UnitStep[t-a] (unsigned a) and DiracDelta[t-a]; Export of
+an unimplemented named format stays unevaluated; \!\(\^x\) (empty operand) still a syntax
+error; Log[E^x] left in some exponential antiderivatives (1/(2+3E^x)).
+
 # Book update pass v0.507 -> v0.6664 (started 2026-11-22)
 
 Plan: ~/.claude/plans/mathilda-has-grown-significant-sharded-brooks-of-765472b2-95d0-4752-97b9-a881e445cda8.md

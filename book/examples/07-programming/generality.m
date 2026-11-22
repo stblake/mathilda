@@ -10,3 +10,7 @@ s[x_ /; x > 0] := "positive"
 s[x_] := "anything"
 s[x_?NumberQ] := "number"
 {s[5], s[-5], s[a]}
+DownValues[k]
+q[x_, y_] := "first is larger" /; x > y
+{q[3, 1], q[1, 3]}
+DownValues[q]

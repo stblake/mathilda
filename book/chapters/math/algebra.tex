@@ -501,9 +501,12 @@ elements; it is computed in a few tens of milliseconds.}
 basis is unique.}
 \pair{algebra/groebner-engines/4}{Over $\mathrm{GF}(32003)$ the degree-reverse-lexicographic
 basis has $20$ elements, computed by F4 in a few milliseconds.}
-\pair{algebra/groebner-engines/5}{\texttt{CoefficientDomain -> InexactNumbers[20]} gives a
-basis with $20$-digit coefficients.}
-\pair{algebra/groebner-engines/6}{\texttt{CoefficientDomain -> RationalFunctions} treats
+\pair{algebra/groebner-engines/5}{Machine-precision coefficients in the input give a
+basis with machine-precision coefficients; the domain is read off the input.}
+\pair{algebra/groebner-engines/6}{Exact input can be computed inexactly on request:
+\texttt{CoefficientDomain -> InexactNumbers[20]} gives a basis with $20$-digit
+coefficients.}
+\pair{algebra/groebner-engines/7}{\texttt{CoefficientDomain -> RationalFunctions} treats
 the other symbols, here $r$ and $t$, as parameters: the basis is over
 $\mathbb{Q}(r,t)$.}
 \end{codepairs}
@@ -1055,6 +1058,8 @@ one form that holds for either sign.}
 positive: $\B{Log}$ of $xy$ becomes $\log x+\log y$.}
 \pair{algebra/refine/5}{\B{Assuming} puts a fact into scope for everything inside it, so
 the two sign assumptions combine---$\sqrt{x^2y^2}=|x|\,|y|=-xy$ when $x>0$ and $y<0$.}
+\pair{algebra/refine/6}{Sign facts follow along a chain of inequalities: $a>b>0$ gives
+$a>0$ by transitivity, so $\sqrt{a^2}=a$.\index{assumptions!inequality chains}}
 \end{codepairs}
 
 Refine does more than rewrite. It will \emph{decide} a relation---an equation, an
@@ -1248,12 +1253,29 @@ coefficients indexed by the monomials in $S$ and in $T$.}
 
 \noindent A rank-one answer would be a product of a factor in $S$ and a factor in $T$,
 which is simply a factorization; the decomposition earns its keep when the rank is two or
-more.\calloutnote{Pitfall}{\texttt{Simplify} has a stage that is meant to try this
-decomposition after \B{Factor}, on exact polynomials in two to five variables, keeping
-it only when it is a genuine sum and strictly smaller. On the build that produced this
-book the stage does not reach the decomposed form, even for the polynomial of pair~10:
-\texttt{Simplify} returns a collected form of $44$ leaves against the decomposition's $23$. Until that is repaired,
-call \mcode{SeparablePolynomialDecomposition} yourself.}
+more. \texttt{FullSimplify} tries the decomposition for you, on an exact polynomial of
+at least four terms in two to five variables, over every split of the variables, and
+keeps it when it is a genuine sum of separated products and the result is smaller:
+
+\begin{codepairs}
+\pair{algebra/simplify-engines/11}{A polynomial of rank two in the split
+$\{a,b\}$, $\{x,y\}$, expanded.}
+\pair{algebra/simplify-engines/12}{It has $251$ leaves expanded, and
+\texttt{Simplify} brings it only to $197$\ldots}
+\pair{algebra/simplify-engines/13}{\ldots while \texttt{FullSimplify} finds the
+separated form, with each product factored\ldots}
+\pair{algebra/simplify-engines/14}{\ldots in $38$ leaves.}
+\end{codepairs}
+
+\calloutnote{Performance}{The decomposition is a \texttt{FullSimplify} transform, not a
+\texttt{Simplify} one, by design. It was a \texttt{Simplify} stage until v0.6178, where
+it was measured adding $26\%$ to \texttt{Simplify}'s time on a $63$-case polynomial
+corpus ($0.78$~s to $0.98$~s), a cost paid on every polynomial for a form that few of
+them have. So
+\texttt{Simplify} stays fast and leaves the search to \texttt{FullSimplify}, the
+function whose contract is to try harder; or call
+\mcode{SeparablePolynomialDecomposition} yourself when you know the split.}
+\index{FullSimplify@\mcode{FullSimplify}!separable decomposition}
 
 \subsection{Is it zero?}
 \label{ssec:alg-possiblezeroq}

@@ -719,11 +719,27 @@ evaluate.}
 \texttt{Subscript}.}
 \end{codepairs}
 
-\calloutnote{Pitfall}{Only the explicit box forms, \texttt{\textbackslash*Box[\ldots]}
-inside \texttt{\textbackslash!\textbackslash(\ldots\textbackslash)}, are read. The
-short operators of linear syntax, such as \texttt{\textbackslash\^{}} for a superscript
-in \texttt{\textbackslash!\textbackslash(x\textbackslash\^{}2\textbackslash)}, are
-not, and that input is a syntax error.}
+The explicit \texttt{\textbackslash*Box[\ldots]} forms are what a notebook writes, but
+linear syntax also has short infix operators, and you are more likely to type those
+by hand.\index{linear box syntax!infix operators} Inside
+\texttt{\textbackslash!\textbackslash(\ldots\textbackslash)},
+\texttt{\textbackslash\^{}} makes a superscript and \texttt{\textbackslash\_} a
+subscript, \texttt{\textbackslash/} a fraction and \texttt{\textbackslash@} a square
+root; \texttt{\textbackslash\&} and \texttt{\textbackslash+} put one thing over or
+under another, and \texttt{\textbackslash\%} adds the second script of a sub- and
+superscript pair. Each reads as the box it abbreviates, so it means what the
+explicit box would.
+
+\begin{codepairs}
+\pair{06-data-structures/string-unicode/15}{A superscript is a power, and a subscript
+is \texttt{Subscript}.}
+\pair{06-data-structures/string-unicode/16}{The fraction and the square root of
+pair~13, written short: \(\tfrac12 + 4\).}
+\pair{06-data-structures/string-unicode/17}{\texttt{\textbackslash\%} completes
+\(x_a^b\), which reads as a power of a subscripted symbol;
+\texttt{\textbackslash\&} and \texttt{\textbackslash+} give \mcode{Overscript} and
+\mcode{Underscript}.}
+\end{codepairs}
 
 \subsection{Worked example: from text to data}
 \label{ssec:ds-string-worked}

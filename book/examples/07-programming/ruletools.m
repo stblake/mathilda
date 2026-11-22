@@ -1,8 +1,8 @@
 # Ch.7 -- more kinds of rule and definition (U2)
 # Dispatch indexes a large rule set by left-hand side
-sq = Table[i -> i^2, {i, 4000}];
+sq = Table[f[i] -> i^2, {i, 4000}];
 d = Dispatch[sq];
-data = RandomInteger[{1, 4000}, 2000];
+data = f /@ RandomInteger[{1, 4000}, 2000];
 {First[AbsoluteTiming[r1 = data /. sq;]], First[AbsoluteTiming[r2 = data /. d;]]}
 r1 === r2
 # ReplaceRepeated stops after MaxIterations

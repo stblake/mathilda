@@ -9,3 +9,7 @@ Simplify[ProductLog[z] E^ProductLog[z]]
 Simplify[(2^(1/3) - 1)^(1/3)]
 FunctionExpand[Cos[2 Pi/17]]
 SeparablePolynomialDecomposition[Expand[(a + b) (x^2 + y) + (a - b)^2 (x - y)], {a, b}, {x, y}]
+p = Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)];
+{LeafCount[p], LeafCount[Simplify[p]]}
+fs = FullSimplify[p]
+LeafCount[fs]

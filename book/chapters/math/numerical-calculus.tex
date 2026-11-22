@@ -219,10 +219,11 @@ digits: nodes \(\tfrac12 \pm \tfrac{1}{2\sqrt3}\).}
 points give twelve correct digits.}
 \pair{numerical-calculus/quadrature-weights/5}{The error term of the three-point rule on
 \([-1,1]\) is \(f^{(6)}(\xi)/15750\): the rule is exact for polynomials of degree five.}
-\pair{numerical-calculus/quadrature-weights/6}{Five points on \([0,1]\): the constant is
-\(1/2534876467200 \approx 3.9\times10^{-13}\). With \(f = e^x\), \(f^{(10)}(\xi)\) lies
-between \(1\) and \(e\), and the size of the actual error in pair~4, \(6.5\times10^{-13}\),
-lies inside that range.}
+\pair{numerical-calculus/quadrature-weights/6}{Five points on \([0,1]\), for \(f=e^x\)
+itself: the tenth derivative of \B{Exp} is \B{Exp}, so the error is \(e^\xi\) times
+\(1/2534876467200 \approx 3.9\times10^{-13}\). That lies between \(3.9\times10^{-13}\)
+and \(1.1\times10^{-12}\), and the size of the actual error in pair~4,
+\(6.5\times10^{-13}\), is inside that range.}
 \end{codepairs}
 
 \subsection{Numerical summation and products}
@@ -564,6 +565,12 @@ cube \(x^3\) returns an \texttt{InterpolatingFunction} over \([1,4]\).}
 underlying square recovered exactly.}
 \pair{numerical-calculus/interpolation/5}{A second argument places the grid: the same
 values on \([0,2]\) put \(9\) at the coordinate \(1\) (the midpoint sample).}
+\pair{numerical-calculus/interpolation/6}{\texttt{InterpolationOrder -> 1} joins the
+points by straight lines: a hat with a kink at \(x=1\).}
+\pair{numerical-calculus/interpolation/7}{\B{NIntegrate} splits a piecewise-linear (or
+piecewise-constant) interpolant at its grid points, so each piece is smooth and the
+result is right to machine precision: \(\tfrac13+\tfrac23=1\).\index{NIntegrate@\mcode{NIntegrate}!interpolant
+grid points}}
 \end{codepairs}
 
 By default these build a cubic spline, so the interpolant is twice continuously
@@ -691,13 +698,18 @@ bracket.}
 Every one of these methods runs at \texttt{WorkingPrecision}, with each value, step, and test in
 arbitrary precision. A machine-precision solve whose function values overflow the \texttt{double}
 range is rerun in arbitrary precision automatically and returned as a machine number. Near the largest
-root of \(L_{1000}\) the polynomial is about \(10^{867}\) in size:
+root of \(L_{1000}\) the polynomial is about \(10^{867}\) in size, and a steep exponential overflows in
+the same way:\index{FindRoot@\mcode{FindRoot}!overflow rerun}
 
 \begin{codepairs}
 \pair{numerical-calculus/roots-adaptive/4}{Two starting values select the secant method, here at
 forty digits. It converges to the largest root, \(x \approx 3943.25\).}
 \pair{numerical-calculus/roots-adaptive/5}{At machine precision the values overflow, and the solve
 is rerun in arbitrary precision behind the scenes.}
+\pair{numerical-calculus/roots-adaptive/6}{\(e^{1000x}-2\) overflows at the start,
+\(x=1\), and the rerun makes the iteration possible. Newton then creeps, by about
+\(1/1000\) a step; FindRoot fits the last two points to \(Ae^{cx}+B\) and steps to that
+curve's root, \(\log 2/1000\).}
 \end{codepairs}
 
 \usagebox{FindRoot}

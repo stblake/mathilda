@@ -5591,3 +5591,16 @@ boundary, with the cheap-looking loophole named, in the worker brief.
 - **Large book passes go faster triaged first, then fanned out by chapter file:** three
   read-only triage agents (version slices + headline deep dive) re-running all sessions
   against the old transcripts found ~20 falsified passages a changelog read alone misses.
+
+## Kernel fix campaign from the book findings (2026-11-22, v0.6666-v0.6688)
+
+- **Re-verify every "expected" before planning.** Of 28 book findings, 4 were not bugs
+  (ReadString matched the expected behaviour; SeparablePolynomialDecomposition had been
+  moved to FullSimplify on purpose; PolyGamma[2,1] stays by design; the slow proof was real
+  elliptic work). Check git log -S for a "regression" before assigning it.
+- **A worker's timing test can pass only under campaign load.** W6's interrupt test used a
+  0.05 s TimeConstrained cut on a 20 ms read; with 7 parallel builds (load ~160) the read
+  took longer and the cut fired, on idle main it did not. Size a cut against the IDLE
+  duration (>= 10x margin), and run the union suites on main after integration.
+- **Two workers touching the same header (loadmodule.h) conflict only in additions** — keep
+  both sides; the helper's `--amend-only` mode bumps/tags a hand-resolved cherry-pick.

@@ -308,6 +308,14 @@ try.}
 \pair{07-programming/generality/11}{\texttt{s[x\_?NumberQ]} went ahead of the more
 general \texttt{s[x\_]}, but not ahead of the conditioned rule: a condition or test
 narrows a pattern without promoting it.}
+\pair{07-programming/generality/12}{The two rules of pairs~1--2, in definition order. A
+test prints infix, \texttt{x\_?EvenQ}, as you typed it.}
+\pair{07-programming/generality/13}{A condition can also guard the right-hand side:
+the rule fires only if \(x > y\) once \(x\) and \(y\) are bound.}
+\pair{07-programming/generality/14}{So it fires on \texttt{q[3, 1]} and not on
+\texttt{q[1, 3]}.}
+\pair{07-programming/generality/15}{The stored rule keeps the guard on the right, as
+written.}
 \end{codepairs}
 
 \calloutnote{Under the hood}{DownValues live on the head symbol in the symbol
@@ -587,12 +595,15 @@ becomes when you ask for a numerical value), or under \texttt{Format} (a
 \emph{FormatValue}, which changes how an expression prints and nothing else).
 
 \begin{codepairs}
-\pair{07-programming/ruletools/1}{Four thousand literal rules \(i \to i^2\).}
+\pair{07-programming/ruletools/1}{Four thousand literal rules
+\(f(i) \to i^2\).}
 \pair{07-programming/ruletools/2}{The same rules as a \texttt{Dispatch} table.}
-\pair{07-programming/ruletools/3}{Two thousand random keys to look up.}
+\pair{07-programming/ruletools/3}{Two thousand random keys
+\texttt{f[k]} to look up.}
 \pair{07-programming/ruletools/4}{Wall-clock seconds for the plain list and for the
-table. The plain list tries the rules in turn for each element; the table goes
-straight to the one that can match.}
+table (they vary from run to run). The plain list tries the rules in turn for each
+element; the table hashes \texttt{f[k]} and goes straight to the one rule that can
+match.}
 \pair{07-programming/ruletools/5}{The answers are identical.}
 \pair{07-programming/ruletools/6}{\texttt{x -> x + 1} never reaches a fixed point;
 \texttt{MaxIterations -> 5} stops it after five sweeps.}
@@ -625,13 +636,15 @@ question of the expression as a whole, as \B{MatchQ} does; only the traversals
 (Until v0.6174 \B{Replace} took one too, and \texttt{Replace[a + b + c, a + b -> z]}
 was \texttt{c + z}.)\index{Replace!whole-expression matching}
 
-\calloutnote{Performance}{How much a \texttt{Dispatch} table saves depends on the
-keys. For atomic left-hand sides, as in pair~4, the lookup is a hash probe and the
-saving grows with the number of rules. Left-hand sides that share a head, such as
-\texttt{f[1] -> \ldots, f[2] -> \ldots}, are not separated by the current index,
-and a table of them is no faster than the list. Within a definition, as opposed to
-a rule list, pattern-free rules are hash-indexed whatever their shape
-(\S\ref{ssec:prog-downvalues}).}
+\calloutnote{Performance}{A \texttt{Dispatch} table hashes every rule whose
+left-hand side is free of patterns, by the \emph{whole} expression: an atom such as
+\texttt{7}, or a compound key such as \texttt{f[7]}. A lookup is then a hash probe, so the saving grows with the number of rules; in
+pair~4 it is a factor of a few hundred. A rule with a pattern on the left, such as
+\texttt{f[x\_] -> \ldots}, cannot be hashed and is tried in order, as in a plain
+list. (Before v0.6672 compound keys that shared a head were not separated, and a
+table of \texttt{f[i]} rules was no faster than the list.) Within a definition, as
+opposed to a rule list, pattern-free rules are hash-indexed in the same way
+(\S\ref{ssec:prog-downvalues}).\index{Dispatch@\mcode{Dispatch}!hashed compound keys}}
 
 The last piece is \emph{options}, the \texttt{name -> value} arguments that so many
 builtins take. Give a function its defaults with \B{Options}, accept them with
@@ -1419,8 +1432,9 @@ gives its second argument.}
 not seen by the \B{Check} around it.}
 \pair{07-programming/messages/7}{\B{Check} inside \B{Quiet}: nothing prints, but the
 \B{Check} still sees the message.}
-\pair{07-programming/messages/8}{The messages one evaluation issued, collected in a
-\B{Block}-scoped \texttt{\$MessageList}.}
+\pair{07-programming/messages/8}{The messages this input issued, in order. The
+list starts empty at each new input; a whole \texttt{-file} script counts as one
+input.}
 \pair{07-programming/messages/9}{Give a message its text; \texttt{`1`} is filled
 from the first argument of \B{Message}.}
 \pair{07-programming/messages/10}{A function that warns on a negative argument and
@@ -1536,41 +1550,56 @@ The session below writes a two-function package to a temporary file, then loads 
 
 \begin{codepairs}
 \pair{07-programming/packages/1}{New symbols go into \texttt{Global`}.}
-\pair{07-programming/packages/2}{The search path. Besides \texttt{Global`} and
-\texttt{System`}, it holds \texttt{Mathilda`} and the contexts of three packages the
-kernel itself loaded at start-up.}
+\pair{07-programming/packages/2}{The search path: \texttt{Global`}, then
+Mathilda's own extensions in \texttt{Mathilda`}, then \texttt{System`}.}
 \pair{07-programming/packages/3}{The standard builtins live in
 \texttt{System`}\ldots}
 \pair{07-programming/packages/4}{\ldots and Mathilda's own additions in
 \texttt{Mathilda`}.}
-\pair{07-programming/packages/5}{A file name in the system's temporary directory.}
-\pair{07-programming/packages/6}{Write the package: a public \texttt{DiskArea} with a
+\pair{07-programming/packages/5}{A package the kernel loads for itself keeps its own
+context\ldots}
+\pair{07-programming/packages/6}{\ldots off the search path. Its exported names
+still resolve, as pair~5 shows.}
+\pair{07-programming/packages/7}{A file name in the system's temporary directory.}
+\pair{07-programming/packages/8}{Write the package: a public \texttt{DiskArea} with a
 usage message, and a private helper \texttt{square}.}
-\pair{07-programming/packages/7}{\B{Get} reads and evaluates it.}
-\pair{07-programming/packages/8}{The public function works.}
-\pair{07-programming/packages/9}{Its usage message came with it.}
-\pair{07-programming/packages/10}{It lives in the package's context\ldots}
-\pair{07-programming/packages/11}{\ldots which \B{EndPackage} put first on the
+\pair{07-programming/packages/9}{\B{Get} reads and evaluates it.}
+\pair{07-programming/packages/10}{The public function works.}
+\pair{07-programming/packages/11}{Its usage message came with it.}
+\pair{07-programming/packages/12}{It lives in the package's context\ldots}
+\pair{07-programming/packages/13}{\ldots which \B{EndPackage} put first on the
 path\ldots}
-\pair{07-programming/packages/12}{\ldots and recorded as loaded.}
-\pair{07-programming/packages/13}{The helper is invisible: this \texttt{square} is a
+\pair{07-programming/packages/14}{\ldots and recorded as loaded.}
+\pair{07-programming/packages/15}{The helper is invisible: this \texttt{square} is a
 new, unrelated \texttt{Global`square}.}
-\pair{07-programming/packages/14}{Its full name still reaches it.}
-\pair{07-programming/packages/15}{\B{Names} lists the package's public symbols: just
+\pair{07-programming/packages/16}{Its full name still reaches it.}
+\pair{07-programming/packages/17}{\B{Names} lists the package's public symbols: just
 one.}
-\pair{07-programming/packages/16}{The package is already loaded, so
+\pair{07-programming/packages/18}{The package is already loaded, so
 \texttt{Needs} does nothing.}
-\pair{07-programming/packages/17}{\B{EndPackage} restored the context.}
-\pair{07-programming/packages/18}{\texttt{<< file} is \B{Get} spelled as an
+\pair{07-programming/packages/19}{\B{EndPackage} restored the context.}
+\pair{07-programming/packages/20}{\texttt{<< file} is \B{Get} spelled as an
 operator.}
+\pair{07-programming/packages/21}{\texttt{Needs} on a kernel package puts its
+context on the path, as for any other package\ldots}
+\pair{07-programming/packages/22}{\ldots in front.}
 \end{codepairs}
 
 The \texttt{Private} sub-context is the whole trick. While the package was being
 read, \texttt{square} was created as \texttt{Geometry`Private`square}, and that
 context is not on \B{\$ContextPath} afterwards, so the name \texttt{square} at the
-prompt finds nothing and creates a fresh \texttt{Global`square} (pair~13). A helper
+prompt finds nothing and creates a fresh \texttt{Global`square} (pair~15). A helper
 called \texttt{square} in your own code and the package's helper can therefore never
 collide, which is what lets independently written packages be loaded side by side.
+
+The kernel uses the same machinery for itself. Some of its own features are written
+as packages: the \texttt{Lean`} proof interface, \texttt{FullSimplify`},
+\texttt{SeparablePolynomialDecomposition`}, and the engines behind \B{Integrate}.
+They are kept off \B{\$ContextPath} and out of \texttt{\$Packages}, so a fresh
+session's path is just the three contexts of pair~2 and none of their private names
+can clash with yours. Their exported names still resolve, so you never have to load them by
+hand (pairs~5--6). \texttt{Needs} still works on them, and puts the context on the
+path like any other package (pairs~21--22).\index{context!kernel packages}
 
 \calloutnote{Under the hood}{Contexts are the machinery that real packages stress
 hardest, and FeynCalc, a large package for particle-physics calculations, has
