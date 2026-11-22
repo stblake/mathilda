@@ -540,6 +540,14 @@ rule set takes 3.8 ms against 772 ms for the plain list. For 4000 rules
   **inert**: querying `DownValues[f]` for a recursive `f` does not re-trigger the
   recursion, and a right-hand side such as `RandomInteger[...]` is shown held
   rather than evaluated afresh on each query.
+- A guard written on the right of a delayed assignment lists on the right:
+  after `q[x_, y_] := "g" /; x > y`, `DownValues[q]` is
+  `{HoldPattern[q[x_, y_]] :> "g" /; x > y}`, while `q[x_, y_] /; x > y := "g"`
+  lists as `{HoldPattern[q[x_, y_] /; x > y] :> "g"}`. Both match identically
+  (the right-hand guard is stored hoisted onto the pattern; the rule records
+  that it was written on the right). The same holds for UpValues, SubValues and
+  `Definition` / `?q`, and assigning a listing back (`DownValues[q] =
+  DownValues[q]`) re-installs the same rules.
 - Returns `{}` for a symbol that carries no rules of the requested kind.
 - **Order** (v0.6022, as in the reference). The list is ordered by pattern
   generality, not by a score.

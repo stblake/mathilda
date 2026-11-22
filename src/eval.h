@@ -70,6 +70,8 @@ Expr* eval_assignment_target(Expr* lhs, bool* freed);
  * rhs carries no Condition, else a new pattern the caller frees; *body is set
  * to the replacement to use (borrowed from rhs). */
 Expr* eval_hoist_rhs_conditions(Expr* lhs, Expr* rhs, Expr** body);
+/* How many nested `v /; c` wrappers eval_hoist_rhs_conditions lifts off rhs. */
+size_t eval_rhs_condition_count(const Expr* rhs);
 /* A Catch / CheckAbort that consumes an in-flight sentinel calls this so the
  * enclosing frame does not re-raise it (see g_pending_unwind in eval.c). */
 void eval_unwind_consumed(void);

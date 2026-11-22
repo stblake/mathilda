@@ -461,10 +461,57 @@ static void test_scoped_condition_rules(void) {
     assert_eval_eq("Catch[sct[2]]", "\"in\"", 0);
 }
 
+/* A guard written on the right of a delayed assignment lists on the right:
+ * lhs := v /; c is stored with the guard hoisted onto the pattern (so it
+ * matches exactly like lhs /; c := v), but DownValues / UpValues / SubValues /
+ * Definition show it where it was written, and the listing re-installs to
+ * the same rules. */
+static void test_rhs_condition_listing(void) {
+    eval_and_drop("ClearAll[rcq, rcr, rcs, rcu, rcg, rcsub, rcm]");
+    eval_and_drop("rcq[x_, y_] := \"g\" /; x > y");
+    assert_eval_eq("DownValues[rcq]", "{HoldPattern[rcq[x_, y_]] :> \"g\" /; x > y}", 0);
+    assert_eval_eq("{rcq[2, 1], rcq[1, 2]}", "{\"g\", rcq[1, 2]}", 0);
+    /* The guard written on the left still lists on the left. */
+    eval_and_drop("rcr[x_, y_] /; x > y := \"g\"");
+    assert_eval_eq("DownValues[rcr]", "{HoldPattern[rcr[x_, y_] /; x > y] :> \"g\"}", 0);
+    /* Both, and a chain on the right. */
+    eval_and_drop("rcs[x_] /; x > 0 := x /; x < 5 /; EvenQ[x]");
+    assert_eval_eq("DownValues[rcs]",
+                   "{HoldPattern[rcs[x_] /; x > 0] :> x /; x < 5 /; EvenQ[x]}", 0);
+    assert_eval_eq("{rcs[2], rcs[3], rcs[6], rcs[-2]}", "{2, rcs[3], rcs[6], rcs[-2]}", 0);
+    /* Round trip: re-assigning the listing reproduces it and the behaviour. */
+    eval_and_drop("DownValues[rcq] = DownValues[rcq]");
+    assert_eval_eq("DownValues[rcq]", "{HoldPattern[rcq[x_, y_]] :> \"g\" /; x > y}", 0);
+    assert_eval_eq("{rcq[2, 1], rcq[1, 2]}", "{\"g\", rcq[1, 2]}", 0);
+    eval_and_drop("DownValues[rcs] = DownValues[rcs]");
+    assert_eval_eq("DownValues[rcs]",
+                   "{HoldPattern[rcs[x_] /; x > 0] :> x /; x < 5 /; EvenQ[x]}", 0);
+    assert_eval_eq("{rcs[2], rcs[3], rcs[-2]}", "{2, rcs[3], rcs[-2]}", 0);
+    /* Redefining the same rule with the guard on the left keeps one rule,
+     * now listed with the guard on the left. */
+    eval_and_drop("rcq[x_, y_] /; x > y := \"h\"");
+    assert_eval_eq("DownValues[rcq]", "{HoldPattern[rcq[x_, y_] /; x > y] :> \"h\"}", 0);
+    /* UpValues and SubValues. */
+    eval_and_drop("rcu /: rcg[rcu, n_] := n /; n > 0");
+    assert_eval_eq("UpValues[rcu]", "{HoldPattern[rcg[rcu, n_]] :> n /; n > 0}", 0);
+    assert_eval_eq("{rcg[rcu, 2], rcg[rcu, -2]}", "{2, rcg[rcu, -2]}", 0);
+    eval_and_drop("rcsub[a_][b_] := a + b /; b > a");
+    assert_eval_eq("SubValues[rcsub]", "{HoldPattern[rcsub[a_][b_]] :> a + b /; b > a}", 0);
+    assert_eval_eq("{rcsub[1][2], rcsub[2][1]}", "{3, rcsub[2][1]}", 0);
+    /* A Module guard is not hoisted and lists as written. */
+    eval_and_drop("rcm[x_] := Module[{t = x}, t /; t > 0]");
+    assert_eval_eq("DownValues[rcm]", "{HoldPattern[rcm[x_]] :> Module[{t = x}, t /; t > 0]}", 0);
+    /* Definition shows the guard where it was written. */
+    assert_eval_eq("ToString[Definition[rcr]]", "\"rcr[x_, y_] /; x > y := g\"", 0);
+    eval_and_drop("ClearAll[rcq]; rcq[x_, y_] := \"g\" /; x > y");
+    assert_eval_eq("ToString[Definition[rcq]]", "\"rcq[x_, y_] := g /; x > y\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
+    TEST(test_rhs_condition_listing);
     TEST(test_cond_single_arg_true);
     TEST(test_cond_single_arg_false);
     TEST(test_cond_single_arg_freeq);

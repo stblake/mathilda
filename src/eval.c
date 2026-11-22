@@ -2059,6 +2059,17 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
  * written on the LHS (`lhs /; t1 /; t2 := body`).  Returns the pattern: lhs
  * itself when the RHS has no guard (borrowed), else a new tree the caller
  * frees; *body is set to the RHS to store (borrowed from rhs). */
+size_t eval_rhs_condition_count(const Expr* rhs) {
+    size_t n = 0;
+    while (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL &&
+           rhs->data.function.head->data.symbol.name == SYM_Condition &&
+           rhs->data.function.arg_count == 2) {
+        n++;
+        rhs = rhs->data.function.args[0];
+    }
+    return n;
+}
+
 static Expr* hoist_rhs_conditions(Expr* lhs, Expr* rhs, Expr** body) {
     size_t n = 0;
     Expr* g = rhs;
@@ -2594,11 +2605,15 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                         if (actual_pattern != lhs) expr_free(actual_pattern);
                         return true;
                     }
+                    if (actual_pattern != lhs)
+                        symtab_mark_next_rule_rhs_conditions(eval_rhs_condition_count(rhs));
                     symtab_add_sub_value(sub_sym, actual_pattern, actual_rhs, is_delayed);
                     if (actual_pattern != lhs) expr_free(actual_pattern);
                     return true;
                 }
             }
+            if (actual_pattern != lhs)
+                symtab_mark_next_rule_rhs_conditions(eval_rhs_condition_count(rhs));
             symtab_add_down_value_as(symbol_name, actual_pattern, actual_rhs, is_delayed);
             if (actual_pattern != lhs) expr_free(actual_pattern);
             return true;
@@ -2614,6 +2629,8 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             }
             Expr* actual_rhs = rhs;
             Expr* actual_pattern = is_delayed ? hoist_rhs_conditions(lhs, rhs, &actual_rhs) : lhs;
+            if (actual_pattern != lhs)
+                symtab_mark_next_rule_rhs_conditions(eval_rhs_condition_count(rhs));
             symtab_add_sub_value(sub_sym, actual_pattern, actual_rhs, is_delayed);
             if (actual_pattern != lhs) expr_free(actual_pattern);
             return true;
@@ -2864,7 +2881,10 @@ static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             continue;
         }
         if (is_n_target(pat)) install_n_value(syms[i], pat, body, is_delayed);   /* N[z] ^= v */
-        else symtab_add_up_value_as(syms[i], pat, body, is_delayed);
+        else {
+            if (owned) symtab_mark_next_rule_rhs_conditions(eval_rhs_condition_count(rhs));
+            symtab_add_up_value_as(syms[i], pat, body, is_delayed);
+        }
     }
     if (owned) expr_free(pat);
     return true;
@@ -2928,6 +2948,7 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
     /* Lift a delayed `body /; test` onto the LHS before storing, like SetDelayed. */
     bool owned; Expr* body;
     Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
+    if (owned) symtab_mark_next_rule_rhs_conditions(eval_rhs_condition_count(rhs));
     if (pos == TAG_OWN)       symtab_add_own_value_as(tagn, pat, body, is_delayed);
     else if (pos == TAG_DOWN) symtab_add_down_value_as(tagn, pat, body, is_delayed);
     else if (pos == TAG_SUB)  symtab_add_sub_value(tagn, pat, body, is_delayed);

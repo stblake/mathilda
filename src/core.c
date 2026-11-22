@@ -2900,9 +2900,13 @@ static Expr* rules_to_list(Rule* r) {
          * Rule would additionally re-evaluate the RHS. HoldPattern is HoldAll and
          * RuleDelayed is HoldRest, so both sides stay held. This also matches
          * Mathematica, which shows values as {HoldPattern[lhs] :> rhs}. */
+        /* A guard written on the right (lhs := v /; c) is stored hoisted onto
+         * the pattern; it lists back on the right, as written. */
+        Expr *lhs, *rhs;
+        symtab_rule_display_parts(curr, &lhs, &rhs);
         rule_args[0] = expr_new_function(expr_new_symbol(SYM_HoldPattern),
-                                         (Expr*[]){expr_copy(curr->pattern)}, 1);
-        rule_args[1] = expr_copy(curr->replacement);
+                                         (Expr*[]){lhs}, 1);
+        rule_args[1] = rhs;
         rule_exprs[i] = expr_new_function(expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         free(rule_args);
         curr = curr->next;

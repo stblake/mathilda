@@ -47,6 +47,13 @@ typedef struct Rule {
      * falls through to the next rule.  Such a rule is not replaced by a later
      * definition with the same LHS. */
     uint8_t scoped_cond;
+    /* The number of outermost Condition wrappers of `pattern` that were
+     * hoisted there from the right-hand side of a delayed assignment
+     * (lhs := v /; c is stored as lhs /; c :> v, see eval.c
+     * hoist_rhs_conditions).  Presentation only: DownValues / Definition
+     * render those guards back on the right (HoldPattern[lhs] :> v /; c),
+     * so the rule lists as it was written; matching never reads it. */
+    uint8_t rhs_conds;
     /* 1 when the replacement mentions Return: applying the rule then
      * evaluates the result and yields v for a top-level Return[v], as the
      * reference returns from a definition (f[x_] := If[x > 0, Return[1], 2]).
@@ -468,6 +475,18 @@ void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replace
 // plain forms above default to immediate for OwnValues, delayed otherwise.
 void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
 void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
+
+// The next rule installed (by any symtab_add_* / *_values setter) has its
+// outermost `n` pattern Conditions recorded as hoisted from the right-hand
+// side (Rule.rhs_conds).  Call it immediately before the add; every add
+// consumes and clears it.
+void symtab_mark_next_rule_rhs_conditions(size_t n);
+
+// The left- and right-hand sides of `r` as listed by DownValues / UpValues /
+// SubValues / Definition: fresh copies, with the rule's hoisted right-hand
+// side guards moved back onto the replacement (lhs /; c :> v lists as
+// lhs :> v /; c when the condition was written on the right).
+void symtab_rule_display_parts(const Rule* r, Expr** lhs, Expr** rhs);
 
 // Get rules
 Rule* symtab_get_own_values(const char* symbol_name);

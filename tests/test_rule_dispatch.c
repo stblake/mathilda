@@ -316,7 +316,7 @@ static void test_generality_order(void) {
      * earlier rule stays first (it had been moved behind on a score). */
     expect_order("o1[h[b___G, di_G, c__G]] := 1 /; c1 /; c2; "
                  "o1[h[b___, G[5], c:G[_[__]].., d___]] := 2; Last /@ DownValues[o1]",
-                 "{1, 2}");
+                 "{1 /; c1 /; c2, 2}");   /* the guards list where written */
     expect_order("o2[x_] := 1; o2[x_Integer] := 2; o2[1] := 3; o2[x_String] := 4; "
                  "o2[x_?EvenQ] := 5; Last /@ DownValues[o2]", "{3, 2, 4, 5, 1}");
     expect_order("o3[x__] := 1; o3[x_, y_] := 2; o3[x_, y__] := 3; o3[1, y_] := 4; "

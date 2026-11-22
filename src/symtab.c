@@ -1878,6 +1878,37 @@ static LitIndex* litidx_get(SymbolDef* d) {
  * OwnValues `list` is, NULL for every other rule list. */
 /* Set by symtab_bind_fresh_local for the one add_rule_in call it makes. */
 static bool g_add_rule_no_bump = false;
+/* Set by symtab_mark_next_rule_rhs_conditions for the next add_rule_in call:
+ * how many outermost pattern Conditions came from the right-hand side. */
+static uint8_t g_add_rule_rhs_conds = 0;
+
+void symtab_mark_next_rule_rhs_conditions(size_t n) {
+    g_add_rule_rhs_conds = (uint8_t)(n > 255 ? 255 : n);
+}
+
+void symtab_rule_display_parts(const Rule* r, Expr** lhs, Expr** rhs) {
+    const Expr* pat = r->pattern;
+    size_t n = r->rhs_conds;
+    /* Peel the hoisted guards, outermost first; bail out to the raw form if
+     * the stored pattern does not have that shape (it always should). */
+    const Expr* guards[256];
+    size_t k = 0;
+    while (k < n && pat->type == EXPR_FUNCTION && pat->data.function.arg_count == 2 &&
+           pat->data.function.head->type == EXPR_SYMBOL &&
+           pat->data.function.head->data.symbol.name == SYM_Condition) {
+        guards[k++] = pat->data.function.args[1];
+        pat = pat->data.function.args[0];
+    }
+    if (k != n) { pat = r->pattern; k = 0; }
+    *lhs = expr_copy((Expr*)pat);
+    Expr* body = expr_copy(r->replacement);
+    /* The innermost guard (nearest the lhs) is the innermost on the right. */
+    for (size_t i = k; i-- > 0; ) {
+        Expr* a[2] = { body, expr_copy((Expr*)guards[i]) };
+        body = expr_new_function(expr_new_symbol(SYM_Condition), a, 2);
+    }
+    *rhs = body;
+}
 
 static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool delayed,
                         SymbolDef* owner, SymbolDef* binding) {
@@ -1889,6 +1920,8 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
      * only if one of them relied on this symbol being unbound (eval.c).
      * The one exception is the first binding of a just-minted Module local
      * (symtab_bind_fresh_local), which no stamp can depend on. */
+    uint8_t rhs_conds = g_add_rule_rhs_conds;
+    g_add_rule_rhs_conds = 0;
     if (g_add_rule_no_bump) g_add_rule_no_bump = false;
     else if (binding) eval_clock_bump_binding(binding);
     else         eval_clock_bump();
@@ -1942,6 +1975,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
                     dup->has_return = -1;   /* computed on first use (rule_result) */
                     dup->ov_tmpl = -1;
                     dup->delayed = delayed;
+                    dup->rhs_conds = rhs_conds;
                     expr_free(canon);
                     return;
                 }
@@ -1962,6 +1996,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
             curr->has_return = -1;   /* computed on first use (rule_result) */
             curr->ov_tmpl = -1;
             curr->delayed = delayed;
+            curr->rhs_conds = rhs_conds;
             expr_free(canon);
             if (key) expr_free(key);
             return;
@@ -1985,6 +2020,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
             curr->has_return = -1;   /* computed on first use (rule_result) */
             curr->ov_tmpl = -1;
             curr->delayed = delayed;
+            curr->rhs_conds = rhs_conds;
             expr_free(key);
             return;
         }
@@ -1999,6 +2035,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
     new_rule->specificity = spec;
     new_rule->alpha_hash = ahash;
     new_rule->delayed = delayed;
+    new_rule->rhs_conds = rhs_conds;
     new_rule->scoped_cond = scoped;
     new_rule->has_return = -1;   /* computed on first use (rule_result) */
     new_rule->ov_tmpl = -1;
@@ -3091,6 +3128,20 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                 SYM_IS_HOLDPATTERN(lhs->data.function.head->data.symbol.name) &&
                 lhs->data.function.arg_count == 1)
                 lhs = lhs->data.function.args[0];   /* unwrap HoldPattern */
+            /* lhs :> v /; c installs as the assignment lhs := v /; c does: the
+             * guard is hoisted onto the pattern, and remembered as written on
+             * the right, so a listed rule set re-installs to the same rules. */
+            Expr* hoisted = NULL;
+            if (delayed) {
+                Expr* body = rhs;
+                Expr* pat = eval_hoist_rhs_conditions(lhs, rhs, &body);
+                if (pat != lhs) {
+                    symtab_mark_next_rule_rhs_conditions(eval_rhs_condition_count(rhs));
+                    hoisted = pat;
+                    lhs = pat;
+                    rhs = body;
+                }
+            }
 
             if (which >= 2) {
                 size_t before = rule_list_len(*target);
@@ -3102,6 +3153,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
             } else {
                 add_rule_in(target, lhs, rhs, delayed, which == 1 ? def : NULL, NULL);
             }
+            if (hoisted) expr_free(hoisted);
         }
     }
     eval_clock_bump();

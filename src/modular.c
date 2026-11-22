@@ -948,6 +948,7 @@ static void bind_restore(BindFrame* b) {
         b->flags &= ~BIND_LIVE;
         if (ours) symtab_rule_free(ours);
         if (saved) {
+            symtab_mark_next_rule_rhs_conditions(saved->rhs_conds);
             symtab_add_down_value_as(h, saved->pattern, saved->replacement, saved->delayed);
             symtab_rule_free(saved);
         }

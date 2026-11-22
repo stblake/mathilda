@@ -817,6 +817,19 @@ void expr_print_fullform(Expr* e) {
  * upvalue prints as `lhs ^= rhs` / `lhs ^:= rhs` when UpSet would have tagged
  * `name` alone, else as `name /: lhs = rhs` / `name /: lhs := rhs`.
  * Empty -> "Null". */
+/* One rule as `[tag /: ]lhs op rhs`, a guard written on the right of the
+ * assignment shown back on the right (symtab_rule_display_parts). */
+static void print_rule_parts(const Rule* r, const char* op, const char* tag) {
+    Expr *lhs, *rhs;
+    symtab_rule_display_parts(r, &lhs, &rhs);
+    if (tag) printf("%s /: ", tag);
+    print_standard(lhs, 0);
+    printf("%s", op);
+    print_standard(rhs, 0);
+    expr_free(lhs);
+    expr_free(rhs);
+}
+
 static void print_definition_body(const char* name) {
     Rule* ov = symtab_get_own_values(name);
     Rule* dv = symtab_get_down_values(name);
@@ -824,33 +837,22 @@ static void print_definition_body(const char* name) {
     int any = 0;
     for (Rule* r = ov; r; r = r->next) {
         if (any++) printf("\n");
-        print_standard(r->pattern, 0);
-        printf(r->delayed ? " := " : " = ");
-        print_standard(r->replacement, 0);
+        print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
     }
     for (Rule* r = uv; r; r = r->next) {
         if (any++) printf("\n");
-        if (upvalue_renders_as_upset(name, r->pattern)) {
-            print_standard(r->pattern, 0);
-            printf(r->delayed ? " ^:= " : " ^= ");
-        } else {
-            printf("%s /: ", name);
-            print_standard(r->pattern, 0);
-            printf(r->delayed ? " := " : " = ");
-        }
-        print_standard(r->replacement, 0);
+        if (upvalue_renders_as_upset(name, r->pattern))
+            print_rule_parts(r, r->delayed ? " ^:= " : " ^= ", NULL);
+        else
+            print_rule_parts(r, r->delayed ? " := " : " = ", name);
     }
     for (Rule* r = dv; r; r = r->next) {
         if (any++) printf("\n");
-        print_standard(r->pattern, 0);
-        printf(r->delayed ? " := " : " = ");
-        print_standard(r->replacement, 0);
+        print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
     }
     for (Rule* r = symtab_get_sub_values(name); r; r = r->next) {   /* f[x_][y_] := ... */
         if (any++) printf("\n");
-        print_standard(r->pattern, 0);
-        printf(r->delayed ? " := " : " = ");
-        print_standard(r->replacement, 0);
+        print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
     }
     if (!any) printf("Null");
 }
