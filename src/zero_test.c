@@ -202,6 +202,11 @@ static const int ZT_OVERFLOW_SHELL_BITS[] = { ZT_NUMERATOR_BITS, 4, 2, 1, 0 };
  * residual stayed flat over the whole ladder (a cancellation deeper than it). */
 #define ZT_HUGE_EXTEND_MAX_BITS 8000
 
+/* Set by sz_trial_shelled while a smaller shell is left to re-draw a sample
+ * point from: an unresolved point is re-drawn only then, and on the last
+ * shell keeps its verdict. */
+static bool g_zt_redraw_ok = false;
+
 /* ------------------------------------------------------------------ */
 /*  Forward declarations                                              */
 /* ------------------------------------------------------------------ */
@@ -1277,8 +1282,9 @@ static bool zt_point_has_real(const Expr* e) {
 static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
                                          double* out_mag, double* out_scale,
                                          double in_scale, bool* out_overflow,
-                                         bool* out_pinned) {
+                                         bool* out_pinned, Expr** out_value) {
     *out_mag = -INFINITY;
+    if (out_value) *out_value = NULL;
     if (out_scale) *out_scale = 0.0;
     if (out_overflow) *out_overflow = false;
     if (out_pinned) *out_pinned = false;
@@ -1321,7 +1327,7 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
         for (int i = 0; i + 1 < PRECISION_LADDER_LEN; ++i)
             if (PRECISION_LADDER[i] >= bits || (i == 0 && bits <= 53))
                 return evaluate_rung_core(e, PRECISION_LADDER[i + 1], out_mag, out_scale,
-                                          in_scale, out_overflow, out_pinned);
+                                          in_scale, out_overflow, out_pinned, out_value);
         *out_mag = INFINITY;
         if (out_scale) *out_scale = 0.0;
         return ZERO_TEST_FALSE;
@@ -1342,7 +1348,7 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
         for (int i = 0; i + 1 < PRECISION_LADDER_LEN; ++i)
             if (PRECISION_LADDER[i] >= bits || (i == 0 && bits <= 53))
                 return evaluate_rung_core(e, PRECISION_LADDER[i + 1], out_mag, out_scale,
-                                          in_scale, out_overflow, out_pinned);
+                                          in_scale, out_overflow, out_pinned, out_value);
         if (out_overflow) *out_overflow = true;
         return ZERO_TEST_UNKNOWN;
     }
@@ -1363,7 +1369,8 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
     double mag = 0.0;
     bool ok = expr_log2_abs(z, &mag);
     if (out_pinned && bits > 53) *out_pinned = zt_precision_not_honoured(z, bits);
-    expr_free(z);
+    if (out_value && ok && isfinite(mag)) *out_value = z;
+    else expr_free(z);
     if (ok && mag == INFINITY) {
         /* Numeric but OUT OF RANGE: a symbol-dependent exponent drove E/Gamma/…
          * past the IEEE/MPFR range (+/-Inf), or two independently-overflowing
@@ -1407,7 +1414,18 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
                                     bool* out_pinned) {
     arith_warnings_mute_push();
     ZeroTestResult r = evaluate_rung_core(e, bits, out_mag, out_scale,
-                                          in_scale, out_overflow, out_pinned);
+                                          in_scale, out_overflow, out_pinned, NULL);
+    arith_warnings_mute_pop();
+    return r;
+}
+
+/* evaluate_rung that also hands back the rung's numeric value (*out_value,
+ * owned by the caller; NULL when the rung produced no finite number). */
+static ZeroTestResult evaluate_rung_value(const Expr* e, long bits, double* out_mag,
+                                          double in_scale, Expr** out_value) {
+    arith_warnings_mute_push();
+    ZeroTestResult r = evaluate_rung_core(e, bits, out_mag, NULL, in_scale, NULL, NULL,
+                                          out_value);
     arith_warnings_mute_pop();
     return r;
 }
@@ -1636,18 +1654,89 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
  * 200 and 500 bits, so Sech[x^2]^2 - 4 (1/2 - Tanh/2)(1/2 + Tanh/2) sat at
  * 1e-178 on both and an identity was reported non-zero (DSolve corpus
  * 2.2.16-1585).  An unavailable MPFR path keeps the machine verdict (FALSE). */
+/* log2 of the relative gap |a - b| / |a| between two readings of the same
+ * point (a the higher rung, of magnitude m_a); -Infinity when they agree
+ * exactly, +Infinity when the gap cannot be formed. */
+static double zt_rel_gap_l2(const Expr* a, const Expr* b, double m_a) {
+    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Subtract),
+                     (Expr*[]){ expr_copy((Expr*)a), expr_copy((Expr*)b) }, 2));
+    double g = INFINITY;
+    if (diff && is_pure_numeric(diff) && !expr_log2_abs(diff, &g)) g = INFINITY;
+    if (diff) expr_free(diff);
+    return g == -INFINITY ? g : g - m_a;
+}
+
+/* A FALSE is evidence of a value only once the value has RESOLVED: two rungs
+ * of a genuine non-zero agree to far more than ZT_RESOLVED_GAP_BITS, while a
+ * cancellation zero the precision has not yet outrun reads as noise of the
+ * size of the answer, which changes from rung to rung (and can sit at the
+ * same MAGNITUDE on two rungs by accident). */
+#define ZT_RESOLVED_GAP_BITS 32
+
+/* Confirm a FALSE read at rung `b_hi` (value v_hi, magnitude m_hi) against the
+ * rung below it (v_lo): resolved readings keep FALSE.  Otherwise keep doubling
+ * the precision, up to ZT_HUGE_EXTEND_MAX_BITS, and decide on the same evidence
+ * as the ladder -- a zero falls by at least half the bits added, a genuine value
+ * reads the same twice.  Still unresolved at the cap, a sample point is sent
+ * back to the sampler for a smaller-shell re-draw (*out_overflow, when one is
+ * left), else the FALSE stands.  Measured on the ArcTan form of the
+ * antiderivative of D[x + Log[-E^x + (1 + E^(3 x))^(1/3)]] (paper example
+ * E3-6), exactly 0: at x = 63.7477 it reads 1.6, 2.98, 2.975 at 200/500/1000
+ * bits -- the same magnitude on the top two rungs, read as a settled value --
+ * and 0 from 2000 bits (G-pzq-1).  Takes ownership of v_hi and v_lo. */
+static ZeroTestResult zt_confirm_false(const Expr* e, long b_hi, Expr* v_hi, double m_hi,
+                                       Expr* v_lo, double scale, bool* out_overflow) {
+    ZeroTestResult verdict = ZERO_TEST_FALSE;
+    if (!v_hi || !v_lo || zt_rel_gap_l2(v_hi, v_lo, m_hi) <= -(double)ZT_RESOLVED_GAP_BITS)
+        goto out;
+    for (long b = 2 * b_hi; ; b *= 2) {
+        if (b > ZT_HUGE_EXTEND_MAX_BITS) {
+            if (out_overflow && g_zt_redraw_ok) {
+                *out_overflow = true;
+                verdict = ZERO_TEST_UNKNOWN;
+            }
+            break;
+        }
+        double m = 0.0;
+        Expr* v = NULL;
+        ZeroTestResult t = evaluate_rung_value(e, b, &m, isfinite(scale) ? scale : NAN, &v);
+        if (t == ZERO_TEST_UNKNOWN) { if (v) expr_free(v); break; }
+        if (t == ZERO_TEST_TRUE || m <= m_hi - (double)((b - b_hi) / 2)) {
+            if (v) expr_free(v);
+            verdict = ZERO_TEST_TRUE;
+            break;
+        }
+        bool resolved = v && zt_rel_gap_l2(v, v_hi, m) <= -(double)ZT_RESOLVED_GAP_BITS;
+        expr_free(v_lo);
+        v_lo = v_hi; v_hi = v; m_hi = m; b_hi = b;
+        if (resolved || !v_hi) break;
+    }
+out:
+    if (v_hi) expr_free(v_hi);
+    if (v_lo) expr_free(v_lo);
+    return verdict;
+}
+
 static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, double scale,
                                                  bool* out_overflow) {
     Expr* exact = zt_exactify_reals(e);
     if (exact) e = exact;
     double ms[PRECISION_LADDER_LEN];      /* residual at each decided MPFR rung */
     long   bits[PRECISION_LADDER_LEN];    /* ... and that rung's precision      */
+    Expr*  vals[2] = { NULL, NULL };      /* values of the last two decided rungs */
     int got = 0;
     ZeroTestResult verdict = ZERO_TEST_FALSE;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
-        ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
-                                          isfinite(scale) ? scale : NAN, NULL, NULL);
+        Expr* v = NULL;
+        ZeroTestResult rr = evaluate_rung_value(e, PRECISION_LADDER[i], &m,
+                                                isfinite(scale) ? scale : NAN, &v);
+        if (rr != ZERO_TEST_UNKNOWN && v) {
+            if (vals[0]) expr_free(vals[0]);
+            vals[0] = vals[1]; vals[1] = v;
+        } else if (v) {
+            expr_free(v);
+        }
         /* an undecidable rung (Indeterminate from a still-cancelling 0 * Infinity,
          * or MPFR unavailable) says nothing: try the next one */
         if (rr == ZERO_TEST_UNKNOWN) continue;
@@ -1695,7 +1784,15 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
                 verdict = ZERO_TEST_UNKNOWN;
             }
         }
+        /* a FALSE off the top two rungs needs their values to agree */
+        if (verdict == ZERO_TEST_FALSE && got >= 2) {
+            verdict = zt_confirm_false(e, bits[got - 1], vals[1], ms[got - 1], vals[0],
+                                       scale, out_overflow);
+            vals[0] = vals[1] = NULL;
+        }
     }
+    if (vals[0]) expr_free(vals[0]);
+    if (vals[1]) expr_free(vals[1]);
     if (exact) expr_free(exact);
     return verdict;
 }
@@ -2381,9 +2478,10 @@ static ZeroTestResult zt_point_verdict_raw(const Expr* sub, bool screen, bool* o
  * imaginary part is rounding noise of either sign at every rung, and Sqrt or Log
  * of it lands on either side of the cut: the point's value is undetermined.
  * Read at 200 bits, such a b has Re b < 0 and 0 < |Im b| < 2^-150 |Re b| (a
- * true zero leaves ~2^-190 relative).  A b computed EXACTLY real (Im == 0, as
- * for (1 - x)/(1 + x) at a real x) is not ambiguous: the principal value is
- * defined, and a failure on that cut is a genuine one the sampler must see. */
+ * true zero leaves ~2^-190 relative, or a signed zero).  A b computed as a
+ * REAL (no Complex head, as for (1 - x)/(1 + x) at a real x) is not
+ * ambiguous: the principal value is defined, and a failure on that cut is a
+ * genuine one the sampler must see. */
 static bool zt_on_ambiguous_cut(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
@@ -2402,9 +2500,14 @@ static bool zt_on_ambiguous_cut(const Expr* e) {
         Expr* re = NULL; Expr* im = NULL;
         bool amb = false;
         double r = 0.0, l2r = 0.0, l2i = 0.0;
+        /* An inexact ZERO imaginary part counts too: complex arithmetic that
+         * cancels the imaginary part exactly leaves a signed zero, and its sign
+         * picks the side of the cut -- (-I - I E^(-2 I x))/(-1 + E^(-2 I x))
+         * (= Cot[x]) reads -8.17 + 0.*^-60 I at x = -3.26342.  A value real
+         * by construction never carries a Complex head here. */
         if (v && is_complex(v, &re, &im) && expr_signed_double(re, &r) && r < 0.0 &&
             expr_log2_abs(re, &l2r) && expr_log2_abs(im, &l2i) &&
-            l2i != -INFINITY && l2i < l2r - 150.0)
+            l2i < l2r - 150.0)
             amb = true;
         if (v) expr_free(v);
         if (amb) return true;
@@ -2415,6 +2518,7 @@ static bool zt_on_ambiguous_cut(const Expr* e) {
 }
 #endif
 
+
 static ZeroTestResult zt_point_verdict(const Expr* sub, bool screen, bool* out_overflow) {
     ZeroTestResult r = zt_point_verdict_raw(sub, screen, out_overflow);
 #ifdef USE_MPFR
@@ -2422,9 +2526,20 @@ static ZeroTestResult zt_point_verdict(const Expr* sub, bool screen, bool* out_o
      * zt_on_ambiguous_cut) is no evidence: send the point back for a re-draw,
      * like an out-of-range coordinate.  Checked only on a FALSE, so the zero
      * path pays nothing. */
-    if (r == ZERO_TEST_FALSE && out_overflow && zt_on_ambiguous_cut(sub)) {
-        *out_overflow = true;
-        return ZERO_TEST_UNKNOWN;
+    if (r == ZERO_TEST_FALSE && out_overflow) {
+        /* read on the EXACT point: a machine-real coordinate stays a machine
+         * number under N, so the 200-bit reading of the radicand carried
+         * machine noise (2^-53, not 2^-190) and the cut went unseen --
+         * Sqrt[Tan[x]] + Sqrt[Cot[x]] (paper example E6d-4), whose answer
+         * holds Sqrt[(-I - I E^(-2 I x))/(-1 + E^(-2 I x))] = Sqrt[Cot[x]],
+         * read FALSE at x = -3.26342, where Cot < 0 */
+        Expr* exact = zt_exactify_reals(sub);
+        bool amb = zt_on_ambiguous_cut(exact ? exact : sub);
+        if (exact) expr_free(exact);
+        if (amb) {
+            *out_overflow = true;
+            return ZERO_TEST_UNKNOWN;
+        }
     }
 #endif
     return r;
@@ -2632,12 +2747,14 @@ static ZeroTestResult sz_trial_shelled(const Expr* e, const char** syms,
     for (int s = 0; s < ZT_OVERFLOW_SHELL_LEN; ++s) {
         *overflow = false;
         if (skip) *skip = false;
+        g_zt_redraw_ok = s + 1 < ZT_OVERFLOW_SHELL_LEN;
         r = sz_trial(e, syms, specs, nsyms, screen,
                      ZT_OVERFLOW_SHELL_BITS[s], overflow,
                      conform_facts, nconform, skip);
         if (skip && *skip) return r;   /* region unreachable: smaller shells can't help */
-        if (!(r == ZERO_TEST_UNKNOWN && *overflow)) return r;
+        if (!(r == ZERO_TEST_UNKNOWN && *overflow)) { g_zt_redraw_ok = false; return r; }
     }
+    g_zt_redraw_ok = false;
     return r;   /* all shells overflowed: UNKNOWN, *overflow == true */
 }
 

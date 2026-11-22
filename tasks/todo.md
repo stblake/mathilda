@@ -81,6 +81,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (v0.6651)
 - [x] D3 M2: the general tower over the curve, weak normaliser, cancellation with a homogeneous solution, least radical exponent (v0.6689)
 - [ ] G-pzq-1: PossibleZeroQ false negatives on correct antiderivatives (E^(Sqrt[1 + x^4] + Log[1 + x]^2) shapes; 6 of the 330 M2 stress cases)
+  - [x] v0.6700: a FALSE needs the top two rungs to agree in value (E3-6 ArcTan residual); a signed-zero imaginary radicand on a cut is re-drawn, read on the exact point (E6d-4)
   - [x] v0.6699: cancellation deeper than the 1000-bit rung (cM-3-152: flat at 2^274 to 1000 bits, a zero at 2000) -- exact-point climb doubles past the ladder; rung-1 plateau no longer against the machine residual; still-falling top rung is a zero. The E^(Sqrt[1 + x^4] + Log[1 + x]^2) stress shapes are still to be rechecked
 - [x] Phase R: FriCAS comparison rerun at v0.6688 (4ce8bd355): 256 100%, 259 99%/100% Automatic, 260 99%
 - [x] L1 I2 (irrational log coefficients in PLD_0): Lemma E1irr, reviewed, v0.6690
@@ -98,7 +99,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 closed v0.6652 (exponent lattice HNF)
 - [x] D6 slow cases (v0.6699): cM-3-152 7.5 s -> 0.06 s (PZQ + verification in u), two-elem-49 2.9 s -> 0.10 s (powerBasisInverse monomial), cM-4-306 3.3 s -> 2.2 s (exp-kernel budget 0.6 s); cR-1-28 0.1 s (v0.6698)
 - [ ] D6: cB-2-1053 is 1.8 s in Trager's own algorithm (Method -> "Trager" column; Automatic closes it at once in QuadraticRadicals) -- a genus-0 shortcut inside Trager must keep Trager's answer form
-- [ ] D6: cM-4-306's remaining 2.2 s is brPrincipalGenerator / kRowEchelon (Trager log part over a cubic curve) -- the shared bottleneck of Trager in u and the tower
+- [x] D6: cM-4-306's principal-generator step (v0.6700): normalizeAtInfinity through FLINT`PolynomialWeakPopovForm, 1.89 s -> 1.14 s (Trager in u 1.76 s -> 0.73 s); remainder is torsionScreen / divisorIdeal
 - [ ] D6 speed: 43 cases over 1 s; evaluator scoping change DONE (v0.6653-57: D + A3 summaries; Trager -14.4%, cM-1-292 -12.8% instructions; docs/design/scoping_substitution.md) -- the algebra-bound remainder is open
 - [x] D7 (v0.6650): 10 of the 18 special-function cases
 - [ ] D7 rest: 1 left, tani-rand-21 Log[I + Tan[1 + x]] Tan[1 + x] (V = Integrate[Tan] is a log; the remainder needs a dilog ladder in Cos/Tan). Closed v0.6691: tan-rand-5, tanh-rand-32, tan-rand-11, lim-rand-10 (stage 15c ExpRewrite, LogByParts)

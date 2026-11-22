@@ -429,6 +429,16 @@ Pipeline (each stage exits early on a definite verdict):
      IEEE overflow, an unrepresentable coordinate, and the sampler re-draws it
      from a smaller magnitude shell. A non-zero function is resolvably
      non-zero at the smaller-shell points, so this cannot hide one.
+   - **A non-zero must read the same value twice.** A `False` off the top two
+     rungs needs their values, not only their magnitudes, to agree to 2^-32.
+     A cancellation the precision has not outrun reads as noise the size of
+     the answer, which changes from rung to rung and can keep the same
+     magnitude by accident. The residual of the ArcTan form of the antiderivative
+     of `D[x + Log[-E^x + (1 + E^(3 x))^(1/3)], x]` is 0, and at `x = 63.7477`
+     it reads 2.98 and 2.975 at 500 and 1000 bits (its terms are ratios of sums
+     of size `2^560`). Such a point climbs on, doubling the precision up to
+     8000 bits, and is decided there on the same evidence; one still unresolved
+     at 8000 bits is re-drawn from a smaller shell (v0.6700).
    - **A residual that falls below the deep-zero floor**, or drops by 2^60
      over the ladder, is a zero.
    - **A machine-precision infinity** defers to the next rung. A genuine pole
@@ -436,7 +446,14 @@ Pipeline (each stage exits early on a definite verdict):
    - **Points on a real-axis branch cut are evidence** like any other. The
      principal values there count, so an identity that fails only on a cut,
      such as `Sqrt[(1 - x)/(1 + x)] (1 + x) - Sqrt[1 - x^2]` on `x < -1`, is
-     `False`.
+     `False`. The exception is a radicand or `Log` argument that is real and
+     negative by value but computed through complex arithmetic, so that its
+     imaginary part is rounding noise or a signed zero, and either sign picks a
+     side of the cut. A `False` at such a point is re-drawn. The test reads the
+     point exactly, because a machine-real coordinate keeps machine noise at
+     every rung. `Sqrt[(-I - I E^(-2 I x))/(-1 + E^(-2 I x))]` is
+     `Sqrt[Cot[x]]`, and at `x = -3.26342` its radicand reads
+     `-8.17 + 0.*^-60 I` (v0.6700).
    - **Magnitudes are base-2 logarithms**, never doubles: the residual, the
      operand scale and every threshold. Read as a double, a value below
      `2^-1074` was 0 and a scale above `2^1024` was `Inf`, so

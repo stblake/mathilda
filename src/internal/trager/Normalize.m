@@ -113,7 +113,19 @@ rowInfData[F_Association, B_Association, row_List, den_] := Module[
 
 normalizeAtInfinity::usage = "normalizeAtInfinity[F, B, M, den, x] normalises at infinity ([T] Ch 2 Sec 3) the basis rows M (polynomial over F[x]) of the module M/den of elements on the integral basis B. It returns <|\"rows\" -> M', \"k\" -> {k_i}|>: a basis of the same module whose leading vectors at infinity are independent, so that an element Sum p_i row_i/den (p_i in F[x]) has no pole at infinity iff every p_i row_i/den has none, and the orders k_i of the rows at infinity.";
 normalizeAtInfinity[F_Association, B_Association, M0_List, den_, x_Symbol] := Module[
-  {M = M0, n = Length[M0], data, ks, Nm, c, nz, i0, newRow, it = 0, cap},
+  {M = M0, n = Length[M0], data, ks, Nm, c, nz, i0, newRow, it = 0, cap, nat},
+  (* The native route: a shifted weak Popov form with shift delta.  The key  *)
+  (* of entry j, deg c_j + delta_j, is -(its order at infinity) + deg den,   *)
+  (* and the kernel breaks a tie on the FIRST column of greatest key, so     *)
+  (* distinct leading columns put the leading vectors in echelon form: they  *)
+  (* are independent, which is normality at infinity.  Its steps are the    *)
+  (* unimodular reductions below, done in C (cM-4-306: 35 steps over Q(w)    *)
+  (* on a 3 x 3 matrix of degree 24, 0.5 s here).                            *)
+  If[nativeQ[F] && VectorQ[B["delta"], IntegerQ],
+    nat = FLINT`PolynomialWeakPopovForm[M0, x, B["delta"], Sequence @@ nativeOpts[F]];
+    If[ListQ[nat],
+      ks = First[rowInfData[F, B, #, den]] & /@ nat;
+      If[FreeQ[ks, Infinity], Return[<|"rows" -> nat, "k" -> ks|>, Module]]]];
   data = rowInfData[F, B, #, den] & /@ M;
   (* Every step raises one k_i by at least 1, and Sum k_i is bounded by the   *)
   (* order at infinity of the determinant ([T] p.28), so this cap is never   *)

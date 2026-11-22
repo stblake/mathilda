@@ -223,6 +223,16 @@ static void test_normalizeAtInfinity(void) {
     TR_TRUE("Module[{tr = normalizeAtInfinity[tQ, tB32, {{x^3, x^2 + 1, x}, {x^2, x, 1}, {0, 0, x^5 + 1}}, 1, x]},"
             " AllTrue[{{1, 1, 1}, {x, 1, 0}, {x^2, x - 1, 3}, {0, x, 1}},"
             "   tNormProp[tQ, tB32, tr[\"rows\"], tr[\"k\"], 1, #] &]]");
+    /* the native route (a shifted weak Popov form, v0.6700) and the package's
+     * loop: both normal, the same orders at infinity up to the row order */
+    tr_do("tNM = {{t x^4, x^3 + 1, x}, {x^5, t x^2, 1}, {0, x + t, x^6 + 1}}; True");
+    TR_TRUE("ListQ[FLINT`PolynomialWeakPopovForm[tNM, x, tB32[\"delta\"], Extension -> {t, t^2 - 2}]]");
+    TR_TRUE("tNormOK[tN, tB32, tNM, x]");
+    TR_TRUE("Sort[normalizeAtInfinity[tN, tB32, tNM, x, x][\"k\"]] ==="
+            " Sort[Block[{nativeQ}, nativeQ[_] := False; normalizeAtInfinity[tN, tB32, tNM, x, x][\"k\"]]]");
+    TR_TRUE("Sort[normalizeAtInfinity[tG5, basisMod[tB32, 5], {{x^3, x^2 + 1, x}, {x^2, x, 1}, {0, 0, x^5 + 1}}, 1, x][\"k\"]] ==="
+            " Sort[Block[{nativeQ}, nativeQ[_] := False;"
+            "   normalizeAtInfinity[tG5, basisMod[tB32, 5], {{x^3, x^2 + 1, x}, {x^2, x, 1}, {0, 0, x^5 + 1}}, 1, x][\"k\"]]]");
     /* a zero row (rank-deficient module) is an internal error */
     TR_TRUE("catchTrager[normalizeAtInfinity[tQ, tBe, {{x^2, 1}, {x^3, x}}, 1, x]][[1 ;; 2]] ==="
             " tragerFail[\"Internal\", \"normalizeAtInfinityZeroRow\"]");
