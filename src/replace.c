@@ -10,6 +10,8 @@
 #include "print.h"          /* expr_to_string */
 #include "message.h"        /* mth_message */
 #include "linkedlist.h"
+#include "attr.h"         /* get_attributes: Flat/Orderless LHS keys */
+#include "ndarray.h"        /* is_packed_list */
 #include <stdlib.h>
 #include <string.h>
 
@@ -934,16 +936,24 @@ static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
  * the rules come wrapped in Dispatch[...] -- the user's explicit request for a
  * dispatch table -- each rule is keyed by what its LHS can possibly match:
  *   ATOM  a literal atom (x, 1, "s"): matches only that atom;
+ *   LIT   a pattern-free compound LHS (f[1], {a, "b"}, x^2): matches only a
+ *         node structurally equal to it, so it is keyed by the WHOLE
+ *         expression (expr_hash + expr_eq) -- otherwise every f[i] -> v rule
+ *         of a table lands in the one f bucket and Dispatch buys nothing;
  *   HEAD  a literal symbol head f[...]: matches only an f[...] node.
+ * A LIT key holds only while equality is the whole story, so an LHS with a
+ * Flat or Orderless head anywhere (a + b also matches inside a + b + c) or
+ * an association in it is keyed by its head instead.
  * HoldPattern / Condition / PatternTest / Pattern wrappers are looked through
  * (the guard still runs) and Verbatim[x] keys on x.  Everything else -- a
  * pattern-construct LHS (x_, _h, a | b, ...), a compound head, an association
  * entry, or an LHS with an Optional / x_. argument (x^n_. matches a bare x,
  * which has no Power head) -- is WILD and tried at every node.  At a node the
- * candidates are its bucket merged with the wild rules in ORIGINAL rule order,
- * so the first rule that matches is exactly the one the linear scan finds. */
+ * candidates are its LIT bucket, its ATOM or HEAD bucket and the wild rules,
+ * merged in ORIGINAL rule order, so the first rule that matches is exactly
+ * the one the linear scan finds. */
 
-enum { RK_WILD = 0, RK_ATOM = 1, RK_HEAD = 2 };
+enum { RK_WILD = 0, RK_ATOM = 1, RK_HEAD = 2, RK_LIT = 3 };
 
 typedef struct {
     Expr* key;          /* borrowed: an atom, or a head symbol */
@@ -957,6 +967,8 @@ typedef struct {
     size_t cap;         /* power of two */
     size_t* wild;       /* ascending */
     size_t nwild;
+    size_t nlit;        /* rules keyed RK_LIT; 0 skips the whole-node lookup */
+    Expr* list_sym;     /* owned: the head a packed-list node is looked up by */
 } RuleIndex;
 
 static bool rk_pattern_head(const char* h) {
@@ -982,6 +994,24 @@ static Expr* rk_unwrap(Expr* p) {
     }
 }
 
+/* True when `p` can match only an expression structurally equal to it: no
+ * pattern construct at any depth, no Flat or Orderless head (those match a
+ * sub-sequence or a permutation of a node's arguments) and no association. */
+static bool rk_literal(const Expr* p) {
+    if (p->type != EXPR_FUNCTION) return true;   /* atoms, packed lists */
+    const Expr* hd = p->data.function.head;
+    if (hd->type == EXPR_SYMBOL) {
+        const char* h = hd->data.symbol.name;
+        if (rk_pattern_head(h) || h == SYM_Association) return false;
+        if (get_attributes(h) & (ATTR_FLAT | ATTR_ORDERLESS)) return false;
+    } else if (!rk_literal(hd)) {
+        return false;
+    }
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (!rk_literal(p->data.function.args[i])) return false;
+    return true;
+}
+
 /* The key of a rule's LHS (see above); RK_WILD when it has none. */
 static int rk_rule_key(const ReplaceRule* r, Expr** key) {
     if (!r->pattern) return RK_WILD;
@@ -992,7 +1022,12 @@ static int rk_rule_key(const ReplaceRule* r, Expr** key) {
         p = p->data.function.args[0];
         verbatim = true;
     }
+    /* A packed list is a List: keyed with the compound literals, which a
+     * plain-List node is looked up against too (expr_hash agrees across the
+     * two representations). */
+    if (is_packed_list(p)) { *key = p; return RK_LIT; }
     if (p->type != EXPR_FUNCTION) { *key = p; return RK_ATOM; }
+    if (rk_literal(p)) { *key = p; return RK_LIT; }
     Expr* h = p->data.function.head;
     if (h->type != EXPR_SYMBOL) return RK_WILD;
     if (!verbatim) {
@@ -1023,10 +1058,13 @@ static void rule_index_build(RuleIndex* ix, const ReplaceRule* rules, size_t n) 
     ix->tab = calloc(ix->cap, sizeof(RuleBucket));
     ix->wild = malloc((n ? n : 1) * sizeof(size_t));
     ix->nwild = 0;
+    ix->nlit = 0;
+    ix->list_sym = expr_new_symbol(SYM_List);
     for (size_t i = 0; i < n; i++) {
         Expr* key = NULL;
         int kind = rk_rule_key(&rules[i], &key);
         if (kind == RK_WILD) { ix->wild[ix->nwild++] = i; continue; }
+        if (kind == RK_LIT) ix->nlit++;
         RuleBucket* b = &ix->tab[rk_slot(ix, key, kind)];
         if (!b->key) { b->key = key; b->kind = kind; }
         if (b->n == b->cap) {
@@ -1041,24 +1079,42 @@ static void rule_index_free(RuleIndex* ix) {
     for (size_t i = 0; i < ix->cap; i++) free(ix->tab[i].idx);
     free(ix->tab);
     free(ix->wild);
+    expr_free(ix->list_sym);
 }
 
 /* do_replace_all over an indexed rule set: only the node's bucket and the wild
  * rules are tried, in original order. */
 static Expr* do_replace_all_idx(Expr* e, ReplaceRule* rules, const RuleIndex* ix) {
+    /* Up to three ascending candidate lists: the node's LIT bucket, its ATOM
+     * or HEAD bucket, and the wild rules. */
+    const size_t* lst[3];
+    size_t len[3], pos[3] = { 0, 0, 0 };
+    int nl = 0;
+    bool packed = is_packed_list(e);
+    if (ix->nlit && (e->type == EXPR_FUNCTION || packed)) {
+        const RuleBucket* s = &ix->tab[rk_slot(ix, e, RK_LIT)];
+        if (s->key) { lst[nl] = s->idx; len[nl++] = s->n; }
+    }
     const RuleBucket* b = NULL;
-    if (e->type != EXPR_FUNCTION) {
+    if (packed) {
+        const RuleBucket* s = &ix->tab[rk_slot(ix, ix->list_sym, RK_HEAD)];
+        if (s->key) b = s;
+    } else if (e->type != EXPR_FUNCTION) {
         const RuleBucket* s = &ix->tab[rk_slot(ix, e, RK_ATOM)];
         if (s->key) b = s;
     } else if (e->data.function.head->type == EXPR_SYMBOL) {
         const RuleBucket* s = &ix->tab[rk_slot(ix, e->data.function.head, RK_HEAD)];
         if (s->key) b = s;
     }
-    size_t i = 0, j = 0, nb = b ? b->n : 0;
-    while (i < nb || j < ix->nwild) {
-        size_t r = (j >= ix->nwild || (i < nb && b->idx[i] < ix->wild[j])) ? b->idx[i++]
-                                                                           : ix->wild[j++];
-        Expr* repl = rule_try(&rules[r], e, true);
+    if (b) { lst[nl] = b->idx; len[nl++] = b->n; }
+    if (ix->nwild) { lst[nl] = ix->wild; len[nl++] = ix->nwild; }
+    for (;;) {
+        int best = -1;
+        for (int k = 0; k < nl; k++)
+            if (pos[k] < len[k] && (best < 0 || lst[k][pos[k]] < lst[best][pos[best]]))
+                best = k;
+        if (best < 0) break;
+        Expr* repl = rule_try(&rules[lst[best][pos[best]++]], e, true);
         if (repl) return repl;
     }
 

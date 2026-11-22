@@ -241,11 +241,34 @@ int main() {
     run_test("a + b + z /. Dispatch[{a + b -> s}]", "s + z");
     /* Randomised: Dispatch and the plain rule list agree. */
     run_test("SeedRandom[3]; pool = {a, b, 1, f[x_], f[1], g[a, y_], h[q_] /; q > 1, x_Integer, _g, a | b, "
-             "x^n_., p_?EvenQ, a + z_, 1/2, u_[1]}; "
-             "ex = {a, b, 1, 2, f[1], f[2], f[a], g[a, 3], h[0], h[5], x, x^2, a + b + z, 1/2, k[1], {f[f[a]]}}; "
+             "x^n_., p_?EvenQ, a + z_, 1/2, u_[1], h[5], {1, 2}, x^2, f[f[a]]}; "
+             "ex = {a, b, 1, 2, f[1], f[2], f[a], g[a, 3], h[0], h[5], x, x^2, a + b + z, 1/2, k[1], {f[f[a]]}, {1, 2}, h[5]}; "
              "And @@ Table[rs = Table[RandomChoice[pool] -> RandomInteger[{100, 999}], {RandomInteger[{1, 10}]}]; "
              "(ex /. rs) === (ex /. Dispatch[rs]), {300}]", "True");
     run_test("Attributes[Dispatch]", "{Protected}");
+
+    /* Pattern-free compound left-hand sides are keyed by the whole expression,
+     * not only by their head, and first-match order still holds between a
+     * literal rule and a pattern rule that both match. */
+    run_test("{f[1], f[2], g[f[1]]} /. Dispatch[{f[x_] :> p[x], f[1] -> lit}]", "{p[1], p[2], g[p[1]]}");
+    run_test("{f[1], f[2], g[f[1]]} /. Dispatch[{f[1] -> lit, f[x_] :> p[x]}]", "{lit, p[2], g[lit]}");
+    run_test("{f[1], f[2]} /. Dispatch[{_f :> w, f[1] -> lit}]", "{w, w}");
+    run_test("{f[1], f[2]} /. Dispatch[{f[1] /; False -> lit, f[1] -> lit2}]", "{lit2, f[2]}");
+    run_test("{a + b, a + b + c, h[a + b + c]} /. Dispatch[{a + b -> s}]", "{s, c + s, h[c + s]}");
+    run_test("{{1, 2}, {1, 2, 3}, Range[3]} /. Dispatch[{{1, 2, 3} -> lit, {1, 2} -> two}]", "{two, lit, lit}");
+    run_test("{Range[100], {1}} /. Dispatch[{Range[100] -> big}]", "{big, {1}}");
+    run_test("{Range[5.]} /. Dispatch[{{x_, y__} :> first[x]}]", "{first[1.0]}");
+    run_test("{x^2, x^3, Sin[x^2]} /. Dispatch[{x^2 -> sq, Sin[x^2] -> s2}]", "{sq, x^3, s2}");
+    run_test("{h[\"a\"], h[1.5], h[1], f[1][2], f[1]} /. Dispatch[{h[\"a\"] -> ha, h[1.5] -> hr, h[1] -> hi, f[1][2] -> c12}]",
+             "{ha, hr, hi, c12, f[1]}");
+    run_test("f[1] //. Dispatch[{f[1] -> f[2], f[2] -> done}]", "done");
+    /* ... and that is what makes a table of them fast: 4000 f[i] rules against
+     * 2000 subexpressions. Loose bound (a linear scan is ~100x slower), so the
+     * test is not timing-flaky. */
+    run_test("rls = Table[f[i] -> i^2, {i, 4000}]; dsp4 = Dispatch[rls]; SeedRandom[1]; "
+             "ex4 = Table[f[RandomInteger[{1, 4000}]], {2000}]; "
+             "tl = First[AbsoluteTiming[r1 = ex4 /. rls]]; td = First[AbsoluteTiming[r2 = ex4 /. dsp4]]; "
+             "{r1 === r2, tl > 10 td}", "{True, True}");
 
     printf("All Replace tests passed!\n");
     symtab_clear();

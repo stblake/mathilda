@@ -500,7 +500,12 @@ the rules that could match it, instead of every rule.
 
 **How the index keys a rule:**
 - A literal atom LHS (`a`, `1`, `"s"`) is keyed by that atom.
-- A literal-headed LHS (`f[...]`) is keyed by its head.
+- A pattern-free compound LHS (`f[1]`, `{a, "b"}`, `x^2`) is keyed by the
+  whole expression, so it is tried only at a node equal to it. A table of
+  `f[i] -> v` rules therefore does not collapse into one `f` bucket. An LHS
+  with a `Flat` or `Orderless` head anywhere (`a + b` also matches inside
+  `a + b + c`), or with an association, is keyed by its head instead.
+- Any other literal-headed LHS (`f[x_]`) is keyed by its head.
 - `HoldPattern`, `/;`, `?` and named-pattern wrappers are looked through, and
   `Verbatim[x]` is keyed by `x`.
 - Every other rule is tried at every node: a pattern construct (`x_`, `_h`,
@@ -510,7 +515,8 @@ the rules that could match it, instead of every rule.
   rule that wins is always the one the plain list would pick.
 
 **Performance:** for 5000 rules `vi -> i` over 20,000 symbols, the indexed
-rule set takes 3.8 ms against 772 ms for the plain list.
+rule set takes 3.8 ms against 772 ms for the plain list. For 4000 rules
+`f[i] -> i^2` over 2000 `f[k]` nodes, it takes about 1 ms against 270 ms.
 
 **Divergence:** `Dispatch[...]` is a normal expression here, so `Length` and
 `AtomQ` see its argument. The reference treats it as an atom, which prints as
