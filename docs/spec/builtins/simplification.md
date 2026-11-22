@@ -871,6 +871,12 @@ Gives the form an expression would take if its symbols satisfied the assumptions
   unsatisfiable for a non-real `p`, so the proof was vacuous:
   `Refine[Arg[-a + I a], a > 0]` was `0` and `Refine[Abs[-a + I a], a > 0]`
   was `-a + I a`. A sign is now read only when the realness is provable.
+- Sign facts that follow by transitivity along an inequality chain are known
+  to the fast sign prover: `a > b > 0` (or `a > b && b > 0`) gives `a > 0`, so
+  `Refine[Sqrt[a^2], a > b > 0]` is `a`, `Refine[Abs[a], a >= b >= 1]` is `a`
+  and `Refine[Sqrt[a^2], a < b < 0]` is `-a`. A chain whose far end has no
+  known sign (`a > b` alone) decides nothing. The closure is computed once,
+  when the assumption context is built, so it costs no Reduce call per query.
 - Purely symbolic/structural: no packed/NDArray kernel and no `Compile[]`
   lowering (it returns symbolic expressions, not machine numbers).
 

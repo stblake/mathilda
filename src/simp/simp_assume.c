@@ -126,10 +126,13 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
     ctx_push(ctx, a);
 }
 
+static void ctx_saturate_signs(AssumeCtx* ctx);
+
 AssumeCtx* assume_ctx_from_expr(const Expr* assum) {
     AssumeCtx* ctx = (AssumeCtx*)calloc(1, sizeof(AssumeCtx));
     if (!ctx) return NULL;
     ctx_walk(ctx, assum);
+    ctx_saturate_signs(ctx);
     return ctx;
 }
 
@@ -827,6 +830,88 @@ bool prov_re(const AssumeCtx* ctx, const Expr* x) {
         }
     }
     return false;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Sign saturation: transitivity over inequality chains                    */
+/* ----------------------------------------------------------------------- */
+
+/* Split a 2-arg inequality fact into hi R lo (hi > lo or hi >= lo). Returns
+ * false for any other fact, and for a fact with a numeric side (those are
+ * already sign facts that the fact_implies_* matchers read directly). */
+static bool sat_split(const Expr* f, const Expr** hi, const Expr** lo,
+                      bool* strict) {
+    if (!f || f->type != EXPR_FUNCTION || f->data.function.arg_count != 2 ||
+        !f->data.function.head || f->data.function.head->type != EXPR_SYMBOL)
+        return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    const Expr* a = f->data.function.args[0];
+    const Expr* b = f->data.function.args[1];
+    if (h == SYM_Greater || h == SYM_GreaterEqual) { *hi = a; *lo = b; }
+    else if (h == SYM_Less || h == SYM_LessEqual) { *hi = b; *lo = a; }
+    else return false;
+    *strict = (h == SYM_Greater || h == SYM_Less);
+    return numeric_sign(*hi) == 2 && numeric_sign(*lo) == 2;
+}
+
+/* Push the sign fact `x OP 0`. */
+static void sat_push_sign(AssumeCtx* ctx, const Expr* x, const char* op) {
+    Expr* fact = expr_new_function(expr_new_symbol(op),
+        (Expr*[]){ expr_copy((Expr*)x), expr_new_integer(0) }, 2);
+    ctx_push(ctx, fact);
+    expr_free(fact);
+}
+
+/* Close the fact set under sign transitivity. For a fact hi > lo (or
+ * hi >= lo) between two non-numeric terms:
+ *   lo > 0, or lo >= 0 with a strict relation   =>  hi > 0
+ *   lo >= 0                                     =>  hi >= 0
+ *   hi < 0, or hi <= 0 with a strict relation   =>  lo < 0
+ *   hi <= 0                                     =>  lo <= 0
+ * Each derived fact is pushed as a plain `x > 0` / `x >= 0` / `x < 0` /
+ * `x <= 0`, which is exactly the shape every sign query already matches, so
+ * `a > b && b > 0` (or the chain a > b > 0) proves a > 0 without a Reduce
+ * call per query. Runs once, when the context is built: rounds repeat until
+ * nothing new is derived (a chain of n links needs n rounds), each round is
+ * linear in the inequality facts, and the work is capped by SAT_MAX_INEQ. */
+#define SAT_MAX_INEQ 64
+static void ctx_saturate_signs(AssumeCtx* ctx) {
+    if (!ctx || ctx->inconsistent) return;
+    size_t n_ineq = 0;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr *hi, *lo; bool st;
+        if (sat_split(ctx->facts[i], &hi, &lo, &st)) n_ineq++;
+    }
+    if (n_ineq == 0 || n_ineq > SAT_MAX_INEQ) return;
+    size_t base = ctx->count;           /* derived facts are never chain links */
+    for (size_t round = 0; round <= n_ineq; round++) {
+        bool grew = false;
+        for (size_t i = 0; i < base; i++) {
+            const Expr *hi, *lo; bool strict;
+            if (!sat_split(ctx->facts[i], &hi, &lo, &strict)) continue;
+            /* Upward: the lower end's sign bounds the upper end. */
+            if (!prov_pos(ctx, hi)) {
+                bool lo_pos = prov_pos(ctx, lo);
+                bool lo_nn  = lo_pos || prov_nn(ctx, lo);
+                if (lo_pos || (strict && lo_nn)) {
+                    sat_push_sign(ctx, hi, SYM_Greater); grew = true;
+                } else if (lo_nn && !prov_nn(ctx, hi)) {
+                    sat_push_sign(ctx, hi, SYM_GreaterEqual); grew = true;
+                }
+            }
+            /* Downward: the upper end's sign bounds the lower end. */
+            if (!prov_neg(ctx, lo)) {
+                bool hi_neg = prov_neg(ctx, hi);
+                bool hi_np  = hi_neg || prov_np(ctx, hi);
+                if (hi_neg || (strict && hi_np)) {
+                    sat_push_sign(ctx, lo, SYM_Less); grew = true;
+                } else if (hi_np && !prov_np(ctx, lo)) {
+                    sat_push_sign(ctx, lo, SYM_LessEqual); grew = true;
+                }
+            }
+        }
+        if (!grew) break;
+    }
 }
 
 bool assume_known_positive(const AssumeCtx* ctx, const Expr* x) { return prov_pos(ctx, x); }

@@ -248,10 +248,29 @@ static void test_refine_arg_complex(void) {
     check("Refine[Abs[x - 1], x > 2]", "-1 + x");
 }
 
+/* Sign facts follow by transitivity along an inequality chain: a > b > 0
+ * gives a > 0 to the sign prover, so Sqrt[a^2] -> a.  Both the chained and
+ * the conjunction spelling, non-strict links, the negative direction, and a
+ * chain whose far end has no known sign (which must stay undecided). */
+static void test_refine_sign_transitivity(void) {
+    check("Refine[Sqrt[a^2], a > b > 0]", "a");
+    check("Refine[Sqrt[a^2], a > b && b > 0]", "a");
+    check("Refine[Sqrt[a^2], a > b > c > 0]", "a");
+    check("Refine[Abs[a], a >= b >= 1]", "a");
+    check("Refine[Abs[a], a >= b >= 0]", "a");
+    check("Refine[Sqrt[a^2], a < b < 0]", "-a");
+    check("Refine[Sqrt[a^2], a <= b < 0]", "-a");
+    check("Refine[Sign[a], b < a && 0 < b]", "1");
+    check("Refine[Sqrt[a^2], a > b]", "Abs[a]");
+    check("Refine[Sqrt[a^2], a > b >= -1]", "Abs[a]");
+    check("Simplify[Sqrt[a^2], a > b > 0]", "a");
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_refine_arg_complex);
+    TEST(test_refine_sign_transitivity);
     test_power_sqrt();
     test_log();
     test_trig();

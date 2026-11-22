@@ -65,7 +65,9 @@ void assume_ctx_free(AssumeCtx* ctx);
  * entails the property under v1's narrow reasoning rules (direct facts
  * plus the obvious lattice Integer => Rational => Real => Complex,
  * x > 0 => x >= 0 => x in Reals, x in Reals && Equal[x,0]==False handled
- * trivially). No transitive chaining across multiple inequality facts. */
+ * trivially). Sign facts that follow by transitivity along an inequality
+ * chain (a > b && b > 0 => a > 0) are derived once, when the context is
+ * built (ctx_saturate_signs); no other chaining across facts. */
 bool assume_known_positive(const AssumeCtx* ctx, const Expr* x);
 bool assume_known_nonneg  (const AssumeCtx* ctx, const Expr* x);
 bool assume_known_negative(const AssumeCtx* ctx, const Expr* x);
