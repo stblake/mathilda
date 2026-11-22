@@ -3316,7 +3316,16 @@ principal value it must be provably **simple** (`Limit[(x−p) f, x → p]` a
 nonzero finite residue): `Integrate[1/(x−a), {x,0,2a}, PrincipalValue -> True,
 Assumptions -> a>0]` → `0`, `Integrate[x/(x−a), {x,0,3a}, ...]` → `a(3 + Log 2)`;
 without `PrincipalValue` the same integral emits `Integrate::idiv`. Several
-symbolic poles cannot be ordered and leave the integral unevaluated. The
+symbolic poles are placed in the order the assumptions prove, and each must be
+simple: `Integrate[1/((x − a)(x − b)), {x, −1, 1}, PrincipalValue -> True,
+Assumptions -> −1 < a < b < 1]` is `(Log[(1−b)/(1+b)] − Log[(1−a)/(1+a)])/(b − a)`
+(as Logs of linear factors); poles the assumptions cannot order (which may
+coincide) leave the integral unevaluated. The real part is written as Logs of
+moduli under the assumptions: `Re[Log[u]]` is `Log[±u]` and `Re[ArcTanh[u]]`
+is `(Log[|1 + u|] − Log[|1 − u|])/2` once the signs are decided, and a Log of a
+factorable argument is split (`Log[1 − 2b + b^2]/2` → `Log[1 − b]` for b < 1), so
+`Integrate[1/(x − b), {x, −1, 1}, PrincipalValue -> True, Assumptions -> −1 < b < 1]`
+→ `Log[1 − b] − Log[1 + b]`. The
 realness check on a symbolic PV samples a point that satisfies the assumptions
 (under `0 < a < b` not `a = b`), and the final `Refine` reads `Re[Log[b]]` as
 `Log[b]` for `b > 0`, so `Integrate[1/x, {x,−a,b}, PrincipalValue -> True,

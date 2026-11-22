@@ -147,6 +147,26 @@ static void test_pv_symbolic_pole(void) {
              "Integrate[1/(-a + x), {x, 0, 2 a}, Assumptions -> a > 0]");
 }
 
+/* The real Log form of a symbolic-pole PV, and two symbolic poles ordered by
+ * the assumptions.  PV of 1/(x - c) on [-1, 1] is Log[(1 - c)/(1 + c)] for
+ * -1 < c < 1; 1/((x - a)(x - b)) = (1/(x - b) - 1/(x - a))/(b - a). */
+static void test_pv_symbolic_logs_and_two_poles(void) {
+    check_quiet("Integrate[1/(x - b), {x, -1, 1}, PrincipalValue -> True, Assumptions -> -1 < b < 1]",
+                "Log[1 - b] - Log[1 + b]");
+    check_quiet("With[{r = Integrate[1/((x - a)(x - b)), {x, -1, 1}, PrincipalValue -> True, "
+                "Assumptions -> -1 < a < b < 1]}, FreeQ[r, Integrate] && AllTrue[{{a -> -0.3, b -> 0.5}, {a -> 0.2, b -> 0.7}, "
+                "{a -> -0.9, b -> -0.1}}, Abs[N[(r - (Log[(1 - b)/(1 + b)] - Log[(1 - a)/(1 + a)])"
+                "/(b - a)) /. #]] < 10^-12 &]]", "True");
+    /* reversed order in the assumptions */
+    check_quiet("With[{r = Integrate[1/((x - a)(x - b)), {x, -1, 1}, PrincipalValue -> True, "
+                "Assumptions -> -1 < b < a < 1]}, FreeQ[r, Integrate] && AllTrue[{{b -> -0.3, a -> 0.5}, {b -> 0.2, a -> 0.7}, "
+                "{b -> -0.9, a -> -0.1}}, Abs[N[(r - (Log[(1 - b)/(1 + b)] - Log[(1 - a)/(1 + a)])"
+                "/(b - a)) /. #]] < 10^-12 &]]", "True");
+    /* unordered poles (a and b may coincide: a double pole) stay unevaluated */
+    check_eq("FreeQ[Quiet[Integrate[1/((x - a)(x - b)), {x, -1, 1}, PrincipalValue -> True, "
+             "Assumptions -> -1 < a < 1 && -1 < b < 1]], Integrate]", "False");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -158,6 +178,7 @@ int main(void) {
     TEST(test_pv_numeric);
 
     TEST(test_pv_symbolic_pole);
+    TEST(test_pv_symbolic_logs_and_two_poles);
     printf("All integrate_principalvalue tests passed.\n");
     return 0;
 }

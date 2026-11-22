@@ -333,10 +333,11 @@ typedef struct {
     double* vals; /* their numeric values, used for ordering / dedup         */
     size_t n, cap;
     bool undecidable; /* a pole exists whose interior-ness we cannot decide  */
-    /* The set holds a single SYMBOLIC interior pole (x = a, proved interior
-     * under the assumptions): its vals[] entry is NaN.  One such pole needs no
-     * ordering -- the breakpoints are [lo, pole, hi] -- so it is placeable;
-     * any second pole alongside it cannot be ordered and is undecidable. */
+    /* The set holds SYMBOLIC interior poles (x = a, proved interior under the
+     * assumptions): their vals[] entries are NaN.  They are kept in ascending
+     * order as the assumptions decide it (poleset_insert_symbolic); a pole the
+     * assumptions cannot order against the others, or any numeric pole
+     * alongside them, is undecidable. */
     bool symbolic;
 } PoleSet;
 
@@ -376,6 +377,36 @@ static void poleset_insert(PoleSet* s, Expr* val, double v) {
     s->pts[k]  = val;
     s->vals[k] = v;
     s->n++;
+}
+
+/* Insert the symbolic interior pole `val` (owned) into a set of symbolic
+ * poles, at its place in the ascending order the assumptions `as` prove
+ * (-1 < a < b < 1 orders x = a before x = b).  A pole equal to one already
+ * held is dropped; one the assumptions cannot order strictly against every
+ * pole held (a and b with no relation between them, which may coincide)
+ * makes the set undecidable.  Consumes `val`. */
+static void poleset_insert_symbolic(PoleSet* s, Expr* val, Expr* as) {
+    if (s->n > 0 && !s->symbolic) { expr_free(val); s->undecidable = true; return; }
+    size_t k = 0;
+    for (size_t i = 0; i < s->n; i++) {
+        if (expr_eq(s->pts[i], val)) { expr_free(val); return; }
+        if (nl_refine_true(mk_fn2("Less", expr_copy(s->pts[i]), expr_copy(val)), as))
+            k = i + 1;
+        else if (!nl_refine_true(mk_fn2("Less", expr_copy(val), expr_copy(s->pts[i])), as)) {
+            expr_free(val); s->undecidable = true; return;
+        }
+    }
+    if (s->n == s->cap) {
+        size_t nc = s->cap ? s->cap * 2 : 4;
+        s->pts  = realloc(s->pts,  nc * sizeof(*s->pts));
+        s->vals = realloc(s->vals, nc * sizeof(*s->vals));
+        s->cap = nc;
+    }
+    for (size_t i = s->n; i > k; i--) { s->pts[i] = s->pts[i - 1]; s->vals[i] = s->vals[i - 1]; }
+    s->pts[k] = val;
+    s->vals[k] = NAN;
+    s->n++;
+    s->symbolic = true;
 }
 
 /* The RHS of the (single) `Rule[x, val]` inside a Solve solution element,
@@ -520,13 +551,10 @@ static void nl_add_zero_roots(Expr* g, Expr* x, Expr* a, Expr* b, PoleSet* s, Ex
 
         if (cls == NL_INTERIOR) {
             if (rk == 1) poleset_insert(s, expr_copy(val), rv);
-            else if (s->symbolic && s->n == 1 && expr_eq(s->pts[0], val))
-                ;                                 /* same symbolic root again */
-            else if (s->n == 0 && !s->undecidable) {
-                /* The sole interior pole, symbolic (x = a under a > 0): placeable. */
-                poleset_insert(s, expr_copy(val), NAN);
-                s->symbolic = true;
-            } else s->undecidable = true;  /* symbolic root among others: cannot order */
+            else if (!s->undecidable)
+                /* A symbolic interior pole (x = a under a > 0), placed in the
+                 * order the assumptions give it among the others. */
+                poleset_insert_symbolic(s, expr_copy(val), as);
         } else if (cls == NL_UNKNOWN) {
             s->undecidable = true;
         }
@@ -1083,6 +1111,209 @@ static void nl_collect_vars(const Expr* e, Expr*** rules, size_t* n, size_t* cap
         nl_collect_vars(e->data.function.args[i], rules, n, cap);
 }
 
+/* Log[p], or Log[Abs[p]] when `modulus`, for p = c q1^e1 ... qk^ek
+ * (FactorList[Together[p]]) with the sign of every qi decided by the
+ * assumptions: Log[|c|] + e1 Log[|q1|] + ... + ek Log[|qk|], |qi| = qi or -qi.
+ * The real part of a principal-value antiderivative is a Log of a modulus,
+ * which Simplify leaves unsplit: Log[1 - 2 b + b^2]/2 is Log[1 - b] when
+ * b < 1, and Re[Log[-1 + b]] is Log[1 - b].  NULL when a sign is undecided;
+ * without `modulus`, also when p does not split or is not positive (the Log
+ * is then not of this real form).  p borrowed. */
+static Expr* nl_log_modulus(Expr* p, Expr* as, bool modulus) {
+    Expr* fl = eval_take(mk_fn1("FactorList", mk_fn1("Together", expr_copy(p))));
+    if (!fl || !head_name_is(fl, "List")) { if (fl) expr_free(fl); return NULL; }
+    size_t nf = fl->data.function.arg_count;
+    Expr** terms = malloc((nf + 1) * sizeof(Expr*));
+    size_t nt = 0, nsym = 0;
+    bool ok = true, split = false;
+    Expr* c = expr_new_integer(1);
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* pr = fl->data.function.args[i];
+        if (!head_name_is(pr, "List") || pr->data.function.arg_count != 2
+            || pr->data.function.args[1]->type != EXPR_INTEGER) { ok = false; break; }
+        Expr* q = pr->data.function.args[0];
+        int64_t e = pr->data.function.args[1]->data.integer;
+        double qv;
+        if (nl_numeric(q, &qv) == 1) {
+            c = eval_take(mk_fn2("Times", c, mk_fn2("Power", expr_copy(q), expr_new_integer(e))));
+            continue;
+        }
+        nsym++;
+        if (e != 1) split = true;
+        Expr* absq;
+        if (nl_refine_true(mk_fn2("Greater", expr_copy(q), expr_new_integer(0)), as))
+            absq = expr_copy(q);
+        else if (nl_refine_true(mk_fn2("Less", expr_copy(q), expr_new_integer(0)), as)) {
+            absq = eval_take(mk_fn2("Times", expr_new_integer(-1), expr_copy(q)));
+            if (e % 2 != 0) c = eval_take(mk_fn2("Times", expr_new_integer(-1), c));
+        } else { ok = false; break; }
+        terms[nt++] = mk_fn2("Times", expr_new_integer(e), mk_fn1("Log", absq));
+    }
+    expr_free(fl);
+    double cv;
+    if (nsym > 1) split = true;
+    if (ok && nl_numeric(c, &cv) == 1 && cv != 0.0 && (modulus || (split && cv > 0.0))) {
+        if (cv < 0.0) c = eval_take(mk_fn2("Times", expr_new_integer(-1), c));
+        terms[nt++] = mk_fn1("Log", c);
+        Expr* out = eval_take(expr_new_function(mk_sym("Plus"), terms, nt));
+        free(terms);
+        return out;
+    }
+    for (size_t i = 0; i < nt; i++) expr_free(terms[i]);
+    free(terms); expr_free(c);
+    return NULL;
+}
+
+/* True for Log[u] / ArcTanh[u], the atoms nl_re_atom takes the real part of. */
+static bool nl_is_re_atom(const Expr* e) {
+    return (head_name_is(e, "Log") || head_name_is(e, "ArcTanh"))
+        && e->data.function.arg_count == 1;
+}
+
+/* Re of a Log or ArcTanh of a real argument, as Logs of moduli:
+ * Re[Log[u]] = Log[|u|] and Re[ArcTanh[u]] = (Log[|1 + u|] - Log[|1 - u|])/2
+ * (u real, u != +-1: ArcTanh past 1 is ArcCoth plus the branch residue I Pi/2).
+ * NULL when a sign is undecided or u is not provably real. */
+static Expr* nl_re_atom(Expr* e, Expr* as) {
+    Expr* u = e->data.function.args[0];
+    if (head_name_is(e, "Log")) return nl_log_modulus(u, as, true);
+    if (!nl_refine_true(mk_fn2("Element", expr_copy(u), mk_sym("Reals")), as)) return NULL;
+    Expr* up = eval_take(mk_fn2("Plus", expr_new_integer(1), expr_copy(u)));
+    Expr* um = eval_take(mk_fn2("Plus", expr_new_integer(1),
+                                mk_fn2("Times", expr_new_integer(-1), expr_copy(u))));
+    Expr* lp = nl_log_modulus(up, as, true);
+    Expr* lm = lp ? nl_log_modulus(um, as, true) : NULL;
+    expr_free(up); expr_free(um);
+    if (!lm) { if (lp) expr_free(lp); return NULL; }
+    return eval_take(mk_fn2("Times", make_rational(1, 2),
+                            mk_fn2("Plus", lp, mk_fn2("Times", expr_new_integer(-1), lm))));
+}
+
+/* Re[z] with the terms c A of (expanded) z whose c is real and whose atom A
+ * (nl_is_re_atom) has a real part nl_re_atom can write, taken out as
+ * c Re[A]; the other terms stay under Re.  Exact: Re is linear over real
+ * coefficients.  NULL when no term qualifies.  z borrowed. */
+static Expr* nl_re_of_logs(Expr* z0, Expr* as) {
+    Expr* z = eval_take(mk_fn1("Expand", expr_copy(z0)));
+    if (!z) return NULL;
+    bool plus = head_name_is(z, "Plus");
+    size_t nt = plus ? z->data.function.arg_count : 1;
+    Expr** out = malloc((nt + 1) * sizeof(Expr*));
+    Expr** rest = malloc((nt ? nt : 1) * sizeof(Expr*));
+    size_t no = 0, nr = 0;
+    for (size_t i = 0; i < nt; i++) {
+        Expr* t = plus ? z->data.function.args[i] : z;
+        bool times = head_name_is(t, "Times");
+        size_t nfac = times ? t->data.function.arg_count : 1;
+        long li = -1;
+        for (size_t k = 0; k < nfac; k++) {
+            Expr* fk = times ? t->data.function.args[k] : t;
+            if (nl_is_re_atom(fk)) {
+                if (li >= 0) { li = -2; break; }
+                li = (long)k;
+            }
+        }
+        Expr* lm = NULL;
+        Expr* coef = NULL;
+        if (li >= 0) {
+            Expr** cf = malloc((nfac ? nfac : 1) * sizeof(Expr*));
+            size_t nc = 0;
+            for (size_t k = 0; k < nfac; k++)
+                if ((long)k != li) cf[nc++] = expr_copy(t->data.function.args[k]);
+            coef = eval_take(expr_new_function(mk_sym("Times"), cf, nc));
+            free(cf);
+            Expr* lg = times ? t->data.function.args[li] : t;
+            if (nl_refine_true(mk_fn2("Element", expr_copy(coef), mk_sym("Reals")), as))
+                lm = nl_re_atom(lg, as);
+        }
+        if (lm) out[no++] = mk_fn2("Times", coef, lm);
+        else { if (coef) expr_free(coef); rest[nr++] = expr_copy(t); }
+    }
+    expr_free(z);
+    if (no == 0) {
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(out); free(rest);
+        return NULL;
+    }
+    if (nr > 0) out[no++] = mk_fn1("Re", expr_new_function(mk_sym("Plus"), rest, nr));
+    free(rest);
+    Expr* r = eval_take(expr_new_function(mk_sym("Plus"), out, no));
+    free(out);
+    return r;
+}
+
+/* The real Log forms of a principal value: nl_re_of_logs at every Re and
+ * nl_log_modulus at every Log of e.  Consumes e. */
+static Expr* nl_split_logs(Expr* e, Expr* as) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    if (head_name_is(e, "Log") && e->data.function.arg_count == 1) {
+        Expr* r = nl_log_modulus(e->data.function.args[0], as, false);
+        if (r) { expr_free(e); return r; }
+        return e;
+    }
+    if (head_name_is(e, "Re") && e->data.function.arg_count == 1) {
+        Expr* r = nl_re_of_logs(e->data.function.args[0], as);
+        if (r) { expr_free(e); return nl_split_logs(r, as); }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** na = malloc((n ? n : 1) * sizeof(Expr*));
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        na[i] = nl_split_logs(expr_copy(a), as);
+        if (!expr_eq(na[i], a)) changed = true;
+    }
+    if (!changed) {
+        for (size_t i = 0; i < n; i++) expr_free(na[i]);
+        free(na);
+        return e;
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), na, n);
+    free(na);
+    expr_free(e);
+    return eval_take(out);
+}
+
+/* Rebind the `var -> value` rules[0..n) to a point FindInstance finds in the
+ * region `as`; the rules are left as they are when it finds none (or does not
+ * bind every variable to a variable-free value). */
+static void nl_sample_from_region(Expr** rules, size_t n, Expr* as) {
+    Expr** vs = malloc(n * sizeof(Expr*));
+    for (size_t k = 0; k < n; k++) vs[k] = expr_copy(rules[k]->data.function.args[0]);
+    Expr* vl = expr_new_function(mk_sym("List"), vs, n);
+    free(vs);
+    /* an internal probe: its diagnostics are neither printed nor seen by Check */
+    unsigned long fired = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    Expr* fi = eval_take(mk_fn2("FindInstance", expr_copy(as), vl));
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired);
+    if (fi && head_name_is(fi, "List") && fi->data.function.arg_count == 1
+        && head_name_is(fi->data.function.args[0], "List")) {
+        Expr* inst = fi->data.function.args[0];
+        Expr** vals = calloc(n, sizeof(Expr*));
+        double dummy;
+        bool all = true;
+        for (size_t k = 0; k < n && all; k++) {
+            const Expr* var = rules[k]->data.function.args[0];
+            for (size_t j = 0; j < inst->data.function.arg_count; j++) {
+                Expr* r = inst->data.function.args[j];
+                if (head_name_is(r, "Rule") && r->data.function.arg_count == 2
+                    && expr_eq(r->data.function.args[0], var)
+                    && nl_numeric(r->data.function.args[1], &dummy) == 1)
+                    vals[k] = r->data.function.args[1];
+            }
+            all = vals[k] != NULL;
+        }
+        for (size_t k = 0; k < n && all; k++) {
+            expr_free(rules[k]->data.function.args[1]);
+            rules[k]->data.function.args[1] = expr_copy(vals[k]);
+        }
+        free(vals);
+    }
+    if (fi) expr_free(fi);
+}
+
 /* A principal value computed as Re[F(b)-F(a)] is trustworthy only if it is in
  * fact real: instantiate every non-constant free variable at a sample value and
  * confirm N[.] is a finite real.  Catches the case where Re[] failed to strip a
@@ -1101,6 +1332,7 @@ static bool nl_realness_ok(Expr* pvval, Expr* as) {
     static const int64_t INC[] = { 2, 3, 5, 7, 11, 13, 17, 19 };
     const size_t NI = sizeof INC / sizeof *INC;
     int pick = 0;
+    bool any_admissible = false;
     if (as && n > 0 && n <= NI) {
         for (int pat = 0; pat < 3; pat++) {
             Expr** rr = malloc(n * sizeof(Expr*));
@@ -1114,7 +1346,7 @@ static bool nl_realness_ok(Expr* pvval, Expr* as) {
             Expr* ok = eval_take(mk_fn2("ReplaceAll", expr_copy(as), rl));
             bool admissible = ok && ok->type == EXPR_SYMBOL && ok->data.symbol.name == SYM_True;
             if (ok) expr_free(ok);
-            if (admissible) { pick = pat; break; }
+            if (admissible) { pick = pat; any_admissible = true; break; }
         }
     }
     for (size_t k = 0; k < n && pick != 0; k++) {
@@ -1122,6 +1354,11 @@ static bool nl_realness_ok(Expr* pvval, Expr* as) {
         expr_free(rules[k]->data.function.args[1]);
         rules[k]->data.function.args[1] = expr_new_integer(v);
     }
+    /* No integer sample is admissible (-1 < a < b < 1 admits none, and the
+     * all-2 fallback puts a pole of 1/(a - b) under the probe): take a point
+     * of the assumptions' region from FindInstance, exact for the polynomial
+     * inequalities assumptions usually are. */
+    if (as && n > 0 && n <= NI && !any_admissible) nl_sample_from_region(rules, n, as);
     Expr* subbed;
     /* An internal probe: instantiating at a sample can hit a transient
      * Power::infy / Infinity::indet (e.g. 0^(1-b) -> 0^-1 at b=2).  Quiet alone
@@ -1154,13 +1391,20 @@ bool nl_numeric_is_complex(Expr* e) {
     Expr** rules = NULL; size_t n = 0, cap = 0;
     nl_collect_vars(e, &rules, &n, &cap);
     Expr* subbed;
-    /* Quiet: instantiating at a sample can hit a transient Power::infy; probe. */
+    /* An internal probe: instantiating at a sample can hit a transient
+     * Power::infy (the all-2 sample is a pole of 1/(a - b)).  Quiet keeps it
+     * off the terminal; the arithmetic mute and the counter rollback keep it
+     * from an enclosing Check[] too (as in nl_realness_ok). */
+    unsigned long fired = mth_msg_fired_count();
+    arith_warnings_mute_push();
     if (n == 0) {
         subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", expr_copy(e))));
     } else {
         Expr* rl = expr_new_function(mk_sym("List"), rules, n);
         subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(e), rl))));
     }
+    arith_warnings_mute_pop();
+    mth_msg_fired_restore(fired);
     free(rules);
     bool is_cplx = false;
     if (subbed) {
@@ -1187,14 +1431,16 @@ static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
     if (num_bounds && bv < av) { double t = av; av = bv; bv = t; }
     if (!num_bounds && !as) return NULL;   /* symbolic bounds need assumptions */
 
-    /* Odd-order gate: sign of f must flip across every interior pole.  A sole
+    /* Odd-order gate: sign of f must flip across every interior pole.  A
      * symbolic pole (x = a) has no numeric probe point; it is admitted when it
      * is provably SIMPLE: Limit[(x - p) f, x -> p] is a finite nonzero residue
      * under the assumptions (a simple pole is odd-order, its one-sided
-     * divergences cancel).  Higher-order symbolic poles decline. */
-    if (poles->symbolic) {
-        if (!as || poles->n != 1) return NULL;
-        Expr* p = poles->pts[0];
+     * divergences cancel).  Every symbolic pole must pass (they are distinct:
+     * poleset_insert_symbolic proved them strictly ordered); a higher-order
+     * one declines. */
+    for (size_t i = 0; poles->symbolic && i < poles->n; i++) {
+        if (!as) return NULL;
+        Expr* p = poles->pts[i];
         Expr* g = mk_fn2("Times", mk_fn2("Plus", expr_copy(x),
                              mk_fn2("Times", expr_new_integer(-1), expr_copy(p))),
                          expr_copy(f));
@@ -1237,6 +1483,7 @@ static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
     Expr* pvval = eval_take(as ? mk_fn1("Quiet", mk_fn2("Simplify",
                                         mk_fn1("Re", expr_copy(diff)), expr_copy(as)))
                                : mk_fn1("Simplify", mk_fn1("Re", expr_copy(diff))));
+    if (pvval && as) pvval = nl_split_logs(pvval, as);   /* the real Log forms */
     if (pvval && nl_is_finite_closed(pvval, x) && nl_realness_ok(pvval, as)) {
         expr_free(diff);
         return pvval;   /* genuinely real (0, Log[b/a], 2 SinhIntegral[a], ...) */
