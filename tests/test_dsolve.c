@@ -3732,6 +3732,16 @@ static void t_nasser_series_sign_display(void) {
  * g(t) DiracDelta[t - a] (sifting) indefinitely, so the integrating-factor form
  * is a closed form valid across the breakpoint: no causal convolution integral,
  * no leaked DSolve`vpS dummy.  Targets are the reference system's answers. */
+/* A step-forced integrating-factor solution is collected by its steps, not
+ * left over the common denominator E^t. */
+static void t_step_forcing_collected(void) {
+    check_true("(y[t] /. DSolve[{y'[t] + y[t] == UnitStep[t - 1], y[0] == 0}, y[t], t][[1]]) === "
+               "(1 - E^(1 - t)) UnitStep[-1 + t]");
+    check_true("With[{s = DSolve[{y'[t] + 2 y[t] == 3 UnitStep[t - 2], y[0] == 1}, y[t], t]}, "
+               "Count[y[t] /. s[[1]], UnitStep[-2 + t], Infinity] == 1 && PossibleZeroQ[(y[t] /. s[[1]]) - "
+               "(E^(-2 t) + 3/2 (1 - E^(4 - 2 t)) UnitStep[t - 2])]]");
+}
+
 static void t_step_impulse_symbolic_breakpoint(void) {
     check_true("With[{s = DSolve[{y'[t] + y[t] == UnitStep[t - a], y[0] == 0}, y[t], t]}, "
                "FreeQ[s, Integrate] && PossibleZeroQ[(y[t] /. s[[1]]) - "
@@ -3879,6 +3889,7 @@ int main(void) {
     test_load_init_m();   /* match production: deriv.m rules + CRC integral tables */
 
     TEST(t_step_impulse_symbolic_breakpoint);
+    TEST(t_step_forcing_collected);
     TEST(t_step_forcing_not_constant);
     TEST(t_clean_answer_forms);
 

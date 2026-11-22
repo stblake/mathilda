@@ -965,7 +965,12 @@ Consistency with Cauchy's theorem: for a contour enclosing only the pole,
 `DSolve[eqn, y[x], x]`, returns the solution as an expression:
 `{{y[x] -> ...}}`. Initial/boundary conditions are given as equations at points
 (`y[0] == a`, `y'[x0] == b`); the generated constants `C[k]` are then fitted to
-them. `GeneratedParameters -> f` renames the constants to `f[k]`.
+them. `GeneratedParameters -> f` renames the constants to `f[k]`. A fitted
+solution carrying `UnitStep` / `HeavisideTheta` is expanded and collected on
+those steps (no Simplify; kept only when no larger), so an integrating-factor
+answer reads step by step: `DSolve[{y'[t] + y[t] == UnitStep[t - 1], y[0] == 0},
+y[t], t]` is `(1 - E^(1 - t)) UnitStep[-1 + t]`, not
+`(-E UnitStep[-1 + t] + E^t UnitStep[-1 + t])/E^t`.
 
 Like `Integrate`, `DSolve` is a **cascade polyalgorithm**: it tries a sequence
 of methods, and `DSolve[eqn, y, x, Method -> "<name>"]` dispatches directly to a

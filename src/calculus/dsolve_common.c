@@ -3077,6 +3077,48 @@ Expr* dsolve_variation_of_parameters_mode(Expr** basis, size_t n, const Expr* g,
     return yp;
 }
 
+/* Gather the distinct UnitStep / HeavisideTheta atoms of e (borrowed) into
+ * atoms[0..*n), up to max. */
+static void ds_step_atoms(const Expr* e, const Expr** atoms, size_t* n, size_t max) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if ((head_is(e, SYM_UnitStep) || head_is(e, SYM_HeavisideTheta)) && *n < max) {
+        for (size_t i = 0; i < *n; i++) if (expr_eq(atoms[i], e)) return;
+        atoms[(*n)++] = e;
+        return;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ds_step_atoms(e->data.function.args[i], atoms, n, max);
+}
+
+/* A step-forced solution, collected by its steps.  The integrating factor
+ * leaves the whole solution over the common denominator mu:
+ * (-E UnitStep[-1 + t] + E^t UnitStep[-1 + t])/E^t for y' + y == UnitStep[t - 1].
+ * Expanded and collected on the step atoms it reads as a sum of steps each
+ * with its own coefficient, (1 - E^(1 - t)) UnitStep[-1 + t].  Expand and
+ * Collect only (no Simplify), on a small body, and kept only when it is no
+ * larger.  Consumes body. */
+#define DS_STEP_COLLECT_MAX_LEAVES 400
+static Expr* ds_collect_steps(Expr* body) {
+    const Expr* atoms[16];
+    size_t na = 0;
+    ds_step_atoms(body, atoms, &na, 16);
+    if (na == 0 || leaf_count_internal(body, true) > DS_STEP_COLLECT_MAX_LEAVES)
+        return body;
+    Expr** al = malloc(sizeof(Expr*) * na);
+    for (size_t i = 0; i < na; i++) al[i] = expr_copy((Expr*)atoms[i]);
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), al, na);
+    free(al);
+    Expr* ex = eval_and_free(ds_call1(SYM_Expand, expr_copy(body)));
+    Expr* col = ex ? eval_and_free(ds_call2(SYM_Collect, ex, lst)) : NULL;
+    if (!ex) expr_free(lst);
+    if (col && leaf_count_internal(col, true) <= leaf_count_internal(body, true)) {
+        expr_free(body);
+        return col;
+    }
+    if (col) expr_free(col);
+    return body;
+}
+
 Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
     size_t nb = 0;
     Expr** bodies = fn(P, &nb);
@@ -3101,7 +3143,7 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
         if (nosol) { n_nosol++; if (fitted) expr_free(fitted); continue; }
         if (!fitted) continue;
         if (st == FIT_UNDEF) { expr_free(fitted); continue; }   /* never a solution */
-        if (st == FIT_OK) fitted = ds_real_form(P, fitted);
+        if (st == FIT_OK) fitted = ds_collect_steps(ds_real_form(P, fitted));
         /* Activate the integrals the fit rebased (inert so far, so that the real
          * form -- which rewrites every subexpression -- did not re-run the
          * definite-integration cascade on each rewrite: 15 s for a forced
