@@ -466,3 +466,21 @@ Found while implementing: a bare Return inside With in the cancellation branch d
 witness's answer, and the top-down pass then said "no solution". That was a false certificate,
 caught by a unit test before release. A source scan then found three more such Returns (inside
 Do in AlgebraicPart.m, inside With in TorsionModP.m), all fixed in v0.6692.
+
+# Fifth pass (2026-11-22): Lemma E2off, one transcendental offset (Phase L3, theory only)
+
+Verdict: **no FATAL**. Lemma (a)-(c) is correct: the P^D argument holds, the isomorphism is
+differential, and g3's integral is t1^2/(2 tau0). Four GAPs, all in the scope and the code
+plan, are resolved in the revised note:
+
+| ID | Class | Item | Resolution |
+|---|---|---|---|
+| L3-1 | GAP | Prime factorisation ignores the sign: Log(-2) = log 2 + i pi needs two constants | kappa_i > 0 with m = 0 (tau0 = log kappa0), or kappa_i = +-1 with any m (tau0 = i pi) |
+| L3-2 | GAP | "m = 0" excluded the i pi case | stated as above, with T10's reading of m |
+| L3-3 | GAP | Exponential offsets are multiplicative factors e^c | all c_i in (1/N)Z, tau0 = e^(1/N) |
+| L3-4 | GAP | After elimination, later kernels can bring algebraic constants (e^(t2/2) = Sqrt[2] e^(t1/2)) | declined until (A3) reads c in Q(tau) |
+| — | MINOR | Const(K(tau)) = Q(tau) unproved; the embedding for RootSum constants; the admitted-tower claim | stated |
+| — | code | "in Q" (integers, exponents, torsion) vs "in Const(K)" were conflated; RootSum residues live over the algebraic closure of Q(tau); missing: brBCLimited, ROOT_0, E1ld(ii), ConstantQ, the (A3) tests, torsion over Q(tau), zero tests, T10 | split into separate lists |
+
+Status: theory reviewed; the code is a staged follow-up. No corpus case of 256-260 reaches
+the offset declines.

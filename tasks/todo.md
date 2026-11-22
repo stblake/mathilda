@@ -84,7 +84,8 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] Phase R: FriCAS comparison rerun at v0.6688 (4ce8bd355): 256 100%, 259 99%/100% Automatic, 260 99%
 - [x] L1 I2 (irrational log coefficients in PLD_0): Lemma E1irr, reviewed, v0.6690
 - [x] L2 (v0.6692): the n = 1 witness by the homogeneous RDE_0 (Corollary E1hom, reviewed) -- root0 declines gone at level 1; level >= 2 still declines
-- [ ] L3 nonzero offsets (OL2): theory, review, then code
+- [x] L3 theory: Lemma E2off (one transcendental offset; K(tau0) = K(tau)), reviewed (no FATAL, 4 scope GAPs resolved)
+- [ ] L3 code: the staged OL2 list in the note (keep "in Q" vs "in Const(K)" separate; torsion and zero tests symbolic in tau) -- no corpus case needs it
 - [ ] NDSolveBVP.m: two bare Returns inside the shooting While fall through (residual-checked, reported as berr): decide whether "fail" was intended
 - [x] Cascade: Linearity returns Erf/Erfi for elementary integrands -> Risch decision on the whole (one-elem-30, two-elem-45, gauss-elem-10 closed; tanh-elem-38 needs > 4 s of RT); Erf[I z] -> I Erfi[z] (v0.6691). Open: odd-function sign of a negative Plus (Sin[-1 - x], Erf[-1 - x]) for every odd head, as the reference does
 - [x] Cascade misses: tan-elem-26, gauss-elem-23 (stage 02 Together probe), tan-elem-32 (closes in 3.6 s idle; DD total CPU budget) -- v0.6691

@@ -4179,6 +4179,22 @@ answer is verified and its certificate is one for `f`:
   iff both are (§E8 over the field of everything else; §E9). Tried when the support groups
   leave two non-elementary groups or a group undecided.
 
+**A radical at the bottom of the tower (Phase 5; M1 v0.6651, M2 v0.6689, L1 v0.6690, L2
+v0.6692).** When the radical `y = b(x)^(1/n)` sits inside a logarithm or an exponential, with
+further monomials above it (`Log[x + Sqrt[1 + x^3]]`, `E^(x Sqrt[1 + x^3])`, `Log[1 + x
+Sqrt[1 + x^3]]`), the integrand lies in a tower `Q(x)(y)(t_1)...(t_s)`. It is decided there by
+transcendental Risch over the curve (theory note E1, E2). The method takes any number of
+monomials. Each level's Risch DE, limited integration and logarithmic-derivative problems
+reduce to the level below, ending in Trager's algorithm and the Risch DE on the curve. For
+example, `Integrate[Log[x] Log[1 + x] E^(x Sqrt[x^3 + 1]), x, Method -> "Bronstein"]` is
+certified non-elementary, while `D[Log[x] Log[x + Sqrt[1 + x^3]] Log[1 + x Sqrt[1 + x^3]], x]`
+integrates. Still declined, with `Integrate::incomplete`:
+- a dependent kernel with a nonzero constant offset (`Log[2 x + 2 y]` beside `Log[x + y]`;
+  theory E2off);
+- constants other than rationals;
+- the radical in the middle of the tower;
+- a logarithmic-derivative witness that needs an n-th root at level >= 2.
+
 `E^x/Sqrt[1 + x^2] + (x Log[x] + Sqrt[2 + x^2] Log[x + Sqrt[2 + x^2]])/(x Sqrt[2 + x^2])`
 has a radical inside a logarithm and a second radical, so no single tower holds it; the
 groups are `E^x/Sqrt[1 + x^2]` (certified) and the rest (`Log[x] Log[x + Sqrt[2 + x^2]]`),
