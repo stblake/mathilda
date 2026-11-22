@@ -516,10 +516,49 @@ static void test_coeff_domain_inexact_numbers(void) {
 /* Inexact (Real) input coefficients are rationalised before the
  * Buchberger run, so a real-coefficient system still produces a basis
  * (previously gb_from_expr rejected reals and the call was left
- * unevaluated).  1.0 x^2 + ... == x^2 + ... after rationalisation. */
+ * unevaluated).  Under CoefficientDomain -> Rationals the basis is the
+ * exact basis of the rationalised input. */
 static void test_real_input_rationalised(void) {
-    check_true("GroebnerBasis[{1.0 x^2 - 2.0 y^2, x y - 3}, {x, y}] == "
+    check_true("GroebnerBasis[{1.0 x^2 - 2.0 y^2, x y - 3}, {x, y}, "
+               "CoefficientDomain -> Rationals] == "
                "GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]");
+}
+
+/* Inexact in, inexact out: under the default CoefficientDomain an
+ * approximate input coefficient makes the basis approximate, at the input's
+ * precision -- machine reals for machine input, the least input precision
+ * for arbitrary-precision input.  The basis is monic, so it equals the
+ * exact basis divided by its leading coefficients. */
+static void test_inexact_input_inexact_basis(void) {
+    const char* gb = "GroebnerBasis[{x^2 + y^2 - 1.5, x - 2.1 y}, {x, y}]";
+    char buf[512];
+    /* Machine reals only: no exact coefficient survives. */
+    snprintf(buf, sizeof buf,
+             "Union[Head /@ DeleteCases[Flatten[CoefficientList[#, {x, y}] & /@ %s], 0]] === {Real}", gb);
+    check_true(buf);
+    /* The monic exact basis is {y^2 - 150/541, x - 21/10 y}. */
+    snprintf(buf, sizeof buf,
+             "Max[Abs[Flatten[CoefficientList[#, {x, y}] & /@ "
+             "(%s - {y^2 - 150/541, x - 21/10 y})]]] < 10^-14", gb);
+    check_true(buf);
+    /* Automatic is the default. */
+    check_true("Union[Head /@ DeleteCases[Flatten[CoefficientList[#, {x, y}] & /@ GroebnerBasis[{x^2 + y^2 - 1.5, "
+               "x - 2.1 y}, {x, y}, CoefficientDomain -> Automatic]], 0]] === {Real}");
+    /* An explicit Rationals domain keeps the exact basis. */
+    check_eq("GroebnerBasis[{x^2 + y^2 - 1.5, x - 2.1 y}, {x, y}, "
+             "CoefficientDomain -> Rationals]",
+             "List[Plus[-150, Times[541, Power[y, 2]]], "
+             "Plus[Times[10, x], Times[-21, y]]]");
+    /* Arbitrary precision: the least input precision (25 digits). */
+    check_true("Min[Precision /@ Flatten[CoefficientList[#, {x, y}] & /@ GroebnerBasis[{x^2 + y^2 - "
+               "N[3/2, 30], x - N[21/10, 25] y}, {x, y}]]] == 25");
+    /* A parameter and a positive-dimensional ideal: still inexact. */
+    check_true("MemberQ[GroebnerBasis[{x^2 + a y - 1.5, x - y}, {x, y}], "
+               "_Real, Infinity]");
+    /* Exact input is unaffected. */
+    check_eq("GroebnerBasis[{x^2 + y^2 - 3/2, x - 21/10 y}, {x, y}]",
+             "List[Plus[-150, Times[541, Power[y, 2]]], "
+             "Plus[Times[10, x], Times[-21, y]]]");
 }
 
 /* CoefficientDomain -> RationalFunctions: the parameters live in the
@@ -1111,6 +1150,7 @@ int main(void) {
     TEST(test_coeff_domain_polynomials_equals_default);
     TEST(test_coeff_domain_inexact_numbers);
     TEST(test_real_input_rationalised);
+    TEST(test_inexact_input_inexact_basis);
     TEST(test_coeff_domain_rational_functions);
     TEST(test_coeff_domain_rational_functions_no_params);
     TEST(test_coeff_domain_rational_functions_eliminates);

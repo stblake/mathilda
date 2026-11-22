@@ -17,6 +17,7 @@
 #include "groebnerbasis.h"
 #include "linkedlist.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,6 +115,10 @@ typedef struct {
     Expr*   parameter_vars;         /* borrowed; List[...] or symbol or NULL */
     GBCoeffDomain domain;           /* CoefficientDomain -> ... */
     int     inexact_prec;           /* decimal digits for GB_DOM_INEXACT */
+    bool    inexact_machine;        /* GB_DOM_INEXACT taken from machine-real
+                                       input: emit machine reals */
+    bool    domain_given;           /* CoefficientDomain set to a value other
+                                       than Automatic */
     Expr*   poly_domain_vars;       /* borrowed; args of Polynomials[...] */
     int64_t modulus;                /* Modulus -> p (prime); 0 = char 0 */
 } GBOptions;
@@ -145,6 +150,8 @@ static void extract_options(const Expr* res, size_t* n_pos,
     opt->parameter_vars = NULL;
     opt->domain = GB_DOM_RATIONALS;
     opt->inexact_prec = 16;
+    opt->inexact_machine = false;
+    opt->domain_given = false;
     opt->poly_domain_vars = NULL;
     opt->modulus = 0;
 
@@ -194,6 +201,8 @@ static void extract_options(const Expr* res, size_t* n_pos,
                 opt->matrix_order = val;
             }
         } else if (key->data.symbol.name == SYM_CoefficientDomain) {
+            opt->domain_given = !(val->type == EXPR_SYMBOL
+                                  && val->data.symbol.name == SYM_Automatic);
             if (val->type == EXPR_SYMBOL) {
                 if (val->data.symbol.name == SYM_Rationals
                  || val->data.symbol.name == SYM_Automatic) {
@@ -607,6 +616,26 @@ static Expr* gb_with_generalised_atoms(Expr* res, Expr* (*self)(Expr*)) {
 static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, const Expr* pv, size_t n_polys,
                      Expr* vars_list, Expr* elim_list, Expr** hold);
 
+/* Precision of the inexact coefficients of `e`: sets *machine when a machine
+ * real occurs, and lowers *min_digits to the precision of each arbitrary-
+ * precision real.  A result is only as precise as its least precise input,
+ * so a machine real anywhere makes the whole computation machine precision. */
+static void gb_scan_precision(const Expr* e, bool* machine, double* min_digits) {
+    if (!e) return;
+    if (e->type == EXPR_REAL) { *machine = true; return; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) {
+        double d = numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr));
+        if (d < *min_digits) *min_digits = d;
+        return;
+    }
+#endif
+    if (e->type != EXPR_FUNCTION) return;
+    gb_scan_precision(e->data.function.head, machine, min_digits);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        gb_scan_precision(e->data.function.args[i], machine, min_digits);
+}
+
 /* Polynomial i of a List (borrowed) or a LinkedList (its slot, held in *hold
  * until the next read): the polynomials are read one at a time. */
 static Expr* gb_at(const Expr* seq, size_t i, Expr** hold) {
@@ -689,6 +718,32 @@ static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, const Expr* pv, s
         wrap_elim = expr_new_function(expr_new_symbol(SYM_List), wrapped, 1);
         free(wrapped);
         elim_list = wrap_elim;
+    }
+
+    /* Inexact in, inexact out: under the default CoefficientDomain, an
+     * approximate coefficient anywhere in the input selects InexactNumbers at
+     * the input's precision -- machine precision when a machine real occurs,
+     * otherwise the least precision of its arbitrary-precision reals.  The
+     * basis is still computed on the exact rationalisation of the input (see
+     * normalise_polynomial); only its rendering is approximate.  An explicit
+     * CoefficientDomain -> Rationals keeps the exact basis. */
+    if (!opt.domain_given && opt.domain == GB_DOM_RATIONALS && opt.modulus == 0) {
+        bool machine = false;
+        double min_digits = 1.0e9;
+        for (size_t i = 0; i < n_polys; i++)
+            gb_scan_precision(gb_at(pv, i, hold), &machine, &min_digits);
+        if (machine || min_digits < 1.0e9) {
+            opt.domain = GB_DOM_INEXACT;
+            opt.inexact_machine = machine;
+            if (machine) {
+                opt.inexact_prec = 16;
+            } else {
+                int p = (int)floor(min_digits);
+                if (p < 1) p = 1;
+                if (p > 100000) p = 100000;
+                opt.inexact_prec = p;
+            }
+        }
     }
 
     /* Empty polynomial list -> empty basis. */
@@ -1155,6 +1210,11 @@ static Expr* gb_core(Expr* res, size_t n_pos, GBOptions* optp, const Expr* pv, s
         mpfr_prec_t bits = (mpfr_prec_t)numeric_digits_to_bits((double)opt.inexact_prec);
         for (size_t i = 0; i < out_n; i++) {
             items[i] = gb_to_expr_inexact(G[i], all_vars, bits);
+            if (opt.inexact_machine) {
+                /* Machine-real input: machine-real coefficients. */
+                Expr* m = numericalize(items[i], numeric_machine_spec());
+                if (m) { expr_free(items[i]); items[i] = m; }
+            }
         }
 #else
         /* No MPFR: fall back to the exact rendering of the basis. */
