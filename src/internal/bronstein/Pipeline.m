@@ -440,6 +440,13 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
      brSignMerge writes them over one radical with sign symbols, and the
      sign split integrates every pattern over the constant field of the
      rewritten integrand (Q(i) when Sqrt[-x] = eps I Sqrt[x] brought in I) *)
+  (* several radicals that the support groups join transitively (terms over {y1, y2}
+     beside terms over {y2}): the partition by the EXACT radical set first, each
+     group on a smaller compositum, before the whole tower over all of them (260
+     two-elem-6: 48 s for the one tower, 5.5 s for its exact groups).  Only a
+     decided split is taken (every group elementary, or exactly one certified:
+     linearity); anything else falls through to the tower. *)
+  With[{ex = brExactSupportSplit[g, x]}, If[ex =!= None, Return[ex, Module]]];
   sm = brCatch[brSignMerge[g, x]];
   If[brFailQ[sm], sm = None];
   r = With[{g1 = If[sm === None, g, sm["g"] /. ((#[[1]] -> 1) & /@ sm["signs"])]},
@@ -479,6 +486,17 @@ brSupportSplitIntegrate[f_, x_Symbol] := Module[{e, r},
   r];
 (* a group undecided: None, so the caller keeps the tower's own (more specific) reason *)
 
+brExactSupportSplit::usage = "brExactSupportSplit[f, x] tries the partition of the terms of f by their exact set of radicals (brSupportGroups[..., \"Exact\"]) when f has two or more distinct radicals and the transitive support partition has a single group: an answer (verified) or {\"not elementary\", ...} when the split decides, None otherwise (fewer groups, a group undecided, or two or more non-elementary groups left after the merges).";
+brExactSupportSplit[f_, x_Symbol] := Module[{e, ts, rads, r},
+  rads = Union[Cases[f, Power[b_, _Rational] /; !FreeQ[b, x] :> b, {0, Infinity}, Heads -> True]];
+  If[Length[rads] < 2, Return[None]];
+  e = Quiet[TimeConstrained[Expand[f], 5, $Failed]];
+  If[e === $Failed || Head[e] =!= Plus || LeafCount[e] > brOption["SupportSplitLeaves"], Return[None]];
+  ts = List @@ e;
+  If[Length[brSupportGroups[ts, x, False]] =!= 1 || Length[brSupportGroups[ts, x, "Exact"]] < 2, Return[None]];
+  r = brSupportSplitBy[f, ts, x, "Exact"];
+  If[r === None || MatchQ[r, {"implementation incomplete", _}], None, r]];
+
 brSupportSplitBy::usage = "brSupportSplitBy[f, terms, x, kernelsQ] is brSupportSplitIntegrate on the partition brSupportGroups[terms, x, kernelsQ] of the terms of f; None when it has fewer than two groups.";
 brSupportSplitBy[f_, ts_List, x_Symbol, kq_] := Module[{groups, gs, rs, ne, pair, m, mr, F},
   groups = brSupportGroups[ts, x, kq];
@@ -508,7 +526,7 @@ brSupportSplitBy[f_, ts_List, x_Symbol, kq_] := Module[{groups, gs, rs, ne, pair
       F = Total[rs];
       If[antiderivativeQ[f, F, x], F, {"implementation incomplete", "support split: the sum of the groups' antiderivatives did not verify"}]]];
 
-brSupportGroups::usage = "brSupportGroups[terms, x] partitions terms into groups: two terms are in one group when they share a radical (the base of a power b^(p/q), b depending on x, anywhere in the term), transitively; the radical-free terms form one group. brSupportGroups[terms, x, True] is the partition by kernels instead: two terms are in one group when they share a logarithm or exponential kernel (Log[a], E^a, a depending on x), the kernel-free terms one group. Any partition is sound for the split (linearity); a finer one only risks two non-elementary groups. Returns a list of lists of terms.";
+brSupportGroups::usage = "brSupportGroups[terms, x] partitions terms into groups: two terms are in one group when they share a radical (the base of a power b^(p/q), b depending on x, anywhere in the term), transitively; the radical-free terms form one group. brSupportGroups[terms, x, True] is the partition by kernels instead: two terms are in one group when they share a logarithm or exponential kernel (Log[a], E^a, a depending on x), the kernel-free terms one group. brSupportGroups[terms, x, \"Exact\"] groups terms by their exact set of radicals (no transitive merging). Any partition is sound for the split (linearity); a finer one only risks two non-elementary groups. Returns a list of lists of terms.";
 brSupportGroups[ts_List, x_Symbol] := brSupportGroups[ts, x, False];
 brSupportGroups[ts_List, x_Symbol, kq_] := Module[{rad, gs, merged, out, g, hit},
   rad[t_] := If[TrueQ[kq],
@@ -516,6 +534,10 @@ brSupportGroups[ts_List, x_Symbol, kq_] := Module[{rad, gs, merged, out, g, hit}
     Union[Cases[t, Power[b_, _Rational] /; !FreeQ[b, x] :> b, {0, Infinity}, Heads -> True]]];
   (* groups {radicals, terms}; the radical-free terms carry the key None *)
   gs = {If[#1 === {}, {None}, #1], {#2}} & @@@ Transpose[{rad /@ ts, ts}];
+  (* kq === "Exact": the partition by the exact SET of radicals, no transitive
+     merging (terms over {y1, y2} apart from terms over {y2}) *)
+  If[kq === "Exact",
+    Return[Values[GroupBy[gs, First -> Last, Flatten]], Module]];
   merged = True;
   While[merged,
     merged = False; out = {};

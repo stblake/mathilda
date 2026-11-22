@@ -403,6 +403,15 @@ static void test_hom_witness(void) {
     BR_ANTIDERIV("D[Sqrt[1 + x^3] Log[x]^2 E^(Log[x]^2), x]", "Bronstein");
 }
 
+/* D6: the exact-support split before the one tower over every radical (260 two-elem-6: 48 s -> 2 s). */
+static void test_exact_support_split(void) {
+    br_run("f6 = (-3*E^(x + x^2)*x)/(2 + x^2)^(3/2) + (3*E^(x + x^2)*(1 + 2*x))/Sqrt[2 + x^2] - (Sqrt[2 + x^2]*(1 + x^3)^(1/3))/(1 + x) + (1 + x^2/(1 + x^3)^(2/3))/(2*(x + (1 + x^3)^(1/3))) - (x^2*Sqrt[2 + x^2]*Log[1 + x])/(1 + x^3)^(2/3) - (x*(1 + x^3)^(1/3)*Log[1 + x])/Sqrt[2 + x^2]; True");
+    BR_TRUE("Length[brSupportGroups[List @@ Expand[f6], x, False]] === 1 && Length[brSupportGroups[List @@ Expand[f6], x, \"Exact\"]] === 3");
+    BR_TRUE("TimeConstrained[With[{F = brExactSupportSplit[f6, x]}, !ListQ[F] && F =!= None && PossibleZeroQ[D[F, x] - f6]], 30, False]");
+    BR_TRUE("brExactSupportSplit[Sqrt[x] + x Sqrt[x], x] === None");                 /* one radical */
+    BR_TRUE("brExactSupportSplit[Sqrt[x] + Sqrt[1 + x], x] === None");               /* transitive groups already apart */
+}
+
 int main(void) {
     br_init();
     setup();
@@ -419,6 +428,7 @@ int main(void) {
     test_m2();
     test_i2();
     test_hom_witness();
+    test_exact_support_split();
     BR_DONE("bronstein_phase5_tests");
     return 0;
 }

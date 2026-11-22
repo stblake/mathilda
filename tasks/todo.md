@@ -89,7 +89,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [ ] NDSolveBVP.m: two bare Returns inside the shooting While fall through (residual-checked, reported as berr): decide whether "fail" was intended
 - [x] Cascade: Linearity returns Erf/Erfi for elementary integrands -> Risch decision on the whole (one-elem-30, two-elem-45, gauss-elem-10 closed; tanh-elem-38 needs > 4 s of RT); Erf[I z] -> I Erfi[z] (v0.6691). Open: odd-function sign of a negative Plus (Sin[-1 - x], Erf[-1 - x]) for every odd head, as the reference does
 - [x] Cascade misses: tan-elem-26, gauss-elem-23 (stage 02 Together probe), tan-elem-32 (closes in 3.6 s idle; DD total CPU budget) -- v0.6691
-- [ ] 260 two-elem-6: Bronstein takes 28 s (> the 10 s cascade budget) -- D6 speed
+- [x] 260 two-elem-6: exact-support split, 48 s -> 2.2 s (v0.6693)
 - [x] knowles_erf_tests: RoachMeijerG drops the additive constant (v0.6691)
 - [x] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases decided (v0.6652)
 - [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 closed v0.6652 (exponent lattice HNF)
