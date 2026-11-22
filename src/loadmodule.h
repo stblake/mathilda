@@ -96,6 +96,36 @@ unsigned mathilda_module_generation(void);
  * (context.c). */
 int mathilda_module_depth(void);
 
+/*
+ * The attempt state of one lazy loader (a stage that reads its .m package on
+ * first use).  Zero-initialised static storage is the "never tried" state.
+ *
+ *   if (mathilda_lazy_due(&st)) ok = mathilda_lazy_load_module(&st, "X.m");
+ *
+ * The rule: a read that ran to its end is not repeated while symtab_generation()
+ * is unchanged -- even when ANOTHER module's read was interrupted in the
+ * meantime, which moves mathilda_module_generation() on (re-reading a finished,
+ * Protected table fails on every definition).  A read that found no file is
+ * retried once mathilda_module_generation() moves.  A read cut short (abort or
+ * timeout jump) is never recorded, so the next call reads the file again.
+ * A loader that reads with mathilda_run_file itself calls mathilda_lazy_record
+ * after a read that was not interrupted.
+ */
+typedef struct {
+    int      attempted;   /* an attempt has been recorded                  */
+    unsigned gen;         /* mathilda_module_generation() at that attempt  */
+    int      complete;    /* that attempt read the whole file              */
+    unsigned symgen;      /* symtab_generation() at that attempt           */
+} MthLazyLoad;
+
+/* Nonzero when the loader should (re)read its module now. */
+int  mathilda_lazy_due(const MthLazyLoad* st);
+/* Record an attempt that was not interrupted; complete = the file was read. */
+void mathilda_lazy_record(MthLazyLoad* st, int complete);
+/* mathilda_load_module(relpath), recording the attempt by the rule above.
+ * Returns mathilda_load_module's value. */
+int  mathilda_lazy_load_module(MthLazyLoad* st, const char* relpath);
+
 /* Builtin: LoadModule["relpath"] -> True (loaded) or False (not found). */
 Expr* builtin_loadmodule(Expr* res);
 

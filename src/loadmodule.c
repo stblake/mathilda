@@ -537,6 +537,36 @@ int mathilda_load_module(const char* relpath) {
     return 0;
 }
 
+/* ---- lazy loaders -------------------------------------------------------- *
+ * The rule every lazy loader keys its attempt on (see MthLazyLoad in the
+ * header).  A COMPLETE read is final for its symtab generation: another
+ * module's interrupted read moves mathilda_module_generation() on, and keying a
+ * finished table on that number re-read it -- for the CRC table, whose last
+ * statement Protects IntegrateTable, every one of its rules then failed with a
+ * SetDelayed::write message.  Only an attempt that did not finish (file
+ * missing) waits for the generation to move; an interrupted one is not recorded
+ * at all, so the next call reads it again. */
+int mathilda_lazy_due(const MthLazyLoad* st) {
+    if (!st->attempted) return 1;
+    if (st->complete && st->symgen == symtab_generation()) return 0;
+    return st->gen != mathilda_module_generation();
+}
+
+void mathilda_lazy_record(MthLazyLoad* st, int complete) {
+    st->attempted = 1;
+    st->gen = mathilda_module_generation();
+    st->complete = complete ? 1 : 0;
+    st->symgen = symtab_generation();
+}
+
+int mathilda_lazy_load_module(MthLazyLoad* st, const char* relpath) {
+    int ok = mathilda_load_module(relpath);
+    if (!ok) mathilda_lazy_record(st, 0);            /* not found */
+    else if (lm_already_loaded(relpath)) mathilda_lazy_record(st, 1);
+    /* else: found but cut short -- unrecorded, so the next call retries */
+    return ok;
+}
+
 /* LoadModule["relpath"] -> True if the module was found and loaded (or had
  * already been loaded), False otherwise. */
 Expr* builtin_loadmodule(Expr* res) {

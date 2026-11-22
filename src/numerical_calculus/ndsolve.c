@@ -294,7 +294,7 @@ static bool nd_is_bvp(Expr** eqitems, size_t neq, const bool* is_ode,
     return false;
 }
 
-static unsigned bvp_load_gen = 0;      /* mathilda_module_generation() of the attempt */
+static MthLazyLoad bvp_load;   /* attempt state; see mathilda_lazy_due */
 static bool bvp_load_succeeded = false;
 
 /* Solve the boundary-value problem by shooting (src/internal/NDSolveBVP.m).
@@ -302,10 +302,9 @@ static bool bvp_load_succeeded = false;
 static Expr* nd_solve_bvp(Expr** A, size_t argc, Expr** eqitems, size_t neq,
                           const bool* is_ode, const char** fnames, size_t nfun,
                           const int* maxorder) {
-    if (bvp_load_gen != mathilda_module_generation()) {
-        bvp_load_gen = mathilda_module_generation();
+    if (mathilda_lazy_due(&bvp_load)) {
         mth_msg_suppress_push();
-        bvp_load_succeeded = mathilda_load_module("NDSolveBVP.m") != 0;
+        bvp_load_succeeded = mathilda_lazy_load_module(&bvp_load, "NDSolveBVP.m") != 0;
         mth_msg_suppress_pop();
     }
     if (!bvp_load_succeeded) {

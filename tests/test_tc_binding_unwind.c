@@ -171,6 +171,25 @@ static void test_context_restored_after_timeout(void) {
                    "Global`keepv === keepv", "True", 0);
 }
 
+/* A lazily loaded table that has been read to its end is not read again when
+ * ANOTHER module's read is cut short by a timeout.  The interrupted read moves
+ * the module generation on (so that module is retried); keying the finished
+ * CRC integral table on that number re-read it, and since the table Protects
+ * IntegrateTable at its end every rule failed with SetDelayed::write -- a
+ * flood of messages from a plain Integrate (and a wrong branch from Check). */
+static void test_lazy_table_not_reread_after_interrupted_load(void) {
+    /* the CRC table is read here, completely */
+    assert_eval_eq("Head[Integrate[x^2 Sqrt[x + 1] Log[x], x, Method -> \"CRCTable\"]] =!= Null",
+                   "True", 0);
+    /* a different module's read, interrupted */
+    assert_eval_eq("TimeConstrained[LoadModule[\"mixed/ParallelMixed.m\"], 0.05, cut]",
+                   "cut", 0);
+    assert_eval_eq("Check[Integrate[x^3 Sqrt[x + 2] Log[x], x, Method -> \"CRCTable\"]; quiet, flood]",
+                   "quiet", 0);
+    /* the interrupted module itself is read again in full */
+    assert_eval_eq("LoadModule[\"mixed/ParallelMixed.m\"]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -182,6 +201,7 @@ int main(void) {
     TEST(test_numerical_methods_slow_body);
     TEST(test_mpfr_constant_cache_after_timeout);
     TEST(test_context_restored_after_timeout);
+    TEST(test_lazy_table_not_reread_after_interrupted_load);
     printf("All tc_binding_unwind tests passed.\n");
     return 0;
 }
