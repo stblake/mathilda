@@ -1156,6 +1156,69 @@ void test_import_text(void) {
     unlink(t); unlink(txt); unlink(e); unlink(v); unlink(x);
 }
 
+/* ===== Export text formats ===== */
+
+void test_export_text(void) {
+    char p[256], txt[300], noext[300], src[2048], want[512];
+    scratch_path(p, sizeof p, "ex");
+    snprintf(txt, sizeof txt, "%s.txt", p);
+    snprintf(noext, sizeof noext, "%s_noext", p);
+    unlink(txt);
+
+    /* A .txt name exports a string as Text and returns the file name. */
+    snprintf(src, sizeof src, "Export[\"%s\", \"hello\"]", txt);
+    snprintf(want, sizeof want, "\"%s\"", txt);
+    assert_eval_eq(src, want, 0);
+    snprintf(src, sizeof src, "{Import[\"%s\"], Import[\"%s\", \"String\"]}", txt, txt);
+    assert_eval_eq(src, "{\"hello\", \"hello\\n\"}", 0);
+
+    /* Round trips, through every format, including strings that end in or
+     * hold line breaks and the empty string. */
+    snprintf(src, sizeof src,
+             "f = \"%s\"; ss = {\"hello\", \"\", \"a\\nb\", \"tail\\n\", \"\\n\\nx\\n\\n\", \"tab\\there\"}; "
+             "{And @@ Table[Import[Export[f, s, \"Text\"], \"Text\"] === s, {s, ss}], "
+             " And @@ Table[Import[Export[f, s], \"Text\"] === s, {s, ss}], "
+             " And @@ Table[Import[Export[f, s, \"String\"], \"String\"] === s, {s, ss}], "
+             " Import[Export[f, {\"a\", \"b\", \"\", \"c\"}, \"Lines\"], \"Lines\"], "
+             " Import[Export[f, {\"one\"}, \"Lines\"], \"Lines\"], "
+             " Import[Export[f, Table[ToString[i], {i, 1000}], \"Lines\"], \"Lines\"] === Table[ToString[i], {i, 1000}]}",
+             txt);
+    assert_eval_eq(src, "{True, True, True, {\"a\", \"b\", \"\", \"c\"}, {\"one\"}, True}", 0);
+
+    /* Non-strings: Text writes input form (a list one element per line),
+     * String output form. */
+    snprintf(src, sizeof src,
+             "f = \"%s\"; {Import[Export[f, x^2 + 1, \"Text\"], \"Text\"], "
+             "Import[Export[f, {{1, 2}, 3}, \"Text\"], \"Text\"], "
+             "Import[Export[f, {\"a\", {\"b\"}}, \"Lines\"], \"Lines\"], "
+             "Import[Export[f, {\"a\", \"b\"}, \"String\"], \"String\"], "
+             "Import[Export[f, Range[3]], \"Lines\"]}", txt);
+    assert_eval_eq(src, "{\"1 + x^2\", \"{1, 2}\\n3\", {\"a\", \"{\\\"b\\\"}\"}, \"{a, b}\", "
+                        "{\"1\", \"2\", \"3\"}}", 0);
+
+    /* An explicit format needs no extension. */
+    snprintf(src, sizeof src, "Import[Export[\"%s\", \"q\", \"Text\"], \"Text\"]", noext);
+    assert_eval_eq(src, "\"q\"", 0);
+    unlink(noext);
+
+    /* Failures go through the message funnel: Quiet silences, Check sees. */
+    assert_eval_eq("Quiet[Export[\"/nonexistent_mathilda_dir/f.txt\", \"x\"]]", "$Failed", 0);
+    assert_eval_eq("Check[Export[\"/nonexistent_mathilda_dir/f.txt\", \"x\"], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Quiet[Check[Export[\"/nonexistent_mathilda_dir/f.txt\", \"x\"], \"nodir\", "
+                   "Export::nodir]]", "\"nodir\"", 0);
+    /* A directory is not a writable file. */
+    assert_eval_eq("Quiet[Check[Export[\"/tmp\", \"x\", \"Text\"], \"noopen\", OpenWrite::noopen]]",
+                   "\"noopen\"", 0);
+    /* No extension and no format: nothing to choose a writer by. */
+    snprintf(src, sizeof src, "Quiet[Check[Export[\"%s\", \"x\"], \"infer\", Export::infer]]", noext);
+    assert_eval_eq(src, "\"infer\"", 0);
+    snprintf(src, sizeof src, "Quiet[Export[\"%s\", \"x\"]]", noext);
+    assert_eval_eq(src, "$Failed", 0);
+    snprintf(src, sizeof src, "FileExistsQ[\"%s\"]", noext);
+    assert_eval_eq(src, "False", 0);
+    unlink(txt);
+}
+
 /* ===== $InputFileName ===== */
 
 void test_inputfilename_get(void) {
@@ -1286,6 +1349,7 @@ int main(void) {
     TEST(test_deletefile);
     TEST(test_syntaxq);
     TEST(test_import_text);
+    TEST(test_export_text);
     TEST(test_fileextension_protected);
 
     /* FileBaseName */

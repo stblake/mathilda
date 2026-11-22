@@ -507,11 +507,51 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
 - `Export["file", plot]` where `plot` is the result of `Plot`, `ListPlot`, `Graphics`, …
   writes the graphic to **PDF, PNG, or JPEG** (again chosen from the extension, or stated
   as `"PDF"`/`"PNG"`/`"JPEG"`).
+- `Export["file.txt", expr]` and `Export["file", expr, "Text" | "Lines" | "String"]` write
+  text (see **Text export** below).
 
 **Features**:
 - `Protected`.
 - Returns the file name, so `Import[Export[f, img]]` is a round trip that can be written
   as a single expression.
+
+**Text export**. Each format is the writing half of the `Import` format of the same name:
+
+| Format | What is written |
+|---|---|
+| `"Text"` (the default for `.txt`) | a string as its characters; a list one element per line; any other expression in input form. The file ends in a line break. |
+| `"Lines"` | a list, one element per line, each line terminated; a non-list is one line. A string element is written as its characters, any other in input form (`{"b"}` keeps its quotes). |
+| `"String"` | a string byte for byte, with nothing added; a non-string in output form. |
+
+- Round trips: `Import[Export[f, s, "Text"], "Text"] === s` for every string `s` with no
+  CR in it (the final line break written is the one `Import "Text"` removes, so a string
+  that itself ends in `"\n"` keeps it). `Import[Export[f, lines, "Lines"], "Lines"] ===
+  lines` for a list of strings with no line breaks in them whose first and last elements
+  are not `""`, since `Import "Lines"` drops leading and trailing empty lines.
+  `Import[Export[f, s, "String"], "String"] === s` for every string.
+- Bytes are written as they are (binary mode): no line-end translation on any platform.
+- A directory that does not exist emits `Export::nodir` and gives `$Failed`; a file that
+  cannot be opened or written emits `OpenWrite::noopen` and gives `$Failed`.
+- A file name with no extension and no format stated emits `Export::infer` and gives
+  `$Failed`. A format or extension nothing here writes stays unevaluated.
+
+```mathematica
+In[1]:= Export["/tmp/mathilda_doc.txt", "hello"]
+Out[1]= /tmp/mathilda_doc.txt
+
+In[2]:= Import["/tmp/mathilda_doc.txt"]
+Out[2]= hello
+
+In[3]:= Import[Export["/tmp/mathilda_doc.txt", {"a", "b"}, "Lines"], "Lines"]
+Out[3]= {a, b}
+
+In[4]:= Import[Export["/tmp/mathilda_doc.txt", x^2 + 1, "Text"], "Text"]
+Out[4]= 1 + x^2
+
+In[5]:= Export["/no/such/dir/f.txt", "x"]
+Export::nodir: Directory /no/such/dir/ does not exist.
+Out[5]= $Failed
+```
 
 **Graphics export**:
 - **PDF** is a resolution-independent **vector** file written by a small built-in PDF

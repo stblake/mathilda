@@ -30,7 +30,8 @@
 #include "random.h"
 #include "options.h"
 #include "sym_names.h"
-#include "files.h"      /* files_import_text */
+#include "files.h"      /* files_import_text, files_export_text */
+#include "message.h"
 #include "graphics/graphics_export.h"
 #include "graphics/render.h"       /* graphics_raster_dims: aspect-aware export sizing */
 
@@ -93,6 +94,26 @@ static bool has_ext(const char* path, const char* ext)
         if (a != b) return false;
     }
     return ext[i] == '\0' && dot[i] == '\0';
+}
+
+/* The file-name component of `path` (everything after the last separator). */
+static const char* path_base_name(const char* path)
+{
+    const char* slash = strrchr(path, '/');
+#ifdef _WIN32
+    const char* bs = strrchr(path, '\\');
+    if (bs && (!slash || bs > slash)) slash = bs;
+#endif
+    return slash ? slash + 1 : path;
+}
+
+/* The file name has an extension: a '.' that is neither its first nor its last character, the
+ * same notion FileExtension uses (".bashrc" has none). */
+static bool path_has_extension(const char* path)
+{
+    const char* base = path_base_name(path);
+    const char* dot = strrchr(base, '.');
+    return dot && dot != base && dot[1] != '\0';
 }
 
 /* The formats stb can decode. Listed so that a file we cannot read is distinguishable from a file
@@ -261,6 +282,20 @@ static Expr* builtin_export(Expr* res)
     if (res->data.function.arg_count == 3) {
         fmt = str_arg(res, 2);
         if (!fmt) return NULL;
+    }
+
+    /* The text formats ("Text", "String", "Lines"; a .txt file is "Text") are written by
+     * files.c, next to the importer they round-trip with. A name with no extension and no
+     * format gives no way to choose a writer, which is an error rather than an unclaimed
+     * format. Any other combination falls through to the image and graphics writers. */
+    if (fmt) {
+        Expr* t = files_export_text(path, res->data.function.args[1], fmt);
+        if (t) return t;
+    } else if (has_ext(path, "txt")) {
+        return files_export_text(path, res->data.function.args[1], "Text");
+    } else if (!path_has_extension(path)) {
+        mth_message("Export", "infer", "Cannot infer format of file %s.", path_base_name(path));
+        return failed();
     }
 
     /* Graphics[...] (Plot/ListPlot/Graphics output) -> PDF/PNG/JPEG. Handled
@@ -469,7 +504,12 @@ void imageio_init(void)
         "without any external library and works headless, while PNG and JPEG render through the "
         "graphics backend and so need graphics support compiled in and a display. A Graphics3D "
         "object (Plot3D, ParametricPlot3D, ...) exports to PNG or JPEG the same way; it has no "
-        "vector-PDF form. Returns the file name, so Import[Export[f, img]] round-trips.");
+        "vector-PDF form. The text formats \"Text\" (the default for .txt: a string as its "
+        "characters, a list one element per line, anything else in input form), \"Lines\" (one "
+        "element per line) and \"String\" (the bytes exactly) write what Import reads back in the "
+        "same format. Returns the file name, so Import[Export[f, img]] round-trips; $Failed with "
+        "Export::nodir or OpenWrite::noopen when the file cannot be written, and Export::infer "
+        "for a name with no extension and no format.");
     symtab_add_builtin("RandomImage", builtin_random_image);
     symtab_get_def("RandomImage")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RandomImage",

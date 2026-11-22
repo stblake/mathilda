@@ -415,6 +415,102 @@ Expr* files_import_text(const char* path, const char* fmt) {
     return out;
 }
 
+/* ------------------------------------------------------------ Export text */
+
+static bool files_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* Write one element of a "Text"/"Lines" export: a string as its characters,
+ * anything else in input form (so a nested {"a"} keeps its quotes and reads
+ * back as the expression it was).  `outputform` selects the unquoted form
+ * instead, which is what "String" writes for a non-string. */
+static bool files_write_element(FILE* fp, const Expr* e, bool outputform) {
+    if (e->type == EXPR_STRING)
+        return fputs(e->data.string, fp) >= 0;
+    char* s = outputform ? expr_to_string_outputform((Expr*)e) : expr_to_string((Expr*)e);
+    if (!s) return false;
+    bool ok = fputs(s, fp) >= 0;
+    free(s);
+    return ok;
+}
+
+/* True when the directory part of `path` exists (or there is none), and
+ * copies that part into `dir`.  Distinguishes Export::nodir -- the caller
+ * named a place that is not there -- from a write the filesystem refused. */
+static bool files_parent_dir_exists(const char* path, char* dir, size_t cap) {
+    const char* slash = strrchr(path, '/');
+#ifdef _WIN32
+    {
+        const char* bs = strrchr(path, '\\');
+        if (bs && (!slash || bs > slash)) slash = bs;
+    }
+#endif
+    if (!slash || slash == path) return true;      /* cwd, or the root */
+    size_t n = (size_t)(slash - path) + 1;         /* keep the trailing '/' */
+    if (n >= cap) return true;                     /* let fopen decide */
+    memcpy(dir, path, n);
+    dir[n] = '\0';
+    struct stat st;
+    return stat(dir, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+/*
+ * Export[path, expr, fmt] for the text formats -- the writing half of
+ * files_import_text, laid out so that each format reads back as what was
+ * written:
+ *   "Text"    a string as its characters; a list one element per line; any
+ *             other expression in input form.  The file ends in a line break,
+ *             which Import "Text" removes again, so
+ *             Import[Export[f, s, "Text"], "Text"] === s for every s with no
+ *             CR in it (Import reads CR as a line break).
+ *   "Lines"   a list, one element per line, each line terminated; a
+ *             non-list is a single line.  Import "Lines" gives the list back
+ *             whenever its first and last elements are not "".
+ *   "String"  a string byte for byte, with nothing added; a non-string in
+ *             output form.
+ * Returns the file name on success; $Failed with Export::nodir (missing
+ * directory) or OpenWrite::noopen (the file cannot be written); NULL for any
+ * other fmt, which is the caller's to decide.
+ */
+Expr* files_export_text(const char* path, const Expr* e, const char* fmt) {
+    int kind = strcmp(fmt, "Text") == 0 ? 0 : strcmp(fmt, "String") == 0 ? 1
+             : strcmp(fmt, "Lines") == 0 ? 2 : -1;
+    if (kind < 0 || !e) return NULL;
+
+    char dir[4096];
+    if (!files_parent_dir_exists(path, dir, sizeof dir)) {
+        mth_message("Export", "nodir", "Directory %s does not exist.", dir);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    /* Binary mode: the bytes written are exactly the ones Import "String"
+     * reads back, with no platform line-end translation in between. */
+    FILE* fp = fopen(path, "wb");
+    if (!fp) {
+        mth_message("OpenWrite", "noopen", "Cannot open %s.", path);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+
+    bool ok = true;
+    if (kind == 1) {
+        ok = files_write_element(fp, e, true);
+    } else if (files_is_list(e)) {
+        for (size_t i = 0; ok && i < e->data.function.arg_count; i++)
+            ok = files_write_element(fp, e->data.function.args[i], false) &&
+                 fputc('\n', fp) != EOF;
+    } else {
+        ok = files_write_element(fp, e, false) && fputc('\n', fp) != EOF;
+    }
+    if (fclose(fp) != 0) ok = false;
+    if (!ok) {
+        mth_message("OpenWrite", "noopen", "Cannot open %s.", path);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    return expr_new_string(path);
+}
+
 /* Walk `buf` once and record one LineSpan per line.  A line ends at the
  * next '\n' (inclusive) or at end-of-buffer.  An empty buffer yields
  * zero lines; a buffer that is exactly "\n" yields one (empty-with-LF)

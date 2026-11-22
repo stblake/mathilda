@@ -95,6 +95,9 @@ size_t files_crlf_normalize(char* buf, size_t len);
 char* files_slurp_raw(const char* path, size_t* len);
 char* files_slurp_text(const char* path, size_t* len);
 Expr* files_import_text(const char* path, const char* fmt);
+/* Export[path, e, fmt] for fmt "Text"/"String"/"Lines": the file name, or
+ * $Failed (with a message) when it cannot be written; NULL for any other fmt. */
+Expr* files_export_text(const char* path, const Expr* e, const char* fmt);
 Expr* builtin_parentdirectory(Expr* res);
 Expr* builtin_filenametake(Expr* res);
 Expr* builtin_absolutefilename(Expr* res);
