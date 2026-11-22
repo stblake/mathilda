@@ -503,8 +503,17 @@ Out[4]= -ExpIntegralE[-1 + n, z]
   (Sqrt[2] Cos[x])/(Sqrt[Pi] Sqrt[x])`, `StruveH[1/2, 2] = 1/Sqrt[Pi] -
   Cos[2]/Sqrt[Pi]`; `StruveH[101/2, x]` in 6 ms. Other rational orders stay
   symbolic.
+- **Negative integer order → order +n plus a Laurent polynomial.** At ν = −n
+  the series has no Gamma pole, and re-indexing its terms k ≥ n by k → k + n
+  gives (−1)ⁿ times the series of H_n, so
+  `H_{−n}(z) = (−1)ⁿ H_n(z) + Σ_{k=0}^{n−1} (−1)^k (z/2)^(2k−n+1)/(Γ(k+3/2) Γ(k−n+3/2))`:
+  `StruveH[-1, x] = 2/Pi - StruveH[1, x]`,
+  `StruveH[-2, x] = -2/(Pi x) - (2 x)/(3 Pi) + StruveH[2, x]`,
+  `StruveH[-1, 0] = 2/Pi`.
 - **Derivative.** `D[StruveH[ν, z], z] = ((z/2)^ν/(√π Γ(ν+3/2)) + H_{ν−1}(z) −
   H_{ν+1}(z))/2`; the ν-derivative is the inert `Derivative[1, 0][StruveH]`.
+  At ν = 0 the neighbour H_{−1} reduces and the ½ cancels:
+  `D[StruveH[0, x], x] = 2/Pi - StruveH[1, x]`.
   `D[StruveL[ν, z], z]` gets the analogue `((z/2)^ν/(√π Γ(ν+3/2)) + L_{ν−1}(z) +
   L_{ν+1}(z))/2` (see StruveL below).
 - **Arbitrary precision** (`N[StruveH[ν, z], p]` with an exact or MPFR argument):
@@ -560,6 +569,10 @@ Out[4]= {-0.491294, 0.223925}
 
 **Features**:
 - Exact value: `StruveL[nu, 0] = 0` for a real ν > −1 (a symbolic ν stays).
+- **Negative integer order**: as for StruveH, without the signs,
+  `L_{−n}(z) = L_n(z) + Σ_{k=0}^{n−1} (z/2)^(2k−n+1)/(Γ(k+3/2) Γ(k−n+3/2))`:
+  `StruveL[-1, x] = 2/Pi + StruveL[1, x]`, and
+  `D[StruveL[0, x], x] = 2/Pi + StruveL[1, x]`.
 - **Half-odd-integer order → elementary**, in `Sinh`/`Cosh`:
   `L_{−(n+½)}(z) = I_{n+½}(z)` and `L_{n+½}(z) = I_{−(n+½)}(z) − (1/π)
   Σ_{j=0}^n (−1)^j Γ(j+½)(z/2)^(n−2j−½)/(n−j)!` (DLMF 11.4.4 and the

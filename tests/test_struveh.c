@@ -265,6 +265,34 @@ void test_struve_derivative() {
                    "/. x -> 13/10]] < 10^-14", "True", 0);
 }
 
+/* Negative integer order: the series of H_{-n} re-indexed by k -> k + n is
+ * (-1)^n times that of H_n, the first n terms a Laurent polynomial:
+ *   H_{-n} = (-1)^n H_n + Sum_{k<n} (-1)^k (z/2)^(2k-n+1)/(Gamma(k+3/2) Gamma(k-n+3/2)),
+ * and the same for L without the signs.  Checked against the direct
+ * numeric evaluation (arb's 1F2) at z = 1.3. */
+void test_struve_negative_integer_order() {
+    assert_eval_eq("StruveH[-1, x]", "2/Pi - StruveH[1, x]", 0);
+    assert_eval_eq("StruveL[-1, x]", "2/Pi + StruveL[1, x]", 0);
+    assert_eval_eq("StruveH[-2, x]", "-2/(Pi x) - (2 x)/(3 Pi) + StruveH[2, x]", 0);
+    assert_eval_eq("StruveH[-1, 0]", "2/Pi", 0);
+    assert_eval_eq("D[StruveH[0, x], x]", "2/Pi - StruveH[1, x]", 0);
+    assert_eval_eq("D[StruveL[0, x], x]", "2/Pi + StruveL[1, x]", 0);
+    for (int n = 1; n <= 6; n++) {
+        char buf[256];
+        snprintf(buf, sizeof buf,
+                 "Abs[(N[StruveH[-%d, x] /. x -> 13/10] - StruveH[-%d, 1.3])/StruveH[-%d, 1.3]] < 10^-13",
+                 n, n, n);
+        assert_eval_eq(buf, "True", 0);
+        snprintf(buf, sizeof buf,
+                 "Abs[(N[StruveL[-%d, x] /. x -> 13/10] - StruveL[-%d, 1.3])/StruveL[-%d, 1.3]] < 10^-13",
+                 n, n, n);
+        assert_eval_eq(buf, "True", 0);
+        /* The derivative rule at integer order n - 1 has no StruveH[-k] left. */
+        snprintf(buf, sizeof buf, "FreeQ[D[StruveH[%d, x], x], StruveH[_?Negative, _]]", n - 1);
+        assert_eval_eq(buf, "True", 0);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -283,6 +311,7 @@ int main() {
     TEST(test_struveh_attributes);
     TEST(test_struveh_halfinteger_elementary);
     TEST(test_struve_derivative);
+    TEST(test_struve_negative_integer_order);
 
     printf("All StruveH tests passed.\n");
     return 0;

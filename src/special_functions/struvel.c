@@ -10,6 +10,8 @@
  *   anything else numeric          arb's regularized 1F2 (flint_num_struvel),
  *                                  demoted to machine numbers for machine input
  *   exact half-odd-integer nu      elementary closed form in Sinh / Cosh
+ *   exact integer nu = -n < 0      L_n(z) + a Laurent polynomial
+ *                                  (struve_negative_integer_order, struveh.c)
  *   everything else                stays symbolic
  *
  * D[StruveL[nu, z], z] lives in calculus/deriv.c with StruveH's rule.
@@ -17,6 +19,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "struvel.h"
+#include "struveh.h"          /* struve_negative_integer_order */
 
 #include "symtab.h"
 #include "attr.h"
@@ -148,6 +151,9 @@ Expr* builtin_struvel(Expr* res) {
     bool handled;
     Expr* v = sf2_numeric(nu, z, 0, sl_machine, sl_arb, &handled);
     if (handled) return v;
+    /* Exact negative integer order: L_{-n} = L_n + a Laurent polynomial. */
+    Expr* neg = struve_negative_integer_order(nu, z, true);
+    if (neg) return neg;
     return sl_half_integer(nu, z);
 }
 
@@ -161,7 +167,8 @@ void struvel_init(void) {
         "z^2 y'' + z y' - (z^2 + nu^2) y = 4 (z/2)^(nu+1)/(Sqrt[Pi] Gamma[nu+1/2]);\n"
         "L_nu(z) = (z/2)^(nu+1) Sum_k (z/2)^(2k)/(Gamma[k+3/2] Gamma[k+nu+3/2]).\n"
         "StruveL[nu, 0] = 0 for nu > -1. A half-odd-integer order reduces to\n"
-        "Sinh, Cosh and powers. Machine, arbitrary-precision and complex arguments;\n"
+        "Sinh, Cosh and powers; a negative integer order -n to StruveL[n, z] plus a\n"
+        "Laurent polynomial (StruveL[-1, z] = 2/Pi + StruveL[1, z]). Machine, arbitrary-precision and complex arguments;\n"
         "fast paths over packed arrays and in Compile[]. D[StruveL[nu, z], z] =\n"
         "((z/2)^nu/(Sqrt[Pi] Gamma[nu+3/2]) + StruveL[nu-1, z] + StruveL[nu+1, z])/2.");
 }

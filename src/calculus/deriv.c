@@ -706,6 +706,40 @@ static Expr* deriv_of_derivative_form(Expr* f, Expr* x, Expr* nonconsts) {
  * ``nonconsts`` (may be NULL) names symbols that should be treated as
  * implicit functions of x; these short-circuit neither expr_free_of
  * nor the symbol-base-case. */
+/* The numeric coefficient of a summand is an even integer, or a rational
+ * with an even numerator (4/Pi, -2 StruveH[1, z], 2/3 z). */
+static bool deriv_term_coeff_even(const Expr* t) {
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+        t->data.function.head->data.symbol.name == SYM_Times && t->data.function.arg_count > 0)
+        t = t->data.function.args[0];
+    if (t->type == EXPR_INTEGER) return t->data.integer % 2 == 0;
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+        t->data.function.head->data.symbol.name == SYM_Rational &&
+        t->data.function.arg_count == 2 && t->data.function.args[0]->type == EXPR_INTEGER)
+        return t->data.function.args[0]->data.integer % 2 == 0;
+    return false;
+}
+
+/* (1/2) sum, with the 1/2 distributed when every summand carries an even
+ * coefficient (so it cancels exactly); otherwise the held product
+ * Times[1/2, sum].  Consumes sum. */
+static Expr* struve_halve_even_sum(Expr* sum) {
+    bool even = sum->type == EXPR_FUNCTION && sum->data.function.head->type == EXPR_SYMBOL &&
+                sum->data.function.head->data.symbol.name == SYM_Plus;
+    for (size_t i = 0; even && i < sum->data.function.arg_count; i++)
+        even = deriv_term_coeff_even(sum->data.function.args[i]);
+    if (!even) return mk_fn2("Times", mk_fn2("Rational", mk_int(1), mk_int(2)), sum);
+    size_t n = sum->data.function.arg_count;
+    Expr** h = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        h[i] = mk_fn2("Times", mk_fn2("Rational", mk_int(1), mk_int(2)),
+                      expr_copy(sum->data.function.args[i]));
+    expr_free(sum);
+    Expr* r = expr_new_function(mk_sym("Plus"), h, n);
+    free(h);
+    return r;
+}
+
 static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
     /* --- Partial-derivative base cases. --- */
     if (x) {
@@ -1984,10 +2018,13 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
                 Expr* sp1 = mk_fn2(hn, mk_fn2("Plus", mk_int(1), expr_copy(N)),
                                    expr_copy(Z));
                 if (h == SYM_StruveH) sp1 = mk_neg(sp1);
-                Expr* sum = expr_new_function(mk_sym("Plus"),
-                                              (Expr*[]){ src, sm1, sp1 }, 3);
-                Expr* dSdZ = mk_fn2("Times",
-                              mk_fn2("Rational", mk_int(1), mk_int(2)), sum);
+                Expr* sum = eval_and_free(expr_new_function(mk_sym("Plus"),
+                                              (Expr*[]){ src, sm1, sp1 }, 3));
+                /* At an integer order the neighbours reduce (StruveH[-1, z] =
+                 * 2/Pi - StruveH[1, z]) and the sum can come out as 2 (...):
+                 * cancel the 1/2 into it, so D[StruveH[0, z], z] is
+                 * 2/Pi - StruveH[1, z] rather than 1/2 (4/Pi - 2 StruveH[1, z]). */
+                Expr* dSdZ = struve_halve_even_sum(sum);
                 terms[nt++] = mk_fn2("Times", dSdZ, dZ);
             } else {
                 expr_free(dZ);

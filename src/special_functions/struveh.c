@@ -11,6 +11,8 @@
  *                                 demoted to machine numbers for machine input;
  *                                 the unregularized 1F2 template only without FLINT
  *   exact half-odd-integer nu     elementary closed form (sh_half_integer)
+ *   exact integer nu = -n < 0     (-1)^n H_n(z) + a Laurent polynomial
+ *                                 (struve_negative_integer_order)
  *   everything else               stays symbolic (return NULL)
  *
  * The 1F2 identity is also the reduction used by the half-line Mellin transform
@@ -222,6 +224,51 @@ static Expr* sh_half_integer(const Expr* nu, const Expr* z) {
     return sh_eval(mk_fn2("Plus", part, bes));
 }
 
+/* ---- negative integer order: reflection to the order +n ---------------
+ *
+ * The defining series (DLMF 11.2.1 / 11.2.2)
+ *
+ *   H_nu(z) = Sum_{k>=0} (-1)^k (z/2)^(2k+nu+1) / (Gamma(k+3/2) Gamma(k+nu+3/2))
+ *   L_nu(z) = Sum_{k>=0}        (z/2)^(2k+nu+1) / (Gamma(k+3/2) Gamma(k+nu+3/2))
+ *
+ * has no Gamma pole at nu = -n (integer n >= 1): k - n + 3/2 is a half-odd
+ * integer.  Re-indexing its terms k >= n by k = j + n gives term-for-term
+ * (-1)^n times (H) or exactly (L) the series of order +n, so
+ *
+ *   H_{-n}(z) = (-1)^n H_n(z) + Sum_{k=0}^{n-1} (-1)^k (z/2)^(2k-n+1) / (Gamma(k+3/2) Gamma(k-n+3/2))
+ *   L_{-n}(z) =        L_n(z) + Sum_{k=0}^{n-1}        (z/2)^(2k-n+1) / (Gamma(k+3/2) Gamma(k-n+3/2))
+ *
+ * e.g. H_{-1} = 2/Pi - H_1 and L_{-1} = 2/Pi + L_1 (consistent with the
+ * recurrence H_{nu-1} + H_{nu+1} = (2 nu/z) H_nu + (z/2)^nu/(Sqrt(Pi) Gamma(nu+3/2))
+ * at nu = 0).  The finite sum is a Laurent polynomial with exact coefficients.
+ * Returns NULL unless nu is an exact Integer <= -1 (and n below a sanity cap,
+ * since the sum has n terms). */
+Expr* struve_negative_integer_order(const Expr* nu, const Expr* z, bool modified) {
+    if (!nu || nu->type != EXPR_INTEGER || nu->data.integer >= 0) return NULL;
+    if (nu->data.integer < -100000) return NULL;
+    int64_t n = -nu->data.integer;
+    Expr** t = malloc(sizeof(Expr*) * (size_t)(n + 1));
+    if (!t) return NULL;
+    const char* head = modified ? "StruveL" : "StruveH";
+    t[0] = mk_fn2("Times", mk_int((!modified && (n & 1)) ? -1 : 1),
+                  mk_fn2(head, mk_int(n), expr_copy((Expr*)z)));
+    for (int64_t k = 0; k < n; k++) {
+        /* (+-1) (z/2)^(2k-n+1) / (Gamma(k+3/2) Gamma(k-n+3/2)) */
+        int64_t e = 2 * k - n + 1;
+        t[k + 1] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+            mk_int((!modified && (k & 1)) ? -1 : 1),
+            /* (z/2)^0 is spelled 1, so H_{-1}(0) = 2/Pi rather than 0^0. */
+            e == 0 ? mk_int(1)
+                   : mk_fn2("Power", mk_fn2("Times", sh_rat(1, 2), expr_copy((Expr*)z)),
+                            mk_int(e)),
+            mk_fn2("Power", mk_fn1("Gamma", sh_rat(2 * k + 3, 2)), mk_int(-1)),
+            mk_fn2("Power", mk_fn1("Gamma", sh_rat(2 * (k - n) + 3, 2)), mk_int(-1)) }, 4);
+    }
+    Expr* sum = expr_new_function(expr_new_symbol("Plus"), t, (size_t)(n + 1));
+    free(t);
+    return sh_eval(sum);
+}
+
 Expr* builtin_struveh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* nu = res->data.function.args[0];
@@ -278,6 +325,9 @@ Expr* builtin_struveh(Expr* res) {
         }
         return NULL;
     }
+    /* Exact negative integer order: reflect to the order +n. */
+    Expr* neg = struve_negative_integer_order(nu, z, false);
+    if (neg) return neg;
     /* Exact half-odd-integer order: elementary. */
     return sh_half_integer(nu, z);
 }
