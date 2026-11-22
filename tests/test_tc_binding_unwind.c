@@ -181,8 +181,10 @@ static void test_lazy_table_not_reread_after_interrupted_load(void) {
     /* the CRC table is read here, completely */
     assert_eval_eq("Head[Integrate[x^2 Sqrt[x + 1] Log[x], x, Method -> \"CRCTable\"]] =!= Null",
                    "True", 0);
-    /* a different module's read, interrupted */
-    assert_eval_eq("TimeConstrained[LoadModule[\"mixed/ParallelMixed.m\"], 0.05, cut]",
+    /* a different module's read, interrupted.  The read takes ~20 ms on an idle
+     * machine, so the cut must be far shorter than that (2 ms, ~10x margin); a
+     * loaded machine only stretches the read, which makes the cut more certain. */
+    assert_eval_eq("TimeConstrained[LoadModule[\"mixed/ParallelMixed.m\"], 0.002, cut]",
                    "cut", 0);
     assert_eval_eq("Check[Integrate[x^3 Sqrt[x + 2] Log[x], x, Method -> \"CRCTable\"]; quiet, flood]",
                    "quiet", 0);
