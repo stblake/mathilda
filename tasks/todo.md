@@ -78,11 +78,16 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D1 support groups (radicals, then kernels, pairwise merges): 45 of the 47 undecided class B decided
 - [x] D2 free square root split (E8 over any base, E9 note): 260 81% -> 90% (separation lemma still open)
 - [x] D3 theory: E2, E1 notes written and reviewed twice (docs/notes/bronstein_phase5_review.md)
-- [ ] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (scope in the note)
-- [ ] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases with no answer and no certificate
-- [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 open (exponent lattice HNF)
+- [x] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (v0.6651)
+- [x] D3 M2: the general tower over the curve, weak normaliser, cancellation with a homogeneous solution, least radical exponent (v0.6689)
+- [ ] Phase R: FriCAS comparison rerun at v0.6688 (256/257/259/260) and BRONSTEIN_VS_FRICAS.md refresh
+- [ ] G-pzq-1: PossibleZeroQ false negatives on correct antiderivatives (E^(Sqrt[1 + x^4] + Log[1 + x]^2) shapes; 6 of the 330 M2 stress cases)
+- [ ] L1 I2 (irrational log coefficients in PLD_0), L2 ROOT_0 (OL5), L3 nonzero offsets (OL2): theory, review, then code
+- [x] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases decided (v0.6652)
+- [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 closed v0.6652 (exponent lattice HNF)
 - [ ] D6 speed: 43 cases over 1 s; evaluator scoping change DONE (v0.6653-57: D + A3 summaries; Trager -14.4%, cM-1-292 -12.8% instructions; docs/design/scoping_substitution.md) -- the algebra-bound remainder is open
 - [x] D7 (v0.6650): 10 of the 18 special-function cases
+- [ ] D7 rest: E^Tanh[x^2] x, Tanh[x^2], Log[I + Tan[1 + x]] Tan[1 + x], x Log[Tan[x]] Tan[x] Sec[x]^2, Log[Tan[x]/x], Log[1 + x]/(1 + Coth[x])
 - [x] D8 FriCAS report submitted: https://github.com/fricas/fricas/issues/249
 
 # MemoryConstrained (started 2026-11-19)

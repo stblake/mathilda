@@ -37,7 +37,7 @@
 (*   "shape"    "Rational" | "Transcendental" | "Algebraic" | "A" | "B" |     *)
 (*              "BCurve" | "BTower" (B: radicand in Q(x), kernel arguments    *)
 (*              free of the radical; BCurve: one kernel whose argument        *)
-(*              contains it; BTower: two monomials, one such kernel)          *)
+(*              contains it; BTower: 2+ monomials, one such kernel)   *)
 (*   "theta"    the top monomial (Shape A), else None                         *)
 (*   "kind"     "Log" | "Exp" for theta, else None                            *)
 (*   "lower"    the monomials below theta (Shape A), else "syms"              *)
@@ -605,13 +605,12 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
     monos === {}, "Algebraic",
     AnyTrue[monos, TrueQ[#["algebraic"]] &],
       (* a kernel with a radical argument: one monomial is BaseCurve.m's case,
-         two are the tower over the curve (BaseTower.m, Phase 5 M1); more
-         were declined when the third was admitted (brDTAdmit) *)
+         two or more the tower over the curve (BaseTower.m, Phase 5 M1/M2) *)
       Which[
         Length[monos] === 1,
           If[brDependsQ[rad["b"], #["sym"] & /@ monos], throwInternal["brTowerCurveMonomialShape", <|"f" -> fs|>]];
           "BCurve",
-        Length[monos] === 2,
+        Length[monos] >= 2,
           If[brDependsQ[rad["b"], #["sym"] & /@ monos],
             throwUnimplemented["BaseTower:radicand-in-tower", "a radicand involving a monomial above a kernel with a radical argument (radical in the middle of the tower over the curve)"]];
           "BTower",

@@ -62,13 +62,15 @@ static const char* const certificates[] = {
 
 static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
-    "Log[x] Log[1 + x] E^(x Sqrt[x^3 + 1])",                                         /* three monomials over the curve (beyond Phase 5 M1) */
     NULL
 };
 
 /* since Phase 4.3b C8 a verdict over a number field is a certificate */
 static void test_nf_certificate(void) {
     BR_EQ("First[BronsteinIntegrate[Sqrt[Sqrt[2] + Log[x]], x]]", "\"not elementary\"");
+    /* three monomials over the curve: a certificate since Phase 5 M2 (RDE_2(D(x y), Log[x] Log[1 + x]) has
+     * no solution); FriCAS 1.3.6 also leaves it unevaluated */
+    BR_EQ("First[BronsteinIntegrate[Log[x] Log[1 + x] E^(x Sqrt[x^3 + 1]), x]]", "\"not elementary\"");
 }
 
 static void test_closes(void) {

@@ -62,7 +62,6 @@ BASELINE_M = {
     "Tower:compositum-undecided",    # Kummer group not decided -> Phase 3
     # Phase 5 M1 (BaseTower.m, docs/notes/bronstein_extensions.tex "M1 declines"):
     # every one of these is an explicit decline of the M1 scope, never a certificate
-    "Tower:three-monomials",         # three or more monomials over the curve -> M2 (general s)
     "Tower:span-undecided",          # an undecided structure-theorem span (A2) -> never an admission
     "Tower:dependent-log-offset",    # dependent log with kappa != 1 (g3; Log[x - z] by Log[x + z]) -> OL2
     "Tower:dependent-log-branch",    # dependent log with a nonzero 2 Pi I m/d on a sampled region -> OL2
@@ -74,10 +73,10 @@ BASELINE_M = {
     "BaseTower:constants",           # a constant other than a rational (H_Q) -> OL2
     "BaseTower:irrational-log",      # an irrational log coefficient from INT_0 in LD/PLD/LI -> I2
     "BaseTower:rootsum-logand",      # a RootSum / ArcTan logarithmic part in LD/PLD/LI -> I2
-    "BaseTower:pld-undecided",       # an undecided PLD_0 span system -> never a "none"
-    "BaseTower:li-undecided",        # an undecided LI_1 span system -> never a "no"
+    "BaseTower:pld-undecided",       # an undecided PLD_i span system -> never a "none"
+    "BaseTower:li-undecided",        # an undecided LI_i span system -> never a "no"
     "BaseTower:root0",               # an LD witness that needs an n-th root in k0 -> OL5
-    "BaseTower:cancellation-homogeneous",  # RDE_1 cancellation with a homogeneous solution / ROOT_0 -> M2
+    "BaseTower:pld-irrational-above",  # an irrational log coefficient from INT_j, j >= 1, in LD/PLD/LI -> OL3
     "Tower:cyclic-compositum",       # one radical in disguise -> Phase 3
     "Tower:exprel",                  # undecided exponential relation -> Phase 3
     "Tower:logrel",                  # undecided logarithm relation -> Phase 3

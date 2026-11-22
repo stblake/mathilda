@@ -2769,6 +2769,95 @@ LD: if $\alpha=Dz/z$ then $D(z^{n_0}/U)=0$, so $U=cz^{n_0}$ for any $n_0$ with
 $n_0\alpha=DU/U$. Conversely $U=cz^{n_0}$ gives $n_0\alpha=n_0Dz/z$.
 \end{proof}
 
+\noindent \emph{Closing I2: irrational coefficients at level~0.} Prop.~\ref{prop:E1ld}(ii)'s
+first case needs each irrational $c_l$ to lie in the $\Q$-span of the residues, a property of
+how INT$_0$ chooses them. The next lemma removes that hypothesis. It decides the case from any
+Liouville data, whatever basis INT$_0$ chose.
+
+\begin{lemma}[irrational coefficients]\label{lem:E1irr}
+Assume (H$_\Q$) at level~0, and let $\alpha=Dv+\sum_{l=1}^Lc_lDv_l/v_l$ with $v\in k_0$,
+$c_l\in\Qbar$, $v_l\in\Qbar k_0=\Qbar(x)(y)$ nonzero, the identity holding exactly. Choose a
+$\Q$-basis $1,\beta_1,\dots,\beta_r$ of $\operatorname{span}_\Q\{1,c_1,\dots,c_L\}$, and write
+$c_l=q_l+\sum_ks_{lk}\beta_k$ with $q_l,s_{lk}\in\Q$. Let $N\ge1$ be a common denominator of the
+$s_{lk}$, and $V_k=\prod_lv_l^{Ns_{lk}}\in\Qbar k_0^*$. Then:
+\begin{itemize}
+\item[(a)] If $DV_k\ne0$ for some $k$, then $\alpha\,dx$ has a residue outside $\Q$ at some place
+  of the curve over $\Qbar$. So PLD$_0(\alpha;\eta)$ has no solution for any $\eta=Dw$, $w\in k_0$
+  (Lemma~\ref{lem:E1res}). Likewise LI$_0(\alpha;\eta_1..\eta_m)$ has none for logarithmic
+  derivatives $\eta_i=Du_i/u_i$, $u_i\in k_0$, because the residues of $\sum d_i\eta_i$ with
+  $d_i\in\Q$ are rational.
+\item[(b)] If $DV_k=0$ for every $k$, then $\alpha=Dv+\sum_lq_lDv_l/v_l$ exactly. These are
+  Liouville data with rational coefficients; their logands may still have coefficients in
+  $\Qbar$ (see (c)).
+\item[(c)] In case (b), the $\Qbar$-logands combine to elements of $k_0$. Let $M$ be a common
+  denominator of the $q_l$. Then $W=\prod_lv_l^{Mq_l}$ satisfies $DW/W=M(\alpha-Dv)\in k_0$,
+  and $W=\gamma\,W_0$ with $\gamma\in\Qbar^*$, $W_0\in k_0^*$. So $\alpha=Dv+\tfrac1MDW_0/W_0$,
+  with one logand in $k_0$.
+\end{itemize}
+\end{lemma}
+\begin{proof}
+At a place $P$ of $\Qbar(x)(y)$, $\operatorname{res}_P(dv)=0$ and
+$\operatorname{res}_P(dv_l/v_l)=\operatorname{ord}_Pv_l\in\Z$. So
+$\operatorname{res}_P(\alpha\,dx)=\sum_lc_l\operatorname{ord}_Pv_l
+=\sum_lq_l\operatorname{ord}_Pv_l+\sum_k\beta_k\tfrac1N\operatorname{ord}_PV_k$. Since
+$1,\beta_1,\dots,\beta_r$ are $\Q$-independent and every $\operatorname{ord}_P$ is an integer, the
+residue is rational iff $\operatorname{ord}_PV_k=0$ for every $k$.
+
+(a) $DV_k\ne0$ means $V_k$ is not a constant. A nonconstant function on the (complete,
+irreducible) curve has a zero, so $\operatorname{ord}_PV_k\ne0$ at that zero, and the residue
+there is irrational. The second sentence is Lemma~\ref{lem:E1res}: $n\alpha=mDw+DU/U$ forces
+rational residues. For LI: $\alpha=Dw+\sum d_i\eta_i$ gives $\operatorname{res}_P(\alpha\,dx)=\sum
+d_i\operatorname{ord}_Pu_i\in\Q$.
+
+(b) $DV_k=0$ means $\sum_lNs_{lk}Dv_l/v_l=0$ for each $k$, so the $\beta_k$-terms cancel exactly.
+
+(c) $DW/W=\sum_lMq_lDv_l/v_l=M(\alpha-Dv)$ lies in $k_0$. $W$ is defined over a finite Galois
+extension $K/\Q$, and $Kk_0/k_0$ is Galois with group $G\cong\operatorname{Gal}(K/\Q)$, because
+$k_0\cap\Qbar=\Q$: the curve is absolutely irreducible, (A0). Each $\sigma\in G$ acts on
+coefficients only and commutes with $D$. So $D(\sigma W)/\sigma W=\sigma(DW/W)=DW/W$, and
+$\chi(\sigma)=\sigma W/W$ has derivative~$0$. Its constants are those of $Kk_0$, namely $K$, so
+$\chi(\sigma)\in K^*$. Moreover $\chi(\sigma\tau)=\sigma(\chi(\tau))\chi(\sigma)$, so $\chi$ is a
+1-cocycle of $G$ in $K^*$. By Hilbert~90 for $K/\Q$, $\chi(\sigma)=\sigma(\gamma)/\gamma$ with
+$\gamma\in K^*$. Then $W_0=W/\gamma$ is fixed by $G$, so $W_0\in k_0$.
+\end{proof}
+
+\noindent \emph{Use (revised after review).} This replaces the I2 decline
+(\code{BaseTower:irrational-log}) at level~0, in LD$_0$/PLD$_0$ and in LI$_0$ against
+$\eta_i$ with rational residues (logarithmic derivatives, or exact derivatives $Dw_i$, $w_i\in
+k_0$). It is sound only with exact number-field arithmetic. Every requirement below is checked,
+and a failed check is a Decline, never a ``no''.
+\begin{enumerate}
+\item The Liouville data are read from INT$_0$'s surface form:
+  \begin{itemize}
+  \item $c\log u$ terms are read directly;
+  \item $\operatorname{arctanh}u=\tfrac12(\log(1+u)-\log(1-u))$ and
+    $\arctan u=\tfrac i2(\log(1-iu)-\log(1+iu))$ are rewritten (so $K\ni i$);
+  \item a \code{RootSum} declines. Its coefficients live in the splitting field, which is not
+    built.
+  \end{itemize}
+  The identity $\alpha=Dv+\sum c_lDv_l/v_l$ is then checked exactly (step~3's arithmetic).
+\item All algebraic constants, of the $c_l$ and of the logands' coefficients, are put into one
+  field $K=\Q(g)$ with an \emph{irreducible} minimal polynomial $\mu$ (a primitive element; $\mu$
+  factored over $\Q$). Every constant is reduced to its unique coordinates in
+  $1,g,\dots,g^{\deg\mu-1}$, and every logand must be rational in $x$, $y$ over $K$, with no other
+  radical. This basis contains~1 and its span holds every $c_l$, so the lemma applies with
+  $\beta_k=g^k$. Without irreducibility, coordinates are not unique: for example $\sqrt{3+2\sqrt2}$
+  and $-\sqrt2$ sum to~1, and treating them as independent gives a false ``no''.
+\item The test is $\sum_lNs_{lk}Dv_l/v_l=0$, equivalent to $DV_k=0$ without forming the powers.
+  It is made in $\Q(x)[Y,g]/(Y^m-G,\mu(g))$, a field by (A0) and linear disjointness. The
+  numerator is reduced modulo the triangular monic basis $\{Y^m-G,\mu(g)\}$, and a nonzero
+  remainder is a nonzero element. A nonzero test is a certificate, by (a).
+\item If every test is zero, case (b) gives rational coefficients $q_l$. When a logand in $k_0$
+  is needed (PLD's span, Prop.~\ref{prop:E1ld}(ii)), take $W=\prod_lv_l^{Mq_l}$ in canonical
+  normal form, $\sum_ia_i(x)Y^i/d(x)$ with $d$ monic. Divide by any nonzero coefficient $c\in K$
+  of the $a_i$: since $W=\gamma W_0$ with $W_0\in k_0$, $c=\gamma r$ with $r\in\Q^*$, so
+  $W/c=W_0/r\in k_0$. This is checked by \code{brDTRationalQ}, and a failure is an internal
+  error.
+\end{enumerate}
+Lemma~\ref{lem:E1res}'s places are those of the curve over $\Qbar$. Its proof uses only
+$\operatorname{ord}_PU\in\Z$, so it covers them. Above level~0 the same argument needs residues
+of the lower-level remainders (OL3) and is not claimed.
+
 \noindent \emph{What ROOT$_0$ would be (OL5).} At level~0, $U=cz^N$ iff two conditions hold:
 \begin{itemize}
 \item $N\mid\operatorname{ord}_PU$ at every place $P$ (finite and infinite);
@@ -3113,6 +3202,48 @@ degenerate case, the unsolvable ones checked against a widened bound as \code{br
 elementary-by-construction family, and every declined class above with a test that it declines.
 General $s$ (item~5 for $j\ge2$) follows by the same code, since every routine takes the level
 as an argument; it needs OL3 only if PLD is called above level~0.
+
+\paragraph{Second milestone (M2): the general tower over $\Q(x)(y)$.}
+\emph{M2 decides} every integrand in the scope of M1 with any number $s\ge2$ of monomials
+after admission and zero-offset elimination. The level-$i$ oracles of Thm~\ref{thm:E1rde}'s
+table are:
+\begin{itemize}
+\item INT$_i$ read as Liouville data (\code{brDTLiouville}). The coefficients must be rational,
+  and the logands in $k_i$, checked exactly;
+\item LI$_i(p;\eta_1..\eta_r)$ (\code{brDTLimitedAt}): INT$_i$, then the structure theorem over
+  $k_i$ ([SI] Cor.~9.3.1), with $w=V+\sum r_g\theta_g$. Its case with no $\eta$ is ``is a
+  derivative in $k_i$'' (\code{brDTIsDeriv});
+\item LD$_i$/PLD$_i$ (\code{brDTPLD}): Prop.~\ref{prop:E1ld}(ii) with
+  $G_F=G_i\cup\{Dv_l/v_l\}$. The units are $u_g$ for a logarithm and $t_g$ for an exponential, and the
+  identity $n_0\alpha=m_0\eta+DU/U$ is checked exactly;
+\item RDE$_i$ (\code{brDTRDE}) for \emph{any} $f$. The weak normaliser of [SI] Thm~6.1.1 comes
+  first, with residues by the resultant $\operatorname{Res}_t(N-zE\,Dd_1,d_1)$ over the simple
+  normal factors $d_1$; then the M1 steps on the normalised equation. This is needed from
+  $s=3$ on: the cancellation case at level~2 calls RDE$_1(b+m\eta,\cdot)$ with $b\in k_1$
+  arbitrary, and Thm~6.1.2's normal-denominator bound is valid only for a weakly normalised
+  $f$.
+\end{itemize}
+The cancellation case with a homogeneous solution ([SI] PolyRischDECancelPrim/Exp, remark~(3)
+of E1.1) is decided when PLD$_{j-1}$ gives an $n=1$ witness $(U,m)$, verified as
+$D(Ut^m)+bUt^m=0$. Then $q=Ut^m r$ with $Dr=c/(Ut^m)$:
+\begin{itemize}
+\item primitive $t$: by \code{brDTPolyDeriv};
+\item exponential $t$: coefficientwise (\code{brDTLaurentDeriv}), RDE$_{j-1}(i\eta,\cdot)$ for
+  $i\ne0$, ``is a derivative'' at $t^0$.
+\end{itemize}
+Only the $t^0$ coefficient of $r$ is free, and only up to a constant. So $q\in k_{j-1}[t]$ with
+$\deg q\le n$ exists iff every exponent $i+m$ of a nonzero coefficient lies in $[0,n]$, after a
+constant $t^0$ coefficient is dropped when $m\notin[0,n]$.
+
+\emph{M2 declines} what M1 declines, less ``three or more monomials'' and less ``cancellation
+with a homogeneous solution'' (an $n_0=1$ witness), plus:
+\begin{itemize}
+\item an irrational logarithm coefficient of INT$_i$, $i\ge1$, inside LD/PLD/LI (OL3,
+  \code{BaseTower:pld-irrational-above});
+\item a witness with $n_0>1$ in the cancellation case (ROOT$_0$, \code{BaseTower:root0}).
+\end{itemize}
+Every ``no'' is still one of Thm~\ref{thm:E2cert}'s, now with the level-$i$ oracles in place of
+the level-0 ones.
 
 \section*{T1. Parameters are constants, never unknowns (v0.6586, v0.6589, v0.6591, v0.6592)}
 \addcontentsline{toc}{section}{T1. Parameters}

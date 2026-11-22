@@ -413,3 +413,26 @@ Related **MINOR** points:
 | S2 | GAP | (1/b)^{k/n} ↦ y^{−k} differs by e^{2πi/n} on b⁻¹(negative reals), e.g. real x < −1 for 1+x³. The certificate holds only for U off that set (h = √(1/b) + 1/√b is ≡ 0 on x < −1 yet certified). Restrict U or decline the spelling. √(4+4x³) and (1+x³)^{3/2} are global identities, so the stated reasons for declining them are wrong (MINOR). |
 | S3 | GAP | Exponential cancellation needs an n = 1 PLD witness. With n0 > 1, ROOT_0 is required, so M1 must decline there, not fall through to the top-down pass (otherwise a possible false "no"). |
 | — | MINOR | Exponential log-part correction must be computed as a rational trace. Uniform ramification is an unstated hypothesis of Lemmas E1choice and E1inf. b/d notation clash. The table in Thm E1rde omits the cancellation z-branch's dependence on a "derivative in k" test. Decline list should name RootSum logands with rational coefficients. |
+
+# Third pass (2026-11-22): Lemma E1irr, which closes I2 (Phase L1)
+
+Reviewer: an independent agent given only the note's text and the sources. Verdict: **no
+FATAL**, one GAP, five MINOR. All are addressed in the note's revised "Use" paragraph.
+
+| ID | Class | Item | Resolution |
+|---|---|---|---|
+| T1 | GAP | The certificate relies on the Q-independence of 1, beta_1..beta_r. With a non-canonical basis (sqrt(3+2 sqrt 2) and -sqrt 2 taken as independent, though they sum to 1), or a reducible "minimal" polynomial, a false "no" results. | Use step 2: one primitive element with an irreducible, factored minimal polynomial; unique coordinates; every logand rational in x, y over K, with no other radical. |
+| T2 | MINOR | RootSum coefficients live in the splitting field, not Q(z). | RootSum declines (step 1). |
+| T3 | MINOR | The W0 recipe was circular. | Divide the canonical normal form (monic d) by a nonzero coefficient; W/c = W0/r is in k0 (step 4). |
+| T4 | MINOR | Test sum N s_lk Dv_l/v_l = 0 instead of forming V_k. | Step 3. |
+| T5 | MINOR | An ArcTan in Trager's surface output gives coefficients +-i/2, so K must contain i. | Step 1 rewrites ArcTan/ArcTanh as logs. |
+| T6 | MINOR | (a)'s LI_0 sentence is valid only for eta_i with rational residues; Lemma E1res's places are over Qbar. | Both stated. |
+
+Checked and sound:
+- (a): the residue formula at every place, including infinite and ramified places, and the zero
+  of a nonconstant V_k on the complete curve;
+- (a), the LI_0 claim, within the stated restriction;
+- (c): Gal(Kk0/k0) = Gal(K/Q) by (A0); Const(Kk0) = K; the cocycle identity; Hilbert 90.
+
+The remaining false-certificate surface is exactness only: an inexact zero test, an unverified
+Liouville identity, or (a) applied to an eta with irrational residues.

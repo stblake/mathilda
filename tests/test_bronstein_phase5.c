@@ -91,9 +91,8 @@ static void test_declines(void) {
     BR_TRUE("Module[{r = brCatch[brTower[E^(x Sqrt[1 + x^3]/2) Log[x] + E^(x Sqrt[1 + x^3]), x]]},"
             " brFailTag[r] === {\"Unimplemented\", \"a dependent exponential over the curve with a fractional coefficient (an algebraic element; A3, OL6)\"}"
             " || (!brFailQ[r] && Length[r[\"monos\"]] === 2)]");
-    /* three monomials */
-    BR_THROWS("brTower[Log[x] Log[x + Sqrt[1 + x^3]] E^Sqrt[1 + x^3], x]", "Unimplemented",
-              "three or more monomials over the curve (Phase 5 M1 takes two)");
+    /* three monomials: admitted since M2 */
+    BR_TRUE("Module[{T = brTower[Log[x] Log[x + Sqrt[1 + x^3]] E^Sqrt[1 + x^3], x]}, T[\"shape\"] === \"BTower\" && Length[T[\"monos\"]] === 3]");
     /* several radicals / another spelling inside the kernels */
     BR_THROWS("brTower[Log[x + Sqrt[1 + x^3]] Log[x + Sqrt[2 + x^3]], x]", "Unimplemented",
               "a tower over the curve whose kernels spell the radical other than as powers of one radicand b ((1/b)^r, several radicands; A1, OL6)");
@@ -210,8 +209,8 @@ static void test_rde1(void) {
     BR_TRUE("brDTPolyRDE[C2x, t, 1, 3] === {\"NoSolution\"}");
     BR_TRUE("brDTPolyRDE[C2x, brBCNorm[P1, 3 x^2/(2 Y2)], 1, 3] === {\"NoSolution\"}");   /* E1.5: cancellation, RDE_0(Dy, 1) */
     BR_TRUE("Module[{e = brBCNorm[P1, 3 x^2/(2 Y2)]}, brDTPolyRDE[C2x, e, brBCNorm[P1, brBCD[P1, t Y2] + e t Y2], 3] === {\"Solution\", t Y2}]");
-    BR_THROWS("brDTPolyRDE[C2x, -1/x, 1, 3]", "Unimplemented",
-              "the cancellation case of the Risch DE over k1 with a homogeneous solution (or one that needs ROOT_0)");
+    /* the cancellation case with a homogeneous solution (M2b): -b = Dx/x, q = x t */
+    BR_TRUE("brDTPolyRDE[C2x, -1/x, 1, 3] === {\"Solution\", x t}");
     /* RDE_1 end to end: E1.5's RDE_1(Dy, 1) over k0(Log[x]) has no solution; solvable ones verify */
     BR_TRUE("brDTRDE[C2x, brBCNorm[P1, 3 x^2/(2 Y2)], 1] === {\"NoSolution\"}");
     BR_TRUE("Module[{e = C2x[\"etas\"][[2]], q = t/x + Y2}, brDTRDE[C2x, e, brBCNorm[P1, brBCD[P1, q] + e q]] === {\"Solution\", brBCNorm[P1, q]}]");
@@ -275,6 +274,82 @@ static void test_kummer_split_kernel_radicals(void) {
             "!ListQ[F] && PossibleZeroQ[D[F, x] - f]]]");
 }
 
+/* Phase 5 M2: every routine takes the level; the oracles of level i >= 1; the weak normaliser;
+ * the cancellation case with a homogeneous solution; three-monomial towers end to end. */
+static void test_m2(void) {
+    /* a three-monomial tower: t1 = Log[x], t2 = Log[x + y], t3 = Log[1 + x y] */
+    br_run("F3 = Log[x] Log[x + Sqrt[1 + x^3]] Log[1 + x Sqrt[1 + x^3]]; T3 = brTower[D[F3, x], x];"
+           " C3x = brDTContext[T3]; s3 = C3x[\"syms\"]; Y3 = C3x[\"Y\"]; Q2 = brDTLevel[C3x, 2]; Q1 = brDTLevel[C3x, 1]; True");
+    BR_TRUE("T3[\"shape\"] === \"BTower\" && C3x[\"kinds\"] === {\"Log\", \"Log\", \"Log\"}");
+    BR_TRUE("brDTTheta[C3x, 1] === s3[[1]] && brDTUnit[C3x, 2] === C3x[\"argsY\"][[2]]");
+    BR_TRUE("brDTTheta[C1x, 1] === C1x[\"argsY\"][[1]] && brDTUnit[C1x, 1] === s1[[1]]");
+    /* Liouville data over k2 */
+    BR_TRUE("Module[{r = brDTLiouville[C3x, 2, brBCNorm[Q2, brBCD[Q2, s3[[1]] s3[[2]]] + 3 C3x[\"Ds\"][[2]]/s3[[2]]]]},"
+            " r[[1]] === \"data\" && Together[r[[2]] - s3[[1]] s3[[2]]] === 0 && r[[3]] === {{3, s3[[2]]}}]");
+    BR_TRUE("brDTLiouville[C3x, 1, Y3] === {\"none\"}");
+    /* limited integration over k2 (LI_2(p; D t3)) and "is a derivative" over k1, k2 */
+    BR_TRUE("Module[{w = brDTLI[C3x, 3, brBCNorm[Q2, brBCD[Q2, s3[[1]] s3[[2]]] + 2 C3x[\"Ds\"][[3]]]]},"
+            " Together[w[[1]] - s3[[1]] s3[[2]]] === 0 && w[[2]] === 2]");
+    BR_TRUE("brDTLI[C3x, 3, C3x[\"Ds\"][[2]]] === {s3[[2]], 0}");
+    BR_THROWS("brDTLI[C3x, 3, s3[[2]] Y3]", "NonElementary",
+              "no algebraic part: the limited integration problem has no solution over the tower on the curve (its integrand is not elementary over k2; [SI] Thm 5.8.1)");
+    BR_THROWS("brDTLI[C3x, 3, 1/(x s3[[1]])]", "NonElementary",
+              "no algebraic part: the limited integration problem has no solution over the tower on the curve (the logarithmic part of the integral over k2 is not in the span of the structure generators; [SI] Thm 5.8.1, Cor 9.3.1)");
+    BR_TRUE("brDTLimitedAt[C3x, 2, 0, {}] === {0, {}}");
+    BR_TRUE("brDTIsDeriv[C3x, 2, brBCNorm[Q2, brBCD[Q2, s3[[1]] s3[[2]]]]][[1]] === \"yes\"");
+    BR_TRUE("brDTIsDeriv[C3x, 1, 1/(x s3[[1]])] === {\"no\"}");
+    BR_TRUE("brDTIsDeriv[C3x, 1, C3x[\"Ds\"][[1]]] === {\"yes\", s3[[1]]}");
+    /* PLD_1 over k1 = k0(Log[x]): D t1/t1 is a log derivative (n0 = 1), half of it needs n0 = 2, t1 is none */
+    BR_TRUE("brDTPLD[C2x, 1, 1/(x t), 0] === {\"radical\", 1, 0, {{1, t}}}");
+    BR_TRUE("brDTPLD[C2x, 1, 1/(2 x t), 0][[1 ;; 3]] === {\"radical\", 2, 0}");
+    BR_TRUE("brDTPLD[C2x, 1, t, 0] === {\"none\"}");
+    BR_TRUE("brDTPLD[C2x, 1, Y2, 0] === {\"none\"}");
+    BR_TRUE("brDTPLD[C2x, 1, 0, 0] === {\"radical\", 1, 0, {}}");
+    BR_TRUE("Module[{r = brDTPLD[C3x, 2, brBCNorm[Q2, C3x[\"Ds\"][[2]] + 2 C3x[\"Ds\"][[1]]], 0]},"
+            " r[[1 ;; 3]] === {\"radical\", 1, 0} && brBCNorm[Q2, Sum[u[[1]] brBCD[Q2, u[[2]]]/u[[2]], {u, r[[4]]}]"
+            " - C3x[\"Ds\"][[2]] - 2 C3x[\"Ds\"][[1]]] === 0]");
+    BR_TRUE("brDTRDEAt[C2x, 0, 0, 1] === {\"Solution\", x}");
+    /* the least n0 over dependent generators: D(x + y)/(x + y) beside Trager's logands of (x + y)^2 */
+    BR_TRUE("Module[{r = brDTRadicalSolve[P1, 1/x, {1/x, 2/x}, {x, Y2, t}]}, r[[1]] === 1 && r[[2]] . {1, 2} === 1]");
+    BR_TRUE("brDTRadicalSolve[P1, 1/(2 x), {2/x, 3/x}, {x, Y2, t}][[1]] === 2");   /* 1 = 3 - 2: n0 = 2, not 6 */
+    BR_TRUE("brDTRadicalSolve[P1, 1/(2 x), {2/x, 4/x}, {x, Y2, t}][[1]] === 4");
+    BR_TRUE("brDTRadicalSolve[P1, Y2, {1/x}, {x, Y2, t}] === None");
+    BR_TRUE("brDTRadicalSolve[P1, 0, {0}, {x, Y2, t}] === {1, {0}}");
+    /* RDE_1 on an f already weakly normalised (brDTRDEWeak directly) */
+    BR_TRUE("Module[{e = C2x[\"etas\"][[2]], q = t/x + Y2}, brDTRDEWeak[C2x, 1, e, brBCNorm[P1, brBCD[P1, q] + e q]] === {\"Solution\", brBCNorm[P1, q]}]");
+    /* the weak normaliser ([SI] 6.1): residue 2 at t = Log[x] gives t^2; residue -1 gives 1; Dw gives 1 */
+    BR_TRUE("brDTWeakNormalizer[C2x, 1, 2/(x t)] === t^2");
+    BR_TRUE("brDTWeakNormalizer[C2x, 1, -1/(x t)] === 1");
+    BR_TRUE("brDTWeakNormalizer[C2x, 1, brBCNorm[P1, brBCD[P1, 1/(t + x)]]] === 1");
+    BR_TRUE("brDTWeakNormalizer[C2x, 1, 0] === 1");
+    /* RDE_1 with f not weakly normalised: every solution x/t^2 + k/t^2 has a pole the bound alone excludes */
+    BR_TRUE("Module[{r = brDTRDE[C2x, 1, 2/(x t), 1/t^2]}, r[[1]] === \"Solution\""
+            " && brBCNorm[P1, brBCD[P1, r[[2]]] + 2 r[[2]]/(x t) - 1/t^2] === 0]");
+    BR_TRUE("brDTRDE[C2x, 1, 2/(x t), 0] === {\"Solution\", 0}");
+    /* the cancellation case with a homogeneous solution, exponential t1 = E^(x y): -b = D x/x + m D(x y) */
+    BR_TRUE("Module[{e = C1x[\"etas\"][[1]], q = x s1[[1]], r}, r = brDTPolyRDE[C1x, 1, -1/x, brBCNorm[L1, brBCD[L1, q] - q/x], 2];"
+            " r[[1]] === \"Solution\" && brBCNorm[L1, brBCD[L1, r[[2]]] - r[[2]]/x - brBCD[L1, q] + q/x] === 0]");
+    BR_TRUE("Module[{e = C1x[\"etas\"][[1]], q = x s1[[1]]^2, b, r}, b = brBCNorm[L1, -1/x - e];"
+            " r = brDTPolyRDE[C1x, 1, b, brBCNorm[L1, brBCD[L1, q] + b q], 3];"
+            " r[[1]] === \"Solution\" && brBCNorm[L1, brBCD[L1, r[[2]]] + b r[[2]] - brBCD[L1, q] - b q] === 0]");
+    BR_TRUE("Module[{b = brBCNorm[L1, -1/x - C1x[\"etas\"][[1]]]}, brDTPolyRDE[C1x, 1, b, s1[[1]]^3, 2] === {\"NoSolution\"}]");
+    BR_TRUE("brDTCancelHom[C2x, 1, -1/x, 1, 3, x, 0] === {\"Solution\", x t}");
+    BR_TRUE("brDTCancelHom[C2x, 1, -1/x, Y2, 3, x, 0] === {\"NoSolution\"}");
+    BR_TRUE("brDTLaurentDeriv[C1x, 1, {}] === {\"Solution\", {}}");
+    BR_TRUE("brDTLaurentDeriv[C1x, 1, {{0, Y1}}] === {\"NoSolution\"}");
+    /* a witness with n0 = 2 still declines (ROOT_0) */
+    BR_THROWS("brDTPolyRDE[C2x, 1, -1/(2 x), 1, 3]", "Unimplemented",
+              "a logarithmic-derivative witness that needs an n-th root in k0 (ROOT_0, OL5)");
+    /* three monomials end to end: answers verified, certificates */
+    BR_ANTIDERIV("D[F3, x]", "Bronstein");
+    BR_ANTIDERIV("D[E^(x Sqrt[1 + x^3]) Log[x] Log[x + Sqrt[1 + x^3]], x]", "Bronstein");
+    BR_ANTIDERIV("D[E^Sqrt[1 + x^3]/(Log[x] + Log[x + Sqrt[1 + x^3]]), x]", "Bronstein");
+    BR_ANTIDERIV("D[x Log[x] E^(x Sqrt[1 + x^3]) E^(Log[x]^2), x]", "Bronstein");
+    BR_ANTIDERIV("D[Log[x] Log[x + Sqrt[1 + x^3]] + Log[1 + x Sqrt[1 + x^3]]/Log[x], x]", "Bronstein");
+    BR_EQ("BronsteinIntegrate[E^(x Sqrt[1 + x^3]) Log[x] Log[x + Sqrt[1 + x^3]], x][[1]]", "\"not elementary\"");
+    BR_EQ("BronsteinIntegrate[Log[x] Log[x + Sqrt[1 + x^3]] Log[1 + x Sqrt[1 + x^3]], x][[1]]", "\"not elementary\"");
+}
+
 int main(void) {
     br_init();
     setup();
@@ -288,6 +363,7 @@ int main(void) {
     test_examples();
     test_soundness_fixes();
     test_kummer_split_kernel_radicals();
+    test_m2();
     BR_DONE("bronstein_phase5_tests");
     return 0;
 }

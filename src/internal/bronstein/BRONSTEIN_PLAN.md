@@ -1817,6 +1817,28 @@ span), LD_0/PLD_0 by Trager plus the span.
   fractional exponentials and other radical spellings (OL6), RDE_1 cancellation with a
   homogeneous solution, RDE_1 for an `f` that is not a derivative (only `i Dw` is called).
 
+**Status (2026-11-22, after v0.6688).** D4 and D5 closed in v0.6652 (the Liouvillian
+primitive directly above its exponential; f12-elem-7 through an HNF basis of the exponent
+lattice). D6's evaluator change shipped in v0.6653–57, as scoping binder summaries.
+
+**Status (2026-11-22, M2, v0.6689).** The general tower over the curve. In `BaseTower.m`
+every routine now takes the level as an argument, and the oracles of level i
+(`brDTLiouville`, `brDTLimitedAt`/`brDTLI`/`brDTIsDeriv`, `brDTPLD`, `brDTRDEAt`) dispatch
+to the level-0 ones. Added:
+- the weak normaliser ([SI] 6.1), needed from s = 3 on;
+- the cancellation case with an n = 1 homogeneous witness ([SI] 6.6);
+- the least radical exponent over dependent generators (HNF).
+
+Measured:
+- 330-case false-certificate stress over three monomials: 317 verified, 0 "not elementary".
+- 6 correct answers rejected by `PossibleZeroQ` (`G-pzq-1`).
+
+Still declined:
+- ROOT_0 (n0 > 1), OL3 (irrational coefficients above level 0);
+- nonzero offsets (OL2), spellings (OL6), the radical mid-tower (OL4).
+
+Next: Phase L of the 2026-11-22 session plan (I2, ROOT_0, offsets), and D7/D6 (Phase S).
+
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
 - *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a

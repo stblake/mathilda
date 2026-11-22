@@ -31,10 +31,13 @@ bronsteinOpenGaps = {
   "followup" -> "rerun the battery (scratch c6r.m pattern) after each 4.3b step; promote it to a nightly stress ctest", "source" -> "Phase 4.3b C6"|>,
 
 (* ---- Bronstein scope ----------------------------------------------------- *)
+<|"id" -> "G-pzq-1", "area" -> "Core", "gap" -> "PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]] is False for a correct antiderivative (residual 0 to 20 digits at three real and four complex points) of an integrand with E^(Sqrt[1 + x^4] + Log[1 + x]^2): the pipeline's check rejects Bronstein's answer (AntiderivativeCheckFailed). Same shape in the M2 stress (m2-46: E^(Log[1 + x Sqrt[1 + x^4]]^2); m2-69 plain PossibleZeroQ False, Simplify 0; m2-83 and m2-142 rejected by the pipeline while a standalone call on the same residual is True, so the sampler looks nondeterministic); a completeness loss, never a wrong answer",
+  "kind" -> "Integrate", "f" -> Hold[(-8*E^(Sqrt[1 + x^4] + Log[1 + x]^2)*x^3)/3 - E^(Sqrt[1 + x^4] + Log[1 + x]^2)/(1 + x)^2 - (2*x)/(3*(1 + x)) - (2*Log[1 + x])/3 + (E^(Sqrt[1 + x^4] + Log[1 + x]^2)*Log[1 + x])/(1 + x)^2 - (2*E^(Sqrt[1 + x^4] + Log[1 + x]^2)*(1 + x^4)*((2*x^3)/Sqrt[1 + x^4] + (2*Log[1 + x])/(1 + x)))/3 - (E^(Sqrt[1 + x^4] + Log[1 + x]^2)*Log[1 + x]*((2*x^3)/Sqrt[1 + x^4] + (2*Log[1 + x])/(1 + x)))/(1 + x)], "current" -> "internal", "budget" -> 60,
+  "followup" -> "fix the PossibleZeroQ false negative (zero_test.c sampler: exponentials of squared logarithms at complex points); the verifier stays PossibleZeroQ alone", "source" -> "Phase 5 M2 stress (tools/bronstein_stress/m2_tower_stress.m, m2-285; also on v0.6688)"|>,
 <|"id" -> "G-sign-1", "area" -> "Bronstein", "gap" -> "radicals equal up to a sign seen only on a branch cut: undecided (E6d)",
   "kind" -> "Integrate", "f" -> Hold[(1 + E^(x^2))/2 + (1 - E^(x^2))/2 Sqrt[x + 1] Sqrt[1/(x + 1)]], "current" -> "incomplete", "budget" -> 60,
   "followup" -> "prove eps = 1 on every open set (no open region with eps = -1: the connected components of the complement of the cuts, e.g. by a cylindrical decomposition in (Re x, Im x)) and integrate f_+ alone; brSignMerge (v0.6567) already reduces it to the single sign Sqrt[x + 1] Sqrt[1/(x + 1)]", "source" -> "review of E6d"|>,
-<|"id" -> "G-mid-1", "area" -> "Bronstein", "gap" -> "a radical in the middle of the tower",
+<|"id" -> "G-mid-1", "area" -> "Bronstein", "gap" -> "a radical in the middle of the tower (OL4)",
   "kind" -> "Integrate", "f" -> Hold[Log[1 + Sqrt[Log[x]]]/x], "current" -> "incomplete", "budget" -> 60,
   "followup" -> "Phase 5 (E1, E2)", "source" -> "plan"|>,
 
