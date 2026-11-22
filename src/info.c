@@ -5611,6 +5611,17 @@ void info_init(void) {
         "BitSet[n, k] with k < 0 or a non-integer argument is left "
         "unevaluated.");
 
+    symtab_set_docstring("BitClear",
+        "BitClear[n, k] sets to 0 the bit corresponding to the coefficient of "
+        "2^k in the integer n, the bit k places from the right.\n"
+        "Integers are taken in two's complement with an unlimited number of "
+        "digits: a non-negative n already has every high bit clear "
+        "(BitClear[5, 100] is 5), and clearing a high bit of a negative n "
+        "subtracts 2^k (BitClear[-1, 64] is -1 - 2^64). BitClear threads over "
+        "lists.\n"
+        "BitClear[n, k] with k < 0 or a non-integer argument is left "
+        "unevaluated.");
+
     symtab_set_docstring("BitGet",
         "BitGet[n, k] gets the bit corresponding to the coefficient of 2^k in "
         "the integer n, the bit k places from the right, as 0 or 1.\n"

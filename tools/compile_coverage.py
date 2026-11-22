@@ -525,7 +525,8 @@ _ZERO = ("indexed zero table: the argument is an integer index, never a "
          "working-precision real (a closed call is folded to a constant)")
 PREC_EXEMPT = {
     **{h: _INT for h in ("BitAnd", "BitGet", "BitLength", "BitNot", "BitOr",
-                         "BitSet", "BitShiftLeft", "BitShiftRight", "BitXor",
+                         "BitSet", "BitClear", "BitShiftLeft", "BitShiftRight",
+                         "BitXor",
                          "DivisorSigma", "EulerPhi", "GCD", "LCM",
                          "IntegerExponent", "IntegerLength", "JacobiSymbol",
                          "MoebiusMu", "PartitionsP", "PartitionsQ", "Quotient",

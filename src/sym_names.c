@@ -361,6 +361,7 @@ const char* SYM_BitAnd = NULL;
 const char* SYM_BitOr = NULL;
 const char* SYM_BitNot = NULL;
 const char* SYM_BitSet = NULL;
+const char* SYM_BitClear = NULL;
 const char* SYM_BitGet = NULL;
 const char* SYM_BitShiftLeft = NULL;
 const char* SYM_BitShiftRight = NULL;
@@ -1549,6 +1550,7 @@ void sym_names_init(void) {
     SYM_BitOr                      = intern_symbol("BitOr");
     SYM_BitNot                     = intern_symbol("BitNot");
     SYM_BitSet                     = intern_symbol("BitSet");
+    SYM_BitClear                   = intern_symbol("BitClear");
     SYM_BitGet                     = intern_symbol("BitGet");
     SYM_BitShiftLeft               = intern_symbol("BitShiftLeft");
     SYM_BitShiftRight              = intern_symbol("BitShiftRight");

@@ -79,6 +79,15 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 if (!emit(c, A[1], &b)) return -1;
                 *out = binop(c, OP_BSET_I, a, b, CT_INT); return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "BitClear") == 0) {
+                /* Binary n, k -> n with bit k cleared; OP_BCLR_I bails to the
+                 * interpreter where there is no int64 answer (k < 0, or a
+                 * bignum for n < 0, k >= 63). */
+                Val a, b;
+                if (!emit(c, A[0], &a)) return -1;
+                if (!emit(c, A[1], &b)) return -1;
+                *out = binop(c, OP_BCLR_I, a, b, CT_INT); return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "BitGet") == 0) {
                 /* Binary n, k -> bit k of n as 0/1; OP_BGET_I bails to the
                  * interpreter only for k < 0 (BitGet stays unevaluated). */

@@ -368,6 +368,7 @@ extern const char* SYM_BitAnd;
 extern const char* SYM_BitOr;
 extern const char* SYM_BitNot;
 extern const char* SYM_BitSet;
+extern const char* SYM_BitClear;
 extern const char* SYM_BitGet;
 extern const char* SYM_BitShiftLeft;
 extern const char* SYM_BitShiftRight;

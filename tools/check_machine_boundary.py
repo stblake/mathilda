@@ -125,7 +125,7 @@ INT_PAIRS = [("imax,2", "9223372036854775807", "2"),
 # and the bounded int pair "imax,2" only.
 INT_GROWTH = {"Power", "Binomial", "Pochhammer", "Factorial2", "Beta",
               "Multinomial", "StirlingS1", "StirlingS2", "BellB", "Fibonacci",
-              "LucasL", "Factorial", "Gamma", "Subfactorial", "BitSet",
+              "LucasL", "Factorial", "Gamma", "Subfactorial", "BitSet", "BitClear",
               "BitShiftLeft", "PartitionsP", "PartitionsQ", "HurwitzZeta"}
 
 # ---------------------------------------------------------------------------

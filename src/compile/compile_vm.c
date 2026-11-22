@@ -1306,6 +1306,13 @@ vm_loop:
                 if (!ndint_bitset_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
                 RD.i = (long long)r; NEXT();
             }
+            /* BitClear: n with bit k cleared, through the interpreter's own
+             * ndint_bitclear_i64; bails for k < 0 or a bignum answer. */
+            OP(BCLR_I): {
+                int64_t r;
+                if (!ndint_bitclear_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
+                RD.i = (long long)r; NEXT();
+            }
             /* BitGet: bit k of n as 0/1, through the interpreter's own
              * ndint_bitget_i64; bails only for k < 0. */
             OP(BGET_I): {

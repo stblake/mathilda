@@ -236,7 +236,7 @@ NUMERIC = {
     # --- exact integer arithmetic that a numeric workload still reaches ----
     "GCD", "LCM", "PowerMod", "Mod", "PrimeQ", "NextPrime", "Prime",
     "PrimePi", "IntegerDigits", "IntegerLength", "BitAnd", "BitOr",
-    "BitXor", "BitNot", "BitSet", "BitGet", "BitShiftLeft", "BitShiftRight", "IntegerExponent",
+    "BitXor", "BitNot", "BitSet", "BitClear", "BitGet", "BitShiftLeft", "BitShiftRight", "IntegerExponent",
     "EvenQ", "OddQ", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
     "Divisible", "CoprimeQ", "PrimeNu", "PrimeOmega", "LiouvilleLambda",
     "FromDigits", "DigitCount", "DigitSum", "RealDigits", "MantissaExponent",

@@ -384,6 +384,59 @@ In[6]:= {BitSet[-5, 2], BitSet[0, 64], BitSet[42, -1]}
 Out[6]= {-1, 18446744073709551616, BitSet[42, -1]}
 ```
 
+## BitClear
+
+- `BitClear[n, k]`: The integer `n` with the bit corresponding to the
+  coefficient of `2^k` set to 0 -- the bit `k` places from the right.
+
+**Features**:
+- `Listable`, `Protected`. Integers are taken in two's complement with an
+  unlimited number of digits. A non-negative `n` already has every high bit
+  clear (`BitClear[5, 100]` is `5`). Clearing a high bit of a negative `n`
+  subtracts `2^k`, so the result grows to whatever size the bit needs
+  (`BitClear[-1, 0]` is `-2`, `BitClear[-1, 64]` is `-1 - 2^64`). Threads over
+  lists in either or both arguments (`BitClear[7, {0, 1}]` is `{6, 5}`). Lists
+  of unequal length emit `Thread::tdlen`.
+- Exact at any size. Machine integers clear the bit in int64 when the answer
+  fits: k ≤ 62, or any k for a non-negative `n`. Everything else (a bignum `n`,
+  or bit 63 and up of a negative `n`) goes through GMP's `mpz_clrbit` into a
+  fresh node, never touching the operand. A result that fits a machine integer
+  is returned as one (`BitClear[2^63, 63]` is `0`).
+- Left unevaluated **silently**, with no message, exactly as `BitSet` and
+  `BitGet`: a negative `k` (`BitClear[5, -1]`), a bignum `k`, any non-integer
+  argument (`BitClear[2.5, 1]`, `BitClear[x, 1]`), and the wrong argument count
+  (`BitClear[5]`). There are no symbolic rules.
+- **Packed / NDArray**: an exact int64 binary kernel in `src/ndinteger.c`,
+  through the machine helper `ndint_bitclear_i64`, on the `AWARE` and
+  `INT64_OK` lists. Its whole-buffer arms mirror `BitSet`'s: a buffer of `n`
+  with a scalar `k` is one AND with a constant mask; a scalar `n` with a buffer
+  of `k`, and two buffers, are branch-free per-element shifts, with the same
+  run-time AVX2 clone on x86-64. An element with no int64 answer (bit 63 and up
+  of a negative `n`, a negative `k`) abandons the buffer and the List path
+  answers exactly; nothing is truncated.
+- **Compile[]**: `OP_BCLR_I`, through the same `ndint_bitclear_i64`. It bails
+  to the interpreter where there is no int64 answer, so the bignum or the
+  unevaluated form comes back exactly as uncompiled. It lowers at scalar and at
+  array shape, and `CompileDiagnostics` reports `Compiled -> True` for each.
+  Scalar, List, packed, `NDArray` and compiled results agree bit for bit.
+
+```
+In[1]:= BitClear[255, 0]
+Out[1]= 254
+
+In[2]:= BitClear[255, {0, 7}]
+Out[2]= {254, 127}
+
+In[3]:= {BitClear[-1, 0], BitClear[5, 100], BitClear[2^70 + 5, 70]}
+Out[3]= {-2, 5, 5}
+
+In[4]:= BitClear[-1, 64]
+Out[4]= -18446744073709551617
+
+In[5]:= BitClear[5, -1]
+Out[5]= BitClear[5, -1]
+```
+
 ## BitGet
 
 - `BitGet[n, k]`: The bit of the integer `n` corresponding to the coefficient

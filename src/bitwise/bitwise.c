@@ -37,6 +37,9 @@ void bitwise_init(void) {
     symtab_add_builtin("BitSet", builtin_bitset);
     symtab_get_def("BitSet")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 
+    symtab_add_builtin("BitClear", builtin_bitclear);
+    symtab_get_def("BitClear")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+
     symtab_add_builtin("BitGet", builtin_bitget);
     symtab_get_def("BitGet")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 

@@ -90,6 +90,20 @@ static inline bool ndint_bitset_i64(int64_t n, int64_t k, int64_t* out) {
     return false;
 }
 
+/* BitClear[n, k] in int64: n with bit k cleared, two's complement. Shared by
+ * the scalar builtin (src/bitwise/bitclear.c), the NDArray kernels and
+ * Compile's OP_BCLR_I, so every machine surface agrees bit for bit. Declines
+ * (false) for k < 0 (BitClear stays unevaluated) and for n < 0 with k >= 63
+ * (clearing one of a negative n's high bits subtracts 2^k, a bignum answer).
+ * A non-negative n has every bit from 63 up clear already, so BitClear[n, k]
+ * is n there. Inline: it sits in the VM's dispatch loop. */
+static inline bool ndint_bitclear_i64(int64_t n, int64_t k, int64_t* out) {
+    if (k < 0) return false;
+    if (k <= 62) { *out = (int64_t)((uint64_t)n & ~(UINT64_C(1) << k)); return true; }
+    if (n >= 0) { *out = n; return true; }
+    return false;
+}
+
 /* BitGet[n, k] in int64: bit k of n as 0 or 1, two's complement. Shared by
  * the scalar builtin (src/bitwise/bitget.c), the NDArray kernels and
  * Compile's OP_BGET_I. Declines (false) only for k < 0 (BitGet stays

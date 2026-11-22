@@ -898,7 +898,7 @@ static void pack_mark_aware_heads(void) {
          * fails -- they degrade through ndarray_delist_and_reeval explicitly
          * instead of falling out unevaluated. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
-        "IntegerLength", "BitLength", "BitXor", "BitAnd", "BitOr", "BitNot", "BitSet", "BitGet", "BitShiftLeft", "BitShiftRight", "PowerMod", "Prime", "IntegerDigits",
+        "IntegerLength", "BitLength", "BitXor", "BitAnd", "BitOr", "BitNot", "BitSet", "BitClear", "BitGet", "BitShiftLeft", "BitShiftRight", "PowerMod", "Prime", "IntegerDigits",
         "IntegerExponent", "PartitionsP", "PartitionsQ",
         /* FromDigits reads an int64 digit buffer straight into mpz_set_str
          * (src/int.c) and delists anything else itself. */
@@ -1302,7 +1302,7 @@ static void pack_mark_aware_heads(void) {
          * unevaluated (DivisorSigma[k, 0]) -- so the List path
          * and GMP still answer every case the buffer cannot. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
-        "IntegerLength", "BitLength", "BitXor", "BitAnd", "BitOr", "BitNot", "BitSet", "BitGet", "BitShiftLeft", "BitShiftRight", "PowerMod", "Prime", "IntegerDigits",
+        "IntegerLength", "BitLength", "BitXor", "BitAnd", "BitOr", "BitNot", "BitSet", "BitClear", "BitGet", "BitShiftLeft", "BitShiftRight", "PowerMod", "Prime", "IntegerDigits",
         "CoprimeQ", "Divisible", "PrimeQ", "IntegerExponent", "FromDigits",
         "PartitionsP", "PartitionsQ",
         /* The sign predicates answer with True/False, which no dtype holds --

@@ -313,6 +313,72 @@ static bool ndk_BitSet_whole2(const int64_t* a, const int64_t* b, size_t sz,
     return ndi_bitset_an_fn(a, b, sz, out);
 }
 
+/* BitClear[n, k]: n with bit k cleared, through ndint_bitclear_i64 -- the
+ * helper the scalar builtin and Compile's OP_BCLR_I share. Declines k < 0
+ * (BitClear stays unevaluated) and n < 0 with k >= 63 (a bignum answer); the
+ * whole array then takes the List path. */
+static bool ndk_BitClear_ii(int64_t n, int64_t k, int64_t* out) {
+    return ndint_bitclear_i64(n, k, out);
+}
+
+/* BitClear with a per-element k: n & ~(1 << k) for every lane, branch-free,
+ * with any k outside [0, 62] folded into a flag -- if one is seen the arm
+ * DECLINES and the per-element loop answers it (a non-negative n with
+ * k >= 63 is still an int64 there; anything else degrades to the List path).
+ * The masked shift count keeps the discarded lanes defined behaviour. Bound
+ * by the same variable 64-bit shift as BitSet's arm, so it gets the same AVX2
+ * clone on baseline x86-64, chosen in ndinteger_init. */
+#define NDI_BITCLEAR_VAR_BODY(AEXPR)                                        \
+    uint64_t bad = 0;                                                       \
+    for (size_t i = 0; i < sz; i++) {                                       \
+        uint64_t k = (uint64_t)ks[i];                                       \
+        bad |= (uint64_t)(k > 62);                                          \
+        out[i] = (int64_t)((uint64_t)(AEXPR) & ~(UINT64_C(1) << (k & 63))); \
+    }                                                                       \
+    return bad == 0;
+
+static bool ndi_bitclear_sn(int64_t n, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITCLEAR_VAR_BODY(n)
+}
+static bool ndi_bitclear_an(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITCLEAR_VAR_BODY(a[i])
+}
+
+#ifdef NDI_BITSET_AVX2
+__attribute__((target("avx2")))
+static bool ndi_bitclear_sn_avx2(int64_t n, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITCLEAR_VAR_BODY(n)
+}
+__attribute__((target("avx2")))
+static bool ndi_bitclear_an_avx2(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITCLEAR_VAR_BODY(a[i])
+}
+#endif
+
+static bool (*ndi_bitclear_sn_fn)(int64_t, const int64_t*, size_t, int64_t*) = ndi_bitclear_sn;
+static bool (*ndi_bitclear_an_fn)(const int64_t*, const int64_t*, size_t, int64_t*) = ndi_bitclear_an;
+
+/* Whole-buffer twin. A buffer of n with a scalar k in [0, 62] is one AND with
+ * a constant mask, which vectorises everywhere; a scalar n over a buffer of
+ * k takes the per-element-k loop above. */
+static bool ndk_BitClear_whole(const int64_t* in, size_t sz, int64_t scal,
+                               bool arr_first, int64_t* out) {
+    if (arr_first) {
+        if (scal < 0 || scal > 62) return false;
+        uint64_t mask = ~(UINT64_C(1) << scal);
+        for (size_t i = 0; i < sz; i++)
+            out[i] = (int64_t)((uint64_t)in[i] & mask);
+        return true;
+    }
+    return ndi_bitclear_sn_fn(scal, in, sz, out);
+}
+
+/* Two int64 buffers of the same shape: n from the first, k from the second. */
+static bool ndk_BitClear_whole2(const int64_t* a, const int64_t* b, size_t sz,
+                                int64_t* out) {
+    return ndi_bitclear_an_fn(a, b, sz, out);
+}
+
 /* BitGet[n, k]: bit k of n as 0/1, through ndint_bitget_i64 -- the helper the
  * scalar builtin and Compile's OP_BGET_I share. Declines only k < 0 (BitGet
  * stays unevaluated); the whole array then takes the List path. */
@@ -889,6 +955,8 @@ static const NDBinaryKernel NDKB_BitOr =
     { NULL, false, NULL, ndk_BitOr_ii, true, ndk_BitOr_whole, ndk_BitOr_whole2 };
 static const NDBinaryKernel NDKB_BitSet =
     { NULL, false, NULL, ndk_BitSet_ii, true, ndk_BitSet_whole, ndk_BitSet_whole2 };
+static const NDBinaryKernel NDKB_BitClear =
+    { NULL, false, NULL, ndk_BitClear_ii, true, ndk_BitClear_whole, ndk_BitClear_whole2 };
 static const NDBinaryKernel NDKB_BitGet =
     { NULL, false, NULL, ndk_BitGet_ii, true, ndk_BitGet_whole, ndk_BitGet_whole2 };
 static const NDBinaryKernel NDKB_BitShiftLeft =
@@ -1312,6 +1380,8 @@ void ndinteger_init(void) {
     if (__builtin_cpu_supports("avx2")) {
         ndi_bitset_sn_fn = ndi_bitset_sn_avx2;
         ndi_bitset_an_fn = ndi_bitset_an_avx2;
+        ndi_bitclear_sn_fn = ndi_bitclear_sn_avx2;
+        ndi_bitclear_an_fn = ndi_bitclear_an_avx2;
         ndi_bitget_sn_fn = ndi_bitget_sn_avx2;
         ndi_bitget_an_fn = ndi_bitget_an_avx2;
         ndi_bshl_sn_fn = ndi_bshl_sn_avx2;
@@ -1335,6 +1405,7 @@ void ndinteger_init(void) {
     symtab_set_ndarray_binary_kernel("BitAnd",       &NDKB_BitAnd);
     symtab_set_ndarray_binary_kernel("BitOr",        &NDKB_BitOr);
     symtab_set_ndarray_binary_kernel("BitSet",       &NDKB_BitSet);
+    symtab_set_ndarray_binary_kernel("BitClear",     &NDKB_BitClear);
     symtab_set_ndarray_binary_kernel("BitGet",       &NDKB_BitGet);
     symtab_set_ndarray_binary_kernel("BitShiftLeft", &NDKB_BitShiftLeft);
     symtab_set_ndarray_binary_kernel("BitShiftRight", &NDKB_BitShiftRight);

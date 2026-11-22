@@ -1788,6 +1788,138 @@ static void test_bitset_stress(void) {
     }
 }
 
+/* ---- BitClear ---------------------------------------------------------- */
+
+static void test_bitclear_basic(void) {
+    assert_eval_eq("BitClear[255, 0]", "254", 0);
+    assert_eval_eq("BitClear[255, 7]", "127", 0);
+    assert_eval_eq("BitClear[42, 0]", "42", 0);    /* already clear */
+    assert_eval_eq("BitClear[42, 1]", "40", 0);
+    assert_eval_eq("BitClear[0, 10]", "0", 0);
+    assert_eval_eq("Table[BitClear[255, k], {k, 0, 7}]",
+                   "{254, 253, 251, 247, 239, 223, 191, 127}", 0);
+    /* Non-negative n: every high bit is already clear. */
+    assert_eval_eq("BitClear[5, 100]", "5", 0);
+    assert_eval_eq("BitClear[9223372036854775807, 62]", "4611686018427387903", 0);
+    assert_eval_eq("BitClear[9223372036854775807, 63]", "9223372036854775807", 0);
+}
+
+static void test_bitclear_negatives_and_bignums(void) {
+    assert_eval_eq("BitClear[-1, 0]", "-2", 0);
+    assert_eval_eq("BitClear[-5, 0]", "-6", 0);
+    assert_eval_eq("BitClear[-5, 1]", "-7", 0);
+    assert_eval_eq("BitClear[-5, 2]", "-5", 0);    /* already clear */
+    /* Clearing a high bit of a negative n subtracts 2^k: a bignum. */
+    assert_eval_eq("BitClear[-1, 63]", "-9223372036854775809", 0);
+    assert_eval_eq("BitClear[-1, 64]", "-18446744073709551617", 0);
+    assert_eval_eq("BitClear[-1, 100] == -1 - 2^100", "True", 0);
+    assert_eval_eq("BitClear[-2^63, 63]", "-18446744073709551616", 0);
+    assert_eval_eq("BitClear[-2^64, 64]", "-36893488147419103232", 0);
+    assert_eval_eq("BitClear[2^70 + 5, 70]", "5", 0);
+    assert_eval_eq("Head[BitClear[2^70 + 5, 70]]", "Integer", 0);
+    assert_eval_eq("BitClear[2^63, 63]", "0", 0);
+    assert_eval_eq("BitClear[2^70, 71] == 2^70", "True", 0);
+    assert_eval_eq("BitClear[2^70, 10^12] == 2^70", "True", 0);
+    assert_eval_eq("BitClear[100! + 2^1000, 1000] == 100!", "True", 0);
+    assert_eval_eq("p = 3^200; r = BitClear[p, 0]; {p == 3^200, r == 3^200 - 1}",
+                   "{True, True}", 0);
+}
+
+static void test_bitclear_unevaluated_silent(void) {
+    const char* in[] = { "BitClear[5, -1]", "BitClear[2.5, 1]", "BitClear[5, 1.]",
+                         "BitClear[x, 1]", "BitClear[5, x]", "BitClear[1/2, 1]",
+                         "BitClear[5, 2^70]", "BitClear[5]", "BitClear[5, 1, 2]" };
+    const char* out[] = { "BitClear[5, -1]", "BitClear[2.5, 1]", "BitClear[5, 1.0]",
+                          "BitClear[x, 1]", "BitClear[5, x]", "BitClear[1/2, 1]",
+                          "BitClear[5, 1180591620717411303424]", "BitClear[5]",
+                          "BitClear[5, 1, 2]" };
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char src[128];
+        snprintf(src, sizeof src, "Check[%s, failed]", in[i]);
+        assert_eval_eq(src, out[i], 0);
+    }
+}
+
+static void test_bitclear_properties(void) {
+    /* BitClear[n, k] == BitAnd[n, BitNot[2^k]]; idempotent; the bit reads back
+     * clear; BitSet undoes it when the bit was set. Over every sign and size. */
+    assert_eval_eq(
+        "SeedRandom[31]; ns = Join[RandomInteger[{-2^200, 2^200}, 30], "
+        "RandomInteger[{-2^62, 2^62}, 30], "
+        "{-2^63, 2^63 - 1, 2^63, -2^63 - 1, 0, -1, 1, 3^100, -5^90}]; "
+        "ks = {0, 1, 5, 31, 32, 61, 62, 63, 64, 65, 127, 128, 300}; "
+        "And @@ Flatten[Table[BitClear[n, k] == BitAnd[n, BitNot[2^k]] && "
+        "BitClear[BitClear[n, k], k] == BitClear[n, k] && "
+        "BitGet[BitClear[n, k], k] == 0 && "
+        "BitSet[BitClear[n, k], k] == BitSet[n, k], "
+        "{n, ns}, {k, ks}]]", "True", 0);
+}
+
+static void test_bitclear_packed_and_ndarray(void) {
+    assert_eval_eq("PackedArrayQ[BitClear[Range[10], 0]]", "True", 0);
+    assert_eval_eq("BitClear[Range[10], 0]", "{0, 2, 2, 4, 4, 6, 6, 8, 8, 10}", 0);
+    assert_eval_eq("PackedArrayQ[BitClear[255, Range[0, 7]]]", "True", 0);
+    assert_eval_eq("BitClear[255, Range[0, 3]]", "{254, 253, 251, 247}", 0);
+    assert_eval_eq("BitClear[Range[8], Range[0, 7]]", "{0, 0, 3, 4, 5, 6, 7, 8}", 0);
+    assert_eval_eq("BitClear[NDArray[{7, 15, 3}, DataType -> \"int64\"], 1]",
+                   "NDArray[{5, 13, 1}]", 0);
+    assert_eval_eq("BitClear[255, NDArray[{0, 1, 2}, DataType -> \"int64\"]]",
+                   "NDArray[{254, 253, 251}]", 0);
+    assert_eval_eq("BitClear[NDArray[{7, 7}, DataType -> \"int64\"], "
+                   "NDArray[{0, 2}, DataType -> \"int64\"]]", "NDArray[{6, 3}]", 0);
+    /* No int64 answer for a negative element past bit 62: the buffer is
+     * abandoned and the List path answers exactly, never a truncation. */
+    assert_eval_eq("BitClear[{-1, 0, 1}, 63]", "{-9223372036854775809, 0, 1}", 0);
+    assert_eval_eq("BitClear[Range[3], 63]", "{1, 2, 3}", 0);
+    assert_eval_eq("BitClear[Range[3], {0, -1, 2}]", "{0, BitClear[2, -1], 3}", 0);
+}
+
+static void test_bitclear_surfaces_agree(void) {
+    assert_eval_eq(
+        "SeedRandom[32]; na = Join[RandomInteger[{-2^62, 2^62}, 500], "
+        "{-2^63, 2^63 - 1, 0, -1}]; ka = RandomInteger[{0, 62}, Length[na]]; "
+        "ref1 = Table[BitAnd[na[[i]], BitNot[2^37]], {i, Length[na]}]; "
+        "ref2 = Table[BitAnd[-12345, BitNot[2^ka[[i]]]], {i, Length[na]}]; "
+        "ref3 = Table[BitAnd[na[[i]], BitNot[2^ka[[i]]]], {i, Length[na]}]; "
+        "{BitClear[na, 37] === ref1, "
+        " Normal[BitClear[NDArray[na, DataType -> \"int64\"], 37]] === ref1, "
+        " Compile[{{v, _Integer, 1}}, BitClear[v, 37]][na] === ref1, "
+        " BitClear[-12345, ka] === ref2, "
+        " Normal[BitClear[-12345, NDArray[ka, DataType -> \"int64\"]]] === ref2, "
+        " Compile[{{v, _Integer, 1}}, BitClear[-12345, v]][ka] === ref2, "
+        " BitClear[na, ka] === ref3, "
+        " BitClear[Developer`FromPackedArray[na], Developer`FromPackedArray[ka]] === ref3, "
+        " Normal[BitClear[NDArray[na, DataType -> \"int64\"], NDArray[ka, DataType -> \"int64\"]]] === ref3, "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitClear[v, w]][na, ka] === ref3, "
+        " Table[Compile[{{s, _Integer}, {t, _Integer}}, BitClear[s, t]][na[[i]], ka[[i]]], {i, Length[na]}] === ref3, "
+        " Table[BitClear[na[[i]], ka[[i]]], {i, Length[na]}] === ref3}",
+        "{True, True, True, True, True, True, True, True, True, True, True, True}", 0);
+}
+
+static void test_bitclear_compile(void) {
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitClear[n, k]][255, 0]", "254", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitClear[n, 70]][7]", "7", 0);
+    /* No int64 answer: the VM bails and the interpreter answers exactly. */
+    assert_eval_eq("Compile[{{n, _Integer}}, BitClear[n, 63]][-1]", "-9223372036854775809", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitClear[n, k]][42, -1]",
+                   "BitClear[42, -1]", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitClear[v, 0]][Range[5]]", "{0, 2, 2, 4, 4}", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{x, _Integer}}, BitClear[x, 3]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{n, _Integer}, {k, _Integer}}, BitClear[n, k]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitClear[v, 3]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitClear[7, v]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, BitClear[v, w]]", "True", 0);
+}
+
+static void test_bitclear_attributes_docstring(void) {
+    assert_eval_eq("Attributes[BitClear]", "{Listable, Protected}", 0);
+    SymbolDef* def = symtab_get_def("BitClear");
+    ASSERT(def != NULL);
+    ASSERT(def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "coefficient of") != NULL);
+    ASSERT(SYM_BitClear != NULL && strcmp(SYM_BitClear, "BitClear") == 0);
+}
+
 /* ---- BitGet ------------------------------------------------------------ */
 
 static void test_bitget_documented_examples(void) {
@@ -2632,6 +2764,14 @@ int main(void) {
     TEST(test_bitset_attributes);
     TEST(test_bitset_docstring_and_sym);
     TEST(test_bitset_stress);
+    TEST(test_bitclear_basic);
+    TEST(test_bitclear_negatives_and_bignums);
+    TEST(test_bitclear_unevaluated_silent);
+    TEST(test_bitclear_properties);
+    TEST(test_bitclear_packed_and_ndarray);
+    TEST(test_bitclear_surfaces_agree);
+    TEST(test_bitclear_compile);
+    TEST(test_bitclear_attributes_docstring);
     TEST(test_bitget_documented_examples);
     TEST(test_bitget_basic);
     TEST(test_bitget_negatives);

@@ -8,6 +8,7 @@
  *   - BitOr[n1, n2, ...]    bitwise OR (two's complement for negatives).
  *   - BitNot[n]             bitwise NOT, -1 - n (two's complement).
  *   - BitSet[n, k]          n with bit k (the 2^k coefficient) set to 1.
+ *   - BitClear[n, k]        n with bit k (the 2^k coefficient) set to 0.
  *   - BitGet[n, k]          bit k (the 2^k coefficient) of n, as 0 or 1.
  *   - BitShiftLeft[n, k]    n * 2^k; a negative k shifts right.
  *   - BitShiftRight[n, k]   IntegerPart[n / 2^k]; a negative k shifts left.
@@ -27,6 +28,7 @@ Expr* builtin_bitand(Expr* res);
 Expr* builtin_bitor(Expr* res);
 Expr* builtin_bitnot(Expr* res);
 Expr* builtin_bitset(Expr* res);
+Expr* builtin_bitclear(Expr* res);
 Expr* builtin_bitget(Expr* res);
 Expr* builtin_bitshiftleft(Expr* res);
 Expr* builtin_bitshiftright(Expr* res);
