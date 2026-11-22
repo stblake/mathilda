@@ -127,13 +127,14 @@ static void test_root_of_unity_odd(void) {
 
 /* x^5 - 2 = 0: positive constant.  Roots share the magnitude 2^(1/5);
  * the canonical Solve sort orders them by (-1)-exponent mod 1, i.e.
- * 0, 1/5, 2/5, 3/5, 4/5.  Each non-principal root canonicalises via
- * Power's even-q/odd-q normalisation to `sign * (-1)^(p/5) * 2^(1/5)`. */
+ * 0, 1/5, 2/5, 3/5, 4/5.  Each non-principal root is
+ * `sign * (-1)^(p/5) * 2^(1/5)`, except that (-1)^(1/5) 2^(1/5) merges to
+ * (-2)^(1/5) (the sign joins the radical with its own exponent), giving
+ * -(-2)^(1/5) -- exactly the reference's list, order included. */
 static void test_binomial_positive_constant(void) {
     run_test("Solve[x^5 - 2 == 0, x]",
-             "List[List[Rule[x, Power[2, Rational[1, 5]]]], "
-                  "List[Rule[x, Times[-1, Power[-1, Rational[1, 5]], "
-                                     "Power[2, Rational[1, 5]]]]], "
+             "List[List[Rule[x, Times[-1, Power[-2, Rational[1, 5]]]]], "
+                  "List[Rule[x, Power[2, Rational[1, 5]]]], "
                   "List[Rule[x, Times[Power[-1, Rational[2, 5]], "
                                      "Power[2, Rational[1, 5]]]]], "
                   "List[Rule[x, Times[-1, Power[-1, Rational[3, 5]], "
@@ -310,18 +311,16 @@ static void test_gcd_exponents_three_term(void) {
     /* x^6 - 5 x^3 + 6 == 0 -- u^2 - 5 u + 6 = (u-2)(u-3); each u-root
      * spawns three cube roots, six in total. */
     run_test("Solve[x^6 - 5 x^3 + 6 == 0, x]",
-             "List[List[Rule[x, Power[2, Rational[1, 3]]]], "
-                  "List[Rule[x, Times[-1, "
-                           "Power[-1, Rational[1, 3]], "
-                           "Power[2, Rational[1, 3]]]]], "
+             "List[List[Rule[x, Times[-1, Power[-3, Rational[1, 3]]]]], "
+                  "List[Rule[x, Times[-1, Power[-2, Rational[1, 3]]]]], "
+                  "List[Rule[x, Power[2, Rational[1, 3]]]], "
                   "List[Rule[x, Times[Power[-1, Rational[2, 3]], "
                                        "Power[2, Rational[1, 3]]]]], "
                   "List[Rule[x, Power[3, Rational[1, 3]]]], "
-                  "List[Rule[x, Times[-1, "
-                           "Power[-1, Rational[1, 3]], "
-                           "Power[3, Rational[1, 3]]]]], "
                   "List[Rule[x, Times[Power[-1, Rational[2, 3]], "
                                        "Power[3, Rational[1, 3]]]]]]");
+    /* (-(-1)^(1/3) b^(1/3) is -(-b)^(1/3) in the canonical radical form; the
+     * list, order included, is the reference's) */
 }
 
 static void test_gcd_exponents_zero_term(void) {

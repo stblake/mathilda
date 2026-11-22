@@ -399,6 +399,8 @@ static int is_real_algebraic_object(const Expr* e) {
     return flint_qqbar_is_real(e) == 1;
 }
 
+static Expr* cx_reim_split(const Expr* arg, bool want_im);
+
 Expr* builtin_re(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -414,6 +416,10 @@ Expr* builtin_re(Expr* res) {
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         return expr_copy(re);
+    }
+    {
+        Expr* split = cx_reim_split(arg, false);
+        if (split) return split;
     }
     if (is_real_number_leaf(arg)) {
         return expr_copy(arg);
@@ -442,6 +448,10 @@ Expr* builtin_im(Expr* res) {
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         return expr_copy(im);
+    }
+    {
+        Expr* split = cx_reim_split(arg, true);
+        if (split) return split;
     }
     if (is_real_number_leaf(arg)) {
         return expr_new_integer(0);
@@ -515,39 +525,288 @@ static bool cx_pullable_factor(const Expr* f) {
     return expr_is_numeric_quantity(f);
 }
 
-/* f[c1 ... ck u1 ... um] -> f[c1] ... f[ck] f[u1 ... um] for f = Abs or
- * Conjugate, both multiplicative (|ab| = |a||b|, conj(ab) = conj(a)conj(b))
- * for every complex value of the symbols, so the split is unconditional, as
- * in the reference. The numeric factors c_i are split off one by one and
- * evaluated (Abs[-2] = 2, Conjugate[1 + I] = 1 - I, Abs[Sin[1]] = Sin[1]);
- * the symbolic factors stay together inside (Abs[x y] is not split). Fires
- * only when the product has at least one numeric AND one non-numeric
- * factor, so it cannot recur on its own output. NULL when it does not
- * apply; otherwise a new evaluated expression (the argument is borrowed). */
-static Expr* cx_split_numeric_factors(const Expr* arg, const char* fsym) {
-    if (!head_is(arg, SYM_Times)) return NULL;
+/* ---- Abs, Conjugate, Re and Im of powers, products and sums -------------
+ *
+ * All four heads are evaluated through identities that hold for every
+ * complex value of the symbols, so none of them needs an assumption.
+ *
+ * Powers.  On the principal branch z^w = Exp[w Log[z]] with
+ * Log[z] = Log[|z|] + I Arg[z], so
+ *     |z^w| = Exp[Re[w Log[z]]] = |z|^Re[w] Exp[-Im[w] Arg[z]].
+ * The Arg term vanishes, and the rewrite is a simplification, in exactly
+ * four cases:
+ *   (A) w real:                  |z^w| = |z|^w          (Abs[x^2] = Abs[x]^2)
+ *   (B) z > 0, so Arg[z] = 0:    |z^w| = z^Re[w]        (Abs[E^y] = E^Re[y])
+ *   (C) z numeric with |z| = 1:  |z^w| = Exp[-Arg[z] Im[w]]
+ *                                                       (Abs[I^y] = E^(-Pi Im[y]/2))
+ *   (D) w = I c, c real:         |z^w| = Exp[-c Im[Log[z]]]
+ * For any other w = a + I c the result keeps an Arg (or Im[Log]) factor
+ * and is longer than the input, so Abs[x^(1 + I)] and Abs[(-2)^y] stay.
+ * Conjugate[z^w] = Exp[Conjugate[w] Conjugate[Log[z]]], and
+ * Conjugate[Log[z]] = Log[Conjugate[z]] holds off the negative real axis
+ * only, so the power rule is restricted to
+ *   (E) w an integer:  Conjugate[z]^w   (z^n is a product, and conjugation
+ *                                        is multiplicative)
+ *   (F) z > 0:         z^Conjugate[w]   (Log[z] is real)
+ * and Conjugate[Sqrt[x]] stays: it differs from Sqrt[Conjugate[x]] for x < 0.
+ *
+ * Products and sums.  |a b| = |a| |b|, and Conjugate is additive and
+ * multiplicative, so any grouping of the factors (terms) is correct; the
+ * one chosen pulls out exactly the parts the head simplifies and keeps the
+ * rest together, as the reference does:
+ *   Abs:        a factor whose Abs has no Abs left in it (a number, E^y,
+ *               I^y) comes out; Abs[x^2 E^y] = E^Re[y] Abs[x]^2, while
+ *               Abs[x^2 y] stays (pulling x^2 alone would only give
+ *               Abs[x]^2 Abs[y]).
+ *   Conjugate:  a factor or term whose Conjugate changes comes out;
+ *               Conjugate[x^2 y z] = Conjugate[x]^2 Conjugate[y z],
+ *               Conjugate[1 + x] = 1 + Conjugate[x].
+ *   Re, Im:     a real numeric factor c comes out (Re[c u] = c Re[u]), and
+ *               a purely imaginary one I k turns Re into -k Im (Re[I k u] =
+ *               -k Im[u], Im[I k u] = k Re[u]); a general complex factor
+ *               stays inside (Re[(1 + I) x] needs both Re[x] and Im[x]).
+ *               Over a sum, the real terms and the terms with an imaginary
+ *               coefficient come out: Re[a + I b] = Re[a] - Im[b],
+ *               Re[x + y + 1] = 1 + Re[x + y]; Re[2 x + 3 y] stays.
+ * Every rewrite produces the head only on a strictly smaller argument, or
+ * on an argument with no part left to pull out, so none can recur. */
+
+static Expr* cx_call1(const char* h, Expr* a) {      /* h[a], unevaluated; consumes a */
+    return expr_new_function(expr_new_symbol(h), (Expr*[]){ a }, 1);
+}
+
+static Expr* cx_eval1(const char* h, const Expr* a) { /* h[a], evaluated; borrows a */
+    return eval_and_free(cx_call1(h, expr_copy((Expr*)a)));
+}
+
+static bool cx_is_exact_zero(const Expr* e) {
+    return e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
+/* A real numeric quantity: a real number, or a numeric constant whose
+ * value is real (Pi, Sqrt[2], Log[3]). */
+static bool cx_real_numeric(const Expr* e) {
+    if (is_real_number_leaf(e)) return true;
+    return cx_pullable_factor(e) && is_numeric_real((Expr*)e);
+}
+
+/* A positive real numeric quantity (2, 2/3, E, Pi, Sqrt[2]). */
+static bool cx_positive_numeric(const Expr* e) {
+    if (!cx_real_numeric(e)) return false;
+    int sg;
+    return comparisons_real_constant_sign((Expr*)e, &sg) && sg > 0;
+}
+
+/* f is the number I k with k real: *k = k (borrowed). */
+static bool cx_pure_imaginary(const Expr* f, Expr** k) {
+    Expr *re, *im;
+    if (!is_complex((Expr*)f, &re, &im) || !cx_is_exact_zero(re)) return false;
+    if (!is_real_number_leaf(im)) return false;
+    *k = im;
+    return true;
+}
+
+static bool cx_free_of(const Expr* e, const char* h) {
+    if (e->type != EXPR_FUNCTION) return true;
+    if (head_is(e, h)) return false;
+    if (!cx_free_of(e->data.function.head, h)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!cx_free_of(e->data.function.args[i], h)) return false;
+    return true;
+}
+
+/* E^x, evaluated; consumes x. */
+static Expr* cx_exp(Expr* x) {
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ expr_new_symbol(SYM_E), x }, 2));
+}
+
+/* -a b, unevaluated; consumes a and b. */
+static Expr* cx_neg_times(Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), a, b }, 3);
+}
+
+/* Abs[z^w] by (A)-(D) above, or NULL.  A fully numeric power takes the
+ * same identities (Abs[(-2)^(1/3)] = 2^(1/3), Abs[Pi^(2 I)] = 1). */
+static Expr* cx_abs_power(const Expr* arg) {
+    if (!head_is(arg, SYM_Power) || arg->data.function.arg_count != 2) return NULL;
+    const Expr* z = arg->data.function.args[0];
+    const Expr* w = arg->data.function.args[1];
+    bool z_num = cx_pullable_factor(z), w_num = cx_pullable_factor(w);
+    if (w_num && cx_real_numeric(w))                                   /* (A) */
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ cx_eval1(SYM_Abs, z), expr_copy((Expr*)w) }, 2));
+    if (z_num) {
+        if (cx_positive_numeric(z))                                    /* (B) */
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_copy((Expr*)z), cx_call1(SYM_Re, expr_copy((Expr*)w)) }, 2));
+        Expr* az = cx_eval1(SYM_Abs, z);                               /* (C) */
+        bool unit = az->type == EXPR_INTEGER && az->data.integer == 1;
+        expr_free(az);
+        if (unit)
+            return cx_exp(cx_neg_times(cx_eval1(SYM_Arg, z), cx_call1(SYM_Im, expr_copy((Expr*)w))));
+        return NULL;
+    }
+    if (w_num) {                                                       /* (D) */
+        Expr* re = cx_eval1(SYM_Re, w);
+        bool imag = cx_is_exact_zero(re);
+        expr_free(re);
+        if (imag)
+            return cx_exp(cx_neg_times(cx_eval1(SYM_Im, w),
+                cx_call1(SYM_Im, cx_call1(SYM_Log, expr_copy((Expr*)z)))));
+    }
+    return NULL;
+}
+
+/* Conjugate[z^w] by (E)-(F) above, or NULL. */
+static Expr* cx_conjugate_power(const Expr* arg) {
+    if (!head_is(arg, SYM_Power) || arg->data.function.arg_count != 2) return NULL;
+    const Expr* z = arg->data.function.args[0];
+    const Expr* w = arg->data.function.args[1];
+    if (expr_is_integer_like(w))                                       /* (E) */
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ cx_call1(SYM_Conjugate, expr_copy((Expr*)z)), expr_copy((Expr*)w) }, 2));
+    if (cx_pullable_factor(z) && cx_positive_numeric(z))               /* (F) */
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ expr_copy((Expr*)z), cx_call1(SYM_Conjugate, expr_copy((Expr*)w)) }, 2));
+    return NULL;
+}
+
+/* f[p1 ... pn] for f = Abs or Conjugate over a product (Times) or, for
+ * Conjugate, a sum (Plus): f[pulled parts, each on its own] combined with
+ * f[the rest, together].  NULL when no part comes out, or when every part
+ * is numeric (the numeric paths own that).  Borrows arg. */
+static Expr* cx_split_parts(const Expr* arg, const char* f) {
+    const char* comb = head_is(arg, SYM_Times) ? SYM_Times
+                     : (head_is(arg, SYM_Plus) && f == SYM_Conjugate) ? SYM_Plus : NULL;
+    if (!comb) return NULL;
     size_t na = arg->data.function.arg_count, nnum = 0;
     for (size_t i = 0; i < na; i++)
         if (cx_pullable_factor(arg->data.function.args[i])) nnum++;
-    if (nnum == 0 || nnum == na) return NULL;
-    Expr** outer = malloc(sizeof(Expr*) * (nnum + 1));
-    Expr** inner = malloc(sizeof(Expr*) * (na - nnum));
-    size_t no = 0, ni = 0;
+    /* A numeric product splits only into parts that all lose the head
+     * (Abs[2 (-1)^(1/3)] = 2); otherwise the numeric paths own it. */
+    bool all_numeric = nnum == na;
+    Expr** out = malloc(sizeof(Expr*) * (na + 1));
+    Expr** rest = malloc(sizeof(Expr*) * na);
+    size_t no = 0, nr = 0;
     for (size_t i = 0; i < na; i++) {
-        Expr* f = arg->data.function.args[i];
-        if (cx_pullable_factor(f))
-            outer[no++] = eval_and_free(expr_new_function(
-                expr_new_symbol(fsym), (Expr*[]){ expr_copy(f) }, 1));
-        else
-            inner[ni++] = expr_copy(f);
+        Expr* p = arg->data.function.args[i];
+        Expr* v = NULL;
+        if (cx_pullable_factor(p)) {
+            v = cx_eval1(f, p);
+        } else if (f == SYM_Abs) {
+            if (head_is(p, SYM_Power)) {
+                v = cx_abs_power(p);
+                if (v && !cx_free_of(v, SYM_Abs)) { expr_free(v); v = NULL; }
+            }
+        } else {
+            v = cx_eval1(f, p);
+            if (head_is(v, f) && v->data.function.arg_count == 1 &&
+                expr_eq(v->data.function.args[0], p)) { expr_free(v); v = NULL; }
+        }
+        if (v && all_numeric && !cx_free_of(v, f)) { expr_free(v); v = NULL; }
+        if (v) out[no++] = v;
+        else rest[nr++] = expr_copy(p);
     }
-    Expr* rest = ni == 1 ? inner[0]
-        : expr_new_function(expr_new_symbol(SYM_Times), inner, ni);
-    free(inner);
-    outer[no++] = expr_new_function(expr_new_symbol(fsym), (Expr*[]){ rest }, 1);
-    Expr* out = expr_new_function(expr_new_symbol(SYM_Times), outer, no);
-    free(outer);
-    return eval_and_free(out);
+    if (no == 0 || (all_numeric && nr > 0)) {
+        for (size_t i = 0; i < no; i++) expr_free(out[i]);
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(out); free(rest);
+        return NULL;
+    }
+    if (nr > 0) {
+        Expr* r = nr == 1 ? rest[0] : expr_new_function(expr_new_symbol(comb), rest, nr);
+        out[no++] = cx_call1(f, r);
+    }
+    free(rest);
+    Expr* res = no == 1 ? out[0] : expr_new_function(expr_new_symbol(comb), out, no);
+    free(out);
+    return eval_and_free(res);
+}
+
+/* Re (want_im = false) or Im (true) of a non-numeric product or sum, by the
+ * rules above, or NULL.  Borrows arg. */
+static Expr* cx_reim_split(const Expr* arg, bool want_im) {
+    const char* self = want_im ? SYM_Im : SYM_Re;
+    const char* other = want_im ? SYM_Re : SYM_Im;
+    if (cx_pullable_factor(arg)) return NULL;
+    if (head_is(arg, SYM_Conjugate) && arg->data.function.arg_count == 1) {
+        /* Re[Conjugate[u]] = Re[u], Im[Conjugate[u]] = -Im[u] */
+        Expr* u = cx_call1(self, expr_copy(arg->data.function.args[0]));
+        if (!want_im) return eval_and_free(u);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), u }, 2));
+    }
+    size_t na = head_is(arg, SYM_Times) || head_is(arg, SYM_Plus) ? arg->data.function.arg_count : 0;
+    if (na == 0) return NULL;
+    if (head_is(arg, SYM_Times)) {
+        /* c (I k)^m u with c real, m in {0, 1}: Re = c Re[u] or -c k Im[u],
+         * Im = c Im[u] or c k Re[u]. */
+        Expr** coef = malloc(sizeof(Expr*) * (na + 1));
+        Expr** rest = malloc(sizeof(Expr*) * na);
+        size_t nc = 0, nr = 0, m = 0;
+        bool ok = true;
+        for (size_t i = 0; i < na && ok; i++) {
+            Expr* p = arg->data.function.args[i];
+            Expr* k;
+            if (cx_pullable_factor(p)) {
+                if (cx_real_numeric(p)) coef[nc++] = expr_copy(p);
+                else if (cx_pure_imaginary(p, &k) && m == 0) { coef[nc++] = expr_copy(k); m++; }
+                else ok = false;
+            } else {
+                rest[nr++] = expr_copy(p);
+            }
+        }
+        Expr* r = NULL;
+        if (ok && nc > 0 && nr > 0) {
+            Expr* u = nr == 1 ? rest[0] : expr_new_function(expr_new_symbol(SYM_Times), rest, nr);
+            nr = 0;
+            const char* part = m == 0 ? self : other;
+            if (m == 1 && !want_im) coef[nc++] = expr_new_integer(-1);
+            coef[nc++] = cx_call1(part, u);
+            r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), coef, nc));
+            nc = 0;
+        }
+        for (size_t i = 0; i < nc; i++) expr_free(coef[i]);
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(coef); free(rest);
+        return r;
+    }
+    /* Plus: the real terms and the terms with a purely imaginary numeric
+     * coefficient come out; the rest stays together. */
+    Expr** out = malloc(sizeof(Expr*) * (na + 1));
+    Expr** rest = malloc(sizeof(Expr*) * na);
+    size_t no = 0, nr = 0;
+    for (size_t i = 0; i < na; i++) {
+        Expr* t = arg->data.function.args[i];
+        bool pull = false;
+        Expr* k;
+        if (cx_pure_imaginary(t, &k)) pull = true;
+        else if (head_is(t, SYM_Times)) {
+            for (size_t j = 0; j < t->data.function.arg_count && !pull; j++)
+                pull = cx_pure_imaginary(t->data.function.args[j], &k);
+        }
+        if (!pull) {
+            Expr* im = cx_eval1(SYM_Im, t);
+            pull = cx_is_exact_zero(im);
+            expr_free(im);
+        }
+        if (pull) out[no++] = cx_eval1(self, t);
+        else rest[nr++] = expr_copy(t);
+    }
+    if (no == 0) {
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(out); free(rest);
+        return NULL;
+    }
+    if (nr > 0)
+        out[no++] = cx_call1(self, nr == 1 ? rest[0]
+                                   : expr_new_function(expr_new_symbol(SYM_Plus), rest, nr));
+    free(rest);
+    Expr* r = no == 1 ? out[0] : expr_new_function(expr_new_symbol(SYM_Plus), out, no);
+    free(out);
+    return eval_and_free(r);
 }
 
 Expr* builtin_abs(Expr* res) {
@@ -582,8 +841,10 @@ Expr* builtin_abs(Expr* res) {
      * its own |c| -- Abs[2 x] = 2 Abs[x], Abs[-x] = Abs[x], Abs[(1+I) x] =
      * Sqrt[2] Abs[x], Abs[Pi x y] = Pi Abs[x y] (see cx_split_numeric_factors). */
     {
-        Expr* split = cx_split_numeric_factors(arg, SYM_Abs);
+        Expr* split = cx_split_parts(arg, SYM_Abs);
         if (split) return split;
+        Expr* pw = cx_abs_power(arg);
+        if (pw) return pw;
     }
     /* Abs[Abs[u]] = Abs[u] (so a split 2 Abs[Abs[x]] settles at 2 Abs[x]). */
     if (head_is(arg, SYM_Abs) && arg->data.function.arg_count == 1)
@@ -851,8 +1112,10 @@ Expr* builtin_conjugate(Expr* res) {
      * of a product: Conjugate[2 x] = 2 Conjugate[x], Conjugate[(1+I) x] =
      * (1-I) Conjugate[x], Conjugate[-x y] = -Conjugate[x y]. */
     {
-        Expr* split = cx_split_numeric_factors(arg, SYM_Conjugate);
+        Expr* split = cx_split_parts(arg, SYM_Conjugate);
         if (split) return split;
+        Expr* pw = cx_conjugate_power(arg);
+        if (pw) return pw;
     }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {

@@ -380,6 +380,31 @@ static Expr* alg_reduce_all(const Expr* poly, const char** gens,
     return cur;
 }
 
+/* Product of the root degrees q of the distinct rational bases r in the
+ * Power[r, p/q] nodes of e -- an upper bound on the degree of the number
+ * field extension_autodetect would build for them.  Stops early past cap. */
+static void alg_rational_radical_degree(const Expr* e, const Expr** seen, size_t* nseen,
+                                        size_t cap_seen, unsigned long* deg, unsigned long cap) {
+    if (*deg > cap || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* x = e->data.function.args[1];
+        int64_t bn, bd, xn, xd;
+        bool rb = expr_is_integer_like(b) || is_rational((Expr*)b, &bn, &bd);
+        if (rb && is_rational((Expr*)x, &xn, &xd) && xd > 1) {
+            size_t k = 0;
+            while (k < *nseen && !expr_eq((Expr*)seen[k], (Expr*)b)) k++;
+            if (k == *nseen) {
+                if (*nseen < cap_seen) seen[(*nseen)++] = b;
+                *deg *= (unsigned long)xd;
+            }
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        alg_rational_radical_degree(e->data.function.args[i], seen, nseen, cap_seen, deg, cap);
+}
+
 static Expr* simp_algebraic_impl(const Expr* e) {
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
@@ -431,7 +456,18 @@ static Expr* simp_algebraic_impl(const Expr* e) {
      * up in the multi-generator (n ≥ 2) branch anyway because the
      * nested generator counts as one — autodetect's primitive-element
      * compositum work is ~tens-of-ms wasted before falling through. */
-    if (!contains_explicit_complex(e)
+    /* The tower is built (compositum and all) before its generator count is
+     * known, so bound it first: the canonical radical form writes a product
+     * of rational radicals over prime-like bases, and 2^(9/10) 3^(2/5)
+     * 5^(3/5) 13^(-3/10) would be a degree-2500 field for an expression
+     * with nothing algebraic to simplify. */
+    unsigned long rad_deg = 1;
+    {
+        const Expr* seen[16];
+        size_t nseen = 0;
+        alg_rational_radical_degree(e, seen, &nseen, 16, &rad_deg, 16);
+    }
+    if (rad_deg <= 16 && !contains_explicit_complex(e)
         && !expr_has_nested_radical_radicand(e)) {
         QATower* qa_t = extension_autodetect(e);
         if (qa_t && qa_t->n == 1) {

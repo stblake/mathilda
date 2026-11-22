@@ -1921,13 +1921,36 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
      * (rationalised denominator, radicand factors absorbed back): a decision
      * procedure for radical-rational identities, any number of radicals,
      * parameters and nesting. NULL unless it strictly improves the input. */
+    /* Both normalise over the radicals with every other kernel opaque, so a
+     * win can still hide a trig or special-function identity among those
+     * kernels: 2/3 Sqrt[2/3] Cos[x] + 2/3 Sqrt[2] Sin[x] - 4/3 Sqrt[2/3]
+     * Sin[x + Pi/6] lifts to 2/3 Sqrt[2/3] (Cos[x] + Sqrt[3] Sin[x] -
+     * 2 Sin[x + Pi/6]), which is 0.  The improved form goes through the
+     * dispatch again; it is the stage's own fixed point (each returns NULL
+     * unless it strictly lowers the score), so this recursion is one deep. */
     {
         Expr* af = simp_algebraic_field(input, ctx, complexity_func);
-        if (af) return af;
+        if (af) {
+            Expr* again = simp_dispatch(af, ctx, complexity_func);
+            if (again && score_with_func(again, complexity_func) < score_with_func(af, complexity_func)) {
+                expr_free(af);
+                return again;
+            }
+            if (again) expr_free(again);
+            return af;
+        }
     }
     {
         Expr* rr = simp_radical_rational(input, ctx, complexity_func);
-        if (rr) return rr;
+        if (rr) {
+            Expr* again = simp_dispatch(rr, ctx, complexity_func);
+            if (again && score_with_func(again, complexity_func) < score_with_func(rr, complexity_func)) {
+                expr_free(rr);
+                return again;
+            }
+            if (again) expr_free(again);
+            return rr;
+        }
     }
 
     /* Special-function families: kernels whose shift arguments differ by

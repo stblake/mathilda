@@ -634,6 +634,36 @@ Symbolic product.
 **Features**:
 - `Flat`, `Orderless`, `Listable`.
 - Combines numeric constants and groups identical bases into `Power` expressions.
+- **Exact rational radicals have one canonical form (v0.6697; `src/radcanon.c`).**
+  The exact numbers of a product and its powers `r^e` of rationals with
+  non-integer rational exponents are rewritten together. They are written over
+  the gcd-free (coprime) basis of every integer involved, which takes gcds only
+  and never factors. Each basis element's total exponent `t` then splits as
+  `trunc(t)` into the coefficient plus a radical with `0 < |f| < 1`. Radicals
+  with equal `|f|` merge into `P^|f|`, `N^-|f|` or `(P/N)^|f|`:
+  `-1/3 Sqrt[3/2] = -1/Sqrt[6]`, `2 Sqrt[3/2] = Sqrt[6]`,
+  `Sqrt[6]/3 = Sqrt[2/3]`, `6^(1/3)/2 = 3^(1/3)/2^(2/3)`,
+  `30 Sqrt[2/15] = 2 Sqrt[30]`, `Sqrt[6] Sqrt[10] = 2 Sqrt[15]`,
+  `1000000007 Sqrt[3/1000000007] = Sqrt[3000000021]`, while `2 Sqrt[2]` and
+  `3 Sqrt[3/2]` stay.
+  - A complex coefficient takes part through its content:
+    `(3 + 6 I)/Sqrt[3] = (1 + 2 I) Sqrt[3]`.
+  - One negative power `(-n)^e` with `0 < e < 1` (or `(-1)^e`) gives its sign
+    to the merged radical of exponent `e`: `(-6)^(1/3)/2 = (-3)^(1/3)/2^(2/3)`,
+    `(-2)^(1/3) 3^(1/3) = (-6)^(1/3)`, `(-1)^(1/3) 2^(1/3) = (-2)^(1/3)`.
+  - Several negative powers take part only when a magnitude shares a factor
+    with another factor of the product. Every sign then splits off and the
+    signs combine: `(-3)^(1/3) (-1)^(2/3) 3^(2/3) = -3`,
+    `(-2)^(1/3) (-4)^(1/3) = 2 (-1)^(2/3)`. With nothing shared they stay:
+    `(-2)^(1/3) (-3)^(1/3)`.
+
+  This replaces three special-case passes that each covered one shape. It
+  matches the reference's automatic form on 250 of 255 checked products. The
+  exceptions are one artefact of the reference's pairwise search: it leaves
+  `2^(-2/3) 3^(-1/3) 5^(2/3)` unmerged, while merging `2^(-2/3) 5^(2/3)` on
+  its own, and does the same inside `Power` on rational bases. Here the
+  equal-exponent powers merge: `(5/2)^(2/3)/3^(1/3)`. `MATHILDA_NO_O5=1`
+  turns the pass off for A/B checks.
 - **Numeric bases under one symbolic exponent merge** (v0.594), as in the
   reference: `2^a 3^a` is `6^a`, `3^-a 5^a` is `(5/3)^a`, `2^a 3^a 5^-a` is
   `(6/5)^a`, and `Sinh[1]^a Cosh[1]^-a` is `Tanh[1]^a`. Since v0.6016 any
@@ -935,6 +965,16 @@ Exponentiation.
   `x^3` differed in the last bit between them for ~26% of random reals
   (`x^5` ~51%, complex powers ~90%).
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
+- **A rational base with a rational exponent is put in the canonical radical
+  form (v0.6697)** that `Times` uses (see Times). `n` and `d` are factored
+  (int64 parts: trial division, then FactorInteger). Examples:
+  `(2/3)^(5/3) = 2/3 (2/3)^(2/3)`, `(3/2)^(-1/2) = Sqrt[2/3]`,
+  `(4/9)^(1/3) = (2/3)^(2/3)`, `(12/5)^(4/3) = 12/5 (3/5)^(1/3) 2^(2/3)`.
+  A negative base keeps its sign on the group that has its own exponent:
+  `(-12)^(1/3) = (-3)^(1/3) 2^(2/3)`, `(-4)^(1/3) = (-1)^(1/3) 2^(2/3)`,
+  `(-12)^(1/4) = (-3)^(1/4) Sqrt[2]`, `(-1/6)^(1/3)` stays, and
+  `(-2/3)^(5/3) = -2/3 (-2/3)^(2/3)`. A square root is `I^p (n/d)^(p/2)`, so
+  `(-2/3)^(3/2) = -2/3 I Sqrt[2/3]`.
 - A negative exact coefficient (other than `-1`) in a product under a rational
   power comes out as its magnitude, the sign staying inside:
   `Sqrt[-4 (1 - x^2)]` is `2 Sqrt[-1 + x^2]` and `(-8 a)^(1/3)` is
@@ -2008,8 +2048,43 @@ Complex number functions.
   alone (`Abs[x y]`) is not split, and an `Infinity` factor stays inside.
   `Abs[Abs[u]]` is `Abs[u]`. Before this, `Norm[SparseArray[{{2 xb}}], 1]` was
   `Abs[2 xb]` where the reference gives `2 Abs[xb]` (oracle case #99).
-  Not yet followed: the reference also writes `Abs[x^2]` as `Abs[x]^2` and
-  `Abs[E^y]` as `E^Re[y]`.
+  Generalised in v0.6697 (below): a factor comes out of `Abs` when its own
+  `Abs` has no `Abs` left in it, and out of `Conjugate` when its `Conjugate`
+  changes.
+- **`Abs`, `Conjugate`, `Re`, `Im` of powers, products and sums (v0.6697).**
+  Every rule is an identity for all complex values of the symbols, so none
+  needs an assumption. On the principal branch `z^w = Exp[w Log[z]]`, so
+  `|z^w| = |z|^Re[w] Exp[-Im[w] Arg[z]]`; the `Arg` term drops out, and `Abs`
+  rewrites, in exactly four cases:
+  - `w` real: `Abs[x^2] = Abs[x]^2`, `Abs[Sqrt[x]] = Sqrt[Abs[x]]`,
+    `Abs[x^2.5] = Abs[x]^2.5`, `Abs[(1 + x)^3] = Abs[1 + x]^3`;
+  - `z > 0`: `Abs[E^y] = E^Re[y]`, `Abs[2^y] = 2^Re[y]`,
+    `Abs[E^(a + I b)] = E^(Re[a] - Im[b])`;
+  - numeric `z` with `|z| = 1`: `Abs[I^y] = E^(-Pi Im[y]/2)`,
+    `Abs[(-1)^y] = E^(-Pi Im[y])`;
+  - `w = I c` with `c` real: `Abs[x^I] = E^(-Im[Log[x]])`.
+
+  `Abs[x^y]`, `Abs[x^(1 + I)]` and `Abs[(-2)^y]` stay, because the result
+  would keep an `Arg` factor and be longer. `Conjugate[z^n] = Conjugate[z]^n`
+  holds for an integer `n`, and `Conjugate[b^w] = b^Conjugate[w]` for `b > 0`.
+  `Conjugate[Sqrt[x]]` stays, since it differs from `Sqrt[Conjugate[x]]` on the
+  negative axis.
+
+  Over a product or sum, each head takes out exactly the parts it simplifies
+  and keeps the rest together:
+  - `Abs[x^2 E^y] = E^Re[y] Abs[x]^2`, while `Abs[x^2 y]` stays;
+  - `Conjugate[x^2 y z] = Conjugate[x]^2 Conjugate[y z]`,
+    `Conjugate[1 + x] = 1 + Conjugate[x]`;
+  - for `Re` and `Im`, a real numeric factor comes out and a pure-imaginary
+    one swaps the head: `Re[2 x] = 2 Re[x]`, `Re[I x] = -Im[x]`,
+    `Im[I x] = Re[x]`;
+  - over a sum, `Re` and `Im` take out the real terms and the terms with an
+    imaginary coefficient: `Re[a + I b] = Re[a] - Im[b]`,
+    `Re[x + y + 1] = 1 + Re[x + y]`, while `Re[2 x + 3 y]` stays;
+  - `Re[Conjugate[x]] = Re[x]` and `Im[Conjugate[x]] = -Im[x]`.
+
+  Fully numeric powers take the same rules: `Abs[(-8)^(1/3)] = 2`,
+  `Abs[Pi^(2 I)] = 1`, `Conjugate[Pi^(2 I)] = Pi^(-2 I)`.
 - `Arg[z]`: Phase angle. Pure-real MPFR returns symbolic `0` or `Pi`;
   `Complex[MPFR, MPFR]` evaluates via `mpfr_atan2` at the working
   precision.  A **root-of-unity-like constant** — a product of real-rational

@@ -43,9 +43,9 @@ static void test_cube_root_ratio(void) {
 }
 
 static void test_rational_ratio_fuses(void) {
-    /* Sqrt[4] reduces to 2 before fusion, so Sqrt[6]/Sqrt[4] short-circuits
-     * through integer folding to 1/2 Sqrt[6] rather than Sqrt[3/2]. */
-    assert_eval_eq("Sqrt[6]/Sqrt[4]", "1/2 Sqrt[6]", 0);
+    /* Sqrt[4] reduces to 2 first; Sqrt[6]/2 is then Sqrt[3/2] in the
+     * canonical radical form (radcanon.c), as in the reference. */
+    assert_eval_eq("Sqrt[6]/Sqrt[4]", "Sqrt[3/2]", 0);
     /* Coprime bases with rational ratio now fuse into a single radical
      * over the rational ratio. */
     assert_eval_eq("Sqrt[10]/Sqrt[3]",       "Sqrt[10/3]",   0);

@@ -1,4 +1,5 @@
 #include "times.h"
+#include "radcanon.h"
 #include "attr.h"       /* call_head_attributes — a cleared Orderless */
 #include "sort.h"       /* expr_orderless_sort — memoized Orderless canonicalisation */
 #include "arithmetic.h"
@@ -24,54 +25,6 @@
 #include <stdbool.h>
 #include <gmp.h>
 
-/* Split the largest perfect-square factor out of a positive integer n.
- * On return n holds the squarefree residual and *root the square root of
- * the extracted square, so (n_in) == (*root)^2 * (n_out).  Trial division
- * is O(sqrt(n)); callers must pass only the small radicand of a Sqrt, never
- * a large coefficient — folding a big coefficient in here is what made
- * builtin_times hang on large series terms (issue #41).
- *
- * The trial divisors stop at SPLIT_TRIAL_LIMIT (Power's own limit for the
- * same question, POWER_TRIAL_LIMIT in power.c), after which a residual that
- * is itself a perfect square is still absorbed.  Every radicand below 10^10
- * is split exactly as before; a larger one may keep a square of a prime above
- * the limit inside the radical -- the value is unchanged -- where the
- * unbounded loop ran for sqrt(n) steps: the radicands of an exact
- * QRDecomposition of a 6 x 6 rational matrix (20-digit Gram norms) took
- * minutes in this loop. */
-#define SPLIT_TRIAL_LIMIT 100000
-static void mpz_split_square_part(mpz_t root, mpz_t n) {
-    mpz_set_ui(root, 1);
-    if (mpz_cmp_ui(n, 1) <= 0) return;
-    mpz_t pr, prsq;
-    mpz_inits(pr, prsq, NULL);
-    mpz_set_ui(prsq, 4);                 /* factor out squares of 2 */
-    while (mpz_divisible_p(n, prsq)) {
-        mpz_divexact(n, n, prsq);
-        mpz_mul_ui(root, root, 2);
-    }
-    mpz_set_ui(pr, 3);                   /* odd trial divisors */
-    mpz_set_ui(prsq, 9);
-    while (mpz_cmp(prsq, n) <= 0) {
-        if (mpz_divisible_p(n, prsq)) {
-            mpz_divexact(n, n, prsq);
-            mpz_mul(root, root, pr);
-        } else {
-            if (mpz_cmp_ui(pr, SPLIT_TRIAL_LIMIT) > 0) {
-                /* a large residual: only a whole square is still taken */
-                if (mpz_perfect_square_p(n)) {
-                    mpz_sqrt(pr, n);
-                    mpz_mul(root, root, pr);
-                    mpz_set_ui(n, 1);
-                }
-                break;
-            }
-            mpz_add_ui(pr, pr, 2);
-            mpz_mul(prsq, pr, pr);
-        }
-    }
-    mpz_clears(pr, prsq, NULL);
-}
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
@@ -1039,6 +992,359 @@ static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
     return out ? eval_and_free(out) : NULL;
 }
 
+/* ---- O5: exact rational radicals in canonical form ------------------------
+ *
+ * The number factors of a product and its powers r^e of rationals with
+ * rational, non-integer exponents are rewritten together into the one
+ * canonical form of radcanon.c: -1/3 Sqrt[3/2] is -1/Sqrt[6], 2 Sqrt[3/2]
+ * is Sqrt[6], Sqrt[6]/3 is Sqrt[2/3], 6^(1/3)/2 is 3^(1/3)/2^(2/3),
+ * 1000000007 Sqrt[3/1000000007] is Sqrt[3000000021] (gcds only, no
+ * factoring), (3 + 6 I)/Sqrt[3] is (1 + 2 I) Sqrt[3].  Every other factor
+ * passes through untouched.
+ *
+ * Taking part: every power of a positive rational (other than 1) to a
+ * Rational exponent, and the exact numbers (Integer, Rational, and Complex
+ * with exact parts).  A negative base takes part only when it is the only
+ * one and its exponent lies in (0, 1) -- the shape Power leaves -- so its
+ * sign can be placed (radcanon.c); otherwise negative powers pass through.
+ * (-1)^e takes part the same way, as a sign with no magnitude:
+ * (-1)^(1/3) 2^(1/3) is (-2)^(1/3), while 2 (-1)^(2/3) 2^(1/3) stays.  An inexact number declines the whole pass (the product
+ * is numericised anyway).
+ *
+ * Returns the evaluated canonical product, or NULL when the product is
+ * already canonical -- which it is after one rewrite, so the evaluation of
+ * the result meets NULL here and the pass cannot cycle. */
+static bool o5_exact_number(const Expr* x, mpq_t re, mpq_t im) {
+    mpz_t n, d;
+    mpz_init(n); mpz_init(d);
+    bool ok = false;
+    if (o4_rat_parts(x, n, d) || (expr_is_integer_like(x))) {
+        if (expr_is_integer_like(x)) { mpz_t t; expr_to_mpz(x, t); mpz_set(n, t); mpz_clear(t); mpz_set_ui(d, 1); }
+        mpq_set_num(re, n); mpq_set_den(re, d); mpq_canonicalize(re);
+        mpq_set_ui(im, 0, 1);
+        ok = true;
+    } else if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+               x->data.function.head->data.symbol.name == SYM_Complex &&
+               x->data.function.arg_count == 2) {
+        const Expr* a = x->data.function.args[0];
+        const Expr* b = x->data.function.args[1];
+        mpz_t n2, d2;
+        mpz_init(n2); mpz_init(d2);
+        bool oa = expr_is_integer_like(a) ? (expr_to_mpz(a, n), mpz_set_ui(d, 1), true) : o4_rat_parts(a, n, d);
+        bool ob = expr_is_integer_like(b) ? (expr_to_mpz(b, n2), mpz_set_ui(d2, 1), true) : o4_rat_parts(b, n2, d2);
+        if (oa && ob) {
+            mpq_set_num(re, n); mpq_set_den(re, d); mpq_canonicalize(re);
+            mpq_set_num(im, n2); mpq_set_den(im, d2); mpq_canonicalize(im);
+            ok = true;
+        }
+        mpz_clear(n2); mpz_clear(d2);
+    }
+    mpz_clear(n); mpz_clear(d);
+    return ok;
+}
+
+/* A power r^e of a rational r other than 0 and +-1 to a Rational exponent:
+ * fills num, den (den > 0) and e. */
+static bool o5_radical(const Expr* a, mpz_t num, mpz_t den, mpq_t e) {
+    if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL ||
+        a->data.function.head->data.symbol.name != SYM_Power || a->data.function.arg_count != 2)
+        return false;
+    const Expr* x = a->data.function.args[1];
+    if (x->type != EXPR_FUNCTION || x->data.function.head->type != EXPR_SYMBOL ||
+        x->data.function.head->data.symbol.name != SYM_Rational || x->data.function.arg_count != 2)
+        return false;
+    mpz_t en, ed;
+    mpz_init(en); mpz_init(ed);
+    bool ok = o4_rat_parts(x, en, ed) && mpz_cmp_ui(ed, 1) > 0;
+    if (ok) { mpq_set_num(e, en); mpq_set_den(e, ed); mpq_canonicalize(e); }
+    mpz_clear(en); mpz_clear(ed);
+    if (!ok) return false;
+    const Expr* b = a->data.function.args[0];
+    if (expr_is_integer_like(b)) {
+        mpz_t t; expr_to_mpz(b, t); mpz_set(num, t); mpz_clear(t);
+        mpz_set_ui(den, 1);
+    } else if (!o4_rat_parts(b, num, den)) {
+        return false;
+    }
+    /* not 0 or 1; -1 takes part as a pure sign carrier */
+    return mpz_sgn(num) != 0 && !(mpz_cmp_ui(num, 1) == 0 && mpz_cmp_ui(den, 1) == 0);
+}
+
+static Expr* o5_rational_radicals(Expr* const* args, size_t n) {
+    static int off = -1;                 /* MATHILDA_NO_O5: A/B kill switch */
+    if (off < 0) off = getenv("MATHILDA_NO_O5") != NULL;
+    if (off) return NULL;
+    /* cheap scan: anything to do at all? */
+    size_t nrad = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+            a->data.function.head->data.symbol.name == SYM_Power && a->data.function.arg_count == 2 &&
+            a->data.function.args[1]->type == EXPR_FUNCTION &&
+            a->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&
+            a->data.function.args[1]->data.function.head->data.symbol.name == SYM_Rational)
+            nrad++;
+    }
+    if (nrad == 0) return NULL;
+
+    mpq_t cre, cim, xre, xim, t1, t2, e;
+    mpq_inits(cre, cim, xre, xim, t1, t2, e, NULL);
+    mpq_set_ui(cre, 1, 1);
+    mpz_t num, den;
+    mpz_init(num); mpz_init(den);
+    int* role = calloc(n, sizeof(int));  /* 0 pass, 1 number, 2 radical, 3 negative radical */
+    size_t nnum = 0, npos = 0, nneg = 0, neg_i = 0;
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++) {
+        const Expr* a = args[i];
+        if (a->type == EXPR_REAL
+#ifdef USE_MPFR
+            || a->type == EXPR_MPFR
+#endif
+            ) { ok = false; break; }
+        if (o5_exact_number(a, xre, xim)) {
+            /* (cre + i cim)(xre + i xim) */
+            mpq_mul(t1, cre, xre); mpq_mul(t2, cim, xim); mpq_sub(t1, t1, t2);
+            mpq_mul(t2, cre, xim); mpq_mul(xim, cim, xre); mpq_add(cim, t2, xim);
+            mpq_set(cre, t1);
+            role[i] = 1; nnum++;
+        } else if (is_complex((Expr*)a, NULL, NULL)) {
+            ok = false;                  /* an inexact complex number */
+        } else if (o5_radical(a, num, den, e)) {
+            if (mpz_sgn(num) > 0) { role[i] = 2; npos++; }
+            else { role[i] = 3; nneg++; neg_i = i; }
+        }
+    }
+    if (ok && mpq_sgn(cre) == 0 && mpq_sgn(cim) == 0) ok = false;   /* 0: Times owns it */
+    /* Negative powers.  One with exponent in (0, 1) takes part as the sign
+     * carrier.  Several take part only when their magnitudes share a factor
+     * with some other factor of the product: then every sign splits off,
+     * (-n)^e = (-1)^e n^e, and the signs combine, (-1)^a (-1)^b =
+     * (-1)^(a + b), both exact on the principal branch; the combined sign
+     * (-1)^k (-1)^E, k = floor(sum), E in [0, 1), leaves at most one
+     * carrier.  So (-3)^(1/3) (-1)^(2/3) 3^(2/3) is -3 and (-2)^(1/3)
+     * (-4)^(1/3) is 2 (-1)^(2/3), while (-2)^(1/3) (-3)^(1/3), with
+     * nothing shared, stays -- as in the reference. */
+    bool multi_neg = false;
+    if (ok && nneg > 0) {
+        bool take = false;
+        if (nneg == 1) {
+            o5_radical(args[neg_i], num, den, e);
+            take = mpq_sgn(e) > 0 && mpz_cmp(mpq_numref(e), mpq_denref(e)) < 0;
+        } else {
+            /* does any negative power's magnitude share a factor with another
+             * factor's magnitude (or with the coefficient's content)? */
+            mpz_t g, m1, m2;
+            mpz_init(g); mpz_init(m1); mpz_init(m2);
+            mpz_t cc;
+            mpz_init(cc);
+            mpz_mul(cc, mpq_numref(cre), mpq_denref(cre));
+            if (mpq_sgn(cim) != 0) { mpz_mul(cc, cc, mpq_numref(cim)); mpz_mul(cc, cc, mpq_denref(cim)); }
+            mpz_abs(cc, cc);
+            for (size_t i = 0; i < n && !take; i++) {
+                if (role[i] != 3) continue;
+                o5_radical(args[i], num, den, e);
+                mpz_mul(m1, num, den);
+                mpz_abs(m1, m1);
+                if (mpz_cmp_ui(m1, 1) == 0) continue;
+                mpz_gcd(g, m1, cc);
+                if (mpz_cmp_ui(g, 1) > 0) take = true;
+                for (size_t j = 0; j < n && !take; j++) {
+                    if (j == i || (role[j] != 2 && role[j] != 3)) continue;
+                    o5_radical(args[j], num, den, e);
+                    mpz_mul(m2, num, den);
+                    mpz_abs(m2, m2);
+                    mpz_gcd(g, m1, m2);
+                    if (mpz_cmp_ui(g, 1) > 0) take = true;
+                }
+            }
+            mpz_clear(g); mpz_clear(m1); mpz_clear(m2); mpz_clear(cc);
+            multi_neg = take;
+        }
+        if (!take) {
+            for (size_t i = 0; i < n; i++) if (role[i] == 3) role[i] = 0;
+            nneg = 0;
+        }
+    }
+    size_t nrad_in = npos + nneg;
+    /* Fast certificate (int64 only).  The grouping pass below merges equal
+     * bases and folds an integer power into the coefficient, in this same
+     * call; so first do just that here, and when what remains is already
+     * canonical, step aside and let the ordinary pass finish -- a rewrite
+     * would evaluate the product a second time, which is what made
+     * number-field arithmetic (3 Sqrt[2] x 5 Sqrt[2] y, products of
+     * monomials over Q(Sqrt[2])) twice as slow.  "Canonical" here: no
+     * negative power takes part, every remaining exponent lies in (-1, 1)
+     * with pairwise distinct magnitudes (nothing merges or carries), a
+     * non-integer rational base has a positive exponent (Power's
+     * orientation), the bases are pairwise coprime, and a prime they share
+     * with the coefficient has the same sign there (nothing moves).
+     * Anything else -- or any overflow --
+     * takes the full canonicalisation. */
+    if (ok && nneg == 0 && npos <= 8 && mpq_sgn(cim) == 0 &&
+        mpz_fits_slong_p(mpq_numref(cre)) && mpz_fits_slong_p(mpq_denref(cre))) {
+        int64_t cn = (int64_t)mpz_get_si(mpq_numref(cre)), cd = (int64_t)mpz_get_si(mpq_denref(cre));
+        int64_t bn_[8], bd_[8], en_[8], ed_[8];
+        size_t m = 0;
+        bool canon = true;
+        for (size_t i = 0; i < n && canon; i++) {
+            if (role[i] != 2) continue;
+            const Expr* a = args[i];
+            int64_t bn, bd, en, ed;
+            if (!is_rational(a->data.function.args[0], &bn, &bd) ||
+                !is_rational(a->data.function.args[1], &en, &ed) || bn <= 0 ||
+                en == INT64_MIN || ed > (INT64_C(1) << 30) || (en < 0 ? -en : en) > (INT64_C(1) << 30)) {
+                canon = false; break;
+            }
+            size_t k = 0;
+            while (k < m && !(bn_[k] == bn && bd_[k] == bd)) k++;
+            if (k == m) { bn_[m] = bn; bd_[m] = bd; en_[m] = en; ed_[m] = ed; m++; }
+            else {                                   /* same base: add exponents */
+                int64_t nn = en_[k] * ed + en * ed_[k], dd = ed_[k] * ed;
+                int64_t g = gcd(nn < 0 ? -nn : nn, dd);
+                if (g > 1) { nn /= g; dd /= g; }
+                if (dd > (INT64_C(1) << 30) || nn > (INT64_C(1) << 30) || nn < -(INT64_C(1) << 30)) { canon = false; break; }
+                en_[k] = nn; ed_[k] = dd;
+            }
+        }
+        /* integer exponents fold into the coefficient */
+        size_t w = 0;
+        for (size_t k = 0; k < m && canon; k++) {
+            if (ed_[k] == 1) {
+                int64_t e = en_[k];
+                int64_t pn = bn_[k], pd = bd_[k];
+                if (e < 0) { int64_t t = pn; pn = pd; pd = t; e = -e; }
+                for (int64_t r = 0; r < e && canon; r++) {
+                    if (ci_mul_i64(cn, pn, &cn) || ci_mul_i64(cd, pd, &cd)) canon = false;
+                }
+                if (canon) {
+                    int64_t g = gcd(cn < 0 ? -cn : cn, cd);
+                    if (g > 1) { cn /= g; cd /= g; }
+                }
+                continue;
+            }
+            if (en_[k] == 0) continue;
+            bn_[w] = bn_[k]; bd_[w] = bd_[k]; en_[w] = en_[k]; ed_[w] = ed_[k]; w++;
+        }
+        uint64_t cc = (uint64_t)(cn < 0 ? -cn : cn), cdd = (uint64_t)cd;
+        for (size_t k = 0; k < w && canon; k++) {
+            int64_t ae = en_[k] < 0 ? -en_[k] : en_[k];
+            if (ae >= ed_[k] || (bd_[k] > 1 && en_[k] < 0)) { canon = false; break; }
+            /* a prime shared with the coefficient stays put when its integer
+             * exponent there has the radical's sign (trunc(k + f) = k):
+             * 2 Sqrt[2], 3 Sqrt[3/2] stay; Sqrt[2]/2, 2 Sqrt[3/2] move */
+            bool pos = en_[k] > 0;
+            if ((cc > 1 && ((!pos && gcd((int64_t)cc, bn_[k]) != 1) || (pos && gcd((int64_t)cc, bd_[k]) != 1))) ||
+                (cdd > 1 && ((pos && gcd((int64_t)cdd, bn_[k]) != 1) || (!pos && gcd((int64_t)cdd, bd_[k]) != 1)))) {
+                canon = false; break;
+            }
+            for (size_t j = 0; j < k && canon; j++) {
+                int64_t aj = en_[j] < 0 ? -en_[j] : en_[j];
+                if (aj == ae && ed_[j] == ed_[k]) canon = false;
+                else if (gcd(bn_[j], bn_[k]) != 1 || gcd(bn_[j], bd_[k]) != 1 ||
+                         gcd(bd_[j], bn_[k]) != 1 || gcd(bd_[j], bd_[k]) != 1)
+                    canon = false;
+            }
+        }
+        if (canon) ok = false;                       /* the grouping pass finishes it */
+    }
+    /* a lone radical with a unit coefficient is Power's canonical output */
+    if (ok && nrad_in == 1) {
+        bool unit;
+        if (mpq_sgn(cim) == 0) unit = mpz_cmpabs_ui(mpq_numref(cre), 1) == 0 && mpz_cmp_ui(mpq_denref(cre), 1) == 0;
+        else {
+            mpz_t g, l;
+            mpz_init(g); mpz_init(l);
+            mpz_gcd(g, mpq_numref(cre), mpq_numref(cim));
+            mpz_lcm(l, mpq_denref(cre), mpq_denref(cim));
+            unit = mpz_cmp_ui(g, 1) == 0 && mpz_cmp_ui(l, 1) == 0;
+            mpz_clear(g); mpz_clear(l);
+        }
+        if (unit) ok = false;
+    }
+    if (!ok || nrad_in == 0) {
+        free(role);
+        mpz_clear(num); mpz_clear(den);
+        mpq_clears(cre, cim, xre, xim, t1, t2, e, NULL);
+        return NULL;
+    }
+
+    RcAtoms at;
+    rc_atoms_init(&at);
+    mpq_t neg_e, ne;
+    mpq_init(neg_e); mpq_init(ne);
+    for (size_t i = 0; i < n; i++) {
+        if (role[i] != 2 && role[i] != 3) continue;
+        o5_radical(args[i], num, den, e);
+        if (role[i] == 3) { mpz_neg(num, num); mpq_add(neg_e, neg_e, e); }
+        rc_atoms_add(&at, num, e);
+        mpq_neg(ne, e);
+        rc_atoms_add(&at, den, ne);
+    }
+    bool has_carrier = nneg > 0;
+    if (multi_neg) {
+        /* (-1)^sum = (-1)^k (-1)^E: the integer part flips the coefficient */
+        mpz_t k;
+        mpz_init(k);
+        mpz_fdiv_q(k, mpq_numref(neg_e), mpq_denref(neg_e));
+        if (mpz_odd_p(k)) { mpq_neg(cre, cre); mpq_neg(cim, cim); }
+        mpq_set_z(ne, k);
+        mpq_sub(neg_e, neg_e, ne);
+        mpz_clear(k);
+        has_carrier = mpq_sgn(neg_e) != 0;
+    }
+    Expr** F = NULL;
+    size_t nf = rc_canonical(&at, cre, cim, has_carrier ? (const mpq_t*)&neg_e : NULL, &F);
+    rc_atoms_clear(&at);
+    mpq_clear(neg_e); mpq_clear(ne);
+
+    /* unchanged?  at most one number, equal to the new one, and the same
+     * radicals as a multiset */
+    bool same = nnum <= 1;
+    /* F holds the number (first, when not 1) and Powers only; a Rational with
+     * a bignum part is a number too, which o3_is_number's int64 test misses */
+    size_t fnum = (nf > 0 && !(F[0]->type == EXPR_FUNCTION &&
+                               F[0]->data.function.head->type == EXPR_SYMBOL &&
+                               F[0]->data.function.head->data.symbol.name == SYM_Power)) ? 1 : 0;
+    if (same) {
+        const Expr* in_num = NULL;
+        for (size_t i = 0; i < n; i++) if (role[i] == 1) in_num = args[i];
+        if (fnum) same = in_num && expr_eq((Expr*)in_num, F[0]);
+        else same = in_num == NULL;
+    }
+    if (same) same = nf - fnum == nrad_in;
+    if (same) {
+        bool* used = calloc(n, sizeof(bool));
+        for (size_t k = fnum; k < nf && same; k++) {
+            size_t i = 0;
+            for (; i < n; i++)
+                if ((role[i] == 2 || role[i] == 3) && !used[i] && expr_eq(args[i], F[k])) break;
+            if (i == n) same = false;
+            else used[i] = true;
+        }
+        free(used);
+    }
+    Expr* out = NULL;
+    if (same) {
+        for (size_t k = 0; k < nf; k++) expr_free(F[k]);
+    } else {
+        Expr** fa = malloc(sizeof(Expr*) * (nf + n + 1));
+        size_t m = 0;
+        for (size_t k = 0; k < nf; k++) fa[m++] = F[k];
+        for (size_t i = 0; i < n; i++) if (role[i] == 0) fa[m++] = expr_copy(args[i]);
+        out = m == 0 ? expr_new_integer(1)
+            : m == 1 ? fa[0]
+            : expr_new_function(expr_new_symbol(SYM_Times), fa, m);
+        free(fa);
+        out = eval_and_free(out);
+    }
+    free(F);
+    free(role);
+    mpz_clear(num); mpz_clear(den);
+    mpq_clears(cre, cim, xre, xim, t1, t2, e, NULL);
+    return out;
+}
+
 /* The product with every splittable power replaced by its split, evaluated;
  * NULL when nothing splits. */
 static Expr* o3_split_powers(Expr* const* args, size_t n) {
@@ -1523,6 +1829,8 @@ Expr* builtin_times(Expr* res) {
         if (split) return split;
         Expr* basis = o4_coprime_basis(res->data.function.args, n);
         if (basis) return basis;
+        Expr* rad = o5_rational_radicals(res->data.function.args, n);
+        if (rad) return rad;
     }
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
@@ -1733,204 +2041,9 @@ Expr* builtin_times(Expr* res) {
         }
     }
 
-    /* Radical canonicalization: for each Power[b, q] group with b a positive
-     * integer (>= 2) and q rational, fold factors of b appearing in the
-     * accumulated rational coefficient num_prod into the exponent. This is
-     * what turns
-     *      Sqrt[2] * 1/2   ->  Power[2, -1/2]            (Sqrt[2]/2)
-     *      2^(1/3) * 1/2   ->  Power[2, -2/3]            (2^(1/3)/2)
-     *      8/Sqrt[2]       ->  4 Sqrt[2]                  (Power[2, 1/2] * 8)
-     * Pull from den(num_prod) unconditionally — the canonical form has
-     * den(num_prod) coprime to b. Pull from num(num_prod) only enough to
-     * raise a still-negative exponent up toward 0; pulling more would push
-     * the exponent >= 1 and trigger Power's integer-part extraction, which
-     * would re-emit the factor and loop. The cap k_n_target is the minimum
-     * number of pulls needed to make the exponent non-negative.
-     *
-     * We work directly on GMP num/den rather than constructing intermediate
-     * Expr nodes per pull — divisibility tests and exact divisions on small
-     * mpz values are essentially free, and there is no evaluator round-trip.
-     * The whole pass is O(sum of factors-of-b in num_prod) per group with
-     * a positive integer base.
-     *
-     * Runs unconditionally even with complex_val present, so that
-     * Plus terms with mixed real/complex coefficients normalise their
-     * Power exponents consistently and collect like-radical terms. */
-    if (group_count > 0 &&
-        (expr_is_integer_like(num_prod) || is_rational(num_prod, NULL, NULL))) {
-        bool any_radical_group = false;
-        for (size_t gi = 0; gi < group_count; gi++) {
-            Expr* gb = groups[gi].base;
-            if (gb->type == EXPR_INTEGER && gb->data.integer >= 2 &&
-                is_rational(groups[gi].exponent, NULL, NULL)) {
-                any_radical_group = true;
-                break;
-            }
-        }
-        if (any_radical_group) {
-            mpz_t num_z, den_z;
-            bool num_extracted = false;
-            if (expr_is_integer_like(num_prod)) {
-                expr_to_mpz(num_prod, num_z);
-                mpz_init_set_ui(den_z, 1);
-                num_extracted = true;
-            } else if (num_prod->type == EXPR_FUNCTION &&
-                       num_prod->data.function.head->type == EXPR_SYMBOL &&
-                       num_prod->data.function.head->data.symbol.name == SYM_Rational &&
-                       num_prod->data.function.arg_count == 2 &&
-                       expr_is_integer_like(num_prod->data.function.args[0]) &&
-                       expr_is_integer_like(num_prod->data.function.args[1])) {
-                expr_to_mpz(num_prod->data.function.args[0], num_z);
-                expr_to_mpz(num_prod->data.function.args[1], den_z);
-                num_extracted = true;
-            }
-
-            if (num_extracted) {
-                bool num_changed = false;
-                for (size_t gi = 0; gi < group_count; gi++) {
-                    Expr* gb = groups[gi].base;
-                    Expr* ge = groups[gi].exponent;
-                    if (gb->type != EXPR_INTEGER || gb->data.integer < 2) continue;
-                    int64_t en, ed;
-                    if (!is_rational(ge, &en, &ed)) continue;  /* also accepts Integer with ed=1 */
-
-                    int64_t b = gb->data.integer;
-                    mpz_t b_z;
-                    mth_mpz_init_set_i64(b_z, b);
-
-                    /* Pull factors of b from den into the exponent, but
-                     * stop when the resulting exponent magnitude would
-                     * exceed 1: pulling further would push |new_en/ed| > 1
-                     * and Power's integer-part extraction would re-emit
-                     * the factor (oscillation). The cap is
-                     *    k_d_max = ceil(en/ed)  for en > 0
-                     *            = 0            for en <= 0
-                     * which keeps new_en > -ed (i.e., new exponent > -1).
-                     * Examples:
-                     *    Sqrt[2]/4 (en=1, ed=2):  k_d_max=1 -> 2^(-1/2)/2
-                     *    1/4 * 2^(2/3) (en=2,ed=3): k_d_max=1 -> 2^(-1/3)/2
-                     *    Power[2, -2/3] * 1 (en=-2, ed=3): k_d_max=0 (skip)
-                     */
-                    int64_t k_d_max = (en > 0) ? ((en + ed - 1) / ed) : 0;
-                    int64_t k_d = 0;
-                    while (k_d < k_d_max && mpz_divisible_p(den_z, b_z)) {
-                        mpz_divexact(den_z, den_z, b_z);
-                        k_d++;
-                    }
-
-                    /* en/ed - k_d. Compute new numerator over the same ed. */
-                    int64_t new_en;
-                    if (k_d > 0 && ed > 0 && k_d > (INT64_MAX / ed)) {
-                        /* Pathological denominator power; back out the den
-                         * pull rather than overflow the int64 exponent. */
-                        for (int64_t i = 0; i < k_d; i++) mpz_mul(den_z, den_z, b_z);
-                        mpz_clear(b_z);
-                        continue;
-                    }
-                    new_en = en - k_d * ed;
-
-                    /* If still negative, pull from num just enough to make
-                     * the new exponent >= 0. ceil((-new_en)/ed) bounds the
-                     * pull; we may pull fewer if num runs out of factors. */
-                    int64_t k_n = 0;
-                    if (new_en < 0) {
-                        int64_t target = (-new_en + ed - 1) / ed;
-                        for (int64_t i = 0; i < target; i++) {
-                            if (!mpz_divisible_p(num_z, b_z)) break;
-                            mpz_divexact(num_z, num_z, b_z);
-                            k_n++;
-                        }
-                        new_en += k_n * ed;
-                    }
-
-                    /* If still negative AND we have a complex coefficient
-                     * whose Re/Im are integer-like and *both* divisible by
-                     * b, pull factors of b out of the complex too -- this
-                     * keeps Complex[2k, 2m] * Sqrt[2]/2 from leaving a
-                     * stale factor of 2 in the complex (gives us the
-                     * canonical Complex[k, m] * Power[2, -1/2] rather than
-                     * Complex[2k, 2m] * Power[2, -3/2]). */
-                    int64_t k_c = 0;
-                    if (new_en < 0 && complex_val) {
-                        Expr *re = NULL, *im = NULL;
-                        is_complex(complex_val, &re, &im);
-                        if (re && im &&
-                            expr_is_integer_like(re) && expr_is_integer_like(im)) {
-                            mpz_t re_z, im_z;
-                            expr_to_mpz(re, re_z);
-                            expr_to_mpz(im, im_z);
-                            int64_t target = (-new_en + ed - 1) / ed;
-                            for (int64_t i = 0; i < target; i++) {
-                                /* Each component must be either zero or
-                                 * divisible by b -- 0/b = 0 leaves it
-                                 * unchanged, which is fine for purely-
-                                 * imaginary or purely-real complexes. */
-                                bool re_ok = (mpz_sgn(re_z) == 0) ||
-                                             mpz_divisible_p(re_z, b_z);
-                                bool im_ok = (mpz_sgn(im_z) == 0) ||
-                                             mpz_divisible_p(im_z, b_z);
-                                if (!re_ok || !im_ok) break;
-                                /* Stop if we'd reduce the whole complex to
-                                 * 0+0i (Re=0 AND Im=0). */
-                                if (mpz_sgn(re_z) == 0 && mpz_sgn(im_z) == 0) break;
-                                if (mpz_sgn(re_z) != 0) mpz_divexact(re_z, re_z, b_z);
-                                if (mpz_sgn(im_z) != 0) mpz_divexact(im_z, im_z, b_z);
-                                k_c++;
-                            }
-                            if (k_c > 0) {
-                                expr_free(complex_val);
-                                Expr* re_e = expr_bigint_normalize(expr_new_bigint_from_mpz(re_z));
-                                Expr* im_e = expr_bigint_normalize(expr_new_bigint_from_mpz(im_z));
-                                complex_val = make_complex(re_e, im_e);
-                                new_en += k_c * ed;
-                            }
-                            mpz_clear(re_z); mpz_clear(im_z);
-                        }
-                    }
-
-                    if (k_d == 0 && k_n == 0 && k_c == 0) { mpz_clear(b_z); continue; }
-                    num_changed = true;
-
-                    /* Reduce new_en/ed by their gcd. */
-                    int64_t abs_en = new_en >= 0 ? new_en : -new_en;
-                    int64_t g_e = gcd(abs_en, ed);
-                    if (g_e > 1) { new_en /= g_e; ed /= g_e; }
-
-                    expr_free(groups[gi].exponent);
-                    if (ed == 1) {
-                        groups[gi].exponent = expr_new_integer(new_en);
-                    } else {
-                        groups[gi].exponent = make_rational(new_en, ed);
-                    }
-                    mpz_clear(b_z);
-                }
-
-                if (num_changed) {
-                    /* Reduce num/den by gcd and rebuild num_prod. */
-                    if (mpz_sgn(den_z) < 0) { mpz_neg(num_z, num_z); mpz_neg(den_z, den_z); }
-                    mpz_t g_z;
-                    mpz_init(g_z);
-                    mpz_gcd(g_z, num_z, den_z);
-                    if (mpz_cmp_ui(g_z, 1) > 0) {
-                        mpz_divexact(num_z, num_z, g_z);
-                        mpz_divexact(den_z, den_z, g_z);
-                    }
-                    mpz_clear(g_z);
-                    expr_free(num_prod);
-                    if (mpz_cmp_ui(den_z, 1) == 0) {
-                        num_prod = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
-                    } else {
-                        Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
-                        Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den_z));
-                        num_prod = expr_new_function(expr_new_symbol(SYM_Rational),
-                                                     (Expr*[]){num_e, den_e}, 2);
-                    }
-                }
-                mpz_clear(num_z);
-                mpz_clear(den_z);
-            }
-        }
-    }
+    /* (The coefficient/radical exchange that used to live here --
+     * Sqrt[2]/2 -> 1/Sqrt[2], 8/Sqrt[2] -> 4 Sqrt[2] -- is the O5 pass
+     * above, which handles every rational radical, not only integer bases.) */
 
     /* Generalized radical fusion: collapse Power[a, e_i] * Power[b, e_j]
      * into a single Power when a, b are positive numerics and one
@@ -1962,6 +2075,15 @@ Expr* builtin_times(Expr* res) {
 
         for (size_t j = i + 1; j < group_count; j++) {
             if (!is_positive_constant_expr(groups[j].base)) continue;
+            /* two rational bases are O5's (radcanon.c): already canonical */
+            {
+                mpz_t a1, a2;
+                mpz_init(a1); mpz_init(a2);
+                bool both = (expr_is_integer_like(groups[i].base) || o4_rat_parts(groups[i].base, a1, a2)) &&
+                            (expr_is_integer_like(groups[j].base) || o4_rat_parts(groups[j].base, a1, a2));
+                mpz_clear(a1); mpz_clear(a2);
+                if (both) continue;
+            }
             int64_t pj_n, pj_d;
             if (!is_rational(groups[j].exponent, &pj_n, &pj_d)) continue;
             if (pj_d != pi_d) continue;
@@ -2156,292 +2278,8 @@ Expr* builtin_times(Expr* res) {
      *   Sin[x]*Csc[x] -> 1,        Cos[x]*Tan[x] -> Sin[x], etc. */
     trig_canon_groups(groups, &group_count);
 
-    /* Sqrt-coefficient absorption: c * Power[r, +/-1/2] folds into
-     * sign(c) * Sqrt[c^2 * r^eps] followed by perfect-square extraction.
-     * The result is the canonical Mathematica form sign * (p_sq / q_sq) *
-     * Sqrt[p_rest / q_rest]. Examples:
-     *   14 / Sqrt[10]        -> 7 Sqrt[2/5]    (98/5 after merge,  49 extracted)
-     *   78 / Sqrt[66]        -> 13 Sqrt[6/11]  (1014/11 after,    169 extracted)
-     *   (3/5) / Sqrt[2/5]    -> 3 / Sqrt[10]   (9/10 after,         9 extracted)
-     *   21/5 Sqrt[2/213]     -> 7/5 Sqrt[6/71] (294/1775 after, 7 and 5 extracted)
-     *
-     * The eps = -1 path covers the original "Sqrt in denominator" case
-     * Mathematica rationalises. The eps = +1 path covers the symmetric
-     * case `c * Sqrt[r]` for rational coefficients on Rational radicands
-     * (e.g. 21/5 Sqrt[2/213] above) -- the tight `p_sq > 1 AND q_sq > 1`
-     * gate keeps integer-coefficient siblings like 2 Sqrt[2/15] and
-     * 30 Sqrt[2/15] (which dominate Gram-Schmidt residuals) unchanged.
-     *
-     * The unchanged-form pre-check keeps inputs already in canonical form
-     * literally identical -- e.g. 2/Sqrt[3] stays as is because 4/3 has
-     * no extractable square beyond the trivial 2/Sqrt[3]. */
-    if (complex_val == NULL && interval_val == NULL && group_count == 1 &&
-        (expr_is_integer_like(num_prod) || is_rational(num_prod, NULL, NULL)) &&
-        !(num_prod->type == EXPR_INTEGER &&
-          (num_prod->data.integer == 0 ||
-           num_prod->data.integer == 1 ||
-           num_prod->data.integer == -1))) {
-        /* Zero-initialised: when the exponent is not rational is_rational
-         * leaves them unset, and en_sa is still read below (valgrind:
-         * 2 z^((b + c)/2), whose exponent is symbolic). */
-        int64_t en_sa = 0, ed_sa = 0;
-        bool eps_ok = is_rational(groups[0].exponent, &en_sa, &ed_sa) &&
-                       (en_sa == -1 || en_sa == 1) && ed_sa == 2;
-        /* eps=+1 gating for c * Sqrt[Rational[a, b]]:
-         *   - cd >= 2 (rational coefficient): integer coefficients can't
-         *     produce q_sq > 1 from a squarefree rd, so the rewrite is
-         *     a no-op for them.
-         *   - |cn|, cd, rn, rd all small (<= 1024): Simplify's internal
-         *     polynomial Euclidean iteration produces sums of products
-         *     of Sqrt[Rational] coefficients whose numerators grow
-         *     without bound; canonicalising those gives PolynomialGCD
-         *     a moving target and the test_qr_rank_deficient_3x3
-         *     Simplify call doesn't terminate.  User-visible inputs
-         *     (21/5 Sqrt[2/213], -1/7 Sqrt[21/2]) sit well below the
-         *     threshold. */
-        int64_t cd_chk = 1, cn_chk = 0;
-        bool num_prod_rational = is_rational(num_prod, &cn_chk, &cd_chk);
-        int64_t cn_abs = cn_chk < 0 ? -cn_chk : cn_chk;
-        const int64_t CANON_CAP = 1024;
-        bool plus_eps_rational_base_and_coeff =
-            (en_sa == 1) &&
-            (groups[0].base->type == EXPR_FUNCTION) &&
-            (groups[0].base->data.function.head->type == EXPR_SYMBOL) &&
-            (groups[0].base->data.function.head->data.symbol.name == SYM_Rational) &&
-            num_prod_rational && (cd_chk >= 2) &&
-            (cn_abs <= CANON_CAP) && (cd_chk <= CANON_CAP);
-        /* Also bound the radicand magnitudes. */
-        if (plus_eps_rational_base_and_coeff) {
-            Expr* base = groups[0].base;
-            int64_t rn_chk, rd_chk;
-            if (!(is_rational(base, &rn_chk, &rd_chk) &&
-                  (rn_chk >= 0 ? rn_chk : -rn_chk) <= CANON_CAP &&
-                  rd_chk <= CANON_CAP)) {
-                plus_eps_rational_base_and_coeff = false;
-            }
-        }
-        /* Disable the eps=+1 rewrite while inside cancel_recursive's
-         * PolynomialGCD pass.  Together / PolynomialGCD iterates over
-         * polynomials whose coefficients carry Sqrt[Rational] terms;
-         * each multiplication produces fresh `c * Sqrt[a/b]` factors
-         * that my rewrite canonicalises to `c' * Sqrt[a'/b']` --
-         * different shape, so PolynomialGCD's coefficient explosion
-         * cannot terminate.  Leaving the form alone inside that pass
-         * keeps the polynomial Euclidean stable, while still applying
-         * the canonical form at user-facing evaluation. */
-        extern int cancel_recursive_inside_gcd;
-        if (cancel_recursive_inside_gcd > 0 && en_sa == 1) {
-            plus_eps_rational_base_and_coeff = false;
-        }
-        if (eps_ok && (en_sa == -1 || plus_eps_rational_base_and_coeff)) {
-            int eps_sa = (int)en_sa;
-            Expr* gb = groups[0].base;
-            mpz_t rn, rd;
-            bool base_ok = false;
-            if (gb->type == EXPR_INTEGER && gb->data.integer >= 2) {
-                mth_mpz_init_set_i64(rn, gb->data.integer);
-                mpz_init_set_ui(rd, 1);
-                base_ok = true;
-            } else if (gb->type == EXPR_BIGINT &&
-                       mpz_sgn(gb->data.bigint) > 0 &&
-                       mpz_cmp_ui(gb->data.bigint, 1) > 0) {
-                mpz_init_set(rn, gb->data.bigint);
-                mpz_init_set_ui(rd, 1);
-                base_ok = true;
-            } else if (gb->type == EXPR_FUNCTION &&
-                       gb->data.function.head->type == EXPR_SYMBOL &&
-                       gb->data.function.head->data.symbol.name == SYM_Rational &&
-                       gb->data.function.arg_count == 2 &&
-                       expr_is_integer_like(gb->data.function.args[0]) &&
-                       expr_is_integer_like(gb->data.function.args[1])) {
-                expr_to_mpz(gb->data.function.args[0], rn);
-                expr_to_mpz(gb->data.function.args[1], rd);
-                if (mpz_sgn(rn) > 0 && mpz_sgn(rd) > 0 &&
-                    !(mpz_cmp_ui(rn, 1) == 0 && mpz_cmp_ui(rd, 1) == 0)) {
-                    base_ok = true;
-                } else {
-                    mpz_clear(rn); mpz_clear(rd);
-                }
-            }
-            if (base_ok) {
-                mpz_t cn, cd;
-                int sign = 1;
-                if (expr_is_integer_like(num_prod)) {
-                    expr_to_mpz(num_prod, cn);
-                    sign = mpz_sgn(cn);
-                    mpz_abs(cn, cn);
-                    mpz_init_set_ui(cd, 1);
-                } else {
-                    int64_t cn_i, cd_i;
-                    is_rational(num_prod, &cn_i, &cd_i);
-                    sign = (cn_i < 0) ? -1 : 1;
-                    mth_mpz_init_set_i64(cn, cn_i < 0 ? -cn_i : cn_i);
-                    mth_mpz_init_set_i64(cd, cd_i);
-                }
-                if (sign != 0) {
-                    /* Canonicalise |c| * r^eps into (p_sq/q_sq) * Sqrt[p/q]
-                     * where p, q are the squarefree residuals of the radicand.
-                     *
-                     * The obvious route -- fold the coefficient into the
-                     * radicand as (cn^2 * rn)/(cd^2 * rd) and trial-divide out
-                     * the square factors -- is O(cn): a large series
-                     * coefficient sends the trial division to sqrt(cn^2) and
-                     * hangs (issue #41).  But cn^2 is already a perfect square,
-                     * and the squarefree part of a number is invariant under
-                     * multiplication by a perfect square, so the squarefree
-                     * residual of cn^2 * rn equals that of the small radicand
-                     * rn alone.  We therefore factor only rn/rd (bounded by the
-                     * symbolic input), fold their extracted roots into the
-                     * coefficient, and reproduce the gcd cross-cancellation
-                     * that (cn^2 * rn)/(cd^2 * rd) reduction would perform using
-                     * three cheap gcds:
-                     *   - gcd(An, Ad):  reduce the coefficient ratio,
-                     *   - gcd(An, W):   a coefficient-numerator prime shared
-                     *                   with the denominator radicand,
-                     *   - gcd(Ad, U):   a coefficient-denominator prime shared
-                     *                   with the numerator radicand.
-                     * This yields byte-for-byte the same (p_sq, p, q_sq, q) as
-                     * the fold-and-factor form on every case, without ever
-                     * trial-dividing the coefficient. */
-                    mpz_t p, q, p_sq, q_sq;
-                    mpz_inits(p, q, p_sq, q_sq, NULL);
-                    {
-                        mpz_t an, ad, cross;
-                        mpz_inits(an, ad, cross, NULL);
-                        /* radicand oriented by eps: p<-numerator, q<-denominator */
-                        mpz_set(p, eps_sa > 0 ? rn : rd);
-                        mpz_set(q, eps_sa > 0 ? rd : rn);
-                        mpz_split_square_part(an, p);  /* p -> U (squarefree) */
-                        mpz_split_square_part(ad, q);  /* q -> W (squarefree) */
-                        mpz_mul(p_sq, cn, an);         /* An = cn * root(rn) */
-                        mpz_mul(q_sq, cd, ad);         /* Ad = cd * root(rd) */
-                        /* reduce the coefficient ratio first */
-                        mpz_gcd(cross, p_sq, q_sq);
-                        if (mpz_cmp_ui(cross, 1) > 0) {
-                            mpz_divexact(p_sq, p_sq, cross);
-                            mpz_divexact(q_sq, q_sq, cross);
-                        }
-                        /* An shares a prime with the denominator radicand W */
-                        mpz_gcd(cross, p_sq, q);
-                        if (mpz_cmp_ui(cross, 1) > 0) {
-                            mpz_divexact(p_sq, p_sq, cross);
-                            mpz_mul(p, p, cross);
-                            mpz_divexact(q, q, cross);
-                        }
-                        /* Ad shares a prime with the numerator radicand U */
-                        mpz_gcd(cross, q_sq, p);
-                        if (mpz_cmp_ui(cross, 1) > 0) {
-                            mpz_divexact(q_sq, q_sq, cross);
-                            mpz_mul(q, q, cross);
-                            mpz_divexact(p, p, cross);
-                        }
-                        mpz_clears(an, ad, cross, NULL);
-                    }
-
-                    /* Usefulness criteria differ by eps:
-                     *   eps=-1: original criterion -- extract a perfect
-                     *           square (p_sq or q_sq > 1) or collapse
-                     *           to integer base (p_rest=1 or q_rest=1).
-                     *           A pure shuffle (e.g. 2/Sqrt[30] -> Sqrt[2/15])
-                     *           costs Plus's like-term collection in QR.
-                     *   eps=+1: tight gate -- BOTH p_sq > 1 AND q_sq > 1.
-                     *           This is the user-visible Mathematica
-                     *           canonicalisation 21/5 Sqrt[2/213] ->
-                     *           7/5 Sqrt[6/71].  Looser criteria here
-                     *           rewrite QR intermediates like
-                     *           30 Sqrt[2/15] -> Sqrt[60] in ways that
-                     *           PolynomialGCD / Together can't reduce. */
-                    bool integer_radical = (mpz_cmp_ui(p, 1) == 0) ||
-                                           (mpz_cmp_ui(q, 1) == 0);
-                    bool useful_extraction;
-                    if (eps_sa < 0) {
-                        useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) ||
-                                            (mpz_cmp_ui(q_sq, 1) > 0) ||
-                                            integer_radical;
-                    } else {
-                        useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) &&
-                                            (mpz_cmp_ui(q_sq, 1) > 0);
-                    }
-
-                    /* Unchanged-form check: the rewrite is a no-op exactly
-                     * when the extracted coefficient equals |c| and the
-                     * residual radical matches the input radical:
-                     *   eps=-1, integer base: output 1/Sqrt[q_rest]
-                     *                          need p=1, rd=1, q=rn.
-                     *   eps=+1, Rational base: output Sqrt[Rational[p,q]]
-                     *                          need p=rn, q=rd, both >=2. */
-                    bool unchanged =
-                        (mpz_cmp(p_sq, cn) == 0) &&
-                        (mpz_cmp(q_sq, cd) == 0) &&
-                        ((eps_sa < 0 && mpz_cmp_ui(p, 1) == 0 &&
-                                         mpz_cmp_ui(rd, 1) == 0 &&
-                                         mpz_cmp(q, rn) == 0) ||
-                         (eps_sa > 0 && mpz_cmp_ui(rd, 1) > 0 &&
-                                         mpz_cmp(p, rn) == 0 &&
-                                         mpz_cmp(q, rd) == 0 &&
-                                         mpz_cmp_ui(p, 1) > 0 &&
-                                         mpz_cmp_ui(q, 1) > 0));
-                    if (!useful_extraction) unchanged = true;
-
-                    if (!unchanged) {
-                        /* New coefficient (sign * p_sq / q_sq). */
-                        mpz_t coef_num;
-                        mpz_init_set(coef_num, p_sq);
-                        if (sign < 0) mpz_neg(coef_num, coef_num);
-                        expr_free(num_prod);
-                        if (mpz_cmp_ui(q_sq, 1) == 0) {
-                            num_prod = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(coef_num));
-                        } else {
-                            Expr* num_e = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(coef_num));
-                            Expr* den_e = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(q_sq));
-                            num_prod = expr_new_function(
-                                expr_new_symbol(SYM_Rational),
-                                (Expr*[]){ num_e, den_e }, 2);
-                        }
-                        mpz_clear(coef_num);
-
-                        /* Residual radical. Three shapes by (p_rest, q_rest):
-                         *   (1, 1)    radical is 1 -> drop the group (exp=0)
-                         *   (>=2, 1)  Sqrt[p_rest]      (exp = +1/2)
-                         *   (1, >=2)  1/Sqrt[q_rest]    (exp = -1/2)
-                         *   else      Sqrt[p_rest/q_rest] (exp = +1/2) */
-                        bool p_is_one = (mpz_cmp_ui(p, 1) == 0);
-                        bool q_is_one = (mpz_cmp_ui(q, 1) == 0);
-                        expr_free(groups[0].base);
-                        expr_free(groups[0].exponent);
-                        if (p_is_one && q_is_one) {
-                            groups[0].base = expr_new_integer(1);
-                            groups[0].exponent = expr_new_integer(0);
-                        } else if (p_is_one) {
-                            groups[0].base = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(q));
-                            groups[0].exponent = make_rational(-1, 2);
-                        } else if (q_is_one) {
-                            groups[0].base = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(p));
-                            groups[0].exponent = make_rational(1, 2);
-                        } else {
-                            Expr* num_e = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(p));
-                            Expr* den_e = expr_bigint_normalize(
-                                expr_new_bigint_from_mpz(q));
-                            groups[0].base = expr_new_function(
-                                expr_new_symbol(SYM_Rational),
-                                (Expr*[]){ num_e, den_e }, 2);
-                            groups[0].exponent = make_rational(1, 2);
-                        }
-                    }
-
-                    mpz_clears(p, q, p_sq, q_sq, NULL);
-                }
-                mpz_clear(cn); mpz_clear(cd);
-                mpz_clear(rn); mpz_clear(rd);
-            }
-        }
-    }
+    /* (Sqrt-coefficient absorption, c Power[r, +-1/2] -> sign (p/q) Sqrt[a/b],
+     * is subsumed by the O5 pass above.) */
 
     /* Fold the numeric coefficient into the interval product (num_prod becomes 1
      * once absorbed). Done before the Complex fold so it also reads a clean

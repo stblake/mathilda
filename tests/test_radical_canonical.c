@@ -677,12 +677,14 @@ static void test_sign_normalization_integer_part(void) {
 }
 
 static void test_sign_normalization_with_residue(void) {
-    /* (-r) stays under the radical when r > 1. For (-72)^(1/3),
-     * 72 = 2^3 * 9 so factor 2 out, residue (-9). */
-    assert_eval_eq("(-72)^(1/3)",               "2 (-9)^(1/3)", 0);
-    assert_eval_eq("(-72)^(2/3)",               "4 (-9)^(2/3)", 0);
-    /* (-200)^(1/3): 200 = 2^3 * 25, factor 2, residue (-25). */
-    assert_eval_eq("(-200)^(1/3)",              "2 (-25)^(1/3)", 0);
+    /* The sign rides on the radical whose exponent is the power's own
+     * (radcanon.c): for (-72)^(1/3), 72 = 2^3 3^2, so 2 comes out and 3
+     * carries exponent 2/3, leaving the sign alone as (-1)^(1/3), as in the
+     * reference.  (-24)^(1/3) = 2 (-3)^(1/3): there 3 has exponent 1/3. */
+    assert_eval_eq("(-72)^(1/3)",               "2 (-1)^(1/3) 3^(2/3)", 0);
+    assert_eval_eq("(-72)^(2/3)",               "12 (-1)^(2/3) 3^(1/3)", 0);
+    /* (-200)^(1/3): 200 = 2^3 5^2, factor 2, 5 at exponent 2/3. */
+    assert_eval_eq("(-200)^(1/3)",              "2 (-1)^(1/3) 5^(2/3)", 0);
     /* (-24)^(1/3): 24 = 2^3 * 3, factor 2, residue (-3). */
     assert_eval_eq("(-24)^(1/3)",               "2 (-3)^(1/3)", 0);
 }
@@ -694,19 +696,21 @@ static void test_sign_normalization_no_extraction(void) {
     assert_eval_eq("(-2)^(1/3)",                "(-2)^(1/3)", 0);
     assert_eval_eq("(-3)^(1/3)",                "(-3)^(1/3)", 0);
     assert_eval_eq("(-6)^(1/3)",                "(-6)^(1/3)", 0);
-    assert_eval_eq("(-12)^(1/3)",               "(-12)^(1/3)", 0);
+    /* 12 = 2^2 3: the exponents differ (2/3 and 1/3), so it splits, the
+     * sign staying on the 1/3 group */
+    assert_eval_eq("(-12)^(1/3)",               "(-3)^(1/3) 2^(2/3)", 0);
 }
 
 static void test_sign_normalization_even_q_unchanged(void) {
-    /* Even q with negative base (other than q == 2) is intentionally
-     * left unevaluated; the principal-branch result has no clean
-     * canonical form yet. q == 2 still goes through the I-extraction
-     * path, q == 4 / 6 / ... stays. */
+    /* Even q with a negative base: q == 2 goes through the I-extraction
+     * path; q == 4 / 6 / ... takes the canonical radical form like an odd
+     * root ((-1)^e times the magnitude's radicals, the sign on the group
+     * of exponent e), so a base with no repeated factor stays. */
     assert_eval_eq("(-4)^(1/2)",                "2*I",          0);
     assert_eval_eq("(-9)^(1/2)",                "3*I",          0);
     assert_eval_eq("(-2)^(1/4)",                "(-2)^(1/4)",   0);
     assert_eval_eq("(-2)^(1/6)",                "(-2)^(1/6)",   0);
-    assert_eval_eq("(-16)^(1/4)",               "(-16)^(1/4)",  0);
+    assert_eval_eq("(-16)^(1/4)",               "2 (-1)^(1/4)",  0);
 }
 
 static void test_minus_one_rational_exp_canonical(void) {
@@ -800,7 +804,7 @@ static void test_combined_canonical_forms(void) {
     assert_eval_eq("FullForm[(-8)^(1/3)]",
         "Times[2, Power[-1, Rational[1, 3]]]", 0);
     assert_eval_eq("FullForm[(-72)^(1/3)]",
-        "Times[2, Power[-9, Rational[1, 3]]]", 0);
+        "Times[2, Power[-1, Rational[1, 3]], Power[3, Rational[2, 3]]]", 0);
 }
 
 /* ------------------------------------------------------------------ */

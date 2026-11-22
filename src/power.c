@@ -1,3 +1,4 @@
+#include "radcanon.h"
 #include "eval.h"
 #include "power.h"
 #include "arithmetic.h"
@@ -350,6 +351,108 @@ static Expr* power_split_residue(int64_t r, int64_t b_rem, int64_t q) {
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), out, out_count);
     free(out);
     return result;
+}
+
+/* Power[n/d, p/q] (int64 n, d with d >= 1 and gcd 1; q > 1) in the
+ * canonical radical form of radcanon.c: n and d are factored (as the
+ * integer path below does, trial division then FactorInteger), every prime
+ * contributes prime^(+-multiplicity p/q), and the product is canonicalised.
+ *   (25/12)^(1/3)  -> 5^(2/3)/(2^(2/3) 3^(1/3)), merged: (5/2)^(2/3)/3^(1/3)
+ *   (2/3)^(5/3)    -> 2/3 (2/3)^(2/3)          (integer part out)
+ *   (3/2)^(-1/2)   -> Sqrt[2/3]                (a mixed group takes |f|)
+ *   (4/9)^(1/3)    -> (2/3)^(2/3)
+ *   (-12)^(1/3)    -> (-3)^(1/3) 2^(2/3)       (the sign goes onto the
+ *   (-25/12)^(1/3) -> (-1/3)^(1/3) (5/2)^(2/3)  group with exponent 1/3)
+ * A negative base takes part with p > 0: its integer part comes out whole
+ * ((-2/3)^(5/3) = -2/3 (-2/3)^(2/3), since (-b)^(k + f) = (-b)^k (-b)^f
+ * for an integer k) and the rest carries the sign, for even roots too
+ * ((-12)^(1/4) = (-3)^(1/4) Sqrt[2], (-16)^(1/4) = 2 (-1)^(1/4)); a square
+ * root is I^p (n/d)^(p/2).  Returns the evaluated
+ * result; NULL with *stays when Power[n/d, p/q] is already canonical, NULL
+ * alone when this does not apply. */
+static Expr* power_radcanon(int64_t n, int64_t d, int64_t p, int64_t q, bool* stays) {
+    *stays = false;
+    if (q <= 1 || d <= 0 || n == 0 || n == INT64_MIN) return NULL;
+    if (n < 0 && q == 2) {
+        /* (-r)^(p/2) = I^p r^(p/2) for r > 0 and any integer p (principal
+         * branch: arg(-r) = Pi); p is odd */
+        if (n == -1 && d == 1) return NULL;
+        int64_t pm = ((p % 4) + 4) % 4;
+        Expr* ip = make_complex(expr_new_integer(0), expr_new_integer(pm == 1 ? 1 : -1));
+        Expr* mag = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ make_rational(-n, d), make_rational(p, q) }, 2);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ ip, mag }, 2));
+    }
+    if (n < 0 && p <= 0) return NULL;
+    if (n == -1 && d == 1) return NULL;
+    if (n == 1 && d == 1) return NULL;
+    enum { RC_MAX_P = 64 };
+    int64_t pr[RC_MAX_P], ex[RC_MAX_P];
+    int np;
+    mpq_t e, coef_re, coef_im, t;
+    mpq_inits(e, coef_re, coef_im, t, NULL);
+    mpq_set_si(e, p, (unsigned long)q);
+    mpq_canonicalize(e);
+    mpq_set_ui(coef_re, 1, 1);
+    if (n < 0 && p >= q) {
+        /* (n/d)^k out, k = floor(p/q) */
+        int64_t k = p / q;
+        mpz_t a, b;
+        mth_mpz_init_set_i64(a, n);
+        mth_mpz_init_set_i64(b, d);
+        mpz_pow_ui(a, a, (unsigned long)k);
+        mpz_pow_ui(b, b, (unsigned long)k);
+        mpq_set_num(coef_re, a);
+        mpq_set_den(coef_re, b);
+        mpq_canonicalize(coef_re);
+        mpz_clear(a); mpz_clear(b);
+        mpq_set_si(t, k, 1);
+        mpq_sub(e, e, t);
+    }
+    RcAtoms at;
+    rc_atoms_init(&at);
+    mpz_t v;
+    mpz_init(v);
+    for (int side = 0; side < 2; side++) {
+        int64_t m = side == 0 ? (n < 0 ? -n : n) : d;
+        if (m <= 1) continue;
+        if (power_factor_int64(m, pr, ex, RC_MAX_P, &np)) {
+            for (int i = 0; i < np; i++) {
+                mth_mpz_set_i64(v, pr[i]);
+                mpq_set_si(t, ex[i], 1);
+                mpq_mul(t, t, e);
+                if (side) mpq_neg(t, t);
+                rc_atoms_add(&at, v, t);
+            }
+        } else {
+            mth_mpz_set_i64(v, m);
+            mpq_set(t, e);
+            if (side) mpq_neg(t, t);
+            rc_atoms_add(&at, v, t);
+        }
+    }
+    Expr** F = NULL;
+    size_t nf = rc_canonical(&at, coef_re, coef_im, n < 0 ? (const mpq_t*)&e : NULL, &F);
+    rc_atoms_clear(&at);
+    mpz_clear(v);
+    mpq_clears(e, coef_re, coef_im, t, NULL);
+
+    Expr* self = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ make_rational(n, d), make_rational(p, q) }, 2);
+    bool same = nf == 1 && expr_eq(F[0], self);
+    expr_free(self);
+    if (same) {
+        expr_free(F[0]);
+        free(F);
+        *stays = true;
+        return NULL;
+    }
+    Expr* r = nf == 0 ? expr_new_integer(1)
+            : nf == 1 ? F[0]
+            : expr_new_function(expr_new_symbol(SYM_Times), F, nf);
+    free(F);
+    return eval_and_free(r);
 }
 
 /* Returns true when Power[f, p/q] is guaranteed to evaluate to a pure
@@ -1859,6 +1962,10 @@ Expr* builtin_power(Expr* res) {
         int64_t pp_rb, qq_rb;
         if (is_rational(base, &bn, &bd) && bd > 1 &&
             is_rational(exp, &pp_rb, &qq_rb) && qq_rb > 1) {
+            bool stays;
+            Expr* rc = power_radcanon(bn, bd, pp_rb, qq_rb, &stays);
+            if (rc) return rc;
+            if (stays) return NULL;
             int64_t abs_bn = (bn < 0) ? -bn : bn;
             int64_t m_n_rb, r_n_rb, m_d_rb, r_d_rb;
             factor_out_kth_power(abs_bn, qq_rb, &m_n_rb, &r_n_rb);
@@ -2393,6 +2500,15 @@ rat_imag_fallthrough: ;
                 (Expr*[]){ expr_new_integer(2), e63 }, 2);
             return expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){ sgn, mag }, 2);
+        }
+        /* A negative base, root above 2: the canonical radical form,
+         * whose sign rides on the group with the same exponent
+         * ((-12)^(1/3) = (-3)^(1/3) 2^(2/3), (-4)^(1/3) = (-1)^(1/3) 2^(2/3)). */
+        if (n < -1 && p > 0 && q > 2) {
+            bool stays;
+            Expr* rc = power_radcanon(n, 1, p, q, &stays);
+            if (rc) return rc;
+            if (stays) return NULL;
         }
         bool n_negative = (n < 0);
         if (n_negative) {

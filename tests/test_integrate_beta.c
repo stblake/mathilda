@@ -107,7 +107,7 @@ static void test_trigpower_unit(void) {
     /* undecided without assumptions: still conditioned */
     check_eq("Integrate`TrigPower[Sin[x]^m Cos[x]^n, {x, 0, Pi/2}]",
              "ConditionalExpression[1/2 Beta[1/2 (1 + m), 1/2 (1 + n)], "
-             "Re[1/2 (1 + m)] > 0 && Re[1/2 (1 + n)] > 0]");
+             "1/2 (1 + Re[m]) > 0 && 1/2 (1 + Re[n]) > 0]");
     /* Over [0, Pi] only n parity matters, so m may stay symbolic (n = 2 even). */
     check_eq("Integrate`TrigPower[Sin[x]^m Cos[x]^2, {x, 0, Pi}, "
              "Assumptions -> m>0]",
@@ -256,7 +256,7 @@ static void test_tanbeta(void) {
     /* the strip undecided without assumptions */
     check_eq("Integrate[Cos[x]^(-2 a - 2) Cos[2 x]^a, {x, 0, Pi/4}]",
              "ConditionalExpression[(Sqrt[Pi] Gamma[1 + a])/(2 Gamma[3/2 + a]), "
-             "Re[1 + a] > 0]");
+             "Re[a] > -1]");
     /* t^a: a plain Beta */
     check_timed_value("Sin[x]^a/Cos[x]^(a + 2)", "{x, 0, Pi/4}",
                       ", Assumptions -> a > 0", "1/(1 + a)", "a -> 5/7", 10);

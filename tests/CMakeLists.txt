@@ -487,6 +487,7 @@ set(COMMON_SRC
     ../src/lean_check.c
     ../src/plus.c
     ../src/times.c
+    ../src/radcanon.c
     ../src/arithmetic.c
     ../src/interval.c
     ../src/numbertheory/numbertheory.c
@@ -1813,6 +1814,11 @@ add_executable(linkedlist_tests test_linkedlist.c $<TARGET_OBJECTS:mathilda_comm
 target_link_libraries(linkedlist_tests m)
 target_include_directories(linkedlist_tests PRIVATE ../src)
 add_test(NAME linkedlist_tests COMMAND linkedlist_tests)
+
+add_executable(radical_canon_tests test_radical_canon.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(radical_canon_tests m)
+target_include_directories(radical_canon_tests PRIVATE ../src)
+add_test(NAME radical_canon_tests COMMAND radical_canon_tests)
 
 add_executable(linkedlist_sets_tests test_linkedlist_sets.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(linkedlist_sets_tests m)

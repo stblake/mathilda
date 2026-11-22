@@ -81,7 +81,7 @@ static void test_complex_vec_real_im(void) {
 static void test_complex_vec_short(void) {
     /* {1+I, 2}: |1+I|^2 + 4 = 2 + 4 = 6. */
     assert_eval_eq("Normalize[{1 + I, 2}]",
-                   "{(1 + I)/Sqrt[6], 2/Sqrt[6]}", 0);
+                   "{(1 + I)/Sqrt[6], Sqrt[2/3]}", 0);
 }
 
 /* --- Zero short-circuit --------------------------------------------- */
@@ -187,9 +187,11 @@ static void test_idempotent_norm(void) {
 static void test_not_listable_semantics(void) {
     /* If Normalize were Listable the next call would yield
      * {Normalize[1], Normalize[2], Normalize[3]} = {1, 1, 1}.  The
-     * correct vector form is {1/Sqrt[14], 2/Sqrt[14], 3/Sqrt[14]}. */
+     * correct vector form is {1/Sqrt[14], Sqrt[2/7], 3/Sqrt[14]}
+     * (2/Sqrt[14] is Sqrt[2/7] in the canonical radical form, as in the
+     * reference). */
     assert_eval_eq("Normalize[{1, 2, 3}]",
-                   "{1/Sqrt[14], 2/Sqrt[14], 3/Sqrt[14]}", 0);
+                   "{1/Sqrt[14], Sqrt[2/7], 3/Sqrt[14]}", 0);
 }
 
 /* --- Arity diagnostics ---------------------------------------------- */
@@ -263,7 +265,7 @@ static void test_repeated_evaluation_does_not_corrupt(void) {
     for (int k = 0; k < 50; k++) {
         assert_eval_eq("Normalize[{3, 4}]", "{3/5, 4/5}", 0);
         assert_eval_eq("Normalize[{1, 2 I, 3}]",
-                       "{1/Sqrt[14], (2*I)/Sqrt[14], 3/Sqrt[14]}", 0);
+                       "{1/Sqrt[14], I Sqrt[2/7], 3/Sqrt[14]}", 0);
         assert_eval_eq("Normalize[{0, 0, 0}]", "{0, 0, 0}", 0);
         assert_eval_eq("Normalize[{x, y}, f]",
                        "{x/f[{x, y}], y/f[{x, y}]}", 0);

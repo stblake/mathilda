@@ -84,7 +84,7 @@ int main(void) {
     check("Sum[Sin[k]^2/k, {k, 1, Infinity}]",
           "Sum[Sin[k]^2/k, {k, 1, Infinity}]");        /* DC term at s=1 diverges */
     check("Sum[Sin[a k]/k, {k, 1, Infinity}]",
-          "Im[-Log[1 - E^(I a)]]");                     /* symbolic coeff: no fabrication */
+          "-Im[Log[1 - E^(I a)]]");                     /* symbolic coeff: no fabrication */
     check("Sum[1/k^2, {k, 1, Infinity}]", "1/6 Pi^2");  /* not intercepted */
 
     if (failures) {
