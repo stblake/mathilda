@@ -447,6 +447,9 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
      decided split is taken (every group elementary, or exactly one certified:
      linearity); anything else falls through to the tower. *)
   With[{ex = brExactSupportSplit[g, x]}, If[ex =!= None, Return[ex, Module]]];
+  (* f = h(theta) D theta for ONE kernel theta, h algebraic: Trager in u = theta
+     (257 cM: 1-4 s through the tower, FriCAS 0.08 s).  Answers only, verified. *)
+  With[{ks = brKernelSubstitution[g, x]}, If[ks =!= None, Return[ks, Module]]];
   sm = brCatch[brSignMerge[g, x]];
   If[brFailQ[sm], sm = None];
   r = With[{g1 = If[sm === None, g, sm["g"] /. ((#[[1]] -> 1) & /@ sm["signs"])]},
@@ -485,6 +488,32 @@ brSupportSplitIntegrate[f_, x_Symbol] := Module[{e, r},
       If[r2 =!= None && (r === None || !MatchQ[r2, {"implementation incomplete", _}]), r = r2]]];
   r];
 (* a group undecided: None, so the caller keeps the tower's own (more specific) reason *)
+
+brKernelSubstitution::usage = "brKernelSubstitution[f, x] integrates f = h(theta) D theta, theta the ONE logarithm Log[a] or exponential E^w of f (all exponentials E^(r w) with rational r written as powers of E^(w/d)), h algebraic in u = theta and free of x: the purely algebraic integrand h(u) by BronsteinIntegrate in u (Trager), under brOption[\"KernelSubstitutionTime\"] seconds. An answer G(u) gives F = G(theta), returned only when antiderivativeQ[f, F, x] (the chain rule makes it exact; the check guards the substitution). Otherwise None: a certificate in u is NOT taken as one for f, so the caller's own path decides (D6: speed only).";
+brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Unique["Bronstein`Private`brKu"], rules, h, G, F},
+  If[FreeQ[f, Power[_, _Rational]] || brOption["KernelSubstitutionTime"] <= 0, Return[None]];
+  logs = Union[Cases[f, Log[a_] /; !FreeQ[a, x], {0, Infinity}, Heads -> True]];
+  exps = Union[Cases[f, Power[E, e_] /; !FreeQ[e, x] :> e, {0, Infinity}, Heads -> True]];
+  Which[
+    Length[logs] === 1 && exps === {}, th = First[logs]; rules = {th -> u},
+    logs === {} && exps =!= {},
+      e0 = First[exps]; rs = Together[#/e0] & /@ exps;
+      If[!AllTrue[rs, rationalNumberQ], Return[None]];
+      d = LCM @@ (Denominator /@ rs); w = e0/d; th = E^w;
+      rules = Thread[(E^# & /@ exps) -> (u^(d Together[#/e0]) & /@ exps)],
+    True, Return[None]];
+  h = Quiet[Together[(f /. rules)/(D[th, x] /. rules)]];
+  If[!FreeQ[h, x] || !FreeQ[h, Log | Power[E, _]] || FreeQ[h, u], Return[None]];
+  (* an exponential's D theta = w' theta adds a pole at u = 0, and Trager in u is then
+     sometimes slower than the tower: a shorter budget for it *)
+  G = Quiet[TimeConstrained[BronsteinIntegrate[h, u],
+    If[Head[th] === Log, brOption["KernelSubstitutionTime"], brOption["KernelSubstitutionExpTime"]], $Failed]];
+  If[G === $Failed || ListQ[G] || !FreeQ[G, Integrate], Return[None]];
+  F = G /. u -> th;
+  (* both checks: a form that only the complex-domain test confirms (PossibleZeroQ's
+     real-line false negative on E^x/(1 + E^(3 x))^(1/3)'s ArcTan form, G-pzq-1) is
+     left to the tower path *)
+  If[antiderivativeQ[f, F, x] && TrueQ[Quiet[PossibleZeroQ[D[F, x] - f]]], F, None]];
 
 brExactSupportSplit::usage = "brExactSupportSplit[f, x] tries the partition of the terms of f by their exact set of radicals (brSupportGroups[..., \"Exact\"]) when f has two or more distinct radicals and the transitive support partition has a single group: an answer (verified) or {\"not elementary\", ...} when the split decides, None otherwise (fewer groups, a group undecided, or two or more non-elementary groups left after the merges).";
 brExactSupportSplit[f_, x_Symbol] := Module[{e, ts, rads, r},

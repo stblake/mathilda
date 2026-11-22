@@ -412,6 +412,16 @@ static void test_exact_support_split(void) {
     BR_TRUE("brExactSupportSplit[Sqrt[x] + Sqrt[1 + x], x] === None");               /* transitive groups already apart */
 }
 
+/* D6: one kernel, h algebraic in u = theta -> Trager in u (257 cM: 1-4 s -> 0.2-1 s). Answers only. */
+static void test_kernel_substitution(void) {
+    BR_TRUE("With[{f = 2/((1 + 2 x) Log[1 + 2 x] (1 + Log[1 + 2 x])^(1/6))}, With[{F = brKernelSubstitution[f, x]}, F =!= None && PossibleZeroQ[D[F, x] - f]]]");
+    BR_TRUE("With[{f = 1/(2 + E^(3 x))^(1/6)}, With[{F = brKernelSubstitution[f, x]}, F =!= None && PossibleZeroQ[D[F, x] - f]]]");
+    BR_TRUE("brKernelSubstitution[Sqrt[Log[x]], x] === None");                 /* h depends on x: x Sqrt[u] */
+    BR_TRUE("brKernelSubstitution[Log[x] Sqrt[Log[1 + x]]/x, x] === None");   /* two kernels */
+    BR_TRUE("brKernelSubstitution[E^x Log[x], x] === None");                  /* no radical */
+    BR_TRUE("Block[{brOption}, brOption[\"KernelSubstitutionTime\"] = 0; brKernelSubstitution[1/(2 + E^(3 x))^(1/6), x] === None]");
+}
+
 int main(void) {
     br_init();
     setup();
@@ -429,6 +439,7 @@ int main(void) {
     test_i2();
     test_hom_witness();
     test_exact_support_split();
+    test_kernel_substitution();
     BR_DONE("bronstein_phase5_tests");
     return 0;
 }
