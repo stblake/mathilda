@@ -1,17 +1,17 @@
-# Integration shootout (2026-11-12)
+# Integration shootout: 256-integration-shootout (2026-11-22)
 
-1266 cases, timeout 30 s per run, wall 12.5 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+1266 cases, timeout 30 s per run, wall 13.5 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
 | run | R rational (72) | T transcendental (217) | A algebraic (400) | M mixed (radical on top) (408) | B radical at the bottom (169) | all |
 |---|---|---|---|---|---|---|
-| Mathilda:Automatic | 100% (72) | 97% (210) | 57% (228) | 84% (342) | 45% (76) | 73% (928) |
-| Mathilda:ParallelMixedTower | 0% (0) | 64% (138) | 52% (208) | 79% (322) | 40% (68) | 58% (736) |
-| Mathilda:RischTranscendental | 100% (72) | 66% (143) | · | · | · | 74% (215) |
+| Mathilda:Automatic | 100% (72) | 98% (212) | 58% (230) | 84% (343) | 45% (76) | 74% (933) |
+| Mathilda:ParallelMixedTower | 0% (0) | 64% (138) | 52% (210) | 79% (323) | 40% (68) | 58% (739) |
+| Mathilda:RischTranscendental | 100% (72) | 67% (145) | · | · | · | 75% (217) |
 | Mathilda:Trager | · | · | 53% (211) | · | · | 53% (211) |
-| Mathilda:Bronstein | · | · | · | 83% (337) | 41% (70) | 71% (407) |
-| FriCAS | 99% (71) | 94% (204) | 51% (204) | 40% (165) | 43% (72) | 57% (716) |
+| Mathilda:Bronstein | · | · | · | 83% (340) | 41% (70) | 71% (410) |
+| FriCAS | 99% (71) | 94% (203) | 51% (204) | 40% (163) | 43% (72) | 56% (713) |
 | Maxima | 100% (72) | 77% (167) | 36% (145) | 42% (170) | 33% (55) | 48% (609) |
 | sympy | 100% (72) | 80% (174) | 32% (130) | 13% (54) | 15% (26) | 36% (456) |
 | Wolfram | 100% (72) | 100% (216) | 83% (331) | 61% (250) | 64% (108) | 77% (977) |
@@ -20,12 +20,12 @@
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 828 | 100 | 212 | 117 | 9 | 0 | 0 | 0 | 0.05 |
-| Mathilda:ParallelMixedTower | 736 | 0 | 260 | 217 | 53 | 0 | 0 | 0 | 0.05 |
-| Mathilda:RischTranscendental | 208 | 7 | 63 | 11 | 0 | 0 | 0 | 0 | 0.00 |
-| Mathilda:Trager | 211 | 0 | 189 | 0 | 0 | 0 | 0 | 0 | 0.03 |
-| Mathilda:Bronstein | 407 | 0 | 55 | 114 | 1 | 0 | 0 | 0 | 0.10 |
-| FriCAS | 647 | 69 | 0 | 240 | 52 | 257 | 0 | 1 | 0.07 |
+| Mathilda:Automatic | 832 | 101 | 325 | 5 | 3 | 0 | 0 | 0 | 0.04 |
+| Mathilda:ParallelMixedTower | 739 | 0 | 239 | 228 | 60 | 0 | 0 | 0 | 0.06 |
+| Mathilda:RischTranscendental | 210 | 7 | 72 | 0 | 0 | 0 | 0 | 0 | 0.00 |
+| Mathilda:Trager | 211 | 0 | 188 | 0 | 1 | 0 | 0 | 0 | 0.07 |
+| Mathilda:Bronstein | 410 | 0 | 165 | 1 | 1 | 0 | 0 | 0 | 0.14 |
+| FriCAS | 644 | 69 | 0 | 239 | 52 | 261 | 0 | 1 | 0.07 |
 | Maxima | 559 | 50 | 0 | 650 | 5 | 0 | 0 | 2 | 0.02 |
 | sympy | 361 | 95 | 0 | 480 | 289 | 1 | 8 | 32 | 0.13 |
 | Wolfram | 704 | 273 | 0 | 269 | 13 | 0 | 1 | 6 | 0.16 |
@@ -38,24 +38,24 @@
 | R | rlog | 36 | 36 | 35 | 36 | 36 | 36 |
 | T | tlog | 33 | 33 | 33 | 33 | 33 | 33 |
 | T | texp | 33 | 33 | 32 | 26 | 33 | 33 |
-| T | tmixed | 15 | 15 | 15 | 15 | 15 | 15 |
+| T | tmixed | 15 | 15 | 14 | 15 | 15 | 15 |
 | T | tnested | 13 | 13 | 13 | 10 | 13 | 13 |
 | T | ttrig | 18 | 18 | 18 | 18 | 18 | 18 |
 | T | tconstk | 26 | 26 | 26 | 26 | 26 | 26 |
-| T | tlog-perturbed | 35 | 32 | 30 | 18 | 16 | 35 |
+| T | tlog-perturbed | 35 | 34 | 30 | 18 | 16 | 35 |
 | T | texp-perturbed | 36 | 33 | 31 | 14 | 15 | 36 |
 | A | agen | 36 | 36 | 35 | 33 | 20 | 35 |
 | B | bbottom | 20 | 20 | 20 | 17 | 12 | 20 |
 | B | bbottom-perturbed | 33 | 5 | 1 | 5 | 0 | 18 |
 | M | alg | 34 | 34 | 3 | 8 | 0 | 33 |
 | M | logxy | 31 | 31 | 0 | 13 | 0 | 0 |
-| M | asinh | 35 | 35 | 35 | 28 | 5 | 35 |
-| M | genus1 | 35 | 35 | 35 | 19 | 8 | 35 |
+| M | asinh | 35 | 35 | 34 | 28 | 5 | 35 |
+| M | genus1 | 35 | 35 | 34 | 19 | 8 | 35 |
 | M | algres | 35 | 35 | 34 | 0 | 0 | 35 |
 | M | ratb | 30 | 30 | 19 | 17 | 2 | 30 |
 | M | constk | 32 | 32 | 0 | 0 | 0 | 0 |
 | M | tower2 | 35 | 35 | 3 | 35 | 0 | 24 |
-| M | lccontent | 35 | 33 | 0 | 12 | 1 | 17 |
+| M | lccontent | 35 | 34 | 0 | 12 | 1 | 17 |
 | M | expcube | 36 | 36 | 34 | 36 | 35 | 36 |
 | M | mrandom | 33 | 0 | 0 | 0 | 0 | 0 |
 | M | mperturb | 34 | 4 | 2 | 0 | 1 | 3 |
@@ -67,10 +67,10 @@
 | M | classic-nonelem | 3 | 2 | 0 | 2 | 2 | 2 |
 | A | classic-nonelem | 2 | 2 | 0 | 0 | 1 | 2 |
 | B | classic-nonelem | 1 | 1 | 1 | 1 | 1 | 1 |
-| A | trager-binomial-xk | 45 | 22 | 20 | 21 | 32 | 45 |
+| A | trager-binomial-xk | 45 | 23 | 20 | 21 | 32 | 45 |
 | A | trager-third-kind | 30 | 18 | 14 | 13 | 4 | 30 |
 | A | trager-rational-times-radical | 50 | 19 | 16 | 17 | 19 | 38 |
-| A | trager-chebyshev | 40 | 23 | 20 | 20 | 25 | 40 |
+| A | trager-chebyshev | 40 | 24 | 20 | 20 | 25 | 40 |
 | A | trager-goursat | 20 | 12 | 11 | 4 | 4 | 15 |
 | A | trager-pseudo-elliptic-recip | 10 | 10 | 10 | 0 | 0 | 10 |
 | A | trager-even-substitution | 6 | 6 | 6 | 0 | 0 | 6 |
@@ -100,7 +100,6 @@
 ## Only one system closes it
 
 - Mathilda: 67
-- Maxima: 1
 
 ## Wrong answers from other systems (their bugs)
 

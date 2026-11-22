@@ -1,43 +1,48 @@
-## Summary (2026-11-21, Mathilda v0.6646, FriCAS 1.3.6)
+## Summary (2026-11-22, Mathilda v0.6688, FriCAS 1.3.6)
 
-The comparison runs on three corpora. Benchmarks 256 and 257 are the integration shootout
-corpora; benchmark 259 holds the C completeness campaign's hunt families. On the Mathilda
-side there are three runs:
+The comparison runs on four corpora:
+- 256 and 257, the integration shootout corpora;
+- 259, the C completeness campaign's hunt families;
+- 260, a radical at the bottom (Campaign D0).
 
+On the Mathilda side there are three runs:
 - **Mathilda**: Bronstein's algorithm as Mathilda implements it. That is RischTranscendental
   (*Symbolic Integration I*) for rational and transcendental integrands, Trager for algebraic
   ones, and the Bronstein package for the mixed algebraic and transcendental cases.
 - **PMT**: ParallelMixedTower, the parallel Risch (Risch–Norman) method over a mixed tower.
 - **Automatic**: the full cascade.
 
-The first version of this report (2026-11-20, v0.6641) led to an improvement plan, items
-C0–C5 in `src/internal/bronstein/BRONSTEIN_PLAN.md`. Releases v0.6642–v0.6646 implement
-C0, C1, C2 (in part), C3.2 and C4 (in part). This run measures the result.
+The previous run (2026-11-21, v0.6646) led to Campaign D in
+`src/internal/bronstein/BRONSTEIN_PLAN.md`. Releases v0.6647–v0.6688 contain:
+- D0 and D1 (support groups);
+- D2 (the free square-root split);
+- D3 M1 (Phase 5: Risch over the curve, two monomials);
+- D4 and D5;
+- D6's evaluator change;
+- D7 in part.
+
+This run measures the result.
 
 **Completeness: how often each system decides.** Deciding means giving a verified closed
 form, or proving that no elementary integral exists.
 
 | corpus | Mathilda | PMT | Automatic | FriCAS |
 |---|---|---|---|---|
-| 256 (1266) | **96%** (was 93%) | 77% | **96%** (was 91%) | 75% |
-| 257 (1000, all elementary) | **100%** (was 99%) | 86% | **100%** | 90% |
-| 259 (640, transcendental) | **98%** (was 96%) | 66% | **98%** (was 92%) | 95% |
+| 256 (1266) | **100%** (was 96%) | 77% | **99%** (was 96%) | 75% |
+| 257 (1000, all elementary) | **100%** | 86% | **100%** (999: one timeout under load, 14 s alone) | 90% |
+| 259 (640, transcendental) | **99%** (was 98%) | not run | **100%** (was 98%) | 95% |
+| 260 (420, radical at the bottom) | **99%** (was 85%) | 46% | **98%** (was 89%) | 95% |
 
-- **Mathilda decides more than FriCAS on every corpus.** It is ahead on algebraic integrands
-  (256 class A: 100% against 82%; Automatic 91% -> 99%) and far ahead on a radical over a
-  log or exp tower (class M: 100% against 44%).
-- **Class B (a radical at the bottom) is the one class where FriCAS still leads:** 93%
-  against 72%, which was 54%. Several independent square roots are now integrated by
-  Galois components (C3.2, theory §E8). The other cause, Risch over an algebraic base
-  (a radical inside a log or exp with further monomials above it), is Phase 5 (C3.1),
-  not started.
-- **The cascade now keeps what its methods find (C1).** Trager's certificates are no longer
-  hidden behind an `Inactive[Integrate]`. A large tower integrand reaches the Risch stage
-  before the stages that grind on it. The decision's verified antiderivative is the
-  integrator's answer. Automatic's timeouts on 259 went from 34 to 6.
-- **On the transcendental corpus** Mathilda now decides 625 and Automatic 627, against
-  FriCAS's 610. FriCAS still *closes* more cases with special functions (polylog, Ei, erf)
-  where Mathilda certifies non-elementarity.
+- **Mathilda now decides more than FriCAS on every corpus and every class.** Class B (a
+  radical at the bottom), the one class where FriCAS led, is 169 of 169 on 256 (was 72%,
+  FriCAS 93%) and 99% on 260 (FriCAS 95%). Three things closed it:
+  - the support groups (D1);
+  - the free square-root split (D2);
+  - transcendental Risch over `Q(x)(y)` (Phase 5 M1).
+- **On the transcendental corpus** Mathilda decides 636 and Automatic 637, against
+  FriCAS's 610.
+- **Not yet in these numbers:** Phase 5 M2 (any number of monomials over the curve, v0.6689,
+  on a branch during this run). The comparison is rerun after it lands.
 
 **Soundness.** No Mathilda method gives a false "no" or a wrong answer on any corpus.
 The Automatic wrong answer of the first run (the PolyLog stage, `Log[-I + Tan[2 x]]`) is
@@ -49,7 +54,7 @@ fixed (C0, v0.6642).
   `integrate(exp(1+2*%i*x)/(1+exp(%i*x)), x)`, whose integral is
   `-%i*%e*(exp(%i*x) - log(1+exp(%i*x)))`. A draft report for FriCAS is in
   `benchmarks/FRICAS_UPSTREAM_REPORT.md`, submitted as https://github.com/fricas/fricas/issues/249.
-- **FriCAS: 40 answers fail their derivative check** at the real points. Rechecked in FriCAS,
+- **FriCAS: 42 answers fail their derivative check** at the real points (40 at v0.6646). Rechecked in FriCAS,
   18 of them are formally correct (`normalize(D(r, x) - f) = 0`, a branch choice); for the
   other 22, `normalize` does not reach 0 on the nested radicals, so they are unresolved.
 - **One lower-layer soundness bug was found and fixed while doing C2.** `Cancel` over `Q(i)`
@@ -57,7 +62,10 @@ fixed (C0, v0.6642).
   "no". The hunts caught it before release (v0.6644).
 
 **Speed.** The comparison uses the cases both systems close, with each system's own
-integration time (start-up excluded).
+integration time (start-up excluded). **This run's Mathilda timings are not comparable with the
+previous ones.** It shared the machine with a 4-process stress run and a test-suite build, so
+its tail (58 cases over 1 s) is inflated. The paragraphs below are from the 2026-11-21 run. The
+speed item (D6) is re-measured on an idle machine.
 
 - **Mathilda is faster on the typical case.** Its medians are 16–71 ms against FriCAS's
   70–110 ms, and it is faster on 1345 of 1927 cases. FriCAS's timer has a floor of about
@@ -75,7 +83,7 @@ integration time (start-up excluded).
 non-elementarity, except on the elementary-by-construction cases, where it is counted as
 false. Its answers in Ei, li, erf and erfi are verified exactly, because `complexNumeric`
 cannot evaluate them. The FriCAS runs on 256 and 257 are the cached runs of
-2026-11-12/13; 259 ran on 2026-11-20.
+2026-11-12/13; 259 ran on 2026-11-20 and 260 on 2026-11-21 (cached).
 
 **What follows from this.** The improvement plan and its status are in
 [`src/internal/bronstein/BRONSTEIN_PLAN.md`](../src/internal/bronstein/BRONSTEIN_PLAN.md),
