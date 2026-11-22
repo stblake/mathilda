@@ -214,6 +214,27 @@ void test_hs_compile() {
     assert_true("With[{f = Compile[{{v, _Real, 1}}, SphericalBesselJ[5, v]], v = Range[0.1, 30., 0.01]}, f[v] === SphericalBesselJ[5, v]]");
 }
 
+/* FunctionExpand rewrites the six heads by their definitions in BesselJ /
+ * BesselY, which at half-integer order reduce to Sin/Cos. */
+void test_hs_function_expand() {
+    assert_true("(FunctionExpand[SphericalBesselJ[1, z]]) === (-Cos[z]/z + Sin[z]/z^2)");
+    assert_true("(FunctionExpand[SphericalBesselJ[0, z]]) === (Sin[z]/z)");
+    assert_true("(FunctionExpand[SphericalBesselY[2, z]]) === (-3 Cos[z]/z^3 + Cos[z]/z - 3 Sin[z]/z^2)");
+    assert_true("(FunctionExpand[SphericalHankelH2[0, z]]) === (I Cos[z]/z + Sin[z]/z)");
+    assert_true("(FunctionExpand[HankelH1[1/2, z]]) === (-I Sqrt[2/Pi] Cos[z]/Sqrt[z] + Sqrt[2/Pi] Sin[z]/Sqrt[z])");
+    assert_true("(FunctionExpand[HankelH1[nu, z]]) === (BesselJ[nu, z] + I BesselY[nu, z])");
+    assert_true("(FunctionExpand[HankelH2[nu, z]]) === (BesselJ[nu, z] - I BesselY[nu, z])");
+    assert_true("(FunctionExpand[SphericalBesselJ[n, z]]) === (Sqrt[Pi/2] BesselJ[1/2 + n, z]/Sqrt[z])");
+    /* outside FunctionExpand the heads stay as they are */
+    assert_true("Head[SphericalBesselJ[2, z]] === SphericalBesselJ");
+    assert_true("Head[HankelH1[1/2, z]] === HankelH1");
+    /* numerically equal at complex points, including across the cut z < 0 */
+    assert_true("Max[Table[Abs[(FunctionExpand[f[z]] /. z -> p) - f[p]]/Abs[f[p]], "
+                "{f, {SphericalBesselJ[1, #] &, SphericalBesselY[2, #] &, SphericalHankelH1[1, #] &, "
+                "SphericalHankelH2[3, #] &, HankelH1[1/2, #] &, HankelH2[3/2, #] &}}, "
+                "{p, {1.3 + 0.7 I, -2.1 + 0.4 I, -1.7 - 0.9 I, 3.2}}]] < 10^-13");
+}
+
 void test_hs_messages_attributes() {
     test_mute_messages();
     assert_eval_eq("Check[HankelH1[1.], \"failed\"]", "\"failed\"", 0);
@@ -237,6 +258,7 @@ int main() {
     TEST(test_hs_buffers);
     TEST(test_hs_compile);
     TEST(test_hs_messages_attributes);
+    TEST(test_hs_function_expand);
     printf("All Hankel / spherical Bessel tests passed.\n");
     return 0;
 }

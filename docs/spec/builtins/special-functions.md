@@ -4499,6 +4499,15 @@ ones, bottom-up (`src/special_functions/functionexpand.c`):
   `1/2 Sqrt[1 - z] (2 + z) + 3/2 Sqrt[z] ArcSin[Sqrt[z]]`. Unchanged when the
   algorithm declines. Automatic evaluation of `HypergeometricPFQ` is not
   affected.
+- **HankelH1/H2, SphericalBesselJ/Y, SphericalHankelH1/H2** → their
+  definitions: `BesselJ[nu, z] ± I BesselY[nu, z]`, and
+  `Sqrt[Pi/2] z^(-1/2)` times `BesselJ`/`BesselY` (or `J ± I Y`) at order
+  `n + 1/2` (the principal-branch form that pairs with the half-integer Bessel
+  functions, entire for integer `n`). A half-integer order then reduces to
+  `Sin`/`Cos`: `FunctionExpand[SphericalBesselJ[1, z]]` = `-Cos[z]/z +
+  Sin[z]/z^2`, `FunctionExpand[HankelH1[1/2, z]]` = `Sqrt[2/Pi] (Sin[z] - I
+  Cos[z])/Sqrt[z]` (expanded); a symbolic order stays a `BesselJ[1/2 + n, z]`.
+  The heads themselves are unchanged outside `FunctionExpand`.
 - **PolyGamma[n, q]** at a positive rational `q` (v0.6131): integer `q`, every
   order, as `n! ((-1)^(n+1) (Zeta[n+1] - HarmonicNumber[q-1, n+1]))`
   (`2 (9/8 - Zeta[3])` for `PolyGamma[2, 3]`); half-integer `q`, every order;

@@ -179,8 +179,11 @@ static bool fe_root_of_unity(const Expr* w, int64_t* rn, int64_t* rd) {
 }
 
 /* Rule families of the walk: MeijerG; PolyLog/Log at roots of unity (with
- * the PolyGamma closed forms); the PolyGamma closed forms alone. */
-enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_PFQ = 8, FE_ALL = 15 };
+ * the PolyGamma closed forms); the PolyGamma closed forms alone; pFq; the
+ * Hankel / spherical Bessel definitions (FunctionExpand only -- the
+ * definite-integral finalisation keeps a HankelH1 it produced). */
+enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_PFQ = 8, FE_BESSEL = 16,
+       FE_ALL = 31 };
 static Expr* fe_walk(const Expr* e, bool* changed, int which);
 static Expr* fe_expand(const Expr* e);
 static Expr* fe_log_reciprocal(const Expr* e, bool* changed);
@@ -829,6 +832,55 @@ static Expr* fe_cos_gauss(const Expr* e) {
               make_rational(1, 2))));
 }
 
+/* The Hankel and spherical Bessel functions by their definitions in the
+ * cylinder functions (principal branches, DLMF 10.4.3, 10.47.3-6):
+ *
+ *   HankelH1/H2[nu, z]         = BesselJ[nu, z] +- I BesselY[nu, z]
+ *   SphericalBesselJ/Y[n, z]   = Sqrt[Pi/2] z^(-1/2) BesselJ/Y[n + 1/2, z]
+ *   SphericalHankelH1/H2[n, z] = Sqrt[Pi/2] z^(-1/2) (BesselJ +- I BesselY)
+ *
+ * Sqrt[Pi/2] z^(-1/2), not Sqrt[Pi/(2 z)]: the two differ in sign on the cut
+ * z < 0, and z^(-1/2) is the one that pairs with the z^(n + 1/2) inside the
+ * half-integer BesselJ, so an integer-order j_n comes out entire (and agrees
+ * with the numeric kernel, which uses Sqrt[Pi]/Sqrt[2 z]).  A half-integer
+ * order then reduces to Sin/Cos through the evaluator's own BesselJ/BesselY
+ * rules; a symbolic order stays BesselJ[n + 1/2, z].  NULL for any other
+ * node. */
+static Expr* fe_bessel_definition(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2
+        || e->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = e->data.function.head->data.symbol.name;
+    int sign;            /* +1: J + I Y, -1: J - I Y, 0: J alone, 2: Y alone */
+    bool spherical;
+    if (h == SYM_HankelH1)                { sign = 1;  spherical = false; }
+    else if (h == SYM_HankelH2)           { sign = -1; spherical = false; }
+    else if (h == SYM_SphericalBesselJ)   { sign = 0;  spherical = true; }
+    else if (h == SYM_SphericalBesselY)   { sign = 2;  spherical = true; }
+    else if (h == SYM_SphericalHankelH1)  { sign = 1;  spherical = true; }
+    else if (h == SYM_SphericalHankelH2)  { sign = -1; spherical = true; }
+    else return NULL;
+    const Expr* nu = e->data.function.args[0];
+    const Expr* z = e->data.function.args[1];
+    Expr* order = spherical ? fp_eval(fp_fn(SYM_Plus, 2, expr_copy((Expr*)nu), fp_q(1, 2)))
+                            : expr_copy((Expr*)nu);
+    Expr* body;
+    if (sign == 0)
+        body = fp_fn(SYM_BesselJ, 2, order, expr_copy((Expr*)z));
+    else if (sign == 2)
+        body = fp_fn(SYM_BesselY, 2, order, expr_copy((Expr*)z));
+    else
+        body = fp_fn(SYM_Plus, 2,
+                     fp_fn(SYM_BesselJ, 2, expr_copy(order), expr_copy((Expr*)z)),
+                     fp_fn(SYM_Times, 3, fp_i(sign), expr_new_symbol(SYM_I),
+                           fp_fn(SYM_BesselY, 2, order, expr_copy((Expr*)z))));
+    /* The prefactor is distributed over the reduced J/Y so that it meets
+     * their Sqrt[2/Pi] z^(-1/2) and cancels: j_1 = Sin[z]/z^2 - Cos[z]/z. */
+    if (spherical)
+        body = fp_fn(SYM_Times, 3, fp_sqrt(fp_fn(SYM_Times, 2, fp_pi(), fp_q(1, 2))),
+                     fp_pow(expr_copy((Expr*)z), fp_q(-1, 2)), fp_eval(body));
+    return fp_eval(fp_fn(SYM_Expand, 1, fp_eval(body)));
+}
+
 static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
@@ -879,6 +931,7 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
         if (!s) s = fe_log_root(node);
         if (!s) s = fe_pcfd_integer(node);
     }
+    if (!s && (which & FE_BESSEL)) s = fe_bessel_definition(node);
     if (!s && (which & (FE_ROOTS | FE_PGAMMA))) s = fe_polygamma_closed(node);
     if (s) { expr_free(node); node = s; *changed = true; }
     return node;
