@@ -1179,6 +1179,39 @@ static void test_huge_cancel_preserves_normal_identities(void) {
  * half of these shifted identities came out False.  Since v0.596 every rung is
  * climbed on an exact point and the top two decide: at |x| ~ 60 the cancellation
  * needs ~400 bits, so the 200-bit rung still showed the uncancelled value. */
+/* G-pzq-1: a cancellation deeper than the 1000-bit top rung.  Integrate's
+ * Euler-substitution answer for (1 + u)(1 + u + u^2)^(3/2)/(2 u^2), u = E^(x^2)
+ * (257 cM-3-152): E^(x^2) ~ 2^90 under (2 Sqrt[q] - 2 u - 1)^k denominators.
+ * At x ~ -7.9 the residual reads 2^274 at 200/500/1000 bits and only collapses
+ * at 2000; the exact-point climb now doubles past the ladder while the residual
+ * is flat.  Read FALSE before.  Two genuine perturbations stay non-zero. */
+static void test_huge_cancel_beyond_ladder(void) {
+    assert_pzq("ztG = "
+               "(21*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)]))/32 - (-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^2/"
+               "8 + (-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^3/48 - 23/(-128 + 256*(-E^x^2 + Sqrt[1 + E^x^2 "
+               "+ E^(2*x^2)])) + 667/(128 - 512*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)]) + 512*(-E^x^2 + Sqr"
+               "t[1 + E^x^2 + E^(2*x^2)])^2) - 905/(128 - 768*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)]) + 140"
+               "8*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^2 - 256*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^3 "
+               "- 1536*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^4 + 1024*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2"
+               ")])^5) + (2624*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)]))/(128 - 768*(-E^x^2 + Sqrt[1 + E^x^2"
+               " + E^(2*x^2)]) + 1408*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^2 - 256*(-E^x^2 + Sqrt[1 + E^"
+               "x^2 + E^(2*x^2)])^3 - 1536*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^4 + 1024*(-E^x^2 + Sqrt["
+               "1 + E^x^2 + E^(2*x^2)])^5) - (1655*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^2)/(128 - 768*(-"
+               "E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)]) + 1408*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^2 - 256"
+               "*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^3 - 1536*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^4 "
+               "+ 1024*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])^5) - (5*ArcTanh[-E^x^2 + Sqrt[1 + E^x^2 + E^"
+               "(2*x^2)]])/2 - (41*Log[-1 + 2*(-E^x^2 + Sqrt[1 + E^x^2 + E^(2*x^2)])])/32"
+               "; ztf = ((1 + E^x^2)*(1 + E^x^2 + E^(2*x^2))^(3/2)*x)/E^x^2; Null", "Null");
+    assert_pzq("PossibleZeroQ[D[ztG, x] - ztf]", "True");
+    assert_pzq("PossibleZeroQ[D[ztG, x] - ztf + x E^(x^2)/10^6]", "False");
+    assert_pzq("PossibleZeroQ[D[ztG, x] - ztf + 1/10^20]", "False");
+    /* the constant at one point: the rung-1 plateau no longer compares against
+     * the machine residual, and a residual still falling at the top rung is a zero */
+    assert_pzq("PossibleZeroQ[(D[ztG, x] - ztf) /. x -> -791127/100000]", "True");
+    assert_pzq("PossibleZeroQ[Exp[300] + 1 - Exp[300]]", "False");
+    assert_pzq("PossibleZeroQ[Exp[10^4] (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1) + 1]", "False");
+}
+
 static void test_huge_cancel_machine_point_exact_climb(void) {
     assert_pzq("ztF[x_] := -(2 Tanh[x/2])/(-1 + Tanh[x/2]^2) - "
                "(16 Tanh[x/2])/(3 - 6 Tanh[x/2]^2 + 3 Tanh[x/2]^4) - "
@@ -1508,6 +1541,7 @@ int main(void) {
     TEST(test_huge_cancel_genuine_nonzero_stays_false);
     TEST(test_huge_cancel_preserves_normal_identities);
     TEST(test_huge_cancel_machine_point_exact_climb);
+    TEST(test_huge_cancel_beyond_ladder);
     /* Group 22 — magnitudes outside the double range */
     TEST(test_range_tiny_and_huge_constants_nonzero);
     TEST(test_range_differences);

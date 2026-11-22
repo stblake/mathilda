@@ -420,6 +420,24 @@ static void test_kernel_substitution(void) {
     BR_TRUE("brKernelSubstitution[Log[x] Sqrt[Log[1 + x]]/x, x] === None");   /* two kernels */
     BR_TRUE("brKernelSubstitution[E^x Log[x], x] === None");                  /* no radical */
     BR_TRUE("Block[{brOption}, brOption[\"KernelSubstitutionTime\"] = 0; brKernelSubstitution[1/(2 + E^(3 x))^(1/6), x] === None]");
+    /* verified in u by the chain rule: PossibleZeroQ in x read this correct answer
+     * False before G-pzq-1 was fixed (257 cM-3-152, 7.5 s through the tower) */
+    BR_TRUE("With[{f = ((1 + E^x^2) (1 + E^x^2 + E^(2 x^2))^(3/2) x)/E^x^2}, With[{F = brKernelSubstitution[f, x]}, "
+            "F =!= None && PossibleZeroQ[D[F, x] - f]]]");
+}
+
+/* powerBasisInverse: a monomial c y^j read structurally, not after Expand, which
+ * distributes c's x-polynomial (260 two-elem-49: the 6 x 6 system, 2.8 s). */
+static void test_power_basis_inverse_monomial(void) {
+    br_run("pbg = Expand[(1 + x^3)^2 (3 + x^4)^3]; True");
+    BR_TRUE("Trager`Private`powerBasisInverse[2 pbY^5 (1 + x^3)^2 (3 + x^4)^3, pbY, 6, pbg, x] === "
+            "{0, Together[1/(2 (1 + x^3)^2 (3 + x^4)^3 pbg)], 0, 0, 0, 0}");
+    BR_TRUE("Trager`Private`powerBasisInverse[(1 + x) pbY^6, pbY, 6, pbg, x] === PadRight[{Together[1/((1 + x) pbg)]}, 6]");
+    BR_TRUE("With[{v = Trager`Private`powerBasisInverse[1 + pbY, pbY, 3, x, x]}, "
+            "Together[PolynomialRemainder[Expand[(1 + pbY) v . pbY^Range[0, 2]], pbY^3 - x, pbY]] === 1]");
+    BR_TRUE("With[{f = (E^x^2 x^3 (1 + x^3)^(1/3))/Sqrt[3 + x^4] + (E^x^2 x^2 Sqrt[3 + x^4])/(2 (1 + x^3)^(2/3)) + "
+            "E^x^2 x (1 + x^3)^(1/3) Sqrt[3 + x^4]}, With[{F = BronsteinIntegrate[f, x]}, "
+            "!ListQ[F] && PossibleZeroQ[D[F, x] - f]]]");
 }
 
 int main(void) {
@@ -440,6 +458,7 @@ int main(void) {
     test_hom_witness();
     test_exact_support_split();
     test_kernel_substitution();
+    test_power_basis_inverse_monomial();
     BR_DONE("bronstein_phase5_tests");
     return 0;
 }

@@ -489,11 +489,11 @@ brSupportSplitIntegrate[f_, x_Symbol] := Module[{e, r},
   r];
 (* a group undecided: None, so the caller keeps the tower's own (more specific) reason *)
 
-brKernelSubstitution::usage = "brKernelSubstitution[f, x] integrates f = h(theta) D theta, theta the ONE logarithm Log[a] or exponential E^w of f (all exponentials E^(r w) with rational r written as powers of E^(w/d)), h algebraic in u = theta and free of x: the purely algebraic integrand h(u) by Integrate in u (the cascade: Euler substitution, Trager, ...), under brOption[\"KernelSubstitutionTime\"] seconds. An answer G(u) gives F = G(theta), returned only when antiderivativeQ[f, F, x] (the chain rule makes it exact; the check guards the substitution). Otherwise None: a certificate in u is NOT taken as one for f, so the caller's own path decides (D6: speed only).";
+brKernelSubstitution::usage = "brKernelSubstitution[f, x] integrates f = h(theta) D theta, theta the ONE logarithm Log[a] or exponential E^w of f (all exponentials E^(r w) with rational r written as powers of E^(w/d)), h algebraic in u = theta and free of x: the purely algebraic integrand h(u) by Integrate in u (the cascade: Euler substitution, Trager, ...), under brOption[\"KernelSubstitutionTime\"] seconds. An answer G(u) gives F = G(theta), returned only when D[G, u] = h is verified in u (antiderivativeQ and PossibleZeroQ there) and f = h(theta) D theta is confirmed: the chain rule then makes F exact. Otherwise None: a certificate in u is NOT taken as one for f, so the caller's own path decides (D6: speed only).";
 (* u is a fixed private symbol, not Unique[...]: Unique symbols are Temporary, and the
    cascade's stages reject an answer containing a Temporary symbol (an escaped Module
    local), so Integrate[h, u] fell past its 0.01 s Euler substitution to the budget *)
-brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Bronstein`Private`brKu, rules, h0, h, G, F},
+brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Bronstein`Private`brKu, rules, h0, h, G},
   If[!FreeQ[f, Bronstein`Private`brKu], Return[None]];
   If[FreeQ[f, Power[_, _Rational]] || brOption["KernelSubstitutionTime"] <= 0, Return[None]];
   logs = Union[Cases[f, Log[a_] /; !FreeQ[a, x], {0, Infinity}, Heads -> True]];
@@ -524,11 +524,16 @@ brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = 
   G = Quiet[TimeConstrained[Integrate[h, u],
     If[Head[th] === Log, brOption["KernelSubstitutionTime"], brOption["KernelSubstitutionExpTime"]], $Failed]];
   If[G === $Failed || ListQ[G] || !FreeQ[G, Integrate | Inactive], Return[None]];
-  F = G /. u -> th;
-  (* both checks: a form that only the complex-domain test confirms (PossibleZeroQ's
-     real-line false negative on E^x/(1 + E^(3 x))^(1/3)'s ArcTan form, G-pzq-1) is
-     left to the tower path *)
-  If[antiderivativeQ[f, F, x] && TrueQ[Quiet[PossibleZeroQ[D[F, x] - f]]], F, None]];
+  (* verified in u, by the chain rule: f = h(theta) D theta holds by construction
+     (every E^(r w) is theta^(r d), Log[a] is theta), so D[G, u] = h gives
+     D[G(theta), x] = f.  The test in u is small and exact where the test in x is
+     not: on 257 cM-3-152 PossibleZeroQ in x read the correct answer False (huge
+     E^(x^2) cancellation, G-pzq-1) while in u it is True in 0.02 s.  Both the
+     complex-domain and the real-line test must hold in u. *)
+  If[!(antiderivativeQ[h, G, u] && TrueQ[Quiet[PossibleZeroQ[D[G, u] - h]]]), Return[None]];
+  (* the construction itself, checked exactly: f is h(theta) D theta *)
+  If[!TrueQ[Quiet[PossibleZeroQ[f - (h /. u -> th) D[th, x]]]], Return[None]];
+  G /. u -> th];
 
 brExactSupportSplit::usage = "brExactSupportSplit[f, x] tries the partition of the terms of f by their exact set of radicals (brSupportGroups[..., \"Exact\"]) when f has two or more distinct radicals and the transitive support partition has a single group: an answer (verified) or {\"not elementary\", ...} when the split decides, None otherwise (fewer groups, a group undecided, or two or more non-elementary groups left after the merges).";
 brExactSupportSplit[f_, x_Symbol] := Module[{e, ts, rads, r},

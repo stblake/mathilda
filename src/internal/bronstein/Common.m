@@ -21,7 +21,7 @@ brOption["PresentationTime"] = 5;
 brOption["SupportSplitLeaves"] = 20000;
 brOption["SupportMergeTime"] = 4;
 brOption["KernelSubstitutionTime"] = 3;   (* brKernelSubstitution: the algebraic integral in u = theta, theta a logarithm *)
-brOption["KernelSubstitutionExpTime"] = 1.5;   (* ... theta an exponential *)
+brOption["KernelSubstitutionExpTime"] = 0.6;   (* ... theta an exponential: every 257 cM success closes in <= 0.31 s; cM-4-306, which Trager in u needs 2.5 s for, falls to the 1.8 s tower sooner *)
 brOption["ArcTanFormTime"] = 20;
 
 brCatch::usage = "brCatch[expr] evaluates expr and returns its value, or the tragerFail[...] object thrown by any stage inside it (Trager's catchTrager).";

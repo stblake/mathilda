@@ -198,6 +198,9 @@ static const int ZT_OVERFLOW_SHELL_BITS[] = { ZT_NUMERATOR_BITS, 4, 2, 1, 0 };
  * decide_numeric_huge_scale), but never above ZT_CONST_MAX_BITS. */
 #define ZT_CONST_ABS_BITS 1000
 #define ZT_CONST_MAX_BITS 65536
+/* The top precision decide_numeric_huge_scale climbs to on an exact point whose
+ * residual stayed flat over the whole ladder (a cancellation deeper than it). */
+#define ZT_HUGE_EXTEND_MAX_BITS 8000
 
 /* ------------------------------------------------------------------ */
 /*  Forward declarations                                              */
@@ -1498,10 +1501,41 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
             long gained = PRECISION_LADDER[got] - PRECISION_LADDER[got - 1];
             if (ms[got] <= ms[got - 1] - (double)(gained / 2)) top = ZERO_TEST_TRUE;
         }
+        /* The residual did not move at all over the whole ladder: the
+         * cancellation has not STARTED by the top rung (it is deeper than 1000
+         * bits), or the value is genuine.  Keep doubling the precision and
+         * decide on the same evidence -- a zero falls by at least half the bits
+         * added, a genuine value holds.  Sound in both directions: more
+         * precision never invents a zero, and a value that holds stays FALSE.
+         * Measured on 257 cM-3-152 (an Euler-substitution antiderivative with
+         * E^(x^2) ~ 2^90 under nested (2 Sqrt[q] - 2 u - 1)^k denominators, at
+         * x = -7.91): 2^273.9 at 200/500/1000 bits, 2^-330.8 at 2000, 2^-2329
+         * at 4000 -- a zero the ladder read FALSE (G-pzq-1).  Reached only on
+         * an exact point at a huge scale whose residual is flat, so the extra
+         * rungs cost nothing elsewhere. */
+        if (top == ZERO_TEST_FALSE && got == PRECISION_LADDER_LEN - 1 &&
+            fabs(ms[got] - ms[1]) < 2.0) {
+            double mprev = ms[got];
+            long bprev = PRECISION_LADDER[got];
+            for (long b = 2 * bprev; b <= ZT_HUGE_EXTEND_MAX_BITS; b *= 2) {
+                double m = 0.0;
+                ZeroTestResult t2 = evaluate_rung(e, b, &m, NULL,
+                                                  isfinite(scale) ? scale : NAN, NULL, NULL);
+                if (t2 == ZERO_TEST_UNKNOWN) break;
+                if (t2 == ZERO_TEST_TRUE || m <= mprev - (double)((b - bprev) / 2)) {
+                    top = ZERO_TEST_TRUE;
+                    break;
+                }
+                /* moved but not by enough: a genuine value resolving, stop */
+                if (fabs(m - mprev) >= 2.0) break;
+                mprev = m; bprev = b;
+            }
+        }
         expr_free(exact);
         return top;
     }
     bool plateaued = false;
+    double mlast[2] = { NAN, NAN };   /* the residuals of the last two rungs */
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
         /* Reuse the machine-precision operand scale (precision-independent). */
@@ -1516,8 +1550,28 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
          * artifact moved from 2^567 to 2^563 -- the same expression, the same
          * MPFR rungs, a different libm path for Tanh (numeric-tower review G4).
          * Certificates come from positive evidence. */
-        if (m >= prev - 1.0 && (i > 1 || rr == ZERO_TEST_FALSE)) { plateaued = true; break; }
+        /* Only a plateau between two MPFR rungs is evidence.  At rung 1 the
+         * baseline is the machine residual, which a deep cancellation can
+         * UNDER-read (double arithmetic caps it near the scale while the
+         * 200-bit rung, still inside the cancellation, reads as large or
+         * larger): R(-791127/100000) for Integrate's Euler-substitution
+         * answer of (1 + u)(1 + u + u^2)^(3/2)/(2 u^2), u = E^(x^2), is exactly
+         * 0 and read False this way (G-pzq-1).  A genuine huge non-zero still
+         * rejects, one rung later. */
+        if (m >= prev - 1.0 && i > 1) { plateaued = true; break; }
         prev = m;
+        mlast[0] = mlast[1]; mlast[1] = m;
+    }
+    /* Still falling at the top rung, by at least half the bits the last rung
+     * added: a zero, whose cancellation is deeper than the top rung's floor
+     * allows for (the exact-point branch above decides the same way).  Above
+     * the floor is not evidence of a value while the residual still collapses
+     * with precision: R(-791127/100000) fell 273.8 -> -24.5 -> -521.6 at
+     * 200/500/1000 bits, a zero, and read False against the 1000-bit floor
+     * (G-pzq-1).  A genuine value holds once resolved and fails this test. */
+    if (!plateaued && rr == ZERO_TEST_FALSE && isfinite(mlast[0]) && isfinite(mlast[1])) {
+        long gained = PRECISION_LADDER[PRECISION_LADDER_LEN - 1] - PRECISION_LADDER[PRECISION_LADDER_LEN - 2];
+        if (mlast[1] <= mlast[0] - (double)(gained / 2)) rr = ZERO_TEST_TRUE;
     }
     /* A CONSTANT whose residual is still falling at the top rung has not been
      * resolved: the top rung's floor sits at scale * 2^-970, and at a scale of
@@ -1534,6 +1588,11 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
             bool pinned = false;
             ZeroTestResult top = evaluate_rung(e, (long)ceil(want), &m, NULL,
                                                scale, NULL, &pinned);
+            /* the same evidence as above: still falling by half the bits added
+             * over the top ladder rung is a zero, not a value above the floor */
+            if (top == ZERO_TEST_FALSE && isfinite(mlast[1]) &&
+                m <= mlast[1] - (ceil(want) - (double)PRECISION_LADDER[PRECISION_LADDER_LEN - 1]) / 2.0)
+                top = ZERO_TEST_TRUE;
             if (top != ZERO_TEST_UNKNOWN && !pinned) rr = top;
         }
     }

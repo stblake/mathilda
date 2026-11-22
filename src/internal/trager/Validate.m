@@ -75,15 +75,24 @@ powerBasisCoords[p_, y_Symbol, n_Integer, g_] :=
   PadRight[CoefficientList[reduceYDegree[p, y, n, g], y], n];
 
 powerBasisInverse::usage = "powerBasisInverse[q, y, n, g, x] is the coordinate list of 1/q in the power basis 1, y, ..., y^(n-1) of Q(x)[y]/(y^n - g), q a nonzero polynomial in y with coefficients in Q(x). It solves the linear system c.M = e_0 with M the multiplication-by-q matrix. Throws an Unimplemented stop when q is a zero divisor (y^n - g reducible over Q(x)).";
-powerBasisInverse[q_, y_Symbol, n_Integer, g_, x_Symbol] := Module[{M, sol, j, c},
+powerBasisInverse[q_, y_Symbol, n_Integer, g_, x_Symbol] := Module[{M, sol, j, c, k, r},
   (* a denominator free of y, or a monomial c y^j, is inverted directly:
-     1/(c y^j) = y^(n - j)/(c g); the n x n system below is the general case,
-     and on a degree-30 Kummer curve its determinant alone did not finish
-     (G-perf-1) *)
+     y^j = g^k y^r (j = k n + r), and 1/(c y^r) = y^(n - r)/(c g); the n x n
+     system below is the general case, and on a degree-30 Kummer curve its
+     determinant alone did not finish (G-perf-1) *)
   If[FreeQ[q, y], Return[PadRight[{tragerTogether[1/q]}, n]]];
-  If[MatchQ[Expand[q], (c0_. y^j0_.) /; FreeQ[c0, y] && IntegerQ[j0] && 0 < j0 < n],
-    {c, j} = Replace[Expand[q], (c0_. y^j0_.) :> {c0, j0}];
-    Return[ReplacePart[ConstantArray[0, n], (n - j + 1) -> tragerTogether[1/(c g)]]]];
+  (* the monomial read structurally: q/y^j free of y.  Expand[q] is no test --
+     it distributes the x-polynomial of c over the y^j, and 2 y^5 (1 + x^3)^2
+     (3 + x^4)^3 (260 two-elem-49, through the compositum) went to the 6 x 6
+     symbolic system, 2.8 s of a 2.9 s integral *)
+  j = Exponent[q, y];
+  If[IntegerQ[j] && j > 0,
+    c = tragerTogether[q/y^j];
+    If[FreeQ[c, y],
+      {k, r} = QuotientRemainder[j, n];
+      Return[If[r === 0,
+        PadRight[{tragerTogether[1/(c g^k)]}, n],
+        ReplacePart[ConstantArray[0, n], (n - r + 1) -> tragerTogether[1/(c g^(k + 1))]]]]]];
   M = Table[powerBasisCoords[y^k q, y, n, g], {k, 0, n - 1}];
   If[tragerTogether[Det[M]] === 0,
     throwUnimplemented["Trager:reducible-radical", "the denominator is a zero divisor: the radical is reducible"]];
