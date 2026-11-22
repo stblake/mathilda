@@ -212,6 +212,33 @@ void test_th_buffers_compile() {
     assert_true("With[{f = Compile[{{v, _Real, 1}}, EllipticTheta[4, v, 0.6]], v = Range[-5., 5., 0.01]}, f[v] === EllipticTheta[4, v, 0.6]]");
 }
 
+/* Real u and real nome 0 < |q| < 1 at arbitrary precision: theta_1..4 (and the
+ * u-derivatives) are real for q > 0, and for q < 0 theta_3/theta_4 are real
+ * while theta_1/theta_2 are e^(i pi/4) times a real number.  The tau route
+ * used to leave a ~1e-49 imaginary rounding ball on the real ones. */
+void test_th_real_axis() {
+    assert_true("Head[EllipticTheta[1, 0.64`30, 0.022`30]] === Real");
+    assert_true("Head[EllipticTheta[2, 0.64`30, 0.022`30]] === Real");
+    assert_true("Head[N[EllipticTheta[1, 64/100, 22/1000], 30]] === Real");
+    assert_true("Head[EllipticTheta[4, 0.64`30, 0.9`30]] === Real");
+    assert_true("Head[EllipticThetaPrime[1, 0.64`30, 0.022`30]] === Real");
+    assert_true("Head[EllipticThetaPrime[2, 1.3`30, 0.5`30]] === Real");
+    assert_true("Head[EllipticTheta[3, 0.64`30, -0.022`30]] === Real");
+    assert_true("Head[EllipticThetaPrime[4, 0.64`30, -0.4`30]] === Real");
+    assert_true("Precision[EllipticTheta[1, 0.64`30, 0.022`30]] >= 29");
+    /* the value is unchanged: the real part of the old answer */
+    assert_true("Abs[EllipticTheta[1, 0.64`30, 0.022`30] - "
+                "0.4596436778681419226530447224373653973296`30] < 10^-28");
+    /* q < 0: theta_1, theta_2 = e^(i pi/4) r, equal real and imaginary parts */
+    assert_true("With[{v = EllipticTheta[1, 0.64`30, -0.022`30]}, "
+                "Head[v] === Complex && Re[v] == Im[v] && "
+                "Abs[Re[v] - 0.32501716155008816759114648453`30] < 10^-28]");
+    assert_true("With[{v = EllipticThetaPrime[2, 0.64`30, -0.3`30]}, Re[v] == Im[v]]");
+    assert_true("With[{v = EllipticTheta[2, 0.64, -0.022]}, Re[v] == Im[v]]");
+    /* complex q keeps its genuine imaginary part */
+    assert_true("Im[EllipticTheta[1, 0.64`30, 0.3`30 + 0.1`30 I]] != 0");
+}
+
 void test_th_attributes() {
     assert_eval_eq("Attributes[EllipticTheta]", "{Listable, NHoldFirst, NumericFunction, Protected}", 0);
     assert_eval_eq("Attributes[EllipticThetaPrime]", "{Listable, NHoldFirst, NumericFunction, Protected}", 0);
@@ -229,6 +256,7 @@ int main() {
     TEST(test_th_derivative);
     TEST(test_th_buffers_compile);
     TEST(test_th_attributes);
+    TEST(test_th_real_axis);
     printf("All EllipticTheta tests passed.\n");
     return 0;
 }

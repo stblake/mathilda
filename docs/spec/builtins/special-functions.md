@@ -3919,6 +3919,14 @@ principal root. `EllipticThetaPrime[a, u, q]` is the `u`-derivative;
   0.99`): median 0.2-1 ulp, max 95 ulp (complex `q`); `|q| > 0.95` max 0.7 ulp.
   The reference system loses this in machine precision: it prints
   `EllipticThetaPrime[4, 0.7, 0.99] = 6.7*10^-16` for the true `5.24*10^-30`.
+- **Real arguments.** For real `u` and real `0 < |q| < 1` every series term is
+  real apart from the `q^(1/4)` of `theta_1`/`theta_2`, so for `q > 0` all four
+  functions (and their derivatives) are `Real`, and for `q < 0` `theta_3`/`theta_4`
+  are `Real` and `theta_1`/`theta_2` are `e^(i Pi/4)` times a real number (equal
+  real and imaginary parts). The arb result is rotated onto that axis and its
+  imaginary rounding ball dropped only when it contains zero, at full precision:
+  `EllipticTheta[1, 0.64`30, 0.022`30]` is `0.4596436778681419226530447224`30.`
+  (it carried a `-6.8*10^-49 I` residue).
 - **Derivatives.** `D[EllipticTheta[a, u, q], u] = EllipticThetaPrime[a, u, q]`;
   the other partials stay inert `Derivative` forms (as the reference).
 - **Performance** (2.2 GHz Intel): scalar 0.5 µs (wolframscript 4.0 µs, mpmath

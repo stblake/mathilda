@@ -1664,6 +1664,48 @@ bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, d
  * root); the derivative from acb_modular_theta_jet, divided by pi.
  * acb_modular_theta reduces tau to the fundamental domain, so |q| -> 1 costs
  * no series length. W encodes a + 10 prime. */
+/* Remove the rounding ball the tau route leaves on a value whose phase is known
+ * exactly.  For real u and real q with 0 < |q| < 1 every term of the four
+ * series is real apart from the prefactor q^(1/4) of theta_1 and theta_2:
+ *   theta_3, theta_4 = 1 +- 2 Sum q^(n^2) cos(2 n u)             (real),
+ *   theta_1 = 2 q^(1/4) Sum (-1)^n q^(n(n+1)) sin((2n+1) u),
+ *   theta_2 = 2 q^(1/4) Sum        q^(n(n+1)) cos((2n+1) u),
+ * and n(n+1) is even, so q^(n(n+1)) = |q|^(n(n+1)) is real for either sign of
+ * q.  The u-derivative keeps the same structure.  So for q > 0 all four are
+ * real, and for q < 0 theta_1/theta_2 are e^(i pi/4) times a real number (the
+ * principal q^(1/4) = |q|^(1/4) e^(i pi/4), which is what tau = log(q)/(i pi)
+ * selects).  Rotate onto the real axis, drop the imaginary part only when the
+ * ball contains zero (so an unexpected genuine imaginary part is kept), and
+ * rotate back. */
+static void nb_theta_real_axis(acb_t res, int a, const acb_t u, const acb_t q, slong prec) {
+    if (!acb_is_real(u) || !acb_is_real(q) || !acb_is_finite(res)) return;
+    const arb_struct* qr = acb_realref(q);
+    if (arb_contains_zero(qr)) return;
+    arb_t aq; arb_init(aq);
+    arb_abs(aq, qr);
+    arb_sub_ui(aq, aq, 1, prec);
+    int inside = arb_is_negative(aq);                /* |q| < 1 certified */
+    arb_clear(aq);
+    if (!inside) return;
+    if (arb_is_positive(qr) || a == 3 || a == 4) {
+        if (arb_contains_zero(acb_imagref(res))) arb_zero(acb_imagref(res));
+        return;
+    }
+    /* q < 0, theta_1 / theta_2: res = e^(i pi/4) r with r real. */
+    acb_t w, rot;
+    acb_init(w); acb_init(rot);
+    arb_set_ui(acb_realref(rot), 2);
+    arb_rsqrt(acb_realref(rot), acb_realref(rot), prec);   /* 1/sqrt(2) */
+    arb_neg(acb_imagref(rot), acb_realref(rot));           /* e^(-i pi/4) */
+    acb_mul(w, res, rot, prec);
+    if (arb_contains_zero(acb_imagref(w))) {
+        arb_zero(acb_imagref(w));
+        acb_conj(rot, rot);                                 /* e^(+i pi/4) */
+        acb_mul(res, w, rot, prec);
+    }
+    acb_clear(w); acb_clear(rot);
+}
+
 static void nb_theta(acb_t res, const acb_t u, const acb_t q, const acb_t W, slong prec) {
     slong code = arf_get_si(arb_midref(acb_realref(W)), ARF_RND_NEAR);
     int a = (int)(code % 10), prime = (int)(code / 10);
@@ -1684,6 +1726,7 @@ static void nb_theta(acb_t res, const acb_t u, const acb_t q, const acb_t W, slo
     if (prime) acb_div(res, res, pi, prec);
     _acb_vec_clear(t, 8);
     acb_clear(tau); acb_clear(z); acb_clear(pi);
+    nb_theta_real_axis(res, a, u, q, prec);
 }
 
 Expr* flint_num_theta(int a, int prime, const Expr* u, const Expr* q) {

@@ -69,6 +69,10 @@ static tcx tcos(tcx z) { return tc(cos(z.r) * cosh(z.i), -sin(z.r) * sinh(z.i));
 /* principal q^(1/4) */
 static tcx tqrt4(tcx q) {
     double m = pow(tabs(q), 0.25), a = 0.25 * atan2(q.i, q.r);
+    /* q < 0: exactly e^(i pi/4) |q|^(1/4), so theta_1/theta_2 at real u keep
+     * equal real and imaginary parts (cos and sin of the rounded pi/4 differ
+     * in the last bit) */
+    if (q.i == 0.0 && q.r < 0.0) return tc(m * 0.70710678118654752440, m * 0.70710678118654752440);
     return tc(m * cos(a), m * sin(a));
 }
 
