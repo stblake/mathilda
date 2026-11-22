@@ -632,6 +632,33 @@ static void test_dot_infix(void) {
     printf("PASS: Dot prints infix with precedence-aware parentheses\n");
 }
 
+/* PatternTest[p, test] prints infix as p?test, at the parser's PatternTest
+ * level: a compound pattern or test is parenthesised and the text reads back
+ * to the same tree (in both OutputForm and InputForm). */
+static void test_patterntest_infix(void) {
+    assert_eval_eq("k[x_?EvenQ] := 1; DownValues[k]", "{HoldPattern[k[x_?EvenQ]] :> 1}", 0);
+    assert_eval_eq("ToString[DownValues[k], InputForm]",
+                   "\"{HoldPattern[k[x_?EvenQ]] :> 1}\"", 0);
+    assert_eval_eq("Hold[x_?(# > 0 &)]", "Hold[x_?(#1 > 0 &)]", 0);
+    assert_eval_eq("Hold[_?NumericQ]", "Hold[_?NumericQ]", 0);
+    assert_eval_eq("Hold[(a | b)?f]", "Hold[(a | b)?f]", 0);
+    assert_eval_eq("PatternTest[x_, EvenQ]", "PatternTest[Pattern[x, Blank[]], EvenQ]", 1);
+    static const char* pats[] = {
+        "x_?EvenQ", "x_?(# > 0 &)", "_?NumericQ", "x:_?EvenQ", "(x_?EvenQ)?OddQ",
+        "x_Integer?Positive", "f[x_?EvenQ, y__?(Length[{##}] > 1 &)]", "x_?g[1]",
+        "(a | b)?f", "PatternTest[x_, a | b]", "PatternTest[a + b, f]",
+        "PatternTest[x_, a -> b]", "PatternTest[x_, a b]", "PatternTest[-x, f]",
+        "PatternTest[x^2, f]", "PatternTest[x_, -f]", "x__?EvenQ /; True",
+    };
+    for (size_t i = 0; i < sizeof(pats) / sizeof(pats[0]); i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf,
+                 "With[{p = Hold[%s]}, ToExpression[ToString[p, InputForm]] === p]", pats[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    printf("PASS: PatternTest prints infix and round-trips\n");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -652,6 +679,7 @@ int main() {
     TEST(test_quotient_denominator_parenthesised);
     TEST(test_inputform_real_roundtrip);
     TEST(test_dot_infix);
+    TEST(test_patterntest_infix);
 #ifdef USE_MPFR
     TEST(test_mpfr_display_digits);
 #endif

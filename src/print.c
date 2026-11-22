@@ -203,6 +203,9 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_Rule || head == SYM_RuleDelayed) return 1500;
     if (head == SYM_DirectedEdge || head == SYM_UndirectedEdge) return 1500;
     if (head == SYM_Condition) return 1700;
+    /* p?test, at the parser's PatternTest level: looser than application
+     * and the atomic blank forms (x_, _h), tighter than every other infix. */
+    if (head == SYM_PatternTest && e->data.function.arg_count == 2) return 7900;
     if (head == SYM_Alternatives) return 2300;
     if (head == SYM_StringExpression) return 2100;   /* a ~~ b, below `|` */
     if ((head == SYM_Repeated || head == SYM_RepeatedNull) &&
@@ -1967,6 +1970,16 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("[");
             print_standard(e->data.function.args[0], 0);
             printf(", <>]");
+        }
+        else if (head == SYM_PatternTest && e->data.function.arg_count == 2) {
+            /* PatternTest[p, test] -> p?test. `?` groups to the left, so the
+             * pattern side prints at the operator's own level and the test at
+             * one above it: a compound test such as a pure function prints
+             * parenthesised, x_?(#1 > 0 & ), and the text re-reads to the
+             * same tree. */
+            print_standard(e->data.function.args[0], my_prec);
+            printf("?");
+            print_standard(e->data.function.args[1], my_prec + 1);
         }
         else if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
                  e->data.function.args[0]->type == EXPR_SYMBOL &&
