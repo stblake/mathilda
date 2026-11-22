@@ -53,9 +53,26 @@ denominatorsPrimeToQ[expr_, p_Integer] :=
 nonzeroModQ::usage = "nonzeroModQ[c, p] is True when the rational number c is nonzero modulo p (p-integral by assumption).";
 nonzeroModQ[c_, p_Integer] := gfMod[c, p] =!= 0;
 
+goodPrimeInvariants::usage = "goodPrimeInvariants[ctx] is the characteristic-0 data goodPrime tests at every prime: <|\"data\" -> the expressions whose denominators must be prime to p, \"nonzero\" -> the integers / rationals that must be nonzero mod p (leading coefficients of G and Bp, the discriminant of Gs Bp with Gs the squarefree part of G, the resultant of Bp and Ep), \"discMu\" -> the discriminant of the residue field's minimal polynomial (1 over Q)|>. Computed once per component (cached on the data), not once per prime: the search tries ~100 primes on a cube-root curve over Q(w) (cM-4-306).";
+goodPrimeInvariants[ctx_Association] := Module[
+  {B = ctx["B"], F = ctx["F"], x, G, Bp = ctx["Bp"], Ep = ctx["Ep"], key, Gs, r},
+  x = B["x"]; G = B["G"];
+  key = Hash[{G, Bp, Ep, ctx["N"], ctx["residues"], Lookup[ctx, "facs", {}], If[F["Type"] === "NF", F["mu"], 0]}];
+  r = Lookup[$goodPrimeInvariants, key, None];
+  If[r =!= None, Return[r, Module]];
+  Gs = Together[G/PolynomialGCD[G, D[G, x]]];
+  r = <|"data" -> {G, ctx["N"], Ep, Bp, ctx["residues"], Lookup[ctx, "facs", {}], If[F["Type"] === "NF", F["mu"], 0]},
+    "nonzero" -> {Coefficient[G, x, Exponent[G, x]], Coefficient[Bp, x, Exponent[Bp, x]],
+                  Discriminant[Expand[Gs Bp], x], Resultant[Bp, Ep, x]},
+    "discMu" -> If[F["Type"] === "NF", Discriminant[F["mu"], F["t"]], 1]|>;
+  If[Length[$goodPrimeInvariants] > 64, $goodPrimeInvariants = <||>];
+  $goodPrimeInvariants[key] = r;
+  r];
+$goodPrimeInvariants = <||>;
+
 goodPrime::usage = "goodPrime[ctx, p] tests the prime p for good reduction of the component data ctx (keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"Ep\", \"Bp\"; an optional \"goodQ\" -> Function[{p, rho}, ...] adds the caller's own conditions). It returns <|\"p\" -> p, \"rho\" -> rho, \"a\" -> a|> (rho the image of the residue-field generator, None over Q; a the centre of the reduced frame mod p: the image of ctx[\"alpha\"] when given, else a root of G mod p of multiplicity prime to m) or None.";
 goodPrime[ctx_Association, p_Integer] := Module[
-  {B = ctx["B"], x, m, G, Gs, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, rhos, alphas, a},
+  {B = ctx["B"], x, m, G, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, rhos, alphas, a, inv},
   x = B["x"]; m = B["m"]; G = B["G"];
   If[Mod[m, p] === 0, Return[None]];
   (* constant field Q(i) (Phase 4.1b): reduction needs a prime of Z[i] of
@@ -64,18 +81,17 @@ goodPrime[ctx_Association, p_Integer] := Module[
   (* radical constants (Phase 4.3b): p needs a prime of degree 1 of the
      constant field (gfConstRoot), through which gfMod reduces them *)
   If[tragerAlgConstants =!= {} && gfConstRoot[p] === None, Return[None]];
-  If[!denominatorsPrimeToQ[{G, ctx["N"], Ep, Bp, ctx["residues"], Lookup[ctx, "facs", {}],
-        If[F["Type"] === "NF", F["mu"], 0]}, p], Return[None]];
-  Gs = Together[G/PolynomialGCD[G, D[G, x]]];
-  If[!nonzeroModQ[Coefficient[G, x, Exponent[G, x]], p], Return[None]];
-  If[!nonzeroModQ[Coefficient[Bp, x, Exponent[Bp, x]], p], Return[None]];
-  If[!nonzeroModQ[Discriminant[Expand[Gs Bp], x], p], Return[None]];
-  If[!nonzeroModQ[Resultant[Bp, Ep, x], p], Return[None]];
+  inv = goodPrimeInvariants[ctx];
+  If[!denominatorsPrimeToQ[inv["data"], p], Return[None]];
+  (* the residue field needs a prime of degree 1 over p: the commonest reason a
+     prime fails, so it is tested before the discriminants *)
+  If[F["Type"] === "NF",
+    If[!nonzeroModQ[inv["discMu"], p], Return[None]];
+    lin = Select[FactorList[gfMod[F["mu"], p], Modulus -> p], Exponent[#[[1]], F["t"]] === 1 &];
+    If[lin === {}, Return[None]]];
+  If[!AllTrue[inv["nonzero"], nonzeroModQ[#, p] &], Return[None]];
   If[curveGenus[m, G, x, p] =!= ctx["genus"], Return[None]];
   If[F["Type"] === "NF",
-    If[!nonzeroModQ[Discriminant[F["mu"], F["t"]], p], Return[None]];
-    lin = Select[FactorList[gfMod[F["mu"], p], Modulus -> p], Exponent[#[[1]], F["t"]] === 1 &];
-    If[lin === {}, Return[None]];
     rhos = gfMod[-Coefficient[#[[1]], F["t"], 0] PowerMod[Coefficient[#[[1]], F["t"], 1], -1, p], p] & /@ lin;
     (* a field containing i ("I" -> rep(t)): t -> rho must send i where gfMod
        sends the literal I, rep(rho) = gfSqrtMinusOne[p], or the data would be

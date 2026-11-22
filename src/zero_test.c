@@ -2521,8 +2521,38 @@ static bool zt_near_cut_line(const Expr* b, long bits, double gap, int axis, boo
     return near;
 }
 
+/* The machine pre-read: is b plainly off its cut line (or real-computed on
+ * the real axis, already its principal value)?  A value read in doubles that is
+ * more than 2^-30 (relative) from the line cannot be rounding noise on it, so
+ * the 200-bit read is skipped -- an answer with ~200 cut functions paid it at
+ * every point (cM-4-306's check, 0.57 s -> 0.85 s).  A failed or non-finite
+ * read decides nothing. */
+static bool zt_plainly_off_cut(const Expr* b, int axis, bool neg) {
+    Expr* v = numericalize_at(b, 53);
+    if (!v) return false;
+    Expr* re = NULL; Expr* im = NULL;
+    double r = 0.0, i = 0.0;
+    bool off = false;
+    if (is_complex(v, &re, &im)) {
+        if (expr_signed_double(re, &r) && expr_signed_double(im, &i) && isfinite(r) && isfinite(i)) {
+            double tang = fabs(axis == ZT_AXIS_REAL ? r : i);
+            double norm = fabs(axis == ZT_AXIS_REAL ? i : r);
+            off = norm > ldexp(tang, -30) || (neg && r > 0.0);
+        }
+    } else if (expr_signed_double(v, &r) && isfinite(r)) {
+        /* a real machine value says nothing about the noise the MPFR rungs
+         * will carry (1 + I Sqrt[-3.77] is exactly -0.94 in doubles, complex
+         * at 200 bits): it is off only a half-line it is not on, or off an
+         * imaginary-axis cut */
+        off = (neg && r > 0.0) || (axis == ZT_AXIS_IMAG && r != 0.0);
+    }
+    expr_free(v);
+    return off;
+}
+
 static int zt_cut_class(const Expr* b, int axis, bool neg) {
     if (!b || b->type != EXPR_FUNCTION) return ZT_CUT_NONE;
+    if (zt_plainly_off_cut(b, axis, neg)) return ZT_CUT_NONE;
     if (!zt_near_cut_line(b, 200, 150.0, axis, neg)) return ZT_CUT_NONE;
     /* rounding noise falls with the precision; a genuine tiny component does not */
     if (zt_near_cut_line(b, 400, 340.0, axis, neg)) return ZT_CUT_REAL;
