@@ -348,6 +348,14 @@ static double dd_deadline = HUGE_VAL;
 #define DD_CASCADE_CANDIDATE_SECONDS 0.5
 static double dd_candidate_budget = 0.0;
 
+/* ... and a TOTAL for the stage, CPU seconds over all candidates of the
+ * outermost cascade frame.  Per candidate alone, many kernels times two passes
+ * times the load-scaled backstop added up: 85 s on 259 tan-elem-32, a large
+ * trig integrand RischTranscendental closes in 4.7 s, before the cascade
+ * reached it.  CPU time, so the cutoff does not move with the machine's load. */
+#define DD_CASCADE_TOTAL_SECONDS 3.0
+static double dd_stage_cpu_deadline = HUGE_VAL;
+
 /* The candidate budget is CPU time of this process, not elapsed time.  Measured
  * in elapsed time it made the ANSWER depend on what else the machine was
  * running: Integrate[2/(2 + a + E^(2 x))^(1/3), x] closes here in 0.16 s with a
@@ -808,6 +816,7 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     /* Pass 1: the cheap, quiet, branch-correct direct quotient. */
     for (size_t i = 0; i < kernels.n && !result; i++) {
         if (outer_deadline < HUGE_VAL && dd_mono_seconds() >= outer_deadline) break;
+        if (per_candidate && dd_cpu_seconds() >= dd_stage_cpu_deadline) break;
         DD_CANDIDATE_BEGIN();
         result = try_direct_kernel(f, x, kernels.items[i]);
         DD_CANDIDATE_END();
@@ -820,6 +829,7 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     if (!result && use_eliminate && outermost)
         for (size_t i = 0; i < kernels.n && !result; i++) {
             if (outer_deadline < HUGE_VAL && dd_mono_seconds() >= outer_deadline) break;
+            if (per_candidate && dd_cpu_seconds() >= dd_stage_cpu_deadline) break;
             DD_CANDIDATE_BEGIN();
             result = try_eliminate_kernel(f, x, kernels.items[i]);
             DD_CANDIDATE_END();
@@ -850,7 +860,7 @@ Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
     /* Explicit Method -> "DerivativeDivides": direct strategy, then the
      * thorough Eliminate/Solve branch-search, no per-candidate budget (reset in
      * case a timeout unwound a cascade call before it restored it). */
-    if (dd_depth == 0) { dd_candidate_budget = 0.0; dd_cand_cpu_deadline = HUGE_VAL; }
+    if (dd_depth == 0) { dd_candidate_budget = 0.0; dd_cand_cpu_deadline = HUGE_VAL; dd_stage_cpu_deadline = HUGE_VAL; }
     return dd_core(f, x, true, NULL);
 }
 
@@ -862,7 +872,9 @@ static Expr* dd_cascade(Expr* f, Expr* x, bool use_eliminate) {
     dd_cand_cpu_deadline = HUGE_VAL;   /* a timeout may have unwound a candidate */
     double saved = dd_candidate_budget;
     dd_candidate_budget = DD_CASCADE_CANDIDATE_SECONDS;
+    dd_stage_cpu_deadline = dd_cpu_seconds() + DD_CASCADE_TOTAL_SECONDS;
     Expr* r = dd_core(f, x, use_eliminate, NULL);
+    dd_stage_cpu_deadline = HUGE_VAL;
     dd_candidate_budget = saved;
     return r;
 }

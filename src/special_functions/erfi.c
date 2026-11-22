@@ -478,6 +478,23 @@ static Expr* erfi_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
 /* Erfi[z]                                                            */
 /* ------------------------------------------------------------------ */
 
+/* The argument divided by I when it is an exact pure-imaginary multiple b I z (b a
+ * nonzero exact rational, z possibly absent): Complex[0, b] itself, or a Times
+ * whose leading factor is one.  NULL otherwise ((1 + I) x is left alone).  Used
+ * for Erfi[b I z] = I Erf[b z], as the reference evaluates it: without it
+ * Erf[(-I/2) (2 + 2 x)] beside Erfi[1 + x] in an antiderivative never combined. */
+static Expr* erfi_imaginary_quotient(const Expr* e) {
+    const Expr* c = e;
+    if (e->type == EXPR_FUNCTION && erfi_is_symbol(e->data.function.head, "Times") && e->data.function.arg_count >= 2)
+        c = e->data.function.args[0];
+    Expr *re, *im;
+    if (!is_complex((Expr*)c, &re, &im)) return NULL;
+    if (erfi_is_inexact(re) || erfi_is_inexact(im)) return NULL;
+    if (!(re->type == EXPR_INTEGER && re->data.integer == 0)) return NULL;
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ make_complex(expr_new_integer(0), expr_new_integer(-1)), expr_copy((Expr*)e) }, 2));
+}
+
 static Expr* erfi_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
@@ -552,6 +569,16 @@ static Expr* erfi_one_arg(Expr* arg) {
                 }
             }
 #endif
+        }
+    }
+
+    /* 5a. Erfi[b I z] = I Erf[b z] for an exact pure-imaginary multiple. */
+    {
+        Expr* w = erfi_imaginary_quotient(arg);
+        if (w) {
+            Expr* inner = expr_new_function(expr_new_symbol(SYM_Erf), &w, 1);
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ make_complex(expr_new_integer(0), expr_new_integer(1)), inner }, 2));
         }
     }
 

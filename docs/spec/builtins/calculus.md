@@ -1665,6 +1665,24 @@ monotonically down.
   ExpIntegralEi[2 Log[x]]`. Both sub-integrals run with the heavy tail stages suppressed;
   the answer is accepted only on `PossibleZeroQ[D[F, x] - f]`.
 
+  **Exponential spelling and `Log` by parts with `V = x` (v0.6691).** Stage "15c
+  ExpRewrite" runs after `SpecialByParts` and has two routes:
+  - A hyperbolic integrand is integrated once as `Expand[Together[TrigToExp[f]]]`.
+    `x^2 Tanh[x^2]/(1 + Tanh[x^2])` is `x^2/2 - x^2 E^(-2 x^2)/2`, which gives an `Erf`
+    answer, and `Log[1 + x]/(1 + Coth[x])` gives an `ExpIntegralEi` answer.
+  - `c Log[g]`, with g carrying a trig or hyperbolic kernel, is integrated by parts as
+    `c (x Log[g] - Integrate[x g'/g, x])`. `Log[Tan[x]/x]` leaves `x Csc[x] Sec[x] - 1`,
+    which the polylogarithm ladder closes.
+
+  Each inner integral has a budget (`Integrate`$ExpRewriteBudget`, 1 s), and the answer is
+  accepted only once it is verified against `f`.
+
+  **Linearity and special answers (v0.6691).** When `Linearity`'s term-by-term sum brings in
+  a special function the integrand lacks, the pieces were non-elementary, but their sum may
+  still be elementary. `D[-x E^(2 x + x^2)]` came back with four Erf/Erfi terms. The whole
+  integrand then goes once to the Risch decision: `RischTranscendental`, or `Bronstein` when
+  there is a radical. A verified answer with no special head replaces the special one.
+
   **`Log` times a trig/hyperbolic kernel (as of v0.343).** A `LogByParts` stage sits
   after the cheap elementary stages (`DerivativeDivides` / `RischTranscendental` /
   `CRCTable`) and before the `ParallelMixedTower` / `ParallelMixedSpecial` tail:
@@ -4431,7 +4449,7 @@ the cheap specialised stages (`BronsteinRational`, the linear, quadratic and
 linear-ratio radical stages, `ChebychevAlgebraic`, Fresnel, GammaPower) and before
 the general search stages (the early Risch probe, `Linearity`, `Weierstrass`,
 `DerivativeDivides`, `RischTranscendental`), which on these shapes only grind.
-(Profile stage "15b" is `SpecialByParts`.)
+(Profile stage "15b" is `SpecialByParts`, "15c" `ExpRewrite`.)
 
 **Gates.** Each stage runs only when a cheap structural gate passes.
 `Integrate\`CascadeGateQ["Trager" | "Bronstein", f, x]` exposes the gates:

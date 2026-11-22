@@ -105,8 +105,8 @@ static void test_erf_constant_at_singular_point(void) {
     BR_FALSE("FreeQ[Integrate[(Log[x^2] - 2 Log[x]) Exp[x^2], x], Erfi | Erf]");
     BR_FALSE("Integrate[(Log[x^2] - 2 Log[x]) Exp[x^2], x] === Indeterminate");
     BR_TRUE("With[{F = Integrate`RischTranscendental[(Log[2 x] - Log[x]) Exp[x^2], x]}, "
-            "!FreeQ[F, Erf] && PossibleZeroQ[D[F, x] - (Log[2 x] - Log[x]) Exp[x^2]]]");
-    BR_TRUE("!FreeQ[Integrate`RischTranscendental[c Exp[x^2], x], Erf]");
+            "!FreeQ[F, Erf | Erfi] && PossibleZeroQ[D[F, x] - (Log[2 x] - Log[x]) Exp[x^2]]]");   /* Erfi since Erf[I x] = I Erfi[x] (v0.6691) */
+    BR_TRUE("!FreeQ[Integrate`RischTranscendental[c Exp[x^2], x], Erf | Erfi]");
 }
 
 /* G-core-3: a Throw[..., "PIM"] from the ParallelMixed valuation routines

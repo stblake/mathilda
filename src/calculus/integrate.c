@@ -222,10 +222,33 @@ static bool is_polynomial_in(Expr* f, Expr* x) {
     return ok;
 }
 
+/* Structurally a rational expression in x: every x-dependent subterm is a
+ * Plus, a Times or an integer Power.  Anything else of x (a transcendental
+ * head, a radical, an x-dependent exponent, an unknown function) is an atom to
+ * Together, so the numerator is then never a polynomial in x and the test
+ * below is false anyway; deciding it here skips the Together, which on a
+ * large transcendental integrand ground for the whole budget (259
+ * tan-elem-26: 60 s in stage 02 before any other stage ran). */
+static bool rat_structural_in(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    if (!depends_on_var((Expr*)e, (Expr*)x)) return true;
+    if (head_is((Expr*)e, SYM_Plus) || head_is((Expr*)e, SYM_Times)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!rat_structural_in(e->data.function.args[i], x)) return false;
+        return true;
+    }
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* p = e->data.function.args[1];
+        return (p->type == EXPR_INTEGER || p->type == EXPR_BIGINT) && rat_structural_in(e->data.function.args[0], x);
+    }
+    return false;
+}
+
 /* Test whether `f` is a rational function in `x`: Together[f] must
  * have a non-trivial denominator that is itself polynomial in `x`,
  * with a polynomial numerator. */
 static bool is_rational_in(Expr* f, Expr* x) {
+    if (!rat_structural_in(f, x)) return false;
     Expr* together = internal_together((Expr*[]){expr_copy(f)}, 1);
     Expr* combined = evaluate(together);
     expr_free(together);
@@ -755,6 +778,9 @@ static bool is_rational_trig_in_x(const Expr* e) {
     return false;
 }
 
+static bool lin_special_added(const Expr* r, const Expr* f);
+static Expr* lin_whole_decision(Expr* f, Expr* x, const Expr* special_answer);
+
 static Expr* try_linearity(Expr* f, Expr* x) {
     Expr* target = NULL;                 /* a Plus we own (or borrow from f) */
     Expr* owned  = NULL;                 /* non-NULL when we built `target` */
@@ -835,6 +861,18 @@ static Expr* try_linearity(Expr* f, Expr* x) {
     if (owned) expr_free(owned);
     Expr* r = evaluate(sum);   /* evaluate BORROWS sum */
     expr_free(sum);
+    /* Each term closed, but with a special function the integrand does not
+     * contain: the pieces are non-elementary, and their sum may still be
+     * elementary, the special parts cancelling only up to identities the
+     * evaluator does not apply (Erf[(-I/2) (2 + 2 x)] beside Erfi[1 + x]).
+     * D[-x E^(2 x + x^2)] came back with four Erf/Erfi terms (benchmark 260
+     * one-elem-30).  The whole integrand then goes to the Risch decision once,
+     * under a budget, and its verified elementary answer replaces the special
+     * one; otherwise the special answer stands. */
+    if (r && lin_special_added(r, f)) {
+        Expr* e = lin_whole_decision(f, x, r);
+        if (e) { expr_free(r); return e; }
+    }
     return r;
 }
 
@@ -1135,6 +1173,124 @@ static Expr* try_rischtranscendental_early(Expr* f, Expr* x, bool* completed) {
         return NULL;
     }
     return r;
+}
+
+/* Stage 15c: two rewrites for the special-function tail (Campaign D7, the
+ * cases FriCAS closes with Erf / Ei / PolyLog and the cascade left open).
+ *  (a) A hyperbolic integrand in exponentials: Expand[Together[
+ *      TrigToExp[f]]] is integrated once.  x^2 Tanh[x^2]/(1 + Tanh[x^2]) is
+ *      x^2/2 - x^2 E^(-2 x^2)/2 (an Erf answer), Log[1 + x]/(1 + Coth[x]) is
+ *      Log[1 + x]/2 - Log[1 + x] E^(-2 x)/2 (Ei by parts): no stage reads the
+ *      hyperbolic spelling that way.
+ *  (b) c Log[g], g carrying a trig/hyperbolic kernel, by parts with V = x:
+ *      c (x Log[g] - INT x g'/g).  Log[Tan[x]/x] leaves x Csc[x] Sec[x] - 1,
+ *      which the polylogarithm ladder closes.
+ * Each answer is verified against f (rt_answer_verified); neither rewrite
+ * re-enters itself (a static depth guard). */
+/* A trig (circular) or hyperbolic head of x; hyp_only restricts it to the
+ * hyperbolic ones. */
+static bool exp_rewrite_scan(const Expr* e, const Expr* x, bool hyp_only) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && depends_on_var((Expr*)e, (Expr*)x)) {
+        const char* n = h->data.symbol.name;
+        if (!hyp_only && (n == SYM_Sin || n == SYM_Cos || n == SYM_Tan || n == SYM_Cot || n == SYM_Sec || n == SYM_Csc))
+            return true;
+        if (strcmp(n, "Sinh") == 0 || strcmp(n, "Cosh") == 0 || strcmp(n, "Tanh") == 0 ||
+            strcmp(n, "Coth") == 0 || strcmp(n, "Sech") == 0 || strcmp(n, "Csch") == 0)
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (exp_rewrite_scan(e->data.function.args[i], x, hyp_only)) return true;
+    return false;
+}
+static bool exp_rewrite_has_trighyp(const Expr* e, const Expr* x) { return exp_rewrite_scan(e, x, false); }
+
+static int exp_rewrite_depth = 0;
+
+/* The rewritten integrand runs the whole cascade, so it is capped: a decline
+ * here must stay cheap (Integrate`$ExpRewriteBudget, default 1 s; the closing cases take 0.1-0.4 s). */
+#define EXP_REWRITE_BUDGET_DEFAULT 1.0
+static Expr* exp_rewrite_integrate(Expr* g, Expr* x) {
+    double budget = cascade_budget("Integrate`$ExpRewriteBudget", EXP_REWRITE_BUDGET_DEFAULT);
+    Expr* call = expr_new_function(expr_new_symbol("Integrate"), (Expr*[]){ expr_copy(g), expr_copy(x) }, 2);
+    if (budget > 0)
+        call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
+            call, expr_new_real(budget), expr_new_symbol(SYM_DollarFailed) }, 3);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarFailed) { expr_free(r); return NULL; }
+    return r;
+}
+
+static Expr* exp_rewrite_accept(Expr* F, Expr* f, Expr* x) {
+    if (!F) return NULL;
+    if (result_contains_head(F, "Integrate") || result_is_unresolved(F, "Integrate") ||
+        (F->type == EXPR_FUNCTION && head_is(F, SYM_List)) || !rt_answer_verified(F, f, x)) {
+        expr_free(F);
+        return NULL;
+    }
+    return F;
+}
+
+static Expr* try_exp_rewrite(Expr* f, Expr* x) {
+    if (exp_rewrite_depth > 0 || !exp_rewrite_has_trighyp(f, x) || node_count_capped(f, 200) >= 200)
+        return NULL;
+    Expr* result = NULL;
+    exp_rewrite_depth++;
+    /* (b) c Log[g] by parts, V = x */
+    Expr* logf = NULL; Expr* c = NULL;
+    if (head_is(f, SYM_Log) && f->data.function.arg_count == 1) { logf = f; c = expr_new_integer(1); }
+    else if (head_is(f, SYM_Times)) {
+        size_t nl = 0, li = 0;
+        for (size_t i = 0; i < f->data.function.arg_count; i++) {
+            Expr* a = f->data.function.args[i];
+            if (head_is(a, SYM_Log) && a->data.function.arg_count == 1 && depends_on_var(a, x)) { nl++; li = i; }
+            else if (depends_on_var(a, x)) { nl = 99; break; }
+        }
+        if (nl == 1) {
+            logf = f->data.function.args[li];
+            Expr* q = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_copy(f),
+                expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(logf), expr_new_integer(-1) }, 2) }, 2);
+            c = evaluate(q); expr_free(q);
+        }
+    }
+    if (logf && c && exp_rewrite_has_trighyp(logf, x)) {
+        Expr* g = logf->data.function.args[0];
+        Expr* dg = expr_new_function(expr_new_symbol("D"), (Expr*[]){ expr_copy(g), expr_copy(x) }, 2);
+        Expr* w = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_copy(x), dg,
+            expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2) }, 3);
+        Expr* wt = apply1_eval("Together", w);
+        expr_free(w);
+        Expr* R = wt ? exp_rewrite_integrate(wt, x) : NULL;
+        if (wt) expr_free(wt);
+        if (R && !result_contains_head(R, "Integrate") && !head_is(R, SYM_List)) {
+            Expr* F = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_copy(c),
+                expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_copy(x), expr_copy(logf) }, 2),
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_integer(-1), R }, 2) }, 2) }, 2);
+            Expr* Fe = evaluate(F); expr_free(F);
+            result = exp_rewrite_accept(Fe, f, x);
+        } else if (R) expr_free(R);
+    }
+    if (c) expr_free(c);
+    /* (a) the exponential spelling, for a HYPERBOLIC integrand only: a circular
+     * one is already read over Q(i) by the Risch stage and LogByParts, and the
+     * rewrite then only costs its budget (twice: the fixed point re-enters) */
+    if (!result && exp_rewrite_scan(f, x, true)) {
+        Expr* t = apply1_eval("TrigToExp", f);
+        Expr* tg = t ? apply1_eval("Together", t) : NULL;
+        Expr* g = tg ? apply1_eval("Expand", tg) : NULL;
+        if (t) expr_free(t);
+        if (tg) expr_free(tg);
+        if (g && !exp_rewrite_has_trighyp(g, x) && !expr_eq(g, f)) {
+            Expr* F = exp_rewrite_integrate(g, x);
+            result = exp_rewrite_accept(F, f, x);
+        }
+        if (g) expr_free(g);
+    }
+    exp_rewrite_depth--;
+    return result;
 }
 
 /* Stage 3: CRC integral table.  Loaded from disk on first invocation
@@ -2025,6 +2181,63 @@ static Expr* try_bronstein_cascade(Expr* f, Expr* x, bool* nonelem) {
                                BRONSTEIN_CASCADE_BUDGET_DEFAULT, f, x, nonelem);
 }
 
+/* Special-function heads an elementary antiderivative never needs.  Linearity
+ * asks whether its sum brought one in that the integrand f does not carry. */
+static const char* const LIN_SPECIAL_HEADS[] = {
+    "Erf", "Erfi", "Erfc", "ExpIntegralEi", "ExpIntegralE", "LogIntegral", "PolyLog",
+    "FresnelS", "FresnelC", "SinIntegral", "CosIntegral", "SinhIntegral", "CoshIntegral",
+    "Gamma", "EllipticF", "EllipticE", "EllipticPi", "Hypergeometric2F1", "HypergeometricPFQ"
+};
+
+static bool lin_special_added(const Expr* r, const Expr* f) {
+    for (size_t k = 0; k < sizeof(LIN_SPECIAL_HEADS) / sizeof(LIN_SPECIAL_HEADS[0]); k++)
+        if (result_contains_head(r, LIN_SPECIAL_HEADS[k]) && !result_contains_head(f, LIN_SPECIAL_HEADS[k]))
+            return true;
+    return false;
+}
+
+/* The Risch decision on the whole of a Linearity integrand whose term-by-term
+ * answer is special: RischTranscendental when f has no radical of x (budget
+ * Integrate`$RischEarlyBudget), the Bronstein method when it has one (budget
+ * $BronsteinCascadeBudget).  The answer is taken only when it is verified and
+ * brings in no special head of its own; a certificate, a decline or a timeout
+ * keeps the special answer.  Not re-entered: the Bronstein method integrates
+ * pieces through the cascade, which may reach Linearity again. */
+static int lin_whole_depth = 0;
+
+static Expr* lin_whole_decision(Expr* f, Expr* x, const Expr* special_answer) {
+    (void)special_answer;
+    if (lin_whole_depth > 0) return NULL;
+    bool rad = false, kern = false;
+    risch_early_scan(f, x, &rad, &kern);
+    Expr* r = NULL;
+    lin_whole_depth++;
+    if (!rad && kern) {
+        double budget = cascade_budget("Integrate`$RischEarlyBudget", RISCH_EARLY_BUDGET_DEFAULT);
+        Expr* call = expr_new_function(expr_new_symbol("Integrate`RischTranscendental"),
+            (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+        if (budget > 0)
+            call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
+                call, expr_new_real(budget), expr_new_symbol(SYM_DollarAborted) }, 3);
+        r = evaluate(call);
+        expr_free(call);
+        if (r && ((r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarAborted) ||
+                  result_is_unresolved(r, "Integrate`RischTranscendental") ||
+                  (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                   r->data.function.head->data.symbol.name == SYM_List) ||
+                  !rt_answer_verified(r, f, x))) {
+            expr_free(r);
+            r = NULL;
+        }
+    } else if (rad) {
+        r = try_cascade_decider("Integrate`Bronstein", "$BronsteinCascadeBudget",
+                                BRONSTEIN_CASCADE_BUDGET_DEFAULT, f, x, NULL);
+    }
+    lin_whole_depth--;
+    if (r && lin_special_added(r, f)) { expr_free(r); r = NULL; }
+    return r;
+}
+
 /* ------------------------------------------------------------------------- *
  * Stage: ParallelMixedSpecial.
  * ------------------------------------------------------------------------- *
@@ -2683,6 +2896,53 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
  * and checks every answer by differentiating it. Loaded with try_roach.
  * budget > 0 caps it under TimeConstrained (the automatic cascade). */
 #define ROACH_INDEFINITE_BUDGET_SECONDS 5
+/* An antiderivative's additive constant is arbitrary, and the Meijer-G route
+ * leaves one when its G function reduces through Erfc = 1 - Erf: Integrate[
+ * E^(-1/Log[x])/(x Log[x]^(3/2)), x] came back as -Sqrt[Pi] (-1 + Erf[..]),
+ * where the reference gives -Sqrt[Pi] Erf[..] (Knowles' Erf family).  The
+ * x-free terms of a top-level sum, or of the one sum factor of a product
+ * whose other factors are x-free, are dropped; any other shape is kept.
+ * Takes ownership of r. */
+static Expr* roach_drop_additive_constant(Expr* r, const Expr* x) {
+    Expr* sum = NULL;
+    if (head_is(r, SYM_Plus)) sum = r;
+    else if (head_is(r, SYM_Times)) {
+        for (size_t i = 0; i < r->data.function.arg_count; i++) {
+            Expr* a = r->data.function.args[i];
+            if (!depends_on_var(a, (Expr*)x)) continue;
+            if (sum || !head_is(a, SYM_Plus)) return r;   /* not c * (sum) */
+            sum = a;
+        }
+    }
+    if (!sum) return r;
+    size_t n = sum->data.function.arg_count, keep = 0;
+    for (size_t i = 0; i < n; i++)
+        if (depends_on_var(sum->data.function.args[i], (Expr*)x)) keep++;
+    if (keep == 0 || keep == n) return r;
+    Expr** terms = malloc(keep * sizeof(Expr*));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++)
+        if (depends_on_var(sum->data.function.args[i], (Expr*)x))
+            terms[k++] = expr_copy(sum->data.function.args[i]);
+    Expr* nsum = expr_new_function(expr_new_symbol(SYM_Plus), terms, keep);
+    free(terms);
+    Expr* out;
+    if (sum == r) out = nsum;
+    else {
+        size_t m = r->data.function.arg_count;
+        Expr** fs = malloc(m * sizeof(Expr*));
+        for (size_t i = 0; i < m; i++)
+            fs[i] = r->data.function.args[i] == sum ? nsum : expr_copy(r->data.function.args[i]);
+        out = expr_new_function(expr_new_symbol(SYM_Times), fs, m);
+        free(fs);
+    }
+    Expr* ev = evaluate(out);   /* evaluate BORROWS out */
+    expr_free(out);
+    if (!ev) return r;
+    expr_free(r);
+    return ev;
+}
+
 static Expr* try_roach_indefinite(Expr* f, Expr* x, int budget) {
     if (mathilda_lazy_due(&roach_load)) {
         mth_msg_suppress_push();
@@ -2716,7 +2976,7 @@ static Expr* try_roach_indefinite(Expr* f, Expr* x, int budget) {
         expr_free(r);
         return NULL;
     }
-    return r;
+    return roach_drop_additive_constant(r, x);
 }
 
 static Expr* integrate_definite(Expr* res) {
@@ -3208,7 +3468,7 @@ typedef enum {
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_GRTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_TRAGER, IP_BRONSTEIN, IP_PMT,
-    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_SPECIALBYPARTS, IP_NSTAGES
+    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_SPECIALBYPARTS, IP_EXPREWRITE, IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
@@ -3218,7 +3478,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
     "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
-    "19 RoachMeijerG", "08d RischEarly", "15b SpecialByParts"
+    "19 RoachMeijerG", "08d RischEarly", "15b SpecialByParts", "15c ExpRewrite"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -4210,6 +4470,11 @@ static Expr* builtin_integrate_body(Expr* res) {
              * decision has no closed form for these, the by-parts residual is
              * elementary and often closes with another special function */
             IP_STAGE(IP_SPECIALBYPARTS, integrate_specialbyparts_try(effective_f, x));
+            /* a trig/hyperbolic integrand in exponentials, and Log[g] by parts
+             * with V = x (Campaign D7): Erf/Ei/PolyLog forms the stages above
+             * reach only in the exponential spelling */
+            if (!g_integrate_no_special)
+                IP_STAGE(IP_EXPREWRITE, try_exp_rewrite(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
              * cheaply rather than paying this stage's package load and search

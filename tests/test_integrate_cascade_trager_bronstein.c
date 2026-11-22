@@ -137,9 +137,10 @@ static void test_cascade_keeps_method_results(void) {
     BR_TRUE("TimeConstrained[With[{f = (-2 (1 + E^x) Log[E^x + x] Log[1 + Tanh[x]^2])/(E^x + x) - "
             "(2 Log[E^x + x]^2 Sech[x]^2 Tanh[x])/(1 + Tanh[x]^2)}, With[{F = Integrate[f, x]}, "
             "FreeQ[F, Integrate] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]], 20, False]");
-    /* 55 s in a speculative Linearity split before (non-elementary) */
-    BR_EQ("TimeConstrained[Check[Integrate[x Log[Tan[x]] Tan[x] (1 + Tan[x]^2), x]; \"none\", \"msg\", "
-          "{Integrate::nonelem}], 20, \"timeout\"]", "\"msg\"");
+    /* 55 s in a speculative Linearity split before (non-elementary); since v0.6691 LogByParts
+     * closes it with a verified PolyLog answer (FriCAS's form too; 259 tan-rand-5, Campaign D7) */
+    BR_TRUE("TimeConstrained[With[{f = x Log[Tan[x]] Tan[x] (1 + Tan[x]^2)}, With[{F = Integrate[f, x]}, "
+            "!FreeQ[F, PolyLog] && FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - f]]], 20, False]");
 }
 
 /* C4: Linearity distributes a sum factor before TrigReduce -- the TrigReduce
@@ -190,6 +191,32 @@ static void test_budgets(void) {
             " PossibleZeroQ[D[Integrate[1/(x Sqrt[Log[x]]), x], x] - 1/(x Sqrt[Log[x]])]]");
 }
 
+/* v0.6691: Linearity's special answers for elementary integrands go to the Risch
+ * decision; stage 15c ExpRewrite (hyperbolic integrands in exponentials, c Log[g]
+ * by parts with V = x); Erf/Erfi of an imaginary multiple. */
+static void test_special_answers(void) {
+    /* elementary by construction: no special head in the answer (260 one-elem-30, two-elem-45) */
+    BR_TRUE("With[{f = -E^(2 x + x^2) - E^(2 x + x^2) x (2 + 2 x)}, With[{F = Integrate[f, x]}, "
+            "FreeQ[F, Erf | Erfi] && PossibleZeroQ[D[F, x] - f]]]");
+    BR_TRUE("With[{f = E^(x + x^2) + 1/(1 + x) + E^(x + x^2) x (1 + 2 x)}, With[{F = Integrate[f, x]}, "
+            "FreeQ[F, Erf | Erfi] && PossibleZeroQ[D[F, x] - f]]]");
+    /* a genuinely special sum keeps its special answer */
+    BR_TRUE("!FreeQ[Integrate[E^(x^2) + 1/x, x], Erfi]");
+    /* 15c: Erf, Ei and PolyLog answers FriCAS gives (259 tanh-rand-32, lim-rand-10, tan-rand-11) */
+    BR_TRUE("With[{f = x^2 Tanh[x^2]/(1 + Tanh[x^2])}, With[{F = Integrate[f, x]}, !FreeQ[F, Erf] && PossibleZeroQ[D[F, x] - f]]]");
+    BR_TRUE("With[{f = Log[1 + x]/(1 + Coth[x])}, With[{F = Integrate[f, x]}, !FreeQ[F, ExpIntegralEi] && PossibleZeroQ[D[F, x] - f]]]");
+    BR_TRUE("With[{f = Log[Tan[x]/x]}, With[{F = Integrate[f, x]}, !FreeQ[F, PolyLog] && PossibleZeroQ[D[F, x] - f]]]");
+    /* the imaginary-argument rules */
+    BR_EQ("{Erf[I x], Erfi[I x], Erf[-I x], Erf[2 I]}", "{I Erfi[x], I Erf[x], -I Erfi[x], I Erfi[2]}");
+    BR_TRUE("Head[Erf[(1 + I) x]] === Erf");
+    /* stage 02's rationality probe ran Together on a transcendental integrand for the whole budget
+     * (259 tan-elem-26: a 60 s timeout; RischTranscendental closes it in 0.1 s) */
+    BR_TRUE("TimeConstrained[With[{f = -2*Csc[1 + x]^2*Log[1 + Tan[1 + x]^2] - (E^Tan[1 + x]^2*x*Log[x]*Sec[1 + x]^2)/(1 + Tan[1 + x])^2 + E^Tan[1 + x]^2/(1 + Tan[1 + x]) + (E^Tan[1 + x]^2*Log[x])/(1 + Tan[1 + x]) + (2*E^Tan[1 + x]^2*x*Log[x]*Sec[1 + x]^2*Tan[1 + x])/(1 + Tan[1 + x]) + (4*Sec[1 + x]^2)/(1 + Tan[1 + x]^2)}, With[{F = Integrate[f, x]}, "
+            "FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - f]]], 20, False]");
+    /* the Meijer-G route keeps no additive constant */
+    BR_EQ("Integrate[E^(-1/Log[x])/(x Log[x]^(3/2)), x]", "-Sqrt[Pi] Erf[1/Sqrt[Log[x]]]");
+}
+
 int main(void) {
     br_init();
     test_gates();
@@ -199,6 +226,7 @@ int main(void) {
     test_linearity_distributes_first();
     test_cascade_parameters();
     test_budgets();
+    test_special_answers();
     BR_DONE("integrate_cascade_trager_bronstein_tests");
     return 0;
 }

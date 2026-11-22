@@ -197,6 +197,9 @@ Out[3]= 0.0831078 + 0.142164*I
   `Indeterminate` pass through.
 - Odd symmetry for symbolic arguments: `Erf[-x] = -Erf[x]`,
   `Erf[-2 x] = -Erf[2 x]`.
+- An exact imaginary multiple goes to `Erfi` (v0.6691): `Erf[I x] = I Erfi[x]`,
+  `Erf[-I x] = -I Erfi[x]`, `Erf[2 I] = I Erfi[2]`, and
+  `Erf[(-I/2) (2 + 2 x)] = I Erfi[(-2 - 2 x)/2]`. `Erf[(1 + I) x]` stays.
 - Numeric evaluation:
   - **Machine precision** (real and complex) → the raw-double kernels of
     `src/special_functions/sf_machine_error.c`, shared bit-for-bit by the
@@ -320,6 +323,8 @@ Out[3]= Erfc[-x]
   pass through.
 - Odd symmetry for symbolic arguments: `Erfi[-x] = -Erfi[x]`,
   `Erfi[-2 x] = -Erfi[2 x]`.
+- An exact imaginary multiple goes to `Erf` (v0.6691): `Erfi[I x] = I Erf[x]`,
+  `Erfi[-I x] = -I Erf[x]`.
 - Numeric evaluation (there is no libm/MPFR `erfi`, so the kernels are
   hand-rolled):
   - **Machine precision** → the shared kernels of `sf_machine_error.c`. Real:
