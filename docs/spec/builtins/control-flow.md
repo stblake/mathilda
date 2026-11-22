@@ -1444,8 +1444,9 @@ Out[1]= ok
 
 ## $MessageList
 The messages printed during the current input line, each as `HoldForm[sym::tag]`.
-- The REPL and the notebook pipe reset it to `{}` at each new input line. A
-  `-file` script accumulates it.
+- The REPL and the pipe protocol reset it to `{}` at each new input: every
+  REPL line, every notebook-cell statement and every plain pipe request. A
+  `-file` script accumulates it, since the whole script is one input.
 - A message silenced by `Quiet` or `Off` is not listed.
 - It is an ordinary variable, so `Block[{$MessageList = {}}, ...]` scopes it to
   one evaluation.

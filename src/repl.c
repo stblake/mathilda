@@ -828,6 +828,11 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
         mth_session_set_line(line);
         mth_session_store_in(line, parsed);
         pipe_emit_line(id, line);
+    } else {
+        /* An unnumbered request is still a fresh input: $MessageList covers
+         * one input, so the messages of an earlier request must not leak
+         * into this one (mth_session_set_line does this for a cell). */
+        mth_message_list_reset();
     }
 
     PipeCapture cap;

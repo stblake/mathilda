@@ -324,6 +324,22 @@ def main():
                                        if m["type"] == "expr"), "") or ""),
           str(by_id.get(3))[:300])
 
+    # ---- $MessageList covers one input, in both request modes ---------------
+    by_id, raw, err = session([
+        {"id": 1, "expr": "1/0"},
+        {"id": 2, "expr": "Check[1/0, c]"},
+        {"id": 3, "expr": "$MessageList"},
+        {"id": 4, "expr": "1/0; $MessageList"},
+        {"id": 5, "expr": "1/0", "cell": True},
+        {"id": 6, "expr": "$MessageList", "cell": True},
+    ])
+    check("a plain request starts with an empty $MessageList",
+          payloads(by_id.get(3, [])) == ["{}"], by_id.get(3))
+    check("a plain request's own messages are in its $MessageList",
+          payloads(by_id.get(4, [])) == ["{Power::infy}"], by_id.get(4))
+    check("a cell starts with an empty $MessageList",
+          payloads(by_id.get(6, [])) == ["{}"], by_id.get(6))
+
     # ---- request reader: length and escapes ---------------------------------
     big = "Length[{" + ",".join(["1"] * 20000) + "}]"          # ~40 KB, past the old 10 KB buffer
     by_id, raw, err = session([
