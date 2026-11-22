@@ -1351,6 +1351,25 @@ static void test_signed_zero_cut_redraw(void) {
     /* a cut met by a radicand computed as a REAL is a genuine failure */
     assert_pzq("PossibleZeroQ[Sqrt[x^2] - x]", "False");
     assert_pzq("PossibleZeroQ[Sqrt[(1 - x)/(1 + x)] - Sqrt[1 - x]/Sqrt[1 + x]]", "False");
+    /* The exact radicand on such a cut is REAL, so its principal value is the
+     * expression's: the point is read with b -> Re[b], not re-drawn.  Both
+     * radicands below are exp forms (R1 = Cot, R2 = Tan), and Sqrt[R1] Sqrt[R2]
+     * - 1 is -2 wherever Tan < 0: read TRUE before (correlated noise, then the
+     * re-draw left the interval) */
+    assert_pzq("ztC = (-I - I E^(-2 I x))/(-1 + E^(-2 I x)); "
+               "ztT = (-I + I E^(-2 I x))/(1 + E^(-2 I x)); Null", "Null");
+    assert_pzq("PossibleZeroQ[Sqrt[ztC] Sqrt[ztT] - 1]", "False");
+    assert_pzq("PossibleZeroQ[(Sqrt[ztC] Sqrt[ztT] - 1) UnitStep[-Tan[x]]]", "False");
+    assert_pzq("PossibleZeroQ[ztR6d + Sqrt[ztC] Sqrt[ztT] - 1]", "False");
+    assert_pzq("PossibleZeroQ[Sqrt[ztC] - Sqrt[Cot[x]]]", "True");
+    assert_pzq("PossibleZeroQ[Sqrt[ztC ztT] - 1]", "True");
+    assert_pzq("PossibleZeroQ[Log[ztC] - Log[Cot[x]]]", "True");
+    assert_pzq("PossibleZeroQ[Sqrt[ztC] - I Sqrt[-Cot[x]]]", "False");
+    /* every cut function is snapped, not only the radical: at x < -1 the
+     * 200-bit Sqrt[x] reads eps + 1.94 I, and ArcTan[s] and Log[1 + I s] cross
+     * their cuts together; snapping the Log alone read this residual as Pi */
+    assert_pzq("PossibleZeroQ[D[Integrate[ArcTan[Sqrt[x]], x, Method -> \"Bronstein\"], x] - ArcTan[Sqrt[x]]]", "True");
+    assert_pzq("PossibleZeroQ[D[Integrate[ArcTan[Sqrt[x]], x, Method -> \"Bronstein\"], x] - ArcTan[Sqrt[x]] + 1/10^6]", "False");
 }
 
 static void test_huge_cancel_machine_point_exact_climb(void) {

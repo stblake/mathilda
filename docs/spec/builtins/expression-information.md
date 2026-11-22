@@ -446,14 +446,20 @@ Pipeline (each stage exits early on a definite verdict):
    - **Points on a real-axis branch cut are evidence** like any other. The
      principal values there count, so an identity that fails only on a cut,
      such as `Sqrt[(1 - x)/(1 + x)] (1 + x) - Sqrt[1 - x^2]` on `x < -1`, is
-     `False`. The exception is a radicand or `Log` argument that is real and
-     negative by value but computed through complex arithmetic, so that its
-     imaginary part is rounding noise or a signed zero, and either sign picks a
-     side of the cut. A `False` at such a point is re-drawn. The test reads the
-     point exactly, because a machine-real coordinate keeps machine noise at
-     every rung. `Sqrt[(-I - I E^(-2 I x))/(-1 + E^(-2 I x))]` is
-     `Sqrt[Cot[x]]`, and at `x = -3.26342` its radicand reads
-     `-8.17 + 0.*^-60 I` (v0.6700).
+     `False`. A point is also evidence when the argument of a cut function is
+     real (or, for `ArcTan`, `ArcCot`, `ArcSinh`, `ArcCsch`, purely imaginary) by
+     value but computed through complex arithmetic, so that the component normal
+     to the cut is rounding noise or a signed zero. The test reads that argument
+     on the exact point at 200 and 400 bits. Noise falls with the precision, and
+     the argument is then projected onto the cut line (`b -> Re[b]`, or
+     `b -> I Im[b]`) and the point is read at its principal value. A component
+     that does not fall is genuine; a `False` there is re-drawn. Every cut
+     function is projected, not only the radicals: a noisy `Sqrt[x]` moves
+     `ArcTan[Sqrt[x]]` and `Log[1 + I Sqrt[x]]` across their cuts together, and
+     projecting one of them alone read `D[F] - ArcTan[Sqrt[x]]` as `Pi` at every
+     `x < -1`. With both radicands in exponential form, `Sqrt[Cot[x]]
+     Sqrt[Tan[x]] - 1` is `-2` where `Tan < 0`, and is `False` (v0.6702; `True`
+     before).
    - **Magnitudes are base-2 logarithms**, never doubles: the residual, the
      operand scale and every threshold. Read as a double, a value below
      `2^-1074` was 0 and a scale above `2^1024` was `Inf`, so

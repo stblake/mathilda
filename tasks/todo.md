@@ -81,6 +81,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (v0.6651)
 - [x] D3 M2: the general tower over the curve, weak normaliser, cancellation with a homogeneous solution, least radical exponent (v0.6689)
 - [ ] G-pzq-1: PossibleZeroQ false negatives on correct antiderivatives (E^(Sqrt[1 + x^4] + Log[1 + x]^2) shapes; 6 of the 330 M2 stress cases)
+  - [x] v0.6702: cut points read at their principal value (every cut function projected onto its cut line once the normal component falls with precision); fixes a wrong True v0.6700 introduced ((Sqrt[Cot] Sqrt[Tan] - 1) UnitStep[-Tan] in exp form) and MPFR ArcTan[-2 I] = +Pi/2 - ...
   - [x] v0.6700: a FALSE needs the top two rungs to agree in value (E3-6 ArcTan residual); a signed-zero imaginary radicand on a cut is re-drawn, read on the exact point (E6d-4)
   - [x] v0.6699: cancellation deeper than the 1000-bit rung (cM-3-152: flat at 2^274 to 1000 bits, a zero at 2000) -- exact-point climb doubles past the ladder; rung-1 plateau no longer against the machine residual; still-falling top rung is a zero. The E^(Sqrt[1 + x^4] + Log[1 + x]^2) stress shapes are still to be rechecked
 - [x] Phase R: FriCAS comparison rerun at v0.6688 (4ce8bd355): 256 100%, 259 99%/100% Automatic, 260 99%

@@ -310,6 +310,16 @@ void mpfr_complex_atan(mpfr_t out_re, mpfr_t out_im,
     mpfr_neg(u_im, a, MPFR_RNDN);
     mpfr_ui_sub(v_re, 1, b, MPFR_RNDN);
     mpfr_set(v_im, a, MPFR_RNDN);
+    /* On the cuts (a = 0, |b| > 1) one of 1 -+ i z is a negative real, and the
+     * sign of its zero imaginary part picks the side of Log's cut.  Negating
+     * a = +0 made it -0: ArcTan[0 - 2 I] read +Pi/2 - 0.549 I where the exact
+     * value (and the machine kernel) is -Pi/2 - 0.549 I.  A zero real part
+     * carries no side, so both are +0, the principal Log -- the odd symmetry
+     * ArcTan[-z] = -ArcTan[z] then holds on the cuts as at machine precision. */
+    if (mpfr_zero_p(a)) {
+        mpfr_set_zero(u_im, 1);
+        mpfr_set_zero(v_im, 1);
+    }
     mpfr_complex_log(lr1, li1, u_re, u_im);
     mpfr_complex_log(lr2, li2, v_re, v_im);
     /*  (i/2)((lr1 + li1 i) - (lr2 + li2 i))

@@ -415,6 +415,30 @@ void test_trig_of_inverse_all_pairs() {
                    "{1/u, Sqrt[1 + u^2], 1/u, 1/u}", 0);
 }
 
+/* Arbitrary-precision ArcTan / ArcCot on the cuts agree with the exact value and
+ * the machine kernel (v0.6702): ArcTan[0 - 2 I] read +Pi/2 - 0.549 I at MPFR
+ * precision, its 1 - I z = -1 - 0 I carrying a negated zero into Log. */
+static void test_arctan_mpfr_lower_cut(void) {
+    static const char* cases[] = {
+        "Abs[ArcTan[SetPrecision[-2 I, 40]] - N[ArcTan[-2 I], 40]] < 10^-30",
+        "Abs[ArcTan[SetPrecision[-3 I, 40]] + ArcTan[SetPrecision[3 I, 40]]] < 10^-30",
+        "Abs[ArcTan[SetPrecision[-2 I, 40]] - ArcTan[-2. I]] < 10^-14",
+        "Abs[ArcCot[SetPrecision[I/2, 40]] - N[ArcCot[I/2], 40]] < 10^-30",
+        "Abs[ArcCot[SetPrecision[-I/2, 40]] - N[ArcCot[-I/2], 40]] < 10^-30",
+        "Abs[ArcTan[SetPrecision[2 I, 40]] - N[ArcTan[2 I], 40]] < 10^-30",
+        NULL
+    };
+    for (int i = 0; cases[i]; i++) {
+        Expr* e = parse_expression(cases[i]);
+        Expr* res = evaluate(e);
+        char* s = expr_to_string_fullform(res);
+        ASSERT_MSG(strcmp(s, "True") == 0, "%s: got %s", cases[i], s);
+        free(s);
+        expr_free(res);
+        expr_free(e);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -427,6 +451,7 @@ int main() {
     TEST(test_trig_of_inverse_all_pairs);
     TEST(test_trig_mpfr_complex);
     TEST(test_arc_trig_mpfr_complex);
+    TEST(test_arctan_mpfr_lower_cut);
     TEST(test_elementary_argx);
     TEST(test_trig_degree);
 

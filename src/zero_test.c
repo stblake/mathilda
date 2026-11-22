@@ -2470,79 +2470,192 @@ static bool assignment_conforms(const Expr** facts, size_t nfacts,
 /* The verdict of one substituted point (screen or full ladder). */
 static ZeroTestResult zt_point_verdict_raw(const Expr* sub, bool screen, bool* out_overflow);
 #ifdef USE_MPFR
-/* Is the sample point `sub` (a substituted, unevaluated tree) ON the branch cut
- * of one of its radicals or logarithms in a way no precision can resolve?  That
- * is a radicand / Log argument b that is mathematically real and negative but
- * reaches the cut only through complex arithmetic (TrigToExp forms: (I (E^(-I x)
- * - E^(I x)))/(E^(-I x) + E^(I x)) is Tan[x], real at real x), so its computed
- * imaginary part is rounding noise of either sign at every rung, and Sqrt or Log
- * of it lands on either side of the cut: the point's value is undetermined.
- * Read at 200 bits, such a b has Re b < 0 and 0 < |Im b| < 2^-150 |Re b| (a
- * true zero leaves ~2^-190 relative, or a signed zero).  A b computed as a
- * REAL (no Complex head, as for (1 - x)/(1 + x) at a real x) is not
- * ambiguous: the principal value is defined, and a failure on that cut is a
- * genuine one the sampler must see. */
-static bool zt_on_ambiguous_cut(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
+/* Branch cuts reached through complex arithmetic.  A radicand / Log argument b
+ * that is mathematically real and negative but is computed through complex
+ * arithmetic (TrigToExp forms: (-I - I E^(-2 I x))/(-1 + E^(-2 I x)) is Cot[x],
+ * real at real x) carries an imaginary part that is rounding noise of either
+ * sign at every rung, and Sqrt or Log of the computed value lands on either
+ * side of the cut.  The EXACT b is real, so the expression has a definite
+ * principal value there; the noise only hides it.
+ *
+ * zt_cut_class reads b at the exact point.  At 200 bits: Re b < 0 and |Im b| <
+ * 2^-150 |Re b| (a signed zero included) make it a candidate.  At 400 bits
+ * rounding noise falls with the precision (below 2^-340 |Re b|) and a genuine
+ * tiny imaginary part does not: the first is ZT_CUT_REAL -- b is replaced by
+ * Re[b], whose principal value is the expression's -- the second is
+ * ZT_CUT_AMBIGUOUS, a point no precision resolves, re-drawn on a FALSE.
+ *
+ * Replacing rather than re-drawing matters: on a whole real interval (Cot < 0
+ * above) every point is such a point, and a residual wrong only there --
+ * Sqrt[Cot] Sqrt[Tan] - 1 = -2 where Tan < 0, with both radicands in exp form
+ * -- was invisible, read TRUE by correlated noise or by re-drawing out of the
+ * interval.  A b computed as a REAL (no Complex head, as for (1 - x)/(1 + x))
+ * never qualifies: its principal value is already the computed one. */
+enum { ZT_CUT_NONE, ZT_CUT_REAL, ZT_CUT_AMBIGUOUS };
+
+/* Which line a function's cuts lie on.  ZT_AXIS_REAL: Log, the radicals and
+ * ArcSin / ArcCos / ArcTanh / ArcCoth / ArcCosh / ArcSec / ArcCsc / ArcSech
+ * (cuts on the real axis: the side is the sign of Im).  ZT_AXIS_IMAG: ArcTan /
+ * ArcCot / ArcSinh / ArcCsch (cuts on the imaginary axis: the side is the sign
+ * of Re).  Every one of them must be snapped, not only Log and the radicals:
+ * noise in a shared subexpression (Sqrt[-q] reads eps + 1.94 I) moves ArcTan[s]
+ * and Log[1 + I s] across their cuts TOGETHER, and the residual stays
+ * consistent; snapping one and not the other reads D[F] - f for
+ * F = Integrate[ArcTan[Sqrt[x]], x] as Pi at every x < -1. */
+enum { ZT_AXIS_REAL, ZT_AXIS_IMAG };
+
+/* Is b, read at `bits`, within 2^-gap (relative) of the cut line?  For a
+ * Log / radical base (`neg`) only the negative real half-line counts. */
+static bool zt_near_cut_line(const Expr* b, long bits, double gap, int axis, bool neg) {
+    Expr* v = numericalize_at(b, bits);
+    Expr* re = NULL; Expr* im = NULL;
+    double r = 0.0, l2t = 0.0, l2n = 0.0;
+    bool near = false;
+    if (v && is_complex(v, &re, &im)) {
+        Expr* tang = axis == ZT_AXIS_REAL ? re : im;
+        Expr* norm = axis == ZT_AXIS_REAL ? im : re;
+        near = expr_log2_abs(tang, &l2t) && expr_log2_abs(norm, &l2n) && l2n < l2t - gap &&
+               (!neg || (expr_signed_double(re, &r) && r < 0.0));
+    }
+    if (v) expr_free(v);
+    return near;
+}
+
+static int zt_cut_class(const Expr* b, int axis, bool neg) {
+    if (!b || b->type != EXPR_FUNCTION) return ZT_CUT_NONE;
+    if (!zt_near_cut_line(b, 200, 150.0, axis, neg)) return ZT_CUT_NONE;
+    /* rounding noise falls with the precision; a genuine tiny component does not */
+    if (zt_near_cut_line(b, 400, 340.0, axis, neg)) return ZT_CUT_REAL;
+    /* the 400-bit read may come back with no Complex head at all: exact on the line */
+    Expr* v = numericalize_at(b, 400);
+    Expr* re = NULL; Expr* im = NULL;
+    double r = 0.0;
+    bool on = v && !is_complex(v, &re, &im) && expr_signed_double(v, &r) &&
+              axis == ZT_AXIS_REAL && (!neg || r < 0.0);
+    if (v) expr_free(v);
+    return on ? ZT_CUT_REAL : ZT_CUT_AMBIGUOUS;
+}
+
+/* The argument of a function with a branch cut (a Log or a non-integer Power
+ * base, or an inverse trig / hyperbolic argument), else NULL; *axis is the
+ * line its cuts lie on, *neg whether only the negative half of it counts. */
+static const Expr* zt_cut_base(const Expr* e, int* axis, bool* neg) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
-    const Expr* b = NULL;
-    if (h && h->type == EXPR_SYMBOL) {
-        const char* hn = h->data.symbol.name;
-        if (hn == SYM_Log && n == 1) b = e->data.function.args[0];
-        else if (hn == SYM_Power && n == 2) {
-            const Expr* p = e->data.function.args[1];
-            if (!(p->type == EXPR_INTEGER || p->type == EXPR_BIGINT)) b = e->data.function.args[0];
+    if (!h || h->type != EXPR_SYMBOL) return NULL;
+    const char* hn = h->data.symbol.name;
+    *axis = ZT_AXIS_REAL; *neg = false;
+    if (hn == SYM_Log && n == 1) { *neg = true; return e->data.function.args[0]; }
+    if (hn == SYM_Power && n == 2) {
+        const Expr* p = e->data.function.args[1];
+        if (p->type == EXPR_INTEGER || p->type == EXPR_BIGINT) return NULL;
+        *neg = true;
+        return e->data.function.args[0];
+    }
+    if (n != 1) return NULL;
+    if (hn == SYM_ArcSin || hn == SYM_ArcCos || hn == SYM_ArcTanh || hn == SYM_ArcCoth ||
+        hn == SYM_ArcCosh || hn == SYM_ArcSec || hn == SYM_ArcCsc || hn == SYM_ArcSech)
+        return e->data.function.args[0];
+    if (hn == SYM_ArcTan || hn == SYM_ArcCot || hn == SYM_ArcSinh || hn == SYM_ArcCsch) {
+        *axis = ZT_AXIS_IMAG;
+        return e->data.function.args[0];
+    }
+    return NULL;
+}
+
+/* Only a tree with a complex constant can compute a real radicand through
+ * complex arithmetic at a real point, and only one with a Log or a radical
+ * has a cut: the gate keeps the 200-bit radicand reads off every other point. */
+static void zt_cut_scan(const Expr* e, bool* cplx, bool* cut) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) { if (e->data.symbol.name == SYM_I) *cplx = true; return; }
+    if (e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Complex) *cplx = true;
+    { int ax; bool ng; if (zt_cut_base(e, &ax, &ng)) *cut = true; }
+    for (size_t i = 0; i < e->data.function.arg_count && !(*cplx && *cut); i++)
+        zt_cut_scan(e->data.function.args[i], cplx, cut);
+}
+
+/* The sample tree e with every base b whose EXACT twin (the same node of ex,
+ * the point with its machine reals made exact) is ZT_CUT_REAL replaced by
+ * Re[b], inner ones first; NULL when nothing changed.  The class is read on
+ * the exact twin, where rounding noise falls with the precision; the rewrite
+ * goes on e, so every other node reads as it did -- at the exact point the
+ * evaluation differs elsewhere too (Sqrt[-q] picks up real-part noise that
+ * moves ArcTan across its cut on the imaginary axis).  *amb is set when a
+ * ZT_CUT_AMBIGUOUS base was met. */
+static Expr* zt_snap_cuts(const Expr* e, const Expr* ex, bool* amb) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    if (!ex || ex->type != EXPR_FUNCTION || ex->data.function.arg_count != n) ex = e;
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = zt_snap_cuts(e->data.function.args[i], ex->data.function.args[i], amb);
+        if (!a) continue;
+        if (!args) {
+            args = malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < n; j++) args[j] = NULL;
         }
+        args[i] = a;
     }
-    if (b && b->type == EXPR_FUNCTION) {
-        Expr* v = numericalize_at(b, 200);
-        Expr* re = NULL; Expr* im = NULL;
-        bool amb = false;
-        double r = 0.0, l2r = 0.0, l2i = 0.0;
-        /* An inexact ZERO imaginary part counts too: complex arithmetic that
-         * cancels the imaginary part exactly leaves a signed zero, and its sign
-         * picks the side of the cut -- (-I - I E^(-2 I x))/(-1 + E^(-2 I x))
-         * (= Cot[x]) reads -8.17 + 0.*^-60 I at x = -3.26342.  A value real
-         * by construction never carries a Complex head here. */
-        if (v && is_complex(v, &re, &im) && expr_signed_double(re, &r) && r < 0.0 &&
-            expr_log2_abs(re, &l2r) && expr_log2_abs(im, &l2i) &&
-            l2i < l2r - 150.0)
-            amb = true;
-        if (v) expr_free(v);
-        if (amb) return true;
-    }
+    int axis = ZT_AXIS_REAL;
+    bool neg = false;
+    const Expr* b = zt_cut_base(ex, &axis, &neg);
+    int c = b ? zt_cut_class(b, axis, neg) : ZT_CUT_NONE;
+    if (c == ZT_CUT_AMBIGUOUS) *amb = true;
+    if (!args && c != ZT_CUT_REAL) return NULL;
+    Expr** out = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++)
-        if (zt_on_ambiguous_cut(e->data.function.args[i])) return true;
-    return false;
+        out[i] = (args && args[i]) ? args[i] : expr_copy(e->data.function.args[i]);
+    free(args);
+    if (c == ZT_CUT_REAL) {
+        /* b -> Re[b] onto the real axis, b -> I Im[b] onto the imaginary one */
+        Expr** rb = malloc(sizeof(Expr*));
+        rb[0] = out[0];
+        Expr* proj = expr_new_function(expr_new_symbol(axis == ZT_AXIS_REAL ? SYM_Re : SYM_Im), rb, 1);
+        free(rb);
+        if (axis == ZT_AXIS_IMAG) {
+            Expr** tm = malloc(2 * sizeof(Expr*));
+            tm[0] = expr_new_symbol(SYM_I);
+            tm[1] = proj;
+            proj = expr_new_function(expr_new_symbol(SYM_Times), tm, 2);
+            free(tm);
+        }
+        out[0] = proj;
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), out, n);
+    free(out);
+    return r;
 }
 #endif
 
 
 static ZeroTestResult zt_point_verdict(const Expr* sub, bool screen, bool* out_overflow) {
-    ZeroTestResult r = zt_point_verdict_raw(sub, screen, out_overflow);
 #ifdef USE_MPFR
-    /* A non-zero reading at a point on an unresolvable cut (see
-     * zt_on_ambiguous_cut) is no evidence: send the point back for a re-draw,
-     * like an out-of-range coordinate.  Checked only on a FALSE, so the zero
-     * path pays nothing. */
-    if (r == ZERO_TEST_FALSE && out_overflow) {
+    bool cplx = false, cut = false;
+    zt_cut_scan(sub, &cplx, &cut);
+    if (cplx && cut) {
         /* read on the EXACT point: a machine-real coordinate stays a machine
-         * number under N, so the 200-bit reading of the radicand carried
-         * machine noise (2^-53, not 2^-190) and the cut went unseen --
-         * Sqrt[Tan[x]] + Sqrt[Cot[x]] (paper example E6d-4), whose answer
-         * holds Sqrt[(-I - I E^(-2 I x))/(-1 + E^(-2 I x))] = Sqrt[Cot[x]],
-         * read FALSE at x = -3.26342, where Cot < 0 */
+         * number under N, so the 200-bit reading of the radicand carries
+         * machine noise (2^-53, not 2^-190) and the cut goes unseen */
         Expr* exact = zt_exactify_reals(sub);
-        bool amb = zt_on_ambiguous_cut(exact ? exact : sub);
+        bool amb = false;
+        Expr* snapped = zt_snap_cuts(sub, exact, &amb);
+        ZeroTestResult r = zt_point_verdict_raw(snapped ? snapped : sub, screen, out_overflow);
+        if (snapped) expr_free(snapped);
         if (exact) expr_free(exact);
-        if (amb) {
+        /* a non-zero reading through an unresolvable cut is no evidence:
+         * re-draw, like an out-of-range coordinate */
+        if (amb && r == ZERO_TEST_FALSE && out_overflow) {
             *out_overflow = true;
             return ZERO_TEST_UNKNOWN;
         }
+        return r;
     }
 #endif
-    return r;
+    return zt_point_verdict_raw(sub, screen, out_overflow);
 }
 
 static ZeroTestResult zt_point_verdict_raw(const Expr* sub, bool screen, bool* out_overflow) {
