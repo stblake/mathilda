@@ -3095,7 +3095,10 @@ $q=1/x$, the RDE behind the $e^{xy}/x$ term (\code{brRDEAlgebraic} agrees).
 \item[I2] (implementation) INT$_0$ must return the Liouville data $(v,c_l,v_l)$ explicitly, with
   the $c_l$ a $\Q$-basis of the $\Q$-span of the residues and, when they are rational, $v_l\in
   k_0$; Trager's \code{RootSum} answers must expose $(c_l,v_l)$. Until checked, an irrational
-  $c_l$ in Prop.~\ref{prop:E1ld}(ii) gives ``undecided'' rather than ``no''.
+  $c_l$ in Prop.~\ref{prop:E1ld}(ii) gives ``undecided'' rather than ``no''. \emph{Closed at
+  level~0 (v0.6690)} by Lemma~\ref{lem:E1irr} (\code{brDTI2} in \code{brDTPLD0}). A
+  \code{RootSum} logarithmic part, and irrational coefficients above level~0 (OL3), still
+  decline.
 \end{itemize}
 
 % ======================================================================

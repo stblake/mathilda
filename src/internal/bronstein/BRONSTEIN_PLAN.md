@@ -1839,6 +1839,15 @@ Still declined:
 
 Next: Phase L of the 2026-11-22 session plan (I2, ROOT_0, offsets), and D7/D6 (Phase S).
 
+**Status (2026-11-22, L1, v0.6690).** Gap I2 is closed at level 0 by Lemma E1irr, reviewed
+once with no FATAL. An irrational Trager coefficient in PLD_0 is now decided: an irrational
+residue is a "none", and otherwise the data are rational with one logand `W0` in `k0`. Still
+declined: a RootSum log part, and irrational coefficients above level 0 (OL3). Next: L2
+(ROOT_0), L3 (offsets), and the cascade items found by the rerun. In those, the Linearity stage
+returns Erf/Erfi answers for elementary integrands (260 one-elem-30, two-elem-45; 259
+tanh-elem-38, tani-elem-25, gauss-elem-10), and `Erf[I z]` / `Erf[-z]` are not canonicalised as
+the reference does.
+
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
 - *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a

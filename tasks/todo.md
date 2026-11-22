@@ -80,14 +80,18 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D3 theory: E2, E1 notes written and reviewed twice (docs/notes/bronstein_phase5_review.md)
 - [x] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (v0.6651)
 - [x] D3 M2: the general tower over the curve, weak normaliser, cancellation with a homogeneous solution, least radical exponent (v0.6689)
-- [ ] Phase R: FriCAS comparison rerun at v0.6688 (256/257/259/260) and BRONSTEIN_VS_FRICAS.md refresh
 - [ ] G-pzq-1: PossibleZeroQ false negatives on correct antiderivatives (E^(Sqrt[1 + x^4] + Log[1 + x]^2) shapes; 6 of the 330 M2 stress cases)
-- [ ] L1 I2 (irrational log coefficients in PLD_0), L2 ROOT_0 (OL5), L3 nonzero offsets (OL2): theory, review, then code
+- [x] Phase R: FriCAS comparison rerun at v0.6688 (4ce8bd355): 256 100%, 259 99%/100% Automatic, 260 99%
+- [x] L1 I2 (irrational log coefficients in PLD_0): Lemma E1irr, reviewed, v0.6690
+- [ ] L2 ROOT_0 (OL5), L3 nonzero offsets (OL2): theory, review, then code
+- [ ] Cascade: Linearity returns Erf/Erfi for elementary integrands (one-elem-30, two-elem-45, tanh-elem-38, tani-elem-25, gauss-elem-10); Erf[I z] -> I Erfi[z], Erf[-z] -> -Erf[z] canonicalisation (reference behaviour)
+- [ ] Cascade misses where a method decides: 260 two-elem-6 (Bronstein ELEM, Automatic UNEVAL), 259 tan-elem-26/32, gauss-elem-23 (RischTranscendental ELEM, Automatic TIMEOUT)
+- [ ] knowles_erf_tests: 2 antiderivatives off by a constant (-1 + Erf, I - Erfi) -- pre-existing on main
 - [x] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases decided (v0.6652)
 - [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 closed v0.6652 (exponent lattice HNF)
 - [ ] D6 speed: 43 cases over 1 s; evaluator scoping change DONE (v0.6653-57: D + A3 summaries; Trager -14.4%, cM-1-292 -12.8% instructions; docs/design/scoping_substitution.md) -- the algebra-bound remainder is open
 - [x] D7 (v0.6650): 10 of the 18 special-function cases
-- [ ] D7 rest: E^Tanh[x^2] x, Tanh[x^2], Log[I + Tan[1 + x]] Tan[1 + x], x Log[Tan[x]] Tan[x] Sec[x]^2, Log[Tan[x]/x], Log[1 + x]/(1 + Coth[x])
+- [ ] D7 rest (5, FriCAS SPECIAL, Mathilda CERT): tanh-rand-32 x^2 Tanh[x^2]/(1 + Tanh[x^2]), tan-rand-5 x Log[Tan[x]] Tan[x] Sec[x]^2, tan-rand-11 Log[Tan[x]/x], tani-rand-21 Log[I + Tan[1 + x]] Tan[1 + x], lim-rand-10 Log[1 + x]/(1 + Coth[x]) (E^Tanh[x^2] x closed)
 - [x] D8 FriCAS report submitted: https://github.com/fricas/fricas/issues/249
 
 # MemoryConstrained (started 2026-11-19)

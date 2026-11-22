@@ -250,6 +250,106 @@ brDTLiouville0[C_Association, F0_] := Module[{C1 = brDTLevel[C, 1], x = C["x"], 
 (* Level-0 oracles.                                                            *)
 (* -------------------------------------------------------------------------- *)
 
+brDTSurfaceLogs::usage = "brDTSurfaceLogs[F0, x] reads the surface integral F0 as {v, {{c, a}, ...}}: v the part free of logarithms and inverse trigonometric functions, then c Log[a] with any constant c. ArcTanh[u] = (Log[1 + u] - Log[1 - u])/2, ArcTan[u] = I (Log[1 - I u] - Log[1 + I u])/2 and ArcCot[u] = ArcTan[1/u] are rewritten (identities up to a locally constant term, which no derivative sees: Lemma E1irr, Use step 1). $Failed on a RootSum, a Root, a two-argument ArcTan or any other shape.";
+brDTSurfaceLogs[F0_, x_Symbol] := Module[{terms, v = 0, logs = {}, ok = True, one, hd = Log | ArcTan | ArcTanh | ArcCot, fs, c},
+  one[c0_, f_] := Switch[f,
+    _Log, AppendTo[logs, {c0, First[f]}],
+    _ArcTanh, With[{u = First[f]}, logs = Join[logs, {{c0/2, 1 + u}, {-c0/2, 1 - u}}]],
+    _ArcTan, With[{u = First[f]}, logs = Join[logs, {{I c0/2, 1 - I u}, {-I c0/2, 1 + I u}}]],
+    _ArcCot, With[{u = 1/First[f]}, logs = Join[logs, {{I c0/2, 1 - I u}, {-I c0/2, 1 + I u}}]]];
+  terms = Expand[F0];
+  terms = If[Head[terms] === Plus, List @@ terms, {terms}];
+  Do[Which[
+      FreeQ[tm, Log | ArcTan | ArcTanh | ArcCot | RootSum | Root], v = v + tm,
+      MatchQ[tm, hd[_]], one[1, tm],
+      Head[tm] === Times && Length[fs = Cases[List @@ tm, hd[_]]] === 1 &&
+        FreeQ[c = tm/First[fs], x] && FreeQ[c, Log | ArcTan | ArcTanh | ArcCot | RootSum | Root],
+        one[c, First[fs]],
+      True, ok = False],
+    {tm, terms}];
+  If[ok, {v, logs}, $Failed]];
+
+brDTI2::usage = "brDTI2[C, a, F0] applies Lemma E1irr (closing gap I2) to INT_0's answer F0 for a in k0. It returns {\"cert\"} when a d x has a residue outside Q: then PLD_0(a; eta) has no solution for any eta = D w (a proof, Lemma E1res). Otherwise it returns {\"data\", v, logs, irr} with a = D v + Sum c D u/u (logs: c rational, u in k0) + lam/M, where irr is None or <|\"lam\" -> lam = D W0/W0 in k0, \"M\" -> M, \"W\" -> {{e, u}, ...}, \"mu\", \"g\"|> with W = Prod u^e = gamma W0 over Q(g). The constants of the irrational part go into ONE field Q(g), mu = MinimalPolynomial (irreducible), with unique coordinates (Use step 2). Every identity is checked exactly in Q(x)[Y, g]/(Y^m - G, mu(g)) (step 3), including the Liouville identity itself. Declines (BaseTower:irrational-log) outside the lemma: a non-algebraic constant, constants that ToNumberField does not put in one field, a logand not rational in x, Y over it, a v outside k0. A RootSum declines as BaseTower:rootsum-logand.";
+brDTI2[C_Association, a_, F0_] := Module[
+  {C0 = brDTLevel[C, 0], C1 = brDTLevel[C, 1], x = C["x"], Y = C["Y"], m = C["m"], G = C["G"], sl, v, vY, logs, rat = {}, irr = {},
+   atoms, tnf, th, g = Unique["Bronstein`Private`brI2g"], mu, d, rep, ig, co, N, M, S, red, dY, lam, dec, irrQ},
+  dec[] := throwUnimplemented["BaseTower:irrational-log", "an irrational logarithm coefficient in the integral over k0 inside LD/PLD/LI (gap I2)"];
+  irrQ = NumericQ[#] && !rationalNumberQ[#] &;
+  sl = brDTSurfaceLogs[F0, x];
+  If[sl === $Failed,
+    throwUnimplemented["BaseTower:rootsum-logand", "a logarithmic part of an integral over the curve not given as rational multiples of logarithms of elements of the field (RootSum, ArcTan)"]];
+  {v, logs} = sl;
+  vY = brBCFromSurface[C1, v];
+  If[!brDTRationalQ[vY, {x, Y}], dec[]];
+  logs = {#[[1]], brBCFromSurface[C1, #[[2]]]} & /@ logs;
+  Do[If[rationalNumberQ[l[[1]]] && brDTRationalQ[l[[2]], {x, Y}] && l[[2]] =!= 0, AppendTo[rat, l], AppendTo[irr, l]], {l, logs}];
+  rat = Select[rat, #[[1]] =!= 0 &];
+  If[irr === {}, Return[{"data", vY, rat, None}]];
+  (* Use step 2: one field K = Q(th) for every constant of the irrational part *)
+  atoms = Reap[irr /. n_?irrQ :> (Sow[n]; n)][[2]];
+  atoms = If[atoms === {}, {}, DeleteDuplicates[First[atoms]]];
+  If[atoms === {}, dec[]];
+  tnf = Quiet[ToNumberField[atoms]];
+  If[!ListQ[tnf] || Length[tnf] =!= Length[atoms] || !AllTrue[tnf, Head[#] === AlgebraicNumber || rationalNumberQ[#] &], dec[]];
+  th = DeleteDuplicates[First /@ Select[tnf, Head[#] === AlgebraicNumber &]];
+  If[Length[th] =!= 1, dec[]];
+  th = First[th];
+  mu = Quiet[MinimalPolynomial[th, g]];
+  If[!PolynomialQ[mu, g] || Exponent[mu, g] < 1 || !FreeQ[mu, x | Y], dec[]];
+  d = Exponent[mu, g]; mu = Expand[mu/Coefficient[mu, g, d]];
+  If[!AllTrue[Select[tnf, Head[#] === AlgebraicNumber &], Length[#[[2]]] === d &], dec[]];
+  rep = Thread[atoms -> (If[Head[#] === AlgebraicNumber, #[[2]] . g^Range[0, d - 1], #] & /@ tnf)];
+  ig = irr /. rep;
+  If[!FreeQ[ig, n_?irrQ] || !AllTrue[ig, PolynomialQ[#[[1]], g] && FreeQ[#[[1]], x | Y] &], dec[]];
+  (* exact reduction in Q(x)[Y, g]/(Y^m - G, mu): unique remainders, a nonzero one is a nonzero element *)
+  red[p_] := Expand[PolynomialRemainder[PolynomialRemainder[Expand[p], Y^m - G, Y], mu, g]];
+  dY[u_] := D[u, x] + D[u, Y] C["sY"] Y;
+  (* the Liouville identity a = D v + Sum c D u/u, exactly, before anything rests on it *)
+  With[{t = Together[a - dY[vY] - Total[#[[1]] dY[#[[2]]]/#[[2]] & /@ Join[rat, ig]]]},
+    If[red[Denominator[t]] === 0 || red[Numerator[t]] =!= 0, throwInternal["brDTI2Liouville", <|"a" -> a|>]]];
+  co = PadRight[CoefficientList[PolynomialRemainder[Expand[#[[1]]], mu, g], g], d] & /@ ig;
+  N = LCM @@ (Denominator /@ Flatten[co[[All, 2 ;;]]]);
+  (* Use step 3: Sum_l N s_lk D u_l/u_l = 0 for every k >= 1, else an irrational residue (a) *)
+  Do[
+    S = Together[Sum[N co[[l, k]] dY[ig[[l, 2]]]/ig[[l, 2]], {l, Length[ig]}]];
+    If[S =!= 0,
+      If[red[Denominator[S]] === 0, dec[]];
+      If[red[Numerator[S]] =!= 0, Return[{"cert"}, Module]]],
+    {k, 2, d}];
+  (* (b): only the rational coordinates remain; lam = M Sum q_l D u_l/u_l lies in k0 *)
+  M = LCM @@ (Denominator /@ co[[All, 1]]);
+  lam = brBCNorm[C0, M (a - brBCD[C0, vY] - Total[#[[1]] brBCD[C0, #[[2]]]/#[[2]] & /@ rat])];
+  If[!brDTRationalQ[lam, {x, Y}], throwInternal["brDTI2Lambda", <|"a" -> a|>]];
+  With[{t = Together[lam - Sum[M co[[l, 1]] dY[ig[[l, 2]]]/ig[[l, 2]], {l, Length[ig]}]]},
+    If[red[Denominator[t]] === 0 || red[Numerator[t]] =!= 0, throwInternal["brDTI2Rational", <|"a" -> a|>]]];
+  {"data", vY, rat, If[lam === 0, None,
+    <|"lam" -> lam, "M" -> M, "W" -> Table[{M co[[l, 1]], ig[[l, 2]]}, {l, Length[ig]}], "mu" -> mu, "g" -> g|>]}];
+
+brDTI2W0::usage = "brDTI2W0[C, irr] is W0 in k0 for the irrational part irr of brDTI2 (Lemma E1irr (c), Use step 4): W = Prod u^e over Q(g) in normal form Sum w_i Y^i, every coordinate reduced modulo mu (denominators inverted modulo mu), W = gamma W0 with gamma in Q(g), gamma read off a nonzero coordinate (its g-coefficients are proportional with rational ratios), and W0 = W/gamma. Checked: W0 rational over Q and D W0/W0 = lam exactly. A failure declines (BaseTower:irrational-log), never a \"no\".";
+brDTI2W0[C_Association, irr_Association] := Module[{C0 = brDTLevel[C, 0], x = C["x"], Y = C["Y"], m = C["m"], g = irr["g"], mu = irr["mu"], W, ws, modmu, rho, j0, gam, gi, W0, dec},
+  dec[] := throwUnimplemented["BaseTower:irrational-log", "an irrational logarithm coefficient in the integral over k0 inside LD/PLD/LI (gap I2)"];
+  modmu[e_] := Module[{t = Together[e], n, dn, eg},
+    n = PolynomialRemainder[Expand[Numerator[t]], mu, g]; dn = PolynomialRemainder[Expand[Denominator[t]], mu, g];
+    If[dn === 0, dec[]];
+    If[FreeQ[dn, g], Return[Together[n/dn], Module]];
+    eg = PolynomialExtendedGCD[dn, mu, g];
+    If[!FreeQ[First[eg], g] || First[eg] === 0, dec[]];
+    Together[PolynomialRemainder[Expand[n eg[[2, 1]]], mu, g]/First[eg]]];
+  W = brBCNorm[C0, Product[u[[2]]^u[[1]], {u, irr["W"]}]];
+  ws = Table[modmu[Coefficient[W, Y, i]], {i, 0, m - 1}];
+  rho = Select[ws, # =!= 0 &];
+  If[rho === {}, dec[]];
+  rho = PadRight[CoefficientList[Expand[Numerator[First[rho]]], g], Exponent[mu, g]];
+  j0 = First[FirstPosition[rho, r_ /; r =!= 0, {1}, Heads -> False]];
+  gam = Together[(rho/rho[[j0]]) . g^Range[0, Length[rho] - 1]];
+  If[!FreeQ[gam, x | Y], dec[]];
+  gi = PolynomialExtendedGCD[gam, mu, g];
+  If[!NumberQ[First[gi]] || First[gi] === 0, dec[]];
+  W0 = brBCNorm[C0, Sum[modmu[ws[[i + 1]] gi[[2, 1]]/First[gi]] Y^i, {i, 0, m - 1}]];
+  If[!brDTRationalQ[W0, {x, Y}] || W0 === 0, dec[]];
+  If[brBCNorm[C0, brBCD[C0, W0]/W0 - irr["lam"]] =!= 0, throwInternal["brDTI2W0Check", <|"W0" -> W0|>]];
+  W0];
+
 brDTRadicalSolve::usage = "brDTRadicalSolve[C, a, gens, vars] finds the least n >= 1 and an INTEGER vector e with n a = Sum e_k gens_k (a, gens in normal form over the level record C, rational in vars): {n, e}, or None when a is not in span_Q gens (a proof, Prop E2span), or $Failed when a span system was not decided. The gens may be dependent (Trager's logands beside the structure units): a greedy independent subset I gives the unique coordinates a_I and the relations q_d of the others; the solutions are a_I - Sum nu_d q_d (dependent coordinates nu_d), so the least n is the order of a_I in Q^I modulo the lattice Z^I + Sum Z q_d (Hermite normal form of its generators), and the integer combination is read off the HNF transformation. A minimal n matters: a consumer that needs an n = 1 witness declines (ROOT_0) on any larger one.";
 brDTRadicalSolve[C_Association, a_, gens0_List, vars_List] := Module[{gens = gens0, K, ind = {}, rel = <||>, sp, aI, dl, L, M, U, H, B, c, n, w, e},
   K = Length[gens];
@@ -283,16 +383,20 @@ brDTRadicalSolve[C_Association, a_, gens0_List, vars_List] := Module[{gens = gen
   If[!AllTrue[e, IntegerQ] || brBCNorm[C, n a - e . gens] =!= 0, throwInternal["brDTRadicalSolveCheck", <|"a" -> a|>]];
   {n, e}];
 
-brDTPLD0::usage = "brDTPLD0[C, alpha, eta] decides PLD_0 (Prop E1ld, j = 0) for alpha, eta in k0 (eta = D w, or 0 for LD_0): {\"none\"} when there are no n >= 1, m in Z, U in k0* with n alpha = m eta + DU/U (a proof: Trager proved alpha non-integrable, or the span system with n = 1 is inconsistent), or {\"radical\", n0, m0, {{e_l, u_l}, ...}} with U = Prod u_l^e_l, checked exactly in normal form. Declines when Trager declines, on Liouville data outside I2 (brDTLiouville0) or an undecided span (BaseTower:pld-undecided).";
-brDTPLD0[C_Association, alpha_, eta_] := Module[{C0 = brDTLevel[C, 0], a = brBCNorm[C, alpha], F0, v, logs, gens, sp, mq, rq, n0, ev},
+brDTPLD0::usage = "brDTPLD0[C, alpha, eta] decides PLD_0 (Prop E1ld, j = 0) for alpha, eta in k0 (eta = D w, or 0 for LD_0): {\"none\"} when there are no n >= 1, m in Z, U in k0* with n alpha = m eta + DU/U (a proof: Trager proved alpha non-integrable, or the span system with n = 1 is inconsistent), or {\"radical\", n0, m0, {{e_l, u_l}, ...}} with U = Prod u_l^e_l, checked exactly in normal form. An irrational coefficient is decided by Lemma E1irr (brDTI2: an irrational residue is a \"none\"). Declines when Trager declines, on Liouville data outside the lemma, or on an undecided span (BaseTower:pld-undecided).";
+brDTPLD0[C_Association, alpha_, eta_] := Module[{C0 = brDTLevel[C, 0], a = brBCNorm[C, alpha], F0, v, logs, gens, sp, mq, rq, n0, ev, i2, irr, facs},
   If[a === 0, Return[{"radical", 1, 0, {}}]];
   F0 = brCatch[brDTIntegrateK0[C, a]];
   If[brFailQ[F0], If[First[brFailTag[F0]] === "NonElementary", Return[{"none"}, Module], Throw[F0, "TragerFail"]]];
-  {v, logs} = brDTLiouville0[C, F0];
+  (* Lemma E1irr: an irrational residue is a proof; else rational data (+ lam = D W0/W0) *)
+  i2 = brDTI2[C, a, F0];
+  If[First[i2] === "cert", Return[{"none"}]];
+  {v, logs, irr} = Rest[i2];
   (* the Liouville data must reproduce alpha exactly before a "none" rests on it *)
-  If[brBCNorm[C, a - brBCD[C0, v] - Sum[l[[1]] brBCD[C0, l[[2]]]/l[[2]], {l, logs}]] =!= 0,
+  If[brBCNorm[C, a - brBCD[C0, v] - Sum[l[[1]] brBCD[C0, l[[2]]]/l[[2]], {l, logs}] - If[irr === None, 0, irr["lam"]/irr["M"]]] =!= 0,
     throwInternal["brDTLiouvilleCheck", <|"alpha" -> alpha|>]];
-  gens = Join[If[eta === 0, {}, {brBCNorm[C, eta]}], brBCNorm[C, brBCD[C0, #[[2]]]/#[[2]]] & /@ logs];
+  gens = Join[If[eta === 0, {}, {brBCNorm[C, eta]}], brBCNorm[C, brBCD[C0, #[[2]]]/#[[2]]] & /@ logs,
+    If[irr === None, {}, {irr["lam"]}]];
   If[gens === {}, Return[{"none"}]];
   sp = brDTRadicalSolve[C0, a, gens, {C["x"], C["Y"]}];
   If[sp === None, Return[{"none"}]];
@@ -300,7 +404,9 @@ brDTPLD0[C_Association, alpha_, eta_] := Module[{C0 = brDTLevel[C, 0], a = brBCN
     throwUnimplemented["BaseTower:pld-undecided", "the span system of a (parametric) logarithmic-derivative problem over k0 was not decided"]];
   {n0, ev} = sp;
   mq = If[eta === 0, 0, First[ev]]; rq = If[eta === 0, ev, Rest[ev]];
-  {"radical", n0, mq, Select[Transpose[{rq, #[[2]] & /@ logs}], #[[1]] =!= 0 &]}];
+  facs = Select[Transpose[{Take[rq, Length[logs]], #[[2]] & /@ logs}], #[[1]] =!= 0 &];
+  If[irr =!= None && Last[rq] =!= 0, AppendTo[facs, {Last[rq], brDTI2W0[C, irr]}]];
+  {"radical", n0, mq, facs}];
 
 brDTIsDerivK0::usage = "brDTIsDerivK0[C, e] decides whether e in k0 is a derivative D v, v in k0: {\"yes\", v} or {\"no\"}. Trager's integral with its logarithmic part dropped gives v; e - D v = Sum c_l D v_l/v_l is then a derivative only if it is 0 (E1.3: reduce the c_l to a Q-basis, each component has zero residues everywhere), so the test e = D v decides. A Trager certificate is a \"no\"; a decline propagates.";
 brDTIsDerivK0[C_Association, e_] := Module[{C1 = brDTLevel[C, 1], C0 = brDTLevel[C, 0], F0, v},

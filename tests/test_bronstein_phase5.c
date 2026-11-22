@@ -350,6 +350,36 @@ static void test_m2(void) {
     BR_EQ("BronsteinIntegrate[Log[x] Log[x + Sqrt[1 + x^3]] Log[1 + x Sqrt[1 + x^3]], x][[1]]", "\"not elementary\"");
 }
 
+/* Lemma E1irr (closing gap I2): an irrational Trager coefficient at level 0 is decided. */
+static void test_i2(void) {
+    /* the surface reader: ArcTanh / ArcTan / ArcCot become logarithms; RootSum is refused */
+    BR_TRUE("brDTSurfaceLogs[x^2/2 - ArcTanh[x/Sqrt[2]]/Sqrt[2], x] === {x^2/2, {{-1/(2 Sqrt[2]), 1 + x/Sqrt[2]}, {1/(2 Sqrt[2]), 1 - x/Sqrt[2]}}}");
+    BR_TRUE("brDTSurfaceLogs[ArcTan[x], x] === {0, {{I/2, 1 - I x}, {-I/2, 1 + I x}}}");
+    BR_TRUE("MemberQ[brDTSurfaceLogs[3 Log[x] + ArcCot[x], x][[2]], {3, x}]");
+    BR_TRUE("brDTSurfaceLogs[RootSum[#^3 - 2 &, Log[x - #] &], x] === $Failed");
+    BR_TRUE("brDTSurfaceLogs[ArcTan[x, 1], x] === $Failed");
+    /* an irrational residue is a certificate: residues of 1/(x^2 - 2) are +-1/(2 Sqrt[2]); of 1/(1 + x^2) +-I/2 */
+    BR_TRUE("brDTI2[C2x, 1/(x^2 - 2), -ArcTanh[x/Sqrt[2]]/Sqrt[2]] === {\"cert\"}");
+    BR_TRUE("brDTI2[C2x, 3/(x^2 - 2) + 1/x, -3 ArcTanh[x/Sqrt[2]]/Sqrt[2] + Log[x]] === {\"cert\"}");
+    BR_TRUE("brDTI2[C2x, 1/(1 + x^2), ArcTan[x]] === {\"cert\"}");
+    /* the review's counterexample: Sqrt[3 + 2 Sqrt[2]] - Sqrt[2] = 1, so NO certificate (one field, unique coordinates) */
+    BR_TRUE("Module[{r = brDTI2[C2x, 1/x, Sqrt[3 + 2 Sqrt[2]] Log[x] - Sqrt[2] Log[x]]}, r[[1]] === \"data\" && r[[4, \"lam\"]] === 1/x]");
+    /* conjugate logands with rational coefficients: lam in k0, W0 = x^2 - 2 */
+    BR_TRUE("Module[{r = brDTI2[C2x, 2 x/(x^2 - 2), Log[x - Sqrt[2]] + Log[x + Sqrt[2]]]}, r[[1]] === \"data\" && brDTI2W0[C2x, r[[4]]] === -2 + x^2]");
+    BR_TRUE("brDTI2[C2x, x, x^2/2] === {\"data\", x^2/2, {}, None}");
+    BR_TRUE("brDTI2[C2x, 1/x, Log[x]] === {\"data\", 0, {{1, x}}, None}");
+    BR_THROWS("brDTI2[C2x, 1/(x^2 - 3), RootSum[#^2 - 3 &, Log[x - #]/(2 #) &]]", "Unimplemented",
+              "a logarithmic part of an integral over the curve not given as rational multiples of logarithms of elements of the field (RootSum, ArcTan)");
+    BR_THROWS("brDTI2[C2x, 1/x, Pi Log[x]]", "Unimplemented",
+              "an irrational logarithm coefficient in the integral over k0 inside LD/PLD/LI (gap I2)");
+    /* PLD_0 end to end: these declined (BaseTower:irrational-log / rootsum-logand) before Lemma E1irr */
+    BR_TRUE("brDTPLD0[C2x, 1/(x^2 - 2), 0] === {\"none\"}");
+    BR_TRUE("brDTPLD0[C2x, 1/(x^2 + 1), 0] === {\"none\"}");
+    BR_TRUE("Module[{e = 3 x^2 Y2/(2 (1 + x^3))}, brDTPLD0[C2x, brBCNorm[P1, 1/(x^2 - 2) + e], e] === {\"none\"}]");   /* eta = D y */
+    BR_TRUE("brDTPLD0[C2x, (x + 1)/(x^2 + 1), 0] === {\"none\"}");
+    BR_TRUE("brDTPLD0[C2x, 2 x/(x^2 - 2), 0] === {\"radical\", 1, 0, {{1, -2 + x^2}}}");
+}
+
 int main(void) {
     br_init();
     setup();
@@ -364,6 +394,7 @@ int main(void) {
     test_soundness_fixes();
     test_kummer_split_kernel_radicals();
     test_m2();
+    test_i2();
     BR_DONE("bronstein_phase5_tests");
     return 0;
 }
