@@ -158,6 +158,22 @@ void test_simplify_exp_sinh_ratio(void) {
     assert_eval_eq("Simplify[(E^x-E^(-x))/Sinh[x]]", "2", 0);
 }
 
+/* An exponential kernel E^u is an ordinary generator to Factor, so a sum
+ * with a common E^x factor factors to E^x (...) instead of losing to the
+ * ExpToTrig form (Cosh[x] + Sinh[x]) (...). */
+void test_simplify_exp_kernel_factor(void) {
+    assert_eval_eq("Simplify[C[1] E^x + C[2] x^2 E^x]",
+                   "E^x (C[1] + x^2 C[2])", 0);
+    assert_eval_eq("Simplify[a E^x + b x E^x]", "E^x (a + b x)", 0);
+    assert_eval_eq("Simplify[a E^x + b E^x]", "(a + b) E^x", 0);
+    assert_eval_eq("Simplify[C[1] E^(2 x) + C[2] x E^(2 x)]",
+                   "E^(2 x) (C[1] + x C[2])", 0);
+    assert_eval_eq("Simplify[x E^x + E^x y + z E^x]", "E^x (x + y + z)", 0);
+    assert_eval_eq("Simplify[a E^(-x) + b x E^(-x)]", "(a + b x)/E^x", 0);
+    assert_eval_eq("Simplify[(E^x - E^(-x))/2]", "Sinh[x]", 0);
+    assert_eval_eq("Simplify[C[1] 2^x + C[2] x^2 2^x]", "2^x (C[1] + x^2 C[2])", 0);
+}
+
 /* ---- Complexity tiebreak ---- */
 
 void test_simplify_integer_digit_penalty(void) {
@@ -1289,6 +1305,7 @@ int main(void) {
     core_init();
 
     TEST(test_simplify_trivial);
+    TEST(test_simplify_exp_kernel_factor);
     TEST(test_simplify_polynomial);
     TEST(test_simplify_rational);
     TEST(test_simplify_collect_by_variable);

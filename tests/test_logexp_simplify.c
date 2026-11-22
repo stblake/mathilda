@@ -265,8 +265,10 @@ void test_exp_periodicity_sum(void) {
     assert_eval_eq("Simplify[Exp[x + 2 I Pi n] - Exp[x], Element[n, Integers]]", "0", 0);
 }
 void test_exp_periodicity_no_integer(void) {
+    /* Without n integer nothing cancels; the common E^x factors out
+     * (LeafCount 14, against 16 for -E^x + E^(2 I n Pi + x)). */
     assert_eval_eq("Simplify[Exp[x + 2 I Pi n] - Exp[x]]",
-                   "-E^x + E^((2*I) n Pi + x)", 0);
+                   "E^x (-1 + E^((2*I) n Pi))", 0);
 }
 
 /* T5: (-1)^(k+n) integer-exponent split; and the full Cos[nPi]-Exp[I n Pi]. */

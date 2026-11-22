@@ -185,6 +185,62 @@ bool has_non_integer_power(const Expr* e) {
     return false;
 }
 
+/* True for an exponential kernel b^u: base E or a positive exact rational,
+ * exponent a non-numeric expression (E^x, 2^(n+1), E^(-x^2/2)).  To the
+ * polynomial machinery such a power is an ordinary opaque generator, like
+ * Exp[x] or Sin[x]: it has no algebraic relation to a variable the way a
+ * radical x^(1/2) has to x. */
+static bool is_exponential_kernel(const Expr* e) {
+    if (!head_is(e, SYM_Power) || e->data.function.arg_count != 2) return false;
+    const Expr* b = e->data.function.args[0];
+    const Expr* u = e->data.function.args[1];
+    bool base_ok = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E)
+                || (b->type == EXPR_INTEGER && b->data.integer > 1)
+                || (b->type == EXPR_BIGINT && mpz_sgn(b->data.bigint) > 0)
+                || (is_rational_literal(b)
+                    && numeric_sign(b->data.function.args[0]) > 0);
+    if (!base_ok) return false;
+    /* A numeric exponent (E^(1/2), 2^(1/3)) is a radical constant. */
+    if (u->type == EXPR_INTEGER || u->type == EXPR_BIGINT
+        || u->type == EXPR_REAL || is_rational_literal(u)
+        || head_is(u, SYM_Complex)) return false;
+    return contains_variable(u);
+}
+
+/* has_non_integer_power for the Factor-family gate: the same test, except
+ * that an exponential kernel (see is_exponential_kernel) counts as an
+ * ordinary generator.  Factor handles E^x exactly as it handles Exp[x], so
+ * C[1] E^x + C[2] x^2 E^x factors to E^x (C[1] + C[2] x^2); gating it out
+ * left only the ExpToTrig seed's Cosh[x] + Sinh[x] form to win. */
+static bool has_radical_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_exponential_kernel(e)) return false;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* exp = e->data.function.args[1];
+        if (exp->type != EXPR_INTEGER && exp->type != EXPR_BIGINT) return true;
+    }
+    if (has_radical_power(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_radical_power(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Collect the distinct exponential kernels of `e` (see is_exponential_kernel),
+ * deduplicated by structural equality, capped at `cap`.  An exponential
+ * kernel is not descended into: E^(x + E^y) contributes E^(x + E^y) only. */
+static void collect_exp_kernels_capped(const Expr* e, const Expr** ks,
+                                       size_t* n, size_t cap) {
+    if (!e || *n >= cap || e->type != EXPR_FUNCTION) return;
+    if (is_exponential_kernel(e)) {
+        for (size_t i = 0; i < *n; i++)
+            if (expr_eq((Expr*)ks[i], (Expr*)e)) return;
+        ks[(*n)++] = e;
+        return;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count && *n < cap; i++)
+        collect_exp_kernels_capped(e->data.function.args[i], ks, n, cap);
+}
+
 /* Collect distinct polynomial "generators" of `e` -- the maximal
  * subexpressions the polynomial machinery (poly.c collect_variables) treats
  * as independent indeterminates: non-constant symbols and function kernels
@@ -253,7 +309,7 @@ bool transform_can_fire(const char* name, const Expr* e,
         strcmp(name, "FactorSquareFree") == 0 ||
         strcmp(name, "FactorTerms") == 0 ||
         strcmp(name, "TrigFactor") == 0) {
-        if (has_non_integer_power(e)) return false;
+        if (has_radical_power(e)) return false;
     }
     /* Polynomial / partial-fraction transforms are no-ops on numeric-only
      * inputs (no symbol leaves). */
@@ -343,9 +399,16 @@ bool transform_can_fire(const char* name, const Expr* e,
         if (!ctx_has_facts(ctx)) return false;
     }
     /* Per-variable Collect: meaningful only when there are at least two
-     * distinct variables to choose between. */
+     * distinct variables to choose between, or an exponential kernel to
+     * collect by (E^x + x^2 E^x has one variable but collects to
+     * E^x (1 + x^2)). */
     if (strcmp(name, "CollectPerVariable") == 0) {
-        if (expr_variables_count_capped(e, 2) < 2) return false;
+        if (expr_variables_count_capped(e, 2) < 2) {
+            const Expr* ks[1];
+            size_t nk = 0;
+            collect_exp_kernels_capped(e, ks, &nk, 1);
+            if (nk == 0) return false;
+        }
     }
     /* Factorial rewriter: nothing fires unless the input mentions
      * Factorial somewhere in the tree. */
@@ -425,25 +488,31 @@ static void try_collect_per_variable(const Expr* seed, size_t parent_score,
                                      Expr** best, size_t* best_score,
                                      const Expr* complexity_func) {
     Expr* vars = call_unary_copy("Variables", seed);
-    if (!vars) return;
-    if (vars->type != EXPR_FUNCTION ||
+    if (vars && (vars->type != EXPR_FUNCTION ||
         !vars->data.function.head ||
         vars->data.function.head->type != EXPR_SYMBOL ||
-        vars->data.function.head->data.symbol.name != SYM_List) {
+        vars->data.function.head->data.symbol.name != SYM_List)) {
         expr_free(vars);
-        return;
+        vars = NULL;
     }
-    size_t nv = vars->data.function.arg_count;
+    /* The targets: every variable, then every exponential kernel.  Variables[]
+     * reports E^x as x, so the kernels are collected separately; collecting
+     * by E^x is what recovers E^x (a + b x) from a E^x + b x E^x when Factor
+     * is gated out by the generator count. */
+    const Expr* ks[4];
+    size_t nk = 0;
+    collect_exp_kernels_capped(seed, ks, &nk, 4);
+    size_t nv = vars ? vars->data.function.arg_count : 0;
     bool dbg = simp_debug_enabled();
-    for (size_t i = 0; i < nv; i++) {
-        Expr* v = vars->data.function.args[i];
-        Expr* args[2] = { expr_copy((Expr*)seed), expr_copy(v) };
+    for (size_t i = 0; i < nv + nk; i++) {
+        const Expr* v = (i < nv) ? vars->data.function.args[i] : ks[i - nv];
+        Expr* args[2] = { expr_copy((Expr*)seed), expr_copy((Expr*)v) };
         Expr* call = expr_new_function(expr_new_symbol(SYM_Collect), args, 2);
         clock_t t0 = dbg ? clock() : 0;
         Expr* r = evaluate(call);
         expr_free(call);
         if (dbg) {
-            char* vname = expr_to_string(v);
+            char* vname = expr_to_string((Expr*)v);
             char buf[64];
             snprintf(buf, sizeof(buf), "Collect[_,%s]",
                      vname ? vname : "?");
@@ -463,7 +532,7 @@ static void try_collect_per_variable(const Expr* seed, size_t parent_score,
             cs_add_or_free(next, r);
         }
     }
-    expr_free(vars);
+    if (vars) expr_free(vars);
 }
 
 /* ----------------------------------------------------------------------- */

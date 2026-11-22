@@ -14,6 +14,8 @@ returns the simplest form it finds.
   the candidate of minimum complexity.
 - `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
 
+**An exponential kernel is an ordinary generator.** `E^u` (or `b^u` for a positive rational `b`, with `u` non-numeric) is treated like `Exp[u]` or `Sin[u]` by the Factor-family gate. It is not treated as a radical. It is also a Collect target, which `Variables` alone does not provide, since it reports `E^x` as `x`. A common exponential factor is therefore pulled out instead of losing to the `ExpToTrig` form: `Simplify[C[1] E^x + C[2] x^2 E^x]` is `E^x (C[1] + x^2 C[2])`, where it was `(C[1] + x^2 C[2]) (Cosh[x] + Sinh[x])`. In the same way `Simplify[a E^x + b E^x]` is `(a + b) E^x` and `Simplify[Exp[x + 2 I Pi n] - Exp[x]]` is `E^x (-1 + E^((2*I) n Pi))`.
+
 **Nested constant radicals among the coefficients** (v0.6507). A rational function whose coefficients carry a nested constant radical (`Sqrt[3/4 - 1/Sqrt[2]]`, `Sqrt[1 + Sqrt[2]]`) takes its normal form over the number field of its coefficients (`Together[..., Extension -> Automatic]`, see Together) when that scores lower, then the bottom-up polish. The general search cannot see the relations between such atoms. The 4639-leaf input of issue #133 over `Q(I, Sqrt[2], Sqrt[3/4 - 1/Sqrt[2]])` ran past 20 s; `Simplify` and `FullSimplify` now give `1 + Sqrt[2] x` in 0.08 s. `Simplify[(x^2 - 1 - Sqrt[2])/(x - Sqrt[1 + Sqrt[2]])]` is `Sqrt[1 + Sqrt[2]] + x`.
 
 **Powers of sums and of negative numbers; a sum's quotient terms** (v0.6225, #126 second follow-up).
