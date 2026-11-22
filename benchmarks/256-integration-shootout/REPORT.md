@@ -1,6 +1,6 @@
 # Integration shootout: 256-integration-shootout (2026-11-22)
 
-1266 cases, timeout 30 s per run, wall 13.5 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+1266 cases, timeout 30 s per run, wall 12.1 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
@@ -20,11 +20,11 @@
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 832 | 101 | 325 | 5 | 3 | 0 | 0 | 0 | 0.04 |
-| Mathilda:ParallelMixedTower | 739 | 0 | 239 | 228 | 60 | 0 | 0 | 0 | 0.06 |
+| Mathilda:Automatic | 832 | 101 | 326 | 4 | 2 | 0 | 1 | 0 | 0.03 |
+| Mathilda:ParallelMixedTower | 739 | 0 | 239 | 230 | 58 | 0 | 0 | 0 | 0.05 |
 | Mathilda:RischTranscendental | 210 | 7 | 72 | 0 | 0 | 0 | 0 | 0 | 0.00 |
-| Mathilda:Trager | 211 | 0 | 188 | 0 | 1 | 0 | 0 | 0 | 0.07 |
-| Mathilda:Bronstein | 410 | 0 | 165 | 1 | 1 | 0 | 0 | 0 | 0.14 |
+| Mathilda:Trager | 211 | 0 | 189 | 0 | 0 | 0 | 0 | 0 | 0.03 |
+| Mathilda:Bronstein | 410 | 0 | 165 | 1 | 1 | 0 | 0 | 0 | 0.08 |
 | FriCAS | 644 | 69 | 0 | 239 | 52 | 261 | 0 | 1 | 0.07 |
 | Maxima | 559 | 50 | 0 | 650 | 5 | 0 | 0 | 2 | 0.02 |
 | sympy | 361 | 95 | 0 | 480 | 289 | 1 | 8 | 32 | 0.13 |

@@ -1,4 +1,4 @@
-## Summary (2026-11-22, Mathilda v0.6688, FriCAS 1.3.6)
+## Summary (2026-11-22, Mathilda v0.6691, FriCAS 1.3.6)
 
 The comparison runs on four corpora:
 - 256 and 257, the integration shootout corpora;
@@ -12,37 +12,31 @@ On the Mathilda side there are three runs:
 - **PMT**: ParallelMixedTower, the parallel Risch (Risch–Norman) method over a mixed tower.
 - **Automatic**: the full cascade.
 
-The previous run (2026-11-21, v0.6646) led to Campaign D in
-`src/internal/bronstein/BRONSTEIN_PLAN.md`. Releases v0.6647–v0.6688 contain:
-- D0 and D1 (support groups);
-- D2 (the free square-root split);
-- D3 M1 (Phase 5: Risch over the curve, two monomials);
-- D4 and D5;
+Since the v0.6646 run, releases v0.6647–v0.6691 contain:
+- Campaign D: D0–D2, D3 (Phase 5 M1 and M2: transcendental Risch over `Q(x)(y)` with any number
+  of monomials), D4, D5, L1 (gap I2), D7 in part;
 - D6's evaluator change;
-- D7 in part.
-
-This run measures the result.
+- the v0.6691 cascade fixes found by the intermediate v0.6688 run.
 
 **Completeness: how often each system decides.** Deciding means giving a verified closed
 form, or proving that no elementary integral exists.
 
 | corpus | Mathilda | PMT | Automatic | FriCAS |
 |---|---|---|---|---|
-| 256 (1266) | **100%** (was 96%) | 77% | **99%** (was 96%) | 75% |
-| 257 (1000, all elementary) | **100%** | 86% | **100%** (999: one timeout under load, 14 s alone) | 90% |
-| 259 (640, transcendental) | **99%** (was 98%) | not run | **100%** (was 98%) | 95% |
-| 260 (420, radical at the bottom) | **99%** (was 85%) | 46% | **98%** (was 89%) | 95% |
+| 256 (1266) | **100%** (1264; was 96%) | 77% | **99%** (1259; was 96%) | 75% |
+| 257 (1000, all elementary) | **100%** | 86% | **100%** | 90% |
+| 259 (640, transcendental) | **99%** (636; was 98%) | not run | **100%** (639; was 98%) | 95% |
+| 260 (420, radical at the bottom) | **99%** (415; was 85%) | 47% | **98%** (412; was 89%) | 95% |
 
-- **Mathilda now decides more than FriCAS on every corpus and every class.** Class B (a
-  radical at the bottom), the one class where FriCAS led, is 169 of 169 on 256 (was 72%,
-  FriCAS 93%) and 99% on 260 (FriCAS 95%). Three things closed it:
-  - the support groups (D1);
-  - the free square-root split (D2);
-  - transcendental Risch over `Q(x)(y)` (Phase 5 M1).
-- **On the transcendental corpus** Mathilda decides 636 and Automatic 637, against
-  FriCAS's 610.
-- **Not yet in these numbers:** Phase 5 M2 (any number of monomials over the curve, v0.6689,
-  on a branch during this run). The comparison is rerun after it lands.
+- **Mathilda decides more than FriCAS on every corpus and every class.** Class B (a radical at
+  the bottom), the one class where FriCAS led at v0.6646 (93% against 72%), is now 169 of 169 on
+  256 and 99% on 260.
+- **The cascade fixes of v0.6691** close cases where Automatic gave a special-function form
+  for an elementary integrand, or timed out where the Risch stage answers in under a second (259
+  `tan-elem-26`: 60 s to 0.95 s). They also add Erf/Ei/PolyLog answers FriCAS gives (D7: one case
+  of the 18 left).
+- **Not in these numbers:** v0.6692 (the homogeneous-RDE witness, L2) and v0.6693 (the
+  exact-support split: 260 `two-elem-6`, 48 s to 2.2 s), on a branch during this run.
 
 **Soundness.** No Mathilda method gives a false "no" or a wrong answer on any corpus.
 The Automatic wrong answer of the first run (the PolyLog stage, `Log[-I + Tan[2 x]]`) is
@@ -62,10 +56,16 @@ fixed (C0, v0.6642).
   "no". The hunts caught it before release (v0.6644).
 
 **Speed.** The comparison uses the cases both systems close, with each system's own
-integration time (start-up excluded). **This run's Mathilda timings are not comparable with the
-previous ones.** It shared the machine with a 4-process stress run and a test-suite build, so
-its tail (58 cases over 1 s) is inflated. The paragraphs below are from the 2026-11-21 run. The
-speed item (D6) is re-measured on an idle machine.
+integration time (start-up excluded). This run had the machine largely to itself.
+- **Medians:** Mathilda's are now 21–60 ms against FriCAS's 70–130 ms. It is faster on 1539 of
+  2109 shared cases.
+- **Tail:** 45 cases over 1 s across the four corpora (10, 20, 11 and 4), against 51 on three
+  corpora at v0.6646.
+- **90th percentiles:** 201–332 ms against 110–170 ms.
+- **Shape of the gap:** FriCAS still has no slow tail. The p90 gap is the remaining D6 work, so
+  the C4 criterion (p90 within 2x) is not yet met on 257 and 259.
+
+The older paragraphs below are from the 2026-11-21 run.
 
 - **Mathilda is faster on the typical case.** Its medians are 16–71 ms against FriCAS's
   70–110 ms, and it is faster on 1345 of 1927 cases. FriCAS's timer has a floor of about
