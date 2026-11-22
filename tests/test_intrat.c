@@ -1063,6 +1063,28 @@ static void test_square_through_symbolic_radical(void) {
            " + 2/((Sqrt[b^2 + c^2] - b) Tan[x/2] + c)) /. {b -> 3/4, c -> 5/4, x -> 1/3}]]", "0");
 }
 
+/* The log pair c Log[A] - c Log[B] is written as ArcTanh[g], g = (A + B)/(B - A),
+ * only where that is real somewhere: ArcTanh[g] is real exactly for |g| < 1.
+ * When no real x puts g in (-1, 1) -- x^2 + 1 and x^2 + 2 never differ in sign,
+ * and u = E^x never reaches the -1 < u < 0 where ArcTanh[1 + 2 u] is real -- the
+ * answer was complex for every real x; it is the real logarithms again. */
+static void test_arctanh_only_where_real(void) {
+    run_eq("Integrate[1/(1 + E^x), x]", "x - Log[1 + E^x]");
+    run_eq("Integrate[x/((x^2 + 1) (x^2 + 2)), x]", "1/2 Log[1 + x^2] - 1/2 Log[2 + x^2]");
+    run_eq("Integrate[E^x/((1 + E^x) (2 + E^x)), x]", "Log[1 + E^x] - Log[2 + E^x]");
+    run_eq("Integrate[1/(1 + E^(2 x)), x]", "x - 1/2 Log[1 + E^(2 x)]");
+    /* every one differentiates back */
+    run_eq("Table[Simplify[D[Integrate[f, x], x] - f], {f, {1/(1 + E^x), x/((x^2 + 1) (x^2 + 2)),"
+           " E^x/((1 + E^x) (2 + E^x)), 1/(1 + E^(2 x)), 1/(3 + E^x + E^(-x))}}]", "{0, 0, 0, 0, 0}");
+    /* the rest of the answer can cancel against the logarithms */
+    run_eq("Integrate[(1 + E^x - E^x x)/(1 + E^x)^2, x]", "x/(1 + E^x)");
+    /* an ArcTanh that is real on an interval stays */
+    run_eq("Integrate[1/(1 - x^2), x]", "ArcTanh[x]");
+    run_eq("Integrate[1/(u^2 + u), u]", "-2 ArcTanh[1 + 2 u]");
+    run_eq("Integrate[E^x/(1 - E^(2 x)), x]", "ArcTanh[E^x]");
+    run_eq("Integrate[1/(x Log[x] (1 + Log[x])), x]", "-2 ArcTanh[1 + 2 Log[x]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1099,6 +1121,7 @@ int main(void) {
 
     TEST(test_integrate_arctan);
     TEST(test_integrate_arctanh_simplification);
+    TEST(test_arctanh_only_where_real);
     TEST(test_options_accepted);
     TEST(test_integrate_quartic_factorable);
 

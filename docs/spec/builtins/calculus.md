@@ -1443,6 +1443,20 @@ remaining child crashes from earlier runs are eliminated, while
   `2 c ArcTanh[(A + B)/(B - A)]` when the simplified argument is
   rational in x.  Beautifies the output without affecting
   differentiation.
+  - **Only where it is real.** `ArcTanh[g]` is real exactly for `|g| < 1`. An
+    `ArcTanh[g]` in the final answer (in the user's variable, so also after a
+    substitution such as `u = E^x`) whose argument is real with `|g| > 1` at
+    every real probe goes back to a real form with the same derivative: the
+    logarithms `(1/2) (Log[n + d] - Log[n - d])`, `g = n/d` (content and
+    constants dropped, `Log[E^h] = h`). When those logarithms would carry an
+    algebraic constant (`Log[3 + 2 Sqrt[2] + u^2]`), `ArcTanh[1/g]` is taken if the
+    whole answer is strictly smaller with it. `Integrate[1/(1 + E^x), x]` is
+    `x - Log[1 + E^x]` (was `-2 ArcTanh[1 + 2 E^x]`, complex for every real x),
+    `Integrate[x/((x^2 + 1) (x^2 + 2)), x]` is `1/2 Log[1 + x^2] - 1/2 Log[2 + x^2]`
+    (was `-ArcTanh[3 + 2 x^2]`), and `Integrate[(1 + E^x - E^x x)/(1 + E^x)^2, x]` is
+    `x/(1 + E^x)`, the logarithms cancelling the rest of the answer.
+    `ArcTanh[x]` for `1/(1 - x^2)` and `-2 ArcTanh[1 + 2 u]` for `1/(u^2 + u)`
+    stay: each is real on an interval.
 - **Complex coefficients** (v0.6508). Rioboo's `LogToReal` turns the log sum
   over a conjugate-closed set of residues into real `ArcTan`/`Log` terms. That
   is valid only when the coefficients are real.
@@ -4085,9 +4099,12 @@ longer instead of declining; a time limit is the caller's (`TimeConstrained`).
 
 - several radicands (a compositum);
 - transcendental functions;
-- algebraic or complex constants;
 - an internal invariant failure (a bug never becomes an answer or a false
   certificate).
+
+Algebraic and complex constants are accepted: `Integrate[1/Sqrt[x^2 + Sqrt[2]], x,
+Method -> "Trager"]` is `Log[x + Sqrt[Sqrt[2] + x^2]]`, and `1/Sqrt[x^3 + I]` is
+certified non-elementary.
 
 **Examples.**
 
@@ -4408,9 +4425,13 @@ the transcendental Risch algorithm over the algebraic base `k0 = Q(x)(y)`.
 
 ### Trager and Bronstein in the Automatic cascade
 
-Both decision procedures run in the Automatic cascade of `Integrate[f, x]`. Their
-stages come after `LogByParts` and before `ParallelMixedTower`, as profile stages
-"15b Trager" and "15c Bronstein".
+Both decision procedures run in the Automatic cascade of `Integrate[f, x]`, as
+profile stages "08b Trager" and "08c Bronstein" (since v0.6521). They come after
+the cheap specialised stages (`BronsteinRational`, the linear, quadratic and
+linear-ratio radical stages, `ChebychevAlgebraic`, Fresnel, GammaPower) and before
+the general search stages (the early Risch probe, `Linearity`, `Weierstrass`,
+`DerivativeDivides`, `RischTranscendental`), which on these shapes only grind.
+(Profile stage "15b" is `SpecialByParts`.)
 
 **Gates.** Each stage runs only when a cheap structural gate passes.
 `Integrate\`CascadeGateQ["Trager" | "Bronstein", f, x]` exposes the gates:

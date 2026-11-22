@@ -1228,21 +1228,50 @@ static void it_free_params(const Expr* e, const Expr* x, const Expr*** out, size
  * definite real |g| <= 1 at any probe vetoes the rewrite (conservative: the
  * swap is derivative-preserving, so a false negative merely leaves the
  * pre-existing form). */
-static bool it_arg_real_outside_unit(const Expr* g, Expr* x) {
-    static const double probes[] = { 0.05, 0.15, 0.3, 0.45, 0.7, 0.9, 1.3, 2.0, 3.5, 8.0, 15.0 };
+/* g with each free parameter (a symbol other than x and the numeric
+ * constants) replaced by a fixed positive sample value; NULL when there are
+ * more than four of them.  Owned result. */
+static Expr* it_subst_params(const Expr* g, Expr* x) {
     static const double pvals[] = { 1.37, 2.11, 1.73, 2.9 };
-    const size_t np = sizeof(probes) / sizeof(probes[0]);
     const Expr** ps = NULL;
     size_t npar = 0, pcap = 0;
     it_free_params(g, x, &ps, &npar, &pcap);
-    if (npar > 4) { free(ps); return false; }
+    if (npar > 4) { free(ps); return NULL; }
     Expr* gp = expr_copy((Expr*)g);
-    for (size_t k = 0; k < npar; k++) {
+    for (size_t k = 0; k < npar && gp; k++) {
         Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
             (Expr*[]){ expr_copy((Expr*)ps[k]), expr_new_real(pvals[k]) }, 2);
         gp = eval_and_free(internal_replace_all((Expr*[]){ gp, rule }, 2));
     }
     free(ps);
+    return gp;
+}
+
+/* gp (parameters already sampled) at x = t: true with *re, *im on a finite
+ * numeric value, false on a pole / non-numeric probe.  Borrows gp. */
+static bool it_probe(const Expr* gp, Expr* x, double t, double* re, double* im) {
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_copy(x), expr_new_real(t) }, 2);
+    arith_warnings_mute_push();          /* a probe may sit on a pole */
+    Expr* sub = eval_and_free(internal_replace_all(
+        (Expr*[]){ expr_copy((Expr*)gp), rule }, 2));
+    arith_warnings_mute_pop();
+    if (!sub) return false;
+    Expr* im_call = expr_new_function(expr_new_symbol(SYM_Im),
+        (Expr*[]){ expr_copy(sub) }, 1);
+    Expr* re_call = expr_new_function(expr_new_symbol(SYM_Re),
+        (Expr*[]){ sub }, 1);                 /* consumes sub */
+    bool ok = it_num_real(im_call, im) && it_num_real(re_call, re);
+    expr_free(im_call);
+    expr_free(re_call);
+    return ok && isfinite(*re) && isfinite(*im);
+}
+
+static bool it_arg_real_outside_unit(const Expr* g, Expr* x) {
+    static const double probes[] = { 0.05, 0.15, 0.3, 0.45, 0.7, 0.9, 1.3, 2.0, 3.5, 8.0, 15.0 };
+    const size_t np = sizeof(probes) / sizeof(probes[0]);
+    Expr* gp = it_subst_params(g, x);
+    if (!gp) return false;
     int valid = 0;
     bool veto = false;
     for (size_t i = 0; i < np && !veto && gp; i++) {
@@ -1309,6 +1338,273 @@ static Expr* it_realify_arctanh(const Expr* e, Expr* x) {
     return rebuilt;
 }
 
+/* ====================================================================
+ * ArcTanh on its cut everywhere -> a real form (it_realify_cut_arctanh).
+ * ====================================================================
+ *
+ * The log-pairing rule (intsimp_log_to_arctanh) writes c Log[A] - c Log[B]
+ * as -2 c ArcTanh[g], g = (A + B)/(B - A), from the variable it integrates
+ * in alone.  ArcTanh[g] is real exactly where |g| < 1, i.e. where A and B
+ * have opposite signs.  When no real x puts g in (-1, 1) the ArcTanh form is
+ * complex for EVERY real x, while the logarithms it replaced were real:
+ *   Integrate[x/((x^2 + 1)(x^2 + 2)), x]  -> -ArcTanh[3 + 2 x^2]
+ *   Integrate[1/(1 + E^x), x]             -> -2 ArcTanh[1 + 2 E^x]
+ * (the second through a substitution u = E^x: Log[u] - Log[1 + u] in u has a
+ * real ArcTanh region, -1 < u < 0, which u = E^x never reaches -- so only a
+ * test in the user's variable can see it).
+ *
+ * ArcTanh[g] = (1/2) Log[(1 + g)/(1 - g)], and for real g with |g| > 1,
+ * (1 + g)/(g - 1) > 0, so
+ *   ArcTanh[g] -> (1/2) (Log[s N] - Log[s D]),  (1 + g)/(g - 1) = N/D,
+ * s = the sign of D at the probes, is real and has the same derivative,
+ * 1/(1 - g^2) g'.  Each logarithm is then tidied up to an additive constant:
+ * x-free factors are dropped and a factor E^h contributes h, so the example
+ * above becomes x - Log[1 + E^x] (and x/(1 + E^x) where the logarithms
+ * cancel against the rest of an answer).  When the logarithms would carry an
+ * algebraic constant in their arguments (Log[3 - 2 Sqrt[2] + u^2] - Log[3 +
+ * 2 Sqrt[2] + u^2]), the other real form with that derivative, ArcTanh[1/g]
+ * (= ArcCoth[g]), is taken instead if the whole answer is strictly smaller
+ * with it: ArcTanh[2 Sqrt[2]/(3 + u^2)].
+ *
+ * The test is numeric (it_cut_everywhere): g real with |g| > 1 at every real
+ * probe where it is real, of both signs of x, and the same sign of D.  A
+ * missed region of (-1, 1) between the probes leaves an antiderivative that
+ * is still correct (real wherever |g| > 1, off by a constant elsewhere), so
+ * the test can only choose between two correct forms. */
+
+/* Probes on both sides of the origin.  Several near the origin catch a
+ * (-1, 1) region of a slowly growing argument. */
+static const double it_cut_probes[] = {
+    -15.0, -6.0, -3.5, -2.0, -1.3, -0.9, -0.6, -0.35, -0.15, -0.05,
+    0.05, 0.15, 0.35, 0.6, 0.9, 1.3, 2.0, 3.5, 6.0, 15.0 };
+
+/* Sign (+1 / -1) shared by real d at every probe where d is real and
+ * nonzero; 0 when it changes or fewer than two probes are real. */
+static int it_probe_sign(const Expr* dp, Expr* x) {
+    const size_t np = sizeof(it_cut_probes) / sizeof(it_cut_probes[0]);
+    int sign = 0, valid = 0;
+    for (size_t i = 0; i < np; i++) {
+        double re, im;
+        if (!it_probe(dp, x, it_cut_probes[i], &re, &im)) continue;
+        if (fabs(im) > 1e-7 * (1.0 + fabs(re)) || re == 0.0) continue;
+        int s = re > 0 ? 1 : -1;
+        if (sign && s != sign) return 0;
+        sign = s; valid++;
+    }
+    return valid >= 2 ? sign : 0;
+}
+
+/* True iff g is real with |g| > 1 at every real probe where it is real (and
+ * real at two at least): ArcTanh[g] is then on its cut everywhere. */
+static bool it_cut_everywhere(const Expr* gp, Expr* x) {
+    const size_t np = sizeof(it_cut_probes) / sizeof(it_cut_probes[0]);
+    int valid = 0;
+    for (size_t i = 0; i < np; i++) {
+        double re, im;
+        if (!it_probe(gp, x, it_cut_probes[i], &re, &im)) continue;
+        if (fabs(im) > 1e-7 * (1.0 + fabs(re))) continue;  /* not real here */
+        if (fabs(re) <= 1.0 + 1e-7) return false;           /* a real ArcTanh value */
+        valid++;
+    }
+    return valid >= 2;
+}
+
+static int64_t it_gcd64(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; }
+    return a;
+}
+
+/* The integer coefficient of one summand (1 when it has none); false when
+ * the coefficient is not an integer. */
+static bool it_term_int_coeff(const Expr* t, int64_t* n) {
+    int64_t d = 1;
+    if (!is_rational(t, n, &d)
+        && !(t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL
+             && t->data.function.head->data.symbol.name == SYM_Times
+             && t->data.function.arg_count >= 1
+             && is_rational(t->data.function.args[0], n, &d))) {
+        *n = 1; d = 1;
+    }
+    return d == 1 && *n != INT64_MIN;
+}
+
+/* p divided by the integer content of its summands (2 + 2 E^x -> 1 + E^x),
+ * when p is a sum whose coefficients are all integers.  Consumes p. */
+static Expr* it_drop_content(Expr* p) {
+    if (!(p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+          && p->data.function.head->data.symbol.name == SYM_Plus)) return p;
+    int64_t g = 0;
+    for (size_t i = 0; i < p->data.function.arg_count; i++) {
+        int64_t n;
+        if (!it_term_int_coeff(p->data.function.args[i], &n)) return p;
+        g = it_gcd64(g, n);
+    }
+    if (g <= 1) return p;
+    Expr* q_raw = internal_divide((Expr*[]){ p, expr_new_integer(g) }, 2);
+    Expr* q = expr_expand(q_raw);
+    expr_free(q_raw);
+    return q;
+}
+
+/* Log[p] up to an additive constant: p's x-free factors and the integer
+ * content of a sum are dropped, and a factor E^h becomes h.  Consumes p;
+ * owned result. */
+static Expr* it_log_tidy(Expr* p, Expr* x) {
+    p = it_drop_content(p);
+    size_t n = 1;
+    Expr** fs = &p;
+    bool is_times = p->type == EXPR_FUNCTION
+        && p->data.function.head->type == EXPR_SYMBOL
+        && p->data.function.head->data.symbol.name == SYM_Times;
+    if (is_times) { n = p->data.function.arg_count; fs = p->data.function.args; }
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+    Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+    size_t nt = 0, nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = fs[i];
+        if (intrat_freeq_test(f, x)) continue;
+        if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL
+            && f->data.function.head->data.symbol.name == SYM_Power
+            && f->data.function.arg_count == 2
+            && f->data.function.args[0]->type == EXPR_SYMBOL
+            && f->data.function.args[0]->data.symbol.name == SYM_E) {
+            terms[nt++] = expr_copy(f->data.function.args[1]);
+            continue;
+        }
+        rest[nr++] = expr_copy(f);
+    }
+    if (nr == 1) {
+        terms[nt++] = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ rest[0] }, 1);
+    } else if (nr > 1) {
+        Expr* prod = internal_times(rest, nr);
+        terms[nt++] = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ prod }, 1);
+    }
+    free(rest);
+    expr_free(p);
+    Expr* out = nt == 0 ? expr_new_integer(0)
+              : eval_and_free(internal_plus(terms, nt));
+    free(terms);
+    return out;
+}
+
+/* A real form of ArcTanh[g] when g is on the cut everywhere (see above),
+ * else NULL: the logarithms, or (recip) ArcTanh[1/g] = ArcCoth[g].  Borrows
+ * g. */
+static Expr* it_cut_arctanh_real(const Expr* g, Expr* x, bool recip) {
+    Expr* gp = it_subst_params(g, x);
+    if (!gp) return NULL;
+    bool cut = it_cut_everywhere(gp, x);
+    expr_free(gp);
+    if (!cut) return NULL;
+    if (recip) {
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(-1) }, 2) }, 1));
+        return inv ? expr_new_function(expr_new_symbol(SYM_ArcTanh), (Expr*[]){ inv }, 1)
+                   : NULL;
+    }
+
+    /* g = n/d; (1 + g)/(g - 1) = (n + d)/(n - d). */
+    Expr* tg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+        (Expr*[]){ expr_copy((Expr*)g) }, 1));
+    if (!tg) return NULL;
+    Expr* gn = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator),
+        (Expr*[]){ expr_copy(tg) }, 1));
+    Expr* gd = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
+        (Expr*[]){ tg }, 1));
+    if (!gn || !gd) { if (gn) expr_free(gn); if (gd) expr_free(gd); return NULL; }
+    Expr* sum_raw = internal_plus((Expr*[]){ expr_copy(gn), expr_copy(gd) }, 2);
+    Expr* dif_raw = internal_subtract((Expr*[]){ gn, gd }, 2);
+    Expr* num = expr_expand(sum_raw);
+    Expr* den = expr_expand(dif_raw);
+    expr_free(sum_raw);
+    expr_free(dif_raw);
+    Expr* out = NULL;
+    if (num && den) {
+        Expr* dp = it_subst_params(den, x);
+        int s = dp ? (intrat_freeq_test(den, x) ? 1 : it_probe_sign(dp, x)) : 0;
+        if (dp) expr_free(dp);
+        if (s != 0) {
+            if (s < 0) {
+                num = eval_and_free(internal_times((Expr*[]){ expr_new_integer(-1), num }, 2));
+                den = eval_and_free(internal_times((Expr*[]){ expr_new_integer(-1), den }, 2));
+            }
+            Expr* ln = it_log_tidy(num, x); num = NULL;
+            Expr* ld = it_log_tidy(den, x); den = NULL;
+            Expr* diff = internal_subtract((Expr*[]){ ln, ld }, 2);
+            out = eval_and_free(internal_times((Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Rational),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2), diff }, 2));
+        }
+    }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    return out;
+}
+
+/* Walk `e`, replacing every x-dependent ArcTanh[g] on its cut everywhere by
+ * a real form (it_cut_arctanh_real).  *changed is set when anything was
+ * replaced.  Returns a fresh owned tree; `e` is untouched. */
+static Expr* it_realify_cut_arctanh(const Expr* e, Expr* x, bool recip, bool* changed) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_ArcTanh
+        && e->data.function.arg_count == 1
+        && !intrat_freeq_test(e->data.function.args[0], x)) {
+        Expr* real = it_cut_arctanh_real(e->data.function.args[0], x, recip);
+        if (real) { *changed = true; return real; }
+        return expr_copy((Expr*)e);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** na = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        na[i] = it_realify_cut_arctanh(e->data.function.args[i], x, recip, changed);
+    Expr* head = expr_copy(e->data.function.head);
+    Expr* rebuilt = expr_new_function(head, na, n);
+    free(na);
+    return rebuilt;
+}
+
+/* True iff e has a Power[c, p/q] with c an x-free number (an algebraic
+ * constant: Sqrt[2], 5^(1/3)) inside some Log argument. */
+static bool it_has_numeric_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        int64_t n, d;
+        const Expr* b = e->data.function.args[0];
+        if (is_rational(e->data.function.args[1], &n, &d) && d != 1
+            && (b->type == EXPR_INTEGER || b->type == EXPR_BIGINT || is_rational(b, &n, &d)))
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (it_has_numeric_radical(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool it_log_arg_has_algebraic_constant(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Log
+        && e->data.function.arg_count == 1)
+        return it_has_numeric_radical(e->data.function.args[0]);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (it_log_arg_has_algebraic_constant(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool it_contains_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == h) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (it_contains_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
 /* Largest algebraic part we will attempt to Cancel[Together] — a guard
  * against the multivariate-GCD blow-up on high-generator results. */
 #define IT_RECOMBINE_GATE 800
@@ -1340,7 +1636,33 @@ Expr* intsimp_finalize(Expr* r, Expr* x) {
      * evaluating it would re-enter the integrator and risk the recursion
      * limit.  Both checks are single tree-walks; this function takes
      * ownership of `r` and returns it (or a derived tree). */
-    if (it_contains_integrate(r) || !it_has_x_radical(r, x)) return r;
+    if (it_contains_integrate(r)) return r;
+    if (!it_has_x_radical(r, x)) {
+        /* An ArcTanh the log-pairing rule left on its cut for every real x
+         * goes back to real logarithms (radical-bearing answers get the
+         * ArcCoth / reciprocal branch instead, step (4) below). */
+        if (it_contains_head(r, SYM_ArcTanh)) {
+            bool changed = false;
+            Expr* l = it_realify_cut_arctanh(r, x, false, &changed);
+            if (changed) {
+                Expr* d = intsimp_distribute_plus(l);
+                expr_free(l);
+                l = eval_and_free(d);
+                bool changed2 = false;
+                Expr* q = eval_and_free(it_realify_cut_arctanh(r, x, true, &changed2));
+                expr_free(r);
+                if (q && it_log_arg_has_algebraic_constant(l)
+                      && leaf_count_internal(q, true) < leaf_count_internal(l, true)) {
+                    expr_free(l);
+                    return q;
+                }
+                if (q) expr_free(q);
+                return l;
+            }
+            expr_free(l);
+        }
+        return r;
+    }
 
     /* (1) x-free power normalisation, then one evaluator pass so the
      *     freed reciprocal powers collect against neighbouring a^k. */
