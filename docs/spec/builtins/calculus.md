@@ -207,6 +207,17 @@ Higher-order derivative operator; represents the symbolic object
 `Derivative[n1, ..., nk][f]` (the mixed `(n1, ..., nk)`-th partial
 of a `k`-argument function `f`).
 
+**Derivatives of built-in function symbols**: `Derivative[n1, ..., nk][f]` with
+`f` a built-in `NumericFunction` (and no DownValues) evaluates to the closed
+form of `D[f[#1, ..., #k], {#1, n1}, ..., {#k, nk}]` as a pure function,
+eta-reduced to a bare symbol when the body is `g[#1, ..., #k]` or `f` itself:
+`Derivative[10][Exp]` is `Exp`, `Derivative[1][Sin]` is `Cos`,
+`Derivative[2][Sin]` is `-Sin[#1] &`, `Derivative[1][Log]` is `1/#1 &`,
+`Derivative[0, 1][BesselJ]` is `(BesselJ[-1 + #1, #2] - BesselJ[1 + #1, #2])/2 &`.
+Without a closed form (`Derivative[1, 0][BesselJ]`), and for a symbol that is
+not a built-in (`Derivative[1][f]`), the operator stays inert. So
+`GaussianQuadratureError[5, Exp, 0, 1]` is `Exp/2534876467200`.
+
 **Applied derivatives of built-in functions**: `Derivative[n1, ..., nk][f][a1, ..., ak]`
 with `f` a built-in `NumericFunction` evaluates to what `D` gives for
 `f[t1, ..., tk]` at `ti = ai`, when that is a closed form:

@@ -378,11 +378,34 @@ static void test_builtin_applied_derivative(void) {
     check("Head[Derivative[1, 0][BesselY][1.0, 0.625]]", "Derivative[1, 0][BesselY]");
 }
 
+/* --- Derivative of a built-in function symbol, as an operator ----------- */
+/* Derivative[n..][f] with f a built-in NumericFunction is the closed form of
+ * D[f[#1..], ...] as a pure Function, eta-reduced to a bare symbol. */
+static void test_builtin_symbol_derivative(void) {
+    check("Derivative[10][Exp]", "Exp");
+    check("Derivative[1][Exp]", "Exp");
+    check("Derivative[1][Sin]", "Cos");
+    check("Derivative[2][Sin]", "Function[Times[-1, Sin[Slot[1]]]]");
+    check("Derivative[1][Log]", "Function[Power[Slot[1], -1]]");
+    check("Derivative[0, 1][BesselJ]",
+          "Function[Times[Rational[1, 2], Plus[BesselJ[Plus[-1, Slot[1]], Slot[2]], "
+          "Times[-1, BesselJ[Plus[1, Slot[1]], Slot[2]]]]]]");
+    check("Derivative[2][Sin][x]", "Times[-1, Sin[x]]");
+    check("Sin''[x]", "Times[-1, Sin[x]]");
+    /* no closed form, or not a built-in: stays inert (and does not recurse) */
+    check("Derivative[1, 0][BesselJ]", "Derivative[1, 0][BesselJ]");
+    check("Derivative[1][f]", "Derivative[1][f]");
+    check("Derivative[2][f][x]", "Derivative[2][f][x]");
+    /* the operator in a consumer */
+    check("GaussianQuadratureError[5, Exp, 0, 1]", "Times[Rational[1, 2534876467200], Exp]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_base_cases);
+    TEST(test_builtin_symbol_derivative);
     TEST(test_compound_head);
     TEST(test_algebraic_rules);
     TEST(test_elementary_chain);

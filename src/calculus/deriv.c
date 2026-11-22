@@ -4453,6 +4453,8 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn) {
  * unique name to clash, and the names are generated fresh per call). */
 static int64_t deriv_temp_counter = 0;
 
+static Expr* derivative_of_builtin_symbol(Expr* deriv_head, Expr* fsym);
+
 /* See deriv.h for the contract. */
 Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
     if (!deriv_head || !fsym) return NULL;
@@ -4476,7 +4478,8 @@ Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
      * us back f[t1,...,tm] and we would correctly fall through; the
      * early exit here is purely a fast path that avoids the call/eval
      * roundtrip in the common no-definition case. */
-    if (!symtab_get_down_values(fsym->data.symbol.name)) return NULL;
+    if (!symtab_get_down_values(fsym->data.symbol.name))
+        return derivative_of_builtin_symbol(deriv_head, fsym);
 
     /* Mint fresh temporary variable symbols. We use a static counter so
      * names are globally unique per process invocation; this avoids the
@@ -4639,8 +4642,13 @@ static int deriv_cf_memo_n = 0, deriv_cf_memo_next = 0;
  * user symbol (no builtin: the inert form is the answer DSolve and friends
  * build on), a non-numeric builtin (evaluating f[t] could have side effects),
  * and a derivative with no closed form. */
-static Expr* deriv_closed_form(const Expr* call) {
-    const Expr* dop = call->data.function.head;
+static const char* deriv_cf_slot[DERIV_CF_MAXARGS];
+
+/* The memoised closed form of the operator dop = Derivative[n1..nm][f] applied
+ * to the placeholder symbols Derivative$Slot1..m: a fresh copy of the
+ * derivative body, or NULL when f is not a built-in NumericFunction, the orders
+ * are out of range, or D has no closed form.  *m_out receives m. */
+static Expr* deriv_cf_body(const Expr* dop, size_t* m_out) {
     if (dop->type != EXPR_FUNCTION || dop->data.function.arg_count != 1) return NULL;
     const Expr* d = dop->data.function.head;
     const Expr* f = dop->data.function.args[0];
@@ -4648,7 +4656,7 @@ static Expr* deriv_closed_form(const Expr* call) {
         || d->data.function.head->data.symbol.name != SYM_Derivative
         || f->type != EXPR_SYMBOL) return NULL;
     size_t m = d->data.function.arg_count;
-    if (m == 0 || m > DERIV_CF_MAXARGS || call->data.function.arg_count != m) return NULL;
+    if (m == 0 || m > DERIV_CF_MAXARGS) return NULL;
     int64_t total = 0;
     for (size_t i = 0; i < m; i++) {
         const Expr* oi = d->data.function.args[i];
@@ -4660,73 +4668,118 @@ static Expr* deriv_closed_form(const Expr* call) {
                                         : symtab_lookup(f->data.symbol.name);
     if (!def || !def->builtin_func || !(def->attributes & ATTR_NUMERICFUNCTION))
         return NULL;
+    *m_out = m;
 
-    static const char* slot[DERIV_CF_MAXARGS];
-    if (!slot[0])
+    if (!deriv_cf_slot[0])
         for (int i = 0; i < DERIV_CF_MAXARGS; i++) {
             char nb[32];
             snprintf(nb, sizeof nb, "Derivative$Slot%d", i + 1);
-            slot[i] = intern_symbol(nb);
+            deriv_cf_slot[i] = intern_symbol(nb);
         }
 
-    Expr* body = NULL;
-    int hit = -1;
     for (int i = 0; i < deriv_cf_memo_n; i++)
-        if (expr_eq(deriv_cf_memo[i].dop, dop)) { hit = i; break; }
-    if (hit >= 0) {
-        body = deriv_cf_memo[hit].body;
-    } else {
-        /* Reserve the entry as a decline BEFORE differentiating: D of f[t..]
-         * may itself produce Derivative[..][f][t..] (no closed form), whose
-         * evaluation re-enters here and must find "no closed form" rather
-         * than recurse without bound. */
-        int at;
-        if (deriv_cf_memo_n < DERIV_CF_MEMO) at = deriv_cf_memo_n++;
-        else {
-            at = deriv_cf_memo_next;
-            deriv_cf_memo_next = (deriv_cf_memo_next + 1) % DERIV_CF_MEMO;
-            expr_free(deriv_cf_memo[at].dop);
-            expr_free(deriv_cf_memo[at].body);
-        }
-        Expr* key = expr_copy((Expr*)dop);
-        deriv_cf_memo[at].dop = key;
-        deriv_cf_memo[at].body = NULL;
-        Expr** fa = malloc(m * sizeof(Expr*));
-        for (size_t i = 0; i < m; i++) fa[i] = expr_new_symbol(slot[i]);
-        Expr* g = expr_new_function(expr_copy((Expr*)f), fa, m);
-        free(fa);
-        size_t nspec = 0;
-        Expr** da = malloc((m + 1) * sizeof(Expr*));
-        da[nspec++] = g;
-        for (size_t i = 0; i < m; i++) {
-            int64_t k = d->data.function.args[i]->data.integer;
-            if (k == 0) continue;
-            da[nspec++] = mk_fn2("List", expr_new_symbol(slot[i]), mk_int(k));
-        }
-        Expr* r = eval_and_free(expr_new_function(mk_sym("D"), da, nspec));
-        free(da);
-        if (r && deriv_mentions_inert(r, f->data.symbol.name)) { expr_free(r); r = NULL; }
-        body = r;
-        /* The slot may have been recycled by a nested insertion meanwhile. */
-        if (deriv_cf_memo[at].dop == key && !deriv_cf_memo[at].body)
-            deriv_cf_memo[at].body = body ? expr_copy(body) : NULL;
-        if (body) {
-            Expr** rules0 = malloc(m * sizeof(Expr*));
-            for (size_t i = 0; i < m; i++)
-                rules0[i] = mk_fn2("Rule", expr_new_symbol(slot[i]),
-                                   expr_copy(call->data.function.args[i]));
-            Expr* rl0 = mk_fnN_adopt("List", rules0, m);
-            return eval_and_free(mk_fn2("ReplaceAll", body, rl0));
-        }
-        return NULL;
+        if (expr_eq(deriv_cf_memo[i].dop, dop))
+            return deriv_cf_memo[i].body ? expr_copy(deriv_cf_memo[i].body) : NULL;
+
+    /* Reserve the entry as a decline BEFORE differentiating: D of f[t..]
+     * may itself produce Derivative[..][f][t..] (no closed form), whose
+     * evaluation re-enters here and must find "no closed form" rather
+     * than recurse without bound. */
+    int at;
+    if (deriv_cf_memo_n < DERIV_CF_MEMO) at = deriv_cf_memo_n++;
+    else {
+        at = deriv_cf_memo_next;
+        deriv_cf_memo_next = (deriv_cf_memo_next + 1) % DERIV_CF_MEMO;
+        expr_free(deriv_cf_memo[at].dop);
+        expr_free(deriv_cf_memo[at].body);
     }
-    if (!body) return NULL;
+    Expr* key = expr_copy((Expr*)dop);
+    deriv_cf_memo[at].dop = key;
+    deriv_cf_memo[at].body = NULL;
+    Expr** fa = malloc(m * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) fa[i] = expr_new_symbol(deriv_cf_slot[i]);
+    Expr* g = expr_new_function(expr_copy((Expr*)f), fa, m);
+    free(fa);
+    size_t nspec = 0;
+    Expr** da = malloc((m + 1) * sizeof(Expr*));
+    da[nspec++] = g;
+    for (size_t i = 0; i < m; i++) {
+        int64_t k = d->data.function.args[i]->data.integer;
+        if (k == 0) continue;
+        da[nspec++] = mk_fn2("List", expr_new_symbol(deriv_cf_slot[i]), mk_int(k));
+    }
+    Expr* r = eval_and_free(expr_new_function(mk_sym("D"), da, nspec));
+    free(da);
+    if (r && deriv_mentions_inert(r, f->data.symbol.name)) { expr_free(r); r = NULL; }
+    /* The slot may have been recycled by a nested insertion meanwhile. */
+    if (deriv_cf_memo[at].dop == key && !deriv_cf_memo[at].body)
+        deriv_cf_memo[at].body = r ? expr_copy(r) : NULL;
+    return r;
+}
+
+/* body with Derivative$Slot_i replaced by the given expressions (consumed). */
+static Expr* deriv_cf_substitute(Expr* body, Expr** vals, size_t m) {
     Expr** rules = malloc(m * sizeof(Expr*));
     for (size_t i = 0; i < m; i++)
-        rules[i] = mk_fn2("Rule", expr_new_symbol(slot[i]),
-                          expr_copy(call->data.function.args[i]));
+        rules[i] = mk_fn2("Rule", expr_new_symbol(deriv_cf_slot[i]), vals[i]);
     Expr* rl = mk_fnN_adopt("List", rules, m);
-    return eval_and_free(mk_fn2("ReplaceAll", expr_copy(body), rl));
+    return eval_and_free(mk_fn2("ReplaceAll", body, rl));
+}
+
+static Expr* deriv_closed_form(const Expr* call) {
+    const Expr* dop = call->data.function.head;
+    size_t m = 0;
+    Expr* body = deriv_cf_body(dop, &m);
+    if (!body) return NULL;
+    if (call->data.function.arg_count != m) { expr_free(body); return NULL; }
+    Expr* vals[DERIV_CF_MAXARGS];
+    for (size_t i = 0; i < m; i++) vals[i] = expr_copy(call->data.function.args[i]);
+    return deriv_cf_substitute(body, vals, m);
+}
+
+/* Derivative[n1..nm][f] for a built-in NumericFunction symbol f, as an operator:
+ * the closed form of D[f[#1..#m], {#1, n1}, ..., {#m, nm}] wrapped as a pure
+ * Function, eta-reduced to the bare symbol g when the body is g[#1..#m]
+ * (Derivative[1][Exp] -> Exp, Derivative[2][Sin] -> -Sin[#1] &).  NULL when
+ * D has no closed form, so the operator stays inert (Derivative[1][f] for an
+ * undefined f, Derivative[1, 0][BesselJ]). */
+static Expr* derivative_of_builtin_symbol(Expr* deriv_head, Expr* fsym) {
+    Expr* dop = mk_fn_head1(expr_copy(deriv_head), expr_copy(fsym));
+    size_t m = 0;
+    Expr* body = deriv_cf_body(dop, &m);
+    expr_free(dop);
+    if (!body) return NULL;
+    Expr* vals[DERIV_CF_MAXARGS];
+    for (size_t i = 0; i < m; i++) vals[i] = make_slot((int64_t)(i + 1));
+    body = deriv_cf_substitute(body, vals, m);
+    if (!body) return NULL;
+    /* Eta-reduce: the body is f[#1..#m] itself (as evaluated: Exp[#1] is
+     * E^#1) -> f, or another symbol's g[#1, ..., #m] -> g. */
+    {
+        Expr** fa = malloc(m * sizeof(Expr*));
+        for (size_t i = 0; i < m; i++) fa[i] = make_slot((int64_t)(i + 1));
+        Expr* self = eval_and_free(expr_new_function(expr_copy(fsym), fa, m));
+        free(fa);
+        bool same = self && expr_eq(self, body);
+        expr_free(self);
+        if (same) { expr_free(body); return expr_copy(fsym); }
+    }
+    if (body->type == EXPR_FUNCTION && body->data.function.head->type == EXPR_SYMBOL
+        && body->data.function.arg_count == m) {
+        bool eta = true;
+        for (size_t i = 0; i < m && eta; i++) {
+            Expr* sl = make_slot((int64_t)(i + 1));
+            eta = expr_eq(body->data.function.args[i], sl);
+            expr_free(sl);
+        }
+        if (eta) {
+            Expr* g = expr_copy(body->data.function.head);
+            expr_free(body);
+            return g;
+        }
+    }
+    Expr* fn_args[1] = { body };
+    return expr_new_function(mk_sym("Function"), fn_args, 1);
 }
 
 Expr* deriv_apply_numeric(const Expr* call) {

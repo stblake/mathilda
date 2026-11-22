@@ -88,9 +88,15 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn);
  *                 all arguments must be nonnegative integers)
  *   fsym       -- the wrapped target; must be EXPR_SYMBOL
  *
- * Returns a fresh Function[...] expression on success. Returns NULL when
+ * A symbol with no DownValues that is a built-in NumericFunction (Exp, Sin,
+ * BesselJ, ...) reduces instead to the closed form of D[f[#1..#m], ...] as a
+ * pure Function, eta-reduced to a bare symbol when the body is g[#1..#m]
+ * (Derivative[1][Exp] -> Exp, Derivative[1][Log] -> 1/#1 &).
+ *
+ * Returns a fresh Function[...] (or symbol) on success. Returns NULL when
  *   - fsym is not a symbol,
- *   - fsym has no DownValues,
+ *   - fsym has no DownValues and is not a built-in with a closed-form
+ *     derivative (so Derivative[1][f] for an undefined f stays inert),
  *   - the constructed call f[t1,...,tm] does not rewrite (e.g. arity or
  *     pattern mismatch), or
  *   - any orders in deriv_head are non-integer or negative.
