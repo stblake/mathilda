@@ -16,21 +16,36 @@
 /* ---- Direct API (non-parser) tests ---- */
 
 static void test_initial_state(void) {
-    /* core_init() loads the FullSimplify package (BeginPackage["FullSimplify`"]
-     * ... EndPackage[]) and then the SeparablePolynomialDecomposition package.
-     * Each EndPackage prepends its package context to $ContextPath, so the
-     * exported symbols (FullSimplify, RegisterTransforms,
-     * SeparablePolynomialDecomposition) resolve under their short names. The
-     * later load comes first; the Lean 4 package (Lean`) loads last. The
-     * current context returns to Global` and System` stays last. */
+    /* core_init() loads the FullSimplify, SeparablePolynomialDecomposition and
+     * Lean 4 packages (each BeginPackage ... EndPackage[]). They are KERNEL
+     * packages, read through mathilda_load_module: their contexts are kept
+     * resolvable without being published, so a fresh session's $ContextPath is
+     * exactly Global`, Mathilda`, System` (see test_kernel_packages_unlisted).
+     * The current context returns to Global` and System` stays last. */
     ASSERT_STR_EQ(context_current(), "Global`");
-    ASSERT(context_path_count() == 6);
-    ASSERT_STR_EQ(context_path_at(0), "Lean`");
-    ASSERT_STR_EQ(context_path_at(1), "SeparablePolynomialDecomposition`");
-    ASSERT_STR_EQ(context_path_at(2), "FullSimplify`");
-    ASSERT_STR_EQ(context_path_at(3), "Global`");
-    ASSERT_STR_EQ(context_path_at(4), "Mathilda`");   /* Mathilda-only builtins */
-    ASSERT_STR_EQ(context_path_at(5), "System`");
+    ASSERT(context_path_count() == 3);
+    ASSERT_STR_EQ(context_path_at(0), "Global`");
+    ASSERT_STR_EQ(context_path_at(1), "Mathilda`");   /* Mathilda-only builtins */
+    ASSERT_STR_EQ(context_path_at(2), "System`");
+}
+
+/* Kernel packages stay off $ContextPath and $Packages, and their exported
+ * symbols still resolve by short name (and print short); a lazily loaded
+ * kernel package (Integrate's cascade) does not publish its context either.
+ * Needs of a kernel context counts it as loaded and then publishes it. */
+static void test_kernel_packages_unlisted(void) {
+    assert_eval_eq("$Packages", "{\"Mathilda`\", \"System`\", \"Global`\"}", 0);
+    assert_eval_eq("{Context[Certify], Context[SeparablePolynomialDecomposition], "
+                   "Context[RegisterTransforms]}",
+                   "{\"Lean`\", \"SeparablePolynomialDecomposition`\", \"FullSimplify`\"}", 0);
+    assert_eval_eq("{Certify, SeparablePolynomialDecomposition, RegisterTransforms}",
+                   "{Certify, SeparablePolynomialDecomposition, RegisterTransforms}", 0);
+    assert_eval_eq("SameQ[Certify, Lean`Certify]", "True", 0);
+    assert_eval_eq("SeparablePolynomialDecomposition[x^2 + 2 x y + y^2 + x + y, {x}, {y}] =!= "
+                   "HoldForm[SeparablePolynomialDecomposition]", "True", 0);
+    assert_eval_eq("FullSimplify[Sin[x]^2 + Cos[x]^2]", "1", 0);
+    assert_eval_eq("Integrate[x/(Exp[x] + 1), x]; Integrate[Log[x]/(1 + x), x]; $ContextPath",
+                   "{\"Global`\", \"Mathilda`\", \"System`\"}", 0);
 }
 
 static void test_resolve_bare_builtin(void) {
@@ -128,11 +143,9 @@ static void test_context_builtin_of_builtin(void) {
 
 static void test_dollar_context_and_path(void) {
     assert_eval_eq("$Context", "\"Global`\"", 0);
-    /* The FullSimplify and SeparablePolynomialDecomposition packages, loaded
-     * by core_init, leave their contexts on $ContextPath (see
+    /* The kernel packages loaded by core_init are not on it (see
      * test_initial_state). */
-    assert_eval_eq("$ContextPath",
-                   "{\"Lean`\", \"SeparablePolynomialDecomposition`\", \"FullSimplify`\", \"Global`\", \"Mathilda`\", \"System`\"}", 0);
+    assert_eval_eq("$ContextPath", "{\"Global`\", \"Mathilda`\", \"System`\"}", 0);
 }
 
 static void test_begin_changes_context(void) {
@@ -434,6 +447,7 @@ int main(void) {
     TEST(test_context_builtin_no_args);
     TEST(test_context_builtin_of_builtin);
     TEST(test_dollar_context_and_path);
+    TEST(test_kernel_packages_unlisted);
     TEST(test_begin_package_path);
     TEST(test_begin_package_with_needs);
     TEST(test_begin_changes_context);

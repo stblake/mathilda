@@ -1823,6 +1823,20 @@ counterpart among the reference language's `System`` names. Examples are
 - `Mathilda`` is on the default `$ContextPath`
   (`{"Global`", "Mathilda`", "System`"}`, after any loaded packages) and is
   listed in `$Packages`, so the names work bare at the top level.
+
+**Kernel packages.** Some kernel functions are packages that the kernel reads
+itself: `FullSimplify``, `SeparablePolynomialDecomposition`` and `Lean`` at
+startup, and Integrate's method packages (`ParallelMixed``, `Trager``, ...)
+when they are first needed. Their contexts are not put on `$ContextPath` or
+`$Packages`, which list only what the user loaded. A fresh session's
+`$ContextPath` is `{"Global`", "Mathilda`", "System`"}`.
+- Their exported symbols still resolve by short name and print short:
+  `Certify` is ``Lean`Certify``, and `Context[Certify]` is `"Lean`"`.
+- A user's own `Global`` symbol of the same name comes first at the top level.
+- Inside `BeginPackage` they are not visible, as before. A package that wants
+  them asks for them, for example `BeginPackage["P`", {"Lean`"}]`.
+- `Needs["Lean`"]` does not reload the package. It puts `Lean`` on
+  `$ContextPath`, as asked.
 - `Mathilda`Name` reaches the builtin from anywhere.
 - `Needs["Mathilda`"]` is a no-op.
 

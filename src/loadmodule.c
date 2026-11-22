@@ -501,6 +501,8 @@ static void lm_note_jumped_reads(void) {
     if (lm_depth_raw > lm_depth) { lm_interrupted++; lm_depth_raw = lm_depth; }
 }
 
+int mathilda_module_depth(void) { return lm_depth; }
+
 unsigned mathilda_module_generation(void) {
     lm_note_jumped_reads();
     return symtab_generation() * 2654435761u + lm_interrupted;

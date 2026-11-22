@@ -13,6 +13,7 @@
 #include "assoc.h"     /* $ContextAliases is an Association */
 #include "common.h"    /* builtin_arg_error */
 #include "readwrite.h" /* readwrite_get: Needs loads through Get */
+#include "loadmodule.h" /* mathilda_module_depth: kernel package loads */
 
 /* -------------------- State -------------------- */
 
@@ -37,6 +38,7 @@ typedef enum {
 
 typedef struct CtxFrame {
     FrameKind kind;
+    bool      kernel;          /* a BeginPackage read by mathilda_load_module */
     Expr*     saved_context;   /* owned copies of the values on entry (or NULL) */
     Expr*     saved_path;
     struct CtxFrame* next;
@@ -44,6 +46,24 @@ typedef struct CtxFrame {
 
 static CtxFrame* g_stack = NULL;
 static bool      g_inited = false;
+
+/* Kernel packages: the contexts of the packages the kernel itself reads
+ * through mathilda_load_module (FullSimplify`, Lean`, the lazily loaded
+ * Integrate cascades, ...), newest first.  Their EndPackage does NOT publish
+ * the context on $ContextPath or $Packages -- those describe what the USER
+ * loaded, and a fresh session's path is {"Global`", "Mathilda`", "System`"} --
+ * but their exported symbols resolve by short name all the same: the resolver
+ * consults this list where the context used to sit on the path (see
+ * context_resolve_name), and the printer shows those symbols short.  Needs of
+ * such a context counts it as loaded and then publishes it, as asked. */
+static char** g_kernel_ctx = NULL;
+static size_t g_kernel_n = 0, g_kernel_cap = 0;
+
+static bool kernel_ctx_has(const char* ctx) {
+    for (size_t i = 0; i < g_kernel_n; i++)
+        if (strcmp(g_kernel_ctx[i], ctx) == 0) return true;
+    return false;
+}
 
 /* -------------------- Helpers -------------------- */
 
@@ -160,6 +180,33 @@ static Expr* prepend_unique(const char* first, const Expr* rest) {
     return out;
 }
 
+static void kernel_ctx_add(const char* ctx) {
+    if (kernel_ctx_has(ctx)) return;
+    if (g_kernel_n == g_kernel_cap) {
+        size_t nc = g_kernel_cap ? 2 * g_kernel_cap : 8;
+        char** nl = (char**)realloc(g_kernel_ctx, nc * sizeof(char*));
+        if (!nl) return;
+        g_kernel_ctx = nl; g_kernel_cap = nc;
+    }
+    g_kernel_ctx[g_kernel_n++] = ctx_strdup(ctx);
+}
+
+/* True while a BeginPackage frame is open: its $ContextPath is the package's
+ * own {ctx`, System`, needs...}, which the kernel packages were never on. */
+static bool in_package_frame(void);
+
+/* The kernel-package symbol `raw` resolves to (malloc'd), or NULL. Newest
+ * package first, as EndPackage used to prepend them. */
+static char* kernel_ctx_probe(const char* raw) {
+    if (g_kernel_n == 0 || in_package_frame()) return NULL;
+    for (size_t i = g_kernel_n; i > 0; i--) {
+        char* probe = ctx_concat(g_kernel_ctx[i - 1], raw);
+        if (symtab_lookup(probe)) return probe;
+        free(probe);
+    }
+    return NULL;
+}
+
 /* Put `ctx` at the front of $ContextPath unless it is already on it. */
 static void path_prepend(const char* ctx) {
     if (path_contains(ctx)) return;
@@ -167,7 +214,7 @@ static void path_prepend(const char* ctx) {
 }
 
 bool context_packages_contains(const char* ctx) {
-    return list_has_string(own_value("$Packages"), ctx);
+    return list_has_string(own_value("$Packages"), ctx) || kernel_ctx_has(ctx);
 }
 
 /* Record a loaded package: move/put `ctx` at the front of $Packages. */
@@ -293,7 +340,7 @@ bool context_is_visible(const char* prefix) {
     if (!prefix || *prefix == '\0') return false;
     if (strcmp(prefix, "System`") == 0) return true; /* System` always visible */
     if (strcmp(prefix, context_current()) == 0) return true;
-    return path_contains(prefix);
+    return path_contains(prefix) || (kernel_ctx_has(prefix) && !in_package_frame());
 }
 
 const char* context_display_name(const char* name) {
@@ -403,6 +450,17 @@ char* context_resolve_name(const char* raw) {
         free(probe);
     }
 
+    /* Kernel packages (see g_kernel_ctx): ahead of the path while the kernel
+     * is reading one of its own modules -- where they used to sit, at the
+     * front -- so a user's Global` symbol of the same name never captures a
+     * kernel package's reference; after the path otherwise, so the user's own
+     * symbols come first. */
+    bool kernel_read = mathilda_module_depth() > 0;
+    if (kernel_read) {
+        char* k = kernel_ctx_probe(raw);
+        if (k) return k;
+    }
+
     size_t np = context_path_count();
     for (size_t i = 0; i < np; i++) {
         const char* prefix = context_path_at(i);
@@ -414,6 +472,10 @@ char* context_resolve_name(const char* raw) {
         char* probe = ctx_concat(prefix, raw);
         if (symtab_lookup(probe)) return probe;
         free(probe);
+    }
+    if (!kernel_read) {
+        char* k = kernel_ctx_probe(raw);
+        if (k) return k;
     }
 
     /* Fall back: resolve to the bare (implicit System`) name when it denotes a
@@ -453,9 +515,16 @@ char* context_resolve_name(const char* raw) {
 
 static Expr* copy_or_null(Expr* e) { return e ? expr_copy(e) : NULL; }
 
+static bool in_package_frame(void) {
+    for (const CtxFrame* f = g_stack; f; f = f->next)
+        if (f->kind == FRAME_PACKAGE) return true;
+    return false;
+}
+
 static void frame_push(FrameKind kind) {
     CtxFrame* f = (CtxFrame*)malloc(sizeof(CtxFrame));
     f->kind = kind;
+    f->kernel = kind == FRAME_PACKAGE && mathilda_module_depth() > 0;
     f->saved_context = copy_or_null(own_value("$Context"));
     f->saved_path = copy_or_null(own_value("$ContextPath"));
     f->next = g_stack;
@@ -538,7 +607,7 @@ bool context_begin_package(const char* ctx, const char** needs, size_t needs_cou
     publish_own("$Context", expr_new_string(ctx));
     publish_own("$ContextPath", make_path(path, n));
     free((void*)path);
-    packages_prepend(ctx);
+    if (!g_stack->kernel) packages_prepend(ctx);   /* a kernel package is unlisted */
     return true;
 }
 
@@ -579,10 +648,14 @@ void context_reapply_endpackages(size_t mark) {
 
 bool context_end_package(char** out_ended_ctx) {
     if (!g_stack) return false;
+    bool kernel = g_stack->kernel;
     char* closed = NULL;
     if (!frame_pop(&closed)) return false;
-    /* Prepend the closed package context to $ContextPath (if not already on it). */
-    if (closed) { path_prepend(closed); endpkg_log(closed); }
+    /* Prepend the closed package context to $ContextPath (if not already on
+     * it) -- or, for a kernel package, record it as resolvable without
+     * publishing it (g_kernel_ctx). */
+    if (closed && kernel) kernel_ctx_add(closed);
+    else if (closed) { path_prepend(closed); endpkg_log(closed); }
     if (out_ended_ctx) *out_ended_ctx = closed;
     else free(closed);
     return true;
@@ -932,5 +1005,8 @@ void context_shutdown(void) {
     for (size_t i = 0; i < g_endpkg_n; i++) free(g_endpkg_log[i]);
     free(g_endpkg_log);
     g_endpkg_log = NULL; g_endpkg_n = g_endpkg_cap = 0;
+    for (size_t i = 0; i < g_kernel_n; i++) free(g_kernel_ctx[i]);
+    free(g_kernel_ctx);
+    g_kernel_ctx = NULL; g_kernel_n = g_kernel_cap = 0;
     g_inited = false;
 }

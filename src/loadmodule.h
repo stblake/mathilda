@@ -90,6 +90,12 @@ int mathilda_load_module(const char* relpath);
  */
 unsigned mathilda_module_generation(void);
 
+/* The number of mathilda_load_module reads in progress (restored when a
+ * TimeConstrained unwind abandons one): > 0 while the kernel is reading one
+ * of its own modules, which is what makes a BeginPackage a kernel package
+ * (context.c). */
+int mathilda_module_depth(void);
+
 /* Builtin: LoadModule["relpath"] -> True (loaded) or False (not found). */
 Expr* builtin_loadmodule(Expr* res);
 

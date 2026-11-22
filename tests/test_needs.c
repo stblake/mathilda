@@ -102,9 +102,10 @@ static void test_initial_state(void) {
     assert_eval_eq("$Path", "{\".\"}", 0);
     assert_eval_eq("$ContextAliases", "<||>", 0);
     assert_eval_eq("Head[$ContextAliases]", "Association", 0);
-    /* The bootstrap's FullSimplify package is recorded by BeginPackage. */
-    assert_eval_eq("SubsetQ[$Packages, {\"System`\", \"Global`\", \"FullSimplify`\"}]",
-                   "True", 0);
+    /* The bootstrap's FullSimplify package is a kernel package: loaded (so
+     * Needs never re-reads it) but not listed in $Packages. */
+    assert_eval_eq("SubsetQ[$Packages, {\"System`\", \"Global`\"}]", "True", 0);
+    assert_eval_eq("MemberQ[$Packages, \"FullSimplify`\"]", "False", 0);
     ASSERT(context_packages_contains("System`"));
     ASSERT(context_packages_contains("FullSimplify`"));
     ASSERT(!context_packages_contains("NdA`"));
