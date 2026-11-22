@@ -5926,6 +5926,112 @@ done:
     return out;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Breakpoints of piecewise-linear interpolants (machine path)        *
+ * ------------------------------------------------------------------ *
+ *
+ * An InterpolatingFunction of InterpolationOrder 1 (or 0) is piecewise
+ * linear (constant) between its grid points, with a kink (step) at every one
+ * of them.  A Daubechies WaveletPhi[w, x] is such an interpolant -- the
+ * cascade on the grid of spacing 2^-MaxRecursion, 769 kinks on [0, 3] for
+ * DaubechiesWavelet[2] -- and an adaptive rule over the whole support then
+ * meets a kink inside nearly every panel.  Its error estimate, the difference
+ * of two rules both wrong by O(h^2) times the slope jump and scaled for an
+ * analytic integrand, under-reports by orders of magnitude: NIntegrate gave
+ * 0.999874 with an estimated error of 1.2e-7 where the integral is exactly 1.
+ * Split at the grid points instead: each piece is then a polynomial of the
+ * interpolant's order and the first rule on it exact.  The interpolant's
+ * argument must be linear in the variable with numeric coefficients; the
+ * breakpoints strictly inside (a, b), ascending and distinct, are returned
+ * (malloc'd, count in *nout), or NULL when there are none, one cannot be
+ * placed, or there are more than NI_PW_MAX.  A higher-order interpolant is
+ * smooth to its order between the grid points and needs no splitting. */
+#define NI_PW_MAX 16384
+
+/* The grid of an applied 1-D InterpolatingFunction[...][u] of order <= 1
+ * into g[0..max); its count, or 0 when e is not one (or too large). */
+static int ni_pw_grid(const Expr* e, double* g, int max) {
+    const Expr* f = e->data.function.head;
+    if (e->data.function.arg_count != 1 || f->type != EXPR_FUNCTION
+        || f->data.function.head->type != EXPR_SYMBOL
+        || f->data.function.head->data.symbol.name != SYM_InterpolatingFunction)
+        return 0;
+    Expr* ord = eval_and_free(expr_new_function(expr_copy((Expr*)f),
+                                  (Expr*[]){ expr_new_string("InterpolationOrder") }, 1));
+    bool low = ord && ord->type == EXPR_FUNCTION && ord->data.function.arg_count == 1
+        && ord->data.function.args[0]->type == EXPR_INTEGER
+        && ord->data.function.args[0]->data.integer <= 1;
+    expr_free(ord);
+    if (!low) return 0;
+    Expr* co = eval_and_free(expr_new_function(expr_copy((Expr*)f),
+                                 (Expr*[]){ expr_new_string("Coordinates") }, 1));
+    int n = 0;
+    if (co && co->type == EXPR_FUNCTION && co->data.function.arg_count == 1
+        && co->data.function.args[0]->type == EXPR_FUNCTION) {
+        const Expr* xs = co->data.function.args[0];
+        size_t m = xs->data.function.arg_count;
+        if (m <= (size_t)max) {
+            for (size_t i = 0; i < m; i++) {
+                if (!ni_to_double_real(xs->data.function.args[i], &g[n])) { n = 0; break; }
+                n++;
+            }
+        }
+    }
+    expr_free(co);
+    return n;
+}
+
+static void ni_pw_collect(const Expr* e, const char* var, double a, double b,
+                          double* out, int* n, bool* over, double* ubuf) {
+    if (!e || e->type != EXPR_FUNCTION || *over) return;
+    int nu = ni_pw_grid(e, ubuf, NI_PW_MAX);
+    if (nu > 0 && !ni_free_of_var(e->data.function.args[0], var)) {
+        Expr* u = e->data.function.args[0];
+        double c[2];
+        bool ok = ni_numeric_poly_degree(u, var) == 1;
+        for (int i = 0; i < 2 && ok; i++) {        /* u at var = 0, 1 */
+            Expr* r = ni_ev2(SYM_ReplaceAll, expr_copy(u),
+                             expr_new_function(expr_new_symbol(SYM_Rule),
+                                 (Expr*[]){ expr_new_symbol(var), expr_new_integer(i) }, 2),
+                             var);
+            Expr* num = r ? numericalize(r, numeric_machine_spec()) : NULL;
+            expr_free(r);
+            ok = num && ni_to_double_real(num, &c[i]) && isfinite(c[i]);
+            expr_free(num);
+        }
+        double alpha = ok ? c[1] - c[0] : 0.0;
+        if (!(alpha != 0.0)) { *over = true; return; }   /* cannot place them */
+        for (int k = 0; k < nu; k++) {
+            double x = (ubuf[k] - c[0]) / alpha;
+            if (!(x > a && x < b)) continue;
+            if (*n >= NI_PW_MAX) { *over = true; return; }
+            out[(*n)++] = x;
+        }
+        return;      /* (a linear argument has no breakpoints of its own) */
+    }
+    ni_pw_collect(e->data.function.head, var, a, b, out, n, over, ubuf);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ni_pw_collect(e->data.function.args[i], var, a, b, out, n, over, ubuf);
+}
+
+static double* ni_piecewise_breakpoints(Expr* body, const char* var, double a, double b,
+                                        int* nout) {
+    *nout = 0;
+    double* out = malloc(sizeof(double) * NI_PW_MAX);
+    double* ubuf = malloc(sizeof(double) * NI_PW_MAX);
+    int n = 0;
+    bool over = false;
+    ni_pw_collect(body, var, a, b, out, &n, &over, ubuf);
+    free(ubuf);
+    if (over || n == 0) { free(out); return NULL; }
+    qsort(out, (size_t)n, sizeof(double), ni_dbl_cmp);
+    int w = 0;
+    for (int i = 0; i < n; i++)
+        if (w == 0 || out[i] > out[w - 1]) out[w++] = out[i];
+    *nout = w;
+    return out;
+}
+
 /* Integrate res = NIntegrate[f, specs..., opts...] with the parsed options:
  * the dispatch onto Monte-Carlo, cubature, iterated, contour and 1-D paths. */
 static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* op) {
@@ -6077,6 +6183,28 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
             }
         }
 #endif
+        /* kinks of a piecewise-linear interpolant, split exactly */
+        if (real_finite && !o.prec_mpfr && o.method == NI_AUTO && nspecs == 1
+            && !o.exclusions && a != b) {
+            int nk;
+            double* kinks = ni_piecewise_breakpoints(eff_body, var, a < b ? a : b,
+                                                     a < b ? b : a, &nk);
+            if (kinks) {
+                double _Complex* nodes = malloc(sizeof(double _Complex) * (size_t)(nk + 2));
+                bool rev = a > b;
+                int nn = 0;
+                nodes[nn++] = a;
+                for (int i = 0; i < nk; i++) nodes[nn++] = kinks[rev ? nk - 1 - i : i];
+                nodes[nn++] = b;
+                free(kinks);
+                out = ni_run_contour(eff_body, var, nodes, nn, &o);
+                free(nodes);
+                expr_free(amin);
+                expr_free(amax);
+                expr_free(inner);
+                return out;
+            }
+        }
         if (real_finite && (o.method == NI_PV || o.exclusions)) {
             double lo = a < b ? a : b, hi = a < b ? b : a;
             ni_extract_points(o.exclusions, var, lo, hi, pts, &npts, 64);

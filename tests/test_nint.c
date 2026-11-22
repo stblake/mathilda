@@ -1216,6 +1216,22 @@ static void test_phase_coordinate_endpoint(void) {
  * PrecisionGoal is 8 digits at machine precision (the goal the rules use),
  * not the ~14 digits the warning used to test against, which both warned on
  * results that had met their goal and printed a tolerance of ~1e-14 |I|. */
+/* A piecewise-linear interpolant (a cascade wavelet, InterpolationOrder 1)
+ * is split at its grid points: each piece is linear and integrated exactly.
+ * The scaling function integrates to 1 (the cascade's grid values sum to
+ * 2^J); it was 0.999874 with an error estimate a thousand times too small. */
+static void test_piecewise_linear_interpolant_breakpoints(void) {
+    ASSERT(close_to("NIntegrate[WaveletPhi[DaubechiesWavelet[2], x], {x, 0, 3}]", "1", 1e-13));
+    ASSERT(close_to("NIntegrate[WaveletPhi[DaubechiesWavelet[3], x], {x, 0, 5}]", "1", 1e-13));
+    ASSERT(close_to("NIntegrate[WaveletPhi[DaubechiesWavelet[2], x], {x, 3, 0}]", "-1", 1e-13));
+    ASSERT(close_to("NIntegrate[WaveletPsi[DaubechiesWavelet[2], x], {x, -1, 2}]", "0", 1e-13));
+    /* a linear argument maps the grid; an order-1 Interpolation is the trapezoid sum */
+    ASSERT(close_to("NIntegrate[WaveletPhi[DaubechiesWavelet[2], 2 x + 1], {x, -1/2, 1}]", "1/2", 1e-13));
+    ASSERT(close_to("NIntegrate[Interpolation[Table[{k/10, Sin[k/10.]}, {k, 0, 30}], "
+                    "InterpolationOrder -> 1][x], {x, 0, 3}]",
+                    "Total[Table[Sin[k/10.], {k, 0, 30}]]/10 - Sin[3.]/20", 1e-14));
+}
+
 static void test_accgl_states_goal(void) {
     const char* path = "/tmp/mathilda_nint_accgl_stderr.log";
     fflush(stderr);
@@ -1341,6 +1357,7 @@ int main(void) {
     TEST(test_nested_exact_endpoints_wp);
     TEST(test_phase_coordinate_endpoint);
     TEST(test_accgl_states_goal);
+    TEST(test_piecewise_linear_interpolant_breakpoints);
     TEST(test_iterated_wp_machine_twin);
     TEST(test_bessel_products_halfline);
 
