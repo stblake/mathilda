@@ -87,6 +87,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] L3 theory: Lemma E2off (one transcendental offset; K(tau0) = K(tau)), reviewed (no FATAL, 4 scope GAPs resolved)
 - [ ] L3 code: the staged OL2 list in the note (keep "in Q" vs "in Const(K)" separate; torsion and zero tests symbolic in tau) -- no corpus case needs it
 - [x] Return semantics (v0.6695, audit agent + independent check): the evaluator follows the reference; all 35 src/internal sites whose catcher changed are equivalent; NDSolveBVP uses Break[]
+- [ ] integrate_roach_tests: one "Subprocess aborted" in a parallel unit-tier run at v0.6698; passes 3/3 alone -- intermittent, investigate (TimeConstrained async?)
 - [ ] benchmarks/102-primality-testing: results produced before v0.6695 are suspect (Return inside While in mrRound/strongLucas) -- rerun
 - [x] Cascade: Linearity returns Erf/Erfi for elementary integrands -> Risch decision on the whole (one-elem-30, two-elem-45, gauss-elem-10 closed; tanh-elem-38 needs > 4 s of RT); Erf[I z] -> I Erfi[z] (v0.6691). Open: odd-function sign of a negative Plus (Sin[-1 - x], Erf[-1 - x]) for every odd head, as the reference does
 - [x] Cascade misses: tan-elem-26, gauss-elem-23 (stage 02 Together probe), tan-elem-32 (closes in 3.6 s idle; DD total CPU budget) -- v0.6691
