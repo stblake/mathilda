@@ -1439,6 +1439,56 @@ static void test_linear_box_syntax(void) {
     assert_eval_eq("ToExpression[\"\\!\\(a\\\\ b\\)\"]", "Times[a, b]", 1);
 }
 
+/* The infix box escapes \^ \_ \% \& \+ \/ \@ inside a linear box group, in
+ * source and in a ToExpression string: each builds its box and reads as the
+ * expression the box stands for, with the box operators' own grouping. */
+static void test_linear_box_infix(void) {
+    static const struct { const char* in; const char* out; } cases[] = {
+        { "\\!\\(x\\^2\\)",            "Power[x, 2]" },
+        { "\\!\\(y\\_1\\)",            "Subscript[y, 1]" },
+        { "\\!\\(x\\^\\(n+1\\)\\)",    "Power[x, Plus[1, n]]" },
+        { "\\!\\(a\\^b\\^c\\)",        "Power[a, Power[b, c]]" },
+        { "\\!\\(a b\\^2\\)",          "Times[a, Power[b, 2]]" },
+        { "\\!\\(-x\\^2\\)",           "Times[-1, Power[x, 2]]" },
+        { "\\!\\(x\\^-1\\)",           "Power[x, -1]" },
+        { "\\!\\(x\\^-y\\^2\\)",       "Power[x, Times[-1, Power[y, 2]]]" },
+        { "\\!\\(x\\/y\\)",            "Times[x, Power[y, -1]]" },
+        { "\\!\\(a b\\/c d\\)",        "Times[a, b, Power[c, -1], d]" },
+        { "\\!\\(a\\/b\\/c\\)",        "Times[a, Power[b, -1], Power[c, -1]]" },
+        { "\\!\\(x\\/2\\^3\\)",        "Times[Rational[1, 8], x]" },
+        { "\\!\\(\\@x\\)",             "Power[x, Rational[1, 2]]" },
+        { "\\!\\(\\@x\\^2\\)",         "Power[Power[x, 2], Rational[1, 2]]" },
+        { "\\!\\(\\@x\\/y\\)",         "Times[Power[x, Rational[1, 2]], Power[y, -1]]" },
+        { "\\!\\(\\@x\\%3\\)",         "Power[x, Rational[1, 3]]" },
+        { "\\!\\(x\\&y\\)",            "Overscript[x, y]" },
+        { "\\!\\(x\\+y\\)",            "Underscript[x, y]" },
+        { "\\!\\(x\\+y\\%z\\)",        "Underoverscript[x, y, z]" },
+        { "\\!\\(x\\&y\\%z\\)",        "Underoverscript[x, z, y]" },
+        { "\\!\\(x\\_1\\%2\\)",        "Power[Subscript[x, 1], 2]" },
+        { "\\!\\(x\\^2\\%1\\)",        "Power[Subscript[x, 1], 2]" },
+        { "\\!\\(x\\_1\\^2\\)",        "Power[Subscript[x, 1], 2]" },
+        { "\\!\\(x\\^2\\_1\\)",        "Power[x, Subscript[2, 1]]" },
+        { "\\!\\(x\\&y\\_z\\)",        "Subscript[Overscript[x, y], z]" },
+        { "\\!\\(x\\_\\(i,j\\)\\)",    "Subscript[x, i, j]" },
+        { "\\!\\(f[x]\\^2\\)",         "Power[f[x], 2]" },
+        { "\\!\\(f[x\\^2]\\)",         "f[Power[x, 2]]" },
+        { "\\!\\({x\\^2, y\\_1}\\)",   "List[Power[x, 2], Subscript[y, 1]]" },
+        { "\\!\\(\\(a+b\\)\\^2\\)",    "Power[Plus[a, b], 2]" },
+        { "\\!\\(x\\^\\*SubscriptBox[\\(a\\), \\(b\\)]\\)", "Power[x, Subscript[a, b]]" },
+        { "\\!\\(\\*SubsuperscriptBox[\\(x\\), \\(1\\), \\(2\\)]\\)", "Power[Subscript[x, 1], 2]" },
+        { "\\!\\(\\*RadicalBox[\\(x\\), \\(3\\)]\\)", "Power[x, Rational[1, 3]]" },
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        assert_eval_eq(cases[i].in, cases[i].out, 1);       /* in source */
+        char buf[256];                                      /* in a string */
+        snprintf(buf, sizeof buf, "ToExpression[\"%s\"]", cases[i].in);
+        assert_eval_eq(buf, cases[i].out, 1);
+    }
+    /* An escape with no operand is a syntax error, not a silent misreading. */
+    assert_eval_eq("Quiet[ToExpression[\"\\!\\(\\^x\\)\"]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"\\!\\(x\\%y\\)\"]]", "$Failed", 1);
+}
+
 /* ToExpression of a non-string, as the reference treats it. */
 static void test_toexpression_nonstring(void) {
     assert_eval_eq("{ToExpression[4], ToExpression[x], ToExpression[1/2], ToExpression[{1, \"2+2\"}]}",
@@ -1493,6 +1543,7 @@ int main() {
     TEST(test_named_characters_in_source);
     TEST(test_flat_chain_provenance);
     TEST(test_linear_box_syntax);
+    TEST(test_linear_box_infix);
     TEST(test_toexpression_nonstring);
 
     printf("\nAll parser tests passed!\n");

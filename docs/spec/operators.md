@@ -108,7 +108,7 @@ between the operators both share (`\[CenterDot]` is 4571, just tighter than `*` 
 A character missing from the table, such as an accented or CJK letter, is a letter.
 
 Known differences: `FullForm` prints a non-ASCII symbol as the character itself, where the
-reference prints `\[Mu]`. Box input (`\!\(\*SuperscriptBox[...]\)`) is not read.
+reference prints `\[Mu]`.
 
 
 
@@ -127,7 +127,33 @@ display. FeynCalc's tests write powers and fractions this way:
   - `SuperscriptBox[a, b]` becomes `a^b`, `SubscriptBox` becomes
     `Subscript`, `FractionBox[a, b]` becomes `a/b`, and `SqrtBox[a]`
     becomes `Sqrt[a]`. `OverscriptBox`, `UnderscriptBox` and
-    `SubsuperscriptBox` map to their heads.
+    `UnderoverscriptBox` map to their heads. `SubsuperscriptBox[a, b, c]`
+    becomes `Subscript[a, b]^c` and `RadicalBox[a, n]` becomes `a^(1/n)`.
+  - The infix escapes build the same boxes inline:
+
+    | Input | Box | Expression |
+    |---|---|---|
+    | `a\^b` | `SuperscriptBox` | `a^b` |
+    | `a\_b` | `SubscriptBox` | `Subscript[a, b]` |
+    | `a\_b\%c`, `a\^c\%b` | `SubsuperscriptBox` | `Subscript[a, b]^c` |
+    | `a\&b` | `OverscriptBox` | `Overscript[a, b]` |
+    | `a\+b` | `UnderscriptBox` | `Underscript[a, b]` |
+    | `a\+b\%c`, `a\&c\%b` | `UnderoverscriptBox` | `Underoverscript[a, b, c]` |
+    | `a\/b` | `FractionBox` | `a/b` |
+    | `\@a` | `SqrtBox` | `Sqrt[a]` |
+    | `\@a\%n` | `RadicalBox` | `a^(1/n)` |
+
+    An operand is one token (a symbol, number, string, slot, bracketed or
+    `\( \)` group, or `\*Box`) with its postfix forms (`f[x]`, `x[[1]]`,
+    `x'`, `x!`, `f@x`). From tightest to loosest the escapes are `\&` `\+`,
+    then `\_`, then `\^`, then the prefix `\@`, then `\/`. The script
+    escapes group to the right (`a\^b\^c` is `a^(b^c)`) and `\/` to the left.
+    All of them bind tighter than the ordinary operators around them:
+    `a b\/c d` is `a (b/c) d`, `-x\^2` is `-(x^2)` and `x+1\^2` is `x+(1^2)`.
+    A right operand may carry a sign (`x\^-1`, `x\/-y`, `\@-x`). An operand
+    that is a bare `\( \)` group gives its contents, so `x\_\(i,j\)` is
+    `Subscript[x, i, j]`. An escape with no operand on one side (`\!\(\^x\)`)
+    is a syntax error.
   - `RowBox[{...}]` concatenates its elements, `FormBox`, `StyleBox`,
     `TagBox` and `AdjustmentBox` show their first argument, and
     `InterpretationBox[b, expr]` stands for `expr`.

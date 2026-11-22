@@ -11,8 +11,29 @@
  * to InputForm text, which the ordinary parser then reads:
  *   - plain text in a group is copied, and a nested \( X \) becomes ( X );
  *   - \*Box[...] is parsed as an expression whose \( X \) arguments are box
- *     strings, and is lowered by box_to_text.
+ *     strings, and is lowered by box_to_text;
+ *   - the infix box escapes build the same boxes inline and are lowered to
+ *     the expressions those boxes stand for:
+ *         a\^b     SuperscriptBox     a^b
+ *         a\_b     SubscriptBox       Subscript[a, b]
+ *         a\_b\%c  SubsuperscriptBox  Subscript[a, b]^c   (also a\^c\%b)
+ *         a\&b     OverscriptBox      Overscript[a, b]
+ *         a\+b     UnderscriptBox     Underscript[a, b]
+ *         a\+b\%c  UnderoverscriptBox Underoverscript[a, b, c]  (a\&c\%b)
+ *         a\/b     FractionBox        a/b
+ *         \@a      SqrtBox            Sqrt[a]
+ *         \@a\%n   RadicalBox         a^(1/n)
  * The lowering is recursive, so a box inside a box inside a group works.
+ *
+ * The escapes are operators over box OPERANDS: one primary token (a symbol,
+ * number, string, slot, bracketed or \( \) group, \*Box) together with its
+ * postfix forms (f[x], x[[1]], x', x!, f@x).  Tightest first:
+ *     \& \+   then  \_   then  \^   then  \@ (prefix)   then  \/
+ * The script operators group to the right (a\^b\^c is a^(b^c)), \/ to the
+ * left (a\/b\/c is (a/b)/c), and every one is tighter than the ordinary
+ * operators around it: a b\/c d is a (b/c) d, -x\^2 is -(x^2).  A right
+ * operand may carry a sign (x\^-1, x\/-y, \@-x).  An operand that is a bare
+ * \( \) group contributes its contents (x\_\(i,j\) is Subscript[x, i, j]).
  */
 
 #include "linear_boxes.h"
@@ -134,11 +155,38 @@ static bool box_to_text(const Expr* b, Buf* out) {
     const char* fn = NULL;
     if (h == SYM_SuperscriptBox && n == 2) fn = "Power";
     else if (h == SYM_SubscriptBox && n == 2) fn = "Subscript";
-    else if (strcmp(h, "FractionBox") == 0 && n == 2) fn = "Divide";
     else if (strcmp(h, "SqrtBox") == 0 && n == 1) fn = "Sqrt";
     else if (h == SYM_OverscriptBox && n == 2) fn = "Overscript";
     else if (strcmp(h, "UnderscriptBox") == 0 && n == 2) fn = "Underscript";
-    else if (h == SYM_SubsuperscriptBox && n == 3) fn = "Subsuperscript";
+    else if (strcmp(h, "UnderoverscriptBox") == 0 && n == 3) fn = "Underoverscript";
+    /* SubsuperscriptBox[a, b, c] displays (and so stands for) Subscript[a, b]^c,
+     * RadicalBox[a, n] the n-th root a^(1/n). */
+    if (h == SYM_SubsuperscriptBox && n == 3) {
+        buf_str(out, "Power[Subscript[(");
+        if (!box_to_text(A[0], out)) return false;
+        buf_str(out, "), (");
+        if (!box_to_text(A[1], out)) return false;
+        buf_str(out, ")], (");
+        if (!box_to_text(A[2], out)) return false;
+        buf_str(out, ")]");
+        return true;
+    }
+    if (strcmp(h, "FractionBox") == 0 && n == 2) {   /* (a)/(b) */
+        buf_str(out, "((");
+        if (!box_to_text(A[0], out)) return false;
+        buf_str(out, ")/(");
+        if (!box_to_text(A[1], out)) return false;
+        buf_str(out, "))");
+        return true;
+    }
+    if (strcmp(h, "RadicalBox") == 0 && n == 2) {
+        buf_str(out, "Power[(");
+        if (!box_to_text(A[0], out)) return false;
+        buf_str(out, "), 1/(");
+        if (!box_to_text(A[1], out)) return false;
+        buf_str(out, ")]");
+        return true;
+    }
     if (fn) {
         buf_str(out, fn);
         buf_str(out, "[");
@@ -229,46 +277,407 @@ static const char* star_box(const char* p, Buf* out) {
     return ok ? q : NULL;
 }
 
-/* The InputForm text of the group content [p, end). */
-static bool group_text(const char* p, const char* end, Buf* out) {
-    while (p < end) {
+/* ---- the infix box escapes ------------------------------------------------
+ *
+ * group_text tokenises the group content into box OPERANDS (already lowered to
+ * InputForm text), box OPERATORS (the escapes), whitespace and the other
+ * characters, then parses each run of operands and operators by the tiers in
+ * the header comment and emits the expression they stand for as function-call
+ * text, which carries its own grouping. Everything else is copied. */
+
+enum { LT_UNIT, LT_OP, LT_WS, LT_CH };
+
+typedef struct {
+    int kind;
+    char op;            /* LT_OP: '^' '_' '%' '&' '+' '/' '@' */
+    char* text;         /* LT_UNIT / LT_WS / LT_CH: owned */
+    char* inner;        /* LT_UNIT of a bare \( \) group: its contents, owned */
+} LTok;
+
+typedef struct { LTok* t; size_t n, cap; bool oom; } LToks;
+
+static void ltoks_free(LToks* v) {
+    for (size_t i = 0; i < v->n; i++) { free(v->t[i].text); free(v->t[i].inner); }
+    free(v->t);
+}
+
+static void ltoks_push(LToks* v, int kind, char op, char* text, char* inner) {
+    if (v->n == v->cap) {
+        size_t cap = v->cap ? 2 * v->cap : 16;
+        LTok* t = realloc(v->t, cap * sizeof(LTok));
+        if (!t) { v->oom = true; free(text); free(inner); return; }
+        v->t = t; v->cap = cap;
+    }
+    v->t[v->n].kind = kind; v->t[v->n].op = op;
+    v->t[v->n].text = text; v->t[v->n].inner = inner;
+    v->n++;
+}
+
+static char* dup_range(const char* p, size_t n) {
+    char* d = malloc(n + 1);
+    if (!d) return NULL;
+    memcpy(d, p, n);
+    d[n] = '\0';
+    return d;
+}
+
+static bool lb_ident_char(unsigned char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+           c == '$' || c == '`' || c == '_' || c >= 0x80;
+}
+
+/* Past the bracket opening at p (one of ( [ {), its contents lowered between
+ * the brackets into out; NULL if unbalanced. Strings and \( \) groups inside
+ * are skipped over when matching. */
+static const char* bracket_unit(const char* p, const char* end, Buf* out) {
+    const char* q = p + 1;
+    int depth = 1;
+    while (q < end) {
+        size_t l = 0;
+        char c = lb_ctl(q, &l);
+        if (c == '(') {
+            const char* cend = NULL;
+            q = group_close(q + l, &cend);
+            if (!q || q > end) return NULL;
+            continue;
+        }
+        if (c) { q += l; continue; }
+        if (*q == '\\' && q + 1 < end) { q += 2; continue; }
+        if (*q == '"') { q = skip_string(q); if (!q || q > end) return NULL; continue; }
+        if (*q == '(' || *q == '[' || *q == '{') depth++;
+        else if (*q == ')' || *q == ']' || *q == '}') {
+            if (--depth == 0) break;
+        }
+        q++;
+    }
+    if (q >= end) return NULL;
+    buf_add(out, p, 1);
+    if (!group_text(p + 1, q, out)) return NULL;
+    buf_add(out, q, 1);
+    return q + 1;
+}
+
+/* One box operand at p, lowered into out: a primary and its postfix forms.
+ * NULL when no operand starts at p (and nothing is written); *bad is set on a
+ * malformed one. A bare \( \) group's contents go to *inner when it is the
+ * whole operand. */
+static const char* scan_unit(const char* p, const char* end, Buf* out, Buf* inner, bool* bad) {
+    size_t l = 0;
+    char c = lb_ctl(p, &l);
+    const char* q = NULL;
+    bool group = false;
+    if (c == '(') {
+        const char* cend = NULL;
+        const char* after = group_close(p + l, &cend);
+        if (!after || after > end) { *bad = true; return NULL; }
+        Buf g = {0};
+        if (!group_text(p + l, cend, &g)) { free(g.s); *bad = true; return NULL; }
+        buf_str(out, "(");
+        if (g.s) buf_str(out, g.s);
+        buf_str(out, ")");
+        if (inner && g.s) buf_str(inner, g.s);
+        free(g.s);
+        q = after;
+        group = true;
+    } else if (c == '*') {
+        q = star_box(p + l, out);
+        if (!q || q > end) { *bad = true; return NULL; }
+    } else if (c) {
+        return NULL;                              /* an operator escape */
+    } else if (*p == '"') {
+        q = skip_string(p);
+        if (!q || q > end) { *bad = true; return NULL; }
+        buf_add(out, p, (size_t)(q - p));
+    } else if (*p == '(' || *p == '[' || *p == '{') {
+        q = bracket_unit(p, end, out);
+        if (!q) { *bad = true; return NULL; }
+    } else if ((*p >= '0' && *p <= '9') || (*p == '.' && p + 1 < end && p[1] >= '0' && p[1] <= '9')) {
+        q = p;                                    /* 12, 1.5, 2.5`20, 1.*^-3 */
+        while (q < end && ((*q >= '0' && *q <= '9') || *q == '.')) q++;
+        while (q < end && *q == '`') {
+            q++;
+            while (q < end && ((*q >= '0' && *q <= '9') || *q == '.' || *q == '`')) q++;
+        }
+        if (q + 1 < end && q[0] == '*' && q[1] == '^') {
+            const char* r = q + 2;
+            if (r < end && (*r == '-' || *r == '+')) r++;
+            if (r < end && *r >= '0' && *r <= '9') {
+                while (r < end && *r >= '0' && *r <= '9') r++;
+                q = r;
+            }
+        }
+        buf_add(out, p, (size_t)(q - p));
+    } else if (*p == '#' || *p == '%') {          /* slots, Out */
+        q = p + 1;
+        while (q < end && (*q == *p || lb_ident_char((unsigned char)*q))) q++;
+        buf_add(out, p, (size_t)(q - p));
+    } else if (lb_ident_char((unsigned char)*p) || (*p == '\\' && p + 1 < end && p[1] == '[')) {
+        q = p;                                    /* symbols, x_h, \[Alpha] */
+        while (q < end) {
+            if (*q == '\\' && q + 1 < end && q[1] == '[') {
+                const char* r = q + 2;
+                while (r < end && *r != ']') r++;
+                if (r >= end) break;
+                q = r + 1;
+            } else if (lb_ident_char((unsigned char)*q) && !lb_ctl(q, &l)) {
+                q++;
+            } else break;
+        }
+        buf_add(out, p, (size_t)(q - p));
+    } else {
+        return NULL;
+    }
+    /* Postfix forms bind tighter than every box operator. */
+    for (;;) {
+        if (q < end && *q == '[') {
+            q = bracket_unit(q, end, out);
+            if (!q) { *bad = true; return NULL; }
+        } else if (q < end && *q == '\'') {
+            buf_add(out, q++, 1);
+        } else if (q < end && *q == '!' && !(q + 1 < end && q[1] == '=')) {
+            buf_add(out, q++, 1);
+        } else if (q + 1 < end && *q == '@' && q[1] != '@' && q[1] != '*') {
+            Buf rhs = {0};
+            const char* r = scan_unit(q + 1, end, &rhs, NULL, bad);
+            if (!r) { free(rhs.s); if (*bad) return NULL; break; }
+            buf_str(out, "@");
+            if (rhs.s) buf_str(out, rhs.s);
+            free(rhs.s);
+            q = r;
+        } else break;
+        group = false;
+    }
+    if (!group && inner) { free(inner->s); inner->s = NULL; inner->n = inner->cap = 0; }
+    return q;
+}
+
+static bool lb_tokenize(const char* p, const char* end, LToks* v) {
+    while (p < end && !v->oom) {
         size_t l = 0;
         char c = lb_ctl(p, &l);
         if (c == '!') { p += l; continue; }
-        if (c == '(') {
-            const char* cend = NULL;
-            const char* after = group_close(p + l, &cend);
-            if (!after || after > end) return false;
-            buf_str(out, "(");
-            if (!group_text(p + l, cend, out)) return false;
-            buf_str(out, ")");
-            p = after;
+        if (c == '^' || c == '_' || c == '%' || c == '&' || c == '+' || c == '/' || c == '@') {
+            ltoks_push(v, LT_OP, c, NULL, NULL);
+            p += l;
             continue;
         }
-        if (c == '*') {
-            p = star_box(p + l, out);
-            if (!p || p > end) return false;
-            continue;
-        }
-        if (c) return false;
+        if (c && c != '(' && c != '*') return false;   /* a stray \) or \` */
         /* "\ " is a space token in box text (p^\ 2 is RowBox[{p, ^, " ", 2}],
          * which reads as p^2): lower it to a plain space. */
         if (*p == '\\' && p + 1 < end && p[1] == ' ') {
-            buf_add(out, " ", 1);
+            ltoks_push(v, LT_WS, 0, dup_range(" ", 1), NULL);
             p += 2;
             continue;
         }
-        if (*p == '"') {
-            const char* e = skip_string(p);
-            if (!e || e > end) return false;
-            buf_add(out, p, (size_t)(e - p));
-            p = e;
+        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+            const char* q = p;
+            while (q < end && (*q == ' ' || *q == '\t' || *q == '\n' || *q == '\r')) q++;
+            ltoks_push(v, LT_WS, 0, dup_range(p, (size_t)(q - p)), NULL);
+            p = q;
             continue;
         }
-        buf_add(out, p, 1);
-        p++;
+        Buf u = {0}, in = {0};
+        bool bad = false;
+        const char* q = scan_unit(p, end, &u, &in, &bad);
+        if (bad || u.oom || in.oom) { free(u.s); free(in.s); return false; }
+        if (q) {
+            ltoks_push(v, LT_UNIT, 0, u.s ? u.s : dup_range("", 0), in.s);
+            p = q;
+            continue;
+        }
+        free(u.s); free(in.s);
+        size_t n = (*p == '\\' && p + 1 < end) ? 2 : 1;   /* other text */
+        ltoks_push(v, LT_CH, 0, dup_range(p, n), NULL);
+        p += n;
     }
-    return !out->oom;
+    return !v->oom;
+}
+
+typedef struct { const LToks* v; size_t i; bool fail; } LParse;
+
+static size_t lp_skip_ws(const LParse* P, size_t i) {
+    while (i < P->v->n && P->v->t[i].kind == LT_WS) i++;
+    return i;
+}
+
+/* Consume the operator `op` if it is next (across whitespace). */
+static bool lp_take(LParse* P, char op) {
+    size_t j = lp_skip_ws(P, P->i);
+    if (j < P->v->n && P->v->t[j].kind == LT_OP && P->v->t[j].op == op) { P->i = j + 1; return true; }
+    return false;
+}
+
+typedef char* (*LTier)(LParse*);
+
+static char* lp_frac(LParse* P);
+static char* lp_sqrt(LParse* P);
+
+/* A right operand: optional signs, then the tier. */
+static char* lp_signed(LParse* P, LTier tier) {
+    size_t j = lp_skip_ws(P, P->i);
+    if (j < P->v->n && P->v->t[j].kind == LT_CH &&
+        (strcmp(P->v->t[j].text, "-") == 0 || strcmp(P->v->t[j].text, "+") == 0)) {
+        P->i = j + 1;
+        char* r = lp_signed(P, tier);
+        if (!r) return NULL;
+        Buf b = {0};
+        buf_str(&b, P->v->t[j].text[0] == '-' ? "(-" : "(+");
+        buf_str(&b, r);
+        buf_str(&b, ")");
+        free(r);
+        return b.oom ? (free(b.s), (char*)NULL) : b.s;
+    }
+    return tier(P);
+}
+
+/* "head[a, b]" or "head[a, b, c]" (c may be NULL); frees the arguments. */
+static char* lp_call(const char* head, char* a, char* b, char* c) {
+    Buf o = {0};
+    if (a && b) {
+        buf_str(&o, head); buf_str(&o, "[");
+        buf_str(&o, a); buf_str(&o, ", "); buf_str(&o, b);
+        if (c) { buf_str(&o, ", "); buf_str(&o, c); }
+        buf_str(&o, "]");
+    }
+    bool ok = a && b && !o.oom;
+    free(a); free(b); free(c);
+    if (!ok) { free(o.s); return NULL; }
+    return o.s;
+}
+
+/* The innermost operand: a unit (its contents, for a bare group). */
+static char* lp_unit(LParse* P) {
+    size_t j = lp_skip_ws(P, P->i);
+    if (j < P->v->n && P->v->t[j].kind == LT_OP && P->v->t[j].op == '@') return lp_sqrt(P);
+    if (j >= P->v->n || P->v->t[j].kind != LT_UNIT) { P->fail = true; return NULL; }
+    P->i = j + 1;
+    const LTok* t = &P->v->t[j];
+    const char* txt = t->inner ? t->inner : t->text;
+    return dup_range(txt, strlen(txt));
+}
+
+/* \& \+ (and their \% second script), grouping to the right. */
+static char* lp_over(LParse* P) {
+    char* b = lp_unit(P);
+    if (!b) return NULL;
+    char op = lp_take(P, '&') ? '&' : lp_take(P, '+') ? '+' : 0;
+    if (!op) return b;
+    char* r = lp_signed(P, lp_over);
+    if (!r) { free(b); return NULL; }
+    if (lp_take(P, '%')) {
+        char* r2 = lp_signed(P, lp_over);
+        if (!r2) { free(b); free(r); return NULL; }
+        /* UnderoverscriptBox[base, under, over] */
+        return op == '+' ? lp_call("Underoverscript", b, r, r2)
+                         : lp_call("Underoverscript", b, r2, r);
+    }
+    return lp_call(op == '&' ? "Overscript" : "Underscript", b, r, NULL);
+}
+
+/* Subscript[base, sub]^sup: the SubsuperscriptBox reading. */
+static char* lp_subsup(char* base, char* sub, char* sup) {
+    char* s = lp_call("Subscript", base, sub, NULL);
+    if (!s) { free(sup); return NULL; }
+    return lp_call("Power", s, sup, NULL);
+}
+
+/* \_ (and \_ \% sup), grouping to the right. */
+static char* lp_sub(LParse* P) {
+    char* b = lp_over(P);
+    if (!b || !lp_take(P, '_')) return b;
+    char* r = lp_signed(P, lp_sub);
+    if (!r) { free(b); return NULL; }
+    if (lp_take(P, '%')) {
+        char* r2 = lp_signed(P, lp_sub);
+        if (!r2) { free(b); free(r); return NULL; }
+        return lp_subsup(b, r, r2);
+    }
+    return lp_call("Subscript", b, r, NULL);
+}
+
+/* \^ (and \^ \% sub), grouping to the right; its operand may be a \@ root. */
+static char* lp_sup(LParse* P) {
+    char* b = lp_sub(P);
+    if (!b || !lp_take(P, '^')) return b;
+    char* r = lp_signed(P, lp_sqrt);
+    if (!r) { free(b); return NULL; }
+    if (lp_take(P, '%')) {
+        char* r2 = lp_signed(P, lp_sub);
+        if (!r2) { free(b); free(r); return NULL; }
+        return lp_subsup(b, r2, r);
+    }
+    return lp_call("Power", b, r, NULL);
+}
+
+/* \@a (and \@a \% n), prefix; otherwise a script expression. */
+static char* lp_sqrt(LParse* P) {
+    if (!lp_take(P, '@')) return lp_sup(P);
+    char* a = lp_signed(P, lp_sqrt);
+    if (!a) return NULL;
+    if (lp_take(P, '%')) {
+        char* n = lp_signed(P, lp_sqrt);
+        if (!n) { free(a); return NULL; }
+        Buf inv = {0};
+        buf_str(&inv, "1/(");
+        buf_str(&inv, n);
+        buf_str(&inv, ")");
+        free(n);
+        if (inv.oom) { free(a); free(inv.s); return NULL; }
+        return lp_call("Power", a, inv.s, NULL);
+    }
+    Buf o = {0};
+    buf_str(&o, "Sqrt[");
+    buf_str(&o, a);
+    buf_str(&o, "]");
+    free(a);
+    if (o.oom) { free(o.s); return NULL; }
+    return o.s;
+}
+
+/* \/ , grouping to the left. */
+static char* lp_frac(LParse* P) {
+    char* l = lp_sqrt(P);
+    while (l && lp_take(P, '/')) {
+        char* r = lp_signed(P, lp_sqrt);
+        if (!r) { free(l); return NULL; }
+        /* (a)/(b), as a FractionBox reads (not a held Divide[a, b]). */
+        Buf o = {0};
+        buf_str(&o, "(("); buf_str(&o, l); buf_str(&o, ")/("); buf_str(&o, r); buf_str(&o, "))");
+        free(l); free(r);
+        if (o.oom) { free(o.s); return NULL; }
+        l = o.s;
+    }
+    return l;
+}
+
+/* The InputForm text of the group content [p, end). */
+static bool group_text(const char* p, const char* end, Buf* out) {
+    LToks v = {0};
+    if (!lb_tokenize(p, end, &v)) { ltoks_free(&v); return false; }
+    LParse P = { &v, 0, false };
+    bool ok = true;
+    while (ok && P.i < v.n) {
+        const LTok* t = &v.t[P.i];
+        bool box = false;
+        if (t->kind == LT_OP) {
+            if (t->op != '@') { ok = false; break; }   /* no left operand */
+            box = true;
+        } else if (t->kind == LT_UNIT) {
+            size_t j = lp_skip_ws(&P, P.i + 1);
+            box = j < v.n && v.t[j].kind == LT_OP && v.t[j].op != '@';
+        }
+        if (!box) { buf_str(out, t->text); P.i++; continue; }
+        char* e = lp_frac(&P);
+        if (!e || P.fail) { free(e); ok = false; break; }
+        /* Parenthesised, so the call text cannot fuse with its neighbours
+         * (2x\^2 is 2 (x^2), a.b\^2 is a . (b^2)). */
+        buf_str(out, "(");
+        buf_str(out, e);
+        buf_str(out, ")");
+        free(e);
+    }
+    ltoks_free(&v);
+    return ok && !out->oom;
 }
 
 char* lb_group_to_input(const char* p, const char** end) {
