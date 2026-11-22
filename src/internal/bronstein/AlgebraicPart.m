@@ -79,6 +79,8 @@ brPolyRDELog[T_Association, cv_Association, c_] := Module[
           U brD[T, G] Sum[bs[[j + 1]] th^j, {j, 0, N}] - m G A] /. th^(-1) -> 0];
   cl = CoefficientList[P, th];
   cl = PadRight[cl, N + g + du + 1];
+  (* inside Do, Return must name Module: a bare Return leaves only the loop
+     (measured 2026-11-22), which lost a coefficient's Unknown/NoSolution *)
   Do[
     e = j + g + du;
     eq = Together[cl[[e + 1]] /. known];
@@ -91,13 +93,13 @@ brPolyRDELog[T_Association, cv_Association, c_] := Module[
     If[h === None,
       If[kappas =!= {} && !FreeQ[rho, Alternatives @@ kappas], throwInternal["brPolyRDELogStrayKappa"]];
       sol = brKSolveRDE[TL, beta, rho];
-      If[First[sol] =!= "Solution", Return[If[First[sol] === "NoSolution", {"NoSolution"}, {"Unknown", "coefficient RDE: " <> sol[[2]]}]]];
+      If[First[sol] =!= "Solution", Return[If[First[sol] === "NoSolution", {"NoSolution"}, {"Unknown", "coefficient RDE: " <> sol[[2]]}], Module]];
       val = sol[[2]],
       (* b_j = h w, w' = rho/h = rho0 + Sum kappa_i sig_i *)
       rho0 = Together[(rho /. Thread[kappas -> 0])/h];
       sig = Together[Coefficient[Expand[Numerator[Together[rho]]], #]/Denominator[Together[rho]]/h] & /@ kappas;
       pr = brParamIntegrate[TL, rho0, sig];
-      If[First[pr] =!= "Solution", Return[If[First[pr] === "NoSolution", {"NoSolution"}, {"Unknown", "coefficient integration: " <> pr[[2]]}]]];
+      If[First[pr] =!= "Solution", Return[If[First[pr] === "NoSolution", {"NoSolution"}, {"Unknown", "coefficient integration: " <> pr[[2]]}], Module]];
       (* the integration's own parameter symbols are our kappas, in order *)
       cons = Join[cons, pr[[4]] /. Thread[pr[[5]] -> kappas]];
       nk++;

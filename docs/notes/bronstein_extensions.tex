@@ -2683,7 +2683,8 @@ on the uniqueness of each coefficient's solution, which fails exactly when that 
 solution exists. So the cancellation case needs an $n=1$ witness, not a ratio. From a radical
 solution with $n_0>1$ and $m_0/n_0\in\Z$, the witness needs ROOT$(U,n_0)$; answering ``not of
 the form'' instead and falling through to the top-down pass could give a false ``no solution''.
-Without ROOT$_0$ this case is declined. ($n_0>1$ arises easily: Trager's coefficient $1/2$ with
+At level~1 the $n=1$ witness comes from the homogeneous RDE$_0$ instead
+(Corollary~\ref{cor:E1hom}, v0.6692). A witness with $n_0>1$ is declined only at level~$\ge2$. ($n_0>1$ arises easily: Trager's coefficient $1/2$ with
 logand $u^2$, $u\in k_0$.)
 
 \subsection*{E1.2. Logarithmic derivatives over $k_j$}
@@ -2871,11 +2872,67 @@ A generator $z_0$ then has $U/z_0^N$ constant. The pieces that are missing:
   and the divisor together. \code{principalGenerator} only handles finite support;
 \item the principality test with a generator ([T] Ch.~6; Coates).
 \end{itemize}
-Until this is written and proved, M1 declines every LD call, and every PLD call that needs
-an $n=1$ witness, whose radical solution has $n_0>1$.
+M1 declined every LD call, and every PLD call that needs an $n=1$ witness, whose radical
+solution has $n_0>1$. Since v0.6692 the homogeneous RDE$_0$ settles them at level~1
+(Corollary~\ref{cor:E1hom}); only level~$\ge2$ still declines.
 
 So torsion orders are computed only inside Trager, and ROOT$_0$ needs a principal-divisor test
 with a generator.
+
+\noindent \emph{The witness without ROOT$_0$ (closing OL5 for its two uses).} Neither consumer
+of ROOT$_0$ needs $U=cz^N$ in general. The primitive degree bound and cancellation case (remark~(1)
+of E1.1) need $z\in k_0^*$ with $Dz/z=\alpha$. The exponential cancellation case (remark~(3)) needs
+$z$ with $Dz/z=\alpha-m\eta$ for the one integer $m=m_0/n_0$ of remark~(2). Both are
+\emph{homogeneous} Risch equations over $k_0$, and the bounds already decide them.
+
+\begin{corollary}[homogeneous RDE$_0$]\label{cor:E1hom}
+Assume (H$_\Q$) and let $f\in k_0$.
+\begin{itemize}
+\item[(i)] The solutions $z\in k_0$ of $Dz+fz=0$ form a $\Q$-vector space of dimension at most~1.
+\item[(ii)] Run \code{brAlgBounds} on $(f,0)$, take the ansatz of (R2) with $g=0$, and let $Z$ be
+  the null space of its linear system over $\Q$. This is \code{brAlgRDEHom}, not \code{brAlgRDE},
+  which answers $z=0$ as soon as $g=0$. Then the solutions of (i) are exactly
+  $\{\sum_k\lambda_kZ_k/\mathcal D\}$. Hence:
+  \begin{itemize}
+  \item $Z=0$ proves that there is no $z\ne0$;
+  \item a nonzero null vector is a witness, checked exactly;
+  \item $\dim Z>1$ contradicts~(i) and is an internal error.
+  \end{itemize}
+\end{itemize}
+Taking $f=-\alpha$ gives LD$_0$ with an $n=1$ witness. Taking $f=-(\alpha-m\eta)$ gives the
+exponential case. Neither the radical solution's $n_0$ nor ROOT$_0$ enters.
+\end{corollary}
+\begin{proof}
+(i) If $z_1,z_2\ne0$ solve it, then $D(z_1/z_2)=0$, so $z_1/z_2\in\operatorname{Const}(k_0)=\Q$.
+This uses (H$_\Q$) through (A0), the absolute irreducibility of $Y^m-G$. Over a larger constant
+field the dimension could exceed~1, and the code answers \code{Unknown}, never ``no''.
+
+(ii) Lemma~\ref{lem:E1uniform} with $m=1$ and $g_1=0$: the bounds are valid for
+$Dq+fq=c\cdot0$ for every $c$, so for every solution of the homogeneous equation. With $g=0$ the
+data are the pole factors of $f$, $\gamma_P=\infty$ and $\gamma_\infty=\infty$, so only $f$'s
+candidates $\tau_p$ and $a$ remain. Every solution is therefore $Z/\mathcal D$ with $Z$ in the
+ansatz space and satisfying (R2), and conversely. A \code{Unknown} from the bounds (I1)
+propagates as a Decline.
+\end{proof}
+
+\noindent \emph{Use.} At level~1 (calls to level~0), the two \code{BaseTower:root0} declines are
+replaced as follows.
+\begin{itemize}
+\item In the primitive degree bound with $d_b=d_a$: if PLD$_0(\alpha)$ has a radical solution
+  with $n_0>1$, solve Corollary~\ref{cor:E1hom} with $f=-\alpha$.
+  \begin{itemize}
+  \item A witness $z$ gives $\beta$ as before.
+  \item No witness means $\alpha$ is not a logarithmic derivative in $k_0$, so this branch of
+    the bound does not apply, which is valid.
+  \end{itemize}
+\item In the cancellation case with $n_0>1$ and $m=m_0/n_0\in\Z$ (or primitive, $m=0$): solve
+  with $f=b+m\eta$. A witness gives the homogeneous solution $zt^m$. No witness means there is
+  no homogeneous solution in $k_0[t]$ of the form $zt^m$. By remark~(2) no other exponent is
+  possible, so the top-down pass is valid (remark~(3)).
+\end{itemize}
+Above level~1, ROOT$_j$ reduces to ROOT$_{j-1}$ on leading coefficients (Prop.~\ref{prop:E1ld}(iii)).
+The homogeneous route there would need the homogeneous RDE$_{j-1}$ over a tower, which is not
+written, so a witness with $n_0>1$ still declines at level $\ge2$.
 
 \subsection*{E1.3. The base: $k_0=\Q(x)(y)$}
 

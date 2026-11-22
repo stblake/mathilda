@@ -436,3 +436,33 @@ Checked and sound:
 
 The remaining false-certificate surface is exactness only: an inexact zero test, an unverified
 Liouville identity, or (a) applied to an eta with irrational residues.
+
+# Fourth pass (2026-11-22): Corollary E1hom, the n = 1 witness without ROOT_0 (Phase L2)
+
+Reviewer: an independent agent. It re-derived the local analysis of z' + f z = 0 from scratch
+and checked it against brAlgBounds, brAlgRDEHom, brDTHomRDE0, brDTDegreeBound and
+brDTPolyRDE. Verdict: **no FATAL, no GAP**.
+
+Checked:
+- **Regular places, ramified places included:** no pole and no zero is possible.
+- **Poles of f:** beta < -r leaves no solution; beta = -r gives alpha = -tau, with tau a
+  positive integer exactly as brAlgTauCandidates keeps; -r < beta < 0 gives alpha = 0.
+- **Infinity:** alpha = r a.
+- **Bound data:** Lemma E1inf holds; the pole factors are complete with g = 0, on the Kummer
+  integral basis.
+- **Solution space:** dimension at most 1 by (A0); the null-space correspondence is exact.
+- **Use paragraph:** in the exponential cancellation case only i = m0/n0 can occur, so the
+  top-down pass is valid with no witness; in the primitive case m = 0; in the degree bound,
+  no witness means the beta branch does not apply.
+
+MINOR findings, all addressed in the note:
+- stale "declined" text in remark (3) and in the ROOT_0 paragraph;
+- the corollary must name brAlgRDEHom, since brAlgRDE short-circuits on g = 0;
+- the (H_Q) dependence of (i) is now stated;
+- the I1 path looks unreachable for the tau candidates (kept as Unknown);
+- soundness still rests on Prop E1ld (and Lemma E1irr) for the "PLD says none" steps.
+
+Found while implementing: a bare Return inside With in the cancellation branch dropped the
+witness's answer, and the top-down pass then said "no solution". That was a false certificate,
+caught by a unit test before release. A source scan then found three more such Returns (inside
+Do in AlgebraicPart.m, inside With in TorsionModP.m), all fixed in v0.6692.

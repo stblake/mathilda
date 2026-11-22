@@ -157,6 +157,32 @@ brAlgRDE[B_Association, f_List, g_List, widen_Integer] := Module[
     Return[{"Unknown", "the solution of the linear system does not verify"}]];
   {"Solution", z}];
 
+brAlgRDEHom::usage = "brAlgRDEHom[B, f] decides the HOMOGENEOUS Risch DE z' + f z = 0 for z != 0 in Q(x)(Y) (Corollary E1hom): the bounds of brAlgBounds on (f, 0) are valid for every solution (Lemma E1uniform with g = 0), so the null space of the ansatz system over Q is the solution space, of dimension at most 1 (Const = Q). It returns {\"Solution\", z} (a nonzero coordinate list, verified), {\"NoSolution\"} (a proof: no nonzero solution) or {\"Unknown\", why} (a bound degenerated, I1, or a null space of dimension > 1).";
+brAlgRDEHom[B_Association, f_List] := Module[
+  {x = B["x"], m = B["m"], F = fieldQ[], bd, Dd, Bdeg, cs, unk, h, fr, lhs, eqs, M, ns, z},
+  bd = brAlgBounds[B, f, afZero[B]];
+  If[MatchQ[bd, {"Unknown", _}], Return[bd]];
+  Dd = bd["D"]; Bdeg = bd["Bdeg"];
+  cs = Table[If[Bdeg[[i + 1]] < 0, {}, Table[Unique["Bronstein`Private`brCh"], {Bdeg[[i + 1]] + 1}]], {i, 0, m - 1}];
+  unk = Flatten[cs];
+  If[unk === {}, Return[{"NoSolution"}]];
+  h = Table[If[cs[[i]] === {}, 0, cs[[i]] . (x^Range[0, Length[cs[[i]]] - 1])], {i, m}];
+  (* (R2) with g = 0: Z' + (f - D'/D) Z = 0, coordinatewise *)
+  fr = afPlus[F, f, afScale[F, -Together[D[Dd, x]/Dd], afOne[B]]];
+  lhs = MapThread[Together[#1 + #2] &, {brAlgDLinear[B, h], brAlgTimesLinear[B, fr, h]}];
+  eqs = DeleteCases[Expand /@ Flatten[CoefficientList[Expand[Numerator[#]], x] & /@ lhs], 0];
+  M = If[eqs === {}, {ConstantArray[0, Length[unk]]}, Table[Coefficient[e, u], {e, eqs}, {u, unk}]];
+  If[eqs =!= {} && !AllTrue[Expand[eqs - M . unk], # === 0 &],
+    Return[{"Unknown", "the homogeneous system is not linear in the ansatz coefficients"}]];
+  If[!FreeQ[M, x] || !AllTrue[Flatten[M], NumberQ], Return[{"Unknown", "the homogeneous system has non-numeric coefficients"}]];
+  ns = NullSpace[M];
+  If[ns === {}, Return[{"NoSolution"}]];
+  If[Length[ns] > 1, Return[{"Unknown", "a homogeneous solution space of dimension > 1 (contradicts Const = Q)"}]];
+  z = Together[(# /. Thread[unk -> First[ns]])/Dd] & /@ h;
+  If[afZeroQ[F, z] || !afZeroQ[F, afPlus[F, afD[F, B, z], afTimes[F, B, f, z]]],
+    Return[{"Unknown", "the homogeneous solution does not verify"}]];
+  {"Solution", z}];
+
 brAlgDLinear::usage = "brAlgDLinear[B, a] is afD over Q for coordinates that may contain undetermined (linear) coefficients: (c_i' + c_i s_i), Together only (no canonical form over a field, which would treat the unknowns as transcendental but is unnecessary here).";
 brAlgDLinear[B_Association, a_List] := Table[Together[D[a[[i]], B["x"]] + a[[i]] B["s"][[i]]], {i, B["m"]}];
 

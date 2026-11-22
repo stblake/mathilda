@@ -455,7 +455,7 @@ paramGoodSpecialization[ctx_Association, spec_Association, sigma_List] := Module
   If[MatchQ[sref, {"R0", _, _}],
     With[{c0 = paramSpecializeValue[sref[[2]], sigma]},
       If[c0 === $Failed || Together[Gs /. x -> c0] === 0 || Together[Es /. x -> c0] === 0 ||
-         Together[Bps /. x -> c0] === 0, Return[$Failed]];
+         Together[Bps /. x -> c0] === 0, Return[$Failed, Module]];   (* a bare Return leaves only the With *)
       sref = {"R0", c0, sref[[3]]}]];
   If[KeyExistsQ[spec, "facs"] || KeyExistsQ[ctx, "facs"], Return[$Failed]];   (* factor divisors: not used with parameters *)
   ctx0 = Join[ctx, <|"B" -> curveBasis[m, Gs, x], "F" -> Fs, "residues" -> ress,

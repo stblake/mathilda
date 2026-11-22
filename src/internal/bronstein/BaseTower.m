@@ -416,6 +416,18 @@ brDTIsDerivK0[C_Association, e_] := Module[{C1 = brDTLevel[C, 1], C0 = brDTLevel
   v = brBCFromSurface[C1, brBCLogFree[F0]];
   If[brBCNorm[C, e - brBCD[C0, v]] === 0, {"yes", v}, {"no"}]];
 
+brDTHomRDE0::usage = "brDTHomRDE0[C, f] decides D z + f z = 0 for z != 0 in k0 = Q(x)(Y) (Corollary E1hom, brAlgRDEHom): {\"witness\", z} (z in normal form, D z = -f z checked) or {\"none\"} (a proof: no nonzero solution in k0). A degenerate bound declines (RDEAlgebraic:undecided, gap I1). This is the n = 1 witness of LD_0 / PLD_0 that the degree bound and the cancellation case need, without ROOT_0.";
+brDTHomRDE0[C_Association, f_] := Module[{B = C["B"], Y = C["Y"], fn = brBCNorm[C, f], r, z},
+  If[!FreeQ[fn, Alternatives @@ C["syms"]], throwInternal["brDTHomRDE0Tower", <|"f" -> f|>]];
+  r = brAlgRDEHom[B, afFromY[fieldQ[], B, fn, Y]];
+  Switch[First[r],
+    "Solution",
+      z = brBCNorm[C, afToY[B, r[[2]], Y]];
+      If[z === 0 || brBCNorm[C, brBCD[brDTLevel[C, 0], z] + fn z] =!= 0, throwInternal["brDTHomRDE0Check", <|"f" -> f|>]];
+      {"witness", z},
+    "NoSolution", {"none"},
+    _, throwUnimplemented["RDEAlgebraic:undecided", "Risch DE on the curve undecided: " <> ToString[Last[r]]]]];
+
 brDTRDE0::usage = "brDTRDE0[C, f, g] is RDE_0: D q + f q = g over k0 = Q(x)(Y) (f, g free of the monomials) by brAlgRDE ([B] Part 3; Lemmas E1choice, E1inf): {\"Solution\", q} (q in normal form), {\"NoSolution\"} (a proof) or a Decline (RDEAlgebraic:undecided, gap I1).";
 brDTRDE0[C_Association, f_, g_] := Module[{B = C["B"], Y = C["Y"], fn = brBCNorm[C, f], gn = brBCNorm[C, g], r},
   If[!FreeQ[{fn, gn}, Alternatives @@ C["syms"]], throwInternal["brDTRDE0Tower", <|"f" -> f, "g" -> g|>]];
@@ -605,12 +617,18 @@ brDTDegreeBound[C_Association, j_Integer, a_, b_, c_] := Module[{C1 = brDTLevel[
     If[db === da,
       ld = brDTPLD[C, j - 1, alpha, 0];
       If[First[ld] === "radical",
-        If[ld[[2]] =!= 1, throwUnimplemented["BaseTower:root0", "a logarithmic-derivative witness that needs an n-th root in k0 (ROOT_0, OL5)"]];
-        z = brBCNorm[C1, Product[u[[2]]^u[[1]], {u, ld[[4]]}]];
-        beta = brBCNorm[C1, -(brDTCoeff[C1, a, da - 1] brBCD[Cl, z] + brDTCoeff[C1, b, da - 1] z)/(z brDTCoeff[C1, a, da])];
-        vc = brCatch[brDTLI[C, j, beta]];
-        If[brFailQ[vc], If[First[brFailTag[vc]] =!= "NonElementary", Throw[vc, "TragerFail"]],
-          If[IntegerQ[vc[[2]]] && vc[[2]] > 0, n = Max[n, vc[[2]]]]]]],
+        (* the witness z with D z/z = alpha: U itself when n0 = 1; at level 1 the homogeneous
+           RDE_0 otherwise (Corollary E1hom: no witness means this branch does not apply);
+           above it ROOT_(j-1), not built *)
+        z = Which[
+          ld[[2]] === 1, brBCNorm[C1, Product[u[[2]]^u[[1]], {u, ld[[4]]}]],
+          j === 1, With[{hw = brDTHomRDE0[C, brBCNorm[C1, -alpha]]}, If[First[hw] === "witness", hw[[2]], None]],
+          True, throwUnimplemented["BaseTower:root0", "a logarithmic-derivative witness that needs an n-th root in k0 (ROOT_0, OL5)"]];
+        If[z =!= None,
+          beta = brBCNorm[C1, -(brDTCoeff[C1, a, da - 1] brBCD[Cl, z] + brDTCoeff[C1, b, da - 1] z)/(z brDTCoeff[C1, a, da])];
+          vc = brCatch[brDTLI[C, j, beta]];
+          If[brFailQ[vc], If[First[brFailTag[vc]] =!= "NonElementary", Throw[vc, "TragerFail"]],
+            If[IntegerQ[vc[[2]]] && vc[[2]] > 0, n = Max[n, vc[[2]]]]]]]],
     n = Max[0, dc - Max[db, da]];
     If[da === db,
       pld = brDTPLD[C, j - 1, alpha, C1["Dh"]];
@@ -732,9 +750,16 @@ brDTPolyRDE[C_Association, j_Integer, b0_, c0_, n0_] := Module[{C1 = brDTLevel[C
   (* b in k_(j-1)*: the cancellation case *)
   ld = If[C1["kind"] === "Log", brDTPLD[C, j - 1, -b, 0], brDTPLD[C, j - 1, -b, C1["Dh"]]];
   If[First[ld] === "radical" && (C1["kind"] === "Log" || IntegerQ[ld[[3]]/ld[[2]]]),
-    If[ld[[2]] =!= 1,
+    If[ld[[2]] === 1,
+      Return[brDTCancelHom[C, j, b, c, n, brBCNorm[C1, Product[u[[2]]^u[[1]], {u, ld[[4]]}]], ld[[3]]]]];
+    If[j =!= 1,
       throwUnimplemented["BaseTower:root0", "a logarithmic-derivative witness that needs an n-th root in k0 (ROOT_0, OL5)"]];
-    Return[brDTCancelHom[C, j, b, c, n, brBCNorm[C1, Product[u[[2]]^u[[1]], {u, ld[[4]]}]], ld[[3]]]]];
+    (* level 1: the n = 1 witness by the homogeneous RDE_0 (Corollary E1hom), D z/z = -b - m eta
+       with the one integer m = m0/n0 (remark (2)); none means no homogeneous solution, and the
+       top-down pass below is valid (remark (3)) *)
+    With[{mm = If[C1["kind"] === "Log", 0, ld[[3]]/ld[[2]]]},
+      With[{hw = brDTHomRDE0[C, brBCNorm[C1, b + mm If[C1["kind"] === "Log", 0, C1["Dh"]]]]},
+        If[First[hw] === "witness", Return[brDTCancelHom[C, j, b, c, n, hw[[2]], mm], Module]]]]];
   While[c =!= 0,
     If[++guard > 500, throwInternal["brDTPolyRDENoProgress"]];
     m = brDTDeg[C1, c];

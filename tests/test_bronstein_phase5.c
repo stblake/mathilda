@@ -337,9 +337,9 @@ static void test_m2(void) {
     BR_TRUE("brDTCancelHom[C2x, 1, -1/x, Y2, 3, x, 0] === {\"NoSolution\"}");
     BR_TRUE("brDTLaurentDeriv[C1x, 1, {}] === {\"Solution\", {}}");
     BR_TRUE("brDTLaurentDeriv[C1x, 1, {{0, Y1}}] === {\"NoSolution\"}");
-    /* a witness with n0 = 2 still declines (ROOT_0) */
-    BR_THROWS("brDTPolyRDE[C2x, 1, -1/(2 x), 1, 3]", "Unimplemented",
-              "a logarithmic-derivative witness that needs an n-th root in k0 (ROOT_0, OL5)");
+    /* a radical solution with n0 = 2 at level 1: the homogeneous RDE_0 decides the witness (Corollary E1hom) --
+     * none for -b = 1/(2 x) (Sqrt[x] is not in k0), so the top-down pass: q = 2 x */
+    BR_TRUE("brDTPolyRDE[C2x, 1, -1/(2 x), 1, 3] === {\"Solution\", 2 x}");
     /* three monomials end to end: answers verified, certificates */
     BR_ANTIDERIV("D[F3, x]", "Bronstein");
     BR_ANTIDERIV("D[E^(x Sqrt[1 + x^3]) Log[x] Log[x + Sqrt[1 + x^3]], x]", "Bronstein");
@@ -380,6 +380,29 @@ static void test_i2(void) {
     BR_TRUE("brDTPLD0[C2x, 2 x/(x^2 - 2), 0] === {\"radical\", 1, 0, {{1, -2 + x^2}}}");
 }
 
+/* Corollary E1hom (closing OL5 for its two uses): the n = 1 witness by the homogeneous RDE_0. */
+static void test_hom_witness(void) {
+    br_run("al = 3 x^2/(2 (1 + x^3)); True");
+    /* Trager writes Log[y] as Log[1 + x^3]/2: a radical solution with n0 = 2 ... */
+    BR_TRUE("brDTPLD0[C2x, al, 0] === {\"radical\", 2, 0, {{1, 1 + x^3}}}");
+    /* ... but y itself is the witness */
+    BR_TRUE("brDTHomRDE0[C2x, -al] === {\"witness\", Y2}");
+    BR_TRUE("brDTHomRDE0[C2x, -1/x] === {\"witness\", x}");
+    BR_TRUE("brDTHomRDE0[C2x, -1/(2 x)] === {\"none\"}");        /* Sqrt[x] is not in Q(x)(Y) */
+    BR_TRUE("brDTHomRDE0[C2x, 1] === {\"none\"}");               /* E^-x */
+    BR_TRUE("brDTHomRDE0[C2x, 0][[1]] === \"witness\"");          /* constants */
+    BR_TRUE("brAlgRDEHom[C2x[\"B\"], afFromY[fieldQ[], C2x[\"B\"], -1/(2 x), Y2]] === {\"NoSolution\"}");
+    BR_TRUE("brAlgRDEHom[C2x[\"B\"], afFromY[fieldQ[], C2x[\"B\"], -al, Y2]][[1]] === \"Solution\"");
+    /* the cancellation case with that witness: D q - al q = Y/x has q = Y Log[x] (a bare Return inside
+     * With dropped the witness's answer and the top-down pass said "no": a false certificate) */
+    BR_TRUE("brDTPolyRDE[C2x, 1, -al, brBCNorm[P1, Y2/x], 3] === {\"Solution\", t Y2}");
+    BR_TRUE("brDTPolyRDE[C2x, 1, -al, brBCNorm[P1, Y2], 3] === {\"Solution\", x Y2}");
+    /* the primitive degree bound with db = da uses the witness too (D q = ... with a = 1, b = -al) */
+    BR_TRUE("IntegerQ[brDTDegreeBound[C2x, 1, 1, brBCNorm[P1, -al], brBCNorm[P1, t Y2/x]]]");
+    /* end to end: an integrand whose RDE_1 needs it */
+    BR_ANTIDERIV("D[Sqrt[1 + x^3] Log[x]^2 E^(Log[x]^2), x]", "Bronstein");
+}
+
 int main(void) {
     br_init();
     setup();
@@ -395,6 +418,7 @@ int main(void) {
     test_kummer_split_kernel_radicals();
     test_m2();
     test_i2();
+    test_hom_witness();
     BR_DONE("bronstein_phase5_tests");
     return 0;
 }

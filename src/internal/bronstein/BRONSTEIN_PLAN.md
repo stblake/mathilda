@@ -1848,6 +1848,19 @@ returns Erf/Erfi answers for elementary integrands (260 one-elem-30, two-elem-45
 tanh-elem-38, tani-elem-25, gauss-elem-10), and `Erf[I z]` / `Erf[-z]` are not canonicalised as
 the reference does.
 
+**Status (2026-11-22, v0.6691-v0.6692).**
+- v0.6691: cascade fixes from the rerun. D7 is down to one case (`tani-rand-21`), and the
+  Linearity special answers and stage-02 Together grinds are fixed.
+- v0.6692 (L2): Corollary E1hom gives the n = 1 witness by the homogeneous RDE_0, so
+  `BaseTower:root0` declines only at level >= 2. Three bare Returns that left only a loop or a
+  With were fixed in AlgebraicPart.m and TorsionModP.m.
+
+Remaining:
+- L3 (nonzero offsets, OL2);
+- ROOT_j at j >= 1;
+- OL3, OL4, OL6;
+- D6 on the v0.6691 benchmark.
+
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
 - *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a
