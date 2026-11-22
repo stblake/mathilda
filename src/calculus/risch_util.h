@@ -20,7 +20,8 @@
 #include "expr.h"
 
 /* Build-and-evaluate. */
-Expr* rt_eval_call(const char* head, Expr** args, size_t n);  /* adopts args elems */
+Expr* rt_eval_call(const char* head, Expr** args, size_t n);
+bool rt_verify_antideriv_cheap(Expr* result, Expr* f, Expr* x);  /* exact rational-cost tests only (see risch_util.c) */  /* adopts args elems */
 /* Polynomial-algebra primitives (PolynomialGCD, ...) that came back unevaluated
  * through rt_eval_call; see risch_util.c.  Monotone counter. */
 extern unsigned long g_rt_prim_unevaluated;

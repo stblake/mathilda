@@ -257,9 +257,37 @@ static bool rt_is_trig_polynomial(Expr* e) {
     return true;
 }
 
+#define RT_REALIFY_SECONDS 1.5
+
+/* The real form is checked against TrigToExp[f], an exact rewrite of f spelled
+ * in the exponential kernels: D of the real candidate is then compared with a
+ * rational function of E^(I x), which the verifier's first exact test decides.
+ * Against the trigonometric f itself the check fell to the unbounded Simplify:
+ * 6 s of 259 tani-elem-25 after a 0.4 s answer. */
+static bool rt_realify_verify(Expr* cand, Expr* f, Expr* x) {
+    if (rt_verify_antideriv_cheap(cand, f, x)) return true;
+    /* then PossibleZeroQ on the exponential spelling, bounded (RT_REALIFY_SECONDS);
+     * never the full verifier's unbounded Simplify fallback: this form is cosmetic,
+     * and a rejection keeps the verified exponential answer */
+    Expr* d = rt_eval2("D", expr_copy(cand), expr_copy(x));
+    if (!d) return false;
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ d,
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+    Expr* pz = rt_eval3("TimeConstrained",
+        expr_new_function(expr_new_symbol("PossibleZeroQ"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("TrigToExp"), (Expr*[]){ diff }, 1) }, 1),
+        expr_new_real(RT_REALIFY_SECONDS), expr_new_symbol("False"));
+    bool ok = pz && rt_is_true(pz);
+    if (pz) expr_free(pz);
+    return ok;
+}
+
 static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
     Expr* re = NULL; Expr* im = NULL;
-    if (!cx_reim(G, x, &re, &im)) { if (re) expr_free(re); if (im) expr_free(im); return NULL; }
+    double t0 = rt_profile_on() ? mth_mono_seconds() : 0;
+    bool okri = cx_reim(G, x, &re, &im);
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] realify cx_reim %.3f s (%zu nodes)\n", mth_mono_seconds() - t0, re ? (size_t)rt_nodecount(re) : (size_t)0);
+    if (!okri) { if (re) expr_free(re); if (im) expr_free(im); return NULL; }
     if (im) expr_free(im);
     /* Complexity guard: on a form carrying an ArcTan/Log of a complex argument (the
      * odd rational-trig powers, e.g. Sec[x]^3), cx_reim's exact real part explodes —
@@ -278,13 +306,33 @@ static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
     if (rt_free_of_complex(re) && rt_is_trig_polynomial(re)) {
         Expr* reN = rt_eval1("TrigReduce", expr_copy(re));          /* adopts the copy */
         if (reN && rt_free_of_complex(reN) && rt_is_trig_polynomial(reN)
-                && rt_verify_antideriv(reN, f, x)) {
+                && rt_realify_verify(reN, f, x)) {
             expr_free(re); return reN;
         }
         if (reN) expr_free(reN);
     }
-    Expr* reS = rt_eval1("Simplify", re);                           /* adopts re */
-    if (reS && rt_free_of_complex(reS) && rt_verify_antideriv(reS, f, x)) return reS;
+    /* The real form is cosmetic (r is already verified), so its Simplify is
+     * bounded: Integrate`$RealifyBudget seconds (default RT_REALIFY_SECONDS).
+     * Unbounded it took 6.4 s of the 6.9 s of 259 tani-elem-25 after a 0.4 s
+     * answer.  A timeout keeps the verified exponential form. */
+    double budget = RT_REALIFY_SECONDS;
+    {
+        Expr* bv = evaluate(expr_new_symbol("Integrate`$RealifyBudget"));
+        if (bv) {
+            if (bv->type == EXPR_INTEGER) budget = (double)bv->data.integer;
+            else if (bv->type == EXPR_REAL) budget = bv->data.real;
+            expr_free(bv);
+        }
+    }
+    Expr* call = expr_new_function(expr_new_symbol("Simplify"), (Expr*[]){ re }, 1);   /* adopts re */
+    Expr* reS = budget > 0
+        ? rt_eval3("TimeConstrained", call, expr_new_real(budget), expr_new_symbol("$Failed"))
+        : rt_eval_call("Identity", (Expr*[]){ call }, 1);
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] realify simplify %.3f s\n", mth_mono_seconds() - t0);
+    if (reS && reS->type == EXPR_SYMBOL && reS->data.symbol.name == intern_symbol("$Failed")) { expr_free(reS); return NULL; }
+    bool vok = reS && rt_free_of_complex(reS) && rt_realify_verify(reS, f, x);
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] realify verify done %.3f s -> %d\n", mth_mono_seconds() - t0, (int)vok);
+    if (vok) return reS;
     if (reS) expr_free(reS);
     return NULL;
 }
@@ -387,6 +435,7 @@ Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * matters.  The real reconstruction below is cosmetic and its Simplify is
      * unbounded: 119 s on D[-I u Tan[u]^2/((1 + Tan[u])(1 + Tan[u]^2))] after
      * a 0.4 s verified answer (tan over Q(i) hunt, 2026-11-20). */
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] trig frontend: decision_only=%d\n", (int)rt_decision_only());
     if (rt_decision_only()) return r;
     /* Reconstruct a REAL closed form from the trig image ExpToTrig[r] (nice-to-have,
      * exact-diff-back gated and time-bounded).  On success return the clean real
@@ -394,6 +443,7 @@ Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * verified, so correct by construction, and far smaller than the multiple-angle
      * ExpToTrig image (e.g. Sec[x]^3, whose real reduction Simplify cannot close). */
     Expr* out = rt_eval1("ExpToTrig", expr_copy(r));   /* trig image; keep r */
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] trig frontend: ExpToTrig %s\n", out ? "ok" : "NULL");
     Expr* real = out ? rt_realify(out, x, f) : NULL;
     if (out) expr_free(out);
     if (real) { expr_free(r); return real; }

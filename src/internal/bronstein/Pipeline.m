@@ -489,15 +489,22 @@ brSupportSplitIntegrate[f_, x_Symbol] := Module[{e, r},
   r];
 (* a group undecided: None, so the caller keeps the tower's own (more specific) reason *)
 
-brKernelSubstitution::usage = "brKernelSubstitution[f, x] integrates f = h(theta) D theta, theta the ONE logarithm Log[a] or exponential E^w of f (all exponentials E^(r w) with rational r written as powers of E^(w/d)), h algebraic in u = theta and free of x: the purely algebraic integrand h(u) by BronsteinIntegrate in u (Trager), under brOption[\"KernelSubstitutionTime\"] seconds. An answer G(u) gives F = G(theta), returned only when antiderivativeQ[f, F, x] (the chain rule makes it exact; the check guards the substitution). Otherwise None: a certificate in u is NOT taken as one for f, so the caller's own path decides (D6: speed only).";
-brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Unique["Bronstein`Private`brKu"], rules, h0, h, G, F},
+brKernelSubstitution::usage = "brKernelSubstitution[f, x] integrates f = h(theta) D theta, theta the ONE logarithm Log[a] or exponential E^w of f (all exponentials E^(r w) with rational r written as powers of E^(w/d)), h algebraic in u = theta and free of x: the purely algebraic integrand h(u) by Integrate in u (the cascade: Euler substitution, Trager, ...), under brOption[\"KernelSubstitutionTime\"] seconds. An answer G(u) gives F = G(theta), returned only when antiderivativeQ[f, F, x] (the chain rule makes it exact; the check guards the substitution). Otherwise None: a certificate in u is NOT taken as one for f, so the caller's own path decides (D6: speed only).";
+(* u is a fixed private symbol, not Unique[...]: Unique symbols are Temporary, and the
+   cascade's stages reject an answer containing a Temporary symbol (an escaped Module
+   local), so Integrate[h, u] fell past its 0.01 s Euler substitution to the budget *)
+brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Bronstein`Private`brKu, rules, h0, h, G, F},
+  If[!FreeQ[f, Bronstein`Private`brKu], Return[None]];
   If[FreeQ[f, Power[_, _Rational]] || brOption["KernelSubstitutionTime"] <= 0, Return[None]];
   logs = Union[Cases[f, Log[a_] /; !FreeQ[a, x], {0, Infinity}, Heads -> True]];
   exps = Union[Cases[f, Power[E, e_] /; !FreeQ[e, x] :> e, {0, Infinity}, Heads -> True]];
   Which[
     Length[logs] === 1 && exps === {}, th = First[logs]; rules = {th -> u},
     logs === {} && exps =!= {},
-      e0 = First[exps]; rs = Together[#/e0] & /@ exps;
+      (* the base with the fewest negative powers: E^(-x^2) beside E^(x^2), E^(2 x^2)
+         must not become u = E^(-x^2), whose radicand 1 + 1/u + 1/u^2 is far harder *)
+      e0 = First[SortBy[exps, Function[c, Count[Together[#/c] & /@ exps, r_ /; NumericQ[r] && r < 0]]]];
+      rs = Together[#/e0] & /@ exps;
       If[!AllTrue[rs, rationalNumberQ], Return[None]];
       d = LCM @@ (Denominator /@ rs); w = e0/d; th = E^w;
       rules = Thread[(E^# & /@ exps) -> (u^(d Together[#/e0]) & /@ exps)],
@@ -511,9 +518,12 @@ brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = 
   If[!FreeQ[h0, Power[p_Plus /; !FreeQ[p, Power[_, _Rational]], n_ /; NumberQ[n] && n < 0]], Return[None]];
   (* an exponential's D theta = w' theta adds a pole at u = 0, and Trager in u is then
      sometimes slower than the tower: a shorter budget for it *)
-  G = Quiet[TimeConstrained[BronsteinIntegrate[h, u],
+  (* the whole cascade in u, not Trager alone: its Euler substitution closes a square
+     root of a quadratic in 0.02 s where Trager took 26 s (257 cM-3-152); h has no
+     kernel left, so this cannot come back here *)
+  G = Quiet[TimeConstrained[Integrate[h, u],
     If[Head[th] === Log, brOption["KernelSubstitutionTime"], brOption["KernelSubstitutionExpTime"]], $Failed]];
-  If[G === $Failed || ListQ[G] || !FreeQ[G, Integrate], Return[None]];
+  If[G === $Failed || ListQ[G] || !FreeQ[G, Integrate | Inactive], Return[None]];
   F = G /. u -> th;
   (* both checks: a form that only the complex-domain test confirms (PossibleZeroQ's
      real-line false negative on E^x/(1 + E^(3 x))^(1/3)'s ArcTan form, G-pzq-1) is

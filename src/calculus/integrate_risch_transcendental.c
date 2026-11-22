@@ -127,12 +127,17 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * real-tangent integrands (which it strands at an I-laden complex-log form). */
     r = RT_STAGE(rt_hypertangent_case, f, x);
     if (r) return r;
-    r = RT_STAGE(rt_trig_frontend, f, x);
-    if (r) return r;
     /* Single-kernel field recursion: a proper part in t plus a k-part whose
      * integral is a new logarithm over k (1/(1 + x) + 1/(x (1 + Log[x]))), which
-     * no flat single-kernel case above covers; exactly verified. */
+     * no flat single-kernel case above covers; exactly verified.  Before the trig
+     * front end: on 259 tan-elem-32 it answers in 0.06 s where the front end's
+     * hyperexponential case ground 6-19 s and declined (D6). */
+    /* Measured over 259's 320 tan/tani/tanh/gauss cases (CPU, 30 s cap): 112.5 s
+     * with this stage after the front end, 68.4 s before it, one more answer
+     * (tani-elem-30: a timeout, now 0.47 s), none lost. */
     r = RT_STAGE(rt_recursive_tower_case_single, f, x);
+    if (r) return r;
+    r = RT_STAGE(rt_trig_frontend, f, x);
     if (r) return r;
     /* Dependent-logarithm fallback.  When every case above declined, the
      * integrand may carry Q-linearly DEPENDENT logarithmic generators that no

@@ -131,7 +131,8 @@ static void test_bronstein_end_to_end(void) {
                  "With[{f = %s}, With[{F = Quiet[Integrate`Bronstein[f, x]]}, !ListQ[F] && PossibleZeroQ[D[F, x] - f]]]", elem[i]);
         BR_TRUE(buf);
     }
-    BR_EQ("Integrate[Sqrt[Global`a + Log[x]]/x, x, Method -> \"Bronstein\"]", "1/3 (2 a Sqrt[a + Log[x]] + 2 Log[x] Sqrt[a + Log[x]])");
+    /* since v0.6697 through the kernel substitution u = Log[x] (the cascade in u) */
+    BR_EQ("Integrate[Sqrt[Global`a + Log[x]]/x, x, Method -> \"Bronstein\"]", "2/3 (a + Log[x])^(3/2)");
     /* a parameter in the exponent: E^(-c x) is (E^(c x))^-1, decided by the
      * structure theorem over Q(c) (it was "exponential relation not decided"
      * while the parameter was solved for as an unknown multiplier) */

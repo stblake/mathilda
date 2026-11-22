@@ -809,6 +809,29 @@ bool rt_exact_zero_trigexp(Expr* d, Expr* x) {
     return z;
 }
 
+/* The exact, rational-cost tests of rt_verify_antideriv only: Together of the
+ * TrigToExp form, the rational point grid, ComplexExpand + Together.  No
+ * PossibleZeroQ and no Simplify, so it is cheap and its true is a proof; false
+ * means "not shown cheaply".  For cosmetic rewrites of an answer already verified
+ * (the real form of the trig front end, rt_realify), where a rejection only keeps
+ * the verified form: the full verifier's Simplify fallback took 6 s there (259
+ * tani-elem-25, after a 0.4 s answer). */
+bool rt_verify_antideriv_cheap(Expr* result, Expr* f, Expr* x) {
+    Expr* d = rt_eval2("D", expr_copy(result), expr_copy(x));
+    if (!d) return false;
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ d, expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+    bool ok = rt_exact_zero_trigexp(diff, x) || trigexp_rational_is_zero(diff) == TRIGEXP_ZERO_TRUE;
+    if (!ok) {
+        Expr* ce = rt_eval1("Together", rt_eval1("ComplexExpand", rt_eval1("TrigToExp", expr_copy(diff))));
+        ok = ce && rt_is_zero(ce);
+        if (ce) expr_free(ce);
+    }
+    expr_free(diff);
+    return ok;
+}
+
 bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* d = rt_eval2("D", expr_copy(result), expr_copy(x));
     if (!d) return false;

@@ -4285,7 +4285,7 @@ give no certificate when a parameter is present. They decline instead.
 
 | Input | Result |
 |---|---|
-| `Integrate[Sqrt[a + Log[x]]/x, x, Method -> "Bronstein"]` | `1/3 (2 a Sqrt[a + Log[x]] + 2 Log[x] Sqrt[a + Log[x]])` |
+| `Integrate[Sqrt[a + Log[x]]/x, x, Method -> "Bronstein"]` | `2/3 (a + Log[x])^(3/2)` |
 | `Integrate[E^x/Sqrt[E^(2 x) + a], x, Method -> "Bronstein"]` | `-Log[-E^x + Sqrt[a + E^(2 x)]]` |
 | `Integrate[1/Sqrt[E^(3 x) + a], x, Method -> "Bronstein"]` | an antiderivative (genus 1, special place at E^x = 0) |
 | `Integrate[Sqrt[a + Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
