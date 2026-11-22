@@ -702,13 +702,13 @@ Expr* builtin_module(Expr* res) {
         expr_free(substituted_body);
     }
 
-    /* Trap Return targeting this Module. Return[v] (1-arg) is consumed
-     * unconditionally; Return[v, h] is consumed only when h == Module,
-     * else the marker is handed upward unchanged so an enclosing
-     * boundary with the matching head can claim it. */
+    /* Trap Return[v, Module]. A plain Return[v] passes through: as in the
+     * reference it leaves the enclosing definition, not this Module, so a
+     * nested Module (or one inside a With or a loop) does not stop it.
+     * Return[v, h] for another h is handed upward unchanged too. */
     {
         Expr* rv = NULL;
-        EvalReturnAction ra = eval_classify_return(final_res, SYM_Module, &rv);
+        EvalReturnAction ra = eval_classify_return_targeted(final_res, SYM_Module, &rv);
         if (ra == EVAL_RETURN_CONSUME) {
             expr_free(final_res);
             final_res = rv;
@@ -1183,10 +1183,10 @@ Expr* builtin_block(Expr* res) {
     Expr* thrown = mth_block_thrown(frame);
     Expr* final_res = thrown ? thrown : evaluate(body);
 
-    /* Trap Return targeting this Block. Symmetric to the Module path. */
+    /* Trap Return[v, Block] only; a plain Return passes. Symmetric to Module. */
     {
         Expr* rv = NULL;
-        EvalReturnAction ra = eval_classify_return(final_res, SYM_Block, &rv);
+        EvalReturnAction ra = eval_classify_return_targeted(final_res, SYM_Block, &rv);
         if (ra == EVAL_RETURN_CONSUME) {
             expr_free(final_res);
             final_res = rv;
@@ -1253,10 +1253,13 @@ Expr* builtin_with(Expr* res) {
     Expr* final_res = evaluate(substituted_body);
     expr_free(substituted_body);
 
-    /* Trap Return targeting this With. Symmetric to Module / Block. */
+    /* Trap Return[v, With] only; a plain Return passes. Symmetric to Module.
+     * (The reference has no With frame once the body is substituted, so it
+     * says Return::nofunc for Return[v, With]; claiming it here is a strict
+     * extension.) */
     {
         Expr* rv = NULL;
-        EvalReturnAction ra = eval_classify_return(final_res, SYM_With, &rv);
+        EvalReturnAction ra = eval_classify_return_targeted(final_res, SYM_With, &rv);
         if (ra == EVAL_RETURN_CONSUME) {
             expr_free(final_res);
             final_res = rv;

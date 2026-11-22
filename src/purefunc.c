@@ -446,10 +446,11 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count, 
  */
 /*
  * trap_return:
- * Strip a Return[v] / Return[] marker that targets *this* Function
- * boundary. Return[v, h] is consumed only when h == Function; otherwise
- * the marker is handed upward unchanged so an enclosing Module / Block
- * / loop with the matching head can claim it.
+ * Strip a Return[v, Function] marker. A plain Return[v] / Return[] is NOT
+ * consumed: as in the reference it passes out of the pure function to the
+ * enclosing definition (or Do / Scan), so Map[(Return[#]; 0) &, {1, 2}] is
+ * {Return[1], Return[2]} and (Return[1]; 2) &[] inside a definition leaves
+ * the definition. Return[v, h] for another h is handed upward unchanged.
  *
  * Takes ownership of `result` and returns either the original pointer
  * (when the marker is absent or propagating) or a freshly-owned
@@ -458,7 +459,7 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count, 
  */
 static Expr* trap_return(Expr* result) {
     Expr* rv = NULL;
-    EvalReturnAction ra = eval_classify_return(result, SYM_Function, &rv);
+    EvalReturnAction ra = eval_classify_return_targeted(result, SYM_Function, &rv);
     if (ra == EVAL_RETURN_CONSUME) {
         expr_free(result);
         return rv;

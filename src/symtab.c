@@ -1477,22 +1477,32 @@ static bool rule_mentions_optionvalue(Rule* rule) {
     return rule->ov_tmpl == 1;
 }
 
-/* The value of applying `rule` of `head` when its rewrite is `result`: for a
- * rule whose right-hand side mentions Return, the result is evaluated here and
- * a top-level Return[v] (or Return[v, head]) yields v, Return[] Null -- the
- * reference's return from a definition. Return[v, other] and a Return below
- * the top level (1 + Return[2]) are left as they are. Consumes result. */
-static Expr* rule_result(const Rule* rule, Expr* result, const char* head) {
-    if (!result || !rule->has_return) return result;
+/* The value of applying `rule` of `def` when its rewrite is `result`: the
+ * result is evaluated here and a top-level Return[v] (or Return[v, head])
+ * yields v, Return[] Null -- the reference's return from a definition, which
+ * is where a plain Return stops (Module, Block, With, While, For and pure
+ * functions pass it through). Return[v, other] and a Return below the top
+ * level (1 + Return[2]) are left as they are. Consumes result.
+ *
+ * Only rules that can produce a Return pay for the eager evaluation: one whose
+ * right-hand side mentions Return, and one of a holding head, whose held
+ * argument can carry a Return in (SetAttributes[w, HoldAll]; w[b_] := Block[{},
+ * b]; then w[Module[{}, Return[1]; 2]] is 1 at w's boundary, as in the
+ * reference). An evaluated argument carrying a plain Return in (g[x_] := x;
+ * g[Return[1]]) is not caught -- a corner left to the next boundary out. */
+static Expr* rule_result(const Rule* rule, Expr* result, const SymbolDef* def) {
+    if (!result) return result;
     if (rule->has_return < 0) {
         /* lazily cached on the (otherwise immutable) rule */
         ((Rule*)rule)->has_return = mentions_return(rule->replacement) ? 1 : 0;
-        if (!rule->has_return) return result;
     }
+    if (!rule->has_return &&
+        !(def->attributes & (ATTR_HOLDALL | ATTR_HOLDALLCOMPLETE)))
+        return result;
     Expr* ev = evaluate(result);
     expr_free(result);
     Expr* v = NULL;
-    if (eval_classify_return(ev, head, &v) == EVAL_RETURN_CONSUME) {
+    if (eval_classify_return(ev, def->symbol_name, &v) == EVAL_RETURN_CONSUME) {
         expr_free(ev);
         return v;
     }
@@ -2507,7 +2517,7 @@ Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
             if (v) return v;
             continue;
         }
-        return rule_result(rule, result, def->symbol_name);
+        return rule_result(rule, result, def);
     }
     return NULL;
 }
@@ -2782,7 +2792,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
             }
             env_free(env);
             if (ds) ds->hits++;
-            return rule_result(rule, result, def->symbol_name);
+            return rule_result(rule, result, def);
         }
         env_free(env);
     }
@@ -2823,13 +2833,13 @@ Expr* apply_own_values(Expr* expr) {
          * check that also guards against any exotic caller. */
         if (rule->pattern->type == EXPR_SYMBOL &&
             rule->pattern->data.symbol.name == expr->data.symbol.name) {
-            return rule_result(rule, expr_copy(rule->replacement), def->symbol_name);
+            return rule_result(rule, expr_copy(rule->replacement), def);
         }
         MatchEnv* env = env_new();
         if (match(expr, rule->pattern, env)) {
             Expr* result = replace_bindings_stored(rule->replacement, env);
             env_free(env);
-            return rule_result(rule, result, def->symbol_name);
+            return rule_result(rule, result, def);
         }
         env_free(env);
         rule = rule->next;
@@ -2952,7 +2962,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
             }
             env_free(env);
             if (ds) ds->hits++;
-            return rule_result(rule, result, def->symbol_name);
+            return rule_result(rule, result, def);
         }
         env_free(env);
     }

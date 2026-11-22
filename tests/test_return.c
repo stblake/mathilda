@@ -1,25 +1,27 @@
 /*
  * test_return.c -- coverage for Return[] / Return[expr] / Return[expr, h]
  *
- * Mathematica's Return is a marker that propagates outward through the
- * current evaluation tree until it hits a "scope boundary" -- the body
- * of a Function, a Module / Block / With, or a Do / For / While. The
- * boundary strips the marker and yields the wrapped value as its own
- * result. Two argument forms exist:
+ * The reference semantics, every expected value below checked against the
+ * reference kernel's interactive top level (2026-11-22):
  *
- *   Return[expr]    -- yield expr from the nearest boundary.
- *   Return[]        -- yield Null from the nearest boundary.
- *   Return[expr, h] -- yield expr from the nearest boundary whose head
- *                      is the symbol h. Boundaries with a different
- *                      head propagate the marker outward unchanged.
+ *   Return[expr] / Return[] is a VALUE that CompoundExpression, While and
+ *   For stop at and pass up. Module, Block, With and pure Functions pass
+ *   it through as well. Only three things consume it: a definition's rule
+ *   boundary (f[x_] := ..., OwnValues, SubValues, UpValues), Do and Scan.
+ *   At the top level it stays as it is: Module[{}, Return[1]; 2] at the
+ *   prompt is Return[1], and Map[Return, {1}] is {Return[1]}.
  *
- * These tests exercise every supported boundary head (Function, Module,
- * Block, With, Do, For, While), the propagation paths through nested
- * boundaries, the propagation through CompoundExpression and
- * If / Which (which do *not* trap), the top-level no-boundary case, and
- * a handful of edge cases (Return inside argument lists, Return whose
- * value is itself an expression, Return[expr, h] for a non-existent
- * boundary).
+ *   Return[expr, h] is a genuine non-local exit to the nearest enclosing
+ *   h. It leaves Table, Map, Select and function arguments on the way. The
+ *   reference supports it for the heads that are frames on its stack
+ *   (Module, Block, Do, While, For, Scan). Mathilda also accepts
+ *   Return[v, With], Return[v, Function] and Return[v, f] for a
+ *   definition's head f, where the reference says Return::nofunc.
+ *
+ * Before v0.6695 Mathilda let Module, Block, With, Function, While and For
+ * consume a plain Return. A Return inside a With or a While therefore
+ * left only that construct and fell through to the rest of the function.
+ * In a decision procedure that turned "undecided" into a false answer.
  */
 
 #include "test_utils.h"
@@ -79,56 +81,56 @@ static void test_return_two_arg_at_top_is_inert(void) {
  * ----------------------------------------------------------------- */
 static void test_return_in_function_simple(void) {
     /* Function[x, Return[x]][5] -> 5 */
-    check_eq("Function[x, Return[x]][5]", "5");
+    check_eq("Function[x, Return[x]][5]", "Return[5]");
     /* Slot form */
-    check_eq("(Return[#] &)[7]", "7");
+    check_eq("(Return[#] &)[7]", "Return[7]");
     /* Multi-param form */
-    check_eq("Function[{x, y}, Return[x + y]][3, 4]", "7");
+    check_eq("Function[{x, y}, Return[x + y]][3, 4]", "Return[7]");
     /* Return[] -> Null */
-    check_eq("Function[x, Return[]][9]", "Null");
+    check_eq("Function[x, Return[]][9]", "Return[]");
 }
 
 static void test_return_in_function_skips_following_statements(void) {
     /* The "after" branch of CompoundExpression must not be evaluated
      * once Return has fired. We use a side-effect to verify. */
     check_eq("Clear[r]; r = 0; "
-                   "Function[x, Return[x]; r = 999][42]", "42");
+                   "Function[x, Return[x]; r = 999][42]", "Return[42]");
     check_eq("r", "0");
 }
 
 static void test_return_in_function_inside_if(void) {
-    /* Common pattern: Return inside an If branch. The If does not trap
-     * Return; the Function body does. */
+    /* Return inside an If branch: neither the If nor the Function traps it;
+     * with no definition around, the marker reaches the top level. */
     check_eq("Function[x, If[x > 0, Return[positive], Return[negative]]][3]",
-                   "positive");
+                   "Return[positive]");
     check_eq("Function[x, If[x > 0, Return[positive], Return[negative]]][-3]",
-                   "negative");
+                   "Return[negative]");
 }
 
 /* -----------------------------------------------------------------
  * Module / Block / With boundaries (1-arg form)
  * ----------------------------------------------------------------- */
 static void test_return_in_module(void) {
-    check_eq("Module[{}, Return[42]]", "42");
-    check_eq("Module[{}, Return[]]", "Null");
-    check_eq("Module[{x = 10}, Return[x + 1]]", "11");
+    check_eq("Module[{}, Return[42]]", "Return[42]");
+    check_eq("Module[{}, Return[]]", "Return[]");
+    check_eq("Module[{x = 10}, Return[x + 1]]", "Return[11]");
 }
 
 static void test_return_in_block(void) {
-    check_eq("Block[{}, Return[42]]", "42");
-    check_eq("Block[{}, Return[]]", "Null");
-    check_eq("Block[{x = 10}, Return[x + 1]]", "11");
+    check_eq("Block[{}, Return[42]]", "Return[42]");
+    check_eq("Block[{}, Return[]]", "Return[]");
+    check_eq("Block[{x = 10}, Return[x + 1]]", "Return[11]");
 }
 
 static void test_return_in_with(void) {
-    check_eq("With[{x = 10}, Return[x + 1]]", "11");
+    check_eq("With[{x = 10}, Return[x + 1]]", "Return[11]");
     /* With value substitution still happens before Return fires. */
-    check_eq("With[{x = 5}, Return[x*x]]", "25");
+    check_eq("With[{x = 5}, Return[x*x]]", "Return[25]");
 }
 
 static void test_return_in_module_skips_subsequent_statements(void) {
     check_eq("Clear[r]; r = 0; "
-                   "Module[{}, Return[7]; r = 999]", "7");
+                   "Module[{}, Return[7]; r = 999]", "Return[7]");
     check_eq("r", "0");
 }
 
@@ -156,12 +158,12 @@ static void test_return_in_do_arithmetic_progression(void) {
 
 static void test_return_in_for(void) {
     check_eq("For[i = 1, i < 10, i = i + 1, If[i == 4, Return[i*100]]]",
-                   "400");
+                   "Return[400]");
 }
 
 static void test_return_in_while(void) {
     check_eq("Clear[n]; n = 0; While[True, n = n + 1; If[n == 5, Return[n]]]",
-                   "5");
+                   "Return[5]");
     check_eq("n", "5");
 }
 
@@ -182,10 +184,10 @@ static void test_compound_expression_propagates_return(void) {
 }
 
 static void test_compound_expression_inside_module_lets_return_reach(void) {
-    /* The CompoundExpression bubbles Return up to the surrounding
-     * Module, which strips it. */
-    check_eq("Module[{}, 1; Return[2]; 3]", "2");
-    check_eq("Module[{}, 1; Return[]; 3]", "Null");
+    /* The CompoundExpression stops at the Return and the Module passes it
+     * on: only a definition (or Do / Scan) strips it. */
+    check_eq("Module[{}, 1; Return[2]; 3]", "Return[2]");
+    check_eq("Module[{}, 1; Return[]; 3]", "Return[]");
 }
 
 /* -----------------------------------------------------------------
@@ -196,7 +198,7 @@ static void test_if_does_not_trap_return(void) {
     check_eq("If[True, Return[5], Return[6]]", "Return[5]");
     check_eq("If[False, Return[5], Return[6]]", "Return[6]");
     /* Wrap with Module to confirm the Return does pierce the If. */
-    check_eq("Module[{}, If[True, Return[5]]; 999]", "5");
+    check_eq("Module[{}, If[True, Return[5]]; 999]", "Return[5]");
 }
 
 /* -----------------------------------------------------------------
@@ -265,26 +267,25 @@ static void test_return_one_arg_innermost_boundary(void) {
  * Edge cases.
  * ----------------------------------------------------------------- */
 static void test_return_value_is_a_list(void) {
-    check_eq("Module[{}, Return[{1, 2, 3}]]", "{1, 2, 3}");
-    check_eq("Function[x, Return[{x, x+1}]][7]", "{7, 8}");
+    check_eq("Module[{}, Return[{1, 2, 3}]]", "Return[{1, 2, 3}]");
+    check_eq("Function[x, Return[{x, x+1}]][7]", "Return[{7, 8}]");
 }
 
 static void test_return_value_is_unevaluated_symbolic(void) {
     /* Return[a + b] where a and b are unbound: symbolic propagates. */
-    check_eq("Module[{}, Return[a + b]]", "a + b");
+    check_eq("Module[{}, Return[a + b]]", "Return[a + b]");
 }
 
 static void test_return_arg_is_evaluated_before_unwind(void) {
     /* Return[v]'s payload is fully evaluated before the marker exits.
      * Here, the inner Plus must be reduced to 6. */
-    check_eq("Module[{}, Return[1 + 2 + 3]]", "6");
+    check_eq("Module[{}, Return[1 + 2 + 3]]", "Return[6]");
 }
 
 static void test_return_inside_pure_function_inner(void) {
-    /* The innermost Function consumes Return[x*2]; the outer Function
-     * just yields whatever the inner Function produced. */
+    /* Neither Function consumes Return[x*2]: it reaches the top level. */
     check_eq("Function[y, Function[x, Return[x*2]][y + 1]][4]",
-                   "10");
+                   "Return[10]");
 }
 
 static void test_return_targeting_non_existent_head_at_top(void) {
@@ -298,19 +299,19 @@ static void test_return_inside_user_defined_function(void) {
      * Return yields its value (the reference gives 6). */
     check_eq("Clear[f]; f[x_] := Return[x + 1]; f[5]",
                    "6");
-    /* Wrapping the body in a Module traps it. */
+    /* The Module passes the Return on to the definition, which strips it. */
     check_eq("Clear[g]; g[x_] := Module[{}, Return[x + 1]]; g[5]",
                    "6");
 }
 
 static void test_return_zero_arg_in_each_boundary(void) {
-    check_eq("Function[x, Return[]][1]", "Null");
-    check_eq("Module[{}, Return[]]", "Null");
-    check_eq("Block[{}, Return[]]", "Null");
-    check_eq("With[{x = 1}, Return[]]", "Null");
+    check_eq("Function[x, Return[]][1]", "Return[]");
+    check_eq("Module[{}, Return[]]", "Return[]");
+    check_eq("Block[{}, Return[]]", "Return[]");
+    check_eq("With[{x = 1}, Return[]]", "Return[]");
     check_eq("Do[Return[], {3}]", "Null");
-    check_eq("For[i = 1, i < 5, i = i + 1, Return[]]", "Null");
-    check_eq("While[True, Return[]]", "Null");
+    check_eq("For[i = 1, i < 5, i = i + 1, Return[]]", "Return[]");
+    check_eq("While[True, Return[]]", "Return[]");
 }
 
 static void test_return_two_arg_each_boundary(void) {
@@ -327,26 +328,20 @@ static void test_return_two_arg_each_boundary(void) {
  * Stress: deeply nested mixed boundaries.
  * ----------------------------------------------------------------- */
 static void test_return_through_deep_nesting(void) {
-    /* Function -> Module -> Do -> For -> While: 1-arg Return is caught
-     * by the innermost (While), which yields a*2. The For body is now
-     * a non-Return value (12), so For keeps looping until i hits 99 and
-     * eventually returns Null. Do then sees Null, iterates 3 times,
-     * yields Null. Module yields Null, Function yields Null. So the
-     * whole expression yields Null -- matching Mathematica's "Return
-     * exits the innermost trapping construct" rule. */
+    /* Function -> Module -> Do -> For -> While: the While and the For stop
+     * at Return[12] and pass it up; the Do consumes it and yields 12, which
+     * the Module and the Function return (the reference gives 12). */
     check_eq("Function[a, "
                    "Module[{}, "
                    "Do["
                    "For[i = 1, i < 99, i = i + 1, "
                    "While[True, Return[a*2]]"
                    "], {3}]]][6]",
-                   "Null");
+                   "12");
 
-    /* Without For/Do swallowing the value, the While yields 12 and
-     * Module simply evaluates to its body's last value (12). The
-     * Function yields the same. */
+    /* With no Do or definition around, nothing consumes it. */
     check_eq("Function[a, Module[{}, While[True, Return[a*2]]]][6]",
-             "12");
+             "Return[12]");
 
     /* Same nesting as the first case but Return targets Function
      * explicitly: the marker must skip While, For, Do, Module and
@@ -359,9 +354,7 @@ static void test_return_through_deep_nesting(void) {
                    "], {3}]]][6]",
                    "18");
 
-    /* Targeting Module specifically: While catches if 1-arg, but the
-     * 2-arg form with target=Module skips While, For, Do until Module
-     * traps it. */
+    /* Return[v, Module] skips the While and stops at the Module. */
     check_eq("Function[a, "
                    "Module[{}, "
                    "While[True, Return[a*5, Module]]"
@@ -405,6 +398,96 @@ static void test_return_from_definition(void) {
     check_eq("rd15[x_] := {Return[x]}; rd15[2]", "{Return[2]}");
     check_eq("rd16[x_] := Hold[Return[x]]; rd16[1]", "Hold[Return[1]]");
     check_eq("rfac[n_] := If[n <= 1, Return[1], Return[n rfac[n - 1]]]; rfac[20]", "2432902008176640000");
+}
+
+
+/* -----------------------------------------------------------------
+ * The reference table (2026-11-22). Each case is a definition, so the
+ * Return has a function boundary to leave, and the value shows which
+ * construct consumed it. Every expected value is the reference kernel's.
+ * Before v0.6695 Mathilda gave 2 / 99 for every row marked (*): With,
+ * Block, a nested Module, While, For and a pure Function consumed the
+ * Return and the function carried on.
+ * ----------------------------------------------------------------- */
+static void test_return_reference_table(void) {
+    /* CompoundExpression, If, Which, Switch: transparent */
+    check_eq("rt1[] := (1; (Return[1]; 3); 2); rt1[]", "1");
+    check_eq("rt2[] := Module[{}, If[True, If[True, Return[1]]]; 2]; rt2[]", "1");
+    check_eq("rt3[] := Module[{}, Which[True, Return[1]]; 2]; rt3[]", "1");
+    check_eq("rt4[] := Module[{}, Switch[1, 1, Return[1]]; 2]; rt4[]", "1");
+    /* Module, Block, With: transparent (*) */
+    check_eq("rt5[] := (Module[{}, Return[1]]; 2); rt5[]", "1");
+    check_eq("rt6[] := Module[{}, Module[{}, If[True, Return[1]]; 3]; 2]; rt6[]", "1");
+    check_eq("rt7[] := Module[{}, Block[{}, Return[1]]; 2]; rt7[]", "1");
+    check_eq("rt8[] := Module[{}, With[{a = 1}, If[True, Return[a]]]; 2]; rt8[]", "1");
+    check_eq("rt9[] := Module[{}, If[True, With[{a = 5}, Return[a]]]; 2]; rt9[]", "5");
+    /* While, For: stop and pass up (*) */
+    check_eq("rt10[] := Module[{i = 0}, While[i < 3, i++; If[i == 2, Return[i]]]; 99]; rt10[]", "2");
+    check_eq("rt11[] := Module[{}, For[i = 0, i < 3, i++, If[i == 1, Return[i]]]; 99]; rt11[]", "1");
+    /* Do, Scan: consume */
+    check_eq("rt12[x_] := (Do[If[x > 5, Return[a]], {3}]; x); rt12[6]", "6");
+    check_eq("rt13[] := Module[{}, Do[Do[If[j == 2, Return[j]], {j, 3}], {2}]; 99]; rt13[]", "99");
+    check_eq("rt14[] := Module[{}, Scan[If[# == 2, Return[#]] &, {1, 2, 3}]; 99]; rt14[]", "99");
+    check_eq("rt15[] := Module[{}, Scan[If[# == 2, Return[#]] &, {1, 2, 3}]]; rt15[]", "2");
+    /* pure Function: transparent (*); Table and Map keep it as a value */
+    check_eq("rt16[] := Module[{}, (Return[#]; 5) &[3]; 99]; rt16[]", "3");
+    check_eq("rt17[] := Module[{}, Function[x, Return[x]; 5][3]; 99]; rt17[]", "3");
+    check_eq("rt18[] := Module[{}, Table[If[i == 2, Return[i], i], {i, 3}]]; rt18[]", "{1, Return[2], 3}");
+    check_eq("rt19[] := Module[{}, Map[If[# == 2, Return[#], #] &, {1, 2, 3}]]; rt19[]", "{1, Return[2], 3}");
+    check_eq("rt20[] := Module[{}, Select[{1, 2, 3}, (If[# == 2, Return[True]]; False) &]]; rt20[]", "{}");
+    /* Catch: transparent; Throw still goes to it */
+    check_eq("rt21[] := Module[{}, Catch[If[True, Return[1]]; 3]; 2]; rt21[]", "1");
+    check_eq("rt22[x_] := Catch[Do[If[x > 5, Throw[a]], {3}]; x]; rt22[6]", "a");
+    /* Check / TimeConstrained / Quiet pass it to the definition */
+    check_eq("rt23[] := Check[Module[{}, Return[9]; 1], fail]; rt23[]", "9");
+    check_eq("rt24[] := TimeConstrained[Module[{}, Return[9]; 1], 10, fail]; rt24[]", "9");
+    check_eq("rt25[] := (Quiet[Module[{}, Return[9]; 1]]; 5); rt25[]", "9");
+    /* a holding wrapper's own definition is a boundary */
+    check_eq("SetAttributes[rtw, HoldAll]; rtw[b_] := Block[{}, b]; "
+             "rt26[] := (rtw[Module[{}, Return[6]; 7]]; 8); rt26[]", "8");
+    /* memoisation stores the Return, which the stored rule strips again */
+    check_eq("rtm[x_] := rtm[x] = Module[{}, If[x > 0, Return[x]]; 0]; {rtm[3], rtm[3]}", "{3, 3}");
+    /* Set passes it: the CompoundExpression stops at the assignment */
+    check_eq("rt27[] := Module[{y}, y = Module[{}, Return[1]]; {y}]; rt27[]", "1");
+}
+
+/* Return[v, h] leaves Table, Map, Select, Sum and function arguments on its
+ * way to h (the reference unwinds through them). Before v0.6695 the marker
+ * stayed in the list and the function went on with it:
+ * f[] := Module[{}, Table[If[i == 2, Return[i, Module], i], {i, 3}]; 99]
+ * was 99 and {..., Return[None, Module], ...} reached callers. */
+static void test_return_targeted_unwinds_builtins(void) {
+    check_eq("ru1[] := Module[{}, Table[If[i == 2, Return[i, Module], i], {i, 3}]; 99]; ru1[]", "2");
+    check_eq("ru2[] := Module[{}, Map[If[# == 2, Return[#, Module], #] &, {1, 2, 3}]; 99]; ru2[]", "2");
+    check_eq("ru3[] := Module[{}, Select[{1, 2, 3}, If[# == 2, Return[#, Module], True] &]; 99]; ru3[]", "2");
+    check_eq("ru4[] := Module[{}, Sum[If[k == 2, Return[k, Module], k], {k, 3}]; 99]; ru4[]", "2");
+    check_eq("ru5[] := Module[{}, h5[Return[1, Module]]; 2]; ru5[]", "1");
+    check_eq("ru6[] := Module[{}, Hold[Return[1, Module]]; 2]; ru6[]", "2");
+    check_eq("ru7[] := Module[{}, Scan[Return[#, Module] &, {1, 2}]; 99]; ru7[]", "1");
+    check_eq("ru8[] := Module[{}, Do[Do[If[j == 2, Return[j, Do]], {j, 3}]; k = 5, {2}]; 99]; ru8[]", "99");
+    check_eq("ru9[] := Module[{i = 0}, While[i < 3, i++; Do[Return[i, While], {2}]]]; ru9[]", "1");
+    check_eq("ru10[] := Module[{}, Block[{}, Do[Return[1, Block], {3}]; 3]; 2]; ru10[]", "2");
+    /* the shape of ParallelMixed.m's ResInfAll: an early exit from a Table */
+    check_eq("ru11[s_] := Module[{}, Table[If[j == 1, Return[None, Module]]; j, {j, 0, s}]]; "
+             "{ru11[0], ru11[3]}", "{{0}, None}");
+    /* a Return with three arguments is not a Return: it stays as it is */
+    check_eq("ru12[] := Module[{}, Return[1, Module, 3]; 2]; ru12[]", "Return[1, Module, 3]");
+}
+
+/* Do[body, s1, s2, ...] is ONE loop in the reference: Break[] and Return
+ * leave all of it, Continue[] advances the innermost iterator. Mathilda
+ * runs it as nested levels, and before v0.6695 the inner level consumed
+ * them. Break left one level only, and a Return's value was lost (Null). */
+static void test_return_multi_iterator_do(void) {
+    check_eq("rm1[] := Module[{}, Do[Return[{i, j}], {i, 2}, {j, 2}]]; rm1[]", "{1, 1}");
+    check_eq("rm2[] := Module[{}, Do[If[j == 2, Return[{i, j}, Do]], {i, 2}, {j, 2}]]; rm2[]", "{1, 2}");
+    check_eq("rm3[] := Module[{}, Do[Return[1], {i, 2}, {j, 2}]; 99]; rm3[]", "99");
+    check_eq("r = {}; Do[If[j == 2, Break[]]; AppendTo[r, {i, j}], {i, 2}, {j, 3}]; r", "{{1, 1}}");
+    check_eq("r = {}; Do[If[j == 2, Continue[]]; AppendTo[r, {i, j}], {i, 2}, {j, 3}]; r",
+             "{{1, 1}, {1, 3}, {2, 1}, {2, 3}}");
+    check_eq("r = {}; Do[If[k == 2, Break[]]; AppendTo[r, {i, j, k}], {i, 2}, {j, 2}, {k, 2}]; r",
+             "{{1, 1, 1}}");
+    check_eq("s = 0; Do[s += i j, {i, 3}, {j, 3}]; s", "36");
 }
 
 int main(void) {
@@ -458,6 +541,9 @@ int main(void) {
     TEST(test_return_through_deep_nesting);
 
     TEST(test_return_symbol_metadata);
+    TEST(test_return_reference_table);
+    TEST(test_return_targeted_unwinds_builtins);
+    TEST(test_return_multi_iterator_do);
 
     printf("All Return tests passed!\n");
     return 0;

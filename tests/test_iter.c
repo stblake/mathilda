@@ -173,9 +173,16 @@ void test_while_continue() {
         " s", "25", 0);
 }
 
-// Return[val] inside the body makes While yield val (rather than Null).
+// Return[val] inside the body stops the While, which passes Return[val] up to
+// the enclosing definition (the reference: at the top level it stays
+// Return[25]; inside f[] := ... the function yields 25). Return[val, While]
+// makes the While itself yield val.
 void test_while_return_value() {
     assert_eval_eq("Clear[n]; n = 0; While[True, n = n + 1; If[n == 5, Return[n * n]]]",
+                   "Return[25]", 0);
+    assert_eval_eq("Clear[wrv]; wrv[] := Module[{n = 0}, While[True, n = n + 1; If[n == 5, Return[n * n]]]; 0]; wrv[]",
+                   "25", 0);
+    assert_eval_eq("Clear[n]; n = 0; While[True, n = n + 1; If[n == 5, Return[n * n, While]]]",
                    "25", 0);
 }
 
@@ -236,15 +243,23 @@ void test_while_test_becomes_false() {
     assert_eval_eq("Clear[n]; n = 0; While[n < 100, n = n + 7]; n", "105", 0);
 }
 
-// Return exits only the innermost While (matching Do/For semantics in
-// Mathilda): the inner While yields the Return's argument as its value,
-// and the outer While continues normally.
+// A Return in an inner While leaves BOTH loops and the enclosing function
+// (the reference gives `stopped`); before v0.6695 it left only the inner While
+// and the function went on. Return[v, While] leaves only the inner While.
 void test_while_return_escapes_innermost_loop() {
+    assert_eval_eq(
+        "Clear[wre]; wre[] := Module[{i = 0, j, outer = 0},"
+        " While[i < 3,"
+        "   j = 0;"
+        "   While[True, j = j + 1; If[j == 2, Return[stopped]]];"
+        "   outer = outer + 1;"
+        "   i = i + 1];"
+        " {i, outer}]; wre[]", "stopped", 0);
     assert_eval_eq(
         "Clear[i, j, outer]; i = 0; outer = 0;"
         " While[i < 3,"
         "   j = 0;"
-        "   While[True, j = j + 1; If[j == 2, Return[stopped]]];"
+        "   While[True, j = j + 1; If[j == 2, Return[stopped, While]]];"
         "   outer = outer + 1;"
         "   i = i + 1];"
         " {i, outer}", "{3, 3}", 0);

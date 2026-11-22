@@ -3757,23 +3757,26 @@ void info_init(void) {
         "Do[expr, {n}] evaluates expr n times with no iteration variable.\n"
         "Do[expr, iter1, iter2, ...] iterates over multiple variables, with the rightmost varying fastest.\n"
         "Do has attribute HoldAll: expr and the iterator specifications are held unevaluated until each iteration.\n"
-        "Break[] inside expr exits the innermost Do loop.\n"
+        "Break[] inside expr exits the Do (all of a multi-iterator Do).\n"
         "Continue[] inside expr skips the rest of expr and proceeds to the next iteration.\n"
-        "Return[v] inside expr causes the enclosing function to yield v; Do itself returns Null.");
+        "Return[v] inside expr exits the Do (all of a multi-iterator Do), which then gives v; "
+        "it does not leave the enclosing function. Otherwise Do returns Null.");
     symtab_set_docstring("For",
         "For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.\n"
         "For[start, test, incr] runs with an empty body, useful when incr or test carries the side-effect.\n"
         "For has attribute HoldAll: start, test, incr, and body are all held unevaluated until For drives them.\n"
         "Break[] inside body exits the loop.\n"
         "Continue[] inside body skips the rest of body and re-evaluates incr then test.\n"
-        "Return[v] inside body causes the enclosing function to yield v; For itself returns Null.");
+        "Return[v] inside body stops the loop and leaves the enclosing function with v; "
+        "Return[v, For] leaves only the For, which then gives v. Otherwise For returns Null.");
     symtab_set_docstring("While",
         "While[test, body] evaluates test, then body, repeatedly, until test first fails to give True.\n"
         "While[test] does the loop with a Null body, which is useful when test has side-effects.\n"
         "While has attribute HoldAll.\n"
         "Break[] inside body exits the loop.\n"
         "Continue[] inside body skips the rest of body and re-evaluates test.\n"
-        "Return[v] inside body causes While to yield v; otherwise While returns Null.");
+        "Return[v] inside body stops the loop and leaves the enclosing function with v; "
+        "Return[v, While] leaves only the While, which then gives v. Otherwise While returns Null.");
     symtab_set_docstring("Break",
         "Break[] exits the nearest enclosing Do, For, or While loop.\n"
         "After Break[], the enclosing loop returns Null.\n"
@@ -4247,13 +4250,16 @@ void info_init(void) {
         "\treturns expr from the nearest enclosing construct whose head is h.\n"
         "\n"
         "Return[expr] exits control structures within the definition of a function,\n"
-        "and gives the value expr for the whole function.\n"
-        "Return takes effect as soon as it is evaluated, even if it appears inside\n"
-        "other functions.\n"
+        "and gives the value expr for the whole function. It passes through If,\n"
+        "Which, Switch, CompoundExpression, Module, Block, With, Catch, While, For\n"
+        "and pure functions. It is consumed by the definition (a DownValue,\n"
+        "OwnValue, SubValue or UpValue), or by an enclosing Do or Scan, which then\n"
+        "gives expr. Elsewhere it stays a value: Table[Return[1], {2}] is\n"
+        "{Return[1], Return[1]}.\n"
         "\n"
-        "The recognised boundary heads are Function, Module, Block, With, Do, For,\n"
-        "and While. CompoundExpression and other Hold-free heads pass Return through\n"
-        "unchanged so that it can reach the boundary.");
+        "Return[expr, h] exits at once, through any builtin, to the nearest\n"
+        "enclosing Module, Block, With, Function, Do, For, While, Scan or\n"
+        "definition of h.");
 
     // Rules and Replacements
     symtab_set_docstring("Rule",

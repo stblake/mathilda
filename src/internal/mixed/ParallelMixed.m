@@ -369,7 +369,7 @@ Mult[poly_, p_, gens_] := Module[{m = 0, P = Expand[poly], qr},
   If[P === 0, Return[Infinity]];
   While[True,
     qr = PolynomialReduce[P, {p}, gens];
-    If[qr[[2]] =!= 0, Return[m]];
+    If[qr[[2]] =!= 0, Return[m]];   (* leaves Mult (the While is its last statement either way) *)
     m++; P = qr[[1, 1]]]];
 
 (* Vp[expr, p, gens]

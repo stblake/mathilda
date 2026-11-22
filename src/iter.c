@@ -559,7 +559,12 @@ static IterFlowAction iter_flow_classify(Expr* eval_expr,
     if (value_out) *value_out = NULL;
 
     Expr* rv = NULL;
-    EvalReturnAction ra = eval_classify_return(eval_expr, boundary_head, &rv);
+    /* Do consumes a plain Return (it is the reference's loop that does);
+     * While and For only stop at one and pass it up to the enclosing
+     * definition, claiming just Return[v, While] / Return[v, For]. */
+    EvalReturnAction ra = (boundary_head == SYM_While || boundary_head == SYM_For)
+        ? eval_classify_return_targeted(eval_expr, boundary_head, &rv)
+        : eval_classify_return(eval_expr, boundary_head, &rv);
     if (ra == EVAL_RETURN_CONSUME) {
         if (value_out) *value_out = rv;
         else expr_free(rv);
@@ -593,7 +598,44 @@ static IterFlowAction iter_flow_classify(Expr* eval_expr,
  * Multi-spec Do is rewritten as nested two-spec Do invocations and re-
  * evaluated; that keeps the arithmetic below a single-iterator problem.
  */
-Expr* builtin_do(Expr* res) {
+/* Does `e` mention Return or Break anywhere (heads included)? */
+static bool do_mentions_exit(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_Return || e->data.symbol.name == SYM_Break;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (do_mentions_exit(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (do_mentions_exit(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* One step of a Do level. An inner level of a multi-iterator
+ * Do[body, s1, ..., sk] (`nested`) is not a loop of its own in the reference:
+ * Break[] and every Return leave the whole Do, so they are handed up to the
+ * outermost level, which is the one that consumes them. Continue[] still only
+ * advances the innermost iterator. */
+static IterFlowAction do_flow_classify(Expr* eval_expr, bool nested, Expr** value_out) {
+    if (nested && eval_expr && eval_expr->type == EXPR_FUNCTION &&
+        eval_expr->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = eval_expr->data.function.head->data.symbol.name;
+        size_t na = eval_expr->data.function.arg_count;
+        if ((h == SYM_Return && na <= 2) || (h == SYM_Break && na == 0)) {
+            if (value_out) *value_out = NULL;
+            return ITER_FLOW_PROPAGATE;
+        }
+    }
+    return iter_flow_classify(eval_expr, SYM_Do, value_out);
+}
+
+static Expr* do_core(Expr* res, bool nested);
+
+Expr* builtin_do(Expr* res) { return do_core(res, false); }
+
+/* Internal`DoNested: an inner level of a multi-iterator Do (see the rewrite
+ * below); Do itself in every respect but do_flow_classify. */
+static Expr* builtin_do_nested(Expr* res) { return do_core(res, true); }
+
+static Expr* do_core(Expr* res, bool nested) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
     /*
@@ -603,10 +645,15 @@ Expr* builtin_do(Expr* res) {
      * and free them after evaluation; the returned value is owned by us.
      */
     if (res->data.function.arg_count > 2) {
+        /* A body that can Break or Return gets Internal`DoNested inner levels,
+         * so the exit leaves the whole Do (do_flow_classify); any other body
+         * keeps plain Do levels, which the compiled fast paths recognise. */
+        const char* inner_head = do_mentions_exit(res->data.function.args[0])
+                               ? SYM_InternalDoNested : SYM_Do;
         Expr** inner_args = malloc(sizeof(Expr*) * 2);
         inner_args[0] = expr_copy(res->data.function.args[0]);
         inner_args[1] = expr_copy(res->data.function.args[res->data.function.arg_count - 1]);
-        Expr* inner_do = expr_new_function(expr_new_symbol(SYM_Do), inner_args, 2);
+        Expr* inner_do = expr_new_function(expr_new_symbol(inner_head), inner_args, 2);
         free(inner_args);
 
         size_t outer_argc = res->data.function.arg_count - 1;
@@ -615,7 +662,9 @@ Expr* builtin_do(Expr* res) {
         for (size_t i = 1; i < outer_argc; i++) {
             outer_args[i] = expr_copy(res->data.function.args[i]);
         }
-        Expr* outer_do = expr_new_function(expr_new_symbol(SYM_Do), outer_args, outer_argc);
+        Expr* outer_do = expr_new_function(
+            expr_new_symbol(nested ? SYM_InternalDoNested : SYM_Do),
+            outer_args, outer_argc);
         free(outer_args);
 
         Expr* eval_outer = evaluate(outer_do);
@@ -693,7 +742,7 @@ Expr* builtin_do(Expr* res) {
             mth_progress_step(ptok, (long)i);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
-            IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
+            IterFlowAction f = do_flow_classify(eval_expr, nested, &rv);
             if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_expr); break; }
             if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_expr;                       break; }
             if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_expr); break; }
@@ -713,7 +762,7 @@ Expr* builtin_do(Expr* res) {
             ll_elem_done(xv, own);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
-            IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
+            IterFlowAction f = do_flow_classify(eval_expr, nested, &rv);
             if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_expr); break; }
             if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_expr;                       break; }
             if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_expr); break; }
@@ -745,7 +794,7 @@ Expr* builtin_do(Expr* res) {
             expr_free(i_val);
 
             Expr* rv = NULL;
-            IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
+            IterFlowAction f = do_flow_classify(eval_expr, nested, &rv);
             if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_expr); break; }
             if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_expr;                       break; }
             if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_expr); break; }
@@ -998,6 +1047,11 @@ Expr* builtin_continue(Expr* res) {
 void iter_init(void) {
     symtab_add_builtin("Do", builtin_do);
     symtab_get_def("Do")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_add_builtin(SYM_InternalDoNested, builtin_do_nested);
+    symtab_get_def(SYM_InternalDoNested)->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring(SYM_InternalDoNested,
+        "Internal`DoNested[body, spec] is an inner level of a multi-iterator Do: "
+        "Do itself, except that Break[] and Return leave the whole Do.");
 
     symtab_add_builtin("For", builtin_for);
     symtab_get_def("For")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

@@ -621,6 +621,7 @@ const char* SYM_Repeated = NULL;
 const char* SYM_RepeatedNull = NULL;
 const char* SYM_Rescale = NULL;
 const char* SYM_Return = NULL;
+const char* SYM_InternalDoNested = NULL;
 const char* SYM_Reverse = NULL;
 const char* SYM_AppendTo = NULL;
 const char* SYM_PrependTo = NULL;
@@ -1820,6 +1821,7 @@ void sym_names_init(void) {
     SYM_RotateRight                = intern_symbol("RotateRight");
     SYM_Rescale                    = intern_symbol("Rescale");
     SYM_Return                     = intern_symbol("Return");
+    SYM_InternalDoNested           = intern_symbol("Internal`DoNested");
     SYM_Reverse                    = intern_symbol("Reverse");
     SYM_AppendTo                   = intern_symbol("AppendTo");
     SYM_PrependTo                  = intern_symbol("PrependTo");

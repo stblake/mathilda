@@ -1670,11 +1670,12 @@ static Expr* scan_apply(Expr* f, Expr* part) {
     Expr* call = expr_new_function(expr_copy(f), &part, 1);  /* adopts part */
     Expr* r = evaluate(call);
     expr_free(call);                                         /* frees f-copy + part */
-    if (eval_is_inflight_unwind(r)) return r;                 /* propagate Throw */
     Expr* rv = NULL;
+    /* Return first: Return[v, Scan] is also an in-flight sentinel. */
     EvalReturnAction ra = eval_classify_return(r, SYM_Scan, &rv);
     if (ra == EVAL_RETURN_CONSUME)   { expr_free(r); return rv; }  /* Return[ret] */
     if (ra == EVAL_RETURN_PROPAGATE) return r;                     /* Return[v, h] */
+    if (eval_is_inflight_unwind(r)) return r;                 /* propagate Throw */
     if (r) expr_free(r);                                    /* result discarded */
     return NULL;
 }

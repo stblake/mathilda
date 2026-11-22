@@ -11,7 +11,7 @@ Evaluates an expression sequentially over an iteration range.
 **Features**:
 - `HoldAll`, evaluating its body only after arguments are substituted.
 - Employs exact dynamic iteration identical to `Table` but discards the evaluated results, returning `Null`.
-- Supports explicit break states (`Return`, `Break`, `Continue`, `Throw`, `Abort`, `Quit`).
+- Supports explicit break states (`Return`, `Break`, `Continue`, `Throw`, `Abort`, `Quit`). `Return[v]` exits only the `Do`, which yields `v`. A multi-iterator `Do[body, s1, s2, ...]` is one loop: `Break[]` and `Return` leave all of it.
 - Can execute an infinite loop using `Do[expr, Infinity]`.
 - Numeric symbolic bounds (`Do[..., {x, 0, 2 Pi, Pi/2}]`) iterate the lattice
   up to the bound, as `Table` does; the loop used to run forever because its
@@ -63,7 +63,7 @@ Executes a loop with an initialization, condition test, increment, and body.
 - `Break[]` exits the loop.
 - `Continue[]` skips the rest of the body and proceeds to evaluating `incr`.
 - Exits as soon as `test` fails.
-- Returns `Null` unless an explicit `Return` is evaluated.
+- Returns `Null`. A `Return[v]` in the body stops the loop and leaves the enclosing function with `v`; `Return[v, For]` makes the `For` yield `v`.
 
 ```mathematica
 In[1]:= For[i=0, i<4, i++, Print[i]]
@@ -79,7 +79,7 @@ Evaluates a test expression and, while it yields `True`, repeatedly evaluates a 
 - Has attribute `HoldAll`; both `test` and `body` are re-evaluated each iteration.
 - `Break[]` inside `body` exits the loop, yielding `Null`.
 - `Continue[]` inside `body` skips the rest of `body` and returns to re-evaluating `test`.
-- `Return[v]` inside `body` causes `While` to yield `v`.
+- `Return[v]` inside `body` stops the loop and leaves the enclosing function with `v` (the `While` does not consume it; see [Return](#return)). `Return[v, While]` makes the `While` yield `v`.
 - `Throw`, `Abort`, and `Quit` propagate unchanged.
 - If the very first evaluation of `test` is not `True`, `body` is never evaluated.
 - Returns `Null` unless an explicit `Return` is issued.
@@ -373,34 +373,47 @@ Out[4]= ConditionalExpression[e, c1 && c2]
 ```
 
 ## Return
-Exits the nearest enclosing scope or loop, yielding a value.
-- `Return[expr]`: Yields `expr` from the innermost enclosing scope boundary.
-- `Return[]`: Yields `Null` (shorthand for `Return[Null]`).
-- `Return[expr, h]`: Yields `expr` from the *nearest enclosing boundary* whose head is the symbol `h`. Boundaries with a different head propagate the marker outward unchanged so that `h` can be reached.
+Exits the enclosing function, or a Do or Scan loop, with a value.
+- `Return[expr]`: the enclosing definition yields `expr`.
+- `Return[]`: yields `Null` (shorthand for `Return[Null]`).
+- `Return[expr, h]`: exits at once to the nearest enclosing construct whose head is `h`.
 
-**Recognised boundary heads**: `Function`, `Module`, `Block`, `With`, `Do`, `For`, `While`, and the application of a definition: an own, down, sub or up value whose evaluated right-hand side is `Return[v]` yields `v` (`f[x_] := If[x > 0, Return[1], 2]` gives `f[3] = 1`; `x := Return[3]` gives `x = 3`). Only the top level is stripped, once: `f[x_] := Return[x] + 1` gives `1 + Return[x]`, and `Return[Return[x]]` gives `Return[x]`, as in the reference. Only rules whose right-hand side mentions `Return` pay for this (a flag computed when the rule is stored). `CompoundExpression` and other Hold-free heads (including `If`, `Which`, `Switch`) propagate `Return` through unchanged so it can reach the enclosing boundary.
+**Which construct consumes a Return** (each row checked against the reference kernel, 2026-11-22):
+
+| Construct | `Return[v]` | `Return[v, h]` |
+|---|---|---|
+| definition (down, own, sub or up value) | consumed; the call yields `v` | consumed when `h` is the definition's head (an extension) |
+| `Do`, `Scan` | consumed; the loop yields `v` | consumed when `h` is `Do` / `Scan` |
+| `While`, `For` | stops the loop and passes `Return[v]` up | consumed when `h` is `While` / `For` |
+| `Module`, `Block` | passes through | consumed when `h` is `Module` / `Block` |
+| `With`, pure `Function` | passes through | consumed when `h` is `With` / `Function` (an extension: the reference says `Return::nofunc`) |
+| `CompoundExpression`, `If`, `Which`, `Switch`, `Catch`, `Check`, `Quiet`, `TimeConstrained`, `Set` | passes through | passes through |
+| `Table`, `Map`, `Select`, any other builtin or argument | stays a value: `Table[Return[1], {2}]` is `{Return[1], Return[1]}` | passes through: a non-local exit, like `Throw` |
+| top level | stays as it is: `Module[{}, Return[1]; 2]` is `Return[1]` | stays as it is |
+
+So `f[] := Module[{}, With[{a = 1}, If[c, Return[a]]]; rest]` leaves `f` when `c` holds. The same goes for a `Return` inside a nested `Module`, a `Block`, a `While` or a `For`. A `Return` inside a `Do` leaves only the `Do`; to leave the function from there, use `Return[v, Module]`. A multi-iterator `Do[body, s1, s2, ...]` is one loop: `Break[]` and `Return` leave all of it.
+
+A definition strips only one top-level Return: `f[x_] := Return[x] + 1` gives `1 + Return[x]`, and `Return[Return[x]]` gives `Return[x]`, as in the reference. Only rules that can produce a Return pay for the check: those whose right-hand side mentions `Return`, and the rules of a holding head (whose held argument can carry one in). A plain Return passed in through an evaluated argument (`g[x_] := x; g[Return[1]]`) is not caught at `g`, unlike the reference.
 
 **Features**:
-- `Protected`. No Hold attributes — arguments are evaluated before the marker takes effect.
-- `Return` takes effect as soon as it is evaluated, even when it appears inside other functions (Plus, Times, etc. in argument positions still see the substituted value, but at the top level the marker propagates immediately through `CompoundExpression`).
-- 1-arg `Return[expr]` is consumed by the *innermost* boundary on the call stack. The 2-arg `Return[expr, h]` form lets the user skip past intervening boundaries to a specific enclosing construct.
-- If no enclosing boundary matches, `Return[expr]` (or `Return[expr, h]`) survives at the top level as a literal expression.
+- `Protected`. No Hold attributes: arguments are evaluated before the marker takes effect.
+- `Return[a, b, c]` (three or more arguments) is not a Return and stays as it is.
 
 ```mathematica
-In[1]:= Function[x, If[x > 0, Return[positive], Return[negative]]][3]
-Out[1]= positive
+In[1]:= f[x_] := Module[{}, With[{a = 2 x}, If[x > 0, Return[a]]]; 0]; {f[3], f[-3]}
+Out[1]= {6, 0}
 
-In[2]:= Module[{}, Do[Return[5], {3}]]
-Out[2]= 5
+In[2]:= g[] := Module[{}, Do[If[i == 2, Return[i]], {i, 3}]; 99]; g[]
+Out[2]= 99
 
-In[3]:= Module[{}, Do[Return[5, Module], {3}]]
-Out[3]= 5
+In[3]:= h[] := Module[{}, Do[If[i == 2, Return[i, Module]], {i, 3}]; 99]; h[]
+Out[3]= 2
 
-In[4]:= Module[{}, Do[Return[5, Block], {3}]]
-Out[4]= Return[5, Block]
+In[4]:= k[] := Module[{}, Table[If[i == 2, Return[i, Module], i], {i, 3}]; 99]; k[]
+Out[4]= 2
 
-In[5]:= f[n_] := Module[{s = 0}, Do[s = s + i; If[s > 10, Return[i]], {i, 1, n}]]; f[10]
-Out[5]= 5
+In[5]:= Module[{}, Do[Return[5, Block], {3}]]
+Out[5]= Return[5, Block]
 ```
 
 ## Quit / Exit

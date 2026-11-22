@@ -88,7 +88,10 @@ static void test_binding_forms(void) {
     probe("With[{Plus = Times}, Plus[2, 3]]", "6");
     probe("Module[{List = 7}, List]", "7");
     probe("Catch[Module[{a = Throw[7]}, a]]", "7");
-    probe("Module[{a = 1}, Return[a + 1]; 5]", "2");
+    /* Module passes a plain Return on (the reference: Return[2] at the top
+     * level); a definition around it yields 2. */
+    probe("Module[{a = 1}, Return[a + 1]; 5]", "Return[2]");
+    probe("ssr[] := Module[{a = 1}, Return[a + 1]; 5]; ssr[]", "2");
 }
 
 static void test_large_bodies_and_repetition(void) {

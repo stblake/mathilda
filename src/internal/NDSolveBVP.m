@@ -110,9 +110,14 @@ Shoot[odes_List, conds_List, funcs_, {x_, xa_, xb_}, heads_List, orders_List,
               sj[[j]] += hj; rj = resid[sj];
               If[rj === $Failed, Return[{"fail"}, Module]];
               (First[rj] - r)/hj], {j, m}]];
-      If[!MatrixQ[J, NumericQ], Return[{"fail"}]];
+      (* a Jacobian or Newton step that is not numeric ends the iteration
+         like a stall (Break, not Return): the current s still goes to the
+         final shot below, whose residual decides "ok" or "berr" -- never an
+         unchecked answer.  A Return here leaves the whole Shoot, not just the
+         While, and would discard an s that may already meet the goal. *)
+      If[!MatrixQ[J, NumericQ], Break[]];
       ds = Quiet[LinearSolve[J, -r]];
-      If[!VectorQ[ds, NumericQ], Return[{"fail"}]];
+      If[!VectorQ[ds, NumericQ], Break[]];
       (* damped step: halve until the residual decreases *)
       lam = 1; rTry = $Failed;
       While[lam >= If[rel <= tol, 1, 2^-12],

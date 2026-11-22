@@ -284,6 +284,29 @@ EvalReturnAction eval_classify_return(Expr* e,
                                       const char* boundary_head,
                                       Expr** out_value);
 
+/* Which constructs catch which Return (the reference's semantics, verified
+ * construct by construct against it):
+ *
+ *   - Do, Scan and a definition's rule boundary (DownValue, OwnValue,
+ *     SubValue, UpValue) consume Return[] / Return[v], and Return[v, h] when
+ *     h is their head: use eval_classify_return.
+ *   - Module, Block, With, Function, While and For do NOT consume a plain
+ *     Return -- it passes through them to the enclosing definition, so
+ *     `f[] := Module[{}, With[{a = 1}, If[c, Return[a]]]; rest]` leaves f.
+ *     They claim only Return[v, h] with h their own head: use
+ *     eval_classify_return_targeted, which answers PROPAGATE for the plain
+ *     forms.
+ *   - Return[v, h] is an in-flight sentinel (eval_is_inflight_unwind), so it
+ *     also leaves builtins that only see it as a value (Table, Map, Select).
+ *   - A Return reaching the top level stays as it is (Return[5] is Return[5]
+ *     at the reference's prompt). */
+EvalReturnAction eval_classify_return_targeted(Expr* e,
+                                               const char* boundary_head,
+                                               Expr** out_value);
+
+/* True iff `e` is Return[v, h] (exactly two arguments). */
+bool eval_is_inflight_targeted_return(const Expr* e);
+
 /* Flatten nested same-head sub-expressions in place. Returns true iff
  * the args list was actually rewritten; callers in the §3.4 fixed-point
  * detector use the return value to decide whether to count this as a

@@ -967,8 +967,23 @@ bool eval_is_inflight_abort(const Expr* e) {
            e->data.function.arg_count == 0;
 }
 
+/* Return[v, h]: the targeted form is a genuine non-local exit in the
+ * reference -- it leaves Table, Map, Select, a function argument, any builtin
+ * at all, until the nearest enclosing h -- so it rides the same sentinel path
+ * as a Throw.  The plain Return[v] is NOT one: it is an ordinary value that
+ * CompoundExpression, While and For stop at and pass up, and that only Do,
+ * Scan and a definition's rule boundary consume (Table[Return[1], {2}] is
+ * {Return[1], Return[1]}).  See eval_classify_return. */
+bool eval_is_inflight_targeted_return(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Return &&
+           e->data.function.arg_count == 2;
+}
+
 bool eval_is_inflight_unwind(const Expr* e) {
-    return eval_is_inflight_throw(e) || eval_is_inflight_abort(e);
+    return eval_is_inflight_throw(e) || eval_is_inflight_abort(e) ||
+           eval_is_inflight_targeted_return(e);
 }
 
 /* Set when an abort reaches the top level (see eval_take_top_abort). */
@@ -1006,6 +1021,10 @@ EvalReturnAction eval_classify_return(Expr* e,
 
     size_t argc = e->data.function.arg_count;
 
+    /* Return[a, b, c, ...]: not a valid Return (the reference says
+     * Return::argb and leaves it as it stands); no boundary claims it. */
+    if (argc > 2) return EVAL_RETURN_NONE;
+
     /* Return[]: yield Null at the nearest boundary. */
     if (argc == 0) {
         if (out_value) *out_value = expr_new_symbol(SYM_Null);
@@ -1033,6 +1052,30 @@ EvalReturnAction eval_classify_return(Expr* e,
         target->data.symbol.name == boundary_head) {
         if (out_value) *out_value = expr_copy(e->data.function.args[0]);
         return EVAL_RETURN_CONSUME;
+    }
+    return EVAL_RETURN_PROPAGATE;
+}
+
+/* The scoping and control constructs that do NOT catch a plain Return:
+ * Module, Block, With, Function, While and For pass Return[] / Return[v] up
+ * unchanged (the reference exits the enclosing *definition*, not these), and
+ * claim only Return[v, h] whose h is their own head. */
+EvalReturnAction eval_classify_return_targeted(Expr* e,
+                                               const char* boundary_head,
+                                               Expr** out_value) {
+    if (out_value) *out_value = NULL;
+    if (!e || e->type != EXPR_FUNCTION) return EVAL_RETURN_NONE;
+    if (e->data.function.head->type != EXPR_SYMBOL) return EVAL_RETURN_NONE;
+    if (e->data.function.head->data.symbol.name != SYM_Return) return EVAL_RETURN_NONE;
+    size_t argc = e->data.function.arg_count;
+    if (argc > 2) return EVAL_RETURN_NONE;
+    if (argc == 2) {
+        Expr* target = e->data.function.args[1];
+        if (boundary_head && target->type == EXPR_SYMBOL &&
+            target->data.symbol.name == boundary_head) {
+            if (out_value) *out_value = expr_copy(e->data.function.args[0]);
+            return EVAL_RETURN_CONSUME;
+        }
     }
     return EVAL_RETURN_PROPAGATE;
 }

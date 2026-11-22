@@ -626,6 +626,7 @@ extern const char* SYM_RepeatedNull;
 extern const char* SYM_Rescale;
 extern const char* SYM_Resolve;
 extern const char* SYM_Return;
+extern const char* SYM_InternalDoNested;   /* Internal`DoNested: inner level of a multi-iterator Do */
 extern const char* SYM_Reverse;
 extern const char* SYM_AppendTo;
 extern const char* SYM_PrependTo;
