@@ -508,6 +508,24 @@ static void test_machine_overflow_escalates(void) {
                "- Log[2]/1000] < 10^-10");   /* |f| < 10^-8, f' = 2000 */
 }
 
+/* Newton in the exponential regime: far from the root of a steep exponential
+ * the Newton step is ~1/c whatever the distance, and 100 such steps used to
+ * end at 0.9 with ::cvmit.  The fitted exponential step reaches the root in the
+ * default iteration budget, on the machine path (Exp[50 x]), the escalated
+ * MPFR path (e^1000 overflows a double) and for a decaying exponential. */
+static void test_exponential_regime_newton(void) {
+    mute_stderr_once();
+    check_true("Abs[(x /. FindRoot[Exp[1000 x] - 2, {x, 1}]) - Log[2]/1000] < 10^-12");
+    check_true("Abs[(x /. FindRoot[Exp[50 x] - 3, {x, 2}]) - Log[3]/50] < 10^-12");
+    check_true("Abs[(x /. FindRoot[Exp[-1000 x] - 2, {x, -1}]) + Log[2]/1000] < 10^-12");
+    check_true("Abs[(x /. FindRoot[2 Exp[30 x] - 5 - x, {x, 3}]) - "
+               "(x /. FindRoot[2 Exp[30 x] - 5 - x, {x, 0.03}])] < 10^-12");
+    check_true("Abs[(x /. FindRoot[Exp[1000 x] - 2, {x, 1}, WorkingPrecision -> 30]) "
+               "- Log[2]/1000] < 10^-28");
+    /* an ordinary problem keeps its Newton iterates */
+    check_true("Length[Reap[FindRoot[x^2 - 2, {x, 1}, StepMonitor :> Sow[x]]][[2, 1]]] <= 7");
+}
+
 /* ------------------------------------------------------------------ */
 /* 17. Jacobian as a matrix                                            */
 /* ------------------------------------------------------------------ */
@@ -773,6 +791,7 @@ int main(void) {
     TEST(test_real_valued_options);
     TEST(test_option_values_evaluated);
     TEST(test_machine_overflow_escalates);
+    TEST(test_exponential_regime_newton);
     TEST(test_jacobian_matrix_forms);
 
     TEST(test_scalar_newton_line_search);

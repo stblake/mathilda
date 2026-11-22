@@ -6384,6 +6384,21 @@ point with `FindRoot::lstol`, as the reference does.
   `::lstol` near the local minimum of `|f|` at `Sqrt[2/3]`, as the reference
   does; before, undamped Newton reached the root `-1.769` by a lucky jump.
 
+**Exponential regime.** Far from the root of a steep exponential residual,
+`f = A E^(c x) + B` with `|A E^(c x)| >> |B|`, the Newton step `f/f'` is about
+`1/c` whatever the distance, so Newton creeps.  The real scalar iteration
+(machine and `WorkingPrecision`) fits that model to `f` and `f'` at the last two
+points (`c = Log[f'_k/f'_(k-1)]/h`, accepted when `(f_k - f_(k-1))/(f'_k - f'_(k-1))`
+is `1/c` to 1%) and, when Newton would advance less than half as far
+(`t = 1 - c f/f' < 0.1`), steps to the model root `x + Log[t]/c` (at most
+`Log[10^-12]/c` when `B` is lost in the rounding of `f`).  The step is subject
+to the line search.  A quadratically converging Newton has `c f/f' -> 0`, so
+ordinary problems keep their iterates.  `FindRoot[Exp[1000 x] - 2, {x, 1}]` is
+`{x -> 0.000693147}` within the default 100 iterations (it was `::cvmit` at
+`0.9`); likewise `Exp[50 x] - 3` from `2` and `Exp[-1000 x] - 2` from `-1`.
+From `x = 1`, `Exp[-1000 x] - 2` has `f' = 0` in doubles and stays
+`FindRoot::dsing`.
+
 **Real values.** A real search reads `x + 0. I`, or any complex value whose
 imaginary part is round-off of its real part (`|im| <= 2^-(p-8) (|re| + 1)`),
 as the real `x`; a genuinely complex value is still `FindRoot::nlnum`.

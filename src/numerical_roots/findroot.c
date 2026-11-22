@@ -937,6 +937,44 @@ static bool fr_newton_should_back_off(double r, double r_prev, double lam,
         && !(r <= (1.0 - FR_ARMIJO * lam) * r_prev);
 }
 
+/* Newton's step in the exponential regime.  Far from the root of a steep
+ * exponential residual, f = A E^(c x) + B with |A E^(c x)| >> |B|, the Newton
+ * step f/f' is ~1/c whatever the distance to the root: Exp[1000 x] - 2 from
+ * x = 1 crept 0.001 per iteration and ended 100 iterations later at 0.9 with
+ * ::cvmit, the root being 0.000693.  That is the regime where Newton's map
+ * x - f/f' has derivative f f''/f'^2 ~ 1 and so barely contracts.
+ *
+ * Here the three-parameter model f = A E^(c x) + B is fitted to f and f' at
+ * the last two Newton points and its root is taken instead.  With h the last
+ * step, rd = f'_k/f'_{k-1}, q = (f_k - f_{k-1})/(f'_k - f'_{k-1}) and
+ * s = f_k/f'_k (all ratios, so they are doubles even when f overflows one):
+ *     c = Log[rd]/h,  and the fit is exponential iff q c == 1;
+ *     B/f'_k = s - 1/c, so the model root is x_k + Log[t]/c, t = 1 - c s.
+ * It is used only when the fit holds to 1% and t < 0.1 (Newton would advance
+ * less than half as far): a quadratically converging Newton has c s -> 0, never
+ * near 1, so ordinary problems take exactly the iterates they took before.
+ * When t is below the resolution of the doubles (B lost to cancellation in f),
+ * the model root is only known to lie beyond Log[FR_EXP_TFLOOR]/c, and that
+ * much is taken: it stays on the near side of the root, where the exponential
+ * still dominates.  A model with no root (t < 0: B has the sign of A E^(c x))
+ * keeps the Newton step.  Writes the step in Newton's convention (x -= step);
+ * the caller's line search applies to it as to any Newton step. */
+#define FR_EXP_TFLOOR 1e-12
+static bool fr_exp_regime_step(double h, double rd, double q, double s,
+                               double* step_out) {
+    if (!(h != 0.0 && isfinite(h) && rd > 0.0 && rd != 1.0 && isfinite(rd)
+          && isfinite(q) && isfinite(s) && s != 0.0))
+        return false;
+    double c = log(rd) / h;
+    if (!isfinite(c) || c == 0.0 || fabs(q * c - 1.0) > 1e-2) return false;
+    double t = 1.0 - c * s;
+    if (!(t < 0.1) || t < -FR_EXP_TFLOOR) return false;
+    double step = -log(fmax(t, FR_EXP_TFLOOR)) / c;
+    if (!isfinite(step) || step * s <= 0.0 || fabs(step) <= 2.0 * fabs(s)) return false;
+    *step_out = step;
+    return true;
+}
+
 /* Returns NULL on failure (NaN, non-numeric eval, MaxIterations with
  * no fallback). On success, returns a fresh EXPR_REAL. */
 static Expr* fr_run_newton_real(Expr* f, Expr* df,
@@ -950,6 +988,8 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
     double prev_step = INFINITY;
     double x_prev = x, last_step = 0.0;   /* for backing off a step (below) */
     int backs = 0;
+    bool have_pt = false;                 /* the last Newton point, for */
+    double pt_x = 0.0, pt_f = 0.0, pt_d = 0.0;  /* fr_exp_regime_step  */
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_real(x);
@@ -1016,6 +1056,14 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
             if (polished >= 0 || resid_ok) return expr_new_real(x);
             fr_warn("noconv", "divergence (non-finite step)"); return NULL;
         }
+        if (have_pt && polished < 0 && opts->damping == 1.0) {
+            double es;                    /* the exponential regime (above) */
+            if (fr_exp_regime_step(x - pt_x, dv / pt_d, (fv - pt_f) / (dv - pt_d),
+                                   step, &es))
+                step = es;
+        }
+        have_pt = true;
+        pt_x = x; pt_f = fv; pt_d = dv;
         x_prev = x;
         last_step = step;
         x -= step;
@@ -1390,6 +1438,9 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
     mpfr_set(x_prev, x, MPFR_RNDN);
     mpfr_set_zero(last_step, +1);
     int backs = 0;
+    bool have_pt = false;              /* the last Newton point: fr_exp_regime_step */
+    mpfr_t pt_x, pt_f, pt_d;
+    mpfr_inits2(bits, pt_x, pt_f, pt_d, (mpfr_ptr)0);
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_mpfr_copy(x);
         Expr* a0[1] = { xv };
@@ -1472,6 +1523,25 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
             }
             fr_warn("noconv", "divergence (non-finite step)"); goto cleanup;
         }
+        if (have_pt && polished < 0 && opts->damping == 1.0) {
+            /* The exponential regime (fr_exp_regime_step), on ratios that are
+             * doubles even where f is not (E^1000 near x = 1). */
+            mpfr_sub(tmp, x, pt_x, MPFR_RNDN);
+            double h = mpfr_get_d(tmp, MPFR_RNDN);
+            mpfr_div(tmp, dv, pt_d, MPFR_RNDN);
+            double rd = mpfr_get_d(tmp, MPFR_RNDN);
+            mpfr_sub(tmp, fv, pt_f, MPFR_RNDN);
+            mpfr_sub(pt_x, dv, pt_d, MPFR_RNDN);          /* pt_x is reset below */
+            mpfr_div(tmp, tmp, pt_x, MPFR_RNDN);
+            double q = mpfr_get_d(tmp, MPFR_RNDN);
+            double es;
+            if (fr_exp_regime_step(h, rd, q, mpfr_get_d(step, MPFR_RNDN), &es))
+                mpfr_set_d(step, es, MPFR_RNDN);
+        }
+        have_pt = true;
+        mpfr_set(pt_x, x, MPFR_RNDN);
+        mpfr_set(pt_f, fv, MPFR_RNDN);
+        mpfr_set(pt_d, dv, MPFR_RNDN);
         mpfr_set(x_prev, x, MPFR_RNDN);
         mpfr_set(last_step, step, MPFR_RNDN);
         mpfr_sub(x, x, step, MPFR_RNDN);
@@ -1519,12 +1589,12 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
     }
 cleanup:
     mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, prev_step,
-                x_prev, last_step, (mpfr_ptr)0);
+                x_prev, last_step, pt_x, pt_f, pt_d, (mpfr_ptr)0);
     return result;
 }
 
 /* ------------------------------------------------------------------ *
- *  Secant at arbitrary precision (real)                               *
+ *  Secant at arbitrary precision (real)                             *
  * ------------------------------------------------------------------ */
 
 /* Set the absolute / relative tolerances 10^-AccuracyGoal, 10^-PrecisionGoal
