@@ -490,7 +490,7 @@ brSupportSplitIntegrate[f_, x_Symbol] := Module[{e, r},
 (* a group undecided: None, so the caller keeps the tower's own (more specific) reason *)
 
 brKernelSubstitution::usage = "brKernelSubstitution[f, x] integrates f = h(theta) D theta, theta the ONE logarithm Log[a] or exponential E^w of f (all exponentials E^(r w) with rational r written as powers of E^(w/d)), h algebraic in u = theta and free of x: the purely algebraic integrand h(u) by BronsteinIntegrate in u (Trager), under brOption[\"KernelSubstitutionTime\"] seconds. An answer G(u) gives F = G(theta), returned only when antiderivativeQ[f, F, x] (the chain rule makes it exact; the check guards the substitution). Otherwise None: a certificate in u is NOT taken as one for f, so the caller's own path decides (D6: speed only).";
-brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Unique["Bronstein`Private`brKu"], rules, h, G, F},
+brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = Unique["Bronstein`Private`brKu"], rules, h0, h, G, F},
   If[FreeQ[f, Power[_, _Rational]] || brOption["KernelSubstitutionTime"] <= 0, Return[None]];
   logs = Union[Cases[f, Log[a_] /; !FreeQ[a, x], {0, Infinity}, Heads -> True]];
   exps = Union[Cases[f, Power[E, e_] /; !FreeQ[e, x] :> e, {0, Infinity}, Heads -> True]];
@@ -502,8 +502,13 @@ brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = 
       d = LCM @@ (Denominator /@ rs); w = e0/d; th = E^w;
       rules = Thread[(E^# & /@ exps) -> (u^(d Together[#/e0]) & /@ exps)],
     True, Return[None]];
-  h = Quiet[Together[(f /. rules)/(D[th, x] /. rules)]];
+  h0 = (f /. rules)/(D[th, x] /. rules);
+  h = Quiet[Together[h0]];
   If[!FreeQ[h, x] || !FreeQ[h, Log | Power[E, _]] || FreeQ[h, u], Return[None]];
+  (* a radical inside a sum of the denominator (256 expcube: 1/(u (6 (1 + u)^(2/3) +
+     3 (1 + u)))) makes Trager in u slower than the tower: left to the tower *)
+  (* read on h before Together, which multiplies the denominator out *)
+  If[!FreeQ[h0, Power[p_Plus /; !FreeQ[p, Power[_, _Rational]], n_ /; NumberQ[n] && n < 0]], Return[None]];
   (* an exponential's D theta = w' theta adds a pole at u = 0, and Trager in u is then
      sometimes slower than the tower: a shorter budget for it *)
   G = Quiet[TimeConstrained[BronsteinIntegrate[h, u],

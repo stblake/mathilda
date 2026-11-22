@@ -86,7 +86,8 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] L2 (v0.6692): the n = 1 witness by the homogeneous RDE_0 (Corollary E1hom, reviewed) -- root0 declines gone at level 1; level >= 2 still declines
 - [x] L3 theory: Lemma E2off (one transcendental offset; K(tau0) = K(tau)), reviewed (no FATAL, 4 scope GAPs resolved)
 - [ ] L3 code: the staged OL2 list in the note (keep "in Q" vs "in Const(K)" separate; torsion and zero tests symbolic in tau) -- no corpus case needs it
-- [ ] NDSolveBVP.m: two bare Returns inside the shooting While fall through (residual-checked, reported as berr): decide whether "fail" was intended
+- [x] Return semantics (v0.6695, audit agent + independent check): the evaluator follows the reference; all 35 src/internal sites whose catcher changed are equivalent; NDSolveBVP uses Break[]
+- [ ] benchmarks/102-primality-testing: results produced before v0.6695 are suspect (Return inside While in mrRound/strongLucas) -- rerun
 - [x] Cascade: Linearity returns Erf/Erfi for elementary integrands -> Risch decision on the whole (one-elem-30, two-elem-45, gauss-elem-10 closed; tanh-elem-38 needs > 4 s of RT); Erf[I z] -> I Erfi[z] (v0.6691). Open: odd-function sign of a negative Plus (Sin[-1 - x], Erf[-1 - x]) for every odd head, as the reference does
 - [x] Cascade misses: tan-elem-26, gauss-elem-23 (stage 02 Together probe), tan-elem-32 (closes in 3.6 s idle; DD total CPU budget) -- v0.6691
 - [x] 260 two-elem-6: exact-support split, 48 s -> 2.2 s (v0.6693)
