@@ -6066,9 +6066,17 @@ under the log-divergence-cancellation conditions (else unevaluated).
   pFq series after `m = N`. That is accepted only when the summand really vanishes
   from there on, as `Binomial[5, k]` does (checked over the next 8 indices). A zero
   of a numerator factor kills one term only, so:
-  - an infinite series is summed explicitly up to the zero and restarted after it.
-    `Sum[(k - 3)^2/k!, {k, 0, Infinity}]` equals `5 E` (it was `27/2`, the three head
-    terms);
+  - an infinite series `Sum P(k) h(k)` with a polynomial factor `P` is first
+    rewritten by Newton's forward-difference expansion of `P` in falling
+    factorials `(k - L)_j` about `h`'s natural start `L` (the index below which
+    `h` vanishes; `0` for `x^k/k!`). Each piece has only leading zeros, and for
+    `h = x^k/k!` it is `x^j E^x`, so `Sum[(k - 3)^2/k!, {k, 0, Infinity}]` is `5 E`
+    and `Sum[(k - 3)^2 x^k/k!, {k, 0, Infinity}]` is `E^x (9 - 5 x + x^2)`. A lower
+    limit above `L` subtracts the terms in between
+    (`Sum[(k - 4)^3 2^k/k!, {k, 1, Infinity}]` = `64 - 18 E^2`). The result is
+    given expanded or factored, whichever is smaller;
+  - otherwise the series is summed explicitly up to the zero and restarted after
+    it (that left `27/2 + HypergeometricPFQ[{2, 2}, {5, 1}, 1]/24` for `5 E`);
   - a finite symbolic range with such a zero stays unevaluated.
 - **Poles at integer bounds** (v0.6530). A terminating sum to a symbolic bound is a
   Gamma ratio in the bound, with balanced pole pairs regularised as for a symbolic

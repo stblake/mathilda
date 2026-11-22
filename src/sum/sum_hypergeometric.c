@@ -533,6 +533,208 @@ static Expr* hg_regularise_poles(Expr* r, Expr* vars) {
     return res;
 }
 
+static Expr* hg_sum_int_lower(Expr* f, Expr* var, int64_t lo0, Expr* nterm, bool allow_ff);
+
+/* Sum_{k >= lo} P(k) h(k) for a summand whose polynomial factor P has an
+ * integer root past lo (an interior zero, (k - 3)^2/k!).  Newton's forward
+ * difference expansion about lo,
+ *
+ *     P(k) = Sum_{j=0}^{d} (Delta^j P(lo) / j!) (k - lo)_j,
+ *     (k - lo)_j = (k - lo)(k - lo - 1)...(k - lo - j + 1)   (falling),
+ *
+ * splits the series into d + 1 series Sum_{k >= lo + j} (k - lo)_j h(k): the
+ * falling factorial vanishes at k = lo .. lo + j - 1, so each starts at its
+ * first nonzero term and has only LEADING zeros from its polynomial factor.
+ * For h(k) = x^k/k! the falling factorial cancels the factorial,
+ * (k)_j x^k/k! = x^j x^(k-j)/(k-j)!, so each piece is x^j E^x and the sum is
+ * E^x Sum_j (Delta^j P(0)/j!) x^j (the Touchard/Dobinski form) for every
+ * polynomial.  The expansion point lo is therefore h's natural start (the
+ * first index above a vanishing h, 0 for x^k/k!), not the requested lower
+ * limit; the terms between the two are subtracted explicitly.  Splitting the
+ * head off instead left a pFq whose parameters no longer cancel
+ * (27/2 + pFq({2,2},{5,1},1)/24 for 5 E).
+ * NULL when f has no polynomial factor or a piece does not sum. */
+#define HG_FF_MAX_DEGREE 64
+
+/* A ComplexInfinity / Indeterminate / Infinity anywhere in e. */
+static bool hg_has_singular(const Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol.name;
+        return s == SYM_ComplexInfinity || s == SYM_Indeterminate || s == SYM_Infinity
+            || s == SYM_DirectedInfinity;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (hg_has_singular(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (hg_has_singular(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* hg_sum_falling(Expr* f, Expr* var, int64_t lo_req) {
+    /* f = P * h, P the product of the factors polynomial in var. */
+    size_t nf = (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL
+                 && f->data.function.head->data.symbol.name == SYM_Times)
+                ? f->data.function.arg_count : 0;
+    if (nf < 2) return NULL;
+    Expr** pf = malloc(sizeof(Expr*) * nf);
+    Expr** hf = malloc(sizeof(Expr*) * nf);
+    size_t np = 0, nh = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* g = f->data.function.args[i];
+        if (!sum_free_of(g, var) && hg_poly_in(g, var)) pf[np++] = expr_copy(g);
+        else hf[nh++] = expr_copy(g);
+    }
+    if (np == 0 || nh == 0) {
+        for (size_t i = 0; i < np; i++) expr_free(pf[i]);
+        for (size_t i = 0; i < nh; i++) expr_free(hf[i]);
+        free(pf); free(hf);
+        return NULL;
+    }
+    Expr* P = sum_eval("Times", pf, np);
+    Expr* h = sum_eval("Times", hf, nh);
+    free(pf); free(hf);
+    int d = hg_pdeg(P, var);
+    if (d < 1 || d > HG_FF_MAX_DEGREE) { expr_free(P); expr_free(h); return NULL; }
+
+    /* Expand about h's natural start L <= lo_req (the index below which h
+     * vanishes: L = -c for x^k/(k + c)!), so the falling factorial (k - L)_j
+     * is the one that cancels h's factorial; the terms L .. lo_req - 1 are then
+     * subtracted.  Without such a start (none within the probe window, or a
+     * singular term on the way down) L = lo_req. */
+    int64_t lo = lo_req;
+    for (int64_t L = lo_req; L > lo_req - HG_FF_MAX_DEGREE; L--) {
+        Expr* below = sum_int(L - 1);
+        bool zero = hg_term_is_zero(h, var, below);
+        expr_free(below);
+        if (zero) { lo = L; break; }
+    }
+    Expr* head = NULL;
+    if (lo < lo_req) {
+        size_t nhd = (size_t)(lo_req - lo);
+        Expr** ht = malloc(sizeof(Expr*) * nhd);
+        for (int64_t k = lo; k < lo_req; k++) {
+            Expr* at = sum_int(k);
+            ht[k - lo] = sum_subst(f, var, at);
+            expr_free(at);
+        }
+        head = sum_eval("Plus", ht, nhd);
+        free(ht);
+        if (hg_has_singular(head)) {
+            expr_free(head); head = NULL;
+            lo = lo_req;
+        }
+    }
+
+    /* diff[i] = P(lo + i), then in place diff[j] = Delta^j P(lo). */
+    Expr** diff = malloc(sizeof(Expr*) * (size_t)(d + 1));
+    for (int i = 0; i <= d; i++) {
+        Expr* at = sum_int(lo + i);
+        diff[i] = sum_subst(P, var, at);
+        expr_free(at);
+    }
+    expr_free(P);
+    for (int j = 1; j <= d; j++)
+        for (int i = d; i >= j; i--)
+            diff[i] = sum_eval("Plus", (Expr*[]){ diff[i],
+                          sum_eval("Times", (Expr*[]){ sum_int(-1), expr_copy(diff[i - 1]) }, 2) }, 2);
+
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)(d + 2));
+    size_t nt = 0;
+    bool ok = true;
+    Expr* ff = sum_int(1);                     /* (k - lo)_j, built up in j */
+    Expr* jfact = sum_int(1);                  /* j! */
+    for (int j = 0; j <= d; j++) {
+        if (j > 0) {
+            ff = sum_eval("Times", (Expr*[]){ ff,
+                     sum_eval("Plus", (Expr*[]){ expr_copy(var), sum_int(-(lo + j - 1)) }, 2) }, 2);
+            jfact = sum_eval("Times", (Expr*[]){ jfact, sum_int(j) }, 2);
+        }
+        if (diff[j]->type == EXPR_INTEGER && diff[j]->data.integer == 0) continue;
+        Expr* piece = sum_eval("Times", (Expr*[]){ expr_copy(ff), expr_copy(h) }, 2);
+        Expr* s = hg_sum_int_lower(piece, var, lo + j, NULL, false);
+        expr_free(piece);
+        if (!s) { ok = false; break; }
+        terms[nt++] = sum_eval("Times", (Expr*[]){ expr_copy(diff[j]),
+                          sum_eval("Power", (Expr*[]){ expr_copy(jfact), sum_int(-1) }, 2), s }, 3);
+    }
+    expr_free(ff); expr_free(jfact); expr_free(h);
+    for (int i = 0; i <= d; i++) expr_free(diff[i]);
+    free(diff);
+    if (!ok) {
+        for (size_t i = 0; i < nt; i++) expr_free(terms[i]);
+        free(terms);
+        if (head) expr_free(head);
+        return NULL;
+    }
+    if (head) terms[nt++] = sum_eval("Times", (Expr*[]){ sum_int(-1), head }, 2);
+    Expr* total = nt ? sum_eval("Plus", terms, nt) : sum_int(0);
+    free(terms);
+    /* Present it expanded (64 - 18 E^2) or factored (E^x (9 - 5 x + x^2)),
+     * whichever is smaller. */
+    Expr* ex = sum_eval("Expand", (Expr*[]){ total }, 1);
+    Expr* fa = sum_eval("Factor", (Expr*[]){ expr_copy(ex) }, 1);
+    Expr* lx = sum_eval("LeafCount", (Expr*[]){ expr_copy(ex) }, 1);
+    Expr* lf = sum_eval("LeafCount", (Expr*[]){ expr_copy(fa) }, 1);
+    bool take_f = lx->type == EXPR_INTEGER && lf->type == EXPR_INTEGER
+                  && lf->data.integer < lx->data.integer;
+    expr_free(lx); expr_free(lf);
+    if (take_f) { expr_free(ex); return fa; }
+    expr_free(fa);
+    return ex;
+}
+
+/* Sum_{k >= lo0} f (nterm NULL), or the terminating sum of nterm + 1 terms,
+ * for a concrete integer lower bound; see builtin_sum_hypergeometric.
+ * allow_ff enables the falling-factorial route for an interior zero (off for
+ * that route's own pieces). */
+static Expr* hg_sum_int_lower(Expr* f, Expr* var, int64_t lo0, Expr* nterm, bool allow_ff) {
+    int64_t lo = lo0;
+    Expr* head = NULL;          /* explicit sum of the split-off terms */
+    Expr* r = NULL;
+    for (int pass = 0; pass < SUM_HG_MAX_DEGREE; pass++) {
+        int64_t lo_eff = lo;
+        bool found = false;
+        for (int64_t j = lo; j < lo + 64; j++) {
+            Expr* jj = sum_int(j);
+            bool zero = hg_term_is_zero(f, var, jj);
+            expr_free(jj);
+            if (!zero) { lo_eff = j; found = true; break; }
+        }
+        if (!found) break;
+        Expr* nt = nterm ? sum_eval("Plus", (Expr*[]){ expr_copy(nterm), sum_int(lo0 - lo_eff) }, 2)
+                         : NULL;
+        Expr* lo_e = sum_int(lo_eff);
+        int64_t split = -1;
+        r = hg_sum_from(f, var, lo_e, nt, &split);
+        expr_free(lo_e);
+        if (nt) expr_free(nt);
+        if (r || split < 0) break;
+        /* An interior zero of an infinite series: first try the
+         * falling-factorial expansion of its polynomial factor, which sums
+         * the whole series in closed form; else split off the head. */
+        if (allow_ff && !nterm && !head) {
+            r = hg_sum_falling(f, var, lo_eff);
+            if (r) break;
+        }
+        /* Sum the head f(lo_eff) .. f(lo_eff + split) explicitly. */
+        size_t nh = (size_t)split + 1 + (head ? 1 : 0), w = 0;
+        Expr** ht = malloc(sizeof(Expr*) * nh);
+        if (head) ht[w++] = head;
+        for (int64_t j = 0; j <= split; j++) {
+            Expr* jj = sum_int(lo_eff + j);
+            ht[w++] = sum_subst(f, var, jj);
+            expr_free(jj);
+        }
+        head = expr_new_function(expr_new_symbol(SYM_Plus), ht, w);
+        free(ht);
+        lo = lo_eff + split + 1;
+    }
+    if (!r) { if (head) expr_free(head); return NULL; }
+    if (head) r = sum_eval("Plus", (Expr*[]){ head, r }, 2);
+    return r;
+}
+
 Expr* builtin_sum_hypergeometric(Expr* res) {
     Expr *f, *var, *imin, *imax;
     bool definite;
@@ -586,43 +788,9 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
      * head terms only; the value is 5 E).  Each split consumes one root of the
      * term ratio's numerator, so the loop is bounded by its degree; the
      * iteration cap only guards a pathological input. */
-    int64_t lo = imin->data.integer;
-    Expr* head = NULL;          /* explicit sum of the split-off terms */
-    Expr* r = NULL;
-    for (int pass = 0; pass < SUM_HG_MAX_DEGREE; pass++) {
-        int64_t lo_eff = lo;
-        bool found = false;
-        for (int64_t j = lo; j < lo + 64; j++) {
-            Expr* jj = sum_int(j);
-            bool zero = hg_term_is_zero(f, var, jj);
-            expr_free(jj);
-            if (!zero) { lo_eff = j; found = true; break; }
-        }
-        if (!found) break;
-        Expr* nt = nterm ? sum_eval("Plus", (Expr*[]){ expr_copy(nterm), sum_int(imin->data.integer - lo_eff) }, 2)
-                         : NULL;
-        Expr* lo_e = sum_int(lo_eff);
-        int64_t split = -1;
-        r = hg_sum_from(f, var, lo_e, nt, &split);
-        expr_free(lo_e);
-        if (nt) expr_free(nt);
-        if (r || split < 0) break;
-        /* Sum the head f(lo_eff) .. f(lo_eff + split) explicitly. */
-        size_t nh = (size_t)split + 1 + (head ? 1 : 0), w = 0;
-        Expr** ht = malloc(sizeof(Expr*) * nh);
-        if (head) ht[w++] = head;
-        for (int64_t j = 0; j <= split; j++) {
-            Expr* jj = sum_int(lo_eff + j);
-            ht[w++] = sum_subst(f, var, jj);
-            expr_free(jj);
-        }
-        head = expr_new_function(expr_new_symbol(SYM_Plus), ht, w);
-        free(ht);
-        lo = lo_eff + split + 1;
-    }
+    Expr* r = hg_sum_int_lower(f, var, imin->data.integer, nterm, true);
     if (nterm) expr_free(nterm);
-    if (!r) { if (head) expr_free(head); return NULL; }
-    if (head) r = sum_eval("Plus", (Expr*[]){ head, r }, 2);
+    if (!r) return NULL;
     /* A terminating sum to a symbolic bound comes out of the Gauss / Kummer /
      * Saalschutz theorems as a Gamma ratio in the bound's symbol, and the
      * integer bound can sit on a pole of every factor:

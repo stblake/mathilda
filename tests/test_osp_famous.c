@@ -154,6 +154,25 @@ void test_sum_vanishing_leading_terms() {
     assert_num_eq("Sum[k (k - 1) 2^k/k!, {k, 0, Infinity}]", "4 E^2");
 }
 
+/* ---- Sum: a polynomial with an interior integer root over k! --------------- */
+
+void test_sum_interior_zero_polynomial() {
+    /* the falling-factorial expansion: E^x times a polynomial, no pFq left */
+    assert_true("Sum[(k - 3)^2/k!, {k, 0, Infinity}] === 5 E");
+    assert_true("Sum[(k - 2) (k - 5)/k!, {k, 0, Infinity}] === 5 E");
+    assert_true("Sum[(k - 3)^2 x^k/k!, {k, 0, Infinity}] === E^x (9 - 5 x + x^2)");
+    /* shifted lower limits: the terms below the limit come off exactly */
+    assert_true("Sum[(k - 3)^2/k!, {k, 2, Infinity}] === -13 + 5 E");
+    assert_true("Sum[(k - 4)^3 2^k/k!, {k, 1, Infinity}] === 64 - 18 E^2");
+    assert_true("FreeQ[Sum[(k - 3)/(k + 1)!, {k, 0, Infinity}], HypergeometricPFQ]");
+    /* against the partial sums */
+    assert_num_eq("Sum[(k - 3)^2/k!, {k, 2, Infinity}]", "Sum[N[(k - 3)^2/k!, 50], {k, 2, 120}]");
+    assert_num_eq("Sum[(k - 4)^3 2^k/k!, {k, 1, Infinity}]", "Sum[N[(k - 4)^3 2^k/k!, 50], {k, 1, 160}]");
+    assert_num_eq("Sum[(k - 3)/(k + 1)!, {k, 0, Infinity}]", "Sum[N[(k - 3)/(k + 1)!, 50], {k, 0, 120}]");
+    assert_num_eq("Sum[(k - 3)^2 (1/3)^k/k!, {k, 0, Infinity}]",
+                  "Sum[N[(k - 3)^2 (1/3)^k/k!, 50], {k, 0, 120}]");
+}
+
 /* ---- HypergeometricPFQ: integer-shifted parameter pairs ------------------- */
 
 void test_pfq_shift_pair() {
@@ -335,6 +354,7 @@ int main() {
     TEST(test_dsolve_singular_point_conditions);
     TEST(test_integrate_cauchy_schlomilch);
     TEST(test_sum_vanishing_leading_terms);
+    TEST(test_sum_interior_zero_polynomial);
     TEST(test_pfq_shift_pair);
     TEST(test_pfq_classical_sums);
     TEST(test_sum_dixon_vandermonde_lambert);
