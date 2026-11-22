@@ -823,12 +823,25 @@ Series[ExpIntegralEi[x], {x, 0, 1}]   (* EulerGamma + (Log[x] - Log[1/x])/2 + x 
 give the one-sided transform ∫₀^∞ f(t) e^(−st) dt. Attributes: `Protected`.
 - Linear, and threads over lists. A term it cannot transform stays as
   `LaplaceTransform[term, t, s]`.
-- Factors free of t come out. An exponential factor E^(at+b) shifts s → s − a
-  and contributes E^b. A t-free remainder c is c/s.
-- Anything else uses the defining integral, under the assumptions and s > 0. If
-  Integrate does not close it, the transform stays unevaluated.
+- Factors free of t come out, also of a term that stays held
+  (`2 f[t]` → `2 LaplaceTransform[f[t], t, s]`). An exponential factor
+  E^(at+b) shifts s → s − a and contributes E^b. A t-free remainder c is c/s.
+- `Cosh[u]` and `Sinh[u]`, u linear in t, are written as exponentials, so they
+  are shifts; the result is recombined by Simplify.
+- A derivative of an undefined function, `Derivative[n][f][t]`, is
+  s^n F(s) − s^(n−1) f(0) − … − f^(n−1)(0) with F = `LaplaceTransform[f[t], t, s]`.
+- Anything else uses the defining integral, under the assumptions and s > 0. A
+  `ConditionalExpression[F, cond]` result gives F, simplified under cond: the
+  transform is the function the integral defines on its region of convergence
+  (`Sin[b t]` → `b/(b^2 + s^2)` with no assumption on b). If Integrate does not
+  close the integral, the transform stays unevaluated.
+- Not yet closed: `UnitStep[t - a]` with no sign for a, and
+  `DiracDelta[t - a]` (the definite integral of the delta does not close).
 
 ```
+LaplaceTransform[Cosh[2 t], t, s]         (* s/(-4 + s^2) *)
+LaplaceTransform[f''[t], t, s]            (* -s f[0] + s^2 LaplaceTransform[f[t], t, s] - f'[0] *)
+LaplaceTransform[t^n E^(a t), t, s]       (* (-a + s)^(-1 - n) Gamma[1 + n] *)
 LaplaceTransform[BesselJ[0, t], t, s]     (* 1/Sqrt[1 + s^2] *)
 LaplaceTransform[t^2 E^(3 t), t, s]        (* 2/(-3 + s)^3 *)
 LaplaceTransform[E^(-2 t) Cos[t], t, s]    (* (2 + s)/(1 + (2 + s)^2) *)

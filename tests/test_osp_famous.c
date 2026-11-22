@@ -268,6 +268,18 @@ void test_fe_elliptic_laplace() {
     assert_true("LaplaceTransform[{1, t}, t, s] === {1/s, 1/s^2}");
     assert_true("LaplaceTransform[f[t] + 1, t, s] === 1/s + LaplaceTransform[f[t], t, s]");
     assert_true("MemberQ[Attributes[LaplaceTransform], Protected]");
+    /* hyperbolic factors are shifts; a conditional integral gives its generic value */
+    assert_true("Simplify[LaplaceTransform[Cosh[2 t], t, s] - s/(s^2 - 4)] === 0");
+    assert_true("Simplify[LaplaceTransform[Sinh[3 t], t, s] - 3/(s^2 - 9)] === 0");
+    assert_true("Simplify[LaplaceTransform[t Sinh[t], t, s] - 2 s/(s^2 - 1)^2] === 0");
+    assert_true("Simplify[LaplaceTransform[Sin[b t], t, s] - b/(b^2 + s^2)] === 0");
+    assert_true("Simplify[LaplaceTransform[Cos[b t], t, s] - s/(b^2 + s^2)] === 0");
+    assert_true("Simplify[LaplaceTransform[t^n E^(a t), t, s] - Gamma[n + 1]/(s - a)^(n + 1)] === 0");
+    /* derivatives of an undefined function, and linearity over them */
+    assert_true("LaplaceTransform[f'[t], t, s] === s LaplaceTransform[f[t], t, s] - f[0]");
+    assert_true("Expand[LaplaceTransform[f''[t], t, s] - (s^2 LaplaceTransform[f[t], t, s] - s f[0] - f'[0])] === 0");
+    assert_true("Expand[LaplaceTransform[f''[t] + 3 f'[t] + 2 f[t], t, s] - ((s^2 + 3 s + 2) "
+                "LaplaceTransform[f[t], t, s] - (s + 3) f[0] - f'[0])] === 0");
 }
 
 /* ---- step 1 of the remaining famous problems -------------------------------- */
