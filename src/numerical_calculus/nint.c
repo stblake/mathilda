@@ -3723,38 +3723,9 @@ static Expr* ni_run_ray(Expr* body, const char* var, double _Complex z0,
 /* Semi-infinite range via exp-sinh.  `a` is the half-line lower limit in the
  * sampling variable; reflect=true binds the integrand variable to -u (mapping a
  * (-∞, b] range onto [-b, ∞)); the overall result is multiplied by `sign`. */
-#ifdef USE_MPFR
-/* ------------------------------------------------------------------ *
- *  Oscillatory half lines at WorkingPrecision: contour rotation       *
- * ------------------------------------------------------------------ *
- *
- * An integrand on [a, oo) that is a finite sum of linear-phase groups,
- *     f(x) = sum_j A_j(x) e^(lam_j x),  A_j non-oscillatory,
- * (Sin, Cos and complex exponentials through TrigToExp; BesselJ and BesselY
- * through the scaled Hankel functions, nc_phase.c) is integrated without
- * resolving a single oscillation.  Beyond a base point X0 every group with
- * Im lam != 0 is moved onto the vertical ray X0 + i s t, s = sign(Im lam),
- * where its factor e^(lam x) decays like e^(-|Im lam| t):
- *     int_X0^oo A e^(lam x) dx = i s int_0^oo A(X0 + i s t) e^(lam (X0 + i s t)) dt,
- * exact by Cauchy's theorem when A is analytic and of sub-exponential growth in
- * the quarter plane Re x >= X0, s Im x >= 0.  A group with Im lam = 0 stays on
- * the real axis; [a, X0] is an ordinary finite integral of f.
- *
- * Partial-sum extrapolation between the zeros, the previous route, has no
- * model for several frequencies at once: J_0(x) Cos[x/2] (frequencies 1/2 and
- * 3/2) ran past 100 s at 30 digits; and on a single frequency it stopped near
- * 21 digits.  On the rotated rays exp-sinh converges double-exponentially.
- *
- * Analyticity is established, not assumed: each amplitude may contain only
- * sums, products, the placeholder Bessel K of a linear argument, and powers and
- * logarithms whose base is a numeric constant or a polynomial in x (or a
- * non-negative integer power of an allowed expression).  The polynomials' roots
- * (all of them, complex ones included) are the only possible singularities;
- * X0 is placed to the right of every one, and an integrand with such a root on
- * the real axis inside the range is left to the other rules. */
-#define NI_ROT_MAX_GROUPS 16
 #define NI_SING_MAX_DEGREE 24   /* polynomial singular arguments (also below) */
-
+/* Structural helpers shared by the MPFR contour rotation below and the
+ * machine piecewise-linear splitting further down, so outside USE_MPFR. */
 static Expr* ni_ev(const char* head, Expr** args, size_t n, const char* var);
 static Expr* ni_ev2(const char* head, Expr* a, Expr* b, const char* var);
 static bool ni_free_of_var(const Expr* e, const char* var) { return !levin_occurs(e, var); }
@@ -3766,7 +3737,11 @@ static bool ni_free_of_var(const Expr* e, const char* var) { return !levin_occur
 static int ni_numeric_poly_degree(const Expr* u, const char* var) {
     if (!u) return -1;
     switch (u->type) {
-    case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_MPFR: return 0;
+    case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
+#ifdef USE_MPFR
+    case EXPR_MPFR:
+#endif
+        return 0;
     case EXPR_SYMBOL: {
         const char* n = u->data.symbol.name;
         if (n == var) return 1;
@@ -3811,6 +3786,38 @@ static int ni_numeric_poly_degree(const Expr* u, const char* var) {
     }
     return -1;
 }
+
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  Oscillatory half lines at WorkingPrecision: contour rotation       *
+ * ------------------------------------------------------------------ *
+ *
+ * An integrand on [a, oo) that is a finite sum of linear-phase groups,
+ *     f(x) = sum_j A_j(x) e^(lam_j x),  A_j non-oscillatory,
+ * (Sin, Cos and complex exponentials through TrigToExp; BesselJ and BesselY
+ * through the scaled Hankel functions, nc_phase.c) is integrated without
+ * resolving a single oscillation.  Beyond a base point X0 every group with
+ * Im lam != 0 is moved onto the vertical ray X0 + i s t, s = sign(Im lam),
+ * where its factor e^(lam x) decays like e^(-|Im lam| t):
+ *     int_X0^oo A e^(lam x) dx = i s int_0^oo A(X0 + i s t) e^(lam (X0 + i s t)) dt,
+ * exact by Cauchy's theorem when A is analytic and of sub-exponential growth in
+ * the quarter plane Re x >= X0, s Im x >= 0.  A group with Im lam = 0 stays on
+ * the real axis; [a, X0] is an ordinary finite integral of f.
+ *
+ * Partial-sum extrapolation between the zeros, the previous route, has no
+ * model for several frequencies at once: J_0(x) Cos[x/2] (frequencies 1/2 and
+ * 3/2) ran past 100 s at 30 digits; and on a single frequency it stopped near
+ * 21 digits.  On the rotated rays exp-sinh converges double-exponentially.
+ *
+ * Analyticity is established, not assumed: each amplitude may contain only
+ * sums, products, the placeholder Bessel K of a linear argument, and powers and
+ * logarithms whose base is a numeric constant or a polynomial in x (or a
+ * non-negative integer power of an allowed expression).  The polynomials' roots
+ * (all of them, complex ones included) are the only possible singularities;
+ * X0 is placed to the right of every one, and an integrand with such a root on
+ * the real axis inside the range is left to the other rules. */
+#define NI_ROT_MAX_GROUPS 16
+
 
 typedef struct { double maxre; bool ok; const char* var; int nroots; } NiRotScan;
 

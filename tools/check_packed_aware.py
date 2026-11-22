@@ -45,6 +45,13 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "ReplaceAll": "representation tolerance, not a buffer kernel (src/replace.c): "
+    "the Dispatch rule index keys a packed-list LHS, and looks up a packed node met "
+    "while walking, under the List head so it hashes with its plain-List twin. A "
+    "packed list reaches it NESTED inside an expression the gate does not open; a "
+    "top-level packed argument is matched element by element, so the gate's "
+    "materialisation is what it needs.",
+    "ReplaceRepeated": "as ReplaceAll -- the same rule index in src/replace.c.",
     "NDEigenvalues": "finite elements (src/numerical_calculus/fem.c): its "
     "EXPR_NDARRAY uses are the mesh function's own storage (coordinates, "
     "elements, nodal values) and reading the batch-evaluated coefficient fields, "
