@@ -82,10 +82,19 @@ static cplx_t c_sub(cplx_t a, cplx_t b)    { return c_make(a.re - b.re, a.im - b
 static cplx_t c_mul(cplx_t a, cplx_t b)    {
     return c_make(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
 }
+/* Smith's scaled division.  The textbook a conj(b) / |b|^2 squares |b|, which
+ * overflows above ~1e154 and underflows below ~1e-162: every elimination
+ * factor became inf/NaN and MatrixRank of 1e160 {{1,2},{3,4}} or of
+ * diag(1e-170, 1e-170) was 1 (audit MatrixRank#1).  A real divisor (the
+ * common case) is a plain division. */
 static cplx_t c_div(cplx_t a, cplx_t b) {
-    double d = b.re * b.re + b.im * b.im;
-    return c_make((a.re * b.re + a.im * b.im) / d,
-                  (a.im * b.re - a.re * b.im) / d);
+    if (b.im == 0.0) return c_make(a.re / b.re, a.im / b.re);
+    if (fabs(b.re) >= fabs(b.im)) {
+        double r = b.im / b.re, d = b.re + b.im * r;
+        return c_make((a.re + a.im * r) / d, (a.im - a.re * r) / d);
+    }
+    double r = b.re / b.im, d = b.re * r + b.im;
+    return c_make((a.re * r + a.im) / d, (a.im * r - a.re) / d);
 }
 static double c_abs(cplx_t a) { return hypot(a.re, a.im); }
 

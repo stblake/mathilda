@@ -2664,19 +2664,48 @@ Expr* ndarray_int64_delist_retry(const Expr* call) {
  * whether Subtract and Divide could be marked packed-aware — they inherit
  * Plus/Times/Power's behaviour here, so the bug had to be fixed at the source
  * rather than propagated to two more heads. */
+/* An infinite or indeterminate quantity: Infinity, ComplexInfinity,
+ * Indeterminate, DirectedInfinity[..], or a numeric multiple of one
+ * (-Infinity is Times[-1, Infinity]).  Not a symbol to an array operation but
+ * a value the machine lanes cannot hold. */
+static bool nd_is_infinite_quantity(const Expr* a) {
+    if (a->type == EXPR_SYMBOL)
+        return a->data.symbol.name == SYM_Infinity || a->data.symbol.name == SYM_ComplexInfinity
+            || a->data.symbol.name == SYM_Indeterminate;
+    if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = a->data.function.head->data.symbol.name;
+    if (h == SYM_DirectedInfinity) return true;
+    if (h != SYM_Times) return false;
+    bool inf = false;
+    for (size_t i = 0; i < a->data.function.arg_count; i++) {
+        const Expr* f = a->data.function.args[i];
+        if (nd_is_infinite_quantity(f)) inf = true;
+        else if (!expr_is_numeric_like((Expr*)f)) return false;
+    }
+    return inf;
+}
+
 Expr* ndarray_symbolic_delist_retry(const Expr* call) {
     if (!call || call->type != EXPR_FUNCTION) return NULL;
-    bool packed = false, sym = false, visible = false;
+    bool packed = false, sym = false, visible = false, inf = false;
     for (size_t i = 0; i < call->data.function.arg_count; i++) {
         const Expr* a = call->data.function.args[i];
         if (!a) continue;
         if (a->type == EXPR_NDARRAY) {
             if (is_packed_list(a)) packed = true;
             else                   visible = true;
+        } else if (nd_is_infinite_quantity(a)) {
+            inf = true;
         } else if (!expr_is_numeric_like((Expr*)a)) {
             sym = true;
         }
     }
+    /* An array combined only with infinite quantities is numeric, element by
+     * element: NDArray[{1., 2.}] + Infinity is {Infinity, Infinity} by the
+     * List path (the lanes cannot hold the entries), as a pole of Gamma
+     * degrades.  Before, the call warned NDArray::sym and Plus's Infinity rule
+     * then dropped the array, answering a bare Infinity (audit NDArray#1). */
+    if (inf && !sym && (packed || visible)) return ndarray_delist_and_reeval(call);
     /* One VISIBLE NDArray anywhere in the call vetoes the retry, even when a
      * packed List is also present.  The alternative was tried and is worse:
      * `NDArray[{1., 2., 3.}] + packedList + x` would then evaluate while

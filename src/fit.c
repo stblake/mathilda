@@ -1186,20 +1186,29 @@ static double* fit_build_design_fast(Expr** funs, size_t nfun,
  * npts x nfun buffer to unit L2 norm in place; return a malloc'd scale[nfun]
  * of the original norms so coefficients can be unscaled.
  *
- * A column that is *numerically zero* -- norm negligible relative to `ref` (the
- * response norm), i.e. a basis function that vanishes over the data, such as
- * Sin[2 x] at multiples of pi -- is zeroed out and flagged with scale 0.0 (a
- * sentinel).  Scaling it to unit norm would amplify rounding noise into an
+ * A column that is *numerically zero* -- norm negligible (1e-13) relative to
+ * `ref` (the response norm), i.e. a basis function that vanishes over the
+ * data, such as Sin[2 x] at multiples of pi -- is zeroed out and flagged with
+ * scale 0.0 (a sentinel).  `ref` is capped by the largest column norm: a
+ * column is never negligible next to a response that is merely large, which
+ * zeroed every column of the fit of 10^14 (1 + x) and answered 0.0 (audit
+ * Fit#2).  Scaling it to unit norm would amplify rounding noise into an
  * apparently independent direction, and unscaling would then multiply the fitted
  * coefficient by 1/norm ~ 1e16; zeroing it makes the SVD drop it cleanly and its
  * coefficient is forced to exactly 0 on unscale (matching the reference). */
 static double* fit_column_scale(double* A, size_t npts, size_t nfun, double ref) {
     double* scale = malloc(sizeof(double) * (nfun ? nfun : 1));
-    double zero_tol = 1.0e-13 * (ref > 0.0 ? ref : 1.0);
-    for (size_t j = 0; j < nfun; j++) {
+    double maxcol = 0.0;
+    for (size_t j = 0; j < nfun; j++) {            /* column norms, then the cut */
         double s = 0.0;
         for (size_t r = 0; r < npts; r++) { double v = A[r * nfun + j]; s += v * v; }
-        s = sqrt(s);
+        scale[j] = sqrt(s);
+        if (scale[j] > maxcol) maxcol = scale[j];
+    }
+    if (!(ref > 0.0) || ref > maxcol) ref = maxcol;
+    double zero_tol = 1.0e-13 * ref;
+    for (size_t j = 0; j < nfun; j++) {
+        double s = scale[j];
         if (!(s > zero_tol)) {                       /* numerically-zero column */
             scale[j] = 0.0;                          /* sentinel -> force coeff 0 */
             for (size_t r = 0; r < npts; r++) A[r * nfun + j] = 0.0;
@@ -1276,8 +1285,7 @@ static bool fit_fast_l2(double* A, const double* b, size_t npts, size_t nfun,
     if (npts >= nfun) {
         double bnorm = 0.0;
         for (size_t r = 0; r < npts; r++) bnorm += b[r] * b[r];
-        bnorm = sqrt(bnorm);
-        scale = fit_column_scale(A, npts, nfun, bnorm);
+        scale = fit_column_scale(A, npts, nfun, sqrt(bnorm));
         if (fit_gram_rcond(A, npts, nfun, scale) < 1e-14)
             fit_warn(who, "cond",
                      "the fit may be poorly conditioned (basis functions nearly "

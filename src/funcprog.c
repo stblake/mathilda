@@ -2450,31 +2450,29 @@ static Expr* inner_n1_A(Expr* f, Expr** A_slices, Expr** B_slices, size_t L, Exp
 static Expr* contract_V_B(Expr* f, Expr* V, Expr* B, Expr* g, Expr* head) {
     if (V->type != EXPR_FUNCTION || B->type != EXPR_FUNCTION) return NULL;
     size_t N = V->data.function.arg_count;
-    
-    bool b_is_matrix = false;
-    if (B->data.function.arg_count > 0 && B->data.function.args[0]->type == EXPR_FUNCTION &&
-        expr_eq(B->data.function.args[0]->data.function.head, head)) {
-        b_is_matrix = true;
+    /* The contracted lengths must agree (Inner::incom is reported up front
+     * by builtin_inner; a ragged mismatch deeper down declines silently). */
+    if (B->data.function.arg_count != N) return NULL;
+
+    /* B continues as a matrix when every row is a list of one common length;
+     * otherwise its rows are the leaves being contracted. */
+    bool b_is_matrix = N > 0;
+    size_t M = 0;
+    for (size_t i = 0; b_is_matrix && i < N; i++) {
+        Expr* B_i = B->data.function.args[i];
+        if (B_i->type != EXPR_FUNCTION || !expr_eq(B_i->data.function.head, head)) b_is_matrix = false;
+        else if (i == 0) M = B_i->data.function.arg_count;
+        else if (B_i->data.function.arg_count != M) b_is_matrix = false;
     }
-    
+
     if (b_is_matrix) {
-        size_t M = B->data.function.args[0]->data.function.arg_count;
-        Expr** res_args = malloc(sizeof(Expr*) * M);
+        Expr** res_args = malloc(sizeof(Expr*) * (M ? M : 1));
         for (size_t j = 0; j < M; j++) {
             Expr** col_args = malloc(sizeof(Expr*) * N);
-            for (size_t i = 0; i < N; i++) {
-                if (i < B->data.function.arg_count) {
-                    Expr* B_i = B->data.function.args[i];
-                    if (B_i->type == EXPR_FUNCTION && j < B_i->data.function.arg_count) {
-                        col_args[i] = expr_copy(B_i->data.function.args[j]);
-                    } else {
-                        col_args[i] = expr_new_symbol(SYM_Null);
-                    }
-                } else {
-                    col_args[i] = expr_new_symbol(SYM_Null);
-                }
-            }
+            for (size_t i = 0; i < N; i++)
+                col_args[i] = expr_copy(B->data.function.args[i]->data.function.args[j]);
             Expr* B_col = expr_new_function(expr_copy(head), col_args, N);
+            free(col_args);
             Expr* contracted = contract_V_B(f, V, B_col, g, head);
             expr_free(B_col);
             if (!contracted) {
@@ -2488,17 +2486,12 @@ static Expr* contract_V_B(Expr* f, Expr* V, Expr* B, Expr* g, Expr* head) {
         free(res_args);
         return ret;
     } else {
-        size_t B_len = B->data.function.arg_count;
-        size_t min_len = N < B_len ? N : B_len;
-        if (N != B_len) {
-            // Technically lengths should match. We'll evaluate up to the min_len.
-        }
-        Expr** g_args = malloc(sizeof(Expr*) * min_len);
-        for (size_t i = 0; i < min_len; i++) {
+        Expr** g_args = malloc(sizeof(Expr*) * (N ? N : 1));
+        for (size_t i = 0; i < N; i++) {
             Expr* f_args[2] = { expr_copy(V->data.function.args[i]), expr_copy(B->data.function.args[i]) };
             g_args[i] = expr_new_function(expr_copy(f), f_args, 2);
         }
-        Expr* ret = expr_new_function(expr_copy(g), g_args, min_len);
+        Expr* ret = expr_new_function(expr_copy(g), g_args, N);
         free(g_args);
         return ret;
     }
@@ -2780,20 +2773,77 @@ Expr* builtin_inner(Expr* res) {
     
     Expr* head = A->data.function.head;
 
-    Expr* inner_res;
-    if (n_expr && n_expr->type == EXPR_INTEGER && n_expr->data.integer == 1) {
-        /* Contract first index of A with first index of B directly */
-        size_t L = A->data.function.arg_count;
-        if (L != B->data.function.arg_count) {
+    /* Depth of A along its first elements: the index count the contraction
+     * sees (inner_A descends exactly this path). */
+    int64_t rank_a = 0;
+    for (Expr* t = A; t->type == EXPR_FUNCTION && expr_eq(t->data.function.head, head); ) {
+        rank_a++;
+        if (t->data.function.arg_count == 0) break;
+        t = t->data.function.args[0];
+    }
+
+    /* Inner[f, A, B, g, n] contracts index n of A (default: its last) with
+     * the first index of B.  An n other than 1 and the last is brought to
+     * the last position by Transpose; before, every such n silently
+     * contracted the last index (audit Inner#2). */
+    int64_t n = rank_a;
+    if (n_expr) {
+        if (n_expr->type != EXPR_INTEGER || n_expr->data.integer < 1
+            || n_expr->data.integer > rank_a) {
             if (res->data.function.arg_count < 4) expr_free(g);
             return NULL;
         }
-        inner_res = inner_n1_A(f, A->data.function.args, B->data.function.args, L, g, head);
-    } else {
-        Expr* A_used = expr_copy(A);
-        inner_res = inner_A(f, A_used, B, g, head);
-        expr_free(A_used);
+        n = n_expr->data.integer;
     }
+    Expr* A_used = expr_copy(A);
+    if (n != 1 && n != rank_a) {
+        Expr** perm = malloc(sizeof(Expr*) * (size_t)rank_a);
+        for (int64_t k = 1; k <= rank_a; k++)
+            perm[k - 1] = expr_new_integer(k < n ? k : (k == n ? rank_a : k - 1));
+        Expr* pl = expr_new_function(expr_new_symbol(SYM_List), perm, (size_t)rank_a);
+        free(perm);
+        Expr* targs[2] = { A_used, pl };
+        A_used = eval_and_free(expr_new_function(expr_new_symbol(SYM_Transpose), targs, 2));
+        if (!A_used || A_used->type != EXPR_FUNCTION
+            || !expr_eq(A_used->data.function.head, head)) {
+            if (A_used) expr_free(A_used);
+            if (res->data.function.arg_count < 4) expr_free(g);
+            return NULL;
+        }
+    }
+
+    /* The contracted lengths must agree, as for Dot (audit Inner#1: they were
+     * truncated to the shorter, or the missing entries filled with Null). */
+    {
+        Expr* t = A_used;
+        int64_t depth = n == 1 ? 1 : rank_a;
+        for (int64_t k = 1; k < depth; k++) t = t->data.function.args[0];
+        size_t len_a = t->data.function.arg_count;
+        size_t len_b = B->data.function.arg_count;
+        if (len_a != len_b) {
+            char* a_str = expr_to_string(A);
+            char* b_str = expr_to_string(B);
+            mth_message("Inner", "incom",
+                        "Length %zu of dimension %lld in %s is incommensurate with "
+                        "length %zu of dimension 1 in %s.",
+                        len_a, (long long)n, a_str, len_b, b_str);
+            free(a_str);
+            free(b_str);
+            expr_free(A_used);
+            if (res->data.function.arg_count < 4) expr_free(g);
+            return NULL;
+        }
+    }
+
+    Expr* inner_res;
+    if (n == 1 && n_expr) {
+        /* Contract first index of A with first index of B directly */
+        size_t L = A_used->data.function.arg_count;
+        inner_res = inner_n1_A(f, A_used->data.function.args, B->data.function.args, L, g, head);
+    } else {
+        inner_res = inner_A(f, A_used, B, g, head);
+    }
+    expr_free(A_used);
 
     if (res->data.function.arg_count < 4) expr_free(g);
 

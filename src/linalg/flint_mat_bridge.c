@@ -23,6 +23,9 @@
 #include <flint/fmpq_mat.h>
 #include <flint/fmpq_vec.h>
 #include <flint/fmpq_poly.h>
+#include <flint/fmpz_mat.h>
+#include <flint/arb.h>
+#include <flint/arb_mat.h>
 
 /* ------------------------------------------------------------------ */
 /*  Expr <-> fmpq (integer / rational scalars only)                    */
@@ -400,6 +403,132 @@ int flint_mat_rank(Expr** flat, int r, int c) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Exact definiteness (PositiveDefiniteMatrixQ / NegativeDefiniteMatrixQ) */
+/* ------------------------------------------------------------------ */
+
+/* (re, im) of an exact scalar: Integer, BigInt, Rational or Complex of those. */
+static int mb_expr_to_gauss_q(const Expr* e, fmpq_t re, fmpq_t im) {
+    fmpq_zero(im);
+    if (mb_expr_to_fmpq(e, re)) return 1;
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex)
+        return mb_expr_to_fmpq(e->data.function.args[0], re)
+            && mb_expr_to_fmpq(e->data.function.args[1], im);
+    return 0;
+}
+
+int flint_mat_definite(Expr** flat, int n, int sign) {
+    if (n <= 0) return -1;
+    fmpq_mat_t Ar, Ai;
+    fmpq_mat_init(Ar, n, n);
+    fmpq_mat_init(Ai, n, n);
+    int ok = 1, cplx = 0;
+    for (int i = 0; ok && i < n * n; i++) {
+        ok = mb_expr_to_gauss_q(flat[i], fmpq_mat_entry(Ar, i / n, i % n),
+                                fmpq_mat_entry(Ai, i / n, i % n));
+        if (ok && !fmpq_is_zero(fmpq_mat_entry(Ai, i / n, i % n))) cplx = 1;
+    }
+    if (!ok) { fmpq_mat_clear(Ar); fmpq_mat_clear(Ai); return -1; }
+
+    /* Z = sign L (A + A^H), the Hermitian part scaled by a positive integer
+     * (L clears every denominator), so Z is definite iff the input is. Only
+     * the upper triangle is kept: Bareiss elimination preserves the
+     * Hermitian symmetry, so Z[i][k] (i > k) is read as conj(Z[k][i]). */
+    fmpz_mat_t Zr, Zi;
+    fmpz_mat_init(Zr, n, n);
+    fmpz_mat_init(Zi, n, n);
+    fmpq_t t;
+    fmpq_init(t);
+    fmpz_t L;
+    fmpz_init_set_ui(L, 1);
+    for (int i = 0; i < n; i++)
+        for (int j = i; j < n; j++) {
+            fmpq_add(t, fmpq_mat_entry(Ar, i, j), fmpq_mat_entry(Ar, j, i));
+            fmpq_set(fmpq_mat_entry(Ar, i, j), t);
+            fmpz_lcm(L, L, fmpq_denref(t));
+            if (cplx) {
+                fmpq_sub(t, fmpq_mat_entry(Ai, i, j), fmpq_mat_entry(Ai, j, i));
+                fmpq_set(fmpq_mat_entry(Ai, i, j), t);
+                fmpz_lcm(L, L, fmpq_denref(t));
+            }
+        }
+    if (sign < 0) fmpz_neg(L, L);
+    for (int i = 0; i < n; i++)
+        for (int j = i; j < n; j++) {
+            fmpq_mul_fmpz(t, fmpq_mat_entry(Ar, i, j), L);
+            fmpz_set(fmpz_mat_entry(Zr, i, j), fmpq_numref(t));
+            if (cplx) {
+                fmpq_mul_fmpz(t, fmpq_mat_entry(Ai, i, j), L);
+                fmpz_set(fmpz_mat_entry(Zi, i, j), fmpq_numref(t));
+            }
+        }
+    fmpq_clear(t);
+    fmpz_clear(L);
+    fmpq_mat_clear(Ar);
+    fmpq_mat_clear(Ai);
+
+    int result = -2;   /* undecided */
+
+    /* Certified fast "yes" for a real matrix: a ball Cholesky that succeeds
+     * proves definiteness (it fails on doubt, never on a wrong answer). */
+    if (!cplx && n > 4) {
+        arb_mat_t B, C;
+        arb_mat_init(B, n, n);
+        arb_mat_init(C, n, n);
+        for (int i = 0; i < n; i++)
+            for (int j = i; j < n; j++) {
+                arb_set_round_fmpz(arb_mat_entry(B, i, j), fmpz_mat_entry(Zr, i, j), 64);
+                arb_set(arb_mat_entry(B, j, i), arb_mat_entry(B, i, j));
+            }
+        if (arb_mat_cho(C, B, 64)) result = 1;
+        arb_mat_clear(B);
+        arb_mat_clear(C);
+    }
+
+    /* Exact Sylvester test: fraction-free (Bareiss) elimination without
+     * pivoting, whose k-th pivot is the k-th leading principal minor of Z;
+     * Z is positive definite iff every one is > 0.  Stops at the first
+     * failing minor. */
+    if (result == -2) {
+        fmpz_t prev, p, u, v;
+        fmpz_init_set_ui(prev, 1);
+        fmpz_init(p); fmpz_init(u); fmpz_init(v);
+        result = 1;
+        for (int k = 0; k < n; k++) {
+            fmpz_set(p, fmpz_mat_entry(Zr, k, k));
+            if (fmpz_sgn(p) <= 0) { result = 0; break; }
+            for (int i = k + 1; i < n; i++) {
+                /* conj(Z[k][i]) = (a, -b) */
+                const fmpz* a = fmpz_mat_entry(Zr, k, i);
+                const fmpz* b = fmpz_mat_entry(Zi, k, i);
+                for (int j = i; j < n; j++) {
+                    const fmpz* c = fmpz_mat_entry(Zr, k, j);
+                    const fmpz* d = fmpz_mat_entry(Zi, k, j);
+                    /* re: Zr p - (a c + b d) */
+                    fmpz_mul(u, fmpz_mat_entry(Zr, i, j), p);
+                    fmpz_submul(u, a, c);
+                    if (cplx) fmpz_submul(u, b, d);
+                    fmpz_divexact(fmpz_mat_entry(Zr, i, j), u, prev);
+                    if (cplx) {
+                        /* im: Zi p - (a d - b c) */
+                        fmpz_mul(v, fmpz_mat_entry(Zi, i, j), p);
+                        fmpz_submul(v, a, d);
+                        fmpz_addmul(v, b, c);
+                        fmpz_divexact(fmpz_mat_entry(Zi, i, j), v, prev);
+                    }
+                }
+            }
+            fmpz_swap(prev, p);
+        }
+        fmpz_clear(prev); fmpz_clear(p); fmpz_clear(u); fmpz_clear(v);
+    }
+    fmpz_mat_clear(Zr);
+    fmpz_mat_clear(Zi);
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
 /*  FLINT` context builtins                                            */
 /* ------------------------------------------------------------------ */
 
@@ -609,6 +738,7 @@ Expr** flint_mat_solve(Expr** fm, int r, int c, Expr** fb, int k) {
     (void)fm; (void)r; (void)c; (void)fb; (void)k; return NULL;
 }
 int flint_mat_rank(Expr** flat, int r, int c) { (void)flat; (void)r; (void)c; return -1; }
+int flint_mat_definite(Expr** flat, int n, int sign) { (void)flat; (void)n; (void)sign; return -1; }
 Expr** flint_mat_mul(Expr** fa, int r, int k, Expr** fb, int s) {
     (void)fa; (void)r; (void)k; (void)fb; (void)s; return NULL;
 }

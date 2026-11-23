@@ -364,89 +364,72 @@ static double* svdm_extract_R(const double* A, int lda,
     return R;
 }
 
-/* Build sigma_m = D1 . (0 R) as an Lm x Ln row-major Mathilda matrix.
- * D1 has structure:
- *   row i in [0, min(K, Lm)):       identity (picks up R[i, jp])
- *   row i in [K, min(K+L, Lm)):     scales row i of R by alpha[i]
- *   row i in [K+L, Lm):             all zero
- * Columns 0..(Ln-K-L-1) of sigma_m are always zero (the leading-zero
- * block of (0 R)).  alpha values are always real (LAPACK convention);
- * for complex R, the scaling is real x complex. */
-static Expr* svdm_build_sigma_m(const double* R, int kpl,
-                                 const double* alpha,
-                                 int Lm, int Ln, int K, int L,
-                                 bool is_complex)
+/* A rows x Ln generalised-singular-value matrix: [D, 0] where D1 (which == 0) has
+ * D1[i, i] = alpha[i] for i < min(rows, kpl) -- alpha[i] = 1 for i < K, by
+ * LAPACK's convention -- and D2 (which == 1) has D2[i, K + i] = beta[K + i]
+ * for i < min(L, rows) (beta[M..K+L-1] = 1 when M < K + L).  Both are real,
+ * non-negative and diagonal; the triangular factor R goes into v instead
+ * (audit SingularValueDecomposition#1: it was folded into these, giving
+ * upper-triangular "sigma" matrices with negative entries). */
+static Expr* svdm_build_gsv_diag(const double* ab, int rows, int kpl, int Ln,
+                                  int K, int L, int which, bool is_complex)
 {
-    int zero_cols = Ln - kpl;
-    int row_K  = (K     < Lm) ? K     : Lm;
-    int row_KL = (K + L < Lm) ? K + L : Lm;
-    size_t stride = is_complex ? 2 : 1;
-
-    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)Lm);
-    for (int i = 0; i < Lm; i++) {
-        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)Ln);
-        for (int j = 0; j < Ln; j++) {
-            double val_re = 0.0, val_im = 0.0;
-            if (j >= zero_cols) {
-                int jp = j - zero_cols;
-                size_t r_off = stride * ((size_t)i + (size_t)jp * (size_t)kpl);
-                if (i < row_K) {
-                    val_re = R[r_off];
-                    if (is_complex) val_im = R[r_off + 1];
-                } else if (i < row_KL) {
-                    val_re = alpha[i] * R[r_off];
-                    if (is_complex) val_im = alpha[i] * R[r_off + 1];
-                }
-            }
-            elems[j] = svdm_scalar(val_re, val_im, is_complex);
-        }
-        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
-                                      elems, (size_t)Ln);
+    Expr** row_exprs = (Expr**)malloc(sizeof(Expr*) * (size_t)(rows > 0 ? rows : 1));
+    for (int i = 0; i < rows; i++) {
+        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)(Ln > 0 ? Ln : 1));
+        int col = -1;
+        double val = 0.0;
+        if (which == 0 && i < kpl) { col = i; val = ab[i]; }
+        if (which == 1 && i < L)   { col = K + i; val = ab[K + i]; }
+        for (int j = 0; j < Ln; j++)
+            elems[j] = svdm_scalar(j == col ? val : 0.0, 0.0, false);
+        row_exprs[i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)Ln);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
-                                  rows, (size_t)Lm);
-    free(rows);
+    (void)is_complex;
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
+    free(row_exprs);
     return m;
 }
 
-/* Build sigma_a = D2 . (0 R) as an Lp x Ln row-major Mathilda matrix.
- * D2 has only one nonzero per row: D2[i, K+i] = beta[K+i] for i in
- * [0, L) and zero elsewhere (works uniformly across both M >= K+L and
- * M < K+L cases because LAPACK fills beta[M..K+L-1] = 1 in the
- * second case, which is exactly the identity-block value).  beta is
- * always real; R may be complex. */
-static Expr* svdm_build_sigma_a(const double* R, int kpl,
-                                 const double* beta,
-                                 int Lp, int Ln, int K, int L,
-                                 bool is_complex)
+/* v = Q . X^H with X = {{0, R}, {I, 0}} (Ln x Ln), so that
+ * m == u . [D1, 0] . ConjugateTranspose[v] (LAPACK: A = U D1 (0 R) Q^H, and
+ * (0 R) = [I_kpl, 0] . X).  Q is Ln x Ln and R kpl x kpl, both column-major;
+ * the result is column-major Ln x Ln: its first kpl columns are Q (0 R)^H,
+ * the rest the leading Ln - kpl columns of Q.  v is not unitary for a
+ * generalised SVD. */
+static double* svdm_gsv_v(const double* Q, int Ln, const double* R, int kpl,
+                          bool is_complex)
 {
-    int zero_cols = Ln - kpl;
-    int row_L = (L < Lp) ? L : Lp;
     size_t stride = is_complex ? 2 : 1;
-
-    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)Lp);
-    for (int i = 0; i < Lp; i++) {
-        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)Ln);
-        for (int j = 0; j < Ln; j++) {
-            double val_re = 0.0, val_im = 0.0;
-            if (j >= zero_cols && i < row_L) {
-                int jp = j - zero_cols;
-                size_t r_off = stride * ((size_t)(K + i)
-                                          + (size_t)jp * (size_t)kpl);
-                val_re = beta[K + i] * R[r_off];
-                if (is_complex) val_im = beta[K + i] * R[r_off + 1];
-            }
-            elems[j] = svdm_scalar(val_re, val_im, is_complex);
+    int zero_cols = Ln - kpl;
+    double* V = (double*)calloc(stride * (size_t)Ln * (size_t)(Ln > 0 ? Ln : 1),
+                                sizeof(double));
+    if (!V) return NULL;
+    for (int c = 0; c < Ln; c++)
+        for (int r = 0; r < zero_cols; r++) {
+            size_t vo = stride * ((size_t)c + (size_t)(kpl + r) * (size_t)Ln);
+            size_t qo = stride * ((size_t)c + (size_t)r * (size_t)Ln);
+            V[vo] = Q[qo];
+            if (is_complex) V[vo + 1] = Q[qo + 1];
         }
-        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
-                                      elems, (size_t)Ln);
-        free(elems);
-    }
-    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
-                                  rows, (size_t)Lp);
-    free(rows);
-    return m;
+    for (int c = 0; c < Ln; c++)
+        for (int r = 0; r < kpl; r++) {
+            double sr = 0.0, si = 0.0;
+            for (int jp = r; jp < kpl; jp++) {          /* R upper triangular */
+                size_t ro = stride * ((size_t)r + (size_t)jp * (size_t)kpl);
+                size_t qo = stride * ((size_t)c + (size_t)(zero_cols + jp) * (size_t)Ln);
+                if (!is_complex) { sr += R[ro] * Q[qo]; continue; }
+                /* conj(R[r, jp]) * Q[c, zero_cols + jp] */
+                double a = R[ro], b = -R[ro + 1], x = Q[qo], y = Q[qo + 1];
+                sr += a * x - b * y;
+                si += a * y + b * x;
+            }
+            size_t vo = stride * ((size_t)c + (size_t)r * (size_t)Ln);
+            V[vo] = sr;
+            if (is_complex) V[vo + 1] = si;
+        }
+    return V;
 }
 
 /* Generalized-SVD entry.  Loads {m, a}, calls dggsvd3 or zggsvd3 based
@@ -526,15 +509,18 @@ static Expr* svdm_dispatch_generalized(const SvdArgs* args,
     }
     int kpl = K + L;
 
+    double* Vg = svdm_gsv_v(Q, Ln, R, kpl, is_complex);
+    if (!Vg) {
+        free(U); free(V); free(Q); free(R); free(alpha); free(beta);
+        return NULL;
+    }
     Expr* u_mat   = svdm_wrap_cm(U, Lm, Lm, ldu, is_complex, false);
     Expr* ua_mat  = svdm_wrap_cm(V, Lp, Lp, ldv, is_complex, false);
-    Expr* v_mat   = svdm_wrap_cm(Q, Ln, Ln, ldq, is_complex, false);
-    Expr* sigma_m = svdm_build_sigma_m(R, kpl, alpha, Lm, Ln, K, L,
-                                         is_complex);
-    Expr* sigma_a = svdm_build_sigma_a(R, kpl, beta,  Lp, Ln, K, L,
-                                         is_complex);
+    Expr* v_mat   = svdm_wrap_cm(Vg, Ln, Ln, Ln, is_complex, false);
+    Expr* sigma_m = svdm_build_gsv_diag(alpha, Lm, kpl, Ln, K, L, 0, is_complex);
+    Expr* sigma_a = svdm_build_gsv_diag(beta,  Lp, kpl, Ln, K, L, 1, is_complex);
 
-    free(U); free(V); free(Q); free(R); free(alpha); free(beta);
+    free(U); free(V); free(Q); free(R); free(Vg); free(alpha); free(beta);
 
     Expr** u_pair_args = (Expr**)malloc(sizeof(Expr*) * 2);
     u_pair_args[0] = u_mat;  u_pair_args[1] = ua_mat;

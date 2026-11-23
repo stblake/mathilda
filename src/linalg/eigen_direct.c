@@ -3558,10 +3558,45 @@ void schur_compute_eigvecs_M(const mpfr_t* H, const mpfr_t* Q, size_t n,
     mpfr_init2(s_re,  bits); mpfr_init2(s_im,  bits);
     mpfr_init2(prod,  bits); mpfr_init2(abs_b, bits);
 
+    /* Residual floor for the Schur-space check below: 2^(-bits/2) max|H|. */
+    mpfr_t hmax, res_tol, r;
+    mpfr_init2(hmax, bits); mpfr_init2(res_tol, bits); mpfr_init2(r, bits);
+    mpfr_set_zero(hmax, 1);
+    for (size_t i = 0; i < n * n; i++) {
+        mpfr_abs(r, H[i], MPFR_RNDN);
+        if (mpfr_cmp(r, hmax) > 0) mpfr_set(hmax, r, MPFR_RNDN);
+    }
+    mpfr_div_2si(res_tol, hmax, (long)(bits / 2), MPFR_RNDN);
+    char* defective = (char*)calloc(n, 1);
+
     size_t k = 0;
     while (k < n) {
         if (mpfr_zero_p(eval_im[k])) {
             schur_eigvec_real_M(H, n, bits, k, eval_re[k], v_schur_re);
+            /* A defective eigenvalue (a Jordan block) has no eigenvector with
+             * y_k = 1: the back substitution meets a zero pivot with a
+             * nonzero right side and its y solves nothing.  Check
+             * H y = lambda y (|y| >= 1, y_k = 1) and emit a zero vector, as
+             * the exact path pads; before, N[{{1,1},{0,1}},20] returned the
+             * identity basis, {0, 1} not an eigenvector (audit Eigensystem#1). */
+            mpfr_set_ui(s_im, 1, MPFR_RNDN);             /* max(1, max|y|) */
+            for (size_t i = 0; i <= k; i++) {
+                mpfr_abs(r, v_schur_re[i], MPFR_RNDN);
+                if (mpfr_cmp(r, s_im) > 0) mpfr_set(s_im, r, MPFR_RNDN);
+            }
+            mpfr_mul(s_im, s_im, res_tol, MPFR_RNDN);
+            for (size_t i = 0; i <= k && !defective[k]; i++) {
+                mpfr_mul(r, eval_re[k], v_schur_re[i], MPFR_RNDN);
+                mpfr_neg(r, r, MPFR_RNDN);
+                for (size_t j = (i > 0 ? i - 1 : 0); j <= k; j++) {
+                    mpfr_mul(prod, H[i * n + j], v_schur_re[j], MPFR_RNDN);
+                    mpfr_add(r, r, prod, MPFR_RNDN);
+                }
+                mpfr_abs(r, r, MPFR_RNDN);
+                if (mpfr_cmp(r, s_im) > 0) defective[k] = 1;
+            }
+            if (defective[k])
+                for (size_t i = 0; i < n; i++) mpfr_set_zero(v_schur_re[i], 1);
             for (size_t i = 0; i < n; i++) {
                 mpfr_set_zero(s_re, 1);
                 for (size_t j = 0; j <= k; j++) {
@@ -3632,6 +3667,28 @@ void schur_compute_eigvecs_M(const mpfr_t* H, const mpfr_t* Q, size_t n,
             k += 2;
         }
     }
+
+    /* A zero (defective) vector goes after the true eigenvectors of the same
+     * eigenvalue, as the exact path orders them: bubble it past each later
+     * sorted neighbour whose eigenvalue matches within the residual floor. */
+    for (bool moved = true; moved; ) {
+        moved = false;
+        for (size_t p = 0; p + 1 < n; p++) {
+            size_t a = perm[p], b = perm[p + 1];
+            if (!defective[a] || defective[b] || !mpfr_zero_p(eval_im[b])) continue;
+            mpfr_sub(r, eval_re[a], eval_re[b], MPFR_RNDN);
+            mpfr_abs(r, r, MPFR_RNDN);
+            if (mpfr_cmp(r, res_tol) > 0 || !mpfr_zero_p(eval_im[a])) continue;
+            for (size_t i = 0; i < n; i++) {
+                mpfr_swap(V_re[p * n + i], V_re[(p + 1) * n + i]);
+                mpfr_swap(V_im[p * n + i], V_im[(p + 1) * n + i]);
+            }
+            defective[a] = 0; defective[b] = 1;   /* the flag follows the zero row */
+            moved = true;
+        }
+    }
+    free(defective);
+    mpfr_clear(hmax); mpfr_clear(res_tol); mpfr_clear(r);
 
     mpfr_array_free(v_schur_re, n); mpfr_array_free(v_schur_im, n);
     mpfr_array_free(w_re, n);       mpfr_array_free(w_im, n);

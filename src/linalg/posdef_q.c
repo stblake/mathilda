@@ -14,6 +14,12 @@
  * matrix is positive definite, so the predicate is exactly that test.
  * When USE_LAPACK is unavailable we fall back to an in-house Cholesky.
  *
+ * Exact input (every entry Integer / Rational / Complex of those) never
+ * reaches the double buffer: flint_mat_definite decides it exactly by
+ * Sylvester's criterion (fraction-free elimination of the Hermitian part).
+ * Rounding made {{10^16, 10^16+1}, {10^16+1, 10^16+2}} (det -1) positive
+ * definite and lost 10^-400 / 10^400 entries to 0 / Inf.
+ *
  * For symbolic / non-numeric input we return False -- "explicitly
  * positive definite" follows the Mathematica convention that the
  * predicate refuses to make claims it cannot prove.
@@ -32,6 +38,7 @@
 #include "sym_names.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "numeric.h"
+#include "flint_mat_bridge.h"
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -101,6 +108,20 @@ static bool pdq_leaf_to_double(Expr* e, double* out_re, double* out_im) {
         default:
             return false;
     }
+}
+
+/* True iff the numeric leaf `e` (already accepted by pdq_leaf_to_double)
+ * is inexact: a machine or MPFR Real, or a Complex with an inexact part. */
+static bool pdq_leaf_inexact(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex)
+        for (size_t k = 0; k < e->data.function.arg_count; k++)
+            if (pdq_leaf_inexact(e->data.function.args[k])) return true;
+    return false;
 }
 
 /* In-house Cholesky for a real symmetric n x n matrix laid out
@@ -199,7 +220,7 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
 
     /* Probe numericity and detect whether any entry is non-real.  Any
      * non-coercible leaf flips us into the "symbolic -> False" branch. */
-    bool is_complex = false;
+    bool is_complex = false, exact = true;
     for (int i = 0; i < n; i++) {
         Expr* row = m->data.function.args[i];
         for (int j = 0; j < n; j++) {
@@ -208,6 +229,24 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
                 return expr_new_symbol(SYM_False);
             }
             if (im != 0.0) is_complex = true;
+            if (exact && pdq_leaf_inexact(row->data.function.args[j])) exact = false;
+        }
+    }
+
+    /* Exact input is decided exactly (Sylvester's criterion over Q(i)).
+     * Rounding to double decided {{10^16, 10^16+1}, {10^16+1, 10^16+2}}
+     * (det -1) definite, and lost 10^-400 / 10^400 entries to 0 / Inf (audit
+     * PositiveDefiniteMatrixQ#1, NegativeDefiniteMatrixQ#2). */
+    if (exact) {
+        Expr** flat = (Expr**)malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
+        if (flat) {
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    flat[(size_t)i * (size_t)n + (size_t)j] =
+                        m->data.function.args[i]->data.function.args[j];
+            int r = flint_mat_definite(flat, n, 1);
+            free(flat);
+            if (r >= 0) return expr_new_symbol(r ? SYM_True : SYM_False);
         }
     }
 

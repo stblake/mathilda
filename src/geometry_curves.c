@@ -377,12 +377,105 @@ Expr* geom_curved_centroid(const Expr* region) {
  * for a symbolic one, NULL otherwise. */
 static Expr* gc_member_point(const GcAnnulus* A, const Expr* p);
 
+/* A Disk as an annulus with no inner radius (r1 == NULL): Disk[], Disk[c],
+ * Disk[c, r], Disk[c, r, {t1, t2}].  `own` receives the defaults it had to
+ * build (the origin, the unit radius), freed by the caller.  An elliptical
+ * disk is not one (see geom_curved_member). */
+static bool gc_disk_as_annulus(const Expr* d, GcAnnulus* out, Expr** own) {
+    own[0] = own[1] = NULL;
+    size_t n = gc_len(d);
+    if (!head_is(d, SYM_Disk) || n > 3) return false;
+    if (n >= 1) {
+        out->c = gc_at(d, 0);
+        if (!head_is(out->c, SYM_List) || gc_len(out->c) != 2) return false;
+    } else {
+        out->c = own[0] = gc_fn2(SYM_List, expr_new_integer(0), expr_new_integer(0));
+    }
+    if (n >= 2) {
+        out->r2 = gc_at(d, 1);
+        if (head_is(out->r2, SYM_List)) { expr_free(own[0]); own[0] = NULL; return false; }
+    } else {
+        out->r2 = own[1] = expr_new_integer(1);
+    }
+    out->r1 = NULL;
+    out->t1 = out->t2 = NULL;
+    if (n == 3) {
+        const Expr* th = gc_at(d, 2);
+        if (!head_is(th, SYM_List) || gc_len(th) != 2) {
+            expr_free(own[0]); expr_free(own[1]); own[0] = own[1] = NULL;
+            return false;
+        }
+        out->t1 = gc_at(th, 0);
+        out->t2 = gc_at(th, 1);
+    }
+    return true;
+}
+
+/* A list of points {p1, p2, ...} (every element a List): RegionMember maps
+ * over it (audit RegionMember#1 -- a two-point list was read as one point
+ * whose coordinates are points). */
+static bool gc_is_point_list(const Expr* q) {
+    if (!head_is(q, SYM_List) || gc_len(q) == 0) return false;
+    for (size_t i = 0; i < gc_len(q); i++)
+        if (!head_is(gc_at(q, i), SYM_List)) return false;
+    return true;
+}
+
 Expr* geom_curved_member(const Expr* region, const Expr* p) {
     GcAnnulus A;
-    if (!gc_annulus(region, &A)) return NULL;
+    Expr* own[2] = { NULL, NULL };
+    if (!gc_annulus(region, &A)) {
+        /* Disk: as an annulus without an inner radius (audit RegionMember#2);
+         * an ellipse Disk[c, {rx, ry}] by scaling the point onto the unit
+         * disk (a sector of an ellipse is left to the caller). */
+        if (head_is(region, SYM_Disk) && gc_len(region) == 2
+            && head_is(gc_at(region, 1), SYM_List)) {
+            const Expr* rr = gc_at(region, 1);
+            const Expr* c = gc_at(region, 0);
+            if (gc_len(rr) != 2 || !head_is(c, SYM_List) || gc_len(c) != 2) return NULL;
+            Expr* q = gc_unpack(p);
+            Expr* r = NULL;
+            if (gc_is_point_list(q)) {
+                size_t k = gc_len(q);
+                Expr** items = malloc(sizeof(Expr*) * k);
+                for (size_t i = 0; i < k; i++)
+                    items[i] = gc_fn2("RegionMember", gc_c(region), gc_c(gc_at(q, i)));
+                r = gc_ev(gc_fn(SYM_List, items, k));
+                free(items);
+            } else if (head_is(q, SYM_List) && gc_len(q) == 2) {
+                Expr* u = gc_fn2(SYM_List,
+                    gc_mul(gc_sub(gc_c(gc_at(q, 0)), gc_c(gc_at(c, 0))),
+                           gc_fn2(SYM_Power, gc_c(gc_at(rr, 0)), expr_new_integer(-1))),
+                    gc_mul(gc_sub(gc_c(gc_at(q, 1)), gc_c(gc_at(c, 1))),
+                           gc_fn2(SYM_Power, gc_c(gc_at(rr, 1)), expr_new_integer(-1))));
+                Expr* ue = gc_ev(u);
+                Expr* unit = gc_fn(SYM_Disk, NULL, 0);
+                if (gc_disk_as_annulus(unit, &A, own)) r = gc_member_point(&A, ue);
+                expr_free(own[0]); expr_free(own[1]);
+                expr_free(unit);
+                expr_free(ue);
+            }
+            expr_free(q);
+            return r;
+        }
+        if (!gc_disk_as_annulus(region, &A, own)) return NULL;
+    }
     Expr* q = gc_unpack(p);                /* a packed point is an NDArray node */
-    Expr* r = gc_member_point(&A, q);
+    Expr* r;
+    if (gc_is_point_list(q)) {
+        size_t k = gc_len(q);
+        Expr** items = malloc(sizeof(Expr*) * k);
+        for (size_t i = 0; i < k; i++) {
+            items[i] = gc_member_point(&A, gc_at(q, i));
+            if (!items[i]) items[i] = gc_fn2("RegionMember", gc_c(region), gc_c(gc_at(q, i)));
+        }
+        r = gc_fn(SYM_List, items, k);
+        free(items);
+    } else {
+        r = gc_member_point(&A, q);
+    }
     expr_free(q);
+    expr_free(own[0]); expr_free(own[1]);
     return r;
 }
 
@@ -392,8 +485,10 @@ static Expr* gc_member_point(const GcAnnulus* Ap, const Expr* p) {
     Expr* dx = gc_sub(gc_c(gc_at(p, 0)), gc_c(gc_at(A.c, 0)));
     Expr* dy = gc_sub(gc_c(gc_at(p, 1)), gc_c(gc_at(A.c, 1)));
     Expr* rho2 = gc_ev(gc_add(gc_sq(dx), gc_sq(dy)));
-    Expr* radial = gc_ev(gc_fn(SYM_LessEqual,
-        (Expr*[]){ gc_ev(gc_sq(gc_c(A.r1))), gc_c(rho2), gc_ev(gc_sq(gc_c(A.r2))) }, 3));
+    Expr* radial = A.r1
+        ? gc_ev(gc_fn(SYM_LessEqual,
+              (Expr*[]){ gc_ev(gc_sq(gc_c(A.r1))), gc_c(rho2), gc_ev(gc_sq(gc_c(A.r2))) }, 3))
+        : gc_ev(gc_fn2(SYM_LessEqual, gc_c(rho2), gc_ev(gc_sq(gc_c(A.r2)))));   /* a disk */
     bool numeric = expr_is_numeric_quantity(gc_at(p, 0)) && expr_is_numeric_quantity(gc_at(p, 1));
     if (!numeric) {
         expr_free(rho2);

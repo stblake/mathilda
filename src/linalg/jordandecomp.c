@@ -248,15 +248,19 @@ static bool jd_num_key(Expr* lambda, double* out) {
  * Returns false and leaves outputs untouched on failure. */
 static bool jd_collect_eigenvalues(Expr* m, int n,
                                    Expr*** out_lams, int** out_mult, int* out_nd) {
-    const char* lam = eigen_lambda_name();
-    Expr* poly = eigen_char_poly_faddeev(m, lam, n);
-    if (!poly) return false;
-    Expr* sols = eigen_solve_poly(poly, lam, false, false);
-    expr_free(poly);
-    if (!sols) return false;
-    size_t vc = 0;
-    Expr** vals = eigen_extract_values(sols, &vc);
-    expr_free(sols);
+    size_t vc = (size_t)n;
+    Expr** vals = eigen_triangular_values(m, n);
+    if (!vals) {
+        const char* lam = eigen_lambda_name();
+        Expr* poly = eigen_char_poly_faddeev(m, lam, n);
+        if (!poly) return false;
+        Expr* sols = eigen_solve_poly(poly, lam, false, false);
+        expr_free(poly);
+        if (!sols) return false;
+        vc = 0;
+        vals = eigen_extract_values(sols, &vc);
+        expr_free(sols);
+    }
     if (!vals || vc == 0) { free(vals); return false; }
 
     Expr** lams = (Expr**)malloc(sizeof(Expr*) * vc);

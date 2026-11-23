@@ -2996,6 +2996,10 @@ Out[13]= 0.5
 - Integer weights give an Integer; Rational or Real weights give a Real (as
   the reference); a negative or symbolic weight leaves the call unevaluated.
   Computation is exact in int64 (reals scaled by a common power of two).
+  Capacities too far apart for one int64 scale (`1.*^20` beside `1.`) are
+  clamped to just above the computed value and re-scaled until the small ones
+  are exact -- the clamp leaves every minimum cut unchanged -- so they are
+  never rounded to 0 (audit FindMaximumFlow#1, FindMinimumCut#1).
 - Algorithms: Nagamochi-Ibaraki for undirected global minimum cuts
   (maximum-adjacency orders that contract every edge whose attachment reaches
   the current bound, not one pair per phase as in Stoer-Wagner); `2(n-1)`

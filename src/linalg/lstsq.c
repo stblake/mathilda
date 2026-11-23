@@ -610,8 +610,8 @@ static Expr* iter_refine_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
  * rank-deficient), the loop maintains
  *
  *     r = b - A x       (residual in R^m)
- *     s = A^T r          (gradient in R^n)
- *     p                  (search direction in R^n)
+ *     s = A^H r          (gradient; A^H = ConjugateTranspose[A])
+ *     p                  (search direction)
  *     gamma = |s|^2      (squared gradient norm, monitored for exit)
  *
  * and at each step computes
@@ -636,6 +636,20 @@ static Expr* iter_refine_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
  * cleanup at the bottom frees exactly the four live vectors r, s, p, and
  * gamma.  x is consumed by the caller's return path.
  * ------------------------------------------------------------------ */
+/* Squared norm <v, v> = Re[Conjugate[v] . v] of a CGLS vector.  The plain
+ * v . v is the bilinear form, which over complex data is neither real nor a
+ * norm: Krylov/LSQR on a complex matrix converged to the solution of
+ * A^T A x = A^T b, or (machine complex) exited at x = 0 (audit
+ * LeastSquares#1, #2).  For real data Conjugate and Re are identities. */
+static Expr* cgls_herm_norm2(Expr* v) {
+    Expr* cv = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_Conjugate), (Expr*[]){expr_copy(v)}, 1));
+    Expr* d = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_Dot), (Expr*[]){cv, expr_copy(v)}, 2));
+    return eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_Re), (Expr*[]){d}, 1));
+}
+
 static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
                                     int max_iter,
                                     bool tol_is_automatic, double tol_val) {
@@ -663,10 +677,8 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
 
     Expr* p = expr_copy(s);
 
-    /* gamma = s . s */
-    Expr* gamma = eval_and_free(expr_new_function(
-        expr_new_symbol(SYM_Dot),
-        (Expr*[]){expr_copy(s), expr_copy(s)}, 2));
+    /* gamma = <s, s> */
+    Expr* gamma = cgls_herm_norm2(s);
 
     for (int k = 0; k < max_iter; k++) {
         if (norm_squared_below(gamma, tol_sq)) break;
@@ -676,10 +688,8 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
             expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(m), expr_copy(p)}, 2));
 
-        /* qq = q . q */
-        Expr* qq = eval_and_free(expr_new_function(
-            expr_new_symbol(SYM_Dot),
-            (Expr*[]){expr_copy(q), expr_copy(q)}, 2));
+        /* qq = <q, q> */
+        Expr* qq = cgls_herm_norm2(q);
 
         /* Null-direction guard: at the LS solution of a rank-deficient
          * system the next p lies in null(A) and q vanishes exactly. */
@@ -725,10 +735,8 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
             expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(mt), expr_copy(r)}, 2));
 
-        /* gamma_new = s_new . s_new */
-        Expr* gamma_new = eval_and_free(expr_new_function(
-            expr_new_symbol(SYM_Dot),
-            (Expr*[]){expr_copy(s_new), expr_copy(s_new)}, 2));
+        /* gamma_new = <s_new, s_new> */
+        Expr* gamma_new = cgls_herm_norm2(s_new);
 
         /* beta = gamma_new / gamma  (gamma consumed here) */
         Expr* inv_gamma = eval_and_free(expr_new_function(
@@ -769,9 +777,10 @@ static Expr* cgls_solve(Expr* m, Expr* b,
     int n = (int)m_dims[1];
     int max_iter = 2 * n + 10;
 
-    /* mt = Transpose[m] shared across every RHS column. */
+    /* mt = ConjugateTranspose[m] (the adjoint: s = A^H r is the gradient
+     * of |b - A x|^2 over complex data) shared across every RHS column. */
     Expr* mt = eval_and_free(expr_new_function(
-        expr_new_symbol(SYM_Transpose),
+        expr_new_symbol(SYM_ConjugateTranspose),
         (Expr*[]){expr_copy(m)}, 1));
     if (!mt) return NULL;
 

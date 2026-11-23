@@ -86,6 +86,17 @@ Expr** flint_mat_solve(Expr** flat_m, int r, int c, Expr** flat_b, int k);
 int flint_mat_rank(Expr** flat, int r, int c);
 
 /*
+ * Exact definiteness of the n x n matrix `flat` (row-major) whose entries are
+ * all Integer / Rational or Complex of those: is the Hermitian part
+ * (m + ConjugateTranspose[m]) / 2 positive definite (sign > 0) or negative
+ * definite (sign < 0)?  Decided by Sylvester's criterion through fraction-free
+ * elimination (a certified ball Cholesky answers "yes" first for a real
+ * matrix).  Returns 1 / 0, or -1 when an entry is not exact numeric, n <= 0,
+ * or FLINT is absent.  Does not take ownership of `flat`.
+ */
+int flint_mat_definite(Expr** flat, int n, int sign);
+
+/*
  * Product of an r×k and a k×s matrix (row-major flats) when every entry is
  * integer-like or Rational, via fmpq_mat_mul (one common denominator, then a
  * multimodular integer product).  Returns a malloc'd Expr** of length r*s

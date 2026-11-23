@@ -90,15 +90,78 @@ static Expr** eigen_apply_k_spec(Expr** vals, size_t count, Expr* k_spec,
  * caller owns the entries and the array.  *out_count is set to n on success
  * or to 0 if the calculation cannot be completed (caller should leave the
  * outer Eigenvalues call unevaluated). */
+static Expr* eigen_mk1(const char* h, Expr* x) {
+    return eval_and_free(expr_new_function(expr_new_symbol(h), (Expr*[]){ x }, 1));
+}
+static Expr* eigen_mk2(const char* h, Expr* x, Expr* y) {
+    return eval_and_free(expr_new_function(expr_new_symbol(h), (Expr*[]){ x, y }, 2));
+}
+static bool eigen_is_list_of(const Expr* e, size_t len) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List
+        && (len == (size_t)-1 || e->data.function.arg_count == len);
+}
+
+/* The generalised eigenvalues of a SINGULAR pencil, det(m - lambda a) == 0
+ * identically, whose singularity is a null space shared by m and a (on both
+ * sides): d = dim of that space eigenvalues are Indeterminate, and the rest
+ * are those of the pencil deflated onto complements of it, W.m.P and W.a.P.
+ * {Infinity, ...} for {{{1,2},{2,4}}, {{1,2},{2,4}}} claimed a.v = 0 with
+ * m.v != 0, impossible when a == m (audit Eigenvalues#1).  NULL when the
+ * left and right shared null spaces differ in dimension or the deflated
+ * pencil is itself singular (the call is then left unevaluated). */
+static Expr** eigen_singular_pencil(Expr* m, Expr* a, int64_t n, size_t* out_count) {
+    *out_count = 0;
+    Expr* right = eigen_mk1(SYM_NullSpace,
+        eigen_mk2(SYM_Join, expr_copy(m), expr_copy(a)));
+    Expr* left = eigen_mk1(SYM_NullSpace,
+        eigen_mk2(SYM_Join, eigen_mk1(SYM_Transpose, expr_copy(m)),
+                            eigen_mk1(SYM_Transpose, expr_copy(a))));
+    Expr** vals = NULL;
+    if (eigen_is_list_of(right, (size_t)-1) && eigen_is_list_of(left, (size_t)-1)
+        && right->data.function.arg_count > 0
+        && right->data.function.arg_count == left->data.function.arg_count) {
+        size_t d = right->data.function.arg_count;
+        Expr* vals_r = NULL;
+        if ((int64_t)d < n) {
+            /* complements: the null space of Conjugate[N] meets span(N^T) only in 0 */
+            Expr* P = eigen_mk1(SYM_Transpose,
+                eigen_mk1(SYM_NullSpace, eigen_mk1(SYM_Conjugate, expr_copy(right))));
+            Expr* W = eigen_mk1(SYM_NullSpace, eigen_mk1(SYM_Conjugate, expr_copy(left)));
+            Expr* mr = eigen_mk2(SYM_Dot, expr_copy(W), eigen_mk2(SYM_Dot, expr_copy(m), expr_copy(P)));
+            Expr* ar = eigen_mk2(SYM_Dot, W, eigen_mk2(SYM_Dot, expr_copy(a), P));
+            vals_r = eigen_mk1(SYM_Eigenvalues,
+                expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ mr, ar }, 2));
+        } else {
+            vals_r = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        }
+        if (eigen_is_list_of(vals_r, (size_t)(n - (int64_t)d))) {
+            vals = malloc(sizeof(Expr*) * (size_t)n);
+            size_t k = 0;
+            for (; k < vals_r->data.function.arg_count; k++)
+                vals[k] = expr_copy(vals_r->data.function.args[k]);
+            for (; k < (size_t)n; k++) vals[k] = expr_new_symbol(SYM_Indeterminate);
+            *out_count = (size_t)n;
+        }
+        expr_free(vals_r);
+    }
+    expr_free(right);
+    expr_free(left);
+    return vals;
+}
+
 static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
                                               int64_t n,
                                               bool cubics_radical,
                                               bool quartics_radical,
+                                              bool deflate_singular,
                                               size_t* out_count) {
     *out_count = 0;
     const char* lam = eigen_lambda_name();
     Expr* poly;
     if (a == NULL) {
+        Expr** tri = eigen_triangular_values(m, (int)n);
+        if (tri) { *out_count = (size_t)n; return tri; }
         /* Ordinary case: Faddeev-Leverrier in O(n^4) matrix multiplications.
          * Far cheaper than Laplace expansion of the polynomial-entry
          * matrix det(m − λI) (which is O(n!)) once n grows past ~8. */
@@ -113,6 +176,15 @@ static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
         Expr* M = eigen_build_lambda_matrix(m, a, lam, n);
         poly = eigen_compute_det(M, (int)n);
         expr_free(M);
+        if (deflate_singular && poly) {
+            Expr* z = eigen_mk1(SYM_Expand, expr_copy(poly));
+            bool zero = z && z->type == EXPR_INTEGER && z->data.integer == 0;
+            expr_free(z);
+            if (zero) {
+                expr_free(poly);
+                return eigen_singular_pencil(m, a, n, out_count);
+            }
+        }
     }
 
     Expr* sols = eigen_solve_poly(poly, lam,
@@ -218,7 +290,7 @@ Expr* builtin_eigenvalues(Expr* res) {
 
     size_t val_count = 0;
     Expr** vals = eigen_compute_eigenvalues_full(m, a, n,
-        opts.cubics_radical, opts.quartics_radical, &val_count);
+        opts.cubics_radical, opts.quartics_radical, true, &val_count);
     if (!vals || val_count == 0) {
         free(vals);
         return NULL;
@@ -418,7 +490,7 @@ static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
     /* Compute eigenvalues in the same arithmetic form as the matrix. */
     size_t val_count = 0;
     Expr** vals = eigen_compute_eigenvalues_full(m, a, n,
-        opts.cubics_radical, opts.quartics_radical, &val_count);
+        opts.cubics_radical, opts.quartics_radical, false, &val_count);
     if (!vals || val_count == 0) {
         free(vals);
         if (m_rat) expr_free(m_rat);

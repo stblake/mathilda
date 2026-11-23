@@ -92,11 +92,63 @@ static void test_circulant_graph_dedup_before_cap(void) {
     audit_chk("CirculantGraph#1", "EdgeList[CirculantGraph[4, 2]]", "{1 <-> 3, 2 <-> 4}");
 }
 
+/* FindMaximumFlow#1 (high): "Small capacities next to a very large one are
+ * rounded to 0, giving max flow 0.0".  On a path the maximum flow is the
+ * bottleneck capacity. */
+static void test_max_flow_wide_range(void) {
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {1.*^20, 1.}]", "1.0");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {1.*^20, 3.}]", "3.0");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {2^63, 5}]", "5");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, VertexCapacity -> {1.*^20, 1., 5.}]", "1.0");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {1.*^300, 1.*^-300}]", "1.0*^-300");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {Infinity, 1.*^-300}]", "1.0*^-300");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, \"FlowMatrix\", EdgeCapacity -> {1.*^20, 1.}]",
+              "{{0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {0.0, 0.0, 0.0}}");
+    /* an integer network whose capacity sum overflows int64 is exact while
+     * the flow itself fits (min cut {7, 10^18}) */
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3, 1 -> 3}], 1, 3, EdgeCapacity -> {10^30, 7, 10^18}]",
+              "1000000000000000007");
+    /* against the same network with the small capacities scaled to integers
+     * (exact) and the large ones lowered (they are not on the minimum cut) */
+    audit_run("SeedRandom[7]; mfg = RandomGraph[{30, 120}]; "
+              "mfd = Graph[VertexList[mfg], DirectedEdge @@@ EdgeList[mfg]]; "
+              "mfc = RandomChoice[{1., 1.*^18, 3.5, 1.*^-5}, EdgeCount[mfd]]");
+    audit_true("FindMaximumFlow#1",
+               "Abs[FindMaximumFlow[mfd, 1, 30, EdgeCapacity -> mfc] - "
+               "FindMaximumFlow[mfd, 1, 30, EdgeCapacity -> Round[10^5 (mfc /. 1.*^18 -> 10.^6)]]/10^5] < 10^-12");
+    /* sanity */
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {3, 5}]", "3");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {0.5, 2.25}]", "0.5");
+    audit_chk("FindMaximumFlow#1", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {Infinity, Infinity}]", "Infinity");
+}
+
+/* FindMinimumCut#1 (high): "FindMinimumCut returns cut value 0.0 when real
+ * weights span a wide range"; #2 is the same rounding for a tiny weight. */
+static void test_min_cut_wide_range(void) {
+    audit_chk("FindMinimumCut#1", "FindMinimumCut[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {1.*^20, 1.}]]",
+              "{1.0, {{3}, {1, 2}}}");
+    audit_chk("FindMinimumCut#1", "FindMinimumCut[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {1.*^-20, 3.}]]",
+              "{1.0*^-20, {{2, 3}, {1}}}");
+    audit_chk("FindMinimumCut#1", "FindMinimumCut[Graph[{1, 2, 3}, {1 -> 2, 2 -> 3, 3 -> 1}, EdgeWeight -> {1.*^20, 1., 1.*^20}]][[1]]",
+              "1.0");
+    audit_chk("FindMinimumCut#1", "EdgeConnectivity[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {1.*^20, 1.}]]", "1.0");
+    audit_chk("FindMinimumCut#1", "FindEdgeCut[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {1.*^20, 1.}], 1, 3]", "{2 <-> 3}");
+    audit_run("SeedRandom[7]; mcg = RandomGraph[{30, 120}]; mcw = RandomChoice[{1., 1.*^18, 3.5, 1.*^-5}, EdgeCount[mcg]]");
+    audit_true("FindMinimumCut#1",
+               "Abs[FindMinimumCut[Graph[VertexList[mcg], EdgeList[mcg], EdgeWeight -> mcw]][[1]] - "
+               "FindMinimumCut[Graph[VertexList[mcg], EdgeList[mcg], EdgeWeight -> Round[10^5 (mcw /. 1.*^18 -> 10.^6)]]][[1]]/10^5] < 10^-12");
+    /* sanity */
+    audit_chk("FindMinimumCut#1", "FindMinimumCut[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {2, 5}]]",
+              "{2, {{2, 3}, {1}}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complete_graph_resource_limit);
     TEST(test_star_graph_resource_limit);
     TEST(test_find_spanning_tree_directed);
     TEST(test_circulant_graph_dedup_before_cap);
+    TEST(test_max_flow_wide_range);
+    TEST(test_min_cut_wide_range);
     return audit_finish("audit_graphs");
 }

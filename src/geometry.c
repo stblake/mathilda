@@ -628,6 +628,31 @@ Expr* builtin_region_member(Expr* res) {
     }
     if (!head_is(poly, SYM_Polygon) || poly->data.function.arg_count != 1) return NULL;
 
+    /* RegionMember[reg, {p1, p2, ...}] tests each point (audit RegionMember#1). */
+    {
+        const Expr* q = res->data.function.args[1];
+        if (is_ndarray(q) && q->data.ndarray.rank == 2) return ndarray_delist_and_reeval(res);
+        if (head_is(q, SYM_List) && q->data.function.arg_count > 0) {
+            size_t k = q->data.function.arg_count;
+            bool all_pts = true;
+            for (size_t i = 0; i < k && all_pts; i++)
+                all_pts = head_is(q->data.function.args[i], SYM_List)
+                          || (is_ndarray(q->data.function.args[i])
+                              && q->data.function.args[i]->data.ndarray.rank == 1);
+            if (all_pts) {
+                Expr** items = malloc(sizeof(Expr*) * k);
+                if (!items) return NULL;
+                for (size_t i = 0; i < k; i++) {
+                    Expr* a[2] = { expr_copy((Expr*)poly), expr_copy(q->data.function.args[i]) };
+                    items[i] = expr_new_function(expr_new_symbol("RegionMember"), a, 2);
+                }
+                Expr* l = expr_new_function(expr_new_symbol(SYM_List), items, k);
+                free(items);
+                return l;
+            }
+        }
+    }
+
     GeomPoints p;
     if (!geom_read_points(poly->data.function.args[0], &p)) return NULL;
     geom_dedup_consecutive(&p);

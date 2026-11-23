@@ -94,7 +94,10 @@ Out[2]= {2, 7/5}
 `RegionMember[Polygon[{{x1, y1}, ...}], {x, y}]` — `True` if the point is
 inside or **on the boundary** of the simple polygon (vertices included),
 `False` otherwise. Exact input uses exact sign tests; boundary decisions on
-exact input are exact.
+exact input are exact. `RegionMember[reg, {p1, p2, ...}]` tests each point
+(audit RegionMember#1), and `Disk[]`, `Disk[c]`, `Disk[c, r]`,
+`Disk[c, {rx, ry}]` and `Disk[c, r, {t1, t2}]` are accepted (closed; a
+symbolic point gives the condition; audit RegionMember#2).
 
 ```
 RegionMember[Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}], {1, 1}]     (* True  *)

@@ -1412,3 +1412,25 @@ size_t matM_bandwidth_complex(const MatM* A, const mpfr_t tol) {
     return b;
 }
 #endif /* USE_MPFR */
+
+/* See eigen_internal.h. */
+Expr** eigen_triangular_values(Expr* m, int n) {
+    if (n <= 0 || !m || m->type != EXPR_FUNCTION || (int)m->data.function.arg_count != n)
+        return NULL;
+    bool lower_zero = true, upper_zero = true;
+    for (int i = 0; i < n && (lower_zero || upper_zero); i++) {
+        Expr* row = m->data.function.args[i];
+        if (row->type != EXPR_FUNCTION || (int)row->data.function.arg_count != n) return NULL;
+        for (int j = 0; j < n; j++) {
+            if (i == j) continue;
+            Expr* e = row->data.function.args[j];
+            bool z = e->type == EXPR_INTEGER && e->data.integer == 0;
+            if (!z) { if (j < i) lower_zero = false; else upper_zero = false; }
+        }
+    }
+    if (!lower_zero && !upper_zero) return NULL;
+    Expr** vals = malloc(sizeof(Expr*) * (size_t)n);
+    if (!vals) return NULL;
+    for (int i = 0; i < n; i++) vals[i] = expr_copy(m->data.function.args[i]->data.function.args[i]);
+    return vals;
+}

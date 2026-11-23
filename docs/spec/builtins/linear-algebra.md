@@ -147,6 +147,11 @@ modelled on numpy's `ndarray`.
   warning and leave the expression unevaluated: `NDArray[{1., 3.}] + a`,
   `c NDArray[{1., 3.}]`, `NDArray[{1., 3.}]^n`. A numeric scalar operand
   (Integer/Real/Rational/Complex) still broadcasts silently and is unaffected.
+  An infinite or indeterminate operand (`Infinity`, `-Infinity`,
+  `ComplexInfinity`, `Indeterminate`) is numeric, not symbolic: the array
+  degrades to the List path, `NDArray[{1., 2.}] + Infinity` is
+  `{Infinity, Infinity}` (it returned a bare `Infinity`; audit NDArray#1), and
+  a 0/0 lane is `Indeterminate`, as `Divide[0., 0.]` now is (audit NDArray#2).
 
 ```mathematica
 In[1]:= NDArray[{{1, 2}, {3, 4}}]
@@ -442,6 +447,12 @@ Tests whether a matrix is explicitly positive definite.
   dispatches to BLAS/LAPACK's `dpotrf` (real) or `zpotrf` (complex);
   otherwise an in-house Cholesky is used.  Either returns `info == 0`
   iff the matrix is positive definite.
+- An exact matrix (Integer / Rational / Complex entries) is decided
+  exactly, by Sylvester's criterion through fraction-free elimination
+  (a certified ball Cholesky answers `True` first for a real one), never
+  by rounding to double: `{{10^16, 10^16+1}, {10^16+1, 10^16+2}}` (det
+  -1) is `False`, `HilbertMatrix[40]` and `{{10^-400}}` are `True`
+  (audit PositiveDefiniteMatrixQ#1).
 - Builds the Hermitian part regardless of whether the input is
   Hermitian, so e.g. a real matrix with non-symmetric entries is
   tested via `(m + m^T) / 2`.
@@ -490,6 +501,9 @@ Tests whether a matrix is explicitly negative definite.
 - Equivalent to: `-m` is positive definite, i.e. the negated Hermitian
   part `-(m + ConjugateTranspose[m]) / 2` has only positive eigenvalues
   and admits a Cholesky factorisation with a real positive diagonal.
+- An exact matrix is decided exactly (Sylvester's criterion on the
+  negated Hermitian part), and a `SparseArray` is tested as its dense
+  form (audit NegativeDefiniteMatrixQ#1, #2).
 - On numeric matrices the test is performed by attempting Cholesky on
   the negated Hermitian part.  When `USE_LAPACK` is available the
   routine dispatches to BLAS/LAPACK's `dpotrf` (real) or `zpotrf`
@@ -619,6 +633,10 @@ A generalization of `Dot` in which `f` plays the role of multiplication and `g` 
 - `Protected`.
 - Like `Dot`, `Inner` effectively contracts the last index of the first tensor with the first index of the second tensor.
 - Applying `Inner` to a rank $r$ tensor and a rank $s$ tensor gives a rank $r+s-2$ tensor.
+- The contracted lengths must agree: otherwise `Inner::incom` and the call
+  stays unevaluated (they were truncated, or padded with `Null`), and
+  `Inner[f, a, b, g, n]` contracts index `n` of `a` for every valid `n`
+  (only `n = 1` was honoured; audit Inner#1, #2).
 
 ```mathematica
 In[1]:= Inner[f, {a, b}, {x, y}, g]
@@ -1179,6 +1197,11 @@ keeps its precision through the inverse.
 ## MatrixExp
 The matrix exponential.
 - `MatrixExp[m]`: the matrix exponential of the square matrix `m`.
+
+The exact path takes a triangular matrix's eigenvalues from its diagonal
+(also in `Eigenvalues`, `Eigensystem` and `JordanDecomposition`), so
+`MatrixExp[{{Sqrt[2], 0}, {0, 1}}]` is `{{E^Sqrt[2], 0}, {0, E}}` (it said
+`Inverse::sing`; audit MatrixExp#1).
 - `MatrixExp[m, v]`: the matrix exponential of `m` applied to the vector `v`.
 
 **Features**:
@@ -1484,6 +1507,10 @@ Gives the rank of a matrix.
 - `MatrixRank[m, Method -> "<name>"]`
 - `MatrixRank[m, Tolerance -> t]`
 - `MatrixRank[m, Method -> "<name>", Tolerance -> t]`
+
+The machine elimination divides by Smith's scaled complex division, so a
+matrix of entries near `1e160` or `1e-170` has the rank of its unscaled
+pattern (it was undercounted when `|b|^2` overflowed; audit MatrixRank#1).
 
 **Features**:
 - `Protected`.
@@ -2384,7 +2411,9 @@ Gives the singular value decomposition of a matrix.
 - `SingularValueDecomposition[m, UpTo[k]]` — returns the truncated SVD
   using up to `k` of the largest singular values, clamping `k` to
   `MatrixRank[m]`.
-- `SingularValueDecomposition[{m, a}]` — generalized SVD; returns
+- `SingularValueDecomposition[{m, a}]` — generalized SVD (`w`, `wa` are the
+  non-negative diagonal alpha / beta matrices and `v` carries LAPACK's
+  triangular factor, so `v` is not unitary; audit SingularValueDecomposition#1); returns
   `{{u, ua}, {sigma, sigma_a}, v}` such that
   `m == u . sigma . ConjugateTranspose[v]` and
   `a == ua . sigma_a . ConjugateTranspose[v]`.  Both matrices must
@@ -3178,6 +3207,9 @@ Out[8]= {6, 4, 5}
 ## LeastSquares
 Finds `x` that solves the linear least-squares problem for `m . x == b`,
 i.e. an `x` minimising `Norm[m . x - b]`.
+`Method -> "Krylov"` / `"LSQR"` on a complex matrix iterate with
+`ConjugateTranspose` and Hermitian inner products, so they solve
+`m^H m x == m^H b` like the direct method (audit LeastSquares#1, #2).
 - `LeastSquares[m, b]`
 - `LeastSquares[m, b, Method -> "<name>"]`
 - `LeastSquares[m, b, Tolerance -> t]`
@@ -3252,6 +3284,10 @@ Out[10]= {0.0, 0.0, 0.0}
 ```
 
 ## Fit
+
+A basis column is dropped as numerically zero only against the largest
+column norm, not the response's: `Fit` of data `10^14 (1 + x)` was `0.0`
+(audit Fit#2).
 
 `Fit[data, {f1, ..., fn}, vars]` finds a linear least-squares fit
 `a1 f1 + ... + an fn` to `data` for basis functions `fi` of the variables
@@ -3419,6 +3455,11 @@ Gives a list of the eigenvalues of a square matrix.
   free variables (no concrete modulus) retain Solve's natural order.
 - When `m, a` have a shared null space, `Eigenvalues[{m, a}]` returns
   `Infinity` for each degree drop in the characteristic polynomial.
+  When `det(m - lambda a)` vanishes identically because `m` and `a` share a
+  `d`-dimensional null space (on both sides), `d` eigenvalues are
+  `Indeterminate` and the rest are those of the pencil deflated onto its
+  complement: `Eigenvalues[{{{1,2},{2,4}}, {{1,2},{2,4}}}]` is
+  `{1, Indeterminate}` (audit Eigenvalues#1).
 - A numeric pencil `{m, a}` is solved at the precision of its entries: machine
   input through LAPACK (`dsygv` for a symmetric `m` with symmetric positive
   definite `a`, `dggev` otherwise), arbitrary-precision real input in MPFR —

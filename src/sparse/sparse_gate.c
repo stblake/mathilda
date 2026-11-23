@@ -405,7 +405,8 @@ static const char* const GATE_DENSE[] = {
     "EuclideanDistance", "SquaredEuclideanDistance", "ManhattanDistance",
     "ChessboardDistance", "CosineDistance", "HammingDistance", "EditDistance",
     "SymmetricMatrixQ", "HermitianMatrixQ", "DiagonalMatrixQ",
-    "PositiveDefiniteMatrixQ", "LowerTriangularMatrixQ", "UpperTriangularMatrixQ",
+    "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
+    "LowerTriangularMatrixQ", "UpperTriangularMatrixQ",
     "IntersectingQ", "DuplicateFreeQ", "SubsetQ", "OrderedQ", "SquareMatrixQ",
     /* selection, ordering and combinatorics over the level-1 parts */
     "Tally", "Pick", "Riffle", "TakeLargest", "TakeSmallest",

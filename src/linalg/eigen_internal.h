@@ -94,6 +94,13 @@ Expr*       eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n);
 Expr*       eigen_solve_poly(Expr* poly, const char* lambda_name,
                               bool cubics_radical, bool quartics_radical);
 Expr**      eigen_extract_values(Expr* solutions, size_t* count_out);
+/* The eigenvalues of a triangular n x n matrix (every entry strictly below,
+ * or strictly above, the diagonal an exact 0): its diagonal entries, copies
+ * the caller owns (n of them).  NULL when m is not triangular.  Avoids the
+ * characteristic polynomial, whose quadratic formula leaves nested radicals
+ * (Sqrt[3 - 2 Sqrt[2]] for diag(Sqrt[2], 1)) that the eigenvector step then
+ * cannot zero-test (audit MatrixExp#1). */
+Expr**      eigen_triangular_values(Expr* m, int n);
 
 /* MatD helpers (used by direct/arnoldi/banded/feast). */
 void   matD_free(MatD* M);
