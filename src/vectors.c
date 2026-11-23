@@ -21,6 +21,7 @@
  * unevaluated (return NULL), matching Mathilda's "can't evaluate" convention.
  */
 
+#include "checked_alloc.h"
 #include "vectors.h"
 #include "symtab.h"
 #include "attr.h"
@@ -154,6 +155,10 @@ Expr* builtin_unit_vector(Expr* res) {
         return NULL;
     }
 
+    /* Options alone: no k at all (UnitVector[WorkingPrecision -> ...] used to
+     * read args[1] past the end).  Report the count of positional arguments. */
+    if (nreq == 0) return builtin_arg_error("UnitVector", 0, 1, 2);
+
     /* Map required arguments to (n, k). */
     Expr* n_expr;
     Expr* k_expr;
@@ -178,6 +183,9 @@ Expr* builtin_unit_vector(Expr* res) {
         n = n_expr->data.integer;
     }
     if (k > n) return NULL;
+    /* n is the user's: a length past memory aborts with General::nomem rather
+     * than handing malloc an impossible size (each cell is at least a pointer). */
+    if (!mth_alloc_ok(n, sizeof(Expr*), NULL)) return mth_nomem_abort();
 
     /* Parse trailing options.  Only WorkingPrecision is recognised; last valid
      * setting wins, an unparseable value is ignored. */
@@ -221,7 +229,8 @@ Expr* builtin_unit_vector(Expr* res) {
     }
 
     /* Build the length-n list: 1 at position k, 0 elsewhere. */
-    Expr** cells = malloc(sizeof(Expr*) * (size_t)n);
+    Expr** cells = mth_malloc_n(n, sizeof(Expr*));
+    if (!cells) return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
     for (int64_t i = 0; i < n; i++) {
         cells[i] = uv_component(i == k - 1, mode, bits);
     }

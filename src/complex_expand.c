@@ -793,7 +793,11 @@ static Expr* cx_expand_one(const Expr* arg, const CxCtx* ctx) {
                                mk_fn2("Times", mk_int(-1), expr_copy(wc))))));
         Expr* out;
         if (!wrap) {
+            /* mk_fn2 adopts re and im: drop our references so the common
+             * cleanup below does not free them a second time (it did, and
+             * the recycled nodes resurfaced inside the caller's expression). */
             out = ev(mk_fn2("Plus", re, mk_fn2("Times", mk_I(), im)));
+            re = im = NULL;
         } else if (strcmp(wrap, "Re") == 0)  { out = re; re = NULL; }
         else if (strcmp(wrap, "Im") == 0)    { out = im; im = NULL; }
         else if (strcmp(wrap, "Arg") == 0)   { out = ev(mk_fn1("Arg", expr_copy((Expr*)inner))); }

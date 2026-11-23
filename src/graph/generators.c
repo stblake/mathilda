@@ -23,14 +23,16 @@
 #include "random.h"
 #include <stdlib.h>
 #include <stdint.h>   /* SIZE_MAX */
+#include <stdbool.h>
+#include "checked_alloc.h"
 
-/* Small integer argument as a nonnegative long, or -1 if not a suitable int. */
-static long as_count(const Expr* e) {
+/* Small integer argument as a nonnegative int64_t, or -1 if not a suitable int. */
+static int64_t as_count(const Expr* e) {
     if (!e || e->type != EXPR_INTEGER || e->data.integer < 0) return -1;
-    return (long)e->data.integer;
+    return (int64_t)e->data.integer;
 }
 
-static Expr* undirected_edge(long a, long b) {
+static Expr* undirected_edge(int64_t a, int64_t b) {
     Expr* ea[2] = { expr_new_integer(a), expr_new_integer(b) };
     return expr_new_function(expr_new_symbol(SYM_UndirectedEdge), ea, 2);
 }
@@ -51,37 +53,61 @@ static Expr* make_graph(Expr** verts, size_t nv, Expr** edges, size_t ne) {
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }
 
-static Expr** int_vertices(long n) {
-    Expr** v = (n > 0) ? calloc((size_t)n, sizeof(Expr*)) : NULL;
-    for (long i = 0; i < n; i++) v[i] = expr_new_integer(i + 1);
-    return v;
+/* Resource limit shared with the other family generators (gmet_generators.c):
+ * a family past either bound is left unevaluated, as the spec states, rather
+ * than allocating gigabytes of edge nodes. */
+#define GEN_FAMILY_MAX_VERTICES INT64_C(100000000)
+#define GEN_FAMILY_MAX_EDGES    INT64_C(50000000)
+
+/* Whether a family on n vertices with ne edges is within the resource limit. */
+static bool family_fits(int64_t n, int64_t ne) {
+    return n >= 0 && ne >= 0 &&
+           n <= GEN_FAMILY_MAX_VERTICES && ne <= GEN_FAMILY_MAX_EDGES;
 }
 
+/* Allocate the vertex array 1..n and an (unfilled) edge array of ne slots.
+ * False (both freed, General::nomem issued) when memory cannot be had. */
+static bool family_alloc(int64_t n, int64_t ne, Expr*** verts, Expr*** edges) {
+    *verts = mth_malloc_n(n, sizeof(Expr*));
+    *edges = *verts ? mth_malloc_n(ne, sizeof(Expr*)) : NULL;
+    if (!*verts || !*edges) {
+        free(*verts); free(*edges);
+        *verts = *edges = NULL;
+        return false;
+    }
+    for (int64_t i = 0; i < n; i++) (*verts)[i] = expr_new_integer(i + 1);
+    return true;
+}
+
+/* K_n: n(n-1)/2 edges i < j, in lexicographic order. */
 Expr* builtin_complete_graph(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    long n = as_count(res->data.function.args[0]);
-    if (n < 0) return NULL;
-    size_t ne = (size_t)n * (size_t)(n - 1) / 2;
-    Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
-    size_t k = 0;
-    for (long i = 1; i <= n; i++)
-        for (long j = i + 1; j <= n; j++)
+    int64_t n = as_count(res->data.function.args[0]);
+    if (n < 0 || n > GEN_FAMILY_MAX_VERTICES) return NULL;
+    int64_t ne = (n < 2) ? 0 : n * (n - 1) / 2;     /* n <= 1e8: no overflow */
+    if (!family_fits(n, ne)) return NULL;
+    Expr **verts, **edges;
+    if (!family_alloc(n, ne, &verts, &edges)) return mth_nomem_abort();
+    int64_t k = 0;
+    for (int64_t i = 1; i <= n; i++)
+        for (int64_t j = i + 1; j <= n; j++)
             edges[k++] = undirected_edge(i, j);
-    return make_graph(int_vertices(n), (size_t)n, edges, ne);
+    return make_graph(verts, (size_t)n, edges, (size_t)ne);
 }
 
 Expr* builtin_cycle_graph(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    long n = as_count(res->data.function.args[0]);
-    if (n < 0) return NULL;
+    int64_t n = as_count(res->data.function.args[0]);
     /* Path edges 1-2-...-n, plus the wrap edge n-1 when n >= 3 (for n <= 2 the
      * wrap edge would duplicate an existing one). */
-    size_t ne = (n >= 3) ? (size_t)n : (n >= 2 ? 1u : 0u);
-    Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
-    size_t k = 0;
-    for (long i = 1; i < n; i++) edges[k++] = undirected_edge(i, i + 1);
+    int64_t ne = (n >= 3) ? n : (n >= 2 ? 1 : 0);
+    if (!family_fits(n, ne)) return NULL;
+    Expr **verts, **edges;
+    if (!family_alloc(n, ne, &verts, &edges)) return mth_nomem_abort();
+    int64_t k = 0;
+    for (int64_t i = 1; i < n; i++) edges[k++] = undirected_edge(i, i + 1);
     if (n >= 3) edges[k++] = undirected_edge(n, 1);
-    return make_graph(int_vertices(n), (size_t)n, edges, ne);
+    return make_graph(verts, (size_t)n, edges, (size_t)ne);
 }
 
 Expr* builtin_path_graph(Expr* res) {
@@ -89,12 +115,17 @@ Expr* builtin_path_graph(Expr* res) {
     const Expr* arg = res->data.function.args[0];
 
     if (graph_is_list(arg)) {
-        /* PathGraph[{v1,...,vk}] over explicit vertices. */
+        /* PathGraph[{v1,...,vk}] over explicit vertices (the list already
+         * exists, so its size is already paid for). */
         size_t nv = arg->data.function.arg_count;
         Expr** verts = (nv > 0) ? calloc(nv, sizeof(Expr*)) : NULL;
-        for (size_t i = 0; i < nv; i++) verts[i] = expr_copy(arg->data.function.args[i]);
         size_t ne = (nv > 0) ? nv - 1 : 0;
         Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
+        if ((nv > 0 && !verts) || (ne > 0 && !edges)) {
+            free(verts); free(edges);
+            return mth_nomem_abort();
+        }
+        for (size_t i = 0; i < nv; i++) verts[i] = expr_copy(arg->data.function.args[i]);
         for (size_t i = 0; i + 1 < nv; i++) {
             Expr* ea[2] = { expr_copy(arg->data.function.args[i]),
                             expr_copy(arg->data.function.args[i + 1]) };
@@ -103,35 +134,46 @@ Expr* builtin_path_graph(Expr* res) {
         return make_graph(verts, nv, edges, ne);
     }
 
-    long n = as_count(arg);
-    if (n < 0) return NULL;
-    size_t ne = (n > 0) ? (size_t)n - 1 : 0;
-    Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
-    for (long i = 1; i < n; i++) edges[i - 1] = undirected_edge(i, i + 1);
-    return make_graph(int_vertices(n), (size_t)n, edges, ne);
+    int64_t n = as_count(arg);
+    int64_t ne = (n > 0) ? n - 1 : 0;
+    if (!family_fits(n, ne)) return NULL;
+    Expr **verts, **edges;
+    if (!family_alloc(n, ne, &verts, &edges)) return mth_nomem_abort();
+    for (int64_t i = 1; i < n; i++) edges[i - 1] = undirected_edge(i, i + 1);
+    return make_graph(verts, (size_t)n, edges, (size_t)ne);
 }
 
 Expr* builtin_star_graph(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    long n = as_count(res->data.function.args[0]);
-    if (n < 0) return NULL;
+    int64_t n = as_count(res->data.function.args[0]);
     /* Hub is vertex 1, joined to each of 2..n: exactly n-1 edges, with no
      * duplicate possible at any size (unlike CycleGraph's wrap edge). */
-    size_t ne = (n > 0) ? (size_t)n - 1 : 0;
-    Expr** edges = (ne > 0) ? calloc(ne, sizeof(Expr*)) : NULL;
-    for (long i = 2; i <= n; i++) edges[i - 2] = undirected_edge(1, i);
-    return make_graph(int_vertices(n), (size_t)n, edges, ne);
+    int64_t ne = (n > 0) ? n - 1 : 0;
+    if (!family_fits(n, ne)) return NULL;
+    Expr **verts, **edges;
+    if (!family_alloc(n, ne, &verts, &edges)) return mth_nomem_abort();
+    for (int64_t i = 2; i <= n; i++) edges[i - 2] = undirected_edge(1, i);
+    return make_graph(verts, (size_t)n, edges, (size_t)ne);
+}
+
+/* List[1, ..., n], or NULL (General::nomem issued) when memory cannot be had. */
+static Expr* int_vertex_list(int64_t n) {
+    Expr** v = mth_malloc_n(n, sizeof(Expr*));
+    if (!v) return NULL;
+    for (int64_t i = 0; i < n; i++) v[i] = expr_new_integer(i + 1);
+    return make_list_owning(v, (size_t)n);
 }
 
 /* One random undirected graph: n vertices, m of the n(n-1)/2 candidate edges.
  * Returns NULL if the sampler declines or an allocation fails. Caller has
  * already validated n >= 0, m >= 0, maxe representable, m <= maxe.
  */
-static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
+static Expr* one_random_graph(int64_t n, unsigned long long maxe, int64_t m) {
     /* n <= 1 leaves no candidates: the empty graph. */
     if (maxe == 0) {
-        Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n),
-                           expr_new_function(expr_new_symbol(SYM_List), NULL, 0) };
+        Expr* vl = int_vertex_list(n);
+        if (!vl) return NULL;
+        Expr* gargs[2] = { vl, expr_new_function(expr_new_symbol(SYM_List), NULL, 0) };
         return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
     }
 
@@ -144,26 +186,28 @@ static Expr* one_random_graph(long n, unsigned long long maxe, long m) {
     if (!idx) return NULL;
     Expr** es = malloc((size_t)(m > 0 ? m : 1) * sizeof(Expr*));
     if (!es) { free(idx); return NULL; }
-    for (long e = 0; e < m; e++) {
+    for (int64_t e = 0; e < m; e++) {
         /* row i (1-based) holds pairs (i, i+1..n) and starts at
          * off(i) = (i-1)(2n-i)/2; find the last row with off(i) <= idx */
         unsigned long long x = idx[e];
-        long lo = 1, hi = n - 1;
+        int64_t lo = 1, hi = n - 1;
         while (lo < hi) {
-            long mid = lo + (hi - lo + 1) / 2;
+            int64_t mid = lo + (hi - lo + 1) / 2;
             unsigned long long off = (unsigned long long)(mid - 1)
                 * (unsigned long long)(2 * n - mid) / 2;
             if (off <= x) lo = mid; else hi = mid - 1;
         }
         unsigned long long off = (unsigned long long)(lo - 1)
             * (unsigned long long)(2 * n - lo) / 2;
-        es[e] = undirected_edge(lo, lo + 1 + (long)(x - off));
+        es[e] = undirected_edge(lo, lo + 1 + (int64_t)(x - off));
     }
     free(idx);
     Expr* sampled = expr_new_function(expr_new_symbol(SYM_List), es, (size_t)m);
     free(es);
 
-    Expr* gargs[2] = { make_list_owning(int_vertices(n), (size_t)n), sampled };
+    Expr* vl = int_vertex_list(n);
+    if (!vl) { expr_free(sampled); return NULL; }
+    Expr* gargs[2] = { vl, sampled };
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }
 
@@ -172,11 +216,12 @@ Expr* builtin_random_graph(Expr* res) {
     if (argc != 1 && argc != 2) return NULL;
     const Expr* spec = res->data.function.args[0];
     if (!graph_is_list(spec) || spec->data.function.arg_count != 2) return NULL;
-    long n = as_count(spec->data.function.args[0]);
-    long m = as_count(spec->data.function.args[1]);
+    int64_t n = as_count(spec->data.function.args[0]);
+    int64_t m = as_count(spec->data.function.args[1]);
     if (n < 0 || m < 0) return NULL;
+    if (!family_fits(n, m)) return NULL;          /* the shared resource limit */
 
-    /* n(n-1)/2 overflows signed long for large n, and a negative maxe would let
+    /* n(n-1)/2 overflows signed int64_t for large n, and a negative maxe would let
      * the m gate below pass. Bound n BEFORE multiplying: checking the product
      * afterwards cannot catch a wrap, since n = 2^32 + 1 wraps n(n-1) to 2^32
      * and yields a small, plausible-looking maxe while the candidate loop still
@@ -195,16 +240,16 @@ Expr* builtin_random_graph(Expr* res) {
     /* RandomGraph[{n,m}, k]: k independent graphs. k = 0 gives {}; a negative,
      * non-integer, or symbolic k is silently unevaluated, matching the five
      * count-taking heads in src/random.c (SPEC section 4: NULL, no Message). */
-    long kcount = as_count(res->data.function.args[1]);
+    int64_t kcount = as_count(res->data.function.args[1]);
     if (kcount < 0) return NULL;
     if ((unsigned long long)kcount > (unsigned long long)(SIZE_MAX / sizeof(Expr*)))
         return NULL;
     Expr** gs = (kcount > 0) ? calloc((size_t)kcount, sizeof(Expr*)) : NULL;
     if (kcount > 0 && !gs) return NULL;
-    for (long i = 0; i < kcount; i++) {
+    for (int64_t i = 0; i < kcount; i++) {
         gs[i] = one_random_graph(n, maxe, m);
         if (!gs[i]) {                        /* never return a partial list */
-            for (long j = 0; j < i; j++) expr_free(gs[j]);
+            for (int64_t j = 0; j < i; j++) expr_free(gs[j]);
             free(gs);
             return NULL;
         }

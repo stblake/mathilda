@@ -255,6 +255,11 @@ terms `(x - x0)^-n` through `(x - x0)^n`, as a `SeriesData` object.
 Implemented natively in C in `src/numerical_calculus/nseries.{c,h}`.
 Attribute: `Protected`.
 
+The order `n` must be a machine integer `0 <= n <= 2^24`: the method samples at
+least `4 n` points, and a larger order is refused with `NSeries::ivar`, the call
+staying unevaluated (audit NSeries#1, v0.6708; `2^31` used to wrap to a negative
+`int` and overrun the sample buffer).
+
 Unlike the symbolic `Series` (which needs a power series at `x0`), `NSeries`
 needs only to **sample `f` numerically**, so it works for functions whose
 coefficients have no closed form and for **Laurent expansions about essential

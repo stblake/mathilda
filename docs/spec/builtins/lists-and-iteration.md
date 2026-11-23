@@ -484,8 +484,12 @@ Components are exact integers by default. The `WorkingPrecision` option selects
 the component representation: `Infinity` (exact, the default), `MachinePrecision`
 (machine-precision reals), or a digit count `d` (`d`-digit reals). `n` and `k`
 must be positive machine integers with `1 <= k <= n`; other arguments leave the
-call unevaluated. `UnitVector[]` reports `UnitVector::argt`; a non-option
-argument beyond the required ones reports `UnitVector::nonopt`.
+call unevaluated. `UnitVector[]` and an options-only call
+(`UnitVector[WorkingPrecision -> MachinePrecision]`) report `UnitVector::argt`;
+a non-option argument beyond the required ones reports `UnitVector::nonopt`. A
+length the machine cannot hold (`UnitVector[10^15, 1]`) emits `General::nomem`
+and aborts (`$Aborted`, catchable by `CheckAbort`) instead of attempting the
+allocation (audit UnitVector#1, v0.6708).
 
 ```
 In[1]:= UnitVector[1]

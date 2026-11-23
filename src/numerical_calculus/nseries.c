@@ -243,6 +243,10 @@ static bool ns_sample_mpfr(NsCtx* c, const mpfr_t z_re, const mpfr_t z_im,
  *  Sample count: N = 2^(ceil(log2 n) + 2), clamped so N >= 4, N > 2n   *
  * ------------------------------------------------------------------ */
 
+/* Largest order accepted: 4n samples of 16 bytes stay under 2^30 bytes, and
+ * every doubling in ns_sample_count stays far from INT_MAX. */
+#define NS_MAX_ORDER (1 << 24)
+
 static int ns_sample_count(int n) {
     int ne = n < 1 ? 1 : n;
     int p = 0;
@@ -628,6 +632,14 @@ Expr* builtin_nseries(Expr* res) {
     }
     if (n_expr->type != EXPR_INTEGER || n_expr->data.integer < 0) {
         ns_warn("ivar", "the order n in {x, x0, n} must be a non-negative integer");
+        return NULL;
+    }
+    /* The method samples N >= 4n points (ns_sample_count, whose doubling is
+     * int arithmetic) and holds 2n + 1 coefficients, so the order is bounded
+     * well inside int: past NS_MAX_ORDER the call is refused like any other
+     * bad order.  (2^31 used to truncate to a negative int and overrun.) */
+    if (n_expr->data.integer > NS_MAX_ORDER) {
+        ns_warn("ivar", "the order n in {x, x0, n} must be at most %d", NS_MAX_ORDER);
         return NULL;
     }
     int n = (int)n_expr->data.integer;

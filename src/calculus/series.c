@@ -25,6 +25,12 @@
 
 #include "ds_ops.h"
 #include "series.h"
+#include "checked_alloc.h"
+
+/* Head-room over the requested order that the expansion may use: the Laurent
+ * pad (12) plus the deficit-widening rounds' slack.  Bounds the order gate in
+ * do_series_single. */
+#define SERIES_ORDER_SLACK INT64_C(64)
 #include "linkedlist.h"
 #include "series_ratpoly.h" /* FLINT truncated-series arithmetic over Q */
 #include "series_numeric.h" /* numeric Taylor expansion of inexact input */
@@ -7267,6 +7273,20 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     if (expr_free_of(f_eval, x)) {
         expr_free(x0_eval);
         return f_eval;
+    }
+
+    /* The expansion is dense: a SeriesObj holds one coefficient slot per
+     * exponent from nmin to the internal order (n + 1 plus a pad of at most
+     * SERIES_ORDER_SLACK, see below).  An order the machine cannot hold --
+     * Series[x, {x, 0, 2^62}] used to size that buffer unchecked and segfault
+     * -- aborts with General::nomem, the reference's answer to a computation
+     * that cannot fit.  Each slot costs at least a pointer and an Expr. */
+    if (!leading_only &&
+        (n > INT64_MAX - SERIES_ORDER_SLACK ||
+         !mth_alloc_ok(n + SERIES_ORDER_SLACK, sizeof(Expr*) + sizeof(Expr), NULL))) {
+        expr_free(f_eval);
+        expr_free(x0_eval);
+        return mth_nomem_abort();
     }
 
     /* WhittakerM at the origin has a branch point (leading power z^(m+1/2)), so

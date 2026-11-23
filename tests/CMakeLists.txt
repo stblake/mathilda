@@ -790,6 +790,7 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/meminfo.c
+    ../src/checked_alloc.c
     ../src/memacct.c
     ../src/parallel.c
     ../src/image.c
@@ -6977,6 +6978,18 @@ if(PYTHON3_EXE)
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set_tests_properties(sparse_linalg_oracle_stress PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+
+# Builtin-audit regression suites (review/issues/, tests/test_audit.h): one
+# test_audit_<category>.c per audit category, each check keyed by its finding
+# id.  Globbed so a new category suite needs no edit here; the target is
+# audit_<category>_tests (test_audit_graphs.c -> audit_graphs_tests).
+file(GLOB _mathilda_audit_suites ${CMAKE_CURRENT_SOURCE_DIR}/test_audit_*.c)
+foreach(_src IN LISTS _mathilda_audit_suites)
+    get_filename_component(_stem ${_src} NAME_WE)
+    string(REGEX REPLACE "^test_" "" _stem ${_stem})
+    add_executable(${_stem}_tests ${_src} $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_stem}_tests PRIVATE ../src)
+endforeach()
 
 # Every *_tests executable is a ctest test.  175 suites were built by every
 # `make` but had no add_test(), so neither ctest nor CI ever ran them -- and
