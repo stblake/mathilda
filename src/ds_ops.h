@@ -44,6 +44,9 @@ typedef struct DsOps {
      * (caller delists and re-evaluates) and DS_PART_DECLINE when this kind does
      * not take the spec (caller falls through, e.g. [[0]] head extraction). */
     Expr* (*part)(Expr* e, Expr** idx, size_t n, int* st);
+    /* Materialise as an ordinary expression (what Normal[] returns): a new owned
+     * value, NULL on failure.  NULL slot = the kind has no such conversion. */
+    Expr* (*to_list)(const Expr* e);
 } DsOps;
 
 enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
@@ -51,6 +54,10 @@ enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
 /* Dispatch Part through the row; *st as above.  Returns NULL with
  * *st == DS_PART_DECLINE when the kind has no row or no part slot. */
 Expr* ds_part(Expr* e, Expr** idx, size_t n, int* st);
+
+/* Normal[] through the row.  *handled is false (and NULL returned) when the
+ * kind has no to_list slot, so the caller can fall through. */
+Expr* ds_to_list(const Expr* e, bool* handled);
 
 /* The ops row for a payload kind, or NULL for kinds with none (atoms, function
  * nodes).  O(1): a small array indexed by ExprType. */

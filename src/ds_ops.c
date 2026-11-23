@@ -63,11 +63,16 @@ static Expr* ll_part_row(Expr* e, Expr** idx, size_t n, int* st) {
     return expr_part(e, idx, n);
 }
 
+/* ---- materialisation (Normal) ------------------------------------------- */
+static Expr* nd_to_list(const Expr* e) { return ndarray_to_nested_list(e); }
+static Expr* sp_to_list(const Expr* e) { return sp_normal(e->data.sparse); }
+static Expr* ll_to_list_row(const Expr* e) { return ll_to_list(e->data.llist); }
+
 /* A packed list/array matches _List or _NDArray by its presentation; the
  * matcher keeps its own NDArray head logic, so no head_is is given here. */
-static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row };
-static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row };
-static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row };
+static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list };
+static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list };
+static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row };
 
 static void ds_init(void) {
     g_init = true;
@@ -92,4 +97,11 @@ Expr* ds_part(Expr* e, Expr** idx, size_t n, int* st) {
     const DsOps* o = ds_ops(e->type);
     if (!o || !o->part) { *st = DS_PART_DECLINE; return NULL; }
     return o->part(e, idx, n, st);
+}
+
+Expr* ds_to_list(const Expr* e, bool* handled) {
+    const DsOps* o = ds_ops(e->type);
+    if (!o || !o->to_list) { *handled = false; return NULL; }
+    *handled = true;
+    return o->to_list(e);
 }

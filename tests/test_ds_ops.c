@@ -67,6 +67,14 @@ static void test_part(void) {
     assert_true("Developer`ToPackedArray[{{1, 2}, {3, 4}}][[All, 1]] === {1, 3}");
     assert_true("Part[{SparseArray[{1 -> 3, 5 -> 7}, 6], 2}, 1, 5] == 7");  /* below the top */
 }
+static void test_normal(void) {
+    assert_true("Normal[SparseArray[{1 -> 3, 5 -> 7}, 6]] === {3, 0, 0, 0, 7, 0}");
+    assert_true("Normal[LinkedList[{1, 2, 3}]] === {1, 2, 3}");
+    assert_true("Normal[Developer`ToPackedArray[{{1, 2}, {3, 4}}]] === {{1, 2}, {3, 4}}");
+    assert_true("Normal[NDArray[{1., 2.}]] === {1., 2.}");
+    assert_true("Normal[<|a -> 1|>] === {a -> 1}");
+    assert_true("Normal[x] === x");
+}
 
 int main(void) {
     symtab_init();
@@ -77,6 +85,7 @@ int main(void) {
     TEST(test_head);
     TEST(test_blank_head_match);
     TEST(test_part);
+    TEST(test_normal);
     printf("All ds_ops tests passed!\n");
     return 0;
 }
