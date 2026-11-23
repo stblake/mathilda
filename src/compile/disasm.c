@@ -23,6 +23,7 @@
  * and numbered by frame slot, so a number means the same thing everywhere,
  * including in a branch target.
  */
+#include "handle_ops.h"
 #include "compile_internal.h"
 #include "compiled_function.h"
 #include "../symtab.h"
@@ -143,8 +144,9 @@ static const char* ct_scalar_name(CompileType t) {
  * "Array", this keeps the element type and rank — the two things you need to
  * read an array program's registers. */
 static void ct_label(CompileType t, char* out, size_t n) {
-    if (CT_IS_ARRAY(t)) snprintf(out, n, "%s[%d]", ct_scalar_name(CT_ELEM(t)), CT_RANK(t));
-    else                snprintf(out, n, "%s", ct_scalar_name(t));
+    if (CT_IS_ARRAY(t))              snprintf(out, n, "%s[%d]", ct_scalar_name(CT_ELEM(t)), CT_RANK(t));
+    else if (ct_handle_name(t))      snprintf(out, n, "%s", ct_handle_name(t));   /* Association, LinkedList, PVector */
+    else                             snprintf(out, n, "%s", ct_scalar_name(t));
 }
 
 /* Named by BANK, numbered by frame slot: R scalar, V array handle, T tile.  An
