@@ -54,6 +54,19 @@ static void test_blank_head_match(void) {
     assert_true("MatchQ[Range[4], _List]");
     assert_true("Length[Cases[{LinkedList[{1}], SparseArray[{1 -> 1}, 2], 5}, _LinkedList]] == 1");
 }
+static void test_part(void) {
+    assert_true("Range[100][[5]] == 5 && Range[100][[-1]] == 100");
+    assert_true("Range[100][[2 ;; 4]] === {2, 3, 4} && Range[100][[{1, 3}]] === {1, 3}");
+    assert_true("Range[100][[0]] === List");
+    assert_true("SparseArray[{1 -> 3, 5 -> 7}, 6][[5]] == 7");
+    assert_true("Normal[SparseArray[{1 -> 3, 5 -> 7}, 6][[2 ;; 5]]] === {0, 0, 0, 7}");
+    assert_true("LinkedList[{1, 2, 3}][[2]] == 2");
+    assert_true("Normal[LinkedList[{1, 2, 3}][[1 ;; 2]]] === {1, 2} || LinkedList[{1, 2, 3}][[1 ;; 2]] =!= $Failed");
+    assert_true("Head[LinkedList[{1, 2, 3}][[0]]] === Symbol");
+    assert_true("MatchQ[Range[3][[9]], _Part]");                      /* out of range: unevaluated */
+    assert_true("Developer`ToPackedArray[{{1, 2}, {3, 4}}][[All, 1]] === {1, 3}");
+    assert_true("Part[{SparseArray[{1 -> 3, 5 -> 7}, 6], 2}, 1, 5] == 7");  /* below the top */
+}
 
 int main(void) {
     symtab_init();
@@ -63,6 +76,7 @@ int main(void) {
     TEST(test_dimensions);
     TEST(test_head);
     TEST(test_blank_head_match);
+    TEST(test_part);
     printf("All ds_ops tests passed!\n");
     return 0;
 }

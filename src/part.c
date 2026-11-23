@@ -1329,31 +1329,17 @@ Expr* builtin_part(Expr* res) {
         }
     }
 
-    /* SparseArray: an element by binary search, or a SparseArray selection
-     * built from the stored entries only (sparse/sparse_part.c). NULL -- an
-     * out-of-range part (after Part::partw) or a spec it does not take --
-     * leaves the Part unevaluated. */
-    if (expr->type == EXPR_SPARSE) {
-        bool err = false;
-        return sp_part(expr, indices, nindices, &err);
+    /* Packed array / SparseArray / LinkedList: element access through the
+     * ds_ops row. A NDArray [[0]] (head extraction) declines to the general
+     * path; Span/All/List positions on an NDArray degrade to the general List
+     * Part via delist-and-reeval; a part that does not exist leaves the Part
+     * unevaluated. */
+    {
+        int st = DS_PART_DECLINE;
+        Expr* r = ds_part(expr, indices, nindices, &st);
+        if (st == DS_PART_DEGRADE) return ndarray_delist_and_reeval(res);
+        if (st == DS_PART_DONE) return r;
     }
-
-    /* NDArray: index the flat buffer directly. [[0]] (head extraction) falls
-     * through to expr_part/expr_head, which reports NDArray as the head. Plain
-     * integer subscripts index natively; Span/All/List positions degrade to the
-     * general List Part via delist-and-reeval. */
-    if (is_ndarray(expr) &&
-        !(nindices > 0 && indices[0]->type == EXPR_INTEGER &&
-          indices[0]->data.integer == 0)) {
-        bool degrade = false;
-        Expr* r = ndarray_part(expr, indices, nindices, &degrade);
-        if (r) return r;
-        if (degrade) return ndarray_delist_and_reeval(res);
-        return NULL;  /* out-of-range / too many subscripts: leave unevaluated */
-    }
-
-    /* LinkedList: O(1) element access; selections are new LinkedLists. */
-    if (expr->type == EXPR_LINKEDLIST) return expr_part(expr, indices, nindices);
 
     // [[0]] is allowed even for atoms
     if (nindices > 0 && indices[0]->type == EXPR_INTEGER && indices[0]->data.integer == 0) {
