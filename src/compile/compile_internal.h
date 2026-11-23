@@ -340,6 +340,24 @@ enum {
     X(LL_REF, K_ARR)  X(LL_PUSH, K_ARR)    X(LL_POP, K_ARR)               \
     X(LL_GET, K_ARR)  X(LL_SET, K_ARR)     X(LL_LEN, K_ARR)               \
     X(LL_TOTAL, K_ARR) X(LL_NORMAL, K_ARR) X(LL_STRUCT, K_ARR)            \
+    /* PVector (compile_pvec.c emits, compile_pvec_vm.c runs).  K_ARR like the  \
+     * list ops, but a PVector is an immutable VALUE, so there is no undo log. \
+     * Operands (PVF_* flags):                                                 \
+     *   PV_NEW     dst = PVector[]                                            \
+     *   PV_FROMARR dst = PVector[R[a] array]                                  \
+     *   PV_RETAIN  dst = R[a] (the same value, one more reference)            \
+     *   PV_STRUCT  dst = imm.i-op[R[a], R[b]] (Most, Append); PVF_INPLACE     \
+     *              consumes R[a] (dst == a) and updates it in place when held \
+     *              once, else the update shares structure with the old value  \
+     *   PV_SET     R[dst][[R[a]]] = R[b] (R[dst] an owned local)              \
+     *   PV_GET     dst value = R[a][[R[b]]]     PV_LEN  dst = Length[R[a]]    \
+     *   PV_TOTAL   dst = Total[R[a]]            PV_NORMAL dst array = Normal  \
+     * A failed op (Most of {}, index out of range, an overflowing Total, a    \
+     * vector of another kind) fails the call: the interpreter then answers.   \
+     * The range PV_NEW..PV_NORMAL is contiguous: vm_array_op dispatches on it. */ \
+    X(PV_NEW, K_ARR)  X(PV_FROMARR, K_ARR) X(PV_RETAIN, K_ARR)            \
+    X(PV_STRUCT, K_ARR) X(PV_SET, K_ARR)   X(PV_GET, K_ARR)               \
+    X(PV_LEN, K_ARR)  X(PV_TOTAL, K_ARR)   X(PV_NORMAL, K_ARR)            \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
@@ -492,6 +510,15 @@ enum { LLS_MOST, LLS_REST, LLS_REVERSE, LLS_TAKE, LLS_DROP, LLS_APPEND, LLS_PREP
 
 /* The LinkedList ops' runtime (compile_llist_vm.c), called from vm_array_op. */
 bool vm_llist_op(const Instr* c, Slot* d, Slot* a, Slot* b);
+
+/* PVector op flags: the element type (CT_INT / CT_REAL) in the low two bits. */
+#define PVF_ELEM(f)   ((CompileType)((f) & 3u))
+#define PVF_INPLACE   0x0004u   /* PV_STRUCT: consume R[a], result is R[a] itself */
+#define PVF_FREE_A    0x0008u   /* PV_FROMARR: release R[a]'s array after reading */
+/* PV_STRUCT sub-ops (imm.i) */
+enum { PVS_MOST, PVS_APPEND };
+/* The PVector ops' runtime (compile_pvec_vm.c), called from vm_array_op. */
+bool vm_pvec_op(const Instr* c, Slot* d, Slot* a, Slot* b);
 /* Operand kinds for the array opcodes. Three bits each (AF_A/AF_B), so there is
  * room; AK_INT was added when int64 buffers stopped being internal to the
  * compiler.
@@ -681,6 +708,7 @@ struct CompiledProgram {
      * same body returns a List however the arguments were spelled.  See Val.built
      * in compile.c and the result-kind decision in compiled_function.c. */
     bool        result_built;
+    bool        result_plain;   /* an array result is presented as a plain List (Normal[PVector]) */
 
     /* Arbitrary precision (managed scalars).  prec_bits == 0 for a machine
      * program, in which case every field below is zero/NULL and every managed

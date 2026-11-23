@@ -2054,5 +2054,43 @@ samples at most 16 elements, so it is O(1).
 **Printing.** `PVector[<n>]`, like `SparseArray` and `LinkedList`; a literal that
 reads back is a later step. `Normal[v]` gives the elements.
 
-**Not yet:** `Compile[]` lowering (a `PVector` argument or result makes the whole
-body run in the interpreter, correctly), and a persistent *map* or *set*.
+**`Compile[]`.** A `PVector` is lowered like a `LinkedList`, but as an immutable
+VALUE (`src/compile/compile_pvec.c`, `compile_pvec_vm.c`; compile type `CT_PVEC`,
+opcodes `PV_*`). Elements are machine Integers or machine Reals, one kind per
+vector. Lowered:
+
+| | |
+|---|---|
+| create | `PVector[]` (element type guessed, Real first, then retried with the type the first store shows, as for `LinkedList[]`), `PVector[array]` over a rank-1 Integer or Real array |
+| read | `Length`, `v[[i]]` (negative `i` counts from the end), `First`, `Last`, `Total`, `Normal` (a plain `List`, as in the interpreter) |
+| update | `v = Append[v, x]`, `AppendTo[v, x]`, `v[[i]] = x`, `v = Most[v]`; `Append[v, x]` and `Most[v]` as values |
+| declare | `{v, _PVector}`, `{v, _PVector, _Integer}`, `{v, _PVector, _Real}` |
+| return | a `PVector` result comes back as the interpreter's own `PVector` |
+
+A vector comes from a `Module` local or an argument. An update of a local that holds
+its vector once (`v = Append[v, x]`, `AppendTo`, `v[[i]] = x`, `Most`) edits it in
+place, so a compiled append/part loop is O(1) per op (measured 8.7 ns per append,
+4.2 ns per `Part` read, doubling ratio 2.0, 31x to 91x faster than the interpreter).
+`w = v` retains: both names share one vector and the next update through either
+copies the touched nodes, so an old value kept inside a compiled body is never
+disturbed. There is no undo log (unlike `LinkedList`): a vector argument is only
+borrowed and never changed, and a failed run just drops its registers.
+
+The compiled answer is the interpreter's exactly, or the call is declined and the
+interpreter re-runs the body from the start. Declined (the body does not compile, or
+the VM refuses at run time): a vector of any other element kind (boxed, mixed,
+strings), an argument vector whose storage differs from the declared element kind
+(`_PVector` with no element type tries Real, then Integer, so a vector of the other
+kind runs in the interpreter; declare the element type), a store of the other
+machine type (the interpreter keeps `{1, 2.5}` boxed; no widening), a List literal
+`PVector[{...}]` (the compiler has no List-literal lowering), `Part` out of range or
+index 0 (the interpreter's `Part::partw`), `First`, `Last`, `Most`, `Normal` of an
+empty vector, an Integer `Total` past int64, `Total` of an empty Real vector, an
+assignment inside another operand of the same op (evaluation order), a `With`
+constant, a global vector, assignment to an argument, `Part` assignment to an
+argument, and a `PVector` passed through a function application, a conditional join,
+`Nest`/`Fold`/`Map`, or to a `CompiledFunction`. `Total` of a Real vector runs the
+interpreter's own `Total` over the equivalent `List`, so the order of summation is
+the evaluator's.
+
+**Not yet:** a persistent *map* or *set*.

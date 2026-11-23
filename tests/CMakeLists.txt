@@ -1278,6 +1278,8 @@ set(COMMON_SRC
     ../src/compile/compile_assoc.c
     ../src/compile/compile_llist.c
     ../src/compile/compile_llist_vm.c
+    ../src/compile/compile_pvec.c
+    ../src/compile/compile_pvec_vm.c
     ../src/compile/compile_vm.c
     ../src/compile/compile_infer.c
     ../src/compile/compile_emit_arith.c
@@ -7101,3 +7103,12 @@ if(USE_ECM)
     add_dependencies(pvector_tests build_ecm)
 endif()
 add_test(NAME pvector_tests COMMAND pvector_tests)
+
+# Compile[] lowering of PVector: compiled == interpreted over every lowered op,
+# persistence inside a body, declines, call-to-call isolation, optimiser A/B.
+add_executable(compile_pvec_tests test_compile_pvec.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_pvec_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_pvec_tests build_ecm)
+endif()
+add_test(NAME compile_pvec_tests COMMAND compile_pvec_tests)

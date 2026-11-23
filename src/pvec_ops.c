@@ -167,7 +167,9 @@ void pvec_init(void) {
         "\tNormal and pattern _PVector work on it; Map, Select, Take, Drop, Join,\n"
         "\tReverse, Sort and Listable functions (v + 1) return a PVector, and Total,\n"
         "\tMax, Count and the like answer as for the List. Storage is unboxed while\n"
-        "\tevery element is a machine integer or real. Prints as PVector[<n>].");
+        "\tevery element is a machine integer or real. Prints as PVector[<n>]. Compile[]\n"
+        "\tlowers it: a Module local, or an argument {v, _PVector, _Integer|_Real}, with\n"
+        "\tLength, Part, First, Last, Total, Normal, Append, AppendTo, Most and v[[i]] = x.");
     symtab_add_builtin(SYM_PVectorQ, builtin_pvectorq);
     symtab_get_def(SYM_PVectorQ)->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("PVectorQ", "PVectorQ[e]\n\tGives True if e is a persistent vector, and False otherwise.");

@@ -94,8 +94,21 @@ typedef enum {
 #define CT_LLIST_TYPE(elem)  ((CompileType)((int)CT_LLIST + (int)(elem)))
 #define CT_IS_LLIST(t)       ((int)(t) >= (int)CT_LLIST && (int)(t) < (int)CT_LLIST + 4)
 #define CT_LLIST_ELEM(t)     ((CompileType)(((int)(t) - (int)CT_LLIST) & 3))
+/* A PVector (src/pvec.h): a persistent, immutable VALUE vector of machine
+ * Integers or Reals (one kind per vector).  `CT_PVEC + elem` with elem CT_INT or
+ * CT_REAL in the low two bits (elem CT_BOOL, 48, is the parser's "element type
+ * not given yet" marker and never reaches the emitter).  Like a LinkedList the
+ * register holds an EXPR_PVEC node in `.arr` (OWNED in the array bank, BORROWED
+ * in an argument register), but with VALUE semantics: an update yields a new
+ * vector and every other holder of the old one keeps it, so there is no undo
+ * log and no aliasing hazard.  See compile_pvec.c. */
+#define CT_PVEC              ((CompileType)48)
+#define CT_PVEC_TYPE(elem)   ((CompileType)((int)CT_PVEC + (int)(elem)))
+#define CT_IS_PVEC(t)        ((int)(t) >= (int)CT_PVEC && (int)(t) < (int)CT_PVEC + 4)
+#define CT_PVEC_ELEM(t)      ((CompileType)(((int)(t) - (int)CT_PVEC) & 3))
 /* A value held through a handle in `.arr` rather than in the Slot itself. */
-#define CT_IS_HANDLE(t)      (CT_IS_ARRAY(t) || CT_IS_ASSOC(t) || CT_IS_LLIST(t))
+#define CT_NOT_SCALAR(t)     (CT_IS_ARRAY(t) || CT_IS_PVEC(t))
+#define CT_IS_HANDLE(t)      (CT_IS_ARRAY(t) || CT_IS_ASSOC(t) || CT_IS_LLIST(t) || CT_IS_PVEC(t))
 
 /* A boxed value (compile-time-known type).  For an array type `a` holds an
  * EXPR_NDARRAY node: BORROWED when passed in as an argument (the program never
@@ -209,6 +222,8 @@ size_t      compiled_num_args(const CompiledProgram* p);
  * NDArray for a body that takes an NDArray and builds a fresh array from
  * something else, so the boundary asks the program instead. */
 bool        compiled_result_built(const CompiledProgram* p);
+/* An array result the interpreter would answer as a plain (never packed) List. */
+bool        compiled_result_plain(const CompiledProgram* p);
 
 /* Number of bytecode instructions in the finished program.  Exposed so tests and
  * benchmarks can measure what the optimiser removed; not needed to run a program. */

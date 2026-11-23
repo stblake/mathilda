@@ -78,7 +78,8 @@ static bool declares_empty_list(const Expr* spec, const char* name) {
     const Expr* init = spec->data.function.args[1];
     return v->type == EXPR_SYMBOL && v->data.symbol.name == name
         && init->type == EXPR_FUNCTION && init->data.function.head->type == EXPR_SYMBOL
-        && init->data.function.head->data.symbol.name == SYM_LinkedList
+        && (init->data.function.head->data.symbol.name == SYM_LinkedList
+            || init->data.function.head->data.symbol.name == SYM_PVector)   /* PVector[] shares the retry */
         && init->data.function.arg_count == 0;
 }
 
