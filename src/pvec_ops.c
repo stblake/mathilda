@@ -116,27 +116,11 @@ Expr* pvec_gate(Expr* res, const char* head, uint32_t attrs) {
     size_t argc = res->data.function.arg_count;
     Expr* a0 = argc ? res->data.function.args[0] : NULL;
 
-    /* Native operations: no materialisation. */
+    /* Native operations through the registry row: no materialisation. */
     if (a0 && a0->type == EXPR_PVEC) {
-        PVec* pv = a0->data.pvec;
-        int64_t len = pv_length(pv);
-        if (head == SYM_Append && argc == 2)
-            return expr_new_pvec(pv_push(pv_retain(pv), expr_copy(res->data.function.args[1])));
-        if (head == SYM_Prepend && argc == 2) {
-            PVec* v = pv_push(pv_new(), expr_copy(res->data.function.args[1]));
-            for (int64_t i = 0; i < len; i++) v = pv_push(v, pv_get(pv, i));
-            return expr_new_pvec(v);
-        }
-        if (argc == 1 && len > 0) {
-            if (head == SYM_First) return pv_get(pv, 0);
-            if (head == SYM_Last)  return pv_get(pv, len - 1);
-            if (head == SYM_Most)  return expr_new_pvec(pv_pop(pv_retain(pv), NULL));
-            if (head == SYM_Rest) {
-                PVec* v = pv_new();
-                for (int64_t i = 1; i < len; i++) v = pv_push(v, pv_get(pv, i));
-                return expr_new_pvec(v);
-            }
-        }
+        bool handled = false;
+        Expr* r = ds_native(a0, head, res, &handled);
+        if (handled) return r;
     }
     /* Append / Prepend with the vector not first: the vector is just an element. */
     if (head == SYM_Append || head == SYM_Prepend) return NULL;

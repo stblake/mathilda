@@ -14,4 +14,9 @@ Expr* builtin_memberq(Expr* res);
 
 void patterns_init(void);
 
+/* LinkedList walk for Count / MemberQ over the elements at `level` (typed-slot
+ * fast paths); the LinkedList ds_ops row's descend slot. */
+int64_t ll_descend_expr(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
+                        bool heads, Expr* pattern, bool first_only);
+
 #endif

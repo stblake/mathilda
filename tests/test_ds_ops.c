@@ -99,6 +99,22 @@ static void test_each(void) {
     expr_free(r);
 }
 
+static void test_native(void) {
+    ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->native && ds_ops(EXPR_PVEC)->native, "LinkedList and PVector have native heads");
+    ASSERT_MSG(ds_ops(EXPR_SPARSE)->native == NULL && ds_ops(EXPR_NDARRAY)->native == NULL, "other kinds keep their own paths");
+    /* every head a kind takes natively answers as the List does */
+    assert_true("Normal[Reverse[LinkedList[{1, 2, 3}]]] === {3, 2, 1} && Head[Reverse[LinkedList[{1, 2, 3}]]] === LinkedList");
+    assert_true("Normal[Take[LinkedList[{1, 2, 3}], 2]] === {1, 2} && Normal[Drop[LinkedList[{1, 2, 3}], 1]] === {2, 3}");
+    assert_true("Normal[Join[LinkedList[{1}], {2, 3}]] === {1, 2, 3} && Normal[Append[LinkedList[{1}], 2]] === {1, 2}");
+    assert_true("First[LinkedList[{4, 5}]] == 4 && Last[LinkedList[{4, 5}]] == 5 && Normal[Rest[LinkedList[{4, 5}]]] === {5}");
+    assert_true("Normal[Insert[LinkedList[{1, 3}], 2, 2]] === {1, 2, 3} && Normal[Delete[LinkedList[{1, 2, 3}], 2]] === {1, 3}");
+    assert_true("Normal[Map[#^2 &, LinkedList[{1, 2, 3}]]] === {1, 4, 9} && Normal[Select[LinkedList[{1, 2, 3, 4}], EvenQ]] === {2, 4}");
+    assert_true("Normal[ReplacePart[LinkedList[{1, 2, 3}], 2 -> 0]] === {1, 0, 3}");
+    /* PVector: O(1) heads native, an empty vector falls to the List path and its message */
+    assert_true("First[PVector[{4, 5}]] == 4 && Last[PVector[{4, 5}]] == 5 && PVectorQ[Most[PVector[{4, 5}]]]");
+    assert_true("MatchQ[First[PVector[{}]], _First]");
+}
+
 static void test_get_rebuild(void) {
     ASSERT_MSG(ds_ops(EXPR_PVEC) && ds_ops(EXPR_PVEC)->get && ds_ops(EXPR_PVEC)->from_list, "PVector row has get and from_list");
     ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->get && ds_ops(EXPR_LINKEDLIST)->from_list, "LinkedList row has get and from_list");
@@ -119,6 +135,7 @@ int main(void) {
     TEST(test_part);
     TEST(test_normal);
     TEST(test_get_rebuild);
+    TEST(test_native);
     TEST(test_each);
     printf("All ds_ops tests passed!\n");
     return 0;

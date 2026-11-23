@@ -61,6 +61,17 @@ typedef struct DsOps {
      * have depth 1 and nothing below them, so a walker need not visit them
      * to know their depth.  NULL = not known. */
     bool (*atoms_only)(const Expr* e);
+    /* The heads this kind implements natively (Append, Reverse, Take, Join,
+     * First, Map, ...): `res` is the evaluated call whose argument is a value of
+     * this kind.  Sets *handled = true and returns the answer (NULL after a
+     * message leaves the call unevaluated), or sets *handled = false for a head
+     * the kind does not take, so the builtin goes on with its List code. */
+    Expr* (*native)(const char* head, Expr* res, bool* handled);
+    /* Optional specialised matcher walk for Count / MemberQ over the elements at
+     * `level` (typed-slot fast paths); same contract as the generic walk built on
+     * `each`, which is used when this is NULL. */
+    int64_t (*descend)(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
+                       bool heads, Expr* pattern, bool first_only);
 } DsOps;
 
 enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
@@ -78,6 +89,14 @@ Expr* ds_get(const Expr* e, int64_t i);
 
 /* Does this kind iterate through its row (DsOps.each)? */
 bool ds_has_each(ExprType t);
+
+/* The optional specialised walk of a kind (DsOps.descend), or NULL. */
+int64_t (*ds_descender(ExprType t))(Expr*, int64_t, int64_t, int64_t, bool, Expr*, bool);
+
+/* Run head `head` natively on the payload value `kind_val` through its row (see
+ * DsOps.native).  *handled is false (and NULL returned) for a value with no
+ * row, no native slot, or a head the kind does not take. */
+Expr* ds_native(const Expr* kind_val, const char* head, Expr* res, bool* handled);
 /* Visit the elements of `e` through its row; false when it has no each slot. */
 bool ds_each(const Expr* e, bool (*fn)(Expr* elem, void* ud), void* ud);
 /* True when `e`'s elements are all machine atoms (see DsOps.atoms_only). */

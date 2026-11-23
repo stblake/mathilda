@@ -1544,6 +1544,7 @@ static Expr* first_last_element(Expr* container, Expr* entry) {
 
 /* First / Last of a LinkedList: O(1). An empty list gives the default when
  * there is one, else First::nofirst / Last::nolast and stays unevaluated. */
+Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last);
 static Expr* ll_first_last(Expr* arg, Expr* deflt, bool last) {
     LinkedList* ll = arg->data.llist;
     int64_t n = ll_length(ll);
@@ -1556,6 +1557,8 @@ static Expr* ll_first_last(Expr* arg, Expr* deflt, bool last) {
     return NULL;
 }
 
+Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last) { return ll_first_last(arg, deflt, last); }
+
 Expr* builtin_first(Expr* res) {
     if (res->type != EXPR_FUNCTION ||
         res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
@@ -1565,7 +1568,7 @@ Expr* builtin_first(Expr* res) {
      * back UNEVALUATED, while the identical List call works.  First is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
      * materialises every element) remains the fallback for what it declines. */
-    if (arg->type == EXPR_LINKEDLIST) return ll_first_last(arg, deflt, false);
+    { bool dh; Expr* dr = ds_native(arg, SYM_First, res, &dh); if (dh) return dr; }
     if (is_ndarray(arg)) {
         Expr* fast = ndstruct_head_tail(res, ND_FIRST);
         if (fast) return fast;
@@ -1587,7 +1590,7 @@ Expr* builtin_last(Expr* res) {
      * back UNEVALUATED, while the identical List call works.  Last is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
      * materialises every element) remains the fallback for what it declines. */
-    if (arg->type == EXPR_LINKEDLIST) return ll_first_last(arg, deflt, true);
+    { bool dh; Expr* dr = ds_native(arg, SYM_Last, res, &dh); if (dh) return dr; }
     if (is_ndarray(arg)) {
         Expr* fast = ndstruct_head_tail(res, ND_LAST);
         if (fast) return fast;
@@ -1601,7 +1604,7 @@ Expr* builtin_last(Expr* res) {
 Expr* builtin_most(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_LINKEDLIST) return ll_most_rest(res, true);
+    { bool dh; Expr* dr = ds_native(arg, SYM_Most, res, &dh); if (dh) return dr; }
     /* An NDArray is atomic, so is_atomic below rejects it and the call comes
      * back UNEVALUATED, while the identical List call works.  Most is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
@@ -1629,7 +1632,7 @@ Expr* builtin_most(Expr* res) {
 Expr* builtin_rest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_LINKEDLIST) return ll_most_rest(res, false);
+    { bool dh; Expr* dr = ds_native(arg, SYM_Rest, res, &dh); if (dh) return dr; }
     /* An NDArray is atomic, so is_atomic below rejects it and the call comes
      * back UNEVALUATED, while the identical List call works.  Rest is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
@@ -1999,7 +2002,7 @@ static bool positions_reachable(Expr* expr, Expr* pos, bool insert) {
 
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
-    if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_insert(res);
+    { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Insert, res, &dh); if (dh) return dr; }
     if (expr_is_number_atom(res->data.function.args[0]))
         return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[2], true);
     if (is_association(res->data.function.args[0]))
@@ -2234,7 +2237,7 @@ Expr* builtin_delete(Expr* res) {
     if (res->data.function.arg_count == 1) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {
-        if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_delete(res);
+        { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Delete, res, &dh); if (dh) return dr; }
         if (!positions_reachable(res->data.function.args[0], res->data.function.args[1], false))
             return NULL;
         return expr_delete(res->data.function.args[0], res->data.function.args[1]);

@@ -7,6 +7,7 @@
 #include "linkedlist.h"
 #include "sparse/sparse.h"
 #include "part.h"
+#include "patterns.h"
 #include "pvec.h"
 #include "pvec_ops.h"
 
@@ -132,13 +133,71 @@ static bool pv_each_row(const Expr* e, bool (*fn)(Expr*, void*), void* ud) {
 }
 static bool pv_atoms_only(const Expr* e) { PVKind k = pv_kind(e->data.pvec); return k == PV_I64 || k == PV_REAL; }
 
+/* ---- native heads ---------------------------------------------------------- */
+static Expr* ll_native(const char* h, Expr* res, bool* handled) {
+    *handled = true;
+    size_t n = res->data.function.arg_count;
+    if (h == SYM_Append)      return ll_append_prepend(res, false);
+    if (h == SYM_Prepend)     return ll_append_prepend(res, true);
+    if (h == SYM_Reverse)     return ll_reverse(res);
+    if (h == SYM_Join)        return ll_join(res);
+    if (h == SYM_Take)        return ll_take_drop(res, true);
+    if (h == SYM_Drop)        return ll_take_drop(res, false);
+    if (h == SYM_Most)        return ll_most_rest(res, true);
+    if (h == SYM_Rest)        return ll_most_rest(res, false);
+    if (h == SYM_Insert)      return ll_insert(res);
+    if (h == SYM_Delete)      return ll_delete(res);
+    if (h == SYM_ReplacePart) return ll_replace_part(res);
+    if (h == SYM_Map)         return ll_map(res);
+    if (h == SYM_Select)      return ll_select(res);
+    if (h == SYM_First || h == SYM_Last)
+        return ll_first_last_expr(res->data.function.args[0], n == 2 ? res->data.function.args[1] : NULL,
+                                  h == SYM_Last);
+    *handled = false;
+    return NULL;
+}
+
+/* PVector: the O(1) / O(log n) heads that need no materialisation. Anything
+ * else (or an empty vector, an option argument) is not handled here and the
+ * evaluator gate answers it through the equivalent List. */
+static Expr* pv_native(const char* h, Expr* res, bool* handled) {
+    *handled = false;
+    size_t argc = res->data.function.arg_count;
+    Expr* a0 = argc ? res->data.function.args[0] : NULL;
+    if (!a0 || a0->type != EXPR_PVEC) return NULL;
+    PVec* pv = a0->data.pvec;
+    int64_t len = pv_length(pv);
+    if (h == SYM_Append && argc == 2) {
+        *handled = true;
+        return expr_new_pvec(pv_push(pv_retain(pv), expr_copy(res->data.function.args[1])));
+    }
+    if (h == SYM_Prepend && argc == 2) {
+        *handled = true;
+        PVec* v = pv_push(pv_new(), expr_copy(res->data.function.args[1]));
+        for (int64_t i = 0; i < len; i++) v = pv_push(v, pv_get(pv, i));
+        return expr_new_pvec(v);
+    }
+    if (argc == 1 && len > 0) {
+        if (h == SYM_First) { *handled = true; return pv_get(pv, 0); }
+        if (h == SYM_Last)  { *handled = true; return pv_get(pv, len - 1); }
+        if (h == SYM_Most)  { *handled = true; return expr_new_pvec(pv_pop(pv_retain(pv), NULL)); }
+        if (h == SYM_Rest) {
+            *handled = true;
+            PVec* v = pv_new();
+            for (int64_t i = 1; i < len; i++) v = pv_push(v, pv_get(pv, i));
+            return expr_new_pvec(v);
+        }
+    }
+    return NULL;
+}
+
 /* A packed list/array matches _List or _NDArray by its presentation; the
  * matcher keeps its own NDArray head logic, so no head_is is given here. */
 static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list };
 static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list };
-static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only };
+static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only, ll_native, ll_descend_expr };
 
-static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only };
+static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only, pv_native, NULL };
 
 static void ds_init(void) {
     g_init = true;
@@ -191,4 +250,15 @@ bool ds_each(const Expr* e, bool (*fn)(Expr*, void*), void* ud) {
 bool ds_atoms_only(const Expr* e) {
     const DsOps* o = ds_ops(e->type);
     return o && o->atoms_only && o->atoms_only(e);
+}
+
+Expr* ds_native(const Expr* kind_val, const char* head, Expr* res, bool* handled) {
+    const DsOps* o = ds_ops(kind_val->type);
+    if (!o || !o->native) { *handled = false; return NULL; }
+    return o->native(head, res, handled);
+}
+
+int64_t (*ds_descender(ExprType t))(Expr*, int64_t, int64_t, int64_t, bool, Expr*, bool) {
+    const DsOps* o = ds_ops(t);
+    return o ? o->descend : NULL;
 }

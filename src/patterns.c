@@ -807,8 +807,8 @@ static int64_t ds_descend(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
                           bool heads, Expr* pattern, bool first_only);
 
 static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, size_t* count) {
-    if (e->type == EXPR_LINKEDLIST)
-        *count += (size_t)ll_descend(e, current_level + 1, min_l, max_l, heads, pattern, false);
+    if (ds_descender(e->type))
+        *count += (size_t)ds_descender(e->type)(e, current_level + 1, min_l, max_l, heads, pattern, false);
     else if (ds_has_each(e->type))
         *count += (size_t)ds_descend(e, current_level + 1, min_l, max_l, heads, pattern, false);
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
@@ -959,6 +959,12 @@ static int64_t ds_descend(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
     return c.hits;
 }
 
+/* The LinkedList row's descend slot (keeps the typed-slot fast paths). */
+int64_t ll_descend_expr(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
+                        bool heads, Expr* pattern, bool first_only) {
+    return ll_descend(x, level, min_l, max_l, heads, pattern, first_only);
+}
+
 Expr* builtin_count(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     /* A visible NDArray is an atom to the matcher; materialise it first.
@@ -1019,8 +1025,8 @@ static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, in
         }
     }
 
-    if (e->type == EXPR_LINKEDLIST)
-        return ll_descend(e, current_level + 1, min_l, max_l, heads, pattern, true) > 0;
+    if (ds_descender(e->type))
+        return ds_descender(e->type)(e, current_level + 1, min_l, max_l, heads, pattern, true) > 0;
     if (ds_has_each(e->type))
         return ds_descend(e, current_level + 1, min_l, max_l, heads, pattern, true) > 0;
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
