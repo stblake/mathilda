@@ -75,6 +75,13 @@ size_t eval_rhs_condition_count(const Expr* rhs);
 /* A Catch / CheckAbort that consumes an in-flight sentinel calls this so the
  * enclosing frame does not re-raise it (see g_pending_unwind in eval.c). */
 void eval_unwind_consumed(void);
+/* True while an abort is due: a TimeConstrained / MemoryConstrained trip or an
+ * interactive interrupt that the evaluator's next poll turns into the Abort[]
+ * sentinel.  While it holds, every unstamped evaluate() returns Abort[], and C
+ * code that keeps going builds that sentinel into its values (Abort[] + c u^3).
+ * Such a value is not a result, so a cache that outlives the call must not
+ * keep it: a memo store is skipped while this is true.  Read-only and O(1). */
+bool eval_abort_raised(void);
 /* Evaluate a user callback (a predicate, comparator, key function, pattern
  * test or guard) for a builtin that only inspects its value: a Throw/Abort it
  * produces is parked so the builtin's frame propagates it even if the builtin

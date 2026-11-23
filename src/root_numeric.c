@@ -1137,9 +1137,11 @@ Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
     unsigned long fired_before = mth_msg_fired_count();
     Expr* out = root_numericalize_uncached(root_expr, spec);
     int fired = (mth_msg_fired_count() != fired_before);
-    /* An interactive interrupt makes the evaluations inside decline: that
+    /* An interactive interrupt or a due TimeConstrained / MemoryConstrained
+     * abort makes the evaluations inside decline (or answer Abort[]): that
      * result is not this Root's value, so it is never memoised. */
-    if (!mth_interrupt_pending()) rnum_cache_put(root_expr, spec, h, out, fired);
+    if (!mth_interrupt_pending() && !eval_abort_raised())
+        rnum_cache_put(root_expr, spec, h, out, fired);
     return out;
 }
 

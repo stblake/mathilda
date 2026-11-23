@@ -553,7 +553,8 @@ static Expr** ar_reduce(DSolveProblem* P, int* n_out, size_t* nb_out) {
     if (slot < 0) {
         int n = 0; size_t nb = 0;
         Expr** b = ar_reduce_compute(P, &n, &nb);
-        if (ar_cache_n < AR_CACHE_SLOTS) {
+        /* not while an abort is due: the reduction was cut short (eval.h) */
+        if (ar_cache_n < AR_CACHE_SLOTS && !eval_abort_raised()) {
             slot = ar_cache_n++;
             ar_cache[slot].h = h; ar_cache[slot].n = n;
             ar_cache[slot].nb = b ? nb : 0; ar_cache[slot].b = b;
@@ -736,7 +737,7 @@ static Expr* ar_try_quadrature(const Expr* invp, const char* Ysym, int n, bool* 
     Expr* F = ar_try_quadrature_raw(sym, Ysym, &cl);
     expr_free(sym);
     if (closed) *closed = cl;
-    if (ar_qcache_n < AR_QCACHE_SLOTS) {
+    if (ar_qcache_n < AR_QCACHE_SLOTS && !eval_abort_raised()) {   /* see ar_reduce */
         ar_qcache[ar_qcache_n].h = h;
         ar_qcache[ar_qcache_n].F = F ? expr_copy(F) : NULL;
         ar_qcache[ar_qcache_n].closed = cl;

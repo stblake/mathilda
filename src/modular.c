@@ -654,9 +654,9 @@ Expr* builtin_module(Expr* res) {
             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                 orig_name = v->data.function.args[0]->data.symbol.name;
                 init_val = evaluate(v->data.function.args[1]);
-                /* A Throw out of an initializer leaves the Module at once (the
+                /* A Throw or Abort out of an initializer leaves the Module at once (the
                  * body is skipped); the locals made so far are released below. */
-                if (eval_is_inflight_throw(init_val)) { module_thrown = init_val; break; }
+                if (eval_is_inflight_unwind(init_val)) { module_thrown = init_val; break; }
             }
         }
 
@@ -1093,9 +1093,9 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                 name = v->data.function.args[0]->data.symbol.name;
                 init_val = evaluate(v->data.function.args[1]);
-                /* A Throw out of an initializer: stop localising; the caller
+                /* A Throw or Abort out of an initializer: stop localising; the caller
                  * (mth_block_thrown) skips the body and restores the frame. */
-                if (eval_is_inflight_throw(init_val)) { frame->thrown = init_val; break; }
+                if (eval_is_inflight_unwind(init_val)) { frame->thrown = init_val; break; }
             }
         }
 
@@ -1219,11 +1219,11 @@ Expr* builtin_with(Expr* res) {
                     name = v->data.function.args[0]->data.symbol.name;
                     if (h == SYM_Set) {
                         val = evaluate(v->data.function.args[1]);
-                        /* A Throw out of an initializer leaves the With at once:
+                        /* A Throw or Abort out of an initializer leaves the With at once:
                          * the body must not run (it ran, with the unevaluated
                          * Throw bound to the variable -- and a body that only
                          * applies the variable, s["F"], never re-raised it). */
-                        if (eval_is_inflight_throw(val)) {
+                        if (eval_is_inflight_unwind(val)) {
                             while (env) {
                                 ScopingEnv* next = env->next;
                                 expr_free(env->replacement);

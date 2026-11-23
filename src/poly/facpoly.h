@@ -76,6 +76,8 @@ void factor_memo_pop(void);
  * factor_memo_pop pair (which Simplify wraps around its candidate-
  * set search). */
 FactorMemo* factor_memo_active(void);
+/* The memo-stack depth, registered as a TimeConstrained unwind counter. */
+int* factor_memo_depth_counter(void);
 const Expr* factor_memo_lookup(FactorMemo* m, Expr* key);
 void factor_memo_store(FactorMemo* m, Expr* key, Expr* value);
 

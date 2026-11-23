@@ -4697,7 +4697,7 @@ static Expr* builtin_integrate_body(Expr* res) {
      * identical integrand (same top-level evaluation) short-circuits above.
      * Only the outermost user call arms the memo: an inner sub-integral's
      * failure is expected and must not suppress an unrelated outer retry. */
-    if (!result && g_integrate_depth == 0)
+    if (!result && g_integrate_depth == 0 && !eval_abort_raised())  /* not a cut-short run */
         intg_fail_record(intg_hf, intg_hx, (int)method);
 
     return result;

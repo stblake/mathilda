@@ -658,6 +658,17 @@ numeric loop never reaches.
   it to the end of its body (see [`docs/spec/repl.md`](../repl.md)).
 - `Abort[]` itself is the in-flight sentinel, like a `Throw` node. It rides the
   ordinary return path, so every frame's cleanup runs (no `longjmp`).
+  - It never becomes data. A head that evaluates to `Abort[]` or a `Throw`
+    unwinds the call, as an argument does: `CheckAbort[(Abort[])["E"], "ab"]` is
+    `"ab"` and `Catch[(Throw[7])[x]]` is `7`. An initializer of `Module`, `With`
+    or `Block` that aborts leaves the construct before the body runs. (Both used
+    to keep the sentinel as a value: `Abort[]["E"]`, or a local bound to
+    `Abort[]`.)
+  - No cache keeps a value computed while an abort is due (a timeout, a memory
+    overrun or Ctrl-C that the evaluator is turning into `Abort[]`), and a
+    timeout that unwinds a `Simplify` takes that `Simplify`'s Factor/Together
+    memo with it. Such a memo used to outlive the timeout and could hand a
+    later, unconstrained computation an `Abort[]` that no constraint owned.
 - `Interrupt[]` is not implemented: outside a notebook it ends the session in
   the reference, which is not an abort.
 

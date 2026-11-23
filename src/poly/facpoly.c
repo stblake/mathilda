@@ -235,6 +235,9 @@ Expr* builtin_polynomialsqrt(Expr* res) {
 }
 
 void facpoly_init(void) {
+    /* The per-Simplify memo stack: a timeout unwinding out of a Simplify must
+     * not leave its memo active for the rest of the session (facpoly_memo.inc). */
+    tc_register_unwind_counter(factor_memo_depth_counter());
     symtab_add_builtin("FactorSquareFree", builtin_factorsquarefree);
     symtab_get_def("FactorSquareFree")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
     symtab_add_builtin("Factor", builtin_factor);

@@ -3267,6 +3267,12 @@ void eval_unwind_consumed(void) {
     if (g_pending_unwind) { expr_free(g_pending_unwind); g_pending_unwind = NULL; }
 }
 
+bool eval_abort_raised(void) {
+    /* cf_abort_actionable, not cf_poll: read-only, so a worker thread may ask */
+    return (MTH_CF_POLL_DUE() && cf_abort_actionable()) ||
+           (MTH_INTERRUPT_PENDING() && mth_interrupt_should_stop());
+}
+
 static Expr* evaluate_step_core(Expr* e, bool* changed);
 
 /* evaluate() of a symbol that has no OwnValue is the symbol itself, and the
@@ -3340,7 +3346,20 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * structural compare if needed. */
             Expr* orig_head = e->data.function.head;
             Expr* head = eval_valueless_symbol(orig_head);
-            if (!head) head = evaluate(orig_head);
+            if (!head) {
+                head = evaluate(orig_head);
+                /* A head that evaluates to an in-flight Throw / Abort / Goto
+                 * short-circuits the call, exactly as an argument does below.
+                 * Kept as the head it was a VALUE: s["E"] with s bound to an
+                 * aborted computation became the datum Abort[]["E"], which
+                 * evaluates to itself, so the abort never reached its owner and
+                 * the Abort[] waited inside a stored value until something
+                 * took it apart (Catch[Throw[7][x]] was Throw[7][x], not 7). */
+                if (eval_is_inflight_unwind(head) || eval_is_inflight_goto(head)) {
+                    *changed = true;
+                    return head;
+                }
+            }
             if (head != orig_head) *changed = true;
 
             uint32_t attrs = ATTR_NONE;
@@ -4261,7 +4280,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         Expr* key = nfmemo_key(res);
                         ret = hdef->builtin_func(res);
                         if (key && ret && mth_msg_fired_count() == msg_before &&
-                            !mpfr_underflow_p())    /* D5 runs after: never memo its 0 */
+                            !mpfr_underflow_p() &&  /* D5 runs after: never memo its 0 */
+                            !eval_abort_raised())   /* may carry the Abort[] sentinel */
                             nfmemo_put(key, nf_h, ret);
                         else if (key) expr_free(key);
                     } else if (!ret) {

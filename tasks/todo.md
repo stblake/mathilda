@@ -1,3 +1,31 @@
+# Evaluator: aborts that escape their constraint (2026-11-23)
+
+- [x] EVAL-abort-1: an abort escaped every TimeConstrained and aborted a LATER,
+  unconstrained computation (min.m: `TimeConstrained[Integrate[f3, x], 30]` then
+  `CheckAbort[Integrate[f7, x], ...]` printed ESCAPED after 1.6 s, about 1 run in 2
+  under load). Root cause: `src/poly/facpoly_memo.inc`'s memo stack depth
+  (`g_memo_stack_top`) was not a TimeConstrained unwind counter. A timeout that
+  siglongjmp'd out of a Simplify (here inside ParallelMixedSpecial, under a 0.5 s
+  DerivativeDivides candidate budget, through the backstop's allocation safe point)
+  skipped `factor_memo_pop`, so that Simplify's memo stayed active for the rest of the
+  session and every Factor / Together / Cancel read it. It held entries stored while the
+  timeout was in flight: a Together whose inner evaluate() came back Abort[] had stored
+  `Abort[] + ...`. A later PolynomialExtendedGCD (InvMod in ParallelMixed.m) got the
+  Abort[] coefficients from it, and PolynomialRemainder's expand evaluated the Abort[]
+  with no constraint left to own it. Fixed: the depth is registered (facpoly_init) and an
+  abandoned memo is freed at the next push; memo stores are skipped while
+  `eval_abort_raised()` (factor memo, numeric-call memo, Root numeric cache, DSolve
+  autonomous caches, Integrate's fail-memo). Two evaluator paths that kept the sentinel
+  as data are closed as well: a head that evaluates to Abort[]/Throw now unwinds the call
+  (`Abort[]["E"]` was a stable value; `Catch[Throw[7][x]]` gave `Throw[7][x]`), and an
+  aborting Module/With/Block initializer skips the body. Reproduced deterministically
+  enough to verify by forcing the backstop at every trip and sweeping the DD budget:
+  ~8% escapes before (5 of ~66 runs), 0 of 60 after; 0 of 20 unforced runs. Test:
+  tests/test_abort_poison.c. Same class, not fixed (torn state after a jump, no abort
+  escape): Simplify's `g_simp_time_budget` / `g_simp_call_deadline` (doubles, not
+  restorable by the int-counter registry) are left armed when a jump leaves a Simplify
+  that set a TimeConstraint.
+
 # Kernel fixes for the book-pass findings (started 2026-11-22)
 
 Plan: ~/.claude/plans/mathilda-has-grown-significant-sharded-brooks-of-765472b2-95d0-4752-97b9-a881e445cda8.md
@@ -80,16 +108,6 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D3 theory: E2, E1 notes written and reviewed twice (docs/notes/bronstein_phase5_review.md)
 - [x] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (v0.6651)
 - [x] D3 M2: the general tower over the curve, weak normaliser, cancellation with a homogeneous solution, least radical exponent (v0.6689)
-- [ ] EVAL-abort-1: an abort escapes every constraint, minutes after its timeout. Reproduction (about 1 run in 2 at v0.6703):
-  `TimeConstrained[Integrate[-((1 + E^(-2 x) + E^(-x))^(1/4)/E^(3 x)), x], 30]` and then
-  `CheckAbort[Integrate[1/(x (-1 + Log[x]) (2 + Log[x]^2)^(1/3)), x], "escaped"]` gives "escaped" after about 1.6 s
-  (the second integral alone runs 12 s and certifies). What is known:
-  - inside the second Integrate, a 0.5 s budget expires while an inner 10 s TimeConstrained is running, and that frame is left by the backstop jump (`jumped=1`); the outer frame then consumes its timeout correctly;
-  - values computed during the timeout carry literal `Abort[]` subterms. ParallelMixedTower's `InvMod` gets `eg = PolynomialExtendedGCD[d, p, g]` whose `u^3`, `u^4` coefficients are `Abort[]`;
-  - `PolynomialRemainder` on such a value then evaluates `Abort[]` with no constraint left to own it, and it reaches the top level;
-  - no builtin returns the poisoned value through the evaluator's dispatch (instrumented: only `If` passes one on), so it is built by C code that calls builtins directly (`internal_call_impl` and the like);
-  - a boundary check at builtin dispatch (a result with a nested `Abort[]` after an abort was raised becomes the sentinel) did not catch it, so it was reverted.
-  The benchmark-261 generator wraps each attempt in `CheckAbort` meanwhile.
 - [ ] G-pzq-1: PossibleZeroQ false negatives on correct antiderivatives (E^(Sqrt[1 + x^4] + Log[1 + x]^2) shapes; 6 of the 330 M2 stress cases)
   - [x] v0.6702: cut points read at their principal value (every cut function projected onto its cut line once the normal component falls with precision); fixes a wrong True v0.6700 introduced ((Sqrt[Cot] Sqrt[Tan] - 1) UnitStep[-Tan] in exp form) and MPFR ArcTan[-2 I] = +Pi/2 - ...
   - [x] v0.6700: a FALSE needs the top two rungs to agree in value (E3-6 ArcTan residual); a signed-zero imaginary radicand on a cut is re-drawn, read on the exact point (E6d-4)

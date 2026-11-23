@@ -6462,6 +6462,19 @@ else()
 endif()
 add_test(NAME abort_tests COMMAND abort_tests)
 
+# An aborted computation must not leave Abort[] behind as data: the memo a
+# timeout jumped out of, memo stores while an abort is due, a sentinel head,
+# an aborting Module/With/Block initializer (EVAL-abort-1).
+add_executable(abort_poison_tests test_abort_poison.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(abort_poison_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(abort_poison_tests gmp m ${ECM_LIB})
+    add_dependencies(abort_poison_tests build_ecm)
+else()
+    target_link_libraries(abort_poison_tests gmp m)
+endif()
+add_test(NAME abort_poison_tests COMMAND abort_poison_tests)
+
 add_executable(memory_constrained_tests test_memory_constrained.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(memory_constrained_tests PRIVATE ../src)
 if(USE_ECM)
