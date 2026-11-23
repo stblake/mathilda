@@ -35,7 +35,10 @@ static void test_dimensions(void) {
     assert_true("Dimensions[Table[i + j, {i, 4}, {j, 3}]] === {4, 3}");
     assert_true("Dimensions[Table[i + j + k, {i, 4}, {j, 3}, {k, 2}], 2] === {4, 3}");
     assert_true("Dimensions[SparseArray[{{1, 2} -> 1}, {5, 6}]] === {5, 6}");
-    assert_true("Dimensions[LinkedList[{1, 2}]] === {}");              /* not rectangular */
+    /* A LinkedList has the dimensions of the List it stands for (get_dimensions_ll;
+     * the registry carries no dims row for it). */
+    assert_true("Dimensions[LinkedList[{1, 2}]] === {2}");
+    assert_true("Dimensions[LinkedList[{{1, 2}, {3, 4}}]] === {2, 2}");
     assert_true("Dimensions[{{1, 2}, {3}}] === {2}");                /* ragged plain list */
 }
 static void test_head(void) {

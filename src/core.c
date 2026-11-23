@@ -6325,15 +6325,9 @@ Expr* builtin_time_constrained(Expr* res) {
 #endif /* !_WIN32 */
 
     Expr* body = expr_copy(expr_arg);
-    /* The context state at entry.  A timeout the evaluator records cooperatively
-     * (no longjmp: the only enforcement where there is no async layer, and the
-     * usual path elsewhere) hands the body back through the Abort[] sentinel, so
-     * tc_run_guarded's own restore -- which belongs to the jump -- never ran: a
-     * Begin / BeginPackage left open by the aborted body then redirected every
-     * later symbol.  Restored below when this frame's timeout ended the body. */
-    size_t tc_ctxdep = context_stack_depth();
-    Expr* tc_ctx0 = NULL; Expr* tc_path0 = NULL;
-    context_capture(&tc_ctx0, &tc_path0);
+    /* The Begin / BeginPackage state is restored inside tc_run_guarded, on
+     * the jump AND on a cooperative (Abort[] sentinel) timeout, keeping the
+     * packages the body loaded to completion (context_reapply_endpackages). */
     Expr* result = tc_run_guarded(body);
 
 #ifndef _WIN32
@@ -6398,12 +6392,6 @@ Expr* builtin_time_constrained(Expr* res) {
      * not falsely "$RecursionLimit exceeded". */
     if (jumped) eval_reset_recursion_depth(saved_depth);
 
-    if (tripped == me && !jumped) {
-        context_unwind_to(tc_ctxdep);
-        context_restore(tc_ctx0, tc_path0);
-    } else {
-        context_release(tc_ctx0, tc_path0);
-    }
     if (tripped == me || faulted || (jumped && tripped < 0)) {
         /* Our timeout (or a fault inside the body): consume the abort and
          * answer failexpr, evaluated after the frame is gone -- under the

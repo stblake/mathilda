@@ -129,11 +129,15 @@ typedef enum {
  * read/write the buffer directly without copy-on-write bookkeeping beyond the
  * usual expr_unshare at the Expr level. */
 typedef struct {
+    /* Layout: this struct is the largest member of Expr's union, so its size
+     * IS sizeof(Expr) - 24 (tests/test_symsum.c pins 56). dtype and present_as
+     * are stored in one byte each, beside rank, so cap_rows fits in 32 bytes;
+     * they hold NDType / NDPresentation values (read and assign as usual). */
     int rank;        /* >= 1 */
+    uint8_t dtype;      /* NDType: element data type */
+    uint8_t present_as; /* NDPresentation: NDArray[...] or a packed List; see above */
     int64_t* dims;   /* rank entries, owned */
     void* data;      /* owned, row-major; element type given by dtype */
-    NDType dtype;    /* element data type */
-    NDPresentation present_as;  /* NDArray[...] or a packed List; see above */
     /* Allocated length of `data` in ROWS (dims[0] units), 0 = exactly dims[0].
      * Only an in-place rank-1 AppendTo (ndstruct_append_inplace) ever sets it,
      * to give amortised O(1) growth; every other site leaves it 0 and treats
