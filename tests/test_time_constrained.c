@@ -347,9 +347,14 @@ void test_tc_nested_pause_clamped_by_outer(void) {
     char* s = eval_string(
         "Module[{t, r}, {t, r} = AbsoluteTiming[TimeConstrained["
         "TimeConstrained[Pause[5], 30, inner], 0.3, outer]]; {r, t < 2}]");
-    /* The inner deadline is clamped to the outer's, so the inner scope is the
-     * one that times out (and returns its failexpr) -- at 0.3 s, not 5 s. */
-    ASSERT_STR_EQ(s, "{inner, True}");
+    /* The inner Pause is clamped to the outer's deadline, so it ends at 0.3 s, not
+     * 5 s -- and it is the OUTER scope that times out and answers its failexpr: a
+     * timeout is an ordinary Abort[] (v0.6623), raised for the budget that ran
+     * out, and a nested budget does not claim an enclosing one's expiry
+     * (Internal`TimeConstrainedRemaining documents it; abort_tests checks the
+     * same for a busy inner loop). This test predates that design and expected
+     * the inner failexpr. */
+    ASSERT_STR_EQ(s, "{outer, True}");
     free(s);
 }
 
