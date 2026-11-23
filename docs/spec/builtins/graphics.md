@@ -877,6 +877,7 @@ camera orientation; labels always show true data values regardless of the
   - a list of `{position, label}` pairs — as above but with an explicit label
     (a string is used verbatim; anything else is printed). A bare number and a
     `{position, label}` pair may be mixed in the same list.
+- A `PlotPoints` grid no machine can hold (`PlotPoints -> 2^32`) emits `General::nomem` and aborts (`$Aborted`) (audit Plot3D#1).
 
 ```mathematica
 In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]

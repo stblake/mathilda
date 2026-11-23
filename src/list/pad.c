@@ -4,6 +4,7 @@
 #include "ndstruct.h"   /* ndstruct_pad / ndstruct_delist_repack */
 #include "pad.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "checked_alloc.h" /* user-sized row buffers */
 
 /* =====================================================================
  * PadRight / PadLeft  --  pad a (possibly ragged, possibly nested) array
@@ -264,6 +265,23 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
         own_dimv = 1;
     } else {
         return NULL;   /* unrecognised length spec: leave unevaluated */
+    }
+
+    /* The lengths are the user's: level i of pr_build allocates |n0|*...*|ni|
+     * row slots in all, so each prefix product must be allocatable.  One past
+     * memory or overflowing (including |INT64_MIN|) aborts with General::nomem
+     * instead of an unchecked malloc written through (audit PadLeft#1;
+     * PadRight shares this driver). */
+    {
+        int64_t cells = 1;
+        for (size_t i = 0; i < k; i++) {
+            int64_t a = dimv[i] < 0 ? (dimv[i] == INT64_MIN ? -1 : -dimv[i]) : dimv[i];
+            if (!mth_count_mul(cells, a, &cells) ||
+                !mth_alloc_ok(cells, sizeof(Expr*), NULL)) {
+                if (own_dimv) free(dimv);
+                return mth_nomem_abort();
+            }
+        }
     }
 
     /* ---- padding (arg 2) and margins (arg 3) ---- */

@@ -505,6 +505,7 @@ Gives the successive differences of the elements in a list. The inverse of `Accu
 - Subtraction threads element-wise over sublists via the `Listable` `Plus`/`Times`, so for a matrix `m`, `Differences[m]` (= `Differences[m, 1]` = `Differences[m, {1, 0}]`) differences successive rows within each column, while `Differences[m, {0, 1}]` differences columns within each row.
 - The head of the input is preserved. A list shorter than the reduction yields the empty list.
 - Works on machine integers, GMP arbitrary-precision integers, machine-precision doubles, and symbolic expressions.
+- A step of `-2^63` is handled like any step longer than the list (`Differences[{1, 2, 3}, 1, -2^63]` is `{}`) (audit Differences#1).
 
 ```mathematica
 In[1]:= Differences[{a, b, c, d, e}]

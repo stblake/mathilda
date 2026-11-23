@@ -88,11 +88,21 @@ bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t
         return true;
     }
 
+    /* Range-check BEFORE sizing the index buffer.  The count comes from the
+     * raw spec, so {1, 2^63-1} asked for 2^63 indices (a NULL or wrapped
+     * malloc written through) before the loop below ever saw index 4 (audit
+     * Drop#1).  Every index lies between m and the last one, so the spec is
+     * in range exactly when m is and the count fits in the room from m to the
+     * end it walks towards -- which also bounds the buffer by len.  The
+     * distances are taken in uint64: n - m and -s can overflow int64. */
     int64_t count = 0;
-    if (s > 0) {
-        if (m <= n) count = (n - m) / s + 1;
-    } else if (s < 0) {
-        if (m >= n) count = (m - n) / (-s) + 1;
+    if (s != 0 && (s > 0 ? m <= n : m >= n)) {
+        if (m < 1 || m > len) return false;
+        uint64_t step = s > 0 ? (uint64_t)s : (uint64_t)0 - (uint64_t)s;
+        uint64_t dist = s > 0 ? (uint64_t)n - (uint64_t)m : (uint64_t)m - (uint64_t)n;
+        uint64_t room = (uint64_t)(s > 0 ? len - m : m - 1) / step + 1;
+        if (dist / step + 1 > room) return false;
+        count = (int64_t)(dist / step + 1);
     }
 
     if (count > 0) {

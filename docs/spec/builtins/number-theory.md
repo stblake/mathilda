@@ -444,6 +444,7 @@ residues $\{1, \ldots, n-1\}$.
   unevaluated with no diagnostic, matching the reference.
 - Diagnostic: `PrimitiveRootList::argx` if not called with exactly 1
   argument.
+- The list is sized by its exact length `EulerPhi[EulerPhi[n]]`; one no machine can hold (`PrimitiveRootList[3458764513820540933]`) emits `General::nomem` and aborts (`$Aborted`) (audit PrimitiveRootList#1).
 
 ```mathematica
 In[1]:= PrimitiveRootList[9]

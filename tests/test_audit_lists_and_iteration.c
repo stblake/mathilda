@@ -34,9 +34,29 @@ static void test_tuples_long_tuple(void) {
               "{{{a}, {a}}, {{a}, {b}}, {{b}, {a}}, {{b}, {b}}}");
 }
 
+/* Array#1 (high): Array[f, 10^15] segfaulted (unchecked malloc of the result
+ * slots, which also wrapped at 2^61).  Every level's slot count is checked. */
+static void test_array_huge_dimension(void) {
+    audit_chk("Array#1", "Quiet[CheckAbort[Array[f, 10^15], aborted]]", "aborted");
+    audit_chk("Array#1", "Quiet[Check[CheckAbort[Array[f, 10^15], 0], fired, General::nomem]]",
+              "fired");
+    audit_chk("Array#1", "Quiet[CheckAbort[Array[f, 2^61], aborted]]", "aborted");
+    audit_chk("Array#1", "Quiet[CheckAbort[Array[f, {10^15, 0}], aborted]]", "aborted");
+    audit_chk("Array#1", "Quiet[CheckAbort[Array[f, {2^32, 2^32}], aborted]]", "aborted");
+    audit_chk("Array#1", "Array[f, 3]", "{f[1], f[2], f[3]}");
+    audit_chk("Array#1", "Array[f, {2, 2}, 0]", "{{f[0, 0], f[0, 1]}, {f[1, 0], f[1, 1]}}");
+    audit_chk("Array#1", "Array[f, {0, 10^15}]", "{}");
+    /* The same class in ArrayReshape (List and packed paths). */
+    audit_chk("Array#1", "Quiet[CheckAbort[ArrayReshape[{1}, {10^15, 0}], aborted]]", "aborted");
+    audit_chk("Array#1", "Quiet[CheckAbort[ArrayReshape[Range[100], 2^61], aborted]]", "aborted");
+    audit_chk("Array#1", "ArrayReshape[Range[6], {2, 3}]", "{{1, 2, 3}, {4, 5, 6}}");
+    audit_chk("Array#1", "ArrayReshape[{1, 2}, {2, 2}]", "{{1, 2}, {0, 0}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
     TEST(test_tuples_long_tuple);
+    TEST(test_array_huge_dimension);
     return audit_finish("audit_lists_and_iteration");
 }

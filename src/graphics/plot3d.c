@@ -27,6 +27,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "checked_alloc.h"   /* mth_alloc2_ok: the PlotPoints grid */
 #include <stdlib.h>
 #include <math.h>
 
@@ -810,6 +811,18 @@ Expr* builtin_plot3d(Expr* res) {
         iter_spec_free(&ix);
         iter_spec_free(&iy);
         return NULL;
+    }
+    /* PlotPoints is the user's: the first grid is n x n GridPts (later
+     * refinements are capped at 200/axis).  A grid past memory, or whose
+     * n*n overflows, aborts with General::nomem instead of an unchecked
+     * malloc that wrapped to a tiny block (audit Plot3D#1). */
+    if (!mth_alloc2_ok(sopts.plot_points, sopts.plot_points, sizeof(GridPt))) {
+        iter_spec_free(&ix);
+        iter_spec_free(&iy);
+        expr_free(single_color);
+        for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
+        free(passthrough);
+        return mth_nomem_abort();
     }
 
     /* One surface (Plot3D[f, …]) or several (Plot3D[{f1, f2, …}, …]). */

@@ -2576,6 +2576,7 @@ Generates an identity matrix.
   should be a positive machine integer or a pair of positive machine
   integers.") and stays unevaluated. A symbol, or a pair with a non-positive
   or non-integer entry (`{0, 3}`, `{2, -1}`), stays unevaluated silently.
+- A size no machine can hold (`IdentityMatrix[{2^62 + 1, 4}]`, whose `m n` overflows) emits `General::nomem` and aborts (`$Aborted`) instead of building an undersized buffer (audit IdentityMatrix#1).
 
 ```mathematica
 In[1]:= IdentityMatrix[3]
@@ -2728,6 +2729,7 @@ Generates a matrix with specified elements on a diagonal.
   against NumPy's `np.diag`. The single-vector form **compiles**
   (`Compile[{{v, _Real, 1}}, DiagonalMatrix[v]]`, rank 1 → rank 2). See
   [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+- An `{m, n}` no machine can hold emits `General::nomem` and aborts (`$Aborted`) (audit DiagonalMatrix#1).
 
 ```mathematica
 In[1]:= DiagonalMatrix[{a, b, c}]
@@ -2821,6 +2823,7 @@ processing.
   two-vector form (`Compile[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]`,
   rank 1 × rank 1 → rank 2) **compile**, delegating to this builtin. See
   [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+- A size no machine can hold (`HankelMatrix[2^31]`) emits `General::nomem` and aborts (`$Aborted`) (audit HankelMatrix#1).
 
 **Diagnostics**:
 ```
@@ -2878,6 +2881,7 @@ and time series.
   (`Compile[{{v, _Real, 1}}, ToeplitzMatrix[v]]`, rank 1 → rank 2) and the
   two-vector form (`ToeplitzMatrix[c, r]`, rank 1 × rank 1 → rank 2)
   **compile**. See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+- A size no machine can hold (`ToeplitzMatrix[2^31]`) emits `General::nomem` and aborts (`$Aborted`) (audit ToeplitzMatrix#1).
 
 **Diagnostics**:
 ```
@@ -2932,6 +2936,7 @@ in computing moments in the monomial basis.
   `Power` cells of an integer node stay exact beside a real one.) The
   single-vector form **compiles** (`Compile[{{v, _Real, 1}}, VandermondeMatrix[v]]`,
   rank 1 → rank 2). See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+- A column count no machine can hold (`VandermondeMatrix[{x}, 10^15]`) emits `General::nomem` and aborts (`$Aborted`) (audit VandermondeMatrix#1).
 
 **Diagnostics**:
 ```

@@ -32,6 +32,7 @@
 #include "sym_names.h"
 #include "files.h"      /* files_import_text, files_export_text */
 #include "message.h"
+#include "checked_alloc.h"  /* user-sized RandomImage buffers */
 #include "graphics/graphics_export.h"
 #include "graphics/render.h"       /* graphics_raster_dims: aspect-aware export sizing */
 
@@ -467,9 +468,20 @@ static Expr* builtin_random_image(Expr* res)
         else return NULL;   /* an unsupported space is not silently grey */
     }
 
-    n = w * h * ch;
+    /* {w, h} are the user's: w*h*ch used to wrap (2^40 x 2^40 is 2^80 samples,
+     * 0 mod 2^64), so an impossible image either overran a tiny buffer or ran
+     * for minutes.  Checked, it aborts at once with General::nomem (audit
+     * RandomImage#1).  w, h came from positive int64s, so the casts are exact. */
+    {
+        int64_t whc;
+        if (!mth_count_mul((int64_t)w, (int64_t)h, &whc) ||
+            !mth_count_mul(whc, (int64_t)ch, &whc) ||
+            !mth_alloc_ok(whc, sizeof(double), NULL))
+            return mth_nomem_abort();
+        n = (size_t)whc;
+    }
     buf = (double*)malloc(n * sizeof(double));
-    if (!buf) return NULL;
+    if (!buf) return mth_nomem_abort();
     /* Scaled by `max` and NOT clamped: the caller asked for that range, and a "Real" image is
      * free to hold values above 1 -- Export is where clamping belongs. */
     for (i = 0; i < n; i++) buf[i] = random_uniform_01() * max;

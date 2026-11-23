@@ -12,6 +12,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "checked_alloc.h" /* mth_malloc_n: the phi(phi(n)) roots */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -558,12 +559,30 @@ Expr* builtin_primitiverootlist(Expr* res) {
     mpz_set_ui(cur, 1);
     mpz_set(g_local, g);
 
-    mpz_t* roots = (mpz_t*)malloc(sizeof(mpz_t) * (phi_ul + 1));
+    /* The list has exactly phi(phi(n)) = phi * prod (q - 1)/q entries (q over
+     * the distinct primes of phi), so size the buffer by that, checked: the
+     * old sizeof(mpz_t) * (phi + 1) wrapped for phi near 2^60 (16 * (3*2^60
+     * + 5) is 80 bytes mod 2^64) and the loop overran it (audit
+     * PrimitiveRootList#1).  A list past memory aborts with General::nomem. */
+    int64_t want;
+    {
+        mpz_t cnt, qm1;
+        mpz_init_set(cnt, phi);
+        mpz_init(qm1);
+        for (size_t i = 0; i < nprimes; i++) {
+            mpz_divexact(cnt, cnt, primes[i]);       /* q still divides it */
+            mpz_sub_ui(qm1, primes[i], 1);
+            mpz_mul(cnt, cnt, qm1);
+        }
+        want = (int64_t)mpz_get_ui(cnt);             /* cnt <= phi fits ulong */
+        mpz_clears(cnt, qm1, NULL);
+    }
+    mpz_t* roots = (mpz_t*)mth_malloc_n(want, sizeof(mpz_t));
     if (!roots) {
         mpz_clears(g, two, cur, i_mpz, g_local, NULL);
         for (size_t i = 0; i < nprimes; i++) mpz_clear(primes[i]);
         mpz_clears(n, p, phi, NULL);
-        return NULL;
+        return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
     }
     size_t root_count = 0;
 
@@ -579,7 +598,7 @@ Expr* builtin_primitiverootlist(Expr* res) {
             while (b) { unsigned long t = a % b; a = b; b = t; }
             ggcd = a;
         }
-        if (ggcd == 1) {
+        if (ggcd == 1 && root_count < (size_t)want) {
             mpz_init_set(roots[root_count], cur);
             root_count++;
         }

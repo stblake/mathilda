@@ -11,6 +11,7 @@
 #include "pack.h"
 #include "sparse/sparse.h"
 #include "message.h"
+#include "checked_alloc.h"
 #include "print.h"
 #include <stdlib.h>
 
@@ -66,6 +67,10 @@ Expr* builtin_identitymatrix(Expr* res) {
     }
 
     if (m <= 0 || n <= 0) return NULL;
+    /* m, n are the user's: a matrix past memory, or one whose m*n overflows,
+     * aborts with General::nomem instead of wrapping the buffer size
+     * (audit IdentityMatrix#1).  Each entry costs at least one machine word. */
+    if (!mth_alloc2_ok(m, n, sizeof(int64_t))) return mth_nomem_abort();
 
     /* THE BUFFER PATH. Every entry is the exact Integer 0 or 1, so the matrix
      * is uniformly int64 and no element's head can change by writing it into a
@@ -88,10 +93,10 @@ Expr* builtin_identitymatrix(Expr* res) {
         }
     }
 
-    Expr** rows = malloc(sizeof(Expr*) * m);
-    for (int i = 0; i < m; i++) {
-        Expr** row_elems = malloc(sizeof(Expr*) * n);
-        for (int j = 0; j < n; j++) {
+    Expr** rows = malloc(sizeof(Expr*) * (size_t)m);
+    for (int64_t i = 0; i < m; i++) {
+        Expr** row_elems = malloc(sizeof(Expr*) * (size_t)n);
+        for (int64_t j = 0; j < n; j++) {
             if (i == j) {
                 row_elems[j] = expr_new_integer(1);
             } else {
@@ -151,6 +156,8 @@ Expr* builtin_diagonalmatrix(Expr* res) {
     }
 
     if (m < 0 || n < 0) return expr_copy(res);
+    /* As IdentityMatrix: an impossible m x n aborts (audit DiagonalMatrix#1). */
+    if (!mth_alloc2_ok(m, n, sizeof(int64_t))) return mth_nomem_abort();
 
     /* THE ZEROS TAKE THE DIAGONAL'S EXACTNESS -- see common.h's note on
      * machine-real contagion. One machine `Real` on the diagonal makes the

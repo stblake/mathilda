@@ -35,6 +35,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/* The most factors the finite form expands into an explicit product, for
+ * either sign of n.  Past it an exact or symbolic call stays in closed form
+ * (QPochhammer[a, q, 10^7] used to build and evaluate a 10^7-factor product,
+ * minutes and gigabytes -- audit QPochhammer#6); an inexact one goes through
+ * arb's (a; q)_inf / (a q^n; q)_inf, as a non-integer n does. */
+#define QP_EXPAND_MAX 100000
+
 /* (1 - a q^k) as an owned, unevaluated tree. */
 static Expr* qfactor(Expr* a, Expr* q, int64_t k) {
     Expr* qk = expr_new_function(expr_new_symbol(SYM_Power),
@@ -59,9 +66,13 @@ Expr* builtin_qpochhammer(Expr* res) {
                 return flint_num_for_call(flint_num_qpochhammer(av, qv, nv), res);
             return NULL;                                 /* symbolic n stays */
         }
+        if (n > QP_EXPAND_MAX || n < -QP_EXPAND_MAX) {
+            if (flint_num_call_inexact(res))
+                return flint_num_for_call(flint_num_qpochhammer(av, qv, nv), res);
+            return NULL;                                 /* closed form stays */
+        }
         if (n < 0) {
             /* (a; q)_-m = 1 / prod_{k=1}^{m} (1 - a q^-k). */
-            if (n < -100000) return NULL;
             int64_t m = -n;
             Expr** facs = malloc(sizeof(Expr*) * (size_t)m);
             for (int64_t k = 0; k < m; k++) facs[k] = qfactor(av, qv, -(k + 1));

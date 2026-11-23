@@ -28,6 +28,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "checked_alloc.h" /* mth_alloc2_ok: user-sized matrices */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -93,6 +94,10 @@ static bool hk_all_machine_real(Expr* const* v, int64_t n) {
 static Expr* hk_build(int64_t m, int64_t n,
                       Expr* const* cvals, Expr* const* rvals,
                       bool integer_form, bool real) {
+    /* HankelMatrix[n] takes n from the user: an n x n past memory (or whose
+     * product overflows) aborts with General::nomem rather than wrapping the
+     * buffer size (audit HankelMatrix#1).  Each entry is at least a word. */
+    if (!mth_alloc2_ok(m, n, sizeof(int64_t))) return mth_nomem_abort();
     /* Buffer fast path — bit-identical to the nested build below (same cell
      * formula, same machine-real contagion), it just writes the flat row-major
      * machine buffer directly instead of allocating m*n Expr cells and offering

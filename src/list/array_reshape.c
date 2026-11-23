@@ -4,6 +4,7 @@
 #include "ndarray.h"     /* is_ndarray */
 #include "ndstruct.h"    /* ndstruct_arrayreshape */
 #include "linkedlist_seq.h" /* LLSeq: LinkedList input levels */
+#include "checked_alloc.h"  /* user-sized reshape levels */
 
 /* ArrayReshape[list, dims]           arrange the flattened elements of list into
  *                                    a rectangular dims array, dropping extras.
@@ -156,6 +157,15 @@ Expr* builtin_array_reshape(Expr* res) {
     int64_t total;
     if (!ar_parse_dims(res->data.function.args[1], d, &dim_count, &total))
         return NULL;
+    /* The dimensions are the user's: level k allocates d0*...*dk slots in
+     * all, so each prefix product must be allocatable -- past memory aborts
+     * with General::nomem rather than an unchecked malloc (the Array#1 class). */
+    {
+        int64_t cells = 1;
+        for (size_t k = 0; k < dim_count; k++)
+            if (!mth_count_mul(cells, d[k], &cells) || !mth_alloc_ok(cells, sizeof(Expr*), NULL))
+                return mth_nomem_abort();
+    }
 
     /* The input's leaves, as references. */
     ARLeaves L = { NULL, 0, 0, NULL, 0, 0 };

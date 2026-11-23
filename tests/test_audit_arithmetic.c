@@ -21,8 +21,20 @@ static void test_complex_expand_conjugate(void) {
                "PossibleZeroQ[ComplexExpand[Re[z^2], {z}, TargetFunctions -> Conjugate] - (z^2 + Conjugate[z]^2)/2]");
 }
 
+/* Differences#1 (high): Differences[list, 1, -2^63] crashed -- -s overflowed
+ * at INT64_MIN, so the |s| >= length guard failed.  The result length is
+ * l - n|s|, empty here. */
+static void test_differences_int64_min_step(void) {
+    audit_chk("Differences#1", "Differences[{1, 2, 3}, 1, -2^63]", "{}");
+    audit_chk("Differences#1", "Differences[{1, 2, 3}, 1, -2^62]", "{}");
+    audit_chk("Differences#1", "Differences[LinkedList[{1, 2, 3}], 1, -2^63] // Normal", "{}");
+    audit_chk("Differences#1", "Differences[{1, 2, 4, 8}, 1, -2]", "{-3, -6}");
+    audit_chk("Differences#1", "Differences[{1, 2, 3}, 1, 2]", "{2}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
+    TEST(test_differences_int64_min_step);
     return audit_finish("audit_arithmetic");
 }

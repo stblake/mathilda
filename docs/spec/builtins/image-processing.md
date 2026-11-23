@@ -691,6 +691,7 @@ Uniform noise as an image.
 - Noise is the input a filter is most often judged on — a smoothing radius means nothing
   on a checkerboard and everything on a noise field.
 - An unsupported colour space declines rather than silently returning grey.
+- A size no machine can hold (`RandomImage[1, {2^40, 2^40}]`) emits `General::nomem` and aborts at once (`$Aborted`) (audit RandomImage#1).
 
 #### Basic Examples
 

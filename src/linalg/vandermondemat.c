@@ -32,6 +32,7 @@
 #include "sym_names.h"
 #include "checked_int.h"   /* ci_powi_i64 — exact integer powers, overflow flag */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "checked_alloc.h" /* mth_alloc2_ok: user-sized matrices */
 #include <math.h>          /* pow — matches power.c's real^integer branch */
 #include <stdio.h>
 #include <stdlib.h>
@@ -89,6 +90,10 @@ static Expr* vm_entry(Expr* node, int64_t exp, bool real) {
  * nodes[i]^(j) for 0-based i in [0, n) and j in [0, k).  Source nodes are
  * deep-copied; the input keeps its ownership. */
 static Expr* vm_build(int64_t n, int64_t k, Expr* const* nodes) {
+    /* k is the user's: an n x k past memory (or whose product overflows)
+     * aborts with General::nomem instead of an unchecked malloc that was
+     * then written through (audit VandermondeMatrix#1). */
+    if (!mth_alloc2_ok(n, k, sizeof(int64_t))) return mth_nomem_abort();
     bool real = false;
     for (int64_t i = 0; i < n && !real; i++)
         if (nodes[i] && nodes[i]->type == EXPR_REAL) real = true;

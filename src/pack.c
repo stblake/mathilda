@@ -7,6 +7,7 @@
 #include "sym_names.h"
 #include "attr.h"
 #include "memacct.h"   /* MemoryConstrained: refuse before allocating */
+#include "checked_alloc.h"  /* overflow-checked user-sized buffers */
 #include "eval.h"
 #include "common.h"   /* head_is */
 #include <stdio.h>
@@ -427,20 +428,33 @@ Expr* pack_eval_plain(Expr* e) {
  * Direct construction
  * -------------------------------------------------------------------------- */
 
+/* The element count and byte size of a buffer of shape `dims`, checked: every
+ * extent positive, the extent product and the byte size free of 64-bit
+ * overflow, within physical memory and allowed by MemoryConstrained
+ * (mth_alloc_ok).  False declines silently, like a failed malloc -- the
+ * caller's boxed fallback (or its own up-front mth_alloc_ok) decides what the
+ * user sees.  The unchecked product used to wrap: IdentityMatrix[{2^62+1, 4}]
+ * got a 4-slot buffer advertised as 2^62+1 rows (audit IdentityMatrix#1). */
+static bool nd_checked_bytes(int rank, const int64_t* dims, NDType dtype,
+                             size_t* n_out, size_t* bytes_out) {
+    int64_t n = 1;
+    for (int i = 0; i < rank; i++) {
+        if (dims[i] < 1) return false;
+        if (!mth_count_mul(n, dims[i], &n)) return false;
+    }
+    if (!mth_alloc_ok(n, ndt_elem_size(dtype), bytes_out)) return false;
+    *n_out = (size_t)n;
+    return true;
+}
+
 static Expr* ndbuild_open_impl(int rank, const int64_t* dims, NDType dtype, void** buf_out,
                                bool zeroed) {
     *buf_out = NULL;
     if (!pack_enabled() || rank < 1 || rank >= NDARRAY_MAX_RANK) return NULL;
-    size_t n = 1;
-    for (int i = 0; i < rank; i++) {
-        if (dims[i] < 1) return NULL;
-        n *= (size_t)dims[i];
-    }
+    size_t n = 0, bytes = 0;
+    if (!nd_checked_bytes(rank, dims, dtype, &n, &bytes)) return NULL;
     if (n < pack_min_elements()) return NULL;
-    /* MemoryConstrained: a refused buffer declines like a failed malloc; the
-     * caller's boxed fallback then trips the evaluator's poll at once. */
-    if (!mth_mem_request(ndt_elem_size(dtype) * n)) return NULL;
-    void* buf = zeroed ? calloc(n, ndt_elem_size(dtype)) : malloc(ndt_elem_size(dtype) * n);
+    void* buf = zeroed ? calloc(n, ndt_elem_size(dtype)) : malloc(bytes);
     if (!buf) return NULL;
     Expr* e = expr_new_ndarray_raw(rank, dims, buf, dtype);
     if (!e) { free(buf); return NULL; }
@@ -462,15 +476,9 @@ Expr* ndbuild_open_like(const Expr* src, int rank, const int64_t* dims,
                         NDType dtype, void** buf_out) {
     *buf_out = NULL;
     if (rank < 1 || rank >= NDARRAY_MAX_RANK) return NULL;
-    size_t n = 1;
-    for (int i = 0; i < rank; i++) {
-        if (dims[i] < 1) return NULL;
-        n *= (size_t)dims[i];
-    }
-    /* MemoryConstrained: a refused buffer declines like a failed malloc; the
-     * caller's boxed fallback then trips the evaluator's poll at once. */
-    if (!mth_mem_request(ndt_elem_size(dtype) * n)) return NULL;
-    void* buf = malloc(ndt_elem_size(dtype) * n);
+    size_t n = 0, bytes = 0;
+    if (!nd_checked_bytes(rank, dims, dtype, &n, &bytes)) return NULL;
+    void* buf = malloc(bytes);
     if (!buf) return NULL;
     Expr* e = expr_new_ndarray_like(src, rank, dims, buf, dtype);
     if (!e) { free(buf); return NULL; }

@@ -154,6 +154,25 @@ static void test_bernoullib_large_index(void) {
     audit_chk(id, "BernoulliB[4999]", "0");
 }
 
+/* Builtin-audit regressions: special functions (review/issues/; tests/test_audit.h). */
+#include "test_audit.h"
+
+/* QPochhammer#6 (low, performance): a large positive n expanded an unbounded
+ * symbolic product (10^7 factors: minutes and gigabytes), unlike negative n.
+ * Both signs now share one expansion bound; past it an exact/symbolic call
+ * stays in closed form and an inexact one goes through (a;q)_inf/(a q^n;q)_inf. */
+static void test_qpochhammer_large_n(void) {
+    audit_chk("QPochhammer#6", "QPochhammer[a, q, 10^7]", "QPochhammer[a, q, 10000000]");
+    audit_chk("QPochhammer#6", "QPochhammer[a, q, -10^7]", "QPochhammer[a, q, -10000000]");
+    /* (1/2; 1/2)_n converges to (1/2; 1/2)_inf. */
+    audit_true("QPochhammer#6",
+               "Abs[QPochhammer[0.5, 0.5, 10^7] - QPochhammer[0.5, 0.5]] < 10^-14");
+    audit_true("QPochhammer#6",
+               "Abs[QPochhammer[0.5, 0.25, 200000] - QPochhammer[0.5, 0.25, 200]] < 10^-14");
+    audit_chk("QPochhammer#6", "Expand[QPochhammer[a, q, 2]]", "1 - a - a q + a^2 q");
+    audit_true("QPochhammer#6", "QPochhammer[2, 3, 3] == (1 - 2) (1 - 6) (1 - 18)");
+}
+
 int main(void) {
     audit_init();
     TEST(test_betaregularized_large_b);
@@ -161,5 +180,6 @@ int main(void) {
     TEST(test_struveh_large_z);
     TEST(test_mathieu_far_imaginary);
     TEST(test_bernoullib_large_index);
+    TEST(test_qpochhammer_large_n);
     return audit_finish("audit_special_functions");
 }

@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "array.h"
 #include "../pack.h"
+#include "../checked_alloc.h"
 
 static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_count, size_t current_dim, Expr** current_args) {
     if (current_dim == dim_count) {
@@ -111,7 +112,23 @@ Expr* builtin_array(Expr* res) {
             return NULL;
         }
     }
-    
+
+    /* The dimensions are the user's: level i allocates d0*...*di result
+     * slots in all, so each prefix product must be allocatable.  One past
+     * memory (or overflowing) aborts with General::nomem instead of an
+     * unchecked malloc written through (audit Array#1, Array[f, 10^15]). */
+    {
+        int64_t cells = 1;
+        for (size_t i = 0; i < dim_count; i++) {
+            if (!mth_count_mul(cells, n_array[i]->data.integer, &cells) ||
+                !mth_alloc_ok(cells, sizeof(Expr*), NULL)) {
+                free(n_array);
+                free(r_array);
+                return mth_nomem_abort();
+            }
+        }
+    }
+
     Expr** current_args = malloc(sizeof(Expr*) * dim_count);
     Expr* result = array_helper(f, n_array, r_array, dim_count, 0, current_args);
     free(current_args);

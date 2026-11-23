@@ -203,15 +203,26 @@ Expr* builtin_complete_kary_tree(Expr* res) {
     return kary_tree(n, k);
 }
 
-/* Circulant edges i ~ i + s (mod n) for each offset in offs (already reduced). */
+/* Circulant edges i ~ i + s (mod n) for each offset in offs: canonical (in
+ * [1, n/2]), distinct and sorted, so every pair emitted is a distinct edge.
+ * The half-turn offset s = n/2 joins i to i + s and i + s back to i, so it is
+ * walked over i < s only.  pairs_add's GEN_MAX_EDGES cap therefore counts
+ * distinct edges: it used to count the raw ones, so CirculantGraph[n,
+ * {1, 1, 1}] (or a half-turn jump) was refused far below the documented
+ * 5x10^7-edge limit (audit CirculantGraph#1). */
 static int circulant_add(Pairs* p, int64_t n, const int64_t* offs, int noffs) {
     for (int64_t i = 0; i < n; i++)
         for (int j = 0; j < noffs; j++) {
             int64_t s = offs[j];
-            if (s == 0) continue;
+            if (2 * s == n && i >= s) continue;
             if (!pairs_add(p, i, (i + s) % n)) return 0;
         }
     return 1;
+}
+
+static int i64_cmp(const void* x, const void* y) {
+    int64_t a = *(const int64_t*)x, b = *(const int64_t*)y;
+    return (a > b) - (a < b);
 }
 
 Expr* builtin_circulant_graph(Expr* res) {
@@ -233,10 +244,16 @@ Expr* builtin_circulant_graph(Expr* res) {
         if (items[j]->type != EXPR_INTEGER) { free(offs); return NULL; }
         int64_t s = items[j]->data.integer % n;
         if (s < 0) s += n;
-        offs[j] = s;
+        offs[j] = (n - s < s) ? n - s : s;      /* i ~ i+s is i ~ i-(n-s) */
     }
+    /* Distinct nonzero canonical offsets: a repeated (or mirrored) jump adds
+     * no edge, and 0 is no jump at all. */
+    qsort(offs, (size_t)nj, sizeof(int64_t), i64_cmp);
+    int nu = 0;
+    for (int j = 0; j < nj; j++)
+        if (offs[j] != 0 && (nu == 0 || offs[nu - 1] != offs[j])) offs[nu++] = offs[j];
     Pairs p = { NULL, 0, 0, 1 };
-    int ok = circulant_add(&p, n, offs, nj);
+    int ok = circulant_add(&p, n, offs, nu);
     free(offs);
     if (!ok) { free(p.k); return NULL; }
     return pairs_graph(n, &p);

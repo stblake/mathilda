@@ -3023,6 +3023,8 @@ Out[4]= 0.743798 - 0.0953168 I
 
 ## QPochhammer
 
+The finite form expands into an explicit product only for `|n| <= 10^5`; past that an exact or symbolic call stays in closed form (`QPochhammer[a, q, 10^7]`) and an inexact one is evaluated as `(a; q)_inf / (a q^n; q)_inf` (audit QPochhammer#6).
+
 `QPochhammer[a, q, n]` gives the q-Pochhammer symbol (q-shifted
 factorial) `prod_{k=0}^{n-1} (1 - a q^k)`; `QPochhammer[a, q]` gives the
 infinite product `(a;q)_Inf` for `|q| < 1`.  The finite form is

@@ -44,6 +44,11 @@ bool mth_alloc_ok(int64_t count, size_t elsize, size_t* bytes) {
     return true;
 }
 
+bool mth_alloc2_ok(int64_t a, int64_t b, size_t elsize) {
+    int64_t n = 0;
+    return mth_count_mul(a, b, &n) && mth_alloc_ok(n, elsize, NULL);
+}
+
 void mth_nomem_message(void) {
     mth_message(SYM_General, "nomem",
                 "The current computation was aborted because there was "

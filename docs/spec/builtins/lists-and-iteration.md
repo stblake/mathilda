@@ -390,6 +390,7 @@ Generates an array by applying a function to indices.
   threshold that is a rectangular block of uniformly exact or uniformly inexact
   machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
   dense buffer, distinguishable only by `NDArrayQ`. Offered after building, not written directly:
+- Dimensions no machine can hold (`Array[f, 10^15]`) emit `General::nomem` and abort (`$Aborted`) (audit Array#1).
 `Array` evaluates `f[i]` per leaf with no advance knowledge of the result type.
 
 ## ConstantArray
@@ -424,6 +425,7 @@ dimensions. Attributes: `Protected`.
   integer or a list of them) from the elements of `list` in row-major order.
 - `ArrayReshape[list, dims, padding]`: use the given padding scheme when `list`
   has too few elements.
+- Dimensions no machine can hold emit `General::nomem` and abort (`$Aborted`), on the List and the packed path alike (the Array#1 class).
 
 `list` is fully flattened first (only `List` levels are descended), so up to the
 shared length `Flatten[ArrayReshape[list, dims]]` equals `Flatten[list]`. Extra
@@ -452,6 +454,7 @@ Attributes: `Protected`. Options: `InterpolationOrder -> 1`.
 - `ArrayPad[array, {{m1, n1}, {m2, n2}, ...}]`: per-level amounts; `{mi}` means
   `{mi, mi}`, and a negative amount removes elements from that side.
 - `ArrayPad[array, amounts, padding]`: fill with the given padding.
+- A padded size no machine can hold (`ArrayPad[{1}, 10^15]`, and likewise `PadLeft[{1}, 10^15]` / `PadRight`) emits `General::nomem` and aborts (`$Aborted`); amounts at `-2^63` no longer overflow (audit PadLeft#1).
 
 The padding is a constant `c` (default `0`), a cyclic list `{c1, c2, ...}`, or
 one of the named schemes `"Fixed"`, `"Periodic"`, `"Reflected"`, `"Reversed"`,

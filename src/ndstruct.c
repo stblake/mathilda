@@ -5,6 +5,7 @@
 
 #include "ndstruct.h"
 #include "memacct.h"
+#include "checked_alloc.h"  /* mth_alloc_ok -- user-sized pads */
 #include "pack.h"    /* pack_repack_like — a packed source re-sniffs its dtype */
 #include "checked_int.h"  /* ci_sub_i64 — Differences abandons on int64 overflow */
 #include "ndarray.h"
@@ -624,6 +625,10 @@ Expr* ndstruct_pad(Expr* res, bool left) {
     size_t esz = ndt_elem_size(dt);
     const char* s = (const char*)a->data.ndarray.data;
     int64_t odims[1] = { want };
+    /* want is the user's: past memory (or want*esz overflowing) declines to
+     * the List path, whose up-front check reports General::nomem -- the
+     * unchecked product used to wrap to a tiny buffer (audit PadLeft#1). */
+    if (!mth_alloc_ok(want, esz, NULL)) return NULL;
 
     if (want <= n) {
         /* Truncation: PadLeft keeps the LAST `want`, PadRight the first. */
@@ -831,6 +836,10 @@ Expr* ndstruct_arrayreshape(Expr* res) {
     size_t sz = ndarray_size(a);
     const char* s = (const char*)a->data.ndarray.data;
 
+    /* total is the user's: total * esz used to wrap (2^61 int64s is 0 bytes
+     * mod 2^64) and the fill overran the block.  Past memory aborts, as the
+     * List path does (the Array#1 class). */
+    if (!mth_alloc_ok(total, esz, NULL)) return mth_nomem_abort();
     char* out = malloc((size_t)total * esz);
     if (!out) return ndarray_delist_and_reeval(res);
 
@@ -882,17 +891,23 @@ Expr* ndstruct_arraypad(Expr* res) {
     }
 
     int64_t n = a->data.ndarray.dims[0];
-    int64_t drop_front = l < 0 ? -l : 0;
-    int64_t drop_back = r < 0 ? -r : 0;
+    /* The amounts are the user's: a drop is clamped to the length (so -l
+     * never overflows at INT64_MIN), and a pad whose total overflows or is
+     * past memory declines to the List path, which reports General::nomem. */
+    int64_t drop_front = l < 0 ? (l < -n ? n : -l) : 0;
+    int64_t drop_back = r < 0 ? (r < -n ? n : -r) : 0;
     int64_t keep = n - drop_front - drop_back;
     if (keep < 0) keep = 0;
     int64_t pad_front = l > 0 ? l : 0;
     int64_t pad_back = r > 0 ? r : 0;
-    int64_t new_n = pad_front + keep + pad_back;
+    int64_t new_n;
+    if (ci_add_i64(pad_front, keep, &new_n) || ci_add_i64(new_n, pad_back, &new_n))
+        return NULL;
     if (new_n <= 0) return NULL;          /* {} -> let the List path answer */
 
     NDType dt = a->data.ndarray.dtype;
     size_t esz = ndt_elem_size(dt);
+    if (!mth_alloc_ok(new_n, esz, NULL)) return NULL;
 
     double re = 0.0; int64_t iv = 0;
     if (pad_front > 0 || pad_back > 0) {

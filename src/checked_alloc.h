@@ -37,6 +37,10 @@ bool mth_count_mul(int64_t a, int64_t b, int64_t* out);
  * byte count is stored in *bytes (when non-NULL).  No message. */
 bool mth_alloc_ok(int64_t count, size_t elsize, size_t* bytes);
 
+/* mth_alloc_ok for an a x b block (a matrix, a grid): the product a * b is
+ * itself overflow-checked first.  No message. */
+bool mth_alloc2_ok(int64_t a, int64_t b, size_t elsize);
+
 /* malloc / calloc of `count` elements of `elsize` bytes, checked as above.
  * NULL (after General::nomem) when the request cannot be met or the
  * allocator fails.  A zero count allocates one byte, so NULL always means

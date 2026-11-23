@@ -50,10 +50,62 @@ static void test_depth_deep_nesting(void) {
     audit_chk("Depth#2", "LeafCount[1 + a + b^2]", "6");
 }
 
+/* An impossible size aborts with General::nomem: CheckAbort sees the abort and
+ * Check sees the (routed) message. */
+static void nomem_chk(const char* id, const char* expr) {
+    char buf[512];
+    snprintf(buf, sizeof buf, "Quiet[CheckAbort[%s, aborted]]", expr);
+    audit_chk(id, buf, "aborted");
+    snprintf(buf, sizeof buf, "Quiet[Check[CheckAbort[%s, 0], fired, General::nomem]]", expr);
+    audit_chk(id, buf, "fired");
+}
+
+/* PadLeft#1 (high): a huge machine-integer length crashed the kernel
+ * (unchecked malloc; -n overflowed at INT64_MIN).  PadRight shares the
+ * driver, the packed rank-1 path and ArrayPad have their own buffers. */
+static void test_pad_huge_length(void) {
+    nomem_chk("PadLeft#1", "PadLeft[{1}, 10^15]");
+    nomem_chk("PadLeft#1", "PadLeft[{1}, 2^62]");
+    nomem_chk("PadLeft#1", "PadLeft[{1}, -2^63]");
+    nomem_chk("PadLeft#1", "PadRight[{1}, 10^15]");
+    nomem_chk("PadLeft#1", "PadRight[{{1}}, {10^10, 10^10}]");
+    nomem_chk("PadLeft#1", "PadLeft[Range[100], 2^62]");          /* packed */
+    nomem_chk("PadLeft#1", "PadRight[N[Range[100]], 2^62, 0.]");  /* packed */
+    nomem_chk("PadLeft#1", "ArrayPad[{1}, 10^15]");
+    nomem_chk("PadLeft#1", "ArrayPad[{1}, {0, 2^62}]");
+    nomem_chk("PadLeft#1", "ArrayPad[Range[100], {0, 2^62}]");     /* packed */
+    audit_chk("PadLeft#1", "PadLeft[{1, 2}, 4]", "{0, 0, 1, 2}");
+    audit_chk("PadLeft#1", "PadRight[{1, 2}, -4]", "{0, 0, 1, 2}");
+    audit_chk("PadLeft#1", "PadRight[{{1}, {2, 3}}, {2, 3}, x]", "{{1, x, x}, {2, 3, x}}");
+    audit_chk("PadLeft#1", "ArrayPad[{1, 2}, 1]", "{0, 1, 2, 0}");
+    audit_chk("PadLeft#1", "ArrayPad[Range[5], {-2, 1}]", "{3, 4, 5, 0}");
+    audit_chk("PadLeft#1", "ArrayPad[Range[3], -2^63]", "{}");
+}
+
+/* Drop#1 (high): Drop[{a,b,c},{1,2^63-1}] segfaulted -- the index count came
+ * from the raw spec before the range check (also Take, and the packed path). */
+static void test_drop_huge_sequence_spec(void) {
+    audit_chk("Drop#1", "Drop[{a, b, c}, {1, 9223372036854775807}]",
+              "Drop[{a, b, c}, {1, 9223372036854775807}]");
+    audit_chk("Drop#1", "Drop[{a, b, c}, {1, 2^62}]", "Drop[{a, b, c}, {1, 4611686018427387904}]");
+    audit_chk("Drop#1", "Take[{a, b, c}, {1, 9223372036854775807}]",
+              "Take[{a, b, c}, {1, 9223372036854775807}]");
+    audit_chk("Drop#1", "Take[{a, b, c}, {3, -9223372036854775807 - 1, -1}]",
+              "Take[{a, b, c}, {3, -9223372036854775808, -1}]");
+    audit_chk("Drop#1", "Take[{a, b, c}, {1, -1, -9223372036854775807 - 1}]", "{}");
+    audit_chk("Drop#1", "Head[Take[Range[10], {1, 2^63 - 1}]]", "Take");
+    audit_chk("Drop#1", "Drop[{a, b, c, d, e}, {1, -1, 2}]", "{b, d}");
+    audit_chk("Drop#1", "Take[{a, b, c, d, e}, {5, 1, -2}]", "{e, c, a}");
+    audit_chk("Drop#1", "Take[{a, b, c, d, e}, {1, 4, 2}]", "{a, c}");
+    audit_chk("Drop#1", "Take[Range[10], {2, 9, 3}]", "{2, 5, 8}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_array_flatten_deep_block);
     TEST(test_depth_malformed_option);
     TEST(test_depth_deep_nesting);
+    TEST(test_pad_huge_length);
+    TEST(test_drop_huge_sequence_spec);
     return audit_finish("audit_structural_manipulation");
 }

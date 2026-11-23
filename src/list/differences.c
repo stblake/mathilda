@@ -46,7 +46,7 @@ static Expr* diff_minus(Expr* minuend, Expr* subtrahend) {
 static Expr* diff_once_ll_machine(const LinkedList* ll, int64_t s) {
     LLKind k = ll_kind(ll);
     int64_t n = ll_length(ll);
-    int64_t a = (s < 0) ? -s : s;
+    int64_t a = (s < 0) ? (s == INT64_MIN ? INT64_MAX : -s) : s;  /* |INT64_MIN| > any length (audit Differences#1) */
     if (n <= a || (k != LL_I64 && k != LL_REAL)) return NULL;
     void* buf = malloc(sizeof(double) * (size_t)n);
     if (!buf) return NULL;
@@ -77,7 +77,7 @@ static Expr* diff_once(Expr* lst, int64_t s) {
     LLSeq lv;
     llq_open(lst, &lv);
     size_t n = lv.n;
-    int64_t a = (s < 0) ? -s : s;
+    int64_t a = (s < 0) ? (s == INT64_MIN ? INT64_MAX : -s) : s;  /* |INT64_MIN| > any length (audit Differences#1) */
 
     if ((int64_t)n <= a) {
         Expr* r = llq_result(&lv, NULL, 0);

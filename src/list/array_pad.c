@@ -6,6 +6,8 @@
 #include "ndstruct.h"    /* ndstruct_arraypad */
 #include "arithmetic.h"  /* is_infinity_sym */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "checked_alloc.h" /* user-sized padded levels */
+#include "checked_int.h"   /* ci_add_i64 */
 #include "linkedlist_seq.h" /* LLSeq: LinkedList levels pad into LinkedLists */
 
 /* ArrayPad[array, m]            pad m elements of padding on every side/level.
@@ -109,6 +111,30 @@ static Expr* ap_pad_at(const Expr* block, const int64_t* coords, size_t n) {
     return ap_pad_at(block->data.function.args[idx], coords + 1, n - 1);
 }
 
+/* The length d + l + h of a constant-padded level, clamped at 0, without
+ * int64 overflow: l + h first (opposite signs cannot overflow; two negatives
+ * that do are an empty level), then d >= 0.  False when the true length
+ * overflows int64 -- past any memory.  The amounts are the user's, so
+ * ArrayPad[{1}, {0, 2^63 - 1}] and ArrayPad[l, -2^63] both reach here. */
+static bool ap_const_len(int64_t d, int64_t l, int64_t h, int64_t* out) {
+    int64_t t;
+    if (ci_add_i64(l, h, &t)) {
+        if (l > 0) return false;
+        *out = 0;
+        return true;
+    }
+    if (ci_add_i64(t, d, &t)) return false;
+    *out = t < 0 ? 0 : t;
+    return true;
+}
+
+/* i - lo, the source index of output slot i, saturating at INT64_MAX: only a
+ * lo within N of INT64_MIN overflows, and that index is past any row. */
+static inline int64_t ap_off(int64_t i, int64_t lo) {
+    int64_t r;
+    return ci_sub_i64(i, lo, &r) ? INT64_MAX : r;
+}
+
 /* Build the padded array for a constant/cyclic block. `node` is the original
  * sub-expression at this position (NULL for a pure-padding subtree). Output
  * width at each level is orig_dim[level]+lo+hi (rectangular target). */
@@ -118,8 +144,8 @@ static Expr* ap_build_const(const Expr* node, const int64_t* lo, const int64_t* 
     if (level == num_levels)
         return node ? expr_copy((Expr*)node) : ap_pad_at(block, coords, num_levels);
 
-    int64_t N = orig_dim[level] + lo[level] + hi[level];
-    if (N < 0) N = 0;
+    int64_t N = 0;     /* builtin_array_pad checked every level's length */
+    ap_const_len(orig_dim[level], lo[level], hi[level], &N);
     /* A LinkedList level pads into a LinkedList; a pure-padding level takes
      * the kind of the level above it. */
     LLSeq v;
@@ -139,14 +165,14 @@ static Expr* ap_build_const(const Expr* node, const int64_t* lo, const int64_t* 
          * (span-wise for the original run), the padding beside them. */
         LinkedList* ol = ll_new();
         int64_t i = 0;
-        for (; i < N && i - lo[level] < 0; i++) {
-            coords[level] = i - lo[level];
+        for (; i < N && ap_off(i, lo[level]) < 0; i++) {
+            coords[level] = ap_off(i, lo[level]);
             ll_push_back(ol, ap_pad_at(block, coords, num_levels));
         }
-        int64_t a = i - lo[level], b = N - lo[level] < L ? N - lo[level] : L;
+        int64_t a = ap_off(i, lo[level]), b = ap_off(N, lo[level]) < L ? ap_off(N, lo[level]) : L;
         if (a < b) { ll_append_range(ol, v.snap, a, b); i += b - a; }
         for (; i < N; i++) {
-            coords[level] = i - lo[level];
+            coords[level] = ap_off(i, lo[level]);
             ll_push_back(ol, ap_pad_at(block, coords, num_levels));
         }
         expr_free(head);
@@ -156,7 +182,7 @@ static Expr* ap_build_const(const Expr* node, const int64_t* lo, const int64_t* 
 
     Expr** out = malloc(sizeof(Expr*) * (size_t)N);
     for (int64_t i = 0; i < N; i++) {
-        int64_t src = i - lo[level];               /* original element index */
+        int64_t src = ap_off(i, lo[level]);               /* original element index */
         const Expr* child = (row && src >= 0 && src < L) ? llq_peek(&v, src) : NULL;
         coords[level] = src;
         out[i] = ap_build_const(child, lo, hi, orig_dim, num_levels, level + 1,
@@ -190,8 +216,9 @@ static Expr* ap_pad_valdep(const Expr* node, const int64_t* lo, const int64_t* h
     llq_open(node, &v);
     int64_t L = (int64_t)v.n;
     int64_t l = lo[level], h = hi[level];
-    int64_t start = l < 0 ? -l : 0;
-    int64_t end = L - (h < 0 ? -h : 0);
+    /* A trim is clamped to the length, so -l never overflows at INT64_MIN. */
+    int64_t start = l < 0 ? (l < -L ? L : -l) : 0;
+    int64_t end = L - (h < 0 ? (h < -L ? L : -h) : 0);
     if (end < start) end = start;
     int64_t src_len = end - start;
     int64_t front = l > 0 ? l : 0;
@@ -295,6 +322,29 @@ Expr* builtin_array_pad(Expr* res) {
 
     PadScheme sc = pad_scheme_classify(padding);
     if (sc == PS_INVALID) { if (owned_array) expr_free(owned_array); return NULL; }
+
+    /* The amounts are the user's: level k allocates prod_{i<=k} len_i slots
+     * in all, len_i being dim_i + lo_i + hi_i for a constant block and at
+     * most dim_i + max(lo_i,0) + max(hi_i,0) for a value-dependent scheme.  A
+     * total that overflows or is past memory aborts with General::nomem
+     * instead of an unchecked malloc written through (the PadLeft#1 class). */
+    {
+        int64_t dm[AP_MAX_RANK], cells = 1;
+        bool vd = pad_scheme_value_dependent(sc);
+        for (size_t k = 0; k < AP_MAX_RANK; k++) dm[k] = 0;
+        ap_dims(array, dm, num_levels, 0);
+        for (size_t k = 0; k < num_levels; k++) {
+            int64_t len = 0;
+            bool ok = vd ? !ci_add_i64(dm[k], lo[k] > 0 ? lo[k] : 0, &len) &&
+                           !ci_add_i64(len, hi[k] > 0 ? hi[k] : 0, &len)
+                         : ap_const_len(dm[k], lo[k], hi[k], &len);
+            if (!ok || !mth_count_mul(cells, len, &cells) ||
+                !mth_alloc_ok(cells, sizeof(Expr*), NULL)) {
+                if (owned_array) expr_free(owned_array);
+                return mth_nomem_abort();
+            }
+        }
+    }
 
     Expr* result;
     if (!pad_scheme_value_dependent(sc)) {

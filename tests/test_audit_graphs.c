@@ -73,10 +73,30 @@ static void test_find_spanning_tree_directed(void) {
     audit_chk("FindSpanningTree#1", "fstBad", "0");
 }
 
+/* CirculantGraph#1 (low): the 5x10^7 edge cap counted raw edges before
+ * deduplication, so a repeated or half-turn jump was refused far below the
+ * limit.  Jumps are now canonicalised (mod n, j ~ n - j, distinct, the
+ * half-turn emitted once), so every emitted edge is distinct.  The large case
+ * (CirculantGraph[2*10^7, {1, 1, 1}] -> 2*10^7 edges) takes ~5 GB, so it is
+ * checked by hand; the canonicalisation is pinned here on small n. */
+static void test_circulant_graph_dedup_before_cap(void) {
+    audit_chk("CirculantGraph#1", "EdgeCount[CirculantGraph[10, {1, 1, 1}]]", "10");
+    audit_chk("CirculantGraph#1", "EdgeCount[CirculantGraph[10, {1, 9, -1, 11}]]", "10");
+    audit_chk("CirculantGraph#1", "EdgeCount[CirculantGraph[10, 5]]", "5");
+    audit_chk("CirculantGraph#1", "EdgeCount[CirculantGraph[10, {1, 5}]]", "15");
+    audit_chk("CirculantGraph#1", "EdgeCount[CirculantGraph[10, {0, 10}]]", "0");
+    audit_true("CirculantGraph#1",
+               "EdgeList[CirculantGraph[6, {1, 3, 1}]] === EdgeList[CirculantGraph[6, {1, 3}]]");
+    audit_chk("CirculantGraph#1", "EdgeList[CirculantGraph[6, 2]]",
+              "{1 <-> 3, 1 <-> 5, 2 <-> 4, 2 <-> 6, 3 <-> 5, 4 <-> 6}");
+    audit_chk("CirculantGraph#1", "EdgeList[CirculantGraph[4, 2]]", "{1 <-> 3, 2 <-> 4}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complete_graph_resource_limit);
     TEST(test_star_graph_resource_limit);
     TEST(test_find_spanning_tree_directed);
+    TEST(test_circulant_graph_dedup_before_cap);
     return audit_finish("audit_graphs");
 }

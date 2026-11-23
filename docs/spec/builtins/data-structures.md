@@ -1135,6 +1135,8 @@ and return an association (order preserved). `First[expr, default]` and
 `Last[expr, default]` return `default` when `expr` has no elements (an empty
 association, empty list, or an atom) — this works for lists too.
 
+A sequence spec out of range (`Drop[{a, b, c}, {1, 2^63 - 1}]`) is range-checked before any index buffer is sized, and the call stays unevaluated (audit Drop#1).
+
 ```mathematica
 In[1]:= First[<|"a" -> 10, "b" -> 20|>]
 Out[1]= 10

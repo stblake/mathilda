@@ -2788,7 +2788,9 @@ Out[6]= KaryTree[0]
   `i < j`, identical to the reference's `EdgeList`.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limit: more than 10^8 vertices or 5×10^7 edges is left
-  unevaluated.
+  unevaluated; the edge count is of distinct edges, so a repeated or mirrored
+  jump (`{1, 1, 1}`, `{1, n - 1}`) or the half-turn `n/2` costs nothing
+  against it (audit CirculantGraph#1).
 
 ```mathematica
 In[1]:= CirculantGraph[5, 1]
