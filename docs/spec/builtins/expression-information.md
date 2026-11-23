@@ -1523,6 +1523,8 @@ Out[3]= {a, b, b, b, c}
   numerator like a real one (`(I*x)/y`, `((2*I)*x)/y`, `I/y`). Before, `HoldForm[a - (b - c)]`
   printed as `a - b - c`, which reads back as a different value; FeynCalc's TeX-preview tests
   compare these strings. The standard form groups the same way (`a b (c d)`).
+- **TeXForm separates a factor that begins with a digit** by an explicit `\ `: math mode ignores
+  spaces, so `2 3^x` is `2\ 3^{x}`, not `2 3^{x}` (which typesets as `23^x`; audit TeXForm#1).
 - **A negative symbolic exponent goes in the denominator** (v0.6146), in InputForm, the standard
   form and TeXForm, as the reference writes it: `c x^(-n)` is `c/x^n`, `3^(x/2) 2^(-x)` is
   `3^(x/2)/2^x`, `a E^(-x)` is `a/E^x`, `a x^(-1.5 n)` is `a/x^(1.5*n)`. A lone negated power keeps

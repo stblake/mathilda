@@ -1506,6 +1506,7 @@ void core_init(void) {
         if (d) d->eval_pure = 1;
     }
     tc_register_unwind_counter(eval_builtin_depth_counter());
+    tc_register_unwind_counter(eval_loop_depth_counter());
 #ifdef USE_MPFR
     tc_register_unwind_counter(eval_nfmemo_depth_counter());
 #endif
@@ -2856,6 +2857,8 @@ Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend) {
     return llx;
 }
 
+static Expr* lvalue_freeze_parts(Expr* lhs, Expr** unwind);
+
 static Expr* append_to_impl(Expr* res, bool prepend) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* sym = res->data.function.args[0];
@@ -2996,8 +2999,26 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     return inplace_assign_back(sym, new_val);
 }
 
-Expr* builtin_append_to(Expr* res)  { return append_to_impl(res, false); }
-Expr* builtin_prepend_to(Expr* res) { return append_to_impl(res, true); }
+/* AppendTo[l[[i]], e]: the Part indices are evaluated once, so the element
+ * read and the element written back are the same one (the read-modify-write
+ * class of audit Decrement#1 / TimesBy#1; see lvalue_freeze_parts). */
+static Expr* append_to_entry(Expr* res, bool prepend) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 2 &&
+        head_is(res->data.function.args[0], SYM_Part)) {
+        Expr* unwind = NULL;
+        Expr* frozen = lvalue_freeze_parts(res->data.function.args[0], &unwind);
+        if (!frozen) return unwind;
+        Expr* ca[2] = { frozen, expr_copy(res->data.function.args[1]) };
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), ca, 2);
+        Expr* r = append_to_impl(call, prepend);
+        expr_free(call);
+        return r;
+    }
+    return append_to_impl(res, prepend);
+}
+
+Expr* builtin_append_to(Expr* res)  { return append_to_entry(res, false); }
+Expr* builtin_prepend_to(Expr* res) { return append_to_entry(res, true); }
 
 static Expr* rules_to_list(Rule* r) {
     size_t count = 0;
@@ -5101,18 +5122,9 @@ Expr* builtin_level(Expr* res) {
     Expr* ls = res->data.function.args[1];
 
     int64_t min_l = 1, max_l = 1;
-    if (ls->type == EXPR_INTEGER) {
-        max_l = ls->data.integer;
-    } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-        max_l = 1000000;
-    } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-        if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-            min_l = max_l = ls->data.function.args[0]->data.integer;
-        } else if (ls->data.function.arg_count == 2) {
-            if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-            if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-            else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-        }
+    if (!mth_level_spec_parse(ls, &min_l, &max_l)) {   /* the shared parser */
+        mth_level_spec_message(SYM_Level, ls);
+        return NULL;
     }
 
     bool heads = false;
@@ -5168,6 +5180,36 @@ static const char* lvalue_symbol_name(Expr* lhs) {
     return NULL;
 }
 
+/* The l-value `lhs` with the indices of every Part layer evaluated, once.
+ * A read-modify-write operator reads the target and then assigns it through
+ * Set; handing both the HELD Part made each evaluate the indices, so
+ * l[[i++]]-- read l[[1]], wrote l[[2]] and advanced i twice (audit
+ * Decrement#1, DivideBy#1, TimesBy#1).  A plain symbol comes back as itself
+ * (a refcount bump).  A Throw / Abort out of an index is returned in
+ * *unwind (caller owns) and the result is NULL. */
+static Expr* lvalue_freeze_parts(Expr* lhs, Expr** unwind) {
+    *unwind = NULL;
+    if (!(lhs->type == EXPR_FUNCTION && head_is(lhs, SYM_Part) &&
+          lhs->data.function.arg_count >= 1))
+        return expr_copy(lhs);
+    size_t n = lhs->data.function.arg_count;
+    Expr* base = lvalue_freeze_parts(lhs->data.function.args[0], unwind);
+    if (!base) return NULL;
+    Expr* out = expr_new_function(expr_copy(lhs->data.function.head), NULL, n);
+    out->data.function.args[0] = base;
+    for (size_t i = 1; i < n; i++) {
+        Expr* ix = evaluate(lhs->data.function.args[i]);
+        if (eval_is_inflight_unwind(ix)) {
+            *unwind = ix;
+            for (size_t j = i; j < n; j++) out->data.function.args[j] = expr_new_integer(0);
+            expr_free(out);
+            return NULL;
+        }
+        out->data.function.args[i] = ix;
+    }
+    return out;
+}
+
 /* How the current value and dx are combined.  Kept as a mode rather than a
  * `negate` flag because TimesBy/DivideBy differ from AddTo/SubtractFrom in the
  * HEAD, not the sign, and every other step of the six operators is identical. */
@@ -5185,6 +5227,13 @@ static Expr* increment_core(Expr* lhs, Expr* dx, int mode, bool pre, const char*
                 sym ? sym : "argument");
         return NULL;
     }
+
+    /* Evaluate a Part target's indices once: the read and the write below
+     * must address the same element. */
+    Expr* unwind = NULL;
+    Expr* frozen = lvalue_freeze_parts(lhs, &unwind);
+    if (!frozen) return unwind;
+    lhs = frozen;
 
     Expr* old_val = evaluate(lhs);
 
@@ -5226,6 +5275,7 @@ static Expr* increment_core(Expr* lhs, Expr* dx, int mode, bool pre, const char*
     Expr* set_result = evaluate(set_call);
     expr_free(set_call);
     if (set_result) expr_free(set_result);
+    expr_free(frozen);
 
     if (pre) {
         expr_free(old_val);

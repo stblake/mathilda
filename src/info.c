@@ -3029,10 +3029,10 @@ void info_init(void) {
         "Function[Null, body, attrs]\n"
         "\trepresents a function in which the parameters in body are given using # etc.\n"
         "\n"
-        "Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters.\n"
+        "Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters, and a nested Function, Module or With whose local occurs in a substituted argument is renamed first, so the argument is never captured. #0 is the function itself.\n"
         "By default Function has no Hold attributes; the arguments are evaluated before substitution. Adding HoldAll (or HoldFirst / HoldRest / HoldAllComplete) in the 3-arg form holds arguments in the chosen positions.");
-    symtab_set_docstring("Slot", "# or Slot[n] represents the n-th argument of a pure function. #name (Slot[\"name\"], also #\"str\") is the value of key \"name\" in the association the function is applied to.");
-    symtab_set_docstring("SlotSequence", "## or SlotSequence[n] represents arguments from the n-th onward.");
+    symtab_set_docstring("Slot", "# or Slot[n] represents the n-th argument of a pure function; #0 is the pure function itself, for anonymous recursion. #name (Slot[\"name\"], also #\"str\") is the value of key \"name\" in the association the function is applied to.");
+    symtab_set_docstring("SlotSequence", "## or SlotSequence[n] represents the sequence of arguments from the n-th onward (empty when none remain).");
 
     // Predicates
     symtab_set_docstring("AtomQ",

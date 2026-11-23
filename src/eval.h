@@ -106,6 +106,17 @@ bool eval_is_inflight_goto(const Expr* e);
  * be reported (Break::nofwd / Continue::nofwd) and rendered inert. */
 bool eval_is_inflight_break_continue(const Expr* e);
 
+/* Number of Do / For / While loops whose body is being evaluated.  While it
+ * is positive, an evaluated Break[] / Continue[] short-circuits argument
+ * evaluation like a Throw, so it reaches the nearest enclosing loop from
+ * anywhere in the body's dynamic extent -- Print[If[c, Break[]]] leaves the
+ * loop instead of printing Break[] (audit Break#1, Continue#1).  Outside every
+ * loop the markers stay plain values (reported at the top level as ::nofwd).
+ * Registered with the TimeConstrained unwind (core.c). */
+extern int g_eval_loop_depth;
+int* eval_loop_depth_counter(void);
+#define EVAL_LOOP_EXIT(e) (g_eval_loop_depth > 0 && eval_is_inflight_break_continue(e))
+
 /* Finish an in-flight sentinel that reached a top level, as evaluate() does
  * at depth 0: an uncaught Throw is reported (Throw::nocatch) and becomes
  * Hold[Throw[...]] (or f[v, tag]), Abort[] becomes $Aborted (and is noted for

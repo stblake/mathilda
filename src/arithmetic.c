@@ -433,11 +433,11 @@ Expr* builtin_divide(Expr* res) {
         double vden = (den->type == EXPR_REAL) ? den->data.real : (den->type == EXPR_INTEGER) ? (double)den->data.integer : numeric_mpz_to_double(den->data.bigint);
         if (vden == 0.0) {
             arith_warn("Power::infy: Infinite expression 1/0 encountered.\n");
-            /* 0/0 is 0 ComplexInfinity, Indeterminate -- as the rewrite
-             * Times[num, Power[den, -1]] answers it (audit NDArray#2: the
-             * delisted lanes of NDArray[{0.}] / NDArray[{0.}] land here). */
+            /* 0./0. (and 0/0., 0./0) is Indeterminate, as the exact 0/0 is:
+             * the zero dividend meets ComplexInfinity (audit Divide#2; also the
+             * delisted lanes of NDArray[{0.}] / NDArray[{0.}], audit NDArray#2). */
             if (vnum == 0.0) {
-                arith_warn("Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.\n");
+                arith_warn("Infinity::indet: Indeterminate expression 0. ComplexInfinity encountered.\n");
                 return expr_new_symbol(SYM_Indeterminate);
             }
             return expr_new_symbol(SYM_ComplexInfinity);
@@ -457,7 +457,7 @@ Expr* builtin_divide(Expr* res) {
             if (br == 0.0 && bi == 0.0) {
                 arith_warn("Power::infy: Infinite expression 1/0 encountered.\n");
                 if (ar == 0.0 && ai == 0.0) {
-                    arith_warn("Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.\n");
+                    arith_warn("Infinity::indet: Indeterminate expression 0. ComplexInfinity encountered.\n");
                     return expr_new_symbol(SYM_Indeterminate);
                 }
                 return expr_new_symbol(SYM_ComplexInfinity);

@@ -9,6 +9,7 @@
 #include "assoc.h"
 #include "assoc_struct.h"  /* associations are atomic: walkers see values only */
 #include "ndarray.h"   /* is_ndarray — see patterns_delist_visible */
+#include "funcprog.h"  /* mth_level_spec_parse */
 #include <stdlib.h>
 #include <string.h>
 
@@ -125,34 +126,32 @@ static bool in_level_spec(Expr* e, int64_t level, int64_t min_l, int64_t max_l,
     return true;
 }
 
+/* The shared level-spec parser (funcprog.h), except that a bare negative
+ * integer -n keeps its long-standing meaning for the pattern heads: the parts
+ * of depth n, level 0 included -- Count[5, _?NumberQ, -1] is 1, as the
+ * reference gives (tests/test_patterns.c). */
+static bool pat_parse_level(const Expr* ls, int64_t* min_l, int64_t* max_l) {
+    if (!mth_level_spec_parse(ls, min_l, max_l)) return false;
+    if (ls->type == EXPR_INTEGER && ls->data.integer < 0) *min_l = *max_l = ls->data.integer;
+    return true;
+}
+
 /* The level spec (3rd argument, default {1}) and Heads option shared by
  * Cases, DeleteCases, Position, Count and MemberQ. */
-static void pat_level_args(Expr* res, int64_t* min_out, int64_t* max_out, bool* heads_out) {
+static void pat_level_args(Expr* res, int64_t* min_out, int64_t* max_out, bool* heads_out,
+                           bool* ok_out) {
+    *ok_out = true;
     size_t argc = res->data.function.arg_count;
     int64_t min_l = 1, max_l = 1;
     bool heads = false;
 
-    if (argc >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            if (ls->data.integer < 0) {
-                min_l = ls->data.integer; max_l = ls->data.integer;
-            } else {
-                min_l = 1; max_l = ls->data.integer;
-            }
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
+    /* The shared level-spec parser (funcprog.h); an option in the third slot
+     * is not a level spec.  *ok is false (Head::level said) for a bad spec. */
+    if (argc >= 3 && !is_rule2(res->data.function.args[2]) &&
+        !pat_parse_level(res->data.function.args[2], &min_l, &max_l)) {
+        mth_level_spec_message(res->data.function.head->data.symbol.name,
+                               res->data.function.args[2]);
+        *ok_out = false;
     }
 
     for (size_t i = 2; i < argc; i++) {
@@ -433,8 +432,9 @@ Expr* builtin_cases(Expr* res) {
     Expr* patt_arg = res->data.function.args[1];
 
     int64_t min_l, max_l;
-    bool heads;
-    pat_level_args(res, &min_l, &max_l, &heads);
+    bool heads, lvl_ok;
+    pat_level_args(res, &min_l, &max_l, &heads, &lvl_ok);
+    if (!lvl_ok) return NULL;
 
     int64_t max_results = -1;
     if (argc >= 4) {
@@ -655,27 +655,11 @@ Expr* builtin_delete_cases(Expr* res) {
     int64_t min_l = 1, max_l = 1;
     bool heads = false;
 
-    if (argc >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            if (ls->data.integer < 0) {
-                min_l = ls->data.integer; max_l = ls->data.integer;
-            } else {
-                min_l = 1; max_l = ls->data.integer;
-            }
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->type == EXPR_SYMBOL && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
+    /* The shared level-spec parser (funcprog.h). */
+    if (argc >= 3 && !is_rule2(res->data.function.args[2]) &&
+        !pat_parse_level(res->data.function.args[2], &min_l, &max_l)) {
+        mth_level_spec_message(SYM_DeleteCases, res->data.function.args[2]);
+        return NULL;
     }
 
     for (size_t i = 2; i < argc; i++) {
@@ -816,27 +800,11 @@ Expr* builtin_position(Expr* res) {
     int64_t min_l = 0, max_l = 1000000;
     bool heads = true;
 
-    if (argc >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            if (ls->data.integer < 0) {
-                min_l = ls->data.integer; max_l = ls->data.integer;
-            } else {
-                min_l = 1; max_l = ls->data.integer;
-            }
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
+    /* The shared level-spec parser (funcprog.h). */
+    if (argc >= 3 && !is_rule2(res->data.function.args[2]) &&
+        !pat_parse_level(res->data.function.args[2], &min_l, &max_l)) {
+        mth_level_spec_message(SYM_Position, res->data.function.args[2]);
+        return NULL;
     }
 
     for (size_t i = 2; i < argc; i++) {
@@ -1060,8 +1028,9 @@ Expr* builtin_count(Expr* res) {
     Expr* pattern = res->data.function.args[1];
 
     int64_t min_l, max_l;
-    bool heads;
-    pat_level_args(res, &min_l, &max_l, &heads);
+    bool heads, lvl_ok;
+    pat_level_args(res, &min_l, &max_l, &heads, &lvl_ok);
+    if (!lvl_ok) return NULL;
 
     size_t count = 0;
     do_count_at_level(expr, 0, min_l, max_l, heads, pattern, &count);
@@ -1136,8 +1105,9 @@ Expr* builtin_memberq(Expr* res) {
     Expr* pattern = res->data.function.args[1];
 
     int64_t min_l, max_l;
-    bool heads;
-    pat_level_args(res, &min_l, &max_l, &heads);
+    bool heads, lvl_ok;
+    pat_level_args(res, &min_l, &max_l, &heads, &lvl_ok);
+    if (!lvl_ok) return NULL;
 
     if (do_member_at_level(expr, 0, min_l, max_l, heads, pattern)) {
         return expr_new_symbol(SYM_True);

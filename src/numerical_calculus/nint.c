@@ -363,6 +363,24 @@ static void ni_ac_prepare(NiCtx* c) {
     }
 }
 
+/* Evaluate the integrand once at the abscissa already bound.  Arithmetic
+ * diagnostics (Power::infy 1/0 at or near a singular abscissa) are muted:
+ * such samples are found non-finite and discarded, so the message is noise.
+ * An Abort[] or Throw raised by the integrand is parked so it unwinds the
+ * NIntegrate call -- dropped as a non-numeric sample it was swallowed and a
+ * wrong number came back (audit Abort#1) -- and NULL is returned. */
+static Expr* ni_sample_eval(Expr* body) {
+    arith_warnings_mute_push();
+    Expr* raw = eval_and_free(expr_copy(body));
+    arith_warnings_mute_pop();
+    if (raw && eval_is_inflight_unwind(raw)) {
+        eval_park_unwind(raw);
+        expr_free(raw);
+        return NULL;
+    }
+    return raw;
+}
+
 static Expr* ni_eval_at(NiCtx* c, Expr* value) {
     /* Compiled fast path (opt-in, machine precision only — the MPFR sampler also
      * routes through here and must keep full precision).  Compiled lazily so the
@@ -402,12 +420,7 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
     ni_bind_set(c->bind, value);
     expr_free(value);
     eval_clock_bump();
-    /* Mute arithmetic diagnostics (e.g. Power::infy 1/0) raised by evaluating
-     * the integrand at or near a singular abscissa: such samples are detected
-     * as non-finite below and discarded, so the message is pure noise. */
-    arith_warnings_mute_push();
-    Expr* raw = eval_and_free(expr_copy(c->body));
-    arith_warnings_mute_pop();
+    Expr* raw = ni_sample_eval(c->body);
     if (!raw) return NULL;
 #ifdef USE_MPFR
     /* The precision the integrand itself delivered, before numericalize
@@ -4432,9 +4445,7 @@ static bool ni_mc_sample_mpfr_at(NiMcCtx* c, const double* x, size_t d,
     if (!num) {
         for (size_t j = 0; j < d; j++) ni_bind_set(&c->binds[j], xs[j]);
         eval_clock_bump();
-        arith_warnings_mute_push();
-        Expr* raw = eval_and_free(expr_copy(c->body));
-        arith_warnings_mute_pop();
+        Expr* raw = ni_sample_eval(c->body);
         num = raw ? numericalize(raw, spec) : NULL;
         expr_free(raw);
     }
@@ -4586,9 +4597,7 @@ static bool ni_mc_sample_double(NiMcCtx* c, const double* x, size_t d,
         expr_free(xe);
     }
     eval_clock_bump();
-    arith_warnings_mute_push();   /* see ni_eval_at: integrand-message noise */
-    Expr* raw = eval_and_free(expr_copy(c->body));
-    arith_warnings_mute_pop();
+    Expr* raw = ni_sample_eval(c->body);
     if (!raw) return false;
     Expr* num = numericalize(raw, c->spec);
     expr_free(raw);
@@ -5487,9 +5496,7 @@ static bool ni_eval_complex_at(Expr* body, NiBind* bind, NumericSpec spec,
     ni_bind_set(bind, xe);
     expr_free(xe);
     eval_clock_bump();
-    arith_warnings_mute_push();   /* see ni_eval_at: integrand-message noise */
-    Expr* raw = eval_and_free(expr_copy(body));
-    arith_warnings_mute_pop();
+    Expr* raw = ni_sample_eval(body);
     if (!raw) return false;
     Expr* num = numericalize(raw, spec);
     expr_free(raw);
@@ -6310,9 +6317,7 @@ static bool ni_held_body_numeric(Expr* body, Expr** specs, size_t nspecs) {
         /* every variable is bound; the context binding only names one of them,
          * so evaluate the body directly at the bound values */
         eval_clock_bump();
-        arith_warnings_mute_push();
-        Expr* raw = eval_and_free(expr_copy(body));
-        arith_warnings_mute_pop();
+        Expr* raw = ni_sample_eval(body);
         Expr* num = raw ? numericalize(raw, numeric_machine_spec()) : NULL;
         if (raw) expr_free(raw);
         double _Complex v;

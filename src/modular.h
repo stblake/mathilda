@@ -19,6 +19,13 @@ Expr* builtin_unique(Expr* res);
  * else NULL. See docs/notes/MATHILDA_DIVERGENCES.md A11. */
 bool expr_is_binding_scope(Expr* e);
 Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
+/* Capture avoidance for a substitution of VALUES (With, Function): if `e` is
+ * a binding scope one of whose locals occurs in some vals[k] (NULL entries
+ * skipped) or is one of shadowed[0..nshadowed), return a fresh copy of `e`
+ * with those locals alpha-renamed (x -> x$n), else NULL.  The renamed scope's
+ * init values are left alone: they are evaluated outside it. */
+Expr* scoping_avoid_values(Expr* e, Expr* const* vals, size_t nvals,
+                           const char* const* shadowed, size_t nshadowed);
 
 /* Block's dynamic-scope frames, exposed for the TimeConstrained unwind only.
  * Block restores its locals' OwnValues, DownValues and attributes on the way

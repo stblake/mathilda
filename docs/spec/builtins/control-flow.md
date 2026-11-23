@@ -75,6 +75,8 @@ Out[1]= Null
 ```
 
 ## While
+
+The compiled numeric loop path (`numloop`) engages only when every assigned variable is provably inexact after a pass; a loop that keeps an exact counter or overwrites a Real with an exact value runs in the interpreter, so the answer's types are the interpreter's (audit While#1, For#3).
 Evaluates a test expression and, while it yields `True`, repeatedly evaluates a body expression.
 - `While[test, body]`: Evaluates `test`, then `body`, repeatedly, until `test` first fails to give `True`.
 - `While[test]`: Executes the loop with a `Null` body. Useful when `test` itself has side-effects.
@@ -106,7 +108,9 @@ Exits the nearest enclosing `Do`, `For`, or `While` loop.
 **Features**:
 - Has attribute `Protected`.
 - Takes effect as soon as it is evaluated (e.g. inside an `If` within the body),
-  escaping only the *innermost* enclosing loop.
+  escaping only the *innermost* enclosing loop. Inside a loop it unwinds argument
+  evaluation like a `Throw`, so `Do[Print[If[i == 2, Break[]]], {i, 3}]` leaves the
+  loop instead of printing `Break[]` (audit Break#1).
 - Outside any loop, `Break[]` emits the message `Break::nofwd` and returns
   `Hold[Break[]]` (inert, so feeding it back does not re-trigger).
 
@@ -126,7 +130,8 @@ Proceeds to the next iteration of the nearest enclosing `Do`, `For`, or `While` 
 
 **Features**:
 - Has attribute `Protected`.
-- Takes effect as soon as it is evaluated. In `Do` it advances the iterator and
+- Takes effect as soon as it is evaluated, from anywhere in the body's dynamic
+  extent (function arguments included: audit Continue#1). In `Do` it advances the iterator and
   re-tests; in `For` it evaluates the increment step then re-tests; in `While` it
   re-evaluates the test.
 - Outside any loop, `Continue[]` emits the message `Continue::nofwd` and returns
@@ -356,6 +361,8 @@ Out[4]= 3
 ```
 
 ## ConditionalExpression
+
+A `ConditionalExpression` argument of a `NumericFunction` (and `Listable`) head is lifted out: `1 + ConditionalExpression[x, x > 0]` is `ConditionalExpression[1 + x, x > 0]`, several conditions are joined by `And` (audit ConditionalExpression#1).
 Symbolic construct representing a value that is defined only when a condition holds.
 - `ConditionalExpression[expr, cond]`: Represents `expr` when `cond` is `True`.
 - `ConditionalExpression[expr, True]`: Evaluates to `expr`.
@@ -630,6 +637,8 @@ so `Sum`'s symbolic probe of its summand does not leak a `Throw` that its
 numeric loop never reaches.
 
 ## Abort / CheckAbort / AbortProtect / $Aborted
+
+An `Abort[]` (or `Throw`) raised by an `NIntegrate` integrand unwinds the `NIntegrate` call; it is not taken as a non-numeric sample (audit Abort#1).
 - `Abort[]` aborts the current evaluation. The abort unwinds every enclosing
   computation, including `Map`, `Table`, the loops, the functional iterators,
   `Block`/`Module` (whose scoping is restored), user functions, and callbacks

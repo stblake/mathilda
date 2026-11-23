@@ -136,7 +136,14 @@ static bool scoping_binds_in_arg0(Expr* e) {
  * bits of every name the walk may substitute, and whether summaries may be
  * consulted at all.  The mask is the OUTER env's: an inner scope's filtered
  * env is a subset, so the mask stays a superset there -- conservative. */
-typedef struct { uint64_t mask; bool fast; } SsCtx;
+typedef struct {
+    uint64_t mask; bool fast;
+    /* With: the env's replacements are VALUES, whose free symbols an inner
+     * scope binding the same name would capture -- such a scope's locals are
+     * renamed first (scoping_avoid_values).  Off for Module's fresh locals. */
+    bool capture;
+    int* renames;                 /* renames made (MATHILDA_SYMSUM_DIFF) */
+} SsCtx;
 
 /* Rule, RuleDelayed, Set, SetDelayed: constructs that scope the pattern
  * variables named on their left-hand side. */
@@ -188,6 +195,39 @@ static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
     /* Everything below a shared node is immutable (copy-on-write), so the
      * summaries this walk fills there stay true. */
     bool cfrozen = frozen || e->refcount >= 2;
+
+    /* Capture avoidance (With): an inner Module / With / Function whose
+     * local occurs in a value being substituted is alpha-renamed first, so
+     * With[{y = x}, Function[x, x + y][10]] is 10 + x, not 20 (audit
+     * With#1).  Every value in the environment is checked, including one
+     * the scope itself shadows: that over-renames (harmlessly -- a renamed
+     * local is still a fresh local) rather than tracking shadowing here.
+     * The environment is short in practice; a long one spills to the heap,
+     * so no binding escapes the check. */
+    if (c->capture && expr_is_binding_scope(e)) {
+        Expr* vals_buf[64];
+        Expr** vals = vals_buf;
+        size_t nv = 0, cap = 64;
+        for (ScopingEnv* cur = env; cur; cur = cur->next) {
+            if (nv == cap) {
+                Expr** grown = malloc(sizeof(Expr*) * cap * 2);
+                if (!grown) break;   /* OOM: check what we have */
+                memcpy(grown, vals, sizeof(Expr*) * nv);
+                if (vals != vals_buf) free(vals);
+                vals = grown;
+                cap *= 2;
+            }
+            vals[nv++] = cur->replacement;
+        }
+        Expr* safe = nv ? scoping_avoid_values(e, vals, nv, NULL, 0) : NULL;
+        if (vals != vals_buf) free(vals);
+        if (safe) {
+            if (c->renames) (*c->renames)++;
+            Expr* r = ss_rec(safe, env, c, false);
+            expr_free(safe);
+            return r;
+        }
+    }
 
     // Handle shadowing in scoping constructs
     ScopingEnv* filtered_env = env;
@@ -382,10 +422,11 @@ static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
  * returned at once without being visited (docs/design/scoping_substitution.md):
  * the env's names are registered as binders first, so their bits exist and a
  * summary that predates a registration is invalid by its epoch. */
-static Expr* substitute_scoping_in(Expr* e, ScopingEnv* env, bool frozen) {
+static Expr* substitute_scoping_in(Expr* e, ScopingEnv* env, bool frozen, bool capture) {
     if (!e) return NULL;
     SCOPE_STAT(ss_top);
-    SsCtx c = { 0, false };
+    int renames = 0;
+    SsCtx c = { 0, false, capture, &renames };
 #ifndef MTH_NO_SYMSUM
     if (g_symsum_on) {
         for (ScopingEnv* n = env; n; n = n->next) {
@@ -399,9 +440,12 @@ static Expr* substitute_scoping_in(Expr* e, ScopingEnv* env, bool frozen) {
     Expr* r = ss_rec(e, env, &c, frozen || e->refcount >= 2);
 #ifndef MTH_NO_SYMSUM
     if (c.fast && g_symsum_diff) {
-        SsCtx slow = { 0, false };
+        int renames2 = 0;
+        SsCtx slow = { 0, false, capture, &renames2 };
         Expr* r2 = ss_rec(e, env, &slow, false);
-        if (!expr_eq(r, r2)) {
+        /* renames mint fresh names: compare the counts, and the trees when
+         * neither walk renamed */
+        if (renames2 != renames || (renames == 0 && !expr_eq(r, r2))) {
             char* a = expr_to_string(r); char* b = expr_to_string(r2);
             fprintf(stderr, "MATHILDA_SYMSUM_DIFF: substitute_scoping differs\n  fast: %s\n  slow: %s\n",
                     a ? a : "?", b ? b : "?");
@@ -414,7 +458,7 @@ static Expr* substitute_scoping_in(Expr* e, ScopingEnv* env, bool frozen) {
 }
 
 static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
-    return substitute_scoping_in(e, env, false);
+    return substitute_scoping_in(e, env, false, false);
 }
 
 /* Counter for the "$"-less names of Unique["x"] / Unique[] (x12, $13). It is
@@ -587,8 +631,9 @@ static Expr* rename_bound_symbol(Expr* sym, ScopingEnv* ren) {
 }
 
 /* One binding-list entry: bare `L`, or `Set[L, init]`/`SetDelayed[L, init]`.
- * Rename L per `ren`; substitute `ren` into the init value (which sees the
- * renamed locals). */
+ * Rename L per `ren`.  The init value is evaluated OUTSIDE the scope, so it
+ * does not see the locals and is not renamed: Module[{y = y + 1}, y] renamed
+ * to Module[{y$1 = y$1 + 1}, y$1] would read the local it initialises. */
 static Expr* rename_binding_entry(Expr* b, ScopingEnv* ren) {
     if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
         && (b->data.function.head->data.symbol.name == SYM_Set
@@ -596,7 +641,7 @@ static Expr* rename_binding_entry(Expr* b, ScopingEnv* ren) {
         && b->data.function.arg_count == 2
         && b->data.function.args[0]->type == EXPR_SYMBOL) {
         Expr* lhs = rename_bound_symbol(b->data.function.args[0], ren);
-        Expr* rhs = substitute_scoping(b->data.function.args[1], ren);
+        Expr* rhs = expr_copy(b->data.function.args[1]);
         Expr* bargs[2] = { lhs, rhs };
         return expr_new_function(expr_copy(b->data.function.head), bargs, 2);
     }
@@ -690,6 +735,89 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger) {
         ren = nx;
     }
     return result;
+}
+
+/* Does `v` mention the symbol `name` (interned) anywhere, heads included?
+ * A valid binder summary without the name's bit answers no at once. */
+static bool scope_value_mentions(const Expr* v, const char* name, uint64_t bit) {
+    if (!v) return false;
+    if (v->type == EXPR_SYMBOL) return v->data.symbol.name == name;
+    if (v->type != EXPR_FUNCTION) return false;
+#ifndef MTH_NO_SYMSUM
+    uint64_t b;
+    if (bit && g_symsum_on && symsum_get(v, &b) && !(b & bit)) return false;
+#endif
+    if (scope_value_mentions(v->data.function.head, name, bit)) return true;
+    for (size_t i = 0; i < v->data.function.arg_count; i++)
+        if (scope_value_mentions(v->data.function.args[i], name, bit)) return true;
+    return false;
+}
+
+#ifndef MTH_NO_SYMSUM
+/* The binder bits of every symbol in `v`, filling the summary of each
+ * immutable FUNCTION node on the way (one reached through a shared node, or
+ * shared itself), so the next capture check of the same value is one
+ * summary read.  A pure function applied to a stored expression asks this
+ * at every nested Module / With / Function of every call: without the fill,
+ * Function[x, Module[{t = x}, ...]][big] walked all of big per call. */
+static uint64_t scope_value_bits(Expr* v, bool frozen) {
+    if (v->type == EXPR_SYMBOL) return symsum_leaf_bits(v);
+    if (v->type != EXPR_FUNCTION) return 0;
+    uint64_t b;
+    if (symsum_get(v, &b)) return b;
+    bool cfrozen = frozen || v->refcount >= 2;
+    b = scope_value_bits(v->data.function.head, cfrozen);
+    for (size_t i = 0; i < v->data.function.arg_count; i++)
+        if (v->data.function.args[i])
+            b |= scope_value_bits(v->data.function.args[i], cfrozen);
+    if (cfrozen) symsum_put(v, b);
+    return b;
+}
+#endif
+
+Expr* scoping_avoid_values(Expr* e, Expr* const* vals, size_t nvals,
+                           const char* const* shadowed, size_t nshadowed) {
+    if (!expr_is_binding_scope(e)) return NULL;
+    const char* locals[64]; size_t nloc = 0;
+    scoping_collect_locals(e, locals, &nloc, 64);
+    const char* clash[64]; size_t nclash = 0;
+    uint64_t bits[64];
+    bool live[64];
+    for (size_t i = 0; i < nloc; i++) {
+        live[i] = true;
+        for (size_t k = 0; k < nshadowed && live[i]; k++) live[i] = shadowed[k] != locals[i];
+        bits[i] = 0;
+#ifndef MTH_NO_SYMSUM
+        /* Register every local first: a registration may advance the epoch,
+         * which would invalidate a value summary computed before it. */
+        if (live[i] && g_symsum_on) {
+            SymbolDef* d = intern_symbol_node(locals[i]);
+            symsum_register_binder(d);
+            bits[i] = symsum_def_bit(d);
+        }
+#endif
+    }
+#ifndef MTH_NO_SYMSUM
+    /* The values' summaries, once: a local whose bit is in none of them is
+     * certainly absent (a set bit may be a shared one, so it is confirmed by
+     * the exact walk below). */
+    uint64_t vbits = 0;
+    bool have_vbits = g_symsum_on;
+    if (have_vbits)
+        for (size_t k = 0; k < nvals; k++)
+            if (vals[k]) vbits |= scope_value_bits(vals[k], false);
+#endif
+    for (size_t i = 0; i < nloc; i++) {
+        if (!live[i]) continue;
+#ifndef MTH_NO_SYMSUM
+        if (have_vbits && bits[i] && !(vbits & bits[i])) continue;
+#endif
+        bool hit = false;
+        for (size_t k = 0; k < nvals && !hit; k++)
+            hit = scope_value_mentions(vals[k], locals[i], bits[i]);
+        if (hit) clash[nclash++] = locals[i];
+    }
+    return nclash ? scoping_capture_avoid(e, clash, nclash) : NULL;
 }
 
 /* The local a binding-list entry names: a bare Symbol or Set[sym, v] (and, for
@@ -806,7 +934,7 @@ Expr* builtin_module(Expr* res) {
         final_res = module_thrown;
     } else {
         /* The body of a shared Module/With node is immutable: fill summaries. */
-        Expr* substituted_body = substitute_scoping_in(body, env, res->refcount >= 2);
+        Expr* substituted_body = substitute_scoping_in(body, env, res->refcount >= 2, false);
         final_res = evaluate(substituted_body);
         expr_free(substituted_body);
     }
@@ -1365,7 +1493,7 @@ Expr* builtin_with(Expr* res) {
     }
 
     /* The body of a shared Module/With node is immutable: fill summaries. */
-    Expr* substituted_body = substitute_scoping_in(body, env, res->refcount >= 2);
+    Expr* substituted_body = substitute_scoping_in(body, env, res->refcount >= 2, true);
     Expr* final_res = evaluate(substituted_body);
     expr_free(substituted_body);
 

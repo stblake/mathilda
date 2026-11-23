@@ -943,6 +943,24 @@ typedef struct {
     size_t  nstmts;
     size_t  max_stack;
     bool    forces_real;
+    /* Some assigned variable is not provably inexact at the end of a pass
+     * (numblock_types): the double VM, which writes every assigned variable
+     * back as a Real, would turn the interpreter's exact answer inexact. */
+    bool    exact_assigned;
+    int64_t steps;                        /* passes run by numblock_step */
+    /* Exact-integer registers (numblock_types): an assigned variable that is
+     * not provably inexact but provably stays an Integer -- an integral seed,
+     * and every statement assigning it reads only such variables and the
+     * (integer) counter -- runs its statements on the int64 VM, mirrored into
+     * regs[] for the Real statements that read it, and is written back as an
+     * Integer.  int64 overflow, a division, a transcendental or a fractional
+     * constant fails the step, and the loop bails to the interpreter before
+     * any writeback.  So y = y + 1 beside x = x + 1. keeps the loop compiled
+     * and y exact (audit While#1, For#3, without the interpreter cliff). */
+    bool    int_reg[NUMBLOCK_MAXVARS];
+    bool    any_int;
+    int64_t iregs[NUMBLOCK_MAXVARS];
+    int64_t* istack;                      /* max_stack int64 slots, if any_int */
 
     /* Array mode (all block variables are same-shape float64 NDArrays): the
      * compiled scalar bytecode is run per element over these flat buffers,
@@ -957,6 +975,8 @@ typedef struct {
 static void numblock_free(NumBlock* b) {
     for (size_t i = 0; i < b->nstmts; i++) prog_free(&b->progs[i]);
     b->nstmts = 0;
+    free(b->istack);
+    b->istack = NULL;
     if (b->is_array)
         for (size_t i = 0; i < b->nvars; i++) { free(b->abuf[i]); b->abuf[i] = NULL; }
 }
@@ -983,6 +1003,103 @@ static bool stmt_is_set(const Expr* s, const Expr** sym, const Expr** rhs) {
     *sym = s->data.function.args[0];
     *rhs = s->data.function.args[1];
     return true;
+}
+
+/* An integral double is an exact int64 seed below 2^53 (numblock_types). */
+#define NL_I64_SEED_MAX 9007199254740992.0
+
+/* Bit i set for every block variable i the expression `e` reads. */
+static void nb_reads(const Expr* e, const NumBlock* b, uint32_t* mask) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < b->nvars; i++)
+            if (b->names[i] == e->data.symbol.name) { *mask |= UINT32_C(1) << i; return; }
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    nb_reads(e->data.function.head, b, mask);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nb_reads(e->data.function.args[i], b, mask);
+}
+
+/* Which assigned variables are PROVABLY inexact after a pass, as the
+ * interpreter computes them?  A statement's value is inexact when its
+ * right-hand side has an inexact leaf or reads a variable that is inexact at
+ * that point: one assigned earlier in the pass reads that statement's value;
+ * a loop-carried one (not yet assigned in the pass) is the seed on the first
+ * pass and its last assignment after, so it is inexact only when both are.
+ * A must-analysis over the loop, iterated down from "all inexact" to the
+ * fixed point.  Anything not proven inexact sets b->exact_assigned: y = 0;
+ * While[x < 3., x = x + 1.; y = y + 1] must leave y the Integer 2, and
+ * x = 2.5; For[i = 0, i < 3, i++, x = i] the Integer 2 (audit While#1,
+ * For#3). */
+static void numblock_types(NumBlock* b, const Expr* const* rhs, const int* lhs, size_t ns,
+                           const bool* seed_inexact) {
+    uint32_t reads[NUMBLOCK_MAXSTMTS];
+    bool leaf[NUMBLOCK_MAXSTMTS];
+    int last[NUMBLOCK_MAXVARS];
+    for (size_t v = 0; v < b->nvars; v++) last[v] = -1;
+    for (size_t i = 0; i < ns; i++) {
+        reads[i] = 0;
+        nb_reads(rhs[i], b, &reads[i]);
+        leaf[i] = has_inexact_leaf(rhs[i]);
+        last[lhs[i]] = (int)i;
+    }
+    bool fin[NUMBLOCK_MAXVARS];           /* inexact at the end of a pass */
+    for (size_t v = 0; v < b->nvars; v++) fin[v] = true;
+    bool val[NUMBLOCK_MAXSTMTS];
+    for (bool changed = true; changed; ) {
+        changed = false;
+        bool cur[NUMBLOCK_MAXVARS];
+        for (size_t v = 0; v < b->nvars; v++) {
+            cur[v] = seed_inexact[v] && (last[v] < 0 || fin[v]);
+        }
+        for (size_t i = 0; i < ns; i++) {
+            bool r = leaf[i];
+            for (size_t v = 0; v < b->nvars && !r; v++)
+                if ((reads[i] >> v) & 1u) r = cur[v];
+            val[i] = r;
+            cur[lhs[i]] = r;
+        }
+        for (size_t v = 0; v < b->nvars; v++) {
+            bool f = last[v] >= 0 ? val[last[v]] : fin[v];
+            if (f != fin[v]) { fin[v] = f; changed = true; }
+        }
+    }
+    /* Exact-integer candidates: every assigned variable not proven inexact
+     * whose seed (if it has one) is an integer a double holds exactly.  Then
+     * drop, to a fixed point, any whose assigning statements read a variable
+     * that is neither the counter nor a candidate: its int64 register would
+     * read a mirror that is not exact. */
+    bool ok[NUMBLOCK_MAXVARS];
+    for (size_t v = 0; v < b->nvars; v++) {
+        ok[v] = false;
+        if (!b->assigned[v] || fin[v]) continue;
+        double r = b->regs[v];
+        ok[v] = !b->seeded[v] ||
+                (!seed_inexact[v] && r == rint(r) && fabs(r) <= NL_I64_SEED_MAX);
+    }
+    for (bool changed = true; changed; ) {
+        changed = false;
+        for (size_t i = 0; i < ns; i++) {
+            if (!ok[lhs[i]]) continue;
+            for (size_t v = 0; v < b->nvars; v++) {
+                if (!((reads[i] >> v) & 1u)) continue;
+                if ((int)v == b->counter_idx || ok[v]) continue;
+                ok[lhs[i]] = false; changed = true; break;
+            }
+        }
+    }
+    b->exact_assigned = false;
+    b->any_int = false;
+    for (size_t v = 0; v < b->nvars; v++) {
+        b->int_reg[v] = ok[v];
+        if (ok[v]) {
+            b->any_int = true;
+            b->iregs[v] = b->seeded[v] ? (int64_t)b->regs[v] : 0;
+        } else if (b->assigned[v] && !fin[v]) {
+            b->exact_assigned = true;
+        }
+    }
 }
 
 /* Build a compiled block from an imperative body. counter_sym (or NULL) names a
@@ -1032,6 +1149,7 @@ static bool numblock_build(NumBlock* b, const Expr* body,
     /* Seed assigned variables from their current OwnValues (the loop-carried
      * initial value). A var that fails to seed stays undefined until it is first
      * assigned; reading it earlier makes pass 2 bail. */
+    bool seed_inexact[NUMBLOCK_MAXVARS] = { false };
     for (size_t i = 0; i < b->nvars; i++) {
         if ((int)i == b->counter_idx) continue;
         double v; bool inexact = false;
@@ -1039,6 +1157,7 @@ static bool numblock_build(NumBlock* b, const Expr* body,
             b->regs[i] = v;
             b->defined[i] = b->seeded[i] = true;
             if (inexact) b->forces_real = true;
+            seed_inexact[i] = inexact;
         }
     }
 
@@ -1060,25 +1179,54 @@ static bool numblock_build(NumBlock* b, const Expr* body,
     }
     b->nstmts = ns;
     if (b->max_stack == 0) b->max_stack = 1;
+    numblock_types(b, rhs_of, lhs_of, ns, seed_inexact);
+    if (b->any_int) {
+        b->istack = malloc(b->max_stack * sizeof(int64_t));
+        if (!b->istack) { numblock_free(b); return false; }
+    }
     return true;
 }
 
 /* Run one pass of the block, updating regs in place. Returns false on a
  * non-finite result (the caller then bails to the interpreter). */
+static bool numprog_run_i64(const NumProg* p, const int64_t* regs,
+                            int64_t* stack, int64_t* out);
+
 static bool numblock_step(NumBlock* b, double* stack) {
+    if (b->any_int && b->counter_idx >= 0) {
+        /* The counter is an integer in every caller; mirror it for the int64
+         * statements (past 2^53 its double is no longer exact). */
+        double c = b->regs[b->counter_idx];
+        if (!(fabs(c) <= NL_I64_SEED_MAX)) return false;
+        b->iregs[b->counter_idx] = (int64_t)c;
+    }
     for (size_t i = 0; i < b->nstmts; i++) {
+        int l = b->lhs[i];
+        if (b->int_reg[l]) {
+            int64_t iv;
+            if (!numprog_run_i64(&b->progs[i], b->iregs, b->istack, &iv)) return false;
+            b->iregs[l] = iv;
+            b->regs[l] = (double)iv;   /* as a Real statement reads an Integer */
+            continue;
+        }
         double v = numprog_run(&b->progs[i], b->regs, stack);
         if (!isfinite(v)) return false;
-        b->regs[b->lhs[i]] = v;
+        b->regs[l] = v;
     }
+    b->steps++;
     return true;
 }
 
-/* Write every assigned variable's final value back to its OwnValue as a Real. */
+/* Write every assigned variable's final value back to its OwnValue: an
+ * exact-integer register as an Integer, every other one as a Real.
+ * After no pass at all the variables keep the values they had (an exact seed
+ * written back as a Real would change its type). */
 static void numblock_writeback(NumBlock* b) {
+    if (b->steps == 0) return;
     for (size_t i = 0; i < b->nvars; i++)
         if (b->assigned[i])
-            writeback_symbol(b->syms[i], expr_new_real(b->regs[i]));
+            writeback_symbol(b->syms[i], b->int_reg[i] ? expr_new_integer(b->iregs[i])
+                                                       : expr_new_real(b->regs[i]));
 }
 
 /* ---- int64 execution of a scalar block (exact-integer loops) -----------
@@ -1484,6 +1632,8 @@ Expr* numloop_do_count(const Expr* body, int64_t n) {
         return ibail ? NULL : expr_new_symbol(SYM_Null);
     }
 
+    /* The double VM writes every assigned variable back as a Real. */
+    if (b.exact_assigned) { numblock_free(&b); return NULL; }
     double* stack = malloc(b.max_stack * sizeof(double));
     if (!stack) { numblock_free(&b); return NULL; }
 
@@ -1549,6 +1699,8 @@ Expr* numloop_do_range(const Expr* body, const Expr* var,
         return ibail ? NULL : expr_new_symbol(SYM_Null);
     }
 
+    /* The double VM writes every assigned variable back as a Real. */
+    if (b.exact_assigned) { numblock_free(&b); return NULL; }
     double* stack = malloc(b.max_stack * sizeof(double));
     if (!stack) { numblock_free(&b); return NULL; }
 
@@ -1674,6 +1826,8 @@ Expr* numloop_for(const Expr* start, const Expr* test,
         return ibail ? NULL : expr_new_symbol(SYM_Null);
     }
 
+    /* The double VM writes every assigned variable back as a Real. */
+    if (b.exact_assigned) { numblock_free(&b); return NULL; }
     double* stack = malloc(b.max_stack * sizeof(double));
     if (!stack) { numblock_free(&b); return NULL; }
 
@@ -1712,6 +1866,7 @@ Expr* numloop_while(const Expr* test, const Expr* body) {
     NumBlock b;
     if (!numblock_build(&b, body, NULL, 0.0)) return NULL;
     if (!b.forces_real && !has_inexact_leaf(test)) { numblock_free(&b); return NULL; }
+    if (b.exact_assigned) { numblock_free(&b); return NULL; }   /* see numblock_types */
 
     /* The test runs before the body each iteration, so it may read only
      * variables that already hold a value (seeded) -- gate its compile on the

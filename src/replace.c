@@ -1,5 +1,6 @@
 #include "ds_ops.h"
 #include "replace.h"
+#include "funcprog.h"       /* mth_level_spec_parse */
 #include "symtab.h"
 #include "eval.h"
 #include "match.h"
@@ -107,7 +108,10 @@ static Expr* normalize_pos_spec(Expr* pos_spec, PathElement* path, size_t depth)
 
 static bool check_match(RawRule* rules, size_t num_rules, PathElement* path, size_t depth,
                         Expr** out_replacement, bool* out_delayed, MatchEnv** out_env) {
-    for (int64_t r = (int64_t)num_rules - 1; r >= 0; r--) {
+    /* Rules are tried in the order given and the FIRST that addresses this
+     * position wins, as for every other rule list: ReplacePart[l, {1 -> x,
+     * _ -> y}] relies on it (audit ReplacePart#1; this scanned last-first). */
+    for (size_t r = 0; r < num_rules; r++) {
         /* Build the current position as a List of positive indices */
         Expr** alias_args = NULL;
         if (depth > 0) alias_args = malloc(sizeof(Expr*) * depth);
@@ -865,23 +869,11 @@ Expr* builtin_replace(Expr* res) {
     int64_t min_l = 0, max_l = 0;
     bool heads = false;
     
-    if (res->data.function.arg_count >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            min_l = 1; max_l = ls->data.integer;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 0; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
+    /* The shared level-spec parser (funcprog.h). */
+    if (res->data.function.arg_count >= 3 && !is_rule2(res->data.function.args[2]) &&
+        !mth_level_spec_parse(res->data.function.args[2], &min_l, &max_l)) {
+        mth_level_spec_message("Replace", res->data.function.args[2]);
+        return NULL;
     }
     
     for (size_t i = 2; i < res->data.function.arg_count; i++) {
@@ -1441,7 +1433,11 @@ static ReplaceRule* parse_replace_rules(Expr* rules_expr, size_t* out_count) {
 static Expr* replaceat_apply_rules(ReplaceRule* rules, size_t num_rules, Expr* target) {
     for (size_t i = 0; i < num_rules; i++) {
         Expr* repl = rule_try(&rules[i], target, false);
-        if (repl) return rules[i].delayed ? eval_and_free(repl) : repl;
+        /* Inserted unevaluated, RuleDelayed included: evaluation happens when
+         * the enclosing expression is, which a Hold prevents --
+         * ReplaceAt[Hold[1+1], x_Plus :> Length[x], 1] is Hold[Length[1+1]]
+         * (audit ReplaceAt#1; the RHS used to be evaluated here). */
+        if (repl) return repl;
     }
     return expr_copy(target);
 }

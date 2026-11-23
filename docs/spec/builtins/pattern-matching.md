@@ -55,7 +55,8 @@
   `x_` (`Pattern[x, Blank[]]`).
 - `PatternSequence[p1, ..., pm]`: matches a run of arguments each matching
   `p1..pm`; `PatternSequence[]` matches zero arguments, and `x:PatternSequence[
-  ...]` binds `x` to the matched `Sequence`.
+  ...]` binds `x` to the matched `Sequence`. A `Condition` may wrap it, named or
+  not: `f[PatternSequence[x_, y_] /; x < y]` matches `f[1, 2]` (audit PatternSequence#1).
 - `OrderlessPatternSequence[p1, ..., pm]`: matches a **contiguous run** of
   arguments at its own position, as any sequence element does, with the `pi`
   matching the run's elements in any order (even under a non-`Orderless` head).

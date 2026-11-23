@@ -2330,6 +2330,18 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             if (iname && !bind_sym) bind_sym = iname;
             else if (iname) extra_bind_sym = iname;
             opt_pat = seqcheck;
+        } else if (seqcheck->type == EXPR_FUNCTION
+                   && seqcheck->data.function.head->type == EXPR_SYMBOL
+                   && seqcheck->data.function.head->data.symbol.name == SYM_PatternSequence) {
+            /* PatternSequence[q..] /; test (named or not): the guard needs the
+             * whole consumed run bound, so it is checked by the (named)
+             * PatternSequence block below once the prefix has matched.  Left
+             * to match_internal it was a one-argument test and never matched
+             * (audit PatternSequence#1). */
+            seq_cond = opt_pat;
+            if (iname && !bind_sym) bind_sym = iname;
+            else if (iname) extra_bind_sym = iname;
+            opt_pat = seqcheck;
         } else if (is_sequence_blank(seqcheck, &dh, &dml)
             || is_repeated(seqcheck, &drp, &drmin, &drmax)) {
             seq_cond = opt_pat;              /* guard chain, evaluated at commit */
@@ -2360,10 +2372,13 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         && opt_pat->data.function.head->type == EXPR_SYMBOL
         && opt_pat->data.function.head->data.symbol.name == SYM_Alternatives
         && !pat_is_single_elem(opt_pat);
-    if (bind_sym && bind_sym->type == EXPR_SYMBOL
+    bool cond_ps = seq_cond && opt_pat->type == EXPR_FUNCTION
+        && opt_pat->data.function.head->type == EXPR_SYMBOL
+        && opt_pat->data.function.head->data.symbol.name == SYM_PatternSequence;
+    if (cond_ps || (bind_sym && bind_sym->type == EXPR_SYMBOL
         && opt_pat->type == EXPR_FUNCTION && opt_pat->data.function.head->type == EXPR_SYMBOL
         && (opt_pat->data.function.head->data.symbol.name == SYM_PatternSequence
-            || named_seq_alt)) {
+            || named_seq_alt))) {
         Expr** qs = named_seq_alt ? &named_alt_slot : opt_pat->data.function.args;
         size_t m = named_seq_alt ? 1 : opt_pat->data.function.arg_count;
         for (size_t k = 0; k <= n_exprs; k++) {
@@ -2372,14 +2387,19 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
              * => success when both sub-lists are exhausted, without firing the
              * outer callback). */
             if (match_args_internal(exprs, k, qs, m, env, NULL, pat_head, m, NULL)) {
-                Expr* seqv = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, k);
-                for (size_t i = 0; i < k; i++)
-                    seqv->data.function.args[i] = expr_copy(exprs[i]);
-                Expr* existing = env_get(env, bind_sym->data.symbol.name);
                 bool okbind = true;
-                if (existing) { if (!expr_eq(seqv, existing)) okbind = false; }
-                else env_set(env, bind_sym->data.symbol.name, seqv);
-                expr_free(seqv);
+                Expr* names[2] = { bind_sym, extra_bind_sym };
+                for (int nb = 0; nb < 2 && okbind; nb++) {
+                    if (!names[nb] || names[nb]->type != EXPR_SYMBOL) continue;
+                    Expr* seqv = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, k);
+                    for (size_t i = 0; i < k; i++)
+                        seqv->data.function.args[i] = expr_copy(exprs[i]);
+                    Expr* existing = env_get(env, names[nb]->data.symbol.name);
+                    if (existing) { if (!expr_eq(seqv, existing)) okbind = false; }
+                    else env_set(env, names[nb]->data.symbol.name, seqv);
+                    expr_free(seqv);
+                }
+                if (okbind && seq_cond && !eval_seq_conditions(seq_cond, env)) okbind = false;
                 if (okbind && match_args_internal(exprs + k, n_exprs - k, pats + 1,
                         n_pats - 1, env, condition, pat_head, total_pats, parent))
                     return true;

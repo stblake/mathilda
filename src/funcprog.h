@@ -41,6 +41,15 @@ Expr* builtin_thread(Expr* res);
 Expr* builtin_freeq(Expr* res);
 Expr* builtin_distribute(Expr* res);
 
+#include <stdbool.h>
+#include <stdint.h>
+/* The shared level-specification parser (n, Infinity, All, {n}, {n1, n2};
+ * bounds integer or Infinity, which is stored as 1000000): true and the
+ * bounds set, or false for anything else.  mth_level_spec_message emits
+ * Head::level for a spec it rejected. */
+bool mth_level_spec_parse(const Expr* ls, int64_t* min, int64_t* max);
+void mth_level_spec_message(const char* head, const Expr* ls);
+
 #endif
 
 Expr* builtin_inner(Expr* res);

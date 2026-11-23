@@ -766,6 +766,10 @@ int  eval_builtin_depth(void) { return g_builtin_depth; }
 const char* eval_dispatch_head(void) { return g_dispatch_head; }
 int* eval_builtin_depth_counter(void) { return &g_builtin_depth; }
 
+/* Do / For / While bodies being evaluated (see eval.h). */
+int g_eval_loop_depth = 0;
+int* eval_loop_depth_counter(void) { return &g_eval_loop_depth; }
+
 /* ---- common numeric subexpressions within one sum or product -------------
  *
  * Substituting an arbitrary-precision number into a composition repeats its
@@ -982,9 +986,16 @@ bool eval_is_inflight_targeted_return(const Expr* e) {
            e->data.function.arg_count == 2;
 }
 
+/* Inside a Do / For / While body a Break[] / Continue[] is an unwind like a
+ * Throw: every builtin that hands an in-flight Throw back to its caller (a
+ * Select / Count / Sort predicate, Map, Scan, Table, ...) hands the loop exit
+ * back too, so it reaches the nearest enclosing loop from anywhere in the
+ * body's dynamic extent (audit Break#1, Continue#1).  The loops themselves
+ * classify Break / Continue by head before any unwind check (iter.c
+ * iter_flow_classify), so they consume it rather than pass it on. */
 bool eval_is_inflight_unwind(const Expr* e) {
     return eval_is_inflight_throw(e) || eval_is_inflight_abort(e) ||
-           eval_is_inflight_targeted_return(e);
+           eval_is_inflight_targeted_return(e) || EVAL_LOOP_EXIT(e);
 }
 
 /* Set when an abort reaches the top level (see eval_take_top_abort). */
@@ -1401,7 +1412,7 @@ static bool dv_binds_opaquely(const SymbolDef* def) {
 /* Classify the arguments of a Listable call in one pass: LA_LIST if any is an
  * explicit List, LA_ASSOC if any is an Association, LA_SPARSE if any is a
  * SparseArray, LA_LLIST if any is a LinkedList (any combination). */
-enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4, LA_LLIST = 8 };
+enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4, LA_LLIST = 8, LA_CONDEXPR = 16 };
 static int listable_arg_kinds(const Expr* e) {
     int kinds = 0;
     size_t n = e->data.function.arg_count;
@@ -1422,8 +1433,38 @@ static int listable_arg_kinds(const Expr* e) {
             return kinds | LA_LIST;
         }
         if (h == SYM_Association) kinds |= LA_ASSOC;
+        else if (h == SYM_ConditionalExpression && arg->data.function.arg_count == 2)
+            kinds |= LA_CONDEXPR;
     }
     return kinds;
+}
+
+/* h[..., ConditionalExpression[v, c], ...] for a NumericFunction h: the
+ * condition is pulled out, ConditionalExpression[h[..., v, ...], c], several
+ * conditions joined by And -- 1 + ConditionalExpression[x, x > 0] is
+ * ConditionalExpression[1 + x, x > 0] (audit ConditionalExpression#1).
+ * Borrows `e`; returns the new call. */
+static Expr* condexpr_lift(const Expr* e) {
+    size_t n = e->data.function.arg_count, nc = 0;
+    Expr** args = malloc(sizeof(Expr*) * n);
+    Expr** conds = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+            a->data.function.head->data.symbol.name == SYM_ConditionalExpression &&
+            a->data.function.arg_count == 2) {
+            args[i] = expr_copy(a->data.function.args[0]);
+            conds[nc++] = expr_copy(a->data.function.args[1]);
+        } else {
+            args[i] = expr_copy(a);
+        }
+    }
+    Expr* body = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    Expr* cond = nc == 1 ? conds[0] : expr_new_function(expr_new_symbol(SYM_And), conds, nc);
+    free(conds);
+    Expr* ca[2] = { body, cond };
+    return expr_new_function(expr_new_symbol(SYM_ConditionalExpression), ca, 2);
 }
 
 /* SparseArray[pos -> vals, ...] -- the constructor's standard spelling --
@@ -3387,7 +3428,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                  * evaluates to itself, so the abort never reached its owner and
                  * the Abort[] waited inside a stored value until something
                  * took it apart (Catch[Throw[7][x]] was Throw[7][x], not 7). */
-                if (eval_is_inflight_unwind(head) || eval_is_inflight_goto(head)) {
+                if (eval_is_inflight_unwind(head) || eval_is_inflight_goto(head) ||
+                    EVAL_LOOP_EXIT(head)) {
                     *changed = true;
                     return head;
                 }
@@ -3579,7 +3621,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                  * enclosing CompoundExpression consumes it (see
                  * builtin_compoundexpression). */
                 if (arg_evaluated && (eval_is_inflight_unwind(new_args[i]) ||
-                                      eval_is_inflight_goto(new_args[i]))) {
+                                      eval_is_inflight_goto(new_args[i]) ||
+                                      EVAL_LOOP_EXIT(new_args[i]))) {
                     Expr* sentinel = new_args[i];
 #ifdef USE_MPFR
                     if (nfmemo_scope) nfmemo_close();
@@ -4020,6 +4063,13 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     *changed = true;
                     return assoc_res;
                 }
+            }
+            if ((la_kind & LA_CONDEXPR) && !(la_kind & LA_LIST) &&
+                (attrs & ATTR_NUMERICFUNCTION)) {
+                Expr* lifted = condexpr_lift(res);
+                expr_free(res);
+                *changed = true;
+                return lifted;
             }
             if (la_kind & LA_LIST) {
                 /* Trace: threading evaluates the threaded elements internally;

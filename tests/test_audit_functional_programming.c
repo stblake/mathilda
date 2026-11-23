@@ -70,6 +70,79 @@ static void test_takesmallestby_numeric_keys(void) {
     audit_true("TakeSmallestBy#1", "TakeSmallestBy[{Pi, 3, 4}, Identity, 1] === {3}");
 }
 
+/* Function#1 / Slot#1 (high): "#0 (the pure function itself) is never
+ * substituted, so recursive pure functions fail". */
+static void test_function_slot_zero(void) {
+    audit_chk("Function#1", "If[# == 0, 1, # #0[# - 1]] &[5]", "120");
+    audit_chk("Slot#1", "If[#1 <= 1, 1, #1 #0[#1 - 1]] &[6]", "720");
+    audit_true("Slot#1", "(f[#0] &)[a] === f[f[#0] &]");
+    audit_true("Slot#1", "(#0 &)[] === (#0 &)");
+    /* sanity: ordinary slots */
+    audit_chk("Slot#1", "(#1 + #2 &)[3, 4]", "7");
+    audit_chk("Slot#1", "Map[#^2 &, {1, 2, 3}]", "{1, 4, 9}");
+}
+
+/* Function#2 (high): "Nested Function captures a substituted argument with
+ * the same name as its parameter (no lexical renaming)".  The inner
+ * parameter is alpha-renamed, so the free y stays free. */
+static void test_function_nested_capture(void) {
+    audit_run("ClearAll[y, x, z]");
+    audit_true("Function#2", "Function[x, Function[y, x + y]][y][1] === 1 + y");
+    audit_true("Function#2", "Function[x, Function[{y}, x + y]][y][3] === 3 + y");
+    audit_true("Function#2", "Function[x, Function[y, x y]][2 y][5] === 10 y");
+    audit_true("Function#2", "Function[x, Function[y, x + y]][y] =!= Function[y, y + y]");
+    /* sanity: no clash, no rename; a rebinding still shadows */
+    audit_true("Function#2", "Function[x, Function[y, x + y]][a] === Function[y, a + y]");
+    audit_true("Function#2", "Function[x, Function[x, x]][1] === Function[x, x]");
+    audit_true("Function#2", "Function[x, (x + #) &][a] === (a + #1 &)");
+}
+
+/* Function#3 (high): "Function substituting into Module/With captures the
+ * argument in the inner local variable". */
+static void test_function_scope_capture(void) {
+    audit_run("ClearAll[y, x]");
+    audit_true("Function#3", "Function[x, With[{y = 2}, x + y]][y] === 2 + y");
+    audit_true("Function#3", "Module[{r = Function[x, Module[{y}, x + y]][y]}, "
+                             "Length[r] == 2 && MemberQ[r, y] && Count[r, y] == 1]");
+    audit_true("Function#3", "(With[{y = 3}, # + y] &)[y] === 3 + y");
+    /* a Module / With that binds the parameter shadows it in the body only */
+    audit_chk("Function#3", "Function[x, Module[{x = x + 1}, x]][5]", "6");
+    audit_chk("Function#3", "Function[{x, z}, With[{x = z}, x + z]][1, 2]", "4");
+    audit_chk("Function#3", "Function[x, Module[{y = x}, y + 1]][5]", "6");
+}
+
+/* Apply#1 / Map#1 (high): "level spec {m, Infinity} silently falls back"
+ * (Apply to {0}, Map to level 1).  One shared parser now serves every
+ * level-spec head. */
+static void test_level_spec_infinity(void) {
+    audit_run("ClearAll[f, a, b, c, d]");
+    audit_chk("Apply#1", "Apply[f, {{a, {b}}, {c, d}}, {0, Infinity}]", "f[f[a, f[b]], f[c, d]]");
+    audit_chk("Apply#1", "Apply[f, {{a, {b}}, {c, d}}, {1, Infinity}]", "{f[a, f[b]], f[c, d]}");
+    audit_chk("Apply#1", "Apply[f, {{a}}, All]", "f[f[a]]");
+    audit_chk("Map#1", "Map[f, {{a, b}, {c}}, {0, Infinity}]", "f[{f[{f[a], f[b]}], f[{f[c]}]}]");
+    audit_chk("Map#1", "Map[f, {{a, b}, {c}}, {2, Infinity}]", "{{f[a], f[b]}, {f[c]}}");
+    audit_chk("Map#1", "Map[f, {a, b}, {0, Infinity}]", "f[{f[a], f[b]}]");
+    audit_chk("Map#1", "Map[f, {a, {b}}, -1]", "{f[a], f[{f[b]}]}");
+    /* the other level-spec heads agree */
+    audit_chk("Map#1", "Level[{a, {b, c}}, -1]", "{a, b, c, {b, c}}");
+    audit_chk("Map#1", "Level[{a, {b, c}}, {-1}]", "{a, b, c}");
+    audit_chk("Map#1", "Cases[{1, {2}}, _Integer, {-1}]", "{1, 2}");
+    audit_chk("Map#1", "Cases[{1, {2}}, _List, All]", "{{2}, {1, {2}}}");
+    audit_chk("Map#1", "Count[{1, {2, 3}}, _Integer, {1, Infinity}]", "3");
+    audit_chk("Map#1", "Replace[{a, {a}}, a -> b, {0, Infinity}]", "{b, {b}}");
+    audit_chk("Map#1", "MapIndexed[f, {a, {b}}, {1, Infinity}]", "{f[a, {1}], f[{f[b, {2, 1}]}, {2}]}");
+    audit_chk("Map#1", "FreeQ[{a, {b}}, b, {2, Infinity}]", "False");
+    /* a malformed spec says Head::level and stays unevaluated */
+    audit_chk("Map#1", "Check[Map[f, {a}, x], fired, Map::level]", "fired");
+    audit_chk("Map#1", "Check[Apply[f, {a}, x], fired, Apply::level]", "fired");
+    audit_chk("Map#1", "Check[Level[{a}, x], fired, Level::level]", "fired");
+    /* sanity: defaults and an option in the level slot */
+    audit_chk("Map#1", "Map[f, {a, b}]", "{f[a], f[b]}");
+    audit_chk("Map#1", "Apply[f, {a, b}]", "f[a, b]");
+    audit_chk("Map#1", "Cases[{1, a, 2}, _Integer]", "{1, 2}");
+    audit_chk("Map#1", "Map[f, g[a], Heads -> True]", "f[g][f[a]]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fixedpointlist_long_symbolic);
@@ -77,5 +150,9 @@ int main(void) {
     TEST(test_takelargest_minus_infinity);
     TEST(test_takelargestby_numeric_keys);
     TEST(test_takesmallestby_numeric_keys);
+    TEST(test_function_slot_zero);
+    TEST(test_function_nested_capture);
+    TEST(test_function_scope_capture);
+    TEST(test_level_spec_infinity);
     return audit_finish("audit_functional_programming");
 }

@@ -1534,44 +1534,47 @@ Expr* builtin_inequality(Expr* res) {
         return expr_new_symbol(SYM_True);
     }
 
-    /* Build a residual Inequality from the undecided pairs. Each surviving
-     * pair contributes (lhs, op, rhs). When the previous emitted RHS is
-     * structurally equal to the next pair's LHS (the common case when
-     * undecided pairs are adjacent, but also when a dropped pair was
-     * `b == b`), we omit the duplicate value so the chain stays well-
-     * formed (2n+1 args). */
-    size_t cap = 2 * npairs + 1;
-    Expr** out_args = (Expr**)malloc(sizeof(Expr*) * cap);
-    if (!out_args) { free(undecided); return NULL; }
-    size_t out_n = 0;
+    /* Build the residual from the undecided pairs.  Each run of surviving
+     * pairs that still link up -- adjacent pairs, or pairs whose shared value
+     * was the far side of a dropped `b == b` -- forms one chain (2k+1 args,
+     * or the binary comparison for a single pair).  Runs separated by a
+     * decided pair do NOT link: Inequality[x, Less, 1, Less, 2, Less, y]
+     * must become x < 1 && 2 < y, not the malformed 6-argument
+     * Inequality[x, Less, 1, 2, Less, y] that no later evaluation could
+     * decide (audit Inequality#1). */
+    Expr** runs = (Expr**)malloc(sizeof(Expr*) * npairs);
+    Expr** out_args = (Expr**)malloc(sizeof(Expr*) * (2 * npairs + 1));
+    if (!runs || !out_args) { free(runs); free(out_args); free(undecided); return NULL; }
+    size_t nruns = 0, out_n = 0;
     Expr* last_emitted_val = NULL;
-    for (size_t k = 0; k < npairs; k++) {
-        if (!undecided[k]) continue;
-        Expr* a  = res->data.function.args[2*k];
-        Expr* op = res->data.function.args[2*k + 1];
-        Expr* b  = res->data.function.args[2*k + 2];
-        if (!last_emitted_val || !expr_eq(last_emitted_val, a)) {
-            out_args[out_n++] = expr_copy(a);
+    for (size_t k = 0; k <= npairs; k++) {
+        bool take = k < npairs && undecided[k];
+        Expr* a = take ? res->data.function.args[2*k] : NULL;
+        bool links = take && last_emitted_val && expr_eq(last_emitted_val, a);
+        if (out_n > 0 && !links) {           /* close the current run */
+            if (out_n == 3) {
+                Expr* binary_args[2] = { out_args[0], out_args[2] };
+                const char* head_sym = out_args[1]->data.symbol.name;
+                expr_free(out_args[1]);
+                runs[nruns++] = expr_new_function(expr_new_symbol(head_sym), binary_args, 2);
+            } else {
+                runs[nruns++] = expr_new_function(expr_new_symbol(SYM_Inequality), out_args, out_n);
+            }
+            out_n = 0;
+            last_emitted_val = NULL;
         }
-        out_args[out_n++] = expr_copy(op);
-        out_args[out_n++] = expr_copy(b);
-        last_emitted_val = b;
+        if (!take) continue;
+        if (!links) out_args[out_n++] = expr_copy(a);
+        out_args[out_n++] = expr_copy(res->data.function.args[2*k + 1]);
+        out_args[out_n++] = expr_copy(res->data.function.args[2*k + 2]);
+        last_emitted_val = res->data.function.args[2*k + 2];
     }
     free(undecided);
-
-    if (out_n == 3) {
-        /* Exactly one undecided pair survived — return it as the binary
-         * comparison so downstream consumers see the familiar shape. */
-        Expr* binary_args[2] = { out_args[0], out_args[2] };
-        const char* head_sym = out_args[1]->data.symbol.name;
-        expr_free(out_args[1]);
-        Expr* result = expr_new_function(expr_new_symbol(head_sym), binary_args, 2);
-        free(out_args);
-        return result;
-    }
-    Expr* residual = expr_new_function(expr_new_symbol(SYM_Inequality), out_args, out_n);
     free(out_args);
-    return residual;
+    Expr* result = nruns == 1 ? runs[0]
+                 : expr_new_function(expr_new_symbol(SYM_And), runs, nruns);
+    free(runs);
+    return result;
 }
 
 /*

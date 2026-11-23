@@ -266,6 +266,8 @@ Out[3]= False
 ```
 
 ## Inequality
+
+A residual over undecided pairs that no longer link (a decided pair between them was dropped) is a conjunction of well-formed chains: `Inequality[x, Less, 1, Less, 2, Less, y]` is `x < 1 && 2 < y` (audit Inequality#1).
 The canonical internal form for chained comparisons.
 - `Inequality[e1, op1, e2, op2, e3, ...]`: produced by the parser for
   expressions such as `a < b <= c`. Each `opk` is one of `Less`, `LessEqual`,

@@ -44,9 +44,24 @@ static void test_with_pattern_names(void) {
     audit_chk("With#2", "wpg[1]", "6");
 }
 
+/* With#1 (high): "With captures free variables in nested Function/Module/
+ * With (no renaming)". */
+static void test_with_capture(void) {
+    audit_run("ClearAll[x, y]");
+    audit_true("With#1", "With[{y = x}, Function[x, x + y][10]] === 10 + x");
+    audit_true("With#1", "With[{y = x}, Module[{x = 2}, x + y]] === 2 + x");
+    audit_true("With#1", "With[{y = x}, With[{x = 2}, x + y]] === 2 + x");
+    audit_true("With#1", "(With[{y = x}, Function[x, x + y]] /. x -> 1)[10] === 11");
+    /* sanity: no clash, no rename; init values still see the outer value */
+    audit_chk("With#1", "With[{y = 3}, Function[x, x + y][10]]", "13");
+    audit_chk("With#1", "With[{q = 12}, With[{k = q}, k]]", "12");
+    audit_chk("With#1", "With[{y = 1}, Module[{z = y}, z + 1]]", "2");
+}
+
 int main(void) {
     audit_init();
     TEST(test_block_duplicate_local);
     TEST(test_with_pattern_names);
+    TEST(test_with_capture);
     return audit_finish("audit_scoping_constructs");
 }

@@ -807,6 +807,8 @@ quotients are untouched.
 
 ## Divide (/)
 
+`Divide[0., 0.]`, `Divide[0, 0.]` and `Divide[0., 0]` are `Indeterminate` (with `Power::infy` and `Infinity::indet`), as `0/0` is (audit Divide#2).
+
 `Divide[a, b]` is `a/b`. Attributes: `Listable`, `NumericFunction`, `Protected`.
 The parsed operator `a/b` is `Times[a, Power[b, -1]]`. Times fuses a machine pair
 back into `Divide` (see Times, v0.6600), so both spellings give the same machine

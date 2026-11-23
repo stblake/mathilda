@@ -638,11 +638,20 @@ static IterFlowAction do_flow_classify(Expr* eval_expr, bool nested, Expr** valu
 
 static Expr* do_core(Expr* res, bool nested);
 
-Expr* builtin_do(Expr* res) { return do_core(res, false); }
+/* A loop's evaluation runs with g_eval_loop_depth raised, so a Break[] or
+ * Continue[] evaluated anywhere inside it reaches the loop (eval.h). */
+static Expr* loop_frame(Expr* (*core)(Expr*, bool), Expr* res, bool flag) {
+    g_eval_loop_depth++;
+    Expr* r = core(res, flag);
+    g_eval_loop_depth--;
+    return r;
+}
+
+Expr* builtin_do(Expr* res) { return loop_frame(do_core, res, false); }
 
 /* Internal`DoNested: an inner level of a multi-iterator Do (see the rewrite
  * below); Do itself in every respect but do_flow_classify. */
-static Expr* builtin_do_nested(Expr* res) { return do_core(res, true); }
+static Expr* builtin_do_nested(Expr* res) { return loop_frame(do_core, res, true); }
 
 static Expr* do_core(Expr* res, bool nested) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
@@ -873,7 +882,11 @@ static Expr* do_core(Expr* res, bool nested) {
  * in incr proceeds to the next test). Returns the Return value if one is
  * issued, else Null.
  */
-Expr* builtin_for(Expr* res) {
+static Expr* for_core(Expr* res, bool unused);
+Expr* builtin_for(Expr* res) { return loop_frame(for_core, res, false); }
+
+static Expr* for_core(Expr* res, bool unused) {
+    (void)unused;
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 3 || argc > 4) return NULL;
@@ -979,7 +992,11 @@ Expr* builtin_for(Expr* res) {
  *     same way (so e.g. Throw inside test still escapes cleanly).
  *   - The loop always returns Null in the absence of an explicit Return.
  */
-Expr* builtin_while(Expr* res) {
+static Expr* while_core(Expr* res, bool unused);
+Expr* builtin_while(Expr* res) { return loop_frame(while_core, res, false); }
+
+static Expr* while_core(Expr* res, bool unused) {
+    (void)unused;
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;

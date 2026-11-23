@@ -39,7 +39,8 @@ Out[5]= {{}, {c}, {b}, {b, c}, {a}, {a, c}, {a, b}, {a, b, c}}
 - `Function[params, body, attrs]`: A pure function treated as having the evaluation attributes `attrs`.
 - `Function[Null, body, attrs]`: Slot form (`#`, `##`, etc.) with evaluation attributes.
 - `Slot` (`#`): Represents the first argument. `#n` represents the $n$-th argument.
-- `SlotSequence` (`##`): Represents all arguments sequence. `##n` represents all arguments starting from the $n$-th.
+- `SlotSequence` (`##`): Represents all arguments sequence. `##n` represents all arguments starting from the $n$-th; it is the empty sequence when exactly $n-1$ arguments are supplied (`{##}&[]` is `{}`; audit SlotSequence#1).
+- `#0` stands for the pure function itself, so `If[# == 0, 1, # #0[# - 1]] &[5]` is `120` (audit Function#1, Slot#1).
 - `Slot` and `SlotSequence` have the attributes `{NHoldAll, Protected}`: `N[(2 + #) &, 20]` numericalises the body to `2.0000000000000000000 + #1 &`, never the slot index (before v0.6574 it became `Slot[1.000...]`, which no call can fill).
 
 **Features**:
@@ -49,6 +50,7 @@ Out[5]= {{}, {c}, {b}, {b, c}, {a}, {a, c}, {a, b}, {a, b, c}}
 - `Slot` parameters are positionally mapped to arguments provided. Remaining arguments are ignored.
 - Pure functions can be assigned to variables (e.g., `f = #^2 &`) and applied over lists (e.g., `f /@ {1, 2, 3}`).
 - Properly scopes nested `Function` expressions: named inner variables shadow outer ones, and unnamed inner functions establish a new scope for `#` slots.
+- **Capture-avoiding**: a nested `Function`, `Module` or `With` whose local occurs in an argument being substituted is alpha-renamed first, so `Function[x, Function[y, x + y]][y]` is `Function[y$n, y + y$n]` and `Function[x, With[{y = 2}, x + y]][y]` is `2 + y` (audit Function#2, Function#3). A `Module`/`With` that binds a parameter shadows it in its body; its init values still see the argument.
 
 ```mathematica
 In[1]:= Function[u, 3 + u][x]
@@ -516,6 +518,8 @@ Out[5]= x^2
 ```
 
 ## Map (/@)
+
+Level specifications (shared by `Map`, `Apply`, `MapIndexed`, `Scan`, `FreeQ`, `Level`, `Cases`, `DeleteCases`, `Count`, `MemberQ`, `Position`, `Replace`): `n` (levels 1..n, `n` may be negative; for `Cases`/`DeleteCases`/`Count`/`MemberQ`/`Position` a bare `-n` means `{-n}`), `Infinity`, `All` (`{0, Infinity}`), `{n}`, `{n1, n2}` with either bound an integer or `Infinity`. One parser serves them all; a malformed spec emits `Head::level` and leaves the call unevaluated (audit Map#1, Apply#1: `{m, Infinity}` used to fall back to the default level).
 - `f /@ expr` or `Map[f, expr]` applies `f` to each element at level 1;
   `Map[f, expr, levelspec]` maps at the parts selected by `levelspec`.
 - **NDArray**: `Map[f, NDArray[…]]` applies `f` to each leading-axis part — a

@@ -1,4 +1,5 @@
 #include "purefunc.h"
+#include "modular.h"   /* scoping_avoid_values: capture avoidance */
 #include "symsum.h"
 #include "symtab.h"
 #include "eval.h"
@@ -158,7 +159,27 @@ static Expr* subst_children(Expr* e, SubstFn sub, void* ctx) {
 /* Binder-summary context of one application (symsum.h): the mask of the
  * names the walk substitutes -- the parameters, or Slot and SlotSequence for
  * a slot-form function -- and whether summaries may be consulted. */
-typedef struct { uint64_t mask; bool fast; } PfSum;
+typedef struct { uint64_t mask; bool fast; int* renames; } PfSum;
+
+/* Capture avoidance (audit Function#2, Function#3): before substituting into
+ * a nested binding scope (Function with parameters, Module, With), rename
+ * every local of it that occurs in a value being substituted, so
+ * Function[x, Function[y, x + y]][y] is Function[y$n, y + y$n], not
+ * Function[y, y + y].  NULL when nothing clashes. */
+/* Cheap pre-test for a lexical binding scope (Function / Module / With):
+ * the walk asks it of every node, so it stays a few pointer compares. */
+static inline bool pf_scope_head(const Expr* e) {
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    return n == SYM_Function || n == SYM_Module || n == SYM_With;
+}
+
+static Expr* pf_avoid_capture(Expr* e, Expr** vals, size_t count, const PfSum* s) {
+    Expr* safe = scoping_avoid_values(e, vals, count, NULL, 0);
+    if (safe && s->renames) (*s->renames)++;
+    return safe;
+}
 
 typedef struct { Expr** args; size_t arg_count; Expr* fn; const PfSum* s; bool frozen; } SlotCtx;
 static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const PfSum* s, bool frozen);
@@ -177,6 +198,14 @@ static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const P
         if (s->fast && symsum_get(e, &sb) && !(sb & s->mask)) { SCOPE_STAT(pf_skip); return expr_copy(e); }
         bool cfrozen = frozen || e->refcount >= 2;
         SCOPE_STAT(pf_nodes);
+        if (pf_scope_head(e) && expr_is_binding_scope(e)) {
+            Expr* safe = pf_avoid_capture(e, args, arg_count, s);
+            if (safe) {
+                Expr* r = slots_rec(safe, args, arg_count, fn, s, false);
+                expr_free(safe);
+                return r;
+            }
+        }
         // A nested *slot-form* Function establishes its own # scope, so the
         // enclosing function's slots must not be substituted into it. A nested
         // *named* Function does not rebind slots, so an enclosing slot-form's #
@@ -199,6 +228,9 @@ static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const P
                     if (idx >= 1 && (size_t)idx <= arg_count) {
                         return expr_copy(args[idx - 1]);
                     }
+                    /* #0 is the pure function itself: the anonymous recursion
+                     * If[# == 0, 1, # #0[# - 1]] & (audit Function#1, Slot#1). */
+                    if (idx == 0 && fn) return expr_copy(fn);
                 }
                 /* Named slot #name == Slot["name"]: the value stored under the
                  * key "name" in the first argument, which must be an
@@ -216,9 +248,12 @@ static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const P
                 Expr* arg = e->data.function.args[0];
                 if (arg->type == EXPR_INTEGER) {
                     int64_t idx = arg->data.integer;
-                    if (idx >= 1 && (size_t)idx <= arg_count) {
+                    /* ##n is the arguments from the n-th on, which is the
+                     * EMPTY sequence when exactly n - 1 were supplied:
+                     * {##}&[] is {} (audit SlotSequence#1). */
+                    if (idx >= 1 && (size_t)idx <= arg_count + 1) {
                         size_t seq_count = arg_count - (size_t)idx + 1;
-                        Expr** seq_args = malloc(sizeof(Expr*) * seq_count);
+                        Expr** seq_args = malloc(sizeof(Expr*) * (seq_count ? seq_count : 1));
                         for (size_t i = 0; i < seq_count; i++) {
                             seq_args[i] = expr_copy(args[(size_t)idx - 1 + i]);
                         }
@@ -246,7 +281,8 @@ static uint64_t g_slot_mask = 0;   /* bits of Slot | SlotSequence */
 static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn, bool frozen) {
     if (!e) return NULL;
     SCOPE_STAT(pf_top);
-    PfSum s = { 0, false };
+    int renames = 0;
+    PfSum s = { 0, false, &renames };
 #ifndef MTH_NO_SYMSUM
     if (g_symsum_on) {
         if (!g_slot_mask) {
@@ -264,9 +300,10 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn, 
 #ifndef MTH_NO_SYMSUM
     /* Not re-run when a named slot could message (#name over an association). */
     if (s.fast && g_symsum_diff && !(arg_count >= 1 && is_association(args[0]))) {
-        PfSum slow = { 0, false };
+        int renames2 = 0;
+        PfSum slow = { 0, false, &renames2 };
         Expr* r2 = slots_rec(e, args, arg_count, fn, &slow, false);
-        if (!expr_eq(r, r2)) {
+        if (renames2 != renames || (renames == 0 && !expr_eq(r, r2))) {
             fprintf(stderr, "MATHILDA_SYMSUM_DIFF: substitute_slots differs\n");
             abort();
         }
@@ -330,6 +367,75 @@ static Expr* names_sub(Expr* e, void* ctx) {
     return names_rec(e, c->names, c->vals, c->count, c->s, c->frozen);
 }
 
+/* The name a Module / With binding-list entry binds (a Symbol, or
+ * Set / SetDelayed[sym, init]), or NULL. */
+static const char* pf_entry_local(const Expr* b) {
+    if (b->type == EXPR_SYMBOL) return b->data.symbol.name;
+    if (b->type == EXPR_FUNCTION && b->data.function.arg_count == 2
+        && b->data.function.head->type == EXPR_SYMBOL
+        && (b->data.function.head->data.symbol.name == SYM_Set
+            || b->data.function.head->data.symbol.name == SYM_SetDelayed)
+        && b->data.function.args[0]->type == EXPR_SYMBOL)
+        return b->data.function.args[0]->data.symbol.name;
+    return NULL;
+}
+
+/* A Module / With that binds one of the parameters shadows it: the
+ * parameter is substituted into the init values (evaluated outside the
+ * scope) but not into the body, so Function[x, Module[{x = x + 1}, x]][5]
+ * is 6.  It used to be substituted everywhere, binding list included
+ * (Module[{5 = 5 + 1}, 5]).  NULL when no parameter is shadowed. */
+static Expr* names_into_local_scope(Expr* e, char** names, Expr** vals, size_t count,
+                                    const PfSum* s, bool frozen) {
+    Expr* vars = e->data.function.args[0];
+    if (!(vars->type == EXPR_FUNCTION && vars->data.function.head->type == EXPR_SYMBOL
+          && vars->data.function.head->data.symbol.name == SYM_List))
+        return NULL;
+    size_t nb = vars->data.function.arg_count;
+    size_t kept = 0;
+    for (size_t i = 0; i < count; i++) {
+        bool sh = false;
+        for (size_t j = 0; j < nb && !sh && names[i]; j++)
+            sh = pf_entry_local(vars->data.function.args[j]) == names[i];
+        if (!sh) kept++;
+    }
+    if (kept == count) return NULL;
+    char** knames = malloc(sizeof(char*) * (kept ? kept : 1));
+    Expr** kvals = malloc(sizeof(Expr*) * (kept ? kept : 1));
+    size_t k = 0;
+    for (size_t i = 0; i < count; i++) {
+        bool sh = false;
+        for (size_t j = 0; j < nb && !sh && names[i]; j++)
+            sh = pf_entry_local(vars->data.function.args[j]) == names[i];
+        if (sh) continue;
+        knames[k] = names[i]; kvals[k] = vals[i]; k++;
+    }
+    /* binding list: inits see every parameter */
+    Expr** nbv = malloc(sizeof(Expr*) * (nb ? nb : 1));
+    for (size_t j = 0; j < nb; j++) {
+        Expr* b = vars->data.function.args[j];
+        if (b->type == EXPR_FUNCTION && pf_entry_local(b)) {
+            Expr* ba[2] = { expr_copy(b->data.function.args[0]),
+                            names_rec(b->data.function.args[1], names, vals, count, s, frozen) };
+            nbv[j] = expr_new_function(expr_copy(b->data.function.head), ba, 2);
+        } else {
+            nbv[j] = expr_copy(b);
+        }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** na = malloc(sizeof(Expr*) * n);
+    na[0] = expr_new_function(expr_copy(vars->data.function.head), nbv, nb);
+    free(nbv);
+    for (size_t i = 1; i < n; i++)
+        na[i] = kept ? names_rec(e->data.function.args[i], knames, kvals, kept, s, frozen)
+                     : expr_copy(e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), na, n);
+    free(na);
+    free(knames);
+    free(kvals);
+    return r;
+}
+
 static Expr* names_rec(Expr* e, char** names, Expr** vals, size_t count, const PfSum* s, bool frozen) {
     if (!e) return NULL;
 
@@ -353,6 +459,18 @@ static Expr* names_rec(Expr* e, char** names, Expr** vals, size_t count, const P
         if (s->fast && symsum_get(e, &sb) && !(sb & s->mask)) { SCOPE_STAT(pf_skip); return expr_copy(e); }
         bool cfrozen = frozen || e->refcount >= 2;
         SCOPE_STAT(pf_nodes);
+        if (pf_scope_head(e) && expr_is_binding_scope(e)) {
+            Expr* safe = pf_avoid_capture(e, vals, count, s);
+            if (safe) {
+                Expr* r = names_rec(safe, names, vals, count, s, false);
+                expr_free(safe);
+                return r;
+            }
+            if (e->data.function.head->data.symbol.name != SYM_Function) {
+                Expr* r = names_into_local_scope(e, names, vals, count, s, cfrozen);
+                if (r) return r;
+            }
+        }
         /* For a nested Function, drop from the substitution set any name it
          * rebinds as a named parameter (a slot-form inner function rebinds
          * none). Non-Function heads keep the full set. */
@@ -400,7 +518,8 @@ static Expr* names_rec(Expr* e, char** names, Expr** vals, size_t count, const P
 static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count, bool frozen) {
     if (!e) return NULL;
     SCOPE_STAT(pf_top);
-    PfSum s = { 0, false };
+    int renames = 0;
+    PfSum s = { 0, false, &renames };
 #ifndef MTH_NO_SYMSUM
     if (g_symsum_on) {
         for (size_t i = 0; i < count; i++) {
@@ -415,9 +534,10 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count, 
     Expr* r = names_rec(e, names, vals, count, &s, frozen || e->refcount >= 2);
 #ifndef MTH_NO_SYMSUM
     if (s.fast && g_symsum_diff) {
-        PfSum slow = { 0, false };
+        int renames2 = 0;
+        PfSum slow = { 0, false, &renames2 };
         Expr* r2 = names_rec(e, names, vals, count, &slow, false);
-        if (!expr_eq(r, r2)) {
+        if (renames2 != renames || (renames == 0 && !expr_eq(r, r2))) {
             fprintf(stderr, "MATHILDA_SYMSUM_DIFF: substitute_names differs\n");
             abort();
         }

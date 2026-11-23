@@ -2850,6 +2850,31 @@ static bool tex_extract_negative(Expr* im, Expr** abs_out) {
     return false;
 }
 
+/* Does the TeX rendering of `e` begin with a digit?  A nonnegative number
+ * does, and so does a Power whose base is one (3^{x}).  Two such factors
+ * side by side need a visible separator: math mode ignores spaces, so
+ * "2 3^{x}" typesets as 23^{x} (audit TeXForm#1). */
+static bool tex_leads_with_digit(const Expr* e) {
+    for (;;) {
+        if (e->type == EXPR_INTEGER) return e->data.integer >= 0;
+        if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint) >= 0;
+        if (e->type == EXPR_REAL) return e->data.real >= 0.0;
+        if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+            && e->data.function.head->data.symbol.name == SYM_Power
+            && e->data.function.arg_count == 2) {
+            e = e->data.function.args[0];
+            continue;
+        }
+        return false;
+    }
+}
+
+/* The separator between two adjacent Times factors in TeX: an explicit
+ * space before a factor that leads with a digit, else a plain one. */
+static void print_tex_factor_sep(const Expr* next) {
+    printf(tex_leads_with_digit(next) ? "\\ " : " ");
+}
+
 static void print_tex(Expr* e, int parent_prec) {
     if (!e) { printf("\\text{Null}"); return; }
 
@@ -3112,7 +3137,7 @@ static void print_tex(Expr* e, int parent_prec) {
 
             if (den_count == 0) {
                 for (size_t i = 0; i < num_count; i++) {
-                    if (i > 0) printf(" ");
+                    if (i > 0) print_tex_factor_sep(num_args[i]);
                     print_tex(num_args[i], 4500);
                 }
             } else {
@@ -3134,7 +3159,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 else {
                     int nprec = (num_count > 1) ? 4500 : 0;
                     for (size_t i = 0; i < num_count; i++) {
-                        if (i > 0) printf(" ");
+                        if (i > 0) print_tex_factor_sep(num_args[i]);
                         print_tex(num_args[i], nprec);
                     }
                 }
@@ -3142,7 +3167,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 {
                     int dprec = (den_count > 1) ? 4500 : 0;
                     for (size_t i = 0; i < den_count; i++) {
-                        if (i > 0) printf(" ");
+                        if (i > 0) print_tex_factor_sep(den_args[i]);
                         print_tex(den_args[i], dprec);
                     }
                 }

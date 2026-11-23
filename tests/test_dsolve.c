@@ -3656,7 +3656,11 @@ static void t_scaling_reduction(void) {
     check_true("Module[{r = DSolve[2 y'[x] (y'[x] + 1) + (x - y[x]) y''[x] == 0, y[x], x]}, "
                "ListQ[r] && r =!= {} && !FreeQ[r, C[2]] && AllTrue[r, "
                "PossibleZeroQ[Together[(2 y'[x] (y'[x] + 1) + (x - y[x]) y''[x]) /. "
-               "y -> Function[{x}, Evaluate[y[x] /. #]]]] &]]");
+               /* Function @@ builds the Function AFTER the slot is filled: a literal
+                * Function[{x}, ...] inside the slot function would have its x renamed
+                * apart from the x the solution carries (capture avoidance, audit
+                * Function#2), and the back-substitution would test nothing. */
+               "y -> Function @@ {{x}, y[x] /. #}]] &]]");
     /* translation along (b, -a), reached ahead of the heuristic searches */
     check_true("ListQ[TimeConstrained[DSolve[(a x + b y[x]) y'[x]^3 + y''[x] == 0, y[x], x], "
                "6, $Aborted]]");

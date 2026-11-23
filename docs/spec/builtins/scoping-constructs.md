@@ -105,6 +105,8 @@ Implements dynamic scoping by temporarily overriding symbol values.
   as `x + y` and `f[3]`.
 
 ## With
+
+Capture-avoiding: a nested `Function`, `Module` or `With` binding a name that occurs free in a substituted value has that local renamed first: `With[{y = x}, Function[x, x + y][10]]` is `10 + x` (audit With#1).
 Defines local constants by lexical substitution.
 - `With[{x = x0, ...}, expr]`
 - `With[{x := x0, ...}, expr]`

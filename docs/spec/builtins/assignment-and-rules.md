@@ -74,6 +74,8 @@
 
 ## AddTo (+=), SubtractFrom (-=), TimesBy (*=), DivideBy (/=)
 
+The indices of a `Part` target are evaluated once, for the read and the write alike (also for `Increment`/`Decrement`/`PreIncrement`/`PreDecrement`/`AppendTo`/`PrependTo`): `l[[i++]] *= 10` updates element `i` and advances `i` once (audit Decrement#1, DivideBy#1, TimesBy#1).
+
 Combine a value into an existing one and return the **new** value.
 
 | operator | head | equivalent |
@@ -319,6 +321,8 @@ Out[4]= 1 + a + b
 ```
 
 ## ReplacePart
+
+When several rules address the same position, the first one wins: `ReplacePart[{a, b, c, d}, {1 -> x, _ -> y}]` is `{x, y, y, y}` (audit ReplacePart#1).
 Replaces parts of an expression at specified positions.
 - `ReplacePart[expr, i -> new]`: Replaces the part at position `i`.
 - `ReplacePart[expr, {i, j, ...} -> new]`: Replaces the part at a nested position.
@@ -351,6 +355,8 @@ Out[4]= g[x]
 ```
 
 ## ReplaceAt
+
+A `RuleDelayed` right-hand side is inserted unevaluated, so `ReplaceAt[Hold[1 + 1], x_Plus :> Length[x], 1]` is `Hold[Length[1 + 1]]` (audit ReplaceAt#1).
 Replaces parts of an expression at specified positions using replacement rules. Unlike `ReplaceAll` (which traverses the whole tree), `ReplaceAt` only attempts the rules at the part(s) named by the position specification.
 
 - `ReplaceAt[expr, rules, n]`: replaces the `n`-th element using `rules`.
