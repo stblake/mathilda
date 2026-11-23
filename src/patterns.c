@@ -1150,7 +1150,9 @@ void patterns_init(void) {
     symtab_add_builtin("Cases", builtin_cases);
     symtab_get_def("Cases")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("FirstCase", builtin_first_case);
-    symtab_get_def("FirstCase")->attributes |= ATTR_PROTECTED;
+    /* HoldRest: the default is evaluated only when nothing matches (audit
+     * FirstCase#1); the pattern is evaluated by the Cases call built below. */
+    symtab_get_def("FirstCase")->attributes |= ATTR_HOLDREST | ATTR_PROTECTED;
     symtab_set_docstring("FirstCase",
         "FirstCase[expr, patt]\n\tGives the first element of expr matching patt,\n"
         "\tor Missing[\"NotFound\"]. FirstCase[expr, patt, default] uses default.\n"

@@ -331,7 +331,7 @@ Concatenates lists or other expressions that share the same head.
 - `Join[list1, list2, ..., n]`: Joins the objects at level `n` in each of the lists.
 
 **Features**:
-- `Protected`.
+- `Flat`, `OneIdentity`, `Protected` (audit Join#2, v0.6709).
 - All arguments must share the same head; returns unevaluated if heads differ.
 - Works on any head, not just `List` (e.g., `Join[f[a], f[b]]` gives `f[a, b]`).
 - `Join[list1, list2, ..., n]` handles ragged arrays by concatenating successive elements at level `n`.

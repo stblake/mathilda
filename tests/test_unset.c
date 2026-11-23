@@ -173,8 +173,9 @@ static void test_unset_returns_null(void) {
 
 static void test_unset_protected_is_blocked(void) {
     /* Sin is Protected: `Sin[x] =.` prints Unset::wrsym to stderr, returns
-     * Null, and leaves Sin intact. */
-    assert_eval_eq("Sin[x] =.", "Null", 0);
+     * $Failed (audit Unset#4, as for a rule that is not there), and leaves Sin
+     * intact. */
+    assert_eval_eq("Sin[x] =.", "$Failed", 0);
     assert_eval_eq("Sin[0]", "0", 0);
 }
 

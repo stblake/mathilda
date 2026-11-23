@@ -274,7 +274,9 @@ Logical equivalence.
 - `Equivalent[e1, e2, ...]`: Yields `True` when **all** of the `ei` share one
   truth value (all `True` or all `False`).
 
-**Attributes**: `Flat`, `Orderless`, `OneIdentity`, `Protected`. Evaluation folds
+**Attributes**: `Orderless`, `Protected` -- not `Flat`: `Equivalent[a, Equivalent[b, c]]`
+tests `a` against the truth value of `b <=> c`, which is not `Equivalent[a, b, c]`
+(audit Equivalent#1, v0.6709). Evaluation folds
 literal Booleans and cancels duplicate arguments: `Equivalent[]` and
 `Equivalent[e]` are `True`; a `True` and a `False` together give `False`
 (`Equivalent[True, False]`); a single literal forces the remaining atoms

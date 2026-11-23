@@ -708,6 +708,19 @@ In[5]:= Check[f[x_] := 0, "refused"]
 Out[5]= "refused"
 ```
 
+**Protected, everywhere it can be written (builtin audit S7, v0.6709).** Every
+System symbol that is not a user-settable variable is `Protected` -- `List`,
+`Head`, `First`, `Length`, `Append`, `Blank`, `Integer`, `String`, `True`,
+`Null`, `Infinity`, the attribute names and the option names among them (an
+unprotected `List = 5` turned every list into `5[...]`). Deliberately settable:
+the `$`-variables, `MakeBoxes`, `Derivative` and `Default`. Every writer honours
+the attribute: `f[] = v` (`Set::write`; a zero-argument left side used to find
+no target), `Options[f] = ...` and `Default[f] = ...` (`Set::write`, tag `f`),
+`Clear[f]` (`Clear::wrsym`, values kept), `ClearAll[f]` (`ClearAll::wrsym` for a
+named symbol; a string pattern skips Protected symbols silently), `f =.`
+(`Unset::wrsym`, `$Failed`), and `AppendTo`/`PrependTo` (`Set::wrsym`, the
+variable unchanged). `N[x] =.` removes the NValue `N[x] = v` installed.
+
 ## Options, SetOptions, OptionValue
 
 Default option settings are stored per symbol (the `DefaultValues`-equivalent),

@@ -1579,6 +1579,13 @@ Expr* builtin_clear(Expr* res) {
         for (size_t i = 0; i < res->data.function.arg_count; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_SYMBOL) {
+                /* A Protected symbol keeps its values (audit Clear#1: Clear
+                 * wiped them).  A string pattern skips such symbols silently. */
+                if (get_attributes(arg->data.symbol.name) & ATTR_PROTECTED) {
+                    mth_message("Clear", "wrsym", "Symbol %s is Protected.",
+                                arg->data.symbol.name);
+                    continue;
+                }
                 symtab_clear_symbol(arg->data.symbol.name);
             } else if (arg->type == EXPR_STRING) {
                 /* Clear["x*"]: every matching symbol that is not Protected. */
@@ -1627,7 +1634,7 @@ static Expr* unset_lhs(Expr* lhs) {
         const char* sub_sym = symtab_innermost_head(inner);
         if (get_attributes(sub_sym) & ATTR_PROTECTED) {
             mth_message("Unset", "wrsym", "Symbol %s is Protected.", sub_sym);
-            return expr_new_symbol(SYM_Null);
+            return expr_new_symbol(SYM_DollarFailed);
         }
         if (!symtab_remove_matching_sub_value(sub_sym, lhs)) {
             char* shown = expr_to_string_outputform(lhs);
@@ -1672,12 +1679,47 @@ static Expr* unset_lhs(Expr* lhs) {
     }
 #endif
 
+    /* N[x] =. / N[x, p] =. removes the NValue that N[x] = v installed on the
+     * tag x (audit Unset#2: it reported N itself as Protected).  N[x] is
+     * stored as N[x, {MachinePrecision, MachinePrecision}] (install_n_value). */
+    if (symbol_name == SYM_N && (lhs->data.function.arg_count == 1 ||
+                                 lhs->data.function.arg_count == 2)) {
+        const Expr* x = lhs->data.function.args[0];
+        const char* tag = (x->type == EXPR_SYMBOL) ? x->data.symbol.name
+                        : (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL)
+                          ? x->data.function.head->data.symbol.name : NULL;
+        if (tag) {
+            if (get_attributes(tag) & ATTR_PROTECTED) {
+                mth_message("Unset", "wrsym", "Symbol %s is Protected.", tag);
+                return expr_new_symbol(SYM_DollarFailed);
+            }
+            Expr* pat;
+            if (lhs->data.function.arg_count == 1) {
+                Expr* mp = expr_new_function(expr_new_symbol(SYM_List),
+                               (Expr*[]){ expr_new_symbol(SYM_MachinePrecision),
+                                          expr_new_symbol(SYM_MachinePrecision) }, 2);
+                pat = expr_new_function(expr_new_symbol(SYM_N),
+                               (Expr*[]){ expr_copy((Expr*)x), mp }, 2);
+            } else {
+                pat = expr_copy(lhs);
+            }
+            bool ok = symtab_remove_n_value(tag, pat);
+            expr_free(pat);
+            if (ok) return expr_new_symbol(SYM_Null);
+            char* shown = expr_to_string_outputform(lhs);
+            mth_message("Unset", "norep", "Assignment on %s for %s not found.", tag, shown ? shown : "");
+            free(shown);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+    }
+
     /* Protected symbols (every builtin among them) cannot be Unset,
      * mirroring Set's wrsym guard. */
     uint32_t attrs = get_attributes(symbol_name);
     if (attrs & ATTR_PROTECTED) {
+        /* $Failed, as for a missing rule (audit Unset#4). */
         mth_message("Unset", "wrsym", "Symbol %s is Protected.", symbol_name);
-        return expr_new_symbol(SYM_Null);
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     symtab_remove_matching_rule(symbol_name, lhs, own_value);
@@ -1791,6 +1833,22 @@ static Expr* core_apply_symbol_action(Expr* res, void (*action)(const char*), co
 }
 
 Expr* builtin_clear_all(Expr* res) {
+    /* An explicitly named Protected symbol is reported (audit ClearAll#4);
+     * core_clear_all_one then leaves it untouched, as it does silently for a
+     * Protected symbol matched by a string pattern. */
+    if (res->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < res->data.function.arg_count; i++) {
+            const Expr* arg = res->data.function.args[i];
+            size_t n = head_is((Expr*)arg, SYM_List) ? arg->data.function.arg_count : 1;
+            for (size_t j = 0; j < n; j++) {
+                const Expr* e = head_is((Expr*)arg, SYM_List) ? arg->data.function.args[j] : arg;
+                if (e->type == EXPR_SYMBOL &&
+                    (get_attributes(e->data.symbol.name) & ATTR_PROTECTED))
+                    mth_message("ClearAll", "wrsym", "Symbol %s is Protected.",
+                                e->data.symbol.name);
+            }
+        }
+    }
     return core_apply_symbol_action(res, core_clear_all_one, NULL);
 }
 
@@ -2807,6 +2865,22 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
      * the body): grow it in place, as through a variable. */
     if (ds_has_append_to(sym->type)) return ds_append_to(name, expr_copy(sym), elem, prepend);
     if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
+
+    /* The update is an assignment, so a Protected variable refuses it before
+     * anything is mutated -- the in-place paths below would otherwise grow it
+     * (audit PrependTo#1; AppendTo had the same hole).  The variable is the
+     * symbol itself or, for AppendTo[s[[i]], e], the symbol under the Part. */
+    {
+        const Expr* var = sym;
+        while (var->type == EXPR_FUNCTION && head_is((Expr*)var, SYM_Part) &&
+               var->data.function.arg_count >= 1)
+            var = var->data.function.args[0];
+        if (var->type == EXPR_SYMBOL &&
+            (get_attributes(var->data.symbol.name) & ATTR_PROTECTED)) {
+            mth_message("Set", "wrsym", "Symbol %s is Protected.", var->data.symbol.name);
+            return NULL;
+        }
+    }
 
     if (sym->type == EXPR_SYMBOL && !symtab_get_own_values(sym->data.symbol.name)) {
         mth_message(name, "rvalue",

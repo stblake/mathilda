@@ -45,6 +45,12 @@ ISSUES = os.path.join(ROOT, "review", "issues")
 BACKLOG = os.path.join(ROOT, "review", "backlog.json")
 STATUS_JSON = os.path.join(ROOT, "review", "backlog_status.json")
 STATUS_MD = os.path.join(ROOT, "review", "backlog_status.md")
+# Hand/agent verdicts on CHANGED rows: {"<id>": {"verdict": FIXED |
+# STILL-BROKEN | PARTIAL | FORMAT-ONLY | UNCLEAR, "reason": ...}}.  A verdict
+# applies only while the row's status is still CHANGED / LIKELY-FIXED.
+ADJUDICATION = os.path.join(ROOT, "review", "adjudication.json")
+OPEN_STATES = ("CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL",
+               "FORMAT-ONLY", "UNCLEAR", "CHANGED", "LIKELY-FIXED")
 BIN = os.path.join(ROOT, "Mathilda")
 TIMEOUT = float(os.environ.get("AB_TIMEOUT", "30"))
 MEM_CAP_MB = float(os.environ.get("AB_MEM_CAP_MB", "2048"))
@@ -324,15 +330,25 @@ def run(args):
     report(rows, status)
 
 
+def effective_status(rid, status, adj):
+    """The run's classification, refined by an adjudication verdict."""
+    s = status.get(rid, {}).get("status", "NOT-RUN")
+    if s in ("CHANGED", "LIKELY-FIXED") and rid in adj:
+        return adj[rid]["verdict"]
+    return s
+
+
 def report(rows=None, status=None):
     rows = rows or json.load(open(BACKLOG))
     status = status or json.load(open(STATUS_JSON))
+    adj = json.load(open(ADJUDICATION)) if os.path.exists(ADJUDICATION) else {}
     from collections import Counter
     c = Counter()
     for r in rows:
-        s = status.get(r["id"], {}).get("status", "NOT-RUN")
+        s = effective_status(r["id"], status, adj)
         c[(r["severity"], s)] += 1
-    states = ["CRASH", "HANG", "SAME", "CHANGED", "LIKELY-FIXED", "NOT-RUN"]
+    states = ["CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL", "FORMAT-ONLY",
+              "UNCLEAR", "CHANGED", "LIKELY-FIXED", "FIXED", "NOT-RUN"]
     md = ["# Audit backlog status", "",
           f"*Generated {time.strftime('%Y-%m-%d %H:%M')} by "
           "`tools/audit_backlog.py` against the current `./Mathilda`.*", "",
@@ -341,11 +357,11 @@ def report(rows=None, status=None):
     for sv in SEV_RANK:
         md.append(f"| {sv} | " + " | ".join(str(c[(sv, s)]) for s in states)
                   + " |")
-    md += ["", "## Open findings (crash, hang, same), by priority", "",
+    md += ["", "## Open findings, by priority", "",
            "| id | sev | tier | kind | status | title |", "|---|---|---|---|---|---|"]
     for r in rows:
-        s = status.get(r["id"], {}).get("status", "NOT-RUN")
-        if s in ("CRASH", "HANG", "SAME"):
+        s = effective_status(r["id"], status, adj)
+        if s in OPEN_STATES:
             md.append(f"| {r['id']} | {r['severity']} | {r['tier']} | "
                       f"{r['kind']} | {s} | {r['title'][:90].replace('|', '/')} |")
     open(STATUS_MD, "w").write("\n".join(md) + "\n")

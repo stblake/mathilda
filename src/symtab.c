@@ -2410,20 +2410,15 @@ static uint64_t pattern_alpha_hash(const Expr* p) {
     return alpha_hash_rec(p, names, n) | 1;   /* never 0: 0 means "not computed" */
 }
 
-bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
-                                 bool own_value) {
-    if (!symbol_name || !lhs) return false;
-
+/* Remove from `list` the first rule whose pattern equals `lhs` up to the
+ * renaming of pattern variables (both sides canonicalised as add_rule did). */
+static bool remove_matching_from(Rule** list, const Expr* lhs) {
     /* Canonicalize the query LHS the same way add_rule() canonicalized the
      * stored patterns, then alpha-normalize so renamed pattern variables
      * still compare equal. */
     Expr* canon = pattern_canonicalize(expr_copy((Expr*)lhs));
     Expr* key = pattern_alpha_normalize(canon);
     expr_free(canon);
-
-    SymbolDef* def = symtab_get_def(symbol_name);
-    Rule** list = own_value ? &def->own_values : &def->down_values;
-    if (!own_value) litidx_drop(def);
 
     Rule* prev = NULL;
     bool removed = false;
@@ -2446,6 +2441,25 @@ bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
 
     expr_free(key);
     return removed;
+}
+
+bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
+                                 bool own_value) {
+    if (!symbol_name || !lhs) return false;
+    SymbolDef* def = symtab_get_def(symbol_name);
+    Rule** list = own_value ? &def->own_values : &def->down_values;
+    if (!own_value) litidx_drop(def);
+    return remove_matching_from(list, lhs);
+}
+
+/* Remove the NValue of `symbol_name` whose pattern is `lhs` (N[x, prec]
+ * form, as install_n_value stores it).  False when there is none. */
+bool symtab_remove_n_value(const char* symbol_name, const Expr* lhs) {
+    if (!symbol_name || !lhs) return false;
+    SymbolDef* def = symtab_get_def(symbol_name);
+    if (!remove_matching_from(&def->n_values, lhs)) return false;
+    symtab_n_value_count--;
+    return true;
 }
 
 /* ---- SubValues ---------------------------------------------------------- */

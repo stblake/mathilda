@@ -3745,7 +3745,8 @@ void info_init(void) {
         "body, then differentiates that pure function. If no DownValue matches,\n"
         "the original Derivative form is returned.\n"
         "\n"
-        "Attributes: Protected.");
+        "Attributes: NHoldAll (not Protected: rules such as Derivative[1][f] = g\n"
+        "may be attached).");
 
     // Control Flow
     symtab_set_docstring("Do",

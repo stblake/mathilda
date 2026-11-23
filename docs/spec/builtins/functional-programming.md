@@ -1413,6 +1413,7 @@ Find the first match, with a fallback.
 - `SelectFirst[list, pred]`: the first element for which `pred` is `True`, else `Missing["NotFound"]`; `SelectFirst[list, pred, default]` uses `default`.
 - `FirstCase[expr, patt]`: the first element matching `patt`, else `Missing["NotFound"]`; `FirstCase[expr, patt, default]` uses `default`.
 - Over an association both test the values and return the first matching value.
+- `FirstCase` is `HoldRest`: the default is evaluated only when nothing matches (audit FirstCase#1, v0.6709).
 
 ```mathematica
 In[1]:= SelectFirst[{1, 3, 4, 5, 6}, EvenQ]

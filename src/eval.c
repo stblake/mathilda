@@ -2013,12 +2013,15 @@ static Expr* lhs_fold_pattern_free(Expr* e) {
 static const char* assignment_target_symbol(Expr* lhs) {
     if (!lhs) return NULL;
     if (lhs->type == EXPR_SYMBOL) return lhs->data.symbol.name;
+    /* A zero-argument call f[] targets f like any other: `Alphabet[] = 3`
+     * used to find no target and so bypassed Protected (audit Alphabet#1,
+     * Kernels#1, MemoryInUse#1, SessionTime#1, TimeUsed#1). */
     if (lhs->type == EXPR_FUNCTION &&
-        lhs->data.function.head->type == EXPR_SYMBOL &&
-        lhs->data.function.arg_count >= 1) {
+        lhs->data.function.head->type == EXPR_SYMBOL) {
         const char* h = lhs->data.function.head->data.symbol.name;
-        if (h == SYM_Condition || SYM_IS_HOLDPATTERN(h) || h == SYM_Part ||
-            h == SYM_MessageName) {
+        if (lhs->data.function.arg_count >= 1 &&
+            (h == SYM_Condition || SYM_IS_HOLDPATTERN(h) || h == SYM_Part ||
+             h == SYM_MessageName)) {
             /* f::tag = ... targets f, not MessageName: a usage message may be
              * attached to an unprotected symbol even though MessageName itself
              * is Protected. */
@@ -2274,6 +2277,14 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         && lhs->data.function.head->data.symbol.name == SYM_Options
         && lhs->data.function.arg_count == 1
         && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        /* The options are the symbol's own definitions, so a Protected
+         * symbol refuses them (audit Options#1: Options[Sin] = {...}). */
+        const char* osym = lhs->data.function.args[0]->data.symbol.name;
+        if (get_attributes(osym) & ATTR_PROTECTED) {
+            mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                        "Tag %s in Options[%s] is Protected.", osym, osym);
+            return true;
+        }
         if (rhs->type == EXPR_FUNCTION
             && rhs->data.function.head->type == EXPR_SYMBOL
             && rhs->data.function.head->data.symbol.name == SYM_List) {
@@ -2391,6 +2402,25 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     bool lhs_is_list = (lhs->type == EXPR_FUNCTION &&
                         lhs->data.function.head->type == EXPR_SYMBOL &&
                         lhs->data.function.head->data.symbol.name == SYM_List);
+    /* Default[f, ...] = v is a definition for f's optional arguments, so a
+     * Protected f refuses it (audit Default#2: Default[Plus] = 1 changed what
+     * x_. + y matches).  The value itself is still stored on Default, where
+     * Optional reads it. */
+    if (lhs->type == EXPR_FUNCTION
+        && lhs->data.function.head->type == EXPR_SYMBOL
+        && lhs->data.function.head->data.symbol.name == SYM_Default
+        && lhs->data.function.arg_count >= 1
+        && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* dsym = lhs->data.function.args[0]->data.symbol.name;
+        if (get_attributes(dsym) & ATTR_PROTECTED) {
+            char* lt = expr_to_string_outputform(lhs);
+            mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                        "Tag %s in %s is Protected.", dsym, lt ? lt : "");
+            free(lt);
+            return true;
+        }
+    }
+
     if (!lhs_is_list) {
         const char* target = assignment_target_symbol(lhs);
         if (target && (get_attributes(target) & ATTR_PROTECTED)) {

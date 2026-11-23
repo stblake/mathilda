@@ -1,3 +1,32 @@
+# Builtin audit campaign: 2,475 findings from review/report.html (started 2026-11-23)
+
+The plan is in `~/.claude/plans/nifty-finding-toucan-*.md`. `tools/audit_backlog.py`
+re-runs every finding (`review/issues/<Head>.md` -> `review/backlog.json` ->
+`review/backlog_status.{json,md}`). Each fix is pinned in `tests/test_audit_<category>.c`
+by audit id. Triage on v0.6701: 1,924 SAME, 442 CHANGED (still to adjudicate), 73
+LIKELY-FIXED, 26 CRASH, 10 HANG.
+
+- [x] Phase 0: triage harness, live backlog, `tests/test_audit.h` + glob in CMake (v0.6708)
+- [x] Wave 1a: `src/checked_alloc.{c,h}`; CompleteGraph#1 StarGraph#1 UnitVector#1 Series#1
+  NSeries#1 ComplexExpand#1 (v0.6708)
+- [ ] Wave 1b (agents): S1 allocation class (IdentityMatrix DiagonalMatrix HankelMatrix
+  ToeplitzMatrix VandermondeMatrix Array PadLeft Drop Differences Plot3D RandomImage
+  CirculantGraph PrimitiveRootList QPochhammer)
+- [ ] Wave 1c (agents): S2 recursion class (ArrayFlatten ByteCount Depth#1-2 StringRiffle
+  Tuples FixedPointList)
+- [ ] Wave 1d (agents): special-function hangs (BetaRegularized ExpIntegralE StruveH
+  MathieuCPrime#4 BernoulliB)
+- [ ] Wave 1e (agents): Block#1 With#2 For#1 FindSpanningTree#1 Classify#1 Fit#1
+- [ ] Adjudicate the 442 CHANGED rows against Expected
+- [ ] Wave 2: high severity (~200 open), in subsystem groups: core semantics (Function/#0/##,
+  With renaming, Break/Continue in args, op= double Part evaluation, Protected:
+  List/Clear/PrependTo), arithmetic and zero tests, numeric-order statistics (S8), exact
+  linear-algebra decisions (S9), special functions x2, numerical calculus, solve and
+  calculus, polynomial algebra, ML/image/misc
+- [ ] Wave 3: shared mechanical fixes S11-S14 (Indeterminate/Infinity propagation, arity
+  metadata, option validation, level specs)
+- [ ] Wave 4: medium by tier; Wave 5: low by tier
+
 # Evaluator: aborts that escape their constraint (2026-11-23)
 
 - [x] EVAL-abort-1: an abort escaped every TimeConstrained and aborted a LATER,

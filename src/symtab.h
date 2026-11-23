@@ -312,6 +312,9 @@ void symtab_remove_symbol(const char* symbol_name);
 // `lhs =.`. Returns true iff a matching rule was found and removed.
 bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
                                  bool own_value);
+// Remove the NValue of symbol_name whose pattern is lhs (an N[x, prec] form);
+// false when there is none.
+bool symtab_remove_n_value(const char* symbol_name, const Expr* lhs);
 
 // SubValues: rules whose left-hand side has a compound head, f[x_][y_] (any
 // depth), keyed on the innermost head symbol f.  Tried for a call whose head
