@@ -26,9 +26,15 @@ Usage:
   tools/audit_backlog.py run [-j4] [--sev=S] [--builtin=B] [--ids=a#1,b#2]
                              [--resume]       # skip ids already in the status
                                                # -> review/backlog_status.json/.md
-  tools/audit_backlog.py report                # regenerate the .md only
+  tools/audit_backlog.py report                # regenerate the .md and the html
+  tools/audit_backlog.py pinned [--dry]        # CHANGED rows pinned by a passing
+                                               # tests/test_audit_*.c check -> FIXED
+  tools/audit_backlog.py html                  # regenerate review/report.html only
+                                               # (from review/report.source.html,
+                                               # stamped with each finding's status)
 
-Environment: AB_TIMEOUT (s, default 30), AB_MEM_CAP_MB (default 2048).
+Environment: AB_TIMEOUT (s, default 30), AB_MEM_CAP_MB (default 2048),
+AB_BIN (binary to check, default ./Mathilda; e.g. a worktree's).
 """
 
 import concurrent.futures as cf
@@ -51,7 +57,9 @@ STATUS_MD = os.path.join(ROOT, "review", "backlog_status.md")
 ADJUDICATION = os.path.join(ROOT, "review", "adjudication.json")
 OPEN_STATES = ("CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL",
                "FORMAT-ONLY", "UNCLEAR", "CHANGED", "LIKELY-FIXED")
-BIN = os.path.join(ROOT, "Mathilda")
+# AB_BIN: check another tree's binary (a branch before it lands); its
+# src/version.h is read alongside it.
+BIN = os.path.abspath(os.environ.get("AB_BIN", os.path.join(ROOT, "Mathilda")))
 TIMEOUT = float(os.environ.get("AB_TIMEOUT", "30"))
 MEM_CAP_MB = float(os.environ.get("AB_MEM_CAP_MB", "2048"))
 POLL_SECONDS = 0.05
@@ -326,6 +334,10 @@ def run(args):
             if done % 50 == 0 or st in ("CRASH", "HANG"):
                 print(f"[{done}/{len(sel)}] {r['id']}: {st} {note}",
                       flush=True)
+    # what this status was measured against (read back by html_report)
+    status["_meta"] = {"version": _bin_version(),
+                       "time": time.strftime("%Y-%m-%d %H:%M"),
+                       "scope": "partial" if (sev or builtin or ids) else "full"}
     json.dump(status, open(STATUS_JSON, "w"), indent=1)
     report(rows, status)
 
@@ -366,6 +378,234 @@ def report(rows=None, status=None):
                       f"{r['kind']} | {s} | {r['title'][:90].replace('|', '/')} |")
     open(STATUS_MD, "w").write("\n".join(md) + "\n")
     print("\n".join(md[:12]))
+    html_report(rows, status, adj)
+
+
+def adjudicate_pinned(args):
+    """Verdict FIXED for every CHANGED / LIKELY-FIXED row whose id is pinned in
+    a tests/test_audit_<category>.c check of the checked tree.
+
+    Each fix is pinned by audit id with checks written from the finding's
+    "Expected", so a row that has moved off the audit's "Actual" AND is pinned
+    in a passing suite is fixed.  Run this only after the audit suites of that
+    tree pass (ctest -R audit_); a row that is not pinned keeps waiting for a
+    hand verdict.  --dry lists without writing."""
+    dry = "--dry" in args
+    tree = os.path.dirname(BIN)
+    status = json.load(open(STATUS_JSON))
+    adj = json.load(open(ADJUDICATION)) if os.path.exists(ADJUDICATION) else {}
+    pinned = {}
+    tdir = os.path.join(tree, "tests")
+    for fn in sorted(os.listdir(tdir)):
+        if fn.startswith("test_audit_") and fn.endswith(".c"):
+            for rid in re.findall(r'audit_\w+\(\s*"([^"]+#\d+)"',
+                                  open(os.path.join(tdir, fn)).read()):
+                pinned.setdefault(rid, fn)
+    n = 0
+    for rid, st in status.items():
+        if rid.startswith("_") or st.get("status") not in ("CHANGED", "LIKELY-FIXED"):
+            continue
+        if rid in pinned and adj.get(rid, {}).get("verdict") != "FIXED":
+            n += 1
+            print(f"{rid}: FIXED (pinned in tests/{pinned[rid]})")
+            adj[rid] = {"verdict": "FIXED",
+                        "reason": f"Output moved off the audit's Actual and the id is "
+                                  f"pinned by passing checks in tests/{pinned[rid]} "
+                                  f"(v{_bin_version()})."}
+    if not dry:
+        json.dump(adj, open(ADJUDICATION, "w"), indent=1)
+        report()
+    print(f"{n} rows adjudicated FIXED from pinned tests"
+          + (" (dry run)" if dry else ""))
+
+
+# --- the annotated audit report ---------------------------------------------
+#
+# review/report.html is the audit's own write-up with every finding stamped by
+# its live status.  It is regenerated from the pristine copy
+# review/report.source.html (made once, from the original report.html), so the
+# rendering is idempotent: run it as often as the status changes.  The audit
+# lists builtins in <details> blocks and each finding in a <div class='f'>, in
+# the order of review/issues/<Head>.md -- so the k-th finding of builtin H is
+# the backlog row "H#k" (checked: every title matches).
+
+# Display group of each effective status: FIXED is done; CHANGED / LIKELY-FIXED
+# / UNCLEAR / FORMAT-ONLY / NOT-RUN still need a human or agent verdict.
+HTML_GROUP = {"FIXED": "fixed",
+              "CRASH": "open", "HANG": "open", "SAME": "open",
+              "STILL-BROKEN": "open", "PARTIAL": "open"}
+HTML_SOURCE = os.path.join(ROOT, "review", "report.source.html")
+HTML_OUT = os.path.join(ROOT, "review", "report.html")
+
+HTML_STYLE = """
+.st{display:inline-block;padding:0 .45em;border-radius:4px;font-size:.75em;font-weight:600;margin-left:.4em;vertical-align:middle;border:1px solid}
+.st.fixed{color:#1b5e20;background:#e8f5e9;border-color:#a5d6a7}.st.open{color:#b71c1c;background:#ffebee;border-color:#ef9a9a}
+.st.review{color:#6d4c00;background:#fff8e1;border-color:#ffe082}
+.f.fixed h4,.f.fixed pre,.f.fixed p{opacity:.55}.f.fixed h4 b,.f.fixed h4{text-decoration-color:#2e7d32}
+details.allfixed>summary{opacity:.6}.tick{color:#2e7d32;font-weight:700}
+.prog{margin:1em 0 .5em}.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#eee}
+.bar span{display:block}.bar .fixed{background:#43a047}.bar .review{background:#ffca28}.bar .open{background:#e53935}
+.sevtab{border-collapse:collapse;margin:.6em 0 1em}.sevtab td,.sevtab th{padding:.15em .7em;border-bottom:1px solid #eee;text-align:right}
+.sevtab th:first-child,.sevtab td:first-child{text-align:left}
+.filters{position:sticky;top:0;background:#fff;padding:.5em 0;z-index:2;border-bottom:1px solid #eee;margin-bottom:1em}
+.filters button{font:inherit;padding:.2em .8em;margin-right:.3em;border:1px solid #ccc;border-radius:6px;background:#fafafa;cursor:pointer}
+.filters button.on{background:#1d1d1f;color:#fff;border-color:#1d1d1f}.filters input{font:inherit;padding:.2em .5em;margin-left:.6em;width:14em}
+body.show-open .f:not(.open),body.show-fixed .f:not(.fixed),body.show-review .f:not(.review){display:none}
+details.hide,h2.hide{display:none}
+"""
+
+HTML_SCRIPT = """<script>
+(function(){
+  var mode='all', q='';
+  function apply(){
+    document.body.className = mode==='all' ? '' : 'show-'+mode;
+    var ds=document.querySelectorAll('details');
+    for(var i=0;i<ds.length;i++){
+      var d=ds[i], name=(d.getAttribute('data-b')||'').toLowerCase();
+      var vis = mode==='all' || d.querySelector('.f.'+mode);
+      if(q && name.indexOf(q)<0 && (d.getAttribute('data-ids')||'').indexOf(q)<0) vis=false;
+      d.classList.toggle('hide', !vis);
+    }
+    var hs=document.querySelectorAll('h2[data-cat]');
+    for(var j=0;j<hs.length;j++){
+      var h=hs[j], n=h.nextElementSibling, any=false;
+      while(n && n.tagName==='DETAILS'){ if(!n.classList.contains('hide')) any=true; n=n.nextElementSibling; }
+      h.classList.toggle('hide', !any);
+    }
+  }
+  var bs=document.querySelectorAll('.filters button');
+  for(var k=0;k<bs.length;k++) bs[k].addEventListener('click', function(){
+    for(var m=0;m<bs.length;m++) bs[m].classList.remove('on');
+    this.classList.add('on'); mode=this.getAttribute('data-m'); apply();
+  });
+  document.getElementById('flt').addEventListener('input', function(){ q=this.value.trim().toLowerCase(); apply(); });
+})();
+</script>"""
+
+
+def _bin_version():
+    """$VersionNumber of the tree the status was taken against."""
+    try:
+        txt = open(os.path.join(os.path.dirname(BIN), "src", "version.h")).read()
+        return re.search(r'MATHILDA_VERSION_STRING "([^"]+)"', txt).group(1)
+    except (OSError, AttributeError):
+        return "?"
+
+
+def html_report(rows=None, status=None, adj=None):
+    import html as H
+    import shutil
+    from collections import Counter
+    rows = rows or json.load(open(BACKLOG))
+    status = status if status is not None else json.load(open(STATUS_JSON))
+    if adj is None:
+        adj = json.load(open(ADJUDICATION)) if os.path.exists(ADJUDICATION) else {}
+    if not os.path.exists(HTML_SOURCE):          # first run: keep the original
+        shutil.copyfile(HTML_OUT, HTML_SOURCE)
+    src = open(HTML_SOURCE).read()
+    byid = {r["id"]: r for r in rows}
+
+    def eff(rid):
+        s = effective_status(rid, status, adj)
+        return s, HTML_GROUP.get(s, "review")
+
+    tally = Counter()
+    for r in rows:
+        tally[(r["severity"], eff(r["id"])[1])] += 1
+        tally[("all", eff(r["id"])[1])] += 1
+
+    head, *blocks = re.split(r"(?=<details>)", src)
+    out_blocks = []
+    for b in blocks:
+        name = H.unescape(re.search(r"<summary>.*?<b>(.*?)</b>", b, re.S).group(1))
+        k = 0
+        groups = []
+
+        def stamp(m):
+            nonlocal k
+            k += 1
+            rid = f"{name}#{k}"
+            s, g = eff(rid)
+            groups.append(g)
+            why = ""
+            if rid in adj and s == adj[rid]["verdict"]:
+                why = adj[rid].get("reason", "")
+            note = status.get(rid, {}).get("note", "")
+            tip = H.escape(" -- ".join(x for x in (why, note) if x), quote=True)
+            label = s.replace("SAME", "OPEN").replace("STILL-BROKEN", "OPEN")
+            pill = (f"<span class='st {g}' title='{tip}'>"
+                    f"{'&#10003; ' if g == 'fixed' else ''}{label}</span>")
+            return (f"<div class='f {g}' id='{H.escape(rid)}'><h4>"
+                    f"<small><code>{H.escape(rid)}</code></small> {pill} ")
+        b = re.sub(r"<div class='f'><h4>", stamp, b)
+        nfix = groups.count("fixed")
+        if not groups:
+            out_blocks.append(b)
+            continue
+        cls = " class='allfixed'" if nfix == len(groups) else ""
+        summ = (f" <span class='st {'fixed' if nfix == len(groups) else 'open' if nfix == 0 else 'review'}'>"
+                f"{'<span class=tick>&#10003;</span> ' if nfix == len(groups) else ''}"
+                f"{nfix}/{len(groups)} fixed</span>")
+        ids = " ".join(f"{name}#{i}".lower() for i in range(1, len(groups) + 1))
+        b = b.replace("<details>", f"<details{cls} data-b='{H.escape(name, quote=True)}' "
+                                   f"data-ids='{H.escape(ids, quote=True)}'>", 1)
+        b = b.replace("</summary>", summ + "</summary>", 1)
+        out_blocks.append(b)
+
+    # category headings get their own fixed / total
+    body = "".join(out_blocks)
+    head_html, _, first_h2 = head.rpartition("<h2>")
+    if not head_html:                            # no heading split: keep as is
+        head_html, first_h2 = head, ""
+    full = ("<h2>" + first_h2 if first_h2 else "") + body
+
+    def cat_tag(m):
+        return f"<h2 data-cat='{H.escape(m.group(1), quote=True)}'>{m.group(1)}</h2>"
+    full = re.sub(r"<h2>(.*?)</h2>", cat_tag, full)
+
+    meta = status.get("_meta")
+    if meta:
+        stamp_txt = f"{meta['time']} against Mathilda v{meta['version']}"
+        if meta.get("scope") == "partial":
+            stamp_txt += " (last run was partial; other rows keep their earlier status)"
+    else:
+        mt = time.strftime("%Y-%m-%d %H:%M",
+                           time.localtime(os.path.getmtime(STATUS_JSON)))
+        stamp_txt = f"{mt} (binary version not recorded)"
+    tot = len(rows)
+    fx, rv, op = (tally[("all", g)] for g in ("fixed", "review", "open"))
+    pct = lambda n: f"{100.0 * n / tot:.2f}%"
+    sev_rows = "".join(
+        f"<tr><td><span class='sev {sv}'>{sv}</span></td>"
+        f"<td>{tally[(sv, 'fixed')]}</td><td>{tally[(sv, 'review')]}</td>"
+        f"<td>{tally[(sv, 'open')]}</td>"
+        f"<td>{sum(tally[(sv, g)] for g in ('fixed', 'review', 'open'))}</td></tr>"
+        for sv in SEV_RANK)
+    progress = (
+        f"<h2>Fix progress</h2><p>Findings last re-run {stamp_txt}; page rendered "
+        f"{time.strftime('%Y-%m-%d %H:%M')} by <code>tools/audit_backlog.py</code>. "
+        f"<b>{fx}</b> fixed, <b>{rv}</b> need a verdict (changed since the audit, "
+        f"not yet confirmed), <b>{op}</b> still open.</p>"
+        f"<div class='prog'><div class='bar'>"
+        f"<span class='fixed' style='width:{pct(fx)}' title='fixed {fx}'></span>"
+        f"<span class='review' style='width:{pct(rv)}' title='needs verdict {rv}'></span>"
+        f"<span class='open' style='width:{pct(op)}' title='open {op}'></span></div></div>"
+        f"<table class='sevtab'><tr><th>severity</th><th>fixed</th><th>needs verdict</th>"
+        f"<th>open</th><th>total</th></tr>{sev_rows}</table>"
+        f"<div class='filters'>"
+        f"<button class='on' data-m='all'>All</button>"
+        f"<button data-m='open'>Open ({op})</button>"
+        f"<button data-m='review'>Needs verdict ({rv})</button>"
+        f"<button data-m='fixed'>Fixed ({fx})</button>"
+        f"<input id='flt' placeholder='filter: builtin or id'></div>")
+    head_html = head_html.replace("</style>", HTML_STYLE + "</style>", 1)
+    page = head_html + progress + full
+    page = page.replace("</html>", HTML_SCRIPT + "</html>") if "</html>" in page \
+        else page + HTML_SCRIPT
+    tmp = HTML_OUT + ".tmp"
+    open(tmp, "w").write(page)
+    os.replace(tmp, HTML_OUT)
+    print(f"report.html: {fx} fixed, {rv} need a verdict, {op} open (of {tot})")
 
 
 if __name__ == "__main__":
@@ -377,5 +617,9 @@ if __name__ == "__main__":
         run(sys.argv[2:])
     elif cmd == "report":
         report()
+    elif cmd == "html":
+        html_report()
+    elif cmd == "pinned":
+        adjudicate_pinned(sys.argv[2:])
     else:
         sys.exit(__doc__)
