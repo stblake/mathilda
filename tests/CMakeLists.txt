@@ -2772,6 +2772,15 @@ if(USE_ECM)
 endif()
 add_test(NAME compile_assoc_tests COMMAND compile_assoc_tests)
 
+# In-place update paths (data-structure program): value semantics must survive
+# aliasing, Block, and cached derived values.
+add_executable(inplace_updates_tests test_inplace_updates.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(inplace_updates_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(inplace_updates_tests build_ecm)
+endif()
+add_test(NAME inplace_updates_tests COMMAND inplace_updates_tests)
+
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
 if(USE_ECM)

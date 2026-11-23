@@ -591,7 +591,7 @@ static bool vm_assoc_higher(const Instr* c, Slot* R, bool select) {
 }
 
 /* Append[assoc, key -> value] (B5) -> a new OWNED association with key set
- * (replaced in place, else appended).  Native (assoc_set_key), no evaluator.
+ * (an existing key moves to the end, as the interpreter's Append does).  Native (assoc_append_key), no evaluator.
  * R[a] = source, R[b] = machine value; flags = value_type | free-source<<8. */
 static bool vm_assoc_set(const Instr* c, Slot* R) {
     const AssocSpec* sp = (const AssocSpec*)c->imm.p;
@@ -605,7 +605,8 @@ static bool vm_assoc_set(const Instr* c, Slot* R) {
      * compiled accumulate loop is O(1) amortised per update, not O(n).  A
      * refusal (non-canonical node, Rule/RuleDelayed head mismatch) leaves
      * `src` untouched and falls through to the copying path. */
-    if ((c->flags & 0x100u) && !sp->assoc && src->refcount == 1) {
+    if ((c->flags & 0x100u) && !sp->assoc && src->refcount == 1 &&
+        !assoc_lookup_value(src, sp->key)) {   /* existing key moves to the end: copy path */
         Expr* ka[2] = { expr_copy((Expr*)sp->key), expr_copy(nv) };
         Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), ka, 2);
         bool ok = assoc_upsert_inplace(src, rule);
@@ -618,7 +619,7 @@ static bool vm_assoc_set(const Instr* c, Slot* R) {
             return true;
         }
     }
-    Expr* r = assoc_set_key(src, sp->key, nv);      /* adopts nv */
+    Expr* r = assoc_append_key(src, sp->key, nv);   /* adopts nv; Mathematica 15 order */
     if (!r) { expr_free(nv); return false; }
     assoc_prebuild_index(r);
     if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }

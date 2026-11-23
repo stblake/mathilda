@@ -360,9 +360,14 @@ static void test_functional_update(void) {
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"c\" -> x]]"
                 "[<|\"a\" -> 1., \"b\" -> 2.|>, 3.] === <|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>");
 
-    /* REPLACE an existing key — value updated in place, order preserved */
+    /* an existing key MOVES TO THE END, as the interpreter's Append does
+     * (Mathematica 15): compiled and interpreted must agree on key order. */
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"
-                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === <|\"a\" -> 1., \"b\" -> 9., \"c\" -> 3.|>");
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === <|\"a\" -> 1., \"c\" -> 3., \"b\" -> 9.|>");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === Append[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, \"b\" -> 9.]");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"a\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === Append[KeyDrop[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, \"b\"], \"a\" -> 9.]");
 
     /* the value can be any compiled machine expression */
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"sum\" -> Lookup[p, \"a\"] + x]]"
@@ -377,9 +382,7 @@ static void test_functional_update(void) {
                 "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 7.] === <|\"a\" -> 1., \"c\" -> 3., \"z\" -> 7.|>");
 
     /* in-place path (owned-temp source, refcount 1): an Append onto a
-     * produced association must equal the interpreter exactly, for a NEW key (the existing-key
-     * position semantics differ between interpreter and VM upstream; see the PR
-     * notes) and a borrowed (argument) source that must NOT
+     * produced association must equal the interpreter exactly, and a borrowed (argument) source that must NOT
      * be mutated across repeated evaluations. */
     {
         const char* body = "Append[KeyDrop[p, \"b\"], \"z\" -> x + 1.]";

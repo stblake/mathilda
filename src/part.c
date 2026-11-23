@@ -535,6 +535,33 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     return new_func;
 }
 
+/* Write ONE element of an exclusively owned packed array in place: every index
+ * an in-range machine integer (negatives count from the end), exactly `rank`
+ * of them, and a scalar of the buffer's own type (an exact Integer into int64, a
+ * machine Real into float64) -- the cases that cannot fail halfway, so a refusal
+ * leaves the array untouched and the caller falls back to the copying path.
+ * This is what makes `Do[p[[i]] = v, {i, n}]` O(n) instead of O(n^2): the copy
+ * path duplicated the whole buffer on every assignment. */
+static bool nd_set_element_inplace(Expr* arr, Expr* const* idx, size_t n, const Expr* rhs) {
+    if (arr->type != EXPR_NDARRAY || n != (size_t)arr->data.ndarray.rank) return false;
+    NDType dt = arr->data.ndarray.dtype;
+    if (dt == NDT_INT64) { if (rhs->type != EXPR_INTEGER) return false; }
+    else if (dt == NDT_FLOAT64) { if (rhs->type != EXPR_REAL) return false; }
+    else return false;
+    size_t off = 0;
+    for (size_t k = 0; k < n; k++) {
+        if (idx[k]->type != EXPR_INTEGER) return false;
+        int64_t d = arr->data.ndarray.dims[k], i = idx[k]->data.integer;
+        if (i < 0) i += d + 1;
+        if (i < 1 || i > d) return false;
+        off = off * (size_t)d + (size_t)(i - 1);
+    }
+    if (dt == NDT_INT64) ((int64_t*)arr->data.ndarray.data)[off] = rhs->data.integer;
+    else ((double*)arr->data.ndarray.data)[off] = rhs->data.real;
+    expr_invalidate_hash(arr);
+    return true;
+}
+
 Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || lhs->data.function.head->data.symbol.name != SYM_Part) return NULL;
     if (lhs->data.function.arg_count < 2) return NULL;
@@ -586,6 +613,15 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
         bool ok = ll_part_assign(current_val, lhs->data.function.args + 1,
                                  lhs->data.function.arg_count - 1, rhs);
         if (!ok) { expr_free(current_val); return NULL; }
+        return current_val;
+    }
+
+    /* p[[i, ...]] = scalar on a packed array this variable owns exclusively:
+     * write the element in place (see nd_set_element_inplace). */
+    if (current_val->type == EXPR_NDARRAY && symtab_value_exclusively_owned(sym, current_val) &&
+        nd_set_element_inplace(current_val, lhs->data.function.args + 1,
+                               lhs->data.function.arg_count - 1, rhs)) {
+        eval_clock_bump_binding(symtab_get_def(sym->data.symbol.name));
         return current_val;
     }
 

@@ -2745,6 +2745,48 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
         return NULL;
     }
 
+    /* In-place AppendTo on a value this variable owns exclusively (refcount 2:
+     * the OwnValue plus us).  A packed rank-1 array grows with capacity
+     * doubling; a plain List of strings reallocs its args.
+     * Either way a loop of n appends is O(n), not O(n^2).  Numeric elements on
+     * a plain List keep the copying path below, which offers the result to the
+     * packer.  Any other holder of the value makes the proof fail -> copy. */
+    if (!prepend && symtab_value_exclusively_owned(sym, current_val)) {
+        bool done = false;
+        uint64_t old_stamp = 0;
+        if (is_ndarray(current_val)) {
+            done = ndstruct_append_inplace(current_val, elem);
+        } else if (current_val->type == EXPR_FUNCTION &&
+                   current_val->data.function.head->type == EXPR_SYMBOL &&
+                   current_val->data.function.head->data.symbol.name == SYM_List &&
+                   elem->type == EXPR_STRING) {
+            old_stamp = current_val->last_evaluated_at;
+            size_t n = current_val->data.function.arg_count;
+            Expr** na = realloc(current_val->data.function.args, sizeof(Expr*) * (n + 1));
+            if (na) {
+                na[n] = expr_copy(elem);
+                current_val->data.function.args = na;
+                current_val->data.function.arg_count = n + 1;
+                expr_invalidate_hash(current_val);
+                /* still a fixed point (entries evaluated, elem is an evaluated
+                 * argument): re-stamp after the binding bump below */
+                done = true;
+            }
+        }
+        if (done) {
+            eval_clock_bump_binding(symtab_get_def(sym->data.symbol.name));
+            /* A string appended to a ground list keeps it ground (GROUND bit 63 /
+             * INERT bit 62 survive iterator churn, so the next evaluate(sym) does
+             * not re-walk every element).  A list of SYMBOLS is not handled here:
+             * its fixed point depends on those symbols having no value, and the
+             * copying path below re-validates it as before. */
+            if (current_val->type == EXPR_FUNCTION)
+                current_val->last_evaluated_at = eval_clock_get() |
+                    (old_stamp & ((UINT64_C(1) << 63) | (UINT64_C(1) << 62)));
+            return current_val;
+        }
+    }
+
     /* An association appends by key (see assoc_add_rules); a non-rule elem
      * leaves AppendTo unevaluated, as in Mathematica. */
     if (is_association(current_val)) {

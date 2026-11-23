@@ -645,6 +645,28 @@ Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval) {
     return result;
 }
 
+/* Append[assoc, key -> newval] with the interpreter's (Mathematica 15) key
+ * order: an existing entry with that key is REMOVED from where it was and the
+ * new rule goes at the END, so Append[<|a -> 1, b -> 2|>, a -> 9] is
+ * <|b -> 2, a -> 9|>.  (assoc_set_key, which replaces in place, is the older
+ * behaviour and is kept for its other callers.)  Adopts `newval`. */
+Expr* assoc_append_key(const Expr* assoc, const Expr* key, Expr* newval) {
+    if (!is_association(assoc)) return NULL;
+    size_t n = assoc->data.function.arg_count;
+    Expr** rules = malloc((n + 1) * sizeof(Expr*));
+    if (!rules) return NULL;
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* entry = assoc->data.function.args[i];
+        if (is_rule2(entry) && expr_eq(rule_key(entry), key)) continue;   /* moved to the end */
+        rules[m++] = expr_copy(entry);
+    }
+    rules[m++] = make_rule(expr_copy((Expr*)key), newval);                /* adopts newval */
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), rules, m);
+    free(rules);
+    return result;
+}
+
 static Expr* key_drop_take(Expr* res, bool take) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
@@ -1260,9 +1282,7 @@ bool assoc_upsert_inplace(Expr* assoc, Expr* rule) {
  * declines when the key is present (AssociateTo keeps the position instead).
  * Returns true if `current` was updated in place (caller returns `current`). */
 bool assoc_try_inplace_update(Expr* sym, Expr* current, Expr* rule, bool append_new_only) {
-    if (sym->type != EXPR_SYMBOL || !is_rule2(rule) || current->refcount != 2) return false;
-    Rule* ov = symtab_get_own_values(sym->data.symbol.name);
-    if (!ov || ov->next || ov->replacement != current) return false;
+    if (!is_rule2(rule) || !symtab_value_exclusively_owned(sym, current)) return false;
     if (append_new_only && current->data.function.arg_count > 0 &&
         assoc_lookup_value(current, rule_key(rule))) return false;
     uint64_t old_stamp = current->last_evaluated_at;

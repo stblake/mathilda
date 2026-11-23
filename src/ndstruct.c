@@ -4,6 +4,7 @@
  * ndarray_delist_and_reeval so the result matches the List path exactly. */
 
 #include "ndstruct.h"
+#include "memacct.h"
 #include "pack.h"    /* pack_repack_like — a packed source re-sniffs its dtype */
 #include "checked_int.h"  /* ci_sub_i64 — Differences abandons on int64 overflow */
 #include "ndarray.h"
@@ -1244,6 +1245,35 @@ Expr* ndstruct_ratios(Expr* res) {
  *   rank N, x an array   Append[matrix, row]: x's shape must equal a's
  *                        trailing dims and its dtype must match exactly, the
  *                        same never-widen rule as Join. */
+/* Append one element to the END of an exclusively owned rank-1 packed array, in
+ * place, with capacity doubling (amortised O(1)).  `x` must be a scalar the
+ * buffer's dtype can hold exactly (nd_fill_value); anything else returns false
+ * with the array untouched and the caller takes the copying path.  Only the
+ * LOGICAL growth is charged to MemoryConstrained (the node is released by
+ * dims), so spare capacity is uncounted slack. */
+bool ndstruct_append_inplace(Expr* a, const Expr* x) {
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return false;
+    NDType dt = a->data.ndarray.dtype;
+    double re = 0.0; int64_t iv = 0;
+    if (!nd_fill_value((Expr*)x, dt, &re, &iv)) return false;
+    size_t esz = ndt_elem_size(dt);
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    size_t cap = a->data.ndarray.cap_rows > n ? a->data.ndarray.cap_rows : n;
+    if (!mth_mem_request(esz)) return false;
+    if (n + 1 > cap) {
+        size_t ncap = n < 8 ? 16 : n * 2;
+        void* nb = realloc(a->data.ndarray.data, ncap * esz);
+        if (!nb) return false;
+        a->data.ndarray.data = nb;
+        a->data.ndarray.cap_rows = ncap;
+    }
+    nd_fill_run((char*)a->data.ndarray.data, dt, n, 1, re, iv);
+    a->data.ndarray.dims[0] = (int64_t)(n + 1);
+    MTH_MEM_CHARGE(esz);
+    expr_invalidate_hash(a);
+    return true;
+}
+
 Expr* ndstruct_append(Expr* res, bool prepend) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* a = res->data.function.args[0];
