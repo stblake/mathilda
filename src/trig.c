@@ -33,19 +33,31 @@ static int mpfr_atan_recip_op(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd) {
     mpfr_clear(tmp);
     return r;
 }
+/* ArcSec / ArcCsc of a real x, |x| >= 1, without forming 1/x: acos(1/x) and
+ * asin(1/x) are infinitely sensitive at x = +-1, so the rounding of 1/x cost
+ * ~half the digits next to them (ArcSec[1 + 10^-25] at 60 digits had 41).
+ * With r = sqrt((x - 1)(x + 1)), x - 1 exact there:
+ *   acos(1/x) = atan2(r, sign x),   asin(1/x) = atan2(sign x, r).
+ * |x| < 1 makes r NaN, the domain failure the complex fallback expects. */
+static int mpfr_recip_acos_asin(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd, bool asin_) {
+    mpfr_prec_t wp = mpfr_get_prec(out) + 32;
+    mpfr_t r, t, sg;
+    mpfr_inits2(wp, r, t, sg, (mpfr_ptr)NULL);
+    mpfr_sub_ui(r, in, 1, MPFR_RNDN);
+    mpfr_add_ui(t, in, 1, MPFR_RNDN);
+    mpfr_mul(r, r, t, MPFR_RNDN);
+    mpfr_sqrt(r, r, MPFR_RNDN);
+    mpfr_abs(r, r, MPFR_RNDN);           /* sqrt(-0) = -0 at x = -1: atan2 -> -Pi */
+    mpfr_set_si(sg, mpfr_sgn(in) < 0 ? -1 : 1, MPFR_RNDN);
+    int ret = asin_ ? mpfr_atan2(out, sg, r, rnd) : mpfr_atan2(out, r, sg, rnd);
+    mpfr_clears(r, t, sg, (mpfr_ptr)NULL);
+    return ret;
+}
 static int mpfr_acos_recip_op(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd) {
-    mpfr_t tmp; mpfr_init2(tmp, mpfr_get_prec(in));
-    mpfr_ui_div(tmp, 1, in, rnd);
-    int r = mpfr_acos(out, tmp, rnd);
-    mpfr_clear(tmp);
-    return r;
+    return mpfr_recip_acos_asin(out, in, rnd, false);
 }
 static int mpfr_asin_recip_op(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd) {
-    mpfr_t tmp; mpfr_init2(tmp, mpfr_get_prec(in));
-    mpfr_ui_div(tmp, 1, in, rnd);
-    int r = mpfr_asin(out, tmp, rnd);
-    mpfr_clear(tmp);
-    return r;
+    return mpfr_recip_acos_asin(out, in, rnd, true);
 }
 #endif
 

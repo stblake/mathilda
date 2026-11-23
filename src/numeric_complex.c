@@ -36,24 +36,6 @@ Expr* numeric_mpfr_make_complex(const mpfr_t out_re, const mpfr_t out_im) {
  *  Private MPFR-complex algebra used by the unary ops below
  * ------------------------------------------------------------------ */
 
-/* Complex multiply (out = a * b). out_re may alias inputs; the intermediate
- * goes through scratch to keep aliasing safe. */
-static void mc_mul(mpfr_t out_re, mpfr_t out_im,
-                   const mpfr_t a_re, const mpfr_t a_im,
-                   const mpfr_t b_re, const mpfr_t b_im) {
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t t1, t2, re_scratch;
-    mpfr_inits2(p, t1, t2, re_scratch, (mpfr_ptr)NULL);
-    mpfr_mul(t1, a_re, b_re, MPFR_RNDN);
-    mpfr_mul(t2, a_im, b_im, MPFR_RNDN);
-    mpfr_sub(re_scratch, t1, t2, MPFR_RNDN);
-    mpfr_mul(t1, a_re, b_im, MPFR_RNDN);
-    mpfr_mul(t2, a_im, b_re, MPFR_RNDN);
-    mpfr_add(out_im, t1, t2, MPFR_RNDN);
-    mpfr_set(out_re, re_scratch, MPFR_RNDN);
-    mpfr_clears(t1, t2, re_scratch, (mpfr_ptr)NULL);
-}
-
 /* Complex sqrt via the cancellation-free identity. Branch: principal,
  * matching Mathematica (Re >= 0, or Re == 0 and Im >= 0 on the cut). */
 static void mc_sqrt(mpfr_t out_re, mpfr_t out_im,
@@ -130,7 +112,33 @@ void mpfr_complex_div(mpfr_t out_re, mpfr_t out_im,
 
 /* --------------------------------------------------------------------
  *  Forward transcendentals
+ *
+ * Every function here is cancellation-free in floating point -- each sum
+ * it forms has terms of one sign -- so the result is accurate to a few
+ * ulps at any precision, near zeros, poles and branch points included.  The
+ * naive log-form inverses this file used to carry (asin = -i log(iz +
+ * sqrt(1 - z^2)) and friends) cancelled catastrophically on half the plane:
+ * ArcSin[SetPrecision[-10^30, 40]] was Overflow[] (iz + sqrt(1 - z^2)
+ * rounded to exactly 0), ArcSin[SetPrecision[-10^30, 60]] six digits,
+ * ArcTan[SetPrecision[10^-30 I, 30]] six digits, Log[1 + 10^-20 I] at 30
+ * digits had Re = 0.
  * ------------------------------------------------------------------ */
+
+/* Guard bits for the internal working precision of the compositions below;
+ * the result is rounded once, into the caller's output precision. */
+#define NC_GUARD 32
+
+/* r = x * y, where a zero factor gives an exact zero even when the other
+ * factor is infinite.  sin(0 + i 10^30) = sin(0) cosh(10^30) + ... has an
+ * exactly-zero real part; 0 * inf = NaN made it Indeterminate. */
+static void nc_mul0(mpfr_t r, const mpfr_t x, const mpfr_t y) {
+    if (mpfr_zero_p(x) || mpfr_zero_p(y)) {
+        bool neg = (mpfr_signbit(x) != 0) != (mpfr_signbit(y) != 0);
+        mpfr_set_zero(r, neg ? -1 : 1);
+    } else {
+        mpfr_mul(r, x, y, MPFR_RNDN);
+    }
+}
 
 void mpfr_complex_exp(mpfr_t out_re, mpfr_t out_im,
                       const mpfr_t a, const mpfr_t b) {
@@ -139,20 +147,44 @@ void mpfr_complex_exp(mpfr_t out_re, mpfr_t out_im,
     mpfr_inits2(p, ea, cb, sb, (mpfr_ptr)NULL);
     mpfr_exp(ea, a, MPFR_RNDN);
     mpfr_sin_cos(sb, cb, b, MPFR_RNDN);
-    mpfr_mul(out_re, ea, cb, MPFR_RNDN);
-    mpfr_mul(out_im, ea, sb, MPFR_RNDN);
+    nc_mul0(out_re, ea, cb);
+    nc_mul0(out_im, ea, sb);
     mpfr_clears(ea, cb, sb, (mpfr_ptr)NULL);
 }
 
+/* log(a + bi) = log|z| + i atan2(b, a).  Near the unit circle log|z| is the
+ * difference of two nearly equal numbers, so there it is log1p(|z|^2 - 1)/2
+ * with |z|^2 - 1 = (a - 1)(a + 1) + b^2 formed exactly and rounded once
+ * (a - 1 is exact for a in [1/2, 2], the products are exact at 2p bits).
+ * The imaginary part keeps atan2's IEEE signed-zero reading. */
 void mpfr_complex_log(mpfr_t out_re, mpfr_t out_im,
                       const mpfr_t a, const mpfr_t b) {
     mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t r;
-    mpfr_init2(r, p);
+    mpfr_prec_t pa = mpfr_get_prec(a), pb = mpfr_get_prec(b);
+    mpfr_prec_t pin = pa > pb ? pa : pb;
+    if (pin < p) pin = p;
+    mpfr_t r, im;
+    mpfr_init2(r, p + NC_GUARD);
+    mpfr_init2(im, p);
+    mpfr_atan2(im, b, a, MPFR_RNDN);      /* before out_re may alias a */
     mpfr_hypot(r, a, b, MPFR_RNDN);
-    mpfr_log(out_re, r, MPFR_RNDN);
-    mpfr_atan2(out_im, b, a, MPFR_RNDN);
+    if (mpfr_number_p(r) && mpfr_cmp_d(r, 0.5) >= 0 && mpfr_cmp_ui(r, 2) <= 0) {
+        mpfr_t am1, ap1, prod, b2;
+        mpfr_inits2(2 * pin + 8, am1, ap1, prod, b2, (mpfr_ptr)NULL);
+        mpfr_sub_ui(am1, a, 1, MPFR_RNDN);
+        mpfr_add_ui(ap1, a, 1, MPFR_RNDN);
+        mpfr_mul(prod, am1, ap1, MPFR_RNDN);
+        mpfr_sqr(b2, b, MPFR_RNDN);
+        mpfr_add(r, prod, b2, MPFR_RNDN);   /* |z|^2 - 1, one rounding */
+        mpfr_log1p(r, r, MPFR_RNDN);
+        mpfr_div_2ui(out_re, r, 1, MPFR_RNDN);
+        mpfr_clears(am1, ap1, prod, b2, (mpfr_ptr)NULL);
+    } else {
+        mpfr_log(out_re, r, MPFR_RNDN);
+    }
+    mpfr_set(out_im, im, MPFR_RNDN);
     mpfr_clear(r);
+    mpfr_clear(im);
 }
 
 void mpfr_complex_sin(mpfr_t out_re, mpfr_t out_im,
@@ -162,8 +194,8 @@ void mpfr_complex_sin(mpfr_t out_re, mpfr_t out_im,
     mpfr_inits2(p, sa, ca, sb, cb, (mpfr_ptr)NULL);
     mpfr_sin_cos(sa, ca, a, MPFR_RNDN);
     mpfr_sinh_cosh(sb, cb, b, MPFR_RNDN);
-    mpfr_mul(out_re, sa, cb, MPFR_RNDN);
-    mpfr_mul(out_im, ca, sb, MPFR_RNDN);
+    nc_mul0(out_re, sa, cb);
+    nc_mul0(out_im, ca, sb);
     mpfr_clears(sa, ca, sb, cb, (mpfr_ptr)NULL);
 }
 
@@ -174,52 +206,88 @@ void mpfr_complex_cos(mpfr_t out_re, mpfr_t out_im,
     mpfr_inits2(p, sa, ca, sb, cb, (mpfr_ptr)NULL);
     mpfr_sin_cos(sa, ca, a, MPFR_RNDN);
     mpfr_sinh_cosh(sb, cb, b, MPFR_RNDN);
-    mpfr_mul(out_re, ca, cb, MPFR_RNDN);
-    mpfr_mul(out_im, sa, sb, MPFR_RNDN);
+    nc_mul0(out_re, ca, cb);
+    nc_mul0(out_im, sa, sb);
     mpfr_neg(out_im, out_im, MPFR_RNDN);
     mpfr_clears(sa, ca, sb, cb, (mpfr_ptr)NULL);
 }
 
-/* tan, cot, tanh, coth of a + bi, all from one cancellation-free form.
+/* tan, cot, tanh, coth, sec, csc, sech, csch of a + bi, from one
+ * cancellation-free, overflow-free form.  With c the circular argument and h
+ * the hyperbolic one (c = a, h = b for the circular functions; c = b, h = a
+ * for the hyperbolic ones), s = sech h, t = tanh h:
  *
- *   tan(a+bi)  = (sin a cos a + i sinh b cosh b) / (cos^2 a + sinh^2 b)
- *   cot(a+bi)  = (sin a cos a - i sinh b cosh b) / (sin^2 a + sinh^2 b)
- *   tanh(a+bi) = (sinh a cosh a + i sin b cos b) / (sinh^2 a + cos^2 b)
- *   coth(a+bi) = (sinh a cosh a - i sin b cos b) / (sinh^2 a + sin^2 b)
+ *   tan  = (sin c cos c s^2 + i t) / (cos^2 c s^2 + t^2)
+ *   cot  = (sin c cos c s^2 - i t) / (sin^2 c s^2 + t^2)
+ *   tanh = (t + i sin c cos c s^2) / (cos^2 c s^2 + t^2)
+ *   coth = (t - i sin c cos c s^2) / (sin^2 c s^2 + t^2)
+ *   sec  = (cos c s + i sin c t s) / (cos^2 c s^2 + t^2)
+ *   csc  = (sin c s - i cos c t s) / (sin^2 c s^2 + t^2)
+ *   sech = (cos c s - i sin c t s) / (cos^2 c s^2 + t^2)
+ *   csch = (cos c t s - i sin c s) / (sin^2 c s^2 + t^2)
  *
- * The denominator is a sum of two squares, each computed to full relative
- * precision, so it never cancels.  The double-angle spelling
- * (cos 2a + cosh 2b) cancels to nothing next to a pole of tan
- * (a = -Pi/2 + d, b tiny: -1 + 1 at 200 bits), giving 0/0 or x/0 at a point
- * 1e-65 from the real axis -- tan came back as Overflow[] and cot, taken as
- * 1/tan there, as Indeterminate, although cot(-Pi/2 + i 1e-65) is a perfectly
- * ordinary 0 - 1e-65 i.  `hyp` selects tanh/coth (a, b swap roles between the
- * circular and hyperbolic factors); `co` selects cot/coth. */
+ * They are the textbook (sin a cos a + i sinh b cosh b) / (cos^2 a + sinh^2 b)
+ * and its relatives divided through by cosh^2 h.  The denominator is a sum of
+ * two squares, so it never cancels next to a pole (the double-angle spelling
+ * cos 2a + cosh 2b cancels to nothing at a = -Pi/2 + d, b tiny), and s, t
+ * stay in [0, 1]: Tan[SetPrecision[10^30 I, 30]] is I, where cosh^2 b
+ * overflowed and inf/inf made it Indeterminate. */
+typedef enum { NC_TAN, NC_COT, NC_SEC, NC_CSC } NcTanKind;
+
 static void complex_tan_family(mpfr_t out_re, mpfr_t out_im,
-                               const mpfr_t a, const mpfr_t b, bool hyp, bool co) {
+                               const mpfr_t a, const mpfr_t b,
+                               bool hyp, NcTanKind kind) {
     mpfr_prec_t p = mpfr_get_prec(out_re) + 8;
-    mpfr_t sc, cc, sh, ch, num_re, num_im, d1, d2;
-    mpfr_inits2(p, sc, cc, sh, ch, num_re, num_im, d1, d2, (mpfr_ptr)NULL);
-    /* circular part on the real (tan) or imaginary (tanh) component */
+    mpfr_t sc, cc, s, t, s2, re, im, d;
+    mpfr_inits2(p, sc, cc, s, t, s2, re, im, d, (mpfr_ptr)NULL);
     mpfr_sin_cos(sc, cc, hyp ? b : a, MPFR_RNDN);
-    mpfr_sinh_cosh(sh, ch, hyp ? a : b, MPFR_RNDN);
-    mpfr_mul(num_re, sc, cc, MPFR_RNDN);   /* sin cos       */
-    mpfr_mul(num_im, sh, ch, MPFR_RNDN);   /* sinh cosh     */
-    /* the hyperbolic factor's square, and the circular one: cos^2 for tan /
-     * tanh, sin^2 for cot / coth */
-    mpfr_sqr(d1, sh, MPFR_RNDN);
-    mpfr_sqr(d2, co ? sc : cc, MPFR_RNDN);
-    mpfr_add(d1, d1, d2, MPFR_RNDN);
-    if (hyp) mpfr_swap(num_re, num_im);    /* tanh: sinh cosh is the real part */
-    if (co) mpfr_neg(num_im, num_im, MPFR_RNDN);
-    mpfr_div(out_re, num_re, d1, MPFR_RNDN);
-    mpfr_div(out_im, num_im, d1, MPFR_RNDN);
-    mpfr_clears(sc, cc, sh, ch, num_re, num_im, d1, d2, (mpfr_ptr)NULL);
+    mpfr_sech(s, hyp ? a : b, MPFR_RNDN);
+    mpfr_tanh(t, hyp ? a : b, MPFR_RNDN);
+    mpfr_sqr(s2, s, MPFR_RNDN);
+    /* denominator: (cos^2 c or sin^2 c) s^2 + t^2 */
+    bool use_sin = (kind == NC_COT || kind == NC_CSC);
+    mpfr_sqr(d, use_sin ? sc : cc, MPFR_RNDN);
+    nc_mul0(d, d, s2);
+    mpfr_sqr(re, t, MPFR_RNDN);
+    mpfr_add(d, d, re, MPFR_RNDN);
+    switch (kind) {
+    case NC_TAN:
+    case NC_COT:
+        mpfr_mul(re, sc, cc, MPFR_RNDN);
+        nc_mul0(re, re, s2);                      /* sin c cos c s^2 */
+        mpfr_set(im, t, MPFR_RNDN);
+        if (kind == NC_COT) mpfr_neg(im, im, MPFR_RNDN);
+        if (hyp) mpfr_swap(re, im);               /* tanh / coth */
+        if (hyp && kind == NC_COT) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
+        break;
+    case NC_SEC:
+        nc_mul0(re, cc, s);                       /* cos c s */
+        mpfr_mul(im, sc, t, MPFR_RNDN);
+        nc_mul0(im, im, s);                       /* sin c t s */
+        if (hyp) mpfr_neg(im, im, MPFR_RNDN);     /* sech */
+        break;
+    case NC_CSC:
+        if (!hyp) {
+            nc_mul0(re, sc, s);                   /* sin c s */
+            mpfr_mul(im, cc, t, MPFR_RNDN);
+            nc_mul0(im, im, s);
+            mpfr_neg(im, im, MPFR_RNDN);          /* -cos c t s */
+        } else {
+            mpfr_mul(re, cc, t, MPFR_RNDN);
+            nc_mul0(re, re, s);                   /* cos c t s */
+            nc_mul0(im, sc, s);
+            mpfr_neg(im, im, MPFR_RNDN);          /* -sin c s */
+        }
+        break;
+    }
+    mpfr_div(out_re, re, d, MPFR_RNDN);
+    mpfr_div(out_im, im, d, MPFR_RNDN);
+    mpfr_clears(sc, cc, s, t, s2, re, im, d, (mpfr_ptr)NULL);
 }
 
 void mpfr_complex_tan(mpfr_t out_re, mpfr_t out_im,
                       const mpfr_t a, const mpfr_t b) {
-    complex_tan_family(out_re, out_im, a, b, false, false);
+    complex_tan_family(out_re, out_im, a, b, false, NC_TAN);
 }
 
 void mpfr_complex_sinh(mpfr_t out_re, mpfr_t out_im,
@@ -230,8 +298,8 @@ void mpfr_complex_sinh(mpfr_t out_re, mpfr_t out_im,
     mpfr_inits2(p, sa, ca, sb, cb, (mpfr_ptr)NULL);
     mpfr_sinh_cosh(sa, ca, a, MPFR_RNDN);
     mpfr_sin_cos(sb, cb, b, MPFR_RNDN);
-    mpfr_mul(out_re, sa, cb, MPFR_RNDN);
-    mpfr_mul(out_im, ca, sb, MPFR_RNDN);
+    nc_mul0(out_re, sa, cb);
+    nc_mul0(out_im, ca, sb);
     mpfr_clears(sa, ca, sb, cb, (mpfr_ptr)NULL);
 }
 
@@ -243,209 +311,377 @@ void mpfr_complex_cosh(mpfr_t out_re, mpfr_t out_im,
     mpfr_inits2(p, sa, ca, sb, cb, (mpfr_ptr)NULL);
     mpfr_sinh_cosh(sa, ca, a, MPFR_RNDN);
     mpfr_sin_cos(sb, cb, b, MPFR_RNDN);
-    mpfr_mul(out_re, ca, cb, MPFR_RNDN);
-    mpfr_mul(out_im, sa, sb, MPFR_RNDN);
+    nc_mul0(out_re, ca, cb);
+    nc_mul0(out_im, sa, sb);
     mpfr_clears(sa, ca, sb, cb, (mpfr_ptr)NULL);
 }
 
-/* tanh(a+bi) = (sinh(2a) + i sin(2b)) / (cosh(2a) + cos(2b)) — the dual
- * of the tan identity, same stability rationale. */
 void mpfr_complex_tanh(mpfr_t out_re, mpfr_t out_im,
                        const mpfr_t a, const mpfr_t b) {
-    complex_tan_family(out_re, out_im, a, b, true, false);
+    complex_tan_family(out_re, out_im, a, b, true, NC_TAN);
 }
 
 /* --------------------------------------------------------------------
- *  Inverse transcendentals (log-form definitions)
+ *  Inverse transcendentals
+ *
+ * The values are those of the principal-branch definitions
+ *   asin z  = -i log(i z + sqrt(1 - z^2))       acos z = Pi/2 - asin z
+ *   atan z  = (i/2)(log(1 - i z) - log(1 + i z))
+ *   asinh z = log(z + sqrt(z^2 + 1))
+ *   acosh z = log(z + sqrt(z - 1) sqrt(z + 1))
+ *   atanh z = (log(1 + z) - log(1 - z))/2
+ * (and the reciprocal functions f(1/z)) with principal Log and Sqrt and a
+ * zero part read as an exact zero -- the convention the exact evaluator
+ * uses, so N[f[p], n] and f[SetPrecision[p, n]] agree ON the cuts too.  They
+ * are computed through cancellation-free forms (Kahan, "Branch cuts for
+ * complex elementary functions", 1987):
+ *
+ *   asin z  = atan2(Re z, Re(s1 s2)) + i asinh(Im(conj(s1) s2))
+ *   acos z  = 2 atan2(Re s1, Re s2)  + i asinh(Im(conj(s2) s1))
+ *   acosh z = asinh(Re(conj(r1) r2))  + 2 i atan2(Im r1, Re r2)
+ *   atanh z = log(((1+a)^2 + b^2) / ((1-a)^2 + b^2))/4
+ *             + i atan2(2b, (1 - a)(1 + a) - b^2)/2
+ *
+ * with s1 = sqrt(1 - z), s2 = sqrt(1 + z), r1 = sqrt(z - 1), r2 = sqrt(z + 1),
+ * and asinh / atan / acot / acoth reduced to these by z -> i z.  In every
+ * real sum the two terms share a sign, so nothing cancels.  The sqrt is
+ * mc_sqrt, which reads a zero imaginary part as exact (a negative real has
+ * the root +i sqrt|x|): that, and nothing else, is what puts each on-cut
+ * value on the side the definitions above give.  atanh's atan2 would read
+ * the sign of a zero b, so the real cuts are set explicitly.
+ *
+ * The reciprocal functions take 1 -+ w and w -+ 1 for w = 1/z as
+ * (z -+ 1)/z, each one complex division, not 1 -+ (1/z): ArcSec at
+ * 1 + 10^-25 loses no digits to the rounding of 1/z.
  * ------------------------------------------------------------------ */
+
+/* asin from x = Re w, om = 1 - w, op = 1 + w; outputs at their own
+ * precision, internals at wp. */
+static void nc_asin_core(mpfr_t out_re, mpfr_t out_im, const mpfr_t x,
+                         const mpfr_t om_re, const mpfr_t om_im,
+                         const mpfr_t op_re, const mpfr_t op_im, mpfr_prec_t wp) {
+    mpfr_t s1r, s1i, s2r, s2i, u, v;
+    mpfr_inits2(wp, s1r, s1i, s2r, s2i, u, v, (mpfr_ptr)NULL);
+    mc_sqrt(s1r, s1i, om_re, om_im);
+    mc_sqrt(s2r, s2i, op_re, op_im);
+    /* Re(s1 s2) = s1r s2r - s1i s2i  (s1i s2i <= 0) */
+    mpfr_mul(u, s1r, s2r, MPFR_RNDN);
+    mpfr_mul(v, s1i, s2i, MPFR_RNDN);
+    mpfr_sub(u, u, v, MPFR_RNDN);
+    mpfr_atan2(out_re, x, u, MPFR_RNDN);
+    /* Im(conj(s1) s2) = s1r s2i - s1i s2r  (both terms of b's sign) */
+    mpfr_mul(u, s1r, s2i, MPFR_RNDN);
+    mpfr_mul(v, s1i, s2r, MPFR_RNDN);
+    mpfr_sub(u, u, v, MPFR_RNDN);
+    mpfr_asinh(out_im, u, MPFR_RNDN);
+    mpfr_clears(s1r, s1i, s2r, s2i, u, v, (mpfr_ptr)NULL);
+}
+
+static void nc_acos_core(mpfr_t out_re, mpfr_t out_im,
+                         const mpfr_t om_re, const mpfr_t om_im,
+                         const mpfr_t op_re, const mpfr_t op_im, mpfr_prec_t wp) {
+    mpfr_t s1r, s1i, s2r, s2i, u, v;
+    mpfr_inits2(wp, s1r, s1i, s2r, s2i, u, v, (mpfr_ptr)NULL);
+    mc_sqrt(s1r, s1i, om_re, om_im);
+    mc_sqrt(s2r, s2i, op_re, op_im);
+    mpfr_atan2(u, s1r, s2r, MPFR_RNDN);
+    mpfr_mul_2ui(out_re, u, 1, MPFR_RNDN);
+    /* Im(conj(s2) s1) = s2r s1i - s2i s1r  (both terms of -b's sign) */
+    mpfr_mul(u, s2r, s1i, MPFR_RNDN);
+    mpfr_mul(v, s2i, s1r, MPFR_RNDN);
+    mpfr_sub(u, u, v, MPFR_RNDN);
+    mpfr_asinh(out_im, u, MPFR_RNDN);
+    mpfr_clears(s1r, s1i, s2r, s2i, u, v, (mpfr_ptr)NULL);
+}
+
+/* acosh from zm = z - 1, zp = z + 1. */
+static void nc_acosh_core(mpfr_t out_re, mpfr_t out_im,
+                          const mpfr_t zm_re, const mpfr_t zm_im,
+                          const mpfr_t zp_re, const mpfr_t zp_im, mpfr_prec_t wp) {
+    mpfr_t r1r, r1i, r2r, r2i, u, v;
+    mpfr_inits2(wp, r1r, r1i, r2r, r2i, u, v, (mpfr_ptr)NULL);
+    mc_sqrt(r1r, r1i, zm_re, zm_im);
+    mc_sqrt(r2r, r2i, zp_re, zp_im);
+    /* Re(conj(r1) r2) = r1r r2r + r1i r2i  (r1i, r2i share b's sign) */
+    mpfr_mul(u, r1r, r2r, MPFR_RNDN);
+    mpfr_mul(v, r1i, r2i, MPFR_RNDN);
+    mpfr_add(u, u, v, MPFR_RNDN);
+    mpfr_asinh(out_re, u, MPFR_RNDN);
+    mpfr_atan2(u, r1i, r2r, MPFR_RNDN);
+    mpfr_mul_2ui(out_im, u, 1, MPFR_RNDN);
+    mpfr_clears(r1r, r1i, r2r, r2i, u, v, (mpfr_ptr)NULL);
+}
+
+/* atanh (coth = false) or acoth (coth = true) of a + bi.  Both have the
+ * real part log(((a+1)^2 + b^2)/((a-1)^2 + b^2))/4 -- log1p(4a/den)/4 when
+ * the ratio num/den = 1 + 4a/den is in [1/2, 2], so a tiny z keeps its
+ * relative accuracy, and the log of the ratio outside it, where 1 + 4a/den
+ * would cancel (z next to -1: num -> 0) -- and the
+ * imaginary parts
+ *   atanh: atan2( 2b, (1 - a)(1 + a) - b^2)/2,  on the cut b = 0, |a| > 1
+ *   acoth: atan2(-2b, (a - 1)(a + 1) + b^2)/2,  on the cut b = 0, |a| < 1
+ * where the definition gives -sign(a) Pi/2. */
+static void nc_atanh_core(mpfr_t out_re, mpfr_t out_im,
+                          const mpfr_t a, const mpfr_t b, bool coth, mpfr_prec_t wp) {
+    mpfr_t am1, ap1, b2, num, den, u, v;
+    mpfr_inits2(wp, am1, ap1, b2, num, den, u, v, (mpfr_ptr)NULL);
+    mpfr_sub_ui(am1, a, 1, MPFR_RNDN);
+    mpfr_add_ui(ap1, a, 1, MPFR_RNDN);
+    mpfr_sqr(b2, b, MPFR_RNDN);
+    mpfr_sqr(num, ap1, MPFR_RNDN);
+    mpfr_add(num, num, b2, MPFR_RNDN);
+    mpfr_sqr(den, am1, MPFR_RNDN);
+    mpfr_add(den, den, b2, MPFR_RNDN);
+    /* u = 4a / den = num/den - 1 */
+    mpfr_mul_2ui(u, a, 2, MPFR_RNDN);
+    mpfr_div(u, u, den, MPFR_RNDN);
+    if (mpfr_number_p(u) && mpfr_cmp_d(u, -0.5) >= 0 && mpfr_cmp_ui(u, 1) <= 0) {
+        mpfr_log1p(u, u, MPFR_RNDN);
+    } else {
+        mpfr_div(u, num, den, MPFR_RNDN);
+        mpfr_log(u, u, MPFR_RNDN);
+    }
+    mpfr_div_2ui(out_re, u, 2, MPFR_RNDN);
+
+    bool on_cut = mpfr_zero_p(b) &&
+                  (coth ? mpfr_cmpabs_ui(a, 1) < 0 : mpfr_cmpabs_ui(a, 1) > 0);
+    if (on_cut && !mpfr_zero_p(a)) {
+        mpfr_const_pi(u, MPFR_RNDN);
+        mpfr_div_2ui(u, u, 1, MPFR_RNDN);
+        if (mpfr_sgn(a) > 0) mpfr_neg(u, u, MPFR_RNDN);
+        mpfr_set(out_im, u, MPFR_RNDN);
+    } else if (on_cut) {
+        /* acoth(0): the definition's limit along the imaginary axis from
+         * the right, +i Pi/2 -- what the machine kernel (catanh(1/0)) and
+         * the exact rule give. */
+        mpfr_const_pi(u, MPFR_RNDN);
+        mpfr_div_2ui(out_im, u, 1, MPFR_RNDN);
+    } else {
+        mpfr_mul(u, am1, ap1, MPFR_RNDN);          /* a^2 - 1 */
+        mpfr_mul_2ui(v, b, 1, MPFR_RNDN);
+        if (coth) {
+            mpfr_add(u, u, b2, MPFR_RNDN);
+            mpfr_neg(v, v, MPFR_RNDN);
+        } else {
+            mpfr_neg(u, u, MPFR_RNDN);
+            mpfr_sub(u, u, b2, MPFR_RNDN);
+        }
+        mpfr_atan2(u, v, u, MPFR_RNDN);
+        mpfr_div_2ui(out_im, u, 1, MPFR_RNDN);
+    }
+    mpfr_clears(am1, ap1, b2, num, den, u, v, (mpfr_ptr)NULL);
+}
+
+/* (out_re, out_im) = (q_re, q_im) rounded; clears nothing. */
+static void nc_round_out(mpfr_t out_re, mpfr_t out_im, const mpfr_t r, const mpfr_t i) {
+    mpfr_set(out_re, r, MPFR_RNDN);
+    mpfr_set(out_im, i, MPFR_RNDN);
+}
 
 void mpfr_complex_asin(mpfr_t out_re, mpfr_t out_im,
                        const mpfr_t a, const mpfr_t b) {
-    /* asin(z) = -i log(i z + sqrt(1 - z^2)) */
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t z2_re, z2_im, sq_re, sq_im, inner_re, inner_im, lr, li, t;
-    mpfr_inits2(p, z2_re, z2_im, sq_re, sq_im, inner_re, inner_im, lr, li, t, (mpfr_ptr)NULL);
-    /* 1 - z^2 = (1 - a^2 + b^2) + (-2 a b) i */
-    mpfr_sqr(z2_re, a, MPFR_RNDN);
-    mpfr_sqr(t,    b, MPFR_RNDN);
-    mpfr_sub(z2_re, z2_re, t, MPFR_RNDN);
-    mpfr_ui_sub(z2_re, 1, z2_re, MPFR_RNDN);
-    mpfr_mul(z2_im, a, b, MPFR_RNDN);
-    mpfr_mul_2ui(z2_im, z2_im, 1, MPFR_RNDN);
-    mpfr_neg(z2_im, z2_im, MPFR_RNDN);
-    mc_sqrt(sq_re, sq_im, z2_re, z2_im);
-    /* inner = i z + sqrt(1 - z^2) = (-b + sq_re) + (a + sq_im) i */
-    mpfr_sub(inner_re, sq_re, b, MPFR_RNDN);
-    mpfr_add(inner_im, sq_im, a, MPFR_RNDN);
-    mpfr_complex_log(lr, li, inner_re, inner_im);
-    /* -i (lr + li i) = li - lr i */
-    mpfr_set(out_re, li, MPFR_RNDN);
-    mpfr_neg(out_im, lr, MPFR_RNDN);
-    mpfr_clears(z2_re, z2_im, sq_re, sq_im, inner_re, inner_im, lr, li, t, (mpfr_ptr)NULL);
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t omr, omi, opr, opi, rr, ri;
+    mpfr_inits2(wp, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+    mpfr_ui_sub(omr, 1, a, MPFR_RNDN);
+    mpfr_neg(omi, b, MPFR_RNDN);
+    mpfr_add_ui(opr, a, 1, MPFR_RNDN);
+    mpfr_set(opi, b, MPFR_RNDN);
+    nc_asin_core(rr, ri, a, omr, omi, opr, opi, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
 }
 
 void mpfr_complex_acos(mpfr_t out_re, mpfr_t out_im,
                        const mpfr_t a, const mpfr_t b) {
-    /* acos(z) = pi/2 - asin(z) */
-    mpfr_complex_asin(out_re, out_im, a, b);
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t pi_half;
-    mpfr_init2(pi_half, p);
-    mpfr_const_pi(pi_half, MPFR_RNDN);
-    mpfr_div_2ui(pi_half, pi_half, 1, MPFR_RNDN);
-    mpfr_sub(out_re, pi_half, out_re, MPFR_RNDN);
-    mpfr_neg(out_im, out_im, MPFR_RNDN);
-    mpfr_clear(pi_half);
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t omr, omi, opr, opi, rr, ri;
+    mpfr_inits2(wp, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+    mpfr_ui_sub(omr, 1, a, MPFR_RNDN);
+    mpfr_neg(omi, b, MPFR_RNDN);
+    mpfr_add_ui(opr, a, 1, MPFR_RNDN);
+    mpfr_set(opi, b, MPFR_RNDN);
+    nc_acos_core(rr, ri, omr, omi, opr, opi, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
 }
 
+/* atan z = -i atanh(i z), i z = -b + a i. */
 void mpfr_complex_atan(mpfr_t out_re, mpfr_t out_im,
                        const mpfr_t a, const mpfr_t b) {
-    /* atan(z) = (i/2)(log(1 - i z) - log(1 + i z))
-     *   1 - i z = (1 + b) + (-a) i
-     *   1 + i z = (1 - b) + ( a) i */
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t u_re, u_im, v_re, v_im, lr1, li1, lr2, li2;
-    mpfr_inits2(p, u_re, u_im, v_re, v_im, lr1, li1, lr2, li2, (mpfr_ptr)NULL);
-    mpfr_add_ui(u_re, b, 1, MPFR_RNDN);
-    mpfr_neg(u_im, a, MPFR_RNDN);
-    mpfr_ui_sub(v_re, 1, b, MPFR_RNDN);
-    mpfr_set(v_im, a, MPFR_RNDN);
-    /* On the cuts (a = 0, |b| > 1) one of 1 -+ i z is a negative real, and the
-     * sign of its zero imaginary part picks the side of Log's cut.  Negating
-     * a = +0 made it -0: ArcTan[0 - 2 I] read +Pi/2 - 0.549 I where the exact
-     * value (and the machine kernel) is -Pi/2 - 0.549 I.  A zero real part
-     * carries no side, so both are +0, the principal Log -- the odd symmetry
-     * ArcTan[-z] = -ArcTan[z] then holds on the cuts as at machine precision. */
-    if (mpfr_zero_p(a)) {
-        mpfr_set_zero(u_im, 1);
-        mpfr_set_zero(v_im, 1);
-    }
-    mpfr_complex_log(lr1, li1, u_re, u_im);
-    mpfr_complex_log(lr2, li2, v_re, v_im);
-    /*  (i/2)((lr1 + li1 i) - (lr2 + li2 i))
-     *  = (i/2)((lr1 - lr2) + (li1 - li2) i)
-     *  =  -(li1 - li2)/2 + (lr1 - lr2)/2 i */
-    mpfr_sub(out_re, li2, li1, MPFR_RNDN);
-    mpfr_div_2ui(out_re, out_re, 1, MPFR_RNDN);
-    mpfr_sub(out_im, lr1, lr2, MPFR_RNDN);
-    mpfr_div_2ui(out_im, out_im, 1, MPFR_RNDN);
-    mpfr_clears(u_re, u_im, v_re, v_im, lr1, li1, lr2, li2, (mpfr_ptr)NULL);
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t wr, rr, ri;
+    mpfr_inits2(wp, wr, rr, ri, (mpfr_ptr)NULL);
+    mpfr_neg(wr, b, MPFR_RNDN);
+    nc_atanh_core(rr, ri, wr, a, false, wp);
+    mpfr_neg(rr, rr, MPFR_RNDN);
+    nc_round_out(out_re, out_im, ri, rr);       /* (Im, -Re) */
+    mpfr_clears(wr, rr, ri, (mpfr_ptr)NULL);
 }
 
+/* asinh z = -i asin(i z), i z = w = -b + a i: 1 - w = (1 + b) - a i,
+ * 1 + w = (1 - b) + a i. */
 void mpfr_complex_asinh(mpfr_t out_re, mpfr_t out_im,
                         const mpfr_t a, const mpfr_t b) {
-    /* asinh(z) = log(z + sqrt(z^2 + 1))
-     *   z^2 + 1 = (a^2 - b^2 + 1) + (2 a b) i */
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t z2_re, z2_im, sq_re, sq_im, t;
-    mpfr_inits2(p, z2_re, z2_im, sq_re, sq_im, t, (mpfr_ptr)NULL);
-    mpfr_sqr(z2_re, a, MPFR_RNDN);
-    mpfr_sqr(t,     b, MPFR_RNDN);
-    mpfr_sub(z2_re, z2_re, t, MPFR_RNDN);
-    mpfr_add_ui(z2_re, z2_re, 1, MPFR_RNDN);
-    mpfr_mul(z2_im, a, b, MPFR_RNDN);
-    mpfr_mul_2ui(z2_im, z2_im, 1, MPFR_RNDN);
-    mc_sqrt(sq_re, sq_im, z2_re, z2_im);
-    mpfr_add(sq_re, a, sq_re, MPFR_RNDN);
-    mpfr_add(sq_im, b, sq_im, MPFR_RNDN);
-    mpfr_complex_log(out_re, out_im, sq_re, sq_im);
-    mpfr_clears(z2_re, z2_im, sq_re, sq_im, t, (mpfr_ptr)NULL);
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t x, omr, omi, opr, opi, rr, ri;
+    mpfr_inits2(wp, x, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+    mpfr_neg(x, b, MPFR_RNDN);
+    mpfr_add_ui(omr, b, 1, MPFR_RNDN);
+    mpfr_neg(omi, a, MPFR_RNDN);
+    mpfr_ui_sub(opr, 1, b, MPFR_RNDN);
+    mpfr_set(opi, a, MPFR_RNDN);
+    nc_asin_core(rr, ri, x, omr, omi, opr, opi, wp);
+    mpfr_neg(rr, rr, MPFR_RNDN);
+    nc_round_out(out_re, out_im, ri, rr);       /* (Im, -Re) */
+    mpfr_clears(x, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
 }
 
 void mpfr_complex_acosh(mpfr_t out_re, mpfr_t out_im,
                         const mpfr_t a, const mpfr_t b) {
-    /* acosh(z) = log(z + sqrt(z - 1) * sqrt(z + 1))
-     * The two-sqrt product form keeps the branch cut on (-inf, 1) — the
-     * Mathematica convention. The product is computed via mc_mul on the
-     * two independent sqrt evaluations. */
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t zm_re, zm_im, zp_re, zp_im;
-    mpfr_t s1_re, s1_im, s2_re, s2_im;
-    mpfr_t prod_re, prod_im, inner_re, inner_im;
-    mpfr_inits2(p, zm_re, zm_im, zp_re, zp_im,
-                   s1_re, s1_im, s2_re, s2_im,
-                   prod_re, prod_im, inner_re, inner_im,
-                   (mpfr_ptr)NULL);
-    mpfr_sub_ui(zm_re, a, 1, MPFR_RNDN);
-    mpfr_set   (zm_im, b,    MPFR_RNDN);
-    mpfr_add_ui(zp_re, a, 1, MPFR_RNDN);
-    mpfr_set   (zp_im, b,    MPFR_RNDN);
-    mc_sqrt(s1_re, s1_im, zm_re, zm_im);
-    mc_sqrt(s2_re, s2_im, zp_re, zp_im);
-    mc_mul(prod_re, prod_im, s1_re, s1_im, s2_re, s2_im);
-    mpfr_add(inner_re, a, prod_re, MPFR_RNDN);
-    mpfr_add(inner_im, b, prod_im, MPFR_RNDN);
-    mpfr_complex_log(out_re, out_im, inner_re, inner_im);
-    mpfr_clears(zm_re, zm_im, zp_re, zp_im,
-                s1_re, s1_im, s2_re, s2_im,
-                prod_re, prod_im, inner_re, inner_im,
-                (mpfr_ptr)NULL);
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t zmr, zmi, zpr, zpi, rr, ri;
+    mpfr_inits2(wp, zmr, zmi, zpr, zpi, rr, ri, (mpfr_ptr)NULL);
+    mpfr_sub_ui(zmr, a, 1, MPFR_RNDN);
+    mpfr_set(zmi, b, MPFR_RNDN);
+    mpfr_add_ui(zpr, a, 1, MPFR_RNDN);
+    mpfr_set(zpi, b, MPFR_RNDN);
+    nc_acosh_core(rr, ri, zmr, zmi, zpr, zpi, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(zmr, zmi, zpr, zpi, rr, ri, (mpfr_ptr)NULL);
 }
 
 void mpfr_complex_atanh(mpfr_t out_re, mpfr_t out_im,
                         const mpfr_t a, const mpfr_t b) {
-    /* atanh(z) = (1/2) log((1 + z) / (1 - z))
-     *   1 + z = (1 + a) + b i
-     *   1 - z = (1 - a) + (-b) i */
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t u_re, u_im, v_re, v_im, q_re, q_im, lr, li;
-    mpfr_inits2(p, u_re, u_im, v_re, v_im, q_re, q_im, lr, li, (mpfr_ptr)NULL);
-    mpfr_add_ui(u_re, a, 1, MPFR_RNDN);
-    mpfr_set   (u_im, b,    MPFR_RNDN);
-    mpfr_ui_sub(v_re, 1, a, MPFR_RNDN);
-    mpfr_neg   (v_im, b,    MPFR_RNDN);
-    mpfr_complex_div(q_re, q_im, u_re, u_im, v_re, v_im);
-    mpfr_complex_log(lr, li, q_re, q_im);
-    mpfr_div_2ui(out_re, lr, 1, MPFR_RNDN);
-    mpfr_div_2ui(out_im, li, 1, MPFR_RNDN);
-    mpfr_clears(u_re, u_im, v_re, v_im, q_re, q_im, lr, li, (mpfr_ptr)NULL);
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t rr, ri;
+    mpfr_inits2(wp, rr, ri, (mpfr_ptr)NULL);
+    nc_atanh_core(rr, ri, a, b, false, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(rr, ri, (mpfr_ptr)NULL);
 }
 
 /* --------------------------------------------------------------------
  *  Reciprocal trig / hyperbolic composites
  * ------------------------------------------------------------------ */
 
-/* out = 1 / forward(in) */
-static void reciprocal_of(mpfr_t out_re, mpfr_t out_im,
-                          MpfrComplexUnaryOp forward,
-                          const mpfr_t in_re, const mpfr_t in_im) {
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t f_re, f_im, one, zero;
-    mpfr_inits2(p, f_re, f_im, one, zero, (mpfr_ptr)NULL);
-    forward(f_re, f_im, in_re, in_im);
-    mpfr_set_ui(one, 1, MPFR_RNDN);
-    mpfr_set_zero(zero, +1);
-    mpfr_complex_div(out_re, out_im, one, zero, f_re, f_im);
-    mpfr_clears(f_re, f_im, one, zero, (mpfr_ptr)NULL);
+void mpfr_complex_cot (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, false, NC_COT); }
+void mpfr_complex_sec (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, false, NC_SEC); }
+void mpfr_complex_csc (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, false, NC_CSC); }
+void mpfr_complex_coth(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, true,  NC_COT); }
+void mpfr_complex_sech(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, true,  NC_SEC); }
+void mpfr_complex_csch(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, true,  NC_CSC); }
+
+/* (z + c)/z for c = c_re + c_im i (one of them zero), at the precision of
+ * the outputs, as (z + c) conj(z) / |z|^2:
+ *   Re = (a (a + c_re) + b (b + c_im)) / |z|^2,  Im = (c_im a - c_re b) / |z|^2.
+ * Every part is then accurate relative to itself.  A general complex division
+ * (Smith's) is accurate only relative to the larger part, and the small one
+ * decides the side of a cut: for z = -10^100 + I, (z - 1)/z has Im = 10^-200,
+ * which Smith's algorithm rounded to an exact 0, so ArcSech read the point as
+ * on its cut and returned +Pi/2 I for -Pi/2 I.  Next to a branch point
+ * (z = 1 + 10^-25) a - 1 is exact, so nothing is lost to rounding 1/z
+ * either. */
+static void nc_shift_over_z(mpfr_t out_re, mpfr_t out_im, long c_re, long c_im,
+                            const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re);
+    mpfr_t t, u, n2;
+    mpfr_inits2(wp, t, u, n2, (mpfr_ptr)NULL);
+    mpfr_sqr(n2, a, MPFR_RNDN);
+    mpfr_fma(n2, b, b, n2, MPFR_RNDN);            /* |z|^2 */
+    mpfr_add_si(t, a, c_re, MPFR_RNDN);
+    mpfr_mul(t, t, a, MPFR_RNDN);
+    mpfr_add_si(u, b, c_im, MPFR_RNDN);
+    mpfr_mul(u, u, b, MPFR_RNDN);
+    mpfr_add(t, t, u, MPFR_RNDN);
+    /* Im numerator: c_im a - c_re b, exact up to a sign (|c| = 1) */
+    if (c_im != 0) mpfr_mul_si(u, a, c_im, MPFR_RNDN);
+    else           mpfr_mul_si(u, b, -c_re, MPFR_RNDN);
+    mpfr_div(out_re, t, n2, MPFR_RNDN);
+    mpfr_div(out_im, u, n2, MPFR_RNDN);
+    mpfr_clears(t, u, n2, (mpfr_ptr)NULL);
 }
 
-/* out = inverse_of_forward(1 / in) — for ArcCot/ArcSec/... */
-static void inverse_of_reciprocal(mpfr_t out_re, mpfr_t out_im,
-                                  MpfrComplexUnaryOp inverse_of_forward,
-                                  const mpfr_t in_re, const mpfr_t in_im) {
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t inv_re, inv_im, one, zero;
-    mpfr_inits2(p, inv_re, inv_im, one, zero, (mpfr_ptr)NULL);
-    mpfr_set_ui(one, 1, MPFR_RNDN);
-    mpfr_set_zero(zero, +1);
-    mpfr_complex_div(inv_re, inv_im, one, zero, in_re, in_im);
-    inverse_of_forward(out_re, out_im, inv_re, inv_im);
-    mpfr_clears(inv_re, inv_im, one, zero, (mpfr_ptr)NULL);
+/* acot z = i acoth(i z), i z = -b + a i. */
+void mpfr_complex_acot(mpfr_t out_re, mpfr_t out_im, const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t wr, rr, ri;
+    mpfr_inits2(wp, wr, rr, ri, (mpfr_ptr)NULL);
+    mpfr_neg(wr, b, MPFR_RNDN);
+    nc_atanh_core(rr, ri, wr, a, true, wp);
+    mpfr_neg(ri, ri, MPFR_RNDN);
+    nc_round_out(out_re, out_im, ri, rr);       /* (-Im, Re) */
+    mpfr_clears(wr, rr, ri, (mpfr_ptr)NULL);
 }
 
-void mpfr_complex_cot (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, false, true); }
-void mpfr_complex_sec (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_cos,  a, b); }
-void mpfr_complex_csc (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_sin,  a, b); }
-void mpfr_complex_coth(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, true, true); }
-void mpfr_complex_sech(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_cosh, a, b); }
-void mpfr_complex_csch(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_sinh, a, b); }
+/* asec z = acos(1/z): 1 - 1/z = (z - 1)/z, 1 + 1/z = (z + 1)/z. */
+void mpfr_complex_asec(mpfr_t out_re, mpfr_t out_im, const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t omr, omi, opr, opi, rr, ri;
+    mpfr_inits2(wp, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+    nc_shift_over_z(omr, omi, -1, 0, a, b);
+    nc_shift_over_z(opr, opi, 1, 0, a, b);
+    nc_acos_core(rr, ri, omr, omi, opr, opi, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+}
 
-void mpfr_complex_acot (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { inverse_of_reciprocal(r, i, mpfr_complex_atan,  a, b); }
-void mpfr_complex_asec (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { inverse_of_reciprocal(r, i, mpfr_complex_acos,  a, b); }
-void mpfr_complex_acsc (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { inverse_of_reciprocal(r, i, mpfr_complex_asin,  a, b); }
-void mpfr_complex_acoth(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { inverse_of_reciprocal(r, i, mpfr_complex_atanh, a, b); }
-void mpfr_complex_asech(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { inverse_of_reciprocal(r, i, mpfr_complex_acosh, a, b); }
-void mpfr_complex_acsch(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { inverse_of_reciprocal(r, i, mpfr_complex_asinh, a, b); }
+/* acsc z = asin(1/z), Re(1/z) = a / |z|^2. */
+void mpfr_complex_acsc(mpfr_t out_re, mpfr_t out_im, const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t x, y, one, zero, omr, omi, opr, opi, rr, ri;
+    mpfr_inits2(wp, x, y, one, zero, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+    mpfr_set_ui(one, 1, MPFR_RNDN);
+    mpfr_set_zero(zero, 1);
+    mpfr_complex_div(x, y, one, zero, a, b);
+    nc_shift_over_z(omr, omi, -1, 0, a, b);
+    nc_shift_over_z(opr, opi, 1, 0, a, b);
+    nc_asin_core(rr, ri, x, omr, omi, opr, opi, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(x, y, one, zero, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+}
+
+/* acoth z, directly (not atanh(1/z), whose rounding of 1/z costs digits next
+ * to the branch points +-1). */
+void mpfr_complex_acoth(mpfr_t out_re, mpfr_t out_im, const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t rr, ri;
+    mpfr_inits2(wp, rr, ri, (mpfr_ptr)NULL);
+    nc_atanh_core(rr, ri, a, b, true, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(rr, ri, (mpfr_ptr)NULL);
+}
+
+/* asech z = acosh(1/z): 1/z - 1 = (1 - z)/z = -(z - 1)/z, 1/z + 1 = (z + 1)/z. */
+void mpfr_complex_asech(mpfr_t out_re, mpfr_t out_im, const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t zmr, zmi, zpr, zpi, rr, ri;
+    mpfr_inits2(wp, zmr, zmi, zpr, zpi, rr, ri, (mpfr_ptr)NULL);
+    nc_shift_over_z(zmr, zmi, -1, 0, a, b);
+    mpfr_neg(zmr, zmr, MPFR_RNDN);
+    mpfr_neg(zmi, zmi, MPFR_RNDN);
+    nc_shift_over_z(zpr, zpi, 1, 0, a, b);
+    nc_acosh_core(rr, ri, zmr, zmi, zpr, zpi, wp);
+    nc_round_out(out_re, out_im, rr, ri);
+    mpfr_clears(zmr, zmi, zpr, zpi, rr, ri, (mpfr_ptr)NULL);
+}
+
+/* acsch z = asinh(1/z) = -i asin(i/z): w = i/z, Re w = b/|z|^2,
+ * 1 - w = (z - i)/z, 1 + w = (z + i)/z. */
+void mpfr_complex_acsch(mpfr_t out_re, mpfr_t out_im, const mpfr_t a, const mpfr_t b) {
+    mpfr_prec_t wp = mpfr_get_prec(out_re) + NC_GUARD;
+    mpfr_t x, y, one, zero, omr, omi, opr, opi, rr, ri;
+    mpfr_inits2(wp, x, y, one, zero, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+    mpfr_set_ui(one, 1, MPFR_RNDN);
+    mpfr_set_zero(zero, 1);
+    mpfr_complex_div(x, y, zero, one, a, b);     /* i / z */
+    nc_shift_over_z(omr, omi, 0, -1, a, b);
+    nc_shift_over_z(opr, opi, 0, 1, a, b);
+    nc_asin_core(rr, ri, x, omr, omi, opr, opi, wp);
+    mpfr_neg(rr, rr, MPFR_RNDN);
+    nc_round_out(out_re, out_im, ri, rr);       /* (Im, -Re) */
+    mpfr_clears(x, y, one, zero, omr, omi, opr, opi, rr, ri, (mpfr_ptr)NULL);
+}
 
 /* --------------------------------------------------------------------
  *  Public dispatcher

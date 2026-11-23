@@ -20,18 +20,45 @@
 #ifdef USE_MPFR
 /* Reciprocal-input helpers for ArcCoth, ArcSech, ArcCsch. Each computes
  * f(1/x) in MPFR. */
+/* ArcCoth and ArcSech of a real x are evaluated without forming 1/x, whose
+ * rounding atanh / acosh amplify without bound next to x = +-1 (ArcCoth[1 +
+ * 10^-25] at 60 digits had 43):
+ *   atanh(1/x) = sign(x) log1p(2 / (|x| - 1)) / 2           (|x| > 1)
+ *   acosh(1/x) = log1p((1 - x + sqrt((1 - x)(1 + x))) / x)   (0 < x <= 1)
+ * with x -+ 1 exact near the branch point and no sum that cancels.  Outside
+ * the real domain both give NaN, the domain failure the complex fallback
+ * expects. */
 static int mpfr_atanh_recip_op(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd) {
-    mpfr_t tmp; mpfr_init2(tmp, mpfr_get_prec(in));
-    mpfr_ui_div(tmp, 1, in, rnd);
-    int r = mpfr_atanh(out, tmp, rnd);
-    mpfr_clear(tmp);
+    mpfr_prec_t wp = mpfr_get_prec(out) + 32;
+    mpfr_t t;
+    mpfr_init2(t, wp);
+    mpfr_abs(t, in, MPFR_RNDN);
+    mpfr_sub_ui(t, t, 1, MPFR_RNDN);
+    mpfr_ui_div(t, 2, t, MPFR_RNDN);
+    mpfr_log1p(t, t, MPFR_RNDN);
+    mpfr_div_2ui(t, t, 1, MPFR_RNDN);
+    if (mpfr_sgn(in) < 0) mpfr_neg(t, t, MPFR_RNDN);
+    int r = mpfr_set(out, t, rnd);
+    mpfr_clear(t);
     return r;
 }
 static int mpfr_acosh_recip_op(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd) {
-    mpfr_t tmp; mpfr_init2(tmp, mpfr_get_prec(in));
-    mpfr_ui_div(tmp, 1, in, rnd);
-    int r = mpfr_acosh(out, tmp, rnd);
-    mpfr_clear(tmp);
+    mpfr_prec_t wp = mpfr_get_prec(out) + 32;
+    mpfr_t om, s;
+    mpfr_inits2(wp, om, s, (mpfr_ptr)NULL);
+    if (mpfr_sgn(in) <= 0) {   /* acosh(1/0) = acosh(inf); x < 0: complex */
+        if (mpfr_zero_p(in)) mpfr_set_inf(out, 1); else mpfr_set_nan(out);
+        mpfr_clears(om, s, (mpfr_ptr)NULL);
+        return 0;
+    }
+    mpfr_ui_sub(om, 1, in, MPFR_RNDN);
+    mpfr_add_ui(s, in, 1, MPFR_RNDN);
+    mpfr_mul(s, s, om, MPFR_RNDN);
+    mpfr_sqrt(s, s, MPFR_RNDN);
+    mpfr_add(s, s, om, MPFR_RNDN);
+    mpfr_div(s, s, in, MPFR_RNDN);
+    int r = mpfr_log1p(out, s, rnd);
+    mpfr_clears(om, s, (mpfr_ptr)NULL);
     return r;
 }
 static int mpfr_asinh_recip_op(mpfr_t out, const mpfr_t in, mpfr_rnd_t rnd) {
@@ -812,8 +839,8 @@ Expr* builtin_arccsch(Expr* res) {
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
         /* asinh(1/x) for real x != 0, as the kernel (mth_machine_elem.h) */
-        double complex s = (cimag(c) == 0.0 && creal(c) != 0.0) ? mth_acsch_machine_z(c)
-                                                                : casinh(1.0 / c);
+        double complex s = (cimag(c) == 0.0 && creal(c) == 0.0) ? casinh(1.0 / c)
+                                                                : mth_acsch_machine_z(c);
         if (cimag(c) == 0.0 && creal(c) != 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }

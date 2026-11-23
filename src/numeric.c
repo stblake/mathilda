@@ -108,6 +108,7 @@ double numeric_bits_to_digits(long bits) {
 
 #ifdef USE_MPFR
 #include <mpfr.h>
+#include "numeric_complex.h"   /* mpfr_complex_exp: N of E^(complex) */
 typedef void (*NumericMpfrFill)(mpfr_t out, mpfr_prec_t bits);
 #else
 typedef void (*NumericMpfrFill)(void);  /* placeholder for ABI stability */
@@ -1762,6 +1763,24 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
         if (y && y->type == EXPR_MPFR && mpfr_number_p(y->data.mpfr)) {
             Expr* r = numeric_mpfr_apply_unary(y, 0, mpfr_exp);
             if (r && r->type == EXPR_MPFR && mpfr_number_p(r->data.mpfr)) {
+                expr_free(y);
+                return r;
+            }
+            if (r) expr_free(r);
+        }
+        /* A complex exponent likewise: exp(a + b i) = e^a (cos b + i sin b),
+         * where the generic exp(y log e) multiplied the rounding of log e by
+         * |b|: N[Exp[I d], 30] for d the 100-digit integer value of 1.*^100
+         * was 0.644 + 0.765 I, a wrong answer, where Cos[d] + I Sin[d] is
+         * 0.925 - 0.381 I. */
+        Expr *yre, *yim;
+        if (y && is_complex(y, &yre, &yim) && numeric_expr_is_mpfr(y)) {
+            Expr* r = numeric_mpfr_apply_complex_unary(y, 0, mpfr_complex_exp);
+            Expr *rre, *rim;
+            bool finite = r && ((r->type == EXPR_MPFR && mpfr_number_p(r->data.mpfr)) ||
+                (is_complex(r, &rre, &rim) && rre->type == EXPR_MPFR && rim->type == EXPR_MPFR
+                 && mpfr_number_p(rre->data.mpfr) && mpfr_number_p(rim->data.mpfr)));
+            if (finite) {
                 expr_free(y);
                 return r;
             }

@@ -80,6 +80,16 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D3 theory: E2, E1 notes written and reviewed twice (docs/notes/bronstein_phase5_review.md)
 - [x] D3 code: M1a exponential top, M1b primitive top, M1c 256/260 cases (v0.6651)
 - [x] D3 M2: the general tower over the curve, weak normaliser, cancellation with a homogeneous solution, least radical exponent (v0.6689)
+- [ ] EVAL-abort-1: an abort escapes every constraint, minutes after its timeout. Reproduction (about 1 run in 2 at v0.6703):
+  `TimeConstrained[Integrate[-((1 + E^(-2 x) + E^(-x))^(1/4)/E^(3 x)), x], 30]` and then
+  `CheckAbort[Integrate[1/(x (-1 + Log[x]) (2 + Log[x]^2)^(1/3)), x], "escaped"]` gives "escaped" after about 1.6 s
+  (the second integral alone runs 12 s and certifies). What is known:
+  - inside the second Integrate, a 0.5 s budget expires while an inner 10 s TimeConstrained is running, and that frame is left by the backstop jump (`jumped=1`); the outer frame then consumes its timeout correctly;
+  - values computed during the timeout carry literal `Abort[]` subterms. ParallelMixedTower's `InvMod` gets `eg = PolynomialExtendedGCD[d, p, g]` whose `u^3`, `u^4` coefficients are `Abort[]`;
+  - `PolynomialRemainder` on such a value then evaluates `Abort[]` with no constraint left to own it, and it reaches the top level;
+  - no builtin returns the poisoned value through the evaluator's dispatch (instrumented: only `If` passes one on), so it is built by C code that calls builtins directly (`internal_call_impl` and the like);
+  - a boundary check at builtin dispatch (a result with a nested `Abort[]` after an abort was raised becomes the sentinel) did not catch it, so it was reverted.
+  The benchmark-261 generator wraps each attempt in `CheckAbort` meanwhile.
 - [ ] G-pzq-1: PossibleZeroQ false negatives on correct antiderivatives (E^(Sqrt[1 + x^4] + Log[1 + x]^2) shapes; 6 of the 330 M2 stress cases)
   - [x] v0.6702: cut points read at their principal value (every cut function projected onto its cut line once the normal component falls with precision); fixes a wrong True v0.6700 introduced ((Sqrt[Cot] Sqrt[Tan] - 1) UnitStep[-Tan] in exp form) and MPFR ArcTan[-2 I] = +Pi/2 - ...
   - [x] v0.6700: a FALSE needs the top two rungs to agree in value (E3-6 ArcTan residual); a signed-zero imaginary radicand on a cut is re-drawn, read on the exact point (E6d-4)

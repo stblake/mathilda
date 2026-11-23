@@ -439,6 +439,92 @@ static void test_arctan_mpfr_lower_cut(void) {
     }
 }
 
+static void assert_all_true(const char* const* cases) {
+    for (int i = 0; cases[i]; i++) {
+        Expr* e = parse_expression(cases[i]);
+        Expr* res = evaluate(e);
+        char* s = expr_to_string_fullform(res);
+        ASSERT_MSG(strcmp(s, "True") == 0, "%s: got %s", cases[i], s);
+        free(s);
+        expr_free(res);
+        expr_free(e);
+    }
+}
+
+/* The machine kernels and Compile[] on the imaginary-axis cuts of ArcTan,
+ * ArcCot, ArcSinh, ArcCsch: C99 catan / casinh read the side from the sign
+ * of the zero real part, so ArcTan[{-2. I}] was +Pi/2 - 0.549 I where the
+ * scalar, the exact value and MPFR give -Pi/2 - 0.549 I. */
+static void test_inverse_imag_cut_all_surfaces(void) {
+    static const char* cases[] = {
+        "And @@ Flatten[Table[With[{s = f[z]}, Abs[f[Developer`ToPackedArray[{z, 1. + I}]][[1]] - s] < 10^-15 && "
+        "Abs[Normal[f[NDArray[{z, 1. + I}]]][[1]] - s] < 10^-15 && "
+        "Abs[With[{g = f}, Compile[{{w, _Complex}}, g[w]]][z] - s] < 10^-15 && "
+        "Abs[With[{g = f}, Compile[{{v, _Complex, 1}}, g[v]]][{z, 1. + I}][[1]] - s] < 10^-15 && "
+        "Abs[s - N[f[SetPrecision[z, Infinity]]]] < 10^-14], "
+        "{f, {ArcTan, ArcCot, ArcSinh, ArcCsch}}, "
+        "{z, {2. I, -2. I, 0.5 I, -0.5 I, 3. I, -3. I, Complex[-0., 2.], Complex[-0., -2.], 10.^4 I, -10.^4 I}}]]",
+        "Abs[ArcTan[Developer`ToPackedArray[{-2. I, 1.}]][[1]] - (-Pi/2 - ArcTanh[1/2] I)] < 10^-15",
+        "Abs[ArcSinh[NDArray[{-2. I, 1.}]][[1]] - (-ArcCosh[2] - Pi/2 I)] < 10^-15",
+        NULL
+    };
+    assert_all_true(cases);
+}
+
+/* MPFR complex inverses through cancellation-free forms: the log forms lost
+ * every digit on half the plane (ArcSin[SetPrecision[-10^30, 40]] was
+ * Overflow[]), near zero (ArcTan of 10^-30 I: six digits of 30), next to
+ * the branch points (ArcCot at I + 10^-20: 23 of 30) and in Log near |z| = 1.
+ * Each value is checked against the exact value at the same (rounded) input,
+ * so only the algorithm's error is measured. */
+static void test_mpfr_complex_inverse_accuracy(void) {
+    static const char* cases[] = {
+        "rel[f_, p_, n_] := With[{q = SetPrecision[p, n]}, Abs[f[q] - N[f[SetPrecision[q, Infinity]], n + 20]]/"
+        "Abs[N[f[SetPrecision[q, Infinity]], n + 20]]]; True",
+        "rel[ArcSin, -10^30, 40] < 10^-36",
+        "rel[ArcSin, -10^30, 60] < 10^-56",
+        "rel[ArcSin, 10^30 I, 60] < 10^-56",
+        "rel[ArcCos, -10^30 + 2 10^30 I, 60] < 10^-56",
+        "rel[ArcSinh, -10^30 I, 60] < 10^-56",
+        "rel[ArcTan, 10^-30 I, 30] < 10^-26",
+        "rel[ArcTan, 10^-30 (1 + I), 30] < 10^-26",
+        "rel[ArcTanh, 10^-30 (2 - I), 30] < 10^-26",
+        "rel[ArcTan, 10^-20 + I, 30] < 10^-26",
+        "rel[ArcCot, 10^-20 + I, 30] < 10^-26",
+        "rel[ArcCoth, 1 + 10^-20 I, 30] < 10^-26",
+        "rel[ArcTanh, -1 + 10^-25 + 10^-25 I, 60] < 10^-56",
+        "rel[ArcSin, 1 + 10^-25 + 10^-25 I, 30] < 10^-26",
+        "rel[ArcSec, 1 + 10^-25, 60] < 10^-56",
+        "rel[ArcCsc, -1 - 10^-25, 60] < 10^-56",
+        "rel[ArcCoth, 1 + 10^-25, 60] < 10^-56",
+        "rel[ArcSech, 1 - 10^-25, 60] < 10^-56",
+        "rel[Log, 1 + 10^-20 I, 30] < 10^-26",
+        "rel[ArcSech, -10^100 + I, 30] < 10^-26",   /* Smith's division put it on the cut */
+        "rel[ArcSec, -1, 30] < 10^-26",
+        NULL
+    };
+    assert_all_true(cases);
+}
+
+/* MPFR forward functions at a huge imaginary part: cosh^2 b overflowed and
+ * inf/inf (or 0 inf) came back Indeterminate. */
+static void test_mpfr_complex_forward_huge(void) {
+    static const char* cases[] = {
+        "Abs[Tan[SetPrecision[10^30 I, 30]] - I] < 10^-29",
+        "Abs[Cot[SetPrecision[-10^9 I, 30]] - I] < 10^-29",
+        "Abs[Tanh[SetPrecision[10^30 + 10^30 I, 30]] - 1] < 10^-29",
+        "Abs[Coth[SetPrecision[-10^100 + I, 30]] + 1] < 10^-29",
+        "Abs[Sec[SetPrecision[10^30 I, 30]]] < 10^-29",
+        "Abs[Csch[SetPrecision[10^9 + I, 30]]] < 10^-29",
+        "Sin[SetPrecision[10^30 I, 30]] =!= Indeterminate",
+        "Abs[Tan[SetPrecision[1/3 + 10^4 I, 30]] - N[Tan[1/3 + 10^4 I], 30]] < 10^-28",
+        /* E^(complex) in N: exp(y log e) multiplied the rounding of log e by |y| */
+        "With[{d = SetPrecision[1.*^100, Infinity]}, Abs[N[Exp[I d], 30] - N[Cos[d] + I Sin[d], 30]] < 10^-28]",
+        NULL
+    };
+    assert_all_true(cases);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -452,6 +538,9 @@ int main() {
     TEST(test_trig_mpfr_complex);
     TEST(test_arc_trig_mpfr_complex);
     TEST(test_arctan_mpfr_lower_cut);
+    TEST(test_inverse_imag_cut_all_surfaces);
+    TEST(test_mpfr_complex_inverse_accuracy);
+    TEST(test_mpfr_complex_forward_huge);
     TEST(test_elementary_argx);
     TEST(test_trig_degree);
 

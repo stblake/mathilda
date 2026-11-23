@@ -13,27 +13,25 @@
  * NULL for any Complex[..] input; the complex-aware analogue lives
  * here so the responsibility split stays clean.
  *
- * Identities used internally:
- *   exp(a + bi) = exp(a)(cos(b) + i sin(b))
- *   log(a + bi) = log(hypot(a, b)) + i atan2(b, a)
- *   sin(a + bi) = sin(a) cosh(b) + i cos(a) sinh(b)
- *   cos(a + bi) = cos(a) cosh(b) - i sin(a) sinh(b)
- *   tan(a + bi) = (sin(2a) + i sinh(2b)) / (cos(2a) + cosh(2b))
- *                 (numerically stable; avoids cosh overflow for large |b|)
- *   sinh(z)     = -i sin(i z)         (via the swap a <-> -b, b <-> a)
- *   cosh(z)     =       cos(i z)
- *   tanh(z)     = -i tan(i z)
- *   asin(z)     = -i log(i z + sqrt(1 - z^2))
- *   acos(z)     = pi/2 - asin(z)
- *   atan(z)     = (i/2)(log(1 - i z) - log(1 + i z))
- *   asinh(z)    = log(z + sqrt(z^2 + 1))
- *   acosh(z)    = log(z + sqrt((z - 1)(z + 1)))   (branch-stable form)
- *   atanh(z)    = (1/2) log((1 + z)/(1 - z))
+ * Identities used internally (numeric_complex.c has the details): every
+ * function is evaluated in a cancellation-free form, accurate to the working
+ * precision on the whole plane, and takes the value of the principal-branch
+ * definition on its cuts (a zero part read as exact):
+ *   exp, log            e^a (cos b + i sin b);  log|z| + i atan2(b, a), with
+ *                       log1p(|z|^2 - 1)/2 for log|z| near |z| = 1
+ *   sin, cos, sinh, cosh  the product formulas (a zero factor wins over an
+ *                       overflowed one)
+ *   tan, cot, sec, csc, tanh, coth, sech, csch
+ *                       divided through by cosh^2 of the hyperbolic part
+ *   asin, acos, acosh   Kahan's forms in sqrt(1 -+ z) / sqrt(z -+ 1)
+ *   atanh, acoth        log of ((1+a)^2 + b^2)/((1-a)^2 + b^2), atan2
+ *   atan, acot, asinh   the above at i z
+ *   asec, acsc, asech, acsch  the above, fed (z -+ 1)/z and (z -+ i)/z
  *
  * All ops respect MPFR_RNDN throughout. Output precision is taken from
  * the caller's already-init2'd `out_re`/`out_im` MPFRs; ops never resize
- * the output. Internal scratch MPFRs are init2'd at the same precision
- * as `out_re`.
+ * the output. The inverse functions work internally at 32 guard bits above
+ * `out_re`'s precision and round once.
  */
 #ifndef NUMERIC_COMPLEX_H
 #define NUMERIC_COMPLEX_H

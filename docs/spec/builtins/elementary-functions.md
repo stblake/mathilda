@@ -22,9 +22,45 @@ argument inside the real domain takes the real libm function, anything else the
 C99 complex one, with Mathilda's branch-cut side. The two families round
 differently (`creal(catan(0.5))` and `atan(0.5)` differ by one ulp), so before
 this the scalar and buffer answers could differ in the last bit. Signed zero is
-IEEE throughout: `ArcCot[-0.]` is `-Pi/2`, `Arg[-0.]` is `Pi`, `Arg[0.]` is
-`0.` (an exact `0` still gives `Arg[0] = 0`).
+IEEE for a real argument: `ArcCot[-0.]` is `-Pi/2`, `Arg[-0.]` is `Pi`,
+`Arg[0.]` is `0.` (an exact `0` still gives `Arg[0] = 0`). A zero *part* of a
+complex argument that lies on a branch cut is read as an exact zero, of either
+sign, on every surface (below).
 `Sin`, `Cos`, `Tan`, `Cot`, `Sec`, `Csc` and their inverses `ArcSin`, etc.
+
+**Values on the branch cuts.** On a cut every surface (exact `N`, MPFR at any
+precision, machine scalar, packed, NDArray, `Compile[]`) gives the value of the
+principal-branch definition, with principal `Log`/`Sqrt` and the zero read as
+exact:
+
+| function | definition | cut | value on it |
+|---|---|---|---|
+| `ArcSin` | `-I Log[I z + Sqrt[1 - z^2]]` | real, `Abs[x] > 1` | `ArcSin[2] = Pi/2 - 1.317 I`, `ArcSin[-2] = -Pi/2 + 1.317 I` |
+| `ArcCos` | `Pi/2 - ArcSin[z]` | real, `Abs[x] > 1` | `ArcCos[2] = 1.317 I`, `ArcCos[-2] = Pi - 1.317 I` |
+| `ArcTan` | `(I/2)(Log[1 - I z] - Log[1 + I z])` | imaginary, `Abs[y] > 1` | `ArcTan[2 I] = Pi/2 + 0.549 I`, `ArcTan[-2 I] = -Pi/2 - 0.549 I` |
+| `ArcSinh` | `Log[z + Sqrt[z^2 + 1]]` | imaginary, `Abs[y] > 1` | `ArcSinh[2 I] = 1.317 + Pi/2 I`, `ArcSinh[-2 I] = -1.317 - Pi/2 I` |
+| `ArcCosh` | `Log[z + Sqrt[z - 1] Sqrt[z + 1]]` | real, `x < 1` | `ArcCosh[1/2] = Pi/3 I`, `ArcCosh[-2] = 1.317 + Pi I` |
+| `ArcTanh` | `(Log[1 + z] - Log[1 - z])/2` | real, `Abs[x] > 1` | `ArcTanh[2] = 0.549 - Pi/2 I`, `ArcTanh[-2] = -0.549 + Pi/2 I` |
+
+`ArcCot`, `ArcSec`, `ArcCsc`, `ArcCoth`, `ArcSech`, `ArcCsch` are the same
+functions of `1/z` (`ArcCot[I/2] = -Pi/2 - 0.549 I`, `ArcCoth[1/2] = 0.549 -
+Pi/2 I`). The odd functions (`ArcSin`, `ArcTan`, `ArcSinh`, `ArcTanh` and the
+reciprocals of these) stay odd on the cuts. C99's `catan`/`casinh` take the
+side from the sign of the zero real part instead, so the machine helpers pass
+them the zero whose sign selects this side (`mth_imag_cut_side`).
+
+**Arbitrary precision.** The MPFR complex functions (`src/numeric_complex.c`)
+use cancellation-free forms (Kahan 1987): `ArcSin`, `ArcCos`, `ArcCosh` from
+`Sqrt[1 -+ z]` (resp. `Sqrt[z -+ 1]`) and real `ArcTan`/`ArcSinh`; `ArcTanh`,
+`ArcCoth` from `Log[((1+a)^2 + b^2)/((1-a)^2 + b^2)]/4` and an `ArcTan` of two
+parts; `ArcTan`, `ArcCot`, `ArcSinh` through `z -> I z`; the reciprocal
+functions from `(z -+ 1)/z`, never `1 -+ 1/z`; `Log` near `|z| = 1` through
+`Log1p`. They are accurate to the working precision everywhere, including at
+`10^30`, `10^-30` and `10^-25` from a branch point (`ArcSin[SetPrecision[-10^30,
+40]]` was `Overflow[]`; `ArcTan` of `10^-30 I` at 30 digits had six correct).
+The circular and hyperbolic `Tan`, `Cot`, `Sec`, `Csc` (and `Tanh`, ...) are
+divided through by `Cosh` of the imaginary (real) part, so `Tan[SetPrecision[10^30
+I, 30]]` is `I`, not `Indeterminate`.
 
 **Features**:
 - `Listable`, `NumericFunction`.
@@ -85,7 +121,7 @@ Out[4]= 1/4*Pi
 number is computed like any other pair, so `Log[1.*^308, 1.*^308]` is the
 machine `1.` every surface gives (numeric-tower review G9).
 - `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching the reference — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
-- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
+- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision, with `Log1p[|z|^2 - 1]/2` for the real part near `|z| = 1` (`Log[1 + 10^-20 I]` at 30 digits has `Re = 5.*^-41`, not `0`). `N[E^z, n]` for a complex `z` is one complex `exp`, so `N[Exp[I d], 30]` is right for a 100-digit integer `d`.
 - `Log[b, z]`: Logarithm to base `b`. When `b` and `z` are exact positive
   rationals that are integer powers of one common rational, the result is the
   exact rational ratio of those powers: `Log[2, 8] = 3`, `Log[4, 8] = 3/2`,

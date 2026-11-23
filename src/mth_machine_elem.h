@@ -67,28 +67,44 @@ static inline double complex mth_acos_machine_z(double complex z) {
     return w;
 }
 
+/* On the imaginary-axis cuts of ArcTan and ArcSinh (z = i y, |y| > 1) C99
+ * takes the side from the sign of the zero real part: catan(+0 - 2i) is
+ * +Pi/2 - 0.549 i.  Mathilda's value there is the definition's
+ * (i/2)(Log[1 - i z] - Log[1 + i z]) with principal Log and the zero read as
+ * exact: +Pi/2 on the upper cut, -Pi/2 on the lower one (counter-clockwise
+ * continuity), so ArcTan is odd on the cuts.  That is what the scalar builtin
+ * and the exact and MPFR paths give; the kernels and Compile[] took C99's
+ * +0 side, and ArcTan[{-2. I}] was +Pi/2 - 0.549 I.  A zero real part is
+ * therefore given the sign of y, which selects that side for either zero --
+ * the same unsigned reading of an on-cut zero the real-axis cuts get below
+ * (mth_asin_machine_z flips on y == 0 regardless of its sign). */
+static inline double complex mth_imag_cut_side(double complex z) {
+    double y = cimag(z);
+    return (creal(z) == 0.0 && fabs(y) > 1.0) ? mth_cmplx(copysign(0.0, y), y) : z;
+}
+
 /* ArcTan: real on the whole real line. */
 static inline double complex mth_atan_machine_z(double complex z) {
     if (cimag(z) == 0.0) return mth_inv_real(atan(creal(z)));
-    return catan(z);
+    return catan(mth_imag_cut_side(z));
 }
 
 /* ArcCot[z] = ArcTan[1/z]: real on the real line, +-Pi/2 at +-0. */
 static inline double complex mth_acot_machine_z(double complex z) {
     if (cimag(z) == 0.0) return mth_inv_real(atan(1.0 / creal(z)));
-    return catan(1.0 / z);
+    return mth_atan_machine_z(1.0 / z);   /* 1/z of i y is on ArcTan's cut */
 }
 
 /* ArcSinh: real on the real line. */
 static inline double complex mth_asinh_machine_z(double complex z) {
     if (cimag(z) == 0.0) return mth_inv_real(asinh(creal(z)));
-    return casinh(z);
+    return casinh(mth_imag_cut_side(z));
 }
 
 /* ArcCsch[z] = ArcSinh[1/z]: real on the real line away from 0. */
 static inline double complex mth_acsch_machine_z(double complex z) {
     if (cimag(z) == 0.0) return mth_inv_real(asinh(1.0 / creal(z)));
-    return casinh(1.0 / z);
+    return mth_asinh_machine_z(1.0 / z);
 }
 
 /* ---- forward functions: real on the whole real line ---------------------- *
