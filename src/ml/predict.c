@@ -96,7 +96,10 @@ static bool ml_read_training(Expr* data, size_t* n_out, size_t* dim_out,
     if (n == 0) return false;
 
     Expr* first = data->data.function.args[0];
+    /* arg_count == 2: the width is read off the first rule's lhs
+     * (Predict[{Rule[]}] read past an empty node, as Classify did). */
     bool rules = first && first->type == EXPR_FUNCTION
+              && first->data.function.arg_count == 2
               && first->data.function.head->type == EXPR_SYMBOL
               && (first->data.function.head->data.symbol.name == SYM_Rule
                   || first->data.function.head->data.symbol.name == SYM_RuleDelayed);

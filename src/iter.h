@@ -70,6 +70,11 @@ bool iter_spec_parse(Expr* spec, IterSpec* out);
  */
 bool iter_spec_parse_lattice(Expr* spec, IterSpec* out);
 
+/* A Throw/Abort/Return the spec's evaluated bounds raised (Do[1, {i, Throw[3]}]),
+ * detached from the spec -- the caller frees the spec and returns it, so it
+ * reaches the enclosing Catch -- or NULL when the bounds are ordinary values. */
+Expr* iter_spec_take_unwind(IterSpec* s);
+
 /* Is the iterator variable an indexed one, v[k] (only the discrete iterators
  * accept it)? Such a variable is bound as the DownValue v[k] = value. */
 bool iter_var_is_indexed(const Expr* var);

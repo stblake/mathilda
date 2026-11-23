@@ -63,6 +63,10 @@ Executes a loop with an initialization, condition test, increment, and body.
 - `Break[]` exits the loop.
 - `Continue[]` skips the rest of the body and proceeds to evaluating `incr`.
 - Exits as soon as `test` fails.
+- A `Throw`, `Abort[]` or `Return` raised by `start` or by `test` leaves the loop at once
+  (audit For#1/#2): `Catch[For[Throw[7], True, i++]]` is `7`, where it used to loop forever.
+  The same holds for a bound of a `Do`/`Table`/`Sum`/`Product` iterator
+  (`Catch[Do[1, {i, Throw[3]}]]` is `3`).
 - Returns `Null`. A `Return[v]` in the body stops the loop and leaves the enclosing function with `v`; `Return[v, For]` makes the `For` yield `v`.
 
 ```mathematica

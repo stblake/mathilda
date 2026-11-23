@@ -839,8 +839,11 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
     /* Residual = M . a - V  (realised to the requested precision). */
     Expr* mR = fit_realize_precision(M, opts);
     Expr* vR = fit_realize_precision(V, opts);
+    /* expr_new_function adopts its arguments: aexpr is still used by the
+     * regularisation terms and freed below, so the Dot takes a reference
+     * (passing it bare freed it twice -- audit Fit#1). */
     Expr* dotma = expr_new_function(expr_new_symbol(SYM_Dot),
-                                    (Expr*[]){ mR, aexpr }, 2);
+                                    (Expr*[]){ mR, expr_copy(aexpr) }, 2);
     Expr* negv = expr_new_function(expr_new_symbol(SYM_Times),
                                    (Expr*[]){ expr_new_integer(-1), vR }, 2);
     Expr* residual = expr_new_function(expr_new_symbol(SYM_Plus),
@@ -910,7 +913,7 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
             if (val) cells[j] = expr_copy(val);
             else good = false;
         }
-        if (good) { coeffs = fit_list(cells, n); }
+        if (good) { coeffs = fit_list(cells, n); free(cells); }   /* the List copies the array */
         else { for (size_t j = 0; j < n; j++) expr_free(cells[j]); free(cells); }
     }
     if (!coeffs) fit_warn("Fit", "nmin", "objective minimisation failed");

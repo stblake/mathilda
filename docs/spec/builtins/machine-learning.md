@@ -510,6 +510,9 @@ Out[2]= 0.243738
 ## Classify
 
 Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
+Malformed training data, including a rule with the wrong argument count such as
+`Classify[{Rule[]}]` (which crashed, audit Classify#1; `Predict` likewise), leaves the call
+unevaluated.
 
 - `Classify[data]`
 - `Classify[data, Method -> "NearestNeighbors"]`

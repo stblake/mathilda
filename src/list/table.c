@@ -928,6 +928,10 @@ Expr* builtin_table(Expr* res) {
     /* ---- Parse the iterator spec (shared helper) ---- */
     IterSpec s;
     if (!iter_spec_parse_lattice(spec, &s)) return NULL;
+    {   /* a Throw out of an iterator bound leaves the call (audit For#1 class) */
+        Expr* u = iter_spec_take_unwind(&s);
+        if (u) { iter_spec_free(&s); return u; }
+    }
 
     int is_n_times   = (s.kind == ITER_KIND_COUNT);
     int is_list_iter = (s.kind == ITER_KIND_LIST);

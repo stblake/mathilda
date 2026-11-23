@@ -376,6 +376,15 @@ bool iter_spec_parse_lattice(Expr* spec, IterSpec* out) {
     return true;
 }
 
+Expr* iter_spec_take_unwind(IterSpec* s) {
+    Expr** slots[4] = { &s->imin, &s->imax, &s->di, &s->list };
+    for (int k = 0; k < 4; k++) {
+        Expr* v = *slots[k];
+        if (v && eval_is_inflight_unwind(v)) { *slots[k] = NULL; return v; }
+    }
+    return NULL;
+}
+
 bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
                                double* min_val, double* max_val,
                                double* di_val, bool* is_real, bool* is_inf) {
@@ -678,6 +687,10 @@ static Expr* do_core(Expr* res, bool nested) {
     /* ---- Parse the iterator spec (shared helper) ---- */
     IterSpec s;
     if (!iter_spec_parse_lattice(spec, &s)) return NULL;
+    {   /* a Throw out of an iterator bound leaves the Do (audit For#1 class) */
+        Expr* u = iter_spec_take_unwind(&s);
+        if (u) { iter_spec_free(&s); return u; }
+    }
 
     int is_n_times   = (s.kind == ITER_KIND_COUNT);
     int is_list_iter = (s.kind == ITER_KIND_LIST);
@@ -880,15 +893,34 @@ Expr* builtin_for(Expr* res) {
         if (fast) return fast;
     }
 
-    /* Initialisation: evaluate `start` for its side-effects; discard result. */
+    /* Initialisation: evaluate `start` for its side-effects; discard result.
+     * A Throw/Abort/Return out of it leaves the For at once, as from the test
+     * below (it was freed, and Catch[For[Throw[7], True, i++]] then looped
+     * forever -- audit For#1); a Break[] ends the loop before it starts. */
     Expr* eval_start = evaluate(start);
-    expr_free(eval_start);
+    {
+        Expr* rv = NULL;
+        IterFlowAction f = iter_flow_classify(eval_start, SYM_For, &rv);
+        if (f == ITER_FLOW_RETURN_VAL) { expr_free(eval_start); return rv; }
+        if (f == ITER_FLOW_PROPAGATE)  return eval_start;
+        expr_free(eval_start);
+        if (f == ITER_FLOW_BREAK) return expr_new_symbol(SYM_Null);
+    }
 
     Expr* returned_val = NULL;
 
     while (true) {
         /* --- Test --- */
         Expr* eval_test = evaluate(test);
+        /* Flow control out of the test escapes like While's (audit For#2). */
+        {
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_test, SYM_For, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_test); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_test;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_test); break; }
+            /* ITER_FLOW_CONTINUE: not True, so the loop ends below. */
+        }
         bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol.name == SYM_True);
         expr_free(eval_test);
         if (!condition_met) break;

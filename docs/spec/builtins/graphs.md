@@ -807,7 +807,9 @@ Out[3]= {{1, 2, 3}}
     taken in decreasing DFS finishing time so as few roots as possible are used;
   - directed, weighted: a minimum-weight spanning branching (Chu–Liu/Edmonds,
     `O(E log V)`) among those with the fewest roots — the minimum spanning
-    arborescence whenever some vertex reaches all;
+    arborescence whenever some vertex reaches all. An edge internal to a contracted
+    cycle is discarded rather than recorded as a one-vertex cycle, which overran the
+    cycle table and returned cyclic, session-dependent results (audit FindSpanningTree#1/#2);
   - mixed graphs are left unevaluated, as in the reference.
 - Weights are compared **exactly**: integers, rationals and reals become GMP
   rationals (a real's exact binary value), so `1/3` and `0.3333333333333333`

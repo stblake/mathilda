@@ -420,6 +420,15 @@ static int dmst(int N, int root, int m, const int* src, const int* dst, const mp
             hprop(heap[u]);
             HNode* top = heap[u];
             int e = top->eid;
+            /* An edge whose tail is already inside u -- an edge between two
+             * vertices of a contracted cycle, or a self-loop -- is no way
+             * into u: drop it.  Taken as a one-vertex "cycle" (as KACTL's
+             * deque version does) it recorded one cycle per such edge, which
+             * is not bounded by N, and the cy_* arrays sized for the at most
+             * N - 1 real contractions were written past their ends -- the
+             * heap corruption behind the cyclic, session-dependent results
+             * of audit FindSpanningTree#1/#2. */
+            if (ruf_find(&uf, src[e]) == u) { hpop(&ctx, &heap[u]); continue; }
             /* every remaining incoming edge of u is now priced relative to e */
             mpq_sub(top->delta, top->delta, top->key);
             hpop(&ctx, &heap[u]);

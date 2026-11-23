@@ -611,6 +611,10 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
 
     IterSpec s;
     if (!iter_spec_parse_lattice(spec, &s)) return NULL;
+    {   /* a Throw out of an iterator bound leaves the call (audit For#1 class) */
+        Expr* u = iter_spec_take_unwind(&s);
+        if (u) { iter_spec_free(&s); return u; }
+    }
 
     /* A single-element iterator {c}: c copies of the body (c real), or the
      * indefinite form (c a free symbol); see iter_count_spec_for_sum.  A

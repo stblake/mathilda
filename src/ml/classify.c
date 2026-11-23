@@ -46,7 +46,9 @@ static bool ml_read_labelled(Expr* data, size_t* n_out, size_t* dim_out,
     if (n == 0) return false;
 
     Expr* first = data->data.function.args[0];
-    if (!first || first->type != EXPR_FUNCTION
+    /* The width is read off the first rule's lhs, so it must HAVE one:
+     * Classify[{Rule[]}] read args[0] of an empty node (audit Classify#1). */
+    if (!first || first->type != EXPR_FUNCTION || first->data.function.arg_count != 2
         || first->data.function.head->type != EXPR_SYMBOL
         || (first->data.function.head->data.symbol.name != SYM_Rule
             && first->data.function.head->data.symbol.name != SYM_RuleDelayed))

@@ -3273,7 +3273,9 @@ response vector `v`.
 - **NormFunction** `-> Function[Norm[#, 1]]` fits in the 1-norm (least absolute
   deviations) via iteratively reweighted least squares; `Norm[#, 2]` is the
   default 2-norm; any other norm (or a norm combined with regularisation) is
-  minimised by `FindMinimum`, warm-started from the L2 solution.
+  minimised by `FindMinimum`, warm-started from the L2 solution. This path freed its
+  coefficient vector twice and crashed (audit Fit#1); `NormFunction -> Function[Norm[#,
+  Infinity]]` now gives the minimax fit (`0.2 + 0.6 x` on `{{0,1},{1,0},{3,2},{5,4}}`).
 - L2 and ridge solves route through `LeastSquares`, so they inherit exact,
   machine and MPFR arithmetic. Malformed data (ragged rows, a variable count
   that does not match the data coordinates, empty data) issues a `Fit::...`

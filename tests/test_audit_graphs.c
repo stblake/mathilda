@@ -22,9 +22,61 @@ static void test_star_graph_resource_limit(void) {
     audit_chk("StarGraph#1", "EdgeCount[CycleGraph[4]]", "4");
 }
 
+/* FindSpanningTree#1 (critical) / #2: "Weighted directed FindSpanningTree
+ * returns a subgraph containing directed cycles (not a branching)", and the
+ * result depended on earlier evaluations.  Chu-Liu/Edmonds recorded every
+ * edge internal to a contracted super-vertex as a one-vertex cycle and wrote
+ * past the N-entry cycle arrays.  The issue's 12-vertex graph has minimum
+ * arborescence weight 28; random small digraphs are checked against an
+ * exhaustive enumeration of every root's parent choices. */
+static void test_find_spanning_tree_directed(void) {
+    audit_run("fstWs = {11,2,-5,19,1,12,12,2,7,11,6,13,6,9,3,16,12,14,"
+              "18,-5,7,20,18,11,20,-1,11,19,12,1,8,-4,10,6,13,12,1,11,8,10}");
+    audit_run("fstG = Graph[Range[12],{1->7,1->12,2->3,2->5,2->6,2->8,3->6,3->10,3->12,4->2,"
+              "5->4,5->10,5->12,6->1,6->4,6->8,7->1,7->9,7->11,7->12,8->1,8->4,8->5,8->12,"
+              "9->4,9->7,9->11,10->1,10->2,10->8,10->12,11->4,11->5,11->7,11->9,12->1,12->6,"
+              "12->7,12->8,12->9},EdgeWeight->fstWs]");
+    /* tree weight, read back through the input edge list and weights */
+    audit_run("fstW[g_, ws_, t_] := Module[{el = EdgeList[g]},"
+              " Total[ws[[Flatten[Position[el, #, {1}, 1] & /@ EdgeList[t]]]]]]");
+    audit_run("fstArbQ[n_, t_] := EdgeCount[t] == n - 1 && AcyclicGraphQ[t] &&"
+              " Max[Counts[EdgeList[t][[All, 2]]]] == 1");
+    audit_run("fstT = FindSpanningTree[fstG]");
+    audit_true("FindSpanningTree#1", "fstArbQ[12, fstT]");
+    audit_chk("FindSpanningTree#1", "fstW[fstG, fstWs, fstT]", "28");
+    audit_chk("FindSpanningTree#1", "FindSpanningTree[fstG] === fstT", "True");
+    audit_run("fstWs4 = {7,1,2,9,6,6,6,8,8,2,2,5}; fstG4 = Graph[Range[4],{1->2,1->3,1->4,"
+              "2->1,2->3,2->4,3->1,3->2,3->4,4->1,4->2,4->3},EdgeWeight->fstWs4]");
+    audit_true("FindSpanningTree#2", "fstArbQ[4, FindSpanningTree[fstG4]]");
+    audit_chk("FindSpanningTree#2", "fstW[fstG4, fstWs4, FindSpanningTree[fstG4]]", "5");
+    audit_chk("FindSpanningTree#2", "FindSpanningTree[fstG4] === FindSpanningTree[fstG4]", "True");
+    /* brute force: every root r, every choice of one incoming edge per other
+     * vertex; a choice is an arborescence when following parents n times
+     * from every vertex lands on r. */
+    audit_run("fstBrute[n_, edges_, ws_] := Module[{best = Infinity, inc, others, p, w},"
+              " Do[inc = Table[Select[Range[Length[edges]], edges[[#, 2]] == v &], {v, n}];"
+              "  others = Delete[Range[n], r];"
+              "  If[AllTrue[inc[[others]], Length[#] > 0 &],"
+              "   Do[p = Range[n]; w = 0;"
+              "    Do[p[[others[[k]]]] = edges[[ch[[k]], 1]]; w += ws[[ch[[k]]]], {k, Length[others]}];"
+              "    If[Nest[#[[#]] &, p, n] === ConstantArray[r, n] && w < best, best = w],"
+              "    {ch, Tuples[inc[[others]]]}]], {r, n}]; best]");
+    audit_run("SeedRandom[1234]; fstBad = 0; fstCnt = 0;"
+              " Do[n = RandomInteger[{3, 5}];"
+              "  edges = Select[Tuples[Range[n], 2], #[[1]] != #[[2]] && RandomReal[] < 0.7 &];"
+              "  ws = RandomInteger[{-6, 12}, Length[edges]];"
+              "  b = fstBrute[n, edges, ws];"
+              "  If[b =!= Infinity, fstCnt++;"
+              "   g = Graph[Range[n], Rule @@@ edges, EdgeWeight -> ws]; t = FindSpanningTree[g];"
+              "   If[!(fstArbQ[n, t] && fstW[g, ws, t] == b), fstBad++]], {40}]");
+    audit_true("FindSpanningTree#1", "fstCnt >= 30");
+    audit_chk("FindSpanningTree#1", "fstBad", "0");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complete_graph_resource_limit);
     TEST(test_star_graph_resource_limit);
+    TEST(test_find_spanning_tree_directed);
     return audit_finish("audit_graphs");
 }

@@ -138,6 +138,32 @@ static bool scoping_binds_in_arg0(Expr* e) {
  * env is a subset, so the mask stays a superset there -- conservative. */
 typedef struct { uint64_t mask; bool fast; } SsCtx;
 
+/* Rule, RuleDelayed, Set, SetDelayed: constructs that scope the pattern
+ * variables named on their left-hand side. */
+static bool ss_is_rule_scope(const Expr* e) {
+    if (e->data.function.arg_count != 2 || e->data.function.head->type != EXPR_SYMBOL)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_Rule || h == SYM_RuleDelayed || h == SYM_Set || h == SYM_SetDelayed;
+}
+
+/* The distinct names of the Pattern[sym, _] nodes in `e` (bounded by cap). */
+static void ss_collect_pattern_names(const Expr* e, const char** out, size_t* n, size_t cap) {
+    if (e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Pattern
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* nm = e->data.function.args[0]->data.symbol.name;
+        bool dup = false;
+        for (size_t k = 0; k < *n && !dup; k++) dup = out[k] == nm;
+        if (!dup && *n < cap) out[(*n)++] = nm;
+    }
+    ss_collect_pattern_names(h, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ss_collect_pattern_names(e->data.function.args[i], out, n, cap);
+}
+
 static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
     if (!e) return NULL;
     SCOPE_STAT(ss_nodes);
@@ -206,6 +232,51 @@ static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
                 }
             }
             filtered_env = new_env;
+        }
+    }
+
+    /* A rule or definition scopes its own pattern variables. One named like
+     * a local being substituted is renamed to x$ throughout the rule (the
+     * reference's form) instead of having the value substituted into the
+     * pattern name: With[{x = 5}, x_ -> x] made Pattern[5, _] -> 5, and
+     * With[{x = 5}, f[x_] := x]; f[2] gave 5 (audit With#2).  The rename
+     * node maps x to x$ and the walk below substitutes it like any other;
+     * the summary skip stays sound, since a subtree holding the pattern
+     * name x carries x's bit and is visited. */
+    Expr* rename_syms[64];
+    size_t nrename = 0;
+    if (ss_is_rule_scope(e)) {
+        const char* pnames[64];
+        size_t np = 0;
+        ss_collect_pattern_names(e->data.function.args[0], pnames, &np, 64);
+        for (size_t k = 0; k < np; k++) {
+            bool in_env = false;
+            for (ScopingEnv* cur = filtered_env; cur && !in_env; cur = cur->next)
+                in_env = cur->old_name == pnames[k];
+            if (!in_env) continue;
+            char buf[256];
+            snprintf(buf, sizeof(buf), "%s$", pnames[k]);
+            Expr* fresh = expr_new_symbol(buf);
+            ScopingEnv* node = malloc(sizeof(ScopingEnv));
+            node->old_name = pnames[k];
+            node->replacement = fresh;
+            if (filtered_env == env) {
+                /* Copy the outer env so the rename node can be prepended
+                 * without touching the caller's list (freed below with it). */
+                ScopingEnv* copy = NULL;
+                ScopingEnv** tail = &copy;
+                for (ScopingEnv* cur = env; cur; cur = cur->next) {
+                    ScopingEnv* nn = malloc(sizeof(ScopingEnv));
+                    *nn = *cur;
+                    nn->next = NULL;
+                    *tail = nn;
+                    tail = &nn->next;
+                }
+                filtered_env = copy;
+            }
+            node->next = filtered_env;   /* found first: shadows the env's x */
+            filtered_env = node;
+            rename_syms[nrename++] = fresh;
         }
     }
 
@@ -298,6 +369,7 @@ static Expr* ss_rec(Expr* e, ScopingEnv* env, const SsCtx* c, bool frozen) {
             tmp = next;
         }
     }
+    for (size_t k = 0; k < nrename; k++) expr_free(rename_syms[k]);
 
     return res;
 }
@@ -620,12 +692,49 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger) {
     return result;
 }
 
+/* The local a binding-list entry names: a bare Symbol or Set[sym, v] (and, for
+ * With, SetDelayed[sym, v]); NULL for any other shape. */
+static const char* scoping_entry_name(const Expr* v, bool delayed_ok) {
+    if (v->type == EXPR_SYMBOL) return delayed_ok ? NULL : v->data.symbol.name;
+    if (v->type != EXPR_FUNCTION || v->data.function.arg_count != 2
+        || v->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = v->data.function.head->data.symbol.name;
+    if (h != SYM_Set && !(delayed_ok && h == SYM_SetDelayed)) return NULL;
+    const Expr* l = v->data.function.args[0];
+    return l->type == EXPR_SYMBOL ? l->data.symbol.name : NULL;
+}
+
+/* Does the binding list `vars` (a List) name one local twice?  Then report
+ * Head::dup and return true: the construct stays unevaluated, as in the
+ * reference.  Accepting it was not harmless for Block -- the frame saved the
+ * symbol twice, the second slot capturing the first initializer's value, so
+ * x = 5; Block[{x = 1, x = 2}, x] left x = 1 behind (audit Block#1).  Names
+ * are interned, so this is a pointer scan; binding lists are short. */
+static bool scoping_reject_duplicates(const char* head, Expr* vars, bool is_with) {
+    size_t n = vars->data.function.arg_count;
+    for (size_t i = 1; i < n; i++) {
+        const char* a = scoping_entry_name(vars->data.function.args[i], is_with);
+        if (!a) continue;
+        for (size_t j = 0; j < i; j++) {
+            if (scoping_entry_name(vars->data.function.args[j], is_with) != a) continue;
+            char* spec = expr_to_string(vars);
+            mth_message(head, "dup",
+                        "Duplicate local variable %s found in local variable specification %s.",
+                        a, spec ? spec : "");
+            free(spec);
+            return true;
+        }
+    }
+    return false;
+}
+
 Expr* builtin_module(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_duplicates(SYM_Module, vars, false)) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
     ScopingEnv* env = NULL;
@@ -837,7 +946,12 @@ static void blk_free_rules_now(Rule* r) {
 /* Put every saved symbol back and release the frame. Idempotent per frame:
  * only ever called once, either by builtin_block or by the unwind drain. */
 static void blk_restore_frame(BlockFrame* f) {
-    for (size_t i = 0; i < f->count; i++) {
+    /* Newest slot first: a frame that saved one symbol twice (a caller of
+     * mth_block_enter that does not reject duplicates) holds, in the later
+     * slot, the value the earlier slot's initializer installed; restoring in
+     * forward order let that stale value win.  In reverse, the earliest slot
+     * -- the value from before the Block -- is put back last. */
+    for (size_t i = f->count; i-- > 0;) {
         if (!f->saved[i].name) continue;
         SymbolDef* def = symtab_get_def(f->saved[i].name);
         /* Did the symbol's values change at all?  Not when it had none before
@@ -1177,6 +1291,7 @@ Expr* builtin_block(Expr* res) {
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_duplicates(SYM_Block, vars, false)) return NULL;
 
     void* frame = mth_block_enter(vars->data.function.args, vars->data.function.arg_count);
 
@@ -1203,6 +1318,7 @@ Expr* builtin_with(Expr* res) {
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_duplicates(SYM_With, vars, true)) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
     ScopingEnv* env = NULL;

@@ -95,6 +95,9 @@ Implements dynamic scoping by temporarily overriding symbol values.
   restored but never cleared. Inside `Block[{Times}, ...]` the reference still multiplies
   numbers (`Times[2, 3, b]` is `6 b`); Mathilda leaves a blocked `Times` entirely inert.
 - Restores original values, attributes and builtins after execution.
+- **A duplicate local is rejected** (audit Block#1): `Block[{x = 1, x = 2}, x]` issues
+  `Block::dup` and stays unevaluated, leaving the outer `x` untouched; `Module::dup` and
+  `With::dup` likewise. Before, the frame saved `x` twice and its exit restored `x = 1`.
 - **The returned value is evaluated again once the symbols are restored**
   (v0.6053), as in the reference: `x = 5; Block[{x}, x + y]` is `5 + y`, and
   with `f[a_] := a^2`, `Block[{f}, f[3]]` is `9`. Before, the fixed-point stamp
@@ -109,6 +112,11 @@ Defines local constants by lexical substitution.
 **Features**:
 - `HoldAll`, `Protected`.
 - Replaces occurrences of symbols in the body before evaluation.
+- **Rules and definitions scope their pattern variables** (audit With#2): a pattern
+  variable named like a local is renamed to `x$` throughout that rule instead of having the
+  value substituted into the pattern name, so `With[{x = 5}, x_ -> x]` is `x$_ -> x$` and
+  `With[{x = 5}, f[x_] := x]; f[2]` is `2` (Module renames the same way). Before, these gave
+  the invalid pattern `Pattern[5, _] -> 5` and `5`.
 
 ```mathematica
 In[1]:= x = 10; With[{x = 5}, x^2]
