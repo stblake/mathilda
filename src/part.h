@@ -16,6 +16,12 @@ Expr* pvec_part(Expr* pvx, Expr** indices, size_t nindices);
 Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices);
 /* First / Last of a LinkedList (deflt may be NULL). */
 Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last);
+/* Part assignment below the top level, per payload kind (the ds_ops
+ * part_assign slot): the new value of `expr`, or NULL after a message. */
+Expr* ll_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+Expr* nd_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+Expr* pvec_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+Expr* sparse_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
 /* Resolve a Span[...] against a container of `len` elements: first selected
  * 1-based index, stride and count (every selected index lies in 1..len).
  * False for a malformed spec; a span selecting nothing succeeds with count 0. */

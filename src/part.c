@@ -302,50 +302,51 @@ static Expr* nd_part_assign_or_list(Expr* arr, Expr** indices, size_t nindices, 
     return expr_copy(arr);
 }
 
-static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
-    if (nindices == 0) return expr_copy(rhs);
-
+/* Part assignment below the top level, per payload kind: the bodies of the
+ * ds_ops part_assign slot.  Each returns the new value of `expr` (a new
+ * reference), or NULL (after a message) to leave the Set unevaluated. */
+Expr* ll_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
     /* A LinkedList reached below the top ({ll}[[1, 2]] = v): written in
      * place, as everywhere -- the enclosing immutable value is rebuilt around
      * the same object. A failed write leaves it unchanged (after its message). */
-    if (expr->type == EXPR_LINKEDLIST) {
         ll_part_assign(expr, indices, nindices, rhs);
         return expr_copy(expr);
-    }
+}
 
-    if (expr->type == EXPR_NDARRAY)
-        return nd_part_assign_or_list(expr, indices, nindices, rhs);
+Expr* nd_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
+    return nd_part_assign_or_list(expr, indices, nindices, rhs);
+}
 
+Expr* pvec_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
     /* A PVector is a value: the write builds a new PVector (path copy) and the
      * old one is untouched.  An integer first subscript is native; any other
      * spec goes through the List and back. */
-    if (expr->type == EXPR_PVEC) {
         PVec* pv = expr->data.pvec;
         Expr* ix = indices[0];
         if (ix->type == EXPR_INTEGER) {
             int64_t len = pv_length(pv), k = ix->data.integer;
             if (k < 0) k = len + k + 1;
-            if (k < 1 || k > len) { ll_part_msg_partw("Set", expr, ix); return NULL; }
+            if (k < 1 || k > len) { ll_part_msg_partw("Set", expr, ix); return expr_copy(expr); }   /* unchanged, as the other kinds */
             Expr* ne;
             if (nindices == 1) ne = expr_copy(rhs);
             else {
                 Expr* cur = pv_get(pv, k - 1);
                 ne = expr_part_assign_rec(cur, indices + 1, nindices - 1, rhs);
                 expr_free(cur);
-                if (!ne) return NULL;
+                if (!ne) return expr_copy(expr);
             }
             return expr_new_pvec(pv_set(pv_retain(pv), k - 1, ne));
         }
         Expr* l = pv_to_list(pv);
         Expr* r = expr_part_assign_rec(l, indices, nindices, rhs);
         expr_free(l);
-        if (!r) return NULL;
+        if (!r) return expr_copy(expr);
         Expr* back = pvec_make(r);
         if (back) { expr_free(r); return back; }
         return r;
-    }
+}
 
-    if (expr->type == EXPR_SPARSE) {
+Expr* sparse_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
         /* One element: rebuilt sparsely. Anything else (spans, All, a List
          * right-hand side) goes through the dense array and back, keeping the
          * background. A part that does not exist leaves the array as it was. */
@@ -381,6 +382,17 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         Expr* out = evaluate(call);
         expr_free(call);
         return out;
+}
+
+static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
+    if (nindices == 0) return expr_copy(rhs);
+
+    /* A payload kind (LinkedList, NDArray, PVector, SparseArray): its row's
+     * part_assign slot writes below this level. */
+    {
+        bool handled = false;
+        Expr* r = ds_part_assign(expr, indices, nindices, rhs, &handled);
+        if (handled) return r;
     }
 
     if (is_atomic(expr)) return expr_copy(expr);

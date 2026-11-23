@@ -193,11 +193,11 @@ static Expr* pv_native(const char* h, Expr* res, bool* handled) {
 
 /* A packed list/array matches _List or _NDArray by its presentation; the
  * matcher keeps its own NDArray head logic, so no head_is is given here. */
-static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list };
-static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list };
-static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only, ll_native, ll_descend_expr };
+static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list, NULL, NULL, NULL, NULL, NULL, NULL, nd_assign_row };
+static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list, NULL, NULL, NULL, NULL, NULL, NULL, sparse_assign_row };
+static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only, ll_native, ll_descend_expr, ll_assign_row };
 
-static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only, pv_native, NULL };
+static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only, pv_native, NULL, pvec_assign_row };
 
 static void ds_init(void) {
     g_init = true;
@@ -261,4 +261,11 @@ Expr* ds_native(const Expr* kind_val, const char* head, Expr* res, bool* handled
 int64_t (*ds_descender(ExprType t))(Expr*, int64_t, int64_t, int64_t, bool, Expr*, bool) {
     const DsOps* o = ds_ops(t);
     return o ? o->descend : NULL;
+}
+
+Expr* ds_part_assign(Expr* e, Expr** idx, size_t n, Expr* rhs, bool* handled) {
+    const DsOps* o = ds_ops(e->type);
+    if (!o || !o->part_assign) { *handled = false; return NULL; }
+    *handled = true;
+    return o->part_assign(e, idx, n, rhs);
 }

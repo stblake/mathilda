@@ -99,6 +99,19 @@ static void test_each(void) {
     expr_free(r);
 }
 
+static void test_part_assign_below_top(void) {
+    ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->part_assign && ds_ops(EXPR_PVEC)->part_assign &&
+               ds_ops(EXPR_NDARRAY)->part_assign && ds_ops(EXPR_SPARSE)->part_assign, "every payload kind has a part_assign row");
+    /* reached through an enclosing List: {x, kind}[[2, i]] = v */
+    assert_true("Module[{a = {0, PVector[{1, 2, 3}]}}, a[[2, 2]] = 9; Normal[a[[2]]] === {1, 9, 3}]");
+    assert_true("Module[{a = {0, PVector[{1, 2, 3}]}, b}, b = a; b[[2, 2]] = 9; Normal[a[[2]]] === {1, 2, 3} && Normal[b[[2]]] === {1, 9, 3}]");  /* value */
+    assert_true("Module[{l = LinkedList[{1, 2, 3}], a}, a = {0, l}; a[[2, 2]] = 9; Normal[l] === {1, 9, 3}]");                                   /* reference */
+    assert_true("Module[{a = {0, SparseArray[{1 -> 5}, 3]}}, a[[2, 3]] = 7; Normal[a[[2]]] === {5, 0, 7}]");
+    assert_true("Module[{a = {0, Developer`ToPackedArray[{1, 2, 3}]}}, a[[2, 1]] = 8; Normal[a[[2]]] === {8, 2, 3}]");
+    assert_true("Module[{a = {0, PVector[{1, 2, 3}]}}, a[[2, 2 ;; 3]] = 0; Normal[a[[2]]] === {1, 0, 0}]");                                      /* non-integer spec */
+    assert_true("Module[{a = {0, PVector[{1, 2, 3}]}}, a[[2, 9]] = 1; Normal[a[[2]]] === {1, 2, 3}]");                                           /* out of range */
+}
+
 static void test_native(void) {
     ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->native && ds_ops(EXPR_PVEC)->native, "LinkedList and PVector have native heads");
     ASSERT_MSG(ds_ops(EXPR_SPARSE)->native == NULL && ds_ops(EXPR_NDARRAY)->native == NULL, "other kinds keep their own paths");
@@ -136,6 +149,7 @@ int main(void) {
     TEST(test_normal);
     TEST(test_get_rebuild);
     TEST(test_native);
+    TEST(test_part_assign_below_top);
     TEST(test_each);
     printf("All ds_ops tests passed!\n");
     return 0;

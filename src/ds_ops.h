@@ -72,6 +72,11 @@ typedef struct DsOps {
      * `each`, which is used when this is NULL. */
     int64_t (*descend)(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
                        bool heads, Expr* pattern, bool first_only);
+    /* Part assignment below the top level (v[[i, ...]] = rhs reached through an
+     * enclosing structure): returns the new value of `e` (a new reference), or
+     * NULL after a message to leave the Set unevaluated.  NULL slot = the kind is
+     * rebuilt by the general function-node path. */
+    Expr* (*part_assign)(Expr* e, Expr** idx, size_t n, Expr* rhs);
 } DsOps;
 
 enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
@@ -89,6 +94,9 @@ Expr* ds_get(const Expr* e, int64_t i);
 
 /* Does this kind iterate through its row (DsOps.each)? */
 bool ds_has_each(ExprType t);
+
+/* Part assignment through the row; *handled false when the kind has no slot. */
+Expr* ds_part_assign(Expr* e, Expr** idx, size_t n, Expr* rhs, bool* handled);
 
 /* The optional specialised walk of a kind (DsOps.descend), or NULL. */
 int64_t (*ds_descender(ExprType t))(Expr*, int64_t, int64_t, int64_t, bool, Expr*, bool);
