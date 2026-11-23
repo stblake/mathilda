@@ -16,6 +16,7 @@
 #include "../equal_tol.h"
 #include "../memacct.h"   /* MemoryConstrained: charges, refusals, frames */
 #include "compile.h"
+#include "handle_ops.h"          /* CompileHandleOps: load_arg per handle kind */
 #include "compile_internal.h"    /* Slot / Instr / CompiledProgram / opcodes / VM_TLS */
 #include "../linkedlist.h"       /* LinkedList arguments, undo frames */
 #include "../pvec.h"             /* PVector arguments (load_arg) */
@@ -2170,46 +2171,14 @@ static bool mgd_ncpx_set_from_expr(ncpx* z, const Expr* e);   /* defined below *
  * match the declared type, so the caller can fall back to the interpreter.
  * An array argument is BORROWED: its handle is stored, never freed. */
 static bool load_arg(Slot* s, const CompileValue* v, CompileType want) {
-    if (CT_IS_ARRAY(want)) {
-        Expr* x = CT_IS_ARRAY(v->type) ? v->v.a : NULL;
-        if (!x || x->type != EXPR_NDARRAY || x->data.ndarray.rank != CT_RANK(want))
-            return false;
-        s->arr = x;
-        return true;
-    }
-    if (CT_IS_ASSOC(want)) {
-        /* A read-only Association bag rides in `.arr` of a SCALAR-bank argument
-         * register (arg registers are < arr_base), so arr_sweep — which only
-         * walks [arr_base, tile_base) — never frees this borrowed handle. */
-        Expr* x = CT_IS_ASSOC(v->type) ? v->v.a : NULL;
-        if (!x || !is_association(x)) return false;
-        s->arr = x;
-        return true;
-    }
-    if (CT_IS_LLIST(want)) {
-        /* A LinkedList argument is BORROWED, in a scalar-bank argument register
-         * (never swept), and it is the caller's own list: the program mutates
-         * it in place, as the interpreter would. Its storage must already be of
-         * the promised element kind -- or empty, which any typed push retypes. */
-        Expr* x = CT_IS_LLIST(v->type) ? v->v.a : NULL;
-        LinkedList* ll = expr_linkedlist(x);
-        if (!ll) return false;
-        CompileType e = CT_LLIST_ELEM(want);
-        LLKind k = e == CT_INT ? LL_I64 : e == CT_REAL ? LL_REAL : LL_CPLX;
-        if (ll_length(ll) > 0 && ll_kind(ll) != k) return false;
-        s->arr = x;
-        return true;
-    }
-    if (CT_IS_PVEC(want)) {
-        /* A PVector argument is BORROWED (scalar-bank register, never swept).
-         * It is a value, so the program never changes it: an update starts from
-         * a retained reference.  Its storage must already be of the promised
-         * element kind -- or empty, which any typed push retypes. */
-        Expr* x = CT_IS_PVEC(v->type) ? v->v.a : NULL;
-        if (!x || x->type != EXPR_PVEC) return false;
-        CompileType e = CT_PVEC_ELEM(want);
-        PVKind k = e == CT_INT ? PV_I64 : PV_REAL;
-        if (pv_length(x->data.pvec) > 0 && pv_kind(x->data.pvec) != k) return false;
+    /* A handle argument is BORROWED into the `.arr` of a SCALAR-bank argument
+     * register (arg registers are < arr_base), so arr_sweep -- which only walks
+     * [arr_base, tile_base) -- never frees it.  The row checks the boxed value's
+     * kind and storage against the declared type. */
+    const CompileHandleOps* ho = ct_handle_ops(want);
+    if (ho) {
+        Expr* x = NULL;
+        if (!ho->load_arg(v, want, &x)) return false;
         s->arr = x;
         return true;
     }

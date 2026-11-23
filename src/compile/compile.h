@@ -108,7 +108,12 @@ typedef enum {
 #define CT_PVEC_ELEM(t)      ((CompileType)(((int)(t) - (int)CT_PVEC) & 3))
 /* A value held through a handle in `.arr` rather than in the Slot itself. */
 #define CT_NOT_SCALAR(t)     (CT_IS_ARRAY(t) || CT_IS_PVEC(t))
-#define CT_IS_HANDLE(t)      (CT_IS_ARRAY(t) || CT_IS_ASSOC(t) || CT_IS_LLIST(t) || CT_IS_PVEC(t))
+/* Every handle kind is one row of the CompileHandleOps registry
+ * (handle_ops.h), which also answers the per-kind questions the shared sites
+ * used to ask by hand; the CT_IS_* windows above remain the encoding itself. */
+struct CompileHandleOps;
+const struct CompileHandleOps* ct_handle_ops(CompileType t);
+#define CT_IS_HANDLE(t)      (ct_handle_ops(t) != NULL)
 
 /* A boxed value (compile-time-known type).  For an array type `a` holds an
  * EXPR_NDARRAY node: BORROWED when passed in as an argument (the program never

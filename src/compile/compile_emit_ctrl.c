@@ -431,13 +431,13 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 Val iv; bool oki = emit(c, init, &iv);
                 c->ll_init_name = saved_init;
                 if (!oki) { c->nscope -= pushed; return -1; }
-                if (CT_IS_PVEC(iv.type) && strcmp(h, "With") == 0) {
+                if (ct_has_value_semantics(iv.type) && strcmp(h, "With") == 0) {
                     /* A With constant cannot be assigned in the interpreter, so
                      * a lowering that lets the body update it would invent a
                      * result: decline. */
                     c->nscope -= pushed; c->ok = false; return -1;
                 }
-                if (CT_IS_LLIST(iv.type) || CT_IS_PVEC(iv.type)) {
+                if (ct_retain_op(iv.type)) {   /* a list or PVector: shared ownership */
                     /* A list local holds a REFERENCE: a new list is adopted, an
                      * existing one (an argument, another local) is retained, so
                      * `b = a` mutates a, exactly as in the interpreter.  A
@@ -451,7 +451,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                     if (iv.tmp && reg_is_owned_arr(iv.reg)) areg = iv.reg;
                     else {
                         areg = alloc_arr(c);
-                        ins(c, CT_IS_PVEC(iv.type) ? OP_PV_RETAIN : OP_LL_RETAIN,
+                        ins(c, ct_retain_op(iv.type),
                             (uint32_t)areg, (uint32_t)iv.reg, 0, z);
                     }
                     arr_regs[narr++] = areg;
@@ -491,7 +491,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         Val body; if (!emit(c, A[1], &body)) { c->nscope -= pushed; return -1; }
         c->nscope -= pushed;
 
-        if (CT_IS_ARRAY(body.type) || CT_IS_LLIST(body.type) || CT_IS_PVEC(body.type)) {
+        if (ct_is_scope_local(body.type)) {   /* array, list or PVector (not an Association) */
             /* The result has to outlive the frees below, so every array local
              * EXCEPT the one carrying it is released, the bank is wound back to
              * where the scope started, and the value is moved down into the
@@ -500,9 +500,9 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 if (arr_regs[i] != body.reg) ins(c, OP_ARR_FREE, (uint32_t)arr_regs[i], 0, 0, z);
             c->arr_top = arr_entry;
             int rres = alloc_arr(c);
-            if (!reg_is_owned_arr(body.reg) && (CT_IS_LLIST(body.type) || CT_IS_PVEC(body.type))) {
+            if (!reg_is_owned_arr(body.reg) && ct_retain_op(body.type)) {
                 /* a borrowed list (an argument): the same list, one more reference */
-                ins(c, CT_IS_PVEC(body.type) ? OP_PV_RETAIN : OP_LL_RETAIN,
+                ins(c, ct_retain_op(body.type),
                     (uint32_t)rres, (uint32_t)body.reg, 0, z);
             } else if (!reg_is_owned_arr(body.reg)) {
                 /* borrowed (an argument array): copy, or the caller's node would

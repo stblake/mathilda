@@ -17,6 +17,7 @@
 #define MATHILDA_COMPILE_EMIT_H
 
 #include "compile_internal.h"   /* Slot / Instr / CompiledProgram / PartSpec / AssocSpec / MgdConst */
+#include "handle_ops.h"         /* CompileHandleOps: per-kind handle facts */
 #include "../ndarray.h"         /* NDUnaryKernel — in nd_unary_elem's signature */
 
 struct CompiledFunction;        /* compiled_callee's return; full type in compiled_function.h */

@@ -6,6 +6,7 @@
 #include "ndreduce.h"          /* ndred_result_degenerate */
 #include "ndarray.h"
 #include "compile.h"
+#include "handle_ops.h"      /* CompileHandleOps: borrow/open/name per handle kind */
 
 #include <stdlib.h>
 #include <string.h>
@@ -253,32 +254,16 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
         out->v.a = (Expr*)e;
         return true;
     }
-    if (CT_IS_LLIST(t)) {
-        /* A LinkedList argument is the caller's own list, BORROWED: the program
-         * mutates it in place, which is the interpreter's reference semantics.
-         * Its element kind is checked when the VM binds it (load_arg). */
-        if (e->type != EXPR_LINKEDLIST) return false;
-        out->v.a = (Expr*)e;
-        return true;
-    }
-    if (CT_IS_PVEC(t)) {
-        /* A PVector argument is an immutable value, BORROWED: the program never
-         * frees or changes it.  Its element kind is checked when the VM binds
-         * it (load_arg); a boxed vector, a List or anything else declines. */
-        if (e->type != EXPR_PVEC) return false;
-        out->v.a = (Expr*)e;
-        return true;
-    }
-    if (CT_IS_ASSOC(t)) {
-        /* A read-only Association bag is BORROWED, exactly like an NDArray
-         * argument: the program never frees it and `owned` stays false.  Build
-         * the single-key index HERE, at the single-threaded marshalling
-         * boundary, so a parallel VM run never triggers the lazy build (which
-         * mutates the shared node) from a worker thread. */
-        if (!is_association(e)) return false;
-        assoc_prebuild_index(e);
-        out->v.a = (Expr*)e;
-        return true;
+    {
+        /* LinkedList / PVector / Association arguments are BORROWED as the
+         * caller's own node (the program never frees one); the row validates the
+         * Expr kind.  An array has no borrow_arg: it packs a nested List below. */
+        const CompileHandleOps* ho = ct_handle_ops(t);
+        if (ho && ho->borrow_arg) {
+            if (!ho->borrow_arg(e, t)) return false;
+            out->v.a = (Expr*)e;
+            return true;
+        }
     }
     if (CT_IS_ARRAY(t)) {
         /* An NDArray argument is BORROWED — the program never frees it, and the
@@ -337,17 +322,11 @@ static Expr* cf_unbox(const CompileValue* v) {
     /* An arbitrary-precision result is a NEW Expr (EXPR_MPFR / bignum Integer /
      * Complex[MPFR,MPFR]) that compiled_eval built and the caller owns. */
     if (CT_IS_MANAGED(v->type)) return v->v.a;
-    /* compiled_eval hands back a NEW EXPR_NDARRAY that the caller owns, so it
-     * becomes the result directly — no copy, no conversion to a nested List. */
-    if (CT_IS_ARRAY(v->type)) return v->v.a;
-    /* An owned association result (B3) is returned as-is — a canonical
-     * Association node the caller owns.  It carries no packed form, so the
-     * CT_IS_ARRAY presentation logic in cf_apply is deliberately skipped. */
-    if (CT_IS_ASSOC(v->type)) return v->v.a;
-    /* A LinkedList result is a reference the caller now owns. */
-    if (CT_IS_LLIST(v->type)) return v->v.a;
-    /* A PVector result is a node the caller now owns (one reference). */
-    if (CT_IS_PVEC(v->type)) return v->v.a;
+    /* Every handle result is a node the caller now owns, returned as-is: a NEW
+     * EXPR_NDARRAY (no copy, no conversion to a nested List), a canonical
+     * Association (no packed form, so the CT_IS_ARRAY presentation logic in
+     * cf_apply is deliberately skipped), or one reference to a list / PVector. */
+    if (CT_IS_HANDLE(v->type)) return v->v.a;
     return NULL;
 }
 
@@ -548,16 +527,16 @@ static void cf_apply_precision_types(CompileType* types, size_t n,
  * At most three such arguments are searched; past that, and when nothing
  * compiles, they are left Real and the function runs through the interpreter. */
 static bool cf_open_arg(CompileType t) {
-    return (CT_IS_LLIST(t) && CT_LLIST_ELEM(t) == CT_BOOL)
-        || (CT_IS_PVEC(t) && CT_PVEC_ELEM(t) == CT_BOOL);
+    const CompileHandleOps* ho = ct_handle_ops(t);
+    return ho && ho->open_choices && ct_handle_elem(t) == CT_BOOL;
 }
 /* The q-th candidate element type of an open argument (a PVector has no
  * Complex storage, so it has two). */
 static CompileType cf_open_pick(CompileType t, int q) {
     static const CompileType order[3] = { CT_REAL, CT_INT, CT_COMPLEX };
-    return CT_IS_PVEC(t) ? CT_PVEC_TYPE(order[q]) : CT_LLIST_TYPE(order[q]);
+    return (CompileType)((int)ct_handle_ops(t)->lo + (int)order[q]);
 }
-static int cf_open_choices(CompileType t) { return CT_IS_PVEC(t) ? 2 : 3; }
+static int cf_open_choices(CompileType t) { return ct_handle_ops(t)->open_choices; }
 
 static CompiledProgram* cf_compile(const Expr* body, const char** names, CompileType* types,
                                    size_t n, unsigned flags, long prec_bits) {
@@ -1248,10 +1227,8 @@ static const char* ct_name(CompileType t) {
         case CT_BIGCOMPLEX: return "MPFRComplex";
         default: break;
     }
-    if (CT_IS_LLIST(t)) return "LinkedList";
-    if (CT_IS_PVEC(t)) return "PVector";
-    if (CT_IS_ASSOC(t)) return "Association";   /* was "Unknown" */
-    return CT_IS_ARRAY(t) ? "Array" : "Unknown";
+    const char* hn = ct_handle_name(t);
+    return hn ? hn : "Unknown";
 }
 
 static Expr* diag_rule(const char* key, Expr* value) {

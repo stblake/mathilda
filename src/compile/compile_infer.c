@@ -8,6 +8,7 @@
  * table lookup (int_closed_head / int_only_head / all_args_int) that decides
  * when integer arguments keep a head's result an Integer, and the fixed-point
  * type helpers for the functional heads (Nest / Fold / FixedPoint / ...). */
+#include "handle_ops.h"          /* CompileHandleOps: value-semantics handles */
 #include "compile_emit.h"        /* Ctx / Val / FnSpec / LoopSpec / IntClosed + emit-core */
 #include "../arithmetic.h"       /* is_rational */
 #include "../symtab.h"           /* symtab_lookup, SymbolDef, ndarray_unary_kernel */
@@ -653,7 +654,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (h == SYM_MemoryConstrained && (na == 2 || na == 3)) return compile_mc_type(c, A, na, out);
     if (h == SYM_If && na == 3) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
-        if (CT_IS_PVEC(tt) || CT_IS_PVEC(te)) return false;      /* no value joins of handles */
+        if (ct_has_value_semantics(tt) || ct_has_value_semantics(te)) return false;   /* no value joins of handles */
         if (tt == te) { *out = tt; return true; }
         *out = num_common(tt, te); return (int)*out >= 0;
     }
@@ -1084,8 +1085,8 @@ static bool infer_apply_core(Ctx* c, const FnSpec* s, const CompileType* argt, i
  * between registers.  Refused here once, for every higher-order form. */
 bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
                         CompileType* out) {
-    for (int i = 0; i < n; i++) if (CT_IS_PVEC(argt[i])) return false;
-    return infer_apply_core(c, s, argt, n, out) && !CT_IS_PVEC(*out);
+    for (int i = 0; i < n; i++) if (ct_has_value_semantics(argt[i])) return false;
+    return infer_apply_core(c, s, argt, n, out) && !ct_has_value_semantics(*out);
 }
 static bool infer_apply_core(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
                              CompileType* out) {

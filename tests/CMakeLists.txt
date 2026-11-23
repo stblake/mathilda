@@ -1280,6 +1280,7 @@ set(COMMON_SRC
     ../src/compile/compile_llist_vm.c
     ../src/compile/compile_pvec.c
     ../src/compile/compile_pvec_vm.c
+    ../src/compile/handle_ops.c
     ../src/compile/compile_vm.c
     ../src/compile/compile_infer.c
     ../src/compile/compile_emit_arith.c
@@ -7112,3 +7113,13 @@ if(USE_ECM)
     add_dependencies(compile_pvec_tests build_ecm)
 endif()
 add_test(NAME compile_pvec_tests COMMAND compile_pvec_tests)
+
+# Compile[] handle kinds through the CompileHandleOps registry: row facts, and one
+# lowered probe shape per Association / LinkedList / PVector op checked against the
+# interpreter (the coverage gate for the handle kinds).
+add_executable(compile_handles_tests test_compile_handles.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_handles_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_handles_tests build_ecm)
+endif()
+add_test(NAME compile_handles_tests COMMAND compile_handles_tests)
