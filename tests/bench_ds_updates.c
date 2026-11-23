@@ -44,6 +44,10 @@ static const Row ROWS[] = {
     { "packed Part-set",        "Module[{p = Range[%d]}, Do[p[[i]] = 0, {i, %d}]; Total[p]]", 1, 25000 },
     { "LinkedList AppendTo",    "Module[{ll = LinkedList[]}, Do[AppendTo[ll, i], {i, %d}]; Length[ll]]", 1, 25000 },
     { "LinkedList pure Append", "Module[{ll = LinkedList[]}, Do[ll = Append[ll, i], {i, %d}]; Length[ll]]", 0, 25000 },
+    { "PVector pure Append",    "Module[{v = PVector[]}, Do[v = Append[v, i], {i, %d}]; Length[v]]", 1, 25000 },
+    { "PVector AppendTo",       "Module[{v = PVector[]}, Do[AppendTo[v, i], {i, %d}]; Length[v]]", 1, 25000 },
+    { "PVector v[[i]]=x",       "Module[{v = PVector[Range[%d]]}, Do[v[[i]] = -i, {i, %d}]; Length[v]]", 1, 25000 },
+    { "PVector v[[i]] read",    "Module[{v = PVector[Range[%d]], s = 0}, Do[s += v[[i]], {i, %d}]; s]", 1, 25000 },
     { "assoc a[[Key[k]]] read", "Module[{a = Association[Table[i -> i, {i, %d}]], s = 0}, Do[s += a[[Key[i]]], {i, %d}]; s]", 1, 25000 },
     { "assoc bulk build",       "Length[Association[Table[i -> i, {i, %d}]]]", 1, 25000 },
 };

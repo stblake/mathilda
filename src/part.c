@@ -5,6 +5,9 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "ds_ops.h"
+#include "pvec_ops.h"
+#include "pvec.h"
 #include "ndarray.h"
 #include "pack.h"      /* pack_force -- lift a small gather source up to the buffer */
 #include "part.h"
@@ -101,6 +104,7 @@ bool part_span_resolve(const Expr* span, int64_t len, int64_t* start, int64_t* s
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
 static bool ll_part_assign(Expr* llx, Expr** indices, size_t nindices, Expr* rhs);
+static void ll_part_msg_partw(const char* head, Expr* ll, Expr* spec);
 
 /* The piece of `rhs` that the k-th of `nsel` positions selected at one level
  * receives. Returns a new reference.
@@ -298,21 +302,55 @@ static Expr* nd_part_assign_or_list(Expr* arr, Expr** indices, size_t nindices, 
     return expr_copy(arr);
 }
 
-static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
-    if (nindices == 0) return expr_copy(rhs);
+/* Part assignment below the top level, per payload kind: the bodies of the
+ * ds_ops part_assign slot.  Each returns the new value of `expr` (a new
+ * reference), or NULL (after a message) to leave the Set unevaluated. */
+bool ll_assign_in_place(Expr* llx, Expr** indices, size_t nindices, Expr* rhs) {
+    return ll_part_assign(llx, indices, nindices, rhs);
+}
 
+Expr* ll_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
     /* A LinkedList reached below the top ({ll}[[1, 2]] = v): written in
      * place, as everywhere -- the enclosing immutable value is rebuilt around
      * the same object. A failed write leaves it unchanged (after its message). */
-    if (expr->type == EXPR_LINKEDLIST) {
         ll_part_assign(expr, indices, nindices, rhs);
         return expr_copy(expr);
-    }
+}
 
-    if (expr->type == EXPR_NDARRAY)
-        return nd_part_assign_or_list(expr, indices, nindices, rhs);
+Expr* nd_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
+    return nd_part_assign_or_list(expr, indices, nindices, rhs);
+}
 
-    if (expr->type == EXPR_SPARSE) {
+Expr* pvec_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
+    /* A PVector is a value: the write builds a new PVector (path copy) and the
+     * old one is untouched.  An integer first subscript is native; any other
+     * spec goes through the List and back. */
+        PVec* pv = expr->data.pvec;
+        Expr* ix = indices[0];
+        if (ix->type == EXPR_INTEGER) {
+            int64_t len = pv_length(pv), k = ix->data.integer;
+            if (k < 0) k = len + k + 1;
+            if (k < 1 || k > len) { ll_part_msg_partw("Set", expr, ix); return expr_copy(expr); }   /* unchanged, as the other kinds */
+            Expr* ne;
+            if (nindices == 1) ne = expr_copy(rhs);
+            else {
+                Expr* cur = pv_get(pv, k - 1);
+                ne = expr_part_assign_rec(cur, indices + 1, nindices - 1, rhs);
+                expr_free(cur);
+                if (!ne) return expr_copy(expr);
+            }
+            return expr_new_pvec(pv_set(pv_retain(pv), k - 1, ne));
+        }
+        Expr* l = pv_to_list(pv);
+        Expr* r = expr_part_assign_rec(l, indices, nindices, rhs);
+        expr_free(l);
+        if (!r) return expr_copy(expr);
+        Expr* back = pvec_make(r);
+        if (back) { expr_free(r); return back; }
+        return r;
+}
+
+Expr* sparse_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
         /* One element: rebuilt sparsely. Anything else (spans, All, a List
          * right-hand side) goes through the dense array and back, keeping the
          * background. A part that does not exist leaves the array as it was. */
@@ -348,6 +386,17 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         Expr* out = evaluate(call);
         expr_free(call);
         return out;
+}
+
+static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
+    if (nindices == 0) return expr_copy(rhs);
+
+    /* A payload kind (LinkedList, NDArray, PVector, SparseArray): its row's
+     * part_assign slot writes below this level. */
+    {
+        bool handled = false;
+        Expr* r = ds_part_assign(expr, indices, nindices, rhs, &handled);
+        if (handled) return r;
     }
 
     if (is_atomic(expr)) return expr_copy(expr);
@@ -599,8 +648,8 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     /* The target is the LinkedList object itself -- what a function body
      * sees after its parameter is substituted (setFirst[l_, v_] :=
      * (l[[1]] = v)): reference semantics make that write the caller's list. */
-    if (sym->type == EXPR_LINKEDLIST)
-        return ll_part_assign(sym, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs)
+    if (ds_has_in_place(sym->type))
+        return ds_assign_in_place(sym, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs)
                ? expr_copy(sym) : NULL;
     if (sym->type != EXPR_SYMBOL) return NULL;
 
@@ -609,11 +658,28 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
 
     /* A variable holding a LinkedList: write the shared object in place; the
      * OwnValue already points at it and is not rebound. */
-    if (current_val->type == EXPR_LINKEDLIST) {
-        bool ok = ll_part_assign(current_val, lhs->data.function.args + 1,
+    if (ds_has_in_place(current_val->type)) {
+        bool ok = ds_assign_in_place(current_val, lhs->data.function.args + 1,
                                  lhs->data.function.arg_count - 1, rhs);
         if (!ok) { expr_free(current_val); return NULL; }
         return current_val;
+    }
+
+    /* v[[i]] = x on a PVector this variable owns exclusively: pv_set edits the
+     * payload in place (O(1) when its nodes are unshared, else one path copy),
+     * and the node is re-pointed at the result.  The node being exclusively
+     * owned is what makes this invisible to every other holder. */
+    if (current_val->type == EXPR_PVEC && lhs->data.function.arg_count == 2 &&
+        lhs->data.function.args[1]->type == EXPR_INTEGER &&
+        symtab_value_exclusively_owned(sym, current_val)) {
+        int64_t len = pv_length(current_val->data.pvec), k = lhs->data.function.args[1]->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k >= 1 && k <= len) {
+            current_val->data.pvec = pv_set(current_val->data.pvec, k - 1, expr_copy(rhs));
+            expr_invalidate_hash(current_val);
+            eval_clock_bump_binding(symtab_get_def(sym->data.symbol.name));
+            return current_val;
+        }
     }
 
     /* p[[i, ...]] = scalar on a packed array this variable owns exclusively:
@@ -668,6 +734,15 @@ static bool is_atomic(Expr* e) {
 
 Expr* expr_head(Expr* e) {
     if (!e) return NULL;
+    /* Payload kinds (packed array, SparseArray, LinkedList, ...) name their own
+     * Head through the ds_ops registry.  A packed list IS a List and must say so:
+     * is_atomic() above deliberately still reports true for it (the 13 sites that
+     * consult it go on to read data.function.arg_count, which aliases the ndarray
+     * payload's `data` pointer, so flipping that predicate would turn a heap
+     * pointer into an element count); presentation is decided in the NDArray row
+     * and in the AtomQ builtin, not in the internal walker guard. */
+    const DsOps* ops = ds_ops(e->type);
+    if (ops) return ops->head(e);
     switch (e->type) {
         case EXPR_INTEGER: return expr_new_symbol(SYM_Integer);
         case EXPR_BIGINT: return expr_new_symbol(SYM_Integer);
@@ -675,19 +750,9 @@ Expr* expr_head(Expr* e) {
 #ifdef USE_MPFR
         case EXPR_MPFR: return expr_new_symbol(SYM_Real);
 #endif
-        /* A packed list IS a List and must say so. Note is_atomic() above
-         * deliberately still reports true for it: the 13 sites that consult it
-         * all go on to read data.function.arg_count, which aliases the ndarray
-         * payload's `data` pointer, so flipping that predicate would turn a
-         * heap pointer into an element count. Presentation is decided here and
-         * in the AtomQ builtin, not in the internal walker guard. */
-        case EXPR_NDARRAY:
-            return expr_new_symbol(is_packed_list(e) ? SYM_List : SYM_NDArray);
         case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
         case EXPR_STRING: return expr_new_symbol(SYM_String);
-        case EXPR_SPARSE: return expr_new_symbol(SYM_SparseArray);
         case EXPR_COMPILED: return expr_new_symbol(SYM_CompiledFunction);
-        case EXPR_LINKEDLIST: return expr_new_symbol(SYM_LinkedList);
         case EXPR_FUNCTION: return expr_copy(e->data.function.head);
         default: return NULL;
     }
@@ -822,6 +887,7 @@ static int64_t* ll_part_positions(const char* head, Expr* llx, Expr* idx, int64_
     return NULL;
 }
 
+Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices);
 static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     LinkedList* ll = llx->data.llist;
     int64_t len = ll_length(ll);
@@ -851,6 +917,37 @@ static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     }
     free(pos);
     return expr_new_linkedlist(out);
+}
+
+Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices) { return ll_part(llx, indices, nindices); }
+
+/* PVector Part: ll_part's reading rules over a persistent vector.  An integer
+ * subscript is one element; All / Span / List select a new PVector (sharing
+ * nothing with the source -- a selection is a fresh, short vector). */
+Expr* pvec_part(Expr* pvx, Expr** indices, size_t nindices) {
+    PVec* pv = pvx->data.pvec;
+    int64_t len = pv_length(pv);
+    Expr* idx = indices[0];
+    Expr** rest = indices + 1;
+    size_t nrest = nindices - 1;
+
+    if (idx->type == EXPR_INTEGER) {
+        int64_t k = idx->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k < 1 || k > len) { ll_part_msg_partw("Part", pvx, idx); return NULL; }
+        return ll_elem_part(pv_get(pv, k - 1), rest, nrest);
+    }
+    int64_t n = 0;
+    int64_t* pos = ll_part_positions("Part", pvx, idx, len, &n);
+    if (!pos) return NULL;
+    PVec* out = pv_new();
+    for (int64_t i = 0; i < n; i++) {
+        Expr* r = nrest == 0 ? pv_get(pv, pos[i]) : ll_elem_part(pv_get(pv, pos[i]), rest, nrest);
+        if (!r) { pv_release(out); free(pos); return NULL; }
+        out = pv_push(out, r);
+    }
+    free(pos);
+    return expr_new_pvec(out);
 }
 
 /* ------------------------------------------------------------------------
@@ -965,20 +1062,16 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
      * positions or keys selects a sub-ASSOCIATION. */
     if (is_association(expr)) return assoc_part(expr, idx, rest, nrest);
 
-    /* A SparseArray reached below the top level ({c0, sa}[[2, 1]]): the
-     * remaining spec is its own Part. builtin_part dispatches the top level;
-     * this covers the recursion, where the atomic test below would otherwise
-     * leave the whole Part unevaluated. [[0]] included: sp_part answers List,
-     * for a SparseArray's part 0. */
-    if (expr->type == EXPR_SPARSE) {
-        bool err = false;
-        return sp_part(expr, indices, nindices, &err);
+    /* A payload kind reached below the top level ({c0, sa}[[2, 1]], {ll}[[1, 3]],
+     * {pv}[[1, 2]]): the remaining spec is the kind's own Part, through its
+     * ds_ops row.  A SparseArray answers [[0]] itself (List); the other kinds
+     * decline it so head extraction below handles it.  An NDArray keeps its own
+     * path (it is atomic here). */
+    if (expr->type != EXPR_NDARRAY) {
+        int st = DS_PART_DECLINE;
+        Expr* r = ds_part(expr, indices, nindices, &st);
+        if (st == DS_PART_DONE) return r;
     }
-
-    /* A LinkedList, at the top level or below it ({ll}[[1, 3]]). */
-    if (expr->type == EXPR_LINKEDLIST &&
-        !(idx->type == EXPR_INTEGER && idx->data.integer == 0))
-        return ll_part(expr, indices, nindices);
 
     // Handle integer index
     if (idx->type == EXPR_INTEGER) {
@@ -1374,31 +1467,17 @@ Expr* builtin_part(Expr* res) {
         }
     }
 
-    /* SparseArray: an element by binary search, or a SparseArray selection
-     * built from the stored entries only (sparse/sparse_part.c). NULL -- an
-     * out-of-range part (after Part::partw) or a spec it does not take --
-     * leaves the Part unevaluated. */
-    if (expr->type == EXPR_SPARSE) {
-        bool err = false;
-        return sp_part(expr, indices, nindices, &err);
+    /* Packed array / SparseArray / LinkedList: element access through the
+     * ds_ops row. A NDArray [[0]] (head extraction) declines to the general
+     * path; Span/All/List positions on an NDArray degrade to the general List
+     * Part via delist-and-reeval; a part that does not exist leaves the Part
+     * unevaluated. */
+    {
+        int st = DS_PART_DECLINE;
+        Expr* r = ds_part(expr, indices, nindices, &st);
+        if (st == DS_PART_DEGRADE) return ndarray_delist_and_reeval(res);
+        if (st == DS_PART_DONE) return r;
     }
-
-    /* NDArray: index the flat buffer directly. [[0]] (head extraction) falls
-     * through to expr_part/expr_head, which reports NDArray as the head. Plain
-     * integer subscripts index natively; Span/All/List positions degrade to the
-     * general List Part via delist-and-reeval. */
-    if (is_ndarray(expr) &&
-        !(nindices > 0 && indices[0]->type == EXPR_INTEGER &&
-          indices[0]->data.integer == 0)) {
-        bool degrade = false;
-        Expr* r = ndarray_part(expr, indices, nindices, &degrade);
-        if (r) return r;
-        if (degrade) return ndarray_delist_and_reeval(res);
-        return NULL;  /* out-of-range / too many subscripts: leave unevaluated */
-    }
-
-    /* LinkedList: O(1) element access; selections are new LinkedLists. */
-    if (expr->type == EXPR_LINKEDLIST) return expr_part(expr, indices, nindices);
 
     // [[0]] is allowed even for atoms
     if (nindices > 0 && indices[0]->type == EXPR_INTEGER && indices[0]->data.integer == 0) {
@@ -1568,6 +1647,7 @@ static Expr* first_last_element(Expr* container, Expr* entry) {
 
 /* First / Last of a LinkedList: O(1). An empty list gives the default when
  * there is one, else First::nofirst / Last::nolast and stays unevaluated. */
+Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last);
 static Expr* ll_first_last(Expr* arg, Expr* deflt, bool last) {
     LinkedList* ll = arg->data.llist;
     int64_t n = ll_length(ll);
@@ -1580,6 +1660,8 @@ static Expr* ll_first_last(Expr* arg, Expr* deflt, bool last) {
     return NULL;
 }
 
+Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last) { return ll_first_last(arg, deflt, last); }
+
 Expr* builtin_first(Expr* res) {
     if (res->type != EXPR_FUNCTION ||
         res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
@@ -1589,7 +1671,7 @@ Expr* builtin_first(Expr* res) {
      * back UNEVALUATED, while the identical List call works.  First is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
      * materialises every element) remains the fallback for what it declines. */
-    if (arg->type == EXPR_LINKEDLIST) return ll_first_last(arg, deflt, false);
+    { bool dh; Expr* dr = ds_native(arg, SYM_First, res, &dh); if (dh) return dr; }
     if (is_ndarray(arg)) {
         Expr* fast = ndstruct_head_tail(res, ND_FIRST);
         if (fast) return fast;
@@ -1611,7 +1693,7 @@ Expr* builtin_last(Expr* res) {
      * back UNEVALUATED, while the identical List call works.  Last is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
      * materialises every element) remains the fallback for what it declines. */
-    if (arg->type == EXPR_LINKEDLIST) return ll_first_last(arg, deflt, true);
+    { bool dh; Expr* dr = ds_native(arg, SYM_Last, res, &dh); if (dh) return dr; }
     if (is_ndarray(arg)) {
         Expr* fast = ndstruct_head_tail(res, ND_LAST);
         if (fast) return fast;
@@ -1625,7 +1707,7 @@ Expr* builtin_last(Expr* res) {
 Expr* builtin_most(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_LINKEDLIST) return ll_most_rest(res, true);
+    { bool dh; Expr* dr = ds_native(arg, SYM_Most, res, &dh); if (dh) return dr; }
     /* An NDArray is atomic, so is_atomic below rejects it and the call comes
      * back UNEVALUATED, while the identical List call works.  Most is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
@@ -1653,7 +1735,7 @@ Expr* builtin_most(Expr* res) {
 Expr* builtin_rest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_LINKEDLIST) return ll_most_rest(res, false);
+    { bool dh; Expr* dr = ds_native(arg, SYM_Rest, res, &dh); if (dh) return dr; }
     /* An NDArray is atomic, so is_atomic below rejects it and the call comes
      * back UNEVALUATED, while the identical List call works.  Rest is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
@@ -2023,7 +2105,7 @@ static bool positions_reachable(Expr* expr, Expr* pos, bool insert) {
 
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
-    if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_insert(res);
+    { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Insert, res, &dh); if (dh) return dr; }
     if (expr_is_number_atom(res->data.function.args[0]))
         return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[2], true);
     if (is_association(res->data.function.args[0]))
@@ -2258,7 +2340,7 @@ Expr* builtin_delete(Expr* res) {
     if (res->data.function.arg_count == 1) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {
-        if (res->data.function.args[0]->type == EXPR_LINKEDLIST) return ll_delete(res);
+        { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Delete, res, &dh); if (dh) return dr; }
         if (!positions_reachable(res->data.function.args[0], res->data.function.args[1], false))
             return NULL;
         return expr_delete(res->data.function.args[0], res->data.function.args[1]);

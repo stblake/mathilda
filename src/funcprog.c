@@ -1,4 +1,5 @@
 #include "linkedlist_seq.h"   /* LLSeq: Tuples / Permutations over LinkedLists */
+#include "ds_ops.h"
 #include "print.h"
 
 #include "funcprog.h"
@@ -553,7 +554,7 @@ Expr* builtin_map(Expr* res) {
 
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
-    if (expr->type == EXPR_LINKEDLIST) return ll_map(res);
+    { bool dh; Expr* dr = ds_native(expr, SYM_Map, res, &dh); if (dh) return dr; }
 
     /* Map over an association threads over its values, preserving keys:
      * Map[f, <|k -> v|>] -> <|k -> f[v]|>. Only the default level (no explicit
@@ -1148,7 +1149,7 @@ Expr* builtin_select(Expr* res) {
     }
 
     /* A LinkedList streams through Select block by block (linkedlist_struct.c). */
-    if (list->type == EXPR_LINKEDLIST) return ll_select(res);
+    { bool dh; Expr* dr = ds_native(list, SYM_Select, res, &dh); if (dh) return dr; }
 
     /* Select over an association filters by value, preserving keys:
      * Select[<|k -> v|>, p] keeps the entries where p[v] is True;

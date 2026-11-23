@@ -17,6 +17,7 @@
 #define MATHILDA_COMPILE_EMIT_H
 
 #include "compile_internal.h"   /* Slot / Instr / CompiledProgram / PartSpec / AssocSpec / MgdConst */
+#include "handle_ops.h"         /* CompileHandleOps: per-kind handle facts */
 #include "../ndarray.h"         /* NDUnaryKernel — in nd_unary_elem's signature */
 
 struct CompiledFunction;        /* compiled_callee's return; full type in compiled_function.h */
@@ -126,6 +127,7 @@ typedef struct {
     CompileType ll_want_elem;
     const char* ll_init_name;
     bool        uses_llist;
+    bool        pv_plain;          /* a PV_NORMAL was emitted: array results present as a plain List */
     bool        ll_module_inner;   /* emit_ctrl: this Module call is a retry attempt */
 
     /* Expr-level CSE (see cse_plan).  A chosen repeated subtree is computed once
@@ -349,6 +351,11 @@ bool llist_global_value(Ctx* c, const char* nm, Val* out);
 bool llist_global_type(const Ctx* c, const char* nm, CompileType* out);
 CompileType llist_guess(const Ctx* c, const char* name);
 bool llist_retry(Ctx* c, const Expr* locals);
+/* PVector (compile_pvec.c): the head hook pair, and `v = rhs` on a PVector
+ * local (0: the target is not one; 1: lowered; -1: failed, c->ok cleared). */
+bool try_emit_pvec(Ctx* c, const char* h, Expr** A, size_t na, Val* out);
+bool try_infer_pvec(Ctx* c, const char* h, Expr** A, size_t na, CompileType* out);
+int  pvec_emit_assign(Ctx* c, const Expr* target, const Expr* rhs, Val* out);
 /* Type-inference engine (compile_infer.c): infer_type is the entry; the rest
  * type the functional / integer-closed heads for emit_node's result register. */
 bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n, CompileType* out);

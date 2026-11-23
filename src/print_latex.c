@@ -29,6 +29,8 @@
  *     through every renderer.
  */
 
+#include "ds_ops.h"
+#include "pvec.h"
 #include "print_latex.h"
 #include "linkedlist.h"
 #include "print.h"          /* expr_to_string, for fallback */
@@ -588,11 +590,12 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
 
-    /* ---- A LinkedList: its summary, LinkedList[<n>] ---- */
-    if (e->type == EXPR_LINKEDLIST) {
-        char buf[96];
-        snprintf(buf, sizeof buf, "\\text{LinkedList}\\left[\\langle %" PRId64 "\\rangle \\right]",
-                 ll_length(e->data.llist));
+    /* ---- A LinkedList / PVector: its summary Name[<n>], from the ds_ops row ---- */
+    if (e->type == EXPR_PVEC || e->type == EXPR_LINKEDLIST) {
+        const DsOps* o = ds_ops(e->type);
+        char buf[128];
+        snprintf(buf, sizeof buf, "\\text{%s}\\left[\\langle %" PRId64 "\\rangle \\right]",
+                 o->name, o->length(e));
         lb_cat(b, buf);
         return;
     }

@@ -784,6 +784,9 @@ static void pack_mark_aware_heads(void) {
          * PopFirst on a packed variable go through First/Last/Most/Rest, which
          * are buffer-aware themselves. */
         "LinkedList", "Push", "Pop", "PopFirst",
+        /* PVector[packed] copies a rank-1 int64/float64 buffer straight into
+         * typed leaves (pv_push_i64 / pv_push_real, src/pvec_ops.c). */
+        "PVector",
         /* SameQ / UnsameQ are expr_eq, which compares a buffer against a boxed
          * List (or another buffer) element by element without materialising.
          * Through the gate they compared the MATERIALISED Complex[1., 0.]
@@ -1131,6 +1134,8 @@ static void pack_mark_aware_heads(void) {
         /* An int64 buffer becomes LL_I64 storage: the same exact Integers;
          * the stack heads move values without reading an element. */
         "LinkedList", "Push", "Pop", "PopFirst",
+        /* An int64 buffer becomes typed int64 PVector leaves: exact Integers. */
+        "PVector",
         /* SparseArray keeps an int64 buffer's values as exact Integers (an
          * SPV_INT64 value buffer read through the exact accessor), and the
          * array predicates read no element except through

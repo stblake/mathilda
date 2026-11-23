@@ -8,6 +8,7 @@
  * The main entry point is evaluate(), which calls evaluate_step() in a loop.
  */
 
+#include "pvec_ops.h"
 #include "eval.h"
 #include "linkedlist.h"
 #include "arithmetic.h"   /* g_arith_warnings_muted: internal-probe marker */
@@ -3326,6 +3327,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
         case EXPR_COMPILED:       /* compiled function object: an atomic value */
         case EXPR_SPARSE:         /* SparseArray raw object: never re-evaluated */
         case EXPR_LINKEDLIST:     /* LinkedList object: a (mutable) atom      */
+        case EXPR_PVEC:           /* persistent vector: an atomic value       */
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif
@@ -3504,7 +3506,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     switch (orig_arg->type) {
                         case EXPR_INTEGER: case EXPR_REAL: case EXPR_STRING:
                         case EXPR_BIGINT: case EXPR_NDARRAY: case EXPR_COMPILED:
-                        case EXPR_SPARSE: case EXPR_LINKEDLIST:
+                        case EXPR_SPARSE: case EXPR_LINKEDLIST: case EXPR_PVEC:
 #ifdef USE_MPFR
                         case EXPR_MPFR:
 #endif
@@ -3888,6 +3890,15 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * registered native kernel (sparse_native), if any, declines. A
              * builtin that reads sparse arguments itself (SPG_NATIVE) gets
              * the gate only if it declines -- see the post-gate below. */
+            /* PVector gate (pvec_ops.c): native O(1)/O(log n) operations on a
+             * persistent vector, and the List round trip for the rest. One load
+             * until the first PVector exists. */
+            if (g_pvec_created && head->type == EXPR_SYMBOL) {
+                g_trace_suppress++;
+                Expr* pg = pvec_gate(res, head->data.symbol.name, attrs);
+                g_trace_suppress--;
+                if (pg) { expr_free(res); *changed = true; return pg; }
+            }
             if (hdef && hdef->sparse_native && sp_any_created() &&
                 eval_sparse_gate_applies(res, hdef->sparse_mode)) {
                 /* A native sparse kernel (sparse/sparse_*.c) gets first try. */

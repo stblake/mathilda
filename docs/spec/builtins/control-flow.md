@@ -986,7 +986,7 @@ expression would.
   outside the compilable subset makes the whole body fall back. Compiled code can
   also functionally **update** an association: `Append[assoc, key -> value]`
   returns a new association with the key set (an existing key moves to the end, as
-  the interpreter's `Append` does in Mathematica 15; a new key is appended),
+  the interpreter's `Append` does in the reference; a new key is appended),
   the value being any compiled machine expression. The mutating `AssociateTo[sym,
   …]` is not compiled (it rebinds a symbol) and stays in the interpreter, as do
   `KeyUnion` (a key list), `PositionIndex` (list-valued entries) and the grouping

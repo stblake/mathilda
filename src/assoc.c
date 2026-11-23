@@ -799,7 +799,7 @@ Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval) {
     return result;
 }
 
-/* Append[assoc, key -> newval] with the interpreter's (Mathematica 15) key
+/* Append[assoc, key -> newval] with the interpreter's (the reference) key
  * order: an existing entry with that key is REMOVED from where it was and the
  * new rule goes at the END, so Append[<|a -> 1, b -> 2|>, a -> 9] is
  * <|b -> 2, a -> 9|>.  (assoc_set_key, which replaces in place, is the older

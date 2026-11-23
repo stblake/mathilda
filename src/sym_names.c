@@ -456,6 +456,11 @@ const char* SYM_Log10 = NULL;
 const char* SYM_Log2 = NULL;
 const char* SYM_SparseArray = NULL;
 const char* SYM_LinkedList = NULL;
+const char* SYM_PVector = NULL;
+const char* SYM_Insert = NULL;
+const char* SYM_Delete = NULL;
+const char* SYM_ReplacePart = NULL;
+const char* SYM_PVectorQ = NULL;
 const char* SYM_Push = NULL;
 const char* SYM_Pop = NULL;
 const char* SYM_PopFirst = NULL;
@@ -1646,6 +1651,11 @@ void sym_names_init(void) {
     SYM_Log2                       = intern_symbol("Log2");
     SYM_SparseArray                = intern_symbol("SparseArray");
     SYM_LinkedList                 = intern_symbol("LinkedList");
+    SYM_PVector                    = intern_symbol("PVector");
+    SYM_Insert                     = intern_symbol("Insert");
+    SYM_Delete                     = intern_symbol("Delete");
+    SYM_ReplacePart                = intern_symbol("ReplacePart");
+    SYM_PVectorQ                   = intern_symbol("PVectorQ");
     SYM_Push                       = intern_symbol("Push");
     SYM_Pop                        = intern_symbol("Pop");
     SYM_PopFirst                   = intern_symbol("PopFirst");
@@ -2500,7 +2510,7 @@ void sym_mark_mathilda_context(void) {
         "HypergraphRestriction", "HypergraphStarExpansion", "HypergraphToGraph", "HypergraphVertexAdd", "HypergraphVertexDelete",
         "Image3DQ", "LinkedList", "ListGradient", "LoadModule", "MachineIntegerQ", "ND",
         "NDArray", "NDArrayQ", "NLimit", "NResidue", "NSeries",
-        "PackedArrayQ", "PDEClassify", "PolynomialSqrt", "Pop", "PopFirst", "Push", "RandomHypergraph", "RatCanonCancel",
+        "PackedArrayQ", "PDEClassify", "PVector", "PVectorQ", "PolynomialSqrt", "Pop", "PopFirst", "Push", "RandomHypergraph", "RatCanonCancel",
         "RatCanonNormalize", "RatCanonPrototype", "RationalQ", "SimplifyCount", "SlashCommand",
         "StronglyConnectedComponents",
         "Subhypergraph", "ToNDArray", "ToPackedArray", "TransversalHypergraph", "UniformHypergraphQ"

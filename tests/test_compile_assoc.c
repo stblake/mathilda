@@ -361,7 +361,7 @@ static void test_functional_update(void) {
                 "[<|\"a\" -> 1., \"b\" -> 2.|>, 3.] === <|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>");
 
     /* an existing key MOVES TO THE END, as the interpreter's Append does
-     * (Mathematica 15): compiled and interpreted must agree on key order. */
+     * (the reference): compiled and interpreted must agree on key order. */
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"
                 "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === <|\"a\" -> 1., \"c\" -> 3., \"b\" -> 9.|>");
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"

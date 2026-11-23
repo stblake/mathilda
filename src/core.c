@@ -12,9 +12,11 @@
 #define _GNU_SOURCE
 #endif
 
+#include "pvec_ops.h"
 #include "core.h"
 #include "linkedlist.h"
 #include "linkedlist_seq.h"   /* LLSeq: ComposeList over a LinkedList */
+#include "ds_ops.h"
 #include "poly/solvepoly.h"   /* roots-of-unity counter for the TC unwind registry */
 #include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
@@ -1157,6 +1159,7 @@ void core_init(void) {
     purefunc_init();
     void minus_init(void);  minus_init();   /* Minus[x] -> Times[-1, x] */
     linkedlist_init();                      /* LinkedList[] (linkedlist.c) */
+    pvec_init();                            /* PVector[] (pvec_ops.c) */
     stats_init();
     partitions_init();
     poly_init();
@@ -1843,13 +1846,11 @@ Expr* builtin_length(Expr* res) {
             len = 0;                 /* Rational/Complex: an atom, no parts */
         } else if (arg->type == EXPR_FUNCTION) {
             len = (int64_t)arg->data.function.arg_count;
-        } else if (arg->type == EXPR_NDARRAY) {
-            /* numpy len(): the leading-axis length (rank >= 1 always). */
-            len = arg->data.ndarray.dims[0];
-        } else if (arg->type == EXPR_SPARSE) {
-            len = arg->data.sparse->dims[0];
-        } else if (arg->type == EXPR_LINKEDLIST) {
-            len = ll_length(arg->data.llist);      /* O(1) */
+        } else {
+            /* A payload kind registered in ds_ops: NDArray (numpy len(): the
+             * leading-axis length), SparseArray, LinkedList (O(1)). */
+            const DsOps* ops = ds_ops(arg->type);
+            if (ops && ops->length) len = ops->length(arg);
         }
         return expr_new_integer(len);
     }
@@ -1973,17 +1974,12 @@ Expr* builtin_dimensions(Expr* res) {
     Expr* arg = res->data.function.args[0];
     int depth = 0;
     int64_t dims[DIMENSIONS_MAX_DEPTH];
-    if (arg->type == EXPR_NDARRAY) {
-        /* O(1): rank/dims are already stored directly, no probing needed. */
-        depth = arg->data.ndarray.rank;
-        if (depth > max_depth) depth = max_depth;
-        for (int i = 0; i < depth; i++) dims[i] = arg->data.ndarray.dims[i];
+    const DsOps* dops = ds_ops(arg->type);
+    if (dops && dops->dims) {
+        /* O(1): rank/dims are stored directly on a packed or sparse array. */
+        depth = dops->dims(arg, dims, max_depth);
     } else if (arg->type == EXPR_LINKEDLIST) {
         depth = get_dimensions_ll(arg, dims, max_depth);
-    } else if (arg->type == EXPR_SPARSE) {
-        depth = arg->data.sparse->rank;
-        if (depth > max_depth) depth = max_depth;
-        for (int i = 0; i < depth; i++) dims[i] = arg->data.sparse->dims[i];
     } else if (max_depth > 0 && arg->type == EXPR_FUNCTION && !expr_is_number_atom(arg) &&
         arg->data.function.head->type == EXPR_SYMBOL) {
         /* a Rational/Complex number is an atom: Dimensions[3/4] is {} */
@@ -2703,7 +2699,7 @@ Expr* builtin_append(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
     if (is_association(expr)) return assoc_add_rules(expr, elem, false);
-    if (expr->type == EXPR_LINKEDLIST) return ll_append_prepend(res, false);
+    { bool dh; Expr* dr = ds_native(expr, SYM_Append, res, &dh); if (dh) return dr; }
     /* One allocation and two memcpys on the buffer. Until this existed Append
      * was "correct by omission" in pack.c -- the gate materialised 10^6 Exprs
      * so the generic walk below could add one element to the end. */
@@ -2738,7 +2734,7 @@ Expr* builtin_prepend(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
     if (is_association(expr)) return assoc_add_rules(expr, elem, true);
-    if (expr->type == EXPR_LINKEDLIST) return ll_append_prepend(res, true);
+    { bool dh; Expr* dr = ds_native(expr, SYM_Prepend, res, &dh); if (dh) return dr; }
     if (is_ndarray(expr)) {                       /* see builtin_append above */
         Expr* nd = ndstruct_append(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
@@ -2789,7 +2785,8 @@ static Expr* inplace_assign_back(Expr* sym, Expr* new_val) {
 /* AppendTo / PrependTo on a LinkedList: O(1) at either end, in place.
  * Consumes `llx` (the list's own atom) and returns it; NULL after
  * Head::llcyc when `elem` would make the list contain itself. */
-static Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend) {
+/* The LinkedList row's append_to slot (ds_ops.c). */
+Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend) {
     LinkedList* ll = llx->data.llist;
     if (ll_would_cycle(ll, elem)) {
         ll_cycle_message(head, elem);
@@ -2808,7 +2805,7 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     const char* name = prepend ? "PrependTo" : "AppendTo";
     /* The LinkedList object itself (a function parameter substituted into
      * the body): grow it in place, as through a variable. */
-    if (sym->type == EXPR_LINKEDLIST) return ll_append_to(name, expr_copy(sym), elem, prepend);
+    if (ds_has_append_to(sym->type)) return ds_append_to(name, expr_copy(sym), elem, prepend);
     if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
 
     if (sym->type == EXPR_SYMBOL && !symtab_get_own_values(sym->data.symbol.name)) {
@@ -2821,10 +2818,10 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     Expr* current_val = evaluate(sym);
     if (!current_val) return NULL;
     /* A LinkedList grows in place in O(1); the variable keeps pointing at it. */
-    if (current_val->type == EXPR_LINKEDLIST) return ll_append_to(name, current_val, elem, prepend);
+    if (ds_has_append_to(current_val->type)) return ds_append_to(name, current_val, elem, prepend);
     /* A SparseArray appends through Append's native sparse kernel (a dense
      * answer for an element that is not a row of the array). */
-    if (current_val->type == EXPR_SPARSE) {
+    if (current_val->type == EXPR_SPARSE || current_val->type == EXPR_PVEC) {
         Expr* aa[2] = { current_val, expr_copy(elem) };          /* adopts current_val */
         Expr* call = expr_new_function(expr_new_symbol(prepend ? "Prepend" : "Append"), aa, 2);
         Expr* new_val = evaluate(call);
@@ -4575,23 +4572,27 @@ Expr* builtin_quotient(Expr* res) {
  * depth 2 (Mathematica: Depth[{}] and Depth[f[]] are 2). Level's negative
  * level specs keep the other convention, which is also Mathematica's there:
  * Level[{{}}, {-2}] is {{{}}}, so {} sits at level -1. */
+static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two);
+struct DepthEx { int64_t max_d; bool heads, empty_is_two; };
+static bool depth_ex_fn(Expr* el, void* ud) {
+    struct DepthEx* dc = (struct DepthEx*)ud;
+    int64_t d = get_expr_depth_ex(el, dc->heads, dc->empty_is_two);
+    if (d > dc->max_d) dc->max_d = d;
+    return true;
+}
 static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
     /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
      * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
     if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
-    /* A LinkedList nests like the List it stands for. */
-    if (e->type == EXPR_LINKEDLIST) {
-        const LinkedList* ll = e->data.llist;
-        int64_t n = ll_length(ll), max_d = empty_is_two ? 1 : 0;
-        for (int64_t i = 0; i < n; i++) {
-            bool own;
-            Expr* el = ll_elem_view(ll, i, &own);
-            int64_t d = get_expr_depth_ex(el, heads, empty_is_two);
-            ll_elem_done(el, own);
-            if (d > max_d) max_d = d;
-            if (own && max_d >= 1) break;        /* typed: every element is an atom */
-        }
-        return max_d + 1;
+    /* A payload sequence (LinkedList, PVector, ...) nests like the List it
+     * stands for, through its ds_ops row: typed storage holds atoms (depth 2
+     * without visiting them), a boxed one is one more than its deepest element. */
+    if (ds_has_each(e->type)) {
+        const DsOps* o = ds_ops(e->type);
+        if (o->length(e) > 0 && ds_atoms_only(e)) return 2;
+        struct DepthEx dc = { empty_is_two ? 1 : 0, heads, empty_is_two };
+        ds_each(e, depth_ex_fn, &dc);
+        return dc.max_d + 1;
     }
     if (e->type != EXPR_FUNCTION) return 1;
 
@@ -6324,6 +6325,15 @@ Expr* builtin_time_constrained(Expr* res) {
 #endif /* !_WIN32 */
 
     Expr* body = expr_copy(expr_arg);
+    /* The context state at entry.  A timeout the evaluator records cooperatively
+     * (no longjmp: the only enforcement where there is no async layer, and the
+     * usual path elsewhere) hands the body back through the Abort[] sentinel, so
+     * tc_run_guarded's own restore -- which belongs to the jump -- never ran: a
+     * Begin / BeginPackage left open by the aborted body then redirected every
+     * later symbol.  Restored below when this frame's timeout ended the body. */
+    size_t tc_ctxdep = context_stack_depth();
+    Expr* tc_ctx0 = NULL; Expr* tc_path0 = NULL;
+    context_capture(&tc_ctx0, &tc_path0);
     Expr* result = tc_run_guarded(body);
 
 #ifndef _WIN32
@@ -6388,6 +6398,12 @@ Expr* builtin_time_constrained(Expr* res) {
      * not falsely "$RecursionLimit exceeded". */
     if (jumped) eval_reset_recursion_depth(saved_depth);
 
+    if (tripped == me && !jumped) {
+        context_unwind_to(tc_ctxdep);
+        context_restore(tc_ctx0, tc_path0);
+    } else {
+        context_release(tc_ctx0, tc_path0);
+    }
     if (tripped == me || faulted || (jumped && tripped < 0)) {
         /* Our timeout (or a fault inside the body): consume the abort and
          * answer failexpr, evaluated after the frame is gone -- under the

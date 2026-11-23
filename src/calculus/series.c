@@ -23,6 +23,7 @@
  * Normal[s] drops the O-term from a SeriesData and returns an ordinary sum.
  */
 
+#include "ds_ops.h"
 #include "series.h"
 #include "linkedlist.h"
 #include "series_ratpoly.h" /* FLINT truncated-series arithmetic over Q */
@@ -959,7 +960,7 @@ static bool so_is_purely_numeric(Expr* e) {
 #endif
             return true;
         case EXPR_SYMBOL: case EXPR_STRING: case EXPR_NDARRAY: case EXPR_COMPILED:
-        case EXPR_SPARSE: case EXPR_LINKEDLIST: return false;
+        case EXPR_SPARSE: case EXPR_LINKEDLIST: case EXPR_PVEC: return false;
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
@@ -4449,16 +4450,13 @@ Expr* builtin_normal(Expr* res) {
         arg->data.function.head->data.symbol.name == SYM_Dispatch && arg->data.function.arg_count == 1)
         return expr_copy(arg->data.function.args[0]);
 
-    /* Normal[SparseArray[...]] is the dense array it represents. */
-    if (arg->type == EXPR_SPARSE) return sp_normal(arg->data.sparse);
-
-    /* Normal[LinkedList[...]] is its elements as a List (packed when the
-     * storage is typed). */
-    if (arg->type == EXPR_LINKEDLIST) return ll_to_list(arg->data.llist);
-
-    /* Normal[ndarray] converts an NDArray back to its equivalent nested List. */
-    if (arg->type == EXPR_NDARRAY) {
-        return ndarray_to_nested_list(arg);
+    /* Normal[SparseArray / LinkedList / NDArray] materialises through the ds_ops
+     * row: the dense array, the element List (packed when the storage is typed),
+     * or the nested List. */
+    {
+        bool handled = false;
+        Expr* r = ds_to_list(arg, &handled);
+        if (handled) return r;
     }
 
     /* Normal[assoc] converts an association to its list of rules. */

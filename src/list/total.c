@@ -1,3 +1,4 @@
+#include "../ds_ops.h"
 #include "linkedlist.h"
 #include "list_common.h"
 #include "total.h"
@@ -9,21 +10,22 @@
  * of Lists only. An element with any other head is a leaf, so
  * Total[{z^2, 1}, Infinity] is 1 + z^2 (descending into Power[z, 2] made it
  * 3 + z) and Total[{{a + 1, 2}}, {-1}] totals the rows. */
+static int64_t get_depth_for_total(Expr* e);
+static bool total_depth_fn(Expr* el, void* ud) {
+    int64_t d = get_depth_for_total(el);
+    if (d > *(int64_t*)ud) *(int64_t*)ud = d;
+    return true;
+}
 static int64_t get_depth_for_total(Expr* e) {
     if (e->type == EXPR_NDARRAY) return 1 + e->data.ndarray.rank;
-    if (e->type == EXPR_LINKEDLIST) {
-        /* A LinkedList nests like the List it stands for. A typed list holds
-         * machine numbers only, so its depth is 2 without a scan; a boxed one
-         * reads each element through a borrowed pointer. */
-        LinkedList* ll = e->data.llist;
-        int64_t n = ll_length(ll);
-        if (n == 0) return 1;
-        if (ll_kind(ll) != LL_BOXED) return 2;
+    if (ds_has_each(e->type)) {
+        /* A payload sequence (LinkedList, PVector, ...) nests like the List it
+         * stands for: a typed one holds machine atoms, so its depth is 2 without
+         * a scan; a boxed one is one more than its deepest element. */
+        if (ds_ops(e->type)->length(e) == 0) return 1;
+        if (ds_atoms_only(e)) return 2;
         int64_t max_d = 0;
-        for (int64_t i = 0; i < n; i++) {
-            int64_t d = get_depth_for_total((Expr*)ll_peek_boxed(ll, i));
-            if (d > max_d) max_d = d;
-        }
+        ds_each(e, total_depth_fn, &max_d);
         return 1 + max_d;
     }
     if (e->type != EXPR_FUNCTION) return 1;
@@ -70,7 +72,7 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k);
  *   k >= 2: a new LinkedList of each element totalled at level k - 1, the
  *           closure rule (a List gives a List).
  * No List is ever built. */
-static Expr* total_ll_level_k(Expr* e, int64_t k) {
+Expr* total_ll_level_k(Expr* e, int64_t k) {
     LinkedList* ll = e->data.llist;
     int64_t n = ll_length(ll);
     if (k == 1) {
@@ -94,7 +96,7 @@ static Expr* total_ll_level_k(Expr* e, int64_t k) {
 
 static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
     if (k <= 0) return expr_copy(e);
-    if (e->type == EXPR_LINKEDLIST) return total_ll_level_k(e, k);
+    { Expr* tl = ds_total_level(e, k); if (tl) return tl; }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     if (k == 1) {
@@ -143,8 +145,8 @@ Expr* builtin_total(Expr* res) {
         return expr_new_integer(0);
     /* A LinkedList takes the same level walk below; total_at_exactly_level_k
      * dispatches it to the native kernels (total_ll_level_k). */
-    bool is_ll = list->type == EXPR_LINKEDLIST;
-    if (is_ll && ll_length(list->data.llist) == 0) return expr_new_integer(0);
+    bool is_ll = ds_has_each(list->type) && ds_ops(list->type)->total_level != NULL;
+    if (is_ll && ds_ops(list->type)->length(list) == 0) return expr_new_integer(0);
 
     int64_t n1 = 1, n2 = 1;
     int64_t depth = get_depth_for_total(list);

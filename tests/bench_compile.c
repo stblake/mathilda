@@ -28,6 +28,7 @@
 #include "sym_intern.h"
 #include "ndarray.h"
 #include "compile/compile.h"
+#include "pvec.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -208,6 +209,106 @@ static void bench_arr(const char* name, const char* src, size_t len, int iters) 
     compiled_free(pf); compiled_free(pd); expr_free(b);
 }
 
+
+/* PVector in a compiled body (compile_pvec.c).  Two claims, both gated:
+ *   - O(1) per op: a compiled Append loop / Part loop over n elements takes time
+ *     linear in n, so the per-op cost stays flat as n DOUBLES (ratio of total
+ *     times ~2; gated below 3.4 to ride out noise, an O(n) op would give ~4);
+ *   - faster than the interpreter running the same body. */
+static double pvec_compiled_time(CompiledProgram* p, long long n, Expr* vec, int reps) {
+    double best = 1e300;
+    for (int r = 0; r < reps; r++) {
+        CompileValue av[2], out;
+        memset(av, 0, sizeof av);
+        av[0].type = CT_INT; av[0].v.i = n;
+        if (vec) { av[0].type = CT_PVEC_TYPE(CT_INT); av[0].v.a = vec; }
+        double t0 = now_s();
+        bool ok = compiled_eval(p, av, &out);
+        double dt = now_s() - t0;
+        if (!ok) return -1;
+        if (CT_IS_PVEC(out.type)) expr_free(out.v.a);
+        if (dt < best) best = dt;
+    }
+    return best;
+}
+static double pvec_interp_time(const char* src_fmt, long long n) {
+    char buf[600];
+    snprintf(buf, sizeof buf, src_fmt, n, n);
+    Expr* e = parse_expression(buf);
+    double t0 = now_s();
+    Expr* r = eval_and_free(e);
+    double dt = now_s() - t0;
+    expr_free(r);
+    return dt;
+}
+static void bench_pvec(void) {
+    printf("\n=== Compile[] PVector (O(1) per op, compiled vs interpreter) ===\n");
+    const char* names[1] = { intern_symbol("n") };
+    CompileType nt[1] = { CT_INT };
+    struct { const char* label; const char* body; const char* interp; bool vec; } rows[] = {
+        { "Append loop",
+          "Module[{v = PVector[]}, Do[v = Append[v, i], {i, n}]; Length[v]]",
+          "Module[{v = PVector[]}, Do[v = Append[v, i], {i, %lld}]; Length[v]] + 0*%lld", false },
+        { "AppendTo + Part loop",
+          "Module[{v = PVector[], s = 0}, Do[AppendTo[v, i]; s += v[[i]], {i, n}]; s]",
+          "Module[{v = PVector[], s = 0}, Do[AppendTo[v, i]; s += v[[i]], {i, %lld}]; s] + 0*%lld", false },
+    };
+    for (size_t k = 0; k < sizeof rows / sizeof *rows; k++) {
+        Expr* body = parse_expression(rows[k].body);
+        CompiledProgram* p = compile_expr_ex(body, names, nt, 1, 0u);
+        if (!p) { printf("FAIL: %-24s DID NOT COMPILE\n", rows[k].label); failures++; expr_free(body); continue; }
+        long long n0 = 100000;
+        double t[4]; long long ns[4];
+        for (int j = 0; j < 4; j++) { ns[j] = n0 << j; t[j] = pvec_compiled_time(p, ns[j], NULL, 3); }
+        bool bad = false;
+        for (int j = 0; j < 4; j++) if (t[j] < 0) bad = true;
+        if (bad) { printf("FAIL: %-24s compiled run declined\n", rows[k].label); failures++; compiled_free(p); expr_free(body); continue; }
+        double worst = 0;
+        for (int j = 1; j < 4; j++) { double r = t[j] / t[j - 1]; if (r > worst) worst = r; }
+        long long ni = 100000;
+        double ti = pvec_interp_time(rows[k].interp, ni);
+        double tc = t[0];                       /* same n as the interpreter ran */
+        printf("ok:   %-24s n=%lld..%lld  %.1f ns/op  doubling ratios %.2f %.2f %.2f  vs interpreter %.1fx faster\n",
+               rows[k].label, ns[0], ns[3], t[0] / (double)ns[0] * 1e9,
+               t[1] / t[0], t[2] / t[1], t[3] / t[2], ti / tc);
+        if (worst > 3.4) { printf("FAIL: %-24s per-op cost grows with n (worst doubling ratio %.2f)\n", rows[k].label, worst); failures++; }
+        if (ti <= tc)    { printf("FAIL: %-24s compiled is not faster than the interpreter (%.1fx)\n", rows[k].label, ti / tc); failures++; }
+        compiled_free(p); expr_free(body);
+    }
+    /* Part reads over an ARGUMENT vector: the read is O(log32 n), flat in practice. */
+    {
+        Expr* body = parse_expression("Module[{s = 0}, Do[s += v[[i]], {i, Length[v]}]; s]");
+        const char* vn[1] = { intern_symbol("v") };
+        CompileType vt[1] = { CT_PVEC_TYPE(CT_INT) };
+        CompiledProgram* p = compile_expr_ex(body, vn, vt, 1, 0u);
+        if (!p) { printf("FAIL: %-24s DID NOT COMPILE\n", "Part loop (argument)"); failures++; expr_free(body); return; }
+        double t[4]; long long ns[4];
+        bool bad = false;
+        for (int j = 0; j < 4; j++) {
+            ns[j] = 100000LL << j;
+            char mk[80]; snprintf(mk, sizeof mk, "PVector[Range[%lld]]", ns[j]);
+            Expr* vec = eval_and_free(parse_expression(mk));
+            t[j] = pvec_compiled_time(p, 0, vec, 3);
+            expr_free(vec);
+            if (t[j] < 0) bad = true;
+        }
+        if (bad) { printf("FAIL: %-24s compiled run declined\n", "Part loop (argument)"); failures++; }
+        else {
+            double worst = 0;
+            for (int j = 1; j < 4; j++) { double r = t[j] / t[j - 1]; if (r > worst) worst = r; }
+            Expr* vec = eval_and_free(parse_expression("PVector[Range[100000]]"));
+            char src[200]; snprintf(src, sizeof src, "Module[{s = 0, v = PVector[Range[100000]]}, Do[s += v[[i]], {i, Length[v]}]; s]");
+            double t0 = now_s(); Expr* r = eval_and_free(parse_expression(src)); double ti = now_s() - t0;
+            expr_free(r); expr_free(vec);
+            printf("ok:   %-24s n=%lld..%lld  %.1f ns/op  doubling ratios %.2f %.2f %.2f  vs interpreter %.1fx faster\n",
+                   "Part loop (argument)", ns[0], ns[3], t[0] / (double)ns[0] * 1e9, t[1] / t[0], t[2] / t[1], t[3] / t[2], ti / t[0]);
+            if (worst > 3.4) { printf("FAIL: Part loop per-op cost grows with n (%.2f)\n", worst); failures++; }
+            if (ti <= t[0])  { printf("FAIL: Part loop compiled is not faster than the interpreter\n"); failures++; }
+        }
+        compiled_free(p); expr_free(body);
+    }
+}
+
 int main(void) {
     core_init();
     const char* xyz[] = { "x", "y", "z" };
@@ -257,6 +358,8 @@ int main(void) {
     bench_par("Sqrt v + v^2",         "Sqrt[v] + v^2",                   1000000, 60);
     bench_par("Sin v Exp -v",         "Sin[v] Exp[-v] + Sqrt[v]",        1000000, 40);
     bench_par("Gamma v",              "Gamma[v] + Erf[v]",               1000000, 20);
+
+    bench_pvec();
 
     if (failures == 0) printf("\nAll Compile benchmarks within gate.\n");
     else printf("\n%d Compile benchmark gate(s) FAILED.\n", failures);

@@ -125,6 +125,7 @@ static Expr* precision_of(const Expr* e) {
                 return make_infinity();
             return make_machineprecision();
         case EXPR_COMPILED:
+        case EXPR_PVEC:
             /* Opaque object; carries no numeric value → exact. */
             return make_infinity();
         case EXPR_LINKEDLIST: {
@@ -284,6 +285,7 @@ static Expr* accuracy_of(const Expr* e) {
         }
 #endif
         case EXPR_COMPILED:
+        case EXPR_PVEC:
             /* Opaque object; carries no numeric value → exact (infinite accuracy). */
             return make_infinity();
         case EXPR_LINKEDLIST: {

@@ -9,6 +9,7 @@
  */
 #include "compile.h"
 #include "compile_internal.h"    /* Slot / Instr / opcodes, shared with optimize.c */
+#include "handle_ops.h"          /* CompileHandleOps: per-kind handle facts */
 #include "compile_emit.h"        /* NameMap / Val / Ctx builder + emitter constants */
 #include "compiled_function.h"   /* inlining a CompiledFunction callee */
 #include "../arithmetic.h"
@@ -259,8 +260,7 @@ CompileType num_common(CompileType a, CompileType b) {
     if (a == CT_BOOL || b == CT_BOOL) return CT_ERR;
     /* An Association bag is never a numeric operand; without this it would fall
      * through to `a > b ? a : b` and be returned as a bogus "wider scalar". */
-    if (CT_IS_ASSOC(a) || CT_IS_ASSOC(b)) return CT_ERR;
-    if (CT_IS_LLIST(a) || CT_IS_LLIST(b)) return CT_ERR;     /* a list is not an operand */
+    if (ct_is_opaque_handle(a) || ct_is_opaque_handle(b)) return CT_ERR;
     if (CT_IS_ARRAY(a) || CT_IS_ARRAY(b)) {
         CompileType ea = CT_IS_ARRAY(a) ? CT_ELEM(a) : a;
         CompileType eb = CT_IS_ARRAY(b) ? CT_ELEM(b) : b;
@@ -277,9 +277,7 @@ CompileType num_common(CompileType a, CompileType b) {
  * array only ever "coerces" to its own type. */
 void coerce(Ctx* c, Val* v, CompileType target) {
     if (!c->ok || v->type == target) return;
-    if (CT_IS_ARRAY(v->type) || CT_IS_ARRAY(target)) { c->ok = false; return; }
-    if (CT_IS_ASSOC(v->type) || CT_IS_ASSOC(target)) { c->ok = false; return; }
-    if (CT_IS_LLIST(v->type) || CT_IS_LLIST(target)) { c->ok = false; return; }
+    if (CT_IS_HANDLE(v->type) || CT_IS_HANDLE(target)) { c->ok = false; return; }
     if (val_is_tile(*v)) {
         /* Tiles only ever hold Real or Complex elements, so the single widening
          * that can arise is real -> complex. */
@@ -312,11 +310,9 @@ int cse_lookup(const Ctx* c, const Expr* e);
  * Max/Min, Mod, ...) bails automatically the moment an array reaches it,
  * instead of silently reinterpreting a handle as a double. */
 bool scalar_only(Ctx* c, CompileType a, CompileType b, CompileType r) {
-    if (CT_IS_ARRAY(a) || CT_IS_ARRAY(b) || CT_IS_ARRAY(r)) { c->ok = false; return false; }
-    /* Same guard for an Association handle: it is not a machine scalar, so any
-     * scalar op that receives one must bail rather than read it as a double. */
-    if (CT_IS_ASSOC(a) || CT_IS_ASSOC(b) || CT_IS_ASSOC(r)) { c->ok = false; return false; }
-    if (CT_IS_LLIST(a) || CT_IS_LLIST(b) || CT_IS_LLIST(r)) { c->ok = false; return false; }
+    /* Any handle (array, Association, list, PVector) is not a machine scalar, so
+     * a scalar op that receives one must bail rather than read it as a double. */
+    if (CT_IS_HANDLE(a) || CT_IS_HANDLE(b) || CT_IS_HANDLE(r)) { c->ok = false; return false; }
     return true;
 }
 
@@ -1755,7 +1751,16 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
  * `out` may share an argument's register when the body is a bare parameter
  * reference, exactly as an ordinary lowering may return an operand's register;
  * `out->tmp` says whether the caller must free it. */
+static bool emit_apply_core(Ctx* c, const FnSpec* s, const Val* argv, int n, Val* out);
+/* See infer_apply: a PVector never flows through a function application. */
 bool emit_apply(Ctx* c, const FnSpec* s, const Val* argv, int n, Val* out) {
+    if (!c->ok) return false;
+    for (int i = 0; i < n; i++) if (ct_has_value_semantics(argv[i].type)) { c->ok = false; return false; }
+    if (!emit_apply_core(c, s, argv, n, out)) return false;
+    if (ct_has_value_semantics(out->type)) { c->ok = false; return false; }
+    return true;
+}
+static bool emit_apply_core(Ctx* c, const FnSpec* s, const Val* argv, int n, Val* out) {
     if (!c->ok) return false;
 
     switch (s->kind) {
@@ -2159,6 +2164,8 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
     /* LinkedList heads (compile_llist.c): handled when the operand is a list,
      * so Length/Part/Total of an ARRAY fall through to the array lowerings. */
     if (try_emit_llist(c, h, A, na, out)) return c->ok;
+    /* PVector heads (compile_pvec.c): the same discipline, value semantics. */
+    if (try_emit_pvec(c, h, A, na, out)) return c->ok;
 
     /* Elementwise fusion, tried before the delegated array lowering below.  The
      * `array_args` gate keeps this free for the overwhelmingly common scalar
@@ -2393,7 +2400,7 @@ static void cse_scan(Ctx* c, const Expr* e, CseCand* cand, int* ncand) {
     int nodes = 0;
     if (e->data.function.head->type == EXPR_SYMBOL && cse_eligible(c, e, &nodes) && nodes >= 3) {
         CompileType t;
-        if (infer_type(c, e, &t) && (int)t >= 0 && !CT_IS_ARRAY(t)) {
+        if (infer_type(c, e, &t) && (int)t >= 0 && !CT_IS_HANDLE(t)) {
             uint64_t h = expr_hash(e);
             int found = -1;
             for (int i = 0; i < *ncand; i++)
@@ -2657,11 +2664,13 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
         flags |= COMPILE_NO_OPT | COMPILE_NO_CSE | COMPILE_NO_FUSE | COMPILE_NO_PAR;
     c.prec_bits = prec_bits;
     c.allow_bigint = (flags & COMPILE_BIGINT) != 0;
-    for (size_t k = 0; k < nargs; k++)
-        if (CT_IS_LLIST(arg_types[k]) && CT_LLIST_ELEM(arg_types[k]) == CT_BOOL) {
-            g_bail_reason = "a LinkedList argument needs a machine element type";
+    for (size_t k = 0; k < nargs; k++) {
+        const CompileHandleOps* ho = ct_handle_ops(arg_types[k]);
+        if (ho && ho->open_choices && ct_handle_elem(arg_types[k]) == CT_BOOL) {
+            g_bail_reason = ho->open_bail;
             return NULL;
         }
+    }
     for (size_t k = 0; k < nargs; k++)
         if (CT_IS_ARRAY(arg_types[k])) {
             /* Rank is bounded only by the packed type encoding: the fused
@@ -2695,14 +2704,17 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
      * is allowed. */
     /* A borrowed LinkedList is different: the interpreter hands back the SAME
      * list (reference semantics), so the result is one more reference to it. */
-    if (ok && CT_IS_LLIST(res.type) && !res.tmp) {
+    /* A borrowed PVector is likewise returned as one more reference to the same
+     * value.  Both go through the row's retain opcode; a kind without one (array,
+     * association) cannot hand back a borrowed handle and bails below. */
+    if (ok && !res.tmp && ct_retain_op(res.type)) {
         Slot z = { 0 };
         int r = alloc_arr(&c);
-        ins(&c, OP_LL_RETAIN, (uint32_t)r, (uint32_t)res.reg, 0, z);
+        ins(&c, ct_retain_op(res.type), (uint32_t)r, (uint32_t)res.reg, 0, z);
         res.reg = r; res.tmp = true;
         ok = c.ok;
     }
-    if (ok && (CT_IS_ARRAY(res.type) || CT_IS_ASSOC(res.type)) && !res.tmp) {
+    if (ok && CT_IS_HANDLE(res.type) && !res.tmp) {
         ok = false;
         c.bail_node = body;   /* the whole body is a borrowed argument handle */
     }
@@ -2787,6 +2799,7 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
     p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
     p->result_built = CT_IS_ARRAY(res.type) && res.built;
+    p->result_plain = CT_IS_ARRAY(res.type) && c.pv_plain;
     p->nargs = nargs; p->argdep = c.argdep;
     p->arg_types = malloc((nargs ? nargs : 1) * sizeof(CompileType));
     p->ntiles = c.tile_max;

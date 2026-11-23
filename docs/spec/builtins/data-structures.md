@@ -2032,3 +2032,101 @@ Messages: `Pop::empty` / `PopFirst::empty` (the list is empty; the call stays
 unevaluated), `::rvalue`, `::normal`, as for `Push`.
 
 Attributes: `{HoldFirst, Protected}`.
+
+## PVector, PVectorQ
+
+`PVector[]` is an empty persistent vector and `PVector[list]` holds the elements
+of a `List` or packed array. `PVectorQ[e]` is `True` for a persistent vector.
+
+A persistent vector is an immutable **value**. Every update returns a new vector
+that shares all untouched storage with the old one, so holding on to the old
+value is free:
+
+```
+v = PVector[Range[100]];
+w = v; w[[50]] = -1;      (* v[[50]] is still 50 *)
+snaps = {}; Do[v[[i]] = 0; AppendTo[snaps, v], {i, 100}]   (* 100 snapshots, shared *)
+```
+
+It is a 32-way bitmapped trie with a separate tail leaf (the Clojure / Scala
+`Vector` layout), reference counted per node. A node held once is edited in
+place; a node held more than once is copied before it is edited (path copying).
+
+| Operation | Cost |
+|---|---|
+| `Length`, `Dimensions` | O(1) |
+| `v[[i]]` | O(log32 n), at most 7 levels for 10^10 elements |
+| `v[[i]] = x`, `Append`, `AppendTo`, `Most` | O(log32 n) at worst; amortised O(1) when the vector is held once |
+| `Prepend`, `Rest`, `Take`, `Drop`, `Join`, `Reverse` | O(n) (a new vector) |
+
+The pure form `v = Append[v, x]`, which is quadratic for a `List` (about 42 µs per
+append at n = 6000), costs about 0.26 µs per append here, flat in n, because the
+update copies one tail leaf instead of the vector.
+
+**Storage is typed.** While every element is a machine integer the leaves hold raw
+`int64`, while every element is a machine real they hold raw `double`; the first
+element of any other kind converts the vector to boxed leaves once. A vector made
+from a packed rank-1 integer or real array copies straight into typed leaves.
+
+**Operations.** Native on the vector, with no materialisation: `Length`,
+`Dimensions`, `Part` (an integer is one element; `All`, a `Span` or a list of
+positions give a new `PVector`), `Part` assignment, `First`, `Last`, `Most`,
+`Rest`, `Append`, `Prepend`, `AppendTo`, `PrependTo`, `Normal`, `Head` and the
+pattern `_PVector`. Structure-preserving heads (`Map`, `Select`, `Take`, `Drop`,
+`Join`, `Reverse`, `Sort`, `Insert`, `Delete`, `ReplacePart`, `Riffle`,
+`DeleteCases`, `DeleteDuplicates`, `Union`, `Accumulate`, `FoldList`,
+`Differences`, `RotateLeft`, `RotateRight`, `PadLeft`, `PadRight`) and every
+`Listable` function (`v + 1`, `2 v`, `Sin[v]`) run on the equivalent `List` and
+return a `PVector`; reductions and queries (`Total`, `Max`, `Min`, `Mean`,
+`Count`, `Position`, `MemberQ`, `Flatten`, `Fold`, `Apply`, `Tally`, ...) answer
+exactly as they do for the `List`. Parity with `List` holds by construction and is
+tested for every one of them over integer, real, mixed, empty and multi-leaf data.
+
+**Equality.** `PVector[{1, 2}] === PVector[{1, 2}]` is `True` whatever the storage
+kind or how each was built, and a `PVector` is never `===` a `List`. A `PVector`
+works as an `Association` key and in `Union` / `DeleteDuplicates`. The hash
+samples at most 16 elements, so it is O(1).
+
+**Printing.** `PVector[<n>]`, like `SparseArray` and `LinkedList`; a literal that
+reads back is a later step. `Normal[v]` gives the elements.
+
+**`Compile[]`.** A `PVector` is lowered like a `LinkedList`, but as an immutable
+VALUE (`src/compile/compile_pvec.c`, `compile_pvec_vm.c`; compile type `CT_PVEC`,
+opcodes `PV_*`). Elements are machine Integers or machine Reals, one kind per
+vector. Lowered:
+
+| | |
+|---|---|
+| create | `PVector[]` (element type guessed, Real first, then retried with the type the first store shows, as for `LinkedList[]`), `PVector[array]` over a rank-1 Integer or Real array |
+| read | `Length`, `v[[i]]` (negative `i` counts from the end), `First`, `Last`, `Total`, `Normal` (a plain `List`, as in the interpreter) |
+| update | `v = Append[v, x]`, `AppendTo[v, x]`, `v[[i]] = x`, `v = Most[v]`; `Append[v, x]` and `Most[v]` as values |
+| declare | `{v, _PVector}`, `{v, _PVector, _Integer}`, `{v, _PVector, _Real}` |
+| return | a `PVector` result comes back as the interpreter's own `PVector` |
+
+A vector comes from a `Module` local or an argument. An update of a local that holds
+its vector once (`v = Append[v, x]`, `AppendTo`, `v[[i]] = x`, `Most`) edits it in
+place, so a compiled append/part loop is O(1) per op (measured 8.7 ns per append,
+4.2 ns per `Part` read, doubling ratio 2.0, 31x to 91x faster than the interpreter).
+`w = v` retains: both names share one vector and the next update through either
+copies the touched nodes, so an old value kept inside a compiled body is never
+disturbed. There is no undo log (unlike `LinkedList`): a vector argument is only
+borrowed and never changed, and a failed run just drops its registers.
+
+The compiled answer is the interpreter's exactly, or the call is declined and the
+interpreter re-runs the body from the start. Declined (the body does not compile, or
+the VM refuses at run time): a vector of any other element kind (boxed, mixed,
+strings), an argument vector whose storage differs from the declared element kind
+(`_PVector` with no element type tries Real, then Integer, so a vector of the other
+kind runs in the interpreter; declare the element type), a store of the other
+machine type (the interpreter keeps `{1, 2.5}` boxed; no widening), a List literal
+`PVector[{...}]` (the compiler has no List-literal lowering), `Part` out of range or
+index 0 (the interpreter's `Part::partw`), `First`, `Last`, `Most`, `Normal` of an
+empty vector, an Integer `Total` past int64, `Total` of an empty Real vector, an
+assignment inside another operand of the same op (evaluation order), a `With`
+constant, a global vector, assignment to an argument, `Part` assignment to an
+argument, and a `PVector` passed through a function application, a conditional join,
+`Nest`/`Fold`/`Map`, or to a `CompiledFunction`. `Total` of a Real vector runs the
+interpreter's own `Total` over the equivalent `List`, so the order of summation is
+the evaluator's.
+
+**Not yet:** a persistent *map* or *set*.

@@ -472,6 +472,9 @@ set(COMMON_SRC
     ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
+    ../src/ds_ops.c
+    ../src/pvec.c
+    ../src/pvec_ops.c
     ../src/assoc_ops.c
     ../src/ndarray.c
     ../src/ndinteger.c
@@ -1280,6 +1283,9 @@ set(COMMON_SRC
     ../src/compile/compile_assoc.c
     ../src/compile/compile_llist.c
     ../src/compile/compile_llist_vm.c
+    ../src/compile/compile_pvec.c
+    ../src/compile/compile_pvec_vm.c
+    ../src/compile/handle_ops.c
     ../src/compile/compile_vm.c
     ../src/compile/compile_infer.c
     ../src/compile/compile_emit_arith.c
@@ -2829,6 +2835,14 @@ if(USE_ECM)
     add_dependencies(inplace_updates_tests build_ecm)
 endif()
 add_test(NAME inplace_updates_tests COMMAND inplace_updates_tests)
+
+# ds_ops registry: Length/Dimensions/Head/blank-head match answer as before.
+add_executable(ds_ops_tests test_ds_ops.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ds_ops_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(ds_ops_tests build_ecm)
+endif()
+add_test(NAME ds_ops_tests COMMAND ds_ops_tests)
 
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
@@ -7155,6 +7169,42 @@ else()
     target_link_libraries(term_menus_tests gmp m)
 endif()
 add_test(NAME term_menus_tests COMMAND term_menus_tests)
+
+# PVec: persistent vector core (model check, persistence, sharing, complexity gate).
+add_executable(pvec_tests test_pvec.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(pvec_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(pvec_tests build_ecm)
+endif()
+add_test(NAME pvec_tests COMMAND pvec_tests)
+
+# PVector at the interpreter level: parity with List for every operation,
+# persistence, value equality/hash, patterns, printing.
+add_executable(pvector_tests test_pvector.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(pvector_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(pvector_tests build_ecm)
+endif()
+add_test(NAME pvector_tests COMMAND pvector_tests)
+
+# Compile[] lowering of PVector: compiled == interpreted over every lowered op,
+# persistence inside a body, declines, call-to-call isolation, optimiser A/B.
+add_executable(compile_pvec_tests test_compile_pvec.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_pvec_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_pvec_tests build_ecm)
+endif()
+add_test(NAME compile_pvec_tests COMMAND compile_pvec_tests)
+
+# Compile[] handle kinds through the CompileHandleOps registry: row facts, and one
+# lowered probe shape per Association / LinkedList / PVector op checked against the
+# interpreter (the coverage gate for the handle kinds).
+add_executable(compile_handles_tests test_compile_handles.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_handles_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_handles_tests build_ecm)
+endif()
+add_test(NAME compile_handles_tests COMMAND compile_handles_tests)
 
 # Link the suites against mathilda_testlib (see the comment at
 # add_library(mathilda_testlib ...)).  Every executable whose sources name

@@ -6,6 +6,7 @@
 #include "ndreduce.h"          /* ndred_result_degenerate */
 #include "ndarray.h"
 #include "compile.h"
+#include "handle_ops.h"      /* CompileHandleOps: borrow/open/name per handle kind */
 
 #include <stdlib.h>
 #include <string.h>
@@ -253,24 +254,16 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
         out->v.a = (Expr*)e;
         return true;
     }
-    if (CT_IS_LLIST(t)) {
-        /* A LinkedList argument is the caller's own list, BORROWED: the program
-         * mutates it in place, which is the interpreter's reference semantics.
-         * Its element kind is checked when the VM binds it (load_arg). */
-        if (e->type != EXPR_LINKEDLIST) return false;
-        out->v.a = (Expr*)e;
-        return true;
-    }
-    if (CT_IS_ASSOC(t)) {
-        /* A read-only Association bag is BORROWED, exactly like an NDArray
-         * argument: the program never frees it and `owned` stays false.  Build
-         * the single-key index HERE, at the single-threaded marshalling
-         * boundary, so a parallel VM run never triggers the lazy build (which
-         * mutates the shared node) from a worker thread. */
-        if (!is_association(e)) return false;
-        assoc_prebuild_index(e);
-        out->v.a = (Expr*)e;
-        return true;
+    {
+        /* LinkedList / PVector / Association arguments are BORROWED as the
+         * caller's own node (the program never frees one); the row validates the
+         * Expr kind.  An array has no borrow_arg: it packs a nested List below. */
+        const CompileHandleOps* ho = ct_handle_ops(t);
+        if (ho && ho->borrow_arg) {
+            if (!ho->borrow_arg(e, t)) return false;
+            out->v.a = (Expr*)e;
+            return true;
+        }
     }
     if (CT_IS_ARRAY(t)) {
         /* An NDArray argument is BORROWED — the program never frees it, and the
@@ -329,15 +322,11 @@ static Expr* cf_unbox(const CompileValue* v) {
     /* An arbitrary-precision result is a NEW Expr (EXPR_MPFR / bignum Integer /
      * Complex[MPFR,MPFR]) that compiled_eval built and the caller owns. */
     if (CT_IS_MANAGED(v->type)) return v->v.a;
-    /* compiled_eval hands back a NEW EXPR_NDARRAY that the caller owns, so it
-     * becomes the result directly — no copy, no conversion to a nested List. */
-    if (CT_IS_ARRAY(v->type)) return v->v.a;
-    /* An owned association result (B3) is returned as-is — a canonical
-     * Association node the caller owns.  It carries no packed form, so the
-     * CT_IS_ARRAY presentation logic in cf_apply is deliberately skipped. */
-    if (CT_IS_ASSOC(v->type)) return v->v.a;
-    /* A LinkedList result is a reference the caller now owns. */
-    if (CT_IS_LLIST(v->type)) return v->v.a;
+    /* Every handle result is a node the caller now owns, returned as-is: a NEW
+     * EXPR_NDARRAY (no copy, no conversion to a nested List), a canonical
+     * Association (no packed form, so the CT_IS_ARRAY presentation logic in
+     * cf_apply is deliberately skipped), or one reference to a list / PVector. */
+    if (CT_IS_HANDLE(v->type)) return v->v.a;
     return NULL;
 }
 
@@ -375,6 +364,16 @@ static bool is_llist_typespec(const Expr* ts) {
         && ts->data.function.arg_count == 1
         && ts->data.function.args[0]->type == EXPR_SYMBOL
         && ts->data.function.args[0]->data.symbol.name == SYM_LinkedList;
+}
+
+/* `_PVector` or the bare `PVector` symbol. */
+static bool is_pvec_typespec(const Expr* ts) {
+    if (ts->type == EXPR_SYMBOL) return ts->data.symbol.name == SYM_PVector;
+    return ts->type == EXPR_FUNCTION && ts->data.function.head->type == EXPR_SYMBOL
+        && ts->data.function.head->data.symbol.name == SYM_Blank
+        && ts->data.function.arg_count == 1
+        && ts->data.function.args[0]->type == EXPR_SYMBOL
+        && ts->data.function.args[0]->data.symbol.name == SYM_PVector;
 }
 
 /* `_Association` (Blank[Association]) or the bare `Association` symbol — the type
@@ -453,6 +452,23 @@ static bool cf_parse_argspec(const Expr* argspec,
                    && el->data.function.head->data.symbol.name == SYM_List
                    && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
                    && el->data.function.args[0]->type == EXPR_SYMBOL
+                   && is_pvec_typespec(el->data.function.args[1])) {
+            /* `{v, _PVector}` or `{v, _PVector, _Integer|_Real}`: a persistent
+             * vector VALUE.  Without the element type the marker
+             * CT_PVEC_TYPE(CT_BOOL) asks cf_compile to find one. */
+            CompileType elty = CT_BOOL;
+            if (el->data.function.arg_count == 3) {
+                if (!parse_typespec(el->data.function.args[2], &elty)
+                    || (elty != CT_REAL && elty != CT_INT)) {
+                    free(names); free(types); return false;
+                }
+            }
+            ty = CT_PVEC_TYPE(elty);
+            nm = el->data.function.args[0]->data.symbol.name;
+        } else if (el->type == EXPR_FUNCTION && el->data.function.head->type == EXPR_SYMBOL
+                   && el->data.function.head->data.symbol.name == SYM_List
+                   && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
+                   && el->data.function.args[0]->type == EXPR_SYMBOL
                    && parse_typespec(el->data.function.args[1], &ty)) {
             /* `{v, _Real, r}` — a rank-r machine array, the same third-element
              * rank spelling Compile[] uses in the Wolfram Language.  All four
@@ -510,31 +526,46 @@ static void cf_apply_precision_types(CompileType* types, size_t n,
  * matters for a body that just reads the list, where Real is the common case).
  * At most three such arguments are searched; past that, and when nothing
  * compiles, they are left Real and the function runs through the interpreter. */
+static bool cf_open_arg(CompileType t) {
+    const CompileHandleOps* ho = ct_handle_ops(t);
+    return ho && ho->open_choices && ct_handle_elem(t) == CT_BOOL;
+}
+/* The q-th candidate element type of an open argument (a PVector has no
+ * Complex storage, so it has two). */
+static CompileType cf_open_pick(CompileType t, int q) {
+    static const CompileType order[3] = { CT_REAL, CT_INT, CT_COMPLEX };
+    return (CompileType)((int)ct_handle_ops(t)->lo + (int)order[q]);
+}
+static int cf_open_choices(CompileType t) { return ct_handle_ops(t)->open_choices; }
+
 static CompiledProgram* cf_compile(const Expr* body, const char** names, CompileType* types,
                                    size_t n, unsigned flags, long prec_bits) {
     size_t open[3];
     size_t nopen = 0;
     for (size_t i = 0; i < n; i++)
-        if (CT_IS_LLIST(types[i]) && CT_LLIST_ELEM(types[i]) == CT_BOOL) {
+        if (cf_open_arg(types[i])) {
             if (nopen == 3) {
                 for (size_t j = 0; j < n; j++)
-                    if (CT_IS_LLIST(types[j]) && CT_LLIST_ELEM(types[j]) == CT_BOOL)
-                        types[j] = CT_LLIST_TYPE(CT_REAL);
+                    if (cf_open_arg(types[j])) types[j] = cf_open_pick(types[j], 0);
                 return NULL;
             }
             open[nopen++] = i;
         }
     if (nopen == 0) return compile_expr_prec(body, names, types, n, flags, prec_bits);
-    static const CompileType order[3] = { CT_REAL, CT_INT, CT_COMPLEX };
+    CompileType marker[3];
     int combos = 1;
-    for (size_t k = 0; k < nopen; k++) combos *= 3;
+    for (size_t k = 0; k < nopen; k++) { marker[k] = types[open[k]]; combos *= cf_open_choices(marker[k]); }
     for (int m = 0; m < combos; m++) {
         int q = m;
-        for (size_t k = 0; k < nopen; k++, q /= 3) types[open[k]] = CT_LLIST_TYPE(order[q % 3]);
+        for (size_t k = 0; k < nopen; k++) {
+            int ch = cf_open_choices(marker[k]);
+            types[open[k]] = cf_open_pick(marker[k], q % ch);
+            q /= ch;
+        }
         CompiledProgram* p = compile_expr_prec(body, names, types, n, flags, prec_bits);
         if (p) return p;
     }
-    for (size_t k = 0; k < nopen; k++) types[open[k]] = CT_LLIST_TYPE(CT_REAL);
+    for (size_t k = 0; k < nopen; k++) types[open[k]] = cf_open_pick(marker[k], 0);
     return compile_expr_prec(body, names, types, n, flags, prec_bits);   /* for the bail reason */
 }
 
@@ -918,7 +949,11 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                  * still yields a List, which is why the rule is a call rather
                  * than a flag flip. */
                 if (r && CT_IS_ARRAY(out.type)) {
-                    if (compiled_result_built(cf->prog)) {
+                    if (compiled_result_plain(cf->prog)) {
+                        /* Normal[PVector]: the interpreter's plain List, never packed. */
+                        Expr* lst = ndarray_to_nested_list(r);
+                        if (lst) { expr_free(r); r = lst; }
+                    } else if (compiled_result_built(cf->prog)) {
                         /* pack_offer re-sniffs, so it applies the threshold, the
                          * $AutoArrayPacking switch AND the complex refusal --
                          * a built complex result stays the folded List the
@@ -1192,9 +1227,8 @@ static const char* ct_name(CompileType t) {
         case CT_BIGCOMPLEX: return "MPFRComplex";
         default: break;
     }
-    if (CT_IS_LLIST(t)) return "LinkedList";
-    if (CT_IS_ASSOC(t)) return "Association";   /* was "Unknown" */
-    return CT_IS_ARRAY(t) ? "Array" : "Unknown";
+    const char* hn = ct_handle_name(t);
+    return hn ? hn : "Unknown";
 }
 
 static Expr* diag_rule(const char* key, Expr* value) {

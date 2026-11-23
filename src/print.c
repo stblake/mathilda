@@ -7,6 +7,8 @@
 
 // Print
 
+#include "ds_ops.h"
+#include "pvec.h"
 #include "print.h"
 #include "linkedlist.h"
 #include "print_fortran.h"
@@ -777,11 +779,14 @@ void expr_print_fullform(Expr* e) {
             expr_free(canon);
             break;
         }
-        case EXPR_LINKEDLIST:
-            /* A mutable object has no literal that reads back: every form
-             * prints the summary. */
-            printf("LinkedList[<%" PRId64 ">]", ll_length(e->data.llist));
+        case EXPR_PVEC:
+        case EXPR_LINKEDLIST: {
+            /* Payload kinds with no literal that reads back print the summary
+             * Name[<n>], the name and length coming from the ds_ops row. */
+            const DsOps* o = ds_ops(e->type);
+            printf("%s[<%" PRId64 ">]", o->name, o->length(e));
             break;
+        }
         case EXPR_COMPILED: {
             const CompiledFunction* cf = e->data.compiled;
             size_t n = compiled_function_num_args(cf);
@@ -2883,9 +2888,9 @@ static void print_tex(Expr* e, int parent_prec) {
         else printf("\\text{SparseArray}");
         return;
     }
-    if (e->type == EXPR_LINKEDLIST) {
-        printf("\\text{LinkedList}\\left[\\langle %" PRId64 "\\rangle \\right]",
-               ll_length(e->data.llist));
+    if (e->type == EXPR_PVEC || e->type == EXPR_LINKEDLIST) {
+        const DsOps* o = ds_ops(e->type);
+        printf("\\text{%s}\\left[\\langle %" PRId64 "\\rangle \\right]", o->name, o->length(e));
         return;
     }
     if (e->type == EXPR_COMPILED) {

@@ -16,8 +16,10 @@
 #include "../equal_tol.h"
 #include "../memacct.h"   /* MemoryConstrained: charges, refusals, frames */
 #include "compile.h"
+#include "handle_ops.h"          /* CompileHandleOps: load_arg per handle kind */
 #include "compile_internal.h"    /* Slot / Instr / CompiledProgram / opcodes / VM_TLS */
 #include "../linkedlist.h"       /* LinkedList arguments, undo frames */
+#include "../pvec.h"             /* PVector arguments (load_arg) */
 #include "../arithmetic.h"       /* expr_new_* / expr_free / expr_bigint_normalize */
 #include "../symtab.h"
 #include "../ndarray.h"          /* ndarray_part(_set) / map / elementwise / NDType */
@@ -619,7 +621,7 @@ static bool vm_assoc_set(const Instr* c, Slot* R) {
             return true;
         }
     }
-    Expr* r = assoc_append_key(src, sp->key, nv);   /* adopts nv; Mathematica 15 order */
+    Expr* r = assoc_append_key(src, sp->key, nv);   /* adopts nv; the reference order */
     if (!r) { expr_free(nv); return false; }
     assoc_prebuild_index(r);
     if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
@@ -740,6 +742,7 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
     Expr* r = NULL;
 
     if (c->op >= OP_LL_NEW && c->op <= OP_LL_STRUCT) return vm_llist_op(c, d, a, b);
+    if (c->op >= OP_PV_NEW && c->op <= OP_PV_NORMAL) return vm_pvec_op(c, d, a, b);
     switch (c->op) {
         case OP_ARR_FREE:
             expr_free(d->arr); d->arr = NULL;
@@ -1637,6 +1640,15 @@ vm_loop:
             OP(LL_TOTAL): ARROP();
             OP(LL_NORMAL): ARROP();
             OP(LL_STRUCT): ARROP();
+            OP(PV_NEW):   ARROP();
+            OP(PV_FROMARR): ARROP();
+            OP(PV_RETAIN): ARROP();
+            OP(PV_STRUCT): ARROP();
+            OP(PV_SET):   ARROP();
+            OP(PV_GET):   ARROP();
+            OP(PV_LEN):   ARROP();
+            OP(PV_TOTAL): ARROP();
+            OP(PV_NORMAL): ARROP();
             /* ---- fused elementwise loop (M3b) ----------------------------
              * A_LOAD/A_STORE are the whole point of fusion: an elementwise
              * chain becomes ONE pass over the buffers driven by ordinary scalar
@@ -2145,6 +2157,7 @@ long compiled_prec_bits(const CompiledProgram* p) { return p ? p->prec_bits : 0;
 
 CompileType compiled_result_type(const CompiledProgram* p) { return p->result_type; }
 bool        compiled_result_built(const CompiledProgram* p) { return p && p->result_built; }
+bool        compiled_result_plain(const CompiledProgram* p) { return p && p->result_plain; }
 size_t compiled_num_args(const CompiledProgram* p) { return p->nargs; }
 size_t compiled_num_instructions(const CompiledProgram* p) { return p->n; }
 bool compiled_program_all_real(const CompiledProgram* p) { return p && p->all_real; }
@@ -2165,33 +2178,14 @@ static bool mgd_ncpx_set_from_expr(ncpx* z, const Expr* e);   /* defined below *
  * match the declared type, so the caller can fall back to the interpreter.
  * An array argument is BORROWED: its handle is stored, never freed. */
 static bool load_arg(Slot* s, const CompileValue* v, CompileType want) {
-    if (CT_IS_ARRAY(want)) {
-        Expr* x = CT_IS_ARRAY(v->type) ? v->v.a : NULL;
-        if (!x || x->type != EXPR_NDARRAY || x->data.ndarray.rank != CT_RANK(want))
-            return false;
-        s->arr = x;
-        return true;
-    }
-    if (CT_IS_ASSOC(want)) {
-        /* A read-only Association bag rides in `.arr` of a SCALAR-bank argument
-         * register (arg registers are < arr_base), so arr_sweep — which only
-         * walks [arr_base, tile_base) — never frees this borrowed handle. */
-        Expr* x = CT_IS_ASSOC(v->type) ? v->v.a : NULL;
-        if (!x || !is_association(x)) return false;
-        s->arr = x;
-        return true;
-    }
-    if (CT_IS_LLIST(want)) {
-        /* A LinkedList argument is BORROWED, in a scalar-bank argument register
-         * (never swept), and it is the caller's own list: the program mutates
-         * it in place, as the interpreter would. Its storage must already be of
-         * the promised element kind -- or empty, which any typed push retypes. */
-        Expr* x = CT_IS_LLIST(v->type) ? v->v.a : NULL;
-        LinkedList* ll = expr_linkedlist(x);
-        if (!ll) return false;
-        CompileType e = CT_LLIST_ELEM(want);
-        LLKind k = e == CT_INT ? LL_I64 : e == CT_REAL ? LL_REAL : LL_CPLX;
-        if (ll_length(ll) > 0 && ll_kind(ll) != k) return false;
+    /* A handle argument is BORROWED into the `.arr` of a SCALAR-bank argument
+     * register (arg registers are < arr_base), so arr_sweep -- which only walks
+     * [arr_base, tile_base) -- never frees it.  The row checks the boxed value's
+     * kind and storage against the declared type. */
+    const CompileHandleOps* ho = ct_handle_ops(want);
+    if (ho) {
+        Expr* x = NULL;
+        if (!ho->load_arg(v, want, &x)) return false;
         s->arr = x;
         return true;
     }

@@ -64,7 +64,7 @@ static bool assoc_const_values_elem(const Expr* assoc, CompileType* out) {
         Slot imm; CompileType vt;
         if (!literal(entry->data.function.args[1], &imm, &vt)) return false;
         elem = num_common(elem, vt);
-        if ((int)elem < 0 || CT_IS_ARRAY(elem) || CT_IS_ASSOC(elem)) return false;
+        if ((int)elem < 0 || CT_IS_HANDLE(elem)) return false;
     }
     *out = elem;
     return true;
@@ -431,7 +431,7 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
                 Slot d; CompileType dt;
                 if (!literal(deflt, &d, &dt)) { pop_tmp(c, kv); c->ok = false; return true; }
                 rt = num_common(rt, dt);
-                if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) { pop_tmp(c, kv); c->ok = false; return true; }
+                if ((int)rt < 0 || CT_IS_HANDLE(rt)) { pop_tmp(c, kv); c->ok = false; return true; }
             }
             if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) { pop_tmp(c, kv); c->ok = false; return true; }
             AssocSpec* sp = emit_assocspec(c, NULL, deflt, src_cst);
@@ -462,7 +462,7 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
             Slot d; CompileType dt;
             if (!literal(deflt, &d, &dt)) { c->ok = false; return true; }
             rt = num_common(rt, dt);
-            if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) { c->ok = false; return true; }
+            if ((int)rt < 0 || CT_IS_HANDLE(rt)) { c->ok = false; return true; }
         }
         if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) { c->ok = false; return true; }
         AssocSpec* sp = emit_assocspec(c, key, deflt, NULL);
@@ -599,7 +599,7 @@ bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* ou
                 Slot d; CompileType dt;
                 if (!literal(deflt, &d, &dt)) return false;
                 rt = num_common(rt, dt);
-                if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) return false;
+                if ((int)rt < 0 || CT_IS_HANDLE(rt)) return false;
             }
             if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) return false;
             *out = rt; return true;
@@ -616,7 +616,7 @@ bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* ou
             Slot d; CompileType dt;
             if (!literal(deflt, &d, &dt)) return false;
             rt = num_common(rt, dt);
-            if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) return false;
+            if ((int)rt < 0 || CT_IS_HANDLE(rt)) return false;
         }
         if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) return false;
         *out = rt; return true;

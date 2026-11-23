@@ -1,3 +1,4 @@
+#include "ds_ops.h"
 #include "list_common.h"
 #include "reverse.h"
 #include "ndarray.h"
@@ -55,7 +56,7 @@ Expr* builtin_reverse(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
 
-    if (expr->type == EXPR_LINKEDLIST) return ll_reverse(res);
+    { bool dh; Expr* dr = ds_native(expr, SYM_Reverse, res, &dh); if (dh) return dr; }
     /* Reverse[ndarray]: block-reverse the leading axis on the buffer (ndstruct.c). */
     if (is_ndarray(expr)) return ndstruct_reverse(res);
 

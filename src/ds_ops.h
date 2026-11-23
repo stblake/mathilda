@@ -1,0 +1,149 @@
+#ifndef MATHILDA_DS_OPS_H
+#define MATHILDA_DS_OPS_H
+
+/* ---------------------------------------------------------------------------
+ * ds_ops -- one table of operations per data-structure kind.
+ *
+ * Mathilda's non-function payload kinds (packed arrays, sparse arrays,
+ * LinkedLists, and the kinds still to come) used to be wired into every generic
+ * builtin by hard-coded `type == EXPR_X` branches: Length, Dimensions, Head and
+ * the pattern matcher's head test each repeated the same three-way split.  A new
+ * structure then meant editing every one of those sites (and, separately, about
+ * 25 Compile[] sites) before it behaved like a sequence at all.
+ *
+ * This table is the single place a kind states what it can do.  A generic
+ * builtin asks `ds_ops(e->type)` and calls the operation if the kind provides it
+ * (a NULL slot means "this kind does not have that notion"), so registering a
+ * kind makes it work in every builtin that has been migrated, with no edit to
+ * the builtin.  This slice migrates head / length / dimensions; element access,
+ * iteration and rebuild follow in later slices, then the Compile[] registry.
+ *
+ * Behaviour is deliberately identical to the branches it replaces.
+ * -------------------------------------------------------------------------- */
+
+#include "expr.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef struct DsOps {
+    ExprType type;           /* the payload kind this row describes */
+    const char* name;        /* for diagnostics and tests */
+
+    /* The Head[] of a value of this kind (owned symbol), never NULL. */
+    Expr* (*head)(const Expr* e);
+    /* Does `e` match the blank head symbol name `hn` (interned)?  e.g. _SparseArray. */
+    bool (*head_is)(const Expr* e, const char* hn);
+    /* Leading-axis length, as Length[] reports it. */
+    int64_t (*length)(const Expr* e);
+    /* Write up to `max` leading dimensions into `out`; return how many (the rank
+     * when it fits).  NULL = the kind has no rectangular shape. */
+    int (*dims)(const Expr* e, int64_t* out, int max);
+    /* Element / selection access for Part[e, i, ...].  Returns the result (NULL
+     * with *st == DS_PART_DONE = leave Part unevaluated).  *st is set to
+     * DS_PART_DEGRADE when the spec must be met on the boxed List path
+     * (caller delists and re-evaluates) and DS_PART_DECLINE when this kind does
+     * not take the spec (caller falls through, e.g. [[0]] head extraction). */
+    Expr* (*part)(Expr* e, Expr** idx, size_t n, int* st);
+    /* Materialise as an ordinary expression (what Normal[] returns): a new owned
+     * value, NULL on failure.  NULL slot = the kind has no such conversion. */
+    Expr* (*to_list)(const Expr* e);
+    /* Element i (0-based, in range) as a new reference; NULL slot = the kind has
+     * no O(1)/O(log n) random access (the caller iterates via to_list). */
+    Expr* (*get)(const Expr* e, int64_t i);
+    /* Rebuild a value of this kind from a plain List (borrowed); NULL when the
+     * kind cannot be built that way or `list` is not a List.  New reference. */
+    Expr* (*from_list)(const Expr* list);
+    /* Visit every element in order: fn(elem, ud) gets the element BORROWED for
+     * the call only (copy it to keep it) and returns false to stop early.
+     * Returns false when the kind has no each slot. */
+    bool (*each)(const Expr* e, bool (*fn)(Expr* elem, void* ud), void* ud);
+    /* True when every element is a machine atom (typed storage): the elements
+     * have depth 1 and nothing below them, so a walker need not visit them
+     * to know their depth.  NULL = not known. */
+    bool (*atoms_only)(const Expr* e);
+    /* The heads this kind implements natively (Append, Reverse, Take, Join,
+     * First, Map, ...): `res` is the evaluated call whose argument is a value of
+     * this kind.  Sets *handled = true and returns the answer (NULL after a
+     * message leaves the call unevaluated), or sets *handled = false for a head
+     * the kind does not take, so the builtin goes on with its List code. */
+    Expr* (*native)(const char* head, Expr* res, bool* handled);
+    /* Optional specialised matcher walk for Count / MemberQ over the elements at
+     * `level` (typed-slot fast paths); same contract as the generic walk built on
+     * `each`, which is used when this is NULL. */
+    int64_t (*descend)(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
+                       bool heads, Expr* pattern, bool first_only);
+    /* Part assignment below the top level (v[[i, ...]] = rhs reached through an
+     * enclosing structure): returns the new value of `e` (a new reference), or
+     * NULL after a message to leave the Set unevaluated.  NULL slot = the kind is
+     * rebuilt by the general function-node path. */
+    Expr* (*part_assign)(Expr* e, Expr** idx, size_t n, Expr* rhs);
+    /* REFERENCE kinds only (the one mutable payload, LinkedList): write the
+     * selected parts of `e` itself, in place, and report success (false = a
+     * message was issued and `e` is unchanged).  NULL = the kind is a value and
+     * is rebuilt through part_assign. */
+    bool (*assign_in_place)(Expr* e, Expr** idx, size_t n, Expr* rhs);
+    /* REFERENCE kinds only: AppendTo / PrependTo grow `val` itself and return it;
+     * consumes the reference `val`, or returns NULL after a message (also
+     * consuming it). `name` is "AppendTo" or "PrependTo". */
+    Expr* (*append_to)(const char* name, Expr* val, Expr* elem, bool prepend);
+    /* Total of the elements at exactly level k >= 1, over the kind's own storage
+     * (typed kernels); NULL = the generic level walk answers. */
+    Expr* (*total_level)(Expr* e, int64_t k);
+} DsOps;
+
+enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
+
+/* Dispatch Part through the row; *st as above.  Returns NULL with
+ * *st == DS_PART_DECLINE when the kind has no row or no part slot. */
+Expr* ds_part(Expr* e, Expr** idx, size_t n, int* st);
+
+/* Normal[] through the row.  *handled is false (and NULL returned) when the
+ * kind has no to_list slot, so the caller can fall through. */
+Expr* ds_to_list(const Expr* e, bool* handled);
+
+/* Element i through the row (see DsOps.get); NULL when the kind has no get. */
+Expr* ds_get(const Expr* e, int64_t i);
+
+/* Does this kind iterate through its row (DsOps.each)? */
+bool ds_has_each(ExprType t);
+
+/* Reference-kind mutation through the row.  The predicates say whether the kind
+ * has the slot; the calls assume it does. */
+bool  ds_has_in_place(ExprType t);
+bool  ds_assign_in_place(Expr* e, Expr** idx, size_t n, Expr* rhs);
+bool  ds_has_append_to(ExprType t);
+Expr* ds_append_to(const char* name, Expr* val, Expr* elem, bool prepend);
+/* Typed level total through the row; NULL when the kind has none. */
+Expr* ds_total_level(Expr* e, int64_t k);
+
+/* Part assignment through the row; *handled false when the kind has no slot. */
+Expr* ds_part_assign(Expr* e, Expr** idx, size_t n, Expr* rhs, bool* handled);
+
+/* The optional specialised walk of a kind (DsOps.descend), or NULL. */
+int64_t (*ds_descender(ExprType t))(Expr*, int64_t, int64_t, int64_t, bool, Expr*, bool);
+
+/* Run head `head` natively on the payload value `kind_val` through its row (see
+ * DsOps.native).  *handled is false (and NULL returned) for a value with no
+ * row, no native slot, or a head the kind does not take. */
+Expr* ds_native(const Expr* kind_val, const char* head, Expr* res, bool* handled);
+/* Visit the elements of `e` through its row; false when it has no each slot. */
+bool ds_each(const Expr* e, bool (*fn)(Expr* elem, void* ud), void* ud);
+/* True when `e`'s elements are all machine atoms (see DsOps.atoms_only). */
+bool ds_atoms_only(const Expr* e);
+
+/* A value of the same kind as `like`, rebuilt from the List `list` (borrowed):
+ * what a structure-preserving operation does with its List answer.  NULL when
+ * `like`'s kind has no from_list or `list` is not a List -- the caller then
+ * keeps the List. */
+Expr* ds_rebuild_like(const Expr* like, const Expr* list);
+
+/* The ops row for a payload kind, or NULL for kinds with none (atoms, function
+ * nodes).  O(1): a small array indexed by ExprType. */
+const DsOps* ds_ops(ExprType t);
+
+/* Register or replace the row for `ops->type` (the hook for new structure
+ * kinds).  The row must outlive the process; returns false if the type is out of
+ * range of the table. */
+bool ds_register(const DsOps* ops);
+
+#endif /* MATHILDA_DS_OPS_H */

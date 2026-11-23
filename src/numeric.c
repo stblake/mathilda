@@ -2022,6 +2022,7 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
             return expr_copy((Expr*)e); /* already machine-precision */
         case EXPR_COMPILED: return expr_copy((Expr*)e); /* opaque object; N[] is a no-op */
         case EXPR_LINKEDLIST: return numericalize_linkedlist(e, spec);
+        case EXPR_PVEC: return expr_copy((Expr*)e);       /* opaque value; N[] is a no-op */
         case EXPR_SYMBOL:  return numericalize_symbol(e, spec);
         case EXPR_FUNCTION: return numericalize_function(e, spec);
 #ifdef USE_MPFR

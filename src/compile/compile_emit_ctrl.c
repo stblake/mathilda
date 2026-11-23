@@ -78,7 +78,7 @@ static bool ladder_fold_rt(Ctx* c, const Expr* value, CompileType* rt, bool* hav
     CompileType t;
     if (value == NULL) t = CT_INT;
     else if (!infer_type(c, value, &t)) return false;
-    if (CT_IS_ARRAY(t)) return false;
+    if (CT_NOT_SCALAR(t)) return false;
     if (!*have) { *rt = t; *have = true; }
     else if (*rt != t) { *rt = num_common(*rt, t); if ((int)*rt < 0) return false; }
     return true;
@@ -107,7 +107,7 @@ bool collect_ladder(Ctx* c, const char* h, Expr** A, size_t na,
     } else if (strcmp(h, "Switch") == 0) {
         if (na < 3 || na % 2 == 0) return false;
         CompileType dt;                                             /* discriminant scalar-numeric */
-        if (!infer_type(c, A[0], &dt) || CT_IS_ARRAY(dt) || dt == CT_BOOL) return false;
+        if (!infer_type(c, A[0], &dt) || CT_NOT_SCALAR(dt) || dt == CT_BOOL) return false;
         for (size_t i = 1; i + 1 < na; i += 2) {
             const Expr* form = A[i]; const Expr* val = A[i + 1];
             if (is_blank_pat(form)) { LADDER_PUSH(NULL, val); has_default = true; break; }
@@ -176,7 +176,7 @@ static bool emit_ladder(Ctx* c, int rr, CompileType rt, const Rung* rungs,
         Val v;
         if (rungs[i].value == NULL) { Slot k = { 0 }; v = emit_const(c, k, CT_INT); }  /* default 0 */
         else if (!emit(c, rungs[i].value, &v)) return false;
-        if (CT_IS_ARRAY(v.type)) { c->ok = false; return false; }
+        if (CT_NOT_SCALAR(v.type)) { c->ok = false; return false; }
         join_coerce(c, &v, rt);
         ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)v.reg, 0, z);
         free_if_tmp(c, v);
@@ -246,7 +246,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         Val bv; if (!emit(c, A[0], &bv)) return -1;
         int rr = -1;
         if (na == 3) {
-            if (CT_IS_ARRAY(bv.type)) { c->ok = false; return -1; }
+            if (CT_NOT_SCALAR(bv.type)) { c->ok = false; return -1; }
             join_coerce(c, &bv, rt);
             rr = alloc_temp(c);
             ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)bv.reg, 0, z);
@@ -257,7 +257,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         if (c->ok) c->code[enter].b = c->code[leave].b = (uint32_t)c->n;   /* H */
         if (na == 3) {
             Val fv; if (!emit(c, A[2], &fv)) return -1;
-            if (CT_IS_ARRAY(fv.type)) { c->ok = false; return -1; }
+            if (CT_NOT_SCALAR(fv.type)) { c->ok = false; return -1; }
             join_coerce(c, &fv, rt);
             ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)fv.reg, 0, z);
             free_if_tmp(c, fv);
@@ -282,7 +282,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
          * (AppendTo[l, v] in both branches) is the same: its handle lives in an
          * array register, and moving it into the scalar join register corrupted
          * the run -- If[c, AppendTo[l, 1.], PrependTo[l, 2.]] in a Do aborted. */
-        if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_LLIST(rt)) { c->ok = false; return -1; }
+        if ((int)rt < 0 || CT_NOT_SCALAR(rt) || CT_IS_LLIST(rt)) { c->ok = false; return -1; }
         int rr = alloc_temp(c);                     /* persistent result reg */
         Slot z = { 0 };
         Val cond; if (!emit(c, A[0], &cond)) return -1;
@@ -290,14 +290,14 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)cond.reg, 0, z);
         free_if_tmp(c, cond);
         Val th; if (!emit(c, A[1], &th)) return -1;
-        if (CT_IS_ARRAY(th.type)) { c->ok = false; return -1; }
+        if (CT_NOT_SCALAR(th.type)) { c->ok = false; return -1; }
         join_coerce(c, &th, rt);
         ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)th.reg, 0, z);
         free_if_tmp(c, th);
         size_t jmp = c->n; ins(c, OP_JMP, 0, 0, 0, z);
         if (c->ok) c->code[jz].b = (uint32_t)c->n;   /* else label */
         Val el; if (!emit(c, A[2], &el)) return -1;
-        if (CT_IS_ARRAY(el.type)) { c->ok = false; return -1; }
+        if (CT_NOT_SCALAR(el.type)) { c->ok = false; return -1; }
         join_coerce(c, &el, rt);
         ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)el.reg, 0, z);
         free_if_tmp(c, el);
@@ -311,14 +311,14 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
     if (strcmp(h, "Which") == 0 || strcmp(h, "Switch") == 0 || strcmp(h, "Piecewise") == 0) {
         Rung rungs[COND_CHAIN_MAX]; int nr; bool has_default; CompileType rt;
         if (!collect_ladder(c, h, A, na, rungs, &nr, &has_default, &rt)) { c->ok = false; return -1; }
-        if (CT_IS_ARRAY(rt) || CT_IS_LLIST(rt)) { c->ok = false; return -1; }   /* see If */
+        if (CT_NOT_SCALAR(rt) || CT_IS_LLIST(rt)) { c->ok = false; return -1; }   /* see If */
         int rr = alloc_temp(c);                       /* persistent result register */
         if (strcmp(h, "Switch") == 0) {
             /* The discriminant is emitted once and stays live across every rung
              * (freed after the ladder); rr sits below it so the LIFO temp stack
              * unwinds cleanly. */
             Val disc; if (!emit(c, A[0], &disc)) return -1;
-            if (CT_IS_ARRAY(disc.type) || disc.type == CT_BOOL) { c->ok = false; return -1; }
+            if (CT_NOT_SCALAR(disc.type) || disc.type == CT_BOOL) { c->ok = false; return -1; }
             bool ok = emit_ladder(c, rr, rt, rungs, nr, &disc, has_default, out);
             free_if_tmp(c, disc);
             return ok ? 1 : -1;
@@ -341,7 +341,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         CompileType T; bool okT = infer_type(c, A[0], &T);
         c->nscope--;
         /* An array accumulator would need a per-iteration copy, not a MOVE. */
-        if (!okT || T == CT_BOOL || CT_IS_ARRAY(T)) { c->ok = false; return -1; }
+        if (!okT || T == CT_BOOL || CT_NOT_SCALAR(T)) { c->ok = false; return -1; }
         Slot z = { 0 };
         int racc = alloc_temp(c), rhi = alloc_temp(c), ri = alloc_temp(c);
         Slot iz; iz.i = 0; if (T == CT_INT) iz.i = prod ? 1 : 0; else if (T == CT_REAL) iz.r = prod ? 1.0 : 0.0; else iz.z = prod ? 1.0 : 0.0;
@@ -356,7 +356,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
         c->temp_top--;                                          /* free the guard temp */
         Val rb; if (!emit(c, A[0], &rb)) { c->nscope--; return -1; }
-        if (CT_IS_ARRAY(rb.type)) { c->nscope--; c->ok = false; return -1; }
+        if (CT_NOT_SCALAR(rb.type)) { c->nscope--; c->ok = false; return -1; }
         coerce(c, &rb, T);
         uint16_t acc = prod ? (T == CT_INT ? OP_MUL_I : T == CT_REAL ? OP_MUL_R : OP_MUL_C)
                             : (T == CT_INT ? OP_ADD_I : T == CT_REAL ? OP_ADD_R : OP_ADD_C);
@@ -434,10 +434,19 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 Val iv; bool oki = emit(c, init, &iv);
                 c->ll_init_name = saved_init;
                 if (!oki) { c->nscope -= pushed; return -1; }
-                if (CT_IS_LLIST(iv.type)) {
+                if (ct_has_value_semantics(iv.type) && strcmp(h, "With") == 0) {
+                    /* A With constant cannot be assigned in the interpreter, so
+                     * a lowering that lets the body update it would invent a
+                     * result: decline. */
+                    c->nscope -= pushed; c->ok = false; return -1;
+                }
+                if (ct_retain_op(iv.type)) {   /* a list or PVector: shared ownership */
                     /* A list local holds a REFERENCE: a new list is adopted, an
                      * existing one (an argument, another local) is retained, so
-                     * `b = a` mutates a, exactly as in the interpreter. */
+                     * `b = a` mutates a, exactly as in the interpreter.  A
+                     * PVector local holds a VALUE: adopted or retained the same
+                     * way, and a retained one is never changed in place (its
+                     * reference count is above one), so `b = a` keeps a. */
                     if (narr >= (int)(sizeof arr_regs / sizeof arr_regs[0])) {
                         c->nscope -= pushed; c->ok = false; return -1;
                     }
@@ -445,7 +454,8 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                     if (iv.tmp && reg_is_owned_arr(iv.reg)) areg = iv.reg;
                     else {
                         areg = alloc_arr(c);
-                        ins(c, OP_LL_RETAIN, (uint32_t)areg, (uint32_t)iv.reg, 0, z);
+                        ins(c, ct_retain_op(iv.type),
+                            (uint32_t)areg, (uint32_t)iv.reg, 0, z);
                     }
                     arr_regs[narr++] = areg;
                     c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = areg;
@@ -484,7 +494,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         Val body; if (!emit(c, A[1], &body)) { c->nscope -= pushed; return -1; }
         c->nscope -= pushed;
 
-        if (CT_IS_ARRAY(body.type) || CT_IS_LLIST(body.type)) {
+        if (ct_is_scope_local(body.type)) {   /* array, list or PVector (not an Association) */
             /* The result has to outlive the frees below, so every array local
              * EXCEPT the one carrying it is released, the bank is wound back to
              * where the scope started, and the value is moved down into the
@@ -493,9 +503,10 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 if (arr_regs[i] != body.reg) ins(c, OP_ARR_FREE, (uint32_t)arr_regs[i], 0, 0, z);
             c->arr_top = arr_entry;
             int rres = alloc_arr(c);
-            if (!reg_is_owned_arr(body.reg) && CT_IS_LLIST(body.type)) {
+            if (!reg_is_owned_arr(body.reg) && ct_retain_op(body.type)) {
                 /* a borrowed list (an argument): the same list, one more reference */
-                ins(c, OP_LL_RETAIN, (uint32_t)rres, (uint32_t)body.reg, 0, z);
+                ins(c, ct_retain_op(body.type),
+                    (uint32_t)rres, (uint32_t)body.reg, 0, z);
             } else if (!reg_is_owned_arr(body.reg)) {
                 /* borrowed (an argument array): copy, or the caller's node would
                  * be freed twice — once by them and once as our result */
@@ -630,10 +641,16 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 c->ok = false; return -1;            /* destructuring -> interpreter */
             }
             Val val; if (!emit(c, A[1], &val)) return -1;
-            if (CT_IS_ARRAY(val.type)) { free_if_tmp(c, val); c->ok = false; return -1; }
+            if (CT_NOT_SCALAR(val.type)) { free_if_tmp(c, val); c->ok = false; return -1; }
             if (!emit_list_thread(c, A[0], val)) { free_if_tmp(c, val); return -1; }
             *out = val;                              /* Set returns the RHS value */
             return c->ok ? 1 : -1;
+        }
+
+        /* v = rhs on a PVector local (compile_pvec.c): rebinding to a new value. */
+        if (kind == 0 && na == 2) {
+            int pr = pvec_emit_assign(c, A[0], A[1], out);
+            if (pr != 0) return pr;
         }
 
         if (kind >= 0) {
@@ -641,6 +658,9 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             if (na != want || A[0]->type != EXPR_SYMBOL) { c->ok = false; return -1; }
             CompileType vt; int vreg = scope_find(c, A[0]->data.symbol.name, &vt, NULL);
             if (vreg < 0 || vt == CT_BOOL) { c->ok = false; return -1; }   /* mutable numeric locals only */
+            /* v++ / v += ... on an owned handle (array, list, PVector) would run
+             * a scalar op on a handle register. */
+            if (CT_IS_HANDLE(vt)) { c->ok = false; return -1; }
             /* DivideBy always produces a Real (or Complex), never an Int. */
             if (kind == 6 && vt == CT_INT) { c->ok = false; return -1; }
             Slot z = { 0 };
@@ -652,7 +672,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                 out->reg = old; out->tmp = true; out->type = vt; return c->ok ? 1 : -1;
             }
             Val val; if (!emit(c, A[1], &val)) return -1;
-            if (CT_IS_ARRAY(val.type)) { c->ok = false; return -1; }
+            if (CT_NOT_SCALAR(val.type)) { c->ok = false; return -1; }
             if (kind == 0) join_coerce(c, &val, vt); else coerce(c, &val, vt);
             if (!c->ok) return -1;
             if (kind == 0) ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)val.reg, 0, z);

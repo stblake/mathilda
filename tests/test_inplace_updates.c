@@ -30,7 +30,7 @@ static void test_assoc_inplace_semantics(void) {
     assert_true("Block[{c1 = c1}, AssociateTo[c1, z -> 3]; Length[c1]] == 3 && Length[c1] == 2");
 }
 static void test_assoc_appendto_order(void) {
-    /* Mathematica 15: an existing key moves to the END */
+    /* the reference: an existing key moves to the END */
     run("d1 = <|1 -> a, 2 -> b|>; AppendTo[d1, 1 -> z]");
     assert_true("d1 === <|2 -> b, 1 -> z|>");
     run("AppendTo[d1, 3 -> w]");

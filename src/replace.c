@@ -1,3 +1,4 @@
+#include "ds_ops.h"
 #include "replace.h"
 #include "symtab.h"
 #include "eval.h"
@@ -439,9 +440,7 @@ Expr* ll_replace_part(Expr* res) {
 
 Expr* builtin_replace_part(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count == 2 &&
-        res->data.function.args[0]->type == EXPR_LINKEDLIST)
-        return ll_replace_part(res);
+    if (res->data.function.arg_count == 2) { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_ReplacePart, res, &dh); if (dh) return dr; }
     /* a Rational/Complex number is an atom with no parts: the reference returns
      * it unchanged for every position, {} included (ReplacePart[3/4, 1 -> 5]
      * and ReplacePart[3/4, {} -> 5] are both 3/4) */

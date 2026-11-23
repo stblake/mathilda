@@ -8,6 +8,7 @@
  * table lookup (int_closed_head / int_only_head / all_args_int) that decides
  * when integer arguments keep a head's result an Integer, and the fixed-point
  * type helpers for the functional heads (Nest / Fold / FixedPoint / ...). */
+#include "handle_ops.h"          /* CompileHandleOps: value-semantics handles */
 #include "compile_emit.h"        /* Ctx / Val / FnSpec / LoopSpec / IntClosed + emit-core */
 #include "../arithmetic.h"       /* is_rational */
 #include "../symtab.h"           /* symtab_lookup, SymbolDef, ndarray_unary_kernel */
@@ -190,7 +191,7 @@ bool compile_mc_type(Ctx* c, Expr** A, size_t na, CompileType* out) {
     if (compile_mc_infinite(A[1])) { *out = t0; return true; }
     if (!infer_type(c, A[1], &tb) || tb != CT_INT) return false;
     if (na == 2) { *out = t0; return true; }
-    if (!infer_type(c, A[2], &tf) || CT_IS_ARRAY(t0) || CT_IS_ARRAY(tf)) return false;
+    if (!infer_type(c, A[2], &tf) || CT_NOT_SCALAR(t0) || CT_NOT_SCALAR(tf)) return false;
     *out = (t0 == tf) ? t0 : num_common(t0, tf);
     return (int)*out >= 0;
 }
@@ -234,6 +235,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * a non-association Length/Values so the array branch below still handles it. */
     { CompileType at; if (try_infer_assoc(c, h, A, na, &at)) { *out = at; return true; } }
     { CompileType lt; if (try_infer_llist(c, h, A, na, &lt)) { *out = lt; return true; } }
+    { CompileType pt; if (try_infer_pvec(c, h, A, na, &pt)) { *out = pt; return true; } }
     CompileType ta, tb;
     #define IT(idx, dst) do { if (!infer_type(c, A[idx], &dst)) return false; } while (0)
     if (h == SYM_Plus || h == SYM_Times) {
@@ -653,6 +655,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (h == SYM_MemoryConstrained && (na == 2 || na == 3)) return compile_mc_type(c, A, na, out);
     if (h == SYM_If && na == 3) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
+        if (ct_has_value_semantics(tt) || ct_has_value_semantics(te)) return false;   /* no value joins of handles */
         if (tt == te) { *out = tt; return true; }
         *out = num_common(tt, te); return (int)*out >= 0;
     }
@@ -660,7 +663,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * emit_ctrl does (shared collect_ladder), so the two cannot disagree. */
     if (h == SYM_Which || h == SYM_Switch || h == SYM_Piecewise) {
         int nr; bool hd; CompileType rt;
-        if (!collect_ladder(c, h, A, na, NULL, &nr, &hd, &rt) || CT_IS_ARRAY(rt)) return false;
+        if (!collect_ladder(c, h, A, na, NULL, &nr, &hd, &rt) || CT_NOT_SCALAR(rt)) return false;
         *out = rt; return true;
     }
     if ((h == SYM_Sum || h == SYM_Product) && na == 2) {
@@ -1076,8 +1079,18 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
 /* Type `f[a1, ..., an]` for an already-resolved function value.  Mirrors
  * emit_apply's binding exactly — the two must agree or a construct types as one
  * thing and lowers as another. */
+static bool infer_apply_core(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
+                             CompileType* out);
+/* A PVector is an owned handle with value semantics: it never flows through a
+ * function application (Nest / Fold / Map / ...), whose lowerings MOVE values
+ * between registers.  Refused here once, for every higher-order form. */
 bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
                         CompileType* out) {
+    for (int i = 0; i < n; i++) if (ct_has_value_semantics(argt[i])) return false;
+    return infer_apply_core(c, s, argt, n, out) && !ct_has_value_semantics(*out);
+}
+static bool infer_apply_core(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
+                             CompileType* out) {
     switch (s->kind) {
         case FN_IDENTITY:
             if (n != 1) return false;

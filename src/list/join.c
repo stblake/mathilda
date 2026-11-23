@@ -1,4 +1,5 @@
 #include "linkedlist_seq.h"   /* LLSeq: Catenate over LinkedLists */
+#include "ds_ops.h"
 #include "list_common.h"
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
@@ -109,7 +110,7 @@ Expr* builtin_join(Expr* res) {
 
     /* Any LinkedList operand: the result is a LinkedList (linkedlist_struct.c). */
     for (size_t i = 0; i < res->data.function.arg_count; i++)
-        if (res->data.function.args[i]->type == EXPR_LINKEDLIST) return ll_join(res);
+        { bool dh; Expr* dr = ds_native(res->data.function.args[i], SYM_Join, res, &dh); if (dh) return dr; }
 
     /* Native buffer path first; ndstruct_delist_repack below stays the fallback
      * for every form it declines. See ndstruct.h. */

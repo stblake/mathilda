@@ -9,6 +9,21 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs);
 Expr* builtin_part(Expr* res);
 Expr* builtin_extract(Expr* res);
 Expr* expr_head(Expr* e);
+/* PVector (persistent vector) Part: an element, or a PVector for a selecting
+ * spec; NULL (after Part::partw) leaves the Part unevaluated. */
+Expr* pvec_part(Expr* pvx, Expr** indices, size_t nindices);
+/* LinkedList Part (element, or a new LinkedList for a selecting spec). */
+Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices);
+/* First / Last of a LinkedList (deflt may be NULL). */
+Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last);
+/* LinkedList Part assignment in place; false after a message (list unchanged). */
+bool ll_assign_in_place(Expr* llx, Expr** indices, size_t nindices, Expr* rhs);
+/* Part assignment below the top level, per payload kind (the ds_ops
+ * part_assign slot): the new value of `expr`, or NULL after a message. */
+Expr* ll_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+Expr* nd_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+Expr* pvec_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+Expr* sparse_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
 /* Resolve a Span[...] against a container of `len` elements: first selected
  * 1-based index, stride and count (every selected index lies in 1..len).
  * False for a malformed spec; a span selecting nothing succeeds with count 0. */
