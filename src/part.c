@@ -5,6 +5,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "ds_ops.h"
 #include "ndarray.h"
 #include "pack.h"      /* pack_force -- lift a small gather source up to the buffer */
 #include "part.h"
@@ -668,6 +669,15 @@ static bool is_atomic(Expr* e) {
 
 Expr* expr_head(Expr* e) {
     if (!e) return NULL;
+    /* Payload kinds (packed array, SparseArray, LinkedList, ...) name their own
+     * Head through the ds_ops registry.  A packed list IS a List and must say so:
+     * is_atomic() above deliberately still reports true for it (the 13 sites that
+     * consult it go on to read data.function.arg_count, which aliases the ndarray
+     * payload's `data` pointer, so flipping that predicate would turn a heap
+     * pointer into an element count); presentation is decided in the NDArray row
+     * and in the AtomQ builtin, not in the internal walker guard. */
+    const DsOps* ops = ds_ops(e->type);
+    if (ops) return ops->head(e);
     switch (e->type) {
         case EXPR_INTEGER: return expr_new_symbol(SYM_Integer);
         case EXPR_BIGINT: return expr_new_symbol(SYM_Integer);
@@ -675,19 +685,9 @@ Expr* expr_head(Expr* e) {
 #ifdef USE_MPFR
         case EXPR_MPFR: return expr_new_symbol(SYM_Real);
 #endif
-        /* A packed list IS a List and must say so. Note is_atomic() above
-         * deliberately still reports true for it: the 13 sites that consult it
-         * all go on to read data.function.arg_count, which aliases the ndarray
-         * payload's `data` pointer, so flipping that predicate would turn a
-         * heap pointer into an element count. Presentation is decided here and
-         * in the AtomQ builtin, not in the internal walker guard. */
-        case EXPR_NDARRAY:
-            return expr_new_symbol(is_packed_list(e) ? SYM_List : SYM_NDArray);
         case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
         case EXPR_STRING: return expr_new_symbol(SYM_String);
-        case EXPR_SPARSE: return expr_new_symbol(SYM_SparseArray);
         case EXPR_COMPILED: return expr_new_symbol(SYM_CompiledFunction);
-        case EXPR_LINKEDLIST: return expr_new_symbol(SYM_LinkedList);
         case EXPR_FUNCTION: return expr_copy(e->data.function.head);
         default: return NULL;
     }

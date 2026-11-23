@@ -1,4 +1,5 @@
 #include "match.h"
+#include "ds_ops.h"
 #include "options.h"   /* optionvalue_inject_context: OptionValue in /; guards */
 #include <gmp.h>
 #include "part.h"
@@ -751,10 +752,14 @@ static bool blank_head_matches(Expr* expr, Expr* b_head) {
 #endif
         case EXPR_SYMBOL:  return hn == SYM_Symbol;
         case EXPR_STRING:  return hn == SYM_String;
-        case EXPR_SPARSE:  return hn == SYM_SparseArray;
         case EXPR_COMPILED: return hn == SYM_CompiledFunction;
-        case EXPR_LINKEDLIST: return hn == SYM_LinkedList;
-        default:           return false;
+        default: {
+            /* a registered payload kind answers for its own head (SparseArray,
+             * LinkedList, ...); the packed-array row provides no head_is, which is
+             * the old `default: return false` for that kind */
+            const DsOps* ops = ds_ops(expr->type);
+            return ops && ops->head_is && ops->head_is(expr, hn);
+        }
     }
 }
 

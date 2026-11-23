@@ -14,6 +14,7 @@
 
 #include "core.h"
 #include "linkedlist.h"
+#include "ds_ops.h"
 #include "poly/solvepoly.h"   /* roots-of-unity counter for the TC unwind registry */
 #include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
@@ -1842,13 +1843,11 @@ Expr* builtin_length(Expr* res) {
             len = 0;                 /* Rational/Complex: an atom, no parts */
         } else if (arg->type == EXPR_FUNCTION) {
             len = (int64_t)arg->data.function.arg_count;
-        } else if (arg->type == EXPR_NDARRAY) {
-            /* numpy len(): the leading-axis length (rank >= 1 always). */
-            len = arg->data.ndarray.dims[0];
-        } else if (arg->type == EXPR_SPARSE) {
-            len = arg->data.sparse->dims[0];
-        } else if (arg->type == EXPR_LINKEDLIST) {
-            len = ll_length(arg->data.llist);      /* O(1) */
+        } else {
+            /* A payload kind registered in ds_ops: NDArray (numpy len(): the
+             * leading-axis length), SparseArray, LinkedList (O(1)). */
+            const DsOps* ops = ds_ops(arg->type);
+            if (ops && ops->length) len = ops->length(arg);
         }
         return expr_new_integer(len);
     }
@@ -1924,15 +1923,10 @@ Expr* builtin_dimensions(Expr* res) {
     Expr* arg = res->data.function.args[0];
     int depth = 0;
     int64_t dims[DIMENSIONS_MAX_DEPTH];
-    if (arg->type == EXPR_NDARRAY) {
-        /* O(1): rank/dims are already stored directly, no probing needed. */
-        depth = arg->data.ndarray.rank;
-        if (depth > max_depth) depth = max_depth;
-        for (int i = 0; i < depth; i++) dims[i] = arg->data.ndarray.dims[i];
-    } else if (arg->type == EXPR_SPARSE) {
-        depth = arg->data.sparse->rank;
-        if (depth > max_depth) depth = max_depth;
-        for (int i = 0; i < depth; i++) dims[i] = arg->data.sparse->dims[i];
+    const DsOps* dops = ds_ops(arg->type);
+    if (dops && dops->dims) {
+        /* O(1): rank/dims are stored directly on a packed or sparse array. */
+        depth = dops->dims(arg, dims, max_depth);
     } else if (max_depth > 0 && arg->type == EXPR_FUNCTION && !expr_is_number_atom(arg) &&
         arg->data.function.head->type == EXPR_SYMBOL) {
         /* a Rational/Complex number is an atom: Dimensions[3/4] is {} */

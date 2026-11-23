@@ -471,6 +471,7 @@ set(COMMON_SRC
     ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
+    ../src/ds_ops.c
     ../src/assoc_ops.c
     ../src/ndarray.c
     ../src/ndinteger.c
@@ -2780,6 +2781,14 @@ if(USE_ECM)
     add_dependencies(inplace_updates_tests build_ecm)
 endif()
 add_test(NAME inplace_updates_tests COMMAND inplace_updates_tests)
+
+# ds_ops registry: Length/Dimensions/Head/blank-head match answer as before.
+add_executable(ds_ops_tests test_ds_ops.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ds_ops_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(ds_ops_tests build_ecm)
+endif()
+add_test(NAME ds_ops_tests COMMAND ds_ops_tests)
 
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
