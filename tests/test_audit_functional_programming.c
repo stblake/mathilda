@@ -15,6 +15,12 @@ static void test_fixedpointlist_long_symbolic(void) {
     audit_chk("FixedPointList#1", "FixedPointList[Floor[#/2] &, 20]", "{20, 10, 5, 2, 1, 0, 0}");
     audit_chk("FixedPointList#1", "FixedPoint[Floor[#/2] &, 2^100]", "0");
     audit_chk("FixedPointList#1", "FixedPointList[# /. a -> b &, {a, a}]", "{{a, a}, {b, b}, {b, b}}");
+    /* Freeing the chain: expr_free loops on the last argument, so releasing a
+     * 2*10^6-deep chain needs constant C stack (recursion overflowed the 8 MB
+     * default at ~10^5 levels once the list was dropped). */
+    audit_chk("FixedPointList#1",
+              "Module[{c = Nest[g, y, 2000000]}, c = 0; Length[FixedPointList[f, x, 300000]]]",
+              "300001");
     /* 0. and -0. are SameQ, so they hash alike and still converge. */
     audit_chk("FixedPointList#1", "Length[FixedPointList[-# &, 0., 10]]", "2");
     audit_true("FixedPointList#1", "Hash[0.] === Hash[-0.]");

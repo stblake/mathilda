@@ -797,7 +797,15 @@ Expr* expr_unshare(Expr* e) {
 // drops to 0. Atoms are eligible to have refcount > 1 starting in M3
 // (see expr_copy). FUNCTION nodes always have refcount == 1 today
 // because expr_copy still deep-copies them.
+//
+// The last argument of a call is released by looping rather than recursing,
+// so a chain-shaped expression (Nest[f, x, 10^5], the tail of a long
+// FixedPointList) is freed in constant C stack: recursion overflowed the 8 MB
+// default stack at ~10^5 levels.  The head and the other arguments still
+// recurse, which is depth-bounded for anything that is not a chain -- the
+// same shape as expr_eq's tail loop.
 void expr_free(Expr* e) {
+  for (;;) {
     if (!e) return;
     if (e->refcount > 1) {
         e->refcount--;
@@ -849,15 +857,24 @@ void expr_free(Expr* e) {
             /* Free the cached Association index (NULL for every non-association
              * function node; assoc_index_free is a no-op on NULL). */
             assoc_index_free(expr_fn_assoc_index(e));
+        {
+            Expr* last = NULL;
+            size_t n = e->data.function.arg_count;
             if (e->data.function.head) expr_free(e->data.function.head);
-            for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                if (e->data.function.args && e->data.function.args[i]) {
-                    expr_free(e->data.function.args[i]);
+            if (e->data.function.args) {
+                for (size_t i = 0; i + 1 < n; i++) {
+                    if (e->data.function.args[i])
+                        expr_free(e->data.function.args[i]);
                 }
+                if (n > 0) last = e->data.function.args[n - 1];
+                expr_args_free(e->data.function.args, n);
             }
-            if (e->data.function.args)
-                expr_args_free(e->data.function.args, e->data.function.arg_count);
-            break;
+            /* Tail position: release this node, then continue with the last
+             * argument instead of recursing into it. */
+            expr_release_node(e);
+            e = last;
+            continue;
+        }
         case EXPR_BIGINT:
             mpz_clear(e->data.bigint);
             break;
@@ -891,6 +908,8 @@ void expr_free(Expr* e) {
     /* Recycle the fixed-size node through the pool instead of free() —
      * see the free-list note above expr_new_integer. */
     expr_release_node(e);
+    return;
+  }
 }
 
 
