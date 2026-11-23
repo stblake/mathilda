@@ -75,6 +75,30 @@ static void test_normal(void) {
     assert_true("Normal[<|a -> 1|>] === {a -> 1}");
     assert_true("Normal[x] === x");
 }
+static int each_count; static int64_t each_sum;
+static bool each_fn(Expr* e, void* ud) { (void)ud; each_count++; if (e->type == EXPR_INTEGER) each_sum += e->data.integer; return true; }
+static bool each_stop(Expr* e, void* ud) { (void)e; (*(int*)ud)++; return *(int*)ud < 3; }
+static void test_each(void) {
+    ASSERT_MSG(ds_has_each(EXPR_PVEC) && ds_has_each(EXPR_LINKEDLIST), "PVector and LinkedList iterate");
+    ASSERT_MSG(!ds_has_each(EXPR_INTEGER) && !ds_has_each(EXPR_SPARSE), "atoms and SparseArray have no each");
+    Expr* pv = parse_expression("PVector[Range[50]]"); Expr* v = evaluate(pv);
+    each_count = 0; each_sum = 0;
+    ASSERT_MSG(ds_each(v, each_fn, NULL) && each_count == 50 && each_sum == 1275, "PVector each visits all in order");
+    int stop = 0; ds_each(v, each_stop, &stop);
+    ASSERT_MSG(stop == 3, "each stops when fn returns false");
+    ASSERT_MSG(ds_atoms_only(v), "typed PVector holds atoms");
+    expr_free(v);
+    Expr* ll = evaluate(parse_expression("LinkedList[{1, 2, 3, x}]"));
+    each_count = 0; each_sum = 0;
+    ASSERT_MSG(ds_each(ll, each_fn, NULL) && each_count == 4 && each_sum == 6 && !ds_atoms_only(ll), "boxed LinkedList each");
+    expr_free(ll);
+    Expr* gv = evaluate(parse_expression("PVector[{7, 8, 9}]"));
+    Expr* r = ds_get(gv, 1);
+    expr_free(gv);
+    ASSERT_MSG(r && r->type == EXPR_INTEGER && r->data.integer == 8, "ds_get");
+    expr_free(r);
+}
+
 static void test_get_rebuild(void) {
     ASSERT_MSG(ds_ops(EXPR_PVEC) && ds_ops(EXPR_PVEC)->get && ds_ops(EXPR_PVEC)->from_list, "PVector row has get and from_list");
     ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->get && ds_ops(EXPR_LINKEDLIST)->from_list, "LinkedList row has get and from_list");
@@ -95,6 +119,7 @@ int main(void) {
     TEST(test_part);
     TEST(test_normal);
     TEST(test_get_rebuild);
+    TEST(test_each);
     printf("All ds_ops tests passed!\n");
     return 0;
 }

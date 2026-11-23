@@ -35,6 +35,8 @@ static const Case CASES[] = {
     {"Position[@, 1]", 0}, {"MemberQ[@, 1]", 0}, {"FreeQ[@, 1]", 0}, {"Flatten[@]", 0},
     {"Apply[Plus, @]", 0}, {"Fold[Plus, 0, @]", 0}, {"Tally[@]", 0}, {"Length[@]", 0},
     {"First[@]", 0}, {"Last[@]", 0}, {"Dimensions[@]", 0}, {"Normal[@]", 0},
+    {"Depth[@]", 0}, {"Level[@, {1}]", 0}, {"Level[@, {2}]", 0}, {"Level[@, {-1}]", 0},
+    {"Count[@, 1, {1}]", 0}, {"Count[@, 1, {2}]", 0}, {"MemberQ[@, 1, {1}]", 0}, {"Depth[{@, 1}]", 0},
 };
 
 static void build(char* out, size_t cap, const char* tpl, const char* arg) {
@@ -73,6 +75,22 @@ static void test_parity_mixed(void)  { run_dataset("mixed", "{1, a, 2.5, {1, 2},
 static void test_parity_empty(void)  { run_dataset("empty", "{}"); }
 static void test_parity_long(void)   { run_dataset("long",  "Range[1, 200]"); }
 static void test_parity_leaf(void)   { run_dataset("leaf",  "Table[Mod[7 i, 11], {i, 33}]"); }   /* 33: one past a leaf */
+
+/* Part below the top level, and the level walkers, reach a PVector through its
+ * ds_ops row exactly as they reach a LinkedList (both are payload sequences). */
+static void test_nested_and_levels(void) {
+    assert_true("{PVector[{1, 2}], 3}[[1, 2]] == 2");
+    assert_true("{LinkedList[{1, 2}], 3}[[1, 2]] == 2");
+    assert_true("Normal[{3, PVector[{1, 2, 3}]}[[2, 2 ;; 3]]] === {2, 3}");
+    assert_true("Normal[<|\"k\" -> PVector[{5, 6}]|>[[1, 2]]] === 6 || <|\"k\" -> PVector[{5, 6}]|>[[1, 2]] === 6");
+    assert_true("Depth[PVector[{}]] == Depth[{}] && Depth[PVector[{1, {2, {3}}}]] == Depth[{1, {2, {3}}}]");
+    assert_true("Depth[LinkedList[{1, 2}]] == Depth[{1, 2}] && Depth[LinkedList[{}]] == Depth[{}]");
+    assert_true("Depth[{PVector[{1, 2}], 3}] == Depth[{{1, 2}, 3}]");
+    assert_true("Depth[PVector[{PVector[{1}], 2}]] == Depth[{{1}, 2}]");
+    assert_true("Count[{PVector[{1, 1, 2}]}, 1, {2}] == 2 && MemberQ[{PVector[{1, a}]}, a, {2}]");
+    assert_true("Count[{LinkedList[{1, 1, 2}]}, 1, {2}] == 2");
+    assert_true("Level[PVector[{1, {2, 3}}], {2}] === Level[{1, {2, 3}}, {2}]");
+}
 
 static void test_core(void) {
     assert_true("PVectorQ[PVector[{1, 2}]] && !PVectorQ[{1, 2}] && !PVectorQ[5]");
@@ -160,6 +178,7 @@ int main(void) {
     symtab_init();
     core_init();
     TEST(test_core);
+    TEST(test_nested_and_levels);
     TEST(test_parity_ints);
     TEST(test_parity_reals);
     TEST(test_parity_mixed);

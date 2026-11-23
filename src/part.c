@@ -871,6 +871,7 @@ static int64_t* ll_part_positions(const char* head, Expr* llx, Expr* idx, int64_
     return NULL;
 }
 
+Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices);
 static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     LinkedList* ll = llx->data.llist;
     int64_t len = ll_length(ll);
@@ -901,6 +902,8 @@ static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     free(pos);
     return expr_new_linkedlist(out);
 }
+
+Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices) { return ll_part(llx, indices, nindices); }
 
 /* PVector Part: ll_part's reading rules over a persistent vector.  An integer
  * subscript is one element; All / Span / List select a new PVector (sharing
@@ -1043,20 +1046,16 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
      * positions or keys selects a sub-ASSOCIATION. */
     if (is_association(expr)) return assoc_part(expr, idx, rest, nrest);
 
-    /* A SparseArray reached below the top level ({c0, sa}[[2, 1]]): the
-     * remaining spec is its own Part. builtin_part dispatches the top level;
-     * this covers the recursion, where the atomic test below would otherwise
-     * leave the whole Part unevaluated. [[0]] included: sp_part answers List,
-     * for a SparseArray's part 0. */
-    if (expr->type == EXPR_SPARSE) {
-        bool err = false;
-        return sp_part(expr, indices, nindices, &err);
+    /* A payload kind reached below the top level ({c0, sa}[[2, 1]], {ll}[[1, 3]],
+     * {pv}[[1, 2]]): the remaining spec is the kind's own Part, through its
+     * ds_ops row.  A SparseArray answers [[0]] itself (List); the other kinds
+     * decline it so head extraction below handles it.  An NDArray keeps its own
+     * path (it is atomic here). */
+    if (expr->type != EXPR_NDARRAY) {
+        int st = DS_PART_DECLINE;
+        Expr* r = ds_part(expr, indices, nindices, &st);
+        if (st == DS_PART_DONE) return r;
     }
-
-    /* A LinkedList, at the top level or below it ({ll}[[1, 3]]). */
-    if (expr->type == EXPR_LINKEDLIST &&
-        !(idx->type == EXPR_INTEGER && idx->data.integer == 0))
-        return ll_part(expr, indices, nindices);
 
     // Handle integer index
     if (idx->type == EXPR_INTEGER) {

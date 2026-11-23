@@ -53,6 +53,14 @@ typedef struct DsOps {
     /* Rebuild a value of this kind from a plain List (borrowed); NULL when the
      * kind cannot be built that way or `list` is not a List.  New reference. */
     Expr* (*from_list)(const Expr* list);
+    /* Visit every element in order: fn(elem, ud) gets the element BORROWED for
+     * the call only (copy it to keep it) and returns false to stop early.
+     * Returns false when the kind has no each slot. */
+    bool (*each)(const Expr* e, bool (*fn)(Expr* elem, void* ud), void* ud);
+    /* True when every element is a machine atom (typed storage): the elements
+     * have depth 1 and nothing below them, so a walker need not visit them
+     * to know their depth.  NULL = not known. */
+    bool (*atoms_only)(const Expr* e);
 } DsOps;
 
 enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
@@ -67,6 +75,13 @@ Expr* ds_to_list(const Expr* e, bool* handled);
 
 /* Element i through the row (see DsOps.get); NULL when the kind has no get. */
 Expr* ds_get(const Expr* e, int64_t i);
+
+/* Does this kind iterate through its row (DsOps.each)? */
+bool ds_has_each(ExprType t);
+/* Visit the elements of `e` through its row; false when it has no each slot. */
+bool ds_each(const Expr* e, bool (*fn)(Expr* elem, void* ud), void* ud);
+/* True when `e`'s elements are all machine atoms (see DsOps.atoms_only). */
+bool ds_atoms_only(const Expr* e);
 
 /* A value of the same kind as `like`, rebuilt from the List `list` (borrowed):
  * what a structure-preserving operation does with its List answer.  NULL when

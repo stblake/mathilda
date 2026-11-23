@@ -1,3 +1,4 @@
+#include "ds_ops.h"
 #include "patterns.h"
 #include "linkedlist.h"
 #include "symtab.h"
@@ -67,19 +68,27 @@ static Expr* patterns_delist_visible(Expr* res) {
     return eval_and_free(rebuilt);
 }
 
+static int64_t get_expr_depth_patterns(Expr* e, bool heads);
+struct DepthCtx { int64_t max_d; bool heads; };
+static bool depth_fn(Expr* el, void* ud) {
+    struct DepthCtx* dc = (struct DepthCtx*)ud;
+    int64_t d = get_expr_depth_patterns(el, dc->heads);
+    if (d > dc->max_d) dc->max_d = d;
+    return true;
+}
+
 static int64_t get_expr_depth_patterns(Expr* e, bool heads) {
-    if (e->type == EXPR_LINKEDLIST) {
-        /* Nests like the List it stands for. Typed elements are atoms. */
-        LinkedList* ll = e->data.llist;
-        int64_t n = ll_length(ll);
-        if (n == 0) return 1;
-        if (ll_kind(ll) != LL_BOXED) return 2;
-        int64_t max_d = 0;
-        for (int64_t i = 0; i < n; i++) {
-            int64_t d = get_expr_depth_patterns((Expr*)ll_peek_boxed(ll, i), heads);
-            if (d > max_d) max_d = d;
-        }
-        return max_d + 1;
+    if (ds_has_each(e->type)) {
+        /* A payload sequence (LinkedList, PVector, ...) nests like the List it
+         * stands for: an empty one has depth 1, typed storage holds atoms of
+         * depth 1 (so depth 2 without visiting them), a boxed one is one more
+         * than its deepest element. */
+        const DsOps* o = ds_ops(e->type);
+        if (o->length(e) == 0) return 1;
+        if (ds_atoms_only(e)) return 2;
+        struct DepthCtx dc = { 0, heads };
+        ds_each(e, depth_fn, &dc);
+        return dc.max_d + 1;
     }
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
@@ -794,9 +803,14 @@ Expr* builtin_position(Expr* res) {
 static int64_t ll_descend(Expr* llx, int64_t level, int64_t min_l, int64_t max_l,
                           bool heads, Expr* pattern, bool first_only);
 
+static int64_t ds_descend(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
+                          bool heads, Expr* pattern, bool first_only);
+
 static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, size_t* count) {
     if (e->type == EXPR_LINKEDLIST)
         *count += (size_t)ll_descend(e, current_level + 1, min_l, max_l, heads, pattern, false);
+    else if (ds_has_each(e->type))
+        *count += (size_t)ds_descend(e, current_level + 1, min_l, max_l, heads, pattern, false);
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             do_count_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, count);
@@ -921,6 +935,30 @@ static int64_t ll_descend(Expr* llx, int64_t level, int64_t min_l, int64_t max_l
     return hits;
 }
 
+/* Matches among the elements of any payload sequence with an each slot (the
+ * generic form of ll_descend, which keeps its typed-slot fast paths): the
+ * elements sit at `level`; stops at the first when `first_only` (MemberQ). */
+struct DescCtx { int64_t level, min_l, max_l, hits; bool heads, first_only; Expr* pattern; };
+static bool desc_fn(Expr* el, void* ud) {
+    struct DescCtx* c = (struct DescCtx*)ud;
+    if (c->first_only) {
+        if (do_member_at_level(el, c->level, c->min_l, c->max_l, c->heads, c->pattern)) { c->hits = 1; return false; }
+    } else {
+        size_t n = 0;
+        do_count_at_level(el, c->level, c->min_l, c->max_l, c->heads, c->pattern, &n);
+        c->hits += (int64_t)n;
+    }
+    return true;
+}
+static int64_t ds_descend(Expr* x, int64_t level, int64_t min_l, int64_t max_l,
+                          bool heads, Expr* pattern, bool first_only) {
+    const DsOps* o = ds_ops(x->type);
+    if (o->length(x) == 0 || (min_l >= 0 && max_l >= 0 && level > max_l)) return 0;
+    struct DescCtx c = { level, min_l, max_l, 0, heads, first_only, pattern };
+    ds_each(x, desc_fn, &c);
+    return c.hits;
+}
+
 Expr* builtin_count(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     /* A visible NDArray is an atom to the matcher; materialise it first.
@@ -983,6 +1021,8 @@ static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, in
 
     if (e->type == EXPR_LINKEDLIST)
         return ll_descend(e, current_level + 1, min_l, max_l, heads, pattern, true) > 0;
+    if (ds_has_each(e->type))
+        return ds_descend(e, current_level + 1, min_l, max_l, heads, pattern, true) > 0;
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             if (do_member_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern)) return true;

@@ -12,6 +12,8 @@ Expr* expr_head(Expr* e);
 /* PVector (persistent vector) Part: an element, or a PVector for a selecting
  * spec; NULL (after Part::partw) leaves the Part unevaluated. */
 Expr* pvec_part(Expr* pvx, Expr** indices, size_t nindices);
+/* LinkedList Part (element, or a new LinkedList for a selecting spec). */
+Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices);
 /* Resolve a Span[...] against a container of `len` elements: first selected
  * 1-based index, stride and count (every selected index lies in 1..len).
  * False for a malformed spec; a span selecting nothing succeeds with count 0. */

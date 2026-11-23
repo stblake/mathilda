@@ -79,7 +79,7 @@ static const struct { const char* name; PGAct act; } g_heads[] = {
     {"Count", PG_PLAIN}, {"Position", PG_PLAIN}, {"MemberQ", PG_PLAIN}, {"FreeQ", PG_PLAIN},
     {"Dot", PG_PLAIN}, {"Norm", PG_PLAIN}, {"Variance", PG_PLAIN},
     {"StandardDeviation", PG_PLAIN}, {"Tally", PG_PLAIN}, {"Counts", PG_PLAIN},
-    {"Flatten", PG_PLAIN}, {"Ordering", PG_PLAIN}, {"Cases", PG_PLAIN}, {"First", PG_PLAIN},
+    {"Flatten", PG_PLAIN}, {"Level", PG_PLAIN}, {"Ordering", PG_PLAIN}, {"Cases", PG_PLAIN}, {"First", PG_PLAIN},
     {"Last", PG_PLAIN}
 };
 

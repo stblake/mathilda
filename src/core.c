@@ -4466,10 +4466,28 @@ Expr* builtin_quotient(Expr* res) {
  * depth 2 (Mathematica: Depth[{}] and Depth[f[]] are 2). Level's negative
  * level specs keep the other convention, which is also Mathematica's there:
  * Level[{{}}, {-2}] is {{{}}}, so {} sits at level -1. */
+static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two);
+struct DepthEx { int64_t max_d; bool heads, empty_is_two; };
+static bool depth_ex_fn(Expr* el, void* ud) {
+    struct DepthEx* dc = (struct DepthEx*)ud;
+    int64_t d = get_expr_depth_ex(el, dc->heads, dc->empty_is_two);
+    if (d > dc->max_d) dc->max_d = d;
+    return true;
+}
 static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
     /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
      * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
     if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
+    /* A payload sequence (LinkedList, PVector, ...) nests like the List it
+     * stands for, through its ds_ops row: typed storage holds atoms (depth 2
+     * without visiting them), a boxed one is one more than its deepest element. */
+    if (ds_has_each(e->type)) {
+        const DsOps* o = ds_ops(e->type);
+        if (o->length(e) > 0 && ds_atoms_only(e)) return 2;
+        struct DepthEx dc = { empty_is_two ? 1 : 0, heads, empty_is_two };
+        ds_each(e, depth_ex_fn, &dc);
+        return dc.max_d + 1;
+    }
     if (e->type != EXPR_FUNCTION) return 1;
 
     // Rational and Complex are considered atomic in terms of Depth/Length in Mathematica

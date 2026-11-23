@@ -62,7 +62,11 @@ static Expr* sp_part_row(Expr* e, Expr** idx, size_t n, int* st) {
 }
 static Expr* ll_part_row(Expr* e, Expr** idx, size_t n, int* st) {
     *st = DS_PART_DONE;
-    return expr_part(e, idx, n);
+    if (n > 0 && idx[0]->type == EXPR_INTEGER && idx[0]->data.integer == 0) {
+        *st = DS_PART_DECLINE;          /* [[0]]: head extraction */
+        return NULL;
+    }
+    return ll_part_expr(e, idx, n);
 }
 
 /* ---- materialisation (Normal) ------------------------------------------- */
@@ -100,13 +104,41 @@ static Expr* ll_from_list_row(const Expr* list) {
 }
 static Expr* pv_from_list_row(const Expr* list) { return pvec_make(list); }
 
+/* ---- iteration -------------------------------------------------------------- */
+static bool ll_each_row(const Expr* e, bool (*fn)(Expr*, void*), void* ud) {
+    const LinkedList* ll = e->data.llist;
+    int64_t n = ll_length(ll);
+    bool boxed = ll_kind(ll) == LL_BOXED;
+    for (int64_t i = 0; i < n; i++) {
+        Expr* owned = boxed ? NULL : ll_get(ll, i);
+        Expr* x = owned ? owned : (Expr*)ll_peek_boxed(ll, i);
+        bool go = fn(x, ud);
+        if (owned) expr_free(owned);
+        if (!go) return true;
+    }
+    return true;
+}
+static bool ll_atoms_only(const Expr* e) { return ll_kind(e->data.llist) != LL_BOXED; }
+static bool pv_each_row(const Expr* e, bool (*fn)(Expr*, void*), void* ud) {
+    const PVec* v = e->data.pvec;
+    int64_t n = pv_length(v);
+    for (int64_t i = 0; i < n; i++) {
+        Expr* x = pv_get(v, i);
+        bool go = fn(x, ud);
+        expr_free(x);
+        if (!go) return true;
+    }
+    return true;
+}
+static bool pv_atoms_only(const Expr* e) { PVKind k = pv_kind(e->data.pvec); return k == PV_I64 || k == PV_REAL; }
+
 /* A packed list/array matches _List or _NDArray by its presentation; the
  * matcher keeps its own NDArray head logic, so no head_is is given here. */
 static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list };
 static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list };
-static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row };
+static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only };
 
-static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row };
+static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only };
 
 static void ds_init(void) {
     g_init = true;
@@ -149,4 +181,14 @@ Expr* ds_get(const Expr* e, int64_t i) {
 Expr* ds_rebuild_like(const Expr* like, const Expr* list) {
     const DsOps* o = ds_ops(like->type);
     return (o && o->from_list) ? o->from_list(list) : NULL;
+}
+
+bool ds_has_each(ExprType t) { const DsOps* o = ds_ops(t); return o && o->each; }
+bool ds_each(const Expr* e, bool (*fn)(Expr*, void*), void* ud) {
+    const DsOps* o = ds_ops(e->type);
+    return (o && o->each) ? o->each(e, fn, ud) : false;
+}
+bool ds_atoms_only(const Expr* e) {
+    const DsOps* o = ds_ops(e->type);
+    return o && o->atoms_only && o->atoms_only(e);
 }
