@@ -960,7 +960,7 @@ static bool so_is_purely_numeric(Expr* e) {
 #endif
             return true;
         case EXPR_SYMBOL: case EXPR_STRING: case EXPR_NDARRAY: case EXPR_COMPILED:
-        case EXPR_SPARSE: case EXPR_LINKEDLIST: return false;
+        case EXPR_SPARSE: case EXPR_LINKEDLIST: case EXPR_PVEC: return false;
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;

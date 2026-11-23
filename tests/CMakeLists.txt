@@ -472,6 +472,8 @@ set(COMMON_SRC
     ../src/assoc.c
     ../src/assoc_index.c
     ../src/ds_ops.c
+    ../src/pvec.c
+    ../src/pvec_ops.c
     ../src/assoc_ops.c
     ../src/ndarray.c
     ../src/ndinteger.c
@@ -7082,3 +7084,20 @@ else()
     target_link_libraries(term_menus_tests gmp m)
 endif()
 add_test(NAME term_menus_tests COMMAND term_menus_tests)
+
+# PVec: persistent vector core (model check, persistence, sharing, complexity gate).
+add_executable(pvec_tests test_pvec.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(pvec_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(pvec_tests build_ecm)
+endif()
+add_test(NAME pvec_tests COMMAND pvec_tests)
+
+# PVector at the interpreter level: parity with List for every operation,
+# persistence, value equality/hash, patterns, printing.
+add_executable(pvector_tests test_pvector.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(pvector_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(pvector_tests build_ecm)
+endif()
+add_test(NAME pvector_tests COMMAND pvector_tests)

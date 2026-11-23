@@ -450,6 +450,8 @@ extern const char* SYM_Log10;
 extern const char* SYM_Log2;
 extern const char* SYM_SparseArray;
 extern const char* SYM_LinkedList;
+extern const char* SYM_PVector;
+extern const char* SYM_PVectorQ;
 extern const char* SYM_Push;
 extern const char* SYM_Pop;
 extern const char* SYM_PopFirst;

@@ -87,6 +87,7 @@ size_t simp_default_complexity(const Expr* e) {
         case EXPR_COMPILED: return 1;   /* opaque atom */
         case EXPR_SPARSE:   return 1;   /* raw object */
         case EXPR_LINKEDLIST: return 1; /* mutable object */
+        case EXPR_PVEC:       return 1; /* persistent vector value */
         case EXPR_NDARRAY: {
             /* Each entry is a machine-precision Real (score 2); +1 for the
              * NDArray wrapper. Keeps Simplify from preferring a large packed

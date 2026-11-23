@@ -1,3 +1,4 @@
+#include "pvec.h"
 #include "sort.h"
 #include "linkedlist.h"
 #include "eval.h"
@@ -690,7 +691,8 @@ int expr_compare(const Expr* a, const Expr* b) {
 
     /* NDArray and CompiledFunction objects sort after everything. */
     if (a->type == EXPR_NDARRAY || a->type == EXPR_COMPILED ||
-        a->type == EXPR_LINKEDLIST ||
+        a->type == EXPR_LINKEDLIST || a->type == EXPR_PVEC ||
+        b->type == EXPR_PVEC ||
         b->type == EXPR_NDARRAY || b->type == EXPR_COMPILED ||
         b->type == EXPR_LINKEDLIST)
         return opaque_cmp(a, b);
@@ -788,6 +790,12 @@ static int opaque_cmp(const Expr* a, const Expr* b) {
     }
     if (a->type == EXPR_LINKEDLIST) return 1;
     if (b->type == EXPR_LINKEDLIST) return -1;
+
+    /* 8. PVector values, after everything: length, then elementwise. */
+    if (a->type == EXPR_PVEC && b->type == EXPR_PVEC)
+        return pv_compare(a->data.pvec, b->data.pvec);
+    if (a->type == EXPR_PVEC) return 1;
+    if (b->type == EXPR_PVEC) return -1;
 
     return 0;
 }

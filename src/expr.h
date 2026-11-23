@@ -26,7 +26,8 @@ typedef enum {
     EXPR_NDARRAY,              /* dense machine-precision ndarray, see ndarray.h */
     EXPR_COMPILED,             /* compiled numeric function, see compile/compiled_function.h */
     EXPR_SPARSE,               /* SparseArray raw object, see sparse/sparse.h */
-    EXPR_LINKEDLIST            /* mutable LinkedList object, see linkedlist.h */
+    EXPR_LINKEDLIST,           /* mutable LinkedList object, see linkedlist.h */
+    EXPR_PVEC                  /* persistent vector value, see pvec.h */
 #ifdef USE_MPFR
     , EXPR_MPFR                /* arbitrary-precision real (MPFR) */
 #endif
@@ -234,6 +235,10 @@ typedef struct Expr {
          * is the payload (expr_eq/hash/compare use its stable id), which is
          * why a mutation never invalidates a cached hash. linkedlist.h. */
         struct LinkedList* llist;
+        /* EXPR_PVEC: a persistent (immutable, structurally shared) vector.
+         * Reference-counted; copying a node retains the payload, and every
+         * update builds a new payload that shares untouched nodes. pvec.h. */
+        struct PVec* pvec;
 #ifdef USE_MPFR
         mpfr_t mpfr;          /* carries its own precision in bits */
 #endif
@@ -341,6 +346,12 @@ Expr* expr_new_sparse(struct SparseArray* sa);
 /* EXPR_LINKEDLIST constructor. Takes ownership of one reference to `ll`
  * (expr_free releases it). See linkedlist.h. */
 Expr* expr_new_linkedlist(struct LinkedList* ll);
+
+/* EXPR_PVEC constructor. Takes ownership of one reference to `pv`. See pvec.h. */
+Expr* expr_new_pvec(struct PVec* pv);
+/* Has any PVector value been created yet?  (Lets the evaluator skip its
+ * PVector gate with one load until the first one exists.) */
+extern bool g_pvec_created;
 
 #ifdef USE_MPFR
 /* MPFR constructors. Each allocates an Expr whose payload `mpfr_t` is

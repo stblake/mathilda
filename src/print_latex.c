@@ -29,6 +29,7 @@
  *     through every renderer.
  */
 
+#include "pvec.h"
 #include "print_latex.h"
 #include "linkedlist.h"
 #include "print.h"          /* expr_to_string, for fallback */
@@ -589,6 +590,11 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
     }
 
     /* ---- A LinkedList: its summary, LinkedList[<n>] ---- */
+    if (e->type == EXPR_PVEC) {
+        printf("\\text{PVector}\\left[\\langle %" PRId64 "\\rangle \\right]",
+               pv_length(e->data.pvec));
+        return;
+    }
     if (e->type == EXPR_LINKEDLIST) {
         char buf[96];
         snprintf(buf, sizeof buf, "\\text{LinkedList}\\left[\\langle %" PRId64 "\\rangle \\right]",

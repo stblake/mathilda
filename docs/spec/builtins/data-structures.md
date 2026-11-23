@@ -1996,3 +1996,63 @@ Messages: `Pop::empty` / `PopFirst::empty` (the list is empty; the call stays
 unevaluated), `::rvalue`, `::normal`, as for `Push`.
 
 Attributes: `{HoldFirst, Protected}`.
+
+## PVector, PVectorQ
+
+`PVector[]` is an empty persistent vector and `PVector[list]` holds the elements
+of a `List` or packed array. `PVectorQ[e]` is `True` for a persistent vector.
+
+A persistent vector is an immutable **value**. Every update returns a new vector
+that shares all untouched storage with the old one, so holding on to the old
+value is free:
+
+```
+v = PVector[Range[100]];
+w = v; w[[50]] = -1;      (* v[[50]] is still 50 *)
+snaps = {}; Do[v[[i]] = 0; AppendTo[snaps, v], {i, 100}]   (* 100 snapshots, shared *)
+```
+
+It is a 32-way bitmapped trie with a separate tail leaf (the Clojure / Scala
+`Vector` layout), reference counted per node. A node held once is edited in
+place; a node held more than once is copied before it is edited (path copying).
+
+| Operation | Cost |
+|---|---|
+| `Length`, `Dimensions` | O(1) |
+| `v[[i]]` | O(log32 n), at most 7 levels for 10^10 elements |
+| `v[[i]] = x`, `Append`, `AppendTo`, `Most` | O(log32 n) at worst; amortised O(1) when the vector is held once |
+| `Prepend`, `Rest`, `Take`, `Drop`, `Join`, `Reverse` | O(n) (a new vector) |
+
+The pure form `v = Append[v, x]`, which is quadratic for a `List` (about 42 µs per
+append at n = 6000), costs about 0.26 µs per append here, flat in n, because the
+update copies one tail leaf instead of the vector.
+
+**Storage is typed.** While every element is a machine integer the leaves hold raw
+`int64`, while every element is a machine real they hold raw `double`; the first
+element of any other kind converts the vector to boxed leaves once. A vector made
+from a packed rank-1 integer or real array copies straight into typed leaves.
+
+**Operations.** Native on the vector, with no materialisation: `Length`,
+`Dimensions`, `Part` (an integer is one element; `All`, a `Span` or a list of
+positions give a new `PVector`), `Part` assignment, `First`, `Last`, `Most`,
+`Rest`, `Append`, `Prepend`, `AppendTo`, `PrependTo`, `Normal`, `Head` and the
+pattern `_PVector`. Structure-preserving heads (`Map`, `Select`, `Take`, `Drop`,
+`Join`, `Reverse`, `Sort`, `Insert`, `Delete`, `ReplacePart`, `Riffle`,
+`DeleteCases`, `DeleteDuplicates`, `Union`, `Accumulate`, `FoldList`,
+`Differences`, `RotateLeft`, `RotateRight`, `PadLeft`, `PadRight`) and every
+`Listable` function (`v + 1`, `2 v`, `Sin[v]`) run on the equivalent `List` and
+return a `PVector`; reductions and queries (`Total`, `Max`, `Min`, `Mean`,
+`Count`, `Position`, `MemberQ`, `Flatten`, `Fold`, `Apply`, `Tally`, ...) answer
+exactly as they do for the `List`. Parity with `List` holds by construction and is
+tested for every one of them over integer, real, mixed, empty and multi-leaf data.
+
+**Equality.** `PVector[{1, 2}] === PVector[{1, 2}]` is `True` whatever the storage
+kind or how each was built, and a `PVector` is never `===` a `List`. A `PVector`
+works as an `Association` key and in `Union` / `DeleteDuplicates`. The hash
+samples at most 16 elements, so it is O(1).
+
+**Printing.** `PVector[<n>]`, like `SparseArray` and `LinkedList`; a literal that
+reads back is a later step. `Normal[v]` gives the elements.
+
+**Not yet:** `Compile[]` lowering (a `PVector` argument or result makes the whole
+body run in the interpreter, correctly), and a persistent *map* or *set*.

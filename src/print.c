@@ -7,6 +7,7 @@
 
 // Print
 
+#include "pvec.h"
 #include "print.h"
 #include "linkedlist.h"
 #include "print_fortran.h"
@@ -774,6 +775,11 @@ void expr_print_fullform(Expr* e) {
             expr_free(canon);
             break;
         }
+        case EXPR_PVEC:
+            /* Prints the summary, as LinkedList and SparseArray do; a literal
+             * that reads back is a later step. Normal[pv] gives the elements. */
+            printf("PVector[<%" PRId64 ">]", pv_length(e->data.pvec));
+            break;
         case EXPR_LINKEDLIST:
             /* A mutable object has no literal that reads back: every form
              * prints the summary. */

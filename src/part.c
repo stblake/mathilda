@@ -6,6 +6,8 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ds_ops.h"
+#include "pvec_ops.h"
+#include "pvec.h"
 #include "ndarray.h"
 #include "pack.h"      /* pack_force -- lift a small gather source up to the buffer */
 #include "part.h"
@@ -102,6 +104,7 @@ bool part_span_resolve(const Expr* span, int64_t len, int64_t* start, int64_t* s
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
 static bool ll_part_assign(Expr* llx, Expr** indices, size_t nindices, Expr* rhs);
+static void ll_part_msg_partw(const char* head, Expr* ll, Expr* spec);
 
 /* The piece of `rhs` that the k-th of `nsel` positions selected at one level
  * receives. Returns a new reference.
@@ -312,6 +315,35 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
 
     if (expr->type == EXPR_NDARRAY)
         return nd_part_assign_or_list(expr, indices, nindices, rhs);
+
+    /* A PVector is a value: the write builds a new PVector (path copy) and the
+     * old one is untouched.  An integer first subscript is native; any other
+     * spec goes through the List and back. */
+    if (expr->type == EXPR_PVEC) {
+        PVec* pv = expr->data.pvec;
+        Expr* ix = indices[0];
+        if (ix->type == EXPR_INTEGER) {
+            int64_t len = pv_length(pv), k = ix->data.integer;
+            if (k < 0) k = len + k + 1;
+            if (k < 1 || k > len) { ll_part_msg_partw("Set", expr, ix); return NULL; }
+            Expr* ne;
+            if (nindices == 1) ne = expr_copy(rhs);
+            else {
+                Expr* cur = pv_get(pv, k - 1);
+                ne = expr_part_assign_rec(cur, indices + 1, nindices - 1, rhs);
+                expr_free(cur);
+                if (!ne) return NULL;
+            }
+            return expr_new_pvec(pv_set(pv_retain(pv), k - 1, ne));
+        }
+        Expr* l = pv_to_list(pv);
+        Expr* r = expr_part_assign_rec(l, indices, nindices, rhs);
+        expr_free(l);
+        if (!r) return NULL;
+        Expr* back = pvec_make(r);
+        if (back) { expr_free(r); return back; }
+        return r;
+    }
 
     if (expr->type == EXPR_SPARSE) {
         /* One element: rebuilt sparsely. Anything else (spans, All, a List
@@ -617,6 +649,23 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
         return current_val;
     }
 
+    /* v[[i]] = x on a PVector this variable owns exclusively: pv_set edits the
+     * payload in place (O(1) when its nodes are unshared, else one path copy),
+     * and the node is re-pointed at the result.  The node being exclusively
+     * owned is what makes this invisible to every other holder. */
+    if (current_val->type == EXPR_PVEC && lhs->data.function.arg_count == 2 &&
+        lhs->data.function.args[1]->type == EXPR_INTEGER &&
+        symtab_value_exclusively_owned(sym, current_val)) {
+        int64_t len = pv_length(current_val->data.pvec), k = lhs->data.function.args[1]->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k >= 1 && k <= len) {
+            current_val->data.pvec = pv_set(current_val->data.pvec, k - 1, expr_copy(rhs));
+            expr_invalidate_hash(current_val);
+            eval_clock_bump_binding(symtab_get_def(sym->data.symbol.name));
+            return current_val;
+        }
+    }
+
     /* p[[i, ...]] = scalar on a packed array this variable owns exclusively:
      * write the element in place (see nd_set_element_inplace). */
     if (current_val->type == EXPR_NDARRAY && symtab_value_exclusively_owned(sym, current_val) &&
@@ -851,6 +900,35 @@ static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     }
     free(pos);
     return expr_new_linkedlist(out);
+}
+
+/* PVector Part: ll_part's reading rules over a persistent vector.  An integer
+ * subscript is one element; All / Span / List select a new PVector (sharing
+ * nothing with the source -- a selection is a fresh, short vector). */
+Expr* pvec_part(Expr* pvx, Expr** indices, size_t nindices) {
+    PVec* pv = pvx->data.pvec;
+    int64_t len = pv_length(pv);
+    Expr* idx = indices[0];
+    Expr** rest = indices + 1;
+    size_t nrest = nindices - 1;
+
+    if (idx->type == EXPR_INTEGER) {
+        int64_t k = idx->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k < 1 || k > len) { ll_part_msg_partw("Part", pvx, idx); return NULL; }
+        return ll_elem_part(pv_get(pv, k - 1), rest, nrest);
+    }
+    int64_t n = 0;
+    int64_t* pos = ll_part_positions("Part", pvx, idx, len, &n);
+    if (!pos) return NULL;
+    PVec* out = pv_new();
+    for (int64_t i = 0; i < n; i++) {
+        Expr* r = nrest == 0 ? pv_get(pv, pos[i]) : ll_elem_part(pv_get(pv, pos[i]), rest, nrest);
+        if (!r) { pv_release(out); free(pos); return NULL; }
+        out = pv_push(out, r);
+    }
+    free(pos);
+    return expr_new_pvec(out);
 }
 
 /* ------------------------------------------------------------------------

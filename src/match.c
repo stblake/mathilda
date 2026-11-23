@@ -1383,6 +1383,10 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
                  * SameQ array, never by destructuring. */
                 if (expr_eq(expr, pattern)) return call_parent(env, parent);
                 return false;
+            case EXPR_PVEC:
+                /* A PVector literal matches an equal PVector, never by destructuring. */
+                if (expr_eq(expr, pattern)) return call_parent(env, parent);
+                return false;
             case EXPR_LINKEDLIST:
                 /* A LinkedList matches only itself (identity). */
                 if (expr_eq(expr, pattern)) return call_parent(env, parent);

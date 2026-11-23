@@ -1,4 +1,5 @@
 #include "expr.h"
+#include "pvec.h"
 #include "arithmetic.h"
 #include "sym_intern.h"
 #include "sym_names.h"
@@ -481,6 +482,20 @@ Expr* expr_new_sparse(struct SparseArray* sa) {
     return e;
 }
 
+/* EXPR_PVEC. An immutable, reference-counted payload: the node adopts one
+ * reference, expr_copy retains it, expr_free releases it. */
+bool g_pvec_created = false;
+Expr* expr_new_pvec(struct PVec* pv) {
+    Expr* e = expr_alloc_node();
+    if (!e) return NULL;
+    e->type = EXPR_PVEC;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.pvec = pv;
+    g_pvec_created = true;
+    return e;
+}
+
 /* EXPR_LINKEDLIST. The payload is reference-counted in linkedlist.c and,
  * unlike every other payload, MUTABLE: the node adopts the one reference. */
 Expr* expr_new_linkedlist(struct LinkedList* ll) {
@@ -728,6 +743,10 @@ Expr* expr_unshare(Expr* e) {
              * physical copy of the node still names the same list. */
             fresh->data.llist = ll_retain(e->data.llist);
             break;
+        case EXPR_PVEC:
+            /* Immutable payload: share it (updates build a new payload). */
+            fresh->data.pvec = pv_retain(e->data.pvec);
+            break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
@@ -850,6 +869,9 @@ void expr_free(Expr* e) {
             break;
         case EXPR_LINKEDLIST:
             ll_release(e->data.llist);
+            break;
+        case EXPR_PVEC:
+            pv_release(e->data.pvec);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -1058,6 +1080,9 @@ bool expr_eq(const Expr* a, const Expr* b) {
             /* Identity: SameQ iff the same list object (the contents of a
              * mutable list are not part of its identity). */
             return a->data.llist == b->data.llist;
+        case EXPR_PVEC:
+            /* Value equality: same length and equal elements. */
+            return pv_equal(a->data.pvec, b->data.pvec);
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Equal iff same precision AND same value (matches SameQ
@@ -1249,6 +1274,9 @@ uint64_t expr_hash(const Expr* e) {
         case EXPR_LINKEDLIST:
             /* Identity hash, stable across mutation (see expr_eq). */
             h ^= ll_id(e->data.llist) * UINT64_C(0x9E3779B97F4A7C15); h *= prime;
+            break;
+        case EXPR_PVEC:
+            h ^= pv_hash(e->data.pvec); h *= prime;
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR: {

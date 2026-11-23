@@ -12,6 +12,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include "pvec_ops.h"
 #include "core.h"
 #include "linkedlist.h"
 #include "ds_ops.h"
@@ -1157,6 +1158,7 @@ void core_init(void) {
     purefunc_init();
     void minus_init(void);  minus_init();   /* Minus[x] -> Times[-1, x] */
     linkedlist_init();                      /* LinkedList[] (linkedlist.c) */
+    pvec_init();                            /* PVector[] (pvec_ops.c) */
     stats_init();
     partitions_init();
     poly_init();
@@ -2723,7 +2725,7 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     if (current_val->type == EXPR_LINKEDLIST) return ll_append_to(name, current_val, elem, prepend);
     /* A SparseArray appends through Append's native sparse kernel (a dense
      * answer for an element that is not a row of the array). */
-    if (current_val->type == EXPR_SPARSE) {
+    if (current_val->type == EXPR_SPARSE || current_val->type == EXPR_PVEC) {
         Expr* aa[2] = { current_val, expr_copy(elem) };          /* adopts current_val */
         Expr* call = expr_new_function(expr_new_symbol(prepend ? "Prepend" : "Append"), aa, 2);
         Expr* new_val = evaluate(call);
