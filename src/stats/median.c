@@ -7,7 +7,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
-#include "sort.h"      /* expr_orderless_sort: Sort's canonical order */
+#include "sort.h"
 #include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include "print.h"     /* expr_to_string */
@@ -42,7 +42,9 @@ Expr* builtin_median(Expr* res) {
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
         // Apply columnwise via Transpose and Map
         ll_rd_close(&e);
-        return stats_apply_columnwise("Median", data);
+        Expr* r = stats_apply_columnwise("Median", data);
+        if (!r) stats_msg_rectn("Median", res);    /* ragged / mixed depth */
+        return r ? r : expr_copy(res);
     }
 
     // Now it's a 1D vector. Check if all elements are real numbers.
@@ -62,8 +64,9 @@ Expr* builtin_median(Expr* res) {
         return expr_copy(res);
     }
 
-    /* The canonical order Sort uses (expr_compare), as a permutation over the
-     * elements where they lie: no Sort call and no element array. */
+    /* Numeric order (stats_sort_order: by value, not Sort's canonical order),
+     * as a permutation over the elements where they lie: no Sort call and no
+     * element array. */
     size_t* perm = stats_sort_order(&e);
     if (!perm) { ll_rd_close(&e); return expr_copy(res); }
     StatsOrder ord = { &e, perm };

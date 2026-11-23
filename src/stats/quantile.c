@@ -59,7 +59,7 @@ static bool parse_param_matrix(Expr* param_expr, Expr** a, Expr** b, Expr** c, E
 /* One validated q in [0,1] -> engine result. Returns NULL when q is not real
  * numeric (caller declines) and sets *out_of_range when q is numeric but
  * outside [0,1] (caller emits the message). */
-static Expr* quantile_one(Expr** sorted_A, size_t n, Expr* q,
+static Expr* quantile_one(const StatsOrder* ord, size_t n, Expr* q,
                           Expr* a, Expr* b, Expr* c, Expr* d, bool* out_of_range) {
     *out_of_range = false;
     if (!stats_is_real_numeric(q)) return NULL;
@@ -74,10 +74,7 @@ static Expr* quantile_one(Expr** sorted_A, size_t n, Expr* q,
         if (!ok) return NULL;
     }
     if (qv < 0.0 || qv > 1.0) { *out_of_range = true; return NULL; }
-    LLReader r;
-    ll_rd_wrap(&r, sorted_A, n);
-    StatsOrder ord = { &r, NULL };
-    return stats_quantile_point(&ord, n, q, a, b, c, d);
+    return stats_quantile_point(ord, n, q, a, b, c, d);
 }
 
 Expr* builtin_quantile(Expr* res) {
@@ -110,11 +107,18 @@ Expr* builtin_quantile(Expr* res) {
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
 
+        /* Ragged / mixed depth: Transpose stays unevaluated, and mapping over
+         * it re-entered Quantile with the same data until $RecursionLimit. */
+        if (!stats_is_matrix(data)) {
+            stats_msg_rectn("Quantile", res);
+            QUANTILE_RET(expr_copy(res));
+        }
         Expr* t_expr = expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){expr_copy(data)}, 1);
         Expr* t_eval = evaluate(t_expr);
         expr_free(t_expr);
 
-        if (t_eval->type != EXPR_FUNCTION) {
+        if (t_eval->type != EXPR_FUNCTION || t_eval->data.function.head->type != EXPR_SYMBOL ||
+            t_eval->data.function.head->data.symbol.name != SYM_List) {
             expr_free(t_eval);
             QUANTILE_RET(expr_copy(res));
         }
@@ -162,18 +166,16 @@ Expr* builtin_quantile(Expr* res) {
     }
 #define QUANTILE_RET_ABCD(x) do { Expr* _r2 = (x); expr_free(a); expr_free(b); expr_free(c); expr_free(d); QUANTILE_RET(_r2); } while (0)
 
-    /* Sort once. pack_eval_plain, not evaluate: Sort returns a PACKED list for
-     * a large machine-number input and the args walk below reads
-     * .data.function.args (same trap note as median.c / quartiles.c). */
-    Expr* sort_expr = expr_new_function(expr_new_symbol(SYM_Sort), (Expr*[]){expr_copy(data)}, 1);
-    Expr* sorted = pack_eval_plain(sort_expr);
-    expr_free(sort_expr);
-
-    if (sorted->type != EXPR_FUNCTION || sorted->data.function.arg_count != n) {
-        expr_free(sorted);
-        QUANTILE_RET_ABCD(expr_copy(res));
-    }
-    Expr** sorted_A = sorted->data.function.args;
+    /* Order once, by NUMERIC value (stats_sort_order): a quantile is defined
+     * on the data sorted by value, and Sort's canonical order put 3.5 before
+     * Sqrt[2] (Quantile[{2, Sqrt[3]}, 0] was 2). The permutation reads the
+     * elements where they lie -- no sorted copy. */
+    LLReader rd;
+    ll_rd_open(data, &rd);
+    size_t* perm = stats_sort_order(&rd);
+    if (!perm) { ll_rd_close(&rd); QUANTILE_RET_ABCD(expr_copy(res)); }
+    StatsOrder ord = { &rd, perm };
+#define QUANTILE_SORTED_FREE() do { free(perm); ll_rd_close(&rd); } while (0)
 
     bool qspec_is_list = qspec->type == EXPR_FUNCTION &&
                          qspec->data.function.head->type == EXPR_SYMBOL &&
@@ -181,17 +183,17 @@ Expr* builtin_quantile(Expr* res) {
 
     if (!qspec_is_list) {
         bool out_of_range = false;
-        Expr* r = quantile_one(sorted_A, n, qspec, a, b, c, d, &out_of_range);
+        Expr* r = quantile_one(&ord, n, qspec, a, b, c, d, &out_of_range);
         if (!r) {
             if (out_of_range) {
                 char* str = expr_to_string(res);
                 mth_message("Quantile", "q100", "The quantile q is expected to be a number between 0 and 1 in %s.", str);
                 free(str);
             }
-            expr_free(sorted);
+            QUANTILE_SORTED_FREE();
             QUANTILE_RET_ABCD(expr_copy(res));
         }
-        expr_free(sorted);
+        QUANTILE_SORTED_FREE();
         QUANTILE_RET_ABCD(r);
     }
 
@@ -199,7 +201,7 @@ Expr* builtin_quantile(Expr* res) {
     Expr** out = malloc(sizeof(Expr*) * (nq ? nq : 1));
     for (size_t i = 0; i < nq; i++) {
         bool out_of_range = false;
-        Expr* r = quantile_one(sorted_A, n, qspec->data.function.args[i], a, b, c, d, &out_of_range);
+        Expr* r = quantile_one(&ord, n, qspec->data.function.args[i], a, b, c, d, &out_of_range);
         if (!r) {
             if (out_of_range) {
                 char* str = expr_to_string(res);
@@ -208,13 +210,13 @@ Expr* builtin_quantile(Expr* res) {
             }
             for (size_t k = 0; k < i; k++) expr_free(out[k]);
             free(out);
-            expr_free(sorted);
+            QUANTILE_SORTED_FREE();
             QUANTILE_RET_ABCD(expr_copy(res));
         }
         out[i] = r;
     }
     Expr* res_list = expr_new_function(expr_new_symbol(SYM_List), out, nq);
     free(out);
-    expr_free(sorted);
+    QUANTILE_SORTED_FREE();
     QUANTILE_RET_ABCD(res_list);
 }

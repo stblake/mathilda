@@ -300,9 +300,12 @@ void test_wp_derivative() {
 }
 
 void test_wp_buffers_compile() {
+    /* The grid stays off the pole at 0: Range is imin + k di, so a grid
+     * through 0 now reaches 0. exactly (the old accumulated Range drifted past
+     * it), and a ComplexInfinity lane cannot pack. */
     for (int k = 0; k < 4; k++) {
         char buf[500];
-        snprintf(buf, sizeof buf, "With[{v = Range[-6., 6., 0.01]}, PackedArrayQ[%s[v, {1., 2.}]] && %s[v, {1., 2.}] === Table[%s[x, {1., 2.}], {x, FromPackedArray[v]}]]",
+        snprintf(buf, sizeof buf, "With[{v = Range[-5.995, 6., 0.01]}, PackedArrayQ[%s[v, {1., 2.}]] && %s[v, {1., 2.}] === Table[%s[x, {1., 2.}], {x, FromPackedArray[v]}]]",
                  NAMES[k], NAMES[k], NAMES[k]);
         assert_true(buf);
         snprintf(buf, sizeof buf, "With[{v = Range[-3., 3., 0.01] + 0.4 I}, %s[v, {1.5, -2. + I}] === Table[%s[x, {1.5, -2. + I}], {x, FromPackedArray[v]}]]",

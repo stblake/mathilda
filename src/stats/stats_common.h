@@ -27,6 +27,17 @@ bool stats_machine_ok(double v);
  * function. */
 Expr* stats_apply_columnwise(const char* func_name, Expr* matrix);
 
+/* True when `data` is a List whose elements are all sequences (List,
+ * LinkedList, array row) of one common length -- a matrix that Transpose
+ * accepts. The matrix branches check it first: an unevaluated Transpose of a
+ * ragged list, mapped over, re-entered the head with the same ragged list
+ * until $RecursionLimit. */
+bool stats_is_matrix(const Expr* data);
+
+/* The `rectn` message every statistic emits for data that is not a vector or
+ * a rectangular array of real numbers, naming the call `res`. */
+void stats_msg_rectn(const char* head, Expr* res);
+
 /* True iff e is NumericQ and free of the imaginary unit I (a real number). */
 bool stats_is_real_numeric(Expr* e);
 
@@ -47,8 +58,8 @@ typedef struct { LLReader* rd; const size_t* perm; } StatsOrder;
 static inline Expr* stats_order_at(const StatsOrder* o, size_t k) {
     return ll_rd_at(o->rd, o->perm ? o->perm[k] : k);
 }
-/* The permutation that sorts the reader's elements into Sort's canonical
- * order (expr_compare): a raw index buffer the caller frees, the elements
+/* The permutation that sorts the reader's elements into NUMERIC order
+ * (numeric_order.h; numerically equal elements in canonical order): a raw index buffer the caller frees, the elements
  * compared where they lie (a List argument, a boxed slot) or through their raw
  * typed slots -- never gathered into an element array. NULL on OOM. */
 size_t* stats_sort_order(LLReader* rd);

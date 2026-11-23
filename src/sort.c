@@ -17,6 +17,7 @@
 #include "ndreduce.h"  /* ndred_ranked_min / ndred_ranked_max — NDArray order-statistic path */
 #include "numeric.h"   /* numericalize / numeric_machine_spec — key for symbolic reals */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
+#include "numeric_order.h" /* numord_key / numord_cmp: TakeLargest, RankedMin numeric order */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -1481,19 +1482,22 @@ Expr* builtin_reverse_sort_by(Expr* res) {
  * The key is `f[subject]` when f != NULL, else `subject` itself, where
  * `subject` is each list element, or each value for an association. For an
  * association the result is an association of the corresponding entries. */
-/* Rank two TakeLargest/TakeSmallest keys. Numbers rank by VALUE: 3 and 3. tie
- * here although canonical order separates them (by type), so that a tie is
- * settled by position, as for any other tie. */
-static int take_key_cmp(const Expr* a, const Expr* b) {
-    int c = expr_compare(a, b);
-    if (c && a->type != b->type && is_atomic_numeric(a) && is_atomic_numeric(b)) {
-        /* Equal values of different kinds tie (1 and 1.). Two real atoms are
-         * compared exactly; a Complex keeps the machine reading. */
-        bool cx = is_complex((Expr*)a, NULL, NULL) || is_complex((Expr*)b, NULL, NULL);
-        if (cx ? get_numeric_value(a) == get_numeric_value(b)
-               : real_value_cmp(a, 1, b, 1) == 0)
-            return 0;
-    }
+/* Rank two TakeLargest/TakeSmallest keys in NUMERIC order (numeric_order.h):
+ * real numbers by value -- Pi below 4, E below 3, -Infinity below every real,
+ * which canonical order (every explicit number before Pi, E and -Infinity) got
+ * wrong -- and anything else after them, canonically. Equal values (3 and 3.)
+ * tie, so that a tie is settled by position, as for any other tie. The
+ * numeric keys are computed once per element (g_take_nk, indexed by pos). */
+static const NumOrdKey* g_take_nk = NULL;
+
+static int take_key_cmp(const SortByPair* pa, const SortByPair* pb) {
+    const NumOrdKey* ka = &g_take_nk[pa->pos];
+    const NumOrdKey* kb = &g_take_nk[pb->pos];
+    if (ka->exact && kb->exact) return (ka->v > kb->v) - (ka->v < kb->v);
+    Expr* ea = sb_key(pa);
+    Expr* eb = sb_key(pb);
+    int c = numord_cmp(ea, ka, eb, kb);
+    expr_free(ea); expr_free(eb);
     return c;
 }
 
@@ -1503,10 +1507,7 @@ static int take_key_cmp(const Expr* a, const Expr* b) {
 static int take_smallest_cmp(const void* a, const void* b) {
     const SortByPair* pa = (const SortByPair*)a;
     const SortByPair* pb = (const SortByPair*)b;
-    Expr* ka = sb_key(pa);
-    Expr* kb = sb_key(pb);
-    int c = take_key_cmp(ka, kb);
-    expr_free(ka); expr_free(kb);
+    int c = take_key_cmp(pa, pb);
     if (c) return c;
     return (pa->pos < pb->pos) ? -1 : (pa->pos > pb->pos);
 }
@@ -1514,10 +1515,7 @@ static int take_smallest_cmp(const void* a, const void* b) {
 static int take_largest_cmp(const void* a, const void* b) {
     const SortByPair* pa = (const SortByPair*)a;
     const SortByPair* pb = (const SortByPair*)b;
-    Expr* ka = sb_key(pa);
-    Expr* kb = sb_key(pb);
-    int c = take_key_cmp(kb, ka);                 /* descending */
-    expr_free(ka); expr_free(kb);
+    int c = take_key_cmp(pb, pa);                 /* descending */
     if (c) return c;
     return (pa->pos < pb->pos) ? -1 : (pa->pos > pb->pos);
 }
@@ -1531,6 +1529,8 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
     /* The key is f[subject] (computed once), or the subject itself, read on
      * demand; the subject is each element, or each value of an association. */
     SortByPair* pairs = malloc(sizeof(SortByPair) * (n ? n : 1));
+    NumOrdKey* nk = malloc(sizeof(NumOrdKey) * (n ? n : 1));
+    if (!pairs || !nk) { free(pairs); free(nk); llq_close(&q); return NULL; }
     for (size_t i = 0; i < n; i++) {
         pairs[i].pos = i;
         pairs[i].multi = false;
@@ -1540,11 +1540,20 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
             Expr* call = expr_new_function(expr_copy(f), call_args, 1);
             pairs[i].key = eval_callback(call);
             expr_free(call);
+            numord_key(pairs[i].key, &nk[i]);
+        } else {
+            Expr* subj = expr_copy(sort_subject(llq_peek(&q, i), assoc));
+            numord_key(subj, &nk[i]);
+            expr_free(subj);
         }
     }
 
     /* Best first: descending for largest, ascending for smallest. */
+    const NumOrdKey* saved_nk = g_take_nk;
+    g_take_nk = nk;
     sb_sort(pairs, n, &q, assoc, largest ? take_largest_cmp : take_smallest_cmp);
+    g_take_nk = saved_nk;
+    free(nk);
 
     size_t k = ((int64_t)n < nreq) ? n : (size_t)nreq;
     size_t* idx = malloc(sizeof(size_t) * (k ? k : 1));
@@ -1602,48 +1611,28 @@ Expr* builtin_take_smallest_by(Expr* res) {
 
 /* ------------------- RankedMin / RankedMax ------------------- */
 
-/* A machine-double sort key for one real element, for the mixed / symbolic
- * ordering path: +/-HUGE_VAL for +/-Infinity, the exact value for a real atom,
- * else the numericalized value of a symbolic real (Pi, E, Sqrt[2], Pi + E, ...).
- * Returns false when e is not a real number -- a free symbol or a non-real
- * complex -- which is the signal that RankedMin has no definite result and must
- * stay unevaluated. */
-static bool ranked_numeric_key(Expr* e, double* out) {
-    if (is_infinity(e)) { *out = HUGE_VAL; return true; }
-    if (is_minus_infinity(e)) { *out = -HUGE_VAL; return true; }
-    /* A real atom (incl. a real-valued Complex[re, 0]) reads its value directly;
-     * a symbolic real is numericalized to machine precision first. The giant
-     * high-precision reals stay untouched -- only their double key is taken. */
-    Expr* nv = is_real_numeric(e) ? NULL : numericalize(e, numeric_machine_spec());
-    Expr* v = nv ? nv : e;
-    bool ok = false;
-    if (is_real_numeric(v)) {
-        Expr* re; Expr* im;
-        *out = is_complex(v, &re, &im) ? get_numeric_value(re) : get_numeric_value(v);
-        ok = true;
-    }
-    if (nv) expr_free(nv);
-    return ok;
-}
-
-/* Context + comparator for the index quickselect. Exactly one of `keys` (the
- * approximate double-key path) and expr_compare (the exact path, keys == NULL)
- * decides order; the original index is the stable tiebreak, so the result is a
- * strict total order over distinct indices either way. cmp(i, i) == 0 so the
- * Hoare partition treats an element as equal to itself. */
-typedef struct { LLSeq* q; const double* keys; } RankedCtx;
+/* Context + comparator for the index quickselect: NUMERIC order
+ * (numeric_order.h) on keys computed once per element -- certified, so Pi and
+ * 314159265358979/10^14 are not confused through their doubles -- with the
+ * original index as the stable tiebreak, so the result is a strict total order
+ * over distinct indices. cmp(i, i) == 0 so the Hoare partition treats an
+ * element as equal to itself. */
+typedef struct { LLSeq* q; const NumOrdKey* keys; } RankedCtx;
 
 static int ranked_cmp(const RankedCtx* c, size_t i, size_t j) {
     if (i == j) return 0;
-    if (c->keys) {
-        if (c->keys[i] < c->keys[j]) return -1;
-        if (c->keys[i] > c->keys[j]) return 1;
+    const NumOrdKey* ki = &c->keys[i];
+    const NumOrdKey* kj = &c->keys[j];
+    int r;
+    if (ki->exact && kj->exact) {
+        r = (ki->v > kj->v) - (ki->v < kj->v);
     } else {
         Expr* a = expr_copy(llq_peek(c->q, i));
-        int r = expr_compare(a, llq_peek(c->q, j));
-        expr_free(a);
-        if (r != 0) return r;
+        Expr* b = expr_copy(llq_peek(c->q, j));
+        r = numord_cmp(a, ki, b, kj);
+        expr_free(a); expr_free(b);
     }
+    if (r != 0) return r;
     return (i < j) ? -1 : 1;   /* stable: original position breaks value ties */
 }
 
@@ -1683,19 +1672,15 @@ static Expr* ranked_select(LLSeq* q, int64_t n0, bool is_max) {
     int64_t r = (n > 0) ? n : ((int64_t)m + n + 1);       /* ascending rank, 1-based */
     if (r < 1 || r > (int64_t)m) return NULL;             /* |n| out of range */
 
-    /* One scan chooses the path: exact (expr_compare, BigInt/Rational-safe) when
-     * every element is a real numeric atom, else the double-key path (which also
-     * validates that every element is a real number). */
-    bool all_exact = true;
-    for (size_t i = 0; i < m; i++)
-        if (!is_real_numeric(llq_peek(q, i))) { all_exact = false; break; }
-
-    double* keys = NULL;
-    if (!all_exact) {
-        keys = malloc(sizeof(double) * m);
-        if (!keys) return NULL;
-        for (size_t i = 0; i < m; i++)
-            if (!ranked_numeric_key(llq_peek(q, i), &keys[i])) { free(keys); return NULL; }
+    /* One key per element; it also validates that every element is a real
+     * number (+/-Infinity included) -- otherwise there is no definite result. */
+    NumOrdKey* keys = malloc(sizeof(NumOrdKey) * m);
+    if (!keys) return NULL;
+    for (size_t i = 0; i < m; i++) {
+        Expr* el = expr_copy(llq_peek(q, i));
+        numord_key(el, &keys[i]);
+        expr_free(el);
+        if (keys[i].cls != NUMORD_REAL) { free(keys); return NULL; }
     }
 
     size_t* idx = malloc(sizeof(size_t) * m);

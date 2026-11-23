@@ -28,6 +28,7 @@ size_t u8_char_len(const char* str, size_t n, size_t i) {
     unsigned char b0 = s[i];
     size_t rem = n - i;
     if (b0 < 0x80) return 1;
+    if (b0 == 0xC0 && rem >= 2 && s[i + 1] == 0x80) return 2;   /* U+0000 (utf8.h) */
     if (b0 >= 0xC2 && b0 <= 0xDF)
         return (rem >= 2 && is_cont(s[i + 1])) ? 2 : 1;
     if (b0 >= 0xE0 && b0 <= 0xEF) {
@@ -115,6 +116,7 @@ uint32_t u8_decode(const char* str, size_t n, size_t* i) {
 
 size_t u8_encode(uint32_t cp, char* out) {
     unsigned char* o = (unsigned char*)out;
+    if (cp == 0) { o[0] = 0xC0; o[1] = 0x80; return 2; }        /* U+0000 (utf8.h) */
     if (cp < 0x80) { o[0] = (unsigned char)cp; return 1; }
     if (cp < 0x800) {
         o[0] = (unsigned char)(0xC0 | (cp >> 6));

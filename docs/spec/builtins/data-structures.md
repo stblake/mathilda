@@ -50,8 +50,11 @@ or `Association[k1 -> v1, ...]`.
   key gives `Missing["KeyAbsent", key]`); `assoc[[{k1, k2, ...}]]` gives the list
   of those values.
 - **`assoc[key]`** — an association applied as a function looks the key up (the
-  idiomatic accessor), giving the value or `Missing["KeyAbsent", key]`; `assoc[Key[k]]`
-  is the explicit form.
+  idiomatic accessor), giving the value or `Missing["KeyAbsent", key]`. Its
+  argument is always the literal key: `assoc[Key[k]]` looks up the key `Key[k]`
+  itself, as in the reference (`<|"b" -> 2|>[Key["b"]]` is
+  `Missing["KeyAbsent", Key["b"]]`); `assoc[[Key[k]]]`, `Lookup` and
+  `Key[k][assoc]` are the forms that unwrap `Key` (audit Key#1).
 - **`Key[k][assoc]`** — the curried complement: `Key[k]` applied to an association
   extracts the value at `k`. This is the record-field extractor for pipelines —
   `GroupBy[records, Key["field"]]`, `SortBy[records, Key["field"]]`,
@@ -479,6 +482,8 @@ Gathers the elements with equal `f[element]` into sublists, in first-appearance
 order (like `GroupBy` but returning the groups as a plain list of lists). Over an
 association it gathers the **entries** by `f[value]` into sub-associations (keys
 preserved), returned as a list — `GroupBy[assoc, f]` without the outer keys.
+`GatherBy[list, {f1, f2, ...}]` gathers by `f1`, then each group by `f2`, and so
+on, giving a nested list (audit GatherBy#1).
 
 ```mathematica
 In[1]:= GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -1201,9 +1206,10 @@ Out[7]= <|"a" -> 1, "b" -> 2|> + <|"b" -> 1, "a" -> 2|>
 ## Key
 `Key[k]` names the key `k` of an association.
 - `Key[k][assoc]` gives the value at `k`, or `Missing["KeyAbsent", k]`.
-- `assoc[[Key[k]]]`, `assoc[Key[k]]` and `Lookup[assoc, Key[k]]` read the key
-  literally, which matters when `k` is an integer (not a position) or a list
-  (not a list of keys).
+- `assoc[[Key[k]]]` and `Lookup[assoc, Key[k]]` read the key literally, which
+  matters when `k` is an integer (not a position) or a list (not a list of
+  keys). The accessor `assoc[Key[k]]` does not unwrap `Key` -- it looks up the
+  key `Key[k]` -- as in the reference (audit Key#1).
 - Key specs in `GroupBy`, `SortBy`, `JoinAcross`, `MapAt`,
   `ReplacePart` and `Extract` accept `Key[k]`.
 

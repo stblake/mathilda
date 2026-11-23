@@ -23,7 +23,7 @@
 
 #define AP_MAX_RANK 64
 
-/* Nesting depth of a nested-List array (0 for an atom). {{},{}} has depth 2. */
+/* True for a List[...] expression. */
 static bool ap_is_list(const Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_List;
@@ -31,19 +31,6 @@ static bool ap_is_list(const Expr* e) {
 
 /* A level of the array: a List, or a LinkedList (read through an LLSeq). */
 static bool ap_row(const Expr* e) { return ap_is_list(e) || e->type == EXPR_LINKEDLIST; }
-
-static size_t ap_depth(const Expr* e) {
-    if (!ap_row(e)) return 0;
-    LLSeq v;
-    llq_open(e, &v);
-    size_t best = 0;
-    for (size_t i = 0; i < v.n; i++) {
-        size_t d = ap_depth(llq_peek(&v, i));
-        if (d > best) best = d;
-    }
-    llq_close(&v);
-    return 1 + best;
-}
 
 /* Rectangular dimension along each level, following the first-child spine. */
 static void ap_dims(const Expr* e, int64_t* dims, size_t num_levels, size_t level) {
@@ -59,7 +46,42 @@ static void ap_dims(const Expr* e, int64_t* dims, size_t num_levels, size_t leve
     llq_close(&v);
 }
 
-/* True for a List[...] expression. */
+/* The spine of e: dims[level..] along the first-child path, and the number of
+ * row levels on it. */
+static size_t ap_spine(const Expr* e, int64_t* dims, size_t level) {
+    if (level >= AP_MAX_RANK || !ap_row(e)) return level;
+    LLSeq v;
+    llq_open(e, &v);
+    dims[level] = (int64_t)v.n;
+    size_t d = v.n ? ap_spine(llq_peek(&v, 0), dims, level + 1) : level + 1;
+    llq_close(&v);
+    return d;
+}
+
+/* True when e is a full array of dims[level..k): every row at each level has
+ * the spine's length. */
+static bool ap_rect_to(const Expr* e, const int64_t* dims, size_t level, size_t k) {
+    if (level == k) return true;
+    if (!ap_row(e)) return false;
+    LLSeq v;
+    llq_open(e, &v);
+    bool ok = (int64_t)v.n == dims[level];
+    for (size_t i = 0; ok && i < v.n; i++) ok = ap_rect_to(llq_peek(&v, i), dims, level + 1, k);
+    llq_close(&v);
+    return ok;
+}
+
+/* The array depth of e: the number of levels at which it is a full
+ * rectangular array ({1, {2, 3}} has 1, {{1, 2}, {3, 4}} has 2). Padding
+ * reaches only those levels: past them there are no rows to pad, and the
+ * builder read the missing rows as pure padding -- ArrayPad[{1, 2},
+ * {{1, 1}, {1, 1}}] erased the data (audit ArrayPad#1). */
+static size_t ap_rect_depth(const Expr* e) {
+    int64_t dims[AP_MAX_RANK];
+    for (size_t k = ap_spine(e, dims, 0); k > 0; k--)
+        if (ap_rect_to(e, dims, 0, k)) return k;
+    return 0;
+}
 
 /* ---- amounts parsing --------------------------------------------------- *
  * Fill lo[]/hi[] for each of *num_levels levels.  Returns false on a bad spec. */
@@ -309,13 +331,21 @@ Expr* builtin_array_pad(Expr* res) {
 
     if (!ap_row(array)) { if (owned_array) expr_free(owned_array); return NULL; }
 
-    size_t rank = ap_depth(array);
-    if (rank == 0 || rank > AP_MAX_RANK) { if (owned_array) expr_free(owned_array); return NULL; }
+    size_t rank = ap_rect_depth(array);
+    if (rank == 0 || rank >= AP_MAX_RANK) { if (owned_array) expr_free(owned_array); return NULL; }
 
     int64_t lo[AP_MAX_RANK], hi[AP_MAX_RANK];
     for (size_t k = 0; k < AP_MAX_RANK; k++) { lo[k] = hi[k] = 0; }
     size_t num_levels = 0;
     if (!ap_parse_amounts(amounts, rank, lo, hi, &num_levels)) {
+        if (owned_array) expr_free(owned_array);
+        return NULL;
+    }
+    if (num_levels > rank) {
+        char* as = expr_to_string((Expr*)amounts);
+        char* xs = expr_to_string(array);
+        mth_message("ArrayPad", "depth", "Padding amount %s should specify padding in no more than the number of dimensions in array %s.", as, xs);
+        free(as); free(xs);
         if (owned_array) expr_free(owned_array);
         return NULL;
     }

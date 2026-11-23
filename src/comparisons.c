@@ -774,6 +774,12 @@ static int compare_numeric_ex(Expr* a, Expr* b, bool* can_compare, int* cert) {
     }
 }
 
+/* See comparisons.h: the certified order compare_numeric gives the
+ * inequality heads, for the numeric-order ranking heads (numeric_order.c). */
+int comparisons_numeric_order(Expr* a, Expr* b, bool* decided) {
+    return compare_numeric(a, b, decided);
+}
+
 /* A literal datum whose comparison verdict is final: a number atom, a string,
  * or an exact rational of ANY size.  A rational with a BigInt part counts:
  * compare_numeric decides it exactly in GMP, and the exact zero test it would

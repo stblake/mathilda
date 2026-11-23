@@ -23,8 +23,48 @@ static void test_stringriffle_deep_nesting(void) {
     audit_true("StringRiffle#1", "StringRiffle[{{}, {x}}] === \"\\nx\"");
 }
 
+/* FromCharacterCode#1 (high): "Code point 0 (NUL) truncates the string:
+ * FromCharacterCode[0] is the empty string and {65,0,66} gives A".  U+0000 is
+ * held as C0 80 internally (src/strings/utf8.h). */
+static void test_fromcharactercode_nul(void) {
+    audit_chk("FromCharacterCode#1", "StringLength[FromCharacterCode[{65, 0, 66}]]", "3");
+    audit_chk("FromCharacterCode#1", "ToCharacterCode[FromCharacterCode[{65, 0, 66}]]", "{65, 0, 66}");
+    audit_chk("FromCharacterCode#1", "StringLength[FromCharacterCode[0]]", "1");
+    audit_chk("FromCharacterCode#1", "ToCharacterCode[FromCharacterCode[0]]", "{0}");
+    /* the external UTF-8 byte form carries a 0 byte, and round-trips */
+    audit_chk("FromCharacterCode#1", "ToCharacterCode[FromCharacterCode[{65, 0, 66}], \"UTF8\"]", "{65, 0, 66}");
+    audit_true("FromCharacterCode#1",
+               "FromCharacterCode[{65, 0, 66}, \"UTF8\"] === FromCharacterCode[{65, 0, 66}]");
+    audit_true("FromCharacterCode#1",
+               "StringReverse[FromCharacterCode[{65, 0, 66}]] === FromCharacterCode[{66, 0, 65}]");
+    audit_true("FromCharacterCode#1",
+               "StringTake[FromCharacterCode[{65, 0, 66}], {2}] === FromCharacterCode[0]");
+    audit_chk("FromCharacterCode#1", "StringPosition[FromCharacterCode[{65, 0, 66}], \"B\"]", "{{3, 3}}");
+    audit_chk("FromCharacterCode#1", "ToCharacterCode[FromCharacterCode[{0, 233, 0}]]", "{0, 233, 0}");
+    /* ordinary text unchanged */
+    audit_chk("FromCharacterCode#1", "ToCharacterCode[FromCharacterCode[{104, 233, 108}]]", "{104, 233, 108}");
+    audit_chk("FromCharacterCode#1", "ToCharacterCode[FromCharacterCode[{104, 233}], \"UTF8\"]", "{104, 195, 169}");
+}
+
+/* StringReplaceList#1 (high): "StringReplaceList with n = Infinity returns {}
+ * instead of every single replacement". */
+static void test_stringreplacelist_infinity(void) {
+    audit_true("StringReplaceList#1",
+               "StringReplaceList[\"aaa\", \"a\" -> \"b\", Infinity] === {\"baa\", \"aba\", \"aab\"}");
+    audit_true("StringReplaceList#1",
+               "StringReplaceList[\"aaa\", \"a\" -> \"b\", Infinity] === StringReplaceList[\"aaa\", \"a\" -> \"b\"]");
+    audit_true("StringReplaceList#1", "StringReplaceList[\"aaa\", \"a\" -> \"b\", 0] === {}");
+    audit_true("StringReplaceList#1", "StringReplaceList[\"aaa\", \"a\" -> \"b\", 2] === {\"baa\", \"aba\"}");
+    audit_true("StringReplaceList#1", "StringReplace[\"aaa\", \"a\" -> \"b\", Infinity] === \"bbb\"");
+    /* n = 0 replaces nothing in StringReplace either */
+    audit_true("StringReplaceList#1", "StringReplace[\"aaa\", \"a\" -> \"b\", 0] === \"aaa\"");
+    audit_true("StringReplaceList#1", "StringReplace[\"aaa\", \"a\" -> \"b\", 2] === \"bba\"");
+}
+
 int main(void) {
     audit_init();
     TEST(test_stringriffle_deep_nesting);
+    TEST(test_fromcharactercode_nul);
+    TEST(test_stringreplacelist_infinity);
     return audit_finish("audit_string_operations");
 }

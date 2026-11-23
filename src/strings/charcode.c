@@ -71,16 +71,22 @@ static uint32_t enc_max(CharEnc enc) {
 static Expr* codes_of_enc(const char* s, CharEnc enc) {
     size_t len = strlen(s);
     if (enc == ENC_UTF8) {
+        /* The string's own bytes, except U+0000: held internally as C0 80
+         * (utf8.h), its UTF-8 byte is 0. */
+        size_t m = 0;
+        for (size_t i = 0; i < len; i++, m++)
+            if ((unsigned char)s[i] == 0xC0 && i + 1 < len && (unsigned char)s[i + 1] == 0x80) i++;
         int64_t* buf = NULL;
-        Expr* packed = ndbuild_open_i64((int64_t)len, &buf);
-        if (packed) {
-            for (size_t i = 0; i < len; i++) buf[i] = (int64_t)(unsigned char)s[i];
-            return packed;
+        Expr* packed = ndbuild_open_i64((int64_t)m, &buf);
+        Expr* out = packed ? NULL : expr_new_function(expr_new_symbol(SYM_List), NULL, m);
+        if (!packed && !out) return NULL;
+        for (size_t i = 0, k = 0; i < len; i++, k++) {
+            int64_t b = (int64_t)(unsigned char)s[i];
+            if (b == 0xC0 && i + 1 < len && (unsigned char)s[i + 1] == 0x80) { b = 0; i++; }
+            if (packed) buf[k] = b;
+            else out->data.function.args[k] = expr_new_integer(b);
         }
-        Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, len);
-        for (size_t i = 0; out && i < len; i++)
-            out->data.function.args[i] = expr_new_integer((int64_t)(unsigned char)s[i]);
-        return out;
+        return packed ? packed : out;
     }
     size_t n = u8_length(s, len), k = 0;
     uint32_t hi = enc_max(enc);

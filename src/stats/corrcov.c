@@ -32,6 +32,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "linkedlist.h" /* LLReader */
+#include "message.h"    /* mth_message: Covariance::vctmat */
 
 /* ------------------------------------------------------------ small helpers */
 
@@ -342,7 +343,12 @@ static Expr* cc_matrix_ll(Expr* a, Expr* b, int correlate, int auto_form) {
     else if (!cc_matrix(b, &rb, &q)) { ll_rd_close(&ra); return NULL; }
     Expr* result = NULL;
     size_t n = ra.n;
-    if (n != rb.n || n < 2) goto done;
+    if (n != rb.n) {                 /* unequal observation counts (audit Covariance#1) */
+        const char* head = correlate ? "Correlation" : "Covariance";
+        mth_message(head, "vctmat", "The arguments to %s are not a pair of vectors or a pair of matrices of equal length.", head);
+        goto done;
+    }
+    if (n < 2) goto done;
 
     /* The packed matrix kernel, when every row is machine-real. */
     double* A = cc_gather_rows(&ra, p);
@@ -467,11 +473,18 @@ static Expr* corrcov_dispatch(Expr* res, int correlate, const char* head) {
     if (argc == 2) {
         Expr* a = res->data.function.args[0];
         Expr* b = res->data.function.args[1];
-        if (eval_pred(SYM_MatrixQ, a) && eval_pred(SYM_MatrixQ, b))
-            return g_matrix(a, b, correlate, 0);
-        if (eval_pred(SYM_VectorQ, a) && eval_pred(SYM_VectorQ, b))
-            return correlate ? g_corr_vectors(a, b) : g_cov_vectors(a, b);
-        return NULL;
+        bool mats = eval_pred(SYM_MatrixQ, a) && eval_pred(SYM_MatrixQ, b);
+        bool vecs = !mats && eval_pred(SYM_VectorQ, a) && eval_pred(SYM_VectorQ, b);
+        if (!mats && !vecs) return NULL;
+        /* The two must carry the same number of observations (rows); a
+         * mismatch is not a degenerate column -- g_matrix's zero fill made it
+         * a zero matrix (audit Covariance#1). */
+        if (ll_seq_length(a) != ll_seq_length(b)) {
+            mth_message(head, "vctmat", "The arguments to %s are not a pair of vectors or a pair of matrices of equal length.", head);
+            return NULL;
+        }
+        if (mats) return g_matrix(a, b, correlate, 0);
+        return correlate ? g_corr_vectors(a, b) : g_cov_vectors(a, b);
     }
     if (argc == 1) {
         Expr* a = res->data.function.args[0];

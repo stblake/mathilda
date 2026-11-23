@@ -177,6 +177,9 @@ Gives the total number of seconds since the beginning of January 1, 1900.
 Gives a broken-down date/time as `{year, month, day, hour, minute, second}`.
 - `DateList[]` -- current local date and time.
 - `DateList[date]` -- date list for the given date specification.
+- The proleptic Gregorian calendar holds for every year: the day-number
+  conversions use floor division, so `DateList[{-5000, 3, 15}]` round-trips
+  (audit DateList#1).
 
 **Supported date specifications**:
 - `{y, m, d, h, m, s}` -- a `DateList` specification. Trailing entries may be elided; missing fields default to `{_, 1, 1, 0, 0, 0}`.
@@ -207,6 +210,8 @@ Out[4]= {2026, 9, 28, 0, 0, 0.0}
 Gives the total number of seconds since the Unix epoch, 1970-01-01 00:00:00 GMT.
 - `UnixTime[]` -- current time, the true POSIX epoch second.
 - `UnixTime[date]` -- Unix time corresponding to the given date specification.
+- A whole number of seconds outside the int64 range is an exact big integer
+  (`UnixTime[2.^63 + 2208988800.]` is `2^63`; audit UnixTime#1).
 
 **Supported date specifications**:
 - `{y, m, d, h, m, s}` -- a `DateList` specification. Trailing entries may be elided; missing fields default to `{_, 1, 1, 0, 0, 0}`.

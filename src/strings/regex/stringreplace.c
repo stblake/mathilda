@@ -236,7 +236,10 @@ static int sr_args(Expr* res, const char* head, int* caseless, size_t* limit, in
     if (argc == 3) {
         Expr* n = a[2];
         *has_limit = 1;
-        if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity) *limit = 0;
+        /* n = Infinity is no limit at all, as the two-argument form; encoding
+         * it as limit 0 WITH a limit read as n = 0 in StringReplaceList, which
+         * answered {} (audit StringReplaceList#1). */
+        if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity) { *limit = 0; *has_limit = 0; }
         else if (n->type == EXPR_INTEGER && n->data.integer >= 0) *limit = (size_t)n->data.integer;
         else return -1;
     }
@@ -340,6 +343,16 @@ static Expr* sr_dispatch(Expr* res, const char* head, SrKind kind) {
             if (meta_owned) expr_free(meta_owned);
             return NULL;
         }
+    }
+
+    /* n = 0: no replacement at all. sr_scalar reads limit 0 as "no limit"
+     * (the two-argument form), so StringReplace[s, r, 0] replaced every
+     * match; StringReplaceList answers {} for it in sr_list_scalar. */
+    if (has_limit && limit == 0 && kind == SR_REPLACE) {
+        regex_rules_free(rules, nr);
+        if (owned) expr_free(owned);
+        if (meta_owned) expr_free(meta_owned);
+        return expr_copy(arg0);
     }
 
     Expr* result;

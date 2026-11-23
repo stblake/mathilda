@@ -245,7 +245,7 @@ Gives the covariance between vectors, or the cross/auto-covariance matrix of mat
 - For vectors, the unbiased estimate $\hat{\sigma}_{vw} = \frac{1}{n-1}\sum_i (v_i - \hat{\mu}_v)\overline{(w_i - \hat{\mu}_w)}$; the conjugate is on the **second** argument, so exact / complex / symbolic inputs yield exact / complex / symbolic output.
 - For matrices, element $(i,j)$ is the covariance of column $i$ of `a` with column $j$ of `b`; `Covariance[a]` is symmetric.
 - NDArray / packed real data uses a threaded centered inner product (vectors) or a BLAS gram (matrices); an integer sample degrades to the exact `List` path. Lowered inside `Compile[]`.
-- Stays unevaluated for a single vector, mismatched shapes, or fewer than two observations. `Covariance[]` reports `Covariance::argb`.
+- Stays unevaluated for a single vector, mismatched shapes, or fewer than two observations. `Covariance[]` reports `Covariance::argb`. Two vectors or matrices with different numbers of observations (rows) report `Covariance::vctmat` (`Correlation::vctmat`); the matrix form used to return a zero matrix (audit Covariance#1).
 
 ```mathematica
 In[1]:= Covariance[{1, 3/2}, {2, 11}]
@@ -389,7 +389,8 @@ Gives the q-th quantile estimate of the elements in data.
 - `Protected`.
 - Default parameters are `{{0, 0}, {1, 0}}` (the reference's Type-1 / left-continuous inverse CDF), so `Quantile[{1, 2, 3, 4}, 1/2]` is `2` while `Median[{1, 2, 3, 4}]` is `5/2` — the two deliberately differ on even-length data.
 - `Quartiles[data]` is `Quantile[data, {1/4, 1/2, 3/4}, {{1/2, 0}, {0, 1}}]`.
-- Exact input gives exact output; sorting uses the canonical `Sort` order.
+- Exact input gives exact output. The data is ordered by **numeric value** (certified: exact, then MPFR at increasing precision when two values are close), not by the canonical `Sort` order, which put every explicit number before `Sqrt[2]`, `E` or `Pi`: `Quantile[{2, Sqrt[3]}, 0]` is `Sqrt[3]` (audit Quantile#1). `Median`, `Quartiles`, `InterquartileRange` and `MedianDeviation` share the same order (audit Median#1/#2, InterquartileRange#1, MedianDeviation#1).
+- Ragged or mixed-depth data (`{{1, 2}, {3}}`, `{{1, 2}, 3}`) gives `Quantile::rectn` and stays unevaluated; it used to recurse through an unevaluated `Transpose` to `$RecursionLimit` (audit Quantile#2). `Quartiles`, `InterquartileRange`, `Median` and `MedianDeviation` likewise give their own `::rectn` (audit Quartiles#1, InterquartileRange#2).
 - For $w \in [0, 1]$ the interpolation is evaluated as the convex combination $(1-w)x_{(j)} + w\,x_{(j+1)}$, not as $x_{(j)} + w\,(x_{(j+1)} - x_{(j)})$. The two are equal in exact arithmetic, but the difference form overflows on `Real` data whose neighbours straddle zero near the machine range: `Quantile[{-1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {0, 1}}]` is `0.0`, not `Infinity`. Outside $[0, 1]$ — which `{{a,b},{c,d}}` permits, though no standard quantile type uses it — the difference form is used instead, because there the convex form is the one that can produce `NaN`. At $w = 0$ or $w = 1$ the element is selected outright rather than computed.
 - For `MatrixQ` data the quantile is computed per column.
 - `Quantile` requires REAL numeric data and numeric $q \in [0, 1]$ (`Quantile::q100` otherwise); symbolic arguments stay unevaluated. A `Complex[re, im]` element is rejected with `Quantile::rectn` when `im` is nonzero — including an already-evaluated complex such as `2 + I` (`Complex[2, 1]`), which carries no literal `I` to search for — and accepted when `im` is zero, since `Complex[x, 0]` at MPFR precision is a real number. Not yet caught: a complex value nested under a numeric head, such as `Sqrt[2 + I]`.

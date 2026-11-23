@@ -325,10 +325,13 @@ void test_jac_derivative() {
 }
 
 void test_jac_buffers() {
+    /* The grid stays off the pole at 0: Range is imin + k di, so a grid
+     * through 0 now reaches 0. exactly (the old accumulated Range drifted past
+     * it), and a ComplexInfinity lane cannot pack. */
     for (int k = 0; k < 12; k++) {
         char buf[400];
         snprintf(buf, sizeof buf,
-                 "With[{v = Range[-30., 30., 0.1]}, PackedArrayQ[%s[v, 0.37]] && %s[v, 0.37] === Table[%s[x, 0.37], {x, FromPackedArray[v]}]]",
+                 "With[{v = Range[-29.95, 30., 0.1]}, PackedArrayQ[%s[v, 0.37]] && %s[v, 0.37] === Table[%s[x, 0.37], {x, FromPackedArray[v]}]]",
                  NAMES[k], NAMES[k], NAMES[k]);
         assert_true(buf);
     }

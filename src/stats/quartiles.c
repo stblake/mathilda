@@ -7,7 +7,7 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "ndreduce.h"
-#include "sort.h"      /* expr_orderless_sort: Sort's canonical order */
+#include "sort.h"
 #include "linkedlist.h" /* LLReader */
 #include "message.h"
 #include "print.h"     /* expr_to_string */
@@ -37,11 +37,18 @@ Expr* builtin_quartiles(Expr* res) {
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
 
+        /* Ragged / mixed depth: Transpose stays unevaluated, and mapping over
+         * it re-entered Quartiles with the same data until $RecursionLimit. */
+        if (!stats_is_matrix(data)) {
+            stats_msg_rectn("Quartiles", res);
+            return expr_copy(res);
+        }
         Expr* t_expr = expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){expr_copy(data)}, 1);
         Expr* t_eval = evaluate(t_expr);
         expr_free(t_expr);
 
-        if (t_eval->type != EXPR_FUNCTION) {
+        if (t_eval->type != EXPR_FUNCTION || t_eval->data.function.head->type != EXPR_SYMBOL ||
+            t_eval->data.function.head->data.symbol.name != SYM_List) {
             expr_free(t_eval);
             return expr_copy(res);
         }
@@ -112,8 +119,8 @@ Expr* builtin_quartiles(Expr* res) {
         d = expr_new_integer(1);
     }
 
-    /* Sort's canonical order (expr_compare), as a permutation over the elements
-     * where they lie. */
+    /* Numeric order (stats_sort_order: by value, not Sort's canonical order),
+     * as a permutation over the elements where they lie. */
     size_t* perm = stats_sort_order(&e);
     if (!perm) {
         ll_rd_close(&e);

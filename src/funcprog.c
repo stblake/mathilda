@@ -3404,13 +3404,17 @@ Expr* builtin_permutations(Expr* res) {
     if (res->data.function.arg_count == 2) {
         Expr* spec = res->data.function.args[1];
         if (spec->type == EXPR_INTEGER) {
+            /* Permutations[list, n]: AT MOST n elements -- every length
+             * 0 .. n ({n} is the exactly-n form). Taking n_min = n gave only
+             * the length-n ones (audit Permutations#1). */
             int64_t n = spec->data.integer;
             if (n > (int64_t)len) n = len;
             if (n < 0) n = 0;
-            n_min = n;
+            n_min = 0;
             n_max = n;
             dn = 1;
-        } else if (spec->type == EXPR_SYMBOL && spec->data.symbol.name == SYM_All) {
+        } else if (spec->type == EXPR_SYMBOL &&
+                   (spec->data.symbol.name == SYM_All || spec->data.symbol.name == SYM_Infinity)) {
             n_min = 0;
             n_max = len;
             dn = 1;

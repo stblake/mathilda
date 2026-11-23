@@ -1357,10 +1357,41 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
     return result;
 }
 
+/* GatherBy[list, {f1, f2, ...}]: gather by f1, then each group by f2, ...,
+ * a nested list of groups (audit GatherBy#1: the list {f1, f2} was used as
+ * the key function itself, {f1, f2}[x] distinct for every x). Each group --
+ * a List, LinkedList or association -- is regathered by the rest. */
+static Expr* gatherby_nested(Expr* list, Expr* const* fs, size_t nf) {
+    Expr* groups = assoc_gather_core(list, fs[0]);
+    if (!groups || nf == 1) return groups;
+    int64_t m = ll_seq_length(groups);
+    if (m < 0) return groups;
+    Expr** out = malloc(sizeof(Expr*) * (size_t)(m ? m : 1));
+    if (!out) { expr_free(groups); return NULL; }
+    for (int64_t i = 0; i < m; i++) {
+        Expr* g = ll_seq_element(groups, i);
+        out[i] = gatherby_nested(g, fs + 1, nf - 1);
+        expr_free(g);
+        if (!out[i]) {
+            for (int64_t k = 0; k < i; k++) expr_free(out[k]);
+            free(out);
+            expr_free(groups);
+            return NULL;
+        }
+    }
+    Expr* r = ll_seq_like(groups, out, (size_t)m);
+    free(out);
+    expr_free(groups);
+    return r;
+}
+
 Expr* builtin_gatherby(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
-    return assoc_gather_core(res->data.function.args[0],
-                             res->data.function.args[1]);
+    Expr* f = res->data.function.args[1];
+    if (head_is(f, SYM_List) && f->data.function.arg_count > 0)
+        return gatherby_nested(res->data.function.args[0], f->data.function.args,
+                               f->data.function.arg_count);
+    return assoc_gather_core(res->data.function.args[0], f);
 }
 
 /* ======================================================================
@@ -1774,15 +1805,20 @@ static Expr* keysort_with_p(const Expr* assoc, Expr* p) {
     Expr* perm = eval_callback(call);
     expr_free(call);
 
+    /* Read the permutation as a sequence: Ordering hands back a PACKED list
+     * once it is long enough, which is not a List-headed call -- every
+     * association of 4 or more keys stayed unevaluated (audit KeySort#1). */
     Expr* result = NULL;
-    if (perm->type == EXPR_FUNCTION && head_is(perm, SYM_List) &&
-        perm->data.function.arg_count == n) {
+    if (ll_seq_length(perm) == (int64_t)n) {
         Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
         size_t k = 0;
         for (; k < n; k++) {
-            Expr* pk = perm->data.function.args[k];
-            if (pk->type != EXPR_INTEGER || pk->data.integer < 1 || pk->data.integer > (int64_t)n) break;
-            out[k] = expr_copy(assoc->data.function.args[pk->data.integer - 1]);
+            Expr* pk = ll_seq_element(perm, (int64_t)k);
+            bool ok = pk->type == EXPR_INTEGER && pk->data.integer >= 1 && pk->data.integer <= (int64_t)n;
+            int64_t at = ok ? pk->data.integer : 0;
+            expr_free(pk);
+            if (!ok) break;
+            out[k] = expr_copy(assoc->data.function.args[at - 1]);
         }
         if (k == n) result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
         else for (size_t q = 0; q < k; q++) expr_free(out[q]);

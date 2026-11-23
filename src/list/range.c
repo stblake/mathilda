@@ -1,6 +1,6 @@
 #include "list_common.h"
 #include "range.h"
-#include "iter.h"   /* iter_real_slack */
+#include "iter.h"
 #include "../pack.h"
 #include "../memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "../checked_int.h"
@@ -57,15 +57,30 @@ static void range_too_large(double count) {
     ndarray_warn_once(msg);
 }
 
-/* The inexact recurrence, in one place so the counting pass and the filling
- * pass cannot drift apart. Accumulating `val += di` rather than computing
- * `min + k*di` is deliberate: it is what this branch has always emitted, and
- * the two differ in the last bits (Range[0., 1., 0.1] gives
- * 0.30000000000000004 for the third element either way, but not for every
- * step count). */
-#define RANGE_MORE(val, max_val, di_val) \
-    (((di_val) > 0 && (val) <= (max_val) + iter_real_slack((max_val), (di_val))) || \
-     ((di_val) < 0 && (val) >= (max_val) - iter_real_slack((max_val), (di_val))))
+/* The number of elements of an inexact range: imin + k di for
+ * k = 0 .. Floor[(imax - imin)/di], as in the reference. The quotient is
+ * computed once, with a relative slack for the rounding of imax - imin, of the
+ * division and of di's own decimal reading (each ~2^-53 of
+ * (|imin| + |imax|)/|di|; the slack is ~45 times that), so a bound the
+ * progression reaches exactly in the reals is counted. Accumulating
+ * `val += di` instead drifted by one ulp per step and outgrew a fixed slack:
+ * Range[0., 100., 0.01] lost its last element (audit Range#1). The caller has
+ * already rejected a wrong-signed step and an over-large estimate. */
+static size_t range_real_count(double min_val, double max_val, double di_val) {
+    double q = (max_val - min_val) / di_val;
+    double tol = 1e-14 * (fabs(min_val) + fabs(max_val) + fabs(di_val)) / fabs(di_val);
+    double k = floor(q + tol);
+    return k < 0 ? 0 : (size_t)k + 1;
+}
+
+/* Element k of an inexact range: imin + k di, never past imax. Only the last
+ * element can overshoot -- by the rounding the count's slack admitted -- and
+ * it is then imax itself, as in the reference (Range[0., 0.3, 0.1] ends at
+ * 0.3, not 0.30000000000000004). */
+static inline double range_real_at(double min_val, double max_val, double di_val, size_t k) {
+    double v = min_val + (double)k * di_val;
+    return (di_val > 0) ? (v > max_val ? max_val : v) : (v < max_val ? max_val : v);
+}
 
 /* Range over exact integers where some bound is a BigInt. NULL (after
  * reporting) when the count exceeds the ceiling or the step is zero. */
@@ -239,22 +254,11 @@ Expr* builtin_range(Expr* res) {
         }
     }
 
-    /* Counting pass. Doubles only -- no allocation, no evaluation. */
-    size_t count = 0;
-    {
-        double val = min_val;
-        while (RANGE_MORE(val, max_val, di_val)) {
-            count++;
-            val += di_val;
-            /* The estimate above is arithmetic and this loop accumulates, so
-             * rounding can carry it one or two past. Stopping a little beyond
-             * the ceiling keeps the two consistent without ever truncating a
-             * range the ceiling admitted. */
-            if ((int64_t)count > RANGE_MAX_ELEMENTS + 2) {
-                range_too_large((double)count);
-                goto L_fail_range;
-            }
-        }
+    /* The count, in O(1). Doubles only -- no allocation, no evaluation. */
+    size_t count = range_real_count(min_val, max_val, di_val);
+    if ((int64_t)count > RANGE_MAX_ELEMENTS + 2) {
+        range_too_large((double)count);
+        goto L_fail_range;
     }
 
     if (!mth_mem_request(count * sizeof(double))) goto L_fail_range;   /* MemoryConstrained */
@@ -263,8 +267,11 @@ Expr* builtin_range(Expr* res) {
         double* buf = NULL;
         Expr* packed = ndbuild_open_f64((int64_t)count, &buf);
         if (packed) {
-            double val = min_val;
-            for (size_t i = 0; i < count; i++) { buf[i] = val; val += di_val; }
+            /* imin + k di, not an accumulated sum: no drift, and the
+             * reference's elements (Range[0., 1., 0.1] ends at 1., not
+             * 0.9999999999999999). The loop is branch-light: the clamp is a
+             * compare per element. */
+            for (size_t i = 0; i < count; i++) buf[i] = range_real_at(min_val, max_val, di_val, i);
             expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
             return packed;
         }
@@ -274,7 +281,6 @@ Expr* builtin_range(Expr* res) {
     if (!results) { range_too_large((double)count); goto L_fail_range; }
     size_t results_count = 0;
 
-    double val = min_val;
     /* `curr_e` is the EXACT running value, advanced by a real Plus so that a
      * Rational range stays exact and an Integer one promotes to a BigInt when it
      * has to. The inexact branch does not need it at all -- it emits from `val`
@@ -284,7 +290,9 @@ Expr* builtin_range(Expr* res) {
     Expr* curr_e = is_real ? NULL : expr_copy(imin_e);
 
     while (results_count < count) {
-        results[results_count++] = is_real ? expr_new_real(val) : expr_copy(curr_e);
+        results[results_count] = is_real ? expr_new_real(range_real_at(min_val, max_val, di_val, results_count))
+                                         : expr_copy(curr_e);
+        results_count++;
 
         if (!is_real) {
             Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
@@ -294,8 +302,6 @@ Expr* builtin_range(Expr* res) {
             expr_free(curr_e);
             curr_e = next_e;
         }
-
-        val += di_val;
     }
 
     if (curr_e) expr_free(curr_e);

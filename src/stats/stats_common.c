@@ -10,7 +10,19 @@
 #include "sym_names.h"    /* SYM_* */
 #include "assoc.h"        /* is_association, assoc_apply_over_values */
 #include "ndreduce.h"     /* ndred_call_has_ndarray, ndred_skewness, ndred_kurtosis */
+#include "numeric_order.h" /* numord_key / numord_cmp: stats_sort_order */
+#include "linkedlist.h"   /* ll_seq_length: stats_is_matrix */
+#include "message.h"      /* mth_message: stats_msg_rectn */
+#include "print.h"        /* expr_to_string */
+#include <stdlib.h>
 #include <math.h>         /* floor -- stats_quantile_point index fallback */
+
+/* True when e is a function call with the given symbol head. */
+static bool stats_head_is(const Expr* e, const char* sym) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == sym;
+}
 
 bool stats_is_numeric(Expr* e, double* val, bool* out_complex) {
     if (e->type == EXPR_INTEGER) {
@@ -37,14 +49,34 @@ bool stats_is_numeric(Expr* e, double* val, bool* out_complex) {
     return false;
 }
 
+bool stats_is_matrix(const Expr* data) {
+    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL ||
+        data->data.function.head->data.symbol.name != SYM_List ||
+        data->data.function.arg_count == 0) return false;
+    int64_t cols = ll_seq_length(data->data.function.args[0]);
+    if (cols < 0) return false;
+    for (size_t i = 1; i < data->data.function.arg_count; i++)
+        if (ll_seq_length(data->data.function.args[i]) != cols) return false;
+    return true;
+}
+
+void stats_msg_rectn(const char* head, Expr* res) {
+    char* str = expr_to_string(res);
+    mth_message(head, "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
+    free(str);
+}
+
 Expr* stats_apply_columnwise(const char* func_name, Expr* matrix) {
+    if (!stats_is_matrix(matrix)) return NULL;     /* ragged: no Transpose */
     // Result is Map[func_name, Transpose[matrix]]
     Expr* transpose_args[1] = { expr_copy(matrix) };
     Expr* transpose_call = expr_new_function(expr_new_symbol(SYM_Transpose), transpose_args, 1);
     Expr* transposed = evaluate(transpose_call);
     expr_free(transpose_call);
 
-    if (transposed->type != EXPR_FUNCTION) {
+    /* A List, not merely a call: an unevaluated Transpose[...] mapped over
+     * re-enters func_name with the same data, without end. */
+    if (!stats_head_is(transposed, SYM_List)) {
         expr_free(transposed);
         return NULL;
     }
@@ -54,13 +86,6 @@ Expr* stats_apply_columnwise(const char* func_name, Expr* matrix) {
     Expr* result = evaluate(map_call);
     expr_free(map_call);
     return result;
-}
-
-/* True when e is a function call with the given symbol head. */
-static bool stats_head_is(const Expr* e, const char* sym) {
-    return e && e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == sym;
 }
 
 Expr* stats_standardized_moment(Expr* res, int p) {
@@ -298,17 +323,21 @@ bool stats_machine_ok(double v) {
 }
 
 /* ------------------------------------------------------------------------
- * stats_sort_order: an index sort (bottom-up merge, stable) whose comparator
- * reads the two elements in place. A typed LinkedList is compared on its raw
- * slots, gathered into a machine buffer: machine integers and reals order
- * numerically, which is their canonical order.
+ * stats_sort_order: an index sort (bottom-up merge, stable) into NUMERIC order
+ * (numeric_order.h) -- the order statistics are defined on the data sorted by
+ * value, and canonical order is not that order once an exact non-rational is
+ * present (Median[{Sqrt[2], 1, 3}] was 3). Numerically equal elements (1 and
+ * 1.) fall back to canonical order, so the permutation is deterministic.
+ * A typed LinkedList is compared on its raw slots, gathered into a machine
+ * buffer; otherwise each element's key is computed once (O(1) for a number
+ * atom) and the comparator reads the elements in place.
  * ---------------------------------------------------------------------- */
-typedef struct { LLReader* rd; const int64_t* iv; const double* dv; } SortCtx;
+typedef struct { LLReader* rd; const int64_t* iv; const double* dv; const NumOrdKey* keys; } SortCtx;
 
-static const Expr* sort_elem(const SortCtx* c, size_t i, Expr** owned) {
+static Expr* sort_elem(const SortCtx* c, size_t i, Expr** owned) {
     *owned = NULL;
     if (!c->rd->snap) return c->rd->v[i];
-    const Expr* b = ll_peek_boxed(c->rd->snap, (int64_t)i);
+    Expr* b = (Expr*)ll_peek_boxed(c->rd->snap, (int64_t)i);
     if (b) return b;
     *owned = ll_get(c->rd->snap, (int64_t)i);       /* complex slots */
     return *owned;
@@ -317,10 +346,15 @@ static const Expr* sort_elem(const SortCtx* c, size_t i, Expr** owned) {
 static int sort_cmp(const SortCtx* c, size_t i, size_t j) {
     if (c->iv) return (c->iv[i] > c->iv[j]) - (c->iv[i] < c->iv[j]);
     if (c->dv) return (c->dv[i] > c->dv[j]) - (c->dv[i] < c->dv[j]);
+    const NumOrdKey* ki = &c->keys[i];
+    const NumOrdKey* kj = &c->keys[j];
+    /* Two machine values: decided here, with no element read. */
+    if (ki->exact && kj->exact && ki->v != kj->v) return ki->v < kj->v ? -1 : 1;
     Expr *oi, *oj;
-    const Expr* a = sort_elem(c, i, &oi);
-    const Expr* b = sort_elem(c, j, &oj);
-    int r = expr_compare(a, b);
+    Expr* a = sort_elem(c, i, &oi);
+    Expr* b = sort_elem(c, j, &oj);
+    int r = numord_cmp(a, ki, b, kj);
+    if (r == 0) r = expr_compare(a, b);
     if (oi) expr_free(oi);
     if (oj) expr_free(oj);
     return r;
@@ -331,8 +365,9 @@ size_t* stats_sort_order(LLReader* rd) {
     size_t* p = malloc(sizeof(size_t) * (n ? n : 1));
     size_t* t = malloc(sizeof(size_t) * (n ? n : 1));
     if (!p || !t) { free(p); free(t); return NULL; }
-    SortCtx c = { rd, NULL, NULL };
+    SortCtx c = { rd, NULL, NULL, NULL };
     void* raw = NULL;
+    NumOrdKey* keys = NULL;
     if (rd->snap && n > 0) {
         LLKind k = ll_kind(rd->snap);
         if (k == LL_I64 || k == LL_REAL) {
@@ -342,6 +377,16 @@ size_t* stats_sort_order(LLReader* rd) {
                 if (k == LL_I64) c.iv = raw; else c.dv = raw;
             }
         }
+    }
+    if (!c.iv && !c.dv) {
+        keys = malloc(sizeof(NumOrdKey) * (n ? n : 1));
+        if (!keys) { free(p); free(t); free(raw); return NULL; }
+        for (size_t i = 0; i < n; i++) {
+            Expr* o;
+            numord_key(sort_elem(&c, i, &o), &keys[i]);
+            if (o) expr_free(o);
+        }
+        c.keys = keys;
     }
     for (size_t i = 0; i < n; i++) p[i] = i;
     for (size_t w = 1; w < n; w *= 2) {
@@ -356,5 +401,6 @@ size_t* stats_sort_order(LLReader* rd) {
     }
     free(t);
     free(raw);
+    free(keys);
     return p;
 }

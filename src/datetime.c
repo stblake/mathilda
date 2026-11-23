@@ -230,6 +230,16 @@ Expr* builtin_repeated_timing(Expr* res) {
  * normalisation for m <= 0 or m > 12 is handled explicitly first so
  * the JDN expression remains within the algorithm's documented range.
  */
+/* Floor division by a positive divisor. The Fliegel & Van Flandern formulas
+ * below assume non-negative operands; C's truncating `/` broke them for
+ * years before -4800 (a negative shifted year / Julian day number), so
+ * DateList[{-5000, 3, 15}] came back as {-5000, 4, -14, ...} (audit
+ * DateList#1). With floor division both directions hold for every year. */
+static int64_t dt_fdiv(int64_t a, int64_t b) {
+    int64_t q = a / b;
+    return (a % b != 0 && a < 0) ? q - 1 : q;
+}
+
 static int64_t days_since_1900(int64_t y, int64_t m, int64_t d) {
     if (m > 12) {
         int64_t k = (m - 1) / 12;
@@ -244,7 +254,7 @@ static int64_t days_since_1900(int64_t y, int64_t m, int64_t d) {
     int64_t yy = y + 4800 - a;
     int64_t mm = m + 12 * a - 3;
     int64_t jdn = d + (153 * mm + 2) / 5
-                + 365 * yy + yy / 4 - yy / 100 + yy / 400
+                + 365 * yy + dt_fdiv(yy, 4) - dt_fdiv(yy, 100) + dt_fdiv(yy, 400)
                 - 32045;
     return jdn - 2415021;
 }
@@ -328,8 +338,8 @@ static void gregorian_from_abstime(double total,
 
     /* Inverse Fliegel & Van Flandern (pure integer arithmetic). */
     int64_t a  = jdn + 32044;
-    int64_t b  = (4 * a + 3) / 146097;
-    int64_t c  = a - (146097 * b) / 4;
+    int64_t b  = dt_fdiv(4 * a + 3, 146097);
+    int64_t c  = a - dt_fdiv(146097 * b, 4);      /* in [0, 146097/4]: the rest is non-negative */
     int64_t dd = (4 * c + 3) / 1461;
     int64_t e  = c - (1461 * dd) / 4;
     int64_t m  = (5 * e + 2) / 153;
@@ -834,8 +844,17 @@ Expr* builtin_date_list(Expr* res) {
 static Expr* unixtime_from_abstime(double total_1900) {
     double unix_secs = total_1900 - DT_UNIX_EPOCH_OFFSET;
     double rounded = floor(unix_secs + 0.5);
-    if (rounded >= (double)INT64_MIN && rounded <= (double)INT64_MAX) {
+    /* (double)INT64_MAX rounds UP to 2^63, so `rounded <= (double)INT64_MAX`
+     * admitted exactly 2^63 and the cast was undefined (audit UnixTime#1).
+     * The int64 range is [-2^63, 2^63); a whole double outside it is an exact
+     * BigInt. */
+    if (rounded >= -0x1p63 && rounded < 0x1p63) {
         return expr_new_integer((int64_t)rounded);
+    }
+    if (isfinite(rounded)) {
+        mpz_t z;
+        mpz_init_set_d(z, rounded);
+        return expr_new_bigint_take(z);
     }
     return expr_new_real(unix_secs);
 }

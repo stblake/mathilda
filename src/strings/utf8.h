@@ -17,6 +17,14 @@
  *     word-at-a-time scan, and callers then use byte arithmetic directly:
  *     character index == byte index costs nothing extra.
  *
+ *   - U+0000 is held as the two bytes C0 80 (the "modified UTF-8" form),
+ *     the one overlong sequence accepted: a String is NUL-terminated, so a raw
+ *     0 byte would end it -- FromCharacterCode[{65, 0, 66}] was "A" (audit
+ *     FromCharacterCode#1). u8_encode(0) writes it and u8_char_len /
+ *     u8_decode read it as one character, so StringLength, ToCharacterCode
+ *     and every character-indexed builtin count NUL as a character; the
+ *     external UTF-8 byte form (ToCharacterCode[s, "UTF8"]) gives it as 0.
+ *
  * Positions in this API are 0-based; builtins convert from Mathematica's
  * 1-based / negative positions themselves.
  */
@@ -60,7 +68,8 @@ static inline size_t u8_view_off(const U8View* v, size_t k) {
 uint32_t u8_decode(const char* s, size_t n, size_t* i);
 
 /* Encode code point `cp` into out (>= 4 bytes); returns the byte count, or 0
- * for an invalid code point (surrogate or > U+10FFFF). */
+ * for an invalid code point (surrogate or > U+10FFFF). U+0000 is encoded as
+ * the two bytes C0 80 (see the note at the top). */
 size_t u8_encode(uint32_t cp, char* out);
 
 /* Code point of the named character \[name] (name without brackets, length

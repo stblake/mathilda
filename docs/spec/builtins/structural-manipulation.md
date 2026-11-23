@@ -826,6 +826,8 @@ between `Min`/`Max`.
 - Yields a definite result whenever every element is a real number, including
   symbolic real constants (`Pi`, `E`, `Sqrt[2]`, `Pi + E`), which order by value;
   `Infinity`/`-Infinity` rank as `±∞`. Returns the element in its exact form.
+  Close values are ordered by a certified comparison, not their doubles
+  (`RankedMax[{Pi, 314159265358979/10^14}, 1]` is `Pi`).
 - Exact for arbitrary-precision integers and rationals; a symbolic non-real
   element (a free symbol or a non-real complex), an empty list, or `|n|` out of
   range leaves the call unevaluated.

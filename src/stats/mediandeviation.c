@@ -55,6 +55,7 @@ Expr* builtin_mediandeviation(Expr* res) {
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
         Expr* r = stats_apply_columnwise("MedianDeviation", data);
+        if (!r) stats_msg_rectn("MedianDeviation", res);   /* ragged / mixed depth */
         MDD_RET(r ? r : expr_copy(res));
     }
 

@@ -1098,7 +1098,9 @@ Out[3]= {"x", "y"}
 - `StringReplaceList["string", rules]`: the list of strings obtained by
   replacing a single match at a time -- one result for every match start of
   every rule (overlapping), in order of position, then rule.
-- `StringReplaceList["string", rules, n]`: at most `n` results.
+- `StringReplaceList["string", rules, n]`: at most `n` results; `n = Infinity`
+  is no limit (it gave `{}`, audit StringReplaceList#1). `StringReplace[s, rules, 0]`
+  replaces nothing.
 - **Options**: `IgnoreCase`. **Attributes**: `Protected`.
 
 ```mathematica
@@ -1218,6 +1220,9 @@ Out[4]= False
 
 - `ToCharacterCode["string"]`: the Unicode code points, as a packed integer
   array (above the packing threshold). A list of strings gives a list of lists.
+- Code point 0 is an ordinary character: `FromCharacterCode[{65, 0, 66}]` has
+  `StringLength` 3 and round-trips through `ToCharacterCode` (held internally
+  as the bytes C0 80, its UTF-8 byte is 0; audit FromCharacterCode#1).
 - `FromCharacterCode[n]`, `FromCharacterCode[{n1, ...}]`,
   `FromCharacterCode[{{...}, ...}]`: the inverse. It reads a packed or `NDArray`
   integer buffer directly. A code outside `0`..`1114111` emits

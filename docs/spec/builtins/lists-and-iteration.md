@@ -56,7 +56,9 @@ Out[4]= {f[x, x], f[x, y], f[x, z], f[y, x], f[y, y], f[y, z], f[z, x], f[z, y],
 ## Permutations
 Generates a list of all possible permutations of the elements in `list`.
 - `Permutations[list]`: generates a list of all possible permutations of the elements in `list`.
-- `Permutations[list, n]`: gives all permutations containing at most `n` elements.
+- `Permutations[list, n]`: gives all permutations containing at most `n` elements
+  (every length `0 .. n`; `n = Infinity` is every length). It gave only the
+  length-`n` ones (audit Permutations#1).
 - `Permutations[list, {n}]`: gives all permutations containing exactly `n` elements.
 
 **Features**:
@@ -289,6 +291,12 @@ The element count is decided before anything is built, and an all-`Integer`
 elements. (It previously ran to a 10^6-element safety cap: the loop was driven
 by the `double` shadow of its bounds, and one ulp at 10^18 is 128.)
 
+An inexact `Range` has `Floor[(imax - imin)/di] + 1` elements, the quotient
+taken once with a relative slack `1e-14 (|imin| + |imax| + |di|)/|di|`, and
+element `k` is `imin + k di` -- never past `imax`, so `Range[0., 0.3, 0.1]`
+ends at `0.3`. Accumulating `val += di` drifted an ulp per step and
+`Range[0., 100., 0.01]` lost its last element (audit Range#1).
+
 A real iterator's bound test allows a rounding slack **relative** to the
 range, `1e-14 (|imax| + |di|)` (v0.6595; shared by `Range`, `Table`, `Do`,
 `Sum`, `Product`). The old absolute `1e-14` swamped a tiny range:
@@ -455,6 +463,9 @@ Attributes: `Protected`. Options: `InterpolationOrder -> 1`.
   `{mi, mi}`, and a negative amount removes elements from that side.
 - `ArrayPad[array, amounts, padding]`: fill with the given padding.
 - A padded size no machine can hold (`ArrayPad[{1}, 10^15]`, and likewise `PadLeft[{1}, 10^15]` / `PadRight`) emits `General::nomem` and aborts (`$Aborted`); amounts at `-2^63` no longer overflow (audit PadLeft#1).
+- A per-level spec deeper than the array (its rectangular depth) gives
+  `ArrayPad::depth` and stays unevaluated; it used to read the missing levels
+  as pure padding and erase the data (audit ArrayPad#1).
 
 The padding is a constant `c` (default `0`), a cyclic list `{c1, c2, ...}`, or
 one of the named schemes `"Fixed"`, `"Periodic"`, `"Reflected"`, `"Reversed"`,
