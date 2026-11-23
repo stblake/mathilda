@@ -444,6 +444,7 @@ Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dty
     e->data.ndarray.data = data;
     e->data.ndarray.dtype = dtype;
     e->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    e->data.ndarray.cap_rows = 0;
     MTH_MEM_CHARGE_BLOCK(expr_ndarray_payload_bytes(e));
     return e;
 }
@@ -713,6 +714,7 @@ Expr* expr_unshare(Expr* e) {
              * way: a copy-on-write of a packed List that came back a visible
              * NDArray would break transparency on any mutation path. */
             fresh->data.ndarray.present_as = e->data.ndarray.present_as;
+            fresh->data.ndarray.cap_rows = 0;      /* exact buffer */
             fresh->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
             memcpy(fresh->data.ndarray.dims, e->data.ndarray.dims, sizeof(int64_t) * (size_t)rank);
             fresh->data.ndarray.data = malloc(bytes);

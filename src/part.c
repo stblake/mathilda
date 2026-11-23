@@ -535,6 +535,33 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     return new_func;
 }
 
+/* Write ONE element of an exclusively owned packed array in place: every index
+ * an in-range machine integer (negatives count from the end), exactly `rank`
+ * of them, and a scalar of the buffer's own type (an exact Integer into int64, a
+ * machine Real into float64) -- the cases that cannot fail halfway, so a refusal
+ * leaves the array untouched and the caller falls back to the copying path.
+ * This is what makes `Do[p[[i]] = v, {i, n}]` O(n) instead of O(n^2): the copy
+ * path duplicated the whole buffer on every assignment. */
+static bool nd_set_element_inplace(Expr* arr, Expr* const* idx, size_t n, const Expr* rhs) {
+    if (arr->type != EXPR_NDARRAY || n != (size_t)arr->data.ndarray.rank) return false;
+    NDType dt = arr->data.ndarray.dtype;
+    if (dt == NDT_INT64) { if (rhs->type != EXPR_INTEGER) return false; }
+    else if (dt == NDT_FLOAT64) { if (rhs->type != EXPR_REAL) return false; }
+    else return false;
+    size_t off = 0;
+    for (size_t k = 0; k < n; k++) {
+        if (idx[k]->type != EXPR_INTEGER) return false;
+        int64_t d = arr->data.ndarray.dims[k], i = idx[k]->data.integer;
+        if (i < 0) i += d + 1;
+        if (i < 1 || i > d) return false;
+        off = off * (size_t)d + (size_t)(i - 1);
+    }
+    if (dt == NDT_INT64) ((int64_t*)arr->data.ndarray.data)[off] = rhs->data.integer;
+    else ((double*)arr->data.ndarray.data)[off] = rhs->data.real;
+    expr_invalidate_hash(arr);
+    return true;
+}
+
 Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || lhs->data.function.head->data.symbol.name != SYM_Part) return NULL;
     if (lhs->data.function.arg_count < 2) return NULL;
@@ -587,6 +614,35 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
                                  lhs->data.function.arg_count - 1, rhs);
         if (!ok) { expr_free(current_val); return NULL; }
         return current_val;
+    }
+
+    /* p[[i, ...]] = scalar on a packed array this variable owns exclusively:
+     * write the element in place (see nd_set_element_inplace). */
+    if (current_val->type == EXPR_NDARRAY && symtab_value_exclusively_owned(sym, current_val) &&
+        nd_set_element_inplace(current_val, lhs->data.function.args + 1,
+                               lhs->data.function.arg_count - 1, rhs)) {
+        eval_clock_bump_binding(symtab_get_def(sym->data.symbol.name));
+        return current_val;
+    }
+
+    /* a[[Key[k]]] = v / a["k"] = v on an association this variable owns
+     * exclusively: upsert in place (O(1) amortised) instead of rebuilding the
+     * whole node.  Positional/All/Span specs and nested paths take the general
+     * path below.  See assoc_try_inplace_update for the ownership proof. */
+    if (is_association(current_val) && lhs->data.function.arg_count == 2) {
+        Expr* ix = lhs->data.function.args[1];
+        Expr* key = NULL;
+        if (ix->type == EXPR_STRING) key = ix;
+        else if (ix->type == EXPR_FUNCTION && ix->data.function.head->type == EXPR_SYMBOL &&
+                 ix->data.function.head->data.symbol.name == SYM_Key &&
+                 ix->data.function.arg_count == 1) key = ix->data.function.args[0];
+        if (key) {
+            Expr* ra[2] = { expr_copy(key), expr_copy(rhs) };
+            Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+            bool done = assoc_try_inplace_update(sym, current_val, rule, false);
+            expr_free(rule);
+            if (done) return current_val;
+        }
     }
 
     Expr* new_val = expr_part_assign_rec(current_val, lhs->data.function.args + 1,
@@ -1128,11 +1184,28 @@ static Expr* assoc_part_collect(Expr** ents, size_t n, bool ok) {
  */
 static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest) {
     size_t na = assoc->data.function.arg_count;
-    for (size_t i = 0; i < na; i++)
-        if (!is_rule2(assoc->data.function.args[i])) return NULL;  /* malformed */
 
     const Expr* key = NULL;
     AssocSpecKind kind = assoc_spec_kind(idx, &key);
+
+    /* Single-key and single-position reads touch one entry, so they must not
+     * pay an O(n) well-formedness scan (that made a[[Key[k]]] O(n) per read):
+     * assoc_lookup_value is index-backed and scan-safe on a malformed node,
+     * and the positional read checks just the entry it dereferences. */
+    if (kind == APS_KEY) {
+        Expr* v = assoc_lookup_value(assoc, key);   /* O(1) via the key index */
+        return v ? expr_part(v, rest, nrest) : assoc_key_absent(idx);
+    }
+    if (kind == APS_POS && idx->data.integer != 0) {
+        int64_t pos = idx->data.integer;
+        if (pos < 0) pos = (int64_t)na + pos + 1;
+        if (pos < 1 || pos > (int64_t)na) return NULL;
+        if (!is_rule2(assoc->data.function.args[pos - 1])) return NULL;   /* malformed */
+        return expr_part(assoc->data.function.args[pos - 1]->data.function.args[1], rest, nrest);
+    }
+
+    for (size_t i = 0; i < na; i++)
+        if (!is_rule2(assoc->data.function.args[i])) return NULL;  /* malformed */
 
     if (kind == APS_POS) {
         int64_t pos = idx->data.integer;

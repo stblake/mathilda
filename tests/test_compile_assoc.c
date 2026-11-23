@@ -360,9 +360,14 @@ static void test_functional_update(void) {
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"c\" -> x]]"
                 "[<|\"a\" -> 1., \"b\" -> 2.|>, 3.] === <|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>");
 
-    /* REPLACE an existing key — value updated in place, order preserved */
+    /* an existing key MOVES TO THE END, as the interpreter's Append does
+     * (Mathematica 15): compiled and interpreted must agree on key order. */
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"
-                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === <|\"a\" -> 1., \"b\" -> 9., \"c\" -> 3.|>");
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === <|\"a\" -> 1., \"c\" -> 3., \"b\" -> 9.|>");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === Append[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, \"b\" -> 9.]");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"a\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === Append[KeyDrop[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, \"b\"], \"a\" -> 9.]");
 
     /* the value can be any compiled machine expression */
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"sum\" -> Lookup[p, \"a\"] + x]]"
@@ -375,6 +380,21 @@ static void test_functional_update(void) {
     assert_lowers("CompileDiagnostics[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"z\" -> x]]");
     assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"z\" -> x]]"
                 "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 7.] === <|\"a\" -> 1., \"c\" -> 3., \"z\" -> 7.|>");
+
+    /* in-place path (owned-temp source, refcount 1): an Append onto a
+     * produced association must equal the interpreter exactly, and a borrowed (argument) source that must NOT
+     * be mutated across repeated evaluations. */
+    {
+        const char* body = "Append[KeyDrop[p, \"b\"], \"z\" -> x + 1.]";
+        char buf[1024];
+        assert_lowers("CompileDiagnostics[{{p, _Association, _Real}, {x, _Real}}, "
+                      "Append[KeyDrop[p, \"b\"], \"z\" -> x + 1.]]");
+        snprintf(buf, sizeof buf,
+                 "Module[{cf = Compile[{{p, _Association, _Real}, {x, _Real}}, %s], pp = <|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>},"
+                 " Table[cf[pp, 7.], {50}]; cf[pp, 7.] === Module[{p = pp, x = 7.}, %s] && pp === <|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>]",
+                 body, body);
+        assert_true(buf);
+    }
 
     /* the mutating AssociateTo[sym, …] is a deliberate boundary: it rebinds a
      * symbol's OwnValue (a side effect the register VM does not model) and so is

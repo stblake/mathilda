@@ -133,6 +133,12 @@ typedef struct {
     void* data;      /* owned, row-major; element type given by dtype */
     NDType dtype;    /* element data type */
     NDPresentation present_as;  /* NDArray[...] or a packed List; see above */
+    /* Allocated length of `data` in ROWS (dims[0] units), 0 = exactly dims[0].
+     * Only an in-place rank-1 AppendTo (ndstruct_append_inplace) ever sets it,
+     * to give amortised O(1) growth; every other site leaves it 0 and treats
+     * dims[0] as the buffer length, which stays true (cap >= dims[0] always).
+     * A copy of the node gets an exact buffer and cap 0 (expr_unshare). */
+    size_t cap_rows;
 } NDArrayData;
 
 typedef struct Expr {

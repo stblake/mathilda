@@ -100,6 +100,9 @@ Expr* ndstruct_pad(Expr* res, bool left);
  */
 Expr* ndstruct_ratios(Expr* res);
 Expr* ndstruct_append(Expr* res, bool prepend);
+/* In-place amortised-O(1) append of one scalar to an exclusively owned rank-1
+ * packed array (see ndstruct.c); false = untouched, use ndstruct_append. */
+bool ndstruct_append_inplace(Expr* a, const Expr* x);
 Expr* ndstruct_catenate(Expr* res);
 Expr* ndstruct_take_extreme(Expr* res, bool largest);
 

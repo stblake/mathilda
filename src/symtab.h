@@ -490,6 +490,13 @@ void symtab_rule_display_parts(const Rule* r, Expr** lhs, Expr** rhs);
 
 // Get rules
 Rule* symtab_get_own_values(const char* symbol_name);
+/* In-place update proof.  `current` is the caller's reference obtained from
+ * evaluate(sym).  True iff `sym` is a plain symbol whose ONLY OwnValue holds
+ * exactly that node and nobody else references it (refcount 2: the OwnValue
+ * plus the caller).  Then mutating `current` is unobservable.  Any extra holder
+ * -- a second variable, a saved Block value, an enclosing expression -- makes
+ * this false and the caller must copy. */
+bool symtab_value_exclusively_owned(const Expr* sym, const Expr* current);
 Rule* symtab_get_down_values(const char* symbol_name);
 // Unlink the DownValue whose LHS is exactly `lhs` (canonicalised); caller owns
 // the returned rule (or NULL). Free a detached rule with symtab_rule_free.

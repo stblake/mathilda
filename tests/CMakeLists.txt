@@ -1892,6 +1892,13 @@ target_link_libraries(bench_assoc m)
 target_include_directories(bench_assoc PRIVATE ../src)
 add_test(NAME bench_assoc COMMAND bench_assoc)
 
+# Update-loop baseline matrix (data-structure program). Reports by default;
+# DS_BENCH_STRICT=1 gates rows that must be O(1) amortised per update.
+add_executable(bench_ds_updates bench_ds_updates.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_ds_updates m)
+target_include_directories(bench_ds_updates PRIVATE ../src)
+add_test(NAME bench_ds_updates COMMAND bench_ds_updates)
+
 # Evaluator baseline benchmark: Phase 0 of EVAL_SYMTAB_IMPROVEMENTS.md. Measures
 # per-node dispatch cost so the symbol-object rework can be validated against a
 # committed baseline. Machine-normalized "much slower" gate like bench_assoc.
@@ -2813,6 +2820,15 @@ if(USE_ECM)
     add_dependencies(compile_assoc_tests build_ecm)
 endif()
 add_test(NAME compile_assoc_tests COMMAND compile_assoc_tests)
+
+# In-place update paths (data-structure program): value semantics must survive
+# aliasing, Block, and cached derived values.
+add_executable(inplace_updates_tests test_inplace_updates.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(inplace_updates_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(inplace_updates_tests build_ecm)
+endif()
+add_test(NAME inplace_updates_tests COMMAND inplace_updates_tests)
 
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)

@@ -38,6 +38,10 @@ bool is_association(const Expr* e);
  * `assoc`.  This is the single-key lookup primitive shared by Lookup,
  * KeyExistsQ/KeyMemberQ/KeyFreeQ, Part, and the <|...|>[key] accessor. */
 Expr* assoc_lookup_value(const Expr* assoc, const Expr* key);
+/* In-place single-rule upsert on an exclusively owned association (see assoc.c). */
+bool assoc_upsert_inplace(Expr* assoc, Expr* rule);
+/* Shared AssociateTo/AppendTo refcount-gated in-place update (see assoc.c). */
+bool assoc_try_inplace_update(Expr* sym, Expr* current, Expr* rule, bool append_new_only);
 
 /* Eagerly build + cache the single-key index (compiled marshalling boundary).
  * Idempotent; keeps the parallel VM off assoc_lookup_value's lazy build. */
@@ -61,6 +65,8 @@ Expr* assoc_counts_ndarray(const Expr* arr);
  * (replaced in place preserving order, else appended).  Borrows assoc/key, ADOPTS
  * newval; owned result, or NULL (then the caller frees newval). */
 Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval);
+/* Append semantics: an existing key moves to the end (Mathematica 15). Adopts newval. */
+Expr* assoc_append_key(const Expr* assoc, const Expr* key, Expr* newval);
 
 /* Build a canonical Association from `count` Rule[k,v] nodes.  The rules are
  * copied (the caller keeps ownership of `rules`).  Duplicate keys collapse

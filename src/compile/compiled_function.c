@@ -1193,6 +1193,7 @@ static const char* ct_name(CompileType t) {
         default: break;
     }
     if (CT_IS_LLIST(t)) return "LinkedList";
+    if (CT_IS_ASSOC(t)) return "Association";   /* was "Unknown" */
     return CT_IS_ARRAY(t) ? "Array" : "Unknown";
 }
 

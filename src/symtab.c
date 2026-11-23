@@ -2124,6 +2124,12 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
     add_rule_in(list, pattern, replacement, delayed, NULL, NULL);
 }
+bool symtab_value_exclusively_owned(const Expr* sym, const Expr* current) {
+    if (!sym || !current || sym->type != EXPR_SYMBOL || current->refcount != 2) return false;
+    Rule* ov = symtab_get_own_values(sym->data.symbol.name);
+    return ov && !ov->next && ov->replacement == current;
+}
+
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
     symtab_add_own_value_as(symbol_name, pattern, replacement, false);
 }
