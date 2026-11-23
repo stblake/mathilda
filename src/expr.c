@@ -1005,7 +1005,14 @@ static bool nd_packed_eq(const Expr* a, const Expr* b) {
     return true;
 }
 
+/* Structural equality.  The last argument of a call is compared by looping
+ * rather than recursing, so a chain-shaped expression (Nest[f, x, n],
+ * Nest[List, x, n], a long Rest/Prepend chain) is compared in constant stack:
+ * `Nest[f, x, 10^5] === Nest[f, x, 10^5]` overflowed the 8 MB C stack.  Other
+ * arguments and heads still recurse, which is depth-bounded by any expression
+ * that is not a chain. */
 bool expr_eq(const Expr* a, const Expr* b) {
+  for (;;) {
     if (a == b) return true;
     if (!a || !b) return false;
     /* A packed list is a List, so it must compare equal to the nested List it
@@ -1045,12 +1052,17 @@ bool expr_eq(const Expr* a, const Expr* b) {
         case EXPR_STRING:
             return strcmp(a->data.string, b->data.string) == 0;
         case EXPR_FUNCTION: {
+            size_t n = a->data.function.arg_count;
+            if (n != b->data.function.arg_count) return false;
             if (!expr_eq(a->data.function.head, b->data.function.head)) return false;
-            if (a->data.function.arg_count != b->data.function.arg_count) return false;
-            for (size_t i = 0; i < a->data.function.arg_count; i++) {
+            if (n == 0) return true;
+            for (size_t i = 0; i + 1 < n; i++) {
                 if (!expr_eq(a->data.function.args[i], b->data.function.args[i])) return false;
             }
-            return true;
+            /* Tail position: compare the last argument by iterating. */
+            a = a->data.function.args[n - 1];
+            b = b->data.function.args[n - 1];
+            continue;
         }
         case EXPR_BIGINT:
             return mpz_cmp(a->data.bigint, b->data.bigint) == 0;
@@ -1100,6 +1112,7 @@ bool expr_eq(const Expr* a, const Expr* b) {
 #endif
     }
     return false;
+  }
 }
 
 /* expr_compare lives in sort.c so the canonical-order policy stays in
