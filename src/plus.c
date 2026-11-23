@@ -29,6 +29,7 @@
  *   -1 = -Infinity (Times[c, Infinity, ...] with c < 0)
  *    2 = ComplexInfinity (or any Times factor that contains it)
  *    3 = Indeterminate (or any Times factor that contains it)
+ *    4 = an infinity in a non-real direction (I Infinity, (1 + I) Infinity)
  */
 /* True iff `e` is a Complex[re, im] with a NONZERO imaginary part -- a non-real
  * numeric coefficient.  Times[Complex[0,b], Infinity] is then a complex-DIRECTED
@@ -61,13 +62,13 @@ static int classify_plus_term(Expr* e) {
         if (has_inf) {
             /* Canonical Times has the numeric coefficient first.  A NON-REAL
              * coefficient (I*Infinity, (c+di)*Infinity) is a directed infinity
-             * in a complex direction, NOT a real +/-Infinity: classify it as an
-             * ordinary term so Plus leaves `c + I Infinity` structurally intact
+             * in a complex direction, NOT a real +/-Infinity (class 4): beside
+             * finite terms Plus leaves `c + I Infinity` structurally intact
              * (the direction is preserved, e.g. for a Mellin-Barnes vertical
-             * line `s = c +/- I Infinity`) rather than collapsing it to a real
-             * Infinity. */
+             * line `s = c +/- I Infinity`), but beside an infinity of another
+             * direction the sum is Indeterminate. */
             Expr* f0 = e->data.function.args[0];
-            if (is_nonreal_complex(f0)) return 0;
+            if (is_nonreal_complex(f0)) return 4;
             if (expr_numeric_sign(f0) < 0) return -1;
             return 1;
         }
@@ -807,15 +808,30 @@ Expr* builtin_plus(Expr* res) {
      */
     {
         bool has_indet = false;
-        int pos_inf = 0, neg_inf = 0, cinf = 0;
+        int pos_inf = 0, neg_inf = 0, cinf = 0, cdir = 0;
         for (size_t i = 0; i < n; i++) {
             int c = classify_plus_term(res->data.function.args[i]);
             if (c == 3) has_indet = true;
             else if (c == 1) pos_inf++;
             else if (c == -1) neg_inf++;
             else if (c == 2) cinf++;
+            else if (c == 4) cdir++;
         }
         if (has_indet) return expr_new_symbol(SYM_Indeterminate);
+        /* Infinity + I Infinity: two infinities in different directions have
+         * no sum (Plus#1 of the 2026-11 audit -- the complex-directed term
+         * used to be absorbed as if finite, giving Infinity).  Terms in
+         * complex directions alone are left to the ordinary collection. */
+        if (cdir > 0 && (pos_inf > 0 || neg_inf > 0)) {
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression involving infinities in different directions encountered.");
+            return expr_new_symbol(SYM_Indeterminate);
+        }
+        if (cinf > 0 && cdir > 0) {
+            mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                    "Indeterminate expression involving ComplexInfinity encountered.");
+            return expr_new_symbol(SYM_Indeterminate);
+        }
         if (pos_inf > 0 && neg_inf > 0) {
             mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
                     "Indeterminate expression -Infinity + Infinity encountered.");

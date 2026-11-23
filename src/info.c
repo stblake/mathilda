@@ -1485,7 +1485,7 @@ void info_init(void) {
         "It is a mathematical constant: it has attributes Constant and Protected,\n"
         "NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]\n"
         "evaluates it to any precision.");
-    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nA non-integer numeric argument (under N) evaluates via 2^(n/2) (Pi/2)^((Cos[n Pi]-1)/4) Gamma[n/2+1] (real, complex, arbitrary precision).\nFactorial2 stays unevaluated on symbolic arguments.");
+    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers give ComplexInfinity; a negative odd integer -(2k+1) gives (-1)^k/(2k-1)!! ((-3)!! = -1, (-5)!! = 1/3).\nA non-integer numeric argument (under N) evaluates via 2^(n/2) (Pi/2)^((Cos[n Pi]-1)/4) Gamma[n/2+1] (real, complex, arbitrary precision).\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"
         "\tgives the nth Fibonacci number F_n.\n"

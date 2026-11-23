@@ -341,6 +341,11 @@ Symbolic sum.
 **Features**:
 - `Flat`, `Orderless`, `Listable`.
 - Combines numeric constants and collects like terms (e.g., `x + 2x` becomes `3x`).
+- Infinities in different directions have no sum: `Infinity + I Infinity` and
+  `-Infinity + (1 + I) Infinity` are `Indeterminate` with `Infinity::indet`
+  (the complex-directed term used to be absorbed, giving `Infinity`; Plus#1).
+  A finite term beside a complex-directed infinity stays as written
+  (`3 + I Infinity`).
 - Like-term collection is hash-based (O(N) expected) and canonically sorts only
   the collapsed result, so a large flat sum (e.g. `Total` of 10^5 monomials) does
   not pay the generic `Orderless` sort over all N raw terms. `Times` collects
@@ -535,7 +540,7 @@ Gives the successive ratios of the elements in a list — the multiplicative ana
 - `Protected`.
 - `Ratios[list]` divides successive elements by preceding ones, giving `{list[[2]]/list[[1]], list[[3]]/list[[2]], ...}` of length `l - 1`; `Ratios[{x1, x2}]` gives `{x2/x1}`.
 - `Ratios[list, n]` applies the ratio operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
-- `Ratios[list, {n1, n2, ...}]` gives the successive `nk`-th ratios at level `k` of a nested list, and is equivalent to `Ratios[Ratios[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
+- `Ratios[list, {n1, n2, ...}]` gives the successive `nk`-th ratios at level `k` of a nested list, and is equivalent to `Ratios[Ratios[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer. Below the top level only a `List` is a level: a spec deeper than the array (`Ratios[{1, 2, 3}, {1, 1}]`) draws `Ratios::lvldep` and stays unevaluated, where it used to take "ratios" of the parts of `3/2` (Ratios#1). `Differences` behaves the same (`Differences::lvldep`).
 - Division threads element-wise over sublists via the `Listable` `Power`/`Times`, so for a matrix `m`, `Ratios[m]` (= `Ratios[m, 1]` = `Ratios[m, {1, 0}]`) takes ratios of successive rows within each column, while `Ratios[m, {0, 1}]` takes ratios of columns within each row.
 - The head of the input is preserved. A list shorter than the reduction yields the empty list. First ratios are constant for a geometric sequence.
 - Works on machine integers, GMP arbitrary-precision integers (exact `Rational` results), machine-precision doubles, and symbolic expressions.
@@ -913,6 +918,13 @@ Exponentiation.
 **Features**:
 - `Listable`.
 - Simplifies integer powers of integers.
+- A finite numeric base to `Infinity` / `-Infinity` is decided by the
+  certified sign of `|b| - 1` (`b^-Infinity` is `(1/b)^Infinity`): `0` inside
+  the unit circle, `Infinity` for a positive real base outside it and
+  `ComplexInfinity` for any other, `Indeterminate` with `Infinity::indet` on it
+  (`2^Infinity` → `Infinity`, `E^-Infinity` → `0`, `(-2)^Infinity` →
+  `ComplexInfinity`, `I^Infinity` → `Indeterminate`); these stayed unevaluated
+  (Power#1).
 - `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and the reference does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
 - An exact integer power is exact at any size GMP can represent; past that
   (at most `INT_MAX` limbs, an `unsigned long` exponent) it is `General::ovfl`
@@ -2350,7 +2362,10 @@ are disjoint, and stay symbolic when they overlap.
 - `IntervalUnion[i1, i2, ...]` — the merged union (also `Interval`'s multi-argument
   form). `Flat` and `Orderless`.
 - `IntervalIntersection[i1, i2, ...]` — the intersection, or the empty interval
-  `Interval[]` when the arguments are disjoint. `Flat` and `Orderless`.
+  `Interval[]` when the arguments are disjoint. `Flat` and `Orderless`. An
+  overlap that depends on a symbolic endpoint leaves the call unevaluated
+  (`IntervalIntersection[Interval[{0, a}], Interval[{1, 2}]]`); it used to be
+  dropped, reporting `Interval[]` (IntervalIntersection#1).
 - `IntervalMemberQ[interval, x]` — `True` if the number `x` lies in `interval`;
   `IntervalMemberQ[interval, other]` tests whether the interval `other` is wholly
   contained.

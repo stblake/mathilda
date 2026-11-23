@@ -3506,11 +3506,20 @@ Expr* builtin_numericq(Expr* res) {
 /* Classify a numeric-quantity expression by reality and sign. Returns:
  *   1  -> arg is real; *sign set to -1, 0, or +1
  *   0  -> arg numericalizes to a genuinely complex (non-real) value
- *  -1  -> arg could not be numericalized to a concrete number
- * Exact integer/rational/real (and MPFR) inputs are read directly; everything
- * else is numericalized to machine precision, mirroring is_numeric_real() in
- * complex.c. The caller is expected to have already established that arg is a
- * numeric quantity via is_numeric_quantity(). */
+ *  -1  -> arg could not be numericalized to a concrete number, or (for an
+ *         EXACT quantity) its sign could not be certified
+ * Exact integer/rational/real (and MPFR) inputs are read directly.  An EXACT
+ * closed form (Pi - 3, Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]], Zeta[3] - 1)
+ * never takes its sign from a rounded approximation: that is rounding noise
+ * for a quantity that is exactly zero (Positive[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1]
+ * was True; Positive#1 of the 2026-11 audit).  Its sign comes from a rigorous
+ * ball evaluation (flint_cert_parts_sign), else from the comparison heads'
+ * certified sign (comparisons_real_constant_sign: an MPFR-resolved order, or
+ * the exact zero test -- which is how an exact zero is recognised), and is
+ * left undecided otherwise.  Only a quantity holding an approximate number is
+ * numericalized at machine precision and read directly, mirroring
+ * is_numeric_real() in complex.c.  The caller is expected to have already
+ * established that arg is a numeric quantity via is_numeric_quantity(). */
 static int numeric_real_sign(Expr* arg, int* sign) {
     int64_t n, d;
     /* +-Underflow[] carry a sign; Overflow[] has none (it cannot be read). */
@@ -3539,6 +3548,15 @@ static int numeric_real_sign(Expr* arg, int* sign) {
         return 1;
     }
 #endif
+    bool exact = !internal_contains_inexact(arg);
+    if (exact) {
+        int rs, is;
+        if (flint_cert_parts_sign(arg, &rs, &is)) {
+            if (is == 0 && rs != 2) { *sign = rs; return 1; }
+            if (is == 1 || is == -1) return 0;     /* certified non-real */
+        }
+        if (comparisons_real_constant_sign(arg, sign)) return 1;
+    }
     Expr* approx = numericalize(arg, numeric_machine_spec());
     if (!approx) return -1;
     int kind;
@@ -3557,7 +3575,18 @@ static int numeric_real_sign(Expr* arg, int* sign) {
         kind = 0;  /* Complex (or otherwise non-real) numeric value. */
     }
     expr_free(approx);
+    /* An exact real whose sign no certificate settled: the machine value's
+     * sign may be noise, so leave it undecided. */
+    if (exact && kind == 1) return -1;
     return kind;
+}
+
+/* Public face of numeric_real_sign (declared in core.h) so UnitStep and the
+ * other sign-deciding heads share one certified sign.  Returns -1 for a
+ * non-numeric argument. */
+int numeric_certified_real_sign(Expr* arg, int* sign) {
+    if (!arg || !is_numeric_quantity(arg)) return -1;
+    return numeric_real_sign(arg, sign);
 }
 
 /* Sign of an infinite quantity, for the four sign predicates.  Infinity is the

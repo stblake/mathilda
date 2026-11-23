@@ -323,10 +323,14 @@ Expr* builtin_piecewise(Expr* res) {
 
     /* Build symbolic Piecewise[{{v, c}, ...}, default?]. The default is
      * dropped iff the final clause is unconditionally True (it would be
-     * unreachable). */
+     * unreachable).  As documented, the values (and the default) that are
+     * kept in the returned form are evaluated: Piecewise[{{1 + 1, x > 0}},
+     * 2 + 2] is Piecewise[{{2, x > 0}}, 4] (Piecewise#1 of the 2026-11 audit
+     * -- they used to stay held).  Once evaluated, the next pass finds them
+     * unchanged, so a side effect in a value runs once. */
     Expr** pair_nodes = malloc(out_count * sizeof(Expr*));
     for (size_t i = 0; i < out_count; i++) {
-        pair_nodes[i] = piecewise_make_pair(out_vals[i], out_conds[i]);
+        pair_nodes[i] = piecewise_make_pair(eval_and_free(out_vals[i]), out_conds[i]);
     }
     Expr* clauses_list = expr_new_function(expr_new_symbol(SYM_List), pair_nodes, out_count);
     free(pair_nodes);
@@ -341,7 +345,7 @@ Expr* builtin_piecewise(Expr* res) {
     } else {
         pw_args = malloc(2 * sizeof(Expr*));
         pw_args[0] = clauses_list;
-        pw_args[1] = default_arg ? expr_copy(default_arg) : expr_new_integer(0);
+        pw_args[1] = default_arg ? eval_and_free(expr_copy(default_arg)) : expr_new_integer(0);
         pw_argc = 2;
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_Piecewise), pw_args, pw_argc);

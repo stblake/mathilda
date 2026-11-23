@@ -32,9 +32,102 @@ static void test_differences_int64_min_step(void) {
     audit_chk("Differences#1", "Differences[{1, 2, 3}, 1, 2]", "{2}");
 }
 
+/* Plus#1 (high): "Infinity + I Infinity returns Infinity instead of
+ * Indeterminate".  Infinities in different directions have no sum; the
+ * complex-directed term was absorbed as if it were finite. */
+static void test_plus_infinity_directions(void) {
+    audit_chk("Plus#1", "Quiet[Infinity + I Infinity]", "Indeterminate");
+    audit_chk("Plus#1", "Quiet[Infinity - I Infinity]", "Indeterminate");
+    audit_chk("Plus#1", "Quiet[-Infinity + (1 + I) Infinity]", "Indeterminate");
+    audit_chk("Plus#1", "Quiet[ComplexInfinity + I Infinity]", "Indeterminate");
+    audit_chk("Plus#1", "Check[Infinity + I Infinity, fired, Infinity::indet]", "fired");
+    /* Unchanged: a finite term beside a complex-directed infinity, and the
+     * real-direction rules. */
+    audit_chk("Plus#1", "3 + I Infinity", "3 + I Infinity");
+    audit_chk("Plus#1", "Infinity + 5", "Infinity");
+    audit_chk("Plus#1", "Quiet[Infinity - Infinity]", "Indeterminate");
+}
+
+/* Power#1 (high): "Finite numeric base raised to Infinity/-Infinity stays
+ * unevaluated".  b^Infinity is decided by the certified sign of |b| - 1:
+ * 0 inside the unit circle, Infinity (positive real b) or ComplexInfinity
+ * outside it, Indeterminate on it; b^-Infinity = (1/b)^Infinity. */
+static void test_power_finite_base_infinity(void) {
+    audit_chk("Power#1", "2^Infinity", "Infinity");
+    audit_chk("Power#1", "(1/2)^Infinity", "0");
+    audit_chk("Power#1", "2^(-Infinity)", "0");
+    audit_chk("Power#1", "(1/2)^(-Infinity)", "Infinity");
+    audit_chk("Power#1", "E^Infinity", "Infinity");
+    audit_chk("Power#1", "E^(-Infinity)", "0");
+    audit_chk("Power#1", "3^Infinity", "Infinity");
+    audit_chk("Power#1", "2.^Infinity", "Infinity");
+    audit_chk("Power#1", "(-2)^Infinity", "ComplexInfinity");
+    audit_chk("Power#1", "(-1/2)^Infinity", "0");
+    audit_chk("Power#1", "(-1/2)^(-Infinity)", "ComplexInfinity");
+    audit_chk("Power#1", "(1 + I)^Infinity", "ComplexInfinity");
+    audit_chk("Power#1", "(I/2)^Infinity", "0");
+    audit_chk("Power#1", "Quiet[1^Infinity]", "Indeterminate");
+    audit_chk("Power#1", "Quiet[I^Infinity]", "Indeterminate");
+    audit_chk("Power#1", "Quiet[(-1)^Infinity]", "Indeterminate");
+    audit_chk("Power#1", "Check[(-1)^Infinity, fired, Infinity::indet]", "fired");
+    audit_chk("Power#1", "(Sqrt[2] - 1)^Infinity", "0");
+    /* An exact base on the unit circle is not taken from rounding noise. */
+    audit_chk("Power#1", "Quiet[(Sqrt[5 + 2 Sqrt[6]] - Sqrt[2] - Sqrt[3] + 1)^Infinity]",
+              "Indeterminate");
+    /* Symbolic bases and the existing table are unchanged. */
+    audit_chk("Power#1", "x^Infinity", "x^Infinity");
+    audit_chk("Power#1", "0^Infinity", "0");
+    audit_chk("Power#1", "Infinity^2", "Infinity");
+}
+
+/* IntervalIntersection#1 (high): "Intervals with symbolic endpoints are
+ * reported as disjoint (Interval[]), even X intersected with itself".  An
+ * overlap that cannot be decided leaves the call unevaluated. */
+static void test_interval_intersection_symbolic(void) {
+    audit_chk("IntervalIntersection#1",
+              "IntervalIntersection[Interval[{a, b}], Interval[{a, b}]]",
+              "IntervalIntersection[Interval[{a, b}], Interval[{a, b}]]");
+    audit_chk("IntervalIntersection#1",
+              "IntervalIntersection[Interval[{0, a}], Interval[{1, 2}]]",
+              "IntervalIntersection[Interval[{0, a}], Interval[{1, 2}]]");
+    audit_chk("IntervalIntersection#1",
+              "IntervalIntersection[Interval[{0, a}], Interval[{1, 2}]] /. a -> 3/2",
+              "Interval[{1, 3/2}]");
+    /* Numeric endpoints: overlaps and proven disjointness as before. */
+    audit_chk("IntervalIntersection#1",
+              "IntervalIntersection[Interval[{0, 3}], Interval[{1, 5}]]", "Interval[{1, 3}]");
+    audit_chk("IntervalIntersection#1",
+              "IntervalIntersection[Interval[{0, 1}], Interval[{2, 3}]]", "Interval[]");
+    audit_chk("IntervalIntersection#1",
+              "IntervalIntersection[Interval[{0, 1}, {2, 5}], Interval[{Pi, 7}]]",
+              "Interval[{Pi, 5}]");
+}
+
+/* Ratios#1 (high): "Level spec deeper than the list recurses into
+ * Rational/Times internals".  Below the top level only a List is a level of
+ * the array; a deeper spec draws Ratios::lvldep and stays unevaluated.  The
+ * same walk in Differences had the same defect. */
+static void test_ratios_level_depth(void) {
+    audit_chk("Ratios#1", "Quiet[Ratios[{1, 2, 3}, {1, 1}]]", "Ratios[{1, 2, 3}, {1, 1}]");
+    audit_chk("Ratios#1", "Quiet[Ratios[{a, b, c}, {1, 1}]]", "Ratios[{a, b, c}, {1, 1}]");
+    audit_chk("Ratios#1", "Check[Ratios[{1, 2, 3}, {1, 1}], fired, Ratios::lvldep]", "fired");
+    audit_chk("Ratios#1", "Quiet[Differences[{a, b^2, c}, {1, 1}]]",
+              "Differences[{a, b^2, c}, {1, 1}]");
+    /* Arrays deep enough, and zero-order trailing levels, are unchanged. */
+    audit_chk("Ratios#1", "Ratios[{{1, 2, 4}, {3, 6, 9}}, {1, 1}]", "{{1, 3/4}}");
+    audit_chk("Ratios#1", "Ratios[{{1, 2, 4}, {3, 6, 9}}, {0, 1}]", "{{2, 2}, {2, 3/2}}");
+    audit_chk("Ratios#1", "Ratios[{1, 2, 4}, {1, 0}]", "{2, 2}");
+    audit_chk("Ratios#1", "Ratios[{1, 2, 4}, {1}]", "{2, 2}");
+    audit_chk("Ratios#1", "Differences[{{1, 2, 4}, {3, 6, 9}}, {1, 1}]", "{{2, 1}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
     TEST(test_differences_int64_min_step);
+    TEST(test_plus_infinity_directions);
+    TEST(test_power_finite_base_infinity);
+    TEST(test_interval_intersection_symbolic);
+    TEST(test_ratios_level_depth);
     return audit_finish("audit_arithmetic");
 }

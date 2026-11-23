@@ -19,6 +19,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "zero_test.h"
+#include "core.h"        /* numeric_certified_real_sign */
 #include "message.h"
 #include "print.h"
 #include "common.h"
@@ -486,42 +487,19 @@ static bool ustep_is_pos_infinity(Expr* e) {
     return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
-/* Certify the sign of an *exact* real numeric quantity (Pi, Sqrt[2], 3^(2/3),
- * ...) that no leaf branch resolved, by numericalizing at increasing
- * precision and accepting the result only once two successive precisions
- * agree on the same non-zero sign. Returns the USTEP_* class, or
- * USTEP_UNKNOWN when `x` is not a real number or the sign cannot be pinned
- * down within the precision cap (mirrors $MaxExtraPrecision: we never guess). */
+/* Certify the sign of a real numeric quantity (Pi, Sqrt[2], 3^(2/3), ...)
+ * that no leaf branch resolved, with the certified sign Positive / Negative
+ * use (numeric_certified_real_sign, core.c): a rigorous ball evaluation, else
+ * an MPFR-resolved order or the exact zero test.  Returns the USTEP_* class,
+ * or USTEP_UNKNOWN when `x` is not a real number or its sign is not proven:
+ * we never guess.  Accepting a sign once two MPFR precisions agreed took the
+ * rounding noise of an exact zero for a sign -- UnitStep[Sqrt[5 + 2 Sqrt[6]]
+ * - Sqrt[2] - Sqrt[3]] was 0 (UnitStep#1 of the 2026-11 audit); the exact
+ * zero now classifies NONNEG (UnitStep[0] = 1). */
 static int ustep_certify(Expr* x) {
-#ifdef USE_MPFR
-    const long max_prec = 1L << 14;   /* ~4900 decimal digits */
-    int prev = 0;                     /* last non-zero sign seen (0 = none) */
-    for (long prec = 64; prec <= max_prec; prec *= 4) {
-        NumericSpec spec;
-        spec.mode = NUMERIC_MODE_MPFR;
-        spec.bits = prec;
-        Expr* approx = numericalize(x, spec);
-        if (!approx) return USTEP_UNKNOWN;
-        int s = ustep_real_sign(approx);
-        expr_free(approx);
-        if (s == -2) return USTEP_UNKNOWN;   /* not a real numeric */
-        if (s != 0) {
-            if (prev != 0 && prev == s) return s > 0 ? USTEP_NONNEG : USTEP_NEG;
-            prev = s;
-        }
-        /* s == 0 only means this precision could not separate x from 0; keep
-         * refining. A genuinely non-zero exact real eventually stabilises. */
-    }
-    return USTEP_UNKNOWN;
-#else
-    NumericSpec spec = numeric_machine_spec();
-    Expr* approx = numericalize(x, spec);
-    if (!approx) return USTEP_UNKNOWN;
-    int s = ustep_real_sign(approx);
-    expr_free(approx);
-    if (s == -2 || s == 0) return USTEP_UNKNOWN;
-    return s > 0 ? USTEP_NONNEG : USTEP_NEG;
-#endif
+    int s;
+    if (numeric_certified_real_sign(x, &s) != 1) return USTEP_UNKNOWN;
+    return s < 0 ? USTEP_NEG : USTEP_NONNEG;
 }
 
 /* Classify one UnitStep argument as NEG (< 0), NONNEG (>= 0) or UNKNOWN. */

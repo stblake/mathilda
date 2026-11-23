@@ -160,7 +160,8 @@ void test_fs_series_at_infinity() {
 void test_fs_series_coefficient() {
     /* Symbolic-n general term (Piecewise closed form). */
     assert_eval_eq("SeriesCoefficient[FresnelS[x], {x, 0, n}]",
-        "Piecewise[{{(-1)^(1/4 (n - 3)) 2^(1 - n) Pi^(1/2 n)/"
+        /* the kept value is evaluated (audit Piecewise#1): canonical order */
+        "Piecewise[{{((-1)^(1/4 (-3 + n)) 2^(1 - n) Pi^(1/2 n))/"
         "(n Gamma[1/4 (1 + n)] Gamma[1/4 (3 + n)]), Mod[-3 + n, 4] == 0 && n >= 3}}, 0]", 0);
     /* Concrete integer indices reduce to the explicit coefficients. */
     assert_eval_eq("SeriesCoefficient[FresnelS[x], {x, 0, 3}]", "1/6 Pi", 0);

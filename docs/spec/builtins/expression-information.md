@@ -934,8 +934,14 @@ Predicates for testing lists and their structures.
 - For non-numeric (`NumericQ`-false) arguments the expression is left
   unevaluated, so symbolic quantities flow through unchanged.
 - Exact integers, rationals, and bigints are decided exactly; reals (machine and
-  arbitrary-precision MPFR), symbolic constants, and numeric functions are
-  classified by their machine-precision numeric value.
+  arbitrary-precision MPFR), and numeric expressions holding one, are
+  classified by their numeric value.  An **exact** closed form (`Pi - 3`,
+  `Zeta[3] - 1`, `Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]`) is never signed
+  from a rounded value: its sign is certified by ball arithmetic, else by an
+  MPFR-resolved comparison or the exact zero test, and left unevaluated when
+  neither settles it.  A hidden zero is zero: `Positive[Sin[Pi/7]^2 +
+  Cos[Pi/7]^2 - 1]` is `False` (Positive#1).  `Negative`, `NonNegative`,
+  `NonPositive` and `UnitStep` share this certified sign.
 - **Infinite quantities** are decided by their direction (v0.6144):
   `Positive[Infinity]`, `Positive[2 Infinity]` and `Negative[-Infinity]` are
   `True`; `Positive[-Infinity]` and `Positive[I Infinity]` are `False`;
@@ -1872,6 +1878,11 @@ its home context is visible, meaning it is current or on `$ContextPath`.
   package. A package's `x` or `DataType` is therefore a new ``P`x`` or
   ``P`DataType``, and defining it raises no `Set::wrsym`.
 - After `EndPackage[]` the package symbol comes first on the path.
+- `EndPackage[]` closes the innermost `BeginPackage` even when a
+  `Begin["`Private`"]` inside it was never closed: the open `Begin` frames are
+  unwound first, so `$Context` and `$ContextPath` return to their values before
+  `BeginPackage` (EndPackage#1; it used to pop only the `Begin`). With no open
+  package it issues `EndPackage::noctx`.
 - A package that wants the kernel builtins asks for them:
   `BeginPackage["P`", {"Mathilda`"}]`.
 - `Begin["ctx`"]` without `BeginPackage` leaves the path unchanged, so

@@ -647,7 +647,13 @@ void context_reapply_endpackages(size_t mark) {
 }
 
 bool context_end_package(char** out_ended_ctx) {
-    if (!g_stack) return false;
+    /* EndPackage closes the innermost BeginPackage, whatever Begin frames are
+     * still open inside it: those are unwound first, so $Context and
+     * $ContextPath come back to their values before BeginPackage.  Popping
+     * only the top frame left a forgotten End[] after Begin["`Private`"] in
+     * package mode, Global` invisible (EndPackage#1 of the 2026-11 audit). */
+    if (!in_package_frame()) return false;
+    while (g_stack->kind != FRAME_PACKAGE) frame_pop(NULL);
     bool kernel = g_stack->kernel;
     char* closed = NULL;
     if (!frame_pop(&closed)) return false;

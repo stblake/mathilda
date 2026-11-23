@@ -37,6 +37,12 @@ Expr* builtin_composition(Expr* res);
 Expr* builtin_compose_list(Expr* res);
 Expr* builtin_numberq(Expr* res);
 Expr* builtin_numericq(Expr* res);
+/* Certified real sign of a numeric quantity: 1 with *sign in {-1, 0, 1}
+ * when arg is real and its sign is proven (an exact closed form is never
+ * signed from a rounded value), 0 when arg is a non-real number, -1 when
+ * undecided or not a numeric quantity.  Shared by Positive / Negative /
+ * NonNegative / NonPositive and UnitStep. */
+int numeric_certified_real_sign(Expr* arg, int* sign);
 Expr* builtin_stringq(Expr* res);
 Expr* builtin_positive(Expr* res);
 Expr* builtin_negative(Expr* res);

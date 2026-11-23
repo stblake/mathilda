@@ -214,7 +214,7 @@ Represents a piecewise function defined by a list of `{value, condition}` clause
 - `Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]`: Returns the `val_i` paired with the first `cond_i` that yields `True`.
 - `Piecewise[{{val_1, cond_1}, ...}, default]`: Uses `default` if none of the `cond_i` apply.
 - `Piecewise[conds]` automatically rewrites to `Piecewise[conds, 0]`.
-- Attribute `HoldAll` — only the surviving `val_i` is evaluated (by the outer evaluator).
+- Attribute `HoldAll` — only the values kept in the returned form are evaluated: the selected `val_i`, or, for a symbolic result, every surviving `val_i` and the default (`Piecewise[{{1 + 1, x > 0}}, 2 + 2]` is `Piecewise[{{2, x > 0}}, 4]`; Piecewise#1).
 
 **Simplification semantics**:
 - Conditions are evaluated left-to-right.

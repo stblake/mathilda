@@ -320,11 +320,13 @@ void test_piecewise_autofill_default_zero() {
         "Piecewise[{{a, d1}, {b, d2}}, 0]", 0);
 }
 
-/* Symbolic form is preserved when conditions cannot be resolved. */
+/* Symbolic form is preserved when conditions cannot be resolved; the kept
+ * values and the default are evaluated (audit Piecewise#1), so the default
+ * prints in canonical order. */
 void test_piecewise_symbolic_preserved() {
     assert_eval_eq(
         "Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1]",
-        "Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, (-x^2)/100 + 1]", 0);
+        "Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, 1 - 1/100 x^2]", 0);
 }
 
 /* /. substitution can later resolve a previously symbolic Piecewise. */

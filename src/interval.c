@@ -1373,17 +1373,22 @@ Expr* builtin_intervalunion(Expr* res) {
 }
 
 /* Intersect the pair-list {los,his}[0..n) with one pair [c,d], appending the
- * overlaps to `dst`. */
-static void iv_intersect_pair(Expr** los, Expr** his, size_t n, Expr* c, Expr* d, IvBuild* dst) {
+ * overlaps to `dst`.  Returns false when some overlap cannot be decided (a
+ * symbolic endpoint): the caller then leaves the intersection unevaluated.
+ * Dropping such a pair asserted disjointness that was never established --
+ * IntervalIntersection[Interval[{a, b}], Interval[{a, b}]] was Interval[]
+ * (IntervalIntersection#1 of the 2026-11 audit). */
+static bool iv_intersect_pair(Expr** los, Expr** his, size_t n, Expr* c, Expr* d, IvBuild* dst) {
     for (size_t i = 0; i < n; i++) {
         Expr* lo = iv_max2(los[i], c);    /* max of the two lower endpoints */
         Expr* hi = iv_min2(his[i], d);    /* min of the two upper endpoints */
-        if (lo && hi) {
-            bool dd; int c2 = interval_endpoint_cmp(lo, hi, &dd);
-            if (dd && c2 <= 0) { ivb_push(dst, lo, hi); continue; }  /* non-empty overlap */
-        }
-        expr_free(lo); expr_free(hi);
+        if (!lo || !hi) { expr_free(lo); expr_free(hi); return false; }
+        bool dd; int c2 = interval_endpoint_cmp(lo, hi, &dd);
+        if (!dd) { expr_free(lo); expr_free(hi); return false; }
+        if (c2 <= 0) { ivb_push(dst, lo, hi); continue; }  /* non-empty overlap */
+        expr_free(lo); expr_free(hi);                       /* proven disjoint */
     }
+    return true;
 }
 
 Expr* builtin_intervalintersection(Expr* res) {
@@ -1398,9 +1403,11 @@ Expr* builtin_intervalintersection(Expr* res) {
         IvBuild nextiv; ivb_init(&nextiv);
         if (!iv_collect(arg, &nextiv)) { ivb_free(&nextiv); ivb_free(&acc); return NULL; }
         IvBuild result; ivb_init(&result);
-        for (size_t j = 0; j < nextiv.n; j++)
-            iv_intersect_pair(acc.los, acc.his, acc.n, nextiv.los[j], nextiv.his[j], &result);
+        bool decided = true;
+        for (size_t j = 0; j < nextiv.n && decided; j++)
+            decided = iv_intersect_pair(acc.los, acc.his, acc.n, nextiv.los[j], nextiv.his[j], &result);
         ivb_free(&nextiv);
+        if (!decided) { ivb_free(&result); ivb_free(&acc); return NULL; }
         ivb_free(&acc);
         acc = result;
     }

@@ -1,4 +1,5 @@
 #include "list_common.h"
+#include "message.h"   /* mth_message */
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "differences.h"
@@ -112,10 +113,22 @@ static Expr* diff_n_step(Expr* lst, int64_t n, int64_t s) {
     return cur;
 }
 
+/* True iff every level spec entry is 0 (nothing left to do below here). */
+static bool levels_all_zero(const int64_t* levels, size_t num) {
+    for (size_t i = 0; i < num; i++) if (levels[i] != 0) return false;
+    return true;
+}
+
 /* Multidimensional differences: apply levels[0] step-1 first differences at the
- * top level, then recurse into each element with the remaining levels. */
+ * top level, then recurse into each element with the remaining levels.
+ * A level that does not exist (an atom where the spec still asks for
+ * differences) answers NULL: the level spec is deeper than the array. */
 static Expr* diff_levels(Expr* lst, const int64_t* levels, size_t num) {
-    if (num == 0 || (lst->type != EXPR_FUNCTION && lst->type != EXPR_LINKEDLIST)) {
+    if (num == 0) return expr_copy(lst);
+    if (lst->type != EXPR_FUNCTION && lst->type != EXPR_LINKEDLIST) {
+        /* An atom (or a buffer) at this level: nothing to recurse into. */
+        if (!is_ndarray(lst) && !levels_all_zero(levels, num))
+            return NULL;                       /* level spec deeper than the array */
         return expr_copy(lst);
     }
 
@@ -129,7 +142,24 @@ static Expr* diff_levels(Expr* lst, const int64_t* levels, size_t num) {
     size_t m = cv.n;
     Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
     for (size_t i = 0; i < m; i++) {
-        out[i] = diff_levels(llq_peek(&cv, i), levels + 1, num - 1);
+        Expr* sub = llq_peek(&cv, i);
+        if (sub->type == EXPR_FUNCTION && !head_is(sub, SYM_List)) {
+            /* Below the top level only a List is a level of the array:
+             * recursing into the arguments of 3/2 or b/a built
+             * Rational[Rational[2, 3]] and a b (Ratios#1 of the 2026-11
+             * audit).  An element that is not a sublist fits only an
+             * all-zero tail of the level spec. */
+            out[i] = levels_all_zero(levels + 1, num - 1) ? expr_copy(sub) : NULL;
+        } else {
+            out[i] = diff_levels(sub, levels + 1, num - 1);
+        }
+        if (!out[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(out[j]);
+            free(out);
+            llq_close(&cv);
+            expr_free(cur);
+            return NULL;
+        }
     }
     Expr* result = llq_result(&cv, out, m);
     free(out);
@@ -179,6 +209,12 @@ Expr* builtin_differences(Expr* res) {
         }
         Expr* result = diff_levels(lst, levels, num);
         free(levels);
+        if (!result) {
+            char* sspec = expr_to_string(spec);
+            mth_message("Differences", "lvldep", "The level specification %s is deeper than the array.",
+                        sspec ? sspec : "?");
+            free(sspec);
+        }
         return result;
     }
 

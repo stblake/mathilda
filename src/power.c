@@ -15,6 +15,8 @@
 #include "flint_qqbar.h"
 #include "message.h"           /* mth_message: General::ovfl */
 #include "mth_machine_pow.h"   /* mth_pow_machine / mth_powi_machine_c: the one machine Power */
+#include "core.h"              /* numeric_certified_real_sign */
+#include "print.h"             /* expr_to_string */
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -1081,6 +1083,44 @@ static Expr* power_rational_int(const Expr* base, int64_t e) {
     return NULL;
 }
 
+/* b^Infinity (pos) or b^-Infinity (!pos) for a finite numeric base b that is
+ * not the literal 0 or 1 (those, and infinite bases, are handled by the
+ * preprocessing table in builtin_power).  b^-Infinity is (1/b)^Infinity, so
+ * the answer turns on the CERTIFIED sign of |b| - 1 (flipped for -Infinity):
+ *   |b| < 1  -> 0
+ *   |b| > 1  -> Infinity for a positive real b, ComplexInfinity otherwise
+ *   |b| = 1  -> Indeterminate (Infinity::indet): (-1)^Infinity, I^Infinity
+ * NULL (unevaluated) for a symbolic base or a sign that cannot be proven.
+ * Power#1 of the 2026-11 audit: 2^Infinity, E^-Infinity, ... stayed
+ * unevaluated. */
+static Expr* power_finite_base_infinity(Expr* base, bool pos) {
+    if (!expr_is_numeric_quantity(base)) return NULL;
+    int sb;
+    int kb = numeric_certified_real_sign(base, &sb);   /* 1 real, 0 non-real */
+    if (kb < 0 || (kb == 1 && sb == 0)) return NULL;
+    Expr* absb = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs),
+                                                 (Expr*[]){ expr_copy(base) }, 1));
+    Expr* d = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                              (Expr*[]){ absb, expr_new_integer(-1) }, 2));
+    int sd;
+    int kd = numeric_certified_real_sign(d, &sd);
+    expr_free(d);
+    if (kd != 1) return NULL;
+    if (!pos) sd = -sd;
+    if (sd < 0) return expr_new_integer(0);
+    if (sd > 0) return expr_new_symbol(kb == 1 && sb > 0 ? SYM_Infinity : SYM_ComplexInfinity);
+    char* sbase = expr_to_string(base);
+    bool atom = sbase != NULL;                       /* parenthesise unless alphanumeric */
+    for (const char* q = sbase; q && *q && atom; q++)
+        atom = (*q >= '0' && *q <= '9') || (*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z');
+    mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+            atom ? "Indeterminate expression %s^%s encountered."
+                 : "Indeterminate expression (%s)^%s encountered.", sbase ? sbase : "?",
+            pos ? "Infinity" : "-Infinity");
+    free(sbase);
+    return expr_new_symbol(SYM_Indeterminate);
+}
+
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -1347,6 +1387,11 @@ Expr* builtin_power(Expr* res) {
             int es = expr_numeric_sign(exp);
             if (es > 0) return expr_new_symbol(SYM_ComplexInfinity);
             if (es < 0) return expr_new_integer(0);
+        }
+
+        if ((e_inf || e_ninf) && !base_is_inf && !base_is_zero_lit) {
+            Expr* r = power_finite_base_infinity(base, e_inf);
+            if (r) return r;
         }
     }
 

@@ -870,11 +870,13 @@ product of the per-argument `UnitStep[xi]`). `UnitStep[]` is `1`.
   input, including `Real`/`MPFR` arguments (e.g. `UnitStep[{-1.6, 3.2}]` gives
   `{0, 1}`).
 - **Exact symbolic real arguments** (`Pi`, `Sqrt[2]`, `E - 3`, ...) are
-  resolved by numerical certification: the argument is numericalized to MPFR at
-  increasing precision and the sign is accepted only once two successive
-  precisions agree on the same non-zero sign. This separates tight cases such
-  as `Sqrt[2] - 99/70` ($\approx -6.4\times10^{-5}$) from zero without ever
-  guessing; an argument whose sign cannot be certified is left unevaluated.
+  resolved by the certified sign `Positive` uses: a rigorous ball evaluation,
+  else an MPFR-resolved comparison or the exact zero test. This separates tight
+  cases such as `Sqrt[2] - 99/70` ($\approx -6.4\times10^{-5}$) from zero
+  without ever guessing, and recognises an exact zero:
+  `UnitStep[Sqrt[5 + 2 Sqrt[6]] - Sqrt[2] - Sqrt[3]]` is `1` (UnitStep#1; the
+  old agreement of two MPFR precisions took rounding noise for a sign). An
+  argument whose sign cannot be certified is left unevaluated.
 - Non-real arguments (a `Complex` with non-zero imaginary part) and unresolved
   symbolic arguments are left unevaluated. In a multidimensional call the
   proven-non-negative arguments are dropped (they contribute a factor of `1`),

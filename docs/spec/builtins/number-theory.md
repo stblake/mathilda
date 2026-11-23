@@ -152,10 +152,17 @@ Gives modular exponentiations, inverses, and roots.
 - Integer-exponent path uses GMP `mpz_powm` / `mpz_invert`; `a`, `b`, `m`
   may all be arbitrary-precision bignums.
 - Rational-exponent path `PowerMod[a, p/q, m]` solves the modular `q`-th
-  root of `a^p` via Tonelli–Shanks, the coprime closed form, Hensel
-  lifting, and CRT over the factorisation of `m`. The
-  Adleman–Manders–Miller branch (`gcd(q, p-1) > 1` for `q > 2` over a
-  large prime) is not yet supported.
+  root of `a^p` completely: per prime power `p^e` of `m`, the `p`-part of
+  `a^p` is split off (a root needs `q` to divide its valuation), and the unit
+  root is taken in the cyclic unit group (for `p = 2`, `{±1} x <5>`) by
+  reducing `q` to `gcd(q, N)` and taking one Adleman–Manders–Miller step per
+  prime factor; the roots are combined by CRT and the result is checked by
+  raising it back. A modulus up to 10^6 answers with its smallest root.
+  `PowerMod::root` is issued only when no root exists (it was issued for the
+  solvable `PowerMod[9, 1/2, 2^21]`, `PowerMod[1009^2, 1/2, 1009^3]` and
+  `PowerMod[1, 1/3, 1000003]`; PowerMod#1–#3); a root degree with a prime
+  factor above 2^20 that needs a discrete log leaves the call unevaluated
+  without a message.
 - Messages, as in the reference (each leaves the call unevaluated):
   - `PowerMod::ninv` when the base is not invertible;
   - `PowerMod::root` when no modular root exists;
@@ -1526,7 +1533,11 @@ The list `{a1, a2, a3, ...}` corresponds to `a1 + 1/(a2 + 1/(a3 + ...))`.
   period would be astronomically long.
 - **Inexact reals** (machine `Real` or arbitrary-precision MPFR) yield terms
   only as far as the input precision determines them, tracking the value's
-  uncertainty and stopping when the next term is no longer pinned down.
+  uncertainty and stopping when the next term is no longer pinned down. A
+  value that is an integer to within its (small) uncertainty ends the
+  expansion with that integer: `ContinuedFraction[0.1]` is `{0, 10}` and
+  `ContinuedFraction[0.7]` is `{0, 1, 2, 3}` (the last term used to be
+  dropped; ContinuedFraction#1).
 - **Exact symbolic reals with an explicit `n`** (e.g. `Pi`, `Sqrt[E]`,
   `Exp[Pi Sqrt[163]]`) are numericised at adaptively increasing precision
   until `n` terms are confirmed by two consecutive evaluations.

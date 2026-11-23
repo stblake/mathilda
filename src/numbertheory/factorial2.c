@@ -23,8 +23,12 @@
  * For non-negative integer n:
  *   n!! = n * (n-2) * (n-4) * ...    (terminating at 1 if n odd, 2 if n even).
  *   0!! = 1, (-1)!! = 1.
- * For negative odd integers n <= -3:
- *   n!! = ComplexInfinity (poles, like Factorial of negative integers).
+ * For negative odd integers n = -(2k+1), k >= 1, the recurrence
+ * n!! = n (n-2)!! run downward from (-1)!! = 1 gives the finite value
+ *   (-2k-1)!! = (-1)^k / (2k-1)!!        ((-3)!! = -1, (-5)!! = 1/3),
+ * agreeing with the analytic continuation below.  Negative even integers
+ * are the poles: ComplexInfinity.  (Factorial2#1 of the 2026-11 audit:
+ * every n < -1 used to give ComplexInfinity.)
  *
  * Symbolic / non-integer arguments return NULL (the call stays as-is)
  * so the surrounding evaluator can keep them in expression form.
@@ -81,6 +85,25 @@ static Expr* f2_numeric(Expr* z) {
     return eval_and_free(prod);
 }
 
+/* n!! for a machine integer n >= 1: int64 for n <= 30, GMP above. */
+static Expr* builtin_factorial2_int(int64_t n) {
+    if (n <= 30) {
+        int64_t f = 1;
+        for (int64_t i = n; i >= 1; i -= 2) f *= i;
+        return expr_new_integer(f);
+    }
+    mpz_t r, k;
+    mpz_init_set_ui(r, 1);
+    mpz_init(k);
+    for (int64_t i = n; i >= 1; i -= 2) {
+        mth_mpz_set_i64(k, i);
+        mpz_mul(r, r, k);
+    }
+    Expr* out = expr_new_bigint_from_mpz(r);
+    mpz_clears(r, k, NULL);
+    return out;
+}
+
 Expr* builtin_factorial2(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -90,33 +113,31 @@ Expr* builtin_factorial2(Expr* res) {
         int64_t n = arg->data.integer;
         if (n == -1 || n == 0) return expr_new_integer(1);
         if (n < 0) {
-            /* Even negative integers: ComplexInfinity (pole). Odd negative
-             * integers below -1 also diverge. */
-            return expr_new_symbol(SYM_ComplexInfinity);
+            /* Even negative integers: ComplexInfinity (pole). */
+            if (n % 2 == 0) return expr_new_symbol(SYM_ComplexInfinity);
+            /* n = -(2k+1): (-1)^k / (2k-1)!!, built from the positive
+             * double factorial (2k-1 = -n - 2 >= 1). */
+            int64_t k = (-(n + 1)) / 2;
+            Expr* pos = builtin_factorial2_int(-n - 2);
+            if (!pos) return NULL;
+            Expr* q = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ pos, expr_new_integer(-1) }, 2));
+            if (k % 2 == 0) return q;
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), q }, 2));
         }
-        if (n <= 30) {
-            int64_t f = 1;
-            for (int64_t i = n; i >= 1; i -= 2) f *= i;
-            return expr_new_integer(f);
-        }
-        /* GMP path. */
-        mpz_t r, k;
-        mpz_init_set_ui(r, 1);
-        mpz_init(k);
-        for (int64_t i = n; i >= 1; i -= 2) {
-            mth_mpz_set_i64(k, i);
-            mpz_mul(r, r, k);
-        }
-        Expr* out = expr_new_bigint_from_mpz(r);
-        mpz_clears(r, k, NULL);
-        return out;
+        return builtin_factorial2_int(n);
     }
 
     if (arg->type == EXPR_BIGINT) {
         /* For arguments large enough to be BigInt, use GMP. We only
          * handle non-negative inputs; negative BigInt is ComplexInfinity. */
         if (mpz_sgn(arg->data.bigint) < 0) {
-            return expr_new_symbol(SYM_ComplexInfinity);
+            /* A negative even integer is a pole; a negative odd one has the
+             * finite value (-1)^k / (2k-1)!!, whose denominator at this size
+             * (2k-1 > 2^62) cannot be formed: leave it symbolic. */
+            if (mpz_even_p(arg->data.bigint)) return expr_new_symbol(SYM_ComplexInfinity);
+            return NULL;
         }
         if (mpz_sgn(arg->data.bigint) == 0) return expr_new_integer(1);
         /* Cap at a sane size: if mpz_fits_ulong_p fails the input is too

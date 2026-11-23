@@ -373,7 +373,22 @@ static void cf_float_mpfr(const mpfr_t x, long pbits, long nlimit, TermVec* out)
         mpfr_add(vhi, v, err, MPFR_RNDN);
         mpfr_get_z(alo, vlo, MPFR_RNDD);
         mpfr_get_z(ahi, vhi, MPFR_RNDD);
-        if (mpz_cmp(alo, ahi) != 0) break;      /* precision exhausted */
+        if (mpz_cmp(alo, ahi) != 0) {
+            /* The uncertainty interval holds an integer.  When it is small
+             * and that integer is the nearest one (`a`, already computed),
+             * the value IS that integer to the input's precision: the
+             * expansion terminates with it.  0.1 -> 1/0.1 = 10.0000000000000006
+             * +/- 1e-15 ends {0, 10}; breaking here dropped the 10 and gave
+             * {0} (ContinuedFraction#1 of the 2026-11 audit).  A wide
+             * interval (err >= 1/16) means precision is genuinely exhausted. */
+            mpfr_sub_z(frac, v, a, MPFR_RNDN);
+            mpfr_abs(frac, frac, MPFR_RNDN);
+            if (mpfr_cmp(frac, err) <= 0 && mpfr_cmp_d(err, 0.0625) < 0) {
+                tv_push(out, a);
+                count++;
+            }
+            break;                              /* precision exhausted */
+        }
 
         mpfr_get_z(a, v, MPFR_RNDD);            /* a = floor(v) */
         tv_push(out, a);
@@ -426,7 +441,16 @@ static void cf_float_double(double x, long nlimit, TermVec* out) {
             count++;
             break;
         }
-        if (floor(v - err) != floor(v + err)) break;
+        if (floor(v - err) != floor(v + err)) {
+            /* Integral to the input's precision: terminate with it (see the
+             * MPFR expansion above). */
+            if (fabs(v - k) <= err && err < 0.0625) {
+                mpz_set_d(a, k);
+                tv_push(out, a);
+                count++;
+            }
+            break;
+        }
         double af = floor(v);
         mpz_set_d(a, af);
         tv_push(out, a);
