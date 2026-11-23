@@ -599,6 +599,25 @@ static bool vm_assoc_set(const Instr* c, Slot* R) {
     if (!src || !is_association(src)) return false;
     Expr* nv = assoc_slot_to_value(R[c->b], (CompileType)(c->flags & 0xFu));
     if (!nv) return false;
+    /* In place when the source is an OWNED temp nobody else references
+     * (flag 0x100, not a compile-time constant, refcount 1): the same
+     * assoc_upsert_inplace the interpreter's AssociateTo/AppendTo use, so a
+     * compiled accumulate loop is O(1) amortised per update, not O(n).  A
+     * refusal (non-canonical node, Rule/RuleDelayed head mismatch) leaves
+     * `src` untouched and falls through to the copying path. */
+    if ((c->flags & 0x100u) && !sp->assoc && src->refcount == 1) {
+        Expr* ka[2] = { expr_copy((Expr*)sp->key), expr_copy(nv) };
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), ka, 2);
+        bool ok = assoc_upsert_inplace(src, rule);
+        expr_free(rule);
+        if (ok) {
+            expr_free(nv);
+            if (R[c->dst].arr != src) expr_free(R[c->dst].arr);
+            R[c->dst].arr = src;
+            if (c->dst != c->a) R[c->a].arr = NULL;   /* ownership moved to dst */
+            return true;
+        }
+    }
     Expr* r = assoc_set_key(src, sp->key, nv);      /* adopts nv */
     if (!r) { expr_free(nv); return false; }
     assoc_prebuild_index(r);

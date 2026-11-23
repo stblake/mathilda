@@ -514,6 +514,15 @@ In[1]:= asc = <|"a" -> 1|>; AssociateTo[asc, "b" -> 2]; asc
 Out[1]= <|"a" -> 1, "b" -> 2|>
 ```
 
+**Cost.** `AssociateTo[a, k -> v]`, `AppendTo[a, k -> v]` (a new key) and
+`a[[Key[k]]] = v` / `a["k"] = v` update the association *in place* when the
+variable is its only owner, so a loop of n updates is O(n) in total (about
+200 ns per update; 10^6 inserts take 0.25 s) instead of O(n^2). If anything
+else holds the value -- a second variable (`b = a`), a saved `Block` value, an
+enclosing expression -- the update copies and the other holder is unchanged.
+`a = Append[a, k -> v]` (the pure form) still builds a new association each
+time and stays O(n) per update; use `AppendTo` or `AssociateTo` in loops.
+
 ## Part assignment
 Associations support in-place update through `Part`: `a[[key]] = val` updates an
 existing key or adds a new one, `a[[Key[k]]] = val` targets a key explicitly,

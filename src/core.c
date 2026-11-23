@@ -2748,6 +2748,10 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     /* An association appends by key (see assoc_add_rules); a non-rule elem
      * leaves AppendTo unevaluated, as in Mathematica. */
     if (is_association(current_val)) {
+        /* Append of a single NEW key onto an exclusively owned association is
+         * done in place (see assoc_try_inplace_update); otherwise copy. */
+        if (!prepend && assoc_try_inplace_update(sym, current_val, elem, true))
+            return current_val;
         Expr* nv = assoc_add_rules(current_val, elem, prepend);
         if (!nv) {
             /* x = Append[x, elem] with Append left unevaluated -- exactly what

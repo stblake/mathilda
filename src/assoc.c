@@ -1211,6 +1211,78 @@ Expr* builtin_merge(Expr* res) {
  * Mirrors AppendTo: read the symbol's current association, produce the
  * updated one, and assign it back.
  * ====================================================================== */
+/* In-place single-rule upsert on an EXCLUSIVELY OWNED association (the caller
+ * has proved refcount ownership).  An existing key keeps its position and gets
+ * the new rule; a new key is appended and registered in the key index.  This is
+ * what makes an AssociateTo / a[k]=v loop O(1) amortised per update instead of
+ * rebuilding the whole node (O(n)) each time.  Returns false -- leaving the
+ * association untouched -- when it is not a canonical indexable association. */
+bool assoc_upsert_inplace(Expr* assoc, Expr* rule) {
+    if (!is_association(assoc) || !is_rule2(rule)) return false;
+    size_t n = assoc->data.function.arg_count;
+    AssocIndex* idx = assoc->data.function.index;
+    if (!idx && n > 0) {
+        idx = assoc_index_build(assoc->data.function.args, n);
+        if (!idx) return false;                 /* non-canonical: scan path */
+        assoc->data.function.index = idx;
+    }
+    int64_t e = (n > 0) ? assoc_index_lookup(idx, assoc->data.function.args, rule_key(rule)) : -1;
+    if (e >= 0) {
+        Expr* old = assoc->data.function.args[e];
+        /* Keep the entry's Rule/RuleDelayed head unless identical; a mismatch
+         * takes the general (rebuilding) path, which owns that policy. */
+        if (old->data.function.head != rule->data.function.head &&
+            !expr_eq(old->data.function.head, rule->data.function.head)) return false;
+        assoc->data.function.args[e] = expr_copy(rule);
+        expr_free(old);
+    } else {
+        Expr** na = realloc(assoc->data.function.args, sizeof(Expr*) * (n + 1));
+        if (!na) return false;
+        assoc->data.function.args = na;
+        na[n] = expr_copy(rule);
+        assoc->data.function.arg_count = n + 1;
+        assoc->data.function.index = assoc_index_append(idx, na, n + 1);
+    }
+    /* The node's structure changed: drop every cached derivation of it. */
+    expr_invalidate_hash(assoc);
+    return true;
+}
+
+/* Fast path shared by AssociateTo and AppendTo: a single rule onto an
+ * association the variable owns exclusively.  `current` is the caller's
+ * reference (from evaluate(sym)); the symbol's OwnValue holds the other.  If
+ * that is exactly the node we were handed and nobody else holds it (refcount 2:
+ * OwnValue + caller), mutating it in place is unobservable, so the O(n) rebuild
+ * is skipped.  Any additional holder (a saved Block value, a second variable, an
+ * enclosing expression) raises the count and the caller takes its copying path,
+ * preserving value semantics.  `append_new_only`: AppendTo semantics move an
+ * existing key to the END, which is not an in-place operation, so that case
+ * declines when the key is present (AssociateTo keeps the position instead).
+ * Returns true if `current` was updated in place (caller returns `current`). */
+bool assoc_try_inplace_update(Expr* sym, Expr* current, Expr* rule, bool append_new_only) {
+    if (sym->type != EXPR_SYMBOL || !is_rule2(rule) || current->refcount != 2) return false;
+    Rule* ov = symtab_get_own_values(sym->data.symbol.name);
+    if (!ov || ov->next || ov->replacement != current) return false;
+    if (append_new_only && current->data.function.arg_count > 0 &&
+        assoc_lookup_value(current, rule_key(rule))) return false;
+    uint64_t old_stamp = current->last_evaluated_at;
+    if (!assoc_upsert_inplace(current, rule)) return false;
+    /* Cached evaluations that read `sym` must not survive the change. */
+    eval_clock_bump_binding(symtab_get_def(sym->data.symbol.name));
+    /* The mutated node is still a fixed point: its entries were already
+     * evaluated and `rule` is an evaluated argument.  Re-stamp it (leaving it at
+     * 0 would make the next evaluate(sym) re-walk all n entries, i.e. quadratic
+     * again).  The GROUND (bit 63) and INERT (bit 62) flags let the stamp survive
+     * iterator churn; they stay valid only if the new rule is made of atoms, so a
+     * symbolic or compound rule drops them and gets the exact-clock stamp alone. */
+    uint64_t flags = old_stamp & ((UINT64_C(1) << 63) | (UINT64_C(1) << 62));
+    const Expr* k = rule_key(rule); const Expr* v = rule_val(rule);
+    bool atoms = (k->type == EXPR_INTEGER || k->type == EXPR_REAL || k->type == EXPR_STRING) &&
+                 (v->type == EXPR_INTEGER || v->type == EXPR_REAL || v->type == EXPR_STRING);
+    current->last_evaluated_at = eval_clock_get() | (atoms ? flags : 0);
+    return true;
+}
+
 Expr* builtin_associate_to(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* sym = res->data.function.args[0];
@@ -1219,6 +1291,9 @@ Expr* builtin_associate_to(Expr* res) {
 
     Expr* current = evaluate(sym);
     if (!current || !is_association(current)) { if (current) expr_free(current); return NULL; }
+
+    if (!head_is(kv, SYM_List) && assoc_try_inplace_update(sym, current, kv, false))
+        return current;
 
     /* Gather current rules plus the new one(s), then re-canonicalise. */
     size_t base = current->data.function.arg_count;

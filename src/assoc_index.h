@@ -51,6 +51,15 @@ AssocIndex* assoc_index_build(struct Expr* const* entries, size_t n);
 int64_t assoc_index_lookup(const AssocIndex* idx, struct Expr* const* entries,
                            const struct Expr* key);
 
+/* Register the entry just appended at position n_after-1 of `entries` (an
+ * in-place append on an exclusively owned association).  Inserts into the
+ * existing table while load stays below 0.5, else rebuilds with the next
+ * power-of-two capacity (amortised O(1)).  `idx` may be NULL (empty or
+ * previously unindexed association): a fresh index is built.  Returns the
+ * index to store (NULL if allocation failed -> callers fall back to a scan). */
+AssocIndex* assoc_index_append(AssocIndex* idx, struct Expr* const* entries,
+                               size_t n_after);
+
 void assoc_index_free(AssocIndex* idx);
 
 #endif /* MATHILDA_ASSOC_INDEX_H */

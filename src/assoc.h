@@ -38,6 +38,10 @@ bool is_association(const Expr* e);
  * `assoc`.  This is the single-key lookup primitive shared by Lookup,
  * KeyExistsQ/KeyMemberQ/KeyFreeQ, Part, and the <|...|>[key] accessor. */
 Expr* assoc_lookup_value(const Expr* assoc, const Expr* key);
+/* In-place single-rule upsert on an exclusively owned association (see assoc.c). */
+bool assoc_upsert_inplace(Expr* assoc, Expr* rule);
+/* Shared AssociateTo/AppendTo refcount-gated in-place update (see assoc.c). */
+bool assoc_try_inplace_update(Expr* sym, Expr* current, Expr* rule, bool append_new_only);
 
 /* Eagerly build + cache the single-key index (compiled marshalling boundary).
  * Idempotent; keeps the parallel VM off assoc_lookup_value's lazy build. */

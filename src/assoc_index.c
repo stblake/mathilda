@@ -12,6 +12,8 @@
 #include "assoc_index.h"
 #include "expr.h"
 
+#include "memacct.h"   /* MTH_MEM_CHARGE: the table is kernel memory MemoryConstrained must see */
+
 #include <stdlib.h>
 
 struct AssocIndex {
@@ -28,6 +30,18 @@ static size_t ai_capacity_for(size_t n) {
     size_t cap = 8;
     while (cap < want) cap <<= 1;
     return cap;
+}
+
+/* Slot for a key.  expr_hash is FNV-1a with no avalanche step, so its low bits
+ * (which `& mask` keeps) cluster for sequential integer keys and linear probing
+ * degrades into long runs.  A 64-bit finalizer (splitmix64) spreads them; it is
+ * internal to this table, so no stored hash or ordering changes. */
+static inline size_t ai_slot(const Expr* key, size_t mask) {
+    uint64_t h = expr_hash(key);
+    h ^= h >> 30; h *= UINT64_C(0xbf58476d1ce4e5b9);
+    h ^= h >> 27; h *= UINT64_C(0x94d049bb133111eb);
+    h ^= h >> 31;
+    return (size_t)h & mask;
 }
 
 /* Key of a canonical entry: entries are two-argument Rule[k, v] nodes. */
@@ -51,13 +65,14 @@ AssocIndex* assoc_index_build(Expr* const* entries, size_t n) {
     idx->n    = n;
     idx->pos  = calloc(idx->cap, sizeof(size_t));
     if (!idx->pos) { free(idx); return NULL; }
+    MTH_MEM_CHARGE_BLOCK(idx->cap * sizeof(size_t) + sizeof(*idx));
 
     /* Canonical entries have unique keys, so no key comparison is needed here:
      * the probe only steps past hash collisions between DISTINCT keys, and the
      * first-inserted entry sits earliest in probe order (first-occurrence
      * semantics, matching assoc_scan) should a duplicate ever slip through. */
     for (size_t i = 0; i < n; i++) {
-        size_t slot = (size_t)expr_hash(entry_key(entries[i])) & idx->mask;
+        size_t slot = ai_slot(entry_key(entries[i]), idx->mask);
         while (idx->pos[slot] != 0) slot = (slot + 1) & idx->mask;
         idx->pos[slot] = i + 1;
     }
@@ -67,7 +82,7 @@ AssocIndex* assoc_index_build(Expr* const* entries, size_t n) {
 int64_t assoc_index_lookup(const AssocIndex* idx, Expr* const* entries,
                            const Expr* key) {
     if (!idx) return -1;
-    size_t slot = (size_t)expr_hash(key) & idx->mask;
+    size_t slot = ai_slot(key, idx->mask);
     while (idx->pos[slot] != 0) {
         size_t e = idx->pos[slot] - 1;
         if (expr_eq(entry_key(entries[e]), key)) return (int64_t)e;
@@ -76,8 +91,21 @@ int64_t assoc_index_lookup(const AssocIndex* idx, Expr* const* entries,
     return -1;
 }
 
+AssocIndex* assoc_index_append(AssocIndex* idx, Expr* const* entries, size_t n_after) {
+    if (idx && n_after * 2 + 1 <= idx->cap) {
+        size_t slot = ai_slot(entry_key(entries[n_after - 1]), idx->mask);
+        while (idx->pos[slot] != 0) slot = (slot + 1) & idx->mask;
+        idx->pos[slot] = n_after;          /* (entry index) + 1 */
+        idx->n = n_after;
+        return idx;
+    }
+    assoc_index_free(idx);
+    return assoc_index_build(entries, n_after);
+}
+
 void assoc_index_free(AssocIndex* idx) {
     if (!idx) return;
+    MTH_MEM_RELEASE(idx->cap * sizeof(size_t) + sizeof(*idx));
     free(idx->pos);
     free(idx);
 }
