@@ -1016,6 +1016,7 @@ string leaves are used verbatim. The result is assembled in one buffer.
   separator that is neither a string nor a 3-string list `StringRiffle::string`;
   both leave the call unevaluated. No arguments emits
   `StringRiffle::argm` (1 or more arguments expected).
+- Any nesting depth is riffled (the traversal is iterative): `StringRiffle[Nest[List, "a", 100000]]` is `"a"` (audit StringRiffle#1).
 - **Attributes**: `Protected`.
 
 ```mathematica

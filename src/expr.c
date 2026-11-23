@@ -1126,8 +1126,20 @@ bool expr_eq(const Expr* a, const Expr* b) {
 
 static uint64_t fnv_mix(uint64_t h, uint64_t x) { return (h ^ x) * FNV_PRIME; }
 
-static uint64_t hash_as_real(double v) {
+/* The bits a double hashes by. expr_eq treats 0. and -0. as equal (==) and
+ * every NaN as equal to every other, so both collapse to one representative:
+ * equal expressions must hash equally, or a hash mismatch could not prove two
+ * expressions different (FixedPoint's O(1) SameQ pre-check relies on it, as
+ * do Union and Association lookup). */
+static uint64_t real_hash_bits(double v) {
+    if (v == 0.0) v = 0.0;
+    else if (isnan(v)) v = NAN;
     uint64_t bits; memcpy(&bits, &v, 8);
+    return bits;
+}
+
+static uint64_t hash_as_real(double v) {
+    uint64_t bits = real_hash_bits(v);
     return fnv_mix(fnv_mix(FNV_OFFSET, (uint64_t)EXPR_REAL), bits);
 }
 static uint64_t hash_as_integer(int64_t v) {
@@ -1190,8 +1202,7 @@ uint64_t expr_hash(const Expr* e) {
             break;
         }
         case EXPR_REAL: {
-            uint64_t v;
-            memcpy(&v, &e->data.real, 8);
+            uint64_t v = real_hash_bits(e->data.real);
             h ^= v; h *= prime;
             break;
         }
@@ -1293,7 +1304,7 @@ uint64_t expr_hash(const Expr* e) {
             h ^= (uint64_t)mpfr_get_prec(e->data.mpfr);
             h *= prime;
             double d = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
-            uint64_t v; memcpy(&v, &d, 8);
+            uint64_t v = real_hash_bits(d);
             h ^= v; h *= prime;
             break;
         }

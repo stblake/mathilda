@@ -949,6 +949,7 @@ Generates the list of successive iterates of a function until a fixed point is r
 - `Protected`.
 - `FixedPointList[f, expr]` is equivalent to `NestWhileList[f, expr, UnsameQ, 2]`.
 - `n` (when given) must be a non-negative integer or `Infinity`. Malformed argument specs leave `FixedPointList` unevaluated.
+- The default `SameQ` test is O(1) per step for a growing iterate: two expressions whose (memoised) hashes differ are not `SameQ`, so only a hash match pays a structural comparison. `FixedPointList[f, x, 100000]` runs in linear time (audit FixedPointList#1). `0.` and `-0.` are `SameQ` and hash alike.
 
 ```mathematica
 In[1]:= FixedPointList[1 + Floor[#/2] &, 1000]

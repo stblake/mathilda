@@ -69,26 +69,32 @@ static Expr* af_row(bool linked, Expr** items, size_t n) {
  * not exist in this codebase).
  */
 
-/* Maximum r (number of level pairs). Keeps the fixed-size dims/index buffers
- * below well within the 64-slot recursion contract of af_tensor_dims. */
+/* Maximum r (number of level pairs); sizes the fixed per-axis buffers below. */
 #define AF_MAX_R 32
 
 /* Local copy of linalg/util.c's get_tensor_dims, kept here so this module has
- * no cross-module link dependency. Returns the rank of a rectangular
- * nested-List tensor (0 for a non-List atom/head), filling dims[0..rank-1], or
- * -1 if the structure is jagged (non-rectangular). dims must hold >= 64 slots. */
-static int af_tensor_dims(Expr* e, int64_t* dims, AFKeep* keep) {
-    if (!af_is_level(e)) {
+ * no cross-module link dependency, but bounded: it inspects at most `maxr`
+ * levels, because a block needs only its first r dimensions -- anything deeper
+ * is element content, carried along verbatim. Returns the rank of the
+ * rectangular nested-List prefix (0 for a non-List atom/head, at most maxr),
+ * filling dims[0..rank-1], or -1 if the structure is jagged within those
+ * levels. dims must hold >= maxr slots; the recursion is maxr <= AF_MAX_R
+ * deep whatever the block's own nesting depth (audit ArrayFlatten#1: the
+ * unbounded version overran its 64-slot stack buffers on a block nested 65+
+ * levels deep). */
+static int af_tensor_dims(Expr* e, int64_t* dims, int maxr, AFKeep* keep) {
+    if (maxr == 0 || !af_is_level(e)) {
         return 0; /* rank 0 */
     }
     int64_t len = af_len(e);
     dims[0] = len;
     if (len == 0) return 1;
 
-    int sub_rank = af_tensor_dims(af_at(e, 0, keep), dims + 1, keep);
+    int sub_rank = af_tensor_dims(af_at(e, 0, keep), dims + 1, maxr - 1, keep);
+    if (sub_rank < 0) return -1;
     for (int64_t i = 1; i < len; i++) {
-        int64_t cur_dims[64];
-        int cur_rank = af_tensor_dims(af_at(e, i, keep), cur_dims, keep);
+        int64_t cur_dims[AF_MAX_R];
+        int cur_rank = af_tensor_dims(af_at(e, i, keep), cur_dims, maxr - 1, keep);
         if (cur_rank != sub_rank) return -1; /* jagged */
         for (int j = 0; j < sub_rank; j++) {
             if (cur_dims[j] != dims[j + 1]) return -1; /* jagged */
@@ -223,8 +229,8 @@ Expr* builtin_array_flatten(Expr* res) {
     /* Classify each block and derive the fitted length along every axis. */
     int mismatch = 0;
     for (size_t f = 0; f < nblocks && !mismatch; f++) {
-        int64_t bdims[64];
-        int rank = af_tensor_dims(blocks[f], bdims, &keep);
+        int64_t bdims[AF_MAX_R];
+        int rank = af_tensor_dims(blocks[f], bdims, (int)r, &keep);
         is_arr[f] = (rank >= (int)r);
         if (!is_arr[f]) continue;
         for (int k = 0; k < (int)r; k++) {

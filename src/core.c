@@ -4654,39 +4654,76 @@ static bool depth_ex_fn(Expr* el, void* ud) {
     if (d > dc->max_d) dc->max_d = d;
     return true;
 }
-static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
+
+/* The depth of e when it needs no descent through FUNCTION arguments (an
+ * atom, Rational/Complex, an NDArray, a payload sequence): stores it in *out
+ * and returns true. A compound FUNCTION node returns false. */
+static bool depth_leaf(Expr* e, bool heads, bool empty_is_two, int64_t* out) {
     /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
      * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
-    if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
+    if (e->type == EXPR_NDARRAY) { *out = (int64_t)e->data.ndarray.rank + 1; return true; }
     /* A payload sequence (LinkedList, PVector, ...) nests like the List it
      * stands for, through its ds_ops row: typed storage holds atoms (depth 2
      * without visiting them), a boxed one is one more than its deepest element. */
     if (ds_has_each(e->type)) {
         const DsOps* o = ds_ops(e->type);
-        if (o->length(e) > 0 && ds_atoms_only(e)) return 2;
+        if (o->length(e) > 0 && ds_atoms_only(e)) { *out = 2; return true; }
         struct DepthEx dc = { empty_is_two ? 1 : 0, heads, empty_is_two };
         ds_each(e, depth_ex_fn, &dc);
-        return dc.max_d + 1;
+        *out = dc.max_d + 1;
+        return true;
     }
-    if (e->type != EXPR_FUNCTION) return 1;
-
+    if (e->type != EXPR_FUNCTION) { *out = 1; return true; }
     // Rational and Complex are considered atomic in terms of Depth/Length in Mathematica
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
-        if (h == SYM_Rational || h == SYM_Complex) return 1;
+        if (h == SYM_Rational || h == SYM_Complex) { *out = 1; return true; }
     }
+    return false;
+}
 
+/* One FUNCTION node on the explicit Depth stack: the next child to visit
+ * (the arguments, then the head when Heads -> True) and the deepest child
+ * seen so far. */
+typedef struct { Expr* e; size_t next; int64_t max_d; bool assoc; } DepthFrame;
+
+/* Iterative over an explicit heap stack, so an expression nested to any depth
+ * it can exist at (Nest[List, 1, 200000]) is measured without exhausting the
+ * C stack (audit Depth#2). O(size of e). */
+static int64_t get_expr_depth_ex(Expr* e, bool heads, bool empty_is_two) {
+    int64_t d;
+    if (depth_leaf(e, heads, empty_is_two, &d)) return d;
+    size_t n = 0, cap = 64;
+    DepthFrame* st = malloc(cap * sizeof(DepthFrame));
+    if (!st) return 0;
     bool assoc = assoc_is_wellformed(e);
-    int64_t max_d = (assoc || empty_is_two) ? 1 : 0;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        int64_t d = get_expr_depth_ex(struct_part(e, i, assoc), heads, empty_is_two);
-        if (d > max_d) max_d = d;
+    st[n++] = (DepthFrame){ e, 0, (assoc || empty_is_two) ? 1 : 0, assoc };
+    for (;;) {
+        DepthFrame* f = &st[n - 1];
+        size_t argc = f->e->data.function.arg_count;
+        if (f->next == argc + (heads ? 1u : 0u)) {
+            d = f->max_d + 1;
+            if (--n == 0) break;
+            if (d > st[n - 1].max_d) st[n - 1].max_d = d;
+            continue;
+        }
+        Expr* c = f->next < argc ? struct_part(f->e, f->next, f->assoc)
+                                 : f->e->data.function.head;
+        f->next++;
+        if (depth_leaf(c, heads, empty_is_two, &d)) {
+            if (d > f->max_d) f->max_d = d;
+            continue;
+        }
+        if (n == cap) {
+            DepthFrame* g = realloc(st, 2 * cap * sizeof(DepthFrame));
+            if (!g) { free(st); return 0; }
+            st = g; cap *= 2;
+        }
+        assoc = assoc_is_wellformed(c);
+        st[n++] = (DepthFrame){ c, 0, (assoc || empty_is_two) ? 1 : 0, assoc };
     }
-    if (heads) {
-        int64_t d_head = get_expr_depth_ex(e->data.function.head, heads, empty_is_two);
-        if (d_head > max_d) max_d = d_head;
-    }
-    return max_d + 1;
+    free(st);
+    return d;
 }
 
 static int64_t get_expr_depth(Expr* e, bool heads) {
@@ -4697,47 +4734,86 @@ Expr* builtin_depth(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     Expr* e = res->data.function.args[0];
     bool heads = false;
+    /* Every argument after the first must be an option rule (audit Depth#1:
+     * Rule[] and Rule[Heads] were read as two-argument rules and crashed). */
     for (size_t i = 1; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule) {
-            if (opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
-                if (opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
-            }
+        bool rule = opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
+                    opt->data.function.head->type == EXPR_SYMBOL &&
+                    (opt->data.function.head->data.symbol.name == SYM_Rule ||
+                     opt->data.function.head->data.symbol.name == SYM_RuleDelayed);
+        if (!rule) {
+            char* bad = expr_to_string(opt);
+            char* call = expr_to_string(res);
+            mth_message("Depth", "nonopt",
+                        "Options expected (instead of %s) beyond position 1 in %s. "
+                        "An option must be a rule or a list of rules.",
+                        bad ? bad : "?", call ? call : "?");
+            free(bad); free(call);
+            return NULL;
         }
+        Expr* key = opt->data.function.args[0];
+        Expr* val = opt->data.function.args[1];
+        if (key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_Heads)
+            heads = val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True;
     }
     return expr_new_integer(get_expr_depth_ex(e, heads, true));
 }
 
+/* Growable stack of borrowed Expr pointers for the additive walkers below
+ * (LeafCount, ByteCount): their totals are sums over nodes, so a plain
+ * pending-node stack replaces the recursion and the walk survives any nesting
+ * depth (audit ByteCount#1; LeafCount crashed the same way). Returns false on
+ * allocation failure. */
+typedef struct { Expr** v; size_t n, cap; } NodeStack;
+static bool node_push(NodeStack* s, Expr* e) {
+    if (s->n == s->cap) {
+        size_t nc = s->cap ? 2 * s->cap : 64;
+        Expr** g = realloc(s->v, nc * sizeof(Expr*));
+        if (!g) return false;
+        s->v = g; s->cap = nc;
+    }
+    s->v[s->n++] = e;
+    return true;
+}
+
+/* LeafCount of one LinkedList: as the List it stands for, a head leaf and the
+ * elements' leaves. */
+static int64_t leaf_count_llist(Expr* e, bool heads) {
+    const LinkedList* ll = e->data.llist;
+    int64_t n = ll_length(ll), count = heads ? 1 : 0;
+    if (ll_kind(ll) != LL_BOXED && ll_kind(ll) != LL_CPLX) return count + n;
+    for (int64_t i = 0; i < n; i++) {
+        bool own;
+        Expr* el = ll_elem_view(ll, i, &own);
+        count += leaf_count_internal(el, heads);
+        ll_elem_done(el, own);
+    }
+    return count;
+}
+
 int64_t leaf_count_internal(Expr* e, bool heads) {
     if (!e) return 0;
-    if (e->type == EXPR_LINKEDLIST) {
-        /* As the List it stands for: a head leaf and the elements' leaves. */
-        const LinkedList* ll = e->data.llist;
-        int64_t n = ll_length(ll), count = heads ? 1 : 0;
-        if (ll_kind(ll) != LL_BOXED && ll_kind(ll) != LL_CPLX) return count + n;
-        for (int64_t i = 0; i < n; i++) {
-            bool own;
-            Expr* el = ll_elem_view(ll, i, &own);
-            count += leaf_count_internal(el, heads);
-            ll_elem_done(el, own);
-        }
-        if (!heads && count == 0 && n == 0) return 0;
-        return count;
-    }
-    if (e->type != EXPR_FUNCTION) return 1;
-    
-    /* An atomic association contributes its head and its values only:
-     * LeafCount[<|a -> 1|>] is 2 (assoc_struct.h). */
-    bool assoc = assoc_is_wellformed(e);
+    NodeStack st = { NULL, 0, 0 };
     int64_t count = 0;
-    if (heads) {
-        count += leaf_count_internal(e->data.function.head, heads);
+    for (;;) {
+        if (e->type == EXPR_LINKEDLIST) {
+            count += leaf_count_llist(e, heads);
+        } else if (e->type != EXPR_FUNCTION) {
+            count += 1;
+        } else {
+            /* An atomic association contributes its head and its values only:
+             * LeafCount[<|a -> 1|>] is 2 (assoc_struct.h). */
+            bool assoc = assoc_is_wellformed(e);
+            if (heads && !node_push(&st, e->data.function.head)) goto oom;
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!node_push(&st, struct_part(e, i, assoc))) goto oom;
+        }
+        if (st.n == 0) break;
+        e = st.v[--st.n];
     }
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        count += leaf_count_internal(struct_part(e, i, assoc), heads);
-    }
-    
-    if (!heads && count == 0 && e->data.function.arg_count == 0) return 0;
+oom:  /* a partial count only if the walk stack itself could not grow */
+    free(st.v);
     return count;
 }
 
@@ -4762,8 +4838,10 @@ Expr* builtin_leafcount(Expr* res) {
     return expr_new_integer(count);
 }
 
-static int64_t byte_count_internal(Expr* e) {
-    if (!e) return 0;
+/* Bytes of one node, excluding its FUNCTION head and argument nodes (the walk
+ * in byte_count_internal counts those). */
+static int64_t byte_count_internal(Expr* e);
+static int64_t byte_count_node(Expr* e) {
     int64_t total = sizeof(Expr);
     switch (e->type) {
         case EXPR_SYMBOL:
@@ -4773,13 +4851,8 @@ static int64_t byte_count_internal(Expr* e) {
             if (e->data.string) total += strlen(e->data.string) + 1;
             break;
         case EXPR_FUNCTION:
-            if (e->data.function.head) total += byte_count_internal(e->data.function.head);
-            if (e->data.function.arg_count > 0 && e->data.function.args) {
+            if (e->data.function.arg_count > 0 && e->data.function.args)
                 total += sizeof(Expr*) * e->data.function.arg_count;
-                for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                    total += byte_count_internal(e->data.function.args[i]);
-                }
-            }
             break;
         case EXPR_BIGINT:
             /* GMP significand: mpz_size limbs of mp_limb_t each. */
@@ -4808,6 +4881,29 @@ static int64_t byte_count_internal(Expr* e) {
         default:
             break;
     }
+    return total;
+}
+
+/* Sum over every node of the tree, on an explicit stack so an expression of
+ * any nesting depth is measured (audit ByteCount#1). */
+static int64_t byte_count_internal(Expr* e) {
+    if (!e) return 0;
+    NodeStack st = { NULL, 0, 0 };
+    int64_t total = 0;
+    for (;;) {
+        total += byte_count_node(e);
+        if (e->type == EXPR_FUNCTION) {
+            if (e->data.function.head && !node_push(&st, e->data.function.head)) goto oom;
+            if (e->data.function.args)
+                for (size_t i = 0; i < e->data.function.arg_count; i++)
+                    if (e->data.function.args[i] && !node_push(&st, e->data.function.args[i]))
+                        goto oom;
+        }
+        if (st.n == 0) break;
+        e = st.v[--st.n];
+    }
+oom:  /* a partial count only if the walk stack itself could not grow */
+    free(st.v);
     return total;
 }
 

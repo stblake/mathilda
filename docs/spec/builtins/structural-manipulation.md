@@ -319,6 +319,7 @@ Creates a single flattened matrix from a matrix of matrices (block matrix).
 - `Protected`. Default `r = 2`.
 - Blocks must fit: matrices in the same grid row must share their first dimension, and matrices in the same column their second; the output size along an axis is the sum of the block sizes. Disagreeing blocks leave the call unevaluated.
 - Elements whose array depth is less than `r` are treated as scalars and replicated to fill a rank-`r` block (e.g. `0` becomes a zero block).
+- Only a block's first `r` levels are inspected; anything deeper (however deeply nested, or ragged) is element content carried along verbatim (audit ArrayFlatten#1).
 
 ```
 In[1]:= m = {{1, 2}, {3, 4}}; ArrayFlatten[{{0, 0, m}, {m, m, 0}}]
@@ -977,6 +978,8 @@ Gives the maximum number of indices needed to specify any part of expr, plus 1.
 - An association counts only its values: `Depth[<|a -> 1|>]` is 2 (see
   [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 - With `Heads -> True`, it includes heads of expressions and their parts.
+- An argument after the first that is not an option rule (`Depth[x, y]`, `Depth[x, Rule[]]`) emits `Depth::nonopt` and leaves the call unevaluated (audit Depth#1).
+- The walk is iterative, so any nesting depth is measured (`Depth[Nest[List, 1, 200000]]` is 200001; audit Depth#2). `LeafCount` and `ByteCount` likewise.
 
 ```mathematica
 In[1]:= Depth[f[g[h[x]]]]

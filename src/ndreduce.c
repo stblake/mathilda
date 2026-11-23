@@ -941,15 +941,13 @@ static bool nd_tally_hash(const void* data, NDType dt, size_t n, NDWordTally* ou
                 free(tab); free(ord);
                 return false;
             }
-            /* The key is the bit pattern, deliberately UNnormalised, so -0.0
-             * and 0.0 stay two tallies. Folding them together is the obvious
-             * thing to do and it is wrong here: Mathilda's List path compares
-             * them with expr_eq, which distinguishes them, so normalising made
-             * Tally[{0., -0., 1.}] answer {{0.,2},{1.,1}} over a buffer and
-             * {{0.,1},{-0.,1},{1.,1}} over the identical plain list. Whether
-             * that List behaviour is itself right is a separate question -- what
-             * cannot happen is the two disagreeing. The differential test in
-             * tests/test_packed_list.c is what caught it. */
+            /* The key is the bit pattern with -0.0 folded into 0.0: the two are
+             * SameQ, so they are one tally, exactly as on the List path (which
+             * hashes them alike -- expr.c real_hash_bits -- and compares them
+             * with expr_eq). The buffer and the identical plain list must never
+             * disagree; the differential test in tests/test_packed_list.c
+             * checks Tally[{0., -0., 1.}] on both. */
+            if (x == 0.0) x = 0.0;
             memcpy(&k, &x, sizeof(k));
         }
         size_t h = (size_t)tally_mix(k) & mask;

@@ -3226,23 +3226,29 @@ static Expr* tuple_build(LLSeq** lists, const size_t* cur, size_t* at, const int
     return r;
 }
 
-static void tuples_rec(LLSeq** lists, size_t num_lists, size_t curr_list, size_t* cur,
+/* Enumerate every index tuple cur[0..num_lists) in lexicographic order -- an
+ * odometer whose last position turns fastest -- appending each built tuple to
+ * *results. Iterative, so the tuple length (Tuples[{a}, 10^6]) costs heap, not
+ * C stack (audit Tuples#1: the per-position recursion overflowed it). An empty
+ * operand means no tuples; zero operands, the one empty tuple. */
+static void tuples_rec(LLSeq** lists, size_t num_lists, size_t* cur,
                        const int64_t* dims, size_t dims_count, LLSeq* tv,
                        Expr*** results, size_t* res_count, size_t* res_cap) {
-    if (curr_list == num_lists) {
+    for (size_t t = 0; t < num_lists; t++) {
+        if (lists[t]->n == 0) return;
+        cur[t] = 0;
+    }
+    for (;;) {
         size_t at = dims ? 0 : num_lists;
-        Expr* t = tuple_build(lists, cur, &at, dims, dims_count, 0, tv);
+        Expr* tup = tuple_build(lists, cur, &at, dims, dims_count, 0, tv);
         if (*res_count >= *res_cap) {
             *res_cap = (*res_cap == 0) ? 16 : (*res_cap * 2);
             *results = realloc(*results, sizeof(Expr*) * (*res_cap));
         }
-        (*results)[(*res_count)++] = t;
-        return;
-    }
-    size_t count = lists[curr_list]->n;
-    for (size_t i = 0; i < count; i++) {
-        cur[curr_list] = i;
-        tuples_rec(lists, num_lists, curr_list + 1, cur, dims, dims_count, tv, results, res_count, res_cap);
+        (*results)[(*res_count)++] = tup;
+        size_t t = num_lists;
+        while (t > 0 && ++cur[t - 1] == lists[t - 1]->n) cur[--t] = 0;
+        if (t == 0) return;
     }
 }
 
@@ -3253,7 +3259,7 @@ static Expr* tuples_of_one(LLSeq* q, size_t k, const int64_t* dims, size_t dims_
     size_t* cur = malloc(sizeof(size_t) * (k ? k : 1));
     Expr** results = NULL;
     size_t res_count = 0, res_cap = 0;
-    tuples_rec(lists, k, 0, cur, dims, dims_count, q, &results, &res_count, &res_cap);
+    tuples_rec(lists, k, cur, dims, dims_count, q, &results, &res_count, &res_cap);
     free(cur); free(lists);
     Expr* out = ll_seq_of(linked, results, res_count);
     free(results);
@@ -3289,7 +3295,7 @@ Expr* builtin_tuples(Expr* res) {
         Expr** results = NULL;
         size_t res_count = 0, res_cap = 0;
         size_t* cur = malloc(sizeof(size_t) * num_lists);
-        tuples_rec(lists, num_lists, 0, cur, NULL, 0, &av, &results, &res_count, &res_cap);
+        tuples_rec(lists, num_lists, cur, NULL, 0, &av, &results, &res_count, &res_cap);
         free(cur);
         for (size_t i = 0; i < num_lists; i++) llq_close(&ops[i]);
         free(ops); free(lists);
@@ -4380,7 +4386,14 @@ static IterStep fixedpoint_step(ExprBuf* hist, void* vctx, Expr** out) {
 
     bool same;
     if (c->same_test == NULL) {
-        same = expr_eq(last, next);
+        /* SameQ, behind an O(1) hash pre-check. The hash is memoised per node
+         * and equal expressions hash equally, so a mismatch proves the pair
+         * different without a walk. Without it, a symbolic iterate that grows
+         * every step (FixedPointList[f, x, n]) paid a full-depth expr_eq per
+         * step -- quadratic, and recursion deep enough to overflow the C stack
+         * at n ~ 10^5 (audit FixedPointList#1). The iterate is usually built
+         * around the previous one, so hashing it touches only the new nodes. */
+        same = expr_hash(last) == expr_hash(next) && expr_eq(last, next);
     } else {
         Expr* tr = apply_binary(c->same_test, last, next);
         /* A Throw from SameTest propagates as the result. */

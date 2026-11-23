@@ -104,47 +104,98 @@ static bool parse_sep(Expr* e, SepSpec* out) {
 }
 
 /*
- * depth_from_bottom:
- * Distance from e to its deepest leaf: 0 for a leaf, 1 + max child depth for a
- * list (an empty list counts as 1). Used to pick the default separator (space
- * at depth 1, one extra newline per level above).
+ * RiffleFrame / RiffleStack:
+ * One open list on the explicit traversal stack shared by depth_from_bottom
+ * and riffle_build, which are iterative so a list nested to any depth (e.g.
+ * Nest[List, "a", 100000]) is riffled without exhausting the C stack (audit
+ * StringRiffle#1). `e` is the list, `i` the next element to visit; `own` says
+ * whether `e` is a box ll_elem_view lent (released when the frame pops). The
+ * remaining fields are riffle_build's resolved separator for this level and
+ * depth_from_bottom's deepest child so far.
  */
-static size_t depth_from_bottom(const Expr* e) {
-    if (!is_list(e)) return 0;
-    size_t max_child = 0;
-    for (size_t i = 0, n = seq_len(e); i < n; i++) {
-        bool own;
-        Expr* x = seq_at(e, i, &own);
-        size_t d = depth_from_bottom(x);
-        seq_done(x, own);
-        if (d > max_child) max_child = d;
+typedef struct {
+    Expr* e;
+    bool own;
+    size_t i, n, level, df;
+    const char* sep;     /* NULL => sep_len newlines */
+    size_t sep_len;
+    const char* right;
+    size_t max_child;
+} RiffleFrame;
+
+typedef struct { RiffleFrame* v; size_t n, cap; } RiffleStack;
+
+/* Push a frame for list e; returns the new frame, or NULL on allocation
+ * failure (the caller still owns e then). */
+static RiffleFrame* rs_push(RiffleStack* st, Expr* e, bool own) {
+    if (st->n == st->cap) {
+        size_t nc = st->cap ? 2 * st->cap : 32;
+        RiffleFrame* g = realloc(st->v, nc * sizeof(RiffleFrame));
+        if (!g) return NULL;
+        st->v = g; st->cap = nc;
     }
-    return max_child + 1;
+    RiffleFrame* f = &st->v[st->n++];
+    memset(f, 0, sizeof *f);
+    f->e = e;
+    f->own = own;
+    f->n = seq_len(e);
+    return f;
+}
+
+/* Release every frame still on the stack (an early exit) and the stack. */
+static void rs_free(RiffleStack* st) {
+    for (size_t k = st->n; k-- > 0;) seq_done(st->v[k].e, st->v[k].own);
+    free(st->v);
 }
 
 /*
- * riffle_build:
- * Appends the riffled form of e to `out` -- one buffer for the whole result, so
- * every leaf is copied exactly once whatever the nesting depth. level is the
- * 0-based nesting level from the top; df is the distance from bottom (used for
- * the default separator when no explicit separator covers this level). Leaves
- * that are not strings appear as ToString would show them (OutputForm).
- * Returns 0, or -1 on allocation failure.
+ * depth_from_bottom:
+ * Distance from e to its deepest leaf: 0 for a leaf, 1 + max child depth for a
+ * list (an empty list counts as 1). Used to pick the default separator (space
+ * at depth 1, one extra newline per level above). Returns SIZE_MAX on
+ * allocation failure.
  */
-static int riffle_build(Expr* e, const SepSpec* seps, size_t nseps,
-                        size_t level, size_t df, RegexBuf* out) {
-    if (!is_list(e)) {
-        if (e->type == EXPR_STRING)
-            return regexbuf_add(out, e->data.string, strlen(e->data.string));
-        char* t = expr_to_string_outputform(e);
-        if (!t) return -1;
-        int rc = regexbuf_add(out, t, strlen(t));
-        free(t);
-        return rc;
+static size_t depth_from_bottom(Expr* e) {
+    if (!is_list(e)) return 0;
+    RiffleStack st = { NULL, 0, 0 };
+    if (!rs_push(&st, e, false)) return SIZE_MAX;
+    size_t d = 0;
+    while (st.n) {
+        RiffleFrame* f = &st.v[st.n - 1];
+        if (f->i == f->n) {
+            d = f->max_child + 1;
+            seq_done(f->e, f->own);
+            if (--st.n && d > st.v[st.n - 1].max_child) st.v[st.n - 1].max_child = d;
+            continue;
+        }
+        bool own;
+        Expr* x = seq_at(f->e, f->i++, &own);
+        if (!is_list(x)) { seq_done(x, own); continue; }
+        if (!rs_push(&st, x, own)) { seq_done(x, own); rs_free(&st); return SIZE_MAX; }
     }
+    free(st.v);
+    return d;
+}
 
-    /* Resolve the separator for this level. An explicit separator wins; else
-     * fall back to the default scheme (space at the bottom, newlines above). */
+/* Append a leaf as it appears in the result: a string verbatim, anything else
+ * as ToString would show it (OutputForm). Returns 0, or -1 on failure. */
+static int riffle_leaf(Expr* e, RegexBuf* out) {
+    if (e->type == EXPR_STRING)
+        return regexbuf_add(out, e->data.string, strlen(e->data.string));
+    char* t = expr_to_string_outputform(e);
+    if (!t) return -1;
+    int rc = regexbuf_add(out, t, strlen(t));
+    free(t);
+    return rc;
+}
+
+/* Open list e at nesting `level` (0-based from the top) with distance-from-
+ * bottom df: resolve its separator, emit its left delimiter and push its frame.
+ * An explicit separator wins; else the default scheme (space at the bottom,
+ * df-1 newlines above). Returns 0, or -1 on failure (e then still the
+ * caller's). */
+static int riffle_open(RiffleStack* st, Expr* e, bool own, const SepSpec* seps,
+                       size_t nseps, size_t level, size_t df, RegexBuf* out) {
     const char* left = "";
     const char* right = "";
     const char* sep = " ";
@@ -158,25 +209,66 @@ static int riffle_build(Expr* e, const SepSpec* seps, size_t nseps,
         sep = NULL;                    /* df-1 newlines between elements */
         sep_len = df - 1;
     }
-
     if (regexbuf_add(out, left, strlen(left))) return -1;
-    size_t n = seq_len(e);
-    for (size_t i = 0; i < n; i++) {
-        if (i > 0) {
-            if (sep) {
-                if (regexbuf_add(out, sep, sep_len)) return -1;
+    RiffleFrame* f = rs_push(st, e, own);
+    if (!f) return -1;
+    f->level = level;
+    f->df = df;
+    f->sep = sep;
+    f->sep_len = sep_len;
+    f->right = right;
+    return 0;
+}
+
+/*
+ * riffle_build:
+ * Appends the riffled form of e to `out` -- one buffer for the whole result, so
+ * every leaf is copied exactly once whatever the nesting depth. `depth` is e's
+ * distance from bottom (depth_from_bottom), which picks the default separator
+ * where no explicit separator covers a level. Returns 0, or -1 on allocation
+ * failure.
+ */
+static int riffle_build(Expr* e, const SepSpec* seps, size_t nseps, size_t depth,
+                        RegexBuf* out) {
+    if (!is_list(e)) return riffle_leaf(e, out);
+    RiffleStack st = { NULL, 0, 0 };
+    if (riffle_open(&st, e, false, seps, nseps, 0, depth, out)) { free(st.v); return -1; }
+    while (st.n) {
+        RiffleFrame* f = &st.v[st.n - 1];
+        if (f->i == f->n) {
+            int rc = regexbuf_add(out, f->right, strlen(f->right));
+            seq_done(f->e, f->own);
+            st.n--;
+            if (rc) { rs_free(&st); return -1; }
+            continue;
+        }
+        if (f->i > 0) {
+            int rc = 0;
+            if (f->sep) {
+                rc = regexbuf_add(out, f->sep, f->sep_len);
             } else {
-                for (size_t k = 0; k < sep_len; k++)
-                    if (regexbuf_add(out, "\n", 1)) return -1;
+                for (size_t k = 0; k < f->sep_len && !rc; k++)
+                    rc = regexbuf_add(out, "\n", 1);
             }
+            if (rc) { rs_free(&st); return -1; }
         }
         bool own;
-        Expr* x = seq_at(e, i, &own);
-        int rc = riffle_build(x, seps, nseps, level + 1, df ? df - 1 : 0, out);
-        seq_done(x, own);
-        if (rc) return -1;
+        Expr* x = seq_at(f->e, f->i++, &own);
+        if (!is_list(x)) {
+            int rc = riffle_leaf(x, out);
+            seq_done(x, own);
+            if (rc) { rs_free(&st); return -1; }
+            continue;
+        }
+        size_t level = f->level + 1, df = f->df ? f->df - 1 : 0;
+        if (riffle_open(&st, x, own, seps, nseps, level, df, out)) {
+            seq_done(x, own);
+            rs_free(&st);
+            return -1;
+        }
     }
-    return regexbuf_add(out, right, strlen(right));
+    free(st.v);
+    return 0;
 }
 
 /*
@@ -214,8 +306,9 @@ Expr* builtin_stringriffle(Expr* res) {
     }
 
     size_t depth = depth_from_bottom(args[0]);
+    if (depth == SIZE_MAX) { free(seps); return NULL; }
     RegexBuf out = { NULL, 0, 0 };
-    int rc = riffle_build(args[0], seps, nseps, 0, depth, &out);
+    int rc = riffle_build(args[0], seps, nseps, depth, &out);
     free(seps);
     if (rc) { free(out.p); return NULL; }
     if (!out.p) return expr_new_string("");
