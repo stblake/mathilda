@@ -94,6 +94,10 @@ static Expr* pv_part_row(Expr* e, Expr** idx, size_t n, int* st) {
 }
 static Expr* pv_to_list_row(const Expr* e) { return pv_to_list(e->data.pvec); }
 
+/* Row functions defined with their kind's code (core.c, list/total.c). */
+Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend);
+Expr* total_ll_level_k(Expr* e, int64_t k);
+
 /* ---- element access and rebuild -------------------------------------------- */
 static Expr* ll_get_row(const Expr* e, int64_t i) { return ll_get(e->data.llist, i); }
 static Expr* pv_get_row(const Expr* e, int64_t i) { return pv_get(e->data.pvec, i); }
@@ -193,11 +197,11 @@ static Expr* pv_native(const char* h, Expr* res, bool* handled) {
 
 /* A packed list/array matches _List or _NDArray by its presentation; the
  * matcher keeps its own NDArray head logic, so no head_is is given here. */
-static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list, NULL, NULL, NULL, NULL, NULL, NULL, nd_assign_row };
-static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list, NULL, NULL, NULL, NULL, NULL, NULL, sparse_assign_row };
-static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only, ll_native, ll_descend_expr, ll_assign_row };
+static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list, NULL, NULL, NULL, NULL, NULL, NULL, nd_assign_row, NULL, NULL, NULL };
+static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list, NULL, NULL, NULL, NULL, NULL, NULL, sparse_assign_row, NULL, NULL, NULL };
+static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row, ll_each_row, ll_atoms_only, ll_native, ll_descend_expr, ll_assign_row, ll_assign_in_place, ll_append_to, total_ll_level_k };
 
-static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only, pv_native, NULL, pvec_assign_row };
+static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row, pv_each_row, pv_atoms_only, pv_native, NULL, pvec_assign_row, NULL, NULL, NULL };
 
 static void ds_init(void) {
     g_init = true;
@@ -268,4 +272,15 @@ Expr* ds_part_assign(Expr* e, Expr** idx, size_t n, Expr* rhs, bool* handled) {
     if (!o || !o->part_assign) { *handled = false; return NULL; }
     *handled = true;
     return o->part_assign(e, idx, n, rhs);
+}
+
+bool ds_has_in_place(ExprType t) { const DsOps* o = ds_ops(t); return o && o->assign_in_place; }
+bool ds_assign_in_place(Expr* e, Expr** idx, size_t n, Expr* rhs) { return ds_ops(e->type)->assign_in_place(e, idx, n, rhs); }
+bool ds_has_append_to(ExprType t) { const DsOps* o = ds_ops(t); return o && o->append_to; }
+Expr* ds_append_to(const char* name, Expr* val, Expr* elem, bool prepend) {
+    return ds_ops(val->type)->append_to(name, val, elem, prepend);
+}
+Expr* ds_total_level(Expr* e, int64_t k) {
+    const DsOps* o = ds_ops(e->type);
+    return (o && o->total_level) ? o->total_level(e, k) : NULL;
 }

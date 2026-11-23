@@ -72,7 +72,7 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k);
  *   k >= 2: a new LinkedList of each element totalled at level k - 1, the
  *           closure rule (a List gives a List).
  * No List is ever built. */
-static Expr* total_ll_level_k(Expr* e, int64_t k) {
+Expr* total_ll_level_k(Expr* e, int64_t k) {
     LinkedList* ll = e->data.llist;
     int64_t n = ll_length(ll);
     if (k == 1) {
@@ -96,7 +96,7 @@ static Expr* total_ll_level_k(Expr* e, int64_t k) {
 
 static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
     if (k <= 0) return expr_copy(e);
-    if (e->type == EXPR_LINKEDLIST) return total_ll_level_k(e, k);
+    { Expr* tl = ds_total_level(e, k); if (tl) return tl; }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     if (k == 1) {
@@ -145,8 +145,8 @@ Expr* builtin_total(Expr* res) {
         return expr_new_integer(0);
     /* A LinkedList takes the same level walk below; total_at_exactly_level_k
      * dispatches it to the native kernels (total_ll_level_k). */
-    bool is_ll = list->type == EXPR_LINKEDLIST;
-    if (is_ll && ll_length(list->data.llist) == 0) return expr_new_integer(0);
+    bool is_ll = ds_has_each(list->type) && ds_ops(list->type)->total_level != NULL;
+    if (is_ll && ds_ops(list->type)->length(list) == 0) return expr_new_integer(0);
 
     int64_t n1 = 1, n2 = 1;
     int64_t depth = get_depth_for_total(list);

@@ -16,6 +16,8 @@ Expr* pvec_part(Expr* pvx, Expr** indices, size_t nindices);
 Expr* ll_part_expr(Expr* llx, Expr** indices, size_t nindices);
 /* First / Last of a LinkedList (deflt may be NULL). */
 Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last);
+/* LinkedList Part assignment in place; false after a message (list unchanged). */
+bool ll_assign_in_place(Expr* llx, Expr** indices, size_t nindices, Expr* rhs);
 /* Part assignment below the top level, per payload kind (the ds_ops
  * part_assign slot): the new value of `expr`, or NULL after a message. */
 Expr* ll_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);

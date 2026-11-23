@@ -2690,7 +2690,8 @@ static Expr* inplace_assign_back(Expr* sym, Expr* new_val) {
 /* AppendTo / PrependTo on a LinkedList: O(1) at either end, in place.
  * Consumes `llx` (the list's own atom) and returns it; NULL after
  * Head::llcyc when `elem` would make the list contain itself. */
-static Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend) {
+/* The LinkedList row's append_to slot (ds_ops.c). */
+Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend) {
     LinkedList* ll = llx->data.llist;
     if (ll_would_cycle(ll, elem)) {
         ll_cycle_message(head, elem);
@@ -2709,7 +2710,7 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     const char* name = prepend ? "PrependTo" : "AppendTo";
     /* The LinkedList object itself (a function parameter substituted into
      * the body): grow it in place, as through a variable. */
-    if (sym->type == EXPR_LINKEDLIST) return ll_append_to(name, expr_copy(sym), elem, prepend);
+    if (ds_has_append_to(sym->type)) return ds_append_to(name, expr_copy(sym), elem, prepend);
     if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
 
     if (sym->type == EXPR_SYMBOL && !symtab_get_own_values(sym->data.symbol.name)) {
@@ -2722,7 +2723,7 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     Expr* current_val = evaluate(sym);
     if (!current_val) return NULL;
     /* A LinkedList grows in place in O(1); the variable keeps pointing at it. */
-    if (current_val->type == EXPR_LINKEDLIST) return ll_append_to(name, current_val, elem, prepend);
+    if (ds_has_append_to(current_val->type)) return ds_append_to(name, current_val, elem, prepend);
     /* A SparseArray appends through Append's native sparse kernel (a dense
      * answer for an element that is not a row of the array). */
     if (current_val->type == EXPR_SPARSE || current_val->type == EXPR_PVEC) {

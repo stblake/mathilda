@@ -305,6 +305,10 @@ static Expr* nd_part_assign_or_list(Expr* arr, Expr** indices, size_t nindices, 
 /* Part assignment below the top level, per payload kind: the bodies of the
  * ds_ops part_assign slot.  Each returns the new value of `expr` (a new
  * reference), or NULL (after a message) to leave the Set unevaluated. */
+bool ll_assign_in_place(Expr* llx, Expr** indices, size_t nindices, Expr* rhs) {
+    return ll_part_assign(llx, indices, nindices, rhs);
+}
+
 Expr* ll_assign_row(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
     /* A LinkedList reached below the top ({ll}[[1, 2]] = v): written in
      * place, as everywhere -- the enclosing immutable value is rebuilt around
@@ -644,8 +648,8 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     /* The target is the LinkedList object itself -- what a function body
      * sees after its parameter is substituted (setFirst[l_, v_] :=
      * (l[[1]] = v)): reference semantics make that write the caller's list. */
-    if (sym->type == EXPR_LINKEDLIST)
-        return ll_part_assign(sym, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs)
+    if (ds_has_in_place(sym->type))
+        return ds_assign_in_place(sym, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs)
                ? expr_copy(sym) : NULL;
     if (sym->type != EXPR_SYMBOL) return NULL;
 
@@ -654,8 +658,8 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
 
     /* A variable holding a LinkedList: write the shared object in place; the
      * OwnValue already points at it and is not rebound. */
-    if (current_val->type == EXPR_LINKEDLIST) {
-        bool ok = ll_part_assign(current_val, lhs->data.function.args + 1,
+    if (ds_has_in_place(current_val->type)) {
+        bool ok = ds_assign_in_place(current_val, lhs->data.function.args + 1,
                                  lhs->data.function.arg_count - 1, rhs);
         if (!ok) { expr_free(current_val); return NULL; }
         return current_val;

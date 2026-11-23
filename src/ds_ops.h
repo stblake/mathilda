@@ -77,6 +77,18 @@ typedef struct DsOps {
      * NULL after a message to leave the Set unevaluated.  NULL slot = the kind is
      * rebuilt by the general function-node path. */
     Expr* (*part_assign)(Expr* e, Expr** idx, size_t n, Expr* rhs);
+    /* REFERENCE kinds only (the one mutable payload, LinkedList): write the
+     * selected parts of `e` itself, in place, and report success (false = a
+     * message was issued and `e` is unchanged).  NULL = the kind is a value and
+     * is rebuilt through part_assign. */
+    bool (*assign_in_place)(Expr* e, Expr** idx, size_t n, Expr* rhs);
+    /* REFERENCE kinds only: AppendTo / PrependTo grow `val` itself and return it;
+     * consumes the reference `val`, or returns NULL after a message (also
+     * consuming it). `name` is "AppendTo" or "PrependTo". */
+    Expr* (*append_to)(const char* name, Expr* val, Expr* elem, bool prepend);
+    /* Total of the elements at exactly level k >= 1, over the kind's own storage
+     * (typed kernels); NULL = the generic level walk answers. */
+    Expr* (*total_level)(Expr* e, int64_t k);
 } DsOps;
 
 enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
@@ -94,6 +106,15 @@ Expr* ds_get(const Expr* e, int64_t i);
 
 /* Does this kind iterate through its row (DsOps.each)? */
 bool ds_has_each(ExprType t);
+
+/* Reference-kind mutation through the row.  The predicates say whether the kind
+ * has the slot; the calls assume it does. */
+bool  ds_has_in_place(ExprType t);
+bool  ds_assign_in_place(Expr* e, Expr** idx, size_t n, Expr* rhs);
+bool  ds_has_append_to(ExprType t);
+Expr* ds_append_to(const char* name, Expr* val, Expr* elem, bool prepend);
+/* Typed level total through the row; NULL when the kind has none. */
+Expr* ds_total_level(Expr* e, int64_t k);
 
 /* Part assignment through the row; *handled false when the kind has no slot. */
 Expr* ds_part_assign(Expr* e, Expr** idx, size_t n, Expr* rhs, bool* handled);

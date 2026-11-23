@@ -112,6 +112,24 @@ static void test_part_assign_below_top(void) {
     assert_true("Module[{a = {0, PVector[{1, 2, 3}]}}, a[[2, 9]] = 1; Normal[a[[2]]] === {1, 2, 3}]");                                           /* out of range */
 }
 
+static void test_reference_mutation(void) {
+    const DsOps* ll = ds_ops(EXPR_LINKEDLIST);
+    ASSERT_MSG(ll->assign_in_place && ll->append_to && ll->total_level, "LinkedList row has the mutation and total slots");
+    ASSERT_MSG(!ds_has_in_place(EXPR_PVEC) && !ds_has_append_to(EXPR_PVEC) && !ds_has_in_place(EXPR_NDARRAY),
+               "value kinds are not mutated in place");
+    /* the mutators reach the shared object through the row */
+    assert_true("Module[{l = LinkedList[{1, 2, 3}], m}, m = l; AppendTo[l, 4]; PrependTo[l, 0]; Normal[m] === {0, 1, 2, 3, 4}]");
+    assert_true("Module[{l = LinkedList[{1, 2, 3}], m}, m = l; l[[2]] = 9; Normal[m] === {1, 9, 3}]");
+    assert_true("Module[{l = LinkedList[{1, 2, 3}], f}, f[x_, v_] := (x[[1]] = v); f[l, 7]; Normal[l] === {7, 2, 3}]");
+    assert_true("Module[{l = LinkedList[{1, 2, 3}]}, l[[7]] = 1; Normal[l] === {1, 2, 3}]");     /* failed write: unchanged */
+    /* value semantics for PVector: AppendTo rebinds, the old value is untouched */
+    assert_true("Module[{v = PVector[{1, 2}], w}, w = v; AppendTo[v, 3]; Normal[w] === {1, 2} && Normal[v] === {1, 2, 3}]");
+    /* the typed level total runs through the row and equals the List answer */
+    assert_true("Total[LinkedList[{1, 2, 3, 4}]] == 10 && Total[LinkedList[{1., 2.5}]] == 3.5");
+    assert_true("Normal[Total[LinkedList[{{1, 2}, {3, 4}}], {2}]] === Total[{{1, 2}, {3, 4}}, {2}]");
+    assert_true("Total[LinkedList[{{1, 2}, {3, 4}}], Infinity] == 10 && Total[LinkedList[{}]] == 0");
+}
+
 static void test_native(void) {
     ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->native && ds_ops(EXPR_PVEC)->native, "LinkedList and PVector have native heads");
     ASSERT_MSG(ds_ops(EXPR_SPARSE)->native == NULL && ds_ops(EXPR_NDARRAY)->native == NULL, "other kinds keep their own paths");
@@ -149,6 +167,7 @@ int main(void) {
     TEST(test_normal);
     TEST(test_get_rebuild);
     TEST(test_native);
+    TEST(test_reference_mutation);
     TEST(test_part_assign_below_top);
     TEST(test_each);
     printf("All ds_ops tests passed!\n");
