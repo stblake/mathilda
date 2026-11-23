@@ -60,6 +60,7 @@
 #include <flint/flint.h>
 #include <flint/arb.h>
 #include <flint/acb.h>
+#include <flint/acb_hypgeom.h>   /* Bessel J, Y: the far-from-real-axis expansion */
 
 #ifdef MATHILDA_THREADS
 #include <pthread.h>
@@ -615,6 +616,310 @@ static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
     return ok;
 }
 
+/* ------------------------------------------------------------------ */
+/* Far from the real axis: the Bessel-function expansion               */
+/* ------------------------------------------------------------------ */
+/* The Fourier (Floquet) sum needs every k with |c_k| e^{2|k||Im z|} above the
+ * target, about sqrt|q| e^{|Im z|} terms: 7e12 of them at Im z = 30, which is
+ * what made MathieuCPrime[1.5, 2.0, 0.7 + 30 I] run forever (audit
+ * MathieuCPrime#4). Far from the axis the same coefficients feed a series of
+ * cylinder functions that converges FASTER the farther out z is:
+ *
+ *     Phi_C(w) = sum_k (-1)^k c_k C_{nu+2k}(2 h cos w),   h^2 = q,
+ *
+ * solves the Mathieu equation y'' + (a - 2q cos 2w) y = 0 for any cylinder
+ * function C (DLMF 28.23, in the modified variable cosh z = cos w), and
+ * converges for |cos w| > 1 -- geometrically, with ratio 1/|cos w|^2, on the
+ * side where the order grows against the argument. Phi_J and Phi_Y are two
+ * solutions, so the requested function (any of ce, se and their derivatives)
+ * is alpha Phi_J + beta Phi_Y, with alpha, beta fixed by its value and
+ * derivative at w0 = Re z + i y0, close enough to the axis for the Fourier sum
+ * to be cheap (y0 <= 3) and far enough for the series to converge (y0 >= 1.5,
+ * |cos w0| >= sinh 1.5 > 2). Both points lie on one vertical segment, along
+ * which 2 h cos w keeps clear of the cut of C (h or -h is chosen so): the
+ * identity is an analytic continuation, not an asymptotic one, so the result
+ * is exact up to the ball arithmetic that bounds it. */
+
+#define MATHIEU_FAR_TERMS 1024.0   /* Fourier terms above which the far path runs */
+
+/* Beyond this |Im z| the far path declines: the phase of C_mu(X) alone needs
+ * |Im z|/log 2 working bits (|X| ~ e^{|Im z|}), and every value is far outside
+ * the MPFR exponent range long before (e^{-|Im z|/2} on the imaginary axis,
+ * e^{|h| e^{|Im z|}} off it). 2048 costs ~3 s at machine precision. */
+#define MATHIEU_FAR_MAX_IM 2048.0
+
+/* Is z far enough out for the Bessel expansion to be the cheaper one? Sets the
+ * connection height *y0 (> 0). -1: too far for either path (decline). */
+static int far_plan(double qr, double qi, double zi, double* y0) {
+    double sq = sqrt(hypot(qr, qi)), ay = fabs(zi);
+    if (!(sq > 0.0) || isnan(ay)) return 0;
+    if (ay > MATHIEU_FAR_MAX_IM) return -1;
+    double c = log(64.0 / sq);
+    if (c > 3.0) c = 3.0;
+    if (c < 1.5) c = 1.5;
+    if (ay <= c + 1.0) return 0;
+    if (sq * exp(ay) <= MATHIEU_FAR_TERMS) return 0;
+    *y0 = c;
+    return 1;
+}
+
+/* The far window: the real-axis window around m, widened on both sides until
+ * the geometric tail (ratio 1/|cos w0|^2 <= 1/sinh^2 y0) is 2^-(bits+40) below
+ * its head, at the uniform precision bits + 32 -- the tail coefficients are
+ * multiplied by cylinder functions that grow as fast as they shrink, so they
+ * are needed to full RELATIVE accuracy (the Miller start-up error at the
+ * window ends decays super-exponentially inward; the last few terms are below
+ * the target whatever their error). */
+static int profile_far(Profile* P, double nur, double nui, double ar, double ai,
+                       double qr, double qi, slong m, slong bits, double y0) {
+    if (!profile_build(P, nur, nui, ar, ai, qr, qi, m, 0.0, bits)) return 0;
+    double lc = log(sinh(y0));                         /* log |cos w0| lower bound */
+    slong E = (slong)(((double)bits + 40.0) * M_LN2 / (2.0 * lc)) + 8;
+    slong lo = P->lo < m - E ? P->lo : m - E;
+    slong hi = P->hi > m + E ? P->hi : m + E;
+    slong n = hi - lo + 1;
+    slong* p = (slong*)malloc(sizeof(slong) * (size_t)n);
+    if (!p) { profile_clear(P); return 0; }
+    for (slong i = 0; i < n; i++) p[i] = bits + 32;
+    free(P->p);
+    P->p = p; P->lo = lo; P->hi = hi;
+    return 1;
+}
+
+/* Does the arc of arg(2 h cos(x + i t)), t between ta and tb (same sign), stay
+ * off the negative real axis? h enters through its argument `ah`. The point
+ * cos x cosh t - i sin x sinh t moves monotonically along one branch of a
+ * hyperbola, inside one closed quadrant, so the arc is the interval between
+ * the endpoint arguments (no wrap: they share the quadrant). */
+static int far_arc_clear(double ah, double x, double ta, double tb) {
+    const double PI = 3.14159265358979323846;
+    /* divided through by cosh t > 0: no overflow at a large t */
+    double fa = atan2(-sin(x) * tanh(ta), cos(x)) + ah;
+    double fb = atan2(-sin(x) * tanh(tb), cos(x)) + ah;
+    double lo = fa < fb ? fa : fb, hi = fa < fb ? fb : fa;
+    /* any odd multiple of pi in [lo - margin, hi + margin]? */
+    double margin = 1e-6;
+    double j = ceil((lo - margin - PI) / (2.0 * PI));
+    return !(PI + 2.0 * PI * j <= hi + margin);
+}
+
+/* C_{nu+j}(X) for j = jlo .. jhi (jlo < 0 < jhi) into v[j - jlo], C = J
+ * (bessel_y = 0) or Y, from two direct evaluations and the three-term
+ * recurrence C_{m-1} + C_{m+1} = (2m/X) C_m, each run in its stable
+ * direction: J downward from the top (it is the minimal solution there, and
+ * grows as the order falls toward and through -|X| for a non-integer nu), Y
+ * outward from j = 0 (it grows away from the oscillatory band either way).
+ * An integer nu uses C_{-m} = (-1)^m C_m instead of the negative orders, where
+ * J would be recurred in its unstable direction. Four Bessel calls per point
+ * where direct evaluation took four per coefficient. */
+static void far_orders(acb_ptr v, int bessel_y, const acb_t nu, int integer,
+                       const acb_t X, slong jlo, slong jhi, slong prec) {
+    slong N = jhi - jlo + 1;
+    acb_t m, t, Xi;
+    acb_init(m); acb_init(t); acb_init(Xi);
+    acb_inv(Xi, X, prec);
+    acb_mul_2exp_si(Xi, Xi, 1);                          /* 2/X */
+    if (integer) {
+        /* orders n0 + j; |order| <= top */
+        slong n0 = arf_get_si(arb_midref(acb_realref(nu)), ARF_RND_NEAR);
+        slong olo = n0 + jlo, ohi = n0 + jhi;
+        slong top = ohi > -olo ? ohi : -olo;
+        if (top < 1) top = 1;
+        acb_ptr u = _acb_vec_init(top + 1);              /* C_0 .. C_top */
+        if (bessel_y) {
+            acb_set_si(m, 0); acb_hypgeom_bessel_y(u + 0, m, X, prec);
+            acb_set_si(m, 1); acb_hypgeom_bessel_y(u + 1, m, X, prec);
+            for (slong o = 1; o < top; o++) {             /* upward */
+                acb_mul_si(t, Xi, o, prec);
+                acb_mul(u + o + 1, t, u + o, prec);
+                acb_sub(u + o + 1, u + o + 1, u + o - 1, prec);
+            }
+        } else {
+            acb_set_si(m, top);     acb_hypgeom_bessel_j(u + top, m, X, prec);
+            acb_set_si(m, top - 1); acb_hypgeom_bessel_j(u + top - 1, m, X, prec);
+            for (slong o = top - 1; o > 0; o--) {         /* downward */
+                acb_mul_si(t, Xi, o, prec);
+                acb_mul(u + o - 1, t, u + o, prec);
+                acb_sub(u + o - 1, u + o - 1, u + o + 1, prec);
+            }
+        }
+        for (slong j = jlo; j <= jhi; j++) {
+            slong o = n0 + j;
+            if (o >= 0) acb_set(v + (j - jlo), u + o);
+            else if ((-o) & 1) acb_neg(v + (j - jlo), u - o);
+            else acb_set(v + (j - jlo), u - o);
+        }
+        _acb_vec_clear(u, top + 1);
+    } else if (bessel_y) {
+        slong i0 = -jlo;                                  /* index of j = 0 */
+        acb_hypgeom_bessel_y(v + i0, nu, X, prec);
+        acb_add_si(m, nu, 1, prec);
+        acb_hypgeom_bessel_y(v + i0 + 1, m, X, prec);
+        for (slong i = i0 + 1; i < N - 1; i++) {          /* upward */
+            acb_add_si(m, nu, jlo + i, prec);
+            acb_mul(t, Xi, m, prec);
+            acb_mul(v + i + 1, t, v + i, prec);
+            acb_sub(v + i + 1, v + i + 1, v + i - 1, prec);
+        }
+        for (slong i = i0; i > 0; i--) {                  /* downward */
+            acb_add_si(m, nu, jlo + i, prec);
+            acb_mul(t, Xi, m, prec);
+            acb_mul(v + i - 1, t, v + i, prec);
+            acb_sub(v + i - 1, v + i - 1, v + i + 1, prec);
+        }
+    } else {
+        acb_add_si(m, nu, jhi, prec);
+        acb_hypgeom_bessel_j(v + N - 1, m, X, prec);
+        acb_add_si(m, nu, jhi - 1, prec);
+        acb_hypgeom_bessel_j(v + N - 2, m, X, prec);
+        for (slong i = N - 2; i > 0; i--) {               /* downward */
+            acb_add_si(m, nu, jlo + i, prec);
+            acb_mul(t, Xi, m, prec);
+            acb_mul(v + i - 1, t, v + i, prec);
+            acb_sub(v + i - 1, v + i - 1, v + i + 1, prec);
+        }
+    }
+    acb_clear(m); acb_clear(t); acb_clear(Xi);
+}
+
+/* Phi_J, Phi_J', Phi_Y, Phi_Y' at w (derivatives in w).
+ *
+ * `tanform` (an odd function at a characteristic value, integer nu = n): the
+ * coefficients are antisymmetric, c_{-n-k} = -c_k, so the plain series above
+ * vanishes identically term by term. The solutions are then the second
+ * expansion (A&S 20.6, Se_n in the modified variable, tanh z = i tan w)
+ *     Psi_C(w) = tan w sum_k (-1)^k (n + 2k) c_k C_{n+2k}(2 h cos w),
+ *     Psi_C'   = sec^2 w T + tan w T',  T the sum. */
+static void far_phi(acb_t PJ, acb_t dPJ, acb_t PY, acb_t dPY, acb_srcptr c,
+                    slong lo, slong n, const acb_t nu, int integer, int tanform,
+                    const acb_t h, const acb_t w, slong prec) {
+    /* orders nu + j, j = 2 lo - 1 .. 2 hi: C_mu and C_{mu-1} for mu = nu + 2k */
+    slong jlo = 2 * lo - 1, jhi = 2 * (lo + n - 1), N = jhi - jlo + 1;
+    acb_ptr J = _acb_vec_init(N), Y = _acb_vec_init(N);
+    acb_t X, dX, mu, t, r, dj, dy, sw, cw;
+    acb_init(X); acb_init(dX); acb_init(mu); acb_init(t); acb_init(r);
+    acb_init(dj); acb_init(dy); acb_init(sw); acb_init(cw);
+    acb_sin_cos(sw, cw, w, prec);
+    acb_mul(X, cw, h, prec); acb_mul_2exp_si(X, X, 1);        /* 2 h cos w  */
+    acb_mul(dX, sw, h, prec); acb_mul_2exp_si(dX, dX, 1);
+    acb_neg(dX, dX);                                          /* -2 h sin w */
+    far_orders(J, 0, nu, integer, X, jlo, jhi, prec);
+    far_orders(Y, 1, nu, integer, X, jlo, jhi, prec);
+    acb_zero(PJ); acb_zero(dPJ); acb_zero(PY); acb_zero(dPY);
+    for (slong i = 0; i < n; i++) {
+        slong k = lo + i, ix = 2 * k - jlo;                   /* index of nu + 2k */
+        acb_add_si(mu, nu, 2 * k, prec);
+        acb_div(r, mu, X, prec);
+        acb_set(t, c + i);
+        if (tanform) acb_mul(t, t, mu, prec);                 /* (n + 2k) c_k */
+        if (k & 1) acb_neg(t, t);                             /* (-1)^k */
+        acb_addmul(PJ, t, J + ix, prec);
+        acb_addmul(PY, t, Y + ix, prec);
+        /* C'_mu = C_{mu-1} - (mu/X) C_mu */
+        acb_set(dj, J + ix - 1); acb_submul(dj, r, J + ix, prec);
+        acb_set(dy, Y + ix - 1); acb_submul(dy, r, Y + ix, prec);
+        acb_addmul(dPJ, t, dj, prec);
+        acb_addmul(dPY, t, dy, prec);
+    }
+    acb_mul(dPJ, dPJ, dX, prec);
+    acb_mul(dPY, dPY, dX, prec);
+    if (tanform) {
+        acb_t tw, s2;
+        acb_init(tw); acb_init(s2);
+        acb_div(tw, sw, cw, prec);                            /* tan w   */
+        acb_sqr(s2, cw, prec); acb_inv(s2, s2, prec);         /* sec^2 w */
+        acb_mul(dPJ, dPJ, tw, prec); acb_addmul(dPJ, PJ, s2, prec);
+        acb_mul(dPY, dPY, tw, prec); acb_addmul(dPY, PY, s2, prec);
+        acb_mul(PJ, PJ, tw, prec);
+        acb_mul(PY, PY, tw, prec);
+        acb_clear(tw); acb_clear(s2);
+    }
+    _acb_vec_clear(J, N); _acb_vec_clear(Y, N);
+    acb_clear(X); acb_clear(dX); acb_clear(mu); acb_clear(t); acb_clear(r);
+    acb_clear(dj); acb_clear(dy); acb_clear(sw); acb_clear(cw);
+}
+
+/* The extra working bits the far path needs, added to wp BEFORE the
+ * coefficients are computed (their accuracy bounds everything after):
+ * the phase of C_mu(X), |X| ~ |h| e^{|Im z|}, and the connection's
+ * cancellation -- off the imaginary axis J and Y both grow like e^{|Im X|}
+ * with J + iY or J - iY recessive, so at w0 the Wronskian and the numerators
+ * of alpha, beta cancel by ~e^{2|Im X0|}, a loss fixed by y0 and q alone,
+ * whatever z (52 bits for q = 2, Re z = 0.7) -- plus the ~16 bits the
+ * geometric Y tail cancels in the sums at w0. */
+static slong far_guard(double qr, double qi, double zr, double zi, double y0) {
+    double r = hypot(qr, qi);
+    double hr = sqrt(0.5 * (r + qr)), hi = sqrt(0.5 * (r - qr));
+    double x = zi < 0.0 ? -zr : zr;
+    double imx0 = 2.0 * fabs(hi * cos(x) * cosh(y0)) + 2.0 * fabs(hr * sin(x) * sinh(y0));
+    return 32 + (slong)((fabs(zi) + log(1.0 + 2.0 * sqrt(r))) / M_LN2)
+              + (slong)(2.0 * imx0 / M_LN2);
+}
+
+static int far_eval(acb_t res, acb_srcptr c, slong lo, slong n, const acb_t nu,
+                    int integer, const acb_t a, const acb_t q, const acb_t z, int odd, int deriv,
+                    slong wp, double y0) {
+    const double PI = 3.14159265358979323846;
+    /* Im z < 0: ce and se' are even, se and ce' odd */
+    double zi = arf_get_d(arb_midref(acb_imagref(z)), ARF_RND_NEAR);
+    double x = arf_get_d(arb_midref(acb_realref(z)), ARF_RND_NEAR);
+    int flip = zi < 0.0;
+    int tanform = integer && odd;     /* antisymmetric c: see far_phi */
+    acb_t zz, w0, h, V0, D0, PJ0, dPJ0, PY0, dPY0, PJ, dPJ, PY, dPY, D, al, be;
+    acb_init(zz); acb_init(w0); acb_init(h); acb_init(V0); acb_init(D0);
+    acb_init(PJ0); acb_init(dPJ0); acb_init(PY0); acb_init(dPY0);
+    acb_init(PJ); acb_init(dPJ); acb_init(PY); acb_init(dPY);
+    acb_init(D); acb_init(al); acb_init(be);
+    int ok = 0;
+    if (flip) { acb_neg(zz, z); x = -x; zi = -zi; } else acb_set(zz, z);
+
+    acb_sqrt(h, q, wp);
+    double hr = arf_get_d(arb_midref(acb_realref(h)), ARF_RND_NEAR);
+    double hi = arf_get_d(arb_midref(acb_imagref(h)), ARF_RND_NEAR);
+    double ah = atan2(hi, hr);
+    if (!far_arc_clear(ah, x, y0, zi)) {
+        acb_neg(h, h);                                /* rotate X by pi */
+        ah += ah > 0.0 ? -PI : PI;
+        if (!far_arc_clear(ah, x, y0, zi)) goto out;
+    }
+
+    {
+        /* wp already carries far_guard's bits (the caller added them before
+         * computing c, which bounds every accuracy here) */
+        slong pf = wp;
+        arb_set(acb_realref(w0), acb_realref(zz));
+        arb_set_d(acb_imagref(w0), y0);
+        mathieu_acb(V0, a, q, w0, odd, 0, pf);
+        mathieu_acb(D0, a, q, w0, odd, 1, pf);
+        if (!acb_is_finite(V0) || !acb_is_finite(D0)) goto out;
+
+        far_phi(PJ0, dPJ0, PY0, dPY0, c, lo, n, nu, integer, tanform, h, w0, pf);
+        far_phi(PJ, dPJ, PY, dPY, c, lo, n, nu, integer, tanform, h, zz, pf);
+
+        /* alpha Phi_J + beta Phi_Y matches (V0, D0) at w0 */
+        acb_mul(D, PJ0, dPY0, pf);
+        acb_submul(D, PY0, dPJ0, pf);
+        if (acb_contains_zero(D)) goto out;
+        acb_mul(al, V0, dPY0, pf);
+        acb_submul(al, PY0, D0, pf);
+        acb_div(al, al, D, pf);
+        acb_mul(be, PJ0, D0, pf);
+        acb_submul(be, V0, dPJ0, pf);
+        acb_div(be, be, D, pf);
+
+        if (deriv) { acb_mul(res, al, dPJ, pf); acb_addmul(res, be, dPY, pf); }
+        else       { acb_mul(res, al, PJ, pf);  acb_addmul(res, be, PY, pf); }
+        if (flip && (odd ^ deriv)) acb_neg(res, res);
+        ok = 1;
+    }
+out:
+    acb_clear(zz); acb_clear(w0); acb_clear(h); acb_clear(V0); acb_clear(D0);
+    acb_clear(PJ0); acb_clear(dPJ0); acb_clear(PY0); acb_clear(dPY0);
+    acb_clear(PJ); acb_clear(dPJ); acb_clear(PY); acb_clear(dPY);
+    acb_clear(D); acb_clear(al); acb_clear(be);
+    return ok;
+}
+
 void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
                  int odd, int deriv, slong prec) {
     if (!acb_is_finite(a) || !acb_is_finite(q) || !acb_is_finite(z)) {
@@ -650,6 +955,11 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     /* the odd functions (se, ce') vanish like z at 0, so a small |z| costs
      * log2(1/|z|) bits of cancellation in the Floquet sum */
     if ((odd ^ deriv) && zabs > 0.0 && zabs < 1.0) wp += (slong)(-log2(zabs) + 1.0);
+    /* far from the real axis: the Bessel expansion (far_eval), its guard bits */
+    double y0 = 0.0;
+    int far = far_plan(qr, qi, zi, &y0);
+    if (far < 0) { acb_indeterminate(res); return; }
+    if (far) wp += far_guard(qr, qi, zr, zi, y0);
 
     acb_t nu;
     acb_init(nu);
@@ -662,9 +972,11 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
         }
     }
 
-    /* the window at full precision, widened for a complex z */
+    /* the window at full precision, widened for a complex z -- or, far from
+     * the real axis, the real-axis window widened for the Bessel expansion */
     Profile P;
-    if (!profile_build(&P, nur, nui, ar, ai, qr, qi, m, fabs(zi), wp)) {
+    if (!(far ? profile_far(&P, nur, nui, ar, ai, qr, qi, m, wp, y0)
+              : profile_build(&P, nur, nui, ar, ai, qr, qi, m, fabs(zi), wp))) {
         acb_indeterminate(res); acb_clear(nu); return;
     }
     slong lo = P.lo, hi = P.hi, n = hi - lo + 1;
@@ -788,6 +1100,21 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
         double vi = arf_get_d(arb_midref(acb_imagref(N)), ARF_RND_NEAR);
         acb_clear(N);
         imag_kind = fabs(vi) > fabs(vr);
+    }
+    if (far) {
+        if (!far_eval(res, c, lo, n, nu, integer, a, q, z, odd, deriv, wp, y0)) {
+            acb_indeterminate(res); goto done;
+        }
+        /* Real (a, q) on the imaginary axis: the parity rule of the Fourier
+         * branch below (the far path never runs on the real axis). */
+        if (realpq && arb_is_zero(acb_realref(z))) {
+            int nreal = real_nu || !imag_kind;
+            int vreal = !(odd ^ deriv) ? nreal : !nreal;
+            if (vreal) arb_zero(acb_imagref(res));
+            else arb_zero(acb_realref(res));
+        }
+        acb_set_round(res, res, prec);
+        goto done;
     }
     if (deriv) {                                    /* weights (nu + 2k) */
         for (slong i = 0; i < n; i++) {

@@ -21,7 +21,9 @@
  *
  * Bernoulli numbers B_n are computed by the recurrence
  *   B_0 = 1,   B_m = -1/(m+1) Sum_{k=0}^{m-1} C(m+1, k) B_k   (m >= 1),
- * using exact GMP rationals in a lazily-grown, process-lifetime cache. (The
+ * using exact GMP rationals in a lazily-grown, process-lifetime cache (odd
+ * terms k > 1 are skipped: they vanish). With FLINT a single BernoulliB[n]
+ * past the cache is computed directly by arith_bernoulli_number. (The
  * same construction lives in src/zeta.c and src/polygamma.c; it is replicated
  * here to keep this module self-contained.)
  *
@@ -46,6 +48,11 @@
 
 #ifdef USE_MPFR
 #include <mpfr.h>
+#endif
+
+#ifdef USE_FLINT
+#include <flint/fmpq.h>
+#include <flint/arith.h>   /* arith_bernoulli_number */
 #endif
 
 /* Largest index for which BernoulliB[n] builds the exact number, and largest
@@ -77,8 +84,11 @@ static void bern_ensure(size_t upto) {
     for (size_t m = g_bern_len; m < newlen; m++) {
         mpq_init(g_bern[m]);
         if (m == 0) { mpq_set_ui(g_bern[m], 1, 1); continue; }
+        /* Odd m > 1: B_m = 0 exactly; no need to sum. */
+        if (m > 1 && (m & 1u)) { mpq_set_ui(g_bern[m], 0, 1); continue; }
         mpq_set_ui(sum, 0, 1);
         for (size_t k = 0; k < m; k++) {
+            if (k > 1 && (k & 1u)) continue;   /* B_k = 0 for odd k > 1 */
             mpz_bin_uiui(binz, (unsigned long)(m + 1), (unsigned long)k);
             mpq_set_z(factor, binz);
             mpq_mul(term, factor, g_bern[k]);
@@ -94,13 +104,34 @@ static void bern_ensure(size_t upto) {
     mpq_clears(sum, term, factor, (mpq_ptr)0);
 }
 
-/* B_idx into `out`. Odd indices above 1 are exactly zero. */
-static void bern_get_q(mpq_t out, size_t idx) {
+/* B_idx into `out`. Odd indices above 1 are exactly zero.
+ *
+ * `direct` asks for a single number (BernoulliB[n]) rather than a run of
+ * them (the polynomial): with FLINT, an index beyond the dense cache is then
+ * computed on its own by arith_bernoulli_number (tabulated / zeta-based /
+ * multi-modular by size, milliseconds at n = 5000) instead of by the O(n^2)
+ * recurrence over every smaller index, which took > 20 s at n = 5000
+ * (audit BernoulliB#1). */
+static void bern_get_q_ex(mpq_t out, size_t idx, bool direct) {
     if (idx > 1 && (idx & 1u)) { mpq_set_ui(out, 0, 1); return; }
+#ifdef USE_FLINT
+    if (direct && idx >= g_bern_len) {
+        fmpq_t b;
+        fmpq_init(b);
+        arith_bernoulli_number(b, (ulong)idx);
+        fmpq_get_mpq(out, b);
+        fmpq_clear(b);
+        return;
+    }
+#else
+    (void)direct;
+#endif
     bern_ensure(idx);
     if (idx < g_bern_len) mpq_set(out, g_bern[idx]);
     else mpq_set_ui(out, 0, 1);
 }
+
+static void bern_get_q(mpq_t out, size_t idx) { bern_get_q_ex(out, idx, false); }
 
 /* Build a canonical Integer/BigInt/Rational from an mpq via Times[num,
  * Power[den, -1]] so the evaluator normalises arbitrary-size components. */
@@ -185,7 +216,7 @@ static Expr* bern_one_arg(Expr* arg) {
 
     mpq_t q;
     mpq_init(q);
-    bern_get_q(q, (size_t)n);
+    bern_get_q_ex(q, (size_t)n, true);
 
     Expr* out;
     if (k == BIDX_EXACT) {

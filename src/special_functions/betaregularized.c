@@ -139,10 +139,71 @@ static bool br_pref(sdd s, double a, sdd t, double b, double* out) {
     return true;
 }
 
+/* log B(p, r), p, r > 0, without the cancellation of lgamma(p) + lgamma(r) -
+ * lgamma(p + r) at a large argument (lgamma(1e15) ~ 3e16 has an ulp of 4):
+ * with M = max, m = min >= 0 and M >= 10, the Stirling difference
+ *   lgamma(M + m) - lgamma(M) = (M - 1/2) log1p(m/M) + m log(M + m) - m
+ *                               + D(M + m) - D(M)
+ * carries no large cancelling terms. *mag gets the magnitude of the largest
+ * term formed, for the caller's rounding allowance. */
+static double br_log_beta(double p, double r, double* mag) {
+    double M = p > r ? p : r, m = p > r ? r : p;
+    if (M < 10.0) {
+        double v = lgamma(p) + lgamma(r) - lgamma(p + r);
+        *mag = fabs(lgamma(p)) + fabs(lgamma(r)) + fabs(lgamma(p + r));
+        return v;
+    }
+    double t1 = (M - 0.5) * log1p(m / M), t2 = m * log(M + m);
+    double d = t1 + t2 - m + br_stirling(M + m) - br_stirling(M);
+    double lm = lgamma(m);
+    *mag = fabs(t1) + fabs(t2) + m + fabs(lm);
+    return lm - d;
+}
+
+/* log of a rigorous upper bound on I_u(al, be), 0 < u < 1:
+ *   I_u = (1/B) int_0^u t^(al-1) (1-t)^(be-1) dt
+ *      <= u^al max(1, (1-u)^(be-1)) / (al B(al, be)),
+ * since (1-t)^(be-1) <= 1 for be >= 1 and <= (1-u)^(be-1) for be < 1.
+ * lu = log u and l1u = log(1 - u) are passed in so the caller can form them
+ * without rounding 1 - u. *mag: the magnitude of the terms summed. */
+static double br_log_upper(double lu, double l1u, double al, double be, double* mag) {
+    double mb;
+    double logB = br_log_beta(al, be, &mb);
+    double t = al * lu;
+    double v = t - log(al) - logB;
+    *mag = fabs(t) + fabs(log(al)) + mb;
+    if (be < 1.0) { v += (be - 1.0) * l1u; *mag += fabs((be - 1.0) * l1u); }
+    return v;
+}
+
+/* a + b >= 1e7, outside the continued fraction's and the Stirling
+ * prefactor's calibrated range. When x lies on the complement side
+ * (x >= (a+1)/(a+b+2)) and the complement I_(1-x)(b, a) is provably below
+ * e^-48 (< 2^-69), I_x(a, b) rounds to exactly 1.0: answer that. This is the
+ * regime of BetaRegularized[0.5, 2, 1.*^10] (audit BetaRegularized#1), which
+ * otherwise fell to arb's 2F1(a, 1 - b; a + 1; x) with a 1e10-sized upper
+ * parameter -- a series of ~1e10 terms that never returned. Everything else
+ * declines as before. */
+static bool br_large(double x, double a, double b, double* out) {
+    if (x == 0.0) { *out = 0.0; return true; }
+    if (x == 1.0) { *out = 1.0; return true; }
+    if (!(x >= (a + 1.0) / (a + b + 2.0))) return false;
+    /* the complement at u = 1 - x: log u = log1p(-x), log(1 - u) = log x */
+    double lu = log1p(-x), l1u = log(x);
+    double mag;
+    double lb = br_log_upper(lu, l1u, b, a, &mag);
+    /* each term carries a few ulps (lgamma, log, log1p): allow 1e-12 of the
+     * largest magnitude formed, far above the rounding actually committed */
+    if (!(lb + 1e-12 * mag < -48.0)) return false;   /* NaN-safe: declines */
+    *out = 1.0;
+    return true;
+}
+
 /* I_x(a, b), 0 <= x <= 1, a, b > 0 */
 static bool br_real(double x, double a, double b, double* out) {
     if (!(a > 0.0) || !(b > 0.0) || !(x >= 0.0) || !(x <= 1.0)) return false;
-    if (!(a + b < 1e7) || a < 1e-150 || b < 1e-150) return false;
+    if (a < 1e-150 || b < 1e-150) return false;
+    if (!(a + b < 1e7)) return isfinite(a + b) && br_large(x, a, b, out);
     if (x == 0.0) { *out = 0.0; return true; }
     if (x == 1.0) { *out = 1.0; return true; }
     sdd X = sdd_from(x), Y = sdd_two_sum(1.0, -x);           /* 1 - x, exact */

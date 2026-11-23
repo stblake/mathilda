@@ -333,7 +333,31 @@ bool sf_machine_li(double x, double* out) {
 
 bool sf_machine_expn(double nd, double x, double* out) {
     if (!(x > 0.0) || isinf(x)) return false;
-    if (nd != floor(nd) || nd < 0.0 || nd > 1.0e6) return false;
+    if (nd != floor(nd) || nd < 0.0) return false;
+    if (nd > 1.0e6) {
+        /* Large order: the expansion uniform in lambda = x/n >= 0 (DLMF 8.20.3),
+         *   E_n(x) ~ e^-x/(x+n) sum_k A_k(lambda) / ((1+lambda)^(2k) n^k),
+         *   A_0 = A_1 = 1, A_2 = 1 - 2l, A_3 = 1 - 8l + 6l^2,
+         *   A_4 = 1 - 22l + 58l^2 - 24l^3,
+         *   A_{k+1} = (1 - 2kl) A_k + l(1+l) A_k'.
+         * A_k has degree k-1 with coefficient magnitudes summing to (2k-1)!!
+         * at most, so |A_k(l)|/(1+l)^(2k) <= (2k-1)!! and term k is below
+         * (2k-1)!!/n^k: the first omitted one (k = 5, 945/n^5) is < 1e-27 for
+         * n > 1e6. This replaces a decline that sent ExpIntegralE[10^15, 1.]
+         * to an arb evaluation whose cost grows with n (> 30 s; audit
+         * ExpIntegralE#1). Doubles throughout: no 32-bit `long` for n. */
+        double ex = exp(-x);
+        if (ex == 0.0) { *out = 0.0; return true; }     /* IEEE underflow, as below */
+        double l = x / nd, onep = 1.0 + l;
+        double u = 1.0 / (onep * onep * nd);
+        double A2 = 1.0 - 2.0 * l;
+        double A3 = 1.0 + l * (-8.0 + 6.0 * l);
+        double A4 = 1.0 + l * (-22.0 + l * (58.0 - 24.0 * l));
+        double S = 1.0 + u * (1.0 + u * (A2 + u * (A3 + u * A4)));
+        double v = ex / (x + nd) * S;
+        *out = v;
+        return isfinite(v);
+    }
     long n = (long)nd;
     double v;
     if (n == 0) {

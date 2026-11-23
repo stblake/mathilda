@@ -984,7 +984,66 @@ Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a) {
     return nb_eval3(z, s, a, acb_dirichlet_lerch_phi);  /* (res, z, s, a, prec) */
 }
 
+/* The approximant of depth M of the positive continued fraction (DLMF 8.19.17
+ * before its even contraction, A&S 5.1.22)
+ *     e^x E_s(x) = 1/(x + s/(1 + 1/(x + (s+1)/(1 + 2/(x + (s+2)/(1 + ...)))))),
+ * partial numerators a_{2j-1} = s + j - 1, a_{2j} = j over denominators 1, x
+ * in turn: the tail beyond level M set to 0, evaluated backward. */
+static void nb_expint_cf_approx(arb_t out, const arb_t s, const arb_t x, slong M, slong prec) {
+    arb_t t, a;
+    arb_init(t); arb_init(a);
+    arb_zero(t);                                   /* tail */
+    for (slong lvl = M; lvl >= 1; lvl--) {
+        slong j = (lvl + 1) / 2;
+        if (lvl & 1) { arb_add_si(a, s, j - 1, prec); }   /* a = s + j - 1, b = 1 */
+        else         { arb_set_si(a, j); }                /* a = j, b = x */
+        /* t <- a / (b + t) */
+        if (lvl & 1) arb_add_ui(t, t, 1, prec);
+        else         arb_add(t, t, x, prec);
+        arb_div(t, a, t, prec);
+    }
+    arb_add(t, t, x, prec);
+    arb_inv(out, t, prec);
+    arb_clear(t); arb_clear(a);
+}
+
+/* E_s(x) for real s >= 1e6 and real x > 0. arb's general E_s costs time
+ * growing with s (ExpIntegralE[10^14, 1.] took 2.6 s, 10^15 did not return),
+ * and that is also where the machine kernel's underflow promotion lands
+ * (ExpIntegralE[10^15, 1000.] underflows a double and is recomputed here;
+ * audit ExpIntegralE#1). All elements of the fraction above are positive, so
+ * its approximants alternate about the value (successive ones bracket it):
+ * the union of depths M and M + 1 is a rigorous enclosure, and for s this
+ * large it is tight after a handful of levels. res is indeterminate outside
+ * this regime (the caller then uses arb's E_s). */
+static void nb_expint_large(acb_t res, const acb_t s, const acb_t z, slong prec) {
+    if (!acb_is_real(s) || !acb_is_real(z)) { acb_indeterminate(res); return; }
+    arb_t S, X, f0, f1, ex;
+    arb_init(S); arb_init(X); arb_init(f0); arb_init(f1); arb_init(ex);
+    acb_get_real(S, s);
+    acb_get_real(X, z);
+    int ok = 0;
+    if (!arb_is_positive(X) || !(arf_cmp_si(arb_midref(S), 1000000) > 0)) goto done;
+    for (slong M = 8; M <= 4 * prec + 64; M *= 2) {
+        nb_expint_cf_approx(f0, S, X, M, prec);
+        nb_expint_cf_approx(f1, S, X, M + 1, prec);
+        arb_union(f0, f0, f1, prec);
+        if (arb_rel_accuracy_bits(f0) >= prec - 4) { ok = 1; break; }
+    }
+    if (ok) {
+        arb_neg(ex, X);
+        arb_exp(ex, ex, prec);
+        arb_mul(acb_realref(res), f0, ex, prec);
+        arb_zero(acb_imagref(res));
+    }
+done:
+    if (!ok) acb_indeterminate(res);
+    arb_clear(S); arb_clear(X); arb_clear(f0); arb_clear(f1); arb_clear(ex);
+}
+
 Expr* flint_num_expint(const Expr* s, const Expr* z) {
+    Expr* v = nb_eval2(s, z, nb_expint_large);   /* declines outside its regime */
+    if (v) return v;
     return nb_eval2(s, z, acb_hypgeom_expint);    /* (res, s, z, prec) */
 }
 
@@ -2667,7 +2726,80 @@ static Expr* nb_eval2_series(const Expr* nu, const Expr* z, nb_fn2 f) {
     return out;
 }
 
+/* H_nu(z) for real nu and a large real z > 0: H_nu = Y_nu + K_nu (DLMF 11.6.1)
+ * with arb's rigorous Y_nu and the asymptotic series
+ *     K_nu(z) = (1/pi) sum_{k<l} Gamma(k+1/2) (z/2)^(nu-2k-1) / Gamma(nu+1/2-k) + R_l,
+ * whose remainder, for real nu, z > 0 and l >= nu - 1/2, has the sign of and
+ * is bounded by the first neglected term (DLMF 11.6(i)). The convergent 1F2
+ * of nb_struve_hl cancels ~1.44 z bits instead, so N[StruveH[0, 10^8], 20]
+ * started at 1.4e8 bits and never returned (audit StruveH#1). Applies when z
+ * is large against the precision and the order (the terms then fall below
+ * 2^-prec long before they turn); res is indeterminate otherwise. */
+static void nb_struve_h_large(acb_t res, const acb_t nu, const acb_t z, slong prec) {
+    if (!acb_is_real(nu) || !acb_is_real(z)) { acb_indeterminate(res); return; }
+    arb_t N, Z, h, w, t, K, g, e, f;
+    arb_init(N); arb_init(Z);
+    arb_init(h); arb_init(w); arb_init(t); arb_init(K); arb_init(g); arb_init(e);
+    arb_init(f);
+    acb_get_real(N, nu);
+    acb_get_real(Z, z);
+    double zd = arf_get_d(arb_midref(Z), ARF_RND_DOWN);
+    double nd = arf_get_d(arb_midref(N), ARF_RND_NEAR);
+    int ok = 0;
+    if (!arb_is_positive(Z) || !(zd > 2.0 * (double)prec + 64.0) ||
+        !(zd > 4.0 * (nd * nd + 1.0))) goto done;
+    arb_mul_2exp_si(h, Z, -1);                         /* z/2 */
+    arb_sqr(w, h, prec);                               /* (z/2)^2 */
+    /* t_0 = Gamma(1/2) (z/2)^(nu-1) / (pi Gamma(nu+1/2)) = (z/2)^(nu-1) / (sqrt(pi) Gamma(nu+1/2)) */
+    arb_set_d(e, 0.5);
+    arb_add(g, N, e, prec);
+    arb_rgamma(g, g, prec);
+    arb_sub_ui(f, N, 1, prec);
+    arb_pow(t, h, f, prec);
+    arb_mul(t, t, g, prec);
+    arb_const_sqrt_pi(f, prec);
+    arb_div(t, t, f, prec);
+    arb_set(K, t);
+    for (slong k = 0; k < 4 * prec + 1000; k++) {
+        /* t_{k+1} = t_k (k + 1/2)(nu - 1/2 - k) / (z/2)^2 */
+        arb_set_d(e, (double)k + 0.5);
+        arb_sub(f, N, e, prec);                        /* nu - 1/2 - k */
+        arb_mul(t, t, f, prec);
+        arb_mul(t, t, e, prec);
+        arb_div(t, t, w, prec);
+        if (arb_is_zero(t)) { ok = 1; break; }         /* terminated: an exact sum */
+        /* t is the first neglected term once it is negligible and l = k + 1
+         * satisfies l >= nu - 1/2 */
+        if ((double)(k + 1) >= nd - 0.5 + 1.0) {
+            mag_t mt, mk;
+            mag_init(mt); mag_init(mk);
+            arb_get_mag(mt, t);
+            arb_get_mag_lower(mk, K);
+            mag_mul_2exp_si(mk, mk, -(prec + 16));
+            int small = mag_cmp(mt, mk) <= 0;
+            if (small) arb_add_error_mag(K, mt);
+            mag_clear(mt); mag_clear(mk);
+            if (small) { ok = 1; break; }
+        }
+        arb_add(K, K, t, prec);
+    }
+    if (ok) {
+        acb_hypgeom_bessel_y(res, nu, z, prec);
+        arb_add(acb_realref(res), acb_realref(res), K, prec);
+        arb_zero(acb_imagref(res));
+    }
+done:
+    if (!ok) acb_indeterminate(res);
+    arb_clear(N); arb_clear(Z);
+    arb_clear(h); arb_clear(w); arb_clear(t); arb_clear(K); arb_clear(g); arb_clear(e);
+    arb_clear(f);
+}
+
 Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
+    /* large real z: the asymptotic route first (no 1.44 z-bit start); it
+     * declines (indeterminate -> NULL) outside its regime */
+    Expr* v = nb_eval2(nu, z, nb_struve_h_large);
+    if (v) return v;
     return nb_eval2_series(nu, z, nb_struve_h);
 }
 

@@ -465,6 +465,12 @@ Out[3]= 4.06998 + 3.40094*I
   `ExpIntegralE[n, packed]` now has a binary NDArray kernel (it threaded element by
   element before). Accuracy vs mpmath: median 0.4 ulp, max 4.3 ulp (real); max 3.8
   ulp (complex).
+- **Large order** (audit ExpIntegralE#1): for n > 10^6 the machine kernel uses the
+  expansion uniform in x/n (DLMF 8.20.3, four correction terms, omitted term below
+  1e-27), and arbitrary precision (and the MPFR recomputation of an underflowed
+  double) the positive continued fraction, whose consecutive approximants bracket
+  the value: `ExpIntegralE[10^15, 1.] = 3.67879*^-16` and `ExpIntegralE[10^15, 1000.]`
+  answer at once, where they took longer than 30 s.
 - Derivative: `D[ExpIntegralE[n, z], z] = -ExpIntegralE[n-1, z]`.
 - Mellin transform: `∫₀^∞ x^(s-1) ExpIntegralE[n, a x] dx = a^(-s) Γ(s)/(s+n-1)`
   (`Re s > 0`), closed by the operational-calculus layer of `Method -> "Mellin"`.
@@ -546,6 +552,13 @@ Out[4]= -ExpIntegralE[-1 + n, z]
   a complex `z`, a real `z < 0` with a complex value — goes to the arb kernel at
   53 bits and comes back as machine numbers
   (`StruveH[-3/2, 2. + I] = -0.646752 - 0.172081 I`).
+- **Large real z** (audit StruveH#1): the `Y_ν + K_ν` sum now stops once its terms
+  are below half an ulp (it ran into an `inf · 0` NaN past z ≈ 10^3 and declined,
+  sending `StruveH[0, 1.*^8]` to a 1.4·10^8-bit series), the phase is taken from
+  `sin z`, `cos z` of the exact double (not a rounded `z − c`), and arbitrary
+  precision at large real z uses `Y_ν` plus the `K_ν` series with its DLMF 11.6(i)
+  remainder bound; machine results are within 3 ulp of `BesselY + K` at 40 digits
+  up to z = 10^300.
 - Mellin transform: `∫₀^∞ x^(s-1) StruveH[0, a x] dx =
   π 2^(s-1) a^(-s)/(Cos(πs/2) Γ(1−s/2)²)`, closed by `Method -> "Mellin"` through
   the ₁F₂ reduction.
@@ -1940,7 +1953,10 @@ t·eˣᵗ/(eᵗ−1) = Σ_{n≥0} Bₙ(x) tⁿ/n!, and the numbers are Bₙ = B�
 
 - **Exact numbers.** A non-negative integer `n` gives the exact rational Bₙ
   from the recurrence B₀ = 1, Bₘ = −1/(m+1) Σ_{k=0}^{m−1} C(m+1, k) Bₖ
-  (lazily cached with GMP, so large indices stay exact). Odd `n > 1` give `0`,
+  (lazily cached with GMP, odd terms skipped, so large indices stay exact); with
+  FLINT a single `BernoulliB[n]` comes from `arith_bernoulli_number` instead
+  (`BernoulliB[5000]` in ~10 ms, where the recurrence took over 20 s; audit
+  BernoulliB#1). Odd `n > 1` give `0`,
   `BernoulliB[0] = 1`, `BernoulliB[1] = -1/2`; e.g. `BernoulliB[12] = -691/2730`.
 - **Polynomials.** For a non-negative integer `n`, `BernoulliB[n, x]` expands
   to Σ_{j=0}^{n} C(n, j) B_{n−j} xʲ with exact rational coefficients, staying
@@ -3777,7 +3793,11 @@ arguments and `z` outside `[0, 1]`). `BetaRegularized[z0, z1, a, b]` gives
   parts cancel exactly) for `a, b >= 10` -- with `1 - z` as a double-double. A
   complement below `1/8`, an exponent beyond 64, a non-converging fraction, and
   every complex, out-of-range or negative-parameter call go to arb
-  (`acb_hypgeom_beta_lower`, regularized) inside the kernel.
+  (`acb_hypgeom_beta_lower`, regularized) inside the kernel. For `a + b >= 1e7`,
+  where the fraction is not calibrated, a `z` on the complement side whose
+  complement has a rigorous upper bound below `e^-48` answers exactly `1.`
+  (`BetaRegularized[0.5, 2, 1.*^10]`, which hung in arb's `2F1(a, 1 - b; a + 1; z)`
+  with a 10^10-sized parameter; audit BetaRegularized#1).
 - **Arbitrary precision**: `arb_hypgeom_beta_lower` (real `z` in `[0, 1]`) /
   `acb_hypgeom_beta_lower` on the shared precision ladder; the four-argument form
   on its own ladder, so a cancelling difference climbs.
@@ -4096,6 +4116,13 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
     ~`e^40`, value ~`1e-3`), the machine path declines to the ball kernel, which
     answers correctly. The reference returns `~1e45` there; the value
     `N y_e(5 i)` is confirmed by an independent mpmath ODE integration.
+  - Far from the axis (Fourier window `sqrt|q| e^|Im z| > 1024`, audit
+    MathieuCPrime#4): the ball kernel continues analytically through the Bessel
+    expansion `Σ (-1)^k c_k C_{ν+2k}(2√q cos z)` (C = J, Y; the `tan z` form for an
+    odd function at a characteristic value), matched in value and slope at
+    `Im z = y0 ≤ 3`, instead of a Fourier sum of ~`sqrt q e^|Im z|` terms:
+    `MathieuCPrime[1.5, 2.0, 0.7 + 30 I]` (beyond `$MaxNumber`: `Overflow[]`) and
+    `MathieuC[1.5, 2.0, 20. I]` answer in milliseconds; `|Im z| > 2048` declines.
 - **Algorithm.** One plan per `(a, q)`, then a short sum per `z`:
   - `nu`: Hill's determinant, rewritten without the poles at `a = (2k)^2` (the
     sinc factor divided out analytically) and with its polynomially convergent

@@ -1369,6 +1369,15 @@ static bool struve_asymp(double nu, double z, double* val, double* relerr) {
         } else {
             if (atk > prevy) break;                     /* divergent: smallest term */
             prevy = atk; yfloor = atk;
+            /* Converged: this term, and every (smaller) one before the
+             * divergence, is below half an ulp of both sums, so adding them
+             * cannot change P or Q. Without this stop the loop ran all 400
+             * steps whenever the divergence point 2z lay beyond them, and for
+             * z >~ 1e3 a_k overflowed while z^-k underflowed: inf * 0 = NaN, a
+             * decline at every large z, and the arb fallback then needed
+             * ~1.44 z bits (StruveH[0, 1.*^8] never returned; audit
+             * StruveH#1). */
+            if (k >= 2 && atk < 1e-18 * fmin(fabs(P), fabs(Q))) break;
         }
         int m = k / 2;
         double sgn = (m % 2 == 0) ? 1.0 : -1.0;         /* (-1)^floor(k/2)        */
@@ -1377,7 +1386,20 @@ static bool struve_asymp(double nu, double z, double* val, double* relerr) {
     }
     if (yterm) yfloor = 2.0 * DBL_EPSILON * yabs;      /* rounding of a finite sum */
     double scale = sqrt(2.0 / (M_PI * z));
-    double Y = scale * (sin(omega) * P + cos(omega) * Q);
+    double so, co;
+    if (z < 32.0) {
+        so = sin(omega); co = cos(omega);
+    } else {
+        /* The rounding of omega = z - c is half an ulp of z: 7e-9 radians at
+         * z = 1e8, a relative error of that size in H (and worse near a zero).
+         * z itself is exact, so expand sin/cos(z - c) about it and let libm
+         * reduce z: the error is then that of c, ~1e-16 radians. */
+        double c = (0.5 * nu + 0.25) * M_PI, sz = sin(z), cz = cos(z);
+        double sc = sin(c), cc = cos(c);
+        so = sz * cc - cz * sc;
+        co = cz * cc + sz * sc;
+    }
+    double Y = scale * (so * P + co * Q);
 
     double w = 0.25 * z * z;
     double c = nu + 0.5;
