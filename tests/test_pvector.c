@@ -124,7 +124,9 @@ static void test_equality_hash(void) {
 static void test_printing(void) {
     assert_true("ToString[PVector[{1, 2, 3}]] === \"PVector[<3>]\"");
     assert_true("ToString[PVector[]] === \"PVector[<0>]\"");
-    assert_true("StringQ[ToString[PVector[{1, 2, 3}], InputForm]] && StringQ[ToString[PVector[{1}], TeXForm]]");
+    assert_true("ToString[PVector[{1, 2, 3}], InputForm] === \"PVector[<3>]\"");
+    assert_true("StringContainsQ[ToString[PVector[{1, 2, 3}], TeXForm], \"PVector\"] && StringContainsQ[ToString[PVector[{1, 2, 3}], TeXForm], \"3\"]");
+    assert_true("StringContainsQ[ToString[LinkedList[{1, 2}], TeXForm], \"LinkedList\"]");
 }
 
 static void test_nesting(void) {

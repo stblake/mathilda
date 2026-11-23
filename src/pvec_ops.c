@@ -1,6 +1,7 @@
 /* pvec_ops.c -- PVector at the expression level.  See pvec_ops.h. */
 #include "pvec_ops.h"
 #include "pvec.h"
+#include "ds_ops.h"
 #include "eval.h"
 #include "attr.h"
 #include "symtab.h"
@@ -102,9 +103,9 @@ static Expr* delisted_call(const Expr* res) {
 }
 
 /* Wrap a List answer back into a PVector; anything else is returned as is. */
-static Expr* wrap_result(Expr* r) {
+static Expr* wrap_result(const Expr* like, Expr* r) {
     if (!r) return NULL;
-    Expr* w = pvec_make(r);
+    Expr* w = ds_rebuild_like(like, r);
     if (!w) return r;
     expr_free(r);
     return w;
@@ -149,7 +150,10 @@ Expr* pvec_gate(Expr* res, const char* head, uint32_t attrs) {
         act = PG_WRAP;                                    /* listable arithmetic: pv + 1 */
     }
     Expr* r = eval_and_free(delisted_call(res));
-    return act == PG_WRAP ? wrap_result(r) : r;
+    if (act != PG_WRAP) return r;
+    for (size_t i = 0; i < argc; i++)               /* the kind of the first vector argument */
+        if (res->data.function.args[i]->type == EXPR_PVEC) return wrap_result(res->data.function.args[i], r);
+    return r;
 }
 
 /* ---- registration ---------------------------------------------------------- */

@@ -8,6 +8,7 @@
 #include "sparse/sparse.h"
 #include "part.h"
 #include "pvec.h"
+#include "pvec_ops.h"
 
 #define DS_MAX_TYPES 64
 static const DsOps* g_rows[DS_MAX_TYPES];
@@ -88,13 +89,24 @@ static Expr* pv_part_row(Expr* e, Expr** idx, size_t n, int* st) {
 }
 static Expr* pv_to_list_row(const Expr* e) { return pv_to_list(e->data.pvec); }
 
+/* ---- element access and rebuild -------------------------------------------- */
+static Expr* ll_get_row(const Expr* e, int64_t i) { return ll_get(e->data.llist, i); }
+static Expr* pv_get_row(const Expr* e, int64_t i) { return pv_get(e->data.pvec, i); }
+static Expr* ll_from_list_row(const Expr* list) {
+    if (!ll_is_list_source(list)) return NULL;
+    LinkedList* ll = ll_new();
+    if (!ll_append_elements(ll, list)) { ll_release(ll); return NULL; }
+    return expr_new_linkedlist(ll);
+}
+static Expr* pv_from_list_row(const Expr* list) { return pvec_make(list); }
+
 /* A packed list/array matches _List or _NDArray by its presentation; the
  * matcher keeps its own NDArray head logic, so no head_is is given here. */
 static const DsOps ROW_NDARRAY    = { EXPR_NDARRAY,    "NDArray",    nd_head,      NULL,       nd_length, nd_dims, nd_part_row, nd_to_list };
 static const DsOps ROW_SPARSE     = { EXPR_SPARSE,     "SparseArray", sp_head,     sp_head_is, sp_length, sp_dims, sp_part_row, sp_to_list };
-static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row };
+static const DsOps ROW_LINKEDLIST = { EXPR_LINKEDLIST, "LinkedList", ll_head_sym,  ll_head_is, ll_len,    NULL, ll_part_row, ll_to_list_row, ll_get_row, ll_from_list_row };
 
-static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row };
+static const DsOps ROW_PVEC       = { EXPR_PVEC,       "PVector",    pv_head_row,  pv_head_is, pv_len_row, pv_dims_row, pv_part_row, pv_to_list_row, pv_get_row, pv_from_list_row };
 
 static void ds_init(void) {
     g_init = true;
@@ -127,4 +139,14 @@ Expr* ds_to_list(const Expr* e, bool* handled) {
     if (!o || !o->to_list) { *handled = false; return NULL; }
     *handled = true;
     return o->to_list(e);
+}
+
+Expr* ds_get(const Expr* e, int64_t i) {
+    const DsOps* o = ds_ops(e->type);
+    return (o && o->get) ? o->get(e, i) : NULL;
+}
+
+Expr* ds_rebuild_like(const Expr* like, const Expr* list) {
+    const DsOps* o = ds_ops(like->type);
+    return (o && o->from_list) ? o->from_list(list) : NULL;
 }

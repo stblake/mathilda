@@ -75,6 +75,14 @@ static void test_normal(void) {
     assert_true("Normal[<|a -> 1|>] === {a -> 1}");
     assert_true("Normal[x] === x");
 }
+static void test_get_rebuild(void) {
+    ASSERT_MSG(ds_ops(EXPR_PVEC) && ds_ops(EXPR_PVEC)->get && ds_ops(EXPR_PVEC)->from_list, "PVector row has get and from_list");
+    ASSERT_MSG(ds_ops(EXPR_LINKEDLIST)->get && ds_ops(EXPR_LINKEDLIST)->from_list, "LinkedList row has get and from_list");
+    assert_true("PVectorQ[PVector[{1, 2}]] && Normal[PVector[{1, 2}] /. x_ :> x] === {1, 2}");
+    /* a structure-preserving head keeps the kind of its argument */
+    assert_true("PVectorQ[Reverse[PVector[{1, 2, 3}]]] && Head[Reverse[LinkedList[{1, 2, 3}]]] === LinkedList");
+    assert_true("StringContainsQ[ToString[LinkedList[{1}], TeXForm], \"LinkedList\"]");
+}
 
 int main(void) {
     symtab_init();
@@ -86,6 +94,7 @@ int main(void) {
     TEST(test_blank_head_match);
     TEST(test_part);
     TEST(test_normal);
+    TEST(test_get_rebuild);
     printf("All ds_ops tests passed!\n");
     return 0;
 }

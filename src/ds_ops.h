@@ -47,6 +47,12 @@ typedef struct DsOps {
     /* Materialise as an ordinary expression (what Normal[] returns): a new owned
      * value, NULL on failure.  NULL slot = the kind has no such conversion. */
     Expr* (*to_list)(const Expr* e);
+    /* Element i (0-based, in range) as a new reference; NULL slot = the kind has
+     * no O(1)/O(log n) random access (the caller iterates via to_list). */
+    Expr* (*get)(const Expr* e, int64_t i);
+    /* Rebuild a value of this kind from a plain List (borrowed); NULL when the
+     * kind cannot be built that way or `list` is not a List.  New reference. */
+    Expr* (*from_list)(const Expr* list);
 } DsOps;
 
 enum { DS_PART_DONE = 0, DS_PART_DEGRADE = 1, DS_PART_DECLINE = 2 };
@@ -58,6 +64,15 @@ Expr* ds_part(Expr* e, Expr** idx, size_t n, int* st);
 /* Normal[] through the row.  *handled is false (and NULL returned) when the
  * kind has no to_list slot, so the caller can fall through. */
 Expr* ds_to_list(const Expr* e, bool* handled);
+
+/* Element i through the row (see DsOps.get); NULL when the kind has no get. */
+Expr* ds_get(const Expr* e, int64_t i);
+
+/* A value of the same kind as `like`, rebuilt from the List `list` (borrowed):
+ * what a structure-preserving operation does with its List answer.  NULL when
+ * `like`'s kind has no from_list or `list` is not a List -- the caller then
+ * keeps the List. */
+Expr* ds_rebuild_like(const Expr* like, const Expr* list);
 
 /* The ops row for a payload kind, or NULL for kinds with none (atoms, function
  * nodes).  O(1): a small array indexed by ExprType. */
