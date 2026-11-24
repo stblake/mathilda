@@ -234,6 +234,40 @@ static void readn_message(const ReadCfg* cfg, const char* tok) {
     mth_message(cfg->msg_head, "readn", "Invalid input `%s` found when a number was expected.", tok ? tok : "");
 }
 
+/* Is `tok` a number LITERAL: [+-] digits [. digits] | [+-] . digits, then an optional exponent
+ * written e/E, *^ or *10^ with an optional sign? On success writes into `out` (capacity >= 2*strlen+1)
+ * the same literal with its exponent respelled as *^, which the expression parser reads as one
+ * number. Anything else -- 1/2, 2^3, Print["x"], a symbol -- is not a number in the file, and must
+ * never reach the evaluator: Read[s, Number] reads data, it does not run it. */
+static int number_literal(const char* tok, char* out) {
+    const char* p = tok;
+    char* o = out;
+    int digits = 0, point = 0;
+    if (*p == '+' || *p == '-') *o++ = *p++;
+    while (*p >= '0' && *p <= '9') { *o++ = *p++; digits++; }
+    if (*p == '.') {
+        point = 1;
+        *o++ = *p++;
+        while (*p >= '0' && *p <= '9') { *o++ = *p++; digits++; }
+    }
+    if (!digits) return 0;
+    int sci = (p[0] == '*' && p[1] == '^') ? 2
+            : (p[0] == '*' && p[1] == '1' && p[2] == '0' && p[3] == '^') ? 4
+            : (*p == 'e' || *p == 'E') ? 1 : 0;
+    if (sci) {
+        /* An e/E exponent is the C/Fortran spelling of a REAL (1e2 is 100.); *^ and *10^
+         * keep the language's own meaning (exact when the mantissa is). */
+        if (sci == 1 && !point) *o++ = '.';
+        p += sci;
+        *o++ = '*'; *o++ = '^';
+        if (*p == '+' || *p == '-') *o++ = *p++;
+        if (!(*p >= '0' && *p <= '9')) return 0;
+        while (*p >= '0' && *p <= '9') *o++ = *p++;
+    }
+    *o = '\0';
+    return *p == '\0';
+}
+
 /* Read one numeric token. `as_real` forces an approximate result. Returns a
  * numeric Expr, or $Failed (with a message) for a malformed token, or NULL at
  * EOF. Owns the returned Expr. */
@@ -245,7 +279,10 @@ static Expr* read_number(ReadCursor* c, const ReadCfg* cfg, int as_real) {
         if (!tok) return NULL;              /* EOF */
     } while (tok[0] == '\0');               /* skip empty (never a number) */
 
-    Expr* parsed = parse_expression(tok);
+    char* lit = malloc(2 * strlen(tok) + 3);
+    if (!lit) { free(tok); return expr_new_symbol(SYM_DollarFailed); }
+    Expr* parsed = number_literal(tok, lit) ? parse_expression(lit) : NULL;
+    free(lit);
     if (!parsed) {
         readn_message(cfg, tok);
         free(tok);

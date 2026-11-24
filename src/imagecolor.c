@@ -269,7 +269,25 @@ static Expr* builtin_colorquantize(Expr* res)
         qchan = best_ch;
         qsort(qidx + boxes[best_b].start, boxes[best_b].len, sizeof(size_t), qcmp);
         {
-            size_t half = boxes[best_b].len / 2;
+            /* Cut at a VALUE boundary: the position nearest the median at which the sorted channel
+             * actually changes. Cutting at len/2 itself split a run of identical colours between two
+             * boxes, so identical pixels came back as different colours and a box's mean invented a
+             * colour the image does not hold (red and blue averaged to purple for an image that
+             * already had only two colours). A boundary exists because best_range > 0. */
+            size_t st = boxes[best_b].start, len = boxes[best_b].len, mid = len / 2, half = 0, dlt;
+            for (dlt = 0; dlt < len && !half; dlt++) {
+                size_t cand[2];
+                int nc = 0, q;
+                if (mid >= dlt) cand[nc++] = mid - dlt;
+                if (dlt && mid + dlt < len) cand[nc++] = mid + dlt;
+                for (q = 0; q < nc && !half; q++) {
+                    size_t sp = cand[q];
+                    if (sp >= 1 && sp < len
+                        && qbuf[qidx[st + sp - 1] * 3 + qchan] < qbuf[qidx[st + sp] * 3 + qchan])
+                        half = sp;
+                }
+            }
+            if (!half) half = mid;      /* unreachable: the range is positive */
             Box lo = { boxes[best_b].start, half };
             Box hi = { boxes[best_b].start + half, boxes[best_b].len - half };
             boxes[best_b] = lo;
@@ -294,7 +312,10 @@ static Expr* builtin_colorquantize(Expr* res)
                 out[p * c] = sum[0]; out[p * c + 1] = sum[1]; out[p * c + 2] = sum[2];
                 if (c == 4) out[p * c + 3] = buf[p * c + 3];
             } else {
-                out[p * c] = luma(sum[0], sum[1], sum[2]);
+                /* A grey pixel was copied into three identical channels, so their mean IS the
+                 * grey value; recombining through the luminance weights (which do not sum to
+                 * exactly 1.0 in binary) drifted 0.5 to 0.49999999999999994. */
+                out[p * c] = sum[0];
                 if (c == 2) out[p * c + 1] = buf[p * c + 1];
             }
         }

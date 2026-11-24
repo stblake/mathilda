@@ -1393,6 +1393,7 @@ if(USE_GRAPHICS)
         ../src/graphics/render.c
         ../src/graphics/render3d.c
         ../src/graphics/label_font.c
+        ../src/graphics/gl_probe.c
     )
 endif()
 

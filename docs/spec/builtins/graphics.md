@@ -1539,7 +1539,7 @@ Histogram[data, {step}, opts...]
 Histogram[data, {min, max, step}, opts...]
 ```
 
-Bins numeric `data` and draws a frequency histogram. Default bin count: Sturges' rule (`⌈log₂(n)⌉ + 1`). Options: `ChartStyle`, `BarSpacing` (default `0.2`), standard `Graphics` options. Defaults: `Axes→True`, `AspectRatio→0.618`.
+Bins numeric `data` and draws a frequency histogram. Default bin count: Sturges' rule (`⌈log₂(n)⌉ + 1`). With an explicit `{min, max, step}` the bins are left-closed, `[min + k step, min + (k+1) step)`, and data outside them is **not counted** (`Histogram[{1, 5, 9, 15}, {0, 10, 5}]` has bar heights 1 and 2: 15 is in no bin). Options: `ChartStyle`, `BarSpacing` (default `0.2`), standard `Graphics` options. Defaults: `Axes→True`, `AspectRatio→0.618`.
 
 **Examples:**
 

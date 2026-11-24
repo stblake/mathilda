@@ -16,6 +16,7 @@
 #include "pca.h"        /* ml_pca, ml_column_mean -- shared with the reducer */
 #include "classify.h"
 #include "predict.h"
+#include "eval.h"       /* evaluate: basis-function values for LinearModelFit[data, funs, vars] */
 
 /* Solve the normal equations (A'A) c = A'y where A is [1 | x], by Gaussian
  * elimination with partial pivoting.
@@ -32,22 +33,33 @@
  */
 bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef) {
     if (!x || !y || !coef || n == 0 || dim == 0) return false;
-    size_t p = dim + 1;                       /* +1 for the intercept */
-    if (n < p) return false;                  /* underdetermined: no unique answer */
+    if (n < dim + 1) return false;            /* underdetermined: no unique answer */
 
-    double* a = calloc(p * (p + 1), sizeof(double));   /* augmented [A'A | A'y] */
-    if (!a) return false;
+    /* CENTRE FIRST. With an intercept the slopes are the least-squares solution of the
+     * centred problem (x - xbar) b = y - ybar, and the intercept is ybar - xbar . b. Forming
+     * the normal equations on the raw columns instead put sum(1) = n next to sum(x^2) ~ n x^2
+     * in one matrix: for x ~ 1e8 that is a condition number ~1e17, and an exactly collinear
+     * data set came back with slope 1.68 instead of 2. Centring removes the offset, which is
+     * what dominated the conditioning, and costs one pass. */
+    size_t p = dim;
+    double* xbar = calloc(dim, sizeof(double));
+    double* a = calloc(p * (p + 1), sizeof(double));   /* augmented [Xc'Xc | Xc'yc] */
+    if (!xbar || !a) { free(xbar); free(a); return false; }
+    double ybar = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        ybar += y[i];
+        for (size_t j = 0; j < dim; j++) xbar[j] += x[i * dim + j];
+    }
+    ybar /= (double)n;
+    for (size_t j = 0; j < dim; j++) xbar[j] /= (double)n;
 
     for (size_t i = 0; i < n; i++) {
-        /* Row i of the design matrix is (1, x_i1, ..., x_id), formed on the fly
-         * rather than materialised -- it is the only place the intercept exists. */
+        double yc = y[i] - ybar;
         for (size_t r = 0; r < p; r++) {
-            double ar = (r == 0) ? 1.0 : x[i * dim + (r - 1)];
-            for (size_t c = 0; c < p; c++) {
-                double ac = (c == 0) ? 1.0 : x[i * dim + (c - 1)];
-                a[r * (p + 1) + c] += ar * ac;
-            }
-            a[r * (p + 1) + p] += ar * y[i];
+            double ar = x[i * dim + r] - xbar[r];
+            for (size_t c = 0; c < p; c++)
+                a[r * (p + 1) + c] += ar * (x[i * dim + c] - xbar[c]);
+            a[r * (p + 1) + p] += ar * yc;
         }
     }
 
@@ -59,7 +71,7 @@ bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef
         }
         /* A zero pivot is a collinear feature set. Scaled against the largest
          * diagonal so the test is not a bare absolute tolerance on unscaled data. */
-        if (!(best > 1e-12)) { free(a); return false; }
+        if (!(best > 1e-12)) { free(a); free(xbar); return false; }
         if (piv != c)
             for (size_t k = 0; k <= p; k++) {
                 double t = a[c * (p + 1) + k];
@@ -74,8 +86,13 @@ bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef
                 a[r * (p + 1) + k] -= f * a[c * (p + 1) + k];
         }
     }
-    for (size_t r = 0; r < p; r++) coef[r] = a[r * (p + 1) + p] / a[r * (p + 1) + r];
-    free(a);
+    double icpt = ybar;
+    for (size_t r = 0; r < p; r++) {
+        coef[r + 1] = a[r * (p + 1) + p] / a[r * (p + 1) + r];
+        icpt -= coef[r + 1] * xbar[r];
+    }
+    coef[0] = icpt;
+    free(a); free(xbar);
     return true;
 }
 
@@ -283,7 +300,199 @@ static Expr* builtin_predict(Expr* res) {
  * offered: the same coefficients Predict finds, reached through a name a reader of
  * regression code will look for. Its own properties (RSquared, standard errors,
  * ANOVA) are a separate piece of work and are NOT silently approximated. */
+/* ---- LinearModelFit[data, funs, vars]: a fit in the span of basis functions ----
+ *
+ * The model is y = c0 + sum_k c_k f_k(vars). The constant basis function is always present (the
+ * reference's IncludeConstantBasis default), so the fit is exactly ml_ols applied to the VALUES of
+ * the non-constant basis functions at the data points: those values are the features, and the
+ * centring there handles an offset abscissa here as well as in LinearModelFit[data]. A basis
+ * element free of every variable is the constant itself and is not a second column (it would be
+ * collinear with the intercept).
+ *
+ * Result: FittedModel["Linear", {bestFit, params, basis, vars}, nvars, nbasis], with
+ * bestFit = params . basis. model[v1, ...] substitutes into bestFit; "BestFit",
+ * "BestFitParameters", "BasisFunctions" and "Function" are properties. Regression diagnostics
+ * are NOT offered (see the spec page). */
+
+static bool lmf_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* Does `e` contain any of the variable symbols (interned names compare by pointer)? */
+static bool lmf_mentions(const Expr* e, Expr* const* vars, size_t nv) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t j = 0; j < nv; j++)
+            if (e->data.symbol.name == vars[j]->data.symbol.name) return true;
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (lmf_mentions(e->data.function.head, vars, nv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (lmf_mentions(e->data.function.args[i], vars, nv)) return true;
+    return false;
+}
+
+/* N[{f1, ...} /. {x1 -> p1, ...}] read into out[0 .. nf-1]. */
+static bool lmf_basis_values(Expr* const* fs, size_t nf, Expr* const* vars, size_t nv,
+                             const double* pt, double* out) {
+    Expr** fl = malloc(sizeof(Expr*) * nf);
+    Expr** rl = malloc(sizeof(Expr*) * nv);
+    if (!fl || !rl) { free(fl); free(rl); return false; }
+    for (size_t k = 0; k < nf; k++) fl[k] = expr_copy(fs[k]);
+    for (size_t j = 0; j < nv; j++) {
+        Expr* ra[2];
+        ra[0] = expr_copy(vars[j]);
+        ra[1] = expr_new_real(pt[j]);
+        rl[j] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+    }
+    Expr* ra2[2];
+    ra2[0] = expr_new_function(expr_new_symbol(SYM_List), fl, nf);
+    ra2[1] = expr_new_function(expr_new_symbol(SYM_List), rl, nv);
+    free(fl); free(rl);
+    Expr* na[1];
+    na[0] = expr_new_function(expr_new_symbol(SYM_ReplaceAll), ra2, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_N), na, 1);
+    Expr* v = evaluate(call);
+    expr_free(call);
+    bool ok = v && lmf_is_list(v) && v->data.function.arg_count == nf;
+    double im = 0.0;
+    for (size_t k = 0; ok && k < nf; k++)
+        ok = na_read_scalar(v->data.function.args[k], &out[k], &im) && im == 0.0
+          && isfinite(out[k]);
+    expr_free(v);
+    return ok;
+}
+
+static Expr* lmf_basis_fit(Expr* res) {
+    Expr* data = res->data.function.args[0];
+    Expr* fe   = res->data.function.args[1];
+    Expr* ve   = res->data.function.args[2];
+    if (!lmf_is_list(data) || data->data.function.arg_count == 0) return NULL;
+
+    /* Variables: a symbol or a list of symbols. */
+    size_t nv = lmf_is_list(ve) ? ve->data.function.arg_count : 1;
+    Expr* const* vars = lmf_is_list(ve) ? ve->data.function.args : &res->data.function.args[2];
+    if (nv == 0) return NULL;
+    for (size_t j = 0; j < nv; j++)
+        if (!vars[j] || vars[j]->type != EXPR_SYMBOL) return NULL;
+
+    /* Non-constant basis functions, in order. */
+    size_t nf_all = lmf_is_list(fe) ? fe->data.function.arg_count : 1;
+    Expr* const* fall = lmf_is_list(fe) ? fe->data.function.args : &res->data.function.args[1];
+    Expr** fs = malloc(sizeof(Expr*) * (nf_all ? nf_all : 1));
+    if (!fs) return NULL;
+    size_t nf = 0;
+    for (size_t k = 0; k < nf_all; k++)
+        if (lmf_mentions(fall[k], vars, nv)) fs[nf++] = fall[k];
+    if (nf == 0) { free(fs); return NULL; }
+
+    /* Data: {y1, y2, ...} with one variable taking 1, 2, ...; or rows {x1, ..., xnv, y}. */
+    size_t n = data->data.function.arg_count;
+    double* pts  = malloc(sizeof(double) * n * nv);
+    double* y    = malloc(sizeof(double) * n);
+    double* fx   = malloc(sizeof(double) * n * nf);
+    double* coef = malloc(sizeof(double) * (nf + 1));
+    Expr* out = NULL;
+    bool ok = pts && y && fx && coef;
+    bool rows = ok && lmf_is_list(data->data.function.args[0]);
+    if (ok && !rows && nv != 1) ok = false;
+    double im = 0.0;
+    for (size_t i = 0; ok && i < n; i++) {
+        Expr* r = data->data.function.args[i];
+        if (rows) {
+            if (!lmf_is_list(r) || r->data.function.arg_count != nv + 1) { ok = false; break; }
+            for (size_t j = 0; ok && j <= nv; j++) {
+                double v = 0.0;
+                ok = na_read_scalar(r->data.function.args[j], &v, &im) && im == 0.0;
+                if (j < nv) pts[i * nv + j] = v; else y[i] = v;
+            }
+        } else {
+            pts[i] = (double)(i + 1);
+            ok = na_read_scalar(r, &y[i], &im) && im == 0.0;
+        }
+    }
+    /* The basis functions are arbitrary user expressions, so their values come from the
+     * evaluator, one point at a time. */
+    for (size_t i = 0; ok && i < n; i++)
+        ok = lmf_basis_values(fs, nf, vars, nv, pts + i * nv, fx + i * nf);
+
+    if (ok && ml_ols(fx, y, n, nf, coef)) {
+        /* basis = {1, f1, ...}; bestFit = c0 + c1 f1 + ... */
+        Expr** bl = malloc(sizeof(Expr*) * (nf + 1));
+        Expr** tl = malloc(sizeof(Expr*) * (nf + 1));
+        Expr** vl = malloc(sizeof(Expr*) * nv);
+        if (bl && tl && vl) {
+            bl[0] = expr_new_integer(1);
+            tl[0] = expr_new_real(coef[0]);
+            for (size_t k = 0; k < nf; k++) {
+                Expr* ta[2];
+                bl[k + 1] = expr_copy(fs[k]);
+                ta[0] = expr_new_real(coef[k + 1]);
+                ta[1] = expr_copy(fs[k]);
+                tl[k + 1] = expr_new_function(expr_new_symbol(SYM_Times), ta, 2);
+            }
+            for (size_t j = 0; j < nv; j++) vl[j] = expr_copy(vars[j]);
+            Expr* pay[4];
+            pay[0] = expr_new_function(expr_new_symbol(SYM_Plus), tl, nf + 1);
+            pay[1] = ml_list_of_reals(coef, nf + 1);
+            pay[2] = expr_new_function(expr_new_symbol(SYM_List), bl, nf + 1);
+            pay[3] = expr_new_function(expr_new_symbol(SYM_List), vl, nv);
+            Expr* a4[4];
+            a4[0] = expr_new_string("Linear");
+            a4[1] = expr_new_function(expr_new_symbol(SYM_List), pay, 4);
+            a4[2] = expr_new_integer((int64_t)nv);
+            a4[3] = expr_new_integer((int64_t)(nf + 1));
+            out = expr_new_function(expr_new_symbol(SYM_FittedModel), a4, 4);
+        }
+        free(bl); free(tl); free(vl);
+    }
+    free(fs); free(pts); free(y); free(fx); free(coef);
+    return out;
+}
+
+/* FittedModel[...][v1, ...] substitutes into the best fit; FittedModel[...]["prop"] reads a
+ * property. Anything else stays unevaluated. */
+static Expr* lmf_apply(Expr* head, Expr** args, size_t argc) {
+    if (head->data.function.arg_count != 4) return NULL;
+    Expr* pay = head->data.function.args[1];
+    if (!lmf_is_list(pay) || pay->data.function.arg_count != 4) return NULL;
+    Expr* best = pay->data.function.args[0];
+    Expr* vl   = pay->data.function.args[3];
+    if (!lmf_is_list(vl)) return NULL;
+    if (argc == 1 && args[0] && args[0]->type == EXPR_STRING) {
+        const char* q = args[0]->data.string;
+        if (strcmp(q, "BestFit") == 0) return expr_copy(best);
+        if (strcmp(q, "BestFitParameters") == 0) return expr_copy(pay->data.function.args[1]);
+        if (strcmp(q, "BasisFunctions") == 0) return expr_copy(pay->data.function.args[2]);
+        if (strcmp(q, "Function") == 0) {
+            Expr* fa[2];
+            fa[0] = expr_copy(vl);
+            fa[1] = expr_copy(best);
+            return expr_new_function(expr_new_symbol(SYM_Function), fa, 2);
+        }
+        return NULL;
+    }
+    if (argc == 0 || argc != vl->data.function.arg_count) return NULL;
+    Expr** rl = malloc(sizeof(Expr*) * argc);
+    if (!rl) return NULL;
+    for (size_t j = 0; j < argc; j++) {
+        Expr* ra[2];
+        ra[0] = expr_copy(vl->data.function.args[j]);
+        ra[1] = expr_copy(args[j]);
+        rl[j] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+    }
+    Expr* ra2[2];
+    ra2[0] = expr_copy(best);
+    ra2[1] = expr_new_function(expr_new_symbol(SYM_List), rl, argc);
+    free(rl);
+    return expr_new_function(expr_new_symbol(SYM_ReplaceAll), ra2, 2);
+}
+
 static Expr* builtin_linear_model_fit(Expr* res) {
+    if (res->data.function.arg_count == 3) return lmf_basis_fit(res);
     if (res->data.function.arg_count != 1) return NULL;
     size_t n, dim; double* x = NULL; double* y = NULL;
     if (!ml_read_training(res->data.function.args[0], &n, &dim, &x, &y)) return NULL;
@@ -445,6 +654,7 @@ bool ml_model_apply_probe(Expr* head) {
     if (!hh || hh->type != EXPR_SYMBOL) return false;
     const char* n = hh->data.symbol.name;
     return n == SYM_PredictorFunction
+        || n == SYM_FittedModel
         || n == SYM_DimensionReducerFunction
         || n == SYM_ClassifierFunction;
 }
@@ -457,6 +667,8 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
         return ml_reducer_apply(head, args, argc);
     if (hh->data.symbol.name == SYM_ClassifierFunction)
         return ml_classifier_apply(head, args, argc);
+    if (hh->data.symbol.name == SYM_FittedModel)
+        return lmf_apply(head, args, argc);
     if (hh->data.symbol.name != SYM_PredictorFunction) return NULL;
     if (head->data.function.arg_count != 4 || argc != 1) return NULL;
 
@@ -594,10 +806,21 @@ void ml_predict_init(void) {
     symtab_get_def("LinearModelFit")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LinearModelFit",
         "LinearModelFit[data] fits a linear model with an intercept and returns a "
-        "PredictorFunction carrying its coefficients. Wolfram's version returns a "
+        "PredictorFunction carrying its coefficients. LinearModelFit[data, {f1, ...}, vars] "
+        "fits c0 + c1 f1 + ... by least squares (data {y1, ...} at x = 1, 2, ..., or rows "
+        "{x1, ..., y}) and returns a FittedModel: model[x] evaluates the fit, and "
+        "\"BestFit\", \"BestFitParameters\", \"BasisFunctions\", \"Function\" are its "
+        "properties. Wolfram's version returns a "
         "FittedModel with regression diagnostics (RSquared, standard errors, ANOVA); "
         "those are not implemented and are not approximated. The coefficients are the "
         "same ones Predict finds.");
+
+    symtab_get_def("FittedModel")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FittedModel",
+        "FittedModel[\"Linear\", {bestFit, params, basis, vars}, nvars, nbasis] is the model "
+        "LinearModelFit[data, funs, vars] returns. model[x, ...] evaluates the fit; "
+        "\"BestFit\", \"BestFitParameters\", \"BasisFunctions\" and \"Function\" are its "
+        "properties.");
 
     symtab_get_def("PredictorFunction")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("PredictorFunction",

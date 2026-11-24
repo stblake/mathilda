@@ -276,6 +276,7 @@ extern const char* SYM_AiryBi;
 extern const char* SYM_AiryBiPrime;
 extern const char* SYM_InterpolatingFunction;
 extern const char* SYM_PredictorFunction;
+extern const char* SYM_FittedModel;
 extern const char* SYM_LearnedDistribution;
 extern const char* SYM_ClassifierFunction;
 extern const char* SYM_DimensionReducerFunction;

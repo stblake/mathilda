@@ -1213,7 +1213,10 @@ Reduces an image to at most `n` colours.
 - Median cut rather than k-means because it is **deterministic**: a palette that depended on the
   random stream could be neither tested nor documented.
 - Channel count and dimensions are preserved; alpha passes through.
-- Asking for more colours than the image holds cannot invent any.
+- Asking for more colours than the image holds cannot invent any. A box is cut at the **value
+  boundary** nearest its median, never inside a run of one value, so identical pixels always stay
+  together and an image with at most `n` colours comes back unchanged (exactly: a grey image's level
+  is the mean of identical values, not a luminance recombination).
 
 #### Basic Examples
 
@@ -2274,6 +2277,13 @@ Out[2]= -Image-
 
 `GradientFilter[image]` gives the gradient magnitude `Sqrt[dx² + dy²]`. Attributes: `Protected`.
 
+- `GradientFilter[image]` — normalised Sobel derivatives (those of `DerivativeFilter`).
+- `GradientFilter[image, r]`, `GradientFilter[image, {r, σ}]` — derivatives of a Gaussian of pixel
+  radius `r` (a `(2r+1)×(2r+1)` kernel), standard deviation `σ` (default `r/2`, the `GaussianFilter`
+  convention). The smoothing factor sums to 1 and the derivative factor is normalised so that a
+  linear ramp of slope `s` has magnitude exactly `s` away from the border, the same calibration
+  as the one-argument form.
+
 **The magnitude rather than `|dx| + |dy|`, because it is rotation invariant.** An edge at 45° reports
 the same strength as one at 0°; the absolute sum would report it `Sqrt[2]` times stronger and so bias
 every downstream threshold by orientation. A test asserts exactly that: a diagonal ramp `x + y` of
@@ -3287,6 +3297,13 @@ the tables, so the peak is 1.0 to within a few ulp — measured at 3.3e-15. The 
 unaffected, being an integer, and that is what template matching rests on, so the suite
 asserts the argmax exactly, the peak to 1e-12, and agreement with the written-out
 definition to 1e-11.
+
+**The tables and the cross term share one anchor.** The correlation anchors a `k`-wide
+template at offset `(k-1)/2` (it is a convolution with the reversed template), so the window
+statistics are taken over that same window. For an odd `k` that is `k/2` either way; for an even
+template the two used to differ by a pixel and the score left `[-1, 1]` (1.8 for `{{2., 7.}}`).
+Every score is a correlation coefficient, in `[-1, 1]`, and invariant under a positive affine
+change of the template.
 
 A uniform window has no variance and scores 0 rather than dividing; the variance is clamped
 at zero first, because cancellation can push it a hair negative and `sqrt` of that is a NaN
@@ -5095,10 +5112,10 @@ Out[2]= -Image-
 ```
 
 ## Opening
-Erosion then dilation with the same element. Idempotent.
+Erosion then dilation, the dilation with the **reflected** element (the adjoint pair). Idempotent and anti-extensive (`Opening[f, k] <= f`) for every element, symmetric or not; for a centrally symmetric element the reflection is the element itself.
 
 - `Opening[image, r]`: removes bright detail smaller than the element.
-- `Opening[Opening[x, r], r]` equals `Opening[x, r]` **exactly**, which is what makes it an opening rather than merely a smoother, and holds only because both passes use the same element.
+- `Opening[Opening[x, r], r]` equals `Opening[x, r]` **exactly**, which is what makes it an opening rather than merely a smoother, and holds only because the second pass is the adjoint of the first. Reusing the unreflected element shifted the result of an asymmetric element: `Opening` of the plateau `{0,0,1,1,0,0}` by `{{1,1}}` moved it one pixel right instead of preserving it.
 - A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in the reference: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Properties & Relations
@@ -5221,7 +5238,7 @@ Out[2]= -Image-
 ```
 
 ## Closing
-Dilation then erosion with the same element. Idempotent.
+Dilation then erosion, the erosion with the **reflected** element (the adjoint pair). Idempotent and extensive (`f <= Closing[f, k]`) for every element, symmetric or not.
 
 - `Closing[image, r]`: fills dark detail smaller than the element.
 - `Opening[x] <= x <= Closing[x]` pointwise.

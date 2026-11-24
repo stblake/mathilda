@@ -347,7 +347,13 @@ static Expr* builtin_export(Expr* res)
                 gok = 0;        /* PNG/JPEG of graphics needs the Raylib renderer */
 #endif
             }
-            if (!gok) return failed();
+            if (!gok) {
+                if (!is_pdf)
+                    mth_message("Export", "nogl",
+                                "Cannot render graphics to %s: no usable OpenGL window or context "
+                                "in this session.", path_base_name(path));
+                return failed();
+            }
             out = expr_new_string(path);
             return out ? out : failed();
         }

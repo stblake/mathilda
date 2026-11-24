@@ -228,9 +228,22 @@ Out[3]= {1.0, 2.0, 3.0}
 ## LinearModelFit
 
 - `LinearModelFit[data]`
+- `LinearModelFit[{y1, y2, ...}, {f1, ...}, x]` — the `y_i` taken at `x = 1, 2, ...`
+- `LinearModelFit[{{x11, ..., y1}, ...}, {f1, ...}, {x1, ...}]`
 
-Fits a linear model with an intercept and returns a `PredictorFunction` carrying its
-coefficients — the same ones `Predict` finds. Attributes: `Protected`.
+`LinearModelFit[data]` fits a linear model with an intercept and returns a `PredictorFunction`
+carrying its coefficients — the same ones `Predict` finds. Attributes: `Protected`.
+
+The basis-function form fits `c0 + c1 f1 + ...` by least squares (the constant basis function is
+always included; a basis element free of the variables *is* that constant and is not repeated)
+and returns `FittedModel["Linear", {bestFit, params, basis, vars}, nvars, nbasis]`.
+`model[x0, ...]` evaluates the fit; `model["BestFit"]`, `model["BestFitParameters"]`,
+`model["BasisFunctions"]` and `model["Function"]` are properties. The `f_k` are arbitrary
+expressions, evaluated numerically at each data point.
+
+Both forms solve the **centred** problem (`x - x̄`, `y - ȳ`, intercept recovered as
+`ȳ - x̄·b`): forming the normal equations on raw columns squares in the offset, and data on
+`y = 2x - 199999997` at `x ≈ 10⁸` came back with slope 1.68.
 
 **Not implemented**: the reference's `LinearModelFit` returns a `FittedModel` whose
 properties are regression diagnostics (`RSquared`, standard errors, ANOVA). Those are
@@ -304,7 +317,18 @@ visibility.
 - `RandomVariate[dist]` — one draw
 - `RandomVariate[dist, n]` — a list of `n`
 
+`dist` is `NormalDistribution`, `UniformDistribution`, or any `LearnedDistribution` that
+`LearnDistribution` or `SmoothKernelDistribution` returns. A univariate distribution draws
+reals; a `dim`-dimensional learned one draws `dim`-vectors (so `RandomVariate[ld, n]` is an
+`n x dim` matrix).
+
 **Features**:
+- **Learned distributions are sampled from their definition.** `"Multinormal"`: `mu + L z`
+  with `L` the Cholesky factor of the fitted covariance and `z` standard normal.
+  `"GaussianMixture"`: a component chosen with probability equal to its weight, then that
+  component's `mu + L z`. `"SmoothKernel"`: a sample point chosen uniformly plus independent
+  `N(0, h_a)` noise per dimension — the KDE is exactly that mixture. (These used to return a
+  constant `0.0`.)
 - **Draws come from the same stream as `RandomReal`**, so `SeedRandom` makes them
   reproducible. A sampler with its own generator would silently ignore `SeedRandom`
   while `RandomReal` honoured it — reproducibility half-working is worse than not

@@ -2992,9 +2992,17 @@ void graphics_render_in_region(const Expr* graphics_expr,
 extern const void* CGSessionCopyCurrentDictionary(void);
 extern void        CFRelease(const void*);
 bool gui_session_available(void) {
+    static int cached = -1;          /* the answer cannot change within a process */
+    if (cached >= 0) return cached != 0;
+    /* No Aqua session is a cheap, certain "no". A session is NOT a "yes": the window or its GL
+     * context can still be unusable, and raylib then crashes inside InitWindow. So the yes comes
+     * only from actually rendering, in a throwaway child (gl_probe.c). */
     const void* d = CGSessionCopyCurrentDictionary();
-    if (d) { CFRelease(d); return true; }
-    return false;
+    bool ok = d != NULL;
+    if (d) CFRelease(d);
+    if (ok) ok = gl_probe_usable();
+    cached = ok ? 1 : 0;
+    return ok;
 }
 #elif defined(__linux__)
 bool gui_session_available(void) {

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <float.h>
 
 #include "expr.h"
 #include "symtab.h"
@@ -454,33 +455,92 @@ static Expr* builtin_pdf(Expr* res) {
 
 /* ---- RandomVariate ------------------------------------------------------ */
 
-static double ml_draw(const MlDist* d) {
-    switch (d->kind) {
-        case ML_D_NORMAL:  return d->a + d->b * ml_normal_deviate();
-        case ML_D_UNIFORM: return d->a + (d->b - d->a) * random_uniform_01();
-        default:           return 0.0;
+/* A uniform index in [0, n): floor(u n), with the u -> 1 rounding edge folded back. */
+static size_t ml_draw_index(size_t n) {
+    size_t i = (size_t)(random_uniform_01() * (double)n);
+    return i < n ? i : n - 1;
+}
+
+/* mu + L z for z a standard normal dim-vector and L the lower Cholesky factor of the
+ * covariance: Cov(L z) = L L' = Sigma. */
+static void ml_draw_gauss(const double* mu, const double* l, size_t dim, double* z,
+                          double* out) {
+    for (size_t a = 0; a < dim; a++) z[a] = ml_normal_deviate();
+    for (size_t a = 0; a < dim; a++) {
+        double v = mu[a];
+        for (size_t b = 0; b <= a; b++) v += l[a * dim + b] * z[b];
+        out[a] = v;
     }
 }
 
+/* One draw of d->dim values into out. `z` is dim scratch doubles.
+ *
+ * Every kind ml_read_dist accepts is sampled here; there is no default value. The learned
+ * kinds used to fall through to a constant 0.0, which is not a sample of anything.
+ *   Multinormal   mu + L z.
+ *   Mixture       pick component j with probability w_j (inverse CDF of the weights), then
+ *                 mu_j + L_j z -- the generative definition of a mixture.
+ *   SmoothKernel  pick a sample point uniformly, add an independent N(0, h_a) per dimension:
+ *                 the KDE is exactly the uniform mixture of those product kernels. */
+static void ml_draw(const MlDist* d, double* z, double* out) {
+    switch (d->kind) {
+        case ML_D_NORMAL:  out[0] = d->a + d->b * ml_normal_deviate(); return;
+        case ML_D_UNIFORM: out[0] = d->a + (d->b - d->a) * random_uniform_01(); return;
+        case ML_D_MULTINORMAL:
+            ml_draw_gauss(d->mu, d->chol, d->dim, z, out);
+            return;
+        case ML_D_MIXTURE: {
+            double tot = 0.0;
+            for (size_t j = 0; j < d->k; j++) if (d->w[j] > 0.0) tot += d->w[j];
+            double u = random_uniform_01() * tot, acc = 0.0;
+            size_t pick = d->k - 1;
+            for (size_t j = 0; j < d->k; j++) {
+                if (!(d->w[j] > 0.0)) continue;
+                acc += d->w[j];
+                pick = j;
+                if (u < acc) break;
+            }
+            ml_draw_gauss(d->mu + pick * d->dim, d->chol + pick * d->dim * d->dim, d->dim,
+                          z, out);
+            return;
+        }
+        case ML_D_KDE: {
+            size_t i = ml_draw_index(d->k);
+            for (size_t a = 0; a < d->dim; a++)
+                out[a] = d->mu[i * d->dim + a] + d->band[a] * ml_normal_deviate();
+            return;
+        }
+        default:
+            return;     /* unreachable: ml_read_dist only accepts the kinds above */
+    }
+}
+
+/* RandomVariate[dist] / RandomVariate[dist, n]. A univariate distribution gives a real (a list
+ * of n reals); a dim > 1 one gives a dim-vector (an n x dim matrix). */
 static Expr* builtin_randomvariate(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
+    size_t n = 1;
+    if (argc == 2) {
+        Expr* ne = res->data.function.args[1];
+        if (!ne || ne->type != EXPR_INTEGER || ne->data.integer < 0) return NULL;
+        n = (size_t)ne->data.integer;
+    }
     MlDist d; double* owned = NULL;
     if (!ml_read_dist(res->data.function.args[0], &d, &owned)) return NULL;
+    size_t dim = d.dim ? d.dim : 1;
 
-    if (argc == 1) {
-        double v = ml_draw(&d);
-        free(owned);
-        return expr_new_real(v);
+    double* z = malloc(sizeof(double) * dim);
+    double* o = malloc(sizeof(double) * (n ? n : 1) * dim);
+    Expr* out = NULL;
+    if (z && o) {
+        for (size_t i = 0; i < n; i++) ml_draw(&d, z, o + i * dim);
+        if (argc == 1)
+            out = (dim == 1) ? expr_new_real(o[0]) : ml_list_of_reals(o, dim);
+        else
+            out = (dim == 1) ? ml_list_of_reals(o, n) : ml_list_matrix(o, n, dim);
     }
-    Expr* ne = res->data.function.args[1];
-    if (!ne || ne->type != EXPR_INTEGER || ne->data.integer < 0) { free(owned); return NULL; }
-    size_t n = (size_t)ne->data.integer;
-    double* o = malloc(sizeof(double) * (n ? n : 1));
-    if (!o) { free(owned); return NULL; }
-    for (size_t i = 0; i < n; i++) o[i] = ml_draw(&d);
-    Expr* out = ml_list_of_reals(o, n);
-    free(o); free(owned);
+    free(z); free(o); free(owned);
     return out;
 }
 
@@ -773,7 +833,17 @@ static Expr* builtin_learn_distribution(Expr* res) {
      * Collinear features or fewer observations than dimensions land here, and a
      * pseudo-density would be a fiction. */
     Expr* out = NULL;
-    if (ml_chol(cov, chk, dim)) {
+    /* A sample covariance has rank at most n - 1, so n <= dim is singular whatever the
+     * arithmetic says. Beyond that, an exact Cholesky test (pivot > 0) is not a rank test: for
+     * two points in the plane the second pivot is 0.5 - 0.5 evaluated in floating point, a
+     * roundoff residue of 1e-16 that "passed" and produced a density spike of 2e7 at the
+     * mean. A pivot is accepted only when it carries a non-negligible share of its own
+     * variance, L_aa^2 > 64 eps Sigma_aa -- far below any genuine conditional variance. */
+    bool spd = n > dim && ml_chol(cov, chk, dim);
+    for (size_t a = 0; spd && a < dim; a++)
+        if (!(chk[a * dim + a] * chk[a * dim + a] > 64.0 * DBL_EPSILON * cov[a * dim + a]))
+            spd = false;
+    if (spd) {
         Expr** rows = malloc(sizeof(Expr*) * (dim + 1));
         if (rows) {
             rows[0] = ml_list_of_reals(mean, dim);
@@ -923,7 +993,9 @@ void ml_dist_init(void) {
         "RandomVariate[dist] draws one value from dist; RandomVariate[dist, n] draws a "
         "list of n. Supports NormalDistribution[mu, sigma] and "
         "UniformDistribution[{lo, hi}], each also usable with no arguments for the "
-        "standard case. Draws come from the same stream as RandomReal, so SeedRandom "
+        "standard case, and every LearnedDistribution LearnDistribution or "
+        "SmoothKernelDistribution returns (Multinormal, GaussianMixture, SmoothKernel); a "
+        "multivariate one gives a vector per draw. Draws come from the same stream as RandomReal, so SeedRandom "
         "makes them reproducible. A non-positive standard deviation, or an inverted "
         "range, returns unevaluated rather than producing NaNs.");
 

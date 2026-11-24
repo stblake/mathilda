@@ -38,6 +38,11 @@ int frame_minor_divs(double step);
  * available. Defined in render.c; used by both renderers. */
 bool gui_session_available(void);
 
+/* Does raylib's InitWindow + render-to-texture + readback really work in this process? Answered
+ * once per session by doing it in a spawned child (macOS; gl_probe.c explains why nothing
+ * in-process can tell). Always true elsewhere. */
+bool gl_probe_usable(void);
+
 /* Find the $StreamColorBar[lo, hi, cfn] metadata node embedded by the
  * plotter in the Graphics/Graphics3D option list.  Returns NULL if absent. */
 const Expr* find_color_bar(const Expr* graphics_expr);

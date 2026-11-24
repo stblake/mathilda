@@ -139,6 +139,7 @@ The read types and the `RecordSeparators`/`WordSeparators`/`TokenWords`/`NullRec
 - `Protected`.
 - Returns `EndOfFile` once past end of file. Within a partly-read `{type_1, ...}` structure, the unread trailing slots are filled with `EndOfFile`; a read that begins already at end of file returns a bare `EndOfFile`.
 - Returns `$Failed` for a stream that is not open, or (with `Read::readn`) for a token that is not of the requested numeric type.
+- `Number` / `Real` accept only a number **literal**: an optional sign, digits with an optional decimal point, and an optional exponent written `e`, `E`, `*^` or `*10^` (`-4`, `2.5`, `1.5e3`, `-2.*^-2`, `2.*10^5`, `.5`). The token is never evaluated, so `1/2`, `2^3` or `Print["x"]` in the file are each a `Read::readn` and `$Failed` — reading data does not run it.
 - The `Expression` leaf is read **unevaluated** and the constructed result is then evaluated by the surrounding evaluator — so `Read[s, Expression]` evaluates while `Read[s, Hold[Expression]]` stays held.
 
 #### Basic Examples
@@ -578,7 +579,11 @@ Out[5]= $Failed
   file is pixel-identical to the on-screen plot (the same axes, ticks, labels and text).
   They therefore need graphics support compiled in (`USE_GRAPHICS`) **and** a usable GUI
   session; with none (a headless box, `ssh`, cron) they return `$Failed` gracefully rather
-  than crashing, while PDF still works. Resolution follows the `ImageSize` option: a width
+  than crashing, while PDF still works. "Usable" is decided by doing it: on macOS the first
+  raster export of a session renders once in a spawned child process, because raylib can crash
+  inside `InitWindow` when a window or GL context is unusable even where a GUI session exists.
+  If that child fails, the export emits `Export::nogl` and returns `$Failed`; the answer is
+  cached for the session. Resolution follows the `ImageSize` option: a width
   (default 800) with the height derived from the plot's `AspectRatio`, sized exactly as the
   on-screen window is, so an aspect-driven plot (`ArrayPlot`, `DensityPlot`, `ContourPlot`,
   …) fills its frame edge-to-edge instead of letterboxing inside a fixed canvas;

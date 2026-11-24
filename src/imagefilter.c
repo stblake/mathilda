@@ -1682,16 +1682,76 @@ static Expr* builtin_derivativefilter(Expr* res) {
  * and combined. Per-channel gradients would have to be combined by some rule (max? sum? norm?) and
  * every choice is arbitrary; taking the gradient of brightness is the one interpretation that
  * needs no such choice. */
+/* Derivative-of-Gaussian kernels for GradientFilter[image, r] / [image, {r, sigma}]: kx is
+ * G(row) * D(col), ky its transpose, each (2r+1) x (2r+1) and rank 1 (so convolve_dispatch runs it
+ * separably). G is the sampled Gaussian normalised to sum 1 -- a constant passes unchanged -- and D is
+ * the sampled derivative -d G(d), normalised so that the CONVOLUTION of a unit ramp is exactly 1:
+ * with dst(x) = sum_j D[j] f(x - d_j) and f(x) = x, the response is -sum_j D[j] d_j, so
+ * D[j] = -d_j G(d_j) / sum_j d_j^2 G(d_j). The magnitude of a ramp of slope s is therefore s in the
+ * interior, the same calibration the 1-argument Sobel form has. Caller frees both. */
+static bool gauss_deriv_kernels(size_t r, double sigma, double** kx, double** ky) {
+    size_t n = 2 * r + 1;
+    double* g = malloc(sizeof(double) * n);
+    double* dd = malloc(sizeof(double) * n);
+    double* a = malloc(sizeof(double) * n * n);
+    double* b = malloc(sizeof(double) * n * n);
+    if (!g || !dd || !a || !b) { free(g); free(dd); free(a); free(b); return false; }
+    double gs = 0.0, ds = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double d = (double)i - (double)r;
+        g[i] = exp(-d * d / (2.0 * sigma * sigma));
+        gs += g[i];
+        ds += d * d * g[i];
+    }
+    for (size_t i = 0; i < n; i++) {
+        double d = (double)i - (double)r;
+        dd[i] = -d * g[i] / ds;
+        g[i] /= gs;
+    }
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++) {
+            a[i * n + j] = g[i] * dd[j];      /* d/dx: smooth down the rows */
+            b[i * n + j] = dd[i] * g[j];      /* d/dy: smooth across the columns */
+        }
+    free(g); free(dd);
+    *kx = a; *ky = b;
+    return true;
+}
+
 static Expr* builtin_gradientfilter(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    /* GradientFilter[image, r] and [image, {r, sigma}]: the derivative of a Gaussian of pixel radius
+     * r, with sigma = r/2 by default (GaussianFilter's convention). */
+    size_t rad = 0; double sigma = 0.0;
+    if (argc == 2) {
+        Expr* sp = res->data.function.args[1];
+        double rr = 0.0, sg = 0.0, im = 0.0;
+        if (ker_is_list(sp)) {
+            if (sp->data.function.arg_count != 2) return NULL;
+            if (!na_read_scalar(sp->data.function.args[0], &rr, &im) || im != 0.0) return NULL;
+            if (!na_read_scalar(sp->data.function.args[1], &sg, &im) || im != 0.0) return NULL;
+            if (!(sg > 0.0)) return NULL;
+        } else if (!na_read_scalar(sp, &rr, &im) || im != 0.0) {
+            return NULL;
+        }
+        if (!(rr >= 1.0) || rr != floor(rr) || rr > 1024.0) return NULL;
+        rad = (size_t)rr;
+        sigma = (sg > 0.0) ? sg : rr / 2.0;
+    }
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
-        return gradient3_run(res->data.function.args[0]);
+        return argc == 1 ? gradient3_run(res->data.function.args[0]) : NULL;
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
 
     size_t khx = 0, kwx = 0, khy = 0, kwy = 0;
-    double* kx = deriv_kernel(0, 1, &khx, &kwx);
-    double* ky = deriv_kernel(1, 0, &khy, &kwy);
+    double* kx = NULL; double* ky = NULL;
+    if (argc == 1) {
+        kx = deriv_kernel(0, 1, &khx, &kwx);
+        ky = deriv_kernel(1, 0, &khy, &kwy);
+    } else if (gauss_deriv_kernels(rad, sigma, &kx, &ky)) {
+        khx = kwx = khy = kwy = 2 * rad + 1;
+    }
     double* dx = malloc(sizeof(double) * w * h);
     double* dy = malloc(sizeof(double) * w * h);
     Expr* out = NULL;
@@ -1963,20 +2023,28 @@ static bool morph_support(const Expr* e, size_t* kh, size_t* kw, unsigned char**
     return true;
 }
 
+/* `reflect` applies the element mirrored through its centre (offset -(i - ci) instead of i - ci).
+ * Dilation and erosion as single operators both read the neighbourhood at x + b; the SECOND pass of
+ * an opening or closing must use the reflected element, because that is the adjoint of the first
+ * pass, and only the adjoint pair gives Opening <= f <= Closing and idempotence for an element that
+ * is not centrally symmetric (a 1x2 element, a diagonal, anything even-sized). For a centrally
+ * symmetric element the reflection is the identity. */
 static void morph_direct(const double* src, double* dst, size_t w, size_t h, size_t c,
-                         const unsigned char* sup, size_t kh, size_t kw, MorphOp op) {
+                         const unsigned char* sup, size_t kh, size_t kw, MorphOp op,
+                         bool reflect) {
     int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    int64_t sgn = reflect ? -1 : 1;
     for (size_t y = 0; y < h; y++)
       for (size_t x = 0; x < w; x++)
         for (size_t ch = 0; ch < c; ch++) {
             double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
             for (size_t i = 0; i < kh; i++) {
-                size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
+                size_t sy = clampi((int64_t)y + sgn * ((int64_t)i - ci), h);
                 for (size_t j = 0; j < kw; j++) {
                     /* A NULL support means a full rectangle -- the shape the separable path takes,
                      * used when its scratch allocation fails. */
                     if (sup && !sup[i * kw + j]) continue;
-                    size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
+                    size_t sx = clampi((int64_t)x + sgn * ((int64_t)j - cj), w);
                     double v = src[(sy * w + sx) * c + ch];
                     if (op == MORPH_DILATE) { if (v > acc) acc = v; }
                     else                    { if (v < acc) acc = v; }
@@ -2041,8 +2109,12 @@ static void morph_1d_vanherk(const double* in, double* out, size_t n, size_t k,
 /* Separable max/min over a full rectangle: rows then columns. */
 static void morph_separable(const double* src, double* dst, double* tmp,
                             size_t w, size_t h, size_t c,
-                            size_t kh, size_t kw, MorphOp op) {
-    size_t rh = kh / 2, rw = kw / 2;
+                            size_t kh, size_t kw, MorphOp op, bool reflect) {
+    /* Window i covers in[i .. i+k-1] of the padded line, i.e. offsets -lead .. k-1-lead around x.
+     * The plain element leads by k/2; its reflection (see morph_direct) by k-1-k/2. The two agree
+     * for odd k. */
+    size_t rh = reflect ? kh - 1 - kh / 2 : kh / 2, rw = reflect ? kw - 1 - kw / 2 : kw / 2;
+    size_t th = kh - 1 - rh, tw = kw - 1 - rw;     /* trailing pads */
     size_t maxline = (w > h ? w : h) + (kw > kh ? kw : kh);
     double* line = malloc(sizeof(double) * (maxline + 2));
     double* res  = malloc(sizeof(double) * (maxline + 2));
@@ -2051,7 +2123,7 @@ static void morph_separable(const double* src, double* dst, double* tmp,
     if (!line || !res || !pre || !suf) {
         /* Without scratch there is no fast path; the caller's direct routine still answers. */
         free(line); free(res); free(pre); free(suf);
-        morph_direct(src, dst, w, h, c, NULL, kh, kw, op);
+        morph_direct(src, dst, w, h, c, NULL, kh, kw, op, reflect);
         return;
     }
 
@@ -2061,7 +2133,7 @@ static void morph_separable(const double* src, double* dst, double* tmp,
         for (size_t ch = 0; ch < c; ch++) {
             for (size_t t = 0; t < rw; t++)          line[t] = src[(y * w + 0) * c + ch];
             for (size_t x = 0; x < w; x++)           line[rw + x] = src[(y * w + x) * c + ch];
-            for (size_t t = 0; t < rw; t++)          line[rw + w + t] = src[(y * w + (w - 1)) * c + ch];
+            for (size_t t = 0; t < tw; t++)          line[rw + w + t] = src[(y * w + (w - 1)) * c + ch];
             morph_1d_vanherk(line, res, w, kw, pre, suf, op);
             for (size_t x = 0; x < w; x++) tmp[(y * w + x) * c + ch] = res[x];
         }
@@ -2071,7 +2143,7 @@ static void morph_separable(const double* src, double* dst, double* tmp,
         for (size_t ch = 0; ch < c; ch++) {
             for (size_t t = 0; t < rh; t++)          line[t] = tmp[(0 * w + x) * c + ch];
             for (size_t y = 0; y < h; y++)           line[rh + y] = tmp[(y * w + x) * c + ch];
-            for (size_t t = 0; t < rh; t++)          line[rh + h + t] = tmp[((h - 1) * w + x) * c + ch];
+            for (size_t t = 0; t < th; t++)          line[rh + h + t] = tmp[((h - 1) * w + x) * c + ch];
             morph_1d_vanherk(line, res, h, kh, pre, suf, op);
             for (size_t y = 0; y < h; y++) dst[(y * w + x) * c + ch] = res[y];
         }
@@ -2080,12 +2152,13 @@ static void morph_separable(const double* src, double* dst, double* tmp,
 
 /* Run one morphological pass over a loaded buffer. */
 static void morph_run(const double* src, double* dst, size_t w, size_t h, size_t c,
-                      const unsigned char* sup, size_t kh, size_t kw, bool full, MorphOp op) {
+                      const unsigned char* sup, size_t kh, size_t kw, bool full, MorphOp op,
+                      bool reflect) {
     if (full) {
         double* tmp = malloc(sizeof(double) * w * h * c);
-        if (tmp) { morph_separable(src, dst, tmp, w, h, c, kh, kw, op); free(tmp); return; }
+        if (tmp) { morph_separable(src, dst, tmp, w, h, c, kh, kw, op, reflect); free(tmp); return; }
     }
-    morph_direct(src, dst, w, h, c, sup, kh, kw, op);
+    morph_direct(src, dst, w, h, c, sup, kh, kw, op, reflect);
 }
 
 /* Read the second argument: an integer radius (a full (2r+1) square) or an explicit element. */
@@ -2204,6 +2277,61 @@ static Expr* morph3_builtin(Expr* res, MorphOp first, bool two_pass) {
     return out;
 }
 
+/* Is the element its own reflection about the anchor? Only an odd-sized element can be (the anchor
+ * of an even extent is off-centre), and then the support must be symmetric under (i, j) ->
+ * (kh-1-i, kw-1-j). */
+static bool morph_centrosymmetric(const unsigned char* sup, size_t kh, size_t kw) {
+    if (!(kh & 1) || !(kw & 1)) return false;
+    for (size_t i = 0; i < kh * kw; i++)
+        if (sup[i] != sup[kh * kw - 1 - i]) return false;
+    return true;
+}
+
+/* One pass of flat morphology over the element RESTRICTED TO THE IMAGE: positions outside are not
+ * read at all (rather than clamped to the edge). `reflect` as in morph_direct.
+ *
+ * WHY A SECOND BORDER RULE, for the two-pass operators with an element that is not its own
+ * reflection. Clamping each read is replicate padding, and for one pass it is exact. Composed, it is
+ * not an adjoint pair at the border: the second pass reads the intermediate at a clamped position,
+ * which for an asymmetric element is not the intermediate of the padded plane, and Opening <= f
+ * failed on the edge rows of a random image with a 2x3 element. Restricting the element to the
+ * domain instead gives the pair
+ *     eps f(x) = min { f(x+b) : x+b in D },     delta g(y) = max { g(y-b) : y-b in D },
+ * and delta g <= f  <=>  g <= eps f  holds exactly on D, so the opening delta.eps is anti-extensive
+ * and idempotent, and the closing eps.delta extensive and idempotent, everywhere including the
+ * border. (For a centrally symmetric element the clamped composition already satisfies the laws and
+ * keeps its separable fast path; see morph_builtin.) Every pixel's own offset b = anchor is in D, so
+ * no accumulator is left at +-infinity. */
+static void morph_direct_restricted(const double* src, double* dst, size_t w, size_t h, size_t c,
+                                    const unsigned char* sup, size_t kh, size_t kw, MorphOp op,
+                                    bool reflect, const double* fb) {
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    int64_t sgn = reflect ? -1 : 1;
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+            double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
+            for (size_t i = 0; i < kh; i++) {
+                int64_t sy = (int64_t)y + sgn * ((int64_t)i - ci);
+                if (sy < 0 || sy >= (int64_t)h) continue;
+                for (size_t j = 0; j < kw; j++) {
+                    if (!sup[i * kw + j]) continue;
+                    int64_t sx = (int64_t)x + sgn * ((int64_t)j - cj);
+                    if (sx < 0 || sx >= (int64_t)w) continue;
+                    double v = src[((size_t)sy * w + (size_t)sx) * c + ch];
+                    if (op == MORPH_DILATE) { if (v > acc) acc = v; }
+                    else                    { if (v < acc) acc = v; }
+                }
+            }
+            /* An element whose support misses its anchor, and is wider than the image, can leave
+             * a pixel with no in-domain neighbour at all. The first pass's empty set never feeds
+             * the second (if x - b is in D then (x - b) + b = x is), and for the second pass the
+             * ORIGINAL pixel (`fb`) is the value that keeps f between opening and closing. */
+            if (acc == INFINITY || acc == -INFINITY) acc = fb[(y * w + x) * c + ch];
+            dst[(y * w + x) * c + ch] = acc;
+        }
+}
+
 /* One-pass operators (Dilation, Erosion) and two-pass ones (Opening, Closing). */
 static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
     if (res->data.function.arg_count != 2) return NULL;
@@ -2225,18 +2353,29 @@ static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
     size_t n = w * h * c;
     double* a = malloc(sizeof(double) * n);
     Expr* out = NULL;
-    if (a) {
-        morph_run(src, a, w, h, c, sup, kh, kw, full, first);
+    if (a && two_pass && !morph_centrosymmetric(sup, kh, kw)) {
+        MorphOp second = (first == MORPH_ERODE) ? MORPH_DILATE : MORPH_ERODE;
+        double* b = malloc(sizeof(double) * n);
+        if (b) {
+            morph_direct_restricted(src, b, w, h, c, sup, kh, kw, first, false, src);
+            morph_direct_restricted(b, a, w, h, c, sup, kh, kw, second, true, src);
+            out = keep_bit ? image_build_typed(a, w, h, c, IMG_BIT) : image_build_real(a, w, h, c);
+            free(b);
+        }
+    } else if (a) {
+        morph_run(src, a, w, h, c, sup, kh, kw, full, first, false);
         if (!two_pass) {
             out = keep_bit ? image_build_typed(a, w, h, c, IMG_BIT) : image_build_real(a, w, h, c);
         } else {
-            /* Opening is erode-then-dilate, closing dilate-then-erode: the SAME element both
-             * times, which is what makes the pair idempotent. Using a different element for the
-             * second pass would still smooth, and would no longer be an opening. */
+            /* Opening is erode-then-dilate, closing dilate-then-erode, the second pass with the
+             * REFLECTED element: that is the adjoint of the first pass, and the adjoint pair is what
+             * makes Opening <= f <= Closing and idempotence hold for every element. Reusing the
+             * unreflected element shifted the result of any asymmetric element (a 1x2 element moved
+             * a plateau one pixel and lost a point). For a symmetric element the two coincide. */
             double* b = malloc(sizeof(double) * n);
             if (b) {
                 MorphOp second = (first == MORPH_ERODE) ? MORPH_DILATE : MORPH_ERODE;
-                morph_run(a, b, w, h, c, sup, kh, kw, full, second);
+                morph_run(a, b, w, h, c, sup, kh, kw, full, second, true);
                 out = keep_bit ? image_build_typed(b, w, h, c, IMG_BIT)
                                : image_build_real(b, w, h, c);
                 free(b);
@@ -3082,7 +3221,12 @@ static void correlate_planes(const double* src, double* dst, size_t w, size_t h,
 static bool ncc_planes(const double* src, double* dst, size_t w, size_t h,
                        const double* t, size_t kw, size_t kh) {
     size_t m = kw * kh;
-    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    /* The window anchor MUST be the cross term's. correlate_planes reverses the template and
+     * convolves, and convolution anchors at k/2, so the correlation pairs t[j] with src[x + j - a] for
+     * a = k - 1 - k/2 = (k - 1)/2. Anchoring the tables at k/2 instead agrees only for odd k: for an
+     * even template the statistics described a window one pixel away from the one the cross term
+     * summed, and the "correlation coefficient" left [-1, 1] (1.8 for a 1x2 template). */
+    int64_t ci = (int64_t)((kh - 1) / 2), cj = (int64_t)((kw - 1) / 2);
 
     /* The template's mean and deviation norm are position-independent: one pass, not w*h passes. */
     double tbar = 0.0;
@@ -3918,7 +4062,9 @@ void imagefilter_init(void) {
     symtab_get_def("GradientFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GradientFilter",
         "GradientFilter[image] gives the gradient magnitude Sqrt[dx^2 + dy^2], using the "
-        "normalised Sobel derivatives of DerivativeFilter. The magnitude rather than |dx| + |dy| "
+        "normalised Sobel derivatives of DerivativeFilter. GradientFilter[image, r] and "
+        "GradientFilter[image, {r, sigma}] use the derivatives of a Gaussian of pixel radius r "
+        "(standard deviation sigma, default r/2), normalised so a ramp of slope s gives s. The magnitude rather than |dx| + |dy| "
         "because it is ROTATION INVARIANT: an edge at 45 degrees reports the same strength as one "
         "at 0, where the absolute sum would report it sqrt(2) times stronger and so bias every "
         "downstream threshold by orientation. A colour image is reduced to luminance first and "

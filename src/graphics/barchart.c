@@ -351,7 +351,11 @@ Expr* builtin_barchart(Expr* res) {
     for (size_t i = 0; i < pt_n; i++) gargs[1 + i] = pt[i];
     free(pt);
 
-    return expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gargc);
+    /* expr_new_function copies the argument array (adopting its elements), so the array
+     * itself is ours to free. */
+    Expr* g = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gargc);
+    free(gargs);
+    return g;
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,8 +367,9 @@ Expr* builtin_barchart(Expr* res) {
 static size_t histogram_parse_bins(Expr* res,
                                     double data_min, double data_max,
                                     double* bin_min_out, double* bin_max_out,
-                                    int*    n_bins_out) {
+                                    int*    n_bins_out, bool* explicit_out) {
     size_t argc = res->data.function.arg_count;
+    *explicit_out = false;
 
     /* Defaults: Sturges' rule, range = [data_min, data_max]. */
     *bin_min_out = data_min;
@@ -415,6 +420,7 @@ static size_t histogram_parse_bins(Expr* res,
                 && step > 0.0 && hi > lo) {
                 *bin_min_out = lo;
                 *bin_max_out = hi;
+                *explicit_out = true;
                 int nb = (int)ceil((hi - lo) / step);
                 if (nb < 1) nb = 1;
                 *n_bins_out = nb;
@@ -453,8 +459,10 @@ Expr* builtin_histogram(Expr* res) {
 
     double bin_min, bin_max;
     int    n_bins;
+    bool   explicit_range;
     size_t opts_start = histogram_parse_bins(res, dmin, dmax,
-                                              &bin_min, &bin_max, &n_bins);
+                                              &bin_min, &bin_max, &n_bins,
+                                              &explicit_range);
 
     /* Apply Sturges' rule if not specified. */
     if (n_bins < 1) {
@@ -467,7 +475,14 @@ Expr* builtin_histogram(Expr* res) {
     int* counts = calloc((size_t)n_bins, sizeof(int));
     double bin_w = (bin_max - bin_min) / n_bins;
     for (size_t i = 0; i < n_vals; i++) {
-        int b = (int)((vals[i] - bin_min) / bin_w);
+        /* An EXPLICIT {min, max, dw} range counts only the data inside its left-closed bins
+         * [min + k dw, min + (k+1) dw); a value below min, or at or above the last edge, is not in
+         * any bin and is not counted. Clamping it into the edge bin (as before) made 15 count in
+         * [5, 10). A derived range spans exactly [data min, data max], so there the maximum itself
+         * belongs to the last bin and the clamp is only absorbing it. */
+        double q = (vals[i] - bin_min) / bin_w;
+        if (explicit_range && !(q >= 0.0 && q < (double)n_bins)) continue;
+        int b = (int)q;
         if (b < 0) b = 0;
         if (b >= n_bins) b = n_bins - 1;
         counts[b]++;
@@ -531,5 +546,7 @@ Expr* builtin_histogram(Expr* res) {
     for (size_t i = 0; i < pt_n; i++) gargs[1 + i] = pt[i];
     free(pt);
 
-    return expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gargc);
+    Expr* g = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gargc);
+    free(gargs);        /* the array is copied; its elements are adopted */
+    return g;
 }
