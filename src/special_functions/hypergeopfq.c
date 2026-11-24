@@ -1014,9 +1014,25 @@ static bool cpx_from_expr(const Expr* e, cpx_t* c, mpfr_prec_t bits) {
     return true;
 }
 
+/* The series summed at target_bits + guard working bits. The guard must cover
+ * the cancellation, log2(max |term| / |sum|) bits, which is not known until
+ * the sum is done: an alternating series at large |z| loses far more than the
+ * default 64 (0F1(; 2; -10^10) loses ~290000), and a sum that kept its rounding
+ * as the answer came back with no correct digit and a full precision tag
+ * (audit Hypergeometric0F1#1). So the peak term is tracked, and a loss beyond
+ * the guard re-sums once with a guard that covers it, or -- past
+ * HGPFQ_MPFR_MAX_LOSS bits, where that re-sum would cost too much -- declines
+ * (NULL): no value rather than a wrong one. */
+#define HGPFQ_MPFR_MAX_LOSS 4096
+static Expr* hgpfq_mpfr_sum_g(const Expr* z, Expr* a, Expr* b,
+                              size_t p, size_t q, long target_bits, long guard);
 static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
                             size_t p, size_t q, long target_bits) {
-    mpfr_prec_t work = (mpfr_prec_t)(target_bits + 64);
+    return hgpfq_mpfr_sum_g(z, a, b, p, q, target_bits, 64);
+}
+static Expr* hgpfq_mpfr_sum_g(const Expr* z, Expr* a, Expr* b,
+                              size_t p, size_t q, long target_bits, long guard) {
+    mpfr_prec_t work = (mpfr_prec_t)(target_bits + guard);
 
     cpx_t zc, *ac = NULL, *bc = NULL;
     if (!cpx_from_expr(z, &zc, work)) return NULL;
@@ -1049,8 +1065,10 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
     mpfr_set_ui(term.re, 1, MPFR_RNDN); mpfr_set_ui(term.im, 0, MPFR_RNDN);
     mpfr_set_ui(sum.re, 1, MPFR_RNDN);  mpfr_set_ui(sum.im, 0, MPFR_RNDN);
 
-    mpfr_t tmag, smag, thr;
+    mpfr_t tmag, smag, thr, peak;
     mpfr_init2(tmag, work); mpfr_init2(smag, work); mpfr_init2(thr, work);
+    mpfr_init2(peak, 64);
+    mpfr_set_ui(peak, 1, MPFR_RNDN);                  /* the k = 0 term */
 
     bool failed = false;
     int settled = 0;
@@ -1099,6 +1117,7 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
         cpx_add(&sum, &sum, &term);
 
         cpx_absmax(tmag, &term);
+        if (mpfr_cmp(tmag, peak) > 0) mpfr_set(peak, tmag, MPFR_RNDU);
         cpx_absmax(smag, &sum);
         mpfr_mul_2si(thr, smag, -(long)work, MPFR_RNDN);   /* |sum| * 2^-work */
         if (mpfr_cmp(tmag, thr) <= 0) { if (++settled >= 2) break; }
@@ -1106,6 +1125,16 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
     }
 
     Expr* result = NULL;
+    long lost = 0;
+    if (!failed && k < HGPFQ_MPFR_MAX_TERMS) {
+        cpx_absmax(smag, &sum);
+        if (mpfr_zero_p(smag)) lost = HGPFQ_MPFR_MAX_LOSS + 1;
+        else {
+            long ep = mpfr_get_exp(peak), es = mpfr_get_exp(smag);
+            lost = ep > es ? ep - es + 1 : 0;
+        }
+        if (lost > guard - 16) failed = true;          /* re-sum below */
+    }
     if (!failed && k < HGPFQ_MPFR_MAX_TERMS) {
         mpfr_t orr, oii;
         mpfr_init2(orr, (mpfr_prec_t)target_bits);
@@ -1116,12 +1145,14 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
         mpfr_clear(orr); mpfr_clear(oii);
     }
 
-    mpfr_clear(tmag); mpfr_clear(smag); mpfr_clear(thr);
+    mpfr_clear(tmag); mpfr_clear(smag); mpfr_clear(thr); mpfr_clear(peak);
     cpx_clear(&term); cpx_clear(&sum); cpx_clear(&fac); cpx_clear(&tmp); cpx_clear(&num);
     cpx_clear(&zc);
     for (size_t i = 0; i < p; i++) cpx_clear(&ac[i]);
     for (size_t j = 0; j < q; j++) cpx_clear(&bc[j]);
     free(ac); free(bc);
+    if (!result && lost > guard - 16 && lost <= HGPFQ_MPFR_MAX_LOSS)
+        return hgpfq_mpfr_sum_g(z, a, b, p, q, target_bits, lost + 64);
     return result;
 }
 /* Round a high-precision sum back down to machine precision, preserving the
@@ -1199,6 +1230,33 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
             Expr* dn = hgpfq_demote_to_machine(v);
             expr_free(v);
             v = dn;
+        }
+        if (v) { free(ac); free(bc); return v; }
+    }
+#endif
+
+    /* 0F1 through arb (acb_hypgeom_0f1: Bessel asymptotics at large |z|), at
+     * every precision: the series below cancels ~2 sqrt|z| / ln 2 bits for
+     * z < 0 (audit Hypergeometric0F1#1). A machine call answers a machine
+     * number while the value fits a double, else the extended-exponent
+     * number arb returned (the machine-overflow convention). */
+#ifdef USE_MPFR
+    if (p == 0 && q == 1) {
+        long gov = numeric_min_inexact_bits(z);
+        long bj = numeric_min_inexact_bits(b->data.function.args[0]);
+        if (bj > 0 && (gov == 0 || bj < gov)) gov = bj;
+        Expr* v = flint_num_hyp0f1(b->data.function.args[0], z);
+        if (v && gov <= 53) {
+            Expr* dn = hgpfq_demote_to_machine(v);
+            Expr *dre = NULL, *dim = NULL;
+            bool fits = dn != NULL;
+            if (fits && dn->type == EXPR_REAL)
+                fits = isfinite(dn->data.real) && dn->data.real != 0.0;
+            else if (fits && is_complex(dn, &dre, &dim))
+                fits = isfinite(dre->data.real) && isfinite(dim->data.real) &&
+                       (dre->data.real != 0.0 || dim->data.real != 0.0);
+            if (fits) { expr_free(v); v = dn; }
+            else expr_free(dn);
         }
         if (v) { free(ac); free(bc); return v; }
     }

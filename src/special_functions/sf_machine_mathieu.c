@@ -50,6 +50,7 @@
  * never freed (still-reachable, bounded by two plans).
  */
 #include "sf_machine_mathieu.h"
+#include "mathieu_char.h"   /* sf_mathieu_char_match */
 
 #include <math.h>
 #include <stdint.h>
@@ -242,6 +243,11 @@ typedef struct {
     int parity;                  /* integer nu: +1 c_k = c_{-n-k} (a = a_n: ce
                                   * periodic, se = 0), -1 antisymmetric (a = b_n:
                                   * se periodic, ce = 0); 0 for generic nu */
+    int force_parity;            /* real (a, q) matched to a_r / b_r by the
+                                  * Sturm count: +1 / -1 imposed on glue_integer;
+                                  * 0 = glue_integer decides */
+    int rindex;                  /* that r (>= 0), or -1 when unknown: it fixes
+                                  * the DLMF sign (sf_machine_mathieu_sign_weight) */
     mcx y0, y1;                  /* ce(0) = sum c_k, se'(0) = sum (nu+2k) c_k: the
                                   * Taylor seeds for the small-|z| arm */
     int cap;                     /* allocated length of the arrays */
@@ -441,6 +447,7 @@ static bool glue_integer(MathieuPlan* p) {
     double best = INFINITY;
     int bt = 0, bg = g;
     for (int t = 1; t >= -1; t -= 2) {
+        if (p->force_parity && t != p->force_parity) continue;
         int g0 = (even && t < 0 && g == kc) ? kc + 1 : g;   /* c_kc = 0 there */
         if (r_inf && g0 + 1 == kc + 1) continue;
         int gmax = g0 > kc + 1 ? g0 : kc + 1;
@@ -546,10 +553,35 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
     double nr = floor(nu.re + 0.5);
     double eps = mc_abs(mc_sub(nu, mc(nr, 0.0)));
     p->integer = eps < 2e-6 * fmax(1.0, fabs(nr));
+    p->force_parity = 0;
+    p->rindex = -1;
+    /* Real (a, q): decide "a is a characteristic value" by the Sturm count of
+     * MathieuCharacteristicA/B's own matrices, not by Hill's estimate alone.
+     * Hill's cos(pi nu) is a difference of terms that grow like
+     * (q^2/16)^k/(k!)^4, so near an integer nu (where nu - n ~ sqrt of its
+     * error) it misses the 2e-6 snap once q is a few tens -- a_2(35) then took
+     * the generic normalization, off by Sqrt[2], and b_2(40) declined (audit
+     * MathieuC#1, MathieuS#1). The match also names r, which fixes the DLMF
+     * sign below. The exponent keeps the class's parity (nu = r mod 2), the
+     * representative nearest Hill's estimate. */
+    if (p->realpq) {
+        int odd_m; int64_t r_m;
+        if (sf_mathieu_char_match(a.re, q.re, &odd_m, &r_m) && r_m <= 1000000) {
+            double base = nr;
+            if (fmod(fabs(base - (double)(r_m & 1)), 2.0) != 0.0)
+                base += (nu.re >= base) ? 1.0 : -1.0;
+            nr = base;
+            eps = mc_abs(mc_sub(nu, mc(nr, 0.0)));
+            p->integer = 1;
+            p->force_parity = odd_m ? -1 : 1;
+            p->rindex = (int)r_m;
+        }
+    }
     /* the inverse iteration below runs at the UNSNAPPED estimate: at an exact
      * characteristic value the Floquet matrix at the integer nu is singular */
     mcx nu_h = nu;
-    if (p->integer && eps < 1e-9) nu_h = mc_add(mc(nr, 0.0), mc(1e-7, 0.0));
+    if (p->integer && (eps < 1e-9 || p->force_parity))
+        nu_h = mc_add(mc(nr, 0.0), mc(1e-7, 0.0));
     if (p->integer) nu = mc(nr, 0.0);
 
     /* Coefficient range: the oscillatory zone |nu+2k|^2 <~ |a| + 2|q| plus the
@@ -652,6 +684,21 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         p->c[i] = v;
         if (v.im != 0.0) p->real = 0;
         p->w[i] = mc_mul(mc_add(nu, mc(2.0 * (double)(p->lo + i), 0.0)), v);
+    }
+    /* The DLMF sign (the conditions at z = pi/2, or z = 0 for q < 0) once r
+     * is known: the c_0 rule above is continuous only while c_0 dominates,
+     * and for larger q the coefficient c_0 passes through zero (ce_4 flipped
+     * sign between q = 14 and 14.5; audit MathieuC#2/#3, MathieuS#3). */
+    if (p->integer && p->rindex >= 0 && p->real) {
+        double T = 0.0;
+        for (int i = 0; i < p->n; i++)
+            T += p->c[i].re * sf_machine_mathieu_sign_weight(p->rindex, p->parity,
+                     p->q.re < 0.0, (long)nu.re + 2L * (long)(p->lo + i));
+        if (T < 0.0)
+            for (int i = 0; i < p->n; i++) {
+                p->c[i] = mc_scale(p->c[i], -1.0);
+                p->w[i] = mc_scale(p->w[i], -1.0);
+            }
     }
     double cmax = 0.0;
     for (int i = 0; i < p->n; i++) {
@@ -939,13 +986,47 @@ bool sf_machine_mathieu(int deriv, double ar, double ai, double qr, double qi,
     return sf_machine_mathieu_fn(0, deriv, ar, ai, qr, qi, zr, zi, rr, ri);
 }
 
+/* See sf_machine_mathieu.h. The function at a = a_r / b_r is ce_r / se_r;
+ * mf = nu + 2k is the frequency of coefficient c_k (cos(mf z) / sin(mf z)).
+ *   q > 0 (DLMF 28.2(vi)):  ce_{2j}(pi/2) (-1)^j > 0,  ce_{2j+1}'(pi/2) (-1)^(j+1) > 0,
+ *                           se_{2j+1}(pi/2) (-1)^j > 0, se_{2j+2}'(pi/2) (-1)^(j+1) > 0;
+ *   q < 0 (the same, through ce_n(z, -q) = +-ce/se_n(pi/2 - z, q), 28.2.34):
+ *                           ce_r(0) > 0, se_r'(0) > 0.
+ * Each is a sum over c_k of a weight; the weight returned already carries the
+ * required sign, so the condition is always sum_k w(mf_k) c_k > 0. */
+double sf_machine_mathieu_sign_weight(int r, int parity, int qneg, long mf) {
+    if (qneg) return parity > 0 ? 1.0 : (double)mf;
+    double s, t;
+    if (parity > 0) {
+        if (r % 2 == 0) {                     /* ce(pi/2) = sum c cos(mf pi/2) */
+            s = ((mf / 2) % 2 != 0) ? -1.0 : 1.0;
+            t = ((r / 2) % 2 != 0) ? -1.0 : 1.0;
+            return s * t;
+        }
+        /* ce'(pi/2) = -sum c mf sin(mf pi/2), target (-1)^((r-1)/2 + 1) */
+        s = (((mf - 1) / 2) % 2 != 0) ? -1.0 : 1.0;
+        t = (((r - 1) / 2) % 2 != 0) ? 1.0 : -1.0;
+        return -(double)mf * s * t;
+    }
+    if (r % 2 != 0) {                         /* se(pi/2) = sum c sin(mf pi/2) */
+        s = (((mf - 1) / 2) % 2 != 0) ? -1.0 : 1.0;
+        t = (((r - 1) / 2) % 2 != 0) ? -1.0 : 1.0;
+        return s * t;
+    }
+    /* se'(pi/2) = sum c mf cos(mf pi/2), target (-1)^(r/2) */
+    s = ((mf / 2) % 2 != 0) ? -1.0 : 1.0;
+    t = ((r / 2) % 2 != 0) ? -1.0 : 1.0;
+    return (double)mf * s * t;
+}
+
 bool sf_machine_mathieu_plan_info(double ar, double ai, double qr, double qi,
                                   double* nur, double* nui, int* integer,
-                                  int* parity, int* m, int* lo, int* hi) {
+                                  int* parity, int* m, int* lo, int* hi, int* rindex) {
     if (!isfinite(ar) || !isfinite(ai) || !isfinite(qr) || !isfinite(qi)) return false;
     MathieuPlan* p = get_plan(ar, ai, qr, qi);
     if (!p || p->q0) return false;
     *nur = p->nu.re; *nui = p->nu.im; *integer = p->integer; *parity = p->parity;
     *m = p->m; *lo = p->lo; *hi = p->lo + p->n - 1;
+    *rindex = p->integer ? p->rindex : -1;
     return true;
 }

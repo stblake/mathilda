@@ -769,14 +769,21 @@ static void legendre_q_vcoeffs(unsigned long n, mpq_t* out) {
     leg_mpq_array_free(nw, n + 1);
 }
 
-/* L(x) = (1/2)(Log[1+x] - Log[1-x]) = Times[-1/2, Log[1-x]] + Times[1/2, Log[1+x]]. */
-static Expr* legendre_L_expr(const Expr* x) {
+/* L(x) = (1/2)(Log[1+x] - Log[1-x]) = Times[-1/2, Log[1-x]] + Times[1/2, Log[1+x]]
+ * for the Ferrers (cut, types 1/2) function.  The type-3 function, analytic off
+ * (-Infinity, 1] and real for real x > 1 (DLMF 14.3.7; Q_0 = ArcCoth[x]), takes
+ * L(x) = (1/2)(Log[1+x] - Log[-1+x]) instead (audit LegendreQ#1); the polynomial
+ * part v_n is the same for both. */
+static Expr* legendre_L_expr(const Expr* x, bool type3) {
     Expr* one_plus_x = expr_new_function(expr_new_symbol(SYM_Plus),
         (Expr*[]){ expr_new_integer(1), expr_copy((Expr*)x) }, 2);
-    Expr* one_minus_x = expr_new_function(expr_new_symbol(SYM_Plus),
-        (Expr*[]){ expr_new_integer(1),
-                   expr_new_function(expr_new_symbol(SYM_Times),
-                       (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)x) }, 2) }, 2);
+    Expr* one_minus_x = type3
+        ? expr_new_function(expr_new_symbol(SYM_Plus),
+              (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)x) }, 2)
+        : expr_new_function(expr_new_symbol(SYM_Plus),
+              (Expr*[]){ expr_new_integer(1),
+                         expr_new_function(expr_new_symbol(SYM_Times),
+                             (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)x) }, 2) }, 2);
     Expr* log_p = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ one_plus_x }, 1);
     Expr* log_m = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ one_minus_x }, 1);
     Expr* term_m = expr_new_function(expr_new_symbol(SYM_Times),
@@ -786,8 +793,8 @@ static Expr* legendre_L_expr(const Expr* x) {
     return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ term_m, term_p }, 2);
 }
 
-/* Q_n(x) = P_n(x) L(x) + v_n(x) for integer n >= 0. */
-static Expr* legendre_q_closed(unsigned long n, const Expr* x) {
+/* Q_n(x) = P_n(x) L(x) + v_n(x) for integer n >= 0 (type3 selects L above). */
+static Expr* legendre_q_closed(unsigned long n, const Expr* x, bool type3) {
     mpq_t* pc = leg_mpq_array_new(n + 1);
     if (!pc) return NULL;
     legendre_p_coeffs(n, pc);
@@ -802,7 +809,7 @@ static Expr* legendre_q_closed(unsigned long n, const Expr* x) {
     leg_mpq_array_free(vc, n + 1);
     if (!vn) { expr_free(pn); return NULL; }
 
-    Expr* L = legendre_L_expr(x);
+    Expr* L = legendre_L_expr(x, type3);
     Expr* pnL = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ pn, L }, 2);
     Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ pnL, vn }, 2);
     return eval_and_free(sum);
@@ -953,7 +960,7 @@ static Expr* legendre_q_two_arg(Expr* n_e, Expr* x_e) {
         if (ni < 0) return NULL;                   /* Q_n singular for n < 0 */
         unsigned long n = (unsigned long)ni;
         if (n > LEG_POLY_CAP) return NULL;
-        return legendre_q_closed(n, x_e);
+        return legendre_q_closed(n, x_e, false);
     }
 
     /* Non-integer order: exact zero gives the exact special value; an inexact
@@ -981,7 +988,7 @@ static Expr* legendre_q_assoc(Expr* n_e, Expr* m_e, int type, Expr* x_e) {
     Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Unique"), NULL, 0));
     if (!t || t->type != EXPR_SYMBOL) { if (t) expr_free(t); return NULL; }
 
-    Expr* qn = legendre_q_closed(n, t);            /* Q_n(t) */
+    Expr* qn = legendre_q_closed(n, t, type == 3); /* Q_n(t) */
     if (!qn) { expr_free(t); return NULL; }
 
     /* Dm = d^m/dt^m Q_n(t)  (m == 0 -> Q_n(t)). */
@@ -1130,6 +1137,23 @@ Expr* builtin_legendre_p(Expr* res) {
     return legendre_emit_argb(argc);
 }
 
+/* The origin Frobenius series (legendre_q_numeric) stays the machine route
+ * for a modest non-integer degree: its two terms cancel ~|nu|-fold only, and
+ * it is ~2x cheaper than arb there (relative error <= ~5e-15 against a
+ * 40-digit arb value over |nu| <= 20, |x| <= 0.9; 1.6e-13 at nu = 49.5). A
+ * machine-precision call (no MPFR
+ * argument) with a real non-integer degree |nu| <= LEG_FROBENIUS_MAXDEG and a
+ * real |x| <= 0.9 qualifies; anything else goes to arb first. */
+#define LEG_FROBENIUS_MAXDEG 20.0
+static bool leg_frobenius_machine_ok(const Expr* res) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args((Expr*)res, &ma) || ma.n != 2) return false;
+    if (ma.is_complex[0] || ma.is_complex[1]) return false;
+    double nu = ma.re[0], x = ma.re[1];
+    return nu == nu && nu != floor(nu) && fabs(nu) <= LEG_FROBENIUS_MAXDEG &&
+           fabs(x) <= 0.9;
+}
+
 /* Mathematica-style diagnostic for a wrong LegendreQ argument count. */
 static Expr* legendre_q_emit_argb(size_t argc) {
     mth_message("LegendreQ", "argb", "LegendreQ called with %zu argument%s; between 2 and 4 arguments are expected.", argc, argc == 1 ? "" : "s");
@@ -1144,6 +1168,18 @@ Expr* builtin_legendre_q(Expr* res) {
     if (argc == 2) {
         Expr* m = legendre_machine(res, true);
         if (m) return m;
+        /* Every numeric call with an inexact argument the machine kernel
+         * declined (degree > 1000, an arbitrary-precision argument, a
+         * non-integer degree) goes to arb FIRST. The closed form P_n L + v_n
+         * evaluated at an inexact x cancels ~n log10 growth -- 10^112 for
+         * LegendreQ[1025, 0.3], and LegendreQ[500, 0.3`30] = -7.5*10^26 with
+         * a 30-digit tag (audit LegendreQ#2, #3) -- and the origin Frobenius
+         * series cancels likewise for a large non-integer degree (#4); arb's
+         * value is a certified ball at the requested precision. */
+        if (flint_num_call_inexact(res) && !leg_frobenius_machine_ok(res)) {
+            Expr* r = leg_arb_tail(NULL, res, true, 1);
+            if (r) return r;
+        }
     }
 
     if (argc == 2) return leg_arb_tail(legendre_q_two_arg(args[0], args[1]), res, true, 1);

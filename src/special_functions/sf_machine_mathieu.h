@@ -15,7 +15,9 @@
  *   generic nu      sum_k c_k^2 = 1   (plain square: analytic in a and q), the
  *                   sign fixed by Re(c_0) > 0, c_0 the cos(nu z) coefficient;
  *   integer nu      (a is a characteristic value) the DLMF normalization
- *                   (int_0^{2 pi} ce^2 = pi): the generic vector times 1/sqrt 2.
+ *                   (int_0^{2 pi} ce^2 = pi): the generic vector times 1/sqrt 2,
+ *                   and for real q the DLMF sign (see
+ *                   sf_machine_mathieu_sign_weight).
  *                   At a = a_n the vector is symmetric under k -> -n-k and
  *                   MathieuS is identically 0 (the limit; no periodic odd
  *                   solution exists); at a = b_n it is antisymmetric, MathieuS
@@ -62,6 +64,15 @@ bool sf_machine_mathieu_fn(int odd, int deriv, double ar, double ai, double qr,
  * plan cannot be built (the arb kernel then declines). q must be nonzero. */
 bool sf_machine_mathieu_plan_info(double ar, double ai, double qr, double qi,
                                   double* nur, double* nui, int* integer,
-                                  int* parity, int* m, int* lo, int* hi);
+                                  int* parity, int* m, int* lo, int* hi, int* rindex);
+
+/* The DLMF sign convention at a characteristic value (real q != 0): with the
+ * plan's coefficients c_k at frequencies mf = nu + 2k, the function ce_r
+ * (parity +1) / se_r (parity -1) has the DLMF sign iff
+ * sum_k w(mf) c_k > 0 for w = sf_machine_mathieu_sign_weight(r, parity,
+ * q < 0, mf). *rindex (plan_info) is r, or -1 when the plan did not identify
+ * it (complex q, or an integer exponent snapped by Hill's estimate alone; the
+ * sign is then Re(c_0) > 0). Shared with the arbitrary-precision kernel. */
+double sf_machine_mathieu_sign_weight(int r, int parity, int qneg, long mf);
 
 #endif /* MATHILDA_SF_MACHINE_MATHIEU_H */

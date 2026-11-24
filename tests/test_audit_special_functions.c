@@ -173,8 +173,178 @@ static void test_qpochhammer_large_n(void) {
     audit_true("QPochhammer#6", "QPochhammer[2, 3, 3] == (1 - 2) (1 - 6) (1 - 18)");
 }
 
+/* LegendreQ#1 (high): type 3 with an integer degree used the type-1 (Ferrers)
+ * log, Log[1 - x], so it was complex for real x > 1.  The type-3 function is
+ * real there (DLMF 14.3.7): Q_0 = ArcCoth[x], Q_1 = x ArcCoth[x] - 1,
+ * Q_2 = P_2(x) ArcCoth[x] - 3x/2.  Type 1 keeps its cut value. */
+static void test_legendreq_type3(void) {
+    const char* id = "LegendreQ#1";
+    audit_true(id, "LegendreQ[0, 0, 3, x] === Log[1 + x]/2 - Log[-1 + x]/2");
+    audit_true(id, "Head[LegendreQ[0, 0, 3, 2.]] === Real && "
+                   "Abs[LegendreQ[0, 0, 3, 2.] - N[ArcCoth[2], 20]] < 1.*^-15");
+    audit_true(id, "Abs[LegendreQ[1, 0, 3, 2.] - N[2 ArcCoth[2] - 1, 20]] < 1.*^-15");
+    audit_true(id, "Abs[LegendreQ[2, 0, 3, 3.] - N[(3 3^2 - 1)/2 ArcCoth[3] - 9/2, 20]] < 1.*^-15");
+    audit_true(id, "Head[LegendreQ[3, 0, 3, 2.]] === Real");
+    /* m = 1: (x^2 - 1)^(1/2) d/dx Q_2(x), and continuity in the degree */
+    audit_true(id, "Abs[LegendreQ[2, 1, 3, 2.] - N[Sqrt[3] D[(3 x^2 - 1)/2 ArcCoth[x] - 3 x/2, x] /. x -> 2, 20]] < 1.*^-14");
+    audit_true(id, "Abs[LegendreQ[2, 1, 3, 2.] - LegendreQ[2.0000001, 1, 3, 2.]] < 1.*^-6");
+    /* sanity: type 1 (and type 2 on the cut) unchanged */
+    audit_true(id, "Abs[LegendreQ[0, 2.] - (N[ArcCoth[2], 20] - N[Pi/2, 20] I)] < 1.*^-15");
+    audit_true(id, "LegendreQ[0, x] === -Log[1 - x]/2 + Log[1 + x]/2");
+    audit_true(id, "Abs[LegendreQ[2, 1, 2, 0.5] - LegendreQ[2, 1, 0.5]] < 1.*^-15");
+}
+
+/* LegendreQ#2/#3/#4/#5: numeric LegendreQ at a large degree.  The closed form
+ * P_n L + v_n evaluated at an inexact x cancelled ~n digits (machine 10^112 at
+ * n = 1025; a 30-digit tag on -7.5*10^26 at n = 500), the Frobenius series
+ * did the same for a non-integer degree, and n > 2000 stayed unevaluated.
+ * arb's ball now answers (with enough first-rung bits).  Independent checks:
+ * the exact closed form at x = 3/10 under N (precision-tracked), the bound
+ * |Q_nu(cos t)| < Sqrt[Pi/(2 nu sin t)]-ish, and the three-term recurrence
+ * (nu+1) Q_{nu+1} = (2nu+1) x Q_nu - nu Q_{nu-1} at a non-integer degree. */
+static void test_legendreq_large_degree(void) {
+    audit_true("LegendreQ#2", "Abs[LegendreQ[1025, 0.3]/N[LegendreQ[1025, 3/10], 20] - 1] < 1.*^-12");
+    audit_true("LegendreQ#2", "Abs[LegendreQ[2000, 0.3]/N[LegendreQ[2000, 3/10], 20] - 1] < 1.*^-12");
+    audit_true("LegendreQ#2", "Abs[LegendreQ[2000, 0.3]] < 0.03");
+    audit_true("LegendreQ#2", "With[{xs = {0.3, -0.6, 0.95}}, "
+                              "(LegendreQ[1500, #] & /@ xs) === LegendreQ[1500, xs]]");
+    /* sanity: the machine kernel's range and its value at n = 1000 */
+    audit_true("LegendreQ#2", "Abs[LegendreQ[1000, 0.3]/N[LegendreQ[1000, 3/10], 20] - 1] < 1.*^-12");
+    audit_true("LegendreQ#3", "Abs[LegendreQ[500, 0.3`30] - N[LegendreQ[500, 3/10], 40]] < 10^-28");
+    audit_true("LegendreQ#3", "Abs[LegendreQ[200, 0.3`30] - N[LegendreQ[200, 3/10], 40]] < 10^-28");
+    audit_true("LegendreQ#3", "Precision[LegendreQ[200, 0.3`30]] == 30.");
+    audit_true("LegendreQ#3", "Abs[LegendreQ[5, 2.`25] - N[LegendreQ[5, 2], 25]] < 10^-20");
+    audit_true("LegendreQ#4", "Abs[LegendreQ[2001.5, 0.3]] < 0.03 && Abs[LegendreQ[2000.0000001, 0.3]] < 0.03");
+    audit_true("LegendreQ#4", "With[{v = 4001/2, x = 3/10}, Abs[(v + 1) LegendreQ[N[v + 1, 30], N[x, 30]] - "
+                              "(2 v + 1) x LegendreQ[N[v, 30], N[x, 30]] + v LegendreQ[N[v - 1, 30], N[x, 30]]] < 10^-20]");
+    audit_true("LegendreQ#4", "Abs[LegendreQ[2001.5, 0.3] - LegendreQ[2001.5`30, 0.3`30]] < 1.*^-12");
+    audit_true("LegendreQ#5", "NumberQ[LegendreQ[2001, 0.3]] && "
+                              "Abs[LegendreQ[2001, 0.3] - LegendreQ[2001, 0.3`30]] < 1.*^-13");
+}
+
+/* Hypergeometric0F1#1 (high): 0F1(; b; -10^10) came back as 10^86774: the
+ * machine kernel declined and the MPFR series, promoted to 53 bits, kept
+ * 290000 bits of cancellation as its answer.  arb's 0F1 now answers, and the
+ * MPFR series declines (or re-sums) a loss beyond its guard.  Independent
+ * check: 0F1(; b; -x) = Gamma[b] x^((1-b)/2) BesselJ[b-1, 2 Sqrt[x]]. */
+static void test_hypergeometric0f1_large_negative(void) {
+    const char* id = "Hypergeometric0F1#1";
+    audit_true(id, "Abs[Hypergeometric0F1[2, -1.*^10]/N[BesselJ[1, 2*10^5]/10^5, 20] - 1] < 1.*^-9");
+    audit_true(id, "Abs[Hypergeometric0F1[1, -1.*^10]/N[BesselJ[0, 2*10^5], 20] - 1] < 1.*^-9");
+    audit_true(id, "Abs[Hypergeometric0F1[2, -1.*^8]/N[BesselJ[1, 2*10^4]/10^4, 20] - 1] < 1.*^-10");
+    audit_true(id, "Abs[N[Hypergeometric0F1[2, -10^10], 20] - N[BesselJ[1, 2*10^5]/10^5, 25]] < 10^-27");
+    /* sanity: moderate and large positive z unchanged */
+    audit_true(id, "Abs[Hypergeometric0F1[2, -1.*^6]/N[BesselJ[1, 2000]/1000, 20] - 1] < 1.*^-11");
+    audit_true(id, "Abs[Hypergeometric0F1[2.5, 3.] - N[Hypergeometric0F1[5/2, 3], 20]] < 1.*^-14");
+    audit_true(id, "Abs[Hypergeometric0F1[2, 1.*^7]/N[BesselI[1, 2 Sqrt[10^7]]/Sqrt[10^7], 20] - 1] < 1.*^-9");
+    audit_true(id, "Abs[N[Hypergeometric0F1[1/3, -50], 30] - N[Gamma[1/3] 50^(1/3) BesselJ[-2/3, 2 Sqrt[50]], 35]] < 10^-27");
+    audit_true(id, "Abs[N[Hypergeometric1F1[1, 2, -40], 30] - N[(1 - Exp[-40])/40, 35]] < 10^-28");
+}
+
+/* HypergeometricU#1/#2: z = 0.  The terminating polynomial built its constant
+ * term as (-z)^0, i.e. 0^0 at z = 0; and at an inexact zero the series gave a
+ * finite -0.006 at the pole of U(1.5, 7, z).  DLMF 13.2.16-22: U(-m, b, 0) =
+ * (-1)^m (b)_m; U(a, b, 0) = Gamma(1-b)/Gamma(a-b+1) for Re b < 1, unbounded
+ * for Re b >= 1.  Independent check of the finite value: U at z = 10^-45. */
+static void test_hypergeometricu_zero(void) {
+    audit_chk("HypergeometricU#1", "HypergeometricU[-1, 2, 0]", "-2");
+    audit_true("HypergeometricU#1", "HypergeometricU[-2, b, 0] === b + b^2");
+    audit_true("HypergeometricU#1", "HypergeometricU[-1, 2, 0.] === -2.");
+    audit_true("HypergeometricU#1", "HypergeometricU[-2, b, z] === b + b^2 - 2 z - 2 b z + z^2");
+    audit_chk("HypergeometricU#2", "HypergeometricU[1.5, 7, 0.]", "ComplexInfinity");
+    audit_chk("HypergeometricU#2", "HypergeometricU[3/2, 7, 0]", "ComplexInfinity");
+    audit_chk("HypergeometricU#2", "HypergeometricU[1.5, 7, 0.`20]", "ComplexInfinity");
+    audit_chk("HypergeometricU#2", "HypergeometricU[1, 1, 0]", "ComplexInfinity");
+    audit_true("HypergeometricU#2", "HypergeometricU[1/2, 1/3, 0] === Gamma[2/3]/Gamma[7/6]");
+    audit_true("HypergeometricU#2", "Abs[N[HypergeometricU[1/2, 1/3, 10^-45], 30] - "
+                                    "N[Gamma[2/3]/Gamma[7/6], 30]] < 10^-25");
+    audit_true("HypergeometricU#2", "Abs[HypergeometricU[0.5, 1/3, 0.] - N[Gamma[2/3]/Gamma[7/6]]] < 1.*^-15");
+    /* sanity: a nonzero z unchanged */
+    audit_true("HypergeometricU#2", "Abs[HypergeometricU[1.5, 7, 2.] - N[HypergeometricU[3/2, 7, 2], 20]] < 1.*^-13");
+}
+
+/* WhittakerW#1/#2: inexact z = 0.  Only an exact 0 took the special value;
+ * 0. reached z^(m+1/2) U(.., 0.) and gave 0.0 (or, for m < 0, leaked
+ * Power::infy).  W_{k,m}(z) ~ Gamma(2|m|)/Gamma(1/2+|m|-k) z^(1/2-|m|) (DLMF
+ * 13.14.18): ComplexInfinity for |Re m| > 1/2, 1/Gamma(1-k) at m = 1/2, 0
+ * below.  Independent check: W at z = 10^-12 against the limit. */
+static void test_whittakerw_zero(void) {
+    const char* id = "WhittakerW#1";
+    audit_chk(id, "WhittakerW[2, 3, 0.]", "ComplexInfinity");
+    audit_chk(id, "WhittakerW[1., 1., 0.]", "ComplexInfinity");
+    audit_chk(id, "WhittakerW[2, 3, 0.`20]", "ComplexInfinity");
+    audit_true(id, "Abs[WhittakerW[1/3, 0.5, 0.] - N[1/Gamma[2/3]]] < 1.*^-15");
+    audit_true(id, "Abs[WhittakerW[1/3, 0.5, 1.*^-12] - WhittakerW[1/3, 0.5, 0.]] < 1.*^-9");
+    audit_true(id, "WhittakerW[1/3, 1/4, 0.] == 0");
+    audit_chk(id, "WhittakerW[2, 3, 0]", "ComplexInfinity");
+    audit_chk("WhittakerW#2", "Check[WhittakerW[2, -3, 0.], \"fired\"]", "ComplexInfinity");
+    /* sanity: a nonzero z unchanged, and W even in m */
+    audit_true(id, "Abs[WhittakerW[2, 3, 4.5] - N[WhittakerW[2, 3, 9/2], 20]] < 1.*^-13");
+    audit_true(id, "WhittakerW[2, -3, 4.5] == WhittakerW[2, 3, 4.5]");
+}
+
+/* WeberE#1 (high): WeberE[n, 0] for odd n built the constant term of the
+ * integer-order polynomial as z^0, so z = 0 gave 0^0.  E_nu(0) =
+ * (1 - Cos[nu Pi])/(nu Pi), checked against the machine value. */
+static void test_webere_zero(void) {
+    const char* id = "WeberE#1";
+    audit_chk(id, "WeberE[1, 0]", "2/Pi");
+    audit_chk(id, "WeberE[3, 0]", "2/(3 Pi)");
+    audit_chk(id, "WeberE[-1, 0]", "-2/Pi");
+    audit_chk(id, "WeberE[2, 0]", "0");
+    audit_true(id, "Abs[N[WeberE[5, 0]] - WeberE[5, 0.]] < 1.*^-15");
+    /* sanity: the symbolic polynomial at nonzero z unchanged */
+    audit_true(id, "WeberE[3, x] === 2/(3 Pi) + 2 x^2/(15 Pi) - StruveH[3, x]");
+}
+
+/* MathieuC#1-#3, MathieuS#1-#3: Mathieu functions at a characteristic value
+ * for larger q.  Hill's determinant (cancelling ~(q^2/16)^k/(k!)^4) no longer
+ * snapped nu to the integer, so the DLMF 1/Sqrt[2] was lost (or the plan
+ * declined); and the sign Re(c_0) > 0 flips where c_0 passes through zero.
+ * Now a Sturm count against the characteristic-value matrices identifies
+ * a_r / b_r, and the sign follows DLMF 28.2(vi): ce_{2j}(Pi/2)(-1)^j > 0,
+ * ce_{2j+1}'(Pi/2)(-1)^(j+1) > 0, se_{2j+1}(Pi/2)(-1)^j > 0,
+ * se_{2j+2}'(Pi/2)(-1)^(j+1) > 0.  Independent checks: the normalization
+ * integral (= Pi) by NIntegrate, the DLMF sign conditions, continuity in q,
+ * and machine == 30-digit. */
+static void test_mathieu_characteristic(void) {
+    audit_run("aA[n_, q_] := MathieuCharacteristicA[n, q]; aB[n_, q_] := MathieuCharacteristicB[n, q]");
+    audit_true("MathieuC#1", "Abs[NIntegrate[MathieuC[aA[2, 35.], 35., z]^2, {z, 0, 2 Pi}] - Pi] < 1.*^-8");
+    audit_true("MathieuC#1", "Abs[NIntegrate[MathieuC[aA[0, 40.], 40., z]^2, {z, 0, 2 Pi}] - Pi] < 1.*^-8");
+    audit_true("MathieuC#1", "Abs[MathieuC[aA[2, N[35, 30]], N[35, 30], N[3/10, 30]] - "
+                             "MathieuC[aA[2, 35.], 35., 0.3]] < 1.*^-13");
+    audit_true("MathieuC#2", "And @@ Table[MathieuC[aA[4, q], q, N[Pi/2]] > 0, {q, {10., 14., 14.5, 20., 25., 40.}}]");
+    audit_true("MathieuC#2", "Abs[MathieuC[aA[4, 14.5], 14.5, N[Pi/2]] - MathieuC[aA[4, 14.4], 14.4, N[Pi/2]]] < 0.01");
+    audit_true("MathieuC#3", "MathieuC[aA[3, 20.], 20., 0.1] > 0");
+    audit_true("MathieuC#3", "And @@ Table[MathieuCPrime[aA[3, q], q, N[Pi/2]] > 0, {q, {5., 15., 20., 30., 35., 40.}}]");
+    audit_true("MathieuC#3", "Abs[NIntegrate[MathieuC[aA[3, 20.], 20., z]^2, {z, 0, 2 Pi}] - Pi] < 1.*^-8");
+    audit_true("MathieuS#1", "NumberQ[MathieuS[aB[2, 40.], 40., 0.4]] && MathieuS[aB[2, 40.], 40., 0.4] > 0");
+    audit_true("MathieuS#1", "MathieuSPrime[aB[2, 40.], 40., N[Pi/2]] < 0");
+    audit_true("MathieuS#1", "Abs[NIntegrate[MathieuS[aB[2, 40.], 40., z]^2, {z, 0, 2 Pi}] - Pi] < 1.*^-8");
+    audit_true("MathieuS#1", "Abs[MathieuS[aB[2, N[40, 30]], N[40, 30], N[2/5, 30]] - "
+                             "MathieuS[aB[2, 40.], 40., 0.4]] < 1.*^-13");
+    audit_true("MathieuS#2", "Abs[NIntegrate[MathieuS[aB[1, 15.], 15., z]^2, {z, 0, 2 Pi}] - Pi] < 1.*^-8");
+    audit_true("MathieuS#3", "And @@ Table[MathieuS[aB[5, q], q, N[Pi/2]] > 0, {q, {10., 20., 30., 35., 40.}}]");
+    audit_true("MathieuS#3", "And @@ Table[MathieuS[aB[1, q], q, N[Pi/2]] > 0, {q, {5., 15., 20., 25., 30.}}]");
+    audit_true("MathieuS#3", "MathieuS[aB[5, 35.], 35., 0.4] > 0 && MathieuS[aB[2, 30.], 30., 0.4] > 0");
+    /* the wrong parity is still identically 0 */
+    audit_true("MathieuS#1", "MathieuS[aA[2, 35.], 35., 0.4] == 0 && MathieuC[aB[2, 40.], 40., 0.4] == 0");
+    /* sanity: small q, negative q, generic and complex a unchanged */
+    audit_true("MathieuC#1", "MathieuC[aA[2, 1.], 1., 0.3] == 0.9693734655943552");
+    audit_true("MathieuC#1", "MathieuC[aA[2, -5.], -5., 0.3] == 0.232723423823903");
+    audit_true("MathieuC#1", "MathieuC[1.5, 2., 0.7] == 1.6751744989286563");
+    audit_true("MathieuC#1", "MathieuC[2 + I, 1. + 0.5 I, 0.3] == 1.1561237520754863 - 0.1593777733640514 I");
+}
+
 int main(void) {
     audit_init();
+    TEST(test_legendreq_type3);
+    TEST(test_legendreq_large_degree);
+    TEST(test_hypergeometric0f1_large_negative);
+    TEST(test_hypergeometricu_zero);
+    TEST(test_whittakerw_zero);
+    TEST(test_webere_zero);
+    TEST(test_mathieu_characteristic);
     TEST(test_betaregularized_large_b);
     TEST(test_expintegrale_large_order);
     TEST(test_struveh_large_z);

@@ -270,13 +270,17 @@ typedef void (*nb_fn3)(acb_t, const acb_t, const acb_t, const acb_t, slong);
  * re-converted on every attempt because scalar_to_arb ROUNDS a Rational at
  * `prec` -- a retry that reused the first conversion would raise the working
  * precision around an input that is still only accurate to the old one. */
-static Expr* nb_eval(const Expr* const* args, int n, slong outb,
-                     nb_fn1 f1, nb_fn2 f2, nb_fn3 f3) {
+/* `extra`: bits added to the first rung for a kernel whose loss is known to
+ * grow with an argument; `lossy`: a non-finite ball is a loss (climb), not a
+ * pole -- for a kernel that returns [+-inf] when its cancellation exceeds the
+ * working precision (acb_hypgeom_legendre_q at a large degree). */
+static Expr* nb_eval_ex(const Expr* const* args, int n, slong outb,
+                        nb_fn1 f1, nb_fn2 f2, nb_fn3 f3, slong extra, int lossy) {
     acb_t A[3], R;
     for (int i = 0; i < n; i++) acb_init(A[i]);
     acb_init(R);
     Expr* out = NULL;
-    slong wp = outb + NB_GUARD;
+    slong wp = outb + NB_GUARD + extra;
     for (int attempt = 0; ; attempt++) {
         int ok = 1;
         for (int i = 0; i < n && ok; i++) ok = expr_to_acb(args[i], A[i], wp);
@@ -284,6 +288,7 @@ static Expr* nb_eval(const Expr* const* args, int n, slong outb,
         if (n == 1)      f1(R, A[0], wp);
         else if (n == 2) f2(R, A[0], A[1], wp);
         else             f3(R, A[0], A[1], A[2], wp);
+        if (lossy && !acb_is_finite(R) && attempt < NB_MAX_DOUBLINGS) { wp *= 2; continue; }
         if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
         slong bits = nb_emit_bits(R, outb);
         if (bits > 0) out = acb_to_expr(R, bits);
@@ -292,6 +297,11 @@ static Expr* nb_eval(const Expr* const* args, int n, slong outb,
     for (int i = 0; i < n; i++) acb_clear(A[i]);
     acb_clear(R);
     return out;
+}
+
+static Expr* nb_eval(const Expr* const* args, int n, slong outb,
+                     nb_fn1 f1, nb_fn2 f2, nb_fn3 f3) {
+    return nb_eval_ex(args, n, outb, f1, f2, f3, 0, 0);
 }
 
 static Expr* nb_eval1(const Expr* a, nb_fn1 f) {
@@ -1055,8 +1065,22 @@ static void nb_legq1(acb_t r, const acb_t n, const acb_t m, const acb_t z, slong
 Expr* flint_num_legendre_p(const Expr* n, const Expr* m, const Expr* z, int type) {
     return nb_eval3(n, m, z, type ? nb_legp1 : nb_legp0);
 }
+/* arb's Q_nu^mu loses about |nu| bits to cancellation (its hypergeometric
+ * representation) and returns a non-finite ball when that exceeds the working
+ * precision -- at 85 bits for LegendreQ[1025, 0.3]. So the first rung carries
+ * |nu| extra bits (|nu| <= 10^5; beyond, the ladder alone) and a non-finite
+ * ball climbs instead of declining (audit LegendreQ#2, #3). */
 Expr* flint_num_legendre_q(const Expr* n, const Expr* m, const Expr* z, int type) {
-    return nb_eval3(n, m, z, type ? nb_legq1 : nb_legq0);
+    const Expr* args[3] = { n, m, z };
+    slong extra = 0;
+    acb_t N; acb_init(N);
+    if (expr_to_acb(n, N, 64) && acb_is_finite(N)) {
+        double nd = arf_get_d(arb_midref(acb_realref(N)), ARF_RND_NEAR);
+        if (fabs(nd) <= 1e5) extra = (slong)fabs(nd);
+    }
+    acb_clear(N);
+    return nb_eval_ex(args, 3, pick_out_bits(args, 3), NULL, NULL,
+                      type ? nb_legq1 : nb_legq0, extra, 1);
 }
 
 /* StieltjesGamma[n] or StieltjesGamma[n, a]; n a non-negative integer. The fmpz
@@ -3254,6 +3278,19 @@ static int mg_run(const MgSrc* s, slong outb, acb_t res) {
     return ok;
 }
 
+/* 0F1(; b; z) at arbitrary precision: acb_hypgeom_0f1, which switches to the
+ * Bessel asymptotic expansion for large |z|. The direct series loses
+ * ~2 sqrt|z| / ln 2 bits to cancellation for z < 0 (0F1(; 2; -10^10): 290000
+ * bits), which the MPFR series of HypergeometricPFQ did not account for --
+ * it returned -9.2*10^86774 for a value of size 10^-8 (audit
+ * Hypergeometric0F1#1). Same precision ladder as the other kernels. */
+static void nb_hyp0f1(acb_t r, const acb_t b, const acb_t z, slong prec) {
+    acb_hypgeom_0f1(r, b, z, 0, prec);
+}
+Expr* flint_num_hyp0f1(const Expr* b, const Expr* z) {
+    return nb_eval2(b, z, nb_hyp0f1);
+}
+
 /* Gauss 2F1(a, b; c; z) at arbitrary precision: acb_hypgeom_2f1, which applies
  * the linear-fractional transformations (z -> 1-z, 1/z, z/(z-1), ...) that a
  * direct series lacks -- the MPFR series HypergeometricPFQ used before needs
@@ -4050,6 +4087,9 @@ Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int odd, in
 }
 Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z) {
     (void)a; (void)b; (void)c; (void)z; return NULL;
+}
+Expr* flint_num_hyp0f1(const Expr* b, const Expr* z) {
+    (void)b; (void)z; return NULL;
 }
 Expr* flint_num_meijerg(const Expr* const* a, size_t n, size_t p,
                         const Expr* const* b, size_t m, size_t q,

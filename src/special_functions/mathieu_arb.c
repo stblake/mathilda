@@ -935,9 +935,9 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     double qi = arf_get_d(arb_midref(acb_imagref(q)), ARF_RND_NEAR);
     double zr = arf_get_d(arb_midref(acb_realref(z)), ARF_RND_NEAR);
     double zi = arf_get_d(arb_midref(acb_imagref(z)), ARF_RND_NEAR);
-    double nur, nui; int integer, parity, mi, lo_m, hi_m;
+    double nur, nui; int integer, parity, mi, lo_m, hi_m, rindex;
     if (!sf_machine_mathieu_plan_info(ar, ai, qr, qi, &nur, &nui, &integer,
-                                      &parity, &mi, &lo_m, &hi_m)) {
+                                      &parity, &mi, &lo_m, &hi_m, &rindex)) {
         acb_indeterminate(res); return;
     }
     (void)lo_m; (void)hi_m;
@@ -1047,6 +1047,21 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
         double c0r = arf_get_d(arb_midref(acb_realref(t)), ARF_RND_NEAR);
         double c0i = arf_get_d(arb_midref(acb_imagref(t)), ARF_RND_NEAR);
         if (c0r < 0.0 || (fabs(c0r) <= 1e-12 * fabs(c0i) && c0i < 0.0)) acb_neg(s, s);
+    }
+    if (integer && rindex >= 0 && realpq) {
+        /* the DLMF sign, by the machine plan's rule (audit MathieuC#2/#3,
+         * MathieuS#3): sum_k w(nu + 2k) c_k / s > 0, read on midpoints */
+        acb_t T, wk; acb_init(T); acb_init(wk);
+        slong nu0 = (slong)floor(nur + 0.5);
+        for (slong i = 0; i < n; i++) {
+            double w = sf_machine_mathieu_sign_weight(rindex, parity, qr < 0.0,
+                                                      (long)(nu0 + 2 * (lo + i)));
+            acb_mul_si(wk, c + i, (slong)w, 64);
+            acb_add(T, T, wk, 64);
+        }
+        acb_div(T, T, s, 64);
+        if (arf_sgn(arb_midref(acb_realref(T))) < 0) acb_neg(s, s);
+        acb_clear(T); acb_clear(wk);
     }
     acb_inv(s, s, wp);
     if (integer) {

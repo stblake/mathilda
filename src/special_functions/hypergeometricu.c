@@ -140,6 +140,84 @@ static Expr* hu_demote_machine(Expr* e) {
     return e;
 }
 
+/* A real numeric leaf, or Rational of two, as a double. */
+static bool hu_real_d(const Expr* e, double* out) {
+    if (hu_num_to_d(e, out)) return true;
+    if (e && e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        double n, d;
+        if (hu_num_to_d(e->data.function.args[0], &n) &&
+            hu_num_to_d(e->data.function.args[1], &d) && d != 0.0) {
+            *out = n / d;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Real and imaginary parts of a number as doubles. */
+static bool hu_parts_d(const Expr* e, double* re, double* im) {
+    Expr *r, *i;
+    if (is_complex((Expr*)e, &r, &i)) return hu_real_d(r, re) && hu_real_d(i, im);
+    *im = 0.0;
+    return hu_real_d(e, re);
+}
+
+/* A numeric zero, exact or inexact (0, 0., 0`20, Complex[0., 0.]). */
+static bool hu_is_zero(const Expr* e) {
+    double re, im;
+    return hu_is_number(e) && hu_parts_d(e, &re, &im) && re == 0.0 && im == 0.0;
+}
+
+/* U(a, b, 0) for numeric a, b (DLMF 13.2.16-13.2.22): with a = -m a
+ * non-positive integer U is the polynomial (-1)^m (b)_m at 0; otherwise
+ * Gamma(1-b)/Gamma(a-b+1) for Re b < 1 and unbounded for Re b >= 1 (the
+ * z^(1-b) term, or -ln z / Gamma(a) at b = 1). Re b = 1, b != 1 has no limit:
+ * NULL. A zero that is inexact (or an inexact a, b) numericalizes the value
+ * at the governing precision. Before this the machine/arb series answered a
+ * finite -0.006 at the pole of HypergeometricU[1.5, 7, 0.] (audit
+ * HypergeometricU#2). */
+static Expr* hu_at_zero(const Expr* a_e, const Expr* b_e, const Expr* z_e) {
+    double ar, ai, br, bi;
+    if (!hu_is_number(a_e) || !hu_is_number(b_e) ||
+        !hu_parts_d(a_e, &ar, &ai) || !hu_parts_d(b_e, &br, &bi)) return NULL;
+    Expr* v;
+    if (ai == 0.0 && ar <= 0.0 && ar == floor(ar) && ar > -1e6) {
+        int64_t m = (int64_t)(-ar);
+        v = mk_fn2("Times", expr_new_integer((m & 1) ? -1 : 1),
+                   mk_fn2("Pochhammer", expr_copy((Expr*)b_e), expr_new_integer(m)));
+    } else if (br < 1.0) {
+        Expr* omb = mk_fn2("Plus", expr_new_integer(1),
+                           mk_fn2("Times", expr_new_integer(-1), expr_copy((Expr*)b_e)));
+        Expr* den = mk_fn2("Plus", expr_copy((Expr*)a_e), expr_copy(omb));
+        v = mk_fn2("Times", expr_new_function(expr_new_symbol("Gamma"), (Expr*[]){ omb }, 1),
+                   mk_fn2("Power", expr_new_function(expr_new_symbol("Gamma"),
+                                                     (Expr*[]){ den }, 1),
+                          expr_new_integer(-1)));
+    } else if (br > 1.0 || bi == 0.0) {
+        return expr_new_symbol("ComplexInfinity");
+    } else {
+        return NULL;
+    }
+    if (hu_is_inexact(a_e) || hu_is_inexact(b_e) || hu_is_inexact(z_e)) {
+#ifdef USE_MPFR
+        long gov = 0;
+        const Expr* xs[3] = { a_e, b_e, z_e };
+        for (int i = 0; i < 3; i++) {
+            long bt = numeric_min_inexact_bits(xs[i]);
+            if (bt > 0 && (gov == 0 || bt < gov)) gov = bt;
+        }
+        if (gov > 53)
+            v = mk_fn2("N", v, expr_new_real(numeric_bits_to_digits(gov)));
+        else
+#endif
+            v = expr_new_function(expr_new_symbol("N"), (Expr*[]){ v }, 1);
+    }
+    return eval_and_free(v);
+}
+
 /* ------------------------------------------------------------------ */
 /* Exact reductions                                                    */
 /* ------------------------------------------------------------------ */
@@ -175,7 +253,10 @@ static Expr* hu_terminating(int64_t m, const Expr* b_e, const Expr* z_e) {
             return NULL;
         }
         f[0] = mk_fn2("Binomial", expr_new_integer(m), expr_new_integer(s));
-        f[1] = mk_fn2("Power", mk_fn2("Times", expr_new_integer(-1), expr_copy((Expr*)z_e)),
+        /* (-z)^0 is the constant 1, not Power[-z, 0]: at z = 0 that is 0^0
+         * (audit HypergeometricU#1) */
+        f[1] = s == 0 ? expr_new_integer(1)
+             : mk_fn2("Power", mk_fn2("Times", expr_new_integer(-1), expr_copy((Expr*)z_e)),
                       expr_new_integer(s));
         for (int64_t j = s; j < m; j++)               /* (b + s)_(m - s) */
             f[2 + (j - s)] = mk_fn2("Plus", expr_copy((Expr*)b_e), expr_new_integer(j));
@@ -217,6 +298,11 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
         return eval_and_free(mk_fn2("Power", expr_copy(z_e),
                                     mk_fn2("Times", expr_new_integer(-1),
                                            expr_copy(a_e))));
+
+    if (hu_is_zero(z_e)) {                                        /* U(a,b,0) */
+        Expr* v = hu_at_zero(a_e, b_e, z_e);
+        if (v) return v;
+    }
 
     /* Numericise only when some argument is inexact; otherwise stay symbolic. */
     if (!(hu_is_inexact(a_e) || hu_is_inexact(b_e) || hu_is_inexact(z_e)))

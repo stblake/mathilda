@@ -220,6 +220,9 @@ Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int odd, in
 /* Hypergeometric2F1[a, b, c, z] at arbitrary precision (acb_hypgeom_2f1, with
  * its transformations near z = 1). Used by HypergeometricPFQ's MPFR path. */
 Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z);
+/* Hypergeometric0F1[b, z] at arbitrary precision (acb_hypgeom_0f1, with the
+ * Bessel asymptotics at large |z|). Used by HypergeometricPFQ's numeric path. */
+Expr* flint_num_hyp0f1(const Expr* b, const Expr* z);
 
 /* MeijerG[{{a_1..a_n},{a_n+1..a_p}}, {{b_1..b_m},{b_m+1..b_q}}, z, r] via
  * Slater's theorem over arb's regularized pFq (the dual expansion in 1/w for

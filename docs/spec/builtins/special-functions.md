@@ -1564,6 +1564,13 @@ equal to `HypergeometricPFQ[{}, {b}, z]`.
   (no rounded `2 Sqrt[-z]`), normalised by the Neumann series (Gautschi 1967) —
   accurate to the envelope of the oscillation; for `z > 900`, the Hankel
   expansion of `I_{b-1}` with `2 Sqrt[z]` formed in double-double. Scalar 0.9 µs.
+- Where the machine kernel declines (Miller's recurrence past `|z| ~ 10^8`, the
+  Hankel series past `z ~ 1.2*10^5`) and at arbitrary precision: arb's
+  `acb_hypgeom_0f1` (Bessel asymptotics at large `|z|`), a machine call
+  answering a machine number while it fits a double:
+  `Hypergeometric0F1[2, -1.*^10] = -1.34848*^-8` (`= BesselJ[1, 2*10^5]/10^5`).
+  The generic MPFR series of `HypergeometricPFQ` now tracks its largest term
+  and re-sums (or declines) when the cancellation exceeds its guard bits.
 
 ```mathematica
 In[1]:= Hypergeometric0F1[1/2, z]
@@ -1658,6 +1665,11 @@ Out[4]= 24.8565393133858972090022500136712230259988212774851
   `HypergeometricU[-2, b, z] = b + b^2 - 2 z - 2 b z + z^2`,
   `HypergeometricU[-2, b, 2.5] = 1.25 - 4.0 b + b^2`. (An all-machine call
   still takes the double kernel first.)
+- **z = 0** (exact or inexact; DLMF 13.2.16-22): `(-1)^m (b)_m` for `a = -m`
+  (`HypergeometricU[-1, 2, 0] = -2`), `Gamma[1-b]/Gamma[a-b+1]` for `Re b < 1`
+  (`HypergeometricU[1/2, 1/3, 0] = Gamma[2/3]/Gamma[7/6]`), `ComplexInfinity`
+  for `Re b > 1` or `b = 1` (`HypergeometricU[1.5, 7, 0.]`); unevaluated for
+  `Re b = 1`, `b != 1` (no limit). An inexact zero numericalizes the value.
 - **Numerics.** With at least one inexact argument the value is computed at
   machine or arbitrary (MPFR) precision, real or complex:
   `HypergeometricU[1.5, 7, 4.5] = 0.554931`,
@@ -3485,7 +3497,8 @@ HypergeometricU[m-k+1/2, 2m+1, z]`, and is evaluated through that form.
   — three seed evaluations instead of three per term — so the packed path runs
   ~1.8× faster than the SciPy `exp·z^(m+½)·hyperu` composition and ~1000× faster
   than the reference, which has no packed Whittaker path.
-- **Values at z = 0.** By the leading exponent `1/2 - |Re m|`: `0` for
+- **Values at z = 0** (exact or inexact; an inexact zero numericalizes the
+  value, `WhittakerW[2, 3, 0.] = ComplexInfinity`). By the leading exponent `1/2 - |Re m|`: `0` for
   `|Re m| < 1/2` (`WhittakerW[0, 0, 0] = 0`), `ComplexInfinity` for `|Re m| > 1/2`
   (`WhittakerW[0, 1, 0]`), and the finite `1/Gamma[1-k]` for `m = ±1/2`
   (`WhittakerW[k, 1/2, 0] = 1/Gamma[1-k]`; `WhittakerW[2, 0.5, 0] = 0`).
@@ -4086,8 +4099,15 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
     coefficient for the representative of `nu` nearest `Sqrt[a]`;
   - integer `nu` (`a` a characteristic value, `MathieuCharacteristicA[r, q]` for
     an integer `r`): the DLMF normalization `Integrate[ce^2, {z, 0, 2 Pi}] = Pi`,
-    i.e. scipy's `mathieu_cem`. A machine `a` within ~2e-6 in `nu` of a
-    characteristic value is treated as one;
+    i.e. scipy's `mathieu_cem`. For real `a`, `q` the test is a Sturm count on
+    the `MathieuCharacteristicA`/`B` matrices (`a` within ~1e-12 relative of
+    `a_r(q)` or `b_r(q)`), which also names `r`; otherwise `a` within ~2e-6 in
+    `nu` (Hill's determinant) is treated as one. At a characteristic value with
+    real `q` the sign is DLMF's (28.2(vi)): `ce_{2j}(Pi/2) (-1)^j > 0`,
+    `ce_{2j+1}'(Pi/2) (-1)^(j+1) > 0`, `se_{2j+1}(Pi/2) (-1)^j > 0`,
+    `se_{2j+2}'(Pi/2) (-1)^(j+1) > 0` for `q > 0`, and `ce_r(0) > 0`,
+    `se_r'(0) > 0` for `q < 0` -- continuous in `q`, where `c_0 > 0` is not
+    (`c_0` of `ce_4` passes through zero near `q = 14.2`);
   - `q = 0`: `Cos[Sqrt[a] z]`, and `1/Sqrt[2]` for `a = 0` (`ce_0`).
 
   For real `a`, `q` in a stability band (real `nu`), and at every characteristic
@@ -5116,6 +5136,12 @@ default `1`).
   Kahan 1987) and with the closed form's branch: on the real axis beyond `±1`,
   `Log[1 - x] = log(x - 1) + iπ` (x > 1), so `LegendreQ[2, 1.5] =
   0.063567 - 4.51604 I`. `x = ±1` declines to the exact path (`Indeterminate`).
+- **Other numeric calls** (degree > 1000, arbitrary precision, non-integer
+  degree, with an inexact argument) go to arb's `acb_hypgeom_legendre_q`
+  first, with `|n|` extra working bits for its cancellation:
+  `LegendreQ[2000, 0.3] = 0.00196943`, `LegendreQ[500, 0.3`30]` correct to 30
+  digits, `LegendreQ[2001, 0.3]` evaluates. (The closed form at an inexact `x`
+  cancelled ~n digits.)
 - **Associated functions (type 1).** For integer `n ≥ 0` and integer `m ≥ 0`,
   `(-1)^m (1-x²)^(m/2) d^m/dx^m Q_n(x)`. Because `Q_n` is not a polynomial, these
   carry `ArcTanh`/`Log` terms, e.g. `LegendreQ[3, 1, x]` and `LegendreQ[2, 2,
@@ -5124,7 +5150,10 @@ default `1`).
   (1-x)^(-m/2)` (type 2) or `(1+x)^(m/2) (-1+x)^(-m/2)` (type 3) to the shared
   core `(-1)^m (1-x)^m d^m/dx^m Q_n(x)` — the identical construction used for
   `LegendreP` types 2/3 — so they equal type 1 on the cut but carry the branch
-  structure of type `a`.
+  structure of type `a`. Type 3 builds the core from `Q_n` with
+  `L(x) = (Log[1+x] - Log[-1+x])/2`, real for `x > 1` (DLMF 14.3.7):
+  `LegendreQ[0, 0, 3, x] = Log[1+x]/2 - Log[-1+x]/2`, `LegendreQ[0, 0, 3, 2.] =
+  0.549306` (`ArcCoth[2]`).
 - **Derivative and Series.** `D[LegendreQ[n, x], x] = ((-1-n) x Q_n + (1+n)
   Q_{n+1}) / (x²-1)`; higher integer-order derivatives follow by repetition.
   `Series[LegendreQ[v, x], {x, 0, k}]` gives the origin expansion.

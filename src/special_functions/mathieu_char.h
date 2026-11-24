@@ -4,12 +4,16 @@
 #define MATHILDA_MATHIEU_CHAR_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "expr.h"
 
 /* The machine helper shared by the scalar path, the NDArray / packed map and
  * Compile[]: a_r(q) (odd == 0) or b_r(q) (odd == 1) for real r and q. False
  * (declines) for b_0, a non-finite input, or |r|, |q| too large (~10^7). */
 bool sf_mathieu_char_r(int odd, double r, double q, double* out);
+/* Is a (to rounding) the characteristic value a_r(q) (*odd = 0) or b_r(q)
+ * (*odd = 1) at real q != 0? Sturm-count test; see mathieu_char.c. */
+bool sf_mathieu_char_match(double a, double q, int* odd, int64_t* r);
 /* Binary-kernel shapes of the above. */
 bool sf_mathieu_char_a_r(double r, double q, double* out);
 bool sf_mathieu_char_b_r(double r, double q, double* out);

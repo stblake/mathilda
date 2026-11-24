@@ -209,6 +209,51 @@ bool sf_mathieu_char_r(int odd, double r, double q, double* out) {
     return true;
 }
 
+/* Is `a` (to rounding) a characteristic value at real q != 0, and which one?
+ * For each of the four integer classes, two Sturm counts put the eigenvalues
+ * of the class matrix in the band [a - tol, a + tol]; the class whose
+ * eigenvalue there lies nearest a wins (a_r and b_{r+1} merge exponentially
+ * fast as q grows, so two classes can both have one in the band). The
+ * function itself is then ce_r (*odd = 0) or se_r (*odd = 1). tol is a few
+ * hundred ulp of the matrix scale: a value from MathieuCharacteristicA/B (or
+ * a few roundings away from one) matches, a genuinely different a does not.
+ * Used by the Mathieu-function plan (sf_machine_mathieu.c), whose own
+ * integer-exponent test, from Hill's determinant, loses accuracy as q grows. */
+bool sf_mathieu_char_match(double a, double q, int* odd, int64_t* r) {
+    if (!isfinite(a) || !isfinite(q) || q == 0.0) return false;
+    double tol = 1e-12 * (fabs(a) + 2.0 * fabs(q) + 1.0);
+    double s = sqrt(fabs(a)) + 2.0;
+    int64_t K = mc_size(s, fabs(q), 53);
+    if (K < 0) return false;
+    static const int classes[4] = { MC_A_EVEN, MC_A_ODD, MC_B_ODD, MC_B_EVEN };
+    double best = HUGE_VAL;
+    int bcls = -1; int64_t bidx = 0;
+    for (int ci = 0; ci < 4; ci++) {
+        double *d, *e2;
+        int64_t n = mc_build_d(classes[ci], 0.0, q, K, &d, &e2);
+        if (n < 0) return false;
+        double emax = 0.0;
+        for (int64_t i = 0; i + 1 < n; i++) if (e2[i] > emax) emax = e2[i];
+        double pivmin = DBL_MIN * (emax > 1.0 ? emax : 1.0);
+        int64_t c1 = mc_count_d(d, e2, n, a - tol, pivmin);
+        int64_t c2 = mc_count_d(d, e2, n, a + tol, pivmin);
+        if (c2 > c1 && c1 + 2 < n) {
+            double lam = mc_bisect_d(d, e2, n, c1);
+            double dist = fabs(lam - a);
+            if (dist < best) { best = dist; bcls = classes[ci]; bidx = c1; }
+        }
+        free(d); free(e2);
+    }
+    if (bcls < 0 || !(best <= tol)) return false;
+    switch (bcls) {
+        case MC_A_EVEN: *odd = 0; *r = 2 * bidx;     break;
+        case MC_A_ODD:  *odd = 0; *r = 2 * bidx + 1; break;
+        case MC_B_ODD:  *odd = 1; *r = 2 * bidx + 1; break;
+        default:        *odd = 1; *r = 2 * bidx + 2; break;
+    }
+    return true;
+}
+
 bool sf_mathieu_char_a_r(double r, double q, double* out) { return sf_mathieu_char_r(0, r, q, out); }
 bool sf_mathieu_char_b_r(double r, double q, double* out) { return sf_mathieu_char_r(1, r, q, out); }
 

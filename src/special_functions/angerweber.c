@@ -72,7 +72,10 @@ static Expr* weber_integer(const mpz_t n_mpz, const Expr* z) {
             mk_int(2),
             mk_fn2("Power", expr_bigint_normalize(expr_new_bigint_from_mpz(P)), mk_int(-1)),
             mk_fn2("Power", expr_new_symbol("Pi"), mk_int(-1)),
-            mk_fn2("Power", expr_copy((Expr*)z), mk_int(n - 2 * k - 1)) }, 4);
+            /* the constant term (n odd, k = (n-1)/2) is 1, never z^0: at an
+             * exact z = 0 that would be 0^0 (audit WeberE#1) */
+            n - 2 * k - 1 == 0 ? mk_int(1)
+                : mk_fn2("Power", expr_copy((Expr*)z), mk_int(n - 2 * k - 1)) }, 4);
     }
     mpz_clear(P);
     t[kmax + 1] = mk_fn2("Times", mk_int(-1), struve);

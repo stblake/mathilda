@@ -347,27 +347,58 @@ static Expr* whittaker_w_numeric_hyp(const Expr* k_e, const Expr* m_e, const Exp
     return NULL;
 }
 
+/* True iff `e` is a numeric zero, exact or inexact (0, 0., 0`20, or a
+ * Complex of two such). */
+static bool whit_is_zero(const Expr* e) {
+    if (!whit_is_number(e)) return false;
+    Expr *re, *im;
+    double r, i = 0.0;
+    if (is_complex((Expr*)e, &re, &im)) {
+        if (!whit_real_number_double(re, &r) || !whit_real_number_double(im, &i)) return false;
+    } else if (!whit_real_number_double(e, &r)) return false;
+    return r == 0.0 && i == 0.0;
+}
+
 static Expr* whittaker_w_eval(Expr* k_e, Expr* m_e, Expr* z_e) {
-    /* Special values at z == 0 (exact Integer 0 only; a Real 0.0 flows through).
-     * W near 0 has two Puiseux branches z^(1/2 +- m), so the leading exponent is
+    /* Special values at z == 0, exact or inexact. W near 0 has two Puiseux
+     * branches z^(1/2 +- m) (DLMF 13.14.17-18), so the leading exponent is
      * 1/2 - |Re m|: for |Re m| < 1/2 it vanishes, for |Re m| > 1/2 it blows up,
-     * and at |Re m| = 1/2 (m = +-1/2, real) it is the finite 1/Gamma[1-k]. */
-    if (z_e && z_e->type == EXPR_INTEGER && z_e->data.integer == 0) {
+     * and at |Re m| = 1/2 (m = +-1/2, real) it is the finite 1/Gamma[1-k]. An
+     * inexact zero used to fall through to e^(-z/2) z^(m+1/2) U(.., 0.), whose
+     * finite U at the pole made 0.0 of a singular W (audit WhittakerW#1). */
+    if (z_e && whit_is_zero(z_e)) {
+        /* an inexact ZERO numericalizes (an exact 0 keeps the exact value) */
+        bool inexact = whit_is_inexact(z_e);
         double rem;
         if (whit_real_part_double(m_e, &rem)) {
             double am = fabs(rem);
-            if (am < 0.5) return expr_new_integer(0);
             if (am > 0.5) return expr_new_symbol("ComplexInfinity");
+            Expr* v = NULL;
+            if (am < 0.5) v = expr_new_integer(0);
             /* |Re m| == 1/2: finite 1/Gamma[1-k] only for a real m = +-1/2. */
-            if (whit_is_real_number(m_e))
-                return eval_and_free(
-                    mk_fn2("Power",
+            else if (whit_is_real_number(m_e))
+                v = mk_fn2("Power",
                            mk_fn1("Gamma",
                                   mk_fn2("Plus", expr_new_integer(1),
                                          mk_fn2("Times", expr_new_integer(-1),
                                                 expr_copy(k_e)))),
-                           expr_new_integer(-1)));
+                           expr_new_integer(-1));
             /* complex m on the boundary: no limit -> stay symbolic */
+            if (v && inexact) {
+#ifdef USE_MPFR
+                long gov = 0;
+                const Expr* xs[3] = { k_e, m_e, z_e };
+                for (int i = 0; i < 3; i++) {
+                    long bt = numeric_min_inexact_bits(xs[i]);
+                    if (bt > 0 && (gov == 0 || bt < gov)) gov = bt;
+                }
+                if (gov > 53)
+                    v = mk_fn2("N", v, expr_new_real(numeric_bits_to_digits(gov)));
+                else
+#endif
+                    v = mk_fn1("N", v);
+            }
+            if (v) return eval_and_free(v);
         }
         /* symbolic m: stay symbolic */
     }
