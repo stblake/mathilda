@@ -503,6 +503,7 @@ Gives the total of elements in a list.
   is fast even when the result collapses to a few distinct terms.
 - `Total[list, n]` totals all elements down to level `n`.
 - `Total[list, {n}]` totals elements at level `n` only.
+- `Total[list, (n,) Method -> m]`: `"CompensatedSummation"` sums a flat machine-real list (packed or not) with Kahan compensation, so `Total[Join[{1.}, Table[10.^-16, {10^4}]], Method -> "CompensatedSummation"]` is the correctly rounded `1.000000000001`; other methods, and exact or symbolic input, use the ordinary sum.
 - Supports negative levels to count from the bottom (`-1` is the last dimension).
 - Handles ragged arrays correctly by summing from the inside out when multiple levels are specified.
 - `Total[list, Infinity]` totals all atoms in the expression.

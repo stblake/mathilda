@@ -127,6 +127,10 @@ static void test_ratios_level_depth(void) {
  * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
  * the call stays unevaluated. */
 static void test_wave3_arity_options(void) {
+    audit_chk("Total#2", "Total[{1, 2}, Method -> \"CompensatedSummation\"]", "3");
+    audit_chk("Total#2", "Total[{{1, 2}, {3, 4}}, 2, Method -> Automatic]", "10");
+    audit_chk("Total#2", "Total[Join[{1.}, Table[10.^-16, {10^4}]], Method -> \"CompensatedSummation\"] == 1.000000000001", "True");
+    audit_chk("Total#2", "Quiet[Check[Total[{1., 2.}, Method -> \"CompensatedSummation\"], fired]]", "3.0");
     audit_chk("Total#3", "Quiet[Check[Total[], fired, Total::argt]]", "fired");
     audit_chk("Total#3", "Quiet[Check[Total[{1, 2}, {1}, 3], fired, Total::nonopt]]", "fired");
     audit_chk("Total#3", "Quiet[Check[Total[{1, 2}, x], fired, Total::level]]", "fired");

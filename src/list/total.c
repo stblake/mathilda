@@ -6,6 +6,9 @@
 #include "ndreduce.h"
 #include "plus.h"
 #include "funcprog.h"   /* mth_level_spec_parse */
+#include "sym_names.h"
+#include "ndarray.h"
+#include <string.h>
 
 /* The depth that negative and Infinity level specs count from: the nesting
  * of Lists only. An element with any other head is a leaf, so
@@ -120,8 +123,91 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
     }
 }
 
+/* A trailing Method -> m option of Total.  Returns 1 for
+ * "CompensatedSummation", 0 for any other Method value, -1 when e is not a
+ * Method rule (so it is the level spec). */
+static int total_method_option(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count != 2 ||
+        e->data.function.head->type != EXPR_SYMBOL) return -1;
+    const char* hd = e->data.function.head->data.symbol.name;
+    if (hd != SYM_Rule && hd != SYM_RuleDelayed) return -1;
+    const Expr* lhs = e->data.function.args[0];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method) return -1;
+    const Expr* rhs = e->data.function.args[1];
+    return rhs->type == EXPR_STRING &&
+           strcmp(rhs->data.string, "CompensatedSummation") == 0;
+}
+
+/* Kahan-compensated total of a flat list of machine numbers, or NULL when an
+ * element is not a machine real (then the ordinary Plus fold is used: exact
+ * and symbolic sums have no rounding to compensate). */
+static Expr* total_kahan(const Expr* list) {
+    if (is_ndarray(list)) {
+        /* A packed / NDArray rank-1 float64 buffer (Total is packed-aware). */
+        if (list->data.ndarray.rank != 1 || list->data.ndarray.dtype != NDT_FLOAT64)
+            return NULL;
+        const double* d = (const double*)list->data.ndarray.data;
+        int64_t n = list->data.ndarray.dims[0];
+        double sum = 0.0, c = 0.0;
+        for (int64_t i = 0; i < n; i++) {
+            double y = d[i] - c, t = sum + y;
+            c = (t - sum) - y;
+            sum = t;
+        }
+        return expr_new_real(sum);
+    }
+    if (list->type != EXPR_FUNCTION) return NULL;
+    size_t n = list->data.function.arg_count;
+    bool any_real = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* x = list->data.function.args[i];
+        if (x->type == EXPR_REAL) any_real = true;
+        else if (x->type != EXPR_INTEGER) return NULL;
+    }
+    if (!any_real) return NULL;
+    double sum = 0.0, c = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* x = list->data.function.args[i];
+        double v = x->type == EXPR_REAL ? x->data.real : (double)x->data.integer;
+        double y = v - c, t = sum + y;
+        c = (t - sum) - y;
+        sum = t;
+    }
+    return expr_new_real(sum);
+}
+
 Expr* builtin_total(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
+
+    /* Total[list, (level,) Method -> m].  Read the option off and decide the
+     * rest on the positional arguments, so the shared level parser never sees
+     * a Method rule (it said Total::level for one, v0.6727). */
+    size_t npos = res->data.function.arg_count;
+    int method = -1;
+    if (npos >= 2) {
+        method = total_method_option(res->data.function.args[npos - 1]);
+        if (method >= 0) npos--;
+    }
+    if (npos > 2) return NULL;          /* Total[l, a, b]: arity says nonopt */
+    if (method == 1) {
+        const Expr* lv = npos == 2 ? res->data.function.args[1] : NULL;
+        bool level1 = !lv || (lv->type == EXPR_INTEGER && lv->data.integer == 1);
+        if (level1) {
+            Expr* k = total_kahan(res->data.function.args[0]);
+            if (k) return k;
+        }
+    }
+    if (method >= 0) {
+        /* Any other Method, or input Kahan cannot improve: the ordinary sum. */
+        Expr** a = malloc(sizeof(Expr*) * npos);
+        if (!a) return NULL;
+        for (size_t i = 0; i < npos; i++) a[i] = expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_new_symbol("Total"), a, npos);
+        free(a);
+        Expr* r = builtin_total(call);
+        expr_free(call);
+        return r;                  /* NULL: stays unevaluated */
+    }
 
     /* Total[assoc] sums the association's values. */
     { Expr* r = assoc_apply_over_values(res); if (r) return r; }
