@@ -9,20 +9,31 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
 - [x] Phase 0: triage harness, live backlog, `tests/test_audit.h` + glob in CMake (v0.6708)
 - [x] Wave 1a: `src/checked_alloc.{c,h}`; CompleteGraph#1 StarGraph#1 UnitVector#1 Series#1
   NSeries#1 ComplexExpand#1 (v0.6708)
-- [ ] Wave 1b (agents): S1 allocation class (IdentityMatrix DiagonalMatrix HankelMatrix
-  ToeplitzMatrix VandermondeMatrix Array PadLeft Drop Differences Plot3D RandomImage
-  CirculantGraph PrimitiveRootList QPochhammer)
-- [ ] Wave 1c (agents): S2 recursion class (ArrayFlatten ByteCount Depth#1-2 StringRiffle
-  Tuples FixedPointList)
-- [ ] Wave 1d (agents): special-function hangs (BetaRegularized ExpIntegralE StruveH
-  MathieuCPrime#4 BernoulliB)
-- [ ] Wave 1e (agents): Block#1 With#2 For#1 FindSpanningTree#1 Classify#1 Fit#1
-- [ ] Adjudicate the 442 CHANGED rows against Expected
-- [ ] Wave 2: high severity (~200 open), in subsystem groups: core semantics (Function/#0/##,
-  With renaming, Break/Continue in args, op= double Part evaluation, Protected:
-  List/Clear/PrependTo), arithmetic and zero tests, numeric-order statistics (S8), exact
-  linear-algebra decisions (S9), special functions x2, numerical calculus, solve and
-  calculus, polynomial algebra, ML/image/misc
+- [x] Wave 1b-1e (agents): allocation class, recursion class, special-function hangs,
+  scoping/Protected (v0.6709-v0.6714); expr_eq / expr_free tail loops (v0.6714, v0.6718)
+- [ ] Adjudicate the CHANGED rows against Expected. `tools/audit_backlog.py pinned` records
+  FIXED for a changed row pinned by a passing audit test; 138 changed rows without a pin
+  remain (v0.6724 run) -- the amber "needs verdict" rows of review/report.html
+- [x] Wave 2 (high severity), landed 2026-11-24 after the machine crash (recovery plan in
+  `~/.claude/plans/this-machine-crashed-*.md`):
+  - [x] S8 numeric order + statistics (v0.6715), certified signs + arithmetic (v0.6716),
+    exact linear-algebra decisions S9 (v0.6717)
+  - [x] core semantics: #0, capture-avoiding substitution, Break/Continue as unwinds,
+    exact integer registers in numeric loops, one level-spec parser (v0.6719)
+  - [x] special functions I (v0.6720) and II (v0.6721); numerics/solve/calculus (v0.6722);
+    structural + polynomial (v0.6723); ML/image/file I/O/graphics incl. Export GPU probe
+    (v0.6725)
+  - [x] found on the way: deep head chains in Set/rule scans (v0.6724); nested NSum
+    D::ivar flood exposed by D#1 (v0.6726); Solve GCD-substitution leak (v0.6722)
+  - Every group was reviewed independently before landing (core semantics and B had
+    blockers: Break through predicates, a 115x numeric-loop cliff, SolveAlways {} for a
+    true identity, unbounded NMinimize edge value, inexact NRoots split)
+- [ ] Wave 2 leftovers: NSum#3 still 1.8622 (expected 1.8941) and NSum#4 spurious ::nnum;
+  PrimitiveRoot#1 (factoring p-1 with two 16-digit factors, ~35 s); CirculantGraph#1 needs
+  > 2 GB under the harness cap (correct, 22 s); N[MathieuC[MathieuCharacteristicA[..],..], 25]
+  stays unevaluated; Reduce leaks 224 B on DiracDelta[Sin[x]]; LegendreQ spurious
+  General::ovfl; N[BetaRegularized[3/10, 5/2, 10^9], 20] hangs; 33 recursive `*mentions*`
+  walkers left for the recursion sweep (expr_mentions_any is the shared iterative one)
 - [ ] Wave 3: shared mechanical fixes S11-S14 (Indeterminate/Infinity propagation, arity
   metadata, option validation, level specs)
 - [ ] Wave 4: medium by tier; Wave 5: low by tier
