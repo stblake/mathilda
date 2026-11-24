@@ -494,6 +494,7 @@ set(COMMON_SRC
     ../src/radcanon.c
     ../src/arithmetic.c
     ../src/interval.c
+    ../src/infinity_rules.c
     ../src/numbertheory/numbertheory.c
     ../src/numbertheory/nt_util.c
     ../src/numbertheory/nt_dlog.c

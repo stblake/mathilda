@@ -219,6 +219,11 @@ Expr* builtin_central_moment(Expr* res) {
     }
     ll_rd_close(&e);
 
+    /* The 0th moment is Mean[(x - mu)^0] = 1, the empty product: summing the
+     * x^0 terms of a moment takes 0^0 = 1, as the machine path above does
+     * (audit CentralMoment#1, where the exact path raised Power::indet). */
+    if (order->type == EXPR_INTEGER && order->data.integer == 0) return expr_new_integer(1);
+
     /* Exact / symbolic vector, or symbolic / non-integer order. */
     return cm_vector_symbolic(data, order);
 }

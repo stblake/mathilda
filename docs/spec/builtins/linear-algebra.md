@@ -791,6 +791,8 @@ Gives the norm of a number, vector, or matrix.
 - For vectors, `Norm[v]` defaults to the 2-norm: `Sqrt[v . Conjugate[v]]`.
 - For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
 - For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
+- A numeric `p < 1` is no norm (the triangle inequality fails; `p = 0` divides by zero): `Norm::ptype`, and the call stays unevaluated (audit Norm#1).
+- An infinite entry gives `Infinity` (`Norm[{Infinity, 1}]`), an `Indeterminate` one `Indeterminate`, through `Abs` of the infinities.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
 - `Norm[m]` and `Norm[m, 2]` of a matrix are the spectral norm, the largest
   singular value: LAPACK for machine numbers, the MPFR SVD at the input

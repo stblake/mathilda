@@ -179,12 +179,13 @@ void test_piecewise() {
         {"Ceiling[Infinity]", "Infinity"},
         {"Round[Infinity]", "Infinity"},
         {"IntegerPart[Infinity]", "Infinity"},
-        {"FractionalPart[Infinity]", "0"},
+        /* x - Floor[x] ranges over [0, 1) however large x is (audit FractionalPart#1) */
+        {"FractionalPart[Infinity]", "Interval[List[0, 1]]"},
         {"Floor[-Infinity]", "Times[-1, Infinity]"},
         {"Ceiling[-Infinity]", "Times[-1, Infinity]"},
         {"Round[-Infinity]", "Times[-1, Infinity]"},
         {"IntegerPart[-Infinity]", "Times[-1, Infinity]"},
-        {"FractionalPart[-Infinity]", "0"},
+        {"FractionalPart[-Infinity]", "Interval[List[-1, 0]]"},
 
         /* Machine reals beyond int64: an exact bigint, not the -2^63 the
          * (int64_t) cast of an out-of-range double gave (v0.6085). */

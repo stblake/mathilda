@@ -1,4 +1,5 @@
 #include "linkedlist.h"
+#include "infinity_rules.h"   /* infinity_direction: Element[Infinity, Reals] */
 #include "simp.h"
 #include "simp_internal.h"
 #include "radrat.h"
@@ -384,6 +385,13 @@ Expr* builtin_element(Expr* res) {
 
     if (dom->type != EXPR_SYMBOL) return NULL;
     const char* d = dom->data.symbol.name;
+
+    /* An infinity is not a number of any numeric domain (audit Element#3,
+     * NotElement#3): Infinity, -Infinity, I Infinity, ComplexInfinity. */
+    if ((d == SYM_Reals || d == SYM_Complexes || d == SYM_Integers ||
+         d == SYM_Rationals || d == SYM_Algebraics || d == SYM_Primes) &&
+        infinity_direction(x, NULL) != INF_DIR_NONE)
+        return expr_new_symbol(SYM_False);
 
     /* Build context from current $Assumptions. */
     Expr* dollar = read_dollar_assumptions();

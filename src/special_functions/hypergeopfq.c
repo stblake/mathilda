@@ -27,6 +27,7 @@
  * Memory contract: builtin takes ownership of res but must not free it.
  */
 
+#include "infinity_rules.h"   /* infinity_direction */
 #include "hypergeopfq.h"
 #include "ndarray.h"
 #include "sf_machine.h"    /* NDArray buffer path for the elementwise argument */
@@ -1491,12 +1492,103 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
         return lst;
     }
 
+    /* (2a) z an inexact 1 with exact parameters: z = 1 is the boundary point
+     * where the series diverges when Re[sum b - sum a] <= 0, and the exact
+     * call there knows it (2F1(1, 1; 2; 1) = Infinity); the inexact call
+     * names the same point, so it answers the same infinity rather than the
+     * machine series' Indeterminate (audit HypergeometricPFQ#1). */
+    if ((z->type == EXPR_REAL && z->data.real == 1.0)
+#ifdef USE_MPFR
+        || (z->type == EXPR_MPFR && mpfr_cmp_ui(z->data.mpfr, 1) == 0)
+#endif
+        ) {
+        bool exact_params = true;
+        for (int side = 0; side < 2 && exact_params; side++) {
+            Expr* l = side ? b : a;
+            for (size_t i = 0; i < l->data.function.arg_count && exact_params; i++) {
+                Expr* p = l->data.function.args[i];
+                exact_params = p->type == EXPR_INTEGER || is_rational(p, NULL, NULL);
+            }
+        }
+        if (exact_params) {
+            arith_warnings_mute_push();
+            Expr* ex = rebuild_eval(expr_copy(a), expr_copy(b), expr_new_integer(1));
+            arith_warnings_mute_pop();
+            if (ex && infinity_direction(ex, NULL) != INF_DIR_NONE) return ex;
+            expr_free(ex);
+        }
+    }
+
     /* (2b) Machine-precision call: the raw-double kernel, before any of the
      * exact rewrites below (which would re-evaluate a whole expression tree
      * per call, and would not match the buffer/Compile surfaces bit-for-bit). */
     {
         Expr* m = hg_machine_pfq(a, b, z);
         if (m) return m;
+    }
+
+    /* (2c) A lower parameter at a non-positive integer -n is a pole: the
+     * coefficient of z^(n+1) divides by (b)_(n+1) = 0 -- unless an upper
+     * parameter -m with m <= n ends the series first (that polynomial is
+     * try_terminate's). Hypergeometric1F1[1, 0, z] and Hypergeometric2F1[1,
+     * 1, -2, 0.5] are ComplexInfinity (audit Hypergeometric1F1#2,
+     * Hypergeometric2F1#3); the value at z = 0 is still 1. */
+    if (!(z->type == EXPR_INTEGER && z->data.integer == 0)) {
+        /* the first zero denominator comes from the pole nearest 0 */
+        int64_t worst = 1;
+        for (size_t j = 0; j < b->data.function.arg_count; j++) {
+            Expr* bj = b->data.function.args[j];
+            if (bj->type == EXPR_INTEGER && bj->data.integer <= 0 &&
+                (worst == 1 || bj->data.integer > worst))
+                worst = bj->data.integer;
+        }
+        if (worst <= 0) {
+            bool terminates = false;
+            for (size_t i = 0; i < a->data.function.arg_count && !terminates; i++) {
+                Expr* ai = a->data.function.args[i];
+                terminates = ai->type == EXPR_INTEGER && ai->data.integer <= 0 &&
+                             ai->data.integer >= worst;
+            }
+            if (!terminates) return expr_new_symbol(SYM_ComplexInfinity);
+        }
+    }
+
+    /* (2d) 1F1(a; b; z) as z -> +Infinity, exact real a and b: Kummer's
+     * asymptotic Gamma[b]/Gamma[a] E^z z^(a-b) (a not a non-positive
+     * integer), so the sign of Gamma[b]/Gamma[a] times Infinity; a = -m makes
+     * it a polynomial of degree m, the sign of its leading coefficient
+     * (a)_m/((b)_m m!) times Infinity. Hypergeometric1F1[1, 2, Infinity] =
+     * (E^z - 1)/z -> Infinity (audit Hypergeometric1F1#4). */
+    if (a->data.function.arg_count == 1 && b->data.function.arg_count == 1 &&
+        infinity_direction(z, NULL) == INF_DIR_POS) {
+        Expr* a0 = a->data.function.args[0];
+        Expr* b0 = b->data.function.args[0];
+        bool ra = a0->type == EXPR_INTEGER || is_rational(a0, NULL, NULL);
+        bool rb = b0->type == EXPR_INTEGER || is_rational(b0, NULL, NULL);
+        if (ra && rb) {
+            Expr* lead;
+            if (a0->type == EXPR_INTEGER && a0->data.integer <= 0) {
+                if (a0->data.integer == 0) return expr_new_integer(1);
+                Expr* m = expr_new_integer(-a0->data.integer);
+                lead = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Pochhammer), (Expr*[]){ expr_copy(a0), expr_copy(m) }, 2),
+                    expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){
+                        expr_new_function(expr_new_symbol(SYM_Pochhammer), (Expr*[]){ expr_copy(b0), m }, 2),
+                        expr_new_integer(-1) }, 2) }, 2);
+            } else {
+                lead = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){ expr_copy(b0) }, 1),
+                    expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){
+                        expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){ expr_copy(a0) }, 1),
+                        expr_new_integer(-1) }, 2) }, 2);
+            }
+            Expr* sg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sign), (Expr*[]){ lead }, 1));
+            int v = (sg && sg->type == EXPR_INTEGER) ? (int)sg->data.integer : 0;
+            expr_free(sg);
+            if (v == 1) return expr_new_symbol(SYM_Infinity);
+            if (v == -1) return expr_new_function(expr_new_symbol(SYM_Times),
+                             (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
+        }
     }
 
     /* (3) Generic parameter cancellation. */

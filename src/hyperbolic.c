@@ -752,6 +752,9 @@ Expr* builtin_arccoth(Expr* res) {
      * -ArcCoth[1] via the odd fold above, giving -Infinity. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
         return expr_new_symbol(SYM_Infinity);
+    /* ArcCoth[0] = ArcTanh[1/0]: the principal value I Pi/2, the limit the
+     * machine ArcCoth[0.] = 0. + 1.5708 I takes (audit ArcCoth#1). */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return half_i_pi(+1);
 
     double complex c;
     bool inexact = false;
@@ -786,6 +789,9 @@ Expr* builtin_arcsech(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("ArcSech", arg); if (r) return r; }
 
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
+    /* ArcSech[0]: ArcCosh[1/z] ~ Log[2/z], whose real part grows without
+     * bound while the imaginary part stays bounded -- Infinity (ArcSech#2). */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_Infinity);
     /* ArcSech[z] = ArcCosh[1/z] -> ArcCosh[0] = I Pi/2 for every infinite z. */
     if (is_any_infinity(arg)) return half_i_pi(+1);
 
@@ -826,6 +832,9 @@ Expr* builtin_arccsch(Expr* res) {
 
     /* ArcCsch[z] = ArcSinh[1/z] -> ArcSinh[0] = 0 for every infinite z. */
     if (is_any_infinity(arg)) return expr_new_integer(0);
+    /* ArcCsch[0]: ArcSinh of an infinity of every direction (ArcCsch#1). */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     double complex c;
     bool inexact = false;

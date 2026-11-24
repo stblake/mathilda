@@ -65,12 +65,13 @@ void test_erfc_exact() {
     assert_eval_eq("Erfc[0]", "1", 0);
     assert_eval_eq("Erfc[Infinity]", "0", 0);
     assert_eval_eq("Erfc[-Infinity]", "2", 0);
-    assert_eval_eq("Erfc[ComplexInfinity]", "ComplexInfinity", 0);
+    /* an essential singularity, as for Erf (audit Erf#2) */
+    assert_eval_eq("Erfc[ComplexInfinity]", "Indeterminate", 0);
     assert_eval_eq("Erfc[Indeterminate]", "Indeterminate", 0);
     /* Directed imaginary infinities are negated relative to Erf:
      * erfc(z) = 1 - erf(z), so Erfc[I Infinity] = DirectedInfinity[-I]. */
-    assert_eval_eq("Erfc[I Infinity]", "DirectedInfinity[Complex[0, -1]]", 1);
-    assert_eval_eq("Erfc[-I Infinity]", "DirectedInfinity[Complex[0, 1]]", 1);
+    assert_eval_eq("Erfc[I Infinity]", "Times[Complex[0, -1], Infinity]", 1);
+    assert_eval_eq("Erfc[-I Infinity]", "Times[Complex[0, 1], Infinity]", 1);
     /* Listable over the standard infinity pair. */
     assert_eval_eq("Erfc[{Infinity, -Infinity}]", "{0, 2}", 0);
 }

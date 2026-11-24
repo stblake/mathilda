@@ -719,6 +719,11 @@ static Expr* loggamma_one_arg(Expr* arg) {
         if (exact) return exact;
     }
 
+    /* A negative BigInt is a pole like every other non-positive integer
+     * (lg_exact reads int64 values only; audit LogGamma#2). */
+    if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0)
+        return expr_new_symbol(SYM_Infinity);
+
     /* 2. Symbolic infinities. */
     if (lg_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
     if (lg_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);

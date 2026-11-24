@@ -91,6 +91,22 @@ static void test_toradicals_inexact_cubic(void) {
     audit_true("ToRadicals#1", "PossibleZeroQ[ToRadicals[Root[#^3 - 2 &, 1]] - 2^(1/3)]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* CountRoots#1: the zero polynomial vanishes everywhere */
+    audit_true("CountRoots#1", "CountRoots[0, x] === Infinity");
+    audit_true("CountRoots#1", "CountRoots[0, {x, 0, 1}] === Infinity");
+    audit_true("CountRoots#1", "CountRoots[x^2 - 1, x] === 2");
+    audit_true("CountRoots#1", "CountRoots[5, x] === 0");
+    /* NotElement#3: NotElement of an infinity */
+    audit_true("NotElement#3", "NotElement[Infinity, Reals] === True");
+    audit_true("NotElement#3", "NotElement[3, Reals] === False");
+}
+
 int main(void) {
     audit_init();
     TEST(test_root_multiplicity);
@@ -99,5 +115,6 @@ int main(void) {
     TEST(test_reduce_inexact_roots);
     TEST(test_solvealways_transcendental);
     TEST(test_toradicals_inexact_cubic);
+    TEST(test_s11_special_values);
     return audit_finish("audit_solutions_of_equations");
 }

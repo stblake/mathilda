@@ -196,8 +196,10 @@ Out[3]= 0.0831078 + 0.142164*I
 **Features**:
 - Exact special values: `Erf[0] = 0`, `Erf[Infinity] = 1`,
   `Erf[-Infinity] = -1`, `Erf[I Infinity] = DirectedInfinity[I]`,
-  `Erf[-I Infinity] = DirectedInfinity[-I]`, plus `ComplexInfinity` and
-  `Indeterminate` pass through.
+  `Erf[-I Infinity] = DirectedInfinity[-I]`; `Indeterminate` passes through, and
+  `Erf[ComplexInfinity]` (likewise `Erfc`, `Erfi`) is `Indeterminate`: the function
+  has an essential singularity at infinity (+-1 along the real axis, an infinity
+  along the imaginary one), so no single value (audit Erf#2).
 - Odd symmetry for symbolic arguments: `Erf[-x] = -Erf[x]`,
   `Erf[-2 x] = -Erf[2 x]`.
 - An exact imaginary multiple goes to `Erfi` (v0.6691): `Erf[I x] = I Erfi[x]`,
@@ -275,8 +277,9 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
 **Features**:
 - Exact special values: `Erfc[0] = 1`, `Erfc[Infinity] = 0`,
   `Erfc[-Infinity] = 2`, `Erfc[I Infinity] = DirectedInfinity[-I]`,
-  `Erfc[-I Infinity] = DirectedInfinity[I]` (negated relative to `Erf`), plus
-  `ComplexInfinity` and `Indeterminate` pass through.
+  `Erfc[-I Infinity] = DirectedInfinity[I]` (negated relative to `Erf`);
+  `Indeterminate` passes through and `Erfc[ComplexInfinity]` is `Indeterminate`
+  (essential singularity).
 - Numeric evaluation:
   - **Machine precision** (real and complex) → the shared kernels of
     `sf_machine_error.c` (see `Erf`): real `erfc = e^(−x²)·erfcx(x)` for x ≥ 1/2
@@ -322,8 +325,8 @@ Out[3]= Erfc[-x]
 - Exact special values: `Erfi[0] = 0`, `Erfi[Infinity] = Infinity`,
   `Erfi[-Infinity] = -Infinity`. The imaginary-axis limits are **finite** (unlike
   `Erf`): `Erfi[I Infinity] = I`, `Erfi[-I Infinity] = -I`, since
-  erfi(i y) = -i·erf(-y) → i as y → ∞. `ComplexInfinity` and `Indeterminate`
-  pass through.
+  erfi(i y) = -i·erf(-y) → i as y → ∞. `Indeterminate` passes through and
+  `Erfi[ComplexInfinity]` is `Indeterminate` (essential singularity).
 - Odd symmetry for symbolic arguments: `Erfi[-x] = -Erfi[x]`,
   `Erfi[-2 x] = -Erfi[2 x]`.
 - An exact imaginary multiple goes to `Erf` (v0.6691): `Erfi[I x] = I Erf[x]`,
@@ -5581,3 +5584,37 @@ inexact arguments (`HeavisideTheta[1., Sqrt[2]]`) decide by sign like any other.
   sum, constants included), and `DiracDelta[2 x, y]` is `DiracDelta[x, y]/2`.
 - `HeavisideTheta` is not normalised (`HeavisideTheta[-x]` stays). FeynCalc's
   `FCFeynmanParameterJoin` writes its delta function in this form.
+
+## Special values at poles and infinities (audit Wave 3, S11)
+
+Besides the shared `NumericFunction` rules (`arithmetic.md`, **Indeterminate and the
+infinities as arguments**: `f[Indeterminate]`, the directed-infinity table for
+`BesselJ`/`BesselY`/`BesselK`/`BesselI`, `ExpIntegralE`, `EllipticK`/`EllipticE`,
+`Erf`, the leading term of `ChebyshevT`/`ChebyshevU`/`HermiteH`/`LegendreP`/`LaguerreL`/
+`BernoulliB` at an infinity, `HurwitzZeta[Infinity, a]`, `QPochhammer[a, q,
+Infinity]`, and inexact poles answering the exact call's infinity -- `Factorial[-1.]`,
+`Factorial2[-2.]`, `PolyGamma[0, -1.]`, `BesselK[1, 0.]`, `BesselI[-0.5, 0.]`,
+`KelvinKei[1, 0.]`, `SphericalHankelH2[0, 0.]`), the per-head rules:
+
+- `ExpIntegralE[n, 0]` is `ComplexInfinity` for integer `n <= 1` (exact, as the
+  inexact call already was).
+- `HankelH1`/`HankelH2[nu, 0]` are `ComplexInfinity` for every real order, exact
+  rationals included; `SphericalHankelH1`/`SphericalHankelH2[nu, 0]` too (for every
+  real order one of `j_nu`, `y_nu` is singular at 0).
+- `LogGamma` at a negative BigInt is `Infinity`, like every other non-positive integer.
+- `Surd[+-Infinity, n]` with `n < 0` is `0`.
+- `EllipticPi[n, 1]` is `ComplexInfinity` for every real `n`, as `EllipticK[1]` is.
+- `StieltjesGamma[n, a]` at an arbitrary-precision pole (`-2.`30`, `0``10`) is
+  `ComplexInfinity`.
+- `HypergeometricPFQ` with a lower parameter at a non-positive integer `-n` is
+  `ComplexInfinity` (z != 0) unless an upper parameter `-m`, `m <= n`, ends the series
+  first: `Hypergeometric1F1[1, 0, z]`, `Hypergeometric2F1[1, 1, -2, 0.5]`. At an
+  inexact `z = 1.` with exact parameters the exact value at `z = 1` is taken when it is
+  infinite (`Hypergeometric2F1[1, 1, 2, 1.]` is `Infinity`, not `Indeterminate`).
+- `Hypergeometric1F1[a, b, Infinity]` for exact real `a`, `b`: the sign of
+  `Gamma[b]/Gamma[a]` times `Infinity` (Kummer's asymptotic), or for `a = -m` the sign
+  of the leading coefficient of the polynomial; `Hypergeometric1F1[a, b,
+  ComplexInfinity]` is `Indeterminate`.
+- `WaveletPhi` and `WaveletPsi` at `Indeterminate` are `Indeterminate` (not the `0` of a
+  point outside the support).
+

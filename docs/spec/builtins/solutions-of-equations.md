@@ -2057,6 +2057,8 @@ Out[6]= True
 roots in the closed interval `[a, b]` (real `a`, `b`, either end may be
 `-Infinity` / `Infinity`), or, when `a` or `b` is complex, in the closed
 rectangle with opposite corners `a` and `b`.
+The zero polynomial vanishes at every point, so `CountRoots[0, x]` and
+`CountRoots[0, {x, 0, 1}]` are `Infinity` (audit CountRoots#1).
 
 ```
 In[1]:= CountRoots[Product[x - k, {k, 1, 20}] - x^19/2^23, x]

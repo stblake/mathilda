@@ -2091,6 +2091,9 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
      * pending x). Rejects Sin[Infinity], Cos[Infinity], ... that stay symbolic. */
     bool resolved = val && !contains_head_symbol(val, head->data.symbol.name) &&
                     !expr_contains(val, ctx->x);
+    /* Sin[Infinity] = Interval[{-1, 1}] is the oscillation's envelope, not a
+     * limit: leave it to the bounded/Interval layers (which say Indeterminate). */
+    if (resolved && head_is(val, SYM_Interval)) resolved = false;
     /* For a directionless / complex inner infinity, additionally require an
      * unambiguous value: reject Indeterminate and any residual infinity
      * (ArcTan[ComplexInfinity] = Indeterminate must NOT be accepted as a

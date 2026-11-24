@@ -363,6 +363,7 @@ Converts a `SeriesData` back into an ordinary expression by dropping its O-term.
 **Features**:
 - `Protected`.
 - Returns the Plus of the coefficient-times-power terms (zero coefficients skipped). For non-`SeriesData` input, `Normal` is the identity.
+- A `SeriesData[x, Infinity, ...]` (or `-Infinity`) written out by hand is in powers of `1/x`: `Normal[SeriesData[x, Infinity, {1, 2}, 1, 3, 1]]` is `1/x + 2/x^2` (it was `Indeterminate`, from powers of `x - Infinity`; audit SeriesData#4).
 - `Normal[SparseArray[...]]` gives the dense nested List the specification
   denotes (see [SparseArray](data-structures.md#sparsearray)), at any depth.
 - Recurses through the whole expression, dropping the O-term of **every** `SeriesData` at any depth. This matters for expansions around `+-Infinity`, whose `SeriesData` is wrapped inside `Plus`/`Times` (e.g. the trig- or exponential-prefactored asymptotic forms of `BesselJ`, `BesselY`, `BesselK`, `BesselI`, `AiryAi`, `AiryBiPrime`); the surrounding factors are preserved and recombined by the evaluator.

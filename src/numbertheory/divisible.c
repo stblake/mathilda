@@ -2,6 +2,7 @@
  * Split from numbertheory.c; see numbertheory.h and
  * numbertheory_internal.h for the subsystem layout. */
 
+#include "infinity_rules.h"   /* infinity_direction */
 #include "numbertheory.h"
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
@@ -138,6 +139,12 @@ Expr* builtin_divisible(Expr* res) {
             return nd ? nd : ndarray_delist_and_reeval(res);
         }
     }
+
+    /* An infinite argument is no integer to divide by, nor to divide: the
+     * quotient n/Infinity = 0 is an integer only by accident of the limit, so
+     * the call stays unevaluated (audit Divisible#1). */
+    for (size_t i = 0; i < argc; i++)
+        if (infinity_direction(args[i], NULL) != INF_DIR_NONE) return NULL;
 
     Expr* inexact = nt_first_inexact_arg(res);
     if (inexact) return nt_emit_exact("Divisible", inexact, res);

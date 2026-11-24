@@ -164,6 +164,7 @@ Gives the central moment (moment about the mean) of data.
 - `Protected`.
 - A central moment is `Variance` without the $n/(n-1)$ bias correction: it divides by `n` (not `n-1`), raises to the power `r` (not a square), and needs only `n >= 1`.
 - For a matrix or array the moment is taken columnwise over the first axis (equivalent to `ArrayReduce[CentralMoment[#, r]&, x, 1]`).
+- `CentralMoment[data, 0]` is `1` (the mean of the empty products `(x - mu)^0`, with `0^0 = 1` as in any sum of powers), exact for exact data and `1.` for approximate data (audit CentralMoment#1; the exact path used to raise `Power::indet`).
 - Exact input yields exact output; approximate input yields approximate output; symbolic data is handled symbolically.
 - Fast path on `NDArray`/packed real buffers (`ndred_central_moment`); an integer buffer degrades to the exact `Rational` `List` result, like `Variance`.
 - Lowerable inside `Compile[]` for a real vector and integer order (participates in auto-compilation).

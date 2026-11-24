@@ -346,6 +346,10 @@ Symbolic sum.
   (the complex-directed term used to be absorbed, giving `Infinity`; Plus#1).
   A finite term beside a complex-directed infinity stays as written
   (`3 + I Infinity`).
+- Two complex-directed infinities have a sum only when their directions agree:
+  `I Infinity + I Infinity` is `I Infinity`, and `I Infinity - I Infinity` is
+  `Indeterminate` with `Infinity::indet` (the coefficients used to cancel to `0`;
+  audit Subtract#1).
 - Like-term collection is hash-based (O(N) expected) and canonically sorts only
   the collapsed result, so a large flat sum (e.g. `Total` of 10^5 monomials) does
   not pay the generic `Orderless` sort over all N raw terms. `Times` collects
@@ -420,6 +424,66 @@ Out[3]= Interval[{0, 5}]
 In[4]:= NDArray[{1., 2., 3.}] + 10
 Out[4]= NDArray[{11.0, 12.0, 13.0}]
 ```
+
+## DirectedInfinity
+
+`DirectedInfinity[z]` is the infinite quantity in the direction of the complex
+number `z`. Mathilda's canonical infinities are `Infinity`, `ComplexInfinity` and
+`c Infinity` with `c` a unit number, so a numeric direction evaluates to that form:
+`DirectedInfinity[1]` is `Infinity` (and `SameQ` to it), `DirectedInfinity[-1]` is
+`-Infinity`, `DirectedInfinity[2 I]` is `I Infinity`, `DirectedInfinity[1 + I]` is
+`((1 + I)/Sqrt[2]) Infinity`, and `DirectedInfinity[]` and `DirectedInfinity[0]` are
+`ComplexInfinity`. A symbolic direction stays (`DirectedInfinity[x]`). `Protected`.
+
+## Indeterminate and the infinities as arguments
+
+One mechanism (`src/infinity_rules.c`) gives every `NumericFunction` head the same
+special-value semantics, before UpValues, DownValues and the builtin -- so `.m`-defined
+heads are covered too. The evaluator's Listable argument classification notes an
+`Indeterminate` or infinite argument as it classifies Lists, so an ordinary numeric
+call pays nothing for it.
+
+- **Indeterminate.** A `NumericFunction` (other than the Flat `Plus`, `Times`, `Max`,
+  `Min`, which carry their own rules) with an `Indeterminate` argument is
+  `Indeterminate`: `Sin[Indeterminate]`, `Floor[Indeterminate]`, `Zeta[2,
+  Indeterminate]`, `JacobiCS[0.5, Indeterminate]`. The list-valued `ReIm` and
+  `QuotientRemainder` give `{Indeterminate, Indeterminate}`. `Max` and `Min` (hence
+  `MinMax`) of an `Indeterminate` element are `Indeterminate` too.
+- **Directed infinities and ComplexInfinity.** A table gives the limit along each
+  direction where it is systematic: the oscillating real-axis values `Sin[Infinity] =
+  Cos[Infinity] = Interval[{-1, 1}]`, `Tan[Infinity] = Indeterminate`; the essential
+  singularity `f[ComplexInfinity] = Indeterminate` for the trigonometric and hyperbolic
+  heads and `Erf`; `Log[z] = Infinity` for every infinite `z`; the inverse
+  trigonometric/hyperbolic branches (`ArcSin[Infinity] = -I Infinity`, `ArcCos[-Infinity]
+  = -I Infinity`, `ArcSinh[I Infinity] = Infinity`, `ArcCosh[-Infinity] = Infinity`, read
+  off Mathilda's numerics at |z| = 10^8); `BesselJ`/`BesselY[n, +-Infinity] = 0`,
+  `BesselK[n, Infinity] = 0`, `BesselI[n, Infinity] = Infinity` (`(-1)^n Infinity` at
+  `-Infinity` for integer `n`); `ExpIntegralE[n, Infinity] = 0`; `EllipticK[z] = 0` and
+  `EllipticE[-Infinity] = Infinity`; `ArcTan[x, +-Infinity] = +-Pi/2`, `ArcTan[Infinity,
+  y] = 0`; `FractionalPart[+-Infinity] = Interval[{0, 1}]` / `Interval[{-1, 0}]`;
+  `Factorial[Infinity] = Infinity`; `HurwitzZeta[Infinity, a]` term by term (0, 1 or
+  `Infinity` for a > 1, = 1, < 1); `QPochhammer[a, q, Infinity] = QPochhammer[a, q]`.
+- **Heads that read the direction.** `Abs` of any infinity is `Infinity`; `Re`, `Im`,
+  `ReIm`, `Sign`, `Arg` and `Conjugate` act on the direction (`Re[I Infinity] = 0`,
+  `Sign[DirectedInfinity[1 + I]] = (1 + I)/Sqrt[2]`, `Arg[-Infinity] = Pi`,
+  `Conjugate[I Infinity] = -I Infinity`; `Re`/`Im`/`Sign` of `ComplexInfinity` are
+  `Indeterminate`), with no spurious `Infinity::indet`.
+- **Power.** `(u Infinity)^p` for an exact real `p` is `u^p Infinity` (`p > 0`; so
+  `Sqrt[-Infinity] = I Infinity`) or `0` (`p < 0`); a positive real base `b != 1` to an
+  imaginary-directed or complex infinity has no limit (`Exp[I Infinity]`,
+  `E^ComplexInfinity`, `2^ComplexInfinity` are `Indeterminate`).
+- **Polynomials of explicit degree.** `ChebyshevT`, `ChebyshevU`, `HermiteH`,
+  `LegendreP`, `LaguerreL` and `BernoulliB` at an infinity are their leading term
+  (`ChebyshevT[3, Infinity] = Infinity`, `HermiteH[3, -Infinity] = -Infinity`) instead
+  of an `Infinity - Infinity` form.
+- **Poles hit by an inexact argument.** A machine or MPFR kernel that lands exactly on
+  a pole (`Cot[0.]`, `ArcTanh[1.]`, `Factorial[-1.]`, `Csc[0.`20]`) used to report
+  `Overflow[]` with `General::ovfl`, or decline (`Factorial2[-2.]`, `BesselK[1, 0.]`,
+  `PolyGamma[0, -1.]`). The inexact call names an exact point, so it answers the
+  infinity the exact call gives there (`ComplexInfinity`, `ArcTanh[1.] = Infinity`,
+  `ArcCot[1. I] = -I Infinity`), silently. The exact re-evaluation is confined to small
+  dyadic arguments (|x| <= 2^20, denominator <= 2^8), so a genuine overflow past MPFR's
+  range (`Exp[1.*^300]`) stays `Overflow[]`.
 
 ## Total
 
@@ -791,6 +855,16 @@ Out[3]= 7 Sqrt[2/5]
 ```
 
 **v0.6035.** A symbolic factor does not rescue `0 * Infinity`: `0 c ComplexInfinity` is `Indeterminate`, with `Infinity::indet`, as `0 ComplexInfinity` is.
+
+**Infinities as factors (audit Wave 3, S11).** `ComplexInfinity` absorbs every
+other nonzero factor -- a complex number, a symbol, any finite expression: `x
+ComplexInfinity`, `I ComplexInfinity`, `ComplexInfinity Log[5]` and `(2 + 3 I)/0`
+are all `ComplexInfinity` (an explicit `0` factor still gives `Indeterminate`; an
+`Interval`, `SeriesData` or `Overflow[]` factor keeps its own rule). A directed
+infinity's direction is kept a unit number: `2 I Infinity` is `I Infinity`, `(3 + 4
+I) Infinity` is `(3/5 + 4/5 I) Infinity`, and a real numeric-quantity coefficient
+gives the signed infinity by its certified sign (`Pi Infinity` and
+`Infinity/Log[10]` are `Infinity`, `-Sqrt[2] Infinity` is `-Infinity`).
 
 **v0.6600: a machine quotient is rounded once.** `a/b` parses to
 `Times[a, Power[b, -1]]`. Evaluating that argument by argument rounds the

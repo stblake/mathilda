@@ -35,9 +35,61 @@ static void test_wave3_arity_options(void) {
     audit_chk("Assuming#1", "Quiet[Assuming[x > 0]]", "Assuming[x > 0]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* ArcCos#1: ArcCos at +-Infinity (branch of ArcCos[10.^8] = 0 + 19.1 I) */
+    audit_true("ArcCos#1", "ArcCos[Infinity] === DirectedInfinity[I]");
+    audit_true("ArcCos#1", "ArcCos[-Infinity] === DirectedInfinity[-I]");
+    audit_true("ArcCos#1", "Im[ArcCos[10.^8]] > 19");
+    audit_true("ArcCos#1", "Im[ArcCos[-10.^8]] < -19");
+    /* ArcCoth#1: ArcCoth[0] is the principal I Pi/2 */
+    audit_true("ArcCoth#1", "ArcCoth[0] === I Pi/2");
+    audit_true("ArcCoth#1", "Abs[ArcCoth[0.] - N[I Pi/2]] < 10.^-15");
+    /* ArcCoth#2: ArcCoth at an inexact pole */
+    audit_true("ArcCoth#2", "Check[ArcCoth[1.], \"m\"] === Infinity");
+    audit_true("ArcCoth#2", "ArcCoth[1] === Infinity");
+    audit_true("ArcCoth#2", "Check[ArcCoth[-1.], \"m\"] === -Infinity");
+    /* Coth#1: Coth at an inexact pole */
+    audit_true("Coth#1", "Check[Coth[0.], \"m\"] === ComplexInfinity");
+    audit_true("Coth#1", "Check[Coth[0. + 0. I], \"m\"] === ComplexInfinity");
+    /* Coth#2: Coth at an imaginary-axis pole */
+    audit_true("Coth#2", "Coth[I Pi] === ComplexInfinity");
+    /* Tanh#1: Tanh at an imaginary-axis pole */
+    audit_true("Tanh#1", "Tanh[I Pi/2] === ComplexInfinity");
+    audit_true("Tanh#1", "Tanh[3 I Pi/2] === ComplexInfinity");
+    /* ArcCos#2: ArcCos along the imaginary axis */
+    audit_true("ArcCos#2", "ArcCos[I Infinity] === DirectedInfinity[-I]");
+    audit_true("ArcCos#2", "ArcCos[-I Infinity] === DirectedInfinity[I]");
+    audit_true("ArcCos#2", "Im[ArcCos[10.^8 I]] < -19");
+    /* ArcCos#3: ArcCos[Indeterminate] */
+    audit_true("ArcCos#3", "ArcCos[Indeterminate] === Indeterminate");
+    /* Coth#3: Coth[ComplexInfinity], Coth[Indeterminate] */
+    audit_true("Coth#3", "Coth[ComplexInfinity] === Indeterminate");
+    audit_true("Coth#3", "Coth[Indeterminate] === Indeterminate");
+    audit_true("Coth#3", "Coth[-Infinity] === -1");
+    /* Element#3: an infinity is in no numeric domain */
+    audit_true("Element#3", "Element[Infinity, Reals] === False");
+    audit_true("Element#3", "Element[ComplexInfinity, Complexes] === False");
+    audit_true("Element#3", "Element[I Infinity, Complexes] === False");
+    audit_true("Element#3", "Element[2, Reals] === True");
+    /* Factorial2#2: Factorial2 at an inexact pole */
+    audit_true("Factorial2#2", "Check[Factorial2[-2.], \"m\"] === ComplexInfinity");
+    audit_true("Factorial2#2", "Check[Factorial2[-4.], \"m\"] === ComplexInfinity");
+    audit_true("Factorial2#2", "Factorial2[-2] === ComplexInfinity");
+    /* Tanh#2: Tanh[Indeterminate], Tanh[ComplexInfinity] */
+    audit_true("Tanh#2", "Tanh[Indeterminate] === Indeterminate");
+    audit_true("Tanh#2", "Tanh[ComplexInfinity] === Indeterminate");
+    audit_true("Tanh#2", "Tanh[Infinity] === 1");
+}
+
 int main(void) {
     audit_init();
     TEST(test_factorial2_negative_odd);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_simplification");
 }

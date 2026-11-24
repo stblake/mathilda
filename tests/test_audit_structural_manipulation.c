@@ -416,6 +416,21 @@ static void test_wave3_arity_options(void) {
     audit_chk("Append#3", "Append[f[a], b]", "f[a, b]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* ConjugateTranspose#2: conjugates of infinite entries */
+    audit_true("ConjugateTranspose#2", "Check[ConjugateTranspose[{{Infinity, I Infinity}}], \"m\"] === {{Infinity}, {-I Infinity}}");
+    /* MinMax#2: an Indeterminate element */
+    audit_true("MinMax#2", "MinMax[{Indeterminate, 1}] === {Indeterminate, Indeterminate}");
+    audit_true("MinMax#2", "Max[1, Indeterminate] === Indeterminate");
+    audit_true("MinMax#2", "Min[{2, Indeterminate}] === Indeterminate");
+    audit_true("MinMax#2", "MinMax[{3, 1, 2}] === {1, 3}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_expand_option_not_pattern);
@@ -438,5 +453,6 @@ int main(void) {
     TEST(test_drop_huge_sequence_spec);
     TEST(test_s14_levels_and_shapes);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_structural_manipulation");
 }

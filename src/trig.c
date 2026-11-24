@@ -14,6 +14,7 @@
 #include "numeric_complex.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: ArcTan::indet */
 #include <math.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
@@ -1390,7 +1391,11 @@ Expr* builtin_arctan(Expr* res) {
         if (x->type == EXPR_INTEGER && y->type == EXPR_INTEGER) {
             int64_t xv = x->data.integer;
             int64_t yv = y->data.integer;
-            if (xv == 0 && yv == 0) return NULL; // Indeterminate form
+            /* The angle of the origin is undefined (audit ArcTan#3). */
+            if (xv == 0 && yv == 0) {
+                mth_message("ArcTan", "indet", "Indeterminate expression ArcTan[0, 0] encountered.");
+                return expr_new_symbol(SYM_Indeterminate);
+            }
             if (yv == 0) {
                 if (xv > 0) return expr_new_integer(0);
                 if (xv < 0) return expr_new_symbol(SYM_Pi);
@@ -1510,6 +1515,10 @@ Expr* builtin_arcsec(Expr* res) {
     // ArcSec[z] = ArcCos[1/z] -> ArcCos[0] = Pi/2 for every infinite z.
     if (is_any_infinity_arg(arg))
         return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
+    // ArcSec[0]: 1/z runs off to infinity in every direction -- a pole of
+    // undetermined direction, as the machine ArcSec[0.] says (audit ArcSec#1).
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arcsec(arg);
@@ -1563,6 +1572,9 @@ Expr* builtin_arccsc(Expr* res) {
 
     // ArcCsc[z] = ArcSin[1/z] -> ArcSin[0] = 0 for every infinite z.
     if (is_any_infinity_arg(arg)) return expr_new_integer(0);
+    // ArcCsc[0] = ComplexInfinity, as ArcCsc[0.] (audit ArcCsc#1).
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccsc(arg);

@@ -16,6 +16,7 @@
 #include "expand.h"       /* expr_expand: O4 exponent sums */
 #include "symtab.h"       /* SymbolDef: the opaque-factor fast path */
 #include "print.h"        /* expr_to_string_fullform: fast-path self-check */
+#include "core.h"         /* numeric_certified_real_sign: c Infinity */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -163,6 +164,82 @@ static bool numeric_base_positive(Expr* b) {
     bool pos = v && v->type == EXPR_REAL && v->data.real > 1e-12;
     if (v) expr_free(v);
     return pos;
+}
+
+/* ComplexInfinity absorbs every other factor of a product -- a number of
+ * any phase, a symbol, any finite expression -- since multiplying an
+ * infinity of undetermined direction by a nonzero quantity leaves it an
+ * infinity of undetermined direction: I ComplexInfinity, x ComplexInfinity
+ * and ComplexInfinity Log[5] are all ComplexInfinity (audit Times#3,
+ * Divide#4, Coth#2, Csch#2, Tanh#1, Log#5, Pochhammer#2). Not when a factor
+ * is an explicit zero (that is 0 ComplexInfinity, Indeterminate, decided by
+ * the caller), nor beside the structured factors that carry their own
+ * product rules (Interval, SeriesData, Overflow[]). */
+static bool times_cinf_absorbs(Expr** args, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = args[i];
+        if (is_complex_infinity_sym(a) || is_infinity_sym(a)) continue;
+        if ((a->type == EXPR_INTEGER && a->data.integer == 0) ||
+            (a->type == EXPR_REAL && a->data.real == 0.0))
+            return false;
+#ifdef USE_MPFR
+        if (a->type == EXPR_MPFR && mpfr_zero_p(a->data.mpfr)) return false;
+#endif
+        if (is_interval(a) || is_overflow(a)) return false;
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+            a->data.function.head->data.symbol.name == SYM_SeriesData)
+            return false;
+    }
+    return true;
+}
+
+/* An exact or inexact zero part of a Complex. */
+static bool times_is_zero_part(const Expr* e) {
+    return (e->type == EXPR_INTEGER && e->data.integer == 0) ||
+           (e->type == EXPR_REAL && e->data.real == 0.0)
+#ifdef USE_MPFR
+           || (e->type == EXPR_MPFR && mpfr_zero_p(e->data.mpfr))
+#endif
+           ;
+}
+
+/* A directed infinity's direction is a unit number: Times[c, Infinity] with
+ * a complex c is rewritten to Times[c/Abs[c], Infinity] (2 I Infinity is
+ * I Infinity, so I Infinity + I Infinity is I Infinity). A direction on the
+ * imaginary axis becomes the exact +-I whatever the precision of c, as a
+ * real direction becomes the exact +-1. NULL when c is already a unit (the
+ * canonical form) or not a complex number. */
+static Expr* times_normalize_direction(Expr* c) {
+    Expr *re, *im;
+    if (!is_complex(c, &re, &im)) return NULL;
+    if (times_is_zero_part(re)) {
+        int s = expr_numeric_sign(im);
+#ifdef USE_MPFR
+        if (im->type == EXPR_MPFR) s = mpfr_sgn(im->data.mpfr);
+#endif
+        if (s == 0) return NULL;
+        if (re->type == EXPR_INTEGER && im->type == EXPR_INTEGER &&
+            (im->data.integer == 1 || im->data.integer == -1))
+            return NULL;                                  /* already +-I */
+        return make_complex(expr_new_integer(0), expr_new_integer(s));
+    }
+    /* Off the axes: c / |c|, unless |c| is already 1. */
+    Expr* a2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(re), expr_new_integer(2) }, 2),
+                   expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(im), expr_new_integer(2) }, 2) }, 2));
+    bool unit = false;
+    if (a2->type == EXPR_INTEGER) unit = a2->data.integer == 1;
+    else if (a2->type == EXPR_REAL) unit = fabs(a2->data.real - 1.0) < 1e-12;
+#ifdef USE_MPFR
+    else if (a2->type == EXPR_MPFR) {
+        double d = mpfr_get_d(a2->data.mpfr, MPFR_RNDN);
+        unit = fabs(d - 1.0) < 1e-12;
+    }
+#endif
+    else if (a2->type != EXPR_FUNCTION) unit = true;      /* undecidable: leave it */
+    expr_free(a2);
+    if (unit) return NULL;
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Sign), (Expr*[]){ expr_copy(c) }, 1));
 }
 
 static Expr* multiply_numbers(Expr* a, Expr* b) {
@@ -1770,6 +1847,15 @@ Expr* builtin_times(Expr* res) {
             else if (is_infinity_sym(arg))      { inf_count++; }
         }
         if (has_indet) return expr_new_symbol(SYM_Indeterminate);
+        if (cinf_count > 0 && times_cinf_absorbs(res->data.function.args, n))
+            return expr_new_symbol(SYM_ComplexInfinity);
+        if (inf_count == 1 && cinf_count == 0 && n == 2) {
+            Expr* c = is_infinity_sym(res->data.function.args[0]) ? res->data.function.args[1]
+                                                                 : res->data.function.args[0];
+            Expr* u = times_normalize_direction(c);
+            if (u) return expr_new_function(expr_new_symbol(SYM_Times),
+                                            (Expr*[]){ u, expr_new_symbol(SYM_Infinity) }, 2);
+        }
         if (inf_count > 0 || cinf_count > 0) {
             Expr* coeff = expr_new_integer(1);
             bool has_symbolic = false;
@@ -1817,6 +1903,37 @@ Expr* builtin_times(Expr* res) {
                     mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
                             "Indeterminate expression 0 %s encountered.", what);
                     return expr_new_symbol(SYM_Indeterminate);
+                }
+            }
+            /* A real numeric-quantity coefficient decides the sign as a
+             * number does: Infinity Pi and Infinity/Log[10] are Infinity,
+             * -Infinity Sqrt[2] is -Infinity (the sign is certified, never
+             * read off a rounded value). A non-real one stays. */
+            if (cinf_count == 0 && inf_count == 1) {
+                size_t m = 0;
+                bool all_num = true;
+                for (size_t i = 0; i < n && all_num; i++) {
+                    Expr* arg = res->data.function.args[i];
+                    if (is_infinity_sym(arg)) continue;
+                    if (!expr_is_numeric_quantity(arg)) all_num = false;
+                    m++;
+                }
+                if (all_num && m > 0) {
+                    Expr** fa = malloc(sizeof(Expr*) * m);
+                    size_t k = 0;
+                    for (size_t i = 0; i < n; i++)
+                        if (!is_infinity_sym(res->data.function.args[i]))
+                            fa[k++] = expr_copy(res->data.function.args[i]);
+                    Expr* prod = m == 1 ? fa[0]
+                               : expr_new_function(expr_new_symbol(SYM_Times), fa, m);
+                    free(fa);
+                    int sg = 0;
+                    int kind = numeric_certified_real_sign(prod, &sg);
+                    expr_free(prod);
+                    if (kind == 1 && sg > 0) return expr_new_symbol(SYM_Infinity);
+                    if (kind == 1 && sg < 0)
+                        return expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
                 }
             }
             /* fall through: keep symbolic, let the rest run */

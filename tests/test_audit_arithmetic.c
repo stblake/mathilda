@@ -152,6 +152,88 @@ static void test_wave3_arity_options(void) {
     audit_chk("Sign#5", "Quiet[Sign[1, 2]]", "Sign[1, 2]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* Abs#2: Abs of the infinities reads the direction; Indeterminate propagates */
+    audit_true("Abs#2", "Abs[Infinity] === Infinity");
+    audit_true("Abs#2", "Check[Abs[-Infinity], \"m\"] === Infinity");
+    audit_true("Abs#2", "Abs[ComplexInfinity] === Infinity");
+    audit_true("Abs#2", "Abs[Indeterminate] === Indeterminate");
+    audit_true("Abs#2", "Abs[DirectedInfinity[1 + I]] === Infinity");
+    /* Minus#1: Minus of a complex-directed infinity flips the direction */
+    audit_true("Minus#1", "Minus[DirectedInfinity[I]] === DirectedInfinity[-I]");
+    audit_true("Minus#1", "Minus[DirectedInfinity[1 + I]] === DirectedInfinity[-1 - I]");
+    audit_true("Minus#1", "Minus[DirectedInfinity[1 + I]] === (-1 - I)/Sqrt[2] Infinity");
+    /* Times#3: ComplexInfinity absorbs every finite factor */
+    audit_true("Times#3", "x ComplexInfinity === ComplexInfinity");
+    audit_true("Times#3", "Quiet[x/0] === ComplexInfinity");
+    audit_true("Times#3", "Check[x/0, \"fired\", Power::infy] === \"fired\"");
+    audit_true("Times#3", "Quiet[0 x ComplexInfinity] === Indeterminate");
+    /* Arg#1: Arg of a directed infinity is the argument of its direction */
+    audit_true("Arg#1", "Arg[DirectedInfinity[1 + I]] === Pi/4");
+    audit_true("Arg#1", "Arg[Infinity] === 0");
+    audit_true("Arg#1", "Check[Arg[-Infinity], \"m\"] === Pi");
+    audit_true("Arg#1", "Arg[I Infinity] === Pi/2");
+    /* Conjugate#1: Conjugate of the infinities, no spurious message */
+    audit_true("Conjugate#1", "Conjugate[Infinity] === Infinity");
+    audit_true("Conjugate#1", "Check[Conjugate[-Infinity], \"m\"] === -Infinity");
+    audit_true("Conjugate#1", "Check[Conjugate[I Infinity], \"m\"] === DirectedInfinity[-I]");
+    audit_true("Conjugate#1", "Conjugate[ComplexInfinity] === ComplexInfinity");
+    /* Im#1: Im of a real infinity is 0 */
+    audit_true("Im#1", "Im[Infinity] === 0");
+    audit_true("Im#1", "Check[Im[-Infinity], \"m\"] === 0");
+    audit_true("Im#1", "Im[I Infinity] === Infinity");
+    /* Re#3: Re of the infinities and of Indeterminate */
+    audit_true("Re#3", "Re[Infinity] === Infinity");
+    audit_true("Re#3", "Check[Re[-Infinity], \"m\"] === -Infinity");
+    audit_true("Re#3", "Re[Indeterminate] === Indeterminate");
+    audit_true("Re#3", "Re[I Infinity] === 0");
+    /* Factorial#1: an inexact pole of Factorial is ComplexInfinity, no Overflow[] */
+    audit_true("Factorial#1", "Check[Factorial[-1.], \"m\"] === ComplexInfinity");
+    audit_true("Factorial#1", "Check[Factorial[-2.], \"m\"] === ComplexInfinity");
+    audit_true("Factorial#1", "Check[Factorial[N[-1, 30]], \"m\"] === ComplexInfinity");
+    audit_true("Factorial#1", "Abs[Factorial[-0.5] - Sqrt[Pi]] < 10.^-14");
+    /* ReIm#2: ReIm of the infinities and of Indeterminate */
+    audit_true("ReIm#2", "ReIm[Infinity] === {Infinity, 0}");
+    audit_true("ReIm#2", "Check[ReIm[-Infinity], \"m\"] === {-Infinity, 0}");
+    audit_true("ReIm#2", "ReIm[Indeterminate] === {Indeterminate, Indeterminate}");
+    /* Sign#1: Sign of a directed infinity is its unit direction */
+    audit_true("Sign#1", "Sign[Infinity] === 1");
+    audit_true("Sign#1", "Sign[-Infinity] === -1");
+    audit_true("Sign#1", "Sign[I Infinity] === I");
+    audit_true("Sign#1", "Sign[DirectedInfinity[1 + I]] === (1 + I)/Sqrt[2]");
+    /* Sign#3: Sign[Indeterminate], Sign[ComplexInfinity] */
+    audit_true("Sign#3", "Sign[Indeterminate] === Indeterminate");
+    audit_true("Sign#3", "Sign[ComplexInfinity] === Indeterminate");
+    /* Power#4: 0^(I b) has no value */
+    audit_true("Power#4", "Check[0^I, \"fired\", Power::indet] === \"fired\"");
+    audit_true("Power#4", "Quiet[0^I] === Indeterminate");
+    audit_true("Power#4", "Quiet[0^(-2 I)] === Indeterminate");
+    audit_true("Power#4", "0^2 === 0");
+    /* Sqrt#4: Sqrt[-Infinity] is I Infinity */
+    audit_true("Sqrt#4", "Sqrt[-Infinity] === DirectedInfinity[I]");
+    audit_true("Sqrt#4", "Sqrt[Infinity] === Infinity");
+    audit_true("Sqrt#4", "(-Infinity)^(-1/2) === 0");
+    /* Arg#3: Arg[Indeterminate] */
+    audit_true("Arg#3", "Arg[Indeterminate] === Indeterminate");
+    /* Conjugate#2: Conjugate[Indeterminate] */
+    audit_true("Conjugate#2", "Conjugate[Indeterminate] === Indeterminate");
+    /* Im#3: Im[Indeterminate], Im[ComplexInfinity] */
+    audit_true("Im#3", "Im[Indeterminate] === Indeterminate");
+    audit_true("Im#3", "Im[ComplexInfinity] === Indeterminate");
+    /* Factorial#3: Factorial[Infinity], Factorial[Indeterminate] */
+    audit_true("Factorial#3", "Factorial[Infinity] === Infinity");
+    audit_true("Factorial#3", "Factorial[Indeterminate] === Indeterminate");
+    /* Multinomial#1: an Indeterminate argument */
+    audit_true("Multinomial#1", "Multinomial[Indeterminate, 2] === Indeterminate");
+    audit_true("Multinomial#1", "Multinomial[Indeterminate, 2, 3] === Indeterminate");
+    audit_true("Multinomial#1", "Multinomial[2, 3] === 10");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
@@ -161,5 +243,6 @@ int main(void) {
     TEST(test_interval_intersection_symbolic);
     TEST(test_ratios_level_depth);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_arithmetic");
 }

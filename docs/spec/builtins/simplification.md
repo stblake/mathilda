@@ -942,6 +942,9 @@ Tests domain membership, consulting the current assumptions.
 - `Protected`.
 - Supported domains: `Integers`, `Rationals`, `Reals`, `Algebraics`, `Complexes`,
   `Booleans`, `Primes`, `Composites`.
+- An infinity (`Infinity`, `-Infinity`, `I Infinity`, `ComplexInfinity`) is in none of the
+  numeric domains: `Element[Infinity, Reals]` and `Element[ComplexInfinity, Complexes]` are
+  `False`, so `NotElement[Infinity, Reals]` is `True` (audit Element#3, NotElement#3).
 - Numeric and structural literals decide directly. Symbolic queries consult
   `$Assumptions`, honouring the `Integer ⊆ Rational ⊆ Algebraic ⊆ Real ⊆ Complex`
   lattice.

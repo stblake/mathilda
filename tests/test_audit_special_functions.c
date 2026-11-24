@@ -572,6 +572,174 @@ static void test_wave3_arity_options(void) {
     audit_chk("WaveletPhi#2", "Quiet[Check[WaveletPhi[DaubechiesWavelet[2], 1., Foo -> 2], fired, WaveletPhi::optx]]", "fired");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* BesselJ#1: BesselJ at the real infinities */
+    audit_true("BesselJ#1", "BesselJ[0, Infinity] === 0");
+    audit_true("BesselJ#1", "BesselJ[2, -Infinity] === 0");
+    audit_true("BesselJ#1", "BesselJ[1/2, Infinity] === 0");
+    /* BesselK#1: BesselK at Infinity */
+    audit_true("BesselK#1", "BesselK[0, Infinity] === 0");
+    audit_true("BesselK#1", "BesselK[2, Infinity] === 0");
+    /* ArcSin#1: ArcSin at +-Infinity (branch of ArcSin[10.^8] = 1.57 - 19.1 I) */
+    audit_true("ArcSin#1", "ArcSin[Infinity] === DirectedInfinity[-I]");
+    audit_true("ArcSin#1", "ArcSin[-Infinity] === DirectedInfinity[I]");
+    audit_true("ArcSin#1", "ArcSin[I Infinity] === DirectedInfinity[I]");
+    audit_true("ArcSin#1", "Im[ArcSin[10.^8]] < -19");
+    /* ChebyshevT#1: ChebyshevT at the infinities is its leading term */
+    audit_true("ChebyshevT#1", "Check[ChebyshevT[3, Infinity], \"m\"] === Infinity");
+    audit_true("ChebyshevT#1", "Check[ChebyshevT[4, -Infinity], \"m\"] === Infinity");
+    audit_true("ChebyshevT#1", "ChebyshevT[3, -Infinity] === -Infinity");
+    audit_true("ChebyshevT#1", "ChebyshevT[0, Infinity] === 1");
+    /* ChebyshevU#1: ChebyshevU at the infinities */
+    audit_true("ChebyshevU#1", "Check[ChebyshevU[3, Infinity], \"m\"] === Infinity");
+    audit_true("ChebyshevU#1", "Check[ChebyshevU[3, -Infinity], \"m\"] === -Infinity");
+    audit_true("ChebyshevU#1", "ChebyshevU[2, I Infinity] === -Infinity");
+    /* EllipticPi#1: EllipticPi[n, 1] is a pole like EllipticK[1] */
+    audit_true("EllipticPi#1", "EllipticPi[0.5, 1.] === ComplexInfinity");
+    audit_true("EllipticPi#1", "EllipticPi[-1., 1.] === ComplexInfinity");
+    audit_true("EllipticPi#1", "EllipticK[1.] === ComplexInfinity");
+    audit_true("EllipticPi#1", "Abs[EllipticPi[0.5, 0.5] - 2.7012877620953506] < 10.^-12");
+    /* ExpIntegralE#2: ExpIntegralE[n, 0] for n <= 1 */
+    audit_true("ExpIntegralE#2", "ExpIntegralE[1, 0] === ComplexInfinity");
+    audit_true("ExpIntegralE#2", "ExpIntegralE[-2, 0] === ComplexInfinity");
+    audit_true("ExpIntegralE#2", "ExpIntegralE[3, 0] === 1/2");
+    /* HermiteH#1: HermiteH at the infinities */
+    audit_true("HermiteH#1", "Check[HermiteH[3, Infinity], \"m\"] === Infinity");
+    audit_true("HermiteH#1", "Check[HermiteH[3, -Infinity], \"m\"] === -Infinity");
+    /* Hypergeometric1F1#2: a lower parameter at a non-positive integer is a pole */
+    audit_true("Hypergeometric1F1#2", "Hypergeometric1F1[1, 0, z] === ComplexInfinity");
+    audit_true("Hypergeometric1F1#2", "Hypergeometric1F1[1, -2, z] === ComplexInfinity");
+    audit_true("Hypergeometric1F1#2", "Hypergeometric1F1[1, 0, 1.] === ComplexInfinity");
+    audit_true("Hypergeometric1F1#2", "Hypergeometric1F1[1, 0, 0] === 1");
+    audit_true("Hypergeometric1F1#2", "Expand[Hypergeometric1F1[-1, -2, z]] === 1 + z/2");
+    /* InverseJacobiSN#1: InverseJacobiSN[1.0, 1] is the logarithmic singularity, not Overflow[] */
+    audit_true("InverseJacobiSN#1", "MatchQ[Check[InverseJacobiSN[1.0, 1], \"m\"], Infinity | ComplexInfinity]");
+    audit_true("InverseJacobiSN#1", "InverseJacobiSN[1, 1] === ComplexInfinity");
+    /* Pochhammer#2: Pochhammer at a Gamma pole */
+    audit_true("Pochhammer#2", "Pochhammer[1/2, -3/2] === ComplexInfinity");
+    audit_true("Pochhammer#2", "Pochhammer[-5/2, 1/2] === ComplexInfinity");
+    /* PolyGamma#1: PolyGamma at an inexact non-positive integer */
+    audit_true("PolyGamma#1", "Check[PolyGamma[0, -1.], \"m\"] === ComplexInfinity");
+    audit_true("PolyGamma#1", "Check[PolyGamma[1, 0.], \"m\"] === ComplexInfinity");
+    audit_true("PolyGamma#1", "Check[PolyGamma[3, -2.], \"m\"] === ComplexInfinity");
+    audit_true("PolyGamma#1", "Check[PolyGamma[0, -1.`30], \"m\"] === ComplexInfinity");
+    /* QPochhammer#2: QPochhammer[a, q, Infinity] is QPochhammer[a, q] */
+    audit_true("QPochhammer#2", "QPochhammer[a, q, Infinity] === QPochhammer[a, q]");
+    audit_true("QPochhammer#2", "QPochhammer[0.5, 0.3, Infinity] === QPochhammer[0.5, 0.3]");
+    audit_true("QPochhammer#2", "Abs[QPochhammer[0.5, 0.3, Infinity] - 0.3980822043018776] < 10.^-14");
+    /* Surd#1: Surd of an infinity with a negative index */
+    audit_true("Surd#1", "Surd[Infinity, -3] === 0");
+    audit_true("Surd#1", "Surd[-Infinity, -3] === 0");
+    audit_true("Surd#1", "Surd[Infinity, -2] === 0");
+    audit_true("Surd#1", "Surd[Infinity, 3] === Infinity");
+    /* WaveletPhi#1: WaveletPhi at Indeterminate */
+    audit_true("WaveletPhi#1", "WaveletPhi[DaubechiesWavelet[2], Indeterminate] === Indeterminate");
+    audit_true("WaveletPhi#1", "WaveletPhi[HaarWavelet[], Indeterminate] === Indeterminate");
+    /* BesselK#2: BesselK at an inexact zero */
+    audit_true("BesselK#2", "BesselK[0, 0.] === Infinity");
+    audit_true("BesselK#2", "BesselK[1, 0.] === ComplexInfinity");
+    audit_true("BesselK#2", "BesselK[0, 0] === Infinity");
+    /* EllipticE#2: EllipticE[-Infinity] */
+    audit_true("EllipticE#2", "EllipticE[-Infinity] === Infinity");
+    audit_true("EllipticE#2", "EllipticE[-10.^10] > 10^4");
+    /* EllipticK#1: EllipticK[Indeterminate] */
+    audit_true("EllipticK#1", "EllipticK[Indeterminate] === Indeterminate");
+    /* EllipticK#2: EllipticK decays in every direction */
+    audit_true("EllipticK#2", "EllipticK[-Infinity] === 0");
+    audit_true("EllipticK#2", "EllipticK[I Infinity] === 0");
+    audit_true("EllipticK#2", "EllipticK[Infinity] === 0");
+    /* Erf#2: Erf[ComplexInfinity] has no limit */
+    audit_true("Erf#2", "Erf[ComplexInfinity] === Indeterminate");
+    audit_true("Erf#2", "Erf[Infinity] === 1");
+    /* Zeta#2: Zeta with an Indeterminate argument */
+    audit_true("Zeta#2", "Zeta[Indeterminate] === Indeterminate");
+    audit_true("Zeta#2", "Zeta[2, Indeterminate] === Indeterminate");
+    audit_true("Zeta#2", "Zeta[Indeterminate, 2] === Indeterminate");
+    /* AppellF2#1: AppellF2 with an Indeterminate argument */
+    audit_true("AppellF2#1", "AppellF2[1, 1, 1, 2, 2, 0.3, Indeterminate] === Indeterminate");
+    /* ArcSin#2: ArcSin[Indeterminate] */
+    audit_true("ArcSin#2", "ArcSin[Indeterminate] === Indeterminate");
+    /* BernoulliB#4: BernoulliB[n, x] at the infinities is x^n */
+    audit_true("BernoulliB#4", "Check[BernoulliB[3, Infinity], \"m\"] === Infinity");
+    audit_true("BernoulliB#4", "BernoulliB[3, -Infinity] === -Infinity");
+    audit_true("BernoulliB#4", "BernoulliB[2, -Infinity] === Infinity");
+    /* BesselI#2: BesselI[-1/2, 0.] is a pole like the exact call */
+    audit_true("BesselI#2", "BesselI[-0.5, 0.] === ComplexInfinity");
+    audit_true("BesselI#2", "BesselI[-1/2, 0] === ComplexInfinity");
+    /* BesselI#3: BesselI at the infinities */
+    audit_true("BesselI#3", "BesselI[0, Infinity] === Infinity");
+    audit_true("BesselI#3", "BesselI[1, -Infinity] === -Infinity");
+    audit_true("BesselI#3", "BesselI[2, -Infinity] === Infinity");
+    /* BesselY#2: BesselY[n, Infinity] */
+    audit_true("BesselY#2", "BesselY[0, Infinity] === 0");
+    /* CubeRoot#5: CubeRoot[Indeterminate] */
+    audit_true("CubeRoot#5", "CubeRoot[Indeterminate] === Indeterminate");
+    /* ExpIntegralE#5: ExpIntegralE[n, Infinity] */
+    audit_true("ExpIntegralE#5", "ExpIntegralE[2, Infinity] === 0");
+    /* ExpIntegralE#6: ExpIntegralE[1, Indeterminate] */
+    audit_true("ExpIntegralE#6", "ExpIntegralE[1, Indeterminate] === Indeterminate");
+    /* GegenbauerC#3: GegenbauerC with an Indeterminate argument */
+    audit_true("GegenbauerC#3", "GegenbauerC[Indeterminate, 1, 0.5] === Indeterminate");
+    audit_true("GegenbauerC#3", "GegenbauerC[3, 1, Indeterminate] === Indeterminate");
+    /* HankelH1#1: HankelH1 at 0 for a rational order */
+    audit_true("HankelH1#1", "HankelH1[1/2, 0] === ComplexInfinity");
+    audit_true("HankelH1#1", "HankelH1[0.5, 0] === ComplexInfinity");
+    /* HankelH1#2: HankelH1[0, Indeterminate] */
+    audit_true("HankelH1#2", "HankelH1[0, Indeterminate] === Indeterminate");
+    /* HankelH2#1: HankelH2 at 0 for a rational order */
+    audit_true("HankelH2#1", "HankelH2[1/2, 0] === ComplexInfinity");
+    audit_true("HankelH2#1", "BesselY[1/2, 0] === ComplexInfinity");
+    /* HurwitzZeta#2: HurwitzZeta[Infinity, a] term by term */
+    audit_true("HurwitzZeta#2", "Check[HurwitzZeta[Infinity, 2], \"m\"] === 0");
+    audit_true("HurwitzZeta#2", "HurwitzZeta[Infinity, 1] === 1");
+    audit_true("HurwitzZeta#2", "HurwitzZeta[Infinity, 1/2] === Infinity");
+    /* Hypergeometric0F1#6: Hypergeometric0F1 with an Indeterminate argument */
+    audit_true("Hypergeometric0F1#6", "Hypergeometric0F1[1, Indeterminate] === Indeterminate");
+    /* Hypergeometric1F1#4: 1F1 at the infinities */
+    audit_true("Hypergeometric1F1#4", "Hypergeometric1F1[1, 2, ComplexInfinity] === Indeterminate");
+    audit_true("Hypergeometric1F1#4", "Check[Hypergeometric1F1[1, 2, Infinity], \"m\"] === Infinity");
+    audit_true("Hypergeometric1F1#4", "Hypergeometric1F1[-2, 1, Infinity] === Infinity");
+    audit_true("Hypergeometric1F1#4", "Hypergeometric1F1[-1, 1, Infinity] === -Infinity");
+    /* HypergeometricPFQ#1: 2F1(1, 1; 2; z) at the divergent z = 1.0 agrees with z = 1 */
+    audit_true("HypergeometricPFQ#1", "HypergeometricPFQ[{1, 1}, {2}, 1] === Infinity");
+    audit_true("HypergeometricPFQ#1", "HypergeometricPFQ[{1, 1}, {2}, 1.] === Infinity");
+    audit_true("HypergeometricPFQ#1", "Hypergeometric2F1[1, 1, 2, 1.] === Infinity");
+    audit_true("HypergeometricPFQ#1", "Hypergeometric2F1[1, 1, -2, 0.5] === ComplexInfinity");
+    audit_true("HypergeometricPFQ#1", "Abs[Hypergeometric2F1[1, 1, 2, 0.5] - 2 Log[2.]] < 10.^-14");
+    /* InverseJacobiCN#2: InverseJacobiCN with an Indeterminate argument */
+    audit_true("InverseJacobiCN#2", "InverseJacobiCN[Indeterminate, 0.5] === Indeterminate");
+    /* InverseJacobiSN#3: InverseJacobiSN with an Indeterminate argument */
+    audit_true("InverseJacobiSN#3", "InverseJacobiSN[Indeterminate, 0.3] === Indeterminate");
+    /* JacobiCS#2: JacobiCS with an Indeterminate argument */
+    audit_true("JacobiCS#2", "JacobiCS[Indeterminate, 0.3] === Indeterminate");
+    audit_true("JacobiCS#2", "JacobiCS[0.5, Indeterminate] === Indeterminate");
+    /* LogGamma#2: LogGamma at a bignum non-positive integer */
+    audit_true("LogGamma#2", "LogGamma[-10^30] === Infinity");
+    audit_true("LogGamma#2", "LogGamma[-3] === Infinity");
+    /* RiemannR#1: RiemannR[Indeterminate] */
+    audit_true("RiemannR#1", "RiemannR[Indeterminate] === Indeterminate");
+    /* RiemannSiegelTheta#1: RiemannSiegelTheta[Indeterminate] */
+    audit_true("RiemannSiegelTheta#1", "RiemannSiegelTheta[Indeterminate] === Indeterminate");
+    /* RiemannSiegelZ#2: no half-evaluated E^(I ComplexInfinity) */
+    audit_true("RiemannSiegelZ#2", "FreeQ[RiemannSiegelZ[0.5 I], ComplexInfinity]");
+    audit_true("RiemannSiegelZ#2", "FreeQ[RiemannSiegelZ[-0.5 I], ComplexInfinity]");
+    /* SphericalBesselJ#5: SphericalBesselJ[0, Indeterminate] */
+    audit_true("SphericalBesselJ#5", "SphericalBesselJ[0, Indeterminate] === Indeterminate");
+    /* StieltjesGamma#2: StieltjesGamma at an arbitrary-precision pole */
+    audit_true("StieltjesGamma#2", "StieltjesGamma[2, -2.`30] === ComplexInfinity");
+    audit_true("StieltjesGamma#2", "StieltjesGamma[2, 0``10] === ComplexInfinity");
+    audit_true("StieltjesGamma#2", "StieltjesGamma[2, -2.] === ComplexInfinity");
+    /* Surd#5: Surd[Indeterminate, 3] */
+    audit_true("Surd#5", "Surd[Indeterminate, 3] === Indeterminate");
+    /* WaveletPsi#2: WaveletPsi at Indeterminate */
+    audit_true("WaveletPsi#2", "WaveletPsi[DaubechiesWavelet[2], Indeterminate] === Indeterminate");
+}
+
 int main(void) {
     audit_init();
     TEST(test_legendreq_type3);
@@ -599,5 +767,6 @@ int main(void) {
     TEST(test_a2_haar_norms);
     TEST(test_a2_jacobip_degenerate);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_special_functions");
 }

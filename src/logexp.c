@@ -1,3 +1,4 @@
+#include "infinity_rules.h"   /* infinity_direction */
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -257,6 +258,12 @@ Expr* builtin_log(Expr* res) {
         if (z->type == EXPR_REAL && z->data.real == 0.0) {
             return expr_new_symbol(SYM_Indeterminate);
         }
+#ifdef USE_MPFR
+        /* An arbitrary-precision zero (0``10) is the same fuzzy zero: its
+         * logarithm is undetermined, not an overflow (audit Log#6). */
+        if (z->type == EXPR_MPFR && mpfr_zero_p(z->data.mpfr))
+            return expr_new_symbol(SYM_Indeterminate);
+#endif
         if (z->type == EXPR_INTEGER && z->data.integer == 1) {
             Expr* ret = expr_new_integer(0); // Log[1] = 0
             return ret;
@@ -400,6 +407,10 @@ Expr* builtin_log(Expr* res) {
         if (z->type == EXPR_REAL && z->data.real == 0.0) {
             return expr_new_symbol(SYM_Indeterminate);
         }
+#ifdef USE_MPFR
+        if (z->type == EXPR_MPFR && mpfr_zero_p(z->data.mpfr))
+            return expr_new_symbol(SYM_Indeterminate);
+#endif
         // Exact integer zero argument with a real-positive base b != 1:
         //   Log[b, 0] = Log[0] / Log[b] = -Infinity / Log[b].
         // For b > 1 (Log[b] > 0) the directed limit is -Infinity;
@@ -435,7 +446,10 @@ Expr* builtin_log(Expr* res) {
         // is computed like any other argument pair (log(b)/log(b) is 1.), so
         // Log[1.*^308, 1.*^308] is the machine 1. every buffer and Compile[]
         // surface gives, not the exact 1 (numeric-tower review G9).
-        if (expr_eq(b, z) && !arg_is_inexact(z)) {
+        /* Not at b = 0 or b = 1, where it is Log[0]/Log[0] or 0/0 --
+         * Indeterminate, through the rewrite below (audit Log#2). */
+        if (expr_eq(b, z) && !arg_is_inexact(z) &&
+            !(z->type == EXPR_INTEGER && (z->data.integer == 0 || z->data.integer == 1))) {
             Expr* ret = expr_new_integer(1);
             return ret;
         }
@@ -673,6 +687,13 @@ static Expr* fixed_base_log(Expr* res, const char* name, int64_t base,
         if (nm == SYM_Infinity || nm == SYM_ComplexInfinity) return expr_new_symbol(SYM_Infinity);
         if (nm == SYM_Indeterminate) return expr_new_symbol(SYM_Indeterminate);
     }
+    /* |log z| grows like log|z| in every direction: Log10[-Infinity] and
+     * Log2[I Infinity] are Infinity (audit Log10#1, Log2#1). */
+    if (infinity_direction(z, NULL) != INF_DIR_NONE) return expr_new_symbol(SYM_Infinity);
+#ifdef USE_MPFR
+    /* an arbitrary-precision zero, like 0.: no determined value (Log10#3) */
+    if (z->type == EXPR_MPFR && mpfr_zero_p(z->data.mpfr)) return expr_new_symbol(SYM_Indeterminate);
+#endif
     {
         int64_t k = fixed_base_exponent(z, base);
         if (k >= 0) return expr_new_integer(k);

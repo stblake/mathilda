@@ -64,11 +64,14 @@ void test_erf_exact() {
     assert_eval_eq("Erf[0]", "0", 0);
     assert_eval_eq("Erf[Infinity]", "1", 0);
     assert_eval_eq("Erf[-Infinity]", "-1", 0);
-    assert_eval_eq("Erf[ComplexInfinity]", "ComplexInfinity", 0);
+    /* an essential singularity: Erf -> +-1 along the real axis, -> I Infinity
+     * along the imaginary one, so no value at ComplexInfinity (audit Erf#2) */
+    assert_eval_eq("Erf[ComplexInfinity]", "Indeterminate", 0);
     assert_eval_eq("Erf[Indeterminate]", "Indeterminate", 0);
     /* Directed imaginary infinities. */
-    assert_eval_eq("Erf[I Infinity]", "DirectedInfinity[Complex[0, 1]]", 1);
-    assert_eval_eq("Erf[-I Infinity]", "DirectedInfinity[Complex[0, -1]]", 1);
+    /* canonical directed infinity: I Infinity is Times[I, Infinity] */
+    assert_eval_eq("Erf[I Infinity]", "Times[Complex[0, 1], Infinity]", 1);
+    assert_eval_eq("Erf[-I Infinity]", "Times[Complex[0, -1], Infinity]", 1);
 }
 
 /* ---- symbolic fall-through & odd symmetry --------------------------- */

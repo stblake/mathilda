@@ -9,6 +9,7 @@
  */
 
 #include "numeric.h"
+#include "infinity_rules.h"
 
 #include "arithmetic.h"
 #include "attr.h"
@@ -3214,6 +3215,9 @@ static Expr* promote_machine_call_impl(const Expr* call) {
             /* Non-finite even in MPFR: past the exponent range -> Overflow[] etc. */
             return numeric_sanitize_nonfinite(r);
         }
+        /* A pole: the MPFR call answered with the exact infinity there
+         * (numeric_pole_value, via the evaluator's net). */
+        if (r && infinity_direction(r, NULL) != INF_DIR_NONE) return r;
         expr_free(r);                     /* symbolic decline: keep caller's behaviour */
         return NULL;
     }

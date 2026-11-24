@@ -65,7 +65,8 @@ void test_erfi_exact() {
     assert_eval_eq("Erfi[0]", "0", 0);
     assert_eval_eq("Erfi[Infinity]", "Infinity", 0);
     assert_eval_eq("Erfi[-Infinity]", "-Infinity", 0);
-    assert_eval_eq("Erfi[ComplexInfinity]", "ComplexInfinity", 0);
+    /* an essential singularity, as for Erf (audit Erf#2) */
+    assert_eval_eq("Erfi[ComplexInfinity]", "Indeterminate", 0);
     assert_eval_eq("Erfi[Indeterminate]", "Indeterminate", 0);
     /* The imaginary-axis limits are FINITE (unlike Erf): erfi(i y) -> i,
      * erfi(-i y) -> -i as y -> +Infinity. */

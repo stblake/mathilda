@@ -33,6 +33,7 @@
 #include "plot_common.h"             /* $RaylibVerbose backing flag (raylib-free) */
 #include "opform.h"                  /* h[o...][x] operator (curried) forms */
 #include "numeric.h"                 /* numeric_sanitize_nonfinite -- no inf/nan leaks */
+#include "infinity_rules.h"          /* numeric special values: Indeterminate, infinities */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1414,7 +1415,12 @@ static bool dv_binds_opaquely(const SymbolDef* def) {
 /* Classify the arguments of a Listable call in one pass: LA_LIST if any is an
  * explicit List, LA_ASSOC if any is an Association, LA_SPARSE if any is a
  * SparseArray, LA_LLIST if any is a LinkedList (any combination). */
-enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4, LA_LLIST = 8, LA_CONDEXPR = 16 };
+/* LA_INDET / LA_INF ride the same pass for the numeric special-value rule
+ * (infinity_rules.c): an argument that is Indeterminate, or an infinity
+ * (Infinity, ComplexInfinity, c Infinity). They cost one compare on a symbol
+ * argument and two loads on a Times argument; a number pays nothing new. */
+enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4, LA_LLIST = 8, LA_CONDEXPR = 16,
+       LA_INDET = INFR_ARG_INDET, LA_INF = INFR_ARG_INF };
 static int listable_arg_kinds(const Expr* e) {
     int kinds = 0;
     size_t n = e->data.function.arg_count;
@@ -1422,9 +1428,22 @@ static int listable_arg_kinds(const Expr* e) {
         const Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_SPARSE) { kinds |= LA_SPARSE; continue; }
         if (arg->type == EXPR_LINKEDLIST) { kinds |= LA_LLIST; continue; }
+        if (arg->type == EXPR_SYMBOL) {
+            const char* s = arg->data.symbol.name;
+            if (s == SYM_Indeterminate) kinds |= LA_INDET;
+            else if (s == SYM_Infinity || s == SYM_ComplexInfinity) kinds |= LA_INF;
+            continue;
+        }
         if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
             continue;
         const char* h = arg->data.function.head->data.symbol.name;
+        if (h == SYM_Times) {
+            size_t ac = arg->data.function.arg_count;
+            const Expr* last = ac ? arg->data.function.args[ac - 1] : NULL;
+            if (last && last->type == EXPR_SYMBOL && last->data.symbol.name == SYM_Infinity)
+                kinds |= LA_INF;
+            continue;
+        }
         if (h == SYM_List) {
             /* List threading wins; only a SparseArray further on still matters
              * (it densifies first), and that is one type test per argument. */
@@ -1439,6 +1458,37 @@ static int listable_arg_kinds(const Expr* e) {
             kinds |= LA_CONDEXPR;
     }
     return kinds;
+}
+
+/* Every argument a number (Integer, BigInt, Real, MPFR, or a Rational /
+ * Complex of them) and one of them inexact: the shape of a numeric call that
+ * a kernel declined on a pole (step 5c). Inline, so the symbolic declines --
+ * Sin[z], Power[x + y, 3], by far the common ones -- pay one type test. */
+static inline bool eval_number_leaf(const Expr* a, bool* inexact) {
+    switch (a->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return true;
+        case EXPR_REAL: *inexact = true; return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR: *inexact = true; return true;
+#endif
+        case EXPR_FUNCTION:
+            if (a->data.function.head->type == EXPR_SYMBOL &&
+                a->data.function.arg_count == 2 &&
+                (a->data.function.head->data.symbol.name == SYM_Rational ||
+                 a->data.function.head->data.symbol.name == SYM_Complex))
+                return eval_number_leaf(a->data.function.args[0], inexact) &&
+                       eval_number_leaf(a->data.function.args[1], inexact);
+            return false;
+        default: return false;
+    }
+}
+static inline bool eval_args_inexact_numbers(const Expr* e) {
+    bool inexact = false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* a = e->data.function.args[i];
+        if (!a || !eval_number_leaf(a, &inexact)) return false;
+    }
+    return inexact;
 }
 
 /* h[..., ConditionalExpression[v, c], ...] for a NumericFunction h: the
@@ -4097,6 +4147,33 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 }
             }
 
+            /* Numeric special values (infinity_rules.c): a NumericFunction
+             * with an Indeterminate argument is Indeterminate, and a head with
+             * a row in the directed-infinity table answers its infinite
+             * arguments (Sin[ComplexInfinity], Log[-Infinity], BesselJ[n,
+             * Infinity]). Runs before UpValues/DownValues/the builtin, so every
+             * head -- C or .m -- gets the same semantics. The no-defect path
+             * pays the attribute test plus the classification above (a
+             * Listable head) or one argument scan (the few non-Listable
+             * NumericFunction heads); Flat heads (Plus, Times, Max, Min) carry
+             * their own rules. */
+            if ((attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT) &&
+                head->type == EXPR_SYMBOL && !hold_all_complete) {
+                int sk = la_kind;
+                if (!(attrs & ATTR_LISTABLE)) {
+                    for (size_t i = 0; i < res->data.function.arg_count; i++)
+                        sk |= numeric_special_arg_kind(res->data.function.args[i]);
+                }
+                if (sk & (LA_INDET | LA_INF)) {
+                    Expr* sv = numeric_special_value_rule(res, (sk & LA_INDET) != 0);
+                    if (sv) {
+                        expr_free(res);
+                        *changed = true; /* special-value rule fired */
+                        return sv;
+                    }
+                }
+            }
+
             /* SubValues: a call with a compound head f[a][b] (the head already
              * evaluated) tries UpValues of its arguments, then the SubValue
              * rules of its innermost head symbol f. */
@@ -4430,6 +4507,15 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         res->data.function.args[0]->data.function.head->data.symbol.name == SYM_SeriesData) {
                         ret = series_apply_unary(res);
                     }
+                    /* 5c. A numeric builtin that declined an inexact call
+                     * sitting exactly on a pole (Factorial2[-2.], BesselK[1,
+                     * 0.], PolyGamma[0, -1.]) answers the infinity of the
+                     * exact call there (infinity_rules.c). The argument test
+                     * rejects a symbolic argument at its first type check. */
+                    if (!ret && (attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT) &&
+                        res->type == EXPR_FUNCTION && eval_args_inexact_numbers(res) &&
+                        mth_msg_fired_count() == msg_before)
+                        ret = numeric_pole_value(res);
                     g_builtin_depth -= opaque;
                     g_dispatch_head = outer_head;
                     g_trace_suppress--;
@@ -4467,7 +4553,13 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                             && (ret->type == EXPR_REAL || ret->type == EXPR_FUNCTION))
                             ret = numeric_promote_result_if_degenerate(ret, res);
                         if (numeric_result_has_nonfinite(ret)) {
-                            ret = numeric_sanitize_nonfinite(ret);
+                            /* inf/NaN at a pole the inexact argument names
+                             * exactly (Cot[0.], ArcTanh[1.]): the exact call's
+                             * infinity, not Overflow[] (infinity_rules.c). */
+                            Expr* pole = (attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT)
+                                             ? numeric_pole_value(res) : NULL;
+                            if (pole) { expr_free(ret); ret = pole; }
+                            else ret = numeric_sanitize_nonfinite(ret);
                         }
 #ifdef USE_MPFR
                         if (attrs & ATTR_NUMERICFUNCTION) {

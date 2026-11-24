@@ -130,6 +130,28 @@ static void test_wave3_arity_options(void) {
     audit_chk("UnitVector#2", "UnitVector[3, 1, {WorkingPrecision -> MachinePrecision}]", "{1.0, 0.0, 0.0}");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* CosineDistance#1: an Infinity component gives no finite distance */
+    audit_true("CosineDistance#1", "Quiet[CosineDistance[{1, Infinity}, {1, 2}]] === Indeterminate");
+    /* EuclideanDistance#2: infinite components */
+    audit_true("EuclideanDistance#2", "EuclideanDistance[{Infinity, 0}, {0, 0}] === Infinity");
+    /* EuclideanDistance#3: no spurious message for -Infinity */
+    audit_true("EuclideanDistance#3", "Check[EuclideanDistance[{-Infinity}, {0}], \"m\"] === Infinity");
+    /* EuclideanDistance#4: an Indeterminate component */
+    audit_true("EuclideanDistance#4", "EuclideanDistance[{Indeterminate}, {0}] === Indeterminate");
+    /* ManhattanDistance#2: infinite components */
+    audit_true("ManhattanDistance#2", "ManhattanDistance[{Infinity, 0}, {0, 0}] === Infinity");
+    audit_true("ManhattanDistance#2", "Check[ManhattanDistance[{-Infinity}, {0}], \"m\"] === Infinity");
+    /* SquaredEuclideanDistance#2: infinite components */
+    audit_true("SquaredEuclideanDistance#2", "SquaredEuclideanDistance[{Infinity, 1}, {0, 1}] === Infinity");
+    audit_true("SquaredEuclideanDistance#2", "SquaredEuclideanDistance[{ComplexInfinity}, {0}] === Infinity");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
@@ -140,5 +162,6 @@ int main(void) {
     TEST(test_permutations_at_most_n);
     TEST(test_s14_arraypad_levels);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_lists_and_iteration");
 }

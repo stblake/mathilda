@@ -37,6 +37,7 @@ Both fold through GMP when any argument is a bigint, so results that exceed `int
 - Gaussian integers, rationals, and exact numeric quantities: the quotient `n/m` is formed and evaluated; the result is `True` iff it reduces to an integer or a Gaussian integer. So `Divisible[3 + I, 1 - I]` → `True`, `Divisible[3/2, 1/2]` → `True`, `Divisible[2 Pi, Pi/2]` → `True`, while `Divisible[Sqrt[6], Sqrt[2]]` → `False`.
 - `Listable`: threads element-wise over lists, e.g. `Divisible[{1, 2, 3, 4, 5, 6}, 2]` → `{False, True, False, True, False, True}`.
 - Symbolic, non-numeric arguments leave the call unevaluated (e.g. `Divisible[x, 2]`).
+- An infinite argument (`Infinity`, `-Infinity`, `ComplexInfinity`) leaves the call unevaluated: an infinity is no integer multiple of anything (it used to give `True`; audit Divisible#1).
 - Diagnostics: one argument emits `Divisible::argmu`, none `Divisible::argm`; both leave the call unevaluated.
 
 ```
@@ -1582,6 +1583,7 @@ The inverse of `ContinuedFraction`: reconstructs a value from its continued-frac
   Möbius transform and rationalised to a single `(P + Q Sqrt[R]) / S` in lowest
   terms.
 - `FromContinuedFraction[{}]` is `0`; `FromContinuedFraction[{x}]` is `x`.
+- An `Infinity` term ends the fraction (`1/(Infinity + ...)` is `0`): `FromContinuedFraction[{1, 2, Infinity}]` is `3/2`, and a leading `Infinity` is the value `Infinity` (audit FromContinuedFraction#2).
 - Left unevaluated for a non-list argument, a sub-list anywhere but last, an
   empty period block, or non-integer terms in a periodic form.
 

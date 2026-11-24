@@ -15,6 +15,7 @@
 #include <math.h>
 #include <stdint.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "infinity_rules.h"   /* DirectedInfinity */
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -185,6 +186,13 @@ void complex_init(void) {
     symtab_add_builtin("Sign", builtin_sign);
     symtab_add_builtin("Conjugate", builtin_conjugate);
     symtab_add_builtin("Arg", builtin_arg);
+    symtab_add_builtin("DirectedInfinity", builtin_directedinfinity);
+    symtab_get_def("DirectedInfinity")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DirectedInfinity",
+        "DirectedInfinity[z] represents an infinite quantity in the direction of "
+        "the complex number z; it evaluates to the canonical Infinity, -Infinity "
+        "or c Infinity with c = z/Abs[z], and DirectedInfinity[] (or [0]) to "
+        "ComplexInfinity.");
 
     symtab_get_def("Re")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Im")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);

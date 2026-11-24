@@ -55,6 +55,11 @@ static Expr* sg_intnm(Expr* res) {
 static bool sg_is_pole(const Expr* a) {
     if (a->type == EXPR_INTEGER) return a->data.integer <= 0;
     if (a->type == EXPR_REAL) return a->data.real <= 0 && a->data.real == floor(a->data.real);
+#ifdef USE_MPFR
+    /* an arbitrary-precision 0 or negative integer (-2.`30, 0``10) is the same
+     * pole (audit StieltjesGamma#2) */
+    if (a->type == EXPR_MPFR) return mpfr_integer_p(a->data.mpfr) && mpfr_sgn(a->data.mpfr) <= 0;
+#endif
     return false;
 }
 

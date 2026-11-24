@@ -17,8 +17,25 @@ static void test_inequality_residual_wellformed(void) {
     audit_chk("Inequality#1", "1 < 2 < 3", "True");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* SameQ#2: DirectedInfinity[d] evaluates to the canonical infinity */
+    audit_true("SameQ#2", "(DirectedInfinity[1] === Infinity) === True");
+    audit_true("SameQ#2", "(DirectedInfinity[] === ComplexInfinity) === True");
+    audit_true("SameQ#2", "(DirectedInfinity[-1] === -Infinity) === True");
+    audit_true("SameQ#2", "(DirectedInfinity[2 I] === I Infinity) === True");
+    audit_true("SameQ#2", "DirectedInfinity[1] == Infinity");
+    /* UnsameQ#2: Infinity =!= DirectedInfinity[1] is False */
+    audit_true("UnsameQ#2", "(Infinity =!= DirectedInfinity[1]) === False");
+}
+
 int main(void) {
     audit_init();
     TEST(test_inequality_residual_wellformed);
+    TEST(test_s11_special_values);
     return audit_finish("audit_comparisons");
 }

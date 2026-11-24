@@ -227,11 +227,23 @@ static Expr* hs_builtin(Expr* res, int code) {
     }
     /* z = 0 (exact) */
     if (hs_is_int(z, 0)) {
+        /* A real order: an Integer, BigInt, Rational or Real. */
+        const bool real_order = n->type == EXPR_INTEGER || n->type == EXPR_BIGINT ||
+            n->type == EXPR_REAL || (n->type == EXPR_FUNCTION &&
+            n->data.function.head->type == EXPR_SYMBOL &&
+            n->data.function.head->data.symbol.name == SYM_Rational);
         if (code <= 1) {
-            /* H(nu, 0): Y is infinite for every real order */
-            if (n->type == EXPR_INTEGER || n->type == EXPR_REAL) return expr_new_symbol("ComplexInfinity");
+            /* H(nu, 0): Y is infinite for every real order -- exact
+             * rational ones too (HankelH1[1/2, 0], audit HankelH1#1). */
+            if (real_order) return expr_new_symbol("ComplexInfinity");
             return NULL;
         }
+        /* h(nu, 0) = j +- I y: for every real order one of the two is
+         * singular at 0 (j_nu ~ z^nu for nu < 0, y_nu ~ z^(-nu-1) for
+         * nu > -1, and j_(-n-1) = (-1)^(n+1) y_n), so the spherical Hankel
+         * functions have a pole there (SphericalHankelH2#2). */
+        if ((code == HS_SH1 || code == HS_SH2) && real_order)
+            return expr_new_symbol("ComplexInfinity");
         if (code == 2 && hs_is_int(n, 0)) return expr_new_integer(1);
         if (code == 2 && n->type == EXPR_INTEGER && n->data.integer > 0) return expr_new_integer(0);
         if (code != 2 && n->type == EXPR_INTEGER && n->data.integer >= 0)

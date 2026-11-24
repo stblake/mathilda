@@ -84,6 +84,13 @@ Expr* builtin_expintegrale(Expr* res) {
             mk_fn1("Exp", mk_fn2("Times", mk_int(-1), expr_copy(z))),
             mk_fn2("Power", expr_copy(z), mk_int(-1)));
 
+    /* E_n(0) diverges for integer n <= 1 (the integrand ~ 1/t^n near 0, or
+     * E_n = Gamma[1-n] z^(n-1) + ... for n < 1): ComplexInfinity, as the
+     * inexact ExpIntegralE[1, 0.] (audit ExpIntegralE#2). */
+    if (n->type == EXPR_INTEGER && n->data.integer <= 1 &&
+        z->type == EXPR_INTEGER && z->data.integer == 0)
+        return expr_new_symbol(SYM_ComplexInfinity);
+
     /* E_n(0) = 1/(n-1) for integer n >= 2. */
     if (n->type == EXPR_INTEGER && n->data.integer >= 2 &&
         z->type == EXPR_INTEGER && z->data.integer == 0)

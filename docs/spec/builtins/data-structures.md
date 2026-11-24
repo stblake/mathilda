@@ -556,6 +556,9 @@ In[1]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
 Out[1]= {1, 9}
 ```
 
+An `Indeterminate` element makes the extremum `Indeterminate`: `Max[1, Indeterminate]`
+and `MinMax[{Indeterminate, 1}]` (`{Indeterminate, Indeterminate}`; audit MinMax#2).
+
 ## Apply (@@)
 `f @@ assoc` uses the association's **values** as `f`'s arguments —
 `f @@ <|k1 -> v1, ...|>` is `f[v1, ...]` (so `Total[assoc]` is `Plus @@ assoc`,

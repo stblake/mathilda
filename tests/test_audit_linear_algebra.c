@@ -349,6 +349,26 @@ static void test_wave3_arity_options(void) {
     audit_chk("UpperTriangularMatrixQ#2", "{UpperTriangularMatrixQ[{{1, 2}, {1*^-20, 3}}, 0, {Tolerance -> 1*^-10}], UpperTriangularMatrixQ[{{1, 2}, {1*^-20, 3}}, Tolerance :> 1*^-10]}", "{True, True}");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* Norm#1: a numeric p below 1 is no norm */
+    audit_true("Norm#1", "Check[Norm[{1, 2}, 1/2], \"fired\", Norm::ptype] === \"fired\"");
+    audit_true("Norm#1", "Quiet[Norm[{1, 2}, 0]] === Norm[{1, 2}, 0]");
+    audit_true("Norm#1", "Quiet[Norm[{1, 2}, -1]] === Norm[{1, 2}, -1]");
+    audit_true("Norm#1", "Norm[{3, 4}, 1] === 7");
+    /* Norm#4: Norm with an infinite entry */
+    audit_true("Norm#4", "Norm[{Infinity, 1}] === Infinity");
+    audit_true("Norm#4", "Norm[Infinity] === Infinity");
+    /* HermitianMatrixQ#2: conjugates of I Infinity entries */
+    audit_true("HermitianMatrixQ#2", "Check[HermitianMatrixQ[{{1, I Infinity}, {-I Infinity, 1}}], \"m\"] === True");
+    /* Normalize#1: Normalize with an Indeterminate entry */
+    audit_true("Normalize#1", "Normalize[{Indeterminate, 1}] === {Indeterminate, Indeterminate}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fit_general_norm);
@@ -372,5 +392,6 @@ int main(void) {
     TEST(test_ndarray_nonfinite);
     TEST(test_gsvd_diagonal);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_linear_algebra");
 }

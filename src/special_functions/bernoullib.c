@@ -32,6 +32,7 @@
 #include "bernoullib.h"
 #include "numeric.h"
 #include "sym_names.h"
+#include "infinity_rules.h"   /* infinity_poly_value */
 
 #include <math.h>
 #include <stdbool.h>
@@ -317,7 +318,12 @@ Expr* builtin_bernoullib(Expr* res) {
     /* BernoulliB[300.] is ~-2.15*10^375: mpq_get_d overflows a double, so a
      * machine-real index promotes to an extended-exponent MPFR real. */
     if (argc == 1) return numeric_promote_result_if_degenerate(bern_one_arg(args[0]), res);
-    if (argc == 2) return numeric_promote_result_if_degenerate(bern_two_arg(args[0], args[1]), res);
+    if (argc == 2) {
+        /* B_n(x) at an infinity is its leading term x^n (BernoulliB#4) */
+        Expr* lead = infinity_poly_value(res);
+        if (lead) return lead;
+        return numeric_promote_result_if_degenerate(bern_two_arg(args[0], args[1]), res);
+    }
     return bern_emit_argt(argc);
 }
 

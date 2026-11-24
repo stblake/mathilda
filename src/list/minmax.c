@@ -243,6 +243,14 @@ Expr* builtin_min(Expr* res) {
     for (size_t i = 0; i < n && !has_list; i++) has_list = minmax_spliced(res->data.function.args[i]);
     if (has_list) return minmax_splice(res);
 
+    /* An undetermined element leaves the extremum undetermined (audit
+     * MinMax#2): Min/Max are numeric functions of every element. */
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Indeterminate)
+            return expr_new_symbol(SYM_Indeterminate);
+    }
+
     /* Min of a single element is that element (Min[5] -> 5, Min[x] -> x). Lists
      * were flattened above, so a lone argument here is a genuine scalar. */
     if (n == 1) return expr_copy(res->data.function.args[0]);
@@ -348,6 +356,15 @@ Expr* builtin_max(Expr* res) {
     bool has_list = false;
     for (size_t i = 0; i < n && !has_list; i++) has_list = minmax_spliced(res->data.function.args[i]);
     if (has_list) return minmax_splice(res);
+
+    /* An undetermined element leaves the extremum undetermined (audit
+     * MinMax#2): Min/Max are numeric functions of every element. */
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Indeterminate)
+            return expr_new_symbol(SYM_Indeterminate);
+    }
+
 
     /* Max of a single element is that element (Max[5] -> 5, Max[x] -> x). Lists
      * were flattened above, so a lone argument here is a genuine scalar. */

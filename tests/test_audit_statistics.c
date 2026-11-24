@@ -132,6 +132,18 @@ static void test_wave3_arity_options(void) {
     audit_chk("Covariance#2", "Quiet[Covariance[{1, 2}, {3, 4}, {5, 6}]]", "Covariance[{1, 2}, {3, 4}, {5, 6}]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* CentralMoment#1: the 0th central moment is 1 */
+    audit_true("CentralMoment#1", "CentralMoment[{1, 2, 3}, 0] === 1");
+    audit_true("CentralMoment#1", "CentralMoment[{1., 2., 3.}, 0] === 1.");
+    audit_true("CentralMoment#1", "CentralMoment[{1, 2, 3}, 2] === 2/3");
+}
+
 int main(void) {
     audit_init();
     TEST(test_median_numeric_order);
@@ -144,5 +156,6 @@ int main(void) {
     TEST(test_quartiles_ragged);
     TEST(test_covariance_row_mismatch);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_statistics");
 }

@@ -91,11 +91,33 @@ static void test_wave3_arity_options(void) {
     audit_chk("FromContinuedFraction#3", "Quiet[FromContinuedFraction[{1}, {2}]]", "FromContinuedFraction[{1}, {2}]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* Divisible#1: an infinite divisor is not decided */
+    audit_true("Divisible#1", "Divisible[2, Infinity] === Divisible[2, Infinity]");
+    audit_true("Divisible#1", "Divisible[2, -Infinity] =!= True");
+    audit_true("Divisible#1", "Divisible[2, ComplexInfinity] =!= True");
+    audit_true("Divisible#1", "Divisible[6, 3] === True");
+    /* DivisorSigma#1: an infinite index is no number of divisor powers */
+    audit_true("DivisorSigma#1", "Quiet[DivisorSigma[Infinity, 6]] =!= 1");
+    audit_true("DivisorSigma#1", "Quiet[DivisorSigma[ComplexInfinity, 6]] === Indeterminate");
+    audit_true("DivisorSigma#1", "DivisorSigma[2, 6] === 50");
+    /* FromContinuedFraction#2: an Infinity term ends the fraction */
+    audit_true("FromContinuedFraction#2", "Check[FromContinuedFraction[{1, 2, Infinity}], \"m\"] === 3/2");
+    audit_true("FromContinuedFraction#2", "FromContinuedFraction[{1, Infinity, 5}] === 1");
+    audit_true("FromContinuedFraction#2", "FromContinuedFraction[{1, 2}] === 3/2");
+}
+
 int main(void) {
     audit_init();
     TEST(test_primitive_root_list_huge_phi);
     TEST(test_powermod_roots);
     TEST(test_continued_fraction_inexact_last_term);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_number_theory");
 }

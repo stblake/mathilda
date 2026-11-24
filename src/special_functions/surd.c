@@ -201,11 +201,14 @@ Expr* builtin_surd(Expr* res) {
         if (sf_surd_r(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
     }
 
+    /* A negative index is the reciprocal root: Infinity^(1/n) -> 0 for
+     * n < 0 (audit Surd#1). */
+    const bool neg_index = n->type == EXPR_BIGINT ? mpz_sgn(n->data.bigint) < 0 : k < 0;
     if (x->type == EXPR_SYMBOL && x->data.symbol.name == SYM_Infinity)
-        return expr_copy(x);
+        return neg_index ? expr_new_integer(0) : expr_copy(x);
     if (surd_is_neg_infinity(x)) {
         if (n->type == EXPR_BIGINT ? mpz_odd_p(n->data.bigint) : (k & 1))
-            return expr_copy(x);
+            return neg_index ? expr_new_integer(0) : expr_copy(x);
         return surd_indeterminate("noneg", "Surd is not defined for even roots of negative values.", NULL);
     }
 

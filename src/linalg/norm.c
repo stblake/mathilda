@@ -24,6 +24,8 @@
 #include "common.h"    /* common_scan_inexact — machine vs MPFR gate below */
 #include "eval.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Norm::ptype */
+#include "print.h"     /* expr_to_string */
 #include "la_dense.h"         /* la_all_numeric */
 #include "svdecomp_internal.h" /* svd_mpfr_values: the MPFR spectral norm */
 #ifdef USE_MPFR
@@ -304,8 +306,35 @@ static Expr* norm_ll(Expr* expr, const Expr* p) {
     return result;
 }
 
+/* A numeric p below 1 gives no norm (the triangle inequality fails, and
+ * p = 0 divides by zero): Norm::ptype, and the call stays (audit Norm#1). */
+static bool norm_p_below_one(const Expr* p) {
+    double v;
+    if (p->type == EXPR_INTEGER) v = (double)p->data.integer;
+    else if (p->type == EXPR_REAL) v = p->data.real;
+#ifdef USE_MPFR
+    else if (p->type == EXPR_MPFR) v = mpfr_get_d(p->data.mpfr, MPFR_RNDN);
+#endif
+    else if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+             p->data.function.head->data.symbol.name == SYM_Rational &&
+             p->data.function.arg_count == 2 &&
+             p->data.function.args[0]->type == EXPR_INTEGER &&
+             p->data.function.args[1]->type == EXPR_INTEGER)
+        v = (double)p->data.function.args[0]->data.integer /
+            (double)p->data.function.args[1]->data.integer;
+    else return false;
+    return v < 1.0;
+}
+
 Expr* builtin_norm(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
+    if (res->data.function.arg_count == 2 && norm_p_below_one(res->data.function.args[1])) {
+        char* ps = expr_to_string(res->data.function.args[1]);
+        mth_message("Norm", "ptype", "The second argument of Norm, %s, should be a symbol, "
+                    "Infinity, or a number greater than or equal to 1.", ps ? ps : "");
+        free(ps);
+        return NULL;
+    }
     if (linalg_call_has_ndarray(res)) return ndla_norm(res);
 
     Expr* expr = res->data.function.args[0];

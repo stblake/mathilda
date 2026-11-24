@@ -1140,3 +1140,27 @@ Out[6]= -1.4066*10^-30
 In[7]:= Rationalize[1.*^20, 0]
 Out[7]= 100000000000000000000
 ```
+
+## Special values at poles and infinities (audit Wave 3, S11)
+
+The `Indeterminate`/infinity semantics shared by every `NumericFunction` (the
+special-value table, the direction-reading `Abs`/`Re`/`Im`/`Sign`/`Arg`/`Conjugate`,
+and inexact poles answering the exact call's infinity) are described under
+**Indeterminate and the infinities as arguments** in `arithmetic.md`. The per-head
+rules added with it:
+
+- `Log[0``10]`, `Log10[0``10]`, `Log2[0``10]`: an arbitrary-precision zero is the same
+  fuzzy zero as `0.`, so `Indeterminate` (it was `Overflow[]`).
+- `Log[0, 0]` and `Log[1, 1]` are the forms `Log[0]/Log[0]` and `0/0`: `Indeterminate`
+  with the messages of that quotient (the `Log[b, b] = 1` rule no longer applies at
+  `b = 0, 1`). `Log[1, z]` is `ComplexInfinity`.
+- `Log10` and `Log2` of any infinity are `Infinity`.
+- At an exact `0`: `ArcSec[0]`, `ArcCsc[0]` and `ArcCsch[0]` are `ComplexInfinity`,
+  `ArcSech[0]` is `Infinity` (the real part of `Log[2/z]` grows, the imaginary part
+  stays bounded) and `ArcCoth[0]` is the principal value `I Pi/2` (as `ArcCoth[0.]`).
+- `ArcTan[0, 0]` is `Indeterminate` with `ArcTan::indet`.
+- At an inexact pole the exact call's value is taken: `Cot[0.]`, `Csc[0.`20]`,
+  `Coth[0.]`, `Csch[0.]` are `ComplexInfinity`; `ArcTanh[1.]` is `Infinity`,
+  `ArcTanh[-1.]` `-Infinity`, `ArcCot[1. I]` `-I Infinity` -- never `Overflow[]`.
+- `0^(I b)` for a real nonzero `b` has no limit: `Indeterminate` with `Power::indet`.
+

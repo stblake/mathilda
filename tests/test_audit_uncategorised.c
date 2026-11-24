@@ -107,6 +107,31 @@ static void test_wave3_arity_options(void) {
     audit_chk("IntegerPart#3", "Quiet[IntegerPart[1, 2]]", "IntegerPart[1, 2]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* Subtract#1: infinities in different complex directions have no sum */
+    audit_true("Subtract#1", "Quiet[Subtract[DirectedInfinity[I], DirectedInfinity[I]]] === Indeterminate");
+    audit_true("Subtract#1", "Check[DirectedInfinity[I] - DirectedInfinity[I], \"fired\", Infinity::indet] === \"fired\"");
+    audit_true("Subtract#1", "Times[-1, DirectedInfinity[I]] === DirectedInfinity[-I]");
+    audit_true("Subtract#1", "DirectedInfinity[I] + DirectedInfinity[I] === DirectedInfinity[I]");
+    audit_true("Subtract#1", "Quiet[DirectedInfinity[1] + DirectedInfinity[I]] === Indeterminate");
+    /* Divide#4: a complex number over 0 */
+    audit_true("Divide#4", "Quiet[Divide[I, 0]] === ComplexInfinity");
+    audit_true("Divide#4", "Quiet[Divide[2 + 3 I, 0]] === ComplexInfinity");
+    audit_true("Divide#4", "Check[Divide[I, 0], \"fired\", Power::infy] === \"fired\"");
+    /* SphericalHankelH2#2: a pole at 0 for every real order */
+    audit_true("SphericalHankelH2#2", "SphericalHankelH2[-1, 0] === ComplexInfinity");
+    audit_true("SphericalHankelH2#2", "SphericalHankelH2[1/2, 0] === ComplexInfinity");
+    audit_true("SphericalHankelH2#2", "SphericalHankelH1[-1, 0] === ComplexInfinity");
+    audit_true("SphericalHankelH2#2", "SphericalHankelH2[0, 0] === ComplexInfinity");
+    /* SphericalHankelH2#3: an inexact zero argument */
+    audit_true("SphericalHankelH2#3", "SphericalHankelH2[0, 0.] === ComplexInfinity");
+}
+
 int main(void) {
     audit_init();
     TEST(test_slotsequence_empty);
@@ -115,5 +140,6 @@ int main(void) {
     TEST(test_texform_digit_factor);
     TEST(test_s14_listconvolve_level);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_uncategorised");
 }

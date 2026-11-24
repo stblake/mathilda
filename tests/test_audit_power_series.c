@@ -53,10 +53,39 @@ static void test_seriesdata_exp_kernel_terms(void) {
                "SeriesData[x, 0, {1, 1, 0, 0}, 0, 4, 1]^x === SeriesData[x, 0, {1, 0, 1, -1/2}, 0, 4, 1]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* ArcCsch#1: ArcCsch[0] */
+    audit_true("ArcCsch#1", "ArcCsch[0] === ComplexInfinity");
+    /* ArcSech#2: ArcSech[0] */
+    audit_true("ArcSech#2", "ArcSech[0] === Infinity");
+    audit_true("ArcSech#2", "ArcSech[1] === 0");
+    /* ArcSinh#1: ArcSinh along the imaginary axis */
+    audit_true("ArcSinh#1", "ArcSinh[I Infinity] === Infinity");
+    audit_true("ArcSinh#1", "ArcSinh[-I Infinity] === -Infinity");
+    audit_true("ArcSinh#1", "Re[ArcSinh[10.^8 I]] > 19");
+    /* ArcCosh#3: ArcCosh of -Infinity and I Infinity */
+    audit_true("ArcCosh#3", "ArcCosh[-Infinity] === Infinity");
+    audit_true("ArcCosh#3", "ArcCosh[I Infinity] === Infinity");
+    audit_true("ArcCosh#3", "Re[ArcCosh[-10.^8]] > 19");
+    /* ArcCsch#3: ArcCsch[Indeterminate] */
+    audit_true("ArcCsch#3", "ArcCsch[Indeterminate] === Indeterminate");
+    /* ArcSinh#2: ArcSinh[Indeterminate] */
+    audit_true("ArcSinh#2", "ArcSinh[Indeterminate] === Indeterminate");
+    /* SeriesData#4: a series about Infinity is in powers of 1/x */
+    audit_true("SeriesData#4", "Check[Normal[SeriesData[x, Infinity, {1, 2}, 1, 3, 1]], \"m\"] === 1/x + 2/x^2");
+    audit_true("SeriesData#4", "Normal[SeriesData[x, Infinity, {3}, 0, 2, 1]] === 3");
+}
+
 int main(void) {
     audit_init();
     TEST(test_series_huge_order);
     TEST(test_seriesdata_function_composition);
     TEST(test_seriesdata_exp_kernel_terms);
+    TEST(test_s11_special_values);
     return audit_finish("audit_power_series");
 }

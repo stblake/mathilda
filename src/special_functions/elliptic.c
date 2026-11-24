@@ -818,6 +818,17 @@ static Expr* ellipticpi_complete(Expr* n, Expr* m) {
      * 21.5, 221, 2221, 22214 at e = 10^-2, 10^-4, 10^-6, 10^-8.) The INCOMPLETE
      * form has no such pole: Pi[1, 1, 1/2] is 1.73199154202. */
     if (ell_is_one(n)) return expr_new_symbol(SYM_ComplexInfinity);
+    /* m = 1 is a pole for every real n, as EllipticK[1] (= Pi[0|1]) is: the
+     * integrand ~ 1/((1 - n) Cos[t]) diverges logarithmically at t = Pi/2
+     * (audit EllipticPi#1; the kernels decline there). */
+    if (ell_is_one(m) && (n->type == EXPR_INTEGER || n->type == EXPR_BIGINT ||
+                          n->type == EXPR_REAL ||
+#ifdef USE_MPFR
+                          n->type == EXPR_MPFR ||
+#endif
+                          (n->type == EXPR_FUNCTION && n->data.function.head->type == EXPR_SYMBOL &&
+                           n->data.function.head->data.symbol.name == SYM_Rational)))
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     Expr* two[2] = { n, m };
     if (ell_any_inexact(two, 2)) {              /* see the note in builtin_ellipticf */

@@ -31,7 +31,8 @@ void test_countroots_real_line() {
     assert_eval_eq("CountRoots[ChebyshevT[20, x], x]", "20", 0);
     /* constants and the zero polynomial */
     assert_eval_eq("CountRoots[5, x]", "0", 0);
-    assert_eval_eq("CountRoots[0, x]", "0", 0);
+    /* the zero polynomial vanishes everywhere (audit CountRoots#1) */
+    assert_eval_eq("CountRoots[0, x]", "Infinity", 0);
     /* rational and approximate coefficients */
     assert_eval_eq("CountRoots[x^3/3 - x/7 + 1/1000, x]", "3", 0);
     assert_eval_eq("CountRoots[x^2 - 2., x]", "2", 0);

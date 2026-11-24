@@ -605,6 +605,13 @@ static Expr* wv_builtin(Expr* res, bool psi) {
     bool haar;
     long n = wv_family(wv_at(res, 0), &haar);
     if (n == 0) return NULL;
+    /* the value at an undetermined point is undetermined (audit WaveletPhi#1,
+     * WaveletPsi#2) -- not the 0 of a point outside the support */
+    {
+        const Expr* x = wv_at(res, 1);
+        if (x->type == EXPR_SYMBOL && x->data.symbol.name == SYM_Indeterminate)
+            return expr_new_symbol(SYM_Indeterminate);
+    }
     /* options */
     long J = 8;
     bool wp_machine = true;

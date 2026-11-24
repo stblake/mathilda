@@ -827,6 +827,25 @@ Expr* builtin_plus(Expr* res) {
                     "Indeterminate expression involving infinities in different directions encountered.");
             return expr_new_symbol(SYM_Indeterminate);
         }
+        /* Two infinities in different complex directions have no sum
+         * either: I Infinity - I Infinity is Indeterminate (the collector
+         * would cancel the coefficients to 0, audit Subtract#1). Directions
+         * are unit numbers (Times normalises them), so equal directions are
+         * equal terms, which the collector merges (I Infinity + I Infinity
+         * is 2 I Infinity, normalised back to I Infinity). */
+        if (cdir > 1 && pos_inf == 0 && neg_inf == 0 && cinf == 0) {
+            Expr* first = NULL;
+            for (size_t i = 0; i < n; i++) {
+                Expr* t = res->data.function.args[i];
+                if (classify_plus_term(t) != 4) continue;
+                if (!first) { first = t; continue; }
+                if (!expr_eq(first, t)) {
+                    mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                            "Indeterminate expression involving infinities in different directions encountered.");
+                    return expr_new_symbol(SYM_Indeterminate);
+                }
+            }
+        }
         if (cinf > 0 && cdir > 0) {
             mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
                     "Indeterminate expression involving ComplexInfinity encountered.");

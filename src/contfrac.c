@@ -891,6 +891,16 @@ static Expr* fcf_terms(const Expr* seq, size_t n) {
     if (n == 0) return expr_new_integer(0);   /* {} -> 0 */
     Expr* hold = NULL;
 
+    /* An Infinity term ends the fraction: 1/(Infinity + ...) is 0, so
+     * {a0, ..., a(k-1), Infinity, ...} is {a0, ..., a(k-1)} (and a leading
+     * Infinity is the value itself). Audit FromContinuedFraction#2. */
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = fcf_at(seq, i, &hold);
+        bool inf = t->type == EXPR_SYMBOL && t->data.symbol.name == SYM_Infinity;
+        expr_free(hold); hold = NULL;
+        if (inf) return i == 0 ? expr_new_symbol(SYM_Infinity) : fcf_terms(seq, i);
+    }
+
     /* A trailing sub-list marks the cyclic (period) block. */
     for (size_t i = 0; i + 1 < n; i++)
         if (fcf_is_list(fcf_at(seq, i, &hold))) { expr_free(hold); return NULL; }   /* sub-list only allowed last */

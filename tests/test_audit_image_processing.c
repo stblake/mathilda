@@ -173,6 +173,17 @@ static void test_wave3_arity_options(void) {
     audit_chk("RandomImage#6", "Quiet[RandomImage[1, {2, 3}, Foo -> 1]]", "RandomImage[1, {2, 3}, Foo -> 1]");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* Round#3: Round[Indeterminate] */
+    audit_true("Round#3", "Round[Indeterminate] === Indeterminate");
+    audit_true("Round#3", "Round[Indeterminate, 2] === Indeterminate");
+}
+
 int main(void) {
     audit_init();
     TEST(test_random_image_huge_size);
@@ -182,5 +193,6 @@ int main(void) {
     TEST(test_gradient_filter_radius);
     TEST(test_s14_removealpha_exact);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_image_processing");
 }

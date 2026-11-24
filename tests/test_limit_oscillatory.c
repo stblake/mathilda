@@ -134,9 +134,11 @@ static void test_abstentions(void) {
      * oscillation IVT can see that. */
     check("Limit[x^2 (1 + Cos[x]), x -> Infinity]",
           "Limit[x^2 (1 + Cos[x]), x -> Infinity]");
-    /* Tan leaves an exponential in a denominator, so the amplitude is
-     * not oscillation-free and the normal form is incomplete. */
-    check("Limit[Tan[x], x -> Infinity]", "Limit[Tan[x], x -> Infinity]");
+    /* Tan has no limit at Infinity: it runs through every real value
+     * between its poles, and Tan[Infinity] is Indeterminate (the special-
+     * value table, audit Wave 3 S11), which the compose-at-infinity layer
+     * reports. */
+    check("Limit[Tan[x], x -> Infinity]", "Indeterminate");
 }
 
 /* ----------------------------------------------------------------- */

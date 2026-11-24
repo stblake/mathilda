@@ -23,6 +23,7 @@
  * Normal[s] drops the O-term from a SeriesData and returns an ordinary sum.
  */
 
+#include "infinity_rules.h"   /* infinity_direction: series about Infinity */
 #include "ds_ops.h"
 #include "series.h"
 #include "checked_alloc.h"
@@ -3979,6 +3980,14 @@ static Expr* series_build_xmx0(Expr* x, Expr* x0) {
     if ((x0->type == EXPR_INTEGER && x0->data.integer == 0) ||
         (x0->type == EXPR_REAL && x0->data.real == 0.0)) {
         return expr_copy(x);
+    }
+    /* A series about +-Infinity is in powers of 1/x: x - Infinity is no
+     * expansion variable (Normal[SeriesData[x, Infinity, {1, 2}, 1, 3, 1]] was
+     * Indeterminate; audit SeriesData#4). */
+    {
+        InfDir d = infinity_direction(x0, NULL);
+        if (d == INF_DIR_POS || d == INF_DIR_NEG)
+            return mk_power(expr_copy(x), expr_new_integer(-1));
     }
     Expr* neg = simp(mk_times(expr_new_integer(-1), expr_copy(x0)));
     return simp(mk_plus(expr_copy(x), neg));

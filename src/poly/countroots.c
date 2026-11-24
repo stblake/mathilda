@@ -467,6 +467,8 @@ Expr* builtin_countroots(Expr* res) {
         if (complex_box) { cr_msg_nmet(); goto done; }
         fmpq_poly_gcd(P, P, Q);
     }
+    /* The zero polynomial vanishes at every point (audit CountRoots#1). */
+    if (fmpq_poly_is_zero(P)) { out = expr_new_symbol(SYM_Infinity); goto done; }
     if (fmpq_poly_degree(P) < 1) { out = expr_new_integer(0); goto done; }
 
     {

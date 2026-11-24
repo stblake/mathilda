@@ -1408,6 +1408,19 @@ Expr* builtin_power(Expr* res) {
                     "Indeterminate expression 0^0 encountered.");
             return expr_new_symbol(SYM_Indeterminate);
         }
+        /* 0^(I b), b real and nonzero: |z^(I b)| = E^(-b Arg[z]) and the
+         * phase b Log|z| winds forever as z -> 0, so there is no limit
+         * (audit Power#4). A zero real part of any precision. */
+        Expr *ere, *eim;
+        if (b_zero_lit && is_complex(exp, &ere, &eim) &&
+            ((ere->type == EXPR_INTEGER && ere->data.integer == 0) ||
+             (ere->type == EXPR_REAL && ere->data.real == 0.0))) {
+            char* es = expr_to_string(exp);
+            mth_message_gated(g_arith_warnings_muted, "Power", "indet",
+                    "Indeterminate expression 0^%s encountered.", es ? es : "");
+            free(es);
+            return expr_new_symbol(SYM_Indeterminate);
+        }
     }
 
     if (exp->type == EXPR_INTEGER && exp->data.integer == 0) {

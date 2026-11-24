@@ -96,6 +96,95 @@ static void test_wave3_arity_options(void) {
     audit_chk("Limit#3", "Limit[x^2, x -> 1, Direction -> \"FromAbove\"]", "1");
 }
 
+/* ================================================================== */
+/* Wave 3, shared fix S11: Indeterminate / infinity / pole values     */
+/* (src/infinity_rules.c and the per-head rules it does not cover).   */
+/* ================================================================== */
+
+static void test_s11_special_values(void) {
+    /* Cot#1: Cot at an inexact pole */
+    audit_true("Cot#1", "Check[Cot[0.], \"m\"] === ComplexInfinity");
+    audit_true("Cot#1", "Check[Cot[-0.], \"m\"] === ComplexInfinity");
+    audit_true("Cot#1", "Check[Cot[Complex[0., 0.]], \"m\"] === ComplexInfinity");
+    audit_true("Cot#1", "Abs[Cot[1.] - 0.6420926159343306] < 10.^-15");
+    /* Exp#1: Exp along the imaginary axis / at ComplexInfinity has no limit */
+    audit_true("Exp#1", "Exp[ComplexInfinity] === Indeterminate");
+    audit_true("Exp#1", "Exp[I Infinity] === Indeterminate");
+    audit_true("Exp#1", "N[Exp[Infinity I]] === Indeterminate");
+    audit_true("Exp#1", "2^ComplexInfinity === Indeterminate");
+    audit_true("Exp#1", "Exp[-Infinity] === 0");
+    /* Log#1: Log of every infinity is Infinity */
+    audit_true("Log#1", "Log[-Infinity] === Infinity");
+    audit_true("Log#1", "Log[I Infinity] === Infinity");
+    audit_true("Log#1", "Log[DirectedInfinity[1 + I]] === Infinity");
+    /* Log#2: Log[0, 0] and Log[1, 1] are 0/0 forms */
+    audit_true("Log#2", "Quiet[Log[0, 0]] === Indeterminate");
+    audit_true("Log#2", "Quiet[Log[1, 1]] === Indeterminate");
+    audit_true("Log#2", "Check[Log[1, 1], \"fired\"] === \"fired\"");
+    audit_true("Log#2", "Log[2, 2] === 1");
+    /* Csc#1: Csc at an inexact pole */
+    audit_true("Csc#1", "Check[Csc[0.], \"m\"] === ComplexInfinity");
+    audit_true("Csc#1", "Check[Csc[0. + 0. I], \"m\"] === ComplexInfinity");
+    audit_true("Csc#1", "Check[Csc[0.`20], \"m\"] === ComplexInfinity");
+    /* Csch#1: Csch at an inexact pole */
+    audit_true("Csch#1", "Check[Csch[0.], \"m\"] === ComplexInfinity");
+    audit_true("Csch#1", "Check[Csch[-0.], \"m\"] === ComplexInfinity");
+    audit_true("Csch#1", "Check[Csch[0. + 0. I], \"m\"] === ComplexInfinity");
+    /* Csch#2: Csch at an imaginary-axis pole */
+    audit_true("Csch#2", "Csch[I Pi] === ComplexInfinity");
+    audit_true("Csch#2", "Csch[2 I Pi] === ComplexInfinity");
+    /* Csch#3: Csch[ComplexInfinity], Csch[Indeterminate] */
+    audit_true("Csch#3", "Csch[ComplexInfinity] === Indeterminate");
+    audit_true("Csch#3", "Csch[Indeterminate] === Indeterminate");
+    /* FractionalPart#1: FractionalPart at the infinities ranges over the unit interval */
+    audit_true("FractionalPart#1", "FractionalPart[Infinity] === Interval[{0, 1}]");
+    audit_true("FractionalPart#1", "FractionalPart[-Infinity] === Interval[{-1, 0}]");
+    audit_true("FractionalPart#1", "FractionalPart[ComplexInfinity] === Indeterminate");
+    /* Sech#1: Sech[ComplexInfinity], Sech[Indeterminate] */
+    audit_true("Sech#1", "Sech[ComplexInfinity] === Indeterminate");
+    audit_true("Sech#1", "Sech[Indeterminate] === Indeterminate");
+    audit_true("Sech#1", "Sech[Infinity] === 0");
+    /* Cos#4: Cos at the infinities */
+    audit_true("Cos#4", "Cos[Infinity] === Interval[{-1, 1}]");
+    audit_true("Cos#4", "Cos[ComplexInfinity] === Indeterminate");
+    audit_true("Cos#4", "Cos[Indeterminate] === Indeterminate");
+    audit_true("Cos#4", "Cos[-Infinity] === Interval[{-1, 1}]");
+    /* Cot#4: Cot[Indeterminate] */
+    audit_true("Cot#4", "Cot[Indeterminate] === Indeterminate");
+    /* Exp#2: Exp of DirectedInfinity[+-1] */
+    audit_true("Exp#2", "Exp[DirectedInfinity[1]] === Infinity");
+    audit_true("Exp#2", "Exp[DirectedInfinity[-1]] === 0");
+    /* Log#5: Log[1, z] is ComplexInfinity */
+    audit_true("Log#5", "Quiet[Log[1, 5]] === ComplexInfinity");
+    audit_true("Log#5", "Check[Log[1, 5], \"fired\", Power::infy] === \"fired\"");
+    /* Log#6: Log of an arbitrary-precision zero */
+    audit_true("Log#6", "Check[Log[0``10], \"m\"] === Indeterminate");
+    audit_true("Log#6", "Log[0.] === Indeterminate");
+    audit_true("Log#6", "Log[0] === -Infinity");
+    /* Sin#4: Sin at the infinities */
+    audit_true("Sin#4", "Sin[Indeterminate] === Indeterminate");
+    audit_true("Sin#4", "Sin[ComplexInfinity] === Indeterminate");
+    audit_true("Sin#4", "Sin[Infinity] === Interval[{-1, 1}]");
+    audit_true("Sin#4", "Sin[I Infinity] === DirectedInfinity[I]");
+    /* Tan#4: Tan[Indeterminate] */
+    audit_true("Tan#4", "Tan[Indeterminate] === Indeterminate");
+    audit_true("Tan#4", "Tan[Infinity] === Indeterminate");
+    /* ArcTan#3: ArcTan[0, 0] */
+    audit_true("ArcTan#3", "Check[ArcTan[0, 0], \"fired\", ArcTan::indet] === \"fired\"");
+    audit_true("ArcTan#3", "Quiet[ArcTan[0, 0]] === Indeterminate");
+    audit_true("ArcTan#3", "ArcTan[0, 1] === Pi/2");
+    /* ArcTan#4: two-argument ArcTan with an infinite coordinate */
+    audit_true("ArcTan#4", "ArcTan[1, Infinity] === Pi/2");
+    audit_true("ArcTan#4", "ArcTan[Infinity, 1] === 0");
+    audit_true("ArcTan#4", "ArcTan[-3, -Infinity] === -Pi/2");
+    /* Csc#3: Csc[Indeterminate], Csc[ComplexInfinity] */
+    audit_true("Csc#3", "Csc[Indeterminate] === Indeterminate");
+    audit_true("Csc#3", "Csc[ComplexInfinity] === Indeterminate");
+    /* Sec#2: Sec[Indeterminate], Sec[ComplexInfinity] */
+    audit_true("Sec#2", "Sec[Indeterminate] === Indeterminate");
+    audit_true("Sec#2", "Sec[ComplexInfinity] === Indeterminate");
+}
+
 int main(void) {
     audit_init();
     TEST(test_d_numeric_variable);
@@ -106,5 +195,6 @@ int main(void) {
     TEST(test_maximize_complex_equality);
     TEST(test_pqr_nonpolynomial_terms);
     TEST(test_wave3_arity_options);
+    TEST(test_s11_special_values);
     return audit_finish("audit_calculus");
 }
