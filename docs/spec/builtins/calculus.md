@@ -2087,7 +2087,13 @@ monotonically down.
     the other powers of the same exponential become powers of `u`:
     `E^x Log[E^(2 x) - E^x - 1]` reduces to `Log[u^2 - u - 1]` and closes.  Only
     the explicit method does this; in the Automatic cascade the later stages
-    already close those integrands, with smaller answers.
+    already close those integrands, with smaller answers.  The inverse has to
+    eliminate `x`, not rename it: a reduced integrand that still contains
+    `Log[u]` (a bare `x` left over) declines the kernel, and so does an
+    Eliminate branch that is the inverse of a `Log[c x + d]` kernel (`E^u` left
+    over).  `x -> Log[u]` alone applies to every exponential integrand and
+    simplifies none of them; `(1 + 5 x^2 + E^x (1 + 4 x + x^2))/(2 Sqrt[E^x + x])`
+    stays unevaluated under the method.
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.

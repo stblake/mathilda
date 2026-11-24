@@ -243,6 +243,14 @@ static void test_exponential_kernel_inverse(void) {
     assert_eval_eq(
         "With[{f = (Log[-u] - Log[u])/(1 + u)}, With[{F = Integrate[f, u, Method -> \"DerivativeDivides\"]},"
         " Head[F] === Integrate || PossibleZeroQ[D[F, u] - f]]]", "True", 0);
+    /* an inverse that only renames x is no reduction: x -> Log[u] for E^x and
+     * x -> E^u for Log[x] would leave Log[u] / E^u in the reduced integrand, and
+     * no kernel of these divides them (their antiderivatives are x Sqrt[E^x + x]
+     * + ... and x (x + Log[x])^(1/3)) */
+    assert_eval_eq("Head[Integrate[(1 + 5 x^2 + E^x (1 + 4 x + x^2))/(2 Sqrt[E^x + x]), x,"
+                   " Method -> \"DerivativeDivides\"]]", "Integrate", 0);
+    assert_eval_eq("Head[Integrate[(1 + x + 3 (x + Log[x]))/(3 (x + Log[x])^(2/3)), x,"
+                   " Method -> \"DerivativeDivides\"]]", "Integrate", 0);
 }
 
 static void test_coth_no_infy_leak(void) {

@@ -574,6 +574,58 @@ static bool dd_contains_sym(const Expr* e, const Expr* u) {
     return false;
 }
 
+/* Does `e` contain Log[u] as a subexpression?  Structural. */
+static bool dd_contains_log_of(const Expr* e, const Expr* u) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Log) && e->data.function.arg_count == 1
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == u->data.symbol.name)
+        return true;
+    if (dd_contains_log_of(e->data.function.head, u)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (dd_contains_log_of(e->data.function.args[i], u)) return true;
+    return false;
+}
+
+/* Does `e` contain E^(c u + d), an exponential linear in u?  An integrand
+ * written in u can only get one from the inverse x = E^u of a Log kernel:
+ * E^(Log[x]) itself evaluates to x. */
+static bool dd_contains_exp_linear_in(const Expr* e, const Expr* u) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == SYM_E
+        && dd_contains_sym(e->data.function.args[1], u)) {
+        Expr *c = NULL, *d = NULL;
+        if (dd_linear_in(e->data.function.args[1], u, &c, &d)) {
+            expr_free(c); expr_free(d);
+            return true;
+        }
+    }
+    if (dd_contains_exp_linear_in(e->data.function.head, u)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (dd_contains_exp_linear_in(e->data.function.args[i], u)) return true;
+    return false;
+}
+
+/* Is w = E^(c x + d) (kind 1) or Log[c x + d] (kind 2)?  0 otherwise. */
+static int dd_invertible_kernel_kind(const Expr* w, const Expr* x) {
+    Expr *c = NULL, *d = NULL;
+    const Expr* arg;
+    int kind;
+    if (!w || w->type != EXPR_FUNCTION) return 0;
+    if (head_is((Expr*)w, SYM_Power) && w->data.function.arg_count == 2
+        && w->data.function.args[0]->type == EXPR_SYMBOL
+        && w->data.function.args[0]->data.symbol.name == SYM_E) {
+        arg = w->data.function.args[1]; kind = 1;
+    } else if (head_is((Expr*)w, SYM_Log) && w->data.function.arg_count == 1) {
+        arg = w->data.function.args[0]; kind = 2;
+    } else return 0;
+    if (!dd_linear_in(arg, x, &c, &d)) return 0;
+    expr_free(c); expr_free(d);
+    return kind;
+}
+
 static bool dd_polynomial_in(const Expr* g, const Expr* u) {
     Expr* args[2] = { expr_copy((Expr*)g), expr_copy((Expr*)u) };
     Expr* call = internal_polynomialq(args, 2);
@@ -686,6 +738,15 @@ static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
                 qu = replace_one(qu, x, inv);               /* consumes qu */
                 expr_free(inv);
                 if (qu) qu = cancel_together(qu);
+                /* The inverse must ELIMINATE x, not rename it: E^(2 x) -> u^2
+                 * is a reduction, but a bare x left over becomes Log[u], and
+                 * x -> Log[u] is then a change of variable that applies to every
+                 * exponential integrand and simplifies none of them (it turned
+                 * (1 + 5 x^2 + E^x (...))/Sqrt[E^x + x], which no kernel divides,
+                 * into a "derivative-divides" close by the whole cascade on
+                 * Log[u]^2 ... Sqrt[u + Log[u]]).  So a Log[u] in the reduced
+                 * integrand declines the kernel. */
+                if (qu && dd_contains_log_of(qu, u)) { expr_free(qu); qu = NULL; }
             }
         }
     }
@@ -784,12 +845,20 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
             if (gs) {
                 /* gs is a List (one entry per branch) or a single expr. */
                 size_t nb = (head_is(gs, SYM_List)) ? gs->data.function.arg_count : 1;
+                int winv = dd_invertible_kernel_kind(w, x);
                 for (size_t b = 0; b < nb && !result; b++) {
                     Expr* g = head_is(gs, SYM_List)
                             ? gs->data.function.args[b] : gs;
                     if (!expr_free_of(g, x))   continue;
                     if (!expr_free_of(g, dtx)) continue;
                     if (!expr_free_of(g, dtu)) continue;
+                    /* A branch that is the kernel's inverse in disguise -- x =
+                     * Log[u] for w = E^(c x + d), x = E^u for w = Log[c x + d] --
+                     * renames x rather than eliminating it (see the guard in
+                     * try_direct_kernel): Sqrt[x + Log[x]] over u = Log[x] is
+                     * Sqrt[E^u + u] E^u, no simpler than the integrand. */
+                    if (winv == 1 && dd_contains_log_of(g, u)) continue;
+                    if (winv == 2 && dd_contains_exp_linear_in(g, u)) continue;
                     if (dd_expired()) break;
                     Expr* G = integrate_in(g, u);
                     if (!G) continue;
