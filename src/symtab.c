@@ -1452,23 +1452,18 @@ static Expr* try_scoped_condition(Expr* bound) {
 bool  symtab_rhs_has_scoped_condition(Expr* rhs) { return rhs_has_scoped_condition(rhs); }
 Expr* symtab_try_scoped_condition(Expr* bound)   { return try_scoped_condition(bound); }
 
-/* Does e mention the symbol Return anywhere (heads included)? */
+/* Does e mention the symbol Return / OptionValue anywhere (heads included)?
+ * They run on every stored rule's right-hand side, so they share the
+ * explicit-stack walk: an OwnValue nested 10^5 deep through its heads
+ * (b = Nest[g[#][x] &, y, 10^5]) overflowed the C stack here. */
 static bool mentions_return(const Expr* e) {
-    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_Return;
-    if (e->type != EXPR_FUNCTION) return false;
-    if (mentions_return(e->data.function.head)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (mentions_return(e->data.function.args[i])) return true;
-    return false;
+    const char* n[1] = { SYM_Return };
+    return expr_mentions_any(e, n, 1);
 }
 
 static bool mentions_optionvalue(const Expr* e) {
-    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_OptionValue;
-    if (e->type != EXPR_FUNCTION) return false;
-    if (mentions_optionvalue(e->data.function.head)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (mentions_optionvalue(e->data.function.args[i])) return true;
-    return false;
+    const char* n[1] = { SYM_OptionValue };
+    return expr_mentions_any(e, n, 1);
 }
 
 /* Rule.ov_tmpl, computed on first use. */

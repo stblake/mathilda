@@ -3213,16 +3213,10 @@ static bool eval_collect_symbols(const Expr* e, const char** names, size_t* n, s
     return true;
 }
 
+/* Does `e` mention one of names[0..n)?  (expr_mentions_any: an explicit-stack
+ * walk, since a chain nested through its heads is as deep as it is long.) */
 static bool eval_mentions_any(const Expr* e, const char* const* names, size_t n) {
-    if (e->type == EXPR_SYMBOL) {
-        for (size_t i = 0; i < n; i++) if (names[i] == e->data.symbol.name) return true;
-        return false;
-    }
-    if (e->type != EXPR_FUNCTION) return false;
-    if (eval_mentions_any(e->data.function.head, names, n)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (eval_mentions_any(e->data.function.args[i], names, n)) return true;
-    return false;
+    return expr_mentions_any(e, names, n);
 }
 
 /* Does `e` mention any symbol that occurs in `lhs` (the assignment target)?

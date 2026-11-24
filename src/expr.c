@@ -1134,6 +1134,47 @@ bool expr_eq(const Expr* a, const Expr* b) {
   }
 }
 
+/* Does `e` mention one of names[0..n)?  An explicit-stack walk: it runs on the
+ * whole right-hand side of an assignment (and of every stored rule, for
+ * Return / OptionValue), and a chain nested through its heads
+ * (Nest[g[#][x] &, y, 10^5]) is as deep as it is long, which overflowed the C
+ * stack when this recursed into heads and arguments alike.  Depth-first, so a
+ * mention near the root still answers early; the first 256 slots are on the C
+ * stack, so an ordinary right-hand side never allocates. */
+bool expr_mentions_any(const Expr* e, const char* const* names, size_t n) {
+    const Expr* buf[256];
+    const Expr** st = buf;
+    size_t sp = 0, cap = 256;
+    bool found = false;
+    st[sp++] = e;
+    while (sp > 0 && !found) {
+        const Expr* x = st[--sp];
+        if (x->type == EXPR_SYMBOL) {
+            for (size_t i = 0; i < n; i++)
+                if (names[i] == x->data.symbol.name) { found = true; break; }
+            continue;
+        }
+        if (x->type != EXPR_FUNCTION) continue;
+        size_t need = sp + x->data.function.arg_count + 1;
+        if (need > cap) {
+            size_t ncap = cap * 2;
+            while (ncap < need) ncap *= 2;
+            const Expr** grown = malloc(sizeof(*grown) * ncap);
+            if (!grown) { found = true; break; }   /* OOM: answer conservatively */
+            memcpy(grown, st, sizeof(*st) * sp);
+            if (st != buf) free((void*)st);
+            st = grown;
+            cap = ncap;
+        }
+        /* push in reverse, so the head and then args[0] come off first */
+        for (size_t i = x->data.function.arg_count; i > 0; i--)
+            if (x->data.function.args[i - 1]) st[sp++] = x->data.function.args[i - 1];
+        if (x->data.function.head) st[sp++] = x->data.function.head;
+    }
+    if (st != buf) free((void*)st);
+    return found;
+}
+
 /* expr_compare lives in sort.c so the canonical-order policy stays in
  * one place alongside the user-facing Sort/OrderedQ builtins.  The
  * helpers it needs (is_atomic_numeric, expr_poly_degree, etc.) are

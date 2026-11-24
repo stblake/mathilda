@@ -288,6 +288,10 @@ Expr* expr_unshare(Expr* e);
 
 #include <stdbool.h>
 bool expr_eq(const Expr* a, const Expr* b);
+/* Does `e` (heads included) mention a symbol named names[i] for some i < n?
+ * Names are interned, so this compares pointers.  Iterative: constant C stack
+ * for any depth of nesting. */
+bool expr_mentions_any(const Expr* e, const char* const* names, size_t n);
 int expr_compare(const Expr* a, const Expr* b);
 uint64_t expr_hash(const Expr* e);
 
