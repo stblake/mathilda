@@ -433,7 +433,8 @@ def adjudicate_pinned(args):
 # / UNCLEAR / FORMAT-ONLY / NOT-RUN still need a human or agent verdict.
 HTML_GROUP = {"FIXED": "fixed",
               "CRASH": "open", "HANG": "open", "SAME": "open",
-              "STILL-BROKEN": "open", "PARTIAL": "open"}
+              "STILL-BROKEN": "open", "PARTIAL": "open",
+              "FORMAT-ONLY": "open"}  # defect still present; UNCLEAR stays amber
 HTML_SOURCE = os.path.join(ROOT, "review", "report.source.html")
 HTML_OUT = os.path.join(ROOT, "review", "report.html")
 
