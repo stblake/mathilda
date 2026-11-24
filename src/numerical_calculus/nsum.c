@@ -1651,6 +1651,10 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
         int ord = 2 * j - 1;
         double _Complex corr; bool have_corr = false;
         if (!ballooned) {
+            /* A failed evaluation of the previous derivative (or the contour
+             * fallback) can leave var bound to a sample point; D must see the
+             * bare symbol, not D[f, 16.] (which is D::ivar). */
+            ns_bind_clear_temp(symtab_get_def(var));
             while (dcur && cur < ord) {
                 dcur = eval_and_free(ns_mk2("D", dcur, expr_new_symbol(var)));
                 cur++;
@@ -1983,6 +1987,7 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
             int ord = 2 * j - 1;
             bool have_corr = false;
             if (!ballooned) {
+                ns_bind_clear_temp(symtab_get_def(var));   /* bare var for D (see above) */
                 while (dcur && cur < ord) {
                     dcur = eval_and_free(ns_mk2("D", dcur, expr_new_symbol(var)));
                     cur++;

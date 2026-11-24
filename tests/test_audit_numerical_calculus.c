@@ -154,8 +154,22 @@ static void test_whenevent_jump(void) {
               "{{1.5}}");
 }
 
+/* NSum#1 follow-up (v0.6726): D#1 made D reject a numeric variable, which
+ * exposed NSum taking its Euler-Maclaurin derivatives with the summation
+ * variable still bound to a sample point after a failed evaluation -- every
+ * nested NSum with a finite inner range flooded D::ivar, so Check took the
+ * failure branch.  The values are the closed forms zeta(2)(1 + 1/4 + 1/9) and
+ * zeta(3)(Sin[1] + Sin[2]). */
+static void test_nsum_nested_no_d_ivar(void) {
+    audit_true("NSum#1", "Quiet[Abs[Check[NSum[1/(i j)^2, {i, 1, Infinity}, {j, 1, 3}], 0, D::ivar] - "
+                         "N[Zeta[2] (1 + 1/4 + 1/9)]] < 10^-8, NSum::nnum]");
+    audit_true("NSum#1", "Quiet[Abs[Check[NSum[Sin[j]/i^3, {i, 1, Infinity}, {j, 1, 2}], 0, D::ivar] - "
+                         "N[Zeta[3] (Sin[1] + Sin[2])]] < 10^-8, NSum::nnum]");
+}
+
 int main(void) {
     audit_init();
+    TEST(test_nsum_nested_no_d_ivar);
     TEST(test_nseries_huge_order);
     TEST(test_nseries_order_narrowing);
     TEST(test_nintegrate_pv_nodes);
