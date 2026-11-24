@@ -202,8 +202,11 @@ static void test_random_exactness_and_rank(void) {
 }
 
 static void test_minimal_rank(void) {
-    /* the number of separable terms equals the rank of the flattening */
-    check("SeedRandom[3]; And @@ Table["
+    /* the number of separable terms equals the rank of the flattening
+     * (Table // Flatten // Apply[And]: a leading And @@ would make Flatten
+     * flatten And, its own head, and leave the inner Lists, as the reference
+     * does -- this relied on Flatten always flattening Lists, audit Flatten#1) */
+    check("SeedRandom[3]; Table["
           "Module[{p = Expand[Total@Table[spdRP[{a, b}, 3, 4] spdRP[{x, y}, 3, 4], {j, r}]], res}, "
           "res = SeparablePolynomialDecomposition[p, {a, b}, {x, y}]; "
           "spdTerms[res, {x, y}] == spdRank[p, {a, b}, {x, y}]], {r, 1, 5}, {rep, 4}] // Flatten // "

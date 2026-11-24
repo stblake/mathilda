@@ -135,7 +135,13 @@ Expr* builtin_flatten(Expr* res) {
     if (expr_is_number_atom(list)) return builtin_normal_error("Flatten", res, 1);
     if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
+    /* The head flattened through is, by default, the head of expr itself:
+     * Flatten[f[a, f[b, c], f[f[d]]]] is f[a, b, c, d]. (A LinkedList is a
+     * List level.) A compound head (g[x][...]) has no symbol to compare by and
+     * keeps the List default. */
     const char* h = SYM_List;
+    if (list->type == EXPR_FUNCTION && list->data.function.head->type == EXPR_SYMBOL)
+        h = list->data.function.head->data.symbol.name;
     if (res->data.function.arg_count == 3) {
         if (res->data.function.args[2]->type != EXPR_SYMBOL) return NULL;
         h = res->data.function.args[2]->data.symbol.name;

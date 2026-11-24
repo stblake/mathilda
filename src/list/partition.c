@@ -14,6 +14,115 @@ static Expr* partition_spec_at(Expr* spec, size_t k) {
     return k == 0 ? expr_copy(spec) : NULL;
 }
 
+/* The deeper levels of one block, re-nested into the block grid.
+ *
+ * At a level with a deeper spec, the block of rows k = 0 .. n-1 is partitioned
+ * row by row: rows[k] = partition_rec(row k) has `g` grid levels (one per
+ * deeper spec level) above its block levels. The reference's block layout puts
+ * every grid index before every block index -- Partition[m, {n1, n2}] is an
+ * N1 x N2 grid of n1 x n2 blocks -- so the row index k must move from the top
+ * down past the g grid levels: out[j1]...[jg] = {rows[0][j1..jg], ...,
+ * rows[n-1][j1..jg]}. A grid level holds the shortest of the rows there (a
+ * ragged input yields only the blocks every row reaches). Borrows rows. */
+static Expr* partition_interleave(Expr** rows, size_t n, size_t g, bool linked) {
+    if (g == 0) {
+        Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t k = 0; k < n; k++) items[k] = expr_copy(rows[k]);
+        Expr* r = ll_seq_of(linked, items, n);
+        free(items);
+        return r;
+    }
+    int64_t m = -1;
+    for (size_t k = 0; k < n; k++) {
+        int64_t len = ll_seq_length(rows[k]);
+        if (len < 0) len = 0;                          /* an atom reaches no block */
+        if (m < 0 || len < m) m = len;
+    }
+    if (m < 0) m = 0;
+    Expr** out = malloc(sizeof(Expr*) * (m ? (size_t)m : 1));
+    Expr** sub = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (int64_t j = 0; j < m; j++) {
+        /* A List row is read in place (borrowed); anything else (a
+         * LinkedList, an array) through ll_seq_element, a new reference. */
+        for (size_t k = 0; k < n; k++)
+            sub[k] = rows[k]->type == EXPR_FUNCTION ? rows[k]->data.function.args[j]
+                                                    : ll_seq_element(rows[k], j);
+        out[j] = partition_interleave(sub, n, g - 1, linked);
+        for (size_t k = 0; k < n; k++)
+            if (rows[k]->type != EXPR_FUNCTION) expr_free(sub[k]);
+    }
+    free(sub);
+    Expr* r = ll_seq_of(linked, out, (size_t)m);
+    free(out);
+    return r;
+}
+
+/* How many spec levels lie below level_idx (each one a grid level of the
+ * partitioned rows). */
+static size_t partition_deeper_levels(Expr* n_spec, size_t level_idx) {
+    size_t g = 0;
+    for (;;) {
+        Expr* e = partition_spec_at(n_spec, level_idx + 1 + g);
+        if (!e) return g;
+        expr_free(e);
+        g++;
+    }
+}
+
+/* The block of rows q[start .. start + count) partitioned at level `lvl` when
+ * that level is the last of the spec and its n (and d) are plain positive
+ * integers, built straight into the block layout: column j is the List of
+ * row_k[[j d + 1 ;; j d + n]] over the rows k -- what partition_interleave
+ * makes of the rows' own partitions, without building them. Only List rows
+ * of a List argument; NULL (use the general path) otherwise. */
+static Expr* partition_direct_last(LLSeq* q, size_t start, size_t count,
+                                   Expr* n_spec, Expr* d_spec, size_t lvl) {
+    if (q->snap || count == 0) return NULL;              /* List argument only */
+    Expr* nx = partition_spec_at(n_spec, lvl + 1);
+    if (nx) { expr_free(nx); return NULL; }              /* not the last level */
+    Expr* ne = partition_spec_at(n_spec, lvl);
+    if (!ne) return NULL;
+    bool n_ok = ne->type == EXPR_INTEGER && ne->data.integer > 0;
+    int64_t n = n_ok ? ne->data.integer : 0;
+    expr_free(ne);
+    if (!n_ok) return NULL;
+    int64_t d = n;
+    if (d_spec) {
+        Expr* de = partition_spec_at(d_spec, lvl);
+        if (de) {
+            bool d_ok = de->type == EXPR_INTEGER && de->data.integer > 0;
+            if (d_ok) d = de->data.integer;
+            expr_free(de);
+            if (!d_ok) return NULL;
+        }
+    }
+    int64_t m = -1;                                       /* grid columns */
+    for (size_t k = 0; k < count; k++) {
+        Expr* row = llq_peek(q, start + k);
+        if (!(row->type == EXPR_FUNCTION && head_is(row, SYM_List))) return NULL;
+        int64_t len = (int64_t)row->data.function.arg_count;
+        int64_t c = len >= n ? (len - n) / d + 1 : 0;
+        if (m < 0 || c < m) m = c;
+    }
+    Expr** cols = malloc(sizeof(Expr*) * (m ? (size_t)m : 1));
+    Expr** blk = malloc(sizeof(Expr*) * count);
+    Expr** seg = malloc(sizeof(Expr*) * (size_t)n);
+    for (int64_t j = 0; j < m; j++) {
+        for (size_t k = 0; k < count; k++) {
+            Expr* row = llq_peek(q, start + k);
+            for (int64_t t = 0; t < n; t++)
+                seg[t] = expr_copy(row->data.function.args[j * d + t]);
+            blk[k] = expr_new_function(expr_new_symbol(SYM_List), seg, (size_t)n);
+        }
+        cols[j] = expr_new_function(expr_new_symbol(SYM_List), blk, count);
+    }
+    free(seg);
+    free(blk);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), cols, (size_t)m);
+    free(cols);
+    return r;
+}
+
 static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_idx) {
     if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
@@ -71,11 +180,34 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
         if (!deeper) { sublists[i] = llq_range(&lv, start, end); continue; }
         
         size_t sub_count = end - start;
-        Expr** sub_args = malloc(sizeof(Expr*) * sub_count);
+        /* The common case -- the next level is the last, with plain integer
+         * n2 and d2, over List rows -- built directly: grid column j is
+         * {row_k[[j d2 + 1 ;; j d2 + n2]] for each row k}, with no
+         * per-row partition to interleave afterwards. */
+        {
+            Expr* blk = partition_direct_last(&lv, start, sub_count, n_spec, d_spec, level_idx + 1);
+            if (blk) { sublists[i] = blk; continue; }
+        }
+        /* Each row of the block is partitioned at the deeper levels, then
+         * the row index is moved below the grid (partition_interleave). */
+        Expr** sub_args = malloc(sizeof(Expr*) * (sub_count ? sub_count : 1));
         for (size_t j = 0; j < sub_count; j++) {
             sub_args[j] = partition_rec(llq_peek(&lv, start + j), n_spec, d_spec, level_idx + 1);
         }
-        sublists[i] = llq_result(&lv, sub_args, sub_count);
+        /* A row that is not a list (a spec deeper than the array) has no
+         * grid to interleave: such a block keeps its rows as they are. */
+        bool rows_are_lists = true;
+        for (size_t j = 0; j < sub_count && rows_are_lists; j++)
+            rows_are_lists = ll_seq_length(sub_args[j]) >= 0;
+        if (!rows_are_lists) {
+            sublists[i] = llq_result(&lv, sub_args, sub_count);   /* consumes */
+            free(sub_args);
+            continue;
+        }
+        sublists[i] = partition_interleave(sub_args, sub_count,
+                                           partition_deeper_levels(n_spec, level_idx),
+                                           list->type == EXPR_LINKEDLIST);
+        for (size_t j = 0; j < sub_count; j++) expr_free(sub_args[j]);
         free(sub_args);
     }
 

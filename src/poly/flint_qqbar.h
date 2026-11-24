@@ -116,8 +116,9 @@ Expr* flint_qqbar_to_number_field_self(const Expr* x);
 Expr* flint_qqbar_integral_basis(const Expr* a);
 
 /* AlgebraicIntegerQ[x]: 1 (x is an algebraic integer), 0 (it is not), or -1
- * (undecided -- FLINT compiled out).  Decided exactly: x is an algebraic integer
- * iff its primitive integer minimal polynomial is monic. */
+ * (undecided -- past the qqbar degree cap, or FLINT compiled out).  Ring closure
+ * (sums, products, positive powers of integers) decides first; otherwise x is
+ * an algebraic integer iff its primitive integer minimal polynomial is monic. */
 int flint_qqbar_algebraic_integer_q(const Expr* x);
 
 /* AlgebraicNumberDenominator[x]: the smallest positive integer d such that d*x is

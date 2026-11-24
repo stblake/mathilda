@@ -355,6 +355,124 @@ static Expr* factor_over_extension(const Expr* poly, const Expr* alpha) {
     return eval_and_free(call);
 }
 
+/* poly with vars[i] -> vals[i] for every i except `keep`, expanded. */
+static Expr* irr_specialize(const Expr* poly, Expr** vars, size_t v_count,
+                            const int64_t* vals, size_t keep) {
+    Expr** rules = malloc(sizeof(Expr*) * (v_count ? v_count : 1));
+    size_t nr = 0;
+    for (size_t i = 0; i < v_count; i++) {
+        if (i == keep) continue;
+        rules[nr++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                          (Expr*[]){expr_copy(vars[i]), expr_new_integer(vals[i])}, 2);
+    }
+    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, nr);
+    free(rules);
+    Expr* ra = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                 (Expr*[]){expr_copy((Expr*)poly), rl}, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                                           (Expr*[]){eval_and_free(ra)}, 1));
+}
+
+/* Absolute irreducibility (Extension -> All) of a multivariate polynomial
+ * with rational coefficients, decided exactly:
+ *
+ *   1. f must be irreducible over Q (else False).
+ *   2. Pick a main variable y of degree n >= 1 in f. n == 1: f = a y + b with
+ *      gcd(a, b) = 1 over Q, which stays 1 over C -- True.
+ *   3. Specialise the other variables to integers a with g(y) = f(a, y) of
+ *      degree n and squarefree. A root t of g gives a SMOOTH point P = (a, t)
+ *      of f = 0 (dg/dy(t) != 0). Only one absolutely irreducible factor f1 of
+ *      f passes through a smooth point, and every automorphism of Qbar fixing
+ *      Q(t) fixes P, hence f1: so f1 is defined over Q(t). Therefore f is
+ *      absolutely reducible iff it factors over Q(t) -- one exact Factor call
+ *      with Extension -> Root[h, 1], h an irreducible factor of g (of least
+ *      degree; degree 1 means t is rational and f, irreducible over Q, is
+ *      absolutely irreducible).
+ *
+ * The approximation this replaces factored over Q(i) only, so x^2 - 2 y^2 and
+ * x^2 + x y + y^2 (which split over Q(Sqrt[2]) and Q(Sqrt[-3])) came back
+ * True. Returns 1 / 0, or -1 to leave the decision to the old path (an
+ * irrational coefficient, or no admissible point in the trial budget). */
+static int irr_absolute_multivariate(const Expr* poly, Expr** vars, size_t v_count) {
+    /* Rational coefficients only: f at a generic integer point is rational. */
+    int64_t* vals = malloc(sizeof(int64_t) * v_count);
+    {
+        static const int64_t primes[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
+        for (size_t i = 0; i < v_count; i++) vals[i] = primes[i % 12] + (int64_t)(i / 12) * 41;
+        Expr* at = irr_specialize(poly, vars, v_count, vals, v_count);   /* keep none */
+        bool rat = at->type == EXPR_INTEGER || at->type == EXPR_BIGINT ||
+                   (at->type == EXPR_FUNCTION && at->data.function.head->type == EXPR_SYMBOL &&
+                    at->data.function.head->data.symbol.name == SYM_Rational);
+        expr_free(at);
+        if (!rat) { free(vals); return -1; }
+    }
+
+    /* 1. Irreducible over Q. */
+    Expr* fq = factor_over_q(poly);
+    int nq = count_nonconstant_factors(fq, vars, v_count);
+    expr_free(fq);
+    if (nq != 1) { free(vals); return nq > 1 ? 0 : -1; }
+
+    /* 2. Main variable: the first of positive degree. */
+    size_t y = v_count;
+    int n = 0;
+    for (size_t i = 0; i < v_count && y == v_count; i++) {
+        int d = get_degree_poly((Expr*)poly, vars[i]);
+        if (d >= 1) { y = i; n = d; }
+    }
+    if (y == v_count) { free(vals); return -1; }
+    if (n == 1) { free(vals); return 1; }
+
+    /* 3. A squarefree full-degree specialisation, then one Factor over Q(t). */
+    int verdict = -1;
+    for (int trial = 0; trial < 40 && verdict < 0; trial++) {
+        for (size_t i = 0; i < v_count; i++)
+            vals[i] = (int64_t)(((trial + 1) * (int)(2 * i + 1) + trial * trial) % 23) - 11;
+        Expr* g = irr_specialize(poly, vars, v_count, vals, y);
+        if (get_degree_poly(g, vars[y]) != n) { expr_free(g); continue; }
+        Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList),
+                                                   (Expr*[]){g}, 1));
+        /* {{c, 1}, {h1, e1}, ...}: squarefree iff every multiplicity is 1. */
+        bool ok = fl->type == EXPR_FUNCTION && fl->data.function.arg_count >= 2;
+        const Expr* best = NULL;
+        int best_deg = 0;
+        for (size_t k = 0; ok && k < fl->data.function.arg_count; k++) {
+            const Expr* pr = fl->data.function.args[k];
+            if (!(pr->type == EXPR_FUNCTION && pr->data.function.arg_count == 2 &&
+                  pr->data.function.args[1]->type == EXPR_INTEGER)) { ok = false; break; }
+            int dk = get_degree_poly(pr->data.function.args[0], vars[y]);
+            if (dk <= 0) continue;
+            if (pr->data.function.args[1]->data.integer != 1) { ok = false; break; }
+            if (!best || dk < best_deg) { best = pr->data.function.args[0]; best_deg = dk; }
+        }
+        if (ok && best) {
+            if (best_deg == 1) {
+                verdict = 1;
+            } else {
+                /* Root[h /. y -> #1 &, 1] */
+                Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
+                                               (Expr*[]){expr_new_integer(1)}, 1);
+                Expr* sub = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                    (Expr*[]){expr_copy((Expr*)best),
+                              expr_new_function(expr_new_symbol(SYM_Rule),
+                                  (Expr*[]){expr_copy(vars[y]), slot}, 2)}, 2);
+                Expr* body = eval_and_free(sub);
+                Expr* fn = expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){body}, 1);
+                Expr* root = eval_and_free(expr_new_function(expr_new_symbol(SYM_Root),
+                                 (Expr*[]){fn, expr_new_integer(1)}, 2));
+                Expr* fe = factor_over_extension(poly, root);
+                expr_free(root);
+                int ne = count_nonconstant_factors(fe, vars, v_count);
+                expr_free(fe);
+                verdict = ne > 1 ? 0 : (ne == 1 ? 1 : -1);
+            }
+        }
+        expr_free(fl);
+    }
+    free(vals);
+    return verdict;
+}
+
 /* ===================================================================== */
 /* Auto-collect polynomial variables (bare symbols only).                */
 /*                                                                       */
@@ -551,6 +669,12 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
             for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
             free(vars);
             return (deg == 1);
+        }
+        int abs_irr = irr_absolute_multivariate(poly, vars, v_count);
+        if (abs_irr >= 0) {
+            for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
+            free(vars);
+            return abs_irr == 1;
         }
         Expr* i_sym = expr_new_symbol(SYM_I);
         factored = factor_over_extension(poly, i_sym);

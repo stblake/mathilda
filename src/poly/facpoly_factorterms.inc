@@ -19,6 +19,50 @@ static bool ft_is_one_int(Expr* e) {
     return e && e->type == EXPR_INTEGER && e->data.integer == 1;
 }
 
+/* Is `e` free of every symbol except the numeric constants (Pi, E, ...)? */
+static bool ft_is_constant(const Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol.name == SYM_I) return true;
+        SymbolDef* d = symtab_lookup(e->data.symbol.name);   /* Pi, E, Degree, ... */
+        return d && (d->attributes & ATTR_CONSTANT);
+    }
+    if (e->type != EXPR_FUNCTION) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!ft_is_constant(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* The generators of `e`, as collect_variables reads them, plus every power of
+ * a numeric base to a non-constant exponent (E^x, 2^x). collect_variables
+ * returns at any numeric base -- right for Sqrt[2], but it drops E^x
+ * altogether, so 2 E^x + 4 looked variable-free and its "numerical content"
+ * was the whole expression ({4 + 2 E^x, 1}). Here such a power is an opaque
+ * generator, exactly as a^x and Sin[x] already are. */
+static void ft_exp_atoms(Expr* e, Expr*** vars, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
+        if (ft_is_constant(e->data.function.args[0])) {
+            if (ft_is_constant(e->data.function.args[1])) return;
+            for (size_t i = 0; i < *n; i++) if (expr_eq((*vars)[i], e)) return;
+            if (*n == *cap) { *cap = *cap ? *cap * 2 : 8; *vars = realloc(*vars, sizeof(Expr*) * *cap); }
+            (*vars)[(*n)++] = expr_copy(e);
+            return;
+        }
+        ft_exp_atoms(e->data.function.args[0], vars, n, cap);   /* a base only */
+        return;
+    }
+    if (h != SYM_Plus && h != SYM_Times) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ft_exp_atoms(e->data.function.args[i], vars, n, cap);
+}
+
+static void ft_collect_vars(Expr* e, Expr*** vars, size_t* n, size_t* cap) {
+    collect_variables(e, vars, n, cap);
+    ft_exp_atoms(e, vars, n, cap);
+}
+
 /* Recursive multivariate content. Computes the polynomial GCD of every  */
 /* coefficient of a {S_0, ..., S_{S_count-1}}-monomial in `poly`,        */
 /* viewed as a polynomial in K[ground_vars][S]. The returned expression  */
@@ -142,7 +186,7 @@ static Expr* ft_number_content(Expr* p) {
     Expr* ex = expr_expand(p);
     size_t vc = 0, vcap = 8;
     Expr** vars = malloc(sizeof(Expr*) * vcap);
-    collect_variables(ex, &vars, &vc, &vcap);
+    ft_collect_vars(ex, &vars, &vc, &vcap);
     Expr* c = ft_content_wrt_set(ex, vars, vc, NULL, 0);
     for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
     free(vars);
@@ -169,7 +213,7 @@ static Expr* ft_compute_list(Expr* poly, Expr** S, size_t S_count) {
     /* Variables of the numerator, sorted canonically. */
     size_t v_count = 0, v_cap = 16;
     Expr** all_vars = malloc(sizeof(Expr*) * v_cap);
-    collect_variables(cur, &all_vars, &v_count, &v_cap);
+    ft_collect_vars(cur, &all_vars, &v_count, &v_cap);
     if (v_count > 0) qsort(all_vars, v_count, sizeof(Expr*), compare_expr_ptrs);
 
     /* Filter S to the variables that actually appear in the numerator;  */

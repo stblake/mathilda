@@ -588,8 +588,13 @@ Tests whether a number is an algebraic integer.
 - `AlgebraicIntegerQ[x]` — `True` if `x` is a root of a monic polynomial with
   integer coefficients, `False` otherwise.
 
-Decided exactly (no numeric oracle): `x` is an algebraic integer iff its
-primitive integer minimal polynomial is monic. Rational integers qualify;
+Decided exactly (no numeric oracle): sums, products and positive (rational)
+powers of integers, `I` and `GoldenRatio` are algebraic integers by ring
+closure (`2^(1/k)` is a root of the monic `x^k - 2`), whatever their degree;
+otherwise `x` is an algebraic integer iff its primitive integer minimal
+polynomial is monic. When that minimal polynomial is past the exact engine's
+degree cap (120) the call stays unevaluated -- it was answered `False`, so
+`AlgebraicIntegerQ[2^(1/200)]` was wrong. Rational integers qualify;
 non-integer rationals, non-algebraic quantities (e.g. `Pi`), symbols, and lists
 do not (`AlgebraicIntegerQ` is `Protected`, not `Listable`, so a list yields
 `False` — use `/@` to test elements). Requires FLINT; a `USE_FLINT=0` build
@@ -914,7 +919,12 @@ Out[4]= 0
   algebraic-number coefficient appearing in `poly` (via `extension_autodetect`)
   and tests irreducibility over that compositum.
 - `IrreduciblePolynomialQ[poly, Extension -> All]`: Tests absolute
-  irreducibility over `C`.
+  irreducibility over `C`. A multivariate polynomial with rational
+  coefficients is decided exactly: irreducible over `Q`, then one factorisation
+  over `Q(t)`, `t` a root of a squarefree specialisation `poly(a, y)` (the one
+  absolutely irreducible factor through the smooth point `(a, t)` is defined
+  over `Q(t)`). `x^2 - 2 y^2` and `x^2 + x y + y^2` are `False` (they were
+  `True`: only `Q(i)` was tried).
 - `IrreduciblePolynomialQ[poly, GaussianIntegers -> True]`: Tests irreducibility
   over `Q(i)`. If any coefficient of `poly` is a `Complex` literal, Gaussian
   mode is auto-enabled even without the option.

@@ -2089,7 +2089,12 @@ static SeriesObj* so_log1p_recurrence(SeriesObj* v) {
 static SeriesObj* so_apply_exp(SeriesObj* s) {
     Expr* c; SeriesObj* u;
     so_split_constant(s, &c, &u);
-    int64_t N = (u->order - u->nmin) / (u->nmin > 0 ? u->nmin : 1) + 1;
+    /* Kernel terms u^0 .. u^K with K nmin < order, i.e. K = floor((order - 1)
+     * / nmin): (order - nmin)/nmin + 1 = floor(order/nmin) is one short when
+     * nmin does not divide order -- Exp[x^2 + O[x]^3] lost its x^2 (and with
+     * it SeriesData[x, 0, {1, 1, 0}, 0, 3, 1]^x, via Exp[x Log[base]]).
+     * The +2 the sibling kernels use covers it; a spare term is truncated. */
+    int64_t N = (u->order - u->nmin) / (u->nmin > 0 ? u->nmin : 1) + 2;
     if (N < 1) N = 1;
     if (u->nmin < 1) { expr_free(c); so_free(u); return NULL; }
     SeriesObj* ex_u;
@@ -4364,6 +4369,31 @@ Expr* series_power(Expr* base, Expr* exp) {
     bool incompatible = false;
     SeriesObj* r = operand_to_series(rewrite, x, x0, order_num, den, 0, &incompatible);
     expr_free(rewrite);
+    if (!r) return NULL;
+    so_trim_leading(r);
+    Expr* out = so_to_expr(r);
+    so_free(r);
+    return out;
+}
+
+/* f[s] for a numeric function f of one argument and a SeriesData s: the
+ * composition, as a series about s's (x, x0) to s's order -- Sin[x + O[x]^4]
+ * is x - x^3/6 + O[x]^4. Only Power (hence Exp) composed before; Sin, Cos,
+ * Log, ArcTan, Sinh, ... stayed unevaluated although the expander composes
+ * them (series_expand adopts an embedded SeriesData). NULL when f has no
+ * series there (non-analytic, an unsupported head): the call stays as it is. */
+Expr* series_apply_unary(Expr* call) {
+    if (call->type != EXPR_FUNCTION || call->data.function.arg_count != 1) return NULL;
+    Expr* sd = call->data.function.args[0];
+    if (!is_series_data(sd)) return NULL;
+    SeriesObj* probe = so_from_seriesdata(sd);
+    if (!probe) return NULL;
+    int64_t order_num = probe->order;
+    int64_t den = probe->den;
+    so_free(probe);
+    bool incompatible = false;
+    SeriesObj* r = operand_to_series(call, sd->data.function.args[0], sd->data.function.args[1],
+                                     order_num, den, 0, &incompatible);
     if (!r) return NULL;
     so_trim_leading(r);
     Expr* out = so_to_expr(r);

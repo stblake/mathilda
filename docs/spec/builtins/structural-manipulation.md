@@ -290,6 +290,9 @@ Flattens out nested lists.
 - `Flatten[list]`: Flattens all levels.
 - `Flatten[list, n]`: Flattens up to level `n`; `n` may be `Infinity`.
 - `Flatten[list, n, h]`: Flattens subexpressions with head `h`.
+- The default head is the head of `list` itself, so
+  `Flatten[f[a, f[b, c], f[f[d]]]]` is `f[a, b, c, d]` (it used to be always
+  `List`, so a non-List expression came back unchanged).
 - A negative level emits `Flatten::flev` and stays unevaluated, for a List, a
   packed list and a `SparseArray` alike.
 
@@ -385,6 +388,11 @@ Partitions a list into sublists.
 - `Partition[list, n, d]`: Sublists with offset `d`.
 - `Partition[list, {n1, n2, ...}]`: Multi-level partitioning.
 - `Partition[list, spec, dspec]`: Multi-level partitioning with offsets.
+- `Partition[m, {n1, n2}]` is an `N1 x N2` grid of `n1 x n2` blocks:
+  `Partition[{{1,2,3},{4,5,6}}, {2,2}]` is `{{{{1, 2}, {4, 5}}}}` (dimensions
+  `{1, 1, 2, 2}`), and likewise at every depth -- all grid indices first, then
+  the block indices. (The row index of a block was left above the grid,
+  giving `{{{{1, 2}}, {{4, 5}}}}`.)
 - `Partition[list, UpTo[n]]`: Allows shorter final sublist.
 - `Partition[list, n, d, {kL, kR}]`: Overhang form: the first element of `list` sits at position `kL` of the first sublist and the last element at or after position `kR` of the last; padding is cyclic from `list` itself. A bare `k` means `{k, k}`; negative `k` counts from the end of a sublist.
 - `Partition[list, n, d, {kL, kR}, x]`: Pads with `x`; `{x1, x2, ...}` pads cyclically with the `xi` (aligned on the absolute index, so `Partition[{a, b, c, d, e, f, g}, 3, 3, 1, {x, y, z}]` ends `{g, y, z}`); `{}` means no padding, so the edge sublists are shorter.
@@ -956,6 +964,12 @@ Inserts or removes elements at specified positions.
     `Delete[{1, 2}, 5]` returned `{1, 2}`, so `Check` took the wrong branch.
   - A position through an association, or with a `Key[k]` step, keeps its own
     rules (an absent key deletes nothing).
+- **Every position in a list of positions names a part of the original
+  expression.** Negative indices are resolved against `expr` before anything is
+  changed, so `Delete[{a, b, c}, {{-3}, {2}}]` is `{c}` and
+  `Insert[{a, b, c}, x, {{-1}, {-2}}]` is `{a, b, x, c, x}`. A position named
+  twice (`{{2}, {2}}`, or the aliases `{-1}` and `{3}` of a length-3 list) is
+  deleted once; Insert inserts once per listing.
 
 ```mathematica
 In[1]:= Insert[{a, b, c}, x, 2]
@@ -1005,6 +1019,8 @@ Gives a list of all subexpressions of expr on levels specified by levelspec.
 **Features**:
 - `Protected`.
 - Default option: `Heads -> False`.
+- `Level[expr, levelspec, f]` applies `f` to the sequence of parts:
+  `Level[a + b, {1}, g]` is `g[a, b]` (the third argument was ignored).
 - Standard level specifications:
   - `n`: levels 1 through `n`.
   - `Infinity`: levels 1 through `Infinity`.
@@ -1064,6 +1080,10 @@ Expands out products and positive integer powers in an expression.
 
 **Features**:
 - `Protected`.
+- Options `Trig -> False` and `Modulus -> 0` (the defaults) are read as
+  options, never as `patt`: `Expand[(a+b)^2, Trig -> False]` is
+  `a^2 + 2 a b + b^2`. Other settings (`Trig -> True`, a nonzero `Modulus`)
+  are not implemented and leave the call unevaluated.
 - Works only on positive integer powers and distributes products over sums.
 - Threads over equations, inequalities, and lists.
 - **Polynomials over the rationals are expanded through FLINT** (packed
@@ -1346,6 +1366,11 @@ Gives a list of coefficients of powers of variables in a polynomial.
 - Gives an array of coefficients starting with power 0.
 - Returns a full rectangular array for multiple variables. Combinations of powers that do not appear in `poly` give zeros in the array.
 - Automatically expands the polynomial internally.
+- A non-polynomial input -- the variable under a power that is not a
+  non-negative integer, as in `1/x + x`, `x^n`, `Sqrt[x]`, `x^2.`,
+  `1/(1 + x)` -- is `CoefficientList::poly` and stays unevaluated; those terms
+  used to be dropped silently. An opaque x-dependent kernel (`Sin[x]`, `E^x`)
+  is still a coefficient.
 
 ```mathematica
 In[1]:= CoefficientList[1 + 6 x - x^4, x]
@@ -1378,6 +1403,11 @@ Gives the list of monomials of a polynomial, sorted by a monomial order.
   coefficient vanishes).
 - `vars` may be `All` (equivalent to `Variables[poly]`).
 - `Plus @@ MonomialList[poly, vars]` reconstructs the expanded polynomial.
+- Exponents are exact at full 64-bit width (as are `CoefficientRules`'):
+  `MonomialList[x^(2^40) + 1, x]` is `{x^1099511627776, 1}` and
+  `MonomialList[x^2147483647 x, x]` is `{x^2147483648}`. They were C `int`s,
+  which truncated or wrapped above `2^31` and merged distinct monomials. An
+  exponent sum past `2^63`, or an order weight that overflows, declines.
 
 ```mathematica
 In[1]:= MonomialList[(x + y)^3]
@@ -1813,6 +1843,9 @@ Lists the factors that `FactorTerms` would multiply together.
 - The product of the returned list always reproduces the input (after
   Together-normalisation), so `Apply[Times, FactorTermsList[poly]]` is a
   faithful round-trip.
+- A power of a numeric constant to a non-constant exponent (`E^x`, `2^x`) is a
+  generator like `a^x` or `Sin[x]`: `FactorTermsList[2 E^x + 4]` is
+  `{2, 2 + E^x}` (it put the whole sum in the numerical-factor slot).
 - Variables in the second argument that do not actually appear in `poly`
   are filtered out, so the output never contains spurious trailing `1`s.
 - The numerical factor (v0.6066) is rational and signed: `FactorTermsList[-6 x^2 - 12 x y]` is `{-6, x^2 + 2 x y}`, `FactorTermsList[3/4 x + 3/2]` is `{3/4, 2 + x}` (the integer content of a denominator belongs to it: `FactorTermsList[(4 x + 4)/(6 y)]` is `{2/3, 1/y + x/y}`), and `FactorTermsList[0]` is `{1, 0}`.  A list argument is `General::poly`.  `Modulus -> p` reduces the coefficients first.
@@ -2008,6 +2041,10 @@ Gives the polynomial reduced modulo `m`.
 **Features**:
 - `Protected`, `Listable`.
 - Reduces a polynomial modulo an integer, another polynomial, or a list of integers/polynomials.
+- The integer modulus may be a bignum: `PolynomialMod[10^25 x + 3, 10^20 + 3]`
+  is `3 + 99999999999999700003 x` (a bignum modulus used to be ignored).
+- Rational coefficients reduce through the modular inverse, including each
+  part of a Gaussian coefficient: `PolynomialMod[3/2 + 3 I, 5]` is `4 + 3 I`.
 - Always gives a result with minimal degree and leading coefficients.
 - Handles rational division mapping perfectly scaling over exact modulo structures dynamically.
 
@@ -2454,6 +2491,9 @@ elimination ideal collapses to `True` and an inconsistent system to
 
 **Features**:
 - `Protected`.
+- Gaussian-rational coefficients are eliminated over `Q(i)`: `i` is adjoined
+  as a parameter `g` with `g^2 + 1 == 0`, ordered last, and read back as `I`.
+  `Eliminate[{x == I y, y == 2}, y]` is `x == 2 I`.
 - Drives the lex-order Buchberger engine (`GroebnerBasis`, the FLINT
   engine since v0.6078) with an elimination block: `vars` are placed in
   the high-priority block so that any polynomial mentioning them is

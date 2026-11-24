@@ -45,6 +45,7 @@
 #include "term/term_progress.h"  /* g_mth_monitor_due, mth_monitor_tick (Monitor) */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
+#include "calculus/series.h" /* series_apply_unary: f[SeriesData] composes */
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -4397,6 +4398,16 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                             ret = hdef->builtin_func(mixed);
                             expr_free(mixed);
                         }
+                    }
+                    /* 5b. A numeric function of one SeriesData composes:
+                     * Sin[Series[x, {x, 0, 3}]] is x - x^3/6 + O[x]^4. One pointer test
+                     * on the declined path; Plus/Times/Power do their own. */
+                    if (!ret && (attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT) &&
+                        res->type == EXPR_FUNCTION && res->data.function.arg_count == 1 &&
+                        res->data.function.args[0]->type == EXPR_FUNCTION &&
+                        res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                        res->data.function.args[0]->data.function.head->data.symbol.name == SYM_SeriesData) {
+                        ret = series_apply_unary(res);
                     }
                     g_builtin_depth -= opaque;
                     g_dispatch_head = outer_head;

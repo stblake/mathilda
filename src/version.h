@@ -4,7 +4,7 @@
 /*
  * version.h — Mathilda release version.
  *
- * MATHILDA_VERSION_NUMBER 0.6722is the single source of truth for the release and
+ * MATHILDA_VERSION_NUMBER 0.6723is the single source of truth for the release and
  * backs the $VersionNumber system variable. MATHILDA_VERSION_STRING is its
  * textual form (kept in sync by hand) and is embedded in the $Version string.
  *
@@ -13,8 +13,8 @@
  * from preprocessor macros; see version.c. mathilda_version() returns it.
  */
 
-#define MATHILDA_VERSION_NUMBER 0.6722
-#define MATHILDA_VERSION_STRING "0.6722"
+#define MATHILDA_VERSION_NUMBER 0.6723
+#define MATHILDA_VERSION_STRING "0.6723"
 
 /* Full descriptive version string, e.g.
  *   "Mathilda 0.01 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ...)"

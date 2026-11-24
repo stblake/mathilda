@@ -1307,7 +1307,7 @@ static int field_kernels_disabled(void) {
 }
 
 int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
-                          int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+                          int64_t** exps_out, Expr*** coeffs_out, size_t* count_out) {
     if (field_kernels_disabled()) return -1;
     if (!poly || nvars < 0) return -1;
     for (int i = 0; i < nvars; i++)
@@ -1386,7 +1386,7 @@ int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
     if (ok) {
         fmpq_mpoly_divrem(Qd, R, P, M, ctx);
         slong len = fmpq_mpoly_length(R, ctx);
-        int* exps = malloc(sizeof(int) * (size_t)((len ? (size_t)len : 1) * (size_t)(nvars ? nvars : 1)));
+        int64_t* exps = malloc(sizeof(int64_t) * (size_t)((len ? (size_t)len : 1) * (size_t)(nvars ? nvars : 1)));
         Expr** coeffs = malloc(sizeof(Expr*) * (size_t)(len ? (size_t)len : 1));
         ulong* eexp = malloc(sizeof(ulong) * (size_t)nvc);
         ulong* cur  = malloc(sizeof(ulong) * (size_t)nvc);
@@ -1409,8 +1409,8 @@ int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
                     for (int j = 0; j < nvars; j++) exps[nt * (size_t)nvars + (size_t)j] = 0;
                     for (slong v = 0; v < nvc; v++) {
                         if (v == tau_idx) continue;
-                        if (cur[v] > (ulong)INT_MAX) { overflow = 1; break; }
-                        exps[nt * (size_t)nvars + (size_t)col_to_user[v]] = (int)cur[v];
+                        if (cur[v] > (ulong)INT64_MAX) { overflow = 1; break; }
+                        exps[nt * (size_t)nvars + (size_t)col_to_user[v]] = (int64_t)cur[v];
                     }
                     nt++;
                     fmpq_poly_zero(coords);
@@ -1425,8 +1425,8 @@ int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
             for (int j = 0; j < nvars; j++) exps[nt * (size_t)nvars + (size_t)j] = 0;
             for (slong v = 0; v < nvc; v++) {
                 if (v == tau_idx) continue;
-                if (cur[v] > (ulong)INT_MAX) { overflow = 1; }
-                else exps[nt * (size_t)nvars + (size_t)col_to_user[v]] = (int)cur[v];
+                if (cur[v] > (ulong)INT64_MAX) { overflow = 1; }
+                else exps[nt * (size_t)nvars + (size_t)col_to_user[v]] = (int64_t)cur[v];
             }
             if (!overflow) nt++;
         }
@@ -1463,7 +1463,7 @@ static void collect_all_symbols(const Expr* e, VarSet* vs);  /* defined below */
  * FLINT) -- the caller then uses the generic path.  Disable for A/B with
  * MATHILDA_NO_POLYQ_MONOMIALS. */
 int flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
-                               int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+                               int64_t** exps_out, Expr*** coeffs_out, size_t* count_out) {
     if (!poly || nvars < 0) return -1;
     if (getenv("MATHILDA_NO_POLYQ_MONOMIALS")) return -1;
     for (int i = 0; i < nvars; i++)
@@ -1484,19 +1484,31 @@ int flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
     fmpq_mpoly_t P; fmpq_mpoly_init(P, ctx);
     if (!to_mpoly(poly, P, ctx, &vs)) { fmpq_mpoly_clear(P, ctx); varset_free(&vs); return -1; }
     slong len = fmpq_mpoly_length(P, ctx);
-    int* exps = malloc(sizeof(int) * (size_t)((len ? (size_t)len : 1) * (size_t)(nvars ? nvars : 1)));
+    int64_t* exps = malloc(sizeof(int64_t) * (size_t)((len ? (size_t)len : 1) * (size_t)(nvars ? nvars : 1)));
     Expr** coeffs = malloc(sizeof(Expr*) * (size_t)(len ? (size_t)len : 1));
     ulong* eexp = malloc(sizeof(ulong) * (size_t)(nvars ? nvars : 1));
     fmpq_t c; fmpq_init(c);
-    for (slong t = 0; t < len; t++) {
-        fmpq_mpoly_get_term_coeff_fmpq(c, P, t, ctx);
+    /* An exponent is read at full width: (int) truncation merged x^(2^40) + 1
+     * into the constant 2. One that does not fit an int64 declines. */
+    slong t = 0;
+    int too_big = 0;
+    for (; t < len && !too_big; t++) {
         fmpq_mpoly_get_term_exp_ui(eexp, P, t, ctx);
+        for (int j = 0; j < nvars; j++) {
+            if (eexp[j] > (ulong)INT64_MAX) { too_big = 1; break; }
+            exps[(size_t)t * (size_t)nvars + (size_t)j] = (int64_t)eexp[j];
+        }
+        if (too_big) break;
+        fmpq_mpoly_get_term_coeff_fmpq(c, P, t, ctx);
         coeffs[t] = expr_from_fmpq_local(c);
-        for (int j = 0; j < nvars; j++)
-            exps[(size_t)t * (size_t)nvars + (size_t)j] = (int)eexp[j];
     }
     fmpq_clear(c); free(eexp);
     fmpq_mpoly_clear(P, ctx); varset_free(&vs);
+    if (too_big) {
+        for (slong i = 0; i < t; i++) expr_free(coeffs[i]);
+        free(exps); free(coeffs);
+        return -1;
+    }
     *exps_out = exps; *coeffs_out = coeffs; *count_out = (size_t)len;
     return (int)len;
 }
@@ -9893,13 +9905,13 @@ Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
 Expr* flint_expand_polynomial_field(const Expr* e) { (void)e; return NULL; }
 Expr* flint_expand_polynomial_kernels(const Expr* e) { (void)e; return NULL; }
 int   flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
-                            int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+                            int64_t** exps_out, Expr*** coeffs_out, size_t* count_out) {
     (void)poly; (void)vars; (void)nvars;
     (void)exps_out; (void)coeffs_out; (void)count_out;
     return -1;
 }
 int   flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
-                                 int** exps_out, Expr*** coeffs_out, size_t* count_out) {
+                                 int64_t** exps_out, Expr*** coeffs_out, size_t* count_out) {
     (void)poly; (void)vars; (void)nvars;
     (void)exps_out; (void)coeffs_out; (void)count_out;
     return -1;

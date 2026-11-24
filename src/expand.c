@@ -720,15 +720,40 @@ Expr* expr_expand(Expr* e) {
 /* User-facing Expand[]: never silently declines — an expansion too large to fit
  * in memory yields Overflow[]. */
 Expr* builtin_expand(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 4) return NULL;
     /* Expand[x -> (a + b)^2] is x -> a^2 + 2 a b + b^2: a Rule, relation or
      * logical connective threads, as in the reference. */
     {
         Expr* t = alg_thread_call(res);
         if (t) return t;
     }
+    /* Expand[expr, opts] / Expand[expr, patt, opts]: a trailing Rule whose
+     * left side is one of Expand's option names is an option, never the
+     * pattern -- read as patt, Trig -> False made every part "free of the
+     * pattern" and nothing expanded. The defaults (Trig -> False, Modulus -> 0)
+     * are what the expander does; any other setting is not implemented, so the
+     * call is left as it stands rather than answered as if it were the default. */
+    size_t argc = res->data.function.arg_count;
+    while (argc > 1) {
+        Expr* o = res->data.function.args[argc - 1];
+        if (!(o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
+              (head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) &&
+              o->data.function.args[0]->type == EXPR_SYMBOL))
+            break;
+        const char* name = o->data.function.args[0]->data.symbol.name;
+        Expr* v = o->data.function.args[1];
+        if (name == SYM_Trig) {
+            if (!(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False)) return NULL;
+        } else if (name == SYM_Modulus) {
+            if (!(v->type == EXPR_INTEGER && v->data.integer == 0)) return NULL;
+        } else {
+            break;                                     /* not an option: a pattern */
+        }
+        argc--;
+    }
+    if (argc > 2) return NULL;
     Expr* patt = NULL;
-    if (res->data.function.arg_count == 2) patt = res->data.function.args[1];
+    if (argc == 2) patt = res->data.function.args[1];
     Expr* ret = expr_expand_impl(res->data.function.args[0], patt, /*overflow_mode=*/true);
     return ret;
 }

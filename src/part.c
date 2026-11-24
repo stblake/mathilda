@@ -1811,25 +1811,76 @@ static Expr* insert_path(Expr* expr, Expr* elem, Expr** path, size_t path_len) {
     }
 }
 
-// Simple path comparison for sorting
+/* Descending order on paths, for applying several Insert/Delete positions one
+ * after another: a lexicographically later position is applied first, so it
+ * never shifts the part an earlier one names. The paths must already be
+ * normalised (normalize_path) -- a raw negative index sorts below every
+ * positive one although it may name a later part. A non-integer step (Key[k]
+ * in an association) orders canonically after the integers. */
 static int compare_paths(const void* a, const void* b) {
     Expr* pa = *(Expr**)a;
     Expr* pb = *(Expr**)b;
-    
-    // Both are Lists of Integers (or single Integers converted to lists)
+
     size_t la = (pa->type == EXPR_FUNCTION) ? pa->data.function.arg_count : 1;
     size_t lb = (pb->type == EXPR_FUNCTION) ? pb->data.function.arg_count : 1;
-    
+
     size_t n = (la < lb) ? la : lb;
     for (size_t i = 0; i < n; i++) {
-        int64_t va = (pa->type == EXPR_FUNCTION) ? pa->data.function.args[i]->data.integer : pa->data.integer;
-        int64_t vb = (pb->type == EXPR_FUNCTION) ? pb->data.function.args[i]->data.integer : pb->data.integer;
-        if (va < vb) return 1; // Reverse sort
-        if (va > vb) return -1;
+        Expr* ea = (pa->type == EXPR_FUNCTION) ? pa->data.function.args[i] : pa;
+        Expr* eb = (pb->type == EXPR_FUNCTION) ? pb->data.function.args[i] : pb;
+        bool ia = ea->type == EXPR_INTEGER, ib = eb->type == EXPR_INTEGER;
+        if (ia && ib) {
+            int64_t va = ea->data.integer, vb = eb->data.integer;
+            if (va < vb) return 1; // Reverse sort
+            if (va > vb) return -1;
+            continue;
+        }
+        if (ia != ib) return ia ? 1 : -1;
+        int c = expr_compare(ea, eb);
+        if (c) return c < 0 ? 1 : -1;
     }
     if (la < lb) return 1;
     if (la > lb) return -1;
     return 0;
+}
+
+/* One position of a list of positions, with every negative index resolved
+ * against the ORIGINAL expression: each position in Insert[expr, e, {p1, p2,
+ * ...}] / Delete[expr, {p1, p2, ...}] names a part (or, for Insert's last
+ * index, a slot) of expr itself, not of the expression the earlier positions
+ * have already changed. Resolving first is what makes the descending
+ * sequential application correct: Delete[{a, b, c}, {{-3}, {2}}] is {c}, and
+ * the aliases {-1} and {3} of a length-3 list become the same path, which the
+ * caller then removes once. Resolution stops (keeping the rest verbatim) at a
+ * non-integer step, an association, an atom, or an index out of range -- the
+ * walkers handle those as before. A new List. */
+static Expr* normalize_path(Expr* expr, Expr* path, bool insert) {
+    size_t n = path->type == EXPR_FUNCTION ? path->data.function.arg_count : 1;
+    Expr** steps = path->type == EXPR_FUNCTION ? path->data.function.args : &path;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    Expr* e = expr;
+    for (size_t d = 0; d < n; d++) {
+        Expr* p = steps[d];
+        if (!e || p->type != EXPR_INTEGER || is_atomic(e) || is_association(e)) {
+            out[d] = expr_copy(p);
+            e = NULL;
+            continue;
+        }
+        int64_t len = (int64_t)e->data.function.arg_count;
+        int64_t k = p->data.integer;
+        bool last = d + 1 == n;
+        if (k < 0) {
+            int64_t r = (insert && last) ? len + 2 + k : len + 1 + k;
+            if (r >= 1) k = r;
+        }
+        out[d] = (k == p->data.integer) ? expr_copy(p) : expr_new_integer(k);
+        if (k == 0) e = e->data.function.head;
+        else if (k >= 1 && k <= len) e = e->data.function.args[k - 1];
+        else e = NULL;
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), out, n);
+    free(out);
+    return r;
 }
 
 Expr* expr_insert(Expr* expr, Expr* elem, Expr* pos) {
@@ -1847,22 +1898,22 @@ Expr* expr_insert(Expr* expr, Expr* elem, Expr* pos) {
         
         if (all_lists && pos->data.function.arg_count > 0) {
             // Sort positions in descending order to apply them safely
-            Expr** sorted_pos = malloc(sizeof(Expr*) * pos->data.function.arg_count);
-            memcpy(sorted_pos, pos->data.function.args, sizeof(Expr*) * pos->data.function.arg_count);
-            qsort(sorted_pos, pos->data.function.arg_count, sizeof(Expr*), compare_paths);
-            
+            size_t np = pos->data.function.arg_count;
+            Expr** sorted_pos = malloc(sizeof(Expr*) * np);
+            for (size_t i = 0; i < np; i++)
+                sorted_pos[i] = normalize_path(expr, pos->data.function.args[i], true);
+            qsort(sorted_pos, np, sizeof(Expr*), compare_paths);
+
+            /* A repeated slot inserts once per listing (the reference's
+             * Insert[{a, b}, x, {{1}, {1}}] is {x, x, a, b}), so no dedup. */
             Expr* current = expr_copy(expr);
-            for (size_t i = 0; i < pos->data.function.arg_count; i++) {
-                Expr* next = NULL;
-                if (sorted_pos[i]->type == EXPR_FUNCTION) {
-                    next = insert_path(current, elem, sorted_pos[i]->data.function.args, sorted_pos[i]->data.function.arg_count);
-                } else {
-                    Expr* p = sorted_pos[i];
-                    next = insert_path(current, elem, &p, 1);
-                }
+            for (size_t i = 0; i < np; i++) {
+                Expr* next = insert_path(current, elem, sorted_pos[i]->data.function.args,
+                                         sorted_pos[i]->data.function.arg_count);
                 expr_free(current);
                 current = next;
             }
+            for (size_t i = 0; i < np; i++) expr_free(sorted_pos[i]);
             free(sorted_pos);
             return current;
         }
@@ -2259,26 +2310,25 @@ Expr* expr_delete(Expr* expr, Expr* pos) {
         }
         
         if (all_lists && pos->data.function.arg_count > 0) {
-            Expr** sorted_pos = malloc(sizeof(Expr*) * pos->data.function.arg_count);
-            memcpy(sorted_pos, pos->data.function.args, sizeof(Expr*) * pos->data.function.arg_count);
-            qsort(sorted_pos, pos->data.function.arg_count, sizeof(Expr*), compare_paths);
-            
+            size_t np = pos->data.function.arg_count;
+            Expr** sorted_pos = malloc(sizeof(Expr*) * np);
+            for (size_t i = 0; i < np; i++)
+                sorted_pos[i] = normalize_path(expr, pos->data.function.args[i], false);
+            qsort(sorted_pos, np, sizeof(Expr*), compare_paths);
+
             Expr* current = expr_copy(expr);
-            for (size_t i = 0; i < pos->data.function.arg_count; i++) {
+            for (size_t i = 0; i < np; i++) {
                 /* A repeated position names the same original part once:
                  * Delete[Range[12], {{3}, {3}}] removes 3, not 3 and then the
-                 * 4 that slid into its place. */
+                 * 4 that slid into its place. Normalised, an alias ({-1} and
+                 * {3} of a length-3 list) is a repeat too. */
                 if (i > 0 && expr_eq(sorted_pos[i - 1], sorted_pos[i])) continue;
-                Expr* next = NULL;
-                if (sorted_pos[i]->type == EXPR_FUNCTION) {
-                    next = delete_path(current, sorted_pos[i]->data.function.args, sorted_pos[i]->data.function.arg_count);
-                } else {
-                    Expr* p = sorted_pos[i];
-                    next = delete_path(current, &p, 1);
-                }
+                Expr* next = delete_path(current, sorted_pos[i]->data.function.args,
+                                         sorted_pos[i]->data.function.arg_count);
                 expr_free(current);
                 current = next;
             }
+            for (size_t i = 0; i < np; i++) expr_free(sorted_pos[i]);
             free(sorted_pos);
             return current;
         }

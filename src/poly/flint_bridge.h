@@ -110,7 +110,7 @@ Expr* flint_expand_polynomial_kernels(const Expr* e);
  * symbol, a non-symbol variable, an all-scalar/tau-free field, or without
  * FLINT); the caller then uses the generic path.  Never mutates `poly`. */
 int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
-                          int** exps_out, Expr*** coeffs_out, size_t* count_out);
+                          int64_t** exps_out, Expr*** coeffs_out, size_t* count_out);
 
 /* Plain-Q counterpart of flint_field_monomials: `poly` a polynomial in EXACTLY
  * `vars` with rational coefficients (no other symbol, no denominator, no
@@ -121,7 +121,7 @@ int flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
  * (count >= 0 on success, -1 to decline; caller uses the generic path).
  * MATHILDA_NO_POLYQ_MONOMIALS forces a decline (A/B). */
 int flint_polynomial_monomials(const Expr* poly, Expr* const* vars, int nvars,
-                               int** exps_out, Expr*** coeffs_out, size_t* count_out);
+                               int64_t** exps_out, Expr*** coeffs_out, size_t* count_out);
 
 /* True (1) when `e` is a polynomial over Q in recognisable variables — i.e. the
  * kind of expression flint_expand_polynomial accepts (built from integers,

@@ -13,6 +13,13 @@ been dropped.
 - `Protected`.
 - `SeriesData` is a pure data head; it has no evaluator and is normally
   produced by `Series`.
+- A one-argument numeric function of a `SeriesData` composes to the series'
+  order: `Sin[Series[x, {x, 0, 3}]]` is `x - x^3/6 + O[x]^4`, and likewise
+  `Cos`, `Log`, `Sinh`, `ArcTan`, ... (only `Power`/`Exp` composed before).
+- `Exp` of a series `u` with leading exponent `nmin` keeps every kernel term
+  `u^k` with `k nmin < order`; one was missing when `nmin` did not divide the
+  order, so `Exp[x^2 + O[x]^3]` and `SeriesData[x, 0, {1, 1, 0}, 0, 3, 1]^x`
+  lost their `x^2`.
 - Standard printing renders the series as an ordinary mathematical sum:
   `a0 + a1 (x - x0) + a2 (x - x0)^2 + ... + O[x - x0]^p`. Zero
   coefficients are suppressed, and `x0 == 0` is displayed as simply `x`

@@ -46,6 +46,7 @@
 #include "pack.h"      /* pack_unpack: materialise a visible NDArray argument */
 #include "print.h"     /* expr_to_string: the ::poly message argument */
 #include "eval.h"      /* eval_and_free: drive the equation rewrite */
+#include "checked_int.h" /* ci_add_i64 / ci_mul_i64: exponent sums and order keys */
 
 #include <stdlib.h>
 #include <string.h>
@@ -72,7 +73,8 @@ static int is_rule_head(const Expr* e)  {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int*     exps;   /* k non-negative integers (owned) */
+    int64_t* exps;   /* k non-negative exponents (owned); full int64 width --
+                      * an int truncated x^(2^40) + 1 to the constant 2 */
     Expr*    coeff;  /* owned; NULL once moved into an output node */
     int64_t* key;    /* keylen weighted sort values (owned; filled before sort) */
 } Mono;
@@ -197,7 +199,7 @@ static Expr** resolve_vars(Expr* poly, Expr* vars_arg, int* k, Expr** owned) {
  * variable) into a growable array of fresh copies, and add variable exponents
  * into exps[]. Recurses into nested Times. Returns 0 if the term contains a
  * variable raised to a negative or non-integer power (not polynomial). */
-static int walk_term(Expr* f, Expr** vars, int k, int* exps,
+static int walk_term(Expr* f, Expr** vars, int k, int64_t* exps,
                      Expr*** kept, size_t* nk, size_t* cap) {
     if (head_is(f, SYM_Times)) {
         for (size_t i = 0; i < f->data.function.arg_count; i++)
@@ -207,7 +209,7 @@ static int walk_term(Expr* f, Expr** vars, int k, int* exps,
     }
     /* factor == variable */
     for (int i = 0; i < k; i++) {
-        if (expr_eq(f, vars[i])) { exps[i] += 1; return 1; }
+        if (expr_eq(f, vars[i])) return !ci_add_i64(exps[i], 1, &exps[i]);
     }
     /* factor == Power[variable, non-negative integer] */
     if (head_is(f, SYM_Power) && f->data.function.arg_count == 2) {
@@ -215,11 +217,11 @@ static int walk_term(Expr* f, Expr** vars, int k, int* exps,
         Expr* e    = f->data.function.args[1];
         for (int i = 0; i < k; i++) {
             if (expr_eq(base, vars[i])) {
-                if (e->type == EXPR_INTEGER && e->data.integer >= 0 &&
-                    e->data.integer <= INT_MAX) {
-                    exps[i] += (int)e->data.integer;
-                    return 1;
-                }
+                /* The exponents of x^a x^b sum: checked, so x^2147483647 x
+                 * is degree 2^31, not a wrapped negative. A sum past int64
+                 * declines (as a bignum power does). */
+                if (e->type == EXPR_INTEGER && e->data.integer >= 0)
+                    return !ci_add_i64(exps[i], e->data.integer, &exps[i]);
                 return 0;   /* variable to a bad power: not polynomial */
             }
         }
@@ -232,7 +234,7 @@ static int walk_term(Expr* f, Expr** vars, int k, int* exps,
 
 /* Decompose one expanded term into exps[k] and a fresh coefficient. Returns 0
  * if not polynomial in the variables. */
-static int term_to_expvec(Expr* term, Expr** vars, int k, int* exps,
+static int term_to_expvec(Expr* term, Expr** vars, int k, int64_t* exps,
                           Expr** out_coeff) {
     for (int i = 0; i < k; i++) exps[i] = 0;
     size_t cap = 4, nk = 0;
@@ -272,7 +274,7 @@ static Mono* finish_monomials(Mono* monos, size_t n, int keylen, int k,
         Expr* coeff = monos[r].coeff;
         monos[r].coeff = NULL;
         while (s < n &&
-               memcmp(monos[r].exps, monos[s].exps, sizeof(int) * (size_t)k) == 0) {
+               memcmp(monos[r].exps, monos[s].exps, sizeof(int64_t) * (size_t)k) == 0) {
             coeff = internal_plus((Expr*[]){ coeff, monos[s].coeff }, 2);
             monos[s].coeff = NULL;
             s++;
@@ -300,6 +302,26 @@ static Mono* finish_monomials(Mono* monos, size_t n, int keylen, int k,
     return monos;
 }
 
+/* The weighted sort key of one exponent vector: `rows` weighted sums, then
+ * the raw exponents as a deterministic tie-break. Fresh array, or NULL when a
+ * weighted sum overflows int64 (the order cannot be decided: decline). */
+static int64_t* mono_key(const int64_t* W, int rows, int k, const int64_t* exps) {
+    int keylen = rows + k;
+    int64_t* key = malloc(sizeof(int64_t) * (size_t)(keylen > 0 ? keylen : 1));
+    for (int r = 0; r < rows; r++) {
+        int64_t acc = 0, t;
+        for (int j = 0; j < k; j++) {
+            if (ci_mul_i64(W[(size_t)r * k + j], exps[j], &t) || ci_add_i64(acc, t, &acc)) {
+                free(key);
+                return NULL;
+            }
+        }
+        key[r] = acc;
+    }
+    for (int j = 0; j < k; j++) key[rows + j] = exps[j];
+    return key;
+}
+
 /* Native field-coefficient fast path for build_monomials.  When `poly` is a
  * polynomial in `vars` with AlgebraicNumber[theta,..] (one number field Q(theta))
  * coefficients, read the monomials straight out of the reduced FLINT polynomial
@@ -309,7 +331,7 @@ static Mono* finish_monomials(Mono* monos, size_t n, int keylen, int k,
  * or NULL to decline (caller uses the generic path). */
 static Mono* build_monomials_field(Expr* poly, Expr** vars, int k,
                                    const int64_t* W, int rows, size_t* n_out) {
-    int*   fexps  = NULL;
+    int64_t* fexps = NULL;
     Expr** fcoeff = NULL;
     size_t fn     = 0;
     int rc = flint_field_monomials(poly, vars, k, &fexps, &fcoeff, &fn);
@@ -318,15 +340,17 @@ static Mono* build_monomials_field(Expr* poly, Expr** vars, int k,
     int keylen = rows + k;
     Mono* monos = malloc(sizeof(Mono) * (fn > 0 ? fn : 1));
     for (size_t t = 0; t < fn; t++) {
-        int* exps = malloc(sizeof(int) * (size_t)(k > 0 ? k : 1));
+        int64_t* exps = malloc(sizeof(int64_t) * (size_t)(k > 0 ? k : 1));
         for (int j = 0; j < k; j++) exps[j] = fexps[t * (size_t)k + j];
-        int64_t* key = malloc(sizeof(int64_t) * (size_t)(keylen > 0 ? keylen : 1));
-        for (int r = 0; r < rows; r++) {
-            int64_t acc = 0;
-            for (int j = 0; j < k; j++) acc += W[(size_t)r * k + j] * exps[j];
-            key[r] = acc;
+        int64_t* key = mono_key(W, rows, k, exps);
+        if (!key) {                      /* order key overflows: decline */
+            free(exps);
+            for (size_t u = t; u < fn; u++) expr_free(fcoeff[u]);
+            monos_free(monos, t);
+            free(fexps);
+            free(fcoeff);
+            return NULL;
         }
-        for (int j = 0; j < k; j++) key[rows + j] = exps[j];
         monos[t].exps  = exps;
         monos[t].coeff = fcoeff[t];      /* move ownership */
         monos[t].key   = key;
@@ -343,7 +367,7 @@ static Mono* build_monomials_field(Expr* poly, Expr** vars, int k,
  * to the generic path. */
 static Mono* build_monomials_polyQ(Expr* poly, Expr** vars, int k,
                                    const int64_t* W, int rows, size_t* n_out) {
-    int*   fexps  = NULL;
+    int64_t* fexps = NULL;
     Expr** fcoeff = NULL;
     size_t fn     = 0;
     int rc = flint_polynomial_monomials(poly, vars, k, &fexps, &fcoeff, &fn);
@@ -352,15 +376,17 @@ static Mono* build_monomials_polyQ(Expr* poly, Expr** vars, int k,
     int keylen = rows + k;
     Mono* monos = malloc(sizeof(Mono) * (fn > 0 ? fn : 1));
     for (size_t t = 0; t < fn; t++) {
-        int* exps = malloc(sizeof(int) * (size_t)(k > 0 ? k : 1));
+        int64_t* exps = malloc(sizeof(int64_t) * (size_t)(k > 0 ? k : 1));
         for (int j = 0; j < k; j++) exps[j] = fexps[t * (size_t)k + j];
-        int64_t* key = malloc(sizeof(int64_t) * (size_t)(keylen > 0 ? keylen : 1));
-        for (int r = 0; r < rows; r++) {
-            int64_t acc = 0;
-            for (int j = 0; j < k; j++) acc += W[(size_t)r * k + j] * exps[j];
-            key[r] = acc;
+        int64_t* key = mono_key(W, rows, k, exps);
+        if (!key) {                      /* order key overflows: decline */
+            free(exps);
+            for (size_t u = t; u < fn; u++) expr_free(fcoeff[u]);
+            monos_free(monos, t);
+            free(fexps);
+            free(fcoeff);
+            return NULL;
         }
-        for (int j = 0; j < k; j++) key[rows + j] = exps[j];
         monos[t].exps  = exps;
         monos[t].coeff = fcoeff[t];      /* move ownership */
         monos[t].key   = key;
@@ -413,7 +439,7 @@ static Mono* build_monomials(Expr* poly, Expr** vars, int k,
     int keylen = rows + k;
 
     for (size_t t = 0; t < nterms; t++) {
-        int* exps = malloc(sizeof(int) * (size_t)(k > 0 ? k : 1));
+        int64_t* exps = malloc(sizeof(int64_t) * (size_t)(k > 0 ? k : 1));
         Expr* coeff;
         if (!term_to_expvec(terms[t], vars, k, exps, &coeff)) {
             free(exps);
@@ -423,13 +449,14 @@ static Mono* build_monomials(Expr* poly, Expr** vars, int k,
         }
         /* weighted sort key: rows weighted values, then the raw exponents as a
          * deterministic tie-break for a degenerate user matrix. */
-        int64_t* key = malloc(sizeof(int64_t) * (size_t)(keylen > 0 ? keylen : 1));
-        for (int r = 0; r < rows; r++) {
-            int64_t acc = 0;
-            for (int j = 0; j < k; j++) acc += W[(size_t)r * k + j] * exps[j];
-            key[r] = acc;
+        int64_t* key = mono_key(W, rows, k, exps);
+        if (!key) {                  /* order key overflows: decline */
+            free(exps);
+            expr_free(coeff);
+            monos_free(monos, n);
+            expr_free(expanded);
+            return NULL;
         }
-        for (int j = 0; j < k; j++) key[rows + j] = exps[j];
         monos[n].exps  = exps;
         monos[n].coeff = coeff;
         monos[n].key   = key;
@@ -543,7 +570,7 @@ Expr* builtin_monomiallist(Expr* res) {
         size_t nf = 0;
         fac[nf++] = monos[i].coeff; monos[i].coeff = NULL;      /* move */
         for (int j = 0; j < k; j++) {
-            int e = monos[i].exps[j];
+            int64_t e = monos[i].exps[j];
             if (e == 1) {
                 fac[nf++] = expr_copy(vars[j]);
             } else if (e > 1) {
@@ -803,9 +830,13 @@ Expr* builtin_coefficientarrays(Expr* res) {
         all[i] = build_monomials(eqs[i], vars, k, W, rows, modulus, &counts[i]);
         if (!all[i]) { ok = 0; break; }
         for (size_t t = 0; t < counts[i]; t++) {
-            int d = 0;
-            for (int j = 0; j < k; j++) d += all[i][t].exps[j];
-            if (d > maxdeg) maxdeg = d;
+            /* Total degree, saturated at INT_MAX: such a degree is far past
+             * the dense-size guard below, which then declines it. */
+            int64_t d = 0;
+            for (int j = 0; j < k; j++)
+                if (ci_add_i64(d, all[i][t].exps[j], &d)) d = INT64_MAX;
+            if (d > INT_MAX) d = INT_MAX;
+            if (d > maxdeg) maxdeg = (int)d;
         }
     }
     free(W);

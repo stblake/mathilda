@@ -17,7 +17,7 @@ Expr* builtin_algebraicintegerq(Expr* res) {
         return NULL;
 
     int q = flint_qqbar_algebraic_integer_q(res->data.function.args[0]);
-    if (q < 0) return NULL;                 /* undecided (FLINT compiled out) */
+    if (q < 0) return NULL;   /* undecided: past the qqbar degree cap, or FLINT compiled out */
     return expr_new_symbol(q ? SYM_True : SYM_False);
 }
 

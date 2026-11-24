@@ -39,6 +39,10 @@
 /* Intermediate qqbar degree above which we give up and fall back (identity /
  * the parametric engine). WL's degree-21 examples stay comfortably under. */
 #define QQBAR_DEGREE_CAP 120
+/* Set by to_qqbar when it declines because an intermediate degree passed the
+ * cap (as opposed to a non-algebraic input): such a decline is "undecided",
+ * never a "not algebraic". Reset by the caller that reads it. */
+static int g_qqbar_cap_hit = 0;
 /* Max distinct algebraic generators collected for the NumberField method. */
 #define QQBAR_MAX_ATOMS  12
 
@@ -526,7 +530,7 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
         for (size_t i = 0; i < n && ok; i++) {
             if (!to_qqbar(e->data.function.args[i], t)) { ok = 0; break; }
             if (is_plus) qqbar_add(acc, acc, t); else qqbar_mul(acc, acc, t);
-            if (qqbar_degree(acc) > QQBAR_DEGREE_CAP) { ok = 0; break; }
+            if (qqbar_degree(acc) > QQBAR_DEGREE_CAP) { ok = 0; g_qqbar_cap_hit = 1; break; }
         }
         if (ok) qqbar_set(out, acc);
         qqbar_clear(acc); qqbar_clear(t);
@@ -589,7 +593,7 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
                 fmpq_clear(ef);
             }
         }
-        if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) ok = 0;
+        if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) { ok = 0; g_qqbar_cap_hit = 1; }
         qqbar_clear(base);
         return ok;
     }
@@ -597,7 +601,7 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
         qqbar_t base; qqbar_init(base);
         int ok = to_qqbar(e->data.function.args[0], base);
         if (ok) qqbar_sqrt(out, base);
-        if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) ok = 0;
+        if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) { ok = 0; g_qqbar_cap_hit = 1; }
         qqbar_clear(base);
         return ok;
     }
@@ -630,7 +634,7 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
             if (!fmpq_from_expr(cl->data.function.args[i], c)) { ok = 0; break; }
             qqbar_mul(acc, acc, g);
             qqbar_add_fmpq(acc, acc, c);
-            if (qqbar_degree(acc) > QQBAR_DEGREE_CAP) { ok = 0; break; }
+            if (qqbar_degree(acc) > QQBAR_DEGREE_CAP) { ok = 0; g_qqbar_cap_hit = 1; break; }
         }
         fmpq_clear(c);
         if (ok) qqbar_set(out, acc);
@@ -666,7 +670,7 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
                 else if (head_is(e, "Cot")) { if (qqbar_is_zero(s)) ok = 0; else qqbar_div(out, c, s); }
                 else if (head_is(e, "Sec")) { if (qqbar_is_zero(c)) ok = 0; else qqbar_inv(out, c); }
                 else                        { if (qqbar_is_zero(s)) ok = 0; else qqbar_inv(out, s); } /* Csc */
-                if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) ok = 0;
+                if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) { ok = 0; g_qqbar_cap_hit = 1; }
                 qqbar_clear(zeta); qqbar_clear(zinv);
                 qqbar_clear(s); qqbar_clear(c); qqbar_clear(two_i);
             }
@@ -1833,10 +1837,55 @@ Expr* flint_qqbar_integral_basis(const Expr* a) {
  * integers (q == 1) qualify; anything that is not a constant algebraic number (a
  * free symbol, Pi, ...) fails the to_qqbar conversion and is not an algebraic
  * integer -> 0. */
+/* Is `e` an algebraic integer by ring closure alone, with no minimal
+ * polynomial: integers, Gaussian integers, GoldenRatio (x^2 - x - 1), and the
+ * sums, products and positive-integer powers of such -- the algebraic integers
+ * are a ring -- plus b^(p/q) with p > 0 for such b (a root of the monic
+ * y^q - b^p over the algebraic integers, hence integral). A sufficient test:
+ * 0 means "not shown", never "not an algebraic integer". It decides the
+ * degree-200 2^(1/200) and the degree-128 sum of seven prime square roots,
+ * which pass to_qqbar's degree cap. */
+static int alg_int_by_closure(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return 1;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_GoldenRatio;
+    if (e->type != EXPR_FUNCTION) return 0;
+    size_t n = e->data.function.arg_count;
+    if (head_is(e, "Complex") && n == 2)
+        return alg_int_by_closure(e->data.function.args[0]) &&
+               alg_int_by_closure(e->data.function.args[1]);
+    if (head_is(e, "Plus") || head_is(e, "Times")) {
+        for (size_t i = 0; i < n; i++)
+            if (!alg_int_by_closure(e->data.function.args[i])) return 0;
+        return 1;
+    }
+    if (head_is(e, "Sqrt") && n == 1) return alg_int_by_closure(e->data.function.args[0]);
+    if (head_is(e, "Power") && n == 2) {
+        const Expr* xe = e->data.function.args[1];
+        int positive = 0;
+        if (xe->type == EXPR_INTEGER) positive = xe->data.integer > 0;
+        else if (head_is(xe, "Rational") && xe->data.function.arg_count == 2) {
+            const Expr* p = xe->data.function.args[0];
+            positive = (p->type == EXPR_INTEGER && p->data.integer > 0) ||
+                       (p->type == EXPR_BIGINT && mpz_sgn(p->data.bigint) > 0);
+        }
+        return positive && alg_int_by_closure(e->data.function.args[0]);
+    }
+    return 0;
+}
+
 int flint_qqbar_algebraic_integer_q(const Expr* x) {
     if (!x) return 0;
+    if (alg_int_by_closure(x)) return 1;
     qqbar_t v; qqbar_init(v);
-    if (!to_qqbar(x, v)) { qqbar_clear(v); return 0; }
+    g_qqbar_cap_hit = 0;
+    if (!to_qqbar(x, v)) {
+        /* Not algebraic -> False; past the degree cap -> undecided. */
+        int capped = g_qqbar_cap_hit;
+        g_qqbar_cap_hit = 0;
+        qqbar_clear(v);
+        return capped ? -1 : 0;
+    }
     slong d = qqbar_degree(v);
     fmpz_t lead; fmpz_init(lead);
     fmpz_poly_get_coeff_fmpz(lead, QQBAR_POLY(v), d);

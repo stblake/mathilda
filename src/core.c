@@ -5127,21 +5127,31 @@ Expr* builtin_level(Expr* res) {
         return NULL;
     }
 
+    /* Level[expr, levelspec, f, opts]: a third argument that is not an option
+     * rule is the head applied to the parts (Level[a + b, {1}, g] is
+     * g[a, b]); it was skipped as an unrecognised option, giving a List. */
     bool heads = false;
+    Expr* f = NULL;
     for (size_t i = 2; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule) {
-            if (opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
-                if (opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
-            }
+        bool is_opt = opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
+                      (head_is(opt, SYM_Rule) || head_is(opt, SYM_RuleDelayed));
+        if (!is_opt) {
+            if (i != 2) return NULL;                 /* only slot 3 holds f */
+            f = opt;
+            continue;
         }
+        Expr* k = opt->data.function.args[0];
+        Expr* v = opt->data.function.args[1];
+        if (k->type == EXPR_SYMBOL && k->data.symbol.name == SYM_Heads)
+            heads = v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
     }
 
     size_t count = 0, cap = 16;
     Expr** results = malloc(sizeof(Expr*) * cap);
     level_rec(e, 0, min_l, max_l, heads, &results, &count, &cap);
 
-    Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
+    Expr* list = expr_new_function(f ? expr_copy(f) : expr_new_symbol(SYM_List), results, count);
     free(results);
     return list;
 }

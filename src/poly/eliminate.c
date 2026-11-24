@@ -1288,6 +1288,32 @@ static bool has_negative_power(const Expr* e) {
     return false;
 }
 
+/* Does `e` hold a Complex number with exact parts (a Gaussian rational)? */
+static bool elim_has_gaussian(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Complex)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (elim_has_gaussian(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* `e` with every Complex[a, b] replaced by a + b g, g the symbol named
+ * `gname`. A new expression (unevaluated around the replaced numbers). */
+static Expr* elim_gaussian_to_param(const Expr* e, const char* gname) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
+        Expr* im = internal_times((Expr*[]){expr_copy(e->data.function.args[1]),
+                                            expr_new_symbol(gname)}, 2);
+        return internal_plus((Expr*[]){expr_copy(e->data.function.args[0]), im}, 2);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = elim_gaussian_to_param(e->data.function.args[i], gname);
+    Expr* r = eval_and_free(expr_new_function(expr_copy(e->data.function.head), a, n));
+    free(a);
+    return r;
+}
+
 static Expr* normalise_equation(const Expr* eq) {
     Expr* base;
     if (is_equal(eq) && eq->data.function.arg_count == 2) {
@@ -2116,6 +2142,33 @@ Expr* builtin_eliminate(Expr* res) {
     for (size_t i = 0; i < n_eq; i++) expr_free(rewritten[i]);
     free(rewritten);
 
+    /* ----- Gaussian coefficients: adjoin i as a parameter -----
+     * The Groebner engine works over Q, so a Complex coefficient made the
+     * system "not polynomial" (Eliminate[{x == I y, y == 2}, y] was nlin).
+     * Q(i) = Q[g]/(g^2 + 1) with g^2 + 1 irreducible over Q, so eliminating
+     * over Q(i) is eliminating from the ideal (F, g^2 + 1) in Q[elim, mains,
+     * g] with g a parameter ordered last (smallest): the eliminants are then
+     * reduced modulo g^2 + 1 and read back with g -> I. g^2 + 1 itself comes
+     * back as I^2 + 1 == 0, i.e. True. */
+    const char* gauss_i = NULL;   /* the interned name of the adjoined i */
+    {
+        bool any = false;
+        for (size_t i = 0; i < n_eq && !any; i++) any = elim_has_gaussian(polys[i]);
+        if (any) {
+            gauss_i = intern_symbol("Internal`EliminateGaussianI$");
+            for (size_t i = 0; i < n_eq; i++) {
+                Expr* g = elim_gaussian_to_param(polys[i], gauss_i);
+                Expr* ge = internal_expand((Expr*[]){g}, 1);
+                expr_free(polys[i]);
+                polys[i] = ge;
+            }
+            polys = (Expr**)realloc(polys, sizeof(Expr*) * (n_eq + 1));
+            polys[n_eq++] = internal_plus((Expr*[]){
+                internal_power((Expr*[]){expr_new_symbol(gauss_i), expr_new_integer(2)}, 2),
+                expr_new_integer(1)}, 2);
+        }
+    }
+
     /* ----- Variable discovery: collect main variables ----- */
     VarSet mains; varset_init(&mains);
     for (size_t i = 0; i < n_eq; i++) {
@@ -2191,6 +2244,17 @@ Expr* builtin_eliminate(Expr* res) {
     for (size_t i = 0; i < n_elim; i++) all_vars[i] = elim_items[i];
     for (size_t i = 0; i < n_main; i++) {
         all_vars[n_elim + i] = mains.items[n_main - 1 - i];
+    }
+    /* The adjoined i is the smallest variable (a coefficient, not a main). */
+    if (gauss_i) {
+        for (size_t i = n_elim; i + 1 < n_vars; i++) {
+            if (all_vars[i]->type == EXPR_SYMBOL && all_vars[i]->data.symbol.name == gauss_i) {
+                Expr* t = all_vars[i];
+                memmove(&all_vars[i], &all_vars[i + 1], sizeof(Expr*) * (n_vars - 1 - i));
+                all_vars[n_vars - 1] = t;
+                break;
+            }
+        }
     }
 
     /* ----- Convert each polynomial to GBPoly ----- */
@@ -2341,16 +2405,24 @@ Expr* builtin_eliminate(Expr* res) {
     kernel_free(&ker);
 
     /* ----- Combine ----- */
+    Expr* combined;
     if (out_n == 1) {
-        Expr* out = eqs[0];
-        free(eqs);
-        return out;
+        combined = eqs[0];
+    } else {
+        Expr* and_e = expr_new_function(expr_new_symbol(SYM_And), eqs, out_n);
+        combined = evaluate(and_e);
+        expr_free(and_e);
     }
-    Expr* and_e = expr_new_function(expr_new_symbol(SYM_And), eqs, out_n);
     free(eqs);
-    Expr* evd = evaluate(and_e);
-    expr_free(and_e);
-    return evd;
+    if (gauss_i) {                                   /* g -> I */
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                         (Expr*[]){expr_new_symbol(gauss_i), expr_new_symbol(SYM_I)}, 2);
+        Expr* ra = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                         (Expr*[]){combined, rule}, 2);
+        combined = evaluate(ra);
+        expr_free(ra);
+    }
+    return combined;
 }
 
 /* ------------------------------------------------------------------ */

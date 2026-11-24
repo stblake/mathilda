@@ -100,5 +100,8 @@ bool  is_series_data(const Expr* e);
 Expr* series_combine_plus(Expr* const* args, size_t n);
 Expr* series_combine_times(Expr* const* args, size_t n);
 Expr* series_power(Expr* base, Expr* exp);
+/* f[s], f a one-argument numeric function, s a SeriesData: the composed
+ * series to s's order, or NULL (the call stays unevaluated). */
+Expr* series_apply_unary(Expr* call);
 
 #endif // SERIES_H
