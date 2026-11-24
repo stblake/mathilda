@@ -1,0 +1,335 @@
+{
+ "generators": [
+  {
+   "class": "R",
+   "seed": 101,
+   "summary": "class R: accepted 60, FriCAS candidates 0, attempts 1522, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 103,
+   "summary": "class T: accepted 31, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 102,
+   "summary": "class T: accepted 37, FriCAS candidates 169, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 105,
+   "summary": "class T: accepted 39, FriCAS candidates 169, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 104,
+   "summary": "class T: accepted 37, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 106,
+   "summary": "class T: accepted 42, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 101,
+   "summary": "class T: accepted 38, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "A",
+   "seed": 106,
+   "summary": "class A: accepted 50, FriCAS candidates 17, attempts 396, escaped aborts 3"
+  },
+  {
+   "class": "A",
+   "seed": 101,
+   "summary": "class A: accepted 50, FriCAS candidates 31, attempts 406, escaped aborts 3"
+  },
+  {
+   "class": "A",
+   "seed": 103,
+   "summary": "class A: accepted 50, FriCAS candidates 27, attempts 531, escaped aborts 9"
+  },
+  {
+   "class": "A",
+   "seed": 102,
+   "summary": "class A: accepted 50, FriCAS candidates 23, attempts 534, escaped aborts 3"
+  },
+  {
+   "class": "A",
+   "seed": 104,
+   "summary": "class A: accepted 50, FriCAS candidates 37, attempts 558, escaped aborts 25"
+  },
+  {
+   "class": "A",
+   "seed": 105,
+   "summary": "class A: accepted 50, FriCAS candidates 39, attempts 618, escaped aborts 8"
+  },
+  {
+   "class": "M",
+   "seed": 105,
+   "summary": "class M: accepted 55, FriCAS candidates 113, attempts 986, escaped aborts 126"
+  },
+  {
+   "class": "M",
+   "seed": 107,
+   "summary": "class M: accepted 55, FriCAS candidates 97, attempts 864, escaped aborts 112"
+  },
+  {
+   "class": "M",
+   "seed": 103,
+   "summary": "class M: accepted 55, FriCAS candidates 143, attempts 1183, escaped aborts 71"
+  },
+  {
+   "class": "M",
+   "seed": 104,
+   "summary": "class M: accepted 55, FriCAS candidates 136, attempts 1168, escaped aborts 179"
+  },
+  {
+   "class": "M",
+   "seed": 101,
+   "summary": "class M: accepted 55, FriCAS candidates 151, attempts 962, escaped aborts 122"
+  },
+  {
+   "class": "B",
+   "seed": 105,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 632, escaped aborts 0"
+  },
+  {
+   "class": "B",
+   "seed": 106,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 635, escaped aborts 31"
+  },
+  {
+   "class": "M",
+   "seed": 108,
+   "summary": "class M: accepted 55, FriCAS candidates 133, attempts 1264, escaped aborts 79"
+  },
+  {
+   "class": "B",
+   "seed": 107,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 499, escaped aborts 0"
+  },
+  {
+   "class": "B",
+   "seed": 108,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 463, escaped aborts 26"
+  },
+  {
+   "class": "B",
+   "seed": 109,
+   "summary": "class B: accepted 40, FriCAS candidates 1, attempts 609, escaped aborts 29"
+  },
+  {
+   "class": "B",
+   "seed": 110,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 710, escaped aborts 29"
+  },
+  {
+   "class": "B",
+   "seed": 111,
+   "summary": "class B: accepted 40, FriCAS candidates 1, attempts 591, escaped aborts 40"
+  },
+  {
+   "class": "B",
+   "seed": 112,
+   "summary": "class B: accepted 40, FriCAS candidates 1, attempts 579, escaped aborts 36"
+  },
+  {
+   "class": "B",
+   "seed": 113,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 569, escaped aborts 15"
+  },
+  {
+   "class": "B",
+   "seed": 114,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 529, escaped aborts 48"
+  },
+  {
+   "class": "M",
+   "seed": 102,
+   "summary": "class M: accepted 55, FriCAS candidates 215, attempts 1152, escaped aborts 52"
+  },
+  {
+   "class": "M",
+   "seed": 109,
+   "summary": "class M: accepted 55, FriCAS candidates 211, attempts 1280, escaped aborts 58"
+  },
+  {
+   "class": "M",
+   "seed": 106,
+   "summary": "class M: accepted 55, FriCAS candidates 256, attempts 1270, escaped aborts 97"
+  },
+  {
+   "class": "M",
+   "seed": 112,
+   "summary": "class M: accepted 55, FriCAS candidates 257, attempts 1221, escaped aborts 190"
+  },
+  {
+   "class": "M",
+   "seed": 111,
+   "summary": "class M: accepted 55, FriCAS candidates 262, attempts 1348, escaped aborts 59"
+  },
+  {
+   "class": "M",
+   "seed": 110,
+   "summary": "class M: accepted 55, FriCAS candidates 320, attempts 1535, escaped aborts 251"
+  },
+  {
+   "class": "B",
+   "seed": 101,
+   "summary": "class B: accepted 40, FriCAS candidates 824, attempts 2819, escaped aborts 467"
+  },
+  {
+   "class": "B",
+   "seed": 104,
+   "summary": "class B: accepted 40, FriCAS candidates 950, attempts 3041, escaped aborts 431"
+  },
+  {
+   "class": "B",
+   "seed": 102,
+   "summary": "class B: accepted 40, FriCAS candidates 1130, attempts 3698, escaped aborts 430"
+  },
+  {
+   "class": "B",
+   "seed": 103,
+   "summary": "class B: accepted 40, FriCAS candidates 1511, attempts 5004, escaped aborts 772"
+  },
+  {
+   "class": "T",
+   "seed": 108,
+   "summary": "class T: accepted 39, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 110,
+   "summary": "class T: accepted 46, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 111,
+   "summary": "class T: accepted 43, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 112,
+   "summary": "class T: accepted 36, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 114,
+   "summary": "class T: accepted 49, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 113,
+   "summary": "class T: accepted 46, FriCAS candidates 169, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 109,
+   "summary": "class T: accepted 41, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "T",
+   "seed": 107,
+   "summary": "class T: accepted 33, FriCAS candidates 170, attempts 7500, escaped aborts 0"
+  },
+  {
+   "class": "B",
+   "seed": 115,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 512, escaped aborts 31"
+  },
+  {
+   "class": "B",
+   "seed": 117,
+   "summary": "class B: accepted 40, FriCAS candidates 1, attempts 574, escaped aborts 19"
+  },
+  {
+   "class": "B",
+   "seed": 116,
+   "summary": "class B: accepted 40, FriCAS candidates 0, attempts 630, escaped aborts 29"
+  },
+  {
+   "class": "A",
+   "seed": 107,
+   "summary": "class A: accepted 50, FriCAS candidates 18, attempts 478, escaped aborts 98"
+  },
+  {
+   "class": "A",
+   "seed": 109,
+   "summary": "class A: accepted 50, FriCAS candidates 29, attempts 498, escaped aborts 97"
+  },
+  {
+   "class": "A",
+   "seed": 108,
+   "summary": "class A: accepted 50, FriCAS candidates 22, attempts 533, escaped aborts 98"
+  },
+  {
+   "class": "M",
+   "seed": 114,
+   "summary": "class M: accepted 55, FriCAS candidates 94, attempts 1075, escaped aborts 166"
+  },
+  {
+   "class": "M",
+   "seed": 113,
+   "summary": "class M: accepted 55, FriCAS candidates 41, attempts 1413, escaped aborts 550"
+  }
+ ],
+ "fricas": {
+  "R": {
+   "candidates": 0,
+   "accepted": 0
+  },
+  "T": {
+   "candidates": 2377,
+   "accepted": 0
+  },
+  "A": {
+   "candidates": 243,
+   "accepted": 0
+  },
+  "M": {
+   "candidates": 2416,
+   "accepted": 14
+  },
+  "B": {
+   "candidates": 111,
+   "accepted": 0
+  }
+ },
+ "reruns": [],
+ "kept": {
+  "R": {
+   "available": 54,
+   "kept": 50,
+   "fricas_only": 0
+  },
+  "T": {
+   "available": 298,
+   "kept": 250,
+   "fricas_only": 0
+  },
+  "A": {
+   "available": 293,
+   "kept": 250,
+   "fricas_only": 0
+  },
+  "M": {
+   "available": 583,
+   "kept": 550,
+   "fricas_only": 6
+  },
+  "B": {
+   "available": 504,
+   "kept": 450,
+   "fricas_only": 0
+  }
+ },
+ "plan": {
+  "name": "261",
+  "ratio": 4,
+  "attempts_per_case": 150,
+  "excluded_integrands": 3240
+ }
+}

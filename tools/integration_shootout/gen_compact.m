@@ -28,6 +28,14 @@ seed = ToExpression[Environment["SEED"]]; If[!IntegerQ[seed], seed = 1];
 cls = Environment["CLASS"]; If[!StringQ[cls], cls = "A"];
 quota = ToExpression[Environment["QUOTA"]]; If[!IntegerQ[quota], quota = 20];
 gname = Environment["GRAMMAR"]; If[!StringQ[gname], gname = cls];
+(* the leaf-count ratio an accepted F must reach over f: RATIO=2 (the default,
+   benchmark 257) accepts LeafCount[Fc] >= 2 LeafCount[f]; any other RATIO is
+   strict, LeafCount[Fc] > RATIO LeafCount[f] (benchmark 261: 4 LeafCount[D[F]] <
+   LeafCount[F]).  ATTEMPTS is the attempt cap per accepted case (40). *)
+ratio = ToExpression[Environment["RATIO"]]; If[!NumericQ[ratio], ratio = 2];
+attFactor = ToExpression[Environment["ATTEMPTS"]]; If[!IntegerQ[attFactor], attFactor = 40];
+ratioOK[lF_, lf_] := If[ratio === 2, lF >= 2 lf, lF > ratio lf];
+fair = ratio =!= 2;
 SeedRandom[seed + 1000 First[ToCharacterCode[cls]]];
 here = DirectoryName[$InputFileName];
 Get[FileNameJoin[{here, "families.m"}]];
@@ -124,10 +132,13 @@ emitCand[id_, f_] := Module[{pts, fv},
       Print["CAND\t", id, "\t", cls, "\t", "c" <> cls, "\t", "elem", "\t", ToString[InputForm[f]], "\tNone\t",
         ToString[InputForm[pts]], "\t", ToString[InputForm[fv]], "\t", ToString[FullForm[f]], "\t", LeafCount[f]]]]];
 
-accepted = 0; attempts = 0; ncand = 0; maxAttempts = 40 quota;
+accepted = 0; attempts = 0; ncand = 0; nescaped = 0; maxAttempts = attFactor quota;
 While[accepted < quota && attempts < maxAttempts,
   attempts++;
-  Module[{f, F, Fc, nonelem = False, id},
+  (* An abort that escapes its TimeConstrained (an Integrate that cached a
+     value with Abort[] inside during an inner timeout and reused it later, a
+     known evaluator bug, tasks/todo.md) costs this attempt, not the run. *)
+  CheckAbort[Module[{f, F, Fc, nonelem = False, id},
     f = Quiet[TimeConstrained[compactForm[grammar[gname][]], 10, $Aborted]];
     If[f === $Aborted || FreeQ[f, x] || !contentOK[f] || LeafCount[f] > 120 || KeyExistsQ[emitted, f], Continue[]];
     F = Quiet[Check[TimeConstrained[Integrate[f, x], 30, $Aborted], nonelem = True; $Failed, {Integrate::nonelem}]];
@@ -135,11 +146,17 @@ While[accepted < quota && attempts < maxAttempts,
     id = StringJoin["c", cls, "-", ToString[seed], "-", ToString[attempts]];
     If[F === $Aborted || !FreeQ[F, Integrate],
       emitCand[id, f]; ncand++; Continue[]];
-    If[!elementaryQ[F], Continue[]];
+    (* fair mode (every RATIO but 2): an integrand Mathilda answers wrongly or
+       only with special functions goes to FriCAS like an unanswered one, so a
+       Mathilda miss is not silently left out of the corpus *)
+    If[!elementaryQ[F], If[fair, emitCand[id, f]; ncand++]; Continue[]];
     Fc = Quiet[TimeConstrained[compactForm[F], 10, F]];
-    If[LeafCount[Fc] < 2 LeafCount[f], Continue[]];
-    If[!TrueQ[Quiet[TimeConstrained[PossibleZeroQ[D[F, x] - f], 20, False]]], Continue[]];
+    If[!ratioOK[LeafCount[Fc], LeafCount[f]], Continue[]];
+    If[!TrueQ[Quiet[TimeConstrained[PossibleZeroQ[D[F, x] - f], 20, False]]],
+      If[fair, emitCand[id, f]; ncand++]; Continue[]];
     With[{before = Length[emitted]},
       emit[id, cls, "c" <> cls <> "-mathilda", "elem", f, F];
-      If[Length[emitted] > before, accepted++]]]];
-WriteString["stderr", "class ", cls, ": accepted ", accepted, ", FriCAS candidates ", ncand, ", attempts ", attempts, "\n"];
+      If[Length[emitted] > before, accepted++]]],
+    nescaped++; WriteString["stderr", "escaped abort at attempt ", attempts, "\n"]]];
+WriteString["stderr", "class ", cls, ": accepted ", accepted, ", FriCAS candidates ", ncand, ", attempts ", attempts,
+  ", escaped aborts ", nescaped, "\n"];

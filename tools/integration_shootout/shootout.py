@@ -10,11 +10,16 @@ RUNS.  Each case of corpus.tsv runs through
   * Mathilda: Method -> Automatic and ParallelMixedTower for every class, plus
     RischTranscendental (classes R, T), Trager (A), Bronstein (M, B);
   * FriCAS, Maxima, sympy and the Wolfram Language (wolframscript), when installed.
-Every system verifies its own answer (adapters.py), so no answer is translated.
+Every system verifies its own answer (adapters.py).  An answer that fails or
+cannot complete its own check is then translated into Mathilda and judged by
+the same test Mathilda's answers get, PossibleZeroQ[D[F, x] - f]
+(crosscheck.py): zero -> verified, nonzero -> WRONG, anything else ->
+UNVERIFIED.  So "wrong" means the same thing for every system.
 
 PER-RUN CLASS:  ELEM (verified, elementary) | SPECIAL (verified, uses a
 non-elementary special function) | WRONG (an answer whose derivative check
-fails) | UNVERIFIED (an answer the system could not evaluate at the points) |
+fails its own check AND PossibleZeroQ in Mathilda) | UNVERIFIED (neither check
+could decide, or the answer would not translate) |
 CERT (Mathilda proved it non-elementary: Integrate::nonelem) | UNEVAL |
 TIMEOUT | ERROR.
 
@@ -53,11 +58,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import adapters as A  # noqa: E402
 import translate as T  # noqa: E402
+import crosscheck as X  # noqa: E402
 
 BENCH = os.path.join(A.REPO, "benchmarks", "256-integration-shootout")
 CORPUS = os.path.join(BENCH, "corpus.tsv")
-EXTERNAL = ("fricas", "maxima", "sympy", "wolfram")
-LABEL = {"fricas": "FriCAS", "maxima": "Maxima", "sympy": "sympy", "wolfram": "Wolfram"}
+EXTERNAL = ("fricas", "axiom", "maxima", "sympy", "wolfram")
+LABEL = {"fricas": "FriCAS", "axiom": "Axiom", "maxima": "Maxima", "sympy": "sympy", "wolfram": "Wolfram"}
 METHODS = {"R": ["Automatic", "ParallelMixedTower", "RischTranscendental"],
            "T": ["Automatic", "ParallelMixedTower", "RischTranscendental"],
            "A": ["Automatic", "ParallelMixedTower", "Trager"],
@@ -101,13 +107,20 @@ def run_label(system, method):
     return f"Mathilda:{method}" if system == "mathilda" else LABEL[system]
 
 
-def classify_run(system, raw):
+def classify_run(system, raw, xv=None):
+    """xv: the Mathilda cross-check verdict, for an answer that failed its own check."""
     st = raw["status"]
     if st == "UNEVAL":
         return "CERT" if raw.get("cert") else "UNEVAL"
     if st != "ANSWER":
         return st
     nums = raw.get("nums") or []
+    if xv is not None:
+        if xv == "nonzero":
+            return "WRONG"
+        if xv != "zero":
+            return "UNVERIFIED"
+        nums = ["ok"]
     if "bad" in nums:
         return "WRONG"
     if "ok" not in nums:
@@ -184,6 +197,8 @@ def main():
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--update-baseline", action="store_true")
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--no-crosscheck", action="store_true",
+                    help="judge answers by their own system's check only (no PossibleZeroQ cross-check)")
     ap.add_argument("--bench", default=None, help="the benchmark folder (corpus.tsv, results/, REPORT.md, "
                     "baseline.json); default benchmarks/256-integration-shootout")
     ap.add_argument("--report", default=None, help="REPORT.md path (default: the benchmark folder; "
@@ -260,6 +275,7 @@ def main():
     t0 = datetime.datetime.now()
     with cf.ThreadPoolExecutor(max_workers=a.jobs) as ex:
         list(ex.map(work, units))
+    xc = {} if a.no_crosscheck else crosscheck(cases, systems, methods, cache, ckey, mstamp, tmpdir, a.jobs)
     wall = (datetime.datetime.now() - t0).total_seconds()
 
     # assemble
@@ -273,8 +289,11 @@ def main():
                 if r is None:
                     continue
                 lab = run_label(s, m)
-                runs[lab] = classify_run(s, r)
+                xv = xc.get(ckey(s, m, c))
+                runs[lab] = classify_run(s, r, xv)
                 raw[lab] = {k: r.get(k) for k in ("status", "time", "nums", "cert", "detail")}
+                if xv is not None:
+                    raw[lab]["xcheck"] = xv
                 raw[lab]["text"] = (r.get("text") or "")[:300]
         rows.append({"id": c["id"], "class": c["class"], "family": c["family"], "expect": c["expect"],
                      "f": c["f"], "runs": runs, "raw": raw, "verdicts": verdicts(c, runs)})
@@ -311,6 +330,52 @@ def main():
     sys.exit(1 if (a.check and fail) else 0)
 
 
+def crosscheck(cases, systems, methods, cache, ckey, mstamp, tmpdir, jobs):
+    """Judge, in Mathilda by PossibleZeroQ, every answer that failed its own check.
+    Returns {run ckey: verdict}.  Verdicts are cached in the run cache under
+    crosscheck.ckey (keyed by the Mathilda stamp and the answer text)."""
+    todo, out = [], {}
+    for c in cases:
+        for s in systems:
+            ms = [m for m in ALL_METHODS if m in methods and m in METHODS[c["class"]]] if s == "mathilda" else [None]
+            for m in ms:
+                k = ckey(s, m, c)
+                r = cache.get(k)
+                if r is None or not X.needs_check(r):
+                    continue
+                if s == "mathilda" and r.get("nums") == ["bad"]:
+                    continue        # garbage ($Failed / a Private` symbol): wrong as it stands
+                xk = X.ckey(k + "|" + mstamp, r.get("text") or "")
+                hit = cache.get(xk)
+                if hit is not None:
+                    out[k] = hit["verdict"]
+                    continue
+                try:
+                    wl = r["text"] if s in ("mathilda", "wolfram") else X.to_wl(s, r["text"])
+                except X.Untranslatable as e:
+                    cache.put(xk, {"id": c["id"], "verdict": "untranslatable", "detail": str(e)})
+                    out[k] = "untranslatable"
+                    continue
+                todo.append((k, xk, c, wl))
+    if not todo:
+        return out
+    print(f"  cross-check: {len(todo)} answers to judge in Mathilda", flush=True)
+    chunks = [todo[i:i + 10] for i in range(0, len(todo), 10)]
+
+    def work(chunk):
+        # ids inside a batch must be unique: number the items
+        items = [(f"x{j}", t[2]["f"], t[3]) for j, t in enumerate(chunk)]
+        got = X.run_batch(items, tmpdir)
+        for j, (k, xk, c, wl) in enumerate(chunk):
+            v = got.get(f"x{j}", "undecided")
+            cache.put(xk, {"id": c["id"], "verdict": v, "detail": ""})
+            out[k] = v
+
+    with cf.ThreadPoolExecutor(max_workers=jobs) as ex:
+        list(ex.map(work, chunks))
+    return out
+
+
 def mode_key(a):
     return "quick" if a.quick else "full"
 
@@ -337,7 +402,10 @@ def write_report(path, rows, labels, wall, a):
          f"{len(rows)} cases, timeout {a.timeout} s per run, wall {wall / 60:.1f} min. "
          "Every answer was verified by its own system (derivative at three points, 10^-20). "
          "`elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved "
-         "non-elementary; `wrong`: an answer failing its own check.", ""]
+         "non-elementary; `wrong`: an answer failing its own check AND PossibleZeroQ[D[F, x] - f] in "
+         "Mathilda -- the test Mathilda's own answers get (an answer failing its own check is translated "
+         "into Mathilda and judged there; one PossibleZeroQ proves zero counts as verified, one it "
+         "cannot decide or that does not translate as unverified).", ""]
     classes = [c for c in "RTAMB" if any(r["class"] == c for r in rows)]
     name = {"R": "rational", "T": "transcendental", "A": "algebraic", "M": "mixed (radical on top)",
             "B": "radical at the bottom"}
@@ -363,6 +431,23 @@ def write_report(path, rows, labels, wall, a):
         med = f"{statistics.median(ts):.2f}" if ts else "-"
         L.append(f"| {lab} | {cnt['ELEM']} | {cnt['SPECIAL']} | {cnt['CERT']} | {cnt['UNEVAL']} | "
                  f"{cnt['TIMEOUT']} | {cnt['ERROR']} | {cnt['UNVERIFIED']} | {cnt['WRONG']} | {med} |")
+    xrows = [(lab, r["raw"][lab]) for r in rows for lab in labels
+             if lab in r["raw"] and "xcheck" in r["raw"][lab]]
+    if xrows:
+        L += ["", "## Cross-check in Mathilda (answers that failed their own check)", "",
+              "Own check: `bad` = a sample point failed; `na` = no point could be evaluated. "
+              "Verdict of PossibleZeroQ[D[F, x] - f] in Mathilda.", "",
+              "| run | own | n | zero (verified) | nonzero (wrong) | undecided | untranslatable |",
+              "|---|---|---|---|---|---|---|"]
+        for lab in labels:
+            for own in ("bad", "na"):
+                vs = [x["xcheck"] for l2, x in xrows if l2 == lab and
+                      (("bad" in (x.get("nums") or [])) == (own == "bad"))]
+                if not vs:
+                    continue
+                cc = collections.Counter(v if v in ("zero", "nonzero", "untranslatable") else "undecided" for v in vs)
+                L.append(f"| {lab} | {own} | {len(vs)} | {cc['zero']} | {cc['nonzero']} | {cc['undecided']} | "
+                         f"{cc['untranslatable']} |")
     # by family, closed for the best Mathilda run vs each external
     L += ["", "## Closed by family (Mathilda = best of its methods)", "",
           "| class | family | n | Mathilda | " + " | ".join(l for l in labels if not l.startswith("Mathilda:")) + " |",

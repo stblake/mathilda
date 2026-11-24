@@ -1,3 +1,22 @@
+## Benchmark 261 (2026-11-24, Mathilda v0.6714, FriCAS 1.3.6)
+
+261 is 1550 new random integrands, each of whose antiderivative is more than four
+times its LeafCount. They are spread over five classes: R 50, T 250, A 250, M 550 and
+B 450. 261 ran at v0.6714; the four corpora below ran at v0.6691.
+
+- **Decided:** RischTranscendental, Trager or Bronstein 1547 (100%), Automatic 1549 (100%),
+  FriCAS 1472 (95%). FriCAS falls behind on M, a radical over a Log/Exp tower: 481 of 550
+  (87%) against Mathilda's 548 and Automatic's 549. Neither system gave a special-function
+  answer.
+- **One rule for "wrong".** An answer that fails its own system's check, or that its own
+  check cannot evaluate, is translated into Mathilda. It is then judged by
+  `PossibleZeroQ[D[F, x] - f]`, the test Mathilda's answers get.
+  - FriCAS: 97 of its 100 such answers are zero, so FriCAS has no wrong answers on 261.
+    The point check had failed on a branch choice of FriCAS's own `complexNumeric`; the
+    same answers pass the point check at 40 digits in Mathilda.
+  - Axiom: 156 answers are wrong by both checks.
+- **Soundness:** no Mathilda method gives a wrong answer or a false "no".
+
 ## Summary (2026-11-22, Mathilda v0.6691, FriCAS 1.3.6)
 
 The comparison runs on four corpora:

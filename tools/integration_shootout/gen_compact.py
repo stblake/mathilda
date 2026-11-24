@@ -32,6 +32,7 @@ import adapters as A  # noqa: E402
 import translate as T  # noqa: E402
 
 BENCH = os.path.join(A.REPO, "benchmarks", "257-compact-integrals")
+RATIO = 2
 # every accepted case before the per-class quota cut, so --extend sees the
 # surplus a from-scratch run would (corpus.tsv is the cut)
 POOL = os.path.join(BENCH, "gen_pool.tsv")
@@ -44,6 +45,28 @@ SEEDS = {"R": [(1, "R", 100)],
          "A": [(s, "A", 75) for s in (1, 2, 3, 4)],
          "M": [(s, "M", 63) for s in (1, 2, 3, 4)],
          "B": [(s, "B", 34) for s in (1, 2, 3, 4, 5, 6)] + [(s, "B2", 30) for s in range(7, 13)]}
+
+# Benchmark 261 (--plan 261): the follow-on corpus, F at least FOUR times f
+# (strict: 4 LeafCount[f] < LeafCount[compactForm[F]]), weighted to the mixed
+# classes M and B (a radical over a Log/Exp tower, and below one), with fresh
+# seeds (101+) and the integrands of the earlier compact corpora excluded.
+# Per-run quotas carry ~20% surplus for the content reclassification and the
+# duplicate cut.
+PLANS = {
+    "257": {"bench": "257-compact-integrals", "ratio": 2, "quotas": QUOTAS, "seeds": SEEDS, "attempts": 40},
+    "261": {"bench": "261-compact-integrals-x4", "ratio": 4, "attempts": 150,
+            "quotas": {"R": 50, "T": 250, "A": 250, "M": 550, "B": 450},
+            "seeds": {"R": [(101, "R", 60)],
+                      # seeds past the first build (T 107+, A 107+, M 113+, B2 115+) were added
+                      # with --extend: dedup and the exclusions left T, A, M and B short of quota
+                      "T": [(s, "T", 50) for s in range(101, 115)],
+                      "A": [(s, "A", 50) for s in range(101, 110)],
+                      "M": [(s, "M", 55) for s in range(101, 115)],
+                      "B": [(s, "B", 40) for s in range(101, 105)] + [(s, "B2", 40) for s in range(105, 118)]},
+            "cand_systems": ["fricas", "axiom", "maxima"],
+            "exclude": ["257-compact-integrals/gen_pool.tsv", "256-integration-shootout/corpus.tsv",
+                        "260-radical-bottom/corpus.tsv", "259-transcendental-decision/corpus.tsv"]},
+}
 
 
 def content_class(cls, f):
@@ -58,7 +81,8 @@ def content_class(cls, f):
 
 
 def run_gen(cls, seed, grammar, quota, timeout=6 * 3600):
-    env = dict(os.environ, SEED=str(seed), CLASS=cls, GRAMMAR=grammar, QUOTA=str(quota))
+    env = dict(os.environ, SEED=str(seed), CLASS=cls, GRAMMAR=grammar, QUOTA=str(quota),
+               RATIO=str(RATIO), ATTEMPTS=str(ATTEMPTS))
     p = subprocess.run([A.MATHILDA, "-file", os.path.join(HERE, "gen_compact.m")], env=env,
                        capture_output=True, text=True, timeout=timeout, cwd=A.REPO)
     stat = [ln for ln in p.stderr.splitlines() if ln.startswith("class ")]
@@ -74,32 +98,69 @@ def leaves(text):
     return len(re.findall(r"[A-Za-z_%][A-Za-z0-9_]*|\d+", text))
 
 
+# The systems that may close a candidate Mathilda did not, in order.  Plan 257
+# asked FriCAS alone; plan 261 also asks Axiom and Maxima, so an integrand only
+# one of the other systems closes is in the corpus too (family c<class>-<sys>).
+CAND_SYSTEMS = ["fricas"]
+CAND_RUNNERS = {"fricas": lambda c, t, d: A.run_fricas_one(c, t, d),
+                "axiom": lambda c, t, d: A.run_axiom_one(c, t, d),
+                "maxima": lambda c, t, d: A.run_maxima_one(c, t, d)}
+
+
 def fricas_check(line, tmpdir):
+    """The first system of CAND_SYSTEMS that closes the candidate with a
+    verified, elementary, large enough answer makes it a case."""
     p = line.split("\t")
     pts = p[7].strip("{}")
     c = {"id": p[1], "class": p[2], "fullform": p[9], "tree": T.parse(p[9]),
          "points_list": [s.strip() for s in pts.split(",")]}
-    rec = A.run_fricas_one(c, 30, tmpdir)
-    ok = (rec.get("status") == "ANSWER" and rec.get("nums") and all(n == "ok" for n in rec["nums"])
-          and not T.special_q("fricas", rec.get("text", "")))
     lf = int(p[10]) if len(p) > 10 else 10 ** 6
-    if ok and leaves(rec["text"]) >= 2 * lf:
-        q = p[:10]
-        q[0] = "CASE"
-        q[3] = "c" + p[2] + "-fricas"
-        return "\t".join(q)
+    for system in CAND_SYSTEMS:
+        if not A.available(system):
+            continue
+        try:
+            rec = CAND_RUNNERS[system](c, 30, tmpdir)
+        except Exception:
+            continue
+        ok = (rec.get("status") == "ANSWER" and rec.get("nums") and all(n == "ok" for n in rec["nums"])
+              and not T.special_q(system, rec.get("text", "")))
+        nl = leaves(rec.get("text", ""))
+        if ok and (nl >= 2 * lf if RATIO == 2 else nl > RATIO * lf):
+            q = p[:10]
+            q[0] = "CASE"
+            q[3] = "c" + p[2] + "-" + system
+            return "\t".join(q)
     return None
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=6)
-    ap.add_argument("--out", default=os.path.join(BENCH, "corpus.tsv"))
+    ap.add_argument("--plan", default="257", choices=sorted(PLANS),
+                    help="which corpus: 257 (ratio 2) or 261 (ratio 4, mixed-weighted)")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--timeout", type=float, default=6.0, help="hours per generator run")
     ap.add_argument("--extend", action="store_true",
                     help="reuse the cases of the existing corpus and gen_stats.json; run only the seeds not yet run")
     ap.add_argument("--rerun", default="",
                     help="with --extend: CLS:SEED,... runs to redo (their old cases are dropped first)")
     a = ap.parse_args()
+    global BENCH, POOL, QUOTAS, SEEDS, RATIO, ATTEMPTS
+    plan = PLANS[a.plan]
+    BENCH = os.path.join(A.REPO, "benchmarks", plan["bench"])
+    POOL = os.path.join(BENCH, "gen_pool.tsv")
+    QUOTAS, SEEDS, RATIO, ATTEMPTS = plan["quotas"], plan["seeds"], plan["ratio"], plan["attempts"]
+    CAND_SYSTEMS[:] = plan.get("cand_systems", ["fricas"])
+    if a.out is None:
+        a.out = os.path.join(BENCH, "corpus.tsv")
+    excluded = set()
+    for rel in plan.get("exclude", []):
+        path = os.path.join(A.REPO, "benchmarks", rel)
+        if os.path.exists(path):
+            for ln in open(path).read().splitlines():
+                q = ln.split("\t")
+                if len(q) > 5 and q[0] == "CASE":
+                    excluded.add(q[5])
     os.makedirs(BENCH, exist_ok=True)
     stats = {"generators": [], "fricas": {}}
     cases = {c: [] for c in QUOTAS}
@@ -116,17 +177,44 @@ def main():
             m = re.match(r"c([A-Z])-(\d+)-", ln.split("\t")[1])
             if (m.group(1), int(m.group(2))) not in redo:
                 cases[m.group(1)].append(ln)
+    # every finished generator run is kept in parts/<class>-<seed>.tsv (its
+    # summary on the first line): an interrupted build resumes, and its cases
+    # can be read while the others still run
+    parts = os.path.join(BENCH, "parts")
+    os.makedirs(parts, exist_ok=True)
+
+    def take(c, s, lines, stat):
+        stats["generators"].append({"class": c, "seed": s, "summary": stat})
+        print(f"  {c} seed {s}: {stat}", flush=True)
+        for ln in lines:
+            if ln.startswith("CASE\t"):
+                cases[c].append(ln)
+            elif ln.startswith("CAND\t"):
+                candl[c].append(ln)
+
+    todo = []
+    for c in QUOTAS:
+        for (sd, g, q) in SEEDS[c]:
+            if (c, sd) in done:
+                continue
+            pf = os.path.join(parts, f"{c}-{sd}.tsv")
+            if os.path.exists(pf) and not a.extend:
+                lines = open(pf).read().splitlines()
+                take(c, sd, lines[1:], lines[0] + " (resumed)")
+            else:
+                todo.append((c, sd, g, q))
     with cf.ThreadPoolExecutor(a.jobs) as ex:
-        futs = [ex.submit(run_gen, c, s, g, q) for c in QUOTAS for (s, g, q) in SEEDS[c] if (c, s) not in done]
+        futs = [ex.submit(run_gen, c, sd, g, q, int(a.timeout * 3600)) for (c, sd, g, q) in todo]
         for fu in cf.as_completed(futs):
-            c, s, lines, stat = fu.result()
-            stats["generators"].append({"class": c, "seed": s, "summary": stat})
-            print(f"  {c} seed {s}: {stat}", flush=True)
-            for ln in lines:
-                if ln.startswith("CASE\t"):
-                    cases[c].append(ln)
-                elif ln.startswith("CAND\t"):
-                    candl[c].append(ln)
+            c, sd, lines, stat = fu.result()
+            with open(os.path.join(parts, f"{c}-{sd}.tsv"), "w") as fh:
+                fh.write(stat + "\n" + "\n".join(lines) + "\n")
+            take(c, sd, lines, stat)
+    # --extend keeps the candidates of the earlier runs (already checked, not re-run)
+    cpath = os.path.join(BENCH, "candidates.tsv")
+    oldc = open(cpath).read().splitlines() if a.extend and os.path.exists(cpath) else []
+    with open(cpath, "w") as fh:
+        fh.write("\n".join([ln for ln in oldc if ln] + [ln for c in QUOTAS for ln in candl[c]]) + "\n")
     with tempfile.TemporaryDirectory() as tmpdir, cf.ThreadPoolExecutor(a.jobs) as ex:
         for c in QUOTAS:
             got = [r for r in ex.map(lambda ln: fricas_check(ln, tmpdir), candl[c]) if r]
@@ -134,7 +222,7 @@ def main():
             if a.extend:
                 prev = json.load(open(os.path.join(BENCH, "gen_stats.json")))["fricas"].get(c, prev)
             stats["fricas"][c] = {"candidates": prev["candidates"] + len(candl[c]), "accepted": prev["accepted"] + len(got)}
-            print(f"  {c}: FriCAS accepted {len(got)} of {len(candl[c])} candidates", flush=True)
+            print(f"  {c}: {'/'.join(CAND_SYSTEMS)} accepted {len(got)} of {len(candl[c])} candidates", flush=True)
             cases[c].extend(got)
     # reclassify by content: a generated case goes to the class its integrand
     # belongs to (the shootout's method map is per class)
@@ -149,6 +237,7 @@ def main():
     out, seen, pool = [], set(), []
     for c in QUOTAS:
         keep = sorted(cases[c], key=lambda ln: (attempt_no(ln.split("\t")[1]), ln.split("\t")[1]))
+        keep = [ln for ln in keep if ln.split("\t")[5] not in excluded]
         keep = [ln for ln in keep if not (ln.split("\t")[5] in seen or seen.add(ln.split("\t")[5]))]
         stats.setdefault("kept", {})[c] = {"available": len(keep), "kept": min(len(keep), QUOTAS[c]),
                                             "fricas_only": sum(1 for ln in keep[:QUOTAS[c]] if "-fricas\t" in ln)}
@@ -158,6 +247,7 @@ def main():
         fh.write("\n".join(out) + "\n")
     with open(POOL, "w") as fh:
         fh.write("\n".join(pool) + "\n")
+    stats["plan"] = {"name": a.plan, "ratio": RATIO, "attempts_per_case": ATTEMPTS, "excluded_integrands": len(excluded)}
     json.dump(stats, open(os.path.join(BENCH, "gen_stats.json"), "w"), indent=1)
     print(f"wrote {len(out)} cases to {a.out}")
 

@@ -158,7 +158,8 @@ SPECIAL_RE = {
     "mathilda": re.compile(r"\b(Erf|Erfi|Erfc|ExpIntegralEi|ExpIntegralE|LogIntegral|SinIntegral|"
                            r"CosIntegral|SinhIntegral|CoshIntegral|PolyLog|Elliptic\w+|Hypergeometric\w+|"
                            r"AppellF1|Gamma|Fresnel\w+|ProductLog|MeijerG|Beta|InverseJacobi\w+|Jacobi\w+|"
-                           r"Weierstrass\w+|Bessel\w+|Zeta|Piecewise|DifferentialRoot)\["),
+                           r"Weierstrass\w+|Bessel\w+|Zeta|Piecewise|DifferentialRoot|PolyGamma|LerchPhi|"
+                           r"Airy\w+|Struve\w+|Kelvin\w+|Whittaker\w+|InverseErf\w*)\["),
     "sympy": re.compile(r"\b(erf|erfi|erfc|Ei|li|Li|Si|Ci|Shi|Chi|expint|polylog|elliptic_\w+|hyper|"
                         r"meijerg|gamma|uppergamma|lowergamma|fresnel\w|LambertW|besse\w+|zeta|Piecewise|"
                         r"appellf1)\("),
@@ -166,9 +167,11 @@ SPECIAL_RE = {
                          r"hypergeometric|fresnel_\w|lambert_w|bessel_\w+|li\[|%f|beta)\b"),
     "fricas": re.compile(r"\b(erf|erfi|Ei|li|Si|Ci|Shi|Chi|dilog|polylog|ellipticF|ellipticE|ellipticPi|"
                          r"ellipticK|fresnelS|fresnelC|Gamma|lambertW|besselJ|besselY|besselI|besselK|"
-                         r"hypergeometricF|meijerG|weierstrass\w*)\b"),
+                         r"hypergeometricF|meijerG|weierstrass\w*|Beta|digamma|polygamma|riemannZeta|"
+                         r"lerchPhi|airyAi|airyBi|struve\w*|kelvin\w*|whittaker\w*|kummer\w*)\b"),
 }
 SPECIAL_RE["wolfram"] = SPECIAL_RE["mathilda"]
+SPECIAL_RE["axiom"] = SPECIAL_RE["fricas"]   # the same language (FriCAS forked Axiom)
 
 UNEVAL_RE = {
     "mathilda": re.compile(r"\bIntegrate\["),
@@ -177,6 +180,9 @@ UNEVAL_RE = {
     "maxima": re.compile(r"\bintegrate\("),
     "fricas": re.compile(r"\bintegral\(|%A|%B"),
 }
+
+
+UNEVAL_RE["axiom"] = UNEVAL_RE["fricas"]
 
 
 def special_q(system, text):

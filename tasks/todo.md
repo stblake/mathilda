@@ -82,6 +82,34 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
   escape): Simplify's `g_simp_time_budget` / `g_simp_call_deadline` (doubles, not
   restorable by the int-counter registry) are left armed when a jump leaves a Simplify
   that set a TimeConstraint.
+- [ ] EVAL-abort-2 (found 2026-11-24, benchmark 261's generator, v0.6714): aborts still
+  escape under heavy load. Benchmark 261's `--extend` run (gen_compact.m, every attempt in
+  `CheckAbort[... TimeConstrained[Integrate[f, x], 30, $Aborted] ...]`) logged 19-550
+  escaped aborts per run (A seeds 107-109 ~98 each, M seed 113 550/1413). All in the
+  Integrate step, none from the outer 30 s budget (no outer timeout fired). They start only
+  after some prefix (attempt 98-277, timing-dependent), then recur on integrands that
+  finish in 0.06 s in a fresh session (`(3 + x^4)^(3/2)`, `1/Sqrt[-1 + x^3]`), so a
+  stale pending abort (an inner budget's timer firing after its frame has gone?) is the
+  suspect. Replay (Integrate-only, attempts 1-160 of A seed 107, load ~90 on 16 cores):
+  tests/data/eval_abort2/replay_A107.m reproduces it from attempt 98; single-integrand prefixes do not, and
+  k27 (`1/(x Sqrt[2 + x^4])`) -> {98, 100, 133, 146} escaped once under load and not when
+  rerun quiet. Repro needs load (e.g. `yes > /dev/null` x 32) plus the 160-integrand
+  replay. Effect so far: skipped generator attempts only (no mislabelled case); the
+  shootout reruns a case whose batch line is missing in a fresh process.
+
+# PossibleZeroQ: True for an expression it cannot evaluate (2026-11-24)
+
+- [ ] PZQ-root-1 (found 2026-11-24, benchmark 261's cross-check, v0.6714): with
+  `b = Root[(#^2 - Root[#^3 - 2 &, 1]) &, 1]` (a Root over algebraic
+  coefficients, which `N` leaves unevaluated), `PossibleZeroQ[x*b - b]` is
+  True. A false "zero" is a wrong answer: it certifies a perturbed FriCAS
+  antiderivative `F (1 + x/10^6)` of cR-101-423 as correct. Expected: False
+  (x b - b = (x - 1) b, b != 0), or at least not True when no sample
+  evaluates. Fix in the PZQ sampler: an expression with no numeric sample is
+  undecided, never zero; and N[Root] over algebraic coefficients (via the
+  resultant norm) would let it sample. Benchmark 261's crosscheck.py guards
+  against it (True counts only when D[F, x] - f evaluates at two points) and
+  does not translate nested rootOf.
 
 # Kernel fixes for the book-pass findings (started 2026-11-22)
 

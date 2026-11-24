@@ -32,18 +32,24 @@ import translate as T
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TOL_EXP = 20
 VERIFY = 20          # seconds of in-system verification per point, on top of the timeout
-TRUNC = 4000
+TRUNC = int(os.environ.get("SHOOTOUT_TRUNC", "4000"))  # 261 keeps full answers for its report
 
-MATHILDA = os.path.join(REPO, "Mathilda")
+# SHOOTOUT_MATHILDA pins the binary (a long generation run can then survive a rebuild of the tree)
+MATHILDA = os.environ.get("SHOOTOUT_MATHILDA", os.path.join(REPO, "Mathilda"))
 WOLFRAM = (shutil.which("wolframscript")
            or "/Applications/Mathematica.app/Contents/MacOS/wolframscript")
 FRICAS = shutil.which("fricas") or "/opt/local/bin/fricas"
 MAXIMA = shutil.which("maxima") or "/usr/local/bin/maxima"
+# Axiom (Tim Daly's distribution): AXIOMsys needs AXIOM pointing at its tree.
+# FriCAS is a fork of it, so the FriCAS script runs unchanged; only the exit
+# differs ()quit asks for confirmation unless quit is unprotected).
+AXIOM_ROOT = os.environ.get("SHOOTOUT_AXIOM_ROOT", os.path.expanduser("~/axiom/mnt/MACOSX"))
+AXIOM = os.path.join(AXIOM_ROOT, "bin", "AXIOMsys")
 SYMPY_PY = os.environ.get("SHOOTOUT_SYMPY_PYTHON", "/usr/local/bin/python3.11")
 
 
 def available(system):
-    exe = {"mathilda": MATHILDA, "wolfram": WOLFRAM, "fricas": FRICAS,
+    exe = {"mathilda": MATHILDA, "wolfram": WOLFRAM, "fricas": FRICAS, "axiom": AXIOM,
            "maxima": MAXIMA, "sympy": SYMPY_PY}[system]
     if not (exe and os.access(exe, os.X_OK)):
         return False
@@ -52,10 +58,10 @@ def available(system):
     return True
 
 
-def run_proc(cmd, timeout, stdin=None, cwd=REPO):
+def run_proc(cmd, timeout, stdin=None, cwd=REPO, env=None):
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout, cwd=cwd, env=env)
         return p.stdout, p.stderr, False, time.time() - t0
     except subprocess.TimeoutExpired as e:
         dec = (lambda s: s.decode(errors="replace") if isinstance(s, bytes) else (s or ""))
@@ -242,14 +248,21 @@ def fricas_float_abs(s):
         return None
 
 
-def run_fricas_one(c, timeout, tmpdir):
+def run_axiom_one(c, timeout, tmpdir):
+    """Axiom: the FriCAS script and checks, run by AXIOMsys."""
+    return run_fricas_one(c, timeout, tmpdir, system="axiom")
+
+
+def run_fricas_one(c, timeout, tmpdir, system="fricas"):
     from fractions import Fraction
     fd, outfile = tempfile.mkstemp(suffix=".txt", dir=tmpdir)
     os.close(fd)
     os.unlink(outfile)
     f = T.emit(c["tree"], "fricas")
     L = [")set output algebra off", ")set messages type off", ")set messages autoload off",
-         f'tf : TextFile := open("{outfile}", "output")',
+         # "_" is the escape character of Axiom strings (FriCAS no longer
+         # treats it so): a path with "_s" in it opened "s" elsewhere
+         f'tf : TextFile := open("{outfile.replace("_", "__") if system == "axiom" else outfile}", "output")',
          f"f := {f}",
          ")set messages time on",
          "r := integrate(f, x)",
@@ -264,8 +277,13 @@ def run_fricas_one(c, timeout, tmpdir):
         L.append('writeLine!(tf, concat(["NUM ", unparse(convert(sqrt(norm(c)))@InputForm), " ", '
                  'unparse(convert(sqrt(norm(cf)))@InputForm)]))')
         L.append("flush(tf)")
-    L += ["close!(tf)", ")quit"]
-    out, err, to, wall = run_proc([FRICAS, "-nosman"], timeout + 3 * VERIFY, stdin="\n".join(L) + "\n")
+    if system == "axiom":
+        L += ["close!(tf)", ")set quit unprotected", ")quit"]
+        out, err, to, wall = run_proc([AXIOM, "-noclef"], timeout + 3 * VERIFY, stdin="\n".join(L) + "\n",
+                                      env=dict(os.environ, AXIOM=AXIOM_ROOT))
+    else:
+        L += ["close!(tf)", ")quit"]
+        out, err, to, wall = run_proc([FRICAS, "-nosman"], timeout + 3 * VERIFY, stdin="\n".join(L) + "\n")
     lines = open(outfile).read().splitlines() if os.path.exists(outfile) else []
     if os.path.exists(outfile):
         os.unlink(outfile)
@@ -285,7 +303,7 @@ def run_fricas_one(c, timeout, tmpdir):
     if r == "r" or r.startswith("["):
         rec.update(status="ERROR", detail="integrate failed" if r == "r" else "list of results")
         return rec
-    if T.uneval_q("fricas", r):
+    if T.uneval_q(system, r):
         rec["status"] = "UNEVAL"
         return rec
     rec["status"] = "ANSWER"
@@ -302,6 +320,14 @@ def run_fricas_one(c, timeout, tmpdir):
     if "ok" not in rec["nums"] and "bad" not in rec["nums"] and "ZERO 0" in lines:
         rec["nums"] = ["ok"] * len(c["points_list"])
         rec["detail"] = "verified exactly (normalize)"
+    elif "bad" in rec["nums"] and "ZERO 0" in lines:
+        # FriCAS's own exact simplifier proves D(r, x) = f as an identity of the
+        # differential field, while the point check fails: a branch choice of
+        # one of its radicals at the sample points.  Counted as verified (the
+        # benefit of the doubt goes to the other system), but recorded apart.
+        rec["detail"] = "verified exactly (normalize); point check failed at " + \
+            ",".join(str(i + 1) for i, v in enumerate(rec["nums"]) if v == "bad") + " (branch)"
+        rec["nums"] = ["ok"] * len(c["points_list"])
     return rec
 
 
@@ -376,6 +402,8 @@ def run_system(system, cases, timeout, tmpdir, method=None):
         return run_sympy(cases, timeout, tmpdir)
     if system == "fricas":
         return run_per_case(run_fricas_one, cases, timeout, tmpdir)
+    if system == "axiom":
+        return run_per_case(run_axiom_one, cases, timeout, tmpdir)
     if system == "maxima":
         return run_per_case(run_maxima_one, cases, timeout, tmpdir)
     raise ValueError(system)
