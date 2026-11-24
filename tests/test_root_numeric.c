@@ -158,10 +158,15 @@ static void test_bring_quintic_200_digits(void) {
 /* ------------------------------------------------------------------ */
 
 static void test_squarefree_multiplicity(void) {
-    /* (x^2 - 2)^3 squarefree radical is x^2 - 2; k=1 -> -sqrt(2). */
+    /* (x^2 - 2)^3: Root numbers its six roots with multiplicity (Root#1 of
+     * the 2026-11 audit), -sqrt(2) three times then sqrt(2) three times. */
     check_true("Abs[N[Root[Function[(#1^2 - 2)^3], 1], 20] - "
                "(-1.4142135623730950488)] < 1.*^-15");
-    check_true("Abs[N[Root[Function[(#1^2 - 2)^3], 2], 20] - "
+    check_true("Abs[N[Root[Function[(#1^2 - 2)^3], 3], 20] - "
+               "(-1.4142135623730950488)] < 1.*^-15");
+    check_true("Abs[N[Root[Function[(#1^2 - 2)^3], 4], 20] - "
+               "1.4142135623730950488] < 1.*^-15");
+    check_true("Abs[N[Root[Function[(#1^2 - 2)^3], 6], 20] - "
                "1.4142135623730950488] < 1.*^-15");
 }
 

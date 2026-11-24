@@ -960,6 +960,94 @@ static bool root_body_has_complex(const Expr* e) {
     return false;
 }
 
+/* A machine root value (Real, or Complex of numbers) as two doubles. */
+static bool root_value_to_cdouble(const Expr* e, double* re, double* im) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) { *re = e->data.real; *im = 0.0; return true; }
+    if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; *im = 0.0; return true; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex
+        && e->data.function.arg_count == 2) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        double x, y;
+        if (a->type == EXPR_REAL) x = a->data.real;
+        else if (a->type == EXPR_INTEGER) x = (double)a->data.integer; else return false;
+        if (b->type == EXPR_REAL) y = b->data.real;
+        else if (b->type == EXPR_INTEGER) y = (double)b->data.integer; else return false;
+        *re = x; *im = y;
+        return true;
+    }
+    return false;
+}
+
+/* The distinct roots of rad (canonical order) at machine precision; false if
+ * any fails.  re/im hold rad->deg entries. */
+static bool root_all_machine(const ZUPoly* rad, double* re, double* im) {
+    for (int j = 1; j <= rad->deg; j++) {
+        Expr* v = solve_root_at_precision(rad, j, (mpfr_prec_t)DBL_MANT_DIG, true);
+        bool ok = root_value_to_cdouble(v, &re[j - 1], &im[j - 1]);
+        expr_free(v);
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/* Root#1: map k, an index into the roots of p counted with multiplicity, to
+ * the index of the same root among the distinct roots of rad = rad(p).  The
+ * canonical order lists equal roots together, so it suffices to know each
+ * distinct root's multiplicity m_j:  m_j = 1 + #{i >= 1 : r_j is a root of
+ * g_i},  g_1 = gcd(p, p'),  g_{i+1} = gcd(g_i, g_i').  The roots of rad(g_i)
+ * are exactly a subset of those of rad, so each is matched to its nearest
+ * distinct root (they are separated by far more than machine rounding).
+ * Returns 0 on failure. */
+static int64_t root_distinct_index(const ZUPoly* p, const ZUPoly* rad, int64_t k) {
+    int m = rad->deg;
+    double* re = (double*)malloc(sizeof(double) * (size_t)m);
+    double* im = (double*)malloc(sizeof(double) * (size_t)m);
+    int* mult = (int*)malloc(sizeof(int) * (size_t)m);
+    double* gre = (double*)malloc(sizeof(double) * (size_t)m);
+    double* gim = (double*)malloc(sizeof(double) * (size_t)m);
+    int64_t out = 0;
+    bool ok = re && im && mult && gre && gim && root_all_machine(rad, re, im);
+    for (int j = 0; ok && j < m; j++) mult[j] = 1;
+    ZUPoly* dp = ok ? zupoly_derivative(p) : NULL;
+    ZUPoly* g = ok ? zupoly_gcd(p, dp) : NULL;
+    if (dp) zupoly_free(dp);
+    while (ok && g && g->deg >= 1) {
+        ZUPoly* rg = zupoly_squarefree_part(g);
+        if (rg->deg > m || !root_all_machine(rg, gre, gim)) ok = false;
+        for (int t = 0; ok && t < rg->deg; t++) {
+            int best = -1;
+            double bd = 0.0;
+            for (int j = 0; j < m; j++) {
+                double d = hypot(gre[t] - re[j], gim[t] - im[j]);
+                if (best < 0 || d < bd) { best = j; bd = d; }
+            }
+            mult[best]++;
+        }
+        zupoly_free(rg);
+        ZUPoly* dg = zupoly_derivative(g);
+        ZUPoly* gn = zupoly_gcd(g, dg);
+        zupoly_free(dg);
+        zupoly_free(g);
+        g = gn;
+    }
+    if (g) zupoly_free(g);
+    if (ok) {
+        int64_t total = 0;
+        for (int j = 0; j < m; j++) total += mult[j];
+        int64_t cum = 0;
+        /* the multiplicities must account for every root of p */
+        for (int j = 0; total == p->deg && j < m; j++) {
+            cum += mult[j];
+            if (k <= cum) { out = j + 1; break; }
+        }
+    }
+    free(re); free(im); free(mult); free(gre); free(gim);
+    return out;
+}
+
 static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec) {
     if (root_trans_is_object(root_expr))            /* Root[{f, x0}] */
         return root_trans_numericalize(root_expr, spec);
@@ -987,6 +1075,20 @@ static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec)
         }
         /* Squarefree radical. */
         ZUPoly* p = zupoly_squarefree_part(p_raw);
+        if (p->deg < p_raw->deg) {
+            /* Root#1: Root[f, k] numbers the deg f roots of f counted with
+             * multiplicity, but k indexed the distinct roots of rad(f)
+             * (Root[#^2 (# - 1) &, 2] gave 1., k = 3 was out of range). */
+            if (k < 1 || k > p_raw->deg) {
+                root_warn("indx", "index k=%lld is out of range 1..%d.",
+                          (long long)k, p_raw->deg);
+                zupoly_free(p); zupoly_free(p_raw);
+                return NULL;
+            }
+            int64_t kd = root_distinct_index(p_raw, p, k);
+            if (kd < 1) { zupoly_free(p); zupoly_free(p_raw); return NULL; }
+            k = kd;
+        }
         zupoly_free(p_raw);
 
         /* Up to 3 escalations on basin-verify failure. */

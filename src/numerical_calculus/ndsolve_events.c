@@ -291,8 +291,12 @@ void nd_events_begin(NdProblem* P, double t0, const double* Y0) {
  * b (fired, value fb) by a safeguarded Illinois iteration; returns the fired
  * end of the final bracket.  Ys is scratch for the state. */
 static double ev_solve(NdProblem* P, NdEvent* v, double a, double fa, double b, double fb,
-                       int sb, NdEvAdvance adv, void* ctx, double* Ys, int* nadv) {
+                       int sb, NdEvAdvance adv, void* ctx, double* Ys, int* nadv,
+                       bool* jump) {
     int last = 0;               /* +1: b moved last, -1: a moved last         */
+    double ga = fa, gb = fb;    /* true values at the bracket ends (fa/fb are
+                                   Illinois-scaled)                            */
+    bool certain = true;        /* every probe evaluated                      */
     double w4 = fabs(b - a);    /* bracket width four iterations ago          */
     bool bisect = (v->kind == EVK_BOOL);
     bool force_mid = false;     /* slow progress: take one bisection         */
@@ -310,17 +314,23 @@ static double ev_solve(NdProblem* P, NdEvent* v, double a, double fa, double b, 
         (*nadv)++;
         if (!adv(ctx, c, Ys) || !ev_value(P, v, c, Ys, &gc, &tc)) {
             /* unevaluable inside the step: fall back to bisection on b */
-            b = c; fb = 0.5 * fb; bisect = true; continue;
+            b = c; fb = 0.5 * fb; bisect = true; certain = false; continue;
         }
-        if (v->kind == EVK_ZERO && gc == 0.0) { b = c; break; }
-        if (ev_fired_side(v, gc, tc, sb)) { b = c; fb = gc; if (last == 1) fa *= 0.5; last = 1; }
-        else                               { a = c; fa = gc; if (last == -1) fb *= 0.5; last = -1; }
+        if (v->kind == EVK_ZERO && gc == 0.0) { b = c; gb = 0.0; break; }
+        if (ev_fired_side(v, gc, tc, sb)) { b = c; fb = gc; gb = gc; if (last == 1) fa *= 0.5; last = 1; }
+        else                               { a = c; fa = gc; ga = gc; if (last == -1) fb *= 0.5; last = -1; }
         force_mid = false;
         if (!bisect && (it & 3) == 3) {
             if (fabs(b - a) > 0.5 * w4) force_mid = true;
             w4 = fabs(b - a);
         }
     }
+    /* WhenEvent#1: a sign change of g = lhs - rhs is a root only if g is
+     * continuous there.  A jump (Mod[t, 1] - 1/2 at an integer) leaves the
+     * collapsed bracket with |g| ~ the jump at both ends, where a root leaves
+     * values of the order of the bracket width times the slope. */
+    *jump = v->kind == EVK_ZERO && certain
+         && fmin(fabs(ga), fabs(gb)) > 1e-3 * v->gscale;
     return b;
 }
 
@@ -356,7 +366,9 @@ int nd_events_locate(NdProblem* P, double ta, const double* Ya,
         if (v->kind == EVK_ZERO && gb[i] == 0.0) t = tb;
         else {
             v->gscale = fabs(v->gp) + fabs(gb[i]);
-            t = ev_solve(P, v, ta, v->gp, tb, gb[i], sb, adv, ctx, Ys, &nadv);
+            bool jump = false;
+            t = ev_solve(P, v, ta, v->gp, tb, gb[i], sb, adv, ctx, Ys, &nadv, &jump);
+            if (jump) continue;          /* a discontinuity, not an event */
         }
         if (best < 0 || (t - tbest) * dir < 0.0) { best = (int)i; tbest = t; }
     }
@@ -533,11 +545,13 @@ static bool ev_fired_side_mp(const NdEvent* v, const mpfr_t g, int truth, int sb
 /* MPFR twin of ev_solve; the located (fired-side) time is written to b. */
 static void ev_solve_mp(NdProblem* P, NdEvent* v, mpfr_t a, mpfr_t fa, mpfr_t b, mpfr_t fb,
                         int sb, NdEvAdvanceMp adv, void* ctx, mpfr_t* Ys, long bits, long ubits,
-                        int* nadv) {
+                        int* nadv, bool* jump) {
     int last = 0;
     bool bisect = (v->kind == EVK_BOOL);
-    mpfr_t c, gc, w, tol, num, den, w4;
-    mpfr_inits2(bits, c, gc, w, tol, num, den, w4, (mpfr_ptr)0);
+    bool certain = true;
+    mpfr_t c, gc, w, tol, num, den, w4, ga, gb;
+    mpfr_inits2(bits, c, gc, w, tol, num, den, w4, ga, gb, (mpfr_ptr)0);
+    mpfr_set(ga, fa, MPFR_RNDN); mpfr_set(gb, fb, MPFR_RNDN);
     mpfr_sub(w4, b, a, MPFR_RNDN); mpfr_abs(w4, w4, MPFR_RNDN);
     int maxit = 8 * (int)ubits + 64;
     for (int it = 0; it < maxit; it++) {
@@ -562,15 +576,16 @@ static void ev_solve_mp(NdProblem* P, NdEvent* v, mpfr_t a, mpfr_t fa, mpfr_t b,
         int tc = 0;
         (*nadv)++;
         if (!adv(ctx, c, Ys) || !ev_value_mp(P, v, c, Ys, bits, gc, &tc)) {
-            mpfr_set(b, c, MPFR_RNDN); mpfr_div_2ui(fb, fb, 1, MPFR_RNDN); bisect = true; continue;
+            mpfr_set(b, c, MPFR_RNDN); mpfr_div_2ui(fb, fb, 1, MPFR_RNDN); bisect = true;
+            certain = false; continue;
         }
-        if (v->kind == EVK_ZERO && mpfr_zero_p(gc)) { mpfr_set(b, c, MPFR_RNDN); break; }
+        if (v->kind == EVK_ZERO && mpfr_zero_p(gc)) { mpfr_set(b, c, MPFR_RNDN); mpfr_set_zero(gb, 1); break; }
         if (ev_fired_side_mp(v, gc, tc, sb)) {
-            mpfr_set(b, c, MPFR_RNDN); mpfr_set(fb, gc, MPFR_RNDN);
+            mpfr_set(b, c, MPFR_RNDN); mpfr_set(fb, gc, MPFR_RNDN); mpfr_set(gb, gc, MPFR_RNDN);
             if (last == 1) mpfr_div_2ui(fa, fa, 1, MPFR_RNDN);
             last = 1;
         } else {
-            mpfr_set(a, c, MPFR_RNDN); mpfr_set(fa, gc, MPFR_RNDN);
+            mpfr_set(a, c, MPFR_RNDN); mpfr_set(fa, gc, MPFR_RNDN); mpfr_set(ga, gc, MPFR_RNDN);
             if (last == -1) mpfr_div_2ui(fb, fb, 1, MPFR_RNDN);
             last = -1;
         }
@@ -581,15 +596,22 @@ static void ev_solve_mp(NdProblem* P, NdEvent* v, mpfr_t a, mpfr_t fa, mpfr_t b,
                 mpfr_add(c, a, b, MPFR_RNDN); mpfr_div_2ui(c, c, 1, MPFR_RNDN);
                 (*nadv)++;
                 if (adv(ctx, c, Ys) && ev_value_mp(P, v, c, Ys, bits, gc, &tc)) {
-                    if (ev_fired_side_mp(v, gc, tc, sb)) { mpfr_set(b, c, MPFR_RNDN); mpfr_set(fb, gc, MPFR_RNDN); }
-                    else { mpfr_set(a, c, MPFR_RNDN); mpfr_set(fa, gc, MPFR_RNDN); }
-                }
+                    if (ev_fired_side_mp(v, gc, tc, sb)) { mpfr_set(b, c, MPFR_RNDN); mpfr_set(fb, gc, MPFR_RNDN); mpfr_set(gb, gc, MPFR_RNDN); }
+                    else { mpfr_set(a, c, MPFR_RNDN); mpfr_set(fa, gc, MPFR_RNDN); mpfr_set(ga, gc, MPFR_RNDN); }
+                } else certain = false;
                 mpfr_sub(w, b, a, MPFR_RNDN); mpfr_abs(w, w, MPFR_RNDN);
             }
             mpfr_set(w4, w, MPFR_RNDN);
         }
     }
-    mpfr_clears(c, gc, w, tol, num, den, w4, (mpfr_ptr)0);
+    /* WhenEvent#1: a jump, not a root (see ev_solve). */
+    *jump = false;
+    if (v->kind == EVK_ZERO && certain) {
+        if (mpfr_cmpabs(ga, gb) > 0) mpfr_abs(w, gb, MPFR_RNDN); else mpfr_abs(w, ga, MPFR_RNDN);
+        mpfr_div_2ui(tol, v->gscale_mp, 10, MPFR_RNDN);          /* ~1e-3 */
+        *jump = mpfr_cmp(w, tol) > 0;
+    }
+    mpfr_clears(c, gc, w, tol, num, den, w4, ga, gb, (mpfr_ptr)0);
 }
 
 int nd_events_locate_mp(NdProblem* P, const mpfr_t ta, mpfr_t* Ya,
@@ -635,7 +657,9 @@ int nd_events_locate_mp(NdProblem* P, const mpfr_t ta, mpfr_t* Ya,
             mpfr_add(v->gscale_mp, v->gscale_mp, fa, MPFR_RNDN);
             mpfr_set(a, ta, MPFR_RNDN); mpfr_set(fa, v->gp_mp, MPFR_RNDN);
             mpfr_set(b, tb, MPFR_RNDN); mpfr_set(fb, gb[i], MPFR_RNDN);
-            ev_solve_mp(P, v, a, fa, b, fb, sb, adv, ctx, Ys, bits, ubits, &nadv);
+            bool jump = false;
+            ev_solve_mp(P, v, a, fa, b, fb, sb, adv, ctx, Ys, bits, ubits, &nadv, &jump);
+            if (jump) continue;          /* a discontinuity, not an event */
         }
         mpfr_sub(fa, b, tbest, MPFR_RNDN);
         if (best < 0 || mpfr_sgn(fa) * dir < 0) { best = (int)i; mpfr_set(tbest, b, MPFR_RNDN); }

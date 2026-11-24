@@ -819,7 +819,9 @@ static bool solve_gcd_substituted(Expr* poly, Expr* var, int d, int64_t g,
         u_poly = u_terms[0];
         free(u_terms);
     } else {
+        /* expr_new_function copies the argument array: free ours. */
         u_poly = expr_new_function(mk_sym("Plus"), u_terms, cnt);
+        free(u_terms);
     }
     u_poly = eval_and_free(u_poly);
 

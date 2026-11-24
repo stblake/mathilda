@@ -417,6 +417,51 @@ static bool np_apply_option(Expr* rule, NpOpts* o) {
  *  Entry point                                                        *
  * ------------------------------------------------------------------ */
 
+/* Factors scanned for an exact zero: the first NP_ZERO_SCAN_INF of an infinite
+ * product, up to NP_ZERO_SCAN_FIN of a finite one (a longer finite product is
+ * scanned over its first NP_ZERO_SCAN_FIN factors only). */
+#define NP_ZERO_SCAN_INF 1024
+#define NP_ZERO_SCAN_FIN 100000
+
+/* True when one of the leading factors f(imin + j di) is numerically 0. */
+static bool np_has_zero_factor(Expr* body, Expr* spec) {
+    size_t n = spec->data.function.arg_count;
+    Expr* hi = eval_and_free(expr_copy(spec->data.function.args[n == 2 ? 1 : 2]));
+    long count;
+    if (np_is_infinity(hi)) {
+        count = NP_ZERO_SCAN_INF;
+    } else {
+        Expr* lo = n >= 3 ? eval_and_free(expr_copy(spec->data.function.args[1]))
+                          : expr_new_integer(1);
+        Expr* st = n >= 4 ? eval_and_free(expr_copy(spec->data.function.args[3]))
+                          : expr_new_integer(1);
+        double dlo, dhi, dst;
+        bool ok = np_to_double(lo, &dlo) && np_to_double(hi, &dhi)
+               && np_to_double(st, &dst) && dst != 0.0;
+        expr_free(lo); expr_free(st);
+        if (!ok) { expr_free(hi); return false; }
+        double c = floor((dhi - dlo) / dst + 1e-9) + 1.0;
+        if (!(c >= 1.0)) { expr_free(hi); return false; }
+        count = c > NP_ZERO_SCAN_FIN ? NP_ZERO_SCAN_FIN : (long)c;
+    }
+    expr_free(hi);
+    Expr* table = np_table(np_apply1("N", expr_copy(body)), spec, 0, count - 1);
+    Expr* qt = np_apply1("Quiet", table);
+    Expr* vals = pack_eval_plain(qt);
+    expr_free(qt);
+    bool zero = false;
+    if (vals && vals->type == EXPR_FUNCTION && vals->data.function.head->type == EXPR_SYMBOL
+        && vals->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < vals->data.function.arg_count; i++) {
+            double re, im;
+            if (np_to_complex(vals->data.function.args[i], &re, &im)
+                && re == 0.0 && im == 0.0) { zero = true; break; }
+        }
+    }
+    expr_free(vals);
+    return zero;
+}
+
 Expr* builtin_nprod(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -470,6 +515,14 @@ Expr* builtin_nprod(Expr* res) {
         free(v);
     } else {
         eff_body = expr_copy(body);
+    }
+
+    /* NProduct#1: a zero factor makes the product exactly 0, but Log[0] is
+     * not a number, so the log-sum below failed (NSum::nnum) and the call
+     * stayed unevaluated.  Scan the leading factors first. */
+    if (nspecs == 1 && np_has_zero_factor(body, spec0)) {
+        expr_free(eff_body);
+        return expr_new_real(0.0);
     }
 
     /* Build the inner NSum[Log[eff_body], spec0, <mapped options>].  An

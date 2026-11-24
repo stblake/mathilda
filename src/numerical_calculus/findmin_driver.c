@@ -952,6 +952,41 @@ Expr* builtin_findminimum(Expr* res) {
     return findmin_driver(res, "FindMinimum");
 }
 
+/* FindMaximum minimises -f, so a user-supplied Gradient -> g (the gradient of
+ * f) must become Gradient -> -g for the synthetic FindMinimum (FindMaximum#1:
+ * passing g verbatim pointed every step uphill on -f).  A List gradient is
+ * negated element-wise so it stays a List; Automatic (or a method name) is
+ * copied unchanged.  Returns a fresh option; every other argument is copied. */
+static Expr* fm_negate_gradient_option(const Expr* opt) {
+    if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2
+        || opt->data.function.head->type != EXPR_SYMBOL
+        || (opt->data.function.head->data.symbol.name != SYM_Rule
+            && opt->data.function.head->data.symbol.name != SYM_RuleDelayed))
+        return expr_copy((Expr*)opt);
+    const Expr* lhs = opt->data.function.args[0];
+    const Expr* rhs = opt->data.function.args[1];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Gradient
+        || rhs->type == EXPR_SYMBOL || rhs->type == EXPR_STRING)
+        return expr_copy((Expr*)opt);
+    Expr* neg_rhs;
+    if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
+        && rhs->data.function.head->data.symbol.name == SYM_List) {
+        size_t m = rhs->data.function.arg_count;
+        Expr** el = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+        for (size_t j = 0; j < m; j++) {
+            Expr* t[2] = { expr_new_integer(-1), expr_copy(rhs->data.function.args[j]) };
+            el[j] = expr_new_function(expr_new_symbol(SYM_Times), t, 2);
+        }
+        neg_rhs = expr_new_function(expr_new_symbol(SYM_List), el, m);
+        free(el);
+    } else {
+        Expr* t[2] = { expr_new_integer(-1), expr_copy((Expr*)rhs) };
+        neg_rhs = expr_new_function(expr_new_symbol(SYM_Times), t, 2);
+    }
+    Expr* r[2] = { expr_copy((Expr*)lhs), neg_rhs };
+    return expr_new_function(expr_copy(opt->data.function.head), r, 2);
+}
+
 /* FindMaximum: build FindMinimum[-f, vars, opts...] internally. */
 Expr* builtin_findmaximum(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
@@ -989,7 +1024,9 @@ Expr* builtin_findmaximum(Expr* res) {
     /* Construct synthetic FindMinimum[new_first, vars, opts...]. */
     Expr** new_args = (Expr**)malloc(sizeof(Expr*) * argc);
     new_args[0] = new_first;
-    for (size_t i = 1; i < argc; i++) new_args[i] = expr_copy(res->data.function.args[i]);
+    for (size_t i = 1; i < argc; i++)
+        new_args[i] = (i >= 2) ? fm_negate_gradient_option(res->data.function.args[i])
+                               : expr_copy(res->data.function.args[i]);
     Expr* synthetic = expr_new_function(expr_new_symbol(SYM_FindMinimum), new_args, argc);
     free(new_args);
     /* Drive findmin directly so the diagnostic tag is FindMaximum. */

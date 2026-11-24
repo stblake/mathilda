@@ -2260,6 +2260,18 @@ static Expr* mz_unconstrained_min(const Expr* f, Expr* const* vars, size_t n,
  * each eliminated v = h(point). Returns the full {value, {rules}} over all
  * original variables, or NULL to decline (nothing eliminable, or the reduced
  * problem declines — mz_run then falls back to the un-reduced KKT engine). */
+/* Does `e` hold a non-real number (I, Complex[a, b])? */
+static bool mz_has_complex(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (mz_is_sym(e->data.function.head, SYM_Complex)) return true;
+    if (mz_has_complex(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (mz_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* mz_eliminate_solve(const Expr* f, const Expr* cons,
                                 Expr* const* vars, size_t n,
                                 const char* head, int budget) {
@@ -2282,8 +2294,8 @@ static Expr* mz_eliminate_solve(const Expr* f, const Expr* cons,
     Expr** eexpr = (Expr**)malloc(sizeof(Expr*) * n);   /* their defining exprs */
     size_t ne = 0;
 
-    bool changed = true;
-    while (changed) {
+    bool changed = true, infeasible = false;
+    while (changed && !infeasible) {
         changed = false;
         for (size_t i = 0; i < ncc && !changed; i++) {
             const Expr* c = cc[i];
@@ -2301,6 +2313,24 @@ static Expr* mz_eliminate_solve(const Expr* f, const Expr* cons,
                 vside = V; hside = H; vidx = idx;
             }
             if (!vside) continue;
+            /* Maximize#1: the variables are real.  x == c with c a non-real
+             * number is infeasible (x == I was substituted and the "optimum"
+             * reported at x -> I); a non-real coefficient in a parametric
+             * right side is left to the general engines. */
+            if (mz_has_complex(hside)) {
+                if (!mz_contains_var(hside, vcur, nv)) {
+                    Expr* nq = mz_beval(fn1(SYM_NumericQ, expr_copy((Expr*)hside)), budget);
+                    bool num = nq && mz_is_true(nq);
+                    if (nq) expr_free(nq);
+                    Expr* im = num ? mz_beval(fn1(SYM_PossibleZeroQ,
+                                              fn1(SYM_Im, expr_copy((Expr*)hside))), budget)
+                                   : NULL;
+                    bool real = im && mz_is_true(im);
+                    if (im) expr_free(im);
+                    if (num && !real) { infeasible = true; break; }
+                }
+                continue;
+            }
             Expr* vcopy = expr_copy((Expr*)vside);
             Expr* hcopy = expr_copy((Expr*)hside);
             Expr* vv[1] = { vcopy }; Expr* hh[1] = { hcopy };
@@ -2320,6 +2350,12 @@ static Expr* mz_eliminate_solve(const Expr* f, const Expr* cons,
     }
 
     Expr* result = NULL;
+    if (infeasible) {
+        mth_message(head, "infeas",
+                    "The constraints are infeasible; the feasible region is empty.");
+        result = mz_result_indet(mz_pos_inf(), vars, n);
+        goto done;
+    }
     if (ne == 0) goto done;                 /* nothing eliminated: let KKT run */
 
     /* Solve the reduced problem. */

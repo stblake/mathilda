@@ -206,6 +206,57 @@ static Expr* lt_hyper_to_exp(const Expr* e, const Expr* t, bool* hit) {
     return out;
 }
 
+/* LaplaceTransform#1: the one-sided transform integrates from 0-, so a delta
+ * at the origin counts in full: L[DiracDelta[a t] h(t)] = h(0)/Abs[a];
+ * the defining Integrate over {t, 0, Infinity}
+ * splits the delta at its endpoint and gave 1/2.  `r` is the t-dependent part
+ * (borrowed); NULL when it is not such a product (or h is not plainly
+ * continuous at 0). */
+static Expr* lt_delta_at_origin(const Expr* r, const Expr* t, const Expr* s) {
+    size_t nf = head_is(r, SYM_Times) ? r->data.function.arg_count : 1;
+    Expr* const* fac = head_is(r, SYM_Times) ? r->data.function.args : (Expr* const*)&r;
+    int at = -1;
+    Expr* scale = NULL;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* x = fac[i];
+        if (!(head_is(x, SYM_DiracDelta) && x->data.function.arg_count == 1)) continue;
+        const Expr* arg = x->data.function.args[0];
+        if (at >= 0) { expr_free(scale); return NULL; }   /* two deltas */
+        Expr* u = lt_eval(lt_fn(SYM_Expand, (Expr*[]){ expr_copy((Expr*)arg) }, 1));
+        Expr *q0 = NULL, *q1 = NULL;
+        bool lin = lt_linear(u, t, &q0, &q1);
+        expr_free(u);
+        if (!lin) return NULL;
+        bool zero0 = q0->type == EXPR_INTEGER && q0->data.integer == 0;
+        expr_free(q0);
+        if (!zero0) { expr_free(q1); return NULL; }
+        at = (int)i; scale = q1;
+    }
+    if (at < 0) return NULL;
+    /* h = the other factors, at t = 0 */
+    Expr** hv = malloc(sizeof(Expr*) * (nf ? nf : 1));
+    size_t nh = 0;
+    for (size_t i = 0; i < nf; i++) if ((int)i != at) hv[nh++] = expr_copy(fac[i]);
+    Expr* h = lt_eval(lt_fn(SYM_Times, hv, nh));
+    free(hv);
+    if (sf_contains_head(h, SYM_DiracDelta) || sf_contains_head(h, SYM_HeavisideTheta)
+        || sf_contains_head(h, SYM_UnitStep) || sf_contains_head(h, SYM_Derivative)) {
+        expr_free(h); expr_free(scale); return NULL;
+    }
+    Expr* h0 = lt_eval(lt_fn2(SYM_ReplaceAll, h,
+                              lt_fn2(SYM_Rule, expr_copy((Expr*)t), expr_new_integer(0))));
+    if (lt_has(h0, t) || sf_contains_head(h0, SYM_Indeterminate)
+        || sf_contains_head(h0, SYM_ComplexInfinity) || sf_contains_head(h0, SYM_DirectedInfinity)
+        || (h0->type == EXPR_SYMBOL && (h0->data.symbol.name == SYM_Indeterminate
+                                        || h0->data.symbol.name == SYM_ComplexInfinity))) {
+        expr_free(h0); expr_free(scale); return NULL;
+    }
+    (void)s;
+    return lt_eval(lt_fn2(SYM_Times, h0,
+                          lt_fn2(SYM_Power, lt_fn(SYM_Abs, (Expr*[]){ scale }, 1),
+                                 expr_new_integer(-1))));
+}
+
 static Expr* lt_transform(const Expr* f, const Expr* t, const Expr* s, const Expr* as) {
     bool hyper = false;
     Expr* fx = lt_hyper_to_exp(f, t, &hyper);
@@ -270,6 +321,9 @@ static Expr* lt_transform(const Expr* f, const Expr* t, const Expr* s, const Exp
         expr_free(p0); expr_free(p1);
     } else if ((v_der = lt_derivative(r, t, s)) != NULL) {
         /* 3a. a derivative of an undefined function */
+        out = lt_eval(lt_fn2(SYM_Times, expr_copy(c), v_der));
+    } else if ((v_der = lt_delta_at_origin(r, t, s)) != NULL) {
+        /* 3b. a delta at the origin, taken from 0- */
         out = lt_eval(lt_fn2(SYM_Times, expr_copy(c), v_der));
     } else if (r->type == EXPR_INTEGER && r->data.integer == 1) {
         /* 3. a t-free remainder */

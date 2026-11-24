@@ -14,6 +14,7 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <float.h>
 
 /* ------------------------------------------------------------------ *
  *  Exact real sign oracle                                             *
@@ -156,12 +157,75 @@ bool rru_is_polynomial(const Expr* poly, const Expr* x) {
     return r;
 }
 
+/* Does `e` hold an approximate number? */
+static bool rru_has_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rru_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The expanded terms of the last few polynomials asked about, as a List, so
+ * the rounding scale below costs one evaluation per sample, not an Expand plus
+ * one ReplaceAll per term.  Small direct-mapped cache, entries owned. */
+#define RRU_TERMS_SLOTS 16
+static struct { Expr* poly; Expr* terms; } g_rru_terms[RRU_TERMS_SLOTS];
+
+static const Expr* rru_terms_of(const Expr* poly) {
+    size_t k = (size_t)(expr_hash((Expr*)poly) % RRU_TERMS_SLOTS);
+    if (g_rru_terms[k].poly && expr_eq(g_rru_terms[k].poly, (Expr*)poly))
+        return g_rru_terms[k].terms;
+    Expr* ex = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ expr_copy((Expr*)poly) }, 1));
+    Expr* terms;
+    if (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL
+        && ex->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t nt = ex->data.function.arg_count;
+        Expr** t = malloc(sizeof(Expr*) * (nt ? nt : 1));
+        for (size_t i = 0; i < nt; i++) t[i] = expr_copy(ex->data.function.args[i]);
+        terms = expr_new_function(expr_new_symbol(SYM_List), t, nt);
+        free(t);
+        expr_free(ex);
+    } else {
+        terms = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ ex }, 1);
+    }
+    expr_free(g_rru_terms[k].poly);
+    expr_free(g_rru_terms[k].terms);
+    g_rru_terms[k].poly = expr_copy((Expr*)poly);
+    g_rru_terms[k].terms = terms;
+    return terms;
+}
+
 int rru_poly_sign_at(const Expr* poly, const Expr* x, const Expr* sample) {
     Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_copy((Expr*)x), expr_copy((Expr*)sample) }, 2);
     Expr* val = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
-        (Expr*[]){ expr_copy((Expr*)poly), rule }, 2));
+        (Expr*[]){ expr_copy((Expr*)poly), expr_copy(rule) }, 2));
     int s = rru_sign_of(val);
+    /* Exists#1 / Resolve#1: an inexact polynomial at its own (machine) root is
+     * zero only up to rounding -- x^2 - 2.0 at 1.4142135623730951 is 4.4e-16 --
+     * so the breakpoint cell of x^2 == 2.0 was judged false and Reduce answered
+     * False.  An approximate value within a few ulps of the size of the terms
+     * that produced it is an approximate zero.  Only an inexact sample can be
+     * such a root (the interval samples are exact rationals), which keeps the
+     * check off the common path. */
+    if (val->type == EXPR_REAL && s != 0 && rru_has_inexact(sample)) {
+        const Expr* terms = rru_terms_of(poly);
+        Expr* tot = eval_and_free(expr_new_function(expr_new_symbol(SYM_Total),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Abs),
+                (Expr*[]){ expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                    (Expr*[]){ expr_copy((Expr*)terms), expr_copy(rule) }, 2) }, 1) }, 1));
+        bool ok;
+        double scale = rru_approx_double(tot, &ok);
+        expr_free(tot);
+        if (ok && scale > 0.0 && fabs(val->data.real) <= 64.0 * DBL_EPSILON * scale) s = 0;
+    }
+    expr_free(rule);
     expr_free(val);
     return s;
 }

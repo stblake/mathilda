@@ -234,13 +234,24 @@ static Expr** radical_cubic(Expr* a, Expr* b, Expr* c, Expr* d, size_t* out_n) {
         mk_fn2("Plus", expr_copy(D1), expr_copy(sqrt_inner)),
         mk_rat(1, 2)));
     bool triple_root = false;
-    if (is_int_zero(C_arg)) {
+    /* ToRadicals#1: with inexact coefficients the cancelling branch is a
+     * Real 0. (x^3 - 2.0: D1 = -54., sqrt_inner = 54.), which the exact-zero
+     * test missed, so C collapsed to 0 and every root came out 0.  Take the
+     * other branch whenever this one is a numeric zero or, for real inexact
+     * D1 and sqrt_inner, whenever the two cancel (opposite signs). */
+    bool cancels = C_arg && C_arg->type == EXPR_REAL && C_arg->data.real == 0.0;
+    if (D1->type == EXPR_REAL && sqrt_inner->type == EXPR_REAL
+        && (D1->data.real < 0.0) != (sqrt_inner->data.real < 0.0)
+        && D1->data.real != 0.0 && sqrt_inner->data.real != 0.0)
+        cancels = true;
+    if (is_int_zero(C_arg) || cancels) {
         Expr* alt = eval_and_free(mk_fn2("Times",
             mk_fn2("Plus", expr_copy(D1), mk_neg(expr_copy(sqrt_inner))),
             mk_rat(1, 2)));
         expr_free(C_arg);
         C_arg = alt;
-        if (is_int_zero(C_arg)) triple_root = true;
+        if (is_int_zero(C_arg) || (C_arg->type == EXPR_REAL && C_arg->data.real == 0.0))
+            triple_root = true;
     }
     Expr* C_val = triple_root
         ? mk_int(0)
@@ -704,7 +715,6 @@ static Expr* convert_root_to_radical(const Expr* root_expr) {
         if (to_complex_double(target, &tre, &tim)) {
             idx = pick_closest_root(roots, nroots, tre, tim);
         }
-        expr_free(target);
     }
     if (idx < 0) {
         /* Parametric / symbolic input — root_numericalize cannot
@@ -715,6 +725,7 @@ static Expr* convert_root_to_radical(const Expr* root_expr) {
     if (idx < 0 || (size_t)idx >= nroots) {
         for (size_t i = 0; i < nroots; i++) expr_free(roots[i]);
         free(roots);
+        expr_free(target);
         return NULL;
     }
     Expr* sel = roots[idx];
@@ -722,6 +733,18 @@ static Expr* convert_root_to_radical(const Expr* root_expr) {
         if ((int)i != idx) expr_free(roots[i]);
     }
     free(roots);
+    /* An inexact polynomial's "radical" is just a number, and the radical
+     * formula's rounding (x^3 - 2.0 gives 1.25992 - 2.2e-16 I through the
+     * cube roots of unity) is worse than the Root's own numerical value, to
+     * which it has already been matched: return that value. */
+    if (target && sel && (sel->type == EXPR_REAL
+                          || (head_is(sel, SYM_Complex) && sel->data.function.arg_count == 2
+                              && (sel->data.function.args[0]->type == EXPR_REAL
+                                  || sel->data.function.args[1]->type == EXPR_REAL)))) {
+        expr_free(sel);
+        return target;
+    }
+    expr_free(target);
     return sel;
 }
 

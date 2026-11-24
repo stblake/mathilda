@@ -63,6 +63,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "parse.h"   /* parse_expression: the Jacobi derivative templates */
+#include "message.h" /* mth_message: D::ivar */
+#include "numeric.h" /* expr_is_numeric_quantity */
 
 /* ---------------------------------------------------------------------- */
 /* Tiny expression builders                                                */
@@ -218,8 +220,13 @@ static bool symbol_has_constant_attr(const char* name) {
     return d && (d->attributes & ATTR_CONSTANT);
 }
 
+/* The Constants -> {c1, ...} option of the Dt call in progress (a List of
+ * symbols, borrowed for the duration of builtin_dt; NULL when none). */
+static const Expr* g_dt_constants = NULL;
+
 static bool is_dt_constant_symbol(const Expr* e) {
     if (!e || e->type != EXPR_SYMBOL) return false;
+    if (g_dt_constants && nonconsts_contains(g_dt_constants, e)) return true;
     const char* s = e->data.symbol.name;
     return s == SYM_Pi || s == SYM_E || s == SYM_I ||
            s == SYM_Infinity || s == SYM_ComplexInfinity ||
@@ -3937,6 +3944,25 @@ static Expr* array_higher_order(Expr* f, Expr* array, int64_t order,
     return current;
 }
 
+/* D::ivar / Dt::ivar (D#1): a differentiation variable must be non-numeric.
+ * A number or a numeric constant (2, 1.5, Pi, I) is not a variable --
+ * differentiating x^2 "with respect to 2" treated the exponent as a symbol.
+ * Returns true (after emitting the message) when `var` is invalid; an array
+ * spec's variables are checked element-wise. */
+static bool deriv_reject_numeric_var(const char* head, Expr* var, bool is_array) {
+    if (is_array && var && var->type == EXPR_FUNCTION) {
+        for (size_t j = 0; j < var->data.function.arg_count; j++)
+            if (deriv_reject_numeric_var(head, var->data.function.args[j], false))
+                return true;
+        return false;
+    }
+    if (!var || !expr_is_numeric_quantity(var)) return false;
+    char* s = expr_to_string(var);
+    mth_message(head, "ivar", "%s is not a valid variable.", s ? s : "?");
+    free(s);
+    return true;
+}
+
 /* Emit MMA-style D::dvar message for malformed multiple-derivative
  * specifiers. Only called when parse_var_spec rejects a List spec. */
 static void emit_dvar_message(Expr* spec) {
@@ -4263,6 +4289,13 @@ Expr* builtin_d(Expr* res) {
             g_dt_total_mode = saved_dt_mode;
             return NULL;                       /* malformed spec */
         }
+        if (deriv_reject_numeric_var("D", var, is_array)) {
+            if (nonconsts) expr_free(nonconsts);
+            free(specs);
+            expr_free(current);
+            g_dt_total_mode = saved_dt_mode;
+            return NULL;
+        }
         Expr* stepped = NULL;
         if (is_array) {
             /* {{x1,...,xN}} or {{x1,...,xN}, n}: array (Outer) derivative. */
@@ -4291,7 +4324,60 @@ Expr* builtin_d(Expr* res) {
 /* Builtin: Dt                                                             */
 /* ---------------------------------------------------------------------- */
 
+/* Rule[Constants, val] / RuleDelayed[Constants, val]: true, with *out the
+ * borrowed rhs. */
+static bool is_dt_constants_option(const Expr* a, const Expr** out) {
+    if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count != 2) return false;
+    const Expr* h = a->data.function.head;
+    if (h->type != EXPR_SYMBOL ||
+        (h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed))
+        return false;
+    if (!is_sym(a->data.function.args[0], "Constants")) return false;
+    *out = a->data.function.args[1];
+    return true;
+}
+
+static Expr* builtin_dt_core(Expr* res);
+
+/* Dt[f, x..., Constants -> {c...}] (Dt#1): the option was read as one more
+ * differentiation variable, which recursed to $RecursionLimit.  Strip it, make
+ * each c a Dt-constant (is_dt_constant_symbol) for the duration of the call,
+ * and differentiate the remaining arguments. */
 Expr* builtin_dt(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    const Expr* cval = NULL;
+    size_t nopt = 0;
+    for (size_t i = 1; i < argc; i++)
+        if (is_dt_constants_option(res->data.function.args[i], &cval)) nopt++;
+    if (nopt == 0) return builtin_dt_core(res);
+
+    Expr** a = malloc(sizeof(Expr*) * argc);
+    size_t w = 0;
+    for (size_t i = 0; i < argc; i++) {
+        const Expr* tmp;
+        if (i >= 1 && is_dt_constants_option(res->data.function.args[i], &tmp)) continue;
+        a[w++] = expr_copy(res->data.function.args[i]);
+    }
+    Expr* stripped = expr_new_function(mk_sym("Dt"), a, w);
+    free(a);
+    Expr* clist = (cval->type == EXPR_FUNCTION && is_sym(cval->data.function.head, "List"))
+                      ? expr_copy((Expr*)cval)
+                      : mk_fn1("List", expr_copy((Expr*)cval));
+    const Expr* saved = g_dt_constants;
+    g_dt_constants = clist;
+    Expr* r = builtin_dt_core(stripped);
+    /* The core may leave unevaluated Dt[...] / D[...] nodes that the
+     * evaluator would revisit after the option is gone: settle them while
+     * the constants are still in force. */
+    if (r) r = eval_and_free(r);
+    g_dt_constants = saved;
+    expr_free(clist);
+    expr_free(stripped);
+    return r;
+}
+
+static Expr* builtin_dt_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return NULL;

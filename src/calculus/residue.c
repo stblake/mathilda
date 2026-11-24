@@ -282,6 +282,8 @@ static Expr* residue_simple_pole(Expr* f, Expr* z, Expr* z0) {
  * 3 = the O-term lies at or before exponent -1 so the coefficient is not yet
  * resolved at this order, NULL. *pole_m (when non-NULL) receives the pole order
  * -nmin (>=1) or 0 at an analytic point, for the caller's convergence sizing. */
+static bool residue_free_of(const Expr* e, const Expr* w);
+
 static Expr* residue_coeff_once(Expr* expr, Expr* svar, Expr* spt,
                                 int64_t order, int* status, int64_t* pole_m) {
     *status = 2;
@@ -305,6 +307,16 @@ static Expr* residue_coeff_once(Expr* expr, Expr* svar, Expr* spt,
 
     /* Fractional exponents -> branch point -> residue undefined. */
     if (den != 1) { expr_free(sd); return NULL; }
+
+    /* Residue#1: a coefficient that still depends on the variable (Log[z] in
+     * the expansion of Log[z]/z about 0) is a logarithmic branch point, not a
+     * Laurent expansion: the residue is undefined.  Log[z] itself and
+     * Log[z]/z^2 have no z^-1 term "in" such an expansion either. */
+    for (size_t i = 0; i < coefs->data.function.arg_count; i++)
+        if (!residue_free_of(coefs->data.function.args[i], svar)) {
+            expr_free(sd);
+            return NULL;
+        }
 
     if (pole_m) *pole_m = (nmin <= -1) ? -nmin : 0;
 

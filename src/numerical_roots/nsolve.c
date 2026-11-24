@@ -883,6 +883,42 @@ Expr* builtin_nsolve(Expr* res) {
 
     bool reals_only = dom && dom->data.symbol.name == SYM_Reals;
 
+    /* NSolve#1: a disjunction is the union of its branches' solution sets.
+     * Nothing below splits an Or, so x^2 == 1 || x == 3 fell through to the
+     * transcendental grid seeding (a flood of FindRoot::nlnum) and stayed
+     * unevaluated.  Solve each branch over the same variables, domain and
+     * options; if any branch declines, so does the whole call. */
+    if (head_is(expr, SYM_Or)) {
+        Expr* vl = vars ? expr_copy(vars) : auto_variable_list(expr);
+        if (!vl) return NULL;
+        size_t nb = expr->data.function.arg_count;
+        Expr** sols = malloc(sizeof(Expr*) * (nb ? nb : 1));
+        size_t ns = 0;
+        bool declined = false;
+        for (size_t k = 0; k < nb && !declined; k++) {
+            Expr** a = malloc(sizeof(Expr*) * (argc + 1));
+            size_t w = 0;
+            a[w++] = expr_copy(expr->data.function.args[k]);
+            a[w++] = expr_copy(vl);
+            for (size_t i = vars ? 2 : 1; i < argc; i++)
+                a[w++] = expr_copy(res->data.function.args[i]);
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_NSolve), a, w));
+            free(a);
+            if (!head_is(r, SYM_List)) { expr_free(r); declined = true; break; }
+            sols[ns++] = r;
+        }
+        expr_free(vl);
+        if (declined) {
+            for (size_t k = 0; k < ns; k++) expr_free(sols[k]);
+            free(sols);
+            return NULL;
+        }
+        Expr* joined = expr_new_function(expr_new_symbol(SYM_Join), sols, ns);
+        free(sols);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_DeleteDuplicates),
+                                               (Expr*[]){ joined }, 1));
+    }
+
     /* Working precision -> machine flag + bit width. */
     bool want_machine = (opts.prec_digits < 0.0);
     long bits = 53;

@@ -6255,7 +6255,35 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
             else ok = false;
             expr_free(nv);
         }
-        if (ok) out = ni_run_contour(eff_body, var, nodes, (int)nnodes, &o);
+        /* NIntegrate#1: Method -> "PrincipalValue" takes its singular points
+         * as the interior nodes of a real range {x, a, s1, ..., b} (as well as
+         * from Exclusions); the contour split integrated straight through
+         * them.  Interior nodes are the PV poles, merged with Exclusions. */
+        bool all_real = ok;
+        for (size_t i = 0; i < nnodes && all_real; i++)
+            if (cimag(nodes[i]) != 0.0) all_real = false;
+        if (ok && all_real && o.method == NI_PV && nnodes >= 3) {
+            double a = creal(nodes[0]), b = creal(nodes[nnodes - 1]);
+            double lo = a < b ? a : b, hi = a < b ? b : a;
+            double ppts[64 + 64];
+            int np = 0;
+            for (size_t i = 1; i + 1 < nnodes && np < 64; i++) {
+                double s = creal(nodes[i]);
+                if (s > lo && s < hi) ppts[np++] = s;
+            }
+            if (o.exclusions) {
+                int ne = 0;
+                ni_extract_points(o.exclusions, var, lo, hi, ppts + np, &ne, 64);
+                np += ne;
+            }
+            qsort(ppts, (size_t)np, sizeof(double), ni_dbl_cmp);
+            int w = 0;                                  /* drop duplicates */
+            for (int i = 0; i < np; i++)
+                if (w == 0 || ppts[i] != ppts[w - 1]) ppts[w++] = ppts[i];
+            np = w;
+            out = (np > 0) ? ni_run_pv(eff_body, var, a, b, ppts, np, &o)
+                           : ni_run_1d_finite_real(eff_body, var, a, b, &o);
+        } else if (ok) out = ni_run_contour(eff_body, var, nodes, (int)nnodes, &o);
         free(nodes);
     }
     expr_free(inner);

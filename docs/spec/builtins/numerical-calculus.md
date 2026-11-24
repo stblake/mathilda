@@ -558,6 +558,12 @@ residual from a true zero -- `Chop` when needed.
   reference rejects every `{n}` with `::itraw`; Mathilda follows its own `Sum`.
 - `NSum[f, {i, imin, imax, di}]` -- step `di`; terms are reindexed to
   `x_k = imin + k di`.
+- `NSum[f, {i, -Infinity, imax}]` and `NSum[f, {i, -Infinity, Infinity}]` --
+  an infinite lower bound is reflected onto the upper half-line
+  (`Sum_{n <= b} f(n) = Sum_{m >= -b} f(-m)`; the doubly infinite sum is
+  `Sum_{n >= 0} f(n) + Sum_{m >= 1} f(-m)`): `NSum[1/(n^2 + 1), {n, -Infinity,
+  Infinity}]` is `Pi Coth[Pi]`.  A step other than 1 from `-Infinity`, or a
+  lower bound of `+Infinity`, stays unevaluated.
 - `NSum[f, {i, ...}, {j, ...}, ...]` -- multidimensional sum; an inner bound
   may depend on an outer index (e.g. `{k, 1, n}`), handled by making the outer
   summand an inner `NSum`.
@@ -909,6 +915,11 @@ an outer index). `NProduct[f, {n}]` is `Floor[n]` numeric factors, by the
 else gives `NProduct::itraw`.  Implemented in `src/numerical_calculus/nprod.{c,h}`.
 Attributes: `HoldAll, Protected`.
 
+A factor that is numerically 0 among the leading factors (the first 1024 of an
+infinite product, up to 100000 of a finite one) makes the product `0.`:
+`NProduct[k - 3, {k, 1, 5}]` and `NProduct[1 - 1/k^2, {k, 1, Infinity}]` are
+`0.` (the log-sum below cannot represent `Log[0]`).
+
 Per Keiper (1992) the product is evaluated as `Exp[NSum[Log[f], …]]`, reusing
 the full NSum engine: Euler-Maclaurin (`Method -> "EulerMaclaurin"`, default for
 monotone factors), Wynn epsilon (`Method -> "WynnEpsilon"`), automatic method
@@ -1245,8 +1256,10 @@ the values here are the well-defined uniform-composite estimates.)
 - `NIntegrate[f, {x, a, b}, Exclusions -> {p1, …}]` or `Exclusions -> (g==0)`
   — splits the domain at the given points / equation roots (best-effort via
   `Solve` for the equation form).
-- `Method -> "PrincipalValue"` with `Exclusions` — Cauchy principal value via the
-  symmetric mirror rule about each simple pole.
+- `Method -> "PrincipalValue"` with `Exclusions`, or with the poles given as the
+  interior points of a real range `{x, a, s1, ..., b}` — Cauchy principal value
+  via the symmetric mirror rule about each simple pole:
+  `NIntegrate[1/x, {x, -1, 0, 2}, Method -> "PrincipalValue"]` is `Log[2]`.
 - A `List` (vector/matrix) integrand threads element-wise.
 
 Option values are evaluated (`PrecisionGoal -> i` with `i = 1`), except `Method`,
@@ -1399,7 +1412,12 @@ Numerical roots of a univariate polynomial equation.
 `var==r1 || var==r2 || …` approximating **every** root of `lhs - rhs` in `var`.
 A root of multiplicity `k` appears as `k` identical equations; a degree-1
 polynomial yields a single bare equation (no `Or`). A numerically vacuous
-equation collapses first: `NRoots[1==0, x]` → `False`, `NRoots[1==1, x]` → `True`.
+equation collapses first: `NRoots[1==0, x]` → `False`, `NRoots[1==1, x]` → `True`;
+an equation free of `var` that is not numeric (`NRoots[y^2 == 1, x]`) gives
+`NRoots::nnum` and stays unevaluated.  Roots are clustered and their noise
+components chopped relative to the root scale (Cauchy's lower bound on the
+nonzero roots), not to 1, so small distinct roots survive:
+`NRoots[10^20 x^2 - 1 == 0, x]` is `x == -1.*^-10 || x == 1.*^-10`.
 
 Implemented in `src/numerical_roots/nroots.{c,h}` (orchestration +
 CompanionMatrix), `nroots_aberth.{c,h}` (Aberth–Ehrlich + Bini initialization +
@@ -1515,7 +1533,9 @@ symbol or a list, and `NSolve[{e1, e2, …}, vars]` is the conjunction
 a trailing positional argument (`NSolve[poly, x, Reals, 30]`); with no
 variable list, `NSolve[expr]` collects the variable. Results: `{}` no
 solutions, `{{x->s,…},…}` the solutions, `{{}}` the universal solution. For a
-single variable, roots are repeated by multiplicity.
+single variable, roots are repeated by multiplicity.  A disjunction
+`e1 || e2 || …` is the union of the branches' solutions (duplicates removed):
+`NSolve[x^2 == 1 || x == 3, x]` is `{{x -> -1.}, {x -> 1.}, {x -> 3.}}`.
 
 Implemented in `src/numerical_roots/nsolve.{c}` (dispatcher) and
 `nsolve_system.{c,h}` (the polynomial-system engine). Attribute: `Protected`.
@@ -1813,7 +1833,8 @@ own) given among the equations of an ODE initial-value problem runs `action`
 whenever `event` occurs during the integration.
 
 - **Events.** `lhs == rhs` fires on a zero crossing of `lhs - rhs` in either
-  direction; an inequality (`a > b`, `a >= b`, `a < b`, `a <= b`) fires when it
+  direction -- a sign change across a jump of `lhs - rhs` is not a crossing
+  (`Mod[t, 1] == 1/2` fires at the half-integers only); an inequality (`a > b`, `a >= b`, `a < b`, `a <= b`) fires when it
   becomes `True`; any other condition fires when it becomes `True` (located by
   bisection); a list of events adds one event per element with the same
   actions. The state forms `u[t]`, `u'[t]`, … and the highest derivative (via
@@ -2405,7 +2426,8 @@ truncated Newton (see below), and Powell and NelderMead are the two
 derivative-free multivariate methods (see below).  The gradient methods
 default to a symbolic gradient (`D[f, x_i]` per variable) with a
 central-difference fallback; override via `Gradient -> {dfdx1, dfdx2,
-...}`.  Powell and NelderMead use no gradient at all.
+...}`.  For `FindMaximum` the gradient given is that of `f` (it is negated for
+the internal minimisation of `-f`).  Powell and NelderMead use no gradient at all.
 
 `"LBFGSB"` (aliases `"LBFGS"`, `"LimitedMemoryBFGS"`; a Mathilda extension —
 the reference exposes no such method name) is **limited-memory BFGS with bound
@@ -2903,6 +2925,16 @@ makes the call return unevaluated with `NMinimize::ivar`.  `NMaximize[f, ...]` i
 Where `FindMinimum` descends from a single start point to the nearest local
 minimum, `NMinimize` runs a stochastic global search over a bounded region and
 then polishes the best point with the exact local solver.
+
+The search region always lies inside the box constraints: a `{x, xmin, xmax}`
+interval only seeds the search and is dropped where it contradicts a bound
+(`NMinimize[{x^2, x > 5}, {x, 0, 1}]` is `{25., {x -> 5.}}`), a degenerate box
+`x >= 3 && x <= 3` is not widened, and an integer variable's bounds round
+inward (`x <= 7.5` allows at most 7).  When the best point of an unbounded
+integer coordinate sits on the edge of the search region, the region is grown
+and the search repeated (`(x - 50)^2` over the integers finds `x -> 50`).  An
+objective that is never a real number at any sampled point (`a x - x^2` with a
+free `a`) gives `NMinimize::nnum` / `NMaximize::nnum` and stays unevaluated.
 
 ### Minimax objectives (`Max[p_1, ..., p_m]`)
 

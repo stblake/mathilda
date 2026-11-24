@@ -3768,6 +3768,94 @@ static Expr* ns_builtin(Expr* res) {
     for (size_t i = 1; i < pos_end; i++)
         if (!ns_is_spec(res->data.function.args[i])) return NULL;
 
+    /* NSum#1: an infinite lower bound.  Every engine below walks upward from
+     * imin, so {n, -Infinity, b} was summed from "-Infinity" as if it were a
+     * number and returned 0.0.  Reflect it onto the upper half-line instead:
+     *     Sum_{n <= b} f(n)       = Sum_{m >= -b} f(-m),
+     *     Sum_{n in Z} f(n)       = Sum_{n >= 0} f(n) + Sum_{m >= 1} f(-m),
+     * with f(-m) spelled Function[{n}, f][-m] so the substitution is made by
+     * the evaluator at each point (scoping-safe; the body stays held).  A step
+     * other than 1 from -Infinity has no first term: stay unevaluated. */
+    if (res->data.function.args[1]->data.function.arg_count >= 3) {
+        Expr* spec0 = res->data.function.args[1];
+        Expr* lo = eval_and_free(expr_copy(spec0->data.function.args[1]));
+        bool lo_inf = ns_is_infinite(lo);
+        bool lo_neg = false;
+        if (lo_inf) {
+            /* -Infinity in its canonical spelling (Times[-1, Infinity]) */
+            Expr* mi[2] = { expr_new_integer(-1), expr_new_symbol(SYM_Infinity) };
+            Expr* minf = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), mi, 2));
+            Expr* di1[1] = { expr_new_integer(-1) };
+            Expr* dinf = expr_new_function(expr_new_symbol(SYM_DirectedInfinity), di1, 1);
+            lo_neg = expr_eq(lo, minf) || expr_eq(lo, dinf);
+            expr_free(minf);
+            expr_free(dinf);
+        }
+        expr_free(lo);
+        if (lo_inf && !lo_neg) return NULL;     /* no first term to start from */
+        if (lo_inf) {
+            size_t sn0 = spec0->data.function.arg_count;
+            if (sn0 == 4) {
+                Expr* st = eval_and_free(expr_copy(spec0->data.function.args[3]));
+                bool unit = st->type == EXPR_INTEGER && st->data.integer == 1;
+                expr_free(st);
+                if (!unit) return NULL;
+            }
+            Expr* var_e = spec0->data.function.args[0];
+            Expr* hi = eval_and_free(expr_copy(spec0->data.function.args[2]));
+            bool hi_inf = ns_is_infinite(hi);
+            if (hi_inf && !(hi->type == EXPR_SYMBOL && hi->data.symbol.name == SYM_Infinity)) {
+                expr_free(hi);              /* {n, -Infinity, -Infinity}, ... */
+                return NULL;
+            }
+            /* Function[{n}, f][-n] */
+            Expr* fv[1] = { expr_copy(var_e) };
+            Expr* fa[2] = { expr_new_function(expr_new_symbol(SYM_List), fv, 1),
+                            expr_copy(res->data.function.args[0]) };
+            Expr* fn = expr_new_function(expr_new_symbol(SYM_Function), fa, 2);
+            Expr* neg[2] = { expr_new_integer(-1), expr_copy(var_e) };
+            Expr* call_arg[1] = { expr_new_function(expr_new_symbol(SYM_Times), neg, 2) };
+            Expr* reflected = expr_new_function(fn, call_arg, 1);
+            /* Two (or one) NSum calls sharing the trailing specs and options. */
+            Expr* parts[2] = { NULL, NULL };
+            size_t nparts = hi_inf ? 2 : 1;
+            for (size_t p = 0; p < nparts; p++) {
+                Expr** v = malloc(sizeof(Expr*) * argc);
+                v[0] = (p == 0) ? reflected : expr_copy(res->data.function.args[0]);
+                Expr* it[3];
+                it[0] = expr_copy(var_e);
+                if (p == 0) {
+                    /* reflected half: m from 1 (hi = Infinity) or from -b */
+                    if (hi_inf) it[1] = expr_new_integer(1);
+                    else {
+                        Expr* nb[2] = { expr_new_integer(-1), expr_copy(hi) };
+                        it[1] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), nb, 2));
+                    }
+                    it[2] = expr_new_symbol(SYM_Infinity);
+                } else {
+                    it[1] = expr_new_integer(0);
+                    it[2] = expr_new_symbol(SYM_Infinity);
+                }
+                v[1] = expr_new_function(expr_new_symbol(SYM_List), it, 3);
+                for (size_t i = 2; i < argc; i++) v[i] = expr_copy(res->data.function.args[i]);
+                Expr* call = expr_new_function(expr_new_symbol(SYM_NSum), v, argc);
+                free(v);
+                g_ns_cur_deriv = NULL;      /* the twin belongs to the unsplit body */
+                parts[p] = ns_builtin(call);
+                expr_free(call);
+                if (!parts[p]) break;
+            }
+            expr_free(hi);
+            if (!parts[0] || (nparts == 2 && !parts[1])) {
+                expr_free(parts[0]);
+                expr_free(parts[1]);
+                return NULL;
+            }
+            if (nparts == 1) return parts[0];
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), parts, 2));
+        }
+    }
+
     NsOpts o;
     o.method = SYM_Automatic;
     o.nsum_terms = NS_DEF_NSUM_TERMS;

@@ -54,6 +54,10 @@ static Expr*  argn(const Expr* e, size_t i) { return e->data.function.args[i]; }
  * its source, so the cast is safe and keeps the read-only helpers const. */
 static Expr* xcopy(const Expr* e) { return expr_copy((Expr*)e); }
 
+/* The Modulus -> m of the FindInstance search in progress (borrowed), or NULL
+ * over the ordinary domains; fi_verify judges equations in Z/mZ under it. */
+static const Expr* g_fi_modulus = NULL;
+
 /* Build a fresh 2-arg relation `newhead[d.arg0, d.arg1]`. */
 static Expr* relhead_swap(const Expr* d, const char* newhead) {
     Expr* a[2] = { expr_copy(argn(d, 0)), expr_copy(argn(d, 1)) };
@@ -609,6 +613,23 @@ static int fi_defined_truth(const Expr* node, const Expr* pt) {
             || h == SYM_LessEqual || h == SYM_GreaterEqual) {
             if (!fi_operand_defined(argn(node, 0), pt)
                 || !fi_operand_defined(argn(node, 1), pt)) return -1;
+            if (g_fi_modulus && (h == SYM_Equal || h == SYM_Unequal)) {
+                /* FindInstance#1: under Modulus -> m an equation holds in Z/mZ:
+                 * Mod[lhs - rhs, m] == 0 at the (integer) point. */
+                Expr* diff[2] = { xcopy(argn(node, 0)),
+                                  expr_new_function(expr_new_symbol(SYM_Times),
+                                      (Expr*[]){ expr_new_integer(-1), xcopy(argn(node, 1)) }, 2) };
+                Expr* md[2] = { expr_new_function(expr_new_symbol(SYM_Plus), diff, 2),
+                                xcopy(g_fi_modulus) };
+                Expr* mexpr = expr_new_function(expr_new_symbol(SYM_Mod), md, 2);
+                Expr* v = fi_replace(mexpr, pt);
+                expr_free(mexpr);
+                int r = -1;
+                if (v->type == EXPR_INTEGER)
+                    r = ((v->data.integer == 0) == (h == SYM_Equal)) ? 1 : 0;
+                expr_free(v);
+                return r;
+            }
             Expr* sub = fi_replace(node, pt);
             int r = fi_is_sym(sub, SYM_True) ? 1 : (fi_is_sym(sub, SYM_False) ? 0 : -1);
             expr_free(sub);
@@ -639,6 +660,16 @@ static int fi_defined_truth(const Expr* node, const Expr* pt) {
  * on infinities (Log[0] = -Infinity, -Infinity == -Infinity -> True), which
  * would otherwise admit a point where the statement is undefined. */
 static bool fi_verify(const Expr* expr, const Expr* point /* List[Rule..] */) {
+    if (g_fi_modulus) {
+        /* a point of (Z/mZ)^n: every coordinate an integer */
+        if (!is_head_sym(point, SYM_List)) return false;
+        for (size_t i = 0; i < nargs(point); i++) {
+            const Expr* r = argn(point, i);
+            if (r->type != EXPR_FUNCTION || nargs(r) != 2) return false;
+            int t = argn(r, 1)->type;
+            if (t != EXPR_INTEGER && t != EXPR_BIGINT) return false;
+        }
+    }
     return fi_defined_truth(expr, point) == 1;
 }
 
@@ -2453,7 +2484,10 @@ static Expr* builtin_find_instance_core(Expr* res) {
      * constraint shape) and must not leak diagnostics -- Mathematica evaluates
      * its FindInstance internals under an implicit Quiet in the same way. */
     mth_msg_suppress_push();
+    const Expr* saved_mod = g_fi_modulus;
+    g_fi_modulus = modulus;
     Expr* fi_out = fi_run_search(expr, vars, dom, nWanted, modulus, V, nv);
+    g_fi_modulus = saved_mod;
     mth_msg_suppress_pop();
     return fi_out;
 }

@@ -23,6 +23,9 @@ Partial derivative.
 - `D[f, {x}]` -- the first derivative, the same as `D[f, x]` (v0.6497).
 - `D[f, x, y, ...]` -- mixed partial derivative, equivalent to
   `D[D[f, x], y, ...]`.
+- A differentiation variable must not be a number or numeric constant:
+  `D[x^2, 2]`, `D[Pi^x, Pi]`, `D[x^2, x, 0]` give `D::ivar` and stay
+  unevaluated.
 - **Sums and products**: `D[Sum[f, {k, a, b}, ...], x]` is
   `Sum[D[f, x], {k, a, b}, ...]` and `D[Product[f, ...], x]` is
   `Product[f, ...] Sum[D[f, x]/f, ...]` when every index is a symbol other than
@@ -176,6 +179,8 @@ Total derivative.
   function of that variable, so it contributes a `Dt[s, x]` term rather
   than vanishing. `Dt[x, x]` is `1`; a bare `Dt[s, x]` is its own normal
   form and stays unevaluated.
+- `Dt[f, ..., Constants -> {c1, ...}]` -- the `ci` are constants for this
+  derivative: `Dt[a x^2, x, Constants -> {a}]` is `2 a x`.
 
 **Features**:
 - `Protected`.
@@ -835,8 +840,11 @@ give the one-sided transform ∫₀^∞ f(t) e^(−st) dt. Attributes: `Protecte
   transform is the function the integral defines on its region of convergence
   (`Sin[b t]` → `b/(b^2 + s^2)` with no assumption on b). If Integrate does not
   close the integral, the transform stays unevaluated.
+- The transform integrates from 0-: a delta at the origin counts in full,
+  `DiracDelta[a t] h(t)` → h(0)/Abs[a] (`LaplaceTransform[DiracDelta[t], t, s]`
+  is 1; the defining integral from 0 would split it and give 1/2).
 - Not yet closed: `UnitStep[t - a]` with no sign for a, and
-  `DiracDelta[t - a]` (the definite integral of the delta does not close).
+  `DiracDelta[t - a]` with no sign for a.
 
 ```
 LaplaceTransform[Cosh[2 t], t, s]         (* s/(-4 + s^2) *)
@@ -867,7 +875,9 @@ unknown function (e.g. `f[z]/z^5`), the series engine truncates relative to that
 function's depth, so `Residue` raises the expansion order until the `-1`
 coefficient is among the explicit terms (bounded, to stay safe at essential
 singularities). A fractional-power (Puiseux) expansion, `den > 1`, signals a
-**branch point**, where the residue is undefined — the call is left unevaluated.
+**branch point**, where the residue is undefined — the call is left unevaluated;
+so does a coefficient that still depends on `z` (the `Log[z]` of
+`Residue[Log[z]/z, {z, 0}]`, a logarithmic branch point).
 
 For a **rational** integrand two paths handle an algebraic (radical) pole
 location robustly. A *simple* pole short-circuits to `Res = P(z0)/Q'(z0)`
@@ -3334,7 +3344,9 @@ exposed explicitly as `Integrate\`NewtonLeibniz[f, {x, xmin, xmax}]` and as
 
 `Integrate[f, {x, a, b}, {y, c, d}, …]` gives the iterated multiple integral,
 reduced innermost-first (the last spec is the inner integral), so an inner
-bound may depend on an outer variable.
+bound may depend on an outer variable.  Indefinite and definite specs mix the
+same way: `Integrate[x, x, y]` is `x^2 y/2` and `Integrate[x y, {x, 0, 1}, y]`
+is `y^2/4`; if an inner integral does not close, the call stays unevaluated.
 
 `Integrate\`SingularPoints[expr, {x, a, b}]` returns the sorted list of the
 interior real poles used for the split — exposed for inspection and reuse.
@@ -5701,6 +5713,11 @@ Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.
 - Accepts an optional `Extension -> alpha` rule (default `None`) for
   division over `Q(alpha)[x]` rather than the rational coefficient
   field.
+- Terms of `p` that are not polynomial in `x` (`1/x`, `Sqrt[x]`, `x^2.5`) are
+  carried into the remainder unchanged, so `p == Quotient*q + Remainder` still
+  holds: `PolynomialQuotientRemainder[1/x + x^2, x + 1, x]` is
+  `{-1 + x, 1 + 1/x}`.  A divisor that is not a polynomial in `x` leaves the call
+  unevaluated.
 
 ```mathematica
 In[1]:= PolynomialQuotientRemainder[x^3 + x + 1, x^2 + 1, x]
@@ -6664,7 +6681,9 @@ engine works by value-preserving substitution).
 The result is `{f_opt, {x -> x_opt, ...}}` with **exact** values (Integer,
 Rational, radical, or `Root[...]`). With inexact (approximate) input Minimize
 automatically calls `NMinimize`. `Maximize` reuses the whole engine by
-minimizing `-f` and negating the reported value.
+minimizing `-f` and negating the reported value.  The variables are real: an
+equality `x == c` with `c` a non-real number is infeasible (`Maximize::infeas`,
+`{-Infinity, {x -> Indeterminate}}`).
 
 The whole call runs under a time budget: one wall-clock deadline is anchored
 when it starts and **every** internal `Solve`/`Reduce`/`FindInstance` probe, in

@@ -308,9 +308,18 @@ static NrPoly* nr_build_poly(Expr* equation, Expr* var, mpfr_prec_t wp,
         ncpx v; ncpx_init(&v, wp);
         bool ok = nr_expr_to_ncpx(num, &v);
         expr_free(num);
+        if (!ok) {
+            /* NRoots#2: a constant that does not numericalize (y^2 - 1 in
+             * NRoots[y^2 == 1, x]) is not vacuous -- False would claim the
+             * equation unsatisfiable.  Leave the call unevaluated. */
+            ncpx_clear(&v);
+            expr_free(expanded);
+            nr_warn("nnum", "the equation does not involve the variable and is not numeric.");
+            return NULL;
+        }
         mpfr_t mag; mpfr_init2(mag, wp); ncpx_abs(mag, &v);
         *was_constant = true;
-        *constant_zero = ok ? (mpfr_zero_p(mag) != 0) : false;
+        *constant_zero = mpfr_zero_p(mag) != 0;
         mpfr_clear(mag); ncpx_clear(&v);
         expr_free(expanded);
         return NULL;
@@ -781,16 +790,18 @@ static int nr_canon_cmp(const ncpx* a, int areal, const ncpx* b, int breal,
     return 0;
 }
 
-/* |a - b| <= tol * max(1, |a|) ? */
-static bool nr_close(const ncpx* a, const ncpx* b, const mpfr_t tol,
-                     mpfr_prec_t wp) {
+/* |a - b| <= tol * max(floor, |a|) ?  `floor` is the polynomial's root scale
+ * (nr_root_floor); NULL means 1, the scale-free floor. */
+static bool nr_close_scaled(const ncpx* a, const ncpx* b, const mpfr_t tol,
+                            mpfr_srcptr floor, mpfr_prec_t wp) {
     ncpx diff; ncpx_init(&diff, wp);
     mpfr_t dm, am, bound;
     mpfr_init2(dm, wp); mpfr_init2(am, wp); mpfr_init2(bound, wp);
     ncpx_sub(&diff, a, b);
     ncpx_abs(dm, &diff);
     ncpx_abs(am, a);
-    mpfr_set_ui(bound, 1, MPFR_RNDN);
+    if (floor) mpfr_set(bound, floor, MPFR_RNDN);
+    else mpfr_set_ui(bound, 1, MPFR_RNDN);
     if (mpfr_cmp(am, bound) > 0) mpfr_set(bound, am, MPFR_RNDN);
     mpfr_mul(bound, bound, tol, MPFR_RNDN);
     bool ok = mpfr_cmp(dm, bound) <= 0;
@@ -799,11 +810,56 @@ static bool nr_close(const ncpx* a, const ncpx* b, const mpfr_t tol,
     return ok;
 }
 
+static bool nr_close(const ncpx* a, const ncpx* b, const mpfr_t tol,
+                     mpfr_prec_t wp) {
+    return nr_close_scaled(a, b, tol, NULL, wp);
+}
+
 /* Shallow swap of two ncpx cells (moves the mpfr limb handles). */
 static void nr_swap_ncpx(ncpx* a, ncpx* b) { ncpx t = *a; *a = *b; *b = t; }
 
+/* Does `e` hold an approximate number? */
+static bool nr_has_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL || e->type == EXPR_MPFR) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nr_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* NRoots#1: the root scale below which a "relative" window turns absolute.
+ * Cauchy's lower bound: every nonzero root z of  sum c_k x^k  satisfies
+ *     |z| >= |c_lo| / (|c_lo| + max_{k > lo} |c_k|),
+ * c_lo the lowest nonzero coefficient.  A fixed floor of 1 made the chopping,
+ * clustering and conjugate-pairing windows absolute for |z| < 1, so the
+ * distinct roots +-1e-10 of 10^20 x^2 - 1 merged into 0.  The bound is <= 1,
+ * so it only ever tightens those windows; a monomial keeps 1. */
+static void nr_root_floor(mpfr_t out, const NrPoly* p, mpfr_prec_t wp) {
+    mpfr_t a, m, clo;
+    mpfr_init2(a, wp); mpfr_init2(m, wp); mpfr_init2(clo, wp);
+    mpfr_set_ui(out, 1, MPFR_RNDN);
+    int lo = -1;
+    for (int k = 0; k <= p->deg; k++) {
+        ncpx_abs(a, &p->c[k]);
+        if (!mpfr_zero_p(a)) { lo = k; mpfr_set(clo, a, MPFR_RNDN); break; }
+    }
+    if (lo >= 0 && lo < p->deg) {
+        mpfr_set_zero(m, 1);
+        for (int k = lo + 1; k <= p->deg; k++) {
+            ncpx_abs(a, &p->c[k]);
+            if (mpfr_cmp(a, m) > 0) mpfr_set(m, a, MPFR_RNDN);
+        }
+        mpfr_add(m, m, clo, MPFR_RNDN);
+        if (!mpfr_zero_p(m)) mpfr_div(out, clo, m, MPFR_RNDD);
+        if (mpfr_cmp_ui(out, 1) > 0) mpfr_set_ui(out, 1, MPFR_RNDN);
+    }
+    mpfr_clear(a); mpfr_clear(m); mpfr_clear(clo);
+}
+
 static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
-                           mpfr_prec_t wp, long target_bits) {
+                           mpfr_srcptr rfloor, mpfr_prec_t wp, long target_bits) {
+    double rfloor_d = mpfr_get_d(rfloor, MPFR_RNDD);
     /* 1. Chop a component that is pure numerical noise relative to the other
      *    (for all polynomials): a near-real root prints as  a, a near-imaginary
      *    root as  b I, instead of carrying a 1e-30 partner.  realf records the
@@ -818,13 +874,13 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
         mpfr_abs(aim, roots[i].im, MPFR_RNDN);
         mpfr_abs(are, roots[i].re, MPFR_RNDN);
         /* chop Im if negligible vs Re. */
-        mpfr_set_ui(bound, 1, MPFR_RNDN);
+        mpfr_set(bound, rfloor, MPFR_RNDN);
         if (mpfr_cmp(are, bound) > 0) mpfr_set(bound, are, MPFR_RNDN);
         mpfr_mul(bound, bound, chop, MPFR_RNDN);
         if (mpfr_cmp(aim, bound) <= 0) mpfr_set_zero(roots[i].im, 1);
         /* else chop Re if negligible vs Im. */
         else {
-            mpfr_set_ui(bound, 1, MPFR_RNDN);
+            mpfr_set(bound, rfloor, MPFR_RNDN);
             if (mpfr_cmp(aim, bound) > 0) mpfr_set(bound, aim, MPFR_RNDN);
             mpfr_mul(bound, bound, chop, MPFR_RNDN);
             if (mpfr_cmp(are, bound) <= 0) mpfr_set_zero(roots[i].re, 1);
@@ -864,11 +920,11 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
             if (grp[j] >= 0) continue;
             double aj = fabs(dre[j]) + fabs(dim[j]);
             double sc = ai > aj ? ai : aj;
-            if (sc < 1.0) sc = 1.0;
+            if (sc < rfloor_d) sc = rfloor_d;
             /* |a - b| > tol max(1,|a|) + rounding of the doubles: not close. */
             if (fabs(dre[j] - dre[i]) + fabs(dim[j] - dim[i])
                 > 2.0 * tolc_d * sc + 0x1p-48 * sc) continue;
-            if (nr_close(&roots[j], &roots[i], tolc, wp)) grp[j] = ng;
+            if (nr_close_scaled(&roots[j], &roots[i], tolc, rfloor, wp)) grp[j] = ng;
         }
         ng++;
     }
@@ -916,7 +972,7 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
                 mpfr_abs(scl, roots[a].re, MPFR_RNDN);
                 mpfr_abs(are, roots[a].im, MPFR_RNDN);
                 if (mpfr_cmp(are, scl) > 0) mpfr_set(scl, are, MPFR_RNDN);
-                mpfr_set_ui(bound, 1, MPFR_RNDN);
+                mpfr_set(bound, rfloor, MPFR_RNDN);
                 if (mpfr_cmp(scl, bound) > 0) mpfr_set(bound, scl, MPFR_RNDN);
                 mpfr_mul(bound, bound, tolp, MPFR_RNDN);
                 if (mpfr_cmp(t1, bound) <= 0 && mpfr_cmp(t2, bound) <= 0) { best = b; break; }
@@ -943,7 +999,7 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
             if (realf[i]) continue;
             mpfr_abs(are, roots[i].re, MPFR_RNDN);
             mpfr_abs(aim, roots[i].im, MPFR_RNDN);
-            mpfr_set_ui(bound, 1, MPFR_RNDN);
+            mpfr_set(bound, rfloor, MPFR_RNDN);
             if (mpfr_cmp(aim, bound) > 0) mpfr_set(bound, aim, MPFR_RNDN);
             mpfr_mul(bound, bound, chop, MPFR_RNDN);
             if (mpfr_cmp(are, bound) <= 0) mpfr_set_zero(roots[i].re, 1);
@@ -1253,6 +1309,16 @@ Expr* builtin_nroots(Expr* res) {
                                        &goal_err, &goal_tol);
     }
 
+    mpfr_t rfloor;
+    mpfr_init2(rfloor, wp);
+    /* The root-scale floor needs exact coefficients: an inexact multiple root
+     * is only known to ~eps^(1/m) relative, and the tighter window split
+     * (x - 1.*10^-3)^3 into three distinct roots.  Inexact (or non-rational)
+     * coefficients keep the scale-free floor 1.  (zp alone does not tell: a
+     * machine real converts to its exact dyadic rational.) */
+    if (zp && !nr_has_inexact(equation)) nr_root_floor(rfloor, p, wp);
+    else    mpfr_set_ui(rfloor, 1, MPFR_RNDN);
+
     if (zp) zupoly_free(zp);
     nr_poly_free(p);
 
@@ -1260,6 +1326,7 @@ Expr* builtin_nroots(Expr* res) {
         nr_warn("conv", "root-finding did not converge.");
         for (int i = 0; i < d; i++) ncpx_clear(&roots[i]);
         free(roots);
+        mpfr_clear(rfloor);
         return NULL;
     }
 
@@ -1267,7 +1334,8 @@ Expr* builtin_nroots(Expr* res) {
         nc_warn_goal("NRoots", goal_err, goal_tol);
 
     int* realf = (int*)malloc(sizeof(int) * (size_t)d);
-    nr_postprocess(roots, realf, d, poly_is_real, wp, target_bits);
+    nr_postprocess(roots, realf, d, poly_is_real, rfloor, wp, target_bits);
+    mpfr_clear(rfloor);
 
     /* Assemble  var==r1 || ... || var==rd  (bare equation for d == 1). */
     Expr* out;

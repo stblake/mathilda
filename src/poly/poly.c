@@ -2886,13 +2886,51 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
         /* Fall through to plain path on lift failure. */
     }
 
+    /* PolynomialQuotientRemainder#1: terms of p that are not polynomial in x
+     * (1/x, Sqrt[x]) were silently dropped by the division, breaking
+     * p == Q q + R.  Divide the polynomial part and carry the rest into the
+     * remainder unchanged, as a term like x^2.5 already was; a divisor that is
+     * not a polynomial in x leaves the call unevaluated. */
+    Expr* p_rest = NULL;
+    Expr* p_poly_owned = NULL;
+    {
+        Expr* xv[1] = { x };
+        Expr* qe = expr_expand(q);
+        bool q_ok = is_polynomial(qe, xv, 1);
+        expr_free(qe);
+        if (!q_ok) return NULL;
+        Expr* pe = expr_expand(p);
+        if (!is_polynomial(pe, xv, 1)) {
+            bool sum = head_is(pe, SYM_Plus);
+            size_t nt = sum ? pe->data.function.arg_count : 1;
+            Expr** pa = malloc(sizeof(Expr*) * (nt ? nt : 1));
+            Expr** na = malloc(sizeof(Expr*) * (nt ? nt : 1));
+            size_t npa = 0, nna = 0;
+            for (size_t i = 0; i < nt; i++) {
+                Expr* t = sum ? pe->data.function.args[i] : pe;
+                if (is_polynomial(t, xv, 1)) pa[npa++] = expr_copy(t);
+                else na[nna++] = expr_copy(t);
+            }
+            p_poly_owned = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), pa, npa));
+            p_rest = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), na, nna));
+            free(pa); free(na);
+            p = p_poly_owned;
+        }
+        expr_free(pe);
+    }
+
     Expr *Q, *R;
     poly_div_rem(p, q, x, &Q, &R);
+    if (p_poly_owned) expr_free(p_poly_owned);
     if (!Q || !R) {
         if (Q) expr_free(Q);
         if (R) expr_free(R);
+        if (p_rest) expr_free(p_rest);
         return NULL;
     }
+    if (p_rest)
+        R = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                            (Expr*[]){ R, p_rest }, 2));
     Expr* expanded_Q = expr_expand(Q);
     expr_free(Q);
     Expr* list = expr_new_function(expr_new_symbol(SYM_List),

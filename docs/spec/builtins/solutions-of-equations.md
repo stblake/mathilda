@@ -1446,6 +1446,10 @@ The engine is a Cylindrical Algebraic Decomposition with the **quantified
 variables projected out first** (McCallum projection), then a per-cell fold over
 the free variables' decomposition:
 
+- **Inexact coefficients** — an approximate polynomial at its own machine root is
+  an approximate zero (within rounding of the size of its terms), so
+  `Resolve[Exists[x, x^2 == 2.0], Reals]` is `True` and
+  `Reduce[x^2 == 2.0, x, Reals]` is `x == -1.41421 || x == 1.41421`.
 - **Fully quantified (no free variables)** — a real-closed-field **decision
   procedure**. `Exists[{v}, φ]` is `True` unless the real solution set of `φ` is
   empty; `ForAll[{v}, φ]` is `True` only when it is all of `R^n`. Examples:
@@ -1603,6 +1607,8 @@ exhibit an instance nor prove emptiness.
 - `FindInstance[expr, vars, dom]` — over `dom`: `Complexes`, `Reals`, `Integers`,
   `Rationals`, or `Booleans` (Boolean satisfiability).
 - `FindInstance[expr, vars, dom, n]` — up to `n` instances (fewer if fewer exist).
+- `Modulus -> p` — equations hold in Z/pZ and every instance is integral:
+  `FindInstance[x^2 == 2, x, Modulus -> 7]` is `{{x -> 3}}`.
 
 **How it works.** Every returned instance is **verified** against `expr`
 (`expr /. instance` must evaluate to `True`) *and* checked to be **defined** there:
@@ -1828,6 +1834,14 @@ unknowns.
   `And[Equal[...], ...]`.  `True`/`False` sentinels arising from the
   evaluator's pre-pass on `==` are folded into the trivial answers.
 - `vars` is a symbol or a `List` of symbols.
+- Transcendental functions of `vars`: each `lhs - rhs` is rewritten with
+  `TrigToExp` and expanded; the kernels `E^(c v)` and `Log[v]` become
+  independent generators (the functions `v^j E^(c v) Log[v]^l` are linearly
+  independent), and their coefficients must vanish:
+  `SolveAlways[a Sin[x] + b == 0, x]` is `{{a -> 0, b -> 0}}`,
+  `SolveAlways[a Cos[x]^2 + b Sin[x]^2 == 1, x]` is `{{a -> 1, b -> 1}}`.  Any
+  other function of `vars` (`Sqrt[x]`, `Log[x + 1]`) leaves the call
+  unevaluated.
 - The empty-parameter case (every symbol in `eqns` already appears in
   `vars`) returns `{}` — the reference's convention that there are no
   parameter values to report regardless of whether the polynomial is
@@ -1865,7 +1879,9 @@ Out[4]= {{b -> a}}
 
 Held symbolic representation of an indexed root of a univariate polynomial.
 
-- `Root[Function[t, p[t]], k]` — the `k`-th root of `p` (1-indexed).
+- `Root[Function[t, p[t]], k]` — the `k`-th root of `p` (1-indexed), the
+  roots counted with multiplicity (`k` runs over `1..deg p`):
+  `N[Root[#^2 (# - 1) &, 2]]` is `0.` and `N[Root[#^2 (# - 1) &, 3]]` is `1.`.
 - The polynomial is kept with a positive leading coefficient, as in the
   reference: `Root[-#^3 - 2 # + 1 &, 1]` is `Root[-1 + 2 #1 + #1^3 &, 1]`; the
   roots and their index are unchanged (v0.591).
@@ -1986,6 +2002,9 @@ closed-form radical expressions.
 - **Canonical order is decided on values, not roundoff (v0.6040).** The numeric path sorts its QR eigenvalue estimates before Newton refinement, and compares Re and |Im| within the estimates' accuracy (2^-30 relative from LAPACK, half the working precision from MPFR QR). Roots on the imaginary axis and conjugate pairs therefore take the same index on every LAPACK build: `Root[49 + 18 #^2 + #^4 &, 4]` is `3.83 I` everywhere.
 
 - `Protected`.
+- A polynomial with inexact coefficients gives the root's numerical value
+  (`ToRadicals[Root[#^3 - 2.0 &, 1]]` is `1.25992`), not a Cardano form whose
+  rounding would leave a spurious imaginary part.
 - Closed-form radicals are always returned when the polynomial has degree
   at most four — linear (trivial), quadratic (`Sqrt`), cubic (Cardano), and
   quartic (Ferrari via the depressed quartic + resolvent cubic).

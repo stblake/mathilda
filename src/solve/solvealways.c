@@ -346,6 +346,207 @@ static Expr* call_solve(Expr** coeff_eqs, size_t n_eq,
 }
 
 /* ------------------------------------------------------------------ */
+/*  Transcendental identities (SolveAlways#1)                          */
+/* ------------------------------------------------------------------ */
+
+/* True iff `e` has a var-dependent subterm that is not built from the vars
+ * by Plus, Times and integer powers: Sin[x], Log[x], E^x, Sqrt[x], ...
+ * collect_variables enrols such a term as one more "parameter", so
+ * SolveAlways[a Sin[x] + b == 0, x] became Solve[..., {a, b, Sin[x]}]. */
+static bool sa_has_kernel(const Expr* e, Expr* const* vars, size_t nv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!sa_involves_any_var(e, vars, nv)) return false;
+    if (head_is(e, SYM_Plus) || head_is(e, SYM_Times)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (sa_has_kernel(e->data.function.args[i], vars, nv)) return true;
+        return false;
+    }
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER)
+        return sa_has_kernel(e->data.function.args[0], vars, nv);
+    return true;
+}
+
+typedef struct { Expr** k; Expr** sym; size_t n, cap; } SaKernels;
+
+/* The generator standing for kernel `e` (borrowed), allocating it on first
+ * sight. */
+static Expr* sa_kernel_symbol(SaKernels* K, const Expr* e) {
+    for (size_t i = 0; i < K->n; i++)
+        if (expr_eq((Expr*)e, K->k[i])) return expr_copy(K->sym[i]);
+    if (K->n == K->cap) {
+        K->cap = K->cap ? 2 * K->cap : 8;
+        K->k = (Expr**)realloc(K->k, sizeof(Expr*) * K->cap);
+        K->sym = (Expr**)realloc(K->sym, sizeof(Expr*) * K->cap);
+    }
+    char name[64];
+    snprintf(name, sizeof name, "SolveAlways`Private`k$%u", (unsigned)(K->n + 1));
+    K->k[K->n] = expr_copy((Expr*)e);
+    K->sym[K->n] = expr_new_symbol(name);
+    return expr_copy(K->sym[K->n++]);
+}
+
+/* Is `v` one of the vars? */
+static bool sa_is_var(const Expr* v, Expr* const* vars, size_t nv) {
+    for (size_t i = 0; i < nv; i++) if (expr_eq((Expr*)v, vars[i])) return true;
+    return false;
+}
+
+/* Replace every kernel of the expanded exp-log polynomial `e` by a generator.
+ * The admitted kernels are E^(c v) (c a nonzero number, v a var) and Log[v]:
+ * after TrigToExp + Expand the functions  v^j E^(c v) Log[v]^l  with distinct
+ * (j, c, l) are linearly independent over the constants, so an identity holds
+ * iff every coefficient vanishes.  Any other kernel sets *bad. */
+static Expr* sa_subst_kernels(const Expr* e, Expr* const* vars, size_t nv,
+                              SaKernels* K, bool* bad) {
+    if (*bad) return NULL;
+    if (!e || e->type != EXPR_FUNCTION || !sa_involves_any_var(e, vars, nv))
+        return expr_copy((Expr*)e);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == SYM_E) {
+        const Expr* g = e->data.function.args[1];
+        bool ok = sa_is_var(g, vars, nv);
+        if (!ok && head_is(g, SYM_Times) && g->data.function.arg_count == 2
+            && sa_is_var(g->data.function.args[1], vars, nv)) {
+            Expr* nq = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+                (Expr*[]){ expr_copy(g->data.function.args[0]) }, 1));
+            ok = nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+            expr_free(nq);
+        }
+        if (!ok) { *bad = true; return NULL; }
+        return sa_kernel_symbol(K, e);
+    }
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1
+        && sa_is_var(e->data.function.args[0], vars, nv))
+        return sa_kernel_symbol(K, e);
+    if (head_is(e, SYM_Plus) || head_is(e, SYM_Times)
+        || (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+            && e->data.function.args[1]->type == EXPR_INTEGER)) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            a[i] = sa_subst_kernels(e->data.function.args[i], vars, nv, K, bad);
+            if (*bad) { for (size_t j = 0; j < i; j++) expr_free(a[j]); free(a); return NULL; }
+        }
+        Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+        free(a);
+        return r;
+    }
+    *bad = true;
+    return NULL;
+}
+
+/* SolveAlways over exp-log identities: rewrite each lhs - rhs with TrigToExp,
+ * expand, name the kernels, and require every coefficient of the resulting
+ * polynomial in vars + kernels to vanish.  Returns the Solve result, or NULL
+ * (with *declined) when a kernel outside the admitted family appears -- the
+ * call then stays unevaluated rather than solving for a function of x. */
+static Expr* sa_solve_transcendental(Expr** eqs, size_t n_eq, Expr* const* vars,
+                                     size_t nv, bool* declined) {
+    *declined = false;
+    SaKernels K = { NULL, NULL, 0, 0 };
+    Expr** polys = (Expr**)malloc(sizeof(Expr*) * (n_eq ? n_eq : 1));
+    size_t np = 0;
+    bool bad = false;
+    for (size_t i = 0; i < n_eq && !bad; i++) {
+        Expr* eq = eqs[i];
+        if (!is_equal(eq)) continue;
+        Expr* diff = internal_subtract((Expr*[]){ expr_copy(eq->data.function.args[0]),
+                                                  expr_copy(eq->data.function.args[1]) }, 2);
+        Expr* te = eval_and_free(expr_new_function(expr_new_symbol(SYM_TrigToExp),
+                                                   (Expr*[]){ diff }, 1));
+        if (sa_has_var_denominator(te, vars, nv)) {
+            Expr* tog = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                                                        (Expr*[]){ te }, 1));
+            te = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator),
+                                                 (Expr*[]){ tog }, 1));
+        }
+        Expr* ex = eval_and_free(internal_expand((Expr*[]){ te }, 1));
+        Expr* sub = sa_subst_kernels(ex, vars, nv, &K, &bad);
+        expr_free(ex);
+        if (!bad) polys[np++] = eval_and_free(sub);
+    }
+    Expr* result = NULL;
+    if (!bad) {
+        /* generators: vars, then kernels */
+        size_t ng = nv + K.n;
+        Expr** gv = (Expr**)malloc(sizeof(Expr*) * (ng ? ng : 1));
+        for (size_t i = 0; i < nv; i++) gv[i] = expr_copy(vars[i]);
+        for (size_t i = 0; i < K.n; i++) gv[nv + i] = expr_copy(K.sym[i]);
+        Expr* glist = expr_new_function(expr_new_symbol(SYM_List), gv, ng);
+        free(gv);
+        Expr** coeffs = NULL;
+        size_t nc = 0, cc = 0;
+        for (size_t i = 0; i < np && !bad; i++) {
+            if (sa_has_kernel(polys[i], vars, nv)) { bad = true; break; }
+            Expr* cl = call_coefficient_list(polys[i], glist);
+            if (!cl || !is_list(cl)) { expr_free(cl); bad = true; break; }
+            flatten_coeffs(cl, &coeffs, &nc, &cc);
+            expr_free(cl);
+        }
+        /* parameters: the symbols of the generator polynomials less the generators */
+        size_t count = 0, cap = 16;
+        Expr** buf = (Expr**)malloc(sizeof(Expr*) * cap);
+        for (size_t i = 0; i < np; i++) collect_variables(polys[i], &buf, &count, &cap);
+        size_t kept = 0;
+        for (size_t i = 0; i < count; i++) {
+            if (list_contains_eq(glist->data.function.args, ng, buf[i])
+                || sa_involves_any_var(buf[i], vars, nv)) expr_free(buf[i]);
+            else buf[kept++] = buf[i];
+        }
+        expr_orderless_sort(buf, kept);
+        expr_free(glist);
+        if (bad || kept == 0) {
+            /* No parameters: the identity either holds (every coefficient is
+             * certifiably zero: {{}}), certainly fails (a coefficient is a
+             * nonzero number: {}), or is undecided (decline).  Sin[x]^2 +
+             * Cos[x]^2 == 1 is {{}}, Sin[x] == Sin[x] + 1 is {}. */
+            int verdict = 1;                     /* 1 holds, 0 fails, -1 undecided */
+            for (size_t i = 0; !bad && i < nc && verdict != 0; i++) {
+                Expr* z = eval_and_free(expr_new_function(expr_new_symbol(SYM_PossibleZeroQ),
+                    (Expr*[]){ expr_copy(coeffs[i]) }, 1));
+                bool zero = z->type == EXPR_SYMBOL && z->data.symbol.name == SYM_True;
+                expr_free(z);
+                if (zero) continue;
+                Expr* nq = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+                    (Expr*[]){ expr_copy(coeffs[i]) }, 1));
+                bool num = nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+                expr_free(nq);
+                verdict = num ? 0 : -1;
+            }
+            for (size_t i = 0; i < nc; i++) expr_free(coeffs[i]);
+            free(coeffs);
+            for (size_t i = 0; i < kept; i++) expr_free(buf[i]);
+            free(buf);
+            if (!bad && verdict == 0)
+                result = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+            else if (!bad && verdict == 1) {
+                Expr* inner = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+                result = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ inner }, 1);
+            } else if (!bad)
+                bad = true;                      /* undecided: stay unevaluated */
+        } else if (nc == 0) {
+            for (size_t i = 0; i < kept; i++) expr_free(buf[i]);
+            free(buf);
+            free(coeffs);
+            Expr* inner = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+            result = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ inner }, 1);
+        } else {
+            result = call_solve(coeffs, nc, buf, kept);
+            free(coeffs);
+            free(buf);
+        }
+    }
+    for (size_t i = 0; i < np; i++) expr_free(polys[i]);
+    free(polys);
+    for (size_t i = 0; i < K.n; i++) { expr_free(K.k[i]); expr_free(K.sym[i]); }
+    free(K.k); free(K.sym);
+    if (bad) *declined = true;
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public entry                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -392,6 +593,22 @@ Expr* builtin_solvealways(Expr* res) {
      * already own a wrapper (single-symbol case) reuse it; otherwise
      * borrow the user's `vars_arg` (it is already a List). */
     Expr* vars_list_view = wrap_vars ? wrap_vars : vars_arg;
+
+    /* ----- Transcendental (exp-log-trig) identities ----- */
+    {
+        bool any_kernel = false;
+        for (size_t i = 0; i < n_eq && !any_kernel; i++)
+            if (is_equal(eq_items[i])
+                && (sa_has_kernel(eq_items[i]->data.function.args[0], var_items, n_vars)
+                    || sa_has_kernel(eq_items[i]->data.function.args[1], var_items, n_vars)))
+                any_kernel = true;
+        if (any_kernel) {
+            bool declined = false;
+            Expr* r = sa_solve_transcendental(eq_items, n_eq, var_items, n_vars, &declined);
+            if (wrap_vars) expr_free(wrap_vars);
+            return declined ? NULL : r;
+        }
+    }
 
     /* ----- Collect all flattened coefficients across every eq ----- */
     Expr** all_coeffs = NULL;

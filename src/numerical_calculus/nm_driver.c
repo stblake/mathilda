@@ -321,23 +321,48 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     reg_hi = (double*)malloc(sizeof(double) * n);
     used_default = (bool*)calloc(n ? n : 1, sizeof(bool));
     bool any_default = false;
+    /* The search clamps every trial point into [reg_lo, reg_hi] and judges only
+     * the general constraints by penalty, so the region must lie inside the box
+     * constraints: a side that comes from a box constraint is a hard bound,
+     * while a starting-interval hint only seeds the search (NMinimize#2: the
+     * hint {x, 0, 1} against x > 5 gave the infeasible x -> 2.5).  A box side is
+     * never widened (NMinimize#1: x >= 3 && x <= 3 was widened to [2.5, 3.5]),
+     * and an integer variable's box side rounds inward (NMaximize#1: x <= 7.5
+     * rounded out to 8). */
     for (size_t i = 0; i < n; i++) {
-        bool klo = boxes[i].has_lo || vs.has_rlo[i];
-        bool khi = boxes[i].has_hi || vs.has_rhi[i];
-        double lo = boxes[i].has_lo ? boxes[i].lo : vs.rlo[i];
-        double hi = boxes[i].has_hi ? boxes[i].hi : vs.rhi[i];
-        if (boxes[i].has_lo && boxes[i].has_hi && boxes[i].lo > boxes[i].hi)
+        bool blo = boxes[i].has_lo, bhi = boxes[i].has_hi;
+        bool hlo = !blo && vs.has_rlo[i], hhi = !bhi && vs.has_rhi[i];
+        double lo = blo ? boxes[i].lo : vs.rlo[i];
+        double hi = bhi ? boxes[i].hi : vs.rhi[i];
+        if (vs.is_int[i]) {
+            if (blo) lo = ceil(lo);
+            if (bhi) hi = floor(hi);
+        }
+        if (blo && bhi && lo > hi)
             infeasible_box = true;
+        /* A hint side that contradicts a box side is dropped. */
+        if (blo && hhi && hi < lo) hhi = false;
+        if (bhi && hlo && lo > hi) hlo = false;
+        bool klo = blo || hlo, khi = bhi || hhi;
         if (klo && khi)      { reg_lo[i] = lo; reg_hi[i] = hi; }
         else if (klo)        { reg_lo[i] = lo; reg_hi[i] = lo + NM_BOUND_SPAN; }
         else if (khi)        { reg_hi[i] = hi; reg_lo[i] = hi - NM_BOUND_SPAN; }
         else                 { reg_lo[i] = -NM_DEFAULT_SPAN; reg_hi[i] = NM_DEFAULT_SPAN;
                                used_default[i] = true; any_default = true; }
-        if (reg_hi[i] <= reg_lo[i]) {
+        if (reg_hi[i] <= reg_lo[i] && !(blo && bhi)) {
+            /* a degenerate hint: widen it, but never past a box side */
             double m = 0.5 * (reg_lo[i] + reg_hi[i]);
-            reg_lo[i] = m - 0.5; reg_hi[i] = m + 0.5;
+            reg_lo[i] = blo ? lo : m - 0.5;
+            reg_hi[i] = bhi ? hi : m + 0.5;
+            if (reg_hi[i] <= reg_lo[i]) {
+                if (blo) reg_hi[i] = lo + 1.0; else reg_lo[i] = hi - 1.0;
+            }
         }
-        if (vs.is_int[i]) { reg_lo[i] = floor(reg_lo[i]); reg_hi[i] = ceil(reg_hi[i]); }
+        if (vs.is_int[i]) {
+            /* hint/default sides may round outward; box sides are integral */
+            reg_lo[i] = floor(reg_lo[i]);
+            reg_hi[i] = ceil(reg_hi[i]);
+        }
     }
 
     /* Objective gradient (for the continuous local polish; NULL → FD). */
@@ -456,7 +481,8 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
      * up to NM_MAX_REGION_EXPAND times. */
     int auto_runs = (nc.method == NM_AUTO && !opts.max_iter_set) ? NM_AUTO_RUNS : 1;
     double* xattempt = (double*)malloc(sizeof(double) * n);
-    int grown = 0, good_runs = 0;
+    int grown = 0, good_runs = 0, edge_grown = 0;
+    bool edge_unresolved = false;   /* best point still on a free edge after the last growth */
     for (int attempt = 0; ; attempt++) {
         double fa = 1e300, pa = 1e300;
         NmRng rng;
@@ -494,8 +520,34 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
             for (size_t i = 0; i < n; i++) xbest[i] = xattempt[i];
             fbest = fa; penbest = pa;
         }
-        if (penbest <= NM_FEAS_RETURN) {       /* feasible: do the best-of-K runs */
+        /* NMinimize#3: an integer coordinate with no bound has nothing to carry
+         * it out of the default region (the continuous ones are polished free
+         * of it), so a best point pinned to that region's edge -- (x - 50)^2
+         * over the integers answered x -> 10 -- means the optimum may lie
+         * beyond it: grow the region as for infeasibility. */
+        bool on_edge = false;
+        if (penbest <= NM_FEAS_RETURN && !infeasible_box && !infeasible_pre)
+            for (size_t i = 0; i < n; i++)
+                if (vs.is_int[i]
+                    && ((!boxes[i].has_lo && fabs(xbest[i] - reg_lo[i]) < 0.5)
+                        || (!boxes[i].has_hi && fabs(xbest[i] - reg_hi[i]) < 0.5)))
+                    on_edge = true;
+        bool int_edge = on_edge && edge_grown < NM_MAX_REGION_EXPAND;
+        edge_unresolved = on_edge && !int_edge;
+        if (penbest <= NM_FEAS_RETURN && !int_edge) {
+            /* feasible: do the best-of-K runs */
             if (++good_runs >= auto_runs) break;
+        } else if (penbest <= NM_FEAS_RETURN) {
+            edge_grown++;
+            good_runs = 0;
+            double span = NM_DEFAULT_SPAN * pow(10.0, (double)edge_grown);
+            for (size_t i = 0; i < n; i++) {
+                if (!vs.is_int[i]) continue;
+                if (!boxes[i].has_lo && fabs(xbest[i] - reg_lo[i]) < 0.5)
+                    reg_lo[i] = floor(reg_lo[i] - span);
+                if (!boxes[i].has_hi && fabs(xbest[i] - reg_hi[i]) < 0.5)
+                    reg_hi[i] = ceil(reg_hi[i] + span);
+            }
         } else {                               /* infeasible: grow region to rescue */
             if (grown >= max_region) break;
             grown++;
@@ -513,6 +565,18 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
      * calling it feasible is the original bug; reporting a worse-than-tolerance
      * result honestly is the fix. */
     bool feasible = !infeasible_box && !infeasible_pre && (penbest <= NM_FEAS_RETURN);
+
+    /* An unbounded integer coordinate whose best point is still on the edge of
+     * the search region after every growth step (NMinimize[{x, x in Integers},
+     * x] reached x -> -111110): the objective keeps decreasing past every
+     * region tried, so the problem appears unbounded.  The edge point is not a
+     * minimum; say so and stay unevaluated. */
+    if (feasible && edge_unresolved) {
+        fm_warn(fn_name, "ubnd",
+                "the objective keeps improving past every search region tried "
+                "(the problem may be unbounded); no minimum is reported");
+        goto cleanup;
+    }
 
     /* A minimax objective Max[p_1, ..., p_m]: the global search and its
      * quasi-Newton polish both stall a few digits short at the kink where the
@@ -617,6 +681,19 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     /* Free the temporary bindings so the variable symbols are unbound while
      * we build the result rules (Rule[x, v] must not re-evaluate x). */
     for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+
+    /* NMaximize#2: nm_eval scores a point whose objective is not a real number
+     * as 1e300.  When no sampled point ever did better, the objective is never
+     * numeric (a x - x^2 with a free a, I x, Indeterminate): the sentinel is not
+     * an optimum.  Say so and stay unevaluated. */
+    if (feasible && !(fbest < 1e300)) {
+        fm_warn(fn_name, "nnum",
+                "the objective function value is not a real number at any sampled point");
+#ifdef USE_MPFR
+        if (mpfr_built) { fm_mpfr_array_free(xm, n); mpfr_clear(fmv); mpfr_built = false; }
+#endif
+        goto cleanup;
+    }
 
 #ifdef USE_MPFR
     if (mpfr_built) {

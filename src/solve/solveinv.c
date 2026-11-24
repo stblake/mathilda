@@ -1771,8 +1771,8 @@ static Expr* peel_explog(Expr* residual, Expr* var, SolveInvCtx* ctx, bool* hand
     return NULL;
 }
 
-static Expr* solveinv_drive(Expr* equation, Expr* var,
-                            SolveInvCtx* ctx) {
+static Expr* solveinv_drive_core(Expr* equation, Expr* var,
+                                 SolveInvCtx* ctx, Expr** fused_orig) {
     if (!equation || !var || !ctx) return NULL;
     if (!ctx->opts || !ctx->opts->enabled) return NULL;
     if (ctx->depth >= SOLVEINV_MAX_DEPTH) return NULL;
@@ -1791,7 +1791,10 @@ static Expr* solveinv_drive(Expr* equation, Expr* var,
      * leaves exactly one invertible head so the Log peel below can fire.
      * NULL (fewer than two fusable logs) leaves the residual unchanged. */
     Expr* fused = simp_log_fuse_all(residual, var);
-    if (fused) { expr_free(residual); residual = fused; }
+    if (fused) {
+        if (fused_orig) *fused_orig = residual; else expr_free(residual);
+        residual = fused;
+    }
 
     /* Exponentials with numeric bases: the exact, domain-aware path. */
     {
@@ -1865,6 +1868,45 @@ static Expr* solveinv_drive(Expr* equation, Expr* var,
 
     expr_free(iso.g); expr_free(iso.new_rhs);
     return aggregate;
+}
+
+/* Solve#1: Log[a] + Log[b] == Log[a b] holds only up to a multiple of
+ * 2 Pi I, so a root of the fused Log[R(var)] form need not be a root of the
+ * residual as written (Log[x] + Log[x - 1] == Log[2] gained x -> -1, where the
+ * left side is Log[2] + 2 Pi I).  Keep a fused-path solution unless the
+ * original residual at it is a number that is certainly not zero; a value that
+ * stays symbolic (parameters, C[k], a ConditionalExpression) is kept as before.
+ * This filter relies on PossibleZeroQ having no false negatives on a valid
+ * root (project policy: PossibleZeroQ is the verifier; a false negative there
+ * is a PossibleZeroQ bug to fix, not a reason to loosen this test) -- a valid
+ * root misjudged nonzero would be dropped silently. */
+static bool solveinv_fused_root_spurious(Expr* orig_residual, Expr* sol) {
+    Expr* at = eval_and_free(mk_fn2("ReplaceAll", expr_copy(orig_residual), expr_copy(sol)));
+    bool spurious = false;
+    Expr* nq = eval_and_free(mk_fn1("NumericQ", expr_copy(at)));
+    if (is_true_sym(nq) && !pzq(expr_copy(at))) spurious = true;
+    expr_free(nq);
+    expr_free(at);
+    return spurious;
+}
+
+static Expr* solveinv_drive(Expr* equation, Expr* var, SolveInvCtx* ctx) {
+    Expr* orig = NULL;
+    Expr* sols = solveinv_drive_core(equation, var, ctx, &orig);
+    if (!orig) return sols;
+    if (sols && head_is(sols, SYM_List)) {
+        size_t n = sols->data.function.arg_count, w = 0;
+        Expr** kept = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            Expr* si = sols->data.function.args[i];
+            if (!solveinv_fused_root_spurious(orig, si)) kept[w++] = expr_copy(si);
+        }
+        expr_free(sols);
+        sols = expr_new_function(expr_new_symbol(SYM_List), kept, w);
+        free(kept);
+    }
+    expr_free(orig);
+    return sols;
 }
 
 /* ------------------------------------------------------------------ *

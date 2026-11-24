@@ -4165,6 +4165,16 @@ Expr* builtin_integrate(Expr* res) {
     return stage_contain_overflow(builtin_integrate_body(res), overflow_before);
 }
 
+/* Does `e` still hold an unevaluated Integrate (a sub-integral that failed)? */
+static bool integ_mentions_integrate(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Integrate)) return true;
+    if (integ_mentions_integrate(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (integ_mentions_integrate(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* builtin_integrate_body(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -4194,6 +4204,46 @@ static Expr* builtin_integrate_body(Expr* res) {
         Expr* out = expr_new_function(expr_new_symbol(SYM_List), elems, n);
         free(elems);
         return out;
+    }
+
+    /* Integrate#2: a multiple integral with an indefinite variable among its
+     * specs, Integrate[f, x, y] or Integrate[f, {x, 0, 1}, y].  The second
+     * and later specs were parsed as options (a bogus Integrate::method).  The
+     * last spec is innermost: integrate over it, then over the rest.  An
+     * all-definite multiple integral keeps the scoped definite path below. */
+    {
+        size_t pend = argc;
+        while (pend > 2 && (head_is(res->data.function.args[pend - 1], SYM_Rule)
+                            || head_is(res->data.function.args[pend - 1], SYM_RuleDelayed)))
+            pend--;
+        bool all_specs = pend >= 3, any_indef = false;
+        for (size_t i = 1; all_specs && i < pend; i++) {
+            Expr* s = res->data.function.args[i];
+            if (s->type == EXPR_SYMBOL) { any_indef = true; continue; }
+            if (!(s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL
+                  && s->data.function.head->data.symbol.name == SYM_List
+                  && s->data.function.arg_count >= 1
+                  && s->data.function.args[0]->type == EXPR_SYMBOL))
+                all_specs = false;
+        }
+        if (all_specs && any_indef) {
+            size_t nopt = argc - pend;
+            Expr** ia = malloc(sizeof(Expr*) * (2 + nopt));
+            ia[0] = expr_copy(f);
+            ia[1] = expr_copy(res->data.function.args[pend - 1]);
+            for (size_t i = 0; i < nopt; i++) ia[2 + i] = expr_copy(res->data.function.args[pend + i]);
+            Expr* inner = eval_and_free(expr_new_function(expr_new_symbol(SYM_Integrate), ia, 2 + nopt));
+            free(ia);
+            if (!inner || integ_mentions_integrate(inner)) { expr_free(inner); return NULL; }
+            size_t on = argc - 1;
+            Expr** oa = malloc(sizeof(Expr*) * on);
+            oa[0] = inner;
+            for (size_t i = 1; i + 1 < pend; i++) oa[i] = expr_copy(res->data.function.args[i]);
+            for (size_t i = 0; i < nopt; i++) oa[pend - 1 + i] = expr_copy(res->data.function.args[pend + i]);
+            Expr* outer = expr_new_function(expr_new_symbol(SYM_Integrate), oa, on);
+            free(oa);
+            return outer;
+        }
     }
 
     /* Definite form: the second argument is a `{x, a, b}` range spec or a
