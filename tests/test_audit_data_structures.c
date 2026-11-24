@@ -45,10 +45,22 @@ static void test_keysort_ordering_packed(void) {
     audit_chk("KeySort#1", "KeySort[<|3 -> a, 1 -> b, 2 -> c|>, #1 > #2 &]", "<|3 -> a, 2 -> c, 1 -> b|>");
 }
 
+/* ArrayQ#1 / DeleteMissing#1 (low): no depth cap; a BigInt level. */
+static void test_s14_arrayq_deletemissing(void) {
+    audit_chk("ArrayQ#1", "ArrayQ[Nest[List, 1, 33]]", "True");
+    audit_chk("ArrayQ#1", "ArrayQ[Nest[List, 1, 40]]", "True");
+    audit_chk("ArrayQ#1", "ArrayQ[Nest[List, 1, 40], 40]", "True");
+    audit_chk("ArrayQ#1", "ArrayQ[{{1, 2}, {3}}]", "False");
+    audit_chk("ArrayQ#1", "ArrayQ[{1, {2}}]", "False");
+    audit_true("DeleteMissing#1", "DeleteMissing[{1, Missing[]}, 2^70] === {1}");
+    audit_true("DeleteMissing#1", "DeleteMissing[{{1, Missing[]}, Missing[]}, 2^70] === {{1}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_gatherby_nested);
     TEST(test_key_accessor_contract);
     TEST(test_keysort_ordering_packed);
+    TEST(test_s14_arrayq_deletemissing);
     return audit_finish("audit_data_structures");
 }

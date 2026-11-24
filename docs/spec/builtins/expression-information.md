@@ -2096,6 +2096,8 @@ Out[2]= "custom note"
 ```
 
 ## MemberQ
+
+- `MemberQ[expr, form, -n]` searches levels 1 through `-n` (audit MemberQ#1).
 - `MemberQ[list, form]`: Returns `True` if an element of list matches form, and `False` otherwise.
 - `MemberQ[list, form, levelspec]`: Tests all parts of list specified by levelspec.
 - `MemberQ[form]`: Represents an operator form of `MemberQ` that can be applied to an expression.

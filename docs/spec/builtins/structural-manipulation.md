@@ -130,6 +130,8 @@ Out[1]= 3
 ```
 
 ## Dimensions
+
+- No depth cap: a plain nest is measured to any depth (`Length[Dimensions[Nest[List, 1, 70]]]` is `70`; it stopped at 64, audit Dimensions#2). `Dimensions[expr, Infinity]` takes the `Infinity` symbol too.
 Returns the list of lengths of levels in a nested rectangular structure.
 - `Dimensions[expr]`: gives the dimensions of `expr` at every level where
   it is not ragged.
@@ -164,6 +166,8 @@ Convenience functions for accessing parts of a sequence.
 - `Rest[expr]`: Returns all elements except the first.
 
 ## Reverse
+
+- The level argument is a positive machine integer or a list of them; anything else (`0`, `-1`, `x`, `1.5`, `{1, x}`) is `Reverse::ilsmp` and the call stays unevaluated (audit Reverse#2).
 Reverses the order of elements.
 - `Reverse[expr]`: Reverses top-level elements.
 - `Reverse[expr, n]`: Reverses elements at level `n`.
@@ -203,6 +207,8 @@ Out[2]= {{a, b, 0, 0, 0}, {c, 0, 0, 0, 0}, {0, 0, 0, 0, 0}}
 ```
 
 ## Transpose
+
+- `Transpose[list, m <-> n]` exchanges levels `m` and `n` (audit Transpose#1).
 Transposes levels in a rectangular array.
 - `Transpose[list]`: Transposes the first two levels.
 - `Transpose[list, {n1, n2, ...}]`: Level `k` becomes level `nk` in result.
@@ -233,6 +239,8 @@ Out[2]= {a, d}
 ```
 
 ## ConjugateTranspose
+
+- A ragged list whose top two levels are not rectangular (`{{1, I}, {3}}`) is `ConjugateTranspose::nmtx`, unevaluated -- it was conjugated as if it were a vector (audit ConjugateTranspose#1).
 Conjugate transpose (Hermitian transpose) of an array.
 - `ConjugateTranspose[m]`: equivalent to `Conjugate[Transpose[m]]`.
 - `ConjugateTranspose[m, spec]`: equivalent to `Conjugate[Transpose[m, spec]]`.
@@ -286,6 +294,8 @@ Extract or remove sequences of elements.
 - `Drop[expr, spec]`: Removes elements according to `spec`.
 
 ## Flatten
+
+- `Flatten[list, {{s11, s12, ...}, {s21, ...}, ...}]` combines levels `s11, s12, ...` of `list` into level 1 of the result, `s21, ...` into level 2, and so on (unnamed levels up to the deepest named one follow as levels of their own): `Flatten[m, {{2}, {1}}]` is the transpose, ragged lists included (`Flatten[{{a, b, c}, {d, e}, {f}}, {{2}, {1}}]` is `{{a, d, f}, {b, e}, {c}}`; audit Flatten#2). A level that is neither a non-negative integer, `Infinity` (a positive BigInt counts as `Infinity`), nor such a list is `Flatten::flev` (audit Flatten#4).
 Flattens out nested lists.
 - `Flatten[list]`: Flattens all levels.
 - `Flatten[list, n]`: Flattens up to level `n`; `n` may be `Infinity`.

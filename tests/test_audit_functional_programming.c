@@ -143,6 +143,49 @@ static void test_level_spec_infinity(void) {
     audit_chk("Map#1", "Map[f, g[a], Heads -> True]", "f[g][f[a]]");
 }
 
+/* S14 (Wave 3): the shared level-spec parser takes BigInt and -Infinity
+ * bounds; the level forms of AllTrue/AnyTrue/NoneTrue/FirstCase; Apply below
+ * a held argument; the ::level / ::intnm messages. */
+static void test_s14_level_specs(void) {
+    audit_run("ClearAll[f, g, a, b, c, x, q]");
+    /* Map#2: a level past any depth is Infinity */
+    audit_true("Map#2", "Map[f, {{a}}, 10^20] === {f[{f[a]}]}");
+    audit_true("Map#2", "Map[f, {{a}}, {1, 2^70}] === {f[{f[a]}]}");
+    audit_true("Map#2", "Map[f, {{a}}, -10^20] === {{a}}");
+    /* Apply#3: the new f[...] below Hold is not evaluated */
+    audit_chk("Apply#3", "Apply[f, Hold[g[1 + 1]], {1}]", "Hold[f[1 + 1]]");
+    audit_chk("Apply#3", "Apply[f, Hold[{1 + 1}], {1}]", "Hold[f[1 + 1]]");
+    audit_true("Apply#3", "Apply[Plus, {{1, 2}, {3, 4}}, {1}] === {3, 7}");
+    audit_true("Apply#3", "(Plus @@@ {{1, 2}, {3, x}}) === {3, 3 + x}");
+    /* AllTrue#1 / AnyTrue#1 / NoneTrue#1: the level form (levels 1..n for n) */
+    audit_chk("AllTrue#1", "AllTrue[{{2}, {3}}, EvenQ, {2}]", "False");
+    audit_chk("AllTrue#1", "AllTrue[{{2}, {4}}, EvenQ, {2}]", "True");
+    audit_chk("AllTrue#1", "AllTrue[{2, 4}, EvenQ, 1]", "True");
+    audit_chk("AllTrue#1", "AllTrue[{{2, 4}, {6}}, IntegerQ[#] || ListQ[#] &, 2]", "True");
+    audit_chk("AnyTrue#1", "AnyTrue[{{1, 3}, {2}}, EvenQ, 2]", "True");
+    audit_chk("AnyTrue#1", "AnyTrue[{{1, 3}, {2}}, EvenQ, {2}]", "True");
+    audit_chk("AnyTrue#1", "AnyTrue[{1, {2}}, EvenQ, Infinity]", "True");
+    audit_chk("AnyTrue#1", "AnyTrue[{1, {3}}, EvenQ, Infinity]", "False");
+    audit_chk("AnyTrue#1", "AnyTrue[{1, 2}, EvenQ, 1]", "True");
+    audit_chk("NoneTrue#1", "NoneTrue[{{1, 2}, {3, 5}}, EvenQ, 2]", "False");
+    audit_chk("NoneTrue#1", "NoneTrue[{{1, 3}, {3, 5}}, EvenQ, 2]", "True");
+    audit_chk("NoneTrue#1", "NoneTrue[{{1, 2}, {3, 5}}, EvenQ, {2}]", "False");
+    audit_chk("AllTrue#1", "Check[AllTrue[{1}, EvenQ, x], fired, AllTrue::level]", "fired");
+    /* FirstCase#2: the level spec (fourth argument) */
+    audit_chk("FirstCase#2", "FirstCase[{{1, 2}, {3, a}}, _Symbol, None, Infinity]", "a");
+    audit_chk("FirstCase#2", "FirstCase[{{1, 2}, {3, a}}, _Symbol, None]", "None");
+    audit_chk("FirstCase#2", "FirstCase[{{1, 2}, {3, a}}, _Integer, None, {2}]", "1");
+    audit_chk("FirstCase#2", "Check[FirstCase[{1}, _, None, x], fired, FirstCase::level]", "fired");
+    /* MapThread#1: a bad level is ::intnm, unevaluated */
+    audit_chk("MapThread#1", "Check[MapThread[f, {{1, 2}, {3, 4}}, -1], fired, MapThread::intnm]",
+              "fired");
+    audit_chk("MapThread#1", "Check[MapThread[f, {{1, 2}, {3, 4}}, 1.0], fired, MapThread::intnm]",
+              "fired");
+    audit_true("MapThread#1", "Quiet[Head[MapThread[f, {{1, 2}, {3, 4}}, -1]]] === MapThread");
+    /* Scan#5: ::level */
+    audit_chk("Scan#5", "Check[Scan[Print, {a}, x], fired, Scan::level]", "fired");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fixedpointlist_long_symbolic);
@@ -154,5 +197,6 @@ int main(void) {
     TEST(test_function_nested_capture);
     TEST(test_function_scope_capture);
     TEST(test_level_spec_infinity);
+    TEST(test_s14_level_specs);
     return audit_finish("audit_functional_programming");
 }

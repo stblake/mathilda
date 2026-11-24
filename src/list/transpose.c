@@ -310,6 +310,30 @@ Expr* builtin_transpose(Expr* res) {
     Expr* list = res->data.function.args[0];
     size_t argc = res->data.function.arg_count;
 
+    /* Transpose[list, m <-> n] swaps levels m and n: the permutation that
+     * exchanges them, as a list spec (audit Transpose#1). */
+    if (argc == 2 && head_is(res->data.function.args[1], SYM_TwoWayRule) &&
+        res->data.function.args[1]->data.function.arg_count == 2) {
+        const Expr* a = res->data.function.args[1]->data.function.args[0];
+        const Expr* b = res->data.function.args[1]->data.function.args[1];
+        if (a->type != EXPR_INTEGER || b->type != EXPR_INTEGER ||
+            a->data.integer < 1 || b->data.integer < 1 ||
+            a->data.integer > 64 || b->data.integer > 64) {
+            tr_msg("permspec", "Invalid permutation specification found at position 2 in %s.", res, NULL);
+            return NULL;
+        }
+        int64_t m = a->data.integer, n = b->data.integer, L = m > n ? m : n;
+        Expr** pa = malloc(sizeof(Expr*) * (size_t)L);
+        for (int64_t k = 1; k <= L; k++)
+            pa[k - 1] = expr_new_integer(k == m ? n : k == n ? m : k);
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List), pa, (size_t)L);
+        free(pa);
+        Expr* ta[2] = { expr_copy(list), spec };
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Transpose), ta, 2));
+        if (head_is(r, SYM_Transpose)) { expr_free(r); return NULL; }
+        return r;
+    }
+
     /* The transpose of a vector is the vector itself. */
     if (is_ndarray(list) && list->data.ndarray.rank == 1) {
         const Expr* sp = argc == 2 ? res->data.function.args[1] : NULL;
@@ -439,6 +463,22 @@ Expr* builtin_conjugate_transpose(Expr* res) {
     /* Not a (rectangular) List: leave the call unevaluated so that symbolic
      * matrices like ConjugateTranspose[A] stay intact. */
     if (depth == 0) return NULL;
+
+    /* 1-arg form on a ragged list (depth 1, but with List entries): the top
+     * two levels are transposed when they are rectangular, else
+     * ConjugateTranspose::nmtx (audit ConjugateTranspose#1: {{1, I}, {3}} was
+     * conjugated as if it were a vector). */
+    if (argc == 1 && depth == 1 && m->type == EXPR_FUNCTION && !is_flat_vector(m)) {
+        int64_t nr, nc;
+        if (!get_top2_dims(m, SYM_List, &nr, &nc)) {
+            char* ms = expr_to_string_outputform(m);
+            mth_message("ConjugateTranspose", "nmtx",
+                        "The first two levels of %s cannot be transposed.", ms ? ms : "");
+            free(ms);
+            return NULL;
+        }
+        depth = 2;
+    }
 
     /* 1-arg form on a 1-D vector: conjugate elementwise, keep the shape. */
     if (argc == 1 && depth == 1) {

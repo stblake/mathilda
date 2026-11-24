@@ -5,6 +5,8 @@
 #include "ndstruct.h"
 #include "assoc.h"
 #include "linkedlist.h"
+#include "message.h"
+#include "print.h"
 
 static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     if (!level_spec) return current_level == 1;
@@ -52,9 +54,31 @@ static Expr* reverse_rec(Expr* expr, Expr* level_spec, size_t current_level) {
     return result;
 }
 
+/* The level argument: a positive machine integer or a list of them.  Anything
+ * else is Reverse::ilsmp and the call stays unevaluated (audit Reverse#2: 0,
+ * -1, x, 1.5 and {1, x} were ignored or half-read). */
+static bool reverse_levels_ok(const Expr* ls) {
+    if (ls->type == EXPR_INTEGER) return ls->data.integer > 0;
+    if (!head_is((Expr*)ls, SYM_List) || ls->data.function.arg_count == 0) return false;
+    for (size_t i = 0; i < ls->data.function.arg_count; i++) {
+        const Expr* a = ls->data.function.args[i];
+        if (a->type != EXPR_INTEGER || a->data.integer <= 0) return false;
+    }
+    return true;
+}
+
 Expr* builtin_reverse(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
+
+    if (res->data.function.arg_count == 2 && !reverse_levels_ok(res->data.function.args[1])) {
+        char* cs = expr_to_string(res);
+        mth_message("Reverse", "ilsmp",
+                    "Single or list of positive machine-sized integers expected at position 2 of %s.",
+                    cs ? cs : "?");
+        free(cs);
+        return NULL;
+    }
 
     { bool dh; Expr* dr = ds_native(expr, SYM_Reverse, res, &dh); if (dh) return dr; }
     /* Reverse[ndarray]: block-reverse the leading axis on the buffer (ndstruct.c). */

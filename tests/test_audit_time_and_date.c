@@ -29,9 +29,17 @@ static void test_unixtime_int64_edge(void) {
     audit_true("UnixTime#1", "UnixTime[{1970, 1, 2}] === 86400");
 }
 
+/* UnixTime#4 (low): an exact AbsoluteTime is shifted exactly. */
+static void test_s14_unixtime_exact(void) {
+    audit_true("UnixTime#4", "UnixTime[10^30] === 10^30 - 2208988800");
+    audit_true("UnixTime#4", "UnixTime[2208988800] === 0");
+    audit_true("UnixTime#4", "UnixTime[0] === -2208988800");
+}
+
 int main(void) {
     audit_init();
     TEST(test_datelist_far_past);
     TEST(test_unixtime_int64_edge);
+    TEST(test_s14_unixtime_exact);
     return audit_finish("audit_time_and_date");
 }

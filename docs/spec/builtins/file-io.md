@@ -770,6 +770,8 @@ FileBaseName["/etc/.bashrc"]     (* ".bashrc" *)
 ```
 
 ## DirectoryName
+
+- `OperatingSystem -> "Windows" | "Unix" | "MacOSX"` selects the separator convention; under `"Windows"` a backslash separates too (audit DirectoryName#2).
 Returns the directory portion of a path, including its final separator.
 - `DirectoryName["name"]`: everything up to and including the last separator.
 - `DirectoryName["name", n]`: goes up `n` levels (`n` a positive machine integer).

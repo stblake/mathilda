@@ -2890,6 +2890,8 @@ Out[5]= HararyGraph[4, 4]
 
 ## FindMaximumFlow
 
+- Exact Integer capacities give exact Integer flows and cuts past 2^61: the network runs on int64 while the capacity sum is below 2^61 and on a 128-bit integer up to 2^125 (on compilers with one); beyond that the Integer network is clamped and, failing that, solved as a Real. This covers `FindMinimumCut`, `FindEdgeCut` and `EdgeConnectivity` too (audit FindMinimumCut#3-4, FindMaximumFlow#3, EdgeConnectivity#2: weights of 10^20 or 2^62 saturated at 2^61 or came back Real).
+
 - `FindMaximumFlow[g, s, t]`: the maximum flow value from source `s` to sink `t` in the graph `g`.
 - `FindMaximumFlow[g, s, t, "prop"]`: the flow property `"prop"` — `"FlowValue"`, `"FlowMatrix"` or `"EdgeList"`.
 

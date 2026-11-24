@@ -288,6 +288,57 @@ static void test_rankedmax_exact_bigints(void) {
     audit_true("RankedMax#1", "RankedMax[{2^53 + 1, 2^53, -Infinity}, -2] === 2^53");
 }
 
+/* S14 (Wave 3): level specs and level arguments in the structural heads. */
+static void test_s14_levels_and_shapes(void) {
+    audit_run("ClearAll[a, b, c, d, e, f, h, x]");
+    /* Level#4: -Infinity as a depth bound includes level 0 */
+    audit_true("Level#4", "Level[{a, {b, {c}}}, {-Infinity, -1}] === Level[{a, {b, {c}}}, {-4, -1}]");
+    audit_true("Level#4", "Level[{a, {b, {c}}}, {-Infinity, -1}] === "
+                          "{a, b, c, {c}, {b, {c}}, {a, {b, {c}}}}");
+    audit_true("Level#4", "Level[{a, {b}}, {1, -Infinity}] === {}");
+    /* Flatten#2: the list-of-level-lists form */
+    audit_true("Flatten#2", "Flatten[{{a, b}, {c, d}}, {{2}, {1}}] === {{a, c}, {b, d}}");
+    audit_true("Flatten#2", "Flatten[{{a, b}, {c, d}}, {{1, 2}}] === {a, b, c, d}");
+    audit_true("Flatten#2", "Flatten[{{a, b, c}, {d, e}, {f}}, {{2}, {1}}] === {{a, d, f}, {b, e}, {c}}");
+    audit_true("Flatten#2", "Flatten[Array[h, {2, 3, 4}], {{3}, {1}, {2}}] === "
+                            "Transpose[Array[h, {2, 3, 4}], {2, 3, 1}]");
+    audit_true("Flatten#2", "Flatten[Array[h, {2, 3, 4}], {{1, 3}, {2}}] === "
+                            "Flatten[Transpose[Array[h, {2, 3, 4}], {1, 3, 2}], 1]");
+    /* Flatten#4: a symbol or Real level is Flatten::flev */
+    audit_chk("Flatten#4", "Check[Flatten[{{a}}, x], fired, Flatten::flev]", "fired");
+    audit_chk("Flatten#4", "Check[Flatten[{{a}}, 1.5], fired, Flatten::flev]", "fired");
+    audit_true("Flatten#4", "Flatten[{{a}, {{b}}}, 2^70] === {a, b}");
+    /* ConjugateTranspose#1: a ragged list is ::nmtx */
+    audit_chk("ConjugateTranspose#1",
+              "Check[ConjugateTranspose[{{1, I}, {3}}], fired, ConjugateTranspose::nmtx]", "fired");
+    audit_chk("ConjugateTranspose#1",
+              "Check[ConjugateTranspose[{{1, I}, 3}], fired, ConjugateTranspose::nmtx]", "fired");
+    audit_true("ConjugateTranspose#1", "ConjugateTranspose[{1, I}] === {1, -I}");
+    audit_true("ConjugateTranspose#1", "ConjugateTranspose[{{1, I}, {2, 3}}] === {{1, 2}, {-I, 3}}");
+    /* Transpose#1: m <-> n swaps two levels */
+    audit_true("Transpose#1", "Transpose[{{a, b}, {c, d}}, 1 <-> 2] === {{a, c}, {b, d}}");
+    audit_true("Transpose#1", "Dimensions[Transpose[Array[h, {2, 3, 4}], 1 <-> 3]] === {4, 3, 2}");
+    audit_true("Transpose#1", "Transpose[Array[h, {2, 3, 4}], 1 <-> 3] === "
+                              "Transpose[Array[h, {2, 3, 4}], {3, 2, 1}]");
+    /* Reverse#2: a bad level is Reverse::ilsmp */
+    audit_chk("Reverse#2", "Check[Reverse[{1, 2}, 0], fired, Reverse::ilsmp]", "fired");
+    audit_chk("Reverse#2", "Check[Reverse[{1, 2}, -1], fired, Reverse::ilsmp]", "fired");
+    audit_chk("Reverse#2", "Check[Reverse[{1, 2}, x], fired, Reverse::ilsmp]", "fired");
+    audit_chk("Reverse#2", "Check[Reverse[{1, 2}, 1.5], fired, Reverse::ilsmp]", "fired");
+    audit_chk("Reverse#2", "Check[Reverse[{1, 2}, {1, x}], fired, Reverse::ilsmp]", "fired");
+    audit_true("Reverse#2", "Reverse[{{1, 2}, {3}}, {1, 2}] === {{3}, {2, 1}}");
+    /* Dimensions#2: no 64-level cap */
+    audit_chk("Dimensions#2", "Length[Dimensions[Nest[List, 1, 70]]]", "70");
+    audit_chk("Dimensions#2", "Length[Dimensions[Nest[List, 1, 70], 66]]", "66");
+    audit_true("Dimensions#2", "Dimensions[{{1, 2}, {3}}] === {2}");
+    audit_true("Dimensions#2", "Dimensions[{{{1}}}, Infinity] === {1, 1, 1}");
+    /* RotateLeft#3 / RotateRight#4: the docstrings name every form */
+    audit_chk("RotateLeft#3", "StringContainsQ[Information[\"RotateLeft\"], \"{n1, n2, ...}\"]",
+              "True");
+    audit_chk("RotateRight#4", "StringContainsQ[Information[\"RotateRight\"], \"RotateRight[expr]\"]",
+              "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_expand_option_not_pattern);
@@ -308,5 +359,6 @@ int main(void) {
     TEST(test_depth_deep_nesting);
     TEST(test_pad_huge_length);
     TEST(test_drop_huge_sequence_spec);
+    TEST(test_s14_levels_and_shapes);
     return audit_finish("audit_structural_manipulation");
 }

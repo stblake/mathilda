@@ -19,6 +19,7 @@
 #include "linkedlist.h"
 #include "print.h"
 #include "pack.h"
+#include "core.h"   /* core_nest_dims: ArrayQ of a deep nest */
 #include <stdlib.h>
 #include <string.h>
 
@@ -327,7 +328,7 @@ static bool level_parts_pass(const Expr* e, int n, const Expr* test) {
     return true;
 }
 
-static bool depth_matches(int depth, const Expr* patt) {
+static bool depth_matches(int64_t depth, const Expr* patt) {
     Expr* margs[2] = { expr_new_integer(depth), expr_copy((Expr*)patt) };
     Expr* mq = expr_new_function(expr_new_symbol(SYM_MatchQ), margs, 2);
     Expr* r = evaluate(mq);
@@ -374,9 +375,24 @@ static Expr* builtin_arrayq(Expr* res) {
         }
         return expr_new_symbol(level_parts_pass(e, d, test) ? SYM_True : SYM_False);
     }
-    int rank = 0;
-    int64_t dims[SP_MAX_RANK];
-    bool arr = array_shape(e, &rank, dims, SP_MAX_RANK);
+    int64_t rank = 0;
+    bool arr;
+    /* A plain nested List: the uncapped walker (core_nest_dims); array_shape
+     * stops at SP_MAX_RANK levels (audit ArrayQ#1).  Other structures, or a
+     * nest with one inside, keep array_shape. */
+    int64_t* nd = NULL;
+    bool full = false;
+    int64_t k = head_is_sym(e, SYM_List) ? core_nest_dims(e, SYM_List, INT64_MAX, &nd, &full) : -1;
+    free(nd);
+    if (k >= 0) {
+        arr = full;
+        rank = k;
+    } else {
+        int r = 0;
+        int64_t dims[SP_MAX_RANK];
+        arr = array_shape(e, &r, dims, SP_MAX_RANK);
+        rank = r;
+    }
     if (!arr) return expr_new_symbol(SYM_False);
     if (na == 2 && !depth_matches(rank, res->data.function.args[1]))
         return expr_new_symbol(SYM_False);

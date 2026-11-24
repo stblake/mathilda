@@ -62,7 +62,8 @@ static void test_ap_perlevel_mixed(void) {
         "{{0, 3, 4, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}}");
 }
 static void test_ap_first_level_only(void) {
-    run("ArrayPad[{{1,2},{3,4}},{{1}}]", "{0, {1, 2}, {3, 4}, 0}");
+    /* the padding rows take the shape of the level below (audit ArrayPad#2) */
+    run("ArrayPad[{{1,2},{3,4}},{{1}}]", "{{0, 0}, {1, 2}, {3, 4}, {0, 0}}");
 }
 
 /* ---------- Negative amounts (removal) ---------- */

@@ -454,6 +454,8 @@ Out[3]= {{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
 ```
 
 ## ArrayPad
+
+- Amounts for fewer levels than the array's rank pad only those levels, with padding slices of the full shape below: `ArrayPad[{{1, 2}, {3, 4}}, {{1, 0}}]` is `{{0, 0}, {1, 2}, {3, 4}}` (audit ArrayPad#2).
 Pads (or, with negative amounts, trims) an array on every side or per level.
 Attributes: `Protected`. Options: `InterpolationOrder -> 1`.
 - `ArrayPad[array, m]`: pad `m` elements on every side of every level.

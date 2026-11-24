@@ -104,6 +104,15 @@ static void test_permutations_at_most_n(void) {
     audit_chk("Permutations#1", "Permutations[{a, b}]", "{{a, b}, {b, a}}");
 }
 
+/* ArrayPad#2 (medium): amounts for fewer levels than the rank pad those
+ * levels with full-shape slices. */
+static void test_s14_arraypad_levels(void) {
+    audit_true("ArrayPad#2", "ArrayPad[{{1, 2}, {3, 4}}, {{1, 0}}] === {{0, 0}, {1, 2}, {3, 4}}");
+    audit_true("ArrayPad#2", "ArrayPad[{{1, 2}, {3, 4}}, {{1, 1}}, 9] === "
+                             "{{9, 9}, {1, 2}, {3, 4}, {9, 9}}");
+    audit_true("ArrayPad#2", "ArrayPad[{{1, 2}, {3, 4}}, {{0, 0}, {1, 0}}] === {{0, 1, 2}, {0, 3, 4}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
@@ -112,5 +121,6 @@ int main(void) {
     TEST(test_range_real_count);
     TEST(test_arraypad_spec_too_deep);
     TEST(test_permutations_at_most_n);
+    TEST(test_s14_arraypad_levels);
     return audit_finish("audit_lists_and_iteration");
 }

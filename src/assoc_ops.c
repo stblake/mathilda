@@ -1523,7 +1523,10 @@ static Expr* ops_deletemissing(Expr* res) {
     Expr* ls = ARG(res, 1);
     int64_t maxlev, d = 0;
     if (ls->type == EXPR_INTEGER && ls->data.integer > 0) maxlev = ls->data.integer;
-    else if (is_infinity_expr(ls)) maxlev = INT64_MAX;
+    /* a positive BigInt is past any depth: it acts as Infinity (audit
+     * DeleteMissing#1) */
+    else if (is_infinity_expr(ls) || (ls->type == EXPR_BIGINT && mpz_sgn(ls->data.bigint) > 0))
+        maxlev = INT64_MAX;
     else {
         char* s = expr_to_string(ls);
         ops_msg("DeleteMissing::arg2: The second argument %s is expected to be a positive integer or Infinity.", s);

@@ -165,6 +165,12 @@ static Expr* ap_build_const(const Expr* node, const int64_t* lo, const int64_t* 
                             const Expr* block, int64_t* coords, bool linked) {
     if (level == num_levels)
         return node ? expr_copy((Expr*)node) : ap_pad_at(block, coords, num_levels);
+    /* No padding at this level or below: the original subtree as it is. */
+    if (node) {
+        size_t k = level;
+        while (k < num_levels && lo[k] == 0 && hi[k] == 0) k++;
+        if (k == num_levels) return expr_copy((Expr*)node);
+    }
 
     int64_t N = 0;     /* builtin_array_pad checked every level's length */
     ap_const_len(orig_dim[level], lo[level], hi[level], &N);
@@ -378,12 +384,17 @@ Expr* builtin_array_pad(Expr* res) {
 
     Expr* result;
     if (!pad_scheme_value_dependent(sc)) {
+        /* Amounts for fewer levels than the rank pad those levels only, but a
+         * padding slice still has the full shape of the levels below: the
+         * deeper levels take amount 0 (lo/hi are zero there), so
+         * ArrayPad[{{1, 2}, {3, 4}}, {{1, 0}}] is {{0, 0}, {1, 2}, {3, 4}}
+         * and not the ragged {0, {1, 2}, {3, 4}} (audit ArrayPad#2). */
         int64_t orig_dim[AP_MAX_RANK];
         for (size_t k = 0; k < AP_MAX_RANK; k++) orig_dim[k] = 0;
-        ap_dims(array, orig_dim, num_levels, 0);
+        ap_dims(array, orig_dim, rank, 0);
         int64_t coords[AP_MAX_RANK];
         Expr* block = padding ? (Expr*)padding : NULL;
-        result = ap_build_const(array, lo, hi, orig_dim, num_levels, 0, block, coords, false);
+        result = ap_build_const(array, lo, hi, orig_dim, rank, 0, block, coords, false);
     } else {
         /* mindimsize guard for the difference/reflected schemes. */
         if (pad_scheme_needs_two(sc)) {

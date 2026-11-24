@@ -44,9 +44,11 @@ Expr* builtin_distribute(Expr* res);
 #include <stdbool.h>
 #include <stdint.h>
 /* The shared level-specification parser (n, Infinity, All, {n}, {n1, n2};
- * bounds integer or Infinity, which is stored as 1000000): true and the
- * bounds set, or false for anything else.  mth_level_spec_message emits
- * Head::level for a spec it rejected. */
+ * each bound an integer -- int64 or BigInt -- or +/-Infinity, stored clamped
+ * to +/-MTH_LEVEL_INF): true and the bounds set, or false for anything else.
+ * A bound >= 0 is a level, a bound < 0 a depth.  mth_level_spec_message
+ * emits Head::level for a spec it rejected. */
+#define MTH_LEVEL_INF 1000000
 bool mth_level_spec_parse(const Expr* ls, int64_t* min, int64_t* max);
 void mth_level_spec_message(const char* head, const Expr* ls);
 

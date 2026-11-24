@@ -11,6 +11,14 @@ Expr* builtin_length(Expr* res);
  * True] semantics); `heads = false` counts only argument leaves. */
 int64_t leaf_count_internal(Expr* e, bool heads);
 Expr* builtin_dimensions(Expr* res);
+/* The rectangular prefix dimensions of e under head h (at most max_depth
+ * levels), with no depth cap: the depth, with *dims_out a malloc'd array of
+ * that many lengths (NULL for depth 0; the caller frees it) and *full whether
+ * no part at the last level is itself an h-expression (e is a full array).
+ * -1 when a LinkedList, NDArray or SparseArray sits inside the nest: the
+ * caller's own walker handles those. */
+int64_t core_nest_dims(const Expr* e, const char* h, int64_t max_depth,
+                       int64_t** dims_out, bool* full);
 Expr* builtin_clear(Expr* res);
 Expr* builtin_unset(Expr* res);
 Expr* builtin_clear_all(Expr* res);

@@ -519,7 +519,7 @@ Out[5]= x^2
 
 ## Map (/@)
 
-Level specifications (shared by `Map`, `Apply`, `MapIndexed`, `Scan`, `FreeQ`, `Level`, `Cases`, `DeleteCases`, `Count`, `MemberQ`, `Position`, `Replace`): `n` (levels 1..n, `n` may be negative; for `Cases`/`DeleteCases`/`Count`/`MemberQ`/`Position` a bare `-n` means `{-n}`), `Infinity`, `All` (`{0, Infinity}`), `{n}`, `{n1, n2}` with either bound an integer or `Infinity`. One parser serves them all; a malformed spec emits `Head::level` and leaves the call unevaluated (audit Map#1, Apply#1: `{m, Infinity}` used to fall back to the default level).
+Level specifications (shared by `Map`, `Apply`, `MapIndexed`, `Scan`, `FreeQ`, `Level`, `Cases`, `DeleteCases`, `Count`, `MemberQ`, `Position`, `FirstPosition`, `FirstCase`, `AllTrue`/`AnyTrue`/`NoneTrue`, `Total`, `Replace`): `n` (levels 1..n; a negative `n` is a depth bound, so `-1` is `{1, -1}` for every head -- the pattern heads used to read it as `{-1}`, audit Count#1, DeleteCases#1, MemberQ#1), `Infinity`, `All` (`{0, Infinity}`), `{n}`, `{n1, n2}`, each bound an integer, `Infinity` or `-Infinity`. A BigInt bound (`10^20`, `2^70`) is past every depth and selects what `Infinity` selects (audit Map#2, Count#2); `{-Infinity, -1}` includes level 0 (audit Level#4). One parser (`mth_level_spec_parse`, `src/funcprog.c`) serves them all; a malformed spec emits `Head::level` under the calling head and leaves the call unevaluated (audit Map#1, Apply#1, Scan#5, FirstPosition#2, Total#3).
 - `f /@ expr` or `Map[f, expr]` applies `f` to each element at level 1;
   `Map[f, expr, levelspec]` maps at the parts selected by `levelspec`.
 - **NDArray**: `Map[f, NDArray[…]]` applies `f` to each leading-axis part — a
@@ -619,6 +619,8 @@ Out[9]= <|a -> <|b -> h[c, {Key[a], Key[b]}], p -> h[<|q -> r|>, {Key[a], Key[p]
 ```
 
 ## MapThread
+
+- A level that is not a non-negative machine integer is `MapThread::intnm` and the call stays unevaluated (audit MapThread#1).
 Applies `f` to corresponding parts of several expressions — a generalization of
 `Map` to functions of several variables. Unlike `Thread`, the function and its
 argument lists are given separately.
@@ -654,6 +656,8 @@ Out[3]= {a + u + x, b + v + y, c + w + z}
 ```
 
 ## Apply (@@, @@@)
+
+- Below a held argument (`Hold`, `HoldForm`, a `HoldAll` head, ...) the new `f[...]` of a level spec is left unevaluated, as `Map` leaves it: `Apply[f, Hold[g[1 + 1]], {1}]` is `Hold[f[1 + 1]]` (audit Apply#3).
 - `f @@ expr`: Level 0.
 - `f @@@ expr`: Level 1.
 - A visible `NDArray` answers as its List does, at every level:
@@ -1314,6 +1318,8 @@ Out[3]= <|"a" -> 1, "b" -> 2|>
 
 
 ## AllTrue, AnyTrue, NoneTrue
+
+- `AllTrue[expr, test, levelspec]` (and `AnyTrue`, `NoneTrue`; optional `Heads -> True`) tests the parts at the levels of `levelspec`, as `Level` collects them: `AnyTrue[{1, {2}}, EvenQ, Infinity]` is `True` (audit AllTrue#1, AnyTrue#1, NoneTrue#1).
 Test a predicate across the elements of a list (or the values of an association).
 - `AllTrue[list, test]`: `True` if `test[e]` is `True` for every element (and for an empty list).
 - `AnyTrue[list, test]`: `True` if `test[e]` is `True` for some element.

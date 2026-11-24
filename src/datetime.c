@@ -888,8 +888,17 @@ Expr* builtin_unix_time(Expr* res) {
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
-    /* UnixTime[t] -- a number is an AbsoluteTime spec (seconds since 1900). */
-    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
+    /* UnixTime[t] -- a number is an AbsoluteTime spec (seconds since 1900).
+     * An exact Integer is shifted exactly: going through a double lost every
+     * digit past the 53rd (UnixTime[10^30] was off by 1.2*10^14, and a Real;
+     * audit UnixTime#4). */
+    if (arg->type == EXPR_INTEGER || arg->type == EXPR_BIGINT) {
+        mpz_t z;
+        expr_to_mpz(arg, z);
+        mpz_sub_ui(z, z, 2208988800UL);
+        return expr_bigint_normalize(expr_new_bigint_take(z));
+    }
+    if (arg->type == EXPR_REAL) {
         double total;
         expr_to_double_strict(arg, &total);
         return unixtime_from_abstime(total);

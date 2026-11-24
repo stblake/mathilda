@@ -64,11 +64,22 @@ static void test_texform_digit_factor(void) {
     audit_true("TeXForm#1", "ToString[TeXForm[2 x]] === \"2 x\"");
 }
 
+/* ListConvolve#1 (medium): the level argument lev below the list's rank. */
+static void test_s14_listconvolve_level(void) {
+    audit_run("ClearAll[a, b, c, d, e, f, x, y]");
+    audit_true("ListConvolve#1",
+               "Expand[ListConvolve[{x, y}, {{a, b}, {c, d}, {e, f}}, {-1, 1}, 0, Times, Plus, 1]] === "
+               "Expand[{{c x + a y, d x + b y}, {e x + c y, f x + d y}}]");
+    audit_true("ListConvolve#1", "ListConvolve[{1, 2}, {3, 4, 5}, {-1, 1}, 0, Times, Plus, 1] === "
+                                 "ListConvolve[{1, 2}, {3, 4, 5}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_slotsequence_empty);
     TEST(test_decrement_part_once);
     TEST(test_divide_zero_zero_real);
     TEST(test_texform_digit_factor);
+    TEST(test_s14_listconvolve_level);
     return audit_finish("audit_uncategorised");
 }

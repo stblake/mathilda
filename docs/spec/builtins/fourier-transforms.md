@@ -159,6 +159,8 @@ Out[2]= {0.447214, 0.447214, -0.447214, -0.447214, 0.447214}
 
 ## ListConvolve / ListCorrelate
 
+- The level argument `lev` (seventh) may be below the list's rank: the list's parts at level `lev` are its elements, combined by `g` and `h` (`ListConvolve[{x, y}, {{a, b}, {c, d}, {e, f}}, {-1, 1}, 0, Times, Plus, 1]` convolves the rows; audit ListConvolve#1). `lev` must equal the kernel's rank.
+
 Discrete convolution and correlation, both implemented in
 `src/convolutions.{c,h}` over one shared engine (parameterised by mode).
 Attribute on both: `Protected`.

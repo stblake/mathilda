@@ -5,6 +5,7 @@
 #include "assoc.h"
 #include "ndreduce.h"
 #include "plus.h"
+#include "funcprog.h"   /* mth_level_spec_parse */
 
 /* The depth that negative and Infinity level specs count from: the nesting
  * of Lists only. An element with any other head is a leaf, so
@@ -151,41 +152,20 @@ Expr* builtin_total(Expr* res) {
     int64_t n1 = 1, n2 = 1;
     int64_t depth = get_depth_for_total(list);
 
+    /* The shared level-spec parser (funcprog.h); a bad spec is Total::level
+     * (audit Total#3: it stayed unevaluated without a word).  Infinity counts
+     * as the deepest level that can be totalled, depth - 1, and a negative
+     * bound -k as depth - k. */
     if (level_spec) {
-        if (level_spec->type == EXPR_INTEGER) {
-            n1 = 1;
-            n2 = level_spec->data.integer;
-            if (n2 < 0) n2 = depth + n2;
-        } else if (is_infinity(level_spec)) {
-            n1 = 1;
-            n2 = depth - 1;
-        } else if (is_listq(level_spec)) {
-            if (level_spec->data.function.arg_count == 1) {
-                Expr* arg = level_spec->data.function.args[0];
-                if (arg->type == EXPR_INTEGER) {
-                    n1 = n2 = arg->data.integer;
-                    if (n1 < 0) n1 = n2 = depth + n1;
-                } else if (is_infinity(arg)) {
-                    n1 = n2 = depth - 1;
-                } else return NULL;
-            } else if (level_spec->data.function.arg_count == 2) {
-                Expr* arg1 = level_spec->data.function.args[0];
-                Expr* arg2 = level_spec->data.function.args[1];
-                if (arg1->type == EXPR_INTEGER) {
-                    n1 = arg1->data.integer;
-                    if (n1 < 0) n1 = depth + n1;
-                } else return NULL;
-                
-                if (arg2->type == EXPR_INTEGER) {
-                    n2 = arg2->data.integer;
-                    if (n2 < 0) n2 = depth + n2;
-                } else if (is_infinity(arg2)) {
-                    n2 = depth - 1;
-                } else return NULL;
-            } else return NULL;
-        } else return NULL;
+        int64_t lo, hi;
+        if (!mth_level_spec_parse(level_spec, &lo, &hi)) {
+            mth_level_spec_message("Total", level_spec);
+            return NULL;
+        }
+        n1 = lo >= MTH_LEVEL_INF ? depth - 1 : lo < 0 ? depth + lo : lo;
+        n2 = hi >= MTH_LEVEL_INF ? depth - 1 : hi < 0 ? depth + hi : hi;
     }
-    
+
     if (n1 > n2) return expr_copy(list);
     if (n1 < 1) n1 = 1;
     if (n2 >= depth) n2 = depth - 1;

@@ -844,6 +844,8 @@ Out[3]= True
 ```
 
 ## RemoveAlphaChannel
+
+- The background may be any real number -- an Integer, Rational, machine or arbitrary-precision Real (audit RemoveAlphaChannel#1).
 Drops or resolves an image's opacity.
 - `RemoveAlphaChannel[image]` — discards the alpha channel.
 - `RemoveAlphaChannel[image, b]` — composites over a background of brightness `b`.

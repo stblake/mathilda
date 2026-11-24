@@ -2742,8 +2742,14 @@ void info_init(void) {
         "\tpads a ragged array list with zeros to make it full.\n"
         "A negative length pads on the left; a negative margin truncates "
         "leading elements. The head of list need not be List.");
-    symtab_set_docstring("RotateLeft", "RotateLeft[expr, n] rotates the elements of expr n positions to the left.");
-    symtab_set_docstring("RotateRight", "RotateRight[expr, n] rotates the elements of expr n positions to the right.");
+    symtab_set_docstring("RotateLeft",
+        "RotateLeft[expr, n]\n\tRotates the elements of expr n positions to the left.\n"
+        "RotateLeft[expr]\n\tRotates one position to the left.\n"
+        "RotateLeft[expr, {n1, n2, ...}]\n\tRotates successive levels of expr by n1, n2, ....");
+    symtab_set_docstring("RotateRight",
+        "RotateRight[expr, n]\n\tRotates the elements of expr n positions to the right.\n"
+        "RotateRight[expr]\n\tRotates one position to the right.\n"
+        "RotateRight[expr, {n1, n2, ...}]\n\tRotates successive levels of expr by n1, n2, ....");
     symtab_set_docstring("Transpose",
         "Transpose[list]\n"
         "\tTransposes the first two levels of list (swaps rows and columns of a matrix).\n"

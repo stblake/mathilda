@@ -67,10 +67,18 @@ static void test_endpackage_unclosed_begin(void) {
     audit_chk("EndPackage#1", "$Context === auditCtx0", "True");
 }
 
+/* MemberQ#1 (medium): -n is levels 1 through -n. */
+static void test_s14_memberq_levels(void) {
+    audit_chk("MemberQ#1", "MemberQ[{{a}}, {a}, -1]", "True");
+    audit_chk("MemberQ#1", "MemberQ[{{a}}, {a}, {1, -1}]", "True");
+    audit_chk("MemberQ#1", "MemberQ[{{a}}, {a}, {-1}]", "False");
+}
+
 int main(void) {
     audit_init();
     TEST(test_bytecount_deep_nesting);
     TEST(test_positive_exact_zero);
     TEST(test_endpackage_unclosed_begin);
+    TEST(test_s14_memberq_levels);
     return audit_finish("audit_expression_information");
 }

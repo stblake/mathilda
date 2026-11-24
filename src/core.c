@@ -1918,6 +1918,81 @@ Expr* builtin_length(Expr* res) {
 
 #define DIMENSIONS_MAX_DEPTH 64
 
+/* A non-plain level inside a nest: core_nest_dims leaves those to the
+ * callers' own walkers. */
+static bool nest_special(const Expr* x) {
+    return x->type == EXPR_LINKEDLIST || x->type == EXPR_NDARRAY || x->type == EXPR_SPARSE;
+}
+
+/* core_nest_dims (core.h).  The candidate shape is read down the first-element
+ * spine, then every node is checked against it with an explicit stack (no
+ * recursion, so a nest 10^5 deep is fine): a node at level L < d that is not
+ * an h-expression of length dims[L] cuts the depth to L.  Dimensions used to
+ * stop at 64 levels and ArrayQ at 32 (audit Dimensions#2, ArrayQ#1). */
+int64_t core_nest_dims(const Expr* e, const char* h, int64_t max_depth,
+                       int64_t** dims_out, bool* full) {
+    *dims_out = NULL;
+    *full = false;
+    const char* hs = intern_symbol(h);
+    size_t cap = 16, d = 0;
+    int64_t* dims = malloc(cap * sizeof(int64_t));
+    if (!dims) return -1;
+    const Expr* node = e;
+    while ((int64_t)d < max_depth && head_is((Expr*)node, hs)) {
+        if (d == cap) {
+            int64_t* nd = realloc(dims, 2 * cap * sizeof(int64_t));
+            if (!nd) { free(dims); return -1; }
+            dims = nd; cap *= 2;
+        }
+        size_t n = node->data.function.arg_count;
+        dims[d++] = (int64_t)n;
+        if (n == 0) break;
+        node = node->data.function.args[0];
+        if (hs == SYM_List && nest_special(node)) { free(dims); return -1; }
+    }
+    if (d == 0) { free(dims); return 0; }
+
+    typedef struct { const Expr* x; size_t level; } NestItem;
+    size_t scap = 64, sn = 0;
+    NestItem* st = malloc(scap * sizeof(NestItem));
+    if (!st) { free(dims); return -1; }
+    bool is_full = true;
+    st[sn].x = e; st[sn].level = 0; sn++;
+    while (sn > 0) {
+        NestItem it = st[--sn];
+        if (it.level > d) continue;                    /* cut off since pushed */
+        if (it.level == d) {
+            if (head_is((Expr*)it.x, hs) || (hs == SYM_List && nest_special(it.x)))
+                is_full = false;
+            continue;
+        }
+        if (hs == SYM_List && nest_special(it.x)) { free(st); free(dims); return -1; }
+        if (!head_is((Expr*)it.x, hs) ||
+            (int64_t)it.x->data.function.arg_count != dims[it.level]) {
+            d = it.level;
+            is_full = false;
+            continue;
+        }
+        size_t n = it.x->data.function.arg_count;
+        if (it.level + 1 > d) continue;
+        for (size_t i = n; i > 0; i--) {
+            if (sn == scap) {
+                NestItem* ns = realloc(st, 2 * scap * sizeof(NestItem));
+                if (!ns) { free(st); free(dims); return -1; }
+                st = ns; scap *= 2;
+            }
+            st[sn].x = it.x->data.function.args[i - 1];
+            st[sn].level = it.level + 1;
+            sn++;
+        }
+    }
+    free(st);
+    if (d == 0) { free(dims); return 0; }
+    *dims_out = dims;
+    *full = is_full;
+    return (int64_t)d;
+}
+
 /*
  * get_dimensions:
  * Recursively determines the dimensions of a rectangular nested structure
@@ -2011,26 +2086,44 @@ Expr* builtin_dimensions(Expr* res) {
 
     /* Determine the level cap from the optional second argument. */
     int max_depth = DIMENSIONS_MAX_DEPTH;
+    int64_t want_depth = INT64_MAX;     /* the uncapped walker's cap */
     if (argc == 2) {
         Expr* n = res->data.function.args[1];
         int64_t nv;
         if (n->type == EXPR_INTEGER) {
             nv = n->data.integer;
-        } else if (head_is(n, SYM_DirectedInfinity) &&
+        } else if ((n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity) ||
+                   (head_is(n, SYM_DirectedInfinity) &&
                    n->data.function.arg_count == 1 &&
                    n->data.function.args[0]->type == EXPR_INTEGER &&
-                   n->data.function.args[0]->data.integer == 1) {
+                   n->data.function.args[0]->data.integer == 1)) {
             /* Dimensions[expr, Infinity] -> use the full depth cap. */
             nv = DIMENSIONS_MAX_DEPTH;
         } else {
             return NULL;
         }
         if (nv < 0) return NULL;
+        want_depth = n->type == EXPR_INTEGER ? nv : INT64_MAX;
         if (nv > DIMENSIONS_MAX_DEPTH) nv = DIMENSIONS_MAX_DEPTH;
         max_depth = (int)nv;
     }
 
     Expr* arg = res->data.function.args[0];
+    /* A plain nest: the uncapped walker (core_nest_dims). */
+    if (arg->type == EXPR_FUNCTION && !expr_is_number_atom(arg) &&
+        arg->data.function.head->type == EXPR_SYMBOL && !ds_ops(arg->type)) {
+        int64_t* nd = NULL;
+        bool full;
+        int64_t k = core_nest_dims(arg, arg->data.function.head->data.symbol.name,
+                                   want_depth, &nd, &full);
+        if (k >= 0) {
+            Expr** da = malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+            for (int64_t i = 0; i < k; i++) da[i] = expr_new_integer(nd[i]);
+            Expr* r = expr_new_function(expr_new_symbol(SYM_List), da, (size_t)k);
+            free(da); free(nd);
+            return r;
+        }
+    }
     int depth = 0;
     int64_t dims[DIMENSIONS_MAX_DEPTH];
     const DsOps* dops = ds_ops(arg->type);

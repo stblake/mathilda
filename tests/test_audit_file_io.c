@@ -54,9 +54,20 @@ static void test_read_number_literal_only(void) {
               "{10, -3.25, 6, 100.0}");
 }
 
+/* DirectoryName#2 (low): the OperatingSystem option. */
+static void test_s14_directoryname_os(void) {
+    audit_chk("DirectoryName#2", "DirectoryName[\"a\\\\b\", OperatingSystem -> \"Windows\"] === \"a\\\\\"",
+              "True");
+    audit_chk("DirectoryName#2", "DirectoryName[\"a\\\\b\", OperatingSystem -> \"Unix\"] === \"\"",
+              "True");
+    audit_chk("DirectoryName#2", "DirectoryName[\"a/b/c\", 2, OperatingSystem -> \"Unix\"] === \"a/\"",
+              "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_export_graphics_raster_no_crash);
     TEST(test_read_number_literal_only);
+    TEST(test_s14_directoryname_os);
     return audit_finish("audit_file_io");
 }

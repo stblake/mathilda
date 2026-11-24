@@ -679,6 +679,8 @@ Out[1]= <|"b" -> 3, "c" -> 3|>
 ```
 
 ## DeleteMissing
+
+- A BigInt level is past any depth and acts as `Infinity` (audit DeleteMissing#1).
 Removes `Missing[...]` elements — the natural cleanup after a multi-key
 `Lookup`. Over an association it drops entries whose value is `Missing[...]`.
 
@@ -1790,6 +1792,8 @@ unevaluated with `SparseArray::dense`. For example, `Total` of a
 Attributes: `{Protected}`.
 
 ## ArrayQ
+
+- No depth cap for a plain nested List (it stopped at 32 levels; audit ArrayQ#1).
 
 - `ArrayQ[expr]` is `True` for a full array: a List (or SparseArray) whose
   every element sits at the same depth.

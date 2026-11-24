@@ -146,6 +146,16 @@ static void test_gradient_filter_radius(void) {
                " Max[Abs[ImageData[GradientFilter[ramp]][[3 ;; 7, 3 ;; 7]] - 0.01]] < 1*^-14]");
 }
 
+/* RemoveAlphaChannel#1 (medium): an exact or arbitrary-precision background. */
+static void test_s14_removealpha_exact(void) {
+    audit_run("auditT = SetAlphaChannel[Image[{{1.0, 1.0}, {1.0, 1.0}}, \"Real\"], 0.5]");
+    audit_true("RemoveAlphaChannel#1",
+               "Max[Abs[Flatten[ImageData[RemoveAlphaChannel[auditT, 1/2]]] - 0.75]] < 10^-12");
+    audit_true("RemoveAlphaChannel#1",
+               "Max[Abs[Flatten[ImageData[RemoveAlphaChannel[auditT, N[1/2, 30]]]] - 0.75]] < 10^-12");
+    audit_run("ClearAll[auditT]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_random_image_huge_size);
@@ -153,5 +163,6 @@ int main(void) {
     TEST(test_color_quantize_value_boundary);
     TEST(test_image_correlate_ncc_even);
     TEST(test_gradient_filter_radius);
+    TEST(test_s14_removealpha_exact);
     return audit_finish("audit_image_processing");
 }

@@ -15,6 +15,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "expr.h"
 #include "symtab.h"
@@ -22,6 +23,7 @@
 #include "image.h"
 #include "imagecompose.h"
 #include "sym_names.h"
+#include "numeric.h"   /* numeric_machine_value */
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -82,6 +84,20 @@ static bool as_double(const Expr* e, double* out)
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
+    return false;
+}
+
+/* A real level of any exactness -- Integer, Rational, machine or
+ * arbitrary-precision Real -- as a double (audit RemoveAlphaChannel#1: the
+ * background 1/2 left the call unevaluated). */
+static bool as_level(const Expr* e, double* out)
+{
+    if (!e) return false;
+    if (numeric_machine_value(e, out)) return isfinite(*out);
+    if (e->type == EXPR_MPFR) {
+        *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+        return isfinite(*out);
+    }
     return false;
 }
 
@@ -208,7 +224,7 @@ static Expr* builtin_removealphachannel(Expr* res)
     if (!img_read(arg(res, 0), &im)) return NULL;
 
     if (res->data.function.arg_count == 2) {
-        if (!as_double(arg(res, 1), &bg)) { img_free(&im); return NULL; }
+        if (!as_level(arg(res, 1), &bg)) { img_free(&im); return NULL; }
         composite = true;
     }
 

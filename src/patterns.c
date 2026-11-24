@@ -10,6 +10,8 @@
 #include "assoc_struct.h"  /* associations are atomic: walkers see values only */
 #include "ndarray.h"   /* is_ndarray — see patterns_delist_visible */
 #include "funcprog.h"  /* mth_level_spec_parse */
+#include "message.h"   /* mth_message: Cases::innf */
+#include "print.h"     /* expr_to_string */
 #include <stdlib.h>
 #include <string.h>
 
@@ -126,18 +128,11 @@ static bool in_level_spec(Expr* e, int64_t level, int64_t min_l, int64_t max_l,
     return true;
 }
 
-/* The shared level-spec parser (funcprog.h), except that a bare negative
- * integer -n keeps its long-standing meaning for the pattern heads: the parts
- * of depth n, level 0 included -- Count[5, _?NumberQ, -1] is 1, as the
- * reference gives (tests/test_patterns.c). */
-static bool pat_parse_level(const Expr* ls, int64_t* min_l, int64_t* max_l) {
-    if (!mth_level_spec_parse(ls, min_l, max_l)) return false;
-    if (ls->type == EXPR_INTEGER && ls->data.integer < 0) *min_l = *max_l = ls->data.integer;
-    return true;
-}
-
 /* The level spec (3rd argument, default {1}) and Heads option shared by
- * Cases, DeleteCases, Position, Count and MemberQ. */
+ * Cases, DeleteCases, Position, Count and MemberQ.  A bare negative integer
+ * -n means levels 1 through -n, as for every other head: these used to read
+ * it as {-n}, so Count[{a, {b}}, _, -1] was 2 where Level gives three parts
+ * (audit Count#1, DeleteCases#1, MemberQ#1). */
 static void pat_level_args(Expr* res, int64_t* min_out, int64_t* max_out, bool* heads_out,
                            bool* ok_out) {
     *ok_out = true;
@@ -148,7 +143,7 @@ static void pat_level_args(Expr* res, int64_t* min_out, int64_t* max_out, bool* 
     /* The shared level-spec parser (funcprog.h); an option in the third slot
      * is not a level spec.  *ok is false (Head::level said) for a bad spec. */
     if (argc >= 3 && !is_rule2(res->data.function.args[2]) &&
-        !pat_parse_level(res->data.function.args[2], &min_l, &max_l)) {
+        !mth_level_spec_parse(res->data.function.args[2], &min_l, &max_l)) {
         mth_level_spec_message(res->data.function.head->data.symbol.name,
                                res->data.function.args[2]);
         *ok_out = false;
@@ -275,11 +270,54 @@ Expr* builtin_first_case(Expr* res) {
      * See patterns_delist_visible. */
     { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
-    if (argc != 2 && argc != 3) return NULL;
+    if (argc < 2) return NULL;
+    /* FirstCase[expr, patt, default, levelspec, opts]: the level spec and a
+     * Heads option go to Cases with a count of 1, which stops the walk at the
+     * first case (audit FirstCase#2: the four-argument form stayed
+     * unevaluated).  The default slot holds no option. */
+    Expr* lspec = NULL;
+    Expr* heads_opt = NULL;
+    for (size_t i = 2; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (i >= 3 && is_rule2(a)) {
+            Expr* k = a->data.function.args[0];
+            if (k->type != EXPR_SYMBOL || k->data.symbol.name != SYM_Heads) return NULL;
+            heads_opt = a;
+        } else if (i == 3) {
+            lspec = a;
+        } else if (i > 3) {
+            return NULL;
+        }
+    }
+    /* FirstCase is HoldRest: the level spec is evaluated here, once. */
+    Expr* lspec_v = lspec ? evaluate(lspec) : NULL;
+    int64_t lmin, lmax;
+    if (lspec_v && !mth_level_spec_parse(lspec_v, &lmin, &lmax)) {
+        mth_level_spec_message("FirstCase", lspec_v);
+        expr_free(lspec_v);
+        return NULL;
+    }
 
-    Expr* cases_args[2] = { expr_copy(res->data.function.args[0]),
-                            expr_copy(res->data.function.args[1]) };
-    Expr* cases = expr_new_function(expr_new_symbol(SYM_Cases), cases_args, 2);
+    Expr* cases;
+    if (lspec || heads_opt) {
+        Expr* ca[5];
+        size_t k = 0;
+        ca[k++] = expr_copy(res->data.function.args[0]);
+        ca[k++] = expr_copy(res->data.function.args[1]);
+        if (lspec_v) {
+            ca[k++] = lspec_v;                   /* adopted */
+        } else {
+            Expr* one[1] = { expr_new_integer(1) };
+            ca[k++] = expr_new_function(expr_new_symbol(SYM_List), one, 1);
+        }
+        ca[k++] = expr_new_integer(1);
+        if (heads_opt) ca[k++] = expr_copy(heads_opt);
+        cases = expr_new_function(expr_new_symbol(SYM_Cases), ca, k);
+    } else {
+        Expr* cases_args[2] = { expr_copy(res->data.function.args[0]),
+                                expr_copy(res->data.function.args[1]) };
+        cases = expr_new_function(expr_new_symbol(SYM_Cases), cases_args, 2);
+    }
     Expr* matches = evaluate(cases);
     expr_free(cases);
 
@@ -294,7 +332,7 @@ Expr* builtin_first_case(Expr* res) {
     if (matches) expr_free(matches);
     if (result) return result;
 
-    if (argc == 3) return expr_copy(res->data.function.args[2]);
+    if (argc >= 3) return expr_copy(res->data.function.args[2]);
     Expr* margs[1] = { expr_new_string("NotFound") };
     return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
 }
@@ -341,7 +379,16 @@ Expr* builtin_first_position(Expr* res) {
     Expr* expr    = pos_args[0];
     Expr* pattern = pos_args[1];
     Expr* deflt   = (np >= 3) ? pos_args[2] : NULL;   /* held; only if returned */
-    Expr* lspec   = (np >= 4) ? pos_args[3] : NULL;
+    /* FirstPosition is HoldRest: the level spec is evaluated here, once.  A
+     * bad one is FirstPosition's to report: the delegated Position said
+     * Position::level and the default came back (audit FirstPosition#2). */
+    Expr* lspec   = (np >= 4) ? evaluate(pos_args[3]) : NULL;
+    int64_t lmin, lmax;
+    if (lspec && !mth_level_spec_parse(lspec, &lmin, &lmax)) {
+        mth_level_spec_message(SYM_FirstPosition, lspec);
+        expr_free(lspec);
+        return NULL;
+    }
 
     /* Build the delegated Position call. */
     Expr* pcall;
@@ -354,7 +401,8 @@ Expr* builtin_first_position(Expr* res) {
          * includes level 0 == the whole expression, giving position {}). */
         Expr* ls;
         if (lspec) {
-            ls = expr_copy(lspec);
+            ls = lspec;                          /* adopted */
+            lspec = NULL;
         } else {
             Expr* largs[2] = { expr_new_integer(0), expr_new_symbol(SYM_Infinity) };
             ls = expr_new_function(expr_new_symbol(SYM_List), largs, 2);
@@ -436,11 +484,22 @@ Expr* builtin_cases(Expr* res) {
     pat_level_args(res, &min_l, &max_l, &heads, &lvl_ok);
     if (!lvl_ok) return NULL;
 
+    /* The count n: a non-negative integer or Infinity (a BigInt is past any
+     * count); anything else is Cases::innf and the call stays unevaluated
+     * (audit Cases#2: Cases[{1, 2}, _, 1, -1] returned every case). */
     int64_t max_results = -1;
-    if (argc >= 4) {
+    if (argc >= 4 && !is_rule2(res->data.function.args[3])) {
         Expr* n_expr = res->data.function.args[3];
         if (n_expr->type == EXPR_INTEGER && n_expr->data.integer >= 0) {
             max_results = n_expr->data.integer;
+        } else if (!(n_expr->type == EXPR_BIGINT && mpz_sgn(n_expr->data.bigint) > 0) &&
+                   !(n_expr->type == EXPR_SYMBOL && n_expr->data.symbol.name == SYM_Infinity)) {
+            char* str = expr_to_string(res);
+            mth_message(SYM_Cases, "innf",
+                        "Non-negative integer or Infinity expected at position 4 in %s.",
+                        str ? str : "?");
+            free(str);
+            return NULL;
         }
     }
 
@@ -657,7 +716,7 @@ Expr* builtin_delete_cases(Expr* res) {
 
     /* The shared level-spec parser (funcprog.h). */
     if (argc >= 3 && !is_rule2(res->data.function.args[2]) &&
-        !pat_parse_level(res->data.function.args[2], &min_l, &max_l)) {
+        !mth_level_spec_parse(res->data.function.args[2], &min_l, &max_l)) {
         mth_level_spec_message(SYM_DeleteCases, res->data.function.args[2]);
         return NULL;
     }
@@ -797,12 +856,12 @@ Expr* builtin_position(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
 
-    int64_t min_l = 0, max_l = 1000000;
+    int64_t min_l = 0, max_l = MTH_LEVEL_INF;
     bool heads = true;
 
     /* The shared level-spec parser (funcprog.h). */
     if (argc >= 3 && !is_rule2(res->data.function.args[2]) &&
-        !pat_parse_level(res->data.function.args[2], &min_l, &max_l)) {
+        !mth_level_spec_parse(res->data.function.args[2], &min_l, &max_l)) {
         mth_level_spec_message(SYM_Position, res->data.function.args[2]);
         return NULL;
     }

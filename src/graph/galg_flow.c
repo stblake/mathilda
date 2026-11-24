@@ -26,11 +26,18 @@
  *     (but {} when g has a directed edge and n >= 3, again as Mathematica),
  *     and adjacent s, t give {}.
  *
- * Exactness: all arithmetic is on int64. Non-integer capacities are scaled by
- * a common power of two -- chosen so every sum fits -- which makes machine
+ * Exactness: all arithmetic is on gf_int -- a 128-bit integer where the
+ * compiler has one (every 64-bit GCC / Clang target), else int64.  Integer
+ * capacities are used as they are while their sum stays below 2^125 (2^61 on
+ * the int64 fallback), so exact weights such as 10^20 or 2^62 give exact
+ * Integer flows and cuts (audit FindMinimumCut#3-4, FindMaximumFlow#3,
+ * EdgeConnectivity#2: they saturated at 2^61 or came back Real).  Beyond that
+ * an Integer network is clamped (gf_caps_refine) and, failing that, solved
+ * approximately as a Real.  Non-integer capacities are scaled by a common
+ * power of two -- chosen so every sum stays below 2^61 -- which makes machine
  * reals exact dyadic integers (their exact max flow is then computed), and a
  * Rational goes through its double value, which is precisely the precision of
- * the Real Mathematica returns for it.
+ * the Real the reference returns for it.
  *
  * Algorithms:
  *   - Max flow: Dinic's algorithm on a CSR residual network (arcs of one edge
@@ -77,28 +84,75 @@
  * Capacities
  * ======================================================================== */
 
+/* The capacity / flow integer: see "Exactness" above.  GF_INT_BITS bounds
+ * every Integer sum; GF_INT_MAX is the "no limit" sentinel, above any flow. */
+#if defined(__SIZEOF_INT128__)
+typedef __int128 gf_int;
+#define GF_INT_BITS 125
+#else
+typedef int64_t gf_int;
+#define GF_INT_BITS 61
+#endif
+#define GF_INT_MAX (((gf_int)1) << (GF_INT_BITS + 1))
+
+/* A gf_int as an Integer expression (an exact BigInt beyond int64). */
+static Expr* gf_int_to_expr(gf_int v) {
+#if defined(__SIZEOF_INT128__)
+    if (v < (gf_int)INT64_MIN || v > (gf_int)INT64_MAX) {
+        unsigned __int128 u = v < 0 ? -(unsigned __int128)v : (unsigned __int128)v;
+        uint64_t w[2] = { (uint64_t)u, (uint64_t)(u >> 64) };
+        mpz_t z;
+        mpz_init(z);
+        mpz_import(z, 2, -1, sizeof(uint64_t), 0, 0, w);
+        if (v < 0) mpz_neg(z, z);
+        return expr_new_bigint_take(z);
+    }
+#endif
+    return expr_new_integer((int64_t)v);
+}
+
+/* A non-negative BigInt below 2^GF_INT_BITS as a gf_int: 1, or 0 when it
+ * does not fit. */
+static int gf_int_from_mpz(mpz_srcptr z, gf_int* out) {
+    if (mpz_sgn(z) < 0 || mpz_sizeinbase(z, 2) > GF_INT_BITS) return 0;
+#if defined(__SIZEOF_INT128__)
+    uint64_t w[2] = { 0, 0 };
+    size_t cnt = 0;
+    mpz_export(w, &cnt, -1, sizeof(uint64_t), 0, 0, z);
+    *out = (gf_int)(((unsigned __int128)w[1] << 64) | w[0]);
+    return 1;
+#else
+    int64_t t;
+    if (!expr_mpz_get_int64(z, &t)) return 0;
+    *out = t;
+    return 1;
+#endif
+}
+
 typedef struct {
-    int64_t* c;     /* scaled capacity per entry; Infinity -> inf              */
+    gf_int* c;     /* scaled capacity per entry; Infinity -> inf              */
     int      real;  /* 1 if the results are Real                               */
     int      shift; /* true value = c / 2^shift                                */
     int      any_inf;
-    int64_t  inf;   /* the finite stand-in for Infinity (sum of finite caps+1) */
+    gf_int  inf;   /* the finite stand-in for Infinity (sum of finite caps+1) */
     /* The parsed capacities, kept so the network can be re-scaled
      * (gf_caps_refine): */
     long     m;
     double*  d;     /* each value as a double; -1 for Infinity                 */
-    int64_t* ci;    /* the exact value of an Integer entry                     */
-    char*    big;   /* 1: an Integer beyond int64 (ci unused, d approximate)   */
+    gf_int* ci;    /* the exact value of an Integer entry                     */
+    char*    big;   /* 1: an Integer beyond 2^GF_INT_BITS (ci unused, d approx) */
     int      ints;  /* every finite entry an Integer: exact Integer results    */
     double   clamp; /* every capacity is min(c, clamp); HUGE_VAL for none      */
     int      exact; /* the scaled network is the true one (no rounding)        */
     int      iters;
 } GfCap;
 
-#define GF_INF_MARK INT64_MIN
-/* Every scaled sum must stay below this: one flow value, or the finite
- * stand-in for Infinity, is at most (sum of caps + 1). */
-#define GF_SUM_LIMIT ((int64_t)1 << 61)
+#define GF_INF_MARK ((gf_int)-1)
+/* Every Integer sum must stay below GF_SUM_LIMIT, every scaled Real sum below
+ * GF_REAL_LIMIT: one flow value, or the finite stand-in for Infinity, is at
+ * most (sum of caps + 1). */
+#define GF_SUM_LIMIT (((gf_int)1) << GF_INT_BITS)
+#define GF_REAL_LIMIT (((gf_int)1) << 61)
 
 static void gf_cap_free(GfCap* c) {
     free(c->c); free(c->d); free(c->ci); free(c->big);
@@ -107,7 +161,7 @@ static void gf_cap_free(GfCap* c) {
 
 /* Fill cap->c from the parsed values, every capacity clamped to cap->clamp.
  * Integers stay exact Integers while their (clamped) sum fits; otherwise --
- * reals, rationals, an Integer beyond int64 or an int64 sum overflow -- the
+ * reals, rationals, an Integer beyond gf_int or a gf_int sum overflow -- the
  * values are scaled by 2^shift, the smallest power making every one an
  * integer, lowered as needed so the total stays under the limit.  cap->exact
  * records whether that scaling rounded nothing.  Returns 0 only when the sum
@@ -117,13 +171,21 @@ static int gf_caps_scale(GfCap* cap) {
     double B = cap->clamp;
     cap->exact = 1;
     if (cap->ints) {
-        int64_t sum = 0;
+        gf_int sum = 0;
         int fits = 1;
-        int64_t Bi = B < (double)GF_SUM_LIMIT ? (int64_t)B : GF_SUM_LIMIT;
+        /* A clamp at or past the limit cannot be represented: clamping to the
+         * limit instead (as this did) undercuts the true flow, so every
+         * weight >= 2^61 gave 2^61 (audit FindMinimumCut#3). */
+        int clamped = B != HUGE_VAL;
+        gf_int Bi = 0;
+        if (clamped) {
+            if (B < (double)GF_SUM_LIMIT) Bi = (gf_int)B;
+            else fits = 0;
+        }
         for (long k = 0; k < m && fits; k++) {
             if (cap->d[k] < 0) { cap->c[k] = GF_INF_MARK; continue; }
-            if (cap->big[k] && B == HUGE_VAL) { fits = 0; break; }
-            int64_t v = (cap->big[k] || cap->ci[k] > Bi) ? Bi : cap->ci[k];
+            if (cap->big[k] && !clamped) { fits = 0; break; }
+            gf_int v = (cap->big[k] || (clamped && cap->ci[k] > Bi)) ? Bi : cap->ci[k];
             if (v > GF_SUM_LIMIT - sum) { fits = 0; break; }
             cap->c[k] = v;
             sum += v;
@@ -153,7 +215,7 @@ static int gf_caps_scale(GfCap* cap) {
     if (!isfinite(sumd)) return 0;
     int shift = need;
     if (sumd > 0) {
-        /* largest shift with sumd * 2^shift < GF_SUM_LIMIT / 2 */
+        /* largest shift with sumd * 2^shift < GF_REAL_LIMIT / 2 */
         int e;
         frexp(sumd, &e);                          /* sumd < 2^e */
         int maxshift = 59 - e;
@@ -161,14 +223,14 @@ static int gf_caps_scale(GfCap* cap) {
     }
     if (cap->ints) cap->exact = 0;                /* an Integer pass is pending */
     cap->shift = shift;
-    int64_t sum = 0;
+    gf_int sum = 0;
     for (long k = 0; k < m; k++) {
         if (cap->d[k] < 0) { cap->c[k] = GF_INF_MARK; continue; }
         double x = cap->d[k] < B ? cap->d[k] : B;
-        cap->c[k] = (int64_t)llround(ldexp(x, shift));
+        cap->c[k] = (gf_int)llround(ldexp(x, shift));
         sum += cap->c[k];
     }
-    if (sum >= GF_SUM_LIMIT) return 0;
+    if (sum >= GF_REAL_LIMIT) return 0;
     cap->inf = sum + 1;
     for (long k = 0; k < m; k++) if (cap->c[k] == GF_INF_MARK) cap->c[k] = cap->inf;
     return 1;
@@ -187,7 +249,7 @@ static int gf_caps_scale(GfCap* cap) {
  * network spans a far smaller range: re-scaling it resolves the small
  * capacities exactly, or to a much finer unit.  Repeated until the scaling is
  * exact or v is accurate to machine precision. */
-static int gf_caps_refine(GfCap* cap, int64_t v) {
+static int gf_caps_refine(GfCap* cap, gf_int v) {
     if (cap->exact || cap->iters >= 64) return 0;
     if (cap->any_inf && v >= cap->inf) return 0;          /* an Infinity flow */
     double unit = ldexp(1.0, -cap->shift);
@@ -214,9 +276,9 @@ static int gf_caps_parse(const Expr* lst_in, long m, GfCap* out) {
     out->m = m;
     out->clamp = HUGE_VAL;
     out->ints = 1;
-    out->c = malloc(mm * sizeof(int64_t));
+    out->c = malloc(mm * sizeof(gf_int));
     out->d = malloc(mm * sizeof(double));
-    out->ci = calloc(mm, sizeof(int64_t));
+    out->ci = calloc(mm, sizeof(gf_int));
     out->big = calloc(mm, 1);
     if (!out->c || !out->d || !out->ci || !out->big) { gf_cap_free(out); return 0; }
     double* d = out->d;
@@ -258,10 +320,11 @@ static int gf_caps_parse(const Expr* lst_in, long m, GfCap* out) {
                 d[k] = (double)w->data.integer;
                 out->ci[k] = w->data.integer;
             } else if (w->type == EXPR_BIGINT) {
-                /* exact, beyond int64: clamped into range by gf_caps_refine */
+                /* exact; beyond gf_int it is clamped into range by
+                 * gf_caps_refine */
                 d[k] = graph_weight_to_double(w);
                 if (!(d[k] >= 0) || isinf(d[k])) ok = 0;
-                out->big[k] = 1;
+                if (!gf_int_from_mpz(w->data.bigint, &out->ci[k])) out->big[k] = 1;
             } else if (galg_is_symbol(w, "Infinity")) {
                 d[k] = -1; out->any_inf = 1;
             } else {
@@ -308,9 +371,9 @@ static int gf_caps_parse_joint(const Expr* el, long m, const Expr* vl, long n, G
 }
 
 /* The Expr for a scaled flow/cut value. */
-static Expr* gf_value(const GfCap* c, int64_t v) {
+static Expr* gf_value(const GfCap* c, gf_int v) {
     if (c->any_inf && v >= c->inf) return expr_new_symbol(SYM_Infinity);
-    if (!c->real) return expr_new_integer(v);
+    if (!c->real) return gf_int_to_expr(v);
     return expr_new_real(ldexp((double)v, -c->shift));
 }
 
@@ -324,8 +387,9 @@ typedef struct {
     long*    first;   /* n + 1: arcs of v are first[v] .. first[v+1]-1         */
     int*     to;
     long*    rev;     /* index of the reverse arc                              */
-    int64_t* res;     /* residual capacity                                     */
-    int64_t* cap0;    /* initial residual (for resets), may be NULL            */
+    void*    res;     /* residual capacity: int64_t, or gf_int when wide       */
+    void*    cap0;    /* initial residual (for resets), may be NULL            */
+    int      wide;    /* 1: the residuals are gf_int (a capacity sum >= 2^61)  */
     /* Dinic scratch */
     int*     level;
     long*    it;
@@ -345,21 +409,31 @@ static void gf_net_free(GfNet* N) {
  * 0 for a directed one). pos_out[p] (when non-NULL) receives the CSR index of
  * the forward arc. keep_cap0 stores the initial residuals for gf_net_reset. */
 static GfNet* gf_net_build(int n, long np, const int* pu, const int* pv,
-                           const int64_t* cf, const int64_t* cb, long* pos_out,
+                           const gf_int* cf, const gf_int* cb, long* pos_out,
                            int keep_cap0) {
     GfNet* N = calloc(1, sizeof(GfNet));
     if (!N) return NULL;
     size_t nn = (size_t)n + 1, na = (size_t)(2 * np) + 1;
     N->n = n; N->na = 2 * np;
+    /* Every residual stays below the sum of all capacities plus the flow,
+     * so a sum below 2^61 fits the narrow (int64) kernels. */
+    {
+        gf_int tot = 0;
+        for (long p = 0; p < np && !N->wide; p++) {
+            tot += cf[p] + cb[p];
+            if (tot >= GF_REAL_LIMIT) N->wide = 1;
+        }
+    }
+    size_t esz = N->wide ? sizeof(gf_int) : sizeof(int64_t);
     N->first = calloc(nn + 1, sizeof(long));
     N->to    = malloc(na * sizeof(int));
     N->rev   = malloc(na * sizeof(long));
-    N->res   = malloc(na * sizeof(int64_t));
+    N->res   = malloc(na * esz);
     N->level = malloc(nn * sizeof(int));
     N->it    = malloc(nn * sizeof(long));
     N->queue = malloc(nn * sizeof(int));
     N->pstack = malloc(nn * sizeof(long));
-    if (keep_cap0) N->cap0 = malloc(na * sizeof(int64_t));
+    if (keep_cap0) N->cap0 = malloc(na * esz);
     if (!N->first || !N->to || !N->rev || !N->res || !N->level || !N->it
         || !N->queue || !N->pstack || (keep_cap0 && !N->cap0)) { gf_net_free(N); return NULL; }
     for (long p = 0; p < np; p++) { N->first[pu[p] + 1]++; N->first[pv[p] + 1]++; }
@@ -371,111 +445,65 @@ static GfNet* gf_net_build(int n, long np, const int* pu, const int* pv,
         long a = fill[pu[p]]++, b = fill[pv[p]]++;
         N->to[a] = pv[p]; N->to[b] = pu[p];
         N->rev[a] = b; N->rev[b] = a;
-        N->res[a] = cf[p]; N->res[b] = cb[p];
+        if (N->wide) { ((gf_int*)N->res)[a] = cf[p]; ((gf_int*)N->res)[b] = cb[p]; }
+        else { ((int64_t*)N->res)[a] = (int64_t)cf[p]; ((int64_t*)N->res)[b] = (int64_t)cb[p]; }
         if (pos_out) pos_out[p] = a;
     }
     free(fill);
-    if (keep_cap0) memcpy(N->cap0, N->res, (size_t)N->na * sizeof(int64_t));
+    if (keep_cap0) memcpy(N->cap0, N->res, (size_t)N->na * esz);
     return N;
 }
 
 static void gf_net_reset(GfNet* N) {
-    memcpy(N->res, N->cap0, (size_t)N->na * sizeof(int64_t));
+    memcpy(N->res, N->cap0, (size_t)N->na * (N->wide ? sizeof(gf_int) : sizeof(int64_t)));
 }
 
-/* BFS levels from s over positive residual arcs; stops once t's level is
- * settled. Returns 1 iff t is reachable. */
-static int gf_bfs(GfNet* N, int s, int t) {
-    int n = N->n;
-    for (int v = 0; v < n; v++) N->level[v] = -1;
-    int head = 0, tail = 0;
-    N->level[s] = 0; N->queue[tail++] = s;
-    while (head < tail) {
-        int v = N->queue[head++];
-        if (N->level[t] >= 0 && N->level[v] >= N->level[t]) break;
-        int lv = N->level[v] + 1;
-        for (long e = N->first[v]; e < N->first[v + 1]; e++) {
-            int w = N->to[e];
-            if (N->res[e] > 0 && N->level[w] < 0) {
-                N->level[w] = lv;
-                N->queue[tail++] = w;
-            }
-        }
-    }
-    return N->level[t] >= 0;
+/* The residual capacity of arc e, whichever width the network holds. */
+static gf_int gf_res(const GfNet* N, long e) {
+    return N->wide ? ((const gf_int*)N->res)[e] : (gf_int)((const int64_t*)N->res)[e];
 }
 
-/* Dinic from s to t, stopping once the flow reaches `limit`. Returns the flow
- * pushed by this call (the residuals keep it). */
-static int64_t gf_dinic(GfNet* N, int s, int t, int64_t limit) {
-    int64_t flow = 0;
-    if (s == t) return 0;
-    long polls = 0;
-    while (flow < limit && gf_bfs(N, s, t)) {
-        if ((++polls & 63) == 0) galg_poll();
-        for (int v = 0; v < N->n; v++) N->it[v] = N->first[v];
-        int top = 0, v = s;
-        for (;;) {
-            if (v == t) {
-                int64_t f = limit - flow;
-                for (int i = 0; i < top; i++) if (N->res[N->pstack[i]] < f) f = N->res[N->pstack[i]];
-                int cut = -1;
-                for (int i = 0; i < top; i++) {
-                    long e = N->pstack[i];
-                    N->res[e] -= f; N->res[N->rev[e]] += f;
-                    if (cut < 0 && N->res[e] == 0) cut = i;
-                }
-                flow += f;
-                if (flow >= limit) return flow;
-                top = cut;                           /* retreat to the bottleneck */
-                v = top == 0 ? s : N->to[N->pstack[top - 1]];
-                continue;
-            }
-            long e = N->it[v], end = N->first[v + 1];
-            int lv = N->level[v] + 1;
-            while (e < end && !(N->res[e] > 0 && N->level[N->to[e]] == lv)) e++;
-            N->it[v] = e;
-            if (e == end) {                          /* dead end: prune v */
-                N->level[v] = -1;
-                if (top == 0) break;
-                top--;
-                v = top == 0 ? s : N->to[N->pstack[top - 1]];
-                N->it[v]++;
-                continue;
-            }
-            N->pstack[top++] = e;
-            v = N->to[e];
-        }
-    }
-    return flow;
+/* The two instances of the capacity kernels (galg_flow_kern.inc). */
+#define GFK_T int64_t
+#define GFK_MAX INT64_MAX
+#define GFK(name) name##_64
+#include "galg_flow_kern.inc"
+#undef GFK_T
+#undef GFK_MAX
+#undef GFK
+#if defined(__SIZEOF_INT128__)
+#define GFK_T gf_int
+#define GFK_MAX GF_INT_MAX
+#define GFK(name) name##_w
+#include "galg_flow_kern.inc"
+#undef GFK_T
+#undef GFK_MAX
+#undef GFK
+#endif
+
+/* Dinic from s to t on N, stopping once the flow reaches `limit` (the pushed
+ * flow; the residuals keep it). */
+static gf_int gf_dinic(GfNet* N, int s, int t, gf_int limit) {
+#if defined(__SIZEOF_INT128__)
+    if (N->wide) return gf_dinic_w(N, s, t, limit);
+#endif
+    return gf_dinic_64(N, s, t, limit > (gf_int)INT64_MAX ? INT64_MAX : (int64_t)limit);
 }
 
 /* mark[v] = 1 for v reachable from s in the residual network. */
 static void gf_reach_from(const GfNet* N, int s, char* mark) {
-    memset(mark, 0, (size_t)N->n);
-    int head = 0, tail = 0;
-    mark[s] = 1; N->queue[tail++] = s;
-    while (head < tail) {
-        int v = N->queue[head++];
-        for (long e = N->first[v]; e < N->first[v + 1]; e++) {
-            int w = N->to[e];
-            if (N->res[e] > 0 && !mark[w]) { mark[w] = 1; N->queue[tail++] = w; }
-        }
-    }
+#if defined(__SIZEOF_INT128__)
+    if (N->wide) { gf_reach_from_w(N, s, mark); return; }
+#endif
+    gf_reach_from_64(N, s, mark);
 }
 
 /* mark[v] = 1 for v that can reach t in the residual network. */
 static void gf_reach_to(const GfNet* N, int t, char* mark) {
-    memset(mark, 0, (size_t)N->n);
-    int head = 0, tail = 0;
-    mark[t] = 1; N->queue[tail++] = t;
-    while (head < tail) {
-        int w = N->queue[head++];
-        for (long e = N->first[w]; e < N->first[w + 1]; e++) {
-            int v = N->to[e];                       /* arc w->v; v->w is rev */
-            if (N->res[N->rev[e]] > 0 && !mark[v]) { mark[v] = 1; N->queue[tail++] = v; }
-        }
-    }
+#if defined(__SIZEOF_INT128__)
+    if (N->wide) { gf_reach_to_w(N, t, mark); return; }
+#endif
+    gf_reach_to_64(N, t, mark);
 }
 
 /* ======================================================================== *
@@ -486,8 +514,8 @@ static void gf_reach_to(const GfNet* N, int t, char* mark) {
  * undirected, 0 when directed. pos[k] = CSR index of edge k's forward arc.
  * Extra pairs (super source/sink hookups) may be appended by the caller via
  * xu/xv/xc (nx of them, all directed). */
-static GfNet* gf_edge_net(const Expr* g, const int64_t* cap, long* pos, int nextra_v,
-                          long nx, const int* xu, const int* xv, const int64_t* xc,
+static GfNet* gf_edge_net(const Expr* g, const gf_int* cap, long* pos, int nextra_v,
+                          long nx, const int* xu, const int* xv, const gf_int* xc,
                           int keep_cap0) {
     const int *eu, *ev;
     const unsigned char* edir;
@@ -496,8 +524,8 @@ static GfNet* gf_edge_net(const Expr* g, const int64_t* cap, long* pos, int next
     long m = galg_ne(g), np = m + nx;
     int* pu = malloc((size_t)(np > 0 ? np : 1) * sizeof(int));
     int* pv = malloc((size_t)(np > 0 ? np : 1) * sizeof(int));
-    int64_t* cf = malloc((size_t)(np > 0 ? np : 1) * sizeof(int64_t));
-    int64_t* cb = malloc((size_t)(np > 0 ? np : 1) * sizeof(int64_t));
+    gf_int* cf = malloc((size_t)(np > 0 ? np : 1) * sizeof(gf_int));
+    gf_int* cb = malloc((size_t)(np > 0 ? np : 1) * sizeof(gf_int));
     long* ppos = malloc((size_t)(np > 0 ? np : 1) * sizeof(long));
     GfNet* N = NULL;
     if (pu && pv && cf && cb && ppos) {
@@ -544,13 +572,13 @@ static int gf_terminals(const Expr* g, const Expr* a, int** idx) {
 enum { GF_PROP_VALUE, GF_PROP_MATRIX, GF_PROP_EDGES };
 
 /* Dense n x n matrix of flows (packed when uniform). */
-static Expr* gf_flow_matrix(int n, const int* tail, const int* head, const int64_t* f,
+static Expr* gf_flow_matrix(int n, const int* tail, const int* head, const gf_int* f,
                             long cnt, const GfCap* c) {
     size_t nn = (size_t)n;
     if (nn * nn > (size_t)64 * 1024 * 1024) return NULL;   /* refuse > 64M cells */
     Expr** rows = malloc((nn > 0 ? nn : 1) * sizeof(Expr*));
     if (!rows) return NULL;
-    int64_t* acc = calloc((nn > 0 ? nn * nn : 1), sizeof(int64_t));
+    gf_int* acc = calloc((nn > 0 ? nn * nn : 1), sizeof(gf_int));
     if (!acc) { free(rows); return NULL; }
     for (long k = 0; k < cnt; k++) acc[(size_t)tail[k] * nn + (size_t)head[k]] += f[k];
     Expr** cell = malloc((nn > 0 ? nn : 1) * sizeof(Expr*));
@@ -631,15 +659,15 @@ Expr* builtin_find_maximum_flow(Expr* res) {
     long np = m + (split ? mu + n : 0) + (multi ? ns + nt : 0);
     int* pu = malloc((size_t)(np > 0 ? np : 1) * sizeof(int));
     int* pv = malloc((size_t)(np > 0 ? np : 1) * sizeof(int));
-    int64_t* cf = malloc((size_t)(np > 0 ? np : 1) * sizeof(int64_t));
-    int64_t* cb = malloc((size_t)(np > 0 ? np : 1) * sizeof(int64_t));
+    gf_int* cf = malloc((size_t)(np > 0 ? np : 1) * sizeof(gf_int));
+    gf_int* cb = malloc((size_t)(np > 0 ? np : 1) * sizeof(gf_int));
     long* pos = malloc((size_t)(np > 0 ? np : 1) * sizeof(long));
     GfNet* N = NULL;
     /* With VertexCapacity both lists come from one joint parse, so cap.inf is
      * the single finite stand-in for Infinity: every finite cut is below it,
      * every cut through Infinity capacities reaches it. */
-    int64_t total;
-    int64_t flow;
+    gf_int total;
+    gf_int flow;
     if (!pu || !pv || !cf || !cb || !pos) goto done;
 rebuild:
     total = cap.inf;
@@ -676,7 +704,7 @@ rebuild:
     N = gf_net_build(nvx, np, pu, pv, cf, cb, pos, 0);
     if (!N) goto done;
 
-    flow = overlap ? 0 : gf_dinic(N, src, snk, INT64_MAX);
+    flow = overlap ? 0 : gf_dinic(N, src, snk, GF_INT_MAX);
     /* capacities on scales the int64 network could not hold exactly:
      * re-scale (clamped) and solve again -- see gf_caps_refine */
     if (!overlap && gf_caps_refine(&cap, flow)) {
@@ -696,14 +724,14 @@ rebuild:
          * direction is the extra pair recorded in order. */
         int* ft = malloc((size_t)(m > 0 ? m : 1) * sizeof(int));
         int* fh = malloc((size_t)(m > 0 ? m : 1) * sizeof(int));
-        int64_t* fv = malloc((size_t)(m > 0 ? m : 1) * sizeof(int64_t));
+        gf_int* fv = malloc((size_t)(m > 0 ? m : 1) * sizeof(gf_int));
         long* fe = malloc((size_t)(m > 0 ? m : 1) * sizeof(long));
         if (!ft || !fh || !fv || !fe) { free(ft); free(fh); free(fv); free(fe); goto done; }
         long cnt = 0, p2 = m;
         for (long k = 0; k < m; k++) {
-            int64_t f;
-            if (edir[k] || !split) f = cap.c[k] - N->res[pos[k]];
-            else { f = (cap.c[k] - N->res[pos[k]]) - (cap.c[k] - N->res[pos[p2]]); p2++; }
+            gf_int f;
+            if (edir[k] || !split) f = cap.c[k] - gf_res(N, pos[k]);
+            else { f = (cap.c[k] - gf_res(N, pos[k])) - (cap.c[k] - gf_res(N, pos[p2])); p2++; }
             if (f == 0 || overlap) continue;
             if (f > 0) { ft[cnt] = eu[k]; fh[cnt] = ev[k]; fv[cnt] = f; }
             else       { ft[cnt] = ev[k]; fh[cnt] = eu[k]; fv[cnt] = -f; }
@@ -765,186 +793,28 @@ static int gf_weight_caps(const Expr* g, GfCap* cap) {
     return gf_caps_parse(NULL, galg_ne(g), cap);
 }
 
-/* Undirected global min cut by Nagamochi-Ibaraki. Weighted edges
- * (eu[k], ev[k], w[k]) over n >= 2 vertices; parallel edges are summed. Writes
- * side[v] = 1 for one shore of a minimum cut and returns its value; -1 on
- * allocation failure. */
-static int64_t gf_ni_mincut(int n, long m, const int* eu, const int* ev, const int64_t* w,
-                            char* side) {
-    int64_t result = -1;
-    size_t nn = (size_t)n + 1, mm = (size_t)(2 * m) + 1;
-    /* current contracted graph (CSR) */
-    int* off = malloc(nn * sizeof(int));
-    int* adj = malloc(mm * sizeof(int));
-    int64_t* wt = malloc(mm * sizeof(int64_t));
-    int* noff = malloc(nn * sizeof(int));
-    int* nadj = malloc(mm * sizeof(int));
-    int64_t* nwt = malloc(mm * sizeof(int64_t));
-    int* owner = malloc(nn * sizeof(int));     /* original v -> current node */
-    int* uf = malloc(nn * sizeof(int));
-    int* newid = malloc(nn * sizeof(int));
-    int64_t* key = malloc(nn * sizeof(int64_t));
-    char* done = malloc(nn);
-    int* order = malloc(nn * sizeof(int));
-    int64_t* acc = malloc(nn * sizeof(int64_t));
-    int* stamp = malloc(nn * sizeof(int));
-    int* heapv = malloc((mm + nn) * sizeof(int));
-    int64_t* heapk = malloc((mm + nn) * sizeof(int64_t));
-    if (!off || !adj || !wt || !noff || !nadj || !nwt || !owner || !uf || !newid || !key
-        || !done || !order || !acc || !stamp || !heapv || !heapk) goto out;
-
-    /* initial graph: merge parallel edges by stamping */
-    {
-        int* cnt = calloc(nn, sizeof(int));
-        int* tu = malloc(mm * sizeof(int));
-        int64_t* tw = malloc(mm * sizeof(int64_t));
-        if (!cnt || !tu || !tw) { free(cnt); free(tu); free(tw); goto out; }
-        for (long k = 0; k < m; k++) if (eu[k] != ev[k]) { cnt[eu[k]]++; cnt[ev[k]]++; }
-        int s = 0;
-        for (int v = 0; v < n; v++) { off[v] = s; s += cnt[v]; }
-        off[n] = s;
-        for (int v = 0; v < n; v++) cnt[v] = off[v];
-        for (long k = 0; k < m; k++) {
-            int a = eu[k], b = ev[k];
-            if (a == b) continue;
-            tu[cnt[a]] = b; tw[cnt[a]++] = w[k];
-            tu[cnt[b]] = a; tw[cnt[b]++] = w[k];
-        }
-        for (int v = 0; v < n; v++) stamp[v] = -1;
-        int wpos = 0;
-        for (int v = 0; v < n; v++) {
-            int lo = off[v], hi = off[v + 1], start = wpos;
-            off[v] = start;
-            for (int j = lo; j < hi; j++) {
-                int x = tu[j];
-                if (stamp[x] >= start) wt[stamp[x]] += tw[j];
-                else { stamp[x] = wpos; adj[wpos] = x; wt[wpos] = tw[j]; wpos++; }
-            }
-        }
-        off[n] = wpos;
-        free(cnt); free(tu); free(tw);
+/* Undirected global min cut by Nagamochi-Ibaraki (galg_flow_kern.inc), on
+ * the narrow kernel whenever the total weight is below 2^61. Returns the
+ * value and one shore in side[]; -1 on allocation failure. */
+static gf_int gf_ni_mincut(int n, long m, const int* eu, const int* ev, const gf_int* w,
+                           char* side) {
+#if defined(__SIZEOF_INT128__)
+    gf_int tot = 0;
+    int wide = 0;
+    for (long k = 0; k < m && !wide; k++) {
+        tot += w[k];
+        if (tot >= GF_REAL_LIMIT) wide = 1;
     }
-    for (int v = 0; v < n; v++) owner[v] = v;
-
-    int cn = n;                 /* current node count */
-    int64_t lambda = INT64_MAX;
-    long polls = 0;
-    while (cn > 1) {
-        if ((++polls & 7) == 0) galg_poll();
-        /* bound by weighted degrees */
-        int bestx = -1;
-        for (int x = 0; x < cn; x++) {
-            int64_t d = 0;
-            for (int j = off[x]; j < off[x + 1]; j++) d += wt[j];
-            if (d < lambda) { lambda = d; bestx = x; }
-        }
-        if (bestx >= 0) for (int v = 0; v < n; v++) side[v] = owner[v] == bestx;
-        if (lambda == 0) break;
-
-        /* maximum-adjacency order with a lazy max-heap; contract edges whose
-         * attachment reaches lambda. */
-        for (int x = 0; x < cn; x++) { key[x] = 0; done[x] = 0; uf[x] = x; }
-        int hn = 0, cnt_order = 0;
-        for (int start = 0; start < cn; start++) {
-            if (done[start]) continue;
-            /* push start (a new component of the current graph) */
-            heapv[hn] = start; heapk[hn] = 0; hn++;
-            while (hn > 0) {
-                /* pop max */
-                int x = heapv[0]; int64_t kx = heapk[0];
-                hn--;
-                if (hn > 0) {
-                    int lv = heapv[hn]; int64_t lk = heapk[hn]; int i = 0;
-                    for (;;) {
-                        int c = 2 * i + 1;
-                        if (c >= hn) break;
-                        if (c + 1 < hn && heapk[c + 1] > heapk[c]) c++;
-                        if (heapk[c] <= lk) break;
-                        heapv[i] = heapv[c]; heapk[i] = heapk[c]; i = c;
-                    }
-                    heapv[i] = lv; heapk[i] = lk;
-                }
-                if (done[x] || kx != key[x]) continue;   /* stale */
-                done[x] = 1;
-                order[cnt_order++] = x;
-                for (int j = off[x]; j < off[x + 1]; j++) {
-                    int y = adj[j];
-                    if (done[y]) continue;
-                    key[y] += wt[j];
-                    if (key[y] >= lambda) {
-                        /* q(x,y) >= lambda: contract */
-                        int a = x, b = y;
-                        while (uf[a] != a) a = uf[a] = uf[uf[a]];
-                        while (uf[b] != b) b = uf[b] = uf[uf[b]];
-                        if (a != b) uf[a] = b;
-                    }
-                    /* push (y, key[y]) */
-                    int i = hn++;
-                    while (i > 0) {
-                        int p = (i - 1) / 2;
-                        if (heapk[p] >= key[y]) break;
-                        heapv[i] = heapv[p]; heapk[i] = heapk[p]; i = p;
-                    }
-                    heapv[i] = y; heapk[i] = key[y];
-                }
-            }
-        }
-        /* the last two of the order: lambda(s, t) = its attachment = deg(t)
-         * >= lambda, so they may always be merged (guarantees progress) */
-        {
-            int a = order[cn - 2], b = order[cn - 1];
-            while (uf[a] != a) a = uf[a] = uf[uf[a]];
-            while (uf[b] != b) b = uf[b] = uf[uf[b]];
-            if (a != b) uf[a] = b;
-        }
-        /* relabel and rebuild */
-        int nc = 0;
-        for (int x = 0; x < cn; x++) {
-            int r = x;
-            while (uf[r] != r) r = uf[r];
-            uf[x] = r;
-        }
-        for (int x = 0; x < cn; x++) newid[x] = -1;
-        for (int x = 0; x < cn; x++) if (uf[x] == x) newid[x] = nc++;
-        for (int x = 0; x < cn; x++) newid[x] = newid[uf[x]];
-        /* group old nodes by new id */
-        int* grp = order;           /* reuse: old nodes sorted by new id */
-        {
-            int* c2 = stamp;        /* reuse as counts */
-            for (int y = 0; y <= nc; y++) c2[y] = 0;
-            for (int x = 0; x < cn; x++) c2[newid[x] + 1]++;
-            for (int y = 0; y < nc; y++) c2[y + 1] += c2[y];
-            for (int x = 0; x < cn; x++) grp[c2[newid[x]]++] = x;
-            /* c2[y] is now the end of group y; starts are c2[y-1] */
-        }
-        for (int y = 0; y < nc; y++) stamp[y] = -1;
-        int wpos = 0, gi = 0;
-        for (int y = 0; y < nc; y++) {
-            int start = wpos;
-            noff[y] = start;
-            while (gi < cn && newid[grp[gi]] == y) {
-                int x = grp[gi++];
-                for (int j = off[x]; j < off[x + 1]; j++) {
-                    int z = newid[adj[j]];
-                    if (z == y) continue;
-                    if (stamp[z] >= start) nwt[stamp[z]] += wt[j];
-                    else { stamp[z] = wpos; nadj[wpos] = z; nwt[wpos] = wt[j]; wpos++; }
-                }
-            }
-        }
-        noff[nc] = wpos;
-        { int* t = off; off = noff; noff = t; }
-        { int* t = adj; adj = nadj; nadj = t; }
-        { int64_t* t = wt; wt = nwt; nwt = t; }
-        for (int v = 0; v < n; v++) owner[v] = newid[owner[v]];
-        cn = nc;
-    }
-    result = lambda == INT64_MAX ? 0 : lambda;
-out:
-    free(off); free(adj); free(wt); free(noff); free(nadj); free(nwt); free(owner);
-    free(uf); free(newid); free(key); free(done); free(order); free(acc); free(stamp);
-    free(heapv); free(heapk);
-    return result;
+    if (wide) return gf_ni_mincut_w(n, m, eu, ev, w, side);
+    int64_t* w64 = malloc((size_t)(m > 0 ? m : 1) * sizeof(int64_t));
+    if (!w64) return -1;
+    for (long k = 0; k < m; k++) w64[k] = (int64_t)w[k];
+    int64_t r = gf_ni_mincut_64(n, m, eu, ev, w64, side);
+    free(w64);
+    return r;
+#else
+    return gf_ni_mincut_64(n, m, eu, ev, w, side);
+#endif
 }
 
 /* True iff every edge of g is undirected. */
@@ -953,17 +823,17 @@ static int gf_all_undirected(const Expr* g) { return graph_directed_edge_count(g
 /* Directed global min cut: min over v != 0 of flow(0 -> v) and flow(v -> 0),
  * capped at the running bound. side[v] = 1 on the SOURCE side of the best
  * cut. Returns the value, -1 on failure. */
-static int64_t gf_directed_mincut(const Expr* g, const GfCap* cap, char* side) {
+static gf_int gf_directed_mincut(const Expr* g, const GfCap* cap, char* side) {
     int n = galg_nv(g);
     GfNet* N = gf_edge_net(g, cap->c, NULL, 0, 0, NULL, NULL, NULL, 1);
     char* mark = malloc((size_t)n + 1);
     if (!N || !mark) { gf_net_free(N); free(mark); return -1; }
-    int64_t best = INT64_MAX;
+    gf_int best = GF_INT_MAX;
     for (int v = 1; v < n && best > 0; v++) {
         for (int dir = 0; dir < 2 && best > 0; dir++) {
             int s = dir ? v : 0, t = dir ? 0 : v;
             gf_net_reset(N);
-            int64_t f = gf_dinic(N, s, t, best);
+            gf_int f = gf_dinic(N, s, t, best);
             if (f < best) {
                 best = f;
                 gf_reach_from(N, s, mark);
@@ -972,12 +842,12 @@ static int64_t gf_directed_mincut(const Expr* g, const GfCap* cap, char* side) {
         }
     }
     gf_net_free(N); free(mark);
-    return best == INT64_MAX ? 0 : best;
+    return best == GF_INT_MAX ? 0 : best;
 }
 
 /* The minimum cut of g (n >= 2) with its capacities: value in *val, side[]
  * one shore (the source side when directed). Returns 1, 0 on failure. */
-static int gf_global_mincut(const Expr* g, GfCap* cap, int64_t* val, char* side) {
+static int gf_global_mincut(const Expr* g, GfCap* cap, gf_int* val, char* side) {
     int n = galg_nv(g);
     long m = galg_ne(g);
     do {                                       /* re-scaled: see gf_caps_refine */
@@ -1005,7 +875,7 @@ Expr* builtin_find_minimum_cut(Expr* res) {
     int* a = malloc((size_t)n * sizeof(int));
     int* b = malloc((size_t)n * sizeof(int));
     Expr* out = NULL;
-    int64_t val;
+    gf_int val;
     if (side && a && b && gf_global_mincut(g, &cap, &val, side)) {
         int directed = !gf_all_undirected(g);
         /* first listed part: the source side (directed) or the side without
@@ -1042,12 +912,12 @@ static Expr* gf_cut_edges(const Expr* g, const char* side) {
 
 /* s-t edge cut with g's cut capacities: side[] = residual reach from s
  * (the cut closest to s). Returns the flow value, -1 on failure. */
-static int64_t gf_st_cut(const Expr* g, GfCap* cap, int s, int t, char* side) {
-    int64_t f;
+static gf_int gf_st_cut(const Expr* g, GfCap* cap, int s, int t, char* side) {
+    gf_int f;
     do {                                       /* re-scaled: see gf_caps_refine */
         GfNet* N = gf_edge_net(g, cap->c, NULL, 0, 0, NULL, NULL, NULL, 0);
         if (!N) return -1;
-        f = gf_dinic(N, s, t, INT64_MAX);
+        f = gf_dinic(N, s, t, GF_INT_MAX);
         if (side) gf_reach_from(N, s, side);
         gf_net_free(N);
     } while (gf_caps_refine(cap, f));
@@ -1067,7 +937,7 @@ Expr* builtin_find_edge_cut(Expr* res) {
     if (!side) goto done;
     if (argc == 1) {
         if (n < 2) { out = expr_new_function(expr_new_symbol(SYM_List), NULL, 0); goto done; }
-        int64_t val;
+        gf_int val;
         if (!gf_global_mincut(g, &cap, &val, side)) goto done;
         out = gf_cut_edges(g, side);
     } else {
@@ -1095,13 +965,13 @@ Expr* builtin_edge_connectivity(Expr* res) {
     if (!side) goto done;
     if (argc == 1) {
         if (n < 2) goto done;                       /* Mathematica: unevaluated */
-        int64_t val;
+        gf_int val;
         if (gf_global_mincut(g, &cap, &val, side)) out = gf_value(&cap, val);
     } else {
         int s = galg_vertex_arg(g, res->data.function.args[1]);
         int t = galg_vertex_arg(g, res->data.function.args[2]);
         if (s < 0 || t < 0 || s == t) goto done;
-        int64_t f = gf_st_cut(g, &cap, s, t, NULL);
+        gf_int f = gf_st_cut(g, &cap, s, t, NULL);
         if (f >= 0) out = gf_value(&cap, f);
     }
 done:
@@ -1121,8 +991,8 @@ static GfNet* gf_split_net(const GalgUG* u) {
     long np = n + 2 * u->m;
     int* pu = malloc((size_t)(np > 0 ? np : 1) * sizeof(int));
     int* pv = malloc((size_t)(np > 0 ? np : 1) * sizeof(int));
-    int64_t* cf = malloc((size_t)(np > 0 ? np : 1) * sizeof(int64_t));
-    int64_t* cb = calloc((size_t)(np > 0 ? np : 1), sizeof(int64_t));
+    gf_int* cf = malloc((size_t)(np > 0 ? np : 1) * sizeof(gf_int));
+    gf_int* cb = calloc((size_t)(np > 0 ? np : 1), sizeof(gf_int));
     GfNet* N = NULL;
     if (pu && pv && cf && cb) {
         long p = 0;
@@ -1150,7 +1020,7 @@ static int gf_ug_adjacent(const GalgUG* u, int a, int b) {
 
 /* Local vertex connectivity kappa(s, t) (s, t non-adjacent), capped at limit.
  * Leaves the flow in N. */
-static int64_t gf_local_kappa(GfNet* N, int s, int t, int64_t limit) {
+static gf_int gf_local_kappa(GfNet* N, int s, int t, gf_int limit) {
     gf_net_reset(N);
     return gf_dinic(N, 2 * s + 1, 2 * t, limit);
 }
@@ -1180,21 +1050,21 @@ static long gf_kappa_global(const GalgUG* u, int* sep, int* nsep) {
     if (!N || !mark) { gf_net_free(N); free(mark); return -1; }
     int v0 = 0;
     for (int v = 1; v < n; v++) if (u->off[v + 1] - u->off[v] < u->off[v0 + 1] - u->off[v0]) v0 = v;
-    int64_t best = n - 1;
+    gf_int best = n - 1;
     int bs = -1, bt = -1;
     char* nb = calloc((size_t)n, 1);
     if (!nb) { gf_net_free(N); free(mark); return -1; }
     for (int j = u->off[v0]; j < u->off[v0 + 1]; j++) nb[u->adj[j]] = 1;
     for (int w = 0; w < n && best > 0; w++) {
         if (w == v0 || nb[w]) continue;
-        int64_t k = gf_local_kappa(N, v0, w, best);
+        gf_int k = gf_local_kappa(N, v0, w, best);
         if (k < best) { best = k; bs = v0; bt = w; }
     }
     for (int i = u->off[v0]; i < u->off[v0 + 1] && best > 0; i++)
         for (int j = i + 1; j < u->off[v0 + 1] && best > 0; j++) {
             int x = u->adj[i], y = u->adj[j];
             if (gf_ug_adjacent(u, x, y)) continue;
-            int64_t k = gf_local_kappa(N, x, y, best);
+            gf_int k = gf_local_kappa(N, x, y, best);
             if (k < best) { best = k; bs = x; bt = y; }
         }
     if (sep) {
@@ -1205,12 +1075,12 @@ static long gf_kappa_global(const GalgUG* u, int* sep, int* nsep) {
         } else if (best == 0) {
             *nsep = 0;
         } else {
-            gf_local_kappa(N, bs, bt, INT64_MAX);
+            gf_local_kappa(N, bs, bt, GF_INT_MAX);
             *nsep = gf_separator(N, n, bt, sep, mark);
         }
     }
     free(nb); free(mark); gf_net_free(N);
-    return best;
+    return (long)best;
 }
 
 long galg_vertex_connectivity(const Expr* g, int s, int t) {
@@ -1223,7 +1093,7 @@ long galg_vertex_connectivity(const Expr* g, int s, int t) {
         r = 0;
     } else {
         GfNet* N = gf_split_net(u);
-        r = N ? gf_local_kappa(N, s, t, INT64_MAX) : -1;
+        r = N ? (long)gf_local_kappa(N, s, t, GF_INT_MAX) : -1;
         gf_net_free(N);
     }
     galg_ug_free(u);
@@ -1260,7 +1130,7 @@ Expr* builtin_find_vertex_cut(Expr* res) {
         GfNet* N = gf_split_net(u);
         char* mark = malloc((size_t)(2 * n) + 1);
         if (N && mark) {
-            gf_local_kappa(N, s, t, INT64_MAX);
+            gf_local_kappa(N, s, t, GF_INT_MAX);
             int ns = gf_separator(N, n, t, sep, mark);
             out = galg_vertex_list(g, sep, ns, 1);
         }

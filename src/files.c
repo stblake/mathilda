@@ -61,6 +61,7 @@
 #include "message.h"
 #include "print.h"
 #include "regex_common.h"
+#include "assoc.h"       /* is_rule2 */
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -1063,6 +1064,22 @@ static void files_arg_message(Expr* call, const char* head, const char* tag,
 Expr* builtin_directoryname(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    /* OperatingSystem -> "Windows" | "Unix" | "MacOSX" picks the separator
+     * convention: a backslash separates too under Windows (audit
+     * DirectoryName#2: the option was read as a bad level, ::intpm). */
+    int win = HOST_SEP == '\\';
+    if (argc >= 2 && is_rule2(res->data.function.args[argc - 1])) {
+        Expr* o = res->data.function.args[argc - 1];
+        Expr* k = o->data.function.args[0];
+        Expr* v = o->data.function.args[1];
+        if (k->type != EXPR_SYMBOL || strcmp(k->data.symbol.name, "OperatingSystem") != 0)
+            return NULL;
+        if (v->type == EXPR_STRING && strcmp(v->data.string, "Windows") == 0) win = 1;
+        else if (v->type == EXPR_STRING && (strcmp(v->data.string, "Unix") == 0 ||
+                                            strcmp(v->data.string, "MacOSX") == 0)) win = 0;
+        else return NULL;
+        argc--;
+    }
     if (argc < 1 || argc > 2) return NULL;
     Expr* a0 = res->data.function.args[0];
     if (a0->type != EXPR_STRING) {
@@ -1085,14 +1102,16 @@ Expr* builtin_directoryname(Expr* res) {
     char* buf = malloc(strlen(src) + 1);
     if (!buf) return NULL;
     size_t len = 0;
+#define DN_SEP(c) ((c) == '/' || (win && (c) == '\\'))
     for (const char* p = src; *p; p++)
-        if (!(dn_is_sep(*p) && len > 0 && dn_is_sep(buf[len - 1])))
+        if (!(DN_SEP(*p) && len > 0 && DN_SEP(buf[len - 1])))
             buf[len++] = *p;
 
     for (int64_t i = 0; i < n && len > 0; i++) {
-        while (len > 0 && dn_is_sep(buf[len - 1])) len--;   /* trailing seps */
-        while (len > 0 && !dn_is_sep(buf[len - 1])) len--;  /* last component */
+        while (len > 0 && DN_SEP(buf[len - 1])) len--;   /* trailing seps */
+        while (len > 0 && !DN_SEP(buf[len - 1])) len--;  /* last component */
     }
+#undef DN_SEP
     buf[len] = '\0';
     Expr* out = expr_new_string(buf);
     free(buf);

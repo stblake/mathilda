@@ -423,6 +423,8 @@ Out[4]= NDArray[{11.0, 12.0, 13.0}]
 
 ## Total
 
+- The level spec goes through the shared parser; a malformed one is `Total::level` (audit Total#3).
+
 Gives the total of elements in a list.
 - `Total[list]`
 - `Total[list, n]`

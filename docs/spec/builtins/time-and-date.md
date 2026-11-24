@@ -207,6 +207,8 @@ Out[4]= {2026, 9, 28, 0, 0, 0.0}
 ```
 
 ## UnixTime
+
+- An exact Integer AbsoluteTime is shifted exactly: `UnixTime[10^30]` is `10^30 - 2208988800` (it went through a double; audit UnixTime#4).
 Gives the total number of seconds since the Unix epoch, 1970-01-01 00:00:00 GMT.
 - `UnixTime[]` -- current time, the true POSIX epoch second.
 - `UnixTime[date]` -- Unix time corresponding to the given date specification.

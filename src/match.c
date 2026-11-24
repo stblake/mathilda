@@ -1107,6 +1107,17 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
         return match_internal(expr, pattern->data.function.args[0], env, parent);
     }
 
+    /* Optional[p] / Optional[p, d] in a single-expression position (the whole
+     * subject, not an argument slot) has nothing to be absent from, so it
+     * matches what p matches: MatchQ[2, x_:0] is True and
+     * Cases[{1, a, 2}, _Integer:0] is {1, 2} (audit Optional#1; both matched
+     * nothing).  Argument slots peel the Optional before reaching here. */
+    if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
+        pattern->data.function.head->data.symbol.name == SYM_Optional &&
+        (pattern->data.function.arg_count == 1 || pattern->data.function.arg_count == 2)) {
+        return match_internal(expr, pattern->data.function.args[0], env, parent);
+    }
+
     /* KeyValuePattern[{k1 -> p1, ...}] (or a single k -> p) matches an
      * association — or a list of rules — that contains, for each required
      * ki -> pi, an entry whose key matches ki and whose value matches pi.

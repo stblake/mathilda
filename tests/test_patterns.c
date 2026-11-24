@@ -32,7 +32,8 @@ void test_count() {
     assert_eval_eq("Count[{{a,a,b},b,{a,b,a}},b,2]", "3", 0);
     assert_eval_eq("Count[{{a,a,b},b,{a,b,a}},b,{2}]", "2", 0);
     assert_eval_eq("Count[x^3+1.5x^2+Pi x +7,_?NumberQ,-1]", "4", 0);
-    assert_eval_eq("Count[5,_?NumberQ,-1]", "1", 0);
+    /* -1 is levels {1, -1}: level 0 is excluded (Level[5, -1] is {}) */
+    assert_eval_eq("Count[5,_?NumberQ,-1]", "0", 0);
     /* {0, -1}: level 0 and depth >= 1 -- the atom 5 itself (verified against the reference). */
     assert_eval_eq("Count[5,_?NumberQ,{0,-1}]", "1", 0);
 }

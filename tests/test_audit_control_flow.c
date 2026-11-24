@@ -99,6 +99,14 @@ static void test_conditionalexpression_propagates(void) {
     audit_chk("ConditionalExpression#1", "ConditionalExpression[x, x > 0] /. x -> 2", "2");
 }
 
+/* Continue#2 (low): a Continue[] at top level is reported and held. */
+static void test_s14_continue_toplevel(void) {
+    mth_msg_suppress_push();
+    audit_chk("Continue#2", "Continue[]", "Hold[Continue[]]");
+    audit_chk("Continue#2", "Break[]", "Hold[Break[]]");
+    mth_msg_suppress_pop();
+}
+
 int main(void) {
     audit_init();
     TEST(test_for_start_throw);
@@ -106,5 +114,6 @@ int main(void) {
     TEST(test_abort_in_nintegrate);
     TEST(test_numloop_exact_types);
     TEST(test_conditionalexpression_propagates);
+    TEST(test_s14_continue_toplevel);
     return audit_finish("audit_control_flow");
 }

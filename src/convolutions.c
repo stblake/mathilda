@@ -140,6 +140,28 @@ static bool nest_dims(const Expr* e, int64_t* dims, int* rank_out) {
     return nest_verify(e, dims, 0, rank);
 }
 
+/* Is `e` a nest of Lists rectangular to depth `rank` (the parts below are
+ * not looked at)?  The dims are read down the first-element spine. */
+static bool nest_prefix_verify(const Expr* e, const int64_t* dims, int level, int rank) {
+    if (level == rank) return true;
+    if (!head_is(e, SYM_List)) return false;
+    if ((int64_t)e->data.function.arg_count != dims[level]) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!nest_prefix_verify(e->data.function.args[i], dims, level + 1, rank)) return false;
+    return true;
+}
+
+static bool nest_prefix_dims(const Expr* e, int rank, int64_t* dims) {
+    if (rank < 1 || rank > CONV_MAX_RANK) return false;
+    const Expr* cur = e;
+    for (int k = 0; k < rank; k++) {
+        if (!head_is(cur, SYM_List) || cur->data.function.arg_count == 0) return false;
+        dims[k] = (int64_t)cur->data.function.arg_count;
+        cur = cur->data.function.args[0];
+    }
+    return nest_prefix_verify(e, dims, 0, rank);
+}
+
 static void nest_flatten(const Expr* e, int level, int rank, Expr** out, size_t* idx) {
     if (level == rank) { out[(*idx)++] = (Expr*)e; return; }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -1204,10 +1226,24 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     s.g_head = g_arg;
     s.h_head = h_arg;
 
+    /* The level argument lev: the kernel's rank, at which the list's parts
+     * are its elements -- below lev they may be anything (sub-arrays combined
+     * by g and h), so ListConvolve[{x, y}, {{a, b}, {c, d}, {e, f}}, {-1, 1},
+     * 0, Times, Plus, 1] convolves the rows (audit ListConvolve#1: any lev
+     * short of the list's own rank stayed unevaluated). */
+    int64_t lev = 0;
+    if (lev_arg && (!get_int(lev_arg, &lev) || lev < 1 || lev > CONV_MAX_RANK)) return NULL;
+
     /* Shapes. */
     int krank = 0, lrank = 0;
     if (!conv_operand_dims(ker, s.kdims, &krank)) return NULL;
-    if (!conv_operand_dims(list, s.ldims, &lrank)) return NULL;
+    if (lev_arg && lev != krank) return NULL;
+    if (lev_arg && head_is(list, SYM_List) && !ll_has_ll_level1(list)) {
+        if (!nest_prefix_dims(list, (int)lev, s.ldims)) return NULL;
+        lrank = (int)lev;
+    } else if (!conv_operand_dims(list, s.ldims, &lrank)) {
+        return NULL;
+    }
     /* A packed operand keeps its buffer; only an unpacked one is flattened into
      * leaves below. Every value in a machine buffer is machine-numeric, so a
      * packed operand also settles the classification without a scan. */
@@ -1222,11 +1258,6 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     for (int ax = 0; ax < s.rank; ax++)
         if (s.kdims[ax] <= 0 || s.ldims[ax] <= 0) return NULL;
 
-    /* Optional level argument: only lev == rank(ker) is supported. */
-    if (lev_arg) {
-        int64_t lev;
-        if (!get_int(lev_arg, &lev) || lev != s.rank) return NULL;
-    }
 
     /* Overhang parameters -> normalised positive kernel indices + output dims. */
     int64_t kLraw[CONV_MAX_RANK], kRraw[CONV_MAX_RANK];

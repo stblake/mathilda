@@ -275,7 +275,9 @@ static void test_flatten(void) {
     chk("Flatten[{{1, 2}, {3}}, Infinity]", "{1, 2, 3}");
     chk("Flatten[{{1, {2}}, {3}}, Infinity]", "{1, 2, 3}");
     chk("Flatten[{{1, 2}, {3}}, 0]", "{{1, 2}, {3}}");
-    chk("Check[Flatten[{{1, 2}, {3}}, x], $Failed]", "Flatten[{{1, 2}, {3}}, x]");
+    /* a symbolic level is Flatten::flev, unevaluated (audit Flatten#4) */
+    chk("Check[Flatten[{{1, 2}, {3}}, x], $Failed]", "$Failed");
+    chk("Quiet[Flatten[{{1, 2}, {3}}, x]]", "Flatten[{{1, 2}, {3}}, x]");
     chk("Normal[Flatten[sf, Infinity]]", "{1, 2, 3, 4}");
 }
 

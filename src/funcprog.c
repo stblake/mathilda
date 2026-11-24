@@ -75,40 +75,77 @@ static int64_t get_depth(Expr* e) {
 }
 
 /* The Infinity sentinel used for an unbounded upper level. */
-#define LEVEL_SPEC_INF 1000000
+#define LEVEL_SPEC_INF MTH_LEVEL_INF
 
 /* is_rule2 — true for a two-argument Rule[a,b] or RuleDelayed[a,b], the shape
  * of an option and of an association entry — now lives in assoc.c, shared with
  * the association machinery that needs the same guard. See assoc.h. */
 
-/* Parse one level bound: an integer yields its value; Infinity yields
- * +LEVEL_SPEC_INF. Returns false for anything else. */
+/* The sign of an infinite level bound: +1 for Infinity (the symbol, or
+ * DirectedInfinity[1]), -1 for -Infinity (DirectedInfinity[-1], or an
+ * unevaluated Times[-1, Infinity]), 0 for anything else. */
+static int level_infinity_sign(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_Infinity ? 1 : 0;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return 0;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_DirectedInfinity && e->data.function.arg_count == 1 &&
+        e->data.function.args[0]->type == EXPR_INTEGER) {
+        int64_t d = e->data.function.args[0]->data.integer;
+        return d == 1 ? 1 : d == -1 ? -1 : 0;
+    }
+    if (h == SYM_Times && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_INTEGER &&
+        e->data.function.args[0]->data.integer == -1 &&
+        e->data.function.args[1]->type == EXPR_SYMBOL &&
+        e->data.function.args[1]->data.symbol.name == SYM_Infinity)
+        return -1;
+    return 0;
+}
+
+/* Parse one level bound: an integer yields its value; Infinity and -Infinity
+ * yield +/-LEVEL_SPEC_INF.  Any integer beyond the sentinel -- an int64 or a
+ * BigInt such as 10^20 -- is clamped to it: no expression has 10^6 levels,
+ * so a larger level selects exactly what Infinity does (audit Map#2, Count#2,
+ * DeleteMissing#1), and the walkers can negate a bound without overflowing.
+ * Returns false for anything else. */
 static bool level_bound(const Expr* e, int64_t* out) {
-    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
-    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity) {
-        *out = LEVEL_SPEC_INF;
+    if (e->type == EXPR_INTEGER) {
+        int64_t v = e->data.integer;
+        *out = v > LEVEL_SPEC_INF ? LEVEL_SPEC_INF : v < -LEVEL_SPEC_INF ? -LEVEL_SPEC_INF : v;
         return true;
     }
-    return false;
+    if (e->type == EXPR_BIGINT) {
+        *out = mpz_sgn(e->data.bigint) > 0 ? LEVEL_SPEC_INF : -LEVEL_SPEC_INF;
+        return true;
+    }
+    int s = level_infinity_sign(e);
+    if (s == 0) return false;
+    *out = s > 0 ? LEVEL_SPEC_INF : -LEVEL_SPEC_INF;
+    return true;
 }
 
 /* The one level-specification parser (funcprog.h), shared by Map, Apply,
  * MapAll, MapIndexed, Scan, FreeQ, Level, Cases, DeleteCases, Count,
- * MemberQ, Position and Replace.  Each head used to parse its own, and they
- * disagreed: Map and Apply read {m, Infinity} as their default (level 1 / level
- * 0, audit Map#1, Apply#1) and Cases read All as {1, Infinity}.  (The pattern
- * heads keep reading a bare -n as {-n}: see pat_parse_level.)
+ * MemberQ, Position, FirstPosition, FirstCase, AllTrue/AnyTrue/NoneTrue and
+ * Replace.  Each head used to parse its own, and they disagreed: Map and
+ * Apply read {m, Infinity} as their default (level 1 / level 0, audit Map#1,
+ * Apply#1), Cases read All as {1, Infinity}, and the pattern heads read a
+ * bare -n as {-n} (audit Count#1).
  *   n          levels 1 through n (n may be negative: a depth bound)
  *   Infinity   levels 1 through Infinity
  *   All        levels 0 through Infinity
  *   {n}        level n only
- *   {n1, n2}   levels n1 through n2 (each an integer or Infinity)
- * Returns false, leaving *min / *max alone, for anything else. */
+ *   {n1, n2}   levels n1 through n2
+ * where each bound is an integer (int64 or BigInt), Infinity or -Infinity
+ * (a depth bound with no limit: {-Infinity, -1} includes level 0, audit
+ * Level#4).  Returns false, leaving *min / *max alone, for anything else.
+ * The common machine-integer forms are decided before any other test. */
 bool mth_level_spec_parse(const Expr* ls, int64_t* min, int64_t* max) {
     if (!ls) return false;
-    if (ls->type == EXPR_INTEGER) { *min = 1; *max = ls->data.integer; return true; }
-    if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-        *min = 1; *max = LEVEL_SPEC_INF; return true;
+    if (ls->type == EXPR_INTEGER || ls->type == EXPR_BIGINT) {
+        int64_t b;
+        level_bound(ls, &b);
+        *min = 1; *max = b; return true;
     }
     if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
         *min = 0; *max = LEVEL_SPEC_INF; return true;
@@ -123,7 +160,10 @@ bool mth_level_spec_parse(const Expr* ls, int64_t* min, int64_t* max) {
             level_bound(ls->data.function.args[1], &b)) {
             *min = a; *max = b; return true;
         }
+        return false;
     }
+    int64_t b;
+    if (level_bound(ls, &b)) { *min = 1; *max = b; return true; }   /* +/-Infinity */
     return false;
 }
 
@@ -162,7 +202,21 @@ static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
 
 /* ------------------- Apply ------------------- */
 
-static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec);
+static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec,
+                            bool held);
+
+/* Does the head of `e` hold its argument i (HoldAll, HoldFirst for i = 0,
+ * HoldRest for i > 0, HoldAllComplete)?  An f[...] built below a held
+ * argument is left for the evaluator, which never reaches it there. */
+static unsigned apply_hold_attrs(const Expr* e) {
+    if (e->data.function.head->type != EXPR_SYMBOL) return 0;
+    SymbolDef* d = symtab_lookup(e->data.function.head->data.symbol.name);
+    return d ? (d->attributes & (ATTR_HOLDALL | ATTR_HOLDALLCOMPLETE)) : 0;
+}
+static bool apply_arg_held(unsigned attrs, size_t i) {
+    if (attrs & ATTR_HOLDALLCOMPLETE) return true;
+    return (i == 0) ? (attrs & ATTR_HOLDFIRST) != 0 : (attrs & ATTR_HOLDREST) != 0;
+}
 
 /* Recurse into one child at the next level down, but short-circuit the common
  * case where a non-negative spec has already passed its maximum: no application
@@ -171,10 +225,11 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
  * re-checking. This is what makes a wide MapApply (`f @@@ list`) cheap -- every
  * element's arguments sit one level past max and would otherwise each cost a
  * recursive call that only shares. Inlined by the compiler at -O3. */
-static Expr* apply_child(Expr* f, Expr* child, int64_t child_level, LevelSpec spec) {
+static Expr* apply_child(Expr* f, Expr* child, int64_t child_level, LevelSpec spec,
+                         bool held) {
     if (spec.min >= 0 && spec.max >= 0 && child_level > spec.max)
         return expr_copy(child);
-    return apply_at_level(f, child, child_level, spec);
+    return apply_at_level(f, child, child_level, spec, held);
 }
 
 /* Apply inside a LinkedList, which stands for the List of its elements. At a
@@ -187,7 +242,7 @@ typedef struct { Expr* f; int64_t level; LevelSpec spec; } ApplyLLCtx;
 static Expr* apply_ll_elem(Expr* el, int64_t i, void* vc) {
     (void)i;
     const ApplyLLCtx* c = (const ApplyLLCtx*)vc;
-    Expr* r = apply_child(c->f, el, c->level + 1, c->spec);
+    Expr* r = apply_child(c->f, el, c->level + 1, c->spec, false);
     if (r == el) { expr_free(r); return NULL; }
     return eval_and_free(r);
 }
@@ -214,7 +269,8 @@ static Expr* apply_at_level_ll(Expr* f, Expr* expr, int64_t current_level, Level
     return eval_and_free(call);
 }
 
-static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
+static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec,
+                            bool held) {
     if (expr->type == EXPR_LINKEDLIST) return apply_at_level_ll(f, expr, current_level, spec);
     if (expr->type != EXPR_FUNCTION || is_atomic_number(expr)) {
         return expr_copy(expr);
@@ -242,15 +298,26 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
     /* An atomic association's parts are its values: f @@ <|a -> 1|> is f[1],
      * and Apply[f, <|a -> g[1]|>, {1}] is <|a -> f[1]|> (assoc_struct.h). */
     bool assoc = assoc_is_wellformed(expr);
+    /* the hold attributes of this node, read only when there are children to
+     * descend into */
+    unsigned ha = (spec.min >= 0 && spec.max >= 0 && current_level + 1 > spec.max)
+                      ? 0 : apply_hold_attrs(expr);
 
     if (should_apply) {
         size_t count = expr->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (count ? count : 1));
         for (size_t i = 0; i < count; i++) {
-            args[i] = apply_child(f, struct_part(expr, i, assoc), current_level + 1, spec);
+            args[i] = apply_child(f, struct_part(expr, i, assoc), current_level + 1, spec,
+                                  held || apply_arg_held(ha, i));
         }
+        /* Below a held argument the f[...] is left as it is, as Map leaves
+         * it, so Apply[f, Hold[g[1+1]], {1}] is Hold[f[1+1]] (audit Apply#3;
+         * it was reduced here, to Hold[f[2]]).  Elsewhere it is reduced now:
+         * the evaluator would do it next anyway, and doing it here keeps
+         * f @@@ list one pass. */
         Expr* new_func = expr_new_function(expr_copy(f), args, count);
         free(args);
+        if (held) return new_func;
         Expr* eval_res = evaluate(new_func);
         expr_free(new_func);
         return eval_res;
@@ -259,12 +326,13 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
     size_t count = expr->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * (count ? count : 1));
     for (size_t i = 0; i < count; i++) {
-        new_args[i] = apply_child(f, struct_part(expr, i, assoc), current_level + 1, spec);
+        new_args[i] = apply_child(f, struct_part(expr, i, assoc), current_level + 1, spec,
+                                  held || apply_arg_held(ha, i));
     }
 
     Expr* new_head = NULL;
     if (spec.heads) {
-        new_head = apply_at_level(f, expr->data.function.head, current_level + 1, spec);
+        new_head = apply_at_level(f, expr->data.function.head, current_level + 1, spec, held);
     } else {
         new_head = expr_copy(expr->data.function.head);
     }
@@ -337,7 +405,7 @@ Expr* builtin_apply(Expr* res) {
     }
     parse_options(res, ls ? 3 : 2, &spec);
 
-    return apply_at_level(f, expr, 0, spec);
+    return apply_at_level(f, expr, 0, spec, false);
 }
 
 /* ------------------- Map ------------------- */
@@ -844,7 +912,10 @@ Expr* builtin_mapindexed(Expr* res) {
     if (!mi_check_options(res, opt_start)) return NULL;
 
     LevelSpec spec;
-    if (!parse_level_spec_strict(ls, &spec)) return NULL;  /* bad level spec */
+    if (!parse_level_spec_strict(ls, &spec)) {            /* bad level spec */
+        mth_level_spec_message("MapIndexed", ls);
+        return NULL;
+    }
     parse_options(res, opt_start, &spec);                  /* Heads->True */
 
     /* An empty level range (0, {3,1}, ...) selects nothing. Returning the
@@ -1743,7 +1814,10 @@ Expr* builtin_scan(Expr* res) {
     if (is_rule2(ls)) ls = NULL;                               /* option in slot 2 */
 
     LevelSpec spec;
-    if (!parse_level_spec_strict(ls, &spec)) return NULL;      /* unrecognized levelspec */
+    if (!parse_level_spec_strict(ls, &spec)) {                 /* audit Scan#5 */
+        mth_level_spec_message(SYM_Scan, ls);
+        return NULL;
+    }
     parse_options(res, ls ? 3 : 2, &spec);                     /* Heads->True */
 
     /* Association at the default level: scan the values (mirrors Map). */
@@ -1805,7 +1879,36 @@ Expr* builtin_scan(Expr* res) {
  * If any test result is neither True nor False the whole call is left
  * unevaluated (return NULL), matching Wolfram; short-circuits otherwise. */
 static Expr* all_any_none_true(Expr* res, int mode) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* AllTrue[expr, test, levelspec, Heads -> h]: the parts at those levels,
+     * which Level collects, tested as a list (audit AllTrue#1, AnyTrue#1,
+     * NoneTrue#1: the level form stayed unevaluated). */
+    size_t argc = res->data.function.arg_count;
+    if (argc == 3 || argc == 4) {
+        Expr* ls = res->data.function.args[2];
+        if (argc == 4) {
+            Expr* o = res->data.function.args[3];
+            if (!is_rule2(o) || o->data.function.args[0]->type != EXPR_SYMBOL ||
+                o->data.function.args[0]->data.symbol.name != SYM_Heads)
+                return NULL;
+        }
+        int64_t lo, hi;
+        if (!mth_level_spec_parse(ls, &lo, &hi)) {
+            mth_level_spec_message(res->data.function.head->data.symbol.name, ls);
+            return NULL;
+        }
+        Expr* la[3] = { expr_copy(res->data.function.args[0]), expr_copy(ls),
+                        argc == 4 ? expr_copy(res->data.function.args[3]) : NULL };
+        Expr* parts = eval_and_free(expr_new_function(expr_new_symbol(SYM_Level), la, argc - 1));
+        if (eval_is_inflight_unwind(parts)) return parts;
+        if (!head_is(parts, SYM_List)) { expr_free(parts); return NULL; }
+        Expr* ta[2] = { parts, expr_copy(res->data.function.args[1]) };
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), ta, 2);
+        Expr* r = all_any_none_true(call, mode);
+        expr_free(call);
+        return r;
+    }
+    if (res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* test = res->data.function.args[1];
 
@@ -5019,7 +5122,15 @@ Expr* builtin_mapthread(Expr* res) {
     int64_t level = 1;                       /* default threading level */
     if (argc == 3) {
         Expr* nspec = res->data.function.args[2];
-        if (nspec->type != EXPR_INTEGER || nspec->data.integer < 0) return NULL;
+        if (nspec->type != EXPR_INTEGER || nspec->data.integer < 0) {
+            /* audit MapThread#1: -1, 1.0, Infinity, {1} were silent */
+            char* cs = expr_to_string(res);
+            mth_message("MapThread", "intnm",
+                        "Non-negative machine-sized integer expected at position 3 in %s.",
+                        cs ? cs : "?");
+            free(cs);
+            return NULL;
+        }
         level = nspec->data.integer;
     }
 

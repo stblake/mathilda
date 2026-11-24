@@ -142,6 +142,34 @@ static void test_min_cut_wide_range(void) {
               "{2, {{2, 3}, {1}}}");
 }
 
+/* FindMinimumCut#3-4, FindMaximumFlow#3, EdgeConnectivity#2: exact Integer
+ * capacities past 2^61 give exact answers (they saturated at 2^61 or came
+ * back Real). */
+static void test_s14_exact_big_capacities(void) {
+    audit_true("FindMinimumCut#3",
+               "FindMinimumCut[Graph[{1, 2}, {1 <-> 2}, EdgeWeight -> {10^20}]] === {10^20, {{2}, {1}}}");
+    audit_true("FindMinimumCut#4",
+               "FindMinimumCut[Graph[{1, 2}, {1 <-> 2}, EdgeWeight -> {2^62}]] === {2^62, {{2}, {1}}}");
+    audit_true("FindMinimumCut#4",
+               "First[FindMinimumCut[Graph[{1, 2}, {1 <-> 2}, EdgeWeight -> {2^61 + 3}]]] === 2^61 + 3");
+    audit_true("FindMaximumFlow#3",
+               "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3}], 1, 3, EdgeCapacity -> {2^61, 7}] === 7");
+    audit_true("FindMaximumFlow#3", "FindMaximumFlow[Graph[{1 -> 2, 2 -> 3, 1 -> 3}], 1, 3, "
+                                    "EdgeCapacity -> {2^62, 2^62, 2^62}] === 2^63");
+    audit_true("EdgeConnectivity#2", "EdgeConnectivity[Graph[{1 <-> 2, 2 <-> 3, 3 <-> 1}, "
+                                     "EdgeWeight -> {2^61, 2^61, 2^61}]] === 2^62");
+    /* a scaled weighted graph: every cut and flow scales exactly */
+    audit_run("SeedRandom[3]; auditG = RandomGraph[{40, 200}]; "
+              "auditW = RandomInteger[{1, 50}, 200]");
+    audit_true("FindMinimumCut#3",
+               "First[FindMinimumCut[Graph[EdgeList[auditG], EdgeWeight -> 3^50 auditW]]] === "
+               "3^50 First[FindMinimumCut[Graph[EdgeList[auditG], EdgeWeight -> auditW]]]");
+    audit_true("FindMaximumFlow#3",
+               "FindMaximumFlow[Graph[EdgeList[auditG]], 1, 2, EdgeCapacity -> 3^50 auditW] === "
+               "3^50 FindMaximumFlow[Graph[EdgeList[auditG]], 1, 2, EdgeCapacity -> auditW]");
+    audit_run("ClearAll[auditG, auditW]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complete_graph_resource_limit);
@@ -150,5 +178,6 @@ int main(void) {
     TEST(test_circulant_graph_dedup_before_cap);
     TEST(test_max_flow_wide_range);
     TEST(test_min_cut_wide_range);
+    TEST(test_s14_exact_big_capacities);
     return audit_finish("audit_graphs");
 }
