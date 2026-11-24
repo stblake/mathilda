@@ -90,7 +90,8 @@ void test_hn_infinity() {
     assert_eval_eq("HarmonicNumber[Infinity, 2]", "1/6 Pi^2", 0);
     assert_eval_eq("HarmonicNumber[Infinity, 4]", "1/90 Pi^4", 0);
     assert_eval_eq("HarmonicNumber[Infinity, 3]", "Zeta[3]", 0);
-    assert_eval_eq("HarmonicNumber[Infinity]", "ComplexInfinity", 0);
+    /* the harmonic series diverges to +Infinity (audit HarmonicNumber#1) */
+    assert_eval_eq("HarmonicNumber[Infinity]", "Infinity", 0);
 }
 
 /* ---- non-positive integer order: Faulhaber polynomial --------------- */

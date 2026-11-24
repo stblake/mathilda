@@ -3076,6 +3076,10 @@ static Expr* integrate_definite(Expr* res) {
              * inputs and never override an existing result. */
             if (expr_eq(a, b)) r = expr_new_integer(0);
             if (!r) r = integrate_dirac_try(cur, x, a, b);
+            if (!r && integrate_dirac_in(cur, x)) {     /* see integrate_dirac.h */
+                expr_free(cur);
+                return NULL;
+            }
             /* Whole-line Log[Abs[affine]]/(quadratic) -- taken BEFORE piecewise,
              * which would otherwise split at the Abs breakpoint into two
              * half-infinite pieces that grind in the parametric cascade. */

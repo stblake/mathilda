@@ -97,8 +97,9 @@ void test_lp_nonpositive_integer_a() {
     assert_eval_eq("LerchPhi[0, 0, 0]", "0", 0);
     /* LerchPhi[1/2, 1, 0] = PolyLog[1, 1/2] = -Log[1/2] (= Log[2]). */
     assert_eval_eq("LerchPhi[1/2, 1, 0]", "-Log[1/2]", 0);
-    /* Negative integer a = -1: z PolyLog[s,z] + (-1)^-s. */
-    assert_eval_eq("LerchPhi[z, s, -1]", "(-1)^(-s) + z PolyLog[s, z]", 0);
+    /* Negative integer a = -1: z PolyLog[s,z] + ((-1)^2)^(-s/2) (the symmetric
+     * power of the convention, = 1; audit LerchPhi#1). */
+    assert_eval_eq("LerchPhi[z, s, -1]", "1 + z PolyLog[s, z]", 0);
 }
 
 void test_lp_minus_one_integer_a() {

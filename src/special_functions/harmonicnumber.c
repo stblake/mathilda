@@ -333,6 +333,14 @@ static Expr* hn_numeric(const Expr* n, const Expr* r) {
     return eval_and_free(ncall);
 }
 
+/* Evaluate `call` (consumed); true when it is the symbol True. */
+static bool hn_true(Expr* call) {
+    Expr* v = eval_and_free(call);
+    bool t = v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "True") == 0;
+    if (v) expr_free(v);
+    return t;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Entry point                                                        */
 /* ------------------------------------------------------------------ */
@@ -351,7 +359,23 @@ Expr* builtin_harmonicnumber(Expr* res) {
     int64_t ni, ri;
 
     if (is_infinity_sym(n)) {
-        /* HarmonicNumber[Infinity, r] = Zeta[r]. */
+        /* HarmonicNumber[Infinity, r] = Sum_{i>=1} i^-r: Zeta[r] only where the
+         * sum converges, Re r > 1. A real r <= 1 sums positive terms without
+         * bound (+Infinity, not the continuation values Zeta[0] = -1/2 or
+         * Zeta[-1] = -1/12); a complex r with Re r < 1 grows in modulus while
+         * its phase turns (ComplexInfinity); Re r = 1, r != 1 oscillates
+         * boundedly with no limit (unevaluated). Symbolic r keeps Zeta[r]. */
+        if (!hn_true(hn_fn2("Greater", hn_fn1("Re", expr_copy(r)), hn_int(1)))) {
+            bool real = hn_true(hn_fn1("PossibleZeroQ", hn_fn1("Im", expr_copy(r))));
+            if (hn_true(hn_fn2("Less", hn_fn1("Re", expr_copy(r)), hn_int(1)))) {
+                expr_free(r);
+                return expr_new_symbol(real ? "Infinity" : "ComplexInfinity");
+            }
+            if (hn_true(hn_fn2("Equal", hn_fn1("Re", expr_copy(r)), hn_int(1)))) {
+                expr_free(r);
+                return real ? expr_new_symbol("Infinity") : NULL;
+            }
+        }
         result = eval_and_free(hn_fn1("Zeta", expr_copy(r)));
     } else if (n->type == EXPR_REAL && hn_is_one(r)) {
         /* Machine-real n, order 1: the ND kernel's own helper, so the scalar

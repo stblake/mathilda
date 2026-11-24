@@ -1085,6 +1085,11 @@ static bool airy_asym_pos(int which, double x, double* out) {
 static bool airy_asym_neg(int which, double x, double* out) {
     double ax = -x, zh, zl;
     airy_zeta_dd(ax, &zh, &zl);
+    /* The phase needs zeta to an ABSOLUTE 2^-53, but zh + zl carries it only
+     * to ~2^-104 relative: past zeta ~ 2^50 (x ~ 1.4e10) the phase error
+     * reaches an ulp of the result and grows with x (AiryAi[-1e15] was 69).
+     * Decline there; the caller's arbitrary-precision path takes x exactly. */
+    if (zh > 1.125899906842624e15) return false;   /* 2^50 */
     double q = sqrt(sqrt(ax));
     double iz = 1.0 / zh, y = -iz * iz;
     const double* c = (which == AIRY_AI || which == AIRY_BI) ? AIRY_U : AIRY_V;
@@ -1095,8 +1100,11 @@ static bool airy_asym_neg(int which, double x, double* out) {
         od = fma(od, y, c[2 * j + 1]);
     }
     od *= iz;
-    double sz = sin(zh), cz = cos(zh);
-    double sn = sz + cz * zl, cs = cz - sz * zl;   /* sin, cos of zeta */
+    /* sin, cos of zeta = zh + zl by the addition theorem. libm reduces zh
+     * exactly; zl reaches ulp(zh)/2 (6e-5 at x = 1e8), so the first-order
+     * sin(zl) ~ zl, cos(zl) ~ 1 left a zl^2/2 phase error (8e-10 relative). */
+    double sz = sin(zh), cz = cos(zh), sl = sin(zl), cl = cos(zl);
+    double sn = sz * cl + cz * sl, cs = cz * cl - sz * sl;
     const double R2 = 0.70710678118654752;
     double sth = (sn + cs) * R2, cth = (cs - sn) * R2;   /* of zeta + pi/4 */
     double v;

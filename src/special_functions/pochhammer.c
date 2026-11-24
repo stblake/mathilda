@@ -77,10 +77,31 @@ static bool poch_contains_gamma(const Expr* e) {
  * (matching Mathematica's Pochhammer[x,-5] = 1/((x-5)(x-4)(x-3)(x-2)(x-1))).
  * The linear factors are Plus[a, k]; expr_new_function copies the factor
  * array, so we free the container but not the adopted elements. */
+/* True when the real number `a` is an integer in [1, m]: then one factor
+ * a - k of the n = -m reciprocal product is exactly zero, a pole. Decided on
+ * the value itself, so an MPFR 2.`30 is caught as well as the exact 2 --
+ * otherwise Times multiplies out an MPFR zero and 1/0.``30 is Overflow[]. */
+static bool poch_neg_pole(const Expr* a, int64_t m) {
+    switch (a->type) {
+        case EXPR_INTEGER: return a->data.integer >= 1 && a->data.integer <= m;
+        case EXPR_REAL: {
+            double v = a->data.real;
+            return v >= 1.0 && v <= (double)m && v == floor(v);
+        }
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+            return mpfr_integer_p(a->data.mpfr) && mpfr_cmp_ui(a->data.mpfr, 1) >= 0 &&
+                   mpfr_cmp_si(a->data.mpfr, (long)m) <= 0;
+#endif
+        default: return false;
+    }
+}
+
 static Expr* poch_build_product(Expr* a, int64_t n) {
     bool negative = n < 0;
     int64_t m = negative ? -n : n;           /* number of factors */
     size_t cnt = (size_t)m;
+    if (negative && poch_neg_pole(a, m)) return expr_new_symbol(SYM_ComplexInfinity);
 
     Expr** factors = (Expr**)malloc(cnt * sizeof(Expr*));
     if (!factors) return NULL;

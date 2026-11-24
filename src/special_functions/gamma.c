@@ -817,10 +817,45 @@ static void gamma_decompose(Expr* v, Expr* zero, Expr** re, Expr** im) {
 /* Gamma[a, z]  (upper incomplete gamma)                              */
 /* ------------------------------------------------------------------ */
 
+/* True when pred[f[a]] evaluates to True (f = NULL: pred[a]). Certified by the
+ * predicate itself (Positive/NonPositive decide the sign exactly), so an
+ * undecidable or symbolic argument reads as false. */
+static bool gamma_pred_of(const char* pred, const char* f, const Expr* a) {
+    Expr* arg = expr_copy((Expr*)a);
+    if (f) arg = expr_new_function(expr_new_symbol(f), &arg, 1);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(pred), &arg, 1));
+    bool t = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    return t;
+}
+
 static Expr* gamma_two_arg(Expr* a, Expr* z) {
     /* 1. Exact rewrites that hold for any z / a. */
     if (z->type == EXPR_INTEGER && z->data.integer == 0) {
-        /* Gamma[a, 0] = Gamma[a]. */
+        /* Gamma[a, 0] = Gamma[a] holds only for Re a > 0: for Re a <= 0 the
+         * integral Int_0^Inf t^(a-1) e^-t dt diverges at t = 0 (Gamma(a, z) ~
+         * -z^a/a as z -> 0, |z^a| = |z|^Re a e^(-Im a Arg z)), so Re a < 0 and
+         * a = 0 are ComplexInfinity, while a numeric a = I t (t != 0) has no
+         * limit (z^a stays bounded and oscillates) and stays unevaluated. A
+         * symbolic a keeps the generic identity. A real leaf is decided by
+         * its sign directly, without the predicate evaluations. */
+        int64_t an, ad;
+        int leaf_sign = 2;                           /* 2: not a real leaf */
+        if (is_rational(a, &an, &ad)) leaf_sign = (an > 0) - (an < 0);
+        else if (a->type == EXPR_REAL) leaf_sign = (a->data.real > 0) - (a->data.real < 0);
+#ifdef USE_MPFR
+        else if (a->type == EXPR_MPFR) leaf_sign = mpfr_sgn(a->data.mpfr);
+#endif
+        if (leaf_sign != 2 && leaf_sign <= 0) return expr_new_symbol(SYM_ComplexInfinity);
+        if (leaf_sign == 2 && !gamma_pred_of("Positive", "Re", a)) {
+            if (gamma_pred_of("Negative", "Re", a))
+                return expr_new_symbol(SYM_ComplexInfinity);
+            if (gamma_pred_of("NonPositive", "Re", a)) {       /* Re a == 0 */
+                if (gamma_pred_of("PossibleZeroQ", "Im", a))
+                    return expr_new_symbol(SYM_ComplexInfinity);
+                return NULL;
+            }
+        }
         Expr* ga = expr_copy(a);
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Gamma), &ga, 1));
     }

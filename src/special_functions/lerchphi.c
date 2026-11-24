@@ -70,6 +70,8 @@
 
 /* Largest positive integer a expanded into the PolyLog reduction. */
 #define LP_POS_A_CAP   100000L
+/* Largest number of head terms peeled off a negative non-integer a. */
+#define LP_SHIFT_CAP   1000
 /* Largest n for which LerchPhi[z, -n, a] is expanded into its rational form. */
 #define LP_NEG_S_CAP   200L
 
@@ -130,6 +132,17 @@ static bool lp_leaf_double(const Expr* e, double* out) {
     return false;
 }
 
+/* Does e contain a subexpression headed by the interned symbol `h`? */
+static bool lp_contains_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type == EXPR_SYMBOL && hd->data.symbol.name == h) return true;
+    if (lp_contains_head(hd, h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (lp_contains_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
 /* ------------------------------------------------------------------ */
 /* Small Expr builders                                                 */
 /* ------------------------------------------------------------------ */
@@ -151,8 +164,28 @@ static Expr* lp_zeta2(Expr* s, Expr* a) {         /* Zeta[s, a], both consumed *
 /* Exact reductions                                                    */
 /* ------------------------------------------------------------------ */
 
-/* z = 0: only the k = 0 term survives, Phi(0, s, a) = a^-s. */
+/* Re a < 0, decided exactly (a real leaf by its sign, otherwise Negative[Re[a]]
+ * must evaluate to True). */
+static bool lp_re_negative(Expr* a) {
+    int64_t n, d;
+    if (is_rational(a, &n, &d)) return n < 0;
+    if (a->type == EXPR_REAL) return a->data.real < 0.0;
+    Expr* re = expr_new_function(expr_new_symbol(SYM_Re), (Expr*[]){ expr_copy(a) }, 1);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Negative), &re, 1));
+    bool t = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    return t;
+}
+
+/* z = 0: only the k = 0 term survives, Phi(0, s, a) = a^-s -- for Re a < 0 the
+ * symmetric (a^2)^(-s/2) of the convention (LerchPhi[0, 1/2, -1/2] = Sqrt[2],
+ * not the principal -I Sqrt[2]). */
 static Expr* lp_z_zero(Expr* s, Expr* a) {
+    if (lp_re_negative(a)) {
+        Expr* a2 = lp_pow(expr_copy(a), expr_new_integer(2));
+        Expr* e  = lp_times(make_rational(-1, 2), expr_copy(s));
+        return eval_and_free(lp_pow(a2, e));
+    }
     return eval_and_free(lp_pow(expr_copy(a), lp_neg_s(expr_copy(s))));
 }
 
@@ -298,10 +331,14 @@ static Expr* lp_nonpos_int_a(Expr* z, Expr* s, long m) {
     if (!parts) { expr_free(main); return NULL; }
     parts[0] = main;
     for (long j = 1; j <= m; j++) {
-        /* z^(m-j) (-j)^-s = Times[Power[z, m-j], Power[-j, -s]]. */
-        Expr* zpow = lp_pow(expr_copy(z), expr_new_integer(m - j));
-        Expr* jpow = lp_pow(expr_new_integer(-j), lp_neg_s(expr_copy(s)));
-        parts[(size_t)j] = lp_times(zpow, jpow);
+        /* The k = m - j term z^(m-j) ((-j)^2)^(-s/2) = z^(m-j) j^-s: the
+         * symmetric power of the convention, NOT the principal (-j)^-s (which
+         * flipped the sign of every odd-s head term: LerchPhi[1/2, 3, -2] came
+         * out -0.49 against the series' 0.759). The k = 0 term (j = m) carries
+         * no z power, so z = 0 leaves it as |a|^-s instead of 0^0. */
+        Expr* jpow = lp_pow(expr_new_integer(j), lp_neg_s(expr_copy(s)));
+        parts[(size_t)j] = (j == m) ? jpow
+            : lp_times(lp_pow(expr_copy(z), expr_new_integer(m - j)), jpow);
     }
     Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, terms);
     free(parts);
@@ -896,6 +933,48 @@ static Expr* lerchphi_single(Expr* z, Expr* s, Expr* a, bool include_singular) {
     if (lp_exact_int(a, &m) && m <= 0) {
         Expr* r = lp_nonpos_int_a(z, s, -m);
         if (r) return r;
+    }
+
+    /* a a negative non-integer rational, exact z and s: peel the K = ceil(-a)
+     * terms with k + a < 0 -- each z^k |k + a|^-s under the symmetric
+     * convention -- onto Phi(z, s, a + K), a + K in (0, 1):
+     *   Phi(z, s, a) = Sum_{k<K} z^k |k + a|^-s + z^K Phi(z, s, a + K).
+     * The closed forms below (z = -1's digamma / two-Zeta forms, the
+     * s = -n rational function) are principal-power identities, valid only
+     * for Re a > 0. Kept only when the shifted call reduces, so an irreducible
+     * LerchPhi[z, s, -1/2] stays as written. z = 1 (Zeta[s, a]) and s = 0
+     * (1/(1 - z), nothing excluded) need no shift. */
+    {
+        int64_t rn, rd;
+        if (is_rational(a, &rn, &rd) && rd > 1 && rn < 0 && rn > -INT64_MAX &&
+            !lp_has_inexact(z) && !lp_has_inexact(s) &&
+            !lp_is_int(z, 1) && !lp_is_int(s, 0)) {
+            int64_t K = (-rn + rd - 1) / rd;                 /* ceil(-a) */
+            if (K <= LP_SHIFT_CAP) {
+                Expr* ak = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                               (Expr*[]){ expr_copy(a), expr_new_integer(K) }, 2));
+                Expr* sh = eval_and_free(expr_new_function(expr_new_symbol(SYM_LerchPhi),
+                               (Expr*[]){ expr_copy(z), expr_copy(s), ak }, 3));
+                if (sh && !lp_contains_head(sh, SYM_LerchPhi)) {
+                    size_t nt = (size_t)K + 1;
+                    Expr** parts = (Expr**)malloc(nt * sizeof(Expr*));
+                    if (parts) {
+                        for (int64_t k = 0; k < K; k++) {
+                            /* |k + a| = -(rn + k rd)/rd > 0 */
+                            Expr* mag = make_rational(-(rn + k * rd), rd);
+                            Expr* t = lp_pow(mag, lp_neg_s(expr_copy(s)));
+                            parts[k] = (k == 0) ? t
+                                : lp_times(lp_pow(expr_copy(z), expr_new_integer(k)), t);
+                        }
+                        parts[K] = lp_times(lp_pow(expr_copy(z), expr_new_integer(K)), sh);
+                        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, nt);
+                        free(parts);
+                        return eval_and_free(sum);
+                    }
+                }
+                if (sh) expr_free(sh);
+            }
+        }
     }
 
     /* z = 0: a^-s. */

@@ -1337,8 +1337,16 @@ property (ahead of every other method): `Integrate[DiracDelta[α x+β] h(x),
 `HeavisideTheta[hi−x0]` step for a symbolic upper limit (the causal convention —
 the full step even when `x0=lo`) and `1 / 0 / ½` (interior / outside / at an
 endpoint) for numeric limits.  A sum integrand (`1 + δ`, `t + δ`, `δ + cos`) is
-split by linearity, sifting each impulse and re-integrating the remainder.  An
-empty interval integrates to `0`.  `DiracDelta` is otherwise inert, so these
+split by linearity, sifting each impulse and re-integrating the remainder.  A
+nonlinear argument uses the composition rule `Σ_r h(r)/|g'(r)| · B(r)` over the
+roots of `g` in `[lo, hi]` (found by `Reduce`, so `DiracDelta[Sin[x]]` on
+`[-1, 1]` sifts at `0` alone): `Integrate[DiracDelta[x^2 - 4], {x, -3, 3}] = 1/2`.
+A delta free of `x` is a constant factor (`Integrate[DiracDelta[x] DiracDelta[y],
+{x, -1, 1}] = DiracDelta[y]`), and `DiracDelta[x, y]` is split into
+`DiracDelta[x] DiracDelta[y]`.  When the sifting declines with an impulse in `x`
+still present — a multiple root (`DiracDelta[x^2]`), two impulses in `x`, an
+undecided endpoint — the integral stays unevaluated (the other methods would read
+the inert delta as 0 almost everywhere).  An empty interval integrates to `0`.  `DiracDelta` is otherwise inert, so these
 never change an existing result — they are the sole source of a value for such
 inputs (used by `DSolve`'s Green's-function solutions of impulse-forced ODEs).
 

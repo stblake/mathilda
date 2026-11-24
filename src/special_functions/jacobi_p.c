@@ -637,7 +637,27 @@ static Expr* jacobi_p_eval(Expr* n_e, Expr* a_e, Expr* b_e, Expr* x_e) {
             Expr* out = jp_numeric_recurrence(k, a_e, b_e, x_e, op, &degenerate);
             if (out) return out;
             if (!degenerate) return NULL;
-            /* degenerate recurrence: the hypergeometric form below */
+            /* Degenerate recurrence (a + b + 2j = 0 for some step, e.g. a = b =
+             * -1): the sum form is the polynomial for EVERY a, b and divides by
+             * no parameter, so evaluate it at the numeric x. The 2F1 form below
+             * is a 0 * Infinity there (Binomial[2, 3] = 0 times a c = 0 2F1)
+             * and answered an exact 0. Exact a, b take the exact coefficients;
+             * N then rounds an all-exact-but-n result to the inputs' precision. */
+            if (k <= JP_SYM_CAP) {
+                mpq_t aq, bq;
+                mpq_init(aq); mpq_init(bq);
+                Expr* poly = (jp_mpq_from_expr(a_e, aq) && jp_mpq_from_expr(b_e, bq))
+                    ? jp_poly_exact((unsigned long)k, aq, bq, x_e)
+                    : jp_poly_symbolic((unsigned long)k, a_e, b_e, x_e);
+                mpq_clear(aq); mpq_clear(bq);
+                if (poly) {
+                    long digits = (long)((double)op * 0.30102999566398120);
+                    Expr* nv = op <= 53 ? mk_fn1("N", poly)
+                                        : mk_fn2("N", poly, expr_new_integer(digits));
+                    return eval_and_free(nv);
+                }
+            }
+            /* otherwise the hypergeometric form below */
         }
     }
 #endif

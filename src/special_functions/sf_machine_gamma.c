@@ -3382,9 +3382,14 @@ static bool loggamma_upper(double zr, double zi, double* rr, double* ri) {
             double lr, li; cx_log(pr, pi, &lr, &li);
             fr += lr; fi += li + 2.0 * M_PI * (double)k;
         } else if (m == -1) {
-            /* lnGamma(z) = lnGamma(z + 1) - Log z, Log z = log1p(z - 1) (z may be
-             * near 1, where lnGamma is small) */
-            double lr, li; cx_log1p(zr - 1.0, zi, &lr, &li);
+            /* lnGamma(z) = lnGamma(z + 1) - Log z. Near z = 1 (where lnGamma is
+             * small) Log z = log1p(z - 1), with z - 1 exact for Re z >= 1/2;
+             * elsewhere the plain log: log1p's argument |z|^2 - 1, formed as
+             * u (2 + u) + Im^2, cancels to nothing as z -> 0 (LogGamma[1e-5 +
+             * 1e-5 I] lost 8 digits). */
+            double lr, li;
+            if (zr >= 0.5) cx_log1p(zr - 1.0, zi, &lr, &li);
+            else           cx_log(zr, zi, &lr, &li);
             fr -= lr; fi -= li;
         } else if (m < -1) {
             /* lnGamma(z) = lnGamma(z - m) - sum_{j=0}^{-m-1} Log(z + j) */

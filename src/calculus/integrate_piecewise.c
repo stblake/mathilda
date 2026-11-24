@@ -347,14 +347,34 @@ static void collect_condition_boundaries(const Expr* cond, const Expr* x,
     if ((h == SYM_Less || h == SYM_LessEqual ||
          h == SYM_Greater || h == SYM_GreaterEqual ||
          h == SYM_Equal || h == SYM_Unequal) &&
-        cond->data.function.arg_count == 2) {
-        Expr* diff = mk_fn2("Plus", cp(cond->data.function.args[0]),
-                            neg_of(cp(cond->data.function.args[1])));
-        if (contains_symbol(diff, x)) solve_roots(diff, x, a, b, s);
-        expr_free(diff);
+        cond->data.function.arg_count >= 2) {
+        /* A chained relation Less[e0, e1, e2] (1/2 < x < 1, as WaveletPsi
+         * builds it) bounds at every consecutive pair; only the two-argument
+         * form used to count, so the chain contributed no breakpoint. */
+        for (size_t i = 0; i + 1 < cond->data.function.arg_count; i++) {
+            Expr* diff = mk_fn2("Plus", cp(cond->data.function.args[i]),
+                                neg_of(cp(cond->data.function.args[i + 1])));
+            if (contains_symbol(diff, x)) solve_roots(diff, x, a, b, s);
+            expr_free(diff);
+        }
         return;
     }
-    /* And / Or / Inequality / Not: recurse into the pieces. */
+    /* Inequality[e0, op1, e1, op2, e2, ...] (0 <= x < 1): the boundaries are
+     * the consecutive pairs e_i == e_(i+1). Its arguments are bare expressions
+     * and operator SYMBOLS, so the generic recursion below finds none, and the
+     * whole interval was integrated on a single branch (Integrate[Piecewise[
+     * {{1, 0 <= x < 1}}], {x, -1, 2}] was 3). */
+    if (h == SYM_Inequality) {
+        size_t n = cond->data.function.arg_count;
+        for (size_t i = 0; i + 2 < n; i += 2) {
+            Expr* diff = mk_fn2("Plus", cp(cond->data.function.args[i]),
+                                neg_of(cp(cond->data.function.args[i + 2])));
+            if (contains_symbol(diff, x)) solve_roots(diff, x, a, b, s);
+            expr_free(diff);
+        }
+        return;
+    }
+    /* And / Or / Not: recurse into the pieces. */
     for (size_t i = 0; i < cond->data.function.arg_count; i++)
         collect_condition_boundaries(cond->data.function.args[i], x, a, b, s);
 }

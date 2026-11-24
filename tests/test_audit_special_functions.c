@@ -336,6 +336,219 @@ static void test_mathieu_characteristic(void) {
     audit_true("MathieuC#1", "MathieuC[2 + I, 1. + 0.5 I, 0.3] == 1.1561237520754863 - 0.1593777733640514 I");
 }
 
+/* ================================================================== */
+/* Group A2: Gamma, LogGamma, Pochhammer, HarmonicNumber, LerchPhi,    */
+/* InverseErf(c), AiryAi, DiracDelta, HaarWavelet, JacobiP.            */
+/* ================================================================== */
+
+/* Gamma#1 (high): Gamma[a, 0] = Gamma[a] was applied for Re a <= 0, where
+ * Int_0^Inf t^(a-1) e^-t dt diverges at 0 (Gamma(a, z) ~ -z^a/a). */
+static void test_a2_gamma_incomplete_at_zero(void) {
+    const char* id = "Gamma#1";
+    audit_chk(id, "Gamma[-1/2, 0]", "ComplexInfinity");
+    audit_chk(id, "Gamma[-1.5, 0]", "ComplexInfinity");
+    audit_chk(id, "Gamma[0, 0]", "ComplexInfinity");
+    audit_chk(id, "Gamma[-1/2 + I, 0]", "ComplexInfinity");
+    audit_chk(id, "Gamma[-3/2, 0, 1]", "ComplexInfinity");
+    /* Re a = 0, a != 0: z^a oscillates boundedly, no limit */
+    audit_chk(id, "Gamma[I, 0]", "Gamma[I, 0]");
+    /* the blow-up the limit follows: ~ 2 z^(-1/2) */
+    audit_true(id, "Gamma[-1/2, 1.*^-12] > 10^6");
+    /* sanity: Re a > 0 and symbolic a keep Gamma[a] */
+    audit_chk(id, "Gamma[1/2, 0]", "Sqrt[Pi]");
+    audit_chk(id, "Gamma[3, 0]", "2");
+    audit_chk(id, "Gamma[a, 0]", "Gamma[a]");
+    audit_chk(id, "Gamma[2, 3]", "4/E^3");
+}
+
+/* LogGamma#1 (high): machine complex LogGamma lost up to 8 digits for small |z|
+ * with Re z > 0: Log z went through log1p(z - 1), whose argument |z|^2 - 1
+ * cancels to nothing as z -> 0. Reference values: N of the exact argument. */
+static void test_a2_loggamma_small_complex(void) {
+    const char* id = "LogGamma#1";
+    audit_true(id, "Abs[LogGamma[0.00001 + 0.00001 I] - "
+                   "N[LogGamma[1/100000 + I/100000], 30]] < 1.*^-14");
+    audit_true(id, "Abs[LogGamma[0.001 + 0.001 I] - "
+                   "N[LogGamma[1/1000 + I/1000], 30]] < 1.*^-14");
+    audit_true(id, "Abs[LogGamma[0.2 - 0.3 I] - N[LogGamma[2/10 - 3/10 I], 30]] < 1.*^-14");
+    /* scalar == packed == NDArray == Compile */
+    audit_true(id, "With[{w = {0.00001 + 0.00001 I, 0.001 + 0.001 I, 0.3 + 2 I}}, "
+                   "(LogGamma /@ w) === LogGamma[w] === Normal[LogGamma[NDArray[w]]] === "
+                   "(Compile[{{z, _Complex}}, LogGamma[z]] /@ w)]");
+    /* sanity: near z = 1 (where log1p is kept) */
+    audit_true(id, "Abs[LogGamma[0.7 + 0.3 I] - N[LogGamma[7/10 + 3/10 I], 30]] < 1.*^-15");
+    audit_true(id, "Abs[LogGamma[1.00001 + 0.00001 I]/"
+                   "LogGamma[SetPrecision[1.00001 + 0.00001 I, 40]] - 1] < 1.*^-14");
+}
+
+/* Pochhammer#1 (high): an arbitrary-precision a at a pole of the negative-n
+ * product multiplied out an MPFR zero and returned Overflow[]. */
+static void test_a2_pochhammer_mpfr_pole(void) {
+    const char* id = "Pochhammer#1";
+    audit_chk(id, "Pochhammer[N[2, 30], -3]", "ComplexInfinity");
+    audit_chk(id, "Pochhammer[N[1, 30], -1]", "ComplexInfinity");
+    audit_chk(id, "Pochhammer[2., -3]", "ComplexInfinity");
+    audit_chk(id, "Pochhammer[2, -3]", "ComplexInfinity");
+    /* sanity: off the pole, 1/((a-1)(a-2)(a-3)) */
+    audit_true(id, "Abs[Pochhammer[N[5, 30], -3] - 1/24] < 10^-28");
+    audit_chk(id, "Pochhammer[10, -3]", "1/504");
+    audit_true(id, "Abs[Pochhammer[N[1/2, 30], -3] + 8/15] < 10^-28");
+}
+
+/* HarmonicNumber#1 (high): HarmonicNumber[Infinity, r] answered Zeta[r] for
+ * r <= 1, where the sum of positive terms diverges. */
+static void test_a2_harmonicnumber_infinity(void) {
+    const char* id = "HarmonicNumber#1";
+    audit_chk(id, "HarmonicNumber[Infinity, -1]", "Infinity");
+    audit_chk(id, "HarmonicNumber[Infinity, 0]", "Infinity");
+    audit_chk(id, "HarmonicNumber[Infinity, 1/2]", "Infinity");
+    audit_chk(id, "HarmonicNumber[Infinity]", "Infinity");
+    audit_chk(id, "HarmonicNumber[Infinity, 0.5]", "Infinity");
+    audit_chk(id, "HarmonicNumber[Infinity, 1/2 + I]", "ComplexInfinity");
+    audit_chk(id, "HarmonicNumber[Infinity, 1 + I]", "HarmonicNumber[Infinity, 1 + I]");
+    /* sanity: the convergent orders and symbolic r */
+    audit_chk(id, "HarmonicNumber[Infinity, 2]", "1/6 Pi^2");
+    audit_chk(id, "HarmonicNumber[Infinity, 3 + I]", "Zeta[3 + I]");
+    audit_chk(id, "HarmonicNumber[Infinity, r]", "Zeta[r]");
+}
+
+/* LerchPhi#1 (high): exact reductions at Re a < 0 used the principal power
+ * (k + a)^-s instead of the symmetric ((k + a)^2)^(-s/2) the numeric path
+ * (and the convention) uses. Reference: the series itself, summed exactly or
+ * numerically, and the machine path. */
+static void test_a2_lerchphi_negative_a(void) {
+    const char* id = "LerchPhi#1";
+    /* k=0: 1/8, k=1: 1/2, k=2 dropped, k>=3: z^2 Li3(z) */
+    audit_true(id, "PossibleZeroQ[LerchPhi[1/2, 3, -2] - (5/8 + PolyLog[3, 1/2]/4)]");
+    audit_true(id, "Abs[N[LerchPhi[1/2, 3, -2]] - LerchPhi[0.5, 3., -2.]] < 1.*^-14");
+    audit_chk(id, "LerchPhi[1/2, -1, -2]", "3");
+    audit_chk(id, "LerchPhi[0, 1/2, -1/2]", "Sqrt[2]");
+    audit_true(id, "Abs[N[LerchPhi[1/2, 1/2, -1]] - LerchPhi[0.5, 0.5, -1.]] < 1.*^-14");
+    /* non-integer negative a: Sum |k - 1/2| 2^-k = 2;  Sum (-1)^k/|k - 1/2| */
+    audit_chk(id, "LerchPhi[1/2, -1, -1/2]", "2");
+    audit_true(id, "Abs[N[LerchPhi[-1, 1, -1/2]] - "
+                   "(2 + NSum[(-1)^k/(k - 1/2), {k, 1, Infinity}])] < 1.*^-10");
+    audit_true(id, "Abs[N[LerchPhi[1/3, 2, -3/2]] - "
+                   "N[Sum[(1/3)^k/((k - 3/2)^2), {k, 0, 200}], 20]] < 1.*^-14");
+    /* the k = -a term of a z = 0 call is dropped, not 0^0 */
+    audit_chk(id, "LerchPhi[0, 2, -1]", "1");
+    /* sanity: positive a and irreducible negative a unchanged */
+    audit_true(id, "PossibleZeroQ[LerchPhi[1/2, 3, 2] - 4 (PolyLog[3, 1/2] - 1/2)]");
+    audit_chk(id, "LerchPhi[z, s, -1/2]", "LerchPhi[z, s, -1/2]");
+    audit_chk(id, "LerchPhi[1/2, s, 0]", "PolyLog[s, 1/2]");
+}
+
+/* InverseErf#1/#2, InverseErfc#1 (high): the arbitrary-precision Newton was
+ * seeded from s rounded to a double, which is 1.0 (or 2.0) next to the
+ * endpoints: Indeterminate, or digits wrong far below the tagged precision.
+ * Checked by the residual of Erf / Erfc and against N of the exact argument. */
+static void test_a2_inverse_erf_tails(void) {
+    const char* id = "InverseErf#1";
+    audit_true(id, "Abs[InverseErf[N[1 - 10^-20, 40]] - 6.6015806223551425615163916] < 10^-24");
+    audit_true(id, "Abs[InverseErf[N[-1 + 10^-20, 40]] + 6.6015806223551425615163916] < 10^-24");
+    audit_true(id, "Abs[N[InverseErf[1 - 10^-20], 30] - 6.60158062235514256151639163242] < 10^-27");
+    audit_true(id, "Abs[Erf[InverseErf[N[1 - 10^-17, 40]]] - N[1 - 10^-17, 40]] < 10^-38");
+    id = "InverseErf#2";
+    audit_true(id, "Abs[InverseErf[N[1 - 10^-16, 40]] - "
+                   "5.87237009045396314506648428187] < 10^-25");
+    audit_true(id, "Abs[InverseErf[N[1 - 10^-15, 40]] - "
+                   "5.67584634746764698500497080641] < 10^-25");
+    audit_true(id, "Abs[Erf[InverseErf[N[1 - 10^-16, 40]]] - N[1 - 10^-16, 40]] < 10^-38");
+    /* sanity: the interior and the machine path */
+    audit_true(id, "Abs[Erf[InverseErf[N[1/3, 30]]] - 1/3] < 10^-28");
+    audit_true(id, "Abs[Erf[InverseErf[N[7/10, 30]]] - 7/10] < 10^-28");
+    audit_true(id, "Abs[InverseErf[0.7] - InverseErf[N[7/10, 30]]] < 1.*^-15");
+
+    id = "InverseErfc#1";
+    audit_true(id, "Abs[InverseErfc[N[2 - 10^-30, 40]] + 8.1486162231698646] < 10^-15");
+    audit_true(id, "Abs[Erfc[InverseErfc[N[2 - 10^-30, 40]]] - N[2 - 10^-30, 40]] < 10^-38");
+    audit_true(id, "Abs[InverseErfc[N[2 - 10^-16, 40]] + 5.8723700904539631450664] < 10^-21");
+    /* below the double range (InverseErfc#2 shape, same root cause) */
+    audit_true(id, "30 < InverseErfc[N[10^-400, 30]] < 304/10");
+    audit_true(id, "Abs[Erfc[InverseErfc[N[10^-400, 30]]]/N[10^-400, 30] - 1] < 10^-27");
+    /* sanity */
+    audit_true(id, "Abs[InverseErfc[N[10^-30, 40]] - 8.1486162231698646073845666606481] < 10^-30");
+    audit_true(id, "Abs[InverseErfc[1.5] + 0.4769362762044699] < 1.*^-15");
+}
+
+/* AiryAi#1 (high): the large-negative-x machine asymptotics took sin/cos of
+ * zeta = zh + zl to first order in zl, and zh + zl itself carries the phase
+ * only to ~2^-104 relative -- AiryAi[-1.*^15] was 69. The arbitrary-precision
+ * path on the same (exact) double is the reference. */
+static void test_a2_airyai_large_negative(void) {
+    const char* id = "AiryAi#1";
+    audit_true(id, "Abs[AiryAi[-1.*^12] - AiryAi[-10^12`30]] < 1.*^-18");
+    audit_true(id, "Abs[AiryAi[-1.*^15] - AiryAi[-10^15`30]] < 1.*^-19");
+    audit_true(id, "Abs[AiryAi[-1.*^20] - AiryAi[-10^20`30]] < 1.*^-20");
+    audit_true(id, "Abs[AiryAi[-1.*^8]/AiryAi[-10^8`30] - 1] < 1.*^-14");
+    audit_true(id, "Abs[AiryAi[-1.*^10]/AiryAi[-10^10`30] - 1] < 1.*^-13");
+    audit_true(id, "Abs[AiryBi[-1.*^8]/AiryBi[-10^8`30] - 1] < 1.*^-14");
+    /* scalar == packed == NDArray == Compile, across the decline threshold */
+    audit_true(id, "With[{v = {-1.*^12, -1.*^8, -5., -1.*^15}}, "
+                   "(AiryAi /@ v) === AiryAi[v] === Normal[AiryAi[NDArray[v]]] === "
+                   "(Compile[{{x, _Real}}, AiryAi[x]] /@ v)]");
+    /* sanity: moderate arguments */
+    audit_true(id, "Abs[AiryAi[-50.] - AiryAi[-50`30]] < 1.*^-16");
+    audit_true(id, "Abs[AiryAi[-5.] - AiryAi[-5`30]] < 1.*^-16");
+}
+
+/* DiracDelta#1/#2 (high): definite integrals with a nonlinear delta argument,
+ * a product of deltas or a multivariate delta declined the sifting and a later
+ * method answered 0. Reference: the composition rule Sum_r h(r)/|g'(r)| and
+ * DiracDelta[x, y] = DiracDelta[x] DiracDelta[y]. */
+static void test_a2_diracdelta_integrals(void) {
+    const char* id = "DiracDelta#1";
+    audit_chk(id, "Integrate[DiracDelta[x^2 - 1], {x, -2, 2}]", "1");
+    audit_chk(id, "Integrate[DiracDelta[x^2 - 4], {x, -3, 3}]", "1/2");
+    audit_chk(id, "Integrate[DiracDelta[Sin[x]], {x, -1, 1}]", "1");
+    audit_chk(id, "Integrate[x^2 DiracDelta[x^2 - 1], {x, 0, 2}]", "1/2");
+    audit_chk(id, "Integrate[DiracDelta[x^2 + 1], {x, -1, 1}]", "0");
+    /* a multiple root: DiracDelta[x^2] is undefined, stays unevaluated */
+    audit_chk(id, "Integrate[DiracDelta[x^2], {x, -1, 1}]",
+                  "Integrate[DiracDelta[x^2], {x, -1, 1}]");
+    audit_chk(id, "Integrate[DiracDelta[x^3], {x, -1, 1}]",
+                  "Integrate[DiracDelta[x^3], {x, -1, 1}]");
+    id = "DiracDelta#2";
+    audit_chk(id, "Integrate[DiracDelta[x] DiracDelta[y], {x, -1, 1}]", "DiracDelta[y]");
+    audit_chk(id, "Integrate[DiracDelta[x] DiracDelta[y], {x, -1, 1}, {y, -1, 1}]", "1");
+    audit_chk(id, "Integrate[DiracDelta[x, y], {x, -1, 1}, {y, -1, 1}]", "1");
+    audit_chk(id, "Integrate[DiracDelta[x - 1/2, y] Exp[x], {x, 0, 1}, {y, -1, 1}]", "Sqrt[E]");
+    /* sanity: the linear sifting */
+    audit_chk(id, "Integrate[DiracDelta[x - 1] Exp[x], {x, 0, 2}]", "E");
+    audit_chk(id, "Integrate[1 + DiracDelta[t - 2], {t, 0, 3}]", "4");
+    audit_chk(id, "Integrate[DiracDelta[x] Cos[x], {x, -Infinity, Infinity}]", "1");
+}
+
+/* HaarWavelet#1 (high): Integrate split a Piecewise at no breakpoint when its
+ * condition was an Inequality (0 <= x < 1) or a chained Less[1/2, x, 1], and
+ * integrated the whole interval on one branch. */
+static void test_a2_haar_norms(void) {
+    const char* id = "HaarWavelet#1";
+    audit_chk(id, "Integrate[WaveletPhi[HaarWavelet[], x], {x, -1, 2}]", "1");
+    audit_chk(id, "Integrate[WaveletPsi[HaarWavelet[], x]^2, {x, 0, 1}]", "1");
+    audit_chk(id, "Integrate[WaveletPsi[HaarWavelet[], x], {x, 0, 3/4}]", "1/4");
+    audit_chk(id, "Integrate[Piecewise[{{1, 0 <= x < 1}}, 0], {x, -1, 2}]", "1");
+    audit_chk(id, "Integrate[Piecewise[{{1, Less[0, x, 1]}}, 0], {x, -1, 2}]", "1");
+    /* sanity: two-argument relations */
+    audit_chk(id, "Integrate[Piecewise[{{x, x < 1}}, 2], {x, 0, 3}]", "9/2");
+}
+
+/* JacobiP#1 (high): a degenerate three-term recurrence (a + b <= -2) fell back
+ * to Binomial[n+a, n] 2F1(..., a+1, ...), a 0 * Infinity read as an exact 0.
+ * Reference: the exact polynomial JacobiP[3, -1, -1, x] = (x^3 - x)/2. */
+static void test_a2_jacobip_degenerate(void) {
+    const char* id = "JacobiP#1";
+    audit_chk(id, "JacobiP[3, -1, -1, x]", "-1/2 x + 1/2 x^3");
+    audit_chk(id, "JacobiP[3, -1, -1, 0.5]", "-0.1875");
+    audit_chk(id, "JacobiP[3, -2, -1, 0.5]", "0.046875");
+    audit_true(id, "Abs[JacobiP[3, -1, -1, 0.5`30] + 3/16] < 10^-28");
+    audit_true(id, "Abs[JacobiP[3, -1, -1, 0.5 + 0.1 I] - (x^3 - x)/2 /. x -> 0.5 + 0.1 I] < 1.*^-15");
+    /* JacobiP#2's shape (real a + b = -2): no messages, the same value */
+    audit_chk(id, "Check[JacobiP[3, -1., -1., 0.5], \"msg\"]", "-0.1875");
+    /* sanity: a regular recurrence */
+    audit_true(id, "Abs[JacobiP[3, 1/2, 1/3, 0.5] - N[JacobiP[3, 1/2, 1/3, 1/2]]] < 1.*^-15");
+}
+
 int main(void) {
     audit_init();
     TEST(test_legendreq_type3);
@@ -351,5 +564,16 @@ int main(void) {
     TEST(test_mathieu_far_imaginary);
     TEST(test_bernoullib_large_index);
     TEST(test_qpochhammer_large_n);
+    /* group A2 */
+    TEST(test_a2_gamma_incomplete_at_zero);
+    TEST(test_a2_loggamma_small_complex);
+    TEST(test_a2_pochhammer_mpfr_pole);
+    TEST(test_a2_harmonicnumber_infinity);
+    TEST(test_a2_lerchphi_negative_a);
+    TEST(test_a2_inverse_erf_tails);
+    TEST(test_a2_airyai_large_negative);
+    TEST(test_a2_diracdelta_integrals);
+    TEST(test_a2_haar_norms);
+    TEST(test_a2_jacobip_degenerate);
     return audit_finish("audit_special_functions");
 }

@@ -44,6 +44,7 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sf_scalar.h"          /* sf_machine_scalar_args: the machine-scalar gate */
 #include "sf_machine_error.h"   /* the shared raw-double kernels (ND / Compile too) */
+#include "inverfc.h"            /* inverfc_mpfr: the |s| -> 1 tail */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -168,6 +169,21 @@ static void inverf_newton_step(mpfr_t y, const mpfr_t s, mpfr_prec_t p) {
  * Newton with precision doubling: seed from the double kernel, then refine,
  * roughly doubling the correct-bit count each step until the target is met. */
 static void inverf_mpfr(mpfr_t out, const mpfr_t s, mpfr_prec_t target) {
+    /* |s| > 1/2: erfinv(s) = sign(s) erfcinv(1 - |s|), with 1 - |s| exact at
+     * s's precision (Sterbenz). Near +-1 the double seed below is taken from s
+     * rounded to a double -- 1 - 10^-20 rounds to 1.0 (seed log 0, then NaN)
+     * and 1 - 10^-16 to a neighbour whose root is off by ~1e-2 -- whereas the
+     * erfc form keeps all of 1 - |s|'s digits. */
+    if (mpfr_cmp_d(s, 0.5) > 0 || mpfr_cmp_d(s, -0.5) < 0) {
+        mpfr_t t;
+        mpfr_init2(t, mpfr_get_prec(s));
+        if (mpfr_sgn(s) > 0) mpfr_ui_sub(t, 1, s, MPFR_RNDN);   /* 1 - |s|, exact */
+        else                 mpfr_add_ui(t, s, 1, MPFR_RNDN);
+        inverfc_mpfr(out, t, target);
+        if (mpfr_sgn(s) < 0) mpfr_neg(out, out, MPFR_RNDN);
+        mpfr_clear(t);
+        return;
+    }
     mpfr_prec_t wp = target + 32;           /* working precision incl. guard */
 
     mpfr_t y;

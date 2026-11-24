@@ -25,6 +25,7 @@
 #define MATHILDA_INTEGRATE_DIRAC_H
 
 #include "expr.h"
+#include <stdbool.h>
 
 /* Definite integral of an integrand carrying a DiracDelta[linear-in-x] factor.
  * Borrowed args (f the integrand, x the variable, a/b the lower/upper limits).
@@ -32,5 +33,12 @@
  * delta-free, when the delta argument is nonlinear, or when the interval
  * membership of the impulse cannot be decided. */
 Expr* integrate_dirac_try(Expr* f, Expr* x, Expr* a, Expr* b);
+
+/* Does f carry a DiracDelta whose argument depends on x? When it does and
+ * integrate_dirac_try declines (a multiple root such as DiracDelta[x^2], two
+ * impulses in x, an undecided endpoint), the definite integral stays
+ * unevaluated: the other methods read the inert delta as an ordinary function
+ * that is 0 almost everywhere and answered 0. */
+bool integrate_dirac_in(Expr* f, Expr* x);
 
 #endif /* MATHILDA_INTEGRATE_DIRAC_H */

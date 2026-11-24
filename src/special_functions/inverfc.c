@@ -144,28 +144,72 @@ static void inverfc_newton_step(mpfr_t y, const mpfr_t s, mpfr_prec_t p) {
     mpfr_clears(f, ex, c, (mpfr_ptr)0);
 }
 
-/* erfcinv(s) for 0 < s < 2 into `out` (already init2'd at the target precision).
- * Newton with precision doubling: seed from the double kernel, then refine,
- * roughly doubling the correct-bit count each step until the target is met. */
-static void inverfc_mpfr(mpfr_t out, const mpfr_t s, mpfr_prec_t target) {
+/* erfcinv(t) for 0 < t <= 1 into `out` (already init2'd at the target
+ * precision). Newton with precision doubling, from a seed that is good to ~50
+ * bits whatever t is:
+ *   - t in the normal double range: the double kernel on t's nearest double.
+ *     Rounding t perturbs it by 2^-53 relative, which moves the root by
+ *     ~2^-53 / (2 y) -- below the seed's own error.
+ *   - t below it (an MPFR 10^-400 has no double): the leading asymptotics
+ *     e^{-y^2} / (y sqrt(pi)) = t from log t (computed in MPFR, so it never
+ *     underflows), then Newton at 64 bits until it settles. */
+static void inverfc_mpfr_unit(mpfr_t out, const mpfr_t t, mpfr_prec_t target) {
     mpfr_prec_t wp = target + 32;           /* working precision incl. guard */
 
     mpfr_t y;
     mpfr_init2(y, wp);
-    mpfr_set_d(y, inverfc_double(mpfr_get_d(s, MPFR_RNDN)), MPFR_RNDN);
+    if (mpfr_get_exp(t) > -1000) {
+        mpfr_set_d(y, inverfc_double(mpfr_get_d(t, MPFR_RNDN)), MPFR_RNDN);
+    } else {
+        mpfr_t lt;
+        mpfr_init2(lt, 64);
+        mpfr_log(lt, t, MPFR_RNDN);
+        double L = -mpfr_get_d(lt, MPFR_RNDN);  /* > 693 here */
+        mpfr_clear(lt);
+        double z = sqrt(L);
+        for (int i = 0; i < 4; i++) z = sqrt(L - log(INVERFC_SQRT_PI * z));
+        mpfr_set_d(y, z, MPFR_RNDN);
+        /* Relative error of the asymptotic seed is O(1/L^2): converge it to
+         * double accuracy at 64 bits before the precision-doubling stage. */
+        mpfr_t prev;
+        mpfr_init2(prev, 64);
+        for (int i = 0; i < 40; i++) {
+            mpfr_set(prev, y, MPFR_RNDN);
+            inverfc_newton_step(y, t, 64);
+            mpfr_sub(prev, prev, y, MPFR_RNDN);
+            if (mpfr_zero_p(prev) ||
+                mpfr_get_exp(prev) < mpfr_get_exp(y) - 55) break;
+        }
+        mpfr_clear(prev);
+    }
 
-    /* The double seed is good to ~50 bits; double the precision each step. */
+    /* The seed is good to ~50 bits; double the precision each step. */
     mpfr_prec_t cur = 50;
     while (cur < wp) {
         cur *= 2;
         mpfr_prec_t p = (cur < wp ? cur : wp) + 16;
         if (p > wp) p = wp;
-        inverfc_newton_step(y, s, p);
+        inverfc_newton_step(y, t, p);
     }
-    inverfc_newton_step(y, s, wp);          /* final clean-up at full precision */
+    inverfc_newton_step(y, t, wp);          /* final clean-up at full precision */
 
     mpfr_set(out, y, MPFR_RNDN);
     mpfr_clear(y);
+}
+
+/* erfcinv(s) for 0 < s < 2 into `out` (init2'd at the target precision). Above
+ * 1 by the reflection erfcinv(s) = -erfcinv(2 - s): 2 - s is exact at s's own
+ * precision (Sterbenz, 1 <= s < 2), so s = 2 - 10^-30 is solved on 10^-30
+ * instead of on a seed from the double 2.0 (which was -Infinity, then NaN).
+ * Shared with InverseErf near +-1 (erfinv(s) = erfcinv(1 - s)). */
+void inverfc_mpfr(mpfr_t out, const mpfr_t s, mpfr_prec_t target) {
+    if (mpfr_cmp_ui(s, 1) <= 0) { inverfc_mpfr_unit(out, s, target); return; }
+    mpfr_t t;
+    mpfr_init2(t, mpfr_get_prec(s));
+    mpfr_ui_sub(t, 2, s, MPFR_RNDN);        /* exact */
+    inverfc_mpfr_unit(out, t, target);
+    mpfr_neg(out, out, MPFR_RNDN);
+    mpfr_clear(t);
 }
 #endif /* USE_MPFR */
 

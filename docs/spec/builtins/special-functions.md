@@ -50,7 +50,10 @@ one.
   - `Gamma[Infinity]` → `Infinity`, `Gamma[-Infinity]` → `Indeterminate`,
     `Gamma[ComplexInfinity]` → `ComplexInfinity`.
 - Exact reductions for the incomplete form:
-  - `Gamma[a, 0] = Gamma[a]`, `Gamma[a, Infinity] = 0`.
+  - `Gamma[a, 0] = Gamma[a]` for `Re a > 0` (and symbolic `a`); for `Re a < 0`
+    or `a = 0` the integral diverges at 0 (`Gamma(a, z) ~ -z^a/a`), so
+    `Gamma[-1/2, 0] = Gamma[-1.5, 0] = ComplexInfinity`; a numeric `a = I t`
+    (no limit) stays unevaluated. `Gamma[a, Infinity] = 0`.
   - **Positive integer first argument** reduces to its finite closed form
     `Gamma[n, z] = (n-1)! e^-z Σ_{k=0}^{n-1} z^k/k!` for symbolic or exact `z`,
     e.g. `Gamma[1, z] = E^-z`, `Gamma[2, x] = (1 + x) E^-x`,
@@ -1113,6 +1116,9 @@ inputs stay symbolic.
   - Arbitrary precision (MPFR) real → Newton with precision doubling on
     `mpfr_erf`, output precision tracking the input, e.g.
     `N[InverseErf[33/100], 50] = 0.30133214613370582612850271815839477396582428282853`.
+    For |s| > 1/2 it solves `InverseErfc[1 - |s|]` instead (1 − |s| is exact), so
+    s next to ±1 keeps all its digits: `InverseErf[N[1 - 10^-20, 40]] = 6.6015806…`
+    (it was `Indeterminate`, the double seed having rounded s to 1).
 - Two-argument form: `InverseErf[0.4, 0.2] = 0.631776`; if `Erf[z0]` does not
   reduce the call stays in two-argument form, while a reducible `z0` collapses to
   the one-argument inverse, e.g. `InverseErf[0, 1.3] = InverseErf[1.3]`.
@@ -1164,7 +1170,11 @@ out-of-domain (`s < 0` or `s > 2`) inputs stay symbolic.
   - Arbitrary precision (MPFR) real → Newton with precision doubling on
     `mpfr_erfc`, output precision tracking the input, e.g.
     `N[InverseErfc[33/100], 50] = 0.68880252811655645040250472890525783544948992349371`
-    (≈0.002 s even at 500-digit precision).
+    (≈0.002 s even at 500-digit precision). s > 1 is solved as
+    `-InverseErfc[2 - s]` (2 − s exact), and an s below the double range seeds
+    from the asymptotics of erfc on `Log[s]`, so `InverseErfc[N[2 - 10^-30, 40]]
+    = -8.14862…` and `InverseErfc[N[10^-400, 30]] = 30.2828…` (both were
+    `Indeterminate`).
 - erfc is **not** odd, so unlike `InverseErf` there is no auto-applied symmetry
   rewrite; the reflection `InverseErfc[1.5] = -InverseErfc[0.5]` is computed
   numerically rather than rewritten.
@@ -1197,10 +1207,14 @@ Behaviour:
   it (`HarmonicNumber[5, r]`, `HarmonicNumber[10^5, 1/2]`). An inexact order at
   `n > 4` takes the analytic form: `HarmonicNumber[10^5, 2.5] = 1.34149`.
   `HarmonicNumber[0, r] = 0`.
-- **At infinity.** `HarmonicNumber[Infinity, r] = Zeta[r]`, so
+- **At infinity.** `HarmonicNumber[Infinity, r] = Zeta[r]` where the sum
+  converges (`Re r > 1`, and symbolic `r`), so
   `HarmonicNumber[Infinity, 2] = Pi^2/6`, `HarmonicNumber[Infinity, 4] = Pi^4/90`,
-  `HarmonicNumber[Infinity, 3] = Zeta[3]`; `HarmonicNumber[Infinity]` →
-  `ComplexInfinity`.
+  `HarmonicNumber[Infinity, 3] = Zeta[3]`. A real `r <= 1` diverges to
+  `Infinity` (`HarmonicNumber[Infinity] = HarmonicNumber[Infinity, -1] =
+  Infinity`, not the continuation values of `Zeta`), a complex `r` with
+  `Re r < 1` to `ComplexInfinity`; `Re r = 1, r != 1` has no limit and stays
+  unevaluated.
 - **Non-positive integer order.** `HarmonicNumber[n, -m]` is the Faulhaber
   polynomial `Sum_{i=1}^n i^m`, returned as a polynomial in `n` (built from
   `BernoulliB`): `HarmonicNumber[n, 0] = n`, `HarmonicNumber[n, -1] = n/2 + n^2/2`,
@@ -2194,7 +2208,8 @@ keeps the series.
 
 - **Exact reductions** (built symbolically, so they also numericalize through the
   reused kernels):
-  - `LerchPhi[0, s, a] = a^(-s)` (only the k = 0 term survives).
+  - `LerchPhi[0, s, a] = a^(-s)` (only the k = 0 term survives; for `Re a < 0`
+    the symmetric `(a^2)^(-s/2)`, so `LerchPhi[0, 1/2, -1/2] = Sqrt[2]`).
   - `LerchPhi[z, 0, a] = 1/(1 - z)` (the geometric sum, independent of `a`).
   - `LerchPhi[1, s, a] = Zeta[s, a]`; `LerchPhi[z, s, 1] = PolyLog[s, z]/z`.
   - `LerchPhi[-1, 1, a] = (1/2)(PolyGamma[0, (a+1)/2] - PolyGamma[0, a/2])` (the
@@ -2215,7 +2230,14 @@ keeps the series.
     default) and shifts onto `PolyLog`:
     `LerchPhi[z, s, 0] = PolyLog[s, z]` (so `LerchPhi[z, s, 0] == PolyLog[s, z]`,
     `LerchPhi[0, s, 0] = 0`, `LerchPhi[0, 0, 0] = 0`), and in general
-    `LerchPhi[z, s, -m] = z^m PolyLog[s, z] + Σ_{j=1}^{m} z^(m-j) (-j)^(-s)`.
+    `LerchPhi[z, s, -m] = z^m PolyLog[s, z] + Σ_{j=1}^{m} z^(m-j) j^(-s)` (the
+    symmetric power `((-j)^2)^(-s/2) = j^(-s)`; e.g. `LerchPhi[1/2, 3, -2] =
+    5/8 + PolyLog[3, 1/2]/4`, `LerchPhi[0, 2, -1] = 1`).
+  - A negative non-integer rational `a` with exact `z`, `s` peels the
+    `K = Ceiling[-a]` terms with `k + a < 0`:
+    `LerchPhi[z, s, a] = Σ_{k<K} z^k |k + a|^(-s) + z^K LerchPhi[z, s, a + K]`,
+    taken only when the shifted call reduces (`LerchPhi[1/2, -1, -1/2] = 2`;
+    `LerchPhi[z, s, -1/2]` stays as written).
   - A negative integer `s = -n` gives a rational function of `z`,
     `(z d/dz + a)^n [1/(1-z)]` (e.g. `LerchPhi[2, -1, a] = 2 - a`,
     `LerchPhi[z, -2, a] = (a² + (1+2a+a²) z + (1-2a-2a²) z² + a² z³)/(1-z)³`).
