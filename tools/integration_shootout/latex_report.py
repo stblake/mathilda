@@ -31,6 +31,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import adapters as A  # noqa: E402
+from tex_break import display  # noqa: E402
 
 MATHILDA_METHODS = ["Automatic", "ParallelMixedTower", "RischTranscendental", "Trager", "Bronstein"]
 EXTERNAL = ["FriCAS", "Axiom", "Maxima", "sympy", "Wolfram"]
@@ -39,7 +40,8 @@ CLASSNAME = {"R": "rational", "T": "transcendental (Log/Exp tower)", "A": "algeb
              "M": "a radical over a Log/Exp tower", "B": "a radical below a Log/Exp kernel"}
 STATUSES = ["ELEM", "SPECIAL", "CERT", "UNEVAL", "TIMEOUT", "ERROR", "UNVERIFIED", "WRONG"]
 CLOSED = ("ELEM", "SPECIAL")
-TYPESET_MAX = 700          # longest TeX typeset in the appendix (the raw text is always shown)
+TYPESET_MAX = 3000         # longest TeX typeset in the appendix (the raw text is always shown);
+                           # tex_break.display wraps a long one over multline* lines
 
 
 def tex_escape(s):
@@ -216,7 +218,7 @@ def main():
     # ---------------- the document ----------------
     L = [r"\documentclass[10pt]{article}",
          r"\usepackage[a4paper,margin=18mm]{geometry}",
-         r"\usepackage{amsmath,amssymb,booktabs,longtable,listings,xcolor}",
+         r"\usepackage{amsmath,amssymb,booktabs,longtable,listings,xcolor,graphicx}",
          r"\usepackage[hidelinks]{hyperref}",
          r"\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,breakatwhitespace=false,columns=fullflexible,"
          r"keepspaces=true,showstringspaces=false,frame=none,xleftmargin=1em}",
@@ -357,7 +359,7 @@ def main():
                  f"\\normalfont\\small(class {c['class']}, family {tex_escape(c['family'])})}}")
         ft = texs.get(f"f|{r['id']}")
         if ft:
-            L.append(r"$\displaystyle f = " + ft + "$")
+            L.append(display("f", ft))
         L += [r"\begin{lstlisting}", "f = " + c["f"], r"\end{lstlisting}"]
         for lab in labs:
             raw = (r.get("raw") or {}).get(lab)
@@ -372,7 +374,7 @@ def main():
             if raw.get("status") == "ANSWER" and raw.get("text"):
                 at = texs.get(f"{lab}|{r['id']}")
                 if at and len(at) <= TYPESET_MAX:
-                    L.append(r"\par\hspace*{1em}$\displaystyle F = " + at + "$")
+                    L.append(display("F", at))
                 L += [r"\begin{lstlisting}", raw["text"], r"\end{lstlisting}"]
     L += [r"\end{document}"]
 
