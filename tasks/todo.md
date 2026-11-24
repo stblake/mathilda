@@ -34,8 +34,22 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
   stays unevaluated; Reduce leaks 224 B on DiracDelta[Sin[x]]; LegendreQ spurious
   General::ovfl; N[BetaRegularized[3/10, 5/2, 10^9], 20] hangs; 33 recursive `*mentions*`
   walkers left for the recursion sweep (expr_mentions_any is the shared iterative one)
-- [ ] Wave 3: shared mechanical fixes S11-S14 (Indeterminate/Infinity propagation, arity
-  metadata, option validation, level specs)
+- [x] Wave 3: shared mechanical fixes S11-S14 (Indeterminate/Infinity propagation, arity
+  metadata, option validation, level specs) -- landed 2026-11-24 as v0.6727 (S14 level specs,
+  exact graph capacities, UnixTime; 36 ids), v0.6728 (S12/S13 declared arity + option checks,
+  ~235 heads, SetDelayed-to-Protected $Failed; 205 ids), v0.6729 (S11 Indeterminate/infinity/pole
+  mechanism, src/infinity_rules.c; 148 ids), v0.6730 (Total Method option; a v0.6727
+  Total::level regression). Full re-run at v0.6729 + re-adjudication of 81 rows whose output
+  moved: 0 regressions. Report: 856 fixed / 1619 open (critical 14/0, high 212/2).
+  Tooling: a verdict now records the output it judged and goes stale when it moves.
+  - Wave 3 leftovers: NumericQ[Infinity] is True (reference False; DirectedInfinity[1] now
+    canonicalises, so NumericQ#1 got worse); Limit[Sin[x], x -> Infinity] is Indeterminate
+    (reference Interval[{-1, 1}]); 5 + I Infinity keeps the 5 (Plus#2, kept for Mellin-Barnes
+    lines); InputForm of a 3-arg Rule/RuleDelayed prints a -> b -> c (Rule#2, RuleDelayed#2);
+    Hypergeometric2F1[1,2,3,1], KelvinKei[0, 0.`20], machine EllipticF[Pi/2, 1.];
+    HilbertMatrix ignores SetOptions defaults; Dilation still reflects the element;
+    PutAppend/Get newline separator; x //= f parse; message gaps (Maximize::ivar,
+    MapAt::partw, Module::lvlist, DownValues::sym, Mean::rectn, NLimit options, RotateRight)
   - Adjudication of the 141 unpinned CHANGED rows (2026-11-24): 106 FIXED, 35 still open
     (19 PARTIAL, 11 STILL-BROKEN, 4 FORMAT-ONLY, 1 UNCLEAR->PARTIAL). Report is now 443
     fixed / 2032 open; critical 14/0, high 210/4 (open highs: LegendreQ#1 half-integer
