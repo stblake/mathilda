@@ -52,8 +52,10 @@ BACKLOG = os.path.join(ROOT, "review", "backlog.json")
 STATUS_JSON = os.path.join(ROOT, "review", "backlog_status.json")
 STATUS_MD = os.path.join(ROOT, "review", "backlog_status.md")
 # Hand/agent verdicts on CHANGED rows: {"<id>": {"verdict": FIXED |
-# STILL-BROKEN | PARTIAL | FORMAT-ONLY | UNCLEAR, "reason": ...}}.  A verdict
-# applies only while the row's status is still CHANGED / LIKELY-FIXED.
+# STILL-BROKEN | PARTIAL | FORMAT-ONLY | UNCLEAR, "reason": ...,
+# "output": <the run output the verdict judged>}}.  A verdict applies only
+# while the row's status is still CHANGED / LIKELY-FIXED and, when it records
+# an output, only while the output is unchanged.
 ADJUDICATION = os.path.join(ROOT, "review", "adjudication.json")
 OPEN_STATES = ("CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL",
                "FORMAT-ONLY", "UNCLEAR", "CHANGED", "LIKELY-FIXED")
@@ -344,9 +346,16 @@ def run(args):
 
 def effective_status(rid, status, adj):
     """The run's classification, refined by an adjudication verdict."""
-    s = status.get(rid, {}).get("status", "NOT-RUN")
+    st = status.get(rid, {})
+    s = st.get("status", "NOT-RUN")
     if s in ("CHANGED", "LIKELY-FIXED") and rid in adj:
-        return adj[rid]["verdict"]
+        a = adj[rid]
+        # A verdict judged one output.  Once the output moves again the
+        # verdict is stale -- a row adjudicated FIXED that regressed must not
+        # stay green -- so the row waits for a fresh verdict (or a re-pin).
+        if "output" in a and a["output"] != st.get("output"):
+            return "CHANGED"
+        return a["verdict"]
     return s
 
 
@@ -405,13 +414,16 @@ def adjudicate_pinned(args):
     for rid, st in status.items():
         if rid.startswith("_") or st.get("status") not in ("CHANGED", "LIKELY-FIXED"):
             continue
-        if rid in pinned and adj.get(rid, {}).get("verdict") != "FIXED":
+        prev = adj.get(rid, {})
+        if rid in pinned and (prev.get("verdict") != "FIXED"
+                              or prev.get("output", st.get("output")) != st.get("output")):
             n += 1
             print(f"{rid}: FIXED (pinned in tests/{pinned[rid]})")
             adj[rid] = {"verdict": "FIXED",
                         "reason": f"Output moved off the audit's Actual and the id is "
                                   f"pinned by passing checks in tests/{pinned[rid]} "
-                                  f"(v{_bin_version()})."}
+                                  f"(v{_bin_version()}).",
+                        "output": st.get("output")}
     if not dry:
         json.dump(adj, open(ADJUDICATION, "w"), indent=1)
         report()
