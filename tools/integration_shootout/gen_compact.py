@@ -66,6 +66,29 @@ PLANS = {
             "cand_systems": ["fricas", "axiom", "maxima"],
             "exclude": ["257-compact-integrals/gen_pool.tsv", "256-integration-shootout/corpus.tsv",
                         "260-radical-bottom/corpus.tsv", "259-transcendental-decision/corpus.tsv"]},
+    # Benchmark 262 (--plan 262): 1000 integrals outside the easy classes of
+    # easy.m -- not rational, not in Q(x, ((a x + b)/(c x + d))^(1/m)), not
+    # Euler-rationalisable (nor rationalisable by a chain of those substitutions),
+    # and not closed by Method -> "DerivativeDivides".  Grammars T3/A3/M3/B3
+    # (gen_compact.m), F at least twice f (ratio 2 as in 257, fair mode on).
+    # M3 finds almost nothing (a radical of a Log/Exp polynomial whose cofactor
+    # is not the kernel's derivative is rarely elementary): its seeds run, and
+    # whatever they yield is kept.
+    # M runs at ratio 1 (F larger than f): an elementary, non-derivative-divides
+    # radical over an Exp tower is built on a unit, Log[P + Sqrt[P^2 - c E^h]],
+    # whose answer is never twice its integrand (grammar M4 in gen_compact.m)
+    "262": {"bench": "262-hard-integrals", "ratio": 2, "attempts": 20, "exclude_easy": True,
+            "class_ratio": {"M": 1},
+            "quotas": {"R": 0, "T": 330, "A": 337, "M": 215, "B": 118},
+            "seeds": {"R": [],
+                      "T": [(s, "T3", 30) for s in range(201, 215)],
+                      "A": [(s, "A3", 30) for s in range(201, 216)],
+                      "M": [(s, "M3", 15) for s in range(201, 205)] + [(s, "M4", 15) for s in range(205, 223)],
+                      "B": [(s, "B3", 30) for s in range(201, 215)]},
+            "cand_systems": ["fricas", "axiom", "maxima"],
+            "exclude": ["261-compact-integrals-x4/gen_pool.tsv", "257-compact-integrals/gen_pool.tsv",
+                        "256-integration-shootout/corpus.tsv", "260-radical-bottom/corpus.tsv",
+                        "259-transcendental-decision/corpus.tsv"]},
 }
 
 
@@ -80,9 +103,26 @@ def content_class(cls, f):
     return "A" if rad else ("T" if ker else "R")
 
 
+EXCLUDE_EASY = False
+
+
+CLASS_RATIO = {}
+
+
+def ratio_of(cls):
+    """the leaf-count ratio for a class: the plan's, unless class_ratio overrides it"""
+    return CLASS_RATIO.get(cls, RATIO)
+
+
+def ratio_ok(cls, lF, lf):
+    r = ratio_of(cls)
+    return lF >= 2 * lf if r == 2 else lF > r * lf
+
+
 def run_gen(cls, seed, grammar, quota, timeout=6 * 3600):
     env = dict(os.environ, SEED=str(seed), CLASS=cls, GRAMMAR=grammar, QUOTA=str(quota),
-               RATIO=str(RATIO), ATTEMPTS=str(ATTEMPTS))
+               RATIO=str(ratio_of(cls)), ATTEMPTS=str(ATTEMPTS), EXCLUDE_EASY="1" if EXCLUDE_EASY else "0",
+               FAIR="1" if EXCLUDE_EASY else "0")
     p = subprocess.run([A.MATHILDA, "-file", os.path.join(HERE, "gen_compact.m")], env=env,
                        capture_output=True, text=True, timeout=timeout, cwd=A.REPO)
     stat = [ln for ln in p.stderr.splitlines() if ln.startswith("class ")]
@@ -125,7 +165,7 @@ def fricas_check(line, tmpdir):
         ok = (rec.get("status") == "ANSWER" and rec.get("nums") and all(n == "ok" for n in rec["nums"])
               and not T.special_q(system, rec.get("text", "")))
         nl = leaves(rec.get("text", ""))
-        if ok and (nl >= 2 * lf if RATIO == 2 else nl > RATIO * lf):
+        if ok and ratio_ok(p[2][0] if p[2] else "", nl, lf):
             q = p[:10]
             q[0] = "CASE"
             q[3] = "c" + p[2] + "-" + system
@@ -137,7 +177,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--plan", default="257", choices=sorted(PLANS),
-                    help="which corpus: 257 (ratio 2) or 261 (ratio 4, mixed-weighted)")
+                    help="which corpus: 257 (ratio 2), 261 (ratio 4, mixed-weighted) or 262 (outside the easy classes)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--timeout", type=float, default=6.0, help="hours per generator run")
     ap.add_argument("--extend", action="store_true",
@@ -145,11 +185,13 @@ def main():
     ap.add_argument("--rerun", default="",
                     help="with --extend: CLS:SEED,... runs to redo (their old cases are dropped first)")
     a = ap.parse_args()
-    global BENCH, POOL, QUOTAS, SEEDS, RATIO, ATTEMPTS
+    global BENCH, POOL, QUOTAS, SEEDS, RATIO, ATTEMPTS, EXCLUDE_EASY, CLASS_RATIO
     plan = PLANS[a.plan]
+    EXCLUDE_EASY = plan.get("exclude_easy", False)
     BENCH = os.path.join(A.REPO, "benchmarks", plan["bench"])
     POOL = os.path.join(BENCH, "gen_pool.tsv")
     QUOTAS, SEEDS, RATIO, ATTEMPTS = plan["quotas"], plan["seeds"], plan["ratio"], plan["attempts"]
+    CLASS_RATIO = plan.get("class_ratio", {})
     CAND_SYSTEMS[:] = plan.get("cand_systems", ["fricas"])
     if a.out is None:
         a.out = os.path.join(BENCH, "corpus.tsv")

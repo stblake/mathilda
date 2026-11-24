@@ -1,0 +1,401 @@
+{
+ "generators": [
+  {
+   "class": "T",
+   "seed": 205,
+   "summary": "class T: accepted 30, FriCAS candidates 3, attempts 75, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 21}"
+  },
+  {
+   "class": "T",
+   "seed": 203,
+   "summary": "class T: accepted 30, FriCAS candidates 5, attempts 80, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 23}"
+  },
+  {
+   "class": "T",
+   "seed": 204,
+   "summary": "class T: accepted 30, FriCAS candidates 2, attempts 58, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 10}"
+  },
+  {
+   "class": "T",
+   "seed": 202,
+   "summary": "class T: accepted 30, FriCAS candidates 5, attempts 97, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 23}"
+  },
+  {
+   "class": "T",
+   "seed": 207,
+   "summary": "class T: accepted 30, FriCAS candidates 2, attempts 71, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 22}"
+  },
+  {
+   "class": "T",
+   "seed": 208,
+   "summary": "class T: accepted 30, FriCAS candidates 7, attempts 91, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 27}"
+  },
+  {
+   "class": "T",
+   "seed": 210,
+   "summary": "class T: accepted 30, FriCAS candidates 6, attempts 96, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 40}"
+  },
+  {
+   "class": "T",
+   "seed": 206,
+   "summary": "class T: accepted 30, FriCAS candidates 1, attempts 66, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 19}"
+  },
+  {
+   "class": "T",
+   "seed": 209,
+   "summary": "class T: accepted 30, FriCAS candidates 9, attempts 116, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 34}"
+  },
+  {
+   "class": "T",
+   "seed": 201,
+   "summary": "class T: accepted 30, FriCAS candidates 6, attempts 83, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 28}"
+  },
+  {
+   "class": "T",
+   "seed": 213,
+   "summary": "class T: accepted 30, FriCAS candidates 5, attempts 95, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 33}"
+  },
+  {
+   "class": "T",
+   "seed": 212,
+   "summary": "class T: accepted 30, FriCAS candidates 2, attempts 84, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 30}"
+  },
+  {
+   "class": "T",
+   "seed": 214,
+   "summary": "class T: accepted 30, FriCAS candidates 1, attempts 83, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 28}"
+  },
+  {
+   "class": "T",
+   "seed": 211,
+   "summary": "class T: accepted 30, FriCAS candidates 9, attempts 91, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 31}"
+  },
+  {
+   "class": "A",
+   "seed": 208,
+   "summary": "class A: accepted 30, FriCAS candidates 3, attempts 109, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 4, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 4}"
+  },
+  {
+   "class": "A",
+   "seed": 207,
+   "summary": "class A: accepted 30, FriCAS candidates 1, attempts 109, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 2, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 6}"
+  },
+  {
+   "class": "A",
+   "seed": 203,
+   "summary": "class A: accepted 30, FriCAS candidates 9, attempts 119, escaped aborts 1, easy excluded {\"rational\" -> 0, \"degenerate\" -> 1, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 6}"
+  },
+  {
+   "class": "A",
+   "seed": 206,
+   "summary": "class A: accepted 30, FriCAS candidates 6, attempts 109, escaped aborts 12, easy excluded {\"rational\" -> 0, \"degenerate\" -> 2, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 10}"
+  },
+  {
+   "class": "A",
+   "seed": 202,
+   "summary": "class A: accepted 30, FriCAS candidates 10, attempts 146, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 3, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 9}"
+  },
+  {
+   "class": "A",
+   "seed": 201,
+   "summary": "class A: accepted 30, FriCAS candidates 8, attempts 119, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 5, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 9}"
+  },
+  {
+   "class": "A",
+   "seed": 205,
+   "summary": "class A: accepted 30, FriCAS candidates 8, attempts 132, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 2, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 12}"
+  },
+  {
+   "class": "A",
+   "seed": 204,
+   "summary": "class A: accepted 30, FriCAS candidates 13, attempts 146, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 2, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 3}"
+  },
+  {
+   "class": "A",
+   "seed": 210,
+   "summary": "class A: accepted 30, FriCAS candidates 4, attempts 121, escaped aborts 2, easy excluded {\"rational\" -> 0, \"degenerate\" -> 2, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 6}"
+  },
+  {
+   "class": "A",
+   "seed": 209,
+   "summary": "class A: accepted 30, FriCAS candidates 8, attempts 125, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 3}"
+  },
+  {
+   "class": "A",
+   "seed": 213,
+   "summary": "class A: accepted 30, FriCAS candidates 6, attempts 125, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 3, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 10}"
+  },
+  {
+   "class": "A",
+   "seed": 211,
+   "summary": "class A: accepted 30, FriCAS candidates 9, attempts 117, escaped aborts 1, easy excluded {\"rational\" -> 0, \"degenerate\" -> 1, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 9}"
+  },
+  {
+   "class": "A",
+   "seed": 215,
+   "summary": "class A: accepted 30, FriCAS candidates 4, attempts 94, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 3, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 4}"
+  },
+  {
+   "class": "M",
+   "seed": 201,
+   "summary": "class M: accepted 3, FriCAS candidates 14, attempts 300, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 3}"
+  },
+  {
+   "class": "A",
+   "seed": 212,
+   "summary": "class A: accepted 30, FriCAS candidates 6, attempts 120, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 5, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 4}"
+  },
+  {
+   "class": "A",
+   "seed": 214,
+   "summary": "class A: accepted 30, FriCAS candidates 5, attempts 130, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 7, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 6}"
+  },
+  {
+   "class": "M",
+   "seed": 202,
+   "summary": "class M: accepted 0, FriCAS candidates 11, attempts 300, escaped aborts 48, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 7}"
+  },
+  {
+   "class": "M",
+   "seed": 204,
+   "summary": "class M: accepted 0, FriCAS candidates 5, attempts 300, escaped aborts 74, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 6}"
+  },
+  {
+   "class": "M",
+   "seed": 203,
+   "summary": "class M: accepted 1, FriCAS candidates 15, attempts 300, escaped aborts 1, easy excluded {\"rational\" -> 0, \"degenerate\" -> 0, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 9}"
+  },
+  {
+   "class": "B",
+   "seed": 205,
+   "summary": "class B: accepted 26, FriCAS candidates 9, attempts 600, escaped aborts 203, easy excluded {\"rational\" -> 0, \"degenerate\" -> 5, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 57}"
+  },
+  {
+   "class": "B",
+   "seed": 201,
+   "summary": "class B: accepted 19, FriCAS candidates 21, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 4, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 80}"
+  },
+  {
+   "class": "B",
+   "seed": 203,
+   "summary": "class B: accepted 24, FriCAS candidates 13, attempts 600, escaped aborts 35, easy excluded {\"rational\" -> 0, \"degenerate\" -> 4, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 72}"
+  },
+  {
+   "class": "B",
+   "seed": 204,
+   "summary": "class B: accepted 17, FriCAS candidates 12, attempts 600, escaped aborts 54, easy excluded {\"rational\" -> 0, \"degenerate\" -> 3, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 73}"
+  },
+  {
+   "class": "B",
+   "seed": 202,
+   "summary": "class B: accepted 24, FriCAS candidates 12, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 7, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 67}"
+  },
+  {
+   "class": "B",
+   "seed": 206,
+   "summary": "class B: accepted 17, FriCAS candidates 13, attempts 600, escaped aborts 36, easy excluded {\"rational\" -> 0, \"degenerate\" -> 10, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 76}"
+  },
+  {
+   "class": "B",
+   "seed": 207,
+   "summary": "class B: accepted 29, FriCAS candidates 18, attempts 600, escaped aborts 117, easy excluded {\"rational\" -> 0, \"degenerate\" -> 4, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 62}"
+  },
+  {
+   "class": "B",
+   "seed": 208,
+   "summary": "class B: accepted 23, FriCAS candidates 18, attempts 600, escaped aborts 65, easy excluded {\"rational\" -> 0, \"degenerate\" -> 1, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 68}"
+  },
+  {
+   "class": "B",
+   "seed": 210,
+   "summary": "class B: accepted 22, FriCAS candidates 9, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 4, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 77}"
+  },
+  {
+   "class": "B",
+   "seed": 209,
+   "summary": "class B: accepted 21, FriCAS candidates 16, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 3, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 67}"
+  },
+  {
+   "class": "B",
+   "seed": 212,
+   "summary": "class B: accepted 21, FriCAS candidates 9, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 7, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 74}"
+  },
+  {
+   "class": "B",
+   "seed": 211,
+   "summary": "class B: accepted 21, FriCAS candidates 9, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 3, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 71}"
+  },
+  {
+   "class": "B",
+   "seed": 213,
+   "summary": "class B: accepted 18, FriCAS candidates 9, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 1, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 68}"
+  },
+  {
+   "class": "B",
+   "seed": 214,
+   "summary": "class B: accepted 19, FriCAS candidates 15, attempts 600, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 2, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 89}"
+  },
+  {
+   "class": "M",
+   "seed": 210,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 52, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 7, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 209,
+   "summary": "class M: accepted 15, FriCAS candidates 0, attempts 55, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 6, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 212,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 84, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 12, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 207,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 113, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 13, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 211,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 111, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 16, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 208,
+   "summary": "class M: accepted 15, FriCAS candidates 0, attempts 96, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 14, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 214,
+   "summary": "class M: accepted 15, FriCAS candidates 0, attempts 92, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 12, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 205,
+   "summary": "class M: accepted 15, FriCAS candidates 0, attempts 107, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 9, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 206,
+   "summary": "class M: accepted 15, FriCAS candidates 5, attempts 95, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 11, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 221,
+   "summary": "class M: accepted 15, FriCAS candidates 0, attempts 79, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 8, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 218,
+   "summary": "class M: accepted 15, FriCAS candidates 0, attempts 72, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 11, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 217,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 101, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 13, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 216,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 99, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 22, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 215,
+   "summary": "class M: accepted 15, FriCAS candidates 2, attempts 117, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 19, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 220,
+   "summary": "class M: accepted 15, FriCAS candidates 1, attempts 78, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 15, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 213,
+   "summary": "class M: accepted 15, FriCAS candidates 2, attempts 105, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 12, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 219,
+   "summary": "class M: accepted 15, FriCAS candidates 2, attempts 151, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 24, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  },
+  {
+   "class": "M",
+   "seed": 222,
+   "summary": "class M: accepted 15, FriCAS candidates 2, attempts 98, escaped aborts 0, easy excluded {\"rational\" -> 0, \"degenerate\" -> 12, \"logradical\" -> 0, \"linrad\" -> 0, \"euler\" -> 0, \"nested\" -> 0, \"dd\" -> 0}"
+  }
+ ],
+ "fricas": {
+  "R": {
+   "candidates": 0,
+   "accepted": 0
+  },
+  "T": {
+   "candidates": 63,
+   "accepted": 0
+  },
+  "A": {
+   "candidates": 100,
+   "accepted": 40
+  },
+  "M": {
+   "candidates": 65,
+   "accepted": 0
+  },
+  "B": {
+   "candidates": 183,
+   "accepted": 11
+  }
+ },
+ "reruns": [],
+ "kept": {
+  "R": {
+   "available": 0,
+   "kept": 0,
+   "fricas_only": 0
+  },
+  "T": {
+   "available": 377,
+   "kept": 330,
+   "fricas_only": 0
+  },
+  "A": {
+   "available": 337,
+   "kept": 337,
+   "fricas_only": 0
+  },
+  "M": {
+   "available": 267,
+   "kept": 215,
+   "fricas_only": 0
+  },
+  "B": {
+   "available": 118,
+   "kept": 118,
+   "fricas_only": 0
+  }
+ },
+ "plan": {
+  "name": "262",
+  "ratio": 2,
+  "attempts_per_case": 20,
+  "excluded_integrands": 4972
+ },
+ "easy_recheck": {
+  "binary": "v0.6732",
+  "dropped_dd": [
+   "cA-204-13",
+   "cM-201-143",
+   "cM-201-202",
+   "cM-203-142"
+  ],
+  "replaced_by": [
+   "cM-219-85",
+   "cM-219-105",
+   "cM-219-110",
+   "cM-219-116"
+  ],
+  "note": "every case re-checked with easy.m easyClass after the build; 4 that DerivativeDivides closes (kernel x^2) replaced by checked M spares"
+ }
+}

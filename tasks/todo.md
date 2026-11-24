@@ -2215,3 +2215,10 @@ Phase 5 is done (v0.6634): Compile[] lowering, the undo log, and auto-compiled D
 tensorproduct-XX, tensorproduct-lin and tensorproduct-sc leave `TensorProduct[...]` unevaluated.
 `tensor-tt` fails the same way at 328dd6d96, before the LinkedList work, so it is older than that
 work and is not the Insert/Delete fix (the package uses neither head). Not yet bisected further.
+
+# Increment / AddTo on an Association key (2026-11-24)
+
+- [ ] **ASSOC-INC-1.** `a = <|"x" -> 0|>; a["x"]++` emits `Increment::rvalue` and leaves `a` unchanged; `a["x"] += 2`
+      likewise (`AddTo::rvalue`). `b[[1]]++` on a List works. The reference language accepts both on an
+      Association key (the key is an lvalue as in `a["x"] = 1`). Found building benchmark 262; the generator
+      counts in a List instead.
