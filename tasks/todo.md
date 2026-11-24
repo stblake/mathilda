@@ -36,6 +36,23 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
   walkers left for the recursion sweep (expr_mentions_any is the shared iterative one)
 - [ ] Wave 3: shared mechanical fixes S11-S14 (Indeterminate/Infinity propagation, arity
   metadata, option validation, level specs)
+  - Adjudication of the 141 unpinned CHANGED rows (2026-11-24): 106 FIXED, 35 still open
+    (19 PARTIAL, 11 STILL-BROKEN, 4 FORMAT-ONLY, 1 UNCLEAR->PARTIAL). Report is now 443
+    fixed / 2032 open; critical 14/0, high 210/4 (open highs: LegendreQ#1 half-integer
+    spurious Im part; the others are in the backlog .md). Shared patterns feeding Wave 3:
+    - level specs: a bigint level (10^20, 2^70) and {-Infinity,-1} are rejected with
+      ::level in Map/Level/Cases/Count; any integer >= depth must behave like Infinity
+      (Map#2, Level#4, Count#2)
+    - arity/option messages: MemberQ[]/Count[]/Map[] no ::argx, extra args silently
+      accepted (MemberQ#3, Count#3, Map#3, Inner#4 ::argb, Cases#2 ::innf, FreeQ#1
+      unknown option, Attributes#2 ::ssle on non-list)
+    - Set/SetDelayed on a protected tag returns Null/rhs instead of $Failed (UpTo#2,
+      Optional#2, BlankNullSequence#1, Most#1 -- counted FIXED, nothing is stored)
+    - integer saturation at 2^61 / Real results in graph flows and cuts (FindMinimumCut#3-4,
+      FindMaximumFlow#3, EdgeConnectivity#2); UnixTime[10^30] through a double
+    - Abort[] swallowed by FindRoot/NSum/Plot (Abort#3); Interval#1 lower endpoint
+    - Expand Modulus/Trig options (Expand#2-3); Unset of a list {p,q}=. (Unset#1)
+    - non-finite doubles leaking as inf (BarChart#6, ToNDArray#1 float32)
 - [ ] Wave 4: medium by tier; Wave 5: low by tier
 
 # Evaluator: aborts that escape their constraint (2026-11-23)
