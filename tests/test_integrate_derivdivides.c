@@ -228,6 +228,23 @@ static void test_substitution_option(void) {
  * failure (Check[Integrate[1/Sqrt[Coth[x]], x], MARKER] returned MARKER before
  * the fix).  Assert the fired-count is unchanged across the evaluation and that
  * the integral actually closed. */
+/* An exponential kernel w = E^(c x + d) leaves x behind in every other power of
+ * the same exponential (E^(2 x) after E^x -> u); the explicit method closes the
+ * substitution with x = (Log[u] - d)/c.  These are h(u) u' by construction and
+ * were declined before. */
+static void test_exponential_kernel_inverse(void) {
+    assert_eval_eq(
+        "With[{f = E^x Log[E^(2 x) - E^x - 1]}, With[{F = Integrate[f, x, Method -> \"DerivativeDivides\"]},"
+        " FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - f]]]", "True", 0);
+    assert_eval_eq(
+        "With[{f = E^(2 x + 1)/(E^(4 x + 2) + 3)}, With[{F = Integrate[f, x, Method -> {\"DerivativeDivides\","
+        " \"Substitution\" -> E^(2 x + 1)}]}, FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - f]]]", "True", 0);
+    /* a linear kernel is not inverted: Log[-u] - Log[u] is not I Pi */
+    assert_eval_eq(
+        "With[{f = (Log[-u] - Log[u])/(1 + u)}, With[{F = Integrate[f, u, Method -> \"DerivativeDivides\"]},"
+        " Head[F] === Integrate || PossibleZeroQ[D[F, u] - f]]]", "True", 0);
+}
+
 static void test_coth_no_infy_leak(void) {
     unsigned long fired0 = mth_msg_fired_count();
     Expr* parsed = parse_expression("Integrate[1/Sqrt[Coth[x]], x]");
@@ -263,6 +280,7 @@ void test_integrate_derivdivides(void) {
     TEST(test_method_plumbing);
     TEST(test_strict_no_fallback);
     TEST(test_substitution_option);
+    TEST(test_exponential_kernel_inverse);
 
     printf("All Integrate DerivativeDivides tests passed!\n");
 }

@@ -2082,6 +2082,12 @@ monotonically down.
     only that one substitution is attempted (still both strategies, still strict
     — no fallback to other kernels if `u` does not close the integral). E.g.
     `Integrate[Sqrt[x]/(1 + Sqrt[x]), x, Method -> {"DerivativeDivides", "Substitution" -> Sqrt[x]}]`.
+    For an exponential kernel `u = E^(c x + d)` the explicit method also
+    substitutes `x = (Log[u] - d)/c` into what the direct quotient leaves, so
+    the other powers of the same exponential become powers of `u`:
+    `E^x Log[E^(2 x) - E^x - 1]` reduces to `Log[u^2 - u - 1]` and closes.  Only
+    the explicit method does this; in the Automatic cascade the later stages
+    already close those integrands, with smaller answers.
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.

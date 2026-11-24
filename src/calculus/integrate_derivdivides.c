@@ -509,6 +509,58 @@ static int64_t kernel_root_degree(const Expr* w, const Expr* x) {
     return 0;
 }
 
+/* If `a` is linear in x, a = c x + d with c != 0 and c, d free of x, set *c and
+ * *d (owned) and return true.  Borrows a and x. */
+static bool dd_linear_in(const Expr* a, const Expr* x, Expr** c, Expr** d) {
+    Expr* cc = deriv_dx(a, x);
+    if (!cc || is_lit_zero(cc) || !expr_free_of(cc, x)) { if (cc) expr_free(cc); return false; }
+    Expr* dd = eval_take(mk_fn1("Expand", mk_fn2("Plus", expr_copy((Expr*)a),
+                      mk_fn2("Times", mk_int(-1), mk_fn2("Times", expr_copy(cc), expr_copy((Expr*)x))))));
+    if (!dd || !expr_free_of(dd, x)) { expr_free(cc); if (dd) expr_free(dd); return false; }
+    *c = cc; *d = dd;
+    return true;
+}
+
+/* The inverse x = w^-1(u) of an exponential kernel w = E^(c x + d):
+ * x = (Log[u] - d)/c.  Returns NULL for any other kernel.
+ *
+ * The direct quotient replaces w by u structurally, so it leaves x behind in
+ * every other power of the same exponential: with w = E^x the quotient of
+ * E^x Log[E^(2 x) - E^x - 1] is Log[E^(2 x) - u - 1], and the method declined an
+ * integrand that is h(u) u' by construction.  Substituting x = Log[u] afterwards
+ * turns E^(2 x) into u^2 (E^(k Log[u]) evaluates to u^k).
+ *
+ * Exponential kernels only.  Inverting a linear kernel c x + d as well was
+ * tried and is harmful: it is a mere shift, which the later stages do anyway,
+ * and it rewrote Log[-u] - Log[u] over w = 1 + u into Log[1 - w] - Log[-1 + w],
+ * which evaluates to the constant I Pi -- true on one half-line only, and
+ * PossibleZeroQ's samples did not see the other.  Log kernels (x = E^u) would
+ * trade an algebraic integrand for an exponential one, which is no reduction.
+ * Borrows w, x and u. */
+/* > 0 while an explicit DerivativeDivides request (Method -> "DerivativeDivides",
+ * a pinned Substitution, or Integrate`DerivativeDivides) is running, including
+ * the Integrate calls nested inside it.  The exponential inverse is used only
+ * then: in the Automatic cascade it closes integrands that the later stages
+ * already close with a smaller answer (2/(2 + a + E^(2 x))^(1/3): 253 leaves
+ * instead of 114).  A counter, restored across a TimeConstrained unwind. */
+static int dd_explicit_depth = 0;
+
+static Expr* kernel_inverse(const Expr* w, const Expr* x, const Expr* u) {
+    Expr *c = NULL, *d = NULL;
+    if (dd_explicit_depth <= 0) return NULL;
+    if (!w || w->type != EXPR_FUNCTION) return NULL;
+    if (!(head_is((Expr*)w, SYM_Power) && w->data.function.arg_count == 2
+          && w->data.function.args[0]->type == EXPR_SYMBOL
+          && w->data.function.args[0]->data.symbol.name == SYM_E))
+        return NULL;
+    if (!dd_linear_in(w->data.function.args[1], x, &c, &d)) return NULL;
+    /* (Log[u] - d)/c */
+    return eval_take(mk_fn2("Times",
+                            mk_fn2("Plus", mk_fn1("Log", expr_copy((Expr*)u)),
+                                   mk_fn2("Times", mk_int(-1), d)),
+                            mk_fn2("Power", c, mk_int(-1))));
+}
+
 /* Does `e` mention the symbol `u`?  A plain structural test -- expr_free_of()
  * in this file is the derivative-based one, which is far more than needed here
  * and would evaluate D[] on every node of the walk. */
@@ -628,6 +680,13 @@ static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
              * against the original f re-verifies, so a branch-crossing expansion
              * is rejected rather than trusted. */
             if (qu) qu = eval_take(mk_fn1("PowerExpand", qu));
+        } else {
+            Expr* inv = kernel_inverse(w, x, u);
+            if (inv) {
+                qu = replace_one(qu, x, inv);               /* consumes qu */
+                expr_free(inv);
+                if (qu) qu = cancel_together(qu);
+            }
         }
     }
 
@@ -861,7 +920,10 @@ Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
      * thorough Eliminate/Solve branch-search, no per-candidate budget (reset in
      * case a timeout unwound a cascade call before it restored it). */
     if (dd_depth == 0) { dd_candidate_budget = 0.0; dd_cand_cpu_deadline = HUGE_VAL; dd_stage_cpu_deadline = HUGE_VAL; }
-    return dd_core(f, x, true, NULL);
+    dd_explicit_depth++;
+    Expr* r = dd_core(f, x, true, NULL);
+    dd_explicit_depth--;
+    return r;
 }
 
 /* The Automatic cascade's entry points: the same strategies, every candidate
@@ -886,7 +948,10 @@ Expr* integrate_derivdivides_with_sub(Expr* f, Expr* x, Expr* sub) {
     /* Explicit Method -> {"DerivativeDivides", "Substitution" -> sub}: trial
      * only the user-pinned kernel `sub`, running both the direct and the
      * thorough Eliminate/Solve strategies. */
-    return dd_core(f, x, true, sub);
+    dd_explicit_depth++;
+    Expr* r = dd_core(f, x, true, sub);
+    dd_explicit_depth--;
+    return r;
 }
 
 Expr* builtin_integrate_derivdivides(Expr* res) {
@@ -895,12 +960,16 @@ Expr* builtin_integrate_derivdivides(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     /* Explicit method: direct strategy, then the thorough Eliminate search. */
-    return dd_core(f, x, true, NULL);
+    dd_explicit_depth++;
+    Expr* r = dd_core(f, x, true, NULL);
+    dd_explicit_depth--;
+    return r;
 }
 
 void integrate_derivdivides_init(void) {
     /* restored across a TimeConstrained unwind (see core.h) */
     tc_register_unwind_counter(&dd_depth);
+    tc_register_unwind_counter(&dd_explicit_depth);
     symtab_add_builtin("Integrate`DerivativeDivides", builtin_integrate_derivdivides);
     symtab_get_def("Integrate`DerivativeDivides")->attributes |=
         ATTR_PROTECTED;
