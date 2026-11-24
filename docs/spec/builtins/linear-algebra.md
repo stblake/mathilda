@@ -216,6 +216,7 @@ Out[4]= True
 
 
 ## DiagonalMatrixQ
+- **Argument and option checks.** `Options[DiagonalMatrixQ]` is `{Tolerance -> 0}`; `Tolerance :> t` and `{Tolerance -> t}` are accepted. Calls are checked against the declared arity and `Options[DiagonalMatrixQ]` before the C code runs (see `src/arity.h`): an unknown option is `DiagonalMatrixQ::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `DiagonalMatrixQ::nonopt`, and a list of option rules is read as the rules themselves.
 Tests whether a matrix has nonzero entries only on a particular diagonal.
 - `DiagonalMatrixQ[m]`: `True` if every off-(main-diagonal) entry of `m`
   is zero, `False` otherwise.
@@ -1822,6 +1823,7 @@ Out[3]= {13.7715, -2.12527, -1.6462}
 ```
 
 ## SchurDecomposition
+- **Argument and option checks.** `Options[SchurDecomposition]` is `{Pivoting -> False, RealBlockDiagonalForm -> True, TargetStructure -> Automatic}`. Calls are checked against the declared arity and `Options[SchurDecomposition]` before the C code runs (see `src/arity.h`): an unknown option is `SchurDecomposition::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `SchurDecomposition::nonopt`, and a list of option rules is read as the rules themselves.
 Gives the Schur decomposition of a numerical square matrix.
 - `SchurDecomposition[m]` — returns `{q, t}` where `q` is orthonormal
   (unitary) and `t` is block upper-triangular (the Schur form), so that
@@ -2126,6 +2128,7 @@ Out[2]= {{1/Sqrt[5], 2/Sqrt[5]}, {2/Sqrt[5], -(1/Sqrt[5])}, {0, 0}}
 ```
 
 ## QRDecomposition
+- **Argument and option checks.** `Options[QRDecomposition]` is `{Pivoting -> False, TargetStructure -> Automatic}`. Calls are checked against the declared arity and `Options[QRDecomposition]` before the C code runs (see `src/arity.h`): an unknown option is `QRDecomposition::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `QRDecomposition::nonopt`, and a list of option rules is read as the rules themselves.
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that
   `m == ConjugateTranspose[q] . r`, with `q` row-orthonormal
@@ -2775,6 +2778,7 @@ Out[4]= {{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}
 ```
 
 ## HilbertMatrix
+- **Argument and option checks.** `Options[HilbertMatrix]` is `{WorkingPrecision -> Infinity}`. Calls are checked against the declared arity and `Options[HilbertMatrix]` before the C code runs (see `src/arity.h`): an unknown option is `HilbertMatrix::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `HilbertMatrix::nonopt`, and a list of option rules is read as the rules themselves.
 Generates a Hilbert matrix, whose `(i, j)` entry is `1/(i + j - 1)`.
 - `HilbertMatrix[n]`: Gives the `n x n` Hilbert matrix.
 - `HilbertMatrix[{m, n}]`: Gives the `m x n` Hilbert matrix.
@@ -3422,6 +3426,7 @@ Out[3]= -1 - x + x^2
 ```
 
 ## Eigenvalues
+- **Argument and option checks.** `Options[Eigenvalues]` (and of `Eigenvectors`, `Eigensystem`) is `{Cubics -> False, Method -> Automatic, Quartics -> False}`. Calls are checked against the declared arity and `Options[Eigenvalues]` before the C code runs (see `src/arity.h`): an unknown option is `Eigenvalues::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `Eigenvalues::nonopt`, and a list of option rules is read as the rules themselves.
 Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.
 - `Eigenvalues[{m, a}]`: generalised eigenvalues of `m` with respect to `a`
@@ -3649,6 +3654,7 @@ Out[5]= True
 
 
 ## Eigensystem
+- **Argument and option checks.** Calls are checked against the declared arity and `Options[Eigensystem]` before the C code runs (see `src/arity.h`): an unknown option is `Eigensystem::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `Eigensystem::nonopt`, and a list of option rules is read as the rules themselves.
 Gives the eigenvalues and the matching eigenvectors of a square matrix.
 - `Eigensystem[m]` — `{Eigenvalues[m], Eigenvectors[m]}`, sorted by decreasing
   absolute value.

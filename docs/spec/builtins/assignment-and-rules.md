@@ -29,7 +29,9 @@
   none of them.
 - **Protected targets.** Assigning to a protected symbol is `Set::wrsym`
   ("Symbol Pi is Protected."); a rule for a protected tag is `Set::write`
-  ("Tag Sin in Sin[x] is Protected."), as in the reference.
+  ("Tag Sin in Sin[x] is Protected."), as in the reference. The value of the
+  refused `Set` is its right side (`Pi = 3` is `3`); of a refused
+  `SetDelayed`, `$Failed` (`Sin[x_] := 7`; it was `Null` before).
 - **Rule order.** A rule goes ahead of the stored rules whose patterns are
   more general (see `DownValues`, Order). So `c[e_, {f___}, o:OptionsPattern[]]`
   is tried before `c[e_, f_, o:OptionsPattern[]]` whichever was defined first
@@ -291,6 +293,7 @@ Out[5]= x ** op[3] ** y ** op[7]
 **v0.6121 (semantics and cost).** Under a Flat head, an element that is a call on another head takes exactly one operand, never a group of them, whether or not that head is OneIdentity and has defaulted arguments. This is the reference behaviour: `MatchQ[2 x y, y_^n_. x]` is `False` (it was `True`), and `ReplaceList[a + b + c, n_ o1_. + o2_ :> {n, o1, o2}]` binds `n` to `a`, `b` or `c` alone. The whole subject is still reached through the defaults: `ReplaceList[2 x, x_. y_^n_. :> {x, y, n}]` includes `{1, 2 x, 1}`. In an Orderless Flat pattern, a plain blank such as `o2_` or `o2_:0` is matched after the elements that take one operand, as `x__` already was. Together these make `n_?NumberQ o1_. + o2_:0` linear in the length of the sum; it had been about 3ⁿ (20 s at 14 terms). DownValue dispatch also keys every leading argument slot by its possible heads and call arity, and keys all slots of an Orderless head by assignment. A rule that cannot fit is skipped without running the matcher.
 
 ## Replace
+- **Argument and option checks.** `Options[Replace]` is `{Heads -> False}`. Calls are checked against the declared arity and `Options[Replace]` before the C code runs (see `src/arity.h`): an unknown option is `Replace::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `Replace::nonopt`, and a list of option rules is read as the rules themselves.
 Applies a rule or list of rules to transform an expression.
 - `Replace[expr, rules]`: Applies rules to the entire expression.
 - `Replace[expr, rules, levelspec]`: Applies rules to parts specified by `levelspec`.

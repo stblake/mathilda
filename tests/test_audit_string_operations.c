@@ -61,10 +61,34 @@ static void test_stringreplacelist_infinity(void) {
     audit_true("StringReplaceList#1", "StringReplace[\"aaa\", \"a\" -> \"b\", 2] === \"bba\"");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Decapitalize#1", "Quiet[Check[Decapitalize[\"A\", \"B\"], fired, Decapitalize::argx]]", "fired");
+    audit_chk("Decapitalize#1", "Quiet[Decapitalize[\"A\", \"B\"]]", "Decapitalize[\"A\", \"B\"]");
+    audit_chk("LetterQ#1", "Quiet[Check[LetterQ[\"a\", \"b\"], fired, LetterQ::argx]]", "fired");
+    audit_chk("LetterQ#1", "Quiet[LetterQ[\"a\", \"b\"]]", "LetterQ[\"a\", \"b\"]");
+    audit_chk("StringContainsQ#2", "Quiet[Check[StringContainsQ[\"abc\", \"b\", Foo -> 1], fired, StringContainsQ::optx]]", "fired");
+    audit_chk("StringContainsQ#2", "Quiet[StringContainsQ[\"abc\", \"b\", Foo -> 1]]", "StringContainsQ[\"abc\", \"b\", Foo -> 1]");
+    audit_chk("StringCount#2", "Quiet[Check[StringCount[\"abc\", \"a\", Foo -> 1], fired, StringCount::optx]]", "fired");
+    audit_chk("StringCount#2", "Quiet[StringCount[\"abc\", \"a\", Foo -> 1]]", "StringCount[\"abc\", \"a\", Foo -> 1]");
+    audit_chk("StringDelete#1", "Quiet[Check[StringDelete[], fired, StringDelete::argt]]", "fired");
+    audit_chk("StringDelete#1", "Quiet[StringDelete[]]", "StringDelete[]");
+    audit_chk("StringLength#2", "Quiet[Check[StringLength[\"a\", \"b\"], fired, StringLength::argx]]", "fired");
+    audit_chk("StringLength#2", "Quiet[StringLength[\"a\", \"b\"]]", "StringLength[\"a\", \"b\"]");
+    audit_chk("StringMatchQ#3", "Quiet[Check[StringMatchQ[\"abc\", \"abc\", Foo -> 1], fired, StringMatchQ::optx]]", "fired");
+    audit_chk("StringMatchQ#3", "Quiet[StringMatchQ[\"abc\", \"abc\", Foo -> 1]]", "StringMatchQ[\"abc\", \"abc\", Foo -> 1]");
+    audit_chk("StringContainsQ#2", "StringContainsQ[\"abc\", \"B\", IgnoreCase -> True]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_stringriffle_deep_nesting);
     TEST(test_fromcharactercode_nul);
     TEST(test_stringreplacelist_infinity);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_string_operations");
 }

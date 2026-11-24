@@ -153,6 +153,12 @@ typedef struct SymbolDef {
      * that has not certified anything yet; logged, and cleared again if no
      * certificate ends up relying on it (eval_dep_note). */
     uint8_t  inert_observed;
+    /* Nonzero when the head has a declared argument count (ARITY_F_* bits,
+     * src/arity.h): the evaluator's arity check reads only this byte for an
+     * undeclared head, so it sits here, in the padding of the line the
+     * evaluator already reads for `attributes`.  0, the calloc default: no
+     * check. */
+    uint8_t  arity_flags;
     /* Position of the symbol's latest tentative entry in the dependency log
      * (eval.c), so a frame can tell a mark of its own from an enclosing
      * frame's.  Meaningful only while inert_observed == 1. */
@@ -182,6 +188,14 @@ typedef struct SymbolDef {
      * binder name's bit, 47 the SCOPE bit of Module/With/Function.  Assigned
      * once (symsum_register_binder) and never changed. */
     uint8_t  ss_bit;
+    /* The declared argument count in one byte, for the evaluator's inline
+     * test (src/arity.h, arity_call_suspect): low nibble a lower bound >= the
+     * declared minimum, high nibble an upper bound <= the declared maximum
+     * (15: 15 or more).  A call whose count lies inside is within the
+     * declaration; any other goes to the full check.  Here, in padding of the
+     * line the evaluator reads for `attributes`, so an undeclared or
+     * well-formed call touches no other line. */
+    uint8_t  arity_fast;
     /* Full 32-bit hash of symbol_name (the bucket is this mod the table size):
      * a chain walk compares it before strcmp.  Module mints a fresh name per
      * call, so a long session interns 10^5-10^6 symbols and every miss used to
@@ -271,6 +285,15 @@ typedef struct SymbolDef {
      * the language itself treats a SparseArray as an atom for pattern and
      * container heads. */
     uint8_t  sparse_mode;
+    /* Declared argument count (src/arity.h, symtab_set_arity): the number of
+     * positional arguments, [arity_min, arity_max] (ARITY_UNBOUNDED: no
+     * maximum), checked by the evaluator before the builtin runs (arity_flags
+     * holds the ARITY_F_* bits; see above).  arity_vfrom: the first argument
+     * index whose option names are validated (-1: none).  These fill the
+     * padding before sparse_native. */
+    uint8_t  arity_min;
+    uint8_t  arity_max;
+    int8_t   arity_vfrom;
     /* A native SparseArray kernel for this head (an SpNativeFn from
      * sparse/sparse.h), tried before the sparse_mode gate whenever an argument
      * is a SparseArray. It borrows the call and returns the answer, or NULL to

@@ -80,6 +80,22 @@ static void test_pqr_nonpolynomial_terms(void) {
               "PolynomialQuotientRemainder[a x^2 + 1, x + 1, x]", "{-a + a x, 1 + a}");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("SubresultantPolynomialRemainders#3", "Quiet[Check[SubresultantPolynomialRemainders[x^2 - 1, x + 1], fired, SubresultantPolynomialRemainders::argrx]]", "fired");
+    audit_chk("SubresultantPolynomialRemainders#3", "Quiet[SubresultantPolynomialRemainders[x^2 - 1, x + 1]]", "SubresultantPolynomialRemainders[-1 + x^2, 1 + x]");
+    audit_chk("Limit#3", "Quiet[Check[Limit[x^2, x -> 1, Foo -> 1], fired, Limit::optx]]", "fired");
+    audit_chk("Limit#3", "Quiet[Limit[x^2, x -> 1, Foo -> 1]]", "Limit[x^2, x -> 1, Foo -> 1]");
+    audit_chk("DSolve#2", "Quiet[Check[DSolve[y'[x] == y[x], y[x], x, Foo -> 1], fired, DSolve::optx]]", "fired");
+    audit_chk("Maximize#4", "Quiet[Check[Maximize[-x^2 + 1, x, Foo -> 1], fired, Maximize::optx]]", "fired");
+    audit_chk("Maximize#4", "Quiet[Maximize[-x^2 + 1, x, Foo -> 1]]", "Maximize[1 - x^2, x, Foo -> 1]");
+    audit_chk("Limit#3", "Limit[x^2, x -> 1, Direction -> \"FromAbove\"]", "1");
+}
+
 int main(void) {
     audit_init();
     TEST(test_d_numeric_variable);
@@ -89,5 +105,6 @@ int main(void) {
     TEST(test_laplace_delta_origin);
     TEST(test_maximize_complex_equality);
     TEST(test_pqr_nonpolynomial_terms);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_calculus");
 }

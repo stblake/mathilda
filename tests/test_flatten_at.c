@@ -110,8 +110,9 @@ static void test_fa_ndarray_ragged(void) {
 /* ---------- One-argument form is the identity ---------- */
 
 static void test_fa_one_arg_identity(void) {
-    /* No positions given -> nothing is flattened. */
-    run_full("FlattenAt[{a, {b, c}}]", "List[a, List[b, c]]");
+    /* FlattenAt takes exactly two arguments (audit FlattenAt#4): with no
+     * position the call is FlattenAt::argr and stays unevaluated. */
+    run_full("Quiet[FlattenAt[{a, {b, c}}]]", "FlattenAt[List[a, List[b, c]]]");
 }
 
 /* ---------- Out-of-range / arity -> unevaluated ---------- */

@@ -74,6 +74,39 @@ static void test_s14_listconvolve_level(void) {
                                  "ListConvolve[{1, 2}, {3, 4, 5}]");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Divide#5", "Quiet[Check[Divide[x], fired, Divide::argr]]", "fired");
+    audit_chk("Divide#5", "Quiet[Divide[x]]", "Divide[x]");
+    audit_chk("RuleDelayed#3", "Quiet[Check[RuleDelayed[a], fired, RuleDelayed::argr]]", "fired");
+    audit_chk("RuleDelayed#3", "Quiet[RuleDelayed[a]]", "RuleDelayed[a]");
+    audit_chk("Subtract#3", "Quiet[Check[Subtract[a, b, c], fired, Subtract::argrx]]", "fired");
+    audit_chk("Subtract#3", "Quiet[Subtract[a, b, c]]", "Subtract[a, b, c]");
+    audit_chk("BooleanQ#1", "Quiet[Check[BooleanQ[Sequence[]], fired, BooleanQ::argx]]", "fired");
+    audit_chk("BooleanQ#1", "Quiet[BooleanQ[Sequence[]]]", "BooleanQ[]");
+    audit_chk("Decrement#4", "Quiet[Check[Decrement[s12x, 1], fired, Decrement::argx]]", "fired");
+    audit_chk("Decrement#4", "Quiet[Decrement[s12x, 1]]", "Decrement[s12x, 1]");
+    audit_chk("Increment#2", "Quiet[Check[Increment[a, b], fired, Increment::argx]]", "fired");
+    audit_chk("Increment#2", "Quiet[Increment[a, b]]", "Increment[a, b]");
+    audit_chk("PreDecrement#4", "Quiet[Check[PreDecrement[s12x, 1], fired, PreDecrement::argx]]", "fired");
+    audit_chk("PreDecrement#4", "Quiet[PreDecrement[s12x, 1]]", "PreDecrement[s12x, 1]");
+    audit_chk("PreIncrement#3", "Quiet[Check[PreIncrement[], fired, PreIncrement::argx]]", "fired");
+    audit_chk("PreIncrement#3", "Quiet[PreIncrement[]]", "PreIncrement[]");
+    audit_chk("SplitBy#2", "Quiet[Check[SplitBy[{1}], fired, SplitBy::argr]]", "fired");
+    audit_chk("SplitBy#2", "Quiet[SplitBy[{1}]]", "SplitBy[{1}]");
+    audit_chk("SymbolName#2", "Quiet[Check[SymbolName[Sequence[a, b]], fired, SymbolName::argx]]", "fired");
+    audit_chk("SymbolName#2", "Quiet[SymbolName[Sequence[a, b]]]", "SymbolName[a, b]");
+    audit_chk("FromPackedArray#2", "Quiet[Check[FromPackedArray[1, 2], fired, FromPackedArray::argx]]", "fired");
+    audit_chk("FromPackedArray#2", "Quiet[FromPackedArray[1, 2]]", "FromPackedArray[1, 2]");
+    audit_chk("ToNDArray#4", "Quiet[Check[ToNDArray[{1, 2}, Foo -> 1], fired, ToNDArray::optx]]", "fired");
+    audit_chk("IntegerPart#3", "Quiet[Check[IntegerPart[1, 2], fired, IntegerPart::argx]]", "fired");
+    audit_chk("IntegerPart#3", "Quiet[IntegerPart[1, 2]]", "IntegerPart[1, 2]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_slotsequence_empty);
@@ -81,5 +114,6 @@ int main(void) {
     TEST(test_divide_zero_zero_real);
     TEST(test_texform_digit_factor);
     TEST(test_s14_listconvolve_level);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_uncategorised");
 }

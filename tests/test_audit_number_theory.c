@@ -81,10 +81,21 @@ static void test_continued_fraction_inexact_last_term(void) {
     audit_chk("ContinuedFraction#1", "ContinuedFraction[2.]", "{2}");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("FromContinuedFraction#3", "Quiet[Check[FromContinuedFraction[{1}, {2}], fired, FromContinuedFraction::argx]]", "fired");
+    audit_chk("FromContinuedFraction#3", "Quiet[FromContinuedFraction[{1}, {2}]]", "FromContinuedFraction[{1}, {2}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_primitive_root_list_huge_phi);
     TEST(test_powermod_roots);
     TEST(test_continued_fraction_inexact_last_term);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_number_theory");
 }

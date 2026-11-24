@@ -491,6 +491,7 @@ Out[4]= {3, 4, 5, 6, 7, 8}
 ```
 
 ## UnitVector
+- **Argument and option checks.** `Options[UnitVector]` is `{WorkingPrecision -> Infinity}`. Calls are checked against the declared arity and `Options[UnitVector]` before the C code runs (see `src/arity.h`): an unknown option is `UnitVector::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `UnitVector::nonopt`, and a list of option rules is read as the rules themselves.
 Generates a coordinate unit vector. Attributes: `Protected`.
 - `UnitVector[k]`: the two-dimensional unit vector in the `k`-th direction
   (equivalent to `UnitVector[2, k]`).

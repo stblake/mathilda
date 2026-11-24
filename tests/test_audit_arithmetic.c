@@ -121,6 +121,37 @@ static void test_ratios_level_depth(void) {
     audit_chk("Ratios#1", "Differences[{{1, 2, 4}, {3, 6, 9}}, {1, 1}]", "{{2, 1}}");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Total#3", "Quiet[Check[Total[], fired, Total::argt]]", "fired");
+    audit_chk("Total#3", "Quiet[Check[Total[{1, 2}, {1}, 3], fired, Total::nonopt]]", "fired");
+    audit_chk("Total#3", "Quiet[Check[Total[{1, 2}, x], fired, Total::level]]", "fired");
+    audit_chk("Abs#7", "Quiet[Check[Abs[], fired, Abs::argx]]", "fired");
+    audit_chk("Abs#7", "Quiet[Abs[]]", "Abs[]");
+    audit_chk("Minus#2", "Quiet[Check[Minus[Sequence[1, 2]], fired, Minus::argx]]", "fired");
+    audit_chk("Minus#2", "Quiet[Minus[Sequence[1, 2]]]", "Minus[1, 2]");
+    audit_chk("Arg#4", "Quiet[Check[Arg[1, 2], fired, Arg::argx]]", "fired");
+    audit_chk("Arg#4", "Quiet[Arg[1, 2]]", "Arg[1, 2]");
+    audit_chk("Accumulate#2", "Quiet[Check[Accumulate[], fired, Accumulate::argx]]", "fired");
+    audit_chk("Accumulate#2", "Quiet[Accumulate[{1., 2., 3.}, Method -> \"CompensatedSummation\"]]", "{1.0, 3.0, 6.0}");
+    audit_chk("Factorial#4", "Quiet[Check[Factorial[1, 2], fired, Factorial::argx]]", "fired");
+    audit_chk("Factorial#4", "Quiet[Factorial[1, 2]]", "Factorial[1, 2]");
+    audit_chk("FactorialPower#3", "Quiet[Check[FactorialPower[5], fired, FactorialPower::argtu]]", "fired");
+    audit_chk("FactorialPower#3", "Quiet[FactorialPower[5]]", "FactorialPower[5]");
+    audit_chk("IntervalMemberQ#3", "Quiet[Check[IntervalMemberQ[Interval[{1, 5}]], fired, IntervalMemberQ::argr]]", "fired");
+    audit_chk("IntervalMemberQ#3", "Quiet[IntervalMemberQ[Interval[{1, 5}]]]", "IntervalMemberQ[Interval[{1, 5}]]");
+    audit_chk("Precision#2", "Quiet[Check[Precision[1., 2.], fired, Precision::argx]]", "fired");
+    audit_chk("ReIm#4", "Quiet[Check[ReIm[1, 2], fired, ReIm::argx]]", "fired");
+    audit_chk("ReIm#4", "Quiet[ReIm[1, 2]]", "ReIm[1, 2]");
+    audit_chk("SetAccuracy#6", "Quiet[Check[SetAccuracy[1.5], fired, SetAccuracy::argr]]", "fired");
+    audit_chk("Sign#5", "Quiet[Check[Sign[1, 2], fired, Sign::argx]]", "fired");
+    audit_chk("Sign#5", "Quiet[Sign[1, 2]]", "Sign[1, 2]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
@@ -129,5 +160,6 @@ int main(void) {
     TEST(test_power_finite_base_infinity);
     TEST(test_interval_intersection_symbolic);
     TEST(test_ratios_level_depth);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_arithmetic");
 }

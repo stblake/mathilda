@@ -57,10 +57,12 @@ bool head_is(const Expr* e, const char* sym);
  *
  *   - min == max            -> fixed arity   ("Sin::argx" / "Head::argrx";
  *                                             "Head::argr" when got == 1)
- *   - max == SIZE_MAX       -> min-or-more   ("Head::argm")
+ *   - max == SIZE_MAX       -> min-or-more   ("Head::argm";
+ *                                             "Head::argmu" when got == 1)
  *   - max == min + 1        -> two choices   ("Head::argt": "1 or 2 ...";
  *                                             "Head::argtu" when got == 1)
- *   - otherwise             -> a range       ("Head::argb": "between m and n")
+ *   - otherwise             -> a range       ("Head::argb": "between m and n";
+ *                                             "Head::argbu" when got == 1)
  *
  * The message text mirrors the reference exactly, e.g.
  *   Sin::argx: Sin called with 3 arguments; 1 argument is expected.
@@ -86,6 +88,13 @@ Expr* builtin_normal_error(const char* head, const Expr* call, int pos);
  * MatchQ[1/2, h_[___]] is True in the reference too, and the matcher keeps
  * that.) */
 bool expr_is_number_atom(const Expr* e);
+
+/* True for an atom in the language's sense that is not a payload object: an
+ * Integer, Real (machine or MPFR), String, Symbol, or a Rational / Complex
+ * number.  False for compound expressions and for the payload kinds
+ * (packed arrays, SparseArray, LinkedList, ...), which have parts or a gate
+ * of their own.  For the ::normal checks of the structural builtins. */
+bool expr_is_plain_atom(const Expr* e);
 
 /* The heads the algebraic transformations (Factor, Expand, Cancel, Apart,
  * Together, ...) thread over, as the reference does: a Rule, the relations

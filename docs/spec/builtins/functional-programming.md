@@ -1443,6 +1443,7 @@ Out[3]= None
 ```
 
 ## Scan
+- **Argument and option checks.** `Options[Scan]` is `{Heads -> False}`. Calls are checked against the declared arity and `Options[Scan]` before the C code runs (see `src/arity.h`): an unknown option is `Scan::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `Scan::nonopt`, and a list of option rules is read as the rules themselves.
 `Scan[f, expr]` applies `f` to each element of `expr` for its side effects and
 returns `Null`, discarding the results (unlike `Map`, it builds no new
 expression). `Scan[f, expr, levelspec]` applies `f` to the parts of `expr`

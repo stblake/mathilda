@@ -167,6 +167,23 @@ static void test_nsum_nested_no_d_ivar(void) {
                          "N[Zeta[3] (Sin[1] + Sin[2])]] < 10^-8, NSum::nnum]");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("FindMinimum#6", "Quiet[Check[FindMinimum[x^2, {x, 1}, Foo -> 1], fired, FindMinimum::optx]]", "fired");
+    audit_chk("NMinimize#5", "Quiet[Check[NMinimize[(x - 2)^2, x, Foo -> 1], fired, NMinimize::optx]]", "fired");
+    audit_chk("Accuracy#3", "Quiet[Check[Accuracy[1., 2.], fired, Accuracy::argx]]", "fired");
+    audit_chk("FindMaximum#2", "Quiet[Check[FindMaximum[-x^2 + 2 x, {x, 0}, Foo -> 1], fired, FindMaximum::optx]]", "fired");
+    audit_chk("NSum#5", "Quiet[Check[NSum[1/n^2, {n, 1, Infinity}, Foo -> 1], fired, NSum::optx]]", "fired");
+    audit_chk("NDSolve#5", "Quiet[Check[NDSolve[{y'[x] == -y[x], y[0] == 1}, y, {x, 0, 1}, Foo -> 3], fired, NDSolve::optx]]", "fired");
+    audit_chk("NDSolveValue#3", "Quiet[Check[NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, 1}, Foo -> 1], fired, NDSolveValue::optx]]", "fired");
+    audit_chk("NSeries#3", "Quiet[Check[NSeries[Exp[x]], fired, NSeries::argr]]", "fired");
+    audit_chk("NSeries#3", "Quiet[NSeries[Exp[x]]]", "NSeries[E^x]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_nsum_nested_no_d_ivar);
@@ -183,5 +200,6 @@ int main(void) {
     TEST(test_nroots_nonnumeric_constant);
     TEST(test_nsolve_or);
     TEST(test_whenevent_jump);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_numerical_calculus");
 }

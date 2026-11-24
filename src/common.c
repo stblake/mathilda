@@ -37,7 +37,7 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
                 head, got, got_s,
                 min, (min == 1) ? "" : "s", (min == 1) ? "is" : "are");
     } else if (max == SIZE_MAX) {
-        mth_message(head, "argm",
+        mth_message(head, (got == 1) ? "argmu" : "argm",
                 "%s called with %zu argument%s; %zu or more arguments are expected.",
                 head, got, got_s, min);
     } else if (max == min + 1) {
@@ -45,7 +45,7 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
                 "%s called with %zu argument%s; %zu or %zu arguments are expected.",
                 head, got, got_s, min, max);
     } else {
-        mth_message(head, "argb",
+        mth_message(head, (got == 1) ? "argbu" : "argb",
                 "%s called with %zu argument%s; between %zu and %zu arguments are expected.",
                 head, got, got_s, min, max);
     }
@@ -96,6 +96,23 @@ bool expr_is_number_atom(const Expr* e) {
            e->data.function.head->type == EXPR_SYMBOL &&
            (e->data.function.head->data.symbol.name == SYM_Rational ||
             e->data.function.head->data.symbol.name == SYM_Complex);
+}
+
+bool expr_is_plain_atom(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_SYMBOL: case EXPR_STRING:
+        case EXPR_BIGINT:
+            return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+            return true;
+#endif
+        case EXPR_FUNCTION:
+            return expr_is_number_atom(e);
+        default:
+            return false;
+    }
 }
 
 Expr* builtin_normal_error(const char* head, const Expr* call, int pos) {

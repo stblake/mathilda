@@ -156,6 +156,23 @@ static void test_s14_removealpha_exact(void) {
     audit_run("ClearAll[auditT]");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Round#2", "Quiet[Check[Round[1, 2, 3], fired, Round::argt]]", "fired");
+    audit_chk("Round#2", "Quiet[Round[1, 2, 3]]", "Round[1, 2, 3]");
+    audit_chk("AlphaChannel#1", "Quiet[Check[AlphaChannel[], fired, AlphaChannel::argx]]", "fired");
+    audit_chk("AlphaChannel#1", "Quiet[AlphaChannel[]]", "AlphaChannel[]");
+    audit_chk("Erosion#3", "Quiet[Check[Erosion[Image[{{0.5, 0.2}}]], fired, Erosion::argr]]", "fired");
+    audit_chk("FindThreshold#4", "Quiet[Check[FindThreshold[], fired, FindThreshold::argx]]", "fired");
+    audit_chk("FindThreshold#4", "Quiet[FindThreshold[]]", "FindThreshold[]");
+    audit_chk("RandomImage#6", "Quiet[Check[RandomImage[1, {2, 3}, Foo -> 1], fired, RandomImage::optx]]", "fired");
+    audit_chk("RandomImage#6", "Quiet[RandomImage[1, {2, 3}, Foo -> 1]]", "RandomImage[1, {2, 3}, Foo -> 1]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_random_image_huge_size);
@@ -164,5 +181,6 @@ int main(void) {
     TEST(test_image_correlate_ncc_even);
     TEST(test_gradient_filter_radius);
     TEST(test_s14_removealpha_exact);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_image_processing");
 }

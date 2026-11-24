@@ -468,7 +468,8 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
         Expr* a1 = res->data.function.args[1];
         bool is_rule = (a1->type == EXPR_FUNCTION &&
                         a1->data.function.head->type == EXPR_SYMBOL &&
-                        a1->data.function.head->data.symbol.name == SYM_Rule);
+                        (a1->data.function.head->data.symbol.name == SYM_Rule ||
+                         a1->data.function.head->data.symbol.name == SYM_RuleDelayed));
         if (is_rule) {
             /* k defaults to 0; options start at position 1. */
             opt_start = 1;
@@ -493,7 +494,8 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
         Expr* opt = res->data.function.args[i];
         bool is_rule = (opt->type == EXPR_FUNCTION &&
                         opt->data.function.head->type == EXPR_SYMBOL &&
-                        opt->data.function.head->data.symbol.name == SYM_Rule &&
+                        (opt->data.function.head->data.symbol.name == SYM_Rule ||
+                         opt->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
                         opt->data.function.arg_count == 2 &&
                         opt->data.function.args[0]->type == EXPR_SYMBOL);
         if (!is_rule) {
@@ -630,7 +632,8 @@ static Expr* triangular_matrix_q(Expr* res, const char* head, bool lower) {
         Expr* a1 = res->data.function.args[1];
         bool is_rule = (a1->type == EXPR_FUNCTION &&
                         a1->data.function.head->type == EXPR_SYMBOL &&
-                        a1->data.function.head->data.symbol.name == SYM_Rule);
+                        (a1->data.function.head->data.symbol.name == SYM_Rule ||
+                         a1->data.function.head->data.symbol.name == SYM_RuleDelayed));
         if (is_rule) {
             opt_start = 1;
         } else {
@@ -652,7 +655,8 @@ static Expr* triangular_matrix_q(Expr* res, const char* head, bool lower) {
         Expr* opt = res->data.function.args[i];
         bool is_rule = (opt->type == EXPR_FUNCTION &&
                         opt->data.function.head->type == EXPR_SYMBOL &&
-                        opt->data.function.head->data.symbol.name == SYM_Rule &&
+                        (opt->data.function.head->data.symbol.name == SYM_Rule ||
+                         opt->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
                         opt->data.function.arg_count == 2 &&
                         opt->data.function.args[0]->type == EXPR_SYMBOL);
         if (!is_rule) {

@@ -825,6 +825,7 @@ void ndsolve_init(void) {
             { SYM_EvaluationMonitor,  expr_new_symbol(SYM_None) },
             { SYM_NormFunction,       expr_new_symbol(SYM_Automatic) },
             { OPT_DependentVariables, expr_new_symbol(SYM_Automatic) },
+            { SYM_Compiled,           expr_new_symbol(SYM_Automatic) },   /* the method of lines reads it */
         };
         size_t nopt = sizeof(defs) / sizeof(defs[0]);
         Expr** rules = malloc(nopt * sizeof(Expr*));

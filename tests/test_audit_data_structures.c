@@ -56,11 +56,38 @@ static void test_s14_arrayq_deletemissing(void) {
     audit_true("DeleteMissing#1", "DeleteMissing[{{1, Missing[]}, Missing[]}, 2^70] === {{1}}");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Rule#3", "Quiet[Check[Rule[a], fired, Rule::argr]]", "fired");
+    audit_chk("Rule#3", "Quiet[Rule[a]]", "Rule[a]");
+    audit_chk("ApplyTo#3", "Quiet[Check[ApplyTo[x], fired, ApplyTo::argr]]", "fired");
+    audit_chk("ApplyTo#3", "Quiet[ApplyTo[x]]", "ApplyTo[x]");
+    audit_chk("CountDistinct#2", "Quiet[Check[CountDistinct[], fired, CountDistinct::argt]]", "fired");
+    audit_chk("CountDistinct#2", "Quiet[CountDistinct[]]", "CountDistinct[]");
+    audit_chk("CountsBy#1", "Quiet[Check[CountsBy[{1, 2}, f, g], fired, CountsBy::argt]]", "fired");
+    audit_chk("CountsBy#1", "Quiet[CountsBy[{1, 2}, f, g]]", "CountsBy[{1, 2}, f, g]");
+    audit_chk("GroupBy#1", "Quiet[Check[GroupBy[{1, 2, 3}, EvenQ, Total, 4], fired, GroupBy::argb]]", "fired");
+    audit_chk("GroupBy#1", "Quiet[GroupBy[{1, 2, 3}, EvenQ, Total, 4]]", "GroupBy[{1, 2, 3}, EvenQ, Total, 4]");
+    audit_chk("KeyComplement#1", "Quiet[Check[KeyComplement[], fired, KeyComplement::argx]]", "fired");
+    audit_chk("KeyComplement#1", "Quiet[KeyComplement[]]", "KeyComplement[]");
+    audit_chk("KeyValueMap#1", "Quiet[Check[KeyValueMap[f, <|a -> 1|>, g], fired, KeyValueMap::argt]]", "fired");
+    audit_chk("Merge#1", "Quiet[Check[Merge[{<|a -> 1|>}, f, g], fired, Merge::argt]]", "fired");
+    audit_chk("MissingQ#1", "Quiet[Check[MissingQ[Sequence[1, 2]], fired, MissingQ::argx]]", "fired");
+    audit_chk("MissingQ#1", "Quiet[MissingQ[Sequence[1, 2]]]", "MissingQ[1, 2]");
+    audit_chk("PositionIndex#1", "Quiet[Check[PositionIndex[{a, b}, {c}], fired, PositionIndex::argx]]", "fired");
+    audit_chk("PositionIndex#1", "Quiet[PositionIndex[{a, b}, {c}]]", "PositionIndex[{a, b}, {c}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_gatherby_nested);
     TEST(test_key_accessor_contract);
     TEST(test_keysort_ordering_packed);
     TEST(test_s14_arrayq_deletemissing);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_data_structures");
 }

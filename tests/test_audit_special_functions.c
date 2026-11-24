@@ -549,6 +549,29 @@ static void test_a2_jacobip_degenerate(void) {
     audit_true(id, "Abs[JacobiP[3, 1/2, 1/3, 0.5] - N[JacobiP[3, 1/2, 1/3, 1/2]]] < 1.*^-15");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("BesselJ#4", "Quiet[Check[BesselJ[x], fired, BesselJ::argr]]", "fired");
+    audit_chk("BesselJ#4", "Quiet[BesselJ[x]]", "BesselJ[x]");
+    audit_chk("Gamma#3", "Quiet[Check[Gamma[], fired, Gamma::argb]]", "fired");
+    audit_chk("Gamma#3", "Quiet[Gamma[]]", "Gamma[]");
+    audit_chk("AiryBiPrimeZero#3", "Quiet[Check[AiryBiPrimeZero[1, 2, 3], fired, AiryBiPrimeZero::argt]]", "fired");
+    audit_chk("AiryBiPrimeZero#3", "Quiet[AiryBiPrimeZero[1, 2, 3]]", "AiryBiPrimeZero[1, 2, 3]");
+    audit_chk("AngerJ#1", "Quiet[Check[AngerJ[1, 2, 3, 4], fired, AngerJ::argt]]", "fired");
+    audit_chk("AngerJ#1", "Quiet[AngerJ[1, 2, 3, 4]]", "AngerJ[1, 2, 3, 4]");
+    audit_chk("BesselJZero#5", "Quiet[Check[BesselJZero[1], fired, BesselJZero::argtu]]", "fired");
+    audit_chk("BesselJZero#5", "Quiet[BesselJZero[1]]", "BesselJZero[1]");
+    audit_chk("MathieuCharacteristicA#1", "Quiet[Check[MathieuCharacteristicA[1, 2, 3], fired, MathieuCharacteristicA::argrx]]", "fired");
+    audit_chk("MathieuCharacteristicA#1", "Quiet[MathieuCharacteristicA[1, 2, 3]]", "MathieuCharacteristicA[1, 2, 3]");
+    audit_chk("QPochhammer#4", "Quiet[Check[QPochhammer[a, b, c, d], fired, QPochhammer::argb]]", "fired");
+    audit_chk("QPochhammer#4", "Quiet[QPochhammer[a, b, c, d]]", "QPochhammer[a, b, c, d]");
+    audit_chk("WaveletPhi#2", "Quiet[Check[WaveletPhi[DaubechiesWavelet[2], 1., Foo -> 2], fired, WaveletPhi::optx]]", "fired");
+}
+
 int main(void) {
     audit_init();
     TEST(test_legendreq_type3);
@@ -575,5 +598,6 @@ int main(void) {
     TEST(test_a2_diracdelta_integrals);
     TEST(test_a2_haar_norms);
     TEST(test_a2_jacobip_degenerate);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_special_functions");
 }

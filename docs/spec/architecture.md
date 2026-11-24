@@ -41,8 +41,9 @@ The `evaluate(Expr* e)` function is the heart of Mathilda. It follows the refere
 3.  **Evaluate Arguments**: Arguments are evaluated standardly, *unless* the head possesses Hold attributes (`ATTR_HOLDFIRST`, `ATTR_HOLDREST`, `ATTR_HOLDALL`, `ATTR_HOLDALLCOMPLETE`).
 4.  **Apply Listable**: If the head is `ATTR_LISTABLE` and any evaluated argument is a `List`, the function automatically threads over the lists (e.g., `Mod[{1, 2}, 3] -> {Mod[1, 3], Mod[2, 3]}`).
 5.  **Apply Flat / Orderless**: If `ATTR_FLAT` (associative), nested calls to the same head are flattened. If `ATTR_ORDERLESS` (commutative), arguments are lexically sorted.
-6.  **Apply Built-ins**: If a C-level built-in function is registered, it is called.
-7.  **Apply User Rules**: If no built-in handles it (or returns `NULL`), the evaluator checks the `DownValues` of the head and applies the first matching pattern replacement.
+6.  **Check the declared arity**: a head with a declared argument count (`symtab_set_arity` / `symtab_set_arity_opts`, most rows in `src/arity_table.c`; see `src/arity.h`) has the call checked once, after its UpValues and DownValues declined and before its C code runs. A call outside the range prints the reference's message -- `argx`, `argr`, `argrx`, `argt`/`argtu`, `argb`/`argbu`, `argm`/`argmu` (`Length[]`: "Length called with 0 arguments; 1 argument is expected.") -- and comes to rest unevaluated. For a head that takes options (declared so, or with a non-empty `Options[head]`) trailing rules and lists of rules are not counted; too many positional arguments is `nonopt` ("Options expected (instead of 2) beyond position 3 in Map[f, {a, b}, 1, 2]. ..."), and for a head whose option names are checked, an option not among `Options[head]` is `optx` ("Unknown option Foo in ..."). A list of options is spliced before such a head runs (`HilbertMatrix[2, {WorkingPrecision -> MachinePrecision}]`). The no-defect path is one byte test for an undeclared head and two compares for a declared one.
+7.  **Apply Built-ins**: If a C-level built-in function is registered, it is called.
+8.  **Apply User Rules**: If no built-in handles it (or returns `NULL`), the evaluator checks the `DownValues` of the head and applies the first matching pattern replacement.
 
 ## 5.5. Pattern Matcher (`match.c`)
 

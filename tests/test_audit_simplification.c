@@ -23,8 +23,21 @@ static void test_factorial2_negative_odd(void) {
     audit_chk("Factorial2#1", "Factorial2[-10^30 - 1]", "Factorial2[-1000000000000000000000000000001]");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Refine#4", "Quiet[Check[Refine[], fired, Refine::argt]]", "fired");
+    audit_chk("Refine#4", "Quiet[Refine[]]", "Refine[]");
+    audit_chk("Assuming#1", "Quiet[Check[Assuming[x > 0], fired, Assuming::argr]]", "fired");
+    audit_chk("Assuming#1", "Quiet[Assuming[x > 0]]", "Assuming[x > 0]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_factorial2_negative_odd);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_simplification");
 }

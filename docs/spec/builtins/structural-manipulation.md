@@ -318,6 +318,9 @@ unevaluated. Attribute: `Protected`.
 - `FlattenAt[expr, {{i1,...},{i2,...},...}]`: Flattens at several positions,
   each resolved against the original expression.
   `FlattenAt[{a,{b,c},{d,e},{f}}, {{2},{4}}]` → `{a,b,c,{d,e},f}`.
+- Exactly two arguments: `FlattenAt[{a, {b}}]` is `FlattenAt::argr` ("FlattenAt
+  called with 1 argument; 2 arguments are expected.") and stays unevaluated; it
+  used to return its argument.
 
 Because the head at the position is removed, `FlattenAt[{1,{{2},{3}},4}, {2}]`
 gives `{1,{2},{3},4}`; use `MapAt[Flatten, …]` to flatten *within* a part

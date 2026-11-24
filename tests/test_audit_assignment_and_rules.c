@@ -38,10 +38,40 @@ static void test_replaceat_delayed_unevaluated(void) {
     audit_chk("ReplaceAt#1", "ReplaceAt[{1, 2}, x_ :> x^2, 2]", "{1, 4}");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("ReplaceAll#3", "Quiet[Check[ReplaceAll[a, b, c], fired, ReplaceAll::argt]]", "fired");
+    audit_chk("ReplaceAll#3", "Quiet[ReplaceAll[a, b, c]]", "ReplaceAll[a, b, c]");
+    audit_chk("SetDelayed#3", "Quiet[Check[SetDelayed[a], fired, SetDelayed::argr]]", "fired");
+    audit_chk("SetDelayed#3", "Quiet[SetDelayed[a]]", "SetDelayed[a]");
+    audit_chk("AddTo#3", "Quiet[Check[AddTo[z, 1, 2], fired, AddTo::argrx]]", "fired");
+    audit_chk("AddTo#3", "Quiet[AddTo[z, 1, 2]]", "AddTo[z, 1, 2]");
+    audit_chk("Dispatch#1", "Quiet[Check[Dispatch[{a -> 1}, {b -> 2}], fired, Dispatch::argx]]", "fired");
+    audit_chk("Dispatch#1", "Quiet[Dispatch[{a -> 1}, {b -> 2}]]", "Dispatch[{a -> 1}, {b -> 2}]");
+    audit_chk("OptionQ#1", "Quiet[Check[OptionQ[Sequence[a -> 1, b -> 2]], fired, OptionQ::argx]]", "fired");
+    audit_chk("OptionQ#1", "Quiet[OptionQ[Sequence[a -> 1, b -> 2]]]", "OptionQ[a -> 1, b -> 2]");
+    audit_chk("SubtractFrom#3", "Quiet[Check[SubtractFrom[z], fired, SubtractFrom::argr]]", "fired");
+    audit_chk("SubtractFrom#3", "Quiet[SubtractFrom[z]]", "SubtractFrom[z]");
+    audit_chk("TimesBy#4", "Quiet[Check[TimesBy[q], fired, TimesBy::argr]]", "fired");
+    audit_chk("TimesBy#4", "Quiet[TimesBy[q]]", "TimesBy[q]");
+    audit_chk("Replace#4", "Quiet[Check[Replace[{x}, x -> 1, {1}, Foo -> True], fired, Replace::optx]]", "fired");
+    audit_chk("Replace#4", "Quiet[Replace[{x}, x -> 1, {1}, Foo -> True]]", "Replace[{x}, x -> 1, {1}, Foo -> True]");
+    audit_chk("SetDelayed#1", "Quiet[Check[Sin[s12y_] := 7, fired, SetDelayed::write]]", "fired");
+    audit_chk("Replace#4", "Replace[f[x], f -> g, {0, 1}, Heads -> True]", "g[x]");
+    audit_chk("SetDelayed#1", "Quiet[Pi := 3]", "$Failed");
+    audit_chk("SetDelayed#1", "Quiet[Sin[s12y_] := 7]", "$Failed");
+    audit_chk("SetDelayed#1", "Quiet[Pi = 3]", "3");
+}
+
 int main(void) {
     audit_init();
     TEST(test_op_assign_part_once);
     TEST(test_replacepart_first_rule);
     TEST(test_replaceat_delayed_unevaluated);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_assignment_and_rules");
 }

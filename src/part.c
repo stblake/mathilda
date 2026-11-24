@@ -1662,6 +1662,21 @@ static Expr* ll_first_last(Expr* arg, Expr* deflt, bool last) {
 
 Expr* ll_first_last_expr(Expr* arg, Expr* deflt, bool last) { return ll_first_last(arg, deflt, last); }
 
+/* First / Last of an atom or of an expression with no elements and no
+ * default: ::normal or ::nofirst / ::nolast, and the call stays unevaluated
+ * (NULL), as in the reference (Last[x], Last[{}]). */
+static Expr* first_last_empty(const Expr* call, Expr* arg, bool last) {
+    const char* head = last ? "Last" : "First";
+    if (expr_is_plain_atom(arg)) return builtin_normal_error(head, call, 1);
+    /* a payload kind (SparseArray, ...) is left to its gate, silently */
+    if (arg->type != EXPR_FUNCTION || arg->data.function.arg_count > 0) return NULL;
+    char* s = expr_to_string(arg);
+    if (last) mth_message("Last", "nolast", "%s has zero length and no last element.", s ? s : "");
+    else mth_message("First", "nofirst", "%s has zero length and no first element.", s ? s : "");
+    free(s);
+    return NULL;
+}
+
 Expr* builtin_first(Expr* res) {
     if (res->type != EXPR_FUNCTION ||
         res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
@@ -1678,9 +1693,10 @@ Expr* builtin_first(Expr* res) {
         return ndstruct_delist_repack(res, arg);
     }
     /* First[expr, def] returns def when expr has no elements (or is atomic);
-     * with no default the 1-arg form is left unevaluated, as before. */
+     * with no default the call is First::normal (an atom) or First::nofirst
+     * (no elements) and stays unevaluated. */
     if (is_atomic(arg) || arg->data.function.arg_count < 1)
-        return deflt ? expr_copy(deflt) : NULL;
+        return deflt ? expr_copy(deflt) : first_last_empty(res, arg, false);
     return expr_copy(first_last_element(arg, arg->data.function.args[0]));
 }
 
@@ -1700,7 +1716,7 @@ Expr* builtin_last(Expr* res) {
         return ndstruct_delist_repack(res, arg);
     }
     if (is_atomic(arg) || arg->data.function.arg_count < 1)
-        return deflt ? expr_copy(deflt) : NULL;
+        return deflt ? expr_copy(deflt) : first_last_empty(res, arg, true);
     return expr_copy(first_last_element(arg, arg->data.function.args[arg->data.function.arg_count - 1]));
 }
 

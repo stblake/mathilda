@@ -339,6 +339,83 @@ static void test_s14_levels_and_shapes(void) {
               "True");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Level#5", "Quiet[Check[Level[a + b], fired, Level::argtu]]", "fired");
+    audit_chk("Head#2", "Quiet[Check[Head[x, f, g], fired, Head::argt]]", "fired");
+    audit_chk("Head#2", "Quiet[Head[x, f, g]]", "Head[x, f, g]");
+    audit_chk("Length#3", "Quiet[Check[Length[a, b], fired, Length::argx]]", "fired");
+    audit_chk("Length#3", "Quiet[Length[a, b]]", "Length[a, b]");
+    audit_chk("Sort#1", "Quiet[Check[Sort[{3, 1, 2}, Less, 1], fired, Sort::argt]]", "fired");
+    audit_chk("Sort#1", "Quiet[Sort[{3, 1, 2}, Less, 1]]", "Sort[{3, 1, 2}, Less, 1]");
+    audit_chk("Append#3", "Quiet[Check[Append[{a}, b, c], fired, Append::argt]]", "fired");
+    audit_chk("Append#3", "Quiet[Append[{a}, b, c]]", "Append[{a}, b, c]");
+    audit_chk("Collect#4", "Quiet[Check[Collect[x], fired, Collect::argtu]]", "fired");
+    audit_chk("Collect#4", "Quiet[Collect[x]]", "Collect[x]");
+    audit_chk("Delete#7", "Quiet[Check[Delete[{a}, 1, 2], fired, Delete::argt]]", "fired");
+    audit_chk("Delete#7", "Quiet[Delete[{a}, 1, 2]]", "Delete[{a}, 1, 2]");
+    audit_chk("DeleteDuplicates#3", "Quiet[Check[DeleteDuplicates[{1, 2, 3}, Equal, 3], fired, DeleteDuplicates::argt]]", "fired");
+    audit_chk("DeleteDuplicates#3", "Quiet[DeleteDuplicates[{1, 2, 3}, Equal, 3]]", "DeleteDuplicates[{1, 2, 3}, Equal, 3]");
+    audit_chk("First#3", "Quiet[Check[First[{1}, 2, 3], fired, First::argt]]", "fired");
+    audit_chk("First#3", "Quiet[First[{1}, 2, 3]]", "First[{1}, 2, 3]");
+    audit_chk("Insert#6", "Quiet[Check[Insert[{a, b}, x, 1, 2], fired, Insert::argt]]", "fired");
+    audit_chk("Insert#6", "Quiet[Insert[{a, b}, x, 1, 2]]", "Insert[{a, b}, x, 1, 2]");
+    audit_chk("Most#4", "Quiet[Check[Most[{1, 2}, {3}], fired, Most::argx]]", "fired");
+    audit_chk("Most#4", "Quiet[Most[{1, 2}, {3}]]", "Most[{1, 2}, {3}]");
+    audit_chk("Partition#5", "Quiet[Check[Partition[{1, 2, 3}], fired, Partition::argbu]]", "fired");
+    audit_chk("Partition#5", "Quiet[Partition[{1, 2, 3}]]", "Partition[{1, 2, 3}]");
+    audit_chk("Prepend#4", "Quiet[Check[Prepend[{a}, b, c], fired, Prepend::argt]]", "fired");
+    audit_chk("Prepend#4", "Quiet[Prepend[{a}, b, c]]", "Prepend[{a}, b, c]");
+    audit_chk("Rest#4", "Quiet[Check[Rest[{a, b}, {c}], fired, Rest::argx]]", "fired");
+    audit_chk("Rest#4", "Quiet[Rest[{a, b}, {c}]]", "Rest[{a, b}, {c}]");
+    audit_chk("Reverse#3", "Quiet[Check[Reverse[{1, 2}, 1, 2], fired, Reverse::argt]]", "fired");
+    audit_chk("Reverse#3", "Quiet[Reverse[{1, 2}, 1, 2]]", "Reverse[{1, 2}, 1, 2]");
+    audit_chk("Tally#3", "Quiet[Check[Tally[{a}, b, c], fired, Tally::argt]]", "fired");
+    audit_chk("Tally#3", "Quiet[Tally[{a}, b, c]]", "Tally[{a}, b, c]");
+    audit_chk("Variables#2", "Quiet[Check[Variables[x, y], fired, Variables::argx]]", "fired");
+    audit_chk("Variables#2", "Quiet[Variables[x, y]]", "Variables[x, y]");
+    audit_chk("AppendTo#2", "Quiet[Check[AppendTo[s12x, 1, 2], fired, AppendTo::argrx]]", "fired");
+    audit_chk("AppendTo#2", "Quiet[AppendTo[s12x, 1, 2]]", "AppendTo[s12x, 1, 2]");
+    audit_chk("ExpandDenominator#1", "Quiet[Check[ExpandDenominator[], fired, ExpandDenominator::argx]]", "fired");
+    audit_chk("ExpandDenominator#1", "Quiet[ExpandDenominator[]]", "ExpandDenominator[]");
+    audit_chk("FactorTermsList#3", "Quiet[Check[FactorTermsList[x, y, z], fired, FactorTermsList::argt]]", "fired");
+    audit_chk("FactorTermsList#3", "Quiet[FactorTermsList[x, y, z]]", "FactorTermsList[x, y, z]");
+    audit_chk("FlattenAt#4", "Quiet[Check[FlattenAt[{a, {b}}], fired, FlattenAt::argr]]", "fired");
+    audit_chk("FlattenAt#4", "Quiet[FlattenAt[{a, {b}}]]", "FlattenAt[{a, {b}}]");
+    audit_chk("FromCoefficientRules#2", "Quiet[Check[FromCoefficientRules[{{1} -> 1}], fired, FromCoefficientRules::argr]]", "fired");
+    audit_chk("FromCoefficientRules#2", "Quiet[FromCoefficientRules[{{1} -> 1}]]", "FromCoefficientRules[{{1} -> 1}]");
+    audit_chk("OrderedQ#1", "Quiet[Check[OrderedQ[{1, 2}, Less, 3], fired, OrderedQ::argt]]", "fired");
+    audit_chk("OrderedQ#1", "Quiet[OrderedQ[{1, 2}, Less, 3]]", "OrderedQ[{1, 2}, Less, 3]");
+    audit_chk("RotateLeft#2", "Quiet[Check[RotateLeft[{a, b, c}, 1, 2], fired, RotateLeft::argt]]", "fired");
+    audit_chk("RotateLeft#2", "Quiet[RotateLeft[{a, b, c}, 1, 2]]", "RotateLeft[{a, b, c}, 1, 2]");
+    audit_chk("Split#2", "Quiet[Check[Split[{1, 1, 2}, SameQ, 3], fired, Split::argt]]", "fired");
+    audit_chk("Split#2", "Quiet[Split[{1, 1, 2}, SameQ, 3]]", "Split[{1, 1, 2}, SameQ, 3]");
+    audit_chk("PolynomialGCD#1", "Quiet[Check[PolynomialGCD[x^2 - 1, x - 1, Foo -> 1], fired, PolynomialGCD::optx]]", "fired");
+    audit_chk("PolynomialGCD#1", "Quiet[PolynomialGCD[x^2 - 1, x - 1, Foo -> 1]]", "PolynomialGCD[-1 + x^2, -1 + x, Foo -> 1]");
+    audit_chk("PolynomialLCM#1", "Quiet[Check[PolynomialLCM[x + 1, x - 1, Foo -> 3], fired, PolynomialLCM::optx]]", "fired");
+    audit_chk("PolynomialLCM#1", "Quiet[PolynomialLCM[x + 1, x - 1, Foo -> 3]]", "PolynomialLCM[1 + x, -1 + x, Foo -> 3]");
+    audit_chk("GroebnerBasis#2", "Quiet[Check[GroebnerBasis[{x^2 - 1, y}, {x, y}, Foo -> 1], fired, GroebnerBasis::optx]]", "fired");
+    audit_chk("IntersectingQ#2", "Quiet[Check[IntersectingQ[{a}, {a}, {a}], fired, IntersectingQ::nonopt]]", "fired");
+    audit_chk("IntersectingQ#2", "Quiet[IntersectingQ[{a}, {a}, {a}]]", "IntersectingQ[{a}, {a}, {a}]");
+    audit_chk("PolynomialReduce#2", "Quiet[Check[PolynomialReduce[x^2 + 1, {x - 1}, x, Foo -> 1], fired, PolynomialReduce::optx]]", "fired");
+    audit_chk("Last#2", "Quiet[Check[Last[{}], fired, Last::nolast]]", "fired");
+    audit_chk("Last#2", "Quiet[Last[{}]]", "Last[{}]");
+    audit_chk("Last#2", "Quiet[Check[Last[s12a], fired, Last::normal]]", "fired");
+    audit_chk("Last#2", "Quiet[Last[s12a]]", "Last[s12a]");
+    audit_chk("Last#2", "Quiet[Check[Last[], fired, Last::argt]]", "fired");
+    audit_chk("Last#2", "Quiet[Last[]]", "Last[]");
+    audit_chk("Append#3", "Quiet[Check[Append[s12a, y], fired, Append::normal]]", "fired");
+    audit_chk("Append#3", "Quiet[Append[s12a, y]]", "Append[s12a, y]");
+    audit_chk("PolynomialGCD#1", "PolynomialGCD[x^2 - 1, x - 1, Modulus -> 2]", "1 + x");
+    audit_chk("FactorList#2", "FactorList[x^2 - 1, {Modulus -> 2}]", "{{1, 1}, {1 + x, 2}}");
+    audit_chk("Last#2", "Last[{}, d]", "d");
+    audit_chk("Append#3", "Append[f[a], b]", "f[a, b]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_expand_option_not_pattern);
@@ -360,5 +437,6 @@ int main(void) {
     TEST(test_pad_huge_length);
     TEST(test_drop_huge_sequence_spec);
     TEST(test_s14_levels_and_shapes);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_structural_manipulation");
 }

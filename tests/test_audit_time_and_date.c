@@ -36,10 +36,33 @@ static void test_s14_unixtime_exact(void) {
     audit_true("UnixTime#4", "UnixTime[0] === -2208988800");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Timing#1", "Quiet[Check[Timing[1, 2], fired, Timing::argx]]", "fired");
+    audit_chk("Timing#1", "Quiet[Timing[1, 2]]", "Timing[1, 2]");
+    audit_chk("AbsoluteTiming#1", "Quiet[Check[AbsoluteTiming[1, 2], fired, AbsoluteTiming::argx]]", "fired");
+    audit_chk("AbsoluteTiming#1", "Quiet[AbsoluteTiming[1, 2]]", "AbsoluteTiming[1, 2]");
+    audit_chk("Pause#1", "Quiet[Check[Pause[1, 2], fired, Pause::argx]]", "fired");
+    audit_chk("Pause#1", "Quiet[Pause[1, 2]]", "Pause[1, 2]");
+    audit_chk("RepeatedTiming#2", "Quiet[Check[RepeatedTiming[1, 2, 3], fired, RepeatedTiming::argt]]", "fired");
+    audit_chk("RepeatedTiming#2", "Quiet[RepeatedTiming[1, 2, 3]]", "RepeatedTiming[1, 2, 3]");
+    audit_chk("SessionTime#2", "Quiet[Check[SessionTime[1], fired, SessionTime::argr]]", "fired");
+    audit_chk("SessionTime#2", "Quiet[SessionTime[1]]", "SessionTime[1]");
+    audit_chk("TimeConstrained#3", "Quiet[Check[TimeConstrained[1, 2, 3, 4], fired, TimeConstrained::argt]]", "fired");
+    audit_chk("TimeConstrained#3", "Quiet[TimeConstrained[1, 2, 3, 4]]", "TimeConstrained[1, 2, 3, 4]");
+    audit_chk("TimeUsed#2", "Quiet[Check[TimeUsed[1], fired, TimeUsed::argr]]", "fired");
+    audit_chk("TimeUsed#2", "Quiet[TimeUsed[1]]", "TimeUsed[1]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_datelist_far_past);
     TEST(test_unixtime_int64_edge);
     TEST(test_s14_unixtime_exact);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_time_and_date");
 }

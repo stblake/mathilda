@@ -1397,6 +1397,12 @@ void core_init(void) {
     void opform_init(void);
     opform_init();
 
+    /* Declared argument counts (src/arity_table.c), checked by the evaluator
+     * before a builtin runs. After every builtin and its Options[] are
+     * registered. */
+    void arity_table_init(void);
+    arity_table_init();
+
     /* Flag every symbol interned so far as a System symbol. At this point in
      * startup the interner holds exactly the kernel's built-in names (cached
      * SYM_* pointers, registered builtins, option names with docstrings, ...).
@@ -2867,7 +2873,9 @@ Expr* builtin_append(Expr* res) {
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
     /* a Rational/Complex number is an atom: Append[3/4, 1] is not Rational[3, 4, 1] */
-    if (expr_is_number_atom(expr)) return builtin_normal_error("Append", res, 1);
+    /* an atom -- a number, Rational/Complex included, a symbol, a string --
+     * has no elements: Append[x, y] is ::normal */
+    if (expr_is_plain_atom(expr)) return builtin_normal_error("Append", res, 1);
     if (expr->type != EXPR_FUNCTION) return NULL;
     
     size_t new_count = expr->data.function.arg_count + 1;
@@ -2891,7 +2899,9 @@ Expr* builtin_prepend(Expr* res) {
         Expr* nd = ndstruct_append(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
-    if (expr_is_number_atom(expr)) return builtin_normal_error("Prepend", res, 1);
+    /* an atom -- a number, Rational/Complex included, a symbol, a string --
+     * has no elements: Prepend[x, y] is ::normal */
+    if (expr_is_plain_atom(expr)) return builtin_normal_error("Prepend", res, 1);
     if (expr->type != EXPR_FUNCTION) return NULL;
     
     size_t new_count = expr->data.function.arg_count + 1;

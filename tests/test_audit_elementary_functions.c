@@ -37,9 +37,26 @@ static void test_piecewise_values_evaluated(void) {
     audit_chk("Piecewise#1", "Piecewise[{{x^2, x > 0}}, -x] /. x -> 3", "9");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("TrigReduce#3", "Quiet[Check[TrigReduce[], fired, TrigReduce::argx]]", "fired");
+    audit_chk("TrigReduce#3", "Quiet[TrigReduce[]]", "TrigReduce[]");
+    audit_chk("Clip#3", "Quiet[Check[Clip[1, {1, 2}, {3, 4}, 5], fired, Clip::argb]]", "fired");
+    audit_chk("Clip#3", "Quiet[Clip[1, {1, 2}, {3, 4}, 5]]", "Clip[1, {1, 2}, {3, 4}, 5]");
+    audit_chk("Ramp#4", "Quiet[Check[Ramp[1, 2], fired, Ramp::argx]]", "fired");
+    audit_chk("Ramp#4", "Quiet[Ramp[1, 2]]", "Ramp[1, 2]");
+    audit_chk("Rationalize#1", "Quiet[Check[Rationalize[1, 2, 3], fired, Rationalize::argt]]", "fired");
+    audit_chk("Rationalize#1", "Quiet[Rationalize[1, 2, 3]]", "Rationalize[1, 2, 3]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unitstep_exact_zero);
     TEST(test_piecewise_values_evaluated);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_elementary_functions");
 }

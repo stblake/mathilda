@@ -43,9 +43,29 @@ static void test_irreduciblepolynomialq_absolute(void) {
     audit_chk("IrreduciblePolynomialQ#1", "IrreduciblePolynomialQ[x^2 - 2 y^2]", "True");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("AlgebraicNumberNorm#1", "Quiet[Check[AlgebraicNumberNorm[Extension -> Sqrt[2]], fired, AlgebraicNumberNorm::argx]]", "fired");
+    audit_chk("NumberFieldIntegralBasis#3", "Quiet[Check[NumberFieldIntegralBasis[Sqrt[2], 3], fired, NumberFieldIntegralBasis::argx]]", "fired");
+    audit_chk("RootReduce#1", "Quiet[Check[RootReduce[Sqrt[2], Foo -> 1], fired, RootReduce::optx]]", "fired");
+    audit_chk("RootReduce#1", "Quiet[RootReduce[Sqrt[2], Foo -> 1]]", "RootReduce[Sqrt[2], Foo -> 1]");
+    audit_chk("SubresultantPolynomials#2", "Quiet[Check[SubresultantPolynomials[x^2 + 1, x + 1], fired, SubresultantPolynomials::argrx]]", "fired");
+    audit_chk("Subresultants#3", "Quiet[Check[Subresultants[x^2 + 1, x + 1], fired, Subresultants::argrx]]", "fired");
+    audit_chk("ToNumberField#1", "Quiet[Check[ToNumberField[1, 2, 3], fired, ToNumberField::argt]]", "fired");
+    audit_chk("ToNumberField#1", "Quiet[ToNumberField[1, 2, 3]]", "ToNumberField[1, 2, 3]");
+    audit_chk("Cancel#2", "Quiet[Check[Cancel[x, y], fired, Cancel::nonopt]]", "fired");
+    audit_chk("Cancel#2", "Quiet[Cancel[x, y]]", "Cancel[x, y]");
+    audit_chk("Cancel#2", "Quiet[Check[Cancel[(x^2 - 1)/(x - 1), Foo -> 1], fired, Cancel::optx]]", "fired");
+}
+
 int main(void) {
     audit_init();
     TEST(test_algebraicintegerq_high_degree);
     TEST(test_irreduciblepolynomialq_absolute);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_algebra");
 }

@@ -186,6 +186,47 @@ static void test_s14_level_specs(void) {
     audit_chk("Scan#5", "Check[Scan[Print, {a}, x], fired, Scan::level]", "fired");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Map#3", "Quiet[Check[Map[f, {a, b}, x], fired, Map::level]]", "fired");
+    audit_chk("Map#3", "Quiet[Check[Map[f, {a, b}, {1, 1, 1}], fired, Map::level]]", "fired");
+    audit_chk("Map#3", "Quiet[Check[Map[f, {a, b}, 1, 2], fired, Map::nonopt]]", "fired");
+    audit_chk("Map#3", "Quiet[Check[Map[], fired, Map::argb]]", "fired");
+    audit_chk("Map#3", "Map[f, a -> b]", "f[a] -> f[b]");
+    audit_chk("NestList#2", "Quiet[Check[NestList[f, x], fired, NestList::argrx]]", "fired");
+    audit_chk("NestList#2", "Quiet[NestList[f, x]]", "NestList[f, x]");
+    audit_chk("Thread#2", "Quiet[Check[Thread[f[{a}], List, 1, 2], fired, Thread::argb]]", "fired");
+    audit_chk("Thread#2", "Quiet[Thread[f[{a}], List, 1, 2]]", "Thread[f[{a}], List, 1, 2]");
+    audit_chk("Distribute#1", "Quiet[Check[Distribute[], fired, Distribute::argb]]", "fired");
+    audit_chk("Distribute#1", "Quiet[Distribute[]]", "Distribute[]");
+    audit_chk("InterpolatingPolynomial#3", "Quiet[Check[InterpolatingPolynomial[{1, 4, 9}, x, Foo -> 1], fired, InterpolatingPolynomial::optx]]", "fired");
+    audit_chk("InterpolatingPolynomial#3", "Quiet[InterpolatingPolynomial[{1, 4, 9}, x, Foo -> 1]]", "InterpolatingPolynomial[{1, 4, 9}, x, Foo -> 1]");
+    audit_chk("LengthWhile#1", "Quiet[Check[LengthWhile[{1, 2}], fired, LengthWhile::argr]]", "fired");
+    audit_chk("LengthWhile#1", "Quiet[LengthWhile[{1, 2}]]", "LengthWhile[{1, 2}]");
+    audit_chk("NestWhile#1", "Quiet[Check[NestWhile[f, x], fired, NestWhile::argb]]", "fired");
+    audit_chk("NestWhile#1", "Quiet[NestWhile[f, x]]", "NestWhile[f, x]");
+    audit_chk("NestWhileList#2", "Quiet[Check[NestWhileList[f, x], fired, NestWhileList::argb]]", "fired");
+    audit_chk("NestWhileList#2", "Quiet[NestWhileList[f, x]]", "NestWhileList[f, x]");
+    audit_chk("TakeWhile#1", "Quiet[Check[TakeWhile[{1, 2}, EvenQ, 3], fired, TakeWhile::argrx]]", "fired");
+    audit_chk("TakeWhile#1", "Quiet[TakeWhile[{1, 2}, EvenQ, 3]]", "TakeWhile[{1, 2}, EvenQ, 3]");
+    audit_chk("MapAll#1", "Quiet[Check[MapAll[f, {a, b}, 3], fired, MapAll::nonopt]]", "fired");
+    audit_chk("MapAll#1", "Quiet[MapAll[f, {a, b}, 3]]", "MapAll[f, {a, b}, 3]");
+    audit_chk("MapAll#2", "Quiet[Check[MapAll[f, {a, b}, Foo -> 1], fired, MapAll::optx]]", "fired");
+    audit_chk("MapAll#2", "Quiet[MapAll[f, {a, b}, Foo -> 1]]", "MapAll[f, {a, b}, Foo -> 1]");
+    audit_chk("Apply#5", "Quiet[Check[Apply[f, {a, b}, {1}, 7], fired, Apply::nonopt]]", "fired");
+    audit_chk("Apply#5", "Quiet[Apply[f, {a, b}, {1}, 7]]", "Apply[f, {a, b}, {1}, 7]");
+    audit_chk("Scan#3", "Quiet[Check[Scan[s12p, {a}, 1, 2], fired, Scan::nonopt]]", "fired");
+    audit_chk("Scan#3", "Quiet[Scan[s12p, {a}, 1, 2]]", "Scan[s12p, {a}, 1, 2]");
+    audit_chk("Scan#4", "Quiet[Check[Scan[s12p, {a}, Foo -> True], fired, Scan::optx]]", "fired");
+    audit_chk("Scan#4", "Quiet[Scan[s12p, {a}, Foo -> True]]", "Scan[s12p, {a}, Foo -> True]");
+    audit_chk("MapAll#2", "MapAll[f, g[a], Heads -> True]", "f[f[g][f[a]]]");
+    audit_chk("Scan#4", "Reap[Scan[Sow, f[a], Heads -> True]][[2]]", "{{f, a}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fixedpointlist_long_symbolic);
@@ -198,5 +239,6 @@ int main(void) {
     TEST(test_function_scope_capture);
     TEST(test_level_spec_infinity);
     TEST(test_s14_level_specs);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_functional_programming");
 }

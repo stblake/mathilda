@@ -64,10 +64,26 @@ static void test_s14_directoryname_os(void) {
               "True");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Environment#2", "Quiet[Check[Environment[Sequence[]], fired, Environment::argx]]", "fired");
+    audit_chk("Environment#2", "Quiet[Environment[Sequence[]]]", "Environment[]");
+    audit_chk("OpenRead#2", "Quiet[Check[OpenRead[], fired, OpenRead::argx]]", "fired");
+    audit_chk("OpenRead#2", "Quiet[OpenRead[]]", "OpenRead[]");
+    audit_chk("FileNameSplit#3", "Quiet[Check[FileNameSplit[\"a\", \"b\"], fired, FileNameSplit::nonopt]]", "fired");
+    audit_chk("FileNameSplit#3", "Quiet[FileNameSplit[\"a\", \"b\"]]", "FileNameSplit[\"a\", \"b\"]");
+    audit_chk("ReadList#4", "Quiet[Check[ReadList[StringToStream[\"a b\"], Word, Bar -> 1], fired, ReadList::optx]]", "fired");
+}
+
 int main(void) {
     audit_init();
     TEST(test_export_graphics_raster_no_crash);
     TEST(test_read_number_literal_only);
     TEST(test_s14_directoryname_os);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_file_io");
 }

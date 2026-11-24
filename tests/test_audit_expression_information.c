@@ -74,11 +74,60 @@ static void test_s14_memberq_levels(void) {
     audit_chk("MemberQ#1", "MemberQ[{{a}}, {a}, {-1}]", "False");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("MemberQ#3", "Quiet[Check[MemberQ[{1}, 1, x], fired, MemberQ::level]]", "fired");
+    audit_chk("MemberQ#3", "Quiet[Check[MemberQ[{1}, 1, 1, 1], fired, MemberQ::nonopt]]", "fired");
+    audit_chk("MemberQ#3", "Quiet[Check[MemberQ[], fired, MemberQ::argb]]", "fired");
+    audit_chk("FreeQ#1", "Quiet[Check[FreeQ[f[x], x, a], fired, FreeQ::level]]", "fired");
+    audit_chk("FreeQ#1", "Quiet[Check[FreeQ[f[x], x, Foo -> 1], fired, FreeQ::optx]]", "fired");
+    audit_chk("FreeQ#1", "Quiet[Check[FreeQ[f[x], x, 1, 2], fired, FreeQ::nonopt]]", "fired");
+    audit_chk("FreeQ#1", "FreeQ[f[a], f, Heads -> False]", "True");
+    audit_chk("SetAttributes#3", "Quiet[Check[SetAttributes[f], fired, SetAttributes::argr]]", "fired");
+    audit_chk("SetAttributes#3", "Quiet[SetAttributes[f]]", "SetAttributes[f]");
+    audit_chk("Activate#2", "Quiet[Check[Activate[a, b, c], fired, Activate::argt]]", "fired");
+    audit_chk("Activate#2", "Quiet[Activate[a, b, c]]", "Activate[a, b, c]");
+    audit_chk("AtomQ#2", "Quiet[Check[AtomQ[1, 2], fired, AtomQ::argx]]", "fired");
+    audit_chk("AtomQ#2", "Quiet[AtomQ[1, 2]]", "AtomQ[1, 2]");
+    audit_chk("ByteCount#3", "Quiet[Check[ByteCount[1, 2], fired, ByteCount::argx]]", "fired");
+    audit_chk("ByteCount#3", "Quiet[ByteCount[1, 2]]", "ByteCount[1, 2]");
+    audit_chk("ClearAttributes#5", "Quiet[Check[ClearAttributes[f, Listable, Flat], fired, ClearAttributes::argrx]]", "fired");
+    audit_chk("ClearAttributes#5", "Quiet[ClearAttributes[f, Listable, Flat]]", "ClearAttributes[f, Listable, Flat]");
+    audit_chk("EvenQ#1", "Quiet[Check[EvenQ[2, 3], fired, EvenQ::argx]]", "fired");
+    audit_chk("EvenQ#1", "Quiet[EvenQ[2, 3]]", "EvenQ[2, 3]");
+    audit_chk("ExactNumberQ#2", "Quiet[Check[ExactNumberQ[], fired, ExactNumberQ::argx]]", "fired");
+    audit_chk("ExactNumberQ#2", "Quiet[ExactNumberQ[]]", "ExactNumberQ[]");
+    audit_chk("Hash#2", "Quiet[Check[Hash[1, \"Expression\", \"Integer\", 4], fired, Hash::argb]]", "fired");
+    audit_chk("Hash#2", "Quiet[Hash[1, \"Expression\", \"Integer\", 4]]", "Hash[1, \"Expression\", \"Integer\", 4]");
+    audit_chk("InexactNumberQ#2", "Quiet[Check[InexactNumberQ[1., 2.], fired, InexactNumberQ::argx]]", "fired");
+    audit_chk("IntegerQ#1", "Quiet[Check[IntegerQ[1, 2], fired, IntegerQ::argx]]", "fired");
+    audit_chk("IntegerQ#1", "Quiet[IntegerQ[1, 2]]", "IntegerQ[1, 2]");
+    audit_chk("ListQ#1", "Quiet[Check[ListQ[{1}, {2}], fired, ListQ::argx]]", "fired");
+    audit_chk("ListQ#1", "Quiet[ListQ[{1}, {2}]]", "ListQ[{1}, {2}]");
+    audit_chk("MachineNumberQ#2", "Quiet[Check[MachineNumberQ[], fired, MachineNumberQ::argx]]", "fired");
+    audit_chk("MachineNumberQ#2", "Quiet[MachineNumberQ[]]", "MachineNumberQ[]");
+    audit_chk("MatrixQ#1", "Quiet[Check[MatrixQ[{{1}}, NumberQ, 3], fired, MatrixQ::argt]]", "fired");
+    audit_chk("MatrixQ#1", "Quiet[MatrixQ[{{1}}, NumberQ, 3]]", "MatrixQ[{{1}}, NumberQ, 3]");
+    audit_chk("NumberQ#2", "Quiet[Check[NumberQ[1, 2], fired, NumberQ::argx]]", "fired");
+    audit_chk("NumberQ#2", "Quiet[NumberQ[1, 2]]", "NumberQ[1, 2]");
+    audit_chk("NumericQ#4", "Quiet[Check[NumericQ[1, 2], fired, NumericQ::argx]]", "fired");
+    audit_chk("NumericQ#4", "Quiet[NumericQ[1, 2]]", "NumericQ[1, 2]");
+    audit_chk("OddQ#1", "Quiet[Check[OddQ[], fired, OddQ::argx]]", "fired");
+    audit_chk("OddQ#1", "Quiet[OddQ[]]", "OddQ[]");
+    audit_chk("StringQ#1", "Quiet[Check[StringQ[Sequence[\"a\", \"b\"]], fired, StringQ::argx]]", "fired");
+    audit_chk("StringQ#1", "Quiet[StringQ[Sequence[\"a\", \"b\"]]]", "StringQ[\"a\", \"b\"]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_bytecount_deep_nesting);
     TEST(test_positive_exact_zero);
     TEST(test_endpackage_unclosed_begin);
     TEST(test_s14_memberq_levels);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_expression_information");
 }

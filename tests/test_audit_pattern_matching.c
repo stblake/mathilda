@@ -49,9 +49,29 @@ static void test_s14_level_specs(void) {
     audit_chk("Optional#1", "MatchQ[a, _Integer:0]", "False");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Count#3", "Quiet[Check[Count[{1, 2}, 1, \"a\"], fired, Count::level]]", "fired");
+    audit_chk("Count#3", "Quiet[Check[Count[{1, 2}, 1, {1}, 5], fired, Count::nonopt]]", "fired");
+    audit_chk("Count#3", "Quiet[Check[Count[], fired, Count::argb]]", "fired");
+    audit_chk("Count#3", "Count[{a -> b, c}, a -> b]", "1");
+    audit_chk("Count#3", "Count[a -> b][{a -> b}]", "1");
+    audit_chk("MatchQ#3", "Quiet[Check[MatchQ[1, 2, 3], fired, MatchQ::argt]]", "fired");
+    audit_chk("MatchQ#3", "Quiet[MatchQ[1, 2, 3]]", "MatchQ[1, 2, 3]");
+    audit_chk("FirstPosition#1", "Quiet[Check[FirstPosition[{a}], fired, FirstPosition::argbu]]", "fired");
+    audit_chk("FirstPosition#1", "Quiet[FirstPosition[{a}]]", "FirstPosition[{a}]");
+    audit_chk("ReplaceList#3", "Quiet[Check[ReplaceList[a, b, c, d], fired, ReplaceList::argt]]", "fired");
+    audit_chk("ReplaceList#3", "Quiet[ReplaceList[a, b, c, d]]", "ReplaceList[a, b, c, d]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_condition_on_patternsequence);
     TEST(test_s14_level_specs);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_pattern_matching");
 }

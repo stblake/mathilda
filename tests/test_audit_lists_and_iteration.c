@@ -113,6 +113,23 @@ static void test_s14_arraypad_levels(void) {
     audit_true("ArrayPad#2", "ArrayPad[{{1, 2}, {3, 4}}, {{0, 0}, {1, 0}}] === {{0, 1, 2}, {0, 3, 4}}");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("GroupElements#2", "Quiet[Check[GroupElements[], fired, GroupElements::argt]]", "fired");
+    audit_chk("GroupElements#2", "Quiet[GroupElements[]]", "GroupElements[]");
+    audit_chk("PermutationCycles#2", "Quiet[Check[PermutationCycles[{2, 1}, h, 3], fired, PermutationCycles::argt]]", "fired");
+    audit_chk("PermutationCycles#2", "Quiet[PermutationCycles[{2, 1}, h, 3]]", "PermutationCycles[{2, 1}, h, 3]");
+    audit_chk("Signature#1", "Quiet[Check[Signature[{1, 2}, {3}], fired, Signature::argx]]", "fired");
+    audit_chk("Signature#1", "Quiet[Signature[{1, 2}, {3}]]", "Signature[{1, 2}, {3}]");
+    audit_chk("UnitVector#3", "Quiet[Check[UnitVector[3, 1, Foo -> 2], fired, UnitVector::optx]]", "fired");
+    audit_chk("UnitVector#3", "Quiet[UnitVector[3, 1, Foo -> 2]]", "UnitVector[3, 1, Foo -> 2]");
+    audit_chk("UnitVector#2", "UnitVector[3, 1, {WorkingPrecision -> MachinePrecision}]", "{1.0, 0.0, 0.0}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
@@ -122,5 +139,6 @@ int main(void) {
     TEST(test_arraypad_spec_too_deep);
     TEST(test_permutations_at_most_n);
     TEST(test_s14_arraypad_levels);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_lists_and_iteration");
 }

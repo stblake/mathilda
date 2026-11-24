@@ -120,6 +120,18 @@ static void test_covariance_row_mismatch(void) {
     audit_true("Covariance#1", "Covariance[{1, 2, 4}, {1, 3, 2}] === 1/2");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("CentralMoment#3", "Quiet[Check[CentralMoment[{1, 2, 3}], fired, CentralMoment::argr]]", "fired");
+    audit_chk("CentralMoment#3", "Quiet[CentralMoment[{1, 2, 3}]]", "CentralMoment[{1, 2, 3}]");
+    audit_chk("Covariance#2", "Quiet[Check[Covariance[{1, 2}, {3, 4}, {5, 6}], fired, Covariance::argt]]", "fired");
+    audit_chk("Covariance#2", "Quiet[Covariance[{1, 2}, {3, 4}, {5, 6}]]", "Covariance[{1, 2}, {3, 4}, {5, 6}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_median_numeric_order);
@@ -131,5 +143,6 @@ int main(void) {
     TEST(test_quantile_ragged);
     TEST(test_quartiles_ragged);
     TEST(test_covariance_row_mismatch);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_statistics");
 }

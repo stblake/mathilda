@@ -46,6 +46,7 @@
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
 #include "calculus/series.h" /* series_apply_unary: f[SeriesData] composes */
+#include "arity.h"           /* declared argument counts (step 5) */
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -2276,6 +2277,11 @@ static bool is_n_target(const Expr* e) {
  * $Failed (SetDelayed) rather than staying unevaluated; any element bound
  * before the mismatch -- the a of {a, {b, c}} = {1, {2}} -- stays bound. */
 static bool g_set_shape_error = false;
+/* Set when apply_assignment refused a write to a Protected symbol or tag
+ * (Set::write / Set::wrsym already reported): SetDelayed then answers
+ * $Failed, as the reference does (Sin[x_] := 7), while Set answers its
+ * right-hand side (Pi = 3 is 3). */
+static bool g_set_refused = false;
 
 /* Find the first List-vs-List length mismatch in a destructuring target and
  * report it as Set::shape (SetDelayed::shape), naming the innermost pair as the
@@ -2323,6 +2329,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * symbol refuses them (audit Options#1: Options[Sin] = {...}). */
         const char* osym = lhs->data.function.args[0]->data.symbol.name;
         if (get_attributes(osym) & ATTR_PROTECTED) {
+            g_set_refused = true;
             mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                         "Tag %s in Options[%s] is Protected.", osym, osym);
             return true;
@@ -2364,6 +2371,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         if (tag) {
             if (get_attributes(tag) & ATTR_PROTECTED) {
                 char* lt = expr_to_string_outputform(lhs->data.function.args[0]);
+                g_set_refused = true;
                 mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                             "Tag %s in %s is Protected.", tag, lt ? lt : "");
                 free(lt);
@@ -2388,6 +2396,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         if (tag) {
             if (get_attributes(tag) & ATTR_PROTECTED) {
                 char* lt = expr_to_string_outputform(lhs);
+                g_set_refused = true;
                 mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                             "Tag %s in %s is Protected.", tag, lt ? lt : "");
                 free(lt);
@@ -2419,6 +2428,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         if (get_attributes(target) & ATTR_PROTECTED) {
             /* Mathematica reports this as Set::write ("Tag f in DownValues[f] is
              * Protected."), not Set::wrsym -- match it so `::write` greps hit. */
+            g_set_refused = true;
             mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                         "Tag %s in %s[%s] is Protected.", target, h, target);
             return true;
@@ -2456,6 +2466,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         const char* dsym = lhs->data.function.args[0]->data.symbol.name;
         if (get_attributes(dsym) & ATTR_PROTECTED) {
             char* lt = expr_to_string_outputform(lhs);
+            g_set_refused = true;
             mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                         "Tag %s in %s is Protected.", dsym, lt ? lt : "");
             free(lt);
@@ -2469,10 +2480,12 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             /* A symbol LHS is ::wrsym; a rule for a protected tag is ::write,
              * naming the LHS, as the reference reports them. */
             if (lhs->type == EXPR_SYMBOL) {
+                g_set_refused = true;
                 mth_message(is_delayed ? "SetDelayed" : "Set", "wrsym",
                             "Symbol %s is Protected.", target);
             } else {
                 char* lt = expr_to_string_outputform(lhs);
+                g_set_refused = true;
                 mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                             "Tag %s in %s is Protected.", target, lt ? lt : "");
                 free(lt);
@@ -2716,6 +2729,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 const char* sub_sym = symtab_innermost_head(inner);
                 if (sub_sym) {
                     if (get_attributes(sub_sym) & ATTR_PROTECTED) {
+                        g_set_refused = true;
                         mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                                     "Tag %s in the assignment is Protected.", sub_sym);
                         if (actual_pattern != lhs) expr_free(actual_pattern);
@@ -2739,6 +2753,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             const char* sub_sym = symtab_innermost_head(lhs);
             if (!sub_sym) return false;
             if (get_attributes(sub_sym) & ATTR_PROTECTED) {
+                g_set_refused = true;
                 mth_message(is_delayed ? "SetDelayed" : "Set", "write",
                             "Tag %s in the assignment is Protected.", sub_sym);
                 return true;
@@ -3656,6 +3671,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             /* Messages fired so far: a head that reports a message while
              * declining has rejected the call (see the post-gate). */
             const unsigned long step_msgs_before = mth_msg_fired_count();
+            /* The head's declared arity rejected the call (step 5-pre). */
+            bool arity_rejected = false;
 
             /* Trace: snapshot the reassembled f[evaluated_args] form, before
              * flatten/Flat/Listable/Orderless and before any rule fires, so the
@@ -4306,8 +4323,18 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     }
                 }
 
+                /* 5-pre. Declared argument count and options (src/arity.h).
+                 * The head's rules have declined; a call outside its declared
+                 * arity prints argx/argr/.../nonopt/optx and comes to rest
+                 * unevaluated without reaching the C code. One byte test
+                 * for an undeclared head, two compares for a declared one. */
+                if (hdef && hdef->arity_flags &&
+                    arity_call_suspect(hdef, res->data.function.arg_count,
+                                       res->data.function.args))
+                    arity_rejected = arity_check_slow(hdef, res);
+
                 /* 5. Call C-level Built-in Functions (internal "down code") */
-                if (hdef && hdef->builtin_func) {
+                if (hdef && hdef->builtin_func && !arity_rejected) {
                     /* Trace: a builtin's internal evaluate() calls (e.g. Range
                      * folding i+1) are the rule's own computation, not user
                      * argument sub-evaluations -- hide them so the builtin shows
@@ -4485,7 +4512,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                  * builtin, so user overrides and the tight elementary handlers
                  * already win. The common no-interval path costs only a bit test
                  * plus a cheap argument scan on this already-cold branch. */
-                if (hdef && (attrs & ATTR_NUMERICFUNCTION) &&
+                if (hdef && !arity_rejected && (attrs & ATTR_NUMERICFUNCTION) &&
                     res->type == EXPR_FUNCTION) {
                     for (size_t i = 0; i < res->data.function.arg_count; i++) {
                         if (is_interval(res->data.function.args[i])) {
@@ -4512,7 +4539,18 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     Expr* target_lhs = build_assignment_target(lhs, &free_target);
 
                     g_set_shape_error = false;
+                    g_set_refused = false;
                     if (apply_assignment(target_lhs, rhs, is_delayed)) {
+                        if (g_set_refused && is_delayed) {
+                            /* SetDelayed::write / ::wrsym reported */
+                            g_set_refused = false;
+                            if (free_target) expr_free(target_lhs);
+                            expr_free(res);
+                            *changed = true;
+                            g_step_settled_depth = eval_recursion_depth;
+                            return expr_new_symbol(SYM_DollarFailed);
+                        }
+                        g_set_refused = false;
                         /* The value of x = rhs is rhs, already evaluated as this
                          * step's argument. It needs another evaluation only if
                          * the assignment can have changed it -- if it mentions a
@@ -4842,7 +4880,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
 
             /* A head with a native sparse path declined this call: the
              * transparency gate is its fallback (see the pre-gate above). */
-            if (hdef && (hdef->sparse_mode & SPG_NATIVE) && sp_any_created() &&
+            if (hdef && !arity_rejected && (hdef->sparse_mode & SPG_NATIVE) && sp_any_created() &&
                 eval_sparse_gate_applies(res, hdef->sparse_mode)) {
                 bool rest = false;
                 g_trace_suppress++;
@@ -4887,7 +4925,11 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * materialised form rests too, rather than being re-asked and
              * printing the message again. (A Listable head's materialised
              * call still threads on the next step.) */
-            if ((!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc)) ||
+            /* A call its head's declared arity rejected rests too, even after
+             * a Sequence splice: re-asking it would print the message again
+             * (Minus[Sequence[1, 2]] printed Minus::argx twice). */
+            if (arity_rejected ||
+                (!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc)) ||
                 (post_gated && !(attrs & ATTR_LISTABLE) &&
                  mth_msg_fired_count() != step_msgs_before))
                 g_step_settled_depth = eval_recursion_depth;

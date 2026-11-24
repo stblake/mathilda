@@ -107,6 +107,42 @@ static void test_s14_continue_toplevel(void) {
     mth_msg_suppress_pop();
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Catch#1", "Quiet[Check[Catch[1, 2, 3, 4], fired, Catch::argb]]", "fired");
+    audit_chk("Catch#1", "Quiet[Catch[1, 2, 3, 4]]", "Catch[1, 2, 3, 4]");
+    audit_chk("For#5", "Quiet[Check[For[s12i = 0, s12i < 3], fired, For::argb]]", "fired");
+    audit_chk("For#5", "Quiet[For[s12i = 0, s12i < 3]]", "For[s12i = 0, s12i < 3]");
+    audit_chk("If#1", "Quiet[Check[If[True], fired, If::argbu]]", "fired");
+    audit_chk("If#1", "Quiet[If[True]]", "If[True]");
+    audit_chk("Not#1", "Quiet[Check[Not[a, b], fired, Not::argx]]", "fired");
+    audit_chk("Not#1", "Quiet[Not[a, b]]", "Not[a, b]");
+    audit_chk("While#2", "Quiet[Check[While[1, 2, 3], fired, While::argb]]", "fired");
+    audit_chk("While#2", "Quiet[While[1, 2, 3]]", "While[1, 2, 3]");
+    audit_chk("AbortProtect#2", "Quiet[Check[AbortProtect[1, 2], fired, AbortProtect::argx]]", "fired");
+    audit_chk("AbortProtect#2", "Quiet[AbortProtect[1, 2]]", "AbortProtect[1, 2]");
+    audit_chk("Boole#3", "Quiet[Check[Boole[True, False], fired, Boole::argx]]", "fired");
+    audit_chk("Boole#3", "Quiet[Boole[True, False]]", "Boole[True, False]");
+    audit_chk("CheckAbort#1", "Quiet[Check[CheckAbort[x], fired, CheckAbort::argr]]", "fired");
+    audit_chk("CheckAbort#1", "Quiet[CheckAbort[x]]", "CheckAbort[x]");
+    audit_chk("Goto#1", "Quiet[Check[Goto[1, 2], fired, Goto::argx]]", "fired");
+    audit_chk("Goto#1", "Quiet[Goto[1, 2]]", "Goto[1, 2]");
+    audit_chk("Implies#1", "Quiet[Check[Implies[p], fired, Implies::argr]]", "fired");
+    audit_chk("Implies#1", "Quiet[Implies[p]]", "Implies[p]");
+    audit_chk("Monitor#1", "Quiet[Check[Monitor[x], fired, Monitor::argr]]", "fired");
+    audit_chk("Monitor#1", "Quiet[Monitor[x]]", "Monitor[x]");
+    audit_chk("Quiet#1", "Quiet[Check[Quiet[1/0, All, None, x], fired, Quiet::argb]]", "fired");
+    audit_chk("TrueQ#1", "Quiet[Check[TrueQ[True, False], fired, TrueQ::argx]]", "fired");
+    audit_chk("TrueQ#1", "Quiet[TrueQ[True, False]]", "TrueQ[True, False]");
+    audit_chk("Dialog#1", "Quiet[Check[Dialog[Sequence[1, 2]], fired, Dialog::nonopt]]", "fired");
+    audit_chk("Dialog#1", "Quiet[Dialog[Sequence[1, 2]]]", "Dialog[1, 2]");
+    audit_chk("Quiet#1", "Quiet[Quiet[1/0, All, None, x]]", "Quiet[1/0, All, None, x]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_for_start_throw);
@@ -115,5 +151,6 @@ int main(void) {
     TEST(test_numloop_exact_types);
     TEST(test_conditionalexpression_propagates);
     TEST(test_s14_continue_toplevel);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_control_flow");
 }

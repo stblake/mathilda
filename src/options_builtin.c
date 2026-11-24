@@ -563,6 +563,8 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("VerifyConvergence", "True"));
     ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
+    ob_add(&b, r_sym("Compiled", "Automatic"));        /* accepted, ignored */
+    ob_add(&b, r_sym("EvaluationMonitor", "None"));
     ob_commit(&b, "NSum");
 
     ob_init(&b);
@@ -954,6 +956,7 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("Sort", "False"));
     ob_add(&b, r_int("Modulus", 0));
+    ob_add(&b, r_list0("ParameterVariables"));
     ob_commit(&b, "GroebnerBasis");
 
     ob_init(&b);
@@ -992,15 +995,39 @@ void options_register_defaults(void) {
     ob_commit(&b, "PolynomialExtendedGCD");
 
     /* ---- Linear algebra ---- */
-    ob_init(&b);
-    ob_add(&b, r_sym("Cubics", "False"));
-    ob_add(&b, r_sym("Quartics", "False"));
-    ob_commit(&b, "Eigenvalues");
+    /* the options eigen_parse_options reads */
+    const char* eig_fns[] = { "Eigenvalues", "Eigenvectors", "Eigensystem" };
+    for (size_t i = 0; i < sizeof(eig_fns) / sizeof(eig_fns[0]); i++) {
+        ob_init(&b);
+        ob_add(&b, r_sym("Cubics", "False"));
+        ob_add(&b, r_sym("Method", "Automatic"));
+        ob_add(&b, r_sym("Quartics", "False"));
+        ob_commit(&b, eig_fns[i]);
+    }
 
     ob_init(&b);
-    ob_add(&b, r_sym("Cubics", "False"));
-    ob_add(&b, r_sym("Quartics", "False"));
-    ob_commit(&b, "Eigenvectors");
+    ob_add(&b, r_sym("Pivoting", "False"));
+    ob_add(&b, r_sym("TargetStructure", "Automatic"));
+    ob_commit(&b, "QRDecomposition");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("Pivoting", "False"));
+    ob_add(&b, r_sym("RealBlockDiagonalForm", "True"));
+    ob_add(&b, r_sym("TargetStructure", "Automatic"));
+    ob_commit(&b, "SchurDecomposition");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("MaxRecursion", "Automatic"));
+    ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_commit(&b, "WaveletPhi");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("DataType", "Automatic"));
+    ob_commit(&b, "ToNDArray");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("ColorSpace", "Automatic"));
+    ob_commit(&b, "RandomImage");
 
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
@@ -1068,12 +1095,28 @@ void options_register_defaults(void) {
         { "MemberQ", "False" }, { "Position", "True" }, { "FirstPosition", "True" }, { "FreeQ", "True" },
         { "Level", "False" }, { "Depth", "False" }, { "LeafCount", "False" },
         { "Map", "False" }, { "Apply", "False" }, { "MapAll", "False" },
+        { "Scan", "False" }, { "Replace", "False" },
         { "MapIndexed", "False" },
     };
     for (size_t i = 0; i < sizeof(heads_fns) / sizeof(heads_fns[0]); i++) {
         ob_init(&b);
         ob_add(&b, r_sym("Heads", heads_fns[i].dflt));
         ob_commit(&b, heads_fns[i].fn);
+    }
+
+    /* ---- Matrix constructors and tests reading one option ---- */
+    const char* wp_fns[] = { "HilbertMatrix", "UnitVector" };
+    for (size_t i = 0; i < sizeof(wp_fns) / sizeof(wp_fns[0]); i++) {
+        ob_init(&b);
+        ob_add(&b, r_sym("WorkingPrecision", "Infinity"));
+        ob_commit(&b, wp_fns[i]);
+    }
+    const char* tol_fns[] = { "DiagonalMatrixQ", "UpperTriangularMatrixQ",
+                              "LowerTriangularMatrixQ" };
+    for (size_t i = 0; i < sizeof(tol_fns) / sizeof(tol_fns[0]); i++) {
+        ob_init(&b);
+        ob_add(&b, r_int("Tolerance", 0));
+        ob_commit(&b, tol_fns[i]);
     }
 
     /* ---- Fixed-point iteration ---- */

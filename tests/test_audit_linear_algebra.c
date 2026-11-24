@@ -311,6 +311,44 @@ static void test_gsvd_diagonal(void) {
                "Transpose[{{2., 1.}, {1., 3.}}] . {{2., 1.}, {1., 3.}}}]]]] < 10^-12]");
 }
 
+/* Wave 3 S12/S13: declared argument counts and option checks
+ * (src/arity.h, src/arity_table.c).  The evaluator checks a call
+ * against its head's declared arity before the C code runs and
+ * prints argx/argr/argrx/argt(u)/argb(u)/argm(u), nonopt or optx;
+ * the call stays unevaluated. */
+static void test_wave3_arity_options(void) {
+    audit_chk("Det#2", "Quiet[Check[Det[], fired, Det::argx]]", "fired");
+    audit_chk("Det#2", "Quiet[Det[]]", "Det[]");
+    audit_chk("Eigensystem#3", "Quiet[Check[Eigensystem[], fired, Eigensystem::argt]]", "fired");
+    audit_chk("Eigensystem#3", "Quiet[Eigensystem[]]", "Eigensystem[]");
+    audit_chk("Norm#5", "Quiet[Check[Norm[{1, 2}, 2, 3], fired, Norm::argt]]", "fired");
+    audit_chk("Norm#5", "Quiet[Norm[{1, 2}, 2, 3]]", "Norm[{1, 2}, 2, 3]");
+    audit_chk("LUDecomposition#2", "Quiet[Check[LUDecomposition[{{1, 2}, {3, 4}}, x], fired, LUDecomposition::argx]]", "fired");
+    audit_chk("QRDecomposition#3", "Quiet[Check[QRDecomposition[], fired, QRDecomposition::argx]]", "fired");
+    audit_chk("QRDecomposition#3", "Quiet[QRDecomposition[]]", "QRDecomposition[]");
+    audit_chk("Tr#1", "Quiet[Check[Tr[{{1, 2}, {3, 4}}, Plus, 1, 2], fired, Tr::argb]]", "fired");
+    audit_chk("VandermondeMatrix#2", "Quiet[Check[VandermondeMatrix[{1, 2}, 2, 3], fired, VandermondeMatrix::argt]]", "fired");
+    audit_chk("VandermondeMatrix#2", "Quiet[VandermondeMatrix[{1, 2}, 2, 3]]", "VandermondeMatrix[{1, 2}, 2, 3]");
+    audit_chk("Eigensystem#2", "Quiet[Check[Eigensystem[{{1, 2}, {3, 4}}, Foo -> 1], fired, Eigensystem::optx]]", "fired");
+    audit_chk("Eigenvalues#5", "Quiet[Check[Eigenvalues[{{1, 2}, {3, 4}}, Foo -> 1], fired, Eigenvalues::optx]]", "fired");
+    audit_chk("Fit#4", "Quiet[Check[Fit[{{0, 1}, {1, 2}, {2, 3}}, {1, x}, x, Foo -> 1], fired, Fit::optx]]", "fired");
+    audit_chk("Inverse#3", "Quiet[Check[Inverse[{{1}}, {{2}}], fired, Inverse::nonopt]]", "fired");
+    audit_chk("Inverse#3", "Quiet[Inverse[{{1}}, {{2}}]]", "Inverse[{{1}}, {{2}}]");
+    audit_chk("LinearSolve#3", "Quiet[Check[LinearSolve[{{1, 2}, {3, 4}}, {5, 6}, Foo -> 1], fired, LinearSolve::optx]]", "fired");
+    audit_chk("DiagonalMatrixQ#3", "Quiet[Check[DiagonalMatrixQ[{{1}}, Foo -> 1], fired, DiagonalMatrixQ::optx]]", "fired");
+    audit_chk("DiagonalMatrixQ#3", "Quiet[DiagonalMatrixQ[{{1}}, Foo -> 1]]", "DiagonalMatrixQ[{{1}}, Foo -> 1]");
+    audit_chk("MatrixFunction#3", "Quiet[Check[MatrixFunction[Sin, {{1, 2}, {3, 4}}, Foo -> 1], fired, MatrixFunction::optx]]", "fired");
+    audit_chk("NullSpace#3", "Quiet[Check[NullSpace[{{1, 2}, {3, 4}}, 5], fired, NullSpace::nonopt]]", "fired");
+    audit_chk("NullSpace#3", "Quiet[NullSpace[{{1, 2}, {3, 4}}, 5]]", "NullSpace[{{1, 2}, {3, 4}}, 5]");
+    audit_chk("QRDecomposition#4", "Quiet[Check[QRDecomposition[{{1, 2}, {3, 4}}, Foo -> 1], fired, QRDecomposition::optx]]", "fired");
+    audit_chk("SchurDecomposition#4", "Quiet[Check[SchurDecomposition[{{1., 2.}, {3., 4.}}, Foo -> 1], fired, SchurDecomposition::optx]]", "fired");
+    audit_chk("Eigenvalues#5", "Eigenvalues[{{2, 0}, {0, 3}}, Cubics -> True]", "{3, 2}");
+    audit_chk("DiagonalMatrixQ#2", "{DiagonalMatrixQ[{{1, 0.001}, {0, 1}}, Tolerance :> 0.01], DiagonalMatrixQ[{{1, 0.001}, {0, 1}}, {Tolerance -> 0.01}]}", "{True, True}");
+    audit_chk("HilbertMatrix#3", "HilbertMatrix[2, {WorkingPrecision -> MachinePrecision}] === HilbertMatrix[2, WorkingPrecision -> MachinePrecision]", "True");
+    audit_chk("QRDecomposition#4", "Module[{n = 0}, Do[Quiet[Check[QRDecomposition[{{1, 2}, {3, 4}}, Foo -> 1], n++, QRDecomposition::optx]], {2}]; n]", "2");
+    audit_chk("UpperTriangularMatrixQ#2", "{UpperTriangularMatrixQ[{{1, 2}, {1*^-20, 3}}, 0, {Tolerance -> 1*^-10}], UpperTriangularMatrixQ[{{1, 2}, {1*^-20, 3}}, Tolerance :> 1*^-10]}", "{True, True}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fit_general_norm);
@@ -333,5 +371,6 @@ int main(void) {
     TEST(test_ndarray_infinity);
     TEST(test_ndarray_nonfinite);
     TEST(test_gsvd_diagonal);
+    TEST(test_wave3_arity_options);
     return audit_finish("audit_linear_algebra");
 }

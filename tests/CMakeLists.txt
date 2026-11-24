@@ -947,6 +947,8 @@ set(COMMON_SRC
     ../src/precision.c
     ../src/rationalize.c
     ../src/common.c
+    ../src/arity.c
+    ../src/arity_table.c
     ../src/poly/zupoly.c
     ../src/poly/flint_bridge.c
     ../src/poly/flint_trager.c
