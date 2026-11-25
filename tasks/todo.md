@@ -94,7 +94,40 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
   - Gates: check-linkedlist shows 4 differences that predate Wave 4 (GatherBy, Grad, Integrate
     message, Reverse with a LinkedList level spec) and a stale baseline (195 fixed entries);
     integrate_roach_tests and bronstein_phase5 line 418 failed on v0.6733 before Wave 4 began.
-- [ ] Wave 5: low by tier (848 open)
+- [x] Wave 5: low findings, nine subsystem groups (2026-11-25/26) -- landed as v0.6743 (core eval;
+  89/111), v0.6745 (graphs, linear algebra, ML; 98/114; edge-list graph argument for ~70 heads),
+  v0.6746 (special/elementary functions; 87/95), v0.6747 (graphics, geometry; 77/78), v0.6748
+  (arithmetic, strings, statistics, random, number theory, dates, Fourier, bitwise; 104/109;
+  $MessageList appends no longer bump the clock, a declined Orderless/Flat call rests), v0.6749
+  (structural, lists, data structures, packed arrays; 92/99), v0.6750 (image processing; 52 pinned,
+  2 partial), v0.6751 (file I/O, control flow, uncategorised; 71/72; General::stop after three
+  copies of a message, stdout/stderr registered so stream ids start at 3), v0.6752 (calculus,
+  solving, simplification, algebra, series, numerics; 101/118). Another session took v0.6744.
+  Integration fixes: duplicate Keys arity row; opform registry union; regex error path (one
+  message, at the user's offset); G7 pins re-stated for General::stop; Subsets EXEMPT in
+  check-packed-aware; G5's negated-sum and I Pi shift helpers dropped for G1's broader ones,
+  inverse-trig tables = G1's evaluated-value cache + G5's Pi/8 entries; Fourier keeps both the
+  fpopt and up-front fftl checks. tools/audit_backlog.py now counts pins made through a file-local
+  wrapper (31 rows); random-draw rows keep their verdict without a pinned output.
+  Report at v0.6752: 2337 fixed / 138 open; critical 14/0, high 212/2, medium 858/61, low 1253/75.
+  - Wave 5 leftovers (low): ToString#3 (prefix ! / postfix [[...]] in the printer), Longest#2,
+    Interpolation#3/ListInterpolation#3, Trace#4; Log10-style canonical Log[1/n] is done, but
+    BetaRegularized#3 (large a, b), ParabolicCylinderD#2 (nu = 10^6); NDArray#5, PageRankCentrality#3
+    (per-vertex list), RowReduce#4 (Tolerance); Integrate#5 (ConditionalExpression for symbolic
+    endpoints), Maximize#2/Minimize#4, DSolve#1/#3/#4, InterpolatingFunction#1, NDEigenvalues#3,
+    NumberFieldIntegralBasis#1, Fourier#3, Exp#3 symbolic part; ImageResize#3 named sizes;
+    BeginPackage#1 (Needs), FileNames#2 regex (re-check), OpenAppend#1 FortranForm width (re-check),
+    ArcCos#4 / LaplaceTransform#7 partial. Declined by design or as large features: Definition#2,
+    PossibleZeroQ#4, Unique#3, Remove#4, FullForm#3/#5, ToString#2, QRDecomposition#2, CycleGraph#2,
+    FindShortestPath#2, LinearModelFit#4, MatrixExp#2 (Power), WaveletFilterCoefficients#2,
+    BarChart#6, N#1, SetPrecision#1, SetAccuracy#5, SeedRandom#5, ToCharacterCode#2, Gather#2,
+    PolynomialLCM#3, PolynomialMod#5, ArrayReshape#2, FactorList#1, PowerExpand#1,
+    EuclideanDistance#5, Export#6, Cancel#1, Cos#2, D#3, Sin#5, NIntegrate#4, Normal#2,
+    NumberFieldIntegralBasis#2 (needs Cyclotomic).
+  - Flaky under load (pass alone): image, dsolve (a 6 s TimeConstrained), pvec (timing ratio),
+    parallelmixed*, integrate_elliptic/gr132_1/gammapower, sparse_la_solve, bronstein_nf/perf, nint,
+    nminimize, eigensystem, term_editor_latency, repl_pty, meminfo. integrate_roach and
+    bronstein_phase5 now pass.
 
 # Evaluator: aborts that escape their constraint (2026-11-23)
 
