@@ -324,9 +324,25 @@ static Expr* pass_a_decompose(const Expr* e) {
 /* a > 0 under ctx: the per-symbol test first, then the reduction-based
  * entailment, which also decides a compound argument -- 1 - x and
  * (1 + x)/(1 - x) under 0 < x < 1, which the per-symbol test cannot. */
+/* Every symbol leaf of e (heads excluded) is provably real under ctx. */
+static bool symbols_all_real(const AssumeCtx* ctx, const Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) return prov_re(ctx, e);
+    if (e->type != EXPR_FUNCTION) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!symbols_all_real(ctx, e->data.function.args[i])) return false;
+    return true;
+}
+
 static bool log_arg_positive(const AssumeCtx* ctx, const Expr* a) {
     if (assume_known_positive(ctx, a)) return true;
     if (!ctx) return false;
+    /* The reduction-based entailment and Refine read a > 0 the way Reduce
+     * does, with every variable real: with no assumptions they "prove"
+     * 2 + x^2 > 0, and Log[2 + x^2] + Log[3 + x^2] fused to
+     * Log[6 + 5 x^2 + x^4], 2 Pi I off at x = 1 + 2 I.  They decide
+     * positivity only when the variables of a are known to be real. */
+    if (!symbols_all_real(ctx, a)) return false;
     if (prov_pos(ctx, a)) return true;      /* Refine's prover: Sin[x], Cos[x] on a box */
     Expr* gt = expr_new_function(expr_new_symbol(SYM_Greater),
                    (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(0) }, 2);
@@ -418,6 +434,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
     Expr** rest   = (Expr**)calloc(n, sizeof(Expr*));
     size_t n_log = 0, n_rest = 0;
     bool all_args_positive = true;
+    bool all_coeffs_real = true;
 
     for (size_t i = 0; i < n; i++) {
         Expr* t = plus_expr->data.function.args[i];
@@ -426,6 +443,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
             coeffs[n_log] = c;
             args[n_log]   = a;
             if (all_args_positive && !log_arg_positive(ctx, a)) all_args_positive = false;
+            if (all_coeffs_real && !prov_re(ctx, c)) all_coeffs_real = false;
             n_log++;
         } else {
             rest[n_rest++] = expr_copy(t);
@@ -560,7 +578,11 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
     size_t old_score = simp_default_complexity(plus_expr);
     size_t new_score = simp_default_complexity(new_plus);
     bool take;
-    if (all_args_positive) {
+    /* With every a_i > 0, Log[Product[a_i^r_i]] = Sum[r_i Log[a_i]] for
+     * integer r_i (the common-factor form), and Log[Product[a_i^c_i]] =
+     * Sum[c_i Log[a_i]] only for REAL c_i: x Log[2] + x^2 Log[3] is not
+     * Log[2^x 3^x^2] at x = 1 + 2 I. */
+    if (all_args_positive && (common || all_coeffs_real)) {
         take = new_score < old_score;
     } else {
         take = false;

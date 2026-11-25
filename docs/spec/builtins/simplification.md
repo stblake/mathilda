@@ -455,7 +455,15 @@ combinations of these. A list `{a1, a2, ...}` is treated as the conjunction
 `And[a1, a2, ...]`. Under provable positivity / reality, `Simplify` applies
 `Log`/`Power` identities — `Log[a b] -> Log[a] + Log[b]`, `(a b)^c -> a^c b^c`,
 `(a^p)^q -> a^(p q)`, `Log[a^p] -> p Log[a]` and the like — whenever the
-operand-domain conditions follow from the assumption set. Per-symbol sign facts
+operand-domain conditions follow from the assumption set. The reverse
+direction, fusing `Sum[c_i Log[a_i]]` into one `Log`, needs every `a_i > 0`
+and either integer ratios `c_i/c_1` (fused as `c_1 Log[Product[a_i^(c_i/c_1)]]`)
+or every `c_i` real. A positivity that the reduction-based entailment or
+`Refine` derives counts only when every variable of `a_i` is known to be real,
+since both read `a > 0` with real variables. So `Log[2 + x^2] + Log[3 + x^2]`
+and `x Log[2] + x^2 Log[3]` are left alone with no assumptions (each fusion
+is off by `2 Pi I` at `x = 1 + 2 I`), and are fused under
+`Element[x, Reals]`. Per-symbol sign facts
 drive `Sqrt[x^2] -> x` / `-x` / `Abs[x]`, and integer facts drive the
 `Sin[n Pi] -> 0`, `Cos[n Pi] -> (-1)^n` family.
 

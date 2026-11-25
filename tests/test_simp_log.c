@@ -88,10 +88,12 @@ void test_simp_log_golden_ratio(void) {
 /* ---- Pass B + LogExp interaction (Log[E^a] feedback) ---- */
 
 void test_simp_log_linear_nesting(void) {
-    /* Log[E^(3x)] = 3x for numeric scalar exponents already; the
-     * symbolic-coefficient case Log[E^(3x)] - 3 Log[E^x] reduces to 0
-     * via SimpLogRules + LogExpRules iterated in simp_pipeline_logexp. */
-    assert_eval_eq("Simplify[Log[E^(3 x)] - 3 Log[E^x]]", "0", 0);
+    /* Log[E^(3x)] - 3 Log[E^x] is 0 for real x, via SimpLogRules +
+     * LogExpRules iterated in simp_pipeline_logexp.  For complex x it is
+     * not (x = 9/10 Pi I: 7/10 Pi I - 27/10 Pi I = -2 Pi I), so with no
+     * assumption it stays as it is. */
+    assert_eval_eq("Simplify[Log[E^(3 x)] - 3 Log[E^x], Element[x, Reals]]", "0", 0);
+    assert_eval_eq("Simplify[Log[E^(3 x)] - 3 Log[E^x]]", "-3 Log[E^x] + Log[E^(3 x)]", 0);
 }
 
 void test_simp_log_exp_product_with_realness(void) {
@@ -132,9 +134,13 @@ void test_simp_log_trig_complement(void) {
 
 void test_simp_log_pythagorean_conjugates(void) {
     /* (Sec[x]-Tan[x])(Sec[x]+Tan[x]) = Sec[x]^2 - Tan[x]^2 -> 1 via the
-     * bounded Simplify pass on the fused argument; Log[1] = 0. */
-    assert_eval_eq("Simplify[Log[Sec[x] - Tan[x]] + Log[Sec[x] + Tan[x]]]",
+     * bounded Simplify pass on the fused argument; Log[1] = 0.  Only where
+     * both arguments are positive: at x = Pi both are -1 and the sum is
+     * 2 Pi I, so without an assumption it stays as it is. */
+    assert_eval_eq("Simplify[Log[Sec[x] - Tan[x]] + Log[Sec[x] + Tan[x]], -Pi/2 < x < Pi/2]",
                    "0", 0);
+    assert_eval_eq("Simplify[Log[Sec[x] - Tan[x]] + Log[Sec[x] + Tan[x]]]",
+                   "Log[Sec[x] - Tan[x]] + Log[Sec[x] + Tan[x]]", 0);
 }
 
 /* ---- Regression guards: confirm we don't over-expand ---- */
