@@ -1,36 +1,38 @@
 # Integration shootout: 260-radical-bottom (2026-11-22)
 
-420 cases, timeout 30 s per run, wall 8.6 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+Re-tabulated from the run of 2026-11-22: 149 easy cases (easy.tsv: rational, rationalised by a substitution, or closed by DerivativeDivides) are left out.
+
+271 cases, timeout 30 s per run, wall 8.6 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check AND PossibleZeroQ[D[F, x] - f] in Mathilda -- the test Mathilda's own answers get (an answer failing its own check is translated into Mathilda and judged there; one PossibleZeroQ proves zero counts as verified, one it cannot decide or that does not translate as unverified).
 
 ## Closed (elementary + special) by class
 
-| run | B radical at the bottom (420) | all |
+| run | B radical at the bottom (271) | all |
 |---|---|---|
-| Mathilda:Automatic | 51% (215) | 51% (215) |
-| Mathilda:ParallelMixedTower | 36% (150) | 36% (150) |
-| Mathilda:Bronstein | 45% (189) | 45% (189) |
-| FriCAS | 52% (217) | 52% (217) |
+| Mathilda:Automatic | 45% (121) | 45% (121) |
+| Mathilda:ParallelMixedTower | 27% (73) | 27% (73) |
+| Mathilda:Bronstein | 41% (110) | 41% (110) |
+| FriCAS | 46% (124) | 46% (124) |
 
 ## Outcome counts
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 187 | 28 | 197 | 7 | 1 | 0 | 0 | 0 | 0.12 |
-| Mathilda:ParallelMixedTower | 150 | 0 | 48 | 188 | 34 | 0 | 0 | 0 | 0.25 |
-| Mathilda:Bronstein | 189 | 0 | 226 | 5 | 0 | 0 | 0 | 0 | 0.04 |
-| FriCAS | 180 | 37 | 0 | 180 | 7 | 14 | 0 | 2 | 0.13 |
+| Mathilda:Automatic | 108 | 13 | 143 | 7 | 0 | 0 | 0 | 0 | 0.20 |
+| Mathilda:ParallelMixedTower | 73 | 0 | 23 | 143 | 32 | 0 | 0 | 0 | 0.74 |
+| Mathilda:Bronstein | 110 | 0 | 156 | 5 | 0 | 0 | 0 | 0 | 0.08 |
+| FriCAS | 103 | 21 | 0 | 128 | 7 | 12 | 0 | 0 | 0.13 |
 
 ## Closed by family (Mathilda = best of its methods)
 
 | class | family | n | Mathilda | FriCAS |
 |---|---|---|---|---|
-| B | one-elem | 60 | 60 | 58 |
-| B | one-rand | 60 | 18 | 12 |
-| B | mid-elem | 60 | 60 | 58 |
-| B | mid-rand | 60 | 4 | 2 |
-| B | two-elem | 60 | 59 | 54 |
-| B | two-rand | 60 | 2 | 2 |
-| B | pert-nonelem | 60 | 14 | 31 |
+| B | one-elem | 28 | 28 | 27 |
+| B | one-rand | 37 | 9 | 5 |
+| B | mid-elem | 29 | 29 | 27 |
+| B | mid-rand | 31 | 0 | 0 |
+| B | two-elem | 50 | 49 | 45 |
+| B | two-rand | 49 | 0 | 0 |
+| B | pert-nonelem | 47 | 8 | 20 |
 
 ## WRONG (0)
 
@@ -51,10 +53,8 @@
 
 ## Only one system closes it
 
-- Mathilda: 10
+- Mathilda: 8
 - FriCAS: 1
 
 ## Wrong answers from other systems (their bugs)
 
-- FriCAS `one-rand-29`: `E^x^2/Sqrt[x]`
-- FriCAS `one-rand-40`: `E^x^2*Sqrt[x]`

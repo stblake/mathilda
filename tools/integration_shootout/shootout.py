@@ -49,6 +49,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import statistics
 import sys
 import tempfile
@@ -207,11 +208,17 @@ def main():
                     "baseline.json); default benchmarks/256-integration-shootout")
     ap.add_argument("--report", default=None, help="REPORT.md path (default: the benchmark folder; "
                     "--quick/--limit runs write REPORT-partial.md)")
+    ap.add_argument("--retabulate", action="store_true",
+                    help="rewrite REPORT.md from the latest results/<date>.json without running anything, "
+                    "leaving out the easy cases (unless --include-easy)")
     a = ap.parse_args()
     global BENCH, CORPUS
     if a.bench:
         BENCH = os.path.abspath(a.bench)
         CORPUS = os.path.join(BENCH, "corpus.tsv")
+    if a.retabulate:
+        retabulate(a)
+        return
 
     if not A.available("mathilda"):
         print("SKIP: ./Mathilda not built")
@@ -406,8 +413,29 @@ def pct(n, d):
     return f"{100.0 * n / d:.0f}%" if d else "-"
 
 
-def write_report(path, rows, labels, wall, a):
-    L = [f"# Integration shootout: {os.path.basename(BENCH)} ({datetime.date.today().isoformat()})", "",
+def retabulate(a):
+    """REPORT.md from the latest saved run: the same tables, without the easy cases"""
+    rdir = os.path.join(BENCH, "results")
+    date = sorted(f[:-5] for f in os.listdir(rdir) if re.match(r"\d{4}-\d\d-\d\d\.json$", f))[-1]
+    saved = json.load(open(os.path.join(rdir, date + ".json")))
+    easy = set() if a.include_easy else easy_ids(BENCH)
+    rows = [r for r in saved["rows"] if r["id"] not in easy]
+    labels = []
+    for r in saved["rows"]:
+        labels += [k for k in r["runs"] if k not in labels]
+    mathilda = [run_label("mathilda", m) for m in ALL_METHODS]
+    labels = [l for l in mathilda if l in labels] + [l for l in labels if l not in mathilda]
+    path = a.report or os.path.join(BENCH, "REPORT.md")
+    write_report(path, rows, labels, saved["wall"], a, run_date=date,
+                 note=f"Re-tabulated from the run of {date}: {len(saved['rows']) - len(rows)} easy cases "
+                      "(easy.tsv: rational, rationalised by a substitution, or closed by DerivativeDivides) "
+                      "are left out." if easy else "")
+    print(f"{path}: {len(rows)} of {len(saved['rows'])} cases (run {date})")
+
+
+def write_report(path, rows, labels, wall, a, run_date=None, note=""):
+    L = [f"# Integration shootout: {os.path.basename(BENCH)} ({run_date or datetime.date.today().isoformat()})", "",
+         *([note, ""] if note else []),
          f"{len(rows)} cases, timeout {a.timeout} s per run, wall {wall / 60:.1f} min. "
          "Every answer was verified by its own system (derivative at three points, 10^-20). "
          "`elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved "

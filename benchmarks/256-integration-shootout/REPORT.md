@@ -1,86 +1,83 @@
 # Integration shootout: 256-integration-shootout (2026-11-22)
 
-1266 cases, timeout 30 s per run, wall 12.1 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+Re-tabulated from the run of 2026-11-22: 489 easy cases (easy.tsv: rational, rationalised by a substitution, or closed by DerivativeDivides) are left out.
+
+777 cases, timeout 30 s per run, wall 12.1 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check AND PossibleZeroQ[D[F, x] - f] in Mathilda -- the test Mathilda's own answers get (an answer failing its own check is translated into Mathilda and judged there; one PossibleZeroQ proves zero counts as verified, one it cannot decide or that does not translate as unverified).
 
 ## Closed (elementary + special) by class
 
-| run | R rational (72) | T transcendental (217) | A algebraic (400) | M mixed (radical on top) (408) | B radical at the bottom (169) | all |
-|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 100% (72) | 98% (212) | 58% (230) | 84% (343) | 45% (76) | 74% (933) |
-| Mathilda:ParallelMixedTower | 0% (0) | 64% (138) | 52% (210) | 79% (323) | 40% (68) | 58% (739) |
-| Mathilda:RischTranscendental | 100% (72) | 67% (145) | · | · | · | 75% (217) |
-| Mathilda:Trager | · | · | 53% (211) | · | · | 53% (211) |
-| Mathilda:Bronstein | · | · | · | 83% (340) | 41% (70) | 71% (410) |
-| FriCAS | 99% (71) | 94% (203) | 51% (204) | 40% (163) | 43% (72) | 56% (713) |
-| Maxima | 100% (72) | 77% (167) | 36% (145) | 42% (170) | 33% (55) | 48% (609) |
-| sympy | 100% (72) | 80% (174) | 32% (130) | 13% (54) | 15% (26) | 36% (456) |
-| Wolfram | 100% (72) | 100% (216) | 83% (331) | 61% (250) | 64% (108) | 77% (977) |
+| run | T transcendental (152) | A algebraic (223) | M mixed (radical on top) (266) | B radical at the bottom (136) | all |
+|---|---|---|---|---|---|
+| Mathilda:Automatic | 97% (147) | 26% (59) | 76% (201) | 32% (44) | 58% (451) |
+| Mathilda:ParallelMixedTower | 48% (73) | 19% (43) | 70% (186) | 31% (42) | 44% (344) |
+| Mathilda:RischTranscendental | 53% (80) | · | · | · | 53% (80) |
+| Mathilda:Trager | · | 19% (43) | · | · | 19% (43) |
+| Mathilda:Bronstein | · | · | 74% (198) | 32% (44) | 60% (242) |
+| FriCAS | 91% (139) | 18% (41) | 12% (31) | 32% (44) | 33% (255) |
+| Maxima | 67% (102) | 7% (16) | 32% (84) | 22% (30) | 30% (232) |
+| sympy | 72% (109) | 17% (37) | 2% (6) | 8% (11) | 21% (163) |
+| Wolfram | 99% (151) | 71% (158) | 41% (110) | 56% (76) | 64% (495) |
 
 ## Outcome counts
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 832 | 101 | 326 | 4 | 2 | 0 | 1 | 0 | 0.03 |
-| Mathilda:ParallelMixedTower | 739 | 0 | 239 | 230 | 58 | 0 | 0 | 0 | 0.05 |
-| Mathilda:RischTranscendental | 210 | 7 | 72 | 0 | 0 | 0 | 0 | 0 | 0.00 |
-| Mathilda:Trager | 211 | 0 | 189 | 0 | 0 | 0 | 0 | 0 | 0.03 |
-| Mathilda:Bronstein | 410 | 0 | 165 | 1 | 1 | 0 | 0 | 0 | 0.08 |
-| FriCAS | 644 | 69 | 0 | 239 | 52 | 261 | 0 | 1 | 0.07 |
-| Maxima | 559 | 50 | 0 | 650 | 5 | 0 | 0 | 2 | 0.02 |
-| sympy | 361 | 95 | 0 | 480 | 289 | 1 | 8 | 32 | 0.13 |
-| Wolfram | 704 | 273 | 0 | 269 | 13 | 0 | 1 | 6 | 0.16 |
+| Mathilda:Automatic | 359 | 92 | 320 | 4 | 2 | 0 | 0 | 0 | 0.07 |
+| Mathilda:ParallelMixedTower | 344 | 0 | 224 | 152 | 57 | 0 | 0 | 0 | 0.06 |
+| Mathilda:RischTranscendental | 73 | 7 | 72 | 0 | 0 | 0 | 0 | 0 | 0.00 |
+| Mathilda:Trager | 43 | 0 | 180 | 0 | 0 | 0 | 0 | 0 | 0.11 |
+| Mathilda:Bronstein | 242 | 0 | 158 | 1 | 1 | 0 | 0 | 0 | 0.08 |
+| FriCAS | 188 | 67 | 0 | 226 | 52 | 244 | 0 | 0 | 0.07 |
+| Maxima | 191 | 41 | 0 | 539 | 5 | 0 | 0 | 1 | 0.07 |
+| sympy | 89 | 74 | 0 | 373 | 205 | 1 | 6 | 29 | 0.22 |
+| Wolfram | 256 | 239 | 0 | 262 | 13 | 0 | 1 | 6 | 0.34 |
 
 ## Closed by family (Mathilda = best of its methods)
 
 | class | family | n | Mathilda | FriCAS | Maxima | sympy | Wolfram |
 |---|---|---|---|---|---|---|---|
-| R | rherm | 36 | 36 | 36 | 36 | 36 | 36 |
-| R | rlog | 36 | 36 | 35 | 36 | 36 | 36 |
-| T | tlog | 33 | 33 | 33 | 33 | 33 | 33 |
-| T | texp | 33 | 33 | 32 | 26 | 33 | 33 |
-| T | tmixed | 15 | 15 | 14 | 15 | 15 | 15 |
-| T | tnested | 13 | 13 | 13 | 10 | 13 | 13 |
-| T | ttrig | 18 | 18 | 18 | 18 | 18 | 18 |
-| T | tconstk | 26 | 26 | 26 | 26 | 26 | 26 |
+| T | tlog | 19 | 19 | 19 | 19 | 19 | 19 |
+| T | texp | 20 | 20 | 20 | 13 | 20 | 20 |
+| T | tmixed | 10 | 10 | 9 | 10 | 10 | 10 |
+| T | tnested | 5 | 5 | 5 | 2 | 5 | 5 |
+| T | ttrig | 7 | 7 | 7 | 7 | 7 | 7 |
+| T | tconstk | 12 | 12 | 12 | 12 | 12 | 12 |
 | T | tlog-perturbed | 35 | 34 | 30 | 18 | 16 | 35 |
 | T | texp-perturbed | 36 | 33 | 31 | 14 | 15 | 36 |
-| A | agen | 36 | 36 | 35 | 33 | 20 | 35 |
-| B | bbottom | 20 | 20 | 20 | 17 | 12 | 20 |
-| B | bbottom-perturbed | 33 | 5 | 1 | 5 | 0 | 18 |
+| A | agen | 3 | 3 | 3 | 2 | 0 | 3 |
+| B | bbottom-perturbed | 27 | 0 | 0 | 0 | 0 | 13 |
 | M | alg | 34 | 34 | 3 | 8 | 0 | 33 |
 | M | logxy | 31 | 31 | 0 | 13 | 0 | 0 |
-| M | asinh | 35 | 35 | 34 | 28 | 5 | 35 |
-| M | genus1 | 35 | 35 | 34 | 19 | 8 | 35 |
-| M | algres | 35 | 35 | 34 | 0 | 0 | 35 |
-| M | ratb | 30 | 30 | 19 | 17 | 2 | 30 |
+| M | asinh | 6 | 6 | 6 | 6 | 0 | 6 |
+| M | ratb | 22 | 22 | 11 | 9 | 0 | 22 |
 | M | constk | 32 | 32 | 0 | 0 | 0 | 0 |
 | M | tower2 | 35 | 35 | 3 | 35 | 0 | 24 |
-| M | lccontent | 35 | 34 | 0 | 12 | 1 | 17 |
-| M | expcube | 36 | 36 | 34 | 36 | 35 | 36 |
+| M | lccontent | 30 | 29 | 0 | 7 | 0 | 14 |
+| M | expcube | 4 | 4 | 4 | 4 | 4 | 4 |
 | M | mrandom | 33 | 0 | 0 | 0 | 0 | 0 |
-| M | mperturb | 34 | 4 | 2 | 0 | 1 | 3 |
+| M | mperturb | 32 | 2 | 0 | 0 | 0 | 1 |
 | B | bgenus | 24 | 24 | 24 | 24 | 0 | 21 |
-| B | bcurve | 26 | 26 | 26 | 8 | 13 | 26 |
+| B | bcurve | 20 | 20 | 20 | 6 | 11 | 20 |
 | B | bgenus-perturbed | 34 | 0 | 0 | 0 | 0 | 11 |
 | B | bcurve-perturbed | 31 | 0 | 0 | 0 | 0 | 11 |
 | T | classic-nonelem | 8 | 7 | 6 | 7 | 5 | 7 |
 | M | classic-nonelem | 3 | 2 | 0 | 2 | 2 | 2 |
 | A | classic-nonelem | 2 | 2 | 0 | 0 | 1 | 2 |
-| B | classic-nonelem | 1 | 1 | 1 | 1 | 1 | 1 |
-| A | trager-binomial-xk | 45 | 23 | 20 | 21 | 32 | 45 |
-| A | trager-third-kind | 30 | 18 | 14 | 13 | 4 | 30 |
-| A | trager-rational-times-radical | 50 | 19 | 16 | 17 | 19 | 38 |
-| A | trager-chebyshev | 40 | 24 | 20 | 20 | 25 | 40 |
-| A | trager-goursat | 20 | 12 | 11 | 4 | 4 | 15 |
-| A | trager-pseudo-elliptic-recip | 10 | 10 | 10 | 0 | 0 | 10 |
-| A | trager-even-substitution | 6 | 6 | 6 | 0 | 0 | 6 |
-| A | trager-genus-hyper | 20 | 6 | 4 | 4 | 4 | 11 |
-| A | trager-genus-super | 10 | 1 | 1 | 1 | 6 | 7 |
-| A | trager-rational-radicand | 20 | 14 | 12 | 5 | 0 | 18 |
+| A | trager-binomial-xk | 25 | 5 | 4 | 4 | 14 | 25 |
+| A | trager-third-kind | 16 | 4 | 0 | 0 | 0 | 16 |
+| A | trager-rational-times-radical | 33 | 2 | 0 | 0 | 5 | 21 |
+| A | trager-chebyshev | 21 | 6 | 2 | 2 | 9 | 21 |
+| A | trager-goursat | 15 | 7 | 6 | 2 | 2 | 10 |
+| A | trager-pseudo-elliptic-recip | 4 | 4 | 4 | 0 | 0 | 4 |
+| A | trager-genus-hyper | 12 | 0 | 0 | 0 | 0 | 3 |
+| A | trager-genus-super | 8 | 0 | 0 | 0 | 4 | 5 |
+| A | trager-rational-radicand | 8 | 2 | 0 | 0 | 0 | 6 |
 | A | trager-torsion-heavy | 18 | 0 | 0 | 0 | 2 | 5 |
-| A | trager-deriv-alg | 18 | 18 | 18 | 13 | 3 | 18 |
-| A | trager-deriv-log | 23 | 23 | 23 | 0 | 0 | 17 |
-| A | trager-random | 52 | 18 | 14 | 14 | 10 | 34 |
+| A | trager-deriv-alg | 11 | 11 | 11 | 6 | 0 | 11 |
+| A | trager-deriv-log | 11 | 11 | 11 | 0 | 0 | 8 |
+| A | trager-random | 36 | 2 | 0 | 0 | 0 | 18 |
+| M | algres | 3 | 3 | 3 | 0 | 0 | 3 |
+| M | genus1 | 1 | 1 | 1 | 0 | 0 | 1 |
 
 ## WRONG (0)
 
@@ -115,27 +112,22 @@
 - sympy `trager-binom-024`: `1/(-1 + x^6)^(1/3)`
 - sympy `trager-binom-025`: `x^3/Sqrt[-3 + x^3]`
 - sympy `trager-binom-026`: `1/Sqrt[-1 + x^6]`
-- sympy `trager-binom-027`: `x/(-1 + x^4)^(1/4)`
 - sympy `trager-binom-038`: `x/(-3 + x^4)^(1/4)`
 - sympy `trager-binom-039`: `x^3/Sqrt[-3 + x^6]`
 - sympy `trager-binom-040`: `1/(-3 + x^6)^(1/3)`
-- sympy `trager-binom-043`: `x/Sqrt[-1 + x^6]`
 - sympy `trager-binom-044`: `1/Sqrt[-3 + x^6]`
 - sympy `trager-cheb-002`: `x^2*Sqrt[-1 + 2*x^4]`
 - sympy `trager-cheb-004`: `x/(-1 + 2*x^3)^(3/4)`
 - sympy `trager-cheb-005`: `(-1 + 2*x^4)^(1/4)`
 - sympy `trager-cheb-014`: `x^3*(-1 + 2*x^3)^(2/3)`
 - sympy `trager-cheb-022`: `x*(-1 + 2*x^3)^(3/2)`
-- sympy `trager-cheb-027`: `1/(x*(3 - x^2)^(1/3))`
 - sympy `trager-cheb-030`: `x^4*(-1 + 2*x^2)^(1/4)`
 - sympy `trager-cheb-040`: `x^4/(-1 + 2*x^4)^(1/3)`
 - Wolfram `trager-goursat-007`: `x/((-2 + x^3)*(1 + x^3)^(1/3))`
 - Wolfram `trager-goursat-009`: `(-2 + x^3)/((1 + x^3)^(2/3)*(4 + x^3))`
 - sympy `trager-goursat-011`: `x^2/(-1 + x^4)^(3/4)`
-- Maxima `trager-ratradicand-016`: `Sqrt[(1 + x)/(-1 + x)]/(-2 + x)`
 - Maxima `trager-deriv-alg-03`: `(-22 - 22*x + 10*x^2 + 10*x^3)/(4*(2 - x - 2*x^2 + x^3)^(7/4))`
 - sympy `trager-deriv-alg-07`: `(6 - 24*x + 42*x^4 - 48*x^5)/(6*(-1 + 3*x^4)^(11/6))`
-- FriCAS `trager-random-048`: `(2 + 3*x - 3*x^2)/(Sqrt[1 + 2*x]*(2 - x + 3*x^2))`
 - sympy `tlogp-2-6`: `(Log[x] + 6*x*Log[1 + x] + 3*Log[1 + x]^2 + 3*x*Log[1 + x]^2)/(1 + x)`
 - sympy `texpp-2-5`: `(2*E^(2*x)*x + 4*E^(2*x)*x^2 + 2*E^(2*x)*x^3 + Log[x])/(1 + x)`
 - Wolfram `bgenusp-2-11`: `(-3*E^(2*x) + 6*E^(2*x)*x - E^(2*x)*x^2 + 6*E^(2*x)*x^3 + 3*x^2*(1 + x^2)^(2/3)*Log[x + Sqrt[1 + x^3]])/(3*x^2*(1 + x^2)^(2/3))`
