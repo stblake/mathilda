@@ -55,6 +55,8 @@ FUNCS = {
     "Si": "SinIntegral", "Ci": "CosIntegral", "Shi": "SinhIntegral", "Chi": "CoshIntegral",
     "gamma": "Gamma", "Gamma": "Gamma", "polylog": "PolyLog", "LambertW": "ProductLog",
     "lambert_w": "ProductLog", "dilog": None, "exp_polar": "Exp",
+    # Maxima: gamma_incomplete(a, z) is the upper incomplete Gamma, expintegral_e(n, z) is E_n(z)
+    "gamma_incomplete": "Gamma", "expintegral_e": "ExpIntegralE",
 }
 CONSTS = {"pi": "Pi", "%pi": "Pi", "E": "E", "%e": "E", "I": "I", "%i": "I", "x": "x"}
 
@@ -173,6 +175,13 @@ def to_wl(system, text):
             return f"HypergeometricPFQ[{tuple_list(a[0])}, {tuple_list(a[1])}, {a[2]}]"
         if name == "atan2" or (name == "atan" and len(a) == 2):
             return f"ArcTan[{a[1]}, {a[0]}]"
+        if system in ("fricas", "axiom"):
+            if name == "complex" and len(a) == 2:          # complex(re, im)
+                return f"(({a[0]}) + I*({a[1]}))"
+            if name == "pi" and not a:                     # pi()
+                return "Pi"
+            if name == "dilog" and len(a) == 1:            # dilog(z) = Li2(1 - z): d/dz = -log(z)/(z - 1)
+                return f"PolyLog[2, 1 - ({a[0]})]"
         if any(isinstance(v, tuple) for v in a):
             raise Untranslatable(f"tuple argument to {name}")
         head = FUNCS.get(name)

@@ -2,7 +2,7 @@
 
 Re-tabulated from the run of 2026-11-24: 1492 easy cases (easy.tsv: rational, rationalised by a substitution, or closed by DerivativeDivides) are left out.
 
-58 cases, timeout 30 s per run, wall 1.3 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check AND PossibleZeroQ[D[F, x] - f] in Mathilda -- the test Mathilda's own answers get (an answer failing its own check is translated into Mathilda and judged there; one PossibleZeroQ proves zero counts as verified, one it cannot decide or that does not translate as unverified).
+58 cases, timeout 30 s per run, wall 1.3 min. Every answer of every system is judged by PossibleZeroQ[D[F, x] - f] in Mathilda (the other systems' answers translated into Mathilda first): zero is verified, nonzero is `wrong`, anything else -- undecided, untranslatable, or an answer text cut when the run was recorded -- is `unverified`. `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary.
 
 ## Closed (elementary + special) by class
 
@@ -16,7 +16,7 @@ Re-tabulated from the run of 2026-11-24: 1492 easy cases (easy.tsv: rational, ra
 | FriCAS | 79% (11) | 7% (3) | 24% (14) |
 | Axiom | 79% (11) | 7% (3) | 24% (14) |
 | Maxima | 50% (7) | 5% (2) | 16% (9) |
-| sympy | 21% (3) | 0% (0) | 5% (3) |
+| sympy | 50% (7) | 0% (0) | 12% (7) |
 
 ## Outcome counts
 
@@ -30,22 +30,28 @@ Re-tabulated from the run of 2026-11-24: 1492 easy cases (easy.tsv: rational, ra
 | FriCAS | 14 | 0 | 0 | 0 | 10 | 34 | 0 | 0 | 0.17 |
 | Axiom | 14 | 0 | 0 | 0 | 5 | 39 | 0 | 0 | 0.17 |
 | Maxima | 9 | 0 | 0 | 49 | 0 | 0 | 0 | 0 | 0.04 |
-| sympy | 0 | 3 | 0 | 44 | 7 | 0 | 4 | 0 | 2.14 |
+| sympy | 0 | 7 | 0 | 44 | 7 | 0 | 0 | 0 | 0.99 |
 
-## Cross-check in Mathilda (answers that failed their own check)
+## PossibleZeroQ verdicts
 
-Own check: `bad` = a sample point failed; `na` = no point could be evaluated. Verdict of PossibleZeroQ[D[F, x] - f] in Mathilda.
+Every answer, by PossibleZeroQ[D[F, x] - f] in Mathilda. `own ok`: of the verified answers, those the system's own three-point check also passed; `own disagrees`: answers where the own check and PossibleZeroQ disagree (one passes, the other does not).
 
-| run | own | n | zero (verified) | nonzero (wrong) | undecided | untranslatable |
-|---|---|---|---|---|---|---|
-| Axiom | bad | 1 | 1 | 0 | 0 | 0 |
-| sympy | bad | 4 | 0 | 0 | 4 | 0 |
+| run | answers | zero (verified) | nonzero (wrong) | undecided | untranslatable | cut | own ok | own disagrees |
+|---|---|---|---|---|---|---|---|---|
+| Mathilda:Automatic | 58 | 58 | 0 | 0 | 0 | 0 | 58 | 0 |
+| Mathilda:ParallelMixedTower | 32 | 32 | 0 | 0 | 0 | 0 | 32 | 0 |
+| Mathilda:Trager | 14 | 14 | 0 | 0 | 0 | 0 | 14 | 0 |
+| Mathilda:Bronstein | 43 | 43 | 0 | 0 | 0 | 0 | 43 | 0 |
+| FriCAS | 14 | 14 | 0 | 0 | 0 | 0 | 14 | 0 |
+| Axiom | 14 | 14 | 0 | 0 | 0 | 0 | 13 | 1 |
+| Maxima | 9 | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| sympy | 7 | 7 | 0 | 0 | 0 | 0 | 3 | 4 |
 
 ## Closed by family (Mathilda = best of its methods)
 
 | class | family | n | Mathilda | FriCAS | Axiom | Maxima | sympy |
 |---|---|---|---|---|---|---|---|
-| A | cA-mathilda | 14 | 14 | 11 | 11 | 7 | 3 |
+| A | cA-mathilda | 14 | 14 | 11 | 11 | 7 | 7 |
 | M | cM-mathilda | 41 | 41 | 0 | 0 | 0 | 0 |
 | M | cM-fricas | 3 | 3 | 3 | 3 | 2 | 0 |
 

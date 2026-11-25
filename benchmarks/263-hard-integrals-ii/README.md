@@ -48,7 +48,19 @@ FriCAS 30 (`cA-fricas`, `cT-fricas`), Maxima 10, Axiom 1.
   timeouts and were replaced by spares from the pool that passed the same check.
   `gen_stats.json` records the replacement.
 
-## Results (2026-11-25, Mathilda v0.6733, FriCAS 1.3.6)
+## Verification
+
+Every answer of every system is judged by `PossibleZeroQ[D[F, x] - f]` in Mathilda,
+the other systems' answers translated first (`pzq_verify.py`):
+- zero: verified;
+- nonzero: **wrong** (an antiderivative must hold for every complex x);
+- anything else: unverified, never wrong.
+
+The own three-point checks are recorded and decide nothing. On 2026-11-26 the saved run
+was re-judged with v0.6744's PossibleZeroQ, and every FriCAS and Axiom ERROR record was
+re-run with the fixed adapter (`refresh_errors.py`), which records each error's message.
+
+## Results (run 2026-11-25 at Mathilda v0.6733; verdicts by PossibleZeroQ, v0.6744)
 
 Closed with a verified answer, out of the cases each run applies to:
 
@@ -59,16 +71,18 @@ Closed with a verified answer, out of the cases each run applies to:
 | Trager | · | 517 | · | · | 517 / 550 | 0 |
 | Bronstein | · | · | 400 | 400 | **800 / 800** | 0 |
 | ParallelMixedTower | 497 | 454 | 0 | 388 | 1339 / 1850 | 0 |
-| FriCAS | 481 | 417 | 0 | 378 | 1276 / 1850 | 0 |
+| FriCAS | 500 | 427 | 0 | 389 | 1316 / 1850 | 0 |
 | Axiom | 500 | 333 | 0 | 370 | 1203 / 1850 | 4 |
-| Maxima | 492 | 403 | 0 | 247 | 1142 / 1850 | 4 |
-| sympy | 447 | 190 | 0 | 117 | 754 / 1850 (197 special) | 28 |
+| Maxima | 486 | 403 | 0 | 238 | 1127 / 1850 | 19 |
+| sympy | 447 | 385 | 0 | 116 | 948 / 1850 (391 special) | 28 |
 
-- **Mathilda against FriCAS.** Mathilda (any method) closes 574 cases FriCAS does
+- **Mathilda against FriCAS.** Mathilda (any method) closes 534 cases FriCAS does
   not, and FriCAS closes 1 Mathilda does not.
   - **M:** FriCAS closes none of the 400; Bronstein closes all.
-  - **A:** FriCAS closes 417 of 550; Trager closes 517 and Automatic 526.
-  - FriCAS's misses: 461 errors, 102 timeouts and 11 unevaluated.
+  - **A:** FriCAS closes 427 of 550; Trager closes 517 and Automatic 526.
+  - **FriCAS's misses:** 420 errors, 103 timeouts and 11 unevaluated. The errors are
+    FriCAS's own "implementation incomplete": has polynomial part 224, constant
+    residues 176, trace 0 18, and one other.
 - **FriCAS: 11 false "no".** On 11 B4 integrands that are elementary by construction,
   FriCAS returns `integral(...)`, its answer for "no elementary antiderivative". Each
   is the derivative of `E^y R`, with y the square or cube root of a cubic or quartic
@@ -81,11 +95,12 @@ Closed with a verified answer, out of the cases each run applies to:
 
   which should give `exp(sqrt(x^3+1))/(x+1)`. With `1/x` in place of `1/(x+1)`,
   FriCAS integrates it. Mathilda closes all 11.
-- **Soundness.** No Mathilda method gives a wrong answer or a false "no". All 7
-  FriCAS answers that its own check could not evaluate are zero in Mathilda.
+- **Soundness.** No Mathilda method gives a wrong answer or a false "no", and no FriCAS
+  answer is wrong. Maxima's 19 are antiderivatives valid only on part of the plane.
 - **Automatic against Trager.**
-  - Trager closes 22 A cases in 11-15 s where Automatic gives up at 20-27 s: the
-    stages before Trager take the time.
+  - Trager closes 22 A cases in 11-15 s where Automatic gave up at 20-27 s, because the
+    stages before Trager take the time. Fixed in v0.6744: an expired cascade budget now
+    resumes Trager, and these close. The table shows the run at v0.6733.
   - Automatic closes 31 A cases where Trager times out (27) or declines (4).
   - 262 showed the same gap for Bronstein.
 - **Speed** (1259 cases both close, each system's own time): median 222 ms against

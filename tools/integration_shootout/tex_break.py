@@ -1,6 +1,6 @@
 """tex_break.py -- break a long TeX formula into multline* lines.
 
-    display(lhs, tex)   ->  TeX for "lhs = tex": one inline \\displaystyle line when
+    display(lhs, tex)   ->  TeX for "lhs = tex" (integral(tex): for "\\int tex dx"): one inline line when
                             it fits the page, else a multline* environment
 
 A formula is broken only at a binary + or - that sits at the top level: outside
@@ -94,23 +94,34 @@ def width(toks):
     return w
 
 
+SIZED = re.compile(r"\\[Bb]igg?[lrm]?$")
+
+
 def _scan(toks):
-    """yield (index, token, top) where top says the token is outside every group and \\left pair"""
-    brace = left = 0
+    """yield (index, token, top) where top says the token is outside every group, every
+    \\left pair and every plain ( ) pair (TeXForm writes a function's argument in plain
+    parentheses; a break inside one is a last resort, made by open_widest_pair)"""
+    brace = left = paren = 0
     i = 0
     while i < len(toks):
         t = toks[i]
-        yield i, t, brace == 0 and left == 0
+        yield i, t, brace == 0 and left == 0 and paren == 0
         if t == "{":
             brace += 1
         elif t == "}":
             brace -= 1
+        elif t == "(":
+            paren += 1
+        elif t == ")":
+            paren -= 1
         elif t == "\\left":
             left += 1
             i += 1          # the delimiter
         elif t == "\\right":
             left -= 1
             i += 1
+        elif SIZED.match(t):
+            i += 1          # \bigl( ... \bigr): sized and unpaired, so its delimiter is not nesting
         i += 1
 
 
@@ -130,8 +141,9 @@ def split_terms(toks):
 
 
 def open_widest_pair(toks):
-    """replace the widest top-level \\left X ... \\right Y of toks by \\Bigl X ... \\Bigr Y;
-    None when there is no such pair"""
+    """replace the widest top-level pair of toks -- \\left X ... \\right Y, or a plain ( ... ) --
+    by \\Bigl X ... \\Bigr Y, so the + and - inside it become break points; None when there
+    is no such pair"""
     best, stack, brace = None, [], 0
     i = 0
     while i < len(toks):
@@ -140,25 +152,52 @@ def open_widest_pair(toks):
             brace += 1
         elif t == "}":
             brace -= 1
-        elif t == "\\left":
-            stack.append((i, brace))
-            i += 1
-        elif t == "\\right":
+        elif t in ("\\left", "("):
+            stack.append((i, brace, t))
+            if t == "\\left":
+                i += 1
+        elif t in ("\\right", ")"):
             if stack:
-                j, b = stack.pop()
+                j, b, kind = stack.pop()
                 if not stack and b == 0 and brace == 0:
-                    wd = width(toks[j:i + 2])
+                    wd = width(toks[j:i + (2 if t == "\\right" else 1)])
                     if best is None or wd > best[0]:
-                        best = (wd, j, i)
+                        best = (wd, j, i, kind)
+            if t == "\\right":
+                i += 1
+        elif SIZED.match(t):
             i += 1
         i += 1
     if best is None:
         return None
-    _, j, k = best
-    inner = toks[j + 2:k]
+    _, j, k, kind = best
+    if kind == "(":
+        inner, lo, hi, rest = toks[j + 1:k], "(", ")", toks[k + 1:]
+    else:
+        inner, lo, hi, rest = toks[j + 2:k], toks[j + 1], toks[k + 1], toks[k + 2:]
     size = "Big" if any(t in ("\\frac", "\\dfrac") for t in inner) else "big"
     # \Bigl. is a null delimiter, as \left. is
-    return toks[:j] + [f"\\{size}l", toks[j + 1]] + inner + [f"\\{size}r", toks[k + 1]] + toks[k + 2:]
+    return toks[:j] + [f"\\{size}l", lo] + inner + [f"\\{size}r", hi] + rest
+
+
+def slash_widest_frac(toks):
+    """replace the widest top-level \\frac{A}{B} of toks by \\Bigl(A\\Bigr)/\\Bigl(B\\Bigr): the
+    same expression, but no longer one unbreakable box (TeX cannot end a line inside
+    \\frac, and a fraction with a 5000-character numerator is wider than TeX's largest
+    dimension, so not even \\resizebox can set it); None when there is none"""
+    best = None
+    for i, t, top in _scan(toks):
+        if top and t in ("\\frac", "\\dfrac", "\\tfrac"):
+            a, j = _group(toks, i + 1)
+            b, k = _group(toks, j)
+            wd = max(width(a), width(b))
+            if best is None or wd > best[0]:
+                best = (wd, i, a, b, k)
+    if best is None:
+        return None
+    _, i, a, b, k = best
+    return (toks[:i] + ["\\Bigl", "("] + a + ["\\Bigr", ")", "\\Big", "/", "\\Bigl", "("] + b +
+            ["\\Bigr", ")"] + toks[k:])
 
 
 def _pieces(toks, budget):
@@ -167,6 +206,8 @@ def _pieces(toks, budget):
     for term in split_terms(toks):
         while width(term) > budget:
             opened = open_widest_pair(term)
+            if opened is None and width(term) > 4 * budget:
+                opened = slash_widest_frac(term)    # last resort: a fraction far wider than a line
             if opened is None:
                 break
             sub = split_terms(opened)
@@ -189,19 +230,33 @@ def render(toks):
     return s
 
 
+def integral(tex):
+    """TeX for the integral of tex dx: one inline line, or multline* lines; a sum is
+    bracketed (\\Bigl( ... \\Bigr), unpaired, so a line may end inside it)"""
+    toks = tokens(tex)
+    if len(split_terms(toks)) > 1:
+        if width(toks) + 6 <= INLINE_WIDTH:
+            return _lines(["\\int", "\\left", "("], toks, ["\\right", ")", "\\,", "dx"])
+        return _lines(["\\int", "\\Bigl", "("], toks, ["\\Bigr", ")", "\\,", "dx"])
+    return _lines(["\\int"], toks, ["\\,", "dx"])
+
+
 def display(lhs, tex):
     """TeX for lhs = tex, broken into multline* lines when it does not fit"""
-    toks = tokens(tex)
-    if width(toks) + width(tokens(lhs)) + 2 <= INLINE_WIDTH:
-        return r"\par\hspace*{1em}$\displaystyle " + lhs + " = " + tex + "$"
-    head = tokens(lhs) + ["="]
+    return _lines(tokens(lhs) + ["="], tokens(tex), [])
+
+
+def _lines(head, toks, tail):
+    """head toks tail on one inline line when it fits, else multline* lines broken in toks"""
+    if width(head) + width(toks) + width(tail) + 2 <= INLINE_WIDTH:
+        return r"\par\hspace*{1em}$\displaystyle " + render(head + toks + tail) + "$"
     lines, cur = [], list(head)
     for p in _pieces(toks, WIDTH):
         if len(cur) > len(head) and width(cur) + width(p) > WIDTH:
             lines.append(cur)
             cur = []
         cur = cur + p
-    lines.append(cur)
+    lines.append(cur + tail)
     body = []
     for ln in lines:
         s = render(ln)

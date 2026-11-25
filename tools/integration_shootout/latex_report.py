@@ -14,9 +14,13 @@ latexmk.  The report has
   * every hard failure and every answer verified only exactly;
   * an appendix with every integral of the corpus and every answer returned for
     it, with its status, time and verification.
-Answers are shown as the system returned them (verbatim, so nothing is lost
-in translation), and typeset as well when Mathilda's TeXForm of them is short.
-TeX for the Mathilda answers and the integrands comes from latex_tex.m.
+Every formula is shown twice: verbatim, as the system returned it (so nothing
+is lost in translation), and typeset.  The verbatim text is the full answer from
+results/cache.jsonl (results/<date>.json keeps only its first 300 characters).
+TeX comes from latex_tex.m: the integrand and Mathilda's and Wolfram's answers
+are read as they are; FriCAS, Axiom, Maxima and sympy answers are first
+translated into Mathilda syntax by crosscheck.to_wl, the translator the
+cross-check uses.  A formula that cannot be typeset says why.
 """
 import argparse
 import collections
@@ -27,12 +31,16 @@ import statistics
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import adapters as A  # noqa: E402
-from tex_break import display  # noqa: E402
+from tex_break import display, integral  # noqa: E402
 from easy_classify import easy_ids  # noqa: E402
+import crosscheck as X  # noqa: E402
+
+SYSTEM = {"FriCAS": "fricas", "Axiom": "axiom", "Maxima": "maxima", "sympy": "sympy", "Wolfram": "wolfram"}
 
 MATHILDA_METHODS = ["Automatic", "ParallelMixedTower", "RischTranscendental", "Trager", "Bronstein"]
 EXTERNAL = ["FriCAS", "Axiom", "Maxima", "sympy", "Wolfram"]
@@ -41,8 +49,6 @@ CLASSNAME = {"R": "rational", "T": "transcendental (Log/Exp tower)", "A": "algeb
              "M": "a radical over a Log/Exp tower", "B": "a radical below a Log/Exp kernel"}
 STATUSES = ["ELEM", "SPECIAL", "CERT", "UNEVAL", "TIMEOUT", "ERROR", "UNVERIFIED", "WRONG"]
 CLOSED = ("ELEM", "SPECIAL")
-TYPESET_MAX = 3000         # longest TeX typeset in the appendix (the raw text is always shown);
-                           # tex_break.display wraps a long one over multline* lines
 
 
 def tex_escape(s):
@@ -70,6 +76,87 @@ def load_rows(bench, date):
     return date, json.load(open(os.path.join(res, f"{date}.json")))["rows"]
 
 
+def full_texts(bench, rows):
+    """Replace each answer's 300-character prefix (results/<date>.json) by its full text from
+    results/cache.jsonl: the last cached record of that system, method and case that extends
+    it.  Marks raw["cut"] when the cached text itself stopped at the recording limit."""
+    path = os.path.join(bench, "results", "cache.jsonl")
+    texts = collections.defaultdict(list)
+    for ln in (open(path) if os.path.exists(path) else ()):
+        try:
+            rec = json.loads(ln)
+        except ValueError:
+            continue
+        k = (rec.get("ckey") or "").split("|")
+        if len(k) >= 3 and rec.get("text"):
+            texts[(k[0], k[1], k[2])].append(rec["text"])
+    for r in rows:
+        for lab, raw in (r.get("raw") or {}).items():
+            pre = raw.get("text") or ""
+            if not pre:
+                continue
+            key = ("mathilda", lab.split(":", 1)[1], r["id"]) if lab.startswith("Mathilda:") else \
+                  (SYSTEM.get(lab, lab.lower()), "", r["id"])
+            full = [t for t in texts.get(key, ()) if t.startswith(pre)]
+            if full:
+                raw["text"] = full[-1]
+            # 4000: adapters.TRUNC's default, the recording limit before SHOOTOUT_TRUNC was raised
+            raw["cut"] = len(raw["text"]) == 4000 or (not full and len(pre) == 300)
+
+
+VERB_WIDTH = 112    # characters per verbatim line (\scriptsize \ttfamily on the text block)
+
+
+def wrap_verbatim(text, width=VERB_WIDTH):
+    """Hard-wrap an answer's text into lines of at most `width` characters, breaking
+    after a space or an operator where one is near the end of the line.  listings
+    can wrap a long line itself, but it builds the whole line in memory first, and
+    a 30000-character answer on one line exhausts TeX (262, 263)."""
+    out = []
+    for line in text.split("\n"):
+        while len(line) > width:
+            cut = max(line.rfind(ch, width // 2, width) for ch in " +-*/,")
+            cut = cut + 1 if cut > 0 else width
+            out.append(line[:cut].rstrip())
+            line = "  " + line[cut:].lstrip()
+        out.append(line)
+    return "\n".join(out)
+
+
+def overview_page(rows, texs):
+    """One page holding every integral of the corpus, typeset and scaled to fit.
+
+    The integrals are set in a ragged paragraph box.  Its width is found by
+    LaTeX itself: the box is set at a trial width, measured, and reset at the
+    width that gives it the page's proportions (the area of a paragraph is
+    nearly independent of its width), twice.  The box is then scaled by the
+    smaller of textwidth/width and textheight/height, so it always fits the page
+    and the formulas never overlap: they are only ever shrunk together."""
+    order = sorted(rows, key=lambda r: ("RTAMB".index(r["class"]), r["id"]))
+    from tex_break import split_terms, tokens
+
+    def one(t):     # a sum is bracketed, as in the appendix's integral()
+        return t if len(split_terms(tokens(t))) == 1 else r"\left(" + t + r"\right)"
+    items = [r"\mbox{$\int " + one(texs[f"f|{r['id']}"]) + r"\,dx$}" for r in order if texs.get(f"f|{r['id']}")]
+    if not items:
+        return []
+    setbox = (r"\sbox{\allintegrals}{\parbox{\allwd}{\raggedright\allintegralitems}}")
+    # the page's proportions, and a width that gives the measured box those proportions
+    refit = (r"\setlength{\allwd}{\fpeval{max(150, sqrt((\the\wd\allintegrals)*"
+             r"((\the\ht\allintegrals)+(\the\dp\allintegrals))*(\the\textwidth)/(0.93*(\the\textheight))))}pt}")
+    return [r"\begin{center}\textbf{Every integral of the corpus} (%d)\end{center}" % len(items),
+            r"\newsavebox{\allintegrals}\newlength{\allwd}\setlength{\allwd}{1600pt}",  # a trial at 400pt is taller than TeX's 16383pt
+            r"\newcommand{\allintegralitems}{%",
+            "\n\\hspace{1.2em plus 1em} ".join(items) + "}",
+            setbox, refit, setbox, refit, setbox,
+            # never enlarged past 1.5 (a small corpus), never wider or taller than the page
+            r"\begin{center}\scalebox{\fpeval{min(1.5, (\the\textwidth)/(\the\wd\allintegrals),"
+            r"0.93*(\the\textheight)/((\the\ht\allintegrals)+(\the\dp\allintegrals)))}}"
+            r"{\usebox{\allintegrals}}\end{center}",
+            r"\clearpage",
+            r"\sbox{\allintegrals}{}"]     # free it: a 1850-formula box held TeX's memory to the end (263)
+
+
 def labels_present(rows):
     seen = set()
     for r in rows:
@@ -82,25 +169,44 @@ def short(lab):
     return lab.replace("Mathilda:", "").replace("ParallelMixedTower", "PMT").replace("RischTranscendental", "RischTr.")
 
 
-def tex_batch(items):
-    """{key: mathilda-syntax text} -> {key: TeX} through latex_tex.m"""
-    if not items:
+def tex_batch(items, jobs=8, chunk=150):
+    """{key: mathilda-syntax text} -> {key: TeX} through latex_tex.m, in parallel chunks.
+    latex_tex.m writes a line for every key it reaches, so when a process dies on
+    one expression (a crash, or the per-chunk time limit) that key is dropped and
+    the chunk resumes after it: one bad expression costs only itself."""
+    todo = [(k, v) for k, v in items.items() if "\t" not in v and "\n" not in v]
+    if not todo:
         return {}
-    with tempfile.TemporaryDirectory() as d:
-        fin, fout = os.path.join(d, "in.tsv"), os.path.join(d, "out.tsv")
-        with open(fin, "w") as fh:
-            for k, v in items.items():
-                if "\t" not in v and "\n" not in v:
-                    fh.write(f"{k}\t{v}\n")
-        subprocess.run([A.MATHILDA, "-file", os.path.join(HERE, "latex_tex.m")],
-                       env=dict(os.environ, IN=fin, OUT=fout), cwd=A.REPO, capture_output=True,
-                       timeout=12 * 3600)
-        out = {}
-        if os.path.exists(fout):
-            for ln in open(fout).read().splitlines():
-                k, _, t = ln.partition("\t")
-                out[k] = t
+    d = tempfile.mkdtemp(prefix="latex-tex-")
+
+    def run(part):
+        out, n = {}, 0
+        while part:
+            n += 1
+            fin, fout = os.path.join(d, f"in{id(part)}-{n}.tsv"), os.path.join(d, f"out{id(part)}-{n}.tsv")
+            with open(fin, "w") as fh:
+                fh.writelines(f"{k}\t{v}\n" for k, v in part)
+            try:
+                subprocess.run([A.MATHILDA, "-file", os.path.join(HERE, "latex_tex.m")],
+                               env=dict(os.environ, IN=fin, OUT=fout), cwd=A.REPO, capture_output=True,
+                               timeout=60 + 45 * len(part))
+            except subprocess.TimeoutExpired:
+                pass
+            done = 0
+            if os.path.exists(fout):
+                for ln in open(fout).read().splitlines():
+                    k, _, t = ln.partition("\t")
+                    done += 1
+                    if t:
+                        out[k] = t
+            part = part[done + 1:] if done < len(part) else []    # skip the key it died on
         return out
+
+    res = {}
+    with ThreadPoolExecutor(jobs) as ex:
+        for got in ex.map(run, [todo[i:i + chunk] for i in range(0, len(todo), chunk)]):
+            res.update(got)
+    return res
 
 
 def verification_text(lab, raw):
@@ -116,19 +222,20 @@ def verification_text(lab, raw):
                 "ERROR": "error" + (f": {det}" if det else "")}.get(st, st)
     pts = ", ".join(nums) if nums else "none"
     if lab.startswith("Mathilda:"):
-        how = "D[F, x] - f at the three rational points, 40 digits, relative 1e-20, in Mathilda"
+        own = "in Mathilda"
     elif lab in ("FriCAS", "Axiom"):
-        how = f"complexNumeric(eval(D(r, x) - f)) at the three points, 40 digits, in {lab}"
+        own = f"complexNumeric in {lab}"
     else:
-        how = "the derivative at the three points, in the system itself"
-    xv = raw.get("xcheck")
-    if xv is not None:
-        det = (det + "; " if det else "") + {
-            "zero": "own check failed; translated into Mathilda, PossibleZeroQ[D[F, x] - f] is True: verified",
-            "nonzero": "own check failed; translated into Mathilda, PossibleZeroQ[D[F, x] - f] is False: wrong",
-            "untranslatable": "own check failed; the answer does not translate into Mathilda: unverified"}.get(
-            xv, "own check failed; PossibleZeroQ[D[F, x] - f] in Mathilda did not decide: unverified")
-    return f"{how}: [{pts}]" + (f"; {det}" if det else "")
+        own = f"in {lab}"
+    v = raw.get("pzq", raw.get("xcheck"))
+    verdict = {
+        "zero": "PossibleZeroQ[D[F, x] - f] is True: verified",
+        "nonzero": "PossibleZeroQ[D[F, x] - f] is False: wrong",
+        "untranslatable": "the answer does not translate into Mathilda, so PossibleZeroQ cannot judge it: unverified",
+        "cut": "the answer text was cut when the run was recorded, so PossibleZeroQ cannot judge it: unverified",
+        None: "not judged by PossibleZeroQ"}.get(
+        v, "PossibleZeroQ[D[F, x] - f] did not decide: unverified")
+    return f"{verdict} (own three-point check, {own}: [{pts}])" + (f"; {det}" if det else "")
 
 
 # The title and the opening paragraph of each benchmark's report.
@@ -176,6 +283,15 @@ ABOUT = {
                             r"M, whose answers are built on a unit $\log(P + \sqrt{P^2 - c e^h})$, only "
                             r"$\mathrm{LeafCount}(F) > \mathrm{LeafCount}(f)$. " + _SEARCH.format(plan=262) +
                             r"The integrands of benchmarks 256, 257 and 259--261 are excluded.")},
+    "264-mixed-integrals": {
+        "title": "a radical on top of a Log/Exp tower",
+        "intro": lambda n: (f"The corpus has {n} indefinite integrals $\\int f\\,dx$, all of class M: a radical whose "
+                            r"radicand holds an exponential of $x$, each with an elementary antiderivative. " +
+                            _HARD.format() + r"They are built on a unit of the tower: with $g = P^2 - c\,e^h$, "
+                            r"$(P' - h' P/2)/\sqrt{g}$ integrates to $\log(P + \sqrt{g}) - h/2$, and each integrand "
+                            r"is drawn from that shape and its perturbations (grammar M4), with "
+                            r"$\mathrm{LeafCount}(F) > \mathrm{LeafCount}(f)$. " + _SEARCH.format(plan=264) +
+                            r"The integrands of benchmarks 256, 257 and 259--263 are excluded.")},
     "263-hard-integrals-ii": {
         "title": "more integrals outside the easy classes",
         "intro": lambda n: (f"The corpus has {n} indefinite integrals $\\int f\\,dx$, each with an elementary antiderivative. " +
@@ -207,6 +323,7 @@ def main():
     easy = set() if a.include_easy else easy_ids(bench)
     n_easy = sum(1 for r in rows if r["id"] in cases and r["id"] in easy)
     rows = [r for r in rows if r["id"] in cases and r["id"] not in easy]
+    full_texts(bench, rows)
     if a.limit:
         per = collections.Counter()
         rows = [r for r in rows if (per.update([r["class"]]) or per[r["class"]] <= a.limit)]
@@ -258,28 +375,37 @@ def main():
                 hard.append((r["id"], v))
         for lab in labs:
             if not lab.startswith("Mathilda:") and r["runs"].get(lab) == "WRONG":
-                hard.append((r["id"], f"{lab} answer fails its own check and PossibleZeroQ in Mathilda"))
+                hard.append((r["id"], f"{lab} answer rejected by PossibleZeroQ[D[F, x] - f] in Mathilda"))
     xtab = collections.defaultdict(collections.Counter)
     for r in rows:
         for lab in labs:
             raw = (r.get("raw") or {}).get(lab) or {}
-            if "xcheck" in raw:
+            v = raw.get("pzq", raw.get("xcheck"))
+            if v is not None and raw.get("status") == "ANSWER":
                 nums = raw.get("nums") or []
-                own = "bad" if "bad" in (nums if isinstance(nums, list) else re.findall(r"ok|bad|na", nums)) else "na"
-                v = raw["xcheck"] if raw["xcheck"] in ("zero", "nonzero", "untranslatable") else "undecided"
+                nums = nums if isinstance(nums, list) else re.findall(r"ok|bad|na", nums)
+                own = "ok" if nums and all(x == "ok" for x in nums) else ("bad" if "bad" in nums else "na")
+                v = v if v in ("zero", "nonzero", "untranslatable", "cut") else "undecided"
                 xtab[(lab, own)][v] += 1
     exact_only = [(r["id"], (r.get("raw") or {}).get("FriCAS", {}).get("detail", "")) for r in rows
                   if "point check failed" in ((r.get("raw") or {}).get("FriCAS", {}).get("detail") or "")]
 
     # ---------------- TeX of integrands and Mathilda answers ----------------
-    items = {}
+    items, untyped = {}, {}
     for r in rows:
         items[f"f|{r['id']}"] = cases[r["id"]]["f"]
         for lab in labs:
             raw = (r.get("raw") or {}).get(lab)
-            if lab.startswith("Mathilda:") and raw and raw.get("status") == "ANSWER" and raw.get("text"):
-                if len(raw["text"]) < 6000:
-                    items[f"{lab}|{r['id']}"] = raw["text"]
+            if not (raw and raw.get("status") == "ANSWER" and raw.get("text")) or raw.get("cut"):
+                continue
+            if lab.startswith("Mathilda:") or lab == "Wolfram":
+                items[f"{lab}|{r['id']}"] = raw["text"]
+            else:
+                try:
+                    items[f"{lab}|{r['id']}"] = X.to_wl(SYSTEM[lab], raw["text"])
+                except Exception as e:  # noqa: BLE001 -- any parse failure: not typeset, and said so
+                    untyped[f"{lab}|{r['id']}"] = "the answer does not translate into Mathilda syntax" + (
+                        f" ({e})" if isinstance(e, X.Untranslatable) and str(e) else "")
     texs = tex_batch(items)
 
     # ---------------- the document ----------------
@@ -287,6 +413,7 @@ def main():
          r"\usepackage[a4paper,margin=18mm]{geometry}",
          r"\usepackage{amsmath,amssymb,booktabs,longtable,listings,xcolor,graphicx}",
          r"\usepackage[hidelinks]{hyperref}",
+         r"\usepackage{xfp}",
          r"\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,breakatwhitespace=false,columns=fullflexible,"
          r"keepspaces=true,showstringspaces=false,frame=none,xleftmargin=1em,"
          # a break point after every digit, so a 150-digit integer can wrap
@@ -297,6 +424,7 @@ def main():
          r"\author{Mathilda integration shootout}",
          r"\date{Run " + date + "}",
          r"\begin{document}", r"\maketitle", r"\tableofcontents", r"\clearpage"]
+    L += overview_page(rows, texs)
 
     n = len(rows)
     L += [r"\section{The benchmark}",
@@ -313,34 +441,31 @@ def main():
     L += [r"\bottomrule\end{tabular}\end{center}"]
 
     L += [r"\section{How each answer was verified}",
-          r"Every system first verifies its own answer. An answer that fails its own check, or that its own check "
-          r"cannot evaluate, is then translated into Mathilda and judged by the test Mathilda's answers are generated "
-          r"under, \texttt{PossibleZeroQ[D[F, x] - f]} (Section~\ref{sec:xcheck}). So \emph{wrong} means the same "
-          r"for every system: the answer fails its own check \emph{and} \texttt{PossibleZeroQ}.",
+          r"Every answer of every system is judged by one test, in Mathilda: "
+          r"\texttt{PossibleZeroQ[D[F, x] - f]} (60~s), the test the corpus itself was built under "
+          r"(Section~\ref{sec:xcheck}). \textbf{True}: verified. \textbf{False}: \textbf{wrong}. Anything else "
+          r"is \textbf{unverified}, never verified on numeric evidence: the test did not decide, or the answer "
+          r"does not translate into Mathilda, or its text was cut when the run was recorded. A True counts only "
+          r"where $D[F,x]-f$ evaluates to a number at two test points, since \texttt{PossibleZeroQ} answers True "
+          r"for an expression it cannot evaluate.",
           r"\begin{itemize}",
-          r"\item \textbf{Mathilda} (every method): the derivative $D[F,x]-f$ is evaluated at three rational points "
-          r"at 40 significant digits and must be below $10^{-20}$ relative to $f$ at every point. "
+          r"\item \textbf{Mathilda} (every method) and \textbf{Wolfram}: the answer is read as it is. "
           r"A \emph{certificate} is Mathilda's proof that no elementary antiderivative exists "
-          r"(\texttt{Integrate::nonelem}); on this corpus every integrand is elementary, so a certificate is a false "
+          r"(\texttt{Integrate::nonelem}); on an integrand that is elementary by construction it is a false "
           r"``no'' and a hard failure.",
-          r"\item \textbf{FriCAS}: \texttt{complexNumeric(eval(D(r, x) - f, x, p), 40)} at the same three points, "
-          r"in FriCAS. When a point cannot be evaluated, or when the point check fails but "
-          r"\texttt{normalize(D(r, x) - f)} is exactly $0$, the answer is counted as verified (exactly); the second "
-          r"case, a branch choice at the sample points, is listed in Section~\ref{sec:exact}.",
-          r"\item \textbf{Axiom} (Tim Daly's distribution, the system FriCAS forked): the same check as FriCAS, run by "
-          r"\texttt{AXIOMsys}.",
-          r"\item \textbf{Maxima, sympy}: the derivative at the three points, in the system itself.",
+          r"\item \textbf{FriCAS, Axiom} (Tim Daly's distribution, the system FriCAS forked), \textbf{Maxima, "
+          r"sympy}: the answer is translated from the system's output into Mathilda syntax first. FriCAS's "
+          r"\texttt{rootOf(p, v)}, valid for every root of $p$, becomes \texttt{Root[p \&, 1]}. The translator was "
+          r"checked both ways: answers multiplied by $1 + x/10^6$ all come out nonzero.",
+          r"\item \textbf{Each system's own check} is still run and shown after the verdict, as a secondary "
+          r"note: $D[F,x]-f$ at three rational points to 40 digits (FriCAS and Axiom: \texttt{complexNumeric}, "
+          r"and \texttt{normalize(D(r, x) - f)} for answers it cannot evaluate). It decides nothing; where it "
+          r"disagrees with \texttt{PossibleZeroQ}, the verdict is \texttt{PossibleZeroQ}'s.",
           r"\item A verified answer is \textbf{elementary} or \textbf{special} by the functions it contains "
           r"(Ei, li, erf, Si, Ci, polylogarithms, elliptic, hypergeometric, Bessel, Gamma, \ldots), by the same "
           r"list for every system. A special-function answer is correct and is counted, but separately: it does not "
           r"exhibit the elementary antiderivative these integrands have.",
-          r"\item \textbf{Cross-check in Mathilda}: an answer whose own check failed at a point (``bad'') or "
-          r"evaluated at none (``na'') is parsed from the system's output and judged by "
-          r"\texttt{PossibleZeroQ[D[F, x] - f]} (60~s). True: verified (a branch or an evaluation limit of the "
-          r"system's own check). False: \textbf{wrong}. Undecided, or an answer that does not translate: "
-          r"\textbf{unverified}, never wrong. The translator was checked on answers that passed their own checks: "
-          r"every one of them is zero in Mathilda. FriCAS's \texttt{rootOf(p, v)}, valid for every root of $p$, "
-          r"becomes \texttt{Root[p \&, 1]}.",
+          r"\item An \textbf{error} is shown with the message the system printed.",
           r"\end{itemize}",
           r"Time limit: 30 s per run."]
 
@@ -394,18 +519,20 @@ def main():
         L += [r"\bottomrule\end{longtable}"]
     else:
         L.append("None.")
-    L += [r"\subsection{Cross-check in Mathilda}\label{sec:xcheck}",
-          r"Answers that failed (bad) or could not complete (na) their own system's check, judged by "
-          r"\texttt{PossibleZeroQ[D[F, x] - f]} in Mathilda."]
+    L += [r"\subsection{PossibleZeroQ verdicts}\label{sec:xcheck}",
+          r"Every answer, judged by \texttt{PossibleZeroQ[D[F, x] - f]} in Mathilda, by the result of the "
+          r"system's own three-point check (ok: passed at every point; bad: failed at a point; na: no point "
+          r"could be evaluated). A row where the own check is ok and the verdict is not zero, or the other way "
+          r"round, is where the two disagree."]
     if xtab:
-        L += [r"\begin{center}\small\begin{tabular}{llrrrrr}\toprule run & own check & n & zero & nonzero & "
-              r"undecided & untranslatable\\\midrule"]
+        L += [r"\begin{center}\small\begin{tabular}{llrrrrrr}\toprule run & own check & n & zero & nonzero & "
+              r"undecided & untranslatable & cut\\\midrule"]
         for lab in labs:
-            for own in ("bad", "na"):
+            for own in ("ok", "bad", "na"):
                 c = xtab.get((lab, own))
                 if c:
                     L.append(f"{tex_escape(short(lab))} & {own} & {sum(c.values())} & {c['zero']} & {c['nonzero']} & "
-                             f"{c['undecided']} & {c['untranslatable']}\\\\")
+                             f"{c['undecided']} & {c['untranslatable']} & {c['cut']}\\\\")
         L += [r"\bottomrule\end{tabular}\end{center}"]
     else:
         L.append("None.")
@@ -425,9 +552,9 @@ def main():
         L.append(f"\\subsubsection*{{\\hypertarget{{case-{r['id']}}}{{{tex_escape(r['id'])}}} "
                  f"\\normalfont\\small(class {c['class']}, family {tex_escape(c['family'])})}}")
         ft = texs.get(f"f|{r['id']}")
-        if ft:
-            L.append(display("f", ft))
-        L += [r"\begin{lstlisting}", "f = " + c["f"], r"\end{lstlisting}"]
+        L += [r"\begin{lstlisting}", wrap_verbatim("Integrate[" + c["f"] + ", x]"), r"\end{lstlisting}"]
+        L.append(integral(ft) if ft else r"\par\emph{(not typeset: TeXForm failed)}")
+        L.append("")
         for lab in labs:
             raw = (r.get("raw") or {}).get(lab)
             cls = r["runs"].get(lab)
@@ -435,14 +562,28 @@ def main():
                 continue
             t = raw.get("time")
             ts = f", {float(t):.2f} s" if t not in (None, "", "None") else ""
+            st = raw.get("status")
+            if st == "ERROR":       # the system's own error message, as it printed it
+                what = r"\emph{Error message:} " + tex_escape(raw.get("detail") or "none recorded")
+            elif st in ("UNEVAL", "TIMEOUT") and not (st == "UNEVAL" and str(raw.get("cert")) == "True"):
+                what = tex_escape(verification_text(lab, raw))
+            else:
+                what = r"\emph{Verdict:} " + tex_escape(verification_text(lab, raw))
             L.append(f"\\textbf{{{tex_escape(short(lab) if lab.startswith('Mathilda:') else lab)}}}"
                      + (" (Mathilda)" if lab.startswith("Mathilda:") else "")
-                     + f": {cls}{ts}. \\emph{{Verified:}} {tex_escape(verification_text(lab, raw))}")
+                     + f": {cls}{ts}. {what}")
+            L.append("")    # every run is its own paragraph
             if raw.get("status") == "ANSWER" and raw.get("text"):
-                at = texs.get(f"{lab}|{r['id']}")
-                if at and len(at) <= TYPESET_MAX:
-                    L.append(display("F", at))
-                L += [r"\begin{lstlisting}", raw["text"], r"\end{lstlisting}"]
+                k = f"{lab}|{r['id']}"
+                L += [r"\begin{lstlisting}", wrap_verbatim(raw["text"]), r"\end{lstlisting}"]
+                if raw.get("cut"):
+                    L.append(r"\emph{(the answer text was cut at %d characters when the run was recorded, "
+                             r"so it is not typeset)}" % len(raw["text"]))
+                elif texs.get(k):
+                    L.append(display("F", texs[k]))
+                else:
+                    L.append(r"\emph{(not typeset: %s)}" % tex_escape(untyped.get(k, "TeXForm failed")))
+                L.append("")
     L += [r"\end{document}"]
 
     outdir = a.out or os.path.join(bench, "report")
@@ -454,6 +595,14 @@ def main():
     if not a.no_pdf:
         p = subprocess.run(["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error", "report.tex"],
                            cwd=outdir, capture_output=True, text=True)
+        log = os.path.join(outdir, "report.log")
+        if p.returncode != 0 and os.path.exists(log) and "TeX capacity exceeded" in open(log, errors="replace").read():
+            # pdfTeX's main memory is fixed (5M words); LuaTeX allocates as it goes.
+            # 262 and 263, with every answer typeset, need the latter.
+            print("pdfTeX ran out of memory; compiling with LuaLaTeX", flush=True)
+            subprocess.run(["latexmk", "-C"], cwd=outdir, capture_output=True)
+            p = subprocess.run(["latexmk", "-lualatex", "-interaction=nonstopmode", "-halt-on-error", "report.tex"],
+                               cwd=outdir, capture_output=True, text=True)
         pdf = os.path.join(outdir, "report.pdf")
         print("pdf:", pdf if p.returncode == 0 and os.path.exists(pdf) else "FAILED -- see report.log")
         if p.returncode != 0:

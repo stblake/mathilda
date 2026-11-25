@@ -20,13 +20,17 @@ texRS[e_] := Module[{rs = {}, k = 0, body, t},
       "\\sum_{\\alpha:\\; " <> ToString[TeXForm[r[[2]]]] <> " = 0} " <>
       "\\left(" <> ToString[TeXForm[r[[3]]]] <> "\\right)"], {r, rs}];
   StringReplace[t, ToString[TeXForm[alpha]] -> "\\alpha"]];
+(* Every key gets a line, "key<TAB>" when it cannot be typeset, and the file is
+   appended to and closed per key: if this process dies on one expression, the
+   caller (latex_report.tex_batch) sees how far it got and resumes after it. *)
 lines = Select[StringSplit[Import[in, "Text"], "\n"], StringContainsQ[#, "\t"] &];
-strm = OpenWrite[out];
 Do[
-  Module[{p = StringSplit[ln, "\t", 2], e, t},
+  Module[{p = StringSplit[ln, "\t", 2], e, t = "", strm},
     e = Quiet[TimeConstrained[ToExpression[p[[2]]], 20, $Failed]];
     If[e =!= $Failed && !MatchQ[e, _ToExpression],
       t = Quiet[TimeConstrained[texRS[e], 20, $Failed]];
-      If[StringQ[t] && !StringContainsQ[t, "\n"], WriteString[strm, p[[1]], "\t", t, "\n"]]]],
+      If[!StringQ[t] || StringContainsQ[t, "\n"], t = ""]];
+    strm = OpenAppend[out];
+    WriteString[strm, p[[1]], "\t", t, "\n"];
+    Close[strm]],
   {ln, lines}];
-Close[strm];

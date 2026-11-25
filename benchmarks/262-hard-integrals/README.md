@@ -49,13 +49,25 @@ because no reference antiderivative exists for them.
 
 ## Verification and tallies
 
-As in 261. Each system first verifies its own answer, at three rational points to
-40 digits. An answer that fails its own check, or that the check cannot evaluate, is
-translated into Mathilda and judged by `PossibleZeroQ[D[F, x] - f]`: zero means
-verified, nonzero means **wrong**, and an undecided or untranslatable answer is
-unverified, never wrong. See 261's README for how the cross-check itself was checked.
+Every answer of every system is judged by one test, `PossibleZeroQ[D[F, x] - f]` in
+Mathilda (`pzq_verify.py`). The other systems' answers are translated into Mathilda
+first (`crosscheck.to_wl`).
+- zero: verified;
+- nonzero: **wrong** (the standard is an antiderivative valid for every complex x);
+- anything else (undecided, untranslatable, or an answer text cut when the run was
+  recorded): unverified, never wrong.
 
-## Results (2026-11-25, Mathilda v0.6732, FriCAS 1.3.6)
+Each system's own three-point check is still recorded, but decides nothing.
+
+The run itself is unchanged since 2026-11-25. Two corrections were applied to the
+saved results afterwards:
+- **2026-11-26: re-judged.** Every answer was re-judged with v0.6744's PossibleZeroQ.
+- **2026-11-26: errors re-run.** Every FriCAS and Axiom ERROR record was re-run with
+  the fixed adapter, which records each error's message (`refresh_errors.py`). Among
+  FriCAS's 230 errors were runs that had answered but lost the answer to a fault in the
+  adapter's output file; those now count.
+
+## Results (run 2026-11-25 at Mathilda v0.6732; verdicts by PossibleZeroQ, v0.6744)
 
 Closed with a verified answer, out of the cases each run applies to:
 
@@ -66,31 +78,34 @@ Closed with a verified answer, out of the cases each run applies to:
 | Trager | · | 312 | · | · | 312 / 336 | 0 |
 | Bronstein | · | · | 216 | 118 | **334 / 334** | 0 |
 | ParallelMixedTower | 328 | 271 | 1 | 60 | 660 / 1000 | 0 |
-| FriCAS | 323 | 266 | 0 | 51 | 640 / 1000 | 0 |
-| Axiom | 330 | 243 | 0 | 0 | 573 / 1000 | 0 |
-| Maxima | 330 | 238 | 0 | 73 | 641 / 1000 | 0 |
-| sympy | 293 | 116 | 0 | 0 | 409 / 1000 (116 special) | 15 |
+| FriCAS | 330 | 268 | 0 | 48 | 646 / 1000 | 0 |
+| Axiom | 330 | 241 | 0 | 0 | 571 / 1000 | 2 |
+| Maxima | 327 | 238 | 0 | 73 | 638 / 1000 | 3 |
+| sympy | 293 | 228 | 0 | 0 | 521 / 1000 (228 special) | 15 |
 
-- **Mathilda against FriCAS.** Mathilda (any method) closes 357 cases FriCAS does
+- **Mathilda against FriCAS.** Mathilda (any method) closes 351 cases FriCAS does
   not; FriCAS closes 13 Mathilda does not, all in class A (`cA-axiom`: Trager times
   out on them).
   - **M:** FriCAS closes none of the 216; Bronstein closes all.
-  - **B:** FriCAS closes 51 of 118; Bronstein closes all.
-  - FriCAS's 360 misses are 230 errors and 130 timeouts.
-- **Automatic is below the dedicated method in 14 cases** (11 B, 3 A). In each, the
-  cascade gave up at about 20 s, while Bronstein or Trager needs 10-26 s on these
-  sixth-root radicals, for example `cB-201-559`, `Log[x]/(x^6 (3 + 2 x^6)^(1/6))`.
-  The cause is speed, not a declining stage. Conversely, Automatic closes 8 A cases
-  where Trager times out or declines.
+  - **B:** FriCAS closes 48 of 118; Bronstein closes all.
+  - **FriCAS's misses:** 219 errors and 131 timeouts. The errors are all FriCAS's own
+    "implementation incomplete": constant residues 109, has polynomial part 107, trace 0
+    3.
+- **Automatic was below the dedicated method in 14 cases** (11 B, 3 A). Automatic gave
+  up at about 20 s, while Bronstein or Trager needs 10-26 s on these sixth-root
+  radicals, for example `cB-201-559`, `Log[x]/(x^6 (3 + 2 x^6)^(1/6))`. Fixed in
+  v0.6744: an expired cascade budget now resumes the method, and these close. The table
+  shows the run at v0.6732. Conversely, Automatic closes 8 A cases where Trager times
+  out or declines.
 - **Trager** leaves 24 A cases undecided: 21 timeouts and 3 unevaluated.
-- **No special-function answers** from Mathilda or FriCAS. All of sympy's 116 are.
-- **Cross-check.** All 7 FriCAS answers that failed (1) or could not complete (6)
-  their own check are zero in Mathilda. No Mathilda, FriCAS, Axiom or Maxima answer
-  is wrong; sympy has 15 wrong and 114 unverified.
-- **Speed** (623 cases both close, each system's own time): the dedicated methods
-  have a median of 328 ms against FriCAS's 100 ms, and are faster on 300 of 623.
-  154 Mathilda cases take over 1 s. This is the cost of hard cases in the `.m`
-  Bronstein and Trager code, and it is the open performance item this corpus shows.
+- **No special-function answers** from Mathilda or FriCAS.
+- **Soundness.** No Mathilda method gives a wrong answer. FriCAS has 4 unverified
+  answers and none wrong; Axiom 2 wrong, Maxima 3, sympy 15.
+- **Speed** (623 cases both close, each system's own time, under heavy machine load):
+  - the dedicated methods have a median of 328 ms against FriCAS's 100 ms, and are
+    faster on 300 of 623;
+  - 154 Mathilda cases take over 1 s. That is the `.m` Bronstein and Trager code on
+    the hard cases, and the open performance item this corpus shows.
 
 ### How the run went
 

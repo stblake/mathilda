@@ -1,6 +1,6 @@
 # Integration shootout: 262-hard-integrals (2026-11-25)
 
-1000 cases, timeout 30 s per run, wall 81.7 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check AND PossibleZeroQ[D[F, x] - f] in Mathilda -- the test Mathilda's own answers get (an answer failing its own check is translated into Mathilda and judged there; one PossibleZeroQ proves zero counts as verified, one it cannot decide or that does not translate as unverified).
+1000 cases, timeout 30 s per run, wall 81.7 min. Every answer of every system is judged by PossibleZeroQ[D[F, x] - f] in Mathilda (the other systems' answers translated into Mathilda first): zero is verified, nonzero is `wrong`, anything else -- undecided, untranslatable, or an answer text cut when the run was recorded -- is `unverified`. `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary.
 
 ## Closed (elementary + special) by class
 
@@ -11,10 +11,10 @@
 | Mathilda:RischTranscendental | 100% (330) | · | · | · | 100% (330) |
 | Mathilda:Trager | · | 93% (312) | · | · | 93% (312) |
 | Mathilda:Bronstein | · | · | 100% (216) | 100% (118) | 100% (334) |
-| FriCAS | 98% (323) | 79% (266) | 0% (0) | 43% (51) | 64% (640) |
-| Axiom | 100% (330) | 72% (243) | 0% (0) | 0% (0) | 57% (573) |
-| Maxima | 100% (330) | 71% (238) | 0% (0) | 62% (73) | 64% (641) |
-| sympy | 89% (293) | 35% (116) | 0% (0) | 0% (0) | 41% (409) |
+| FriCAS | 100% (330) | 80% (268) | 0% (0) | 41% (48) | 65% (646) |
+| Axiom | 100% (330) | 72% (241) | 0% (0) | 0% (0) | 57% (571) |
+| Maxima | 99% (327) | 71% (238) | 0% (0) | 62% (73) | 64% (638) |
+| sympy | 89% (293) | 68% (228) | 0% (0) | 0% (0) | 52% (521) |
 
 ## Outcome counts
 
@@ -25,32 +25,37 @@
 | Mathilda:RischTranscendental | 330 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.01 |
 | Mathilda:Trager | 312 | 0 | 0 | 3 | 21 | 0 | 0 | 0 | 0.76 |
 | Mathilda:Bronstein | 334 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.08 |
-| FriCAS | 640 | 0 | 0 | 0 | 130 | 230 | 0 | 0 | 0.10 |
-| Axiom | 573 | 0 | 0 | 5 | 42 | 380 | 0 | 0 | 0.17 |
-| Maxima | 641 | 0 | 0 | 359 | 0 | 0 | 0 | 0 | 0.04 |
-| sympy | 293 | 116 | 0 | 235 | 224 | 3 | 114 | 15 | 2.09 |
+| FriCAS | 646 | 0 | 0 | 0 | 131 | 219 | 4 | 0 | 0.10 |
+| Axiom | 571 | 0 | 0 | 5 | 45 | 377 | 0 | 2 | 0.17 |
+| Maxima | 638 | 0 | 0 | 359 | 0 | 0 | 0 | 3 | 0.04 |
+| sympy | 293 | 228 | 0 | 235 | 224 | 3 | 2 | 15 | 2.50 |
 
-## Cross-check in Mathilda (answers that failed their own check)
+## PossibleZeroQ verdicts
 
-Own check: `bad` = a sample point failed; `na` = no point could be evaluated. Verdict of PossibleZeroQ[D[F, x] - f] in Mathilda.
+Every answer, by PossibleZeroQ[D[F, x] - f] in Mathilda. `own ok`: of the verified answers, those the system's own three-point check also passed; `own disagrees`: answers where the own check and PossibleZeroQ disagree (one passes, the other does not).
 
-| run | own | n | zero (verified) | nonzero (wrong) | undecided | untranslatable |
-|---|---|---|---|---|---|---|
-| FriCAS | bad | 1 | 1 | 0 | 0 | 0 |
-| FriCAS | na | 6 | 6 | 0 | 0 | 0 |
-| sympy | bad | 124 | 0 | 15 | 109 | 0 |
-| sympy | na | 18 | 13 | 0 | 4 | 1 |
+| run | answers | zero (verified) | nonzero (wrong) | undecided | untranslatable | cut | own ok | own disagrees |
+|---|---|---|---|---|---|---|---|---|
+| Mathilda:Automatic | 970 | 970 | 0 | 0 | 0 | 0 | 970 | 0 |
+| Mathilda:ParallelMixedTower | 660 | 660 | 0 | 0 | 0 | 0 | 660 | 0 |
+| Mathilda:RischTranscendental | 330 | 330 | 0 | 0 | 0 | 0 | 330 | 0 |
+| Mathilda:Trager | 312 | 312 | 0 | 0 | 0 | 0 | 312 | 0 |
+| Mathilda:Bronstein | 334 | 334 | 0 | 0 | 0 | 0 | 334 | 0 |
+| FriCAS | 650 | 646 | 0 | 0 | 4 | 0 | 639 | 7 |
+| Axiom | 573 | 571 | 2 | 0 | 0 | 0 | 571 | 2 |
+| Maxima | 641 | 638 | 3 | 0 | 0 | 0 | 638 | 3 |
+| sympy | 538 | 521 | 15 | 0 | 2 | 0 | 395 | 126 |
 
 ## Closed by family (Mathilda = best of its methods)
 
 | class | family | n | Mathilda | FriCAS | Axiom | Maxima | sympy |
 |---|---|---|---|---|---|---|---|
-| T | cT-mathilda | 330 | 330 | 323 | 330 | 330 | 293 |
-| A | cA-mathilda | 318 | 318 | 251 | 228 | 235 | 115 |
-| A | cA-axiom | 15 | 2 | 15 | 15 | 0 | 0 |
-| A | cA-maxima | 3 | 0 | 0 | 0 | 3 | 1 |
+| T | cT-mathilda | 330 | 330 | 330 | 330 | 327 | 293 |
+| A | cA-mathilda | 318 | 318 | 253 | 228 | 235 | 225 |
+| A | cA-axiom | 15 | 2 | 15 | 13 | 0 | 0 |
+| A | cA-maxima | 3 | 0 | 0 | 0 | 3 | 3 |
 | M | cM-mathilda | 216 | 216 | 0 | 0 | 0 | 0 |
-| B | cB-mathilda | 110 | 110 | 51 | 0 | 65 | 0 |
+| B | cB-mathilda | 110 | 110 | 48 | 0 | 65 | 0 |
 | B | cB-maxima | 8 | 8 | 0 | 0 | 8 | 0 |
 
 ## WRONG (0)
@@ -99,8 +104,13 @@ Own check: `bad` = a sample point failed; `na` = no point could be evaluated. Ve
 - sympy `cT-205-36`: `(-2*Log[-2 + x^3])/(3 + x)^3`
 - sympy `cT-205-68`: `3*x^2*(-(Log[x]/(1 + x^3)^2) - Log[2 + x^2]/(2 + x^3)^2)`
 - sympy `cT-206-48`: `(-2*Log[3 + x^2])/(-1 + x)^3 - (2*Log[-2 + x^3])/(-2 + x)^3`
+- Maxima `cT-207-5`: `x*((-3*x*Log[(-3 + x)/(1 + x)])/(-1 + x^3)^2 - ((-6 + x^3)*Log[1 + (2 + x)^(-1)])/(3 + x^3)^2)`
 - sympy `cT-208-20`: `-((x*(-4 + x^3)*Log[1 + x^3])/(2 + x^3)^2)`
 - sympy `cT-208-35`: `(-3*x^2*Log[(2 + x)/(-3 + x)])/(2 + x^3)^2`
 - sympy `cT-209-22`: `(-3*x^2*Log[1 + x^2])/(-2 + x^3)^2 - ((-3 - 4*x - x^2 + 2*x^3)*Log[1 + x + x^2])/((2 + x)^2*(1 + x^2)^2)`
 - sympy `cT-209-89`: `-((x*(-4 + x^3)*Log[-1 + x^3])/(2 + x^3)^2)`
+- Maxima `cT-210-29`: `x*(-(((-4 + x^3)*Log[(2 + x)/(-1 + x)])/(2 + x^3)^2) - (2*Log[1 + x + x^2])/(3 + x^2)^2)`
+- Maxima `cT-212-49`: `(-(((-1 + 2*x)*(-5 + 2*x + x^2)*Log[1 + (-3 + x)^(-1)])/(-3 + x)^2) - (-1 + x)*(1 + x)*Log[1 + x^3])/(1 + x^2)^2`
 - sympy `cT-212-76`: `-(((1 + x^2)*Log[-1 + x])/((-1 + x)^2*(1 + x)^2)) - (x*(-2 + x^3)*Log[-2 + x^3])/(1 + 2*x^3 + x^6)`
+- Axiom `cA-202-43`: `(-2 + x^6)/((2 + x^6)*(3 + x^6)^(1/6))`
+- Axiom `cA-205-117`: `(-1 + x^6)/((1 + x^6)*(3 + x^6)^(1/6))`

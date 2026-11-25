@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 import time
 
 import translate as T
@@ -253,11 +254,38 @@ def run_axiom_one(c, timeout, tmpdir):
     return run_fricas_one(c, timeout, tmpdir, system="axiom")
 
 
+def fricas_error(out):
+    """The first error FriCAS / Axiom printed in a session, as one line:
+    ">> Error detected within library code:" (or ">> System error:") and the message
+    lines after it, up to the next blank line; "" when there is none."""
+    m = re.search(r">> (Error detected within library code:|System error:|[^\n]*)\s*\n(.*?)(?:\n\s*\n|\n\(\d+\) ->|\Z)",
+                  out, re.S)
+    if not m:
+        return ""
+    head = m.group(1).strip()
+    body = " ".join(ln.strip() for ln in m.group(2).splitlines() if ln.strip())
+    if head.startswith("Error detected within library code"):
+        return body
+    return (head + " " + body).strip()
+
+
 def run_fricas_one(c, timeout, tmpdir, system="fricas"):
+    """One case in FriCAS or Axiom.  "File is not writable" is the harness's own failure
+    (the session could not open its output file; seen intermittently, 14 of 260's cases
+    in one parallel refresh and none on a re-run), never the system's answer, so the case
+    is run again with a fresh file, up to twice."""
+    for _attempt in range(3):
+        rec = _run_fricas_one(c, timeout, tmpdir, system)
+        if "not writable" not in (rec.get("detail") or ""):
+            break
+    return rec
+
+
+def _run_fricas_one(c, timeout, tmpdir, system="fricas"):
     from fractions import Fraction
-    fd, outfile = tempfile.mkstemp(suffix=".txt", dir=tmpdir)
-    os.close(fd)
-    os.unlink(outfile)
+    # a plain hex name: FriCAS opened some mkstemp names ("..._.txt" and the like) as
+    # "File is not writable", which the shootout then recorded as FriCAS's error
+    outfile = os.path.join(tmpdir, "fr" + uuid.uuid4().hex + ".txt")
     f = T.emit(c["tree"], "fricas")
     L = [")set output algebra off", ")set messages type off", ")set messages autoload off",
          # "_" is the escape character of Axiom strings (FriCAS no longer
@@ -295,13 +323,14 @@ def run_fricas_one(c, timeout, tmpdir, system="fricas"):
         if to:
             rec.update(status="TIMEOUT", time=None)
         else:
-            em = re.search(r">> (?:Error detected within library code:\s*)?(.*?)\n", out)
-            rec.update(status="ERROR", detail=(em.group(1).strip() if em else out.strip()[-200:]))
+            rec.update(status="ERROR", detail=fricas_error(out) or out.strip()[-200:])
         return rec
     r = res[0]
     rec["text"] = r[:TRUNC]
     if r == "r" or r.startswith("["):
-        rec.update(status="ERROR", detail="integrate failed" if r == "r" else "list of results")
+        # r unassigned: integrate raised an error, whose message is in the session output
+        rec.update(status="ERROR", detail=(fricas_error(out) or "integrate failed, no message")
+                   if r == "r" else "list of results")
         return rec
     if T.uneval_q(system, r):
         rec["status"] = "UNEVAL"

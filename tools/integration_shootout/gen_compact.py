@@ -110,6 +110,20 @@ PLANS = {
                         "261-compact-integrals-x4/gen_pool.tsv", "257-compact-integrals/gen_pool.tsv",
                         "256-integration-shootout/corpus.tsv", "260-radical-bottom/corpus.tsv",
                         "259-transcendental-decision/corpus.tsv"]},
+    # Benchmark 264 (--plan 264): 500 more class M integrals (a radical on top of a
+    # Log/Exp tower) outside the easy classes -- the class FriCAS closes none of in
+    # 262 and 263.  M4 on fresh seeds at ratio 1, as in 262 and 263; every earlier
+    # corpus and pool is excluded.
+    "264": {"bench": "264-mixed-integrals", "ratio": 1, "attempts": 20, "exclude_easy": True,
+            "quotas": {"R": 0, "T": 0, "A": 0, "M": 500, "B": 0},
+            "seeds": {"R": [], "T": [], "A": [], "B": [],
+                      "M": [(s, "M4", 15) for s in range(401, 451)]},
+            "cand_systems": ["fricas", "axiom", "maxima"],
+            "exclude": ["263-hard-integrals-ii/gen_pool.tsv", "263-hard-integrals-ii/corpus.tsv",
+                        "262-hard-integrals/gen_pool.tsv", "262-hard-integrals/corpus.tsv",
+                        "261-compact-integrals-x4/gen_pool.tsv", "257-compact-integrals/gen_pool.tsv",
+                        "256-integration-shootout/corpus.tsv", "260-radical-bottom/corpus.tsv",
+                        "259-transcendental-decision/corpus.tsv"]},
 }
 
 

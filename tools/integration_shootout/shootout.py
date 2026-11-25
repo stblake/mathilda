@@ -10,16 +10,15 @@ RUNS.  Each case of corpus.tsv runs through
   * Mathilda: Method -> Automatic and ParallelMixedTower for every class, plus
     RischTranscendental (classes R, T), Trager (A), Bronstein (M, B);
   * FriCAS, Maxima, sympy and the Wolfram Language (wolframscript), when installed.
-Every system verifies its own answer (adapters.py).  An answer that fails or
-cannot complete its own check is then translated into Mathilda and judged by
-the same test Mathilda's answers get, PossibleZeroQ[D[F, x] - f]
-(crosscheck.py): zero -> verified, nonzero -> WRONG, anything else ->
-UNVERIFIED.  So "wrong" means the same thing for every system.
+VERIFICATION.  Every answer of every system is judged by one test, in Mathilda:
+PossibleZeroQ[D[F, x] - f] (crosscheck.py; answers of the other systems are
+translated into Mathilda first): zero -> verified, nonzero -> WRONG, anything
+else -> UNVERIFIED.  Each system also checks its own answer at three points
+(adapters.py); that check is recorded ("nums") but decides nothing.
 
 PER-RUN CLASS:  ELEM (verified, elementary) | SPECIAL (verified, uses a
-non-elementary special function) | WRONG (an answer whose derivative check
-fails its own check AND PossibleZeroQ in Mathilda) | UNVERIFIED (neither check
-could decide, or the answer would not translate) |
+non-elementary special function) | WRONG (PossibleZeroQ[D[F, x] - f] is False) |
+UNVERIFIED (PossibleZeroQ did not decide, or the answer would not translate) |
 CERT (Mathilda proved it non-elementary: Integrate::nonelem) | UNEVAL |
 TIMEOUT | ERROR.
 
@@ -27,7 +26,7 @@ CROSS-RUN VERDICTS (Mathilda runs only):
   FALSE_CERT  CERT on a case whose expect is "elem"              [hard fail]
   DISAGREE    CERT while another run, any method or system, has a verified
               ELEM answer                                         [hard fail]
-  WRONG       a Mathilda answer failing its own derivative check  [hard fail]
+  WRONG       a Mathilda answer PossibleZeroQ[D[F, x] - f] rejects [hard fail]
   AUTO-GAP    a dedicated method closes, Automatic does not       [reported]
   ONLY-<sys>  exactly one system closes the case (ELEM)          [reported]
 Another system's WRONG is listed as that system's bug, never as ours.
@@ -110,7 +109,8 @@ def run_label(system, method):
 
 
 def classify_run(system, raw, xv=None):
-    """xv: the Mathilda cross-check verdict, for an answer that failed its own check."""
+    """xv: the PossibleZeroQ[D[F, x] - f] verdict for the answer, which decides it; None
+    only under --no-crosscheck, when the system's own point check is used instead."""
     st = raw["status"]
     if st == "UNEVAL":
         return "CERT" if raw.get("cert") else "UNEVAL"
@@ -309,7 +309,7 @@ def main():
                 runs[lab] = classify_run(s, r, xv)
                 raw[lab] = {k: r.get(k) for k in ("status", "time", "nums", "cert", "detail")}
                 if xv is not None:
-                    raw[lab]["xcheck"] = xv
+                    raw[lab]["pzq"] = xv
                 raw[lab]["text"] = (r.get("text") or "")[:300]
         rows.append({"id": c["id"], "class": c["class"], "family": c["family"], "expect": c["expect"],
                      "f": c["f"], "runs": runs, "raw": raw, "verdicts": verdicts(c, runs)})
@@ -347,7 +347,7 @@ def main():
 
 
 def crosscheck(cases, systems, methods, cache, ckey, mstamp, tmpdir, jobs):
-    """Judge, in Mathilda by PossibleZeroQ, every answer that failed its own check.
+    """Judge, in Mathilda by PossibleZeroQ, every answer of every system.
     Returns {run ckey: verdict}.  Verdicts are cached in the run cache under
     crosscheck.ckey (keyed by the Mathilda stamp and the answer text)."""
     todo, out = [], {}
@@ -357,7 +357,7 @@ def crosscheck(cases, systems, methods, cache, ckey, mstamp, tmpdir, jobs):
             for m in ms:
                 k = ckey(s, m, c)
                 r = cache.get(k)
-                if r is None or not X.needs_check(r):
+                if r is None or r.get("status") != "ANSWER":
                     continue
                 if s == "mathilda" and r.get("nums") == ["bad"]:
                     continue        # garbage ($Failed / a Private` symbol): wrong as it stands
@@ -437,12 +437,11 @@ def write_report(path, rows, labels, wall, a, run_date=None, note=""):
     L = [f"# Integration shootout: {os.path.basename(BENCH)} ({run_date or datetime.date.today().isoformat()})", "",
          *([note, ""] if note else []),
          f"{len(rows)} cases, timeout {a.timeout} s per run, wall {wall / 60:.1f} min. "
-         "Every answer was verified by its own system (derivative at three points, 10^-20). "
-         "`elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved "
-         "non-elementary; `wrong`: an answer failing its own check AND PossibleZeroQ[D[F, x] - f] in "
-         "Mathilda -- the test Mathilda's own answers get (an answer failing its own check is translated "
-         "into Mathilda and judged there; one PossibleZeroQ proves zero counts as verified, one it "
-         "cannot decide or that does not translate as unverified).", ""]
+         "Every answer of every system is judged by PossibleZeroQ[D[F, x] - f] in Mathilda (the other "
+         "systems' answers translated into Mathilda first): zero is verified, nonzero is `wrong`, "
+         "anything else -- undecided, untranslatable, or an answer text cut when the run was recorded -- "
+         "is `unverified`. `elem`/`special`: verified elementary / special-function answer; `cert`: "
+         "Mathilda proved non-elementary.", ""]
     classes = [c for c in "RTAMB" if any(r["class"] == c for r in rows)]
     name = {"R": "rational", "T": "transcendental", "A": "algebraic", "M": "mixed (radical on top)",
             "B": "radical at the bottom"}
@@ -469,22 +468,29 @@ def write_report(path, rows, labels, wall, a, run_date=None, note=""):
         L.append(f"| {lab} | {cnt['ELEM']} | {cnt['SPECIAL']} | {cnt['CERT']} | {cnt['UNEVAL']} | "
                  f"{cnt['TIMEOUT']} | {cnt['ERROR']} | {cnt['UNVERIFIED']} | {cnt['WRONG']} | {med} |")
     xrows = [(lab, r["raw"][lab]) for r in rows for lab in labels
-             if lab in r["raw"] and "xcheck" in r["raw"][lab]]
+             if lab in r["raw"] and r["raw"][lab].get("pzq") is not None]
     if xrows:
-        L += ["", "## Cross-check in Mathilda (answers that failed their own check)", "",
-              "Own check: `bad` = a sample point failed; `na` = no point could be evaluated. "
-              "Verdict of PossibleZeroQ[D[F, x] - f] in Mathilda.", "",
-              "| run | own | n | zero (verified) | nonzero (wrong) | undecided | untranslatable |",
-              "|---|---|---|---|---|---|---|"]
+        L += ["", "## PossibleZeroQ verdicts", "",
+              "Every answer, by PossibleZeroQ[D[F, x] - f] in Mathilda. `own ok`: of the verified answers, "
+              "those the system's own three-point check also passed; `own disagrees`: answers where the "
+              "own check and PossibleZeroQ disagree (one passes, the other does not).", "",
+              "| run | answers | zero (verified) | nonzero (wrong) | undecided | untranslatable | cut | "
+              "own ok | own disagrees |",
+              "|---|---|---|---|---|---|---|---|---|"]
         for lab in labels:
-            for own in ("bad", "na"):
-                vs = [x["xcheck"] for l2, x in xrows if l2 == lab and
-                      (("bad" in (x.get("nums") or [])) == (own == "bad"))]
-                if not vs:
-                    continue
-                cc = collections.Counter(v if v in ("zero", "nonzero", "untranslatable") else "undecided" for v in vs)
-                L.append(f"| {lab} | {own} | {len(vs)} | {cc['zero']} | {cc['nonzero']} | {cc['undecided']} | "
-                         f"{cc['untranslatable']} |")
+            xs = [x for l2, x in xrows if l2 == lab]
+            if not xs:
+                continue
+            cc = collections.Counter(x["pzq"] if x["pzq"] in ("zero", "nonzero", "untranslatable", "cut")
+                                     else "undecided" for x in xs)
+
+            def own_ok(x):
+                nums = x.get("nums") or []
+                return bool(nums) and all(v == "ok" for v in nums)
+            ok = sum(1 for x in xs if x["pzq"] == "zero" and own_ok(x))
+            dis = sum(1 for x in xs if (x["pzq"] == "zero") != own_ok(x) and x["pzq"] in ("zero", "nonzero"))
+            L.append(f"| {lab} | {len(xs)} | {cc['zero']} | {cc['nonzero']} | {cc['undecided']} | "
+                     f"{cc['untranslatable']} | {cc['cut']} | {ok} | {dis} |")
     # by family, closed for the best Mathilda run vs each external
     L += ["", "## Closed by family (Mathilda = best of its methods)", "",
           "| class | family | n | Mathilda | " + " | ".join(l for l in labels if not l.startswith("Mathilda:")) + " |",
