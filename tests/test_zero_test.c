@@ -1505,6 +1505,21 @@ static void test_log_of_large_integer_nonzero(void) {
     assert_pzq("PossibleZeroQ[Log[43774] - Log[2] - Log[43] - Log[509]]", "True");
 }
 
+/* A cancellation deeper than the top ladder rung at a sample point (benchmark
+ * 257 cM-1-176): at x ~ -49.6 the Log argument of this correct antiderivative of
+ * 2/(1 + E^(12 x))^(1/4) cancels to E^(24 x) ~ 2^-1720 against operands of 2^2,
+ * every rung up to 1000 bits read D[F, x] - f as -f, and their agreement was
+ * taken for a genuine non-zero.  A FALSE must now survive a doubling of the
+ * precision (zt_range_guard). */
+static void test_deep_cancellation_point_is_not_evidence(void) {
+    assert_pzq("With[{f = 2/(1 + E^(12*x))^(1/4), F = ArcTan[-2/(2*(1 + E^(12*x))^(1/4) - 2*(1 + E^(12*x))^(3/4)) - E^(12*x)/(2*(1 + E^(12*x))^(1/4) - 2*(1 + E^(12*x))^(3/4)) + (2*Sqrt[1 + E^(12*x)])/(2*(1 + E^(12*x))^(1/4) - 2*(1 + E^(12*x))^(3/4))]/6 + Log[E^(12*x)]/3 - Log[2 + E^(12*x) + 2*(1 + E^(12*x))^(1/4) + 2*Sqrt[1 + E^(12*x)] + 2*(1 + E^(12*x))^(3/4)]/6 - Log[4 + 4*E^(12*x) + E^(24*x) - 4*Sqrt[1 + E^(12*x)] - 4*E^(12*x)*Sqrt[1 + E^(12*x)] - 4*(1 + E^(12*x)) + 4*(1 + E^(12*x))^(3/2)]/12}, PossibleZeroQ[D[F, x] - f]]", "True");
+    /* still decides a genuine non-zero of the same shape */
+    assert_pzq("With[{f = 2/(1 + E^(12*x))^(1/4), F = ArcTan[-2/(2*(1 + E^(12*x))^(1/4) - 2*(1 + E^(12*x))^(3/4)) - E^(12*x)/(2*(1 + E^(12*x))^(1/4) - 2*(1 + E^(12*x))^(3/4)) + (2*Sqrt[1 + E^(12*x)])/(2*(1 + E^(12*x))^(1/4) - 2*(1 + E^(12*x))^(3/4))]/6 + Log[E^(12*x)]/3 - Log[2 + E^(12*x) + 2*(1 + E^(12*x))^(1/4) + 2*Sqrt[1 + E^(12*x)] + 2*(1 + E^(12*x))^(3/4)]/6 - Log[4 + 4*E^(12*x) + E^(24*x) - 4*Sqrt[1 + E^(12*x)] - 4*E^(12*x)*Sqrt[1 + E^(12*x)] - 4*(1 + E^(12*x)) + 4*(1 + E^(12*x))^(3/2)]/12}, PossibleZeroQ[D[F, x] - f + E^(-x^2)/1000]]", "False");
+    /* the hyperbolic dress of the same exponentials: 1 - Tanh[u]^2 at |u| ~ 57 */
+    assert_pzq("PossibleZeroQ[D[Log[Cosh[3 x]] + Tanh[x]/7, x] - 3 Tanh[3 x] - Sech[x]^2/7]", "True");
+    assert_pzq("PossibleZeroQ[D[Log[Cosh[3 x]], x] - 3 Tanh[3 x] + Sech[x]^2/7]", "False");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1720,6 +1735,7 @@ int main(void) {
     TEST(test_nonholomorphic_assumed_real_stays_real);
     TEST(test_uninformative_points_are_redrawn);
     TEST(test_log_of_large_integer_nonzero);
+    TEST(test_deep_cancellation_point_is_not_evidence);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

@@ -1954,8 +1954,9 @@ static Expr* try_bronstein(Expr* f, Expr* x) {
  *                constant);
  *   - Bronstein: a radical whose radicand contains a Log/Exp kernel of x, and no
  *                head other than rational operations, powers and Log.
- * A budget expiry is a decline: the cascade continues (a budget must never stop
- * the cascade).  A certificate {"not elementary", ...} is announced by the
+ * A budget expiry is not a decline but a deferral: the cascade continues (a
+ * budget must never stop the cascade), and when no later elementary stage
+ * closes the integrand the method is resumed with no budget (try_cascade_resumed).  A certificate {"not elementary", ...} is announced by the
  * method symbol (Integrate::nonelem) and sets *nonelem so the cascade skips its
  * remaining ELEMENTARY-only stages (ParallelMixedTower, Goursat) -- the special-
  * function stages still run, since an Erf / elliptic answer is still wanted.
@@ -2140,19 +2141,28 @@ static double cascade_budget(const char* name, double dflt) {
     return b;
 }
 
-/* Run the method symbol `head` on (f, x) under the budget; an antiderivative,
- * or NULL (decline).  A {"not elementary", ...} certificate sets *nonelem. */
-static Expr* try_cascade_decider(const char* head, const char* budget_sym, double dflt,
-                                 Expr* f, Expr* x, bool* nonelem) {
-    double budget = cascade_budget(budget_sym, dflt);
+/* What TimeConstrained returns when a cascade decider's budget runs out: a
+ * symbol of its own, so an expiry is told apart from a decline ($Failed). */
+#define CASCADE_BUDGET_EXPIRED "Integrate`Private`$CascadeBudgetExpired"
+
+/* Run the method symbol `head` on (f, x) under `budget` seconds (0: none); an
+ * antiderivative, or NULL (decline).  A {"not elementary", ...} certificate sets
+ * *nonelem; an expired budget sets *expired (when non-NULL). */
+static Expr* run_cascade_decider(const char* head, double budget, Expr* f, Expr* x,
+                                 bool* nonelem, bool* expired) {
     Expr* call = expr_new_function(expr_new_symbol(head),
         (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
     if (budget > 0)
         call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
-            call, expr_new_real(budget), expr_new_symbol(SYM_DollarFailed) }, 3);
+            call, expr_new_real(budget), expr_new_symbol(CASCADE_BUDGET_EXPIRED) }, 3);
     Expr* r = evaluate(call);
     expr_free(call);
     if (!r) return NULL;
+    if (r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol(CASCADE_BUDGET_EXPIRED)) {
+        if (expired) *expired = true;
+        expr_free(r);
+        return NULL;
+    }
     if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
         r->data.function.head->data.symbol.name == SYM_List) {
         if (pmt_is_nonelementary_certificate(r) && nonelem) *nonelem = true;
@@ -2169,16 +2179,37 @@ static Expr* try_cascade_decider(const char* head, const char* budget_sym, doubl
     return r;
 }
 
-static Expr* try_trager_cascade(Expr* f, Expr* x, bool* nonelem) {
+/* The budgeted first attempt.  *expired is set when the budget ran out: the
+ * cascade then resumes the method, unbudgeted, once every other elementary
+ * stage has had its turn (try_cascade_resumed). */
+static Expr* try_trager_cascade(Expr* f, Expr* x, bool* nonelem, bool* expired) {
     if (!cascade_gate_trager(f, x)) return NULL;
-    return try_cascade_decider("Integrate`Trager", "$TragerCascadeBudget",
-                               TRAGER_CASCADE_BUDGET_DEFAULT, f, x, nonelem);
+    return run_cascade_decider("Integrate`Trager",
+                               cascade_budget("$TragerCascadeBudget", TRAGER_CASCADE_BUDGET_DEFAULT),
+                               f, x, nonelem, expired);
 }
 
-static Expr* try_bronstein_cascade(Expr* f, Expr* x, bool* nonelem) {
+static Expr* try_bronstein_cascade(Expr* f, Expr* x, bool* nonelem, bool* expired) {
     if (!cascade_gate_bronstein(f, x)) return NULL;
-    return try_cascade_decider("Integrate`Bronstein", "$BronsteinCascadeBudget",
-                               BRONSTEIN_CASCADE_BUDGET_DEFAULT, f, x, nonelem);
+    return run_cascade_decider("Integrate`Bronstein",
+                               cascade_budget("$BronsteinCascadeBudget", BRONSTEIN_CASCADE_BUDGET_DEFAULT),
+                               f, x, nonelem, expired);
+}
+
+/* A decision procedure whose budget ran out, resumed with no budget.
+ *
+ * Trager and Bronstein are complete in their scope, and the cascade budget is
+ * a scheduling choice, not a give-up: it lets the cheaper specialists after
+ * them (GoursatAlgebraic closes pseudo-elliptic integrands in a second that
+ * Trager needs minutes for) answer first.  When none of them closes the
+ * integrand, the method is run again to completion -- before
+ * ParallelMixedSpecial, so its elementary answer is preferred to a
+ * special-function one.  Without this the cascade returned unevaluated what
+ * the method decides in 10-40 s (14 cases of benchmark 262, 22 of 263).  Only
+ * at the outermost Integrate: a nested pass (a speculative sub-integral) must
+ * still decline promptly.  The user's TimeConstrained bounds it as usual. */
+static Expr* try_cascade_resumed(const char* head, Expr* f, Expr* x, bool* nonelem) {
+    return run_cascade_decider(head, 0, f, x, nonelem, NULL);
 }
 
 /* Special-function heads an elementary antiderivative never needs.  Linearity
@@ -2230,8 +2261,10 @@ static Expr* lin_whole_decision(Expr* f, Expr* x, const Expr* special_answer) {
             r = NULL;
         }
     } else if (rad) {
-        r = try_cascade_decider("Integrate`Bronstein", "$BronsteinCascadeBudget",
-                                BRONSTEIN_CASCADE_BUDGET_DEFAULT, f, x, NULL);
+        /* an expiry keeps the special answer: this is an improvement, not the last word */
+        r = run_cascade_decider("Integrate`Bronstein",
+                                cascade_budget("$BronsteinCascadeBudget", BRONSTEIN_CASCADE_BUDGET_DEFAULT),
+                                f, x, NULL, NULL);
     }
     lin_whole_depth--;
     if (r && lin_special_added(r, f)) { expr_free(r); r = NULL; }
@@ -3472,7 +3505,8 @@ typedef enum {
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_GRTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_TRAGER, IP_BRONSTEIN, IP_PMT,
-    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_SPECIALBYPARTS, IP_EXPREWRITE, IP_NSTAGES
+    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_SPECIALBYPARTS, IP_EXPREWRITE, IP_RESUMED,
+    IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
@@ -3482,7 +3516,8 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
     "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
-    "19 RoachMeijerG", "08d RischEarly", "15b SpecialByParts", "15c ExpRewrite"
+    "19 RoachMeijerG", "08d RischEarly", "15b SpecialByParts", "15c ExpRewrite",
+    "17b Trager/Bronstein resumed"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -4439,6 +4474,7 @@ static Expr* builtin_integrate_body(Expr* res) {
 
     Expr* result = NULL;
     bool cascade_nonelem = false;   /* a Trager/Bronstein certificate in this pass */
+    bool trager_expired = false, bronstein_expired = false;   /* budget ran out: resume later */
     switch (method) {
         case METHOD_AUTOMATIC:
             /* Depth 1 only: a NESTED pass (a stage recursing into Integrate --
@@ -4489,8 +4525,9 @@ static Expr* builtin_integrate_body(Expr* res) {
              * the cascade continues unchanged; a certificate skips the remaining
              * elementary-only stages.  Skipped under g_integrate_no_special. */
             if (!g_integrate_no_special) {
-                IP_STAGE(IP_TRAGER,    try_trager_cascade(effective_f, x, &cascade_nonelem));
-                IP_STAGE(IP_BRONSTEIN, try_bronstein_cascade(effective_f, x, &cascade_nonelem));
+                IP_STAGE(IP_TRAGER,    try_trager_cascade(effective_f, x, &cascade_nonelem, &trager_expired));
+                IP_STAGE(IP_BRONSTEIN, try_bronstein_cascade(effective_f, x, &cascade_nonelem,
+                                                             &bronstein_expired));
             }
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
@@ -4598,6 +4635,17 @@ static Expr* builtin_integrate_body(Expr* res) {
              * (a LogByParts speculative sub-integral). */
             if (!g_integrate_no_special && !cascade_nonelem)
                 IP_STAGE(IP_GOURSAT,  try_goursat(effective_f, x));
+            /* Trager / Bronstein resumed with no budget when their budgeted
+             * attempt ran out and nothing since has closed the integrand (see
+             * try_cascade_resumed).  Outermost Integrate only. */
+            if (!g_integrate_no_special && !cascade_nonelem && g_integrate_depth == 1) {
+                if (trager_expired)
+                    IP_STAGE(IP_RESUMED, try_cascade_resumed("Integrate`Trager", effective_f, x,
+                                                             &cascade_nonelem));
+                if (bronstein_expired)
+                    IP_STAGE(IP_RESUMED, try_cascade_resumed("Integrate`Bronstein", effective_f, x,
+                                                             &cascade_nonelem));
+            }
             /* ParallelMixedSpecial: the special-function stage, and the LAST
              * stage of the cascade.
              *
@@ -4907,12 +4955,16 @@ void integrate_init(void) {
         "Method -> \"Trager\" | \"Bronstein\" answers parametric integrands regardless.");
     symtab_set_docstring("$TragerCascadeBudget",
         "$TragerCascadeBudget is the wall-clock budget in seconds (default 10) of the Trager "
-        "stage of the Automatic Integrate cascade; past it the stage declines and the cascade "
-        "continues. Infinity removes the budget. An explicit Method -> \"Trager\" is unbudgeted.");
+        "stage of the Automatic Integrate cascade. Past it the cascade moves on to its later "
+        "stages, and if none of them closes the integral, Trager is resumed with no budget before "
+        "the special-function stages. Infinity removes the budget. An explicit Method -> \"Trager\" "
+        "is unbudgeted.");
     symtab_set_docstring("$BronsteinCascadeBudget",
         "$BronsteinCascadeBudget is the wall-clock budget in seconds (default 10) of the Bronstein "
-        "stage of the Automatic Integrate cascade; past it the stage declines and the cascade "
-        "continues. Infinity removes the budget. An explicit Method -> \"Bronstein\" is unbudgeted.");
+        "stage of the Automatic Integrate cascade. Past it the cascade moves on to its later "
+        "stages, and if none of them closes the integral, Bronstein is resumed with no budget before "
+        "the special-function stages. Infinity removes the budget. An explicit Method -> \"Bronstein\" "
+        "is unbudgeted.");
     /* The ParallelMixedSpecial method symbol (lazy-loads
      * src/internal/ParallelMixedSpecial.m, which loads Part II itself). */
     symtab_add_builtin("Integrate`ParallelMixedSpecial", builtin_integrate_pms);

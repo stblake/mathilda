@@ -3251,6 +3251,31 @@ static void print_tex(Expr* e, int parent_prec) {
         return;
     }
 
+    /* Pure functions in the language's own notation: Slot[n] is \#n, a named
+     * slot \#\text{name}, SlotSequence[n] \#\#n, and Function[body] is body\&.
+     * They were printed as calls -- \text{Root}(\text{Function}(\text{Slot}(1)^{3}
+     * +2),1) -- which is how every Root and RootSum in an Integrate answer read.
+     * A Function with named variables keeps the call form. */
+    if (e->data.function.head->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
+        const char* fh = e->data.function.head->data.symbol.name;
+        Expr* a0 = e->data.function.args[0];
+        if ((fh == SYM_Slot || fh == SYM_SlotSequence) &&
+            (a0->type == EXPR_INTEGER || a0->type == EXPR_STRING)) {
+            printf(fh == SYM_Slot ? "\\#" : "\\#\\#");
+            if (a0->type == EXPR_INTEGER) printf("%" PRId64, a0->data.integer);
+            else print_tex_text(a0->data.string);
+            return;
+        }
+        if (fh == SYM_Function) {
+            /* & binds loosest of all: parenthesised inside any operator */
+            if (parent_prec > 0) printf("\\left(");
+            print_tex(a0, 0);
+            printf("\\&");
+            if (parent_prec > 0) printf("\\right)");
+            return;
+        }
+    }
+
     /* The big operators -- an unevaluated (held) Integrate / Sum / Product /
      * Limit -- typeset as the notation, not as a function call:
      * \int_0^1 f(x) \, dx, \sum _{i=1}^n a(i), \lim_{x\to 0} f(x).  Each binds

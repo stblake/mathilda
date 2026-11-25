@@ -304,6 +304,27 @@ the precision ladder, and it was read as a cancellation zero:
 coefficients that are hidden zeros, then turned `x Log[10^6] == 1` into "no
 solution". The scale is now `log2(|ln|a|| + Pi)`, a bound on `|Log[a]|`.
 
+**A non-zero reading must survive a doubling of the precision (v0.6744).** A
+sample point that holds exponentials (`E^a`, or the hyperbolic and circular
+functions, which are exponentials in other dress) can need far more precision
+than the ladder's 1000-bit top rung. The antiderivative of
+`2/(1 + E^(12 x))^(1/4)` contains `Log[g]` with
+`g = 4 + 4 E^(12x) + E^(24x) - 4 Sqrt[1 + E^(12x)] - ...`. At x = -49.6, g is
+`E^(24x) + ...`, about 2^-1720, built from operands of size 2^2. Every rung up
+to 1000 bits read `D[F, x] - f` as `-f`, and their agreement is exactly the
+evidence the ladder takes for a genuine value, so `PossibleZeroQ` rejected a
+correct answer. This happened with Mathilda's, FriCAS's and Wolfram's answers
+in the integration benchmarks. Now every FALSE at such a point is read again,
+at a precision covering the point's exponential range and then at twice that,
+doubling while the value still moves:
+- if the residual falls by about the bits added, the point is a zero;
+- if it holds, it is a genuine value;
+- if the 8000-bit ceiling is reached first, the point is re-drawn, as an IEEE
+  overflow is.
+
+A FALSE decided this way costs two to four high-precision evaluations at one
+point; a TRUE costs nothing extra.
+
 **Uninformative sample points are re-drawn.** A sample whose value is
 `Indeterminate` only through rounding (`Coth[63.9]` is exactly `1.0` in
 doubles, so `(-1 + Coth[x])^(3/2)` in a denominator is `1/0`) is retried at the
@@ -1536,6 +1557,12 @@ Out[3]= {a, b, b, b, c}
   numerator like a real one (`(I*x)/y`, `((2*I)*x)/y`, `I/y`). Before, `HoldForm[a - (b - c)]`
   printed as `a - b - c`, which reads back as a different value; FeynCalc's TeX-preview tests
   compare these strings. The standard form groups the same way (`a b (c d)`).
+- **TeXForm writes a pure function in the language's own notation** (v0.6744): `Slot[n]` is `\#n`,
+  a named slot `\#\text{name}`, `SlotSequence[n]` `\#\#n`, and `Function[body]` is `body\&`,
+  parenthesised inside an operator. So `TeXForm[Root[#^3 + 2 &, 1]]` is `\text{Root}(\#1^{3}+2\&,1)`.
+  A `Function` with named variables keeps its call form. Until v0.6744 these printed as calls,
+  `\text{Function}(\text{Slot}(1)^{3}+2)`, and that is how every `Root` and `RootSum` in an
+  `Integrate` answer read in the integration reports.
 - **TeXForm separates a factor that begins with a digit** by an explicit `\ `: math mode ignores
   spaces, so `2 3^x` is `2\ 3^{x}`, not `2 3^{x}` (which typesets as `23^x`; audit TeXForm#1).
 - **A negative symbolic exponent goes in the denominator** (v0.6146), in InputForm, the standard

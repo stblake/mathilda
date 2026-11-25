@@ -189,6 +189,12 @@ static void test_budgets(void) {
             "  FreeQ[F, Integrate] || Head[F] === Integrate]]");
     BR_TRUE("Block[{$BronsteinCascadeBudget = Infinity},"
             " PossibleZeroQ[D[Integrate[1/(x Sqrt[Log[x]]), x], x] - 1/(x Sqrt[Log[x]])]]");
+    /* An expired budget is not the last word: when no later elementary stage
+     * closes the integrand, Trager is resumed with no budget (benchmark 263
+     * cA-312-12: Trager decides it in ~7 s, and the cascade returned it
+     * unevaluated whenever that took over the 10 s budget). */
+    BR_TRUE("Block[{$TragerCascadeBudget = 1}, With[{f = (-2 + 2 x^6)^(5/6)/(1 + x^6)},"
+            " With[{F = Integrate[f, x]}, FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - f]]]]");
 }
 
 /* v0.6691: Linearity's special answers for elementary integrands go to the Risch

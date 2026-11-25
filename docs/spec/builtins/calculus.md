@@ -4528,8 +4528,19 @@ the general search stages (the early Risch probe, `Linearity`, `Weierstrass`,
   `E^(x Sqrt[x^3 + 1])/x`).
 
 **Budgets.** `$TragerCascadeBudget` and `$BronsteinCascadeBudget` hold the
-wall-clock budget in seconds (default 10 each; `Infinity` removes it). When a budget
-expires, the stage declines and the cascade continues.
+wall-clock budget in seconds (default 10 each; `Infinity` removes it). The budget
+only schedules the method; it never abandons it:
+- When a budget expires, the cascade moves on to its later stages. GoursatAlgebraic,
+  for one, closes in about a second pseudo-elliptic integrands that Trager needs
+  minutes for.
+- If none of the later elementary stages closes the integral, the method is resumed
+  with no budget, before the special-function stages (`ParallelMixedSpecial`, Roach,
+  the G&R table). Its elementary answer, or its certificate, is then the result.
+- The resumed run happens only at the outermost `Integrate`. A speculative nested
+  integration declines promptly, as before.
+
+Before v0.6744 an expiry was a plain decline. The cascade then returned unevaluated
+what Trager or Bronstein decides in 10-40 s: 14 cases of benchmark 262 and 22 of 263.
 
 **Certificates.** A certificate from either stage has two effects:
 - the stages that can only answer elementarily (`ParallelMixedTower`, Goursat) are

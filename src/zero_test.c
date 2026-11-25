@@ -66,6 +66,9 @@
 
 #include <gmp.h>
 #include <math.h>
+#ifndef M_LN2
+#define M_LN2 0.693147180559945309417   /* POSIX, not C99 */
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -1719,6 +1722,141 @@ out:
     return verdict;
 }
 
+/* The log2 magnitudes of the smallest and largest exponential E^a in `e` (a
+ * point: every exponent is a number), read from Re(a) / ln 2 without evaluating
+ * E^a itself.  *lo = +INFINITY, *hi = -INFINITY when there is none (or no
+ * exponent reduces to a number). */
+static void zt_exp_range(const Expr* e, double* lo, double* hi) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E) {
+            Expr* a = numericalize_machine_unplanned(e->data.function.args[1]);
+            if (a) {
+                const Expr* re = a;
+                if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+                    a->data.function.head->data.symbol.name == SYM_Complex &&
+                    a->data.function.arg_count == 2)
+                    re = a->data.function.args[0];
+                double v = 0.0;
+                if (expr_signed_double(re, &v) && isfinite(v)) {
+                    v /= M_LN2;
+                    if (v < *lo) *lo = v;
+                    if (v > *hi) *hi = v;
+                }
+                expr_free(a);
+            }
+        }
+    }
+    /* A hyperbolic function of a carries e^(+-a), a circular one e^(+-I a): the
+     * same exponentials in other dress, and they cancel as deeply -- 1 - Tanh[u]^2
+     * is ~4 e^(-2|u|), a correct antiderivative's residual at u ~ -57 in
+     * benchmark 259 tanh-elem-13 read as non-zero through every rung. */
+    if (h && h->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
+        const char* fn = h->data.symbol.name;
+        int part = -1;                                /* 0: Re(a) matters, 1: Im(a) */
+        if (fn == SYM_Sinh || fn == SYM_Cosh || fn == SYM_Tanh || fn == SYM_Coth ||
+            fn == SYM_Sech || fn == SYM_Csch) part = 0;
+        else if (fn == SYM_Sin || fn == SYM_Cos || fn == SYM_Tan || fn == SYM_Cot ||
+                 fn == SYM_Sec || fn == SYM_Csc) part = 1;
+        if (part >= 0) {
+            Expr* a = numericalize_machine_unplanned(e->data.function.args[0]);
+            if (a) {
+                const Expr* c = a;
+                bool cplx = a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+                            a->data.function.head->data.symbol.name == SYM_Complex &&
+                            a->data.function.arg_count == 2;
+                if (cplx) c = a->data.function.args[part];
+                double v = 0.0;
+                if ((cplx || part == 0) && expr_signed_double(c, &v) && isfinite(v)) {
+                    v = fabs(v) / M_LN2;
+                    if (-v < *lo) *lo = -v;
+                    if (v > *hi) *hi = v;
+                }
+                expr_free(a);
+            }
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        zt_exp_range(e->data.function.args[i], lo, hi);
+}
+
+/* A sample point's FALSE is evidence only when the ladder can resolve the
+ * point.  Exponentials span a dynamic range: from the largest of them (or the
+ * structural scale) down to the smaller of the smallest exponential and the
+ * residual itself.  A cancellation can need all of it -- Log[g] with
+ * g = 4 + 4 E^(12x) + E^(24x) - 4 Sqrt[1 + E^(12x)] - ... is E^(24x) + O(E^(36x)),
+ * 2^-1720 at x = -49.6 against operands of 2^2, in the antiderivative of
+ * 2/(1 + E^(12x))^(1/4) (benchmark 257 cM-1-176); a derivative of 2^-622
+ * built from exponentials of 2^627 needs ~1250 bits (cM-2-351).  When the range
+ * exceeds what the top rung resolves, every rung reads the residual without the
+ * cancelled quantity, the rungs agree on that wrong value, and their agreement
+ * is exactly what the ladder takes for a genuine non-zero: PossibleZeroQ
+ * rejected correct antiderivatives.
+ *
+ * So a FALSE at such a point is re-read at a precision covering the range and
+ * at twice it.  The rung's own noise floor cannot decide (after the cancellation
+ * only bits - range of the cancelled quantity are significant); the trend does:
+ * a zero falls by about the bits added, a genuine value holds.  Past the
+ * extension ceiling the point is unrepresentable for this test and goes back to
+ * the sampler's re-draw, like an IEEE overflow. */
+static ZeroTestResult zt_range_guard(const Expr* sub, ZeroTestResult r, bool* out_overflow) {
+    if (r != ZERO_TEST_FALSE) return r;
+    double lo = INFINITY, hi = -INFINITY;
+    zt_exp_range(sub, &lo, &hi);
+    if (!isfinite(lo)) return r;                     /* no exponentials: as before */
+    Expr* exact = zt_exactify_reals(sub);
+    const Expr* e = exact ? exact : sub;
+    double s_struct = magnitude_scale(e);
+    double m0 = -INFINITY;
+    (void)evaluate_rung(e, PRECISION_LADDER[1], &m0, NULL, NAN, NULL, NULL);
+    double top = fmax(isfinite(s_struct) ? s_struct : 0.0, hi);
+    double bot = isfinite(m0) ? fmin(lo, m0) : lo;
+    double range = top - bot;
+    long ladder_top = PRECISION_LADDER[PRECISION_LADDER_LEN - 1];
+    /* The explicit exponentials only bound the range from below: a product
+     * like (E^(2x))^6 inside a Log argument can cancel to a quantity that never
+     * appears as a term (FriCAS's antiderivative of 2 E^(2x) (2 + E^(4x))^(3/2)/
+     * (-1 + E^(2x)) at x = 57, benchmark 257 cM-1-126: a range of 825 bits by the
+     * exponentials, a cancellation the 1000-bit rung does not resolve).  So
+     * every FALSE at such a point must survive a doubling of the precision,
+     * starting from at least the top rung. */
+    long b1 = (long)ceil(fmax((double)ladder_top, range + 64.0 + ZT_NONZERO_HEADROOM));
+    ZeroTestResult rr = ZERO_TEST_UNKNOWN;
+    double m1 = 0.0;
+    bool p1 = false;
+    ZeroTestResult r1 = evaluate_rung(e, b1, &m1, NULL, top, NULL, &p1);
+    while (2 * b1 <= ZT_HUGE_EXTEND_MAX_BITS && r1 != ZERO_TEST_UNKNOWN && !p1) {
+        long b2 = 2 * b1;
+        double m2 = 0.0;
+        bool p2 = false;
+        ZeroTestResult r2 = evaluate_rung(e, b2, &m2, NULL, top, NULL, &p2);
+        if (r2 == ZERO_TEST_UNKNOWN || p2) break;
+        if (r2 == ZERO_TEST_TRUE || m2 <= m1 - (double)((b2 - b1) / 2)) {
+            rr = ZERO_TEST_TRUE;               /* fell with the added bits: a zero */
+            break;
+        }
+        if (fabs(m2 - m1) <= 1.0) {
+            rr = ZERO_TEST_FALSE;              /* the same value at both: genuine */
+            break;
+        }
+        b1 = b2; m1 = m2; r1 = r2;             /* still moving: not resolved yet */
+    }
+    ZeroTestResult out;
+    if (rr != ZERO_TEST_UNKNOWN) {
+        out = rr;
+    } else if (out_overflow) {
+        *out_overflow = true;                  /* unresolvable here: re-draw */
+        out = ZERO_TEST_UNKNOWN;
+    } else {
+        out = r;
+    }
+    if (exact) expr_free(exact);
+    return out;
+}
+
 static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, double scale,
                                                  bool* out_overflow) {
     Expr* exact = zt_exactify_reals(e);
@@ -2702,6 +2840,7 @@ static ZeroTestResult zt_point_verdict_raw(const Expr* sub, bool screen, bool* o
         } else {
             r = decide_numeric(sub, out_overflow);
         }
+        r = zt_range_guard(sub, r, out_overflow);
     }
     return r;
 }

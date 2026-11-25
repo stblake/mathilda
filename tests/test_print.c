@@ -440,6 +440,32 @@ void test_texform_fraction_parenthesisation() {
     printf("PASS: TeXForm parenthesises juxtaposed factors in a fraction\n");
 }
 
+/* Pure functions typeset in the language's own notation: Slot[n] is \#n and
+ * Function[body] is body\& (they printed as \text{Function}(\text{Slot}(1)...),
+ * which is how every Root and RootSum of an Integrate answer read). */
+void test_texform_pure_functions() {
+    static const struct { const char* in; const char* tex; } cases[] = {
+        {"TeXForm[Root[#^3 + 2 &, 1]]",        "\\text{Root}(\\#1^{3}+2\\&,1)"},
+        {"TeXForm[f[#1, #2] &]",                "f(\\#1,\\#2)\\&"},
+        {"TeXForm[#name + ##2 &]",              "\\#\\text{name}+\\#\\#2\\&"},
+        {"TeXForm[(#^2 &)^2]",                  "\\left(\\#1^{2}\\&\\right)^{2}"},
+        {"TeXForm[Function[{u}, u^2]]",         "\\text{Function}(\\{u\\},u^{2})"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+        char* str = expr_to_string(res);
+        if (!str || strcmp(str, cases[i].tex) != 0)
+            printf("  %s\n    got      %s\n    expected %s\n",
+                   cases[i].in, str ? str : "(null)", cases[i].tex);
+        ASSERT(str && strcmp(str, cases[i].tex) == 0);
+        free(str);
+        expr_free(res);
+    }
+    printf("PASS: TeXForm typesets pure functions as #n and &\n");
+}
+
 /* A denominator is the right operand of a left-associative `/`: a factor
  * that itself prints as a quotient (a negative Power, a Rational) must be
  * parenthesised, or the text re-reads as a different value -- "1/1/x" is
@@ -676,6 +702,7 @@ int main() {
     TEST(test_selectable_standardform);
     TEST(test_radical_body_unbracketed);
     TEST(test_texform_fraction_parenthesisation);
+    TEST(test_texform_pure_functions);
     TEST(test_quotient_denominator_parenthesised);
     TEST(test_inputform_real_roundtrip);
     TEST(test_dot_infix);
