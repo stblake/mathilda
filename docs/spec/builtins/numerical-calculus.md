@@ -246,6 +246,7 @@ In[10]:= ND[Sin[x^2], {x, 3}, 1, Terms -> 20, WorkingPrecision -> 40]
 Out[10]= -14.420070264639875819037588981065446865125
 ```
 
+**Wave 5 (2026-11).** An order above 1000 is `ND::ord` (it was truncated to `int`).
 
 ## NSeries
 
@@ -285,8 +286,15 @@ The upper-half DFT bins (`k = N - m`) supply the **negative**-power
 coefficients, so one transform yields both the principal part and the
 analytic part; this is exact when `f` is analytic on an annulus containing
 the circle.  The sample count is a power of two with an oversampling margin,
-`N = 2^{ceil(log2 n) + 2}`, which pushes the leading aliased term below the
-round-off floor.  A direct `O(N^2)` DFT is used (no FFT dependency): `N` is
+`N = 2^{ceil(log2 n) + 2}`.  That base count alone does not reach round-off:
+the leading aliased term is `a_{e+N} r^N`, so for `Exp[x]` at `n = 2`
+(`N = 8`, `r = 1`) the `x^-2` coefficient reads `a_6 = 1/720 ~ 1.4e-3` and the
+`x^0` coefficient is off by `a_8 = 1/8! ~ 2.5e-5` in the first pass.  The
+default `PrecisionGoal`/`AccuracyGoal` refinement doubles `N` until successive
+estimates agree, which is what brings the coefficients to round-off; with both
+goals set to `Infinity` that refinement is off and the base-count error stands
+(`NSeries[Exp[x], {x, 0, 2}, PrecisionGoal -> Infinity, AccuracyGoal ->
+Infinity]` has errors ~`1e-3` in its negative-power coefficients).  A direct `O(N^2)` DFT is used (no FFT dependency): `N` is
 small and each sample requires a full symbolic evaluation of `f`, which
 dominates the runtime.  The same path serves machine (`double _Complex`) and
 arbitrary-precision (MPFR) computations.
@@ -536,6 +544,7 @@ In[12]:= NLimit[Sin[x]/x, x -> Infinity]  (* same oscillation, decaying envelope
 Out[12]= 0.0142131
 ```
 
+**Wave 5 (2026-11).** A second argument that is not `z -> z0` is `NLimit::lim`; `Scale -> 0` and `Direction -> 0` are `NLimit::badopt`.
 
 ## NSum
 
@@ -906,6 +915,7 @@ multidimensional **sums** (`NSum[(-1)^n (2/n)^k/k^2, {n,2,Infinity},
 {k,1,Infinity}]` ≈ 1.14434, `{k,1,n}` ≈ 0.770188) and all finite ranges are
 accurate.
 
+**Wave 5 (2026-11).** The inner `NSum` of a multidimensional sum, evaluated while an outer index is still symbolic, stays unevaluated quietly (no `NSum::nnum`).
 
 ## NProduct
 
@@ -973,6 +983,7 @@ Out[3]= 3.67608
 `In[1]` is the telescoping product `∏(1−1/n²) = 1/2`; `In[2]` is its reciprocal,
 `2`; `In[3]` is `Sinh[Pi]/Pi ≈ 3.67608`.
 
+**Wave 5 (2026-11).** A finite machine-precision product of at most 10^5 factors multiplies its factors (`NProduct[2, {3}]` is `8.`).
 
 ## NIntegrate
 
@@ -1528,6 +1539,8 @@ Out[6]= x == -1.414213562373095048801688724209 || x == 1.41421356237309504880168
 `In[4]` shows multiplicity as repeated equations; `In[5]` solves a
 complex-coefficient equation (`x = ±(2 + I)`); `In[6]` returns 30-digit roots.
 
+**Wave 5 (2026-11).** Argument count and option names are checked (`NRoots::argr`, `::optx`).
+
 ## NSolve
 
 **Audit wave 4.** The integer parameters `C[k]` of a periodic family stay exact.
@@ -1624,6 +1637,8 @@ Out[6]= {{x -> -1.097911672722823576416400 + 0.839886921615659203622803 I, …},
 `In[2]` is the global solver returning all six complex solutions;
 `In[4]` is an inconsistent linear system; `In[5]` uses FindRoot grid-seeding
 for a transcendental equation Solve cannot reduce.
+
+**Wave 5 (2026-11).** A polynomial with a symbolic coefficient goes to the symbolic solver without the internal `NRoots::nnum`; the transcendental grid seeds run quietly (only verified roots are kept).
 
 ## NDSolve
 
@@ -2141,6 +2156,8 @@ In[7]:= (* wave equation u_tt = u_xx (default adaptive DOPRI5) *)
                 u, {t, 0, 0.5}, {x, 0, 1}]
 ```
 
+**Wave 5 (2026-11).** Exhausting `MaxSteps` is `NDSolve::mxst` (with the point reached); a non-numeric endpoint is `::ndnl`, a non-numeric initial value `::ndinnt`; `::ndsz` names the point. An end that a fixed step or an event restart leaves an ulp short of the endpoint is snapped onto it, so `u[xmax]` does not extrapolate.
+
 ## NDSolveValue
 
 `NDSolveValue[eqns, expr, {x, xmin, xmax}, opts]` solves the differential
@@ -2163,6 +2180,8 @@ PDE ranges `{t, ...}, {x, ...}`, and all `NDSolve` options (`Options[NDSolveValu
 is `Options[NDSolve]`). When `NDSolve` stays unevaluated so does `NDSolveValue`;
 equations with no derivative at all are `NDSolveValue::dvnf`. Attributes:
 `Protected`.
+
+**Wave 5 (2026-11).** Diagnostics of the underlying solve are issued under `NDSolveValue`.
 
 ## Finite elements: NDEigenvalues, NDEigensystem, NDSolve over a region
 
@@ -2321,6 +2340,8 @@ so the remaining gap is the prefractal, not the discretization.
 Attributes: `NDEigenvalues`, `NDEigensystem`, `DirichletCondition`,
 `NeumannValue`: `Protected`. `Options[NDEigenvalues]` =
 `{DependentVariables -> Automatic, Method -> Automatic}`.
+
+**Wave 5 (2026-11).** The eigenvalues are sorted ascending again after Richardson extrapolation (which could swap a near-degenerate pair), the eigenfunctions permuted with them.
 
 ## FindMinimum / FindMaximum
 
@@ -2925,6 +2946,8 @@ In[10]:= FindMinimum[x Cos[x], {x, 2}, WorkingPrecision -> 80]
 Out[10]= {-3.2883713955908964865125964571235283975158511553846230554230811211040811736596049,
          {x -> 3.42561845948172814647771386218545617769640923939753965919739613085112431446169}}
 ```
+
+**Wave 5 (2026-11).** An objective that is not a number at the start (`f[x]`, `a x^2`) is `::nrnum`; a variable named twice is `::dupv`; a bracket search still descending after its expansion (unbounded below) is `::cvmit`, with the last iterate returned.
 
 ## NMinimize / NMaximize
 

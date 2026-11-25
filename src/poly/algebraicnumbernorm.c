@@ -106,8 +106,11 @@ Expr* builtin_algebraicnumbernorm(Expr* res) {
         return NULL;
     }
 
-    /* r == 0: not a constant algebraic number — report and stay unevaluated. */
-    char* s = expr_to_string((Expr*)a);
+    /* r == 0: not a constant algebraic number — report and stay unevaluated.
+     * When a is one, the culprit is the Extension value (AlgebraicNumberNorm#2,
+     * AlgebraicNumberTrace#1: Extension -> Pi blamed Sqrt[2]). */
+    const Expr* culprit = (theta && flint_qqbar_is_constant_algebraic(a)) ? theta : a;
+    char* s = expr_to_string((Expr*)culprit);
     mth_message("AlgebraicNumberNorm", "nalg", "%s is not an explicit algebraic number.", s ? s : "?");
     free(s);
     return NULL;

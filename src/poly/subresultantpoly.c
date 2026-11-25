@@ -310,6 +310,7 @@ static Expr* subrespoly_emit_npolys(Expr* p1, Expr* p2, Expr* var) {
 }
 
 Expr* builtin_subresultantpolynomials(Expr* res) {
+    { Expr* mr = subres_modulus_apply(res, builtin_subresultantpolynomials, false); if (mr) return mr; }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
 
     Expr* p1  = res->data.function.args[0];

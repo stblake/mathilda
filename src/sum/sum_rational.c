@@ -474,6 +474,22 @@ static Expr* sr_generators(Expr* den, Expr* var) {
 /*  Finite ranges: Sum[p(i)/q(i), {i, imin, imax}] with integer bounds  */
 /* ------------------------------------------------------------------ */
 
+/* A symbolic finite upper bound: free of the index, with no inexact number,
+ * infinity or Indeterminate in it. */
+static bool sr_symbolic_bound(const Expr* e, const Expr* var) {
+    if (e->type == EXPR_SYMBOL)
+        return !expr_eq((Expr*)e, (Expr*)var) &&
+               e->data.symbol.name != SYM_Infinity && e->data.symbol.name != SYM_ComplexInfinity &&
+               e->data.symbol.name != SYM_Indeterminate;
+    if (e->type != EXPR_FUNCTION) return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_DirectedInfinity) return false;
+    if (!sr_symbolic_bound(e->data.function.head, var)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!sr_symbolic_bound(e->data.function.args[i], var)) return false;
+    return true;
+}
+
 /* PolyGamma[m, a] (owned args). */
 static Expr* sr_polygamma(int m, Expr* a) {
     return expr_new_function(expr_new_symbol(SYM_PolyGamma),
@@ -542,11 +558,41 @@ static Expr* sr_finite_linear_term(Expr* c0, Expr* base, int k, Expr* var,
                                expr_new_function(expr_new_symbol(SYM_Power),
                                    (Expr*[]){ expr_copy(b1), sum_int(-1) }, 2) }, 3);
     /* A pole at a non-integer rational is never hit by an integer index. */
+    bool sym_max = !expr_is_integer_like(imax);
     if (expr_is_integer_like(rho)) {
-        Expr* c = sum_eval("LessEqual", (Expr*[]){ expr_copy(imin), expr_copy(rho),
-                                                    expr_copy(imax) }, 3);
+        /* With a symbolic upper bound an integer pole at or above imin lies in
+         * the range for every large enough imax: no closed form to give. */
+        Expr* c = sym_max
+            ? sum_eval("LessEqual", (Expr*[]){ expr_copy(imin), expr_copy(rho) }, 2)
+            : sum_eval("LessEqual", (Expr*[]){ expr_copy(imin), expr_copy(rho),
+                                               expr_copy(imax) }, 3);
         if (c->type == EXPR_SYMBOL && c->data.symbol.name == SYM_True) *in_range = true;
         expr_free(c);
+        if (sym_max && !*in_range) {
+            /* Sum#4: an integer pole below the range, symbolic imax -- the
+             * reference's harmonic-number form,
+             *   sum 1/(i - rho)^k = H[imax - rho, k] - H[imin - rho - 1, k]
+             * (HarmonicNumber[m] for k = 1): Sum[1/i, {i, 1, n}] is
+             * HarmonicNumber[n]. */
+            Expr* hi = sum_sub(imax, rho);
+            Expr* lo_arg = sum_sub(imin, rho);
+            Expr* lo = sum_eval("Plus", (Expr*[]){ lo_arg, sum_int(-1) }, 2);
+            Expr* H_hi = k == 1
+                ? expr_new_function(expr_new_symbol(SYM_HarmonicNumber), (Expr*[]){ hi }, 1)
+                : expr_new_function(expr_new_symbol(SYM_HarmonicNumber), (Expr*[]){ hi, sum_int(k) }, 2);
+            Expr* H_lo = k == 1
+                ? expr_new_function(expr_new_symbol(SYM_HarmonicNumber), (Expr*[]){ lo }, 1)
+                : expr_new_function(expr_new_symbol(SYM_HarmonicNumber), (Expr*[]){ lo, sum_int(k) }, 2);
+            expr_free(rho);
+            Expr* cf = sum_eval("Times",
+                           (Expr*[]){ c0,
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ b1, sum_int(-k) }, 2) }, 2);
+            Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
+                             (Expr*[]){ H_hi, expr_new_function(expr_new_symbol(SYM_Times),
+                                                  (Expr*[]){ sum_int(-1), H_lo }, 2) }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ cf, diff }, 2);
+        }
     }
     Expr* A = sum_sub(imin, rho);
     Expr* imax1 = sum_eval("Plus", (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);
@@ -729,7 +775,11 @@ static Expr* sr_finite_decompose(Expr* f, Expr* var, Expr* imin, Expr* imax,
  * non-linear irreducible factor, or a non-rational summand returns NULL.
  */
 static Expr* sr_finite(Expr* f, Expr* var, Expr* imin, Expr* imax) {
-    if (!expr_is_integer_like(imin) || !expr_is_integer_like(imax)) return NULL;
+    /* imin an exact integer; imax an exact integer, or (Sum#4) a symbolic
+     * bound free of the index -- the polygamma / harmonic closed form holds
+     * for every integer imax >= imin. */
+    if (!expr_is_integer_like(imin)) return NULL;
+    if (!expr_is_integer_like(imax) && !sr_symbolic_bound(imax, var)) return NULL;
     /* An inexact summand (1.0/k, N[1/k]) is summed numerically by the caller's
      * compiled loop: Apart would rationalise it and return an exact form. */
     if (internal_contains_inexact(f)) return NULL;

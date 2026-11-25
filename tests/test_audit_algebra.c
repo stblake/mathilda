@@ -1,5 +1,7 @@
+#define _POSIX_C_SOURCE 200809L   /* dup, dup2, fileno: audit_msg_text */
 /* Builtin-audit regressions: algebra (review/issues/; tests/test_audit.h). */
 #include "test_audit.h"
+#include <unistd.h>
 
 /* AlgebraicIntegerQ#1 (high): past to_qqbar's degree cap (120) the decline
  * became a definite False. Ring closure now decides sums, products and
@@ -85,11 +87,67 @@ static void test_wave4_algebra(void) {
     audit_chk("IrreduciblePolynomialQ#2", "IrreduciblePolynomialQ[x^2 + 1, Modulus -> 3]", "True");
 }
 
+
+
+
+
+
+
+/* ---- Wave 5 G5 BEGIN (calculus-solve audit fixes) ---- */
+
+/* Wave 5 G5: does evaluating `input` print a message containing `needle`?
+ * (stderr is captured in a temporary file for the call.) */
+static void audit_msg_text(const char* id, const char* input, const char* needle) {
+    fflush(stderr);
+    int saved = dup(2);
+    FILE* tf = tmpfile();
+    if (saved < 0 || !tf) { if (tf) fclose(tf); if (saved >= 0) close(saved); return; }
+    dup2(fileno(tf), 2);
+    int depth = mth_msg_suppress_depth_save();   /* the suite runs muted */
+    mth_msg_suppress_depth_load(0);
+    Expr* e = parse_expression(input);         /* audit_run would mute it */
+    if (e) { Expr* r = evaluate(e); expr_free(e); if (r) expr_free(r); }
+    mth_msg_suppress_depth_load(depth);
+    fflush(stderr);
+    dup2(saved, 2);
+    close(saved);
+    rewind(tf);
+    char buf[4096];
+    size_t n = fread(buf, 1, sizeof buf - 1, tf);
+    buf[n] = '\0';
+    fclose(tf);
+    if (strstr(buf, needle)) g_audit_pass++;
+    else {
+        fprintf(stderr, "FAIL [%s] %s\n  message lacks: %s\n  got: %s\n", id, input, needle, buf);
+        g_audit_fail++;
+    }
+}
+
+static void test_wave5_g5(void) {
+    audit_chk("Together#2", "Check[Together[], fired, Together::argx]", "fired");
+    audit_chk("Together#2", "Check[Together[x, y], fired, Together::nonopt]", "fired");
+    audit_chk("Cancel#3", "Cancel[(1 - Cos[x]^2)/Sin[x], Trig -> True]", "Sin[x]");
+    audit_chk("Denominator#2", "{Denominator[Tan[x], Trig -> True], Numerator[Tan[x], Trig -> True]}", "{Cos[x], Sin[x]}");
+    audit_chk("AlgebraicNumber#1", "MinimalPolynomial[AlgebraicNumber[Sqrt[2], {1, 1}], x]", "-1 - 2 x + x^2");
+    audit_chk("AlgebraicNumberTrace#2", "AlgebraicNumberTrace[Sqrt[2], Extension -> Sqrt[2], Extension -> Sqrt[3]]", "0");
+    audit_chk("AlgebraicNumberTrace#3", "Check[AlgebraicNumberTrace[], fired, AlgebraicNumberTrace::argx]", "fired");
+    audit_chk("MinimalPolynomial#3", "MinimalPolynomial[Quiet[Root[#^2 - 2 &, 3]], x]", "MinimalPolynomial[Root[#1^2 - 2 &, 3], x]");
+    audit_chk("MinimalPolynomial#4", "MinimalPolynomial[Root[Function[{y}, y^3 - 2], 1], x]", "-2 + x^3");
+    audit_chk("MinimalPolynomial#5", "Head[MinimalPolynomial[Complex[1.5, 3], x]]", "MinimalPolynomial");
+    audit_chk("SubresultantPolynomials#1", "SubresultantPolynomials[x^3 + 1, x^2 + 1, x, Modulus -> 3]", "{2, 1 + 2 x, 1 + x^2}");
+    audit_chk("Subresultants#2", "Subresultants[x^2 + 1, x + 1, x, Modulus -> 3]", "{2, 1}");
+    audit_msg_text("AlgebraicNumberNorm#2", "AlgebraicNumberNorm[Sqrt[2], Extension -> x]", "x is not an explicit algebraic number");
+    audit_msg_text("AlgebraicNumberTrace#1", "AlgebraicNumberTrace[Sqrt[2], Extension -> Pi]", "Pi is not an explicit algebraic number");
+    audit_msg_text("MinimalPolynomial#6", "MinimalPolynomial[Sqrt[2], 3]", "3 is not a valid variable");
+}
+/* ---- Wave 5 G5 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_algebraicintegerq_high_degree);
     TEST(test_irreduciblepolynomialq_absolute);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_algebra);
+    TEST(test_wave5_g5);
     return audit_finish("audit_algebra");
 }

@@ -201,6 +201,47 @@ static void test_wave4_numerical(void) {
     audit_chk("NDSolveValue#1", "Abs[NDSolveValue[y'[x] == y[x] && y[0] == 1, y[1], {x, 0, 1}] - E] < 10^-5", "True");
 }
 
+
+
+
+
+
+
+/* ---- Wave 5 G5 BEGIN (calculus-solve audit fixes) ---- */
+static void test_wave5_g5(void) {
+    audit_chk("Or#1", "StringContainsQ[ToString[Information[Or]], \"logical OR\"]", "True");
+    audit_chk("NSum#4", "Abs[Check[NSum[1/(i j)^2, {i, 1, Infinity}, {j, 1, Infinity}], fired, NSum::nnum] - Zeta[2]^2] < 10^-6", "True");
+    audit_chk("FindMinimum#4", "Check[FindMinimum[x, {x, 0}], fired, FindMinimum::cvmit]", "fired");
+    audit_chk("FindMinimum#5", "Check[FindMinimum[x^2, {{x, 1}, {x, 2}}], fired, FindMinimum::dupv]", "fired");
+    audit_chk("FindMinimum#5", "Quiet[FindMinimum[x^2, {{x, 1}, {x, 2}}]]", "FindMinimum[x^2, {{x, 1}, {x, 2}}]");
+    audit_chk("FindMinimum#7", "Check[FindMinimum[f[x], {x, 1}], fired, FindMinimum::nrnum]", "fired");
+    audit_chk("FindMinimum#7", "Quiet[FindMinimum[f[x], {x, 1}]]", "FindMinimum[f[x], {x, 1}]");
+    audit_chk("NSolve#3", "Head[Check[NSolve[x^2 == a, x], fired, NRoots::nnum]]", "List");
+    audit_chk("NSolve#4", "Block[{$MessageList = {}}, NSolve[x^x == 2, x, Reals]; Length[$MessageList]]", "0");
+    audit_chk("NSolve#4", "Abs[x - 1.5596104694623694 /. First[NSolve[x^x == 2, x, Reals]]] < 10^-9", "True");
+    audit_chk("ND#2", "Check[ND[x^2, {x, 4294967298}, 1], fired, ND::ord]", "fired");
+    audit_chk("NDEigenvalues#2", "OrderedQ[TimeConstrained[NDEigenvalues[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, u[x, y], {x, y} \\[Element] Rectangle[{0, 0}, {1, 1}], 6], 120]]", "True");
+    audit_chk("NDSolve#2", "Check[NDSolve[{y'[x] == -y[x], y[0] == 1}, y, {x, 0, 100}, MaxSteps -> 5], fired, NDSolve::mxst]", "fired");
+    audit_chk("NDSolve#3", "Check[NDSolve[{y'[x] == -y[x], y[0] == a}, y, {x, 0, 1}], fired, NDSolve::ndinnt]", "fired");
+    audit_chk("NDSolve#4", "Check[NDSolve[{y'[x] == -y[x], y[0] == 1}, y, {x, 0, a}], fired, NDSolve::ndnl]", "fired");
+    audit_chk("NDSolve#6", "Abs[Check[y[1] /. First[NDSolve[{y'[x] == -y[x], y[0] == 1}, y, {x, 0, 1}, StartingStepSize -> 0.25, Method -> \"RK4\"]], fired] - E^-1.] < 10^-6", "True");
+    audit_chk("WhenEvent#4", "Check[(y /. First[NDSolve[{y'[t] == 1, y[0] == 0, WhenEvent[t == 1/2, y[t] -> 0]}, y, {t, 0, 1}]])[1], fired] - 0.5 < 10^-9", "True");
+    audit_chk("NDSolveValue#2", "Quiet[Check[NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, 1}, MaxSteps -> 3], fired, NDSolveValue::mxst]]", "fired");
+    audit_chk("NDSolveValue#4", "Check[NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, a}], fired, NDSolveValue::ndnl]", "fired");
+    audit_chk("NDSolveValue#5", "Quiet[Check[NDSolveValue[{y'[x] == 1/(x - 0.5), y[0] == 1}, y[1], {x, 0, 1}], fired, NDSolveValue::ndsz]]", "fired");
+    audit_chk("WhenEvent#4", "(y /. First[NDSolve[{y'[t] == 1, y[0] == 0, WhenEvent[t == 1/2, y[t] -> 0]}, y, {t, 0, 1}]])[\"Domain\"]", "{{0.0, 1.0}}");
+    audit_chk("NProduct#3", "NProduct[2, {3}] === 8.", "True");
+    audit_chk("NRoots#3", "Check[NRoots[x^2 == 2], fired, NRoots::argr]", "fired");
+    audit_chk("NRoots#4", "Check[NRoots[x^2 == 2, x, Foo -> 1], fired, NRoots::optx]", "fired");
+    audit_chk("Fourier#2", "{Check[Fourier[{}], fired, Fourier::fftl], Check[Fourier[5], fired, Fourier::fftl], Check[Fourier[{{1, 2}, {3}}], fired, Fourier::fftl], Check[Fourier[{\"a\", \"b\"}], fired, Fourier::fftl]}", "{fired, fired, fired, fired}");
+    audit_chk("Fourier#2", "Quiet[Fourier[{\"a\", \"b\"}]]", "Fourier[{\"a\", \"b\"}]");
+    audit_chk("NLimit#2", "{Check[NLimit[Sin[x]/x, x], fired, NLimit::lim], Check[NLimit[Sin[x]/x, x -> 0, Scale -> 0], fired, NLimit::badopt], Check[NLimit[Sin[x]/x, x -> 0, Direction -> 0], fired, NLimit::badopt]}", "{fired, fired, fired}");
+    audit_chk("NResidue#1", "Abs[Check[NResidue[1/x, {x, 0}, Radius -> 1/10, MaxRecursion -> 0], fired] - 1] < 10^-12", "True");
+    audit_chk("ND#3", "Abs[Check[ND[x, {x, -1/2}, 1, Method -> NIntegrate], fired] - 4/(3 Sqrt[Pi])] < 10^-8", "True");
+    audit_chk("NSeries#4", "Max[Abs[Normal[CoefficientList[Normal[NSeries[Exp[x], {x, 0, 2}]] x^2, x]] - {0, 0, 1, 1, 1/2}]] < 10^-10", "True");
+}
+/* ---- Wave 5 G5 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_nsum_nested_no_d_ivar);
@@ -219,5 +260,6 @@ int main(void) {
     TEST(test_whenevent_jump);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_numerical);
+    TEST(test_wave5_g5);
     return audit_finish("audit_numerical_calculus");
 }

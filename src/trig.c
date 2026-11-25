@@ -1214,6 +1214,33 @@ static const Expr* exact_inverse_value(int which, int64_t n, int64_t d) {
     return g_exact_inv_cache[which][i][j];
 }
 
+/* The values Sin and Cos take at odd multiples of Pi/8, for the inverse
+ * tables only (ArcCos#4): the reference leaves Cos[Pi/8] itself unevaluated,
+ * but ArcCos[Sqrt[2 + Sqrt[2]]/2] is Pi/8.  k = 1 or 3: Sin[k Pi/8] is
+ * Sqrt[2 -+ Sqrt[2]]/2, and Cos[k Pi/8] = Sin[(4 - k) Pi/8]. */
+static Expr* exact_sin_pi8(int k) {
+    Expr* inner = make_plus(expr_new_integer(2),
+                            k == 1 ? make_times(expr_new_integer(-1), make_sqrt(2)) : make_sqrt(2));
+    return eval_and_free(make_times(make_rational(1, 2), make_sqrt_expr(inner)));
+}
+
+/* arg == +-Sin[k Pi/8] (k = 1, 3): the multiple of Pi, else NULL. */
+static Expr* exact_arcsin_pi8(Expr* arg, bool cosine) {
+    for (int k = 1; k <= 3; k += 2) {
+        for (int sg = 1; sg >= -1; sg -= 2) {
+            Expr* v = exact_sin_pi8(k);
+            if (sg < 0) v = eval_and_free(make_times(expr_new_integer(-1), v));
+            bool hit = expr_eq(arg, v);
+            expr_free(v);
+            if (!hit) continue;
+            /* ArcSin: sg k Pi/8.  ArcCos: Pi/2 - sg k Pi/8 = (4 - sg k) Pi/8. */
+            int64_t num = cosine ? 4 - sg * k : sg * k;
+            return make_times(make_rational(num, 8), expr_new_symbol(SYM_Pi));
+        }
+    }
+    return NULL;
+}
+
 static Expr* exact_arcsin(Expr* arg) {
     if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
@@ -1225,7 +1252,7 @@ static Expr* exact_arcsin(Expr* arg) {
                 return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
         }
     }
-    return NULL;
+    return exact_arcsin_pi8(arg, false);
 }
 
 static Expr* exact_arccos(Expr* arg) {
@@ -1239,7 +1266,7 @@ static Expr* exact_arccos(Expr* arg) {
                 return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
         }
     }
-    return NULL;
+    return exact_arcsin_pi8(arg, true);
 }
 
 static Expr* exact_arctan(Expr* arg) {
@@ -1249,6 +1276,7 @@ static Expr* exact_arctan(Expr* arg) {
         int64_t d = ds[i];
         for (int64_t n = -d/2; n <= d/2; n++) {
             Expr* val = exact_tan(n, d);
+            if (val) val = eval_and_free(val);   /* canonical form, as arg is */
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
@@ -1493,14 +1521,6 @@ static int atan2_exact_sign(const Expr* e) {
     return v > 0 ? 1 : -1;
 }
 
-static bool atan2_mentions_arctan(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    if (head_is(e, SYM_ArcTan)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (atan2_mentions_arctan(e->data.function.args[i])) return true;
-    return false;
-}
-
 Expr* builtin_arctan(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -1611,7 +1631,11 @@ Expr* builtin_arctan(Expr* res) {
                 Expr* q = eval_and_free(make_times(expr_copy(y),
                               make_power(expr_copy(x), expr_new_integer(-1))));
                 Expr* t = eval_and_free(expr_new_function(expr_new_symbol(SYM_ArcTan), &q, 1));
-                if (t && !atan2_mentions_arctan(t)) {
+                /* ArcTan#2: with no closed form the one-argument ArcTan[y/x]
+                 * stands, plus the quadrant offset -- ArcTan[1, 2] is
+                 * ArcTan[2] and ArcTan[-1, 2] is Pi - ArcTan[2], as in the
+                 * reference (closed forms only, before). */
+                if (t && !(head_is(t, SYM_ArcTan) && t->data.function.arg_count == 2)) {
                     if (sx > 0) return t;
                     return eval_and_free(make_plus(t, make_times(expr_new_integer(sy > 0 ? 1 : -1),
                                                                  expr_new_symbol(SYM_Pi))));

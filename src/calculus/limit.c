@@ -393,6 +393,51 @@ static bool is_bare_hyperbolic_call(Expr* e) {
            head_is(e, SYM_Coth) || head_is(e, SYM_Sech) || head_is(e, SYM_Csch);
 }
 
+/* Fibonacci[a] -> (GoldenRatio^a - Cos[Pi a] GoldenRatio^-a)/Sqrt[5] and
+ * LucasL[a] -> GoldenRatio^a + Cos[Pi a] GoldenRatio^-a, for every one-argument
+ * call whose argument mentions x (the functions' definitions for real a).
+ * Returns an owned rewrite, or NULL when there is no such call. */
+static bool limit_mentions(const Expr* e, const Expr* x) {
+    if (expr_eq((Expr*)e, (Expr*)x)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (limit_mentions(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (limit_mentions(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+static Expr* rewrite_fibonacci_binet(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    bool fib = head_is(e, SYM_Fibonacci), luc = head_is(e, SYM_LucasL);
+    if ((fib || luc) && n == 1 && limit_mentions(e->data.function.args[0], x)) {
+        Expr* a = e->data.function.args[0];
+        Expr* up = mk_fn2("Power", mk_sym("GoldenRatio"), expr_copy(a));
+        Expr* dn = mk_fn2("Times", mk_fn1("Cos", mk_fn2("Times", mk_sym("Pi"), expr_copy(a))),
+                          mk_fn2("Power", mk_sym("GoldenRatio"),
+                                 mk_fn2("Times", mk_int(-1), expr_copy(a))));
+        if (luc) return mk_fn2("Plus", up, dn);
+        return mk_fn2("Times",
+                      mk_fn2("Plus", up, mk_fn2("Times", mk_int(-1), dn)),
+                      mk_fn2("Power", mk_int(5), mk_fn2("Rational", mk_int(-1), mk_int(2))));
+    }
+    bool any = false;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = rewrite_fibonacci_binet(e->data.function.args[i], x);
+        if (r) any = true;
+        args[i] = r ? r : expr_copy(e->data.function.args[i]);
+    }
+    if (!any) {
+        for (size_t i = 0; i < n; i++) expr_free(args[i]);
+        free(args);
+        return NULL;
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
 static Expr* rewrite_hyperbolic_to_exp(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -4593,6 +4638,14 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * term-wise Plus layer can cancel decaying tails. We also Expand so shapes
      * like `E^(-x) (1 + (E^x - E^-x)/2)` fold into `1/2 - E^(-2x)/2 + E^(-x)`,
      * which the term-wise Plus layer can directly sum. */
+    /* Limit#2: Fibonacci / LucasL of the variable at Infinity, in Binet form
+     * (their definition for real argument), so the dominant GoldenRatio^a is
+     * visible: Limit[Fibonacci[n + 1]/Fibonacci[n], n -> Infinity] is
+     * GoldenRatio. */
+    if (at_inf) {
+        Expr* rb = rewrite_fibonacci_binet(rewritten, ctx->x);
+        if (rb) { expr_free(rewritten); rewritten = rb; }
+    }
     if (at_inf && !bare_hyp_at_inf) {
         Expr* r2 = rewrite_hyperbolic_to_exp(rewritten);
         expr_free(rewritten);

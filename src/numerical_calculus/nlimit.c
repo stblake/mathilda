@@ -78,6 +78,7 @@
 
 #include "nlimit.h"
 #include "../modular.h"
+#include "../print.h"   /* expr_to_string: NLimit::lim */
 
 #include <complex.h>
 #include <gmp.h>
@@ -717,11 +718,26 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
         } else if (rhs->type == EXPR_STRING && !strcmp(rhs->data.string, "FromBelow")) {
             if (!dir_from_below) dir_from_below = expr_new_integer(1);
             o->direction = dir_from_below;
-        } else
+        } else {
+            /* NLimit#2: a zero direction has no approach (Direction -> 0) */
+            if ((rhs->type == EXPR_INTEGER && rhs->data.integer == 0) ||
+                (rhs->type == EXPR_REAL && rhs->data.real == 0.0)) {
+                nl_warn("badopt", "Direction must be a nonzero number, \"FromAbove\", \"FromBelow\" or Automatic");
+                return false;
+            }
             o->direction = rhs;
+        }
         return true;
     }
-    if (name == SYM_Scale) { o->scale = rhs; return true; }
+    if (name == SYM_Scale) {
+        /* NLimit#2: a zero Scale puts every sample on the limit point */
+        if ((rhs->type == EXPR_INTEGER && rhs->data.integer == 0) ||
+            (rhs->type == EXPR_REAL && rhs->data.real == 0.0)) {
+            nl_warn("badopt", "Scale must be a nonzero number");
+            return false;
+        }
+        o->scale = rhs; return true;
+    }
     if (name == SYM_Terms) {
         if (rhs->type == EXPR_INTEGER && rhs->data.integer >= 2) {
             o->terms = (int)rhs->data.integer;
@@ -1255,6 +1271,10 @@ Expr* builtin_nlimit(Expr* res) {
             && rule->data.function.head->data.symbol.name != SYM_RuleDelayed)
         || rule->data.function.arg_count != 2
         || rule->data.function.args[0]->type != EXPR_SYMBOL) {
+        /* NLimit#2: say so (NLimit[f, x] was left without a word). */
+        char* rs = expr_to_string(rule);
+        nl_warn("lim", "%s is not a valid limit specification.", rs ? rs : "?");
+        free(rs);
         return NULL;               /* not a var -> point spec: stay unevaluated */
     }
     const char* var = rule->data.function.args[0]->data.symbol.name;

@@ -4798,6 +4798,14 @@ static Expr* normal_recurse(Expr* e) {
 }
 
 Expr* builtin_normal(Expr* res) {
+    /* Normal#3: Normal[expr, SeriesData] converts only the SeriesData objects
+     * (drop the O-terms); other heads keep their own two-argument path. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 2) {
+        Expr* h = res->data.function.args[1];
+        if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_SeriesData)
+            return normal_recurse(res->data.function.args[0]);
+        return NULL;
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 

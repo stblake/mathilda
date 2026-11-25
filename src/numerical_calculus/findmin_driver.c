@@ -4,6 +4,9 @@
  * prototype in that header. */
 #include "findmin_internal.h"
 #include "compile/autocompile.h"  /* autocompile_new_prec: WorkingPrecision programs */
+#include "print.h"    /* expr_to_string: FindMinimum::nrnum / ::dupv */
+#include "common.h"   /* head_is */
+#include "numeric.h"  /* expr_is_numeric_quantity */
 
 
 /* ------------------------------------------------------------------ *
@@ -325,9 +328,72 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         if (opts.gradient) opts.gradient = grad_norm;
     }
 
+    /* FindMinimum#5: a variable named twice ({{x, 1}, {x, 2}}) has no single
+     * value to report -- the solver handed back x -> a, x -> b. */
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++)
+            if (expr_eq(vars[i], vars[j])) {
+                char* vs = expr_to_string(orig_vars ? orig_vars[i] : vars[i]);
+                fm_warn(fn_name, "dupv", "Duplicate variable %s found in the variable "
+                        "specification.", vs ? vs : "?");
+                free(vs);
+                goto cleanup;
+            }
+
     /* Now bind variables. */
     binds = (FmVarBind*)calloc(n, sizeof(FmVarBind));
     for (size_t i = 0; i < n; i++) fm_bind_snapshot(&binds[i], vars[i]->data.symbol.name);
+
+    /* FindMinimum#7: an objective that is not a real number at the starting
+     * point (an undefined f[x]) is FindMinimum::nrnum, as in the reference --
+     * the bracket search reported "bracket-finding failed".  Machine runs
+     * only; the MPFR path evaluates its own way. */
+    if (opts.prec_mode == FM_PREC_MACHINE && !cons && n > 0) {
+        double f0;
+        bool saved_q = g_fm_quiet;
+        g_fm_quiet = true;
+        bool num0 = fm_eval_scalar(f_raw, binds, x_vec, n, &opts, &f0);
+        g_fm_quiet = saved_q;
+        for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+        if (!num0) {
+            Expr** vals = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) vals[i] = expr_new_real(x_vec[i]);
+            NumericSpec ms; ms.mode = NUMERIC_MODE_MACHINE; ms.bits = 53;
+            Expr* fv = fm_eval_with_bindings(f_raw, binds, vals, n, NULL, ms);
+            /* Only a value that is no number at all (it still carries a
+             * symbol): a pole or a complex value at the start is left to the
+             * solvers, which may step off it. */
+            bool real_num = !fv || expr_is_numeric_quantity(fv) ||
+                            (fv->type == EXPR_SYMBOL &&
+                             (fv->data.symbol.name == SYM_Indeterminate ||
+                              fv->data.symbol.name == SYM_ComplexInfinity ||
+                              fv->data.symbol.name == SYM_Infinity)) ||
+                            head_is(fv, SYM_DirectedInfinity) ||
+                            (head_is(fv, SYM_Times) && fv->data.function.arg_count == 2 &&
+                             fv->data.function.args[1]->type == EXPR_SYMBOL &&
+                             fv->data.function.args[1]->data.symbol.name == SYM_Infinity);
+            if (!real_num) {
+                char* fs = fv ? expr_to_string(fv) : NULL;
+                Expr* vl = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+                Expr* pl = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+                for (size_t i = 0; i < n; i++) {
+                    vl->data.function.args[i] = expr_copy(orig_vars ? orig_vars[i] : vars[i]);
+                    pl->data.function.args[i] = expr_new_real(x_vec[i]);
+                }
+                char* vs = expr_to_string(vl);
+                char* ps = expr_to_string(pl);
+                fm_warn(fn_name, "nrnum", "The function value %s is not a real number at %s = %s.",
+                        fs ? fs : "?", vs ? vs : "?", ps ? ps : "?");
+                free(fs); free(vs); free(ps);
+                expr_free(vl); expr_free(pl);
+            }
+            if (fv) expr_free(fv);
+            for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+            for (size_t i = 0; i < n; i++) expr_free(vals[i]);
+            free(vals);
+            if (!real_num) goto cleanup;
+        }
+    }
 
     /* Constraints. FindMinimum passes no disjunction sink: its smooth gradient
      * penalty method cannot use the non-smooth min penalty an Or requires. */

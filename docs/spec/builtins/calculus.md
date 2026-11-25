@@ -164,6 +164,8 @@ In[13]:= D[x^2 + y^2 == 1, x, NonConstants -> y]   (* implicit diff *)
 Out[13]= 2 x + 2 y D[y, x, NonConstants -> {y}] == 0
 ```
 
+**Wave 5 (2026-11).** `D[f]` (no variables) is `f`. A positive bigint order differentiates until the tree vanishes (`D[x^2, {x, 10^30}]` is 0); a function that never vanishes stays `D[f, {x, n}]`. `D::dvar` routes through the message funnel.
+
 ## Dt
 
 **Audit wave 4.** A number or string as the variable is `Dt::ivar` and stays unevaluated (`Dt[x, 1]` recursed to the recursion limit). `Dt[s, f[x]]` (a compound variable) and `Dt[s, {x, n}]` are irreducible forms; in a total derivative `Dt[s, x]` differentiates to `Dt[s, {x, 2}]` (`Dt[x y, {x, 2}]` is `2 Dt[y, x] + x Dt[y, {x, 2}]`).
@@ -241,7 +243,8 @@ and any derivative of a user symbol stay inert. The order derivative
 arb's power series in the order (`flint_num_bessel_order_deriv`).
 
 **Features**:
-- `Protected`.
+- Attributes `{NHoldAll}` (not `Protected`: rules such as `Derivative[1][f] = g` may be attached).
+- An applied derivative of a built-in numeric function up to total order 64 evaluates to its closed form (`Derivative[17][Sin][x]` is `Cos[x]`).
 - Acts primarily as a tag carried through the differentiation
   pipeline: `D` and `Dt` produce `Derivative[...]` heads for
   unknown functions and advance their indices when differentiating
@@ -361,6 +364,8 @@ Out[7]= {(k q)/r^2, 0, 0}
 In[8]:= Laplacian[Sin[r^2], {r, t}, "Polar"] // Simplify
 Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
 ```
+
+**Wave 5 (2026-11).** A `{chart, "Euclidean"}` specification names its chart, and the `"Cartesian"` chart is the two-argument form (vector fields included). A coordinate that is a list (`{{x, y, z}}`) is `::ivar`.
 
 ## Limit
 
@@ -835,6 +840,8 @@ Limit[ExpIntegralEi[y] - Log[-y], y -> 0, Direction -> "FromBelow"]   (* EulerGa
 Series[ExpIntegralEi[x], {x, 0, 1}]   (* EulerGamma + (Log[x] - Log[1/x])/2 + x + O[x]^2 *)
 ```
 
+**Wave 5 (2026-11).** At `Infinity`, `Fibonacci` and `LucasL` of the variable are read in Binet form: `Limit[Fibonacci[n + 1]/Fibonacci[n], n -> Infinity]` is `GoldenRatio`.
+
 ## LaplaceTransform
 `LaplaceTransform[f, t, s]` and `LaplaceTransform[f, t, s, Assumptions -> a]`
 give the one-sided transform ∫₀^∞ f(t) e^(−st) dt. Attributes: `Protected`.
@@ -871,6 +878,8 @@ LaplaceTransform[E^(-2 t) Cos[t], t, s]    (* (2 + s)/(1 + (2 + s)^2) *)
 Pochhammer or Binomial of the variable is re-run with those written as Gamma
 ratios, which the Stirling/MRV machinery expands:
 `Limit[n!/(Sqrt[2 Pi n] (n/E)^n), n -> Infinity] = 1`.
+
+**Wave 5 (2026-11).** A numeric `s` gives the transform's value there (`LaplaceTransform[t^2, t, 3]` is `2/27`); constant factors come out of a held transform (`2 LaplaceTransform[f[t], t, s]`); a running integral `Integrate[g[u], {u, 0, t}]` transforms to `G(s)/s`.
 
 ## Residue
 
@@ -981,6 +990,8 @@ Consistency with Cauchy's theorem: for a contour enclosing only the pole,
 `NIntegrate[f, {z, ...loop...}]/(2 Pi I)` agrees with `Residue`; e.g.
 `Residue[1/Sin[z]^7, {z, 0}]` is `5/16`, matching `NResidue[1/Sin[z]^7, {z, 0}]`
 ≈ `0.3125`.
+
+**Wave 5 (2026-11).** `Residue[f, {z, Infinity}]` is `-Residue[f(1/w)/w^2, {w, 0}]` (`Residue[z^2/(z - 1), {z, Infinity}]` is -1). An inexact integrand gives an inexact residue (`Residue[1.0/z, {z, 0}]` is `1.`).
 
 ## DSolve (symbolic differential equations)
 
@@ -5210,6 +5221,8 @@ Regression coverage: `tests/test_mathar_regressions.c`; corpus: `tests/MatharDef
 - ∫ dx/√Q with a negative leading coefficient and a discriminant of unknown
   sign uses the real ArcTan form.
 
+**Wave 5 (2026-11).** Definite integrals of `Floor`, `Ceiling`, `IntegerPart`, `FractionalPart` and `Round` of an argument linear in `x` over a finite numeric range are split at the jumps (`Integrate[Floor[x], {x, 0, 3}]` is 3). A divergent even integrand over the whole line reports one `Integrate::idiv`, naming the user's interval.
+
 ## Integrate`IntRationalLogPart
 
 The Lazard-Rioboo-Trager logarithmic-part computation
@@ -5768,6 +5781,8 @@ In[2]:= PolynomialQuotientRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2
 Out[2]= {Sqrt[2] + x, 0}
 ```
 
+**Wave 5 (2026-11).** `Modulus -> m` accepts a bigint modulus (the classical path).
+
 ## SubresultantPolynomialRemainders
 
 Polynomial-remainder chain in `K(coeffs)[x]`, used by the
@@ -5789,6 +5804,7 @@ In[1]:= SubresultantPolynomialRemainders[x^4 + 1, 2 x^3, x]
 Out[1]= {1 + x^4, 2 x^3, 2}
 ```
 
+**Wave 5 (2026-11).** `Modulus -> m`: the chain over Z/m (inputs reduced first; the chain stops at its first entry that vanishes mod m).
 
 ## Sum
 
@@ -6253,6 +6269,8 @@ regularised by reflection, which gives Dixon's `(3n)!/(n!)^3`. ``Sum`Lambert`` g
 Σ n^s/(e^{2πn} − 1) = B_{s+1}/(2(s+1)) for s ≡ 1 (mod 4), s ≥ 5, and
 1/24 − 1/(8π) for s = 1.
 
+**Wave 5 (2026-11).** A rational summand whose integer poles lie below the range, summed to a symbolic upper bound, gives harmonic numbers: `Sum[1/i, {i, 1, n}]` is `HarmonicNumber[n]`, `Sum[1/i^2, {i, 1, n}]` is `HarmonicNumber[n, 2]`.
+
 ## DifferenceDelta
 
 `DifferenceDelta[f, i]` gives the forward difference
@@ -6266,6 +6284,7 @@ In[2]:= DifferenceDelta[Sum[k k!, k], k]
 Out[2]= -k! + (1 + k)!
 ```
 
+**Wave 5 (2026-11).** `DifferenceDelta[f, i, j, ...]` differences in each variable in turn: `DifferenceDelta[i^2 j^2, i, j]` is `1 + 2 i + 2 j + 4 i j`.
 
 ## Product
 
@@ -6465,6 +6484,8 @@ Engages on symbolic-power bodies; `PowerExpand[Log[f]]` is summed by the shipped
 **All-real-root rational products (v0.6491).** ``Product`RationalInfiniteReal``
 runs after ``Product`Infinite`` and applies the Gamma canonical form to rational
 products whose roots are all real: Wallis `Product[4k^2/(4k^2-1), {k, 1, Infinity}] = Pi/2`.
+
+**Wave 5 (2026-11).** A malformed iterator (a number, a string, `{}` or a list of more than four parts) is `Product::itform`; `Product[f]` is `Product::argmu`. Both stay unevaluated.
 
 ## FindRoot
 
@@ -6933,6 +6954,8 @@ Out[9]= {-0.9, {x -> 0.6}}
 In[10]:= Minimize[(x y - 3)^2 + 1, {x, y}]   (* flat valley along x y == 3 *)
 Out[10]= {1, {x -> -1, y -> -3}}
 ```
+
+**Wave 5 (2026-11).** A numeric variable (`Minimize[x^2, 3]`) is `::ivar`.
 
 ## Audit wave 4 notes
 

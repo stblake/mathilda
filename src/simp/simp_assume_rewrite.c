@@ -1860,6 +1860,20 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Power[Abs[%s], AssumeRules`n_Integer /; EvenQ[AssumeRules`n]] :> Power[%s, AssumeRules`n]", x, x);
     }
 
+    /* Refine#3: Sqrt[x^(2k)] -> Abs[x]^k (k > 1) for every real x, whatever
+     * else is known of its sign; the Abs rules above then finish it
+     * (Sqrt[x^4] -> x^2 on the reals).  k = 1 is the Sqrt[x^2] rule above. */
+    {
+        char** lists[4] = { reals, positives, negatives, nonpos };
+        size_t counts[4] = { nreal, npos, nneg, nnp };
+        for (int l = 0; l < 4; l++)
+            for (size_t i = 0; i < counts[l]; i++) {
+                const char* x = lists[l][i];
+                SEP(); EMIT("Power[Power[%s, AssumeRules`n_Integer /; AssumeRules`n > 2 && "
+                            "EvenQ[AssumeRules`n]], Rational[1, 2]] :> Power[Abs[%s], AssumeRules`n/2]", x, x);
+            }
+    }
+
     /* Sin[n Pi] -> 0, Cos[n Pi] -> (-1)^n, Tan[n Pi] -> 0 for integer n.
      * Plus: (-1)^(even_int * n) -> 1 and ((-1)^n)^even_int -> 1, so the
      * Cos rule can collapse all the way (the standalone Cos result

@@ -368,6 +368,8 @@ bool is_rational_literal(const Expr* e);
 
 /* Public builtins: registered from simp_init. */
 Expr* builtin_simplify(Expr* res);
+/* Simplify#4 univariate-inequality re-entry depth (TimeConstrained unwind). */
+int* simp_ui_depth_counter(void);
 Expr* builtin_simplify_count(Expr* res);
 Expr* builtin_assuming(Expr* res);
 Expr* builtin_element(Expr* res);

@@ -129,7 +129,7 @@ void test_logexp_forward() {
         {"Log[-I]", "(-1/2*I) Pi"},
         {"Log[2 I]", "(1/2*I) Pi + Log[2]"},
         {"Log[-3 I]", "(-1/2*I) Pi + Log[3]"},
-        {"Log[I/2]", "(1/2*I) Pi + Log[1/2]"},
+        {"Log[I/2]", "(1/2*I) Pi - Log[2]"},   /* Log[1/2] = -Log[2] (Log#4) */
         {"Log[2 + 3 I]", "Log[2 + 3*I]"},
         {NULL, NULL}
     };

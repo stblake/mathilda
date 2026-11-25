@@ -122,6 +122,8 @@ Inverse values: ArcSin and ArcCos compare against the evaluated table values, so
 
 The I Pi quarter periods are reduced: Cosh[x + I Pi] = -Cosh[x], Sinh[x + I Pi/2] = I Cosh[x], Tanh[x + I Pi/2] = Coth[x], a 2 I Pi shift drops out. Sinh[ArcCsch[x]] = Cosh[ArcSech[x]] = 1/x. An all-negative sum loses its sign as for the trig functions (Cosh[-x - y] = Cosh[x + y]).
 
+**Wave 5 (2026-11).** Of `Log[a]`: `Sinh = (a - 1/a)/2`, `Cosh = (a + 1/a)/2`, `Tanh = (a^2 - 1)/(a^2 + 1)`, `Coth`, `Sech = 2 a/(a^2 + 1)`, `Csch` likewise (`Sech[Log[2]]` is `4/5`). A term `m I Pi` (integer `m`) in the argument is shed (`Sech[2 + I Pi]` is `-Sech[2]`), and a sum whose every term is negative pulls the sign out (`Tanh[-x - y]` is `-Tanh[x + y]`). `ArcSech` of an exact rational with an exact `ArcCosh[1/z]` evaluates (`ArcSech[2]` is `I Pi/3`). Every hyperbolic and inverse-hyperbolic head has a docstring.
+
 ## Exponential and Logarithmic Functions
 
 `Log[b, b]` is the exact `1` for an exact or symbolic `b` only. An inexact
@@ -216,6 +218,8 @@ Out[7]= 1/3
 In[8]:= Log[2, 2^(1/3)]
 Out[8]= 1/3
 ```
+
+**Wave 5 (2026-11).** `E^(c1 Log[a1] + ... + rest)`, each `ai` an exact number and `ci` an exact rational, splits to `a1^c1 ... E^rest`: `Exp[Log[2] + Log[3]]` is 6, `Exp[2 + Log[3]]` is `3 E^2`. A Log of a symbolic argument stays in the exponent (`E^(y + Log[x])`): splitting it undoes the exp-log normal form `E^(g Log[f])` that the limit and integration engines build, and they cycled. `Log[1/n]` is `-Log[n]` for an integer `n > 1`. `Log[E^x]` stays for symbolic `x` (the docstring said otherwise).
 
 ## Log10 / Log2
 
@@ -382,6 +386,7 @@ to `ComplexInfinity`: `ArcSin[ComplexInfinity]`, `ArcCos[ComplexInfinity]`,
 
 **v0.6035.** All 36 compositions `f[g[x]]` of the six circular functions and their inverses evaluate to their principal-branch algebraic forms, e.g. `Csc[ArcSin[u]] -> 1/u`, `Sec[ArcTan[u]] -> Sqrt[1 + u^2]`, `Sin[ArcCot[u]] -> 1/(Sqrt[1 + 1/u^2] u)`, `Cos[ArcSec[u]] -> 1/u`. ArcCot, ArcSec and ArcCsc are ArcTan, ArcCos and ArcSin at `1/x`.
 
+**Wave 5 (2026-11).** `Coth`, `Sech`, `Csch` of `ArcSinh`/`ArcCosh`/`ArcTanh` are the reciprocals of `Tanh`, `Cosh`, `Sinh` of the same call (`Csch[ArcSinh[x]]` is `1/x`). The inverse-trig tables compare canonical (evaluated) values, so `ArcTan[1 - Sqrt[2]]` is `-Pi/8` and `ArcCos[(1 + Sqrt[5])/4]` is `Pi/5`; `ArcSin`/`ArcCos` also know the odd multiples of `Pi/8` (`ArcCos[Sqrt[2 + Sqrt[2]]/2]` is `Pi/8`; `Cos[Pi/8]` itself stays, as in the reference). `ArcTan[x, y]` of exact reals without a closed form is `ArcTan[y/x]` plus the quadrant offset (`ArcTan[-1, 2]` is `Pi - ArcTan[2]`).
 
 ## TrigToExp
 Converts trigonometric and hyperbolic functions in `expr` to exponentials.

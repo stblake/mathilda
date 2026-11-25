@@ -542,11 +542,7 @@ static Expr* solve_root_core(const mpfr_t* c_wp, int n, int64_t k,
                              mpfr_prec_t target_bits,
                              int sturm_n_real, bool want_machine) {
     if (n <= 0) return NULL;
-    if (k < 1 || k > n) {
-        root_warn("indx", "index k=%lld is out of range 1..%d.",
-                  (long long)k, n);
-        return NULL;
-    }
+    if (k < 1 || k > n) return NULL;   /* Root::indx is reported where Root is formed */
 
     /* Working precision: 2*target + 64 for QR; refinement uses target + 32.
      * c_wp is supplied at wp by the caller (same formula). */
@@ -1079,9 +1075,7 @@ static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec)
             /* Root#1: Root[f, k] numbers the deg f roots of f counted with
              * multiplicity, but k indexed the distinct roots of rad(f)
              * (Root[#^2 (# - 1) &, 2] gave 1., k = 3 was out of range). */
-            if (k < 1 || k > p_raw->deg) {
-                root_warn("indx", "index k=%lld is out of range 1..%d.",
-                          (long long)k, p_raw->deg);
+            if (k < 1 || k > p_raw->deg) {   /* Root::indx: reported by builtin_root */
                 zupoly_free(p); zupoly_free(p_raw);
                 return NULL;
             }

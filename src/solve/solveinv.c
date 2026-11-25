@@ -25,6 +25,7 @@
  */
 
 #include "solveinv.h"
+#include "solve.h"   /* solve_ifun_claim */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -152,6 +153,7 @@ static void emit_ifun(SolveInvCtx* ctx) {
      * enclosing Check[Reduce[...]] must not see it either. */
     if (mth_msg_ifun_suppressed()) return;
     ctx->ifun_warned = true;
+    if (!solve_ifun_claim()) return;      /* already reported by this Solve */
     /* mth_message notes the firing (so Check sees it, even under Quiet) then
      * prints unless a quiet internal probe (e.g. FindInstance) suppressed it. */
     mth_message("Solve", "ifun",

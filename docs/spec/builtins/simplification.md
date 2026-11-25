@@ -573,6 +573,8 @@ that value only when the inverse-function decider proves the difference zero:
   `Simplify[(2^(1/3) - 1)^(1/3)] = (3^(1/3) - 6^(1/3) + 12^(1/3))/3`.
 - A Root of a composed binomial or quadratic q(x^m) is given in radicals.
 
+**Wave 5 (2026-11).** An And/Or of real comparisons in one variable with exact polynomial sides is decided by the univariate real solver: `Simplify[x < 2 && x > 3]` is `False`, `Simplify[x > 3 && x > 2]` is `x > 3`. `Max`/`Min` are refined under the assumptions (`Simplify[Max[x, y], x > y]` is `x`). Wrong argument counts give `Simplify::argt` / `::nonopt`.
+
 ## FullSimplify
 Tries a wider range of transformations than `Simplify`, drawing on a library of
 known elementary- and special-function identities, and returns the simplest form
@@ -699,6 +701,8 @@ First-cut limitations: the gamma recurrence matches a literal `+1` shift only
 (`Gamma[x + 2]/Gamma[x]` is left unreduced). The identity collection is expected
 to grow, and each family lives in its own file under
 `src/internal/simp/transforms/`.
+
+**Wave 5 (2026-11).** `FullSimplify[e, a, z]` (a third positional argument) is `FullSimplify::nonopt` and stays unevaluated; `Max`/`Min` refine under the assumptions.
 
 ## SeparablePolynomialDecomposition
 Rewrites a polynomial as a minimal-length sum of separable products.
@@ -918,6 +922,8 @@ Out[5]= -x y
 
 **Wave 4 G8.** Boole[c] and ConditionalExpression[v, c] whose condition the assumptions decide are settled: Boole to 1 / 0, the conditional to v / Undefined (`Refine[Boole[x > 0], x > 0]` is 1). Simplify with assumptions does the same first.
 
+**Wave 5 (2026-11).** `Max`/`Min` with an argument the assumptions prove dominates the rest refine to it; a `Piecewise` case the assumptions decide is taken or dropped; `Sqrt[x^(2k)]` is `Abs[x]^k` for real `x` (so `Sqrt[x^4]` is `x^2`); `NotElement` is decided as the negation of `Element`.
+
 ## Assuming
 Evaluates an expression with extra assumptions in effect.
 
@@ -1000,6 +1006,8 @@ Out[3]= False
 In[4]:= Element[x, Reals]
 Out[4]= Element[x, Reals]
 ```
+
+**Wave 5 (2026-11).** Decidable non-members: non-integers are not prime or composite, integers below 2 are not composite, numbers and strings are not `Booleans`, an exact quantity plainly off the real axis (`I Sqrt[2]`) is not real. New domains `PositiveIntegers`, `NonNegativeIntegers`, `NegativeIntegers`, `NonPositiveIntegers`.
 
 ## $SimplifyDebug
 A system symbol that turns on tracing of `Simplify`'s transform pipeline.

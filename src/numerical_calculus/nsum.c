@@ -3800,6 +3800,17 @@ static Expr* ns_builtin(Expr* res) {
         }
     }
     Expr* body = res->data.function.args[0];
+    /* NSum#4: the inner NSum of a multidimensional sum is also evaluated with
+     * an outer index still symbolic (the outer sum's symbolic pre-passes); that
+     * is not a sum of numbers and not the user's call, so it stays unevaluated
+     * without NSum::nnum.  At a term the index is bound to a number. */
+    for (int a = 0; a < g_ns_nactive && a < NS_MAX_ACTIVE; a++) {
+        if (!ns_mentions_name(body, g_ns_active[a])) continue;
+        Expr* v = eval_and_free(expr_new_symbol(g_ns_active[a]));
+        bool num = v && expr_is_numeric_quantity(v);
+        if (v) expr_free(v);
+        if (!num) return NULL;
+    }
     /* positional args [1 .. pos_end) must all be iterator specs. */
     for (size_t i = 1; i < pos_end; i++)
         if (!ns_is_spec(res->data.function.args[i])) return NULL;

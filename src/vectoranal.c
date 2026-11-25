@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "print.h"     /* expr_to_string: Head::ivar */
 
 /* ---------------------------------------------------------------------- */
 /* Tiny expression builders (per-module convention; cf. deriv.c)           */
@@ -523,11 +524,41 @@ static Expr* vecop(Expr* res, const char* head, cart_fn cart, chart_fn chart) {
     /* the coordinates: a List, or a LinkedList read one slot at a time */
     if (!va_seq(vlist)) { expr_free(vlist); return NULL; }
     int n = (int)va_n(vlist);
+    /* Laplacian#1: a coordinate is a variable, never a list ({{x, y, z}}
+     * differentiated by each of x, y, z gave the Hessian). */
+    for (int i = 0; i < n; i++) {
+        Expr* vi = va_at(vlist, (size_t)i);
+        bool bad = vi->type == EXPR_FUNCTION && vi->data.function.head->type == EXPR_SYMBOL &&
+                   vi->data.function.head->data.symbol.name == SYM_List;
+        if (bad) {
+            char* s = expr_to_string(vi);
+            mth_message(head, "ivar", "%s is not a valid variable.", s ? s : "?");
+            free(s);
+            expr_free(vi);
+            expr_free(vlist);
+            return NULL;
+        }
+        expr_free(vi);
+    }
+
+    /* Grad#2 / Grad#3: a {chart, metric} specification names its chart (only
+     * the "Euclidean" metric is supported), and the "Cartesian" chart is the
+     * two-argument form -- which also takes vector and tensor fields. */
+    Expr* chart_e = argc == 3 ? res->data.function.args[2] : NULL;
+    if (chart_e && chart_e->type == EXPR_FUNCTION && chart_e->data.function.head->type == EXPR_SYMBOL &&
+        chart_e->data.function.head->data.symbol.name == SYM_List &&
+        chart_e->data.function.arg_count == 2 &&
+        chart_e->data.function.args[0]->type == EXPR_STRING &&
+        chart_e->data.function.args[1]->type == EXPR_STRING &&
+        strcmp(chart_e->data.function.args[1]->data.string, "Euclidean") == 0)
+        chart_e = chart_e->data.function.args[0];
+    bool cartesian = !chart_e || (chart_e->type == EXPR_STRING &&
+                                  strcmp(chart_e->data.string, "Cartesian") == 0);
 
     Expr* f = normalized_copy(res->data.function.args[0]);
-    Expr* result = (argc == 2)
+    Expr* result = cartesian
         ? cart(f, vlist, n)
-        : chart(f, vlist, n, res->data.function.args[2], head);
+        : chart(f, vlist, n, chart_e, head);
 
     expr_free(f);
     expr_free(vlist);

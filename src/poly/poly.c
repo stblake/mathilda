@@ -2738,10 +2738,15 @@ static Expr* poly_divrem_mod_classical(Expr* p, Expr* q, Expr* x, Expr* m) {
  * Tries the FLINT nmod_poly fast path (word-size prime m) then the classical
  * fallback. Returns the requested result (owned) or NULL to stay unevaluated. */
 static Expr* poly_divrem_modulus(Expr* p, Expr* q, Expr* x, Expr* m, int which) {
-    if (m->type != EXPR_INTEGER || m->data.integer < 2) return NULL;
-    unsigned long pp = (unsigned long)m->data.integer;
-    Expr* fr = flint_nmod_poly_divrem(p, q, x, pp, which);   /* NULL unless word-size prime */
-    if (fr) return fr;
+    /* PolynomialQuotientRemainder#3: a bigint modulus goes to the classical
+     * path (the FLINT nmod fast path is word-size only). */
+    bool big = m->type == EXPR_BIGINT && mpz_cmp_ui(m->data.bigint, 1) > 0;
+    if (!big && (m->type != EXPR_INTEGER || m->data.integer < 2)) return NULL;
+    if (!big) {
+        unsigned long pp = (unsigned long)m->data.integer;
+        Expr* fr = flint_nmod_poly_divrem(p, q, x, pp, which);   /* NULL unless word-size prime */
+        if (fr) return fr;
+    }
     Expr* dr = poly_divrem_mod_classical(p, q, x, m);
     if (!dr) return NULL;
     if (which == 0) return dr;                               /* {Q, R} */
@@ -3062,6 +3067,7 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
 /* properties are invariant under content scaling, so the simpler          */
 /* pseudo-rem chain is a correct substrate without the Lazard arithmetic.  */
 Expr* builtin_subresultantpolynomialremainders(Expr* res) {
+    { Expr* mr = subres_modulus_apply(res, builtin_subresultantpolynomialremainders, true); if (mr) return mr; }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
 
     Expr* A = res->data.function.args[0];

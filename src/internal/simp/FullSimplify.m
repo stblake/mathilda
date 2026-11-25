@@ -217,7 +217,11 @@ Consolidate[r_, fns_, score_] := Module[{cands},
 (* A LinkedList is simplified as the List of its elements is: element by
    element (Map reads the slots), the answers in a new LinkedList. *)
 FullSimplify[expr_LinkedList, opts___] := Map[FullSimplify[#, opts] &, expr];
-FullSimplify[expr_, opts___] := Core[expr, {opts}];
+(* FullSimplify#2: at most one positional argument (the assumptions) before the
+   options; any other call is declined here, and the declared arity (src/
+   arity_table.c) then reports FullSimplify::nonopt and leaves it unevaluated. *)
+FullSimplify[expr_, opts___] /; MatchQ[{opts}, {___?OptionQ} | {Except[_?OptionQ], ___?OptionQ}] :=
+    Core[expr, {opts}];
 
 Core[expr_, allOpts_List] := Module[
     {optRules, positional, assum, cf, userTF, tc, tLoc, tTot,

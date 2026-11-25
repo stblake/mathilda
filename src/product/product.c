@@ -33,6 +33,9 @@
 #include "compile/compile_underflow.h"   /* S6: underflow -> interpreter */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "product_internal.h"   /* g_product_verify_convergence */
+#include "message.h"   /* mth_message: Product::itform */
+#include "print.h"
+#include "common.h"
 #include "symtab.h"
 #include "eval.h"
 #include "expr.h"
@@ -798,6 +801,24 @@ Expr* builtin_product(Expr* res) {
     size_t nspecs = nspecs_end - 1;
 
     Expr* f = a[0];
+
+    /* Product#2: an iterator that is a number, a string or {} (or a list of
+     * more than four parts) is malformed -- Product::itform, unevaluated. */
+    for (size_t i = 1; i < nspecs_end; i++) {
+        Expr* sp = a[i];
+        bool bad = sp->type == EXPR_INTEGER || sp->type == EXPR_BIGINT ||
+                   sp->type == EXPR_REAL || sp->type == EXPR_STRING ||
+                   head_is(sp, SYM_Rational) ||
+                   (head_is(sp, SYM_List) && (sp->data.function.arg_count == 0 ||
+                                              sp->data.function.arg_count > 4));
+        if (bad) {
+            char* ss = expr_to_string(sp);
+            mth_message("Product", "itform", "Argument %s at position %zu does not have "
+                        "the correct form for an iterator.", ss ? ss : "", i + 1);
+            free(ss);
+            return NULL;
+        }
+    }
 
     /* Apply VerifyConvergence for the duration of this evaluation; nested
      * Product re-evaluations save/restore their own value. */

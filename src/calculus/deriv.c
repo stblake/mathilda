@@ -3984,6 +3984,15 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
         }
         /* Reject non-integer numeric orders (Real, Rational, Complex);
          * MMA's D::dvar requires n to be symbolic or non-negative integer. */
+        /* A positive bigint order (D#2): no derivative of a finite tree
+         * survives that many steps unless it never reaches 0; the caller
+         * walks a bounded number of steps (sentinel order -2). */
+        if (k->type == EXPR_BIGINT && mpz_sgn(k->data.bigint) > 0) {
+            *var = spec_elem(spec, 0);
+            *order = -2;
+            if (order_expr) *order_expr = k;
+            return true;
+        }
         if (k->type == EXPR_REAL || k->type == EXPR_BIGINT ||
             (k->type == EXPR_FUNCTION &&
              k->data.function.head->type == EXPR_SYMBOL &&
@@ -4112,9 +4121,9 @@ static void emit_dvar_message(Expr* spec) {
         return;
     }
     char* s = expr_to_string(spec);
-    printf("D::dvar: Multiple derivative specifier %s does not have "
-           "the form {variable, n}, where n is symbolic or a "
-           "non-negative integer.\n", s ? s : "?");
+    mth_message("D", "dvar", "Multiple derivative specifier %s does not have "
+                "the form {variable, n}, where n is symbolic or a "
+                "non-negative integer.", s ? s : "?");
     free(s);
 }
 
@@ -4364,7 +4373,8 @@ static bool parse_nonconsts_option(Expr* a, Expr** out) {
 Expr* builtin_d(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2) return NULL;                 /* D[f] stays unevaluated */
+    if (argc == 1) return expr_copy(res->data.function.args[0]);  /* D[f] = f (D#4) */
+    if (argc < 2) return NULL;
 
     /* D is always a partial derivative. Pin total-derivative mode off for
      * the duration so a Dt-in-progress flag can never leak into a D node
@@ -4443,6 +4453,23 @@ Expr* builtin_d(Expr* res) {
             stepped = array_higher_order(current, var, order, nonconsts);
         } else if (order >= 0) {
             stepped = higher_order_partial(current, var, order, nonconsts);
+        } else if (order == -2) {
+            /* Bigint order: differentiate until the tree is 0 (then every
+             * further derivative is 0), within a bounded number of steps;
+             * a function that never vanishes stays D[f, {x, n}]. */
+            Expr* cur = expr_copy(current);
+            for (int step = 0; step < 1024 && cur; step++) {
+                if (cur->type == EXPR_INTEGER && cur->data.integer == 0) break;
+                if (expr_free_of(cur, var)) { expr_free(cur); cur = mk_int(0); break; }
+                Expr* nxt = compute_deriv(cur, var, nonconsts);
+                expr_free(cur);
+                cur = nxt ? eval_and_free(nxt) : NULL;
+            }
+            if (cur && cur->type == EXPR_INTEGER && cur->data.integer == 0) stepped = cur;
+            else {
+                if (cur) expr_free(cur);
+                stepped = build_unevaluated_d(current, var, order_expr);
+            }
         } else {
             /* Symbolic-order spec. NonConstants is not threaded through
              * the closed-form symbolic-k path; it falls through to the
@@ -4993,7 +5020,9 @@ static Expr* deriv_cf_body(const Expr* dop, size_t* m_out) {
         if (oi->type != EXPR_INTEGER || oi->data.integer < 0) return NULL;
         total += oi->data.integer;
     }
-    if (total <= 0 || total > 16) return NULL;
+    /* The order cap bounds the closed form's size, not its correctness: 64
+     * (Derivative#4: Derivative[17][Sin][x] stayed inert while D gave Cos[x]). */
+    if (total <= 0 || total > 64) return NULL;
     SymbolDef* def = f->data.symbol.def ? f->data.symbol.def
                                         : symtab_lookup(f->data.symbol.name);
     /* Identity is not a NumericFunction, but it is a pure builtin whose

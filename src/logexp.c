@@ -269,6 +269,21 @@ Expr* builtin_log(Expr* res) {
             return ret;
         }
 
+        // Log[1/n] = -Log[n] for an integer n > 1 (Log#4), as in the reference;
+        // Log[2/3] stays.
+        if (head_is(z, SYM_Rational) && z->data.function.arg_count == 2) {
+            Expr* num = z->data.function.args[0];
+            Expr* den = z->data.function.args[1];
+            if (num->type == EXPR_INTEGER && num->data.integer == 1 &&
+                ((den->type == EXPR_INTEGER && den->data.integer > 1) ||
+                 (den->type == EXPR_BIGINT && mpz_sgn(den->data.bigint) > 0))) {
+                Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
+                                             (Expr*[]){ expr_copy(den) }, 1);
+                return expr_new_function(expr_new_symbol(SYM_Times),
+                                         (Expr*[]){ expr_new_integer(-1), lg }, 2);
+            }
+        }
+
         // Negative integer: Log[n] = I*Pi + Log[-n] for n < 0
         if ((z->type == EXPR_INTEGER && z->data.integer < 0) ||
             (z->type == EXPR_BIGINT && mpz_sgn(z->data.bigint) < 0)) {

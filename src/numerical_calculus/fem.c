@@ -2453,6 +2453,25 @@ static Expr* fem_eigen(Expr* res, bool want_vectors) {
         if (all) {
             lv[nlev - 1] = lam;
             fem_richardson(lv, nlev, nev);
+            /* NDEigenvalues#2: extrapolation can swap a near-degenerate pair;
+             * the list is ascending, so sort it again (insertion sort, the
+             * eigenvectors permuted with their values). */
+            int64_t nv = S.nfree;
+            double* tmp = vec ? malloc(sizeof(double) * (size_t)nv) : NULL;
+            for (int i = 1; i < nev; i++) {
+                double key = lam[i];
+                if (tmp) memcpy(tmp, vec + (size_t)i * (size_t)nv, sizeof(double) * (size_t)nv);
+                int j = i - 1;
+                while (j >= 0 && lam[j] > key) {
+                    lam[j + 1] = lam[j];
+                    if (tmp) memcpy(vec + (size_t)(j + 1) * (size_t)nv, vec + (size_t)j * (size_t)nv,
+                                    sizeof(double) * (size_t)nv);
+                    j--;
+                }
+                lam[j + 1] = key;
+                if (tmp) memcpy(vec + (size_t)(j + 1) * (size_t)nv, tmp, sizeof(double) * (size_t)nv);
+            }
+            free(tmp);
         }
         for (int l = 0; l + 1 < nlev; l++) free(lv[l]);
     }

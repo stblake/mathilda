@@ -159,8 +159,8 @@ int main(void) {
     nclose("Sum`Rational[1/(k + 1/2), k, -300, -2]", "Sum[1/(j + 1/2), {j, -300, -2}]", 20);
     /* a pole on an index of the range has no finite value: the stage declines */
     check("Sum`Rational[1/(k - 5), k, 1, 100]", "Sum`Rational[1/(-5 + k), k, 1, 100]");
-    /* symbolic finite bounds are not handled by this stage */
-    check("Sum`Rational[1/(k + 3/7), k, 12, n]", "Sum`Rational[1/(3/7 + k), k, 12, n]");
+    /* a symbolic upper bound: the polygamma difference (Sum#4) */
+    check("Sum`Rational[1/(k + 3/7), k, 12, n]", "-PolyGamma[0, 87/7] + PolyGamma[0, 10/7 + n]");
 
     /* ---- Non-unit step: reindexed to a unit-step range first ---- */
     check("Sum[1/(k + 3/7), {k, 12, 3000000, 2}]",

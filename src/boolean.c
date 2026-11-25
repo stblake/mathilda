@@ -361,6 +361,18 @@ void boolean_init(void) {
     symtab_add_builtin("And", builtin_and);
     symtab_add_builtin("Or", builtin_or);
     symtab_add_builtin("Not", builtin_not);
+    symtab_set_docstring("And",
+        "e1 && e2 && ... (And[e1, e2, ...])\n"
+        "\tis the logical AND function.  It evaluates its arguments in order,\n"
+        "\tgiving False immediately if any of them are False, and True if they\n"
+        "\tare all True.  Other arguments are kept (True ones dropped): And[] is\n"
+        "\tTrue and And[e] is e.  HoldAll, Flat, OneIdentity.");
+    symtab_set_docstring("Or",
+        "e1 || e2 || ... (Or[e1, e2, ...])\n"
+        "\tis the logical OR function.  It evaluates its arguments in order,\n"
+        "\tgiving True immediately if any of them are True, and False if they\n"
+        "\tare all False.  Other arguments are kept (False ones dropped): Or[] is\n"
+        "\tFalse and Or[e] is e.  HoldAll, Flat, OneIdentity.");
     symtab_set_docstring("Not",
         "Not[e] (!e) is the logical negation of e: Not[True] is False, !!a is a, a "
         "two-argument relation flips (!(x == 0) is x != 0, !(x < 1) is x >= 1) and "

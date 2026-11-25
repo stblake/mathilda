@@ -294,7 +294,63 @@ static Expr* subresultants_prs(Expr* e1, Expr* e2, int n, int m, Expr* var) {
     return result;
 }
 
+/* Subresultants#2, SubresultantPolynomials#1, SubresultantPolynomialRemainders#2:
+ * f[p1, p2, x, Modulus -> m] (m an integer > 1).  Each of the three is built
+ * from determinants (or pseudo-remainders) whose entries are polynomials in the
+ * coefficients over Z, so over Z/m it is the integer answer reduced mod m, once
+ * p1 and p2 are reduced mod m first (so their degrees are the ones over Z/m).
+ * A chain stops at its first entry that vanishes mod m (`truncate`).  NULL
+ * when the call is not that form. */
+Expr* subres_modulus_apply(Expr* res, Expr* (*fn)(Expr*), bool truncate) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    Expr* o = res->data.function.args[3];
+    if (!(o->type == EXPR_FUNCTION && o->data.function.head->type == EXPR_SYMBOL &&
+          o->data.function.head->data.symbol.name == SYM_Rule && o->data.function.arg_count == 2 &&
+          o->data.function.args[0]->type == EXPR_SYMBOL &&
+          o->data.function.args[0]->data.symbol.name == SYM_Modulus))
+        return NULL;
+    Expr* m = o->data.function.args[1];
+    if (m->type == EXPR_INTEGER && m->data.integer == 0) {
+        /* Modulus -> 0 is the ordinary ring */
+        Expr* call = expr_new_function(expr_copy(res->data.function.head),
+            (Expr*[]){ expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]),
+                       expr_copy(res->data.function.args[2]) }, 3);
+        Expr* r = fn(call);
+        expr_free(call);
+        return r;
+    }
+    bool ok_m = (m->type == EXPR_INTEGER && m->data.integer > 1) ||
+                (m->type == EXPR_BIGINT && mpz_cmp_ui(m->data.bigint, 1) > 0);
+    if (!ok_m) return NULL;
+    Expr* q[2];
+    for (int k = 0; k < 2; k++)
+        q[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialMod),
+                   (Expr*[]){ expr_copy(res->data.function.args[k]), expr_copy(m) }, 2));
+    Expr* call = expr_new_function(expr_copy(res->data.function.head),
+                     (Expr*[]){ q[0], q[1], expr_copy(res->data.function.args[2]) }, 3);
+    Expr* r = fn(call);
+    expr_free(call);
+    if (!r || !(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                r->data.function.head->data.symbol.name == SYM_List)) {
+        if (r) expr_free(r);
+        return NULL;
+    }
+    size_t n = r->data.function.arg_count, w = 0;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialMod),
+                      (Expr*[]){ expr_copy(r->data.function.args[i]), expr_copy(m) }, 2));
+        if (truncate && v->type == EXPR_INTEGER && v->data.integer == 0) { expr_free(v); break; }
+        out[w++] = v;
+    }
+    expr_free(r);
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), out, w);
+    free(out);
+    return lst;
+}
+
 Expr* builtin_subresultants(Expr* res) {
+    { Expr* mr = subres_modulus_apply(res, builtin_subresultants, false); if (mr) return mr; }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
 
     Expr* p1  = res->data.function.args[0];

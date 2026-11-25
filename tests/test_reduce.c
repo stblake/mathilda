@@ -1090,8 +1090,9 @@ static void test_quantifiers_decline(void) {
     /* Explicit non-Reals domain with a quantifier. */
     run_contains("Reduce[Exists[y, x^2 + y^2 < 1], {x}, Complexes]",
                  "Reduce[Exists[y,");
-    /* Resolve on a non-quantified statement is left alone. */
-    run_contains("Resolve[x^2 > 0, Reals]", "Resolve[");
+    /* Resolve on a non-quantified statement returns it (Resolve#2: there is
+     * no quantifier to eliminate). */
+    run_contains("Resolve[x^2 > 0, Reals]", "Greater[Power[x, 2], 0]");
     /* Bare Exists / ForAll are inert (stay symbolic). */
     run_contains("Exists[x, x > 0]", "Exists[x,");
     run_contains("ForAll[x, x^2 >= 0]", "ForAll[x,");

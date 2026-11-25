@@ -876,7 +876,43 @@ Expr* builtin_residue(Expr* res) {
     Expr* z0 = spec->data.function.args[1];
     if (z->type != EXPR_SYMBOL) return NULL;
 
-    return residue_tidy_constant(residue_compute(expr, z, z0));
+    /* Residue#3: the residue at Infinity is -Res[f(1/w)/w^2, {w, 0}] (an
+     * f free of z is analytic there too, residue 0).  Substituting the point
+     * into the finite-point engines read 0 Infinity. */
+    bool at_inf = (z0->type == EXPR_SYMBOL &&
+                   (z0->data.symbol.name == SYM_Infinity ||
+                    z0->data.symbol.name == SYM_ComplexInfinity)) ||
+                  residue_head_is(z0, SYM_DirectedInfinity);
+    if (at_inf) {
+        if (residue_free_of(expr, z)) return expr_new_integer(0);
+        Expr* w = expr_new_symbol("Residue`$winf");
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy(w), expr_new_integer(-1) }, 2);
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                         (Expr*[]){ expr_copy(z), inv }, 2);
+        Expr* fw = residue_eval2("ReplaceAll", expr_copy(expr), rule);
+        Expr* g = fw ? residue_eval1("Together", expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), fw,
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_copy(w), expr_new_integer(-2) }, 2) }, 3))
+                     : NULL;
+        Expr* zero = expr_new_integer(0);
+        Expr* r = g ? residue_compute(g, w, zero) : NULL;
+        if (g) expr_free(g);
+        expr_free(zero);
+        bool clean = r && residue_free_of(r, w);
+        expr_free(w);
+        if (!clean) { if (r) expr_free(r); return NULL; }
+        return residue_tidy_constant(r);
+    }
+
+    Expr* r = residue_tidy_constant(residue_compute(expr, z, z0));
+    /* Residue#4: an inexact integrand gives an inexact residue -- the exact
+     * series engines read 1.0/z's coefficient as the integer 1. */
+    if (r && internal_contains_inexact(expr) && !internal_contains_inexact(r) &&
+        expr_is_numeric_quantity(r))
+        r = residue_eval1("N", r);
+    return r;
 }
 
 void residue_init(void) {

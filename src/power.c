@@ -787,6 +787,55 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
         (Expr*[]){ expr_copy(a), coeff }, 2));
 }
 
+/* Exp#3: E^(c1 Log[a1] + ... + rest) -> a1^c1 ... E^rest, for the sum terms
+ * that are Log[a] or (exact rational) * Log[a] with a an exact number:
+ * E^(Log[2] + Log[3]) = 6 and E^(2 + Log[3]) = 3 E^2, as in the reference.
+ * Only base E: 2^(x + Log[3]) has no such split.  NULL when no term splits. */
+static Expr* split_exp_log_sum(Expr* base, Expr* exp) {
+    if (!(base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E)) return NULL;
+    if (!head_is(exp, SYM_Plus)) return NULL;
+    size_t n = exp->data.function.arg_count;
+    Expr** factors = malloc(sizeof(Expr*) * (n + 1));
+    Expr** rest = malloc(sizeof(Expr*) * n);
+    size_t nf = 0, nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = exp->data.function.args[i];
+        Expr* lg = NULL;
+        Expr* c = NULL;
+        int64_t rn, rd;
+        if (is_head_call(t, SYM_Log, 1)) lg = t;
+        else if (is_head_call(t, SYM_Times, 2) && is_rational(t->data.function.args[0], &rn, &rd)
+                 && is_head_call(t->data.function.args[1], SYM_Log, 1)) {
+            c = t->data.function.args[0];
+            lg = t->data.function.args[1];
+        }
+        /* Only a Log of an exact number splits off: a symbolic one would undo
+         * the exp-log normal form E^(g Log[f]) the limit and integration
+         * engines build (Gruntz's rewrite of f^g), and they cycle. */
+        if (lg && !(expr_is_numeric_quantity(lg->data.function.args[0]) &&
+                    !arg_is_inexact(lg->data.function.args[0])))
+            lg = NULL;
+        if (lg) {
+            Expr* a = expr_copy(lg->data.function.args[0]);
+            factors[nf++] = c ? make_power(a, expr_copy(c)) : a;
+        } else {
+            rest[nr++] = expr_copy(t);
+        }
+    }
+    if (nf == 0) {
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(rest);
+        free(factors);
+        return NULL;
+    }
+    Expr* rexp = nr == 1 ? rest[0] : expr_new_function(expr_new_symbol(SYM_Plus), rest, nr);
+    free(rest);
+    factors[nf++] = make_power(expr_new_symbol(SYM_E), rexp);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, nf);
+    free(factors);
+    return eval_and_free(prod);
+}
+
 /* Decode a scalar exponent Expr into a (re, im) pair for the NDArray power fast
  * path: Integer/Real/BigInt/Rational/MPFR → real, Complex[re, im] with numeric
  * parts → complex. A rational exponent decodes to its machine-precision value
@@ -2529,6 +2578,8 @@ rat_imag_fallthrough: ;
 
     {
         Expr* simp = simplify_exp_log(base, exp);
+        if (simp) return simp;
+        simp = split_exp_log_sum(base, exp);
         if (simp) return simp;
     }
 

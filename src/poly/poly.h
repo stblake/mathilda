@@ -28,6 +28,8 @@ Expr* builtin_hornerform(Expr* res);
 Expr* builtin_resultant(Expr* res);
 Expr* builtin_discriminant(Expr* res);
 Expr* builtin_subresultants(Expr* res);
+/* f[p1, p2, x, Modulus -> m] for the three subresultant heads (subresultants.c). */
+Expr* subres_modulus_apply(Expr* res, Expr* (*fn)(Expr*), bool truncate);
 void  subresultants_init(void);
 Expr* builtin_subresultantpolynomials(Expr* res);
 void  subresultantpolynomials_init(void);

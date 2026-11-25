@@ -329,6 +329,24 @@ static Expr* lt_transform(const Expr* f, const Expr* t, const Expr* s, const Exp
     } else if ((v_der = lt_delta_at_origin(r, t, s)) != NULL) {
         /* 3b. a delta at the origin, taken from 0- */
         out = lt_eval(lt_fn2(SYM_Times, expr_copy(c), v_der));
+    } else if (head_is(r, SYM_Integrate) && r->data.function.arg_count == 2 &&
+               head_is(r->data.function.args[1], SYM_List) &&
+               r->data.function.args[1]->data.function.arg_count == 3 &&
+               r->data.function.args[1]->data.function.args[0]->type == EXPR_SYMBOL &&
+               r->data.function.args[1]->data.function.args[1]->type == EXPR_INTEGER &&
+               r->data.function.args[1]->data.function.args[1]->data.integer == 0 &&
+               expr_eq(r->data.function.args[1]->data.function.args[2], (Expr*)t) &&
+               !lt_has(r->data.function.args[0], t)) {
+        /* 3c. LaplaceTransform#7: the running integral Integrate[g[u], {u, 0, t}]
+         * transforms to G(s)/s (it was sent to the defining integral, which
+         * raised Power::infy at the u = 0 end). */
+        Expr* u = r->data.function.args[1]->data.function.args[0];
+        Expr* gt = lt_eval(lt_fn2(SYM_ReplaceAll, expr_copy(r->data.function.args[0]),
+                                  lt_fn2(SYM_Rule, expr_copy(u), expr_copy((Expr*)t))));
+        Expr* G = lt_or_held(gt, t, s, as);
+        expr_free(gt);
+        out = lt_eval(lt_fn(SYM_Times, (Expr*[]){ expr_copy(c), G,
+                      lt_fn2(SYM_Power, expr_copy((Expr*)s), expr_new_integer(-1)) }, 3));
     } else if (r->type == EXPR_INTEGER && r->data.integer == 1) {
         /* 3. a t-free remainder */
         out = lt_eval(lt_fn2(SYM_Times, expr_copy(c),
@@ -362,13 +380,37 @@ static Expr* lt_transform(const Expr* f, const Expr* t, const Expr* s, const Exp
 }
 
 /* LaplaceTransform[f, t, s] or [f, t, s, Assumptions -> a]. */
+static Expr* builtin_laplace_transform(Expr* res);
 static Expr* builtin_laplace_transform(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
     if (n != 3 && n != 4) return NULL;
     Expr* t = res->data.function.args[1];
     Expr* s = res->data.function.args[2];
-    if (t->type != EXPR_SYMBOL || s->type != EXPR_SYMBOL) return NULL;
+    if (t->type != EXPR_SYMBOL) return NULL;
+    /* LaplaceTransform#6: a numeric s is the transform at that point --
+     * LaplaceTransform[t^2, t, 3] is 2/27.  Transform in a fresh symbol and
+     * substitute; a transform that does not close stays as given. */
+    if (s->type != EXPR_SYMBOL) {
+        if (lt_has(s, t)) return NULL;
+        Expr* sv = expr_new_symbol("LaplaceTransform`Private`s$");
+        Expr** a = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) a[i] = expr_copy(res->data.function.args[i]);
+        expr_free(a[2]);
+        a[2] = expr_copy(sv);
+        Expr* call = lt_fn(SYM_LaplaceTransform, a, n);
+        free(a);
+        Expr* F = builtin_laplace_transform(call);
+        expr_free(call);
+        Expr* out = NULL;
+        if (F && !sf_contains_head(F, SYM_LaplaceTransform))
+            out = lt_eval(lt_fn2(SYM_ReplaceAll, F, lt_fn2(SYM_Rule, sv, expr_copy(s))));
+        else {
+            if (F) expr_free(F);
+            expr_free(sv);
+        }
+        return out;
+    }
     Expr* as = NULL;
     if (n == 4) {
         Expr* o = res->data.function.args[3];
@@ -380,6 +422,17 @@ static Expr* builtin_laplace_transform(Expr* res) {
     }
     Expr* tru = as ? NULL : expr_new_symbol(SYM_True);
     Expr* r = lt_transform(res->data.function.args[0], t, s, as ? as : tru);
+    /* LaplaceTransform#5: c h(t) with c free of t is c LaplaceTransform[h]
+     * even when h has no closed transform (2 f[t] -> 2 L[f[t]]). */
+    if (!r) {
+        Expr* g = lt_eval(lt_fn(SYM_Expand, (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1));
+        bool pull = false;
+        if (g && head_is(g, SYM_Times))
+            for (size_t i = 0; i < g->data.function.arg_count; i++)
+                if (!lt_has(g->data.function.args[i], t)) pull = true;
+        if (pull) r = lt_or_held(g, t, s, as ? as : tru);
+        if (g) expr_free(g);
+    }
     if (tru) expr_free(tru);
     return r;
 }

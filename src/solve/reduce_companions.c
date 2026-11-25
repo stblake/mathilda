@@ -377,6 +377,11 @@ static Expr* dnf_to_expr(const Dnf* d) {
 /* Nand[a, ...] -> !(a && ...), Nor -> !(a || ...), Xnor -> !Xor[...]: the
  * negated connectives in the terms the DNF engine expands (audit
  * LogicalExpand#1; they were opaque atoms).  Fresh tree. */
+static bool le_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
 static Expr* le_desugar(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
@@ -391,6 +396,29 @@ static Expr* le_desugar(const Expr* e) {
         else if (strcmp(hn, "Xnor") == 0) inner = SYM_Xor;
     }
     Expr* out;
+    /* LogicalExpand#2: an equation (or inequation) between lists of the same
+     * length is the conjunction of the componentwise equations (the
+     * disjunction of the inequations): {a, b} == {c, d} is a == c && b == d. */
+    bool eq = h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Equal;
+    bool ne = h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Unequal;
+    if ((eq || ne) && n == 2 && le_is_list(a[0]) && le_is_list(a[1]) &&
+        a[0]->data.function.arg_count == a[1]->data.function.arg_count &&
+        a[0]->data.function.arg_count > 0) {
+        size_t m = a[0]->data.function.arg_count;
+        Expr** parts = malloc(m * sizeof(Expr*));
+        for (size_t i = 0; i < m; i++) {
+            Expr* rel = expr_new_function(expr_new_symbol(eq ? SYM_Equal : SYM_Unequal),
+                            (Expr*[]){ expr_copy(a[0]->data.function.args[i]),
+                                       expr_copy(a[1]->data.function.args[i]) }, 2);
+            parts[i] = le_desugar(rel);
+            expr_free(rel);
+        }
+        out = expr_new_function(expr_new_symbol(eq ? SYM_And : SYM_Or), parts, m);
+        free(parts);
+        for (size_t i = 0; i < n; i++) expr_free(a[i]);
+        free(a);
+        return out;
+    }
     if (inner) {
         Expr* body = expr_new_function(expr_new_symbol(inner), a, n);
         out = expr_new_function(expr_new_symbol(SYM_Not), &body, 1);
@@ -2590,7 +2618,11 @@ static Expr* builtin_find_instance_core(Expr* res) {
     long nWanted = 1;
     for (size_t i = 2; i < pos_end; i++) {
         Expr* a = args[i];
-        if (a->type == EXPR_INTEGER) nWanted = a->data.integer;
+        /* FindInstance#5: a count beyond any instance set (a bigint, or an
+         * int64 past long on LLP64) asks for "all of them": clamp it. */
+        if (a->type == EXPR_INTEGER)
+            nWanted = a->data.integer > (INT64_C(1) << 30) ? (1L << 30) : (long)a->data.integer;
+        else if (a->type == EXPR_BIGINT) nWanted = mpz_sgn(a->data.bigint) > 0 ? (1L << 30) : 0;
         else if (fi_is_domain(a)) dom = a;
         else return NULL;   /* unrecognised positional -> leave unevaluated */
     }

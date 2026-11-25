@@ -279,6 +279,65 @@ static void test_wave4_calculus(void) {
     audit_chk("FindRoot#1", "FindRoot[{x + y == 3, x - y == 1}, {x, 0}, {y, 0}]", "{x -> 2.0, y -> 1.0}");
 }
 
+
+
+
+
+
+
+/* ---- Wave 5 G5 BEGIN (calculus-solve audit fixes) ---- */
+static void test_wave5_g5(void) {
+    audit_chk("Csch#4", "StringContainsQ[ToString[Information[Csch]], \"hyperbolic cosecant\"]", "True");
+    audit_chk("Sech#2", "StringContainsQ[ToString[Information[Sech]], \"hyperbolic secant\"]", "True");
+    audit_chk("Log#7", "StringContainsQ[ToString[Information[Log]], \"Log[E^x] stays\"]", "True");
+    audit_chk("Log#7", "Log[E^x]", "Log[E^x]");
+    audit_chk("D#2", "D[x^2, {x, 10^30}]", "0");
+    audit_chk("D#2", "Quiet[Check[D[x^2, {x, 10^30}], fired, D::dvar]]", "0");
+    audit_chk("D#4", "D[x^2]", "x^2");
+    audit_chk("Exp#3", "Exp[Log[2] + Log[3]]", "6");
+    audit_chk("Exp#3", "Exp[2 + Log[3]]", "3 E^2");
+    audit_chk("Log#4", "{Log[1/2], Log[1/8], Log[2/3]}", "{-Log[2], -Log[8], Log[2/3]}");
+    audit_chk("Integrate#6", "Integrate[Floor[x], {x, 0, 3}]", "3");
+    audit_chk("Integrate#6", "Integrate[x Floor[x], {x, 0, 3}]", "13/2");
+    audit_chk("Integrate#7", "Block[{$MessageList = {}}, Integrate[x^2, {x, -Infinity, Infinity}]; Length[$MessageList]]", "1");
+    audit_chk("Limit#2", "Limit[Fibonacci[n+1]/Fibonacci[n], n -> Infinity]", "GoldenRatio");
+    audit_chk("Product#2", "Check[Product[x], fired, Product::argmu]", "fired");
+    audit_chk("Product#2", "Check[Product[i, 3], fired, Product::itform]", "fired");
+    audit_chk("Product#2", "Check[Product[i, {}], fired, Product::itform]", "fired");
+    audit_chk("Product#2", "Quiet[Product[i, {}]]", "Product[i, {}]");
+    audit_chk("Sum#4", "{Sum[1/i, {i, 1, n}], Sum[1/i^2, {i, 1, n}], Sum[1/(i + 1), {i, 0, n}]}", "{HarmonicNumber[n], HarmonicNumber[n, 2], HarmonicNumber[1 + n]}");
+    audit_chk("Derivative#4", "Derivative[17][Sin][x]", "Cos[x]");
+    audit_chk("Derivative#5", "Attributes[Derivative]", "{NHoldAll}");
+    audit_chk("Residue#3", "Check[Residue[z^2/(z - 1), {z, Infinity}], fired]", "-1");
+    audit_chk("Residue#3", "Residue[1/z, {z, Infinity}]", "-1");
+    audit_chk("Residue#4", "{Residue[1.0/z, {z, 0}], Residue[2.5/z, {z, 0}]}", "{1.0, 2.5}");
+    audit_chk("ArcTan#2", "{ArcTan[1, 2], ArcTan[-1, 2]}", "{ArcTan[2], Pi - ArcTan[2]}");
+    audit_chk("ArcTan#5", "{ArcTan[Sqrt[2] - 1], ArcTan[1 - Sqrt[2]], ArcTan[1 + Sqrt[2]]}", "{1/8 Pi, -1/8 Pi, 3/8 Pi}");
+    audit_chk("Csch#5", "{Csch[ArcSinh[x]], Csch[ArcCosh[x]], Csch[ArcTanh[x]]}", "{1/x, 1/(Sqrt[-1 + x] Sqrt[1 + x]), Sqrt[1 - x^2]/x}");
+    audit_chk("DifferenceDelta#3", "DifferenceDelta[i^2 j^2, i, j]", "1 + 2 i + 2 j + 4 i j");
+    audit_chk("Grad#2", "Grad[{x^2, y}, {x, y}, \"Cartesian\"]", "{{2 x, 0}, {0, 1}}");
+    audit_chk("Grad#3", "{Grad[x y, {x, y}, {\"Polar\", \"Euclidean\"}], Grad[x y, {x, y}, {\"Cartesian\", \"Euclidean\"}]}", "{{y, 1}, {y, x}}");
+    audit_chk("InterpolatingFunction#2", "Attributes[InterpolatingFunction]", "{HoldAll, NHoldAll, Protected}");
+    audit_chk("LaplaceTransform#5", "{LaplaceTransform[2 f[t], t, s], LaplaceTransform[a f[t] + b, t, s]}", "{2 LaplaceTransform[f[t], t, s], b/s + a LaplaceTransform[f[t], t, s]}");
+    audit_chk("LaplaceTransform#6", "{LaplaceTransform[t^2, t, 3], LaplaceTransform[E^(-t), t, 0]}", "{2/27, 1}");
+    audit_chk("LaplaceTransform#7", "Check[LaplaceTransform[Integrate[f[u], {u, 0, t}], t, s], fired]", "LaplaceTransform[f[t], t, s]/s");
+    audit_chk("Laplacian#1", "Check[Laplacian[x y z, {{x, y, z}}], fired, Laplacian::ivar]", "fired");
+    audit_chk("Laplacian#1", "Quiet[Laplacian[x y z, {{x, y, z}}]]", "Laplacian[x y z, {{x, y, z}}]");
+    audit_chk("Maximize#5", "Check[Maximize[-x^2, 3], fired, Maximize::ivar]", "fired");
+    audit_chk("Minimize#5", "Check[Minimize[x^2, 3], fired, Minimize::ivar]", "fired");
+    audit_chk("PolynomialQuotientRemainder#3", "PolynomialQuotientRemainder[x^2 + 1, x + 1, x, Modulus -> 1000000000000000000000007]", "{1000000000000000000000006 + x, 2}");
+    audit_chk("RootSum#3", "RootSum[Function[{t}, t^2 - 2], Function[{t}, 1/(x - t)]]", "(2 x)/(-2 + x^2)");
+    audit_chk("Sech#3", "{Sech[ArcCosh[x]], Sech[ArcSinh[x]], Sech[ArcTanh[x]]}", "{1/x, 1/Sqrt[1 + x^2], Sqrt[1 - x^2]}");
+    audit_chk("Sech#4", "Sech[Log[2]]", "4/5");
+    audit_chk("Sech#5", "Sech[2 + I Pi]", "-Sech[2]");
+    audit_chk("SubresultantPolynomialRemainders#2", "SubresultantPolynomialRemainders[x^3 + x + 1, 3 x^2 + 1, x, Modulus -> 5]", "{1 + x + x^3, 1 + 3 x^2, 3 + 2 x, 1}");
+    audit_chk("FindRoot#2", "Check[FindRoot[x^2 - 2, {x, 0}], fired, FindRoot::jsing]", "fired");
+    audit_chk("FindRoot#2", "Quiet[FindRoot[x^2 - 2, {x, 0}]]", "{x -> 0.0}");
+    audit_chk("FindRoot#3", "Check[FindRoot[{x^2 - 2, x^2 - 3}, {x, 1}], fired, FindRoot::systno]", "fired");
+    audit_chk("FindRoot#3", "Quiet[FindRoot[{x^2 - 2, x^2 - 3}, {x, 1}]]", "FindRoot[{x^2 - 2, x^2 - 3}, {x, 1}]");
+}
+/* ---- Wave 5 G5 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_d_numeric_variable);
@@ -291,5 +350,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_calculus);
+    TEST(test_wave5_g5);
     return audit_finish("audit_calculus");
 }

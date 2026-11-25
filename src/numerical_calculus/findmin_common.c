@@ -2381,6 +2381,13 @@ static bool fm_bracket_from(Expr* f, FmVarBind* binds, const FmOpts* opts,
         }
         if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
     }
+    /* FindMinimum#4: still descending after the whole expansion (an objective
+     * unbounded below, FindMinimum[x, {x, 0}]): no minimum was bracketed.
+     * Say so, as the reference does; the last iterate is still returned. */
+    bool hit_box = box1 && ((box1->has_hi && c >= box1->hi) || (box1->has_lo && c <= box1->lo));
+    if (fc <= fb && !hit_box)
+        fm_warn(g_fm_name, "cvmit", "Failed to converge to the requested accuracy or "
+                "precision within 100 iterations.");
     if (a > c) {
         double t = a; a = c; c = t;
     }

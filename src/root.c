@@ -40,6 +40,17 @@
  * sign of the polynomial form); NULL preserves the input verbatim. */
 static Expr* subst_slot1(const Expr* e, const Expr* replacement);   /* fwd */
 
+/* True when Variables[body] is {t}: a polynomial in t with numeric
+ * coefficients, whose degree is the number of its roots. */
+static bool root_only_variable(const Expr* body, const Expr* t) {
+    Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                  (Expr*[]){ expr_copy((Expr*)body) }, 1));
+    bool ok = v && head_is(v, SYM_List) && v->data.function.arg_count == 1 &&
+              expr_eq(v->data.function.args[0], t);
+    if (v) expr_free(v);
+    return ok;
+}
+
 static Expr* builtin_root(Expr* res) {
     /* Transcendental form Root[{f, x0}]: certify that f has a unique simple
      * root next to x0 and canonicalise x0 to the nearest machine number of
@@ -77,6 +88,24 @@ static Expr* builtin_root(Expr* res) {
             ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
                   (Expr*[]){ expr_copy(body), expr_copy(t), expr_copy(deg) }, 3))
             : NULL;
+        /* Root#3: the index of Root[f, k] must be an integer in 1..deg f.  It
+         * is checked once, here, where Root is formed: the numeric paths that
+         * used to report it ran several times per evaluation. */
+        if (lc && deg && deg->type == EXPR_INTEGER && res->data.function.arg_count == 2) {
+            Expr* kx = res->data.function.args[1];
+            bool numeric_k = kx->type == EXPR_INTEGER || kx->type == EXPR_BIGINT ||
+                             kx->type == EXPR_REAL || head_is(kx, SYM_Rational);
+            bool ok = kx->type == EXPR_INTEGER && kx->data.integer >= 1 &&
+                      kx->data.integer <= deg->data.integer;
+            if (numeric_k && !ok && root_only_variable(body, t)) {
+                char* ks = expr_to_string(kx);
+                mth_message("Root", "indx", "Index %s should be a machine-size integer "
+                            "between 1 and %lld.", ks ? ks : "?", (long long)deg->data.integer);
+                free(ks);
+                expr_free(lc); expr_free(deg); expr_free(body); expr_free(t);
+                return NULL;
+            }
+        }
         /* A linear or quadratic polynomial with rational coefficients: the
          * root in radicals, as the reference gives it (audit Root#2):
          * Root[# - 3 &, 1] is 3, Root[#^2 - 2 &, 1] is -Sqrt[2],
@@ -741,6 +770,22 @@ done:
     return out;
 }
 
+static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name);
+
+/* RootSum#3: Function[{t}, body] and Function[t, body] as the slot form
+ * Function[body /. t -> #1] the RootSum engines read; NULL for any other
+ * shape (a slot-form Function is used as given). */
+static Expr* rootsum_slot_form(const Expr* f) {
+    if (!head_is(f, SYM_Function) || f->data.function.arg_count != 2) return NULL;
+    const Expr* p = f->data.function.args[0];
+    const Expr* v = p->type == EXPR_SYMBOL ? p
+                  : (head_is(p, SYM_List) && p->data.function.arg_count == 1 &&
+                     p->data.function.args[0]->type == EXPR_SYMBOL) ? p->data.function.args[0] : NULL;
+    if (!v) return NULL;
+    Expr* body = substitute_bvar_with_slot(f->data.function.args[1], v->data.symbol.name);
+    return expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){ body }, 1);
+}
+
 static Expr* builtin_rootsum(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* fn1 = res->data.function.args[0];
@@ -748,8 +793,8 @@ static Expr* builtin_rootsum(Expr* res) {
     /* RootSum is HoldAll, so a Function-valued symbol (pf = Function[...];
      * RootSum[pf, ...]) reaches here unevaluated.  Resolve such a symbol to its
      * value so the Lagrange path sees a literal Function. */
-    Expr* ev1 = (fn1->type == EXPR_SYMBOL) ? evaluate(fn1) : NULL;
-    Expr* ev2 = (fn2->type == EXPR_SYMBOL) ? evaluate(fn2) : NULL;
+    Expr* ev1 = (fn1->type == EXPR_SYMBOL) ? evaluate(fn1) : rootsum_slot_form(fn1);
+    Expr* ev2 = (fn2->type == EXPR_SYMBOL) ? evaluate(fn2) : rootsum_slot_form(fn2);
     Expr* simplified = rootsum_try_lagrange(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
     if (!simplified) simplified = rootsum_try_rational(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
     if (!simplified) simplified = rootsum_try_numeric(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);

@@ -44,6 +44,8 @@ In[2]:= Denominator[3/7 + I/11]
 Out[2]= 77
 ```
 
+**Wave 5 (2026-11).** `Trig -> True` (also for `Numerator`): `Denominator[Tan[x], Trig -> True]` is `Cos[x]`.
+
 ## Cancel
 
 Cancels out common factors in the numerator and denominator of an expression.
@@ -126,6 +128,8 @@ Out[8]= 1/(1 + x^4)
 In[9]:= Cancel[(Sqrt[2] x + Sqrt[2] y)/(Sqrt[2] + Sqrt[2] x)]
 Out[9]= (x + y)/(1 + x)
 ```
+
+**Wave 5 (2026-11).** `Trig -> True`: the circular functions as rational functions of `Sin`/`Cos`, reduced modulo `Sin^2 + Cos^2 == 1` (`Cancel[(1 - Cos[x]^2)/Sin[x], Trig -> True]` is `Sin[x]`).
 
 ## Together
 
@@ -321,6 +325,8 @@ Out[7]= -(2 x)/(k^(2/3) - x^2)
     one take their former paths, and so does a default call with no symbolic
     variable (numbers and numeric kernels such as `EllipticK[1/2 (7 - 3 Sqrt[5])]`
     only), which the numeric-constant guards already leave as written.
+
+**Wave 5 (2026-11).** Wrong argument counts give `Together::argx` / `::nonopt`.
 
 ## RootReduce
 
@@ -719,6 +725,8 @@ Since the norm is multiplicative, a prime norm implies primality: `9 + Sqrt[10]`
 has norm `71` (a prime), so it is irreducible in `Z[Sqrt[10]]`. Units of a number
 field have norm `±1`.
 
+**Wave 5 (2026-11).** An `Extension` value that is not an explicit algebraic number is the one `::nalg` names.
+
 ## AlgebraicNumberTrace
 
 Gives the field trace of an algebraic number.
@@ -770,6 +778,8 @@ Out[6]= -3
 The trace is additive over a fixed field: `Tr(a + b) = Tr(a) + Tr(b)`. The absolute
 trace is the sum of `a`'s conjugates, so `AlgebraicNumberTrace[a]` equals the sum of
 the roots of `MinimalPolynomial[a, x]`.
+
+**Wave 5 (2026-11).** An `Extension` value that is not an explicit algebraic number is the one `::nalg` names; of repeated `Extension` options the first is in force; `AlgebraicNumberTrace[]` is `::argx`.
 
 ## Apart
 
@@ -886,6 +896,8 @@ In[5]:= Length[Subresultants[x^50 + a, x^20 + b, x]]
 Out[5]= 21
 ```
 
+**Wave 5 (2026-11).** `Modulus -> m`: computed over Z/m (inputs reduced first).
+
 ## SubresultantPolynomials
 
 - `SubresultantPolynomials[poly1, poly2, var]`: Gives the list of
@@ -925,6 +937,8 @@ Out[3]= {-183782157189, -761749829 + 3208696817 x,
 In[4]:= First[%] - Resultant[2 x^7 + 3 x^3 + 5 x - 1, 7 x^6 + 8 x - 9, x]
 Out[4]= 0
 ```
+
+**Wave 5 (2026-11).** `Modulus -> m`: computed over Z/m (inputs reduced first).
 
 ## IrreduciblePolynomialQ
 
@@ -1105,6 +1119,8 @@ Out[4]= 4 - 4 x^2 + x^4
 **Trigonometric atoms (v0.6491).** Cos, Sin and Tan of a rational multiple of π
 are algebraic. cos(pπ/q) is a root of T_q(t) − (−1)^p, and the irreducible factor
 vanishing at the number is kept: `MinimalPolynomial[Cos[Pi/9], x] = -1 - 6 x + 8 x^3`.
+
+**Wave 5 (2026-11).** Accepts `AlgebraicNumber[theta, coeffs]` and `Root[Function[{y}, body], k]`; a `Root` index outside `1..deg` and an inexact number stay unevaluated; `::ivar` names the offending variable.
 
 ## Audit wave 4 notes
 

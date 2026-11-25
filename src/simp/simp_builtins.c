@@ -258,6 +258,24 @@ int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
             return 0;
         }
         if (prov_re(ctx, x)) return 1;
+        /* Element#4: an exact numeric quantity whose value is plainly off
+         * the real axis (I Sqrt[2]) is not real. */
+        if (expr_is_numeric_quantity(x) && !internal_contains_inexact((Expr*)x)) {
+            Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                           (Expr*[]){ expr_copy((Expr*)x) }, 1));
+            bool off = false;
+            if (nv && head_is(nv, SYM_Complex) && nv->data.function.arg_count == 2) {
+                const Expr* re = nv->data.function.args[0];
+                const Expr* im = nv->data.function.args[1];
+                double dre = re->type == EXPR_REAL ? re->data.real
+                           : re->type == EXPR_INTEGER ? (double)re->data.integer : NAN;
+                double dim = im->type == EXPR_REAL ? im->data.real
+                           : im->type == EXPR_INTEGER ? (double)im->data.integer : NAN;
+                off = isfinite(dre) && isfinite(dim) && fabs(dim) > 1e-8 * (1.0 + fabs(dre));
+            }
+            if (nv) expr_free(nv);
+            if (off) return 0;
+        }
         return -1;
     }
 
@@ -274,7 +292,47 @@ int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
             if (x->data.symbol.name == SYM_True)  return 1;
             if (x->data.symbol.name == SYM_False) return 1;
         }
+        /* Element#2: a number or a string is not a truth value. */
+        if (x->type == EXPR_INTEGER || x->type == EXPR_BIGINT || x->type == EXPR_REAL ||
+            x->type == EXPR_STRING || is_rational_literal(x) || is_complex_literal(x))
+            return 0;
         return -1;
+    }
+
+    /* Element#2: a non-integer number is neither prime nor composite, and the
+     * composites are the integers n >= 4 that are not prime (0, 1 and the
+     * negatives are not). */
+    if ((strcmp(dom, "Primes") == 0 || strcmp(dom, "Composites") == 0) &&
+        (x->type == EXPR_REAL || is_rational_literal(x) || is_complex_literal(x)))
+        return 0;
+    if (strcmp(dom, "Composites") == 0 && x->type == EXPR_INTEGER && x->data.integer < 2)
+        return 0;
+
+    /* Element#5: the sign-restricted integer domains. */
+    if (strcmp(dom, "PositiveIntegers") == 0 || strcmp(dom, "NonNegativeIntegers") == 0 ||
+        strcmp(dom, "NegativeIntegers") == 0 || strcmp(dom, "NonPositiveIntegers") == 0) {
+        int in_z = element_decide(x, "Integers", ctx);
+        if (in_z == 0) return 0;
+        int sg = 2;   /* unknown */
+        if (x->type == EXPR_INTEGER) sg = x->data.integer > 0 ? 1 : x->data.integer < 0 ? -1 : 0;
+        else if (x->type == EXPR_BIGINT) sg = mpz_sgn(x->data.bigint);
+        else if (prov_pos(ctx, x)) sg = 1;
+        else if (prov_neg(ctx, x)) sg = -1;
+        bool want_pos = strcmp(dom, "PositiveIntegers") == 0;
+        bool want_neg = strcmp(dom, "NegativeIntegers") == 0;
+        if (sg == 2) {
+            /* the sign alone can still exclude */
+            if (strcmp(dom, "PositiveIntegers") == 0 && prov_np(ctx, x)) return 0;
+            if (strcmp(dom, "NonNegativeIntegers") == 0 && prov_neg(ctx, x)) return 0;
+            if (strcmp(dom, "NegativeIntegers") == 0 && prov_nn(ctx, x)) return 0;
+            if (strcmp(dom, "NonPositiveIntegers") == 0 && prov_pos(ctx, x)) return 0;
+            return -1;
+        }
+        bool ok_sign = want_pos ? sg > 0
+                     : want_neg ? sg < 0
+                     : strcmp(dom, "NonNegativeIntegers") == 0 ? sg >= 0 : sg <= 0;
+        if (!ok_sign) return 0;
+        return in_z == 1 ? 1 : -1;
     }
 
     if (strcmp(dom, "Primes") == 0) {
@@ -2226,6 +2284,84 @@ static size_t sb_leaves(const Expr* e) {
 
 typedef struct { unsigned val, mask; bool used; } SbImp;
 
+/* ---- Univariate inequality systems (audit Simplify#4) ---------------------
+ * An And/Or/Not of real comparisons, every side a polynomial in ONE symbol v
+ * with exact coefficients, is decided by the univariate real solver: Reduce
+ * gives its solution set, which is True/False (x < 2 && x > 3 is False) or a
+ * smaller description of it (x > 3 && x > 2 is x > 3).  The leaf walk collects
+ * v and rejects anything else; the Reduce form is taken only when strictly
+ * smaller by LeafCount. */
+static bool simp_ineq_leaves(const Expr* e, Expr** var, int depth) {
+    if (depth > 32 || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_And || h == SYM_Or || h == SYM_Not) {
+        if (n == 0) return false;
+        for (size_t i = 0; i < n; i++)
+            if (!simp_ineq_leaves(e->data.function.args[i], var, depth + 1)) return false;
+        return true;
+    }
+    if (!(h == SYM_Less || h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual ||
+          h == SYM_Inequality))
+        return false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* side = e->data.function.args[i];
+        if (h == SYM_Inequality && (i % 2) == 1) continue;     /* the relation symbols */
+        if (internal_contains_inexact(side)) return false;
+        Expr* vs = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                       (Expr*[]){ expr_copy((Expr*)side) }, 1));
+        bool ok = vs && head_is(vs, SYM_List);
+        for (size_t j = 0; ok && j < vs->data.function.arg_count; j++) {
+            Expr* s = vs->data.function.args[j];
+            if (s->type != EXPR_SYMBOL) ok = false;
+            else if (!*var) *var = expr_copy(s);
+            else if (!expr_eq(*var, s)) ok = false;
+        }
+        if (ok) {
+            Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                           (Expr*[]){ expr_copy((Expr*)side),
+                                      *var ? expr_copy(*var) : expr_new_symbol("System`$simpNoVar") }, 2));
+            ok = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
+            if (pq) expr_free(pq);
+        }
+        if (vs) expr_free(vs);
+        if (!ok) return false;
+    }
+    return true;
+}
+
+static size_t simp_leafcount(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return 1;
+    size_t n = simp_leafcount(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        n += simp_leafcount(e->data.function.args[i]);
+    return n;
+}
+
+/* Re-entry guard: Reduce may Simplify its own conditions, which must not come
+ * back here (a TimeConstrained unwind counter, registered in simp init). */
+static int g_simp_ui_depth = 0;
+int* simp_ui_depth_counter(void) { return &g_simp_ui_depth; }
+
+static Expr* simp_univariate_inequalities(const Expr* e) {
+    if (g_simp_ui_depth > 0) return NULL;
+    if (!(head_is(e, SYM_And) || head_is(e, SYM_Or))) return NULL;
+    Expr* var = NULL;
+    bool ok = simp_ineq_leaves(e, &var, 0);
+    if (!ok || !var) { if (var) expr_free(var); return NULL; }
+    g_simp_ui_depth++;
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
+                  (Expr*[]){ expr_copy((Expr*)e), var, expr_new_symbol(SYM_Reals) }, 3));
+    if (g_simp_ui_depth > 0) g_simp_ui_depth--;
+    if (!r || eval_is_inflight_unwind(r) || head_is(r, SYM_Reduce) ||
+        !(r->type == EXPR_SYMBOL || simp_leafcount(r) < simp_leafcount(e))) {
+        if (r) expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 static Expr* simp_boolean_minimize(const Expr* e) {
     if (!sb_nand) {
         sb_nand = intern_symbol("Nand");
@@ -2476,18 +2612,42 @@ Expr* builtin_simplify(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
         Expr* again = simp_ll_assumptions(res);
         if (again) return again;
+    }
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1) {
         /* Boole[c] / ConditionalExpression[v, c] whose condition the
          * assumptions decide: Refine settles it (Simplify[Boole[x > 0],
          * x > 0] is 1), and the settled form is simplified in turn.  A
          * Refine that changes nothing falls through, so this cannot loop. */
         Expr* e0 = res->data.function.args[0];
-        if (sf_contains_head(e0, SYM_Boole) || sf_contains_head(e0, SYM_ConditionalExpression)) {
+        if (sf_contains_head(e0, SYM_Boole) || sf_contains_head(e0, SYM_ConditionalExpression) ||
+            sf_contains_head(e0, SYM_Max) || sf_contains_head(e0, SYM_Min)) {   /* FullSimplify#3 */
             size_t n = res->data.function.arg_count;
-            Expr* ref = expr_new_function(expr_new_symbol(SYM_Refine), NULL, n);
-            for (size_t i = 0; i < n; i++) ref->data.function.args[i] = expr_copy(res->data.function.args[i]);
-            Expr* r = evaluate(ref);
-            expr_free(ref);
-            if (r && !eval_is_inflight_unwind(r) && !expr_eq(r, e0)) {
+            /* Refine takes the expression and the assumptions (positional or
+             * an Assumptions option); Simplify's other options are not its. */
+            Expr* assum = NULL;
+            for (size_t i = 1; i < n && !assum; i++) {
+                Expr* ai = res->data.function.args[i];
+                bool rule = (head_is(ai, SYM_Rule) || head_is(ai, SYM_RuleDelayed)) &&
+                            ai->data.function.arg_count == 2;
+                bool assum_opt = rule && ai->data.function.args[0]->type == EXPR_SYMBOL &&
+                                 ai->data.function.args[0]->data.symbol.name == SYM_Assumptions;
+                if (!rule || assum_opt) assum = ai;
+            }
+            Expr* r = NULL;
+            Expr* dollar = assum ? NULL : read_dollar_assumptions();  /* FullSimplify binds it */
+            if (dollar && dollar->type == EXPR_SYMBOL && dollar->data.symbol.name == SYM_True) {
+                expr_free(dollar);
+                dollar = NULL;
+            }
+            if (dollar) assum = dollar;
+            if (assum) {
+                Expr* ref = expr_new_function(expr_new_symbol(SYM_Refine),
+                                (Expr*[]){ expr_copy(e0), expr_copy(assum) }, 2);
+                r = evaluate(ref);
+                expr_free(ref);
+            }
+            if (dollar) expr_free(dollar);
+            if (r && !eval_is_inflight_unwind(r) && !expr_eq(r, e0) && !head_is(r, SYM_Refine)) {
                 Expr* call = expr_new_function(expr_copy(res->data.function.head), NULL, n);
                 call->data.function.args[0] = r;
                 for (size_t i = 1; i < n; i++) call->data.function.args[i] = expr_copy(res->data.function.args[i]);
@@ -2509,7 +2669,7 @@ Expr* builtin_simplify(Expr* res) {
                          ? e0->data.function.head->data.symbol.name : NULL;
         bool pred = h0 && (h0 == SYM_Less || h0 == SYM_LessEqual || h0 == SYM_Greater ||
                            h0 == SYM_GreaterEqual || h0 == SYM_Equal || h0 == SYM_Unequal ||
-                           h0 == SYM_Element || h0 == SYM_Inequality);
+                           h0 == SYM_Element || h0 == SYM_NotElement || h0 == SYM_Inequality);
         const Expr* opt = NULL;
         const Expr* pos = pred ? simp_call_assumptions(res, &opt) : NULL;
         bool dollar = false;     /* $Assumptions in force (FullSimplify binds it) */
@@ -2530,6 +2690,10 @@ Expr* builtin_simplify(Expr* res) {
                 return v;
             if (v) expr_free(v);
         }
+    }
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
+        Expr* ui = simp_univariate_inequalities(res->data.function.args[0]);
+        if (ui) return ui;
     }
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1) {
         Expr* bm = simp_boolean_minimize(res->data.function.args[0]);

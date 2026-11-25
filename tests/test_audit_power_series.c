@@ -94,6 +94,20 @@ static void test_wave4_series(void) {
     audit_chk("ArcCosh#1", "ArcCosh[1/2]", "(1/3*I) Pi");
 }
 
+
+
+
+
+
+
+/* ---- Wave 5 G5 BEGIN (calculus-solve audit fixes) ---- */
+static void test_wave5_g5(void) {
+    audit_chk("ArcSinh#3", "StringContainsQ[ToString[Information[ArcSinh]], \"inverse hyperbolic sine\"]", "True");
+    audit_chk("ArcSech#3", "{ArcSech[-1], ArcSech[2], ArcSech[-2]}", "{I Pi, (1/3*I) Pi, (2/3*I) Pi}");
+    audit_chk("Normal#3", "Normal[Series[Sin[x], {x, 0, 5}], SeriesData]", "x - 1/6 x^3 + 1/120 x^5");
+}
+/* ---- Wave 5 G5 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_series_huge_order);
@@ -101,5 +115,6 @@ int main(void) {
     TEST(test_seriesdata_exp_kernel_terms);
     TEST(test_s11_special_values);
     TEST(test_wave4_series);
+    TEST(test_wave5_g5);
     return audit_finish("audit_power_series");
 }

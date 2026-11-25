@@ -381,6 +381,60 @@ static void collect_condition_boundaries(const Expr* cond, const Expr* x,
         collect_condition_boundaries(cond->data.function.args[i], x, a, b, s);
 }
 
+/* Integer-step heads (Integrate#6): Floor, Ceiling, IntegerPart,
+ * FractionalPart and Round of an argument linear in x jump where the argument
+ * crosses an integer (a half-integer for Round). */
+static bool is_step_head(const char* h) {
+    return h == SYM_Floor || h == SYM_Ceiling || h == SYM_IntegerPart ||
+           h == SYM_FractionalPart || h == SYM_Round;
+}
+
+#define STEP_MAX_JUMPS 2048
+
+/* The jumps of a step head h of g = c1 x + c0 on a finite numeric [a, b]:
+ * x = (k - c0)/c1 for every integer k (k + 1/2 for Round) between g(a) and
+ * g(b).  A non-linear argument, a non-numeric range or too many jumps marks
+ * the set incomplete. */
+static void step_breakpoints(const char* h, const Expr* g, const Expr* x,
+                             const Expr* a, const Expr* b, BPSet* s) {
+    double da, db;
+    Expr* zero = expr_new_integer(0);
+    Expr* one = expr_new_integer(1);
+    Expr* c0 = subst(g, x, zero);
+    Expr* g1 = subst(g, x, one);
+    Expr* c1 = eval_take(mk_fn2("Plus", g1, neg_of(cp(c0))));
+    /* linear: g == c1 x + c0 identically */
+    Expr* lin = eval_take(mk_fn1("Expand", mk_fn2("Plus", cp((Expr*)g),
+                    neg_of(mk_fn2("Plus", mk_fn2("Times", cp(c1), cp((Expr*)x)), cp(c0))))));
+    bool linear = lin && lin->type == EXPR_INTEGER && lin->data.integer == 0;
+    if (lin) expr_free(lin);
+    double dc0, dc1;
+    if (!linear || !num_double(a, &da) || !num_double(b, &db) ||
+        !num_double(c0, &dc0) || !num_double(c1, &dc1) || dc1 == 0.0 ||
+        contains_symbol(c1, x) || contains_symbol(c0, x)) {
+        s->incomplete = true;
+    } else {
+        double ga = dc1 * da + dc0, gb = dc1 * db + dc0;
+        double lo = ga < gb ? ga : gb, hi = ga < gb ? gb : ga;
+        double off = (h == SYM_Round) ? 0.5 : 0.0;
+        double k0 = ceil(lo - off), k1 = floor(hi - off);
+        if (k1 - k0 > STEP_MAX_JUMPS) {
+            s->incomplete = true;
+        } else {
+            for (double k = k0; k <= k1; k += 1.0) {
+                /* x = (k + off - c0)/c1, exactly */
+                Expr* kk = h == SYM_Round
+                    ? mk_fn2("Plus", expr_new_integer((int64_t)k), mk_fn2("Rational", expr_new_integer(1), expr_new_integer(2)))
+                    : expr_new_integer((int64_t)k);
+                Expr* xk = eval_take(mk_fn2("Times", mk_fn2("Plus", kk, neg_of(cp(c0))),
+                                            mk_fn2("Power", cp(c1), expr_new_integer(-1))));
+                if (xk) bp_add(s, xk);
+            }
+        }
+    }
+    expr_free(zero); expr_free(one); expr_free(c0); expr_free(c1);
+}
+
 /* Walk the integrand, collecting every branch-switch breakpoint in x.  A
  * fractional-power radical Power[g, p] contributes the real zeros of its
  * radicand g: the radical is smooth except where g vanishes, so those zeros are
@@ -395,6 +449,8 @@ static void collect_breakpoints(const Expr* e, const Expr* x, const Expr* a,
          h == SYM_HeavisideTheta || h == SYM_UnitStep) &&
         n == 1 && contains_symbol(e->data.function.args[0], x)) {
         solve_roots(e->data.function.args[0], x, a, b, s);
+    } else if (is_step_head(h) && n == 1 && contains_symbol(e->data.function.args[0], x)) {
+        step_breakpoints(h, e->data.function.args[0], x, a, b, s);
     } else if ((h == SYM_Min || h == SYM_Max) && n >= 2) {
         for (size_t i = 0; i < n; i++)
             for (size_t j = i + 1; j < n; j++) {
@@ -428,7 +484,7 @@ static bool has_branch_head(const Expr* e, const Expr* x) {
     if ((h == SYM_Abs || h == SYM_Sign || h == SYM_Ramp ||
          h == SYM_HeavisideTheta || h == SYM_UnitStep ||
          h == SYM_Min || h == SYM_Max ||
-         h == SYM_Piecewise) && contains_symbol(e, x))
+         h == SYM_Piecewise || is_step_head(h)) && contains_symbol(e, x))
         return true;
     if (has_branch_head(e->data.function.head, x)) return true;
     for (size_t i = 0; i < n; i++)
@@ -561,6 +617,24 @@ static Expr* resolve_at(const Expr* e, const Expr* x, const Expr* m,
         Expr* g = resolve_at(e->data.function.args[0], x, m, as, ok);
         if (!*ok) { if (g) expr_free(g); return NULL; }
         return resolve_unary(h, g, x, m, as, ok);
+    }
+    /* A step head is constant between its jumps: its value at the test point
+     * (FractionalPart[g] = g - IntegerPart[g(m)]). */
+    if (is_step_head(h) && n == 1 && contains_symbol(e->data.function.args[0], x)) {
+        Expr* g = resolve_at(e->data.function.args[0], x, m, as, ok);
+        if (!*ok) { if (g) expr_free(g); return NULL; }
+        Expr* gm = subst(g, x, m);
+        const char* vh = (h == SYM_FractionalPart) ? SYM_IntegerPart : h;
+        Expr* v = eval_take(mk_fn1(vh, gm));
+        if (!v || !expr_is_integer_like(v)) {
+            if (v) expr_free(v);
+            expr_free(g);
+            *ok = false;
+            return NULL;
+        }
+        if (h == SYM_FractionalPart) return mk_fn2("Plus", g, neg_of(v));
+        expr_free(g);
+        return v;
     }
     if ((h == SYM_Min || h == SYM_Max) && n >= 1 &&
         contains_symbol(e, x)) {

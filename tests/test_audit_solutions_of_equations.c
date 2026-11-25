@@ -149,6 +149,27 @@ static void test_wave4_solve(void) {
     audit_chk("SolveAlways#3", "SolveAlways[a x + b == 0, y]", "{{b -> -a x}}");
 }
 
+
+
+
+
+
+
+/* ---- Wave 5 G5 BEGIN (calculus-solve audit fixes) ---- */
+static void test_wave5_g5(void) {
+    audit_chk("And#1", "StringContainsQ[ToString[Information[And]], \"logical AND\"]", "True");
+    audit_chk("Root#3", "Quiet[Check[N[Root[#^3 - 2 &, 0]], fired, Root::indx]]", "fired");
+    audit_chk("Root#3", "Quiet[Check[N[Root[#^3 - 2 &, 1.5]], fired, Root::indx]]", "fired");
+    audit_chk("Root#3", "Quiet[Check[N[Root[#^3 - 2 &, 4]], fired, Root::indx]]", "fired");
+    audit_chk("Root#4", "N[Root[#^3 + # + 1 &, 2], 20] == 0.34116390191400966368`20 - 1.1615413999972519361`20 I", "True");
+    audit_chk("Solve#6", "Block[{$MessageList = {}}, Solve[Exp[2 x] - 3 Exp[x] + 2 == 0, x]; Length[$MessageList]]", "1");
+    audit_chk("FindInstance#5", "FindInstance[x^2 == 4, x, Reals, 10^20]", "{{x -> -2}, {x -> 2}}");
+    audit_chk("LogicalExpand#2", "LogicalExpand[{a, b} == {c, d}]", "a == c && b == d");
+    audit_chk("NotElement#2", "{Refine[NotElement[x, Reals], Element[x, Reals]], Simplify[NotElement[x, Reals], Element[x, Reals]]}", "{False, False}");
+    audit_chk("Resolve#2", "{Resolve[True], Resolve[x > 0, Reals]}", "{True, x > 0}");
+}
+/* ---- Wave 5 G5 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_root_multiplicity);
@@ -159,5 +180,6 @@ int main(void) {
     TEST(test_toradicals_inexact_cubic);
     TEST(test_s11_special_values);
     TEST(test_wave4_solve);
+    TEST(test_wave5_g5);
     return audit_finish("audit_solutions_of_equations");
 }

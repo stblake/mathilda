@@ -724,7 +724,7 @@ void test_arg(void) {
     free(s10);
 
     char* s11 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[Complex[1, 2]]")));
-    assert(strcmp(s11, "ArcTan[1, 2]") == 0);
+    assert(strcmp(s11, "ArcTan[2]") == 0);   /* ArcTan[1, 2] = ArcTan[2] (ArcTan#2) */
     free(s11);
 
     /* MPFR (high-precision Real): Arg is symbolic 0 / Pi by sign, not the

@@ -3513,6 +3513,47 @@ void info_init(void) {
         "\tgives the hyperbolic tangent of z, Sinh[z] / Cosh[z].\n"
         "Tanh is Listable.");
 
+    symtab_set_docstring("Coth",
+        "Coth[z]\n"
+        "\tgives the hyperbolic cotangent of z, Cosh[z] / Sinh[z].\n"
+        "Coth is Listable.");
+    symtab_set_docstring("Sech",
+        "Sech[z]\n"
+        "\tgives the hyperbolic secant of z, 1 / Cosh[z].\n"
+        "Sech is Listable.");
+    symtab_set_docstring("Csch",
+        "Csch[z]\n"
+        "\tgives the hyperbolic cosecant of z, 1 / Sinh[z].\n"
+        "Csch is Listable.");
+    symtab_set_docstring("ArcSinh",
+        "ArcSinh[z]\n"
+        "\tgives the inverse hyperbolic sine of z, Log[z + Sqrt[z^2 + 1]];\n"
+        "\tbranch cuts along the imaginary axis outside (-I, I).\n"
+        "ArcSinh is Listable.");
+    symtab_set_docstring("ArcCosh",
+        "ArcCosh[z]\n"
+        "\tgives the inverse hyperbolic cosine of z; branch cut along the real\n"
+        "\taxis to the left of 1.\n"
+        "ArcCosh is Listable.");
+    symtab_set_docstring("ArcTanh",
+        "ArcTanh[z]\n"
+        "\tgives the inverse hyperbolic tangent of z, (Log[1 + z] - Log[1 - z])/2;\n"
+        "\tbranch cuts along the real axis outside (-1, 1).\n"
+        "ArcTanh is Listable.");
+    symtab_set_docstring("ArcCoth",
+        "ArcCoth[z]\n"
+        "\tgives the inverse hyperbolic cotangent of z, ArcTanh[1/z];\n"
+        "\tbranch cut along the real axis on [-1, 1].\n"
+        "ArcCoth is Listable.");
+    symtab_set_docstring("ArcSech",
+        "ArcSech[z]\n"
+        "\tgives the inverse hyperbolic secant of z, ArcCosh[1/z].\n"
+        "ArcSech is Listable.");
+    symtab_set_docstring("ArcCsch",
+        "ArcCsch[z]\n"
+        "\tgives the inverse hyperbolic cosecant of z, ArcSinh[1/z].\n"
+        "ArcCsch is Listable.");
+
     // Log/Exp
     symtab_set_docstring("Log",
         "Log[z]\n"
@@ -3520,7 +3561,8 @@ void info_init(void) {
         "\tthe negative real axis.\n"
         "Log[b, z]\n"
         "\tgives the logarithm to base b, i.e. Log[z] / Log[b].\n"
-        "Log is Listable. Log[1] = 0, Log[E] = 1, Log[E^n] = n for symbolic n.\n"
+        "Log is Listable. Log[1] = 0, Log[E] = 1, Log[E^n] = n for real numeric n\n"
+        "(Log[E^x] stays for symbolic x).\n"
         "Numeric inputs route to libm / MPFR; negative reals yield I Pi + Log[|z|].");
     symtab_set_docstring("Log10",
         "Log10[z]\n"

@@ -178,6 +178,10 @@ static QdResultMachine qd_fixed_m(QdSampleMachine f, void* ctx,
         if (err < tol * scale) { st = QD_OK; break; }
     }
 
+    /* NResidue#1: with MaxRecursion -> 0 there is no doubling, so neither a
+     * convergence nor a branch-cut judgement exists -- the base rule's value is
+     * the requested answer (decay_min stayed 1 and read as a branch cut). */
+    if (max_recursion <= 0) st = QD_OK;
     if (st != QD_OK) {
         double rj = qd_maxreljump_m(fv, N);
         st = (rj > QD_REL_JUMP_BRANCHCUT || decay_min > QD_DECAY_BRANCHCUT)
@@ -493,6 +497,7 @@ static QdResultMpfr qd_fixed_mpfr(QdSampleMpfr f, void* ctx,
     }
 
     if (st != QD_NONNUMERIC) {
+        if (max_recursion <= 0) st = QD_OK;   /* no doubling: see the machine path */
         if (st != QD_OK) {
             double rj = qd_maxreljump_mpfr(fv, N);
             st = (rj > QD_REL_JUMP_BRANCHCUT || decay_min > QD_DECAY_BRANCHCUT)

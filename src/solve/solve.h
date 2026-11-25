@@ -19,4 +19,8 @@ Expr* builtin_solve(Expr* res);
  * equality specialist.  Idempotent. */
 void solve_init(void);
 
+/* Solve#6: true when this Solve call may report Solve::ifun (once per
+ * top-level Solve); marks it reported. */
+bool solve_ifun_claim(void);
+
 #endif /* SOLVE_H */

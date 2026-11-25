@@ -117,11 +117,39 @@ static void test_wave4_simplification(void) {
     audit_chk("SimplifyCount#1", "Union[Table[SimplifyCount[10^k - 1] - k, {k, 19, 60}]]", "{0}");
 }
 
+
+
+
+
+
+
+/* ---- Wave 5 G5 BEGIN (calculus-solve audit fixes) ---- */
+static void test_wave5_g5(void) {
+    audit_chk("Coth#5", "StringContainsQ[ToString[Information[Coth]], \"hyperbolic cotangent\"]", "True");
+    audit_chk("Refine#2", "{Refine[Max[x, y], x > y], Refine[Min[x, 0], x > 0], Refine[UnitStep[x], x > 0], Refine[Boole[x > 0], x > 1], Refine[Piecewise[{{1, x > 0}, {2, True}}], x > 1]}", "{x, 0, 1, 1, 1}");
+    audit_chk("Refine#3", "{Refine[Sqrt[x^4], Element[x, Reals]], Refine[Sqrt[x^4], x < 0], Refine[Abs[x]^2, Element[x, Reals]]}", "{x^2, x^2, x^2}");
+    audit_chk("Simplify#4", "{Simplify[x < 2 && x > 3], Simplify[x > 3 && x > 2], Simplify[x < 2 || x > 1]}", "{False, x > 3, True}");
+    audit_chk("Simplify#5", "Check[Simplify[], fired, Simplify::argt]", "fired");
+    audit_chk("Simplify#5", "Check[Simplify[x, y, z], fired, Simplify::nonopt]", "fired");
+    audit_chk("Simplify#5", "Quiet[Simplify[x, y, z]]", "Simplify[x, y, z]");
+    audit_chk("FullSimplify#2", "Check[FullSimplify[x, y, z], fired, FullSimplify::nonopt]", "fired");
+    audit_chk("FullSimplify#3", "{FullSimplify[Max[x, y], x > y], Simplify[Max[x, y], x > y], FullSimplify[Sign[x], x > 0]}", "{x, x, 1}");
+    audit_chk("ArcCos#4", "{ArcCos[(1 + Sqrt[5])/4], ArcCos[(Sqrt[6] + Sqrt[2])/4], ArcCos[Sqrt[2 + Sqrt[2]]/2]}", "{1/5 Pi, 1/12 Pi, 1/8 Pi}");
+    audit_chk("Coth#4", "{Coth[ArcSinh[x]], Coth[ArcCosh[x]]}", "{Sqrt[1 + x^2]/x, x/(Sqrt[-1 + x] Sqrt[1 + x])}");
+    audit_chk("Element#2", "{Element[1, Composites], Element[0, Composites], Element[1/2, Primes], Element[2.0, Primes], Element[1, Booleans]}", "{False, False, False, False, False}");
+    audit_chk("Element#4", "Element[Sqrt[2] I, Reals]", "False");
+    audit_chk("Element#5", "{Element[-3, NonNegativeIntegers], Element[0, PositiveIntegers], Element[0, NonNegativeIntegers], Element[-2, NegativeIntegers]}", "{False, False, True, True}");
+    audit_chk("Tanh#3", "Tanh[-x - y]", "-Tanh[x + y]");
+    audit_chk("Tanh#4", "{Tanh[Log[x]], Tanh[Log[2]]}", "{(-1 + x^2)/(1 + x^2), 3/5}");
+}
+/* ---- Wave 5 G5 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_factorial2_negative_odd);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_simplification);
+    TEST(test_wave5_g5);
     return audit_finish("audit_simplification");
 }

@@ -17,7 +17,10 @@
 #include "../numeric.h"
 #include "../nc_accuracy.h"   /* shared AccuracyGoal/PrecisionGoal handling */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "../print.h"  /* expr_to_string: NDSolve::ndnl / ::ndinnt */
+#include "../core.h"   /* tc_register_unwind_counter */
 #include <math.h>
+#include <float.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -201,8 +204,15 @@ static void nd_problem_free(NdProblem* P) {
 /* ------------------------------------------------------------------ *
  *  Core solver                                                        *
  * ------------------------------------------------------------------ */
+/* NDSolveValue#5: the head NDSolve's own diagnostics carry.  NDSolveValue
+ * evaluates an NDSolve call; a message about that solve is about the user's
+ * NDSolveValue and says so (g_nd_value_depth > 0 for its extent; a
+ * TimeConstrained unwind counter). */
+static int g_nd_value_depth = 0;
+static const char* nd_head(void) { return g_nd_value_depth > 0 ? "NDSolveValue" : "NDSolve"; }
+
 static void nd_warn(const char* tag, const char* msg) {
-    mth_message("NDSolve", tag, "%s", msg);
+    mth_message(nd_head(), tag, "%s", msg);
 }
 
 /* ------------------------------------------------------------------ *
@@ -260,6 +270,19 @@ static bool nd_plain_ic(const Expr* c, const char** fnames, size_t nfun,
  * with every condition's value taken as an initial value there: a silent
  * wrong answer (-u'' == E^(2x), u[0] == 0, u'[1] == 0 gave u(1) = 0, not
  * 2.0973). */
+/* Does e mention one of the unknown functions (u[1] in u[0] == u[1])? */
+static bool nd_mentions_unknown(const Expr* e, const char** fnames, size_t nfun) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t k = 0; k < nfun; k++) if (e->data.symbol.name == fnames[k]) return true;
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (nd_mentions_unknown(e->data.function.head, fnames, nfun)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nd_mentions_unknown(e->data.function.args[i], fnames, nfun)) return true;
+    return false;
+}
+
 static bool nd_is_bvp(Expr** eqitems, size_t neq, const bool* is_ode,
                       const char** fnames, size_t nfun, const int* maxorder,
                       NumericSpec spec) {
@@ -414,6 +437,18 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     if (range->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
     const char* xvar = range->data.function.args[0]->data.symbol.name;
     double tmin, tmax;
+    /* NDSolve#4: a non-numeric endpoint is NDSolve::ndnl (it was left
+     * unevaluated without a word). */
+    for (int ei = 1; ei <= 2; ei++) {
+        double tv;
+        if (nd_eval_to_double(range->data.function.args[ei], o.spec, &tv)) continue;
+        char* es = expr_to_string(range->data.function.args[ei]);
+        char* rs = expr_to_string(range);
+        mth_message(nd_head(), "ndnl", "Endpoint %s in %s is not a real number.",
+                    es ? es : "?", rs ? rs : "?");
+        free(es); free(rs);
+        return NULL;
+    }
     if (!nd_eval_to_double(range->data.function.args[1], o.spec, &tmin)) return NULL;
     if (!nd_eval_to_double(range->data.function.args[2], o.spec, &tmax)) return NULL;
     /* {x, a, b} with a > b is the interval [b, a] (integrated backward from a
@@ -490,6 +525,37 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     if (!order_ok || d == 0) {
         free(maxorder); free(is_ode); free(base); free(fnames); free(eqitems); free(evitems);
         nd_warn("nodeqs", "could not identify a well-posed ODE system");
+        return NULL;
+    }
+
+    /* NDSolve#3: an initial value that is not a number (y[0] == a) is
+     * NDSolve::ndinnt -- it was read as a missing condition, the problem
+     * taken for a boundary-value one, and the shooting method "failed". */
+    for (size_t e = 0; e < neq; e++) {
+        if (is_ode[e] || !head_is(eqitems[e], SYM_Equal) || eqitems[e]->data.function.arg_count != 2)
+            continue;
+        const char* fn; int ord; const Expr* arg;
+        Expr* val = NULL;
+        if (nd_match_funcapp(eqitems[e]->data.function.args[0], &fn, &ord, &arg))
+            val = eqitems[e]->data.function.args[1];
+        else if (nd_match_funcapp(eqitems[e]->data.function.args[1], &fn, &ord, &arg))
+            val = eqitems[e]->data.function.args[0];
+        if (!val) continue;
+        bool known = false;
+        for (size_t k = 0; k < nfun; k++) if (fn == fnames[k]) known = true;
+        double pt;
+        if (!known || !nd_eval_to_double((Expr*)arg, o.spec, &pt)) continue;
+        Expr* nq = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+                       (Expr*[]){ expr_copy(val) }, 1));
+        bool numeric = nq && nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+        if (nq) expr_free(nq);
+        bool listy = head_is(val, SYM_List);
+        if (numeric || listy || nd_mentions_unknown(val, fnames, nfun)) continue;
+        char* vs = expr_to_string(val);
+        mth_message(nd_head(), "ndinnt", "Initial condition %s is not a number or a rectangular "
+                    "array of numbers.", vs ? vs : "?");
+        free(vs);
+        free(maxorder); free(is_ode); free(base); free(fnames); free(eqitems); free(evitems);
         return NULL;
     }
 
@@ -689,17 +755,32 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         nd_bind_restore(&P.bind_t);
         for (size_t i = 0; i < P.d; i++) nd_bind_restore(&P.bind_y[i]);
         if (st == ND_ERR_MAXSTEPS) {
-            /* Ran out of the step budget before reaching the endpoint: the
-             * returned solution is truncated, so its error over the requested
-             * interval is unbounded.  Report the shortfall against the documented
-             * combined tolerance at unit solution scale (NDSolve's error control
-             * is scale-relative) and return the partial (best) solution. */
-            double wp = o.wp_bits > 0 ? numeric_bits_to_digits(o.wp_bits)
-                                      : NUMERIC_MACHINE_PRECISION_DIGITS;
-            nc_warn_goal("NDSolve", HUGE_VAL,
-                         nc_combined_tol(o.acc_goal, o.prec_goal, 1.0, wp));
+            /* NDSolve#2: ran out of the step budget before the endpoint --
+             * NDSolve::mxst, as in the reference, naming the budget and the
+             * point reached; the partial solution is returned.  (An accgl
+             * "estimated error inf" said nothing about the cause.) */
+            int64_t ms = o.max_steps > 0 ? o.max_steps : ND_AUTO_MAX_STEPS;
+            double tl = sol.n > 0 ? sol.ts[sol.n - 1] : 0.0;
+            mth_message(nd_head(), "mxst", "Maximum number of %lld steps reached at the point %s == %.17g.",
+                        (long long)ms, P.tvar ? P.tvar : "x", tl);
         }
-        else if (st == ND_ERR_STEPSIZE) nd_warn("ndsz", "step size effectively zero; singularity or stiffness suspected");
+        /* NDSolve#6 / WhenEvent#4: a fixed step or an event restart can land
+         * an ulp or two short of an endpoint (0.9999999999999999 for 1): the
+         * domain then excluded its own end, and u[xmax] extrapolated with
+         * InterpolatingFunction::dmval.  Snap such an end onto the endpoint. */
+        if (st != ND_ERR_MAXSTEPS && st != ND_ERR_STEPSIZE && sol.n >= 2) {
+            double* first = &sol.ts[0];
+            double* last = &sol.ts[sol.n - 1];
+            double lo = P.tmin, hi = P.tmax;
+            if (*first > *last) { double* sw = first; first = last; last = sw; }
+            if (*last != hi && fabs(*last - hi) <= 8.0 * DBL_EPSILON * fmax(1.0, fabs(hi))) *last = hi;
+            if (*first != lo && fabs(*first - lo) <= 8.0 * DBL_EPSILON * fmax(1.0, fabs(lo))) *first = lo;
+        }
+        if (st == ND_ERR_MAXSTEPS) { /* reported above */ }
+        else if (st == ND_ERR_STEPSIZE)
+            mth_message(nd_head(), "ndsz", "At %s == %.17g, step size is effectively zero; "
+                        "singularity or stiff system suspected.", P.tvar ? P.tvar : "x",
+                        sol.n > 0 ? sol.ts[sol.n - 1] : 0.0);
         else if (st == ND_ERR_NONCONV) nd_warn("ndcf", "corrector failed to converge");
         else if (st == ND_ERR_SAMPLE) nd_warn("nrnum", "right-hand side did not evaluate to a number");
         result = cplx ? nd_build_result_complex(&P, &o, &sol)
@@ -793,7 +874,9 @@ static Expr* builtin_ndsolvevalue(Expr* res) {
     for (size_t i = 2; i < argc; i++) args[i] = expr_copy(A[i]);
     Expr* call = expr_new_function(expr_new_symbol(intern_symbol("NDSolve")), args, argc);
     free(args);
+    g_nd_value_depth++;
     Expr* sol = eval_and_free(call);
+    if (g_nd_value_depth > 0) g_nd_value_depth--;
     Expr* out = NULL;
     if (head_is(sol, SYM_List) && sol->data.function.arg_count >= 1
         && head_is(sol->data.function.args[0], SYM_List)) {
@@ -822,6 +905,7 @@ void ndsolve_init(void) {
     OPT_DependentVariables = intern_symbol("DependentVariables");
 
     symtab_add_builtin("NDSolve", builtin_ndsolve);
+    tc_register_unwind_counter(&g_nd_value_depth);
     symtab_get_def("NDSolve")->attributes |= ATTR_PROTECTED;
 
     /* Options[NDSolve] — defaults mirror nd_opts_default() (see

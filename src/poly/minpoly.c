@@ -40,6 +40,8 @@
 #include "zupoly.h"
 #include "poly.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "print.h"     /* expr_to_string: MinimalPolynomial::ivar */
+#include "rationalize.h" /* internal_contains_inexact */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -453,6 +455,24 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
         c->failed = true; return NULL;
     }
 
+    /* AlgebraicNumber#1: AlgebraicNumber[theta, {c0, c1, ...}] is the number
+     * c0 + c1 theta + ... */
+    if (h == SYM_AlgebraicNumber && na == 2 && head_is(A[1], "List")) {
+        size_t nc = A[1]->data.function.arg_count;
+        Expr** terms = malloc(sizeof(Expr*) * (nc ? nc : 1));
+        for (size_t i = 0; i < nc; i++)
+            terms[i] = expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_copy(A[1]->data.function.args[i]),
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_copy(A[0]), expr_new_integer((int64_t)i) }, 2) }, 2);
+        Expr* val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, nc));
+        free(terms);
+        if (!val || head_is(val, "AlgebraicNumber")) { if (val) expr_free(val); c->failed = true; return NULL; }
+        Expr* r = mp_walk(val, c);
+        expr_free(val);
+        return r;
+    }
+
     if (h == SYM_Root && na >= 1) {
         const Expr* fn = A[0];
         if (!head_is(fn, "Function")) { c->failed = true; return NULL; }
@@ -465,8 +485,26 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
                    fn->data.function.args[0]->type == EXPR_SYMBOL) {
             rel = mp_subst_symbol(fn->data.function.args[1],
                                   fn->data.function.args[0]->data.symbol.name, nm);
+        } else if (fnn == 2 && head_is(fn->data.function.args[0], "List") &&
+                   fn->data.function.args[0]->data.function.arg_count == 1 &&
+                   fn->data.function.args[0]->data.function.args[0]->type == EXPR_SYMBOL) {
+            /* MinimalPolynomial#4: Function[{y}, body], the list-parameter form */
+            rel = mp_subst_symbol(fn->data.function.args[1],
+                                  fn->data.function.args[0]->data.function.args[0]->data.symbol.name, nm);
         }
         if (!rel) { free(nm); c->failed = true; return NULL; }
+        /* MinimalPolynomial#3: Root[f, k] names a number only for an integer
+         * 1 <= k <= deg f (Root[#^2 - 2 &, 3] is not one). */
+        if (na >= 2) {
+            const Expr* kx = A[1];
+            Expr* nv = expr_new_symbol(nm);
+            Expr* dg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Exponent),
+                           (Expr*[]){ expr_copy(rel), nv }, 2));
+            bool ok = kx->type == EXPR_INTEGER && kx->data.integer >= 1 &&
+                      dg && dg->type == EXPR_INTEGER && kx->data.integer <= dg->data.integer;
+            if (dg) expr_free(dg);
+            if (!ok) { expr_free(rel); free(nm); c->failed = true; return NULL; }
+        }
         /* A Root whose polynomial has a symbolic coefficient (Root[#^2 - y &,
          * 1]) is not an explicit algebraic number: decline, so the call stays
          * unevaluated (audit MinimalPolynomial#2). */
@@ -776,9 +814,14 @@ Expr* builtin_minimalpolynomial(Expr* res) {
         const Expr* s = pos[0];
         const Expr* x = pos[1];
         if (x->type != EXPR_SYMBOL) {
-            mth_message("MinimalPolynomial", "ivar", "the second argument %s is not a valid variable.", "");
+            char* xs = expr_to_string((Expr*)x);
+            mth_message("MinimalPolynomial", "ivar", "%s is not a valid variable.", xs ? xs : "?");
+            free(xs);
             return NULL;
         }
+        /* MinimalPolynomial#5: an inexact number is not an explicit algebraic
+         * number (MinimalPolynomial[1.5, x] already stays; Complex[1.5, 3] too). */
+        if (internal_contains_inexact((Expr*)s)) return NULL;
         if (ext) return mp_extension(s, x, ext);
         return mp_core(s, x);
     }

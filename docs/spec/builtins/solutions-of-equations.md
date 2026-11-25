@@ -895,6 +895,8 @@ is given), Solve treats the system as Diophantine:
 `Solve[{x^2 - 61 y^2 == 1, Element[x, Integers] && x > 0 && Element[y, Integers] && y > 0}, {x, y}]`
 gives the Pell family, indexed by `Element[C[1], Integers] && C[1] >= 1`.
 
+**Wave 5 (2026-11).** `Solve::ifun` is reported once per top-level `Solve` call.
+
 ## Reduce
 
 **Audit wave 4.** When the engines decline: `lhs != rhs` in one variable over the complexes is the complement of the points of `lhs == rhs`; a product equal to 0 is the union of its factors' zero sets; over the reals a linear inequality with a parametric coefficient and a quadratic equation with parametric coefficients are split on the sign of the coefficient / discriminant; over the integers a bounded statement (bounds from the real projection, or from its inequality conjuncts) is enumerated (`Reduce[Mod[x, 3] == 1 && 0 < x < 10, x, Integers]`). Quantifiers inside And/Or/Not are eliminated first (`Reduce[ForAll[x, x^2 >= 0] && a > 0, a, Reals]` is `a > 0`). Cell samples are exact, so bounds past the machine integers and narrow cells (`0 < x < 10^-10`) are handled.
@@ -1558,6 +1560,8 @@ In[6]:= Resolve[Exists[{x, y, z}, x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 &
 Out[6]= False
 ```
 
+**Wave 5 (2026-11).** A statement with no quantifier is returned as it is (`Resolve[True]` is `True`).
+
 ## LogicalExpand
 
 **Audit wave 4.** `Nand`, `Nor` and `Xnor` are expanded.
@@ -1597,6 +1601,8 @@ consensus contractions produce a shorter but logically identical cover, the outp
 here may differ cosmetically (`Table[in == out, ...]` over the atoms is still all
 `True`).
 
+**Wave 5 (2026-11).** An equation (inequation) between lists of the same length is the conjunction (disjunction) of the componentwise ones: `{a, b} == {c, d}` is `a == c && b == d`.
+
 ## NotElement
 
 **Audit wave 4.** `NotElement[x1 | x2, dom]` is the conjunction of the `NotElement[xi, dom]` (no xi is in dom).
@@ -1608,6 +1614,8 @@ here may differ cosmetically (`Table[in == out, ...]` over the atoms is still al
 `NotElement[I, Reals] -> True`) and stays symbolic otherwise
 (`NotElement[x, Reals]`). It is the head `LogicalExpand` emits for a negated
 membership.
+
+**Wave 5 (2026-11).** Under assumptions `Refine`/`Simplify` decide it as the negation of `Element`.
 
 ## FindInstance
 
@@ -1782,6 +1790,8 @@ emptiness); region (`x ∈ reg`) constraints; bare-disequation statements `Reduc
 declines (`x != 0`); and integer systems whose only witnesses lie beyond the bounded
 search budget (e.g. `a^4 + b^4 + c^4 == d^4`, whose smallest positive solution is near
 `4·10^5`).
+
+**Wave 5 (2026-11).** A count beyond any instance set (a bigint) asks for all of them.
 
 ## CylindricalDecomposition
 
@@ -1984,10 +1994,10 @@ In[2]:= N[Root[Function[#^3 + # + 1], 1], 20]    (* real root first *)
 Out[2]= -0.68232780382801932737
 
 In[3]:= N[Root[Function[#^3 + # + 1], 2], 20]    (* conj pair: -Im first *)
-Out[3]= 0.34116390191400966368 - 1.1615414252683233453 I
+Out[3]= 0.34116390191400966368 - 1.1615413999972519361 I
 
 In[4]:= N[Root[Function[#^3 + # + 1], 3], 20]
-Out[4]= 0.34116390191400966368 + 1.1615414252683233453 I
+Out[4]= 0.34116390191400966368 + 1.1615413999972519361 I
 ```
 
 **Transcendental roots** — `Root[{f, x0}]`:
@@ -2013,6 +2023,8 @@ In[6]:= Root[{Cos[#1] - #1 &, 0.7}]
 Root::invrt: 0.7 is not equal to a root of Cos[#1] - #1 &.
 Out[6]= Root[{Cos[#1] - #1 &, 0.7}]
 ```
+
+**Wave 5 (2026-11).** The index is checked once, where `Root` is formed: `Root[f, k]` with `k` not an integer in `1..deg f` is `Root::indx` ("Index k should be a machine-size integer between 1 and n.") and stays unevaluated.
 
 ## ToRadicals
 

@@ -394,6 +394,18 @@ static Expr* nsolve_polynomial(Expr* expr, Expr* var,
     /* Confirm the residual is a polynomial in `var`. */
     Expr* residual = equation_residual(expr);
     bool is_poly = is_polynomial(residual, &var, 1);
+    /* NSolve#3: a symbolic coefficient (x^2 == a) is not NRoots' to report --
+     * the user never called NRoots -- so it goes to the Solve specialist
+     * without the internal NRoots::nnum. */
+    if (is_poly) {
+        Expr* vs = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                       (Expr*[]){ expr_copy(residual) }, 1));
+        bool only_var = vs && vs->type == EXPR_FUNCTION &&
+            vs->data.function.arg_count <= 1 &&
+            (vs->data.function.arg_count == 0 || expr_eq(vs->data.function.args[0], var));
+        if (vs) expr_free(vs);
+        if (!only_var) is_poly = false;
+    }
     expr_free(residual);
     if (!is_poly) return NULL;
 
@@ -770,7 +782,12 @@ static Expr* findroot_at(Expr* residual, Expr* var, double re0, double im0,
         call = expr_new_function(expr_new_symbol(SYM_FindRoot),
                    (Expr*[]){ expr_copy(residual), spec }, 2);
     }
+    /* NSolve#4: a grid seed is a speculative probe -- most diverge, and the
+     * roots kept are verified by the caller -- so its FindRoot diagnostics
+     * (nlnum, lstol, cvmit, General::ovfl, ...) are not the user's. */
+    mth_msg_suppress_push();
     Expr* fr = builtin_findroot(call);
+    mth_msg_suppress_pop();
     expr_free(call);
     if (!fr) return NULL;
     Expr* val = NULL;

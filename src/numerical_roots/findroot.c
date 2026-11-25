@@ -39,6 +39,7 @@
 #include "findroot.h"
 #include "deriv.h"         /* deriv_numeric_for: registered numeric derivatives */
 #include "../modular.h"
+#include "../print.h"   /* expr_to_string: FindRoot::jsing */
 
 #include <float.h>
 #include <math.h>
@@ -1049,7 +1050,16 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         if (fr_overflowed(dv, opts)) return NULL;
         if (dv == 0.0) {
             if (polished >= 0 || resid_ok) return expr_new_real(x);   /* keep x */
-            fr_warn("dsing", "derivative vanished"); return NULL;
+            /* FindRoot#2: as the reference, FindRoot::jsing and the point
+             * reached (it was left unevaluated after "derivative vanished"). */
+            Expr* xe = expr_new_real(x);
+            char* xs = expr_to_string(xe);
+            expr_free(xe);
+            fr_warn("jsing", "Encountered a singular Jacobian at the point {%s} = {%s}. "
+                    "Try perturbing the initial point(s).", bind->name ? bind->name : "x",
+                    xs ? xs : "?");
+            free(xs);
+            return expr_new_real(x);
         }
         double step = opts->damping * fv / dv;
         if (!isfinite(step)) {
@@ -3011,6 +3021,18 @@ Expr* builtin_findroot(Expr* res) {
             && first->data.function.head->data.symbol.name == SYM_List) {
             is_system = true;
         }
+    }
+
+    /* FindRoot#3: several equations in a single variable are an
+     * overdetermined system -- FindRoot::systno, as for {x^2 + y^2 == 1} in two
+     * variables (the scalar path read the List value as a non-real f). */
+    if (!is_system && f_raw->type == EXPR_FUNCTION &&
+        f_raw->data.function.head->type == EXPR_SYMBOL &&
+        f_raw->data.function.head->data.symbol.name == SYM_List &&
+        f_raw->data.function.arg_count > 1) {
+        fr_warn("systno", "system size %zu does not match %zu variables",
+                (size_t)f_raw->data.function.arg_count, (size_t)1);
+        return NULL;
     }
 
     /* ============================================================== *

@@ -355,6 +355,13 @@ static const ArityRow ARITY_ROWS[] = {
     { "Quit",             0, 1, NOOPT },
     { "Exit",             0, 1, NOOPT },
     { "Read",             1, 2, OPT_NOCHECK },
+    /* ---- Wave 5 G5 (calculus, algebra, simplification, solving) ---- */
+    { "Product",          2, ANY, OPT_NOCHECK },   /* Product[f, {i, ...}, ...] */
+    { "Simplify",         1, 2, OPT_NOCHECK },     /* Simplify[e, assum, opts] */
+    { "FullSimplify",     1, 2, OPT_NOCHECK },
+    { "Together",         1, 1, OPT_NOCHECK },
+    { "AlgebraicNumberTrace", 1, 1, OPT_NOCHECK },
+    { "NRoots",           2, 2, 2 },
 };
 
 /* Heads whose choice of two counts the reference words as a range:

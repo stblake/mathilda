@@ -752,6 +752,85 @@ static Expr* refine_condition_walk(const Expr* e, const AssumeCtx* ctx,
     Expr* out = expr_new_function(expr_copy(e->data.function.head), NULL, n);
     for (size_t i = 0; i < n; i++)
         out->data.function.args[i] = refine_condition_walk(e->data.function.args[i], ctx, Aconj, b);
+
+    /* Refine#2: Max / Min with an argument the assumptions prove dominates
+     * every other (Refine[Max[x, y], x > y] is x, Refine[Min[x, 0], x > 0]
+     * is 0). */
+    if ((h == SYM_Max || h == SYM_Min) && n >= 2) {
+        for (size_t k = 0; k < n; k++) {
+            bool dom = true;
+            for (size_t j = 0; j < n && dom; j++) {
+                if (j == k) continue;
+                Expr* rel = expr_new_function(expr_new_symbol(h == SYM_Max ? SYM_GreaterEqual
+                                                                            : SYM_LessEqual),
+                                (Expr*[]){ expr_copy(out->data.function.args[k]),
+                                           expr_copy(out->data.function.args[j]) }, 2);
+                Expr* d = refine_decide_predicate(rel, ctx, Aconj, b);
+                dom = d && is_true_sym(d);
+                if (d) expr_free(d);
+                expr_free(rel);
+            }
+            if (dom) {
+                Expr* w = expr_copy(out->data.function.args[k]);
+                expr_free(out);
+                return w;
+            }
+        }
+    }
+    /* Piecewise[{{v, c}, ...}, d]: a case whose condition the assumptions
+     * decide is taken (True, when every earlier case is excluded) or dropped
+     * (False) -- Refine[Piecewise[{{1, x > 0}}, 2], x > 1] is 1. */
+    if (h == SYM_Piecewise && (n == 1 || n == 2) && head_is(out->data.function.args[0], "List")) {
+        Expr* cases = out->data.function.args[0];
+        size_t nc = cases->data.function.arg_count;
+        Expr** keep = (Expr**)malloc(sizeof(Expr*) * (nc ? nc : 1));
+        size_t nk = 0;
+        bool changed = false;
+        Expr* taken = NULL;
+        for (size_t i = 0; i < nc && !taken; i++) {
+            Expr* pc = cases->data.function.args[i];
+            if (!(head_is(pc, "List") && pc->data.function.arg_count == 2)) {
+                keep[nk++] = expr_copy(pc);
+                continue;
+            }
+            const Expr* c = pc->data.function.args[1];
+            const char* ch = head_name(c);
+            int v = -1;
+            if (is_true_sym(c)) v = 1;
+            else if (ch && (ch == SYM_Element || is_relational_head(ch))) {
+                Expr* d = refine_decide_predicate(c, ctx, Aconj, b);
+                if (d && d->type == EXPR_SYMBOL) v = d->data.symbol.name == SYM_True ? 1
+                                                 : d->data.symbol.name == SYM_False ? 0 : -1;
+                if (d) expr_free(d);
+            }
+            if (v == 0) { changed = true; continue; }
+            if (v == 1 && nk == 0) { taken = expr_copy(pc->data.function.args[0]); break; }
+            keep[nk++] = expr_copy(pc);
+        }
+        if (taken) {
+            for (size_t i = 0; i < nk; i++) expr_free(keep[i]);
+            free(keep);
+            expr_free(out);
+            return taken;
+        }
+        if (changed) {
+            if (nk == 0) {
+                free(keep);
+                Expr* dflt = n == 2 ? expr_copy(out->data.function.args[1]) : expr_new_integer(0);
+                expr_free(out);
+                return dflt;
+            }
+            Expr* nl = expr_new_function(expr_new_symbol(SYM_List), keep, nk);
+            Expr* pw = n == 2 ? expr_new_function(expr_new_symbol(SYM_Piecewise),
+                                    (Expr*[]){ nl, expr_copy(out->data.function.args[1]) }, 2)
+                              : expr_new_function(expr_new_symbol(SYM_Piecewise), (Expr*[]){ nl }, 1);
+            free(keep);
+            expr_free(out);
+            return pw;
+        }
+        for (size_t i = 0; i < nk; i++) expr_free(keep[i]);
+        free(keep);
+    }
     return out;
 }
 
@@ -944,6 +1023,19 @@ Expr* builtin_refine(Expr* res) {
     const char* eh = head_name(expr);
     if (eh && (eh == SYM_Element || is_relational_head(eh))) {
         result = refine_decide_predicate(expr, ctx, Aconj, &bud);
+    }
+    /* NotElement#2: NotElement[x, d] is the negation of Element[x, d]. */
+    if (!result && eh == SYM_NotElement && expr->data.function.arg_count == 2) {
+        Expr* el = expr_new_function(expr_new_symbol(SYM_Element),
+                       (Expr*[]){ expr_copy(expr->data.function.args[0]),
+                                  expr_copy(expr->data.function.args[1]) }, 2);
+        Expr* d = refine_decide_predicate(el, ctx, Aconj, &bud);
+        expr_free(el);
+        if (d && d->type == EXPR_SYMBOL &&
+            (d->data.symbol.name == SYM_True || d->data.symbol.name == SYM_False)) {
+            result = bool_sym(d->data.symbol.name == SYM_False);
+        }
+        if (d) expr_free(d);
     }
 
     /* (2) Rewrite path. */

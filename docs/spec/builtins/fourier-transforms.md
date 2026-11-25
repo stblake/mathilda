@@ -81,6 +81,8 @@ Exact numeric constants (`Pi`, `E`, `Sqrt[2]`) are numbers: the transform is
 numerical, as for integers. Only free symbols take the symbolic path. InverseFourier,
 FourierDCT and FourierDST likewise.
 
+**Wave 5 (2026-11).** Data that is not a non-empty rectangular array of quantities (`{}`, a scalar, a ragged list, strings, truth values) is `Fourier::fftl` and stays unevaluated.
+
 ## InverseFourier
 
 - For `Fourier` and `InverseFourier`: a repeated `FourierParameters` option takes the first occurrence; `b = 0` prints `Head::fpopt`; an empty, ragged or non-list argument prints `Head::fftl` (audit InverseFourier#2/#3/#4).

@@ -270,7 +270,7 @@ singularity reports the stopping point (`y' == 1 + y^2, y(0) == 0` gives
 - In standard output only the `domain` is shown; the rest is abbreviated as
   `<>`. `FullForm` reveals the full structure.
 
-Attribute: `Protected`.
+Attributes: `{HoldAll, NHoldAll, Protected}` (see above).
 
 ```mathematica
 In[1]:= ifun = InterpolatingFunction[{{0, 5}}, {{0,0},{1,1},{2,3},{3,4},{4,3},{5,0}}]

@@ -477,15 +477,13 @@ static void test_automatic_fallback(void) {
  *     has no mrv expansion (the Automatic cascade handles those elsewhere). */
 static void test_honest_abstentions(void) {
     /* 8.31 Stirling-difference: Gamma[x+1]/Sqrt[2Pi] minus its own first two
-     * asymptotic terms is a true zero, but proving it needs the x^x-scale
-     * Stirling tower expanded and cancelled to an order the dense-polynomial
-     * Series machinery does not reach here, so the engine abstains (never a
-     * wrong value). The Stirling *ratio* and thesis 5.5 — which do NOT require
-     * that deep a cancellation — now resolve; see test_thesis_gamma. */
-    assert_eval_startswith(
+     * asymptotic terms is E^-x x^(x+1/2) (1/(288 x^2) + ...), which grows
+     * without bound (3.2*10^75 at x = 60, 6.4*10^191 at x = 120): the limit is
+     * Infinity, which the engine now reaches. */
+    assert_eval_eq(
         "Limit[Gamma[x + 1]/Sqrt[2 Pi] - E^-x (x^(x + 1/2) + x^(x - 1/2)/12), "
         "x -> Infinity, Method -> \"Gruntz\"]",
-        "Limit[");
+        "Infinity", 0);
     /* Symbolic-sign: value depends on Sign[s] / which of a,b dominates. */
     assert_eval_startswith(
         "Limit[Log[x]/x^s, x -> Infinity, Method -> \"Gruntz\"]", "Limit[");

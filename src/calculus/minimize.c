@@ -46,6 +46,8 @@
  * value-preserving substitution (D, Solve, Reduce). */
 
 #include <stdbool.h>
+#include "numeric.h"   /* expr_is_numeric_quantity: Minimize::ivar */
+#include "print.h"     /* expr_to_string */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2632,6 +2634,22 @@ static Expr* mz_run_body(Expr* res, const char* head, bool is_max) {
         }
     }
 
+    /* Maximize#5 / Minimize#5: a number is not a variable (Minimize[x^2, 3]
+     * was left unevaluated without a word). */
+    {
+        bool lst = arg1->type == EXPR_FUNCTION && mz_is_sym(arg1->data.function.head, SYM_List);
+        size_t nv = lst ? arg1->data.function.arg_count : 1;
+        for (size_t i = 0; i < nv; i++) {
+            Expr* v = lst ? arg1->data.function.args[i] : arg1;
+            if (expr_is_numeric_quantity(v)) {
+                char* vs = expr_to_string(v);
+                mth_message(head, "ivar", "%s is not a valid variable.", vs ? vs : "?");
+                free(vs);
+                if (cons_owned) expr_free(cons);
+                return NULL;
+            }
+        }
+    }
     Expr** vars = NULL; size_t n = 0;
     if (!(arg1->type == EXPR_SYMBOL ||
           (arg1->type == EXPR_FUNCTION && mz_is_sym(arg1->data.function.head, SYM_List)))) {

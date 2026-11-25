@@ -2712,9 +2712,11 @@ static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
 
     /* A hyperbolic (or circular) function of Log w rationalises under TrigToExp:
      * Sinh[Log w] = (w - 1/w)/2, etc.  Together clears the resulting 1/w pieces. */
-    bool had_hyp = contains_head(g, "Sinh") || contains_head(g, "Cosh") ||
-                   contains_head(g, "Tanh") || contains_head(g, "Csch") ||
-                   contains_head(g, "Sech") || contains_head(g, "Coth");
+    /* Read on f: a hyperbolic function of Log[w] now evaluates to its rational
+     * form as the substitution is made, so g may already carry none. */
+    bool had_hyp = contains_head(f, "Sinh") || contains_head(f, "Cosh") ||
+                   contains_head(f, "Tanh") || contains_head(f, "Csch") ||
+                   contains_head(f, "Sech") || contains_head(f, "Coth");
     if (had_hyp) {
         Expr* g2 = ev1("Together", ev1("TrigToExp", expr_copy(g)));
         if (g2) { expr_free(g); g = g2; }

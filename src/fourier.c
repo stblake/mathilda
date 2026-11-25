@@ -1136,6 +1136,37 @@ static Expr* fourier_compute_ll(Expr* data, Expr* a_expr, Expr* b_expr, int inve
     return result;
 }
 
+/* A non-empty List, rectangular at every level, whose leaves are not strings
+ * or truth values (symbolic leaves are transformed, as before).  The shape of
+ * the first element at each level is the shape every sibling must have. */
+static bool fourier_shape_eq(const Expr* a, const Expr* b) {
+    bool la = head_is((Expr*)a, SYM_List), lb = head_is((Expr*)b, SYM_List);
+    if (la != lb) return false;
+    if (!la) return true;
+    if (a->data.function.arg_count != b->data.function.arg_count) return false;
+    return a->data.function.arg_count == 0 ||
+           fourier_shape_eq(a->data.function.args[0], b->data.function.args[0]);
+}
+
+static bool fourier_leaves_ok(const Expr* e) {
+    if (head_is((Expr*)e, SYM_List)) {
+        if (e->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (!fourier_shape_eq(e->data.function.args[0], e->data.function.args[i])) return false;
+            if (!fourier_leaves_ok(e->data.function.args[i])) return false;
+        }
+        return true;
+    }
+    if (e->type == EXPR_STRING) return false;
+    if (e->type == EXPR_SYMBOL &&
+        (e->data.symbol.name == SYM_True || e->data.symbol.name == SYM_False)) return false;
+    return true;
+}
+
+static bool fourier_data_ok(const Expr* data) {
+    return head_is((Expr*)data, SYM_List) && fourier_leaves_ok(data);
+}
+
 static Expr* fourier_core(Expr* res, int inverse) {
     const char* name = inverse ? "InverseFourier" : "Fourier";
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -1179,6 +1210,19 @@ static Expr* fourier_core(Expr* res, int inverse) {
                     "numbers {a, b} with b nonzero.", ps ? ps : "?");
         free(ps);
         expr_free(rhs);
+        expr_free(a_default); expr_free(b_default);
+        return NULL;
+    }
+
+    /* Fourier#2: the data must be a non-empty rectangular array whose
+     * entries are quantities -- {}, a scalar, a ragged list, strings or truth
+     * values are ::fftl (strings and booleans were transformed as symbols). */
+    if (data->type != EXPR_NDARRAY && data->type != EXPR_LINKEDLIST &&
+        data->type != EXPR_SPARSE && data->type != EXPR_PVEC && !fourier_data_ok(data)) {
+        char* ds = expr_to_string(data);
+        mth_message(name, "fftl", "Argument %s is not a nonempty list or rectangular array "
+                    "of numeric quantities.", ds ? ds : "?");
+        free(ds);
         expr_free(a_default); expr_free(b_default);
         return NULL;
     }

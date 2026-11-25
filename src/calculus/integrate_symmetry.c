@@ -20,6 +20,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "integrate_newton_leibniz.h"   /* integrate_idiv_defer_begin */
 
 #include <string.h>
 #include <stdbool.h>
@@ -166,7 +167,13 @@ static Expr* half_integral(const Expr* f, const Expr* x, const Expr* c,
     if (assumptions)
         opts[no++] = mk_fn2("Rule", expr_new_symbol("Assumptions"), cp(assumptions));
     Expr* call = expr_new_function(expr_new_symbol("Integrate"), opts, no);
-    return eval_take(call);
+    /* Integrate#7: a divergent half is reported by the whole-interval stage
+     * that follows (Newton-Leibniz names the user's {-Infinity, Infinity}), so
+     * the half's own idiv -- naming {0, Infinity} -- is held and dropped. */
+    bool saved = integrate_idiv_defer_begin();
+    Expr* r = eval_take(call);
+    (void)integrate_idiv_defer_end(saved);
+    return r;
 }
 
 /* ---- core --------------------------------------------------------------- */

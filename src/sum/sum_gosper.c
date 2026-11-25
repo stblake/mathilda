@@ -398,6 +398,22 @@ Expr* builtin_sum_gosper(Expr* res) {
 
 /* ---- DifferenceDelta[f, i] = (f /. i -> i+1) - f ---- */
 Expr* builtin_differencedelta(Expr* res) {
+    /* DifferenceDelta#3: DifferenceDelta[f, i, j, ...] differences in i, then
+     * in j, ... -- DifferenceDelta[i^2 j^2, i, j] is (1 + 2 i)(1 + 2 j),
+     * expanded. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count > 2) {
+        size_t n = res->data.function.arg_count;
+        Expr* cur = expr_copy(res->data.function.args[0]);
+        for (size_t k = 1; k < n; k++) {
+            Expr* call = expr_new_function(expr_new_symbol("DifferenceDelta"),
+                             (Expr*[]){ cur, expr_copy(res->data.function.args[k]) }, 2);
+            Expr* r = builtin_differencedelta(call);
+            if (!r) { expr_free(call); return NULL; }
+            expr_free(call);
+            cur = r;
+        }
+        return cur;
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
         return NULL;
     Expr* f   = res->data.function.args[0];

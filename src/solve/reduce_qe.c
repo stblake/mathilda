@@ -443,6 +443,9 @@ Expr* builtin_resolve(Expr* res) {
     /* Quantifiers inside a logical combination are eliminated one by one
      * (audit ForAll#1): Resolve[!ForAll[x, x^2 > 0], Reals] is True,
      * Resolve[ForAll[x, x^2 >= 0] && a > 0, Reals] is a > 0. */
+    /* Resolve#2: a statement with no quantifier is already resolved --
+     * Resolve[True] is True, Resolve[x > 0, Reals] is x > 0. */
+    if (!qe_has_quantifier(qexpr)) return expr_copy(qexpr);
     if (!is_quantifier(qexpr)) return reduce_qe_eliminate_inner(qexpr, dom);
     return reduce_qe_dispatch(qexpr, dom);
 }

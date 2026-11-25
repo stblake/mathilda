@@ -316,6 +316,25 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
     const char* inner = arg->data.function.head->data.symbol.name;
     Expr* x = arg->data.function.args[0];
 
+    /* Coth, Sech, Csch of ArcSinh/ArcCosh/ArcTanh (Coth#4, Csch#5, Sech#3):
+     * the reciprocal of Tanh, Cosh, Sinh of the same call, so the two
+     * families agree on every branch.  Csch[ArcSinh[x]] = 1/x,
+     * Sech[ArcSinh[x]] = 1/Sqrt[1 + x^2], Coth[ArcSinh[x]] = Sqrt[1 + x^2]/x. */
+    if (inner == SYM_ArcSinh || inner == SYM_ArcCosh || inner == SYM_ArcTanh) {
+        const char* fwd = strcmp(outer, "Coth") == 0 ? "Tanh"
+                        : strcmp(outer, "Sech") == 0 ? "Cosh"
+                        : strcmp(outer, "Csch") == 0 ? "Sinh" : NULL;
+        if (fwd) {
+            bool self = (inner == SYM_ArcSinh && fwd[0] == 'S') ||
+                        (inner == SYM_ArcCosh && fwd[0] == 'C') ||
+                        (inner == SYM_ArcTanh && fwd[0] == 'T');
+            Expr* f = self ? expr_copy(x) : try_simp_forward_of_inverse_hyp(fwd, arg);
+            if (!f) return NULL;
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ f, expr_new_integer(-1) }, 2));
+        }
+    }
+
     #define SQRT_OF(arg_e)                                                     \
         eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
             (Expr*[]){ (arg_e), make_rational(1, 2) }, 2))
@@ -389,6 +408,40 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
     return NULL;
 }
 
+/* Hyperbolic function of Log[a] (Tanh#4, Sech#4): with E^Log[a] = a,
+ *   Sinh = (a - 1/a)/2      Cosh = (a + 1/a)/2      Tanh = (a^2 - 1)/(a^2 + 1)
+ *   Csch = 2 a/(a^2 - 1)    Sech = 2 a/(a^2 + 1)    Coth = (a^2 + 1)/(a^2 - 1)
+ * as in the reference (Tanh[Log[2]] = 3/5).  NULL unless arg is Log[a]. */
+static Expr* hyp_of_log(const char* outer, Expr* arg) {
+    if (!head_is(arg, SYM_Log) || arg->data.function.arg_count != 1) return NULL;
+    Expr* a = arg->data.function.args[0];
+    #define HPOW(b, k) expr_new_function(expr_new_symbol(SYM_Power), \
+        (Expr*[]){ (b), expr_new_integer(k) }, 2)
+    #define HPLUS(u, v) expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ (u), (v) }, 2)
+    #define HTIMES(u, v) expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ (u), (v) }, 2)
+    Expr* r = NULL;
+    if (strcmp(outer, "Sinh") == 0 || strcmp(outer, "Cosh") == 0) {
+        Expr* inv = HPOW(expr_copy(a), -1);
+        if (outer[0] == 'S') inv = HTIMES(expr_new_integer(-1), inv);
+        r = HTIMES(make_rational(1, 2), HPLUS(expr_copy(a), inv));
+    } else {
+        int top = 0, bot = 0;      /* numerator / denominator: a^2 + top, a^2 + bot; 0: 2 a */
+        if (strcmp(outer, "Tanh") == 0) { top = -1; bot = 1; }
+        else if (strcmp(outer, "Coth") == 0) { top = 1; bot = -1; }
+        else if (strcmp(outer, "Sech") == 0) { top = 0; bot = 1; }
+        else if (strcmp(outer, "Csch") == 0) { top = 0; bot = -1; }
+        else return NULL;
+        Expr* num = top ? HPLUS(expr_new_integer(top), HPOW(expr_copy(a), 2))
+                        : HTIMES(expr_new_integer(2), expr_copy(a));
+        Expr* den = HPLUS(expr_new_integer(bot), HPOW(expr_copy(a), 2));
+        r = HTIMES(num, HPOW(den, -1));
+    }
+    #undef HPOW
+    #undef HPLUS
+    #undef HTIMES
+    return eval_and_free(r);
+}
+
 /* If arg is a one-argument call whose head is `inverse_name`, return a deep
  * copy of its single argument; otherwise NULL. Folds the direct
  * hyperbolic forward/inverse identities (Sinh[ArcSinh[x]] -> x, etc.):
@@ -452,6 +505,7 @@ Expr* builtin_sinh(Expr* res) {
 #endif
 
     { Expr* inv = strip_inverse_call(arg, SYM_ArcSinh); if (inv) return inv; }
+    { Expr* f = hyp_of_log("Sinh", arg); if (f) return f; }
 
     // Sinh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1], Sinh[ArcTanh[x]] -> x/Sqrt[1-x^2]
     { Expr* f = try_simp_forward_of_inverse_hyp("Sinh", arg); if (f) return f; }
@@ -497,6 +551,7 @@ Expr* builtin_cosh(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("Cosh", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, SYM_ArcCosh); if (inv) return inv; }
+    { Expr* f = hyp_of_log("Cosh", arg); if (f) return f; }
 
     // Cosh[ArcSinh[x]] -> Sqrt[1+x^2], Cosh[ArcTanh[x]] -> 1/Sqrt[1-x^2]
     { Expr* f = try_simp_forward_of_inverse_hyp("Cosh", arg); if (f) return f; }
@@ -542,6 +597,7 @@ Expr* builtin_tanh(Expr* res) {
 #endif
 
     { Expr* inv = strip_inverse_call(arg, SYM_ArcTanh); if (inv) return inv; }
+    { Expr* f = hyp_of_log("Tanh", arg); if (f) return f; }
 
     // Tanh[ArcSinh[x]] -> x/Sqrt[1+x^2], Tanh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1]/x,
     // Tanh[ArcCoth[x]] -> 1/x.
@@ -585,6 +641,7 @@ Expr* builtin_coth(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("Coth", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, SYM_ArcCoth); if (inv) return inv; }
+    { Expr* f = hyp_of_log("Coth", arg); if (f) return f; }
 
     // Coth[ArcTanh[x]] -> 1/x
     { Expr* f = try_simp_forward_of_inverse_hyp("Coth", arg); if (f) return f; }
@@ -627,6 +684,9 @@ Expr* builtin_sech(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("Sech", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, SYM_ArcSech); if (inv) return inv; }
+    { Expr* f = hyp_of_log("Sech", arg); if (f) return f; }
+
+    { Expr* f = try_simp_forward_of_inverse_hyp("Sech", arg); if (f) return f; }
 
     // Sech is even: Sech[-x] -> Sech[x]
     { Expr* f = even_fold(arg, "Sech"); if (f) return f; }
@@ -665,6 +725,9 @@ Expr* builtin_csch(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("Csch", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, SYM_ArcCsch); if (inv) return inv; }
+    { Expr* f = hyp_of_log("Csch", arg); if (f) return f; }
+
+    { Expr* f = try_simp_forward_of_inverse_hyp("Csch", arg); if (f) return f; }
 
     // Csch is odd: Csch[-x] -> -Csch[x]
     { Expr* f = odd_fold(arg, "Csch"); if (f) return f; }
@@ -892,6 +955,14 @@ Expr* builtin_arccoth(Expr* res) {
     return NULL;
 }
 
+static bool hyp_mentions_head(const Expr* e, const char* h) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (hyp_mentions_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
 Expr* builtin_arcsech(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1)
@@ -906,6 +977,15 @@ Expr* builtin_arcsech(Expr* res) {
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_Infinity);
     /* ArcSech[z] = ArcCosh[1/z] -> ArcCosh[0] = I Pi/2 for every infinite z. */
     if (is_any_infinity(arg)) return half_i_pi(+1);
+    /* ArcSech#3: an exact rational z at which ArcCosh[1/z] has an exact value
+     * (ArcSech[-1] = I Pi, ArcSech[2] = I Pi/3, ArcSech[-2] = 2 I Pi/3). */
+    if (arg->type == EXPR_INTEGER || head_is(arg, SYM_Rational)) {
+        Expr* ac = eval_and_free(expr_new_function(expr_new_symbol(SYM_ArcCosh),
+                       (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                                      (Expr*[]){ expr_copy(arg), expr_new_integer(-1) }, 2) }, 1));
+        if (ac && !hyp_mentions_head(ac, SYM_ArcCosh)) return ac;
+        if (ac) expr_free(ac);
+    }
 
     double complex c;
     bool inexact = false;

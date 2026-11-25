@@ -46,6 +46,7 @@
 #include "symtab.h"
 #include "zero_test.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "core.h"      /* tc_register_unwind_counter */
 #include "simp_internal.h"   /* is_real_constant_symbol: Pi/E/... are never implicit vars */
 
 /* ------------------------------------------------------------------ *
@@ -1016,7 +1017,32 @@ static Expr* shield_params(const Expr* e, const char* head, bool hide) {
 }
 
 
+/* Solve#6: Solve::ifun is reported once per top-level Solve call.  The
+ * inverse-function solver makes a fresh context for every sub-equation
+ * (E^x == 1 and E^x == 2 of a quadratic in E^x), and each context's own
+ * one-shot fired again.  g_solve_depth (a TimeConstrained unwind counter) is
+ * the nesting depth of builtin_solve; the flag resets on entry at depth 0. */
+static int  g_solve_depth = 0;
+static bool g_solve_ifun_fired = false;
+
+bool solve_ifun_claim(void) {
+    if (g_solve_depth == 0) return true;      /* not under Solve: no shared scope */
+    if (g_solve_ifun_fired) return false;
+    g_solve_ifun_fired = true;
+    return true;
+}
+
+static Expr* builtin_solve_impl(Expr* res);
+
 Expr* builtin_solve(Expr* res) {
+    if (g_solve_depth == 0) g_solve_ifun_fired = false;
+    g_solve_depth++;
+    Expr* r = builtin_solve_impl(res);
+    if (g_solve_depth > 0) g_solve_depth--;
+    return r;
+}
+
+static Expr* builtin_solve_impl(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
@@ -1587,6 +1613,7 @@ solve_finish:
 
 void solve_init(void) {
     symtab_add_builtin("Solve", builtin_solve);
+    tc_register_unwind_counter(&g_solve_depth);
     SymbolDef* def = symtab_get_def("Solve");
     if (def) def->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Solve",

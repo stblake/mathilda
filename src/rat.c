@@ -192,7 +192,13 @@ void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
     *den_out = expr_new_integer(1);
 }
 
+static Expr* trig_option_apply(Expr* res, const char* head, Expr* (*fn)(Expr*), bool pyth);
+
 Expr* builtin_numerator(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 2) {
+        Expr* t = trig_option_apply(res, SYM_Numerator, builtin_numerator, false);
+        if (t) return t;
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* n; Expr* d;
     extract_num_den(res->data.function.args[0], &n, &d);
@@ -201,6 +207,10 @@ Expr* builtin_numerator(Expr* res) {
 }
 
 Expr* builtin_denominator(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 2) {
+        Expr* t = trig_option_apply(res, SYM_Denominator, builtin_denominator, false);
+        if (t) return t;
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* n; Expr* d;
     extract_num_den(res->data.function.args[0], &n, &d);
@@ -2996,6 +3006,10 @@ static Expr* builtin_cancel_body(Expr* res);
  * it back through the evaluator, which respells it, so the numeric-radical
  * unit of the coefficient division stays off and the old behaviour holds. */
 Expr* builtin_cancel(Expr* res) {
+    {
+        Expr* t = trig_option_apply(res, SYM_Cancel, builtin_cancel, true);
+        if (t) return t;
+    }
     int bump = exact_poly_div_nested_enter(res);
     Expr* r = builtin_cancel_body(res);
     exact_poly_div_nested_release(bump);
@@ -3150,7 +3164,24 @@ static Expr* trig_kern_abstract(const Expr* e, TrigKern* k) {
     return out;
 }
 
-static Expr* together_trig_option(Expr* res) {
+/* Shared Trig -> v handling for Together, Cancel, Numerator and Denominator
+ * (audit Together#1, Cancel#3, Denominator#2): the option is removed; under
+ * Trig -> True the circular functions are abstracted to their Sin/Cos kernels
+ * first and put back after.  With `pyth`, the numerator and denominator are
+ * also reduced modulo Sin[u]^2 + Cos[u]^2 == 1 (each Cos[u]^2 written as
+ * 1 - Sin[u]^2), so Cancel[(1 - Cos[x]^2)/Sin[x], Trig -> True] is Sin[x].
+ * `fn` is the head's own builtin, called directly on the call without the
+ * option (so the call stays user-level).  NULL when there is no Trig option. */
+static Expr* builtin_together_wrap(Expr* e);
+
+static size_t trig_leaves(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return 1;
+    size_t n = trig_leaves(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) n += trig_leaves(e->data.function.args[i]);
+    return n;
+}
+
+static Expr* trig_option_apply(Expr* res, const char* head, Expr* (*fn)(Expr*), bool pyth) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     size_t argc = res->data.function.arg_count, at = argc;
     for (size_t i = 1; i < argc; i++) {
@@ -3163,7 +3194,8 @@ static Expr* together_trig_option(Expr* res) {
     if (at == argc) return NULL;
     Expr* v = res->data.function.args[at]->data.function.args[1];
     bool on = v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
-    if (!on) return NULL;      /* Trig -> False: the ordinary Together */
+    /* Together's default path keeps its own Trig -> False handling. */
+    if (!on && head == SYM_Together) return NULL;
     /* The call without the Trig option. */
     Expr** a = malloc(argc * sizeof(Expr*));
     size_t m = 0;
@@ -3173,13 +3205,57 @@ static Expr* together_trig_option(Expr* res) {
         a[m++] = (i == 0 && on) ? trig_kern_abstract(res->data.function.args[0], &k)
                                 : expr_copy(res->data.function.args[i]);
     }
+    Expr* alt = NULL;     /* pyth: the reduction in the other kernel */
+    if (on && pyth && k.n > 0) {
+        /* Reduce once eliminating Cos[u]^2 and once eliminating Sin[u]^2;
+         * the smaller result after fn is kept (s^2 - 1 over c cancels only in
+         * the second, 1 - c^2 over s only in the first). */
+        Expr* t = builtin_together_wrap(expr_copy(a[0]));
+        Expr* red[2];
+        for (int w = 0; w < 2; w++) {
+            Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator), (Expr*[]){ expr_copy(t) }, 1));
+            Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator), (Expr*[]){ expr_copy(t) }, 1));
+            for (size_t i = 0; i < k.n; i++) {
+                Expr* rel = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_new_integer(-1), trig_kern_power(expr_copy(k.s[i]), 2),
+                               trig_kern_power(expr_copy(k.c[i]), 2) }, 3));
+                Expr* kv = w == 0 ? k.c[i] : k.s[i];
+                num = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialRemainder),
+                          (Expr*[]){ num, expr_copy(rel), expr_copy(kv) }, 3));
+                den = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialRemainder),
+                          (Expr*[]){ den, rel, expr_copy(kv) }, 3));
+            }
+            red[w] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                         (Expr*[]){ num, trig_kern_power(den, -1) }, 2));
+        }
+        expr_free(t);
+        expr_free(a[0]);
+        a[0] = red[0];
+        alt = red[1];
+    }
+    if (alt) {
+        /* fn on the alternative spelling; the smaller of the two wins */
+        Expr** b = malloc(m * sizeof(Expr*));
+        b[0] = alt;
+        for (size_t i = 1; i < m; i++) b[i] = expr_copy(a[i]);
+        Expr* call2 = expr_new_function(expr_new_symbol(head), b, m);
+        free(b);
+        Expr* r2 = fn(call2);
+        if (!r2) r2 = expr_copy(call2->data.function.args[0]);
+        expr_free(call2);
+        alt = r2;
+    }
     /* called directly, not evaluated: the call stays user-level, so the
      * factored form survives (ratfun.c rf_factored_form) */
-    Expr* call = expr_new_function(expr_new_symbol(SYM_Together), a, m);
+    Expr* call = expr_new_function(expr_new_symbol(head), a, m);
     free(a);
-    Expr* r = builtin_together(call);
+    Expr* r = fn(call);
     if (!r) r = expr_copy(call);
     expr_free(call);
+    if (alt) {
+        if (trig_leaves(alt) < trig_leaves(r)) { expr_free(r); r = alt; }
+        else expr_free(alt);
+    }
     if (on && k.n > 0 && r) {
         Expr** rules = malloc(2 * k.n * sizeof(Expr*));
         for (size_t i = 0; i < k.n; i++) {
@@ -3200,9 +3276,18 @@ static Expr* together_trig_option(Expr* res) {
     return r;
 }
 
+/* Together[e] on an owned e, evaluated through the user-level builtin. */
+static Expr* builtin_together_wrap(Expr* e) {
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Together), (Expr*[]){ e }, 1);
+    Expr* r = builtin_together(call);
+    if (!r) r = expr_copy(call->data.function.args[0]);
+    expr_free(call);
+    return r;
+}
+
 Expr* builtin_together(Expr* res) {
     {
-        Expr* t = together_trig_option(res);
+        Expr* t = trig_option_apply(res, SYM_Together, builtin_together, false);
         if (t) return t;
     }
     int bump = exact_poly_div_nested_enter(res);

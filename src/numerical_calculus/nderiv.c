@@ -655,6 +655,12 @@ static Expr* nd_nintegrate(Expr* expr, const char* var, Expr* n_expr,
     Expr* nres = expr_new_function(expr_new_symbol(SYM_NResidue), a, cnt);
     free(a);
 
+    /* ND#3: a fractional order puts the branch point of (x - x0)^-(n+1) on
+     * purpose inside the contour; NResidue's branch-cut warning is then about
+     * the method, not the user's call, and is silenced. */
+    if (n_expr->type != EXPR_INTEGER)
+        nres = mk2("Quiet", nres, mk2("MessageName", expr_new_symbol(SYM_NResidue),
+                                      expr_new_string("bcut")));
     Expr* gam = mk1("Gamma", mk2("Plus", expr_copy(n_expr), expr_new_integer(1)));
     Expr* full = mk2("Times", gam, nres);
 
@@ -783,6 +789,11 @@ Expr* builtin_nd(Expr* res) {
         if (n_expr->type != EXPR_INTEGER || n_expr->data.integer < 0) {
             nd_warn("ord", "Method -> EulerSum requires a non-negative integer "
                            "order; use Method -> NIntegrate for fractional order");
+        } else if (n_expr->data.integer > 1000) {
+            /* ND#2: the order was truncated to int (4294967298 read as 2); a
+             * finite-difference derivative of such an order is not computable. */
+            nd_warn("ord", "the derivative order %lld is too large to compute numerically",
+                    (long long)n_expr->data.integer);
         } else {
             int n = (int)n_expr->data.integer;
             /* Adaptive refinement: grow the Richardson tableau depth from Terms up

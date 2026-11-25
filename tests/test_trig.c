@@ -92,10 +92,12 @@ void test_trig_forward_of_inverse() {
         /* Composite arguments survive as-is */
         {"Sin[ArcSin[x^2 + 1]]", "1 + x^2"},
         {"Cos[ArcCos[2 y]]", "2 y"},
-        /* ArcTan[x, y] two-arg form must NOT be stripped: our rule guards
-         * on arg_count==1, so Tan[ArcTan[x, y]] stays unevaluated here
-         * rather than collapsing via the (wrong) single-argument rule. */
-        {"Tan[ArcTan[3, 4]]", "Tan[ArcTan[3, 4]]"},
+        /* ArcTan[x, y] two-arg form must NOT be stripped by the
+         * single-argument rule: symbolic Tan[ArcTan[x, y]] stays.  With exact
+         * x > 0, ArcTan[3, 4] is ArcTan[4/3] (ArcTan#2, as the reference), and
+         * then Tan of it is 4/3. */
+        {"Tan[ArcTan[x, y]]", "Tan[ArcTan[x, y]]"},
+        {"Tan[ArcTan[3, 4]]", "4/3"},
         /* Opposite direction is NOT folded: ArcSin[Sin[x]] stays put */
         {"ArcSin[Sin[x]]", "ArcSin[Sin[x]]"},
         {NULL, NULL}

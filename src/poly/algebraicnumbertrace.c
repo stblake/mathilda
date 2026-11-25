@@ -16,6 +16,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
+#include "sym_names.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdio.h>
@@ -29,6 +30,23 @@ Expr* builtin_algebraicnumbertrace(Expr* res) {
     size_t argc = res->data.function.arg_count;
     const Expr* theta = extract_extension_option(res, &argc);
     if (argc != 1) return NULL;
+    /* AlgebraicNumberTrace#2: of repeated Extension options the first is the
+     * one in force, as for every option (the shared reader keeps the last). */
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        const Expr* o = res->data.function.args[i];
+        if (o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
+            o->data.function.head->type == EXPR_SYMBOL &&
+            (o->data.function.head->data.symbol.name == SYM_Rule ||
+             o->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
+            o->data.function.args[0]->type == EXPR_SYMBOL &&
+            o->data.function.args[0]->data.symbol.name == SYM_Extension) {
+            const Expr* v = o->data.function.args[1];
+            bool trivial = v->type == EXPR_SYMBOL &&
+                           (v->data.symbol.name == SYM_Automatic || v->data.symbol.name == SYM_None);
+            theta = trivial ? NULL : v;
+            break;
+        }
+    }
 
     const Expr* a = res->data.function.args[0];
     Expr* out = NULL;
@@ -43,8 +61,11 @@ Expr* builtin_algebraicnumbertrace(Expr* res) {
         return NULL;
     }
 
-    /* r == 0: not a constant algebraic number — report and stay unevaluated. */
-    char* s = expr_to_string((Expr*)a);
+    /* r == 0: not a constant algebraic number — report and stay unevaluated.
+     * When a is one, the culprit is the Extension value (AlgebraicNumberNorm#2,
+     * AlgebraicNumberTrace#1: Extension -> Pi blamed Sqrt[2]). */
+    const Expr* culprit = (theta && flint_qqbar_is_constant_algebraic(a)) ? theta : a;
+    char* s = expr_to_string((Expr*)culprit);
     mth_message("AlgebraicNumberTrace", "nalg", "%s is not an explicit algebraic number.", s ? s : "?");
     free(s);
     return NULL;

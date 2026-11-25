@@ -525,6 +525,46 @@ Expr* builtin_nprod(Expr* res) {
         return expr_new_real(0.0);
     }
 
+    /* NProduct#3: a finite machine-precision product of at most
+     * NP_ZERO_SCAN_FIN factors is the product of its factors' values --
+     * Exp[NSum[Log[f]]] lost the last ulp (NProduct[2, {3}] was
+     * 7.999999999999998). */
+    if (nspecs == 1 && !o.mpfr && !o.wprec) {
+        size_t sn = spec0->data.function.arg_count;
+        Expr* hi = eval_and_free(expr_copy(spec0->data.function.args[sn == 2 ? 1 : 2]));
+        Expr* lo = sn >= 3 ? eval_and_free(expr_copy(spec0->data.function.args[1])) : expr_new_integer(1);
+        Expr* st = sn >= 4 ? eval_and_free(expr_copy(spec0->data.function.args[3])) : expr_new_integer(1);
+        double dlo, dhi, dst;
+        bool fin = !np_is_infinity(hi) && np_to_double(lo, &dlo) && np_to_double(hi, &dhi) &&
+                   np_to_double(st, &dst) && dst != 0.0;
+        expr_free(hi); expr_free(lo); expr_free(st);
+        double c = fin ? floor((dhi - dlo) / dst + 1e-9) + 1.0 : 0.0;
+        if (fin && c >= 1.0 && c <= NP_ZERO_SCAN_FIN) {
+            Expr* table = np_table(np_apply1("N", expr_copy(body)), spec0, 0, (long)c - 1);
+            Expr* qt = np_apply1("Quiet", table);
+            Expr* vals = pack_eval_plain(qt);
+            expr_free(qt);
+            Expr* prod = NULL;
+            if (vals && vals->type == EXPR_FUNCTION && vals->data.function.head->type == EXPR_SYMBOL
+                && vals->data.function.head->data.symbol.name == SYM_List) {
+                double pre = 1.0, pim = 0.0;
+                bool ok = true;
+                for (size_t i = 0; i < vals->data.function.arg_count && ok; i++) {
+                    double re, im;
+                    if (!np_to_complex(vals->data.function.args[i], &re, &im)) { ok = false; break; }
+                    double nre = pre * re - pim * im, nim = pre * im + pim * re;
+                    pre = nre; pim = nim;
+                }
+                if (ok && isfinite(pre) && isfinite(pim))
+                    prod = pim == 0.0 ? expr_new_real(pre)
+                                      : expr_new_function(expr_new_symbol(SYM_Complex),
+                                            (Expr*[]){ expr_new_real(pre), expr_new_real(pim) }, 2);
+            }
+            if (vals) expr_free(vals);
+            if (prod) { expr_free(eff_body); return prod; }
+        }
+    }
+
     /* Build the inner NSum[Log[eff_body], spec0, <mapped options>].  An
      * infinite single product sums the cancellation-free form of Log (see
      * np_log_summand); a finite or nested one keeps Log[f]. */
