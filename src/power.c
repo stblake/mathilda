@@ -1121,11 +1121,42 @@ static Expr* power_finite_base_infinity(Expr* base, bool pos) {
     return expr_new_symbol(SYM_Indeterminate);
 }
 
+/* The principal square root of the Gaussian integer re + im I when it is a
+ * Gaussian integer itself, else NULL.  im != 0.  See builtin_power. */
+static Expr* power_gaussian_sqrt(Expr* re, Expr* im) {
+    mpz_t a, b, n2, n, t, x, y;
+    mpz_inits(a, b, n2, n, t, x, y, NULL);
+    Expr* out = NULL;
+    expr_to_mpz(re, a);
+    expr_to_mpz(im, b);
+    if (mpz_sgn(b) == 0) goto done;
+    mpz_mul(n2, a, a);
+    mpz_addmul(n2, b, b);
+    if (!mpz_perfect_square_p(n2)) goto done;
+    mpz_sqrt(n, n2);
+    mpz_add(t, n, a);                       /* N + a = 2 x^2 */
+    if (!mpz_even_p(t)) goto done;
+    mpz_divexact_ui(t, t, 2);
+    if (!mpz_perfect_square_p(t)) goto done;
+    mpz_sqrt(x, t);
+    mpz_sub(t, n, a);                       /* N - a = 2 y^2 */
+    mpz_divexact_ui(t, t, 2);
+    if (!mpz_perfect_square_p(t)) goto done;
+    mpz_sqrt(y, t);
+    if (mpz_sgn(b) < 0) mpz_neg(y, y);
+    out = make_complex(expr_bigint_normalize(expr_new_bigint_from_mpz(x)),
+                       expr_bigint_normalize(expr_new_bigint_from_mpz(y)));
+    out = eval_and_free(out);
+done:
+    mpz_clears(a, b, n2, n, t, x, y, NULL);
+    return out;
+}
+
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
     size_t n_args = res->data.function.arg_count;
-    if (n_args == 0) return NULL;
+    if (n_args == 0) return expr_new_integer(1);   /* Power[] is the empty product of exponents: 1 */
     if (n_args == 1) return expr_copy(res->data.function.args[0]);
 
     if (n_args > 2) {
@@ -1598,6 +1629,24 @@ Expr* builtin_power(Expr* res) {
                 Expr* z = make_complex(sgn_re, sgn_im);
                 return eval_and_free(internal_times(
                     (Expr*[]){z, sqrt2_inv}, 2));
+            }
+        }
+    }
+
+    /* A Gaussian-integer perfect square: (a + b I)^(n/2) with a + b I =
+     * (x + y I)^2 is (x + y I)^n, so Sqrt[3 + 4 I] is 2 + I and Sqrt[2 I] is
+     * 1 + I.  The principal root has x > 0 (b != 0, so the root is never on
+     * the imaginary axis): x^2 = (N + a)/2, y^2 = (N - a)/2 with N = |a + b I|,
+     * and sign(y) = sign(b).  All in GMP; declines unless N, x and y are all
+     * integers. */
+    if (base_comp && !exp_comp && expr_is_integer_like(re_b) && expr_is_integer_like(im_b)) {
+        int64_t en = 0, ed = 1;
+        if (is_rational(exp, &en, &ed) && ed == 2) {
+            Expr* root = power_gaussian_sqrt(re_b, im_b);
+            if (root) {
+                if (en == 1) return root;
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ root, expr_new_integer(en) }, 2));
             }
         }
     }

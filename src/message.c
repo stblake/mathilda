@@ -261,7 +261,10 @@ static void message_list_append(const char* head, const char* tag) {
     items[n] = expr_new_function(expr_new_symbol(SYM_HoldForm), &mn, 1);
     Expr* l = expr_new_function(expr_new_symbol(SYM_List), items, n + 1);
     free(items);
-    message_list_set(l);
+    /* No clock bump for an append (symtab_set_bookkeeping_value). */
+    Expr* sym = expr_new_symbol("$MessageList");
+    symtab_set_bookkeeping_value("$MessageList", sym, l);
+    expr_free(sym);
     expr_free(l);
 }
 

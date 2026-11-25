@@ -59,10 +59,10 @@ extern Expr* builtin_sameq(Expr* res);
 extern Expr* builtin_unsameq(Expr* res);
 extern Expr* builtin_equal(Expr* res);
 extern Expr* builtin_unequal(Expr* res);
-extern Expr* builtin_less(Expr* res);
-extern Expr* builtin_greater(Expr* res);
-extern Expr* builtin_lessequal(Expr* res);
-extern Expr* builtin_greaterequal(Expr* res);
+extern Expr* builtin_less_quiet(Expr* res);   /* no Head::nord */
+extern Expr* builtin_greater_quiet(Expr* res);   /* no Head::nord */
+extern Expr* builtin_lessequal_quiet(Expr* res);   /* no Head::nord */
+extern Expr* builtin_greaterequal_quiet(Expr* res);   /* no Head::nord */
 extern Expr* builtin_sinh(Expr* res);
 extern Expr* builtin_cosh(Expr* res);
 extern Expr* builtin_tanh(Expr* res);
@@ -264,10 +264,10 @@ Expr* internal_sameq(Expr** args, size_t count) { return internal_call_impl("Sam
 Expr* internal_unsameq(Expr** args, size_t count) { return internal_call_impl("UnsameQ", builtin_unsameq, args, count); }
 Expr* internal_equal(Expr** args, size_t count) { return internal_call_impl("Equal", builtin_equal, args, count); }
 Expr* internal_unequal(Expr** args, size_t count) { return internal_call_impl("Unequal", builtin_unequal, args, count); }
-Expr* internal_less(Expr** args, size_t count) { return internal_call_impl("Less", builtin_less, args, count); }
-Expr* internal_greater(Expr** args, size_t count) { return internal_call_impl("Greater", builtin_greater, args, count); }
-Expr* internal_lessequal(Expr** args, size_t count) { return internal_call_impl("LessEqual", builtin_lessequal, args, count); }
-Expr* internal_greaterequal(Expr** args, size_t count) { return internal_call_impl("GreaterEqual", builtin_greaterequal, args, count); }
+Expr* internal_less(Expr** args, size_t count) { return internal_call_impl("Less", builtin_less_quiet, args, count); }
+Expr* internal_greater(Expr** args, size_t count) { return internal_call_impl("Greater", builtin_greater_quiet, args, count); }
+Expr* internal_lessequal(Expr** args, size_t count) { return internal_call_impl("LessEqual", builtin_lessequal_quiet, args, count); }
+Expr* internal_greaterequal(Expr** args, size_t count) { return internal_call_impl("GreaterEqual", builtin_greaterequal_quiet, args, count); }
 Expr* internal_sinh(Expr** args, size_t count) { return internal_call_impl("Sinh", builtin_sinh, args, count); }
 Expr* internal_cosh(Expr** args, size_t count) { return internal_call_impl("Cosh", builtin_cosh, args, count); }
 Expr* internal_tanh(Expr** args, size_t count) { return internal_call_impl("Tanh", builtin_tanh, args, count); }

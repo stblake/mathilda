@@ -314,6 +314,23 @@ static const ArityRow ARITY_ROWS[] = {
     /* ---- files and packed arrays ---- */
     { "ReadList",         1, 3, 1 },
     { "ToNDArray",        1, 1, 1 },
+
+    /* ---- Wave 5 G7 (arithmetic, strings, random): argument-count messages ---- */
+    { "N",                1, 2, NOOPT },
+    { "Re",               1, 1, NOOPT },
+    { "Im",               1, 1, NOOPT },
+    { "Quotient",         2, 3, NOOPT },
+    { "LucasL",           1, 2, NOOPT },
+    { "Capitalize",       1, 2, NOOPT },   /* Capitalize[s, "TitleCase"] */
+    { "CharacterRange",   2, 2, NOOPT },
+    { "DigitQ",           1, 1, NOOPT },
+    { "LowerCaseQ",       1, 1, NOOPT },
+    { "UpperCaseQ",       1, 1, NOOPT },
+    { "ToLowerCase",      1, 1, NOOPT },
+    { "ToUpperCase",      1, 1, NOOPT },
+    { "ToCharacterCode",  1, 2, NOOPT },
+    { "RandomChoice",     1, 2, NOOPT },
+    { "RandomInteger",    0, 2, NOOPT },
 };
 
 /* Heads whose choice of two counts the reference words as a range:

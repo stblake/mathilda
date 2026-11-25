@@ -156,6 +156,7 @@ void opform_init(void) {
     opform_register("TakeSmallestBy", 2, 2, 0);
     opform_register("ReplaceAt", 2, 2, 0);       /* ReplaceAt[rules, n][x] */
     opform_register("MapAt", 2, 2, 1);           /* MapAt[f, pos][x] == MapAt[f, x, pos] */
+    opform_register("StringReplacePart", 2, 2, 0);   /* StringReplacePart[new, part][old] */
 
     /* x last: h[f][x] == h[f, x]. */
     static const char* const DATA_SECOND_1[] = {

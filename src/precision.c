@@ -375,6 +375,10 @@ static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
     if (n->type == EXPR_INTEGER) digits = (double)n->data.integer;
     else if (n->type == EXPR_REAL) digits = n->data.real;
     else if (is_rational((Expr*)n, &rn, &rd)) digits = (double)rn / (double)rd;
+#ifdef USE_MPFR
+    /* An arbitrary-precision number as the precision (N[20, 30]): its value. */
+    else if (n->type == EXPR_MPFR) digits = mpfr_get_d(n->data.mpfr, MPFR_RNDN);
+#endif
     else return false;
     if (!(digits > 0.0)) {
         /* A non-positive precision was left unevaluated in silence
@@ -440,7 +444,11 @@ Expr* builtin_set_accuracy(Expr* res) {
     }
     else return NULL;
 
-    if (target_acc <= 0.0) return NULL;
+    /* A non-positive accuracy is meaningful while the precision it implies,
+     * a + log10|x|, is positive (SetAccuracy[12345.6, -2] keeps ~2 digits). */
+    if (target_acc <= 0.0 && !(expr_is_numeric_quantity(value) &&
+                               target_acc + value_log10_abs(value) > 0.0))
+        return NULL;
 
     /* A compound that is not itself a number (f[1000.5, 0.001], x + 1.5):
      * accuracy n is given to EACH number in it, at that number's own

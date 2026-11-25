@@ -2159,6 +2159,23 @@ void symtab_bind_fresh_local(SymbolDef* def, Expr* pattern, Expr* replacement) {
     if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
 }
 
+/* $MessageList's append (message.c): an OwnValue update without the
+ * evaluation-clock bump.  The bump would invalidate every exact-clock
+ * fixed-point stamp, and the fixed-point loop would then re-evaluate calls
+ * that already came to rest -- re-asking each declining builtin and
+ * printing its message again ({IntegerLength[1.5], IntegerLength[2.5]}
+ * printed each IntegerLength::int twice: the second message un-stamped the
+ * first element, whose re-evaluation then un-stamped the second).  No
+ * stamp can rely on the appended value: a message already taints every open
+ * dependency frame (eval.c, g_dep_taint_why[2]), and the per-line reset,
+ * which can turn a non-empty list back into {}, still bumps. */
+void symtab_set_bookkeeping_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    g_add_rule_no_bump = true;
+    add_rule_in(&def->own_values, pattern, replacement, false, NULL, def);
+    g_add_rule_no_bump = false;   /* consumed by add_rule_in; defensive */
+}
+
 void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
                              bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);

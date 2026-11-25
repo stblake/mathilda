@@ -426,6 +426,9 @@ void symtab_add_own_value_def(SymbolDef* def, Expr* pattern, Expr* replacement);
 /* symtab_add_own_value_def for a Module local minted this call: no clock
  * bump (no stamp can depend on a fresh symbol). See symtab.c. */
 void symtab_bind_fresh_local(SymbolDef* def, Expr* pattern, Expr* replacement);
+/* The OwnValue of a diagnostic-bookkeeping symbol ($MessageList), replaced
+ * WITHOUT the evaluation-clock bump: see symtab.c. */
+void symtab_set_bookkeeping_value(const char* symbol_name, Expr* pattern, Expr* replacement);
 /* Module-local reclamation: mark a FRESH local (returns false and leaves the
  * symbol uncounted when the name already existed), and try to reclaim locals
  * at Module exit / in deferred sweeps.  See symtab.c. */

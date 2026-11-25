@@ -61,6 +61,8 @@
 #include "print.h"
 #include "sym_names.h"
 #include "eval.h"           /* eval_and_free */
+#include "common.h"         /* head_is */
+#include "arithmetic.h"     /* expr_numeric_sign */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -124,6 +126,62 @@ static Expr* int_emit_int(size_t pos, Expr* res) {
     return NULL;
 }
 
+/* IntegerDigits[n, MixedRadix[{b1, ..., bk}]] and the length form: the
+ * digits of |n| in the mixed radix, least significant against bk.  Each
+ * radix is an integer > 1.  What is left after b1 is one more, unbounded,
+ * leading digit (IntegerDigits[10^6, MixedRadix[{24, 60, 60}]] is
+ * {11, 13, 46, 40}); leading zeros are dropped, and a length pads with zeros
+ * or keeps the low digits, as for a plain base.  NULL (unevaluated) for a
+ * radix list that is not all integers > 1. */
+static Expr* int_digits_mixed_radix(Expr* res, Expr* n_expr) {
+    size_t argc = res->data.function.arg_count;
+    Expr* mr = res->data.function.args[1];
+    if (mr->data.function.arg_count != 1 || !head_is(mr->data.function.args[0], SYM_List))
+        return NULL;
+    Expr* radices = mr->data.function.args[0];
+    size_t k = radices->data.function.arg_count;
+    for (size_t i = 0; i < k; i++) {
+        Expr* b = radices->data.function.args[i];
+        if (!expr_is_integer_like(b) || expr_numeric_sign(b) <= 0 ||
+            (b->type == EXPR_INTEGER && b->data.integer < 2))
+            return NULL;
+    }
+    size_t target_len = 0;
+    bool has_len = false;
+    if (argc >= 3) {
+        Expr* l = res->data.function.args[2];
+        if (l->type != EXPR_INTEGER || l->data.integer < 0) return NULL;
+        target_len = (size_t)l->data.integer;
+        has_len = true;
+    }
+    mpz_t n, b, d;
+    mpz_inits(n, b, d, NULL);
+    { mpz_t t; expr_to_mpz(n_expr, t); mpz_abs(n, t); mpz_clear(t); }
+    Expr** dig = malloc(sizeof(Expr*) * (k + 1));
+    size_t nd = 0;                              /* digits, least significant first */
+    for (size_t i = k; i-- > 0 && mpz_sgn(n) != 0;) {
+        mpz_t bt;
+        expr_to_mpz(radices->data.function.args[i], bt);
+        mpz_fdiv_qr(n, d, n, bt);
+        mpz_clear(bt);
+        dig[nd++] = expr_bigint_normalize(expr_new_bigint_from_mpz(d));
+    }
+    if (mpz_sgn(n) != 0) dig[nd++] = expr_bigint_normalize(expr_new_bigint_from_mpz(n));
+    if (nd == 0) dig[nd++] = expr_new_integer(0);   /* IntegerDigits[0, ...] is {0} */
+    mpz_clears(n, b, d, NULL);
+    size_t out_n = has_len ? target_len : nd;
+    Expr** out = malloc(sizeof(Expr*) * (out_n ? out_n : 1));
+    for (size_t j = 0; j < out_n; j++) {
+        size_t from_low = out_n - 1 - j;            /* position from the least significant */
+        out[j] = from_low < nd ? expr_copy(dig[from_low]) : expr_new_integer(0);
+    }
+    for (size_t j = 0; j < nd; j++) expr_free(dig[j]);
+    free(dig);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), out, out_n);
+    free(out);
+    return r;
+}
+
 Expr* builtin_integerdigits(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     /* Base-10 digits of a rank-1 int64 buffer, read element by element out of
@@ -147,6 +205,10 @@ Expr* builtin_integerdigits(Expr* res) {
         if (expr_is_numeric_like(n_expr)) return int_emit_int(1, res);
         return NULL;
     }
+
+    /* --- IntegerDigits[n, MixedRadix[{b1, ..., bk}]] (, len) --------- */
+    if (argc >= 2 && head_is(res->data.function.args[1], SYM_MixedRadix))
+        return int_digits_mixed_radix(res, n_expr);
 
     /* --- base argument --------------------------------------------- */
     mpz_t base;
@@ -1605,8 +1667,10 @@ Expr* builtin_integerstring(Expr* res) {
         Expr* b_expr = res->data.function.args[1];
         if (!expr_is_integer_like(b_expr)) {
             /* Mathematica collapses fractional / real / complex bases
-             * into ::basf.  Symbolic bases stay silent. */
-            if (expr_is_numeric_like(b_expr)) return is_emit_basf(b_expr, res);
+             * into ::basf, and so is a string other than "Roman"
+             * (IntegerString[10, "Foo"]).  Symbolic bases stay silent. */
+            if (expr_is_numeric_like(b_expr) || b_expr->type == EXPR_STRING)
+                return is_emit_basf(b_expr, res);
             return NULL;
         }
         mpz_t b;

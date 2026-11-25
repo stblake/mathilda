@@ -1454,7 +1454,10 @@ static int partitions_count(bool distinct, int64_t n, mpz_t out) {
  * the int64 helper (the one the packed kernel and Compile use), else GMP. */
 static Expr* partitions_scalar(bool distinct, Expr* res) {
     Expr* arg = res->data.function.args[0];
-    /* A big-integer argument has an astronomically large answer. */
+    /* A negative big integer has no partitions (PartitionsP[-10^20] is 0,
+     * as for every negative n); a positive one has an astronomically large
+     * answer. */
+    if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0) return expr_new_integer(0);
     if (arg->type != EXPR_INTEGER) return NULL;
     int64_t n = arg->data.integer, v;
     if (distinct ? partitions_q_i64(n, &v) : partitions_p_i64(n, &v))

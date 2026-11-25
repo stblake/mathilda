@@ -29,6 +29,7 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "common.h"
+#include "strings_internal.h"   /* strings_msg_strse */
 
 #include <stdlib.h>
 #include <string.h>
@@ -131,6 +132,10 @@ Expr* builtin_stringcases(Expr* res) {
 
     Expr* subject = a[0];
     Expr* patt = a[1];
+    /* A string or a list of strings, else StringCases::strse (unevaluated). */
+    if (subject->type != EXPR_STRING &&
+        !(strings_is_seq(subject) && strings_seq_all_strings(subject)))
+        return strings_msg_strse("StringCases", res, 1);
 
     /* All-mode enumerates exact-substring matches, so build anchored rules. */
     int anchored = (mode == REGEX_OV_ALL) ? 1 : 0;

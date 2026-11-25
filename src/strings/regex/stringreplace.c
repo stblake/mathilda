@@ -20,6 +20,7 @@
 #include "print.h"
 
 #include <string.h>
+#include <gmp.h>
 
 /*
  * Result assembly. Unmatched text and string replacements accumulate in `buf`;
@@ -241,6 +242,8 @@ static int sr_args(Expr* res, const char* head, int* caseless, size_t* limit, in
          * answered {} (audit StringReplaceList#1). */
         if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity) { *limit = 0; *has_limit = 0; }
         else if (n->type == EXPR_INTEGER && n->data.integer >= 0) *limit = (size_t)n->data.integer;
+        /* A positive BigInt limit exceeds any count of matches: no limit. */
+        else if (n->type == EXPR_BIGINT && mpz_sgn(n->data.bigint) > 0) { *limit = 0; *has_limit = 0; }
         else return -1;
     }
     return (int)argc;

@@ -29,6 +29,8 @@
  * reduces every padding mode to a plain linear convolution computed by a
  * zero-padded FFT product; it then slices out the L outputs. */
 
+#include "message.h"   /* mth_message: klist */
+#include "print.h"     /* expr_to_string */
 #include "convolutions.h"
 #include "linkedlist.h"
 #include "sym_names.h"
@@ -1266,6 +1268,17 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
         s.KL[ax] = norm_k(kLraw[ax], s.kdims[ax]);
         s.KR[ax] = norm_k(kRraw[ax], s.kdims[ax]);
         if (s.KL[ax] == 0 || s.KR[ax] == 0) return NULL;
+        /* An alignment past the kernel's own elements (k = 3 for a kernel of
+         * length 2) names no kernel element: Head::klist, unevaluated. */
+        if (s.KL[ax] < 1 || s.KL[ax] > s.kdims[ax] || s.KR[ax] < 1 || s.KR[ax] > s.kdims[ax]) {
+            char* cs = expr_to_string(res);
+            mth_message(name, "klist",
+                        "The kernel alignment in %s lies outside the kernel, which has %lld "
+                        "element%s along dimension %d.", cs ? cs : "?",
+                        (long long)s.kdims[ax], s.kdims[ax] == 1 ? "" : "s", ax + 1);
+            free(cs);
+            return NULL;
+        }
         s.Ldims[ax] = (mode == CONV_MODE_CORRELATE)
                         ? s.ldims[ax] + s.KL[ax] - s.KR[ax]
                         : s.ldims[ax] - s.KL[ax] + s.KR[ax];

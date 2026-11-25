@@ -18,6 +18,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <gmp.h>
+
+/* A non-negative integer count into *out: a positive BigInt saturates to
+ * INT64_MAX, which is as good as infinite here (the output length is capped
+ * by memory long before), so StringRepeat["ab", 10^30, 5] is "ababa".  Kept
+ * local; a shared saturating helper is being added to expr.c separately. */
+static bool sr_count(const Expr* e, int64_t* out) {
+    if (e->type == EXPR_INTEGER) {
+        if (e->data.integer < 0) return false;
+        *out = e->data.integer;
+        return true;
+    }
+    if (e->type == EXPR_BIGINT && mpz_sgn(e->data.bigint) > 0) {
+        *out = INT64_MAX;
+        return true;
+    }
+    return false;
+}
 
 /*
  * builtin_stringrepeat:
@@ -39,18 +58,17 @@ Expr* builtin_stringrepeat(Expr* res) {
     if (arg0->type != EXPR_STRING)
         return strings_arg_message("StringRepeat", "string", "String", 1, res);
 
-    /* Count n: non-negative integer. */
-    if (args[1]->type != EXPR_INTEGER || args[1]->data.integer < 0)
+    /* Count n: non-negative integer (a BigInt saturates, see sr_count). */
+    int64_t n;
+    if (!sr_count(args[1], &n))
         return strings_arg_message("StringRepeat", "intp", "Positive integer", 2, res);
-    int64_t n = args[1]->data.integer;
 
     /* Optional maximum total length (characters): non-negative integer. */
     bool have_max = false;
     int64_t max = 0;
     if (argc == 3) {
-        if (args[2]->type != EXPR_INTEGER || args[2]->data.integer < 0)
+        if (!sr_count(args[2], &max))
             return strings_arg_message("StringRepeat", "intp", "Positive integer", 3, res);
-        max = args[2]->data.integer;
         have_max = true;
     }
 

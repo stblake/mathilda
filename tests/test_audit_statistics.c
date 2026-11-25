@@ -162,6 +162,27 @@ static void test_wave4_shapes_and_scale(void) {
     audit_chk("Quartiles#3", "Quartiles[{1,2,3,4}, {{a,0},{0,1}}]", "Quartiles[{1, 2, 3, 4}, {{a, 0}, {0, 1}}]");
 }
 
+/* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
+ * off $MessageList inside a Block (each diagnostic once per evaluation). */
+static void test_wave5_g7_statistics(void) {
+    audit_chk("Mean#3", "Quiet[Check[Mean[x], fired, Mean::rectn]]", "fired");
+    audit_chk("Mean#3", "Quiet[Check[Mean[{}], fired, Mean::rectn]]", "fired");
+    audit_chk("Mean#3", "Quiet[Mean[{}]]", "Mean[{}]");
+    audit_chk("Quantile#3", "Block[{$MessageList = {}}, Quantile[{1, 2, I}, 1/2]; Length[$MessageList]]", "1");
+    audit_chk("CentralMoment#2", "Block[{$MessageList = {}}, CentralMoment[{{1, 2}, {3}}, 2]; Length[$MessageList]]", "1");
+    audit_chk("CentralMoment#2", "Quiet[CentralMoment[{{1, 2}, {3}}, 2]]", "CentralMoment[{{1, 2}, {3}}, 2]");
+    audit_chk("InterquartileRange#3", "Block[{$MessageList = {}}, InterquartileRange[{1, 2, I}]; Length[$MessageList]]", "1");
+    audit_chk("InterquartileRange#4", "InterquartileRange[{1, 2, 3, 4}, {{0, 0}, {1, 0}}]", "2");
+    audit_chk("MeanDeviation#1", "Block[{$MessageList = {}}, MeanDeviation[{1 + I, 2, 3}]; Length[$MessageList]]", "1");
+    audit_chk("Median#6", "Block[{$MessageList = {}}, Median[{2 + I, 1, 3}]; Length[$MessageList]]", "1");
+    audit_chk("Median#7", "Median[{1, 2, 3, 4, 5, 6, 7}]", "4");
+    audit_chk("MedianDeviation#2", "Block[{$MessageList = {}}, MedianDeviation[{1, I}]; Length[$MessageList]]", "1");
+    audit_chk("MovingMedian#2", "Block[{$MessageList = {}}, MovingMedian[{1, I, 3}, 2]; Length[$MessageList]]", "1");
+    audit_chk("Quartiles#4", "Quiet[Check[Quartiles[{1, 2, 3, 4}, foo], fired, Quartiles::parm]]", "fired");
+    audit_chk("Quartiles#4", "Quiet[Quartiles[{1, 2, 3, 4}, foo]]", "Quartiles[{1, 2, 3, 4}, foo]");
+    audit_chk("Quartiles#5", "Block[{$MessageList = {}}, Quartiles[{1, 2 + I, 3}]; Length[$MessageList]]", "1");
+}
+
 int main(void) {
     audit_init();
     TEST(test_median_numeric_order);
@@ -176,5 +197,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_shapes_and_scale);
+    TEST(test_wave5_g7_statistics);
     return audit_finish("audit_statistics");
 }

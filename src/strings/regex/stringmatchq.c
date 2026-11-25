@@ -12,6 +12,7 @@
 #include "linkedlist.h"   /* a LinkedList of subjects */
 #include "symtab.h"
 #include "sym_names.h"
+#include "strings_internal.h"   /* strings_msg_strse */
 
 #include <string.h>
 
@@ -48,6 +49,13 @@ Expr* builtin_stringmatchq(Expr* res) {
 
     Expr* arg0 = a[0];
     Expr* patt = a[1];
+
+    /* A string or a list of strings; 5, {"a", 5} and {{"a"}} are
+     * StringMatchQ::strse and stay unevaluated (a Q-function never answers
+     * with a non-Boolean element). */
+    if (arg0->type != EXPR_STRING &&
+        !(strings_is_seq(arg0) && strings_seq_all_strings(arg0)))
+        return strings_msg_strse("StringMatchQ", res, 1);
 
     RegexRule* rules;
     int nr = regex_rules_build_opts(patt, REGEX_RULE_ANCHORED | REGEX_RULE_WILDCARDS,

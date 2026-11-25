@@ -18,7 +18,7 @@ moving-average specs, integer/complex covariance, …) fall back to the exact
 - `Median[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
   `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
 Gives the median estimate of the elements in data.
-- `Median[data]`: gives the median estimate $\hat{q}_{1/4}$ of the elements in `data`.
+- `Median[data]`: gives the median estimate $\hat{q}_{1/2}$ of the elements in `data`.
 - `Median[dist]`: gives the median of the distribution `dist`.
 
 **Features**:
@@ -60,6 +60,7 @@ for that distribution; otherwise it stays unevaluated.
 
 ## Mean
 
+- `Mean[x]`, `Mean[5]` and `Mean[{}]` print `Mean::rectn` and stay unevaluated (audit Mean#3).
 - `Mean[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
   `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
 Gives the mean estimate of the elements in data.
@@ -175,6 +176,7 @@ Out[5]= 1/2 (a b^2 + c d^2)
 ```
 
 ## CentralMoment
+- Ragged data (`{{1, 2}, {3}}`) is one `CentralMoment::rectn`, unevaluated (audit CentralMoment#2).
 Gives the central moment (moment about the mean) of data.
 - `CentralMoment[data, r]`: the order-`r` central moment $\tilde{\mu}_r = (1/n) \sum_i (x_i - \hat{\mu}_1)^r$, where $\hat{\mu}_1$ is `Mean[data]`.
 - `CentralMoment[data, {r_1, ..., r_m}]`: the multivariate mixed central moment $(1/n) \sum_i \prod_j (x_{ij} - \hat{\mu}_{1,j})^{r_j}$.
@@ -421,7 +423,7 @@ Gives the q-th quantile estimate of the elements in data.
 **Features**:
 - `Protected`.
 - Default parameters are `{{0, 0}, {1, 0}}` (the reference's Type-1 / left-continuous inverse CDF), so `Quantile[{1, 2, 3, 4}, 1/2]` is `2` while `Median[{1, 2, 3, 4}]` is `5/2` — the two deliberately differ on even-length data.
-- `Quartiles[data]` is `Quantile[data, {1/4, 1/2, 3/4}, {{1/2, 0}, {0, 1}}]`.
+- `Quartiles[data]` is `Quantile[data, {1/4, 1/2, 3/4}, {{1/2, 0}, {0, 1}}]`. A second argument that is not `{{a, b}, {c, d}}` prints `Quartiles::parm` and the call stays unevaluated (audit Quartiles#4).
 - Exact input gives exact output. The data is ordered by **numeric value** (certified: exact, then MPFR at increasing precision when two values are close), not by the canonical `Sort` order, which put every explicit number before `Sqrt[2]`, `E` or `Pi`: `Quantile[{2, Sqrt[3]}, 0]` is `Sqrt[3]` (audit Quantile#1). `Median`, `Quartiles`, `InterquartileRange` and `MedianDeviation` share the same order (audit Median#1/#2, InterquartileRange#1, MedianDeviation#1).
 - Ragged or mixed-depth data (`{{1, 2}, {3}}`, `{{1, 2}, 3}`) gives `Quantile::rectn` and stays unevaluated; it used to recurse through an unevaluated `Transpose` to `$RecursionLimit` (audit Quantile#2). `Quartiles`, `InterquartileRange`, `Median` and `MedianDeviation` likewise give their own `::rectn` (audit Quartiles#1, InterquartileRange#2).
 - For $w \in [0, 1]$ the interpolation is evaluated as the convex combination $(1-w)x_{(j)} + w\,x_{(j+1)}$, not as $x_{(j)} + w\,(x_{(j+1)} - x_{(j)})$. The two are equal in exact arithmetic, but the difference form overflows on `Real` data whose neighbours straddle zero near the machine range: `Quantile[{-1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {0, 1}}]` is `0.0`, not `Infinity`. Outside $[0, 1]$ — which `{{a,b},{c,d}}` permits, though no standard quantile type uses it — the difference form is used instead, because there the convex form is the one that can produce `NaN`. At $w = 0$ or $w = 1$ the element is selected outright rather than computed.
@@ -454,6 +456,7 @@ Out[6]= Quantile[{1, 2, 3}, 2]
 the call unevaluated.
 
 ## InterquartileRange
+- `InterquartileRange[data, {{a, b}, {c, d}}]` is `q3 - q1` under those quantile parameters (audit InterquartileRange#4).
 Gives the difference between the upper and lower quartiles of data.
 - `InterquartileRange[data]`: $\hat{q}_{3/4} - \hat{q}_{1/4}$, using the `Quartiles` parameterization `{{1/2, 0}, {0, 1}}`.
 

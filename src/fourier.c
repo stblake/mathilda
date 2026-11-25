@@ -36,6 +36,8 @@
 #include "numeric.h"
 #include "common.h"
 #include "ndarray.h"
+#include "message.h"   /* mth_message: fpopt / fftl */
+#include "print.h"     /* expr_to_string */
 
 #include <stdlib.h>
 #include <string.h>
@@ -1149,13 +1151,15 @@ static Expr* fourier_core(Expr* res, int inverse) {
     Expr* a_expr = a_default;
     Expr* b_expr = b_default;
     Expr* poslist = NULL;
+    bool have_params = false;
 
     for (size_t i = 1; i < argc; i++) {
         Expr* arg = res->data.function.args[i];
         Expr *ao, *bo;
         if (parse_fourier_option(arg, &ao, &bo)) {
-            a_expr = ao;
-            b_expr = bo;
+            /* A repeated option: the first occurrence wins, as for every
+             * option. */
+            if (!have_params) { a_expr = ao; b_expr = bo; have_params = true; }
         } else if ((head_is(arg, SYM_List) || arg->type == EXPR_LINKEDLIST) && poslist == NULL) {
             poslist = arg;                         /* position-selection form */
         } else {
@@ -1164,11 +1168,44 @@ static Expr* fourier_core(Expr* res, int inverse) {
         }
     }
 
+    /* b = 0 makes the transform singular (every frequency the same): the
+     * parameters are rejected, Head::fpopt, and the call stays unevaluated. */
+    if (b_expr->type == EXPR_INTEGER && b_expr->data.integer == 0) {
+        Expr* rhs = expr_new_function(expr_new_symbol(SYM_List),
+                        (Expr*[]){ expr_copy(a_expr), expr_copy(b_expr) }, 2);
+        char* ps = expr_to_string(rhs);
+        mth_message(name, "fpopt",
+                    "The value of option FourierParameters -> %s should be a list of two "
+                    "numbers {a, b} with b nonzero.", ps ? ps : "?");
+        free(ps);
+        expr_free(rhs);
+        expr_free(a_default); expr_free(b_default);
+        return NULL;
+    }
+
     Expr* full = ll_has_ll_level1(data) ? fourier_compute_ll(data, a_expr, b_expr, inverse)
                                         : fourier_compute(data, a_expr, b_expr, inverse);
     expr_free(a_default);
     expr_free(b_default);
-    if (!full) return NULL;
+    if (!full) {
+        /* Not a nonempty rectangular array (InverseFourier[{}], a ragged
+         * {{1, 2}, {3}}, a scalar 5): Head::fftl. */
+        int64_t dims[FOURIER_MAX_RANK];
+        int rank = 0;
+        bool shaped = data->type == EXPR_NDARRAY || data->type == EXPR_LINKEDLIST ||
+                      ll_has_ll_level1(data) || nested_dims(data, dims, &rank);
+        if (shaped && data->type != EXPR_NDARRAY && data->type != EXPR_LINKEDLIST &&
+            !ll_has_ll_level1(data))
+            for (int i = 0; i < rank; i++) if (dims[i] <= 0) shaped = false;
+        if (!shaped) {
+            char* ds = expr_to_string(data);
+            mth_message(name, "fftl",
+                        "Argument %s is not a nonempty list or rectangular array of numeric quantities.",
+                        ds ? ds : "?");
+            free(ds);
+        }
+        return NULL;
+    }
 
     if (poslist == NULL) return full;
 

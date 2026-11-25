@@ -306,8 +306,11 @@ static bool lg_parse(const Expr* res, LGParams* p, size_t* positional_argc) {
         for (int i = 0; i < p->rank; i++) p->axes[i] = i;
     } else if (v_axis->type == EXPR_INTEGER) {
         int64_t a = v_axis->data.integer;
-        int ax = (a > 0) ? (int)(a - 1) : (int)(p->rank + a);
-        if (ax < 0 || ax >= p->rank) return false;
+        /* Range-checked in int64 BEFORE narrowing: Axis -> 4294967297 cast
+         * to int aliased axis 1. */
+        int64_t ax64 = (a > 0) ? a - 1 : (int64_t)p->rank + a;
+        if (ax64 < 0 || ax64 >= p->rank) return false;
+        int ax = (int)ax64;
         p->axes[0] = ax; p->naxes = 1; p->single_axis = true;
     } else if (is_listq((Expr*)v_axis)) {
         size_t k = v_axis->data.function.arg_count;
@@ -316,9 +319,9 @@ static bool lg_parse(const Expr* res, LGParams* p, size_t* positional_argc) {
             Expr* ae = v_axis->data.function.args[i];
             if (ae->type != EXPR_INTEGER) return false;
             int64_t a = ae->data.integer;
-            int ax = (a > 0) ? (int)(a - 1) : (int)(p->rank + a);
-            if (ax < 0 || ax >= p->rank) return false;
-            p->axes[i] = ax;
+            int64_t ax64 = (a > 0) ? a - 1 : (int64_t)p->rank + a;   /* checked before narrowing */
+            if (ax64 < 0 || ax64 >= p->rank) return false;
+            p->axes[i] = (int)ax64;
         }
         p->naxes = (int)k;
     } else {

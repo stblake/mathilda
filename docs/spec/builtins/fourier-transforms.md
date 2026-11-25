@@ -83,6 +83,7 @@ FourierDCT and FourierDST likewise.
 
 ## InverseFourier
 
+- For `Fourier` and `InverseFourier`: a repeated `FourierParameters` option takes the first occurrence; `b = 0` prints `Head::fpopt`; an empty, ragged or non-list argument prints `Head::fftl` (audit InverseFourier#2/#3/#4).
 Inverse discrete Fourier transform, the inverse of `Fourier`. Same options,
 regimes, and multidimensional/position-form support. Implemented in
 `src/fourier.{c,h}`. Attribute: `Protected`.
@@ -167,6 +168,7 @@ Out[2]= {0.447214, 0.447214, -0.447214, -0.447214, 0.447214}
 ## ListConvolve / ListCorrelate
 
 - The level argument `lev` (seventh) may be below the list's rank: the list's parts at level `lev` are its elements, combined by `g` and `h` (`ListConvolve[{x, y}, {{a, b}, {c, d}, {e, f}}, {-1, 1}, 0, Times, Plus, 1]` convolves the rows; audit ListConvolve#1). `lev` must equal the kernel's rank.
+- A cyclic alignment outside the kernel (`k = 3` for a kernel of length 2) prints `Head::klist` and stays unevaluated (audit ListConvolve#2).
 
 Discrete convolution and correlation, both implemented in
 `src/convolutions.{c,h}` over one shared engine (parameterised by mode).

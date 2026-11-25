@@ -152,16 +152,13 @@ Expr* builtin_repeated_timing(Expr* res) {
         } else if (t_expr->type == EXPR_REAL) {
             t_target = t_expr->data.real;
         } else {
-            Expr* t_eval = evaluate(t_expr);
-            if (t_eval->type == EXPR_INTEGER) {
-                t_target = (double)t_eval->data.integer;
-            } else if (t_eval->type == EXPR_REAL) {
-                t_target = t_eval->data.real;
-            } else {
-                expr_free(t_eval);
-                return NULL;
-            }
+            /* Any real numeric budget: an exact one (1/10, Pi/100) is read
+             * through N, as a time is a machine number. */
+            Expr* t_eval = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                                                           (Expr*[]){ expr_copy(t_expr) }, 1));
+            bool ok = numeric_machine_value(t_eval, &t_target);
             expr_free(t_eval);
+            if (!ok) return NULL;
         }
     }
     
@@ -483,6 +480,38 @@ Expr* builtin_absolute_time(Expr* res) {
         /* Year and month must be integer-valued; day/h/m/s may be fractional. */
         double total;
         if (!datelist_parts_to_abstime(parts, &total)) return NULL;
+
+        /* An all-integer List spec whose total passes 2^53 is still exact:
+         * the total is formed in GMP from the integers as written
+         * (AbsoluteTime[{2022, 1, 1, 0, 0, 10^20}] is 100000000003849984000,
+         * where the double sum rounded it). */
+        if (head_is(arg, SYM_List) && fabs(total) >= 0x1p53) {
+            bool exact = true;
+            for (size_t i = 0; i < n && exact; i++)
+                exact = expr_is_integer_like(arg->data.function.args[i]) &&
+                        (i >= 3 || arg->data.function.args[i]->type == EXPR_INTEGER);
+            if (exact && fabs(parts[2]) < 0x1p40) {
+                mpz_t acc, t;
+                mpz_init(acc);
+                mpz_init(t);
+                int64_t days = days_since_1900((int64_t)parts[0], (int64_t)parts[1], (int64_t)parts[2]);
+                {   /* days * 86400, via the int64-safe setter */
+                    Expr* de = expr_new_integer(days);
+                    expr_to_mpz(de, acc);
+                    expr_free(de);
+                }
+                mpz_mul_ui(acc, acc, 86400u);
+                static const unsigned long scale[3] = { 3600u, 60u, 1u };
+                for (size_t i = 3; i < n; i++) {
+                    expr_to_mpz(arg->data.function.args[i], t);
+                    mpz_addmul_ui(acc, t, scale[i - 3]);
+                }
+                Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(acc));
+                mpz_clear(acc);
+                mpz_clear(t);
+                return out;
+            }
+        }
 
         /* Return an exact integer when all inputs and the total are integral. */
         int all_int = (parts[2] == floor(parts[2]))
@@ -913,6 +942,16 @@ Expr* builtin_date_list(Expr* res) {
                 return NULL;   /* non-numeric element: leave unevaluated */
             }
         }
+        /* The fraction of the seconds field is carried apart from the
+         * total: absolute seconds (~4e9) keep only ~7 fractional digits, so
+         * DateList[{2022, 5, 6, 7, 8, 9.123456789}] read back 9.123456954956055.
+         * The whole seconds normalise through the total; the fraction (in
+         * [0, 1)) is added back to the normalised seconds, which stay < 60. */
+        double s_frac = 0.0;
+        if (isfinite(parts[5]) && parts[5] != floor(parts[5])) {
+            s_frac = parts[5] - floor(parts[5]);
+            parts[5] = floor(parts[5]);
+        }
         double total;
         if (!datelist_parts_to_abstime(parts, &total)) {
             /* Year or month not integer-valued: the lengths of years and months
@@ -925,6 +964,14 @@ Expr* builtin_date_list(Expr* res) {
         }
         int64_t y, mo, d, h, mi; double s;
         gregorian_from_abstime(total, &y, &mo, &d, &h, &mi, &s);
+        if (s_frac != 0.0 && s == floor(s)) s += s_frac;
+        else if (s_frac != 0.0) {
+            /* a fractional day / hour / minute already made s fractional:
+             * keep the single-total reading */
+            parts[5] += s_frac;
+            if (datelist_parts_to_abstime(parts, &total))
+                gregorian_from_abstime(total, &y, &mo, &d, &h, &mi, &s);
+        }
         return datelist_make_result(y, mo, d, h, mi, s);
     }
 

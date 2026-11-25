@@ -56,7 +56,7 @@ Expr* builtin_mediandeviation(Expr* res) {
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
         Expr* r = stats_apply_columnwise("MedianDeviation", data);
         if (!r) stats_msg_rectn("MedianDeviation", res);   /* ragged / mixed depth */
-        MDD_RET(r ? r : expr_copy(res));
+        MDD_RET(r);   /* NULL after the message */
     }
 
     LLReader e;
@@ -69,7 +69,7 @@ Expr* builtin_mediandeviation(Expr* res) {
             char* str = expr_to_string(res);
             mth_message("MedianDeviation", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
-            MDD_RET(expr_copy(res));
+            MDD_RET(NULL);   /* rest after the message */
         }
     }
 

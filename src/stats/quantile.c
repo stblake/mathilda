@@ -119,7 +119,7 @@ Expr* builtin_quantile(Expr* res) {
          * it re-entered Quantile with the same data until $RecursionLimit. */
         if (!stats_is_matrix(data)) {
             stats_msg_rectn("Quantile", res);
-            QUANTILE_RET(expr_copy(res));
+            QUANTILE_RET(NULL);   /* rest after the message */
         }
         Expr* t_expr = expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){expr_copy(data)}, 1);
         Expr* t_eval = evaluate(t_expr);
@@ -157,7 +157,7 @@ Expr* builtin_quantile(Expr* res) {
             char* str = expr_to_string(res);
             mth_message("Quantile", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
-            QUANTILE_RET(expr_copy(res));
+            QUANTILE_RET(NULL);   /* rest after the message */
         }
     }
 

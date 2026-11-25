@@ -26,6 +26,7 @@
  */
 /* MovingMedian over the n elements el of `data` (a List or a LinkedList). */
 static Expr* moving_median_vec(Expr* res, Expr* data, LLReader* rd, Expr* spec) {
+    (void)res;   /* the call is left as it stands on a decline */
     size_t n = rd->n;
     size_t r = 0;
     if (spec->type == EXPR_INTEGER) {
@@ -77,7 +78,7 @@ static Expr* moving_median_vec(Expr* res, Expr* data, LLReader* rd, Expr* spec) 
         mth_message("MovingMedian", "arg1",
                     "The first argument %s must be a vector or matrix of real values.", str);
         free(str);
-        return expr_copy(res);
+        return NULL;   /* rest after the message */
     }
 
     size_t out_n = n - r + 1;

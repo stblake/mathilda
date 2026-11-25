@@ -224,6 +224,10 @@ its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
 - **`Accuracy` at any magnitude** (v0.6596): `log10|x|` comes from the
   number's exponent, not a double, so `Accuracy[N[10^-400, 20]]` is `420.`
   (it was `20.`) and `Accuracy[N[10^500, 20]]` is `-480.` (it was `Overflow[]`).
+- **`SetAccuracy[x, a]`** accepts a non-positive accuracy while the precision it
+  implies, `a + Log10[Abs[x]]`, is positive (`SetAccuracy[12345.6, -2]`; audit
+  SetAccuracy#4). **`SetPrecision[x, p]`** takes an arbitrary-precision `p`
+  (`SetPrecision[1.5, N[20, 30]]` has precision 20; audit SetPrecision#2).
 - **`SetAccuracy[x, a]`** (v0.6596) sizes the result from `x`'s magnitude also
   for a symbolic numeric `x` (`Precision[SetAccuracy[Pi 10^50, 10]]` is ~61;
   it was 10), rounds the digit count up so the accuracy is never less than
@@ -649,6 +653,7 @@ Out[5]= {a, b, c, d, e}
 
 ## ListGradient
 
+- An `Axis` value is range-checked before it is narrowed to `int` (`Axis -> 4294967297` stays unevaluated) (audit ListGradient#2).
 The numerical gradient of a sampled array by finite differences — a
 from-first-principles port of `numpy.gradient`. Second-order central differences
 in the interior, one-sided at the edges, per axis, for an array of any rank.
@@ -1007,6 +1012,7 @@ Out[3]= {3, 2, 1}
 
 ## Power (^)
 
+- `Power[]` is `1`. A Gaussian-integer perfect square under an odd half-integer power is reduced: `Sqrt[3 + 4 I]` is `2 + I`, `Sqrt[2 I]` is `1 + I`, `(3 + 4 I)^(3/2)` is `2 + 11 I` (audit Power#3/#5, Sqrt#3).
 Exponentiation.
 - `base ^ exp`
 
@@ -1221,6 +1227,7 @@ division up to 10^4 pulled out: `Sqrt[2*10^40]` is `10^20 Sqrt[2]`.
   `2 + 2 I`. The two branches deliberately differ — an imaginary part changes
   which integer is nearest — and both match the reference.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
+- A zero divisor prints `QuotientRemainder::divz` (not `Mod::indet`) and the call stays unevaluated (audit QuotientRemainder#3).
 
 Over a list, both run on the machine buffer and keep the result packed. Their
 exactness rules differ, and the difference is the point: `Quotient` **narrows** —
@@ -1249,6 +1256,7 @@ Exact real constants are Floor of the exact quotient: `Quotient[Pi, 1]` is 3,
 - `IntegerDigits[n, b, len]`: Pads on the left with leading zeros to length
   `len`. If `n` has more than `len` base-`b` digits, the `len` least-
   significant digits are returned.
+- `IntegerDigits[n, MixedRadix[{b1, ..., bk}]]` (and with a length) gives the mixed-radix digits of `|n|`; what is left after `b1` is one more leading digit: `IntegerDigits[10^6, MixedRadix[{24, 60, 60}]]` is `{11, 13, 46, 40}` (audit IntegerDigits#1).
 
 **Features**:
 - `Protected`, `Listable`. Threading distributes element-wise over a list
@@ -1552,6 +1560,7 @@ Out[5]= e + d x + c x^2 + b x^3 + a x^4
   overbarred numerals, a typeset form rather than a string, and stays
   unevaluated. Written from the same numeral table `FromDigits[s, "Roman"]`
   reads, so the two round-trip.
+- A string base other than `"Roman"` prints `IntegerString::basf` (audit IntegerString#1).
 
 **Features**:
 - `Protected`, `Listable`. Threads element-wise over a list of integers in
@@ -1623,6 +1632,7 @@ Out[8]= IntegerString[10, 50]
 - `RealDigits[x, b, len]`: Exactly `len` digits.
 - `RealDigits[x, b, len, n]`: `len` digits, first one the coefficient of
   `b^n`; the returned exponent is `n + 1`.
+- `RealDigits::realx` names the value (`The value 1 + I is not a real number.`) and also fires for a complex numeric quantity such as `I Pi` (audit RealDigits#1); `RealExponent::realx` likewise (audit RealExponent#1).
 
 **Features**:
 - `Protected`, `Listable`. Threads over lists in any argument position.
@@ -1684,6 +1694,7 @@ A machine real's digits are those of its shortest round-trip decimal, zero padde
   `1/10 <= |m| < 1` (or `{0, 0}` when `x` is zero).
 - `MantissaExponent[x, b]`: Same in base `b`; the mantissa then lies in
   `1/b <= |m| < 1`.
+- The exact and machine paths take an integer base of any size (`MantissaExponent[2^64, 2^64]` is `{1/2^64, 2}`); the MPFR and exact-constant paths keep the `ULONG_MAX` cap (audit MantissaExponent#2).
 
 **Features**:
 - `Protected`, `Listable`. Threads over lists in any argument position.
@@ -1809,6 +1820,7 @@ Out[3]= 1
 
 ## FactorialPower
 
+- `FactorialPower[n, k]` with a BigInt `k` past a non-negative integer `n` is `0` (audit FactorialPower#2).
 Falling factorial. `FactorialPower[n, k]` = $n (n-1) (n-2) \cdots (n - k + 1)$.
 - `FactorialPower[n, k]`
 
@@ -2132,6 +2144,7 @@ Represents a complex number.
 
 ## Re, Im, ReIm, Abs, Sign, Conjugate, Arg
 
+- `Conjugate[(-1)^r]` for rational `r` is `(-1)^-r` (`Conjugate[(-1)^(1/3)]` is `-(-1)^(2/3)`) (audit Conjugate#3).
 Complex number functions.
 - `Re[z]`: Real part. Folds `Re[f[z]] -> f[z]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).
@@ -2323,6 +2336,7 @@ they are: only the variables are assumed real, not the values of `f`.
 
 ## Interval arithmetic
 
+- An inexact zero factor gives inexact endpoints: `0. Interval[{1, 2}]` is `Interval[{0., 0.}]` (audit Interval#2).
 `Interval[{min, max}]` represents the closed range of real values between `min`
 and `max`. The multi-argument form
 `Interval[{min1, max1}, {min2, max2}, ...]` is the union of the ranges. An

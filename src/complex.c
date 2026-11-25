@@ -703,6 +703,14 @@ static Expr* cx_conjugate_power(const Expr* arg) {
     if (cx_pullable_factor(z) && cx_positive_numeric(z))               /* (F) */
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy((Expr*)z), cx_call1(SYM_Conjugate, expr_copy((Expr*)w)) }, 2));
+    /* (G) a root of unity (-1)^r, r rational: (-1)^r = E^(I Pi r) lies on the
+     * unit circle, so its conjugate is (-1)^-r (Conjugate[(-1)^(1/3)] is
+     * -(-1)^(2/3) once (-1)^(-1/3) canonicalises). */
+    if (z->type == EXPR_INTEGER && z->data.integer == -1 && is_rational((Expr*)w, NULL, NULL))
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ expr_new_integer(-1),
+                       eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)w) }, 2)) }, 2));
     return NULL;
 }
 

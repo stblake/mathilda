@@ -106,9 +106,18 @@ static Expr* apply_position(Expr* blocks, Expr* pos, int* is_multi) {
             if (pi->type == EXPR_INTEGER) {
                 out[i] = pos_single(blocks, pi->data.integer);
             } else {
-                /* Span/All/etc. nested in the list: defer to Part semantics. */
+                /* Span/All/etc. nested in the list: defer to Part semantics.
+                 * A position Part cannot read ({1, x}) invalidates the whole
+                 * spec -- the call stays unevaluated, as for the bare x --
+                 * rather than being copied into the result. */
                 Expr* v = expr_part(blocks, &pi, 1);
-                out[i] = v ? v : expr_copy(pi);
+                if (!v) {
+                    for (size_t j = 0; j < i; j++) expr_free(out[j]);
+                    free(out);
+                    ll_rd_close(&pe);
+                    return NULL;
+                }
+                out[i] = v;
             }
         }
         ll_rd_close(&pe);

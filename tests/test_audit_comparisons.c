@@ -43,10 +43,29 @@ static void test_wave4_variadic_inequalities(void) {
     audit_chk("LessEqual#1", "Less[x, 1, 2, 3, y]", "x < 1 < 3 < y");
 }
 
+/* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
+ * off $MessageList inside a Block (each diagnostic once per evaluation). */
+static void test_wave5_g7_comparisons(void) {
+    audit_chk("Equal#2", "True == False", "False");
+    audit_chk("Equal#2", "True == True", "True");
+    audit_chk("Unequal#1", "True != False", "True");
+    audit_chk("Greater#4", "Quiet[Check[1 + I > 0, fired, Greater::nord]]", "fired");
+    audit_chk("Greater#4", "Quiet[1 + I > 0]", "1 + I > 0");
+    audit_chk("GreaterEqual#2", "Quiet[Check[I >= 0, fired, GreaterEqual::nord]]", "fired");
+    audit_chk("Less#3", "Quiet[Check[I < 1, fired, Less::nord]]", "fired");
+    audit_chk("Less#3", "Quiet[I < 1]", "I < 1");
+    audit_chk("LessEqual#4", "Quiet[Check[I <= 2, fired, LessEqual::nord]]", "fired");
+    audit_chk("LessEqual#3", "Interval[{1, 2}] <= 2", "True");
+    audit_chk("LessEqual#3", "Interval[{1, 2}] <= 3", "True");
+    audit_chk("LessEqual#3", "2 >= Interval[{1, 2}]", "True");
+    audit_chk("LessEqual#3", "Interval[{1, 2}] >= 2", "Interval[{1, 2}] >= 2");
+}
+
 int main(void) {
     audit_init();
     TEST(test_inequality_residual_wellformed);
     TEST(test_s11_special_values);
     TEST(test_wave4_variadic_inequalities);
+    TEST(test_wave5_g7_comparisons);
     return audit_finish("audit_comparisons");
 }

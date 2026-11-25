@@ -35,6 +35,7 @@
 #include "common.h"
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 
 /* Count the matches in one subject string. Returns a fresh Integer, or NULL on
@@ -89,6 +90,28 @@ Expr* builtin_stringcount(Expr* res) {
 
     Expr* subject = a[0];
     Expr* patt = a[1];
+
+    /* An empty pattern list matches nothing: 0 occurrences.  (The rule
+     * builder reports {} as a failure, which left the call unevaluated.) */
+    if (head_is(patt, SYM_List) && patt->data.function.arg_count == 0) {
+        if (subject->type == EXPR_STRING) return expr_new_integer(0);
+        LLReader zv;
+        if (!ll_rd_open(subject, &zv)) return NULL;
+        size_t m = zv.n;
+        bool all_str = true;
+        for (size_t i = 0; i < m && all_str; i++) all_str = ll_rd_at(&zv, i)->type == EXPR_STRING;
+        Expr* zres = NULL;
+        if (all_str) {
+            Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
+            if (out) {
+                for (size_t i = 0; i < m; i++) out[i] = expr_new_integer(0);
+                zres = ll_seq_like(subject, out, m);
+                free(out);
+            }
+        }
+        ll_rd_close(&zv);
+        return zres;
+    }
 
     /* All-mode enumerates exact-substring matches, so build anchored rules. */
     int anchored = (mode == REGEX_OV_ALL) ? 1 : 0;

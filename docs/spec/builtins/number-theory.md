@@ -6,6 +6,7 @@ Integer and number-theoretic functions: greatest common divisor and least common
 
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.
+- `LCM[-x]` (and `GCD[-x]`) stays unevaluated rather than returning the signed `-x` (audit LCM#2).
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
@@ -98,6 +99,7 @@ Out[5]= {True, False, False, False, True}
 ## ExtendedGCD
 
 - `ExtendedGCD[n1, n2, ...]`: returns `{g, {r1, r2, ...}}` where `g == GCD[n1, ...]` and `g == r1 n1 + r2 n2 + ...` (a multi-argument Bézout / extended GCD). Attributes: `Listable`, `Protected` (deliberately *not* `Flat`/`Orderless`/`OneIdentity`, since the cofactor list is positional).
+- An inexact complex argument prints `ExtendedGCD::exact` (audit ExtendedGCD#1).
 
 **Features**:
 - Integers: both machine integers and GMP bigints are accepted, and cofactors demote back to machine integers when they fit. Two machine integers skip GMP entirely, and the int64 path reproduces `mpz_gcdext`'s unique cofactors exactly (checked against the GMP fold on 500 random 10¹⁵-sized pairs).
@@ -622,7 +624,7 @@ Out[3]= 252097800623
 
 **Features**:
 - `Listable`, `Protected`.  Default `Method -> Automatic`.
-- Several recognised prime-counting algorithms are available via `Method`: `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`, `"Lehmer"`, `"LMO"` (Lagarias–Miller–Odlyzko, segmented special leaves), `"DelegliseRivat"` and `"LucyHedgehog"`. They are independent implementations, and the tests cross-check them.
+- Several recognised prime-counting algorithms are available via `Method`: `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`, `"Lehmer"`, `"LMO"` (Lagarias–Miller–Odlyzko, segmented special leaves), `"DelegliseRivat"` and `"LucyHedgehog"`. They are independent implementations, and the tests cross-check them. Each named method has a range (`"Legendre"` to 10^9, `"Sieve"` to 10^10, `"Lehmer"` to 10^12, `"Meissel"` to 10^13); past it the count is handed to `Automatic`, so `PrimePi[2*10^9, Method -> "Legendre"]` is `98222287` rather than unevaluated.
 - **`"DelegliseRivat"` is the `Automatic` method** (v0.472), above the $10^6$ table. It is tuned:
   - $y = \alpha x^{1/3}$ with $\alpha = 0.0008 \ln^3 x$, which shrinks the sieve range $z = x/y$ by $\alpha$.
   - Trivial leaves ($v < p_b$) are counted, not visited.
@@ -676,6 +678,7 @@ Out[3]= {4, 25}
      else onto the largest prime power (written with exponent 1): `FactorInteger[-36, 2]` is
      `{{-9, 1}, {2, 2}}`. For a rational, the sign prefers the denominator part.
   6. Entries are sorted by base.
+- A positive BigInt `k` is the complete factorisation, as `Infinity` (audit FactorInteger#1).
 
   `FactorInteger[n, 1]` is `{{n, 1}}`; `k < 1` leaves the call unevaluated. The reference splits the
   cofactor in the order its own search happens to find factors, so when C has three or more prime
@@ -1428,6 +1431,7 @@ Out[4]= {{5, 1}, {4, 2}, {4, 1, 1}}
 
 ## PartitionsP
 
+- `PartitionsP[-10^20]` is `0`, as for every negative integer (audit PartitionsP#1).
 Gives the number `p(n)` of unrestricted partitions of the integer `n` — the
 number of ways to write `n` as a sum of positive integers, where order is
 ignored. `PartitionsP[n] == Length[IntegerPartitions[n]]`.

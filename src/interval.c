@@ -459,7 +459,21 @@ Expr* interval_negate(const Expr* A) {
 
 /* Extended-real endpoint product with outward rounding. */
 static Expr* iv_mul_ext(Expr* x, Expr* y, IvRound dir) {
-    if (iv_is_exact_zero(x) || iv_is_exact_zero(y)) return expr_new_integer(0);
+    /* A zero factor gives 0 -- an exact 0, unless the zero itself is
+     * inexact (0. Interval[{1, 2}] is Interval[{0., 0.}], as 0. 2 is 0.). */
+    if (iv_is_exact_zero(x) || iv_is_exact_zero(y)) {
+        bool inexact = (iv_is_exact_zero(x) && (x->type == EXPR_REAL
+#ifdef USE_MPFR
+                                                || x->type == EXPR_MPFR
+#endif
+                                                )) ||
+                       (iv_is_exact_zero(y) && (y->type == EXPR_REAL
+#ifdef USE_MPFR
+                                                || y->type == EXPR_MPFR
+#endif
+                                                ));
+        return inexact ? expr_new_real(0.0) : expr_new_integer(0);
+    }
     if (iv_is_inf(x) || iv_is_inf(y)) {
         int sx = iv_sign(x), sy = iv_sign(y);
         if (sx == -2 || sy == -2) return NULL;

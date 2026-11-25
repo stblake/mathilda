@@ -48,6 +48,15 @@ Expr* single_arg_abs_or_copy(Expr* arg) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
     }
+    /* A symbolic argument with a negative coefficient (-x, -2 y): its value
+     * carries a sign that GCD and LCM never give, so the call stays
+     * unevaluated (NULL) instead of answering -x. */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_Times &&
+        arg->data.function.arg_count >= 1 &&
+        expr_is_numeric_like(arg->data.function.args[0]) &&
+        expr_numeric_sign(arg->data.function.args[0]) < 0)
+        return NULL;
     return expr_copy(arg);
 }
 

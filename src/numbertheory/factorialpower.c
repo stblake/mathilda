@@ -152,6 +152,13 @@ Expr* builtin_factorialpower(Expr* res) {
     /* k must be a concrete non-negative integer for the exact product path.
      * A non-integer k with an inexact operand (under N) takes the generalised
      * Gamma quotient; otherwise the expression stays symbolic. */
+    /* A BigInt k past a non-negative integer n: the falling product
+     * n (n - 1) ... (n - k + 1) passes through 0 (FactorialPower[5, 2^70]). */
+    if (k_arg->type == EXPR_BIGINT && mpz_sgn(k_arg->data.bigint) > 0 &&
+        ((n_arg->type == EXPR_INTEGER && n_arg->data.integer >= 0) ||
+         (n_arg->type == EXPR_BIGINT && mpz_cmp(n_arg->data.bigint, k_arg->data.bigint) < 0 &&
+          mpz_sgn(n_arg->data.bigint) >= 0)))
+        return expr_new_integer(0);
     if (k_arg->type != EXPR_INTEGER) {
         if (fp_is_inexact(n_arg) || fp_is_inexact(k_arg)) {
             Expr* val = fp_gamma_quotient(n_arg, k_arg);

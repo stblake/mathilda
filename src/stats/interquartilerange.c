@@ -24,15 +24,19 @@
 #include <stdlib.h>
 
 Expr* builtin_interquartilerange(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* InterquartileRange[data] and InterquartileRange[data, {{a, b}, {c, d}}]:
+     * q3 - q1 of Quartiles[data(, params)]. */
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 ||
+        res->data.function.arg_count > 2) return NULL;
     Expr* data = res->data.function.args[0];
+    Expr* params = res->data.function.arg_count == 2 ? res->data.function.args[1] : NULL;
 
     Expr* unpacked = ndred_call_has_ndarray(res) ? pack_unpack(data) : NULL;
     if (unpacked) data = unpacked;
 #define IQR_RET(x) do { Expr* _r = (x); if (unpacked) expr_free(unpacked); return _r; } while (0)
 
     /* LinkedList: columnwise (stats_ll.c), or the vector below. */
-    { Expr* r; if (stats_ll_arm(res, STATS_IQR, &r)) IQR_RET(r ? r : expr_copy(res)); }
+    { Expr* r; if (!params && stats_ll_arm(res, STATS_IQR, &r)) IQR_RET(r ? r : expr_copy(res)); }
 
     if (!ll_is_seq(data)) IQR_RET(expr_copy(res));
     if (ll_seq_length(data) == 0) IQR_RET(expr_copy(res));
@@ -41,9 +45,10 @@ Expr* builtin_interquartilerange(Expr* res) {
         data->data.function.args[0]->type == EXPR_FUNCTION &&
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
         data->data.function.args[0]->data.function.head->data.symbol.name == SYM_List) {
+        if (params) IQR_RET(NULL);   /* columnwise with parameters: not handled */
         Expr* r = stats_apply_columnwise("InterquartileRange", data);
         if (!r) stats_msg_rectn("InterquartileRange", res);   /* ragged / mixed depth */
-        IQR_RET(r ? r : expr_copy(res));
+        IQR_RET(r);   /* NULL after the message */
     }
 
     LLReader e;
@@ -55,13 +60,15 @@ Expr* builtin_interquartilerange(Expr* res) {
             char* str = expr_to_string(res);
             mth_message("InterquartileRange", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
-            IQR_RET(expr_copy(res));
+            IQR_RET(NULL);   /* rest after the message */
         }
     }
 
     ll_rd_close(&e);
 
-    Expr* q_call = expr_new_function(expr_new_symbol(SYM_Quartiles), (Expr*[]){expr_copy(data)}, 1);
+    Expr* q_call = params
+        ? expr_new_function(expr_new_symbol(SYM_Quartiles), (Expr*[]){expr_copy(data), expr_copy(params)}, 2)
+        : expr_new_function(expr_new_symbol(SYM_Quartiles), (Expr*[]){expr_copy(data)}, 1);
     Expr* q_eval = evaluate(q_call);
     expr_free(q_call);
 
@@ -74,7 +81,7 @@ Expr* builtin_interquartilerange(Expr* res) {
               stats_is_real_numeric(q_eval->data.function.args[2]);
     if (!ok) {
         expr_free(q_eval);
-        IQR_RET(expr_copy(res));
+        IQR_RET(NULL);   /* Quartiles declined (and reported) */
     }
 
     Expr* neg_q1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(q_eval->data.function.args[0])}, 2));

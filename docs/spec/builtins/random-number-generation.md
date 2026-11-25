@@ -1,6 +1,7 @@
 # Random Number Generation
 
 ## RandomInteger
+- A bad range prints `RandomInteger::unifr`, a bad dimension spec `RandomInteger::array`; `RandomInteger` takes no options, so a third argument is `RandomInteger::argb` (audit RandomInteger#1).
 Gives pseudorandom integers.
 - `RandomInteger[{imin, imax}]`: gives a pseudorandom integer in the range {imin, ..., imax}.
 - `RandomInteger[imax]`: gives a pseudorandom integer in the range {0, ..., imax}.
@@ -64,7 +65,7 @@ Gives pseudorandom real numbers.
   the same values either way. Does not apply to `WorkingPrecision` above
   `MachinePrecision`, which yields MPFR atoms.
 - Accepts integer, real, rational, and bigint range arguments, as well as symbolic-but-numeric bounds that `N[]` can reduce to a machine (or MPFR) number, e.g. `RandomReal[{-Pi, Pi}]` or `RandomReal[{0, Sqrt[2]}]`.
-- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom.
+- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Any digit count other than MachinePrecision -- below it included (`WorkingPrecision -> 10` gives `Precision` 10., as `N[x, 10]` does) -- routes generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom. A rejected value (`WorkingPrecision -> -1`) is `RandomReal::precw`; a bad range is `::unifr` and a bad dimension spec `::array` (also for `RandomInteger` and `RandomComplex`).
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomReal[]
@@ -93,6 +94,7 @@ Out[8]= 40.037
 ```
 
 ## SeedRandom
+- `SeedRandom["string"]` seeds from the string. A negative seed and a string seed are mapped above 2^256 under distinct tags, so `SeedRandom[-5]` is no longer `SeedRandom[2^64 - 5]`; the machine stream folds every word of a BigInt seed (audit SeedRandom#2/#3/#4). Seeds `n >= 0` keep their streams.
 Resets the pseudorandom generator.
 - `SeedRandom[n]`: seeds the generator with integer n.
 - `SeedRandom[]`: reseeds from system entropy.
@@ -127,7 +129,7 @@ Gives pseudorandom complex numbers.
 - RandomComplex gives a different sequence of pseudorandom complex numbers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness per component for full double-precision mantissa coverage.
 - Accepts integer, real, rational, and complex range arguments, as well as symbolic-but-numeric corners that `N[]` can reduce to a number, e.g. `RandomComplex[{-Pi - I, Pi + I}]` (a `Plus` that only collapses to a `Complex` once `Pi` is numeric). When the range has no imaginary component, the result simplifies to a real.
-- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so the real and imaginary parts are MPFR atoms at the requested precision.
+- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Any digit count other than MachinePrecision, below it included, routes generation through MPFR, so the real and imaginary parts are MPFR atoms at the requested precision.
 - Machine-precision `RandomComplex[range, n]` / `RandomComplex[range, {n1, ...}]` with a genuinely complex range fill a packed `complex64` buffer directly (v0.402), in the same re-then-im draw order as scalar calls, so a seeded stream is unchanged. A zero-imaginary range returns an unpacked List of Reals; MPFR results are boxed.
 
 ```mathematica
@@ -154,6 +156,7 @@ Out[7]= {True, {-0.999983, 2.99996}, {-1.99997, 0.999965}}
 ```
 
 ## RandomChoice
+- A positive exact weight below the double range (`10^-400`) is read through its logarithm instead of as `0`; a choice list that is not a non-empty list prints `RandomChoice::lrwl` (audit RandomChoice#2/#3).
 Gives pseudorandom choices from a list of elements.
 - `RandomChoice[{e1, e2, ...}]`: gives a pseudorandom choice of one of the ei.
 - `RandomChoice[list, n]`: gives a list of n pseudorandom choices.
@@ -215,6 +218,7 @@ Weights that overflow a double (an exact `10^400`) or whose sum does are rescale
 the largest (read through log2), so only their ratios matter. RandomSample's weights alike.
 
 ## RandomSample
+- `UpTo[BigInt]` is accepted; a sample longer than the set prints `RandomSample::smplen` (audit RandomSample#2/#3).
 Gives a pseudorandom sample of elements without replacement.
 - `RandomSample[{e1, e2, ...}, n]`: gives a pseudorandom sample of n of the ei.
 - `RandomSample[{w1, w2, ...} -> {e1, e2, ...}, n]`: gives a pseudorandom sample of n of the ei chosen using weights wi.
@@ -271,6 +275,7 @@ Out[10]= RandomSample[x]
 `RandomSample[{}]`, `RandomSample[{}, 0]` and `RandomSample[{}, UpTo[k]]` are `{}`.
 
 ## RandomPrime
+- A dimension list of any rank is accepted (audit RandomPrime#1).
 Gives pseudorandom prime numbers.
 - `RandomPrime[{imin, imax}]`: gives a pseudorandom prime number in the range imin to imax.
 - `RandomPrime[imax]`: gives a pseudorandom prime number in the range 2 to imax. It is equivalent to `RandomPrime[{2, imax}]`.

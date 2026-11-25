@@ -199,6 +199,8 @@ Expr* builtin_extendedgcd(Expr* res) {
     }
 
     if (any_inexact) return egcd_emit_exact(first_inexact, res);
+    /* An inexact complex argument (1.5 + I) is no exact number either. */
+    { Expr* inexact = nt_first_inexact_arg(res); if (inexact) return egcd_emit_exact(inexact, res); }
 
     /* Z[i]: any non-real Gaussian argument. Non-integer Gaussian rationals
      * draw ::egcd, as their real counterparts do. */

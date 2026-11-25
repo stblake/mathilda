@@ -41,7 +41,7 @@ Expr* builtin_quartiles(Expr* res) {
          * it re-entered Quartiles with the same data until $RecursionLimit. */
         if (!stats_is_matrix(data)) {
             stats_msg_rectn("Quartiles", res);
-            return expr_copy(res);
+            return NULL;   /* rest after the message */
         }
         Expr* t_expr = expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){expr_copy(data)}, 1);
         Expr* t_eval = evaluate(t_expr);
@@ -90,7 +90,7 @@ Expr* builtin_quartiles(Expr* res) {
         char* str = expr_to_string(res);
         mth_message("Quartiles", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
         free(str);
-        return expr_copy(res);
+        return NULL;   /* rest after the message */
     }
 
     Expr *a = NULL, *b = NULL, *c = NULL, *d = NULL;
@@ -113,6 +113,17 @@ Expr* builtin_quartiles(Expr* res) {
         if (b) expr_free(b);
         if (c) expr_free(c);
         if (d) expr_free(d);
+        if (param_expr) {
+            /* A second argument that is not {{a, b}, {c, d}}: Quartiles::parm,
+             * unevaluated (it was silently replaced by the default). */
+            ll_rd_close(&e);
+            char* ps = expr_to_string(param_expr);
+            mth_message("Quartiles", "parm",
+                        "The parameter specification %s should be a 2 x 2 matrix {{a, b}, {c, d}} "
+                        "of real numbers.", ps ? ps : "?");
+            free(ps);
+            return NULL;
+        }
         a = make_rational(1, 2);
         b = expr_new_integer(0);
         c = expr_new_integer(0);

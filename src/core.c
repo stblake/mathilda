@@ -5890,6 +5890,22 @@ Expr* builtin_quotientremainder(Expr* res) {
         return NULL;
     }
 
+    /* A zero divisor is the call's own error, QuotientRemainder::divz -- not
+     * the Mod::indet of the Mod it delegates to. */
+    {
+        Expr* dv = res->data.function.args[1];
+        if ((dv->type == EXPR_INTEGER && dv->data.integer == 0) ||
+            (dv->type == EXPR_REAL && dv->data.real == 0.0)) {
+            char* cs = expr_to_string(res);
+            char* ds = expr_to_string(dv);
+            mth_message("QuotientRemainder", "divz", "The argument %s in %s should be nonzero.",
+                        ds ? ds : "0", cs ? cs : "?");
+            free(cs);
+            free(ds);
+            return NULL;
+        }
+    }
+
     Expr* quot_expr = expr_new_function(expr_new_symbol(SYM_Quotient), res->data.function.args, 2);
     Expr* mod_expr = expr_new_function(expr_new_symbol(SYM_Mod), res->data.function.args, 2);
 
@@ -7079,12 +7095,19 @@ Expr* builtin_time_constrained(Expr* res) {
     Expr* time_eval = eval_and_free(expr_copy(time_arg));
     double seconds = 0.0;
     int kind = tc_parse_time(time_eval, &seconds);
-    expr_free(time_eval);
 
     if (kind < 0) {
-        /* Unparseable time budget: leave the whole call unevaluated. */
+        /* Unparseable time budget (x, -Infinity, 1 + I): TimeConstrained::timc,
+         * and the whole call is left unevaluated. */
+        char* ts = expr_to_string(time_eval);
+        mth_message("TimeConstrained", "timc",
+                    "Number of seconds %s is not a positive machine-sized number or Infinity.",
+                    ts ? ts : "?");
+        free(ts);
+        expr_free(time_eval);
         return NULL;
     }
+    expr_free(time_eval);
 
     /* Infinity -> evaluate the body with no constraint.  The caller in
      * evaluate_step frees `res` once we return non-NULL; the builtin

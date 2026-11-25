@@ -185,7 +185,13 @@ Expr* builtin_central_moment(Expr* res) {
     size_t n = e.n;
 
     /* Scalar order over an array (depth >= 2): columnwise over the first axis. */
-    if (cm_is_list(ll_rd_at(&e, 0))) { ll_rd_close(&e); return cm_columnwise(data, order); }
+    /* A ragged array ({{1, 2}, {3}}) is CentralMoment::rectn once, before any
+     * Mean is taken of it (which flooded Mean::rectn and returned a nest). */
+    if (cm_is_list(ll_rd_at(&e, 0))) {
+        ll_rd_close(&e);
+        if (data->type != EXPR_LINKEDLIST && stats_reject_ragged("CentralMoment", res, data)) return NULL;
+        return cm_columnwise(data, order);
+    }
 
     /* Scalar order over a vector (depth 1). Fast real path: every element is a
      * real number, at least one is inexact (approximate input -> approximate

@@ -228,19 +228,11 @@ Expr* builtin_stringreplacepart(Expr* res) {
     /* Operator form: StringReplacePart[new, part][old] is realised as the pure
      * function Function[StringReplacePart[#1, new, part]], mirroring how the
      * other operator-form builtins (Cases, ...) are implemented. */
-    if (argc == 2) {
-        Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
-        Expr* inner_args[3] = {
-            slot,
-            expr_copy(res->data.function.args[0]),
-            expr_copy(res->data.function.args[1])
-        };
-        Expr* inner = expr_new_function(expr_new_symbol(SYM_StringReplacePart),
-                                        inner_args, 3);
-        Expr* func_args[1] = { inner };
-        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
-    }
+    /* StringReplacePart[new, part] is the operator form: it stays inert
+     * (Head StringReplacePart, not a pure Function) and is applied by the
+     * generic operator-form table, src/opform.c:
+     * StringReplacePart[new, part][old] == StringReplacePart[old, new, part]. */
+    if (argc == 2) return NULL;
     if (argc != 3) return strings_argt_error("StringReplacePart", argc);
 
     Expr* arg0 = res->data.function.args[0];

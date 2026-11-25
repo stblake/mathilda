@@ -28,6 +28,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "utf8.h"
+#include "strings_internal.h"   /* strings_msg_strse */
 
 #include <stdlib.h>
 #include <string.h>
@@ -186,6 +187,10 @@ Expr* builtin_stringsplit(Expr* res) {
     if (pargc < 1 || pargc > 3) return builtin_arg_error("StringSplit", argc, 1, 3);
 
     Expr* subject = a[0];
+    /* A string or a list of strings, else StringSplit::strse (unevaluated). */
+    if (subject->type != EXPR_STRING &&
+        !(strings_is_seq(subject) && strings_seq_all_strings(subject)))
+        return strings_msg_strse("StringSplit", res, 1);
 
     /* Third positional argument: an integer count n, or All. */
     long n_limit = 0;

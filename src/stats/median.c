@@ -72,7 +72,7 @@ Expr* builtin_median(Expr* res) {
         ll_rd_close(&e);
         Expr* r = stats_apply_columnwise("Median", data);
         if (!r) stats_msg_rectn("Median", res);    /* ragged / mixed depth */
-        return r ? r : expr_copy(res);
+        return r;   /* NULL after the message: rest, do not re-ask */
     }
 
     // Now it's a 1D vector. Check if all elements are real numbers.
@@ -89,7 +89,7 @@ Expr* builtin_median(Expr* res) {
         char* str = expr_to_string(res);
         mth_message("Median", "rectn", "Rectangular array of real numbers is expected at position 1 in %s.", str);
         free(str);
-        return expr_copy(res);
+        return NULL;   /* rest after the message (a copy re-ran the call) */
     }
 
     /* Numeric order (stats_sort_order: by value, not Sort's canonical order),

@@ -32,9 +32,11 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "common.h"
+#include "strings_internal.h"   /* strings_arg_message */
 #include "utf8.h"
 
 #include <string.h>
+#include <gmp.h>
 #include <stdlib.h>
 
 /* Character index of byte offset `b` (a character boundary) in view `v`. */
@@ -134,8 +136,16 @@ Expr* builtin_stringposition(Expr* res) {
     long n_limit = -1;                      /* no count given: every match */
     if (pargc == 3) {
         Expr* third = a[2];
-        if (third->type == EXPR_INTEGER)
+        /* A non-negative integer, or Infinity / a positive BigInt (no
+         * limit); a negative count is StringPosition::innf. */
+        if (third->type == EXPR_INTEGER && third->data.integer >= 0)
             n_limit = (long)third->data.integer;
+        else if ((third->type == EXPR_SYMBOL && third->data.symbol.name == SYM_Infinity) ||
+                 (third->type == EXPR_BIGINT && mpz_sgn(third->data.bigint) > 0))
+            n_limit = -1;
+        else if (expr_is_integer_like(third))
+            return strings_arg_message("StringPosition", "innf",
+                                       "Non-negative integer or Infinity", 3, res);
         else return NULL;   /* unsupported third arg: leave unevaluated */
     }
 

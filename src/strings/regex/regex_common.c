@@ -7,6 +7,7 @@
 #include "sym_names.h"
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -158,6 +159,28 @@ static int is_rule2(Expr* e, Expr** lhs, Expr** rhs) {
     return 0;
 }
 
+/* The compile error of the first RegularExpression["re"] inside `e` whose own
+ * text does not compile, into err.  A failure of the TRANSLATED pattern is
+ * reported against the source the user wrote: the translation wraps a raw
+ * regex (in a group, after the anchor of StringStartsQ / StringMatchQ), and
+ * PCRE's offset into that wrapper -- "at offset 9" for the 1-character
+ * pattern "(" -- names a position the user never wrote. */
+static bool user_regex_error(const Expr* e, unsigned flags, char* err, size_t cap, int depth) {
+    if (!e || e->type != EXPR_FUNCTION || depth > 64) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_RegularExpression) {
+        if (e->data.function.arg_count != 1 || e->data.function.args[0]->type != EXPR_STRING)
+            return false;
+        RegexProgram* p = regex_compile_ex(e->data.function.args[0]->data.string,
+                                           flags, NULL, NULL, err, cap);
+        if (p) { regex_free(p); return false; }
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (user_regex_error(e->data.function.args[i], flags, err, cap, depth + 1)) return true;
+    return false;
+}
+
 /* Compile one element into `out`. Returns 0 on success, -1 on failure. */
 static int build_one(Expr* e, unsigned anchored, unsigned regex_flags,
                      RegexRule* out, const char* head) {
@@ -191,6 +214,9 @@ static int build_one(Expr* e, unsigned anchored, unsigned regex_flags,
                                           out, err, sizeof err);
     free(src);
     if (!prog) {
+        char uerr[256];
+        if (user_regex_error(patt, regex_flags & REGEX_CASELESS, uerr, sizeof uerr, 0))
+            memcpy(err, uerr, sizeof err);
         mth_message(head, "regex", "%s", err);
         sp_info_free(&out->info);
         return -1;

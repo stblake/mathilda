@@ -160,7 +160,10 @@ Expr* builtin_primepi(Expr* res) {
 
     if (x_val < 2) return expr_new_integer(0);
     int64_t count = prime_count(x_val, method);
-    if (count < 0) return NULL;   /* beyond the method's supported range */
+    /* A named method past its range (Legendre above 10^9, Sieve above 10^10,
+     * ...) hands over to Automatic: the count does not depend on the method. */
+    if (count < 0 && method != PC_AUTOMATIC) count = prime_count(x_val, PC_AUTOMATIC);
+    if (count < 0) return NULL;   /* beyond the supported range */
     return expr_new_integer(count);
 }
 

@@ -6218,8 +6218,6 @@ void info_init(void) {
         "StringReplacePart[\"string\", {\"snew1\", \"snew2\", ...}, {{m1, n1}, ...}]\n"
         "\tReplaces the characters at each range by the corresponding new\n"
         "\tstring; the two lists must be the same length.\n"
-        "StringReplacePart[{s1, s2, ...}, snew, part]\n"
-        "\tGives the list of results for each of the si.\n"
         "StringReplacePart[new, part]\n"
         "\tis the operator form: StringReplacePart[new, part][old] ==\n"
         "\tStringReplacePart[old, new, part].\n\n"

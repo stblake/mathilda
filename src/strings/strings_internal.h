@@ -22,6 +22,7 @@
 #include "message.h"
 #include "utf8.h"
 #include "linkedlist.h"
+#include "eval.h"   /* eval_mark_fixed_point: strings_uneval */
 
 /* True if e is the symbol whose interned name is `name`. */
 static inline bool strings_is_sym(const Expr* e, const char* name) {
@@ -353,10 +354,16 @@ static inline Expr* strings_char_at(const U8View* v, int64_t pos) {
     return expr_new_string_n(v->s + b0, STR_OFF(v, pos) - b0);
 }
 
-/* head[a, b] / head[a, b, c] from copies, for an unevaluated element. */
+/* head[a, b] / head[a, b, c] from copies, for an unevaluated element: the
+ * call the head just declined (after its message) on evaluated arguments.
+ * It is stamped as a fixed point, so the evaluator's walk of the threaded
+ * result does not re-ask the head and print the message a second time
+ * (StringPart[{"abc", "de"}, 3] printed StringPart::partw twice). */
 static inline Expr* strings_uneval(const char* head, Expr* a, Expr* b, Expr* c) {
     Expr* args[3] = { expr_copy(a), expr_copy(b), c ? expr_copy(c) : NULL };
-    return expr_new_function(expr_new_symbol(head), args, c ? 3 : 2);
+    Expr* call = expr_new_function(expr_new_symbol(head), args, c ? 3 : 2);
+    eval_mark_fixed_point(call);
+    return call;
 }
 
 /* A String holding the character s[0, n) (one UTF-8 sequence). Single ASCII

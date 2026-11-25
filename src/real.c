@@ -81,11 +81,25 @@ static Expr* rd_emit_argb(size_t argc) {
     return NULL;
 }
 
-static Expr* rd_emit_realx(Expr* res) {
-    char* s = expr_to_string(res);
-    mth_message("RealDigits", "realx", "The number %s is not a real number.", s ? s : "?");
+/* RealDigits::realx names the VALUE (1 + I), not the whole call. */
+static Expr* rd_emit_realx(Expr* x) {
+    char* s = expr_to_string(x);
+    mth_message("RealDigits", "realx", "The value %s is not a real number.", s ? s : "?");
     free(s);
     return NULL;
+}
+
+/* A numeric quantity whose value is not real: I Pi, I Sqrt[2], E^(I/3).
+ * Decided on its machine value (a nonzero imaginary part). */
+static bool real_numeric_nonreal(Expr* x) {
+    if (!expr_is_numeric_quantity(x)) return false;
+    Expr* v = numericalize(x, numeric_machine_spec());
+    Expr *re, *im;
+    bool nonreal = v && is_complex(v, &re, &im) && im &&
+                   !(im->type == EXPR_INTEGER && im->data.integer == 0) &&
+                   !(im->type == EXPR_REAL && im->data.real == 0.0);
+    if (v) expr_free(v);
+    return nonreal;
 }
 
 static Expr* rd_emit_ibase(Expr* b_expr, Expr* res) {
@@ -781,9 +795,10 @@ Expr* builtin_realdigits(Expr* res) {
             && x_expr->data.function.head->data.symbol.name == SYM_Complex
             && is_complex(x_expr, &re_p, &im_p)) {
             /* True complex with imaginary != 0 -> not a real number. */
-            return rd_emit_realx(res);
+            return rd_emit_realx(x_expr);
         }
-        if (expr_is_numeric_like(x_expr)) return rd_emit_realx(res);
+        if (expr_is_numeric_like(x_expr)) return rd_emit_realx(x_expr);
+        if (real_numeric_nonreal(x_expr)) return rd_emit_realx(x_expr);   /* I Pi */
         /* Symbolic: only numericalize if we know how many digits to
          * request.  Without that we cannot pick a precision. */
         /* The numericalize precision depends on the (yet-unparsed) base
@@ -1354,15 +1369,14 @@ Expr* builtin_mantissa_exponent(Expr* res) {
             mpz_clear(base);
             return NULL;
         }
-        if (!mpz_fits_ulong_p(base)) {
-            mth_message("MantissaExponent", "ibase", "Base too large; use a base <= ULONG_MAX.");
-            mpz_clear(base);
-            return NULL;
-        }
     } else {
         mpz_init_set_ui(base, 10);
     }
-    unsigned long b_ulong = mpz_get_ui(base);
+    /* The exact and machine paths below take any integer base, through GMP
+     * (MantissaExponent[2^64, 2^64] is {1/2^64, 2}); the constant and MPFR
+     * paths read it as an unsigned long and keep that cap. */
+    bool b_fits = mpz_fits_ulong_p(base) != 0;
+    unsigned long b_ulong = b_fits ? mpz_get_ui(base) : 0;
 
     /* --- Classify the input ------------------------------------------- */
     RdKind kind = rd_classify(x_expr);
@@ -1373,6 +1387,11 @@ Expr* builtin_mantissa_exponent(Expr* res) {
          * {Pi/10, 1}).  Anything else -- symbolic, or an unhandled numeric
          * form -- stays unevaluated with no diagnostic. */
         int sg;
+        if (!b_fits && comparisons_real_constant_sign(x_expr, &sg)) {
+            mth_message("MantissaExponent", "ibase", "Base too large; use a base <= ULONG_MAX.");
+            mpz_clear(base);
+            return NULL;
+        }
         if (comparisons_real_constant_sign(x_expr, &sg)) {
             mpz_clear(base);
             if (sg == 0) return me_make_pair(expr_new_integer(0), 0);
@@ -1423,12 +1442,12 @@ Expr* builtin_mantissa_exponent(Expr* res) {
         mpz_t scale;
         mpz_init(scale);
         if (e_val >= 0) {
-            mpz_ui_pow_ui(scale, b_ulong, (unsigned long)e_val);
+            mpz_pow_ui(scale, base, (unsigned long)e_val);
             mpz_mul(mpq_denref(q), mpq_denref(q), scale);
         } else {
             /* For exact rationals with |x| < 1 the natural exponent is
              * non-positive, so we multiply the numerator by b^(-e). */
-            mpz_ui_pow_ui(scale, b_ulong, (unsigned long)(-e_val));
+            mpz_pow_ui(scale, base, (unsigned long)(-e_val));
             mpz_mul(mpq_numref(q), mpq_numref(q), scale);
         }
         mpq_canonicalize(q);
@@ -1463,7 +1482,7 @@ Expr* builtin_mantissa_exponent(Expr* res) {
         unsigned long ae = (unsigned long)(e_val < 0 ? -e_val : e_val);
         mpz_t pw;
         mpz_init(pw);
-        mpz_ui_pow_ui(pw, b_ulong, ae);
+        mpz_pow_ui(pw, base, ae);
         double m;
         if (mpz_sizeinbase(pw, 2) <= 53) {
             /* b^|e| is exact in a double: one correctly rounded operation. */
@@ -1482,7 +1501,7 @@ Expr* builtin_mantissa_exponent(Expr* res) {
             mpfr_clear(t);
             if (v < 0) m = -m;
 #else
-            m = v / pow((double)b_ulong, (double)e_val);
+            m = v / pow(mpz_get_d(base), (double)e_val);
 #endif
         }
         mpz_clear(pw);
@@ -1495,6 +1514,11 @@ Expr* builtin_mantissa_exponent(Expr* res) {
     /* ====================================================================
      *  INEXACT path -- MPFR
      * ================================================================== */
+    if (kind == RD_KIND_MPFR && !b_fits) {
+        mth_message("MantissaExponent", "ibase", "Base too large; use a base <= ULONG_MAX.");
+        mpz_clear(base);
+        return NULL;
+    }
     if (kind == RD_KIND_MPFR) {
         mpfr_srcptr xv = x_expr->data.mpfr;
         mpfr_prec_t prec = mpfr_get_prec(xv);
@@ -1779,6 +1803,9 @@ Expr* builtin_real_exponent(Expr* res) {
             && is_complex(x_in, &re_p, &im_p)) {
             return re_emit_realx(x_in);
         }
+        /* A symbolic complex numeric quantity (I Pi, I Sqrt[2]) is no real
+         * number either. */
+        if (real_numeric_nonreal(x_in)) return re_emit_realx(x_in);
         if (b_in && b_in->type == EXPR_FUNCTION
             && b_in->data.function.head
             && b_in->data.function.head->type == EXPR_SYMBOL

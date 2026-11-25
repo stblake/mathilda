@@ -121,6 +121,20 @@ static void test_wave4_numbertheory(void) {
     audit_chk("PrimitiveRoot#1", "PrimitiveRoot[2000000000005408000000000197359]", "11");
 }
 
+/* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
+ * off $MessageList inside a Block (each diagnostic once per evaluation). */
+static void test_wave5_g7_number_theory(void) {
+    audit_chk("Divisible#3", "Block[{$MessageList = {}}, Divisible[{1, 2, 3}, 0]; Length[$MessageList]]", "3");
+    audit_chk("ExtendedGCD#1", "Quiet[Check[ExtendedGCD[1.5 + I, 2], fired, ExtendedGCD::exact]]", "fired");
+    audit_chk("FactorInteger#1", "FactorInteger[12, 10^30]", "{{2, 2}, {3, 1}}");
+    audit_chk("LCM#2", "LCM[-x]", "LCM[-x]");
+    audit_chk("LCM#3", "Block[{$MessageList = {}}, LCM[3., 2]; Length[$MessageList]]", "1");
+    audit_chk("PartitionsP#1", "PartitionsP[-10^20]", "0");
+    audit_chk("Prime#1", "Block[{$MessageList = {}}, Prime[{-1, 0}]; Length[$MessageList]]", "2");
+    audit_chk("Prime#1", "Quiet[Prime[{-1, 0}]]", "{Prime[-1], Prime[0]}");
+    audit_chk("PrimePi#1", "PrimePi[2*10^9, Method -> \"Legendre\"]", "98222287");
+}
+
 int main(void) {
     audit_init();
     TEST(test_primitive_root_list_huge_phi);
@@ -129,5 +143,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_numbertheory);
+    TEST(test_wave5_g7_number_theory);
     return audit_finish("audit_number_theory");
 }

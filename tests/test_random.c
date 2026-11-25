@@ -772,10 +772,11 @@ void test_randomreal_workingprecision_array(void) {
 }
 
 void test_randomreal_machineprecision_option(void) {
-    /* WorkingPrecision -> MachinePrecision (or a value at/below machine
-     * precision) returns a plain EXPR_REAL. */
+    /* WorkingPrecision -> MachinePrecision returns a plain EXPR_REAL; a digit
+     * count below machine precision is an MPFR number of that precision, as
+     * N[x, 10] is (audit RandomComplex#1). */
     ASSERT(eval_to_type("RandomReal[1, WorkingPrecision -> MachinePrecision]") == (int)EXPR_REAL);
-    ASSERT(eval_to_type("RandomReal[1, WorkingPrecision -> 10]") == (int)EXPR_REAL);
+    ASSERT(eval_to_type("RandomReal[1, WorkingPrecision -> 10]") == (int)EXPR_MPFR);
 }
 
 void test_randomcomplex_workingprecision_basic(void) {

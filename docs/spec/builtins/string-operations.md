@@ -124,6 +124,7 @@ In[4]:= StringJoin[]
 Out[4]= ""
 
 In[5]:= StringJoin["a", x]
+StringJoin::string: String expected at position 2 in StringJoin[a, x].
 Out[5]= StringJoin["a", x]
 
 In[6]:= StringJoin[Characters["hello"]]
@@ -363,6 +364,7 @@ Out[7]= StringInsert[]
 
 ## StringReplacePart
 
+- `StringReplacePart[new, part]` stays inert (Head `StringReplacePart`); applied to a string it is `StringReplacePart[old, new, part]` (audit StringReplacePart#2).
 Replaces one or more ranges of characters in a string with new strings.
 
 - `StringReplacePart["string", "snew", {m, n}]`: Replaces the characters at positions m through n by `"snew"`.
@@ -447,6 +449,7 @@ in `b`), `RegularExpression::limit` says so and the call stays unevaluated; a
 
 ## StringMatchQ
 
+- A non-string subject, or a list holding one (`{"a", 5}`, `{{"a"}}`), prints `StringMatchQ::strse` and stays unevaluated. A regex syntax error is reported against the user's own `RegularExpression` text, not the anchored wrapper (audit StringMatchQ#2/#4, RegularExpression#2, StringStartsQ#2, StringEndsQ#2).
 Tests whether a whole string matches a pattern.
 
 - `StringMatchQ["string", patt]`: `True` if all of `"string"` matches `patt`
@@ -656,6 +659,7 @@ Out[7]= {22, 333}
 
 ## StringCount
 
+- `StringCount[s, {}]` is `0` (audit StringCount#1).
 Counts the substrings of a string that match a pattern — the counting-only
 companion of `StringCases`, running the same match enumeration but without
 building the matched substrings.
@@ -753,6 +757,7 @@ Out[5]= "bbaa"
 
 ## StringSplit
 
+- A subject that is not a string or a list of strings prints `StringSplit::strse` and stays unevaluated (audit StringSplit#2); so do `StringCases`, `StringMatchQ`, `StringContainsQ`, `StringFreeQ`, `StringStartsQ` and `StringEndsQ`.
 Splits a string at matches of a delimiter pattern.
 
 - `StringSplit["string"]`: splits at runs of whitespace (equivalent to
@@ -804,7 +809,8 @@ Trims substrings matching a pattern from the beginning and end of a string.
   match must begin at or after the end of the start match.
 - Option `IgnoreCase -> True` matches case-insensitively.
 - `StringTrim[{s1, s2, ...}, ...]`: gives the list of results for each `si`;
-  non-string list elements pass through unchanged.
+  every element must be a string -- a list holding a non-string
+  (`StringTrim[{" a ", 1}]`) emits `StringTrim::strse` and stays unevaluated.
 - `patt` accepts the full shared string-pattern vocabulary (see below),
   `RegularExpression["re"]`, and literal strings. A pattern that anchors itself
   to the start (e.g. `RegularExpression["^ *"]`) therefore only trims the front.
@@ -828,6 +834,7 @@ Out[4]= "bond"
 
 ## StringExtract
 
+- A position list holding an element that is not a position (`{1, x}`) leaves the call unevaluated (audit StringExtract#2).
 Splits a string into blocks and selects blocks by position. Built on top of
 `StringSplit`, so the split behaviour (whitespace-run collapsing, empty-end
 trimming, the full string-pattern vocabulary) is identical.
@@ -867,6 +874,7 @@ An integer span is the list of its positions: past the last block each is
 
 ## StringPosition
 
+- The count `n` is a non-negative integer, `Infinity` or a positive BigInt; a negative count prints `StringPosition::innf` (audit StringPosition#2).
 Gives the `{start, end}` character positions at which substrings matching a
 string pattern occur, in the 1-based inclusive form used by `StringTake`,
 `StringDrop`, and `StringReplacePart`. Positions count characters, and the
@@ -946,6 +954,7 @@ Out[4]= {"aba", "bab", "aba"}
 
 ## StringRepeat
 
+- A positive BigInt count or maximum is accepted (`StringRepeat["ab", 10^30, 5]` is `"ababa"`) (audit StringRepeat#1).
 Builds a string by repeating a base string. Lengths count characters.
 
 - `StringRepeat["string", n]`: `"string"` concatenated `n` times.
@@ -1119,6 +1128,7 @@ Out[3]= {"x", "y"}
   is no limit (it gave `{}`, audit StringReplaceList#1). `StringReplace[s, rules, 0]`
   replaces nothing.
 - **Options**: `IgnoreCase`. **Attributes**: `Protected`.
+- A positive BigInt limit is no limit (audit StringReplaceList#2).
 
 ```mathematica
 In[1]:= StringReplaceList["aaa", "a" -> "b"]
@@ -1155,6 +1165,7 @@ Out[3]= {{"d", "abc"}, {"z", "wxy"}}
   left (`n` may be negative or exceed the length); `StringRotateLeft["string"]`
   rotates by one. `StringRotateRight` rotates the other way.
 - **Attributes**: `Protected`.
+- The shift may be a BigInt or `-2^63`; it is reduced modulo the length exactly (audit StringRotateLeft#1, StringRotateRight#1/#2).
 
 ```mathematica
 In[1]:= StringRotateLeft["abcdef", 2]
@@ -1191,6 +1202,7 @@ Out[3]= ToUpperCase[x]
   `Decapitalize["string"]` in lowercase. A list of strings maps; anything else
   emits `::strse`.
 - **Attributes**: `Protected`.
+- An unknown second argument prints `Capitalize::cmode` (audit Capitalize#2).
 
 ```mathematica
 In[1]:= Capitalize["hello world"]

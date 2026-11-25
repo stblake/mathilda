@@ -56,6 +56,7 @@ Out[1]= 7
 ```
 
 ## RepeatedTiming
+- An exact time budget (`1/10`, `Pi/100`) is read through `N` (audit RepeatedTiming#1).
 Evaluates `expr` repeatedly and returns a list of the average time in seconds used, together with the result obtained.
 - `RepeatedTiming[expr]`
 - `RepeatedTiming[expr, t]`
@@ -68,6 +69,7 @@ Evaluates `expr` repeatedly and returns a list of the average time in seconds us
 - Always evaluates `expr` at least four times.
 
 ## TimeConstrained
+- A time budget that is not a number or `Infinity` (`x`, `-Infinity`, `1 + I`) prints `TimeConstrained::timc` and the call stays unevaluated (audit TimeConstrained#2).
 Evaluates `expr`, generating an interrupt to abort the evaluation if it has not completed within the time budget.
 - `TimeConstrained[expr, t]`
 - `TimeConstrained[expr, t, failexpr]`
@@ -158,6 +160,7 @@ The seconds left before the innermost active `TimeConstrained` deadline.
   therefore takes at most a third of what is left (v0.6526).
 
 ## AbsoluteTime
+- An all-integer `List` spec whose total passes 2^53 is summed exactly in GMP (audit AbsoluteTime#4).
 Gives the total number of seconds since the beginning of January 1, 1900.
 - `AbsoluteTime[]` -- current wall-clock time, in the local time zone, as a machine real with sub-second resolution (so `AbsoluteTime[] - t0` times a computation).
 - `AbsoluteTime[date]` -- absolute time corresponding to the given date specification.
@@ -177,6 +180,7 @@ Accepts date strings and `{"string", {elements}}` specs (the DateList parsers), 
 exact rational times and fields.
 
 ## DateList
+- The fraction of the seconds field is carried apart from the absolute total, so `DateList[{2022, 5, 6, 7, 8, 9.123456789}]` keeps `9.123456789` (audit DateList#8).
 Gives a broken-down date/time as `{year, month, day, hour, minute, second}`.
 - `DateList[]` -- current local date and time.
 - `DateList[date]` -- date list for the given date specification.

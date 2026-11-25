@@ -5106,8 +5106,15 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             /* A call its head's declared arity rejected rests too, even after
              * a Sequence splice: re-asking it would print the message again
              * (Minus[Sequence[1, 2]] printed Minus::argx twice). */
+            /* Likewise a node that Orderless sorted or Flat flattened in this
+             * step and whose head then declined it WITH a message (LCM[3., 2]
+             * -> LCM[2, 3.], LCM::exact): the next step would find the same
+             * canonical arguments and the same declining head, and only print
+             * the message again. */
             if (arity_rejected ||
                 (!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc)) ||
+                (!post_gated && (attrs & (ATTR_ORDERLESS | ATTR_FLAT)) &&
+                 mth_msg_fired_count() != step_msgs_before) ||
                 (post_gated && !(attrs & ATTR_LISTABLE) &&
                  mth_msg_fired_count() != step_msgs_before))
                 g_step_settled_depth = eval_recursion_depth;

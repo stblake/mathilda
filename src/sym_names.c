@@ -439,6 +439,7 @@ const char* SYM_Counts = NULL;
 const char* SYM_CountsBy = NULL;
 const char* SYM_GroupBy = NULL;
 const char* SYM_Missing = NULL;
+const char* SYM_MixedRadix = NULL;
 const char* SYM_LinearSolveFunction = NULL;
 const char* SYM_MatchQ = NULL;
 const char* SYM_KeySort = NULL;
@@ -1656,6 +1657,7 @@ void sym_names_init(void) {
     SYM_CountsBy                    = intern_symbol("CountsBy");
     SYM_GroupBy                    = intern_symbol("GroupBy");
     SYM_Missing                    = intern_symbol("Missing");
+    SYM_MixedRadix                 = intern_symbol("MixedRadix");
     SYM_LinearSolveFunction = intern_symbol("LinearSolveFunction");
     SYM_MatchQ                     = intern_symbol("MatchQ");
     SYM_KeySort                     = intern_symbol("KeySort");

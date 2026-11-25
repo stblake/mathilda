@@ -68,7 +68,7 @@ Expr* builtin_meandeviation(Expr* res) {
             mth_message("MeanDeviation", "rectn",
                         "Rectangular array of real numbers is expected at position 1 in %s.", str);
             free(str);
-            MD_RET(expr_copy(res));
+            MD_RET(NULL);   /* rest after the message */
         }
     }
 

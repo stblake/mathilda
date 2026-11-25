@@ -291,6 +291,54 @@ static void test_wave4_arith_misc(void) {
     audit_chk("SetAccuracy#2", "Map[Accuracy, SetAccuracy[f[1000.5, 0.001], 20]][[2]]", "20.0");
 }
 
+/* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
+ * off $MessageList inside a Block (each diagnostic once per evaluation). */
+static void test_wave5_g7_arithmetic(void) {
+    audit_chk("Mod#1", "With[{r = Mod[1., 1.*^-300]}, 0 <= r < 1.*^-300]", "True");
+    audit_chk("Mod#1", "With[{r = Mod[1.*^300, 1.*^-300]}, 0 <= r < 1.*^-300]", "True");
+    audit_chk("Mod#1", "Head[Mod[2.5, 1.*^-310]]", "Real");
+    audit_chk("N#2", "Quiet[Check[N[], fired, N::argt]]", "fired");
+    audit_chk("N#2", "Quiet[Check[N[1, 2, 3], fired, N::argt]]", "fired");
+    audit_chk("Power#3", "Power[]", "1");
+    audit_chk("Power#5", "Sqrt[3 + 4 I]", "2 + I");
+    audit_chk("Power#5", "Sqrt[2 I]", "1 + I");
+    audit_chk("Power#5", "Sqrt[-2 I]", "1 - I");
+    audit_chk("Power#5", "(3 + 4 I)^(3/2)", "2 + 11*I");
+    audit_chk("Power#5", "Sqrt[5 I]", "Sqrt[5*I]");
+    audit_chk("Sqrt#3", "Sqrt[3 + 4 I]", "2 + I");
+    audit_chk("Sqrt#3", "Sqrt[-3 + 4 I]", "1 + 2*I");
+    audit_chk("Conjugate#3", "Conjugate[(-1)^(1/3)]", "-(-1)^(2/3)");
+    audit_chk("Conjugate#3", "Conjugate[E^I]", "E^(-I)");
+    audit_chk("Conjugate#3", "Chop[N[Conjugate[(-1)^(1/3)] - Conjugate[N[(-1)^(1/3)]]]]", "0");
+    audit_chk("Re#4", "Quiet[Check[Re[], fired, Re::argx]]", "fired");
+    audit_chk("Re#4", "Quiet[Check[Re[1, 2], fired, Re::argx]]", "fired");
+    audit_chk("FactorialPower#2", "FactorialPower[5, 2^70]", "0");
+    audit_chk("IntegerDigits#1", "IntegerDigits[3661, MixedRadix[{24, 60, 60}]]", "{1, 1, 1}");
+    audit_chk("IntegerDigits#1", "IntegerDigits[10^6, MixedRadix[{24, 60, 60}]]", "{11, 13, 46, 40}");
+    audit_chk("IntegerDigits#1", "IntegerDigits[61, MixedRadix[{24, 60, 60}], 3]", "{0, 1, 1}");
+    audit_chk("IntegerExponent#1", "Block[{$MessageList = {}}, IntegerExponent[{8, 16}, 1]; Length[$MessageList]]", "2");
+    audit_chk("IntegerLength#1", "Block[{$MessageList = {}}, IntegerLength[{1.5, 2.5}]; Length[$MessageList]]", "2");
+    audit_chk("IntegerLength#1", "Quiet[IntegerLength[{1.5, 2.5}]]", "{IntegerLength[1.5], IntegerLength[2.5]}");
+    audit_chk("IntegerString#1", "Quiet[Check[IntegerString[10, \"Foo\"], fired, IntegerString::basf]]", "fired");
+    audit_chk("Interval#2", "0. Interval[{1, 2}]", "Interval[{0.0, 0.0}]");
+    audit_chk("Interval#2", "0 Interval[{1, 2}]", "0");
+    audit_chk("ListGradient#2", "ListGradient[{{1, 2}, {3, 4}}, Axis -> 4294967297]", "ListGradient[{{1, 2}, {3, 4}}, Axis -> 4294967297]");
+    audit_chk("LucasL#1", "Quiet[Check[LucasL[], fired, LucasL::argt]]", "fired");
+    audit_chk("LucasL#1", "Quiet[Check[LucasL[1, 2, 3], fired, LucasL::argt]]", "fired");
+    audit_chk("MantissaExponent#2", "MantissaExponent[2^64, 2^64]", "{1/18446744073709551616, 2}");
+    audit_chk("Quotient#3", "Quiet[Check[Quotient[5], fired, Quotient::argtu]]", "fired");
+    audit_chk("Quotient#3", "Quiet[Check[Quotient[1, 2, 3, 4], fired, Quotient::argt]]", "fired");
+    audit_chk("QuotientRemainder#3", "Quiet[Check[QuotientRemainder[5, 0], fired, QuotientRemainder::divz]]", "fired");
+    audit_chk("QuotientRemainder#3", "Quiet[QuotientRemainder[5, 0]]", "QuotientRemainder[5, 0]");
+    audit_chk("RealDigits#1", "Quiet[Check[RealDigits[I Pi, 10, 3], fired, RealDigits::realx]]", "fired");
+    audit_chk("RealDigits#1", "Quiet[Check[RealDigits[1 + I], fired, RealDigits::realx]]", "fired");
+    audit_chk("RealExponent#1", "Quiet[Check[RealExponent[I Pi], fired, RealExponent::realx]]", "fired");
+    audit_chk("RealExponent#1", "Quiet[Check[RealExponent[Sqrt[-2]], fired, RealExponent::realx]]", "fired");
+    audit_chk("SetAccuracy#4", "NumberQ[SetAccuracy[12345.6, -2]]", "True");
+    audit_chk("SetAccuracy#4", "NumberQ[SetAccuracy[12345.6, 0]]", "True");
+    audit_chk("SetPrecision#2", "Precision[SetPrecision[1.5, N[20, 30]]]", "20.0");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
@@ -302,5 +350,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_arith_misc);
+    TEST(test_wave5_g7_arithmetic);
     return audit_finish("audit_arithmetic");
 }

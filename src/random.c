@@ -55,6 +55,7 @@
 #include "message.h"
 #include "common.h"   /* builtin_arg_error */
 #include "print.h"    /* expr_to_string, for intp/posdim message text */
+#include "assoc.h"    /* is_association: RandomChoice::lrwl */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -498,7 +499,64 @@ static Expr* random_array(const mpz_t imin, const mpz_t imax,
  *   RandomInteger[range, n]      -> flat list of n values
  *   RandomInteger[range, {n1, n2, ...}] -> nested array
  */
+/* Is `d` a valid dimension specification: a non-negative machine integer,
+ * or a list of them?  (A packed dims list is materialised by the gate before
+ * these heads run -- they are not on pack.c's AWARE list -- so it arrives
+ * here as a plain List.) */
+static bool rnd_dims_ok(const Expr* d) {
+    if (d->type == EXPR_INTEGER) return d->data.integer >= 0;
+    if (!head_is(d, SYM_List)) return false;
+    for (size_t i = 0; i < d->data.function.arg_count; i++) {
+        const Expr* x = d->data.function.args[i];
+        if (x->type != EXPR_INTEGER || x->data.integer < 0) return false;
+    }
+    return true;
+}
+
+/* After a Random{Integer,Real,Complex} core declined: name the argument that
+ * made it decline -- Head::unifr for a range the parser rejected, Head::array
+ * for a dimension spec that is not non-negative machine integers.  `range_ok`
+ * is the parser's verdict on the range.  A decline for any other reason
+ * (MemoryConstrained, an allocation failure) says nothing here. */
+static void rnd_diagnose(const char* head, Expr* res, size_t eff_argc, bool range_ok) {
+    if (eff_argc >= 1 && !range_ok) {
+        char* rs = expr_to_string(res->data.function.args[0]);
+        mth_message(head, "unifr",
+                    "The endpoints specified by %s for the endpoints of the uniform "
+                    "distribution range are not appropriate.", rs ? rs : "?");
+        free(rs);
+        return;
+    }
+    if (eff_argc == 2 && !rnd_dims_ok(res->data.function.args[1])) {
+        char* ds = expr_to_string(res->data.function.args[1]);
+        char* cs = expr_to_string(res);
+        mth_message(head, "array",
+                    "The array dimensions %s given in position 2 of %s should be a list of "
+                    "non-negative machine-sized integers giving the dimensions for the result.",
+                    ds ? ds : "?", cs ? cs : "?");
+        free(ds);
+        free(cs);
+    }
+}
+
+static Expr* builtin_randominteger_core(Expr* res);
 Expr* builtin_randominteger(Expr* res) {
+    Expr* r = builtin_randominteger_core(res);
+    if (r || res->type != EXPR_FUNCTION) return r;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 1 || argc == 2) {
+        mpz_t lo, hi;
+        mpz_init(lo);
+        mpz_init(hi);
+        bool ok = parse_range(res->data.function.args[0], lo, hi);
+        mpz_clear(lo);
+        mpz_clear(hi);
+        rnd_diagnose("RandomInteger", res, argc, ok);
+    }
+    return NULL;
+}
+
+static Expr* builtin_randominteger_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     /* MemoryConstrained: refuse an over-budget array before building either form */
@@ -825,9 +883,11 @@ static bool parse_working_precision_opt(Expr* arg, long* bits, bool* is_machine)
     if (digits <= 0.0) return false;
 
 #ifdef USE_MPFR
-    if (digits <= NUMERIC_MACHINE_PRECISION_DIGITS) {
-        /* Mathematica treats requests at or below machine precision as
-         * machine: the doubles path is exact enough. */
+    if (digits == NUMERIC_MACHINE_PRECISION_DIGITS) {
+        /* $MachinePrecision itself is machine.  Any other request, below
+         * machine precision included, is an arbitrary-precision result of
+         * that precision, as N[x, 10] is: WorkingPrecision -> 10 gave machine
+         * numbers (Precision MachinePrecision, not 10.). */
         *bits = 0;
         *is_machine = true;
     } else {
@@ -1109,6 +1169,38 @@ static Expr* randomreal_machine(Expr* res, size_t effective_argc) {
     return NULL; /* Too many arguments */
 }
 
+/* RandomReal / RandomComplex after a decline: a WorkingPrecision option the
+ * parser rejected (WorkingPrecision -> -1) is Head::precw; otherwise the
+ * range / dimension diagnosis of rnd_diagnose.  `argc` is the positional
+ * count the builtin settled on (the option peeled when it parsed). */
+static bool parse_complex_range(Expr* arg, double* re_min, double* re_max,
+                                double* im_min, double* im_max);   /* below */
+static void rnd_wp_or_diagnose(const char* head, Expr* res, size_t argc, bool cplx) {
+    if (argc >= 1) {
+        Expr* last = res->data.function.args[argc - 1];
+        if (head_is(last, SYM_Rule) && last->data.function.arg_count == 2 &&
+            last->data.function.args[0]->type == EXPR_SYMBOL &&
+            last->data.function.args[0]->data.symbol.name == SYM_WorkingPrecision) {
+            char* ps = expr_to_string(last->data.function.args[1]);
+            mth_message(head, "precw",
+                        "The precision %s specified by the option WorkingPrecision is not a "
+                        "positive number or MachinePrecision.", ps ? ps : "?");
+            free(ps);
+            return;
+        }
+    }
+    if (argc != 1 && argc != 2) return;
+    bool ok;
+    if (!cplx) {
+        double lo, hi;
+        ok = parse_real_range(res->data.function.args[0], &lo, &hi);
+    } else {
+        double a, b, c, d;
+        ok = parse_complex_range(res->data.function.args[0], &a, &b, &c, &d);
+    }
+    rnd_diagnose(head, res, argc, ok);
+}
+
 /*
  * builtin_randomreal - implements RandomReal[...]
  *
@@ -1140,17 +1232,78 @@ Expr* builtin_randomreal(Expr* res) {
     if (argc == 2 && !mth_mem_request_shape(res->data.function.args[1], sizeof(double)))
         return NULL;
 
+    Expr* out;
 #ifdef USE_MPFR
-    if (!is_machine) return randomreal_mpfr(res, argc, bits);
+    if (!is_machine) out = randomreal_mpfr(res, argc, bits);
+    else
 #else
     (void)bits;
 #endif
-    return randomreal_machine(res, argc);
+    out = randomreal_machine(res, argc);
+    if (!out) rnd_wp_or_diagnose("RandomReal", res, argc, false);
+    return out;
 }
 
 /*
  * builtin_seedrandom - implements SeedRandom[n] and SeedRandom[]
  */
+/* The seed every SeedRandom[s] other than a non-negative machine integer
+ * is drawn from, as a non-negative mpz (initialised here; the caller clears).
+ * A non-negative integer n is itself, so SeedRandom[n] gives the same stream
+ * as before for every n >= 0 (int64 or BigInt).  A negative n and a string are
+ * moved above 2^256 under distinct tags: -n read as its two's complement
+ * 2^64 - n (SeedRandom[-5] was SeedRandom[2^64 - 5]), or the 2 n + 1 of the
+ * old BigInt mapping, collided with an ordinary positive seed. */
+static void seed_canonical(const Expr* arg, mpz_t sd) {
+    mpz_init(sd);
+    unsigned long tag;
+    if (arg->type == EXPR_STRING) {
+        const char* str = arg->data.string;
+        mpz_import(sd, strlen(str), 1, 1, 0, 0, str);   /* the bytes, big-endian */
+        tag = 0x53747269u;                              /* "Stri" */
+    } else {
+        mpz_t t;
+        expr_to_mpz(arg, t);
+        if (mpz_sgn(t) >= 0) { mpz_swap(sd, t); mpz_clear(t); return; }
+        mpz_neg(sd, t);
+        mpz_clear(t);
+        tag = 0x4e656761u;                              /* "Nega" */
+    }
+    /* sd += tag * 2^(256 + bits): above every byte string's or |n|'s value,
+     * so the tagged ranges are disjoint from each other and from n >= 0. */
+    mpz_t hi;
+    mpz_init_set_ui(hi, tag);
+    mpz_mul_2exp(hi, hi, 256 + (mp_bitcnt_t)mpz_sizeinbase(sd, 2));
+    mpz_add(sd, sd, hi);
+    mpz_clear(hi);
+}
+
+/* 64 bits of a non-negative mpz seed: a splitmix64-style mix of every 64-bit
+ * word, so seeds that differ anywhere give different machine streams.  A
+ * seed below 2^64 is its own value (the machine stream of SeedRandom[n] is
+ * unchanged for every machine-width n). */
+static uint64_t seed_fold64(const mpz_t sd) {
+    size_t nw = 0;
+    uint64_t* w = (uint64_t*)mpz_export(NULL, &nw, -1, sizeof(uint64_t), 0, 0, sd);
+    uint64_t h;
+    if (nw <= 1) {
+        h = nw ? w[0] : 0;
+    } else {
+        h = UINT64_C(0x9E3779B97F4A7C15);
+        for (size_t i = 0; i < nw; i++) {
+            uint64_t z = w[i] + UINT64_C(0x9E3779B97F4A7C15) * (uint64_t)(i + 1);
+            z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+            z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+            h ^= z ^ (z >> 31);
+            h = (h << 23) | (h >> 41);
+        }
+    }
+    void (*freefunc)(void*, size_t);
+    mp_get_memory_functions(NULL, NULL, &freefunc);
+    if (w) freefunc(w, nw * sizeof(uint64_t));
+    return h;
+}
+
 Expr* builtin_seedrandom(Expr* res) {
     /* Reseeding must also drop any cached Gaussian deviate held by src/ml's
      * Box-Muller sampler. Without this, SeedRandom leaves a spare deviate in hand from
@@ -1171,28 +1324,20 @@ Expr* builtin_seedrandom(Expr* res) {
 
     if (argc == 1) {
         Expr* arg = res->data.function.args[0];
-        if (arg->type == EXPR_INTEGER) {
+        if (arg->type == EXPR_INTEGER && arg->data.integer >= 0) {
             ensure_rand_init();
             seed_all((uint64_t)arg->data.integer);
             return expr_new_symbol(SYM_Null);
         }
-        if (arg->type == EXPR_BIGINT) {
+        if (arg->type == EXPR_INTEGER || arg->type == EXPR_BIGINT || arg->type == EXPR_STRING) {
             ensure_rand_init();
-            /* GMP seeds and mpz_get_ui read only |n|: a negative seed -n is
-             * mapped to the distinct odd 2 n + 1 first, so SeedRandom[-2^70]
-             * and SeedRandom[2^70] give different streams. */
             mpz_t sd;
-            mpz_init_set(sd, arg->data.bigint);
-            if (mpz_sgn(sd) < 0) {
-                mpz_neg(sd, sd);
-                mpz_mul_2exp(sd, sd, 1);
-                mpz_add_ui(sd, sd, 1);
-            }
+            seed_canonical(arg, sd);
             gmp_randseed(g_rand_state, sd);
-            /* Derive the machine seed from the same bignum, so SeedRandom[huge]
-             * is as reproducible as SeedRandom[small]. */
-            xs_seed((uint64_t)mpz_get_ui(sd) ^
-                    ((uint64_t)mpz_sizeinbase(sd, 2) << 32));
+            /* The machine seed folds EVERY word of the canonical seed: reading
+             * only the low word (and the bit length) made 2^70 + 1 and
+             * 2^70 + 2^65 + 1 the same RandomReal stream. */
+            xs_seed(seed_fold64(sd));
             mpz_clear(sd);
             return expr_new_symbol(SYM_Null);
         }
@@ -1626,12 +1771,16 @@ Expr* builtin_randomcomplex(Expr* res) {
     if (argc == 2 && !mth_mem_request_shape(res->data.function.args[1], 2 * sizeof(double)))
         return NULL;   /* MemoryConstrained */
 
+    Expr* out;
 #ifdef USE_MPFR
-    if (!is_machine) return randomcomplex_mpfr(res, argc, bits);
+    if (!is_machine) out = randomcomplex_mpfr(res, argc, bits);
+    else
 #else
     (void)bits;
 #endif
-    return randomcomplex_machine(res, argc);
+    out = randomcomplex_machine(res, argc);
+    if (!out) rnd_wp_or_diagnose("RandomComplex", res, argc, true);
+    return out;
 }
 
 /*
@@ -1827,6 +1976,12 @@ static bool rc_weights(RCSrc args, size_t n, double* w) {
             v = INFINITY;                 /* maybe a huge exact weight: below */
         } else if (!(v >= 0.0)) {
             return false;
+        } else if (v == 0.0 && rc_at(args, i)->type != EXPR_REAL &&
+                   expr_numeric_sign(rc_at(args, i)) > 0) {
+            /* A positive exact weight below the double range (10^-400):
+             * not zero -- it is read through its logarithm below, so
+             * {10^-400, 0} -> {a, b} always picks a. */
+            v = NAN;
         }
         w[i] = v;
         sum += v;
@@ -2249,11 +2404,20 @@ static Expr* randomchoice_core(Expr* res) {
         return NULL;
     }
 
-    /* Uniform random choice: first arg must be a non-empty list */
+    /* Uniform random choice: first arg must be a non-empty list, else
+     * RandomChoice::lrwl ({}, x, 5) and the call stays unevaluated. */
     RCSrc choices;
     size_t choice_count;
-    if (!is_nonempty_list(first_arg, &choices, &choice_count))
+    if (!is_nonempty_list(first_arg, &choices, &choice_count)) {
+        if (!is_association(first_arg)) {
+            char* cs = expr_to_string(first_arg);
+            mth_message("RandomChoice", "lrwl",
+                        "The items for choice %s should be a list or a rule weights -> choices.",
+                        cs ? cs : "?");
+            free(cs);
+        }
         return NULL;
+    }
 
     if (argc == 1) {
         /* Single uniform choice */
@@ -2431,7 +2595,30 @@ static bool is_upto(Expr* e, int64_t* val) {
         *val = e->data.function.args[0]->data.integer;
         return true;
     }
+    /* UpTo[BigInt]: more than any list holds, so it saturates (every caller
+     * clamps to the list length). */
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_UpTo &&
+        e->data.function.arg_count == 1 &&
+        e->data.function.args[0]->type == EXPR_BIGINT) {
+        *val = mpz_sgn(e->data.function.args[0]->data.bigint) > 0 ? INT64_MAX : -1;
+        return true;
+    }
     return false;
+}
+
+/* RandomSample::smplen: a sample of n distinct elements from a set of fewer. */
+static Expr* rs_msg_smplen(Expr* n_arg, Expr* set) {
+    char* ns = expr_to_string(n_arg);
+    char* ss = expr_to_string(set);
+    mth_message("RandomSample", "smplen",
+                "RandomSample cannot generate a sample of length %s, which is greater than "
+                "the length of the sample set %s. If you want a choice of possibly repeated "
+                "elements from the set, use RandomChoice.", ns, ss);
+    free(ns);
+    free(ss);
+    return NULL;
 }
 
 /*
@@ -2501,7 +2688,7 @@ static Expr* randomsample_core(Expr* res) {
                 sample_n = (size_t)n_arg->data.integer;
                 if (sample_n > elems_count) {
                     free(weights);
-                    return NULL; /* Cannot sample more than available */
+                    return rs_msg_smplen(n_arg, elist_expr);   /* more than available */
                 }
                 have_n = true;
             } else if (is_upto(n_arg, &upto_val) && upto_val >= 0) {
@@ -2558,8 +2745,10 @@ static Expr* randomsample_core(Expr* res) {
         int64_t upto_val;
         if (n_arg->type == EXPR_INTEGER && n_arg->data.integer >= 0) {
             sample_n = (size_t)n_arg->data.integer;
-            if (sample_n > choice_count) return NULL; /* Can't sample more than available */
+            if (sample_n > choice_count) return rs_msg_smplen(n_arg, first_arg);   /* more than available */
             have_n = true;
+        } else if (n_arg->type == EXPR_BIGINT && mpz_sgn(n_arg->data.bigint) > 0) {
+            return rs_msg_smplen(n_arg, first_arg);
         } else if (is_upto(n_arg, &upto_val) && upto_val >= 0) {
             sample_n = (size_t)upto_val;
             if (sample_n > choice_count) sample_n = choice_count;
@@ -2802,15 +2991,23 @@ static bool rp_parse_range(Expr* arg, mpz_t lo, mpz_t hi) {
 /* Parse the dimension spec: n >= 1, or a list of such (possibly empty, which
  * Mathematica answers with a one-element list). Fills dims[0..*rank) and the
  * element total; emits posdim on failure. */
-static bool rp_parse_dims(Expr* d, int64_t* dims, int* rank, int64_t* total) {
+/* The dims array is allocated here (*dims_out, freed by the caller), sized
+ * to the spec: the rank has no cap of its own -- a list of 64 or more 1s
+ * was a "not a list of positive integers" posdim. */
+static bool rp_parse_dims(Expr* d, int64_t** dims_out, int* rank, int64_t* total) {
     bool ok = true;
+    size_t cap = (head_is(d, SYM_List) && d->data.function.arg_count > 0)
+               ? d->data.function.arg_count : 1;
+    int64_t* dims = malloc(sizeof(int64_t) * cap);
+    *dims_out = dims;
+    if (!dims) return false;
     if (d->type == EXPR_INTEGER) {
         ok = d->data.integer >= 1;
         if (ok) { dims[0] = d->data.integer; *rank = 1; *total = dims[0]; }
     } else if (d->type == EXPR_FUNCTION &&
                d->data.function.head->type == EXPR_SYMBOL &&
                d->data.function.head->data.symbol.name == SYM_List &&
-               d->data.function.arg_count < NDARRAY_MAX_RANK) {
+               d->data.function.arg_count < (size_t)INT32_MAX) {
         size_t r = d->data.function.arg_count;
         int64_t t = 1;
         for (size_t i = 0; i < r && ok; i++) {
@@ -2867,13 +3064,13 @@ Expr* builtin_randomprime(Expr* res) {
     mpz_init(lo);
     mpz_init(hi);
     Expr* out = NULL;
-    int64_t dims[NDARRAY_MAX_RANK];
+    int64_t* dims = NULL;
     int rank = 0;
     int64_t total = 1;
     RpSampler S;
 
     if (!rp_parse_range(res->data.function.args[0], lo, hi)) goto done;
-    if (argc == 2 && !rp_parse_dims(res->data.function.args[1], dims, &rank, &total))
+    if (argc == 2 && !rp_parse_dims(res->data.function.args[1], &dims, &rank, &total))
         goto done;
     if (!rp_sampler_init(&S, lo, hi)) {
         mth_message("RandomPrime", "noprime", "There are no primes in the specified interval.");
@@ -2884,7 +3081,7 @@ Expr* builtin_randomprime(Expr* res) {
         out = rp_draw_expr(&S);
     } else {
         void* buf = NULL;
-        if (S.kind != RP_MPZ &&
+        if (S.kind != RP_MPZ && rank < NDARRAY_MAX_RANK &&
             (out = ndbuild_open(rank, dims, NDT_INT64, &buf)) != NULL) {
             int64_t* b = (int64_t*)buf;
             for (int64_t i = 0; i < total; i++) b[i] = rp_draw_i64(&S);
@@ -2902,6 +3099,7 @@ Expr* builtin_randomprime(Expr* res) {
     rp_sampler_clear(&S);
 
 done:
+    free(dims);
     mpz_clear(lo);
     mpz_clear(hi);
     return out;

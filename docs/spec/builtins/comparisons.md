@@ -44,6 +44,7 @@ Note this differs from the reference, where `Indeterminate == Indeterminate` is
 `True`.
 
 ## Equal
+- `True == False` is `False` (and `True != False` is `True`): the two Boolean constants are distinct values (audit Equal#2, Unequal#1).
 Tests whether two (or more) expressions are mathematically equal.
 - `Equal[x, y]` (written `x == y`): `True` if `x` and `y` are equal, `False` if
   they are provably unequal, otherwise stays symbolic.
@@ -187,6 +188,7 @@ Tests whether expressions are unequal.
   symbolic (`x != 0`).
 
 ## Less
+- An ordering head (`Less`, `LessEqual`, `Greater`, `GreaterEqual`) with a literal complex operand prints `Head::nord` ("Invalid comparison with I attempted.") and stays unevaluated; the internal comparison entry points do not print it. A non-strict head decides an `Interval` that touches the bound: `Interval[{1, 2}] <= 2` is `True` (audit Less#3, LessEqual#3/#4, Greater#4, GreaterEqual#2).
 Tests strict ascending order.
 - `Less[x, y]` (written `x < y`): `True` if `x` is less than `y`.
 - `Less[x, y, z, ...]` (written `x < y < z`): tests the whole chain.

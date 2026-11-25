@@ -54,6 +54,7 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "common.h"
+#include "strings_internal.h"   /* strings_msg_strse */
 
 #include <stdlib.h>
 #include <string.h>
@@ -170,6 +171,12 @@ static Expr* sq_operator_form(Expr** a, size_t argc, SqKind kind) {
     return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
 }
 
+/* A string, or a List / LinkedList whose every element is a string. */
+static bool sq_subject_ok(const Expr* subject) {
+    return subject->type == EXPR_STRING ||
+           (strings_is_seq(subject) && strings_seq_all_strings(subject));
+}
+
 /* Shared evaluation core; `head` is the printable name used in diagnostics. */
 static Expr* sq_dispatch(Expr* res, SqKind kind, const char* head) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -206,6 +213,10 @@ static Expr* sq_dispatch(Expr* res, SqKind kind, const char* head) {
 
     Expr* subject = a[0];
     Expr* patt = a[1];
+
+    /* The subject is a string or a list of strings; anything else (5, x,
+     * {"a", 5}) is Head::strse and stays unevaluated. */
+    if (!sq_subject_ok(subject)) return strings_msg_strse(head, res, 1);
 
     /* An empty pattern list matches nothing.  regex_rules_build_ex reports that
      * as -1, indistinguishable from a genuine failure, so answer it directly:

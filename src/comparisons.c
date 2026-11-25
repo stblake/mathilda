@@ -18,8 +18,11 @@
 #include "zero_test.h"
 #include "assoc_struct.h"   /* Equal/Unequal between associations */
 #include "equal_tol.h"      /* Internal`$EqualTolerance / $SameQTolerance */
+#include "message.h"        /* mth_message: Head::nord */
+#include "print.h"          /* expr_to_string */
 #include "pack.h"           /* pack_unpack: SameQ on a packed list */
 #include <stdio.h>
+#include <stdlib.h>
 #include <gmp.h>
 #include <float.h>
 #include <math.h>
@@ -1206,9 +1209,17 @@ static int cmp_surrogate_equal(const Expr* a, const Expr* b) {
     return ASSOC_EQ_UNKNOWN;
 }
 
+/* True or False: the two Boolean constants are distinct values, so
+ * True == False is False and True != False is True (not left symbolic). */
+static bool cmp_is_boolean_constant(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL &&
+           (e->data.symbol.name == SYM_True || e->data.symbol.name == SYM_False);
+}
+
 static int equal_pair_decide(Expr* a, Expr* b) {
     if (is_nan_operand(a) || is_nan_operand(b)) return ASSOC_EQ_FALSE;
     if (expr_eq(a, b)) return ASSOC_EQ_TRUE;
+    if (cmp_is_boolean_constant(a) && cmp_is_boolean_constant(b)) return ASSOC_EQ_FALSE;
     int av;
     if ((av = cmp_surrogate_equal(a, b)) != ASSOC_EQ_NA) return av;
     if ((av = assoc_equal_verdict(a, b)) != ASSOC_EQ_NA) return av;
@@ -1345,8 +1356,49 @@ bool comparisons_real_constant_sign(Expr* e, int* sgn) {
     return false;
 }
 
-/* Inequality helpers */
+/* A literal complex number with a nonzero imaginary part (I, 1 + I, 2. I):
+ * a value no ordering predicate can place, for which the head prints
+ * Head::nord ("Invalid comparison with I attempted.").  Literal numbers
+ * only -- a symbolic complex quantity (I Pi) is left to stay symbolic
+ * without a message, as an undecided pair. */
+static bool cmp_is_literal_nonreal(Expr* e) {
+    Expr *re, *im;
+    if (!is_complex(e, &re, &im) || !im) return false;
+    if (im->type == EXPR_INTEGER) return im->data.integer != 0;
+    if (im->type == EXPR_REAL) return im->data.real != 0.0;
+    return true;
+}
+
+/* Is every point of `a` <= every point of `b`, decidably?  One of the two
+ * is an Interval, the other an Interval or a scalar (a point).  Used for the
+ * non-strict heads only: Interval[{1, 2}] <= 2 holds although the interval
+ * touches 2, a case compare_numeric's single order cannot express (it
+ * decides only a disjoint pair). */
+static bool cmp_interval_all_le(Expr* a, Expr* b) {
+    if (!is_interval(a) && !is_interval(b)) return false;
+    Expr* sup_a = a;
+    Expr* inf_b = b;
+    if (is_interval(a)) {
+        size_t n = interval_pair_count(a);
+        if (n == 0) return false;
+        sup_a = interval_pair_hi(a, n - 1);
+    }
+    if (is_interval(b)) {
+        if (interval_pair_count(b) == 0) return false;
+        inf_b = interval_pair_lo(b, 0);
+    }
+    bool d = false;
+    int c = interval_endpoint_cmp(sup_a, inf_b, &d);
+    return d && c <= 0;
+}
+
+/* Inequality helpers.  `msg` enables Head::nord for a literal complex
+ * operand; the internal_* entry points (internal.c) evaluate without it. */
+static Expr* evaluate_inequality_ex(Expr* res, int expected_cmp_1, int expected_cmp_2, bool msg);
 static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp_2) {
+    return evaluate_inequality_ex(res, expected_cmp_1, expected_cmp_2, true);
+}
+static Expr* evaluate_inequality_ex(Expr* res, int expected_cmp_1, int expected_cmp_2, bool msg) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 2) return expr_new_symbol(SYM_True);
 
@@ -1371,11 +1423,25 @@ static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp
         int cmp = compare_numeric_ex(a, b, &can_compare, &cert);
 
         if (!can_compare) {
+            bool nonstrict = (expected_cmp_1 == 0 || expected_cmp_2 == 0);
+            if (msg && (cmp_is_literal_nonreal(a) || cmp_is_literal_nonreal(b))) {
+                Expr* bad = cmp_is_literal_nonreal(a) ? a : b;
+                const char* hn = res->data.function.head->type == EXPR_SYMBOL
+                               ? res->data.function.head->data.symbol.name : "Less";
+                char* str = expr_to_string(bad);
+                mth_message(hn, "nord", "Invalid comparison with %s attempted.", str);
+                free(str);
+                msg = false;   /* once per call */
+            }
             /* Two exact quantities closer than MPFR resolves have no numeric
              * order; when the exact zero test proves them EQUAL, the order is
              * equality (Sqrt[5 + 2 Sqrt[6]] <= Sqrt[2] + Sqrt[3]).  Otherwise
              * leave the comparison unevaluated. */
-            if (cmp_is_exact_quantity(a) && cmp_is_exact_quantity(b) &&
+            if (nonstrict && expected_cmp_1 == -1 && cmp_interval_all_le(a, b))
+                cmp = -1;
+            else if (nonstrict && expected_cmp_1 == 1 && cmp_interval_all_le(b, a))
+                cmp = 1;
+            else if (cmp_is_exact_quantity(a) && cmp_is_exact_quantity(b) &&
                 expr_is_numeric_quantity(a) && expr_is_numeric_quantity(b) &&
                 cmp_is_real_constant(a) && cmp_is_real_constant(b) &&
                 numeric_pair_zero_test(a, b) == ZERO_TEST_TRUE)
@@ -1458,6 +1524,14 @@ Expr* builtin_lessequal(Expr* res) {
 Expr* builtin_greaterequal(Expr* res) {
     return evaluate_inequality(res, 1, 0);
 }
+
+/* The internal_* entry points (internal.c): the same verdicts, without the
+ * user-facing Head::nord message -- an internal probe of a complex value is
+ * not the user's comparison. */
+Expr* builtin_less_quiet(Expr* res)         { return evaluate_inequality_ex(res, -1, -1, false); }
+Expr* builtin_greater_quiet(Expr* res)      { return evaluate_inequality_ex(res, 1, 1, false); }
+Expr* builtin_lessequal_quiet(Expr* res)    { return evaluate_inequality_ex(res, -1, 0, false); }
+Expr* builtin_greaterequal_quiet(Expr* res) { return evaluate_inequality_ex(res, 1, 0, false); }
 
 /* Map an operator-symbol head (Less/LessEqual/Greater/GreaterEqual/Equal/Unequal)
  * to a pairwise decision. Returns:

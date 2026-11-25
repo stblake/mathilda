@@ -72,6 +72,19 @@ static void test_wave4_dates(void) {
     audit_chk("UnixTime#3", "UnixTime[{2022, 1, 1, 0, 0, 1/2}]", "1640995200");
 }
 
+/* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
+ * off $MessageList inside a Block (each diagnostic once per evaluation). */
+static void test_wave5_g7_time_and_date(void) {
+    audit_chk("AbsoluteTime#4", "AbsoluteTime[{2022, 1, 1, 0, 0, 10^20}]", "100000000003849984000");
+    audit_true("DateList#8", "Abs[DateList[{2022, 5, 6, 7, 8, 9.123456789}][[6]] - 9.123456789] < 10^-12");
+    audit_chk("DateList#8", "Most[DateList[{2022, 5, 6, 7, 8, 9.123456789}]]", "{2022, 5, 6, 7, 8}");
+    audit_chk("RepeatedTiming#1", "RepeatedTiming[1 + 1, 1/10][[2]]", "2");
+    audit_chk("RepeatedTiming#1", "RepeatedTiming[1 + 1, Pi/100][[2]]", "2");
+    audit_chk("TimeConstrained#2", "Quiet[Check[TimeConstrained[1 + 1, x], fired, TimeConstrained::timc]]", "fired");
+    audit_chk("TimeConstrained#2", "Quiet[Check[TimeConstrained[1 + 1, -Infinity], fired, TimeConstrained::timc]]", "fired");
+    audit_chk("TimeConstrained#2", "Quiet[TimeConstrained[1 + 1, 1 + I]]", "TimeConstrained[1 + 1, 1 + I]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_datelist_far_past);
@@ -79,5 +92,6 @@ int main(void) {
     TEST(test_s14_unixtime_exact);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_dates);
+    TEST(test_wave5_g7_time_and_date);
     return audit_finish("audit_time_and_date");
 }

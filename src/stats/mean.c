@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include "dist.h"    /* ml_dist_property: distribution moments */
 #include "common.h"  /* head_is */
+#include "message.h" /* mth_message: Mean::rectn */
+#include "print.h"   /* expr_to_string */
 
 /* Mean of the n elements v[0..n): the vector core, shared by a List's
  * arguments and a LinkedList's elements (LLReader). */
@@ -125,6 +127,18 @@ Expr* builtin_mean(Expr* res) {
     if (data->type == EXPR_FUNCTION && !head_is(data, SYM_List)) {
         Expr* r = ml_dist_property(ML_PROP_MEAN, data, NULL);
         if (r) return r;
+    }
+
+    /* Mean[x], Mean[5], Mean[{}]: no data to average -- Mean::rectn, and the
+     * call stays unevaluated.  (A non-List compound argument, e.g. an
+     * unknown distribution, stays unevaluated silently.) */
+    if (data->type == EXPR_SYMBOL || data->type == EXPR_STRING || data->type == EXPR_INTEGER ||
+        data->type == EXPR_REAL || data->type == EXPR_BIGINT ||
+        (head_is(data, SYM_List) && data->data.function.arg_count == 0)) {
+        char* str = expr_to_string(res);
+        mth_message("Mean", "rectn", "Rectangular array expected at position 1 in %s.", str);
+        free(str);
+        return NULL;
     }
 
     /* NDArray fast path (see ndreduce.c). */

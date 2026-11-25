@@ -229,10 +229,19 @@ static Expr* capitalize_builtin(Expr* res, const char* head, int upper) {
     CapMode mode = CAP_FIRST;
     if (argc == 2) {
         const Expr* m = res->data.function.args[1];
-        if (m->type != EXPR_STRING) return NULL;
-        if (strcmp(m->data.string, "AllWords") == 0) mode = CAP_ALLWORDS;
-        else if (upper && strcmp(m->data.string, "TitleCase") == 0) mode = CAP_TITLE;
-        else return NULL;
+        if (m->type == EXPR_STRING && strcmp(m->data.string, "AllWords") == 0) mode = CAP_ALLWORDS;
+        else if (upper && m->type == EXPR_STRING && strcmp(m->data.string, "TitleCase") == 0)
+            mode = CAP_TITLE;
+        else {
+            /* Capitalize["a", "b"]: name the unknown method (it stayed
+             * unevaluated in silence). */
+            char* ms = expr_to_string((Expr*)m);
+            mth_message(head, "cmode",
+                        "%s is not a valid capitalization method; \"AllWords\"%s is expected.",
+                        ms ? ms : "?", upper ? " or \"TitleCase\"" : "");
+            free(ms);
+            return NULL;
+        }
     }
     Expr* a = res->data.function.args[0];
     if (a->type == EXPR_STRING)

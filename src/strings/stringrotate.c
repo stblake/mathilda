@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <gmp.h>
 
 static Expr* rotate(Expr* res, const char* head, int left) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -25,22 +26,30 @@ static Expr* rotate(Expr* res, const char* head, int left) {
     Expr* s = res->data.function.args[0];
     if (s->type != EXPR_STRING)
         return strings_arg_message(head, "string", "String", 1, res);
-    int64_t n = 1;
-    if (argc == 2) {
-        if (res->data.function.args[1]->type != EXPR_INTEGER)
-            return strings_arg_message(head, "int", "Integer", 2, res);
-        n = res->data.function.args[1]->data.integer;
-    }
+    Expr* nx = (argc == 2) ? res->data.function.args[1] : NULL;
+    if (nx && !expr_is_integer_like(nx))
+        return strings_arg_message(head, "int", "Integer", 2, res);
 
     const char* str = s->data.string;
     size_t len = strlen(str);
     size_t clen = u8_length(str, len);
     if (clen == 0) return expr_new_string("");
 
-    /* Left rotation by k in [0, clen): the result starts at character k. */
+    /* Left rotation by k in [0, clen): the result starts at character k.
+     * n is reduced mod the length in GMP, so a BigInt shift (10^20) and
+     * n = -2^63 (whose negation overflows int64) both rotate correctly. */
     int64_t m = (int64_t)clen;
-    int64_t k = (left ? n : -n) % m;
-    if (k < 0) k += m;
+    int64_t k;
+    if (!nx) {
+        k = left ? 1 % m : (m - 1 % m) % m;
+    } else {
+        mpz_t z;
+        mpz_init(z);
+        expr_to_mpz(nx, z);
+        if (!left) mpz_neg(z, z);
+        k = (int64_t)mpz_fdiv_ui(z, (unsigned long)m);   /* in [0, m) */
+        mpz_clear(z);
+    }
     size_t cut = u8_offset(str, len, (size_t)k);
 
     char* buf = malloc(len + 1);

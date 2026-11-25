@@ -1204,7 +1204,8 @@ void options_register_defaults(void) {
     ob_commit(&b, "Divisors");
 
     /* ---- Random number generation ---- */
-    const char* rand_fns[] = { "RandomInteger", "RandomReal", "RandomComplex" };
+    /* RandomInteger reads no option (an integer has no precision). */
+    const char* rand_fns[] = { "RandomReal", "RandomComplex" };
     for (size_t i = 0; i < sizeof(rand_fns) / sizeof(rand_fns[0]); i++) {
         ob_init(&b);
         ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));

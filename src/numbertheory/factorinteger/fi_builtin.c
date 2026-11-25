@@ -531,6 +531,9 @@ static int parse_args(const Expr* res, size_t first, FiCtx* c, CallOpts* o, int 
             o->k = a->data.integer;
             continue;
         }
+        /* A positive BigInt k (10^30) asks for more factors than any n has:
+         * the complete factorisation, as Infinity does. */
+        if (a->type == EXPR_BIGINT && i == first && mpz_sgn(a->data.bigint) > 0) continue;
         /* Automatic, All and Infinity as k: the complete factorisation. */
         if (a->type == EXPR_SYMBOL && i == first &&
             (a->data.symbol.name == SYM_Automatic || a->data.symbol.name == SYM_All ||
