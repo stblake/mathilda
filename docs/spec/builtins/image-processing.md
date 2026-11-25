@@ -265,15 +265,17 @@ Out[2]= True
 
 `ImageDimensions[image]` gives `{width, height}`. Attributes: `Protected`.
 
+A `Graphics` object with an explicit `ImageSize -> {w, h}` reports `{w, h}`; anything that is not an
+image gives `ImageDimensions::imginv`.
+
 Transposed relative to `ImageData`, which is `height × width`.
 
 #### Basic Examples
 
 ```mathematica
 In[1]:= ImageDimensions[Image[{{1., 2., 3.}, {4., 5., 6.}}]]
+Out[1]= {3, 2}
 ```
-
-#### Basic Examples
 
 ```mathematica
 In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
@@ -603,6 +605,9 @@ Out[2]= Real
 `ImageData[image]` gives the pixels as reals in `[0, 1]`, scaling out the image's type.
 `ImageData[image, type]` gives the stored values unscaled. Attributes: `Protected`.
 
+`Interleaving -> False` gives the channels outermost: `channels × height × width` (a volume
+`channels × depth × height × width`).
+
 A `"Byte"` 255 comes back as **exactly** `1.0` and a 0 as exactly `0.0`; the tests assert these
 as equalities rather than tolerances, so a wrong divisor (254, or 256) fails outright.
 
@@ -691,6 +696,9 @@ discard precision the caller never asked to lose.
 
 ## RandomImage
 `RandomImage[{min, max}, size]` draws on `[min, max]`.
+
+`max` may be exact (`1/2`, `Pi`). A size `{w, h, d}` gives an `Image3D`. `RandomImage[dist, size]`
+draws each pixel from the distribution by `RandomVariate`.
 
 Uniform noise as an image.
 - `RandomImage[]`: a 150x150 grey image of uniform noise on `[0, 1]`.
@@ -865,6 +873,8 @@ Out[3]= True
 The background may be a colour -- `GrayLevel[g]`, `RGBColor[r, g, b]`, `{r, g, b}`
 -- as well as a level; a grey image over a non-grey colour becomes a colour image.
 
+An image without alpha comes back unchanged, and a composite keeps the input's pixel type.
+
 - The background may be any real number -- an Integer, Rational, machine or arbitrary-precision Real (audit RemoveAlphaChannel#1).
 Drops or resolves an image's opacity.
 - `RemoveAlphaChannel[image]` — discards the alpha channel.
@@ -895,6 +905,9 @@ The composite is the "over" operator: the base's colour is weighted by its own
 alpha and the sum divided by the result's alpha, so half-transparent red over a
 fully transparent pixel stays pure red (`{1., 0., 0., 0.5}`). An opaque base is
 unchanged (`o a + b (1 - a)`).
+
+The position may also be `Scaled[{sx, sy}]` (fractions of the base's size) or `Center`, the default
+placement.
 
 Alpha-composites one image onto another.
 - `ImageCompose[base, over]` — centred.
@@ -972,6 +985,9 @@ Out[3]= -Image-
 Tiles images into one.
 - `ImageAssemble[{{a, b}, {c, d}}]` — a grid.
 - `ImageAssemble[{a, b}]` — a single row.
+
+Tiles that all share a pixel type keep it (`"Byte"` tiles give a `"Byte"` sheet); mixed types give
+`"Real"`.
 
 **Features**:
 - `Protected`.
@@ -1183,6 +1199,9 @@ Out[6]= {12, 10, 8, 6, 4}
 Colour and alpha are counted separately: a grey+alpha image given a colour
 replacement becomes RGB+alpha, its alpha passed through.
 
+A wrong argument count gives `ColorReplace::argt`, and a negative or non-real tolerance
+`ColorReplace::tol`; the call stays unevaluated.
+
 Replaces colours within a tolerance.
 - `ColorReplace[image, old -> new]`
 - `ColorReplace[image, {rule1, rule2, ...}]`
@@ -1243,6 +1262,9 @@ Out[6]= 1
 colour (Euclidean in RGB), alpha passed through; a grey image with an all-grey
 palette stays grey.
 
+`Dithering -> False` is accepted (it is what is computed: no error diffusion); dithering itself
+is not implemented, so any other value leaves the call unevaluated.
+
 Reduces an image to at most `n` colours.
 - `ColorQuantize[image, n]`
 
@@ -1297,6 +1319,10 @@ Out[4]= True
 to the reference's quantile (sorted luminances, or `Quantile[dist, p]`) at its
 mid-rank.
 
+A colour pixel is scaled by ONE factor so its hue survives; where that factor would push a channel
+past 1, the factor is capped rather than each channel clipped (clipping separately turned an orange
+`{1, 0.8, 0.2}` yellow). An `Image3D` equalises over all its voxels.
+
 Equalises an image's brightness histogram.
 - `HistogramTransform[image]`
 
@@ -1350,6 +1376,10 @@ Out[4]= True
 `(-1)^n He_n(t/s)/s^n` times each axis's weight (`He` the probabilists' Hermite
 polynomial); `{0, 0}` is `GaussianMatrix[r]`.
 
+`GaussianMatrix[{{r1, r2}, σ}]` is the rectangular `(2 r1 + 1) × (2 r2 + 1)` kernel (rows, then
+columns), and `σ` may be `{σ1, σ2}`; still normalised to sum 1. As for `BoxMatrix`, the radius is
+bounded by memory, not by a cap.
+
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.
 `GaussianMatrix[{r, sigma}]` states the standard deviation. Attributes: `Protected`.
 
@@ -1372,6 +1402,11 @@ In[2]:= Total[Flatten[GaussianMatrix[2]]]
 
 `BoxMatrix[{r1, r2}]` is the `(2 r1 + 1) x (2 r2 + 1)` box.
 
+`BoxMatrix[r, w]` (or `BoxMatrix[r, {w1, w2}]`) centres the box in a `w × w` matrix of zeros, so
+`BoxMatrix[1, 5]` is a 5×5 matrix with a centred 3×3 block of 1s; a width whose parity differs from
+`2r + 1` has no centre and stays unevaluated. There is no radius cap: the size is checked against
+memory (`General::nomem` and an abort when it cannot be met), so `BoxMatrix[513]` is 1027×1027.
+
 `BoxMatrix[r]` gives a `(2r+1) × (2r+1)` matrix of 1s. Attributes: `Protected`.
 
 **Not normalised**, matching the reference — so `ImageConvolve[img, BoxMatrix[1]]` is nine times too
@@ -1386,6 +1421,10 @@ In[1]:= BoxMatrix[1]
 ## GaussianFilter
 
 `GaussianFilter[image, r]` blurs `image` with a Gaussian of radius `r`. Attributes: `Protected`.
+
+A volume takes the `{r, σ}` radius form as a plane does. `Padding -> p` is accepted:
+`"Fixed"` is the built-in replicate border, and any other padding is
+`ImageConvolve[image, GaussianMatrix[r], Padding -> p]`.
 
 Exactly `ImageConvolve[image, GaussianMatrix[r]]` — the reference documents the two as equal, so it
 is implemented by building the same matrix and calling the same convolution, and a test asserts the
@@ -1577,6 +1616,10 @@ The benchmark pair lives in `benchmarks/63-image-convolve/`, including a deliber
 `Method -> "Cluster"` (the default, Otsu) or `Method -> "Mean"` (the mean
 intensity).
 
+An `Image3D` is thresholded over all its voxels. When the pixels are not all equal but all fall in
+one bin of the 256-bin unit-interval histogram (`Image[{{0., 0.001}}]`), Otsu is run on the histogram
+of the data's own range instead, so two distinct grey levels are always separated.
+
 `FindThreshold[image]` gives a threshold separating the image into two classes, by **Otsu's
 method**. Attributes: `Protected`.
 
@@ -1693,6 +1736,10 @@ Out[2]= 0.488235
 
 `Binarize[image, {t1, t2}]` gives 1 for `t1 <= value <= t2`. A one-level image,
 which Otsu cannot split, is thresholded at 0.5 rather than left unevaluated.
+
+`Binarize[image, f]` gives 1 where `f[v]` is `True`, with `v` the pixel value (a number for a grey
+image, the channel list for a colour one); `f` is a pure function or a defined symbol, so an
+undefined symbol is still read as a symbolic threshold and the call stays unevaluated.
 
 `Binarize[image]` thresholds by Otsu; `Binarize[image, t]` thresholds at `t`. Gives a `"Bit"`
 image. Attributes: `Protected`.
@@ -1832,6 +1879,10 @@ Out[2]= -Image-
 The conversion keeps the pixel type: a `"Byte"` image's luminance is quantised
 back to bytes (a colour `"Bit"` image widens to `"Byte"`).
 
+A colour directive converts as well: `ColorConvert[RGBColor[r, g, b], "Grayscale"]` is
+`GrayLevel` of the Rec. 601 luminance (`GrayLevel[0.299]` for pure red), `GrayLevel[g]` to `"RGB"` is
+`RGBColor[g, g, g]`, and an opacity is carried along.
+
 `ColorConvert[image, "Grayscale"]` converts by **Rec. 601 luminance**,
 `0.299 R + 0.587 G + 0.114 B`. Attributes: `Protected`.
 
@@ -1953,6 +2004,10 @@ Out[2]= -Image-
 
 `{w, Automatic}` and `{Automatic, h}` keep the aspect ratio; `Scaled[s]` scales
 both dimensions.
+
+`UpTo[s]` and `{UpTo[w], UpTo[h]}` fit the image within the bound, keeping the aspect ratio, and
+never enlarge: an image already inside it comes back unchanged. The result keeps the input's pixel
+type, the resampled values quantised back to it (a `"Byte"` image stays `"Byte"`).
 
 `ImageResize[image, {w, h}]` resizes to `w × h`; `ImageResize[image, w]` gives width `w` with the
 height following to preserve the aspect ratio. `Resampling -> "Nearest" | "Bilinear" | "Average"`
@@ -2215,6 +2270,11 @@ Out[2]= -Image-
 `DerivativeFilter[image, {n, m}]` gives the `n`-th derivative down the rows and the `m`-th across
 the columns, each order 0–2. Attributes: `Protected`.
 
+`DerivativeFilter[image, {n1, n2}, σ]` is the Gaussian derivative at scale `σ`:
+`ImageConvolve[image, GaussianMatrix[{Ceiling[4 σ], σ}, {n1, n2}]]`, the `n1`-th derivative down the
+rows and the `n2`-th across the columns, with the stencils' sign convention (a ramp of slope `s`
+reads about `+s`).
+
 The kernel is a separable outer product of 1-D stencils:
 
 | order | stencil | on what it is exact |
@@ -2341,6 +2401,8 @@ Out[2]= -Image-
 ## GradientFilter
 
 `GradientFilter[image]` gives the gradient magnitude `Sqrt[dx² + dy²]`. Attributes: `Protected`.
+
+`GradientFilter[]` or a call with too many arguments gives the argument-count message.
 
 - `GradientFilter[image]` — normalised Sobel derivatives (those of `DerivativeFilter`).
 - `GradientFilter[image, r]`, `GradientFilter[image, {r, σ}]` — derivatives of a Gaussian of pixel
@@ -2545,6 +2607,11 @@ Out[2]= -Image-
 
 `Image3D[{image1, image2, ...}]` stacks 2-D images of one size, channel count and
 type into a volume, `image1` the first slice.
+
+Nested one-channel voxels `{{{{v}, ...}}}` are a one-channel volume, as the packed `d × h × w × 1`
+buffer is. Data that is not an array of real numbers gives `Image3D::imgarray` and stays unevaluated
+(`Image::imgarray` for a plane). Exact numeric constants (`Pi`, `Sqrt[2]/2`) are numericized, as a
+rational already was, for both `Image` and `Image3D`.
 
 
 `Image3D[data]` is a volumetric image, normalising to `Image3D[data, type]`. Attributes:
@@ -2914,6 +2981,9 @@ the window 1-D), the image operator runs, and the data come back in the input's
 shape. Min / max / median of integer data stay integers, and `MeanFilter` of exact
 data is exact (`MeanFilter[{1, 2, 3, 4, 5}, 1]` is `{4/3, 2, 3, 4, 14/3}`).
 
+An `Image3D` is labelled the same way over 26 neighbours (6 with `CornerNeighbors -> False`) and
+gives a depth × height × width label array.
+
 `MorphologicalComponents[image]` labels the connected components of the foreground.
 `[image, t]` takes pixels above `t` as foreground (default 0). `CornerNeighbors -> False` selects
 4-connectivity instead of the default 8. Attributes: `Protected`.
@@ -3118,6 +3188,9 @@ Parity on the reduction and **4.5× faster** on the enlargement.
 A multichannel image gives one count per channel, `{level, {c1, ..., cn}}`, so
 each channel's counts sum to the pixel count.
 
+`ImageLevels[image, n, {min, max}]` spans the `n` levels over `[min, max]`; a value outside counts at
+the nearer end, so `{0, 1}` is exactly the default.
+
 `ImageLevels[image]` gives `{{level, count}, …}` — the histogram as **data, not a plot**. The reference's
 `ImageHistogram` draws a graphic and `ImageLevels` gives the counts; in a computer algebra system the
 counts are the useful half, so that is what this provides and `Histogram` over the result draws the
@@ -3148,6 +3221,9 @@ Out[2]= {{0.0, 32}, {1.0, 32}}
 ## ImageAdjust
 
 `ImageAdjust[image, c]` is `ImageAdjust[image, {c, 0}]`.
+
+`ImageAdjust[image, {c, b, γ}, {imin, imax}]` rescales the input range `[imin, imax]` to the unit
+interval before the curve, and a further `{omin, omax}` maps the output onto that range.
 
 `ImageAdjust[image]` stretches to the full range. `ImageAdjust[image, {c, b}]` and `[image, {c, b, g}]`
 apply contrast, brightness and gamma. Accepts volumes. Attributes: `Protected`.
@@ -3315,6 +3391,11 @@ Out[2]= -Image-
 `ImageCorrelate[image, ker, f]` with `f` one of `EuclideanDistance`,
 `SquaredEuclideanDistance`, `ManhattanDistance`, `ChessboardDistance` gives
 `f[neighbourhood, ker]` at every pixel (border replicated, per channel).
+
+`Padding -> p` is accepted as for `ImageConvolve`: `"Fixed"` is the replicate border, anything
+else pads, correlates and crops back, so `ImageCorrelate[Image[{{0., 1., 0.}}], {{1, 2, 3}}, Padding -> 0]`
+is `{{3., 2., 1.}}`. Where the template is a crop of the image the NCC score is 1 to within rounding
+(a few ulp), not bit-exactly 1.
 
 `ImageCorrelate[image, kernel]` correlates — the kernel is **not** reflected, which is the only
 difference from `ImageConvolve`. `ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is
@@ -3754,9 +3835,10 @@ guessed, because a silently transposed or flipped coordinate looks plausible on 
 ### The properties that are exact
 
 - A uniform region has no gradient, so the response is **exactly** `0.0`, not merely small.
-- **A straight edge scores exactly zero** under both methods. Every gradient in the window is
-  parallel, so `M` has rank 1 and both `det` and `λ_min` vanish. This is the property that
-  separates a corner detector from an edge detector, and it is the one no visual inspection of
+- **A straight edge scores exactly zero** under `"MinimumEigenvalue"`. Every gradient in the
+  window is parallel, so `M` has rank 1 and both `det` and `λ_min` vanish. `"Harris"` is
+  `det - 0.04 trace^2 = -0.04 trace^2`, strictly **negative** there, not zero. This is the property
+  that separates a corner detector from an edge detector, and it is the one no visual inspection of
   a response map reliably shows.
 - **Rotational covariance.** A quarter turn is an exact index permutation, so the response of
   the rotated image is the rotation of the response — measured agreement 1.4e-17, and four
@@ -3880,6 +3962,10 @@ A global threshold cannot binarize unevenly lit content, and that is not a tunin
 half of a page is darker than the other, **no single number** separates ink from paper in both
 halves at once. `LocalAdaptiveBinarize[image, r]` compares each pixel to the mean of its own
 `(2r+1)²` neighbourhood; `LocalAdaptiveBinarize[image, r, {c1, c2, c3}]` uses
+
+Any positive integer radius is accepted: the window statistics read the replicated border
+analytically, so a radius larger than the image costs no more than `r = 1`. An invalid radius gives
+`LocalAdaptiveBinarize::rad` and invalid coefficients `LocalAdaptiveBinarize::coef`.
 
 ```
 threshold(y, x) = c1·mean + c2·stddev + c3
@@ -4430,6 +4516,10 @@ asserts the subtraction is non-zero.
 `RGBColor`, `GrayLevel` or a channel list -- one value per channel, with an
 opaque alpha added to a colour given without one.
 
+The result keeps the input's pixel type, the fill quantised to it (a `"Byte"` image stays
+`"Byte"`). Each side pair in `{{l, r}, {b, t}}` must be a list; `f[1, 1]` is not a padding
+specification and the call stays unevaluated.
+
 Pads an image or volume, or crops it when given negative amounts.
 
 - `ImagePad[image, m]`: pads `m` pixels on every side.
@@ -4535,6 +4625,10 @@ Out[2]= -Image-
 Cropping keeps the pixel type (`"Byte"` and `"Bit"` stay so), as do
 `ImageReflect` and the quarter turns of `ImageRotate`: they move stored values
 without computing new ones.
+
+`ImageCrop[image, size, spec]` says which sides lose the pixels: `Left` removes them from the left
+(keeping the right-hand columns), likewise `Right`, `Top` and `Bottom`; `Center` is the default, and
+`{h, v}` names one side per axis.
 
 Crops an image about its centre, or trims a uniform border.
 
@@ -4657,7 +4751,7 @@ Corner strength from the eigenvalues of the structure tensor.
 - `CornerFilter[image]`: the smaller eigenvalue (Shi-Tomasi) at every pixel.
 - `CornerFilter[image, r]`: sets the window radius.
 - `Method -> "Harris"` selects `det - 0.04 trace^2` instead.
-- A straight edge scores **exactly zero**: its tensor has rank 1, so both the determinant and the smaller eigenvalue vanish. That is what separates a corner detector from an edge detector.
+- A straight edge scores **exactly zero** under the default `"MinimumEigenvalue"`: its tensor has rank 1, so the smaller eigenvalue vanishes. Under `"Harris"` the determinant vanishes too, leaving `-0.04 trace^2`, which is negative on an edge. That is what separates a corner detector from an edge detector.
 - Accepts an `Image3D`, where rank 1 is a plane and rank 2 an edge, so both score zero.
 
 #### Basic Examples
@@ -5089,6 +5183,10 @@ Out[2]= -Image-
 ## Erosion
 Morphological erosion: the minimum over a structuring element.
 
+A radius beyond the image is clamped to it, which is exact for a max or min under replicate
+padding, so any non-negative integer radius is accepted (`Erosion[img, 300]` equals `Erosion[img, 256]`
+on a small image); the same holds for `Dilation`, `Opening` and `Closing`, planar and volumetric.
+
 - `Erosion[image, r]`, the dual of `Dilation` under negation.
 - Accepts an `Image3D` with an integer radius.
 - A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in the reference: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
@@ -5473,6 +5571,11 @@ Out[2]= -Image-
 ## MeanFilter
 The mean over a square or cubic window.
 
+`MeanFilter[image, {r1, r2}]` uses radius `r1` down the rows and `r2` across the columns (three radii
+for a volume). There is no upper bound on the radius: the box mean is a prefix-sum difference plus
+the replicated border's counts, `O(1)` per pixel whatever `r`, so `MeanFilter[img, 300]` on a 3×3 image
+gives `1/601^2` at a lone bright pixel.
+
 - `MeanFilter[image, r]`.
 - For an `Image3D` the window total comes from prefix sums, so the cost does not grow with `r`.
 
@@ -5620,6 +5723,11 @@ Out[3]= -Image-
 
 ## MedianFilter
 The median over a window. Every output value is an input value.
+
+`MedianFilter[image, {r1, r2}]` uses per-axis radii (rows, then columns). Any radius is accepted: a
+window larger than `MEDIAN_GATHER` (8192) values is read as the distinct pixels it covers, weighted by
+how often the replicated border repeats them, so the cost is bounded by the image. The pixel type is
+kept, since every output is one of the window's own values.
 
 - `MedianFilter[image, r]`.
 - A lone impulse is removed **completely**, where a mean spreads it at any radius.

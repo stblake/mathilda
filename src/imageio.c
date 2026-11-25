@@ -33,6 +33,7 @@
 #include "files.h"      /* files_import_text, files_export_text */
 #include "message.h"
 #include "checked_alloc.h"  /* user-sized RandomImage buffers */
+#include "eval.h"           /* eval_and_free: RandomImage[dist, size] */
 #include "graphics/graphics_export.h"
 #include "graphics/render.h"       /* graphics_raster_dims: aspect-aware export sizing */
 
@@ -435,28 +436,58 @@ static Expr* builtin_export(Expr* res)
  * small enough to print, resize and Export without thinking about it. */
 #define RANDIMG_DEFAULT 150
 
-/* A dimension pair {w, h}, or a single n meaning {n, n}. Returns false when the argument is
- * neither -- a symbolic size has to stay unevaluated rather than become a guess. */
-static bool read_size(const Expr* e, size_t* w, size_t* h)
+/* A dimension pair {w, h}, a triple {w, h, d} (a volume: *d set, audit RandomImage#5), or a single
+ * n meaning {n, n}. Returns false when the argument is none of these -- a symbolic size has to stay
+ * unevaluated rather than become a guess. *d stays 0 for a plane. */
+static bool read_size(const Expr* e, size_t* w, size_t* h, size_t* d)
 {
     if (!e) return false;
     if (e->type == EXPR_INTEGER && e->data.integer > 0) {
         *w = *h = (size_t)e->data.integer;
         return true;
     }
-    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+    if (e->type == EXPR_FUNCTION && (e->data.function.arg_count == 2 || e->data.function.arg_count == 3) &&
         e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_List) {
-        const Expr* a = e->data.function.args[0];
-        const Expr* b = e->data.function.args[1];
-        if (a && b && a->type == EXPR_INTEGER && b->type == EXPR_INTEGER &&
-            a->data.integer > 0 && b->data.integer > 0) {
-            *w = (size_t)a->data.integer;
-            *h = (size_t)b->data.integer;
-            return true;
+        size_t v[3] = { 0, 0, 0 };
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            const Expr* a = e->data.function.args[i];
+            if (!a || a->type != EXPR_INTEGER || a->data.integer <= 0) return false;
+            v[i] = (size_t)a->data.integer;
         }
+        *w = v[0]; *h = v[1]; *d = v[2];
+        return true;
     }
     return false;
+}
+
+/* RandomImage[dist, size]: pixels drawn from a distribution by RandomVariate (audit RandomImage#4),
+ * so the same seed and the same sampler as everywhere else. The draws are stored as a "Real" image
+ * unclipped, as RandomImage[max] stores values above 1. NULL when the distribution does not sample to
+ * a real array. */
+static Expr* random_image_dist(const Expr* dist, size_t w, size_t h, size_t d, size_t ch)
+{
+    int64_t whc;
+    if (!mth_count_mul((int64_t)w, (int64_t)h, &whc) ||
+        !mth_count_mul(whc, (int64_t)(d ? d : 1), &whc) ||
+        !mth_count_mul(whc, (int64_t)ch, &whc) ||
+        !mth_alloc_ok(whc, sizeof(double), NULL))
+        return mth_nomem_abort();
+    Expr* dims[4];
+    size_t nd = 0;
+    if (d) dims[nd++] = expr_new_integer((int64_t)d);
+    dims[nd++] = expr_new_integer((int64_t)h);
+    dims[nd++] = expr_new_integer((int64_t)w);
+    if (ch > 1) dims[nd++] = expr_new_integer((int64_t)ch);
+    Expr* shape = expr_new_function(expr_new_symbol(SYM_List), dims, nd);
+    Expr* draws = eval_and_free(expr_new_function(expr_new_symbol("RandomVariate"),
+                                                  (Expr*[]){ expr_copy((Expr*)dist), shape }, 2));
+    Expr* img = eval_and_free(expr_new_function(expr_new_symbol(d ? SYM_Image3D : SYM_Image),
+                                                (Expr*[]){ draws, expr_new_string("Real") }, 2));
+    bool ok = d ? image3d_info(img, NULL, NULL, NULL, NULL, NULL)
+                : image_info(img, NULL, NULL, NULL, NULL);
+    if (!ok) { expr_free(img); return NULL; }
+    return img;
 }
 
 /* RandomImage[] / RandomImage[max] / RandomImage[max, {w, h}] / ColorSpace -> "RGB"
@@ -475,7 +506,8 @@ static Expr* builtin_random_image(Expr* res)
     bool cs_given = false;
     OptEntry opts[] = { { "ColorSpace", &colorspace, &cs_given } };
     size_t argc = 0;
-    size_t w = RANDIMG_DEFAULT, h = RANDIMG_DEFAULT, ch = 1, n, i;
+    size_t w = RANDIMG_DEFAULT, h = RANDIMG_DEFAULT, d = 0, ch = 1, n, i;
+    const Expr* dist = NULL;
     double max = 1.0, min = 0.0;
     double* buf;
     Expr* out;
@@ -487,8 +519,8 @@ static Expr* builtin_random_image(Expr* res)
     if (argc >= 1) {
         const Expr* a = res->data.function.args[0];
         if (!a) return NULL;
-        if (a->type == EXPR_INTEGER)   max = (double)a->data.integer;
-        else if (a->type == EXPR_REAL) max = a->data.real;
+        /* max of any exactness: 1/2 and Pi as well as 2 and 0.5 (audit RandomImage#3) */
+        if (image_real_value(a, &max)) { /* the range [0, max] */ }
         else if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
                  && a->data.function.head->data.symbol.name == SYM_List
                  && a->data.function.arg_count == 2) {
@@ -497,10 +529,13 @@ static Expr* builtin_random_image(Expr* res)
                 || !image_real_value(a->data.function.args[1], &max)) return NULL;
             if (!(max > min)) return NULL;
         }
+        else if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+                 && strstr(a->data.function.head->data.symbol.name, "Distribution") != NULL)
+            dist = a;
         else return NULL;
-        if (!(max > 0.0) && !(max > min)) return NULL;
+        if (!dist && !(max > 0.0) && !(max > min)) return NULL;
     }
-    if (argc == 2 && !read_size(res->data.function.args[1], &w, &h)) return NULL;
+    if (argc == 2 && !read_size(res->data.function.args[1], &w, &h, &d)) return NULL;
 
     if (cs_given && colorspace && colorspace->type == EXPR_STRING) {
         const char* cs = colorspace->data.string;
@@ -509,6 +544,8 @@ static Expr* builtin_random_image(Expr* res)
         else return NULL;   /* an unsupported space is not silently grey */
     }
 
+    if (dist) return random_image_dist(dist, w, h, d, ch);
+
     /* {w, h} are the user's: w*h*ch used to wrap (2^40 x 2^40 is 2^80 samples,
      * 0 mod 2^64), so an impossible image either overran a tiny buffer or ran
      * for minutes.  Checked, it aborts at once with General::nomem (audit
@@ -516,6 +553,7 @@ static Expr* builtin_random_image(Expr* res)
     {
         int64_t whc;
         if (!mth_count_mul((int64_t)w, (int64_t)h, &whc) ||
+            !mth_count_mul(whc, (int64_t)(d ? d : 1), &whc) ||
             !mth_count_mul(whc, (int64_t)ch, &whc) ||
             !mth_alloc_ok(whc, sizeof(double), NULL))
             return mth_nomem_abort();
@@ -527,7 +565,8 @@ static Expr* builtin_random_image(Expr* res)
      * free to hold values above 1 -- Export is where clamping belongs. */
     for (i = 0; i < n; i++) buf[i] = min + random_uniform_01() * (max - min);
 
-    out = image_build_real(buf, w, h, ch);
+    /* A {w, h, d} size is a volume, d slices of h x w (audit RandomImage#5). */
+    out = d ? image3d_build_real(buf, w, h, d, ch) : image_build_real(buf, w, h, ch);
     free(buf);
     return out;
 }
@@ -568,6 +607,7 @@ void imageio_init(void)
     symtab_set_docstring("RandomImage",
         "RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] "
         "scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n "
-        "means {n, n}; RandomImage[{min, max}, size] draws on [min, max]. ColorSpace -> \"RGB\" gives three independent channels. Samples are drawn "
+        "means {n, n}, and {w, h, d} gives an Image3D; RandomImage[{min, max}, size] draws on [min, max]; "
+        "RandomImage[dist, size] draws each pixel from the distribution dist by RandomVariate. ColorSpace -> \"RGB\" gives three independent channels. Samples are drawn "
         "from the same stream as RandomReal, so SeedRandom makes the result reproducible.");
 }

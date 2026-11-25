@@ -35,6 +35,15 @@ typedef struct {
 
 static void img_free(Img* im) { free(im->buf); im->buf = NULL; }
 
+/* A result in the pixel type of `like` ("Real" when `like` is real or not an image). */
+static Expr* build_typed_as(const Expr* like, const double* buf, size_t w, size_t h, size_t c)
+{
+    ImgType t = IMG_REAL;
+    if (!like || !image_info(like, NULL, NULL, NULL, &t) || t == IMG_REAL)
+        return image_build_real(buf, w, h, c);
+    return image_build_typed(buf, w, h, c, t);
+}
+
 static bool img_read(const Expr* e, Img* out)
 {
     out->buf = NULL;
@@ -244,6 +253,12 @@ static Expr* builtin_removealphachannel(Expr* res)
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     if (!img_read(arg(res, 0), &im)) return NULL;
+    /* No alpha and no background: nothing to remove, and the image comes back UNCHANGED, type and
+     * all (audit RemoveAlphaChannel#3). */
+    if (res->data.function.arg_count == 1 && !has_alpha(im.c)) {
+        img_free(&im);
+        return expr_copy((Expr*)arg(res, 0));
+    }
 
     if (res->data.function.arg_count == 2) {
         /* a level, or a colour (audit RemoveAlphaChannel#2) */
@@ -267,7 +282,8 @@ static Expr* builtin_removealphachannel(Expr* res)
             }
         }
     }
-    r = image_build_real(out, im.w, im.h, oc);
+    /* The pixel type is kept, the composite quantised back to it (audit RemoveAlphaChannel#3). */
+    r = build_typed_as(arg(res, 0), out, im.w, im.h, oc);
     free(out);
     img_free(&im);
     return r;
@@ -314,8 +330,22 @@ static Expr* builtin_imagecompose(Expr* res)
     }
 
     if (res->data.function.arg_count == 3) {
-        if (!as_pair(arg(res, 2), &px, &py)) { img_free(&base); img_free(&over); return NULL; }
-        have_pos = true;
+        /* {x, y} in pixels, Scaled[{sx, sy}] as fractions of the base's size, or Center -- the
+         * default placement (audit ImageCompose#4) */
+        const Expr* pos = arg(res, 2);
+        if (pos && pos->type == EXPR_SYMBOL && strcmp(pos->data.symbol.name, "Center") == 0) {
+            have_pos = false;
+        } else if (pos && pos->type == EXPR_FUNCTION && pos->data.function.arg_count == 1
+                   && pos->data.function.head->type == EXPR_SYMBOL
+                   && strcmp(pos->data.function.head->data.symbol.name, "Scaled") == 0) {
+            if (!as_pair(pos->data.function.args[0], &px, &py)) { img_free(&base); img_free(&over); return NULL; }
+            px *= (double)base.w;
+            py *= (double)base.h;
+            have_pos = true;
+        } else {
+            if (!as_pair(pos, &px, &py)) { img_free(&base); img_free(&over); return NULL; }
+            have_pos = true;
+        }
     }
 
     if (have_pos) {
@@ -388,6 +418,10 @@ static Expr* builtin_imageassemble(Expr* res)
     double* out = NULL;
     Expr* r = NULL;
     bool flat, any_alpha = false;
+    /* The tiles' common pixel type, kept when they all share it (audit ImageAssemble#1): placing
+     * stored values side by side computes nothing new, and a gap's 0 is in every type. */
+    ImgType common = IMG_REAL;
+    bool have_type = false;
 
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     grid = arg(res, 0);
@@ -433,6 +467,12 @@ static Expr* builtin_imageassemble(Expr* res)
         for (j = 0; j < n && j < cols; j++) {
             Img* t = &tiles[i * cols + j];
             if (!img_read(row->data.function.args[j], t)) goto done;
+            {
+                ImgType tt = IMG_REAL;
+                image_info(row->data.function.args[j], NULL, NULL, NULL, &tt);
+                if (!have_type) { common = tt; have_type = true; }
+                else if (tt != common) common = IMG_REAL;
+            }
             if (t->h > row_h[i]) row_h[i] = t->h;
             if (t->w > col_w[j]) col_w[j] = t->w;
             if (colour_count(t->c) > cc) cc = colour_count(t->c);
@@ -473,7 +513,8 @@ static Expr* builtin_imageassemble(Expr* res)
             y0 += row_h[i];
         }
     }
-    r = image_build_real(out, total_w, total_h, oc);
+    r = common == IMG_REAL ? image_build_real(out, total_w, total_h, oc)
+                           : image_build_typed(out, total_w, total_h, oc, common);
 
 done:
     if (tiles) {

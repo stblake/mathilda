@@ -319,6 +319,10 @@ static const ArityRow ARITY_ROWS[] = {
     { "Discard",          1, 3, NOOPT },         /* Discard[crit] operator form */
     { "AssociationThread", 1, 2, NOOPT },
     { "AssociationComap", 1, 2, NOOPT },
+    /* ---- images (Wave 5 G9: GradientFilter#3, ColorReplace#3, ImageDimensions#3) ---- */
+    { "GradientFilter",   1, 2, OPT_NOCHECK },
+    { "ColorReplace",     2, 3, NOOPT },
+    { "ImageDimensions",  1, 1, NOOPT },
 
     /* ---- files and packed arrays ---- */
     { "ReadList",         1, 3, 1 },

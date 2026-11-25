@@ -150,7 +150,11 @@ static Expr* builtin_colorreplace(Expr* res)
     nrules = read_rules(res->data.function.args[1], from, to, 64);
     if (!nrules) return NULL;
     if (argc == 3) {
-        if (!as_double(res->data.function.args[2], &tol) || tol < 0.0) return NULL;
+        if (!as_double(res->data.function.args[2], &tol) || tol < 0.0) {
+            image_message("ColorReplace", "tol", "The tolerance specification %s should be a "
+                          "non-negative real number.", res->data.function.args[2]);
+            return NULL;
+        }
     }
     if (!image_load(res->data.function.args[0], &w, &h, &c, &buf)) return NULL;
 
@@ -278,7 +282,25 @@ static Expr* builtin_colorquantize(Expr* res)
     double* out = NULL;
     Expr* r = NULL;
 
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count == 3) {
+        /* Dithering -> False is exactly what this computes -- every pixel mapped to its nearest
+         * palette colour, no error diffusion -- so the option is accepted and dropped (audit
+         * ColorQuantize#4). Dithering is not implemented, so any other value stays unevaluated. */
+        const Expr* o = res->data.function.args[2];
+        if (o->type == EXPR_FUNCTION && o->data.function.arg_count == 2
+            && o->data.function.head->type == EXPR_SYMBOL
+            && (o->data.function.head->data.symbol.name == SYM_Rule
+                || o->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && o->data.function.args[0]->type == EXPR_SYMBOL
+            && strcmp(o->data.function.args[0]->data.symbol.name, "Dithering") == 0
+            && o->data.function.args[1]->type == EXPR_SYMBOL
+            && o->data.function.args[1]->data.symbol.name == SYM_False)
+            return expr_new_function(expr_copy(res->data.function.head),
+                (Expr*[]){ expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) }, 2);
+        return NULL;
+    }
+    if (res->data.function.arg_count != 2) return NULL;
     {
         const Expr* a = res->data.function.args[1];
         if (a && a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
@@ -462,8 +484,14 @@ static Expr* builtin_histogramtransform(Expr* res)
 
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1 && res->data.function.arg_count != 2) return NULL;
-    if (!image_load(res->data.function.args[0], &w, &h, &c, &buf)) return NULL;
-    n_px = w * h;
+    /* A volume equalises exactly as a plane does: the histogram of a volume is a histogram, so the
+     * voxels are one flat buffer here and only the rebuild knows the rank (audit
+     * HistogramTransform#3). */
+    size_t d = 1;
+    bool vol = image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL);
+    if (vol ? !image3d_load(res->data.function.args[0], &w, &h, &d, &c, &buf)
+            : !image_load(res->data.function.args[0], &w, &h, &c, &buf)) return NULL;
+    n_px = w * h * d;
     if (!n_px) { free(buf); return NULL; }
 
     for (i = 0; i < HT_BINS; i++) hist[i] = 0;
@@ -503,6 +531,12 @@ static Expr* builtin_histogramtransform(Expr* res)
              * scale, so it takes the new luminance in every channel -- grey, which is the only
              * hue-free answer available. */
             double f = (l > 1e-9) ? nl / l : 0.0;
+            /* One factor for all three channels is what keeps the hue, so where it would push a
+             * channel past 1 the FACTOR is capped, not each channel: clipping channels separately
+             * turned an orange {1, 0.8, 0.2} yellow (audit HistogramTransform#2). The pixel then
+             * reaches less than the target luminance, which is the price of keeping its colour. */
+            double mx = px[0] > px[1] ? (px[0] > px[2] ? px[0] : px[2]) : (px[1] > px[2] ? px[1] : px[2]);
+            if (mx > 0.0 && mx * f > 1.0) f = 1.0 / mx;
             for (k = 0; k < 3; k++) {
                 double v = (l > 1e-9) ? px[k] * f : nl;
                 out[i * c + k] = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
@@ -514,7 +548,7 @@ static Expr* builtin_histogramtransform(Expr* res)
         }
     }
     free(buf);
-    r = image_build_real(out, w, h, c);
+    r = vol ? image3d_build_real(out, w, h, d, c) : image_build_real(out, w, h, c);
     free(out);
     return r;
 }

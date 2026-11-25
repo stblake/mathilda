@@ -287,6 +287,40 @@ static void rs3_average(const double* src, double* dst,
     }
 }
 
+/* Rebuild a pure index permutation of `img`'s pixels (a crop, a reflection, a quarter turn) in
+ * the input's own type: those move stored values without computing new ones, so a "Byte" or
+ * "Bit" image stays one (audit ImageCrop#1, ImageReflect#1). Padding and resizing keep the type too,
+ * as in the reference, quantising the fill or the resampled values back to it (audit ImagePad#3,
+ * ImageResize#4). */
+static bool img_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* UpTo[n] with n a positive integer: into *n. */
+static bool img_upto(const Expr* e, double* n) {
+    double im = 0.0;
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1
+        || e->data.function.head->type != EXPR_SYMBOL
+        || strcmp(e->data.function.head->data.symbol.name, "UpTo") != 0) return false;
+    if (!na_read_scalar(e->data.function.args[0], n, &im) || im != 0.0) return false;
+    return *n >= 1.0 && *n == floor(*n) && *n <= 1e6;
+}
+
+static Expr* build_as(const Expr* img, const double* buf, size_t w, size_t h, size_t c) {
+    ImgType t = IMG_REAL;
+    if (!image_info(img, NULL, NULL, NULL, &t) || t == IMG_REAL) return image_build_real(buf, w, h, c);
+    return image_build_typed(buf, w, h, c, t);
+}
+
+static Expr* build3_as(const Expr* img, const double* buf, size_t w, size_t h, size_t d, size_t c) {
+    ImgType t = IMG_REAL;
+    if (!image3d_info(img, NULL, NULL, NULL, NULL, &t) || t == IMG_REAL)
+        return image3d_build_real(buf, w, h, d, c);
+    return image3d_build_typed(buf, w, h, d, c, t);
+}
+
 /* Resize a volume. `spec` is {width, height, depth} or a single width. */
 static Expr* resize3_run(Expr* vol, Expr* spec, Resample how) {
     size_t sw = 0, sh = 0, sd = 0, c = 0; double* src = NULL;
@@ -329,7 +363,7 @@ static Expr* resize3_run(Expr* vol, Expr* spec, Resample how) {
         if (use == RS_NEAREST)       rs3_nearest(src, dst, sw, sh, sd, dw, dh, dd, c);
         else if (use == RS_BILINEAR) rs3_trilinear(src, dst, sw, sh, sd, dw, dh, dd, c);
         else                         rs3_average(src, dst, sw, sh, sd, dw, dh, dd, c);
-        out = image3d_build_real(dst, dw, dh, dd, c);
+        out = build3_as(vol, dst, dw, dh, dd, c);
     }
     free(src); free(dst);
     return out;
@@ -360,7 +394,23 @@ static Expr* builtin_imageresize(Expr* res) {
     Expr* spec = res->data.function.args[1];
     double dwd = 0.0, dhd = 0.0, im = 0.0;
     bool have_h = false;
-    if (spec && spec->type == EXPR_FUNCTION && spec->data.function.head
+    /* UpTo[s] / {UpTo[w], UpTo[h]}: fit within the bound, keeping the aspect ratio, and NEVER
+     * enlarge -- an image already inside it comes back unchanged (audit ImageResize#3). */
+    double bw = 0.0, bh = 0.0;
+    bool upto = false;
+    if (img_upto(spec, &bw)) { bh = bw; upto = true; }
+    else if (img_is_list(spec) && spec->data.function.arg_count == 2
+             && img_upto(spec->data.function.args[0], &bw)
+             && img_upto(spec->data.function.args[1], &bh)) upto = true;
+    if (upto) {
+        if ((double)sw <= bw && (double)sh <= bh) { free(src); return expr_copy(res->data.function.args[0]); }
+        double f = bw / (double)sw < bh / (double)sh ? bw / (double)sw : bh / (double)sh;
+        dwd = floor((double)sw * f + 0.5);
+        dhd = floor((double)sh * f + 0.5);
+        if (dwd < 1.0) dwd = 1.0;
+        if (dhd < 1.0) dhd = 1.0;
+        have_h = true;
+    } else if (spec && spec->type == EXPR_FUNCTION && spec->data.function.head
         && spec->data.function.head->type == EXPR_SYMBOL
         && spec->data.function.head->data.symbol.name == SYM_List) {
         if (spec->data.function.arg_count != 2) { free(src); return NULL; }
@@ -415,7 +465,7 @@ static Expr* builtin_imageresize(Expr* res) {
         if (use == RS_NEAREST)       rs_nearest(src, dst, sw, sh, dw, dh, c);
         else if (use == RS_BILINEAR) rs_bilinear(src, dst, sw, sh, dw, dh, c);
         else                         rs_average(src, dst, sw, sh, dw, dh, c);
-        out = image_build_real(dst, dw, dh, c);
+        out = build_as(res->data.function.args[0], dst, dw, dh, c);
     }
     free(src); free(dst);
     return out;
@@ -532,16 +582,6 @@ static bool rot_side_spec(const Expr* e, double* rad) {
         return true;
     }
     return false;
-}
-
-/* Rebuild a pure index permutation of `img`'s pixels (a crop, a reflection, a quarter turn) in
- * the input's own type: those move stored values without computing new ones, so a "Byte" or
- * "Bit" image stays one (audit ImageCrop#1, ImageReflect#1). A resampling filter still widens
- * to "Real". */
-static Expr* build_as(const Expr* img, const double* buf, size_t w, size_t h, size_t c) {
-    ImgType t = IMG_REAL;
-    if (!image_info(img, NULL, NULL, NULL, &t) || t == IMG_REAL) return image_build_real(buf, w, h, c);
-    return image_build_typed(buf, w, h, c, t);
 }
 
 /* ImageRotate[image] (a quarter turn) / [image, angle] / [image, n Degree] / [image, side] /
@@ -989,8 +1029,9 @@ static Expr* builtin_imagepad(Expr* res) {
         Expr* hx = sp->data.function.args[0];
         Expr* hy = sp->data.function.args[1];
         double l = 0, r = 0, b = 0, t = 0;
-        if (!hx || hx->type != EXPR_FUNCTION || hx->data.function.arg_count != 2) return NULL;
-        if (!hy || hy->type != EXPR_FUNCTION || hy->data.function.arg_count != 2) return NULL;
+        /* each side pair is a LIST: f[1, 1] is not a padding specification (audit ImagePad#4) */
+        if (!img_is_list(hx) || hx->data.function.arg_count != 2) return NULL;
+        if (!img_is_list(hy) || hy->data.function.arg_count != 2) return NULL;
         if (!na_read_scalar(hx->data.function.args[0], &l, &im) || im != 0.0) return NULL;
         if (!na_read_scalar(hx->data.function.args[1], &r, &im) || im != 0.0) return NULL;
         if (!na_read_scalar(hy->data.function.args[0], &b, &im) || im != 0.0) return NULL;
@@ -1091,7 +1132,7 @@ static Expr* builtin_imagepad(Expr* res) {
                 }
             }
         }
-        out = image_build_real(dst, (size_t)nw, (size_t)nh, c);
+        out = build_as(res->data.function.args[0], dst, (size_t)nw, (size_t)nh, c);
     }
     free(src); free(dst);
     return out;
@@ -1126,7 +1167,31 @@ static void border_trim(const double* p, size_t w, size_t h, size_t c,
 /* ImageCrop[image, {w, h}] -- centred crop. ImageCrop[image] -- trim a uniform border. */
 static Expr* builtin_imagecrop(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc != 1 && argc != 2) return NULL;
+    if (argc != 1 && argc != 2 && argc != 3) return NULL;
+    /* ImageCrop[image, size, spec]: which sides lose the pixels (audit ImageCrop#2). Left removes
+     * them from the left, keeping the right-hand columns; Right, Top and Bottom likewise; Center is
+     * the default; {h, v} names one side per axis. -1 = take from the low side, 0 centre, +1 high. */
+    int sx = 0, sy = 0;
+    if (argc == 3) {
+        const Expr* sp = res->data.function.args[2];
+        const Expr* parts[2] = { sp, NULL };
+        size_t np = 1;
+        if (img_is_list(sp)) {
+            if (sp->data.function.arg_count != 2) return NULL;
+            parts[0] = sp->data.function.args[0]; parts[1] = sp->data.function.args[1]; np = 2;
+        }
+        for (size_t i = 0; i < np; i++) {
+            const Expr* q = parts[i];
+            if (!q || q->type != EXPR_SYMBOL) return NULL;
+            const char* nm = q->data.symbol.name;
+            if (strcmp(nm, "Left") == 0)        sx = 1;    /* keep the right: x0 = w - cw */
+            else if (strcmp(nm, "Right") == 0)  sx = -1;   /* keep the left:  x0 = 0 */
+            else if (strcmp(nm, "Top") == 0)    sy = 1;    /* keep the bottom rows */
+            else if (strcmp(nm, "Bottom") == 0) sy = -1;   /* keep the top rows */
+            else if (strcmp(nm, "Center") != 0) return NULL;
+        }
+        if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) return NULL;
+    }
 
     /* A volume, again dispatching on the image. Only the sized form: trimming a uniform border in
      * three dimensions is a different question (which faces? a shell or a box?) and declining is
@@ -1149,7 +1214,7 @@ static Expr* builtin_imagecrop(Expr* res) {
     if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
 
     size_t x0 = 0, y0 = 0, cw = w, ch = h;
-    if (argc == 2) {
+    if (argc >= 2) {
         Expr* sp = res->data.function.args[1];
         double a = 0.0, b = 0.0, im = 0.0;
         if (!sp || sp->type != EXPR_FUNCTION || sp->data.function.arg_count != 2
@@ -1165,8 +1230,8 @@ static Expr* builtin_imagecrop(Expr* res) {
         /* Centred, with any odd remainder going to the RIGHT and BOTTOM. That is the same
          * floor-division convention the kernel centres use, so a pad of m followed by a crop back to
          * the original size lands exactly where it started. */
-        x0 = (w - cw) / 2;
-        y0 = (h - ch) / 2;
+        x0 = sx > 0 ? w - cw : sx < 0 ? 0 : (w - cw) / 2;
+        y0 = sy > 0 ? h - ch : sy < 0 ? 0 : (h - ch) / 2;
     } else {
         /* Trim a uniform border. The colour comes from the top-left corner rather than being assumed
          * black: a scanned page's margin is white, and assuming black would trim nothing. */

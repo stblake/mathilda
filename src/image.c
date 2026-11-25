@@ -38,6 +38,8 @@
 #include "image.h"
 #include "eval.h"
 #include "numeric.h"
+#include "message.h"
+#include "print.h"
 
 /* ---- shape and type inspection of a nested List ---- */
 
@@ -445,6 +447,22 @@ static bool img_droppable_option(const Expr* a) {
     return false;
 }
 
+/* Every leaf a real number or an exact numeric quantity (Pi, Sqrt[2]); *need set when one is the
+ * latter, i.e. when numericizing would change something. */
+static bool img_leaves_numericizable(const Expr* e, bool* need) {
+    if (img_is_list(e)) {
+        if (e->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!img_leaves_numericizable(e->data.function.args[i], need)) return false;
+        return true;
+    }
+    double re = 0.0, im = 0.0;
+    if (na_read_scalar(e, &re, &im)) return im == 0.0;
+    if (!expr_is_numeric_quantity(e)) return false;
+    *need = true;
+    return true;
+}
+
 static Expr* img_construct(Expr* res, const char* head, bool vol) {
     size_t argc = res->data.function.arg_count;
     if (argc >= 2 && img_droppable_option(res->data.function.args[argc - 1])) {
@@ -497,7 +515,29 @@ static Expr* img_construct(Expr* res, const char* head, bool vol) {
     bool all_int = false; double lo = 0.0, hi = 0.0;
     bool shaped = vol ? img3_shape(data, &dp, &h, &w, &c, &all_int, &lo, &hi)
                       : img_shape(data, &h, &w, &c, &all_int, &lo, &hi);
-    if (!shaped) return NULL;
+    if (!shaped) {
+        /* Exact numeric constants (Pi, E, Sqrt[2]/2) are numbers too: numericize and construct from
+         * that, as a rational already is (audit Image#2). Only when every leaf that is not already a
+         * real is a numeric quantity, so symbolic data keeps its own form. */
+        bool need = false;
+        if (!is_ndarray(data) && img_leaves_numericizable(data, &need) && need) {
+            Expr* nd = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                                                       (Expr*[]){ expr_copy(data) }, 1));
+            Expr* args2[2] = { nd, argc == 2 ? expr_copy(res->data.function.args[1]) : NULL };
+            Expr* again = expr_new_function(expr_new_symbol(head), args2, argc);
+            Expr* out = img_construct(again, head, vol);
+            expr_free(again);
+            if (out) return out;
+        }
+        /* Not an array of real numbers: say so (audit Image3D#3), and stay unevaluated. */
+        if (vol)
+            image_message("Image3D", "imgarray", "The specified argument %s should be an array of "
+                          "rank 3 or 4 with machine-sized numbers.", data);
+        else
+            image_message("Image", "imgarray", "The specified argument %s should be an array of "
+                          "rank 2 or 3 with machine-sized numbers.", data);
+        return NULL;
+    }
     if (!stated) {
         if (all_int && lo >= 0.0 && hi <= 1.0)        t = IMG_BIT;
         else if (all_int && lo >= 0.0 && hi <= 255.0) t = IMG_BYTE;
@@ -583,7 +623,39 @@ static Expr* builtin_imagedimensions(Expr* res) {
         }
         return expr_new_function(expr_new_symbol(SYM_List), three, 3);
     }
-    if (!image_info(res->data.function.args[0], &w, &h, NULL, NULL)) return NULL;
+    const Expr* a = res->data.function.args[0];
+    if (!image_info(a, &w, &h, NULL, NULL)) {
+        /* A Graphics object has the dimensions of its raster, which an explicit ImageSize -> {w, h}
+         * states (audit ImageDimensions#2). Without one the size is the renderer's choice, so the
+         * call stays unevaluated rather than guess it. */
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Graphics
+                || strcmp(a->data.function.head->data.symbol.name, "Graphics3D") == 0)) {
+            for (size_t i = 1; i < a->data.function.arg_count; i++) {
+                const Expr* o = a->data.function.args[i];
+                if (o->type != EXPR_FUNCTION || o->data.function.arg_count != 2
+                    || o->data.function.head->type != EXPR_SYMBOL
+                    || (o->data.function.head->data.symbol.name != SYM_Rule
+                        && o->data.function.head->data.symbol.name != SYM_RuleDelayed)
+                    || o->data.function.args[0]->type != EXPR_SYMBOL
+                    || o->data.function.args[0]->data.symbol.name != SYM_ImageSize) continue;
+                const Expr* v = o->data.function.args[1];
+                if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL
+                    && v->data.function.head->data.symbol.name == SYM_List
+                    && v->data.function.arg_count == 2
+                    && v->data.function.args[0]->type == EXPR_INTEGER
+                    && v->data.function.args[1]->type == EXPR_INTEGER
+                    && v->data.function.args[0]->data.integer > 0
+                    && v->data.function.args[1]->data.integer > 0)
+                    return expr_copy((Expr*)v);
+                break;
+            }
+            return NULL;
+        }
+        /* Anything else is not an image (audit ImageDimensions#3). */
+        image_message("ImageDimensions", "imginv", "Expecting an image or graphics instead of %s.", a);
+        return NULL;
+    }
     Expr* two[2];
     two[0] = expr_new_integer((int64_t)w);
     two[1] = expr_new_integer((int64_t)h);
@@ -760,6 +832,34 @@ static Expr* img_scale_tree(const Expr* e, ImgType t, bool raw) {
  */
 static Expr* builtin_imagedata(Expr* res) {
     size_t argc = res->data.function.arg_count;
+    /* Interleaving -> False gives the channels OUTERMOST, c x h x w (c x d x h x w for a volume);
+     * True is the default interleaved order (audit ImageData#1). */
+    if (argc == 2 || argc == 3) {
+        const Expr* o = res->data.function.args[argc - 1];
+        if (o->type == EXPR_FUNCTION && o->data.function.arg_count == 2
+            && o->data.function.head->type == EXPR_SYMBOL
+            && (o->data.function.head->data.symbol.name == SYM_Rule
+                || o->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && o->data.function.args[0]->type == EXPR_SYMBOL
+            && strcmp(o->data.function.args[0]->data.symbol.name, "Interleaving") == 0) {
+            const Expr* v = o->data.function.args[1];
+            if (v->type != EXPR_SYMBOL || (v->data.symbol.name != SYM_True && v->data.symbol.name != SYM_False))
+                return NULL;
+            size_t c = 0, dp = 0;
+            bool vol = image3d_info(res->data.function.args[0], NULL, NULL, &dp, &c, NULL);
+            if (!vol && !image_info(res->data.function.args[0], NULL, NULL, &c, NULL)) return NULL;
+            Expr* a[2];
+            for (size_t i = 0; i + 1 < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+            Expr* inner = expr_new_function(expr_new_symbol("ImageData"), a, argc - 1);
+            if (v->data.symbol.name == SYM_True || c == 1) return inner;
+            Expr* perm = vol
+                ? expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_new_integer(2),
+                      expr_new_integer(3), expr_new_integer(4), expr_new_integer(1) }, 4)
+                : expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_new_integer(2),
+                      expr_new_integer(3), expr_new_integer(1) }, 3);
+            return expr_new_function(expr_new_symbol("Transpose"), (Expr*[]){ inner, perm }, 2);
+        }
+    }
     if (argc != 1 && argc != 2) return NULL;
     Expr* img = res->data.function.args[0];
     ImgType t;
@@ -1003,13 +1103,17 @@ static bool img3_shape(const Expr* d, size_t* dp, size_t* h, size_t* w, size_t* 
         return true;
     }
 
+    /* A list-valued voxel makes a channel axis, even of length 1: {{{{v}, ...}}} is a one-channel
+     * volume, as the packed d x h x w x 1 buffer and the planar h x w x 1 case are (audit
+     * Image3D#2). */
+    bool listvox = img_is_list(d->data.function.args[0]->data.function.args[0]->data.function.args[0]);
     for (size_t z = 0; z < *dp; z++) {
         const Expr* sl = d->data.function.args[z];
         for (size_t y = 0; y < *h; y++) {
             const Expr* row = sl->data.function.args[y];
             for (size_t x = 0; x < *w; x++) {
                 const Expr* px = row->data.function.args[x];
-                if (*c > 1) {
+                if (*c > 1 || listvox) {
                     if (!img_is_list(px) || px->data.function.arg_count != *c) return false;
                     for (size_t k = 0; k < *c; k++) {
                         const Expr* v = px->data.function.args[k];
@@ -1577,4 +1681,11 @@ bool image_real_value(const Expr* e, double* out) {
     expr_free(n);
     if (ok) *out = re;
     return ok;
+}
+
+/* A message naming one offending argument, through the message funnel (so Quiet and Check see it). */
+void image_message(const char* head, const char* tag, const char* fmt, const Expr* e) {
+    char* s = e ? expr_to_string((Expr*)e) : NULL;
+    mth_message(head, tag, fmt, s ? s : "");
+    free(s);
 }

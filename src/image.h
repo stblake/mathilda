@@ -101,4 +101,8 @@ char* image_to_json(const Expr* e);
  * tolerance, kernel entries, colour components) goes through, so 1/2 and 0.5 always agree. */
 bool image_real_value(const Expr* e, double* out);
 
+/* Emit head::tag through the message funnel, `fmt` holding one %s for the offending argument `e`.
+ * For argument-validation messages; the caller still returns NULL. */
+void image_message(const char* head, const char* tag, const char* fmt, const Expr* e);
+
 #endif /* MATHILDA_IMAGE_H */

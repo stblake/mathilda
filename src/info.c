@@ -2,6 +2,11 @@
 #include "symtab.h"
 
 void info_init(void) {
+    // Session history
+    symtab_set_docstring("Out",
+        "Out[n] or %n is the value produced on the nth output line. Out[] or % gives the last "
+        "output, and Out[-k] or %%...% (k times) the output k lines back.");
+
     // Arithmetic
     symtab_set_docstring("Plus",
         "x + y + ... or Plus[x, y, ...] represents a sum of terms.\n"

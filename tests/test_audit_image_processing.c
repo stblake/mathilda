@@ -388,6 +388,185 @@ static void test_wave4_histogram_match_correlate(void) {
     audit_true("ImageCorrelate#2", "ImageData[ImageCorrelate[Image[{{0.,1.,0.5}}],{{1, 0}},ManhattanDistance]] == {{1., 2., 0.5}}");
 }
 
+/* Wave 5 G9: radius caps lifted. A box mean or a median past the image reads the replicated border
+ * analytically (mean3_boxsum, median_run), flat morphology clamps the radius to the image (exact for
+ * a max or min), and the kernel matrices check memory instead of refusing r > 512. */
+static void test_wave5_radius_caps(void) {
+    audit_chk("BoxMatrix#3", "Dimensions[BoxMatrix[513]]", "{1027, 1027}");
+    audit_true("BoxMatrix#3", "Union[Flatten[BoxMatrix[513]]] == {1}");
+    audit_chk("GaussianMatrix#3", "Dimensions[GaussianMatrix[513]]", "{1027, 1027}");
+    audit_true("GaussianMatrix#3", "Abs[Total[Flatten[GaussianMatrix[513]]] - 1] < 10^-12");
+    audit_chk("Erosion#2", "ImageData[Erosion[Image[{{0.5, 0.2}}], 300]]", "{{0.2, 0.2}}");
+    audit_true("Erosion#2", "Erosion[Image[{{0.5, 0.2}}], 300] === Erosion[Image[{{0.5, 0.2}}], 256]");
+    audit_true("Erosion#2", "SeedRandom[2]; Module[{i = Image[RandomReal[1, {5, 7}]]}, "
+                            "Erosion[i, 6] === Erosion[i, 10^6] && Dilation[i, 7] === Dilation[i, 400]]");
+    audit_chk("Opening#2", "ImageData[Opening[Image[{{0., 1., 0.}}, \"Real\"], 300]]", "{{0.0, 0.0, 0.0}}");
+    audit_run("lab = Image[{{0.2, 0.3, 0.9}, {0.2, 0.8, 0.9}, {0.1, 0.2, 0.3}}]");
+    audit_chk("LocalAdaptiveBinarize#1", "ImageType[LocalAdaptiveBinarize[lab, 257]]", "\"Bit\"");
+    audit_true("LocalAdaptiveBinarize#1", "ImageData[LocalAdaptiveBinarize[lab, 257]] == ImageData[LocalAdaptiveBinarize[lab, 256]]");
+    audit_run("mf = Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}]");
+    audit_true("MeanFilter#3", "Max[Abs[Flatten[ImageData[MeanFilter[mf, 300]]] - 1/601.^2]] < 10^-15");
+    audit_true("MeanFilter#3", "Max[Abs[Flatten[ImageData[MeanFilter[mf, 5]]] - 1/121.]] < 10^-15");
+    audit_true("MeanFilter#2", "Max[Abs[Flatten[ImageData[MeanFilter[mf, {1, 1}]] - ImageData[MeanFilter[mf, 1]]]]] < 10^-15");
+    /* {r1, r2} is rows then columns: against the padded definition */
+    audit_true("MeanFilter#2", "SeedRandom[4]; Module[{m = RandomReal[1, {4, 5}], p}, p = ArrayPad[m, 70, \"Fixed\"];"
+                               " Max[Abs[ImageData[MeanFilter[Image[m], {2, 70}]] - "
+                               "Table[Mean[Flatten[p[[y + 68 ;; y + 72, x ;; x + 140]]]], {y, 4}, {x, 5}]]] < 10^-13]");
+    audit_run("md = Image[{{0.1, 0.9, 0.3}, {0.4, 0.5, 0.6}, {0.7, 0.2, 0.8}}]");
+    audit_chk("MedianFilter#3", "Head[MedianFilter[md, 65]]", "Image");
+    audit_chk("MedianFilter#3", "ImageData[MedianFilter[md, 65]]", "{{0.3, 0.3, 0.3}, {0.4, 0.5, 0.6}, {0.7, 0.7, 0.7}}");
+    /* the weighted (large-window) median agrees with the definition on the padded window */
+    audit_true("MedianFilter#3", "SeedRandom[3]; Module[{m = RandomReal[1, {5, 6}], r = 46, p}, p = ArrayPad[m, r, \"Fixed\"];"
+                                 " ImageData[MedianFilter[Image[m], r]] == "
+                                 "Table[Median[Flatten[p[[y ;; y + 2 r, x ;; x + 2 r]]]], {y, 5}, {x, 6}]]");
+    audit_chk("MedianFilter#4", "Head[MedianFilter[md, {1, 0}]]", "Image");
+    /* {1, 0}: 3 x 1 windows (rows), {0, 1}: 1 x 3 (columns) */
+    audit_chk("MedianFilter#4", "ImageData[MedianFilter[Image[{{0.9, 0.1, 0.5}, {0.2, 0.8, 0.4}}], {0, 1}]]",
+              "{{0.9, 0.5, 0.5}, {0.2, 0.4, 0.4}}");
+    audit_chk("MedianFilter#4", "ImageData[MedianFilter[Image[{{0.9, 0.1}, {0.2, 0.8}, {0.5, 0.3}}], {1, 0}]]",
+              "{{0.9, 0.1}, {0.5, 0.3}, {0.5, 0.3}}");
+}
+
+/* Wave 5 G9: the pixel type survives every operator that only moves or selects stored values. */
+static void test_wave5_type_kept(void) {
+    audit_run("mb = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 4}, {j, 1, 4}]]");
+    audit_chk("MedianFilter#2", "ImageType[MedianFilter[mb, 1]]", "\"Byte\"");
+    audit_run("mbit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 4}, {j, 1, 4}]]");
+    audit_chk("MedianFilter#2", "ImageType[MedianFilter[mbit, 1]]", "\"Bit\"");
+    audit_chk("MedianFilter#2", "ImageData[MedianFilter[Image[{{0, 255, 0}, {255, 0, 255}, {0, 255, 0}}, \"Byte\"], 1], \"Byte\"]",
+              "{{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}");
+    audit_chk("MedianFilter#2", "ImageData[MedianFilter[Image[{{9, 200, 7}, {8, 6, 250}}, \"Byte\"], {0, 1}], \"Byte\"]",
+              "{{9, 9, 7}, {8, 8, 250}}");
+    audit_run("ag = Image[{{10, 20}, {30, 40}}, \"Byte\"]");
+    audit_chk("ImageAssemble#1", "ImageType[ImageAssemble[{ag, ag}]]", "\"Byte\"");
+    audit_chk("ImageAssemble#1", "ImageData[ImageAssemble[{ag, ag}], \"Byte\"]", "{{10, 20, 10, 20}, {30, 40, 30, 40}}");
+    audit_chk("ImageAssemble#1", "ImageType[ImageAssemble[{Image[{{1, 0, 1}, {0, 1, 0}}], Image[{{1, 0, 1}, {0, 1, 0}}]}]]", "\"Bit\"");
+    audit_chk("ImageAssemble#1", "ImageType[ImageAssemble[{ag, Image[{{0.5, 0.5}, {0.5, 0.5}}]}]]", "\"Real\"");
+    audit_run("pb = Image[{{0, 255}, {128, 64}}, \"Byte\"]");
+    audit_chk("ImagePad#3", "ImageType[ImagePad[pb, 1]]", "\"Byte\"");
+    audit_chk("ImagePad#3", "ImageData[ImagePad[pb, 1], \"Byte\"]", "{{0, 0, 0, 0}, {0, 0, 255, 0}, {0, 128, 64, 0}, {0, 0, 0, 0}}");
+    audit_chk("ImageResize#4", "ImageResize[Image[{{0, 255}}, \"Byte\"], 4] // ImageType", "\"Byte\"");
+    audit_run("rb = Image[{{0, 128}, {255, 7}}, \"Byte\"]");
+    audit_chk("RemoveAlphaChannel#3", "ImageType[RemoveAlphaChannel[rb]]", "\"Byte\"");
+    audit_chk("RemoveAlphaChannel#3", "RemoveAlphaChannel[rb] === rb", "True");
+    audit_chk("RemoveAlphaChannel#3", "ImageType[RemoveAlphaChannel[Image[{{{10, 20}, {30, 255}}}, \"Byte\"]]]", "\"Byte\"");
+}
+
+/* Wave 5 G9: messages for invalid arguments, through the funnel (so Check sees them). */
+static void test_wave5_messages(void) {
+    audit_chk("GradientFilter#3", "Quiet[Check[GradientFilter[], fired, GradientFilter::argt]]", "fired");
+    audit_chk("GradientFilter#3", "Quiet[GradientFilter[]]", "GradientFilter[]");
+    audit_chk("GradientFilter#3", "Quiet[Check[GradientFilter[Image[{{0, 1}, {1, 0}}], 1, 2, 3], fired]]", "fired");
+    audit_chk("ImageDimensions#3", "Quiet[Check[ImageDimensions[x], fired, ImageDimensions::imginv]]", "fired");
+    audit_chk("ImageDimensions#3", "Quiet[ImageDimensions[{{1, 2}}]]", "ImageDimensions[{{1, 2}}]");
+    audit_chk("ImageDimensions#3", "Check[ImageDimensions[Image[{{1., 2.}}]], fired]", "{2, 1}");
+    audit_run("cri = Image[{{{1., 0., 0.}, {0., 1., 0.}}}, \"Real\"]");
+    audit_chk("ColorReplace#3", "Quiet[Check[ColorReplace[cri, Red -> Blue, 0.1, 4], fired, ColorReplace::argt]]", "fired");
+    audit_chk("ColorReplace#3", "Quiet[Check[ColorReplace[cri, Red -> Blue, -1], fired, ColorReplace::tol]]", "fired");
+    audit_run("lab2 = Image[{{0.2, 0.3}, {0.8, 0.9}}]");
+    audit_chk("LocalAdaptiveBinarize#2", "Quiet[Check[LocalAdaptiveBinarize[lab2, -1], fired, LocalAdaptiveBinarize::rad]]", "fired");
+    audit_chk("LocalAdaptiveBinarize#2", "Quiet[Check[LocalAdaptiveBinarize[lab2], fired]]", "fired");
+    audit_chk("LocalAdaptiveBinarize#2", "Quiet[Check[LocalAdaptiveBinarize[lab2, 1, {1, 2}], fired, LocalAdaptiveBinarize::coef]]", "fired");
+    audit_chk("Image3D#3", "Quiet[Check[Image3D[{{0., 1.}}], fired, Image3D::imgarray]]", "fired");
+    audit_chk("Image3D#3", "Quiet[Check[Image3D[{{{a, 1.}}}], fired, Image3D::imgarray]]", "fired");
+    audit_chk("Image3D#3", "Quiet[Image3D[{{{a, 1.}}}]]", "Image3D[{{{a, 1.0}}}]");
+}
+
+/* Wave 5 G9: argument forms that were left unevaluated. */
+static void test_wave5_forms(void) {
+    audit_chk("BoxMatrix#2", "BoxMatrix[1, 5]", "{{0, 0, 0, 0, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 0, 0, 0, 0}}");
+    audit_chk("BoxMatrix#2", "BoxMatrix[{0, 1}, {3, 5}]", "{{0, 0, 0, 0, 0}, {0, 1, 1, 1, 0}, {0, 0, 0, 0, 0}}");
+    audit_chk("GaussianMatrix#2", "Dimensions[GaussianMatrix[{{1, 2}, 1}]]", "{3, 5}");
+    audit_true("GaussianMatrix#2", "Module[{g = GaussianMatrix[{{1, 2}, 1}]}, Abs[Total[Flatten[g]] - 1] < 10^-15 && g == Reverse[g] && g == Reverse /@ g"
+                                   " && Abs[g[[2, 3]]/g[[1, 3]] - E^(1/2)] < 10^-12 && Abs[g[[2, 3]]/g[[2, 1]] - E^2] < 10^-12]");
+    audit_true("GaussianMatrix#2", "GaussianMatrix[{{2, 2}, 1}] == GaussianMatrix[{2, 1}]");
+    audit_chk("Binarize#3", "Binarize[Image[{{0.1, 0.9}}], # > 0.5 &]", "Image[{{0, 1}}, \"Bit\"]");
+    audit_chk("Binarize#3", "ImageData[Binarize[Image[{{{1., 0., 0.}, {0., 1., 0.}}}], #[[1]] > 0.5 &], \"Bit\"]", "{{1, 0}}");
+    audit_chk("Binarize#3", "Binarize[Image[{{0.1, 0.9}}], wave5thr]", "Binarize[Image[{{0.1, 0.9}}, \"Real\"], wave5thr]");
+    audit_chk("ColorConvert#2", "ColorConvert[RGBColor[1, 0, 0], \"Grayscale\"]", "GrayLevel[0.299]");
+    audit_chk("ColorConvert#2", "ColorConvert[GrayLevel[0.3], \"RGB\"]", "RGBColor[0.3, 0.3, 0.3]");
+    audit_chk("ColorConvert#2", "ColorConvert[RGBColor[1, 0, 0, 0.5], \"Grayscale\"]", "GrayLevel[0.299, 0.5]");
+    audit_chk("ColorQuantize#4", "ImageData[ColorQuantize[Image[{{0., 1.}}, \"Real\"], 2, Dithering -> False]]", "{{0.0, 1.0}}");
+    audit_true("DerivativeFilter#2", "ImageQ[DerivativeFilter[Image[{{0., 1., 4.}, {0., 1., 4.}}], {0, 1}, 2]]");
+    /* a ramp of slope 1 across the columns: the Gaussian derivative reads ~1 in the interior,
+     * along the rows ~0; the rows form is the transpose */
+    audit_true("DerivativeFilter#2", "Abs[ImageData[DerivativeFilter[Image[Table[N[j], {i, 20}, {j, 40}]], {0, 1}, 2]][[10, 20]] - 1] < 10^-3");
+    audit_true("DerivativeFilter#2", "Abs[ImageData[DerivativeFilter[Image[Table[N[j], {i, 20}, {j, 40}]], {1, 0}, 2]][[10, 20]]] < 10^-12");
+    audit_true("DerivativeFilter#2", "Abs[ImageData[DerivativeFilter[Image[Table[N[i], {i, 40}, {j, 20}]], {1, 0}, 2]][[20, 10]] - 1] < 10^-3");
+    audit_true("DerivativeFilter#2", "Module[{i = Image[{{0., 1., 4.}, {0., 1., 4.}}]}, DerivativeFilter[i, {0, 1}, 2] === "
+                                     "ImageConvolve[i, GaussianMatrix[{8, 2.}, {0, 1}]]]");
+    audit_true("FindThreshold#2", "Module[{t = FindThreshold[Image[{{0., 0.001}}]]}, 0. < t < 0.001]");
+    audit_true("FindThreshold#2", "ImageData[Binarize[Image[{{0., 0.001}}]]] == {{0, 1}}");
+    audit_true("FindThreshold#3", "FindThreshold[Image3D[{{{0., 1.}}}]] == FindThreshold[Image[{{0., 1.}}]]");
+    audit_run("g3 = Image3D[Table[N[Boole[i == 2 && j == 2 && k == 2]], {i, 3}, {j, 3}, {k, 3}]]");
+    audit_chk("GaussianFilter#2", "Head[GaussianFilter[g3, {1, 2}]]", "Image3D");
+    audit_true("GaussianFilter#2", "GaussianFilter[g3, {1, 0.5}] === GaussianFilter[g3, 1]");
+    audit_true("GaussianFilter#2", "Module[{d = ImageData[GaussianFilter[g3, {1, 2}]]}, d[[2, 2, 2]] < 1 && d[[1, 1, 1]] > 0]");
+    audit_run("gf = Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}]");
+    audit_true("GaussianFilter#3", "GaussianFilter[gf, {1, 2}, Padding -> \"Fixed\"] === GaussianFilter[gf, {1, 2}]");
+    audit_true("GaussianFilter#3", "ImageData[GaussianFilter[gf, 1, Padding -> 0]] == ImageData[ImageConvolve[gf, GaussianMatrix[1], Padding -> 0]]");
+    audit_true("GaussianFilter#3", "Abs[Total[Flatten[ImageData[GaussianFilter[gf, 1, Padding -> 0]]]] - 1] < 10^-12");
+    audit_true("HistogramTransform#2", "Module[{d = ImageData[HistogramTransform[Image[{{{1., 0.8, 0.2}, {0.1, 0.1, 0.1}}}]]]},"
+                                       " d[[1, 1, 1]] > d[[1, 1, 2]] > d[[1, 1, 3]]]");
+    audit_chk("HistogramTransform#3", "Head[HistogramTransform[Image3D[{{{0.1, 0.5}}}]]]", "Image3D");
+    audit_true("HistogramTransform#3", "ImageData[HistogramTransform[Image3D[{{{0.1, 0.5}}}]]] == {ImageData[HistogramTransform[Image[{{0.1, 0.5}}]]]}");
+    audit_true("Image#2", "Module[{i = Image[{{Pi, E}}]}, ImageType[i] == \"Real\" && ImageData[i] == {{N[Pi], N[E]}}]");
+    audit_true("Image#2", "ImageData[Image[{{Sqrt[2]/2, 0.}}]] == {{N[Sqrt[2]/2], 0.}}");
+    audit_chk("Image#2", "Quiet[Image[{{a, 1.}}]]", "Image[{{a, 1.0}}]");
+    audit_chk("Image3D#2", "Image3DQ[Image3D[{{{{0.5}, {1.}}}}]]", "True");
+    audit_true("Image3D#2", "Image3D[{{{{0.5}, {1.}}}}] === Image3D[{{{0.5, 1.}}}]");
+    audit_chk("ImageAdjust#2", "ImageData[ImageAdjust[Image[{{0.2, 0.6}}], {0, 0, 1}, {0.2, 0.6}]]", "{{0.0, 1.0}}");
+    audit_true("ImageAdjust#2", "ImageData[ImageAdjust[Image[{{0.2, 0.6}}], {0, 0, 1}, {0.2, 0.6}, {0.1, 0.5}]] == {{0.1, 0.5}}");
+    audit_chk("ImageCompose#4", "ImageData[ImageCompose[Image[{{0., 0.}, {0., 0.}}], Image[{{1.}}], Scaled[{0.25, 0.75}]]]",
+              "{{1.0, 0.0}, {0.0, 0.0}}");
+    audit_true("ImageCompose#4", "ImageCompose[Image[{{0., 0.}, {0., 0.}}], Image[{{1.}}], Center] === "
+                                 "ImageCompose[Image[{{0., 0.}, {0., 0.}}], Image[{{1.}}]]");
+    audit_chk("ImageCorrelate#3", "ImageData[ImageCorrelate[Image[{{0., 1., 0.}}], {{1, 2, 3}}, Padding -> 0]]", "{{3.0, 2.0, 1.0}}");
+    audit_true("ImageCorrelate#3", "ImageCorrelate[Image[{{0., 1., 0.}}], {{1, 2, 3}}, Padding -> \"Fixed\"] === "
+                                   "ImageCorrelate[Image[{{0., 1., 0.}}], {{1, 2, 3}}]");
+    audit_run("ci = Image[{{0.1, 0.2, 0.3}, {0.4, 0.5, 0.6}, {0.7, 0.8, 0.9}}]");
+    audit_chk("ImageCrop#2", "ImageData[ImageCrop[ci, {2, 2}, Left]]", "{{0.2, 0.3}, {0.5, 0.6}}");
+    audit_chk("ImageCrop#2", "ImageData[ImageCrop[ci, {2, 2}, Right]]", "{{0.1, 0.2}, {0.4, 0.5}}");
+    audit_chk("ImageCrop#2", "ImageData[ImageCrop[ci, {2, 2}, {Right, Top}]]", "{{0.4, 0.5}, {0.7, 0.8}}");
+    audit_chk("ImageCrop#2", "ImageData[ImageCrop[ci, {3, 2}, Bottom]]", "{{0.1, 0.2, 0.3}, {0.4, 0.5, 0.6}}");
+    audit_run("ic = Image[{{{255, 0, 0}, {0, 255, 0}}}]");
+    audit_chk("ImageData#1", "ImageData[ic, Interleaving -> False]", "{{{1.0, 0.0}}, {{0.0, 1.0}}, {{0.0, 0.0}}}");
+    audit_chk("ImageData#1", "ImageData[ic, \"Byte\", Interleaving -> False]", "{{{255, 0}}, {{0, 255}}, {{0, 0}}}");
+    audit_true("ImageData#1", "ImageData[ic, Interleaving -> True] === ImageData[ic]");
+    audit_chk("ImageDimensions#2", "ImageDimensions[Graphics[Disk[], ImageSize -> {100, 50}]]", "{100, 50}");
+    audit_chk("ImageLevels#2", "ImageLevels[Image[{{0.2, 0.5}}], 4, {0, 1}] == ImageLevels[Image[{{0.2, 0.5}}], 4]", "True");
+    audit_true("ImageLevels#2", "ImageLevels[Image[{{0.2, 0.5}}], 2, {0.2, 0.5}] == {{0.2, 1}, {0.5, 1}}");
+    audit_chk("ImagePad#4", "ImagePad[Image[{{0.1, 0.2}}], {wave5f[1, 1], wave5g[0, 0]}]",
+              "ImagePad[Image[{{0.1, 0.2}}, \"Real\"], {wave5f[1, 1], wave5g[0, 0]}]");
+    audit_run("ri = Image[Table[N[(i + j)/10], {i, 3}, {j, 6}]]");
+    audit_chk("ImageResize#3", "ImageDimensions[ImageResize[ri, UpTo[100]]]", "{6, 3}");
+    audit_chk("ImageResize#3", "ImageResize[ri, UpTo[100]] === ri", "True");
+    audit_chk("ImageResize#3", "ImageDimensions[ImageResize[ri, UpTo[3]]]", "{3, 2}");
+    audit_chk("ImageResize#3", "ImageDimensions[ImageResize[ri, {UpTo[4], UpTo[100]}]]", "{4, 2}");
+    audit_chk("MorphologicalComponents#2", "MorphologicalComponents[Image3D[{{{1., 0.}, {0., 0.}}, {{0., 0.}, {0., 1.}}}]]",
+              "{{{1, 0}, {0, 0}}, {{0, 0}, {0, 1}}}");
+    audit_chk("MorphologicalComponents#2", "MorphologicalComponents[Image3D[{{{1., 0.}, {0., 0.}}, {{0., 0.}, {0., 1.}}}], CornerNeighbors -> False]",
+              "{{{1, 0}, {0, 0}}, {{0, 0}, {0, 2}}}");
+    audit_chk("MorphologicalComponents#2", "MorphologicalComponents[Image[{{1, 0, 1}, {0, 1, 0}, {1, 0, 0}}], CornerNeighbors -> False]",
+              "{{1, 0, 2}, {0, 3, 0}, {4, 0, 0}}");
+    audit_chk("RandomImage#3", "{Head[RandomImage[1/2, {2, 2}]], Head[RandomImage[Pi, {2, 2}]]}", "{Image, Image}");
+    audit_true("RandomImage#3", "SeedRandom[1]; Max[ImageData[RandomImage[1/2, {10, 10}]]] <= 0.5");
+    audit_chk("RandomImage#4", "Head[RandomImage[UniformDistribution[{0, 1}], {2, 2}]]", "Image");
+    audit_chk("RandomImage#4", "ImageDimensions[RandomImage[NormalDistribution[], {3, 2}]]", "{3, 2}");
+    audit_chk("RandomImage#5", "Head[RandomImage[1, {2, 3, 4}]]", "Image3D");
+    audit_chk("RandomImage#5", "ImageDimensions[RandomImage[1, {2, 3, 4}]]", "{2, 3, 4}");
+}
+
+/* Wave 5 G9: docstrings. */
+static void test_wave5_docs(void) {
+    audit_true("Closing#3", "StringContainsQ[Information[Closing], \"pointwise everywhere. A \"]");
+    audit_true("Erosion#4", "StringContainsQ[Information[Erosion], \"self-dual. \"]");
+    audit_true("CornerFilter#1", "StringContainsQ[Information[CornerFilter], \"-0.04 trace^2 < 0\"]");
+    audit_true("CornerFilter#1", "!StringContainsQ[Information[CornerFilter], \"SCORES ZERO under both\"]");
+    audit_true("ImageCorrelate#4", "StringContainsQ[Information[ImageCorrelate], \"1 to within rounding\"]");
+    audit_true("Out#3", "StringContainsQ[Information[Out], \"Out[n]\"]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_random_image_huge_size);
@@ -413,5 +592,10 @@ int main(void) {
     TEST(test_wave4_gaussian_derivative);
     TEST(test_wave4_palette_padding_metrics);
     TEST(test_wave4_histogram_match_correlate);
+    TEST(test_wave5_radius_caps);
+    TEST(test_wave5_type_kept);
+    TEST(test_wave5_messages);
+    TEST(test_wave5_forms);
+    TEST(test_wave5_docs);
     return audit_finish("audit_image_processing");
 }

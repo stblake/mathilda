@@ -38,6 +38,8 @@
 #include "pack.h"
 #include "ndarray.h"
 #include "options.h"
+#include "checked_alloc.h"
+#include "numeric.h"
 #ifdef USE_FFTW
 #include <fftw3.h>
 #endif
@@ -744,9 +746,9 @@ static Expr* convolve3_run(Expr* vol, const double* k, size_t kd, size_t kh, siz
 /* A separable 3-D Gaussian of radius r, normalised to sum 1. Built as a full rank-3 kernel and
  * handed to the same dispatcher, so its separability is re-derived and verified rather than
  * assumed -- the same discipline the 2-D derivative kernels follow. */
-static double* gauss3_kernel(size_t r, size_t* kd, size_t* kh, size_t* kw) {
+static double* gauss3_kernel(size_t r, double sigma, size_t* kd, size_t* kh, size_t* kw) {
     size_t n = 2 * r + 1;
-    double sigma = (r == 0) ? 1.0 : (double)r / 2.0;
+    if (!(sigma > 0.0)) sigma = (r == 0) ? 1.0 : (double)r / 2.0;   /* the default, r/2 */
     double* k = malloc(sizeof(double) * n * n * n);
     if (!k) return NULL;
     double sum = 0.0;
@@ -777,33 +779,53 @@ static bool opt_is(const Expr* a, const char* name) {
         && strcmp(a->data.function.args[0]->data.symbol.name, name) == 0;
 }
 
+/* Padding -> p for a planar filter whose last argument is that option (audit ImageConvolve#2,
+ * GaussianFilter#3, ImageCorrelate#3). "Fixed" is the built-in replicate border, so the option is
+ * dropped. Any other scheme or value pads the image by `m` (at least the kernel's reach) with
+ * ImagePad, runs the filter on the padded image, and crops back to the centre, so the border pixels
+ * read the padding instead of the replicated edge. One rewrite for every head that takes the option,
+ * so they cannot disagree about what a padding means. NULL when the call is not of that shape. */
+static Expr* filter_padding_rewrite(Expr* res, int64_t m) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || !opt_is(res->data.function.args[argc - 1], "Padding")) return NULL;
+    size_t w = 0, h = 0;
+    if (!image_info(res->data.function.args[0], &w, &h, NULL, NULL)) return NULL;
+    const Expr* pv = res->data.function.args[argc - 1]->data.function.args[1];
+    size_t np = argc - 1;
+    Expr** a = malloc(sizeof(Expr*) * np);
+    if (!a) return NULL;
+    for (size_t i = 0; i < np; i++) a[i] = expr_copy(res->data.function.args[i]);
+    if (pv->type == EXPR_STRING && strcmp(pv->data.string, "Fixed") == 0) {
+        Expr* two = expr_new_function(expr_copy(res->data.function.head), a, np);
+        free(a);
+        return two;
+    }
+    a[0] = expr_new_function(expr_new_symbol("ImagePad"),
+        (Expr*[]){ a[0], expr_new_integer(m), expr_copy((Expr*)pv) }, 3);
+    Expr* conv = expr_new_function(expr_copy(res->data.function.head), a, np);
+    free(a);
+    Expr* size = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_new_integer((int64_t)w), expr_new_integer((int64_t)h) }, 2);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol("ImageCrop"), (Expr*[]){ conv, size }, 2));
+    if (!image_info(r, NULL, NULL, NULL, NULL)) { expr_free(r); return NULL; }
+    return r;
+}
+
+/* The reach of a kernel argument (a matrix, or an image template): its larger dimension. */
+static bool kernel_reach(const Expr* kern, int64_t* m) {
+    size_t kh = 0, kw = 0; double* k = NULL;
+    if (image_info(kern, &kw, &kh, NULL, NULL)) { *m = (int64_t)(kh > kw ? kh : kw); return true; }
+    if (!ker_load(kern, &kh, &kw, &k)) return false;
+    free(k);
+    *m = (int64_t)(kh > kw ? kh : kw);
+    return true;
+}
+
 static Expr* builtin_imageconvolve(Expr* res) {
-    /* Padding -> p (audit ImageConvolve#2): "Fixed" is the built-in replicate border; any other
-     * scheme or value pads by the kernel's reach with ImagePad, convolves, and crops back, so the
-     * border pixels read the padding instead of the replicated edge. */
     if (res->data.function.arg_count == 3 && opt_is(res->data.function.args[2], "Padding")) {
-        const Expr* pv = res->data.function.args[2]->data.function.args[1];
-        if (pv->type == EXPR_STRING && strcmp(pv->data.string, "Fixed") == 0) {
-            Expr* two = expr_new_function(expr_copy(res->data.function.head),
-                (Expr*[]){ expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) }, 2);
-            return two;
-        }
-        size_t kh = 0, kw = 0; double* k = NULL;
-        size_t w = 0, h = 0, c = 0;
-        if (!image_info(res->data.function.args[0], &w, &h, &c, NULL)) return NULL;
-        if (!ker_load(res->data.function.args[1], &kh, &kw, &k)) return NULL;
-        free(k);
-        int64_t m = (int64_t)(kh > kw ? kh : kw);
-        Expr* padded = expr_new_function(expr_new_symbol("ImagePad"),
-            (Expr*[]){ expr_copy(res->data.function.args[0]), expr_new_integer(m), expr_copy((Expr*)pv) }, 3);
-        Expr* conv = expr_new_function(expr_new_symbol("ImageConvolve"),
-            (Expr*[]){ padded, expr_copy(res->data.function.args[1]) }, 2);
-        Expr* size = expr_new_function(expr_new_symbol(SYM_List),
-            (Expr*[]){ expr_new_integer((int64_t)w), expr_new_integer((int64_t)h) }, 2);
-        Expr* crop = expr_new_function(expr_new_symbol("ImageCrop"), (Expr*[]){ conv, size }, 2);
-        Expr* r = eval_and_free(crop);
-        if (!image_info(r, NULL, NULL, NULL, NULL)) { expr_free(r); return NULL; }
-        return r;
+        int64_t m = 0;
+        if (!kernel_reach(res->data.function.args[1], &m)) return NULL;
+        return filter_padding_rewrite(res, m);
     }
     if (res->data.function.arg_count != 2) return NULL;
     /* A VOLUME takes the rank-3 path. Dispatching on the image rather than on the kernel is
@@ -851,6 +873,53 @@ static double gauss_deriv_factor(double t, double s, int n) {
     return ((n & 1) ? -1.0 : 1.0) * h1 / pow(s, (double)n);
 }
 
+/* An nr x nc matrix as nested Lists -- of machine reals from `k`, or of integers from `ik` (one of
+ * the two is non-NULL). The size is the caller's (a radius), so it is checked against memory first:
+ * a request that cannot be met reports General::nomem and aborts, rather than being refused by an
+ * arbitrary radius cap (audit BoxMatrix#3, GaussianMatrix#3). */
+static Expr* matrix_from_buf(const double* k, const unsigned char* ik, size_t nr, size_t nc) {
+    /* each entry is an Expr node, and each row a List: a few dozen bytes per element */
+    if (!mth_alloc2_ok((int64_t)nr, (int64_t)nc, 64)) return mth_nomem_abort();
+    Expr** rows = malloc(sizeof(Expr*) * nr);
+    if (!rows) return mth_nomem_abort();
+    bool ok = true;
+    for (size_t i = 0; i < nr; i++) rows[i] = NULL;
+    for (size_t i = 0; i < nr && ok; i++) {
+        Expr** cols = malloc(sizeof(Expr*) * nc);
+        if (!cols) { ok = false; break; }
+        bool okc = true;
+        for (size_t j = 0; j < nc; j++) {
+            cols[j] = k ? expr_new_real(k[i * nc + j]) : expr_new_integer(ik[i * nc + j]);
+            if (!cols[j]) okc = false;
+        }
+        if (okc) rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, nc);
+        else for (size_t j = 0; j < nc; j++) expr_free(cols[j]);
+        free(cols);
+        if (!rows[i]) ok = false;
+    }
+    Expr* out = NULL;
+    if (ok) out = expr_new_function(expr_new_symbol(SYM_List), rows, nr);
+    else for (size_t i = 0; i < nr; i++) expr_free(rows[i]);
+    free(rows);
+    return out;
+}
+
+/* A non-negative integer radius, or {r1, r2} (rows, columns): into r[0], r[1]. */
+static bool matrix_radii(const Expr* e, double* r) {
+    double im = 0.0;
+    if (ker_is_list(e)) {
+        if (e->data.function.arg_count != 2) return false;
+        if (!na_read_scalar(e->data.function.args[0], &r[0], &im) || im != 0.0) return false;
+        if (!na_read_scalar(e->data.function.args[1], &r[1], &im) || im != 0.0) return false;
+    } else {
+        if (!na_read_scalar(e, &r[0], &im) || im != 0.0) return false;
+        r[1] = r[0];
+    }
+    for (int i = 0; i < 2; i++)
+        if (!(r[i] >= 0.0) || r[i] != floor(r[i]) || !(r[i] < 1.0e9)) return false;
+    return true;
+}
+
 static Expr* builtin_gaussianmatrix(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
@@ -868,64 +937,52 @@ static Expr* builtin_gaussianmatrix(Expr* res) {
         dn1 = (int)e1->data.integer; dn2 = (int)e2->data.integer;
     }
     Expr* a = res->data.function.args[0];
-    double r = 0.0, sigma = -1.0, im = 0.0;
-
+    /* r = {rows, cols} and sigma = {rows, cols}: GaussianMatrix[r], [{r, sigma}], and the
+     * rectangular [{{r1, r2}, sigma}] / [{{r1, r2}, {s1, s2}}] (audit GaussianMatrix#2). A list
+     * radius whose two entries are both scalars is {r, sigma}, not {r1, r2}. */
+    double r[2] = { 0.0, 0.0 }, sg[2] = { -1.0, -1.0 }, im = 0.0;
     if (ker_is_list(a)) {
         if (a->data.function.arg_count != 2) return NULL;
-        if (!na_read_scalar(a->data.function.args[0], &r, &im) || im != 0.0) return NULL;
-        if (!na_read_scalar(a->data.function.args[1], &sigma, &im) || im != 0.0) return NULL;
-        if (!(sigma > 0.0)) return NULL;
-    } else {
-        if (!na_read_scalar(a, &r, &im) || im != 0.0) return NULL;
+        if (!matrix_radii(a->data.function.args[0], r)) return NULL;
+        const Expr* se = a->data.function.args[1];
+        if (ker_is_list(se)) {
+            if (se->data.function.arg_count != 2) return NULL;
+            for (int i = 0; i < 2; i++)
+                if (!na_read_scalar(se->data.function.args[i], &sg[i], &im) || im != 0.0) return NULL;
+        } else {
+            if (!na_read_scalar(se, &sg[0], &im) || im != 0.0) return NULL;
+            sg[1] = sg[0];
+        }
+        if (!(sg[0] > 0.0) || !(sg[1] > 0.0)) return NULL;
+    } else if (!matrix_radii(a, r)) {
+        return NULL;
     }
-    /* A radius must be a non-negative integer: a fractional radius has no matrix size. */
-    if (!(r >= 0.0) || r != floor(r) || r > 512.0) return NULL;
-    size_t rr = (size_t)r;
-    if (sigma < 0.0) sigma = (rr == 0) ? 1.0 : (double)rr / 2.0;
+    for (int i = 0; i < 2; i++)
+        if (sg[i] < 0.0) sg[i] = (r[i] == 0.0) ? 1.0 : r[i] / 2.0;
+    size_t r1 = (size_t)r[0], r2 = (size_t)r[1];
+    size_t nr = 2 * r1 + 1, nc = 2 * r2 + 1;
+    if (!mth_alloc2_ok((int64_t)nr, (int64_t)nc, 64)) return mth_nomem_abort();
 
-    size_t n = 2 * rr + 1;
-    double* k = malloc(sizeof(double) * n * n);
-    if (!k) return NULL;
+    double* k = malloc(sizeof(double) * nr * nc);
+    if (!k) return mth_nomem_abort();
     double sum = 0.0;
-    for (size_t i = 0; i < n; i++) {
-        double dy = (double)i - (double)rr;
-        for (size_t j = 0; j < n; j++) {
-            double dx = (double)j - (double)rr;
-            double v = exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma));
-            k[i * n + j] = v;
+    for (size_t i = 0; i < nr; i++) {
+        double dy = (double)i - (double)r1;
+        for (size_t j = 0; j < nc; j++) {
+            double dx = (double)j - (double)r2;
+            double v = exp(-(dy * dy) / (2.0 * sg[0] * sg[0]) - (dx * dx) / (2.0 * sg[1] * sg[1]));
+            k[i * nc + j] = v;
             sum += v;
         }
     }
     if (!(sum > 0.0)) { free(k); return NULL; }
-    for (size_t i = 0; i < n * n; i++) k[i] /= sum;
+    for (size_t i = 0; i < nr * nc; i++) k[i] /= sum;
     if (dn1 || dn2)
-        for (size_t i = 0; i < n; i++)
-            for (size_t j = 0; j < n; j++)
-                k[i * n + j] *= gauss_deriv_factor((double)i - (double)rr, sigma, dn1)
-                              * gauss_deriv_factor((double)j - (double)rr, sigma, dn2);
-
-    Expr** rows = malloc(sizeof(Expr*) * n);
-    Expr* out = NULL;
-    if (rows) {
-        bool ok = true;
-        for (size_t i = 0; i < n; i++) rows[i] = NULL;
-        for (size_t i = 0; i < n && ok; i++) {
-            Expr** cols = malloc(sizeof(Expr*) * n);
-            if (!cols) { ok = false; break; }
-            bool okc = true;
-            for (size_t j = 0; j < n; j++) {
-                cols[j] = expr_new_real(k[i * n + j]);
-                if (!cols[j]) okc = false;
-            }
-            if (okc) rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, n);
-            else for (size_t j = 0; j < n; j++) expr_free(cols[j]);
-            free(cols);
-            if (!rows[i]) ok = false;
-        }
-        if (ok) out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
-        else for (size_t i = 0; i < n; i++) expr_free(rows[i]);
-        free(rows);
-    }
+        for (size_t i = 0; i < nr; i++)
+            for (size_t j = 0; j < nc; j++)
+                k[i * nc + j] *= gauss_deriv_factor((double)i - (double)r1, sg[0], dn1)
+                               * gauss_deriv_factor((double)j - (double)r2, sg[1], dn2);
+    Expr* out = matrix_from_buf(k, NULL, nr, nc);
     free(k);
     return out;
 }
@@ -935,46 +992,38 @@ static Expr* builtin_gaussianmatrix(Expr* res) {
  * NOT normalised, which is Mathematica's definition and a trap worth naming: convolving with it
  * multiplies brightness by the element count, so ImageConvolve[img, BoxMatrix[1]] is nine times
  * too bright. The normalised version is a mean filter. Kept faithful rather than helpfully
- * rescaled, because a caller reaching for BoxMatrix in an arithmetic expression needs the ones. */
+ * rescaled, because a caller reaching for BoxMatrix in an arithmetic expression needs the ones.
+ *
+ * BoxMatrix[{r1, r2}] is a (2 r1 + 1) x (2 r2 + 1) box (audit BoxMatrix#1). BoxMatrix[r, w] /
+ * BoxMatrix[r, {w1, w2}] centres the box in a w x w (w1 x w2) matrix of 0s (audit BoxMatrix#2); a
+ * width with no centre -- one whose parity differs from 2 r + 1 -- stays unevaluated rather than be
+ * placed off-centre by a guess. */
 static Expr* builtin_boxmatrix(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
-    double r = 0.0, r2 = 0.0, im = 0.0;
-    const Expr* spec = res->data.function.args[0];
-    if (ker_is_list(spec)) {
-        /* BoxMatrix[{r1, r2}]: a (2 r1 + 1) x (2 r2 + 1) box (audit BoxMatrix#1) */
-        if (spec->data.function.arg_count != 2) return NULL;
-        if (!na_read_scalar(spec->data.function.args[0], &r, &im) || im != 0.0) return NULL;
-        if (!na_read_scalar(spec->data.function.args[1], &r2, &im) || im != 0.0) return NULL;
-    } else {
-        if (!na_read_scalar(spec, &r, &im) || im != 0.0) return NULL;
-        r2 = r;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    double r[2];
+    if (!matrix_radii(res->data.function.args[0], r)) return NULL;
+    size_t bn = 2 * (size_t)r[0] + 1, bc = 2 * (size_t)r[1] + 1;
+    size_t n = bn, ncol = bc;
+    if (argc == 2) {
+        double wd[2];
+        if (!matrix_radii(res->data.function.args[1], wd)) return NULL;
+        n = (size_t)wd[0]; ncol = (size_t)wd[1];
+        if (n == 0 || ncol == 0) return NULL;
+        if ((n % 2) != (bn % 2) || (ncol % 2) != (bc % 2)) return NULL;
     }
-    if (!(r >= 0.0) || r != floor(r) || r > 512.0) return NULL;
-    if (!(r2 >= 0.0) || r2 != floor(r2) || r2 > 512.0) return NULL;
-    size_t n = 2 * (size_t)r + 1;
-    size_t ncol = 2 * (size_t)r2 + 1;
-
-    Expr** rows = malloc(sizeof(Expr*) * n);
-    if (!rows) return NULL;
-    bool ok = true;
-    for (size_t i = 0; i < n; i++) rows[i] = NULL;
-    for (size_t i = 0; i < n && ok; i++) {
-        Expr** cols = malloc(sizeof(Expr*) * ncol);
-        if (!cols) { ok = false; break; }
-        bool okc = true;
+    if (!mth_alloc2_ok((int64_t)n, (int64_t)ncol, 64)) return mth_nomem_abort();
+    unsigned char* m = malloc(n * ncol);
+    if (!m) return mth_nomem_abort();
+    /* the box's top-left corner; negative when the width crops the box */
+    int64_t oy = ((int64_t)n - (int64_t)bn) / 2, ox = ((int64_t)ncol - (int64_t)bc) / 2;
+    for (size_t i = 0; i < n; i++)
         for (size_t j = 0; j < ncol; j++) {
-            cols[j] = expr_new_integer(1);
-            if (!cols[j]) okc = false;
+            int64_t bi = (int64_t)i - oy, bj = (int64_t)j - ox;
+            m[i * ncol + j] = (bi >= 0 && bi < (int64_t)bn && bj >= 0 && bj < (int64_t)bc) ? 1u : 0u;
         }
-        if (okc) rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, ncol);
-        else for (size_t j = 0; j < ncol; j++) expr_free(cols[j]);
-        free(cols);
-        if (!rows[i]) ok = false;
-    }
-    Expr* out = NULL;
-    if (ok) out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
-    else for (size_t i = 0; i < n; i++) expr_free(rows[i]);
-    free(rows);
+    Expr* out = matrix_from_buf(NULL, m, n, ncol);
+    free(m);
     return out;
 }
 
@@ -984,13 +1033,32 @@ static Expr* builtin_boxmatrix(Expr* res) {
  * separate code path, because Mathematica DOCUMENTS the two as equal and a test asserts it. Two
  * independent implementations of the same identity is how the identity quietly stops holding. */
 static Expr* builtin_gaussianfilter(Expr* res) {
+    if (res->data.function.arg_count == 3 && opt_is(res->data.function.args[2], "Padding")
+        && image_info(res->data.function.args[0], NULL, NULL, NULL, NULL)) {
+        /* GaussianFilter[img, r, Padding -> p] is ImageConvolve[img, GaussianMatrix[r], Padding -> p],
+         * the identity GaussianFilter is built on (audit GaussianFilter#3). */
+        Expr* gm = eval_and_free(expr_new_function(expr_new_symbol("GaussianMatrix"),
+                                                   (Expr*[]){ expr_copy(res->data.function.args[1]) }, 1));
+        if (!ker_is_list(gm)) { expr_free(gm); return NULL; }
+        return expr_new_function(expr_new_symbol("ImageConvolve"),
+            (Expr*[]){ expr_copy(res->data.function.args[0]), gm, expr_copy(res->data.function.args[2]) }, 3);
+    }
     if (res->data.function.arg_count != 2) return NULL;
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
-        double rr = 0.0, im = 0.0;
-        if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return NULL;
+        /* GaussianFilter[volume, r] or [volume, {r, sigma}] (audit GaussianFilter#2), as for a plane */
+        double rr = 0.0, sigma = -1.0, im = 0.0;
+        const Expr* ra = res->data.function.args[1];
+        if (ker_is_list(ra)) {
+            if (ra->data.function.arg_count != 2) return NULL;
+            if (!na_read_scalar(ra->data.function.args[0], &rr, &im) || im != 0.0) return NULL;
+            if (!na_read_scalar(ra->data.function.args[1], &sigma, &im) || im != 0.0) return NULL;
+            if (!(sigma > 0.0)) return NULL;
+        } else if (!na_read_scalar(ra, &rr, &im) || im != 0.0) {
+            return NULL;
+        }
         if (!(rr >= 0.0) || rr != floor(rr) || rr > 32.0) return NULL;
         size_t kd = 0, kh3 = 0, kw3 = 0;
-        double* k3 = gauss3_kernel((size_t)rr, &kd, &kh3, &kw3);
+        double* k3 = gauss3_kernel((size_t)rr, sigma, &kd, &kh3, &kw3);
         if (!k3) return NULL;
         Expr* o = convolve3_run(res->data.function.args[0], k3, kd, kh3, kw3);
         free(k3);
@@ -1066,13 +1134,15 @@ static void img_to_grey(const double* src, double* dst, size_t w, size_t h, size
  *
  * Returns false for a degenerate image where every pixel is identical: there is no threshold
  * that separates one cluster into two, and inventing one would be a fiction. */
-static bool img_otsu(const double* grey, size_t n, double* thresh) {
-    if (!grey || n == 0) return false;
+/* Otsu over the histogram of [lo, hi] (values outside clamp to the ends); the threshold is mapped
+ * back to the data's scale. */
+static bool img_otsu_range(const double* grey, size_t n, double lo, double hi, double* thresh) {
     double hist[IMG_OTSU_BINS];
     for (size_t i = 0; i < IMG_OTSU_BINS; i++) hist[i] = 0.0;
+    double span = hi - lo;
 
     for (size_t i = 0; i < n; i++) {
-        double v = grey[i];
+        double v = (grey[i] - lo) / span;
         if (!(v == v)) return false;                    /* a NaN pixel has no bin */
         if (v < 0.0) v = 0.0;
         if (v > 1.0) v = 1.0;
@@ -1109,9 +1179,30 @@ static bool img_otsu(const double* grey, size_t n, double* thresh) {
     /* The threshold sits at the UPPER EDGE of the winning bin, so a pixel in that bin falls on
      * the low side. Bin b covers values centred on b/255, so its upper edge is halfway to the
      * next centre. */
-    *thresh = ((double)best_bin + 0.5) / (double)(IMG_OTSU_BINS - 1);
-    if (*thresh > 1.0) *thresh = 1.0;
+    double t = ((double)best_bin + 0.5) / (double)(IMG_OTSU_BINS - 1);
+    if (t > 1.0) t = 1.0;
+    *thresh = lo + t * span;
     return true;
+}
+
+/* Otsu's threshold of a grey buffer: on the 256-bin histogram of the unit interval, or -- when the
+ * pixels are not all equal but every one lands in a single bin of it (Image[{{0., 0.001}}]) -- on the
+ * histogram of the data's own range, so two distinct grey levels are always separated (audit
+ * FindThreshold#2). The unit-interval histogram stays the first choice, so a threshold that already
+ * existed does not move. */
+static bool img_otsu(const double* grey, size_t n, double* thresh) {
+    if (!grey || n == 0) return false;
+    if (img_otsu_range(grey, n, 0.0, 1.0, thresh)) return true;
+    double mn = grey[0], mx = grey[0];
+    for (size_t i = 0; i < n; i++) {
+        if (!(grey[i] == grey[i])) return false;
+        if (grey[i] < mn) mn = grey[i];
+        if (grey[i] > mx) mx = grey[i];
+    }
+    if (mn < 0.0) mn = 0.0;
+    if (mx > 1.0) mx = 1.0;
+    if (!(mx > mn)) return false;
+    return img_otsu_range(grey, n, mn, mx, thresh);
 }
 
 /* Load an image and reduce it to a greyscale plane. */
@@ -1125,6 +1216,8 @@ static bool img_grey_plane(Expr* img, size_t* w, size_t* h, double** grey) {
     *w = ww; *h = hh; *grey = g;
     return true;
 }
+
+static bool img3_grey_volume(Expr* img, size_t* w, size_t* h, size_t* d, double** grey);
 
 /* FindThreshold[image] -- Otsu's threshold as a real number. */
 /* FindThreshold[image, Method -> m]: "Cluster" (the default, Otsu's between-class variance) or
@@ -1145,8 +1238,13 @@ static Expr* builtin_findthreshold(Expr* res) {
         else if (m->type == EXPR_STRING && strcmp(m->data.string, "Mean") == 0) mean = true;
         else return NULL;
     }
-    size_t w = 0, h = 0; double* g = NULL;
-    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    size_t w = 0, h = 0, d = 1; double* g = NULL;
+    /* A volume's histogram is a histogram: Otsu needs only the flat grey buffer (audit
+     * FindThreshold#3). */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        if (!img3_grey_volume(res->data.function.args[0], &w, &h, &d, &g)) return NULL;
+        w *= d;
+    } else if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
     double t = 0.0;
     bool ok;
     if (mean) {
@@ -1371,7 +1469,7 @@ static Expr* binarize3_run(Expr* vol, const Expr* targ) {
  * caller. Declared rather than moved, so the box-sum code stays next to the filter it was written for
  * and the reader finds it where MeanFilter is. */
 static bool mean3_boxsum(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
-                         size_t r);
+                         const double* rad);
 
 /* LocalAdaptiveBinarize[volume, r] / [volume, r, {c1, c2, c3}]
  *
@@ -1387,26 +1485,21 @@ static bool mean3_boxsum(const double* src, double* dst, size_t w, size_t h, siz
  * (D+2r+1)(H+2r+1)(W+2r+1) doubles, which for a 64x96x128 volume at r = 4 would be 8.4 MB per table
  * and two tables are needed.
  */
-static Expr* localadapt3_run(Expr* vol, double rr, double c1, double c2, double c3) {
-    size_t r = (size_t)rr;
-    size_t w = 0, h = 0, d = 0; double* g = NULL;
-    if (!img3_grey_volume(vol, &w, &h, &d, &g)) return NULL;
+static unsigned char* localadapt_mask(const double* g, size_t w, size_t h, size_t d,
+                                      const double* rad, double c1, double c2, double c3) {
     size_t n = w * h * d;
     bool need_sd = (c2 != 0.0);
     double* mean = malloc(sizeof(double) * n);
+    /* The mean of squares is only for the standard deviation, so with c2 == 0 -- the default,
+     * Bradley's mean thresholding -- building it is half the work for nothing. */
     double* sq = need_sd ? malloc(sizeof(double) * n) : NULL;
     double* msq = need_sd ? malloc(sizeof(double) * n) : NULL;
-    unsigned char* mask = malloc(n);
-    Expr* out = NULL;
+    unsigned char* mask = malloc(n ? n : 1);
     bool ok = mean && mask && (!need_sd || (sq && msq));
-    if (ok) {
-        if (r == 0) memcpy(mean, g, sizeof(double) * n);
-        else ok = mean3_boxsum(g, mean, w, h, d, 1, r);
-    }
+    if (ok) ok = mean3_boxsum(g, mean, w, h, d, 1, rad);
     if (ok && need_sd) {
         for (size_t i = 0; i < n; i++) sq[i] = g[i] * g[i];
-        if (r == 0) memcpy(msq, sq, sizeof(double) * n);
-        else ok = mean3_boxsum(sq, msq, w, h, d, 1, r);
+        ok = mean3_boxsum(sq, msq, w, h, d, 1, rad);
     }
     if (ok) {
         for (size_t i = 0; i < n; i++) {
@@ -1419,83 +1512,70 @@ static Expr* localadapt3_run(Expr* vol, double rr, double c1, double c2, double 
             }
             mask[i] = (g[i] > c1 * mean[i] + c2 * sd + c3) ? 1u : 0u;
         }
-        out = bit_image3d_from_mask(mask, w, h, d);
     }
-    free(g); free(mean); free(sq); free(msq); free(mask);
-    return out;
+    free(mean); free(sq); free(msq);
+    if (!ok) { free(mask); return NULL; }
+    return mask;
 }
 
+/* LocalAdaptiveBinarize[image, r] / [image, r, {c1, c2, c3}]: 1 where the pixel exceeds
+ * c1 mean + c2 sd + c3 of its (2r+1) window. The window statistics of a plane and of a volume both
+ * come from mean3_boxsum (a plane is one slice with no slice pass), which reads the replicated border
+ * analytically -- so any radius is accepted, and a window far larger than the image costs no more than
+ * r = 1 (audit LocalAdaptiveBinarize#1; the planar half used to build a summed-area table padded by r,
+ * which is why it refused r > 256). */
 static Expr* builtin_localadaptivebinarize(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 2 && argc != 3) return NULL;
+    Expr* img = res->data.function.args[0];
+    bool vol = image3d_info(img, NULL, NULL, NULL, NULL, NULL);
+    if (!vol && !image_info(img, NULL, NULL, NULL, NULL)) return NULL;
     double rr = 0.0, im = 0.0;
-    if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return NULL;
-    if (!(rr >= 1.0) || rr != floor(rr) || rr > 256.0) return NULL;
-    size_t r = (size_t)rr;
+    if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0
+        || !(rr >= 1.0) || rr != floor(rr) || !(rr < 4.5e15)) {
+        image_message("LocalAdaptiveBinarize", "rad",
+                      "The radius specification %s should be a positive integer.",
+                      res->data.function.args[1]);
+        return NULL;
+    }
 
     double c1 = 1.0, c2 = 0.0, c3 = 0.0;
     if (argc == 3) {
         const Expr* cs = res->data.function.args[2];
-        if (!cs || cs->type != EXPR_FUNCTION || !cs->data.function.head
-            || cs->data.function.head->type != EXPR_SYMBOL
-            || cs->data.function.head->data.symbol.name != SYM_List
-            || cs->data.function.arg_count != 3) return NULL;
         double v[3];
-        for (int i = 0; i < 3; i++)
-            if (!na_read_scalar(cs->data.function.args[i], &v[i], &im) || im != 0.0) return NULL;
+        bool okc = ker_is_list(cs) && cs->data.function.arg_count == 3;
+        for (int i = 0; okc && i < 3; i++)
+            if (!na_read_scalar(cs->data.function.args[i], &v[i], &im) || im != 0.0) okc = false;
+        if (!okc) {
+            image_message("LocalAdaptiveBinarize", "coef",
+                          "The coefficient specification %s should be a list of three real numbers.",
+                          res->data.function.args[2]);
+            return NULL;
+        }
         c1 = v[0]; c2 = v[1]; c3 = v[2];
     }
 
-    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
-        return localadapt3_run(res->data.function.args[0], (double)r, c1, c2, c3);
-
-    size_t w = 0, h = 0; double* g = NULL;
-    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
-
-    size_t m = 2 * r + 1;
-    size_t PH = h + 2 * r, PW = w + 2 * r, sw = PW + 1;
-    bool need_sd = (c2 != 0.0);
-    double* s1 = calloc((PH + 1) * sw, sizeof(double));
-    /* The sum-of-squares table is only for the standard deviation, so with c2 == 0 -- the default,
-     * Bradley's mean thresholding -- building it is half the work for nothing. */
-    double* s2 = need_sd ? calloc((PH + 1) * sw, sizeof(double)) : NULL;
-    unsigned char* mask = malloc(w * h);
+    size_t w = 0, h = 0, d = 1; double* g = NULL;
+    if (vol) { if (!img3_grey_volume(img, &w, &h, &d, &g)) return NULL; }
+    else if (!img_grey_plane(img, &w, &h, &g)) return NULL;
+    double rad[3] = { rr, rr, vol ? rr : 0.0 };
+    unsigned char* mask = localadapt_mask(g, w, h, d, rad, c1, c2, c3);
     Expr* out = NULL;
-    if (s1 && (s2 || !need_sd) && mask) {
-        for (size_t y = 0; y < PH; y++) {
-            size_t sy = clampi((int64_t)y - (int64_t)r, h);
-            for (size_t x = 0; x < PW; x++) {
-                size_t sx = clampi((int64_t)x - (int64_t)r, w);
-                double v = g[sy * w + sx];
-                s1[(y + 1) * sw + (x + 1)] = s1[y * sw + (x + 1)] + s1[(y + 1) * sw + x]
-                                           - s1[y * sw + x] + v;
-                if (need_sd)
-                    s2[(y + 1) * sw + (x + 1)] = s2[y * sw + (x + 1)] + s2[(y + 1) * sw + x]
-                                               - s2[y * sw + x] + v * v;
-            }
-        }
-        double area = (double)(m * m);
-        for (size_t y = 0; y < h; y++)
-          for (size_t x = 0; x < w; x++) {
-            size_t a = y * sw + x, b = y * sw + (x + m);
-            size_t c = (y + m) * sw + x, d = (y + m) * sw + (x + m);
-            double sum = s1[d] - s1[b] - s1[c] + s1[a];
-            double mean = sum / area;
-            double sd = 0.0;
-            if (need_sd) {
-                double sq = s2[d] - s2[b] - s2[c] + s2[a];
-                /* Cancellation can push a uniform window's variance a hair below zero; it is zero,
-                 * and sqrt of it would be a NaN spreading into the comparison. */
-                double var = sq / area - mean * mean;
-                sd = var > 0.0 ? sqrt(var) : 0.0;
-            }
-            double thr = c1 * mean + c2 * sd + c3;
-            mask[y * w + x] = (g[y * w + x] > thr) ? 1u : 0u;
-          }
-        out = bit_image_from_mask(mask, w, h);
-    }
-    free(g); free(s1); free(s2); free(mask);
+    if (mask) out = vol ? bit_image3d_from_mask(mask, w, h, d) : bit_image_from_mask(mask, w, h);
+    free(g); free(mask);
     return out;
+}
+
+/* A predicate argument: a pure function, or a symbol that HAS a definition (EvenQ, a user's p with
+ * DownValues). An undefined symbol is a symbolic threshold, and the call stays unevaluated rather
+ * than read t[v] as False everywhere. */
+static bool binarize_is_predicate(const Expr* f) {
+    if (f->type == EXPR_FUNCTION)
+        return f->data.function.head->type == EXPR_SYMBOL
+            && f->data.function.head->data.symbol.name == SYM_Function;
+    if (f->type != EXPR_SYMBOL || expr_is_numeric_quantity(f)) return false;
+    SymbolDef* d = symtab_lookup(f->data.symbol.name);
+    return d && (d->builtin_func || d->down_values);
 }
 
 static Expr* builtin_binarize(Expr* res) {
@@ -1504,6 +1584,34 @@ static Expr* builtin_binarize(Expr* res) {
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
         return binarize3_run(res->data.function.args[0],
                              argc == 2 ? res->data.function.args[1] : NULL);
+    if (argc == 2 && binarize_is_predicate(res->data.function.args[1])) {
+        /* Binarize[image, f]: 1 where f[v] is True, v the pixel's value -- a number for a grey image,
+         * the channel list for a colour one (audit Binarize#3). */
+        Expr* f = res->data.function.args[1];
+        size_t w = 0, h = 0, c = 0; double* px = NULL;
+        if (!image_load(res->data.function.args[0], &w, &h, &c, &px)) return NULL;
+        size_t npx = w * h;
+        unsigned char* mask = malloc(npx > 0 ? npx : 1);
+        Expr* out = NULL;
+        if (mask) {
+            for (size_t i = 0; i < w * h; i++) {
+                Expr* v;
+                if (c == 1) v = expr_new_real(px[i]);
+                else {
+                    Expr** ch = malloc(sizeof(Expr*) * c);
+                    for (size_t k = 0; k < c; k++) ch[k] = expr_new_real(px[i * c + k]);
+                    v = expr_new_function(expr_new_symbol(SYM_List), ch, c);
+                    free(ch);
+                }
+                Expr* r = eval_and_free(expr_new_function(expr_copy(f), (Expr*[]){ v }, 1));
+                mask[i] = (r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True) ? 1u : 0u;
+                expr_free(r);
+            }
+            out = bit_image_from_mask(mask, w, h);
+        }
+        free(mask); free(px);
+        return out;
+    }
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
 
@@ -1565,10 +1673,53 @@ static Expr* builtin_binarize(Expr* res) {
  * `1.0 - (0.299 + 0.587 + 0.114)`, which prints 1.11e-16, reveals otherwise. A test written from the
  * printed value would assert the wrong thing and pass for the wrong reason.
  */
+/* ColorConvert[colour, space] for a colour DIRECTIVE (audit ColorConvert#2): RGBColor to
+ * "Grayscale" is GrayLevel of the same Rec. 601 luminance images use, GrayLevel to "RGB" is the
+ * equal-channel RGBColor, and an opacity is carried along. Exact components stay exact. */
+static Expr* colorconvert_directive(const Expr* col, const char* space) {
+    if (col->type != EXPR_FUNCTION || col->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = col->data.function.head->data.symbol.name;
+    size_t n = col->data.function.arg_count;
+    bool to_grey = strcmp(space, "Grayscale") == 0 || strcmp(space, "Gray") == 0;
+    bool to_rgb = strcmp(space, "RGB") == 0;
+    if (!to_grey && !to_rgb) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        double v = 0.0;
+        if (!image_real_value(col->data.function.args[i], &v)) return NULL;
+    }
+    if (h == SYM_RGBColor && (n == 3 || n == 4)) {
+        if (to_rgb) return expr_copy((Expr*)col);
+        /* 0.299 r + 0.587 g + 0.114 b, evaluated so an exact colour gives the machine luminance */
+        Expr* terms[3];
+        static const double wts[3] = { 0.299, 0.587, 0.114 };
+        for (int i = 0; i < 3; i++)
+            terms[i] = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_real(wts[i]), expr_copy(col->data.function.args[i]) }, 2);
+        Expr* l = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, 3));
+        if (n == 4)
+            return expr_new_function(expr_new_symbol(SYM_GrayLevel),
+                                     (Expr*[]){ l, expr_copy(col->data.function.args[3]) }, 2);
+        return expr_new_function(expr_new_symbol(SYM_GrayLevel), (Expr*[]){ l }, 1);
+    }
+    if (h == SYM_GrayLevel && (n == 1 || n == 2)) {
+        if (to_grey) return expr_copy((Expr*)col);
+        Expr* g = col->data.function.args[0];
+        if (n == 2)
+            return expr_new_function(expr_new_symbol(SYM_RGBColor),
+                (Expr*[]){ expr_copy(g), expr_copy(g), expr_copy(g), expr_copy(col->data.function.args[1]) }, 4);
+        return expr_new_function(expr_new_symbol(SYM_RGBColor),
+                                 (Expr*[]){ expr_copy(g), expr_copy(g), expr_copy(g) }, 3);
+    }
+    return NULL;
+}
+
 static Expr* builtin_colorconvert(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* sp = res->data.function.args[1];
     if (!sp || sp->type != EXPR_STRING) return NULL;
+    if (!image_info(res->data.function.args[0], NULL, NULL, NULL, NULL)
+        && !image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return colorconvert_directive(res->data.function.args[0], sp->data.string);
     if (strcmp(sp->data.string, "Grayscale") != 0 && strcmp(sp->data.string, "Gray") != 0)
         return NULL;
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
@@ -1759,6 +1910,30 @@ static Expr* gradient3_run(Expr* vol) {
 }
 
 static Expr* builtin_derivativefilter(Expr* res) {
+    if (res->data.function.arg_count == 3
+        && image_info(res->data.function.args[0], NULL, NULL, NULL, NULL)) {
+        /* DerivativeFilter[image, {n1, n2}, sigma]: the Gaussian derivative at scale sigma (audit
+         * DerivativeFilter#2) -- ImageConvolve with GaussianMatrix[{r, sigma}, {n1, n2}], the n1-th
+         * derivative down the rows and the n2-th across the columns of a normalised Gaussian, with
+         * r = Ceiling[4 sigma] so the truncated tails carry no visible weight. The kernel's sign
+         * convention is the stencils': convolving a ramp of slope s gives (about) +s. */
+        const Expr* ord = res->data.function.args[1];
+        double sigma = 0.0;
+        if (!ker_is_list(ord) || ord->data.function.arg_count != 2) return NULL;
+        for (int i = 0; i < 2; i++) {
+            const Expr* o = ord->data.function.args[i];
+            if (o->type != EXPR_INTEGER || o->data.integer < 0 || o->data.integer > 16) return NULL;
+        }
+        if (!image_real_value(res->data.function.args[2], &sigma) || !(sigma > 0.0) || sigma > 1.0e4)
+            return NULL;
+        int64_t r = (int64_t)ceil(4.0 * sigma);
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_new_integer(r), expr_new_real(sigma) }, 2);
+        Expr* gm = expr_new_function(expr_new_symbol("GaussianMatrix"),
+            (Expr*[]){ spec, expr_copy((Expr*)ord) }, 2);
+        return expr_new_function(expr_new_symbol("ImageConvolve"),
+            (Expr*[]){ expr_copy(res->data.function.args[0]), gm }, 2);
+    }
     if (res->data.function.arg_count != 2) return NULL;
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
         int oz3 = 0, oy3 = 0, ox3 = 0;
@@ -2285,11 +2460,24 @@ static void morph_run(const double* src, double* dst, size_t w, size_t h, size_t
 }
 
 /* Read the second argument: an integer radius (a full (2r+1) square) or an explicit element. */
-static bool morph_element(Expr* spec, size_t* kh, size_t* kw, unsigned char** sup, bool* full) {
-    double r = 0.0, im = 0.0;
-    if (na_read_scalar(spec, &r, &im) && im == 0.0) {
-        if (!(r >= 0.0) || r != floor(r) || r > 256.0) return false;
-        size_t n = 2 * (size_t)r + 1;
+/* A radius past the image is CLAMPED to its largest extent, which is exact: under replicate padding a
+ * window [x - r, x + r] reads the clamped indices [max(0, x - r), min(n - 1, x + r)], and once
+ * r >= n - 1 that is the whole axis whatever r is -- and a max or min, unlike a mean, does not see how
+ * many times the border repeats. So Erosion[img, 300] is Erosion[img, max(w, h)] (audit Erosion#2,
+ * Opening#2), and a huge radius costs nothing. `maxext` is that extent. */
+static bool morph_radius(const Expr* spec, size_t maxext, size_t* r) {
+    double v = 0.0, im = 0.0;
+    if (!na_read_scalar(spec, &v, &im) || im != 0.0) return false;
+    if (!(v >= 0.0) || v != floor(v) || isinf(v)) return false;
+    *r = v > (double)maxext ? maxext : (size_t)v;
+    return true;
+}
+
+static bool morph_element(Expr* spec, size_t maxext, size_t* kh, size_t* kw, unsigned char** sup,
+                          bool* full) {
+    size_t r = 0;
+    if (morph_radius(spec, maxext, &r)) {
+        size_t n = 2 * r + 1;
         unsigned char* m = malloc(n * n);
         if (!m) return false;
         memset(m, 1, n * n);
@@ -2368,14 +2556,14 @@ static bool morph3_separable(const double* src, double* dst, size_t w, size_t h,
 
 /* The rank-3 half of Dilation/Erosion/Opening/Closing. */
 static Expr* morph3_builtin(Expr* res, MorphOp first, bool two_pass) {
-    double r = 0.0, im = 0.0;
-    if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
-    if (!(r >= 0.0) || r != floor(r) || r > 64.0) return NULL;
-    size_t k = 2 * (size_t)r + 1;
-
     size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
     ImgType t = IMG_REAL;
-    image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, &t);
+    image3d_info(res->data.function.args[0], &w, &h, &d, NULL, &t);
+    size_t r = 0;
+    if (!morph_radius(res->data.function.args[1], w > h ? (w > d ? w : d) : (h > d ? h : d), &r))
+        return NULL;
+    size_t k = 2 * r + 1;
+
     if (!image3d_load(res->data.function.args[0], &w, &h, &d, &c, &src)) return NULL;
     bool keep_bit = (t == IMG_BIT);     /* see morph_builtin */
     size_t n = w * h * d * c;
@@ -2462,12 +2650,12 @@ static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
     /* A VOLUME takes the rank-3 path, dispatching on the image as every other filter here does. */
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
         return morph3_builtin(res, first, two_pass);
-    size_t kh = 0, kw = 0; unsigned char* sup = NULL; bool full = false;
-    if (!morph_element(res->data.function.args[1], &kh, &kw, &sup, &full)) return NULL;
-
     size_t w = 0, h = 0, c = 0; double* src = NULL;
     ImgType t = IMG_REAL;
-    image_info(res->data.function.args[0], NULL, NULL, NULL, &t);
+    if (!image_info(res->data.function.args[0], &w, &h, NULL, &t)) return NULL;
+    size_t kh = 0, kw = 0; unsigned char* sup = NULL; bool full = false;
+    if (!morph_element(res->data.function.args[1], w > h ? w : h, &kh, &kw, &sup, &full)) return NULL;
+
     if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(sup); return NULL; }
     /* A "Bit" image STAYS "Bit", as in Mathematica. Flat morphology takes a max or min of stored
      * values, so every output of a binary image is exactly 0 or 1 already; widening it to "Real" (as
@@ -2593,30 +2781,46 @@ static Expr* builtin_morphologicalcomponents(Expr* res) {
         else return NULL;
     }
 
-    size_t w = 0, h = 0; double* g = NULL;
-    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
-    size_t n = w * h;
+    /* A VOLUME is labelled the same way, over 26 neighbours (6 without CornerNeighbors), and gives a
+     * depth x height x width label array (audit MorphologicalComponents#2). A plane is the d = 1 case
+     * of the same pass, so the two cannot disagree. */
+    size_t w = 0, h = 0, d = 1; double* g = NULL;
+    bool vol = image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL);
+    if (vol) { if (!img3_grey_volume(res->data.function.args[0], &w, &h, &d, &g)) return NULL; }
+    else if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    size_t n = w * h * d;
 
-    size_t* lab = calloc(n, sizeof(size_t));
+    /* The already-visited half of the neighbourhood, in raster order: the previous slice (9), the
+     * previous row (3) and the previous pixel. With CornerNeighbors -> False only the face
+     * neighbours count. */
+    int64_t offs[13][3];
+    int noff = 0;
+    for (int64_t dz = -1; dz <= 0; dz++)
+        for (int64_t dy = -1; dy <= 1; dy++)
+            for (int64_t dx = -1; dx <= 1; dx++) {
+                if (dz == 0 && (dy > 0 || (dy == 0 && dx >= 0))) continue;
+                if (!corners && ((dz != 0) + (dy != 0) + (dx != 0)) != 1) continue;
+                offs[noff][0] = dz; offs[noff][1] = dy; offs[noff][2] = dx; noff++;
+            }
+
+    size_t* lab = calloc(n ? n : 1, sizeof(size_t));
     size_t* parent = malloc(sizeof(size_t) * (n + 1));
     Expr* out = NULL;
     if (lab && parent) {
         size_t next = 1;
         parent[0] = 0;
         /* First pass: provisional labels, unioning already-seen neighbours. */
-        for (size_t y = 0; y < h; y++) {
+        for (size_t z = 0; z < d; z++)
+          for (size_t y = 0; y < h; y++)
             for (size_t x = 0; x < w; x++) {
-                size_t i = y * w + x;
+                size_t i = (z * h + y) * w + x;
                 if (!(g[i] > thr)) continue;                 /* background */
                 size_t best = 0;
-                /* W, then NW, N, NE -- the visited half of the neighbourhood. */
-                int64_t dxs[4] = { -1, -1, 0, 1 };
-                int64_t dys[4] = {  0, -1, -1, -1 };
-                for (int k = 0; k < 4; k++) {
-                    if (!corners && (dxs[k] != 0 && dys[k] != 0)) continue;  /* 4-connectivity */
-                    int64_t nx = (int64_t)x + dxs[k], ny = (int64_t)y + dys[k];
-                    if (nx < 0 || (size_t)nx >= w || ny < 0) continue;
-                    size_t j = (size_t)ny * w + (size_t)nx;
+                for (int k = 0; k < noff; k++) {
+                    int64_t nz = (int64_t)z + offs[k][0], ny = (int64_t)y + offs[k][1];
+                    int64_t nx = (int64_t)x + offs[k][2];
+                    if (nz < 0 || ny < 0 || ny >= (int64_t)h || nx < 0 || nx >= (int64_t)w) continue;
+                    size_t j = ((size_t)nz * h + (size_t)ny) * w + (size_t)nx;
                     if (lab[j] == 0) continue;
                     if (best == 0) best = lab[j];
                     else cc_union(parent, best, lab[j]);
@@ -2624,7 +2828,6 @@ static Expr* builtin_morphologicalcomponents(Expr* res) {
                 if (best == 0) { parent[next] = next; lab[i] = next; next++; }
                 else lab[i] = cc_find(parent, best);
             }
-        }
         /* Second pass: resolve to roots and RELABEL to 1..k in raster order of first appearance. */
         size_t* remap = calloc(next + 1, sizeof(size_t));
         if (remap) {
@@ -2635,28 +2838,31 @@ static Expr* builtin_morphologicalcomponents(Expr* res) {
                 if (remap[r] == 0) remap[r] = ++k;
                 lab[i] = remap[r];
             }
-            /* A plain integer matrix -- see the note above on why not an Image. */
-            Expr** rows = malloc(sizeof(Expr*) * h);
-            if (rows) {
-                bool ok = true;
+            /* A plain integer array -- see the note above on why not an Image. */
+            Expr** slices = malloc(sizeof(Expr*) * d);
+            bool ok = slices != NULL;
+            for (size_t z = 0; ok && z < d; z++) slices[z] = NULL;
+            for (size_t z = 0; ok && z < d; z++) {
+                Expr** rows = malloc(sizeof(Expr*) * h);
+                if (!rows) { ok = false; break; }
                 for (size_t y = 0; y < h; y++) rows[y] = NULL;
                 for (size_t y = 0; y < h && ok; y++) {
                     Expr** cols = malloc(sizeof(Expr*) * w);
                     if (!cols) { ok = false; break; }
-                    bool okc = true;
-                    for (size_t x = 0; x < w; x++) {
-                        cols[x] = expr_new_integer((int64_t)lab[y * w + x]);
-                        if (!cols[x]) okc = false;
-                    }
-                    if (okc) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
-                    else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
+                    for (size_t x = 0; x < w; x++)
+                        cols[x] = expr_new_integer((int64_t)lab[(z * h + y) * w + x]);
+                    rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
                     free(cols);
                     if (!rows[y]) ok = false;
                 }
-                if (ok) out = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+                if (ok) slices[z] = expr_new_function(expr_new_symbol(SYM_List), rows, h);
                 else for (size_t y = 0; y < h; y++) expr_free(rows[y]);
                 free(rows);
+                if (!slices[z]) ok = false;
             }
+            if (ok) out = vol ? expr_new_function(expr_new_symbol(SYM_List), slices, d) : slices[0];
+            else if (slices) for (size_t z = 0; z < d; z++) expr_free(slices[z]);
+            free(slices);
             free(remap);
         }
     }
@@ -2767,183 +2973,277 @@ static double window_median(double* buf, size_t n) {
  * r copies of the first value, the line, r copies of the last.
  */
 static bool mean3_boxsum(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
-                         size_t r) {
-    size_t n = w * h * d * c, k = 2 * r + 1;
+                         const double* rad) {
+    /* rad = {rx, ry, rz}: the radius along x (columns), y (rows) and z (slices). Any finite
+     * non-negative integer, however large. An axis of radius 0 is skipped (copied), so a zero radius
+     * is exact rather than a prefix difference that rounds. */
+    size_t n = w * h * d * c;
     size_t maxn = w > h ? (w > d ? w : d) : (h > d ? h : d);
     double* t1 = malloc(sizeof(double) * n);
     double* t2 = malloc(sizeof(double) * n);
-    /* prefix[i] is the sum of the first i padded entries, so prefix has one extra slot. */
-    double* pre = malloc(sizeof(double) * (maxn + 2 * r + 2));
+    /* prefix[i] is the sum of the first i entries of the UNPADDED line, so prefix has one extra slot.
+     * The replicated border is not materialised: a window [q - r, q + r] reads (r - q) copies of the
+     * first value past the left end and (q + r - (len - 1)) copies of the last past the right, so its
+     * sum is a prefix difference plus two products. That keeps the scratch at the line length and the
+     * cost at O(1) per entry for ANY radius -- a radius far beyond the image (MeanFilter[img, 300] on a
+     * 3 x 3 image) is no costlier than r = 1, where padding the line by r would allocate per radius. */
+    double* pre = malloc(sizeof(double) * (maxn + 1));
     if (!t1 || !t2 || !pre) { free(t1); free(t2); free(pre); return false; }
     size_t plane = w * h * c;
-    double inv = 1.0 / (double)k;
 
-    #define MEAN3_PASS(LEN, READ, WRITE)                                            \
+    #define MEAN3_PASS(LEN, R, READ, WRITE)                                         \
         do {                                                                        \
             size_t len = (LEN);                                                     \
+            double rr_ = (R), inv = 1.0 / (2.0 * rr_ + 1.0);                        \
+            double last = (double)(len - 1);                                        \
             pre[0] = 0.0;                                                           \
-            for (size_t t = 0; t < r; t++)   pre[t + 1] = pre[t] + (READ(0));        \
-            for (size_t q = 0; q < len; q++) pre[r + q + 1] = pre[r + q] + (READ(q));\
-            for (size_t t = 0; t < r; t++)                                          \
-                pre[r + len + t + 1] = pre[r + len + t] + (READ(len - 1));          \
+            for (size_t q = 0; q < len; q++) pre[q + 1] = pre[q] + (READ(q));       \
             for (size_t q = 0; q < len; q++) {                                      \
-                double sum = pre[q + k] - pre[q];                                   \
+                double dq = (double)q;                                              \
+                double lo = dq - rr_, hi = dq + rr_;                                \
+                size_t a = lo > 0.0 ? (size_t)lo : 0;                               \
+                size_t b = hi < last ? (size_t)hi : len - 1;                        \
+                double sum = pre[b + 1] - pre[a];                                   \
+                if (lo < 0.0) sum += (-lo) * (READ(0));                             \
+                if (hi > last) sum += (hi - last) * (READ(len - 1));                \
                 WRITE(q, sum * inv);                                                \
             }                                                                       \
         } while (0)
 
-    for (size_t z = 0; z < d; z++)
-      for (size_t y = 0; y < h; y++)
-        for (size_t ch = 0; ch < c; ch++) {
-          #define RD(q) src[z * plane + (y * w + (q)) * c + ch]
-          #define WR(q, v) t1[z * plane + (y * w + (q)) * c + ch] = (v)
-          MEAN3_PASS(w, RD, WR);
-          #undef RD
-          #undef WR
-        }
-    for (size_t z = 0; z < d; z++)
-      for (size_t x = 0; x < w; x++)
-        for (size_t ch = 0; ch < c; ch++) {
-          #define RD(q) t1[z * plane + ((q) * w + x) * c + ch]
-          #define WR(q, v) t2[z * plane + ((q) * w + x) * c + ch] = (v)
-          MEAN3_PASS(h, RD, WR);
-          #undef RD
-          #undef WR
-        }
-    for (size_t y = 0; y < h; y++)
-      for (size_t x = 0; x < w; x++)
-        for (size_t ch = 0; ch < c; ch++) {
-          #define RD(q) t2[(q) * plane + (y * w + x) * c + ch]
-          #define WR(q, v) dst[(q) * plane + (y * w + x) * c + ch] = (v)
-          MEAN3_PASS(d, RD, WR);
-          #undef RD
-          #undef WR
-        }
+    /* Each pass reads `in` and writes `out`; a skipped (radius 0) axis copies, and the buffers
+     * rotate so the last pass lands in dst. */
+    const double* in = src;
+    double* out = rad[0] > 0.0 ? t1 : NULL;
+    if (out) {
+        for (size_t z = 0; z < d; z++)
+          for (size_t y = 0; y < h; y++)
+            for (size_t ch = 0; ch < c; ch++) {
+              #define RD(q) in[z * plane + (y * w + (q)) * c + ch]
+              #define WR(q, v) out[z * plane + (y * w + (q)) * c + ch] = (v)
+              MEAN3_PASS(w, rad[0], RD, WR);
+              #undef RD
+              #undef WR
+            }
+        in = out;
+    }
+    out = rad[1] > 0.0 ? (in == t1 ? t2 : t1) : NULL;
+    if (out) {
+        for (size_t z = 0; z < d; z++)
+          for (size_t x = 0; x < w; x++)
+            for (size_t ch = 0; ch < c; ch++) {
+              #define RD(q) in[z * plane + ((q) * w + x) * c + ch]
+              #define WR(q, v) out[z * plane + ((q) * w + x) * c + ch] = (v)
+              MEAN3_PASS(h, rad[1], RD, WR);
+              #undef RD
+              #undef WR
+            }
+        in = out;
+    }
+    if (rad[2] > 0.0) {
+        out = dst;
+        for (size_t y = 0; y < h; y++)
+          for (size_t x = 0; x < w; x++)
+            for (size_t ch = 0; ch < c; ch++) {
+              #define RD(q) in[(q) * plane + (y * w + x) * c + ch]
+              #define WR(q, v) out[(q) * plane + (y * w + x) * c + ch] = (v)
+              MEAN3_PASS(d, rad[2], RD, WR);
+              #undef RD
+              #undef WR
+            }
+    } else {
+        memcpy(dst, in, sizeof(double) * n);
+    }
     #undef MEAN3_PASS
     free(t1); free(t2); free(pre);
     return true;
 }
 
-static Expr* mean3_run(Expr* vol, double rr) {
-    size_t r = (size_t)rr;
+/* A filter radius: a non-negative integer, or {r1, r2(, r3)} per data level (rows first, as
+ * BoxMatrix[{r1, r2}] is (2 r1 + 1) x (2 r2 + 1)), written into rad = {rx, ry, rz}. `rank` is 2 for
+ * an image and 3 for a volume. No upper bound: a window past the image reads the replicated border,
+ * which every caller computes without materialising it. */
+static bool filter_radii(const Expr* e, int rank, double* rad) {
+    double im = 0.0, v[3] = { 0.0, 0.0, 0.0 };
+    if (ker_is_list(e)) {
+        if (e->data.function.arg_count != (size_t)rank) return false;
+        for (int i = 0; i < rank; i++)
+            if (!na_read_scalar(e->data.function.args[i], &v[i], &im) || im != 0.0) return false;
+    } else {
+        if (!na_read_scalar(e, &v[0], &im) || im != 0.0) return false;
+        for (int i = 1; i < rank; i++) v[i] = v[0];
+    }
+    for (int i = 0; i < rank; i++)
+        if (!(v[i] >= 0.0) || v[i] != floor(v[i]) || !(v[i] < 4.5e15)) return false;
+    /* v is in data-level order (slices, rows, columns for a volume; rows, columns for a plane) */
+    if (rank == 2) { rad[0] = v[1]; rad[1] = v[0]; rad[2] = 0.0; }
+    else           { rad[0] = v[2]; rad[1] = v[1]; rad[2] = v[0]; }
+    return true;
+}
+
+static Expr* mean3_run(Expr* vol, const double* rad) {
     size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
     if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
     size_t n = w * h * d * c;
     double* dst = malloc(sizeof(double) * n);
     Expr* out = NULL;
-    if (dst) {
-        if (r == 0) {
-            /* A one-voxel window is no filtering, and the answer is the input EXACTLY. The prefix-sum
-             * path would return it to within the prefix's rounding rather than bit-for-bit -- which is
-             * how this identity was silently lost when that path replaced the separable convolution,
-             * and how the test caught it. */
-            memcpy(dst, src, sizeof(double) * n);
-            out = image3d_build_real(dst, w, h, d, c);
-        } else if (mean3_boxsum(src, dst, w, h, d, c, r)) {
-            out = image3d_build_real(dst, w, h, d, c);
-        }
-    }
+    /* A zero radius is no filtering, and the answer is the input EXACTLY: mean3_boxsum skips (copies)
+     * every axis of radius 0 rather than returning it to within a prefix difference's rounding --
+     * which is how this identity was silently lost once, and how the test caught it. */
+    if (dst && mean3_boxsum(src, dst, w, h, d, c, rad)) out = image3d_build_real(dst, w, h, d, c);
     free(src); free(dst);
     return out;
 }
 
+/* One window's multiset along an axis, as DISTINCT indices with multiplicities: [a, b] once each, plus
+ * the replicated border's extra copies of index 0 and index len - 1. */
+static size_t median_axis(size_t q, size_t len, double r, size_t* idx, double* mult) {
+    double dq = (double)q, lo = dq - r, hi = dq + r, last = (double)(len - 1);
+    size_t a = lo > 0.0 ? (size_t)lo : 0, b = hi < last ? (size_t)hi : len - 1, m = 0;
+    for (size_t i = a; i <= b; i++) { idx[m] = i; mult[m] = 1.0; m++; }
+    if (lo < 0.0) mult[0] += -lo;
+    if (hi > last) mult[m - 1] += hi - last;
+    return m;
+}
 
-static Expr* median3_run(Expr* vol, double rr) {
-    size_t r = (size_t)rr, n = 2 * r + 1, m = n * n * n;
-    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
-    if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
-    double* dst = malloc(sizeof(double) * w * h * d * c);
-    double* win = malloc(sizeof(double) * m);
-    Expr* out = NULL;
-    if (dst && win) {
-        size_t plane = w * h * c;
+typedef struct { double v, wt; } MedPair;
+static int medpair_cmp(const void* x, const void* y) {
+    double a = ((const MedPair*)x)->v, b = ((const MedPair*)y)->v;
+    return (a > b) - (a < b);
+}
+
+/* The median filter of a w x h x d x c buffer (a plane is d = 1, rz = 0), radii rad = {rx, ry, rz}.
+ *
+ * Every output is the LOWER-MIDDLE order statistic of the (2rx+1)(2ry+1)(2rz+1) values of the window
+ * under replicate padding -- one of the window's own values, so the result is exact in any pixel type.
+ *
+ * Two ways to the same order statistic. A window of up to MEDIAN_GATHER values is gathered and
+ * quickselected (window_median). A larger one is not gathered at all: a window that runs past the image
+ * consists of the pixels it covers, the edge rows and columns REPEATED, so it is read as distinct
+ * pixels with weights (the products of the per-axis multiplicities), sorted, and walked to the k-th
+ * weight. The cost is then bounded by the image, not the radius, so MedianFilter[img, 65] on a 3 x 3
+ * image is nine weighted pixels per output, not 17161 copies. The two compute the same order
+ * statistic, so they agree exactly wherever both apply. */
+#define MEDIAN_GATHER 8192.0
+static bool median_run(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
+                       const double* rad) {
+    double kx = 2.0 * rad[0] + 1.0, ky = 2.0 * rad[1] + 1.0, kz = 2.0 * rad[2] + 1.0;
+    double N = kx * ky * kz;
+    size_t plane = w * h * c;
+    if (N <= MEDIAN_GATHER) {
+        size_t rx = (size_t)rad[0], ry = (size_t)rad[1], rz = (size_t)rad[2];
+        size_t nx = (size_t)kx, ny = (size_t)ky, nz = (size_t)kz;
+        double* win = malloc(sizeof(double) * (size_t)N);
+        if (!win) return false;
         for (size_t z = 0; z < d; z++)
           for (size_t y = 0; y < h; y++)
             for (size_t x = 0; x < w; x++)
               for (size_t ch = 0; ch < c; ch++) {
                 size_t q = 0;
-                for (size_t a = 0; a < n; a++) {
-                    size_t sz = clampi((int64_t)z + (int64_t)a - (int64_t)r, d);
-                    for (size_t b = 0; b < n; b++) {
-                        size_t sy = clampi((int64_t)y + (int64_t)b - (int64_t)r, h);
-                        for (size_t e = 0; e < n; e++) {
-                            size_t sx = clampi((int64_t)x + (int64_t)e - (int64_t)r, w);
+                for (size_t a = 0; a < nz; a++) {
+                    size_t sz = clampi((int64_t)z + (int64_t)a - (int64_t)rz, d);
+                    for (size_t b = 0; b < ny; b++) {
+                        size_t sy = clampi((int64_t)y + (int64_t)b - (int64_t)ry, h);
+                        for (size_t e = 0; e < nx; e++) {
+                            size_t sx = clampi((int64_t)x + (int64_t)e - (int64_t)rx, w);
                             win[q++] = src[sz * plane + (sy * w + sx) * c + ch];
                         }
                     }
                 }
-                dst[z * plane + (y * w + x) * c + ch] = window_median(win, m);
+                dst[z * plane + (y * w + x) * c + ch] = window_median(win, q);
               }
-        out = image3d_build_real(dst, w, h, d, c);
+        free(win);
+        return true;
     }
-    free(src); free(dst); free(win);
-    return out;
+    size_t maxn = w > h ? (w > d ? w : d) : (h > d ? h : d);
+    size_t* ix = malloc(sizeof(size_t) * maxn * 3);
+    double* mx = malloc(sizeof(double) * maxn * 3);
+    MedPair* pr = malloc(sizeof(MedPair) * w * h * d);
+    bool ok = ix && mx && pr;
+    double k = floor((N - 1.0) / 2.0);
+    for (size_t z = 0; ok && z < d; z++) {
+        size_t mz = median_axis(z, d, rad[2], ix + 2 * maxn, mx + 2 * maxn);
+        for (size_t y = 0; y < h; y++) {
+            size_t my = median_axis(y, h, rad[1], ix + maxn, mx + maxn);
+            for (size_t x = 0; x < w; x++) {
+                size_t mxn = median_axis(x, w, rad[0], ix, mx);
+                for (size_t ch = 0; ch < c; ch++) {
+                    size_t m = 0;
+                    for (size_t a = 0; a < mz; a++)
+                        for (size_t b = 0; b < my; b++)
+                            for (size_t e = 0; e < mxn; e++) {
+                                pr[m].v = src[ix[2 * maxn + a] * plane
+                                              + (ix[maxn + b] * w + ix[e]) * c + ch];
+                                pr[m].wt = mx[2 * maxn + a] * mx[maxn + b] * mx[e];
+                                m++;
+                            }
+                    qsort(pr, m, sizeof(MedPair), medpair_cmp);
+                    double cum = 0.0, v = pr[m - 1].v;
+                    for (size_t i = 0; i < m; i++) {
+                        cum += pr[i].wt;
+                        if (cum > k) { v = pr[i].v; break; }
+                    }
+                    dst[z * plane + (y * w + x) * c + ch] = v;
+                }
+            }
+        }
+    }
+    free(ix); free(mx); free(pr);
+    return ok;
 }
 
+/* MedianFilter[image, r] / [image, {r1, r2}] / [volume, r] / [volume, {r1, r2, r3}].
+ *
+ * THE PIXEL TYPE IS KEPT (audit MedianFilter#2): every output is one of the window's stored values,
+ * so a median of bytes is a byte and a median of a "Bit" image is binary. Widening to "Real" lost the
+ * type for no numerical reason -- the same argument as flat morphology's. */
 static Expr* builtin_medianfilter(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
-    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
-        double rv = 0.0, iv = 0.0;
-        if (!na_read_scalar(res->data.function.args[1], &rv, &iv) || iv != 0.0) return NULL;
-        if (!(rv >= 0.0) || rv != floor(rv) || rv > 16.0) return NULL;   /* (2r+1)^3 grows fast */
-        return median3_run(res->data.function.args[0], rv);
+    Expr* img = res->data.function.args[0];
+    bool vol = image3d_info(img, NULL, NULL, NULL, NULL, NULL);
+    double rad[3];
+    if (!filter_radii(res->data.function.args[1], vol ? 3 : 2, rad)) return NULL;
+    ImgType t = IMG_REAL;
+    size_t w = 0, h = 0, d = 1, c = 0; double* src = NULL;
+    if (vol) {
+        image3d_info(img, NULL, NULL, NULL, NULL, &t);
+        if (!image3d_load(img, &w, &h, &d, &c, &src)) return NULL;
+    } else {
+        image_info(img, NULL, NULL, NULL, &t);
+        if (!image_load(img, &w, &h, &c, &src)) return NULL;
     }
-    double r = 0.0, im = 0.0;
-    if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
-    if (!(r >= 0.0) || r != floor(r) || r > 64.0) return NULL;
-    size_t rr = (size_t)r, k = 2 * rr + 1;
-
-    size_t w = 0, h = 0, c = 0; double* src = NULL;
-    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
-    double* dst = malloc(sizeof(double) * w * h * c);
-    double* win = malloc(sizeof(double) * k * k);
+    double* dst = malloc(sizeof(double) * w * h * d * c);
     Expr* out = NULL;
-    if (dst && win) {
-        for (size_t y = 0; y < h; y++)
-          for (size_t x = 0; x < w; x++)
-            for (size_t ch = 0; ch < c; ch++) {
-                size_t m = 0;
-                for (size_t i = 0; i < k; i++) {
-                    size_t sy = clampi((int64_t)y + (int64_t)i - (int64_t)rr, h);
-                    for (size_t j = 0; j < k; j++) {
-                        size_t sx = clampi((int64_t)x + (int64_t)j - (int64_t)rr, w);
-                        win[m++] = src[(sy * w + sx) * c + ch];
-                    }
-                }
-                dst[(y * w + x) * c + ch] = window_median(win, m);
-            }
-        out = image_build_real(dst, w, h, c);
+    if (dst && median_run(src, dst, w, h, d, c, rad)) {
+        if (vol) out = t == IMG_REAL ? image3d_build_real(dst, w, h, d, c)
+                                     : image3d_build_typed(dst, w, h, d, c, t);
+        else     out = t == IMG_REAL ? image_build_real(dst, w, h, c)
+                                     : image_build_typed(dst, w, h, c, t);
     }
-    free(src); free(dst); free(win);
+    free(src); free(dst);
     return out;
 }
 
-/* MeanFilter[image, r] -- the mean over a (2r+1) square, which IS a convolution with a normalised
- * box, so it is implemented as one rather than as a second averaging loop. Two implementations of
- * one identity is how the identity quietly stops holding -- the same reason GaussianFilter routes
- * through ImageConvolve. */
+/* MeanFilter[image, r] / [image, {r1, r2}] / [volume, r] / [volume, {r1, r2, r3}] -- the mean over a
+ * (2r+1) box under replicate padding.
+ *
+ * The box mean comes from mean3_boxsum, for a plane (d = 1, no slice pass) and a volume alike: one
+ * implementation, O(1) per pixel whatever the radius, and no upper bound on it -- a window past the
+ * image reads the replicated border analytically rather than padding the line by r (audit
+ * MeanFilter#3). It equals ImageConvolve with a normalised BoxMatrix to rounding, which a test
+ * asserts against the definition. */
 static Expr* builtin_meanfilter(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
-    double r = 0.0, im = 0.0;
-    if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
-    if (!(r >= 0.0) || r != floor(r) || r > 256.0) return NULL;
-    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
-        return mean3_run(res->data.function.args[0], r);
-    size_t n = 2 * (size_t)r + 1;
-    double* k = malloc(sizeof(double) * n * n);
-    if (!k) return NULL;
-    double inv = 1.0 / (double)(n * n);
-    for (size_t i = 0; i < n * n; i++) k[i] = inv;
-
+    Expr* img = res->data.function.args[0];
+    bool vol = image3d_info(img, NULL, NULL, NULL, NULL, NULL);
+    double rad[3];
+    if (!filter_radii(res->data.function.args[1], vol ? 3 : 2, rad)) return NULL;
+    if (vol) return mean3_run(img, rad);
     size_t w = 0, h = 0, c = 0; double* src = NULL;
-    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(k); return NULL; }
+    if (!image_load(img, &w, &h, &c, &src)) return NULL;
     double* dst = malloc(sizeof(double) * w * h * c);
     Expr* out = NULL;
-    if (dst) {
-        convolve_dispatch(src, dst, w, h, c, k, n, n);
-        out = image_build_real(dst, w, h, c);
-    }
-    free(src); free(dst); free(k);
+    if (dst && mean3_boxsum(src, dst, w, h, 1, c, rad)) out = image_build_real(dst, w, h, c);
+    free(src); free(dst);
     return out;
 }
 
@@ -3201,10 +3501,20 @@ static Expr* builtin_distancetransform(Expr* res) {
 
 static Expr* builtin_imagelevels(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc != 1 && argc != 2) return NULL;
+    if (argc != 1 && argc != 2 && argc != 3) return NULL;
 
+    /* ImageLevels[image, n, {min, max}]: n levels spanning [min, max] instead of the unit interval
+     * (audit ImageLevels#2); a value outside the range counts at the nearer end, as one outside
+     * [0, 1] does by default, so {0, 1} is exactly the default. */
+    double lmin = 0.0, lmax = 1.0;
+    if (argc == 3) {
+        const Expr* rg = res->data.function.args[2];
+        if (!ker_is_list(rg) || rg->data.function.arg_count != 2) return NULL;
+        if (!image_real_value(rg->data.function.args[0], &lmin)
+            || !image_real_value(rg->data.function.args[1], &lmax) || !(lmax > lmin)) return NULL;
+    }
     size_t nbins = 0;
-    if (argc == 2) {
+    if (argc >= 2) {
         double b = 0.0, im = 0.0;
         if (!na_read_scalar(res->data.function.args[1], &b, &im) || im != 0.0) return NULL;
         if (!(b >= 2.0) || b != floor(b) || b > 65536.0) return NULL;
@@ -3232,7 +3542,7 @@ static Expr* builtin_imagelevels(Expr* res) {
     Expr* out = NULL;
     if (count) {
         for (size_t i = 0; i < n; i++) {
-            double v = buf[i];
+            double v = argc == 3 ? (buf[i] - lmin) / (lmax - lmin) : buf[i];
             if (v < 0.0) v = 0.0;
             if (v > 1.0) v = 1.0;
             size_t b = (size_t)(v * (double)(nbins - 1) + 0.5);
@@ -3247,7 +3557,8 @@ static Expr* builtin_imagelevels(Expr* res) {
                 Expr* pair[2];
                 /* The level, on the same unit scale ImageData uses, so a level can be compared
                  * against a pixel value without rescaling. */
-                pair[0] = expr_new_real((double)i / (double)(nbins - 1));
+                pair[0] = expr_new_real(argc == 3 ? lmin + (lmax - lmin) * (double)i / (double)(nbins - 1)
+                                                  : (double)i / (double)(nbins - 1));
                 if (c == 1) {
                     pair[1] = expr_new_integer((int64_t)count[i]);
                 } else {
@@ -3275,11 +3586,23 @@ static Expr* builtin_imagelevels(Expr* res) {
  * ImageAdjust[image, {c, b}] / [image, {c, b, g}] -- contrast, brightness, gamma. */
 static Expr* builtin_imageadjust(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc != 1 && argc != 2) return NULL;
+    if (argc < 1 || argc > 4) return NULL;
+
+    /* ImageAdjust[image, {c, b, g}, {imin, imax}] rescales the input range to the unit interval
+     * before the curve, and [..., {omin, omax}] maps the curve's unit output onto that range
+     * (audit ImageAdjust#2). */
+    double rng[2][2] = { { 0.0, 1.0 }, { 0.0, 1.0 } };
+    for (size_t j = 2; j < argc; j++) {
+        const Expr* rg = res->data.function.args[j];
+        if (!ker_is_list(rg) || rg->data.function.arg_count != 2) return NULL;
+        if (!image_real_value(rg->data.function.args[0], &rng[j - 2][0])
+            || !image_real_value(rg->data.function.args[1], &rng[j - 2][1])) return NULL;
+        if (j == 2 && !(rng[0][1] > rng[0][0])) return NULL;
+    }
 
     double ct = 0.0, br = 0.0, gm = 1.0;
     bool params = false;
-    if (argc == 2) {
+    if (argc >= 2) {
         Expr* sp = res->data.function.args[1];
         /* ImageAdjust[image, c] is ImageAdjust[image, {c, 0}] (audit ImageAdjust#1) */
         if (!ker_is_list(sp)) {
@@ -3318,10 +3641,13 @@ static Expr* builtin_imageadjust(Expr* res) {
              * brightness is then a plain offset; gamma applies last on the unit interval, which is
              * where it is defined. Clipping happens before gamma because a negative base has no real
              * power. */
-            double v = (buf[i] - 0.5) * (1.0 + ct) + 0.5 + br;
+            double x = buf[i];
+            if (argc >= 3) x = (x - rng[0][0]) / (rng[0][1] - rng[0][0]);
+            double v = (x - 0.5) * (1.0 + ct) + 0.5 + br;
             if (v < 0.0) v = 0.0;
             if (v > 1.0) v = 1.0;
             if (gm != 1.0) v = pow(v, 1.0 / gm);
+            if (argc == 4) v = rng[1][0] + v * (rng[1][1] - rng[1][0]);
             buf[i] = v;
         }
     }
@@ -4005,6 +4331,11 @@ static Expr* builtin_imagecorners(Expr* res) {
 /* ImageCorrelate[image, kernel] / [image, template, "NormalizedCrossCorrelation"] */
 static Expr* builtin_imagecorrelate(Expr* res) {
     size_t argc = res->data.function.arg_count;
+    if (argc >= 3 && opt_is(res->data.function.args[argc - 1], "Padding")) {
+        int64_t m = 0;
+        if (!kernel_reach(res->data.function.args[1], &m)) return NULL;
+        return filter_padding_rewrite(res, m);
+    }
     if (argc != 2 && argc != 3) return NULL;
 
     bool ncc = false;
@@ -4270,8 +4601,9 @@ void imagefilter_init(void) {
         "selects \"MinimumEigenvalue\" (the default -- Shi-Tomasi's lambda_min, which is directly "
         "\"how much does the weaker direction vary\" and is comparable across images) or "
         "\"Harris\" (det - 0.04 trace^2, cheaper since it needs no square root, and negative on "
-        "edges). A STRAIGHT EDGE SCORES ZERO under both: every gradient in the window is parallel, so "
-        "the matrix has rank 1 and its determinant and smaller eigenvalue vanish. Colour is reduced "
+        "edges). On a STRAIGHT EDGE every gradient in the window is parallel, so the matrix has rank 1: "
+        "its smaller eigenvalue and determinant vanish, so \"MinimumEigenvalue\" scores exactly 0 there "
+        "while \"Harris\" is -0.04 trace^2 < 0. Colour is reduced "
         "to luminance first, since a corner is a property of brightness.");
 
     symtab_add_builtin("ImageCorners", builtin_imagecorners);
@@ -4308,7 +4640,7 @@ void imagefilter_init(void) {
         "is invariant to brightness offset and contrast scale. Plain correlation is maximised by "
         "brightness rather than similarity -- a white patch beats a correct but darker match -- which is "
         "why raw correlation is a poor matcher. Where the template is a crop of the image the score is "
-        "exactly 1 and is the global maximum. A flat window has no shape to compare and scores 0 rather "
+        "1 to within rounding (a few ulp) and is the global maximum. A flat window has no shape to compare and scores 0 rather "
         "than dividing by zero; scoring 1 would make every flat region match everything. Colour is "
         "reduced to luminance first for the NCC form.");
     symtab_add_builtin("ImageLevels", builtin_imagelevels);
@@ -4404,7 +4736,8 @@ void imagefilter_init(void) {
         "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; "
         "Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, "
         "Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only "
-        "because the replicate padding is itself self-dual A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
+        "because the replicate padding is itself self-dual. A radius beyond the image is the whole axis, "
+        "so any radius is accepted. A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
 
     symtab_add_builtin("Opening", builtin_filter_data);   /* data arrays, then builtin_opening */
     symtab_get_def("Opening")->attributes |= ATTR_PROTECTED;
@@ -4412,14 +4745,15 @@ void imagefilter_init(void) {
         "Opening[image, r] erodes then dilates with the same element, removing bright features "
         "smaller than it while leaving larger ones close to their original size. IDEMPOTENT: "
         "Opening[Opening[f]] equals Opening[f], which is the defining property and the reason "
-        "opening twice is not a sharpening loop A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
+        "opening twice is not a sharpening loop. A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
 
     symtab_add_builtin("Closing", builtin_filter_data);   /* data arrays, then builtin_closing */
     symtab_get_def("Closing")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Closing",
         "Closing[image, r] dilates then erodes with the same element, filling dark features "
         "smaller than it. Idempotent, like Opening, and the two bracket the image: "
-        "Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
+        "Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere. A \"Bit\" image "
+        "stays \"Bit\"; other types give \"Real\".");
     symtab_add_builtin("EdgeDetect", builtin_edgedetect);
     symtab_get_def("EdgeDetect")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("EdgeDetect",

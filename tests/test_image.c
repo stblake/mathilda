@@ -2206,8 +2206,9 @@ static void test_volume_mean_and_median_match_the_definition(void) {
     assert_eval_eq("Module[{u = Image3D[Table[0.5, {8}, {8}, {8}]]},"
                    " {Union[Flatten[ImageData[MeanFilter[u, 2]]]],"
                    "  Union[Flatten[ImageData[MedianFilter[u, 2]]]]}]", "{{0.5}, {0.5}}", 0);
-    /* (2r+1)^3 grows fast enough that a large radius is refused rather than silently taking minutes. */
-    assert_eval_eq("Head[MedianFilter[" FVOL ", 20]]", "MedianFilter", 0);
+    /* A large radius is no longer refused (audit MedianFilter#3): a window past the volume is read as
+     * the voxels it covers, weighted by the border's repeats, so the cost is bounded by the volume. */
+    assert_eval_eq("Head[MedianFilter[" FVOL ", 20]]", "Image3D", 0);
 }
 
 static void test_volume_median_is_a_rank_filter(void) {
