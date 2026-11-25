@@ -32,6 +32,8 @@
 #include "sym_names.h"
 #include "common.h"
 #include "dist.h"
+#include "message.h"
+#include "print.h"
 
 static Expr* mk1(const char* h, Expr* a) {
     return expr_new_function(expr_new_symbol(h), &a, 1);
@@ -57,7 +59,28 @@ static bool holds(Expr* test) {
     return t;
 }
 
-typedef enum { FD_NONE, FD_NORMAL, FD_UNIFORM } FdKind;
+typedef enum { FD_NONE, FD_NORMAL, FD_UNIFORM, FD_UNIFORM_BOX } FdKind;
+
+/* The distribution d names no distribution: say which parameter is wrong. */
+static void fd_bad_param(const char* head, const char* tag, const char* fmt,
+                         const Expr* param, const Expr* d) {
+    char* ps = expr_to_string((Expr*)param);
+    char* ds = expr_to_string((Expr*)d);
+    mth_message(head, tag, fmt, ps ? ps : "?", ds ? ds : "?");
+    free(ps); free(ds);
+}
+
+/* A box {{a1, b1}, ..., {an, bn}} (n >= 1) of numeric or symbolic bounds. */
+static bool fd_is_box(const Expr* r) {
+    if (!head_is(r, SYM_List) || r->data.function.arg_count == 0) return false;
+    for (size_t i = 0; i < r->data.function.arg_count; i++) {
+        const Expr* p = r->data.function.args[i];
+        if (!head_is(p, SYM_List) || p->data.function.arg_count != 2 ||
+            head_is(p->data.function.args[0], SYM_List) ||
+            head_is(p->data.function.args[1], SYM_List)) return false;
+    }
+    return true;
+}
 
 /* The distribution's kind and parameters (borrowed into p[0..1]); FD_NONE when
  * dist is neither family or a numeric parameter set is not a distribution. */
@@ -70,8 +93,11 @@ static FdKind fd_read(const Expr* d, Expr** p0, Expr** p1) {
         if (argc == 0) { *p0 = expr_new_integer(0); *p1 = expr_new_integer(1); return FD_NORMAL; }
         if (argc != 2) return FD_NONE;
         Expr* s = d->data.function.args[1];
-        if (expr_is_numeric_quantity(s) && !holds(mk1(SYM_Positive, expr_copy(s))))
+        if (expr_is_numeric_quantity(s) && !holds(mk1(SYM_Positive, expr_copy(s)))) {
+            fd_bad_param("NormalDistribution", "posprm",
+                         "Parameter %s at position 2 in %s is expected to be positive.", s, d);
             return FD_NONE;
+        }
         *p0 = expr_copy(d->data.function.args[0]);
         *p1 = expr_copy(s);
         return FD_NORMAL;
@@ -80,12 +106,32 @@ static FdKind fd_read(const Expr* d, Expr** p0, Expr** p1) {
         if (argc == 0) { *p0 = expr_new_integer(0); *p1 = expr_new_integer(1); return FD_UNIFORM; }
         if (argc != 1) return FD_NONE;
         const Expr* r = d->data.function.args[0];
+        /* {{a1, b1}, {a2, b2}, ...}: the uniform distribution on a box. */
+        if (fd_is_box(r)) {
+            for (size_t i = 0; i < r->data.function.arg_count; i++) {
+                const Expr* pr = r->data.function.args[i];
+                Expr* a = pr->data.function.args[0];
+                Expr* b = pr->data.function.args[1];
+                if (expr_is_numeric_quantity(a) && expr_is_numeric_quantity(b) &&
+                    !holds(mk2(SYM_Less, expr_copy(a), expr_copy(b)))) {
+                    fd_bad_param("UniformDistribution", "ordr",
+                                 "The bounds %s in %s are expected to be in increasing order.", pr, d);
+                    return FD_NONE;
+                }
+            }
+            *p0 = expr_copy((Expr*)r);
+            *p1 = NULL;
+            return FD_UNIFORM_BOX;
+        }
         if (!head_is(r, SYM_List) || r->data.function.arg_count != 2) return FD_NONE;
         Expr* a = r->data.function.args[0];
         Expr* b = r->data.function.args[1];
         if (expr_is_numeric_quantity(a) && expr_is_numeric_quantity(b) &&
-            !holds(mk2(SYM_Less, expr_copy(a), expr_copy(b))))
+            !holds(mk2(SYM_Less, expr_copy(a), expr_copy(b)))) {
+            fd_bad_param("UniformDistribution", "ordr",
+                         "The bounds %s in %s are expected to be in increasing order.", r, d);
             return FD_NONE;
+        }
         *p0 = expr_copy(a);
         *p1 = expr_copy(b);
         return FD_UNIFORM;
@@ -146,10 +192,67 @@ static bool fd_prob_ok(const Expr* q) {
     return holds(mk3(SYM_LessEqual, expr_new_integer(0), expr_copy((Expr*)q), expr_new_integer(1)));
 }
 
+/* The uniform distribution on the box b = {{a1, b1}, ...} at the point x
+ * (a List of the same length): PDF Piecewise[{{1/Product[bi - ai],
+ * a1 <= x1 <= b1 && ...}}, 0]; CDF Product of each coordinate's clamped
+ * fraction; Mean the midpoints.  NULL for anything else. */
+static Expr* fd_box(MlDistProp prop, const Expr* box, const Expr* x) {
+    size_t n = box->data.function.arg_count;
+    if (prop == ML_PROP_MEAN) {
+        Expr** el = malloc(sizeof(Expr*) * n);
+        if (!el) return NULL;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* pr = box->data.function.args[i];
+            el[i] = mk2(SYM_Times, rat(1, 2), mk2(SYM_Plus, expr_copy(pr->data.function.args[0]),
+                                                 expr_copy(pr->data.function.args[1])));
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), el, n);
+        free(el);
+        return out;
+    }
+    if (prop != ML_PROP_PDF && prop != ML_PROP_CDF) return NULL;
+    if (!x || !head_is(x, SYM_List) || x->data.function.arg_count != n) return NULL;
+    Expr** f = malloc(sizeof(Expr*) * n);
+    Expr** c = malloc(sizeof(Expr*) * n);
+    if (!f || !c) { free(f); free(c); return NULL; }
+    for (size_t i = 0; i < n; i++) {
+        const Expr* pr = box->data.function.args[i];
+        Expr* a = pr->data.function.args[0];
+        Expr* b = pr->data.function.args[1];
+        Expr* xi = x->data.function.args[i];
+        if (prop == ML_PROP_PDF) {
+            f[i] = inv(sub(expr_copy(b), expr_copy(a)));
+            c[i] = mk3(SYM_LessEqual, expr_copy(a), expr_copy(xi), expr_copy(b));
+        } else {
+            /* Piecewise[{{(x - a)/(b - a), a <= x <= b}, {1, x > b}}, 0] */
+            Expr* in = mk2(SYM_List, mk2(SYM_Times, sub(expr_copy(xi), expr_copy(a)),
+                                         inv(sub(expr_copy(b), expr_copy(a)))),
+                           mk3(SYM_LessEqual, expr_copy(a), expr_copy(xi), expr_copy(b)));
+            Expr* up = mk2(SYM_List, expr_new_integer(1), mk2(SYM_Greater, expr_copy(xi), expr_copy(b)));
+            f[i] = mk2(SYM_Piecewise, mk2(SYM_List, in, up), expr_new_integer(0));
+        }
+    }
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), f, n);
+    Expr* out;
+    if (prop == ML_PROP_PDF) {
+        Expr* cond = expr_new_function(expr_new_symbol(SYM_And), c, n);
+        out = mk2(SYM_Piecewise, mk1(SYM_List, mk2(SYM_List, prod, cond)), expr_new_integer(0));
+    } else {
+        out = prod;
+    }
+    free(f); free(c);
+    return out;
+}
+
 Expr* ml_dist_closed_form(MlDistProp prop, const Expr* dist, const Expr* x) {
     Expr *p0 = NULL, *p1 = NULL;
     FdKind k = fd_read(dist, &p0, &p1);
     if (k == FD_NONE) return NULL;
+    if (k == FD_UNIFORM_BOX) {
+        Expr* bo = fd_box(prop, p0, x);
+        expr_free(p0);
+        return bo ? eval_and_free(bo) : NULL;
+    }
     Expr* out = NULL;
     switch (prop) {
         case ML_PROP_MEAN:

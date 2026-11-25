@@ -113,7 +113,50 @@ bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef
  * usually arrives in and saves the caller a Thread. Both are read, and which one was
  * given is not remembered -- the fitted model is the same either way. */
 static bool ml_read_training(Expr* data, size_t* n_out, size_t* dim_out,
+                             double** x_out, double** y_out);
+
+/* The other training-data forms, as the list of rules they stand for:
+ * {x1, x2, ...} -> {y1, y2, ...} (equal lengths) is {x1 -> y1, ...}, and an
+ * Association <|x1 -> y1, ...|> its Normal.  NULL for any other form. */
+static Expr* ml_training_as_rules(const Expr* data) {
+    if (!data || data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL)
+        return NULL;
+    const char* h = data->data.function.head->data.symbol.name;
+    if (h == SYM_Association) {
+        Expr* a = expr_copy((Expr*)data);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Normal), &a, 1));
+    }
+    if (h != SYM_Rule || data->data.function.arg_count != 2) return NULL;
+    const Expr* xs = data->data.function.args[0];
+    const Expr* ys = data->data.function.args[1];
+    if (xs->type != EXPR_FUNCTION || ys->type != EXPR_FUNCTION ||
+        xs->data.function.head->type != EXPR_SYMBOL || ys->data.function.head->type != EXPR_SYMBOL ||
+        xs->data.function.head->data.symbol.name != SYM_List ||
+        ys->data.function.head->data.symbol.name != SYM_List ||
+        xs->data.function.arg_count != ys->data.function.arg_count ||
+        xs->data.function.arg_count == 0) return NULL;
+    size_t n = xs->data.function.arg_count;
+    Expr** rl = malloc(sizeof(Expr*) * n);
+    if (!rl) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* ab[2] = { expr_copy(xs->data.function.args[i]), expr_copy(ys->data.function.args[i]) };
+        rl[i] = expr_new_function(expr_new_symbol(SYM_Rule), ab, 2);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rl, n);
+    free(rl);
+    return out;
+}
+
+static bool ml_read_training(Expr* data, size_t* n_out, size_t* dim_out,
                              double** x_out, double** y_out) {
+    {
+        Expr* rules = ml_training_as_rules(data);
+        if (rules) {
+            bool ok = ml_read_training(rules, n_out, dim_out, x_out, y_out);
+            expr_free(rules);
+            return ok;
+        }
+    }
     if (!data || data->type != EXPR_FUNCTION) return false;
     Expr* h = data->data.function.head;
     if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_List) return false;
@@ -554,7 +597,25 @@ static Expr* ml_make_reducer(const char* method, const double* mean,
 /* DimensionReduction[data, k]. Wolfram's split is kept: DimensionReduce returns the
  * REDUCED DATA, DimensionReduction returns a REUSABLE REDUCER. */
 static Expr* builtin_dimension_reduction(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
+    size_t argc = res->data.function.arg_count;
+    /* Method -> "PrincipalComponentsAnalysis" | Automatic, the method this
+     * reducer implements; any other method declines. */
+    if (argc == 3) {
+        Expr* o = res->data.function.args[2];
+        if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2 ||
+            o->data.function.head->type != EXPR_SYMBOL ||
+            (o->data.function.head->data.symbol.name != SYM_Rule &&
+             o->data.function.head->data.symbol.name != SYM_RuleDelayed)) return NULL;
+        Expr* lhs = o->data.function.args[0];
+        Expr* rhs = o->data.function.args[1];
+        if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method) return NULL;
+        bool ok = (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) ||
+                  (rhs->type == EXPR_STRING &&
+                   strcmp(rhs->data.string, "PrincipalComponentsAnalysis") == 0);
+        if (!ok) return NULL;
+        argc = 2;
+    }
+    if (argc != 2) return NULL;
     Expr* kexpr = res->data.function.args[1];
     if (!kexpr || kexpr->type != EXPR_INTEGER || kexpr->data.integer <= 0) return NULL;
     size_t target = (size_t)kexpr->data.integer;
@@ -708,6 +769,19 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
         if (strcmp(q, "FeatureCount") == 0) return expr_copy(dimx);
         if (knn && strcmp(q, "NeighborCount") == 0) return expr_copy(extrax);
         if (knn && strcmp(q, "TrainingData") == 0)  return expr_copy(cl);
+        if (strcmp(q, "Properties") == 0) {
+            static const char* const PROPS[] = {
+                "Coefficients", "FeatureCount", "Method", "NeighborCount", "Properties",
+                "TrainingData" };
+            Expr* pl[6];
+            size_t np = 0;
+            for (size_t i = 0; i < 6; i++) {
+                bool knn_only = strcmp(PROPS[i], "NeighborCount") == 0
+                             || strcmp(PROPS[i], "TrainingData") == 0;
+                if (!knn_only || knn) pl[np++] = expr_new_string(PROPS[i]);
+            }
+            return expr_new_function(expr_new_symbol(SYM_List), pl, np);
+        }
         return NULL;                       /* unknown property: leave unevaluated */
     }
 
@@ -809,12 +883,12 @@ void ml_predict_init(void) {
     symtab_get_def("Predict")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Predict",
         "Predict[data] fits a predictor to data and returns a PredictorFunction, "
-        "which can be stored and applied to new inputs. Data is either a list of "
-        "rules {features -> value, ...} or a matrix whose last column is the "
-        "response. Method -> \"LinearRegression\" is the only method implemented and "
-        "is the default; any other declines rather than silently linear-regressing. "
-        "The returned object also answers \"Method\", \"Coefficients\" and "
-        "\"FeatureCount\". A collinear feature set has no unique fit and returns "
+        "which can be stored and applied to new inputs. Data is a list of rules "
+        "{features -> value, ...}, {x1, x2, ...} -> {y1, y2, ...}, an Association "
+        "<|x1 -> y1, ...|>, or a matrix whose last column is the response. Methods: \"LinearRegression\" (the default) and "
+        "\"NearestNeighbors\"; any other declines rather than silently "
+        "linear-regressing. The returned object also answers \"Method\", "
+        "\"Coefficients\", \"FeatureCount\" and \"Properties\". A collinear feature set has no unique fit and returns "
         "unevaluated.");
 
     symtab_add_builtin("LinearModelFit", builtin_linear_model_fit);
@@ -839,8 +913,11 @@ void ml_predict_init(void) {
 
     symtab_get_def("PredictorFunction")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("PredictorFunction",
-        "PredictorFunction[method, coefficients, featureCount] is the fitted object "
-        "Predict returns. Apply it to a feature vector to get a prediction, or to "
-        "\"Method\", \"Coefficients\" or \"FeatureCount\" to read it. A one-feature "
-        "model also accepts a bare scalar.");
+        "PredictorFunction[method, params, featureCount, extra] is the fitted object "
+        "Predict returns: method \"LinearRegression\" (params the coefficients, "
+        "intercept first; extra 0) or \"NearestNeighbors\" (params the training "
+        "rows; extra the neighbour count). Apply it to a feature vector to get a "
+        "prediction, or to \"Method\", \"Coefficients\", \"FeatureCount\" or "
+        "\"Properties\" to read it (NearestNeighbors also \"NeighborCount\" and "
+        "\"TrainingData\"). A one-feature model also accepts a bare scalar.");
 }

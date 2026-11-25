@@ -250,6 +250,11 @@ Expr* builtin_graph(Expr* res) {
      * freshly built graph is already an O(1) memo hit. */
     if (graph_is_valid(res)) return NULL;
 
+    /* Graph[g] of a graph is g itself. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1 &&
+        graph_is_valid(res->data.function.args[0]))
+        return expr_copy(res->data.function.args[0]);
+
     Expr* canonical = try_build_canonical(res);
     if (!canonical) return NULL;                 /* malformed: leave unevaluated */
     if (expr_eq(canonical, res)) {               /* already canonical: fixed point */

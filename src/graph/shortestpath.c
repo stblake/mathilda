@@ -28,6 +28,7 @@
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
+#include <string.h>
 #include <float.h>
 
 /* BFS from src over out[]; fills parent[] (-1 = root/unvisited) and dist[]
@@ -156,8 +157,41 @@ static void dijkstra(const WAdj* w, int src, int* parent, double* dist) {
 
 /* Resolve g, s, t to a GraphAdj and endpoint indices. Returns adj (caller frees)
  * or NULL; on success sets *is,*it. */
+/* True iff e is Method -> m with m Automatic or a shortest-path method name
+ * the reference accepts.  Every method gives the same distances, so the
+ * choice only selects an algorithm; the one here is Dijkstra (or BFS). */
+static bool is_method_option(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2 ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        (e->data.function.head->data.symbol.name != SYM_Rule &&
+         e->data.function.head->data.symbol.name != SYM_RuleDelayed)) return false;
+    const Expr* k = e->data.function.args[0];
+    const Expr* v = e->data.function.args[1];
+    if (k->type != EXPR_SYMBOL || k->data.symbol.name != SYM_Method) return false;
+    if (v->type == EXPR_SYMBOL) return v->data.symbol.name == SYM_Automatic;
+    if (v->type != EXPR_STRING) return false;
+    static const char* const M[] = { "Dijkstra", "BellmanFord", "FloydWarshall", "Johnson" };
+    for (size_t i = 0; i < sizeof(M) / sizeof(M[0]); i++)
+        if (strcmp(v->data.string, M[i]) == 0) return true;
+    return false;
+}
+
+/* True when g carries an EdgeWeight list that the weighted search cannot use
+ * (a symbolic or negative weight). */
+static bool weights_unusable(const Expr* g) {
+    const Expr* wl = graph_edge_weight_list(g);
+    if (!wl || graph_weights_usable(g)) return false;
+    /* only a symbolic weight: a negative number keeps the documented
+     * hop-count fallback */
+    for (size_t k = 0; k < wl->data.function.arg_count; k++)
+        if (!expr_is_numeric_like(wl->data.function.args[k])) return true;
+    return false;
+}
+
 static GraphAdj* resolve(Expr* res, int* is, int* it) {
-    if (res->data.function.arg_count != 3) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 4 && is_method_option(res->data.function.args[3])) argc = 3;
+    if (argc != 3) return NULL;
     const Expr* g = res->data.function.args[0];
     GraphAdj* a = graph_build_adj(g);
     if (!a) return NULL;
@@ -217,6 +251,11 @@ Expr* builtin_find_shortest_path(Expr* res) {
 }
 
 Expr* builtin_graph_distance(Expr* res) {
+    /* A distance under a symbolic weight is not a hop count:
+     * unevaluated, as GraphDistance[g, s] is.  (FindShortestPath keeps the
+     * unweighted path: any path it gives is a path of g.) */
+    if (res->data.function.arg_count >= 1 && weights_unusable(res->data.function.args[0]))
+        return NULL;
     int is, it;
     GraphAdj* a = resolve(res, &is, &it);
     if (!a) return NULL;

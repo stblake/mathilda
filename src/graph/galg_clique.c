@@ -45,6 +45,7 @@
 #include "sym_names.h"
 #include <stdint.h>
 #include <gmp.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -584,7 +585,11 @@ int galg_parse_size_spec(const Expr* spec, int* kmin, int* kmax) {
 
 /* count argument: positive Integer or All (-> 0). */
 int galg_parse_count(const Expr* e, long* count) {
-    if (e->type == EXPR_INTEGER && e->data.integer >= 1) { *count = (long)e->data.integer; return 1; }
+    int64_t v;
+    /* a count past a long (a BigInt) asks for every answer, as All does */
+    if (expr_get_int64_saturated(e, &v) && v >= 1) {
+        *count = v > (int64_t)LONG_MAX ? 0 : (long)v; return 1;
+    }
     if (galg_is_symbol(e, "All") || galg_is_symbol(e, "Infinity")) { *count = 0; return 1; }
     return 0;
 }
@@ -722,8 +727,11 @@ Expr* builtin_find_k_clique(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     const Expr* g = res->data.function.args[0];
     const Expr* ka = res->data.function.args[1];
-    if (!graph_is_valid(g) || ka->type != EXPR_INTEGER || ka->data.integer < 1) return NULL;
-    long K = (long)ka->data.integer;
+    int64_t kv;
+    if (!graph_is_valid(g) || !expr_get_int64_saturated(ka, &kv) || kv < 1) return NULL;
+    /* Any K at least the vertex count bounds no distance (a BigInt included):
+     * clamp it to INT_MAX so `dist[x] >= K` compares within int. */
+    long K = kv > (int64_t)INT_MAX ? (long)INT_MAX : (long)kv;
     GalgUG* u = galg_ug_from_graph(g);
     if (!u) return NULL;
     int n = u->n;

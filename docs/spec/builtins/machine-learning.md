@@ -139,6 +139,8 @@ In[2]:= DimensionReduce[d, 2, Method -> "LatentSemanticAnalysis"]
 Out[2]= {{3.53625, 1.0399}, {7.03311, -0.290957}, {9.24375, 3.24698}, {9.903, -4.78819}, {13.8764, 1.13662}}
 ```
 
+- `Method -> Automatic` is the default method. `n` centred points span at most `n - 1` dimensions, so PCA (like MDS) declines `k > Min[dim, n - 1]` rather than padding; LSA, which does not centre, allows `Min[dim, n]`.
+
 ## Trained models
 
 `Predict` returns a **`PredictorFunction`** — a fitted object that can be stored in a
@@ -237,6 +239,8 @@ In[3]:= Predict[{{1., 1., 6.}, {2., 1., 8.}, {1., 2., 9.},
 Out[3]= {1.0, 2.0, 3.0}
 ```
 
+- The data may also be `{x1, x2, ...} -> {y1, y2, ...}` or an Association `<|x1 -> y1, ...|>`, read as the rules `{x1 -> y1, ...}`. A `PredictorFunction` answers `"Properties"` (the names it answers).
+
 ## LinearModelFit
 
 - `LinearModelFit[data]`
@@ -311,6 +315,8 @@ In[3]:= r[{104., 210.}]           (* exactly at the training mean *)
 Out[3]= {0.0}
 ```
 
+- `Method -> "PrincipalComponentsAnalysis"` (or `Automatic`), the method it implements, is accepted; any other declines.
+
 ## Distributions
 
 `NormalDistribution[mu, sigma]` and `UniformDistribution[{lo, hi}]` are distribution
@@ -366,6 +372,8 @@ In[3]:= RandomVariate[NormalDistribution[], 0]
 Out[3]= {}
 ```
 
+- A `"ContingencyTable"` `LearnedDistribution` draws outcomes with their empirical probabilities; `UniformDistribution[{{a1, b1}, ...}]` draws a point of the box.
+
 ## PDF
 
 - `PDF[dist, x]`, threading over a list of `x`.
@@ -374,6 +382,10 @@ Out[3]= {}
   `PDF[UniformDistribution[{0, 3}], 1]` is `1/3`, `PDF[UniformDistribution[{0, 2}], x]`
   is `Piecewise[{{1/2, 0 <= x <= 2}}, 0]`. Approximate input keeps the machine path.
 - A univariate `LearnedDistribution` takes a scalar point: `PDF[m, 3.5]`.
+
+- Arbitrary-precision input keeps its precision (the closed form at the input precision). `PDF[dist][x]` and `CDF[dist][x]` are the operator forms.
+- `NormalDistribution[m, s]` with a numeric `s <= 0` is `NormalDistribution::posprm`, and decreasing uniform bounds `UniformDistribution::ordr`; the call stays unevaluated.
+- `UniformDistribution[{{a1, b1}, ...}]`, the uniform distribution on a box: `PDF` is `1/Product[bi - ai]` inside, `0` outside; `CDF` the product of the coordinates' CDFs; `Mean` the midpoints.
 
 ## CDF, Mean, Variance, Median, Quantile of a distribution
 
@@ -405,6 +417,8 @@ Out[2]= {5.00479, 1.99627}
 In[3]:= PDF[NormalDistribution[], {-1., 0., 1.}]
 Out[3]= {0.241971, 0.398942, 0.241971}
 ```
+
+- `InverseCDF[dist, q]` is `Quantile[dist, q]` for these continuous univariate distributions.
 
 ## LearnDistribution
 
@@ -525,6 +539,8 @@ Out[3]= {0.113186, 3.6193e-169}
 In[4]:= Last[LearnDistribution[{1.4, 1.4, 1.3, 1.5, 1.4, 1.7, 1.4, 1.5, 1.4, 1.5, 1.5, 1.6, 1.4, 1.1, 1.2, 4.7, 4.5, 4.9, 4., 4.6, 4.5, 4.7, 3.3, 4.6, 3.9, 3.5, 4.2, 4., 4.7, 3.6, 6., 5.1, 5.9, 5.6, 5.8, 6.6, 4.5, 6.3, 5.8, 6.1, 5.1, 5.3, 5.5, 5., 5.1}, Method -> "GaussianMixture"]]
 Out[4]= 2
 ```
+
+- `Method -> Automatic` is the default; with it (or no `Method`), data with no numeric leaf -- strings, symbols -- is learned as a `"ContingencyTable"`.
 
 ## SmoothKernelDistribution
 
@@ -690,6 +706,8 @@ Out[2]= {"red", "blue", {"red", "blue"}}
 In[3]:= c[{0.5, 0.5}, "Probabilities"]
 Out[3]= {"red" -> 1.0, "blue" -> 0.0}
 ```
+
+- A `ClassifierFunction` also answers `c[x, "Decision"]` (the class) and `c[x, "TopProbabilities"]` / `c[x, {"TopProbabilities", n}]` (the rules of nonzero probability, most likely first).
 
 ## Clustering
 

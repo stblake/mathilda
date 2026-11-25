@@ -60,6 +60,7 @@
 #include "graph_ops.h"
 #include "core.h"
 #include "sym_names.h"
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -143,25 +144,37 @@ done:
 
 /* ---- Length / count specifications ---------------------------------------- */
 
-/* kspec -> [*lo, *hi] (hi = LONG_MAX for Infinity). 0 if malformed. */
+/* An Integer or BigInt as a long, saturated: a length bound or count past the
+ * range of a long (10^20) means the same as the largest one -- no graph has
+ * that many edges or cycles -- so it answers like Infinity / All would. */
+static int int_spec(const Expr* e, long* out) {
+    int64_t v;
+    if (!expr_get_int64_saturated(e, &v)) return 0;
+    *out = v > (int64_t)LONG_MAX ? LONG_MAX : v < -(int64_t)LONG_MAX ? -LONG_MAX : (long)v;
+    return 1;
+}
+
+/* kspec -> [*lo, *hi] (hi = -1 for Infinity). 0 if malformed. */
 static int parse_kspec(const Expr* k, long* lo, long* hi) {
+    long v, w;
     if (gops_is_infinity(k)) { *lo = 0; *hi = -1; return 1; }
-    if (k->type == EXPR_INTEGER) {
-        if (k->data.integer < 0) return 0;
-        *lo = 0; *hi = (long)k->data.integer; return 1;
+    if (int_spec(k, &v)) {
+        if (v < 0) return 0;
+        /* a saturated (BigInt) bound is no bound at all, as Infinity */
+        *lo = 0; *hi = v == LONG_MAX ? -1 : v; return 1;
     }
     if (!graph_is_list(k)) return 0;
     size_t c = k->data.function.arg_count;
     const Expr* a = c >= 1 ? k->data.function.args[0] : NULL;
-    if (c == 1 && a->type == EXPR_INTEGER && a->data.integer >= 0) {
-        *lo = *hi = (long)a->data.integer; return 1;
+    if (c == 1 && int_spec(a, &v) && v >= 0) {
+        *lo = *hi = v; return 1;
     }
-    if (c == 2 && a->type == EXPR_INTEGER && a->data.integer >= 0) {
+    if (c == 2 && int_spec(a, &v) && v >= 0) {
         const Expr* b = k->data.function.args[1];
-        *lo = (long)a->data.integer;
+        *lo = v;
         if (gops_is_infinity(b)) { *hi = -1; return 1; }
-        if (b->type == EXPR_INTEGER && b->data.integer >= a->data.integer) {
-            *hi = (long)b->data.integer; return 1;
+        if (int_spec(b, &w) && w >= v) {
+            *hi = w == LONG_MAX ? -1 : w; return 1;
         }
     }
     return 0;
@@ -169,8 +182,9 @@ static int parse_kspec(const Expr* k, long* lo, long* hi) {
 
 /* n -> *count (-1 = All). 0 if malformed. */
 static int parse_count(const Expr* n, long* count) {
+    long v;
     if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_All) { *count = -1; return 1; }
-    if (n->type == EXPR_INTEGER && n->data.integer >= 1) { *count = (long)n->data.integer; return 1; }
+    if (int_spec(n, &v) && v >= 1) { *count = v; return 1; }
     return 0;
 }
 

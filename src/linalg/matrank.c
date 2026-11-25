@@ -57,6 +57,7 @@
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "linalg_mod.h"  /* Modulus -> p */
 #include "numeric.h"
 
 #include <float.h>
@@ -109,6 +110,8 @@ typedef struct {
     MatsolMethod method;
     bool         tol_is_automatic;
     double       tolerance;
+    int64_t      modp;      /* Modulus -> p (0: the ordinary field)      */
+    Expr*        zt;        /* ZeroTest -> f, borrowed (NULL: none)      */
 } MatrankOpts;
 
 static bool parse_tolerance_value(Expr* rhs, bool* is_auto_out, double* tol_out) {
@@ -166,10 +169,18 @@ static bool parse_options(Expr* res, MatrankOpts* opts) {
     opts->method            = MATSOL_AUTOMATIC;
     opts->tol_is_automatic  = true;
     opts->tolerance         = 0.0;
+    opts->modp              = 0;
+    opts->zt                = NULL;
 
     size_t argc = res->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
+        /* Modulus -> p and ZeroTest -> f, parsed as RowReduce parses them */
+        Expr* zf = matsol_parse_zerotest_option(opt);
+        if (zf) { opts->zt = zf; continue; }
+        int mr = linalg_mod_parse_option(opt, &opts->modp);
+        if (mr < 0) return false;
+        if (mr > 0) continue;
         if (opt->type != EXPR_FUNCTION
             || opt->data.function.head->type != EXPR_SYMBOL
             || opt->data.function.arg_count != 2) return false;
@@ -481,7 +492,8 @@ Expr* builtin_matrixrank(Expr* res) {
             "MatrixRank::opt: Option is not one of Method -> "
             "{\"Automatic\", \"DivisionFreeRowReduction\", "
             "\"OneStepRowReduction\", \"CofactorExpansion\"} or "
-            "Tolerance -> Automatic | non-negative number.\n");
+            "Tolerance -> Automatic | non-negative number, Modulus -> p, "
+            "ZeroTest -> f.\n");
         return NULL;
     }
 
@@ -496,6 +508,44 @@ Expr* builtin_matrixrank(Expr* res) {
 
     int rows = (int)dims[0];
     int cols = (int)dims[1];
+
+    /* Modulus -> p / ZeroTest -> f: the rank is the pivot count of the
+     * reduced row echelon form RowReduce gives under the same option. */
+    if (opts.modp > 0 || opts.zt) {
+        Expr* rr = NULL;
+        if (opts.modp > 0) {
+            rr = linalg_mod_rowreduce(m, opts.modp, "MatrixRank");
+            if (!rr) return NULL;
+        } else {
+            Expr** flat = malloc(sizeof(Expr*) * (size_t)rows * (size_t)cols);
+            if (!flat) return NULL;
+            size_t idx = 0;
+            flatten_tensor(m, flat, &idx);
+            matsol_rref_with_zerotest(flat, rows, cols, opts.zt);
+            int64_t rank = 0;
+            for (int i = 0; i < rows; i++) {
+                bool nz = false;
+                for (int j = 0; j < cols && !nz; j++)
+                    nz = !matsol_zt_is_zero(flat[i * cols + j], opts.zt);
+                if (nz) rank++;
+            }
+            for (size_t k = 0; k < idx; k++) expr_free(flat[k]);
+            free(flat);
+            return expr_new_integer(rank);
+        }
+        int64_t rank = 0;
+        for (size_t i = 0; i < rr->data.function.arg_count; i++) {
+            Expr* row = rr->data.function.args[i];
+            bool nz = false;
+            for (size_t j = 0; row->type == EXPR_FUNCTION && j < row->data.function.arg_count && !nz; j++) {
+                Expr* x = row->data.function.args[j];
+                nz = !(x->type == EXPR_INTEGER && x->data.integer == 0);
+            }
+            if (nz) rank++;
+        }
+        expr_free(rr);
+        return expr_new_integer(rank);
+    }
 
     /* Decide which path to take.  Numerical when:
      *   - User explicitly supplied a finite Tolerance (>= 0), OR

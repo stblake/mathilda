@@ -1227,6 +1227,7 @@ extern const char* SYM_FindVertexColoring;
 extern const char* SYM_EdgeWeight;
 extern const char* SYM_EdgeCapacity;
 extern const char* SYM_DirectedEdges;
+extern const char* SYM_BernoulliGraphDistribution;
 extern const char* SYM_IncludeConstantBasis;
 extern const char* SYM_WeightedAdjacencyMatrix;
 

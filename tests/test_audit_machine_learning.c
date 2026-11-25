@@ -213,6 +213,55 @@ static void test_wave4_machine_learning(void) {
                "{104., 210.}, {106., 215.}, {108., 220.}}, 1]}, ToExpression[ToString[r, InputForm]] === r]");
 }
 
+/* Wave 5 (G6, low): classifier / predictor properties, learned and specified
+ * distributions. */
+static void test_wave5_ml(void) {
+    audit_run("w5c = Classify[{1. -> \"a\", 2. -> \"a\", 8. -> \"b\", 9. -> \"b\"}]");
+    audit_chk("ClassifierFunction#2", "w5c[1.5, \"Decision\"]", "\"a\"");
+    audit_chk("ClassifierFunction#2", "w5c[1.5, \"TopProbabilities\"]", "{\"a\" -> 1.0}");
+    audit_chk("ClassifierFunction#2", "w5c[8.5, {\"TopProbabilities\", 1}]", "{\"b\" -> 1.0}");
+    audit_chk("Classify#5", "StringContainsQ[Information[Classify], \"RandomForest\"] && "
+              "!StringContainsQ[Information[Classify], \"only method\"]", "True");
+    audit_chk("PredictorFunction#2", "StringContainsQ[Information[PredictorFunction], \"featureCount, extra\"]", "True");
+    audit_run("w5p = Predict[{1. -> 3., 2. -> 5., 3. -> 7., 4. -> 9.}]");
+    audit_chk("PredictorFunction#3", "w5p[\"Properties\"]", "{\"Coefficients\", \"FeatureCount\", \"Method\", \"Properties\"}");
+    audit_chk("Predict#4", "Predict[{1., 2., 3.} -> {1., 2., 3.}] === Predict[{1. -> 1., 2. -> 2., 3. -> 3.}]", "True");
+    audit_chk("Predict#4", "Predict[<|1. -> 1., 2. -> 2., 3. -> 3.|>] === Predict[{1. -> 1., 2. -> 2., 3. -> 3.}]", "True");
+    /* DimensionReduce / DimensionReduction */
+    audit_chk("DimensionReduce#1", "DimensionReduce[{{1, 2, 3, 4}, {5, 6, 7, 9}}, 3]", "DimensionReduce[{{1, 2, 3, 4}, {5, 6, 7, 9}}, 3]");
+    audit_chk("DimensionReduce#1", "Dimensions[DimensionReduce[{{1, 2, 3, 4}, {5, 6, 7, 9}}, 1]]", "{2, 1}");
+    audit_chk("DimensionReduce#2",
+              "DimensionReduce[{{1, 2}, {3, 4}, {5, 7}}, 1, Method -> Automatic] === DimensionReduce[{{1, 2}, {3, 4}, {5, 7}}, 1]",
+              "True");
+    audit_chk("DimensionReduction#1",
+              "DimensionReduction[{{1, 2}, {3, 4}, {5, 7}}, 1, Method -> \"PrincipalComponentsAnalysis\"] === "
+              "DimensionReduction[{{1, 2}, {3, 4}, {5, 7}}, 1]", "True");
+    /* LearnDistribution */
+    audit_chk("LearnDistribution#4",
+              "LearnDistribution[{1., 2., 3.}, Method -> Automatic] === LearnDistribution[{1., 2., 3.}]", "True");
+    audit_chk("LearnDistribution#5", "PDF[LearnDistribution[{\"a\", \"b\", \"a\"}], \"a\"] == 2/3", "True");
+    audit_run("w5d = LearnDistribution[{\"r\", \"r\", \"r\", \"b\"}, Method -> \"ContingencyTable\"]");
+    audit_chk("LearnedDistribution#3", "MemberQ[{\"r\", \"b\"}, RandomVariate[w5d]]", "True");
+    audit_chk("LearnedDistribution#3",
+              "SeedRandom[7]; Count[RandomVariate[w5d, 4000], \"r\"] > 2700", "True");
+    /* specified distributions */
+    audit_chk("NormalDistribution#4", "InverseCDF[NormalDistribution[], 0.975] == Quantile[NormalDistribution[], 0.975]", "True");
+    audit_chk("NormalDistribution#4", "InverseCDF[NormalDistribution[], 1/2]", "0");
+    audit_chk("NormalDistribution#6", "Quiet[Check[PDF[NormalDistribution[0, -1], 0.], fired, NormalDistribution::posprm]]", "fired");
+    audit_chk("PDF#6", "Quiet[Check[PDF[NormalDistribution[0, -1], 0.], fired, NormalDistribution::posprm]]", "fired");
+    audit_chk("PDF#6", "Quiet[Check[PDF[UniformDistribution[{2, 0}], 1.], fired, UniformDistribution::ordr]]", "fired");
+    audit_chk("PDF#6", "Quiet[PDF[UniformDistribution[{2, 0}], 1.]]", "PDF[UniformDistribution[{2, 0}], 1.0]");
+    audit_chk("PDF#3", "Precision[PDF[NormalDistribution[], 0.5`30]] >= 29", "True");
+    audit_chk("PDF#3", "Abs[PDF[NormalDistribution[], 0.5`30] - N[Exp[-1/8]/Sqrt[2 Pi], 30]] < 10^-28", "True");
+    audit_chk("PDF#5", "PDF[NormalDistribution[]][0.] == PDF[NormalDistribution[], 0.]", "True");
+    audit_chk("PDF#5", "CDF[NormalDistribution[]][0]", "1/2");
+    audit_chk("UniformDistribution#7", "PDF[UniformDistribution[{{0, 1}, {0, 1}}], {0.5, 0.5}]", "1");
+    audit_chk("UniformDistribution#7", "PDF[UniformDistribution[{{0, 1}, {0, 2}}], {0.5, 3}]", "0");
+    audit_chk("UniformDistribution#7",
+              "SeedRandom[2]; p = RandomVariate[UniformDistribution[{{0, 1}, {0, 1}}]]; "
+              "Length[p] == 2 && And @@ Thread[0 <= p <= 1]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_machine_learning);
@@ -221,5 +270,6 @@ int main(void) {
     TEST(test_random_variate_learned);
     TEST(test_linear_model_fit_offset);
     TEST(test_linear_model_fit_basis);
+    TEST(test_wave5_ml);
     return audit_finish("audit_machine_learning");
 }

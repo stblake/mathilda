@@ -428,6 +428,14 @@ bool  expr_is_integer_like(const Expr* e);
 bool  expr_is_numeric_like(const Expr* e);
 /* True and *out = z when z fits int64 (portable: not via `long`). */
 bool  expr_mpz_get_int64(const mpz_t z, int64_t* out);
+/* True for an Integer or BigInt e, with *out its value saturated to
+ * [-INT64_MAX, INT64_MAX]: a BigInt beyond int64 reads as the bound of its
+ * sign.  For a count, length or index argument whose every value past the
+ * int64 range means the same thing as the bound ("at most 10^20 edges",
+ * "the 2^70-th diagonal"), so a huge spec answers instead of staying
+ * unevaluated.  -INT64_MAX, not INT64_MIN, so negating *out never overflows.
+ * False (and *out untouched) for anything else. */
+bool  expr_get_int64_saturated(const Expr* e, int64_t* out);
 /* z = v for any int64 v.  mpz_set_si/mpz_init_set_si take a `long`, which is
  * only 32 bits on LLP64 Windows, so an int64 above 2^31 would be truncated;
  * these are exact on every data model. */

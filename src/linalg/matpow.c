@@ -85,6 +85,9 @@ Expr* builtin_matrixpower(Expr* res) {
      * principal power, computed by the matrix-function machinery (matfunc.c).
      * The integer path below is untouched. */
     (void)is_rational; (void)is_real;
+    /* A List is no exponent (MatrixPower is not Listable): threading it gave
+     * a meaningless rank-3 tensor. */
+    if (head_is(exp_arg, SYM_List)) return NULL;
     if (!is_int && !is_bigint) return matfunc_matrixpower(res);
 
     /* Get the exponent value; for bigint, check it fits in int64_t */
@@ -94,8 +97,13 @@ Expr* builtin_matrixpower(Expr* res) {
     } else {
         /* EXPR_BIGINT: check if it fits in int64_t range */
         if (!expr_mpz_get_int64(exp_arg->data.bigint, &exp_val)) {
-            /* Exponent too large to compute */
-            return NULL;
+            /* Past int64, repeated squaring is out of reach, but the closed
+             * form of the matrix-function path is not: a Jordan block's
+             * power is polynomial in k ({{1,1},{0,1}}^k = {{1,k},{0,1}}), an
+             * identity's is itself, and a growing entry is the evaluator's
+             * Power (which reports an overflow rather than exhausting
+             * memory). */
+            return matfunc_matrixpower(res);
         }
     }
 

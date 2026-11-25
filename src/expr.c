@@ -635,6 +635,21 @@ bool expr_is_numeric_like(const Expr* e) {
 /* Portable "does z fit int64, and what is it": mpz_fits_slong_p/mpz_get_si
  * test a `long`, which is only 32 bits on LLP64 Windows, so normalisation and
  * hashing silently disagreed there for 2^31 <= |z| < 2^63. */
+bool expr_get_int64_saturated(const Expr* e, int64_t* out) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) {
+        *out = e->data.integer == INT64_MIN ? -INT64_MAX : e->data.integer;
+        return true;
+    }
+    if (e->type != EXPR_BIGINT) return false;
+    int64_t v;
+    if (expr_mpz_get_int64(e->data.bigint, &v))
+        *out = v == INT64_MIN ? -INT64_MAX : v;
+    else
+        *out = mpz_sgn(e->data.bigint) > 0 ? INT64_MAX : -INT64_MAX;
+    return true;
+}
+
 bool expr_mpz_get_int64(const mpz_t z, int64_t* out) {
     int sgn = mpz_sgn(z);
     if (sgn == 0) { *out = 0; return true; }

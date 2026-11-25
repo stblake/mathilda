@@ -124,9 +124,9 @@ void graph_ops_init(void) {
         "EdgeWeightedGraphQ[g] gives True if g carries edge weights (EdgeWeight).");
     reg("PathGraphQ", builtin_path_graph_q,
         "PathGraphQ[g] gives True if g is a path: connected with at least one "
-        "vertex and, if undirected, every degree at most 2 and one edge fewer "
-        "than vertices; if directed, every in- and out-degree at most 1. Mixed "
-        "graphs are never paths.");
+        "vertex and, if undirected, every degree at most 2 (so a cycle is a "
+        "closed path: PathGraphQ[CycleGraph[4]] is True); if directed, every "
+        "in- and out-degree at most 1. Mixed graphs are never paths.");
     reg("EulerianGraphQ", builtin_eulerian_graph_q,
         "EulerianGraphQ[g] gives True if g has a cycle using every edge exactly "
         "once: all degrees even (undirected) or in-degree = out-degree "
@@ -143,7 +143,8 @@ void graph_ops_init(void) {
         "FindCycle[g] finds a cycle of g, as {list of edges}, or {}. FindCycle[g, "
         "k] finds a cycle of length at most k, FindCycle[g, {k}] of length "
         "exactly k, FindCycle[g, {kmin, kmax}] of length in that range; "
-        "FindCycle[g, kspec, n] finds at most n (n an integer or All). Each "
+        "FindCycle[g, kspec, n] finds at most n (n an integer or All). "
+        "FindCycle[{g, v}, ...] finds cycles through the vertex v. Each "
         "cycle is reported once. Length-bounded searches are exhaustive and give "
         "up (unevaluated) after 5*10^7 steps; use TimeConstrained to bound them.");
     reg("FindPath", builtin_find_path,

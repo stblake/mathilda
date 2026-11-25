@@ -30,6 +30,7 @@
                        * stream, so a fit is reproducible under SeedRandom */
 #include "pca.h"      /* ml_column_mean, ml_column_sd */
 #include "classify.h"
+#include "eval.h"     /* eval_and_free: Decision / TopProbabilities */
 
 /* Read {features -> class, ...} into a feature matrix and a label vocabulary.
  *
@@ -683,6 +684,44 @@ static Expr* builtin_classify(Expr* res) {
     return out;
 }
 
+/* c[x, "TopProbabilities"]: c[x, "Probabilities"] sorted by probability,
+ * most likely first (ties keep the class order), without the classes of
+ * probability 0; at most n of them when n >= 1. NULL when the probabilities
+ * do not evaluate. */
+static Expr* ml_top_probabilities(Expr* head, Expr* x, int64_t n) {
+    Expr* pr = eval_and_free(expr_new_function(expr_copy(head),
+                   (Expr*[]){ expr_copy(x), expr_new_string("Probabilities") }, 2));
+    if (!pr || pr->type != EXPR_FUNCTION || pr->data.function.head->type != EXPR_SYMBOL
+        || pr->data.function.head->data.symbol.name != SYM_List) { expr_free(pr); return NULL; }
+    size_t m = pr->data.function.arg_count;
+    double* v = malloc(sizeof(double) * (m ? m : 1));
+    size_t* ix = malloc(sizeof(size_t) * (m ? m : 1));
+    if (!v || !ix) { free(v); free(ix); expr_free(pr); return NULL; }
+    size_t k = 0;
+    for (size_t i = 0; i < m; i++) {
+        Expr* r = pr->data.function.args[i];
+        double p;
+        if (r->type != EXPR_FUNCTION || r->data.function.arg_count != 2
+            || !ml_read_real(r->data.function.args[1], &p)) {
+            free(v); free(ix); expr_free(pr); return NULL;
+        }
+        if (p > 0.0) { v[k] = p; ix[k] = i; k++; }
+    }
+    /* stable insertion sort, descending */
+    for (size_t i = 1; i < k; i++) {
+        double pv = v[i]; size_t pi = ix[i]; size_t j = i;
+        while (j > 0 && v[j - 1] < pv) { v[j] = v[j - 1]; ix[j] = ix[j - 1]; j--; }
+        v[j] = pv; ix[j] = pi;
+    }
+    if (n >= 1 && (uint64_t)n < (uint64_t)k) k = (size_t)n;
+    Expr** out = malloc(sizeof(Expr*) * (k ? k : 1));
+    if (!out) { free(v); free(ix); expr_free(pr); return NULL; }
+    for (size_t i = 0; i < k; i++) out[i] = expr_copy(pr->data.function.args[ix[i]]);
+    Expr* res = expr_new_function(expr_new_symbol(SYM_List), out, k);
+    free(out); free(v); free(ix); expr_free(pr);
+    return res;
+}
+
 /* Apply a fitted classifier. Handles ClassifierFunction[...][x] and
  * ClassifierFunction[...][x, "Probabilities"], plus the property queries. */
 Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
@@ -721,8 +760,34 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
 
     bool want_probs = false;
     if (argc == 2) {
-        if (!args[1] || args[1]->type != EXPR_STRING
-            || strcmp(args[1]->data.string, "Probabilities") != 0) {
+        /* "Decision" is the class itself; "TopProbabilities" (or
+         * {"TopProbabilities", n}) the Probabilities rules most likely first,
+         * those of probability 0 dropped (and at most n of them). */
+        const Expr* q = args[1];
+        int64_t top_n = -1;
+        bool top = false;
+        if (q && q->type == EXPR_STRING && strcmp(q->data.string, "TopProbabilities") == 0)
+            top = true;
+        else if (q && q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL
+                 && q->data.function.head->data.symbol.name == SYM_List
+                 && q->data.function.arg_count == 2
+                 && q->data.function.args[0]->type == EXPR_STRING
+                 && strcmp(q->data.function.args[0]->data.string, "TopProbabilities") == 0
+                 && q->data.function.args[1]->type == EXPR_INTEGER
+                 && q->data.function.args[1]->data.integer >= 1) {
+            top = true;
+            top_n = q->data.function.args[1]->data.integer;
+        }
+        if (q && q->type == EXPR_STRING && strcmp(q->data.string, "Decision") == 0) {
+            ml_labels_free(&labels);
+            return eval_and_free(expr_new_function(expr_copy(head),
+                                     (Expr*[]){ expr_copy(args[0]) }, 1));
+        }
+        if (top) {
+            ml_labels_free(&labels);
+            return ml_top_probabilities(head, args[0], top_n);
+        }
+        if (!q || q->type != EXPR_STRING || strcmp(q->data.string, "Probabilities") != 0) {
             ml_labels_free(&labels); return NULL;
         }
         want_probs = true;
@@ -1074,8 +1139,9 @@ void ml_classify_init(void) {
         "Classify[data] trains a classifier and returns a ClassifierFunction. Data is a "
         "list of rules {features -> class, ...}; a class may be any expression -- a "
         "string, a symbol, a number -- and the distinct classes are numbered by first "
-        "appearance. Method -> \"NearestNeighbors\" is the only method implemented and is "
-        "the default, with NeighborsNumber defaulting to 1: a classifier votes rather "
+        "appearance. Methods: \"NearestNeighbors\" (the default), \"NaiveBayes\", "
+        "\"LogisticRegression\", \"DecisionTree\" and \"RandomForest\". "
+        "NearestNeighbors has NeighborsNumber defaulting to 1: a classifier votes rather "
         "than averages, so at k = 1 it reproduces its training labels exactly. Apply the "
         "result to a feature vector for a class, or with \"Probabilities\" for the vote "
         "shares. It also answers \"Classes\", \"Method\", \"FeatureCount\" and "
@@ -1095,5 +1161,7 @@ void ml_classify_init(void) {
     symtab_set_docstring("ClassifierFunction",
         "ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier "
         "Classify returns. Apply it to a feature vector to get a class, or to a feature "
-        "vector and \"Probabilities\" to get one rule per class.");
+        "vector and \"Probabilities\" to get one rule per class, \"TopProbabilities\" "
+        "(or {\"TopProbabilities\", n}) for those of nonzero probability most likely "
+        "first, or \"Decision\" for the class.");
 }

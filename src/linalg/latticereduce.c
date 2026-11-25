@@ -506,6 +506,13 @@ Expr* builtin_latticereduce(Expr* res) {
     }
 
     int dependent = lll_reduce(B, n, d, NULL);
+    /* A zero row is a dependent set too, and lll_reduce's test misses the
+     * one-row case ({{0, 0, 0}} came back as a "basis"). */
+    for (int r = 0; r < n && !dependent; r++) {
+        bool zero = true;
+        for (int c = 0; c < d && zero; c++) zero = gr_is_zero(&ROW(B, r, d)[c]);
+        if (zero) dependent = 1;
+    }
     if (dependent) {
         mth_message("LatticeReduce", "dep", "The rows of the argument are linearly dependent; a basis (linearly independent generating set) is expected.");
         for (int i = 0; i < n * d; i++) gr_clear(&B[i]);
@@ -596,6 +603,17 @@ static bool finv_num_to_double(const Expr* e, double* out) {
         mpq_t q; mpq_init(q);
         if (expr_to_mpq((Expr*)e, q)) { *out = mpq_get_d(q); mpq_clear(q); return true; }
         mpq_clear(q);
+    }
+    /* An exact numeric quantity (a norm bound Sqrt[5], Pi): its machine value.
+     * The bound test then allows a relative 1e-12, so a relation of norm
+     * exactly Sqrt[5] is within Sqrt[5]. */
+    if (e->type == EXPR_FUNCTION && expr_is_numeric_quantity(e)) {
+        Expr* n = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                                    (Expr*[]){ expr_copy((Expr*)e) }, 1));
+        bool ok = n->type == EXPR_REAL;
+        if (ok) *out = n->data.real;
+        expr_free(n);
+        return ok;
     }
     return false;
 }

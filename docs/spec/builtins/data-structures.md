@@ -1816,6 +1816,8 @@ Densifying is implicit only up to 2^27 elements. Beyond that the call is left
 unevaluated with `SparseArray::dense`. For example, `Total` of a
 `10^5 x 10^5` array never allocates the 80 GB dense form.
 
+- A literal position with a `0` index (`SparseArray[{{0, 1} -> 1}]`) is `SparseArray::pos`, naming the rule (it was `::exdims` "from the positions {}").
+
 ## ArrayRules
 
 - `ArrayRules[s]` gives the rules `{pos1 -> v1, ..., {_, _, ...} -> val}` that

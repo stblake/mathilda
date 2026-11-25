@@ -168,6 +168,7 @@ Expr* builtin_hilbertmatrix(Expr* res) {
     hm_prec_mode mode = HM_PREC_EXACT;
     long bits = 0;
     Expr* last_bad = NULL;
+    bool wp_seen = false;
     for (size_t i = 1; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
         bool is_rule = (hm_is_call(opt, SYM_Rule) ||
@@ -180,9 +181,12 @@ Expr* builtin_hilbertmatrix(Expr* res) {
         }
         const char* name = opt->data.function.args[0]->data.symbol.name;
         if (name == SYM_WorkingPrecision) {
-            /* Last valid setting wins; an unparseable value is ignored. */
-            hm_parse_working_precision(opt->data.function.args[1],
-                                       &mode, &bits);
+            /* The FIRST setting wins, as for every option (OptionValue reads
+             * the leftmost rule); an unparseable value is ignored. */
+            if (!wp_seen)
+                hm_parse_working_precision(opt->data.function.args[1],
+                                           &mode, &bits);
+            wp_seen = true;
         } else {
             last_bad = opt;
         }

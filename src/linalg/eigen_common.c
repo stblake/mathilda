@@ -845,6 +845,8 @@ bool eigen_parse_args(Expr* res, EigenOpts* opts) {
     opts->method_given = false;
     opts->method = MATEIGEN_AUTOMATIC;
     opts->method_value = NULL;
+    opts->head = (res->data.function.head->type == EXPR_SYMBOL)
+               ? res->data.function.head->data.symbol.name : "Eigenvalues";
 
     /* Peel trailing options. */
     size_t pos_end = argc;

@@ -604,10 +604,18 @@ Expr* builtin_graph_plot(Expr* res) {
     const Expr* g = res->data.function.args[0];
     Expr* built = NULL;
     if (is_head(g, SYM_List)) {
-        /* GraphPlot[{u -> v, ...}]: the Graph of those rules. */
+        /* GraphPlot[{u -> v, ...}]: the Graph of those rules; GraphPlot[m]
+         * of a square matrix m: the AdjacencyGraph of m. */
         Expr* call = gd_head1(SYM_Graph, expr_copy((Expr*)g));
         built = evaluate(call);
         expr_free(call);
+        if (!graph_is_valid(built) && g->data.function.arg_count > 0 &&
+            is_head(g->data.function.args[0], SYM_List)) {
+            expr_free(built);
+            call = gd_head1(SYM_AdjacencyGraph, expr_copy((Expr*)g));
+            built = evaluate(call);
+            expr_free(call);
+        }
         g = built;
     }
     if (!graph_is_valid(g)) { if (built) expr_free(built); return NULL; }

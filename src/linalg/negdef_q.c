@@ -40,6 +40,7 @@
 #include "sym_names.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "numeric.h"
+#include "common.h"     /* common_scan_inexact */
 #include "flint_mat_bridge.h"
 
 #include <gmp.h>
@@ -245,6 +246,14 @@ Expr* builtin_negative_definite_matrix_q(Expr* res) {
     if (has_const)
         return expr_new_symbol(linalg_exact_definite_minors(m, n, 1) == 1
                                ? SYM_True : SYM_False);
+
+    /* Arbitrary precision is decided at the input precision (the leading
+     * minors of the Hermitian part, each an MPFR Det): rounded to doubles,
+     * {{1, 1}, {1, 1 + 10^-30}} at 50 digits lost its 10^-30. */
+    if (!exact && common_scan_inexact(m).min_bits > 53) {
+        int r = linalg_exact_definite_minors(m, n, 1);
+        if (r >= 0) return expr_new_symbol(r ? SYM_True : SYM_False);
+    }
 
     /* Exact input is decided exactly (Sylvester's criterion over Q(i)).
      * Rounding to double decided {{10^16, 10^16+1}, {10^16+1, 10^16+2}}

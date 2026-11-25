@@ -17,6 +17,8 @@
 #include "dist.h"
 #include "numeric.h"   /* expr_is_numeric_quantity, numericalize_machine_unplanned */
 #include "eval.h"
+#include "opform.h"   /* PDF[dist][x] */
+#include "common.h"   /* common_scan_inexact */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -498,7 +500,10 @@ static Expr* builtin_pdf(Expr* res) {
     Expr* dist = res->data.function.args[0];
     Expr* xe = res->data.function.args[1];
     bool exact = !ml_has_inexact(dist) && !ml_has_inexact(xe);
-    if (exact) {
+    /* Arbitrary-precision input keeps its precision: the closed form,
+     * evaluated at the input precision, not the machine density. */
+    bool bignum = !exact && common_scan_inexact(res).min_bits > 53;
+    if (exact || bignum) {
         Expr* cf = ml_dist_closed_form(ML_PROP_PDF, dist, xe);
         if (cf) return cf;
     }
@@ -585,6 +590,62 @@ static Expr* kde_property(MlDistProp prop, Expr* dist, const Expr* x) {
     return out;
 }
 
+/* InverseCDF[dist, q]: for these continuous univariate distributions the
+ * quantile function, so Quantile[dist, q]. */
+static Expr* builtin_inverse_cdf(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    return ml_dist_property(ML_PROP_QUANTILE, res->data.function.args[0],
+                            res->data.function.args[1]);
+}
+
+/* RandomVariate[UniformDistribution[{{a1, b1}, ...}]] (n draws when n given):
+ * a point drawn uniformly from the box, one uniform per coordinate.  NULL
+ * when dist is not a numeric box. */
+static Expr* box_draw_one(const double* lo, const double* w, size_t d) {
+    Expr** el = malloc(sizeof(Expr*) * d);
+    if (!el) return NULL;
+    for (size_t i = 0; i < d; i++) el[i] = expr_new_real(lo[i] + w[i] * random_uniform_01());
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), el, d);
+    free(el);
+    return out;
+}
+static Expr* box_randomvariate(const Expr* dist, bool one, size_t n) {
+    if (!dist || dist->type != EXPR_FUNCTION || dist->data.function.arg_count != 1 ||
+        dist->data.function.head->type != EXPR_SYMBOL ||
+        dist->data.function.head->data.symbol.name != SYM_UniformDistribution) return NULL;
+    const Expr* r = dist->data.function.args[0];
+    if (r->type != EXPR_FUNCTION || r->data.function.head->type != EXPR_SYMBOL ||
+        r->data.function.head->data.symbol.name != SYM_List || r->data.function.arg_count == 0)
+        return NULL;
+    size_t d = r->data.function.arg_count;
+    double* lo = malloc(sizeof(double) * d);
+    double* w = malloc(sizeof(double) * d);
+    bool ok = lo && w;
+    for (size_t i = 0; ok && i < d; i++) {
+        const Expr* p = r->data.function.args[i];
+        double a = 0, b = 0, im = 0;
+        ok = p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+             p->data.function.head->data.symbol.name == SYM_List && p->data.function.arg_count == 2 &&
+             na_read_scalar(p->data.function.args[0], &a, &im) && im == 0.0 &&
+             na_read_scalar(p->data.function.args[1], &b, &im) && im == 0.0 && a < b;
+        if (ok) { lo[i] = a; w[i] = b - a; }
+    }
+    Expr* out = NULL;
+    if (ok) {
+        if (one) out = box_draw_one(lo, w, d);
+        else {
+            Expr** el = malloc(sizeof(Expr*) * (n ? n : 1));
+            if (el) {
+                for (size_t i = 0; i < n; i++) el[i] = box_draw_one(lo, w, d);
+                out = expr_new_function(expr_new_symbol(SYM_List), el, n);
+                free(el);
+            }
+        }
+    }
+    free(lo); free(w);
+    return out;
+}
+
 Expr* ml_dist_property(MlDistProp prop, Expr* dist, const Expr* x) {
     Expr* r = ml_dist_closed_form(prop, dist, x);
     if (r) return r;
@@ -657,9 +718,87 @@ static void ml_draw(const MlDist* d, double* z, double* out) {
 
 /* RandomVariate[dist] / RandomVariate[dist, n]. A univariate distribution gives a real (a list
  * of n reals); a dim > 1 one gives a dim-vector (an n x dim matrix). */
+/* The outcome and probability lists of a ContingencyTable LearnedDistribution
+ * (borrowed), or false when dist is not one. */
+static bool ct_table(Expr* dist, Expr** outs, Expr** prs) {
+    if (!dist || dist->type != EXPR_FUNCTION || dist->data.function.arg_count != 4) return false;
+    Expr* h = dist->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_LearnedDistribution) return false;
+    Expr* m = dist->data.function.args[0];
+    if (!m || m->type != EXPR_STRING || strcmp(m->data.string, "ContingencyTable") != 0) return false;
+    Expr* pay = dist->data.function.args[1];
+    if (!pay || pay->type != EXPR_FUNCTION || pay->data.function.arg_count != 2) return false;
+    *outs = pay->data.function.args[0];
+    *prs = pay->data.function.args[1];
+    return (*outs)->type == EXPR_FUNCTION && (*prs)->type == EXPR_FUNCTION &&
+           (*outs)->data.function.arg_count == (*prs)->data.function.arg_count &&
+           (*outs)->data.function.arg_count > 0;
+}
+
+/* One outcome drawn from a ContingencyTable: invert the cumulative of its
+ * empirical probabilities at one uniform draw (so SeedRandom reproduces it). */
+static Expr* ct_draw(Expr* outs, const double* cum, size_t k) {
+    double u = random_uniform_01() * cum[k - 1];
+    size_t j = 0;
+    while (j + 1 < k && u >= cum[j]) j++;
+    return expr_copy(outs->data.function.args[j]);
+}
+
+/* RandomVariate of a nominal LearnedDistribution: one outcome, or a List of
+ * n.  NULL when the table's probabilities do not read. */
+static Expr* ct_randomvariate(Expr* outs, Expr* prs, bool one, size_t n) {
+    size_t k = outs->data.function.arg_count;
+    double* cum = malloc(sizeof(double) * k);
+    if (!cum) return NULL;
+    double acc = 0.0;
+    for (size_t j = 0; j < k; j++) {
+        double v = 0.0, im = 0.0;
+        if (!na_read_scalar(prs->data.function.args[j], &v, &im) || im != 0.0 || v < 0.0) {
+            free(cum); return NULL;
+        }
+        acc += v; cum[j] = acc;
+    }
+    Expr* out = NULL;
+    if (acc > 0.0) {
+        if (one) out = ct_draw(outs, cum, k);
+        else {
+            Expr** el = malloc(sizeof(Expr*) * (n ? n : 1));
+            if (el) {
+                for (size_t i = 0; i < n; i++) el[i] = ct_draw(outs, cum, k);
+                out = expr_new_function(expr_new_symbol(SYM_List), el, n);
+                free(el);
+            }
+        }
+    }
+    free(cum);
+    return out;
+}
+
 static Expr* builtin_randomvariate(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
+    {
+        /* a nominal distribution draws outcomes, not numbers */
+        Expr *outs, *prs;
+        if (ct_table(res->data.function.args[0], &outs, &prs)) {
+            if (argc == 1) return ct_randomvariate(outs, prs, true, 0);
+            Expr* ne = res->data.function.args[1];
+            if (ne->type != EXPR_INTEGER || ne->data.integer < 0 ||
+                ne->data.integer > INT64_C(100000000)) return NULL;
+            return ct_randomvariate(outs, prs, false, (size_t)ne->data.integer);
+        }
+        /* the uniform distribution on a box draws points */
+        if (argc == 1) {
+            Expr* b = box_randomvariate(res->data.function.args[0], true, 0);
+            if (b) return b;
+        } else if (res->data.function.args[1]->type == EXPR_INTEGER &&
+                   res->data.function.args[1]->data.integer >= 0 &&
+                   res->data.function.args[1]->data.integer <= INT64_C(100000000)) {
+            Expr* b = box_randomvariate(res->data.function.args[0], false,
+                                        (size_t)res->data.function.args[1]->data.integer);
+            if (b) return b;
+        }
+    }
     size_t n = 1;
     /* RandomVariate[dist, {n1, n2, ...}]: an n1 x n2 x ... array of draws. */
     size_t shape[16];
@@ -817,11 +956,33 @@ static double ml_nn_floor(const double* x, size_t n, size_t dim, size_t* n_disti
     return med;                                          /* already a SQUARED distance */
 }
 
+/* True when no leaf of data (a List, or a List of Lists) is a number: the
+ * outcomes are nominal (strings, symbols), which the default method learns as
+ * a ContingencyTable instead of declining in the numeric reader. */
+static bool ld_all_nominal(const Expr* data) {
+    if (!data || data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL
+        || data->data.function.head->data.symbol.name != SYM_List
+        || data->data.function.arg_count == 0) return false;
+    for (size_t i = 0; i < data->data.function.arg_count; i++) {
+        const Expr* r = data->data.function.args[i];
+        bool row = r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+                   && r->data.function.head->data.symbol.name == SYM_List;
+        size_t m = row ? r->data.function.arg_count : 1;
+        for (size_t j = 0; j < m; j++) {
+            const Expr* x = row ? r->data.function.args[j] : r;
+            if (x->type != EXPR_STRING &&
+                !(x->type == EXPR_SYMBOL && !expr_is_numeric_quantity(x))) return false;
+        }
+    }
+    return true;
+}
+
 static Expr* builtin_learn_distribution(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     bool mixture = false;
     bool contingency = false;
+    bool automatic = true;    /* no Method, or Method -> Automatic */
     if (argc == 2) {
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
@@ -833,13 +994,20 @@ static Expr* builtin_learn_distribution(Expr* res) {
         Expr* rhs = o->data.function.args[1];
         if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
             return NULL;
-        if (!rhs || rhs->type != EXPR_STRING) return NULL;
-        const char* mm = rhs->data.string;
-        if (strcmp(mm, "Multinormal") == 0)          mixture = false;
-        else if (strcmp(mm, "GaussianMixture") == 0) mixture = true;
-        else if (strcmp(mm, "ContingencyTable") == 0) contingency = true;
-        else return NULL;
+        if (rhs && rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
+            /* the default method, as with no option */
+        } else {
+            if (!rhs || rhs->type != EXPR_STRING) return NULL;
+            const char* mm = rhs->data.string;
+            automatic = false;
+            if (strcmp(mm, "Multinormal") == 0)          mixture = false;
+            else if (strcmp(mm, "GaussianMixture") == 0) mixture = true;
+            else if (strcmp(mm, "ContingencyTable") == 0) contingency = true;
+            else return NULL;
+        }
     }
+    /* The default method detects nominal data. */
+    if (automatic && ld_all_nominal(res->data.function.args[0])) contingency = true;
 
     if (contingency) {
         /* NOMINAL data: a probability per distinct outcome, which is what Wolfram's
@@ -1180,9 +1348,23 @@ void ml_dist_init(void) {
     symtab_get_def("PDF")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("PDF",
         "PDF[dist, x] gives the probability density of dist at x, and threads over a "
-        "list of x. Supports NormalDistribution and UniformDistribution -- exactly for exact "
-        "input and as a formula for symbolic input -- and every LearnedDistribution; a "
-        "univariate learned distribution takes a scalar point.");
+        "list of x. Supports NormalDistribution and UniformDistribution (on an interval "
+        "{a, b} or a box {{a1, b1}, ...}) -- exactly for exact input, at the input "
+        "precision for arbitrary-precision input, and as a formula for symbolic input -- "
+        "and every LearnedDistribution; a univariate learned distribution takes a scalar "
+        "point. PDF[dist][x] is PDF[dist, x]. A parameter set that is no distribution "
+        "(NormalDistribution[m, s] with s <= 0, decreasing bounds) gives a message.");
+    /* PDF[dist][x] and CDF[dist][x]: the point is the second argument */
+    opform_register("PDF", 1, 1, 1);
+    opform_register("CDF", 1, 1, 1);
+
+    symtab_add_builtin("InverseCDF", builtin_inverse_cdf);
+    symtab_get_def("InverseCDF")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("InverseCDF",
+        "InverseCDF[dist, q] gives the inverse of the CDF of dist at the probability q: "
+        "for the continuous univariate distributions here, Quantile[dist, q] "
+        "(NormalDistribution, UniformDistribution and a univariate SmoothKernel "
+        "LearnedDistribution).");
 
     symtab_add_builtin("CDF", builtin_cdf);
     symtab_get_def("CDF")->attributes |= ATTR_PROTECTED;

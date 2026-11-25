@@ -506,6 +506,18 @@ static Expr* svl_run(Expr* res) {
         free(s);
         return NULL;
     }
+    /* An Indeterminate entry leaves no singular value determined: each is
+     * Indeterminate (the Gram matrix's eigenvalues came back as Infinity,
+     * which nothing in the input is). */
+    if (!is_ndarray(a.m) && expr_mentions_any(a.m, &SYM_Indeterminate, 1)) {
+        int mn = r < c ? r : c;
+        Expr** v = (Expr**)malloc(sizeof(Expr*) * (size_t)mn);
+        if (!v) return NULL;
+        for (int i = 0; i < mn; i++) v[i] = expr_new_symbol(SYM_Indeterminate);
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), v, (size_t)mn);
+        free(v);
+        return out;
+    }
     long bits = 53;
     LaPrecClass pc = la_prec_class(a.m, &bits);
     Expr* out = NULL;

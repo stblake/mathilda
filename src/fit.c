@@ -236,8 +236,10 @@ static bool fit_is_option_arg(Expr* e) {
 }
 
 /* Parse trailing options.  *npos receives the number of leading positional
- * arguments.  Returns false (and emits a diagnostic) on an invalid value. */
-static bool fit_parse_options(Expr** args, size_t argc, size_t* npos, FitOpts* opts) {
+ * arguments.  Returns false (and emits a diagnostic under `head`, the calling
+ * builtin) on an invalid value. */
+static bool fit_parse_options(const char* head, Expr** args, size_t argc, size_t* npos,
+                              FitOpts* opts) {
     opts->wp_mode = FIT_WP_AUTO;
     opts->wp_bits = 0;
     opts->reg_kind = FIT_REG_NONE;
@@ -254,12 +256,12 @@ static bool fit_parse_options(Expr** args, size_t argc, size_t* npos, FitOpts* o
         Expr* val = rule->data.function.args[1];
         if (name == SYM_WorkingPrecision) {
             if (!fit_parse_working_precision(val, &opts->wp_mode, &opts->wp_bits)) {
-                fit_warn("Fit", "wprec", "invalid WorkingPrecision value");
+                fit_warn(head, "wprec", "invalid WorkingPrecision value");
                 return false;
             }
         } else if (name == SYM_FitRegularization) {
             if (!fit_parse_regularization(val, &opts->reg_kind, &opts->reg_lambda)) {
-                fit_warn("Fit", "reg",
+                fit_warn(head, "reg",
                          "FitRegularization must be {\"name\", lambda}");
                 return false;
             }
@@ -1551,7 +1553,7 @@ Expr* builtin_fit(Expr* res) {
 
     FitOpts opts;
     size_t npos;
-    if (!fit_parse_options(args, argc, &npos, &opts)) return NULL;
+    if (!fit_parse_options("Fit", args, argc, &npos, &opts)) return NULL;
 
     if (npos == 1) {
         return fit_from_design(args[0], &opts);
@@ -1659,7 +1661,7 @@ Expr* builtin_designmatrix(Expr* res) {
     }
     FitOpts opts;
     size_t npos;
-    bool parsed = fit_parse_options(a2, argc2, &npos, &opts);
+    bool parsed = fit_parse_options("DesignMatrix", a2, argc2, &npos, &opts);
     free(a2);
     if (!parsed || npos != 3) return NULL;
 

@@ -1337,6 +1337,7 @@ set(COMMON_SRC
     ../src/graphics/show.c
     ../src/graph/graph.c
     ../src/graph/graph_util.c
+    ../src/graph/graph_edgearg.c
     ../src/graph/construct.c
     ../src/graph/graphq.c
     ../src/graph/vertexlist.c

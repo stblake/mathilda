@@ -86,11 +86,18 @@ static void pr_pull(void* vctx, int tid, int64_t lo, int64_t hi) {
 
 Expr* builtin_pagerank_centrality(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc != 1 && argc != 2) return NULL;
+    if (argc < 1 || argc > 3) return NULL;
     const Expr* g = res->data.function.args[0];
     double alpha = 0.85;
-    if (argc == 2 && !read_real(res->data.function.args[1], &alpha, NULL)) return NULL;
+    if (argc >= 2 && !read_real(res->data.function.args[1], &alpha, NULL)) return NULL;
     if (alpha < 0.0 || alpha > 1.0) return NULL;
+    /* PageRankCentrality[g, alpha, beta]: a positive scalar beta is a uniform
+     * initial centrality, and the normalised answer is the two-argument one.
+     * (A per-vertex beta list is not implemented: left unevaluated.) */
+    if (argc == 3) {
+        double beta;
+        if (!read_real(res->data.function.args[2], &beta, NULL) || !(beta > 0.0)) return NULL;
+    }
     if (!graph_is_valid(g)) return NULL;
     Expr* cached = gmet_cache_get("PageRankCentrality", res);
     if (cached) return cached;

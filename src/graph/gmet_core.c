@@ -84,6 +84,24 @@ int gmet_edge_weights(const Expr* g, double** w_out) {
     return 1;
 }
 
+int gmet_weights_exact_in_double(const Expr* g) {
+    const Expr* wl = graph_edge_weight_list(g);
+    if (!wl) return 0;
+    double tot = 0.0;
+    for (size_t k = 0; k < wl->data.function.arg_count; k++) {
+        const Expr* x = wl->data.function.args[k];
+        if (x->type != EXPR_INTEGER || x->data.integer < 0) return 0;
+        tot += (double)x->data.integer;
+        if (tot > 9007199254740992.0) return 0;     /* 2^53 */
+    }
+    return 1;
+}
+
+double gmet_distance_tol(const Expr* g, double x) {
+    if (isinf(x) || gmet_weights_exact_in_double(g)) return 0.0;
+    return 1e-12 * (fabs(x) + 1.0);
+}
+
 /* ---- CSR ------------------------------------------------------------------ */
 
 void gmet_csr_free(GmetCSR* c) {

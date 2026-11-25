@@ -15,6 +15,7 @@
 #include "graph_ops.h"
 #include "symtab.h"
 #include "attr.h"
+#include "sym_names.h"
 #include "graph_metrics.h"
 #include "graph_hyper.h"
 #include "graph_algos.h"
@@ -149,7 +150,15 @@ void graph_init(void) {
     symtab_set_docstring("RandomGraph",
         "RandomGraph[{n, m}] gives a random undirected graph with n vertices "
         "and m edges. RandomGraph[{n, m}, k] gives a list of k such graphs; "
-        "memory use grows with k.");
+        "memory use grows with k. DirectedEdges -> True draws m of the n(n-1) "
+        "directed edges instead. RandomGraph[BernoulliGraphDistribution[n, p]] "
+        "includes each of the n(n-1)/2 possible edges with probability p.");
+    {
+        Expr* o[1];
+        Expr* kv[2] = { expr_new_symbol(SYM_DirectedEdges), expr_new_symbol(SYM_False) };
+        o[0] = expr_new_function(expr_new_symbol(SYM_Rule), kv, 2);
+        symtab_set_options("RandomGraph", expr_new_function(expr_new_symbol(SYM_List), o, 1));
+    }
 
     /* ---- Phase 5: search & computation algorithms ------------------------ */
     symtab_add_builtin("FindShortestPath", builtin_find_shortest_path);
@@ -319,4 +328,7 @@ void graph_init(void) {
     /* ---- Algos stream: flows, matchings, covers, cliques, Hamiltonian,
      *      isomorphism, planarity (galg_*.c) ------------------------------- */
     graph_algos_init();
+    /* Last: route the graph-argument heads through the edge-list shim
+     * (graph_edgearg.c), now that every one of them is registered. */
+    graph_edgearg_init();
 }

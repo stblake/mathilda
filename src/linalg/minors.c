@@ -435,8 +435,8 @@ static Expr* minors_run(Expr* res) {
     int64_t k = n - 1;
     if (argc >= 2) {
         const Expr* ke = res->data.function.args[1];
-        if (ke->type != EXPR_INTEGER) return NULL;     /* silent, as the reference */
-        k = ke->data.integer;
+        /* silent, as the reference; a BigInt k is out of range like k > n */
+        if (!expr_get_int64_saturated(ke, &k)) return NULL;
     }
     const Expr* f = argc == 3 ? res->data.function.args[2] : NULL;
     if (k < 0 || k > n) return la_empty_list();

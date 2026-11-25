@@ -242,8 +242,11 @@ Expr* builtin_graph_distance_matrix(Expr* res) {
         gmet_csr_free(&csr);
         if (!ok) { if (nd) expr_free(nd); else free(Dw); return NULL; }
         int complete = 1;
+        /* a distance equal to the cutoff up to round-off is within it
+         * (1/10 + 2/10 is not past 3/10) */
+        double ctol = gmet_distance_tol(g, cutoff);
         for (size_t i = 0; i < nn; i++) {
-            if (Dw[i] > cutoff) Dw[i] = INFINITY;
+            if (Dw[i] > cutoff + ctol) Dw[i] = INFINITY;
             if (isinf(Dw[i])) complete = 0;
         }
         if (complete && nd) out = nd;
@@ -365,9 +368,9 @@ Expr* builtin_vertex_eccentricity(Expr* res) {
 
 enum { EX_DIAMETER, EX_RADIUS, EX_CENTER, EX_PERIPHERY, EX_MEAN };
 
-/* Relative tolerance for "equal eccentricity" on weighted graphs, so that two
- * sums of the same weights taken in different orders compare equal. */
-#define ECC_TIE_TOL 1e-12
+/* "Equal eccentricity" on a weighted graph compares within
+ * gmet_distance_tol: exactly for Integer weights, else up to a relative
+ * 1e-12 so that two sums of the same weights in different orders tie. */
 
 static const char* const EX_NAMES[] = {
     "GraphDiameter", "GraphRadius", "GraphCenter", "GraphPeriphery", "MeanGraphDistance"
@@ -436,7 +439,7 @@ static Expr* extremal_compute(Expr* res, int what) {
         break;
     default: {
         double target = what == EX_CENTER ? lo : hi;
-        double tol = (S->weighted && !isinf(target)) ? ECC_TIE_TOL * (fabs(target) + 1.0) : 0.0;
+        double tol = S->weighted ? gmet_distance_tol(g, target) : 0.0;
         unsigned char* flag = calloc((size_t)n, 1);
         if (flag) {
             for (int i = 0; i < n; i++)
@@ -479,7 +482,8 @@ Expr* builtin_kirchhoff_matrix(Expr* res) {
     if (!graph_edge_indices(g, &eu, &ev, &edir)) return NULL;
     int n = (int)g->data.function.args[0]->data.function.arg_count;
     size_t ne = g->data.function.args[1]->data.function.arg_count;
-    if (n == 0) return NULL;
+    /* the null graph's Laplacian is the 0 x 0 matrix, as its AdjacencyMatrix */
+    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     size_t nn = (size_t)n * (size_t)n;
     int64_t dims[2] = { n, n };
     void* buf = NULL;

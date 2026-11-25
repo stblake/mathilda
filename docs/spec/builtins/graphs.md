@@ -22,6 +22,18 @@ in either constructor form: `Graph[e, EdgeWeight -> {w1, ..., wm}]` or
 (the capacities `FindMaximumFlow` uses) — see `EdgeWeight` and
 `WeightedAdjacencyMatrix` below.
 
+**The edge-list form.** Every head whose first argument is a graph (the
+queries, matrix views, distances, centralities, editing heads, transforms,
+cycles, paths, flows, covers and cliques; not the `*Q` predicates) also takes
+a list of edges or edge sugar in its place: `GraphDistance[{1 <-> 2, 2 <-> 3},
+1, 3]` is `2`, `VertexInDegree[{1 -> 2, 2 -> 3}]` is `{0, 1, 1}`. The list is
+read as `Graph[list]` (`src/graph/graph_edgearg.c`, one shim for all of them);
+when the head declines, the call stays unevaluated as written.
+`FindMinimumCut` and `GraphPlot` also take an adjacency matrix, read as
+`AdjacencyGraph[m]`. A count or length bound past the int64 range (`2^70`) is
+the largest one (`FindCycle[g, 2^70]`, `FindPath[g, s, t, 10^20]`,
+`FindKClique[g, 10^20]`, `KaryTree[n, 10^20]`, `NeighborhoodGraph[g, v, 2^70]`).
+
 **Scope:** simple graphs only — no parallel edges, no self-loops, no edge tags
 beyond `EdgeWeight` and `EdgeCapacity`, no multigraphs, and no vertex weights
 (hypergraphs are a separate type, see `hypergraphs.md`).
@@ -143,6 +155,8 @@ Out[11]= Graph[{1, 2}, {1 -> 3}]
 In[12]:= Graph[{1,2,3}, {1->2, 2->3}, EdgeWeight -> {5}]
 Out[12]= Graph[{1, 2, 3}, {1 -> 2, 2 -> 3}, EdgeWeight -> {5}]
 ```
+
+- `Graph[g]` of a graph `g` is `g` itself.
 
 ## GraphQ
 
@@ -288,6 +302,8 @@ Out[4]= {2}
 In[5]:= AdjacencyList[5]
 Out[5]= AdjacencyList[5]
 ```
+
+- `AdjacencyList[g, patt]`: the vertices adjacent to some vertex matching `patt`, each once, in `VertexList` order (`AdjacencyList[PathGraph[3], 1 | 3]` is `{2}`).
 
 ## VertexDegree
 
@@ -534,6 +550,8 @@ In[5]:= AdjacencyGraph[{{1,2},{3}}]
 Out[5]= AdjacencyGraph[{{1, 2}, {3}}]
 ```
 
+- A `SparseArray` adjacency matrix is read as its `Normal` (`AdjacencyGraph[SparseArray[{{1, 2} -> 1, {2, 1} -> 1}, {2, 2}]]` has the one edge `1 <-> 2`).
+
 ## WeightedAdjacencyMatrix
 
 - `WeightedAdjacencyMatrix[g]`: like `AdjacencyMatrix[g]`, but each nonzero
@@ -686,6 +704,9 @@ Out[5]= List
 In[6]:= RandomGraph[{6, 5}, -1]
 Out[6]= RandomGraph[{6, 5}, -1]
 ```
+
+- `RandomGraph[{n, m}, DirectedEdges -> True]` samples `m` of the `n(n-1)` directed edges; `Options[RandomGraph]` is `{DirectedEdges -> False}`.
+- `RandomGraph[BernoulliGraphDistribution[n, p]]` (and `[..., k]` for `k` graphs) includes each of the `n(n-1)/2` possible undirected edges with probability `p`, one uniform draw per candidate (it honours `SeedRandom`).
 
 ## FindShortestPath
 
@@ -1262,6 +1283,8 @@ In[9]:= GraphPlot[5]
 Out[9]= GraphPlot[5]
 ```
 
+- `GraphPlot[m]` of a square matrix draws `AdjacencyGraph[m]`; `GraphPlot[]` is `GraphPlot::argx`.
+
 ## FindVertexColoring
 
 - `FindVertexColoring[g]`: a minimal vertex colouring of `g`, as a list of
@@ -1599,6 +1622,8 @@ In[3]:= IndexGraph[{1,2}]
 Out[3]= IndexGraph[{1, 2}]
 ```
 
+- The first label `r` may be a BigInt, and `r + n - 1` may pass `2^63`: the labels are then BigInts (`IndexGraph[g, 2^70]`).
+
 ## GraphComplement
 
 - `GraphComplement[g]`: the graph on the vertices of `g` whose edges are the pairs not adjacent in `g`.
@@ -1856,6 +1881,8 @@ In[2]:= {PathGraphQ[Graph[{1->2,2<->3}]], PathGraphQ[Graph[{1<->2,3<->4}]], Path
 Out[2]= {False, False, True, False, False}
 ```
 
+- A cycle is a closed path: `PathGraphQ[CycleGraph[4]]` is `True` (undirected: every degree at most 2, connected).
+
 ## EulerianGraphQ
 
 - `EulerianGraphQ[g]`: `True` if `g` has an Eulerian cycle.
@@ -1962,6 +1989,8 @@ Out[5]= {{4 <-> 3, 3 <-> 5, 5 <-> 4}}
 In[6]:= FindCycle[Graph[{1->2,2<->3}]]
 Out[6]= FindCycle[Graph[<3 vertices, 2 edges>]]
 ```
+
+- A BigInt length bound or count (`FindCycle[g, 2^70]`) is no bound, as `Infinity` / `All`.
 
 ## FindPath
 
@@ -2107,6 +2136,10 @@ In[5]:= GraphDistance[Graph[{1,2},{1<->2}, EdgeWeight->{a}], 1]
 Out[5]= GraphDistance[Graph[<2 vertices, 1 edge>], 1]
 ```
 
+- `GraphDistance[g, s, t, Method -> m]` accepts `m` = `Automatic`, `"Dijkstra"`, `"BellmanFord"`, `"FloydWarshall"` or `"Johnson"` (the distances do not depend on it).
+- A symbolic edge weight leaves `GraphDistance[g, s, t]` unevaluated, as `GraphDistance[g, s]` is (it gave the hop count).
+- `GraphDistanceMatrix[g, d]` keeps a weighted distance equal to `d` up to round-off (`1/10 + 2/10` against `3/10`); Integer weights compare exactly.
+
 ## VertexEccentricity
 
 - `VertexEccentricity[g, v]`: the largest distance from `v` to a vertex of `g`.
@@ -2206,6 +2239,8 @@ In[5]:= GraphPeriphery[Graph[{1<->2,3<->4}]]
 Out[5]= {}
 ```
 
+- Ties compare exactly for Integer weights whose total is at most `2^53` (`10^15` and `10^15 + 1` differ), and within a relative `10^-12` otherwise. A disconnected weighted graph has every eccentricity `Infinity`, so every vertex is in its center.
+
 ## MeanGraphDistance
 
 - `MeanGraphDistance[g]`: the mean of the distances between all ordered pairs of distinct vertices of `g`.
@@ -2283,6 +2318,8 @@ Out[4]= {{2, -1, -1}, {-1, 2, -1}, {-1, -1, 2}}
 In[5]:= KirchhoffMatrix[5]
 Out[5]= KirchhoffMatrix[5]
 ```
+
+- `KirchhoffMatrix[Graph[{}]]` is `{}`, the 0 x 0 matrix.
 
 ## DegreeCentrality
 
@@ -2446,6 +2483,8 @@ Out[4]= {0.475676, 0.131081, 0.131081, 0.131081, 0.131081}
 In[5]:= PageRankCentrality[Graph[{1->2, 2->3, 3->1, 3->4}], 2]
 Out[5]= PageRankCentrality[Graph[<4 vertices, 4 edges>], 2]
 ```
+
+- `PageRankCentrality[g, alpha, beta]` with a positive scalar `beta` (a uniform initial centrality) is the two-argument answer; a per-vertex `beta` list is not implemented.
 
 ## EigenvectorCentrality
 

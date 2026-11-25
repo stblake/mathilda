@@ -40,6 +40,8 @@
 #include "flint_mat_bridge.h"
 #include "numarray.h"   /* na_read_scalar */
 #include "sym_names.h"
+#include "message.h"
+#include "print.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -179,8 +181,17 @@ Expr* builtin_characteristicpolynomial(Expr* res) {
     Expr* var  = res->data.function.args[1];
 
     Expr *m, *a; int64_t n;
-    if (!eigen_extract_matrix_pair(arg0, &m, &a, &n))
-        return NULL;   /* not a square matrix / matrix pair: leave unevaluated */
+    if (!eigen_extract_matrix_pair(arg0, &m, &a, &n)) {
+        /* not a square matrix / matrix pair: unevaluated, and a List that is
+         * not one is the reference's ::matsq (a symbol stays silent) */
+        if (head_is(arg0, SYM_List)) {
+            char* s = expr_to_string(arg0);
+            mth_message("CharacteristicPolynomial", "matsq",
+                        "Argument %s at position 1 is not a non-empty square matrix.", s ? s : "?");
+            free(s);
+        }
+        return NULL;
+    }
 
     const char* lam = eigen_lambda_name();
 

@@ -582,6 +582,45 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
  *  Method value emits Inverse::method and leaves the call             *
  *  unevaluated.  Non-square or empty input emits Inverse::matsq.      *
  * ------------------------------------------------------------------ */
+/* Inverse[m, ZeroTest -> f] for the n x n matrix m: the right half of the
+ * reduced (m | I), or NULL with Inverse::sing when f finds m singular. */
+static Expr* inv_with_zerotest(Expr* m, int n, Expr* zt) {
+    int w = 2 * n;
+    Expr** flat = malloc(sizeof(Expr*) * (size_t)n * (size_t)w);
+    if (!flat) return NULL;
+    for (int i = 0; i < n; i++) {
+        Expr* row = m->data.function.args[i];
+        for (int j = 0; j < n; j++) flat[i * w + j] = expr_copy(row->data.function.args[j]);
+        for (int j = 0; j < n; j++) flat[i * w + n + j] = expr_new_integer(i == j ? 1 : 0);
+    }
+    matsol_rref_with_zerotest(flat, n, w, zt);
+    /* m is invertible iff every row has its pivot in the left block: then the
+     * left block is I.  A zero left row means a rank defect. */
+    bool singular = false;
+    for (int i = 0; i < n && !singular; i++) {
+        bool nz = false;
+        for (int j = 0; j < n && !nz; j++) nz = !matsol_zt_is_zero(flat[i * w + j], zt);
+        if (!nz) singular = true;
+    }
+    Expr* out = NULL;
+    if (singular) {
+        char* s = expr_to_string(m);
+        inv_warn("Inverse::sing: Matrix %s is singular.\n", s ? s : "?");
+        free(s);
+    } else {
+        Expr** rows = malloc(sizeof(Expr*) * (size_t)n);
+        for (int i = 0; i < n; i++) {
+            rows[i] = expr_new_function(expr_new_symbol(SYM_List), flat + i * w + n, (size_t)n);
+            for (int j = 0; j < n; j++) flat[i * w + n + j] = NULL;
+        }
+        out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+        free(rows);
+    }
+    for (int k = 0; k < n * w; k++) if (flat[k]) expr_free(flat[k]);
+    free(flat);
+    return out;
+}
+
 Expr* builtin_inverse(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_inverse(res);
@@ -602,6 +641,14 @@ Expr* builtin_inverse(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     MatsolMethod method = MATSOL_AUTOMATIC;
+    Expr* zt = argc == 2 ? matsol_parse_zerotest_option(res->data.function.args[1]) : NULL;
+    if (zt) {
+        /* ZeroTest -> f: Gauss-Jordan on (m | I), consulting f for every zero
+         * decision (RowReduce's ZeroTest kernel); the right block is m^-1. */
+        int64_t zd[64];
+        if (get_tensor_dims(arg, zd) != 2 || zd[0] != zd[1] || zd[0] == 0) return NULL;
+        return inv_with_zerotest(arg, (int)zd[0], zt);
+    }
     if (argc == 2) {
         /* Modulus -> p: the inverse over Z/p (linalg_mod.c). */
         int64_t modp = 0;

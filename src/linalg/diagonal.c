@@ -84,8 +84,8 @@ Expr* builtin_diagonal(Expr* res) {
     int64_t k = 0;
     if (argc == 2) {
         Expr* ke = res->data.function.args[1];
-        if (ke->type != EXPR_INTEGER) return NULL;
-        k = ke->data.integer;
+        /* A BigInt k lies past every diagonal, as a large Integer one does. */
+        if (!expr_get_int64_saturated(ke, &k)) return NULL;
     }
 
     if (ll_has_ll_level1(m)) return diagonal_ll(m, k);

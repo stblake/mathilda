@@ -7,6 +7,8 @@
  *   StarGraph[n]              - undirected star: hub 1 joined to leaves 2..n
  *   RandomGraph[{n, m}]       - undirected graph with n vertices, m random edges
  *   RandomGraph[{n, m}, k]    - a list of k such graphs
+ *   RandomGraph[{n, m}, DirectedEdges -> True] - m random directed edges
+ *   RandomGraph[BernoulliGraphDistribution[n, p]] - each edge with prob. p
  *
  * Each assembles a Graph[List verts, List edges] expression and returns it; the
  * evaluator canonicalizes and validates it via builtin_graph. Vertices are the
@@ -77,6 +79,13 @@ static bool family_alloc(int64_t n, int64_t ne, Expr*** verts, Expr*** edges) {
     }
     for (int64_t i = 0; i < n; i++) (*verts)[i] = expr_new_integer(i + 1);
     return true;
+}
+
+/* True iff e is a function node whose head is the interned symbol h. */
+static bool head_is_sym_name(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
 }
 
 /* True iff e is Rule[sym, value] (an option). */
@@ -273,7 +282,12 @@ static Expr* int_vertex_list(int64_t n) {
  * Returns NULL if the sampler declines or an allocation fails. Caller has
  * already validated n >= 0, m >= 0, maxe representable, m <= maxe.
  */
-static Expr* one_random_graph(int64_t n, unsigned long long maxe, int64_t m) {
+static Expr* directed_edge(int64_t a, int64_t b) {
+    Expr* ea[2] = { expr_new_integer(a), expr_new_integer(b) };
+    return expr_new_function(expr_new_symbol(SYM_DirectedEdge), ea, 2);
+}
+
+static Expr* one_random_graph(int64_t n, unsigned long long maxe, int64_t m, bool directed) {
     /* n <= 1 leaves no candidates: the empty graph. */
     if (maxe == 0) {
         Expr* vl = int_vertex_list(n);
@@ -292,9 +306,16 @@ static Expr* one_random_graph(int64_t n, unsigned long long maxe, int64_t m) {
     Expr** es = malloc((size_t)(m > 0 ? m : 1) * sizeof(Expr*));
     if (!es) { free(idx); return NULL; }
     for (int64_t e = 0; e < m; e++) {
+        unsigned long long x = idx[e];
+        if (directed) {
+            /* the n(n-1) ordered pairs, row-major: row i holds (i, j != i) */
+            int64_t i = (int64_t)(x / (unsigned long long)(n - 1)) + 1;
+            int64_t k = (int64_t)(x % (unsigned long long)(n - 1));
+            es[e] = directed_edge(i, k + 1 < i ? k + 1 : k + 2);
+            continue;
+        }
         /* row i (1-based) holds pairs (i, i+1..n) and starts at
          * off(i) = (i-1)(2n-i)/2; find the last row with off(i) <= idx */
-        unsigned long long x = idx[e];
         int64_t lo = 1, hi = n - 1;
         while (lo < hi) {
             int64_t mid = lo + (hi - lo + 1) / 2;
@@ -316,10 +337,75 @@ static Expr* one_random_graph(int64_t n, unsigned long long maxe, int64_t m) {
     return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
 }
 
+/* RandomGraph[BernoulliGraphDistribution[n, p]]: each of the n(n-1)/2
+ * possible undirected edges present independently with probability p, one
+ * uniform draw per candidate in row-major order (so it honours SeedRandom).
+ * NULL for a malformed distribution or past the resource limit. */
+static Expr* bernoulli_random_graph(const Expr* dist) {
+    if (dist->data.function.arg_count != 2) return NULL;
+    int64_t n = as_count(dist->data.function.args[0]);
+    const Expr* pe = dist->data.function.args[1];
+    double p;
+    if (pe->type == EXPR_REAL) p = pe->data.real;
+    else if (pe->type == EXPR_INTEGER) p = (double)pe->data.integer;
+    else if (head_is_sym_name(pe, SYM_Rational) && pe->data.function.arg_count == 2 &&
+             pe->data.function.args[0]->type == EXPR_INTEGER &&
+             pe->data.function.args[1]->type == EXPR_INTEGER)
+        p = (double)pe->data.function.args[0]->data.integer /
+            (double)pe->data.function.args[1]->data.integer;
+    else return NULL;
+    if (n < 0 || !(p >= 0.0 && p <= 1.0)) return NULL;
+    int64_t maxe = n < 2 ? 0 : n * (n - 1) / 2;
+    if (n > GEN_FAMILY_MAX_VERTICES || !family_fits(n, maxe)) return NULL;
+    Expr** es = mth_malloc_n(maxe > 0 ? maxe : 1, sizeof(Expr*));
+    if (!es) return mth_nomem_abort();
+    size_t m = 0;
+    for (int64_t i = 1; i <= n; i++)
+        for (int64_t j = i + 1; j <= n; j++)
+            if (random_uniform_01() < p) es[m++] = undirected_edge(i, j);
+    Expr* el = expr_new_function(expr_new_symbol(SYM_List), es, m);
+    free(es);
+    Expr* vl = int_vertex_list(n);
+    if (!vl) { expr_free(el); return NULL; }
+    Expr* gargs[2] = { vl, el };
+    return expr_new_function(expr_new_symbol(SYM_Graph), gargs, 2);
+}
+
 Expr* builtin_random_graph(Expr* res) {
     size_t argc = res->data.function.arg_count;
+    /* a trailing DirectedEdges -> True | False */
+    bool directed = false;
+    if (argc >= 2 && is_option(res->data.function.args[argc - 1])) {
+        const Expr* o = res->data.function.args[argc - 1];
+        const Expr* v = o->data.function.args[1];
+        if (o->data.function.args[0]->data.symbol.name != SYM_DirectedEdges ||
+            v->type != EXPR_SYMBOL ||
+            (v->data.symbol.name != SYM_True && v->data.symbol.name != SYM_False))
+            return NULL;
+        directed = v->data.symbol.name == SYM_True;
+        argc--;
+    }
     if (argc != 1 && argc != 2) return NULL;
     const Expr* spec = res->data.function.args[0];
+    if (head_is_sym_name(spec, SYM_BernoulliGraphDistribution)) {
+        if (directed) return NULL;            /* undirected distribution only */
+        if (argc == 1) return bernoulli_random_graph(spec);
+        int64_t kc = as_count(res->data.function.args[1]);
+        if (kc < 0 || kc > GEN_FAMILY_MAX_VERTICES) return NULL;
+        Expr** gs = kc > 0 ? calloc((size_t)kc, sizeof(Expr*)) : NULL;
+        if (kc > 0 && !gs) return NULL;
+        for (int64_t i = 0; i < kc; i++) {
+            gs[i] = bernoulli_random_graph(spec);
+            if (!gs[i]) {
+                for (int64_t j = 0; j < i; j++) expr_free(gs[j]);
+                free(gs);
+                return NULL;
+            }
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), gs, (size_t)kc);
+        free(gs);
+        return out;
+    }
     if (!graph_is_list(spec) || spec->data.function.arg_count != 2) return NULL;
     int64_t n = as_count(spec->data.function.args[0]);
     int64_t m = as_count(spec->data.function.args[1]);
@@ -336,11 +422,11 @@ Expr* builtin_random_graph(Expr* res) {
      * head's error channel. */
     if (n > 2147483647L) return NULL;
     unsigned long long maxe = (n < 2) ? 0ULL
-        : (unsigned long long)n * (unsigned long long)(n - 1) / 2;
+        : (unsigned long long)n * (unsigned long long)(n - 1) / (directed ? 1 : 2);
     if (maxe > (unsigned long long)(SIZE_MAX / sizeof(Expr*))) return NULL;
     if ((unsigned long long)m > maxe) return NULL;  /* more edges than a simple graph allows */
 
-    if (argc == 1) return one_random_graph(n, maxe, m);
+    if (argc == 1) return one_random_graph(n, maxe, m, directed);
 
     /* RandomGraph[{n,m}, k]: k independent graphs. k = 0 gives {}; a negative,
      * non-integer, or symbolic k is silently unevaluated, matching the five
@@ -352,7 +438,7 @@ Expr* builtin_random_graph(Expr* res) {
     Expr** gs = (kcount > 0) ? calloc((size_t)kcount, sizeof(Expr*)) : NULL;
     if (kcount > 0 && !gs) return NULL;
     for (int64_t i = 0; i < kcount; i++) {
-        gs[i] = one_random_graph(n, maxe, m);
+        gs[i] = one_random_graph(n, maxe, m, directed);
         if (!gs[i]) {                        /* never return a partial list */
             for (int64_t j = 0; j < i; j++) expr_free(gs[j]);
             free(gs);

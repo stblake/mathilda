@@ -163,6 +163,20 @@ MATHILDA_MAYBE_UNUSED static bool schur_all_real(const Expr* m, int n) {
  *  Builtin entry point.                                                     *
  * ------------------------------------------------------------------------ */
 
+/* True when a leaf of e is an infinity (Infinity, ComplexInfinity,
+ * DirectedInfinity[...]): numeric to NumericQ, but no matrix the kernels can
+ * factor -- left alone, the machine kernel failed silently. */
+static bool schur_has_infinity(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_Infinity || e->data.symbol.name == SYM_ComplexInfinity;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_DirectedInfinity)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (schur_has_infinity(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_schurdecomposition(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -208,7 +222,7 @@ Expr* builtin_schurdecomposition(Expr* res) {
         }
     } else {
         long b1 = 0;
-        if (!la_all_numeric(m)) {
+        if (!la_all_numeric(m) || schur_has_infinity(m)) {
             mth_message("SchurDecomposition", "schurn", "SchurDecomposition has received a matrix with non-numeric elements.");
             return NULL;
         }

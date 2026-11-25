@@ -277,6 +277,7 @@ Out[3]= {1, -2 I, 3 - 4 I}
 ```
 
 ## Take, Drop
+- `UpTo[n]` needs `n >= 0`: `Take[list, UpTo[-2]]` is `Take::seqs` (and `Drop::seqs`), unevaluated; it used to read as the last two.
 
 In[1]:= Reverse[{a, b, c}]
 Out[1]= {c, b, a}

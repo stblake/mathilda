@@ -3397,13 +3397,30 @@ Expr* builtin_outer(Expr* res) {
     }
     
     Expr* head = NULL;
+    size_t head_pos = 0;
     for (size_t i = 0; i < num_tensors; i++) {
-        if (tensors[i]->type == EXPR_FUNCTION) {
-            head = tensors[i]->data.function.head;
-            break;
+        if (tensors[i]->type != EXPR_FUNCTION) continue;
+        Expr* h = tensors[i]->data.function.head;
+        if (!head) { head = h; head_pos = i; continue; }
+        /* the operands' heads must agree (Outer::heads); left alone, the
+         * first head was imposed on the others */
+        if (!expr_eq(h, head)) {
+            char* s1 = expr_to_string(head);
+            char* s2 = expr_to_string(h);
+            mth_message("Outer", "heads", "Heads %s and %s at positions %zu and %zu are expected to be the same.",
+                        s1 ? s1 : "?", s2 ? s2 : "?", head_pos + 2, i + 2);
+            free(s1); free(s2);
+            free(target_depths);
+            return NULL;
         }
     }
-    
+    /* An Association is no tensor: the result would be an Association of
+     * non-rules.  Left unevaluated. */
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Association) {
+        free(target_depths);
+        return NULL;
+    }
+
     Expr** current_atoms = malloc(sizeof(Expr*) * num_tensors);
     Expr* raw_res = outer_rec(f, tensors, num_tensors, target_depths, 0, tensors[0], 0, current_atoms, head);
     

@@ -3,7 +3,8 @@
  * Reference semantics (probed): Flat, OneIdentity, Protected. For arrays the
  * product is the full outer product, rank r1 + r2 + ...
  * (TensorProduct[{1, 2}, {3, 4}] is {{3, 4}, {6, 8}}); a NUMBER multiplies
- * (TensorProduct[2, {1, 2}] is {2, 4}); TensorProduct[t] is t and
+ * (TensorProduct[2, {1, 2}] is {2, 4}, TensorProduct[Pi, {1, 2}] is {Pi, 2 Pi},
+ * TensorProduct[2, 3] is 6); TensorProduct[t] is t and
  * TensorProduct[] is 1; a symbol stays a formal factor (TensorProduct[x, {1, 2}]
  * and TensorProduct[a, b] are left as they are). Any SparseArray factor makes
  * the answer a SparseArray.
@@ -20,6 +21,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "numeric.h"   /* expr_is_numeric_quantity */
 #include <stdlib.h>
 #include <string.h>
 
@@ -40,7 +42,8 @@ static bool is_number(const Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
         (e->data.function.head->data.symbol.name == SYM_Rational ||
          e->data.function.head->data.symbol.name == SYM_Complex)) return true;
-    return false;
+    /* an exact numeric quantity (Pi, Sqrt[2]) is a scalar too */
+    return expr_is_numeric_quantity(e);
 }
 
 static Expr* eval_owned(Expr* e) {
@@ -75,7 +78,15 @@ Expr* builtin_tensorproduct(Expr* res) {
         if (is_array(a[i])) { narr++; if (a[i]->type == EXPR_SPARSE) any_sparse = true; }
         else if (!is_number(a[i])) return NULL;      /* a formal factor: leave the product */
     }
-    if (narr == 0) return NULL;                      /* numbers only: Times is not ours to do */
+    if (narr == 0) {
+        /* numbers only: the product of scalars (TensorProduct[2, 3] is 6) */
+        Expr** c = malloc(sizeof(Expr*) * n);
+        if (!c) return NULL;
+        for (size_t i = 0; i < n; i++) c[i] = expr_copy(a[i]);
+        Expr* t = expr_new_function(expr_new_symbol("Times"), c, n);
+        free(c);
+        return eval_owned(t);
+    }
     /* the numeric scalar factor, then the arrays left to right */
     Expr* scal = NULL;
     Expr* acc = NULL;

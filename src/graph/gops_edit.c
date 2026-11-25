@@ -42,6 +42,7 @@
 #include "graph_ops.h"
 #include "eval.h"
 #include "sym_names.h"
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -501,8 +502,12 @@ Expr* builtin_neighborhood_graph(Expr* res) {
     long depth = 1;                               /* -1 = unbounded */
     if (argc == 3) {
         const Expr* ka = res->data.function.args[2];
+        int64_t kv;
         if (gops_is_infinity(ka)) depth = -1;
-        else if (ka->type == EXPR_INTEGER && ka->data.integer >= 0) depth = (long)ka->data.integer;
+        else if (expr_get_int64_saturated(ka, &kv) && kv >= 0)
+            /* a radius past any distance (a BigInt, or beyond a long) is
+             * unbounded, as Infinity is */
+            depth = kv >= (int64_t)INT_MAX ? -1 : (long)kv;
         else return NULL;
     }
     GopsView v;
@@ -735,16 +740,19 @@ Expr* builtin_edge_index(Expr* res) {
 Expr* builtin_index_graph(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
-    int64_t r = 1;
+    /* The first label r, exact: an Integer or a BigInt (IndexGraph[g, 2^70]
+     * labels from 2^70, and r + n - 1 may pass 2^63). */
+    mpz_t r;
+    mpz_init_set_ui(r, 1);
     if (argc == 2) {
         const Expr* ra = res->data.function.args[1];
-        if (ra->type != EXPR_INTEGER) return NULL;
-        r = ra->data.integer;
+        if (ra->type == EXPR_INTEGER) mth_mpz_set_i64(r, ra->data.integer);
+        else if (ra->type == EXPR_BIGINT) mpz_set(r, ra->data.bigint);
+        else { mpz_clear(r); return NULL; }
     }
     GopsView v;
-    if (!gops_view(res->data.function.args[0], &v)) return NULL;
+    if (!gops_view(res->data.function.args[0], &v)) { mpz_clear(r); return NULL; }
     size_t nv = v.nv, ne = v.ne;
-    if (nv > 0 && r > INT64_MAX - (int64_t)nv) return NULL;
     Expr** verts = gops_malloc(nv, sizeof(Expr*));
     Expr** edges = gops_malloc(ne, sizeof(Expr*));
     Expr** ws = v.weights ? copy_exprs(v.weights, ne, 0) : NULL;
@@ -752,10 +760,23 @@ Expr* builtin_index_graph(Expr* res) {
     if (!verts || !edges || (v.weights && !ws) || !copy_endpoints(&v, &eu, &ev, &ed)) {
         free(verts); free(edges);
         if (ws) { for (size_t i = 0; i < ne; i++) expr_free(ws[i]); free(ws); }
+        mpz_clear(r);
         return NULL;
     }
     GopsHeads hs = { { NULL, NULL } };
-    for (size_t i = 0; i < nv; i++) verts[i] = expr_new_integer(r + (int64_t)i);
+    {
+        int64_t r64;
+        int small = expr_mpz_get_int64(r, &r64) && r64 <= INT64_MAX - (int64_t)nv;
+        mpz_t t;
+        mpz_init(t);
+        for (size_t i = 0; i < nv; i++) {
+            if (small) { verts[i] = expr_new_integer(r64 + (int64_t)i); continue; }
+            mth_mpz_add_u64(t, r, (uint64_t)i);
+            verts[i] = expr_bigint_normalize(expr_new_bigint_from_mpz(t));
+        }
+        mpz_clear(t);
+    }
+    mpz_clear(r);
     for (size_t k = 0; k < ne; k++) {
         /* the edge's own orientation: eu[k] is its first argument */
         edges[k] = gops_edge(&hs, v.edir[k], expr_copy(verts[v.eu[k]]), expr_copy(verts[v.ev[k]]));

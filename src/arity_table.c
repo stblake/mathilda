@@ -257,6 +257,12 @@ static const ArityRow ARITY_ROWS[] = {
     { "LowerTriangularMatrixQ", 1, 2, 1 },
     { "Inverse",          1, 1, OPT_NOCHECK },
     { "NullSpace",        1, 1, OPT_NOCHECK },
+    { "IdentityMatrix",   1, 2, OPT_NOCHECK },
+    { "SymmetricMatrixQ", 1, 1, OPT_NOCHECK },
+    { "Inner",            3, 5, NOOPT },
+
+    /* ---- graphs ---- */
+    { "GraphPlot",        1, 1, OPT_NOCHECK },
 
     /* ---- calculus and numerics ---- */
     { "Limit",            2, 2, 2 },
@@ -289,7 +295,7 @@ static const ArityRow ARITY_ROWS[] = {
 
 /* Heads whose choice of two counts the reference words as a range:
  * "While called with 3 arguments; between 1 and 2 arguments are expected." */
-static const char* const BETWEEN_ROWS[] = { "For", "While" };
+static const char* const BETWEEN_ROWS[] = { "For", "While", "IdentityMatrix" };
 
 void arity_table_init(void) {
     for (size_t i = 0; i < sizeof(ARITY_ROWS) / sizeof(ARITY_ROWS[0]); i++) {

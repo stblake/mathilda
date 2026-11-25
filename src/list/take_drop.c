@@ -36,14 +36,11 @@ bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t
         const char* head = spec->data.function.head->type == EXPR_SYMBOL ? spec->data.function.head->data.symbol.name : "";
         if (head == SYM_UpTo && spec->data.function.arg_count == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t k = spec->data.function.args[0]->data.integer;
-            if (k >= 0) {
-                m = 1;
-                n = k > len ? len : k;
-            } else {
-                m = len + k + 1;
-                if (m < 1) m = 1;
-                n = len;
-            }
+            /* UpTo[n] needs n >= 0: UpTo[-2] is no sequence specification
+             * (it read as the last 2), as StringTake already holds */
+            if (k < 0) return false;
+            m = 1;
+            n = k > len ? len : k;
         } else if (head == SYM_List) {
             size_t count = spec->data.function.arg_count;
             if (count >= 1 && count <= 3) {
@@ -145,6 +142,18 @@ static void take_drop_range_message(const Expr* spec, const Expr* expr, bool is_
         if (c == 3 && spec->data.function.args[2]->data.integer == 0) return;
         m = spec->data.function.args[0]->data.integer;
         n = (c >= 2) ? spec->data.function.args[1]->data.integer : m;
+    } else if (spec->type == EXPR_FUNCTION && head_is((Expr*)spec, SYM_UpTo) &&
+               spec->data.function.arg_count == 1 &&
+               spec->data.function.args[0]->type == EXPR_INTEGER &&
+               spec->data.function.args[0]->data.integer < 0) {
+        /* UpTo[-n] is no sequence specification at all */
+        char* es = expr_to_string((Expr*)expr);
+        char* ss = expr_to_string((Expr*)spec);
+        const char* h = is_take ? "Take" : "Drop";
+        mth_message(h, "seqs", "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or {m, n, s}) "
+                    "expected at position 2 in %s[%s, %s].", h, es ? es : "", ss ? ss : "");
+        free(es); free(ss);
+        return;
     } else {
         return;
     }

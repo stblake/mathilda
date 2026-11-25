@@ -44,8 +44,11 @@ void graph_metrics_init(void) {
         "GraphRadius[g] gives the minimum vertex eccentricity of g. Infinity "
         "unless g is (strongly) connected.");
     reg("GraphCenter", builtin_graph_center,
-        "GraphCenter[g] gives the vertices of g with minimum eccentricity; {} "
-        "unless g is (strongly) connected.");
+        "GraphCenter[g] gives the vertices of g with minimum eccentricity. An "
+        "unweighted g gives {} unless it is (strongly) connected; a weighted g "
+        "uses weighted eccentricities, Infinity for a vertex that does not reach "
+        "every other one, so a disconnected weighted g has every vertex in its "
+        "center. Integer weights compare exactly.");
     reg("GraphPeriphery", builtin_graph_periphery,
         "GraphPeriphery[g] gives the vertices of g with maximum eccentricity; "
         "{} unless g is (strongly) connected.");
@@ -73,8 +76,10 @@ void graph_metrics_init(void) {
         "number of vertices reachable from v and s the sum of their distances "
         "from v (0 if v reaches none). Uses EdgeWeight as lengths.");
     reg("EccentricityCentrality", builtin_eccentricity_centrality,
-        "EccentricityCentrality[g] gives 1/VertexEccentricity[g, v] for each "
-        "vertex v (0 when the eccentricity is 0). Uses EdgeWeight as lengths.");
+        "EccentricityCentrality[g] gives, for each vertex v, 1/e where e is the "
+        "greatest distance from v to a vertex v reaches (0 when e is 0). Uses "
+        "EdgeWeight as lengths; unlike a weighted VertexEccentricity, a vertex v "
+        "cannot reach does not make e Infinity.");
     reg("BetweennessCentrality", builtin_betweenness_centrality,
         "BetweennessCentrality[g] gives for each vertex v the sum over pairs of "
         "other vertices s, t of the fraction of shortest s-t paths passing "

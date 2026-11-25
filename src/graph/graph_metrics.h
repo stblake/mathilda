@@ -102,6 +102,18 @@ int gmet_graph_kind(const Expr* g);
  * unevaluated, as Wolfram does). */
 int gmet_edge_weights(const Expr* g, double** w_out);
 
+/* True when g's weights are all Integers whose total is at most 2^53: every
+ * weighted distance is then an exact double, so a tie or a cutoff compares
+ * exactly (no round-off tolerance; 10^15 and 10^15 + 1 differ).  False for
+ * an unweighted graph, a Real / Rational / BigInt weight, or a larger total. */
+int gmet_weights_exact_in_double(const Expr* g);
+
+/* The tolerance for comparing a weighted distance with x: 0 when the
+ * distances are exact doubles (gmet_weights_exact_in_double), else a
+ * relative 1e-12 so that sums of the same weights in another order, or
+ * 1/10 + 2/10 against 3/10, compare equal. */
+double gmet_distance_tol(const Expr* g, double x);
+
 /* Build the CSR of g in the given mode. `ew` (edge weights, may be NULL) fills
  * csr->w; want_eid fills csr->eid. Arcs of a row keep EdgeList order. Returns
  * 0 if g is not valid (or allocation failed); csr is then zeroed. */

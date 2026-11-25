@@ -602,8 +602,11 @@ static Expr* builtin_dimension_reduce(Expr* res) {
         Expr* rhs = o->data.function.args[1];
         if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
             return NULL;
-        if (!rhs || rhs->type != EXPR_STRING) return NULL;
-        const char* m = rhs->data.string;
+        /* Method -> Automatic is the default method */
+        if (rhs && rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
+            rhs = NULL;
+        else if (!rhs || rhs->type != EXPR_STRING) return NULL;
+        const char* m = rhs ? rhs->data.string : "PrincipalComponentsAnalysis";
         if      (strcmp(m, "PrincipalComponentsAnalysis") == 0) method = ML_REDUCE_PCA;
         else if (strcmp(m, "LatentSemanticAnalysis") == 0)      method = ML_REDUCE_LSA;
         else if (strcmp(m, "MultidimensionalScaling") == 0)     method = ML_REDUCE_MDS;
@@ -622,7 +625,10 @@ static Expr* builtin_dimension_reduce(Expr* res) {
     /* Asking for more dimensions than the data has is a question with no answer, so
      * it declines instead of padding with zeros -- padding would look like a
      * successful reduction to a caller checking only the shape. */
-    size_t cap = (method == ML_REDUCE_MDS) ? (n > 0 ? n - 1 : 0) : dim;
+    /* n centred points span at most n - 1 dimensions (MDS and PCA centre);
+     * LSA does not centre, so n points span n. */
+    size_t cap = (method == ML_REDUCE_LSA) ? n : (n > 0 ? n - 1 : 0);
+    if (method != ML_REDUCE_MDS && dim < cap) cap = dim;
     if (target > cap) { free(x); return NULL; }
 
     double* out = malloc(sizeof(double) * n * target);

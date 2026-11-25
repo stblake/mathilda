@@ -243,6 +243,82 @@ static void test_wave4_graphs(void) {
     audit_chk("HamiltonianGraphQ#2", "TimeConstrained[HamiltonianGraphQ[GridGraph[{11, 11}]], 10]", "False");
 }
 
+/* Wave 5 (G6, low): the edge-list form of a graph argument, BigInt counts,
+ * and assorted graph options and docstrings. */
+static void test_wave5_graphs(void) {
+    /* {v -> w, ...} in place of a Graph (graph_edgearg.c) */
+    audit_chk("AdjacencyList#3", "AdjacencyList[{1 <-> 2, 2 <-> 3}, 2]", "{1, 3}");
+    audit_chk("BetweennessCentrality#1", "BetweennessCentrality[{1 -> 2, 2 -> 3}]", "{0.0, 1.0, 0.0}");
+    audit_chk("DegreeCentrality#1", "DegreeCentrality[{1 <-> 2, 2 <-> 3}]", "{1, 2, 1}");
+    audit_chk("EigenvectorCentrality#1",
+              "EigenvectorCentrality[{1 -> 2, 2 -> 3, 3 -> 1}] == EigenvectorCentrality[Graph[{1 -> 2, 2 -> 3, 3 -> 1}]]",
+              "True");
+    audit_chk("FindClique#2", "FindClique[{1 <-> 2, 2 <-> 3, 1 <-> 3, 3 <-> 4}]", "{{1, 2, 3}}");
+    audit_chk("FindEdgeCut#1", "Length[FindEdgeCut[{1 <-> 2, 2 <-> 3}]]", "1");
+    audit_chk("FindIndependentEdgeSet#1", "FindIndependentEdgeSet[{1 <-> 2, 2 <-> 3, 3 <-> 4}]", "{1 <-> 2, 3 <-> 4}");
+    audit_chk("FindMinimumCut#5", "First[FindMinimumCut[{1 <-> 2, 2 <-> 3, 3 <-> 1, 3 <-> 4}]]", "1");
+    audit_chk("FindMinimumCut#5", "First[FindMinimumCut[{{0, 1, 1}, {1, 0, 1}, {1, 1, 0}}]]", "2");
+    audit_chk("FindShortestPath#1", "FindShortestPath[{1 -> 2, 2 -> 3}, 1, 3]", "{1, 2, 3}");
+    audit_chk("FindShortestPath#1", "FindShortestPath[{1 -> 2, 2 -> 3}, 1, 7]", "FindShortestPath[{1 -> 2, 2 -> 3}, 1, 7]");
+    audit_chk("FindVertexCover#1", "FindVertexCover[{1 <-> 2, 2 <-> 3}]", "{2}");
+    audit_chk("GraphDiameter#1", "GraphDiameter[{1 <-> 2, 2 <-> 3}]", "2");
+    audit_chk("GraphDistance#3", "GraphDistance[{1 <-> 2, 2 <-> 3}, 1, 3]", "2");
+    audit_chk("HITSCentrality#1",
+              "HITSCentrality[{1 -> 2, 1 -> 3, 2 -> 3}] == HITSCentrality[Graph[{1 -> 2, 1 -> 3, 2 -> 3}]]", "True");
+    audit_chk("IncidenceMatrix#1", "Normal[IncidenceMatrix[{1 -> 2, 2 -> 3}]]", "{{-1, 0}, {1, -1}, {0, 1}}");
+    audit_chk("MeanClusteringCoefficient#1", "MeanClusteringCoefficient[{1 <-> 2, 2 <-> 3, 3 <-> 1}]", "1");
+    audit_chk("PageRankCentrality#4",
+              "PageRankCentrality[{1 -> 2, 2 -> 3, 3 -> 1}] == PageRankCentrality[Graph[{1 -> 2, 2 -> 3, 3 -> 1}]]", "True");
+    audit_chk("UndirectedGraph#1", "EdgeList[UndirectedGraph[{1 -> 2, 2 -> 3}]]", "{1 <-> 2, 2 <-> 3}");
+    audit_chk("VertexAdd#1", "VertexAdd[{1 -> 2}, 3] === Graph[{1, 2, 3}, {1 -> 2}]", "True");
+    audit_chk("VertexDelete#1", "VertexDelete[{1 -> 2, 2 -> 3}, 2] === Graph[{1, 3}, {}]", "True");
+    audit_chk("VertexInDegree#1", "VertexInDegree[{1 -> 2, 2 -> 3}]", "{0, 1, 1}");
+    audit_chk("WeightedAdjacencyMatrix#1", "Normal[WeightedAdjacencyMatrix[{1 -> 2, 2 -> 3}]]",
+              "{{0, 1, 0}, {0, 0, 1}, {0, 0, 0}}");
+    /* BigInt bounds and counts */
+    audit_chk("FindCycle#1", "FindCycle[CycleGraph[4], 2^70]", "{{1 <-> 2, 2 <-> 3, 3 <-> 4, 4 <-> 1}}");
+    audit_chk("FindKClique#3", "FindKClique[CompleteGraph[4], 10^20]", "{{1, 2, 3, 4}}");
+    audit_chk("FindPath#2", "FindPath[CompleteGraph[4], 1, 4, 10^20] === FindPath[CompleteGraph[4], 1, 4, Infinity]", "True");
+    audit_chk("FindPath#2", "FindPath[CompleteGraph[4], 1, 4, 2, 10^20]", "{{1, 4}, {1, 3, 4}, {1, 2, 4}}");
+    audit_chk("KaryTree#2", "EdgeList[KaryTree[5, 10^20]]", "{1 <-> 2, 1 <-> 3, 1 <-> 4, 1 <-> 5}");
+    audit_chk("IndexGraph#1", "VertexList[IndexGraph[Graph[{a <-> b, b <-> c}], 2^70]]",
+              "{1180591620717411303424, 1180591620717411303425, 1180591620717411303426}");
+    audit_chk("IndexGraph#1", "EdgeList[IndexGraph[Graph[{a <-> b, b <-> c}], 2^63 - 3]]",
+              "{9223372036854775805 <-> 9223372036854775806, 9223372036854775806 <-> 9223372036854775807}");
+    audit_chk("NeighborhoodGraph#1", "VertexList[NeighborhoodGraph[PathGraph[Range[6]], 3, 2^70]]", "{3, 1, 2, 4, 5, 6}");
+    /* other forms and options */
+    audit_chk("Graph#2", "Graph[Graph[{1 -> 2}]] === Graph[{1 -> 2}]", "True");
+    audit_chk("KirchhoffMatrix#1", "KirchhoffMatrix[Graph[{}]]", "{}");
+    audit_chk("AdjacencyList#2", "AdjacencyList[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}], 1 | 3]", "{2}");
+    audit_chk("AdjacencyList#2", "AdjacencyList[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}], _]", "{1, 2, 3}");
+    audit_chk("AdjacencyGraph#4", "EdgeList[AdjacencyGraph[SparseArray[{{1, 2} -> 1, {2, 1} -> 1}, {2, 2}]]]", "{1 <-> 2}");
+    audit_chk("GraphPlot#1", "Head[GraphPlot[{{0, 1}, {1, 0}}]]", "Graphics");
+    audit_chk("GraphPlot#2", "Quiet[Check[GraphPlot[], fired, GraphPlot::argx]]", "fired");
+    audit_chk("GraphDistance#4", "GraphDistance[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}], 1, 3, Method -> \"Dijkstra\"]", "2");
+    audit_chk("GraphDistance#2",
+              "GraphDistance[Graph[{1, 2, 3}, {1 -> 2, 2 -> 3, 1 -> 3}, EdgeWeight -> {1, 1, a}], 1, 3]",
+              "GraphDistance[Graph[<3 vertices, 3 edges>], 1, 3]");
+    audit_chk("GraphDistanceMatrix#1",
+              "GraphDistanceMatrix[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3}, EdgeWeight -> {1/10, 2/10}], 3/10][[1, 3]] < Infinity",
+              "True");
+    audit_chk("GraphCenter#1",
+              "GraphCenter[Graph[{1 <-> 2, 2 <-> 3, 3 <-> 4}, EdgeWeight -> {10^15, 10^15, 10^15 + 1}]]", "{3}");
+    audit_chk("PageRankCentrality#3",
+              "PageRankCentrality[PathGraph[3], 0.85, 1] == PageRankCentrality[PathGraph[3], 0.85]", "True");
+    audit_chk("RandomGraph#1", "SeedRandom[3]; g = RandomGraph[{4, 2}, DirectedEdges -> True]; "
+              "{VertexCount[g], EdgeCount[g], DirectedGraphQ[g]}", "{4, 2, True}");
+    audit_chk("RandomGraph#1", "Options[RandomGraph]", "{DirectedEdges -> False}");
+    audit_chk("RandomGraph#2", "SeedRandom[1]; g = RandomGraph[BernoulliGraphDistribution[5, 0.5]]; "
+              "{VertexCount[g], EdgeCount[g] <= 10}", "{5, True}");
+    audit_chk("RandomGraph#2", "EdgeCount[RandomGraph[BernoulliGraphDistribution[5, 1]]]", "10");
+    audit_chk("RandomGraph#2", "EdgeCount[RandomGraph[BernoulliGraphDistribution[5, 0]]]", "0");
+    /* docstrings */
+    audit_chk("PathGraphQ#1", "StringContainsQ[Information[PathGraphQ], \"closed path\"] && PathGraphQ[CycleGraph[4]]", "True");
+    audit_chk("FindCycle#2", "StringContainsQ[Information[FindCycle], \"FindCycle[{g, v}\"]", "True");
+    audit_chk("GraphCenter#2", "StringContainsQ[Information[GraphCenter], \"disconnected weighted\"]", "True");
+    audit_chk("EccentricityCentrality#1", "StringContainsQ[Information[EccentricityCentrality], \"v reaches\"]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_graphs);
@@ -253,5 +329,6 @@ int main(void) {
     TEST(test_max_flow_wide_range);
     TEST(test_min_cut_wide_range);
     TEST(test_s14_exact_big_capacities);
+    TEST(test_wave5_graphs);
     return audit_finish("audit_graphs");
 }

@@ -516,12 +516,17 @@ static void msg_power_nosol(double sr, double si) {
         mth_message("MatrixPower", "nosol", "Cannot compute the matrix power.");
 }
 
-static Expr* powm_machine(const MfOperand* op, double sr, double si) {
+/* `head`: the calling builtin, which its messages name (MatrixPower, or
+ * MatrixFunction for MatrixFunction[Sqrt, m]). */
+static Expr* powm_machine(const MfOperand* op, double sr, double si, const char* head) {
     double s[2] = { sr, si };
     int st;
     int kind = (sr == 0.5 && si == 0.0) ? MF_KIND_SQRT : MF_KIND_FUNC;
     Expr* r = schur_machine(op, kind, mf_fn_pow, s, &st);
-    if (st == MF_ZEROEIG) msg_zegev("MatrixPower", op->m);
+    bool mfn = strcmp(head, "MatrixFunction") == 0;
+    if (st == MF_ZEROEIG) msg_zegev(head, op->m);
+    else if (st == MF_NOSOL && mfn)
+        mth_message("MatrixFunction", "nosol", "Cannot compute the matrix function for the function Sqrt.");
     else if (st == MF_NOSOL) msg_power_nosol(sr, si);
     return r;
 }
@@ -547,7 +552,7 @@ Expr* matfunc_matrixpower(Expr* res) {
     }
 
     if (op.cls == MC_MACHINE) {
-        if (s_num) result = powm_machine(&op, sr, sim);
+        if (s_num) result = powm_machine(&op, sr, sim, "MatrixPower");
         else {
             Expr* f = pure_power(s);
             Expr* list = is_ndarray(op.m) ? ndarray_to_nested_list(op.m) : expr_copy((Expr*)op.m);
@@ -558,7 +563,7 @@ Expr* matfunc_matrixpower(Expr* res) {
     } else if (op.cls == MC_MPFR) {
         if (s_num && si_info.has_inexact && si_info.min_bits <= 53) {
             operand_replace(&op, eval_and_free(common_numericalize_result(op.m, 53)));
-            result = powm_machine(&op, sr, sim);
+            result = powm_machine(&op, sr, sim, "MatrixPower");
         } else if (s_num) {
 #ifdef USE_MPFR
             MfMat W;
@@ -629,7 +634,7 @@ static Expr* matrixfunction_impl(Expr* res) {
     } else if (is_symbol(f, SYM_Log) && op.cls != MC_EXACT) {
         r = logm_any(&op, "MatrixFunction");
     } else if (is_symbol(f, SYM_Sqrt) && op.cls == MC_MACHINE) {
-        r = powm_machine(&op, 0.5, 0.0);
+        r = powm_machine(&op, 0.5, 0.0, "MatrixFunction");
     } else if (op.cls == MC_MACHINE) {
         SymFnCtx ctx;
         memset(&ctx, 0, sizeof ctx);

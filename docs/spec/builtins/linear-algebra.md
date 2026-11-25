@@ -437,6 +437,8 @@ In[5]:= SymmetricMatrixQ[{{1, Log[x^2]}, {2 Log[x], 2}},
 Out[5]= True
 ```
 
+- `SymmetricMatrixQ[]` is `SymmetricMatrixQ::argx` (one argument expected).
+
 
 ## PositiveDefiniteMatrixQ
 Tests whether a matrix is explicitly positive definite.
@@ -500,6 +502,8 @@ In[6]:= PositiveDefiniteMatrixQ[Table[1/(i + j - 1), {i, 8}, {j, 8}]]
 Out[6]= True
 ```
 
+- An arbitrary-precision matrix is decided at its precision (the leading minors of the Hermitian part): `PositiveDefiniteMatrixQ[N[{{1, 1}, {1, 1 + 10^-30}}, 50]]` is `True` (rounded to doubles it was `False`).
+
 
 ## NegativeDefiniteMatrixQ
 Tests whether a matrix is explicitly negative definite.
@@ -557,6 +561,8 @@ Out[5]= False
 In[6]:= NegativeDefiniteMatrixQ[Table[-1/(i + j - 1), {i, 8}, {j, 8}]]
 Out[6]= True
 ```
+
+- An arbitrary-precision matrix is decided at its precision, as for `PositiveDefiniteMatrixQ`.
 
 
 ## Dot (.)
@@ -635,6 +641,8 @@ An operand mixing machine Reals and Complexes (the usual shape of a complex
 factor), or exact numbers beside a machine Real, is packed for the BLAS path:
 the product of two 166 x 166 such matrices takes 0.07 s (was 18 s).
 
+- A ragged List operand (`{{1, 2}, {3}} . {1, 2}`) is `Dot::rect` ("Nonrectangular tensor encountered."), once per call; a non-List operand stays unevaluated silently.
+
 ## Inner
 A generalization of `Dot` in which `f` plays the role of multiplication and `g` of addition.
 - `Inner[f, list1, list2, g]`: computes the "inner `f`" of two lists, with "plus operation" `g`.
@@ -668,6 +676,8 @@ Out[3]= a1 b1 + a2 b2 + a3 b3
 > operator pair has no kernel and takes the ordinary path with the same
 > answer.
 
+- A call outside 3 to 5 arguments is `Inner::argb` / `Inner::argbu`, left unevaluated (`Inner[f, l1, l2, g, h, k]` used to drop the sixth).
+
 ## Outer
 Gives the generalized outer product of the `listi`, forming all possible combinations of the lowest-level elements in each of them, and feeding them as arguments to `f`.
 - `Outer[f, list1, list2, ...]`
@@ -699,6 +709,8 @@ Out[2]= {{a, b, c}, {2 a, 2 b, 2 c}, {3 a, 3 b, 3 c}, {4 a, 4 b, 4 c}}
 In[3]:= Outer[g, f[a, b], f[x, y, z]]
 Out[3]= f[f[g[a, x], g[a, y], g[a, z]], f[g[b, x], g[b, y], g[b, z]]]
 ```
+
+- Operands with different heads are `Outer::heads` (`Outer[f, {a, b}, g[c, d]]`), unevaluated; an Association operand leaves the call unevaluated (it built an Association of non-rules).
 ## Det
 Gives the determinant of a square matrix.
 - `Det[m]`
@@ -767,6 +779,8 @@ In[5]:= Cross[{1, 2, 3}, {4, 5}]
 Cross::nonn1: The arguments are expected to be vectors of equal length, and the number of arguments is expected to be 1 less than their length.
 Out[5]= Cross[{1, 2, 3}, {4, 5}]
 ```
+
+- A non-List argument leaves the call unevaluated silently whichever position it is in; `Cross::nonn1` is for Lists of the wrong lengths only.
 
 ## RotationMatrix
 
@@ -878,6 +892,8 @@ split off, see `Abs` in arithmetic.md) and `Power` rule
 (`(Abs[u]^p)^q = Abs[u]^(p q)` for exact rationals). The matrix 2-norm of
 `{{x}}` stays `Sqrt[x Conjugate[x]]`, the largest singular value, as there.
 
+- A string order other than `"Frobenius"` is `Norm::ptype`, unevaluated. A scalar's `Norm[x, p]` is `Abs[x]` for every order `p`.
+
 ## Normalize
 Gives the normalized form of a scalar, vector, or tensor.
 - `Normalize[v]`
@@ -976,6 +992,8 @@ In[5]:= Diagonal[{{a, b, c, d}, {e, f, g, h}, {i, j, k, l}, {m, n, o, p}}, -2]
 Out[5]= {i, n}
 ```
 
+- A BigInt `k` lies past every diagonal: `Diagonal[m, 2^70]` is `{}`.
+
 ## Inverse
 Gives the inverse of a square matrix.
 - `Inverse[m]`
@@ -1062,6 +1080,8 @@ Out[12]= {{d/(a d - b c), -b/(a d - b c)}, {-c/(a d - b c), a/(a d - b c)}}
   elimination never touched stay exact `0`, as in the reference.
 - One machine number makes the whole matrix machine (contagion), so a mixed
   exact/machine matrix takes the LAPACK path.
+
+- `Inverse[m, ZeroTest -> f]`: Gauss-Jordan on `(m | I)` consulting `f` for every zero decision; `Inverse::sing` when `f` finds `m` singular.
 
 ## PseudoInverse
 Gives the Moore-Penrose pseudoinverse of a rectangular (or
@@ -1219,6 +1239,9 @@ singular, and for a machine matrix already when its 1-norm rcond is below
 `100 eps` (probed: `2.22*^-14` is singular, `2.3*^-14` is not); between that and
 `10^6 eps` it answers with `Inverse::luc`, as the reference does. An MPFR matrix
 keeps its precision through the inverse.
+
+- An integer exponent past int64 (`10^30`) takes the closed form of the matrix-function path: `MatrixPower[{{1, 1}, {0, 1}}, 10^30]` is `{{1, 10^30}, {0, 1}}`; a growing entry overflows through `Power` (`Overflow[]`).
+- A List exponent is no exponent: `MatrixPower[m, {2, 3}]` stays unevaluated.
 
 ## MatrixExp
 The matrix exponential.
@@ -1387,6 +1410,8 @@ came back unevaluated: `MatrixFunction[Cos, RandomReal[1, {100, 100}]/10]`
 now takes 0.015 s (scipy `cosm` 0.006 s), with errors of order `1e-15` against
 `(MatrixExp[I m] + MatrixExp[-I m])/2`.
 
+- A machine `MatrixFunction[Sqrt, m]` with no square root reports `MatrixFunction::nosol` (it said `MatrixPower::nosol`).
+
 ## RowReduce
 Gives the row-reduced form of the matrix `m`.
 - `RowReduce[m]`
@@ -1448,17 +1473,20 @@ A machine or MPFR matrix (real or complex) is reduced by a tolerance-aware
 Gauss-Jordan with partial pivoting (`src/linalg/rref_numeric.c`): a candidate
 pivot counts as zero when `|p| <= max(r, c) eps max|a_ij|` for a machine matrix
 -- the reference's own rule, probed on `diag(1, e)` of orders 2, 3 and 6 -- and
-64 times that at arbitrary precision. The answer has the reference's form:
-exact `1` at the pivots, exact `0` below them and in the zero rows, an inexact
-`0.` above a machine pivot (exact `0` above an MPFR one). A machine pivot below
+64 times that at arbitrary precision. A machine matrix answers in machine
+reals throughout (`1.` at the pivots, `0.` elsewhere, one head, so the result
+packs); an MPFR matrix has the reference's exact `1` at the pivots and exact
+`0` below and above them and in the zero rows. A machine pivot below
 `10^6 eps max|a_ij|` warns `RowReduce::luc`. A singular 30-digit matrix used to
 row-reduce to the identity (the `10^-30` residue taken as a pivot) or to
 `Overflow[]` entries.
 
 ```mathematica
 In[1]:= RowReduce[{{1., 2, 3}, {4, 5, 6}, {7, 8, 9}}]
-Out[1]= {{1, 0., -1.}, {0, 1, 2.}, {0, 0, 0}}
+Out[1]= {{1., 0., -1.}, {0., 1., 2.}, {0., 0., 0.}}
 ```
+
+- `Options[RowReduce]` is `{Method -> Automatic, Modulus -> 0, Tolerance -> Automatic, ZeroTest -> Automatic}`; an unknown option is `RowReduce::optx`; an explicit numeric `Tolerance` is not implemented (unevaluated).
 
 ## NullSpace
 Gives a basis for the null space of a matrix.
@@ -1645,6 +1673,8 @@ Out[9]= 1
 > `cplx_t = {re, im}` struct stands in for `double _Complex` to keep
 > the build strictly C99.
 
+- `MatrixRank[m, Modulus -> p]` is the pivot count of `RowReduce[m, Modulus -> p]`; `MatrixRank[m, ZeroTest -> f]` that of the `ZeroTest` Gauss-Jordan.
+
 ## LatticeReduce
 Gives an LLL-reduced basis for a lattice.
 - `LatticeReduce[m]` — `m` an `n × d` matrix whose rows are the lattice
@@ -1698,6 +1728,8 @@ Out[5]= LatticeReduce[{{1, 2}, {3, 4.5}}]
 > maintained incrementally — updated in place on size reduction and on a
 > Lovász swap via the conjugate-aware Cohen swap formulas — so no full
 > recomputation is needed.
+
+- A zero row is a dependent set: `LatticeReduce[{{0, 0, 0}}]` is `LatticeReduce::dep`, as `{{0, 0}, {0, 0}}` is.
 
 ## HermiteDecomposition
 Hermite normal form of an integer matrix, with the unimodular transform.
@@ -1798,6 +1830,8 @@ Out[5]= FindIntegerNullVector[{E, Pi}, 1000000]
 > `LatticeReduce`, reusing its exact Gaussian-rational LLL kernel
 > (`lll_reduce`, extended to report `minᵢ |b*ᵢ|²`).
 
+- An exact numeric bound `d` (`Sqrt[5]`, `Pi`) is read at machine precision; the bound test allows a relative `10^-12`, so a relation of norm exactly `Sqrt[5]` qualifies.
+
 ## JordanDecomposition
 Gives the Jordan decomposition of a square matrix.
 - `JordanDecomposition[m]` — returns `{s, j}` where `j` is the Jordan
@@ -1885,10 +1919,11 @@ Gives the Schur decomposition of a numerical square matrix.
   form, so a non-numeric (symbolic) matrix is left unevaluated. Input families:
   - machine-precision Real / complex matrices, and `NDArray` / packed arrays
     (read straight off the buffer);
-  - exact integer / rational matrices (computed at machine precision, since
-    there is no exact Schur form);
-  - arbitrary-precision MPFR matrices — supported for the **standard real**
-    form (output at the input precision).
+  - arbitrary-precision MPFR matrices — the standard form, real or complex
+    (output at the input precision).
+  - An exact integer / rational matrix is refused with
+    `SchurDecomposition::schurf` (there is no exact Schur form), and a matrix
+    with an `Infinity` entry with `::schurn`; both stay unevaluated.
 - Options:
   - `Pivoting -> True` returns `{q, t, d}` with an extra scaling / permutation
     matrix `d`, such that `m . d == d . q . t . ConjugateTranspose[q]` (the
@@ -2003,6 +2038,8 @@ CholeskyDecomposition::npdef: The matrix {{1, 2}, {2, 1}} is not positive defini
 Out[3]= CholeskyDecomposition[{{1, 2}, {2, 1}}]
 ```
 
+- An exact entry beside an arbitrary-precision one is a number at the matrix precision (contagion): `CholeskyDecomposition[{{4, 0}, {0, 9.`20}}]` has the pivot `2.`20`, not the exact `2`.
+
 ## SingularValueList
 Gives the singular values of a matrix.
 - `SingularValueList[m]` — the nonzero singular values, in decreasing order.
@@ -2097,6 +2134,8 @@ Out[2]= {{-(b d) + a e, -(c d) + a f, -(c e) + b f}}
 ### Minors: Det::luc
 A machine minor whose infinity-norm rcond is below `10^6 eps` warns `Det::luc`,
 as the reference's `Det` of each submatrix does.
+
+- A BigInt `k` is out of range like `k > n`: `Minors[m, 10^30]` is `{}`.
 
 ## Adjugate
 Gives the adjugate (classical adjoint) of a square matrix: the transposed
@@ -2448,6 +2487,8 @@ In[4]:= h = N[HilbertMatrix[256], 500];
 Out[4]= 500.
 ```
 
+- A permutation entry outside `1..n` (`2^32 + 1`, which narrowed to `1`) leaves the call unevaluated.
+
 ## SingularValueDecomposition
 Gives the singular value decomposition of a matrix.
 - `SingularValueDecomposition[m]` — returns `{u, sigma, v}` such that
@@ -2642,6 +2683,10 @@ decomposed through its conjugate transpose. It overran `U` and crashed
 `LeastSquares` on it); the factors now agree with the reference digit for
 digit, signs included.
 
+- A vector `{1, 2}` is `::matrix`, as `{1, 2, 3}` is. `k` is read as given (a BigInt saturates), so `2^40` is `::sval` naming `1099511627776` (it read as `0`); `UpTo[-1]` is `::sval`.
+
+- `SingularValueList` of a matrix with an `Indeterminate` entry is a list of `Indeterminate` (it was `{Infinity, Infinity}`).
+
 ## IdentityMatrix
 Generates an identity matrix.
 - `IdentityMatrix[n]`: Gives the `n x n` identity matrix.
@@ -2665,6 +2710,8 @@ In[2]:= IdentityMatrix[{2, 3}]
 Out[2]= {{1, 0, 0}, {0, 1, 0}}
 ```
 
+- `IdentityMatrix[]` is `IdentityMatrix::argb` (between 1 and 2 arguments).
+
 ## Projection
 The projection of one vector onto another (v0.6189, `src/linalg/projection.c`).
 - `Projection[u, v]`: `((u . Conjugate[v]) / (v . Conjugate[v])) v`.
@@ -2687,6 +2734,8 @@ The tensor product of arrays (v0.6189, `src/linalg/tensorproduct.c`).
 - A number factor multiplies (`TensorProduct[2, {1, 2}]` is `{2, 4}`). A symbol stays a formal factor (`TensorProduct[x, {1, 2}]` and `TensorProduct[a, b]` are left alone, as in the reference).
 - The product is computed by the buffer-aware, sparse-native `Outer[Times, ...]`. Any SparseArray factor gives a SparseArray.
 - `Compile` lowers `TensorProduct[a, b]` for two machine arrays (ND_FN2S row with the new rank rule `R2_OUTER`, rank `ra + rb`; an integer pair stays integer).
+
+- An exact numeric quantity (`Pi`, `Sqrt[2]`) is a scalar factor (`TensorProduct[Pi, {1, 2}]` is `{Pi, 2 Pi}`), and a product of scalars only is their product (`TensorProduct[2, 3]` is `6`).
 
 ## LowerTriangularMatrixQ
 - `LowerTriangularMatrixQ[m]`: True if every entry above the main diagonal is zero.
@@ -2869,6 +2918,8 @@ Out[4]= 1/2160
 In[5]:= Inverse[HilbertMatrix[3]]
 Out[5]= {{9, -36, 30}, {-36, 192, -180}, {30, -180, 180}}
 ```
+
+- A repeated `WorkingPrecision` takes the first setting, as for every option.
 
 ## HankelMatrix
 Generates a Hankel matrix — a matrix that is constant along its
@@ -3090,10 +3141,14 @@ Finds `x` that solves the matrix equation `m . x == b`.
   - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one division per pivot per element on `[m | b]`. Each per-cell update is canonicalised via `Together` so symbolic rationals reduce. Fast on numeric matrices.
   - `Method -> "CofactorExpansion"` — Cramer's rule. Requires square non-singular `m`; emits `LinearSolve::cofnsq` on a non-square `m`, and `LinearSolve::cofsng` on a structurally singular `m`. For matrix `b` the rule is applied column-by-column.
 - Unknown method names emit `LinearSolve::method` and the call remains unevaluated.
-- A singular machine-real system that has solutions sets each free variable to
-  `0.`, not the exact `0`: `LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}]` is
-  `{3., 0.}`. One with no solution emits `LinearSolve::nosol` once; neither
-  recurses to `$RecursionLimit` any more.
+- A singular (or rectangular) machine-real system that has solutions gives the
+  minimum-norm solution, as the reference does:
+  `LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}]` is `{0.6, 1.2}`. One machine
+  operand makes the whole system machine (numeric contagion), so
+  `LinearSolve[{{1, 2.}, {2, 4}}, {3, 6}]` is the same `{0.6, 1.2}`. An
+  arbitrary-precision singular system sets each free variable to `0`. One with
+  no solution emits `LinearSolve::nosol` once; neither recurses to
+  `$RecursionLimit` any more.
 
 ```mathematica
 In[1]:= LinearSolve[{{r, s}, {t, u}}, {y, z}]
@@ -3441,6 +3496,8 @@ In[2]:= DesignMatrix[{{0,0,0},{1,0,1},{0,1,2}}, {1, x, y}, {x, y}]
 Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
 ```
 
+- An invalid option value is reported under `DesignMatrix::` (`DesignMatrix::wprec`), not `Fit::`.
+
 ## CharacteristicPolynomial
 Gives the characteristic polynomial of a square matrix.
 - `CharacteristicPolynomial[m, x]`: the polynomial `Det[m - x I]` in `x`.
@@ -3486,6 +3543,8 @@ In[3]:= CharacteristicPolynomial[{{{1, 1, 1}, {1, 0, 1}, {0, 0, 1}},
           {{0, 1, 1}, {0, 1, 1}, {1, 0, 0}}}, x]
 Out[3]= -1 - x + x^2
 ```
+
+- A List that is no non-empty square matrix (or matrix pair) is `CharacteristicPolynomial::matsq`; a symbol stays silent.
 
 ## Eigenvalues
 - **Argument and option checks.** `Options[Eigenvalues]` (and of `Eigenvectors`, `Eigensystem`) is `{Cubics -> False, Method -> Automatic, Quartics -> False}`. Calls are checked against the declared arity and `Options[Eigenvalues]` before the C code runs (see `src/arity.h`): an unknown option is `Eigenvalues::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `Eigenvalues::nonopt`, and a list of option rules is read as the rules themselves.
@@ -3649,6 +3708,9 @@ Out[4]= {Infinity, 1/2 (1 + Sqrt[5]), 1/2 (1 - Sqrt[5])}
 In[5]:= Eigenvalues[IdentityMatrix[12]]
 Out[5]= {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 ```
+
+- The second argument is a count `k`, `-k` or `UpTo[k]` (`k >= 0`); anything else (a symbol, `1.5`, `UpTo[-1]`, a second matrix -- the generalized form is `Eigenvalues[{m, a}]`) is `Eigenvalues::seqs`, unevaluated. A non-square List is `::matsq`. A `k` past the order still gives every eigenvalue.
+- An unknown `Method` value is reported under the calling head and names the value (`Eigenvectors::method: Method -> "Foo" ...`), every call.
 
 ## Eigenvectors
 Gives a list of the eigenvectors of a square matrix.

@@ -425,6 +425,8 @@ static const char* const GATE_DENSE[] = {
     "CoefficientRules", "CoefficientArrays", "CoefficientList", "MonomialList",
     "Decompose", "FactorTermsList", "Minimize", "Maximize",
     "NMinimize", "NMaximize", "FindMinimum", "FindMaximum",
+    /* a graph from its adjacency matrix: the entries are what count */
+    "AdjacencyGraph", "GraphPlot",
     NULL
 };
 

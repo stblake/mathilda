@@ -450,6 +450,149 @@ static void test_wave4_linear_algebra(void) {
     audit_chk("HilbertMatrix#1", "Options[HilbertMatrix]", "{WorkingPrecision -> Infinity}");
 }
 
+/* Wave 5 (G6, low): linear-algebra message, option and bigint fixes. */
+static void test_wave5_linalg(void) {
+    /* Norm: a string order other than "Frobenius" is ::ptype; a scalar's
+     * p-norm is its Abs. */
+    audit_chk("Norm#2", "Quiet[Check[Norm[{1, 2}, \"Foo\"], fired, Norm::ptype]]", "fired");
+    audit_chk("Norm#2", "Quiet[Norm[{1, 2}, \"Foo\"]]", "Norm[{1, 2}, \"Foo\"]");
+    audit_chk("Norm#2", "Norm[{{1, 2}, {3, 4}}, \"Frobenius\"]", "Sqrt[30]");
+    audit_chk("Norm#3", "{Norm[-3, 1], Norm[-3, 2], Norm[-3, Infinity], Norm[3 + 4 I, 3]}", "{3, 3, 3, 5}");
+    /* Dot of a ragged operand */
+    audit_chk("Dot#1", "Quiet[Check[{{1, 2}, {3}} . {1, 2}, fired, Dot::rect]]", "fired");
+    audit_chk("Dot#1", "Quiet[{{1, 2}, {3}} . {1, 2}]", "{{1, 2}, {3}} . {1, 2}");
+    audit_chk("Dot#1", "Quiet[Check[a . {1, 2}, fired]]", "a . {1, 2}");
+    /* BigInt counts and indices */
+    audit_chk("Diagonal#1", "{Diagonal[{{1, 2}, {3, 4}}, 2^70], Diagonal[{{1, 2}, {3, 4}}, -2^70]}", "{{}, {}}");
+    audit_chk("Minors#1", "{Minors[{{1, 2}, {3, 4}}, 10^30], Minors[{{1, 2}, {3, 4}}, -10^30]}", "{{}, {}}");
+    audit_chk("LUBackSubstitution#1",
+              "LUBackSubstitution[{{{1, 2}, {3, 4}}, {2^32 + 1, 2}, 0}, {1, 2}]",
+              "LUBackSubstitution[{{{1, 2}, {3, 4}}, {4294967297, 2}, 0}, {1, 2}]");
+    audit_chk("LUBackSubstitution#1",
+              "LUBackSubstitution[{{{1, 2}, {3, 4}}, {-4294967295, 2}, 0}, {1, 2}]",
+              "LUBackSubstitution[{{{1, 2}, {3, 4}}, {-4294967295, 2}, 0}, {1, 2}]");
+    audit_chk("MatrixPower#1", "MatrixPower[{{1, 1}, {0, 1}}, 10^30]",
+              "{{1, 1000000000000000000000000000000}, {0, 1}}");
+    audit_chk("MatrixPower#1", "MatrixPower[{{1, 0}, {0, 1}}, 10^30]", "{{1, 0}, {0, 1}}");
+    audit_chk("MatrixPower#2", "MatrixPower[{{1, 2}, {3, 4}}, {2, 3}]", "MatrixPower[{{1, 2}, {3, 4}}, {2, 3}]");
+    /* argument counts */
+    audit_chk("IdentityMatrix#2", "Quiet[Check[IdentityMatrix[], fired, IdentityMatrix::argb]]", "fired");
+    audit_chk("SymmetricMatrixQ#1", "Quiet[Check[SymmetricMatrixQ[], fired, SymmetricMatrixQ::argx]]", "fired");
+    audit_chk("SymmetricMatrixQ#1", "SymmetricMatrixQ[{{1, 2}, {2, 1}}]", "True");
+    audit_chk("Inner#4", "Quiet[Check[Inner[f, {a, b}, {x, y}, g, h, k], fired, Inner::argb]]", "fired");
+    audit_chk("Inner#4", "Quiet[Inner[f, {a, b}, {x, y}, g, h, k]]", "Inner[f, {a, b}, {x, y}, g, h, k]");
+    audit_chk("Inner#4", "Quiet[Check[Inner[f], fired, Inner::argbu]]", "fired");
+    audit_chk("Inner#4", "Inner[f, {a, b}, {x, y}, g]", "g[f[a, x], f[b, y]]");
+    /* eigen count specs and methods */
+    audit_chk("Eigenvalues#4", "Quiet[Check[Eigenvalues[{{1, 2}, {3, 4}}, x], fired, Eigenvalues::seqs]]", "fired");
+    audit_chk("Eigenvalues#4", "Quiet[Check[Eigenvalues[{{1, 2}, {3, 4}}, 1.5], fired, Eigenvalues::seqs]]", "fired");
+    audit_chk("Eigenvalues#4", "Quiet[Check[Eigenvalues[{{1, 2}, {3, 4}}, UpTo[-1]], fired, Eigenvalues::seqs]]", "fired");
+    audit_chk("Eigenvalues#4", "Quiet[Check[Eigenvalues[{{1, 2}, {2, 4}}, {{1, 2}, {2, 4}}], fired, Eigenvalues::seqs]]", "fired");
+    audit_chk("Eigenvalues#4", "Quiet[Eigenvalues[{{1, 2}, {3, 4}}, x]]", "Eigenvalues[{{1, 2}, {3, 4}}, x]");
+    audit_chk("Eigenvalues#4", "Eigenvalues[{{2, 0}, {0, 1}}, 1]", "{2}");
+    audit_chk("Eigenvalues#4", "Eigenvalues[{{2, 0}, {0, 1}}, UpTo[5]]", "{2, 1}");
+    audit_chk("Eigenvectors#2",
+              "Quiet[Check[Eigenvectors[{{1., 2.}, {3., 4.}}, Method -> \"Foo\"], fired, Eigenvectors::method]]",
+              "fired");
+    audit_chk("CharacteristicPolynomial#2",
+              "Quiet[Check[CharacteristicPolynomial[{{1, 2, 3}, {4, 5, 6}}, x], fired, CharacteristicPolynomial::matsq]]",
+              "fired");
+    audit_chk("CharacteristicPolynomial#2",
+              "Quiet[Check[CharacteristicPolynomial[{}, x], fired, CharacteristicPolynomial::matsq]]", "fired");
+    audit_chk("CharacteristicPolynomial#2", "Quiet[Check[CharacteristicPolynomial[m, x], fired]]",
+              "CharacteristicPolynomial[m, x]");
+    /* Cross: a non-List argument is silent in either order */
+    audit_chk("Cross#1", "Check[Cross[b[x], {1, 2}], fired]", "Cross[b[x], {1, 2}]");
+    audit_chk("Cross#1", "Check[Cross[{1, 2}, b[x]], fired]", "Cross[{1, 2}, b[x]]");
+    audit_chk("Cross#1", "Quiet[Check[Cross[{1, 2}, {3, 4}], fired, Cross::nonn1]]", "fired");
+    audit_chk("DesignMatrix#3",
+              "Quiet[Check[DesignMatrix[{{1, 2}, {2, 3}}, {x}, x, WorkingPrecision -> -3], fired, DesignMatrix::wprec]]",
+              "fired");
+    audit_chk("HilbertMatrix#2",
+              "Precision[HilbertMatrix[2, WorkingPrecision -> 30, WorkingPrecision -> Infinity]]", "30.0");
+    /* options */
+    audit_chk("MatrixRank#3", "MatrixRank[{{1, 1}, {1, 3}}, Modulus -> 2]", "1");
+    audit_chk("MatrixRank#3", "MatrixRank[{{1, 1}, {1, 3}}, Modulus -> 3]", "2");
+    audit_chk("MatrixRank#4", "MatrixRank[{{1, 1}, {1, 1}}, ZeroTest -> (PossibleZeroQ[#1] &)]", "1");
+    audit_chk("MatrixRank#4", "MatrixRank[{{1, 2}, {3, 4}}, ZeroTest -> (PossibleZeroQ[#1] &)]", "2");
+    audit_chk("Inverse#2", "Inverse[{{1, 2}, {3, 4}}, ZeroTest -> (#1 == 0 &)]", "{{-2, 1}, {3/2, -1/2}}");
+    audit_chk("Inverse#2", "Quiet[Check[Inverse[{{1, 2}, {2, 4}}, ZeroTest -> (#1 == 0 &)], fired, Inverse::sing]]", "fired");
+    /* SingularValueDecomposition messages */
+    audit_chk("SingularValueDecomposition#2",
+              "Quiet[Check[SingularValueDecomposition[{1, 2}], fired, SingularValueDecomposition::matrix]]", "fired");
+    audit_chk("SingularValueDecomposition#3",
+              "Quiet[Check[SingularValueDecomposition[{{1., 2.}, {3., 4.}}, 2^40], fired, SingularValueDecomposition::sval]]",
+              "fired");
+    audit_chk("SingularValueDecomposition#3",
+              "Quiet[Check[SingularValueDecomposition[{{1., 2.}, {3., 4.}}, 2^70], fired, SingularValueDecomposition::sval]]",
+              "fired");
+    audit_chk("SingularValueDecomposition#3",
+              "Quiet[Check[SingularValueDecomposition[{{1, 2}, {3, 4}}, UpTo[-1]], fired, SingularValueDecomposition::sval]]",
+              "fired");
+    audit_chk("SingularValueDecomposition#3",
+              "Dimensions /@ SingularValueDecomposition[{{1., 2.}, {3., 4.}}, 1]", "{{2, 1}, {1, 1}, {2, 1}}");
+    audit_chk("LatticeReduce#1", "Quiet[Check[LatticeReduce[{{0, 0, 0}}], fired, LatticeReduce::dep]]", "fired");
+    audit_chk("LatticeReduce#1", "LatticeReduce[{{1, 0}, {0, 1}}]", "{{1, 0}, {0, 1}}");
+    /* LinearSolve: one machine operand makes the system machine (contagion),
+     * so the mixed form gives the same minimum-norm answer */
+    audit_chk("LinearSolve#1",
+              "Max[Abs[LinearSolve[{{1, 2.}, {2, 4}}, {3, 6}] - LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}]]] < 10^-14",
+              "True");
+    audit_chk("LinearSolve#1", "Max[Abs[LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}] - {0.6, 1.2}]] < 10^-14", "True");
+    /* RowReduce options */
+    audit_chk("RowReduce#4", "Options[RowReduce]",
+              "{Method -> Automatic, Modulus -> 0, Tolerance -> Automatic, ZeroTest -> Automatic}");
+    audit_chk("RowReduce#4", "RowReduce[{{1, 2}, {3, 1}}, Modulus -> 5]", "{{1, 2}, {0, 0}}");
+    audit_chk("RowReduce#4", "Quiet[Check[RowReduce[{{1, 2}, {3, 4}}, Foo -> 1], fired, RowReduce::optx]]", "fired");
+    audit_chk("RowReduce#4", "RowReduce[{{1, 2}, {3, 4}}, ZeroTest -> Automatic, Tolerance -> Automatic]", "{{1, 0}, {0, 1}}");
+    audit_chk("RowReduce#5", "RowReduce[{{1., 2, 3}, {4, 5, 6}, {7, 8, 9}}]",
+              "{{1.0, 0.0, -1.0}, {0.0, 1.0, 2.0}, {0.0, 0.0, 0.0}}");
+    audit_chk("FindIntegerNullVector#1", "FindIntegerNullVector[{1, 2}, Sqrt[5]]", "{-2, 1}");
+    audit_chk("MatrixFunction#2",
+              "Quiet[Check[MatrixFunction[Sqrt, {{0., 1.}, {0., 0.}}], fired, MatrixFunction::nosol]]", "fired");
+    audit_chk("MatrixFunction#2",
+              "Quiet[Check[MatrixFunction[Sqrt, {{0., 1.}, {0., 0.}}], fired, MatrixPower::nosol]]",
+              "MatrixFunction[Sqrt, {{0.0, 1.0}, {0.0, 0.0}}]");
+    audit_chk("PositiveDefiniteMatrixQ#6", "PositiveDefiniteMatrixQ[N[{{1, 1}, {1, 1 + 10^-30}}, 50]]", "True");
+    audit_chk("PositiveDefiniteMatrixQ#6", "PositiveDefiniteMatrixQ[N[{{1, 1}, {1, 1 - 10^-30}}, 50]]", "False");
+    audit_chk("NegativeDefiniteMatrixQ#7", "NegativeDefiniteMatrixQ[N[{{-1, -1}, {-1, -1 - 10^-30}}, 50]]", "True");
+    audit_chk("TensorProduct#1",
+              "{TensorProduct[2, 3], TensorProduct[2, 3, {1}], TensorProduct[Pi, {1, 2}], TensorProduct[Sqrt[2], {1, 2}]}",
+              "{6, {6}, {Pi, 2 Pi}, {Sqrt[2], 2 Sqrt[2]}}");
+    audit_chk("TensorProduct#1", "TensorProduct[a, {1, 2}]", "TensorProduct[a, {1, 2}]");
+    audit_chk("UpTo#3", "Quiet[Check[Take[{1, 2, 3}, UpTo[-2]], fired, Take::seqs]]", "fired");
+    audit_chk("UpTo#3", "Quiet[Check[Drop[{1, 2, 3}, UpTo[-1]], fired, Drop::seqs]]", "fired");
+    audit_chk("UpTo#3", "Quiet[Take[{1, 2, 3}, UpTo[-2]]]", "Take[{1, 2, 3}, UpTo[-2]]");
+    audit_chk("UpTo#3", "{Take[{1, 2, 3}, UpTo[5]], Drop[{1, 2, 3}, UpTo[2]]}", "{{1, 2, 3}, {3}}");
+    audit_chk("SingularValueList#1", "SingularValueList[{{Indeterminate, 0}, {0, 1.}}]", "{Indeterminate, Indeterminate}");
+    audit_chk("SingularValueList#1", "SingularValueList[{{2., 0}, {0, 1.}}]", "{2.0, 1.0}");
+    audit_chk("Eigensystem#4", "FreeQ[Eigensystem[{{Indeterminate, 1}, {0, 1}}], Infinity]", "True");
+    audit_chk("Eigensystem#4", "MemberQ[First[Eigensystem[{{Indeterminate, 1}, {0, 1}}]], Indeterminate]", "True");
+    audit_chk("Eigenvalues#6", "Eigenvalues[{{I, 1}, {0, 2}}]", "{2, I}");
+    audit_chk("Outer#1", "Quiet[Check[Outer[f, {a, b}, g[c, d]], fired, Outer::heads]]", "fired");
+    audit_chk("Outer#1", "Quiet[Outer[f, <|1 -> a|>, {x}]]", "Outer[f, <|1 -> a|>, {x}]");
+    audit_chk("Outer#1", "Outer[f, {a, b}, {x}]", "{{f[a, x]}, {f[b, x]}}");
+    audit_chk("Outer#1", "Outer[f, g[a, b], g[x]]", "g[g[f[a, x]], g[f[b, x]]]");
+    audit_chk("CholeskyDecomposition#1",
+              "c = CholeskyDecomposition[{{4, 0}, {0, 9.`20}}]; {Precision[c[[1, 1]]] >= 19, Abs[c[[1, 1]] - 2] < 10^-18}",
+              "{True, True}");
+    audit_chk("CholeskyDecomposition#1",
+              "FreeQ[CholeskyDecomposition[{{4, 1.`20}, {1.`20, 3}}][[1, 1]], _Integer]", "True");
+    audit_chk("SparseArray#1", "Quiet[Check[SparseArray[{{0, 1} -> 1}], fired, SparseArray::pos]]", "fired");
+    audit_chk("SparseArray#1", "Quiet[Check[SparseArray[{{0, 1} -> 1}], fired, SparseArray::exdims]]",
+              "SparseArray[{{0, 1} -> 1}]");
+    audit_chk("SparseArray#1", "Normal[SparseArray[{{1, 2} -> 1}]]", "{{0, 1}}");
+    audit_chk("SchurDecomposition#1",
+              "Quiet[Check[SchurDecomposition[{{1, 2}, {3, 4}}], fired, SchurDecomposition::schurf]]", "fired");
+    audit_chk("SchurDecomposition#3",
+              "Quiet[Check[SchurDecomposition[{{1., Infinity}, {0., 1.}}], fired, SchurDecomposition::schurn]]", "fired");
+    /* docstrings that now describe the implementation */
+    audit_chk("Det#3", "StringContainsQ[Information[Det], \"FLINT\"] && !StringContainsQ[Information[Det], \"Bareiss\"]", "True");
+    audit_chk("Adjugate#1", "StringContainsQ[Information[Adjugate], \"one LU factorisation\"]", "True");
+    audit_chk("PseudoInverse#2", "StringContainsQ[Information[PseudoInverse], \"singular value\"] && !StringContainsQ[Information[PseudoInverse], \"rationalised\"]", "True");
+    audit_chk("SchurDecomposition#2", "StringContainsQ[Information[SchurDecomposition], \"real or complex\"]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_linear_algebra);
@@ -475,5 +618,6 @@ int main(void) {
     TEST(test_gsvd_diagonal);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave5_linalg);
     return audit_finish("audit_linear_algebra");
 }

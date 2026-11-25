@@ -819,8 +819,16 @@ Expr* builtin_dot(Expr* res) {
             }
             continue;
         }
-        bool a_is_tensor = (a->type == EXPR_NDARRAY) || get_tensor_dims(a, dA) > 0;
-        bool b_is_tensor = (b->type == EXPR_NDARRAY) || get_tensor_dims(b, dB) > 0;
+        int ra = a->type == EXPR_NDARRAY ? 1 : get_tensor_dims(a, dA);
+        int rb = b->type == EXPR_NDARRAY ? 1 : get_tensor_dims(b, dB);
+        /* A ragged List operand (rank -1) is the reference's Dot::rect, once
+         * per call; a non-List one (rank 0) stays unevaluated silently. */
+        if ((ra < 0 || rb < 0) && !error_printed) {
+            mth_message("Dot", "rect", "Nonrectangular tensor encountered.");
+            error_printed = true;
+        }
+        bool a_is_tensor = ra > 0;
+        bool b_is_tensor = rb > 0;
         if (a_is_tensor && b_is_tensor) {
             Expr* d = dot2(a, b, &error_printed);
             if (d) {

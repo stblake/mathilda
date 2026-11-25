@@ -328,7 +328,12 @@ static bool norm_p_below_one(const Expr* p) {
 
 Expr* builtin_norm(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
-    if (res->data.function.arg_count == 2 && norm_p_below_one(res->data.function.args[1])) {
+    /* A p below 1, or a string other than "Frobenius", is not a norm order:
+     * left alone it built (1 + 2^"Foo")^"Foo"^(-1). */
+    if (res->data.function.arg_count == 2 &&
+        (norm_p_below_one(res->data.function.args[1]) ||
+         (res->data.function.args[1]->type == EXPR_STRING &&
+          strcmp(res->data.function.args[1]->data.string, "Frobenius") != 0))) {
         char* ps = expr_to_string(res->data.function.args[1]);
         mth_message("Norm", "ptype", "The second argument of Norm, %s, should be a symbol, "
                     "Infinity, or a number greater than or equal to 1.", ps ? ps : "");
@@ -349,12 +354,10 @@ Expr* builtin_norm(Expr* res) {
     if (rank < 0) return NULL; // jagged array
 
     if (rank == 0) {
-        // Scalar: Norm[x] -> Abs[x]
-        if (!p) {
-            Expr* args[1] = { expr_copy(expr) };
-            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), args, 1));
-        }
-        return NULL;
+        /* Scalar: Norm[x] and Norm[x, p] are Abs[x] for every order p (the
+         * p-norm of a one-element vector). */
+        Expr* args[1] = { expr_copy(expr) };
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), args, 1));
     }
 
     /* Machine-precision vector fast path.  The element-wise Power[Abs[x], p]

@@ -186,8 +186,11 @@ Expr* builtin_kary_tree(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
     int64_t n = int_arg(res->data.function.args[0], 1);
-    int64_t k = argc == 2 ? int_arg(res->data.function.args[1], 1) : 2;
-    if (n < 0 || k < 0 || n > GEN_MAX_VERTICES) return NULL;
+    int64_t k = 2;
+    /* a BigInt branching factor makes the same star as any k >= n - 1 */
+    if (argc == 2 && (!expr_get_int64_saturated(res->data.function.args[1], &k) || k < 1))
+        return NULL;
+    if (n < 0 || n > GEN_MAX_VERTICES) return NULL;
     return kary_tree(n, k);
 }
 

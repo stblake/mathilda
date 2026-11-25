@@ -39,6 +39,7 @@ typedef struct {
     bool  method_given;     /* user supplied Method -> ...          */
     MateigenMethod method;  /* parsed Method, or AUTOMATIC if unset */
     Expr* method_value;     /* original Method RHS (for sub-options) */
+    const char* head;       /* the calling head, for its messages   */
 } EigenOpts;
 
 /* ---------------------------------------------------------------------

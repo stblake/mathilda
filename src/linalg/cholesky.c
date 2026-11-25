@@ -366,6 +366,13 @@ Expr* builtin_choleskydecomposition(Expr* res) {
     if (st == CHOL_NOTNUM) {
         /* MPFR, exact, symbolic -- or a machine matrix with a symbolic leaf. */
         Expr* boxed = la_boxed_copy(m);
+        if (pc == LA_MPFR) {
+            /* numeric contagion: an exact entry beside a 20-digit one is a
+             * 20-digit number, so the factor has no exact pivot (the exact 4
+             * gave an exact 2, where Inverse gives 0.25`20) */
+            Expr* pr = la_ev1("Precision", expr_copy(boxed));
+            boxed = la_ev2(SYM_SetPrecision, boxed, pr);
+        }
         st = chol_generic(boxed, n, pc, &out);
         expr_free(boxed);
     }

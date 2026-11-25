@@ -29,10 +29,9 @@ Expr* builtin_cross(Expr* res) {
              * stays unevaluated silently, as in the reference. */
             return NULL;
         }
-        if (arg->data.function.arg_count != n) {
-            valid = false;
-            break;
-        }
+        /* no break: a later non-List argument still decides (silently),
+         * whichever order the arguments come in */
+        if (arg->data.function.arg_count != n) valid = false;
     }
 
     if (!valid) {

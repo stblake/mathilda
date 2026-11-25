@@ -45,6 +45,11 @@ Expr* builtin_graph_q(Expr* res);
  * Called from core_init() in src/core.c. */
 void graph_init(void);
 
+/* Route every head whose first argument is a graph through the edge-list
+ * shim, so {1 -> 2, 2 <-> 3} is accepted in place of a Graph
+ * (graph_edgearg.c).  Called last in graph_init. */
+void graph_edgearg_init(void);
+
 /* ---- Shared helpers (src/graph/graph_util.c) ------------------------------
  * Used across the subsystem (constructor, predicates, printer, and later the
  * query/matrix/algorithm builtins). All are read-only over their arguments. */

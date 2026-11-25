@@ -63,7 +63,7 @@ typedef struct {
     bool                generalized;   /* true iff arg[0] was a {m, a} pair */
 
     SvdKForm            k_form;
-    int                 k_value;       /* signed; |k| <= min(n, p); 0 for SVD_FORM_FULL */
+    int64_t             k_value;       /* signed, as given (saturated past int64); 0 for SVD_FORM_FULL */
 
     Expr*               tolerance;     /* NULL when not supplied */
     SvdTargetStructure  target_structure;

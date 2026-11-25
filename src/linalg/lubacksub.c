@@ -73,7 +73,8 @@ static bool lub_read_perm(const Expr* p, int n, int* out)
             return false;
         for (int i = 0; i < n; i++) {
             Expr* e = ndarray_element_to_expr(p, (size_t)i);
-            bool ok = e && e->type == EXPR_INTEGER;
+            bool ok = e && e->type == EXPR_INTEGER &&
+                      e->data.integer >= 1 && e->data.integer <= n;
             if (ok) out[i] = (int)e->data.integer;
             expr_free(e);
             if (!ok) return false;
@@ -82,7 +83,9 @@ static bool lub_read_perm(const Expr* p, int n, int* out)
         if (!lub_is_list(p) || (int)p->data.function.arg_count != n) return false;
         for (int i = 0; i < n; i++) {
             const Expr* e = p->data.function.args[i];
-            if (e->type != EXPR_INTEGER) return false;
+            /* range-check before narrowing: (int)(2^32 + 1) is 1 */
+            if (e->type != EXPR_INTEGER || e->data.integer < 1 ||
+                e->data.integer > n) return false;
             out[i] = (int)e->data.integer;
         }
     }

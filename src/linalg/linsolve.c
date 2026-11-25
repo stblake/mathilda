@@ -1281,10 +1281,33 @@ Expr* builtin_rowreduce(Expr* res) {
     for (size_t k = 1; k < argc; k++) {
         Expr* opt = res->data.function.args[k];
         Expr* zf = matsol_parse_zerotest_option(opt);
-        if (zf) { zt = zf; continue; }
+        if (zf) {
+            /* ZeroTest -> Automatic is the default zero test */
+            if (!(zf->type == EXPR_SYMBOL && zf->data.symbol.name == SYM_Automatic)) zt = zf;
+            continue;
+        }
         int mr = linalg_mod_parse_option(opt, &modp);
         if (mr < 0) return NULL;
         if (mr > 0) continue;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
+            (head_is(opt, SYM_Rule) || head_is(opt, SYM_RuleDelayed)) &&
+            opt->data.function.args[0]->type == EXPR_SYMBOL) {
+            const char* key = opt->data.function.args[0]->data.symbol.name;
+            if (key == SYM_Tolerance) {
+                /* the default tolerance only; an explicit one is not
+                 * implemented and stays unevaluated */
+                Expr* tv = opt->data.function.args[1];
+                if (tv->type == EXPR_SYMBOL && tv->data.symbol.name == SYM_Automatic) continue;
+                return NULL;
+            }
+            if (key != SYM_Method) {
+                char* ks = expr_to_string(opt->data.function.args[0]);
+                char* cs = expr_to_string(res);
+                mth_message("RowReduce", "optx", "Unknown option %s in %s.", ks ? ks : "?", cs ? cs : "?");
+                free(ks); free(cs);
+                return NULL;
+            }
+        }
         MatsolMethod mm = matsol_parse_method_option(opt);
         if (mm == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
@@ -1579,6 +1602,16 @@ Expr* builtin_linearsolve(Expr* res) {
 void matsol_init(void) {
     symtab_add_builtin("RowReduce", builtin_rowreduce);
     symtab_get_def("RowReduce")->attributes |= ATTR_PROTECTED;
+    {
+        const char* keys[4] = { SYM_Method, SYM_Modulus, SYM_Tolerance, SYM_ZeroTest };
+        Expr* ol[4];
+        for (int i = 0; i < 4; i++) {
+            Expr* kv[2] = { expr_new_symbol(keys[i]),
+                            i == 1 ? expr_new_integer(0) : expr_new_symbol(SYM_Automatic) };
+            ol[i] = expr_new_function(expr_new_symbol(SYM_Rule), kv, 2);
+        }
+        symtab_set_options("RowReduce", expr_new_function(expr_new_symbol(SYM_List), ol, 4));
+    }
 
     symtab_add_builtin("LinearSolve", builtin_linearsolve);
     symtab_get_def("LinearSolve")->attributes |= ATTR_PROTECTED;

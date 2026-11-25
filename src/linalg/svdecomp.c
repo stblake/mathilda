@@ -110,21 +110,20 @@ static bool is_named_option(Expr* e) {
  *
  * Returns false if `e` does not match either shape (in which case the
  * caller treats `e` as an option or rejects it). */
-static bool parse_k_value(Expr* e, SvdKForm* form, int* k_out) {
-    if (e->type == EXPR_INTEGER) {
-        *form  = SVD_FORM_K;
-        *k_out = (int)e->data.integer;
+static bool parse_k_value(Expr* e, SvdKForm* form, int64_t* k_out) {
+    /* k as given, not narrowed to int: 2^40 used to read as 0.  A BigInt
+     * saturates (it is out of range either way, and ::sval names it). */
+    if (expr_get_int64_saturated(e, k_out)) {
+        *form = SVD_FORM_K;
         return true;
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_UpTo
         && e->data.function.arg_count == 1) {
-        Expr* arg = e->data.function.args[0];
-        if (arg->type != EXPR_INTEGER) return false;
-        if (arg->data.integer < 0) return false;
-        *form  = SVD_FORM_UPTO;
-        *k_out = (int)arg->data.integer;
+        /* a negative UpTo[k] parses, so the bounds check reports ::sval */
+        if (!expr_get_int64_saturated(e->data.function.args[0], k_out)) return false;
+        *form = SVD_FORM_UPTO;
         return true;
     }
     return false;
@@ -188,10 +187,10 @@ bool svd_parse_args(Expr* res, SvdArgs* args) {
                 args->a           = a;
                 args->generalized = true;
                 pair_handled      = true;
-            } else {
-                /* It's a 2-element List but not a valid pair of matrices. */
-                return false;
             }
+            /* Otherwise a 2-element List that is no pair of matrices (a
+             * vector {1, 2}): read it as the matrix argument, so the shape
+             * check below reports ::matrix as it does for {1, 2, 3}. */
         }
     }
     if (!pair_handled) {
@@ -1439,13 +1438,11 @@ Expr* svd_apply_postprocess(Expr* result, const SvdArgs* args,
     if (args->k_form == SVD_FORM_K) {
         do_truncate = true;
         if (args->k_value > 0) {
-            k_eff = args->k_value;
-            if (k_eff > mn) k_eff = mn;
+            k_eff = args->k_value > mn ? mn : (int)args->k_value;
             col_lo = 0;
             sigma_idx_lo = 0;
         } else {
-            k_eff = -args->k_value;
-            if (k_eff > mn) k_eff = mn;
+            k_eff = -args->k_value > mn ? mn : (int)-args->k_value;
             /* Last |k| singular values: positions mn - k_eff .. mn - 1
              * in sigma's diagonal, and the matching columns of u and v. */
             col_lo = mn - k_eff;
@@ -1455,9 +1452,8 @@ Expr* svd_apply_postprocess(Expr* result, const SvdArgs* args,
         do_truncate = true;
         /* "UpTo" clamps to rank, not to mn -- the docstring says
          * "as many as are available", and the reference uses MatrixRank. */
-        k_eff = args->k_value;
+        k_eff = args->k_value > mn ? mn : (int)args->k_value;
         if (k_eff > rank) k_eff = rank;
-        if (k_eff > mn) k_eff = mn;
         col_lo = 0;
         sigma_idx_lo = 0;
     }
@@ -1620,14 +1616,14 @@ Expr* builtin_singularvaluedecomposition(Expr* res) {
      * by mistake). */
     int mn = (n < p) ? n : p;
     if (args.k_form == SVD_FORM_K) {
-        int absk = args.k_value < 0 ? -args.k_value : args.k_value;
+        int64_t absk = args.k_value < 0 ? -args.k_value : args.k_value;
         if (args.k_value == 0 || absk > mn) {
-            mth_message("SingularValueDecomposition", "sval", "k = %d is out of range; expected a non-zero integer with |k| <= %d (min of matrix dimensions).", args.k_value, mn);
+            mth_message("SingularValueDecomposition", "sval", "k = %lld is out of range; expected a non-zero integer with |k| <= %d (min of matrix dimensions).", (long long)args.k_value, mn);
             return NULL;
         }
     } else if (args.k_form == SVD_FORM_UPTO) {
         if (args.k_value < 0) {
-            mth_message("SingularValueDecomposition", "sval", "UpTo[k] requires k >= 0; got %d.", args.k_value);
+            mth_message("SingularValueDecomposition", "sval", "UpTo[k] requires k >= 0; got %lld.", (long long)args.k_value);
             return NULL;
         }
     }

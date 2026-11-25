@@ -115,14 +115,35 @@ Expr* linalg_pack_machine_call1(const Expr* res)
  * machine-real -- a mixed call (one packed, one exact) would hand the fast path
  * an operand pair whose natural result is not the exact one the generic path
  * would produce, so it is declined rather than half-converted. */
+/* An exact numeric operand beside a machine one: numeric contagion makes it
+ * machine too (LinearSolve[{{1, 2.}, {2, 4}}, {3, 6}] is the machine system
+ * LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}]).  NULL unless arg is all
+ * numeric and packs to a real or complex buffer at MachinePrecision. */
+static Expr* linalg_pack_coerced_operand(const Expr* arg)
+{
+    if (!arg || is_ndarray(arg) || common_scan_inexact(arg).has_inexact) return NULL;
+    Expr* sa[2] = { expr_copy((Expr*)arg), expr_new_symbol(SYM_MachinePrecision) };
+    Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_SetPrecision), sa, 2));
+    Expr* packed = pack_force_machine(num);
+    if (packed && (!is_ndarray(packed) ||
+                   (packed->data.ndarray.dtype != NDT_FLOAT64 &&
+                    packed->data.ndarray.dtype != NDT_COMPLEX64))) {
+        expr_free(packed);
+        packed = NULL;
+    }
+    return packed;
+}
+
 Expr* linalg_pack_machine_call2(const Expr* res)
 {
     if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
         return NULL;
     Expr* a = linalg_pack_machine_operand(res->data.function.args[0]);
-    if (!a) return NULL;
     Expr* b = linalg_pack_machine_operand(res->data.function.args[1]);
-    if (!b) { expr_free(a); return NULL; }
+    /* one machine operand makes an exact numeric partner machine */
+    if (a && !b) b = linalg_pack_coerced_operand(res->data.function.args[1]);
+    else if (b && !a) a = linalg_pack_coerced_operand(res->data.function.args[0]);
+    if (!a || !b) { expr_free(a); expr_free(b); return NULL; }
     Expr* args[2] = { a, b };
     return expr_new_function(expr_copy((Expr*)res->data.function.head), args, 2);
 }

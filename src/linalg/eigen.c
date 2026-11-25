@@ -24,26 +24,16 @@
 #endif
 
 
-/* Emit a once-per-method stderr warning that the requested Method is
- * not yet implemented and the symbolic path will be used instead.  The
- * full numerical kernels arrive in Phases 2-5.  Returning the message
- * suppresses repeats within a single process to avoid log spam in
- * tight loops. */
-static void eigen_warn_unimplemented_method(MateigenMethod m) {
-    static bool warned[MATEIGEN_METHOD_UNKNOWN + 1] = { false };
-    if ((int)m < 0 || (int)m > (int)MATEIGEN_METHOD_UNKNOWN) return;
-    if (warned[m]) return;
-    warned[m] = true;
-    const char* name = "?";
-    switch (m) {
-        case MATEIGEN_DIRECT:          name = "Direct";  break;
-        case MATEIGEN_ARNOLDI:         name = "Arnoldi"; break;
-        case MATEIGEN_BANDED:          name = "Banded";  break;
-        case MATEIGEN_FEAST:           name = "FEAST";   break;
-        case MATEIGEN_METHOD_UNKNOWN:  name = "<unknown>"; break;
-        default:                       return;
-    }
-    mth_message("Eigenvalues", "method", "Method -> \"%s\" is not yet implemented; using the symbolic characteristic-polynomial pipeline.", name);
+/* A Method value that names no eigen method: say so, under the calling head
+ * and naming the value given, and go on with the symbolic
+ * characteristic-polynomial pipeline.  Every call: a once-per-process
+ * message would let a second Check[] of the same call return the wrong
+ * branch. */
+static void eigen_warn_unknown_method(const EigenOpts* o) {
+    char* v = o->method_value ? expr_to_string(o->method_value) : NULL;
+    mth_message(o->head, "method", "Method -> %s is not a known eigen method; using the "
+                "symbolic characteristic-polynomial pipeline.", v ? v : "?");
+    free(v);
 }
 
 /* Apply k-spec (Integer k, -k, or UpTo[k]) to vals[0..count].  Returns a
@@ -212,7 +202,13 @@ static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
     return vals;
 }
 
+static bool eigensystem_check(Expr* res, const char* head, const char* noun, bool take);
+
 Expr* builtin_eigenvalues(Expr* res) {
+    /* The second argument is a count spec (k, -k, UpTo[k]) or an option: a
+     * symbol, a Real, UpTo[-1] or a second matrix is not silently ignored. */
+    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigenvalues", "eigenvalues", false))
+        return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_eigenvalues(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
@@ -285,7 +281,7 @@ Expr* builtin_eigenvalues(Expr* res) {
         && opts.method != MATEIGEN_ARNOLDI
         && opts.method != MATEIGEN_BANDED
         && opts.method != MATEIGEN_FEAST) {
-        eigen_warn_unimplemented_method(opts.method);
+        eigen_warn_unknown_method(&opts);
     }
 
     size_t val_count = 0;
@@ -431,12 +427,10 @@ static Expr* eigen_numeric_dispatch(EigenOpts* o, Expr* m, Expr* a, int64_t n,
 static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
                                     bool inexact, Expr** vals_out);
 
-static bool eigensystem_check(Expr* res, const char* head, const char* noun);
-
 Expr* builtin_eigenvectors(Expr* res) {
     /* The second argument is a count spec (k, -k, UpTo[k]) or an option: a
      * symbol, a Real or a second matrix is not silently ignored. */
-    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigenvectors", "eigenvectors"))
+    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigenvectors", "eigenvectors", true))
         return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_eigenvectors(res);
     EigenOpts opts;
@@ -464,7 +458,7 @@ static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
         && opts.method != MATEIGEN_ARNOLDI
         && opts.method != MATEIGEN_BANDED
         && opts.method != MATEIGEN_FEAST) {
-        eigen_warn_unimplemented_method(opts.method);
+        eigen_warn_unknown_method(&opts);
     }
 
     /* Inexact input: rationalise once up front so we can perform the
@@ -633,7 +627,9 @@ static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
  * MATEIGEN_WANT_BOTH (they sort, pair and k-select both parts with the one
  * permutation), and the symbolic path returns the eigenvalues it found the
  * eigenvectors for.  Same argument forms and options as Eigenvalues. */
-static bool eigensystem_check(Expr* res, const char* head, const char* noun) {
+/* `take`: a count k past the matrix order is ::take (Eigenvectors,
+ * Eigensystem); Eigenvalues clamps it to every eigenvalue instead. */
+static bool eigensystem_check(Expr* res, const char* head, const char* noun, bool take) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return false;
     Expr* m = res->data.function.args[0];
@@ -669,7 +665,7 @@ static bool eigensystem_check(Expr* res, const char* head, const char* noun) {
                 free(s);
                 return false;
             }
-            if (k->type == EXPR_INTEGER) {
+            if (take && k->type == EXPR_INTEGER) {
                 int64_t kv = k->data.integer, ak = kv < 0 ? -kv : kv;
                 if (ak > n) {
                     mth_message(head, "take", "Cannot take %s %lld through %lld out of the total of %lld %s.", noun,
@@ -683,7 +679,7 @@ static bool eigensystem_check(Expr* res, const char* head, const char* noun) {
 }
 
 Expr* builtin_eigensystem(Expr* res) {
-    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigensystem", "eigenvectors and eigenvalues")) return NULL;
+    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigensystem", "eigenvectors and eigenvalues", true)) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_eigensystem(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;

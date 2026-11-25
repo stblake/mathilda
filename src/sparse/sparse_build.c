@@ -1006,6 +1006,25 @@ static Expr* from_rules(const Expr* call, const Expr* spec, Expr* const* rules, 
     x.rules_e = spec;
     if (!parse_dims(dims_arg, &x.ds)) return NULL;
 
+    /* A literal position with a 0 index is no position: say so, naming
+     * the rule (it fell through to ::exdims "from the positions {}"). */
+    for (size_t i = 0; i < n; i++) {
+        const Expr* lhs = rules[i]->data.function.args[0];
+        if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL ||
+            lhs->data.function.head->data.symbol.name != SYM_List) continue;
+        bool ints = lhs->data.function.arg_count > 0, bad = false;
+        for (size_t k = 0; ints && k < lhs->data.function.arg_count; k++) {
+            const Expr* c = lhs->data.function.args[k];
+            if (c->type != EXPR_INTEGER) ints = false;
+            else if (c->data.integer == 0) bad = true;
+        }
+        if (ints && bad) {
+            sa_msg("pos", "The left-hand side of %s in %s is not a position or pattern that will "
+                   "match a position.", rules[i], spec, NULL);
+            return NULL;
+        }
+    }
+
     /* Rank: from the dims, else from the first rule that determines one. */
     int rank = x.ds.rank;
     for (size_t i = 0; i < n && !rank; i++) rank = rule_rank(rules[i]);
