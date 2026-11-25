@@ -54,6 +54,10 @@ In[8]:= Median[{a, b, c}]
 Median::rectn: Rectangular array of real numbers is expected at position 1 in Median[{a, b, c}].
 Out[8]= Median[{a, b, c}]
 ```
+
+`Median[dist]` of a distribution is `Quantile[dist, 1/2]` when Quantile evaluates
+for that distribution; otherwise it stays unevaluated.
+
 ## Mean
 
 - `Mean[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
@@ -78,6 +82,9 @@ Out[1]= 5/2
 In[2]:= Mean[{{a, u}, {b, v}, {c, w}}]
 Out[2]= {1/3 (a + b + c), 1/3 (u + v + w)}
 ```
+
+A ragged or mixed-depth list (`Mean[{{1, 2}, {3}}]`) is `Mean::rectn` and stays
+unevaluated, as do `Variance` and `StandardDeviation`.
 
 ## RootMeanSquare
 Gives the root mean square of values in `list`.
@@ -133,6 +140,9 @@ Out[1]= 1
 In[2]:= Variance[{{5.2, 7}, {5.3, 8}, {5.4, 9}}]
 Out[2]= {0.01, 1}
 ```
+
+Fewer than two elements (or rows) is `Variance::shlen`. Distinct machine data whose
+squared deviations underflow is no zero variance: it takes the arbitrary-precision path.
 
 ## Moment
 Gives the raw (power) moment of data.
@@ -211,6 +221,11 @@ In[2]:= Skewness[{1., 2., 3., 4., 5.}]
 Out[2]= 0.
 ```
 
+A machine vector takes the buffer kernel, so a short list answers what its packed
+form does; when the moments leave the double range (data of size `1.*^-200` or
+`1.*^120`) the deviations are rescaled by their largest first, the ratio being
+scale-free. `Kurtosis` likewise.
+
 ## Kurtosis
 Gives the coefficient of kurtosis (peak/tail versus flank concentration) for the elements in data.
 - `Kurtosis[data]`
@@ -243,6 +258,11 @@ Gives the standard deviation estimate of the elements in data.
 In[1]:= StandardDeviation[{1, 2, 3}]
 Out[1]= 1
 ```
+
+Too short (`{1}`, `{{1, 2}}`) is `StandardDeviation::shlen`; a non-list argument or
+a call whose `Variance` stays unevaluated stays unevaluated (no `Sqrt[Variance[x]]`).
+Machine data uses the buffer kernel's reduction, rescaled when the squares
+under- or overflow (`StandardDeviation[{1.*^-200, 2.*^-200, 3.*^-200}]` is `1.*^-200`).
 
 ## Covariance
 Gives the covariance between vectors, or the cross/auto-covariance matrix of matrices.
@@ -429,6 +449,9 @@ In[6]:= Quantile[{1, 2, 3}, 2]
 Quantile::q100: The quantile q is expected to be a number between 0 and 1 in Quantile[{1, 2, 3}, 2].
 Out[6]= Quantile[{1, 2, 3}, 2]
 ```
+
+`Quartiles[list, {{a, b}, {c, d}}]` needs numeric parameters; a symbolic one leaves
+the call unevaluated.
 
 ## InterquartileRange
 Gives the difference between the upper and lower quartiles of data.

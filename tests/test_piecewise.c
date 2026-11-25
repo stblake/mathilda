@@ -164,7 +164,8 @@ void test_piecewise() {
         // Sign extraction composes with the numeric path.
         {"Round[-(3^(2/3))]", "-2"},
         {"Floor[-(3^(2/3))]", "-3"},
-        // Genuinely symbolic / complex arguments stay unevaluated.
+        // Genuinely symbolic arguments stay unevaluated; an exact non-real
+        // constant rounds its real and imaginary parts (audit IntegerPart#1).
         {"Round[2.5 + y]", "Round[Plus[2.5, y]]"},
         // An exact complex quantity rounds part by part (Floor#1/Ceiling#1).
         {"Round[(-3)^(2/3)]", "Complex[-1, 2]"},

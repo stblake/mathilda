@@ -15,10 +15,29 @@
 #include <stdlib.h>
 #include "dist.h"    /* ml_dist_property: distribution moments */
 #include "common.h"  /* head_is */
+#include <string.h>
+#include "arithmetic.h" /* make_rational */
 
 Expr* builtin_median(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
+
+    /* Median[dist] of a distribution is its quantile at 1/2 (Median[
+     * NormalDistribution[m, s]] is m), when Quantile knows the distribution. */
+    if (data->type == EXPR_FUNCTION && data->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = data->data.function.head->data.symbol.name;
+        size_t hl = strlen(h);
+        if (hl > 12 && strcmp(h + hl - 12, "Distribution") == 0) {
+            Expr* q = eval_and_free(expr_new_function(expr_new_symbol(SYM_Quantile),
+                (Expr*[]){ expr_copy(data), make_rational(1, 2) }, 2));
+            if (q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL &&
+                q->data.function.head->data.symbol.name == SYM_Quantile) {
+                expr_free(q);          /* Quantile does not know it: try the closed forms below */
+            } else {
+                return q;
+            }
+        }
+    }
 
     /* Median[assoc] is the median of the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }

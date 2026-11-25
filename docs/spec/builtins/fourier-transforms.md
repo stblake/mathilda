@@ -74,6 +74,10 @@ In[4]:= Fourier[{1, 0, 1, 0, 0, 1, 0, 0, 0, 1}, FourierParameters -> {-1, 1}][[1
 Out[4]= 0.4
 ```
 
+Exact numeric constants (`Pi`, `E`, `Sqrt[2]`) are numbers: the transform is
+numerical, as for integers. Only free symbols take the symbolic path. InverseFourier,
+FourierDCT and FourierDST likewise.
+
 ## InverseFourier
 
 Inverse discrete Fourier transform, the inverse of `Fourier`. Same options,

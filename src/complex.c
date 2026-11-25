@@ -271,7 +271,25 @@ static bool exact_constant_parts(Expr* arg, Expr** re_out, Expr** im_out,
         return true;
     }
     Expr *re = NULL, *im = NULL;
-    if (!complex_decompose(arg, &re, &im)) return false;
+    if (!complex_decompose(arg, &re, &im)) {
+        /* No Complex literal to split on: a root of unity (-1)^(1/3), an
+         * exponential E^(1 + I), a reciprocal 1/(1 + I Sqrt[3]).  The
+         * argument is a free-of-symbols constant, so ComplexExpand's
+         * "variables are real" premise is vacuous and its a + b I form is
+         * exact; the signs of both parts are then certified below, which
+         * also checks the expansion.  Guarded: ComplexExpand may itself ask
+         * Re / Im of a subterm. */
+        static int in_expand = 0;
+        if (in_expand) return false;
+        in_expand = 1;
+        Expr* ce = eval_and_free(expr_new_function(expr_new_symbol(SYM_ComplexExpand),
+                                                   (Expr*[]){ expr_copy(arg) }, 1));
+        bool ok = !head_is(ce, SYM_ComplexExpand) && !expr_eq(ce, arg) &&
+                  complex_decompose(ce, &re, &im);
+        in_expand = 0;
+        expr_free(ce);
+        if (!ok) return false;
+    }
     if (!certified_real_sign(re, rs) || !certified_real_sign(im, is)) {
         expr_free(re); expr_free(im);
         return false;
@@ -408,6 +426,7 @@ static int is_real_algebraic_object(const Expr* e) {
 }
 
 static Expr* cx_reim_split(const Expr* arg, bool want_im);
+static Expr* cx_eval1(const char* h, const Expr* a);
 
 Expr* builtin_re(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -517,7 +536,13 @@ Expr* builtin_reim(Expr* res) {
         expr_free(re);
         expr_free(im);
     }
-    return exact_constant_head(arg, CX_REIM);
+    {
+        Expr* r = exact_constant_head(arg, CX_REIM);
+        if (r) return r;
+    }
+    /* Anything else is {Re[z], Im[z]}, each head simplifying what it can
+     * (ReIm[x] is {Re[x], Im[x]}). */
+    return cx_list2(cx_eval1(SYM_Re, arg), cx_eval1(SYM_Im, arg));
 }
 
 /* A factor of a product that Abs / Conjugate may pull out as its own
@@ -1090,6 +1115,37 @@ Expr* builtin_sign(Expr* res) {
     /* As in Abs: Sign[-1 + Zeta[3]] is 1; a hidden zero stays Sign[...]. */
     int sg;
     if (comparisons_real_constant_sign(arg, &sg) && sg != 0) return expr_new_integer(sg);
+    /* Sign[c u] = Sign[c] Sign[u] for a nonzero REAL constant c: Sign[-x] is
+     * -Sign[x], Sign[2 x] and Sign[Pi x] are Sign[x]. */
+    if (head_is(arg, SYM_Times)) {
+        size_t na = arg->data.function.arg_count, nr = 0;
+        int prod = 1;
+        bool pulled = false;
+        Expr** rest = malloc(sizeof(Expr*) * (na ? na : 1));
+        for (size_t i = 0; i < na; i++) {
+            Expr* f = arg->data.function.args[i];
+            int fs = 0;
+            bool known = false;
+            if (is_rational_like(f) || f->type == EXPR_REAL) {
+                fs = expr_numeric_sign(f); known = true;
+            } else if (comparisons_real_constant_sign(f, &fs)) {
+                known = true;
+            }
+            if (known && fs != 0) { prod *= fs; pulled = true; }
+            else rest[nr++] = expr_copy(f);
+        }
+        if (!pulled || nr == 0) {
+            for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+            free(rest);
+            return NULL;
+        }
+        Expr* u = nr == 1 ? rest[0] : expr_new_function(expr_new_symbol(SYM_Times), rest, nr);
+        free(rest);
+        Expr* su = cx_call1(SYM_Sign, u);
+        if (prod > 0) return eval_and_free(su);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                               (Expr*[]){ expr_new_integer(-1), su }, 2));
+    }
     return NULL;
 }
 
@@ -1231,6 +1287,23 @@ static bool arg_turns_of(Expr* z, int64_t* tn, int64_t* td) {
         Expr* base = z->data.function.args[0];
         Expr* exp  = z->data.function.args[1];
         int64_t en, ed;
+        /* E^(I k Pi), k rational: k turns in units of Pi (Arg[E^(I Pi/3)]). */
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E &&
+            head_is(exp, SYM_Times) && exp->data.function.arg_count == 2 &&
+            head_is(exp->data.function.args[0], SYM_Complex) &&
+            exp->data.function.args[1]->type == EXPR_SYMBOL &&
+            exp->data.function.args[1]->data.symbol.name == SYM_Pi) {
+            Expr* c = exp->data.function.args[0];
+            Expr* cr = c->data.function.args[0];
+            Expr* ci = c->data.function.args[1];
+            if (!(cr->type == EXPR_INTEGER && cr->data.integer == 0)) return false;
+            if (ci->type == EXPR_INTEGER) { en = ci->data.integer; ed = 1; }
+            else if (!is_rational(ci, &en, &ed)) return false;
+            if (ed <= 0 || ed > ARG_TURNS_CAP || en > ARG_TURNS_CAP || en < -ARG_TURNS_CAP)
+                return false;
+            *tn = en; *td = ed;
+            return true;
+        }
         if (exp->type == EXPR_INTEGER) { en = exp->data.integer; ed = 1; }
         else if (!is_rational(exp, &en, &ed)) return false;
         if (!is_rational_like(base)) return false;

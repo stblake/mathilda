@@ -38,8 +38,12 @@ Expr* builtin_stringmatchq(Expr* res) {
     if (defs && defs->type == EXPR_FUNCTION)
         for (size_t i = 0; i < defs->data.function.arg_count; i++)
             regex_match_opt(defs->data.function.args[i], SYM_IgnoreCase, &caseless, 0);
-    while (argc > 2 && regex_match_opt(a[argc - 1], SYM_IgnoreCase, &caseless, 0))
-        argc--;
+    for (;;) {
+        int spell;
+        if (argc > 2 && regex_match_opt(a[argc - 1], SYM_IgnoreCase, &caseless, 0)) argc--;
+        else if (argc > 2 && regex_match_opt(a[argc - 1], SYM_SpellingCorrection, &spell, 0)) argc--;
+        else break;
+    }
     if (argc != 2) return NULL;
 
     Expr* arg0 = a[0];

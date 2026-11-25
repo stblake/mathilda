@@ -333,6 +333,14 @@ In[2]:= Precision[%]
 Out[2]= 100.243
 ```
 
+An N-value rule `N[f[x_], p_] := ...` binds `p` to the requested precision, not the
+raised working precision of the pass (`N[f[1], 20]` gave 39).
+
+`SetAccuracy` of a compound that is not itself a number
+(`f[1000.5, 0.001]`) gives accuracy n to each number at its own magnitude. Precision is
+held in whole digits, so the accuracy obtained is at least n (it can exceed it by the
+fractional part of the magnitude's logarithm).
+
 ## Plus (+)
 
 Symbolic sum.
@@ -529,6 +537,9 @@ In[4]:= Total[{{1, 2}, {3}}, 2]
 Out[4]= 6
 ```
 
+`Total[h[e1, e2, ...]]` sums the arguments for any head (`Total[f[1, 2, 3]]` is 6);
+`Rational` and `Complex` are numbers, not containers.
+
 ## Accumulate
 
 Gives the running cumulative totals of the elements in a list.
@@ -559,6 +570,9 @@ Out[4]= {1, 3, 6, 10, 15}
 In[5]:= Accumulate[{1.0, 2.0, 3.0}, Method -> "CompensatedSummation"]
 Out[5]= {1., 3., 6.}
 ```
+
+`Method -> "CompensatedSummation"` applies only to a list holding a machine Real; an
+all-exact list is accumulated exactly, as without the option.
 
 ## Differences
 
@@ -698,6 +712,8 @@ Out[5]= {0, 3, 12, 27, 48, 75, 108}
 > `List` path answers. Arbitrary-precision (`MPFR`) and exact
 > (`Integer`/`Rational`) arrays likewise compute on the exact/symbolic `List`
 > path, retaining full precision.
+
+A ragged array is `ListGradient::rect` and stays unevaluated.
 
 ## Times (*)
 
@@ -1173,6 +1189,9 @@ for an `int64` — so a single 18–19 digit non-square radicand cost tens of
 seconds (`Sqrt[3141592653589793238]` took 24 s while
 `FactorInteger` of the same number took 3.6 ms).
 
+A BigInt radicand has its square (generally q-th power) factors found by trial
+division up to 10^4 pulled out: `Sqrt[2*10^40]` is `10^20 Sqrt[2]`.
+
 ## Mod, Quotient, QuotientRemainder
 
 - `Mod[n, m]`: Remainder of `n/m`.
@@ -1218,6 +1237,9 @@ values packed. `Quotient` was worse than slow — it answered `{0., 1., 1., 2.}`
 on a list long enough to pack and the exact `{0, 1, 1, 2}` on one that was not,
 the same expression giving different element heads either side of the
 250-element threshold.
+
+Exact real constants are Floor of the exact quotient: `Quotient[Pi, 1]` is 3,
+`QuotientRemainder[10, Pi]` is `{3, 10 - 3 Pi}`.
 
 ## IntegerDigits
 
@@ -1653,6 +1675,9 @@ In[7]:= {RealDigits[1000.], RealDigits[0.999]}
 Out[7]= {{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 4}, {{9, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}}
 ```
 
+A machine real's digits are those of its shortest round-trip decimal, zero padded
+(`RealDigits[1.*^-20]` is `{{1, 0, ...}, -19}`, not sixteen 9s); `DigitCount` follows.
+
 ## MantissaExponent
 
 - `MantissaExponent[x]`: Returns `{m, e}` such that `x == m * 10^e` and
@@ -1700,6 +1725,8 @@ Out[6]= {0.3141592653589793238462643383278, 1}
 In[7]:= MantissaExponent[-3/2]
 Out[7]= {-3/20, 1}
 ```
+
+An exact real constant keeps its exact form: `MantissaExponent[Pi]` is `{Pi/10, 1}`.
 
 ## RealExponent
 
@@ -1778,6 +1805,8 @@ In[3]:= Factorial[0]
 Out[3]= 1
 ```
 
+`D[x!, x]` is `Gamma[1 + x] PolyGamma[0, 1 + x]`.
+
 ## FactorialPower
 
 Falling factorial. `FactorialPower[n, k]` = $n (n-1) (n-2) \cdots (n - k + 1)$.
@@ -1815,6 +1844,9 @@ Out[4]= x^(-k + n) FactorialPower[n, k]
   Sqrt[Pi/2]/8`, `FactorialPower[-2.5, 1.5, 0.5] = ComplexInfinity`); a symbolic
   `x` or `h` stays. A negative integer `k` with numeric `n` now evaluates too
   (`FactorialPower[5, -2] = 1/42`).
+
+A numeric `n` with an integer `k > 32` evaluates as the product (an exact rational for
+`FactorialPower[1/2, 33]`, a machine real for `FactorialPower[2.5, 33]`).
 
 ## Binomial
 
@@ -2238,6 +2270,13 @@ In[10]:= Abs[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]   (* exactly 0: undecidabl
 Out[10]= Abs[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
 ```
 
+Exact constants with no `Complex` literal to split on -- roots of unity `(-1)^(1/3)`,
+`E^(1 + I)`, `1/(1 + I Sqrt[3])` -- are split by ComplexExpand (exact, the constant
+having no variables) and the parts' signs certified: `Re[(-1)^(1/3)]` is `1/2`,
+`Re[Exp[1 + I]]` is `E Cos[1]`. `Arg[E^(I k Pi)]` reads the turns. `ReIm[z]` is
+`{Re[z], Im[z]}` for any z. `Sign[c u]` with a nonzero real constant c is
+`Sign[c] Sign[u]` (`Sign[-x]` is `-Sign[x]`).
+
 ## ComplexExpand
 
 `ComplexExpand[expr]` rewrites `expr` into explicit real and imaginary parts,
@@ -2278,6 +2317,9 @@ Out[4]= Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + I Sinh[2 y]/(Cos[2 x] + Cosh[2 y])
 ```
 
 ---
+
+`Re` / `Im` of an arbitrary function `f[x]` (no `NumericFunction` attribute) stay as
+they are: only the variables are assumed real, not the values of `f`.
 
 ## Interval arithmetic
 
@@ -2474,3 +2516,8 @@ is not replicated, because Mathilda's printer shows full precision and would
 render `[1.−ulp, 1.+ulp]` as `{0.9999…, 1.0000…}` rather than `{1., 1.}`.
 `Interval` is also not (yet) usable as a geometric `Region`, since Mathilda has
 no `RegionMember`/region subsystem.
+
+`Interval[]` (empty) is accepted by `IntervalUnion`, `IntervalIntersection` and
+`IntervalMemberQ` (nothing is a member of it); a non-real number is no member of
+any interval. `Interval[{a, b}]^Infinity` with 1 in `[a, b]` stays unevaluated
+rather than carry an `Indeterminate` endpoint.

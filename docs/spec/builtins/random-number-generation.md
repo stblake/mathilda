@@ -110,6 +110,8 @@ In[2]:= SeedRandom[42]; {RandomInteger[], RandomInteger[], RandomInteger[]}
 Out[2]= {1, 1, 0}
 ```
 
+A negative BigInt seed gives a stream distinct from its absolute value's.
+
 ## RandomComplex
 Gives pseudorandom complex numbers.
 - `RandomComplex[]`: gives a pseudorandom complex number with real and imaginary parts in the range 0 to 1.
@@ -208,6 +210,10 @@ Out[6]= RandomChoice[x]
   `FoldList[#2[[1]] + #2[[2]]/#1 &, ...]` reads directly. It is one draw per cell,
   in the same order as the boxed path. Ragged or mixed choices keep the boxed
   path.
+
+Weights that overflow a double (an exact `10^400`) or whose sum does are rescaled by
+the largest (read through log2), so only their ratios matter. RandomSample's weights alike.
+
 ## RandomSample
 Gives a pseudorandom sample of elements without replacement.
 - `RandomSample[{e1, e2, ...}, n]`: gives a pseudorandom sample of n of the ei.
@@ -261,6 +267,8 @@ Out[10]= RandomSample[x]
 > list or an `NDArray` directly, drawing from the **same generator sequence**
 > the ordinary path uses — so `SeedRandom[n]` gives the same answer whether
 > the argument is packed or not.
+
+`RandomSample[{}]`, `RandomSample[{}, 0]` and `RandomSample[{}, UpTo[k]]` are `{}`.
 
 ## RandomPrime
 Gives pseudorandom prime numbers.

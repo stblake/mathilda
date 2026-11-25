@@ -118,6 +118,14 @@ Expr* builtin_quartiles(Expr* res) {
         c = expr_new_integer(0);
         d = expr_new_integer(1);
     }
+    /* The quantile parameters must be real numbers: a symbolic one has no
+     * position to read (it gave {Indeterminate, Indeterminate, Indeterminate}). */
+    if (!stats_is_real_numeric(a) || !stats_is_real_numeric(b) ||
+        !stats_is_real_numeric(c) || !stats_is_real_numeric(d)) {
+        ll_rd_close(&e);
+        expr_free(a); expr_free(b); expr_free(c); expr_free(d);
+        return NULL;
+    }
 
     /* Numeric order (stats_sort_order: by value, not Sort's canonical order),
      * as a permutation over the elements where they lie. */

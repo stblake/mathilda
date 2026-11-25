@@ -142,6 +142,7 @@ Expr* builtin_mean(Expr* res) {
         bool mat = is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol.name == SYM_True;
         expr_free(is_matrix);
         if (mat) return stats_apply_columnwise("Mean", data);
+        if (stats_reject_ragged("Mean", res, data)) return NULL;
     }
 
     /* A vector: a List's arguments or a LinkedList's elements. */

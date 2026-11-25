@@ -3,6 +3,8 @@
 #include "ndstruct.h"    /* ndstruct_delist_repack — packed/declined fallback */
 #include "options.h"     /* options_extract / OptEntry */
 #include "list_gradient.h"
+#include "message.h"     /* mth_message: ragged input */
+#include "print.h"       /* expr_to_string */
 
 /* ---- ListGradient --------------------------------------------------------
  *
@@ -225,6 +227,21 @@ static bool lg_list_shape(const Expr* f, int64_t* dims, int* rank) {
     return r >= 1;
 }
 
+/* True when every sublist at depth d < rank of `f` has dims[d] elements and
+ * no element at depth rank is itself a List: the array lg_list_shape read
+ * off the spine of first elements is really rectangular. A ragged input
+ * ({{1, 2}, {3, 4, 5}}) threaded Plus over unequal rows otherwise. */
+static bool lg_is_rect(const Expr* f, const int64_t* dims, int rank, int d) {
+    bool is_list = f->type == EXPR_FUNCTION
+        && f->data.function.head->type == EXPR_SYMBOL
+        && f->data.function.head->data.symbol.name == SYM_List;
+    if (d == rank) return !is_list;
+    if (!is_list || (int64_t)f->data.function.arg_count != dims[d]) return false;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (!lg_is_rect(f->data.function.args[i], dims, rank, d + 1)) return false;
+    return true;
+}
+
 static bool lg_parse(const Expr* res, LGParams* p, size_t* positional_argc) {
     if (res->type != EXPR_FUNCTION) return false;
 
@@ -269,6 +286,15 @@ static bool lg_parse(const Expr* res, LGParams* p, size_t* positional_argc) {
         for (int i = 0; i < p->rank; i++) p->dims[i] = f->data.ndarray.dims[i];
     } else if (is_listq(f)) {
         if (!lg_list_shape(f, p->dims, &p->rank)) return false;
+        if (!lg_is_rect(f, p->dims, p->rank, 0)) {
+            if (res->data.function.head->type == EXPR_SYMBOL) {
+                char* str = expr_to_string((Expr*)res);
+                mth_message(res->data.function.head->data.symbol.name, "rect",
+                            "Rectangular array expected at position 1 in %s.", str);
+                free(str);
+            }
+            return false;
+        }
     } else {
         return false;
     }

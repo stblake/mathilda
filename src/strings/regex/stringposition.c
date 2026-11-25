@@ -63,6 +63,8 @@ static Expr* sp_pair(size_t ms, size_t me) {
  */
 static Expr* sp_scalar(const char* subj, RegexRule* rules, int nr,
                        RegexOverlapMode mode, long n_limit) {
+    /* An explicit count of 0 asks for no positions (n_limit < 0: no limit). */
+    if (n_limit == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     size_t len = strlen(subj);
     RegexScan scan;
     if (regex_scan_limit(subj, len, rules, nr, mode, /*want_captures=*/0,
@@ -129,10 +131,11 @@ Expr* builtin_stringposition(Expr* res) {
     Expr* patt = a[1];
 
     /* Optional third positional argument: an integer occurrence count. */
-    long n_limit = 0;
+    long n_limit = -1;                      /* no count given: every match */
     if (pargc == 3) {
         Expr* third = a[2];
-        if (third->type == EXPR_INTEGER) n_limit = (long)third->data.integer;
+        if (third->type == EXPR_INTEGER)
+            n_limit = (long)third->data.integer;
         else return NULL;   /* unsupported third arg: leave unevaluated */
     }
 

@@ -33,6 +33,7 @@
 #include "sparse/sparse.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -440,6 +441,22 @@ Expr* builtin_set_accuracy(Expr* res) {
     else return NULL;
 
     if (target_acc <= 0.0) return NULL;
+
+    /* A compound that is not itself a number (f[1000.5, 0.001], x + 1.5):
+     * accuracy n is given to EACH number in it, at that number's own
+     * magnitude -- one precision for the whole expression gave 1000.5 and
+     * 0.001 accuracies 17 and 23. */
+    if (value->type == EXPR_FUNCTION && !expr_is_numeric_quantity(value)) {
+        size_t na = value->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * (na ? na : 1));
+        if (!a) return NULL;
+        for (size_t i = 0; i < na; i++)
+            a[i] = expr_new_function(expr_new_symbol(SYM_SetAccuracy),
+                (Expr*[]){ expr_copy(value->data.function.args[i]), expr_copy((Expr*)n) }, 2);
+        Expr* r = expr_new_function(expr_copy(value->data.function.head), a, na);
+        free(a);
+        return r;
+    }
 
     double log10_abs = value_log10_abs(value);
     double digits = target_acc + log10_abs;

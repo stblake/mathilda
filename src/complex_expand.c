@@ -616,6 +616,19 @@ static void cx_decompose(const Expr* e, const CxCtx* ctx, Expr** re, Expr** im) 
         }
     }
 
+    /* Re / Im of an arbitrary function f[x] (no NumericFunction attribute):
+     * only the VARIABLES are assumed real, not the values of f, so the part
+     * stays as it is (ComplexExpand[Re[f[x]]] is Re[f[x]]; Gamma, a
+     * NumericFunction real on the reals, still gives Re[Gamma[x]] -> Gamma[x]). */
+    if ((h == SYM_Re || h == SYM_Im) && nargs == 1 &&
+        args[0]->type == EXPR_FUNCTION &&
+        args[0]->data.function.head->type == EXPR_SYMBOL &&
+        !(get_attributes(args[0]->data.function.head->data.symbol.name) & ATTR_NUMERICFUNCTION)) {
+        *re = ev(mk_fn1(h, expr_copy(args[0])));
+        *im = mk_int(0);
+        return;
+    }
+
     /* Re[w] / Im[w]: real and imaginary components of w. */
     if (h == SYM_Re && nargs == 1) {
         Expr *u, *v;

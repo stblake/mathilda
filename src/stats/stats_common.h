@@ -38,6 +38,16 @@ bool stats_is_matrix(const Expr* data);
  * a rectangular array of real numbers, naming the call `res`. */
 void stats_msg_rectn(const char* head, Expr* res);
 
+/* True (after emitting head::rectn for the call `res`) when `data` is a List
+ * that is not a matrix but has a sequence element -- a ragged or mixed-depth
+ * array. The vector paths would otherwise thread Plus over the unequal rows
+ * (Thread::tdlen floods and a garbage sum); the statistic stays unevaluated. */
+bool stats_reject_ragged(const char* head, Expr* res, const Expr* data);
+
+/* True (after emitting head::shlen) when `data` is a List of fewer than two
+ * elements (rows, for a matrix): Variance / StandardDeviation need two. */
+bool stats_reject_short(const char* head, const Expr* data);
+
 /* True iff e is NumericQ and free of the imaginary unit I (a real number). */
 bool stats_is_real_numeric(Expr* e);
 

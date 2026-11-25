@@ -204,6 +204,12 @@ Tests strict ascending order.
   sign below every normal machine number, so `0. == 10^-400` is `False`, as
   `0. == 10^-300` is.
 
+**Variadic chains.** Each adjacent pair is decided on its own: one decided False
+pair makes the chain False even beside a symbolic pair (`x >= 4 >= 5` is `False`),
+and members whose every adjacent pair is decided True drop out
+(`1 <= 2 <= x <= 3` is `2 <= x <= 3`; `x < 1 < 2 < 3 < y` is `x < 1 < 3 < y`).
+The same holds for `LessEqual`, `Greater` and `GreaterEqual`.
+
 ## LessEqual
 Tests non-strict ascending order.
 - `LessEqual[x, y]` (written `x <= y`): `True` if `x` is less than or equal to

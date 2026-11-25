@@ -67,6 +67,32 @@ void stats_msg_rectn(const char* head, Expr* res) {
     free(str);
 }
 
+bool stats_reject_ragged(const char* head, Expr* res, const Expr* data) {
+    if (!stats_head_is(data, SYM_List)) return false;
+    for (size_t i = 0; i < data->data.function.arg_count; i++) {
+        if (ll_seq_length(data->data.function.args[i]) >= 0) {
+            /* A full array of higher rank (a list of matrices) is fine: the
+             * statistic is taken elementwise over the first level. */
+            Expr* aq = eval_and_free(expr_new_function(expr_new_symbol(SYM_ArrayQ),
+                                                       (Expr*[]){ expr_copy((Expr*)data) }, 1));
+            bool full = aq->type == EXPR_SYMBOL && aq->data.symbol.name == SYM_True;
+            expr_free(aq);
+            if (full) return false;
+            stats_msg_rectn(head, res);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool stats_reject_short(const char* head, const Expr* data) {
+    if (!stats_head_is(data, SYM_List) || data->data.function.arg_count >= 2) return false;
+    char* str = expr_to_string((Expr*)data);
+    mth_message(head, "shlen", "The argument %s should have at least two elements.", str);
+    free(str);
+    return true;
+}
+
 Expr* stats_apply_columnwise(const char* func_name, Expr* matrix) {
     if (!stats_is_matrix(matrix)) return NULL;     /* ragged: no Transpose */
     // Result is Map[func_name, Transpose[matrix]]
@@ -104,6 +130,29 @@ Expr* stats_standardized_moment(Expr* res, int p) {
      * otherwise CentralMoment below reads the LinkedList itself. */
     { Expr* r; if (stats_ll_arm(res, p == 3 ? STATS_SKEWNESS : STATS_KURTOSIS, &r)) return r; }
 
+    /* A machine vector (a Real among the numbers): the buffer kernel, so a
+     * short boxed list answers what its packed / NDArray form does, and data
+     * whose moments leave the double range (1.*^-200 cubes to 0.) is
+     * rescaled -- Skewness[{1.*^-200, 2.*^-200, 4.*^-200}] is
+     * Skewness[{1, 2, 4}] // N, not Indeterminate. */
+    if (stats_head_is(data, SYM_List) && data->data.function.arg_count >= 2) {
+        size_t n = data->data.function.arg_count;
+        bool machine = false, ok = true;
+        for (size_t i = 0; i < n && ok; i++) {
+            Expr* x = data->data.function.args[i];
+            if (x->type == EXPR_REAL) machine = true;
+            else if (x->type != EXPR_INTEGER) ok = false;
+        }
+        if (ok && machine) {
+            double* xs = malloc(sizeof(double) * n);
+            if (xs) {
+                for (size_t i = 0; i < n; i++) stats_is_numeric(data->data.function.args[i], &xs[i], NULL);
+                double k = ndred_stdmoment_f64(xs, n, p);
+                free(xs);
+                if (isfinite(k)) return expr_new_real(k);
+            }
+        }
+    }
     /* m_p = CentralMoment[data, p] and m_2 = CentralMoment[data, 2]. Both reduce
      * for any list/vector/matrix/array (numeric, exact, or symbolic); if either
      * stays a CentralMoment[...] the data was not reducible, so leave the caller's

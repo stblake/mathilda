@@ -941,7 +941,18 @@ static Expr* fourier_compute(Expr* data, Expr* a_expr, Expr* b_expr, int inverse
     int base_sign = base_sign_nd;
 
     Expr* result = NULL;
-    if (reg == REG_SYMBOLIC) {
+    bool all_num = reg == REG_SYMBOLIC;
+    for (int64_t i = 0; all_num && i < N; i++) all_num = expr_is_numeric_quantity(leaves[i]);
+    if (all_num) {
+        /* Exact numeric constants (Pi, E, Sqrt[2]) are numbers: the
+         * transform is numerical, as for integers (InverseFourier[{Pi, E}] is
+         * InverseFourier[N[{Pi, E}]]). Only free symbols take the symbolic
+         * path. */
+        Expr* nd = numericalize(data, numeric_machine_spec());
+        if (nd && !expr_eq(nd, data)) result = fourier_compute(nd, a_expr, b_expr, inverse);
+        if (nd) expr_free(nd);
+        if (!result) result = symbolic_path(&LV, dims, rank, a_expr, b_expr, base_sign, N, NULL);
+    } else if (reg == REG_SYMBOLIC) {
         result = symbolic_path(&LV, dims, rank, a_expr, b_expr, base_sign, N, NULL);
     } else {
         double a;
@@ -1584,7 +1595,31 @@ static Expr* dct_compute(Expr* data, int type, bool sine) {
 
     Expr* result = NULL;
     if (reg == REG_SYMBOLIC) {
-        result = NULL;                       /* symbolic input stays unevaluated */
+        /* Exact numeric constants (Pi, E, Sqrt[2]) are numbers: the
+         * transform is numerical, so they are read as machine numbers, as
+         * N[data] would give them (FourierDCT[{1, Pi}] is FourierDCT[N[{1,
+         * Pi}]]). Free symbols stay unevaluated. */
+        bool all_num = true;
+        for (int64_t i = 0; i < N && all_num; i++)
+            all_num = expr_is_numeric_quantity(leaves[i]);
+        if (all_num) {
+            Expr* nd = numericalize(data, numeric_machine_spec());
+            if (nd) {
+                int64_t d2[FOURIER_MAX_RANK]; int r2 = 0;
+                if (nested_dims(nd, d2, &r2) && r2 == rank) {
+                    Expr** lv = malloc((size_t)N * sizeof(Expr*));
+                    size_t id2 = 0;
+                    nd_flatten(nd, 0, rank, lv, &id2);
+                    LLLeaves L2;
+                    ll_leaves_array(&L2, lv);
+                    long ab2 = 0;
+                    Regime r = classify(&L2, (size_t)N, &ab2);
+                    free(lv);
+                    if (r != REG_SYMBOLIC) result = dct_compute(nd, type, sine);
+                }
+                expr_free(nd);
+            }
+        }
     } else if (reg == REG_MACHINE) {
         result = dct_machine_path(data, dims, rank, type, sine);
     } else { /* REG_ARB */

@@ -20,6 +20,7 @@
 #include "sym_names.h"
 #include "zero_test.h"
 #include "core.h"        /* numeric_certified_real_sign */
+#include "comparisons.h" /* comparisons_real_constant_sign */
 #include "message.h"
 #include "print.h"
 #include "common.h"
@@ -362,6 +363,36 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         if (r) return r;
     }
 #endif
+
+    /* An exact NON-REAL numeric quantity (Sqrt[2] + I Pi, Sqrt[-2]): the
+     * operation acts on the real and imaginary parts, as for a Complex
+     * literal above -- IntegerPart[Sqrt[2] + I Pi] is 1 + 3 I.  Re / Im
+     * give the parts exactly; each must come back a certified real
+     * constant, so a part they cannot split leaves the call alone. */
+    if (expr_is_numeric_quantity(x) && !is_complex(x, NULL, NULL)) {
+        Expr* rp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Re),
+                                                   (Expr*[]){ expr_copy(x) }, 1));
+        Expr* ip = eval_and_free(expr_new_function(expr_new_symbol(SYM_Im),
+                                                   (Expr*[]){ expr_copy(x) }, 1));
+        int sr, si;
+        Expr* out = NULL;
+        if (comparisons_real_constant_sign(rp, &sr) &&
+            comparisons_real_constant_sign(ip, &si) && si != 0) {
+            Expr* r1 = do_piecewise_1(rp, op);
+            Expr* r2 = do_piecewise_1(ip, op);
+            if (r1 && r2) {
+                Expr* it = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ make_complex(expr_new_integer(0), expr_new_integer(1)), r2 }, 2);
+                out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                                      (Expr*[]){ r1, it }, 2));
+            } else {
+                if (r1) expr_free(r1);
+                if (r2) expr_free(r2);
+            }
+        }
+        expr_free(rp); expr_free(ip);
+        if (out) return out;
+    }
 
     return NULL;
 }

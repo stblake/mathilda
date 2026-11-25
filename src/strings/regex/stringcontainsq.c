@@ -65,10 +65,13 @@ typedef enum { SQ_CONTAINS, SQ_FREE, SQ_STARTS, SQ_ENDS } SqKind;
 static int sq_match(const char* subj, RegexRule* rules, int nr) {
     size_t len = strlen(subj);
     size_t ov[2];
-    for (int i = 0; i < nr; i++)
-        if (regex_match(rules[i].prog, subj, len, 0, ov, 1) == 1)
-            return 1;
-    return 0;
+    int failed = 0;
+    for (int i = 0; i < nr; i++) {
+        int m = regex_match(rules[i].prog, subj, len, 0, ov, 1);
+        if (m == 1) return 1;
+        if (m < 0) failed = 1;
+    }
+    return failed ? -1 : 0;   /* -1: an engine limit, the answer is unknown */
 }
 
 /* Turn a match/no-match into the answer for this face (StringFreeQ inverts). */
@@ -86,8 +89,10 @@ static Expr* sq_answer(int matched, SqKind kind) {
  * list falls out as no-match without a special case.
  */
 static Expr* sq_build_result(Expr* subject, RegexRule* rules, int nr, SqKind kind) {
-    if (subject->type == EXPR_STRING)
-        return sq_answer(sq_match(subject->data.string, rules, nr), kind);
+    if (subject->type == EXPR_STRING) {
+        int m = sq_match(subject->data.string, rules, nr);
+        return m < 0 ? NULL : sq_answer(m, kind);
+    }
 
     LLReader sv;                             /* a List or a LinkedList of subjects */
     if (!ll_rd_open(subject, &sv)) return NULL;
@@ -98,8 +103,16 @@ static Expr* sq_build_result(Expr* subject, RegexRule* rules, int nr, SqKind kin
 
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     if (!out) { ll_rd_close(&sv); return NULL; }
-    for (size_t i = 0; i < n; i++)
-        out[i] = sq_answer(sq_match(ll_rd_at(&sv, i)->data.string, rules, nr), kind);
+    for (size_t i = 0; i < n; i++) {
+        int m = sq_match(ll_rd_at(&sv, i)->data.string, rules, nr);
+        if (m < 0) {
+            for (size_t k = 0; k < i; k++) expr_free(out[k]);
+            free(out);
+            ll_rd_close(&sv);
+            return NULL;
+        }
+        out[i] = sq_answer(m, kind);
+    }
     ll_rd_close(&sv);
 
     Expr* result = ll_seq_like(subject, out, n);

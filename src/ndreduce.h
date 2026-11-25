@@ -61,6 +61,8 @@ Expr* ndred_min(Expr* res);         /* Min[a] */
 Expr* ndred_accumulate(Expr* res);  /* Accumulate[a] */
 Expr* ndred_variance(Expr* res);    /* Variance[a] */
 double ndred_variance_f64(const double* x, size_t n);  /* the rank-1 kernel on a double array, n >= 2 */
+double ndred_std_f64(const double* x, size_t n);       /* StandardDeviation's, likewise */
+double ndred_stdmoment_f64(const double* x, size_t n, int p);  /* Skewness (3) / Kurtosis (4) */
 Expr* ndred_std(Expr* res);         /* StandardDeviation[a] */
 Expr* ndred_rms(Expr* res);         /* RootMeanSquare[a] */
 Expr* ndred_moment(Expr* res);      /* Moment[a, r] — raw moment (1/n)Sum[x^r] (integer r; Compile ND_REDS delegate) */

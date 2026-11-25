@@ -6,6 +6,7 @@
  */
 
 #include "regex_engine.h"
+#include "message.h"   /* mth_message: an engine limit */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -166,6 +167,15 @@ int regex_match(RegexProgram* prog, const char* subj, size_t len, size_t start,
     if (rc == PCRE2_ERROR_NOMATCH || rc == PCRE2_ERROR_CALLOUT) {
         ret = 0;
     } else if (rc < 0) {
+        /* A resource limit is not a "no match": the answer is unknown, and
+         * the caller leaves its call unevaluated -- say why, through the
+         * funnel (Quiet / Check see it). (a+)+$ against a run of a's ending
+         * in b backtracks exponentially. */
+        if (rc == PCRE2_ERROR_MATCHLIMIT || rc == PCRE2_ERROR_DEPTHLIMIT ||
+            rc == PCRE2_ERROR_HEAPLIMIT)
+            mth_message("RegularExpression", "limit",
+                        "The pattern matcher's backtracking limit was reached; "
+                        "the match could not be decided.");
         ret = -1;
     } else {
         /* rc == 0 means the ovector was too small for all groups; the whole

@@ -265,8 +265,22 @@ static int expr_to_double_strict(const Expr* e, double* out) {
         case EXPR_INTEGER: *out = (double)e->data.integer; return 1;
         case EXPR_REAL:    *out = e->data.real;            return 1;
         case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return 1;
-        default: return 0;
+        default: break;
     }
+    /* An exact rational (an AbsoluteTime of 1/2, a seconds field of 1/2). */
+    if (is_rational_like((Expr*)e) && e->type == EXPR_FUNCTION) {
+        mpz_t n, d;
+        expr_to_mpz(e->data.function.args[0], n);
+        expr_to_mpz(e->data.function.args[1], d);
+        mpq_t q;
+        mpq_init(q);
+        mpq_set_num(q, n); mpq_set_den(q, d);
+        mpq_canonicalize(q);
+        *out = mpq_get_d(q);
+        mpq_clear(q); mpz_clear(n); mpz_clear(d);
+        return 1;
+    }
+    return 0;
 }
 
 /*
@@ -391,6 +405,9 @@ static int datelist_result_to_abstime(const Expr* list, double* total) {
     return datelist_parts_to_abstime(parts, total);
 }
 
+static Expr* datelist_from_string(const char* s);
+static Expr* datelist_from_format(Expr* arg);
+
 Expr* builtin_absolute_time(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -426,6 +443,23 @@ Expr* builtin_absolute_time(Expr* res) {
 
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+    /* AbsoluteTime["string"] and AbsoluteTime[{"string", {elements}}]: the
+     * DateList parsers, read back as seconds -- an exact Integer when whole. */
+    if (arg->type == EXPR_STRING ||
+        (head_is(arg, SYM_List) && arg->data.function.arg_count >= 1 &&
+         arg->data.function.args[0]->type == EXPR_STRING)) {
+        Expr* dl = arg->type == EXPR_STRING ? datelist_from_string(arg->data.string)
+                                            : datelist_from_format(arg);
+        if (!dl) return NULL;
+        double total;
+        int ok = datelist_result_to_abstime(dl, &total);
+        expr_free(dl);
+        if (!ok) return NULL;
+        if (total == floor(total) && total >= -0x1p63 && total < 0x1p63)
+            return expr_new_integer((int64_t)total);
+        return expr_new_real(total);
+    }
 
     /* AbsoluteTime[t] for numeric t passes through as an existing spec. */
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
@@ -677,26 +711,90 @@ static Expr* datelist_finish(double parts[6], int pm, int have_hour12) {
     return datelist_make_result(y, mo, d, h, mi, s);
 }
 
-/* DateList["string"] -- best-effort parse of a free-form date string. */
+/* Tokens of a free-form date string: maximal runs of digits or of letters
+ * (so "28T12" is 28, T, 12 and "3PM" is 3, PM), each flagged when it is a
+ * number joined to a neighbour by ':' -- a clock time h:mm(:ss). */
+static int dt_tokenize_free(const char* s, char tok[DT_MAX_TOKENS][DT_TOKEN_LEN],
+                            int colon[DT_MAX_TOKENS]) {
+    int count = 0;
+    const char* p = s;
+    while (*p && count < DT_MAX_TOKENS) {
+        while (*p && !isalnum((unsigned char)*p)) p++;
+        if (!*p) break;
+        int digit = isdigit((unsigned char)*p) != 0;
+        int len = 0;
+        const char* b = p;
+        while (*p && isalnum((unsigned char)*p) && (isdigit((unsigned char)*p) != 0) == digit) {
+            if (len < DT_TOKEN_LEN - 1) tok[count][len++] = *p;
+            p++;
+        }
+        tok[count][len] = '\0';
+        colon[count] = digit && ((b > s && b[-1] == ':') || *p == ':');
+        count++;
+    }
+    return count;
+}
+
+/* Today's local calendar date into parts[0..2], for a time-only string. */
+static void dt_today(double parts[6]) {
+    time_t now = time(NULL);
+    struct tm* lp = now == (time_t)-1 ? NULL : localtime(&now);
+    if (!lp) return;
+    parts[0] = (double)lp->tm_year + 1900.0;
+    parts[1] = (double)lp->tm_mon + 1.0;
+    parts[2] = (double)lp->tm_mday;
+}
+
+/* DateList["string"] -- best-effort parse of a free-form date string.
+ *
+ * Numbers joined by ':' are the clock time (h, m, s, in order); "AM"/"PM"
+ * applies to it as a 12-hour clock; an ISO "T" separator and ordinal
+ * suffixes (1st, 2nd, 28th) are skipped.  The other numbers are the date: with
+ * a month name, a day and a 4-digit year; all-numeric, a leading 4-digit
+ * token is ISO Y-M-D, a first field above 12 is D/M/Y (day first, no
+ * ambiguity), and anything else is the US M/D/Y, with a warning.  A string
+ * with a time and no date at all is today at that time. */
 static Expr* datelist_from_string(const char* s) {
     char tok[DT_MAX_TOKENS][DT_TOKEN_LEN];
-    int nt = dt_tokenize(s, tok);
+    int colon[DT_MAX_TOKENS];
+    int nt = dt_tokenize_free(s, tok, colon);
     if (nt == 0) return NULL;
 
     double parts[6] = { (double)current_year(), 1.0, 1.0, 0.0, 0.0, 0.0 };
     int pm = -1;
     int month = 0;
-    int num_idx[DT_MAX_TOKENS], nn = 0;
+    int num_idx[DT_MAX_TOKENS], nn = 0;     /* date numbers */
+    int time_idx[DT_MAX_TOKENS], ntm = 0;   /* clock-time numbers */
 
     /* Classify word tokens; collect numeric-token indices in order. */
     for (int i = 0; i < nt; i++) {
-        if (tok_is_numeric(tok[i])) { num_idx[nn++] = i; continue; }
+        if (tok_is_numeric(tok[i])) {
+            if (colon[i]) time_idx[ntm++] = i;
+            else num_idx[nn++] = i;
+            continue;
+        }
         int m = month_from_name(tok[i]);
         if (m) { if (month) return NULL; month = m; continue; }
         if (is_day_name(tok[i])) continue;
         int ap = ampm_of(tok[i]);
         if (ap >= 0) { pm = ap; continue; }
+        /* the ISO date/time separator, and an ordinal suffix after a number */
+        if ((tok[i][0] == 'T' || tok[i][0] == 't') && tok[i][1] == '\0') continue;
+        if (i > 0 && tok_is_numeric(tok[i - 1]) &&
+            (!strcmp(tok[i], "st") || !strcmp(tok[i], "nd") ||
+             !strcmp(tok[i], "rd") || !strcmp(tok[i], "th"))) continue;
         return NULL;   /* an unrecognised word -> not a date we can read */
+    }
+
+    /* "Sep 28 2026 3 PM": with AM/PM and no clock time, a trailing small
+     * number after the date fields is the hour. */
+    if (pm >= 0 && ntm == 0 && nn > 0) {
+        int last = num_idx[nn - 1];
+        int date_fields = month ? 2 : 3;
+        if (strlen(tok[last]) <= 2 && atol(tok[last]) <= 12 && (nn > date_fields || nn == 1)) {
+            time_idx[ntm++] = last;
+            nn--;
+        }
     }
 
     int ambiguous = 0;
@@ -712,31 +810,38 @@ static Expr* datelist_from_string(const char* s) {
             else if (time_i <= 5) { parts[time_i++] = (double)v; }
         }
         if (!day_set) return NULL;
+    } else if (nn == 0) {
+        if (ntm == 0) return NULL;
+        dt_today(parts);                     /* a time alone: today */
     } else {
-        /* All numeric. A leading 4-digit token reads as ISO Y/M/D; otherwise the
-         * order is genuinely ambiguous -- take the US default M/D/Y and warn. */
-        if (nn == 0) return NULL;
-        int base = 3;
+        /* All numeric. A leading 4-digit token reads as ISO Y/M/D; a first
+         * field that cannot be a month is the day (D/M/Y); otherwise the order
+         * is genuinely ambiguous -- take the US default M/D/Y and warn. */
         if (strlen(tok[num_idx[0]]) == 4) {
             parts[0] = (double)atol(tok[num_idx[0]]);
             if (nn > 1) parts[1] = (double)atol(tok[num_idx[1]]);
             if (nn > 2) parts[2] = (double)atol(tok[num_idx[2]]);
+        } else if (nn > 1 && atol(tok[num_idx[0]]) > 12 && atol(tok[num_idx[1]]) <= 12) {
+            parts[2] = (double)atol(tok[num_idx[0]]);
+            parts[1] = (double)atol(tok[num_idx[1]]);
+            if (nn > 2) parts[0] = norm_year(tok[num_idx[2]]);
         } else {
             ambiguous = 1;
             parts[1] = (double)atol(tok[num_idx[0]]);
             if (nn > 1) parts[2] = (double)atol(tok[num_idx[1]]);
             if (nn > 2) parts[0] = norm_year(tok[num_idx[2]]);
         }
-        for (int k = 3; k < nn && (base + k - 3) <= 5; k++) {
-            parts[base + k - 3] = (double)atol(tok[num_idx[k]]);
-        }
+        for (int k = 3; k < nn && k <= 5; k++)
+            parts[k] = (double)atol(tok[num_idx[k]]);
     }
+    for (int k = 0; k < ntm && k < 3; k++)
+        parts[3 + k] = strtod(tok[time_idx[k]], NULL);
 
     if (ambiguous) {
         dt_msg("DateList::ambig: Warning: the interpretation of the string %s "
                "as a date is ambiguous.", s);
     }
-    return datelist_finish(parts, pm, 0);
+    return datelist_finish(parts, pm, pm >= 0);
 }
 
 /* DateList[{"string", {e1, e2, ...}}] -- format-element-driven parse. Separator
@@ -778,7 +883,8 @@ Expr* builtin_date_list(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     /* DateList[time] -- an AbsoluteTime specification (seconds since 1900). */
-    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
+    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT ||
+        (is_rational_like(arg) && arg->type == EXPR_FUNCTION)) {
         double total;
         expr_to_double_strict(arg, &total);
         int64_t y, mo, d, h, mi; double s;
@@ -843,7 +949,10 @@ Expr* builtin_date_list(Expr* res) {
  */
 static Expr* unixtime_from_abstime(double total_1900) {
     double unix_secs = total_1900 - DT_UNIX_EPOCH_OFFSET;
+    /* The nearest whole second, a half to the even one as Round does
+     * (UnixTime[{2022, 1, 1, 0, 0, 1/2}] is 1640995200, a 3/2 is 2). */
     double rounded = floor(unix_secs + 0.5);
+    if (rounded - unix_secs == 0.5 && fmod(rounded, 2.0) != 0.0) rounded -= 1.0;
     /* (double)INT64_MAX rounds UP to 2^63, so `rounded <= (double)INT64_MAX`
      * admitted exactly 2^63 and the cast was undefined (audit UnixTime#1).
      * The int64 range is [-2^63, 2^63); a whole double outside it is an exact
@@ -898,7 +1007,7 @@ Expr* builtin_unix_time(Expr* res) {
         mpz_sub_ui(z, z, 2208988800UL);
         return expr_bigint_normalize(expr_new_bigint_take(z));
     }
-    if (arg->type == EXPR_REAL) {
+    if (arg->type == EXPR_REAL || (is_rational_like(arg) && arg->type == EXPR_FUNCTION)) {
         double total;
         expr_to_double_strict(arg, &total);
         return unixtime_from_abstime(total);

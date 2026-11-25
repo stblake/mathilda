@@ -832,6 +832,14 @@ static Expr* fcf_periodic(const Expr* lseq, size_t m, const Expr* pseq, size_t k
         } else {
             fcf_extract_square(Delta, f, sf);
             mpz_set(Q, f); mpz_set(R, sf);
+            /* The value is the ATTRACTING fixed point of the period's Mobius
+             * map M(x) = (h x + h') / (k x + k'), |M'(x)| = 1/(k x + k')^2
+             * < 1, i.e. the root with the larger |k x + k'| =
+             * |h + k' +/- sqrt(Delta)| / 2: the sign of the root is the sign
+             * of h + k'.  Positive terms always give +; FromContinuedFraction
+             * [{{-1}}] is (-1 - Sqrt[5])/2, the limit of its convergents. */
+            mpz_add(tmp, hp1, kp2);
+            if (mpz_sgn(tmp) < 0) mpz_neg(Q, Q);
             if (mpz_cmp_ui(R, 1) == 0) {     /* perfect square -> rational */
                 mpz_add(P, P, Q); mpz_set_ui(Q, 0);
             }

@@ -1178,11 +1178,22 @@ Expr* builtin_seedrandom(Expr* res) {
         }
         if (arg->type == EXPR_BIGINT) {
             ensure_rand_init();
-            gmp_randseed(g_rand_state, arg->data.bigint);
+            /* GMP seeds and mpz_get_ui read only |n|: a negative seed -n is
+             * mapped to the distinct odd 2 n + 1 first, so SeedRandom[-2^70]
+             * and SeedRandom[2^70] give different streams. */
+            mpz_t sd;
+            mpz_init_set(sd, arg->data.bigint);
+            if (mpz_sgn(sd) < 0) {
+                mpz_neg(sd, sd);
+                mpz_mul_2exp(sd, sd, 1);
+                mpz_add_ui(sd, sd, 1);
+            }
+            gmp_randseed(g_rand_state, sd);
             /* Derive the machine seed from the same bignum, so SeedRandom[huge]
              * is as reproducible as SeedRandom[small]. */
-            xs_seed((uint64_t)mpz_get_ui(arg->data.bigint) ^
-                    ((uint64_t)mpz_sizeinbase(arg->data.bigint, 2) << 32));
+            xs_seed((uint64_t)mpz_get_ui(sd) ^
+                    ((uint64_t)mpz_sizeinbase(sd, 2) << 32));
+            mpz_clear(sd);
             return expr_new_symbol(SYM_Null);
         }
         return NULL; /* Non-integer seed */
@@ -1802,6 +1813,47 @@ typedef struct { Expr* const* a; LLSeq* q; } RCSrc;
 /* Element i, borrowed (a LinkedList's typed slot: a short-lived box). */
 static Expr* rc_at(RCSrc s, size_t i) { return s.q ? llq_peek(s.q, i) : s.a[i]; }
 
+/* The n weights of a weighted RandomChoice / RandomSample as nonnegative
+ * doubles in w[]: false on a weight that is not a nonnegative real number.
+ * Only ratios matter, so weights that overflow a double (an exact 10^400) or
+ * whose SUM overflows (1.5*^308 twice) are rescaled by the largest one, read
+ * through log2: summing them raw gave Infinity and every draw the last index. */
+static bool rc_weights(RCSrc args, size_t n, double* w) {
+    bool scale = false;
+    double sum = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double v = 0.0;
+        if (!expr_to_real(rc_at(args, i), &v)) {
+            v = INFINITY;                 /* maybe a huge exact weight: below */
+        } else if (!(v >= 0.0)) {
+            return false;
+        }
+        w[i] = v;
+        sum += v;
+        if (!isfinite(v) || !isfinite(sum)) scale = true;
+    }
+    if (!scale) return true;
+    double lmax = -INFINITY;
+    for (size_t i = 0; i < n; i++) {
+        double l;
+        if (isfinite(w[i])) {
+            l = w[i] > 0.0 ? log2(w[i]) : -INFINITY;
+        } else {
+            Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
+                (Expr*[]){ expr_new_integer(2), expr_copy(rc_at(args, i)) }, 2);
+            Expr* num = numericalize(lg, numeric_machine_spec());
+            expr_free(lg);
+            bool ok = num && literal_to_real(num, &l) && isfinite(l);
+            if (num) expr_free(num);
+            if (!ok) return false;         /* not a finite positive number */
+        }
+        w[i] = l;                          /* log2 weight, for now */
+        if (l > lmax) lmax = l;
+    }
+    for (size_t i = 0; i < n; i++) w[i] = exp2(w[i] - lmax);
+    return true;
+}
+
 static Expr* random_choice_array(RCSrc choices, size_t choice_count,
                                  Expr* dims, size_t dim_idx) {
     if (dim_idx >= dims->data.function.arg_count)
@@ -2130,14 +2182,9 @@ static Expr* randomchoice_core(Expr* res) {
         if (!cum_weights) return NULL;
 
         double total = 0.0;
-        bool valid = true;
-        for (size_t i = 0; i < weights_count; i++) {
-            double w;
-            if (!expr_to_real(rc_at(weights_args, i), &w) || w < 0.0) {
-                valid = false;
-                break;
-            }
-            total += w;
+        bool valid = rc_weights(weights_args, weights_count, cum_weights);
+        for (size_t i = 0; valid && i < weights_count; i++) {
+            total += cum_weights[i];
             cum_weights[i] = total;
         }
 
@@ -2444,13 +2491,7 @@ static Expr* randomsample_core(Expr* res) {
         double* weights = malloc(sizeof(double) * weights_count);
         if (!weights) return NULL;
 
-        bool valid = true;
-        for (size_t i = 0; i < weights_count; i++) {
-            if (!expr_to_real(rc_at(weights_args, i), &weights[i]) || weights[i] < 0.0) {
-                valid = false;
-                break;
-            }
-        }
+        bool valid = rc_weights(weights_args, weights_count, weights);
         if (!valid) { free(weights); return NULL; }
 
         if (argc == 2) {
@@ -2491,6 +2532,19 @@ static Expr* randomsample_core(Expr* res) {
         Expr* list = rc_list(result_elems, sample_n);
         free(result_elems);
         return list;
+    }
+
+    /* RandomSample[{}], RandomSample[{}, 0], RandomSample[{}, UpTo[k]]: the
+     * empty sample. */
+    if (first_arg->type == EXPR_FUNCTION && first_arg->data.function.arg_count == 0 &&
+        first_arg->data.function.head->type == EXPR_SYMBOL &&
+        first_arg->data.function.head->data.symbol.name == SYM_List) {
+        int64_t up;
+        Expr* n_arg = argc == 2 ? res->data.function.args[1] : NULL;
+        if (!n_arg || (n_arg->type == EXPR_INTEGER && n_arg->data.integer == 0) ||
+            (is_upto(n_arg, &up) && up >= 0))
+            return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        return NULL;
     }
 
     /* Uniform random sample: first arg must be a non-empty list */

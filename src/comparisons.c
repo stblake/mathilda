@@ -1353,10 +1353,19 @@ static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp
     /* IEEE unordered: an ordering predicate against a NaN is always False. */
     if (has_nan_operand(res)) return expr_new_symbol(SYM_False);
 
-    for (size_t i = 0; i < res->data.function.arg_count - 1; i++) {
+    /* Each adjacent pair is decided independently (1 True, 0 False, -1
+     * undecided): one decided False pair makes the whole chain False even
+     * when an earlier pair is symbolic (x >= 4 >= 5 is False), and decided
+     * True pairs are dropped below (1 < 2 < x < 3 is 2 < x < 3). */
+    size_t n = res->data.function.arg_count;
+    signed char dec_buf[16];
+    signed char* dec = (n - 1 <= sizeof dec_buf) ? dec_buf : (signed char*)malloc(n - 1);
+    bool any_undecided = false;
+    for (size_t i = 0; i < n - 1; i++) {
         Expr* a = res->data.function.args[i];
         Expr* b = res->data.function.args[i+1];
-        
+        dec[i] = 1;
+
         bool can_compare;
         int cert = CMP_CERT_EXACT;
         int cmp = compare_numeric_ex(a, b, &can_compare, &cert);
@@ -1371,8 +1380,11 @@ static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp
                 cmp_is_real_constant(a) && cmp_is_real_constant(b) &&
                 numeric_pair_zero_test(a, b) == ZERO_TEST_TRUE)
                 cmp = 0;
-            else
-                return NULL; // Unevaluated
+            else {
+                dec[i] = -1; /* undecided: keep looking for a False pair */
+                any_undecided = true;
+                continue;
+            }
         }
 
         /* An order read off machine values of EXACT operands can be a
@@ -1398,10 +1410,37 @@ static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp
         }
         
         if (cmp != expected_cmp_1 && cmp != expected_cmp_2) {
+            if (dec != dec_buf) free(dec);
             return expr_new_symbol(SYM_False);
         }
     }
-    return expr_new_symbol(SYM_True);
+    if (!any_undecided) {
+        if (dec != dec_buf) free(dec);
+        return expr_new_symbol(SYM_True);
+    }
+    /* Drop the members every adjacent pair of which is decided True: an end
+     * member whose one pair holds, or an interior member between two holding
+     * pairs (a < b < c with both pairs True gives a < c by transitivity). */
+    size_t keep = 0;
+    for (size_t k = 0; k < n; k++) {
+        bool left_open = (k > 0 && dec[k - 1] != 1);
+        bool right_open = (k + 1 < n && dec[k] != 1);
+        if (left_open || right_open) keep++;
+    }
+    Expr* out = NULL;
+    if (keep < n) {
+        Expr** kept = (Expr**)malloc(keep * sizeof(Expr*));
+        size_t j = 0;
+        for (size_t k = 0; k < n; k++) {
+            bool left_open = (k > 0 && dec[k - 1] != 1);
+            bool right_open = (k + 1 < n && dec[k] != 1);
+            if (left_open || right_open) kept[j++] = expr_copy(res->data.function.args[k]);
+        }
+        out = expr_new_function(expr_copy(res->data.function.head), kept, keep);
+        free(kept);
+    }
+    if (dec != dec_buf) free(dec);
+    return out;
 }
 
 Expr* builtin_less(Expr* res) {

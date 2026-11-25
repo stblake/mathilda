@@ -2572,6 +2572,40 @@ rat_imag_fallthrough: ;
         return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
     }
 
+    /* Positive BigInt base, exponent p/q (q > 1): pull the q-th-power part
+     * found by trial division out of the radical, n^(p/q) = m^p r^(p/q) with
+     * n = m^q r -- the int64 path's factor_out_kth_power, for a radicand past
+     * int64 (Sqrt[2*10^40] is 10^20 Sqrt[2]). Trial division is bounded: a
+     * q-th-power factor made of large primes stays under the radical, as for
+     * an int64 radicand whose factorisation is out of reach. */
+    if (base->type == EXPR_BIGINT && mpz_sgn(base->data.bigint) > 0
+        && is_rational(exp, &p, &q) && q > 1 && q <= 64) {
+        mpz_t r, m;
+        mpz_init_set(r, base->data.bigint);
+        mpz_init_set_ui(m, 1);
+        for (unsigned long d = 2; d <= 10000; d += (d == 2 ? 1 : 2)) {
+            if (!mpz_divisible_ui_p(r, d)) continue;
+            unsigned long e = 0;
+            while (mpz_divisible_ui_p(r, d)) { mpz_divexact_ui(r, r, d); e++; }
+            /* d^(e mod q) stays in the residue; d^(e div q) moves to m. */
+            for (unsigned long t = 0; t < e % (unsigned long)q; t++) mpz_mul_ui(r, r, d);
+            for (unsigned long t = 0; t < e / (unsigned long)q; t++) mpz_mul_ui(m, m, d);
+            if (mpz_cmp_ui(r, 1) == 0) break;
+        }
+        if (mpz_cmp_ui(m, 1) > 0) {
+            Expr* m_e = expr_bigint_normalize(expr_new_bigint_from_mpz(m));
+            Expr* r_e = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
+            mpz_clear(r); mpz_clear(m);
+            Expr* coef = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ m_e, expr_new_integer(p) }, 2);
+            Expr* rad = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ r_e, expr_copy(exp) }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ coef, rad }, 2);
+        }
+        mpz_clear(r); mpz_clear(m);
+    }
+
     if (base->type == EXPR_INTEGER && is_rational(exp, &p, &q) && q > 1) {
         int64_t n = base->data.integer;
         /* INT64_MIN = -2^63 has no int64 magnitude: every "-n" below would

@@ -112,6 +112,15 @@ static void test_s11_special_values(void) {
     audit_true("FromContinuedFraction#2", "FromContinuedFraction[{1, 2}] === 3/2");
 }
 
+static void test_wave4_numbertheory(void) {
+    audit_chk("FromContinuedFraction#1", "FromContinuedFraction[{{-1}}]", "1/2 (-1 - Sqrt[5])");
+    audit_chk("FromContinuedFraction#1", "FromContinuedFraction[{-2,{-3}}]", "1/2 (-1 - Sqrt[13])");
+    audit_chk("FromContinuedFraction#1", "FromContinuedFraction[{{1}}]", "1/2 (1 + Sqrt[5])");
+    audit_chk("GCD#2", "GCD[-1/2]", "1/2");
+    audit_chk("GCD#2", "GCD[-2^70/3]", "1180591620717411303424/3");
+    audit_chk("PrimitiveRoot#1", "PrimitiveRoot[2000000000005408000000000197359]", "11");
+}
+
 int main(void) {
     audit_init();
     TEST(test_primitive_root_list_huge_phi);
@@ -119,5 +128,6 @@ int main(void) {
     TEST(test_continued_fraction_inexact_last_term);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_numbertheory);
     return audit_finish("audit_number_theory");
 }

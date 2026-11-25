@@ -110,15 +110,22 @@ Expr* builtin_accumulate(Expr* res) {
     /* Kahan compensated summation in double precision when every element
      * is a machine number. */
     if (kahan_requested) {
-        bool all_numeric = true;
+        /* Only a list holding a machine Real is summed in doubles: an
+         * all-exact list (integers, bignums) is accumulated exactly below,
+         * as without the option -- compensated summation is a rounding
+         * remedy, and exact sums have no rounding (it turned
+         * {10^20, 1, -10^20} into {1.*^20, 1.*^20, 0.}). */
+        bool all_numeric = true, any_real = false;
         for (size_t i = 0; i < n; i++) {
             double tmp;
-            if (!accumulate_to_double(llq_peek(&lv, i), &tmp)) {
+            Expr* el = llq_peek(&lv, i);
+            if (!accumulate_to_double(el, &tmp)) {
                 all_numeric = false;
                 break;
             }
+            if (el->type == EXPR_REAL) any_real = true;
         }
-        if (all_numeric) {
+        if (all_numeric && any_real) {
             Expr** out = malloc(sizeof(Expr*) * n);
             if (!out) { llq_close(&lv); return NULL; }
             double sum = 0.0;

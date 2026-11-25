@@ -84,11 +84,31 @@ static void test_wave3_arity_options(void) {
     audit_chk("StringContainsQ#2", "StringContainsQ[\"abc\", \"B\", IgnoreCase -> True]", "True");
 }
 
+static void test_wave4_strings(void) {
+    audit_chk("StringSplit#1", "StringSplit[\"abc\", \"\", 2]", "{\"a\", \"bc\"}");
+    audit_chk("StringPosition#1", "StringPosition[\"aaa\",\"a\",0]", "{}");
+    audit_chk("StringMatchQ#1", "StringMatchQ[\"abc\", \"abc\", SpellingCorrection -> False]", "True");
+    audit_chk("StringMatchQ#1", "Options[StringMatchQ]", "{IgnoreCase -> False, SpellingCorrection -> False}");
+    audit_chk("Alphabet#2", "Alphabet[\"English\"] === Alphabet[]", "True");
+    audit_chk("Alphabet#2", "Length[Alphabet[\"Greek\"]]", "24");
+    audit_chk("Alphabet#2", "Length[Alphabet[\"Russian\"]]", "33");
+    audit_chk("Alphabet#2", "ToCharacterCode[StringJoin[Alphabet[\"Greek\"][[{1, 18, 24}]]]]", "{945, 963, 969}");
+    audit_chk("Capitalize#1", "Capitalize[\"the quick brown fox\",\"AllWords\"]", "\"The Quick Brown Fox\"");
+    audit_chk("Capitalize#1", "Capitalize[\"the lord of the rings\",\"TitleCase\"]", "\"The Lord of the Rings\"");
+    audit_chk("StringExpression#1", "\"a\" ~~ \"b\"", "\"ab\"");
+    audit_chk("StringExpression#1", "\"a\" ~~ \"b\" ~~ x ~~ \"c\" ~~ \"d\"", "\"ab\"~~x~~\"cd\"");
+    audit_chk("StringExpression#1", "StringExpression[\"a\"]", "\"a\"");
+    audit_chk("StringExpression#1", "StringExpression[\"a\", \"b\"] // StringLength", "2");
+    audit_chk("StringExtract#1", "StringExtract[\"a b c\", 2;;5]", "{\"b\", \"c\", Missing[\"PartAbsent\", 4], Missing[\"PartAbsent\", 5]}");
+    audit_chk("RegularExpression#1", "Check[StringContainsQ[StringJoin[Table[\"a\", {30}]] <> \"b\", RegularExpression[\"(a+)+$\"]], \"fired\", RegularExpression::limit]", "\"fired\"");
+}
+
 int main(void) {
     audit_init();
     TEST(test_stringriffle_deep_nesting);
     TEST(test_fromcharactercode_nul);
     TEST(test_stringreplacelist_infinity);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_strings);
     return audit_finish("audit_string_operations");
 }

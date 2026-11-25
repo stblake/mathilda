@@ -1147,6 +1147,11 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
 /* Depth of N-value rewrites in progress (n_value below): a rule whose value
  * mentions its own tag again must not recurse without bound. */
 static int g_n_value_depth = 0;
+/* The precision (bits) the current top-level numericalization was ASKED for,
+ * 0 outside one.  The pass itself may run at a raised working precision (the
+ * plan in numericalize_top), but an N rule N[f[x_], p_] := ... must see the
+ * requested p -- N[f[1], 20] bound p to 39 before. */
+static long g_n_target_bits = 0;
 
 /* The value an N rule gives the symbol or call `e` whose tag is `tag`, at the
  * working precision -- N[e] at machine precision, N[e, digits] otherwise -- then
@@ -1169,7 +1174,8 @@ static Expr* n_value(const Expr* e, const char* tag, NumericSpec spec) {
         Expr* a[2] = { expr_copy((Expr*)e), mp };
         call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
     } else {
-        Expr* a[2] = { expr_copy((Expr*)e), expr_new_integer((int64_t)floor(numeric_bits_to_digits(spec.bits) + 0.5)) };  /* the precision, not the guarded width */
+        long req_bits = g_n_target_bits > 0 && g_n_target_bits <= spec.bits ? g_n_target_bits : spec.bits;
+        Expr* a[2] = { expr_copy((Expr*)e), expr_new_integer((int64_t)floor(numeric_bits_to_digits(req_bits) + 0.5)) };  /* the precision, not the guarded width */
         call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
     }
     Expr* v = NULL;
@@ -3721,6 +3727,8 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
 
     NumericSpec work;
     bool raised = numeric_plan_working_spec(&s, spec, &work);
+    long saved_target = g_n_target_bits;
+    g_n_target_bits = numeric_spec_is_mpfr(spec) ? spec.bits : 0;
     long saved_cancel = g_numeric_cancel_bits;
     long saved_left = g_numeric_cancel_left;
     long saved_absorb = g_numeric_absorb_bits;
@@ -3849,6 +3857,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             r = numeric_round_result(prev, spec);
         }
     }
+    g_n_target_bits = saved_target;
     /* an enclosing numericalization sees the worst cancellation of any pass */
     g_numeric_cancel_bits = saved_cancel > cancelled ? saved_cancel : cancelled;
     if (saved_left < g_numeric_cancel_left) g_numeric_cancel_left = saved_left;

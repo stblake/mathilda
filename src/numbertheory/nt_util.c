@@ -37,6 +37,17 @@ Expr* single_arg_abs_or_copy(Expr* arg) {
         mpz_clear(a);
         return r;
     }
+    /* A Rational with a BigInt part: negate a negative numerator
+     * (GCD[-2^70/3] is 2^70/3). */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.arg_count == 2 &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_Rational &&
+        expr_is_integer_like(arg->data.function.args[0]) &&
+        expr_is_integer_like(arg->data.function.args[1]) &&
+        expr_numeric_sign(arg->data.function.args[0]) < 0) {
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
+    }
     return expr_copy(arg);
 }
 

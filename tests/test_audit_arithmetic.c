@@ -238,6 +238,59 @@ static void test_s11_special_values(void) {
     audit_true("Multinomial#1", "Multinomial[2, 3] === 10");
 }
 
+static void test_wave4_arith_misc(void) {
+    audit_chk("Sqrt#2", "Sqrt[2*10^40]", "100000000000000000000 Sqrt[2]");
+    audit_chk("Sqrt#2", "(2^70*3)^(1/3)", "8388608 6^(1/3)");
+    audit_chk("Total#1", "Total[f[1,2,3]]", "6");
+    audit_chk("Total#1", "Total[1/2]", "1/2");
+    audit_chk("Arg#2", "Arg[E^(I Pi/3)]", "1/3 Pi");
+    audit_chk("ComplexExpand#2", "ComplexExpand[Re[f[x]]]", "Re[f[x]]");
+    audit_chk("ComplexExpand#2", "ComplexExpand[Im[f[x]]]", "Im[f[x]]");
+    audit_chk("ComplexExpand#2", "ComplexExpand[Re[Gamma[x]]]", "Gamma[x]");
+    audit_chk("Im#2", "Im[(-1)^(1/3)]", "1/2 Sqrt[3]");
+    audit_chk("Im#2", "Im[(-8)^(1/3)]", "Sqrt[3]");
+    audit_chk("Im#2", "Im[(-1)^(1/4)]", "1/Sqrt[2]");
+    audit_chk("Re#1", "Re[(-1)^(1/3)]", "1/2");
+    audit_chk("Re#1", "Re[E^(I Pi/4)]", "1/Sqrt[2]");
+    audit_chk("Re#1", "Re[(-8)^(1/3)]", "1");
+    audit_chk("Re#2", "Re[1/(1 + I Sqrt[3])]", "1/4");
+    audit_chk("Re#2", "Re[Exp[1 + I]]", "E Cos[1]");
+    audit_chk("ReIm#1", "ReIm[x]", "{Re[x], Im[x]}");
+    audit_chk("ReIm#1", "ReIm[{1+I, 2, x}]", "{{1, 1}, {2, 0}, {Re[x], Im[x]}}");
+    audit_chk("ReIm#3", "ReIm[(-1)^(1/3)]", "{1/2, 1/2 Sqrt[3]}");
+    audit_chk("ReIm#3", "ReIm[Exp[I Pi/3]]", "{1/2, 1/2 Sqrt[3]}");
+    audit_chk("Quotient#2", "Quotient[Pi, 1]", "3");
+    audit_chk("Quotient#2", "Quotient[Sqrt[2], 1/10]", "14");
+    audit_chk("QuotientRemainder#2", "QuotientRemainder[10, Pi]", "{3, 10 - 3 Pi}");
+    audit_chk("Sign#2", "Sign[-x]", "-Sign[x]");
+    audit_chk("Sign#2", "Sign[2 x]", "Sign[x]");
+    audit_chk("Sign#2", "Sign[-3 x]", "-Sign[x]");
+    audit_chk("Sign#2", "Sign[Pi x]", "Sign[x]");
+    audit_chk("Factorial#2", "D[x!, x]", "Gamma[1 + x] PolyGamma[0, 1 + x]");
+    audit_chk("FactorialPower#1", "FactorialPower[1/2, 33] == FactorialPower[1/2, 32] (1/2 - 32)", "True");
+    audit_chk("FactorialPower#1", "Head[FactorialPower[2.5, 33]]", "Real");
+    audit_chk("Accumulate#1", "Accumulate[{10^20, 1, -10^20}, Method->\"CompensatedSummation\"]", "{100000000000000000000, 100000000000000000001, 1}");
+    audit_chk("Accumulate#1", "Accumulate[{1,2,3}, Method->\"CompensatedSummation\"]", "{1, 3, 6}");
+    audit_chk("ListGradient#1", "Check[ListGradient[{{1,2},{3,4,5}}], \"fired\", ListGradient::rect]", "\"fired\"");
+    audit_chk("ListGradient#1", "Quiet[ListGradient[{{1,2},{3,4,5}}]]", "ListGradient[{{1, 2}, {3, 4, 5}}]");
+    audit_chk("MantissaExponent#1", "MantissaExponent[Pi]", "{1/10 Pi, 1}");
+    audit_chk("DigitCount#1", "DigitCount[1.*^-20]", "{1, 0, 0, 0, 0, 0, 0, 0, 0, 15}");
+    audit_chk("DigitCount#1", "RealDigits[1.*^-20]", "{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, -19}");
+    audit_chk("DigitCount#1", "RealDigits[0.1 + 0.2]", "{{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}");
+    audit_chk("IntervalIntersection#2", "IntervalIntersection[Interval[{1,2}], Interval[]]", "Interval[]");
+    audit_chk("IntervalIntersection#2", "IntervalIntersection[Interval[], Interval[]]", "Interval[]");
+    audit_chk("IntervalMemberQ#1", "IntervalMemberQ[Interval[], 1]", "False");
+    audit_chk("IntervalMemberQ#2", "IntervalMemberQ[Interval[{1, 5}], 2 + I]", "False");
+    audit_chk("IntervalUnion#1", "IntervalUnion[Interval[], Interval[{1,2}]]", "Interval[{1, 2}]");
+    audit_chk("IntervalUnion#1", "IntervalUnion[Interval[]]", "Interval[]");
+    audit_chk("IntervalUnion#1", "IntervalUnion[IntervalIntersection[Interval[{1,2}], Interval[{3,4}]], Interval[{5,6}]]", "Interval[{5, 6}]");
+    audit_chk("Interval#1", "Interval[{1, 2}]^Infinity", "Interval[{1, 2}]^Infinity");
+    audit_chk("NValues#1", "N[nvw4f[x_], p_] := p; N[nvw4f[1], 20]", "20.000000000000000000");
+    audit_chk("NValues#2", "N[nvw4a] = 3; N[nvw4a] =.; NValues[nvw4a]", "{}");
+    audit_true("SetAccuracy#2", "Min[List @@ Map[Accuracy, SetAccuracy[f[1000.5, 0.001], 20]]] >= 20");
+    audit_chk("SetAccuracy#2", "Map[Accuracy, SetAccuracy[f[1000.5, 0.001], 20]][[2]]", "20.0");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
@@ -248,5 +301,6 @@ int main(void) {
     TEST(test_ratios_level_depth);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_arith_misc);
     return audit_finish("audit_arithmetic");
 }

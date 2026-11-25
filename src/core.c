@@ -4927,14 +4927,27 @@ Expr* builtin_quotient(Expr* res) {
         return out;
     }
 
+    /* Exact real constants (Quotient[Pi, 1], Quotient[10, Pi]): Floor of
+     * the exact quotient, the definition, which Floor decides exactly (as
+     * Mod[10, Pi] already did) -- the double fallback below cannot read
+     * them, and a rounded double would be wrong near an integer anyway. */
+    bool exact_consts = false;
+    {
+        int sm, sn, sd = 0;
+        exact_consts = comparisons_real_constant_sign(m_expr, &sm) &&
+                       comparisons_real_constant_sign(n_expr, &sn) && sn != 0 &&
+                       (!d_expr || comparisons_real_constant_sign(d_expr, &sd));
+    }
+    (void)exact_consts;
 #ifdef USE_MPFR
     /* An arbitrary-precision operand: the double fallback below read it
      * through mpfr_get_d, so Quotient[N[10^30, 40] + 1/2, 1] was off by
      * 2*10^13. Floor of an MPFR value is exact, so hand the evaluator
      * Floor[(m - d)/n], the definition, at the operands' own precision. */
-    if ((numeric_expr_is_mpfr(m_expr) || numeric_expr_is_mpfr(n_expr)
+    if (exact_consts ||
+        ((numeric_expr_is_mpfr(m_expr) || numeric_expr_is_mpfr(n_expr)
          || (d_expr && numeric_expr_is_mpfr(d_expr)))
-        && expr_numeric_sign(n_expr) != 0) {     /* a zero divisor declines below */
+        && expr_numeric_sign(n_expr) != 0)) {     /* a zero divisor declines below */
         Expr* num = d_expr
             ? expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_copy(m_expr),
                   expr_new_function(expr_new_symbol(SYM_Times),

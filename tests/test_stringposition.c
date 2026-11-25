@@ -134,8 +134,8 @@ static void test_stringtake_roundtrip(void) {
 /* Empty string / empty match edges. */
 static void test_edges(void) {
     assert_eval_eq("StringPosition[\"\", \"a\"]", "{}", 0);
-    assert_eval_eq("StringPosition[\"aaa\", \"a\", 0]",
-                   "{{1, 1}, {2, 2}, {3, 3}}", 0);   /* n <= 0 imposes no cap */
+    /* An occurrence count of 0 asks for no positions (audit StringPosition#1). */
+    assert_eval_eq("StringPosition[\"aaa\", \"a\", 0]", "{}", 0);
 }
 
 /* Options[StringPosition] exposes defaults; SetOptions changes the behaviour. */

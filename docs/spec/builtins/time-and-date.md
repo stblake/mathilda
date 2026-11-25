@@ -173,6 +173,9 @@ Gives the total number of seconds since the beginning of January 1, 1900.
 - Performs no corrections for time zones, daylight saving time, or leap seconds.
 - Returns an integer when every component is integer-valued and the total is exact; otherwise returns a real.
 
+Accepts date strings and `{"string", {elements}}` specs (the DateList parsers), and
+exact rational times and fields.
+
 ## DateList
 Gives a broken-down date/time as `{year, month, day, hour, minute, second}`.
 - `DateList[]` -- current local date and time.
@@ -205,6 +208,12 @@ Out[3]= {2022, 3, 3, 0, 0, 0.0}
 In[4]:= DateList["28 Sep, 2026"]
 Out[4]= {2026, 9, 28, 0, 0, 0.0}
 ```
+
+Free-form strings: numbers joined by `:` are the clock time, `AM`/`PM` applies a
+12-hour clock (also to a lone trailing hour, `"Sep 28 2026 3 PM"`), an ISO `T`
+separator and ordinal suffixes are skipped, a time alone is today at that time, and an
+all-numeric date whose first field exceeds 12 is day-first (no ambiguity warning).
+Rational AbsoluteTimes and fields are accepted.
 
 ## UnixTime
 
@@ -240,6 +249,8 @@ Out[3]= 1646265600
 In[4]:= AbsoluteTime[{2000, 1, 1}] - UnixTime[{2000, 1, 1}]
 Out[4]= 2208988800
 ```
+
+Rational times and fields are accepted; the nearest second rounds a half to even.
 
 ## Pause
 Pauses for at least `n` seconds, then returns `Null`.

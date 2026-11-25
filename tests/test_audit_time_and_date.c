@@ -58,11 +58,26 @@ static void test_wave3_arity_options(void) {
     audit_chk("TimeUsed#2", "Quiet[TimeUsed[1]]", "TimeUsed[1]");
 }
 
+static void test_wave4_dates(void) {
+    audit_chk("AbsoluteTime#3", "AbsoluteTime[\"2022-03-03\"]", "3855254400");
+    audit_chk("AbsoluteTime#3", "AbsoluteTime[{\"2022-03-03\", {\"Year\",\"-\",\"Month\",\"-\",\"Day\"}}]", "3855254400");
+    audit_chk("DateList#3", "DateList[\"Sep 28 2026 3 PM\"]", "{2026, 9, 28, 15, 0, 0.0}");
+    audit_chk("DateList#4", "Take[DateList[\"3:15 PM\"], {4, 6}]", "{15, 15, 0.0}");
+    audit_chk("DateList#4", "Take[DateList[\"3:15 PM\"], 3] == Take[DateList[], 3]", "True");
+    audit_chk("DateList#5", "DateList[\"2026-09-28T12:30:00\"]", "{2026, 9, 28, 12, 30, 0.0}");
+    audit_chk("DateList#6", "DateList[\"31/12/2022\"]", "{2022, 12, 31, 0, 0, 0.0}");
+    audit_chk("DateList#7", "DateList[1/2]", "{1900, 1, 1, 0, 0, 0.5}");
+    audit_chk("DateList#7", "DateList[{2022, 1, 1, 0, 0, 1/2}]", "{2022, 1, 1, 0, 0, 0.5}");
+    audit_chk("UnixTime#3", "UnixTime[2208988800 + 3/2]", "2");
+    audit_chk("UnixTime#3", "UnixTime[{2022, 1, 1, 0, 0, 1/2}]", "1640995200");
+}
+
 int main(void) {
     audit_init();
     TEST(test_datelist_far_past);
     TEST(test_unixtime_int64_edge);
     TEST(test_s14_unixtime_exact);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_dates);
     return audit_finish("audit_time_and_date");
 }

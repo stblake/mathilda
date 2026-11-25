@@ -13,6 +13,10 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "expr.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 
 /* Register a symbol as an inert protected head (no builtin, no rules). Used for
  * the string-pattern class heads that the WL-pattern translator recognises. */
@@ -37,6 +41,45 @@ static void register_scan_options(const char* name, const char* overlaps_default
 /* Options[name] = {IgnoreCase -> False}.  The substring predicates take no
  * Overlaps option (a Boolean answer does not depend on the overlap policy), so
  * they get this one-option sibling of register_scan_options. */
+/* StringExpression[p1, p2, ...]: adjacent literal strings are one literal
+ * ("a" ~~ "b" is "ab", "a" ~~ "b" ~~ x ~~ "c" is "ab" ~~ x ~~ "c"), and a
+ * lone string is itself. The match is unchanged: consecutive literals match
+ * consecutively either way. Anything else stays as it is. */
+static Expr* builtin_stringexpression(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
+    bool adjacent = false;
+    for (size_t i = 0; i + 1 < n; i++)
+        if (a[i]->type == EXPR_STRING && a[i + 1]->type == EXPR_STRING) { adjacent = true; break; }
+    if (!adjacent) {
+        if (n == 1 && a[0]->type == EXPR_STRING) return expr_copy(a[0]);
+        return NULL;
+    }
+    Expr** out = malloc(sizeof(Expr*) * n);
+    if (!out) return NULL;
+    size_t m = 0;
+    for (size_t i = 0; i < n; ) {
+        if (a[i]->type != EXPR_STRING) { out[m++] = expr_copy(a[i]); i++; continue; }
+        size_t j = i, total = 0;
+        while (j < n && a[j]->type == EXPR_STRING) total += strlen(a[j++]->data.string);
+        char* buf = malloc(total + 1);
+        if (!buf) { for (size_t k = 0; k < m; k++) expr_free(out[k]); free(out); return NULL; }
+        size_t o = 0;
+        for (size_t k = i; k < j; k++) {
+            size_t l = strlen(a[k]->data.string);
+            memcpy(buf + o, a[k]->data.string, l); o += l;
+        }
+        buf[o] = '\0';
+        out[m++] = expr_new_string_adopt(buf);
+        i = j;
+    }
+    Expr* r = m == 1 ? out[0]
+                     : expr_new_function(expr_copy(res->data.function.head), out, m);
+    free(out);
+    return r;
+}
+
 static void register_ignorecase_option(const char* name) {
     Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2);
@@ -59,7 +102,13 @@ void regex_init(void) {
 
     symtab_add_builtin("StringMatchQ", builtin_stringmatchq);
     symtab_get_def("StringMatchQ")->attributes |= ATTR_PROTECTED;
-    register_ignorecase_option("StringMatchQ");
+    /* Options[StringMatchQ]: IgnoreCase -> False, SpellingCorrection -> False
+     * (accepted; no spelling correction is ever applied). */
+    symtab_set_options("StringMatchQ", expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2),
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_SpellingCorrection), expr_new_symbol(SYM_False) }, 2) }, 2));
 
     symtab_add_builtin("StringCases", builtin_stringcases);
     symtab_get_def("StringCases")->attributes |= ATTR_PROTECTED;
@@ -184,6 +233,7 @@ void regex_init(void) {
     register_inert("IgnoreCase", NULL);
     register_inert("Overlaps", NULL);
 
+    symtab_add_builtin("StringExpression", builtin_stringexpression);
     symtab_get_def("StringExpression")->attributes |=
         ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_set_docstring("StringExpression",

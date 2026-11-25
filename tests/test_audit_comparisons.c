@@ -33,9 +33,20 @@ static void test_s11_special_values(void) {
     audit_true("UnsameQ#2", "(Infinity =!= DirectedInfinity[1]) === False");
 }
 
+static void test_wave4_variadic_inequalities(void) {
+    /* Variadic inequalities decide each adjacent pair; a False pair wins,
+     * decided True pairs drop out (src/comparisons.c evaluate_inequality). */
+    audit_chk("GreaterEqual#1", "GreaterEqual[x,4,5]", "False");
+    audit_chk("GreaterEqual#1", "GreaterEqual[x,y,3,4]", "False");
+    audit_chk("LessEqual#1", "LessEqual[x, 3, 2]", "False");
+    audit_chk("LessEqual#1", "LessEqual[1, 2, x, 3]", "2 <= x <= 3");
+    audit_chk("LessEqual#1", "Less[x, 1, 2, 3, y]", "x < 1 < 3 < y");
+}
+
 int main(void) {
     audit_init();
     TEST(test_inequality_residual_wellformed);
     TEST(test_s11_special_values);
+    TEST(test_wave4_variadic_inequalities);
     return audit_finish("audit_comparisons");
 }

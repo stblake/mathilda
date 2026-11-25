@@ -119,6 +119,36 @@ static Expr* apply_position(Expr* blocks, Expr* pos, int* is_multi) {
     /* n1;;n2 (Span) -> range of blocks (Part clips to valid range). */
     if (head_is(pos, SYM_Span)) {
         *is_multi = 1;
+        /* An integer span m;;n (;;s) is the list of its positions, each read
+         * as a single position is: a block past the last is Missing, so
+         * "a b c" at 2;;5 is {"b", "c", Missing[...], Missing[...]} -- Part
+         * returned {} for an out-of-range span, dropping blocks 2 and 3. */
+        size_t sa = pos->data.function.arg_count;
+        int64_t N = (int64_t)blocks->data.function.arg_count;
+        if (sa >= 2 && sa <= 3) {
+            Expr* e0 = pos->data.function.args[0];
+            Expr* e1 = pos->data.function.args[1];
+            Expr* e2 = sa == 3 ? pos->data.function.args[2] : NULL;
+            bool all1 = e1->type == EXPR_SYMBOL && e1->data.symbol.name == SYM_All;
+            if (e0->type == EXPR_INTEGER && (e1->type == EXPR_INTEGER || all1) &&
+                (!e2 || (e2->type == EXPR_INTEGER && e2->data.integer != 0))) {
+                int64_t a = e0->data.integer, b = all1 ? N : e1->data.integer;
+                int64_t st = e2 ? e2->data.integer : 1;
+                if (a < 0) a = N + a + 1;
+                if (b < 0) b = N + b + 1;
+                if (a >= 1 && b >= 0 && (st > 0 ? b - a : a - b) <= 1000000) {
+                    size_t cnt = 0;
+                    if (st > 0 && b >= a) cnt = (size_t)((b - a) / st + 1);
+                    if (st < 0 && a >= b) cnt = (size_t)((a - b) / -st + 1);
+                    Expr** out = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+                    for (size_t i = 0; i < cnt; i++)
+                        out[i] = pos_single(blocks, a + (int64_t)i * st);
+                    Expr* r = expr_new_function(expr_new_symbol(SYM_List), out, cnt);
+                    free(out);
+                    return r;
+                }
+            }
+        }
         return expr_part(blocks, &pos, 1);   /* NULL -> bail */
     }
     return NULL;

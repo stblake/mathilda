@@ -3414,6 +3414,16 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Times", dGdA, dA);
         }
 
+        /* --- Factorial[A] = Gamma[1 + A]: d/dA A! = Gamma[1 + A] PolyGamma[0, 1 + A]. */
+        if (h == SYM_Factorial && n == 1) {
+            Expr* A = args[0];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* A1 = mk_fn2("Plus", mk_int(1), expr_copy(A));
+            Expr* g  = mk_fn1("Gamma", expr_copy(A1));
+            Expr* pg = mk_fn2("PolyGamma", mk_int(0), A1);
+            return mk_fn2("Times", mk_fn2("Times", g, pg), dA);
+        }
+
         /* --- LogGamma[A]: d/dA LogGamma[A] = PolyGamma[0, A] (the digamma).
          * Higher derivatives then raise the PolyGamma order automatically. */
         if (h == SYM_LogGamma && n == 1) {

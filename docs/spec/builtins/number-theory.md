@@ -23,6 +23,8 @@ Both fold through GMP when any argument is a bigint, so results that exceed `int
 > the ordinary path answers exactly in GMP; never a wrapped value. See
 > [Packed arrays](packed-arrays.md).
 
+`GCD[r]` / `LCM[r]` of one negative rational with BigInt parts is its absolute value.
+
 ## Divisible
 
 - `Divisible[n, m]`: yields `True` if `n` is divisible by `m`, and `False` otherwise. Attributes: `Listable`, `Protected`.
@@ -430,6 +432,10 @@ Out[5]= {2, 3, 2}
 In[6]:= PrimitiveRoot[12]
 Out[6]= PrimitiveRoot[12]
 ```
+
+When Pollard rho cannot split p - 1 within its budget, the FactorInteger engine
+(`facint_factor_complete`, as MultiplicativeOrder uses) proves the factorisation:
+`PrimitiveRoot[2000000000005408000000000197359]` is 11.
 
 ## PrimitiveRootList
 
@@ -1604,3 +1610,5 @@ In[5]:= FromContinuedFraction[ContinuedFraction[Pi, 3]]
 Out[5]= 333/106
 ```
 
+A periodic form evaluates to the ATTRACTING fixed point of the period's Mobius map,
+the limit of the convergents: `FromContinuedFraction[{{-1}}]` is `(-1 - Sqrt[5])/2`.

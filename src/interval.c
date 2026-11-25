@@ -635,6 +635,22 @@ Expr* interval_power_real_exp(const Expr* A, const Expr* p) {
         for (size_t i = 0; i < na; i++)
             if (iv_sign(interval_pair_lo(A, i)) <= 0) return NULL;
     }
+    /* An infinite exponent: x^Infinity is 0 below 1, Infinity above it and
+     * Indeterminate AT 1, so a pair holding 1 has no enclosure -- the Power
+     * stays unevaluated rather than carry an Indeterminate endpoint
+     * (Interval[{1, 2}]^Infinity). x^-Infinity likewise. */
+    if (iv_is_pos_inf((Expr*)p) || iv_is_neg_inf((Expr*)p)) {
+        Expr* one = expr_new_integer(1);
+        bool holds_one = false;
+        for (size_t i = 0; i < na && !holds_one; i++) {
+            bool d1, d2;
+            int c1 = interval_endpoint_cmp(interval_pair_lo(A, i), one, &d1);
+            int c2 = interval_endpoint_cmp(interval_pair_hi(A, i), one, &d2);
+            if (!d1 || !d2 || (c1 <= 0 && c2 >= 0)) holds_one = true;
+        }
+        expr_free(one);
+        if (holds_one) return NULL;
+    }
     IvBuild out; ivb_init(&out);
     for (size_t i = 0; i < na; i++) {
         Expr* a = interval_pair_lo(A, i);
@@ -1345,7 +1361,17 @@ int interval_compare_scalar(const Expr* iv, Expr* c, bool* decidable) {
 
 /* Append every pair of `arg` (an interval, or a scalar as a point) to `out`.
  * Returns false if `arg` is neither. */
+/* Interval[] -- the empty interval, which is_interval (an interval with at
+ * least one pair) does not admit. */
+static bool iv_is_empty_interval(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Interval &&
+           e->data.function.arg_count == 0;
+}
+
 static bool iv_collect(Expr* arg, IvBuild* out) {
+    if (iv_is_empty_interval(arg)) return true;    /* no pairs to add */
     if (is_interval(arg)) {
         size_t k = interval_pair_count(arg);
         for (size_t i = 0; i < k; i++)
@@ -1421,8 +1447,21 @@ Expr* builtin_intervalmemberq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* iv = res->data.function.args[0];
     Expr* x  = res->data.function.args[1];
+    /* Nothing is a member of the empty interval; only the empty interval is
+     * a subset of it. */
+    if (iv_is_empty_interval(iv)) {
+        if (iv_is_empty_interval(x)) return expr_new_symbol(SYM_True);
+        return expr_new_symbol(SYM_False);
+    }
     if (!is_interval(iv)) return NULL;
     size_t n = interval_pair_count(iv);
+    if (iv_is_empty_interval(x)) return expr_new_symbol(SYM_True);
+    /* An interval holds real numbers only: a non-real number is no member. */
+    {
+        Expr *cre, *cim;
+        if (is_complex(x, &cre, &cim) && expr_numeric_sign(cim) != 0)
+            return expr_new_symbol(SYM_False);
+    }
 
     if (is_interval(x)) {
         /* subset test: every pair of x must sit inside some pair of iv */

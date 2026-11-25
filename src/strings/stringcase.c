@@ -133,11 +133,110 @@ Expr* builtin_tolowercase(Expr* res) { return case_builtin(res, 0); }
 
 /* Capitalize / Decapitalize: the first character only; a string or a list of
  * strings (head::strse otherwise). */
+typedef enum { CAP_FIRST, CAP_ALLWORDS, CAP_TITLE } CapMode;
+
+static int char_ok_letter(uint32_t cp);
+
+/* Short function words TitleCase leaves lowercase unless first or last. */
+static int cap_minor_word(const char* w, size_t n) {
+    static const char* const minor[] = {
+        "a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
+        "as", "at", "by", "in", "of", "off", "on", "per", "to", "up", "via"
+    };
+    for (size_t i = 0; i < sizeof minor / sizeof minor[0]; i++)
+        if (strlen(minor[i]) == n && strncmp(minor[i], w, n) == 0) return 1;
+    return 0;
+}
+
+/* Capitalize / Decapitalize one string: its first character (CAP_FIRST), the
+ * first letter of every word (CAP_ALLWORDS), or of every word but the short
+ * function words not at either end (CAP_TITLE). A word is a maximal run of
+ * letters. */
+static Expr* cap_string(const char* s, int upper, CapMode mode) {
+    size_t len = strlen(s);
+    if (mode == CAP_FIRST) return map_case(s, len, upper, 0, 1);
+    /* Word starts and ends, by byte offset. */
+    size_t cap_w = 16, nw = 0;
+    size_t* ws = malloc(sizeof(size_t) * cap_w);
+    size_t* we = malloc(sizeof(size_t) * cap_w);
+    if (!ws || !we) { free(ws); free(we); return NULL; }
+    int in_word = 0;
+    for (size_t i = 0; i < len; ) {
+        size_t start = i;
+        uint32_t cp = u8_decode(s, len, &i);
+        int letter = char_ok_letter(cp);
+        if (letter && !in_word) {
+            if (nw == cap_w) {
+                cap_w *= 2;
+                size_t* a = realloc(ws, sizeof(size_t) * cap_w);
+                if (a) ws = a;
+                size_t* b = realloc(we, sizeof(size_t) * cap_w);
+                if (b) we = b;
+                if (!a || !b) { free(ws); free(we); return NULL; }
+            }
+            ws[nw] = start;
+            in_word = 1;
+        } else if (!letter && in_word) {
+            we[nw++] = start;
+            in_word = 0;
+        }
+    }
+    if (in_word) we[nw++] = len;
+    /* The output: each changed first letter mapped, everything else copied. */
+    size_t ocap = 2 * len + 16, o = 0;
+    char* out = malloc(ocap);
+    if (!out) { free(ws); free(we); return NULL; }
+    size_t pos = 0;
+    for (size_t k = 0; k < nw; k++) {
+        int change = 1;
+        if (mode == CAP_TITLE && k > 0 && k + 1 < nw &&
+            cap_minor_word(s + ws[k], we[k] - ws[k])) change = 0;
+        size_t copy_to = change ? ws[k] : we[k];
+        memcpy(out + o, s + pos, copy_to - pos); o += copy_to - pos;
+        pos = copy_to;
+        if (change) {
+            size_t j = ws[k];
+            (void)u8_decode(s, len, &j);          /* one character */
+            Expr* m = map_case(s + ws[k], j - ws[k], upper, 0, 1);
+            if (!m) { free(out); free(ws); free(we); return NULL; }
+            size_t ml = strlen(m->data.string);
+            if (o + ml + (len - j) + 1 > ocap) {
+                ocap = o + ml + (len - j) + 16;
+                char* nb = realloc(out, ocap);
+                if (!nb) { expr_free(m); free(out); free(ws); free(we); return NULL; }
+                out = nb;
+            }
+            memcpy(out + o, m->data.string, ml); o += ml;
+            expr_free(m);
+            pos = j;
+        }
+    }
+    if (o + (len - pos) + 1 > ocap) {
+        char* nb = realloc(out, o + (len - pos) + 1);
+        if (!nb) { free(out); free(ws); free(we); return NULL; }
+        out = nb;
+    }
+    memcpy(out + o, s + pos, len - pos); o += len - pos;
+    out[o] = '\0';
+    free(ws); free(we);
+    return expr_new_string_adopt(out);
+}
+
 static Expr* capitalize_builtin(Expr* res, const char* head, int upper) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    CapMode mode = CAP_FIRST;
+    if (argc == 2) {
+        const Expr* m = res->data.function.args[1];
+        if (m->type != EXPR_STRING) return NULL;
+        if (strcmp(m->data.string, "AllWords") == 0) mode = CAP_ALLWORDS;
+        else if (upper && strcmp(m->data.string, "TitleCase") == 0) mode = CAP_TITLE;
+        else return NULL;
+    }
     Expr* a = res->data.function.args[0];
     if (a->type == EXPR_STRING)
-        return map_case(a->data.string, strlen(a->data.string), upper, 0, 1);
+        return cap_string(a->data.string, upper, mode);
     if (!(a->type == EXPR_LINKEDLIST ? strings_seq_all_strings(a) : is_string_list(a)))
         return strings_arg_message(head, "strse", "String or list of strings", 1, res);
     LLReader sv;                          /* a List or a LinkedList of strings */
@@ -147,7 +246,7 @@ static Expr* capitalize_builtin(Expr* res, const char* head, int upper) {
     size_t built = 0;
     for (; out && built < n; built++) {
         const char* s = ll_rd_at(&sv, built)->data.string;
-        out[built] = map_case(s, strlen(s), upper, 0, 1);
+        out[built] = cap_string(s, upper, mode);
         if (!out[built]) break;
     }
     ll_rd_close(&sv);
@@ -198,6 +297,8 @@ static Expr* charq_builtin(Expr* res, const char* head, CharQ q) {
     }
     return expr_new_symbol(SYM_True);
 }
+
+static int char_ok_letter(uint32_t cp) { return char_ok(CQ_LETTER, cp); }
 
 Expr* builtin_letterq(Expr* res)    { return charq_builtin(res, "LetterQ", CQ_LETTER); }
 Expr* builtin_digitq(Expr* res)     { return charq_builtin(res, "DigitQ", CQ_DIGIT); }

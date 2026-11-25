@@ -454,7 +454,36 @@ Expr* builtin_characterrange(Expr* res) {
     return char_list((uint32_t)lo, (uint32_t)hi);
 }
 
+/* The lowercase letters of a named alphabet, as code-point runs [lo, hi]:
+ * "English" a-z; "Greek" alpha-omega without the final sigma (24 letters);
+ * "Russian" the 32 letters a-ya with yo after ye (33). */
+typedef struct { const char* name; uint32_t runs[3][2]; int nruns; } AlphabetDef;
+static const AlphabetDef k_alphabets[] = {
+    { "English", { { 'a', 'z' } }, 1 },
+    { "Greek",   { { 0x3B1, 0x3C1 }, { 0x3C3, 0x3C9 } }, 2 },
+    { "Russian", { { 0x430, 0x435 }, { 0x451, 0x451 }, { 0x436, 0x44F } }, 3 },
+};
+
 Expr* builtin_alphabet(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) return NULL;
-    return char_list('a', 'z');
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return char_list('a', 'z');
+    if (argc != 1 || res->data.function.args[0]->type != EXPR_STRING) return NULL;
+    const char* lang = res->data.function.args[0]->data.string;
+    for (size_t i = 0; i < sizeof k_alphabets / sizeof k_alphabets[0]; i++) {
+        const AlphabetDef* d = &k_alphabets[i];
+        if (strcmp(lang, d->name) != 0) continue;
+        size_t n = 0;
+        for (int r = 0; r < d->nruns; r++) n += d->runs[r][1] - d->runs[r][0] + 1;
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+        size_t k = 0;
+        for (int r = 0; out && r < d->nruns; r++)
+            for (uint32_t cp = d->runs[r][0]; cp <= d->runs[r][1]; cp++) {
+                char buf[5];
+                size_t len = u8_encode(cp, buf);
+                out->data.function.args[k++] = strings_char_expr(buf, len);
+            }
+        return out;
+    }
+    return NULL;                       /* an alphabet not tabulated here */
 }

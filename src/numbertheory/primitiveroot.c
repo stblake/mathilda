@@ -4,6 +4,7 @@
 
 #include "numbertheory.h"
 #include "numbertheory_internal.h"
+#include "facint.h"    /* facint_factor_complete */
 #include "arithmetic.h"
 #include "eval.h"
 #include "sym_names.h"
@@ -198,15 +199,27 @@ static bool pr_distinct_primes_recursive(mpz_t n, mpz_t* out, size_t* count) {
     mpz_t f, q;
     mpz_inits(f, q, NULL);
     bool ok = false;
-    for (unsigned long c = 1; c < 64 && !ok; c++) {
+    for (unsigned long c = 1; c < 3 && !ok; c++) {   /* then facint, below */
         pr_pollard_rho(f, n, c);
         if (mpz_sgn(f) != 0 && mpz_cmp_ui(f, 1) > 0 && mpz_cmp(f, n) < 0) {
             ok = true;
         }
     }
     if (!ok) {
+        /* Rho's budget is spent (p - 1 = 2 * 1000000000000037 *
+         * 1000000000002667 needs ~3*10^7 steps): the full FactorInteger
+         * engine, as MultiplicativeOrder uses, proves the factorisation. */
         mpz_clears(f, q, NULL);
-        return false;
+        mpz_t pr[PR_MAX_DISTINCT_PRIMES];
+        int64_t ex[PR_MAX_DISTINCT_PRIMES];
+        int cnt = 0;
+        if (!facint_factor_complete(n, pr, ex, PR_MAX_DISTINCT_PRIMES, &cnt)) return false;
+        bool added = true;
+        for (int i = 0; i < cnt; i++) {
+            if (added) added = pr_add_unique(out, count, pr[i]);
+            mpz_clear(pr[i]);
+        }
+        return added;
     }
     mpz_divexact(q, n, f);
     bool result = pr_distinct_primes_recursive(f, out, count) &&

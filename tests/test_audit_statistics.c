@@ -144,6 +144,24 @@ static void test_s11_special_values(void) {
     audit_true("CentralMoment#1", "CentralMoment[{1, 2, 3}, 2] === 2/3");
 }
 
+static void test_wave4_shapes_and_scale(void) {
+    audit_chk("Mean#2", "Check[Mean[{{1, 2}, {3}}], \"fired\", Mean::rectn]", "\"fired\"");
+    audit_chk("Mean#2", "Quiet[Mean[{{1, 2}, {3}}]]", "Mean[{{1, 2}, {3}}]");
+    audit_chk("Variance#1", "Check[Variance[{{1,2},{3}}], \"fired\", Variance::rectn]", "\"fired\"");
+    audit_chk("Variance#1", "Quiet[Variance[{{1,2},{3}}]]", "Variance[{{1, 2}, {3}}]");
+    audit_chk("StandardDeviation#1", "Check[StandardDeviation[{1}], \"fired\", StandardDeviation::shlen]", "\"fired\"");
+    audit_chk("StandardDeviation#1", "Quiet[StandardDeviation[{1}]]", "StandardDeviation[{1}]");
+    audit_chk("StandardDeviation#1", "StandardDeviation[x]", "StandardDeviation[x]");
+    audit_chk("StandardDeviation#1", "Quiet[StandardDeviation[{{1,2}}]]", "StandardDeviation[{{1, 2}}]");
+    audit_chk("StandardDeviation#2", "StandardDeviation[{1.*^200,2.*^200,3.*^200}]", "1.0*^200");
+    audit_chk("StandardDeviation#2", "StandardDeviation[{1.*^-200,2.*^-200,3.*^-200}]", "1.0*^-200");
+    audit_true("StandardDeviation#2", "StandardDeviation[{1.5, 2, 7}] === StandardDeviation[ToNDArray[{1.5, 2, 7}]]");
+    audit_chk("Skewness#1", "Skewness[{1.*^120, 2.*^120, 4.*^120}] == Skewness[{1, 2, 4}] // N", "True");
+    audit_chk("Skewness#1", "Skewness[{1.*^-200, 2.*^-200, 4.*^-200}] == Skewness[{1, 2, 4}] // N", "True");
+    audit_true("Skewness#1", "Skewness[{1.5, 2, 7}] === Skewness[ToNDArray[{1.5, 2, 7}]]");
+    audit_chk("Quartiles#3", "Quartiles[{1,2,3,4}, {{a,0},{0,1}}]", "Quartiles[{1, 2, 3, 4}, {{a, 0}, {0, 1}}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_median_numeric_order);
@@ -157,5 +175,6 @@ int main(void) {
     TEST(test_covariance_row_mismatch);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_shapes_and_scale);
     return audit_finish("audit_statistics");
 }

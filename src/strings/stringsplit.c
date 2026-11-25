@@ -124,13 +124,19 @@ static Expr* ss_scalar(const char* subj, RegexRule* rules, int nr,
     return result;
 }
 
-/* Null delimiter "": split into individual characters (UTF-8 code points). */
-static Expr* ss_null(const char* subj) {
+/* Null delimiter "": split into individual characters (UTF-8 code points),
+ * at most n_limit pieces when n_limit > 0 (the last one takes the rest:
+ * StringSplit["abc", "", 2] is {"a", "bc"}). */
+static Expr* ss_null(const char* subj, long n_limit) {
     size_t len = strlen(subj);
     Expr** items = malloc(sizeof(Expr*) * (len ? len : 1));
     if (!items) return NULL;
     size_t n = 0;
     for (size_t i = 0; i < len; ) {                /* one piece per character */
+        if (n_limit > 0 && n + 1 == (size_t)n_limit) {
+            items[n++] = expr_new_string_n(subj + i, len - i);
+            break;
+        }
         size_t k = u8_char_len(subj, len, i);
         items[n++] = expr_new_string_n(subj + i, k);
         i += k;
@@ -226,7 +232,7 @@ Expr* builtin_stringsplit(Expr* res) {
             if (si->type != EXPR_STRING)
                 out[i] = expr_copy(si);
             else
-                out[i] = patt_is_null ? ss_null(si->data.string)
+                out[i] = patt_is_null ? ss_null(si->data.string, n_limit)
                                       : ss_scalar(si->data.string, rules, nr,
                                                   n_limit, keep_ends);
         }
@@ -234,7 +240,7 @@ Expr* builtin_stringsplit(Expr* res) {
         free(out);
         ll_rd_close(&sv);
     } else if (subject->type == EXPR_STRING) {
-        result = patt_is_null ? ss_null(subject->data.string)
+        result = patt_is_null ? ss_null(subject->data.string, n_limit)
                               : ss_scalar(subject->data.string, rules, nr,
                                           n_limit, keep_ends);
     } else {

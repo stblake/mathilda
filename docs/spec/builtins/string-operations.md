@@ -441,6 +441,10 @@ In[4]:= StringCases["caf\:00e9 na\:00efve", RegularExpression["\\w+"]]
 Out[4]= {"café", "naïve"}
 ```
 
+When the matcher's backtracking limit is reached (`(a+)+$` on a long run of `a`s ending
+in `b`), `RegularExpression::limit` says so and the call stays unevaluated; a
+`StringContainsQ` no longer answers `False` for an undecided match.
+
 ## StringMatchQ
 
 Tests whether a whole string matches a pattern.
@@ -470,6 +474,9 @@ Out[3]= True
 In[4]:= StringMatchQ["aXb", x_ ~~ "X" ~~ x_]
 Out[4]= False
 ```
+
+`SpellingCorrection -> False` is accepted (and in `Options[StringMatchQ]`); no
+spelling correction is ever applied.
 
 ## StringContainsQ
 
@@ -783,6 +790,8 @@ In[4]:= StringSplit["This is a sentence, which goes on.", Except[WordCharacter] 
 Out[4]= {"This", "is", "a", "sentence", "which", "goes", "on"}
 ```
 
+`StringSplit[s, "", n]` gives at most n pieces, the last taking the rest.
+
 ## StringTrim
 
 Trims substrings matching a pattern from the beginning and end of a string.
@@ -853,6 +862,9 @@ In[4]:= StringExtract["a 1\nb 2\nc 3 x", All, 3]
 Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
 ```
 
+An integer span is the list of its positions: past the last block each is
+`Missing["PartAbsent", k]` (`StringExtract["a b c", 2;;5]`).
+
 ## StringPosition
 
 Gives the `{start, end}` character positions at which substrings matching a
@@ -894,6 +906,8 @@ Out[3]= {{1, 2}, {3, 4}}
 In[4]:= StringPosition["abAB", "a", IgnoreCase -> True]
 Out[4]= {{1, 1}, {3, 3}}
 ```
+
+An occurrence count of 0 gives `{}`.
 
 ## StringPartition
 
@@ -1074,6 +1088,9 @@ is a `Flat` operator with precedence just below `Alternatives`; `x:p` binds
 tighter than `~~` (`x__ ~~ y:DigitCharacter..` is
 `StringExpression[x__, Pattern[y, Repeated[DigitCharacter]]]`).
 
+`StringExpression` joins adjacent literal strings (`"a" ~~ "b"` is `"ab"`) and a lone
+string is itself; matching is unchanged.
+
 ## StringDelete
 
 - `StringDelete["string", patt]`: deletes every substring matching `patt`
@@ -1186,6 +1203,10 @@ In[3]:= Decapitalize[{"Alpha", "Beta"}]
 Out[3]= {"alpha", "beta"}
 ```
 
+`Capitalize[s, "AllWords"]` capitalizes the first letter of every word;
+`"TitleCase"` all but short function words not at either end
+(`"The Lord of the Rings"`). `Decapitalize[s, "AllWords"]` likewise.
+
 ## LetterQ / DigitQ / UpperCaseQ / LowerCaseQ
 
 - `LetterQ["string"]`: every character is a letter of any script.
@@ -1271,6 +1292,9 @@ Out[2]= {"A", "B", "C", "D", "E", "F"}
 In[3]:= Length[Alphabet[]]
 Out[3]= 26
 ```
+
+`Alphabet["English"]`, `Alphabet["Greek"]` (24 letters, no final sigma) and
+`Alphabet["Russian"]` (33) give the lowercase letters.
 
 ## Operator forms and occurrence limits
 

@@ -750,6 +750,10 @@ In[7]:= FractionalPart[10000000*3^(2/3)]
 Out[7]= -20800838 + 10000000 3^(2/3)
 ```
 
+- **Exact non-real numeric arguments** (`Sqrt[2] + I Pi`, `Sqrt[-2]`) act on the real
+  and imaginary parts, split exactly by `Re` / `Im`: `IntegerPart[Sqrt[2] + I Pi]` is
+  `1 + 3 I`, as for a `Complex` literal. Floor, Ceiling, Round and FractionalPart alike.
+
 ## UnitBox
 
 `UnitBox[x]` is the rectangular pulse (box) function: `1` for

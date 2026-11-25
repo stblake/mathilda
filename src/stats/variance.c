@@ -46,9 +46,14 @@ Expr* stats_variance_vec(LLReader* rd) {
                 stats_is_numeric(ll_rd_at(rd, i), &xs[i], NULL);
             }
             double v = ndred_variance_f64(xs, n);
+            /* Squares that underflowed to 0. (distinct data of size
+             * 1.*^-200) are no zero variance: decline, as for an overflow. */
+            bool underflow = false;
+            if (v == 0.0)
+                for (size_t i = 1; i < n && !underflow; i++) underflow = xs[i] != xs[0];
             free(xs);
             /* Overflowed squares decline to the symbolic path (C3). */
-            if (stats_machine_ok(v)) return expr_new_real(v);
+            if (stats_machine_ok(v) && !underflow) return expr_new_real(v);
         } else {
             /* Exact calculation for Variance, WITH OVERFLOW DETECTION.
              * Var = (Sum[x^2] - n*Mean[x]^2) / (n-1)
@@ -181,6 +186,8 @@ Expr* builtin_variance(Expr* res) {
     /* LinkedList: the packed kernel on the chunks, or columnwise (stats_ll.c). */
     { Expr* r; if (stats_ll_arm(res, STATS_VARIANCE, &r)) return r; }
 
+    if (stats_reject_short("Variance", data)) return NULL;
+
     // Check if it's a matrix
     if (data->type != EXPR_LINKEDLIST) {
         Expr* matrixq_args[1] = { expr_copy(data) };
@@ -190,6 +197,7 @@ Expr* builtin_variance(Expr* res) {
         bool mat = is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol.name == SYM_True;
         expr_free(is_matrix);
         if (mat) return stats_apply_columnwise("Variance", data);
+        if (stats_reject_ragged("Variance", res, data)) return NULL;
     }
 
     /* A vector: a List's arguments or a LinkedList's elements. */

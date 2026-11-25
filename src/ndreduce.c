@@ -1536,6 +1536,53 @@ static bool nd_moment_cols(void* c, size_t lo, size_t hi) {
  * Always produces a REAL result (a complex column yields a real spread), so the
  * output dtype is the real dtype of matching component width. The rank-1 case
  * runs the two passes (mean, then Σ|x−μ|²) through the threaded full reducers. */
+/* Largest |x_i - (mr + i mi)| over a rank-1 buffer: the scale that brings
+ * the deviations of extreme-magnitude data (1.*^-200, 1.*^200) into range. */
+static double nd_max_dev(const void* buf, NDType dt, size_t n, double mr, double mi) {
+    double c = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double re, im;
+        ndt_get(buf, i, dt, &re, &im);
+        double d = hypot(re - mr, im - mi);
+        if (d > c) c = d;
+    }
+    return c;
+}
+
+/* Sum of |(x_i - m)/c|^p (p even uses |.|^2 powers; odd p the real part):
+ * the rescaled moment sums the fallbacks below use. */
+static double nd_scaled_moment(const void* buf, NDType dt, size_t n,
+                               double mr, double mi, double c, int p) {
+    double t = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double re, im;
+        ndt_get(buf, i, dt, &re, &im);
+        double a = (re - mr) / c, b = (im - mi) / c;
+        if (p == 2) t += a * a + b * b;
+        else {
+            double r = 1.0;
+            for (int k = 0; k < p; k++) r *= a;
+            t += r;
+        }
+    }
+    return t;
+}
+
+/* sqrt(ss / div) for the StandardDeviation / RootMeanSquare kernels, with ss
+ * the plain sum of squared deviations from (mr, mi).  When ss underflowed
+ * (data of size 1.*^-200 squares to 0.) or overflowed (1.*^200 to
+ * Infinity) although the answer is a normal double, the deviations are
+ * rescaled by their largest magnitude first: StandardDeviation[{1.*^-200,
+ * 2.*^-200, 3.*^-200}] was 0. instead of 1.*^-200.  An ss in range takes the
+ * plain formula, so ordinary data is unchanged to the bit. */
+static double nd_sqrt_mean_square(const void* buf, NDType dt, size_t n,
+                           double mr, double mi, double ss, double div) {
+    if (isfinite(ss) && ss >= DBL_MIN) return sqrt(ss / div);
+    double c = nd_max_dev(buf, dt, n, mr, mi);
+    if (!(c > 0.0) || !isfinite(c)) return sqrt(ss / div);
+    return c * sqrt(nd_scaled_moment(buf, dt, n, mr, mi, c, 2) / div);
+}
+
 static Expr* nd_moment_leading(Expr* res, int mode) {
     Expr* a = res->data.function.args[0];
     /* Variance[Range[10]] is 55/6 and RootMeanSquare[{1,2}] is Sqrt[5/2]; both
@@ -1556,14 +1603,15 @@ static Expr* nd_moment_leading(Expr* res, int mode) {
         double v;
         if (mode == 2) {
             double ss = nd_full_sumsq(buf, dt, blocks, 0.0, 0.0);
-            v = sqrt(ss / (double)blocks);
+            v = nd_sqrt_mean_square(buf, dt, blocks, 0.0, 0.0, ss, (double)blocks);
         } else {
             double sr, si;
             nd_full_sum(buf, dt, blocks, &sr, &si);
             double mr = sr / (double)blocks, mi = si / (double)blocks;
             double ss = nd_full_sumsq(buf, dt, blocks, mr, mi);
             double var_ = ss / (double)(blocks - 1);
-            v = (mode == 1) ? sqrt(var_) : var_;
+            v = (mode == 1) ? nd_sqrt_mean_square(buf, dt, blocks, mr, mi, ss, (double)(blocks - 1))
+                            : var_;
         }
         return expr_new_real(v);
     }
@@ -1588,6 +1636,17 @@ double ndred_variance_f64(const double* x, size_t n) {
     nd_full_sum(x, NDT_FLOAT64, n, &sr, &si);
     double ss = nd_full_sumsq(x, NDT_FLOAT64, n, sr / (double)n, 0.0);
     return ss / (double)(n - 1);
+}
+
+/* The rank-1 StandardDeviation over a plain double array (n >= 2), the
+ * kernel's own reduction (rescaled when the squares leave the double range),
+ * for the boxed machine path in standarddeviation.c. */
+double ndred_std_f64(const double* x, size_t n) {
+    double sr, si;
+    nd_full_sum(x, NDT_FLOAT64, n, &sr, &si);
+    double mr = sr / (double)n;
+    double ss = nd_full_sumsq(x, NDT_FLOAT64, n, mr, 0.0);
+    return nd_sqrt_mean_square(x, NDT_FLOAT64, n, mr, 0.0, ss, (double)(n - 1));
 }
 static Expr* ndred_std_raw(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
@@ -1803,6 +1862,35 @@ static bool nd_sm_cols(void* c, size_t lo, size_t hi) {
     return true;
 }
 
+static double nd_stdmoment_vec(const void* buf, NDType dt, size_t blocks, int p) {
+    double half_p = (double)p / 2.0;
+    double sr, si;
+    nd_full_sum(buf, dt, blocks, &sr, &si);
+    double mean = sr / (double)blocks;
+    double m2 = nd_full_moment(buf, dt, blocks, mean, 2) / (double)blocks;
+    double mp = nd_full_moment(buf, dt, blocks, mean, p) / (double)blocks;
+    double r = mp / pow(m2, half_p);
+    /* The ratio is scale-free, but its parts are not: data of size
+     * 1.*^-200 cubes to 0. and 1.*^120 to Infinity. Out of range, the
+     * moments are taken of the deviations rescaled by their largest. */
+    if (!isfinite(r) || !(m2 >= DBL_MIN) || !isfinite(mp) ||
+        (mp != 0.0 && fabs(mp) < DBL_MIN)) {
+        double c = nd_max_dev(buf, dt, blocks, mean, 0.0);
+        if (c > 0.0 && isfinite(c)) {
+            double s2 = nd_scaled_moment(buf, dt, blocks, mean, 0.0, c, 2) / (double)blocks;
+            double sp = nd_scaled_moment(buf, dt, blocks, mean, 0.0, c, p) / (double)blocks;
+            r = sp / pow(s2, half_p);
+        }
+    }
+    return r;
+}
+
+/* The rank-1 Skewness (p = 3) / Kurtosis (p = 4) kernel over a plain double
+ * array, for the boxed machine path in stats_common.c. */
+double ndred_stdmoment_f64(const double* x, size_t n, int p) {
+    return nd_stdmoment_vec(x, NDT_FLOAT64, n, p);
+}
+
 static Expr* nd_stdmoment_leading(Expr* res, int p) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
@@ -1820,14 +1908,7 @@ static Expr* nd_stdmoment_leading(Expr* res, int p) {
     NDType odt = nd_real_of(dt);
     double half_p = (double)p / 2.0;
 
-    if (rank == 1) {
-        double sr, si;
-        nd_full_sum(buf, dt, blocks, &sr, &si);
-        double mean = sr / (double)blocks;
-        double m2 = nd_full_moment(buf, dt, blocks, mean, 2) / (double)blocks;
-        double mp = nd_full_moment(buf, dt, blocks, mean, p) / (double)blocks;
-        return expr_new_real(mp / pow(m2, half_p));
-    }
+    if (rank == 1) return expr_new_real(nd_stdmoment_vec(buf, dt, blocks, p));
 
     void* out = malloc(ndt_elem_size(odt) * T);
     if (!out) return ndarray_delist_and_reeval(res);

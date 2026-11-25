@@ -208,5 +208,14 @@ Expr* builtin_factorialpower(Expr* res) {
         free(factors);
         return eval_and_free(product);
     }
+    /* A numeric n (1/2, 2.5, Pi) with a larger k: the same product, as the
+     * negative-k branch forms it (FactorialPower[1/2, 33] is an exact
+     * rational, FactorialPower[2.5, 33] a machine real). */
+    if (fp_numeric(n_arg)) {
+        Expr* one = expr_new_integer(1);
+        Expr* r = fp_step_product(n_arg, k_arg, one);
+        expr_free(one);
+        return r;
+    }
     return NULL;
 }

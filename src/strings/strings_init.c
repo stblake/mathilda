@@ -150,14 +150,20 @@ void strings_init(void) {
         "Capitalize[\"string\"]\n"
         "\tGives \"string\" with its first character in uppercase.\n"
         "Capitalize[{s1, s2, ...}]\n"
-        "\tCapitalizes each string.");
+        "\tCapitalizes each string.\n"
+        "Capitalize[s, \"AllWords\"]\n"
+        "\tCapitalizes the first letter of every word.\n"
+        "Capitalize[s, \"TitleCase\"]\n"
+        "\tCapitalizes every word except short function words not at either end.");
     symtab_add_builtin("Decapitalize", builtin_decapitalize);
     symtab_get_def("Decapitalize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Decapitalize",
         "Decapitalize[\"string\"]\n"
         "\tGives \"string\" with its first character in lowercase.\n"
         "Decapitalize[{s1, s2, ...}]\n"
-        "\tDecapitalizes each string.");
+        "\tDecapitalizes each string.\n"
+        "Decapitalize[s, \"AllWords\"]\n"
+        "\tDecapitalizes the first letter of every word.");
     symtab_add_builtin("LetterQ", builtin_letterq);
     symtab_get_def("LetterQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LetterQ",
@@ -217,5 +223,7 @@ void strings_init(void) {
     symtab_get_def("Alphabet")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Alphabet",
         "Alphabet[]\n"
-        "\tGives the list of the lowercase letters a through z.");
+        "\tGives the list of the lowercase letters a through z.\n"
+        "Alphabet[\"lang\"]\n"
+        "\tGives the lowercase letters of the alphabet of \"English\", \"Greek\" or \"Russian\".");
 }

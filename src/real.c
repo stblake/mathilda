@@ -39,6 +39,8 @@
 #include "sym_names.h"
 #include "numeric.h"
 #include "arithmetic.h"
+#include "comparisons.h" /* comparisons_real_constant_sign */
+#include "eval.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -301,6 +303,34 @@ static long rd_rational_natural_exp(const mpq_t q, const mpz_t base) {
  * high (RealDigits[0.999] -> 1 instead of 0).  mpfr_get_str at the full
  * available precision does neither: a carry there is self-consistent with the
  * digits it also produces. */
+/* The decimal digits of a machine double v > 0 as its SHORTEST round-trip
+ * string, zero-padded to `count` digits: the digits the reference shows for a
+ * machine number.  Rounding to `count` (16) digits instead read the double
+ * nearest 10^-20 (9.99999999999999945e-21) as sixteen 9s, exponent -20, where
+ * 1.*^-20 is the number meant: 1 and fifteen 0s, exponent -19.  *exp gets the
+ * exponent n of v = 0.d1 d2 ... * 10^n.  False when the shortest string needs
+ * more than `count` digits (0.1 + 0.2): the caller rounds to `count`. */
+#ifdef USE_MPFR
+static bool rd_machine_shortest(double v, size_t count, char* digits, long* exp) {
+    char buf[40];
+    for (int k = 1; k <= 17 && (size_t)k <= count; k++) {
+        snprintf(buf, sizeof buf, "%.*e", k - 1, v);
+        if (strtod(buf, NULL) != v) continue;
+        /* buf is d[.ddd]e[+-]xx */
+        size_t n = 0;
+        const char* p = buf;
+        for (; *p && *p != 'e'; p++)
+            if (*p >= '0' && *p <= '9') digits[n++] = *p;
+        long e10 = (*p == 'e') ? strtol(p + 1, NULL, 10) : 0;
+        while (n < count) digits[n++] = '0';
+        digits[n] = '\0';
+        *exp = e10 + 1;
+        return true;
+    }
+    return false;
+}
+#endif
+
 static long rd_inexact_natural_exp(const Expr* x, unsigned long b_ulong) {
 #ifdef USE_MPFR
     mpfr_t v;
@@ -320,6 +350,14 @@ static long rd_inexact_natural_exp(const Expr* x, unsigned long b_ulong) {
     }
     size_t count = rd_available_digits(x, b_ulong);
     if (count < 2) count = 2;          /* mpfr_get_str requires n >= 2 */
+    if (x->type == EXPR_REAL && b_ulong == 10 && count < 40) {
+        char dg[48];
+        long e10;
+        if (rd_machine_shortest(fabs(x->data.real), count, dg, &e10)) {
+            mpfr_clear(v);
+            return e10;
+        }
+    }
     mpfr_exp_t ep = 0;
     char* s = mpfr_get_str(NULL, &ep, (int)b_ulong, count, v, MPFR_RNDN);
     long out = 0;
@@ -605,6 +643,18 @@ static unsigned long* rd_inexact_canonical_digits(
         *out_exp_p = 0;
         return arr;
     }
+    /* A machine double in base 10: its shortest round-trip digits, as
+     * rd_inexact_natural_exp reads its exponent. */
+    if (prec == REAL_MACHINE_BITS && b_ulong == 10 && count < 40) {
+        char dg[48];
+        long e10;
+        if (rd_machine_shortest(mpfr_get_d(v_abs, MPFR_RNDN), count, dg, &e10)) {
+            unsigned long* arr = calloc(count, sizeof(unsigned long));
+            for (size_t i = 0; arr && i < count; i++) arr[i] = (unsigned long)(dg[i] - '0');
+            *out_exp_p = e10;
+            return arr;
+        }
+    }
     mpfr_exp_t ep = 0;
     /* mpfr_get_str(NULL, &exp, base, n, op, rnd):
      *   - allocates string of n digits (no leading zeros, no sign).
@@ -632,7 +682,6 @@ static unsigned long* rd_inexact_canonical_digits(
     }
     mpfr_free_str(s);
     *out_exp_p = (long)ep;
-    (void)prec;
     return arr;
 }
 #endif
@@ -1318,9 +1367,34 @@ Expr* builtin_mantissa_exponent(Expr* res) {
     /* --- Classify the input ------------------------------------------- */
     RdKind kind = rd_classify(x_expr);
     if (kind == RD_KIND_OTHER) {
-        /* Symbolic, named constant, or unhandled numeric form -- leave
-         * the call unevaluated, no diagnostic.  This mirrors the
-         * Mathematica behaviour for `MantissaExponent[x]`. */
+        /* An exact real numeric constant (Pi, Sqrt[2]) keeps its exact
+         * form: e = Floor[Log[b, Abs[x]]] + 1, decided exactly by Floor, and
+         * the mantissa x b^-e in [1/b, 1) (MantissaExponent[Pi] is
+         * {Pi/10, 1}).  Anything else -- symbolic, or an unhandled numeric
+         * form -- stays unevaluated with no diagnostic. */
+        int sg;
+        if (comparisons_real_constant_sign(x_expr, &sg)) {
+            mpz_clear(base);
+            if (sg == 0) return me_make_pair(expr_new_integer(0), 0);
+            Expr* b_e = expr_new_integer((int64_t)b_ulong);
+            Expr* lg = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ expr_copy(b_e),
+                expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(x_expr) }, 1) }, 2);
+            Expr* ev = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){ lg }, 1),
+                expr_new_integer(1) }, 2));
+            if (ev->type != EXPR_INTEGER || ev->data.integer > LONG_MAX / 2 ||
+                ev->data.integer < -(LONG_MAX / 2)) {
+                expr_free(ev); expr_free(b_e);
+                return NULL;
+            }
+            long e_val = (long)ev->data.integer;
+            expr_free(ev);
+            Expr* m = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                expr_copy(x_expr),
+                expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ b_e, expr_new_integer(-(int64_t)e_val) }, 2) }, 2));
+            return me_make_pair(m, e_val);
+        }
         mpz_clear(base);
         return NULL;
     }

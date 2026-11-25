@@ -237,6 +237,19 @@ Expr* builtin_total(Expr* res) {
 
     int64_t n1 = 1, n2 = 1;
     int64_t depth = get_depth_for_total(list);
+    /* Total[h[e1, e2, ...]] is Plus @@ h[...] for any head, not only List
+     * (Total[f[1, 2, 3]] is 6): the outermost level counts whatever its head.
+     * Rational and Complex are numbers, not containers. */
+    if (list->type == EXPR_FUNCTION && list->data.function.arg_count > 0 &&
+        !(list->data.function.head->type == EXPR_SYMBOL &&
+          (list->data.function.head->data.symbol.name == SYM_List ||
+           list->data.function.head->data.symbol.name == SYM_Rational ||
+           list->data.function.head->data.symbol.name == SYM_Complex))) {
+        for (size_t i = 0; i < list->data.function.arg_count; i++) {
+            int64_t d = get_depth_for_total(list->data.function.args[i]);
+            if (d + 1 > depth) depth = d + 1;
+        }
+    }
 
     /* The shared level-spec parser (funcprog.h); a bad spec is Total::level
      * (audit Total#3: it stayed unevaluated without a word).  Infinity counts
