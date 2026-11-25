@@ -95,4 +95,10 @@ Expr* image_build_bit(const unsigned char* mask, size_t width, size_t height);
  * cannot display it, and a cutting plane or a translucent rendering would need the volume itself. */
 char* image_to_json(const Expr* e);
 
+/* A real scalar argument of any exactness -- Integer, Rational, machine or MPFR Real, or an exact
+ * numeric quantity such as Pi/4 or Sqrt[2]/2 (numericized) -- as a finite double. False for
+ * anything symbolic or complex. The one reader every image head's numeric parameters (opacity,
+ * tolerance, kernel entries, colour components) goes through, so 1/2 and 0.5 always agree. */
+bool image_real_value(const Expr* e, double* out);
+
 #endif /* MATHILDA_IMAGE_H */

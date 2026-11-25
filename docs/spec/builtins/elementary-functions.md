@@ -707,6 +707,9 @@ by two agreeing precisions as for a real one: `Ceiling[Pi + I E]` is `4 + 3 I`,
   compiled `Round` also rounds ties to even.
 - `Floor[x, a]` returns the greatest multiple of `a` $\le x$.
 - **Exact real numeric arguments** that no leaf branch resolves (e.g. `Pi`, `E`, surds, and products such as `10000000 3^(2/3)` or `25000000000000000000 Pi`) are numericalized to MPFR at increasing precision and reduced to the exact integer. The result is only accepted once two successive precisions (starting at 256 bits, doubling to a 65536-bit cap) agree on the integer — an interval-style certification that never returns a wrong answer; a value that cannot be certified (or is not a pure real number) is left unevaluated. For `FractionalPart` the answer is kept exact as `x - IntegerPart[x]` (matching the reference).
+- **Exact complex numeric arguments** (`Round[Sqrt[2] + I Pi]`, `Round[I Sqrt[2]]`,
+  `Floor[E + I Pi]`) act on the real and imaginary parts separately, each certified
+  by the real path: `1 + 3 I`, `I`, `2 + 3 I`.
 
 **Symbolic simplifications** (`Floor`, `Ceiling`, `Round` only -- `IntegerPart` and `FractionalPart` are excluded):
 

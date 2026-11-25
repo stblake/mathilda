@@ -262,6 +262,37 @@ static Expr* gc_ellipse_perimeter(const Expr* a, const Expr* b) {
     return gc_ev(gc_mul(gc_mul(expr_new_integer(4), gc_c(hi)), gc_fn1(SYM_EllipticE, m)));
 }
 
+/* |r| for a numeric radius (Circle[c, -2] measures as radius 2: a measure is
+ * never negative, audit Disk#3 / ArcLength#2); a symbolic radius is kept as
+ * given (taken positive, as the reference does). */
+static Expr* gc_absnum(const Expr* r) {
+    if (expr_is_numeric_quantity(r)) return gc_ev(gc_fn1(SYM_Abs, gc_c(r)));
+    return gc_c(r);
+}
+
+/* The angular extent of a sector {t1, t2}: |t2 - t1| capped at 2 Pi when the
+ * difference is numeric (reversed angles measure the same sector, and a span
+ * past a full turn covers the region once -- audit Annulus#1/#2, Circle#1);
+ * a symbolic difference is kept as t2 - t1.  *full is set when the span
+ * covers the whole turn. */
+static Expr* gc_span(const Expr* t1, const Expr* t2, bool* full) {
+    *full = false;
+    Expr* d = gc_ev(gc_sub(gc_c(t2), gc_c(t1)));
+    if (!expr_is_numeric_quantity(d)) return d;
+    Expr* ad = gc_ev(gc_fn1(SYM_Abs, d));
+    Expr* two_pi = gc_mul(expr_new_integer(2), gc_pi());
+    Expr* ge = gc_ev(gc_fn2(SYM_GreaterEqual, gc_c(ad), gc_c(two_pi)));
+    if (ge->type == EXPR_SYMBOL && ge->data.symbol.name == SYM_True) {
+        *full = true;
+        expr_free(ad);
+        expr_free(ge);
+        return gc_ev(two_pi);
+    }
+    expr_free(ge);
+    expr_free(two_pi);
+    return ad;
+}
+
 static Expr* gc_circle_length(const Expr* c) {
     size_t n = gc_len(c);
     if (n > 3) return NULL;
@@ -269,26 +300,46 @@ static Expr* gc_circle_length(const Expr* c) {
     if (n == 3) {                                       /* arc */
         const Expr* th = gc_at(c, 2);
         if (!head_is(th, SYM_List) || gc_len(th) != 2 || head_is(r, SYM_List)) return NULL;
-        return gc_ev(gc_mul(gc_c(r), gc_sub(gc_c(gc_at(th, 1)), gc_c(gc_at(th, 0)))));
+        bool full;
+        Expr* sp = gc_span(gc_at(th, 0), gc_at(th, 1), &full);
+        return gc_ev(gc_mul(gc_absnum(r), sp));
     }
     if (!r) return gc_ev(gc_mul(expr_new_integer(2), gc_pi()));
     if (head_is(r, SYM_List)) {
         if (gc_len(r) != 2) return NULL;
-        return gc_ellipse_perimeter(gc_at(r, 0), gc_at(r, 1));
+        Expr* a = gc_absnum(gc_at(r, 0));
+        Expr* b = gc_absnum(gc_at(r, 1));
+        Expr* out = gc_ellipse_perimeter(a, b);
+        expr_free(a); expr_free(b);
+        return out;
     }
-    return gc_ev(gc_mul(gc_mul(expr_new_integer(2), gc_pi()), gc_c(r)));
+    return gc_ev(gc_mul(gc_mul(expr_new_integer(2), gc_pi()), gc_absnum(r)));
 }
 
+/* Disk[c, r] / Disk[c, {a, b}] / the sector Disk[c, r | {a, b}, {t1, t2}]:
+ * Pi a b, or (span/2) a b for a sector (the parametric angle of an
+ * elliptical sector, so Disk[c, {1, 2}, {0, Pi}] is half the ellipse). */
 static Expr* gc_disk_area(const Expr* d) {
     size_t n = gc_len(d);
-    if (n > 2) return NULL;                             /* sectors: not handled */
+    if (n > 3) return NULL;
     const Expr* r = gc_radius(d);
-    if (!r) return gc_pi();
-    if (head_is(r, SYM_List)) {
+    Expr* ab;
+    if (!r) ab = expr_new_integer(1);
+    else if (head_is(r, SYM_List)) {
         if (gc_len(r) != 2) return NULL;
-        return gc_ev(gc_mul(gc_pi(), gc_mul(gc_c(gc_at(r, 0)), gc_c(gc_at(r, 1)))));
+        ab = gc_mul(gc_absnum(gc_at(r, 0)), gc_absnum(gc_at(r, 1)));
+    } else {
+        ab = gc_sq(gc_absnum(r));
     }
-    return gc_ev(gc_mul(gc_pi(), gc_sq(gc_c(r))));
+    if (n == 3) {
+        const Expr* th = gc_at(d, 2);
+        if (!head_is(th, SYM_List) || gc_len(th) != 2) { expr_free(ab); return NULL; }
+        bool full;
+        Expr* sp = gc_span(gc_at(th, 0), gc_at(th, 1), &full);
+        Expr* half = gc_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2));
+        return gc_ev(gc_mul(gc_mul(half, sp), ab));
+    }
+    return gc_ev(gc_mul(gc_pi(), ab));
 }
 
 /* Unpack Annulus[c, {r1, r2}(, {t1, t2})]: borrowed parts; r1 <= r2 when both
@@ -324,16 +375,52 @@ static bool gc_annulus(const Expr* a, GcAnnulus* out) {
 static Expr* gc_annulus_area(const GcAnnulus* A) {
     Expr* d = gc_sub(gc_sq(gc_c(A->r2)), gc_sq(gc_c(A->r1)));
     if (!A->t1) return gc_ev(gc_mul(gc_pi(), d));
+    bool full;
+    Expr* sp = gc_span(A->t1, A->t2, &full);
     Expr* half = gc_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2));
-    return gc_ev(gc_mul(gc_mul(half, gc_sub(gc_c(A->t2), gc_c(A->t1))), d));
+    return gc_ev(gc_mul(gc_mul(half, sp), d));
 }
 
 static Expr* gc_annulus_perimeter(const GcAnnulus* A) {
     Expr* s = gc_add(gc_c(A->r1), gc_c(A->r2));
     if (!A->t1) return gc_ev(gc_mul(gc_mul(expr_new_integer(2), gc_pi()), s));
-    Expr* arcs = gc_mul(gc_sub(gc_c(A->t2), gc_c(A->t1)), s);
+    bool full;
+    Expr* sp = gc_span(A->t1, A->t2, &full);
+    Expr* arcs = gc_mul(sp, s);
+    if (full) return gc_ev(arcs);                 /* a full turn: no radial edges */
     Expr* radial = gc_mul(expr_new_integer(2), gc_sub(gc_c(A->r2), gc_c(A->r1)));
     return gc_ev(gc_add(arcs, radial));
+}
+
+/* Centroid of the sector of radii r1..r2 (r1 = NULL: a disk) about c over
+ * {t1, t2}: c + (2/3) (r2^3 - r1^3)/(r2^2 - r1^2) Sin[a]/a {Cos[m], Sin[m]},
+ * a the half-span and m the mid-angle; c itself for a full turn. */
+static Expr* gc_sector_centroid(const Expr* c, const Expr* r1, const Expr* r2,
+                                const Expr* t1, const Expr* t2) {
+    bool full;
+    Expr* sp = gc_span(t1, t2, &full);
+    if (full) { expr_free(sp); return gc_c(c); }
+    Expr* half = gc_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2));
+    Expr* a = gc_ev(gc_mul(gc_c(half), sp));
+    Expr* m = gc_ev(gc_mul(half, gc_add(gc_c(t1), gc_c(t2))));
+    Expr* R2 = gc_absnum(r2);
+    Expr* rad;
+    if (r1) {
+        Expr* R1 = gc_absnum(r1);
+        Expr* num = gc_sub(gc_fn2(SYM_Power, gc_c(R2), expr_new_integer(3)),
+                           gc_fn2(SYM_Power, gc_c(R1), expr_new_integer(3)));
+        Expr* den = gc_sub(gc_sq(gc_c(R2)), gc_sq(R1));
+        rad = gc_mul(num, gc_fn2(SYM_Power, den, expr_new_integer(-1)));
+        expr_free(R2);
+    } else {
+        rad = R2;
+    }
+    Expr* k = gc_ev(gc_mul(gc_mul(gc_fn2(SYM_Rational, expr_new_integer(2), expr_new_integer(3)), rad),
+                           gc_mul(gc_fn1(SYM_Sin, gc_c(a)), gc_fn2(SYM_Power, a, expr_new_integer(-1)))));
+    Expr* x = gc_add(gc_c(gc_at(c, 0)), gc_mul(gc_c(k), gc_fn1(SYM_Cos, gc_c(m))));
+    Expr* y = gc_add(gc_c(gc_at(c, 1)), gc_mul(k, gc_fn1(SYM_Sin, m)));
+    return gc_ev(gc_fn2(SYM_List, gc_ev(gc_fn1(SYM_Simplify, gc_ev(x))),
+                                  gc_ev(gc_fn1(SYM_Simplify, gc_ev(y)))));
 }
 
 /* The region's 2-D measure, or NULL. */
@@ -351,11 +438,26 @@ Expr* geom_curved_area(const Expr* region) { return gc_area_of(region); }
 Expr* geom_curved_perimeter(const Expr* region) {
     GcAnnulus A;
     if (gc_annulus(region, &A)) return gc_annulus_perimeter(&A);
+    if (head_is(region, SYM_Disk) && gc_len(region) == 3) {
+        /* a circular sector: the arc plus the two radii (audit Disk#1) */
+        const Expr* r = gc_at(region, 1);
+        const Expr* th = gc_at(region, 2);
+        if (head_is(r, SYM_List) || !head_is(th, SYM_List) || gc_len(th) != 2) return NULL;
+        bool full;
+        Expr* sp = gc_span(gc_at(th, 0), gc_at(th, 1), &full);
+        Expr* R = gc_absnum(r);
+        if (full) return gc_ev(gc_mul(sp, R));
+        return gc_ev(gc_mul(gc_add(sp, expr_new_integer(2)), R));
+    }
     if (head_is(region, SYM_Disk) && gc_len(region) <= 2) {
         /* the boundary circle (or ellipse) */
-        Expr* circ = expr_copy((Expr*)region);
-        expr_free(circ->data.function.head);
-        circ->data.function.head = expr_new_symbol(SYM_Circle);
+        /* a fresh node: expr_copy is a refcount bump, and writing the head
+         * through it turned the caller's Disk[] into Circle[] */
+        size_t k = gc_len(region);
+        Expr** a = malloc(sizeof(Expr*) * (k ? k : 1));
+        for (size_t i = 0; i < k; i++) a[i] = gc_c(gc_at(region, i));
+        Expr* circ = gc_fn(SYM_Circle, a, k);
+        free(a);
         Expr* r = gc_circle_length(circ);
         expr_free(circ);
         return r;
@@ -365,7 +467,18 @@ Expr* geom_curved_perimeter(const Expr* region) {
 
 Expr* geom_curved_centroid(const Expr* region) {
     GcAnnulus A;
-    if (gc_annulus(region, &A) && !A.t1) return gc_c(A.c);
+    if (gc_annulus(region, &A)) {
+        if (!A.t1) return gc_c(A.c);
+        return gc_sector_centroid(A.c, A.r1, A.r2, A.t1, A.t2);
+    }
+    if (head_is(region, SYM_Disk) && gc_len(region) == 3) {
+        const Expr* c = gc_at(region, 0);
+        const Expr* r = gc_at(region, 1);
+        const Expr* th = gc_at(region, 2);
+        if (!head_is(c, SYM_List) || gc_len(c) != 2 || head_is(r, SYM_List)
+            || !head_is(th, SYM_List) || gc_len(th) != 2) return NULL;
+        return gc_sector_centroid(c, NULL, r, gc_at(th, 0), gc_at(th, 1));
+    }
     if (head_is(region, SYM_Disk) && gc_len(region) <= 2) {
         if (gc_len(region) == 0) return gc_ev(gc_fn2(SYM_List, expr_new_integer(0), expr_new_integer(0)));
         return gc_c(gc_at(region, 0));
@@ -519,6 +632,7 @@ static Expr* gc_member_point(const GcAnnulus* Ap, const Expr* p) {
         expr_free(t1n); expr_free(t2n); expr_free(pxn); expr_free(pyn);
         expr_free(cxn); expr_free(cyn);
         if (!ok) { expr_free(rho2); return NULL; }
+        if (t2 < t1) { double sw = t1; t1 = t2; t2 = sw; }   /* reversed angles: the same sector */
         if (px != cx || py != cy) {
             double ang = atan2(py - cy, px - cx);
             double two_pi = 2.0 * 3.14159265358979323846;
@@ -532,6 +646,18 @@ static Expr* gc_member_point(const GcAnnulus* Ap, const Expr* p) {
 }
 
 /* ---- ArcLength --------------------------------------------------------- */
+
+/* A bound that is a finite number (not Infinity / -Infinity /
+ * DirectedInfinity / ComplexInfinity). */
+static bool gc_finite_bound(const Expr* b) {
+    if (b->type == EXPR_SYMBOL)
+        return b->data.symbol.name != SYM_Infinity && b->data.symbol.name != SYM_ComplexInfinity;
+    if (head_is(b, SYM_DirectedInfinity)) return false;
+    if (head_is(b, SYM_Times))
+        for (size_t i = 0; i < gc_len(b); i++)
+            if (!gc_finite_bound(gc_at(b, i))) return false;
+    return true;
+}
 
 static bool gc_contains_head(const Expr* e, const char* h) {
     if (e->type != EXPR_FUNCTION) return false;
@@ -572,6 +698,18 @@ static Expr* gc_arclength_param(const Expr* curve, const Expr* range, const Expr
     if (speed->type == EXPR_INTEGER && speed->data.integer == 0) {
         expr_free(speed);
         return expr_new_integer(0);
+    }
+    bool infinite = !gc_finite_bound(gc_at(range, 1)) || !gc_finite_bound(gc_at(range, 2));
+    if (!numeric && infinite
+        && expr_is_numeric_quantity(gc_at(range, 1)) && expr_is_numeric_quantity(gc_at(range, 2))) {
+        /* An infinite range: a closed form, or Integrate's own divergence
+         * verdict with the integral left inert -- never a quadrature, which
+         * reports the last partial sum of a divergent length as a number
+         * (audit ArcLength#1: 1.45*^304). */
+        Expr* ex = gc_ev(gc_fn2(SYM_Integrate, gc_c(speed), gc_c(range)));
+        expr_free(speed);
+        if (!gc_contains_head(ex, SYM_Integrate)) return gc_ev(gc_fn1(SYM_Simplify, ex));
+        return ex;
     }
     if (!numeric) {
         /* Exactly first, quietly: when Integrate finds no closed form its
@@ -619,7 +757,7 @@ Expr* builtin_arclength(Expr* res) {
 Expr* builtin_regionmeasure(Expr* res) {
     if (res->type != EXPR_FUNCTION || gc_len(res) != 1) return NULL;
     const Expr* g = gc_at(res, 0);
-    if (head_is(g, SYM_Polygon)) {
+    if (head_is(g, SYM_Polygon) || head_is(g, SYM_Rectangle) || head_is(g, SYM_Triangle)) {
         Expr* call = gc_fn1(SYM_Area, gc_c(g));
         Expr* r = gc_ev(call);
         if (head_is(r, SYM_Area)) { expr_free(r); return NULL; }

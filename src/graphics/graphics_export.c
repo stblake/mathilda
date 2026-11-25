@@ -434,7 +434,7 @@ static char* text_string(const Expr* e) {
     char tmp[64];
     if (e->type == EXPR_INTEGER) { snprintf(tmp, sizeof(tmp), "%lld", (long long)e->data.integer); }
     else if (e->type == EXPR_REAL) { snprintf(tmp, sizeof(tmp), "%g", e->data.real); }
-    else return NULL;
+    else return expr_to_string_outputform((Expr*)e);   /* any expression: 1/2, 10^30, x + y (audit Text#1) */
     size_t n = strlen(tmp) + 1; char* s = (char*)malloc(n); if (s) memcpy(s, tmp, n); return s;
 }
 
@@ -504,6 +504,11 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
       } }
     if (head_is(p, SYM_Opacity) && p->data.function.arg_count >= 1) {
         double o; if (to_double(p->data.function.args[0], &o)) e->opacity = clip01(o);
+        /* Opacity[a, color] sets the colour too (audit Opacity#1) */
+        double r, g, b, a;
+        if (p->data.function.arg_count >= 2 && resolve_color(p->data.function.args[1], &r, &g, &b, &a)) {
+            e->r = r; e->g = g; e->b = b;
+        }
         return;
     }
     if (apply_directive(e, p, plot_w)) return;   /* Thickness/PointSize/Dashing/Directive */
@@ -591,6 +596,23 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
         double px = X(e, x1), py = Y(e, y1);
         buf_catf(e->c, "%.3f %.3f %.3f %.3f re f\n", px, py, X(e, x2) - px, Y(e, y2) - py);
         if (gsi >= 0) buf_cat(e->c, "Q\n");
+        return;
+    }
+
+    /* Arrow[{line1, line2, ...}]: one arrow per point list (audit Arrow#1). */
+    if (head_is(p, SYM_Arrow) && p->data.function.arg_count >= 1
+        && head_is(p->data.function.args[0], SYM_List)
+        && p->data.function.args[0]->data.function.arg_count > 0
+        && head_is(p->data.function.args[0]->data.function.args[0], SYM_List)
+        && p->data.function.args[0]->data.function.args[0]->data.function.arg_count > 0
+        && head_is(p->data.function.args[0]->data.function.args[0]->data.function.args[0], SYM_List)) {
+        const Expr* lines = p->data.function.args[0];
+        for (size_t i = 0; i < lines->data.function.arg_count; i++) {
+            Expr* one = expr_new_function(expr_new_symbol(SYM_Arrow),
+                                          (Expr*[]){ expr_copy(lines->data.function.args[i]) }, 1);
+            draw_prim(e, one, plot_w);
+            expr_free(one);
+        }
         return;
     }
 

@@ -822,6 +822,13 @@ Expr* builtin_plot(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
+    /* A body that evaluates to a list (Table[x^n, {n, 3}], a symbol holding
+     * {f1, f2}) plots each element (audit Plot#1). */
+    if (!(f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL && f->data.function.head->data.symbol.name == SYM_List)) {
+        Expr* rd = plot_redispatch_list_body(res, 1);
+        if (rd) return rd;
+    }
+
     IterSpec ispec;
     if (!iter_spec_parse(spec, &ispec)) return NULL;
     if (ispec.kind != ITER_KIND_RANGE || !ispec.var) { iter_spec_free(&ispec); return NULL; }

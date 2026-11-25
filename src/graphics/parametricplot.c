@@ -45,6 +45,8 @@ typedef struct {
      * round-trip and only complicate the parity story. */
     AutoCompiled* acx;
     AutoCompiled* acy;
+    double cur[2];          /* the parameter values of the sample being tested */
+    size_t ncur;
 } ParamEvalCtx;
 
 /* Compile the two components of a literal {x(t), y(t)} body against the
@@ -69,8 +71,23 @@ static void param_ctx_free(ParamEvalCtx* ctx) {
     autocompiled_free(ctx->acy); ctx->acy = NULL;
 }
 
+/* RegionFunction gets f[x, y, u] (f[x, y, u, v] for a surface), as in the reference (audit
+ * ParametricPlot#3); a function of the point alone, f[x, y] or f[x], is still read. */
 static bool param_region_ok(const ParamEvalCtx* ctx, double x, double y) {
-    return !ctx->region_function || eval_region(ctx->region_function, x, y);
+    if (!ctx->region_function) return true;
+    if (ctx->ncur > 0) {
+        Expr* a[4] = { expr_new_real(x), expr_new_real(y), NULL, NULL };
+        for (size_t i = 0; i < ctx->ncur; i++) a[2 + i] = expr_new_real(ctx->cur[i]);
+        Expr* call = expr_new_function(expr_copy(ctx->region_function), a, 2 + ctx->ncur);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        bool t = r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+        bool f = r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_False;
+        expr_free(r);
+        if (t) return true;
+        if (f) return false;
+    }
+    return eval_region(ctx->region_function, x, y);
 }
 
 /* Evaluate ctx->body (with vars already set in the symbol table) and
@@ -101,6 +118,8 @@ static bool eval_body_xy(ParamEvalCtx* ctx, double* x_out, double* y_out) {
  * touches the symbol table, which is most of what makes it fast. */
 static bool param_eval_at(ParamEvalCtx* ctx, const double* vals, size_t nvals,
                           double* x_out, double* y_out) {
+    ctx->ncur = nvals > 2 ? 2 : nvals;
+    for (size_t i = 0; i < ctx->ncur; i++) ctx->cur[i] = vals[i];
     if (ctx->acx) {
         double x, y;
         if (autocompiled_eval_real(ctx->acx, vals, &x) && isfinite(x)
@@ -687,6 +706,25 @@ Expr* builtin_parametricplot(Expr* res) {
     /* arg 1 must be a {var, min, max} iterator. */
     Expr* iter1 = res->data.function.args[1];
     if (!is_iterator(iter1)) return NULL;
+
+    /* A body that only evaluates to the curve list -- a symbol holding it,
+     * or computed parts {2 {Cos[t], Sin[t]}, ...} -- plots as the literal
+     * list would (audit ParametricPlot#1/#2, ParametricPlot3D#1). */
+    {
+        const Expr* b0 = res->data.function.args[0];
+        bool all_lists = (b0->type == EXPR_FUNCTION && b0->data.function.head->type == EXPR_SYMBOL && b0->data.function.head->data.symbol.name == SYM_List) && b0->data.function.arg_count > 0;
+        for (size_t i = 0; all_lists && i < b0->data.function.arg_count; i++) {
+            const Expr* bi = b0->data.function.args[i];
+            all_lists = (bi->type == EXPR_FUNCTION && bi->data.function.head->type == EXPR_SYMBOL && bi->data.function.head->data.symbol.name == SYM_List);
+        }
+        if (!all_lists) {
+            const Expr* a2 = argc >= 3 ? res->data.function.args[2] : NULL;
+            size_t nspecs = (a2 && (a2->type == EXPR_FUNCTION && a2->data.function.head->type == EXPR_SYMBOL && a2->data.function.head->data.symbol.name == SYM_List) && a2->data.function.arg_count >= 1
+                             && a2->data.function.args[0]->type == EXPR_SYMBOL) ? 2 : 1;
+            Expr* rd = plot_redispatch_list_body(res, nspecs);
+            if (rd) return rd;
+        }
+    }
 
     Expr* var1 = iter1->data.function.args[0];
     double t1min, t1max;

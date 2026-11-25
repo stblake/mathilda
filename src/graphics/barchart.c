@@ -39,7 +39,8 @@
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    double  bar_spacing;     /* fraction of bar width that is gap (default 0.2) */
+    double  bar_spacing;     /* default layout: 0.2 of each unit slot is gap */
+    bool    bar_spacing_set; /* BarSpacing -> s given: the gap is s times the bar width */
     Expr*   chart_style;     /* borrowed List[...] or single directive; NULL = palette */
     Expr*   chart_labels;    /* borrowed List[...] of label expressions; NULL = none */
 } ChartOpts;
@@ -50,6 +51,7 @@ static bool split_chart_options(Expr* res, size_t start_idx,
                                  ChartOpts* co,
                                  Expr*** pt_out, size_t* pt_n_out) {
     co->bar_spacing  = 0.2;
+    co->bar_spacing_set = false;
     co->chart_style  = NULL;
     co->chart_labels = NULL;
 
@@ -70,8 +72,9 @@ static bool split_chart_options(Expr* res, size_t start_idx,
 
         if (name == SYM_BarSpacing) {
             double v;
-            if (!numericize_bound(rhs, &v)) BC_FAIL();
+            if (!numericize_bound(rhs, &v) || v < 0.0) BC_FAIL();
             co->bar_spacing = v;
+            co->bar_spacing_set = true;
         } else if (name == SYM_ChartStyle) {
             co->chart_style = rhs;  /* borrowed */
         } else if (name == SYM_ChartLabels) {
@@ -172,7 +175,10 @@ static size_t emit_bar(Expr** prims, size_t np,
 /* Returns false if vals is not a list of numeric values.             */
 /* ------------------------------------------------------------------ */
 
-static bool extract_reals(Expr* list, double** vals_out, size_t* n_out) {
+/* keep_slots: a non-numeric entry (a symbol, Missing[], a complex, Infinity) keeps its slot as
+ * NaN, so the bars after it stay at their positions (audit BarChart#1); otherwise it is dropped.
+ * Exact numeric constants (Pi, E) are numericized (audit Histogram#3). */
+static bool extract_reals(Expr* list, double** vals_out, size_t* n_out, bool keep_slots) {
     if (!list || list->type != EXPR_FUNCTION
         || list->data.function.head->type != EXPR_SYMBOL
         || list->data.function.head->data.symbol.name != SYM_List)
@@ -184,7 +190,8 @@ static bool extract_reals(Expr* list, double** vals_out, size_t* n_out) {
     for (size_t i = 0; i < n; i++) {
         Expr* ev = evaluate(list->data.function.args[i]);
         double x;
-        if (expr_to_real_double(ev, &x)) v[k++] = x;
+        if ((expr_to_real_double(ev, &x) || numericize_bound(ev, &x)) && isfinite(x)) v[k++] = x;
+        else if (keep_slots) v[k++] = NAN;
         expr_free(ev);
     }
     *vals_out = v;
@@ -232,14 +239,14 @@ Expr* builtin_barchart(Expr* res) {
     if (multi) {
         for (size_t d = 0; d < n_datasets; d++) {
             if (!extract_reals(data_arg->data.function.args[d],
-                                &datasets[d], &lengths[d])) {
+                                &datasets[d], &lengths[d], true)) {
                 /* Fill with zeros on bad input. */
                 datasets[d] = malloc(sizeof(double));
                 datasets[d][0] = 0.0; lengths[d] = 1;
             }
         }
     } else {
-        if (!extract_reals(data_arg, &datasets[0], &lengths[0])) {
+        if (!extract_reals(data_arg, &datasets[0], &lengths[0], true)) {
             expr_free(data_arg);
             free(datasets); free(lengths);
             for (size_t i = 0; i < pt_n; i++) expr_free(pt[i]);
@@ -255,40 +262,50 @@ Expr* builtin_barchart(Expr* res) {
     for (size_t d = 0; d < n_datasets; d++)
         if (lengths[d] > n_bars) n_bars = lengths[d];
 
-    /* Layout: bar groups centred at x = 1, 2, ..., n_bars.
-     * Within a group, each dataset gets one sub-bar.
-     * Group width = 1 − bar_spacing; sub-bar width = group_width / n_datasets. */
-    double group_w  = 1.0 - co.bar_spacing;
-    double sub_w    = group_w / (double)n_datasets;
+    /* Layout. One dataset: bar i centred at x = i. Several datasets: one GROUP per dataset,
+     * centred at x = d, its elements side by side and coloured by position within the group
+     * (audit BarChart#3: grouping by element index transposed the reference's layout).
+     * The bar width: 1 - 0.2 by default; with BarSpacing -> s the gap between groups is s times
+     * the group width, so the group is 1/(1 + s) wide (audit BarChart#2: s >= 1 gave empty or
+     * inverted bars). */
+    size_t n_groups = multi ? n_datasets : n_bars;
+    size_t per_group = multi ? n_bars : 1;
+    double group_w  = co.bar_spacing_set ? 1.0 / (1.0 + co.bar_spacing) : 1.0 - co.bar_spacing;
+    double sub_w    = group_w / (double)per_group;
 
     /* ymin for PlotRange: 0 unless negative values exist. */
     double ymin_all = 0.0, ymax_all = 0.0;
     for (size_t d = 0; d < n_datasets; d++)
         for (size_t i = 0; i < lengths[d]; i++) {
             double v = datasets[d][i];
+            if (isnan(v)) continue;
             if (v < ymin_all) ymin_all = v;
             if (v > ymax_all) ymax_all = v;
         }
     if (ymax_all == ymin_all) ymax_all = ymin_all + 1.0;
 
     /* Capacity: at most (n_datasets * n_bars) bars × 5 prims each + labels. */
-    size_t cap   = n_datasets * n_bars * 6 + n_bars * 2 + 4;
+    size_t cap   = n_datasets * n_bars * 6 + n_bars * 2 + n_datasets * 2 + 4;
     Expr** prims = malloc(sizeof(Expr*) * cap);
     size_t np    = 0;
 
-    for (size_t i = 0; i < n_bars; i++) {
-        double group_left = (double)(i + 1) - group_w * 0.5;
-        for (size_t d = 0; d < n_datasets; d++) {
+    for (size_t g = 0; g < n_groups; g++) {
+        double group_left = (double)(g + 1) - group_w * 0.5;
+        for (size_t j = 0; j < per_group; j++) {
+            size_t d = multi ? g : 0;
+            size_t i = multi ? j : g;
             if (i >= lengths[d]) continue;
             double v   = datasets[d][i];
-            double x0  = group_left + d * sub_w;
+            if (isnan(v)) continue;                     /* a missing entry: an empty slot */
+            double x0  = group_left + (double)j * sub_w;
             double x1  = x0 + sub_w;
             double y_lo = (v < 0.0) ? v : 0.0;
             double y_hi = (v > 0.0) ? v : 0.0;
-            Expr*  col  = bar_color(co.chart_style, multi ? d : i);
+            Expr*  col  = bar_color(co.chart_style, i);
             np = emit_bar(prims, np, x0, y_lo, x1, y_hi, col);
         }
     }
+    n_bars = n_groups;                                  /* the label / range slots below */
 
     /* ChartLabels: packaged as $BarChartLabels[{x1,"label1"}, {x2,"label2"}, ...]
      * so the renderer can draw them in screen space (crisp, bold, fixed size)
@@ -405,8 +422,13 @@ static size_t histogram_parse_bins(Expr* res,
             /* {step} */
             double step;
             if (numericize_bound(ev->data.function.args[0], &step) && step > 0.0) {
-                int nb = (int)ceil((data_max - data_min) / step);
+                /* Bins of width exactly `step`, on multiples of it, covering the data (audit
+                 * Histogram#2: the range used to be stretched to [min, max]). */
+                double lo = floor(data_min / step) * step;
+                int nb = (int)floor((data_max - lo) / step) + 1;
                 if (nb < 1) nb = 1;
+                *bin_min_out = lo;
+                *bin_max_out = lo + nb * step;
                 *n_bins_out = nb;
                 expr_free(ev);
                 return 2;
@@ -418,11 +440,13 @@ static size_t histogram_parse_bins(Expr* res,
                 && numericize_bound(ev->data.function.args[1], &hi)
                 && numericize_bound(ev->data.function.args[2], &step)
                 && step > 0.0 && hi > lo) {
-                *bin_min_out = lo;
-                *bin_max_out = hi;
+                /* width exactly `step`: the last bin reaches past hi when step does not
+                 * divide the range (audit Histogram#2) */
                 *explicit_out = true;
-                int nb = (int)ceil((hi - lo) / step);
+                int nb = (int)ceil((hi - lo) / step - 1e-12);
                 if (nb < 1) nb = 1;
+                *bin_min_out = lo;
+                *bin_max_out = lo + nb * step;
                 *n_bins_out = nb;
                 expr_free(ev);
                 return 2;
@@ -444,7 +468,7 @@ Expr* builtin_histogram(Expr* res) {
     Expr* data_arg = evaluate(res->data.function.args[0]);
     double* vals   = NULL;
     size_t  n_vals = 0;
-    if (!extract_reals(data_arg, &vals, &n_vals) || n_vals == 0) {
+    if (!extract_reals(data_arg, &vals, &n_vals, false) || n_vals == 0) {
         expr_free(data_arg); free(vals);
         return NULL;
     }

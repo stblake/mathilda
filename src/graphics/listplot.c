@@ -67,6 +67,21 @@ typedef struct { bool has_range; double xmin, xmax; bool force_multi; } DataRang
  * heights {y_i}, plotted at x running over the DataRange (default 1..n),
  * with non-numeric (missing) entries skipped but still occupying their
  * index slot. */
+/* A list of 2-element lists is a list of points when at least one pair is
+ * numeric: a non-numeric pair ({3, x}) is a missing point, not a reason to
+ * re-read every pair as a height dataset (audit ListPlot#1). */
+static bool is_point_list(Expr** el, size_t n) {
+    bool any_numeric = false;
+    for (size_t i = 0; i < n; i++) {
+        double a, b;
+        if (!is_list(el[i]) || el[i]->data.function.arg_count != 2) return false;
+        if (point2(el[i], &a, &b)) any_numeric = true;
+        else if (is_list(el[i]->data.function.args[0]) || is_list(el[i]->data.function.args[1]))
+            return false;
+    }
+    return any_numeric;
+}
+
 static PointSet extract_dataset(Expr* ds, const DataRange* dr) {
     PointSet ps = { NULL, NULL, 0 };
     if (!is_list(ds)) return ps;
@@ -74,18 +89,14 @@ static PointSet extract_dataset(Expr* ds, const DataRange* dr) {
     if (n == 0) return ps;
     Expr** el = ds->data.function.args;
 
-    bool pairs = true;
-    for (size_t i = 0; i < n; i++) {
-        double a, b;
-        if (!point2(el[i], &a, &b)) { pairs = false; break; }
-    }
+    bool pairs = is_point_list(el, n);
 
     ps.xs = malloc(sizeof(double) * n);
     ps.ys = malloc(sizeof(double) * n);
     if (pairs) {
         for (size_t i = 0; i < n; i++) {
             double a, b;
-            point2(el[i], &a, &b);
+            if (!point2(el[i], &a, &b)) continue;   /* a missing point */
             ps.xs[ps.n] = a; ps.ys[ps.n] = b; ps.n++;
         }
     } else {
@@ -122,13 +133,7 @@ static Expr** classify(Expr* data, const DataRange* dr, size_t* nsets) {
     for (size_t i = 0; i < nd; i++)
         if (is_list(el[i])) { has_list = true; break; }
 
-    bool all_pairs = !dr->force_multi;
-    if (all_pairs) {
-        for (size_t i = 0; i < nd; i++) {
-            double a, b;
-            if (!point2(el[i], &a, &b)) { all_pairs = false; break; }
-        }
-    }
+    bool all_pairs = !dr->force_multi && is_point_list(el, nd);
 
     Expr** sets;
     if (all_pairs || !has_list) {

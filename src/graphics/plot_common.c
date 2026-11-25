@@ -920,3 +920,93 @@ Expr* plot_style_color(const Expr* directive, const Expr* base) {
     }
     return expr_copy((Expr*)base);
 }
+
+Expr* plot_redispatch_list_body(const Expr* res, size_t nspecs) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 + nspecs) return NULL;
+    const Expr* body = res->data.function.args[0];
+    Expr** vars = malloc(sizeof(Expr*) * (nspecs ? nspecs : 1));
+    size_t nv = 0;
+    for (size_t i = 1; i <= nspecs; i++) {
+        const Expr* sp = res->data.function.args[i];
+        if (sp->type != EXPR_FUNCTION || sp->data.function.head->type != EXPR_SYMBOL
+            || sp->data.function.head->data.symbol.name != SYM_List
+            || sp->data.function.arg_count < 1
+            || sp->data.function.args[0]->type != EXPR_SYMBOL) {
+            for (size_t k = 0; k < nv; k++) expr_free(vars[k]);
+            free(vars);
+            return NULL;
+        }
+        vars[nv++] = expr_copy(sp->data.function.args[0]);
+    }
+    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), vars, nv);
+    free(vars);
+    Expr* quiet = expr_new_function(expr_new_symbol("Quiet"), (Expr*[]){ expr_copy((Expr*)body) }, 1);
+    Expr* blk = expr_new_function(expr_new_symbol(SYM_Block), (Expr*[]){ vlist, quiet }, 2);
+    Expr* ev = evaluate(blk);
+    expr_free(blk);
+    bool is_list = ev->type == EXPR_FUNCTION && ev->data.function.head->type == EXPR_SYMBOL
+                   && ev->data.function.head->data.symbol.name == SYM_List;
+    if (!is_list || expr_eq(ev, body)) { expr_free(ev); return NULL; }
+    /* a fresh node: expr_copy is a refcount bump and must not be written through */
+    size_t n = res->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * n);
+    a[0] = ev;
+    for (size_t i = 1; i < n; i++) a[i] = expr_copy(res->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(res->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+bool parse_plot_points_pair(Expr* rhs, long* nx, long* ny) {
+    Expr* v = evaluate(rhs);
+    bool ok = false;
+    *nx = *ny = 0;
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
+        ok = true;
+    } else if (v->type == EXPR_INTEGER && v->data.integer >= 2) {
+        *nx = *ny = (long)v->data.integer;
+        ok = true;
+    } else if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL
+               && v->data.function.head->data.symbol.name == SYM_List
+               && v->data.function.arg_count == 2
+               && v->data.function.args[0]->type == EXPR_INTEGER
+               && v->data.function.args[1]->type == EXPR_INTEGER
+               && v->data.function.args[0]->data.integer >= 2
+               && v->data.function.args[1]->data.integer >= 2) {
+        *nx = (long)v->data.function.args[0]->data.integer;
+        *ny = (long)v->data.function.args[1]->data.integer;
+        ok = true;
+    }
+    expr_free(v);
+    return ok;
+}
+
+static bool pc_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+           && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+Expr* eval_control_spec(const Expr* spec) {
+    if (!pc_is_list(spec) || spec->data.function.arg_count == 0) return evaluate((Expr*)spec);
+    size_t n = spec->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        const Expr* x = spec->data.function.args[i];
+        if (i == 0 && x->type == EXPR_SYMBOL) {
+            a[i] = expr_copy((Expr*)x);
+        } else if (i == 0 && pc_is_list(x) && x->data.function.arg_count >= 1
+                   && x->data.function.args[0]->type == EXPR_SYMBOL) {
+            size_t m = x->data.function.arg_count;
+            Expr** b = malloc(sizeof(Expr*) * m);
+            b[0] = expr_copy(x->data.function.args[0]);
+            for (size_t j = 1; j < m; j++) b[j] = evaluate(x->data.function.args[j]);
+            a[i] = expr_new_function(expr_new_symbol(SYM_List), b, m);
+            free(b);
+        } else {
+            a[i] = evaluate((Expr*)x);
+        }
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), a, n);
+    free(a);
+    return out;
+}

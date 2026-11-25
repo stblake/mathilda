@@ -209,8 +209,10 @@ static bool is_color_head_vp(const Expr* e) {
 
 /* speed_norm is pre-normalised [0,1]; raw_vx/vy/speed are used when the
  * ColorFunction wants physical values. */
+/* The reference's arguments f[x, y, vx, vy, n] (each scaled to [0, 1] under ColorFunctionScaling),
+ * passed in `five`; NULL skips that form. */
 static Expr* vp_color(Expr* cfn, double speed_norm,
-                       double vx, double vy, double speed) {
+                       double vx, double vy, double speed, const double* five) {
     if (!cfn) {
         /* Default: Viridis ramp based on speed. */
         double r, g, b;
@@ -222,7 +224,17 @@ static Expr* vp_color(Expr* cfn, double speed_norm,
         Expr* c = named_color_ramp(cfn->data.string, speed_norm);
         if (c) return c;
     }
-    /* Try f[vx,vy,speed], f[speed], f[speed_norm] in sequence. */
+    /* f[x, y, vx, vy, n] first (audit VectorPlot#1), then the older f[vx, vy, speed] and
+     * f[speed_norm] forms. */
+    if (five) {
+        Expr* fa[5];
+        for (int i = 0; i < 5; i++) fa[i] = expr_new_real(five[i]);
+        Expr* call = expr_new_function(expr_copy(cfn), fa, 5);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        if (is_color_head_vp(r)) return r;
+        expr_free(r);
+    }
     static const int arities[] = { 3, 1 };
     for (size_t ai = 0; ai < 2; ai++) {
         int ar = arities[ai];
@@ -253,6 +265,13 @@ Expr* builtin_vectorplot(Expr* res) {
     /* VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}] is the base form
      * (three arguments); options follow. */
     if (argc < 3) return NULL;
+
+    /* A field given as a symbol or a call that evaluates to {vx, vy}
+     * (audit StreamPlot#1, VectorPlot#2). */
+    if (!(res->data.function.args[0]->type == EXPR_FUNCTION && res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL && res->data.function.args[0]->data.function.head->data.symbol.name == SYM_List)) {
+        Expr* rd = plot_redispatch_list_body(res, 2);
+        if (rd) return rd;
+    }
 
     /* args[0] must be a List[vx_body, vy_body] */
     Expr* field = res->data.function.args[0];
@@ -377,6 +396,13 @@ Expr* builtin_vectorplot(Expr* res) {
     }
 
     double spd_range = (spd_max > 0.0) ? spd_max : 1.0;
+    double vx_lo = 0.0, vx_hi = 0.0, vy_lo = 0.0, vy_hi = 0.0;
+    for (size_t k = 0; k < n_arr; k++) {
+        if (k == 0 || arrows[k].vx < vx_lo) vx_lo = arrows[k].vx;
+        if (k == 0 || arrows[k].vx > vx_hi) vx_hi = arrows[k].vx;
+        if (k == 0 || arrows[k].vy < vy_lo) vy_lo = arrows[k].vy;
+        if (k == 0 || arrows[k].vy > vy_hi) vy_hi = arrows[k].vy;
+    }
 
     for (size_t k = 0; k < n_arr; k++) {
         Arrow* a    = &arrows[k];
@@ -386,7 +412,18 @@ Expr* builtin_vectorplot(Expr* res) {
         if (snorm < 0.0) snorm = 0.0;
         if (snorm > 1.0) snorm = 1.0;
 
-        prims[np++] = vp_color(opts.color_function, snorm, a->vx, a->vy, spd);
+        double five[5];
+        if (opts.color_function_scaling) {
+            five[0] = (a->wx - u_xmin) / wu_x;
+            five[1] = (a->wy - u_ymin) / wu_y;
+            five[2] = vx_hi > vx_lo ? (a->vx - vx_lo) / (vx_hi - vx_lo) : 0.0;
+            five[3] = vy_hi > vy_lo ? (a->vy - vy_lo) / (vy_hi - vy_lo) : 0.0;
+            five[4] = snorm;
+        } else {
+            five[0] = scale_invert(opts.sf_x, a->wx); five[1] = scale_invert(opts.sf_y, a->wy);
+            five[2] = a->vx; five[3] = a->vy; five[4] = spd;
+        }
+        prims[np++] = vp_color(opts.color_function, snorm, a->vx, a->vy, spd, five);
 
         /* Screen-normalised direction: project world vector onto [0,1]² screen.
          * Normalising in screen space (not world space) gives equal visual

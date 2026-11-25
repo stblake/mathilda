@@ -36,6 +36,7 @@
 #include "linalg/numarray.h"
 #include "image.h"
 #include "pack.h"
+#include "ndarray.h"
 #include "options.h"
 #ifdef USE_FFTW
 #include <fftw3.h>
@@ -67,10 +68,9 @@ static bool ker_load(const Expr* e, size_t* kh, size_t* kw, double** buf) {
         const Expr* row = e->data.function.args[i];
         if (!ker_is_list(row) || row->data.function.arg_count != w) { free(k); return false; }
         for (size_t j = 0; j < w; j++) {
-            double re = 0.0, im = 0.0;
-            if (!na_read_scalar(row->data.function.args[j], &re, &im) || im != 0.0) {
-                free(k); return false;
-            }
+            double re = 0.0;
+            /* exact constants too: {{Pi}} is the kernel N[{{Pi}}] (audit ImageConvolve#1) */
+            if (!image_real_value(row->data.function.args[j], &re)) { free(k); return false; }
             k[i * w + j] = re;
         }
     }
@@ -769,7 +769,42 @@ static double* gauss3_kernel(size_t r, size_t* kd, size_t* kh, size_t* kw) {
 }
 
 /* ImageConvolve[image, kernel] */
+static bool opt_is(const Expr* a, const char* name) {
+    return a && a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+        && (a->data.function.head->data.symbol.name == SYM_Rule
+            || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
+        && a->data.function.arg_count == 2 && a->data.function.args[0]->type == EXPR_SYMBOL
+        && strcmp(a->data.function.args[0]->data.symbol.name, name) == 0;
+}
+
 static Expr* builtin_imageconvolve(Expr* res) {
+    /* Padding -> p (audit ImageConvolve#2): "Fixed" is the built-in replicate border; any other
+     * scheme or value pads by the kernel's reach with ImagePad, convolves, and crops back, so the
+     * border pixels read the padding instead of the replicated edge. */
+    if (res->data.function.arg_count == 3 && opt_is(res->data.function.args[2], "Padding")) {
+        const Expr* pv = res->data.function.args[2]->data.function.args[1];
+        if (pv->type == EXPR_STRING && strcmp(pv->data.string, "Fixed") == 0) {
+            Expr* two = expr_new_function(expr_copy(res->data.function.head),
+                (Expr*[]){ expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) }, 2);
+            return two;
+        }
+        size_t kh = 0, kw = 0; double* k = NULL;
+        size_t w = 0, h = 0, c = 0;
+        if (!image_info(res->data.function.args[0], &w, &h, &c, NULL)) return NULL;
+        if (!ker_load(res->data.function.args[1], &kh, &kw, &k)) return NULL;
+        free(k);
+        int64_t m = (int64_t)(kh > kw ? kh : kw);
+        Expr* padded = expr_new_function(expr_new_symbol("ImagePad"),
+            (Expr*[]){ expr_copy(res->data.function.args[0]), expr_new_integer(m), expr_copy((Expr*)pv) }, 3);
+        Expr* conv = expr_new_function(expr_new_symbol("ImageConvolve"),
+            (Expr*[]){ padded, expr_copy(res->data.function.args[1]) }, 2);
+        Expr* size = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_new_integer((int64_t)w), expr_new_integer((int64_t)h) }, 2);
+        Expr* crop = expr_new_function(expr_new_symbol("ImageCrop"), (Expr*[]){ conv, size }, 2);
+        Expr* r = eval_and_free(crop);
+        if (!image_info(r, NULL, NULL, NULL, NULL)) { expr_free(r); return NULL; }
+        return r;
+    }
     if (res->data.function.arg_count != 2) return NULL;
     /* A VOLUME takes the rank-3 path. Dispatching on the image rather than on the kernel is
      * deliberate: a rank-3 kernel handed to a plane is a mistake worth declining, not something to
@@ -807,8 +842,31 @@ static Expr* builtin_imageconvolve(Expr* res) {
  * 2 pi sigma^2. The analytic constant is only correct for an infinite kernel; using it on a
  * truncated one leaves the sum slightly under 1, which darkens an image a little on every pass
  * -- invisible once and obvious after fifty. */
+/* d^n/dt^n of exp(-t^2 / (2 s^2)), over the Gaussian itself: (-1)^n He_n(t/s) / s^n, He the
+ * probabilists' Hermite polynomial (He_{k+1}(u) = u He_k(u) - k He_{k-1}(u)). */
+static double gauss_deriv_factor(double t, double s, int n) {
+    double u = t / s, h0 = 1.0, h1 = u;
+    if (n == 0) return 1.0;
+    for (int k = 1; k < n; k++) { double h2 = u * h1 - (double)k * h0; h0 = h1; h1 = h2; }
+    return ((n & 1) ? -1.0 : 1.0) * h1 / pow(s, (double)n);
+}
+
 static Expr* builtin_gaussianmatrix(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    /* GaussianMatrix[r, {n1, n2}]: the n1-th derivative down the rows and the n2-th across the
+     * columns of the same (normalised) Gaussian (audit GaussianMatrix#1). */
+    int dn1 = 0, dn2 = 0;
+    if (argc == 2) {
+        const Expr* d = res->data.function.args[1];
+        if (!ker_is_list(d) || d->data.function.arg_count != 2) return NULL;
+        const Expr* e1 = d->data.function.args[0];
+        const Expr* e2 = d->data.function.args[1];
+        if (e1->type != EXPR_INTEGER || e2->type != EXPR_INTEGER) return NULL;
+        if (e1->data.integer < 0 || e1->data.integer > 16 || e2->data.integer < 0 || e2->data.integer > 16)
+            return NULL;
+        dn1 = (int)e1->data.integer; dn2 = (int)e2->data.integer;
+    }
     Expr* a = res->data.function.args[0];
     double r = 0.0, sigma = -1.0, im = 0.0;
 
@@ -840,6 +898,11 @@ static Expr* builtin_gaussianmatrix(Expr* res) {
     }
     if (!(sum > 0.0)) { free(k); return NULL; }
     for (size_t i = 0; i < n * n; i++) k[i] /= sum;
+    if (dn1 || dn2)
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j < n; j++)
+                k[i * n + j] *= gauss_deriv_factor((double)i - (double)rr, sigma, dn1)
+                              * gauss_deriv_factor((double)j - (double)rr, sigma, dn2);
 
     Expr** rows = malloc(sizeof(Expr*) * n);
     Expr* out = NULL;
@@ -875,25 +938,36 @@ static Expr* builtin_gaussianmatrix(Expr* res) {
  * rescaled, because a caller reaching for BoxMatrix in an arithmetic expression needs the ones. */
 static Expr* builtin_boxmatrix(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    double r = 0.0, im = 0.0;
-    if (!na_read_scalar(res->data.function.args[0], &r, &im) || im != 0.0) return NULL;
+    double r = 0.0, r2 = 0.0, im = 0.0;
+    const Expr* spec = res->data.function.args[0];
+    if (ker_is_list(spec)) {
+        /* BoxMatrix[{r1, r2}]: a (2 r1 + 1) x (2 r2 + 1) box (audit BoxMatrix#1) */
+        if (spec->data.function.arg_count != 2) return NULL;
+        if (!na_read_scalar(spec->data.function.args[0], &r, &im) || im != 0.0) return NULL;
+        if (!na_read_scalar(spec->data.function.args[1], &r2, &im) || im != 0.0) return NULL;
+    } else {
+        if (!na_read_scalar(spec, &r, &im) || im != 0.0) return NULL;
+        r2 = r;
+    }
     if (!(r >= 0.0) || r != floor(r) || r > 512.0) return NULL;
+    if (!(r2 >= 0.0) || r2 != floor(r2) || r2 > 512.0) return NULL;
     size_t n = 2 * (size_t)r + 1;
+    size_t ncol = 2 * (size_t)r2 + 1;
 
     Expr** rows = malloc(sizeof(Expr*) * n);
     if (!rows) return NULL;
     bool ok = true;
     for (size_t i = 0; i < n; i++) rows[i] = NULL;
     for (size_t i = 0; i < n && ok; i++) {
-        Expr** cols = malloc(sizeof(Expr*) * n);
+        Expr** cols = malloc(sizeof(Expr*) * ncol);
         if (!cols) { ok = false; break; }
         bool okc = true;
-        for (size_t j = 0; j < n; j++) {
+        for (size_t j = 0; j < ncol; j++) {
             cols[j] = expr_new_integer(1);
             if (!cols[j]) okc = false;
         }
-        if (okc) rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, n);
-        else for (size_t j = 0; j < n; j++) expr_free(cols[j]);
+        if (okc) rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, ncol);
+        else for (size_t j = 0; j < ncol; j++) expr_free(cols[j]);
         free(cols);
         if (!rows[i]) ok = false;
     }
@@ -1053,12 +1127,36 @@ static bool img_grey_plane(Expr* img, size_t* w, size_t* h, double** grey) {
 }
 
 /* FindThreshold[image] -- Otsu's threshold as a real number. */
+/* FindThreshold[image, Method -> m]: "Cluster" (the default, Otsu's between-class variance) or
+ * "Mean" (the mean intensity) -- audit FindThreshold#1. */
 static Expr* builtin_findthreshold(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    bool mean = false;
+    if (argc == 2) {
+        const Expr* o = res->data.function.args[1];
+        if (o->type != EXPR_FUNCTION || o->data.function.head->type != EXPR_SYMBOL
+            || o->data.function.head->data.symbol.name != SYM_Rule || o->data.function.arg_count != 2
+            || o->data.function.args[0]->type != EXPR_SYMBOL
+            || o->data.function.args[0]->data.symbol.name != SYM_Method) return NULL;
+        const Expr* m = o->data.function.args[1];
+        if (m->type == EXPR_SYMBOL && m->data.symbol.name == SYM_Automatic) mean = false;
+        else if (m->type == EXPR_STRING && strcmp(m->data.string, "Cluster") == 0) mean = false;
+        else if (m->type == EXPR_STRING && strcmp(m->data.string, "Mean") == 0) mean = true;
+        else return NULL;
+    }
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
     double t = 0.0;
-    bool ok = img_otsu(g, w * h, &t);
+    bool ok;
+    if (mean) {
+        double sum = 0.0;
+        for (size_t i = 0; i < w * h; i++) sum += g[i];
+        t = (w * h > 0) ? sum / (double)(w * h) : 0.0;
+        ok = w * h > 0;
+    } else {
+        ok = img_otsu(g, w * h, &t);
+    }
     free(g);
     return ok ? expr_new_real(t) : NULL;
 }
@@ -1409,20 +1507,30 @@ static Expr* builtin_binarize(Expr* res) {
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
 
-    double t = 0.0;
+    double t = 0.0, t_hi = 0.0;
+    bool range = false;
     if (argc == 2) {
-        double im = 0.0;
-        if (!na_read_scalar(res->data.function.args[1], &t, &im) || im != 0.0) {
+        const Expr* ts = res->data.function.args[1];
+        if (ker_is_list(ts) && ts->data.function.arg_count == 2) {
+            /* Binarize[image, {t1, t2}]: 1 for t1 <= value <= t2 (audit Binarize#2) */
+            if (!image_real_value(ts->data.function.args[0], &t)
+                || !image_real_value(ts->data.function.args[1], &t_hi)) { free(g); return NULL; }
+            range = true;
+        } else if (!image_real_value(ts, &t)) {
             free(g); return NULL;
         }
     } else if (!img_otsu(g, w * h, &t)) {
-        free(g); return NULL;
+        /* One grey level: Otsu has no two classes to separate. Every pixel falls on one side of
+         * the midpoint, so the image is still binarized rather than left unevaluated (audit
+         * Binarize#1). */
+        t = 0.5;
     }
 
     unsigned char* mask = malloc(w * h);
     Expr* out = NULL;
     if (mask) {
-        for (size_t i = 0; i < w * h; i++) mask[i] = (g[i] > t) ? 1u : 0u;
+        if (range) for (size_t i = 0; i < w * h; i++) mask[i] = (g[i] >= t && g[i] <= t_hi) ? 1u : 0u;
+        else for (size_t i = 0; i < w * h; i++) mask[i] = (g[i] > t) ? 1u : 0u;
         out = bit_image_from_mask(mask, w, h);
     }
     free(mask);
@@ -1474,7 +1582,14 @@ static Expr* builtin_colorconvert(Expr* res) {
     }
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
-    Expr* out = image_build_real(g, w, h, 1);
+    /* The conversion keeps the pixel type (audit ColorConvert#1): a "Byte" image's luminance is
+     * quantised back to bytes. A colour "Bit" image has grey levels between 0 and 1, so it widens
+     * to "Byte" rather than being thresholded. */
+    ImgType t = IMG_REAL;
+    size_t ch = 1;
+    image_info(res->data.function.args[0], NULL, NULL, &ch, &t);
+    if (t == IMG_BIT && ch > 1) t = IMG_BYTE;
+    Expr* out = t == IMG_REAL ? image_build_real(g, w, h, 1) : image_build_typed(g, w, h, 1, t);
     free(g);
     return out;
 }
@@ -1844,7 +1959,9 @@ static void canny_hysteresis(const double* nms, double* out, size_t w, size_t h,
                              double lo, double hi, size_t* stack) {
     size_t n = w * h, top = 0;
     for (size_t i = 0; i < n; i++) {
-        if (nms[i] >= hi) { out[i] = 1.0; stack[top++] = i; }
+        /* an edge has a positive gradient: a zero-gradient pixel is never one, whatever the
+         * threshold (audit EdgeDetect#1: threshold 0 marked a uniform image everywhere) */
+        if (nms[i] > 0.0 && nms[i] >= hi) { out[i] = 1.0; stack[top++] = i; }
         else out[i] = 0.0;
     }
     while (top > 0) {
@@ -1858,7 +1975,7 @@ static void canny_hysteresis(const double* nms, double* out, size_t w, size_t h,
                 size_t j = (size_t)ny * w + (size_t)nx;
                 /* 8-connectivity, because a diagonal edge is connected in any sensible reading and
                  * 4-connectivity would break every 45-degree line into dots. */
-                if (out[j] == 0.0 && nms[j] >= lo) { out[j] = 1.0; stack[top++] = j; }
+                if (out[j] == 0.0 && nms[j] > 0.0 && nms[j] >= lo) { out[j] = 1.0; stack[top++] = j; }
             }
         }
     }
@@ -2154,6 +2271,12 @@ static void morph_separable(const double* src, double* dst, double* tmp,
 static void morph_run(const double* src, double* dst, size_t w, size_t h, size_t c,
                       const unsigned char* sup, size_t kh, size_t kw, bool full, MorphOp op,
                       bool reflect) {
+    /* Each operator in its standard form, whatever the caller passed: dilation reads x - b and
+     * erosion x + b, so Dilation stamps the element itself (a single pixel dilated by
+     * {{1,0,0},{0,1,0},{0,0,0}} becomes that element, not its reflection -- audit Dilation#1), and
+     * an opening (erode then dilate) or closing (dilate then erode) is automatically the adjoint
+     * pair. */
+    reflect = (op == MORPH_DILATE);
     if (full) {
         double* tmp = malloc(sizeof(double) * w * h * c);
         if (tmp) { morph_separable(src, dst, tmp, w, h, c, kh, kw, op, reflect); free(tmp); return; }
@@ -2305,6 +2428,7 @@ static bool morph_centrosymmetric(const unsigned char* sup, size_t kh, size_t kw
 static void morph_direct_restricted(const double* src, double* dst, size_t w, size_t h, size_t c,
                                     const unsigned char* sup, size_t kh, size_t kw, MorphOp op,
                                     bool reflect, const double* fb) {
+    reflect = (op == MORPH_DILATE);      /* the standard forms, as in morph_run */
     int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
     int64_t sgn = reflect ? -1 : 1;
     for (size_t y = 0; y < h; y++)
@@ -2942,12 +3066,68 @@ static Expr* dt3_run(Expr* vol, double thr) {
     return out;
 }
 
+/* Two-pass chamfer transform, exact for the city-block (axis 1, diagonal 2) and chessboard
+ * (axis 1, diagonal 1) metrics: the forward raster pass reads the four already-visited
+ * neighbours, the backward pass the other four. `f` holds 0 at background, DT_INF elsewhere. */
+static void dt_chamfer(double* f, size_t w, size_t h, double diag) {
+    for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++) {
+            double v = f[y * w + x];
+            if (x > 0 && f[y * w + x - 1] + 1.0 < v) v = f[y * w + x - 1] + 1.0;
+            if (y > 0) {
+                if (f[(y - 1) * w + x] + 1.0 < v) v = f[(y - 1) * w + x] + 1.0;
+                if (x > 0 && f[(y - 1) * w + x - 1] + diag < v) v = f[(y - 1) * w + x - 1] + diag;
+                if (x + 1 < w && f[(y - 1) * w + x + 1] + diag < v) v = f[(y - 1) * w + x + 1] + diag;
+            }
+            f[y * w + x] = v;
+        }
+    for (size_t yy = h; yy-- > 0; )
+        for (size_t xx = w; xx-- > 0; ) {
+            double v = f[yy * w + xx];
+            if (xx + 1 < w && f[yy * w + xx + 1] + 1.0 < v) v = f[yy * w + xx + 1] + 1.0;
+            if (yy + 1 < h) {
+                if (f[(yy + 1) * w + xx] + 1.0 < v) v = f[(yy + 1) * w + xx] + 1.0;
+                if (xx + 1 < w && f[(yy + 1) * w + xx + 1] + diag < v) v = f[(yy + 1) * w + xx + 1] + diag;
+                if (xx > 0 && f[(yy + 1) * w + xx - 1] + diag < v) v = f[(yy + 1) * w + xx - 1] + diag;
+            }
+            f[yy * w + xx] = v;
+        }
+}
+
 static Expr* builtin_distancetransform(Expr* res) {
     size_t argc = res->data.function.arg_count;
+    /* DistanceFunction -> EuclideanDistance (the default) | ManhattanDistance |
+     * ChessboardDistance (audit DistanceTransform#2). */
+    int metric = 0;               /* 0 Euclidean, 1 Manhattan, 2 chessboard */
+    if (argc >= 2 && opt_is(res->data.function.args[argc - 1], "DistanceFunction")) {
+        const Expr* df = res->data.function.args[argc - 1]->data.function.args[1];
+        if (df->type != EXPR_SYMBOL) return NULL;
+        const char* dn = df->data.symbol.name;
+        if (strcmp(dn, "EuclideanDistance") == 0 || strcmp(dn, "Automatic") == 0) metric = 0;
+        else if (strcmp(dn, "ManhattanDistance") == 0) metric = 1;
+        else if (strcmp(dn, "ChessboardDistance") == 0) metric = 2;
+        else return NULL;
+        argc--;
+    }
     if (argc != 1 && argc != 2) return NULL;
     double thr = 0.0, im = 0.0;
     if (argc == 2) {
         if (!na_read_scalar(res->data.function.args[1], &thr, &im) || im != 0.0) return NULL;
+    }
+    if (metric != 0) {
+        if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) return NULL;
+        size_t w = 0, h = 0; double* g = NULL;
+        if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+        size_t n = w * h;
+        double* f = malloc(sizeof(double) * (n ? n : 1));
+        Expr* out = NULL;
+        if (f) {
+            for (size_t i = 0; i < n; i++) f[i] = (g[i] > thr) ? DT_INF : 0.0;
+            dt_chamfer(f, w, h, metric == 1 ? 2.0 : 1.0);
+            out = image_build_real(f, w, h, 1);
+        }
+        free(g); free(f);
+        return out;
     }
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
         return dt3_run(res->data.function.args[0], thr);
@@ -3045,7 +3225,10 @@ static Expr* builtin_imagelevels(Expr* res) {
      * binning them into anything else would invent structure. Only Real needs a choice. */
     if (nbins == 0) nbins = (t == IMG_BIT) ? 2 : IMG_LEVEL_BINS;
 
-    double* count = calloc(nbins, sizeof(double));
+    /* One count per channel: a multichannel image gives {level, {c1, ..., cn}} rows, so the
+     * counts of each channel sum to the pixel count (audit ImageLevels#1: the channels were pooled,
+     * so 2 RGB pixels counted 6). */
+    double* count = calloc(nbins * c, sizeof(double));
     Expr* out = NULL;
     if (count) {
         for (size_t i = 0; i < n; i++) {
@@ -3054,7 +3237,7 @@ static Expr* builtin_imagelevels(Expr* res) {
             if (v > 1.0) v = 1.0;
             size_t b = (size_t)(v * (double)(nbins - 1) + 0.5);
             if (b >= nbins) b = nbins - 1;
-            count[b] += 1.0;
+            count[b * c + i % c] += 1.0;
         }
         Expr** rows = malloc(sizeof(Expr*) * nbins);
         if (rows) {
@@ -3065,7 +3248,14 @@ static Expr* builtin_imagelevels(Expr* res) {
                 /* The level, on the same unit scale ImageData uses, so a level can be compared
                  * against a pixel value without rescaling. */
                 pair[0] = expr_new_real((double)i / (double)(nbins - 1));
-                pair[1] = expr_new_integer((int64_t)count[i]);
+                if (c == 1) {
+                    pair[1] = expr_new_integer((int64_t)count[i]);
+                } else {
+                    Expr** per = malloc(sizeof(Expr*) * c);
+                    for (size_t k = 0; k < c; k++) per[k] = expr_new_integer((int64_t)count[i * c + k]);
+                    pair[1] = expr_new_function(expr_new_symbol(SYM_List), per, c);
+                    free(per);
+                }
                 if (pair[0] && pair[1])
                     rows[i] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
                 else { expr_free(pair[0]); expr_free(pair[1]); }
@@ -3091,13 +3281,17 @@ static Expr* builtin_imageadjust(Expr* res) {
     bool params = false;
     if (argc == 2) {
         Expr* sp = res->data.function.args[1];
-        if (!ker_is_list(sp)) return NULL;
-        size_t k = sp->data.function.arg_count;
-        if (k != 2 && k != 3) return NULL;
+        /* ImageAdjust[image, c] is ImageAdjust[image, {c, 0}] (audit ImageAdjust#1) */
+        if (!ker_is_list(sp)) {
+            if (!image_real_value(sp, &ct)) return NULL;
+            sp = NULL;
+        }
+        size_t k = sp ? sp->data.function.arg_count : 0;
+        if (sp && k != 2 && k != 3) return NULL;
         double im = 0.0;
-        if (!na_read_scalar(sp->data.function.args[0], &ct, &im) || im != 0.0) return NULL;
-        if (!na_read_scalar(sp->data.function.args[1], &br, &im) || im != 0.0) return NULL;
-        if (k == 3) {
+        if (sp && (!na_read_scalar(sp->data.function.args[0], &ct, &im) || im != 0.0)) return NULL;
+        if (sp && (!na_read_scalar(sp->data.function.args[1], &br, &im) || im != 0.0)) return NULL;
+        if (sp && k == 3) {
             if (!na_read_scalar(sp->data.function.args[2], &gm, &im) || im != 0.0) return NULL;
             if (!(gm > 0.0)) return NULL;      /* a non-positive gamma is not a curve */
         }
@@ -3814,11 +4008,23 @@ static Expr* builtin_imagecorrelate(Expr* res) {
     if (argc != 2 && argc != 3) return NULL;
 
     bool ncc = false;
+    int dist = 0;          /* ImageCorrelate[image, ker, f]: 1 Euclidean, 2 squared Euclidean,
+                            * 3 Manhattan, 4 chessboard -- f[neighbourhood, ker] at every pixel
+                            * (audit ImageCorrelate#2) */
     if (argc == 3) {
         Expr* m = res->data.function.args[2];
-        if (!m || m->type != EXPR_STRING) return NULL;
-        if (strcmp(m->data.string, "NormalizedCrossCorrelation") == 0) ncc = true;
-        else return NULL;
+        if (m && m->type == EXPR_SYMBOL) {
+            const char* dn = m->data.symbol.name;
+            if (strcmp(dn, "EuclideanDistance") == 0) dist = 1;
+            else if (strcmp(dn, "SquaredEuclideanDistance") == 0) dist = 2;
+            else if (strcmp(dn, "ManhattanDistance") == 0) dist = 3;
+            else if (strcmp(dn, "ChessboardDistance") == 0) dist = 4;
+            else return NULL;
+        } else {
+            if (!m || m->type != EXPR_STRING) return NULL;
+            if (strcmp(m->data.string, "NormalizedCrossCorrelation") == 0) ncc = true;
+            else return NULL;
+        }
     }
 
     /* The template is a matrix or, as in Mathematica, an IMAGE -- the natural way to hand over a patch
@@ -3837,6 +4043,35 @@ static Expr* builtin_imagecorrelate(Expr* res) {
     }
 
     Expr* out = NULL;
+    if (dist) {
+        /* The neighbourhood is the kernel-sized window around each pixel, its centre at the kernel's
+         * centre, the border replicated as in the convolutions; every channel separately. */
+        size_t w = 0, h = 0, c = 0; double* src = NULL;
+        if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(k); return NULL; }
+        double* dst = malloc(sizeof(double) * w * h * c);
+        if (dst) {
+            int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+            for (size_t y = 0; y < h; y++)
+                for (size_t x = 0; x < w; x++)
+                    for (size_t ch = 0; ch < c; ch++) {
+                        double acc = 0.0;
+                        for (size_t i = 0; i < kh; i++) {
+                            size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
+                            for (size_t j = 0; j < kw; j++) {
+                                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
+                                double d = fabs(src[(sy * w + sx) * c + ch] - k[i * kw + j]);
+                                if (dist == 3) acc += d;
+                                else if (dist == 4) { if (d > acc) acc = d; }
+                                else acc += d * d;
+                            }
+                        }
+                        dst[(y * w + x) * c + ch] = dist == 1 ? sqrt(acc) : acc;
+                    }
+            out = image_build_real(dst, w, h, c);
+        }
+        free(src); free(dst); free(k);
+        return out;
+    }
     if (ncc) {
         /* NCC compares SHAPE, which is a property of brightness rather than of colour, so a colour
          * image is reduced to luminance first -- the same choice GradientFilter makes, and for the
@@ -3859,6 +4094,151 @@ static Expr* builtin_imagecorrelate(Expr* res) {
     }
     free(k);
     return out;
+}
+
+/* ---------------------------------------------------------------- numeric data arrays */
+
+/* The filters also take plain numeric data -- a vector or a matrix, as the reference does --
+ * (audit Erosion#1, Closing#2, GaussianFilter#1, MeanFilter#1, MedianFilter#1,
+ * DerivativeFilter#1, GradientFilter#2, MorphologicalComponents#1). One mechanism serves all of
+ * them: the data become a "Real" image (a vector a one-row image, whose replicated border makes
+ * the 2-D window the 1-D one), the image operator runs unchanged, and ImageData of the result is
+ * handed back in the input's shape. A "Real" image stores the values as given, so integers and
+ * values outside [0, 1] pass through. Order-statistic heads (min, max, median) return one of
+ * their inputs, so integer data come back as integers; MeanFilter of exact data is computed
+ * exactly (the reference gives {4/3, 2, ...}, not reals). */
+
+typedef struct { const char* name; BuiltinFunc fn; int mode; } FilterDataEntry;
+enum { FD_REAL = 0, FD_SELECT = 1, FD_MEAN = 2, FD_RAW = 3 };
+
+static FilterDataEntry g_filter_data[] = {
+    { "Erosion", builtin_erosion, FD_SELECT },
+    { "Dilation", builtin_dilation, FD_SELECT },
+    { "Opening", builtin_opening, FD_SELECT },
+    { "Closing", builtin_closing, FD_SELECT },
+    { "MedianFilter", builtin_medianfilter, FD_SELECT },
+    { "MeanFilter", builtin_meanfilter, FD_MEAN },
+    { "GaussianFilter", builtin_gaussianfilter, FD_REAL },
+    { "DerivativeFilter", builtin_derivativefilter, FD_REAL },
+    { "GradientFilter", builtin_gradientfilter, FD_REAL },
+    { "MorphologicalComponents", builtin_morphologicalcomponents, FD_RAW },
+};
+
+static bool fd_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
+static bool fd_leaf(const Expr* e, bool* exact, bool* integer) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type == EXPR_REAL || e->type == EXPR_MPFR) { *exact = false; *integer = false; return true; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational) { *integer = false; return true; }
+    return false;
+}
+
+/* Rank 1 or 2 numeric data (a nested List; a packed one is unpacked first). */
+static int fd_rank(const Expr* e, bool* exact, bool* integer) {
+    *exact = true; *integer = true;
+    if (!fd_is_list(e) || e->data.function.arg_count == 0) return 0;
+    size_t n = e->data.function.arg_count;
+    if (!fd_is_list(e->data.function.args[0])) {
+        for (size_t i = 0; i < n; i++) if (!fd_leaf(e->data.function.args[i], exact, integer)) return 0;
+        return 1;
+    }
+    size_t m = e->data.function.args[0]->data.function.arg_count;
+    if (m == 0) return 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* row = e->data.function.args[i];
+        if (!fd_is_list(row) || row->data.function.arg_count != m) return 0;
+        for (size_t j = 0; j < m; j++) if (!fd_leaf(row->data.function.args[j], exact, integer)) return 0;
+    }
+    return 2;
+}
+
+static Expr* fd_call1(const char* h, Expr* a) {
+    return eval_and_free(expr_new_function(expr_new_symbol(h), (Expr*[]){ a }, 1));
+}
+
+/* Exact MeanFilter of rank-1/2 exact data with an integer radius: the window mean with the
+ * border replicated, as rationals. NULL when the radius is not a nonnegative integer. */
+static Expr* fd_mean_exact(const Expr* data, int rank, const Expr* rspec) {
+    if (rspec->type != EXPR_INTEGER || rspec->data.integer < 0) return NULL;
+    int64_t r = rspec->data.integer;
+    size_t h = rank == 1 ? 1 : data->data.function.arg_count;
+    size_t w = rank == 1 ? data->data.function.arg_count : data->data.function.args[0]->data.function.arg_count;
+    if ((double)(2 * r + 1) * (double)(2 * r + 1) * (double)h * (double)w > 4.0e6) return NULL;
+    #define FD_AT(i, j) (rank == 1 ? data->data.function.args[(j)] \
+                                   : data->data.function.args[(i)]->data.function.args[(j)])
+    int64_t kh = rank == 1 ? 0 : r;
+    int64_t cnt = (2 * kh + 1) * (2 * r + 1);
+    Expr** rows = malloc(sizeof(Expr*) * h);
+    for (size_t i = 0; i < h; i++) {
+        Expr** out = malloc(sizeof(Expr*) * w);
+        for (size_t j = 0; j < w; j++) {
+            Expr** terms = malloc(sizeof(Expr*) * (size_t)cnt);
+            size_t t = 0;
+            for (int64_t di = -kh; di <= kh; di++)
+                for (int64_t dj = -r; dj <= r; dj++) {
+                    size_t ii = clampi((int64_t)i + di, h), jj = clampi((int64_t)j + dj, w);
+                    terms[t++] = expr_copy(FD_AT(ii, jj));
+                }
+            Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, t);
+            free(terms);
+            Expr* q = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ sum, expr_new_function(expr_new_symbol(SYM_Rational),
+                           (Expr*[]){ expr_new_integer(1), expr_new_integer(cnt) }, 2) }, 2);
+            out[j] = eval_and_free(q);
+        }
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), out, w);
+        free(out);
+    }
+    #undef FD_AT
+    Expr* res;
+    if (rank == 1) { res = rows[0]; }
+    else res = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+    free(rows);
+    return res;
+}
+
+static Expr* builtin_filter_data(Expr* res) {
+    const char* h = res->data.function.head->data.symbol.name;
+    const FilterDataEntry* ent = NULL;
+    for (size_t i = 0; i < sizeof g_filter_data / sizeof g_filter_data[0]; i++)
+        if (strcmp(g_filter_data[i].name, h) == 0) { ent = &g_filter_data[i]; break; }
+    if (!ent) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return NULL;
+    Expr* data = res->data.function.args[0];
+    bool is_nd = is_ndarray(data);
+    if (!is_nd && !fd_is_list(data)) return ent->fn(res);    /* an Image: the image operator */
+    Expr* plain = is_nd ? ndarray_to_nested_list(data) : expr_copy(data);
+    if (!plain) return NULL;
+    bool exact, integer;
+    int rank = fd_rank(plain, &exact, &integer);
+    if (rank == 0) { expr_free(plain); return NULL; }
+    if (ent->mode == FD_MEAN && exact && argc == 2) {
+        Expr* m = fd_mean_exact(plain, rank, res->data.function.args[1]);
+        if (m) { expr_free(plain); return m; }
+    }
+    Expr* rows = rank == 1 ? expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ plain }, 1) : plain;
+    Expr* img = expr_new_function(expr_new_symbol(SYM_Image),
+                                  (Expr*[]){ rows, expr_new_string("Real") }, 2);
+    Expr** a = malloc(sizeof(Expr*) * argc);
+    a[0] = img;
+    for (size_t i = 1; i < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+    Expr* call = expr_new_function(expr_new_symbol(h), a, argc);
+    free(a);
+    Expr* r = eval_and_free(call);
+    if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+        r->data.function.head->data.symbol.name == h) { expr_free(r); return NULL; }
+    if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+        r->data.function.head->data.symbol.name == SYM_Image) {
+        r = fd_call1("ImageData", r);
+    }
+    if (rank == 1) r = fd_call1(SYM_First, r);
+    if (ent->mode == FD_SELECT && integer) r = fd_call1(SYM_Round, r);
+    return r;
 }
 
 void imagefilter_init(void) {
@@ -3915,6 +4295,8 @@ void imagefilter_init(void) {
     symtab_add_builtin("ImageCorrelate", builtin_imagecorrelate);
     symtab_get_def("ImageCorrelate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageCorrelate",
+        "ImageCorrelate[image, kernel, f] with f EuclideanDistance, SquaredEuclideanDistance, "
+        "ManhattanDistance or ChessboardDistance gives f[neighbourhood, kernel] per pixel. "
         "ImageCorrelate[image, kernel] correlates image with kernel: the kernel is NOT reflected, which "
         "is the only difference from ImageConvolve. The two are related exactly -- correlation equals "
         "convolution with the kernel reversed on both axes -- and they agree on any symmetric kernel, "
@@ -3932,7 +4314,8 @@ void imagefilter_init(void) {
     symtab_add_builtin("ImageLevels", builtin_imagelevels);
     symtab_get_def("ImageLevels")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageLevels",
-        "ImageLevels[image] gives {{level, count}, ...}: the histogram as DATA, not a plot -- use "
+        "ImageLevels[image] gives {{level, count}, ...} ({{level, {c1, ..., cn}}, ...} per channel for a "
+        "multichannel image): the histogram as DATA, not a plot -- use "
         "Histogram over the result for a picture. ImageLevels[image, n] uses n bins. Levels are on "
         "the same unit scale as ImageData, so a level can be compared against a pixel value without "
         "rescaling. A \"Bit\" image uses its 2 natural levels and \"Byte\" its 256, because those "
@@ -3943,6 +4326,7 @@ void imagefilter_init(void) {
     symtab_add_builtin("ImageAdjust", builtin_imageadjust);
     symtab_get_def("ImageAdjust")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageAdjust",
+        "ImageAdjust[image, c] is ImageAdjust[image, {c, 0}]. "
         "ImageAdjust[image] stretches to the full range: the darkest pixel becomes exactly 0 and the "
         "brightest exactly 1. It is IDEMPOTENT, a second stretch being the identity. A constant image "
         "has no range to stretch and comes back unchanged, since dividing by zero is not the answer "
@@ -3956,6 +4340,8 @@ void imagefilter_init(void) {
     symtab_add_builtin("DistanceTransform", builtin_distancetransform);
     symtab_get_def("DistanceTransform")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DistanceTransform",
+        "DistanceTransform[image, DistanceFunction -> ManhattanDistance | ChessboardDistance] uses "
+        "that metric (exact two-pass chamfer). "
         "DistanceTransform[image] replaces each pixel by its EXACT Euclidean distance to the nearest "
         "background pixel; background pixels are 0, so the value rises toward the interior of a blob. "
         "DistanceTransform[image, t] takes pixels above t as foreground (default 0). "
@@ -3965,7 +4351,7 @@ void imagefilter_init(void) {
         "parabolas method, O(n) per row with no sorting. Separability is EXACT here because squared "
         "Euclidean distance is a sum over the axes, so minimising it decomposes per axis; the square "
         "root is taken once at the end rather than per pass.");
-    symtab_add_builtin("MedianFilter", builtin_medianfilter);
+    symtab_add_builtin("MedianFilter", builtin_filter_data);   /* data arrays, then builtin_medianfilter */
     symtab_get_def("MedianFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("MedianFilter",
         "MedianFilter[image, r] replaces each pixel with the median over a (2r+1) x (2r+1) "
@@ -3978,14 +4364,14 @@ void imagefilter_init(void) {
         "middle is taken rather than the average of the two, so the output is always one of the "
         "inputs.");
 
-    symtab_add_builtin("MeanFilter", builtin_meanfilter);
+    symtab_add_builtin("MeanFilter", builtin_filter_data);   /* data arrays, then builtin_meanfilter */
     symtab_get_def("MeanFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("MeanFilter",
         "MeanFilter[image, r] averages over a (2r+1) x (2r+1) neighbourhood. This IS a convolution "
         "with a normalised box, and it is implemented as one rather than as a separate averaging "
         "loop -- two implementations of one identity is how the identity quietly stops holding. "
         "Being a full rectangle the kernel is separable, so it costs kw + kh rather than kw * kh.");
-    symtab_add_builtin("MorphologicalComponents", builtin_morphologicalcomponents);
+    symtab_add_builtin("MorphologicalComponents", builtin_filter_data);   /* data arrays, then builtin_morphologicalcomponents */
     symtab_get_def("MorphologicalComponents")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("MorphologicalComponents",
         "MorphologicalComponents[image] labels the connected components of the foreground, giving "
@@ -3999,10 +4385,11 @@ void imagefilter_init(void) {
         "of 1..12 a \"Byte\" image and ImageData would then divide every label by 255. Labels are "
         "indices, not brightnesses. Contiguous labels in scan order mean Max of the result is the "
         "component count.");
-    symtab_add_builtin("Dilation", builtin_dilation);
+    symtab_add_builtin("Dilation", builtin_filter_data);   /* data arrays, then builtin_dilation */
     symtab_get_def("Dilation")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Dilation",
-        "Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood; "
+        "Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood "
+        "(max f(x - b): an element is stamped as written); "
         "Dilation[image, elem] uses the SUPPORT of the matrix elem -- its nonzero positions -- as "
         "the neighbourhood. This is flat morphology: the element's values do not enter the "
         "maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same "
@@ -4011,7 +4398,7 @@ void imagefilter_init(void) {
         "maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh. "
         "A \"Bit\" image gives a \"Bit\" image; other types give \"Real\".");
 
-    symtab_add_builtin("Erosion", builtin_erosion);
+    symtab_add_builtin("Erosion", builtin_filter_data);   /* data arrays, then builtin_erosion */
     symtab_get_def("Erosion")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Erosion",
         "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; "
@@ -4019,7 +4406,7 @@ void imagefilter_init(void) {
         "Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only "
         "because the replicate padding is itself self-dual A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
 
-    symtab_add_builtin("Opening", builtin_opening);
+    symtab_add_builtin("Opening", builtin_filter_data);   /* data arrays, then builtin_opening */
     symtab_get_def("Opening")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Opening",
         "Opening[image, r] erodes then dilates with the same element, removing bright features "
@@ -4027,7 +4414,7 @@ void imagefilter_init(void) {
         "Opening[Opening[f]] equals Opening[f], which is the defining property and the reason "
         "opening twice is not a sharpening loop A \"Bit\" image stays \"Bit\"; other types give \"Real\".");
 
-    symtab_add_builtin("Closing", builtin_closing);
+    symtab_add_builtin("Closing", builtin_filter_data);   /* data arrays, then builtin_closing */
     symtab_get_def("Closing")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Closing",
         "Closing[image, r] dilates then erodes with the same element, filling dark features "
@@ -4046,7 +4433,7 @@ void imagefilter_init(void) {
         "its faint stretches while isolated weak responses do not. The high threshold defaults to "
         "Otsu's method applied to the SUPPRESSED magnitude, where the two classes really are edge "
         "against non-edge; on the raw magnitude it would be dominated by the ridge flanks.");
-    symtab_add_builtin("DerivativeFilter", builtin_derivativefilter);
+    symtab_add_builtin("DerivativeFilter", builtin_filter_data);   /* data arrays, then builtin_derivativefilter */
     symtab_get_def("DerivativeFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DerivativeFilter",
         "DerivativeFilter[image, {n, m}] gives the n-th derivative down the rows and the m-th "
@@ -4058,7 +4445,7 @@ void imagefilter_init(void) {
         "and wrong for anything that reads the number. On f(x) = c x the first derivative gives "
         "exactly c. The result is a \"Real\" image.");
 
-    symtab_add_builtin("GradientFilter", builtin_gradientfilter);
+    symtab_add_builtin("GradientFilter", builtin_filter_data);   /* data arrays, then builtin_gradientfilter */
     symtab_get_def("GradientFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GradientFilter",
         "GradientFilter[image] gives the gradient magnitude Sqrt[dx^2 + dy^2], using the "
@@ -4074,7 +4461,8 @@ void imagefilter_init(void) {
     symtab_get_def("FindThreshold")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FindThreshold",
         "FindThreshold[image] gives a threshold separating the image into two classes, by "
-        "Otsu's method: the level maximising the BETWEEN-class variance "
+        "Otsu's method (Method -> \"Cluster\", the default; Method -> \"Mean\" gives the mean "
+        "intensity). Otsu's method is the level maximising the BETWEEN-class variance "
         "w0 w1 (mu0 - mu1)^2, which is algebraically the same as minimising the weighted "
         "within-class variance but needs only one incremental pass over a 256-bin histogram. "
         "A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an "
@@ -4096,7 +4484,8 @@ void imagefilter_init(void) {
     symtab_get_def("Binarize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Binarize",
         "Binarize[image] thresholds image by Otsu's method (see FindThreshold), giving a "
-        "\"Bit\" image. Binarize[image, t] thresholds at t. A pixel STRICTLY ABOVE the "
+        "\"Bit\" image (a one-level image, which Otsu cannot split, at 0.5). Binarize[image, {t1, t2}] "
+        "gives 1 for values in [t1, t2]. Binarize[image, t] thresholds at t. A pixel STRICTLY ABOVE the "
         "threshold becomes 1, so a pixel exactly at it becomes 0 -- which matters, because "
         "\"above\" and \"at or above\" differ on exactly the pixels a threshold was chosen "
         "to sit between. A colour image is reduced to luminance first.");
@@ -4117,7 +4506,8 @@ void imagefilter_init(void) {
     symtab_add_builtin("ImageConvolve", builtin_imageconvolve);
     symtab_get_def("ImageConvolve")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageConvolve",
-        "ImageConvolve[image, kernel] convolves image with the rank-2 numeric kernel. This is "
+        "ImageConvolve[image, kernel] convolves image with the rank-2 numeric kernel; Padding -> p "
+        "(\"Fixed\" by default, or any ImagePad scheme or value) sets the border. This is "
         "true convolution: the kernel is REFLECTED before summing, so it differs from "
         "correlation on an asymmetric kernel (the two agree exactly on a symmetric one such as "
         "a Gaussian or a box). Out-of-range reads clamp to the nearest edge pixel, replicating "
@@ -4130,7 +4520,8 @@ void imagefilter_init(void) {
     symtab_get_def("GaussianMatrix")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GaussianMatrix",
         "GaussianMatrix[r] gives a (2r+1) x (2r+1) Gaussian matrix normalised to sum 1. "
-        "GaussianMatrix[{r, sigma}] states the standard deviation; it defaults to r/2, which "
+        "GaussianMatrix[r, {n1, n2}] differentiates it n1 times down the rows and n2 times across "
+        "the columns. GaussianMatrix[{r, sigma}] states the standard deviation; it defaults to r/2, which "
         "puts the kernel's edge at two standard deviations. Normalisation divides by the "
         "realised sum rather than the analytic 2 pi sigma^2, because the analytic constant is "
         "correct only for an infinite kernel and using it on a truncated one leaves the sum "
@@ -4139,12 +4530,13 @@ void imagefilter_init(void) {
     symtab_add_builtin("BoxMatrix", builtin_boxmatrix);
     symtab_get_def("BoxMatrix")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("BoxMatrix",
-        "BoxMatrix[r] gives a (2r+1) x (2r+1) matrix of 1s. It is NOT normalised, matching "
+        "BoxMatrix[r] gives a (2r+1) x (2r+1) matrix of 1s; BoxMatrix[{r1, r2}] a (2 r1 + 1) x "
+        "(2 r2 + 1) one. It is NOT normalised, matching "
         "Mathematica, so ImageConvolve[image, BoxMatrix[1]] is nine times too bright; the "
         "normalised version is a mean filter. Kept faithful rather than helpfully rescaled, "
         "since a caller using BoxMatrix in arithmetic needs the ones.");
 
-    symtab_add_builtin("GaussianFilter", builtin_gaussianfilter);
+    symtab_add_builtin("GaussianFilter", builtin_filter_data);   /* data arrays, then builtin_gaussianfilter */
     symtab_get_def("GaussianFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GaussianFilter",
         "GaussianFilter[image, r] blurs image with a Gaussian of radius r. It is exactly "

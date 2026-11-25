@@ -8,6 +8,7 @@
  * free without duplicating any logic. */
 
 #include "polarplot.h"
+#include "plot_common.h"
 #include "parametricplot.h"
 #include "expr.h"
 #include "sym_names.h"
@@ -44,6 +45,12 @@ Expr* builtin_polarplot(Expr* res) {
         return NULL;
 
     Expr* theta = iter->data.function.args[0]; /* borrowed */
+
+    /* f = {1, 2}; PolarPlot[f, ...] plots both radii (audit PolarPlot#1). */
+    if (!(r_body->type == EXPR_FUNCTION && r_body->data.function.head->type == EXPR_SYMBOL && r_body->data.function.head->data.symbol.name == SYM_List)) {
+        Expr* rd = plot_redispatch_list_body(res, 1);
+        if (rd) return rd;
+    }
 
     /* Build the Cartesian body.
      * Single curve: r -> {r*Cos[th], r*Sin[th]}.

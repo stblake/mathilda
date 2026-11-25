@@ -655,6 +655,7 @@ set(COMMON_SRC
     ../src/tc_unwind_safe.c
     ../src/geometry.c
     ../src/geometry_curves.c
+    ../src/geometry_regions.c
     ../src/wavelets.c
     ../src/numloop.c
     ../src/boolean.c

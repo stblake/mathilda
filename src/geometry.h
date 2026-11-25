@@ -38,4 +38,11 @@ Expr* geom_curved_perimeter(const Expr* region);
 Expr* geom_curved_centroid(const Expr* region);
 Expr* geom_curved_member(const Expr* region, const Expr* p);
 
+/* src/geometry_regions.c: Rectangle / Triangle (as Polygon), multi-polygons,
+ * polygons with holes, RegionMember on Point / Line / Circle / Ball and planar
+ * 3-D polygons, and exact non-rational coordinates.  `h` is the head asking
+ * ("Area", "Perimeter", "RegionCentroid", "RegionMember"); NULL declines. */
+Expr* geom_region_extra(const char* h, const Expr* res);
+Expr* geom_symbolic_hull(const Expr* pts);
+
 #endif /* GEOMETRY_H */

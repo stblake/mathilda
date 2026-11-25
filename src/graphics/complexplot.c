@@ -46,7 +46,8 @@
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int   plot_points;
+    int   plot_points;          /* cells along x (the real axis) */
+    int   plot_points_y;        /* cells along y (the imaginary axis) */
     Expr* color_function;         /* borrowed; NULL = thermal default */
     bool  color_function_scaling;
     Expr* region_function;        /* borrowed; NULL = none */
@@ -60,6 +61,7 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plo
                                  CPlotOpts* o,
                                  Expr*** pt_out, size_t* pt_n_out) {
     o->plot_points            = default_plot_points;
+    o->plot_points_y          = default_plot_points;
     o->color_function         = NULL;
     o->color_function_scaling = true;
     o->region_function        = NULL;
@@ -85,9 +87,9 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plo
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
-            long v;
-            if (!parse_long_value(rhs, &v) || v < 2) CP_FAIL();
-            o->plot_points = (int)v;
+            long vx, vy;          /* n, {nx, ny} (audit ComplexPlot#2) or Automatic */
+            if (!parse_plot_points_pair(rhs, &vx, &vy)) CP_FAIL();
+            if (vx > 0) { o->plot_points = (int)vx; o->plot_points_y = (int)vy; }
         } else if (name == SYM_ColorFunction) {
             o->color_function = rhs; /* borrowed */
         } else if (name == SYM_ColorFunctionScaling) {
@@ -107,10 +109,9 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plo
             if      (name == SYM_Axes)        have_axes   = true;
             else if (name == SYM_AspectRatio) have_aspect = true;
             else if (name == SYM_Frame) {
-                if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol.name == SYM_False
-                          || rhs->data.symbol.name == SYM_None)))
-                    have_frame = true;
+                /* any explicit Frame, False included, suppresses the injected
+                 * Frame -> True (audit ArrayPlot#1, ComplexPlot#1) */
+                have_frame = true;
             }
             Expr* val  = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
@@ -439,12 +440,12 @@ static double compute_height_cap(const CGrid* grid, size_t total) {
 
 static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
                            double xmin, double xmax,
-                           double ymin, double ymax, int N) {
-    CGrid* grid = malloc(sizeof(CGrid) * (size_t)(N + 1) * (size_t)(N + 1));
+                           double ymin, double ymax, int NX, int NY) {
+    CGrid* grid = malloc(sizeof(CGrid) * (size_t)(NX + 1) * (size_t)(NY + 1));
     if (!grid) return NULL;
 
-    double dx = (xmax - xmin) / N;
-    double dy = (ymax - ymin) / N;
+    double dx = (xmax - xmin) / NX;
+    double dy = (ymax - ymin) / NY;
 
     const Expr* zv[1] = { zvar };
     AutoCompiled* ac = autocompile_new_z(body, zv, 1);
@@ -455,13 +456,13 @@ static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
      * chatter the interpreter would otherwise print for every such point —
      * exactly as Plot and the numeric optimizers do around divergent probes. */
     arith_warnings_mute_push();
-    for (int iy = 0; iy <= N; iy++) {
+    for (int iy = 0; iy <= NY; iy++) {
         double y = ymin + iy * dy;
-        if (iy == N) y = ymax;
-        for (int ix = 0; ix <= N; ix++) {
+        if (iy == NY) y = ymax;
+        for (int ix = 0; ix <= NX; ix++) {
             double x = xmin + ix * dx;
-            if (ix == N) x = xmax;
-            CGrid* p = &grid[iy * (N + 1) + ix];
+            if (ix == NX) x = xmax;
+            CGrid* p = &grid[iy * (NX + 1) + ix];
             double re, im;
             bool ok = cp_eval(ac, zvar, body, x, y, &re, &im);
             if (ok && region_fn && !eval_region(region_fn, x, y)) ok = false;
@@ -479,16 +480,16 @@ static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
  * points, for ColorFunctionScaling→True.  Computed from the sampled grid points
  * (the corners the cell colours are averaged from), which bound the cell-centre
  * values; scaled results are clamped to [0,1] regardless. */
-static void grid_cfrange(const CGrid* grid, int N,
+static void grid_cfrange(const CGrid* grid, int NX, int NY,
                          double xmin, double xmax, double ymin, double ymax,
                          CFRange* r) {
     for (int k = 0; k < 8; k++) { r->lo[k] = 1e300; r->hi[k] = -1e300; }
-    double dx = (xmax - xmin) / N;
-    double dy = (ymax - ymin) / N;
-    size_t stride = (size_t)(N + 1);
-    for (int iy = 0; iy <= N; iy++) {
+    double dx = (xmax - xmin) / NX;
+    double dy = (ymax - ymin) / NY;
+    size_t stride = (size_t)(NX + 1);
+    for (int iy = 0; iy <= NY; iy++) {
         double y = ymin + iy * dy;
-        for (int ix = 0; ix <= N; ix++) {
+        for (int ix = 0; ix <= NX; ix++) {
             const CGrid* p = &grid[(size_t)iy * stride + (size_t)ix];
             if (!p->valid) continue;
             double a[8];
@@ -592,12 +593,12 @@ Expr* builtin_complexplot(Expr* res) {
      * under ~0.5s. */
     if (!split_cplot_options(res, 2, 400, &opts, &pt, &pt_n)) return NULL;
 
-    int N = opts.plot_points;
-    size_t stride = (size_t)(N + 1);
+    int NX = opts.plot_points, NY = opts.plot_points_y;
+    size_t stride = (size_t)(NX + 1);
 
     IterShadow old_z = iter_spec_shadow(zvar);
     CGrid* grid = build_cgrid(zvar, body, opts.region_function,
-                               xmin, xmax, ymin, ymax, N);
+                               xmin, xmax, ymin, ymax, NX, NY);
     iter_spec_restore(zvar, old_z);
 
     if (!grid) {
@@ -610,19 +611,19 @@ Expr* builtin_complexplot(Expr* res) {
      * consumes them; the default and string ramps key off the raw phase). */
     CFRange cfr = {{0}, {0}};
     if (opts.color_function)
-        grid_cfrange(grid, N, xmin, xmax, ymin, ymax, &cfr);
+        grid_cfrange(grid, NX, NY, xmin, xmax, ymin, ymax, &cfr);
 
-    double dx = (xmax - xmin) / N;
-    double dy = (ymax - ymin) / N;
+    double dx = (xmax - xmin) / NX;
+    double dy = (ymax - ymin) / NY;
 
     /* 2 primitives per cell: color directive + Rectangle */
-    size_t cap   = (size_t)N * (size_t)N * 2 + 2;
+    size_t cap   = (size_t)NX * (size_t)NY * 2 + 2;
     Expr** prims = malloc(sizeof(Expr*) * cap);
     size_t np    = 0;
 
-    for (int iy = 0; iy < N; iy++) {
+    for (int iy = 0; iy < NY; iy++) {
         double y0 = ymin + iy * dy;
-        for (int ix = 0; ix < N; ix++) {
+        for (int ix = 0; ix < NX; ix++) {
             double x0 = xmin + ix * dx;
 
             /* Average the four corner values for smooth appearance */
@@ -691,6 +692,29 @@ Expr* builtin_complexplot3d(Expr* res) {
 
     Expr* body = res->data.function.args[0]; /* held */
 
+    /* ComplexPlot3D[{f1, f2, ...}, ...]: one surface per function, overlaid by Show (whose range
+     * union covers every surface) -- audit ComplexPlot3D#2: the list body gave an empty plot. */
+    if (body->type == EXPR_FUNCTION && body->data.function.head->type == EXPR_SYMBOL
+        && body->data.function.head->data.symbol.name == SYM_List && body->data.function.arg_count > 0) {
+        size_t nf = body->data.function.arg_count;
+        Expr** parts = malloc(sizeof(Expr*) * nf);
+        if (!parts) return NULL;
+        for (size_t i = 0; i < nf; i++) {
+            Expr** a = malloc(sizeof(Expr*) * argc);
+            a[0] = expr_copy(body->data.function.args[i]);
+            for (size_t j = 1; j < argc; j++) a[j] = expr_copy(res->data.function.args[j]);
+            parts[i] = expr_new_function(expr_copy(res->data.function.head), a, argc);
+            free(a);
+        }
+        Expr* show = expr_new_function(expr_new_symbol("Show"), parts, nf);
+        free(parts);
+        Expr* r = evaluate(show);
+        expr_free(show);
+        if (!(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+              && r->data.function.head->data.symbol.name == SYM_Graphics3D)) { expr_free(r); return NULL; }
+        return r;
+    }
+
     Expr*  zvar;
     double xmin, xmax, ymin, ymax;
     if (!parse_complex_iterator(res->data.function.args[1],
@@ -705,12 +729,12 @@ Expr* builtin_complexplot3d(Expr* res) {
      * comparable gain (the surface is already smoothly shaded). */
     if (!split_cplot_options(res, 2, 200, &opts, &pt, &pt_n)) return NULL;
 
-    int N = opts.plot_points;
-    size_t stride = (size_t)(N + 1);
+    int NX = opts.plot_points, NY = opts.plot_points_y;
+    size_t stride = (size_t)(NX + 1);
 
     IterShadow old_z = iter_spec_shadow(zvar);
     CGrid* grid = build_cgrid(zvar, body, opts.region_function,
-                               xmin, xmax, ymin, ymax, N);
+                               xmin, xmax, ymin, ymax, NX, NY);
     iter_spec_restore(zvar, old_z);
 
     if (!grid) {
@@ -722,19 +746,27 @@ Expr* builtin_complexplot3d(Expr* res) {
     /* Per-argument ranges for ColorFunctionScaling (custom ColorFunction only). */
     CFRange cfr = {{0}, {0}};
     if (opts.color_function)
-        grid_cfrange(grid, N, xmin, xmax, ymin, ymax, &cfr);
+        grid_cfrange(grid, NX, NY, xmin, xmax, ymin, ymax, &cfr);
 
     /* Clip heights at the 95th-percentile of |f(z)| so poles appear as
      * flat-topped cylinders rather than infinite spikes (Mathematica style). */
-    double hcap = compute_height_cap(grid, stride * stride);
+    double hcap = compute_height_cap(grid, (size_t)(NX + 1) * (size_t)(NY + 1));
+    /* An explicit PlotRange (All, or a range) asks for the true heights: no
+     * percentile clamp (audit ComplexPlot3D#1). */
+    for (size_t i = 2; i < res->data.function.arg_count; i++) {
+        Expr* a = res->data.function.args[i];
+        if (is_rule_arg(a) && a->data.function.args[0]->type == EXPR_SYMBOL
+            && a->data.function.args[0]->data.symbol.name == SYM_PlotRange)
+            hcap = HUGE_VAL;
+    }
 
     /* 2 primitives per cell: color + Polygon */
-    size_t cap   = (size_t)N * (size_t)N * 2 + 2;
+    size_t cap   = (size_t)NX * (size_t)NY * 2 + 2;
     Expr** prims = malloc(sizeof(Expr*) * cap);
     size_t np    = 0;
 
-    for (int iy = 0; iy < N; iy++) {
-        for (int ix = 0; ix < N; ix++) {
+    for (int iy = 0; iy < NY; iy++) {
+        for (int ix = 0; ix < NX; ix++) {
             const CGrid* p00 = &grid[ iy      * (int)stride + ix    ];
             const CGrid* p10 = &grid[ iy      * (int)stride + ix + 1];
             const CGrid* p11 = &grid[(iy + 1) * (int)stride + ix + 1];
@@ -768,18 +800,18 @@ Expr* builtin_complexplot3d(Expr* res) {
                 Expr* ca[3] = { expr_new_real(r), expr_new_real(g), expr_new_real(b) };
                 color = expr_new_function(expr_new_symbol(SYM_RGBColor), ca, 3);
             } else {
-                double xc = xmin + (ix + 0.5) * (xmax - xmin) / N;
-                double yc = ymin + (iy + 0.5) * (ymax - ymin) / N;
+                double xc = xmin + (ix + 0.5) * (xmax - xmin) / NX;
+                double yc = ymin + (iy + 0.5) * (ymax - ymin) / NY;
                 color = cp_color(opts.color_function, opts.color_function_scaling,
                                   &cfr, xc, yc, re_avg, im_avg);
             }
             prims[np++] = color;
 
             /* x axis = Re(z), y axis = Im(z), z axis = |f(z)| */
-            double x0 = xmin + ix       * (xmax - xmin) / N;
-            double x1 = xmin + (ix + 1) * (xmax - xmin) / N;
-            double y0 = ymin + iy       * (ymax - ymin) / N;
-            double y1 = ymin + (iy + 1) * (ymax - ymin) / N;
+            double x0 = xmin + ix       * (xmax - xmin) / NX;
+            double x1 = xmin + (ix + 1) * (xmax - xmin) / NX;
+            double y0 = ymin + iy       * (ymax - ymin) / NY;
+            double y1 = ymin + (iy + 1) * (ymax - ymin) / NY;
 
             Expr* verts[4] = { point3d(x0, y0, h00),
                                point3d(x1, y0, h10),

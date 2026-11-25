@@ -74,6 +74,7 @@ static const char* op_head_name(int op) {
         case OP_FLOOR:   return "Floor";
         case OP_CEILING: return "Ceiling";
         case OP_ROUND:   return "Round";
+        case OP_INTPART: return "IntegerPart";
         default:         return NULL;
     }
 }

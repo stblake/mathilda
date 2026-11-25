@@ -6,6 +6,12 @@ these and land separately.
 
 ## Image
 
+The presentation options `ColorSpace`, `Interleaving`, `ImageSize`, `Magnification`,
+`ImageResolution`, `MetaInformation`, `ImageMargins`, `Background` and `BaseStyle`
+are accepted and dropped: they do not change the stored pixels, and the result is
+the canonical `Image[data, type]` every accessor reads. An unknown option leaves
+the call unevaluated.
+
 `Image[data]` is a raster image, normalising to the canonical `Image[data, type]`.
 Attributes: `Protected`.
 
@@ -646,6 +652,15 @@ data rather than round-tripping through `ImageData`.
 
 ## ImageConvolve
 
+`Padding -> p`: `"Fixed"` (the default) replicates the edge; any other `ImagePad`
+scheme or value pads by the kernel's reach, convolves and crops back
+(`ImageConvolve[Image[{{0., 1., 0.}}], {{1, 1, 1}}, Padding -> 0]` is `{{1., 1., 1.}}`).
+
+Kernel entries, opacities, tolerances, colour components and pad values are read
+by one reader, `image_real_value` (`src/image.c`): an exact numeric quantity
+(`1/2`, `Pi`, `Pi/4`, `Sqrt[2]/2`) is its value, so `{{Pi}}` convolves as
+`N[{{Pi}}]` and `SetAlphaChannel[img, 1/2]` equals `SetAlphaChannel[img, 0.5]`.
+
 `ImageConvolve[image, kernel]` convolves `image` with a rank-2 numeric kernel. Attributes:
 `Protected`.
 
@@ -675,6 +690,8 @@ independently. A Gaussian of bytes is not a byte, and rounding back into the inp
 discard precision the caller never asked to lose.
 
 ## RandomImage
+`RandomImage[{min, max}, size]` draws on `[min, max]`.
+
 Uniform noise as an image.
 - `RandomImage[]`: a 150x150 grey image of uniform noise on `[0, 1]`.
 - `RandomImage[max]`: the same size, with samples on `[0, max]`.
@@ -845,6 +862,9 @@ Out[3]= True
 
 ## RemoveAlphaChannel
 
+The background may be a colour -- `GrayLevel[g]`, `RGBColor[r, g, b]`, `{r, g, b}`
+-- as well as a level; a grey image over a non-grey colour becomes a colour image.
+
 - The background may be any real number -- an Integer, Rational, machine or arbitrary-precision Real (audit RemoveAlphaChannel#1).
 Drops or resolves an image's opacity.
 - `RemoveAlphaChannel[image]` — discards the alpha channel.
@@ -871,6 +891,11 @@ Out[4]= 0.5
 ```
 
 ## ImageCompose
+The composite is the "over" operator: the base's colour is weighted by its own
+alpha and the sum divided by the result's alpha, so half-transparent red over a
+fully transparent pixel stays pure red (`{1., 0., 0., 0.5}`). An opaque base is
+unchanged (`o a + b (1 - a)`).
+
 Alpha-composites one image onto another.
 - `ImageCompose[base, over]` — centred.
 - `ImageCompose[base, over, {x, y}]` — the overlay's centre at `{x, y}`: `x` from the left,
@@ -985,6 +1010,9 @@ Out[3]= -Image-
 ```
 
 ## Thinning
+A 2x2 block that a subiteration would delete whole keeps one pixel, so thinning
+never deletes a component (the classic Zhang-Suen failure).
+
 Reduces the foreground to a one-pixel-wide skeleton.
 - `Thinning[image]` — iterates until a pass deletes nothing.
 - `Thinning[image, n]` — stops after `n` iterations.
@@ -1094,6 +1122,10 @@ Out[4]= -Image-
 ```
 
 ## Pruning
+An end point is a pixel whose neighbours form one contiguous run of at most three
+around its ring, so a spur is removed right up to the loop or junction it meets
+(no one-pixel stub), while a pixel inside a line, with two separate runs, stays.
+
 Removes pixels from the free ends of the foreground.
 - `Pruning[image]` — one pixel from every end.
 - `Pruning[image, n]` — repeats `n` times.
@@ -1148,6 +1180,9 @@ Out[6]= {12, 10, 8, 6, 4}
 ```
 
 ## ColorReplace
+Colour and alpha are counted separately: a grey+alpha image given a colour
+replacement becomes RGB+alpha, its alpha passed through.
+
 Replaces colours within a tolerance.
 - `ColorReplace[image, old -> new]`
 - `ColorReplace[image, {rule1, rule2, ...}]`
@@ -1204,6 +1239,10 @@ Out[6]= 1
 ```
 
 ## ColorQuantize
+`ColorQuantize[image, {c1, c2, ...}]` replaces each pixel by its nearest palette
+colour (Euclidean in RGB), alpha passed through; a grey image with an all-grey
+palette stays grey.
+
 Reduces an image to at most `n` colours.
 - `ColorQuantize[image, n]`
 
@@ -1253,6 +1292,11 @@ Out[4]= True
 ```
 
 ## HistogramTransform
+`HistogramTransform[image, ref]` matches the histogram of a reference image, and
+`HistogramTransform[image, dist]` that of a distribution: each occupied level maps
+to the reference's quantile (sorted luminances, or `Quantile[dist, p]`) at its
+mid-rank.
+
 Equalises an image's brightness histogram.
 - `HistogramTransform[image]`
 
@@ -1301,6 +1345,11 @@ Out[4]= True
 
 ## GaussianMatrix
 
+`GaussianMatrix[r, {n1, n2}]` is the `n1`-th derivative down the rows and the
+`n2`-th across the columns of the same normalised Gaussian:
+`(-1)^n He_n(t/s)/s^n` times each axis's weight (`He` the probabilists' Hermite
+polynomial); `{0, 0}` is `GaussianMatrix[r]`.
+
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.
 `GaussianMatrix[{r, sigma}]` states the standard deviation. Attributes: `Protected`.
 
@@ -1320,6 +1369,8 @@ In[1]:= GaussianMatrix[1]
 In[2]:= Total[Flatten[GaussianMatrix[2]]]
 ```
 ## BoxMatrix
+
+`BoxMatrix[{r1, r2}]` is the `(2 r1 + 1) x (2 r2 + 1)` box.
 
 `BoxMatrix[r]` gives a `(2r+1) × (2r+1)` matrix of 1s. Attributes: `Protected`.
 
@@ -1523,6 +1574,9 @@ The benchmark pair lives in `benchmarks/63-image-convolve/`, including a deliber
 
 ## FindThreshold
 
+`Method -> "Cluster"` (the default, Otsu) or `Method -> "Mean"` (the mean
+intensity).
+
 `FindThreshold[image]` gives a threshold separating the image into two classes, by **Otsu's
 method**. Attributes: `Protected`.
 
@@ -1636,6 +1690,9 @@ Out[2]= 0.488235
 ```
 
 ## Binarize
+
+`Binarize[image, {t1, t2}]` gives 1 for `t1 <= value <= t2`. A one-level image,
+which Otsu cannot split, is thresholded at 0.5 rather than left unevaluated.
 
 `Binarize[image]` thresholds by Otsu; `Binarize[image, t]` thresholds at `t`. Gives a `"Bit"`
 image. Attributes: `Protected`.
@@ -1772,6 +1829,9 @@ Out[2]= -Image-
 
 ## ColorConvert
 
+The conversion keeps the pixel type: a `"Byte"` image's luminance is quantised
+back to bytes (a colour `"Bit"` image widens to `"Byte"`).
+
 `ColorConvert[image, "Grayscale"]` converts by **Rec. 601 luminance**,
 `0.299 R + 0.587 G + 0.114 B`. Attributes: `Protected`.
 
@@ -1890,6 +1950,9 @@ Out[2]= -Image-
 ```
 
 ## ImageResize
+
+`{w, Automatic}` and `{Automatic, h}` keep the aspect ratio; `Scaled[s]` scales
+both dimensions.
 
 `ImageResize[image, {w, h}]` resizes to `w × h`; `ImageResize[image, w]` gives width `w` with the
 height following to preserve the aspect ratio. `Resampling -> "Nearest" | "Bilinear" | "Average"`
@@ -2315,6 +2378,9 @@ In[1]:= ImageData[GradientFilter[Image[{{0., 0., 1., 1.}, {0., 0., 1., 1.}}]]]
 ```
 ## EdgeDetect
 
+A zero-gradient pixel is never an edge, whatever the threshold: a uniform image
+has no edges even at threshold 0.
+
 `EdgeDetect[image]` finds edges by the **Canny** algorithm, giving a `"Bit"` image.
 `EdgeDetect[image, r]` sets the Gaussian smoothing radius (default 2; `0` means none).
 `EdgeDetect[image, r, t]` sets the high threshold. Attributes: `Protected`.
@@ -2476,6 +2542,9 @@ Out[2]= -Image-
 ```
 
 ## Image3D
+
+`Image3D[{image1, image2, ...}]` stacks 2-D images of one size, channel count and
+type into a volume, `image1` the first slice.
 
 
 `Image3D[data]` is a volumetric image, normalising to `Image3D[data, type]`. Attributes:
@@ -2836,6 +2905,15 @@ whole padded line.
 
 ## MorphologicalComponents
 
+Also takes a plain 0/1 (or numeric) matrix, labelled as the image of the same
+data would be. The same data-array form serves `Erosion`, `Dilation`, `Opening`,
+`Closing`, `MedianFilter`, `MeanFilter`, `GaussianFilter`, `DerivativeFilter` and
+`GradientFilter` (`builtin_filter_data`, `src/imagefilter.c`): a vector or matrix
+becomes a `"Real"` image (a vector a one-row image, whose replicated border makes
+the window 1-D), the image operator runs, and the data come back in the input's
+shape. Min / max / median of integer data stay integers, and `MeanFilter` of exact
+data is exact (`MeanFilter[{1, 2, 3, 4, 5}, 1]` is `{4/3, 2, 3, 4, 14/3}`).
+
 `MorphologicalComponents[image]` labels the connected components of the foreground.
 `[image, t]` takes pixels above `t` as foreground (default 0). `CornerNeighbors -> False` selects
 4-connectivity instead of the default 8. Attributes: `Protected`.
@@ -3037,6 +3115,9 @@ Parity on the reduction and **4.5× faster** on the enlargement.
 
 ## ImageLevels
 
+A multichannel image gives one count per channel, `{level, {c1, ..., cn}}`, so
+each channel's counts sum to the pixel count.
+
 `ImageLevels[image]` gives `{{level, count}, …}` — the histogram as **data, not a plot**. The reference's
 `ImageHistogram` draws a graphic and `ImageLevels` gives the counts; in a computer algebra system the
 counts are the useful half, so that is what this provides and `Histogram` over the result draws the
@@ -3065,6 +3146,8 @@ Out[2]= {{0.0, 32}, {1.0, 32}}
 ```
 
 ## ImageAdjust
+
+`ImageAdjust[image, c]` is `ImageAdjust[image, {c, 0}]`.
 
 `ImageAdjust[image]` stretches to the full range. `ImageAdjust[image, {c, b}]` and `[image, {c, b, g}]`
 apply contrast, brightness and gamma. Accepts volumes. Attributes: `Protected`.
@@ -3228,6 +3311,10 @@ Out[2]= -Image-
 ```
 
 ## ImageCorrelate
+
+`ImageCorrelate[image, ker, f]` with `f` one of `EuclideanDistance`,
+`SquaredEuclideanDistance`, `ManhattanDistance`, `ChessboardDistance` gives
+`f[neighbourhood, ker]` at every pixel (border replicated, per channel).
 
 `ImageCorrelate[image, kernel]` correlates — the kernel is **not** reflected, which is the only
 difference from `ImageConvolve`. `ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is
@@ -4338,6 +4425,11 @@ printed value would assert the wrong thing and pass for the wrong reason — whi
 asserts the subtraction is non-zero.
 
 ## ImagePad
+`"Periodic"` wraps around; `"Reversed"` mirrors repeating the edge pixel
+(`{1, 2, 3}` padded by 1 is `{1, 1, 2, 3, 3}`). The fill may be a colour --
+`RGBColor`, `GrayLevel` or a channel list -- one value per channel, with an
+opaque alpha added to a colour given without one.
+
 Pads an image or volume, or crops it when given negative amounts.
 
 - `ImagePad[image, m]`: pads `m` pixels on every side.
@@ -4440,6 +4532,10 @@ Out[2]= -Image-
 ```
 
 ## ImageCrop
+Cropping keeps the pixel type (`"Byte"` and `"Bit"` stay so), as do
+`ImageReflect` and the quarter turns of `ImageRotate`: they move stored values
+without computing new ones.
+
 Crops an image about its centre, or trims a uniform border.
 
 - `ImageCrop[image, {w, h}]`: crops to `w` by `h` about the centre.
@@ -4847,6 +4943,12 @@ Out[2]= {{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}, {6, 7}, {6, 25}, {25,
 ```
 
 ## Dilation
+Each operator takes its standard form: dilation is `max f(x - b)` (it stamps the
+element: a single pixel dilated by `{{1,0,0},{0,1,0},{0,0,0}}` becomes that
+element) and erosion `min f(x + b)`, so an opening (erode, then dilate) and a
+closing (dilate, then erode) are adjoint pairs for every element and
+`Dilation[Erosion[f, k], k]` recovers a shape the element fits.
+
 Morphological dilation: the maximum over a structuring element.
 
 - `Dilation[image, r]`: a `(2r+1)` square, or a cube for an `Image3D`.
@@ -5666,6 +5768,10 @@ Out[3]= -Image-
 ```
 
 ## DistanceTransform
+`DistanceFunction -> ManhattanDistance` or `ChessboardDistance` uses the exact
+two-pass chamfer transform (axis step 1, diagonal 2 or 1); `EuclideanDistance` is
+the default.
+
 Distance from each pixel to the nearest background pixel.
 
 - `DistanceTransform[image]`, or `DistanceTransform[image, t]` to set what counts as background.
@@ -5781,6 +5887,12 @@ Out[2]= -Image-
 ```
 
 ## ImageReflect
+`ImageReflect[image, side1 -> side2]`: opposite sides flip that axis
+(`Top -> Bottom` is the default reflection), adjacent sides reflect about a
+diagonal (`Left -> Top`, `Top -> Left`, `Right -> Bottom`, `Bottom -> Right` about
+the main one, the other four about the anti-diagonal; a `w x h` image becomes
+`h x w`), and a side to itself is the identity.
+
 Reflects an image or volume about one axis.
 
 - `ImageReflect[image]`: top to bottom.
@@ -5907,6 +6019,10 @@ Out[2]= -Image-
 ```
 
 ## ImageRotate
+Only an angle whose quarter count is representable (below 2^40 quarters) can
+take the exact right-angle path: `ImageRotate[img, 1.*^20]` is a free rotation by
+`1.*^20` radians, not a quarter turn read off an overflowing integer cast.
+
 Rotates an image **counterclockwise** by a positive angle, as the reference does. Right angles are exact index permutations.
 
 - `ImageRotate[image]`: a quarter turn counterclockwise.

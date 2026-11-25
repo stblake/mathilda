@@ -180,7 +180,47 @@ static void prims_extent(const Expr* e, size_t d, Box* b) {
         box_add(b, lo, 2); box_add(b, hi, 2);
         return;
     }
+    const char* hn = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
+    if ((strcmp(hn, "Sphere") == 0 || strcmp(hn, "Ball") == 0) && d == 3) {
+        /* Sphere[] / Sphere[c] / Sphere[c, r] (audit Show#2) */
+        double c[3] = { 0.0, 0.0, 0.0 }, r = 1.0;
+        if (n >= 1 && !read_point(e->data.function.args[0], 3, c)) {
+            coords_extent(e->data.function.args[0], 3, b);     /* several centres */
+            return;
+        }
+        if (n >= 2) gfx_coerce_double(e->data.function.args[1], &r);
+        double lo[3] = { c[0] - r, c[1] - r, c[2] - r }, hi[3] = { c[0] + r, c[1] + r, c[2] + r };
+        box_add(b, lo, 3); box_add(b, hi, 3);
+        return;
+    }
     if (n == 0) return;
+    if (strcmp(hn, "GraphicsComplex") == 0 || strcmp(hn, "BezierCurve") == 0
+        || strcmp(hn, "BSplineCurve") == 0 || strcmp(hn, "Cuboid") == 0
+        || strcmp(hn, "Triangle") == 0 || strcmp(hn, "Tetrahedron") == 0) {
+        /* every coordinate in the first argument: a GraphicsComplex's vertex list, a curve's
+         * control points, a cuboid's corner (audit Show#2) */
+        coords_extent(e->data.function.args[0], d, b);
+        if (strcmp(hn, "Cuboid") == 0 && n >= 2) coords_extent(e->data.function.args[1], d, b);
+        if (strcmp(hn, "Cuboid") == 0 && n == 1) {
+            double c[3];
+            if (d == 3 && read_point(e->data.function.args[0], 3, c)) {
+                double hi[3] = { c[0] + 1.0, c[1] + 1.0, c[2] + 1.0 };
+                box_add(b, hi, 3);
+            }
+        }
+        return;
+    }
+    if ((strcmp(hn, "Cylinder") == 0 || strcmp(hn, "Cone") == 0 || strcmp(hn, "Tube") == 0) && d == 3) {
+        Box inner; memset(&inner, 0, sizeof inner);
+        coords_extent(e->data.function.args[0], 3, &inner);
+        if (!inner.any) return;
+        double r = 1.0;
+        if (n >= 2) gfx_coerce_double(e->data.function.args[1], &r);
+        double lo[3], hi[3];
+        for (int k = 0; k < 3; k++) { lo[k] = inner.lo[k] - r; hi[k] = inner.hi[k] + r; }
+        box_add(b, lo, 3); box_add(b, hi, 3);
+        return;
+    }
     if (head_is(e, SYM_Line) || head_is(e, SYM_Point) || head_is(e, SYM_Polygon)
         || head_is(e, SYM_Arrow)) {
         coords_extent(e->data.function.args[0], d, b);
@@ -199,8 +239,15 @@ static void graphic_range(const Expr* g, size_t d, Box* b, bool* explicit_out) {
     *explicit_out = false;
     prims_extent(g->data.function.args[0], d, b);
     const Expr* pr = graphic_option(g, SYM_PlotRange);
+    double lo, hi, r;
+    /* PlotRange -> r is {{-r, r}, ...} on every axis (audit Show#1) */
+    if (pr && !head_is(pr, SYM_List) && gfx_coerce_double(pr, &r) && r > 0.0) {
+        for (size_t k = 0; k < d; k++) { b->lo[k] = -r; b->hi[k] = r; }
+        b->any = true;
+        *explicit_out = true;
+        return;
+    }
     if (!head_is(pr, SYM_List)) return;
-    double lo, hi;
     if (pr->data.function.arg_count == d) {
         bool all = true;
         double rl[SHOW_MAX_DIM], rh[SHOW_MAX_DIM];
@@ -213,6 +260,26 @@ static void graphic_range(const Expr* g, size_t d, Box* b, bool* explicit_out) {
         if (all) {
             for (size_t k = 0; k < d; k++) { b->lo[k] = rl[k]; b->hi[k] = rh[k]; }
             b->any = true;
+            *explicit_out = true;
+            return;
+        }
+        /* A partial spec {{0, 1}, All}: the fixed axes as given, an All / Automatic axis from the
+         * primitives (audit Show#1). */
+        bool partial = b->any, fixed_any = false;
+        for (size_t k = 0; k < d && partial; k++) {
+            const Expr* ax = pr->data.function.args[k];
+            if (head_is(ax, SYM_List) && ax->data.function.arg_count == 2
+                && gfx_coerce_double(ax->data.function.args[0], &rl[k])
+                && gfx_coerce_double(ax->data.function.args[1], &rh[k])) { fixed_any = true; continue; }
+            if (ax->type == EXPR_SYMBOL && (ax->data.symbol.name == SYM_All
+                                            || ax->data.symbol.name == SYM_Automatic)) {
+                rl[k] = b->lo[k]; rh[k] = b->hi[k];
+                continue;
+            }
+            partial = false;
+        }
+        if (partial && fixed_any) {
+            for (size_t k = 0; k < d; k++) { b->lo[k] = rl[k]; b->hi[k] = rh[k]; }
             *explicit_out = true;
             return;
         }

@@ -112,6 +112,16 @@ static size_t thin_pass(unsigned char* m, size_t w, size_t h, bool second)
             del[y * w + x] = 1;
         }
     }
+    /* A 2x2 block flagged whole would vanish in this one parallel step -- the classic Zhang-Suen
+     * failure, which deletes a component outright (audit Thinning#1). Keep one pixel of every such
+     * block: the top-left in the first subiteration, the bottom-right in the second. */
+    if (w >= 2 && h >= 2) {
+        for (y = 0; y + 1 < h; y++)
+            for (x = 0; x + 1 < w; x++) {
+                size_t a = y * w + x, b = a + 1, c = a + w, d = c + 1;
+                if (del[a] && del[b] && del[c] && del[d]) del[second ? d : a] = 0;
+            }
+    }
     /* Deleted TOGETHER, after the whole pass. Deleting in place would let a pixel's removal change
      * the verdict on its neighbour mid-pass, which is exactly the connectivity break the two
      * subiterations exist to avoid. */
@@ -121,9 +131,13 @@ static size_t thin_pass(unsigned char* m, size_t w, size_t h, bool second)
     return n;
 }
 
-/* An end point: foreground with exactly one foreground neighbour. An ISOLATED pixel has none and is
- * therefore not an end point -- pruning shortens branches, it does not erase specks, and a rule that
- * deleted isolated pixels would quietly remove every one-pixel component. */
+/* An end point: foreground whose neighbours form ONE contiguous run around the 8-ring, of at most
+ * three pixels -- one neighbour, or a few that touch each other. That is the tip of a branch
+ * wherever it meets the rest: where a spur meets a loop or a junction, its last pixel has the
+ * junction pixel and its two diagonal neighbours on the loop, a run of three, and counting only
+ * "exactly one neighbour" left that pixel as a stub (audit Pruning#1). A pixel inside a line has
+ * two separate runs and is kept. An ISOLATED pixel has none and is not an end point -- pruning
+ * shortens branches, it does not erase specks. */
 static size_t prune_pass(unsigned char* m, size_t w, size_t h)
 {
     size_t npix = w * h;
@@ -135,7 +149,10 @@ static size_t prune_pass(unsigned char* m, size_t w, size_t h)
             unsigned char p[8];
             if (!m[y * w + x]) continue;
             neighbours(m, w, h, x, y, p);
-            if (neighbour_count(p) == 1) del[y * w + x] = 1;
+            {
+                int b = neighbour_count(p);
+                if (b >= 1 && b <= 3 && transitions(p) == 1) del[y * w + x] = 1;
+            }
         }
     }
     for (i = 0; i < npix; i++)

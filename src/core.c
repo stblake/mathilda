@@ -3368,11 +3368,14 @@ Expr* builtin_n_values(Expr* res) {
 }
 
 Expr* builtin_out(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_INTEGER) return NULL;
-    
-    int64_t n = arg->data.integer;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count > 1) return NULL;
+    /* Out[] is Out[-1], i.e. % (audit Out#1). */
+    int64_t n = -1;
+    if (res->data.function.arg_count == 1) {
+        Expr* arg = res->data.function.args[0];
+        if (arg->type != EXPR_INTEGER) return NULL;
+        n = arg->data.integer;
+    }
     if (n < 0) {
         Expr* line_sym = expr_new_symbol(SYM_DollarLine);
         Expr* line_expr = evaluate(line_sym);

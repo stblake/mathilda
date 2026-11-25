@@ -81,10 +81,7 @@ static const Expr* arg(const Expr* e, size_t i)
 /* A real number argument, in [0, 1] or not -- the caller decides the range. */
 static bool as_double(const Expr* e, double* out)
 {
-    if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
-    if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
-    return false;
+    return image_real_value(e, out);   /* 1/2, Pi/4 as well as 0.5 (audit SetAlphaChannel#1) */
 }
 
 /* A real level of any exactness -- Integer, Rational, machine or
@@ -210,13 +207,38 @@ static Expr* builtin_setalphachannel(Expr* res)
  * which is the difference between "forget the transparency" and "resolve it": a half-transparent
  * white pixel over black is grey, and dropping alpha would leave it white.
  */
+/* A background colour: a level, GrayLevel[g], RGBColor[r, g, b] or {r, g, b}. *grey says whether
+ * all three components are equal (a grey image then stays grey). */
+static bool as_background(const Expr* e, double rgb[3], bool* grey)
+{
+    if (!e) return false;
+    if (as_level(e, &rgb[0])) { rgb[1] = rgb[2] = rgb[0]; *grey = true; return true; }
+    if (e->type != EXPR_FUNCTION || !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_GrayLevel && n >= 1) {
+        if (!image_real_value(e->data.function.args[0], &rgb[0])) return false;
+        rgb[1] = rgb[2] = rgb[0];
+        *grey = true;
+        return true;
+    }
+    if ((h == SYM_RGBColor && (n == 3 || n == 4)) || (h == SYM_List && n == 3)) {
+        for (size_t i = 0; i < 3; i++)
+            if (!image_real_value(e->data.function.args[i], &rgb[i])) return false;
+        *grey = rgb[0] == rgb[1] && rgb[1] == rgb[2];
+        return true;
+    }
+    return false;
+}
+
 static Expr* builtin_removealphachannel(Expr* res)
 {
     Img im;
-    double bg = 0.0;
-    bool composite = false;
+    double bg[3] = { 0.0, 0.0, 0.0 };
+    bool composite = false, grey_bg = true;
     double* out;
-    size_t cc, x, y, k;
+    size_t cc, oc, x, y, k;
     Expr* r;
 
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -224,24 +246,28 @@ static Expr* builtin_removealphachannel(Expr* res)
     if (!img_read(arg(res, 0), &im)) return NULL;
 
     if (res->data.function.arg_count == 2) {
-        if (!as_level(arg(res, 1), &bg)) { img_free(&im); return NULL; }
+        /* a level, or a colour (audit RemoveAlphaChannel#2) */
+        if (!as_background(arg(res, 1), bg, &grey_bg)) { img_free(&im); return NULL; }
         composite = true;
     }
 
     cc = colour_count(im.c);
-    out = (double*)malloc(im.w * im.h * cc * sizeof(double));
+    /* a grey image over a coloured background becomes a colour image */
+    oc = (cc == 1 && !grey_bg) ? 3 : cc;
+    out = (double*)malloc(im.w * im.h * oc * sizeof(double));
     if (!out) { img_free(&im); return NULL; }
     for (y = 0; y < im.h; y++) {
         for (x = 0; x < im.w; x++) {
-            size_t d = (y * im.w + x) * cc;
+            size_t d = (y * im.w + x) * oc;
             double al = has_alpha(im.c) ? sample(&im, x, y, cc, cc) : 1.0;
-            for (k = 0; k < cc; k++) {
-                double v = sample(&im, x, y, k, cc);
-                out[d + k] = composite ? v * al + bg * (1.0 - al) : v;
+            for (k = 0; k < oc; k++) {
+                double v = sample(&im, x, y, cc == 1 ? 0 : k, cc);
+                double b = (cc == 1 && grey_bg) ? bg[0] : bg[k < 3 ? k : 2];
+                out[d + k] = composite ? v * al + b * (1.0 - al) : v;
             }
         }
     }
-    r = image_build_real(out, im.w, im.h, cc);
+    r = image_build_real(out, im.w, im.h, oc);
     free(out);
     img_free(&im);
     return r;
@@ -317,16 +343,22 @@ static Expr* builtin_imagecompose(Expr* res)
             double al = 0.0;
             if (inside)
                 al = sample(&over, (size_t)sx, (size_t)sy, cc, cc) * opacity;
+            /* The "over" operator: the base's colour counts in proportion to its own alpha, and
+             * the sum is divided by the result's alpha, so half-transparent red over a fully
+             * transparent pixel stays pure red (audit ImageCompose#2). An opaque base (ba = 1)
+             * reduces to o al + b (1 - al). */
+            double ba = oc > cc ? sample(&base, x, y, cc, cc) : 1.0;
+            double ra = al + ba * (1.0 - al);
             for (k = 0; k < cc; k++) {
                 double b = sample(&base, x, y, k, cc);
                 double o = inside ? sample(&over, (size_t)sx, (size_t)sy, k, cc) : 0.0;
-                out[d + k] = o * al + b * (1.0 - al);
+                double num = o * al + b * ba * (1.0 - al);
+                out[d + k] = ra > 0.0 ? num / ra : 0.0;
             }
             if (oc > cc) {
                 /* Alpha of a composite: the base's own opacity, raised toward opaque wherever the
                  * overlay covered it. */
-                double ba = sample(&base, x, y, cc, cc);
-                out[d + cc] = ba + al * (1.0 - ba);
+                out[d + cc] = ra;
             }
         }
     }
@@ -475,7 +507,8 @@ void imagecompose_init(void)
     symtab_add_builtin("RemoveAlphaChannel", builtin_removealphachannel);
     symtab_get_def("RemoveAlphaChannel")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RemoveAlphaChannel",
-        "RemoveAlphaChannel[image] drops the alpha channel. RemoveAlphaChannel[image, b] instead "
+        "RemoveAlphaChannel[image] drops the alpha channel. RemoveAlphaChannel[image, b] (a level or a "
+        "colour) instead "
         "COMPOSITES over a background of brightness b, which is the difference between forgetting "
         "the transparency and resolving it: a half-transparent white pixel over black is grey, "
         "where dropping alpha would leave it white.");

@@ -41,6 +41,7 @@
 /* From plot_common.c ($RaylibVerbose). Declared directly rather than via
  * plot_common.h, whose is_rule_arg prototype clashes with the local one below. */
 bool raylib_verbose_enabled(void);
+Expr* eval_control_spec(const Expr* spec);   /* plot_common.c: the variable stays held */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -219,7 +220,13 @@ static bool parse_iter_spec(const Expr* e, const char** var_sym,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
     if (e->data.function.head->data.symbol.name != SYM_List) return false;
-    if (e->data.function.arg_count != 3) return false;
+    /* {t, tmin, tmax} or {t, tmin, tmax, dt} (audit Animate#2). The step is accepted; the
+     * animation sweeps the range continuously, so it is not used to quantise t. */
+    if (e->data.function.arg_count != 3 && e->data.function.arg_count != 4) return false;
+    if (e->data.function.arg_count == 4) {
+        double dt;
+        if (!numericize(e->data.function.args[3], &dt) || !(dt > 0.0)) return false;
+    }
     const Expr* ve = e->data.function.args[0];
     if (!ve || ve->type != EXPR_SYMBOL) return false;
     *var_sym = ve->data.symbol.name;
@@ -806,7 +813,7 @@ Expr* builtin_animate(Expr* res) {
     size_t opts_start = 1;
 
     for (size_t i = 1; i < argc && n_iters < MAX_ITERS; i++) {
-        Expr* arg_ev = evaluate(res->data.function.args[i]);
+        Expr* arg_ev = eval_control_spec(res->data.function.args[i]);
         const char* vs = NULL;
         double lo = 0.0, hi = 1.0;
         bool ok = parse_iter_spec(arg_ev, &vs, &lo, &hi);

@@ -267,7 +267,9 @@ static void test_filters_handle_colour_and_decline_junk(void) {
     assert_eval_eq("Head[ImageConvolve[" I23 ", {{1, 2}, {3}}]]", "ImageConvolve", 0);
     assert_eval_eq("Head[ImageConvolve[" I23 ", {1, 2, 3}]]", "ImageConvolve", 0);
     assert_eval_eq("Head[ImageConvolve[" I23 ", {{1, x}}]]", "ImageConvolve", 0);
-    assert_eval_eq("Head[GaussianFilter[{{1, 2}}, 1]]", "GaussianFilter", 0);
+    /* plain data is filtered as data (audit GaussianFilter#1), not declined */
+    assert_eval_eq("Head[GaussianFilter[{{1, 2}}, 1]]", "List", 0);
+    assert_eval_eq("Head[GaussianFilter[{{1, x}}, 1]]", "GaussianFilter", 0);
     assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
                    " {ImageConvolve, GaussianMatrix, BoxMatrix, GaussianFilter}]", "True", 0);
 }
@@ -339,10 +341,11 @@ static void test_greyscale_uses_rec601_luminance(void) {
 }
 
 static void test_degenerate_and_malformed_decline(void) {
-    /* A constant image is ONE cluster: no threshold splits it in two, and inventing one would be
-     * a fiction. Declining is the honest answer. */
+    /* A constant image is ONE cluster: no threshold splits it in two, so FindThreshold declines.
+     * Binarize still answers, as the reference does: a binary image, every pixel on one side of
+     * the midpoint (audit Binarize#1). */
     assert_eval_eq("Head[FindThreshold[Image[Table[0.5, {3}, {3}]]]]", "FindThreshold", 0);
-    assert_eval_eq("Head[Binarize[Image[Table[0.5, {3}, {3}]]]]", "Binarize", 0);
+    assert_eval_eq("ImageType[Binarize[Image[Table[0.5, {3}, {3}]]]]", "\"Bit\"", 0);
     /* But an EXPLICIT threshold on a constant image is perfectly well defined. */
     assert_eval_eq("ImageData[Binarize[Image[Table[0.5, {2}, {2}]], 0.4], \"Bit\"]",
                    "{{1, 1}, {1, 1}}", 0);
@@ -618,8 +621,12 @@ static void test_derivative_filter_matches_an_explicit_kernel(void) {
     assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", {-1, 0}]]", "DerivativeFilter", 0);
     assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", 1]]", "DerivativeFilter", 0);
     assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", {0, 1.5}]]", "DerivativeFilter", 0);
-    assert_eval_eq("Head[DerivativeFilter[{{1, 2}}, {0, 1}]]", "DerivativeFilter", 0);
-    assert_eval_eq("Head[GradientFilter[{{1, 2}}]]", "GradientFilter", 0);
+    /* plain numeric data is filtered as data (Wave 4 audit); a symbolic entry still declines */
+    assert_eval_eq("Head[DerivativeFilter[{{1, 2}}, {0, 1}]]", "List", 0);
+    assert_eval_eq("Head[DerivativeFilter[{{1, x}}, {0, 1}]]", "DerivativeFilter", 0);
+    /* plain numeric data is filtered as data (Wave 4 audit); a symbolic entry still declines */
+    assert_eval_eq("Head[GradientFilter[{{1, 2}}]]", "List", 0);
+    assert_eval_eq("Head[GradientFilter[{{1, x}}]]", "GradientFilter", 0);
     /* Colour goes through luminance, so the result is single-channel. */
     assert_eval_eq("ImageChannels[GradientFilter[Image[{{{1.,0.,0.},{0.,1.,0.}}}]]]", "1", 0);
     assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
@@ -895,7 +902,9 @@ static void test_element_forms_and_declines(void) {
     assert_eval_eq("Head[Dilation[" MIMG ", {{0, 0}, {0, 0}}]]", "Dilation", 0);
     assert_eval_eq("Head[Dilation[" MIMG ", -1]]", "Dilation", 0);
     assert_eval_eq("Head[Dilation[" MIMG ", 1.5]]", "Dilation", 0);
-    assert_eval_eq("Head[Erosion[{{1, 2}}, 1]]", "Erosion", 0);
+    /* plain numeric data is filtered as data (Wave 4 audit); a symbolic entry still declines */
+    assert_eval_eq("Head[Erosion[{{1, 2}}, 1]]", "List", 0);
+    assert_eval_eq("Head[Erosion[{{1, x}}, 1]]", "Erosion", 0);
     assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
                    " {Dilation, Erosion, Opening, Closing}]", "True", 0);
 }
@@ -954,7 +963,9 @@ static void test_components_interact_with_morphology(void) {
     /* The threshold argument selects the foreground: above t, not at or above. */
     assert_eval_eq("MorphologicalComponents[Image[{{0.3, 0.7}, {0.7, 0.3}}], 0.5]",
                    "{{0, 1}, {1, 0}}", 0);
-    assert_eval_eq("Head[MorphologicalComponents[{{1, 2}}]]", "MorphologicalComponents", 0);
+    /* plain numeric data is filtered as data (Wave 4 audit); a symbolic entry still declines */
+    assert_eval_eq("Head[MorphologicalComponents[{{1, 2}}]]", "List", 0);
+    assert_eval_eq("Head[MorphologicalComponents[{{1, x}}]]", "MorphologicalComponents", 0);
     assert_eval_eq("Head[MorphologicalComponents[Image[{{1., 0.}}],"
                    " CornerNeighbors -> Maybe]]", "MorphologicalComponents", 0);
     assert_eval_eq("MemberQ[Attributes[MorphologicalComponents], Protected]", "True", 0);
@@ -1014,7 +1025,9 @@ static void test_meanfilter_is_a_box_convolution(void) {
                    " And @@ Map[(Min[f] <= # <= Max[f]) &, m]]", "True", 0);
     assert_eval_eq("Head[MedianFilter[" MIMG ", -1]]", "MedianFilter", 0);
     assert_eval_eq("Head[MedianFilter[" MIMG ", 1.5]]", "MedianFilter", 0);
-    assert_eval_eq("Head[MeanFilter[{{1, 2}}, 1]]", "MeanFilter", 0);
+    /* plain numeric data is filtered as data (Wave 4 audit); a symbolic entry still declines */
+    assert_eval_eq("Head[MeanFilter[{{1, 2}}, 1]]", "List", 0);
+    assert_eval_eq("Head[MeanFilter[{{1, x}}, 1]]", "MeanFilter", 0);
     assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
                    " {MedianFilter, MeanFilter}]", "True", 0);
 }

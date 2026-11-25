@@ -17,6 +17,8 @@
 #include "image.h"
 #include "imagecolor.h"
 #include "sym_names.h"
+#include "numeric.h"
+#include "eval.h"
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -29,11 +31,26 @@ static double luma(double r, double g, double b) { return 0.299 * r + 0.587 * g 
  *
  * Accepts RGBColor[r, g, b], GrayLevel[v], a bare number, and {r, g, b}. A grey spec expands to
  * three equal components, so a grey image and a colour image can be compared in one code path. */
+/* A bare numeric value (1/2, Pi/4) rather than a colour head. */
+static bool head_is_numeric_value(const Expr* e)
+{
+    return e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name != SYM_List &&
+           e->data.function.head->data.symbol.name != SYM_RGBColor &&
+           e->data.function.head->data.symbol.name != SYM_GrayLevel &&
+           expr_is_numeric_quantity(e);
+}
+
 static bool read_colour(const Expr* e, double rgb[3])
 {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { rgb[0] = rgb[1] = rgb[2] = (double)e->data.integer; return true; }
-    if (e->type == EXPR_REAL)    { rgb[0] = rgb[1] = rgb[2] = e->data.real; return true; }
+    if (e->type != EXPR_FUNCTION || head_is_numeric_value(e)) {
+        double v;
+        if (!image_real_value(e, &v)) return false;
+        rgb[0] = rgb[1] = rgb[2] = v;
+        return true;
+    }
     if (e->type != EXPR_FUNCTION || !e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL) return false;
     {
@@ -42,17 +59,14 @@ static bool read_colour(const Expr* e, double rgb[3])
         double v[3];
         size_t i;
         if ((head == SYM_GrayLevel || strcmp(head, "Graylevel") == 0) && n >= 1) {
-            const Expr* a = e->data.function.args[0];
-            if (a->type == EXPR_INTEGER)   { rgb[0] = rgb[1] = rgb[2] = (double)a->data.integer; return true; }
-            if (a->type == EXPR_REAL)      { rgb[0] = rgb[1] = rgb[2] = a->data.real; return true; }
-            return false;
+            double g;
+            if (!image_real_value(e->data.function.args[0], &g)) return false;
+            rgb[0] = rgb[1] = rgb[2] = g;
+            return true;
         }
         if ((head == SYM_RGBColor || head == SYM_List) && n >= 3) {
             for (i = 0; i < 3; i++) {
-                const Expr* a = e->data.function.args[i];
-                if (a->type == EXPR_INTEGER)  v[i] = (double)a->data.integer;
-                else if (a->type == EXPR_REAL) v[i] = a->data.real;
-                else return false;
+                if (!image_real_value(e->data.function.args[i], &v[i])) return false;
             }
             rgb[0] = v[0]; rgb[1] = v[1]; rgb[2] = v[2];
             return true;
@@ -109,10 +123,7 @@ static size_t read_rules(const Expr* e, double (*from)[3], double (*to)[3], size
 
 static bool as_double(const Expr* e, double* out)
 {
-    if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
-    if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
-    return false;
+    return image_real_value(e, out);   /* 1/2, Pi/4 as well as 0.5 (audit SetAlphaChannel#1) */
 }
 
 /* --------------------------------------------------------------- ColorReplace */
@@ -147,7 +158,12 @@ static Expr* builtin_colorreplace(Expr* res)
      * be silently flattened to its luminance -- the caller asked for red and would get grey. */
     for (i = 0; i < nrules; i++)
         if (!is_grey_colour(to[i])) need_colour = true;
-    oc = (c == 1 && need_colour) ? 3 : c;
+    /* Colour and alpha are counted separately: a grey+alpha image given a colour becomes RGB+alpha,
+     * not luminance+alpha (audit ColorReplace#1). */
+    size_t in_col = (c >= 3) ? 3 : 1;
+    bool alpha = (c == 2 || c == 4);
+    size_t out_col = (in_col == 1 && need_colour) ? 3 : in_col;
+    oc = out_col + (alpha ? 1 : 0);
 
     n_px = w * h;
     out = (double*)malloc(n_px * oc * sizeof(double));
@@ -168,17 +184,14 @@ static Expr* builtin_colorreplace(Expr* res)
              * makes the result depend on the order the caller happened to write them in. */
             if (dist <= tol && (hit == (size_t)-1 || dist < best)) { hit = k; best = dist; }
         }
-        for (k = 0; k < oc; k++) {
+        for (k = 0; k < out_col; k++) {
             double v;
-            if (hit != (size_t)-1) v = (oc >= 3) ? to[hit][k] : luma(to[hit][0], to[hit][1], to[hit][2]);
-            else                   v = (oc >= 3) ? src[k] : px[0];
-            /* An alpha channel passes through untouched: transparency is not a colour. */
-            if (c == 2 && k == 1)      v = px[1];
-            else if (c == 4 && k == 3) v = px[3];
+            if (hit != (size_t)-1) v = (out_col == 3) ? to[hit][k] : luma(to[hit][0], to[hit][1], to[hit][2]);
+            else                   v = (out_col == 3) ? src[k] : px[0];
             out[i * oc + k] = v;
         }
-        if (oc == 4 && c == 4) out[i * oc + 3] = px[3];
-        if (oc == 2 && c == 2) out[i * oc + 1] = px[1];
+        /* An alpha channel passes through untouched: transparency is not a colour. */
+        if (alpha) out[i * oc + out_col] = px[c - 1];
     }
     free(buf);
     r = image_build_real(out, w, h, oc);
@@ -210,6 +223,51 @@ static int qcmp(const void* a, const void* b)
  * result would then depend on the random stream, so the same image quantised twice could differ, and
  * no test could assert a palette. Median cut is deterministic, which for a documented, testable
  * builtin is worth more than a marginally lower error. */
+/* ColorQuantize[image, {c1, c2, ...}]: each pixel replaced by its nearest palette colour
+ * (Euclidean in RGB), alpha passed through. A grey image and an all-grey palette stay grey
+ * (audit ColorQuantize#2). */
+static Expr* colorquantize_palette(Expr* res)
+{
+    const Expr* pal = res->data.function.args[1];
+    size_t np = pal->data.function.arg_count, i, k;
+    if (np == 0 || np > 4096) return NULL;
+    double (*pc)[3] = malloc(sizeof(double[3]) * np);
+    if (!pc) return NULL;
+    bool grey_pal = true;
+    for (k = 0; k < np; k++) {
+        if (!read_colour(pal->data.function.args[k], pc[k])) { free(pc); return NULL; }
+        if (!is_grey_colour(pc[k])) grey_pal = false;
+    }
+    double* buf = NULL;
+    size_t w = 0, h = 0, c = 0;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &buf)) { free(pc); return NULL; }
+    size_t in_col = c >= 3 ? 3 : 1;
+    bool alpha = (c == 2 || c == 4);
+    size_t out_col = (in_col == 1 && grey_pal) ? 1 : 3;
+    size_t oc = out_col + (alpha ? 1 : 0);
+    double* out = malloc(sizeof(double) * w * h * oc);
+    Expr* r = NULL;
+    if (out) {
+        for (i = 0; i < w * h; i++) {
+            const double* px = buf + i * c;
+            double src[3];
+            if (in_col == 3) { src[0] = px[0]; src[1] = px[1]; src[2] = px[2]; }
+            else src[0] = src[1] = src[2] = px[0];
+            size_t best = 0; double bd = 0.0;
+            for (k = 0; k < np; k++) {
+                double d0 = src[0] - pc[k][0], d1 = src[1] - pc[k][1], d2 = src[2] - pc[k][2];
+                double d = d0 * d0 + d1 * d1 + d2 * d2;
+                if (k == 0 || d < bd) { bd = d; best = k; }
+            }
+            for (k = 0; k < out_col; k++) out[i * oc + k] = pc[best][out_col == 1 ? 0 : k];
+            if (alpha) out[i * oc + out_col] = px[c - 1];
+        }
+        r = image_build_real(out, w, h, oc);
+    }
+    free(out); free(buf); free(pc);
+    return r;
+}
+
 static Expr* builtin_colorquantize(Expr* res)
 {
     double* buf = NULL;
@@ -223,6 +281,9 @@ static Expr* builtin_colorquantize(Expr* res)
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     {
         const Expr* a = res->data.function.args[1];
+        if (a && a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol.name == SYM_List)
+            return colorquantize_palette(res);
         if (!a || a->type != EXPR_INTEGER) return NULL;
         ncol = (long)a->data.integer;
         if (ncol < 1 || ncol > 4096) return NULL;
@@ -339,16 +400,68 @@ done:
  * colour: a warm image comes back grey-ish, because equalising red and blue separately removes
  * exactly the imbalance that made it warm.
  */
+static int ht_cmp(const void* a, const void* b)
+{
+    double x = *(const double*)a, y = *(const double*)b;
+    return (x > y) - (x < y);
+}
+
+/* The target quantile function for HistogramTransform[image, ref] (a reference image's sorted
+ * luminances) or HistogramTransform[image, dist] (Quantile[dist, p]), tabulated at the mid-rank of
+ * every occupied bin. False when the reference is neither (audit HistogramTransform#1). */
+static bool ht_target_map(const Expr* ref, const double* cdf, const size_t* hist, double* map)
+{
+    size_t rw = 0, rh = 0, rc = 0, i;
+    double* rbuf = NULL;
+    if (image_info(ref, NULL, NULL, NULL, NULL)) {
+        if (!image_load(ref, &rw, &rh, &rc, &rbuf)) return false;
+        size_t m = rw * rh;
+        if (!m) { free(rbuf); return false; }
+        double* lum = malloc(sizeof(double) * m);
+        if (!lum) { free(rbuf); return false; }
+        for (i = 0; i < m; i++) {
+            const double* px = rbuf + i * rc;
+            lum[i] = (rc >= 3) ? luma(px[0], px[1], px[2]) : px[0];
+        }
+        free(rbuf);
+        qsort(lum, m, sizeof(double), ht_cmp);
+        for (i = 0; i < HT_BINS; i++) {
+            if (!hist[i]) continue;
+            double pm = (i ? cdf[i - 1] : 0.0) * 0.5 + cdf[i] * 0.5;
+            double q = ceil(pm * (double)m) - 1.0;
+            size_t idx = q < 0.0 ? 0 : (q >= (double)m ? m - 1 : (size_t)q);
+            map[i] = lum[idx];
+        }
+        free(lum);
+        return true;
+    }
+    if (ref->type != EXPR_FUNCTION || ref->data.function.head->type != EXPR_SYMBOL) return false;
+    for (i = 0; i < HT_BINS; i++) {
+        if (!hist[i]) continue;
+        double pm = (i ? cdf[i - 1] : 0.0) * 0.5 + cdf[i] * 0.5;
+        Expr* call = expr_new_function(expr_new_symbol("Quantile"),
+                         (Expr*[]){ expr_copy((Expr*)ref), expr_new_real(pm) }, 2);
+        Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), (Expr*[]){ call }, 1));
+        bool ok = image_real_value(v, &map[i]);
+        expr_free(v);
+        if (!ok) return false;
+    }
+    return true;
+}
+
 static Expr* builtin_histogramtransform(Expr* res)
 {
     double* buf = NULL;
     size_t w = 0, h = 0, c = 0, n_px, i, k;
     size_t hist[HT_BINS];
     double cdf[HT_BINS];
+    double map[HT_BINS];
+    bool matched = false;
     double* out;
     Expr* r;
 
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1 && res->data.function.arg_count != 2) return NULL;
     if (!image_load(res->data.function.args[0], &w, &h, &c, &buf)) return NULL;
     n_px = w * h;
     if (!n_px) { free(buf); return NULL; }
@@ -370,6 +483,11 @@ static Expr* builtin_histogramtransform(Expr* res)
         }
     }
 
+    if (res->data.function.arg_count == 2) {
+        if (!ht_target_map(res->data.function.args[1], cdf, hist, map)) { free(buf); return NULL; }
+        matched = true;
+    }
+
     out = (double*)malloc(n_px * c * sizeof(double));
     if (!out) { free(buf); return NULL; }
     for (i = 0; i < n_px; i++) {
@@ -379,7 +497,7 @@ static Expr* builtin_histogramtransform(Expr* res)
         double nl;
         if (b < 0) b = 0;
         if (b >= HT_BINS) b = HT_BINS - 1;
-        nl = cdf[b];
+        nl = matched ? map[b] : cdf[b];
         if (c >= 3) {
             /* Scale the channels by the luminance's own change. A black pixel has no ratio to
              * scale, so it takes the new luminance in every channel -- grey, which is the only
@@ -419,6 +537,7 @@ void imagecolor_init(void)
     symtab_add_builtin("ColorQuantize", builtin_colorquantize);
     symtab_get_def("ColorQuantize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ColorQuantize",
+        "ColorQuantize[image, {c1, c2, ...}] maps each pixel to the nearest palette colour. "
         "ColorQuantize[image, n] reduces the image to at most n colours by MEDIAN CUT: the box with "
         "the widest single-channel spread is split at its median until n boxes remain, and each "
         "collapses to its mean colour. Widest spread rather than most pixels, since a large box of "
@@ -430,6 +549,8 @@ void imagecolor_init(void)
     symtab_add_builtin("HistogramTransform", builtin_histogramtransform);
     symtab_get_def("HistogramTransform")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("HistogramTransform",
+        "HistogramTransform[image, ref] matches the histogram of a reference image, and "
+        "HistogramTransform[image, dist] that of a distribution. "
         "HistogramTransform[image] equalises the histogram, spreading the brightness distribution "
         "toward uniform over 256 bins by mapping each value through the cumulative distribution. "
         "The mapping is computed from the LUMINANCE and applied to every channel as a ratio, so hue "

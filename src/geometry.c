@@ -368,7 +368,7 @@ static const Expr* geom_polygon_points(const Expr* res) {
 /* Area                                                                      */
 /* ------------------------------------------------------------------------- */
 
-Expr* builtin_area(Expr* res) {
+static Expr* builtin_area_core(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
         Expr* c = geom_curved_area(res->data.function.args[0]);
         if (c) return c;
@@ -405,7 +405,7 @@ Expr* builtin_area(Expr* res) {
 /* Perimeter                                                                 */
 /* ------------------------------------------------------------------------- */
 
-Expr* builtin_perimeter(Expr* res) {
+static Expr* builtin_perimeter_core(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
         Expr* c = geom_curved_perimeter(res->data.function.args[0]);
         if (c) return c;
@@ -470,7 +470,7 @@ Expr* builtin_perimeter(Expr* res) {
 /* RegionCentroid                                                            */
 /* ------------------------------------------------------------------------- */
 
-Expr* builtin_region_centroid(Expr* res) {
+static Expr* builtin_region_centroid_core(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
         Expr* c = geom_curved_centroid(res->data.function.args[0]);
         if (c) return c;
@@ -619,7 +619,7 @@ static int geom_member_d(const GeomPoints* p, double px, double py) {
     return inside;
 }
 
-Expr* builtin_region_member(Expr* res) {
+static Expr* builtin_region_member_core(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     const Expr* poly = res->data.function.args[0];
     {
@@ -728,7 +728,7 @@ static int geom_turn(const GeomPoints* p, GeomCrossTmp* s,
                              p->dx[c], p->dy[c]);
 }
 
-Expr* builtin_convex_hull_region(Expr* res) {
+static Expr* builtin_convex_hull_region_core(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
 
     GeomPoints p;
@@ -807,6 +807,41 @@ Expr* builtin_convex_hull_region(Expr* res) {
     return out;
 }
 
+/* builtin_area: the 2-D polygon kernel above, then the further region forms
+ * (src/geometry_regions.c: Rectangle, Triangle, multi-polygons, holes, ...). */
+Expr* builtin_area(Expr* res) {
+    Expr* r = builtin_area_core(res);
+    return r ? r : geom_region_extra(SYM_Area, res);
+}
+
+/* builtin_perimeter: the 2-D polygon kernel above, then the further region forms
+ * (src/geometry_regions.c: Rectangle, Triangle, multi-polygons, holes, ...). */
+Expr* builtin_perimeter(Expr* res) {
+    Expr* r = builtin_perimeter_core(res);
+    return r ? r : geom_region_extra(SYM_Perimeter, res);
+}
+
+/* builtin_region_centroid: the 2-D polygon kernel above, then the further region forms
+ * (src/geometry_regions.c: Rectangle, Triangle, multi-polygons, holes, ...). */
+Expr* builtin_region_centroid(Expr* res) {
+    Expr* r = builtin_region_centroid_core(res);
+    return r ? r : geom_region_extra(SYM_RegionCentroid, res);
+}
+
+/* builtin_region_member: the 2-D polygon kernel above, then the further region forms
+ * (src/geometry_regions.c: Rectangle, Triangle, multi-polygons, holes, ...). */
+Expr* builtin_region_member(Expr* res) {
+    Expr* r = builtin_region_member_core(res);
+    return r ? r : geom_region_extra(SYM_RegionMember, res);
+}
+
+/* Exact non-rational coordinates (Sqrt[2], Pi) take the symbolic hull. */
+Expr* builtin_convex_hull_region(Expr* res) {
+    Expr* r = builtin_convex_hull_region_core(res);
+    if (r || res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return r;
+    return geom_symbolic_hull(res->data.function.args[0]);
+}
+
 /* ------------------------------------------------------------------------- */
 /* Registration                                                              */
 /* ------------------------------------------------------------------------- */
@@ -832,20 +867,26 @@ void geometry_init(void) {
         "Area[Polygon[{{x1, y1}, ...}]] gives the area of a simple 2D polygon. "
         "Exact (Integer/Rational) coordinates give an exact result; any Real "
         "coordinate gives a machine-precision result. A polygon with fewer "
-        "than 3 distinct vertices has Undefined area.");
+        "than 3 distinct vertices has Undefined area. Also Disk, Annulus and their "
+        "sectors, Rectangle, Triangle, multi-polygons, polygons with holes, and "
+        "exact irrational coordinates (Sqrt[2], Pi) exactly.");
     symtab_set_docstring("Perimeter",
         "Perimeter[Polygon[{{x1, y1}, ...}]] gives the perimeter of a simple "
         "2D polygon: the sum of its edge lengths, including the closing edge. "
         "Exact coordinates give an exact (possibly symbolic, e.g. 2 + Sqrt[2]) "
-        "result; Real coordinates give a machine-precision result.");
+        "result; Real coordinates give a machine-precision result. The same "
+        "regions as Area are accepted.");
     symtab_set_docstring("RegionCentroid",
         "RegionCentroid[Polygon[{{x1, y1}, ...}]] gives the centroid {cx, cy} "
         "of a simple 2D polygon with nonzero area. Exact coordinates give an "
-        "exact result; Real coordinates give a machine-precision result.");
+        "exact result; Real coordinates give a machine-precision result. Disk and "
+        "Annulus sectors, Rectangle, Triangle and multi-polygons are accepted.");
     symtab_set_docstring("RegionMember",
         "RegionMember[Polygon[{{x1, y1}, ...}], {x, y}] gives True if the "
         "point lies inside or on the boundary of the simple 2D polygon, and "
-        "False otherwise.");
+        "False otherwise. Also Disk, Annulus, Rectangle, Triangle, Circle, Ball, "
+        "Point, Line, planar 3D polygons, polygons with holes and multi-polygons; "
+        "a list of points is tested point by point.");
     symtab_set_docstring("ConvexHullRegion",
         "ConvexHullRegion[{{x1, y1}, ...}] gives the convex hull of a set of "
         "2D points: a Polygon with the hull vertices in counterclockwise "

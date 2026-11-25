@@ -207,6 +207,9 @@ before drawing, since the underlying triangle-fan fill is
 winding-sensitive but `Polygon[]` itself, like the reference's, is not).
 
 ## Text
+The PDF export draws any expression as its label (`Text[1/2, ...]`,
+`Text[10^30, ...]`, a symbol), not only strings and machine numbers.
+
 A graphics primitive: `Text[expr, {x,y}]` renders `expr` (a string,
 number, or any expression -- non-strings are stringified the same way
 `ToString[]` would) as text centered at `{x,y}`, drawn with a filled
@@ -222,6 +225,11 @@ toolbar chrome, and `Animate`/`Manipulate`'s own slider/button UI -- uses
 this same font.
 
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
+`RGBColor[{r, g, b}]` and `RGBColor[{r, g, b, a}]` evaluate to the flat
+`RGBColor[r, g, b(, a)]`. `Opacity[a, color]` sets the colour as well as the
+opacity, in the PDF export, the notebook JSON and the window renderer.
+`Arrow[{line1, line2, ...}]` draws one arrow per point list.
+
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
 list, each affects every primitive that follows it (left to right) up to the
 end of the enclosing `{...}` list, exactly like the reference's directive
@@ -557,6 +565,11 @@ In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
 ```
 
 ## Show
+The union of the inputs' ranges reads `PlotRange -> r` as `{{-r, r}, {-r, r}}` and a
+partial `{{0, 1}, All}` as the fixed axis plus the primitives' extent on the other;
+`GraphicsComplex`, `BezierCurve`, `BSplineCurve`, `Cuboid`, `Sphere`, `Ball`,
+`Cylinder` and `Cone` contribute their extents.
+
 Normalizes a `Graphics[...]` object for display; the REPL front end opens
 the window when the result is a top-level `Graphics` (see the auto-display
 note at the top). The window blocks the REPL until closed.
@@ -753,6 +766,15 @@ Out[1]= -Graphics-
 ```
 
 ## Plot
+A body that only evaluates to a list -- `Plot[Table[x^n, {n, 3}], {x, 0, 1}]`, a
+symbol holding `{f1, f2}` -- plots each element, as the literal list does. The
+held body is evaluated once under `Block[{x}, Quiet[...]]` (so a global value of
+the variable is irrelevant) and, when that gives a different List, the call is
+re-dispatched with it (`plot_redispatch_list_body`, `src/graphics/plot_common.c`).
+The same rule serves `PolarPlot`, `ParametricPlot` (including computed parts such
+as `{2 {Cos[t], Sin[t]}, ...}`), `ParametricPlot3D`, `StreamPlot` and `VectorPlot`
+(a field given as a symbol or a call returning `{vx, vy}`).
+
 Adaptively samples and displays a function of one real variable.
 - `Plot[f, {x, xmin, xmax}]`: samples `f` over `[xmin, xmax]`, opens an
   interactive window showing the curve, and returns it as a
@@ -827,6 +849,11 @@ Out[1]= -Graphics3D-
 ```
 
 ## Plot3D
+`PlotPoints -> Automatic` and `MaxRecursion -> Automatic` keep the defaults;
+`PlotPoints -> {nx, ny}` samples the adaptive base grid at the finer of the two
+(the refinement then follows the surface). `Mesh -> n`, `{nx, ny}` and `Full`
+draw the mesh along the sampling grid (`Mesh -> 0` turns it off).
+
 Samples and displays a function of two real variables as a surface.
 - `Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}]`: samples `f` over a uniform
   grid on `[xmin,xmax] x [ymin,ymax]`, opens an orbit-camera window showing
@@ -910,6 +937,9 @@ Out[7]= -Graphics3D-  (* cube box: z filled to full height (default is {1,1,0.4}
 ```
 
 ## ParametricPlot
+`RegionFunction` receives `f[x, y, u]` (`f[x, y, u, v]` for a surface), as in the
+reference; a function of the point alone is still read.
+
 Samples and displays a parametric planar curve or filled region.
 
 **One-iterator form** — parametric curve:
@@ -1077,6 +1107,9 @@ Out[10]= -Graphics3D-  (* flat color, no shading *)
 ```
 
 ## ListPlot
+A list of pairs in which some pair is not numeric (`{{1, 2}, {3, x}}`) is still a
+list of points, with the non-numeric pair missing -- not several height datasets.
+
 Plots explicit data as a point (scatter) plot, returning a
 `Graphics[{Point[...], ...}, opts]` object rendered through the same engine
 as `Plot`/`Show`. Unlike `Plot` (which is `HoldAll` so its function body stays
@@ -1200,6 +1233,9 @@ Out[10]= -Graphics-   (* dots visibly orbit along each circular streamline *)
 ```
 
 ## ContourPlot
+`PlotPoints -> {nx, ny}` samples `nx` cells along x and `ny` along y (also
+`DensityPlot` and `ComplexPlot`); `PlotPoints -> Automatic` keeps the default.
+
 Generates iso-contour lines of a 2-D function `f(x, y)` using the marching
 squares algorithm and returns a `Graphics[...]` object (auto-displayed).
 
@@ -1322,6 +1358,9 @@ Out[4]= -Graphics-
 ---
 
 ## ArrayPlot
+
+An explicit `Frame` option, `Frame -> False` included, replaces the injected
+`Frame -> True` default (also `ComplexPlot`); the result carries one `Frame` rule.
 
 ```
 ArrayPlot[array, opts...]
@@ -1453,6 +1492,12 @@ Out[6]= {PlotPoints -> 400, ColorFunction -> "Cyclic"}
 
 ## ComplexPlot3D
 
+`ComplexPlot3D[{f1, f2, ...}, ...]` overlays one surface per function (combined by
+`Show`, whose range union covers them all).
+
+An explicit `PlotRange` (`All` or a range) turns off the 95th-percentile height
+clamp, so the surface reaches the true `|f|`.
+
 ```
 ComplexPlot3D[f, {z, zmin, zmax}, opts...]
 ```
@@ -1499,6 +1544,13 @@ Out[4]= {PlotPoints -> 200, Lighting -> Automatic}
 
 ## BarChart
 
+A non-numeric entry (a symbol, `Missing[]`, a complex number) keeps its slot
+empty, so the later bars stay at their positions. Several datasets
+`{{a1, a2, ...}, {b1, ...}}` form one group per dataset, centred at x = 1, 2, ...,
+its bars side by side and coloured by position within the group. With
+`BarSpacing -> s` the gap between groups is `s` times the group width (the
+group is `1/(1 + s)` wide); without it the bars are 0.8 wide as before.
+
 ```
 BarChart[{v1, v2, ..., vn}, opts...]
 BarChart[{{v1,...}, {w1,...}, ...}, opts...]
@@ -1531,6 +1583,11 @@ Out[4]= -Graphics-
 ---
 
 ## Histogram
+
+`{dw}` gives bins of width exactly `dw` on multiples of it; `{min, max, dw}`
+gives bins of width exactly `dw` from `min`, the last one reaching past `max`
+when `dw` does not divide the range. Exact numeric data (`Pi`, `E`) are
+numericized, not dropped.
 
 ```
 Histogram[data, opts...]
@@ -1568,6 +1625,10 @@ Out[5]= -Graphics-
 
 ## VectorPlot
 
+A `ColorFunction` receives `f[x, y, vx, vy, n]` (each scaled to `[0, 1]` under
+`ColorFunctionScaling -> True`); the older `f[vx, vy, n]` and `f[n]` forms are
+still tried after it.
+
 ```
 VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 ```
@@ -1604,6 +1665,10 @@ Out[5]= Graphics
 ---
 
 ## Animate
+
+The control spec's variable is not evaluated, so a global value of `t` does not
+break `Animate[t, {t, 0, 1}]`; `{t, tmin, tmax, dt}` is accepted (the sweep is
+continuous; the step is not used to quantise `t`).
 
 ```
 Animate[expr, {t, tmin, tmax}, opts...]
@@ -1682,6 +1747,9 @@ Out[6]= Null
 ---
 
 ## Manipulate
+
+The control variable is local: the spec `{x, 0, 1}` is evaluated without
+evaluating `x`, so a global `x = 5` is irrelevant.
 
 ```
 Manipulate[expr, {u, umin, umax}, ...]

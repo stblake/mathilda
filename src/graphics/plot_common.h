@@ -27,6 +27,10 @@ bool numericize_bound(Expr* e, double* out);
 /* True if `e` is Rule[_,_] or RuleDelayed[_,_] (a trailing opts... arg). */
 bool is_rule_arg(Expr* e);
 
+/* PlotPoints -> n | {nx, ny} | Automatic. Fills *nx / *ny (each >= 2), or sets both to 0 for
+ * Automatic (keep the plot's default). False for anything else. */
+bool parse_plot_points_pair(Expr* rhs, long* nx, long* ny);
+
 /* Evaluate `rhs` and require it to be a plain machine integer. */
 bool parse_long_value(Expr* rhs, long* out);
 
@@ -57,6 +61,27 @@ Expr* eval_color_function3(Expr* color_fn,
                             double ymin, double ymax,
                             double zmin, double zmax,
                             bool scaling);
+
+/* The list-valued-body redispatch shared by the plotters (Plot, PolarPlot,
+ * ParametricPlot, ParametricPlot3D, StreamPlot, VectorPlot).  The plotters
+ * read a multi-curve / vector body off its literal List head, but the
+ * reference evaluates the held body, so a body that only BECOMES a list --
+ * a symbol holding one, Table[x^n, {n, 3}], f[x, y] := {y, -x},
+ * {2 {Cos[t], Sin[t]}, ...} -- must plot the same as the literal list.
+ *
+ * Evaluates res's first argument under Block[{vars}, Quiet[...]] (vars: the
+ * iterator variables of the specs args[1 .. nspecs], so a global value of
+ * the variable is irrelevant).  When the result is a List that differs from
+ * the held body, returns the call with the evaluated body in its place, for
+ * the evaluator to re-dispatch; NULL otherwise (the caller proceeds). */
+Expr* plot_redispatch_list_body(const Expr* res, size_t nspecs);
+
+/* Evaluate a Manipulate / Animate control spec {var, min, max, ...} WITHOUT
+ * evaluating the control variable: the variable is local to the control, so a
+ * global value of it must not turn {x, 0, 1} into {5, 0, 1} (audit
+ * Manipulate#1, Animate#1).  {{var, init, label}, ...} keeps var too.  Returns
+ * an owned expression. */
+Expr* eval_control_spec(const Expr* spec);
 
 /* Named color ramps — all take t ∈ [0,1], write r/g/b ∈ [0,1]. */
 

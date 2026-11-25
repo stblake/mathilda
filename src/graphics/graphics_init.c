@@ -22,7 +22,22 @@ static void register_inert(const char* name, const char* doc) {
     symtab_set_docstring(name, doc);
 }
 
-/* Mathematica's named color constants are themselves OwnValues that
+/* RGBColor[{r, g, b}] / RGBColor[{r, g, b, a}] is RGBColor[r, g, b(, a)]
+ * (audit RGBColor#1): the list form normalises to the flat one, so the two
+ * compare equal and every consumer reads one shape. */
+static Expr* builtin_rgbcolor(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    const Expr* l = res->data.function.args[0];
+    if (l->type != EXPR_FUNCTION || l->data.function.head->type != EXPR_SYMBOL
+        || l->data.function.head->data.symbol.name != SYM_List) return NULL;
+    size_t n = l->data.function.arg_count;
+    if (n != 3 && n != 4) return NULL;
+    Expr* a[4];
+    for (size_t i = 0; i < n; i++) a[i] = expr_copy(l->data.function.args[i]);
+    return expr_new_function(expr_new_symbol(SYM_RGBColor), a, n);
+}
+
+/* The reference's named color constants are themselves OwnValues that
  * evaluate to an RGBColor[...]/GrayLevel[...] literal -- not inert heads.
  * That's what makes them resolve anywhere a real color literal would: a
  * bare (non-Held) Graphics[]'s arguments evaluate normally, and Plot
@@ -118,7 +133,9 @@ void graphics_init(void) {
 
     register_inert("RGBColor",
         "RGBColor[r, g, b]\n\tA style directive: sets the color (each "
-        "component in [0,1]) of subsequent primitives.");
+        "component in [0,1]) of subsequent primitives.\n"
+        "RGBColor[r, g, b, a]\n\tWith opacity a. RGBColor[{r, g, b}] is RGBColor[r, g, b].");
+    symtab_add_builtin("RGBColor", builtin_rgbcolor);
     register_inert("GrayLevel",
         "GrayLevel[g]\n\tA style directive: sets the color of subsequent "
         "primitives to a shade of gray (g in [0,1]).");
@@ -575,6 +592,7 @@ void graphics_init(void) {
     symtab_get_def("ComplexPlot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("ComplexPlot3D",
         "ComplexPlot3D[f, {z, zmin, zmax}, opts...]\n"
+        "ComplexPlot3D[{f1, f2, ...}, ...] overlays one surface per function.\n"
         "\tThree-dimensional surface plot of a complex function: height = |f(z)|,\n"
         "\tcolour = Arg(f(z)) via the thermal ramp (same default as Plot3D).\n"
         "\tz is bound to Complex[x, y] at each grid point; the result is a\n"

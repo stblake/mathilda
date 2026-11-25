@@ -449,7 +449,7 @@ static Expr* builtin_random_image(Expr* res)
     OptEntry opts[] = { { "ColorSpace", &colorspace, &cs_given } };
     size_t argc = 0;
     size_t w = RANDIMG_DEFAULT, h = RANDIMG_DEFAULT, ch = 1, n, i;
-    double max = 1.0;
+    double max = 1.0, min = 0.0;
     double* buf;
     Expr* out;
 
@@ -462,8 +462,16 @@ static Expr* builtin_random_image(Expr* res)
         if (!a) return NULL;
         if (a->type == EXPR_INTEGER)   max = (double)a->data.integer;
         else if (a->type == EXPR_REAL) max = a->data.real;
+        else if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+                 && a->data.function.head->data.symbol.name == SYM_List
+                 && a->data.function.arg_count == 2) {
+            /* RandomImage[{min, max}, size]: uniform on [min, max] (audit RandomImage#2) */
+            if (!image_real_value(a->data.function.args[0], &min)
+                || !image_real_value(a->data.function.args[1], &max)) return NULL;
+            if (!(max > min)) return NULL;
+        }
         else return NULL;
-        if (!(max > 0.0)) return NULL;
+        if (!(max > 0.0) && !(max > min)) return NULL;
     }
     if (argc == 2 && !read_size(res->data.function.args[1], &w, &h)) return NULL;
 
@@ -490,7 +498,7 @@ static Expr* builtin_random_image(Expr* res)
     if (!buf) return mth_nomem_abort();
     /* Scaled by `max` and NOT clamped: the caller asked for that range, and a "Real" image is
      * free to hold values above 1 -- Export is where clamping belongs. */
-    for (i = 0; i < n; i++) buf[i] = random_uniform_01() * max;
+    for (i = 0; i < n; i++) buf[i] = min + random_uniform_01() * (max - min);
 
     out = image_build_real(buf, w, h, ch);
     free(buf);
@@ -533,6 +541,6 @@ void imageio_init(void)
     symtab_set_docstring("RandomImage",
         "RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] "
         "scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n "
-        "means {n, n}. ColorSpace -> \"RGB\" gives three independent channels. Samples are drawn "
+        "means {n, n}; RandomImage[{min, max}, size] draws on [min, max]. ColorSpace -> \"RGB\" gives three independent channels. Samples are drawn "
         "from the same stream as RandomReal, so SeedRandom makes the result reproducible.");
 }

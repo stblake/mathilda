@@ -117,20 +117,39 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
-            long v;
-            if (!parse_long_value(rhs, &v) || v < 2) FAIL_CLEANUP3();
-            sopts->plot_points = v;
+            /* n, Automatic (the default, audit Plot3D#2) or {nx, ny} (audit Plot3D#3). The
+             * adaptive sampler refines one square base grid, so a per-axis count samples the
+             * base grid at the finer of the two and lets the refinement follow the surface. */
+            long vx, vy;
+            if (!parse_plot_points_pair(rhs, &vx, &vy)) FAIL_CLEANUP3();
+            if (vx > 0) sopts->plot_points = vx > vy ? vx : vy;
         } else if (name == SYM_MaxRecursion) {
-            long v;
-            if (!parse_long_value(rhs, &v) || v < 0) FAIL_CLEANUP3();
-            sopts->max_recursion = (int)v;
+            Expr* mv = evaluate(rhs);
+            bool automatic = mv->type == EXPR_SYMBOL && mv->data.symbol.name == SYM_Automatic;
+            expr_free(mv);
+            if (!automatic) {
+                long v;
+                if (!parse_long_value(rhs, &v) || v < 0) FAIL_CLEANUP3();
+                sopts->max_recursion = (int)v;
+            }
         } else if (name == SYM_Mesh) {
             /* Default True (unlike Plot's default None) -- Mathematica's
              * Plot3D shows grid lines on the surface out of the box. */
             Expr* v = evaluate(rhs);
+            /* Mesh -> n, {nx, ny} and Full draw the mesh too (audit Plot3D#4); the lines follow
+             * the sampling grid rather than n evenly spaced curves. */
             bool on = (v->type == EXPR_SYMBOL
                        && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True
-                           || v->data.symbol.name == SYM_Automatic));
+                           || v->data.symbol.name == SYM_Automatic
+                           || v->data.symbol.name == SYM_Full))
+                      || (v->type == EXPR_INTEGER && v->data.integer > 0)
+                      || (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL
+                          && v->data.function.head->data.symbol.name == SYM_List);
+            if (v->type == EXPR_INTEGER && v->data.integer == 0) {
+                expr_free(v);
+                sopts->mesh = false;
+                continue;
+            }
             bool off = (v->type == EXPR_SYMBOL
                         && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
             expr_free(v);

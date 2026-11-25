@@ -13,6 +13,7 @@
 #include "label_font.h"
 #include "primitives.h"
 #include "sym_names.h"
+#include "common.h"   /* head_is */
 #include "print.h"
 #include "eval.h"
 #include "plot_common.h"
@@ -1095,6 +1096,9 @@ static void draw_primitive(const Expr* node, DrawState* state) {
     }
     if (name == SYM_Opacity) {
         double a;
+        RGBA8 c;
+        /* Opacity[a, color]: the colour first, then its alpha (audit Opacity#1) */
+        if (n >= 2 && resolve_color(node->data.function.args[1], &c)) state->color = to_raylib(c);
         if (n >= 1 && expr_to_d(node->data.function.args[0], &a)) state->color.a = (unsigned char)(a * 255);
         return;
     }
@@ -1191,6 +1195,21 @@ static void draw_primitive(const Expr* node, DrawState* state) {
                 DrawTriangleFan(poly, (int)cnt, state->color);
             }
             free(poly);
+        }
+        return;
+    }
+    if (name == SYM_Arrow && n >= 1 && head_is(node->data.function.args[0], SYM_List)
+        && node->data.function.args[0]->data.function.arg_count > 0
+        && head_is(node->data.function.args[0]->data.function.args[0], SYM_List)
+        && node->data.function.args[0]->data.function.args[0]->data.function.arg_count > 0
+        && head_is(node->data.function.args[0]->data.function.args[0]->data.function.args[0], SYM_List)) {
+        /* Arrow[{line1, line2, ...}]: one arrow each (audit Arrow#1) */
+        const Expr* lines = node->data.function.args[0];
+        for (size_t i = 0; i < lines->data.function.arg_count; i++) {
+            Expr* one = expr_new_function(expr_new_symbol(SYM_Arrow),
+                                          (Expr*[]){ expr_copy(lines->data.function.args[i]) }, 1);
+            draw_primitive(one, state);
+            expr_free(one);
         }
         return;
     }

@@ -354,6 +354,11 @@ static void draw_prim_2d(State2D* s, const Expr* p) {
         double op;
         if (expr_to_double(p->data.function.args[0], &op))
             s->cur_opacity = op;
+        double r, g_c, b, a;          /* Opacity[a, color] sets the colour too */
+        if (p->data.function.arg_count >= 2
+            && resolve_color_rgb(p->data.function.args[1], &r, &g_c, &b, &a)) {
+            s->cur_r = r; s->cur_g = g_c; s->cur_b = b;
+        }
         return;
     }
 

@@ -33,7 +33,8 @@
 /* ---- options ---- */
 
 typedef struct {
-    int         plot_points;
+    int         plot_points;     /* cells along x */
+    int         plot_points_y;   /* cells along y */
     Expr*       color_function;         /* borrowed; NULL = thermal default */
     bool        color_function_scaling;
     Expr*       region_function;        /* borrowed; NULL = none */
@@ -44,6 +45,7 @@ typedef struct {
 static bool split_density_options(Expr* res, DensityOpts* o,
                                    Expr*** pt_out, size_t* pt_n_out) {
     o->plot_points            = 50;
+    o->plot_points_y          = 50;
     o->color_function         = NULL;
     o->color_function_scaling = true;
     o->region_function        = NULL;
@@ -67,9 +69,9 @@ static bool split_density_options(Expr* res, DensityOpts* o,
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
-            long v;
-            if (!parse_long_value(rhs, &v) || v < 2) DP_FAIL();
-            o->plot_points = (int)v;
+            long vx, vy;          /* n, {nx, ny} (audit DensityPlot#1) or Automatic */
+            if (!parse_plot_points_pair(rhs, &vx, &vy)) DP_FAIL();
+            if (vx > 0) { o->plot_points = (int)vx; o->plot_points_y = (int)vy; }
         } else if (name == SYM_ColorFunction) {
             o->color_function = rhs;          /* borrowed */
         } else if (name == SYM_ColorFunctionScaling) {
@@ -210,14 +212,14 @@ Expr* builtin_densityplot(Expr* res) {
     if (!split_density_options(res, &opts, &pt, &pt_n)) {
         iter_spec_free(&xspec); iter_spec_free(&yspec); return NULL; }
 
-    int    N  = opts.plot_points;
+    int    NX = opts.plot_points, NY = opts.plot_points_y;
     /* Sample uniformly in world (scaled) space */
     double u_xmin = scale_apply(opts.sf_x, xmin), u_xmax = scale_apply(opts.sf_x, xmax);
     double u_ymin = scale_apply(opts.sf_y, ymin), u_ymax = scale_apply(opts.sf_y, ymax);
-    double du_x = (u_xmax - u_xmin) / N;
-    double du_y = (u_ymax - u_ymin) / N;
+    double du_x = (u_xmax - u_xmin) / NX;
+    double du_y = (u_ymax - u_ymin) / NY;
 
-    double* grid = malloc(sizeof(double) * (size_t)(N + 1) * (size_t)(N + 1));
+    double* grid = malloc(sizeof(double) * (size_t)(NX + 1) * (size_t)(NY + 1));
     if (!grid) {
         iter_spec_free(&xspec); iter_spec_free(&yspec);
         for (size_t i = 0; i < pt_n; i++) expr_free(pt[i]);
@@ -234,14 +236,14 @@ Expr* builtin_densityplot(Expr* res) {
     AutoCompiled* ac = autocompile_new(body, dvars, 2);
 
     double zmin =  1e300, zmax = -1e300;
-    for (int iy = 0; iy <= N; iy++) {
+    for (int iy = 0; iy <= NY; iy++) {
         double uy = u_ymin + iy * du_y;
         double y  = scale_invert(opts.sf_y, uy);
-        for (int ix = 0; ix <= N; ix++) {
+        for (int ix = 0; ix <= NX; ix++) {
             double ux = u_xmin + ix * du_x;
             double x  = scale_invert(opts.sf_x, ux);
             double v  = dp_eval(ac, xspec.var, yspec.var, body, x, y);
-            grid[iy * (N + 1) + ix] = v;
+            grid[iy * (NX + 1) + ix] = v;
             if (isfinite(v)) {
                 if (v < zmin) zmin = v;
                 if (v > zmax) zmax = v;
@@ -256,18 +258,18 @@ Expr* builtin_densityplot(Expr* res) {
     double zspan = (zmax > zmin) ? (zmax - zmin) : 1.0;
 
     /* 2 primitives per cell (colour directive + Rectangle). */
-    size_t cap   = (size_t)N * N * 2 + 4;
+    size_t cap   = (size_t)NX * NY * 2 + 4;
     Expr** prims = malloc(sizeof(Expr*) * cap);
     size_t np    = 0;
 
-    for (int iy = 0; iy < N; iy++) {
+    for (int iy = 0; iy < NY; iy++) {
         double uy0 = u_ymin + iy * du_y;
-        for (int ix = 0; ix < N; ix++) {
+        for (int ix = 0; ix < NX; ix++) {
             double ux0 = u_xmin + ix * du_x;
-            double v00 = grid[ iy      * (N + 1) + ix    ];
-            double v10 = grid[ iy      * (N + 1) + ix + 1];
-            double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
-            double v01 = grid[(iy + 1) * (N + 1) + ix    ];
+            double v00 = grid[ iy      * (NX + 1) + ix    ];
+            double v10 = grid[ iy      * (NX + 1) + ix + 1];
+            double v11 = grid[(iy + 1) * (NX + 1) + ix + 1];
+            double v01 = grid[(iy + 1) * (NX + 1) + ix    ];
 
             if (!isfinite(v00) || !isfinite(v10) || !isfinite(v11) || !isfinite(v01))
                 continue;

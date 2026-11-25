@@ -190,17 +190,67 @@ of a `Line` or `Circle`. Attributes: `Protected`.
 `Annulus[c]` uses the same radii). Attributes: `Protected`.
 
 - `Area` / `RegionMeasure`: `Pi (rout^2 - rin^2)` (`3 Pi/4` for `Annulus[]`;
-  `Pi (-r1^2 + r2^2)` symbolically); a sector `(t2 - t1)/2 (rout^2 - rin^2)`.
+  `Pi (-r1^2 + r2^2)` symbolically); a sector `s/2 (rout^2 - rin^2)`.
+- **The angular span `s` of a sector** (Annulus, Disk and Circle alike) is
+  `|t2 - t1|` capped at `2 Pi` when the difference is numeric: reversed angles
+  `{Pi/2, 0}` describe the same sector as `{0, Pi/2}`, and a span past a full
+  turn covers the region once (`Area[Annulus[{0,0},{1,2},{0,4 Pi}]]` is `3 Pi`,
+  not `6 Pi`). A symbolic difference is kept as `t2 - t1`. A measure is never
+  negative.
   Numeric radii given out of order measure as the ordered annulus
   (`Area[Annulus[{0,0},{2,1}]] = 3 Pi`), as in the reference.
-- `Perimeter`: `2 Pi (rin + rout)`; a sector `(t2 - t1)(rin + rout) + 2 (rout - rin)`.
-- `RegionCentroid`: the centre (full annulus).
+- `Perimeter`: `2 Pi (rin + rout)`; a sector `s (rin + rout) + 2 (rout - rin)`
+  (a full-turn sector has no radial edges).
+- `RegionCentroid`: the centre for the full annulus; for a sector
+  `c + (2/3) (rout^3 - rin^3)/(rout^2 - rin^2) Sin[a]/a {Cos[m], Sin[m]}`, with `a`
+  the half-span and `m` the mid-angle (`{0, 28/(9 Pi)}` for
+  `Annulus[{0,0},{1,2},{0,Pi}]`).
 - `RegionMember[ann, p]`: `rin <= |p - c| <= rout` (closed), plus the angle of
   `p - c` within `[t1, t2]` for a sector; a symbolic point gives the reference's
   condition `Element[x | y, Reals] && 1/4 <= x^2 + y^2 <= 1`.
 - `Disk[c, r]` / `Disk[c, {a, b}]` / `Disk[]`: `Area` / `RegionMeasure`
   `Pi r^2` / `Pi a b` / `Pi`; `Perimeter` the boundary circle's `ArcLength`;
-  `RegionCentroid` the centre.
+  `RegionCentroid` the centre. A numeric radius measures as `|r|`
+  (`Perimeter[Disk[{0,0},-2]]` is `4 Pi`; `ArcLength[Circle[{0,0},-2]]` likewise).
+- The sector `Disk[c, r, {t1, t2}]`: `Area` `s r^2/2` (`s a b/2` for an ellipse,
+  the angle being the parametric one, so `Disk[{0,0},{1,2},{0,Pi}]` is `Pi`),
+  `Perimeter` `r s + 2 r`, `RegionCentroid` `c + 2 r Sin[a]/(3 a) {Cos[m], Sin[m]}`
+  (`{0, 4/(3 Pi)}` for the upper half disk). `ArcLength[Circle[c, r, {t1, t2}]]`
+  is `|r| s`.
+
+## Further regions
+
+`src/geometry_regions.c` reduces the region forms the polygon kernel does not
+read to the ones it does:
+
+- `Rectangle[{x1, y1}, {x2, y2}]`, `Rectangle[{x, y}]` (the unit square there),
+  `Rectangle[]`, `Triangle[{p1, p2, p3}]` and `Triangle[]` are their `Polygon`:
+  `Area`, `Perimeter`, `RegionCentroid`, `RegionMember` and `RegionMeasure`
+  (`RegionCentroid[Rectangle[{0,0},{2,4}]]` is `{1, 2}`).
+- A multi-polygon `Polygon[{poly1, poly2, ...}]`: the measures add, the centroid
+  is area-weighted, a point is a member of any part.
+- A polygon with holes `Polygon[outer -> {hole1, ...}]`: the holes' areas
+  subtract and their boundaries add to the perimeter; a point is a member when
+  it is in the outer polygon and not strictly inside a hole (a hole's edge
+  belongs to the region).
+- `RegionMember` on `Point` (one or several points), `Line` (any dimension, one
+  or several polylines), `Circle[c, r]` (the circle itself), `Ball[c, r]` (any
+  dimension; `Ball[]` is the unit ball in 3-D) and a planar 3-D `Polygon` (coplanar,
+  then the 2-D test on the projection along the normal's largest component). A
+  list of points is tested point by point.
+- **Exact coordinates that are not rational** (`Sqrt[2]`, `Pi`) take a symbolic
+  path: the same shoelace / crossing / monotone-chain algorithms with the
+  arithmetic built as expressions and every branch decided by the certified
+  `Sign` of an exact numeric quantity. `Area[Polygon[{{0,0},{Pi,0},{0,1}}]]` is
+  `Pi/2`, `ConvexHullRegion[{{0,0},{1,0},{0,1},{Sqrt[2],0}}]` is
+  `Polygon[{{0,0},{Sqrt[2],0},{0,1}}]`, and `RegionMember` decides a point such as
+  `{Sqrt[2], 1}`. Inexact coordinates mixed with such constants are numericized
+  first and take the machine path.
+
+`ArcLength[curve, {t, a, b}]` over an infinite range integrates exactly or
+returns Integrate's own verdict (`Integrate::idiv`, the integral left inert); it
+never falls back to a quadrature, whose last partial sum of a divergent length
+is a number (`1.45*^304` for `ArcLength[{t, t}, {t, 0, Infinity}]` before).
 - Not implemented: `RegionBounds`, `RegionDimension`, the one-argument
   `RegionMember[reg]` (`RegionMemberFunction`), and use as an `NDSolve` /
   `NDEigenvalues` domain.

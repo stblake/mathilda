@@ -681,6 +681,25 @@ Expr* builtin_parametricplot3d(Expr* res) {
     Expr* iter1 = res->data.function.args[1];
     if (!is_iterator_3d(iter1)) return NULL;
 
+    /* A body that only evaluates to the curve list -- a symbol holding it,
+     * or computed parts {2 {Cos[t], Sin[t]}, ...} -- plots as the literal
+     * list would (audit ParametricPlot#1/#2, ParametricPlot3D#1). */
+    {
+        const Expr* b0 = res->data.function.args[0];
+        bool all_lists = (b0->type == EXPR_FUNCTION && b0->data.function.head->type == EXPR_SYMBOL && b0->data.function.head->data.symbol.name == SYM_List) && b0->data.function.arg_count > 0;
+        for (size_t i = 0; all_lists && i < b0->data.function.arg_count; i++) {
+            const Expr* bi = b0->data.function.args[i];
+            all_lists = (bi->type == EXPR_FUNCTION && bi->data.function.head->type == EXPR_SYMBOL && bi->data.function.head->data.symbol.name == SYM_List);
+        }
+        if (!all_lists) {
+            const Expr* a2 = argc >= 3 ? res->data.function.args[2] : NULL;
+            size_t nspecs = (a2 && (a2->type == EXPR_FUNCTION && a2->data.function.head->type == EXPR_SYMBOL && a2->data.function.head->data.symbol.name == SYM_List) && a2->data.function.arg_count >= 1
+                             && a2->data.function.args[0]->type == EXPR_SYMBOL) ? 2 : 1;
+            Expr* rd = plot_redispatch_list_body(res, nspecs);
+            if (rd) return rd;
+        }
+    }
+
     Expr* var1 = iter1->data.function.args[0];
     double t1min, t1max;
     if (!numericize_bound(iter1->data.function.args[1], &t1min)

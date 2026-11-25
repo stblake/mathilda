@@ -549,7 +549,7 @@ Expr* builtin_manipulate(Expr* res) {
     int n_ctrls = 0;
 
     for (size_t i = 1; i < argc && n_ctrls < MAX_CTRLS; i++) {
-        Expr* arg_ev = evaluate(res->data.function.args[i]);
+        Expr* arg_ev = eval_control_spec(res->data.function.args[i]);
         ManipCtrl c;
         memset(&c, 0, sizeof(c));
         bool ok = parse_control_spec(arg_ev, &c);

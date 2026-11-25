@@ -652,6 +652,13 @@ Expr* builtin_streamplot(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 3) return NULL;
 
+    /* A field given as a symbol or a call that evaluates to {vx, vy}
+     * (audit StreamPlot#1, VectorPlot#2). */
+    if (!(res->data.function.args[0]->type == EXPR_FUNCTION && res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL && res->data.function.args[0]->data.function.head->data.symbol.name == SYM_List)) {
+        Expr* rd = plot_redispatch_list_body(res, 2);
+        if (rd) return rd;
+    }
+
     /* Arg 0: {vx, vy} — must be a 2-element List (held, not yet evaluated). */
     Expr* field_arg = res->data.function.args[0];
     if (!field_arg || field_arg->type != EXPR_FUNCTION

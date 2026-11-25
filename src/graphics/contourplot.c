@@ -75,7 +75,8 @@ static Expr* contour_color(Expr* cfn, double t, double x, double y) {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int     plot_points;           /* grid points per axis, default 75 */
+    int     plot_points;           /* grid cells along x, default 75 */
+    int     plot_points_y;         /* grid cells along y, default 75 */
     int     n_contours;            /* number of auto-levels, default 10 */
     double* levels;                /* explicit contour values; NULL = auto */
     size_t  n_levels;
@@ -100,6 +101,7 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
      * evals stays well under ~0.1s; a non-compilable body falls to the
      * interpreter but that is the exception for a numeric contour plot. */
     co->plot_points = 75;
+    co->plot_points_y = 75;
     co->n_contours = 10;
     co->levels = NULL;
     co->n_levels = 0;
@@ -133,9 +135,9 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
-            long v;
-            if (!parse_long_value(rhs, &v) || v < 2) CP_FAIL();
-            co->plot_points = (int)v;
+            long vx, vy;          /* n, {nx, ny} (audit ContourPlot#1) or Automatic */
+            if (!parse_plot_points_pair(rhs, &vx, &vy)) CP_FAIL();
+            if (vx > 0) { co->plot_points = (int)vx; co->plot_points_y = (int)vy; }
         } else if (name == SYM_Contours) {
             co->contours_set = true;
             Expr* v = evaluate(rhs);
@@ -491,21 +493,21 @@ Expr* builtin_contourplot(Expr* res) {
     /* Determine shading: Automatic → on if ColorFunction is set */
     bool do_shade = (co.shading == 1) || (co.shading == -1 && co.color_function != NULL);
 
-    int N = co.plot_points;        /* grid is (N+1)×(N+1) points, N×N cells */
+    int NX = co.plot_points, NY = co.plot_points_y;   /* (NX+1)×(NY+1) points, NX×NY cells */
 
     /* World-space (scaled) bounds and step sizes.  When no scaling is active
      * these equal the data-space values, so the code below is uniform. */
     double u_xmin = scale_apply(co.sf_x, xmin), u_xmax = scale_apply(co.sf_x, xmax);
     double u_ymin = scale_apply(co.sf_y, ymin), u_ymax = scale_apply(co.sf_y, ymax);
-    double du_x = (u_xmax - u_xmin) / N;
-    double du_y = (u_ymax - u_ymin) / N;
+    double du_x = (u_xmax - u_xmin) / NX;
+    double du_y = (u_ymax - u_ymin) / NY;
     /* Keep legacy names for code that still uses them for data-space work. */
-    double dx = (xmax - xmin) / N;
-    double dy = (ymax - ymin) / N;
+    double dx = (xmax - xmin) / NX;
+    double dy = (ymax - ymin) / NY;
     (void)dx; (void)dy; /* suppress unused-variable warning when only world coords used */
 
     /* Allocate and evaluate the grid. */
-    double* grid = malloc(sizeof(double) * (size_t)(N + 1) * (size_t)(N + 1));
+    double* grid = malloc(sizeof(double) * (size_t)(NX + 1) * (size_t)(NY + 1));
     if (!grid) {
         iter_spec_free(&xspec); iter_spec_free(&yspec);
         free(co.levels);
@@ -533,7 +535,7 @@ Expr* builtin_contourplot(Expr* res) {
             {0.923, 0.694, 0.122},  /* yellow */
         };
 
-        size_t lprim_cap = (neq > 0 ? neq : 1) * (size_t)N * (size_t)N * 3 + 16;
+        size_t lprim_cap = (neq > 0 ? neq : 1) * (size_t)NX * (size_t)NY * 3 + 16;
         Expr** lprims = malloc(sizeof(Expr*) * lprim_cap);
         size_t lnprim = 0;
 
@@ -570,11 +572,11 @@ Expr* builtin_contourplot(Expr* res) {
             IterShadow lox = iter_spec_shadow(xspec.var);
             IterShadow loy = iter_spec_shadow(yspec.var);
             lctx.ac = grid_compile(&lctx);
-            for (int iy = 0; iy <= N; iy++) {
+            for (int iy = 0; iy <= NY; iy++) {
                 double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
-                for (int ix = 0; ix <= N; ix++) {
+                for (int ix = 0; ix <= NX; ix++) {
                     double xi = scale_invert(co.sf_x, u_xmin + ix * du_x);
-                    grid[iy * (N + 1) + ix] = eval_at(&lctx, xi, yj);
+                    grid[iy * (NX + 1) + ix] = eval_at(&lctx, xi, yj);
                 }
             }
             autocompiled_free(lctx.ac);
@@ -598,14 +600,14 @@ Expr* builtin_contourplot(Expr* res) {
             /* Marching squares (cell corners in world space). */
             for (size_t li = 0; li < sub_nl; li++) {
                 double level = sub_lvs[li];
-                for (int iy = 0; iy < N; iy++) {
+                for (int iy = 0; iy < NY; iy++) {
                     double wy0 = u_ymin + iy * du_y;
-                    for (int ix = 0; ix < N; ix++) {
+                    for (int ix = 0; ix < NX; ix++) {
                         double wx0 = u_xmin + ix * du_x;
-                        double v00 = grid[ iy      * (N + 1) + ix    ];
-                        double v10 = grid[ iy      * (N + 1) + ix + 1];
-                        double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
-                        double v01 = grid[(iy + 1) * (N + 1) + ix    ];
+                        double v00 = grid[ iy      * (NX + 1) + ix    ];
+                        double v10 = grid[ iy      * (NX + 1) + ix + 1];
+                        double v11 = grid[(iy + 1) * (NX + 1) + ix + 1];
+                        double v01 = grid[(iy + 1) * (NX + 1) + ix    ];
                         LENSURE(4);
                         cell_march(lprims, &lnprim, wx0, wy0, du_x, du_y,
                                    v00, v10, v11, v01, level);
@@ -697,12 +699,12 @@ Expr* builtin_contourplot(Expr* res) {
     ctx.ac = grid_compile(&ctx);
 
     double zmin = 1e300, zmax = -1e300;
-    for (int iy = 0; iy <= N; iy++) {
+    for (int iy = 0; iy <= NY; iy++) {
         double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
-        for (int ix = 0; ix <= N; ix++) {
+        for (int ix = 0; ix <= NX; ix++) {
             double xi = scale_invert(co.sf_x, u_xmin + ix * du_x);
             double v = eval_at(&ctx, xi, yj);
-            grid[iy * (N + 1) + ix] = v;
+            grid[iy * (NX + 1) + ix] = v;
             if (isfinite(v)) {
                 if (v < zmin) zmin = v;
                 if (v > zmax) zmax = v;
@@ -737,7 +739,7 @@ Expr* builtin_contourplot(Expr* res) {
      *   per level:     N*N cells × 2 segments + colour + optional label
      *   scale bar:     not used here
      */
-    size_t prim_cap = (size_t)N * N * 2 + n_levels * ((size_t)N * N * 3 + 4) + 8;
+    size_t prim_cap = (size_t)NX * NY * 2 + n_levels * ((size_t)NX * NY * 3 + 4) + 8;
     Expr** prims = malloc(sizeof(Expr*) * prim_cap);
     size_t nprim = 0;
 
@@ -751,14 +753,14 @@ Expr* builtin_contourplot(Expr* res) {
     /* ---- Shading: colour each grid cell ---- */
     if (do_shade) {
         double zspan = (zmax > zmin) ? (zmax - zmin) : 1.0;
-        for (int iy = 0; iy < N; iy++) {
+        for (int iy = 0; iy < NY; iy++) {
             double wy0 = u_ymin + iy * du_y;
-            for (int ix = 0; ix < N; ix++) {
+            for (int ix = 0; ix < NX; ix++) {
                 double wx0 = u_xmin + ix * du_x;
-                double v00 = grid[iy       * (N + 1) + ix    ];
-                double v10 = grid[iy       * (N + 1) + ix + 1];
-                double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
-                double v01 = grid[(iy + 1) * (N + 1) + ix    ];
+                double v00 = grid[iy       * (NX + 1) + ix    ];
+                double v10 = grid[iy       * (NX + 1) + ix + 1];
+                double v11 = grid[(iy + 1) * (NX + 1) + ix + 1];
+                double v01 = grid[(iy + 1) * (NX + 1) + ix    ];
 
                 /* Skip cells with any NaN corner. */
                 if (!isfinite(v00) || !isfinite(v10) || !isfinite(v11) || !isfinite(v01))
@@ -855,14 +857,14 @@ Expr* builtin_contourplot(Expr* res) {
 
             /* Marching squares over every cell (world-space coords). */
             bool label_done = false;
-            for (int iy = 0; iy < N; iy++) {
+            for (int iy = 0; iy < NY; iy++) {
                 double wy0 = u_ymin + iy * du_y;
-                for (int ix = 0; ix < N; ix++) {
+                for (int ix = 0; ix < NX; ix++) {
                     double wx0 = u_xmin + ix * du_x;
-                    double v00 = grid[iy       * (N + 1) + ix    ];
-                    double v10 = grid[iy       * (N + 1) + ix + 1];
-                    double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
-                    double v01 = grid[(iy + 1) * (N + 1) + ix    ];
+                    double v00 = grid[iy       * (NX + 1) + ix    ];
+                    double v10 = grid[iy       * (NX + 1) + ix + 1];
+                    double v11 = grid[(iy + 1) * (NX + 1) + ix + 1];
+                    double v01 = grid[(iy + 1) * (NX + 1) + ix    ];
 
                     ENSURE_CAP(4);
                     size_t before = nprim;

@@ -105,10 +105,9 @@ static bool split_arrayplot_options(Expr* res, ArrayPlotOpts* o,
         } else {
             if (name == SYM_Axes) have_axes = true;
             else if (name == SYM_Frame) {
-                if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol.name == SYM_False
-                          || rhs->data.symbol.name == SYM_None)))
-                    have_frame = true;
+                /* any explicit Frame, False included, suppresses the injected
+                 * Frame -> True (audit ArrayPlot#1, ComplexPlot#1) */
+                have_frame = true;
             }
             Expr* val  = eval_borrowed(rhs);
             Expr* a[2] = { expr_copy(lhs), val };

@@ -364,12 +364,29 @@ static Expr* builtin_imageresize(Expr* res) {
         && spec->data.function.head->type == EXPR_SYMBOL
         && spec->data.function.head->data.symbol.name == SYM_List) {
         if (spec->data.function.arg_count != 2) { free(src); return NULL; }
-        if (!na_read_scalar(spec->data.function.args[0], &dwd, &im) || im != 0.0) {
+        /* {w, Automatic} / {Automatic, h} keep the aspect ratio (audit ImageResize#1) */
+        const Expr* sw_e = spec->data.function.args[0];
+        const Expr* sh_e = spec->data.function.args[1];
+        bool aw = sw_e->type == EXPR_SYMBOL && sw_e->data.symbol.name == SYM_Automatic;
+        bool ah = sh_e->type == EXPR_SYMBOL && sh_e->data.symbol.name == SYM_Automatic;
+        if (aw && ah) { free(src); return NULL; }
+        if (!ah && (!na_read_scalar(sh_e, &dhd, &im) || im != 0.0)) { free(src); return NULL; }
+        if (!aw && (!na_read_scalar(sw_e, &dwd, &im) || im != 0.0)) { free(src); return NULL; }
+        if (aw) dwd = floor((double)sw * dhd / (double)sh + 0.5);
+        if (aw && dwd < 1.0) dwd = 1.0;
+        have_h = !ah;
+    } else if (spec && spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
+               && strcmp(spec->data.function.head->data.symbol.name, "Scaled") == 0
+               && spec->data.function.arg_count == 1) {
+        /* Scaled[s]: both dimensions times s (audit ImageResize#2) */
+        double sc = 0.0;
+        if (!na_read_scalar(spec->data.function.args[0], &sc, &im) || im != 0.0 || !(sc > 0.0)) {
             free(src); return NULL;
         }
-        if (!na_read_scalar(spec->data.function.args[1], &dhd, &im) || im != 0.0) {
-            free(src); return NULL;
-        }
+        dwd = floor((double)sw * sc + 0.5);
+        dhd = floor((double)sh * sc + 0.5);
+        if (dwd < 1.0) dwd = 1.0;
+        if (dhd < 1.0) dhd = 1.0;
         have_h = true;
     } else {
         if (!na_read_scalar(spec, &dwd, &im) || im != 0.0) { free(src); return NULL; }
@@ -517,6 +534,16 @@ static bool rot_side_spec(const Expr* e, double* rad) {
     return false;
 }
 
+/* Rebuild a pure index permutation of `img`'s pixels (a crop, a reflection, a quarter turn) in
+ * the input's own type: those move stored values without computing new ones, so a "Byte" or
+ * "Bit" image stays one (audit ImageCrop#1, ImageReflect#1). A resampling filter still widens
+ * to "Real". */
+static Expr* build_as(const Expr* img, const double* buf, size_t w, size_t h, size_t c) {
+    ImgType t = IMG_REAL;
+    if (!image_info(img, NULL, NULL, NULL, &t) || t == IMG_REAL) return image_build_real(buf, w, h, c);
+    return image_build_typed(buf, w, h, c, t);
+}
+
 /* ImageRotate[image] (a quarter turn) / [image, angle] / [image, n Degree] / [image, side] /
  * [image, side1 -> side2]. Positive angles turn the picture COUNTERCLOCKWISE, as in Mathematica. */
 static Expr* builtin_imagerotate(Expr* res) {
@@ -554,20 +581,24 @@ static Expr* builtin_imagerotate(Expr* res) {
      * reading of what they asked for. */
     double q = rad / (M_PI / 2.0);
     double qr = floor(q + 0.5);
-    bool right = fabs(q - qr) < 1e-9;
+    /* Only a representable quarter count is a right angle: past 2^40 quarters the spacing of the
+     * doubles exceeds the tolerance, so every huge angle would test "right" and its count would
+     * overflow the int64 cast (audit ImageRotate#1: 1.*^20 rad turned a quarter). */
+    bool right = fabs(q) < 1099511627776.0 && fabs(q - qr) < 1e-9;
+    if (!right) rad = fmod(rad, 2.0 * M_PI);
 
     Expr* out = NULL;
     if (right) {
         int quarters = (int)(((int64_t)qr % 4 + 4) % 4);
         if (quarters == 0) {
-            out = image_build_real(src, w, h, c);      /* full turn: the image itself */
+            out = build_as(res->data.function.args[0], src, w, h, c);   /* full turn: the image itself */
         } else {
             size_t dw = (quarters == 2) ? w : h;
             size_t dh = (quarters == 2) ? h : w;
             double* dst = malloc(sizeof(double) * dw * dh * c);
             if (dst) {
                 rot90_run(src, dst, w, h, c, quarters);
-                out = image_build_real(dst, dw, dh, c);
+                out = build_as(res->data.function.args[0], dst, dw, dh, c);
             }
             free(dst);
         }
@@ -647,10 +678,33 @@ static Expr* builtin_imagereflect(Expr* res) {
         return reflect3_run(res->data.function.args[0], axis);
     }
 
-    /* Mathematica's default reflects top-to-bottom. The named sides are given as symbols. */
-    int mode = 0;                          /* 0 = vertical flip, 1 = horizontal, 2 = both */
-    if (argc == 2) {
-        int ax = reflect_side_axis(res->data.function.args[1]);
+    /* The default reflects top-to-bottom. The named sides are given as symbols, or as
+     * side1 -> side2 (audit ImageReflect#2): opposite sides flip that axis, adjacent sides reflect
+     * about a diagonal -- Left -> Top (and Top -> Left, Right -> Bottom, Bottom -> Right) about the
+     * main one, the other four about the anti-diagonal -- and a side to itself is the identity. */
+    int mode = 0;          /* 0 = vertical flip, 1 = horizontal, 3 = transpose, 4 = anti-transpose, 5 = none */
+    const Expr* a1 = argc == 2 ? res->data.function.args[1] : NULL;
+    if (a1 && a1->type == EXPR_FUNCTION && a1->data.function.head->type == EXPR_SYMBOL
+        && a1->data.function.head->data.symbol.name == SYM_Rule && a1->data.function.arg_count == 2) {
+        const Expr* s1 = a1->data.function.args[0];
+        const Expr* s2 = a1->data.function.args[1];
+        int x1 = reflect_side_axis(s1), x2 = reflect_side_axis(s2);
+        if (x1 <= 0 || x2 <= 0) return NULL;
+        const char* n1 = s1->data.symbol.name;
+        const char* n2 = s2->data.symbol.name;
+        if (n1 == n2) mode = 5;
+        else if (x1 == x2) mode = (x1 == 1) ? 0 : 1;
+        else {
+            /* one vertical side (Top/Bottom) and one horizontal (Left/Right) */
+            const char* v = (x1 == 1) ? n1 : n2;
+            const char* hz = (x1 == 1) ? n2 : n1;
+            bool main_diag = (v == SYM_Top && hz == SYM_Left) || (v == SYM_Bottom && hz == SYM_Right);
+            mode = main_diag ? 3 : 4;
+        }
+        a1 = NULL;
+    }
+    if (a1) {
+        int ax = reflect_side_axis(a1);
         /* A plane has no depth axis, so Front and Back are refused rather than reinterpreted: a
          * silent substitution would turn a caller's mistake into a wrong picture. */
         if (ax == 1)      mode = 0;
@@ -661,7 +715,19 @@ static Expr* builtin_imagereflect(Expr* res) {
     if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
     double* dst = malloc(sizeof(double) * w * h * c);
     Expr* out = NULL;
-    if (dst) {
+    if (dst && mode >= 3) {
+        /* the diagonal reflections: an h x w array becomes w x h */
+        for (size_t y = 0; y < h; y++)
+            for (size_t x = 0; x < w; x++) {
+                size_t dy = (mode == 3) ? x : (mode == 4 ? w - 1 - x : y);
+                size_t dx = (mode == 3) ? y : (mode == 4 ? h - 1 - y : x);
+                size_t dw = (mode == 5) ? w : h;
+                for (size_t k = 0; k < c; k++)
+                    dst[(dy * dw + dx) * c + k] = src[(y * w + x) * c + k];
+            }
+        if (mode == 5) out = build_as(res->data.function.args[0], dst, w, h, c);
+        else out = build_as(res->data.function.args[0], dst, h, w, c);
+    } else if (dst) {
         for (size_t y = 0; y < h; y++)
             for (size_t x = 0; x < w; x++) {
                 size_t sy = (mode == 1) ? y : h - 1 - y;
@@ -669,7 +735,7 @@ static Expr* builtin_imagereflect(Expr* res) {
                 for (size_t k = 0; k < c; k++)
                     dst[(y * w + x) * c + k] = src[(sy * w + sx) * c + k];
             }
-        out = image_build_real(dst, w, h, c);
+        out = build_as(res->data.function.args[0], dst, w, h, c);
     }
     free(src); free(dst);
     return out;
@@ -700,13 +766,27 @@ static Expr* builtin_imagereflect(Expr* res) {
  * rather than assumed to be black, because a scanned page's margin is white and assuming black would
  * trim nothing.
  */
-typedef enum { PAD_VALUE, PAD_FIXED, PAD_REFLECT } PadMode;
+typedef enum { PAD_VALUE, PAD_FIXED, PAD_REFLECT, PAD_PERIODIC, PAD_REVERSED } PadMode;
 
 /* Map a padded coordinate back into the source, or report that it lies outside. */
 static bool pad_src_index(int64_t v, size_t n, PadMode mode, size_t* out) {
     if (v >= 0 && (size_t)v < n) { *out = (size_t)v; return true; }
     if (mode == PAD_VALUE) return false;
     if (mode == PAD_FIXED) { *out = (v < 0) ? 0 : n - 1; return true; }
+    if (mode == PAD_PERIODIC) {                 /* wrap around: index -1 is the last pixel */
+        int64_t m = v % (int64_t)n;
+        if (m < 0) m += (int64_t)n;
+        *out = (size_t)m;
+        return true;
+    }
+    if (mode == PAD_REVERSED) {                 /* mirror REPEATING the edge: -1 maps to 0 */
+        int64_t period = 2 * (int64_t)n;
+        int64_t m = v % period;
+        if (m < 0) m += period;
+        if (m >= (int64_t)n) m = period - 1 - m;
+        *out = (size_t)m;
+        return true;
+    }
     /* Reflect without repeating the edge: index -1 maps to 1, index n maps to n-2. A period of
      * 2n - 2 covers arbitrarily deep padding rather than only one width. */
     if (n == 1) { *out = 0; return true; }
@@ -864,21 +944,33 @@ static Expr* builtin_imagepad(Expr* res) {
 
     PadMode mode = PAD_VALUE;
     double fill = 0.0;
+    const Expr* fill_colour = NULL;    /* a colour fill, resolved once the channel count is known */
     if (argc == 3) {
         Expr* pv = res->data.function.args[2];
         double im = 0.0;
         if (pv && pv->type == EXPR_STRING) {
             if (strcmp(pv->data.string, "Fixed") == 0) mode = PAD_FIXED;
             else if (strcmp(pv->data.string, "Reflected") == 0) mode = PAD_REFLECT;
+            else if (strcmp(pv->data.string, "Periodic") == 0) mode = PAD_PERIODIC;
+            else if (strcmp(pv->data.string, "Reversed") == 0) mode = PAD_REVERSED;
             else return NULL;
         } else if (na_read_scalar(pv, &fill, &im) && im == 0.0) {
             mode = PAD_VALUE;
+        } else if (image_real_value(pv, &fill)) {
+            mode = PAD_VALUE;
+        } else if (pv && pv->type == EXPR_FUNCTION && pv->data.function.head->type == EXPR_SYMBOL
+                   && (pv->data.function.head->data.symbol.name == SYM_RGBColor
+                       || pv->data.function.head->data.symbol.name == SYM_GrayLevel
+                       || pv->data.function.head->data.symbol.name == SYM_List)) {
+            mode = PAD_VALUE;          /* a colour: RGBColor, GrayLevel or a channel list */
+            fill_colour = pv;
         } else return NULL;
     }
 
     /* A VOLUME takes the rank-3 path, dispatching on the image exactly as ImageConvolve does. */
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
         int64_t lo3[3], hi3[3];
+        if (fill_colour) return NULL;
         if (!pad_spec(res->data.function.args[1], 3, lo3, hi3)) return NULL;
         return pad3_run(res->data.function.args[0], lo3, hi3, mode, fill);
     }
@@ -914,6 +1006,37 @@ static Expr* builtin_imagepad(Expr* res) {
     int64_t nh = (int64_t)h + pb + pt;
     if (nw < 1 || nh < 1) { free(src); return NULL; }   /* negative padding may not erase the image */
 
+    /* A colour fill, one value per channel (audit ImagePad#2). An opaque alpha is appended to a
+     * colour given without one. */
+    double fillv[4] = { fill, fill, fill, fill };
+    if (fill_colour) {
+        const Expr* fc = fill_colour;
+        const char* fh = fc->data.function.head->data.symbol.name;
+        size_t fn = fc->data.function.arg_count;
+        size_t colour_ch = (c == 2 || c == 4) ? c - 1 : c;
+        bool ok = true;
+        double v[4] = { 0.0, 0.0, 0.0, 1.0 };
+        if (fh == SYM_GrayLevel && fn >= 1) {
+            ok = image_real_value(fc->data.function.args[0], &v[0]);
+            v[1] = v[2] = v[0];
+            if (ok && fn >= 2) ok = image_real_value(fc->data.function.args[1], &v[3]);
+            if (ok && colour_ch == 1) v[1] = v[3];
+        } else if ((fh == SYM_RGBColor && fn >= 3) || (fh == SYM_List && fn == c)) {
+            size_t take = fh == SYM_List ? fn : (fn > 4 ? 4 : fn);
+            for (size_t i = 0; i < take && ok; i++) ok = image_real_value(fc->data.function.args[i], &v[i]);
+            if (ok && fh == SYM_List) { for (size_t i = 0; i < c; i++) fillv[i] = v[i]; }
+            else if (ok && colour_ch == 1) {
+                v[0] = 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2];
+                v[1] = v[3];
+            }
+        } else ok = false;
+        if (!ok) { free(src); return NULL; }
+        if (!(fh == SYM_List)) {
+            if (colour_ch == 1) { fillv[0] = v[0]; fillv[1] = v[1]; }
+            else { fillv[0] = v[0]; fillv[1] = v[1]; fillv[2] = v[2]; fillv[3] = v[3]; }
+        }
+    }
+
     double* dst = malloc(sizeof(double) * (size_t)nw * (size_t)nh * c);
     Expr* out = NULL;
     if (dst) {
@@ -928,11 +1051,12 @@ static Expr* builtin_imagepad(Expr* res) {
          * code path: a negative offset simply makes the in-range span start later and end sooner. */
         size_t rowbytes_all = sizeof(double) * (size_t)nw * c;
         if (mode == PAD_VALUE) {
-            if (fill == 0.0) {
+            if (!fill_colour && fill == 0.0) {
                 memset(dst, 0, rowbytes_all * (size_t)nh);      /* the common case, and the fastest */
             } else {
-                size_t n = (size_t)nw * (size_t)nh * c;
-                for (size_t i = 0; i < n; i++) dst[i] = fill;
+                size_t n = (size_t)nw * (size_t)nh;
+                for (size_t i = 0; i < n; i++)
+                    for (size_t k = 0; k < c; k++) dst[i * c + k] = fillv[k];
             }
         }
         for (int64_t y = 0; y < nh; y++) {
@@ -1061,7 +1185,7 @@ static Expr* builtin_imagecrop(Expr* res) {
             for (size_t x = 0; x < cw; x++)
                 for (size_t k = 0; k < c; k++)
                     dst[(y * cw + x) * c + k] = src[((y0 + y) * w + (x0 + x)) * c + k];
-        out = image_build_real(dst, cw, ch, c);
+        out = build_as(res->data.function.args[0], dst, cw, ch, c);
     }
     free(src); free(dst);
     return out;
@@ -1074,7 +1198,9 @@ void imagegeom_init(void) {
         "ImagePad[image, m] pads m pixels on every side; ImagePad[image, {{left, right}, "
         "{bottom, top}}] pads each side separately, in Mathematica's VISUAL order -- so `top` adds rows "
         "at the start of the data, since row 1 is the top of the image. Negative amounts crop, but may "
-        "not erase the image. ImagePad[image, m, v] fills with the value v (default 0); "
+        "not erase the image. ImagePad[image, m, v] fills with the value v (default 0), or a colour "
+        "(RGBColor, GrayLevel or a channel list); \"Periodic\" wraps around and \"Reversed\" mirrors "
+        "repeating the edge pixel; "
         "ImagePad[image, m, \"Fixed\"] replicates the edge pixel, the same boundary rule the filters "
         "use, so padding then filtering composes with it; ImagePad[image, m, \"Reflected\"] mirrors "
         "WITHOUT repeating the edge -- {1,2,3} padded by 1 gives {2,1,2,3,2}, not {1,1,2,3,3}, because "
@@ -1110,7 +1236,9 @@ void imagegeom_init(void) {
     symtab_add_builtin("ImageReflect", builtin_imagereflect);
     symtab_get_def("ImageReflect")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageReflect",
-        "ImageReflect[image] reflects top to bottom; ImageReflect[image, Left] or Right reflects left "
+        "ImageReflect[image] reflects top to bottom; ImageReflect[image, side1 -> side2] maps one side "
+        "onto another (opposite sides flip that axis, adjacent sides reflect about a diagonal, so a "
+        "w x h image becomes h x w); the pixel type is kept. ImageReflect[image, Left] or Right reflects left "
         "to right, and Top or Bottom is the vertical reflection again -- either name of a pair selects "
         "the same axis, since reflecting to the top and reflecting to the bottom are one operation. "
         "For an Image3D, Front or Back selects the DEPTH axis, the pair Mathematica uses for volumes; "
@@ -1122,7 +1250,8 @@ void imagegeom_init(void) {
     symtab_get_def("ImageResize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageResize",
         "ImageResize[image, {w, h}] resizes to w x h pixels; ImageResize[image, w] gives width w "
-        "with the height following to preserve the aspect ratio. "
+        "with the height following to preserve the aspect ratio, as do {w, Automatic} and "
+        "{Automatic, h}; ImageResize[image, Scaled[s]] scales both dimensions by s. "
         "Resampling -> \"Nearest\" | \"Bilinear\" | \"Average\" selects the method; the default "
         "Automatic uses AREA AVERAGING when either axis shrinks and bilinear otherwise. That "
         "default is about aliasing: point-sampling a shrinking image destroys every frequency "

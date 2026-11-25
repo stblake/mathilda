@@ -36,6 +36,8 @@
 #include "ndarray.h"
 #include "pack.h"
 #include "image.h"
+#include "eval.h"
+#include "numeric.h"
 
 /* ---- shape and type inspection of a nested List ---- */
 
@@ -426,8 +428,33 @@ static Expr* img_typed_storage(double* vals, const int64_t* dims, int rank, ImgT
  * clipping for the integer types, as Mathematica does -- rather than declining, so the only data left
  * unevaluated is data that is not a rectangular array of real numbers at all. Image[image, type]
  * converts an existing image, and Image[image] is the image itself. */
+/* The presentation options an Image may carry -- ColorSpace, Interleaving, ImageSize, ... -- do not
+ * change the pixels the canonical Image[data, type] stores, so they are accepted and dropped: the
+ * image is valid and every accessor reads it (audit Image#1, ImageDimensions#1). An unknown
+ * option still leaves the call unevaluated. */
+static bool img_droppable_option(const Expr* a) {
+    if (!a || a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = a->data.function.head->data.symbol.name;
+    if ((h != SYM_Rule && h != SYM_RuleDelayed) || a->data.function.arg_count != 2) return false;
+    const Expr* k = a->data.function.args[0];
+    if (k->type != EXPR_SYMBOL) return false;
+    static const char* const names[] = { "ColorSpace", "Interleaving", "ImageSize", "Magnification",
+        "ImageResolution", "MetaInformation", "ImageMargins", "Background", "BaseStyle" };
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; i++)
+        if (strcmp(k->data.symbol.name, names[i]) == 0) return true;
+    return false;
+}
+
 static Expr* img_construct(Expr* res, const char* head, bool vol) {
     size_t argc = res->data.function.arg_count;
+    if (argc >= 2 && img_droppable_option(res->data.function.args[argc - 1])) {
+        size_t keep = argc;
+        while (keep > 1 && img_droppable_option(res->data.function.args[keep - 1])) keep--;
+        if (keep > 2) return NULL;
+        Expr* a[2];
+        for (size_t i = 0; i < keep; i++) a[i] = expr_copy(res->data.function.args[i]);
+        return expr_new_function(expr_new_symbol(head), a, keep);
+    }
     if (argc != 1 && argc != 2) return NULL;
     Expr* data = res->data.function.args[0];
 
@@ -1156,7 +1183,37 @@ Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t 
 
 /* Image3D[data] / Image3D[data, type] / Image3D[volume, type] -- same normalisation, inference,
  * coercion and conversion as Image. */
-static Expr* builtin_image3d(Expr* res) { return img_construct(res, "Image3D", true); }
+/* Image3D[{image1, image2, ...}] stacks 2-D images of one size, channel count and type into a
+ * volume, image1 the first slice (audit Image3D#1). */
+static Expr* img3_stack(const Expr* list) {
+    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL
+        || list->data.function.head->data.symbol.name != SYM_List) return NULL;
+    size_t n = list->data.function.arg_count;
+    if (n == 0) return NULL;
+    size_t w0 = 0, h0 = 0, c0 = 0; ImgType t0 = IMG_REAL;
+    for (size_t i = 0; i < n; i++) {
+        size_t w, h, c; ImgType t;
+        if (!image_info(list->data.function.args[i], &w, &h, &c, &t)) return NULL;
+        if (i == 0) { w0 = w; h0 = h; c0 = c; t0 = t; }
+        else if (w != w0 || h != h0 || c != c0 || t != t0) return NULL;
+    }
+    Expr** sl = malloc(sizeof(Expr*) * n);
+    if (!sl) return NULL;
+    for (size_t i = 0; i < n; i++)
+        sl[i] = expr_new_function(expr_new_symbol("ImageData"),
+                    (Expr*[]){ expr_copy(list->data.function.args[i]), expr_new_string(img_type_name(t0)) }, 2);
+    Expr* data = expr_new_function(expr_new_symbol(SYM_List), sl, n);
+    free(sl);
+    return expr_new_function(expr_new_symbol("Image3D"), (Expr*[]){ data, expr_new_string(img_type_name(t0)) }, 2);
+}
+
+static Expr* builtin_image3d(Expr* res) {
+    if (res->data.function.arg_count == 1) {
+        Expr* st = img3_stack(res->data.function.args[0]);
+        if (st) return st;
+    }
+    return img_construct(res, "Image3D", true);
+}
 
 static Expr* builtin_image3dq(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
@@ -1168,7 +1225,8 @@ void image_init(void) {
     symtab_add_builtin("Image3D", builtin_image3d);
     symtab_get_def("Image3D")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Image3D",
-        "Image3D[data] is a volumetric image, normalising to Image3D[data, type]. The data is a "
+        "Image3D[data] is a volumetric image, normalising to Image3D[data, type]; Image3D[{img1, img2, ...}] "
+        "stacks 2-D images as slices. The data is a "
         "depth x height x width array of voxels, or depth x height x width x channels for colour, "
         "so it is indexed data[[z, y, x]] with slices outermost. ImageDimensions reports "
         "{width, height, depth} -- FULLY REVERSED from that order, which is Mathematica's "
@@ -1197,7 +1255,8 @@ void image_init(void) {
     symtab_add_builtin("Image", builtin_image);
     symtab_get_def("Image")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Image",
-        "Image[data] is a raster image, normalising to the canonical Image[data, type]. "
+        "Image[data] is a raster image, normalising to the canonical Image[data, type]; presentation "
+        "options (ColorSpace, Interleaving, ImageSize, ...) are accepted and dropped. "
         "The data is a rectangular height x width array of pixel values, or "
         "height x width x channels for a colour image, so it is indexed data[[y, x]] with "
         "rows running down the image -- note that ImageDimensions reports {width, height}, "
@@ -1501,4 +1560,21 @@ char* image_to_json(const Expr* e) {
     free(b64);
     free(vbuf);
     return json;
+}
+
+bool image_real_value(const Expr* e, double* out) {
+    if (!e) return false;
+    if (numeric_machine_value(e, out)) return isfinite(*out);
+    double re = 0.0, im = 0.0;
+    if (e->type != EXPR_FUNCTION && e->type != EXPR_SYMBOL) {
+        if (na_read_scalar(e, &re, &im) && im == 0.0 && isfinite(re)) { *out = re; return true; }
+        return false;
+    }
+    if (!expr_is_numeric_quantity(e)) return false;     /* Pi and E are symbols */
+    Expr* n = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                                              (Expr*[]){ expr_copy((Expr*)e) }, 1));
+    bool ok = na_read_scalar(n, &re, &im) && im == 0.0 && isfinite(re);
+    expr_free(n);
+    if (ok) *out = re;
+    return ok;
 }
