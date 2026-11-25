@@ -741,6 +741,13 @@ Expr* builtin_polynomialreduce(Expr* res) {
     g_pr_ll_quotients = divisors->type == EXPR_LINKEDLIST;
     Expr* r = pr_core(res, &opt, poly, divisors, (int)nd, vars_arg);
     g_pr_ll_quotients = saved;
+    /* The reduction runs on the exact (rationalised) coefficients; inexact
+     * input gives an inexact answer, as every polynomial operation does
+     * (audit PolynomialReduce#1: {{1/2 + x}, 7/4} for x^2 + 1.5 by x - 0.5). */
+    if (r && !eval_is_inflight_unwind(r) && internal_args_contain_inexact(res)) {
+        Expr* nr = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), (Expr*[]){ r }, 1));
+        r = nr;
+    }
     return r;
 }
 

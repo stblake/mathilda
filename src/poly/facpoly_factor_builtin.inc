@@ -325,9 +325,13 @@ static bool factor_has_only_gaussian_numbers(const Expr* e) {
     return true;
 }
 
-/* Default Factor of a univariate polynomial with Gaussian-rational
- * coefficients and no other algebraic number: over Q(i), as for the
- * multivariate case (Factor[x^2 + 2 I x - 1] is (I + x)^2). */
+/* Default Factor of a polynomial with Gaussian-rational coefficients and no
+ * other algebraic number: over Q(i) (Factor[x^2 + 2 I x - 1] is (I + x)^2).
+ * Multivariate too, in up to two variables: Factor[(2 - I x + x^2)(1 + y)]
+ * expanded is (-2 I + x) (I + x) (1 + y), as with GaussianIntegers -> True
+ * (audit Factor#1: the Gaussian factor of the primitive part was missed).
+ * Past two variables the reference keeps the input's orientation, which the
+ * classical path below preserves. */
 static Expr* factor_univariate_gaussian(const Expr* arg) {
     if (!flint_trager_has_complex(arg) || !factor_has_only_gaussian_numbers(arg)) return NULL;
     size_t nv = 0, vcap = 4;
@@ -335,11 +339,27 @@ static Expr* factor_univariate_gaussian(const Expr* arg) {
     collect_variables((Expr*)arg, &vs, &nv, &vcap);
     for (size_t k = 0; k < nv; k++) expr_free(vs[k]);
     free(vs);
-    if (nv != 1) return NULL;
+    if (nv < 1 || nv > 2) return NULL;
     Expr* iu = expr_new_function(expr_new_symbol(SYM_Complex),
                                  (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
     Expr* out = fext_factor(arg, &iu, 1);
     expr_free(iu);
+    /* In two variables the Q(i) factorisation is taken only when it splits:
+     * an irreducible one (I a + b, 2 I a + 4 b) keeps the classical path's
+     * orientation and content, as the reference does. */
+    if (out && nv == 2) {
+        int64_t nf = 0;
+        const Expr* f = out;
+        size_t nfa = head_is((Expr*)f, SYM_Times) ? f->data.function.arg_count : 1;
+        for (size_t i = 0; i < nfa; i++) {
+            const Expr* g = head_is((Expr*)f, SYM_Times) ? f->data.function.args[i] : f;
+            if (expr_is_numeric_quantity(g)) continue;
+            if (head_is((Expr*)g, SYM_Power) && g->data.function.args[1]->type == EXPR_INTEGER)
+                nf += g->data.function.args[1]->data.integer;
+            else nf++;
+        }
+        if (nf < 2) { expr_free(out); return NULL; }
+    }
     return out;
 }
 

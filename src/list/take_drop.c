@@ -5,6 +5,8 @@
 #include "ndstruct.h"
 #include "../sym_names.h"
 #include "../linkedlist.h"
+#include "../message.h"   /* mth_message: Take::take / Drop::drop */
+#include <stdlib.h>
 
 bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t* out_count) {
     int64_t m = 0, n = 0, s = 1;
@@ -125,6 +127,37 @@ bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t
     return true;
 }
 
+/* A well-formed sequence spec that get_seq_spec_indices refused ran off the
+ * end of `expr`: Take::take / Drop::drop name the positions as the spec wrote
+ * them (Take[{a, b, c}, 5] is "positions 1 through 5", {-4} is "-4 through
+ * -4"; audit Take#1).  A malformed spec (a symbol, a zero step) is not
+ * reported here. */
+static void take_drop_range_message(const Expr* spec, const Expr* expr, bool is_take) {
+    int64_t m, n;
+    if (spec->type == EXPR_INTEGER) {
+        int64_t k = spec->data.integer;
+        if (k >= 0) { m = 1; n = k; } else { m = k; n = -1; }
+    } else if (spec->type == EXPR_FUNCTION && head_is((Expr*)spec, SYM_List) &&
+               spec->data.function.arg_count >= 1 && spec->data.function.arg_count <= 3) {
+        size_t c = spec->data.function.arg_count;
+        for (size_t i = 0; i < c; i++)
+            if (spec->data.function.args[i]->type != EXPR_INTEGER) return;
+        if (c == 3 && spec->data.function.args[2]->data.integer == 0) return;
+        m = spec->data.function.args[0]->data.integer;
+        n = (c >= 2) ? spec->data.function.args[1]->data.integer : m;
+    } else {
+        return;
+    }
+    char* es = expr_to_string((Expr*)expr);
+    if (is_take)
+        mth_message("Take", "take", "Cannot take positions %lld through %lld in %s.",
+                    (long long)m, (long long)n, es ? es : "");
+    else
+        mth_message("Drop", "drop", "Cannot drop positions %lld through %lld in %s.",
+                    (long long)m, (long long)n, es ? es : "");
+    free(es);
+}
+
 static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_take) {
     if (nspecs == 0) return expr_copy(expr);
     /* a Rational/Complex number is an atom (Take[3/4, 1] is not Rational[3]) */
@@ -133,7 +166,10 @@ static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_ta
     int64_t len = (int64_t)expr->data.function.arg_count;
     size_t spec_count = 0;
     int64_t* spec_indices = NULL;
-    if (!get_seq_spec_indices(specs[0], len, &spec_indices, &spec_count)) return NULL;
+    if (!get_seq_spec_indices(specs[0], len, &spec_indices, &spec_count)) {
+        take_drop_range_message(specs[0], expr, is_take);
+        return NULL;
+    }
 
     Expr** new_args = NULL;
     size_t new_count = 0;

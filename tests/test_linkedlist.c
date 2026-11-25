@@ -839,6 +839,23 @@ void test_compile_lists_are_fast() {
                    "{c5t < 0.25, Length[c5big]}", "{True, 1000000}", 0);
 }
 
+/* Wave 4 integration (v0.6737): the List and LinkedList answers agree for
+ * the heads whose List path changed (check-linkedlist). */
+void test_wave4_surface_parity() {
+    /* an atom element below the reversed level is unchanged, without Reverse::normal */
+    assert_eval_eq("Normal[Reverse[LinkedList[{3, 1, 2, 2}], 2]]", "{3, 1, 2, 2}", 0);
+    assert_eval_eq("Normal[Reverse[LinkedList[{{1, 2}, {3, 4}}], 2]]", "{{2, 1}, {4, 3}}", 0);
+    /* a packed level / block-size spec reads as the List it stands for */
+    assert_eval_eq("Reverse[{{1, 2}, {3, 4}}, Developer`ToPackedArray[{1, 2}]]", "{{4, 3}, {2, 1}}", 0);
+    assert_eval_eq("Partition[Range[8], Developer`ToPackedArray[{2}]]", "{{1, 2}, {3, 4}, {5, 6}, {7, 8}}", 0);
+    /* HornerForm maps over a list (a number list is not a coefficient list) */
+    assert_eval_eq("HornerForm[{1.5, -2.0, 3.0, 0.5}, w4x]", "{1.5, -2.0, 3.0, 0.5}", 0);
+    assert_eval_eq("Normal[HornerForm[LinkedList[{1 + w4x^2, w4x}], w4x]]", "{1 + w4x^2, w4x}", 0);
+    /* MonomialList threads a LinkedList as a List; a repeated variable is read exactly */
+    assert_eval_eq("Normal[MonomialList[LinkedList[{w4u, w4v + w4u^2}]]]", "{{w4u}, {w4u^2, w4v}}", 0);
+    assert_eval_eq("MonomialList[w4c, {w4a, w4b, w4a, w4c}]", "{w4c}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -882,6 +899,7 @@ int main() {
     TEST(test_compile_failure_is_undone);
     TEST(test_autocompile_loops_over_global_lists);
     TEST(test_compile_lists_are_fast);
+    TEST(test_wave4_surface_parity);
 
     printf("All LinkedList tests passed!\n");
     symtab_clear();

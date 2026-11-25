@@ -730,10 +730,17 @@ Expr* builtin_expand(Expr* res) {
     /* Expand[expr, opts] / Expand[expr, patt, opts]: a trailing Rule whose
      * left side is one of Expand's option names is an option, never the
      * pattern -- read as patt, Trig -> False made every part "free of the
-     * pattern" and nothing expanded. The defaults (Trig -> False, Modulus -> 0)
-     * are what the expander does; any other setting is not implemented, so the
-     * call is left as it stands rather than answered as if it were the default. */
+     * pattern" and nothing expanded.
+     *
+     * Trig -> True first expands trigonometric functions of sums and multiples
+     * (TrigExpand), so Expand[Cos[x + y], Trig -> True] is
+     * Cos[x] Cos[y] - Sin[x] Sin[y]; Modulus -> m (a positive integer) reduces
+     * the expanded coefficients modulo m, so Expand[(1 + x)^3, Modulus -> 2] is
+     * 1 + x + x^2 + x^3 (audit Expand#2/#3).  Any other setting is left as it
+     * stands rather than answered as if it were the default. */
     size_t argc = res->data.function.arg_count;
+    bool trig = false;
+    Expr* modulus = NULL;
     while (argc > 1) {
         Expr* o = res->data.function.args[argc - 1];
         if (!(o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
@@ -743,9 +750,13 @@ Expr* builtin_expand(Expr* res) {
         const char* name = o->data.function.args[0]->data.symbol.name;
         Expr* v = o->data.function.args[1];
         if (name == SYM_Trig) {
-            if (!(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False)) return NULL;
+            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True) trig = true;
+            else if (!(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False)) return NULL;
         } else if (name == SYM_Modulus) {
-            if (!(v->type == EXPR_INTEGER && v->data.integer == 0)) return NULL;
+            if (v->type == EXPR_INTEGER && v->data.integer == 0) modulus = NULL;
+            else if ((v->type == EXPR_INTEGER && v->data.integer > 0) ||
+                     (v->type == EXPR_BIGINT && mpz_sgn(v->data.bigint) > 0)) modulus = v;
+            else return NULL;
         } else {
             break;                                     /* not an option: a pattern */
         }
@@ -754,7 +765,24 @@ Expr* builtin_expand(Expr* res) {
     if (argc > 2) return NULL;
     Expr* patt = NULL;
     if (argc == 2) patt = res->data.function.args[1];
-    Expr* ret = expr_expand_impl(res->data.function.args[0], patt, /*overflow_mode=*/true);
+    Expr* subject = res->data.function.args[0];
+    Expr* expanded_trig = NULL;
+    if (trig) {
+        Expr* a[1] = { expr_copy(subject) };
+        expanded_trig = eval_and_free(expr_new_function(expr_new_symbol(SYM_TrigExpand), a, 1));
+        subject = expanded_trig;
+    }
+    Expr* ret = expr_expand_impl(subject, patt, /*overflow_mode=*/true);
+    if (expanded_trig) expr_free(expanded_trig);
+    if (ret && modulus) {
+        Expr* a[2] = { ret, expr_copy(modulus) };
+        Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialMod), a, 2));
+        if (!red || head_is(red, SYM_PolynomialMod)) {
+            if (red) expr_free(red);
+            return NULL;
+        }
+        ret = red;
+    }
     return ret;
 }
 
@@ -958,6 +986,31 @@ Expr* expr_expand_denominator(Expr* e) {
  *  a top-level Expand leaves untouched, and expr_expand_impl does the actual
  *  distribution once the children are already expanded.
  * ------------------------------------------------------------------------- */
+/* Does a term of `e` (a Times, or each summand of a Plus) carry two or more
+ * reciprocal factors with a compound base?  Only those need their
+ * denominators combined. */
+static bool expand_term_reciprocals(const Expr* t) {
+    if (!head_is((Expr*)t, SYM_Times)) return false;
+    size_t k = 0;
+    for (size_t i = 0; i < t->data.function.arg_count; i++) {
+        const Expr* f = t->data.function.args[i];
+        if (head_is((Expr*)f, SYM_Power) && f->data.function.arg_count == 2 &&
+            f->data.function.args[1]->type == EXPR_INTEGER &&
+            f->data.function.args[1]->data.integer < 0 &&
+            f->data.function.args[0]->type == EXPR_FUNCTION) k++;
+    }
+    return k >= 2;
+}
+
+static bool expand_has_compound_reciprocals(const Expr* e) {
+    if (head_is((Expr*)e, SYM_Plus)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (expand_term_reciprocals(e->data.function.args[i])) return true;
+        return false;
+    }
+    return expand_term_reciprocals(e);
+}
+
 static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
     if (!e) return NULL;
     /* Two-arg ExpandAll[expr, patt]: leave parts free of patt untouched. */
@@ -997,6 +1050,10 @@ static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
     uint32_t hattr = (e->data.function.head->type == EXPR_SYMBOL)
         ? get_attributes(e->data.function.head->data.symbol.name) : 0;
     bool hold_all  = (hattr & (ATTR_HOLDALL | ATTR_HOLDALLCOMPLETE)) != 0;
+    /* The logical connectives hold their operands only to short-circuit, not
+     * to keep them unexpanded: ExpandAll[f[(x + y)^2] && g[(x + y)^2]] expands
+     * inside both (audit ExpandAll#2). */
+    if (head == SYM_And || head == SYM_Or) { hold_all = false; hattr = 0; }
     Expr* new_head = expr_expand_all_impl(e->data.function.head, patt, overflow_mode);
     Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
@@ -1012,6 +1069,15 @@ static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
 
     Expr* result = expr_expand_impl(rebuilt, patt, overflow_mode);
     expr_free(rebuilt);
+    /* A product of reciprocals is ONE denominator, expanded too:
+     * ExpandAll[1/((x + 1)(x + 2))] is 1/(2 + 3 x + x^2) (audit ExpandAll#1;
+     * each reciprocal factor was expanded on its own, and nothing combined
+     * them). */
+    if (!patt && result && (head_is(result, SYM_Times) || head_is(result, SYM_Plus)) &&
+        expand_has_compound_reciprocals(result)) {
+        Expr* d = expr_expand_denominator(result);
+        if (d) { expr_free(result); result = d; }
+    }
     return result;
 }
 

@@ -30,6 +30,8 @@
 #include "sym_names.h"
 #include "message.h"
 #include "print.h"
+#include "sym_intern.h"   /* intern_symbol: the named group heads */
+#include <gmp.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,6 +58,11 @@ static void msg_expr(const char* head, const char* tag, const char* fmt, const E
 /* ------------------------------------------------------------------ */
 /* Cycles                                                              */
 /* ------------------------------------------------------------------ */
+
+static int cycles_i64_cmp(const void* a, const void* b) {
+    int64_t x = *(const int64_t*)a, y = *(const int64_t*)b;
+    return (x > y) - (x < y);
+}
 
 /* Validate Cycles[cl]'s argument.  Returns 1 when every point is a positive
  * integer, all distinct (writing the largest to *maxpt); 0 when it is not
@@ -84,7 +91,32 @@ static int cycles_check(const Expr* cl, const Expr* whole, int64_t* maxpt) {
             }
         }
     }
-    if ((uint64_t)*maxpt > PERM_MAX_CELLS) return 0;
+    if ((uint64_t)*maxpt > PERM_MAX_CELLS) {
+        /* Too large a degree for an image array: check for a repeated point by
+         * sorting the points instead, and report the Cycles as concrete but
+         * large (2), which only the sparse canonicaliser handles (audit
+         * Cycles#1: a point past 2^27 skipped both checks). */
+        size_t np = 0;
+        for (size_t c = 0; c < cl->data.function.arg_count; c++)
+            np += cl->data.function.args[c]->data.function.arg_count;
+        int64_t* pts = malloc(sizeof(int64_t) * (np ? np : 1));
+        if (!pts) return 0;
+        size_t k = 0;
+        for (size_t c = 0; c < cl->data.function.arg_count; c++) {
+            const Expr* cyc = cl->data.function.args[c];
+            for (size_t j = 0; j < cyc->data.function.arg_count; j++)
+                pts[k++] = cyc->data.function.args[j]->data.integer;
+        }
+        qsort(pts, np, sizeof(int64_t), cycles_i64_cmp);
+        bool rep = false;
+        for (size_t i = 1; i < np && !rep; i++) rep = pts[i] == pts[i - 1];
+        free(pts);
+        if (rep) {
+            msg_expr("Cycles", "reppoint", "%s contains repeated integers.", whole);
+            return -1;
+        }
+        return 2;
+    }
     {
         unsigned char* seen = calloc((size_t)*maxpt + 1, 1);
         if (!seen) return 0;
@@ -147,11 +179,48 @@ static Expr* images_to_cycles(const uint32_t* img, size_t n) {
 /* Cycles[{{3, 1, 2}, {5, 4}}] -> Cycles[{{1, 2, 3}, {4, 5}}];
  * Cycles[{{1}}] -> Cycles[{}].  Unevaluated when already canonical, or when
  * a point is symbolic. */
+/* Canonical Cycles of a validated cycle list, without an image array: each
+ * cycle of length >= 2 rotated to start at its smallest point, the cycles
+ * ordered by that point.  For points too large for cycles_images. */
+static int cycles_first_cmp(const void* a, const void* b) {
+    const Expr* x = *(Expr* const*)a;
+    const Expr* y = *(Expr* const*)b;
+    int64_t p = x->data.function.args[0]->data.integer, q = y->data.function.args[0]->data.integer;
+    return (p > q) - (p < q);
+}
+
+static Expr* cycles_canonical_sparse(const Expr* cl) {
+    size_t nc = cl->data.function.arg_count, k = 0;
+    Expr** cyc = malloc(sizeof(Expr*) * (nc ? nc : 1));
+    for (size_t c = 0; c < nc; c++) {
+        const Expr* cy = cl->data.function.args[c];
+        size_t m = cy->data.function.arg_count;
+        if (m < 2) continue;
+        size_t lo = 0;
+        for (size_t j = 1; j < m; j++)
+            if (cy->data.function.args[j]->data.integer < cy->data.function.args[lo]->data.integer) lo = j;
+        Expr** pts = malloc(sizeof(Expr*) * m);
+        for (size_t j = 0; j < m; j++) pts[j] = expr_copy(cy->data.function.args[(lo + j) % m]);
+        cyc[k++] = expr_new_function(expr_new_symbol(SYM_List), pts, m);
+        free(pts);
+    }
+    qsort(cyc, k, sizeof(Expr*), cycles_first_cmp);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), cyc, k);
+    free(cyc);
+    return expr_new_function(expr_new_symbol(SYM_Cycles), &l, 1);
+}
+
 static Expr* builtin_cycles(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     const Expr* cl = res->data.function.args[0];
     int64_t maxpt;
-    if (cycles_check(cl, res, &maxpt) != 1) return NULL;
+    int chk = cycles_check(cl, res, &maxpt);
+    if (chk == 2) {
+        Expr* canon = cycles_canonical_sparse(cl);
+        if (expr_eq(canon, res)) { expr_free(canon); return NULL; }
+        return canon;
+    }
+    if (chk != 1) return NULL;
     size_t n = (size_t)maxpt;
     uint32_t* img = malloc(sizeof(uint32_t) * (n ? n : 1));
     cycles_images(cl, img, n);
@@ -257,12 +326,22 @@ static Expr* builtin_permutationlist(Expr* res) {
 
 /* PermutationCycles[{2, 3, 1}] -> Cycles[{{1, 2, 3}}]. */
 static Expr* builtin_permutationcycles(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
     size_t n = 0;
     uint32_t* img = list_images(res->data.function.args[0], &n, "PermutationCycles", false);
     if (!img) return NULL;
     Expr* r = images_to_cycles(img, n);
     free(img);
+    /* PermutationCycles[perm, h]: the cycle list under head h instead of
+     * Cycles (h[{{1, 2, 3}}]; audit PermutationCycles#1). */
+    if (argc == 2) {
+        Expr* cl = r->data.function.args[0];
+        r->data.function.args[0] = NULL;
+        expr_free(r);
+        r = expr_new_function(expr_copy(res->data.function.args[1]), &cl, 1);
+    }
     return r;
 }
 
@@ -330,8 +409,92 @@ static int perm_cmp(const void* a, const void* b) {
     return 0;
 }
 
+/* The named permutation groups -- SymmetricGroup[n], AlternatingGroup[n],
+ * CyclicGroup[n], DihedralGroup[n] -- as the PermutationGroup of their
+ * standard generators on the points 1..n (audit GroupElements#1,
+ * GroupOrder#1).  A new expression, or NULL for anything else. */
+static Expr* cyc_of(Expr** cycles, size_t k) {
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), cycles, k);
+    return expr_new_function(expr_new_symbol(SYM_Cycles), &l, 1);
+}
+
+static Expr* cyc_range(int64_t lo, int64_t hi) {          /* the cycle (lo lo+1 ... hi) */
+    size_t m = (size_t)(hi - lo + 1);
+    Expr** p = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) p[i] = expr_new_integer(lo + (int64_t)i);
+    Expr* c = expr_new_function(expr_new_symbol(SYM_List), p, m);
+    free(p);
+    return c;
+}
+
+static int named_group_kind(const Expr* g, int64_t* n) {
+    static const char* names[4];
+    if (!names[0]) {
+        names[0] = intern_symbol("SymmetricGroup");
+        names[1] = intern_symbol("AlternatingGroup");
+        names[2] = intern_symbol("CyclicGroup");
+        names[3] = intern_symbol("DihedralGroup");
+    }
+    if (!g || g->type != EXPR_FUNCTION || g->data.function.arg_count != 1 ||
+        g->data.function.head->type != EXPR_SYMBOL) return -1;
+    const Expr* a = g->data.function.args[0];
+    if (a->type != EXPR_INTEGER || a->data.integer < 1 || a->data.integer > 100000) return -1;
+    *n = a->data.integer;
+    for (int k = 0; k < 4; k++)
+        if (g->data.function.head->data.symbol.name == names[k]) return k;
+    return -1;
+}
+
+static Expr* named_group_to_permgroup(const Expr* g) {
+    int64_t n;
+    int kind = named_group_kind(g, &n);
+    if (kind < 0) return NULL;
+    Expr* gens[64];
+    size_t ng = 0;
+    switch (kind) {
+    case 0:                                        /* Symmetric: (1 2), (1 ... n) */
+        if (n >= 2) { Expr* c = cyc_range(1, 2); gens[ng++] = cyc_of(&c, 1); }
+        if (n >= 3) { Expr* c = cyc_range(1, n); gens[ng++] = cyc_of(&c, 1); }
+        break;
+    case 1:                                        /* Alternating: (1 2 k), k = 3..n */
+        if (n > 63 + 2) return NULL;
+        for (int64_t k = 3; k <= n; k++) {
+            Expr* p[3] = { expr_new_integer(1), expr_new_integer(2), expr_new_integer(k) };
+            Expr* c = expr_new_function(expr_new_symbol(SYM_List), p, 3);
+            gens[ng++] = cyc_of(&c, 1);
+        }
+        break;
+    case 2:                                        /* Cyclic: (1 ... n) */
+        if (n >= 2) { Expr* c = cyc_range(1, n); gens[ng++] = cyc_of(&c, 1); }
+        break;
+    case 3: {                                      /* Dihedral: rotation, reflection */
+        if (n < 3) return NULL;
+        Expr* c = cyc_range(1, n);
+        gens[ng++] = cyc_of(&c, 1);
+        size_t half = (size_t)(n / 2);
+        Expr** sw = malloc(sizeof(Expr*) * half);
+        for (size_t i = 0; i < half; i++) {
+            Expr* p[2] = { expr_new_integer((int64_t)i + 1), expr_new_integer(n - (int64_t)i) };
+            sw[i] = expr_new_function(expr_new_symbol(SYM_List), p, 2);
+        }
+        gens[ng++] = cyc_of(sw, half);
+        free(sw);
+        break;
+    }
+    }
+    Expr* gl = expr_new_function(expr_new_symbol(SYM_List), gens, ng);
+    return expr_new_function(expr_new_symbol(SYM_PermutationGroup), &gl, 1);
+}
+
 uint32_t* perm_group_elements(const Expr* group, size_t* order, size_t* deg) {
-    if (!has_head(group, SYM_PermutationGroup) || group->data.function.arg_count != 1) return NULL;
+    if (!has_head(group, SYM_PermutationGroup)) {
+        Expr* pg = named_group_to_permgroup(group);
+        if (!pg) return NULL;
+        uint32_t* r = perm_group_elements(pg, order, deg);
+        expr_free(pg);
+        return r;
+    }
+    if (group->data.function.arg_count != 1) return NULL;
     const Expr* gl = group->data.function.args[0];
     if (!is_list(gl)) return NULL;
     size_t ng = gl->data.function.arg_count;
@@ -430,6 +593,23 @@ static Expr* builtin_groupelements(Expr* res) {
 /* GroupOrder[group] -> the number of elements. */
 static Expr* builtin_grouporder(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* A named group's order is known in closed form, at any degree: n!,
+     * n!/2, n and 2 n (audit GroupOrder#1). */
+    {
+        int64_t gn;
+        int kind = named_group_kind(res->data.function.args[0], &gn);
+        if (kind == 2) return expr_new_integer(gn);
+        if (kind == 3 && gn >= 3) return expr_new_integer(2 * gn);
+        if (kind == 0 || kind == 1) {
+            mpz_t f;
+            mpz_init(f);
+            mpz_fac_ui(f, (unsigned long)gn);
+            if (kind == 1 && gn >= 2) mpz_fdiv_q_ui(f, f, 2);
+            Expr* r = expr_new_bigint_from_mpz(f);
+            mpz_clear(f);
+            return expr_bigint_normalize(r);
+        }
+    }
     size_t order = 0, n = 0;
     uint32_t* el = perm_group_elements(res->data.function.args[0], &order, &n);
     if (!el) return NULL;

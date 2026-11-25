@@ -593,5 +593,37 @@ Expr* builtin_factorsquarefree(Expr* res) {
         return internal_rationalize_then_numericalize_algebraic(res, builtin_factorsquarefree, NULL);
     }
 
+    /* Powers with a symbolic or fractional exponent are read over a common
+     * generator, as Factor reads them: E^(2 x) + 2 E^x + 1 is (1 + E^x)^2,
+     * x^(2 n) + 2 x^n + 1 is (1 + x^n)^2 and x^(1/2) + 2 x^(1/4) + 1 is
+     * (1 + x^(1/4))^2 (audit FactorSquareFree#1). */
+    if (res->data.function.arg_count == 1) {
+        Expr* arg = res->data.function.args[0];
+        ExpSplitTab st = {0};
+        Expr* split = expsplit_abstract(arg, &st);
+        if (split) {
+            Expr* f = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorSquareFree),
+                                                      (Expr*[]){ split }, 1));
+            Expr* out = f ? expsplit_restore(f, &st) : NULL;
+            expsplit_free(&st);
+            if (out) return out;
+        }
+        Expr* base = NULL;
+        Expr* atom = NULL;
+        int64_t m = 1;
+        if (poly_find_radical_gen(arg, &base, &atom, &m)) {
+            char* gen = poly_make_fresh_gen(arg);
+            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
+            Expr* in_g = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorSquareFree),
+                                                         (Expr*[]){ substituted }, 1));
+            Expr* out = poly_subst_radical_from_gen(in_g, base, atom, m, gen);
+            expr_free(in_g);
+            expr_free(base);
+            expr_free(atom);
+            free(gen);
+            if (out) return out;
+        }
+    }
+
     return factor_square_free_dispatcher(res->data.function.args[0]);
 }

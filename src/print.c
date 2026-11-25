@@ -197,6 +197,12 @@ static int get_expr_prec(Expr* e) {
     
     const char* head = e->data.function.head->data.symbol.name;
 
+    /* The binary infix operators print infix only with exactly two operands;
+     * any other count is shown in functional form, Rule[a, b, c] (audit
+     * Rule#2), whose precedence is that of application. */
+    if ((head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule ||
+         head == SYM_RuleDelayed || head == SYM_Condition) &&
+        e->data.function.arg_count != 2) return 9500;
     if (head == SYM_Set || head == SYM_SetDelayed) return 500;
 #if UP_VALUES
     if (head == SYM_UpSet || head == SYM_UpSetDelayed ||
@@ -1792,7 +1798,8 @@ static void print_standard(Expr* e, int parent_prec) {
             print_definition_body(e->data.function.args[0]->data.symbol.name);
         }
 #endif
-        else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives || head == SYM_NonCommutativeMultiply || head == SYM_Dot || head == SYM_StringExpression) && e->data.function.arg_count >= 2) {
+        else if (((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_And || head == SYM_Or || head == SYM_Alternatives || head == SYM_NonCommutativeMultiply || head == SYM_Dot || head == SYM_StringExpression) && e->data.function.arg_count >= 2) ||
+                 ((head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition) && e->data.function.arg_count == 2)) {
             const char* op = "";
             if (head == SYM_Equal) op = " == ";
             else if (head == SYM_Unequal) op = " != ";
@@ -1814,20 +1821,24 @@ static void print_standard(Expr* e, int parent_prec) {
             else if (head == SYM_Dot) op = " . ";
             else if (head == SYM_StringExpression) op = "~~";   /* as Mathematica */
 
-            /* Grouping the parser would not reproduce gets parentheses: the
-             * right-associative = := -> :> keep a same-level LEFT operand in
-             * parentheses ((a -> b) -> c, which reads back as a -> (b -> c)
-             * otherwise), and a comparison nested in a comparison is
-             * parenthesised on either side, since a == b == c reads as one
-             * chain (audit InputForm#1, InputForm#2). */
-            bool right_assoc = head == SYM_Set || head == SYM_SetDelayed ||
-                               head == SYM_Rule || head == SYM_RuleDelayed;
-            bool comparison = my_prec == 3200;
-            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            /* Operands at the operator's own precedence are parenthesised
+             * except on the side the operator associates to: the parser
+             * builds a == b == c as one Equal, a -> b -> c as a -> (b -> c)
+             * and a /; b /; c as (a /; b) /; c, so (a -> b) -> c and
+             * Equal[Equal[a, b], c] need their parentheses to read back as
+             * the same expression (audit Rule#1). */
+            size_t n_ops = e->data.function.arg_count;
+            bool right_assoc = (head == SYM_Set || head == SYM_SetDelayed ||
+                                head == SYM_Rule || head == SYM_RuleDelayed);
+            bool left_assoc = (head == SYM_Condition);
+            /* a nested same-head operand of a Flat head (a held
+             * And[And[a, b], c]) reads back as the same flat value */
+            bool flat = (get_attributes(head) & ATTR_FLAT) != 0;
+            for (size_t i = 0; i < n_ops; i++) {
                 if (i > 0) printf("%s", op);
-                int ap = my_prec;
-                if ((right_assoc && i == 0) || comparison) ap = my_prec + 1;
-                print_standard(e->data.function.args[i], ap);
+                int p = my_prec + 1;
+                if (flat || (right_assoc && i == n_ops - 1) || (left_assoc && i == 0)) p = my_prec;
+                print_standard(e->data.function.args[i], p);
             }
         }
         else if (head == SYM_Plus && g_inputform_depth == 0 &&

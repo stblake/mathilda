@@ -428,8 +428,10 @@ static Expr* builtin_keyintersection(Expr* res) {
     for (size_t j = 0; j < m; j++) {
         ExprBuf rules = {0};
         for (size_t c = 0; c < common.n; c++) {
-            Expr* v = assoc_lookup_value(as[j], common.v[c]);
-            eb_push(&rules, mk_rule(expr_copy(common.v[c]), expr_copy(v)));
+            /* the entry whole, so a RuleDelayed stays delayed (audit
+             * KeyIntersection#1) */
+            Expr* ent = assoc_lookup_entry(as[j], common.v[c]);
+            eb_push(&rules, expr_copy(ent));
         }
         eb_push(&out, eb_take(&rules, SYM_Association));
     }
@@ -606,6 +608,18 @@ static Expr* count_distinct(Expr* res, const Expr* f, const char* name) {
 }
 
 static Expr* builtin_countdistinct(Expr* res) {
+    /* CountDistinct[list, test]: the number of classes DeleteDuplicates[list,
+     * test] keeps (CountDistinct[{1, 1.}, Equal] is 1; audit CountDistinct#1). */
+    if (ARGC(res) == 2) {
+        Expr* a[2] = { expr_copy(ARG(res, 0)), expr_copy(ARG(res, 1)) };
+        Expr* dd = eval_and_free(mk_fn(SYM_DeleteDuplicates, a, 2));
+        if (!dd || eval_is_inflight_unwind(dd)) return dd;
+        Expr* out = NULL;
+        if (head_is(dd, SYM_List)) out = expr_new_integer((int64_t)ARGC(dd));
+        else if (dd->type == EXPR_LINKEDLIST) out = expr_new_integer(ll_length(dd->data.llist));
+        expr_free(dd);
+        return out;
+    }
     if (ARGC(res) != 1) return NULL;
     return count_distinct(res, NULL, "CountDistinct");
 }
@@ -1267,7 +1281,9 @@ static Expr* ops_associationmap(Expr* res) {
         bool bad = false;
         for (size_t i = 0; i < n; i++) {
             Expr* ent = ARG(a, i);
-            Expr* as_rule = mk_rule(expr_copy(RKEY(ent)), expr_copy(RVAL(ent)));
+            /* f sees the entry itself: a RuleDelayed stays delayed, its
+             * value unevaluated (audit AssociationMap#1) */
+            Expr* as_rule = expr_copy(ent);
             raw[i] = eval_call1(f, as_rule);
             Expr* r = raw[i];
             if (is_rule2(r)) eb_push(&rules, expr_copy(r));

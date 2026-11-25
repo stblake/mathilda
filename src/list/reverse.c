@@ -71,6 +71,15 @@ Expr* builtin_reverse(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
 
+    /* A packed level list ({1, 2} from Range) reads as the List it stands for. */
+    if (res->data.function.arg_count == 2 && is_ndarray(res->data.function.args[1])) {
+        Expr* a[2] = { expr_copy(expr), ndarray_unpack_top_level(res->data.function.args[1]) };
+        Expr* call = expr_new_function(expr_new_symbol(SYM_Reverse), a, 2);
+        Expr* r = builtin_reverse(call);
+        expr_free(call);
+        return r;
+    }
+
     if (res->data.function.arg_count == 2 && !reverse_levels_ok(res->data.function.args[1])) {
         char* cs = expr_to_string(res);
         mth_message("Reverse", "ilsmp",
@@ -87,6 +96,13 @@ Expr* builtin_reverse(Expr* res) {
     Expr* level_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     /* a Rational/Complex number at the top is an atom: ::normal, unevaluated */
     if (expr_is_number_atom(expr)) return builtin_normal_error("Reverse", res, 1);
+    /* likewise any other atom: Reverse[x], Reverse[5] (audit Reverse#1) */
+    if (expr->type == EXPR_INTEGER || expr->type == EXPR_REAL || expr->type == EXPR_SYMBOL ||
+        expr->type == EXPR_STRING || expr->type == EXPR_BIGINT
+#ifdef USE_MPFR
+        || expr->type == EXPR_MPFR
+#endif
+        ) return builtin_normal_error("Reverse", res, 1);
 
     return reverse_rec(expr, level_spec, 1);
 }

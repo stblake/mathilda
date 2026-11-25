@@ -138,7 +138,7 @@ static void test_unwind_through_callbacks(void) {
         { "MatchQ", "MatchQ[2, _?(If[# == 2, U, True] &)]" },
         { "Condition", "MatchQ[2, x_ /; If[x == 2, U, True]]" },
         { "ReplaceAll", "{1, 2, 3} /. x_ /; If[x == 2, U, True] :> 0" },
-        { "DownValue guard", "cbg[x_] /; If[x == 2, U, True] := x; cbg[2]" },
+        { "DownValue guard", "ClearAll[cbg]; cbg[x_] /; If[x == 2, U, True] := x; cbg[2]" },
         { "Sort", "Sort[{3, 2, 1}, If[#1 == 2 || #2 == 2, U, True] &]" },
         { "SortBy", "SortBy[{3, 2, 1}, If[# == 2, U, #] &]" },
         { "GatherBy", "GatherBy[{1, 2, 3}, If[# == 2, U, #] &]" },

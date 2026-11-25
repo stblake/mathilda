@@ -288,6 +288,25 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
     Expr* zero = NULL;
     Expr* P = (argc >= 3) ? res->data.function.args[2] : (zero = expr_new_integer(0));
     Expr* margins = (argc >= 4) ? res->data.function.args[3] : NULL;
+    /* A margin is a machine integer or a List of them: anything else (m, 2.,
+     * Infinity) is refused, never read as 0 (audit PadRight#1). */
+    if (margins) {
+        bool ok = margins->type == EXPR_INTEGER;
+        if (!ok && head_is(margins, SYM_List)) {
+            ok = true;
+            for (size_t i = 0; i < margins->data.function.arg_count && ok; i++)
+                ok = margins->data.function.args[i]->type == EXPR_INTEGER;
+        }
+        if (!ok) {
+            char* cs = expr_to_string(res);
+            mth_message(name, "ilsmp", "Single or list of machine-sized integers expected at "
+                        "position 4 of %s.", cs ? cs : "");
+            free(cs);
+            if (own_dimv) free(dimv);
+            if (zero) expr_free(zero);
+            return NULL;
+        }
+    }
 
     int64_t* coords = malloc(sizeof(int64_t) * k);
     int empty_anchor = list->type == EXPR_LINKEDLIST ? (ll_length(list->data.llist) == 0)

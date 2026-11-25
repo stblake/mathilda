@@ -97,6 +97,32 @@ static bool span_resolve(const Expr* span, int64_t len,
     *start = s; *step = st; *count = n;
     return true;
 }
+/*
+ * Whether Span `span` lies within a container of `len` elements, the rule
+ * Part, Take and the LinkedList reader share: both ends inside, or the empty
+ * span one short of the start in the step's direction (3;;2 is {}, 3;;1 and
+ * 2;;10 of a 5-list are errors).  When it does not, Part::take names the
+ * positions and `whole` (audit Part#1) and false is returned; a malformed
+ * spec is left to span_resolve.
+ */
+static bool span_check_take(const Expr* span, int64_t len, const Expr* whole) {
+    int64_t s = 1, e = len, st = 1;
+    size_t argc = span->data.function.arg_count;
+    if (argc >= 1 && !span_slot(span->data.function.args[0], len, 0, &s)) return true;
+    if (argc >= 2 && !span_slot(span->data.function.args[1], len, 1, &e)) return true;
+    if (argc >= 3 && !span_slot(span->data.function.args[2], len, 2, &st)) return true;
+    if (st == 0) return true;
+    bool ok = (st > 0) ? (s >= 1 && s <= len + 1 && e >= 0 && e <= len && e >= s - 1)
+                       : (s >= 0 && s <= len && e >= 1 && e <= len + 1 && e <= s + 1);
+    if (!ok) {
+        char* l = expr_to_string((Expr*)whole);
+        mth_message("Part", "take", "Cannot take positions %lld through %lld in %s.",
+                    (long long)s, (long long)e, l ? l : "");
+        free(l);
+    }
+    return ok;
+}
+
 bool part_span_resolve(const Expr* span, int64_t len, int64_t* start, int64_t* step,
                        int64_t* count) {
     return span_resolve(span, len, start, step, count);
@@ -1112,6 +1138,7 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
         int64_t len = (int64_t)expr->data.function.arg_count;
         int64_t start, step, count;
         if (!span_resolve(idx, len, &start, &step, &count)) return NULL;
+        if (!span_check_take(idx, len, expr)) return NULL;
 
         Expr** args = NULL;
         if (count > 0) {
@@ -1246,19 +1273,6 @@ static Expr* assoc_entry_part(const Expr* e, Expr** rest, size_t nrest) {
     return assoc_entry_with_value(e, v);
 }
 
-/* Would Take accept this Span on `len` elements? Mathematica leaves a Part
- * whose Span runs off either end unevaluated (Part::take) but allows the
- * empty span that sits just inside, e.g. 3;;2 or 5;;4 on four entries. */
-static bool assoc_span_in_range(const Expr* span, int64_t len) {
-    int64_t s = 1, e = len, st = 1;
-    size_t argc = span->data.function.arg_count;
-    if (argc >= 1 && !span_slot(span->data.function.args[0], len, 0, &s)) return false;
-    if (argc >= 2 && !span_slot(span->data.function.args[1], len, 1, &e)) return false;
-    if (argc >= 3 && !span_slot(span->data.function.args[2], len, 2, &st)) return false;
-    if (st > 0) return s >= 1 && e <= len && s <= e + 1;
-    if (st < 0) return s <= len && e >= 1 && e <= s + 1;
-    return false;
-}
 
 /* Build the sub-association from `n` owned entries (NULL entries mean a
  * deeper Part failed: everything is freed and NULL returned). Duplicate keys
@@ -1338,7 +1352,7 @@ static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest) {
 
     if (is_all || is_span) {
         int64_t start = 1, step = 1, count = (int64_t)na;
-        if (is_span && (!assoc_span_in_range(idx, (int64_t)na) ||
+        if (is_span && (!span_check_take(idx, (int64_t)na, assoc) ||
                         !span_resolve(idx, (int64_t)na, &start, &step, &count)))
             return NULL;
         Expr** ents = malloc(sizeof(Expr*) * (count > 0 ? (size_t)count : 1));
@@ -2182,8 +2196,45 @@ static bool positions_reachable(Expr* expr, Expr* pos, bool insert) {
     return true;
 }
 
+/* One index of an Insert position path: a machine integer, or a key (a string
+ * or Key[k]) for an association level. */
+static bool insert_index_ok(const Expr* e) {
+    return e->type == EXPR_INTEGER || e->type == EXPR_STRING || head_is((Expr*)e, SYM_Key);
+}
+
+/* An Insert position spec: an index, a path {i, j, ...} of indices, or a list
+ * of such paths -- anything else (a symbol, 1.5, 10^30, a mix {{1}, 2}) is
+ * Insert::psl and the call stays unevaluated (audit Insert#3; it used to come
+ * back as the input unchanged). */
+static bool insert_pos_spec_ok(const Expr* pos) {
+    if (insert_index_ok(pos)) return true;
+    if (!head_is((Expr*)pos, SYM_List)) return false;
+    size_t m = pos->data.function.arg_count;
+    if (m == 0) return true;
+    bool paths = head_is(pos->data.function.args[0], SYM_List);
+    for (size_t i = 0; i < m; i++) {
+        const Expr* a = pos->data.function.args[i];
+        if (paths) {
+            if (!head_is((Expr*)a, SYM_List)) return false;
+            for (size_t j = 0; j < a->data.function.arg_count; j++)
+                if (!insert_index_ok(a->data.function.args[j])) return false;
+        } else if (!insert_index_ok(a)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (!insert_pos_spec_ok(res->data.function.args[2])) {
+        char* ps = expr_to_string(res->data.function.args[2]);
+        char* cs = expr_to_string(res);
+        mth_message("Insert", "psl", "Position specification %s in %s is not a machine-sized "
+                    "integer or a list of machine-sized integers.", ps ? ps : "", cs ? cs : "");
+        free(ps); free(cs);
+        return NULL;
+    }
     { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Insert, res, &dh); if (dh) return dr; }
     if (expr_is_number_atom(res->data.function.args[0]))
         return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[2], true);
@@ -2419,6 +2470,22 @@ Expr* builtin_delete(Expr* res) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {
         { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Delete, res, &dh); if (dh) return dr; }
+        /* Delete[assoc, Key[k]] and Delete[assoc, "k"] name one entry by its
+         * key, as the one-element path {Key[k]} does (audit Delete#3 /
+         * Association#1 / Key#2). */
+        {
+            Expr* pos = res->data.function.args[1];
+            if (is_association(res->data.function.args[0]) &&
+                (head_is(pos, SYM_Key) || pos->type == EXPR_STRING)) {
+                Expr* path_args[1] = { expr_copy(pos) };
+                Expr* path = expr_new_function(expr_new_symbol(SYM_List), path_args, 1);
+                Expr* out = NULL;
+                if (positions_reachable(res->data.function.args[0], path, false))
+                    out = expr_delete(res->data.function.args[0], path);
+                expr_free(path);
+                return out;
+            }
+        }
         if (!positions_reachable(res->data.function.args[0], res->data.function.args[1], false))
             return NULL;
         return expr_delete(res->data.function.args[0], res->data.function.args[1]);

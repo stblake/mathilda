@@ -883,6 +883,7 @@ extern const char* SYM_PolynomialQuotient;
 extern const char* SYM_PolynomialQuotientRemainder;
 extern const char* SYM_PolynomialReduce;
 extern const char* SYM_PolynomialRemainder;
+extern const char* SYM_PolynomialMod;
 extern const char* SYM_Position;
 extern const char* SYM_PreDecrement;
 extern const char* SYM_PreIncrement;

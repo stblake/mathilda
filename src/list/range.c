@@ -153,6 +153,13 @@ Expr* builtin_range(Expr* res) {
      * explicit numbers or an exact symbolic end point. */
     bool normalised = iter_normalize_bounds(imin_e, &imax_e, di_e);
 
+    /* Symbolic bounds whose distance is a number -- Range[a, a + 3] is
+     * {a, 1 + a, 2 + a, 3 + a} (audit Range#3). */
+    {
+        Expr* lat = iter_symbolic_lattice(imin_e, imax_e, di_e, RANGE_MAX_ELEMENTS);
+        if (lat) { expr_free(imin_e); expr_free(imax_e); expr_free(di_e); return lat; }
+    }
+
     if (imin_e->type == EXPR_REAL || imax_e->type == EXPR_REAL || di_e->type == EXPR_REAL) is_real = true;
 
     /* All three bounds machine integers: the count, and every element, are

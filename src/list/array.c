@@ -73,8 +73,41 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
     return list_result;
 }
 
+/* Set while the 4-argument form builds its List skeleton: the result is not
+ * offered to the packer, since its heads are about to be replaced. */
+static bool g_array_no_pack = false;
+
+/* Replace the List heads of the top `levels` levels of the array skeleton
+ * `a` (owned) by h: Array[f, dims, origin, h] (audit Array#2). */
+static Expr* array_rehead(Expr* a, Expr* h, size_t levels) {
+    if (levels == 0 || !head_is(a, SYM_List)) return a;
+    size_t n = a->data.function.arg_count;
+    Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        items[i] = array_rehead(expr_copy(a->data.function.args[i]), h, levels - 1);
+    Expr* out = expr_new_function(expr_copy(h), items, n);
+    free(items);
+    expr_free(a);
+    return out;
+}
+
 Expr* builtin_array(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2 || res->data.function.arg_count > 3) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2 || res->data.function.arg_count > 4) return NULL;
+    /* Array[f, dims, origin, h]: the array under head h at every level, as
+     * h[f[1], f[2], ...] -- built as the List array, then re-headed. */
+    if (res->data.function.arg_count == 4) {
+        Expr* a3[3] = { expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]),
+                        expr_copy(res->data.function.args[2]) };
+        Expr* call = expr_new_function(expr_new_symbol(SYM_Array), a3, 3);
+        g_array_no_pack = true;              /* a List skeleton to re-head */
+        Expr* arr = builtin_array(call);
+        g_array_no_pack = false;
+        expr_free(call);
+        if (!arr || eval_is_inflight_unwind(arr)) return arr;
+        Expr* n_spec = res->data.function.args[1];
+        size_t levels = head_is(n_spec, SYM_List) ? n_spec->data.function.arg_count : 1;
+        return array_rehead(arr, res->data.function.args[3], levels);
+    }
     
     Expr* f = res->data.function.args[0];
     Expr* n_spec = res->data.function.args[1];
@@ -139,5 +172,5 @@ Expr* builtin_array(Expr* res) {
     /* Offered rather than direct-built: array_helper runs evaluate(f[i]) per leaf
      * with no advance knowledge of the result type, so a buffer opened up front
      * would be abandoned in the common (symbolic) case. */
-    return pack_offer(result);
+    return g_array_no_pack ? result : pack_offer(result);
 }

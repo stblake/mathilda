@@ -152,6 +152,80 @@ static void test_s11_special_values(void) {
     audit_true("SquaredEuclideanDistance#2", "SquaredEuclideanDistance[{ComplexInfinity}, {0}] === Infinity");
 }
 
+/* ================================================================== */
+/* Wave 4, G2-structural (lists and iteration): symbolic lattices,    */
+/* Table iterator validation, scalar distances, named groups, ...     */
+/* ================================================================== */
+
+static void test_wave4_lists_iteration(void) {
+    /* symbolic bounds a numeric distance apart */
+    audit_chk("Range#3", "Range[a, a+3]", "{a, 1 + a, 2 + a, 3 + a}");
+    audit_chk("Range#3", "Range[0, 3 b, b]", "{0, b, 2 b, 3 b}");
+    audit_chk("Range#3", "Range[x]", "Range[x]");
+    audit_chk("Table#3", "Table[i, {i, a, a+3}]", "{a, 1 + a, 2 + a, 3 + a}");
+    audit_chk("Table#3", "Table[i^2, {i, a, a + 1}]", "{a^2, (1 + a)^2}");
+    /* a bad iterator anywhere leaves the whole multi-iterator Table */
+    audit_chk("Table#1", "Quiet[Table[i, {i, 2}, {j, 1, 2, 0}]]", "Table[i, {i, 2}, {j, 1, 2, 0}]");
+    audit_chk("Table#1", "Quiet[Check[Table[i, {i, 2}, {j, 1, 2, 0}], fired, Table::iterb]]", "fired");
+    audit_chk("Table#1", "Quiet[Table[x, {i, 2}, a]]", "Table[x, {i, 2}, a]");
+    audit_chk("Table#1", "Quiet[Check[Table[x, {i, 2}, a], fired, Table::itform]]", "fired");
+    audit_chk("Table#1", "Quiet[Table[i, {i, 1, 3}, {}]]", "Table[i, {i, 1, 3}, {}]");
+    audit_chk("Table#1", "Table[i j, {i, 3}, {j, i}]", "{{1}, {2, 4}, {3, 6, 9}}");
+    audit_chk("Table#1", "Table[x, {i, 2}, 3]", "{{x, x, x}, {x, x, x}}");
+    audit_chk("Table#2", "Quiet[Table[i, i, {i, 3}]]", "Table[i, i, {i, 3}]");
+    audit_chk("Table#2", "Quiet[Table[Sequence[i, i], {i, 3}]]", "Table[i, i, {i, 3}]");
+    /* Array with a head */
+    audit_chk("Array#2", "Array[f, 3, 1, g]", "g[f[1], f[2], f[3]]");
+    audit_chk("Array#2", "Array[f, {2, 2}, 1, g]", "g[g[f[1, 1], f[1, 2]], g[f[2, 1], f[2, 2]]]");
+    audit_chk("Array#2", "Array[#^2 &, 5, 1, Plus]", "55");
+    /* ArrayReshape reads only a List as an array */
+    audit_chk("ArrayReshape#1", "Quiet[ArrayReshape[f[a,b,c,d],{2,2}]]", "ArrayReshape[f[a, b, c, d], {2, 2}]");
+    audit_chk("ArrayReshape#1", "ArrayReshape[{f[a,b],c},{3}]", "{f[a, b], c, 0}");
+    /* Cycles past the image-array degree cap */
+    audit_chk("Cycles#1", "Cycles[{{10^9,5}}]", "Cycles[{{5, 1000000000}}]");
+    audit_chk("Cycles#1", "Quiet[Check[Cycles[{{10^9,5},{5,7}}], fired, Cycles::reppoint]]", "fired");
+    audit_chk("Cycles#1", "Cycles[{{10^9,5},{3,7,2}}]", "Cycles[{{2, 3, 7}, {5, 1000000000}}]");
+    /* distances between scalars */
+    audit_chk("EuclideanDistance#1", "EuclideanDistance[-3, 7/2]", "13/2");
+    audit_chk("EuclideanDistance#1", "EuclideanDistance[I, 0]", "1");
+    audit_chk("EuclideanDistance#1", "EuclideanDistance[1.5+2.I, 0]", "2.5");
+    audit_chk("EuclideanDistance#1", "EuclideanDistance[{1,2},{4,6}]", "5");
+    audit_chk("ManhattanDistance#1", "ManhattanDistance[1/2, 1/3]", "1/6");
+    audit_chk("ManhattanDistance#1", "ManhattanDistance[I, 0]", "1");
+    audit_chk("SquaredEuclideanDistance#1", "SquaredEuclideanDistance[1/2, 0]", "1/4");
+    audit_chk("SquaredEuclideanDistance#1", "SquaredEuclideanDistance[1+I, 0]", "2");
+    audit_chk("SquaredEuclideanDistance#1", "SquaredEuclideanDistance[a + b, c]", "Abs[a + b - c]^2");
+    audit_chk("SquaredEuclideanDistance#1", "SquaredEuclideanDistance[Sqrt[2], 0]", "2");
+    /* the named permutation groups */
+    audit_chk("GroupElements#1", "GroupElements[SymmetricGroup[3]]",
+              "{Cycles[{}], Cycles[{{2, 3}}], Cycles[{{1, 2}}], Cycles[{{1, 2, 3}}], Cycles[{{1, 3, 2}}], Cycles[{{1, 3}}]}");
+    audit_chk("GroupElements#1", "GroupElements[CyclicGroup[4]]",
+              "{Cycles[{}], Cycles[{{1, 2, 3, 4}}], Cycles[{{1, 3}, {2, 4}}], Cycles[{{1, 4, 3, 2}}]}");
+    audit_chk("GroupElements#1", "GroupElements[AlternatingGroup[3]]",
+              "{Cycles[{}], Cycles[{{1, 2, 3}}], Cycles[{{1, 3, 2}}]}");
+    audit_chk("GroupElements#1", "Length[GroupElements[DihedralGroup[3]]]", "6");
+    audit_chk("GroupElements#1", "Length[GroupElements[AlternatingGroup[4]]]", "12");
+    audit_chk("GroupOrder#1", "GroupOrder[SymmetricGroup[4]]", "24");
+    audit_chk("GroupOrder#1", "GroupOrder[AlternatingGroup[5]]", "60");
+    audit_chk("GroupOrder#1", "GroupOrder[CyclicGroup[7]]", "7");
+    audit_chk("GroupOrder#1", "GroupOrder[DihedralGroup[5]]", "10");
+    audit_chk("GroupOrder#1", "GroupOrder[SymmetricGroup[25]]", "15511210043330985984000000");
+    /* PermutationCycles with a head */
+    audit_chk("PermutationCycles#1", "PermutationCycles[{2,3,1}, h]", "h[{{1, 2, 3}}]");
+    /* Permutations::nninfseq */
+    audit_chk("Permutations#2", "Quiet[Permutations[{a,b,c},x]]", "Permutations[{a, b, c}, x]");
+    audit_chk("Permutations#2", "Quiet[Check[Permutations[{a,b,c},1.5], fired, Permutations::nninfseq]]", "fired");
+    audit_chk("Permutations#2", "Quiet[Permutations[{a,b,c},{-1}]]", "Permutations[{a, b, c}, {-1}]");
+    audit_chk("Permutations#2", "Quiet[Permutations[{a,b,c},{1,3,0}]]", "Permutations[{a, b, c}, {1, 3, 0}]");
+    audit_chk("Permutations#2", "Length[Permutations[{a,b,c},2^70]]", "16");
+    /* Riffle's three-argument form (already fixed) */
+    audit_chk("Riffle#1", "Riffle[{a,b,c},x,2]", "{a, x, b, x, c}");
+    audit_chk("Riffle#1", "Riffle[{a,b,c,d,e},x,{1,-1,2}]", "{x, a, x, b, x, c, x, d, x, e, x}");
+    /* Tuples with a zero dimension */
+    audit_chk("Tuples#2", "Tuples[{a,b},{0}]", "{{}}");
+    audit_chk("Tuples#2", "Tuples[{a,b},{2,0}]", "{{{}, {}}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
@@ -163,5 +237,6 @@ int main(void) {
     TEST(test_s14_arraypad_levels);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_lists_iteration);
     return audit_finish("audit_lists_and_iteration");
 }

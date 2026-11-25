@@ -280,7 +280,15 @@ Expr* ll_reverse(Expr* res) {
     }
     for (int64_t t = 0; t < len; t++) {
         int64_t i = top ? len - 1 - t : t;
-        Expr* a[2] = { ll_get(src, i), expr_copy(below) };
+        Expr* el = ll_get(src, i);
+        /* An atom element is unchanged, silently -- Reverse::normal is only
+         * for an atom at the TOP of the call, as reverse_rec has it. */
+        if ((el->type != EXPR_FUNCTION && !is_ndarray(el) && el->type != EXPR_LINKEDLIST) ||
+            expr_is_number_atom(el)) {
+            ll_push_back(out, el);
+            continue;
+        }
+        Expr* a[2] = { el, expr_copy(below) };
         Expr* call = sym_call(SYM_Reverse, a, 2);
         Expr* r = builtin_reverse(call);
         if (!r) r = expr_copy(call->data.function.args[0]);    /* an atom: unchanged */

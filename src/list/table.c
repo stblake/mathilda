@@ -899,10 +899,76 @@ static long table_mpfr_list_bits(const Expr* list) {
 }
 #endif
 
+/* True when an iterator spec of Table[body, spec_1, ..., spec_n] can never be
+ * iterated, so the whole call must stay unevaluated (audit Table#1/#2).  The
+ * multi-iterator form is rewritten into nested Tables, and an inner Table that
+ * failed would otherwise come back as a list of unevaluated inner Tables (or,
+ * for a bad OUTER spec, as a different expression altogether).  Checked
+ * before the rewrite:
+ *   - a List spec with no elements or more than four, or whose first element
+ *     (with two or more) is not a symbol or indexed variable: Table::itform;
+ *   - a literal zero step {i, a, b, 0}: Table::iterb;
+ *   - a bare count that is not numeric, unless it mentions the variable of an
+ *     enclosing spec (Table[x, {i, 3}, i] counts i at each step): itform.
+ * A spec that mentions an enclosing variable is otherwise left for the
+ * iteration itself to judge. */
+static bool table_spec_mentions_outer(const Expr* spec, Expr* const* specs, size_t j) {
+    for (size_t k = 0; k < j; k++) {
+        const Expr* o = specs[k];
+        if (o->type != EXPR_FUNCTION || !head_is((Expr*)o, SYM_List) ||
+            o->data.function.arg_count < 2) continue;
+        const Expr* v = o->data.function.args[0];
+        if (v->type == EXPR_SYMBOL && iter_expr_mentions_symbol(spec, v->data.symbol.name))
+            return true;
+    }
+    return false;
+}
+
+static bool table_specs_invalid(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr* const* specs = res->data.function.args + 1;
+    for (size_t j = 0; j + 1 < argc; j++) {
+        Expr* spec = specs[j];
+        bool bad_form = false, bad_bounds = false;
+        if (spec->type == EXPR_FUNCTION && head_is(spec, SYM_List)) {
+            size_t len = spec->data.function.arg_count;
+            if (len == 0 || len > 4) bad_form = true;
+            else if (len >= 2) {
+                Expr* v = spec->data.function.args[0];
+                if (v->type != EXPR_SYMBOL && !iter_var_is_indexed(v)) bad_form = true;
+            }
+            if (!bad_form && len == 4) {
+                Expr* di = spec->data.function.args[3];
+                if ((di->type == EXPR_INTEGER && di->data.integer == 0) ||
+                    (di->type == EXPR_REAL && di->data.real == 0.0))
+                    bad_bounds = true;
+            }
+        } else if (!table_spec_mentions_outer(spec, specs, j)) {
+            double v;
+            Expr* c = evaluate(spec);
+            bad_form = !(c && (iter_real_value(c, &v) || head_is(c, SYM_List)));
+            if (c) expr_free(c);
+        }
+        if (bad_form || bad_bounds) {
+            char* ss = expr_to_string(spec);
+            if (bad_form)
+                mth_message("Table", "itform", "Argument %s at position %zu does not have "
+                            "the correct form for an iterator.", ss ? ss : "", j + 2);
+            else
+                mth_message("Table", "iterb", "Iterator %s does not have appropriate bounds.",
+                            ss ? ss : "");
+            free(ss);
+            return true;
+        }
+    }
+    return false;
+}
+
 Expr* builtin_table(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     
     if (res->data.function.arg_count > 2) {
+        if (table_specs_invalid(res)) return NULL;
         Expr** inner_args = malloc(sizeof(Expr*) * 2);
         inner_args[0] = expr_copy(res->data.function.args[0]);
         inner_args[1] = expr_copy(res->data.function.args[res->data.function.arg_count - 1]);
@@ -933,6 +999,12 @@ Expr* builtin_table(Expr* res) {
         if (u) { iter_spec_free(&s); return u; }
     }
 
+    /* Symbolic bounds a fixed number of steps apart, {i, a, a + 3}: iterate
+     * the lattice {a, 1 + a, 2 + a, 3 + a} as a list (audit Table#3). */
+    if (s.kind == ITER_KIND_RANGE) {
+        Expr* lat = iter_symbolic_lattice(s.imin, s.imax, s.di, TABLE_MAX_FINITE_ELEMENTS);
+        if (lat) { s.kind = ITER_KIND_LIST; s.list = lat; }
+    }
     int is_n_times   = (s.kind == ITER_KIND_COUNT);
     int is_list_iter = (s.kind == ITER_KIND_LIST);
     double min_val = 0, max_val = 0, di_val = 0;

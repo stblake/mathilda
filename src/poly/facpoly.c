@@ -103,6 +103,7 @@ static bool factor_has_leftover_denominator(const Expr* e) {
     return false;
 }
 
+#include "expsplit.h"   /* FactorSquareFree reads symbolic powers over generators */
 #include "facpoly_options.inc"
 #include "facpoly_squarefree.inc"
 #include "facpoly_simple.inc"

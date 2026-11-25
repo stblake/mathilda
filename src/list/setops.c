@@ -454,13 +454,20 @@ static Expr* setops_same_test(Expr* res, size_t* last_arg) {
             if (i < *last_arg) *last_arg = i;
         }
     }
+    /* SameTest -> Automatic means "use the default comparison" (audit
+     * Intersection#1: it was taken as a test that never held). */
+    if (same_test && same_test->type == EXPR_SYMBOL && same_test->data.symbol.name == SYM_Automatic)
+        same_test = NULL;
     return same_test;
 }
 
 /* Union[l1, l2, ...]: the sorted distinct elements of all the li. Default
  * comparison: the hash set over every element (O(total)), then a sort of the
  * distinct ones only (issue #112: 946k elements reduced to 91). SameTest -> f:
- * sort everything, then drop an element f calls equal to the last kept. */
+ * sort everything, then drop an element f calls equal to ANY element already
+ * kept -- not only the last one, since f need not respect the canonical order
+ * (Union[Range[6], SameTest -> (Mod[#1 - #2, 3] == 0 &)] is {1, 2, 3}; audit
+ * Union#1). */
 Expr* builtin_union(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     size_t last_arg;
@@ -504,8 +511,12 @@ Expr* builtin_union(Expr* res) {
         size_t* all = malloc(sizeof(size_t) * total);
         for (size_t g = 0; g < total; g++) all[g] = g;
         setops_sort(&so, all, total);
-        for (size_t i = 0; i < total; i++)
-            if (nk == 0 || !setops_test(&so, same_test, all[i], keep[nk - 1])) keep[nk++] = all[i];
+        for (size_t i = 0; i < total; i++) {
+            bool dup = false;
+            for (size_t k = nk; k > 0 && !dup; k--)      /* the latest kept first */
+                dup = setops_test(&so, same_test, all[i], keep[k - 1]);
+            if (!dup) keep[nk++] = all[i];
+        }
         free(all);
     }
     Expr* result = setops_emit(&so, keep, nk);
@@ -529,10 +540,6 @@ static Expr* setops_filter(Expr* res, int mode, const char* name) {
                                  1, SIZE_MAX);
     size_t last_arg;
     Expr* same_test = setops_same_test(res, &last_arg);
-    /* SameTest -> Automatic means "use the default comparison" (Complement). */
-    if (mode == 2 && same_test != NULL && same_test->type == EXPR_SYMBOL &&
-        same_test->data.symbol.name == SYM_Automatic)
-        same_test = NULL;
     if (last_arg == 0) return NULL;   /* only an option, no list operands */
 
     if (setop_any_nd(res->data.function.args, last_arg)) {
@@ -692,7 +699,13 @@ Expr* builtin_tally(Expr* res) {
     /* A LinkedList tallies its elements read from its slots; the answer is a
      * LinkedList of {element, count} Lists. */
     LLSeq q;
-    if (!llq_open(list, &q)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (!llq_open(list, &q)) {
+        /* Tally[5]: an atom has no elements to tally (audit Tally#1) */
+        char* cs = expr_to_string(res);
+        mth_message("Tally", "list", "List expected at position 1 in %s.", cs ? cs : "");
+        free(cs);
+        return NULL;
+    }
     bool linked = llq_linked(&q);
     size_t* uniq; int64_t* mult;
     size_t nu = tally_indices(&q, test, &uniq, &mult);
@@ -728,6 +741,22 @@ Expr* builtin_deleteduplicates(Expr* res) {
 
     /* DeleteDuplicates[assoc] keeps the first entry for each distinct value. */
     if (test == NULL && is_association(list)) return assoc_delete_duplicate_values(list);
+    /* ... and DeleteDuplicates[assoc, test] for each class of values under
+     * the test (audit DeleteDuplicates#2: the test was ignored). */
+    if (test != NULL && is_association(list)) {
+        Expr* vals = assoc_values_list(list);
+        LLSeq vq;
+        if (!vals || !llq_open(vals, &vq)) { if (vals) expr_free(vals); return NULL; }
+        size_t* uniq; int64_t* mult;
+        size_t nu = tally_indices(&vq, test, &uniq, &mult);
+        llq_close(&vq);
+        Expr** ents = malloc(sizeof(Expr*) * (nu ? nu : 1));
+        for (size_t u = 0; u < nu; u++) ents[u] = list->data.function.args[uniq[u]];
+        Expr* out = assoc_from_rules(ents, nu);
+        free(ents); free(uniq); free(mult);
+        expr_free(vals);
+        return out;
+    }
 
     /* Packed int64 with the default test: dedup on the machine words. Every
      * other array shape must delist here, not fall through (it would be read
@@ -759,6 +788,8 @@ Expr* builtin_deleteduplicates(Expr* res) {
  * of f[element], preserving order. Over an association f is applied to each
  * value and the surviving entries form an association. The distinct f-values
  * (keys, not elements) are compared directly. */
+static Expr* dedupby_key_peek(void* ctx, size_t i) { return ((Expr**)ctx)[i]; }
+
 Expr* builtin_deleteduplicatesby(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
@@ -768,23 +799,24 @@ Expr* builtin_deleteduplicatesby(Expr* res) {
     if (!llq_open(coll, &q)) return NULL;
     size_t n = q.n;
     size_t* kept = malloc(sizeof(size_t) * (n ? n : 1));  /* surviving element indices */
-    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));    /* their f-values (owned) */
+    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));    /* f[element i] (owned) */
     size_t nkept = 0;
+    /* The f-values are deduplicated through the SameQ hash set, so the pass is
+     * O(n) in the number of distinct keys, not O(n^2) (audit
+     * DeleteDuplicatesBy#1: 10^5 distinct elements took over 10 s). */
+    LLIdxSet seen;
+    llis_init(&seen, n);
     for (size_t i = 0; i < n; i++) {
         Expr* elem = llq_peek(&q, i);
         Expr* val  = assoc ? elem->data.function.args[1] : elem;  /* value for assoc */
         Expr* fcall = expr_new_function(expr_copy(f), (Expr*[]){ expr_copy(val) }, 1);
-        Expr* fk = eval_callback(fcall);
+        keys[i] = eval_callback(fcall);
         expr_free(fcall);
-        bool dup = false;
-        for (size_t j = 0; j < nkept; j++)
-            if (expr_eq(fk, keys[j])) { dup = true; break; }
-        if (dup) { expr_free(fk); continue; }
-        keys[nkept] = fk;
-        kept[nkept++] = i;
+        if (llis_add(&seen, dedupby_key_peek, keys, i) == SIZE_MAX) kept[nkept++] = i;
     }
+    llis_free(&seen);
     Expr* out = llq_emit(&q, kept, nkept);
-    for (size_t j = 0; j < nkept; j++) expr_free(keys[j]);
+    for (size_t j = 0; j < n; j++) expr_free(keys[j]);
     free(keys); free(kept);
     llq_close(&q);
     return out;

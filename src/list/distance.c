@@ -437,11 +437,47 @@ static bool dist_ll_pair(Expr* u, Expr* v, DistPt* pu, DistPt* pv) {
     return ok;
 }
 
+/* A scalar argument of the distance builtins: anything but a vector (a List,
+ * a packed array, a LinkedList, a SparseArray). */
+static bool dist_scalar(const Expr* x) {
+    /* a number, a symbol or a compound expression -- never an array object
+     * (packed / sparse / linked), which are vectors */
+    bool atom = x->type == EXPR_INTEGER || x->type == EXPR_REAL || x->type == EXPR_BIGINT ||
+                x->type == EXPR_SYMBOL;
+#ifdef USE_MPFR
+    atom = atom || x->type == EXPR_MPFR;
+#endif
+    if (!atom && (x->type != EXPR_FUNCTION || is_listq((Expr*)x))) return false;
+    /* A colour directive is a point of its colour space, not a scalar; the
+     * public builtins keep declining it (see dist_shape). */
+    if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = x->data.function.head->data.symbol.name;
+        static const char* colours[] = { "RGBColor", "Hue", "GrayLevel", "CMYKColor",
+                                         "LABColor", "LCHColor", "LUVColor", "XYZColor" };
+        for (size_t i = 0; i < sizeof colours / sizeof colours[0]; i++)
+            if (strcmp(h, colours[i]) == 0) return false;
+    }
+    return true;
+}
+
 static Expr* dist_builtin(Expr* res, int p, bool root) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
 
     Expr* u = res->data.function.args[0];
     Expr* v = res->data.function.args[1];
+
+    /* Two scalars -- any expression that is not a vector: 7/2, I, 1.5 + 2. I,
+     * Sqrt[2], a + b.  The distance is Abs[u - v] (to the power p, for the
+     * squared and Manhattan forms); a Rational or Complex is a number, not a
+     * vector of its parts (audit EuclideanDistance#1, ManhattanDistance#1,
+     * SquaredEuclideanDistance#1). */
+    if (dist_scalar(u) && dist_scalar(v)) {
+        Expr* d[2] = { expr_copy(u), expr_copy(v) };
+        Expr* a = dist_abs(eval_and_free(internal_subtract(d, 2)));
+        if (p == 1 || root) return a;
+        Expr* pw[2] = { a, expr_new_integer(p) };
+        return eval_and_free(internal_power(pw, 2));
+    }
 
     Expr* sum;
     DistPt pu, pv;

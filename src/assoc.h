@@ -149,6 +149,10 @@ Expr* builtin_keyunion(Expr* res);
  * `entry` MUST be a two-argument rule: is_association() only checks the head,
  * so Association[1, 2] can exist and callers must guard with is_rule2 first. */
 Expr* assoc_entry_with_value(const Expr* entry, Expr* newval);
+/* The entry (borrowed Rule / RuleDelayed) under `key`, or NULL. */
+Expr* assoc_lookup_entry(const Expr* assoc, const Expr* key);
+/* A new entry with key `newkey` (adopted), entry's value and entry's head. */
+Expr* assoc_entry_with_key(const Expr* entry, Expr* newkey);
 
 /* True for a two-argument Rule/RuleDelayed, i.e. a well-formed entry. */
 bool is_rule2(const Expr* e);

@@ -47,7 +47,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `=`      | `Set`   | 500 | Right |
 | `:=`     | `SetDelayed` | 500 | Right |
 | `=.`     | `Unset` (postfix) | 500 | None |
-| `+=`, `-=`, `*=`, `/=` | `AddTo`, `SubtractFrom`, `TimesBy`, `DivideBy` | 500 | Right |
+| `+=`, `-=`, `*=`, `/=`, `//=` | `AddTo`, `SubtractFrom`, `TimesBy`, `DivideBy`, `ApplyTo` | 500 | Right |
 | `>>`, `>>>` | `Put`, `PutAppend` | 300 | Left |
 | `<<` (prefix) | `Get` | tightest | — |
 | `;`      | `CompoundExpression` | 100 | Left |

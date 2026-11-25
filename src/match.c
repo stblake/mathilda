@@ -947,7 +947,21 @@ static bool kvp_match_reqs(Expr** reqs, size_t nreq, size_t ri, Expr* subj,
                            MatchEnv* env, ParentMatch* parent) {
     if (ri == nreq) return call_parent(env, parent);
     Expr* rule = reqs[ri];
-    if (!kvp_is_rule2(rule)) return false;
+    if (!kvp_is_rule2(rule)) {
+        /* An element pattern that is not itself a rule -- _Rule, an
+         * Alternatives of rules, a rule under a Condition -- is matched
+         * against each whole entry (audit KeyValuePattern#1). */
+        for (size_t i = 0; i < subj->data.function.arg_count; i++) {
+            Expr* entry = subj->data.function.args[i];
+            if (!kvp_is_rule2(entry)) continue;
+            size_t es = env->count;
+            if (match_internal(entry, rule, env, NULL) &&
+                kvp_match_reqs(reqs, nreq, ri + 1, subj, env, parent))
+                return true;
+            env_rollback(env, es);
+        }
+        return false;
+    }
     Expr* kpat = rule->data.function.args[0];
     Expr* vpat = rule->data.function.args[1];
     for (size_t i = 0; i < subj->data.function.arg_count; i++) {

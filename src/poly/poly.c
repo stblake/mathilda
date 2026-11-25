@@ -548,6 +548,21 @@ Expr* builtin_coefficient(Expr* res) {
         return NULL;
     int64_t n = (res->data.function.arg_count == 3) ? res->data.function.args[2]->data.integer : 1;
 
+    /* A power series is the sum of its terms: Coefficient[Series[E^x, {x, 0, 5}],
+     * x, 3] is 1/6, the coefficient of its Normal form (audit Coefficient#1). */
+    if (head_is(original_expr, SYM_SeriesData)) {
+        Expr* na[1] = { expr_copy(original_expr) };
+        Expr* normal = eval_and_free(expr_new_function(expr_new_symbol(SYM_Normal), na, 1));
+        if (!normal || head_is(normal, SYM_SeriesData)) { if (normal) expr_free(normal); return NULL; }
+        size_t argc = res->data.function.arg_count;
+        Expr** ca = malloc(sizeof(Expr*) * argc);
+        ca[0] = normal;
+        for (size_t i = 1; i < argc; i++) ca[i] = expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_Coefficient), ca, argc);
+        free(ca);
+        return call;
+    }
+
     BPList target_bp;
     bp_init(&target_bp);
     decompose_to_bp(form, &target_bp);
@@ -1425,6 +1440,23 @@ void poly_kernel_map_free(PolyKernelMap* map) {
     map->kern = NULL; map->sym = NULL; map->n = 0;
 }
 
+/* Drop the Constant-attributed symbols (EulerGamma, Catalan, Degree,
+ * GoldenRatio, Khinchin, Glaisher, ...) from a Variables result: they are
+ * numbers, as Pi and E already are to collect_variables (audit Variables#1).
+ * Compacts vars[0..*k) in place, freeing what it drops. */
+static void variables_drop_constants(Expr** vars, size_t* k) {
+    size_t w = 0;
+    for (size_t i = 0; i < *k; i++) {
+        Expr* v = vars[i];
+        if (v->type == EXPR_SYMBOL && (get_attributes(v->data.symbol.name) & ATTR_CONSTANT)) {
+            expr_free(v);
+            continue;
+        }
+        vars[w++] = v;
+    }
+    *k = w;
+}
+
 Expr* builtin_variables(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     /* x^(1 + e) is the monomial x (x^e): its variables are x and x^e, as in
@@ -1451,6 +1483,7 @@ Expr* builtin_variables(Expr* res) {
                 vars[k++] = vars[i];
             }
         }
+        variables_drop_constants(vars, &k);
         if (k > 0) qsort(vars, k, sizeof(Expr*), compare_expr_ptrs);
         Expr* list = expr_new_function(expr_new_symbol(SYM_List), vars, k);
         free(vars);
@@ -1461,6 +1494,7 @@ Expr* builtin_variables(Expr* res) {
     size_t count = 0, capacity = 16;
     Expr** vars = malloc(sizeof(Expr*) * capacity);
     collect_variables(res->data.function.args[0], &vars, &count, &capacity);
+    variables_drop_constants(vars, &count);
     if (count > 0) qsort(vars, count, sizeof(Expr*), compare_expr_ptrs);
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), vars, count);
     free(vars); return list;
@@ -1468,10 +1502,27 @@ Expr* builtin_variables(Expr* res) {
 
 /* The variables of is_polynomial, read one at a time: from an array, or from
  * a LinkedList's slots (vl set). */
-typedef struct { Expr** arr; const LinkedList* vl; size_t n; } PolyVars;
+typedef struct { Expr** arr; const LinkedList* vl; size_t n; bool bigint_degrees; } PolyVars;
 static Expr* pv_get(const PolyVars* V, size_t i, bool* own) {
     if (!V->vl) { *own = false; return V->arr[i]; }
     return ll_elem_view(V->vl, (int64_t)i, own);
+}
+
+/* Does variable v occur in e?  A symbol occurs wherever it appears; a
+ * compound variable (x[1], Sin[x]) only as a whole subexpression -- x[2] and
+ * Cos[x] are free of x[1] and Sin[x], so they are coefficients (audit
+ * PolynomialQ#2: they used to count as non-polynomial occurrences). */
+static bool poly_var_occurs(const Expr* e, const Expr* v) {
+    if (v->type == EXPR_SYMBOL) return contains_any_symbol_from((Expr*)e, (Expr*)v);
+    /* a power variable b^k depends on its base: x is not a polynomial in x^2 */
+    if (head_is((Expr*)v, SYM_Power) && v->data.function.arg_count == 2 &&
+        poly_var_occurs(e, v->data.function.args[0])) return true;
+    if (expr_eq((Expr*)e, (Expr*)v)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (poly_var_occurs(e->data.function.head, v)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (poly_var_occurs(e->data.function.args[i], v)) return true;
+    return false;
 }
 
 static bool is_polynomial_v(Expr* e, const PolyVars* V) {
@@ -1493,7 +1544,7 @@ static bool is_polynomial_v(Expr* e, const PolyVars* V) {
     for (size_t i = 0; i < var_count && !contains_var; i++) {
         bool o;
         Expr* v = pv_get(V, i, &o);
-        contains_var = contains_any_symbol_from(e, v);
+        contains_var = poly_var_occurs(e, v);
         ll_elem_done(v, o);
     }
     if (!contains_var) return true;
@@ -1518,6 +1569,12 @@ static bool is_polynomial_v(Expr* e, const PolyVars* V) {
             if (exp->type == EXPR_INTEGER && exp->data.integer >= 0) {
                 return is_polynomial_v(base, V);
             }
+            /* x^(10^20) is a monomial too, of a degree past int64 (audit
+             * PolynomialQ#1) -- for the PolynomialQ predicate only: the
+             * internal callers of is_polynomial go on to read degrees as
+             * machine integers, and must keep declining such a power. */
+            if (V->bigint_degrees && exp->type == EXPR_BIGINT && mpz_sgn(exp->data.bigint) > 0)
+                return is_polynomial_v(base, V);
             return false;
         }
     }
@@ -1528,14 +1585,14 @@ static bool is_polynomial_v(Expr* e, const PolyVars* V) {
 }
 
 bool is_polynomial(Expr* e, Expr** vars, size_t var_count) {
-    PolyVars V = { vars, NULL, var_count };
+    PolyVars V = { vars, NULL, var_count, false };
     return is_polynomial_v(e, &V);
 }
 
 Expr* builtin_polynomialq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars_expr = res->data.function.args[1];
-    PolyVars V = { NULL, NULL, 0 };
+    PolyVars V = { NULL, NULL, 0, true };
     if (vars_expr->type == EXPR_LINKEDLIST) {
         /* a LinkedList of variables, read from its slots one at a time */
         V.vl = vars_expr->data.llist;
@@ -2637,6 +2694,28 @@ static Expr* poly_divrem_mod_classical(Expr* p, Expr* q, Expr* x, Expr* m) {
     Expr* pm = internal_polynomialmod((Expr*[]){expr_copy(p), expr_copy(m)}, 2);
     Expr* qm = internal_polynomialmod((Expr*[]){expr_copy(q), expr_copy(m)}, 2);
     if (is_zero_poly(qm)) { expr_free(pm); expr_free(qm); return NULL; }
+    /* Division by q over Z/m needs lc(q) to be a unit there: modulo a
+     * composite m a leading coefficient sharing a factor with m (2 x + 1
+     * modulo 4) has no inverse, and dividing over Q would hand back
+     * fractions that mean nothing modulo m (audit PolynomialQuotient#4). */
+    {
+        Expr* cl = internal_coefficientlist((Expr*[]){expr_copy(qm), expr_copy(x)}, 2);
+        bool unit = false;
+        if (cl && head_is(cl, SYM_List) && cl->data.function.arg_count > 0) {
+            Expr* lc = cl->data.function.args[cl->data.function.arg_count - 1];
+            if (expr_is_integer_like(lc)) {
+                mpz_t a, b;
+                mpz_inits(a, b, NULL);
+                expr_to_mpz(lc, a);
+                expr_to_mpz(m, b);
+                mpz_gcd(a, a, b);
+                unit = mpz_cmp_ui(a, 1) == 0;
+                mpz_clears(a, b, NULL);
+            }
+        }
+        if (cl) expr_free(cl);
+        if (!unit) { expr_free(pm); expr_free(qm); return NULL; }
+    }
     Expr *Q = NULL, *R = NULL;
     poly_div_rem(pm, qm, x, &Q, &R);
     expr_free(pm); expr_free(qm);
@@ -2663,8 +2742,33 @@ static Expr* poly_divrem_modulus(Expr* p, Expr* q, Expr* x, Expr* m, int which) 
     return out;
 }
 
+/* PolynomialQuotient[p, q, x] divides polynomials in x: a dividend or
+ * divisor that is not one (x^2.5, 1/x + x^2, Sqrt[x], a List) is
+ * PolynomialQuotient::poly and the call stays unevaluated, rather than having
+ * its non-polynomial terms dropped (audit PolynomialQuotient#1-#3). */
+static bool polyquot_args_polynomial(Expr* res) {
+    /* User-level calls only: the summation and integration engines divide
+     * expressions with opaque or radical coefficients in x (n^(3/2)
+     * EulerPhi[n]^3, ...) through PolynomialQuotient and rely on reading
+     * them as coefficients. */
+    if (eval_builtin_depth() > 1) return true;
+    Expr* x = res->data.function.args[2];
+    if (x->type != EXPR_SYMBOL) return true;          /* a compound variable: as before */
+    for (int k = 0; k < 2; k++) {
+        Expr* e = res->data.function.args[k];
+        if (!is_polynomial(e, &x, 1)) {
+            char* es = expr_to_string(e);
+            mth_message("PolynomialQuotient", "poly", "%s is not a polynomial.", es ? es : "");
+            free(es);
+            return false;
+        }
+    }
+    return true;
+}
+
 Expr* builtin_polynomialquotient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+    if (!polyquot_args_polynomial(res)) return NULL;
 
     /* Modulus -> m: quotient over F_p (A3). */
     {
@@ -5006,6 +5110,50 @@ static void bp_compute_residual(BPList* term_bp, BPList* var_bp,
     free(consumed);
 }
 
+/* Gather every power of the key's base `b` in a term's BP list into ONE
+ * entry (b, total exponent): decompose_to_bp leaves x^n as the opaque base
+ * x^n and splits x^(n + 1) into x and x^n, so the key x never met its
+ * symbolic power (audit Collect#1/#2: a x^n + b x^n was not collected, and
+ * a x^(n+1) + b x^(n+1) came back as x (a x^n + b x^n)).  A no-op for a term
+ * with at most one plain power of b. */
+/* An entry (b^e)^k that IS b^(e k): b^e with a symbolic exponent e (a
+ * numeric one decompose_to_bp has already split off), raised to an integer
+ * k.  (x^(4/3))^(-3/4) is not x^-1 off the positive axis, so a fractional k
+ * keeps the entry opaque. */
+static bool bp_power_of_base(const Expr* tb, const Expr* k, const Expr* b) {
+    return head_is((Expr*)tb, SYM_Power) && tb->data.function.arg_count == 2 &&
+           expr_eq(tb->data.function.args[0], (Expr*)b) && k->type == EXPR_INTEGER &&
+           !expr_is_numeric_quantity(tb->data.function.args[1]);
+}
+
+static void bp_merge_base_powers(BPList* l, Expr* b) {
+    size_t hits = 0;
+    bool opaque = false;
+    for (size_t j = 0; j < l->count; j++) {
+        Expr* tb = l->data[j].base;
+        if (expr_eq(tb, b)) hits++;
+        else if (bp_power_of_base(tb, l->data[j].exp, b)) { hits++; opaque = true; }
+    }
+    if (hits == 0 || (hits == 1 && !opaque)) return;
+    Expr* total = NULL;
+    BPList rest;
+    bp_init(&rest);
+    for (size_t j = 0; j < l->count; j++) {
+        Expr* tb = l->data[j].base;
+        Expr* tx = l->data[j].exp;
+        Expr* e = NULL;
+        if (expr_eq(tb, b)) e = expr_copy(tx);
+        else if (bp_power_of_base(tb, tx, b))
+            e = internal_times((Expr*[]){ expr_copy(tb->data.function.args[1]), expr_copy(tx) }, 2);
+        if (!e) { bp_add(&rest, tb, tx); continue; }
+        total = total ? internal_plus((Expr*[]){ total, e }, 2) : e;
+    }
+    bp_add(&rest, b, total);
+    expr_free(total);
+    bp_free(l);
+    *l = rest;
+}
+
 static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t var_idx, Expr* h) {
     if (expr->type == EXPR_FUNCTION && is_threadable_head(expr->data.function.head)) {
         bool is_ineq = (expr->data.function.head->type == EXPR_SYMBOL
@@ -5096,6 +5244,9 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
         BPList term_bp;
         bp_init(&term_bp);
         decompose_to_bp(term, &term_bp);
+
+        if (single_base && !head_is(sb_base, SYM_Power) && !expr_is_integer_like(sb_base))
+            bp_merge_base_powers(&term_bp, sb_base);
 
         Expr* k_expr = NULL;       /* group key for single_base path */
         int64_t k_int = 0;          /* group key for multi-factor path */
@@ -5502,16 +5653,66 @@ static bool cl_not_polynomial(const Expr* e, const Expr* var) {
     return false;
 }
 
+/* The longest List at each of the first `depth` levels of `e`, folded into
+ * maxlen[0..depth). */
+static void cl_max_dims(const Expr* e, size_t level, size_t depth, int64_t* maxlen) {
+    if (level >= depth || !head_is((Expr*)e, SYM_List)) return;
+    int64_t n = (int64_t)e->data.function.arg_count;
+    if (n > maxlen[level]) maxlen[level] = n;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        cl_max_dims(e->data.function.args[i], level + 1, depth, maxlen);
+}
+
+/* CoefficientList[{p1, p2, ...}, vars]: the coefficient array of each pi,
+ * all padded with 0 to one common shape (audit CoefficientList#2: the list
+ * was taken as a single coefficient). */
+static Expr* coefficientlist_of_list(Expr* polys, Expr* vars_expr) {
+    size_t n = polys->data.function.arg_count;
+    size_t depth = head_is(vars_expr, SYM_List) ? vars_expr->data.function.arg_count : 1;
+    if (depth == 0) return NULL;
+    Expr** rs = malloc(sizeof(Expr*) * (n ? n : 1));
+    int64_t* maxlen = calloc(depth, sizeof(int64_t));
+    bool ok = true;
+    size_t got = 0;
+    for (; got < n && ok; got++) {
+        Expr* a[2] = { expr_copy(polys->data.function.args[got]), expr_copy(vars_expr) };
+        rs[got] = eval_and_free(expr_new_function(expr_new_symbol(SYM_CoefficientList), a, 2));
+        if (!rs[got] || !head_is(rs[got], SYM_List)) { ok = false; got++; break; }
+        cl_max_dims(rs[got], 0, depth, maxlen);
+    }
+    Expr* out = NULL;
+    if (ok) {
+        Expr** dims = malloc(sizeof(Expr*) * depth);
+        for (size_t d = 0; d < depth; d++) dims[d] = expr_new_integer(maxlen[d] > 0 ? maxlen[d] : 1);
+        Expr* dl = expr_new_function(expr_new_symbol(SYM_List), dims, depth);
+        free(dims);
+        Expr** padded = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            Expr* a[2] = { rs[i], expr_copy(dl) };
+            rs[i] = NULL;
+            padded[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_PadRight), a, 2));
+        }
+        expr_free(dl);
+        out = expr_new_function(expr_new_symbol(SYM_List), padded, n);
+        free(padded);
+    }
+    for (size_t i = 0; i < got; i++) if (rs[i]) expr_free(rs[i]);
+    free(rs); free(maxlen);
+    return out;
+}
+
 Expr* builtin_coefficientlist(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* vars_expr = res->data.function.args[1];
 
+    if (head_is(expr, SYM_List)) return coefficientlist_of_list(expr, vars_expr);
+
     if (expr->type == EXPR_INTEGER && expr->data.integer == 0) {
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
-    PolyVars V = { &vars_expr, NULL, 1 };
+    PolyVars V = { &vars_expr, NULL, 1, false };
     if (vars_expr->type == EXPR_LINKEDLIST) {
         /* a LinkedList of variables, read from its slots one at a time */
         V.arr = NULL;
@@ -5890,9 +6091,36 @@ static Expr* horner_form_rec_v(Expr* expr, const PolyVars* vars, size_t k, Expr*
 
 Expr* builtin_hornerform(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
-    
+
     Expr* expr = res->data.function.args[0];
-    
+
+    /* A List (or LinkedList) of polynomials: each element in Horner form, in
+     * the same container.  Read as one polynomial, PolynomialQ accepted the
+     * list and CoefficientList threaded over it, so HornerForm[{1.5, -2.}, x]
+     * came back as a coefficient-list polynomial. */
+    int64_t seq_n = (expr->type == EXPR_LINKEDLIST || head_is(expr, SYM_List)) ? ll_seq_length(expr) : -1;
+    if (seq_n >= 0) {
+        size_t argc = res->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (size_t)(seq_n ? seq_n : 1));
+        for (int64_t i = 0; i < seq_n; i++) {
+            Expr** a = malloc(sizeof(Expr*) * argc);
+            a[0] = ll_seq_element(expr, i);
+            for (size_t j = 1; j < argc; j++) a[j] = expr_copy(res->data.function.args[j]);
+            out[i] = eval_and_free(expr_new_function(expr_new_symbol("HornerForm"), a, argc));
+            free(a);
+        }
+        Expr* r;
+        if (expr->type == EXPR_LINKEDLIST) {
+            LinkedList* ll = ll_new();
+            for (int64_t i = 0; i < seq_n; i++) ll_push_back(ll, out[i]);
+            r = expr_new_linkedlist(ll);
+        } else {
+            r = expr_new_function(expr_new_symbol(SYM_List), out, (size_t)seq_n);
+        }
+        free(out);
+        return r;
+    }
+
     Expr* num = NULL;
     Expr* den = NULL;
     
@@ -5975,7 +6203,7 @@ Expr* builtin_hornerform(Expr* res) {
     }
     
     /* the variables of a List, or of a LinkedList read one slot at a time */
-    PolyVars v1 = { NULL, NULL, 0 }, v2 = { NULL, NULL, 0 };
+    PolyVars v1 = { NULL, NULL, 0, false }, v2 = { NULL, NULL, 0, false };
     PolyVars* vv[2] = { &v1, &v2 };
     Expr* ve[2] = { vars1_expr, vars2_expr };
     for (int t = 0; t < 2; t++) {
@@ -5991,9 +6219,10 @@ Expr* builtin_hornerform(Expr* res) {
     
     Expr* h_num = horner_form_rec(num, &v1, 0);
     if (!h_num) {
-        printf("HornerForm::poly: "); 
+        /* through the funnel, so Quiet silences it and Check sees it
+         * (audit HornerForm#1: it was printed to stdout) */
         char* s = expr_to_string(expr);
-        printf("%s is not a polynomial.\n", s);
+        mth_message("HornerForm", "poly", "%s is not a polynomial.", s ? s : "");
         free(s);
                 if (vars1_expr) expr_free(vars1_expr);
         if (vars2_expr) expr_free(vars2_expr);
@@ -6008,9 +6237,10 @@ Expr* builtin_hornerform(Expr* res) {
     } else {
         h_den = horner_form_rec(den, &v2, 0);
         if (!h_den) {
-            printf("HornerForm::poly: "); 
+            /* through the funnel, so Quiet silences it and Check sees it
+             * (audit HornerForm#1: it was printed to stdout) */
             char* s = expr_to_string(expr);
-            printf("%s is not a polynomial.\n", s);
+            mth_message("HornerForm", "poly", "%s is not a polynomial.", s ? s : "");
             free(s);
                         if (vars1_expr) expr_free(vars1_expr);
             if (vars2_expr) expr_free(vars2_expr);
@@ -6612,7 +6842,39 @@ static bool resultant_has_symbolic_denominator(const Expr* e) {
 }
 
 Expr* builtin_resultant(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* Resultant[p, q, x, Modulus -> m]: the resultant is a polynomial in the
+     * coefficients with integer coefficients, so reducing it modulo m is the
+     * resultant over Z/m (audit Resultant#2).  Method -> Automatic is the
+     * default and accepted. */
+    if (res->data.function.arg_count > 3) {
+        Expr* mod = NULL;
+        for (size_t i = 3; i < res->data.function.arg_count; i++) {
+            Expr* o = res->data.function.args[i];
+            if (!(head_is(o, SYM_Rule) && o->data.function.arg_count == 2 &&
+                  o->data.function.args[0]->type == EXPR_SYMBOL)) return NULL;
+            const char* nm = o->data.function.args[0]->data.symbol.name;
+            Expr* v = o->data.function.args[1];
+            if (nm == SYM_Modulus) {
+                if (v->type == EXPR_INTEGER && v->data.integer == 0) mod = NULL;
+                else if (expr_is_integer_like(v) &&
+                         !(v->type == EXPR_INTEGER && v->data.integer < 0) &&
+                         !(v->type == EXPR_BIGINT && mpz_sgn(v->data.bigint) < 0)) mod = v;
+                else return NULL;
+            } else if (nm == SYM_Method) {
+                if (!(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic)) return NULL;
+            } else {
+                return NULL;
+            }
+        }
+        Expr* a[3] = { expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]),
+                       expr_copy(res->data.function.args[2]) };
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Resultant), a, 3));
+        if (!r || head_is(r, SYM_Resultant)) { if (r) expr_free(r); return NULL; }
+        if (!mod) return r;
+        return internal_polynomialmod((Expr*[]){ r, expr_copy(mod) }, 2);
+    }
+    if (res->data.function.arg_count != 3) return NULL;
     
     Expr* p1 = res->data.function.args[0];
     Expr* p2 = res->data.function.args[1];
@@ -6629,6 +6891,9 @@ Expr* builtin_resultant(Expr* res) {
     if (!is_poly1 || !is_poly2) {
         return NULL;
     }
+    /* The zero polynomial has every root: its resultant with anything --
+     * zero included -- is 0 (audit Resultant#1: Resultant[0, 0, x] was 1). */
+    if (is_zero_poly(p1) || is_zero_poly(p2)) return expr_new_integer(0);
 
 #ifdef USE_FLINT
     /* Parametric radical field Q(t..)(sqrt k): the classical symbolic
@@ -7161,6 +7426,26 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
         } else {
             return NULL;
         }
+    }
+    /* The extended gcd is of polynomials in x: a List (the function is not
+     * Listable) or any non-polynomial argument leaves the call unevaluated
+     * (audit PolynomialExtendedGCD#3: {x^2 - 1, x^2 + x} gave a nonsense
+     * {1, {{1/(-1 + x^2), ...}, 0}}). */
+    if (x->type == EXPR_SYMBOL && (!is_polynomial(A, &x, 1) || !is_polynomial(B, &x, 1)))
+        return NULL;
+    /* Over Z/m for a composite m there is no Euclidean algorithm (a leading
+     * coefficient may be a zero divisor), and the loop below came back with
+     * {0, {0, 0}} -- a gcd of 0 for nonzero polynomials (audit
+     * PolynomialExtendedGCD#2).  Only a prime modulus is answered. */
+    if (mod_p && mod_p->type == EXPR_INTEGER && mod_p->data.integer == 0) mod_p = NULL;
+    if (mod_p) {
+        if (!expr_is_integer_like(mod_p)) return NULL;
+        mpz_t mz;
+        mpz_init(mz);
+        expr_to_mpz(mod_p, mz);
+        bool prime = mpz_cmp_ui(mz, 2) >= 0 && mpz_probab_prime_p(mz, 30) > 0;
+        mpz_clear(mz);
+        if (!prime) return NULL;
     }
 
 #ifdef USE_FLINT

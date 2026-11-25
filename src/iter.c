@@ -158,6 +158,49 @@ bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di) {
     return true;
 }
 
+Expr* iter_symbolic_lattice(const Expr* imin, const Expr* imax, const Expr* di, int64_t cap) {
+    if (!imin || !imax || !di) return NULL;
+    double lo, hi, st;
+    /* All numeric: the ordinary (normalised) range path owns it. */
+    if (iter_real_value(imin, &lo) && iter_real_value(imax, &hi) && iter_real_value(di, &st))
+        return NULL;
+    Expr* neg[2]  = { expr_new_integer(-1), expr_copy((Expr*)imin) };
+    Expr* span[2] = { expr_copy((Expr*)imax), expr_new_function(expr_new_symbol(SYM_Times), neg, 2) };
+    Expr* inv[2]  = { expr_copy((Expr*)di), expr_new_integer(-1) };
+    Expr* quo[2]  = { expr_new_function(expr_new_symbol(SYM_Plus), span, 2),
+                      expr_new_function(expr_new_symbol(SYM_Power), inv, 2) };
+    Expr* ratio = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), quo, 2));
+    if (!ratio) return NULL;
+    int64_t num, den, n;
+    bool ok = true;
+    if (ratio->type == EXPR_INTEGER) {
+        n = ratio->data.integer;
+    } else if (ratio->type == EXPR_REAL) {
+        double r = ratio->data.real;
+        if (isfinite(r) && fabs(r) < 9.0e15) n = (int64_t)floor(r); else ok = false;
+    } else if (is_rational(ratio, &num, &den)) {
+        n = num / den;
+        if ((num % den != 0) && ((num < 0) != (den < 0))) n--;   /* floor */
+    } else {
+        ok = false;
+    }
+    expr_free(ratio);
+    if (!ok) return NULL;
+    if (n < 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (n >= cap) return NULL;
+    size_t count = (size_t)n + 1;
+    Expr** pts = malloc(sizeof(Expr*) * count);
+    if (!pts) return NULL;
+    for (size_t k = 0; k < count; k++) {
+        Expr* t[2] = { expr_new_integer((int64_t)k), expr_copy((Expr*)di) };
+        Expr* p[2] = { expr_copy((Expr*)imin), expr_new_function(expr_new_symbol(SYM_Times), t, 2) };
+        pts[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), p, 2));
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), pts, count);
+    free(pts);
+    return out;
+}
+
 bool iter_expr_mentions_symbol(const Expr* e, const char* name) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;

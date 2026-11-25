@@ -59,7 +59,7 @@ Out[6]= "int64"
 In[7]:= Head[ToNDArray[{1, 2, 3}][[2]]]
 Out[7]= Integer
 
-In[8]:= NDArrayQ[ToNDArray[{1, 2.5}]]         (* mixed exact/inexact declines: *)
+In[8]:= NDArrayQ[{1, 2.5}]                    (* automatic packing declines a mix: *)
 Out[8]= False                                 (* one buffer cannot hold both heads *)
 
 In[9]:= ToNDArray[{9007199254740993}][[1]]    (* exact beyond 2^53 *)
@@ -182,6 +182,9 @@ materialising to the List path at ~22× the cost.)
 threshold that automatic packing applies. `ToNDArray[list, DataType -> "..."]`
 forces the element type.
 
+A value a single-precision `DataType` cannot hold (past `FLT_MAX`) leaves the
+list unpacked rather than storing `inf`.
+
 Returns `list` unchanged — not an error — when it cannot be packed:
 
 | declines when | because |
@@ -250,6 +253,10 @@ the same builtin registered twice, not a rule that rewrites to the other, so it
 costs no extra evaluation pass and cannot be shadowed. Every form and every
 option is identical.
 
+`ToPackedArray[list, type]` packs as `Integer`, `Real` or `Complex`
+(`ToPackedArray[{1, 2, 3}, Real]` is the packed `{1., 2., 3.}`); a list the type
+cannot hold exactly comes back unchanged.
+
 ```mathematica
 In[10]:= ToPackedArray[{1., 2., 3.}] === ToNDArray[{1., 2., 3.}]
 Out[10]= True
@@ -293,6 +300,9 @@ Out[3]= {1.0, 2.0, 3.0}
 `PackedArrayQ[expr]` gives `True` when `expr` is a packed array — a `List` stored
 as a dense machine-precision buffer — and `False` otherwise. It is the reference's
 name (`Developer`​`PackedArrayQ`) for that test.
+
+`PackedArrayQ[expr, type]` and `PackedArrayQ[expr, type, rank]` also require
+the element type (`Integer`, `Real`, `Complex`) and the rank.
 
 It is deliberately **narrower** than `NDArrayQ`. `NDArrayQ` is `True` for either
 surface of an `EXPR_NDARRAY` — a packed `List` *or* a visible `NDArray[...]`

@@ -7,6 +7,10 @@ Extracts subparts of an expression.
 - `expr[[{i, j, ...}]]`: Extracts a list of specific parts.
 - `expr[[All]]`: Represents all elements at a given level.
 
+A `Span` that runs off either end (`{a, b, c, d, e}[[2 ;; 10]]`) is
+`Part::take` and the Part stays unevaluated; the empty span just inside the
+list (`{a, b, c}[[3 ;; 2]]`) is `{}`. Lists and associations share the rule.
+
 **Features**: 
 - Supports negative indices to count from the end (`-1` is the last element).
 - `expr[[0]]` returns the `Head` of the expression. This is permitted even for atomic expressions.
@@ -176,6 +180,8 @@ Reverses the order of elements.
   or a `Complex`, so `Reverse[{5/4, 7/2}, 2]` is `{5/4, 7/2}` (non-atomic
   expressions of any head are reversed: `Reverse[{f[1, 2]}, 2]` is `{f[2, 1]}`).
 
+An atom (`Reverse[x]`, `Reverse[5]`) is `Reverse::normal`, unevaluated.
+
 ## RotateLeft, RotateRight
 Cycles elements.
 - `RotateLeft[expr, n]`: Cycles `n` positions to the left.
@@ -197,6 +203,9 @@ padding on the right. The head of `list` need not be `List` (it is preserved).
 - `PadLeft[list]` / `PadLeft[list, Automatic, x]`: pads a ragged array to a
   full rectangular array (with `0`, resp. `x`).
 - A negative length `n` pads on the opposite side.
+
+A margin that is not a machine integer or a List of them (`m`, `2.`) is
+`PadRight::ilsmp` / `PadLeft::ilsmp`, unevaluated -- never read as 0.
 
 ```
 In[1]:= PadLeft[{a, b, c}, 10, {x, y, z}]
@@ -272,6 +281,9 @@ Out[3]= {1, -2 I, 3 - 4 I}
 In[1]:= Reverse[{a, b, c}]
 Out[1]= {c, b, a}
 
+Positions off the end are `Take::take` / `Drop::drop`, naming them as
+written (`Take[{a, b, c}, {-4}]`: "positions -4 through -4").
+
 In[2]:= RotateLeft[{a, b, c}, 1]
 Out[2]= {b, c, a}
 
@@ -321,6 +333,11 @@ unevaluated. Attribute: `Protected`.
 - Exactly two arguments: `FlattenAt[{a, {b}}]` is `FlattenAt::argr` ("FlattenAt
   called with 1 argument; 2 arguments are expected.") and stays unevaluated; it
   used to return its argument.
+
+The splice is done by `FlattenAt` itself, so it also happens inside
+`HoldComplete` (`FlattenAt[HoldComplete[{a, b}], 1]` is `HoldComplete[a, b]`);
+position `{}` names the whole expression, which has nothing to splice into
+(`FlattenAt::psl`, unevaluated).
 
 Because the head at the position is removed, `FlattenAt[{1,{{2},{3}},4}, {2}]`
 gives `{1,{2},{3},4}`; use `MapAt[Flatten, …]` to flatten *within* a part
@@ -376,8 +393,8 @@ Out[6]= {{x, 1, 2}, {3, 4}}
 ## Catenate
 `Catenate[{e1, e2, ...}]` takes a single list and flattens one level: the `ei`
 must share a head, and their elements are concatenated under it. A list of
-associations merges into one association (later keys win) — so `Catenate`
-composes with `GroupBy` / `Merge` pipelines that yield a list of associations.
+associations gives the List of all their values, in order (it does not merge
+the associations; `Merge` / `Join` do that).
 
 **Features**:
 - `Protected`.
@@ -389,7 +406,7 @@ In[1]:= Catenate[{{1, 2}, {3, 4}, {5}}]
 Out[1]= {1, 2, 3, 4, 5}
 
 In[2]:= Catenate[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
-Out[2]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+Out[2]= {1, 2, 3, 4}
 
 In[3]:= Catenate[Values[GroupBy[Range[6], EvenQ]]]
 Out[3]= {1, 3, 5, 2, 4, 6}
@@ -409,6 +426,9 @@ Partitions a list into sublists.
 - `Partition[list, UpTo[n]]`: Allows shorter final sublist.
 - `Partition[list, n, d, {kL, kR}]`: Overhang form: the first element of `list` sits at position `kL` of the first sublist and the last element at or after position `kR` of the last; padding is cyclic from `list` itself. A bare `k` means `{k, k}`; negative `k` counts from the end of a sublist.
 - `Partition[list, n, d, {kL, kR}, x]`: Pads with `x`; `{x1, x2, ...}` pads cyclically with the `xi` (aligned on the absolute index, so `Partition[{a, b, c, d, e, f, g}, 3, 3, 1, {x, y, z}]` ends `{g, y, z}`); `{}` means no padding, so the edge sublists are shorter.
+
+A block size or offset that is not a positive machine integer (`0`, `x`,
+`10^30`, `UpTo[0]`) is `Partition::ilsmp` and the call stays unevaluated.
 
 **Features**:
 - `Protected`.
@@ -444,6 +464,10 @@ Out[7]= {{a, b, c}, {d, e}}
 Splits a list into sublists of identical adjacent elements.
 - `Split[list]`
 - `Split[list, test]`
+
+A `Throw` from the test ends `Split` at once; the test is not called again
+(this holds for every builtin that calls a user function per element: the first
+parked unwind stops all further callbacks in that call).
 
 **Features**:
 - `Protected`.
@@ -616,6 +640,10 @@ Gives a sorted list of all distinct elements from one or more expressions.
 - `Union[list1, list2, ...]`
 - `Union[..., SameTest -> test]`
 
+With `SameTest -> f`, each element is compared with every element already
+kept, not only the last one: `Union[Range[6], SameTest -> (Mod[#1 - #2, 3] == 0 &)]`
+is `{1, 2, 3}`.
+
 **Features**:
 - `Flat`, `OneIdentity`, `Protected`.
 - Without `SameTest`, duplicates are removed by hashing first and only the
@@ -650,6 +678,9 @@ Gives a sorted list of the elements common to all of the inputs.
 - `Intersection[list]`
 - `Intersection[list1, list2, ...]`
 - `Intersection[..., SameTest -> test]`
+
+`SameTest -> Automatic` is the default comparison, for `Intersection`,
+`Union` and `Complement` alike.
 
 **Features**:
 - `Flat`, `OneIdentity`, `Protected`.
@@ -709,6 +740,11 @@ Removes duplicate elements while preserving order.
 - `DeleteDuplicates[list]`
 - `DeleteDuplicates[list, test]`
 
+`DeleteDuplicates[assoc, test]` keeps the first entry of each class of
+values under `test` (`DeleteDuplicates[<|a -> 1, b -> 1, c -> 2|>, Equal]` is
+`<|a -> 1, c -> 2|>`). `DeleteDuplicatesBy` hashes the computed keys, so it is
+linear in the number of distinct keys.
+
 **Features**:
 - `Protected`.
 - Preserves the order of first occurrences.
@@ -748,6 +784,8 @@ common, and `False` otherwise.
 Counts occurrences of elements.
 - `Tally[list]`
 - `Tally[list, test]`
+
+`Tally` of an atom is `Tally::list`, unevaluated.
 
 **Features**:
 - `Protected`.
@@ -875,6 +913,11 @@ Out[4]= Infinity
 data, handy for plot bounds. Over an association it uses the values. Delegates
 to `Min` / `Max`, so it inherits their numeric handling.
 
+`MinMax[list, d]` pads the range: `d` on both sides, `{dmin, dmax}`, or
+`Scaled[s]` (`s` times the range on each side). `Min` and `Max` read an
+`Interval` argument's extreme endpoint among other arguments
+(`Max[Interval[{1, 3}], 5]` is `5`).
+
 Packed-array aware, and `int64`-exact, since 2026-07-31: it accepts a buffer and
 passes it to `Min` and `Max` intact, each of which takes its own buffer path
 (`ndred_min` / `ndred_max`). Before that the head was absent from `pack.c`'s
@@ -938,6 +981,9 @@ Updates a variable by appending or prepending an element.
 - `AppendTo[symbol, elem]`
 - `PrependTo[symbol, elem]`
 
+An indexed target with no value (`PrependTo[h[1], z]`) is `::rvalue`, as an
+unset symbol is; no definition is created.
+
 **Features**:
 - `HoldFirst`. The target may be a symbol or any assignable form with a value,
   such as `m[[1]]`, `f[1]`, `Options[f]`, or a `Module` local.
@@ -960,6 +1006,11 @@ Out[1]= {{2, 3, 9}, {3, 4}}
 Inserts or removes elements at specified positions.
 - `Insert[expr, elem, pos]`
 - `Delete[expr, pos]`
+
+A position that is no index (`Insert[{a, b}, x, y]`, `1.5`, `10^30`, a mixed
+`{{1}, 2}`) is `Insert::psl` and the call stays unevaluated.
+`Delete[assoc, Key[k]]` and `Delete[assoc, "k"]` delete the entry with that
+key, as `Delete[assoc, {Key[k]}]` does.
 
 **Features**:
 - `pos` can be a single index, a list (path), or a list of paths.
@@ -1063,6 +1114,10 @@ Out[3]= {Plus, Power, x, 2, x^2, Power, y, 3, y^3}
 Gives an ordered list of all independent variables in a polynomial.
 - `Variables[poly]`
 
+Symbols with the `Constant` attribute (`EulerGamma`, `Catalan`, `Degree`,
+`GoldenRatio`, `Khinchin`, `Glaisher`, as `Pi` and `E`) are numbers, not
+variables.
+
 **Features**:
 - `Protected`.
 - Looks for variables only inside `Plus`, `Times`, and `Power` with rational exponents.
@@ -1090,6 +1145,11 @@ Out[3]= {}
 Expands out products and positive integer powers in an expression.
 - `Expand[expr]`
 - `Expand[expr, patt]`
+
+Options: `Trig -> True` expands trigonometric functions of sums and multiples
+first (`Expand[Cos[x + y], Trig -> True]` is `Cos[x] Cos[y] - Sin[x] Sin[y]`);
+`Modulus -> m` reduces the expanded coefficients modulo `m`
+(`Expand[(1 + x)^3, Modulus -> 2]` is `1 + x + x^2 + x^3`).
 
 **Features**:
 - `Protected`.
@@ -1207,6 +1267,10 @@ Out[3]= ((a+b)(a-b))/(c^2 - d^2)
 Expands out all products and integer powers in *any* part of an expression.
 - `ExpandAll[expr]`
 - `ExpandAll[expr, patt]`
+
+A product of reciprocals is combined into one expanded denominator
+(`ExpandAll[1/((x + 1)(x + 2))]` is `1/(2 + 3 x + x^2)`), and the operands of
+`And` / `Or` are expanded too.
 
 **Features**:
 - `Protected`.
@@ -1342,6 +1406,9 @@ Gives the coefficient of a specific form in a polynomial.
 - `Coefficient[expr, form]`
 - `Coefficient[expr, form, n]`
 
+A power series reads as its terms: `Coefficient[Series[E^x, {x, 0, 5}], x, 3]`
+is `1/6`.
+
 **Features**:
 - `Protected`, `Listable`.
 - `Coefficient[expr, form, 0]` picks out terms that do NOT contain `form`.
@@ -1373,6 +1440,10 @@ Out[1]= x
 Gives a list of coefficients of powers of variables in a polynomial.
 - `CoefficientList[poly, var]`
 - `CoefficientList[poly, {var1, var2, ...}]`
+
+`CoefficientList[{p1, p2, ...}, vars]` gives each coefficient array, padded
+with 0 to one common shape (`CoefficientList[{1 + x, 1 + x^2}, x]` is
+`{{1, 1, 0}, {1, 0, 1}}`).
 
 **Features**:
 - `Protected`.
@@ -1439,6 +1510,9 @@ Gives the exponent vectors and coefficients of the monomials of a polynomial as 
 - `CoefficientRules[poly, {var1, var2, ...}]`
 - `CoefficientRules[poly, vars, order]`
 
+`CoefficientRules[{p1, p2, ...}, vars]` (and `MonomialList`) gives the rules of
+each polynomial; with no variables, those of the whole list.
+
 **Features**:
 - `Protected`.
 - Returns `{expvec -> coeff, ...}`, one rule per monomial; the exponent vector lists
@@ -1471,6 +1545,9 @@ Out[3]= {{5} -> 1, {4} -> 1, {1} -> 1, {0} -> 1}
 Gives the coefficient arrays of a polynomial or polynomial system, grouped by total degree.
 - `CoefficientArrays[polys, vars]`
 - `CoefficientArrays[poly, vars]` (a non-List first argument is one polynomial)
+
+An equation that is not a polynomial in the variables (`Sin[x] + x` in `x`) is
+`CoefficientArrays::poly`, unevaluated.
 
 **Features**:
 - `Protected`. `vars` may be `All` or omitted (then `Variables` of the whole input).
@@ -1545,6 +1622,10 @@ Collects together terms involving the same powers of objects matching a variable
 - `Collect[expr, {x1, x2, ...}]`
 - `Collect[expr, var, h]`
 
+Every power of the key's base in a term counts, symbolic exponents included:
+`Collect[a x^n + b x^n + c, x]` is `c + (a + b) x^n` and
+`Collect[a x^(n+1) + b x^(n+1), x]` is `(a + b) x^(1 + n)`.
+
 **Features**:
 - `Protected`.
 - Automatically threads over lists, equations, inequalities, and logic functions.
@@ -1576,6 +1657,10 @@ Pulls out any multiple factors in a polynomial.
 - `FactorSquareFree[poly, Extension -> None]` -- factor over Q (the default).
 - `FactorSquareFree[poly, Extension -> alpha]` -- decompose over Q(alpha) (`alpha` = `Sqrt[c]`, `c^(1/n)`, `I`, or a list of generators).
 - `FactorSquareFree[poly, Modulus -> p]` -- decompose over GF(p).
+
+Powers with a symbolic or fractional exponent are read over a common
+generator, as `Factor` does: `FactorSquareFree[E^(2 x) + 2 E^x + 1]` is
+`(1 + E^x)^2`.
 
 **Features**:
 - `Listable`, `Protected`.  `Options[FactorSquareFree]` is `{Extension -> None, Modulus -> 0, Trig -> False}`; any other option is `FactorSquareFree::optx` (in particular `GaussianIntegers`).
@@ -1634,6 +1719,10 @@ Factors a polynomial over the rationals, or over an algebraic extension or a fin
 - `Factor[poly, GaussianIntegers -> True]` -- over the Gaussian rationals Q(I).
 - `Factor[poly, Modulus -> p]` -- over GF(p), p prime.
 - `Factor[poly, Trig -> True]` -- accepted; no trigonometric rewriting is done.
+
+A polynomial with Gaussian-rational coefficients in one or two variables is
+factored over Q(i) by default (in two variables, when it splits there), as with `GaussianIntegers -> True`:
+`Factor[2 + 2 y - I x - I x y + x^2 + x^2 y]` is `(I + x) (-2 I + x) (1 + y)`.
 
 **Features**:
 - `Listable`, `Protected`.  `Options[Factor]` is `{Extension -> None, GaussianIntegers -> False, Modulus -> 0, Trig -> False}`; `SetOptions` applies.
@@ -1792,6 +1881,9 @@ not depend on a given set of variables.
   recursively refined by extracting content with respect to the smaller
   subsets `{x_1, ..., x_{n-1}}`, ..., `{x_1}`.
 
+Fractional powers are read as indeterminates of their own:
+`FactorTerms[2 Sqrt[x] + 4]` is `2 (2 + Sqrt[x])` (likewise `FactorTermsList`).
+
 **Features**:
 - `Protected`.  `FactorTerms[poly, Modulus -> p]` reduces the coefficients mod p first (`FactorTerms[3 x + 6, Modulus -> 3]` is `0`).
 - The numerical factor is signed so the rest has a positive leading term (lexicographic, variables in canonical order): `FactorTerms[-6 x^2 - 12 x y]` is `-6 (x^2 + 2 x y)` (v0.6061).
@@ -1920,6 +2012,10 @@ Gives the extended GCD of polynomials.
 - `PolynomialExtendedGCD[poly1, poly2, x]`
 - `PolynomialExtendedGCD[poly1, poly2, x, Modulus -> p]`
 
+A List or other non-polynomial argument leaves the call unevaluated; under
+`Modulus -> m` only a prime `m` is answered (a composite one has no Euclidean
+algorithm).
+
 **Features**:
 - `Protected`.
 - Returns `{d, {a, b}}` such that $a \cdot poly1 + b \cdot poly2 = d$.
@@ -1967,6 +2063,11 @@ Out[3]= -2 + x^2
 Gives the quotient of $p$ and $q$, treated as polynomials in $x$, with any remainder dropped.
 - `PolynomialQuotient[p, q, x]`
 - `PolynomialQuotient[p, q, x, Extension -> alpha]` -- divide over $\mathbb{Q}(\alpha)$.
+
+A dividend or divisor that is not a polynomial in the variable (`x^2.5`,
+`1/x + x^2`, `Sqrt[x]`, a List) is `PolynomialQuotient::poly`, unevaluated.
+Under `Modulus -> m` a divisor whose leading coefficient is not a unit modulo
+`m` (`2 x + 1` modulo 4) leaves the call unevaluated.
 
 **Features**:
 - `Protected`.
@@ -2024,6 +2125,11 @@ Tests whether an expression is a polynomial in one or more variables.
 - `PolynomialQ[expr, var]`: Yields `True` if `expr` is a polynomial in `var`.
 - `PolynomialQ[expr, {var1, var2, ...}]`: Tests whether `expr` is a polynomial in the set of variables.
 
+A power with a positive BigInt exponent (`x^(10^20)`) is a monomial, and a
+compound variable occurs only as a whole subexpression: `x[2]` is free of
+`x[1]`, `Cos[x]` of `Sin[x]` (`PolynomialQ[Cos[x] + Sin[x]^2, Sin[x]]` is
+`True`).
+
 **Features**:
 - `Protected`.
 - Variables can be symbols or compound expressions.
@@ -2079,6 +2185,10 @@ Out[4]= 1 + 7 x + x^3 + 4 y^2
 Computes the resultant of two polynomials.
 - `Resultant[poly1, poly2, var]`
 
+`Resultant[0, q, x]` is `0` (also for `q = 0`). Options: `Modulus -> m`
+reduces the resultant modulo `m`; `Options[Resultant]` is
+`{Method -> Automatic, Modulus -> 0}`.
+
 **Features**:
 - `Protected`, `Listable`.
 - Computes the resultant of polynomials `poly1` and `poly2` with respect to the variable `var`.
@@ -2127,6 +2237,9 @@ Puts a polynomial or rational function into Horner form.
 - `HornerForm[poly]`
 - `HornerForm[poly, vars]`
 - `HornerForm[poly1/poly2, vars1, vars2]`
+
+`HornerForm::poly` goes through the message funnel (`Quiet` silences it,
+`Check` sees it).
 
 ## GroebnerBasis
 Computes a Gröbner basis for the ideal generated by a list of polynomials.
@@ -2418,6 +2531,9 @@ Multivariate polynomial division with cofactors.
 - `PolynomialReduce[poly, {p1, p2, ...}]` — variables from `Variables`.
 - `PolynomialReduce[poly, {p1, ...}, x]` — single-variable shorthand.
 
+Inexact input gives an inexact answer: `PolynomialReduce[x^2 + 1.5, {x - 0.5}, x]`
+is `{{0.5 + x}, 1.75}`.
+
 Returns `{{a1, a2, ...}, b}` such that `a1 p1 + a2 p2 + ... + b == poly`
 exactly, with `b` *minimal*: no term of `b` is divisible by any leading term
 of the `pi` under the chosen monomial order.  When the `pi` are a Gröbner
@@ -2494,6 +2610,10 @@ Out[7]= {{x}, 6 x}
 Eliminates variables between a set of simultaneous equations.
 - `Eliminate[eqns, vars]`
 - `Eliminate[eqns, var]` — single-symbol shorthand for `Eliminate[eqns, {var}]`.
+
+For a system the polynomial elimination cannot take (a transcendental or
+inexact equation), an elimination variable fixed by an equation `v == c` is
+substituted first: `Eliminate[{x == E^y, y == 0}, y]` is `x == 1`.
 
 `eqns` is a list `{eq1, eq2, ...}` or a conjunction `eq1 && eq2 && ...` of
 `lhs == rhs` equations (a single `Equal[lhs, rhs]` is also accepted).

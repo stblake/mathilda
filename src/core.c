@@ -3108,6 +3108,18 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
 
     Expr* current_val = evaluate(sym);
     if (!current_val) return NULL;
+    /* An indexed target h[1] with no value evaluates to itself: like an
+     * unset symbol it is ::rvalue, not an expression to grow and assign as a
+     * new definition (audit PrependTo#2). */
+    if (sym->type == EXPR_FUNCTION && !head_is(sym, SYM_Part) && expr_eq(current_val, sym)) {
+        char* s = expr_to_string(sym);
+        mth_message(name, "rvalue",
+                    "%s is not a variable with a value, so its value cannot be changed.",
+                    s ? s : "");
+        free(s);
+        expr_free(current_val);
+        return NULL;
+    }
     /* A LinkedList grows in place in O(1); the variable keeps pointing at it. */
     if (ds_has_append_to(current_val->type)) return ds_append_to(name, current_val, elem, prepend);
     /* A SparseArray appends through Append's native sparse kernel (a dense

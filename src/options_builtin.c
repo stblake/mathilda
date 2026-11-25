@@ -780,6 +780,10 @@ void options_register_defaults(void) {
         ob_add(&b, r_int("Modulus", 0));
         ob_commit(&b, poly_fns[i]);
     }
+    ob_init(&b);
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_add(&b, r_int("Modulus", 0));
+    ob_commit(&b, "Resultant");
     const char* rat_fns[] = { "Together", "Cancel", "Apart" };
     for (size_t i = 0; i < sizeof(rat_fns) / sizeof(rat_fns[0]); i++) {
         ob_init(&b);

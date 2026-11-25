@@ -2,6 +2,8 @@
 #include "flatten_at.h"
 #include "part.h"
 #include "ndarray.h"
+#include "message.h"
+#include "sym_intern.h"   /* intern_symbol: the splice marker */
 
 /*
  * FlattenAt[list, n]                     splice element n into its parent.
@@ -19,14 +21,79 @@
  * is exactly theirs. A position that does not exist makes the walker return NULL
  * and FlattenAt stay unevaluated, matching Part[{a, b, c}, 5].
  *
- * The splice itself is deferred to the evaluator: the addressed subexpression is
- * replaced by Sequence @@ leaf, and flatten_sequences (src/eval.c) splices that
- * Sequence into the parent on the next evaluation pass -- exactly as MapAt
- * returns an unreduced f[leaf]. Because each targeted slot holds a single
- * Sequence node during the walk, arg_count never changes mid-walk, so several
- * positions resolve against the original expression with no index-shift
- * bookkeeping (no descending sort, unlike Insert / Delete).
+ * The addressed subexpression is replaced by a private splice marker holding
+ * its arguments, and a second pass splices every marker into its parent.
+ * Because each targeted slot holds a single marker node during the walk,
+ * arg_count never changes mid-walk, so several positions resolve against the
+ * original expression with no index-shift bookkeeping (no descending sort,
+ * unlike Insert / Delete).  The splice is done here, not left to the
+ * evaluator's Sequence flattening: inside HoldComplete that flattening never
+ * happens (FlattenAt[HoldComplete[{a, b}], 1] is HoldComplete[a, b], not
+ * HoldComplete[Sequence[a, b]]; audit FlattenAt#1), and a marker at the root
+ * -- position {} -- has no parent to splice into at all (FlattenAt#2).
  */
+
+/* The private head of a pending splice (see the note above). */
+static const char* flatten_at_marker(void) {
+    static const char* m = NULL;
+    if (!m) m = intern_symbol("FlattenAt`Private`splice");
+    return m;
+}
+
+/* Splice every marker node of `e` (owned) into its parent's arguments.  A
+ * subtree with no marker is handed back as it is, so only the paths the walk
+ * rebuilt are rebuilt again. */
+static Expr* flatten_at_splice(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    const char* mk = flatten_at_marker();
+    size_t n = e->data.function.arg_count;
+    Expr** kids = malloc(sizeof(Expr*) * (n ? n : 1));
+    bool changed = false;
+    size_t total = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        kids[i] = flatten_at_splice(expr_copy(a));
+        if (kids[i] != a) changed = true;
+        if (head_is(kids[i], mk)) { changed = true; total += kids[i]->data.function.arg_count; }
+        else total++;
+    }
+    if (!changed) {
+        for (size_t i = 0; i < n; i++) expr_free(kids[i]);
+        free(kids);
+        return e;
+    }
+    Expr** out = malloc(sizeof(Expr*) * (total ? total : 1));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (head_is(kids[i], mk)) {
+            for (size_t j = 0; j < kids[i]->data.function.arg_count; j++)
+                out[k++] = expr_copy(kids[i]->data.function.args[j]);
+            expr_free(kids[i]);
+        } else {
+            out[k++] = kids[i];
+        }
+    }
+    free(kids);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), out, total);
+    free(out);
+    expr_free(e);
+    return r;
+}
+
+/* The walk's result with its markers spliced; NULL (after a message) when the
+ * root itself was addressed. */
+static Expr* flatten_at_finish(Expr* walked, Expr* res) {
+    if (!walked) return NULL;
+    if (head_is(walked, flatten_at_marker())) {
+        char* cs = expr_to_string(res);
+        mth_message("FlattenAt", "psl", "Position {} in %s names the whole expression, "
+                    "which has no parent to be flattened into.", cs ? cs : "");
+        free(cs);
+        expr_free(walked);
+        return NULL;
+    }
+    return flatten_at_splice(walked);
+}
 
 /* Mirror of part.c's is_atomic: Rational and Complex are stored as EXPR_FUNCTION
  * nodes but are atomic leaves with no arguments to splice, so FlattenAt[{1/2, x},
@@ -42,8 +109,8 @@ static bool flatten_at_atomic(const Expr* e) {
 }
 
 /* Leaf action for FlattenAt: replace the addressed subexpression g[a1, ..., ak]
- * with Sequence[a1, ..., ak], dropping its head; the evaluator splices the
- * Sequence into the parent. `leaf` is borrowed (never freed here); the returned
+ * with the splice marker [a1, ..., ak], dropping its head; flatten_at_splice
+ * splices it into the parent. `leaf` is borrowed (never freed here); the returned
  * node is newly owned, per the PartLeafFn contract. */
 static Expr* flatten_at_leaf(void* ctx, Expr* leaf) {
     (void)ctx;
@@ -53,7 +120,7 @@ static Expr* flatten_at_leaf(void* ctx, Expr* leaf) {
     Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++)
         args[i] = expr_copy(leaf->data.function.args[i]);
-    Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), args, n);
+    Expr* seq = expr_new_function(expr_new_symbol(flatten_at_marker()), args, n);
     free(args);   /* elements + head adopted; the array itself is ours to free */
     return seq;
 }
@@ -79,8 +146,8 @@ Expr* builtin_flatten_at(Expr* res) {
         Expr* nested = ndarray_to_nested_list(expr);
         Expr* out = expr_apply_at_positions(nested, pos, flatten_at_leaf, NULL);
         expr_free(nested);
-        return out;
+        return flatten_at_finish(out, res);
     }
 
-    return expr_apply_at_positions(expr, pos, flatten_at_leaf, NULL);
+    return flatten_at_finish(expr_apply_at_positions(expr, pos, flatten_at_leaf, NULL), res);
 }

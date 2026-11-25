@@ -1,6 +1,7 @@
 /* Automatic packed arrays — the packing decision, the producer API, and the
  * ToNDArray/FromNDArray builtins. See pack.h for the model and the contract. */
 
+#include <math.h>   /* isinf: the single-precision range check */
 #include "pack.h"
 #include "ndarray.h"
 #include "symtab.h"
@@ -267,6 +268,17 @@ static Expr* pack_build(const Expr* list, size_t min_elems,
     if (!buf) return NULL;
     size_t k = 0;
     pack_flatten(list, buf, dt, &k);
+    /* A single-precision buffer cannot hold a value past FLT_MAX: narrowing
+     * 1.*^300 would store inf, a different value.  Packing only ever changes
+     * representation, so such a list stays unpacked (audit ToNDArray#1).  A
+     * packable list holds finite numbers only, so any inf here is that
+     * overflow. */
+    if (dt == NDT_FLOAT32 || dt == NDT_COMPLEX32) {
+        const float* f = (const float*)buf;
+        size_t nf = n * (dt == NDT_COMPLEX32 ? 2 : 1);
+        for (size_t i = 0; i < nf; i++)
+            if (isinf(f[i])) { free(buf); return NULL; }
+    }
 
     Expr* out = expr_new_ndarray_raw(rank, dims, buf, dt);
     if (!out) { free(buf); return NULL; }
@@ -555,6 +567,27 @@ static Expr* builtin_tondarray(Expr* res) {
      * lossless automatic path). An explicit int64 DataType still refuses to
      * round Reals -- pack_build enforces that. */
     return pack_force_coerce(list, have, dt);
+}
+
+/* ToPackedArray[list] is ToNDArray[list]; ToPackedArray[list, type] packs as
+ * the element type Integer, Real or Complex asks (ToPackedArray[{1, 2, 3},
+ * Real] is the packed {1., 2., 3.}; audit ToPackedArray#1).  A list the type
+ * cannot hold exactly (reals as Integer) comes back unchanged and unpacked. */
+static Expr* builtin_topackedarray(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 2 &&
+        res->data.function.args[1]->type == EXPR_SYMBOL) {
+        const char* t = res->data.function.args[1]->data.symbol.name;
+        NDType dt;
+        if (t == SYM_Integer) dt = NDT_INT64;
+        else if (t == SYM_Real) dt = NDT_FLOAT64;
+        else if (t == SYM_Complex) dt = NDT_COMPLEX64;
+        else return NULL;
+        Expr* arg = res->data.function.args[0];
+        if (is_packed_list(arg) && arg->data.ndarray.dtype == dt) return expr_copy(arg);
+        Expr* list = is_ndarray(arg) ? ndarray_to_nested_list(arg) : expr_copy(arg);
+        return pack_force_coerce(list, true, dt);
+    }
+    return builtin_tondarray(res);
 }
 
 static Expr* builtin_fromndarray(Expr* res) {
@@ -1476,7 +1509,7 @@ void pack_init(void) {
      * ToNDArray: an alias installed as a DownValue would show up in traces, cost
      * an evaluation pass, and could be shadowed by a user definition on the
      * target. These are genuinely the same function under two names. */
-    symtab_add_builtin("ToPackedArray", builtin_tondarray);
+    symtab_add_builtin("ToPackedArray", builtin_topackedarray);
     set_attributes("ToPackedArray", ATTR_PROTECTED);
     symtab_set_docstring("ToPackedArray",
         "ToPackedArray[list] is ToNDArray[list]: it returns list stored as a "

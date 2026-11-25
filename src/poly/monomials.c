@@ -46,6 +46,7 @@
 #include "pack.h"      /* pack_unpack: materialise a visible NDArray argument */
 #include "print.h"     /* expr_to_string: the ::poly message argument */
 #include "eval.h"      /* eval_and_free: drive the equation rewrite */
+#include "linkedlist.h"   /* ll_seq_*: a LinkedList of polynomials threads */
 #include "checked_int.h" /* ci_add_i64 / ci_mul_i64: exponent sums and order keys */
 
 #include <stdlib.h>
@@ -405,7 +406,13 @@ static Mono* build_monomials(Expr* poly, Expr** vars, int k,
      * Expand + per-term evaluator work + Orderless re-sort.  Try the field path
      * (algebraic coefficients) first, then the plain-Q path; each declines
      * (NULL) unless `poly` is a polynomial in exactly `vars`. */
-    if (!modulus && flint_bridge_available()) {
+    /* A repeated variable ({a, b, a, c}) is outside the native read-off's
+     * model of distinct generators: it read c in {a, b, a, c} as a. */
+    bool distinct = true;
+    for (int i = 0; i < k && distinct; i++)
+        for (int j = i + 1; j < k; j++)
+            if (expr_eq(vars[i], vars[j])) { distinct = false; break; }
+    if (!modulus && distinct && flint_bridge_available()) {
         Mono* fm = build_monomials_field(poly, vars, k, W, rows, n_out);
         if (fm) return fm;
         Mono* qm = build_monomials_polyQ(poly, vars, k, W, rows, n_out);
@@ -531,7 +538,75 @@ static Mono* parse_and_build(Expr* res, Expr*** vars_out, Expr** owned_out,
 /*  CoefficientRules                                                   */
 /* ------------------------------------------------------------------ */
 
+/* CoefficientRules[{p1, p2, ...}, vars, ...] (and MonomialList): the rules of
+ * each polynomial, in the variables given -- or, when they are omitted (or
+ * All), in the variables of the whole list, so every pi is read over the same
+ * exponent vectors (audit CoefficientRules#2: a list was declined).  NULL
+ * when the first argument is not a List. */
+static Expr* monomials_thread_list(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    Expr* polys = res->data.function.args[0];
+    if (polys->type == EXPR_LINKEDLIST) {
+        /* A LinkedList of polynomials threads the same way, element by element
+         * from its slots, and answers a LinkedList (the closure rule). */
+        int64_t n = ll_seq_length(polys);
+        Expr** el = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+        for (int64_t i = 0; i < n; i++) el[i] = ll_seq_element(polys, i);
+        Expr* lst = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)n);
+        free(el);
+        size_t argc0 = res->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * argc0);
+        a[0] = lst;
+        for (size_t j = 1; j < argc0; j++) a[j] = expr_copy(res->data.function.args[j]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc0);
+        free(a);
+        Expr* t = monomials_thread_list(call);
+        expr_free(call);
+        if (!t) return NULL;
+        LinkedList* out = ll_new();
+        for (size_t i = 0; i < t->data.function.arg_count; i++)
+            ll_push_back(out, expr_copy(t->data.function.args[i]));
+        expr_free(t);
+        return expr_new_linkedlist(out);
+    }
+    if (!is_list_head(polys)) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr* vars = NULL;
+    bool have_vars = argc >= 2 && !is_rule_head(res->data.function.args[1]) &&
+                     !(res->data.function.args[1]->type == EXPR_SYMBOL &&
+                       res->data.function.args[1]->data.symbol.name == SYM_All);
+    if (!have_vars) {
+        vars = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                                               (Expr*[]){ expr_copy(polys) }, 1));
+        /* a list of numbers has no variables to read it in: declined */
+        if (!vars || !is_list_head(vars) || vars->data.function.arg_count == 0) {
+            if (vars) expr_free(vars);
+            return NULL;
+        }
+    }
+    size_t m = polys->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) {
+        /* (pi, vars, rest...): vars inserted (or replacing All) when not given */
+        Expr** a = malloc(sizeof(Expr*) * (argc + 1));
+        a[0] = expr_copy(polys->data.function.args[i]);
+        size_t k = 1;
+        if (!have_vars) a[k++] = expr_copy(vars);
+        for (size_t j = 1; j < argc; j++) {
+            if (!have_vars && j == 1 && !is_rule_head(res->data.function.args[1])) continue; /* All */
+            a[k++] = expr_copy(res->data.function.args[j]);
+        }
+        out[i] = eval_and_free(expr_new_function(expr_copy(res->data.function.head), a, k));
+        free(a);
+    }
+    if (vars) expr_free(vars);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), out, m);
+    free(out);
+    return r;
+}
+
 Expr* builtin_coefficientrules(Expr* res) {
+    { Expr* t = monomials_thread_list(res); if (t) return t; }
     Expr** vars; Expr* owned; int k; size_t n;
     Mono* monos = parse_and_build(res, &vars, &owned, &k, &n);
     if (!monos) return NULL;
@@ -560,6 +635,7 @@ Expr* builtin_coefficientrules(Expr* res) {
 /* ------------------------------------------------------------------ */
 
 Expr* builtin_monomiallist(Expr* res) {
+    { Expr* t = monomials_thread_list(res); if (t) return t; }
     Expr** vars; Expr* owned; int k; size_t n;
     Mono* monos = parse_and_build(res, &vars, &owned, &k, &n);
     if (!monos) return NULL;
@@ -770,6 +846,22 @@ Expr* builtin_coefficientarrays(Expr* res) {
     int k;
     Expr* owned = NULL;
     Expr** vars = resolve_vars(polys, vars_arg, &k, &owned);
+
+    /* Every equation must be a polynomial in the variables: Sin[x] + x is not
+     * one in x, and reading Sin[x] as its constant term was a wrong answer
+     * (audit CoefficientArrays#1). */
+    for (size_t i = 0; i < m && k > 0; i++) {
+        if (!is_polynomial(eqs[i], vars, (size_t)k)) {
+            char* qs = expr_to_string(eqs[i]);
+            mth_message("CoefficientArrays", "poly", "%s is not a polynomial.", qs ? qs : "");
+            free(qs);
+            free(eqs);
+            free(vars);
+            if (owned) expr_free(owned);
+            if (unpacked) expr_free(unpacked);
+            return NULL;
+        }
+    }
 
     /* No variables (CoefficientArrays[p, {}], or a constant input): every term
      * is the constant term, so the answer is the single degree-0 element --

@@ -273,6 +273,10 @@ association or a bare list of rules.
 - Operator forms: `KeyExistsQ[key][assoc]`, `KeyMemberQ[patt][assoc]`,
   `KeyFreeQ[patt][assoc]`.
 
+`PatternSequence`, `OrderlessPatternSequence`, `Longest`, `Shortest` and
+`KeyValuePattern` in a key make it a pattern for `KeyMemberQ` / `KeyFreeQ`
+(`KeyMemberQ[<|f[1, 2] -> 0|>, f[PatternSequence[1, 2]]]` is `True`).
+
 **Features**:
 - A pattern-free key keeps the O(1) index probe; a key containing a pattern
   construct (`_`, `x_h`, `Alternatives`, `Except`, `PatternTest`, `Condition`,
@@ -300,6 +304,9 @@ Out[5]= False
 ## KeyDrop
 Gives an association with the specified key or keys removed (order preserved).
 
+A List of rules is accepted and answered as a List of rules
+(`KeyDrop[{"a" -> 1, "b" -> 2}, "a"]` is `{"b" -> 2}`); so for `KeyTake`.
+
 ```mathematica
 In[1]:= KeyDrop[<|"a" -> 1, "b" -> 2, "c" -> 3|>, "b"]
 Out[1]= <|"a" -> 1, "c" -> 3|>
@@ -320,6 +327,8 @@ Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
 - `KeyTake[assoc, {k1, k2, ...}]` gives the association of only the specified
   keys, **in the requested order**.
 - `KeyTake[{assoc1, ...}, keys]` threads over a list of associations.
+
+A List of rules is accepted and answered as a List of rules.
 
 **Features**
 - Matches the reference: absent keys are skipped, and a key requested more
@@ -342,6 +351,8 @@ their keys (in first-appearance order), filling a key absent from an
 association with `Missing["KeyAbsent", key]`. The result is the list of
 equalised associations — a common preparation step before row-wise or tabular
 processing. Hash-indexed: the union and every rebuild are `O(n)`.
+
+A present entry is carried over whole, so a `RuleDelayed` stays delayed.
 
 ```mathematica
 In[1]:= KeyUnion[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
@@ -513,6 +524,9 @@ Out[3]= <|"a" -> 4, "b" -> 2|>
 ## AssociateTo
 Adds or updates key–value pairs in the association held by a symbol, modifying
 the symbol in place (like `AppendTo`). Has attribute `HoldFirst`.
+
+An association of new entries merges like the List of its rules:
+`AssociateTo[a, <|"y" -> 2|>]`.
 
 ```mathematica
 In[1]:= asc = <|"a" -> 1|>; AssociateTo[asc, "b" -> 2]; asc
@@ -916,6 +930,9 @@ Out[1]= <|"a" -> 2, "cc" -> 3, "bbb" -> 1|>
 Applies `f` to every key, keeping values. Keys that collide collapse with
 last-value-wins.
 
+A `RuleDelayed` entry keeps its head: `KeyMap[f, <|x :> e|>]` is
+`<|f[x] :> e|>`, `e` unevaluated.
+
 ```mathematica
 In[1]:= KeyMap[f, <|1 -> 10, 2 -> 20|>]
 Out[1]= <|f[1] -> 10, f[2] -> 20|>
@@ -959,6 +976,10 @@ Builds `<|k1 -> f[k1], k2 -> f[k2], ...|>` from a list of keys.
   be a rule, a list of rules, an association, or `{}`/`Nothing` (dropped), and
   together they form the new association (last value wins on a repeated key).
   Any other result gives `AssociationMap::invrlf`.
+
+Over an association, `f` is applied to each entry as it is: a `RuleDelayed`
+entry stays delayed and its value unevaluated
+(`AssociationMap[Identity, <|a :> 1 + 1|>]` is `<|a :> 1 + 1|>`).
 
 ```mathematica
 In[1]:= AssociationMap[#^2 &, {1, 2, 3, 4}]
@@ -1110,6 +1131,10 @@ Out[6]= <|"x" -> {2, 1}, "y" -> {4, 3}|>
 (or a list of rules) containing keys matching `k1, ...` with values matching
 `p1, ...`. Value patterns may bind, so associations can be destructured in rules
 and used to filter records.
+
+An element pattern that is not itself a rule -- `_Rule`, an `Alternatives`
+of rules, a rule under a `Condition` -- is matched against each whole entry
+(`MatchQ[<|"a" -> 1|>, KeyValuePattern[{_Rule}]]` is `True`).
 
 ```mathematica
 In[1]:= MatchQ[<|"a" -> 1, "b" -> 2|>, KeyValuePattern[{"a" -> _}]]
@@ -1277,6 +1302,8 @@ keys common to all of them, in the key order of `assoc1`.
 - `KeyIntersection[{}]` is `{}`; anything else that is not a list of
   associations or rules gives `KeyIntersection::invar`.
 
+Entries are carried over whole, so a `RuleDelayed` stays delayed.
+
 **Features**: attributes `{Protected}`; `O(total size)` via the persistent key
 index.
 
@@ -1327,6 +1354,10 @@ Out[3]= {1, 3, 5, 6}
 ## CountDistinct
 `CountDistinct[expr]` gives the number of distinct elements of `expr` (of its
 values, for an association).
+
+`CountDistinct[list, test]` counts the classes `DeleteDuplicates[list, test]`
+keeps (`CountDistinct[{1, 1.}, Equal]` is `1`). A `Throw` from the
+`CountDistinctBy` key function ends the call at once.
 
 **Features**: attributes `{Protected}`; one hash pass, `O(n)`; elements are
 distinct under `SameQ`, so `1` and `1.` count separately. An atomic argument

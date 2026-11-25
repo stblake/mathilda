@@ -1902,12 +1902,15 @@ static Expr* listable_machine_binary(const Expr* e, size_t len) {
  * If a function is Listable and contains list arguments, it maps itself over them.
  * Example: f[{a, b}, c] -> {f[a, c], f[b, c]}
  */
-static Expr* apply_listable(Expr* e) {
+static Expr* apply_listable(Expr* e, bool* tdlen) {
     /* Determine the required result length from the list arguments, and verify
-     * that every List argument shares that length (Mathematica threads over
-     * equal-length lists only). The length may legitimately be 0: threading a
-     * Listable function over an empty list yields an empty list, e.g.
-     * BernoulliB[{}] -> {} and f[{}, c] -> {}. */
+     * that every List argument shares that length (lists of unequal length do
+     * not thread: Thread::tdlen, *tdlen set, and the caller leaves the call as
+     * it stands -- neither the builtin nor a DownValue may then answer it as
+     * if the lists were scalars; audit Exponent#1, PolynomialLCM#2). The length
+     * may legitimately be 0: threading a Listable function over an empty list
+     * yields an empty list, e.g. BernoulliB[{}] -> {} and f[{}, c] -> {}. */
+    *tdlen = false;
     bool have_list = false;
     size_t list_len = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -1922,6 +1925,7 @@ static Expr* apply_listable(Expr* e) {
                 mth_message("Thread", "tdlen",
                             "Objects of unequal length in %s cannot be combined.", s);
                 free(s);
+                *tdlen = true;
                 return NULL;
             }
         }
@@ -4156,8 +4160,20 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                  * hide those sub-evaluations so x^{1..10} shows as a single
                  * rewrite to {x,x^2,...} rather than a decomposed one. */
                 g_trace_suppress++;
-                Expr* list_res = apply_listable(res);
+                bool tdlen = false;
+                Expr* list_res = apply_listable(res, &tdlen);
                 g_trace_suppress--;
+                if (tdlen) {
+                    /* settled after Thread::tdlen: the call stays unevaluated,
+                     * in canonical order for an Orderless head (Plus and Times
+                     * sort inside their builtins, which do not run now). */
+                    if (attrs & ATTR_ORDERLESS) {
+                        expr_orderless_sort(res->data.function.args, res->data.function.arg_count);
+                        expr_invalidate_hash(res);
+                    }
+                    g_step_settled_depth = eval_recursion_depth;
+                    return res;
+                }
                 if (list_res) {
                     expr_free(res);
                     *changed = true; /* List threading reshaped the call */
@@ -5153,14 +5169,25 @@ Expr* evaluate(Expr* e) {
     return r;
 }
 
+/* The FIRST unwind parked in a frame is the one that ends it: a Throw stops
+ * the evaluation where it happens, so a later one (from a callback the
+ * builtin went on to call) must not replace it -- Catch[Split[{1, 2, 3},
+ * (Throw[#1]; True) &]] is 1, not 3 (audit Split#1). */
 void eval_park_unwind(const Expr* r) {
     if (eval_recursion_depth > 0 && r && eval_is_inflight_unwind(r) && !g_arith_warnings_muted) {
-        if (g_pending_unwind) expr_free(g_pending_unwind);
+        if (g_pending_unwind) return;
         g_pending_unwind = expr_copy((Expr*)r);
     }
 }
 
+/* Once a callback in this frame has parked an unwind, the builtin is already
+ * finished -- its result will be replaced by the sentinel -- so a further
+ * callback is not run at all: it would execute user code (side effects,
+ * Print, k++) past the point where the reference's evaluation stopped
+ * (audit CountDistinctBy#1, GatherBy#2, Split#1).  The parked sentinel is
+ * returned in its place, which every caller already treats as "stop". */
 Expr* eval_callback(Expr* call) {
+    if (g_pending_unwind && eval_recursion_depth > 0) return expr_copy(g_pending_unwind);
     Expr* r = evaluate(call);
     eval_park_unwind(r);
     return r;

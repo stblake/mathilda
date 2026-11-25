@@ -45,7 +45,74 @@
 #include "riffle.h"
 #include "linkedlist_seq.h" /* LLSeq: LinkedList list or separators */
 
+/* How many result positions imin, imin + step, ... (each <= the resolved
+ * imax) a result of length L has, imax < 0 counting from L's end. */
+static int64_t riffle_slots(int64_t imin, int64_t imax, int64_t step, int64_t L) {
+    int64_t lo = imin < 0 ? L + imin + 1 : imin;
+    int64_t hi = imax < 0 ? L + imax + 1 : imax;
+    if (lo < 1 || hi > L || lo > hi) return 0;
+    return (hi - lo) / step + 1;
+}
+
+/* Riffle[list, x, n] and Riffle[list, x, {imin, imax, n}] (audit Riffle#1):
+ * the separators sit at positions imin, imin + n, ... of the result, imax
+ * (negative: from the result's end) bounding them; Riffle[list, x, n] is
+ * Riffle[list, x, {n, -2, n}].  The result length L is the longest for which
+ * the number of separator positions is L - Length[list].  A List of separators
+ * is used cyclically.  NULL when no length fits (or for a LinkedList). */
+static Expr* riffle_spaced(Expr* res) {
+    Expr* list = res->data.function.args[0];
+    Expr* sep = res->data.function.args[1];
+    Expr* spec = res->data.function.args[2];
+    if (list->type != EXPR_FUNCTION || expr_is_number_atom(list)) return NULL;
+    int64_t imin, imax, step;
+    if (spec->type == EXPR_INTEGER) {
+        imin = spec->data.integer; imax = -2; step = spec->data.integer;
+    } else if (head_is(spec, SYM_List) && spec->data.function.arg_count == 3 &&
+               spec->data.function.args[0]->type == EXPR_INTEGER &&
+               spec->data.function.args[1]->type == EXPR_INTEGER &&
+               spec->data.function.args[2]->type == EXPR_INTEGER) {
+        imin = spec->data.function.args[0]->data.integer;
+        imax = spec->data.function.args[1]->data.integer;
+        step = spec->data.function.args[2]->data.integer;
+    } else {
+        return NULL;
+    }
+    if (step <= 0 || imin == 0 || imax == 0) return NULL;
+    int64_t n = (int64_t)list->data.function.arg_count;
+    int64_t L = -1;
+    /* the longest consistent result: Riffle[{a, b, c}, x, 2] is
+     * {a, x, b, x, c}, not {a, x, b, c} */
+    for (int64_t s2 = n + 1; s2 >= 0 && L < 0; s2--)
+        if (riffle_slots(imin, imax, step, n + s2) == s2) L = n + s2;
+    if (L < 0) return NULL;
+    bool seq_sep = head_is(sep, SYM_List);
+    size_t k = seq_sep ? sep->data.function.arg_count : 1;
+    if (k == 0) return expr_copy(list);
+    int64_t lo = imin < 0 ? L + imin + 1 : imin;
+    int64_t hi = imax < 0 ? L + imax + 1 : imax;
+    Expr** out = malloc(sizeof(Expr*) * (size_t)(L ? L : 1));
+    size_t next_el = 0, next_sep = 0;
+    for (int64_t pos = 1; pos <= L; pos++) {
+        bool is_sep = pos >= lo && pos <= hi && (pos - lo) % step == 0;
+        if (is_sep) {
+            out[pos - 1] = expr_copy(seq_sep ? sep->data.function.args[next_sep % k] : sep);
+            next_sep++;
+        } else {
+            out[pos - 1] = expr_copy(list->data.function.args[next_el++]);
+        }
+    }
+    Expr* r = expr_new_function(expr_copy(list->data.function.head), out, (size_t)L);
+    free(out);
+    return r;
+}
+
 Expr* builtin_riffle(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 3) {
+        if (is_ndarray(res->data.function.args[0]))
+            return ndstruct_delist_repack(res, res->data.function.args[0]);
+        return riffle_spaced(res);
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
 
     Expr* list = res->data.function.args[0];

@@ -19,6 +19,9 @@
  * SPEC.md §4 for the builtin ownership rule.
  */
 
+#include "rationalize.h"   /* internal_args_contain_inexact */
+#include "poly.h"          /* is_polynomial, contains_any_symbol_from */
+#include "numeric.h"       /* expr_is_numeric_quantity */
 #include "eliminate.h"
 
 #include <stdbool.h>
@@ -1879,6 +1882,62 @@ Expr* builtin_eliminate(Expr* res) {
         n_elim = 1;
         elim_items = wrap_vars->data.function.args;
     }
+    /* ----- A solved elimination variable: v == c with c free of every
+     * elimination variable is substituted into the other equations first.
+     * Eliminate[{x == E^y, y == 0}, y] is x == 1 and Eliminate[{x == 0.5 y,
+     * y == 2}, y] is x == 1. -- neither system needs to be polynomial once v
+     * is gone (audit Eliminate#2/#3: both were Eliminate::nlin). */
+    bool needs_subst = internal_args_contain_inexact(res);
+    for (size_t i = 0; i < n_eq && !needs_subst; i++) {
+        Expr* q = eq_in[i];
+        if (!head_is(q, SYM_Equal) || q->data.function.arg_count != 2) continue;
+        for (int side = 0; side < 2 && !needs_subst; side++)
+            needs_subst = !is_polynomial(q->data.function.args[side], elim_items, n_elim);
+    }
+    /* (only for a system the polynomial elimination cannot take) */
+    for (size_t i = 0; i < n_eq && needs_subst; i++) {
+        Expr* q = eq_in[i];
+        if (!head_is(q, SYM_Equal) || q->data.function.arg_count != 2) continue;
+        for (int side = 0; side < 2; side++) {
+            Expr* v = q->data.function.args[side];
+            Expr* c = q->data.function.args[1 - side];
+            size_t vi = n_elim;
+            for (size_t k = 0; k < n_elim; k++)
+                if (v->type == EXPR_SYMBOL && expr_eq(v, elim_items[k])) vi = k;
+            if (vi == n_elim) continue;
+            /* only a variable fixed to a number: a symbolic solution is the
+             * polynomial elimination's (and its radical pre-pass's) to use */
+            bool free_c = expr_is_numeric_quantity(c);
+            for (size_t k = 0; k < n_elim && free_c; k++)
+                free_c = !contains_any_symbol_from(c, elim_items[k]);
+            if (!free_c) continue;
+            /* {rest /. v -> c}, {vars minus v} */
+            Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                                           (Expr*[]){ expr_copy(v), expr_copy(c) }, 2);
+            Expr** rest = malloc(sizeof(Expr*) * (n_eq ? n_eq : 1));
+            size_t nr = 0;
+            for (size_t j = 0; j < n_eq; j++) {
+                if (j == i) continue;
+                rest[nr++] = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                               (Expr*[]){ expr_copy(eq_in[j]), expr_copy(rule) }, 2);
+            }
+            expr_free(rule);
+            Expr** nv = malloc(sizeof(Expr*) * (n_elim ? n_elim : 1));
+            size_t nvn = 0;
+            for (size_t k = 0; k < n_elim; k++)
+                if (k != vi) nv[nvn++] = expr_copy(elim_items[k]);
+            Expr* sys = expr_new_function(expr_new_symbol(SYM_List), rest, nr);
+            Expr* vl = expr_new_function(expr_new_symbol(SYM_List), nv, nvn);
+            free(rest); free(nv);
+            Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Eliminate),
+                                                        (Expr*[]){ sys, vl }, 2));
+            free(eq_in);
+            if (wrap_vars) expr_free(wrap_vars);
+            if (out && head_is(out, SYM_Eliminate)) { expr_free(out); return NULL; }
+            return out;
+        }
+    }
+
     if (n_elim == 0) {
         /* `Eliminate[eqns, {}]` -- nothing to eliminate; just return the
          * original equations as `And` (or single `Equal`). */

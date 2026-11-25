@@ -150,6 +150,14 @@ Expr* builtin_array_reshape(Expr* res) {
 
     if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST)
         return NULL;   /* not a list: leave alone */
+    /* Only a List is an array: f[a, b, c, d] is a leaf, not the list
+     * {a, b, c, d} with its head dropped (audit ArrayReshape#1). */
+    if (list->type == EXPR_FUNCTION && !head_is(list, SYM_List)) {
+        char* cs = expr_to_string(res);
+        mth_message("ArrayReshape", "list", "List expected at position 1 in %s.", cs ? cs : "");
+        free(cs);
+        return NULL;
+    }
     bool linked = list->type == EXPR_LINKEDLIST;
 
     int64_t d[AR_MAX_RANK];

@@ -3419,6 +3419,8 @@ static Expr* tuples_of_one(LLSeq* q, size_t k, const int64_t* dims, size_t dims_
     return out;
 }
 
+static Expr* tuples_empty_shape(const LLSeq* lv, const int64_t* dims, size_t n, size_t k);
+
 Expr* builtin_tuples(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     
@@ -3496,7 +3498,11 @@ Expr* builtin_tuples(Expr* res) {
             if (!ok) {
                 out = NULL;
             } else if (total_elements == 0) {
-                out = llq_result(&lv, NULL, 0);
+                /* A zero dimension leaves exactly one array of that shape --
+                 * the empty one: Tuples[{a, b}, {0}] is {{}} and {2, 0} is
+                 * {{{}, {}}} (audit Tuples#2). */
+                Expr* shape = tuples_empty_shape(&lv, dims, dims_count, 0);
+                out = llq_result(&lv, (Expr*[]){shape}, 1);
             } else {
                 out = tuples_of_one(&lv, (size_t)total_elements, dims, dims_count, linked);
             }
@@ -3506,6 +3512,18 @@ Expr* builtin_tuples(Expr* res) {
         if (out) return out;
     }
     return expr_copy(res);
+}
+
+/* The array of shape dims[k..n) holding no elements (some dimension is 0),
+ * in containers of lv's kind. */
+static Expr* tuples_empty_shape(const LLSeq* lv, const int64_t* dims, size_t n, size_t k) {
+    if (k >= n || dims[k] == 0) return llq_result(lv, NULL, 0);
+    size_t m = (size_t)dims[k];
+    Expr** items = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) items[i] = tuples_empty_shape(lv, dims, n, k + 1);
+    Expr* r = llq_result(lv, items, m);
+    free(items);
+    return r;
 }
 
 /* ------------------- Permutations ------------------- */
@@ -3539,9 +3557,40 @@ static void permutations_rec(UniqueElement* elements, size_t num_unique, size_t 
     }
 }
 
+/* A Permutations length spec: All, Infinity, a non-negative integer (a
+ * BigInt counts as "at most that many", so every length), or {n}, {nmin,
+ * nmax}, {nmin, nmax, dn} of non-negative integers with dn nonzero.
+ * Anything else (x, 1.5, {-1}, {1, 3, 0}) is Permutations::nninfseq and the
+ * call stays unevaluated (audit Permutations#2). */
+static bool perm_spec_ok(const Expr* spec) {
+    if (spec->type == EXPR_INTEGER) return spec->data.integer >= 0;
+    if (spec->type == EXPR_BIGINT) return mpz_sgn(spec->data.bigint) > 0;
+    if (spec->type == EXPR_SYMBOL)
+        return spec->data.symbol.name == SYM_All || spec->data.symbol.name == SYM_Infinity;
+    if (!head_is((Expr*)spec, SYM_List)) return false;
+    size_t m = spec->data.function.arg_count;
+    if (m < 1 || m > 3) return false;
+    for (size_t i = 0; i < m; i++) {
+        const Expr* a = spec->data.function.args[i];
+        if (a->type != EXPR_INTEGER) return false;
+        if (i < 2 && a->data.integer < 0) return false;
+        if (i == 2 && a->data.integer == 0) return false;
+    }
+    return true;
+}
+
 Expr* builtin_permutations(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
-    
+    if (res->data.function.arg_count == 2 && !perm_spec_ok(res->data.function.args[1])) {
+        char* cs = expr_to_string(res);
+        mth_message("Permutations", "nninfseq", "Position 2 of %s must be All, Infinity, a "
+                    "non-negative integer, or a List whose first element (required) is a "
+                    "non-negative integer, second element (optional) is a non-negative integer "
+                    "or Infinity, and third element (optional) is a nonzero integer.", cs ? cs : "");
+        free(cs);
+        return NULL;
+    }
+
     Expr* list = res->data.function.args[0];
     /* A LinkedList permutes from a snapshot of its slots (read on demand) into
      * a LinkedList of LinkedList permutations, each copied slot to slot. */
@@ -3566,9 +3615,10 @@ Expr* builtin_permutations(Expr* res) {
             n_min = 0;
             n_max = n;
             dn = 1;
-        } else if (spec->type == EXPR_SYMBOL &&
-                   (spec->data.symbol.name == SYM_All || spec->data.symbol.name == SYM_Infinity)) {
-            n_min = 0;
+        } else if (spec->type == EXPR_BIGINT ||
+                   (spec->type == EXPR_SYMBOL &&
+                    (spec->data.symbol.name == SYM_All || spec->data.symbol.name == SYM_Infinity))) {
+            n_min = 0;                                /* at most 2^70: every length */
             n_max = len;
             dn = 1;
         } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->data.symbol.name == SYM_List) {

@@ -387,6 +387,32 @@ Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
     return assoc_scan(assoc, key);
 }
 
+/* Borrowed ENTRY (the Rule or RuleDelayed) stored under `key`, or NULL: what
+ * a builtin copies when it carries an entry over unchanged, so a delayed
+ * value stays delayed (KeyIntersection, KeyUnion).  Same index as
+ * assoc_lookup_value. */
+Expr* assoc_lookup_entry(const Expr* assoc, const Expr* key) {
+    if (!assoc_lookup_value(assoc, key)) return NULL;     /* builds the index */
+    AssocIndex* idx = expr_fn_assoc_index(assoc);
+    if (idx) {
+        int64_t e = assoc_index_lookup(idx, assoc->data.function.args, key);
+        return e < 0 ? NULL : assoc->data.function.args[e];
+    }
+    for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
+        Expr* r = assoc->data.function.args[i];
+        if (is_rule2(r) && expr_eq(rule_key(r), (Expr*)key)) return r;
+    }
+    return NULL;
+}
+
+/* A new entry with key `newkey` (adopted) and the value of `entry`, under the
+ * entry's own head: a RuleDelayed stays a RuleDelayed (KeyMap, AssociationMap
+ * over an association). */
+Expr* assoc_entry_with_key(const Expr* entry, Expr* newkey) {
+    Expr* rargs[2] = { newkey, expr_copy(entry->data.function.args[1]) };
+    return expr_new_function(expr_copy(entry->data.function.head), rargs, 2);
+}
+
 /* Build and cache the single-key index NOW.  The compiled evaluator calls this
  * at its marshalling boundary (cf_box), where evaluation is single-threaded, so
  * a subsequent parallel VM run never triggers assoc_lookup_value's lazy index
@@ -632,7 +658,9 @@ static bool key_contains_pattern(const Expr* e) {
             n == SYM_Pattern || n == SYM_Alternatives || n == SYM_Except ||
             n == SYM_PatternTest || n == SYM_Condition || n == SYM_Optional ||
             n == SYM_Repeated || n == SYM_RepeatedNull || SYM_IS_HOLDPATTERN(n) ||
-            n == SYM_Verbatim)
+            n == SYM_Verbatim || n == SYM_PatternSequence ||
+            n == SYM_OrderlessPatternSequence || n == SYM_Longest || n == SYM_Shortest ||
+            n == SYM_KeyValuePattern)    /* audit KeyMemberQ#1 */
             return true;
     } else if (key_contains_pattern(h)) {
         return true;
@@ -850,6 +878,27 @@ static Expr* key_drop_take(Expr* res, bool take) {
         }
     }
 
+    /* A list of rules selects like the association it names, and answers as
+     * a list of the surviving rules (KeyTake[{"a" -> 1, "b" -> 2}, {"a"}] is
+     * {"a" -> 1}; audit KeyDrop#1, KeyTake#1). */
+    if (head_is(assoc, SYM_List)) {
+        size_t m = assoc->data.function.arg_count;
+        for (size_t i = 0; i < m; i++)
+            if (!is_rule2(assoc->data.function.args[i])) return NULL;
+        Expr* a = assoc_from_rules(assoc->data.function.args, m);
+        Expr* sel = a ? assoc_key_select(a, karg, take) : NULL;
+        if (a) expr_free(a);
+        if (!sel) return NULL;
+        if (!is_association(sel)) return sel;
+        size_t k = sel->data.function.arg_count;
+        Expr** ents = malloc(sizeof(Expr*) * (k ? k : 1));
+        for (size_t i = 0; i < k; i++) ents[i] = expr_copy(sel->data.function.args[i]);
+        Expr* list = make_list(ents, k);
+        free(ents);
+        expr_free(sel);
+        return list;
+    }
+
     return assoc_key_select(assoc, karg, take);
 }
 
@@ -914,11 +963,14 @@ Expr* builtin_keyunion(Expr* res) {
         for (size_t u = 0; u < nu; u++) {
             Expr* k = ukeys[u];
             size_t slot, idx = ki_lookup(&jki, jkeys, k, &slot);
-            Expr* val = (idx == SIZE_MAX)
-                ? make_missing(k)
-                : expr_copy(rule_val(a->data.function.args[idx]));
-            Expr* rargs[2] = { expr_copy(k), val };
-            entries[u] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+            /* a present entry is carried over whole, so a RuleDelayed stays
+             * delayed (audit KeyUnion#1); a padded one is a Rule to Missing */
+            if (idx == SIZE_MAX) {
+                Expr* rargs[2] = { expr_copy(k), make_missing(k) };
+                entries[u] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+            } else {
+                entries[u] = expr_copy(a->data.function.args[idx]);
+            }
         }
         outer[j] = expr_new_function(expr_new_symbol(SYM_Association),entries, nu);
         free(entries); free(jkeys); ki_free(&jki);
@@ -1552,16 +1604,19 @@ Expr* builtin_associate_to(Expr* res) {
     Expr* current = evaluate(sym);
     if (!current || !is_association(current)) { if (current) expr_free(current); return NULL; }
 
-    if (!head_is(kv, SYM_List) && assoc_try_inplace_update(sym, current, kv, false))
+    /* An association of new entries merges like the List of its rules
+     * (AssociateTo[a, <|"y" -> 2|>]; audit AssociateTo#1). */
+    bool several = head_is(kv, SYM_List) || is_association(kv);
+    if (!several && assoc_try_inplace_update(sym, current, kv, false))
         return current;
 
     /* Gather current rules plus the new one(s), then re-canonicalise. */
     size_t base = current->data.function.arg_count;
-    size_t extra = head_is(kv, SYM_List) ? kv->data.function.arg_count : 1;
+    size_t extra = several ? kv->data.function.arg_count : 1;
     Expr** all = malloc(sizeof(Expr*) * (base + extra));
     size_t n = 0;
     for (size_t i = 0; i < base; i++) all[n++] = current->data.function.args[i];
-    if (head_is(kv, SYM_List)) {
+    if (several) {
         for (size_t i = 0; i < extra; i++) {
             if (!is_rule2(kv->data.function.args[i])) { free(all); expr_free(current); return NULL; }
             all[n++] = kv->data.function.args[i];
@@ -1886,7 +1941,7 @@ Expr* builtin_keymap(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* r = assoc->data.function.args[i];
         Expr* newkey = apply1(f, rule_key(r));
-        rules[i] = make_rule(newkey, expr_copy(rule_val(r)));
+        rules[i] = assoc_entry_with_key(r, newkey);   /* a RuleDelayed stays delayed (audit KeyMap#1) */
     }
     Expr* result = assoc_from_rules(rules, n);
     for (size_t i = 0; i < n; i++) expr_free(rules[i]);

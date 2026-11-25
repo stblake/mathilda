@@ -388,6 +388,39 @@ static size_t ft_options(Expr* res, const char* head, Expr** mod) {
     return argc;
 }
 
+/* Does `e` hold a fractional power of a non-numeric base (Sqrt[x], x^(1/3))? */
+static bool ft_has_frac_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2 &&
+        head_is(e->data.function.args[1], SYM_Rational) &&
+        !expr_is_numeric_quantity(e->data.function.args[0])) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ft_has_frac_power(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The numerical factor of a polynomial in fractional powers is read with each
+ * power as an indeterminate of its own: collect_variables files Sqrt[x] under
+ * x, whose integer-degree coefficients cannot see it, so 2 Sqrt[x] + 4 gave
+ * {4, 1 + Sqrt[x]/2} instead of {2, 2 + Sqrt[x]} (audit FactorTerms#1,
+ * FactorTermsList#2).  Only for the plain numerical factor (no variables
+ * named); the kernels are restored in every entry of the list. */
+static Expr* ft_compute_list_kerned(Expr* poly, Expr** S, size_t S_count) {
+    if (S_count == 0 && ft_has_frac_power(poly)) {
+        PolyKernelMap kmap;
+        Expr* kerned = poly_kernels_to_symbols(poly, &kmap);
+        if (kerned) {
+            Expr* l = ft_compute_list(kerned, S, S_count);
+            expr_free(kerned);
+            Expr* back = l ? eval_and_free(poly_symbols_to_kernels(l, &kmap)) : NULL;
+            if (l) expr_free(l);
+            poly_kernel_map_free(&kmap);
+            if (back) return back;
+        }
+    }
+    return ft_compute_list(poly, S, S_count);
+}
+
 /* poly with its coefficients reduced mod m. */
 static Expr* ft_reduce_mod(Expr* poly, Expr* m) {
     return eval_and_free(expr_new_function(expr_new_symbol("PolynomialMod"),
@@ -419,7 +452,7 @@ Expr* builtin_factortermslist(Expr* res) {
     if (var_arg) ft_extract_vars(var_arg, &S, &S_count);
 
     Expr* reduced = mod ? ft_reduce_mod(poly, mod) : NULL;
-    Expr* result = ft_compute_list(reduced ? reduced : poly, S, S_count);
+    Expr* result = ft_compute_list_kerned(reduced ? reduced : poly, S, S_count);
     if (reduced) expr_free(reduced);
     free(S);
     return result;
@@ -447,7 +480,7 @@ Expr* builtin_factorterms(Expr* res) {
     if (var_arg) ft_extract_vars(var_arg, &S, &S_count);
 
     Expr* reduced = mod ? ft_reduce_mod(poly, mod) : NULL;
-    Expr* list = ft_compute_list(reduced ? reduced : poly, S, S_count);
+    Expr* list = ft_compute_list_kerned(reduced ? reduced : poly, S, S_count);
     if (reduced) expr_free(reduced);
     free(S);
 

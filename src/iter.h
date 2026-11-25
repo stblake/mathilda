@@ -156,6 +156,17 @@ bool iter_expr_mentions_symbol(const Expr* e, const char* name);
 bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di);
 
 /*
+ * The lattice {imin, imin + di, ..., imin + n di} of a range whose bounds are
+ * not numeric but whose length is: (imax - imin)/di evaluates to an explicit
+ * real number (Range[a, a + 3], Table[i, {i, a, a + 3}], Range[0, 3 b, b]),
+ * with n = Floor of it.  Returns a new List of the evaluated points, an empty
+ * List for a negative length, or NULL when the helper does not apply (all
+ * three bounds numeric, a zero step, a non-numeric length, or more than `cap`
+ * points).  Iterating over this List is iterating the range exactly.
+ */
+Expr* iter_symbolic_lattice(const Expr* imin, const Expr* imax, const Expr* di, int64_t cap);
+
+/*
  * Block-style localization of the iterator variable.  shadow() sets the
  * variable's current value aside (an OwnValue, or the v[k] DownValue of an
  * indexed variable) and returns a token; bind each iteration's value with

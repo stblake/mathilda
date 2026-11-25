@@ -1427,6 +1427,7 @@ typedef enum {
     OP_ADDTO,
     OP_SUBTRACTFROM,
     OP_TIMESBY,
+    OP_APPLYTO,
     OP_DIVIDEBY,
     OP_DERIVATIVE,
     OP_COMPOSITION,
@@ -1511,6 +1512,10 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_UNSAMEQ; def.prec = 3200; def.head_name = "UnsameQ"; def.len = 3;
     } else if (strncmp(pos, "@@@", 3) == 0) {
         def.type = OP_APPLY1; def.prec = 7000; def.right_assoc = 1; def.head_name = "Apply1"; def.len = 3;
+    } else if (strncmp(pos, "//=", 3) == 0) {
+        /* ApplyTo (x //= f is x = f[x]), at the assignment operators' level.
+         * Checked before "//" so the 3-char form wins (audit ApplyTo#1). */
+        def.type = OP_APPLYTO; def.prec = 500; def.right_assoc = 1; def.head_name = "ApplyTo"; def.len = 3;
     } else if (strncmp(pos, "//.", 3) == 0 && !isdigit(pos[3])) {
         def.type = OP_REPLACEREPEATED; def.prec = 1200; def.right_assoc = 0; def.head_name = "ReplaceRepeated"; def.len = 3;
     } else if (strncmp(pos, "//@", 3) == 0) {

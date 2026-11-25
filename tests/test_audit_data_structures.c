@@ -82,6 +82,68 @@ static void test_wave3_arity_options(void) {
     audit_chk("PositionIndex#1", "Quiet[PositionIndex[{a, b}, {c}]]", "PositionIndex[{a, b}, {c}]");
 }
 
+/* ================================================================== */
+/* Wave 4, G2-structural (data structures): infix Rule printing, a    */
+/* Throw from a callback ending the loop, RuleDelayed entries kept    */
+/* delayed, rule lists for KeyTake/KeyDrop, entry patterns.           */
+/* ================================================================== */
+
+static void test_wave4_data_structures(void) {
+    /* x //= f is ApplyTo */
+    audit_chk("ApplyTo#1", "x4a = 5; x4a //= f", "f[5]");
+    audit_chk("ApplyTo#1", "x4a", "f[5]");
+    audit_chk("ApplyTo#1", "FullForm[Hold[y //= g; z]]", "Hold[CompoundExpression[ApplyTo[y, g], z]]");
+    /* Rule prints with the parentheses its associativity needs */
+    audit_chk("Rule#1", "ToExpression[ToString[InputForm[(a -> b) -> c]]] === ((a -> b) -> c)", "True");
+    audit_chk("Rule#1", "ToString[InputForm[(a -> b) -> c]]", "\"(a -> b) -> c\"");
+    audit_chk("Rule#1", "ToString[InputForm[a -> (b -> c)]]", "\"a -> b -> c\"");
+    audit_chk("Rule#1", "ToString[InputForm[Hold[(a = b) = c]]]", "\"Hold[(a = b) = c]\"");
+    audit_chk("Rule#1", "ToString[InputForm[Equal[Equal[a, b], c]]]", "\"(a == b) == c\"");
+    audit_chk("Rule#1", "ToString[InputForm[Hold[(a /; b) /; c]]]", "\"Hold[a /; b /; c]\"");
+    /* Rule with three arguments prints in functional form */
+    audit_chk("Rule#2", "Quiet[ToString[InputForm[Rule[a, b, c]]]]", "\"Rule[a, b, c]\"");
+    audit_chk("Rule#2", "Quiet[ToString[Rule[a, b, c]]]", "\"Rule[a, b, c]\"");
+    /* AssociateTo merges an association */
+    audit_chk("AssociateTo#1", "a4s = <|\"x\" -> 1|>; AssociateTo[a4s, <|\"y\" -> 2|>]", "<|\"x\" -> 1, \"y\" -> 2|>");
+    audit_chk("AssociateTo#1", "a4s", "<|\"x\" -> 1, \"y\" -> 2|>");
+    /* Delete[assoc, Key[k]] */
+    audit_chk("Association#1", "Delete[<|a -> 1, b -> 2|>, Key[a]]", "<|b -> 2|>");
+    audit_chk("Key#2", "Delete[<|\"a\"->1, \"b\"->2|>, Key[\"b\"]]", "<|\"a\" -> 1|>");
+    audit_chk("Key#2", "Delete[<|\"a\"->1, \"b\"->2|>, {Key[\"b\"]}]", "<|\"a\" -> 1|>");
+    /* RuleDelayed entries stay delayed */
+    audit_chk("AssociationMap#1", "AssociationMap[Identity, <|a :> 1+1|>]", "<|a :> 1 + 1|>");
+    audit_chk("AssociationMap#1", "AssociationMap[Reverse, <|a -> 1, b -> 2|>]", "<|1 -> a, 2 -> b|>");
+    audit_chk("KeyIntersection#1", "KeyIntersection[{<|a :> 1 + 1, b -> 2|>, <|a -> 3|>}]", "{<|a :> 1 + 1|>, <|a -> 3|>}");
+    audit_chk("KeyMap#1", "KeyMap[f, <|x :> 1 + 1|>]", "<|f[x] :> 1 + 1|>");
+    audit_chk("KeyUnion#1", "KeyUnion[{<|a :> 1 + 1|>, <|b -> 2|>}]",
+              "{<|a :> 1 + 1, b -> Missing[\"KeyAbsent\", b]|>, <|a -> Missing[\"KeyAbsent\", a], b -> 2|>}");
+    /* CountDistinct with a test */
+    audit_chk("CountDistinct#1", "CountDistinct[{1, 1.}, Equal]", "1");
+    audit_chk("CountDistinct#1", "CountDistinct[{1, 2, 1}]", "2");
+    /* a Throw from the key function ends the call at once */
+    audit_chk("CountDistinctBy#1", "k4c = 0; Catch[CountDistinctBy[{1,2,3}, (k4c++; Throw[#])&]]", "1");
+    audit_chk("CountDistinctBy#1", "k4c", "1");
+    audit_chk("CountDistinctBy#1", "Catch[CountDistinctBy[{1,2,3}, Throw]]", "1");
+    audit_chk("GatherBy#2", "k4g = 0; Catch[GatherBy[{1,2,3,4}, (k4g++; If[# > 1, Throw[#], 0])&]]", "2");
+    audit_chk("GatherBy#2", "k4g", "2");
+    /* DeleteDuplicatesBy is linear in the number of distinct keys */
+    audit_chk("DeleteDuplicatesBy#1", "TimeConstrained[Length[DeleteDuplicatesBy[Range[100000], Identity]], 10]", "100000");
+    audit_chk("DeleteDuplicatesBy#1", "DeleteDuplicatesBy[{1, 2, 3, 4, 5}, EvenQ]", "{1, 2}");
+    /* KeyDrop / KeyTake over a list of rules */
+    audit_chk("KeyDrop#1", "KeyDrop[{\"a\"->1,\"b\"->2},\"a\"]", "{\"b\" -> 2}");
+    audit_chk("KeyTake#1", "KeyTake[{\"a\"->1, \"b\"->2, \"c\"->3}, {\"a\",\"c\"}]", "{\"a\" -> 1, \"c\" -> 3}");
+    /* KeyMemberQ with sequence patterns */
+    audit_chk("KeyMemberQ#1", "KeyMemberQ[<|f[1, 2] -> 0|>, f[PatternSequence[1, 2]]]", "True");
+    audit_chk("KeyMemberQ#1", "KeyMemberQ[<|f[1, 2] -> 0|>, f[OrderlessPatternSequence[2, 1]]]", "True");
+    audit_chk("KeyMemberQ#1", "KeyMemberQ[<|3 -> 0|>, Shortest[3]]", "True");
+    audit_chk("KeyMemberQ#1", "KeyMemberQ[<|3 -> 0|>, 4]", "False");
+    /* KeyValuePattern element patterns that are not literal rules */
+    audit_chk("KeyValuePattern#1", "MatchQ[<|\"a\" -> 1|>, KeyValuePattern[{_Rule}]]", "True");
+    audit_chk("KeyValuePattern#1", "MatchQ[<|\"a\" -> 1|>, KeyValuePattern[{(\"a\" -> 1) | (\"b\" -> 2)}]]", "True");
+    audit_chk("KeyValuePattern#1", "MatchQ[<|\"a\" -> 1|>, KeyValuePattern[{(x_ -> y_) /; y > 0}]]", "True");
+    audit_chk("KeyValuePattern#1", "MatchQ[<|\"a\" -> 1|>, KeyValuePattern[{(x_ -> y_) /; y > 5}]]", "False");
+}
+
 int main(void) {
     audit_init();
     TEST(test_gatherby_nested);
@@ -89,5 +151,6 @@ int main(void) {
     TEST(test_keysort_ordering_packed);
     TEST(test_s14_arrayq_deletemissing);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_data_structures);
     return audit_finish("audit_data_structures");
 }

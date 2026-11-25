@@ -1,3 +1,4 @@
+#include "sym_intern.h"   /* intern_symbol: Scaled */
 #include "list_common.h"
 #include "minmax.h"
 #include "assoc.h"
@@ -147,7 +148,47 @@ static int minmax_cmp(Expr* a, Expr* b) {
  * would otherwise write by hand. Over an association it uses the values (Min and
  * Max already thread there). Delegating to Min / Max keeps the numeric handling
  * — bignums, reals, symbolic extrema, empty-list Infinity — in exactly one place. */
+/* MinMax[list, d]: the range {min, max} widened to {min - dmin, max + dmax}
+ * for d (both sides), {dmin, dmax}, or Scaled[s] (s times the range on each
+ * side) -- audit MinMax#1. */
+static Expr* minmax_padded(Expr* res) {
+    Expr* d = res->data.function.args[1];
+    Expr* one[1] = { expr_copy(res->data.function.args[0]) };
+    Expr* call = expr_new_function(expr_new_symbol("MinMax"), one, 1);
+    Expr* mm = builtin_minmax(call);
+    expr_free(call);
+    if (!mm || !head_is(mm, SYM_List) || mm->data.function.arg_count != 2) return mm ? mm : NULL;
+    Expr* mn = mm->data.function.args[0];
+    Expr* mx = mm->data.function.args[1];
+    Expr *dlo, *dhi;
+    if (head_is(d, SYM_List) && d->data.function.arg_count == 2) {
+        dlo = expr_copy(d->data.function.args[0]);
+        dhi = expr_copy(d->data.function.args[1]);
+    } else if (head_is(d, intern_symbol("Scaled")) && d->data.function.arg_count == 1) {
+        Expr* neg[2] = { expr_new_integer(-1), expr_copy(mn) };
+        Expr* span[2] = { expr_copy(mx), expr_new_function(expr_new_symbol(SYM_Times), neg, 2) };
+        Expr* t[2] = { expr_copy(d->data.function.args[0]),
+                       expr_new_function(expr_new_symbol(SYM_Plus), span, 2) };
+        dlo = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t, 2));
+        dhi = expr_copy(dlo);
+    } else if (!head_is(d, SYM_List)) {
+        dlo = expr_copy(d);
+        dhi = expr_copy(d);
+    } else {
+        expr_free(mm);
+        return NULL;
+    }
+    Expr* nlo[2] = { expr_new_integer(-1), dlo };
+    Expr* lo[2] = { expr_copy(mn), expr_new_function(expr_new_symbol(SYM_Times), nlo, 2) };
+    Expr* hi[2] = { expr_copy(mx), dhi };
+    Expr* items[2] = { eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), lo, 2)),
+                       eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), hi, 2)) };
+    expr_free(mm);
+    return expr_new_function(expr_new_symbol(SYM_List), items, 2);
+}
+
 Expr* builtin_minmax(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 2) return minmax_padded(res);
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     bool is_list = arg->type == EXPR_FUNCTION &&
@@ -211,6 +252,35 @@ static Expr* minmax_reduce_array_args(Expr* res, const char* head) {
     return out;
 }
 
+/* Min/Max with Interval arguments (audit Max#1).  An interval enters an
+ * extremum only through its extreme endpoint: Min sees the lowest lower
+ * endpoint (the first pair's, after canonical sorting), Max the highest upper
+ * endpoint (the last pair's).  Each Interval argument is replaced by that
+ * endpoint and the call rebuilt, so Max[Interval[{1,3}], 5] -> Max[3, 5] -> 5
+ * and Min[Interval[{1,3}]] -> Min[1] -> 1.  Returns NULL when no argument is an
+ * Interval. */
+static Expr* minmax_interval_endpoints(Expr* res, bool is_max) {
+    size_t n = res->data.function.arg_count;
+    bool any = false;
+    for (size_t i = 0; i < n && !any; i++) {
+        Expr* a = res->data.function.args[i];
+        any = is_interval(a) && interval_pair_count(a) > 0;
+    }
+    if (!any) return NULL;
+    Expr** args = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (is_interval(a) && interval_pair_count(a) > 0)
+            args[i] = expr_copy(is_max ? interval_pair_hi(a, interval_pair_count(a) - 1)
+                                       : interval_pair_lo(a, 0));
+        else
+            args[i] = expr_copy(a);
+    }
+    Expr* out = expr_new_function(expr_copy(res->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -233,10 +303,7 @@ Expr* builtin_min(Expr* res) {
 
     /* Min[Interval[{a,b}, ...]] is the lowest lower endpoint (the first pair's
      * lower endpoint after canonical sorting). */
-    if (n == 1 && is_interval(res->data.function.args[0])) {
-        Expr* iv = res->data.function.args[0];
-        return expr_copy(interval_pair_lo(iv, 0));
-    }
+    { Expr* r = minmax_interval_endpoints(res, false); if (r) return r; }
 
     // Check for List (or LinkedList) arguments to flatten
     bool has_list = false;
@@ -347,10 +414,7 @@ Expr* builtin_max(Expr* res) {
 
     /* Max[Interval[..., {a,b}]] is the highest upper endpoint (the last pair's
      * upper endpoint after canonical sorting). */
-    if (n == 1 && is_interval(res->data.function.args[0])) {
-        Expr* iv = res->data.function.args[0];
-        return expr_copy(interval_pair_hi(iv, interval_pair_count(iv) - 1));
-    }
+    { Expr* r = minmax_interval_endpoints(res, true); if (r) return r; }
 
     // Check for List (or LinkedList) arguments to flatten
     bool has_list = false;

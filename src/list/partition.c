@@ -1,4 +1,5 @@
 #include "list_common.h"
+#include "message.h"   /* mth_message: Partition::ilsmp */
 #include "common.h"     /* head_is */
 #include "ndarray.h"    /* is_ndarray */
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
@@ -346,8 +347,53 @@ static Expr* partition_overhang(Expr* res) {
     return out;
 }
 
+/* One level of a Partition block size (position 2) or offset (position 3): a
+ * positive machine integer; the block size may also be UpTo[k], k > 0. */
+static bool partition_level_ok(const Expr* e, bool size) {
+    if (e->type == EXPR_INTEGER) return e->data.integer > 0;
+    if (size && head_is((Expr*)e, SYM_UpTo) && e->data.function.arg_count == 1) {
+        const Expr* k = e->data.function.args[0];
+        return k->type == EXPR_INTEGER && k->data.integer > 0;
+    }
+    return false;
+}
+
+/* A block size or offset spec: one level, or a nonempty List of levels. */
+static bool partition_spec_ok(const Expr* spec, bool size) {
+    if (head_is((Expr*)spec, SYM_List)) {
+        if (spec->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < spec->data.function.arg_count; i++)
+            if (!partition_level_ok(spec->data.function.args[i], size)) return false;
+        return true;
+    }
+    if (spec->type == EXPR_LINKEDLIST) return true;      /* read level by level */
+    if (is_ndarray(spec)) {
+        /* A packed spec ({2} or {3, 1} packed int64): the same rule per entry. */
+        if (spec->data.ndarray.rank != 1 || spec->data.ndarray.dtype != NDT_INT64 ||
+            spec->data.ndarray.dims[0] == 0) return false;
+        const int64_t* d = (const int64_t*)spec->data.ndarray.data;
+        for (int64_t i = 0; i < spec->data.ndarray.dims[0]; i++) if (d[i] <= 0) return false;
+        return true;
+    }
+    return partition_level_ok(spec, size);
+}
+
 Expr* builtin_partition(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2 || res->data.function.arg_count > 5) return NULL;
+
+    /* A block size or offset that is not positive (0, -1, UpTo[0]), not an
+     * integer (x, 1.5) or not machine-sized (10^30) has no partition: the call
+     * stays unevaluated with Partition::ilsmp, never answered with the input
+     * (audit Partition#2/#3). */
+    for (size_t pos = 1; pos <= 2 && pos < res->data.function.arg_count; pos++) {
+        if (!partition_spec_ok(res->data.function.args[pos], pos == 1)) {
+            char* cs = expr_to_string(res);
+            mth_message("Partition", "ilsmp", "Single or list of positive machine-size integers "
+                        "expected at position %zu of %s.", pos + 1, cs ? cs : "");
+            free(cs);
+            return NULL;
+        }
+    }
 
     if (res->data.function.arg_count >= 4) {
         Expr* list = res->data.function.args[0];

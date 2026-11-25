@@ -431,6 +431,169 @@ static void test_s11_special_values(void) {
     audit_true("MinMax#2", "MinMax[{3, 1, 2}] === {1, 3}");
 }
 
+/* ================================================================== */
+/* Wave 4, G2-structural (batch 1): extremum of Intervals, Span and   */
+/* Take ranges, argument validation, Listable tdlen settling.         */
+/* ================================================================== */
+
+static void test_wave4_structural_batch1(void) {
+    /* Min/Max read an Interval argument's extreme endpoint */
+    audit_chk("Max#1", "Max[Interval[{1,3}], 5]", "5");
+    audit_chk("Max#1", "Max[Interval[{1,3}], Interval[{2,7}]]", "7");
+    audit_chk("Max#1", "Min[Interval[{1,3}], 0]", "0");
+    audit_chk("Max#1", "Max[Interval[{1,3}]]", "3");
+    /* a Span running off the end is Part::take, unevaluated */
+    audit_chk("Part#1", "Quiet[Check[{a, b, c, d, e}[[2;;10]], fired, Part::take]]", "fired");
+    audit_chk("Part#1", "Quiet[{a, b, c, d, e}[[2;;10]]]", "Part[{a, b, c, d, e}, Span[2, 10]]");
+    audit_chk("Part#1", "Quiet[Check[<|\"a\" -> 1, \"b\" -> 2|>[[1;;5]], fired, Part::take]]", "fired");
+    audit_chk("Part#1", "{a, b, c}[[3;;2]]", "{}");
+    audit_chk("Part#1", "{a, b, c}[[2;;3]]", "{b, c}");
+    /* Expand's Modulus and Trig options */
+    audit_chk("Expand#2", "Expand[(1+x)^3, Modulus -> 2]", "1 + x + x^2 + x^3");
+    audit_chk("Expand#3", "Expand[Cos[x + y], Trig -> True]", "Cos[x] Cos[y] - Sin[x] Sin[y]");
+    /* Delete of an association entry by key */
+    audit_chk("Delete#3", "Delete[<|a->1,b->2|>,Key[a]]", "<|b -> 2|>");
+    audit_chk("Delete#3", "Delete[<|\"a\"->1,\"b\"->2|>,\"a\"]", "<|\"b\" -> 2|>");
+    audit_chk("Delete#3", "Delete[<|a->1,b->2|>,{Key[a]}]", "<|b -> 2|>");
+    audit_chk("DeleteDuplicates#2", "DeleteDuplicates[<|a->1,b->1,c->2|>, Equal]", "<|a -> 1, c -> 2|>");
+    /* Listable threading over lists of unequal length: tdlen, unevaluated */
+    audit_chk("Exponent#1", "Quiet[Exponent[{x^2, x^3}, {x, y, z}]]", "Exponent[{x^2, x^3}, {x, y, z}]");
+    audit_chk("Exponent#1", "Quiet[Check[Exponent[{x^2, x^3}, {x, y, z}], fired, Thread::tdlen]]", "fired");
+    audit_chk("Exponent#1", "Quiet[Exponent[{x^2, x^3}, {x, y, z}, List]]", "Exponent[{x^2, x^3}, {x, y, z}, List]");
+    audit_chk("PolynomialLCM#2", "Quiet[PolynomialLCM[{x, x^2}, {x^3}]]", "PolynomialLCM[{x, x^2}, {x^3}]");
+    /* Insert::psl for a position that is no index */
+    audit_chk("Insert#3", "Quiet[Check[Insert[{a, b}, x, y], fired, Insert::psl]]", "fired");
+    audit_chk("Insert#3", "Quiet[Insert[{a, b}, x, y]]", "Insert[{a, b}, x, y]");
+    audit_chk("Insert#3", "Quiet[Insert[{a, b}, x, 1.5]]", "Insert[{a, b}, x, 1.5]");
+    audit_chk("Insert#3", "Quiet[Insert[{a, b}, x, 10^30]]", "Insert[{a, b}, x, 1000000000000000000000000000000]");
+    audit_chk("Insert#3", "Quiet[Insert[{a, b}, x, {{1}, 2}]]", "Insert[{a, b}, x, {{1}, 2}]");
+    audit_chk("Insert#3", "Quiet[Insert[{a, b}, x, {1, 1}]]", "Insert[{a, b}, x, {1, 1}]");
+    audit_chk("Insert#3", "Insert[{a, b}, x, {{1}, {2}}]", "{x, a, x, b}");
+    audit_chk("Intersection#1", "Intersection[{1,2,3}, {2,3,4}, SameTest -> Automatic]", "{2, 3}");
+    audit_chk("Intersection#1", "Union[{3,1}, {2,1}, SameTest -> Automatic]", "{1, 2, 3}");
+    /* Partition::ilsmp for a block size or offset that is not a positive integer */
+    audit_chk("Partition#2", "Quiet[Check[Partition[{1,2,3}, 0], fired, Partition::ilsmp]]", "fired");
+    audit_chk("Partition#2", "Quiet[Partition[{1,2,3}, x]]", "Partition[{1, 2, 3}, x]");
+    audit_chk("Partition#2", "Quiet[Partition[{1,2}, 10^30]]", "Partition[{1, 2}, 1000000000000000000000000000000]");
+    audit_chk("Partition#2", "Quiet[Partition[Range[5], UpTo[0]]]", "Partition[{1, 2, 3, 4, 5}, UpTo[0]]");
+    audit_chk("Partition#2", "Partition[Range[5], UpTo[2]]", "{{1, 2}, {3, 4}, {5}}");
+    audit_chk("Partition#3", "Quiet[Partition[{1,2,3,4}, 2, x]]", "Partition[{1, 2, 3, 4}, 2, x]");
+    audit_chk("Partition#3", "Quiet[Check[Partition[{1,2,3,4}, 2, 0], fired, Partition::ilsmp]]", "fired");
+    /* PolynomialQuotient of non-polynomials: ::poly, unevaluated */
+    audit_chk("PolynomialQuotient#1", "Quiet[PolynomialQuotient[x^2.5, x, x]]", "PolynomialQuotient[x^2.5, x, x]");
+    audit_chk("PolynomialQuotient#1", "Quiet[Check[PolynomialQuotient[1/x + x^2, x+1, x], fired, PolynomialQuotient::poly]]", "fired");
+    audit_chk("PolynomialQuotient#1", "Quiet[PolynomialQuotient[Sqrt[x] + x^2, x+1, x]]", "PolynomialQuotient[Sqrt[x] + x^2, 1 + x, x]");
+    audit_chk("PolynomialQuotient#2", "Quiet[PolynomialQuotient[x^2, Sqrt[x], x]]", "PolynomialQuotient[x^2, Sqrt[x], x]");
+    audit_chk("PolynomialQuotient#2", "Quiet[PolynomialQuotient[x^2+1, 1/x, x]]", "PolynomialQuotient[1 + x^2, 1/x, x]");
+    audit_chk("PolynomialQuotient#3", "Quiet[PolynomialQuotient[{x^2,x^3}, x+1, x]]", "PolynomialQuotient[{x^2, x^3}, 1 + x, x]");
+    audit_chk("PolynomialQuotient#3", "PolynomialQuotient[x^3 + a x, x + b, x]", "a + b^2 - b x + x^2");
+    audit_chk("PolynomialQuotient#4", "Check[PolynomialQuotient[x^4+1, 2x+1, x, Modulus->4], fired]", "PolynomialQuotient[1 + x^4, 1 + 2 x, x, Modulus -> 4]");
+    audit_chk("PolynomialQuotient#4", "PolynomialQuotient[x^4+1, x+1, x, Modulus->4]", "3 + x + 3 x^2 + x^3");
+    /* Reverse::normal for an atom */
+    audit_chk("Reverse#1", "Quiet[Check[Reverse[x], fired, Reverse::normal]]", "fired");
+    audit_chk("Reverse#1", "Quiet[Reverse[x]]", "Reverse[x]");
+    audit_chk("Reverse#1", "Quiet[Reverse[5]]", "Reverse[5]");
+    /* Take::take / Drop::drop for positions off the end */
+    audit_chk("Take#1", "Quiet[Check[Take[{a,b,c},5], fired, Take::take]]", "fired");
+    audit_chk("Take#1", "Quiet[Check[Take[{a,b,c},{-4}], fired, Take::take]]", "fired");
+    audit_chk("Take#1", "Quiet[Check[Take[Range[3],5], fired, Take::take]]", "fired");
+    audit_chk("Take#1", "Quiet[Take[{a,b,c},5]]", "Take[{a, b, c}, 5]");
+    audit_chk("Take#1", "Quiet[Check[Drop[{a,b,c},5], fired, Drop::drop]]", "fired");
+    /* Tally of an atom */
+    audit_chk("Tally#1", "Quiet[Check[Tally[5], fired, Tally::list]]", "fired");
+    audit_chk("Tally#1", "Quiet[Tally[5]]", "Tally[5]");
+    /* Union with SameTest compares with every kept element */
+    audit_chk("Union#1", "Union[Range[6], SameTest->(Mod[#1-#2,3]==0&)]", "{1, 2, 3}");
+    /* the Constant symbols are not variables */
+    audit_chk("Variables#1", "Variables[EulerGamma x + Catalan + Degree y]", "{x, y}");
+    audit_chk("Variables#1", "Variables[GoldenRatio + z]", "{z}");
+    /* Coefficient of a power series */
+    audit_chk("Coefficient#1", "Coefficient[Series[Exp[x], {x, 0, 5}], x, 3]", "1/6");
+    /* CoefficientList of a list of polynomials, padded to one shape */
+    audit_chk("CoefficientList#2", "CoefficientList[{1+x, 1+x^2}, x]", "{{1, 1, 0}, {1, 0, 1}}");
+    /* HornerForm::poly through the funnel */
+    audit_chk("HornerForm#1", "Quiet[Check[HornerForm[1 + x^a, x], failed]]", "failed");
+    /* Resultant: the zero polynomial, and Modulus */
+    audit_chk("Resultant#1", "Resultant[0,0,x]", "0");
+    audit_chk("Resultant#1", "Resultant[0,x+1,x]", "0");
+    audit_chk("Resultant#2", "Resultant[x^2+1, x^3-1, x, Modulus->2]", "0");
+    audit_chk("Resultant#2", "Resultant[x^2+1, x^3-1, x, Modulus->3]", "2");
+    audit_chk("Resultant#2", "Options[Resultant]", "{Method -> Automatic, Modulus -> 0}");
+    /* PolynomialQ: bigint degrees, compound variables */
+    audit_chk("PolynomialQ#1", "PolynomialQ[x^(10^20), x]", "True");
+    audit_chk("PolynomialQ#1", "PolynomialQ[x^(2^63) + 1, x]", "True");
+    audit_chk("PolynomialQ#2", "PolynomialQ[x[1]^2 + x[2], x[1]]", "True");
+    audit_chk("PolynomialQ#2", "PolynomialQ[Cos[x] + Sin[x]^2, Sin[x]]", "True");
+    audit_chk("PolynomialQ#2", "PolynomialQ[Sin[x]^(1/2), Sin[x]]", "False");
+    /* a Throw from the test ends Split at once */
+    audit_chk("Split#1", "k = 0; Catch[Split[{1,2,3,4}, (k++; Throw[#1]; True)&]]", "1");
+    audit_chk("Split#1", "k", "1");
+}
+
+/* Wave 4, G2-structural (batch 2): Gaussian Factor in two variables,
+ * Collect on symbolic powers, MinMax padding, PadRight margins, FlattenAt
+ * splicing, indexed PrependTo targets, Catenate of associations. */
+static void test_wave4_structural_batch2(void) {
+    audit_chk("Factor#1", "Factor[2 + 2 y - I x - I x y + x^2 + x^2 y]", "(I + x) (-2*I + x) (1 + y)");
+    audit_chk("Factor#1", "Factor[2 - I x + x^2]", "(I + x) (-2*I + x)");
+    audit_chk("Factor#1", "Factor[x^2 + 2 I x y - y^2]", "(x + I y)^2");
+    audit_chk("Factor#1", "Factor[x^2 + y^2]", "x^2 + y^2");
+    audit_chk("Collect#1", "Collect[a x^n + b x^n + c, x]", "c + (a + b) x^n");
+    audit_chk("Collect#1", "Collect[a x^n + b x^(2 n) + c x^n, x]", "(a + c) x^n + b x^(2 n)");
+    audit_chk("Collect#2", "Collect[a x^(n+1) + b x^(n+1), x]", "(a + b) x^(1 + n)");
+    audit_chk("Collect#2", "Collect[a x y + b x y + x, x]", "x (1 + a y + b y)");
+    audit_chk("MinMax#1", "MinMax[{1, 2, 3}, 1]", "{0, 4}");
+    audit_chk("MinMax#1", "MinMax[{1, 2, 3}, {1, 2}]", "{0, 5}");
+    audit_chk("MinMax#1", "MinMax[{1, 2, 3}, Scaled[1/2]]", "{0, 4}");
+    audit_chk("PadRight#1", "Quiet[PadRight[{a,b},4,x,m]]", "PadRight[{a, b}, 4, x, m]");
+    audit_chk("PadRight#1", "Quiet[Check[PadRight[{a,b},4,x,2.0], fired, PadRight::ilsmp]]", "fired");
+    audit_chk("PadRight#1", "PadRight[{a,b},4,x,1]", "{x, a, b, x}");
+    audit_chk("FlattenAt#1", "FlattenAt[HoldComplete[{a,b}], 1]", "HoldComplete[a, b]");
+    audit_chk("FlattenAt#1", "FlattenAt[{HoldComplete[{a,b}]}, {1,1}]", "{HoldComplete[a, b]}");
+    audit_chk("FlattenAt#1", "FlattenAt[{a, {b, c}, {d}}, {{2}, {3}}]", "{a, b, c, d}");
+    audit_chk("FlattenAt#2", "Quiet[r4f = {FlattenAt[{a,{b}}, {{}}]}]", "{FlattenAt[{a, {b}}, {{}}]}");
+    audit_chk("FlattenAt#2", "Quiet[Check[FlattenAt[{a,{b}}, {{}}], fired, FlattenAt::psl]]", "fired");
+    audit_chk("PrependTo#2", "Quiet[Check[PrependTo[h4p[1], z], fired, PrependTo::rvalue]]", "fired");
+    audit_chk("PrependTo#2", "h4p[1]", "h4p[1]");
+    audit_chk("PrependTo#2", "v4p = {1}; PrependTo[v4p, 0]", "{0, 1}");
+    audit_chk("Catenate#1", "Catenate[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]", "{1, 2, 3, 4}");
+    audit_chk("PolynomialMod#3", "PolynomialMod[(3+5I) x + 7, 2]", "1 + (1 + I) x");
+}
+
+/* Wave 4, G2-structural (batch 3): polynomial argument checks, list forms,
+ * ExpandAll denominators and connectives, FactorTerms of radicals,
+ * inexact PolynomialReduce, Eliminate of a solved variable. */
+static void test_wave4_structural_batch3(void) {
+    audit_chk("PolynomialExtendedGCD#3", "PolynomialExtendedGCD[{x^2-1, x^2+x}, x - 1, x]",
+              "PolynomialExtendedGCD[{-1 + x^2, x + x^2}, -1 + x, x]");
+    audit_chk("PolynomialExtendedGCD#3", "PolynomialExtendedGCD[x^2 - 1, x - 1, x]", "{-1 + x, {0, 1}}");
+    audit_chk("PolynomialExtendedGCD#2", "PolynomialExtendedGCD[x^2 + 1, x + 1, x, Modulus -> 4]",
+              "PolynomialExtendedGCD[1 + x^2, 1 + x, x, Modulus -> 4]");
+    audit_chk("PolynomialExtendedGCD#2", "PolynomialExtendedGCD[x^2 + 1, x + 1, x, Modulus -> 3]", "{1, {2, 2 + x}}");
+    audit_chk("CoefficientRules#2", "CoefficientRules[{x + y, x y}, {x, y}]",
+              "{{{1, 0} -> 1, {0, 1} -> 1}, {{1, 1} -> 1}}");
+    audit_chk("CoefficientRules#2", "CoefficientRules[{x + y, x y}]",
+              "{{{1, 0} -> 1, {0, 1} -> 1}, {{1, 1} -> 1}}");
+    audit_chk("CoefficientArrays#1", "Quiet[CoefficientArrays[Sin[x] + x, x]]", "CoefficientArrays[x + Sin[x], x]");
+    audit_chk("CoefficientArrays#1", "Quiet[Check[CoefficientArrays[Sin[x] + x, x], fired, CoefficientArrays::poly]]", "fired");
+    audit_chk("ExpandAll#1", "ExpandAll[1/((x+1)(x+2))]", "1/(2 + 3 x + x^2)");
+    audit_chk("ExpandAll#1", "ExpandAll[a/((x+1)(x+2)) + b]", "b + a/(2 + 3 x + x^2)");
+    audit_chk("ExpandAll#2", "ExpandAll[f[(x+y)^2] && g[(x+y)^2]]", "f[x^2 + 2 x y + y^2] && g[x^2 + 2 x y + y^2]");
+    audit_chk("FactorTerms#1", "FactorTerms[2 Sqrt[x] + 4]", "2 (2 + Sqrt[x])");
+    audit_chk("FactorTerms#1", "FactorTerms[6 x^(3/2) + 4 x]", "2 (2 x + 3 x^(3/2))");
+    audit_chk("FactorTermsList#2", "FactorTermsList[2 Sqrt[x] + 4]", "{2, 2 + Sqrt[x]}");
+    audit_chk("FactorTermsList#2", "FactorTermsList[6 x^(1/3) + 9]", "{3, 3 + 2 x^(1/3)}");
+    audit_chk("FactorTermsList#2", "FactorTermsList[4 Sqrt[x] + 6 x^(3/2)]", "{2, 2 Sqrt[x] + 3 x^(3/2)}");
+    audit_chk("PolynomialReduce#1", "PolynomialReduce[x^2 + 1.5, {x - 0.5}, x]", "{{0.5 + x}, 1.75}");
+    audit_chk("PolynomialReduce#1", "PolynomialReduce[x^2 + 1, {x - 1}, x]", "{{1 + x}, 2}");
+    audit_chk("Eliminate#3", "Quiet[Eliminate[{x == E^y, y == 0}, y]]", "x == 1");
+    audit_chk("FactorSquareFree#1", "FactorSquareFree[E^(2x)+2E^x+1]", "(1 + E^x)^2");
+    audit_chk("FactorSquareFree#1", "FactorSquareFree[x^(2n)+2x^n+1]", "(1 + x^n)^2");
+    audit_chk("FactorSquareFree#1", "FactorSquareFree[x^(1/2) + 2 x^(1/4) + 1]", "(1 + x^(1/4))^2");
+    audit_chk("FactorSquareFree#1", "FactorSquareFree[x^2 + 2 x + 1]", "(1 + x)^2");
+    audit_chk("Eliminate#2", "Quiet[Eliminate[{x == 0.5 y, y == 2}, y]]", "x == 1.0");
+}
+
 int main(void) {
     audit_init();
     TEST(test_expand_option_not_pattern);
@@ -454,5 +617,8 @@ int main(void) {
     TEST(test_s14_levels_and_shapes);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_structural_batch1);
+    TEST(test_wave4_structural_batch2);
+    TEST(test_wave4_structural_batch3);
     return audit_finish("audit_structural_manipulation");
 }

@@ -2999,8 +2999,28 @@ Expr* builtin_ndarrayq(Expr* res) {
  * would materialise a packed argument into a plain List before this runs, making
  * it wrongly answer False. */
 Expr* builtin_packedarrayq(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
-    return expr_new_symbol(is_packed_list(res->data.function.args[0]) ? SYM_True : SYM_False);
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+    const Expr* a = res->data.function.args[0];
+    if (argc == 1 || !is_packed_list(a))
+        return expr_new_symbol(is_packed_list(a) ? SYM_True : SYM_False);
+    /* PackedArrayQ[expr, type (, rank)]: a packed array whose elements are of
+     * that type -- Integer, Real or Complex -- and, when given, of that rank
+     * (audit PackedArrayQ#1). */
+    const Expr* t = res->data.function.args[1];
+    if (t->type != EXPR_SYMBOL) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    bool ok;
+    if (t->data.symbol.name == SYM_Integer) ok = dt == NDT_INT64;
+    else if (t->data.symbol.name == SYM_Real) ok = dt == NDT_FLOAT64 || dt == NDT_FLOAT32;
+    else if (t->data.symbol.name == SYM_Complex) ok = dt == NDT_COMPLEX64 || dt == NDT_COMPLEX32;
+    else return NULL;
+    if (argc == 3) {
+        const Expr* r = res->data.function.args[2];
+        if (r->type != EXPR_INTEGER) return NULL;
+        ok = ok && (int64_t)a->data.ndarray.rank == r->data.integer;
+    }
+    return expr_new_symbol(ok ? SYM_True : SYM_False);
 }
 
 void ndarray_init(void) {
