@@ -58,6 +58,7 @@ Out[1]= 3
 In[2]:= x
 Out[2]= 1
 ```
+- **A malformed local is rejected** (audit Block#2): an entry that is neither a symbol nor `sym = v` (`Module[{f[1]}, 2]`) issues `Module::lvsym` and the call stays unevaluated. Local names of any length stay unique (audit Module#1).
 
 ## Conditions at the end of a scoping construct
 In a definition, a right-hand side that is `Module`, `With` or `Block`
@@ -103,6 +104,7 @@ Implements dynamic scoping by temporarily overriding symbol values.
   with `f[a_] := a^2`, `Block[{f}, f[3]]` is `9`. Before, the fixed-point stamp
   made while the symbol was blocked survived the restore, so these came back
   as `x + y` and `f[3]`.
+- **A malformed local is rejected** (audit Block#2): `Block[{1}, 2]` issues `Block::lvsym` and stays unevaluated.
 
 ## With
 
@@ -124,6 +126,8 @@ Defines local constants by lexical substitution.
 In[1]:= x = 10; With[{x = 5}, x^2]
 Out[1]= 25
 ```
+- **A malformed local is rejected** (audit With#3): a bare symbol, `1 = 2` or `f[1] = 2` issues `With::lvset` and the call stays unevaluated.
+- **Several lists nest** (audit With#4): `With[{x = 1}, {y = x + 1}, y]` is `2`.
 
 ## Unique
 Generates fresh symbols that have never been used before.
@@ -149,6 +153,8 @@ Generates fresh symbols that have never been used before.
 In[1]:= {Unique[a], Unique[{a, a}], Unique[{a, b}], Unique["x"], Unique[]}
 Out[1]= {a$1, {a$2, a$3}, {a$4, b$4}, x1, $2}
 ```
+- `Unique["str"]` needs a valid symbol name: `Unique["1abc"]` issues `Unique::usym` (audit Unique#1).
+- `Unique[x, attrs]` (and `Unique[{x, ...}, attrs]`) gives the fresh symbols the attributes `attrs` as well as `Temporary` (audit Unique#2).
 
 ## Scoping and pure functions
 

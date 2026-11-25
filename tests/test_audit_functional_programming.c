@@ -227,6 +227,38 @@ static void test_wave3_arity_options(void) {
     audit_chk("Scan#4", "Reap[Scan[Sow, f[a], Heads -> True]][[2]]", "{{f, a}}");
 }
 
+/* Wave 4 G4: Orderless and fpct for Function, more operator forms, Select's
+ * count, MaximalBy/MinimalBy counts and numeric order, UpTo and excluded
+ * forms in TakeLargest*, and Through[expr, h] only at the head. */
+static void test_wave4_g4_functional(void) {
+    audit_run("ClearAll[f, a, b, k, p, q, g, x, y]");
+    audit_chk("Function#4", "Function[{x, y}, {x, y}, Orderless][b, a]", "{a, b}");
+    audit_chk("Function#5", "Check[Function[{x, y}, x + y][1], fired, Function::fpct]", "fired");
+    audit_chk("Function#5", "Quiet[Function[{x, y}, x + y][1]]", "Function[{x, y}, x + y][1]");
+    audit_chk("Function#5", "Function[{x, y}, x + y][1, 2, 3]", "3");
+    audit_chk("Scan#2", "Reap[Scan[Sow][{a, b}]]", "{Null, {{a, b}}}");
+    audit_chk("Select#1", "Check[Select[{1, 2, 3, 4, 5, 6}, EvenQ, -1], fired, Select::innf]", "fired");
+    audit_chk("Select#1", "Select[{1, 2, 3, 4, 5, 6}, EvenQ, Infinity]", "{2, 4, 6}");
+    audit_chk("MapIndexed#1", "MapIndexed[f][{a, b}]", "{f[a, {1}], f[b, {2}]}");
+    audit_chk("MaximalBy#1", "MaximalBy[{1, 2, 3, 4, 5}, Identity, 2]", "{5, 4}");
+    audit_chk("MaximalBy#2", "MaximalBy[{Pi, 4}, Identity]", "{4}");
+    audit_chk("MaximalBy#2", "MinimalBy[{Pi, 3, E}, Identity]", "{E}");
+    audit_chk("MinimalBy#1", "MinimalBy[{1, 2, 3, 4, 5}, Mod[#1, 3] &, 2]", "{3, 1}");
+    audit_chk("MinimalBy#1", "MinimalBy[{1, 2, 3, 4, 5}, Identity, 2]", "{1, 2}");
+    audit_chk("MinimalBy#1", "MinimalBy[{1, 2, 3}, Identity, UpTo[5]]", "{1, 2, 3}");
+    audit_chk("ReverseSortBy#1", "ReverseSortBy[-#1 &][{1, 3, 2}]", "{1, 2, 3}");
+    audit_chk("TakeLargest#3", "{TakeLargest[{1, 2, 3}, UpTo[2]], TakeLargest[{1, 2, 3}, UpTo[5]]}", "{{3, 2}, {3, 2, 1}}");
+    audit_chk("TakeLargest#4", "{TakeLargest[{1, Missing[], 5}, 2], TakeLargest[{1, Indeterminate, 5}, 2]}", "{{5, 1}, {5, 1}}");
+    audit_chk("TakeLargestBy#3", "TakeLargestBy[{1, 2, 3}, Identity, UpTo[5]]", "{3, 2, 1}");
+    audit_chk("TakeSmallestBy#3", "TakeSmallestBy[{3, -1, 2, -5}, Abs, UpTo[2]]", "{-1, 2}");
+    audit_chk("Through#2", "Through[p[q[f, g]][x], q]", "p[q[f, g]][x]");
+    audit_chk("Through#2", "Through[q[f, g][x], q]", "q[f[x], g[x]]");
+    audit_chk("InterpolatingPolynomial#1", "Check[InterpolatingPolynomial[{{1, 2}, {2, 3}, {1, 5}}, x], fired, InterpolatingPolynomial::noipf]", "fired");
+    audit_chk("InterpolatingPolynomial#1", "Quiet[InterpolatingPolynomial[{{1, 2}, {2, 3}, {1, 5}}, x]]", "InterpolatingPolynomial[{{1, 2}, {2, 3}, {1, 5}}, x]");
+    audit_chk("InterpolatingPolynomial#1", "Expand[InterpolatingPolynomial[{{1, 2}, {2, 3}, {1, 2}}, x]]", "1 + x");
+    audit_chk("InterpolatingPolynomial#2", "Check[InterpolatingPolynomial[{{1, 2}, {1., 3}}, x], fired, InterpolatingPolynomial::noipf]", "fired");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fixedpointlist_long_symbolic);
@@ -240,5 +272,6 @@ int main(void) {
     TEST(test_level_spec_infinity);
     TEST(test_s14_level_specs);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_g4_functional);
     return audit_finish("audit_functional_programming");
 }

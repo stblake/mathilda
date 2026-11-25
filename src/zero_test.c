@@ -3391,6 +3391,18 @@ Expr* builtin_possible_zero_q(Expr* res) {
     Expr* arg = res->data.function.args[0];
     if (arg->type == EXPR_LINKEDLIST) return ll_map_arg(res, 0);   /* as over a List */
 
+    /* An equation, inequality or logical combination is not a quantity, so it
+     * is never zero: PossibleZeroQ[a == b] was True, read as a - b (audit
+     * PossibleZeroQ#3). */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = arg->data.function.head->data.symbol.name;
+        if (h == SYM_Equal || h == SYM_Unequal || h == SYM_Less || h == SYM_LessEqual ||
+            h == SYM_Greater || h == SYM_GreaterEqual || h == SYM_Inequality ||
+            h == SYM_SameQ || h == SYM_UnsameQ || h == SYM_And || h == SYM_Or ||
+            h == SYM_Not)
+            return expr_new_symbol(SYM_False);
+    }
+
     /* Manual threading over the FIRST argument only (PossibleZeroQ is no longer
      * ATTR_LISTABLE, so the assumption argument is never mis-threaded): a list
      * first argument maps element-wise while every option/assumption argument

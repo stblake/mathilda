@@ -399,7 +399,12 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         if (handled) return r;
     }
 
-    if (is_atomic(expr)) return expr_copy(expr);
+    /* A subscript below an atom: Set::partd, and the value is unchanged
+     * (audit Set#1: l[[1, 1]] = 9 on {1, 2, 3} was silent). */
+    if (is_atomic(expr)) {
+        mth_message("Set", "partd", "Part specification is longer than depth of object.");
+        return expr_copy(expr);
+    }
 
     Expr* idx = indices[0];
     Expr** rest = indices + 1;
@@ -518,6 +523,13 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             if (k < 0) k = len + k + 1;
             if (k >= 1 && k <= (int64_t)len)
                 part_assign_slot(&new_args[k - 1], rest, nrest, rhs, 0, 0);
+            else {
+                /* Set::partw, the value unchanged (audit Set#1). */
+                char* ks = expr_to_string(idx);
+                char* es = expr_to_string(expr);
+                mth_message("Set", "partw", "Part %s of %s does not exist.", ks ? ks : "", es ? es : "");
+                free(ks); free(es);
+            }
         }
     } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
         for (size_t i = 0; i < len; i++)

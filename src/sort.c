@@ -1297,6 +1297,19 @@ Expr* builtin_sort_by(Expr* res) {
  * MaximalBy[list, f]  -> the element(s) e maximising f[e] (all ties, in order).
  * MaximalBy[assoc, f] -> the entries whose value maximises f[value] (an assoc).
  * MaximalBy[f]        -> operator form. */
+static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest);
+
+/* A count spec n or UpTo[n] (n a non-negative machine integer) -> *out.
+ * UpTo[n] takes at most n, which take_extreme already does for any n. */
+static bool take_count_spec(const Expr* e, int64_t* out) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_UpTo && e->data.function.arg_count == 1)
+        e = e->data.function.args[0];
+    if (e->type != EXPR_INTEGER || e->data.integer < 0) return false;
+    *out = e->data.integer;
+    return true;
+}
+
 static Expr* maximal_minimal_by(Expr* res, int mode) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1309,6 +1322,17 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
         Expr* inner = expr_new_function(expr_new_symbol(head), inner_args, 2);
         Expr* func_args[1] = { inner };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
+    }
+    /* MaximalBy[list, f, n] / MinimalBy[list, f, n] (n or UpTo[n]): the n
+     * elements with the largest (smallest) f-values, best first, ties by
+     * position -- exactly TakeLargestBy / TakeSmallestBy (audit MaximalBy#1,
+     * MinimalBy#1). */
+    if (argc == 3) {
+        { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
+        int64_t nreq;
+        if (!take_count_spec(res->data.function.args[2], &nreq)) return NULL;
+        return take_extreme(res->data.function.args[0], res->data.function.args[1],
+                            nreq, mode == 0);
     }
     if (argc != 2) return NULL;
     /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
@@ -1339,20 +1363,26 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
         expr_free(call);
     }
 
+    /* f-values rank in NUMERIC order (numeric_order.h), as TakeLargestBy's
+     * do: canonical order put every explicit number before Pi, so
+     * MaximalBy[{Pi, 4}, Identity] was {Pi} (audit MaximalBy#2). */
+    NumOrdKey* nk = malloc(sizeof(NumOrdKey) * n);
+    for (size_t i = 0; i < n; i++) numord_key(keys[i], &nk[i]);
     size_t best = 0;
     for (size_t i = 1; i < n; i++) {
-        int c = expr_compare(keys[i], keys[best]);
+        int c = numord_cmp(keys[i], &nk[i], keys[best], &nk[best]);
         if ((mode == 0 && c > 0) || (mode == 1 && c < 0)) best = i;
     }
 
     size_t* out = malloc(sizeof(size_t) * n);
     size_t nout = 0;
     for (size_t i = 0; i < n; i++)
-        if (expr_compare(keys[i], keys[best]) == 0)
+        if (i == best || numord_cmp(keys[i], &nk[i], keys[best], &nk[best]) == 0)
             out[nout++] = i;
 
     for (size_t i = 0; i < n; i++) expr_free(keys[i]);
     free(keys);
+    free(nk);
 
     Expr* result = llq_emit(&q, out, nout);
     free(out);
@@ -1531,22 +1561,41 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
     SortByPair* pairs = malloc(sizeof(SortByPair) * (n ? n : 1));
     NumOrdKey* nk = malloc(sizeof(NumOrdKey) * (n ? n : 1));
     if (!pairs || !nk) { free(pairs); free(nk); llq_close(&q); return NULL; }
+    /* Missing[...] and Indeterminate keys are excluded, as the reference's
+     * default ExcludedForms does: TakeLargest[{1, Missing[], 5}, 2] is
+     * {5, 1} (audit TakeLargest#4).  pairs[] is compacted; nk[] stays
+     * indexed by position. */
+    size_t m = 0;
     for (size_t i = 0; i < n; i++) {
-        pairs[i].pos = i;
-        pairs[i].multi = false;
-        pairs[i].key = NULL;
+        SortByPair* pr = &pairs[m];
+        pr->pos = i;
+        pr->multi = false;
+        pr->key = NULL;
+        const Expr* kx;
+        Expr* subj = NULL;
         if (f) {
             Expr* call_args[1] = { expr_copy(sort_subject(llq_peek(&q, i), assoc)) };
             Expr* call = expr_new_function(expr_copy(f), call_args, 1);
-            pairs[i].key = eval_callback(call);
+            pr->key = eval_callback(call);
             expr_free(call);
-            numord_key(pairs[i].key, &nk[i]);
+            kx = pr->key;
         } else {
-            Expr* subj = expr_copy(sort_subject(llq_peek(&q, i), assoc));
-            numord_key(subj, &nk[i]);
-            expr_free(subj);
+            subj = expr_copy(sort_subject(llq_peek(&q, i), assoc));
+            kx = subj;
         }
+        bool excluded =
+            (kx->type == EXPR_SYMBOL && kx->data.symbol.name == SYM_Indeterminate) ||
+            (kx->type == EXPR_FUNCTION && kx->data.function.head->type == EXPR_SYMBOL &&
+             kx->data.function.head->data.symbol.name == SYM_Missing);
+        if (excluded) {
+            if (pr->key) { expr_free(pr->key); pr->key = NULL; }
+        } else {
+            numord_key((Expr*)kx, &nk[i]);
+            m++;
+        }
+        if (subj) expr_free(subj);
     }
+    n = m;
 
     /* Best first: descending for largest, ascending for smallest. */
     const NumOrdKey* saved_nk = g_take_nk;
@@ -1567,19 +1616,6 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
     return result;
 }
 
-/* The count of TakeLargest / TakeSmallest (+By): an Integer n, or UpTo[n]
- * (at most n -- take_extreme already stops at the length). */
-static bool take_count(const Expr* e, int64_t* out) {
-    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
-    if (head_is(e, SYM_UpTo) && e->data.function.arg_count == 1 &&
-        e->data.function.args[0]->type == EXPR_INTEGER &&
-        e->data.function.args[0]->data.integer >= 0) {
-        *out = e->data.function.args[0]->data.integer;
-        return true;
-    }
-    return false;
-}
-
 Expr* builtin_take_largest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     /* O(n log k) through a bounded heap rather than the full O(n log n) sort
@@ -1588,9 +1624,9 @@ Expr* builtin_take_largest(Expr* res) {
         Expr* nd = ndstruct_take_extreme(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
-    int64_t nreq_;
-    if (!take_count(res->data.function.args[1], &nreq_)) return NULL;
-    return take_extreme(res->data.function.args[0], NULL, nreq_, true);
+    int64_t nreq;
+    if (!take_count_spec(res->data.function.args[1], &nreq)) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nreq, true);
 }
 
 Expr* builtin_take_smallest(Expr* res) {
@@ -1599,27 +1635,27 @@ Expr* builtin_take_smallest(Expr* res) {
         Expr* nd = ndstruct_take_extreme(res, false);
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
-    int64_t nreq_;
-    if (!take_count(res->data.function.args[1], &nreq_)) return NULL;
-    return take_extreme(res->data.function.args[0], NULL, nreq_, false);
+    int64_t nreq;
+    if (!take_count_spec(res->data.function.args[1], &nreq)) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nreq, false);
 }
 
 Expr* builtin_take_largest_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
     /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
     { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
-    int64_t nreq_;
-    if (!take_count(res->data.function.args[2], &nreq_)) return NULL;
-    return take_extreme(res->data.function.args[0], res->data.function.args[1], nreq_, true);
+    int64_t nreq;
+    if (!take_count_spec(res->data.function.args[2], &nreq)) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nreq, true);
 }
 
 Expr* builtin_take_smallest_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
     /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
     { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
-    int64_t nreq_;
-    if (!take_count(res->data.function.args[2], &nreq_)) return NULL;
-    return take_extreme(res->data.function.args[0], res->data.function.args[1], nreq_, false);
+    int64_t nreq;
+    if (!take_count_spec(res->data.function.args[2], &nreq)) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nreq, false);
 }
 
 /* ------------------- RankedMin / RankedMax ------------------- */

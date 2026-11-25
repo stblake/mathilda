@@ -161,7 +161,10 @@ static long nf_capacity(const Expr* e) {
     }
 #endif
     (void)e;
-    return 17;   /* a machine double round-trips in <= 17 significant digits */
+    /* A machine number carries $MachinePrecision (~15.95) digits: showing 17
+     * exposed binary noise, NumberForm[0.1, 20] as 0.10000000000000001
+     * (audit NumberForm#1). */
+    return 16;
 }
 
 /* ------------------------------------------------------------------ */

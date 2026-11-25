@@ -44,6 +44,10 @@ uint32_t call_head_attributes(Expr* call);
 // Set attributes for a given symbol
 void set_attributes(const char* symbol_name, uint32_t attrs);
 
+// Attributes[s] = spec: set exactly the attributes named by spec (a name or a
+// List of names). False (nothing changed) when a name is not an attribute.
+bool attr_assign(const char* symbol_name, Expr* spec);
+
 // Built-in functions
 Expr* builtin_attributes(Expr* res);
 Expr* builtin_set_attributes(Expr* res);

@@ -105,6 +105,7 @@ Out[2]= {1.0, 2.0, 0.75}
 
 `Increment` (`++`), `Decrement` (`--`), `PreIncrement` and `PreDecrement` share
 the same machinery; the first two return the **old** value, the rest the new one.
+- The target may be an indexed value: a DownValue `f[1]` or a key `asc["a"]` of an association in a variable (audit AddTo#2, SubtractFrom#2, TimesBy#2, DivideBy#2).
 
 ## Unset (=.)
 
@@ -137,6 +138,7 @@ Out[2]= f[3]
 In[3]:= fact[1] = 1; fact[n_] := n fact[n - 1]; fact[1] =.; DownValues[fact]
 Out[3]= {HoldPattern[fact[n_]] :> n fact[n - 1]}
 ```
+- `{a, b} =.` unsets each element (audit Unset#1), and `Format[lhs] =.` removes the display rules `Format[lhs] = rhs` made (audit Format#2, FormatValues#1).
 
 ## UpSet (^=), UpSetDelayed (^:=)
 
@@ -322,6 +324,7 @@ Out[3]= {a, b}
 In[4]:= Replace[1 + x^2, x^2 -> a + b, {1}]
 Out[4]= 1 + a + b
 ```
+- A rule spec that is not a rule, an association, a list of them or a list of such lists issues `Replace::reps` (likewise `ReplaceAll::reps`, `ReplaceRepeated::reps`, `ReplaceAt::reps`) and the call stays unevaluated (audit Replace#1, ReplaceAll#1, ReplaceAt#3). `ReplaceRepeated[rules][expr]` and `ReplaceAt[rules, n][expr]` are operator forms.
 
 ## ReplacePart
 
@@ -356,6 +359,7 @@ Out[3]= {a, xxx, c, xxx, e, xxx, xxx}
 In[4]:= ReplacePart[f[x], 0 -> g]
 Out[4]= g[x]
 ```
+- A position may go through a head into its parts (`ReplacePart[f[a][b], {0, 1} -> z]` is `f[z][b]`), and `Heads -> v` is accepted as an option (audit ReplacePart#2/#3).
 
 ## ReplaceAt
 
@@ -644,6 +648,7 @@ Out[2]= "HoldForm[1*qq]"
 In[3]:= f /: MakeBoxes[f, TraditionalForm] := "F"; {UpValues[f], FormatValues[f]}
 Out[3]= {{}, {HoldPattern[MakeBoxes[f, TraditionalForm]] :> F}}
 ```
+- A delayed `Format[lhs] := rhs /; test` applies only when the test is `True` (audit Format#1). A tagged `h /: MakeBoxes[h[x_], fmt_] := boxes` is used by `MakeBoxes` (audit MakeBoxes#1).
 
 ## ClearAll, Remove
 
@@ -681,6 +686,7 @@ Out[2]= {{}, {}}
 In[3]:= x = 2; Remove[x]; x
 Out[3]= x
 ```
+- Also removes every message `s::tag` and the symbol's `Options` (audit ClearAll#1/#2). `Remove` removes the messages too.
 
 ## Protect, Unprotect
 
@@ -729,6 +735,7 @@ no target), `Options[f] = ...` and `Default[f] = ...` (`Set::write`, tag `f`),
 named symbol; a string pattern skips Protected symbols silently), `f =.`
 (`Unset::wrsym`, `$Failed`), and `AppendTo`/`PrependTo` (`Set::wrsym`, the
 variable unchanged). `N[x] =.` removes the NValue `N[x] = v` installed.
+- A string argument is a `Names` pattern: `Protect["xa*"]` protects every matching symbol and creates none (audit Protect#1, Unprotect#1).
 
 ## Options, SetOptions, OptionValue
 
@@ -863,3 +870,11 @@ FilterRules[{a -> 1, b -> 2, c :> 3}, {a, c}]     (* {a -> 1, c :> 3} *)
 FilterRules[{opts}, Options[Plot]]                 (* the options Plot accepts *)
 FilterRules[{opts}, Except[Options[Plot]]]         (* the rest *)
 ```
+
+## SetOptions
+
+- `SetOptions[{s1, s2, ...}, rules]` changes nothing when one symbol refuses an option (audit SetOptions#1).
+
+## OptionValue
+
+- `OptionValue[f, {n1, n2, ...}]` gives the list of values (audit OptionValue#1).

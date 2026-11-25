@@ -2411,6 +2411,22 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         return false;
     }
 
+    /* Attributes[s] = {attr, ...}: s's attributes become exactly those named
+     * (audit Attributes#1, Set#2). Attributes is Protected, so this is
+     * intercepted before the Protected guard; like SetAttributes it is not
+     * refused for a Protected s. A spec naming a non-attribute falls through
+     * and is refused as before. */
+    if (lhs->type == EXPR_FUNCTION
+        && lhs->data.function.head->type == EXPR_SYMBOL
+        && lhs->data.function.head->data.symbol.name == SYM_Attributes
+        && lhs->data.function.arg_count == 1
+        && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        Expr* spec = is_delayed ? evaluate(rhs) : expr_copy(rhs);
+        bool ok = attr_assign(lhs->data.function.args[0]->data.symbol.name, spec);
+        expr_free(spec);
+        if (ok) return true;
+    }
+
     /* Format[lhs] = rhs / Format[lhs, form] := rhs: FormatValues of the symbol
      * lhs is keyed on, as the reference stores them. Format is Protected, so
      * this is intercepted before the Protected guard. (An untagged
@@ -2469,7 +2485,8 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             || lhs->data.function.head->data.symbol.name == SYM_DownValues
             || lhs->data.function.head->data.symbol.name == SYM_OwnValues
             || lhs->data.function.head->data.symbol.name == SYM_FormatValues
-            || lhs->data.function.head->data.symbol.name == SYM_NValues)) {
+            || lhs->data.function.head->data.symbol.name == SYM_NValues
+            || lhs->data.function.head->data.symbol.name == SYM_SubValues)) {
         const char* h = lhs->data.function.head->data.symbol.name;
         const char* target = lhs->data.function.args[0]->data.symbol.name;
         /* A list-assignment mutates `target`'s definitions, so it must honour
@@ -2489,6 +2506,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             if (h == SYM_UpValues)          symtab_set_up_values(target, rhs);
             else if (h == SYM_FormatValues) symtab_set_format_values(target, rhs);
             else if (h == SYM_NValues)      symtab_set_n_values(target, rhs);
+            else if (h == SYM_SubValues)    symtab_set_sub_values(target, rhs);
             else if (h == SYM_DownValues)   symtab_set_down_values(target, rhs);
             else                          symtab_set_own_values(target, rhs);
             return true;

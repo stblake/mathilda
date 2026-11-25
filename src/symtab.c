@@ -2438,6 +2438,41 @@ static bool remove_matching_from(Rule** list, const Expr* lhs) {
     return removed;
 }
 
+/* Drop every message of `symbol_name` -- the DownValues MessageName[s, tag]
+ * (s::tag = text) keyed on it, including s::usage -- as ClearAll and Remove
+ * do (audit ClearAll#2, Remove#1).  A no-op (no scan) when MessageName has no
+ * rules. */
+void symtab_clear_messages(const char* symbol_name) {
+    if (!symbol_name) return;
+    SymbolDef* md = node_find(SYM_MessageName);
+    if (!md || !md->down_values) return;
+    litidx_drop(md);
+    bool removed = false;
+    Rule* prev = NULL;
+    for (Rule* curr = md->down_values; curr; ) {
+        const Expr* p = curr->pattern;
+        if (p && p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+            && SYM_IS_HOLDPATTERN(p->data.function.head->data.symbol.name)
+            && p->data.function.arg_count == 1)
+            p = p->data.function.args[0];
+        bool hit = p && p->type == EXPR_FUNCTION && p->data.function.arg_count >= 1
+                   && p->data.function.args[0]->type == EXPR_SYMBOL
+                   && p->data.function.args[0]->data.symbol.name == symbol_name;
+        Rule* next = curr->next;
+        if (hit) {
+            if (prev) prev->next = next; else md->down_values = next;
+            expr_free(curr->pattern);
+            expr_free(curr->replacement);
+            free(curr);
+            removed = true;
+        } else {
+            prev = curr;
+        }
+        curr = next;
+    }
+    if (removed) eval_clock_bump();
+}
+
 bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
                                  bool own_value) {
     if (!symbol_name || !lhs) return false;
@@ -2454,6 +2489,16 @@ bool symtab_remove_n_value(const char* symbol_name, const Expr* lhs) {
     SymbolDef* def = symtab_get_def(symbol_name);
     if (!remove_matching_from(&def->n_values, lhs)) return false;
     symtab_n_value_count--;
+    return true;
+}
+
+/* Remove the FormatValue of `symbol_name` whose pattern is `lhs` (Format[...]
+ * =. ; see install_format_rules).  False when there is none. */
+bool symtab_remove_format_value(const char* symbol_name, const Expr* lhs) {
+    if (!symbol_name || !lhs) return false;
+    SymbolDef* def = symtab_get_def(symbol_name);
+    if (!remove_matching_from(&def->format_values, lhs)) return false;
+    if (symtab_format_value_count) symtab_format_value_count--;
     return true;
 }
 
@@ -3113,7 +3158,7 @@ bool symtab_remove_matching_up_value(const char* symbol_name, const Expr* lhs) {
 }
 
 /* Shared backend for OwnValues[f]=list / DownValues[f]=list / UpValues[f]=list.
- * which: 0=own, 1=down, 2=up, 3=format, 4=N. Frees the existing target list, then installs each
+ * which: 0=own, 1=down, 2=up, 3=format, 4=N, 5=sub. Frees the existing target list, then installs each
  * Rule/RuleDelayed[lhs,rhs] element (stripping an outer HoldPattern on lhs).
  * Malformed elements are skipped. Order follows add_rule's specificity sort
  * (insertion order the tie-break) -- identical to how a sequence of individual
@@ -3125,6 +3170,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                   : (which == 1) ? &def->down_values
                   : (which == 2) ? &def->up_values
                   : (which == 3) ? &def->format_values
+                  : (which == 5) ? &def->sub_values
                                  : &def->n_values;
 
     if (which == 1) litidx_drop(def);
@@ -3168,7 +3214,9 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                 }
             }
 
-            if (which >= 2) {
+            if (which == 5) {
+                add_rule(target, lhs, rhs, delayed);
+            } else if (which >= 2) {
                 size_t before = rule_list_len(*target);
                 add_rule(target, lhs, rhs, delayed);
                 size_t added = rule_list_len(*target) - before;
@@ -3199,6 +3247,9 @@ void symtab_set_format_values(const char* symbol_name, const Expr* list) {
 }
 void symtab_set_n_values(const char* symbol_name, const Expr* list) {
     symtab_set_values_common(symbol_name, list, 4);
+}
+void symtab_set_sub_values(const char* symbol_name, const Expr* list) {
+    symtab_set_values_common(symbol_name, list, 5);
 }
 #endif /* UP_VALUES */
 

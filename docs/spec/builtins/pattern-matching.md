@@ -131,6 +131,7 @@ Gives a list of the positions at which objects matching a pattern appear.
 **Features**:
 - Defaults to levels `{0, Infinity}` with `Heads -> True`.
 - Yields lists of indices in lexicographic order.
+- A fourth argument other than a non-negative integer or `Infinity` issues `Position::innf` and the call stays unevaluated (audit Position#2).
 
 ## FirstPosition
 
@@ -188,6 +189,7 @@ Gives the number of elements or subexpressions that match a pattern.
 - `Default[f] = val`: Sets the default value for arguments of `f`.
 - Built-in default values include `0` for `Plus` and `1` for `Times` and `Power`.
 - Used automatically by the pattern matcher when `_.` is present in the pattern.
+- `Default[Plus]` is `0`, `Default[Times]` is `1` and `Default[Power, 2]` is `1` (audit Default#1).
 
 ## Attributes in matching
 - **Orderless.** Pattern arguments may take the subject's arguments in any
@@ -289,3 +291,14 @@ In[1]:= Options[g] = {a -> 1, b -> 2};
 Out[1]= {{1, 2}, {17, 2}, {3, 4}}
 ```
 
+## MatchQ
+
+- The subject is not evaluated a second time: `MatchQ[Unevaluated[1 + 1], _Plus]` is `True` (audit MatchQ#2). `MatchQ[form][expr]` is the operator form (audit MatchQ#1).
+
+## Longest
+
+- `Longest[PatternSequence[...]]` (named or not) tries the longest run first (audit PatternSequence#2).
+
+## OrderlessPatternSequence
+
+- A `Condition` around it (`OrderlessPatternSequence[x_, y_] /; x < y`) is checked once the run is bound (audit OrderlessPatternSequence#1).

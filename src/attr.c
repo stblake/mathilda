@@ -349,6 +349,31 @@ static uint32_t string_to_attribute(const char* name) {
     return ATTR_NONE;
 }
 
+/* Attributes[s] = spec: replace s's attributes by exactly those named in
+ * spec (one name or a List of names).  False, changing nothing, when spec
+ * names something that is not an attribute. */
+bool attr_assign(const char* symbol_name, Expr* spec) {
+    if (!symbol_name || !spec) return false;
+    Expr* one[1] = { spec };
+    Expr** items = one;
+    size_t n = 1;
+    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
+        && spec->data.function.head->data.symbol.name == SYM_List) {
+        items = spec->data.function.args;
+        n = spec->data.function.arg_count;
+    }
+    uint32_t bits = ATTR_NONE;
+    for (size_t i = 0; i < n; i++) {
+        const char* nm = items[i]->type == EXPR_SYMBOL ? items[i]->data.symbol.name
+                       : items[i]->type == EXPR_STRING ? items[i]->data.string : NULL;
+        uint32_t b = nm ? string_to_attribute(nm) : ATTR_NONE;
+        if (b == ATTR_NONE) return false;
+        bits |= b;
+    }
+    set_attributes(symbol_name, bits);
+    return true;
+}
+
 static void remove_single_attribute(SymbolDef* def, Expr* attr_expr) {
     const char* attr_name = NULL;
     if (attr_expr->type == EXPR_SYMBOL) attr_name = attr_expr->data.symbol.name;
@@ -356,6 +381,18 @@ static void remove_single_attribute(SymbolDef* def, Expr* attr_expr) {
 
     if (attr_name) {
         uint32_t bit = string_to_attribute(attr_name);
+        /* HoldAll (NHoldAll) is one attribute stored as the two bits of
+         * HoldFirst | HoldRest.  Clearing the composite needs the whole
+         * composite present (ClearAttributes[h, HoldAll] on a HoldFirst h
+         * keeps HoldFirst), and clearing one half of a full composite is a
+         * no-op (ClearAttributes[g, HoldFirst] on a HoldAll g keeps HoldAll)
+         * -- audit ClearAttributes#1/#2. */
+        static const uint32_t composites[2] = { ATTR_HOLDALL, ATTR_NHOLDALL };
+        for (int k = 0; k < 2; k++) {
+            uint32_t c = composites[k];
+            if (bit == c && (def->attributes & c) != c) return;
+            if (bit != c && (bit & c) == bit && (def->attributes & c) == c) return;
+        }
         if (bit != ATTR_NONE && (def->attributes & bit)) {
             def->attributes &= ~bit;
             /* Real attribute change -- invalidate cached evaluations (and any
@@ -372,7 +409,10 @@ static void add_single_attribute(SymbolDef* def, Expr* attr_expr) {
 
     if (attr_name) {
         uint32_t bit = string_to_attribute(attr_name);
-        if (bit != ATTR_NONE && !(def->attributes & bit)) {
+        /* A composite (HoldAll = HoldFirst | HoldRest) is added unless ALL of
+         * it is present: SetAttributes[h, HoldAll] on a HoldFirst h used to
+         * see the overlap and add nothing. */
+        if (bit != ATTR_NONE && (def->attributes & bit) != bit) {
             def->attributes |= bit;
             /* Real attribute change -- invalidate cached evaluations (and any
              * GROUND node using this head) by advancing the rule epoch. */

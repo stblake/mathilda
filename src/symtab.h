@@ -328,6 +328,8 @@ void symtab_clear_symbol(const char* symbol_name);
 // owned by sym_intern and is NOT freed, so a later reference recreates a
 // fresh, empty definition. No-op if the symbol is not present.
 void symtab_remove_symbol(const char* symbol_name);
+/* Drop every message s::tag of `symbol_name` (ClearAll / Remove). */
+void symtab_clear_messages(const char* symbol_name);
 
 // Remove the single OwnValue (own_value=true) or DownValue (own_value=false)
 // rule on `symbol_name` whose left-hand side is identical to `lhs` up to
@@ -586,6 +588,8 @@ void symtab_set_up_values(const char* symbol_name, const Expr* list);
  * backend above. */
 void symtab_set_format_values(const char* symbol_name, const Expr* list);
 void symtab_set_n_values(const char* symbol_name, const Expr* list);
+/* SubValues[f] = {lhs :> rhs, ...}: replace f's SubValues by the listed rules. */
+void symtab_set_sub_values(const char* symbol_name, const Expr* list);
 #endif // UP_VALUES
 
 /* FormatValues. symtab_format_value_count is the total number of rules across
@@ -594,6 +598,8 @@ void symtab_set_n_values(const char* symbol_name, const Expr* list);
 extern size_t symtab_format_value_count;
 void  symtab_add_format_value(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
 Rule* symtab_get_format_values(const char* symbol_name);
+/* Remove the FormatValue whose pattern is lhs (up to pattern renaming). */
+bool  symtab_remove_format_value(const char* symbol_name, const Expr* lhs);
 
 /* NValues: as FormatValues (see SymbolDef.n_values). */
 extern size_t symtab_n_value_count;

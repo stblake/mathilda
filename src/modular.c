@@ -7,6 +7,7 @@
 #include "print.h"
 #include "iter.h"
 #include "symsum.h"
+#include "core.h"      /* symbol_name_is_valid */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -476,7 +477,11 @@ typedef struct {
  * a String its characters and the xnnn form. Anything else -> false. */
 static bool unique_source_of(Expr* e, UniqueSrc* out) {
     if (e->type == EXPR_SYMBOL) { out->prefix = e->data.symbol.name; out->dollar = true; return true; }
-    if (e->type == EXPR_STRING) { out->prefix = e->data.string;      out->dollar = false; return true; }
+    /* A string must itself name a symbol: Unique["1abc"] made the unparseable
+     * symbol 1abc1 (audit Unique#1). */
+    if (e->type == EXPR_STRING && symbol_name_is_valid(e->data.string)) {
+        out->prefix = e->data.string; out->dollar = false; return true;
+    }
     return false;
 }
 
@@ -509,7 +514,8 @@ static void unique_make_batch(const UniqueSrc* srcs, size_t count, Expr** out) {
 
 /* Unique::usym -- the argument is neither a symbol nor a name string. */
 static void unique_usym(Expr* bad) {
-    char* str = expr_to_string(bad);
+    char* str = bad->type == EXPR_STRING ? mathilda_strdup(bad->data.string)
+                                         : expr_to_string(bad);
     mth_message("Unique", "usym", "%s is not a symbol or a valid symbol name.", str ? str : "?");
     free(str);
 }
@@ -529,6 +535,23 @@ Expr* builtin_unique(Expr* res) {
         Expr* out[1];
         unique_make_batch(&src, 1, out);
         return out[0];
+    }
+    /* Unique[x, attrs] / Unique[{x, ...}, attrs]: the fresh symbols, each
+     * also given the attributes attrs (a name or a list of names), as
+     * SetAttributes would (audit Unique#2). */
+    if (argc == 2) {
+        Expr* one = expr_new_function(expr_new_symbol("Unique"),
+                                      (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1);
+        Expr* made = builtin_unique(one);
+        expr_free(one);
+        if (!made) return NULL;
+        Expr* sa = expr_new_function(expr_new_symbol("SetAttributes"),
+                                     (Expr*[]){ expr_copy(made),
+                                                expr_copy(res->data.function.args[1]) }, 2);
+        Expr* r = evaluate(sa);
+        expr_free(sa);
+        expr_free(r);
+        return made;
     }
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -856,12 +879,40 @@ static bool scoping_reject_duplicates(const char* head, Expr* vars, bool is_with
     return false;
 }
 
+/* Is every entry of the binding list `vars` a well-formed local spec (a Symbol
+ * or Set[sym, v] for Module/Block; Set/SetDelayed[sym, v] for With)?  Else
+ * report Head::lvsym (Module, Block) or With::lvset and return true: the
+ * construct stays unevaluated, as in the reference.  Skipping the entry, as
+ * this did before, silently ran the body with the spec ignored (audit Block#2,
+ * With#3: Block[{1}, 2] gave 2, With[{x}, x] gave x). */
+static bool scoping_reject_bad_specs(const char* head, Expr* vars, bool is_with) {
+    size_t n = vars->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* v = vars->data.function.args[i];
+        if (scoping_entry_name(v, is_with)) continue;
+        char* spec = expr_to_string(vars);
+        char* bad = expr_to_string(v);
+        if (is_with)
+            mth_message(head, "lvset",
+                        "Local variable specification %s contains %s, which is not an assignment to a symbol.",
+                        spec ? spec : "", bad ? bad : "");
+        else
+            mth_message(head, "lvsym",
+                        "Local variable specification %s contains %s, which is not a symbol or an assignment to a symbol.",
+                        spec ? spec : "", bad ? bad : "");
+        free(spec); free(bad);
+        return true;
+    }
+    return false;
+}
+
 Expr* builtin_module(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_bad_specs(SYM_Module, vars, false)) return NULL;
     if (scoping_reject_duplicates(SYM_Module, vars, false)) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
@@ -898,9 +949,13 @@ Expr* builtin_module(Expr* res) {
         }
 
         if (orig_name) {
-            char buf[256];
-            snprintf(buf, sizeof(buf), "%s$%lld", orig_name, (long long)current_mn);
-            info[i].new_name = mathilda_strdup(buf);
+            /* Sized to the name: a fixed buffer truncated a long name before
+             * its $nnn suffix, so two Module calls shared one local (audit
+             * Module#1). */
+            size_t blen = strlen(orig_name) + 24;
+            char* buf = malloc(blen);
+            snprintf(buf, blen, "%s$%lld", orig_name, (long long)current_mn);
+            info[i].new_name = buf;
             info[i].init_val = init_val;
 
             /* Register the temporary symbol BEFORE any node names it, so every
@@ -1419,6 +1474,7 @@ Expr* builtin_block(Expr* res) {
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_bad_specs(SYM_Block, vars, false)) return NULL;
     if (scoping_reject_duplicates(SYM_Block, vars, false)) return NULL;
 
     void* frame = mth_block_enter(vars->data.function.args, vars->data.function.arg_count);
@@ -1441,11 +1497,31 @@ Expr* builtin_block(Expr* res) {
 }
 
 Expr* builtin_with(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t wargc = res->data.function.arg_count;
+    /* With[{x = a}, {y = f[x]}, ..., body] nests: each later list sees the
+     * earlier lists' values, so it is With[{x = a}, With[{y = f[x]}, ...]]
+     * (audit With#4).  Every list is validated first. */
+    if (wargc > 2) {
+        for (size_t i = 0; i + 1 < wargc; i++) {
+            Expr* l = res->data.function.args[i];
+            if (l->type != EXPR_FUNCTION || l->data.function.head->type != EXPR_SYMBOL
+                || l->data.function.head->data.symbol.name != SYM_List) return NULL;
+            if (scoping_reject_bad_specs(SYM_With, l, true)) return NULL;
+        }
+        Expr* nest = expr_copy(res->data.function.args[wargc - 1]);
+        for (size_t i = wargc - 1; i-- > 1; )
+            nest = expr_new_function(expr_new_symbol(SYM_With),
+                                     (Expr*[]){ expr_copy(res->data.function.args[i]), nest }, 2);
+        return expr_new_function(expr_new_symbol(SYM_With),
+                                 (Expr*[]){ expr_copy(res->data.function.args[0]), nest }, 2);
+    }
+    if (wargc != 2) return NULL;
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_bad_specs(SYM_With, vars, true)) return NULL;
     if (scoping_reject_duplicates(SYM_With, vars, true)) return NULL;
 
     size_t var_count = vars->data.function.arg_count;

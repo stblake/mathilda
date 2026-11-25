@@ -64,3 +64,22 @@ Expr* get_default_value(Expr* pat_head, int pos, int total_pats) {
 
     return NULL;
 }
+
+/* Default[f] / Default[f, i]: the built-in defaults the matcher uses for an
+ * optional argument x_. -- Default[Plus] (any position) is 0, Default[Times]
+ * is 1, Default[Power, 2] is 1 (audit Default#1).  A user's Default[f, ...]
+ * values are DownValues and apply for every other f; NULL leaves the call. */
+Expr* builtin_default(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    Expr* f = res->data.function.args[0];
+    if (f->type != EXPR_SYMBOL) return NULL;
+    if (argc == 2 && res->data.function.args[1]->type != EXPR_INTEGER) return NULL;
+    const char* h = f->data.symbol.name;
+    if (h == SYM_Plus) return expr_new_integer(0);
+    if (h == SYM_Times) return expr_new_integer(1);
+    if (h == SYM_Power && argc == 2 && res->data.function.args[1]->data.integer == 2)
+        return expr_new_integer(1);
+    return NULL;
+}

@@ -16,6 +16,7 @@
 #include "expr.h"
 #include "arithmetic.h"
 #include "context.h"
+#include "attr.h"           /* Definition: Attributes[f] line */
 #include "sym_names.h"
 #include "numberform.h"
 #include "ndarray.h"
@@ -219,6 +220,8 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_And) return 2800;
     if (head == SYM_Or) return 2700;   /* looser than And, so Or nested in And parenthesises */
     if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 3200;
+    /* Plus[] / Times[] print as Plus[] / Times[]: atomic, never parenthesised */
+    if ((head == SYM_Plus || head == SYM_Times) && e->data.function.arg_count == 0) return 9500;
     if (head == SYM_Plus) return 3500;
 
     if (head == SYM_Times) return 4500;
@@ -323,7 +326,41 @@ static Expr* format_value_rewrite(Expr* e, const char* form) {
         Expr* out = NULL;
         if (match(e, pat, env)) {
             Expr* bound = replace_bindings(r->replacement, env);
-            out = evaluate(bound);
+            /* A delayed rule's rhs /; test (also inside the Format[rhs, form]
+             * wrapper a MakeBoxes rule carries) applies only when the test is
+             * True: Format[e2[x_]] := "pos" /; x > 0 left e2[-1] showing
+             * "pos /; -1 > 0" (audit Format#1). */
+            Expr** slot = &bound;
+            if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL &&
+                bound->data.function.head->data.symbol.name == SYM_Format &&
+                bound->data.function.arg_count >= 1)
+                slot = &bound->data.function.args[0];
+            bool guard_ok = true;
+            while (r->delayed && guard_ok && (*slot)->type == EXPR_FUNCTION &&
+                   (*slot)->data.function.head->type == EXPR_SYMBOL &&
+                   (*slot)->data.function.head->data.symbol.name == SYM_Condition &&
+                   (*slot)->data.function.arg_count == 2) {
+                Expr* t = evaluate((*slot)->data.function.args[1]);
+                guard_ok = t->type == EXPR_SYMBOL && t->data.symbol.name == SYM_True;
+                expr_free(t);
+                if (guard_ok) {
+                    /* bound is fresh from replace_bindings, but its nodes may
+                     * be shared: rebuild rather than write through. */
+                    Expr* v = expr_copy((*slot)->data.function.args[0]);
+                    if (slot == &bound) { expr_free(bound); bound = v; slot = &bound; }
+                    else {
+                        Expr* fa[2];
+                        size_t na = bound->data.function.arg_count;
+                        fa[0] = v;
+                        fa[1] = na >= 2 ? expr_copy(bound->data.function.args[1]) : NULL;
+                        Expr* nb = expr_new_function(expr_copy(bound->data.function.head), fa, na >= 2 ? 2 : 1);
+                        expr_free(bound);
+                        bound = nb;
+                        slot = &bound->data.function.args[0];
+                    }
+                }
+            }
+            if (guard_ok) out = evaluate(bound);
             expr_free(bound);
         }
         env_free(env);
@@ -335,6 +372,38 @@ static Expr* format_value_rewrite(Expr* e, const char* form) {
             expr_free(out);
             out = inner;
         }
+        if (out) return out;
+    }
+    return NULL;
+}
+
+/* MakeBoxes[e, form]: a box rule the user gave for e's tag -- the tagged
+ * h /: MakeBoxes[h[x_], fmt_] := boxes lands in h's FormatValues, which
+ * evaluating MakeBoxes never consulted, so the call stayed unevaluated (audit
+ * MakeBoxes#1).  Only rules written as MakeBoxes rules are used here: the
+ * MakeBoxes[lhs, FormatType_] :> Format[rhs, FormatType] rule a Format
+ * assignment installs is the printer's, not a box value.  NULL leaves the call. */
+Expr* builtin_makeboxes(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (!symtab_format_value_count) return NULL;
+    const Expr* k = res->data.function.args[0];
+    while (k->type == EXPR_FUNCTION) k = k->data.function.head;
+    if (k->type != EXPR_SYMBOL) return NULL;
+    for (Rule* r = symtab_get_format_values(k->data.symbol.name); r; r = r->next) {
+        const Expr* p = r->pattern;
+        if (!(p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+              p->data.function.head->data.symbol.name == SYM_MakeBoxes)) continue;
+        const Expr* rp = r->replacement;
+        if (rp->type == EXPR_FUNCTION && rp->data.function.head->type == EXPR_SYMBOL &&
+            rp->data.function.head->data.symbol.name == SYM_Format) continue;
+        MatchEnv* env = env_new();
+        Expr* out = NULL;
+        if (match(res, r->pattern, env)) {
+            Expr* bound = replace_bindings(r->replacement, env);
+            out = r->delayed ? evaluate(bound) : expr_copy(bound);
+            expr_free(bound);
+        }
+        env_free(env);
         if (out) return out;
     }
     return NULL;
@@ -840,6 +909,25 @@ static void print_definition_body(const char* name) {
     Rule* dv = symtab_get_down_values(name);
     Rule* uv = symtab_get_up_values(name);
     int any = 0;
+    /* The attributes lead and the options close the definition, each set off
+     * by a blank line, as the reference shows them (audit Definition#1,
+     * Information#1): Attributes[f] = {Listable} ... Options[f] = {...}. */
+    if (get_attributes(name) != ATTR_NONE) {
+        Expr* a[1] = { expr_new_symbol(name) };
+        Expr* call = expr_new_function(expr_new_symbol("Attributes"), a, 1);
+        Expr* lst = builtin_attributes(call);
+        expr_free(call);
+        if (lst) {
+            printf("Attributes[%s] = ", context_display_name(name));
+            print_standard(lst, 0);
+            expr_free(lst);
+            any++;
+        }
+    }
+    bool rules = ov || dv || uv || symtab_get_sub_values(name);
+    if (any && rules) printf("\n\n");
+    int nattr = any;
+    any = 0;
     for (Rule* r = ov; r; r = r->next) {
         if (any++) printf("\n");
         print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
@@ -859,7 +947,14 @@ static void print_definition_body(const char* name) {
         if (any++) printf("\n");
         print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
     }
-    if (!any) printf("Null");
+    Expr* opts = symtab_get_options(name);            /* borrowed */
+    if (opts && opts->type == EXPR_FUNCTION && opts->data.function.arg_count > 0) {
+        if (any || nattr) printf("\n\n");
+        printf("Options[%s] = ", context_display_name(name));
+        print_standard(opts, 0);
+        any++;
+    }
+    if (!any && !nattr) printf("Null");
 }
 #endif
 
@@ -1212,7 +1307,12 @@ static void print_standard(Expr* e, int parent_prec) {
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol.name;
         
-        if (head == SYM_SequenceForm) {
+        /* Plus[] / Times[] have no operator spelling: printing nothing made
+         * Hold[{Times[], 2}] read back as Hold[{, 2}] (audit InputForm#3). */
+        if ((head == SYM_Plus || head == SYM_Times) && e->data.function.arg_count == 0) {
+            printf("%s[]", head);
+        }
+        else if (head == SYM_SequenceForm) {
             /* SequenceForm[a, b, ...] shows its arguments side by side: strings
              * as their characters, except in InputForm, where each argument
              * keeps its input form ("a"1 for SequenceForm["a", 1]). */
@@ -1292,17 +1392,38 @@ static void print_standard(Expr* e, int parent_prec) {
             /* Row[{a, b, ...}] concatenates the OutputForm of each element (no
              * quotes on strings); Row[{...}, s] inserts the string s between. */
             Expr* list = e->data.function.args[0];
-            const char* sep = NULL;
-            if (e->data.function.arg_count >= 2
-                && e->data.function.args[1]->type == EXPR_STRING)
-                sep = e->data.function.args[1]->data.string;
+            /* Any separator expression, printed like the elements: Row[{a, b},
+             * x] is axb, not ab (audit Row#1). */
+            Expr* sep = e->data.function.arg_count >= 2 ? e->data.function.args[1] : NULL;
             bool saved_of = g_print_output_form;
             g_print_output_form = true;
             for (size_t i = 0; i < list->data.function.arg_count; i++) {
-                if (i > 0 && sep) fputs(sep, MTH_POUT);
+                if (i > 0 && sep) {
+                    if (sep->type == EXPR_STRING) fputs(sep->data.string, MTH_POUT);
+                    else print_standard(sep, 0);
+                }
                 print_standard(list->data.function.args[i], 0);
             }
             g_print_output_form = saved_of;
+        }
+        /* OutputForm[e] is a display wrapper: shown as e in OutputForm, never
+         * as the literal OutputForm[...] (audit Print#1). */
+        else if (head == SYM_OutputForm && e->data.function.arg_count == 1
+                 && g_inputform_depth == 0) {
+            bool saved_of = g_print_output_form;
+            g_print_output_form = true;
+            print_standard(e->data.function.args[0], parent_prec);
+            g_print_output_form = saved_of;
+        }
+        /* StringForm["tmpl", e1, ...] displays the template with its `` / `n`
+         * slots filled (audit Print#2). */
+        else if (head == SYM_StringForm && e->data.function.arg_count >= 1
+                 && e->data.function.args[0]->type == EXPR_STRING
+                 && g_inputform_depth == 0) {
+            char* txt = mth_stringform_fill(e->data.function.args[0]->data.string,
+                                            e->data.function.args + 1,
+                                            e->data.function.arg_count - 1);
+            if (txt) { fputs(txt, MTH_POUT); free(txt); }
         }
         else if (head == SYM_Graphics && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
             printf("-Graphics-");
@@ -1693,9 +1814,20 @@ static void print_standard(Expr* e, int parent_prec) {
             else if (head == SYM_Dot) op = " . ";
             else if (head == SYM_StringExpression) op = "~~";   /* as Mathematica */
 
+            /* Grouping the parser would not reproduce gets parentheses: the
+             * right-associative = := -> :> keep a same-level LEFT operand in
+             * parentheses ((a -> b) -> c, which reads back as a -> (b -> c)
+             * otherwise), and a comparison nested in a comparison is
+             * parenthesised on either side, since a == b == c reads as one
+             * chain (audit InputForm#1, InputForm#2). */
+            bool right_assoc = head == SYM_Set || head == SYM_SetDelayed ||
+                               head == SYM_Rule || head == SYM_RuleDelayed;
+            bool comparison = my_prec == 3200;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf("%s", op);
-                print_standard(e->data.function.args[i], my_prec);
+                int ap = my_prec;
+                if ((right_assoc && i == 0) || comparison) ap = my_prec + 1;
+                print_standard(e->data.function.args[i], ap);
             }
         }
         else if (head == SYM_Plus && g_inputform_depth == 0 &&
@@ -2955,6 +3087,16 @@ static void print_tex(Expr* e, int parent_prec) {
             if (a->type == EXPR_STRING) printf("\\text{%s}", a->data.string);
             else print_tex(a, 0);
         }
+        return;
+    }
+    /* HoldForm and the display wrappers TraditionalForm / StandardForm are
+     * invisible in TeX, as in every other printer: TeXForm[HoldForm[1 + 1]]
+     * is 1+1 (audit HoldForm#1, TraditionalForm#1). */
+    if (e->data.function.head->type == EXPR_SYMBOL && e->data.function.arg_count == 1 &&
+        (e->data.function.head->data.symbol.name == SYM_HoldForm ||
+         e->data.function.head->data.symbol.name == SYM_TraditionalForm ||
+         e->data.function.head->data.symbol.name == SYM_StandardForm)) {
+        print_tex(e->data.function.args[0], parent_prec);
         return;
     }
 

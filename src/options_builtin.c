@@ -279,14 +279,37 @@ Expr* builtin_setoptions(Expr* res) {
     } else {
         size_t m = sobj->data.function.arg_count;
         Expr** items = malloc(sizeof(Expr*) * (m ? m : 1));
+        /* All or nothing: when one symbol refuses an option the call stays
+         * unevaluated, so the symbols set before it are put back -- g kept
+         * a -> 99 while SetOptions[{g, h}, a -> 99] came back unevaluated
+         * (audit SetOptions#1). */
+        Expr** saved = malloc(sizeof(Expr*) * (m ? m : 1));
+        size_t k = 0;                    /* symbols visited, the failing one included */
         bool ok = true;
-        for (size_t i = 0; i < m; i++) {
-            items[i] = so_set_one(sobj->data.function.args[i]->data.symbol.name, r, rn);
-            if (!items[i]) { ok = false; items[i] = expr_new_symbol(SYM_Null); }
+        for (; k < m && ok; k++) {
+            const char* si = sobj->data.function.args[k]->data.symbol.name;
+            Expr* cur = symtab_get_options(si);
+            saved[k] = cur ? expr_copy(cur) : NULL;
+            items[k] = so_set_one(si, r, rn);
+            if (!items[k]) ok = false;
         }
-        out = list_from(items, m);
+        if (ok) {
+            out = list_from(items, m);
+            for (size_t i = 0; i < m; i++) if (saved[i]) expr_free(saved[i]);
+        } else {
+            for (size_t i = 0; i < k; i++) {
+                if (items[i]) {          /* set before the failure: restore */
+                    symtab_set_options(sobj->data.function.args[i]->data.symbol.name, saved[i]);
+                    expr_free(items[i]);
+                } else if (saved[i]) {
+                    expr_free(saved[i]);
+                }
+            }
+            eval_clock_bump();
+            out = NULL;
+        }
+        free(saved);
         free(items);
-        if (!ok) { expr_free(out); out = NULL; }
     }
     free(r);
     return out;
@@ -355,6 +378,27 @@ Expr* builtin_optionvalue(Expr* res) {
         hold = true;
     } else {
         return NULL;
+    }
+
+    /* OptionValue[f, ..., {n1, n2, ...}] gives the list of the values; one
+     * unknown name leaves the whole call unevaluated (audit OptionValue#1). */
+    if (is_list(name)) {
+        size_t m = name->data.function.arg_count;
+        Expr** vals = malloc(sizeof(Expr*) * (m ? m : 1));
+        for (size_t i = 0; i < m; i++) {
+            const Expr* ni = name->data.function.args[i];
+            vals[i] = (ni->type == EXPR_SYMBOL || ni->type == EXPR_STRING)
+                          ? ov_resolve(f, opts, ni) : NULL;
+            if (!vals[i]) {
+                for (size_t j = 0; j < i; j++) expr_free(vals[j]);
+                free(vals);
+                return NULL;
+            }
+            if (hold) vals[i] = expr_new_function(expr_new_symbol(SYM_Hold), &vals[i], 1);
+        }
+        Expr* out = list_from(vals, m);
+        free(vals);
+        return out;
     }
 
     if (!(name->type == EXPR_SYMBOL || name->type == EXPR_STRING)) return NULL;

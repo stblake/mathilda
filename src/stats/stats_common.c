@@ -2,6 +2,7 @@
  * Split from stats.c; see stats.h and stats_common.h for the subsystem layout. */
 
 #include "stats_common.h"
+#include "numeric.h"   /* expr_is_numeric_quantity */
 #include <float.h>
 #include <math.h>
 #include "arithmetic.h"   /* is_rational, make_rational */
@@ -175,14 +176,11 @@ bool stats_is_real_numeric(Expr* e) {
         return known && imv == 0.0;
     }
 
-    Expr* numq = expr_new_function(expr_new_symbol(SYM_NumericQ), (Expr*[]){expr_copy(e)}, 1);
-    Expr* numq_eval = evaluate(numq);
-    expr_free(numq);
-    if (numq_eval->type != EXPR_SYMBOL || numq_eval->data.symbol.name != SYM_True) {
-        expr_free(numq_eval);
-        return false;
-    }
-    expr_free(numq_eval);
+    /* The numeric-quantity test itself, not the NumericQ builtin: an infinity
+     * is a legitimate real datum here (Median[{-Infinity, 5, 1}] is 1), while
+     * NumericQ[Infinity] is False (audit NumericQ#1).  It also saves an
+     * evaluator round trip per element. */
+    if (!expr_is_numeric_quantity(e)) return false;
 
     Expr* freeq = expr_new_function(expr_new_symbol(SYM_FreeQ), (Expr*[]){expr_copy(e), expr_new_symbol(SYM_I)}, 2);
     Expr* freeq_eval = evaluate(freeq);

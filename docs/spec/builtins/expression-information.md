@@ -12,6 +12,7 @@ Returns the core evaluation attributes assigned to a symbol.
 In[1]:= Attributes[Plus]
 Out[1]= {Flat, Listable, NumericFunction, OneIdentity, Orderless}
 ```
+- `Attributes[s] = {attr, ...}` sets exactly those attributes (audit Attributes#1, Set#2). `ClearAttributes` treats `HoldAll` as one attribute (audit ClearAttributes#1/#2).
 
 ## ClearAttributes
 Removes attributes from symbols.
@@ -198,6 +199,7 @@ depth. Examples: `f[x_][y_] := ...`, `f[a][b] = v`, `f[a_][b_][c_] := ...`.
 mem[h_][y_] := mem[h][y] = expensive[h, y]    (* memoised per (h, y) *)
 SubValues[mem]
 ```
+- `SubValues[f] = {rules}` replaces the SubValues (audit SubValues#1).
 
 ## Definition
 
@@ -232,6 +234,7 @@ Out[4]= c0 = 3
 In[5]:= fd[x_] := x^2; FullForm[Definition[fd]]   (* display only *)
 Out[5]= Definition[fd]
 ```
+- Shows an `Attributes[f] = {...}` line first and an `Options[f] = {...}` line last (audit Definition#1); `Information` includes them (audit Information#1).
 
 ## NumericQ
 `NumericQ[expr]` is `True` when `expr` is a numeric quantity: a number, a
@@ -241,6 +244,7 @@ objects, transcendental `Root[{f, x0}]`, and (since v0.6129) algebraic
 `Root[f, k]` whose pure-function body is a polynomial with numeric
 coefficients, as in the reference: `NumericQ[Root[-1 + 6 #1 + 22 #1^2 +
 16 #1^3 &, 2]]` is `True`, `NumericQ[Root[#1^2 - a &, 1]]` is `False`.
+- `False` for `Infinity`, `ComplexInfinity` and `DirectedInfinity[...]`, and for `Rational`/`Complex` with non-numeric parts (audit NumericQ#1/#2). `NumberQ`, `AtomQ`, `ExactNumberQ` and `InexactNumberQ` likewise accept `Rational[p, q]`/`Complex[a, b]` only with number parts.
 
 ## PossibleZeroQ
 Hybrid symbolic-numeric test for whether `expr` is identically zero.
@@ -674,6 +678,7 @@ Out[11]= True
 In[12]:= PossibleZeroQ[Cos[n Pi], Assumptions -> Element[n, Integers]]
 Out[12]= False    (* Cos[n Pi] == (-1)^n, never zero on the integers *)
 ```
+- `False` for an equation, inequality or logical combination (audit PossibleZeroQ#3).
 
 ## $MachinePrecision, $MachineEpsilon, $MinMachineNumber, $MaxMachineNumber, $MaxNumber, $MinNumber
 Read-only system constants describing the floating-point range and
@@ -1653,6 +1658,7 @@ Out[2]= 1,000,000,000
 In[3]:= NumberForm[{8.^5, 11.^7, 13.^9}, NumberFormat -> (Row[{#1, "e", #3}] &)]
 Out[3]= {32768.e, 1.94872e7, 1.06045e10}
 ```
+- A machine real shows at most 16 significant digits, its precision: `NumberForm[0.1, 20]` is `0.1` (audit NumberForm#1).
 
 ## Row
 - `Row[{e1, e2, ...}]` displays the `ei` concatenated in a row; strings are shown without quotes.
@@ -1666,6 +1672,7 @@ Out[1]= x = 5
 In[2]:= Row[{1, 2, 3}, ", "]
 Out[2]= 1, 2, 3
 ```
+- The separator may be any expression (audit Row#1). `OutputForm[e]` and `StringForm[...]` print as text (audit Print#1/#2).
 
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in the reference: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
@@ -1717,6 +1724,7 @@ Out[2]= Complex(0,2)*x + Power(x,2) == 0 && y >= 1
 In[3]:= ToString[Sum[v[k], {k, 7}], FormatType -> FortranForm, PageWidth -> 40]
 Out[3]= "        v(1) + v(2) + v(3) + v(4) + \n     -  v(5) + v(6) + v(7)"
 ```
+- A rational becomes the nearest double (`1/10` is `0.1`), and an arbitrary-precision real shows the digits of its precision (`N[10^40, 20]` is `1.e40`) (audit FortranForm#1/#3).
 
 ## ToExpression
 - `ToExpression[input]`: parses the string `input` as Mathilda input (`InputForm`) and returns the resulting expression after evaluation. Several statements on separate lines are evaluated in turn and the last result is returned.
@@ -1778,6 +1786,7 @@ otherwise. Nothing is evaluated.
 ```
 {SyntaxQ["1+2"], SyntaxQ["1+"], SyntaxQ["f[x"]}    (* {True, False, False} *)
 ```
+- `False` for an unterminated comment (audit SyntaxQ#1).
 
 ## Symbol
 Refers to a symbol with the specified name, creating it if necessary.
@@ -1807,6 +1816,7 @@ In[5]:= Symbol["1x"]
 Symbol::symname: The string "1x" cannot be used for a symbol name. A symbol name must start with a letter followed by letters and numbers.
 Out[5]= Symbol["1x"]
 ```
+- A name ending in a backtick is a context, not a symbol: `Symbol["`"]` issues `Symbol::symname` (audit Symbol#1).
 
 ## Context
 Gives the current context, or the context of a symbol.
@@ -1898,6 +1908,7 @@ Out[2]= {"Test`", "Test`"}
 In[3]:= EndPackage[]; {Context[$T2], Context[$Version], Context[Pi], Context[x]}
 Out[3]= {"Test`", "System`", "System`", "Global`"}
 ```
+- `Context["`x"]` resolves the relative name against `$Context` (audit Context#1). `Begin` rejects a context whose segments are not symbol names (`Begin::cxt`, audit Begin#1).
 
 ## $Context / $ContextPath
 The current context, and the list of contexts searched for bare names (whose
@@ -2073,6 +2084,7 @@ Out[4]= {"FileSize"}
 In[5]:= Foo`bar = 1; {Names["Foo`*"], Names["bar"]}
 Out[5]= {{"Foo`bar"}, {}}                    (* Foo` is not on $ContextPath *)
 ```
+- Takes `IgnoreCase -> True` and any string pattern (`"Sin" | "Cos"`, `"ArcSin" ~~ __`) (audit Names#1/#2).
 
 ## MessageName
 Associates a named text string (a "message") with a symbol, written with the
@@ -2292,3 +2304,7 @@ Out[1]= Integer
 In[2]:= MaxMemoryUsed[] > 0
 Out[2]= True
 ```
+
+## TeXForm
+
+- `HoldForm`, `TraditionalForm` and `StandardForm` are transparent (audit HoldForm#1, TraditionalForm#1).

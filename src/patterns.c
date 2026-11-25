@@ -879,8 +879,19 @@ Expr* builtin_position(Expr* res) {
     int64_t max_results = -1;
     if (argc >= 4) {
         Expr* n_expr = res->data.function.args[3];
+        /* A non-negative integer or Infinity (an option there is not a
+         * count); anything else is Position::innf and the call stays
+         * unevaluated -- it used to be ignored (audit Position#2). */
         if (n_expr->type == EXPR_INTEGER && n_expr->data.integer >= 0) {
             max_results = n_expr->data.integer;
+        } else if (!(n_expr->type == EXPR_SYMBOL && n_expr->data.symbol.name == SYM_Infinity)
+                   && !is_rule2(n_expr)) {
+            char* rs = expr_to_string(res);
+            mth_message(SYM_Position, "innf",
+                        "Non-negative integer or Infinity expected at position 4 in %s.",
+                        rs ? rs : "");
+            free(rs);
+            return NULL;
         }
     }
 

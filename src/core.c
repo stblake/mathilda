@@ -15,6 +15,7 @@
 #include "pvec_ops.h"
 #include "core.h"
 #include "linkedlist.h"
+#include "default_helper.h"   /* builtin_default */
 #include "linkedlist_seq.h"   /* LLSeq: ComposeList over a LinkedList */
 #include "ds_ops.h"
 #include "poly/solvepoly.h"   /* roots-of-unity counter for the TC unwind registry */
@@ -481,6 +482,7 @@ void core_init(void) {
     symtab_add_builtin("Clear", builtin_clear);
     symtab_add_builtin("Unset", builtin_unset);
     symtab_add_builtin("ClearAll", builtin_clear_all);
+    symtab_add_builtin("Default", builtin_default);   /* Default[Plus] = 0, ... */
     symtab_add_builtin("Remove", builtin_remove);
     symtab_add_builtin("Protect", builtin_protect);
     symtab_add_builtin("Unprotect", builtin_unprotect);
@@ -967,6 +969,7 @@ void core_init(void) {
     symtab_add_builtin("FullForm", builtin_fullform);
     symtab_add_builtin("InputForm", builtin_inputform);
     symtab_add_builtin("TeXForm", builtin_texform);
+    symtab_add_builtin("MakeBoxes", builtin_makeboxes);   /* user box rules (FormatValues) */
     symtab_add_builtin("FortranForm", builtin_texform);   /* inert wrapper; rendered by print_fortran.c */
     symtab_add_builtin("CForm", builtin_texform);         /* inert wrapper; rendered by print_fortran.c */
     symtab_add_builtin("LeanForm", builtin_texform);      /* inert wrapper; rendered by print_lean.c */
@@ -1628,6 +1631,57 @@ static Expr* unset_lhs(Expr* lhs) {
     const char* symbol_name = NULL;
     bool own_value = false;
 
+    /* {a, b, ...} =. unsets each element, giving {Null, ...} (audit Unset#1:
+     * the List head was taken for an ordinary, Protected, function head). */
+    if (head_is(lhs, SYM_List)) {
+        size_t n = lhs->data.function.arg_count;
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+        for (size_t i = 0; i < n; i++) {
+            Expr* r = unset_lhs(lhs->data.function.args[i]);
+            out->data.function.args[i] = r ? r : expr_new_symbol(SYM_DollarFailed);
+        }
+        return out;
+    }
+
+#if UP_VALUES
+    /* Format[lhs] =. / Format[lhs, form] =. removes the display rules that
+     * Format[lhs] = rhs installed on lhs's tag (audit Format#2,
+     * FormatValues#1: it reported Format itself as Protected). */
+    if (head_is(lhs, SYM_Format) &&
+        (lhs->data.function.arg_count == 1 || lhs->data.function.arg_count == 2)) {
+        Expr* target = lhs->data.function.args[0];
+        const Expr* t = target;
+        while (t && t->type == EXPR_FUNCTION) t = t->data.function.head;
+        const char* tag = (t && t->type == EXPR_SYMBOL) ? t->data.symbol.name : NULL;
+        if (tag) {
+            if (get_attributes(tag) & ATTR_PROTECTED) {
+                mth_message("Unset", "wrsym", "Symbol %s is Protected.", tag);
+                return expr_new_symbol(SYM_DollarFailed);
+            }
+            Expr* form = lhs->data.function.arg_count == 2 ? lhs->data.function.args[1] : NULL;
+            bool removed = false;
+            if (form && form->type == EXPR_SYMBOL && form->data.symbol.name == SYM_OutputForm) {
+                removed = symtab_remove_format_value(tag, target);
+            } else {
+                Expr* form_pat = form ? expr_copy(form)
+                    : expr_new_function(expr_new_symbol(SYM_Pattern),
+                          (Expr*[]){ expr_new_symbol(SYM_FormatType),
+                                     expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+                Expr* mb = expr_new_function(expr_new_symbol(SYM_MakeBoxes),
+                                             (Expr*[]){ expr_copy(target), form_pat }, 2);
+                removed = symtab_remove_format_value(tag, mb);
+                expr_free(mb);
+                if (!form) removed = symtab_remove_format_value(tag, target) || removed;
+            }
+            if (removed) { eval_clock_bump(); return expr_new_symbol(SYM_Null); }
+            char* shown = expr_to_string_outputform(lhs);
+            mth_message("Unset", "norep", "Assignment on %s for %s not found.", tag, shown ? shown : "");
+            free(shown);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+    }
+#endif
+
     if (lhs->type == EXPR_SYMBOL) {
         symbol_name = lhs->data.symbol.name;
         own_value = true;
@@ -1770,6 +1824,9 @@ static void core_clear_all_one(const char* name) {
         free(def->docstring);
         def->docstring = NULL;
     }
+    symtab_clear_messages(name);        /* every s::tag, not only usage */
+    if (symtab_get_options(name))       /* Options[s] (audit ClearAll#1) */
+        symtab_set_options(name, NULL);
 }
 
 /* Remove[s]: delete the symbol's definition entirely. The Protected guard
@@ -1782,6 +1839,7 @@ static void core_remove_one(const char* name) {
                     context_display_name(name));
         return;
     }
+    symtab_clear_messages(name);
     symtab_remove_symbol(name);
 }
 
@@ -1876,17 +1934,28 @@ static Expr* core_protect_unprotect(Expr* res, bool protecting) {
         Expr* arg = res->data.function.args[i];
         size_t n = head_is(arg, SYM_List) ? arg->data.function.arg_count : 1;
         for (size_t j = 0; j < n; j++) {
-            const char* name = core_symbol_name_of(
-                head_is(arg, SYM_List) ? arg->data.function.args[j] : arg);
-            bool did = protecting ? core_protect_one(name)
-                                  : core_unprotect_one(name);
-            if (did) {
-                if (count == cap) {
-                    cap = cap ? cap * 2 : 4;
-                    changed = realloc(changed, cap * sizeof(Expr*));
+            Expr* spec = head_is(arg, SYM_List) ? arg->data.function.args[j] : arg;
+            /* A string is a Names-style pattern ("xa*", "ctx`*", or a plain
+             * name), naming every symbol Names[spec] lists -- never a new
+             * symbol called "xa*" (audit Protect#1, Unprotect#1). */
+            char** keys = NULL;
+            size_t nk = 0;
+            const char* one = NULL;
+            if (spec->type == EXPR_STRING) keys = names_match_keys(spec, &nk);
+            else { one = core_symbol_name_of(spec); nk = one ? 1 : 0; }
+            for (size_t k = 0; k < nk; k++) {
+                const char* name = keys ? keys[k] : one;
+                bool did = protecting ? core_protect_one(name)
+                                      : core_unprotect_one(name);
+                if (did) {
+                    if (count == cap) {
+                        cap = cap ? cap * 2 : 4;
+                        changed = realloc(changed, cap * sizeof(Expr*));
+                    }
+                    changed[count++] = expr_new_string(keys ? context_display_name(name) : name);
                 }
-                changed[count++] = expr_new_string(name);
             }
+            if (keys) names_free_keys(keys, nk);
         }
     }
 
@@ -3412,9 +3481,8 @@ Expr* builtin_composition(Expr* res) {
 
 /* ComposeList[{f1, f2, ..., fn}, x] generates a list of length n+1 of the
  * form {x, f1[x], f2[f1[x]], ..., fn[...f2[f1[x]]...]}. The list of
- * functions can be any expression with head List; the symbolic
- * applications are constructed and the outer evaluator reduces them
- * to fixed point. */
+ * functions can be any expression with head List; each application is
+ * evaluated in turn and fed to the next. */
 Expr* builtin_compose_list(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) {
         return NULL;
@@ -3438,17 +3506,61 @@ Expr* builtin_compose_list(Expr* res) {
     Expr** out = malloc(sizeof(Expr*) * out_count);
     if (!out) { llq_close(&fv); return NULL; }
 
+    /* Each step is evaluated as it is built, so f(k+1) receives fk's VALUE:
+     * leaving the nested calls for the outer evaluator re-ran every earlier
+     * function once per later element (quadratic work, side effects
+     * repeated) and recursed n deep (audit ComposeList#1/#2). */
     out[0] = expr_copy(x);
     for (size_t i = 0; i < n; i++) {
         Expr* fi = llq_peek(&fv, i);
         Expr* arg = expr_copy(out[i]);
-        out[i + 1] = expr_new_function(expr_copy(fi), &arg, 1);
+        Expr* call = expr_new_function(expr_copy(fi), &arg, 1);
+        out[i + 1] = evaluate(call);
+        expr_free(call);
+        if (eval_is_inflight_unwind(out[i + 1])) {      /* Throw / Abort */
+            Expr* u = out[i + 1];
+            for (size_t j = 0; j <= i; j++) expr_free(out[j]);
+            free(out);
+            llq_close(&fv);
+            return u;
+        }
     }
 
     Expr* result = ll_seq_of(llq_linked(&fv), out, out_count);
     free(out);
     llq_close(&fv);
     return result;
+}
+
+/* An explicit real number: a machine or big integer, a machine or MPFR real,
+ * or Rational[p, q] of integers. */
+static bool core_is_real_number_value(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational)
+        return expr_is_integer_like(e->data.function.args[0]) &&
+               expr_is_integer_like(e->data.function.args[1]);
+    return false;
+}
+
+/* Is a Rational[...] / Complex[...] node a genuine number -- Rational of two
+ * integers, Complex of two explicit real numbers?  Only then is it an atom and
+ * a number; a symbolic Rational[a, b] or Complex[x, 1] is an ordinary
+ * expression (audit AtomQ#1, NumberQ#1, NumericQ#2, ExactNumberQ#1,
+ * InexactNumberQ#1). */
+static bool core_is_number_node(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count != 2 ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Rational) return core_is_real_number_value(e);
+    if (h == SYM_Complex)
+        return core_is_real_number_value(e->data.function.args[0]) &&
+               core_is_real_number_value(e->data.function.args[1]);
+    return false;
 }
 
 Expr* builtin_atomq(Expr* res) {
@@ -3470,7 +3582,8 @@ Expr* builtin_atomq(Expr* res) {
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol.name;
-            if (head_name == SYM_Complex || head_name == SYM_Rational) {
+            if ((head_name == SYM_Complex || head_name == SYM_Rational) &&
+                core_is_number_node(arg)) {
                 return expr_new_symbol(SYM_True);
             }
         }
@@ -3499,7 +3612,8 @@ Expr* builtin_numberq(Expr* res) {
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol.name;
-            if (head_name == SYM_Complex || head_name == SYM_Rational) {
+            if ((head_name == SYM_Complex || head_name == SYM_Rational) &&
+                core_is_number_node(arg)) {
                 return expr_new_symbol(SYM_True);
             }
         }
@@ -3560,7 +3674,13 @@ static bool is_numeric_quantity(Expr* e) {
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = e->data.function.head->data.symbol.name;
-            if (head_name == SYM_Complex || head_name == SYM_Rational) return true;
+            /* Complex[a, b] / Rational[a, b] with numeric parts: Complex[Pi, 1]
+             * stays numeric (a numeric quantity), Complex[x, 1] does not. */
+            if (head_name == SYM_Complex || head_name == SYM_Rational) {
+                for (size_t i = 0; i < e->data.function.arg_count; i++)
+                    if (!is_numeric_quantity(e->data.function.args[i])) return false;
+                return true;
+            }
             /* Overflow[] / Underflow[]: numbers past the exponent range. */
             if (numeric_is_range_surrogate(e)) return true;
 
@@ -3657,13 +3777,28 @@ bool expr_is_numeric_quantity(const Expr* e) {
     return e && is_numeric_quantity((Expr*)e);
 }
 
+/* Does `e` contain Infinity, ComplexInfinity or DirectedInfinity[...]?  The
+ * internal numeric-quantity test admits them (comparisons and limits reason
+ * about infinite quantities through it), but NumericQ does not: an infinity is
+ * not a number (audit NumericQ#1). */
+static bool core_mentions_infinity(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_Infinity || e->data.symbol.name == SYM_ComplexInfinity;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_DirectedInfinity) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (core_mentions_infinity(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_numericq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         return NULL;
     }
 
     Expr* arg = res->data.function.args[0];
-    if (is_numeric_quantity(arg)) {
+    if (is_numeric_quantity(arg) && !core_mentions_infinity(arg)) {
         return expr_new_symbol(SYM_True);
     }
     return expr_new_symbol(SYM_False);
@@ -3966,7 +4101,7 @@ static bool core_head_is(const Expr* e, const char* sym) {
 /* An exact number: machine/big integer, rational, or a Complex of exact parts. */
 static bool core_is_exact_number(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
-    if (core_head_is(e, SYM_Rational)) return true;
+    if (core_head_is(e, SYM_Rational)) return core_is_number_node(e);
     if (core_head_is(e, SYM_Complex))
         return core_is_exact_number(e->data.function.args[0])
             && core_is_exact_number(e->data.function.args[1]);
@@ -3981,8 +4116,9 @@ static bool core_is_inexact_number(const Expr* e) {
     if (e->type == EXPR_MPFR) return true;
 #endif
     if (core_head_is(e, SYM_Complex))
-        return core_is_inexact_number(e->data.function.args[0])
-            || core_is_inexact_number(e->data.function.args[1]);
+        return core_is_number_node(e) &&
+               (core_is_inexact_number(e->data.function.args[0])
+                || core_is_inexact_number(e->data.function.args[1]));
     return false;
 }
 
@@ -4087,7 +4223,8 @@ Expr* builtin_valueq(Expr* res) {
  * symbol has no values. */
 static char* render_definitions(const char* name) {
     if (!symtab_get_own_values(name) && !symtab_get_down_values(name) &&
-        !symtab_get_up_values(name))
+        !symtab_get_up_values(name) && !symtab_get_sub_values(name) &&
+        get_attributes(name) == ATTR_NONE && !symtab_get_options(name))
         return NULL;
     Expr* arg[1] = { expr_new_symbol(name) };
     Expr* def = expr_new_function(expr_new_symbol(SYM_Definition), arg, 1);
@@ -4132,7 +4269,12 @@ Expr* builtin_information(Expr* res) {
     const char* doc = symtab_get_docstring(sym_name);
 #if UP_VALUES
     /* ?name shows the docstring AND any own/down/up value definitions. */
-    char* defs = render_definitions(sym_name);
+    /* A documented symbol with no rules (every builtin) shows its usage only,
+     * as before; the attribute and option lines join the rules, or stand in
+     * for them when there is no usage (audit Information#1). */
+    bool has_rules = symtab_get_own_values(sym_name) || symtab_get_down_values(sym_name) ||
+                     symtab_get_up_values(sym_name) || symtab_get_sub_values(sym_name);
+    char* defs = (doc && !has_rules) ? NULL : render_definitions(sym_name);
     if (doc || defs) {
         size_t n = (doc ? strlen(doc) : 0) + (defs ? strlen(defs) : 0) + 2;
         char* combined = malloc(n);
@@ -5376,21 +5518,57 @@ enum { IC_ADD = 0, IC_SUB, IC_MUL, IC_DIV };
  * X::rvalue diagnostic. */
 static Expr* increment_core(Expr* lhs, Expr* dx, int mode, bool pre, const char* op_name) {
     const char* sym = lvalue_symbol_name(lhs);
-    if (!sym || symtab_get_own_values(sym) == NULL) {
+    /* An indexed l-value f[i, ...] (a DownValue such as f[1] = 5, or a key of
+     * an association held in a variable, asc["a"]): its arguments are
+     * evaluated once, and it must have a value -- the call must evaluate to
+     * something other than itself (audit AddTo#2, SubtractFrom#2, TimesBy#2,
+     * DivideBy#2). */
+    bool indexed = !sym && lhs->type == EXPR_FUNCTION &&
+                   lhs->data.function.head->type == EXPR_SYMBOL;
+    Expr* frozen = NULL;
+    Expr* old_val = NULL;
+    if (indexed) {
+        size_t n = lhs->data.function.arg_count;
+        frozen = expr_new_function(expr_copy(lhs->data.function.head), NULL, n);
+        for (size_t i = 0; i < n; i++) frozen->data.function.args[i] = NULL;
+        for (size_t i = 0; i < n; i++) {
+            Expr* ix = evaluate(lhs->data.function.args[i]);
+            if (eval_is_inflight_unwind(ix)) {
+                for (size_t j = i; j < n; j++) frozen->data.function.args[j] = expr_new_integer(0);
+                expr_free(frozen);
+                return ix;
+            }
+            frozen->data.function.args[i] = ix;
+        }
+        old_val = evaluate(frozen);
+        if (eval_is_inflight_unwind(old_val)) { expr_free(frozen); return old_val; }
+        if (expr_eq(old_val, frozen)) {
+            char* ls = expr_to_string_outputform(frozen);
+            mth_message(op_name, "rvalue",
+                        "%s is not a variable with a value, so its value cannot be changed.",
+                        ls ? ls : "argument");
+            free(ls);
+            expr_free(old_val);
+            expr_free(frozen);
+            return NULL;
+        }
+        lhs = frozen;
+    } else if (!sym || symtab_get_own_values(sym) == NULL) {
         mth_message(op_name, "rvalue",
                 "%s is not a variable with a value, so its value cannot be changed.",
                 sym ? sym : "argument");
         return NULL;
     }
 
-    /* Evaluate a Part target's indices once: the read and the write below
-     * must address the same element. */
-    Expr* unwind = NULL;
-    Expr* frozen = lvalue_freeze_parts(lhs, &unwind);
-    if (!frozen) return unwind;
-    lhs = frozen;
-
-    Expr* old_val = evaluate(lhs);
+    if (!indexed) {
+        /* Evaluate a Part target's indices once: the read and the write below
+         * must address the same element. */
+        Expr* unwind = NULL;
+        frozen = lvalue_freeze_parts(lhs, &unwind);
+        if (!frozen) return unwind;
+        lhs = frozen;
+        old_val = evaluate(lhs);
+    }
 
     /* Build Plus[old, +-dx] or Times[old, dx^+-1] and evaluate, so list
      * threading and symbolic simplification happen exactly as they would for
@@ -5637,6 +5815,31 @@ Expr* builtin_syntaxq(Expr* res) {
         return NULL;
     }
     if (a0->data.string[0] == '\0') return expr_new_symbol(SYM_False);
+    /* The lexer lets a comment run to the end of the input, so an unclosed
+     * (* ... (nested ones counted) would parse as nothing at all -- not as
+     * valid syntax (audit SyntaxQ#1).  Strings are skipped: "(*" inside one
+     * is text. */
+    {
+        const char* p = a0->data.string;
+        while (*p) {
+            if (*p == '"') {
+                p++;
+                while (*p && *p != '"') p += (*p == '\\' && p[1]) ? 2 : 1;
+                if (*p) p++;
+            } else if (p[0] == '(' && p[1] == '*') {
+                int depth = 1;
+                p += 2;
+                while (*p && depth > 0) {
+                    if (p[0] == '(' && p[1] == '*') { depth++; p += 2; }
+                    else if (p[0] == '*' && p[1] == ')') { depth--; p += 2; }
+                    else p++;
+                }
+                if (depth > 0) return expr_new_symbol(SYM_False);
+            } else {
+                p++;
+            }
+        }
+    }
     int prev_quiet = parse_set_quiet(1);     /* a question, not an error */
     Expr* stmts = parse_statement_sequence(a0->data.string, 1, NULL);
     parse_set_quiet(prev_quiet);
@@ -5778,8 +5981,11 @@ static bool symbol_segment_is_valid(const char* start, size_t len) {
  *   - a relatively-qualified name with a leading backtick  e.g. "`x"
  * Rejects empty input and any name with an empty or syntactically invalid
  * segment (must start with letter or '$', then letters / digits / '$'). */
-static bool symbol_name_is_valid(const char* name) {
+bool symbol_name_is_valid(const char* name) {
     if (!name || !*name) return false;
+    /* A name ending in a backtick is a context name, not a symbol name: "`"
+     * made a symbol with an empty name and "a`" one named a` (audit Symbol#1). */
+    if (name[strlen(name) - 1] == '`') return false;
     const char* p = name;
     if (*p == '`') p++;            /* leading backtick: relative-context form */
     while (*p) {

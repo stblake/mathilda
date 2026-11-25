@@ -690,6 +690,21 @@ static Expr* builtin_context(Expr* res) {
         return NULL;
     }
 
+    /* A relative name `x (or `a`x) lives under $Context: its context is
+     * $Context followed by any inner segments, not "`" (audit Context#1). */
+    if (a->type == EXPR_STRING && name[0] == '`') {
+        const char* cur = context_current();
+        size_t inner = context_prefix_len(name);      /* through the last ` */
+        size_t cl = strlen(cur);
+        char* full = malloc(cl + inner + 1);
+        memcpy(full, cur, cl);
+        memcpy(full + cl, name + 1, inner - 1);        /* drop the leading ` */
+        full[cl + inner - 1] = '\0';
+        Expr* out = expr_new_string(full);
+        free(full);
+        return out;
+    }
+
     /* If the name already has a backtick, peel off its prefix as the answer. */
     size_t plen = context_prefix_len(name);
     if (plen > 0) {
@@ -740,11 +755,16 @@ static const char* string_arg(Expr* e) {
     return (e && e->type == EXPR_STRING) ? e->data.string : NULL;
 }
 
+static bool is_valid_context_name(const char* s);
+
 static Expr* builtin_begin(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     const char* ctx = string_arg(res->data.function.args[0]);
     if (!ctx) return NULL;
-    if (!context_begin(ctx)) {
+    /* Every segment must be a symbol name: "1abc`", "a b`" and "a``" were
+     * accepted and became $Context (audit Begin#1).  A relative "`a`" is
+     * checked after its leading backtick. */
+    if (!is_valid_context_name(ctx[0] == '`' ? ctx + 1 : ctx) || !context_begin(ctx)) {
         mth_message("Begin", "cxt", "Context specification %s is not valid.", ctx);
         return NULL;
     }

@@ -58,10 +58,30 @@ static void test_with_capture(void) {
     audit_chk("With#1", "With[{y = 1}, Module[{z = y}, z + 1]]", "2");
 }
 
+/* Wave 4 G4: malformed local specs (Block/Module::lvsym, With::lvset), long
+ * Module names, nested With lists, Unique's name check and attributes. */
+static void test_wave4_g4_scoping(void) {
+    audit_chk("Block#2", "Check[Block[{1}, 2], fired, Block::lvsym]", "fired");
+    audit_chk("Block#2", "Quiet[Block[{1}, 2]]", "Block[{1}, 2]");
+    audit_chk("Block#2", "Check[Module[{f[1]}, 2], fired, Module::lvsym]", "fired");
+    audit_chk("Block#2", "Block[{bx = 1, by}, {bx, by}]", "{1, by}");
+    audit_run("r1g4 = Module[{vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv = 1}, Hold[vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]]; r2g4 = Module[{vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv = 2}, Hold[vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]]");
+    audit_chk("Module#1", "{ReleaseHold[r1g4], ReleaseHold[r2g4]}", "{1, 2}");
+    audit_chk("With#3", "Check[With[{x}, x], fired, With::lvset]", "fired");
+    audit_chk("With#3", "Quiet[{With[{x}, x], With[{1 = 2}, 3], With[{f[1] = 2}, 3]}]", "{With[{x}, x], With[{1 = 2}, 3], With[{f[1] = 2}, 3]}");
+    audit_chk("With#4", "With[{x = 1}, {y = x + 1}, y]", "2");
+    audit_chk("With#4", "With[{x = 1}, {y = x + 1}, {z = y + x}, {x, y, z}]", "{1, 2, 3}");
+    audit_chk("Unique#1", "Check[Unique[\"1abc\"], fired, Unique::usym]", "fired");
+    audit_chk("Unique#1", "Quiet[{Unique[\"a b\"], Unique[\"\"]}]", "{Unique[\"a b\"], Unique[\"\"]}");
+    audit_chk("Unique#2", "Attributes[Evaluate[Unique[yg4, {Flat, Orderless}]]]", "{Flat, Orderless, Temporary}");
+    audit_chk("Unique#2", "Attributes[Evaluate[Unique[yg4, Temporary]]]", "{Temporary}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_block_duplicate_local);
     TEST(test_with_pattern_names);
     TEST(test_with_capture);
+    TEST(test_wave4_g4_scoping);
     return audit_finish("audit_scoping_constructs");
 }

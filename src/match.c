@@ -967,15 +967,38 @@ static bool kvp_match_reqs(Expr** reqs, size_t nreq, size_t ri, Expr* subj,
 /* If `e` is an OrderlessPatternSequence[...] (optionally wrapped in a
  * Pattern[name, ...]), return the OPS node and set *bind_out to the binding
  * name symbol (or NULL). Otherwise return NULL. */
-static Expr* ops_unwrap(Expr* e, Expr** bind_out) {
+/* The OrderlessPatternSequence a pattern element is, through an optional
+ * name and any Condition layers (x:OPS[..], OPS[..] /; c, x:(OPS[..] /; c),
+ * (x:OPS[..]) /; c), or NULL.  *bind_out gets the name and *cond_out (when
+ * non-NULL) the outermost Condition, whose guards are checked once the run is
+ * bound -- a Condition around an OPS used to bypass the run matcher and never
+ * match (audit OrderlessPatternSequence#1). */
+static bool ops_is_pattern(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Pattern
+        && e->data.function.arg_count == 2;
+}
+static bool ops_is_condition(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Condition
+        && e->data.function.arg_count == 2;
+}
+static Expr* ops_unwrap_c(Expr* e, Expr** bind_out, Expr** cond_out) {
     *bind_out = NULL;
+    if (cond_out) *cond_out = NULL;
     Expr* cur = e;
-    if (cur && cur->type == EXPR_FUNCTION && cur->data.function.head
-        && cur->data.function.head->type == EXPR_SYMBOL
-        && cur->data.function.head->data.symbol.name == SYM_Pattern
-        && cur->data.function.arg_count == 2) {
-        *bind_out = cur->data.function.args[0];
-        cur = cur->data.function.args[1];
+    if (ops_is_pattern(cur)) { *bind_out = cur->data.function.args[0]; cur = cur->data.function.args[1]; }
+    if (ops_is_condition(cur)) {
+        Expr* outer = cur;
+        while (ops_is_condition(cur)) cur = cur->data.function.args[0];
+        if (!*bind_out && ops_is_pattern(cur)) {
+            *bind_out = cur->data.function.args[0];
+            cur = cur->data.function.args[1];
+        }
+        if (!cond_out) { *bind_out = NULL; return NULL; }   /* caller cannot guard */
+        *cond_out = outer;
     }
     if (cur && cur->type == EXPR_FUNCTION && cur->data.function.head
         && cur->data.function.head->type == EXPR_SYMBOL
@@ -983,7 +1006,12 @@ static Expr* ops_unwrap(Expr* e, Expr** bind_out) {
         return cur;
     }
     *bind_out = NULL;
+    if (cond_out) *cond_out = NULL;
     return NULL;
+}
+static Expr* ops_unwrap(Expr* e, Expr** bind_out) {
+    Expr* c = NULL;
+    return ops_unwrap_c(e, bind_out, &c);
 }
 
 /* Assign the elements qs[qi..nq) of an OrderlessPatternSequence to the
@@ -1000,7 +1028,7 @@ static bool ops_assign(Expr** run, size_t L, bool* used,
                        Expr** tail, size_t n_tail,
                        Expr** pats, size_t n_pats, MatchEnv* env,
                        Expr* condition, Expr* pat_head, size_t total_pats,
-                       ParentMatch* parent, Expr* bind_sym) {
+                       ParentMatch* parent, Expr* bind_sym, Expr* seq_cond) {
     if (qi == nq) {
         for (size_t i = 0; i < L; i++) if (!used[i]) return false;
         size_t saved = env->count;
@@ -1013,6 +1041,10 @@ static bool ops_assign(Expr** run, size_t L, bool* used,
             else env_set(env, bind_sym->data.symbol.name, seqv);
             expr_free(seqv);
             if (!okbind) return false;
+        }
+        if (seq_cond && !eval_seq_conditions(seq_cond, env)) {
+            env_rollback(env, saved);
+            return false;
         }
         if (match_args_internal(tail, n_tail, pats + 1, n_pats - 1, env,
                                 condition, pat_head, total_pats, parent))
@@ -1030,7 +1062,7 @@ static bool ops_assign(Expr** run, size_t L, bool* used,
             used[p] = true;
             if (match_internal(run[p], q, env, NULL)
                 && ops_assign(run, L, used, qs, qi + 1, nq, tail, n_tail, pats, n_pats,
-                              env, condition, pat_head, total_pats, parent, bind_sym))
+                              env, condition, pat_head, total_pats, parent, bind_sym, seq_cond))
                 return true;
             used[p] = false;
             env_rollback(env, saved);
@@ -1059,7 +1091,7 @@ static bool ops_assign(Expr** run, size_t L, bool* used,
             if (match_args_internal(sub, w, &q, 1, env, NULL, pat_head, 1, NULL)) {
                 for (size_t i = 0; i < w; i++) used[freeidx[comb[i]]] = true;
                 r = ops_assign(run, L, used, qs, qi + 1, nq, tail, n_tail, pats, n_pats,
-                               env, condition, pat_head, total_pats, parent, bind_sym);
+                               env, condition, pat_head, total_pats, parent, bind_sym, seq_cond);
                 for (size_t i = 0; i < w; i++) used[freeidx[comb[i]]] = false;
             }
             if (r) break;
@@ -2139,7 +2171,8 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
      * enumerate (one match, not two, for f[a, a] against OPS[x_, a]). */
     {
         Expr* ops_bind = NULL;
-        Expr* ops = ops_unwrap(pats[0], &ops_bind);
+        Expr* ops_cond = NULL;
+        Expr* ops = ops_unwrap_c(pats[0], &ops_bind, &ops_cond);
         if (ops) {
             size_t nq = ops->data.function.arg_count;
             Expr** qs = malloc((nq ? nq : 1) * sizeof(Expr*));
@@ -2157,7 +2190,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             for (size_t L = lmin; L <= lmax && !r; L++) {
                 r = ops_assign(exprs, L, used, qs, 0, nq, exprs + L, n_exprs - L,
                                pats, n_pats, env, condition, pat_head, total_pats,
-                               parent, ops_bind);
+                               parent, ops_bind, ops_cond);
             }
             free(used);
             free(qs);
@@ -2386,13 +2419,19 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     bool cond_ps = seq_cond && opt_pat->type == EXPR_FUNCTION
         && opt_pat->data.function.head->type == EXPR_SYMBOL
         && opt_pat->data.function.head->data.symbol.name == SYM_PatternSequence;
-    if (cond_ps || (bind_sym && bind_sym->type == EXPR_SYMBOL
+    /* Longest[...] / Shortest[...] around a PatternSequence (named or not)
+     * also lands here once the wrapper is peeled: Longest tries the longest
+     * prefix first, Shortest (the default order) the shortest.  The unnamed
+     * Longest[PatternSequence[a, b]] used to fall through to the
+     * single-argument matcher and never match (audit PatternSequence#2). */
+    if (cond_ps || (((bind_sym && bind_sym->type == EXPR_SYMBOL) || is_longest || is_shortest)
         && opt_pat->type == EXPR_FUNCTION && opt_pat->data.function.head->type == EXPR_SYMBOL
         && (opt_pat->data.function.head->data.symbol.name == SYM_PatternSequence
             || named_seq_alt))) {
         Expr** qs = named_seq_alt ? &named_alt_slot : opt_pat->data.function.args;
         size_t m = named_seq_alt ? 1 : opt_pat->data.function.arg_count;
-        for (size_t k = 0; k <= n_exprs; k++) {
+        for (size_t t = 0; t <= n_exprs; t++) {
+            size_t k = is_longest ? n_exprs - t : t;
             size_t saved = env->count;
             /* Full boolean sub-match of exprs[0..k) against q1..qm (parent NULL
              * => success when both sub-lists are exhausted, without firing the
@@ -3642,13 +3681,15 @@ Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv
 Expr* builtin_matchq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     
-    Expr* expr = evaluate(res->data.function.args[0]);
+    /* The argument arrives evaluated (MatchQ holds nothing); evaluating it
+     * again undid Unevaluated: MatchQ[Unevaluated[1 + 1], _Plus] matched 2
+     * (audit MatchQ#2, HoldPattern#1). */
+    Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
-    
+
     MatchEnv* env = env_new();
     bool result = match(expr, pattern, env);
     env_free(env);
-    expr_free(expr);
     
     return expr_new_symbol(result ? "True" : "False");
 }

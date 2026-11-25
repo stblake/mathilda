@@ -68,10 +68,39 @@ static void test_wave3_arity_options(void) {
     audit_chk("ReplaceList#3", "Quiet[ReplaceList[a, b, c, d]]", "ReplaceList[a, b, c, d]");
 }
 
+/* Wave 4 G4: Attributes[s] = list, MatchQ operator form and Unevaluated, Longest
+ * around PatternSequence, Position's count, Default for Plus/Times/Power, and
+ * a Condition around OrderlessPatternSequence. */
+static void test_wave4_g4_patterns(void) {
+    audit_run("ClearAll[pat1, f, x, y, a, b, c]");
+    audit_chk("Attributes#1", "Attributes[pat1] = {Listable, Orderless}; Attributes[pat1]", "{Listable, Orderless}");
+    audit_chk("Attributes#1", "pat1[{1, 2}]", "{pat1[1], pat1[2]}");
+    audit_chk("Attributes#1", "pat1[b, a]", "pat1[a, b]");
+    audit_chk("MatchQ#1", "MatchQ[_Integer][5]", "True");
+    audit_chk("MatchQ#1", "Select[{1, a, 2}, MatchQ[_Integer]]", "{1, 2}");
+    audit_chk("MatchQ#2", "MatchQ[Unevaluated[1 + 1], _Plus]", "True");
+    audit_chk("MatchQ#2", "MatchQ[Unevaluated[Sin[Pi]], _Sin]", "True");
+    audit_chk("MatchQ#2", "MatchQ[1 + 1, _Plus]", "False");
+    audit_chk("PatternSequence#2", "MatchQ[f[a, b], f[Longest[PatternSequence[a, b]]]]", "True");
+    audit_chk("PatternSequence#2", "f[a, b, c] /. f[Longest[x:PatternSequence[__]], y___] :> {{x}, {y}}", "{{a, b, c}, {}}");
+    audit_chk("PatternSequence#2", "f[a, b, c] /. f[x:PatternSequence[__], y___] :> {{x}, {y}}", "{{a}, {b, c}}");
+    audit_chk("Position#2", "Check[Position[{a, a}, a, {1}, -1], fired, Position::innf]", "fired");
+    audit_chk("Position#2", "Quiet[Position[{a, a}, a, {1}, x]]", "Position[{a, a}, a, {1}, x]");
+    audit_chk("Position#2", "Quiet[Position[{a, b}, a, {1}, 2.5]]", "Position[{a, b}, a, {1}, 2.5]");
+    audit_chk("Position#2", "{Position[{a, a}, a, {1}, 1], Position[{a, a}, a, {1}, Infinity]}", "{{{1}}, {{1}, {2}}}");
+    audit_chk("Default#1", "{Default[Plus], Default[Times], Default[Power, 2]}", "{0, 1, 1}");
+    audit_chk("Default#1", "{Default[Plus, 1], Default[Power]}", "{0, Default[Power]}");
+    audit_chk("OrderlessPatternSequence#1", "MatchQ[f[1, 2], f[OrderlessPatternSequence[x_, y_] /; x < y]]", "True");
+    audit_chk("OrderlessPatternSequence#1", "MatchQ[f[1, 2], f[OrderlessPatternSequence[x_, y_]] /; x < y]", "True");
+    audit_chk("OrderlessPatternSequence#1", "f[1, 2] /. f[OrderlessPatternSequence[x_, y_] /; x > y] :> {x, y}", "{2, 1}");
+    audit_chk("OrderlessPatternSequence#1", "MatchQ[f[1, 2], f[OrderlessPatternSequence[x_, y_] /; x > 5]]", "False");
+}
+
 int main(void) {
     audit_init();
     TEST(test_condition_on_patternsequence);
     TEST(test_s14_level_specs);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_g4_patterns);
     return audit_finish("audit_pattern_matching");
 }

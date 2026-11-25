@@ -516,6 +516,7 @@ Out[4]= 1 + x - x^3/3
 In[5]:= InterpolatingPolynomial[{1, 4, 9, 16}, x, Modulus -> 7]
 Out[5]= x^2
 ```
+- One abscissa given two different values (also `1` and `1.`) has no interpolant: `InterpolatingPolynomial::noipf`, the call unevaluated (audit InterpolatingPolynomial#1/#2).
 
 ## Map (/@)
 
@@ -1165,6 +1166,7 @@ Out[1]= {f[x], g[x], h[x]}
 In[2]:= Through[(f + g)[x, y]]
 Out[2]= f[x, y] + g[x, y]
 ```
+- `Through[expr, h]` applies only when the head of `expr` is `h[...]`; otherwise `expr` is returned unchanged (audit Through#2).
 
 ## Thread
 Threads a function over the arguments that are lists (or have a given head).
@@ -1298,6 +1300,7 @@ Out[1]= {2, 4, 6, 2}
 In[2]:= Select[{1, 2, 4, 7, 6, 2}, # > 2 &, 1]
 Out[2]= {4}
 ```
+- The count must be a non-negative integer or `Infinity`; otherwise `Select::innf` and the call stays unevaluated (audit Select#1). `Select[crit][list]` is the operator form.
 
 ## TakeWhile, LengthWhile
 Act on the *leading* run of elements satisfying a criterion.
@@ -1378,6 +1381,7 @@ Out[1]= {-5, -5}
 In[2]:= MinimalBy[<|"a" -> 1, "b" -> 3, "c" -> 2|>, Identity]
 Out[2]= <|"a" -> 1|>
 ```
+- f-values are ranked numerically (`MaximalBy[{Pi, 4}, Identity]` is `{4}`), and `MaximalBy[list, f, n]` / `UpTo[n]` gives the n best, best first (audit MaximalBy#1/#2).
 
 ## TakeLargest, TakeSmallest, TakeLargestBy, TakeSmallestBy
 Take the ranked extreme elements.
@@ -1410,6 +1414,7 @@ Out[3]= {-9, 5}
 > cost is `O(n log k)` rather than a full sort. An **integer** buffer takes
 > the ordinary path: ordering it through `double` would compare two integers
 > past 2^53 equal.
+- The count may be `UpTo[n]`; `Missing[...]` and `Indeterminate` are excluded (audit TakeLargest#3/#4). The same holds for `TakeSmallest`, `TakeLargestBy` and `TakeSmallestBy`.
 
 ## ReverseSort, ReverseSortBy
 Sort into descending order.
@@ -1532,3 +1537,15 @@ Out[4]= {1, 3., 6.}
 The seed at `[[1]]` of every `*List` head, `Nest[f, x, 0]`, a `NestWhile` whose
 test fails immediately, and any element a body simply returns (`#2 &`) are all
 pass-through positions of this kind.
+
+## Function
+
+- `Function[params, body, Orderless]` takes its arguments in canonical order (audit Function#4). A named-parameter function called with fewer arguments than parameters issues `Function::fpct` and stays unevaluated (audit Function#5).
+
+## ComposeList
+
+- Each step is evaluated once and fed to the next, so side effects run once per function and long lists do not recurse (audit ComposeList#1/#2).
+
+## MinimalBy
+
+- f-values are ranked numerically, and `MinimalBy[list, f, n]` / `UpTo[n]` gives the n smallest, smallest first, ties by position (audit MinimalBy#1).

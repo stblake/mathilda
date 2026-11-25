@@ -122,6 +122,65 @@ static void test_wave3_arity_options(void) {
     audit_chk("StringQ#1", "Quiet[StringQ[Sequence[\"a\", \"b\"]]]", "StringQ[\"a\", \"b\"]");
 }
 
+/* Wave 4 G4: transparent display wrappers in TeX, Unevaluated through MatchQ,
+ * attributes and options in Definition / Information, OutputForm and
+ * StringForm, genuine-number tests for Rational/Complex, context-name checks,
+ * composite Hold attributes, ComposeList evaluated step by step, Names
+ * patterns, NumericQ of infinities, Row separators, SubValues[s] = list,
+ * Symbol names and SyntaxQ on comments. */
+static void test_wave4_g4_expression(void) {
+    audit_run("ClearAll[f, x, a, b, gi4, f3g4, f4g4, gca4, hca4, k]");
+    audit_chk("HoldForm#1", "ToString[TeXForm[HoldForm[1 + 1]]]", "\"1+1\"");
+    audit_chk("HoldForm#1", "ToString[HoldForm[x^2], TeXForm]", "\"x^{2}\"");
+    audit_chk("TraditionalForm#1", "ToString[TeXForm[TraditionalForm[x^2]]]", "\"x^{2}\"");
+    audit_chk("HoldPattern#1", "MatchQ[Unevaluated[1 + 1], HoldPattern[1 + 1]]", "True");
+    audit_run("SetAttributes[gi4, Listable]");
+    audit_chk("Information#1", "Information[gi4]", "\"Attributes[gi4] = {Listable}\"");
+    audit_chk("Print#1", "ToString[OutputForm[x^2]]", "\"x^2\"");
+    audit_chk("Print#2", "ToString[StringForm[\"`` and ``\", a, b]]", "\"a and b\"");
+    audit_chk("AtomQ#1", "{AtomQ[Rational[a, b]], AtomQ[Complex[a, b]], AtomQ[1/2], AtomQ[I]}", "{False, False, True, True}");
+    audit_chk("Begin#1", "Check[Begin[\"1abc`\"], fired, Begin::cxt]", "fired");
+    audit_chk("Begin#1", "Quiet[{Begin[\"a b`\"], Begin[\"a``\"], $Context}]", "{Begin[\"a b`\"], Begin[\"a``\"], \"Global`\"}");
+    audit_run("SetAttributes[gca4, HoldAll]; ClearAttributes[gca4, HoldFirst]");
+    audit_chk("ClearAttributes#1", "Attributes[gca4]", "{HoldAll}");
+    audit_run("SetAttributes[hca4, HoldFirst]; ClearAttributes[hca4, HoldAll]");
+    audit_chk("ClearAttributes#2", "Attributes[hca4]", "{HoldFirst}");
+    audit_chk("ClearAttributes#2", "SetAttributes[hca4, HoldAll]; ClearAttributes[hca4, HoldAll]; Attributes[hca4]", "{}");
+    audit_chk("ComposeList#1", "k = 0; ComposeList[{(k++; #1) &, (k++; #1) &, (k++; #1) &}, x]; k", "3");
+    audit_chk("ComposeList#2", "Last[ComposeList[Table[#1 + 1 &, {2000}], 0]]", "2000");
+    audit_chk("ComposeList#2", "ComposeList[{f, g}, x]", "{x, f[x], g[f[x]]}");
+    audit_chk("Context#1", "Context[\"`x\"]", "\"Global`\"");
+    audit_run("SetAttributes[f3g4, Listable]; f3g4[x_] := x^2");
+    audit_chk("Definition#1", "ToString[Definition[f3g4]]", "\"Attributes[f3g4] = {Listable}\\n\\nf3g4[x_] := x^2\"");
+    audit_run("Options[f4g4] = {opt -> 1}; f4g4[x_] := x");
+    audit_chk("Definition#1", "ToString[Definition[f4g4]]", "\"f4g4[x_] := x\\n\\nOptions[f4g4] = {opt -> 1}\"");
+    audit_chk("ExactNumberQ#1", "{ExactNumberQ[Rational[a, b]], ExactNumberQ[1/2]}", "{False, True}");
+    audit_chk("InexactNumberQ#1", "{InexactNumberQ[Complex[a, 1.]], InexactNumberQ[1. + I]}", "{False, True}");
+    audit_chk("Names#1", "Names[\"sin\", IgnoreCase -> True]", "{\"Sin\"}");
+    audit_chk("Names#2", "Names[\"Sin\" | \"Cos\"]", "{\"Cos\", \"Sin\"}");
+    audit_chk("Names#2", "Names[\"ArcSin\" ~~ __]", "{\"ArcSinh\"}");
+    audit_chk("NumberQ#1", "{NumberQ[Complex[1, x]], NumberQ[Rational[1, x]], NumberQ[Complex[Pi, 1]], NumberQ[Rational[Pi, 2]], NumberQ[2 + 3 I]}", "{False, False, False, False, True}");
+    audit_chk("NumericQ#1", "{NumericQ[Infinity], NumericQ[-Infinity], NumericQ[ComplexInfinity], NumericQ[DirectedInfinity[1]], NumericQ[Pi]}", "{False, False, False, False, True}");
+    audit_chk("NumericQ#2", "{NumericQ[Rational[x, 2]], NumericQ[Complex[x, 1]], NumericQ[Complex[Pi, 1]]}", "{False, False, True}");
+    audit_chk("Row#1", "ToString[Row[{a, b, c}, x]]", "\"axbxc\"");
+    audit_chk("SubValues#1", "SubValues[usv4] = {HoldPattern[usv4[x_][y_]] :> x - y}; usv4[5][2]", "3");
+    audit_chk("SubValues#1", "SubValues[usv4]", "{HoldPattern[usv4[x_][y_]] :> x - y}");
+    audit_chk("Symbol#1", "Check[Symbol[\"`\"], fired, Symbol::symname]", "fired");
+    audit_chk("Symbol#1", "Quiet[Symbol[\"a`\"]]", "Symbol[\"a`\"]");
+    audit_chk("SyntaxQ#1", "{SyntaxQ[\"(* unterminated\"], SyntaxQ[\"(* a (* nested *) b\"], SyntaxQ[\"1 (* c *)\"], SyntaxQ[\"\\\"(*\\\"\"]}", "{False, False, True, True}");
+    audit_chk("EndPackage#2", "Begin[\"XepG4`\"]; Quiet[EndPackage[]]; c0 = $Context; End[]; c0", "\"XepG4`\"");
+    audit_chk("InputForm#1", "ToString[Hold[(a -> b) -> c], InputForm]", "\"Hold[(a -> b) -> c]\"");
+    audit_chk("InputForm#1", "FullForm[ToExpression[ToString[Hold[(a -> b) -> c], InputForm]]]", "Hold[Rule[Rule[a, b], c]]");
+    audit_chk("InputForm#1", "{ToString[Hold[(a = b) = c], InputForm], ToString[Hold[(a :> b) :> c], InputForm], ToString[Hold[a -> (b -> c)], InputForm]}", "{\"Hold[(a = b) = c]\", \"Hold[(a :> b) :> c]\", \"Hold[a -> b -> c]\"}");
+    audit_chk("InputForm#2", "{ToString[Hold[(a == b) == c], InputForm], ToString[Hold[(a > b) > c], InputForm], ToString[Hold[(a === b) === c], InputForm]}", "{\"Hold[(a == b) == c]\", \"Hold[(a > b) > c]\", \"Hold[(a === b) === c]\"}");
+    audit_chk("InputForm#2", "ToString[Hold[a == b == c], InputForm]", "\"Hold[a == b == c]\"");
+    audit_chk("InputForm#3", "{ToString[Hold[Plus[]], InputForm], ToString[Hold[{Times[], 2}], InputForm], ToString[Hold[Plus[] + 1], InputForm], ToString[Hold[f[Plus[]]], InputForm]}", "{\"Hold[Plus[]]\", \"Hold[{Times[], 2}]\", \"Hold[Plus[] + 1]\", \"Hold[f[Plus[]]]\"}");
+    audit_chk("FortranForm#1", "{ToString[FortranForm[1/10]], ToString[FortranForm[1/10^30]]}", "{\"0.1\", \"1.e-30\"}");
+    audit_chk("FortranForm#3", "{ToString[FortranForm[N[1/3, 30]]], ToString[FortranForm[N[10^40, 20]]]}", "{\"0.333333333333333333333333333333\", \"1.e40\"}");
+    audit_chk("NumberForm#1", "{ToString[NumberForm[0.1, 20]], ToString[NumberForm[N[Pi], 30]]}", "{\"0.1\", \"3.141592653589793\"}");
+    audit_chk("PossibleZeroQ#3", "{PossibleZeroQ[a == b], PossibleZeroQ[x < y], PossibleZeroQ[a - a]}", "{False, False, True}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_bytecount_deep_nesting);
@@ -129,5 +188,6 @@ int main(void) {
     TEST(test_endpackage_unclosed_begin);
     TEST(test_s14_memberq_levels);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_g4_expression);
     return audit_finish("audit_expression_information");
 }

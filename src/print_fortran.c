@@ -324,7 +324,12 @@ static char* fmt_double(double d) {
 #ifdef USE_MPFR
 static char* fmt_mpfr(const Expr* e) {
     mpfr_exp_t ex = 0;
-    char* s = mpfr_get_str(NULL, &ex, 10, 0, e->data.mpfr, MPFR_RNDN);
+    /* As many digits as the value's decimal precision, not every digit of
+     * its binary mantissa (which showed N[1/3, 30] with 36 digits and
+     * N[10^40, 20] as 9.99...e39, audit FortranForm#3). */
+    long ndig = (long)(numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr)) + 1e-9);
+    if (ndig < 1) ndig = 1;
+    char* s = mpfr_get_str(NULL, &ex, 10, (size_t)ndig, e->data.mpfr, MPFR_RNDN);
     if (!s) return fmt_decimal(false, "0", 0);
     bool neg = s[0] == '-';
     const char* D0 = s + (neg ? 1 : 0);
@@ -368,7 +373,17 @@ static double rational_to_double(const Expr* e) {
     expr_to_mpz(e->data.function.args[0], mpq_numref(q));
     expr_to_mpz(e->data.function.args[1], mpq_denref(q));
     mpq_canonicalize(q);
+    /* Correctly rounded: mpq_get_d truncates, so 1/10 came out as
+     * 0.09999999999999999 (audit FortranForm#1). */
+#ifdef USE_MPFR
+    mpfr_t t;
+    mpfr_init2(t, 53);
+    mpfr_set_q(t, q, MPFR_RNDN);
+    double d = mpfr_get_d(t, MPFR_RNDN);
+    mpfr_clear(t);
+#else
     double d = mpq_get_d(q);
+#endif
     mpq_clear(q);
     return d;
 }

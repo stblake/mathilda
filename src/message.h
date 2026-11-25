@@ -21,6 +21,7 @@
 #define MATHILDA_MESSAGE_H
 
 #include <stdarg.h>
+#include <stddef.h>
 
 /* printf-style format checking for the emit funnel below. GUARDED: CLAUDE.md
  * bans an unguarded __attribute__ (breaks strict C99 on a non-GCC compiler and
@@ -156,5 +157,10 @@ void mth_message_line(int extra_mute, const char* line);
  * emits it through the funnel by name.  For legacy helpers whose format
  * strings carry the "Head::tag: " prefix. */
 void mth_message_linev(int extra_mute, const char* fmt, va_list ap);
+
+/* Fill the `n` / `` slots of a StringForm template with args (OutputForm).
+ * Returns a malloc'd string the caller frees. */
+struct Expr;
+char* mth_stringform_fill(const char* tmpl, struct Expr** args, size_t nargs);
 
 #endif /* MATHILDA_MESSAGE_H */

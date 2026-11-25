@@ -60,6 +60,8 @@ void echo_print_line(Expr* label, Expr* value);
 Expr* builtin_fullform(Expr* res);
 Expr* builtin_inputform(Expr* res);
 Expr* builtin_texform(Expr* res);
+/* MakeBoxes[e, form] from a user's box rule in e's FormatValues. */
+Expr* builtin_makeboxes(Expr* res);
 Expr* builtin_display_form(Expr* res);
 
 

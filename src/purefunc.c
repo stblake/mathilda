@@ -577,6 +577,8 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count, 
  * unwrapped value (when the marker is consumed). Frees `result` on the
  * consume path.
  */
+static Expr* apply_pure_function_sorted(Expr* head, Expr** args, size_t arg_count);
+
 static Expr* trap_return(Expr* result) {
     Expr* rv = NULL;
     EvalReturnAction ra = eval_classify_return_targeted(result, SYM_Function, &rv);
@@ -587,9 +589,49 @@ static Expr* trap_return(Expr* result) {
     return result;
 }
 
+/* Function::fpct -- a named-parameter Function called with fewer arguments
+ * than it has parameters; the call stays unevaluated, as in the reference
+ * (audit Function#5: Function[{x, y}, x + y][1] gave 1 + y). */
+static Expr* pf_fpct(Expr* head, Expr* params, Expr** args, size_t arg_count) {
+    char* ps = expr_to_string(params);
+    char* hs = expr_to_string(head);
+    size_t cap = 64 + (hs ? strlen(hs) : 0);
+    char** as = malloc(sizeof(char*) * (arg_count ? arg_count : 1));
+    for (size_t i = 0; i < arg_count; i++) { as[i] = expr_to_string(args[i]); cap += strlen(as[i]) + 2; }
+    char* cs = malloc(cap);
+    size_t o = (size_t)snprintf(cs, cap, "%s[", hs ? hs : "");
+    for (size_t i = 0; i < arg_count; i++) {
+        o += (size_t)snprintf(cs + o, cap - o, "%s%s", i ? ", " : "", as[i]);
+        free(as[i]);
+    }
+    snprintf(cs + o, cap - o, "]");
+    mth_message("Function", "fpct", "Too many parameters in %s to be filled from %s.",
+                ps ? ps : "", cs);
+    free(as); free(cs); free(ps); free(hs);
+    return NULL;
+}
+
 Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     if (head->type != EXPR_FUNCTION) return NULL;
 
+    size_t head_argc = head->data.function.arg_count;
+
+    /* Function[params, body, Orderless]: the arguments are taken in canonical
+     * order, as for an Orderless symbol head (audit Function#4).  Sorted in a
+     * private copy of the pointer array; the call itself is not mutated. */
+    if (head_argc >= 3 && arg_count > 1 &&
+        (pure_function_attributes(head) & ATTR_ORDERLESS)) {
+        Expr** sorted = malloc(sizeof(Expr*) * arg_count);
+        memcpy(sorted, args, sizeof(Expr*) * arg_count);
+        expr_orderless_sort(sorted, arg_count);
+        Expr* r = apply_pure_function_sorted(head, sorted, arg_count);
+        free(sorted);
+        return r;
+    }
+    return apply_pure_function_sorted(head, args, arg_count);
+}
+
+static Expr* apply_pure_function_sorted(Expr* head, Expr** args, size_t arg_count) {
     size_t head_argc = head->data.function.arg_count;
 
     /* Function[body] -- slot form with 1 argument */
@@ -617,8 +659,9 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
 
     /* Function[x, body] -- single named parameter */
     if (params->type == EXPR_SYMBOL) {
+        if (arg_count < 1) return pf_fpct(head, params, args, arg_count);
         char* name = params->data.symbol.name;
-        Expr* val = (arg_count >= 1) ? args[0] : params;
+        Expr* val = args[0];
         Expr* substituted = substitute_names(body, &name, &val, 1, head->refcount >= 2);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
@@ -630,6 +673,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
         params->data.function.head->type == EXPR_SYMBOL &&
         params->data.function.head->data.symbol.name == SYM_List) {
         size_t var_count = params->data.function.arg_count;
+        if (arg_count < var_count) return pf_fpct(head, params, args, arg_count);
         if (var_count == 0) {
             Expr* result = evaluate(body);
             return trap_return(result);

@@ -51,6 +51,7 @@
 #include "sym_intern.h"
 #include "attr.h"
 #include "regex_engine.h"
+#include "regex_common.h"   /* regex_rules_build_opts: general string patterns */
 #include "context.h"
 
 #include <stdio.h>
@@ -101,7 +102,14 @@ typedef struct {
     int          has_ctx;    /* pattern text contains a backtick */
     const char*  glob;       /* borrowed from the input Expr (when !is_regex) */
     RegexProgram* prog;      /* owned (when is_regex); freed by free_pats */
+    RegexRule*   rules;      /* owned: a general string pattern (Alternatives,
+                                StringExpression, ...) or a caseless glob,
+                                compiled by the string-pattern engine */
+    int          nrules;
 } NamePat;
+
+/* Names[..., IgnoreCase -> True] for the pattern being built (build_pat). */
+static int g_names_caseless = 0;
 
 /* RegularExpression["re"] -> anchored PCRE program, or NULL if `e` is not one. */
 static int is_regular_expression(Expr* e, const char** re_out) {
@@ -120,6 +128,26 @@ static int is_regular_expression(Expr* e, const char** re_out) {
  * unsupported element / regex compile failure / missing regex engine. */
 static int build_pat(Expr* e, NamePat* out) {
     const char* re;
+    out->rules = NULL;
+    out->nrules = 0;
+    /* A general string pattern (Alternatives, StringExpression, ...), or any
+     * pattern under IgnoreCase -> True, is compiled by the string-pattern
+     * engine to an anchored regex, with * and @ as the Names wildcards in
+     * literal strings (audit Names#1, Names#2). */
+    if (g_names_caseless || (e->type != EXPR_STRING && !is_regular_expression(e, &re))) {
+        RegexRule* rules = NULL;
+        int nr = regex_rules_build_opts(e, REGEX_RULE_ANCHORED | REGEX_RULE_WILDCARDS,
+                                        g_names_caseless ? REGEX_CASELESS : 0u,
+                                        &rules, "Names");
+        if (nr < 1) return -1;
+        out->is_regex = 0;
+        out->has_ctx = e->type == EXPR_STRING && strchr(e->data.string, 96) != NULL;
+        out->glob = NULL;
+        out->prog = NULL;
+        out->rules = rules;
+        out->nrules = nr;
+        return 0;
+    }
     if (e->type == EXPR_STRING) {
         out->is_regex = 0;
         out->has_ctx = strchr(e->data.string, '`') != NULL;
@@ -159,12 +187,20 @@ static int build_pat(Expr* e, NamePat* out) {
 
 static void free_pats(NamePat* pats, int n) {
     if (!pats) return;
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         if (pats[i].is_regex) regex_free(pats[i].prog);
+        if (pats[i].rules) regex_rules_free(pats[i].rules, pats[i].nrules);
+    }
     free(pats);
 }
 
 static int pat_matches(const NamePat* p, const char* name) {
+    if (p->rules) {
+        size_t ov[2];
+        for (int i = 0; i < p->nrules; i++)
+            if (regex_match(p->rules[i].prog, name, strlen(name), 0, ov, 1) == 1) return 1;
+        return 0;
+    }
     if (p->is_regex) {
         size_t ov[2];
         return regex_match(p->prog, name, strlen(name), 0, ov, 1) == 1;
@@ -232,8 +268,8 @@ typedef struct {
  * and `disp` its display name (see the header comment for the rule). */
 static int match_one(const NamePat* p, const char* full, const char* disp) {
     if (p->has_ctx)
-        return p->is_regex ? pat_matches(p, full)
-                           : glob_matches_qualified(p->glob, full);
+        return (p->is_regex || p->rules) ? pat_matches(p, full)
+                                         : glob_matches_qualified(p->glob, full);
     return !name_has_backtick(disp) && pat_matches(p, disp);
 }
 
@@ -347,7 +383,25 @@ static int name_expr_cmp(const void* a, const void* b) {
 Expr* builtin_names(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    /* Names[patt, IgnoreCase -> True | False]: the only option. */
+    int caseless = 0;
+    if (argc == 2) {
+        Expr* o = res->data.function.args[1];
+        if (!(o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
+              o->data.function.head->type == EXPR_SYMBOL &&
+              (o->data.function.head->data.symbol.name == SYM_Rule ||
+               o->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
+              o->data.function.args[0]->type == EXPR_SYMBOL &&
+              strcmp(o->data.function.args[0]->data.symbol.name, "IgnoreCase") == 0 &&
+              o->data.function.args[1]->type == EXPR_SYMBOL))
+            return NULL;
+        const char* v = o->data.function.args[1]->data.symbol.name;
+        if (v == SYM_True) caseless = 1;
+        else if (v != SYM_False) return NULL;
+        argc = 1;
+    }
     if (argc > 1) return NULL;
+    g_names_caseless = caseless;
 
     NamePat* pats = NULL;
     int npats = 0;
@@ -385,6 +439,7 @@ Expr* builtin_names(Expr* res) {
         }
     }
 
+    g_names_caseless = 0;
     NameCollect c = { pats, npats, match_all, 0, NULL, 0, 0 };
     symtab_for_each(collect_visit, &c);
     free_pats(pats, npats);
@@ -417,6 +472,7 @@ Expr* builtin_names(Expr* res) {
  * with *n = 0 when nothing matches or the pattern is not one. */
 char** names_match_keys(Expr* pattern, size_t* n) {
     *n = 0;
+    g_names_caseless = 0;
     NamePat pat;
     memset(&pat, 0, sizeof pat);
     if (build_pat(pattern, &pat) != 0) return NULL;

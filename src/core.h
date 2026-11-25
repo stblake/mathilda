@@ -85,6 +85,9 @@ Expr* builtin_tostring(Expr* res);
 Expr* builtin_toexpression(Expr* res);
 Expr* builtin_syntaxq(Expr* res);
 Expr* builtin_symbol(Expr* res);
+/* Is `name` a valid (optionally context-qualified) symbol name?  Symbol[]
+ * and Unique["str"] accept only such names. */
+bool symbol_name_is_valid(const char* name);
 Expr* builtin_increment(Expr* res);
 Expr* builtin_decrement(Expr* res);
 Expr* builtin_preincrement(Expr* res);

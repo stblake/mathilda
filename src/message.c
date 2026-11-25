@@ -568,6 +568,12 @@ static char* message_fill(const char* tmpl, Expr** args, size_t nargs) {
     return b.p;
 }
 
+/* StringForm[tmpl, e1, ...] as text: the template with its slots filled
+ * (print.c renders StringForm through this). Caller frees. */
+char* mth_stringform_fill(const char* tmpl, Expr** args, size_t nargs) {
+    return message_fill(tmpl, args, nargs);
+}
+
 /* Message[sym::tag, e1, e2, ...] -- emit the message sym::tag with its `n`
  * slots filled from the ei (in OutputForm).  The text is sym::tag's, else
  * General::tag's, else "-- Message text not found --" followed by each ei in

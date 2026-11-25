@@ -14,7 +14,8 @@ void test_numericq(void) {
     assert_eval_eq("NumericQ[Pi]", "True", 0);
     assert_eval_eq("NumericQ[E]", "True", 0);
     assert_eval_eq("NumericQ[I]", "True", 0);
-    assert_eval_eq("NumericQ[Infinity]", "True", 0);
+    /* An infinity is not a number (audit NumericQ#1). */
+    assert_eval_eq("NumericQ[Infinity]", "False", 0);
     assert_eval_eq("NumericQ[x]", "False", 0);
     assert_eval_eq("NumericQ[Sin[Sqrt[2]]]", "True", 0);
     assert_eval_eq("NumericQ[Sin[x]]", "False", 0);

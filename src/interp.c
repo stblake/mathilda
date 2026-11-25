@@ -3181,6 +3181,8 @@ typedef struct {
     Expr**  val;            /* n owned value Exprs */
     bool    any_automatic;  /* any Automatic seen (routes 1-D to Engine B) */
     bool    coords_numeric; /* every coord node_to_double-convertible */
+    bool    conflict;       /* one condition given twice with different values
+                               (ip_newton_1d reported ::noipf) */
 } IPData;
 
 static void ipdata_free(IPData* D) {
@@ -3385,10 +3387,34 @@ static Expr* ip_newton_1d(IPData* D, Expr* xvar) {
         Expr* x = D->pE[i * 1 + 0];
         int   ord = D->alpha[i * 1 + 0];
         size_t ni = nnodes;
-        for (size_t t = 0; t < nnodes; t++) if (expr_eq(nodeX[t], x)) { ni = t; break; }
+        /* 1 and 1. are one abscissa: compared by value when both are numbers,
+         * else the divided difference divided by 1 - 1. = 0 (audit
+         * InterpolatingPolynomial#2). */
+        double xd; bool xnum = node_to_double(x, &xd);
+        for (size_t t = 0; t < nnodes; t++) {
+            double td;
+            if (expr_eq(nodeX[t], x) ||
+                (xnum && node_to_double(nodeX[t], &td) && td == xd)) { ni = t; break; }
+        }
         if (ni == nnodes) { nodeX[nnodes] = x; nnodes++; }
         if (ord + 1 > nodeMx[ni]) nodeMx[ni] = ord + 1;
         if (ord > 0) any_confluent = true;
+        /* The same condition given twice with different values has no
+         * interpolant: the later value silently replaced the earlier one, so
+         * the polynomial violated the data (audit InterpolatingPolynomial#1). */
+        Expr* prev = deriv[ni * N + ord];
+        if (prev && !expr_eq(prev, D->val[i])) {
+            double pv, cv;
+            bool same = node_to_double(prev, &pv) && node_to_double(D->val[i], &cv) && pv == cv;
+            if (!same) {
+                free(nodeX); free(nodeMx); free(deriv);
+                mth_message("InterpolatingPolynomial", "noipf",
+                            "Unable to find an interpolating polynomial of total degree %d.",
+                            (int)N - 1);
+                D->conflict = true;
+                return NULL;
+            }
+        }
         deriv[ni * N + ord] = D->val[i];
         double t; if (!node_to_double(x, &t)) numeric_nodes = false;
     }
@@ -3707,7 +3733,7 @@ static Expr* ip_impl(Expr* res) {
                 if (mpz_sgn(modulus) > 0) r = ip_solve_modular(&D, varr1, modulus);
                 else if (!D.any_automatic) {
                     r = ip_newton_1d(&D, varr1[0]);
-                    if (!r) r = ip_solve_general(&D, varr1);
+                    if (!r && !D.conflict) r = ip_solve_general(&D, varr1);
                 } else r = ip_solve_general(&D, varr1);
             }
             ipdata_free(&D);
@@ -3724,7 +3750,8 @@ static Expr* ip_impl(Expr* res) {
         result = ip_solve_modular(&D, varr, modulus);
     } else if (m == 1 && !D.any_automatic) {
         result = ip_newton_1d(&D, varr[0]);
-        if (!result) result = ip_solve_general(&D, varr);   /* degenerate fallback */
+        if (!result && !D.conflict)
+            result = ip_solve_general(&D, varr);   /* degenerate fallback */
     } else {
         result = ip_solve_general(&D, varr);
     }

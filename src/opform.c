@@ -131,7 +131,8 @@ void opform_init(void) {
         "KeyTake", "KeyDrop", "KeySelect", "KeySortBy",
         "KeyExistsQ", "KeyMemberQ", "KeyFreeQ", "FreeQ",
         "GroupBy", "CountsBy", "Merge", "DeleteDuplicatesBy",
-        "ReplaceAll", "Replace", "ReplacePart",
+        "ReplaceAll", "Replace", "ReplacePart", "ReplaceRepeated",
+        "MatchQ", "ReverseSortBy",
         "Append", "Prepend", "Delete",
         "TakeLargest", "TakeSmallest",
         "Discard", "CountDistinctBy",           /* src/assoc_ops.c */
@@ -152,11 +153,13 @@ void opform_init(void) {
     opform_register("Insert", 2, 2, 0);          /* Insert[e, n][x]  == Insert[x, e, n] */
     opform_register("TakeLargestBy", 2, 2, 0);   /* TakeLargestBy[f, n][x] */
     opform_register("TakeSmallestBy", 2, 2, 0);
+    opform_register("ReplaceAt", 2, 2, 0);       /* ReplaceAt[rules, n][x] */
 
     /* x last: h[f][x] == h[f, x]. */
     static const char* const DATA_SECOND_1[] = {
         "Map", "Apply", "KeyMap", "KeyValueMap", "AssociationMap",
         "AssociationComap",                     /* AssociationComap[{f..}][x] */
+        "Scan", "MapIndexed",
     };
     for (size_t i = 0; i < sizeof(DATA_SECOND_1) / sizeof(DATA_SECOND_1[0]); i++)
         opform_register(DATA_SECOND_1[i], 1, 1, 1);

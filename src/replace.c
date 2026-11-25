@@ -206,8 +206,11 @@ static Expr* replace_part_rec(Expr* expr, RawRule* rules, size_t num_rules, Path
         bool head_replaced = false;
         for (size_t r = num_rules; r > 0; r--) {
             Expr* spec = rules[r - 1].pos_spec;
-            /* Only consider this rule for the head if it has a literal 0 at this depth */
-            if (spec->type == EXPR_FUNCTION && spec->data.function.arg_count == depth + 1) {
+            /* Only consider this rule for the head if it has a literal 0 at
+             * this depth -- as its last index or followed by more, which go on
+             * into the head's own parts: ReplacePart[f[a][b], {0, 1} -> z] is
+             * f[z][b] (audit ReplacePart#2). */
+            if (spec->type == EXPR_FUNCTION && spec->data.function.arg_count >= depth + 1) {
                 Expr* idx = spec->data.function.args[depth];
                 if (idx->type == EXPR_INTEGER && idx->data.integer == 0) {
                     new_head = replace_part_rec(expr->data.function.head, rules, num_rules, next_path, depth + 1);
@@ -450,6 +453,19 @@ Expr* builtin_replace_part(Expr* res) {
      * and ReplacePart[3/4, {} -> 5] are both 3/4) */
     if (res->data.function.arg_count >= 2 && expr_is_number_atom(res->data.function.args[0]))
         return expr_copy(res->data.function.args[0]);
+    /* ReplacePart[expr, rules, Heads -> v]: the rule form with an option, not
+     * the positional ReplacePart[expr, new, pos] (audit ReplacePart#3).
+     * Literal positions reach a head at 0 either way, so the option is
+     * accepted and the rule form applied. */
+    if (res->data.function.arg_count == 3 && is_rule2(res->data.function.args[2]) &&
+        res->data.function.args[2]->data.function.args[0]->type == EXPR_SYMBOL &&
+        res->data.function.args[2]->data.function.args[0]->data.symbol.name == SYM_Heads) {
+        Expr* a2[2] = { expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) };
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), a2, 2);
+        Expr* r = builtin_replace_part(call);
+        expr_free(call);
+        return r;                /* NULL: the rule form declined; stays as written */
+    }
     if (res->data.function.arg_count == 3 || res->data.function.arg_count == 4)
         return replace_part_legacy(res);
     if (res->data.function.arg_count == 1) {
@@ -822,6 +838,45 @@ static bool ll_rule_sets(const Expr* rules_expr) {
     return sets;
 }
 
+/* A rule, an association, or a LinkedList (whose rules are taken as given). */
+static bool reps_single_ok(Expr* r) {
+    return is_rule2(r) || assoc_is_wellformed(r) || r->type == EXPR_LINKEDLIST;
+}
+
+/* Is `r` (Dispatch already unwrapped) usable as replacement rules: a rule, an
+ * association, a List of them, or a List of such Lists (one result per rule
+ * set)?  Otherwise report head::reps and return false, so the call stays
+ * unevaluated as in the reference.  Silently dropping the non-rules made
+ * x /. a give x and Replace[x, {x -> 1, {x -> 2}}] give 1 (audit Replace#1,
+ * ReplaceAll#1, ReplaceAt#3). */
+static bool reps_check(const char* head, Expr* r) {
+    bool ok;
+    if (head_is(r, SYM_List)) {
+        size_t n = r->data.function.arg_count;
+        bool nested = n > 0 && head_is(r->data.function.args[0], SYM_List);
+        ok = true;
+        for (size_t i = 0; ok && i < n; i++) {
+            Expr* a = r->data.function.args[i];
+            if (!nested) { ok = reps_single_ok(a); continue; }
+            if (!head_is(a, SYM_List)) { ok = false; break; }
+            for (size_t j = 0; ok && j < a->data.function.arg_count; j++)
+                ok = reps_single_ok(a->data.function.args[j]);
+        }
+    } else {
+        ok = reps_single_ok(r);
+    }
+    if (!ok) {
+        char* rs = expr_to_string(r);
+        mth_message(head, "reps",
+                    head_is(r, SYM_List)
+                        ? "%s is neither a list of replacement rules nor a valid dispatch table, and so cannot be used for replacing."
+                        : "{%s} is neither a list of replacement rules nor a valid dispatch table, and so cannot be used for replacing.",
+                    rs ? rs : "");
+        free(rs);
+    }
+    return ok;
+}
+
 static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, int64_t max_l, bool heads) {
     if (ll_rule_sets(rules_expr)) {
         LinkedList* snap = ll_copy(rules_expr->data.llist);
@@ -886,7 +941,9 @@ Expr* builtin_replace(Expr* res) {
         }
     }
     
-    return apply_replace_nested(expr, dispatch_unwrap(rules_expr, NULL), min_l, max_l, heads);
+    Expr* rset = dispatch_unwrap(rules_expr, NULL);
+    if (!reps_check("Replace", rset)) return NULL;
+    return apply_replace_nested(expr, rset, min_l, max_l, heads);
 }
 
 static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
@@ -1210,6 +1267,7 @@ Expr* builtin_replace_all(Expr* res) {
     Expr* expr = res->data.function.args[0];
     bool indexed = false;
     Expr* rules_expr = dispatch_unwrap(res->data.function.args[1], &indexed);
+    if (!reps_check("ReplaceAll", rules_expr)) return NULL;
 
     return apply_replace_all_nested(expr, rules_expr, indexed);
 }
@@ -1314,6 +1372,7 @@ Expr* builtin_replace_repeated(Expr* res) {
     }
     bool indexed = false;
     rules_expr = dispatch_unwrap(rules_expr, &indexed);
+    if (!reps_check("ReplaceRepeated", rules_expr)) return NULL;
     return apply_replace_repeated_nested(expr, rules_expr, max_scans, indexed);
 }
 
@@ -1466,6 +1525,7 @@ Expr* builtin_replace_at(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* rules_expr = dispatch_unwrap(res->data.function.args[1], NULL);
     Expr* pos = res->data.function.args[2];
+    if (!reps_check("ReplaceAt", rules_expr)) return NULL;
 
     size_t num_rules = 0;
     ReplaceRule* rules = parse_replace_rules(rules_expr, &num_rules);

@@ -1200,10 +1200,20 @@ Expr* builtin_select(Expr* res) {
     int64_t n_max = -1; // -1 means all
     if (res->data.function.arg_count == 3) {
         Expr* n_expr = res->data.function.args[2];
-        if (n_expr->type == EXPR_INTEGER) {
+        /* A non-negative integer or Infinity; anything else is Select::innf
+         * and the call stays unevaluated.  A negative n collided with the
+         * "all" sentinel and returned every match (audit Select#1). */
+        if (n_expr->type == EXPR_INTEGER && n_expr->data.integer >= 0) {
             n_max = n_expr->data.integer;
+        } else if (n_expr->type == EXPR_SYMBOL && n_expr->data.symbol.name == SYM_Infinity) {
+            n_max = -1;
         } else {
-            return NULL; // Invalid n
+            char* rs = expr_to_string(res);
+            mth_message("Select", "innf",
+                        "Non-negative integer or Infinity expected at position 3 in %s.",
+                        rs ? rs : "");
+            free(rs);
+            return NULL;
         }
     }
 
@@ -2034,16 +2044,11 @@ static Expr* transform_head(Expr* head, Expr* h_spec, Expr** args, size_t arg_co
         Expr* ret = expr_new_function(expr_copy(P), new_args, n);
         free(new_args);
         return ret;
-    } else {
-        size_t n = head->data.function.arg_count;
-        Expr** new_args = malloc(sizeof(Expr*) * n);
-        for (size_t i = 0; i < n; i++) {
-            new_args[i] = transform_head(head->data.function.args[i], h_spec, args, arg_count, transformed);
-        }
-        Expr* ret = expr_new_function(expr_copy(P), new_args, n);
-        free(new_args);
-        return ret;
     }
+    /* Through[expr, h] acts only when expr's head is h[...] itself.  The
+     * search used to descend into the head and rebuild it without the outer
+     * arguments, so Through[p[q[f, g]][x], q] lost its [x] (audit Through#2). */
+    return NULL;
 }
 
 Expr* builtin_through(Expr* res) {
