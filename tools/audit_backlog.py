@@ -407,8 +407,16 @@ def adjudicate_pinned(args):
     tdir = os.path.join(tree, "tests")
     for fn in sorted(os.listdir(tdir)):
         if fn.startswith("test_audit_") and fn.endswith(".c"):
-            for rid in re.findall(r'audit_\w+\(\s*"([^"]+#\d+)"',
-                                  open(os.path.join(tdir, fn)).read()):
+            src = open(os.path.join(tdir, fn)).read()
+            # A pin is an audit_*() check, or a call of a file-local wrapper
+            # whose first parameter (the id) it hands to an audit_*() check.
+            heads = {r"audit_\w+"}
+            for m in re.finditer(r'static\s+void\s+(\w+)\s*\(\s*const\s+char\s*\*\s*(\w+)'
+                                 r'[^)]*\)\s*\{(.*?)\n\}', src, re.S):
+                if re.search(r'audit_\w+\(\s*' + m.group(2) + r'\b', m.group(3)):
+                    heads.add(re.escape(m.group(1)))
+            pat = r'\b(?:' + "|".join(sorted(heads)) + r')\(\s*"([^"]+#\d+)"'
+            for rid in re.findall(pat, src):
                 pinned.setdefault(rid, fn)
     n = 0
     for rid, st in status.items():
