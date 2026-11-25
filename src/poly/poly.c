@@ -3062,6 +3062,22 @@ Expr* builtin_subresultantpolynomialremainders(Expr* res) {
 
     if (x->type != EXPR_SYMBOL) return NULL;
 
+    /* Both arguments must be polynomials in x: x^2 + 1/x or a list gave a
+     * meaningless chain (audit SubresultantPolynomialRemainders#1). */
+    for (int k = 0; k < 2; k++) {
+        Expr* q = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                      (Expr*[]){ expr_copy(k ? B : A), expr_copy(x) }, 2));
+        bool poly = q && q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
+        if (q) expr_free(q);
+        if (!poly) {
+            char* ps = expr_to_string(k ? B : A);
+            mth_message("SubresultantPolynomialRemainders", "npoly",
+                        "%s is not a polynomial.", ps ? ps : "?");
+            free(ps);
+            return NULL;
+        }
+    }
+
     Expr* a0 = expr_expand(A);
     Expr* b0 = expr_expand(B);
 

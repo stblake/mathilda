@@ -185,7 +185,10 @@ static Regime classify(const LLLeaves* leaves, size_t n, long* arb_bits_out) {
     long min_bits = 0;
     for (size_t i = 0; i < n; i++) {
         Expr* e = ft_leaf(leaves, (int64_t)i);
-        bool num = expr_is_numeric_like(e);
+        /* An exact numeric constant (Pi, E, Sqrt[2]) is a number to transform,
+         * as a rational is: the machine path numericalises it (audit
+         * Fourier#1; Fourier[{Pi, E}] stayed symbolic). */
+        bool num = expr_is_numeric_like(e) || expr_is_numeric_quantity(e);
 #ifdef USE_MPFR
         if (num && numeric_expr_is_mpfr(e)) {
             has_mpfr = true;

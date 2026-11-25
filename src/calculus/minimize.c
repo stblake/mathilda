@@ -2871,7 +2871,55 @@ static void mz_memo_add(Expr* res) {
 
 /* Entry: decline memo, then the body under its own per-call deadline (the
  * caller's deadline, if this is a nested call, is restored afterwards). */
+/* {f}, {f, True} and {f, False} as the first argument (audit Minimize#1-3):
+ * the first two are the unconstrained problem f; the last has no feasible
+ * point -- Minimize::infeas and {Infinity, {x -> Indeterminate, ...}}
+ * (-Infinity for Maximize).  NULL for every other shape. */
+static Expr* mz_trivial_constraints(Expr* res, const char* head, bool is_max) {
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_FUNCTION || !mz_is_sym(a0->data.function.head, SYM_List)) return NULL;
+    size_t m = a0->data.function.arg_count;
+    if (m == 0 || m > 2) return NULL;
+    Expr* c = (m == 2) ? a0->data.function.args[1] : NULL;
+    bool is_true = !c || (c->type == EXPR_SYMBOL && c->data.symbol.name == SYM_True);
+    bool is_false = c && c->type == EXPR_SYMBOL && c->data.symbol.name == SYM_False;
+    if (!is_true && !is_false) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (is_true) {
+        Expr** a = malloc(argc * sizeof(Expr*));
+        a[0] = expr_copy(a0->data.function.args[0]);
+        for (size_t i = 1; i < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+        free(a);
+        return call;
+    }
+    Expr* v = res->data.function.args[1];
+    size_t nv = (v->type == EXPR_FUNCTION && mz_is_sym(v->data.function.head, SYM_List))
+                ? v->data.function.arg_count : 1;
+    if (v->type != EXPR_SYMBOL && !(v->type == EXPR_FUNCTION && mz_is_sym(v->data.function.head, SYM_List)))
+        return NULL;
+    mth_message(head, "infeas", "There are no values of the variables satisfying the constraints.");
+    Expr** rules = malloc((nv ? nv : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < nv; i++) {
+        Expr* var = (v->type == EXPR_SYMBOL) ? v : v->data.function.args[i];
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule),
+                       (Expr*[]){ expr_copy(var), expr_new_symbol(SYM_Indeterminate) }, 2);
+    }
+    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, nv);
+    free(rules);
+    Expr* val = is_max
+        ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+              (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2))
+        : expr_new_symbol(SYM_Infinity);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ val, rl }, 2);
+}
+
 static Expr* mz_run(Expr* res, const char* head, bool is_max) {
+    {
+        Expr* t = mz_trivial_constraints(res, head, is_max);
+        if (t) return t;
+    }
     mz_memo_sync();
     if (mz_memo_seen(res)) return NULL;
     double saved_deadline = g_mz_deadline;

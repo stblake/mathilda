@@ -4508,7 +4508,15 @@ static Expr* normal_recurse(Expr* e) {
         has_symbol_head(e, "SeriesData") &&
         e->data.function.arg_count == 6) {
         Expr* n = seriesdata_to_normal(e);
-        if (n) return n;
+        if (n) {
+            /* The coefficients of a multivariate series are series in the
+             * next variable: drop their O-terms too, before the sum is
+             * re-evaluated and the SeriesData arithmetic absorbs the
+             * polynomial back into them (audit Normal#1). */
+            Expr* n2 = normal_recurse(n);
+            expr_free(n);
+            return n2;
+        }
         /* Malformed SeriesData: fall through to a structural copy. */
     }
     if (e->type == EXPR_SPARSE) {
@@ -8440,8 +8448,14 @@ Expr* builtin_series(Expr* res) {
     if (f->type == EXPR_LINKEDLIST) return ll_map_arg(res, 0);
 
     /* List threading on the first argument (not ATTR_LISTABLE since the
-     * specs must not thread). */
-    if (has_symbol_head(f, "List")) {
+     * specs must not thread).  Equations and inequalities thread the same
+     * way: Series[lhs == rhs, spec] is Series[lhs, spec] == Series[rhs, spec]
+     * (audit Series#2 -- the relation used to be expanded as a function of
+     * x, giving True/False coefficients). */
+    if (has_symbol_head(f, "List") || has_symbol_head(f, "Equal") ||
+        has_symbol_head(f, "Unequal") || has_symbol_head(f, "Less") ||
+        has_symbol_head(f, "LessEqual") || has_symbol_head(f, "Greater") ||
+        has_symbol_head(f, "GreaterEqual")) {
         size_t n = f->data.function.arg_count;
         Expr** threaded = calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
@@ -8456,7 +8470,7 @@ Expr* builtin_series(Expr* res) {
                                * array -- as the multivariate path below does. */
             threaded[i] = eval_and_free(call);
         }
-        Expr* lst = expr_new_function(mk_symbol("List"), threaded, n);
+        Expr* lst = expr_new_function(expr_copy(f->data.function.head), threaded, n);
         free(threaded);
         return lst;
     }
@@ -8615,6 +8629,23 @@ static Expr* sd_coefficient(const Expr* sd, const Expr* const* idx, size_t nidx)
 }
 
 Expr* builtin_seriescoefficient(Expr* res) {
+    /* SeriesCoefficient[f, {x, x0, m}, {y, y0, n}, ...]: the coefficient of
+     * x^m in f, then of y^n in that, ... (audit SeriesCoefficient#1).  The
+     * innermost call is the first spec, as in Series. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 3) {
+        size_t argc = res->data.function.arg_count;
+        for (size_t i = 1; i < argc; i++) {
+            Expr* sp = res->data.function.args[i];
+            if (!has_symbol_head(sp, "List") || sp->data.function.arg_count != 3) return NULL;
+        }
+        Expr* cur = expr_new_function(mk_symbol("SeriesCoefficient"),
+                        (Expr*[]){ expr_copy(res->data.function.args[0]),
+                                   expr_copy(res->data.function.args[1]) }, 2);
+        for (size_t i = 2; i < argc; i++)
+            cur = expr_new_function(mk_symbol("SeriesCoefficient"),
+                      (Expr*[]){ cur, expr_copy(res->data.function.args[i]) }, 2);
+        return cur;
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
 
     /* SeriesCoefficient[series, n] / [series, {n1, n2, ...}]: read the

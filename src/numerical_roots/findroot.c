@@ -2925,6 +2925,32 @@ Expr* builtin_findroot(Expr* res) {
             return NULL;
         }
     }
+    /* FindRoot[eqns, {x, x0}, {y, y0}, ...]: the variable specs given as
+     * separate arguments are the list of specs (audit FindRoot#1). */
+    if (pos_end > 2) {
+        bool all_specs = true;
+        for (size_t i = 1; i < pos_end && all_specs; i++) {
+            const Expr* sp = res->data.function.args[i];
+            all_specs = sp->type == EXPR_FUNCTION && sp->data.function.head->type == EXPR_SYMBOL &&
+                        sp->data.function.head->data.symbol.name == SYM_List &&
+                        sp->data.function.arg_count >= 2;
+        }
+        if (all_specs) {
+            size_t nsp = pos_end - 1;
+            Expr** sps = malloc(nsp * sizeof(Expr*));
+            for (size_t i = 0; i < nsp; i++) sps[i] = expr_copy(res->data.function.args[1 + i]);
+            Expr* spl = expr_new_function(expr_new_symbol(SYM_List), sps, nsp);
+            free(sps);
+            size_t nargc = 2 + (argc - pos_end);
+            Expr** na = malloc(nargc * sizeof(Expr*));
+            na[0] = expr_copy(res->data.function.args[0]);
+            na[1] = spl;
+            for (size_t i = pos_end; i < argc; i++) na[2 + i - pos_end] = expr_copy(res->data.function.args[i]);
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), na, nargc);
+            free(na);
+            return call;
+        }
+    }
     if (pos_end != 2) {
         fr_warn("argt", "needs exactly 2 positional arguments (got %zu)", pos_end);
         return NULL;

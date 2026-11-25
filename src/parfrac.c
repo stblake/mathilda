@@ -389,6 +389,33 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             Expr* rf = ratfun_apart(expr, v);
             /* one variable over Q(i) / one number field */
             if (!rf && v->type == EXPR_SYMBOL) rf = flint_field_apart(expr, v);
+            /* A transcendental kernel of v (Sin[x], Log[x], BesselJ[0, x]) is
+             * not rational in v: it is a coefficient of the decomposition,
+             * as in the reference -- Apart[Sin[x]/(x^2 - 1), x] is
+             * Sin[x]/(2 (-1 + x)) - Sin[x]/(2 (1 + x)).  Each kernel becomes
+             * a fresh symbol, the rational function is decomposed in v, and
+             * the kernels are put back; an identity in independent
+             * indeterminates survives the substitution (audit Apart#1).
+             * Radicals of v keep the algebraic-generator pass below. */
+            if (!rf && v->type == EXPR_SYMBOL) {
+                Expr* rb = NULL; Expr* ra = NULL; int64_t rm = 1;
+                bool has_rad = poly_find_radical_gen(expr, &rb, &ra, &rm);
+                if (rb) expr_free(rb);
+                if (ra) expr_free(ra);
+                if (!has_rad) {
+                    PolyKernelMap km;
+                    Expr* ks = poly_kernels_to_symbols(expr, &km);
+                    if (ks) {
+                        Expr* r2 = ratfun_apart(ks, v);
+                        if (r2) {
+                            rf = eval_and_free(poly_symbols_to_kernels(r2, &km));
+                            expr_free(r2);
+                        }
+                        expr_free(ks);
+                        poly_kernel_map_free(&km);
+                    }
+                }
+            }
             expr_free(v);
             if (rf) return rf;
         }

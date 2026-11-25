@@ -177,8 +177,10 @@ static void test_unevaluated(void) {
     check("Head[Grad[x, {x, y}, \"Elliptic\"]]", "Grad");
     /* Non-list variable specification -> unevaluated. */
     check("Head[Grad[x^2, x]]", "Grad");
-    /* 2-D curl needs a length-2 vector; a scalar stays put. */
-    check("Head[Curl[x, {x, y}]]", "Curl");
+    /* The curl of a scalar field is {D[f, y], -D[f, x]} in the plane (audit
+     * Curl#1); a vector of the wrong length still stays put. */
+    check("Curl[x, {x, y}]", "List[0, -1]");
+    check("Head[Curl[{x, y, z}, {x, y}]]", "Curl");
 }
 
 int main(void) {

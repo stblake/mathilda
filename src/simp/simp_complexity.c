@@ -78,7 +78,17 @@ size_t simp_default_complexity(const Expr* e) {
         case EXPR_BIGINT: {
             int sgn = mpz_sgn(e->data.bigint);
             if (sgn == 0) return 1;
+            /* mpz_sizeinbase(., 10) may be one too large: it is exact
+             * only for a power of two base.  10^k - 1 has k digits, and was
+             * counted k + 1 (audit SimplifyCount#1). */
             size_t digits = mpz_sizeinbase(e->data.bigint, 10);
+            if (digits > 1) {
+                mpz_t p10;
+                mpz_init(p10);
+                mpz_ui_pow_ui(p10, 10, (unsigned long)(digits - 1));
+                if (mpz_cmpabs(e->data.bigint, p10) < 0) digits--;
+                mpz_clear(p10);
+            }
             return sgn > 0 ? digits : digits + 1;
         }
         case EXPR_REAL:    return 2;

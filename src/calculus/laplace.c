@@ -164,10 +164,14 @@ static Expr* lt_derivative(const Expr* r, const Expr* t, const Expr* s) {
 /* ConditionalExpression[F, cond] -> F, simplified under cond (where it was
  * derived: s/Sqrt[(b^2 + s^2)^2] under b > 0 is s/(b^2 + s^2)); anything
  * else is returned as is.  Consumes v. */
-static Expr* lt_generic_value(Expr* v) {
+static Expr* lt_generic_value(Expr* v, const Expr* asm_) {
     if (v && head_is(v, SYM_ConditionalExpression) && v->data.function.arg_count == 2) {
-        Expr* r = lt_eval(lt_fn2(SYM_Simplify, expr_copy(v->data.function.args[0]),
-                                 expr_copy(v->data.function.args[1])));
+        /* Simplified under the condition AND the assumptions the integral was
+         * taken under: Integrate may leave out of the condition what the
+         * assumptions already imply (s > 0), and the value needs it. */
+        Expr* cond = expr_copy(v->data.function.args[1]);
+        if (asm_) cond = lt_eval(lt_fn2(SYM_And, cond, expr_copy((Expr*)asm_)));
+        Expr* r = lt_eval(lt_fn2(SYM_Simplify, expr_copy(v->data.function.args[0]), cond));
         expr_free(v);
         return r;
     }
@@ -338,13 +342,15 @@ static Expr* lt_transform(const Expr* f, const Expr* t, const Expr* s, const Exp
                                                 expr_new_symbol(SYM_Infinity) }, 3);
         Expr* asm_ = lt_fn2(SYM_And, expr_copy((Expr*)as),
                             lt_fn2(SYM_Greater, expr_copy((Expr*)s), expr_new_integer(0)));
+        Expr* asm_keep = expr_copy(asm_);
         Expr* v = lt_eval(lt_fn(SYM_Integrate, (Expr*[]){ ker, rng,
                      lt_fn2(SYM_Rule, expr_new_symbol(SYM_Assumptions), asm_) }, 3));
         /* A ConditionalExpression[F, cond] is F where the integral converges
          * (Sin[b t]: s > Abs[Im[b]]; t^n: n > -1).  The transform is the
          * analytic function F, defined by the integral on its region of
          * convergence, so F is the transform: its generic value. */
-        v = lt_generic_value(v);
+        v = lt_generic_value(v, asm_keep);
+        expr_free(asm_keep);
         if (v && !sf_contains_head(v, SYM_Integrate)
               && !sf_contains_head(v, SYM_ConditionalExpression))
             out = lt_eval(lt_fn2(SYM_Times, expr_copy(c),

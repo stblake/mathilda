@@ -585,7 +585,7 @@ static void test_sector(void) {
      * (n > 1).  Beta[1/n, 1-1/n]/n = (Pi/n) Csc[Pi/n] by Euler reflection,
      * which the special-function Simplify engine now applies to the Beta. */
     check_eq("Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 0]",
-             "ConditionalExpression[(Pi Csc[Pi/n])/n, 1/n > 0 && 1/n < 1]");
+             "ConditionalExpression[(Pi Csc[Pi/n])/n, 1/n < 1]");   /* 1/n > 0 holds under n > 0 */
 
     /* Case In[19]: SYMBOLIC numerator and denominator exponents,
      * x^(2m)/(1 + x^(2n)) = (Pi/(2n)) Csc[Pi(2m+1)/(2n)].  The convergence

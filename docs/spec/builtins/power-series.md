@@ -140,6 +140,9 @@ Out[5]= 1 + Log[2] x + Log[2]^2/2 x^2 + Log[2]^3/6 x^3 + O[x]^4
 ```
 
 ## Series
+
+**Audit wave 4.** An equation or inequality threads: `Series[x == Sin[x], {x, 0, 3}]` is `(x + O[x]^4) == (x - x^3/6 + O[x]^4)`. `Normal` drops the O-terms of the coefficients of a multivariate series too, and `SeriesCoefficient[f, {x, x0, m}, {y, y0, n}]` is the iterated coefficient.
+
 Produces the power-series expansion of an expression about a point.
 - `Series[f, {x, x0, n}]` — Taylor/Laurent/Puiseux expansion up to order `(x - x0)^n`.
 - `Series[f, x -> x0]` — leading-term form. The engine scans the internal expansion for the first non-zero coefficient at exponent `e1` and the next non-zero at `e2 > e1`; the reported `O`-term lands at exponent `e2` (or `e1 + 1` when no further non-zero term exists). So `Series[Sin[x] - x, x -> 0]` returns `-x^3/6 + O[x]^5`, `Series[f[x], x -> 0]` returns `f[0] + O[x]^1`, and analytic-at-x0 inputs collapse to their constant plus `O[x - x0]^1`.

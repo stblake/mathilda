@@ -433,6 +433,17 @@ static bool ns_head_is_numeric_blackbox(const char* s) {
         || s == SYM_ND;
 }
 
+/* Does e mention the symbol named `name` (an interned pointer)? */
+static bool ns_mentions_name(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ns_mentions_name(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ns_mentions_name(e->data.function.args[i], name)) return true;
+    return false;
+}
+
 static bool ns_body_is_blackbox(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
@@ -2266,7 +2277,27 @@ static void ns_build_profile(NsCtx* c, long count, NsProfile* p) {
      * the ladder for nested summands — but still allow Euler–Maclaurin, which is
      * valid for an independent inner bound {k,1,Infinity} and falls back on its
      * own otherwise. */
-    if (ns_body_is_blackbox(c->body)) return;
+    if (ns_body_is_blackbox(c->body)) {
+        /* An inner NSum whose range depends on this index ({j, 1, i}) is a
+         * function of the integer i only: its value at a non-integer i is
+         * not the summand interpolated, so Euler-Maclaurin -- which
+         * integrates the summand over the reals -- does not apply (audit
+         * NSum#3: NSum[1/(i j)^2, {i, 1, Infinity}, {j, 1, i}] was 1.8622,
+         * the sum is 1.89407). */
+        const Expr* b = c->body;
+        if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+            b->data.function.head->data.symbol.name == SYM_NSum && c->bind && c->bind->name) {
+            for (size_t i = 1; i < b->data.function.arg_count; i++) {
+                const Expr* sp = b->data.function.args[i];
+                if (sp->type != EXPR_FUNCTION || sp->data.function.head->type != EXPR_SYMBOL ||
+                    sp->data.function.head->data.symbol.name != SYM_List) continue;
+                for (size_t k = 1; k < sp->data.function.arg_count; k++)
+                    if (ns_mentions_name(sp->data.function.args[k], c->bind->name))
+                        p->continuous = false;
+            }
+        }
+        return;
+    }
     /* Continuity: does the summand extend off the integers?  Set before the
      * monotone early-out below, because the integer-only cases we must keep away
      * from Euler–Maclaurin (1/Prime[n], …) are exactly the monotone-decreasing

@@ -96,18 +96,17 @@ void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
 
     Expr* re; Expr* im;
     if (is_complex(expr, &re, &im)) {
-        int64_t rn = 0, rd = 1, in = 0, id = 1;
-        is_rational(re, &rn, &rd);
-        if (re->type == EXPR_INTEGER) { rn = re->data.integer; rd = 1; }
-        is_rational(im, &in, &id);
-        if (im->type == EXPR_INTEGER) { in = im->data.integer; id = 1; }
-
-        int64_t common_den = lcm(rd, id);
-        /* lcm saturates at INT64_MAX when the exact lcm needs a bignum. */
-        Expr* d_expr = (common_den == INT64_MAX)
-            ? eval_and_free(expr_new_function(expr_new_symbol(SYM_LCM),
-                  (Expr*[]){ expr_new_integer(rd), expr_new_integer(id) }, 2))
-            : expr_new_integer(common_den);
+        /* The common denominator of the two parts.  A part's denominator is
+         * its stored Rational denominator (Integer or BigInt alike; a
+         * bignum-component part was read as 1 by the int64 path, so
+         * Denominator[(10^30 + I)/7^25] was 1 -- audit Denominator#1 /
+         * Numerator#1); an inexact or Integer part contributes 1. */
+        Expr* rd = (is_rational_like(re) && re->type == EXPR_FUNCTION)
+                   ? expr_copy(re->data.function.args[1]) : expr_new_integer(1);
+        Expr* id = (is_rational_like(im) && im->type == EXPR_FUNCTION)
+                   ? expr_copy(im->data.function.args[1]) : expr_new_integer(1);
+        Expr* d_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_LCM),
+                           (Expr*[]){ rd, id }, 2));
         *den_out = d_expr;
         *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(expr), expr_copy(d_expr)}, 2));
         return;
@@ -3088,7 +3087,124 @@ static Expr* builtin_together_body(Expr* res);
  * radical in the argument, the exponent-generator and cancel passes multiply
  * it back through the evaluator, which respells it, so the numeric-radical
  * unit of the coefficient division stays off and the old behaviour holds. */
+/* ---- Together[expr, Trig -> v] (audit Together#1) ----------------------
+ * Trig -> False (the default) is the ordinary Together.  Trig -> True treats
+ * the circular functions as rational functions of Sin and Cos: every
+ * Sin/Cos/Tan/Cot/Sec/Csc[u] is written over the two kernels s_u = Sin[u],
+ * c_u = Cos[u] (each a fresh symbol), the result is combined as a rational
+ * function of them, and the kernels are put back -- so
+ * Together[Tan[x] + 1, Trig -> True] is (Cos[x] + Sin[x])/Cos[x]. */
+typedef struct { Expr** args; Expr** s; Expr** c; size_t n, cap; } TrigKern;
+
+static size_t trig_kern_slot(TrigKern* k, Expr* u) {
+    for (size_t i = 0; i < k->n; i++) if (expr_eq(k->args[i], u)) return i;
+    if (k->n == k->cap) {
+        size_t nc = k->cap ? 2 * k->cap : 4;
+        k->args = realloc(k->args, nc * sizeof(Expr*));
+        k->s = realloc(k->s, nc * sizeof(Expr*));
+        k->c = realloc(k->c, nc * sizeof(Expr*));
+        k->cap = nc;
+    }
+    char nm[48];
+    snprintf(nm, sizeof nm, "Together`Private`s$%zu", k->n + 1);
+    k->s[k->n] = expr_new_symbol(nm);
+    snprintf(nm, sizeof nm, "Together`Private`c$%zu", k->n + 1);
+    k->c[k->n] = expr_new_symbol(nm);
+    k->args[k->n] = expr_copy(u);
+    return k->n++;
+}
+
+static Expr* trig_kern_power(Expr* b, int64_t e) {
+    return expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ b, expr_new_integer(e) }, 2);
+}
+
+static Expr* trig_kern_abstract(const Expr* e, TrigKern* k) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_Sin || hn == SYM_Cos || hn == SYM_Tan || hn == SYM_Cot ||
+            hn == SYM_Sec || hn == SYM_Csc) {
+            Expr* u = trig_kern_abstract(e->data.function.args[0], k);
+            size_t i = trig_kern_slot(k, u);
+            expr_free(u);
+            Expr* S = expr_copy(k->s[i]);
+            Expr* C = expr_copy(k->c[i]);
+            if (hn == SYM_Sin) { expr_free(C); return S; }
+            if (hn == SYM_Cos) { expr_free(S); return C; }
+            if (hn == SYM_Sec) { expr_free(S); return trig_kern_power(C, -1); }
+            if (hn == SYM_Csc) { expr_free(C); return trig_kern_power(S, -1); }
+            if (hn == SYM_Tan)
+                return expr_new_function(expr_new_symbol(SYM_Times),
+                                         (Expr*[]){ S, trig_kern_power(C, -1) }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Times),
+                                     (Expr*[]){ C, trig_kern_power(S, -1) }, 2);
+        }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = trig_kern_abstract(e->data.function.args[i], k);
+    Expr* out = expr_new_function(trig_kern_abstract(h, k), a, n);
+    free(a);
+    return out;
+}
+
+static Expr* together_trig_option(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    size_t argc = res->data.function.arg_count, at = argc;
+    for (size_t i = 1; i < argc; i++) {
+        Expr* o = res->data.function.args[i];
+        if ((head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) &&
+            o->data.function.arg_count == 2 &&
+            o->data.function.args[0]->type == EXPR_SYMBOL &&
+            o->data.function.args[0]->data.symbol.name == SYM_Trig) { at = i; break; }
+    }
+    if (at == argc) return NULL;
+    Expr* v = res->data.function.args[at]->data.function.args[1];
+    bool on = v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
+    if (!on) return NULL;      /* Trig -> False: the ordinary Together */
+    /* The call without the Trig option. */
+    Expr** a = malloc(argc * sizeof(Expr*));
+    size_t m = 0;
+    TrigKern k = { NULL, NULL, NULL, 0, 0 };
+    for (size_t i = 0; i < argc; i++) {
+        if (i == at) continue;
+        a[m++] = (i == 0 && on) ? trig_kern_abstract(res->data.function.args[0], &k)
+                                : expr_copy(res->data.function.args[i]);
+    }
+    /* called directly, not evaluated: the call stays user-level, so the
+     * factored form survives (ratfun.c rf_factored_form) */
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Together), a, m);
+    free(a);
+    Expr* r = builtin_together(call);
+    if (!r) r = expr_copy(call);
+    expr_free(call);
+    if (on && k.n > 0 && r) {
+        Expr** rules = malloc(2 * k.n * sizeof(Expr*));
+        for (size_t i = 0; i < k.n; i++) {
+            rules[2 * i] = expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_copy(k.s[i]), expr_new_function(expr_new_symbol(SYM_Sin),
+                               (Expr*[]){ expr_copy(k.args[i]) }, 1) }, 2);
+            rules[2 * i + 1] = expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_copy(k.c[i]), expr_new_function(expr_new_symbol(SYM_Cos),
+                               (Expr*[]){ expr_copy(k.args[i]) }, 1) }, 2);
+        }
+        Expr* lst = expr_new_function(expr_new_symbol(SYM_List), rules, 2 * k.n);
+        free(rules);
+        r = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                            (Expr*[]){ r, lst }, 2));
+    }
+    for (size_t i = 0; i < k.n; i++) { expr_free(k.args[i]); expr_free(k.s[i]); expr_free(k.c[i]); }
+    free(k.args); free(k.s); free(k.c);
+    return r;
+}
+
 Expr* builtin_together(Expr* res) {
+    {
+        Expr* t = together_trig_option(res);
+        if (t) return t;
+    }
     int bump = exact_poly_div_nested_enter(res);
     Expr* r = builtin_together_body(res);
     exact_poly_div_nested_release(bump);

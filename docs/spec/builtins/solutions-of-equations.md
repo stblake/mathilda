@@ -4,6 +4,9 @@ The equation solver and its supporting machinery: `Solve`, `Reduce`, the quantif
 
 ## Solve
 
+**Audit wave 4.** A disjunction is solved disjunct by disjunct (`Solve[x == 1 || x == 2, x]`); a branch whose domain condition is False contributes nothing (`Solve[ArcSin[x] == 2, x]` is `{}`); over the reals a sum of even-power monomials of one sign vanishes only where every monomial does (`Solve[x^2 + y^2 == 0, {x, y}, Reals]` is `{{x -> 0, y -> 0}}`).
+
+
 Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars]`: Solve `expr` for `vars` over the complex numbers (default).
 - `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
@@ -894,6 +897,9 @@ gives the Pell family, indexed by `Element[C[1], Integers] && C[1] >= 1`.
 
 ## Reduce
 
+**Audit wave 4.** When the engines decline: `lhs != rhs` in one variable over the complexes is the complement of the points of `lhs == rhs`; a product equal to 0 is the union of its factors' zero sets; over the reals a linear inequality with a parametric coefficient and a quadratic equation with parametric coefficients are split on the sign of the coefficient / discriminant; over the integers a bounded statement (bounds from the real projection, or from its inequality conjuncts) is enumerated (`Reduce[Mod[x, 3] == 1 && 0 < x < 10, x, Integers]`). Quantifiers inside And/Or/Not are eliminated first (`Reduce[ForAll[x, x^2 >= 0] && a > 0, a, Reals]` is `a > 0`). Cell samples are exact, so bounds past the machine integers and narrow cells (`0 < x < 10^-10`) are handled.
+
+
 Reduces a statement of equations and inequalities to a complete, quantifier-free
 logical description of its solution set.
 
@@ -1419,6 +1425,9 @@ decided from one sample cell.
 
 ## Exists
 
+**Audit wave 4.** `Resolve` eliminates quantifiers nested in a logical combination (`Resolve[!ForAll[x, x^2 > 0], Reals]` is True).
+
+
 `Exists[x, expr]` / `Exists[{x1, x2, ...}, expr]` / `Exists[x, cond, expr]` — the
 quantified statement that there is a value of the bound variable(s) for which
 `expr` (restricted to `cond`, when given) is `True`. `Exists` is **inert**
@@ -1551,6 +1560,9 @@ Out[6]= False
 
 ## LogicalExpand
 
+**Audit wave 4.** `Nand`, `Nor` and `Xnor` are expanded.
+
+
 `LogicalExpand[expr]` expands a logical combination of equations, inequalities and
 Boolean atoms into **disjunctive normal form** — an `Or` of `And`s — applying the
 distributive, De Morgan, idempotence, complementation and absorption laws, and
@@ -1587,6 +1599,9 @@ here may differ cosmetically (`Table[in == out, ...]` over the atoms is still al
 
 ## NotElement
 
+**Audit wave 4.** `NotElement[x1 | x2, dom]` is the conjunction of the `NotElement[xi, dom]` (no xi is in dom).
+
+
 `NotElement[x, dom]` is the statement that `x` is **not** an element of the domain
 `dom` — the negation of `Element[x, dom]`. It decides to `True` or `False` whenever
 `Element[x, dom]` decides (`NotElement[3, Reals] -> False`,
@@ -1595,6 +1610,9 @@ here may differ cosmetically (`Table[in == out, ...]` over the atoms is still al
 membership.
 
 ## FindInstance
+
+**Audit wave 4.** A list of constraints is their conjunction. The bounded integer search visits small points of every coordinate first, so `FindInstance[x^2 - 61 y^2 == 1, {x, y}, Integers]` finds `{x -> 1, y -> 0}`.
+
 
 `FindInstance[expr, vars]` finds a single instance of `vars` making the statement
 `expr` — any logical combination of equations and inequalities in the same form as
@@ -1820,6 +1838,9 @@ unsupported third positional also leaves the expression unevaluated.
 
 ## SolveAlways
 
+**Audit wave 4.** When the parameter equations have a family of solutions, the largest subset of parameters they determine is solved for, preferring a solution without symbolic denominators (`SolveAlways[x^2 + a x + b == (x + c)^2, x]` is `{{a -> 2 c, b -> c^2}}`).
+
+
 Finds values of parameters (the symbols appearing in `eqns` but **not** in
 `vars`) that make every equation in `eqns` hold for every value of `vars`.
 The reduction is: each `lhs == rhs` is rewritten as the polynomial
@@ -1875,6 +1896,9 @@ Out[4]= {{b -> a}}
 ```
 
 ## Root
+
+**Audit wave 4.** A linear or quadratic polynomial with rational coefficients gives the root in radicals (`Root[#^2 - 2 &, 1]` is `-Sqrt[2]`, `Root[#^2 + 1 &, 1]` is `-I`), and a rational root of an integer polynomial is that rational (`Root[#^3 - 8 &, 1]` is 2); other roots stay Root objects.
+
 
 
 Held symbolic representation of an indexed root of a univariate polynomial.

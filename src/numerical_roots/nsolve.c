@@ -544,6 +544,38 @@ static Expr* filter_solutions(Expr* lst, Expr* expr, bool reals_only) {
  * to the requested working precision.  Returns NULL (leaving NSolve
  * unevaluated) when Solve cannot reduce the input. `expr`, `varlist`, `dom`
  * are borrowed. */
+/* The integer parameters C[k] of a periodic solution family are not numbers
+ * to approximate: N[C[1]] is C[1.] (audit NSolve#2).  Each C[k] (k an
+ * integer) is swapped for a fresh symbol around the numericalisation and put
+ * back after.  `pairs` collects Rule[fresh, C[k]] for the way back. */
+static Expr* nsolve_hide_params(const Expr* e, Expr*** pairs, size_t* n, size_t* cap) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.head->data.symbol.name, "C") == 0 &&
+        e->data.function.arg_count == 1 &&
+        e->data.function.args[0]->type == EXPR_INTEGER) {
+        for (size_t i = 0; i < *n; i++)
+            if (expr_eq((*pairs)[i]->data.function.args[1], (Expr*)e))
+                return expr_copy((*pairs)[i]->data.function.args[0]);
+        if (*n == *cap) {
+            *cap = *cap ? 2 * *cap : 4;
+            *pairs = realloc(*pairs, *cap * sizeof(Expr*));
+        }
+        char nm[48];
+        snprintf(nm, sizeof nm, "NSolve`Private`param$%zu", *n + 1);
+        Expr* fresh = expr_new_symbol(nm);
+        (*pairs)[(*n)++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                               (Expr*[]){ fresh, expr_copy((Expr*)e) }, 2);
+        return expr_copy(fresh);
+    }
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc((m ? m : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) a[i] = nsolve_hide_params(e->data.function.args[i], pairs, n, cap);
+    Expr* out = expr_new_function(nsolve_hide_params(e->data.function.head, pairs, n, cap), a, m);
+    free(a);
+    return out;
+}
+
 static Expr* nsolve_via_solve(Expr* expr, Expr* varlist,
                               Expr* dom, bool want_machine, long bits,
                               long max_roots) {
@@ -561,8 +593,17 @@ static Expr* nsolve_via_solve(Expr* expr, Expr* varlist,
     /* Solve returned unevaluated -> NSolve cannot handle this input. */
     if (is_head(sol, SYM_Solve)) { expr_free(sol); return NULL; }
 
-    Expr* numeric = common_numericalize_result(sol, want_machine ? 53 : bits);
+    Expr** pairs = NULL; size_t npairs = 0, pcap = 0;
+    Expr* hidden = nsolve_hide_params(sol, &pairs, &npairs, &pcap);
     expr_free(sol);
+    Expr* numeric = common_numericalize_result(hidden, want_machine ? 53 : bits);
+    expr_free(hidden);
+    if (npairs > 0) {
+        Expr* back = expr_new_function(expr_new_symbol(SYM_List), pairs, npairs);
+        numeric = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                                  (Expr*[]){ numeric, back }, 2));
+    }
+    free(pairs);
 
     /* Drop roots that radical/inverse substitution introduced but that do not
      * satisfy the original equation, and (under Reals) manifestly complex roots.

@@ -393,6 +393,14 @@ Expr* builtin_element(Expr* res) {
         infinity_direction(x, NULL) != INF_DIR_NONE)
         return expr_new_symbol(SYM_False);
 
+    /* An approximate number is not an integer, rational, prime or algebraic
+     * number: Element[2., Integers] is False, as in the reference (audit
+     * Element#1).  Only at the user-facing head -- element_decide is also
+     * the assumption engine's, which reads facts about exact quantities. */
+    if ((d == SYM_Integers || d == SYM_Rationals || d == SYM_Algebraics || d == SYM_Primes) &&
+        expr_is_numeric_like(x) && arg_is_inexact(x))
+        return expr_new_symbol(SYM_False);
+
     /* Build context from current $Assumptions. */
     Expr* dollar = read_dollar_assumptions();
     AssumeCtx* ctx = assume_ctx_from_expr(dollar);
@@ -1602,6 +1610,12 @@ static bool simp_has_rounding_head(const Expr* e) {
              * Simplify[HeavisideTheta[x], x > 0] = 1 (HeavisideTheta#1) */
             h == SYM_Sign || h == SYM_HeavisideTheta || h == SYM_UnitStep)
             return true;
+        /* The complex-part heads: Simplify[Re[x], x in Reals] is x and
+         * Simplify[Abs[x]^2, x in Reals] is x^2 by the same structural
+         * rewrites Refine applies (audit Simplify#1). */
+        if (h == SYM_Re || h == SYM_Im || h == SYM_Conjugate ||
+            h == SYM_Abs || h == SYM_Arg || h == SYM_Sign)
+            return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (simp_has_rounding_head(e->data.function.args[i])) return true;
@@ -2128,6 +2142,186 @@ static const Expr* simp_call_assumptions(const Expr* res, const Expr** opt) {
 
 static Expr* builtin_simplify_inner(Expr* res);
 
+/* ---- Boolean minimisation (audit Simplify#3) ----------------------------
+ * A pure Boolean expression -- And/Or/Not/Xor/Nand/Nor/Xnor/Implies/
+ * Equivalent over at most SB_MAX_ATOMS atoms (anything that is not a logical
+ * connective is an atom: a, x > 0, f[y]) -- is decided by its truth table:
+ * a tautology is True, a contradiction False, and anything else is replaced
+ * by a minimal sum of prime implicants (Quine-McCluskey, greedy cover) when
+ * that is strictly smaller.  Treating related atoms (x > 0, x < 0) as
+ * independent only loses simplifications: an identity of the free Boolean
+ * algebra holds for every assignment, so it holds for these too.
+ * Simplify[a && !a] -> False, Simplify[a || !a] -> True,
+ * Simplify[(a && b) || (a && !b)] -> a. */
+#define SB_MAX_ATOMS 8
+
+static const char* sb_nand, *sb_nor, *sb_xnor;
+
+static int sb_is_conn(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return 0;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_And || h == SYM_Or || h == SYM_Not || h == SYM_Xor ||
+           h == SYM_Implies || h == SYM_Equivalent || h == sb_nand || h == sb_nor ||
+           h == sb_xnor;
+}
+
+/* Collect the atoms of e; false when there are too many or e is not a
+ * Boolean expression at all. */
+static bool sb_atoms(const Expr* e, const Expr** atoms, int* na) {
+    if (e->type == EXPR_SYMBOL &&
+        (e->data.symbol.name == SYM_True || e->data.symbol.name == SYM_False)) return true;
+    if (sb_is_conn(e)) {
+        if (e->data.function.head->data.symbol.name == SYM_Not && e->data.function.arg_count != 1)
+            return false;
+        if (e->data.function.head->data.symbol.name == SYM_Implies && e->data.function.arg_count != 2)
+            return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!sb_atoms(e->data.function.args[i], atoms, na)) return false;
+        return true;
+    }
+    /* a number, string or list is not a truth value */
+    if (e->type != EXPR_SYMBOL && e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_List)) return false;
+    for (int i = 0; i < *na; i++) if (expr_eq((Expr*)atoms[i], (Expr*)e)) return true;
+    if (*na >= SB_MAX_ATOMS) return false;
+    atoms[(*na)++] = e;
+    return true;
+}
+
+static int sb_eval(const Expr* e, const Expr** atoms, int na, unsigned bits) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True) return 1;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_False) return 0;
+    if (!sb_is_conn(e)) {
+        for (int i = 0; i < na; i++)
+            if (expr_eq((Expr*)atoms[i], (Expr*)e)) return (int)((bits >> i) & 1u);
+        return 0;
+    }
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Not) return !sb_eval(e->data.function.args[0], atoms, na, bits);
+    if (h == SYM_Implies)
+        return !sb_eval(e->data.function.args[0], atoms, na, bits) ||
+               sb_eval(e->data.function.args[1], atoms, na, bits);
+    int acc_and = 1, acc_or = 0, acc_xor = 0, all_eq = 1, first = -1;
+    for (size_t i = 0; i < n; i++) {
+        int v = sb_eval(e->data.function.args[i], atoms, na, bits);
+        acc_and &= v; acc_or |= v; acc_xor ^= v;
+        if (first < 0) first = v; else if (v != first) all_eq = 0;
+    }
+    if (h == SYM_And) return acc_and;
+    if (h == SYM_Or) return acc_or;
+    if (h == SYM_Xor) return acc_xor;
+    if (h == sb_nand) return !acc_and;
+    if (h == sb_nor) return !acc_or;
+    if (h == sb_xnor) return !acc_xor;
+    return all_eq;                                   /* Equivalent */
+}
+
+static size_t sb_leaves(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return 1;
+    size_t c = sb_leaves(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) c += sb_leaves(e->data.function.args[i]);
+    return c;
+}
+
+typedef struct { unsigned val, mask; bool used; } SbImp;
+
+static Expr* simp_boolean_minimize(const Expr* e) {
+    if (!sb_nand) {
+        sb_nand = intern_symbol("Nand");
+        sb_nor  = intern_symbol("Nor");
+        sb_xnor = intern_symbol("Xnor");
+    }
+    if (!sb_is_conn(e)) return NULL;
+    const Expr* atoms[SB_MAX_ATOMS];
+    int na = 0;
+    if (!sb_atoms(e, atoms, &na)) return NULL;
+    /* canonical atom order, so the answer does not depend on the input's */
+    for (int i = 1; i < na; i++)
+        for (int j = i; j > 0 && expr_compare((Expr*)atoms[j - 1], (Expr*)atoms[j]) > 0; j--) {
+            const Expr* t = atoms[j]; atoms[j] = atoms[j - 1]; atoms[j - 1] = t;
+        }
+    unsigned rows = 1u << na;
+    bool tt[1u << SB_MAX_ATOMS];
+    unsigned ones = 0;
+    for (unsigned b = 0; b < rows; b++) { tt[b] = sb_eval(e, atoms, na, b) != 0; ones += tt[b]; }
+    if (ones == 0) return expr_new_symbol(SYM_False);
+    if (ones == rows) return expr_new_symbol(SYM_True);
+
+    /* Quine-McCluskey: merge implicants differing in one cared-for bit. */
+    size_t cap = 4096, n = 0;
+    SbImp* cur = malloc(cap * sizeof(SbImp));
+    SbImp* primes = malloc(cap * sizeof(SbImp));
+    size_t np = 0;
+    if (!cur || !primes) { free(cur); free(primes); return NULL; }
+    for (unsigned b = 0; b < rows; b++) if (tt[b]) { cur[n].val = b; cur[n].mask = 0; cur[n].used = false; n++; }
+    while (n > 0) {
+        SbImp* next = malloc(cap * sizeof(SbImp));
+        size_t nn = 0;
+        if (!next) { free(cur); free(primes); return NULL; }
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = i + 1; j < n; j++) {
+                if (cur[i].mask != cur[j].mask) continue;
+                unsigned d = cur[i].val ^ cur[j].val;
+                if (d == 0 || (d & (d - 1))) continue;
+                cur[i].used = cur[j].used = true;
+                unsigned v = cur[i].val & ~d, m = cur[i].mask | d;
+                bool dup = false;
+                for (size_t k = 0; k < nn && !dup; k++) dup = next[k].val == v && next[k].mask == m;
+                if (!dup && nn < cap) { next[nn].val = v; next[nn].mask = m; next[nn].used = false; nn++; }
+            }
+        for (size_t i = 0; i < n; i++)
+            if (!cur[i].used && np < cap) primes[np++] = cur[i];
+        free(cur);
+        cur = next; n = nn;
+    }
+    free(cur);
+
+    /* Greedy cover: essential primes are taken by the same rule (the prime
+     * covering the most uncovered minterms, fewest literals on a tie). */
+    bool covered[1u << SB_MAX_ATOMS];
+    for (unsigned b = 0; b < rows; b++) covered[b] = !tt[b];
+    size_t* pick = malloc((np ? np : 1) * sizeof(size_t));
+    size_t npick = 0;
+    for (;;) {
+        bool left = false;
+        for (unsigned b = 0; b < rows && !left; b++) if (!covered[b]) left = true;
+        if (!left) break;
+        size_t best = np; unsigned bestc = 0; int bestlit = 99;
+        for (size_t i = 0; i < np; i++) {
+            unsigned c = 0;
+            for (unsigned b = 0; b < rows; b++)
+                if (!covered[b] && (b & ~primes[i].mask) == primes[i].val) c++;
+            int lit = 0;
+            for (int k = 0; k < na; k++) if (!((primes[i].mask >> k) & 1u)) lit++;
+            if (c > bestc || (c == bestc && c > 0 && lit < bestlit)) { best = i; bestc = c; bestlit = lit; }
+        }
+        if (best == np) break;
+        pick[npick++] = best;
+        for (unsigned b = 0; b < rows; b++)
+            if ((b & ~primes[best].mask) == primes[best].val) covered[b] = true;
+    }
+
+    Expr** terms = malloc((npick ? npick : 1) * sizeof(Expr*));
+    for (size_t t = 0; t < npick; t++) {
+        SbImp* p = &primes[pick[t]];
+        Expr* lits[SB_MAX_ATOMS];
+        int nl = 0;
+        for (int k = 0; k < na; k++) {
+            if ((p->mask >> k) & 1u) continue;
+            Expr* a = expr_copy((Expr*)atoms[k]);
+            lits[nl++] = ((p->val >> k) & 1u) ? a
+                       : expr_new_function(expr_new_symbol(SYM_Not), &a, 1);
+        }
+        terms[t] = (nl == 1) ? lits[0] : expr_new_function(expr_new_symbol(SYM_And), lits, (size_t)nl);
+    }
+    Expr* out = (npick == 1) ? terms[0] : expr_new_function(expr_new_symbol(SYM_Or), terms, npick);
+    free(terms); free(pick); free(primes);
+    out = eval_and_free(out);
+    if (sb_leaves(out) >= sb_leaves(e)) { expr_free(out); return NULL; }
+    return out;
+}
+
 /* Is t a term carrying a reciprocal power (c/x, x^-2 y, ...)? */
 static bool simp_term_has_reciprocal(const Expr* t) {
     const Expr* const* fs = &t;
@@ -2282,6 +2476,55 @@ Expr* builtin_simplify(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
         Expr* again = simp_ll_assumptions(res);
         if (again) return again;
+    }
+    /* A predicate the assumptions settle is decided outright, as Refine
+     * decides it: Simplify[x > 0, x > 1] is True, Simplify[x > 0, x < 0]
+     * False, Simplify[x^2 >= 0, x in Reals] True (audit Simplify#2,
+     * FullSimplify#1).  Only a True/False verdict is taken; anything else
+     * goes through the ordinary pipeline. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
+        Expr* e0 = res->data.function.args[0];
+        const char* h0 = (e0->type == EXPR_FUNCTION && e0->data.function.head->type == EXPR_SYMBOL)
+                         ? e0->data.function.head->data.symbol.name : NULL;
+        bool pred = h0 && (h0 == SYM_Less || h0 == SYM_LessEqual || h0 == SYM_Greater ||
+                           h0 == SYM_GreaterEqual || h0 == SYM_Equal || h0 == SYM_Unequal ||
+                           h0 == SYM_Element || h0 == SYM_Inequality);
+        const Expr* opt = NULL;
+        const Expr* pos = pred ? simp_call_assumptions(res, &opt) : NULL;
+        bool dollar = false;     /* $Assumptions in force (FullSimplify binds it) */
+        if (pred && !pos && !opt) {
+            Expr* d = read_dollar_assumptions();
+            dollar = d && !(d->type == EXPR_SYMBOL && d->data.symbol.name == SYM_True);
+            if (d) expr_free(d);
+        }
+        if (pred && (pos || opt || dollar)) {
+            Expr* ra[3]; size_t rn = 0;
+            ra[rn++] = expr_copy(e0);
+            if (pos) ra[rn++] = expr_copy((Expr*)pos);
+            if (opt) ra[rn++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                         (Expr*[]){ expr_new_symbol(SYM_Assumptions), expr_copy((Expr*)opt) }, 2);
+            Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Refine), ra, rn));
+            if (v && v->type == EXPR_SYMBOL &&
+                (v->data.symbol.name == SYM_True || v->data.symbol.name == SYM_False))
+                return v;
+            if (v) expr_free(v);
+        }
+    }
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1) {
+        Expr* bm = simp_boolean_minimize(res->data.function.args[0]);
+        if (bm && bm->type == EXPR_SYMBOL) return bm;              /* True / False */
+        if (bm) {
+            /* the minimal form, its atoms then simplified as usual (the
+             * minimiser reports only strictly smaller forms, so this
+             * terminates) */
+            size_t argc = res->data.function.arg_count;
+            Expr** a = malloc(argc * sizeof(Expr*));
+            a[0] = bm;
+            for (size_t i = 1; i < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+            free(a);
+            return call;
+        }
     }
     Expr* out = builtin_simplify_inner(res);
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {

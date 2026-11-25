@@ -47,4 +47,10 @@ Expr* builtin_forall(Expr* res);
  * Resolve and by Reduce's Exists/ForAll front-end peel. */
 Expr* reduce_qe_dispatch(const Expr* qexpr, const Expr* dom);
 
+/* Eliminate the quantifiers nested in a logical combination (And/Or/Not/
+ * Implies/Xor/Equivalent) of e, each by reduce_qe_dispatch over dom; the
+ * evaluated quantifier-free result, or NULL when e has none, is itself a
+ * quantifier, or one does not eliminate.  e and dom are borrowed. */
+Expr* reduce_qe_eliminate_inner(const Expr* e, Expr* dom);
+
 #endif /* REDUCE_QE_H */

@@ -81,11 +81,25 @@ static void test_s11_special_values(void) {
     audit_true("SeriesData#4", "Normal[SeriesData[x, Infinity, {3}, 0, 2, 1]] === 3");
 }
 
+/* Wave 4 (G5): Series of relations, nested Normal, multivariate
+ * SeriesCoefficient, ArcCosh on [-1, 1). */
+static void test_wave4_series(void) {
+    audit_chk("Series#2", "Series[x == Sin[x], {x, 0, 3}]", "x + O[x]^4 == x - 1/6 x^3 + O[x]^4");
+    audit_chk("Normal#1", "Normal[Series[Exp[x y], {x, 0, 2}, {y, 0, 2}]]", "1 + x y + 1/2 x^2 y^2");
+    audit_chk("SeriesCoefficient#1", "SeriesCoefficient[Exp[x y], {x, 0, 2}, {y, 0, 2}]", "1/2");
+    audit_chk("ArcCsch#2", "With[{F = Integrate[ArcCsch[x], x]}, Chop[N[(D[F, x] - ArcCsch[x]) /. x -> -2]]]", "0");
+    audit_chk("ArcCsch#2", "With[{F = Integrate[x ArcCsch[x], x]}, Chop[N[(D[F, x] - x ArcCsch[x]) /. x -> -2]]]", "0");
+    audit_chk("ArcCosh#1", "ArcCosh[0]", "(1/2*I) Pi");
+    audit_chk("ArcCosh#1", "ArcCosh[-1]", "I Pi");
+    audit_chk("ArcCosh#1", "ArcCosh[1/2]", "(1/3*I) Pi");
+}
+
 int main(void) {
     audit_init();
     TEST(test_series_huge_order);
     TEST(test_seriesdata_function_composition);
     TEST(test_seriesdata_exp_kernel_terms);
     TEST(test_s11_special_values);
+    TEST(test_wave4_series);
     return audit_finish("audit_power_series");
 }

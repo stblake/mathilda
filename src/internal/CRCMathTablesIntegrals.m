@@ -1709,9 +1709,13 @@ IntegrateTable[ArcCoth[a_. x_], x_] /; FreeQ[a, x] :=
 IntegrateTable[ArcSech[a_. x_], x_] /; FreeQ[a, x] :=
   x ArcSech[a x] + 1/a ArcSin[a x];
 
-(* Formula 432h *)
+(* Formula 432h.  The table's 1/a ArcSinh[a x] holds for a x > 0 only: on
+   a x < 0 its derivative is off by 2/Sqrt[1 + a^2 x^2].  The factor
+   x Sqrt[1 + 1/(a^2 x^2)]/Sqrt[1 + a^2 x^2] (= 1/a for a x > 0, -1/a for
+   a x < 0: its square is 1/a^2, so it is locally constant) makes it hold on
+   both sides (audit ArcCsch#2). *)
 IntegrateTable[ArcCsch[a_. x_], x_] /; FreeQ[a, x] :=
-  x ArcCsch[a x] + 1/a ArcSinh[a x];
+  x ArcCsch[a x] + x Sqrt[1 + 1/(a^2 x^2)] ArcSinh[a x]/Sqrt[1 + a^2 x^2];
 
 (* Formula 437h *)
 IntegrateTable[x_ ArcSinh[a_. x_], x_] /; FreeQ[a, x] :=
@@ -1805,17 +1809,24 @@ IntegrateTable[x_^n_ ArcSech[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
 IntegrateTable[ArcSech[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
   -ArcSech[a x]/x + Sqrt[1 - a^2 x^2]/x;
 
-(* Formula 462h *)
+(* Formula 462h, valid on both sides of 0 (the table's
+   Sqrt[1 + a^2 x^2]/(2 a^2) is x Sqrt[1 + 1/(a^2 x^2)]/(2 a) for a x > 0
+   only; audit ArcCsch#2). *)
 IntegrateTable[x_ ArcCsch[a_. x_], x_] /; FreeQ[a, x] :=
-  x^2/2 ArcCsch[a x] + 1/(2 a^2) Sqrt[1 + a^2 x^2];
+  x^2/2 ArcCsch[a x] + x/(2 a) Sqrt[1 + 1/(a^2 x^2)];
 
-(* Formula 463h *)
+(* Formula 463h, valid on both sides of 0: the remaining integrand is
+   x^(n - 1)/(a Sqrt[1 + 1/(a^2 x^2)]), which is x^n/Sqrt[1 + a^2 x^2] times
+   the locally constant Sqrt[1 + a^2 x^2]/(a x Sqrt[1 + 1/(a^2 x^2)]) (= +-1;
+   audit ArcCsch#2). *)
 IntegrateTable[x_^n_ ArcCsch[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
-  x^(n + 1)/(n + 1) ArcCsch[a x] + 1/(n + 1) IntegrateTable[x^n/Sqrt[1 + a^2 x^2], x];
+  x^(n + 1)/(n + 1) ArcCsch[a x] +
+    Sqrt[1 + a^2 x^2]/(a x Sqrt[1 + 1/(a^2 x^2)] (n + 1)) IntegrateTable[x^n/Sqrt[1 + a^2 x^2], x];
 
-(* Formula 464h *)
+(* Formula 464h, valid on both sides of 0 (the table's Sqrt[1 + a^2 x^2]/x
+   is a Sqrt[1 + 1/(a^2 x^2)] for a x > 0 only; audit ArcCsch#2). *)
 IntegrateTable[ArcCsch[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
-  -ArcCsch[a x]/x + Sqrt[1 + a^2 x^2]/x;
+  -ArcCsch[a x]/x + a Sqrt[1 + 1/(a^2 x^2)];
 
 (* Formula 465 *)
 IntegrateTable[Log[x_], x_] := 

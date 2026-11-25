@@ -353,6 +353,29 @@ Expr* builtin_log(Expr* res) {
                 is_real_numeric_expr(pexp)) {
                 return expr_copy(pexp);
             }
+            /* Log[E^k] -> k for an exact complex k = a + b I on the
+             * principal strip -Pi < b <= Pi (Log[E^(1 + I)] = 1 + I,
+             * Log[E^(-3 I)] = -3 I); an exact rational b is never +-Pi, so
+             * a margin around 3.14159 decides it (audit Log#3). */
+            Expr *kre, *kim;
+            if (pbase->type == EXPR_SYMBOL && pbase->data.symbol.name == SYM_E &&
+                is_complex(pexp, &kre, &kim) &&
+                is_rational_like(kre) && is_rational_like(kim)) {
+                double bv;
+                if (numeric_machine_value(kim, &bv) && fabs(bv) < 3.14159)
+                    return expr_copy(pexp);
+            }
+            /* Log[(-1)^q] = I Pi q for an exact rational -1 < q <= 1:
+             * (-1)^q is E^(I Pi q) on the principal branch, so
+             * Log[(-1)^(1/3)] = I Pi/3 (audit Log#3). */
+            int64_t qn, qd;
+            if (pbase->type == EXPR_INTEGER && pbase->data.integer == -1 &&
+                is_rational(pexp, &qn, &qd) && qd > 0 && qn > -qd && qn <= qd) {
+                Expr* ta[3] = { expr_copy(pexp),
+                                make_complex(expr_new_integer(0), expr_new_integer(1)),
+                                expr_new_symbol(SYM_Pi) };
+                return expr_new_function(expr_new_symbol(SYM_Times), ta, 3);
+            }
         }
 
 #ifdef USE_MPFR

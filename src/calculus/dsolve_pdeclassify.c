@@ -24,6 +24,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include <stdlib.h>
+#include <stdint.h>
 
 /* Derivative[o1,o2][u][v1,v2] */
 static Expr* pdec_deriv(const char* u, int o1, int o2, const char* v1, const char* v2) {
@@ -50,6 +51,48 @@ static int pdec_sign(const Expr* disc) {
     return r;
 }
 
+/* Is f the unknown u or one of its derivatives Derivative[..][u]?  On a
+ * derivative, *order receives the total order. */
+static bool pdec_is_u_head(const Expr* h, const char* u, int64_t* order) {
+    *order = 0;
+    if (h->type == EXPR_SYMBOL) return h->data.symbol.name == u;
+    if (h->type == EXPR_FUNCTION && h->data.function.arg_count == 1 &&
+        h->data.function.args[0]->type == EXPR_SYMBOL &&
+        h->data.function.args[0]->data.symbol.name == u &&
+        h->data.function.head->type == EXPR_FUNCTION &&
+        h->data.function.head->data.function.head->type == EXPR_SYMBOL &&
+        h->data.function.head->data.function.head->data.symbol.name == SYM_Derivative) {
+        const Expr* d = h->data.function.head;
+        for (size_t i = 0; i < d->data.function.arg_count; i++) {
+            if (d->data.function.args[i]->type != EXPR_INTEGER) { *order = INT64_MAX; return true; }
+            *order += d->data.function.args[i]->data.integer;
+        }
+        return true;
+    }
+    return false;
+}
+
+/* Walk the residual: the highest derivative order of u, and whether u is
+ * applied with its arguments in the order (v2, v1) -- the order the caller
+ * listed the variables need not be u's own. */
+static void pdec_scan(const Expr* e, const char* u, const char* v1, const char* v2,
+                      int64_t* max_order, bool* swapped) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    int64_t ord;
+    if (pdec_is_u_head(e->data.function.head, u, &ord)) {
+        if (ord > *max_order) *max_order = ord;
+        if (e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_SYMBOL &&
+            e->data.function.args[1]->type == EXPR_SYMBOL &&
+            e->data.function.args[0]->data.symbol.name == v2 &&
+            e->data.function.args[1]->data.symbol.name == v1)
+            *swapped = true;
+    }
+    pdec_scan(e->data.function.head, u, v1, v2, max_order, swapped);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        pdec_scan(e->data.function.args[i], u, v1, v2, max_order, swapped);
+}
+
 static Expr* builtin_pdeclassify(Expr* res) {
     DSolveProblem P;
     if (!dsolve_parse(res, &P)) { dsolve_problem_free(&P); return NULL; }
@@ -59,6 +102,19 @@ static Expr* builtin_pdeclassify(Expr* res) {
     const char* u  = P.fun_names[0];
     const char* v1 = P.ind_names[0];
     const char* v2 = P.ind_names[1];
+
+    /* The discriminant classifies a SECOND-order equation: a third- or
+     * fourth-order one is not typed by its second-order part (audit
+     * PDEClassify#1).  Variables listed in another order than u's own
+     * arguments are read in u's order -- the type is symmetric in the
+     * swap (audit PDEClassify#2). */
+    {
+        int64_t max_order = 0;
+        bool swapped = false;
+        pdec_scan(P.eq_residuals[0], u, v1, v2, &max_order, &swapped);
+        if (max_order > 2) { dsolve_problem_free(&P); return NULL; }
+        if (swapped) { const char* t = v1; v1 = v2; v2 = t; }
+    }
 
     const char* sxx = intern_symbol("DSolve`pdecUxx");
     const char* sxy = intern_symbol("DSolve`pdecUxy");

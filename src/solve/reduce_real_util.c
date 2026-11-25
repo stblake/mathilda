@@ -10,6 +10,7 @@
 
 #include "eval.h"
 #include "sym_names.h"
+#include "arithmetic.h"   /* is_rational_like: exact midpoints */
 #include "flint_qqbar.h"
 
 #include <stdlib.h>
@@ -90,58 +91,62 @@ double rru_approx_double(const Expr* e, bool* ok) {
     return d;
 }
 
-/* num/den as a canonical Integer or Rational. */
-static Expr* make_rational(long num, long den) {
-    if (den == 1) return expr_new_integer(num);
-    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-        (Expr*[]){ expr_new_integer(num),
-                   expr_new_function(expr_new_symbol(SYM_Power),
-                       (Expr*[]){ expr_new_integer(den), expr_new_integer(-1) }, 2) }, 2));
+/* An exact integer strictly beyond a bound: Floor[b] - 1 (dir < 0) or
+ * Ceiling[b] + 1 (dir > 0), in exact arithmetic so a bound past the machine
+ * integers (10^20) still has a sample (audit CylindricalDecomposition#1). */
+static Expr* rru_integer_beyond(const Expr* b, int dir) {
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(dir < 0 ? SYM_Floor : SYM_Ceiling),
+                                              (Expr*[]){ expr_copy((Expr*)b) }, 1));
+    if (!r || !expr_is_integer_like(r)) { if (r) expr_free(r); return NULL; }
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                             (Expr*[]){ r, expr_new_integer(dir < 0 ? -1 : 1) }, 2));
 }
 
 Expr* rru_rational_between(const Expr* lo, const Expr* hi) {
     bool ok;
     if (!lo && !hi) return expr_new_integer(0);
 
-    if (!lo) {                              /* (-inf, hi) */
-        double b = rru_approx_double(hi, &ok);
-        if (!ok) return NULL;
-        long s = (long)floor(b) - 1;
-        for (int i = 0; i < 64; i++, s--) {
-            Expr* c = expr_new_integer(s);
-            int cmp = rru_sign_compare(c, hi);
-            if (cmp == -2) { expr_free(c); return NULL; }
-            if (cmp < 0) return c;
-            expr_free(c);
-        }
-        return NULL;
-    }
-    if (!hi) {                              /* (lo, +inf) */
-        double a = rru_approx_double(lo, &ok);
-        if (!ok) return NULL;
-        long s = (long)ceil(a) + 1;
-        for (int i = 0; i < 64; i++, s++) {
-            Expr* c = expr_new_integer(s);
-            int cmp = rru_sign_compare(c, lo);
-            if (cmp == -2) { expr_free(c); return NULL; }
-            if (cmp > 0) return c;
+    if (!lo || !hi) {                       /* (-inf, hi) or (lo, +inf) */
+        const Expr* b = lo ? lo : hi;
+        int dir = lo ? 1 : -1;
+        Expr* c = rru_integer_beyond(b, dir);
+        if (c) {
+            int cmp = rru_sign_compare(c, b);
+            if (cmp != -2 && cmp * dir > 0) return c;
             expr_free(c);
         }
         return NULL;
     }
 
-    double a = rru_approx_double(lo, &ok); if (!ok) return NULL;
-    double b = rru_approx_double(hi, &ok); if (!ok) return NULL;
+    double a = rru_approx_double(lo, &ok);
+    double b = ok ? rru_approx_double(hi, &ok) : 0.0;
     double mid = 0.5 * (a + b);
-    for (long D = 1; D <= (1L << 30); D *= 2) {
-        long num = (long)llround(mid * (double)D);
-        Expr* c = make_rational(num, D);
+    for (int64_t D = 1; ok && D <= (INT64_C(1) << 52); D *= 2) {
+        double sc = mid * (double)D;
+        if (!(fabs(sc) < 9.0e18)) break;
+        int64_t num = (int64_t)llround(sc);
+        Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(num),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_new_integer(D), expr_new_integer(-1) }, 2) }, 2));
         int c1 = rru_sign_compare(c, lo);       /* want > 0 */
         int c2 = rru_sign_compare(c, hi);       /* want < 0 */
         if (c1 == -2 || c2 == -2) { expr_free(c); return NULL; }
         if (c1 > 0 && c2 < 0) return c;
         expr_free(c);
     }
+    /* No small-denominator sample (the cell is narrow, as (0, 1/10^10), or
+     * past 2^63): two exact rational bounds still have their exact midpoint. */
+    if (is_rational_like(lo) && is_rational_like(hi)) {
+        Expr* m = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Rational),
+                           (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2),
+                       expr_new_function(expr_new_symbol(SYM_Plus),
+                           (Expr*[]){ expr_copy((Expr*)lo), expr_copy((Expr*)hi) }, 2) }, 2));
+        if (m && rru_sign_compare(m, lo) > 0 && rru_sign_compare(m, hi) < 0) return m;
+        if (m) expr_free(m);
+    }
+
     return NULL;
 }
 

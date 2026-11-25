@@ -402,7 +402,8 @@ static void test_presentation_helpers(void) {
  * that refuses a nonzero residual it cannot test exactly. */
 static void test_relative_constants(void) {
     TR_TRUE("binomialRootRadical[Root[-16 + #1^3 &, 1]] === 2 2^(1/3)");
-    TR_TRUE("binomialRootRadical[Root[-2 + #1^2 &, 1]] === -Sqrt[2]");
+    /* (a quadratic Root evaluates to its radical before the call: quartic) */
+    TR_TRUE("binomialRootRadical[Root[-2 + #1^4 &, 1]] === -2^(1/4)");
     TR_TRUE("binomialRootRadical[Root[-1 - #1 + #1^3 &, 1]] === None");
     TR_TRUE("binomialRootRadical[Root[2 + #1^2 &, 1]] === None");          /* not real */
     TR_TRUE("binomialRootRadical[7] === None");

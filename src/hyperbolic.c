@@ -652,6 +652,28 @@ Expr* builtin_arccosh(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCosh", arg); if (r) return r; }
     
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
+    /* ArcCosh[x] = I ArcCos[x] on -1 <= x < 1 (principal branches): an exact
+     * x there with an exact ArcCos value folds -- ArcCosh[0] = I Pi/2,
+     * ArcCosh[-1] = I Pi, ArcCosh[1/2] = I Pi/3 (audit ArcCosh#1). */
+    {
+        double xv = 0.0;
+        bool exact_real = false;
+        if (!arg_is_inexact(arg) && expr_is_numeric_quantity(arg)) {
+            if (numeric_machine_value(arg, &xv)) exact_real = true;
+            else {
+                Expr* nv = numericalize_machine_unplanned(arg);
+                if (nv && nv->type == EXPR_REAL) { xv = nv->data.real; exact_real = true; }
+                if (nv) expr_free(nv);
+            }
+        }
+        if (exact_real && xv >= -1.0 && xv < 1.0 - 1e-12) {
+            Expr* ac = eval_and_free(expr_new_function(expr_new_symbol(SYM_ArcCos),
+                                                       (Expr*[]){ expr_copy(arg) }, 1));
+            if (ac && !head_is(ac, SYM_ArcCos))
+                return make_times(make_complex(expr_new_integer(0), expr_new_integer(1)), ac);
+            if (ac) expr_free(ac);
+        }
+    }
     if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
     // ArcCosh grows without bound; a directionless infinite argument maps to
     // ComplexInfinity.

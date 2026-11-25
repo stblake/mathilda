@@ -144,14 +144,13 @@ static void test_pgcd_root_extension_nontrivial(void) {
         "Extension -> Automatic], x]", "1", 0);
 }
 
-/* A reducible Root defining polynomial is declined (irreducibility gate):
- * the extension path falls back to the gcd over Q rather than risk a
- * zero-divisor.  Must not crash; here x^2 - 4 and x - Root[...] share no
- * factor over Q, so the gcd is 1. */
+/* A Root of a reducible polynomial with a rational root is that rational
+ * (Root[#^2 - 4 &, 1] is -2), so x - Root[...] is x + 2, a factor of
+ * x^2 - 4.  Must not crash. */
 static void test_pgcd_root_reducible_declines(void) {
     assert_eval_eq(
         "PolynomialGCD[x^2 - 4, x - Root[#1^2 - 4 &, 1], "
-        "Extension -> Automatic]", "1", 0);
+        "Extension -> Automatic]", "2 + x", 0);
 }
 
 /* =========================== PolynomialLCM =========================== */

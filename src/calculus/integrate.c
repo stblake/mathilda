@@ -4140,7 +4140,46 @@ static Expr* int_zero_algebraic_constants(const Expr* e) {
     return out;
 }
 
+/* GenerateConditions -> v (audit Integrate#3).  The option is removed and
+ * the integral evaluated without it; with v = False a ConditionalExpression
+ * answer is replaced by its value (the condition is not generated), so
+ * Integrate[E^(-a x), {x, 0, Infinity}, GenerateConditions -> False] is 1/a.
+ * True and Automatic keep the default behaviour, which states conditions.
+ * NULL when the call carries no GenerateConditions option. */
+static Expr* integrate_strip_generate_conditions(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+    size_t argc = res->data.function.arg_count;
+    size_t at = argc;
+    for (size_t t = 2; t < argc; t++)
+        if (integrate_option_is(res->data.function.args[t], "GenerateConditions")) { at = t; break; }
+    if (at == argc) return NULL;
+    Expr* v = res->data.function.args[at]->data.function.args[1];
+    bool drop = v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False;
+    Expr** a = malloc(sizeof(Expr*) * (argc - 1));
+    size_t k = 0;
+    for (size_t t = 0; t < argc; t++)
+        if (t != at) a[k++] = expr_copy(res->data.function.args[t]);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Integrate), a, k));
+    free(a);
+    if (!r) return NULL;
+    if (head_is(r, SYM_Integrate)) {
+        /* Not done: keep the call as written (option included). */
+        expr_free(r);
+        return NULL;
+    }
+    if (drop && head_is(r, SYM_ConditionalExpression) && r->data.function.arg_count == 2) {
+        Expr* val = expr_copy(r->data.function.args[0]);
+        expr_free(r);
+        r = val;
+    }
+    return r;
+}
+
 Expr* builtin_integrate(Expr* res) {
+    {
+        Expr* gc = integrate_strip_generate_conditions(res);
+        if (gc) return gc;
+    }
     /* A LinkedList integrand / expression maps as a List does: one call per
      * element, the answers in a new LinkedList (linkedlist.h, ll_map_arg). */
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&

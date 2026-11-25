@@ -668,6 +668,10 @@ done:
 Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     if (!f || !z || !z0 || z->type != EXPR_SYMBOL) return NULL;
 
+    /* An f free of z is a constant: analytic everywhere, residue 0 -- also
+     * at Infinity, where a constant has no 1/z term (audit Residue#2). */
+    if (residue_free_of(f, z)) return expr_new_integer(0);
+
     /* A rational function over Q at a rational point: the residue is ONE
      * Laurent coefficient, read off a single expansion about z0.  The series
      * engine expands such an f in exact rational arithmetic (every

@@ -14,6 +14,9 @@ for spectral analysis of sampled data or arrays.
 
 ## Fourier
 
+**Audit wave 4.** Exact numeric constants (Pi, E, Sqrt[2]) are numericalised like rationals: `Fourier[{Pi, E}]` is numeric.
+
+
 Discrete Fourier transform of a list of complex numbers (or a rectangular
 nested array, for a multidimensional transform). `Fourier[list]` returns a list
 the same shape as `list`; `Fourier[list, {p1, p2, …}]` returns only the

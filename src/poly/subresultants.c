@@ -300,6 +300,32 @@ Expr* builtin_subresultants(Expr* res) {
     Expr* p1  = res->data.function.args[0];
     Expr* p2  = res->data.function.args[1];
     Expr* var = res->data.function.args[2];
+    /* A compound variable (y[1], Sin[x]) is a generator like any other, as
+     * Resultant takes it (audit Subresultants#1): replace it by a fresh
+     * symbol, compute, and put it back. */
+    if (var->type == EXPR_FUNCTION && !expr_is_numeric_like(var)) {
+        Expr* v = expr_new_symbol("Subresultants`Private`v");
+        Expr* fwd = expr_new_function(expr_new_symbol(SYM_Rule),
+                        (Expr*[]){ expr_copy(var), expr_copy(v) }, 2);
+        Expr* q1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                       (Expr*[]){ expr_copy(p1), expr_copy(fwd) }, 2));
+        Expr* q2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                       (Expr*[]){ expr_copy(p2), fwd }, 2));
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Subresultants),
+                      (Expr*[]){ q1, q2, expr_copy(v) }, 3));
+        Expr* out = NULL;
+        if (r && !(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                   r->data.function.head->data.symbol.name == SYM_Subresultants)) {
+            Expr* back = expr_new_function(expr_new_symbol(SYM_Rule),
+                             (Expr*[]){ expr_copy(v), expr_copy(var) }, 2);
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                      (Expr*[]){ r, back }, 2));
+        } else if (r) {
+            expr_free(r);
+        }
+        expr_free(v);
+        return out;
+    }
     if (var->type != EXPR_SYMBOL) return NULL;
 
     /* Both arguments must be polynomials in var (as Resultant requires). */

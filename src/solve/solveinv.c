@@ -1838,6 +1838,15 @@ static Expr* solveinv_drive_core(Expr* equation, Expr* var,
     Expr* aggregate = NULL;
     bool any_success = false;
     for (size_t i = 0; i < nb; i++) {
+        /* A branch whose domain condition is already False has no
+         * solutions: ArcSin[x] == 2 (2 is outside ArcSin's range) and
+         * Log[x] == 2 I Pi give {}, not x -> Undefined (audit Solve#2). */
+        Expr* bc = branches[i].condition;
+        if (bc && bc->type == EXPR_SYMBOL && bc->data.symbol.name == SYM_False) {
+            any_success = true;
+            if (!aggregate) aggregate = expr_new_function(mk_sym("List"), NULL, 0);
+            continue;
+        }
         ctx->depth++;
         Expr* sols = solve_inner_equation(branches[i].inner_eq, var, ctx);
         ctx->depth--;

@@ -26,6 +26,9 @@
 #include "internal.h"
 #include "poly.h"    /* get_degree_poly */
 #include "root_trans.h"
+#include "arithmetic.h"   /* is_rational_like: the radical form of a quadratic Root */
+#include "root_numeric.h" /* root_numericalize: selects a rational root by value */
+#include <math.h>
 #include "message.h"
 #include "print.h"
 
@@ -74,6 +77,117 @@ static Expr* builtin_root(Expr* res) {
             ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
                   (Expr*[]){ expr_copy(body), expr_copy(t), expr_copy(deg) }, 3))
             : NULL;
+        /* A linear or quadratic polynomial with rational coefficients: the
+         * root in radicals, as the reference gives it (audit Root#2):
+         * Root[# - 3 &, 1] is 3, Root[#^2 - 2 &, 1] is -Sqrt[2],
+         * Root[#^2 + 1 &, 1] is -I.  Roots are ordered as Root orders them:
+         * the real roots ascending, a conjugate pair with the negative
+         * imaginary part first. */
+        if (lc && deg && deg->type == EXPR_INTEGER &&
+            (deg->data.integer == 1 || deg->data.integer == 2) &&
+            res->data.function.arg_count == 2 &&
+            res->data.function.args[1]->type == EXPR_INTEGER) {
+            int64_t d = deg->data.integer, k = res->data.function.args[1]->data.integer;
+            Expr* c[3] = { NULL, NULL, NULL };
+            bool rat = true;
+            for (int64_t j = 0; j <= d; j++) {
+                c[j] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                           (Expr*[]){ expr_copy(body), expr_copy(t), expr_new_integer(j) }, 3));
+                if (!c[j] || !is_rational_like(c[j])) rat = false;
+            }
+            Expr* out = NULL;
+            if (rat && k >= 1 && k <= d) {
+                if (d == 1) {
+                    out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_integer(-1), expr_copy(c[0]),
+                                         expr_new_function(expr_new_symbol(SYM_Power),
+                                             (Expr*[]){ expr_copy(c[1]), expr_new_integer(-1) }, 2) }, 3));
+                } else {
+                    /* disc = c1^2 - 4 c2 c0; roots (-c1 -+ Sqrt[disc]) / (2 c2) */
+                    Expr* disc = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ expr_copy(c[1]), expr_new_integer(2) }, 2),
+                                   expr_new_function(expr_new_symbol(SYM_Times),
+                                       (Expr*[]){ expr_new_integer(-4), expr_copy(c[2]),
+                                                  expr_copy(c[0]) }, 3) }, 2));
+                    int sgn_lc = 1;
+                    if ((c[2]->type == EXPR_INTEGER && c[2]->data.integer < 0) ||
+                        (c[2]->type == EXPR_BIGINT && mpz_sgn(c[2]->data.bigint) < 0) ||
+                        (c[2]->type == EXPR_FUNCTION && expr_is_integer_like(c[2]->data.function.args[0]) &&
+                         ((c[2]->data.function.args[0]->type == EXPR_INTEGER &&
+                           c[2]->data.function.args[0]->data.integer < 0) ||
+                          (c[2]->data.function.args[0]->type == EXPR_BIGINT &&
+                           mpz_sgn(c[2]->data.function.args[0]->data.bigint) < 0))))
+                        sgn_lc = -1;
+                    /* With c2 > 0, -Sqrt[disc] gives the smaller real root and,
+                     * for disc < 0, the root with negative imaginary part
+                     * (Sqrt of a negative rational is I times a positive
+                     * real).  A negative c2 swaps them. */
+                    int64_t s = ((k == 1) ? -1 : 1) * sgn_lc;
+                    out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Plus),
+                                       (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                                                      (Expr*[]){ expr_new_integer(-1), expr_copy(c[1]) }, 2),
+                                                  expr_new_function(expr_new_symbol(SYM_Times),
+                                                      (Expr*[]){ expr_new_integer(s),
+                                                                 expr_new_function(expr_new_symbol(SYM_Power),
+                                                                     (Expr*[]){ disc, expr_new_function(expr_new_symbol(SYM_Rational),
+                                                                         (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2) }, 2) }, 2),
+                                   expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                                                      (Expr*[]){ expr_new_integer(2), expr_copy(c[2]) }, 2),
+                                                  expr_new_integer(-1) }, 2) }, 2));
+                }
+            }
+            for (int j = 0; j < 3; j++) if (c[j]) expr_free(c[j]);
+            if (out) {
+                expr_free(lc); expr_free(deg); expr_free(body); expr_free(t);
+                return out;
+            }
+        }
+        /* Degree 3 and up, integer coefficients: a root that is rational is
+         * that rational number (Root[#^3 - 8 &, 1] is 2).  A rational root
+         * p/q of an integer polynomial has q | lc, so the candidate is the
+         * machine value of the indexed root scaled by lc and rounded; it is
+         * accepted only when it is an exact root (the polynomial vanishes
+         * there identically) -- the numeric value only selects it. */
+        if (lc && deg && deg->type == EXPR_INTEGER && deg->data.integer >= 3 &&
+            deg->data.integer <= 64 && lc->type == EXPR_INTEGER && lc->data.integer != 0 &&
+            res->data.function.arg_count == 2 &&
+            res->data.function.args[1]->type == EXPR_INTEGER) {
+            bool ints = true;
+            for (int64_t j = 0; j <= deg->data.integer && ints; j++) {
+                Expr* cj = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                               (Expr*[]){ expr_copy(body), expr_copy(t), expr_new_integer(j) }, 3));
+                ints = cj && expr_is_integer_like(cj);
+                if (cj) expr_free(cj);
+            }
+            Expr* out = NULL;
+            if (ints) {
+                NumericSpec sp; sp.mode = NUMERIC_MODE_MACHINE; sp.bits = 53;
+                Expr* v = root_numericalize(res, sp);
+                double L = (double)(lc->data.integer < 0 ? -lc->data.integer : lc->data.integer);
+                if (v && v->type == EXPR_REAL && isfinite(v->data.real) &&
+                    fabs(L * v->data.real) < 4.0e15) {
+                    double num = floor(L * v->data.real + 0.5);
+                    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer((int64_t)num),
+                                   expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ expr_new_integer((int64_t)L), expr_new_integer(-1) }, 2) }, 2));
+                    Expr* at = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                        (Expr*[]){ expr_copy(body), expr_new_function(expr_new_symbol(SYM_Rule),
+                                       (Expr*[]){ expr_copy(t), expr_copy(r) }, 2) }, 2));
+                    if (at && at->type == EXPR_INTEGER && at->data.integer == 0) out = r;
+                    else expr_free(r);
+                    if (at) expr_free(at);
+                }
+                if (v) expr_free(v);
+            }
+            if (out) {
+                expr_free(lc); expr_free(deg); expr_free(body); expr_free(t);
+                return out;
+            }
+        }
         bool negative = lc && ((lc->type == EXPR_INTEGER && lc->data.integer < 0) ||
                                (lc->type == EXPR_BIGINT && mpz_sgn(lc->data.bigint) < 0) ||
                                (lc->type == EXPR_FUNCTION && lc->data.function.head->type == EXPR_SYMBOL &&

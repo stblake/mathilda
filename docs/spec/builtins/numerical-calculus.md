@@ -539,6 +539,9 @@ Out[12]= 0.0142131
 
 ## NSum
 
+**Audit wave 4.** An inner sum whose range depends on the outer index is not extrapolated by Euler-Maclaurin (the outer summand is a function of the integer index only).
+
+
 Numerical summation.  `NSum[f, {i, imin, imax}]` gives a numerical
 approximation to the sum of `f` for `i` running from `imin` to `imax` (which
 may be `Infinity`).  Implemented natively in C in
@@ -972,6 +975,9 @@ Out[3]= 3.67608
 
 
 ## NIntegrate
+
+**Audit wave 4.** A Boole/UnitStep integrand in one dimension is integrated as the piecewise function it is, with its jump locations as Exclusions (`NIntegrate[Boole[x < 1/3], {x, 0, 1}]` is 1/3 to machine precision); in several dimensions with a bound depending on another variable it takes the iterated piecewise rules (Monte Carlo needs a constant box).
+
 
 **Bessel and multi-frequency integrands on a half line (machine precision)**:
 an integrand on `[a, Infinity)` with a `BesselJ` / `BesselY` factor of a
@@ -1524,6 +1530,9 @@ complex-coefficient equation (`x = ±(2 + I)`); `In[6]` returns 30-digit roots.
 
 ## NSolve
 
+**Audit wave 4.** The integer parameters `C[k]` of a periodic family stay exact.
+
+
 Numerical solutions of an equation or system of equations.
 `NSolve[expr, vars]` returns approximate solutions as a list of
 replacement-rule lists; `NSolve[expr, vars, Reals]` restricts to real
@@ -1617,6 +1626,9 @@ Out[6]= {{x -> -1.097911672722823576416400 + 0.839886921615659203622803 I, …},
 for a transcendental equation Solve cannot reduce.
 
 ## NDSolve
+
+**Audit wave 4.** `eqn1 && eqn2 && ...` is accepted as the equation list (NDSolve and NDSolveValue).
+
 
 `NDSolve[eqns, u, {x, xmin, xmax}]` finds a numerical solution to the ordinary
 differential equations `eqns` for the function `u` with independent variable `x`
@@ -2311,6 +2323,9 @@ Attributes: `NDEigenvalues`, `NDEigensystem`, `DirichletCondition`,
 `{DependentVariables -> Automatic, Method -> Automatic}`.
 
 ## FindMinimum / FindMaximum
+
+**Audit wave 4.** An objective free of the variables is its own minimum at the start; contradictory bounds are `FindMinimum::nsol` and stay unevaluated.
+
 
 Iterative local optimisation.  Implemented natively in C in
 `src/numerical_calculus/findmin.c`.  Both have `HoldAll, Protected` attributes and use
@@ -3695,3 +3710,6 @@ In[6]:= NMaximize[{x + y, x^2 + y^2 <= 1}, {x, y}]
 Out[6]= {1.41421, {x -> 0.70710, y -> 0.70711}}
 ```
 
+## Audit wave 4 notes
+
+- **NMaximize.** An infeasible problem is `NMaximize::nsol` with `{-Infinity, {x -> Indeterminate}}` (`NMinimize` gives `+Infinity`).

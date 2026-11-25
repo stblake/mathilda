@@ -184,6 +184,23 @@ static void test_wave3_arity_options(void) {
     audit_chk("NSeries#3", "Quiet[NSeries[Exp[x]]]", "NSeries[E^x]");
 }
 
+/* Wave 4 (G5): region integrands, constant and infeasible optimisation,
+ * NMaximize's infeasible sentinel, NSolve's integer parameters, Fourier of
+ * exact constants, NDSolveValue of a conjunction. */
+static void test_wave4_numerical(void) {
+    audit_chk("NIntegrate#2", "Abs[NIntegrate[Boole[x < 1/3], {x, 0, 1}] - 1/3] < 10^-12", "True");
+    audit_chk("NIntegrate#3", "Abs[NIntegrate[Boole[x^2 + y^2 < 1], {x, -1, 1}, {y, -Sqrt[1 - x^2], Sqrt[1 - x^2]}] - Pi] < 10^-6", "True");
+    audit_chk("FindMinimum#1", "FindMinimum[5, {x, 1}]", "{5.0, {x -> 1.0}}");
+    audit_chk("FindMinimum#3", "Check[FindMinimum[{x^2, x >= 1, x <= 0}, {x, 0.5}], fired, FindMinimum::nsol]", "fired");
+    audit_chk("NMaximize#3", "Check[NMaximize[{x, x^2 + 1 <= 0}, x], fired, NMaximize::nsol]", "fired");
+    audit_chk("NMaximize#3", "Quiet[NMaximize[{x, x^2 + 1 <= 0}, x]]", "{-Infinity, {x -> Indeterminate}}");
+    audit_chk("NSolve#2", "FreeQ[Quiet[NSolve[Sin[x] == 0, x]], C[1.]]", "True");
+    audit_chk("NSolve#2", "MemberQ[Quiet[NSolve[Sin[x] == 0, x]], {x -> ConditionalExpression[_ C[1], Element[C[1], Integers]]}, Infinity]", "True");
+    audit_chk("Fourier#1", "Max[Abs[Fourier[{Pi, E}] - {4.14356, 0.299326}]] < 10^-5", "True");
+    audit_chk("Fourier#1", "Head[First[Fourier[{Sqrt[2], 1}]]]", "Real");
+    audit_chk("NDSolveValue#1", "Abs[NDSolveValue[y'[x] == y[x] && y[0] == 1, y[1], {x, 0, 1}] - E] < 10^-5", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_nsum_nested_no_d_ivar);
@@ -201,5 +218,6 @@ int main(void) {
     TEST(test_nsolve_or);
     TEST(test_whenevent_jump);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_numerical);
     return audit_finish("audit_numerical_calculus");
 }

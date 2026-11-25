@@ -86,10 +86,42 @@ static void test_s11_special_values(void) {
     audit_true("Tanh#2", "Tanh[Infinity] === 1");
 }
 
+/* Wave 4 (G5): Refine by value assumptions, Simplify of complex parts and
+ * predicates under assumptions, Boolean minimisation, Element of
+ * approximate numbers, SimplifyCount of bignums. */
+static void test_wave4_simplification(void) {
+    audit_chk("Refine#1", "Refine[x + 1, x == -3]", "-2");
+    audit_chk("Refine#1", "Refine[x + 1, x == 1/2]", "3/2");
+    audit_chk("Refine#1", "Refine[x + 1, x == 2.5]", "3.5");
+    audit_chk("Refine#1", "Refine[Sqrt[x^2], x == -3]", "3");
+    audit_chk("Simplify#1", "Simplify[Re[x], Element[x, Reals]]", "x");
+    audit_chk("Simplify#1", "Simplify[Im[x], Element[x, Reals]]", "0");
+    audit_chk("Simplify#1", "Simplify[Conjugate[x], Element[x, Reals]]", "x");
+    audit_chk("Simplify#1", "Simplify[Abs[x]^2, Element[x, Reals]]", "x^2");
+    audit_chk("Simplify#1", "Simplify[Re[x], x > 0]", "x");
+    audit_chk("Simplify#2", "Simplify[x > 0, x > 1]", "True");
+    audit_chk("Simplify#2", "Simplify[x > 0, x < 0]", "False");
+    audit_chk("Simplify#2", "Simplify[x^2 >= 0, Element[x, Reals]]", "True");
+    audit_chk("Simplify#3", "Simplify[a && !a]", "False");
+    audit_chk("Simplify#3", "Simplify[a || !a]", "True");
+    audit_chk("Simplify#3", "Simplify[(a && b) || (a && !b)]", "a");
+    audit_chk("FullSimplify#1", "FullSimplify[x > 0, x > 1]", "True");
+    audit_chk("FullSimplify#1", "FullSimplify[x^2 >= 0, Element[x, Reals]]", "True");
+    audit_chk("FullSimplify#1", "FullSimplify[x == 1, x == 2]", "False");
+    audit_chk("Element#1", "Element[2., Integers]", "False");
+    audit_chk("Element#1", "Element[2.5, Rationals]", "False");
+    audit_chk("Element#1", "Element[N[Pi], Algebraics]", "False");
+    audit_chk("Element#1", "Element[2.5, Reals]", "True");
+    audit_chk("SimplifyCount#1", "SimplifyCount[99999999999999999999]", "20");
+    audit_chk("SimplifyCount#1", "SimplifyCount[10^20]", "21");
+    audit_chk("SimplifyCount#1", "Union[Table[SimplifyCount[10^k - 1] - k, {k, 19, 60}]]", "{0}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_factorial2_negative_odd);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_simplification);
     return audit_finish("audit_simplification");
 }

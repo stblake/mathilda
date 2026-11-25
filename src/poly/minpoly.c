@@ -467,6 +467,16 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
                                   fn->data.function.args[0]->data.symbol.name, nm);
         }
         if (!rel) { free(nm); c->failed = true; return NULL; }
+        /* A Root whose polynomial has a symbolic coefficient (Root[#^2 - y &,
+         * 1]) is not an explicit algebraic number: decline, so the call stays
+         * unevaluated (audit MinimalPolynomial#2). */
+        {
+            Expr* nq = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+                           (Expr*[]){ expr_copy((Expr*)e) }, 1));
+            bool numeric = nq && nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+            if (nq) expr_free(nq);
+            if (!numeric) { expr_free(rel); free(nm); c->failed = true; return NULL; }
+        }
         mp_store(c, nm, rel);
         return expr_new_symbol(nm);
     }

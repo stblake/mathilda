@@ -194,9 +194,10 @@ static void test_equations(void) {
  * anything else (!=, conjunction/disjunction of equations, transcendental,
  * the a x==0 asymmetry, no-variable form) must NOT invent an answer. */
 static void test_equations_decline(void) {
-    /* !=  over Complexes with no equation to pin the variety -> declines. */
-    run_test("Reduce[x != 0, x]", "Reduce[Unequal[x, 0], x]");
-    run_test("Reduce[x^2 != 4, x]", "Reduce[Unequal[Power[x, 2], 4], x]");
+    /* !=  in one variable over Complexes: the complement of the finitely many
+     * points of the equation (audit Reduce#1). */
+    run_test("Reduce[x != 0, x]", "Unequal[x, 0]");
+    run_test("Reduce[x^2 != 4, x]", "And[Unequal[x, -2], Unequal[x, 2]]");
     /* A nonlinear conjunction / disjunction of equations is a zero-dimensional
      * system: the linear engine declines and reduce_zerodim solves it exactly.
      * (x^2==4 && x^3==8 has the single common root 2; the Or unions its cases.) */
@@ -561,8 +562,8 @@ static void test_inequality_defaults_reals(void) {
     /* An equation alone keeps the Complexes default (no over-broadening). */
     run_test("Reduce[x^2 == 4, x]", "Or[Equal[x, -2], Equal[x, 2]]");
     /* Unequal (!=) is meaningful over Complexes, so it does NOT force Reals:
-     * this stays on the Complexes path and is left unevaluated as before. */
-    run_test("Reduce[x != 1, x]", "Reduce[Unequal[x, 1], x]");
+     * this stays on the Complexes path (the complement of x == 1). */
+    run_test("Reduce[x != 1, x]", "Unequal[x, 1]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1414,9 +1415,9 @@ static void test_find_instance(void) {
     run_contains("FindInstance[E^(-a x) Cos[b x] == 0.1 && E^(-a y) Cos[b y] == 0.1 "
                  "&& x != y && a > 0, {a, b, x, y}, Reals]", "Rule[a");
 
-    /* Structured sampling finds a witness Reduce/Solve decline (x != 0 over the
-     * default Complexes: -1 is the first verified candidate). */
-    run_test("FindInstance[x != 0, x]", "List[List[Rule[x, -1]]]");
+    /* x != 0 over the default Complexes: Reduce gives x != 0 itself, and the
+     * clause witness is the first verified point off the excluded value. */
+    run_test("FindInstance[x != 0, x]", "List[List[Rule[x, 1]]]");
 
     /* Solve-one-variable sampler: solve x^2 + y z == 1 for x, sample y, z --
      * y=-5, z=1 gives x=-Sqrt[6], with -Sqrt[6]-10 <= 4 and 5 Sqrt[6] > 7 both

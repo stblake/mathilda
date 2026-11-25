@@ -723,7 +723,26 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
 /* ------------------------------------------------------------------ *
  *  Builtins                                                           *
  * ------------------------------------------------------------------ */
+/* eqn1 && eqn2 && ... as the first argument is the list {eqn1, eqn2, ...}
+ * (audit NDSolveValue#1): the same call with the List, or NULL. */
+static Expr* nd_and_to_list(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    Expr* e = res->data.function.args[0];
+    if (!head_is(e, SYM_And)) return NULL;
+    size_t n = e->data.function.arg_count, argc = res->data.function.arg_count;
+    Expr** el = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) el[i] = expr_copy(e->data.function.args[i]);
+    Expr** a = malloc(argc * sizeof(Expr*));
+    a[0] = expr_new_function(expr_new_symbol(SYM_List), el, n);
+    free(el);
+    for (size_t i = 1; i < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+    free(a);
+    return call;
+}
+
 Expr* builtin_ndsolve(Expr* res) {
+    { Expr* l = nd_and_to_list(res); if (l) return l; }
     return ndsolve_core(res, NULL);
 }
 
@@ -754,6 +773,7 @@ static void nd_collect_unknowns(const Expr* e, const char*** names, size_t* n, s
  * number, {y[1], y'[1]} a list).  Left unevaluated when NDSolve is. */
 static Expr* builtin_ndsolvevalue(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+    { Expr* l = nd_and_to_list(res); if (l) return l; }
     Expr** A = res->data.function.args;
     size_t argc = res->data.function.arg_count;
     const char** names = NULL; size_t n = 0, cap = 0;

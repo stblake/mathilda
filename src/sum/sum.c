@@ -946,16 +946,65 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
      * step-1 result. */
     if (!is_unit_step(s.di)) { iter_spec_free(&s); return NULL; }
 
+    /* Sum[f, {i, -Infinity, b}] with b not +Infinity: reflect i -> -i, the
+     * sum over {i, -b, Infinity} -- every closed-form stage reads a lower
+     * bound it can substitute, and -Infinity substituted gave 1/0 and
+     * Indeterminate (audit Sum#3). */
+    {
+        Expr* ninf = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2));
+        bool lower_ninf = expr_eq(s.imin, ninf);
+        bool upper_inf = (s.imax->type == EXPR_SYMBOL && s.imax->data.symbol.name == SYM_Infinity)
+                         || expr_eq(s.imax, ninf);
+        expr_free(ninf);
+        if (lower_ninf && !upper_inf) {
+            IterShadow saved = iter_spec_shadow(s.var);
+            Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_new_integer(-1), expr_copy(s.var) }, 2);
+            Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                            (Expr*[]){ expr_copy(s.var), neg }, 2);
+            Expr* fr = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                            (Expr*[]){ expr_copy(f), rule }, 2));
+            Expr* lo = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_new_integer(-1), expr_copy(s.imax) }, 2));
+            Expr* nspec = expr_new_function(expr_new_symbol(SYM_List),
+                            (Expr*[]){ expr_copy(s.var), lo, expr_new_symbol(SYM_Infinity) }, 3);
+            Expr* r = sum_one_spec(fr, nspec, method);
+            expr_free(fr); expr_free(nspec);
+            iter_spec_restore(s.var, saved);
+            iter_spec_free(&s);
+            return r;
+        }
+    }
+
+    /* Sum is HoldAll: shadow the iterator for the symbolic stages, or an
+     * outer value of it (i = 5) leaks into the held body and every stage
+     * sees a constant summand (audit Sum#2). */
+    /* Only an iterator that has a value is shadowed: an unbound one is left
+     * exactly as the stages always saw it. */
+    SymbolDef* vdef = (s.var->type == EXPR_SYMBOL) ? symtab_lookup(s.var->data.symbol.name) : NULL;
+    bool shadowed = vdef && vdef->own_values;
+    IterShadow shadow;
+    if (shadowed) shadow = iter_spec_shadow(s.var);
     if (!sum_body_is_expensive(f)) {
         Expr* pv = NULL;
         SumPoleVerdict pole = sum_pole_verdict(f, s.var, s.imin, s.imax, &pv);
-        if (pole != SUM_POLE_NONE) { iter_spec_free(&s); return pv; }   /* NULL holds */
+        if (pole != SUM_POLE_NONE) {                        /* NULL holds */
+            if (shadowed) iter_spec_restore(s.var, shadow);
+            iter_spec_free(&s);
+            return pv;
+        }
     }
     if (s.imax->type == EXPR_SYMBOL && s.imax->data.symbol.name == SYM_Infinity
         && !sum_body_is_expensive(f)
-        && sum_series_diverges(f, s.var)) { iter_spec_free(&s); return NULL; }
+        && sum_series_diverges(f, s.var)) {
+        if (shadowed) iter_spec_restore(s.var, shadow);
+        iter_spec_free(&s);
+        return NULL;
+    }
 
     Expr* r = dispatch_def(method, f, s.var, s.imin, s.imax);
+    if (shadowed) iter_spec_restore(s.var, shadow);
     iter_spec_free(&s);
     return r;
 }

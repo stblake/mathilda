@@ -4,6 +4,9 @@ Algebraic manipulation of rational and polynomial expressions: rational-expressi
 
 ## Numerator
 
+**Audit wave 4.** For a complex number with bignum-rational parts the common denominator is computed exactly (`Numerator[1/10^30 + I]` is `1 + 10^30 I`).
+
+
 Gives the numerator of an expression.
 - `Numerator[expr]`
 
@@ -21,6 +24,9 @@ Out[2]= 33 + 7 I
 ```
 
 ## Denominator
+
+**Audit wave 4.** For a complex number with bignum-rational parts the common denominator is the exact LCM (`Denominator[(10^30 + I)/7^25]` is `7^25`).
+
 
 Gives the denominator of an expression.
 - `Denominator[expr]`
@@ -122,6 +128,9 @@ Out[9]= (x + y)/(1 + x)
 ```
 
 ## Together
+
+**Audit wave 4.** `Trig -> True` combines over the circular functions as rational functions of Sin and Cos: `Together[Tan[x] + 1, Trig -> True]` is `(Cos[x] + Sin[x]) Sec[x]`.
+
 
 Puts terms in a sum over a common denominator, and cancels factors in the result.
 - `Together[expr]`
@@ -616,6 +625,9 @@ Out[4]= False
 
 ## AlgebraicNumberDenominator
 
+**Audit wave 4.** A Root object with rational coefficients is read as the integer polynomial it is a multiple of.
+
+
 Gives the denominator of an algebraic number.
 
 - `AlgebraicNumberDenominator[a]` — the smallest positive integer `n` such that
@@ -761,6 +773,9 @@ the roots of `MinimalPolynomial[a, x]`.
 
 ## Apart
 
+**Audit wave 4.** A transcendental kernel of the variable (`Sin[x]`, `Log[x]`) is a coefficient of the decomposition: `Apart[Sin[x]/(x^2 - 1), x]` is `Sin[x]/(2 (-1 + x)) - Sin[x]/(2 (1 + x))`.
+
+
 Gives the partial fraction decomposition of a rational expression.
 - `Apart[expr]`
 - `Apart[expr, var]`
@@ -833,6 +848,9 @@ Out[6]= 1/(2 + Sqrt[x]) - 1/(3 + Sqrt[x])
 ```
 
 ## Subresultants
+
+**Audit wave 4.** A compound variable (`y[1]`, `Sin[x]`) is accepted, as Resultant accepts it.
+
 
 - `Subresultants[poly1, poly2, var]`: Gives the list of **principal
   subresultant coefficients** (PSCs) of `poly1` and `poly2` treated as
@@ -909,6 +927,9 @@ Out[4]= 0
 ```
 
 ## IrreduciblePolynomialQ
+
+**Audit wave 4.** `Modulus -> p` tests irreducibility over GF(p) (`IrreduciblePolynomialQ[x^2 + 1, Modulus -> 2]` is False).
+
 
 - `IrreduciblePolynomialQ[poly]`: Returns `True` if `poly` is an irreducible
   polynomial over the rationals (treating any algebraic-number coefficient
@@ -1037,6 +1058,9 @@ Out[11]= True
 
 ## MinimalPolynomial
 
+**Audit wave 4.** A Root object with a symbolic coefficient is not an explicit algebraic number: the call stays unevaluated.
+
+
 - `MinimalPolynomial[s, x]`: Returns the lowest-degree polynomial in `x` with
   integer coefficients, positive leading coefficient, and content `1` (GCD of
   coefficients equal to `1`) having the algebraic number `s` as a root.
@@ -1081,3 +1105,7 @@ Out[4]= 4 - 4 x^2 + x^4
 **Trigonometric atoms (v0.6491).** Cos, Sin and Tan of a rational multiple of π
 are algebraic. cos(pπ/q) is a root of T_q(t) − (−1)^p, and the irreducible factor
 vanishing at the number is kept: `MinimalPolynomial[Cos[Pi/9], x] = -1 - 6 x + 8 x^3`.
+
+## Audit wave 4 notes
+
+- **SubresultantPolynomialRemainders.** A non-polynomial argument is `SubresultantPolynomialRemainders::npoly` and stays unevaluated.

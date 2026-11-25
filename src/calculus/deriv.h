@@ -103,4 +103,10 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn);
  * The input expressions are NOT consumed. */
 Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym);
 
+/* Derivative[n1..nm][Derivative[k1..km][f]] -> Derivative[n1+k1, ..., nm+km][f]
+ * (unevaluated) when every order is a nonnegative machine integer and the
+ * arities agree; NULL otherwise.  `outer_head` is Derivative[n1..nm], `inner`
+ * is Derivative[k1..km][f].  Neither is consumed (audit Derivative#3). */
+Expr* derivative_merge_nested(Expr* outer_head, Expr* inner);
+
 #endif /* MATHILDA_DERIV_H */

@@ -96,13 +96,18 @@ void test_polygcd_extension(void) {
            "Extension -> Sqrt[2]]", "-Sqrt[2] + x");
 
     /* A14b: an explicit Root[] object as the extension generator.  The
-     * gcd is rendered in terms of the Root object (index preserved). */
+     * gcd is rendered in terms of the Root object (index preserved).  A
+     * quadratic Root is its radical (Root[#^2 - 2 &, 2] is Sqrt[2]), so the
+     * Root form is exercised on a cubic. */
     run_eq("PolynomialGCD[x^2 - 2, x - Root[#^2 - 2 &, 2], "
            "Extension -> Root[#^2 - 2 &, 2]]",
-           "x - Root[#1^2 - 2 &, 2]");
+           "-Sqrt[2] + x");
     run_eq("PolynomialGCD[x^2 - 2, x - Root[#^2 - 2 &, 1], "
            "Extension -> Root[#^2 - 2 &, 1]]",
-           "x - Root[#1^2 - 2 &, 1]");
+           "Sqrt[2] + x");
+    run_eq("PolynomialGCD[x^3 - 2, x - Root[#^3 - 2 &, 1], "
+           "Extension -> Root[#^3 - 2 &, 1]]",
+           "x - Root[#1^3 - 2 &, 1]");
 }
 
 /* ------------------------------------------------------------------ */

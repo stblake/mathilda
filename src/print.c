@@ -190,6 +190,15 @@ static bool is_plain_blank(const Expr* b) {
     const char* h = b->data.function.head->data.symbol.name;
     return h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence;
 }
+/* A Complex node is printed as re + im I only when both parts are numbers;
+ * Complex[a, b] with symbolic parts is not a number and prints as itself
+ * (audit Complex#2). */
+static bool print_complex_is_numeric(const Expr* e) {
+    return e->data.function.arg_count == 2 &&
+           expr_is_numeric_like(e->data.function.args[0]) &&
+           expr_is_numeric_like(e->data.function.args[1]);
+}
+
 
 static int get_expr_prec(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 9500;
@@ -253,7 +262,7 @@ static int get_expr_prec(Expr* e) {
         return 6500;
     }
     if (head == SYM_Rational) return 5000;
-    if (head == SYM_Complex) {
+    if (head == SYM_Complex && print_complex_is_numeric(e)) {
         /* Only the bare imaginary unit `I` (Complex[0, 1]) is an atom.
          * `-I` (Complex[0, -1]) prints as a unary-minus form and so
          * takes Plus-level precedence — otherwise Power[-I, n] would
@@ -1470,12 +1479,12 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("/");
             print_standard(e->data.function.args[1], 5000);
         }
-        else if (head == SYM_Complex && e->data.function.arg_count == 2
+        else if (head == SYM_Complex && print_complex_is_numeric(e)
                  && g_inputform_depth > 0
                  && print_complex_rational_im_inputform(e)) {
             /* printed */
         }
-        else if (head == SYM_Complex && e->data.function.arg_count == 2) {
+        else if (head == SYM_Complex && print_complex_is_numeric(e)) {
             Expr* re = e->data.function.args[0];
             Expr* im = e->data.function.args[1];
             bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0);

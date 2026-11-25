@@ -36,7 +36,15 @@ Expr* builtin_not(Expr* res) {
             else if (h == SYM_GreaterEqual) flip = SYM_Less;
             else if (h == SYM_Greater) flip = SYM_LessEqual;
             else if (h == SYM_LessEqual) flip = SYM_Greater;
-            else if (h == SYM_Element) flip = SYM_NotElement;
+            /* !Element[x1 | x2, dom] is "some xi is not in dom", which is not
+             * NotElement[x1 | x2, dom] ("no xi is"): only a single element
+             * flips. */
+            else if (h == SYM_Element &&
+                     !(arg->data.function.args[0]->type == EXPR_FUNCTION &&
+                       arg->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                       (arg->data.function.args[0]->data.function.head->data.symbol.name == SYM_Alternatives ||
+                        arg->data.function.args[0]->data.function.head->data.symbol.name == SYM_List)))
+                flip = SYM_NotElement;
         }
         if (flip)
             return expr_new_function(expr_new_symbol(flip),

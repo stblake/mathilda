@@ -387,13 +387,63 @@ Expr* reduce_qe_dispatch(const Expr* qexpr, const Expr* dom) {
 Expr* builtin_exists(Expr* res) { (void)res; return NULL; }
 Expr* builtin_forall(Expr* res) { (void)res; return NULL; }
 
+/* Does e contain a quantifier anywhere? */
+static bool qe_has_quantifier(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_quantifier(e)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (qe_has_quantifier(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Replace every maximal quantified subformula of a logical combination
+ * (And / Or / Not / Implies / Xor / Equivalent) by its elimination.  NULL
+ * when a quantifier sits elsewhere (inside a non-logical head) or one does
+ * not eliminate.  Fresh tree, unevaluated. */
+static Expr* qe_eliminate_inner(const Expr* e, Expr* dom) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (is_quantifier(e)) {
+        Expr* r = reduce_qe_dispatch((Expr*)e, dom);
+        if (!r || qe_has_quantifier(r)) { if (r) expr_free(r); return NULL; }
+        return r;
+    }
+    if (!qe_has_quantifier(e)) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return NULL;
+    const char* hn = h->data.symbol.name;
+    if (hn != SYM_And && hn != SYM_Or && hn != SYM_Not && hn != SYM_Implies &&
+        hn != SYM_Xor && hn != SYM_Equivalent) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        a[i] = qe_eliminate_inner(e->data.function.args[i], dom);
+        if (!a[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(a[j]);
+            free(a);
+            return NULL;
+        }
+    }
+    Expr* out = expr_new_function(expr_copy((Expr*)h), a, n);
+    free(a);
+    return out;
+}
+
+Expr* reduce_qe_eliminate_inner(const Expr* e, Expr* dom) {
+    if (!e || is_quantifier(e) || !qe_has_quantifier(e)) return NULL;
+    Expr* r = qe_eliminate_inner(e, dom);
+    return r ? eval_and_free(r) : NULL;
+}
+
 Expr* builtin_resolve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     Expr* qexpr = res->data.function.args[0];
     Expr* dom   = (argc >= 2) ? res->data.function.args[1] : NULL;
-    if (!is_quantifier(qexpr)) return NULL;      /* only quantified input */
+    /* Quantifiers inside a logical combination are eliminated one by one
+     * (audit ForAll#1): Resolve[!ForAll[x, x^2 > 0], Reals] is True,
+     * Resolve[ForAll[x, x^2 >= 0] && a > 0, Reals] is a > 0. */
+    if (!is_quantifier(qexpr)) return reduce_qe_eliminate_inner(qexpr, dom);
     return reduce_qe_dispatch(qexpr, dom);
 }
 

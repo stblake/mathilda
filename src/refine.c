@@ -786,6 +786,49 @@ static Expr* refine_directed_infinity(const Expr* e, const AssumeCtx* ctx,
     return out;
 }
 
+/* Collect the value rules sym -> c for every top-level conjunct of `assum`
+ * that pins a symbol to a numeric quantity (x == -3, 1/2 == x, x == 2.5)
+ * into the List `rules` (appending). */
+static void refine_collect_value_rules(const Expr* assum, Expr*** rules,
+                                       size_t* n, size_t* cap) {
+    if (!assum || assum->type != EXPR_FUNCTION) return;
+    const char* h = head_name(assum);
+    if (h == SYM_And) {
+        for (size_t i = 0; i < assum->data.function.arg_count; i++)
+            refine_collect_value_rules(assum->data.function.args[i], rules, n, cap);
+        return;
+    }
+    if (h != SYM_Equal || assum->data.function.arg_count != 2) return;
+    Expr* a = assum->data.function.args[0];
+    Expr* b = assum->data.function.args[1];
+    Expr* sym = NULL; Expr* val = NULL;
+    if (a->type == EXPR_SYMBOL && expr_is_numeric_quantity(b)) { sym = a; val = b; }
+    else if (b->type == EXPR_SYMBOL && expr_is_numeric_quantity(a)) { sym = b; val = a; }
+    if (!sym) return;
+    if (*n == *cap) {
+        size_t nc = *cap ? 2 * *cap : 4;
+        Expr** nr = (Expr**)realloc(*rules, nc * sizeof(Expr*));
+        if (!nr) return;
+        *rules = nr; *cap = nc;
+    }
+    Expr* ra[2] = { expr_copy(sym), expr_copy(val) };
+    (*rules)[(*n)++] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+}
+
+/* An assumption x == c with c a numeric quantity determines x: Refine
+ * replaces x by c (Refine[x + 1, x == -3] -> -2, Refine[Sqrt[x^2], x == -3]
+ * -> 3; audit Refine#1).  Returns the substituted, evaluated expression, or
+ * NULL when no conjunct pins a symbol. */
+static Expr* refine_substitute_values(const Expr* expr, const Expr* assum) {
+    Expr** rules = NULL; size_t n = 0, cap = 0;
+    refine_collect_value_rules(assum, &rules, &n, &cap);
+    if (n == 0) { free(rules); return NULL; }
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), rules, n);
+    free(rules);
+    Expr* ra[2] = { expr_copy((Expr*)expr), lst };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll), ra, 2));
+}
+
 /* ------------------------------------------------------------------------- */
 /* builtin_refine                                                            */
 /* ------------------------------------------------------------------------- */
@@ -862,6 +905,10 @@ Expr* builtin_refine(Expr* res) {
 
     Expr* result = NULL;
 
+    /* (0) Value assumptions x == c substitute outright. */
+    Expr* substituted = refine_substitute_values(expr, effective);
+    if (substituted) expr = substituted;
+
     /* (1) Predicate expression -> try to decide True/False. */
     const char* eh = head_name(expr);
     if (eh && (eh == SYM_Element || is_relational_head(eh))) {
@@ -877,6 +924,7 @@ Expr* builtin_refine(Expr* res) {
             expr_free(Aconj);
             assume_ctx_free(ctx);
             expr_free(effective);
+            if (substituted) return substituted;
             /* Steal the positional expr out of res (the evaluator frees res). */
             for (size_t i = 0; i < argc; i++) {
                 if (res->data.function.args[i] == expr) { res->data.function.args[i] = NULL; break; }
@@ -902,6 +950,7 @@ Expr* builtin_refine(Expr* res) {
     expr_free(Aconj);
     assume_ctx_free(ctx);
     expr_free(effective);
+    if (substituted) expr_free(substituted);
     return result;
 }
 

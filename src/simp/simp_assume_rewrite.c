@@ -1855,6 +1855,9 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Log[Power[%s, 2]] :> 2 Log[Abs[%s]]", x, x);
         /* Log[E^x] -> x for real x (E^x is a positive real). */
         SEP(); EMIT("Log[Power[E, %s]] :> %s", x, x);
+        /* Abs[x]^n -> x^n for real x and an even integer n (audit
+         * Simplify#1: Abs[x]^2 is x^2 on the reals). */
+        SEP(); EMIT("Power[Abs[%s], AssumeRules`n_Integer /; EvenQ[AssumeRules`n]] :> Power[%s, AssumeRules`n]", x, x);
     }
 
     /* Sin[n Pi] -> 0, Cos[n Pi] -> (-1)^n, Tan[n Pi] -> 0 for integer n.

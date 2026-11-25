@@ -62,10 +62,34 @@ static void test_wave3_arity_options(void) {
     audit_chk("Cancel#2", "Quiet[Check[Cancel[(x^2 - 1)/(x - 1), Foo -> 1], fired, Cancel::optx]]", "fired");
 }
 
+/* Wave 4 (G5): Apart with transcendental kernels, Together Trig option,
+ * Numerator/Denominator of bignum complex numbers, IrreduciblePolynomialQ
+ * over GF(p). */
+static void test_wave4_algebra(void) {
+    audit_chk("Apart#1", "Apart[Sin[x]/(x^2 - 1), x]", "Sin[x]/(2 (-1 + x)) - Sin[x]/(2 (1 + x))");
+    audit_chk("Apart#1", "Apart[1/(x^2 - 1) + Sin[x], x]", "1/(2 (-1 + x)) - 1/(2 (1 + x)) + Sin[x]");
+    audit_chk("Apart#1", "Apart[E^x/(x^2 - 1), x]", "E^x/(2 (-1 + x)) - E^x/(2 (1 + x))");
+    audit_chk("Together#1", "Together[Sin[x]/Cos[x] + 1, Trig -> True]", "Sec[x] (Cos[x] + Sin[x])");
+    audit_chk("Together#1", "Together[x + 1/x, Trig -> True]", "(1 + x^2)/x");
+    audit_chk("Together#1", "Together[x + 1/x, Trig -> False]", "(1 + x^2)/x");
+    audit_chk("Denominator#1", "Denominator[(10^30 + I)/7^25]", "1341068619663964900807");
+    audit_chk("Numerator#1", "Numerator[1/10^30 + I]", "1 + 1000000000000000000000000000000*I");
+    audit_chk("Numerator#1", "Numerator[1/2 + I/3]", "3 + 2*I");
+    audit_chk("Subresultants#1", "Subresultants[y[1]^2 + 1, y[1] + 2, y[1]]", "{5, 1}");
+    audit_chk("Subresultants#1", "Subresultants[Sin[x]^2 + 1, Sin[x] + 1, Sin[x]]", "{2, 1}");
+    audit_chk("AlgebraicNumberDenominator#1", "AlgebraicNumberDenominator[Root[#^5 - # - 1/7 &, 1]]", "7");
+    audit_chk("AlgebraicNumberDenominator#1", "AlgebraicNumberDenominator[Root[#^3 - 1/2 &, 1]]", "2");
+    audit_chk("AlgebraicNumberDenominator#1", "AlgebraicNumberDenominator[Root[7 #^5 - 7 # - 1 &, 1]]", "7");
+    audit_chk("MinimalPolynomial#2", "MinimalPolynomial[Root[#^2 - y &, 1], x]", "MinimalPolynomial[Root[#1^2 - y &, 1], x]");
+    audit_chk("IrreduciblePolynomialQ#2", "IrreduciblePolynomialQ[x^2 + 1, Modulus -> 2]", "False");
+    audit_chk("IrreduciblePolynomialQ#2", "IrreduciblePolynomialQ[x^2 + 1, Modulus -> 3]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_algebraicintegerq_high_degree);
     TEST(test_irreduciblepolynomialq_absolute);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_algebra);
     return audit_finish("audit_algebra");
 }

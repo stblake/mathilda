@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>        /* floor, ceil, HUGE_VAL: integer enumeration bounds */
 
 #include "attr.h"
 #include "expr.h"
@@ -40,6 +41,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "numeric.h"         /* numeric_machine_value, expr_is_numeric_quantity */
 #include "simp_internal.h"   /* is_real_constant_symbol: exclude Pi/E/... from inferred vars */
 
 /* ------------------------------------------------------------------ *
@@ -738,6 +740,454 @@ static Expr* reduce_fold_not_relations(const Expr* e, bool reals) {
     return out;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Fallbacks for statements the engines leave unevaluated (audit       *
+ *  Reduce#1, #2, #3, #5, #6).  Each runs only when reduce_impl         *
+ *  declined, so no answer the engines already give changes.            *
+ * ------------------------------------------------------------------ */
+
+/* Reduce[expr, vars (, dom)] evaluated; NULL when it stays unevaluated. */
+static Expr* rfb_reduce(Expr* expr, const Expr* vars, const char* dom) {
+    Expr* a[3]; size_t n = 0;
+    a[n++] = expr;
+    a[n++] = expr_copy((Expr*)vars);
+    if (dom) a[n++] = expr_new_symbol(dom);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce), a, n));
+    if (!r || is_head(r, SYM_Reduce)) { if (r) expr_free(r); return NULL; }
+    return r;
+}
+
+static Expr* rfb_eval2(const char* h, Expr* a, Expr* b) {
+    return eval_and_free(expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2));
+}
+
+/* The single symbol a variable spec names (x or {x}), else NULL. */
+static const Expr* rfb_single_var(const Expr* vars) {
+    if (vars->type == EXPR_SYMBOL) return vars;
+    if (is_head(vars, SYM_List) && vars->data.function.arg_count == 1 &&
+        vars->data.function.args[0]->type == EXPR_SYMBOL)
+        return vars->data.function.args[0];
+    return NULL;
+}
+
+static bool rfb_num(const Expr* e, double* out);
+
+/* (a) lhs != rhs in one variable over the complexes: the complement of the
+ * points lhs == rhs reduces to -- Reduce[x^2 != 1, x] is
+ * x != -1 && x != 1. */
+static Expr* rfb_unequal(const Expr* expr, const Expr* vars) {
+    if (!is_head(expr, SYM_Unequal) || expr->data.function.arg_count != 2) return NULL;
+    const Expr* x = rfb_single_var(vars);
+    if (!x) return NULL;
+    Expr* r = rfb_reduce(rfb_eval2("Equal", expr_copy(expr->data.function.args[0]),
+                                   expr_copy(expr->data.function.args[1])), vars, NULL);
+    if (!r) return NULL;
+    if (is_sym(r, SYM_True))  { expr_free(r); return expr_new_symbol(SYM_False); }
+    if (is_sym(r, SYM_False)) { expr_free(r); return expr_new_symbol(SYM_True); }
+    size_t n = is_head(r, SYM_Or) ? r->data.function.arg_count : 1;
+    Expr** parts = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        const Expr* q = is_head(r, SYM_Or) ? r->data.function.args[i] : r;
+        if (!is_head(q, SYM_Equal) || q->data.function.arg_count != 2 ||
+            !expr_eq(q->data.function.args[0], (Expr*)x) ||
+            reduce_contains_var(q->data.function.args[1], x)) {
+            for (size_t j = 0; j < i; j++) expr_free(parts[j]);
+            free(parts); expr_free(r);
+            return NULL;
+        }
+        parts[i] = expr_new_function(expr_new_symbol(SYM_Unequal),
+                       (Expr*[]){ expr_copy((Expr*)x), expr_copy(q->data.function.args[1]) }, 2);
+    }
+    expr_free(r);
+    Expr* out = (n == 1) ? parts[0] : expr_new_function(expr_new_symbol(SYM_And), parts, n);
+    free(parts);
+    return eval_and_free(out);
+}
+
+/* (b) a product equal to zero over the complexes: the union of its
+ * factors' zero sets -- Reduce[x y == 0, {x, y}] is x == 0 || y == 0. */
+static Expr* rfb_product_zero(const Expr* expr, const Expr* vars) {
+    if (!is_head(expr, SYM_Equal) || expr->data.function.arg_count != 2) return NULL;
+    Expr* diff = rfb_eval2("Plus", expr_copy(expr->data.function.args[0]),
+                           rfb_eval2("Times", expr_new_integer(-1),
+                                     expr_copy(expr->data.function.args[1])));
+    Expr* f = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), &diff, 1));
+    if (!is_head(f, SYM_Times)) { expr_free(f); return NULL; }
+    int nv = 0;
+    Expr** vl = collect_vars((Expr*)vars, &nv);
+    size_t n = f->data.function.arg_count, k = 0;
+    Expr** parts = malloc(n * sizeof(Expr*));
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++) {
+        Expr* fi = f->data.function.args[i];
+        if (is_head(fi, SYM_Power) && fi->data.function.args[1]->type == EXPR_INTEGER &&
+            fi->data.function.args[1]->data.integer > 0)
+            fi = fi->data.function.args[0];
+        bool dep = false;
+        for (int v = 0; v < nv && !dep; v++) dep = reduce_contains_var(fi, vl[v]);
+        if (!dep) continue;                    /* a constant factor (nonzero) */
+        Expr* ri = rfb_reduce(rfb_eval2("Equal", expr_copy(fi), expr_new_integer(0)), vars, NULL);
+        if (!ri) { ok = false; break; }
+        parts[k++] = ri;
+    }
+    free(vl);
+    expr_free(f);
+    if (!ok || k < 2) {
+        for (size_t i = 0; i < k; i++) expr_free(parts[i]);
+        free(parts);
+        return NULL;
+    }
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Or), parts, k));
+    free(parts);
+    return out;
+}
+
+/* (c) a linear inequality c x + d REL 0 over the reals whose coefficient c
+ * has an unknown sign: split on the sign of c -- Reduce[a x > 1, x, Reals]
+ * is (a < 0 && x < 1/a) || (a > 0 && x > 1/a). */
+static Expr* rfb_linear_param_ineq(const Expr* expr, const Expr* vars) {
+    if (!(is_head(expr, SYM_Less) || is_head(expr, SYM_LessEqual) ||
+          is_head(expr, SYM_Greater) || is_head(expr, SYM_GreaterEqual)) ||
+        expr->data.function.arg_count != 2) return NULL;
+    const Expr* x = rfb_single_var(vars);
+    if (!x) return NULL;
+    const char* rel = expr->data.function.head->data.symbol.name;
+    const char* flip = rel == SYM_Less ? SYM_Greater : rel == SYM_Greater ? SYM_Less
+                     : rel == SYM_LessEqual ? SYM_GreaterEqual : SYM_LessEqual;
+    Expr* p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                  (Expr*[]){ rfb_eval2("Plus", expr_copy(expr->data.function.args[0]),
+                                rfb_eval2("Times", expr_new_integer(-1),
+                                          expr_copy(expr->data.function.args[1]))) }, 1));
+    Expr* deg = rfb_eval2("Exponent", expr_copy(p), expr_copy((Expr*)x));
+    bool lin = deg->type == EXPR_INTEGER && deg->data.integer == 1;
+    expr_free(deg);
+    if (!lin) { expr_free(p); return NULL; }
+    Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                  (Expr*[]){ expr_copy(p), expr_copy((Expr*)x), expr_new_integer(1) }, 3));
+    Expr* d = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                  (Expr*[]){ expr_copy(p), expr_copy((Expr*)x), expr_new_integer(0) }, 3));
+    expr_free(p);
+    Expr* out = NULL;
+    double cv;
+    if (!reduce_contains_var(c, x) && !reduce_contains_var(d, x) &&
+        expr_is_numeric_quantity(c) && rfb_num(c, &cv) && cv != 0.0) {
+        /* A numeric coefficient with a parametric constant term (x > a):
+         * the bound is -d/c, the relation flipped when c < 0. */
+        Expr* b = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                      (Expr*[]){ rfb_eval2("Times", expr_new_integer(-1),
+                                    rfb_eval2("Times", expr_copy(d),
+                                              rfb_eval2("Power", expr_copy(c),
+                                                        expr_new_integer(-1)))) }, 1));
+        out = eval_and_free(expr_new_function(expr_new_symbol(cv > 0 ? rel : flip),
+                  (Expr*[]){ expr_copy((Expr*)x), b }, 2));
+    } else if (!reduce_contains_var(c, x) && !reduce_contains_var(d, x) &&
+        !expr_is_numeric_quantity(c)) {
+        /* c == 0 leaves d REL 0, which must be decided outright. */
+        Expr* z = eval_and_free(expr_new_function(expr_new_symbol(rel),
+                      (Expr*[]){ expr_copy(d), expr_new_integer(0) }, 2));
+        if (is_sym(z, SYM_True) || is_sym(z, SYM_False)) {
+            Expr* b = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                          (Expr*[]){ rfb_eval2("Times", expr_new_integer(-1),
+                                        rfb_eval2("Times", expr_copy(d),
+                                                  rfb_eval2("Power", expr_copy(c),
+                                                            expr_new_integer(-1)))) }, 1));
+            Expr* neg = expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Less), (Expr*[]){ expr_copy(c), expr_new_integer(0) }, 2),
+                expr_new_function(expr_new_symbol(flip), (Expr*[]){ expr_copy((Expr*)x), expr_copy(b) }, 2) }, 2);
+            Expr* pos = expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Greater), (Expr*[]){ expr_copy(c), expr_new_integer(0) }, 2),
+                expr_new_function(expr_new_symbol(rel), (Expr*[]){ expr_copy((Expr*)x), expr_copy(b) }, 2) }, 2);
+            Expr* br[3]; size_t nb = 0;
+            br[nb++] = neg;
+            if (is_sym(z, SYM_True))
+                br[nb++] = expr_new_function(expr_new_symbol(SYM_Equal),
+                               (Expr*[]){ expr_copy(c), expr_new_integer(0) }, 2);
+            br[nb++] = pos;
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Or), br, nb));
+            expr_free(b);
+        }
+        expr_free(z);
+    }
+    expr_free(c); expr_free(d);
+    return out;
+}
+
+/* (e) a quadratic c2 x^2 + c1 x + c0 == 0 over the reals with a numeric
+ * c2 and parametric c1, c0: split on the sign of the discriminant --
+ * Reduce[x^2 + a == 0, x, Reals] is
+ * (a < 0 && (x == -Sqrt[-a] || x == Sqrt[-a])) || (a == 0 && x == 0)
+ * (audit Reduce#4).  The conditions on the parameters are themselves
+ * reduced; NULL when either does not reduce. */
+static Expr* rfb_param_quadratic(const Expr* expr, const Expr* vars) {
+    if (!is_head(expr, SYM_Equal) || expr->data.function.arg_count != 2) return NULL;
+    const Expr* x = rfb_single_var(vars);
+    if (!x) return NULL;
+    Expr* p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                  (Expr*[]){ rfb_eval2("Plus", expr_copy(expr->data.function.args[0]),
+                                rfb_eval2("Times", expr_new_integer(-1),
+                                          expr_copy(expr->data.function.args[1]))) }, 1));
+    Expr* deg = rfb_eval2("Exponent", expr_copy(p), expr_copy((Expr*)x));
+    bool quad = deg->type == EXPR_INTEGER && deg->data.integer == 2;
+    expr_free(deg);
+    if (!quad) { expr_free(p); return NULL; }
+    Expr* c[3];
+    for (int k = 0; k < 3; k++)
+        c[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                   (Expr*[]){ expr_copy(p), expr_copy((Expr*)x), expr_new_integer(k) }, 3));
+    expr_free(p);
+    double c2v;
+    Expr* out = NULL;
+    bool ok = !reduce_contains_var(c[0], x) && !reduce_contains_var(c[1], x) &&
+              expr_is_numeric_quantity(c[2]) && rfb_num(c[2], &c2v) && c2v != 0.0 &&
+              !(expr_is_numeric_quantity(c[0]) && expr_is_numeric_quantity(c[1]));
+    if (ok) {
+        /* the parameters: the free symbols of c1, c0 */
+        Expr* pv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                       (Expr*[]){ rfb_eval2("Plus", expr_copy(c[0]), expr_copy(c[1])) }, 1));
+        Expr* disc = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+            (Expr*[]){ rfb_eval2("Plus", rfb_eval2("Power", expr_copy(c[1]), expr_new_integer(2)),
+                                 rfb_eval2("Times", expr_new_integer(-4),
+                                           rfb_eval2("Times", expr_copy(c[2]), expr_copy(c[0])))) }, 1));
+        Expr* cpos = rfb_reduce(rfb_eval2("Greater", expr_copy(disc), expr_new_integer(0)), pv, SYM_Reals);
+        Expr* czero = rfb_reduce(rfb_eval2("Equal", expr_copy(disc), expr_new_integer(0)), pv, SYM_Reals);
+        if (cpos && czero) {
+            /* the two roots, the smaller first (c2 > 0: minus the root) */
+            Expr* sq = rfb_eval2("Power", expr_copy(disc),
+                                 expr_new_function(expr_new_symbol(SYM_Rational),
+                                     (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2));
+            Expr* inv2a = rfb_eval2("Power", rfb_eval2("Times", expr_new_integer(2), expr_copy(c[2])),
+                                    expr_new_integer(-1));
+            Expr* r[2];
+            for (int k = 0; k < 2; k++) {
+                int sgn = ((k == 0) ? -1 : 1) * (c2v > 0 ? 1 : -1);
+                r[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                    (Expr*[]){ rfb_eval2("Times", expr_copy(inv2a),
+                                   rfb_eval2("Plus", rfb_eval2("Times", expr_new_integer(-1), expr_copy(c[1])),
+                                             rfb_eval2("Times", expr_new_integer(sgn), expr_copy(sq)))) }, 1));
+            }
+            Expr* r0 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                (Expr*[]){ rfb_eval2("Times", expr_new_integer(-1),
+                               rfb_eval2("Times", expr_copy(c[1]), expr_copy(inv2a))) }, 1));
+            Expr* two = expr_new_function(expr_new_symbol(SYM_Or), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ expr_copy((Expr*)x), r[0] }, 2),
+                expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ expr_copy((Expr*)x), r[1] }, 2) }, 2);
+            Expr* b1 = expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){ cpos, two }, 2);
+            Expr* b2 = expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){ czero,
+                expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ expr_copy((Expr*)x), r0 }, 2) }, 2);
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Or), (Expr*[]){ b1, b2 }, 2));
+            cpos = czero = NULL;
+            expr_free(sq); expr_free(inv2a);
+        }
+        if (cpos) expr_free(cpos);
+        if (czero) expr_free(czero);
+        expr_free(disc); expr_free(pv);
+    }
+    for (int k = 0; k < 3; k++) expr_free(c[k]);
+    return out;
+}
+
+/* The machine value of a real numeric quantity (-Sqrt[2], 7/2, Pi). */
+static bool rfb_num(const Expr* e, double* out) {
+    if (numeric_machine_value(e, out)) return true;
+    if (!expr_is_numeric_quantity(e)) return false;
+    Expr* n = numericalize_machine_unplanned(e);
+    bool ok = n && n->type == EXPR_REAL && isfinite(n->data.real);
+    if (ok) *out = n->data.real;
+    if (n) expr_free(n);
+    return ok;
+}
+
+/* Hull [lo, hi] of the real set a Reduce answer in x describes: a chain
+ * lo <= x <= hi, x == c, one-sided bounds intersected by And, and the hull
+ * of an Or.  False when some part is not a finite bound on x. */
+static bool rfb_bounds(const Expr* b, const Expr* x, double* lo, double* hi) {
+    double v;
+    if (is_head(b, SYM_Or)) {
+        double L = HUGE_VAL, H = -HUGE_VAL;
+        for (size_t i = 0; i < b->data.function.arg_count; i++) {
+            double l2, h2;
+            if (!rfb_bounds(b->data.function.args[i], x, &l2, &h2)) return false;
+            if (l2 < L) L = l2;
+            if (h2 > H) H = h2;
+        }
+        *lo = L; *hi = H;
+        return b->data.function.arg_count > 0;
+    }
+    if (is_head(b, SYM_And)) {
+        double L = -HUGE_VAL, H = HUGE_VAL;
+        bool any = false;
+        for (size_t i = 0; i < b->data.function.arg_count; i++) {
+            const Expr* q = b->data.function.args[i];
+            if (!reduce_contains_var(q, x)) continue;
+            double l2 = -HUGE_VAL, h2 = HUGE_VAL;
+            /* a one-sided bound is fine inside an And */
+            if (q->type == EXPR_FUNCTION && q->data.function.arg_count == 2 &&
+                (is_head(q, SYM_Less) || is_head(q, SYM_LessEqual) ||
+                 is_head(q, SYM_Greater) || is_head(q, SYM_GreaterEqual))) {
+                bool upper = is_head(q, SYM_Less) || is_head(q, SYM_LessEqual);
+                const Expr* l = q->data.function.args[0];
+                const Expr* r = q->data.function.args[1];
+                if (expr_eq((Expr*)l, (Expr*)x) && rfb_num(r, &v)) {
+                    if (upper) h2 = v; else l2 = v;
+                } else if (expr_eq((Expr*)r, (Expr*)x) && rfb_num(l, &v)) {
+                    if (upper) l2 = v; else h2 = v;
+                } else return false;
+            } else if (!rfb_bounds(q, x, &l2, &h2)) return false;
+            if (l2 > L) L = l2;
+            if (h2 < H) H = h2;
+            any = true;
+        }
+        *lo = L; *hi = H;
+        return any && L > -HUGE_VAL && H < HUGE_VAL;
+    }
+    if (is_head(b, SYM_Equal) && b->data.function.arg_count == 2 &&
+        expr_eq(b->data.function.args[0], (Expr*)x) &&
+        rfb_num(b->data.function.args[1], &v)) {
+        *lo = *hi = v; return true;
+    }
+    if ((is_head(b, SYM_Less) || is_head(b, SYM_LessEqual)) && b->data.function.arg_count == 3 &&
+        expr_eq(b->data.function.args[1], (Expr*)x)) {
+        double l, h;
+        if (!rfb_num(b->data.function.args[0], &l) ||
+            !rfb_num(b->data.function.args[2], &h)) return false;
+        *lo = l; *hi = h; return true;
+    }
+    if (is_head(b, SYM_Inequality) && b->data.function.arg_count == 5 &&
+        expr_eq(b->data.function.args[2], (Expr*)x)) {
+        double l, h;
+        if (!rfb_num(b->data.function.args[0], &l) ||
+            !rfb_num(b->data.function.args[4], &h)) return false;
+        *lo = l; *hi = h; return true;
+    }
+    return false;
+}
+
+#define RFB_INT_MAX_POINTS 20000
+
+/* The integer points of `stmt` in vars[k..n), each a conjunction
+ * x1 == c1 && ...; appended to *out.  The range of vars[k] is the real hull
+ * of Exists[rest, stmt] (or, when that stays unevaluated, of the plain
+ * inequality conjuncts -- a superset); every candidate is checked against
+ * the full statement.  False when a range cannot be bounded or a
+ * substituted statement is not decided. */
+static bool rfb_int_points(Expr* stmt, Expr** vl, int k, int nv, Expr** fixed,
+                           Expr*** out, size_t* nout, size_t* cap, size_t* budget) {
+    if (k == nv) {
+        Expr* t = evaluate(stmt);
+        bool tv = is_sym(t, SYM_True), fv = is_sym(t, SYM_False);
+        expr_free(t);
+        if (!tv && !fv) return false;
+        if (tv) {
+            Expr** eqs = malloc((size_t)nv * sizeof(Expr*));
+            for (int i = 0; i < nv; i++)
+                eqs[i] = expr_new_function(expr_new_symbol(SYM_Equal),
+                             (Expr*[]){ expr_copy(vl[i]), expr_copy(fixed[i]) }, 2);
+            Expr* pt = (nv == 1) ? eqs[0] : expr_new_function(expr_new_symbol(SYM_And), eqs, (size_t)nv);
+            free(eqs);
+            if (*nout == *cap) { *cap = *cap ? 2 * *cap : 16; *out = realloc(*out, *cap * sizeof(Expr*)); }
+            (*out)[(*nout)++] = pt;
+        }
+        return true;
+    }
+    Expr* x = vl[k];
+    Expr* body = expr_copy(stmt);
+    if (k + 1 < nv) {
+        Expr** rest = malloc((size_t)(nv - k - 1) * sizeof(Expr*));
+        for (int i = k + 1; i < nv; i++) rest[i - k - 1] = expr_copy(vl[i]);
+        Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rest, (size_t)(nv - k - 1));
+        free(rest);
+        body = expr_new_function(expr_new_symbol(SYM_Exists), (Expr*[]){ rl, body }, 2);
+    }
+    Expr* b = rfb_reduce(body, x, SYM_Reals);
+    if (!b && is_head(stmt, SYM_And)) {
+        /* bounds from the inequality conjuncts alone */
+        size_t m = stmt->data.function.arg_count, j = 0;
+        Expr** ineq = malloc(m * sizeof(Expr*));
+        for (size_t i = 0; i < m; i++) {
+            Expr* q = stmt->data.function.args[i];
+            if (is_head(q, SYM_Less) || is_head(q, SYM_LessEqual) || is_head(q, SYM_Greater) ||
+                is_head(q, SYM_GreaterEqual) || is_head(q, SYM_Inequality))
+                ineq[j++] = expr_copy(q);
+        }
+        if (j > 0 && k + 1 == nv) {
+            Expr* conj = (j == 1) ? ineq[0] : expr_new_function(expr_new_symbol(SYM_And), ineq, j);
+            b = rfb_reduce(conj, x, SYM_Reals);
+        } else {
+            for (size_t i = 0; i < j; i++) expr_free(ineq[i]);
+        }
+        free(ineq);
+    }
+    if (!b) return false;
+    if (is_sym(b, SYM_False)) { expr_free(b); return true; }
+    double lo, hi;
+    bool bounded = rfb_bounds(b, x, &lo, &hi);
+    expr_free(b);
+    if (!bounded || !(hi - lo < (double)RFB_INT_MAX_POINTS)) return false;
+    double flo = floor(lo), fhi = ceil(hi);
+    for (double kv = flo; kv <= fhi; kv += 1.0) {
+        if (*budget == 0) return false;
+        (*budget)--;
+        Expr* kval = expr_new_integer((int64_t)kv);
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                         (Expr*[]){ expr_copy(x), expr_copy(kval) }, 2);
+        Expr* sk = rfb_eval2("ReplaceAll", expr_copy(stmt), rule);
+        fixed[k] = kval;
+        bool ok = rfb_int_points(sk, vl, k + 1, nv, fixed, out, nout, cap, budget);
+        expr_free(sk);
+        expr_free(kval);
+        fixed[k] = NULL;
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/* (d) a bounded statement over the integers: enumerate its lattice points --
+ * Reduce[Mod[x, 3] == 1 && 0 < x < 10, x, Integers] is
+ * x == 1 || x == 4 || x == 7. */
+static Expr* rfb_integer_enumerate(const Expr* expr, const Expr* vars) {
+    int nv = 0;
+    Expr** vl = collect_vars((Expr*)vars, &nv);
+    if (!vl || nv < 1 || nv > 4) { free(vl); return NULL; }
+    for (int i = 0; i < nv; i++) if (vl[i]->type != EXPR_SYMBOL) { free(vl); return NULL; }
+    Expr** fixed = calloc((size_t)nv, sizeof(Expr*));
+    Expr** pts = NULL; size_t np = 0, cap = 0, budget = RFB_INT_MAX_POINTS;
+    bool ok = rfb_int_points((Expr*)expr, vl, 0, nv, fixed, &pts, &np, &cap, &budget);
+    free(fixed); free(vl);
+    Expr* out = NULL;
+    if (ok) {
+        if (np == 0) out = expr_new_symbol(SYM_False);
+        else if (np == 1) { out = pts[0]; np = 0; }
+        else { out = expr_new_function(expr_new_symbol(SYM_Or), pts, np); np = 0; }
+    }
+    for (size_t i = 0; i < np; i++) expr_free(pts[i]);
+    free(pts);
+    return out;
+}
+
+static Expr* reduce_fallbacks(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+    Expr* expr = res->data.function.args[0];
+    Expr* vars = res->data.function.args[1];
+    const Expr* dom = argc == 3 ? res->data.function.args[2] : NULL;
+    if (dom && dom->type != EXPR_SYMBOL) return NULL;
+    if (!reduce_valid_vars(vars)) return NULL;
+    const char* d = dom ? dom->data.symbol.name : NULL;
+    if (!d || d == SYM_Complexes) {
+        Expr* r = rfb_unequal(expr, vars);
+        if (!r) r = rfb_product_zero(expr, vars);
+        return r;
+    }
+    if (d == SYM_Reals) {
+        Expr* r = rfb_linear_param_ineq(expr, vars);
+        if (!r) r = rfb_param_quadratic(expr, vars);
+        return r;
+    }
+    if (d == SYM_Integers) return rfb_integer_enumerate(expr, vars);
+    return NULL;
+}
+
 Expr* builtin_reduce(Expr* res) {
     if (res && res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1) {
         bool reals = false;
@@ -750,9 +1200,25 @@ Expr* builtin_reduce(Expr* res) {
             expr_free(res->data.function.args[0]);
             res->data.function.args[0] = folded;
         }
+        /* A quantifier inside And/Or/Not is eliminated first, then the
+         * quantifier-free statement is reduced (audit ForAll#1). */
+        {
+            Expr* d = NULL;
+            for (size_t i = 2; i < res->data.function.arg_count; i++)
+                if (res->data.function.args[i]->type == EXPR_SYMBOL &&
+                    (res->data.function.args[i]->data.symbol.name == SYM_Reals ||
+                     res->data.function.args[i]->data.symbol.name == SYM_Complexes))
+                    d = res->data.function.args[i];
+            Expr* q = reduce_qe_eliminate_inner(res->data.function.args[0], d);
+            if (q) {
+                expr_free(res->data.function.args[0]);
+                res->data.function.args[0] = q;
+            }
+        }
     }
     mth_msg_ifun_suppress_push();
     Expr* out = reduce_impl(res);
+    if (!out) out = reduce_fallbacks(res);
     mth_msg_ifun_suppress_pop();
     return out;
 }

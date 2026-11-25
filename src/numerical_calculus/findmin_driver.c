@@ -335,6 +335,14 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         if (!fm_collect_constraints(cons, vars, n, boxes, &gens, &ngens, &gcap,
                                     NULL, NULL, NULL))
             goto cleanup;
+        /* Contradictory bounds (x >= 1 && x <= 0): no point satisfies the
+         * constraints.  Say so and stay unevaluated -- the solver used to hand
+         * back a point violating them (audit FindMinimum#3). */
+        for (size_t i = 0; i < n; i++)
+            if (boxes[i].has_lo && boxes[i].has_hi && boxes[i].lo > boxes[i].hi) {
+                fm_warn(fn_name, "nsol", "There are no points that satisfy the constraints.");
+                goto cleanup;
+            }
         /* Best-effort symbolic gradient of each constraint expression. The
          * penalty solver needs ∇(f + μ·Σ penalty) — using a stale ∇f alone
          * gives the inner BFGS/CG an inconsistent value/gradient pair and
@@ -497,6 +505,36 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         if (opts.acc_goal_digits  > 8.0) opts.acc_goal_digits  = 8.0;
         if (opts.prec_goal_digits > 8.0) opts.prec_goal_digits = 8.0;
     }
+#endif
+    /* An objective free of every variable is its own minimum at the start:
+     * FindMinimum[5, {x, 1}] is {5., {x -> 1.}}.  The line search otherwise
+     * reads the flat objective as a descent direction without end and walked
+     * x to ~3*10^19 (audit FindMinimum#1).  Machine precision, no general
+     * constraint (a constraint can still exclude the start). */
+    if (!has_general_cons
+#ifdef USE_MPFR
+        && !use_mpfr
+#endif
+        ) {
+        bool constant = true;
+        for (size_t i = 0; i < n && constant; i++)
+            if (nm_expr_contains_symbol(f_raw, vars[i]->data.symbol.name)) constant = false;
+        double cv;
+        if (constant) {
+            Expr* fv = eval_and_free(expr_copy(f_raw));
+            bool num = fv && fm_expr_to_double_real(fv, &cv) && isfinite(cv);
+            if (fv) expr_free(fv);
+            if (num) {
+                for (size_t i = 0; i < n; i++) {
+                    if (boxes[i].has_lo && x_vec[i] < boxes[i].lo) x_vec[i] = boxes[i].lo;
+                    if (boxes[i].has_hi && x_vec[i] > boxes[i].hi) x_vec[i] = boxes[i].hi;
+                }
+                fx_min = cv;
+                goto run_done;
+            }
+        }
+    }
+#ifdef USE_MPFR
     if (use_mpfr) {
         mpfr_init2(fx_min_mpfr, opts.wp_bits);
         x_vec_mpfr = fm_mpfr_array(n, opts.wp_bits);

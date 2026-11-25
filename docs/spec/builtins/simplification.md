@@ -7,6 +7,9 @@ the assumption machinery they consult. The core entry point is `Simplify`;
 and `$SimplifyDebug` tune or trace the search.
 
 ## Simplify
+
+**Audit wave 4.** A relation the assumptions settle is decided as Refine decides it (`Simplify[x > 0, x > 1]` is True); `Re`, `Im`, `Conjugate`, `Abs` and `Sign` get the structural assumption rewrites (`Simplify[Abs[x]^2, x in Reals]` is `x^2`); a pure Boolean expression in at most 8 atoms is minimised by its truth table (`Simplify[(a && b) || (a && !b)]` is a).
+
 Performs a sequence of algebraic and other transformations on an expression and
 returns the simplest form it finds.
 
@@ -760,6 +763,9 @@ Out[5]= $Failed
 ```
 
 ## SimplifyCount
+
+**Audit wave 4.** Bignum digit counts are exact (`SimplifyCount[10^20 - 1]` is 20).
+
 The complexity measure used by `Simplify` when no `ComplexityFunction` option (or
 `ComplexityFunction -> Automatic`) is given.
 
@@ -820,6 +826,9 @@ Out[2]= Cos[x]^2 + Sin[x]^2
 ```
 
 ## Refine
+
+**Audit wave 4.** An assumption `x == c` with c a numeric quantity substitutes c for x (`Refine[Sqrt[x^2], x == -3]` is 3).
+
 Gives the form an expression would take if its symbols satisfied the assumptions.
 
 - `Refine[expr, assum]` — gives the form of `expr` obtained if the symbols in it
@@ -940,6 +949,9 @@ Out[1]= True
 ```
 
 ## Element
+
+**Audit wave 4.** An approximate number is not in Integers, Rationals, Algebraics or Primes (`Element[2., Integers]` is False).
+
 Tests domain membership, consulting the current assumptions.
 
 - `Element[x, dom]` — returns `True` if `x` is provably an element of `dom` under

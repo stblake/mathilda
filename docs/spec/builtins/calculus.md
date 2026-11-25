@@ -166,6 +166,9 @@ Out[13]= 2 x + 2 y D[y, x, NonConstants -> {y}] == 0
 
 ## Dt
 
+**Audit wave 4.** A number or string as the variable is `Dt::ivar` and stays unevaluated (`Dt[x, 1]` recursed to the recursion limit). `Dt[s, f[x]]` (a compound variable) and `Dt[s, {x, n}]` are irreducible forms; in a total derivative `Dt[s, x]` differentiates to `Dt[s, {x, 2}]` (`Dt[x y, {x, 2}]` is `2 Dt[y, x] + x Dt[y, {x, 2}]`).
+
+
 Total derivative.
 - `Dt[f]` -- total derivative of `f`. Numeric literals and the
   distinguished constants (`Pi`, `E`, `I`, `Infinity`,
@@ -207,6 +210,9 @@ Out[5]= 2
 ```
 
 ## Derivative
+
+**Audit wave 4.** `Derivative[0, ..., 0][f]` is f, and `Derivative[n..][Derivative[k..][f]]` merges to `Derivative[n + k..][f]`.
+
 
 Higher-order derivative operator; represents the symbolic object
 `Derivative[n1, ..., nk][f]` (the mixed `(n1, ..., nk)`-th partial
@@ -309,6 +315,9 @@ Divergence / contracted covariant derivative.
 
 ### Curl
 
+**Audit wave 4.** The curl of a scalar field is the rank n - 1 tensor `eps[i1, ..., j] D[f, x_j]`: `Curl[f, {x, y}]` is `{D[f, y], -D[f, x]}`.
+
+
 Curl / rotational.
 - `Curl[{f1, f2}, {x1, x2}]` -- the scalar `D[f2, x1] - D[f1, x2]`.
 - `Curl[{f1, f2, f3}, {x1, x2, x3}]` -- the vector curl
@@ -354,6 +363,9 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
 ```
 
 ## Limit
+
+**Audit wave 4.** One-sided limits of `Sign`, `UnitStep` and `HeavisideTheta` at a jump are the head at the sign of the argument on that side (`Limit[UnitStep[x], x -> 0, Direction -> "FromBelow"]` is 0).
+
 
 `Limit[f, x -> a]` finds the limiting value of `f` as `x` approaches `a`.
 `Limit[f, {x1 -> a1, ...}]` is the iterated (rightmost-first) limit and
@@ -862,6 +874,9 @@ ratios, which the Stirling/MRV machinery expands:
 
 ## Residue
 
+**Audit wave 4.** The residue of an expression free of the variable is 0.
+
+
 `Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity
 `z = z0` — the coefficient of `(z - z0)^-1` in the Laurent expansion of `f`
 (`src/calculus/residue.c`). Attribute: `Protected`. The numerical counterpart is
@@ -1315,6 +1330,9 @@ c0 Exp[Σ θ_m(t) x^m]. The family reduces the PDE to an ODE in t.
   Gaussians, Lamb–Oseen, Taylor–Green, Stokes I/II.
 
 ## Integrate (rational-function integration, Phase 1-8d)
+
+**Audit wave 4.** `GenerateConditions -> False` drops the condition of a `ConditionalExpression` answer (`Integrate[E^(-a x), {x, 0, Infinity}, GenerateConditions -> False]` is `1/a`); `True`/`Automatic` keep the default. The CRC table entries for `ArcCsch[a x]`, `x ArcCsch[a x]`, `x^n ArcCsch[a x]` and `ArcCsch[a x]/x^2` now hold for a x < 0 too (they were correct for a x > 0 only).
+
 
 `Integrate[f, x]` is the public entry point for the rational-function
 integrator implemented in `src/calculus/integrate.c` (System dispatcher) and
@@ -5763,6 +5781,9 @@ Out[1]= {1 + x^4, 2 x^3, 2}
 
 ## Sum
 
+**Audit wave 4.** A sum from -Infinity to a finite bound is reflected (`Sum[1/i^2, {i, -Infinity, -1}]` is `Pi^2/6`), and the iterator is shadowed while the symbolic stages run, so a global value of it (`i = 5`) no longer leaks into `Sum[i, {i, n}]`. `DifferenceDelta[f, {i, n}]` and `{i, n, h}` give the n-th forward difference with step h.
+
+
 Definite, indefinite and symbolic summation.  Implemented natively in C
 under `src/sum/`: a dispatcher (`sum.c`) plus one file per algorithm,
 each algorithm also exposed as a context-qualified builtin
@@ -6436,6 +6457,9 @@ products whose roots are all real: Wallis `Product[4k^2/(4k^2-1), {k, 1, Infinit
 
 ## FindRoot
 
+**Audit wave 4.** `FindRoot[eqns, {x, x0}, {y, y0}, ...]` takes the variable specs as separate arguments.
+
+
 Iterative numerical root finder.  Implemented natively in C in
 `src/numerical_roots/findroot.c`.  Has `HoldAll, Protected` attributes and uses
 `Block`-style local binding of the search variables so the user's
@@ -6683,6 +6707,9 @@ Out[8]= {x -> 1.0}
 
 ## Minimize / Maximize
 
+**Audit wave 4.** `Minimize[{f}, x]` and `Minimize[{f, True}, x]` are the unconstrained problem; `Minimize[{f, False}, x]` is `Minimize::infeas` with `{Infinity, {x -> Indeterminate}}` (`-Infinity` for `Maximize`).
+
+
 `Minimize[f, x]`, `Minimize[f, {x, y, ...}]`, `Minimize[{f, cons}, vars]` and
 `Minimize[..., dom]` find an **exact global** optimum of `f`, the symbolic
 counterpart to `NMinimize`/`NMaximize`. Attributes: `Protected` (not `HoldAll`,
@@ -6895,3 +6922,7 @@ Out[9]= {-0.9, {x -> 0.6}}
 In[10]:= Minimize[(x y - 3)^2 + 1, {x, y}]   (* flat valley along x y == 3 *)
 Out[10]= {1, {x -> -1, y -> -3}}
 ```
+
+## Audit wave 4 notes
+
+- **PDEClassify.** A third- or higher-order equation is declined (unevaluated); the variables may be listed in any order.

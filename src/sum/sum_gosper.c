@@ -293,6 +293,18 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
                 bool hit = false;
                 for (int k = 0; lhs && k <= d && !hit; k++) hit = expr_eq(lhs, csym[k]);
                 coeffs_only = hit;
+                /* A coefficient over a symbolic denominator (-1/n) is valid
+                 * for generic parameter values only: the antidifference then
+                 * fails where the denominator vanishes (Sum[(-1)^k
+                 * Binomial[n, k], {k, 0, n}] read 0 at n = 0).  Decline. */
+                if (coeffs_only) {
+                    Expr* ta[1] = { expr_copy(rl->data.function.args[1]) };
+                    Expr* tg = sum_eval("Together", ta, 1);
+                    Expr* da[1] = { tg };
+                    Expr* den = sum_eval("Denominator", da, 1);
+                    if (!expr_is_numeric_like(den)) coeffs_only = false;
+                    expr_free(den);
+                }
             }
             if (coeffs_only
                 && rules->data.function.arg_count >= 1) {
@@ -390,6 +402,40 @@ Expr* builtin_differencedelta(Expr* res) {
         return NULL;
     Expr* f   = res->data.function.args[0];
     Expr* var = res->data.function.args[1];
+    /* DifferenceDelta[f, {i, n}] and {i, n, h}: the n-th forward difference
+     * with step h (default 1), Delta applied n times (audit
+     * DifferenceDelta#1): DifferenceDelta[i^3, {i, 2}] is 6 + 6 i. */
+    if (var->type == EXPR_FUNCTION && var->data.function.head->type == EXPR_SYMBOL &&
+        var->data.function.head->data.symbol.name == SYM_List &&
+        (var->data.function.arg_count == 2 || var->data.function.arg_count == 3) &&
+        var->data.function.args[0]->type == EXPR_SYMBOL &&
+        var->data.function.args[1]->type == EXPR_INTEGER &&
+        var->data.function.args[1]->data.integer >= 0 &&
+        var->data.function.args[1]->data.integer <= 1000) {
+        Expr* v = var->data.function.args[0];
+        Expr* h = (var->data.function.arg_count == 3) ? var->data.function.args[2] : NULL;
+        int64_t n = var->data.function.args[1]->data.integer;
+        Expr* cur = expr_copy(f);
+        for (int64_t k = 0; k < n; k++) {
+            Expr* sh;
+            if (h) {
+                Expr* step = expr_new_function(expr_new_symbol(SYM_Plus),
+                                 (Expr*[]){ expr_copy(v), expr_copy(h) }, 2);
+                Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                                 (Expr*[]){ expr_copy(v), step }, 2);
+                Expr* ra[2] = { expr_copy(cur), rule };
+                sh = sum_eval("ReplaceAll", ra, 2);
+            } else {
+                sh = shift_var(cur, v, 1);
+            }
+            Expr* d = sum_sub(sh, cur);
+            expr_free(sh);
+            expr_free(cur);
+            Expr* ea[1] = { d };
+            cur = sum_eval("Expand", ea, 1);
+        }
+        return cur;
+    }
     if (var->type != EXPR_SYMBOL) return NULL;
 
     Expr* shifted = shift_var(f, var, 1);

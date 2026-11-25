@@ -43,6 +43,8 @@
  *  Small Expr helpers                                                 *
  * ------------------------------------------------------------------ */
 
+static bool is_container(const Expr* c);   /* x1 | x2 or {x1, x2} */
+
 static bool is_head_sym(const Expr* e, const char* s) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
@@ -89,8 +91,10 @@ static Expr* logical_negate(const Expr* d) {
             if (h == SYM_GreaterEqual) return relhead_swap(d, SYM_Less);
             if (h == SYM_Greater)      return relhead_swap(d, SYM_LessEqual);
             if (h == SYM_LessEqual)    return relhead_swap(d, SYM_Greater);
-            if (h == SYM_Element)      return relhead_swap(d, SYM_NotElement);
-            if (h == SYM_NotElement)   return relhead_swap(d, SYM_Element);
+            /* a container (x1 | x2, {x1, x2}) does not flip: !Element[x1 | x2]
+             * is "some xi is not in dom", NotElement[x1 | x2] "none is" */
+            if (h == SYM_Element && !is_container(argn(d, 0)))    return relhead_swap(d, SYM_NotElement);
+            if (h == SYM_NotElement && !is_container(argn(d, 0))) return relhead_swap(d, SYM_Element);
         }
     }
     return wrap_not(d);
@@ -370,9 +374,37 @@ static Expr* dnf_to_expr(const Dnf* d) {
  *  Builtins                                                           *
  * ------------------------------------------------------------------ */
 
+/* Nand[a, ...] -> !(a && ...), Nor -> !(a || ...), Xnor -> !Xor[...]: the
+ * negated connectives in the terms the DNF engine expands (audit
+ * LogicalExpand#1; they were opaque atoms).  Fresh tree. */
+static Expr* le_desugar(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = le_desugar(e->data.function.args[i]);
+    const Expr* h = e->data.function.head;
+    const char* inner = NULL;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (strcmp(hn, "Nand") == 0) inner = SYM_And;
+        else if (strcmp(hn, "Nor") == 0) inner = SYM_Or;
+        else if (strcmp(hn, "Xnor") == 0) inner = SYM_Xor;
+    }
+    Expr* out;
+    if (inner) {
+        Expr* body = expr_new_function(expr_new_symbol(inner), a, n);
+        out = expr_new_function(expr_new_symbol(SYM_Not), &body, 1);
+    } else {
+        out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    }
+    free(a);
+    return out;
+}
+
 Expr* builtin_logical_expand(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    const Expr* e = res->data.function.args[0];
+    Expr* e_owned = le_desugar(res->data.function.args[0]);
+    const Expr* e = e_owned;
 
     Dnf phi = to_dnf(e);
     Expr* out;
@@ -393,6 +425,7 @@ Expr* builtin_logical_expand(Expr* res) {
         }
     }
     dnf_free(&phi);
+    expr_free(e_owned);
     return out;
 }
 
@@ -400,6 +433,20 @@ Expr* builtin_not_element(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* x   = res->data.function.args[0];
     Expr* dom = res->data.function.args[1];
+
+    /* NotElement[x1 | x2 | ..., dom] says that NO xi is in dom: the
+     * conjunction of the NotElement[xi, dom] (audit NotElement#1; it was
+     * read as Not[Element[...]], "some xi is not in dom"). */
+    if (is_head_sym(x, SYM_Alternatives)) {
+        size_t n = x->data.function.arg_count;
+        Expr** parts = malloc((n ? n : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++)
+            parts[i] = expr_new_function(expr_copy(res->data.function.head),
+                           (Expr*[]){ expr_copy(x->data.function.args[i]), expr_copy(dom) }, 2);
+        Expr* conj = expr_new_function(expr_new_symbol(SYM_And), parts, n);
+        free(parts);
+        return conj;
+    }
 
     Expr* ea[2] = { expr_copy(x), expr_copy(dom) };
     Expr* el = expr_new_function(expr_new_symbol(SYM_Element), ea, 2);
@@ -1527,6 +1574,60 @@ static int fi_integer_search(const Expr* expr, Expr** V, int nv, long want, FiWi
     long* cur = malloc(sizeof(long) * (size_t)nv);
     for (int i = 0; i < nv; i++) cur[i] = elo[i];
     long evals = 0; bool budget_hit = false, exhausted = false; int start_n = ws->n;
+    /* Up to three variables: visit the box in shells of growing index, with an
+     * open range indexed from its centre outwards (0, 1, -1, 2, -2, ...), so
+     * the small points of EVERY coordinate come first.  The plain odometer
+     * below sweeps the first coordinate's whole range before the second
+     * moves: x^2 - 2 y^2 == 1 never reached y == 0 within the budget, and
+     * FindInstance left the Pell equation unevaluated (audit
+     * FindInstance#3).  The same box is covered, so an exhaustive pass still
+     * proves emptiness. */
+    if (nv <= 3) {
+        long len[3], idx[3], maxlen = 0;
+        for (int i = 0; i < nv; i++) {
+            len[i] = ehi[i] - elo[i] + 1;
+            if (len[i] > maxlen) maxlen = len[i];
+        }
+        bool done = false;
+        for (long r = 0; r < maxlen && !done; r++) {
+            for (int i = 0; i < nv; i++) idx[i] = 0;
+            for (;;) {
+                bool on_shell = false, in_box = true;
+                for (int i = 0; i < nv; i++) {
+                    if (idx[i] == r) on_shell = true;
+                    if (idx[i] >= len[i]) in_box = false;
+                }
+                if (on_shell && in_box) {
+                    if (evals >= BUDGET) { budget_hit = true; done = true; break; }
+                    evals++;
+                    Expr** outr = malloc(sizeof(Expr*) * (size_t)nv);
+                    for (int i = 0; i < nv; i++) {
+                        long v;
+                        bool open_lo = !rg[i].has_lo, open_hi = !rg[i].has_hi;
+                        if (open_lo && open_hi)
+                            v = (idx[i] % 2) ? (idx[i] + 1) / 2 : -(idx[i] / 2);
+                        else if (open_lo) v = ehi[i] - idx[i];
+                        else v = elo[i] + idx[i];
+                        outr[i] = fi_rule(V[i], expr_new_integer(v));
+                    }
+                    Expr* p = expr_new_function(expr_new_symbol(SYM_List), outr, (size_t)nv);
+                    free(outr);
+                    if (fi_verify(expr, p)) {
+                        fi_wit_add(ws, p);
+                        if (ws->n >= want) { done = true; break; }
+                    } else expr_free(p);
+                }
+                int i = 0;
+                for (; i < nv; i++) { idx[i]++; if (idx[i] <= r) break; idx[i] = 0; }
+                if (i == nv) break;
+            }
+        }
+        if (!done) exhausted = true;
+        free(cur); free(elo); free(ehi); free(rg);
+        if (ws->n > start_n) return 1;
+        if (exhausted && can_prove_empty && !budget_hit) return 0;
+        return -1;
+    }
     for (;;) {
         if (evals >= BUDGET) { budget_hit = true; break; }
         evals++;
@@ -2425,6 +2526,26 @@ static Expr* fi_run_search(Expr* expr, Expr* vars, Expr* dom, long nWanted,
 static Expr* builtin_find_instance_core(Expr* res);
 
 Expr* builtin_find_instance(Expr* res) {
+    /* A list of constraints is their conjunction (audit FindInstance#4):
+     * FindInstance[{x > 1, x < 2}, x] is FindInstance[x > 1 && x < 2, x]. */
+    if (res && res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&
+        is_head_sym(res->data.function.args[0], SYM_List)) {
+        Expr* l = res->data.function.args[0];
+        size_t n = l->data.function.arg_count;
+        Expr** parts = malloc((n ? n : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) parts[i] = expr_copy(l->data.function.args[i]);
+        Expr* conj = (n == 1) ? parts[0]
+                   : (n == 0) ? expr_new_symbol(SYM_True)
+                   : expr_new_function(expr_new_symbol(SYM_And), parts, n);
+        free(parts);
+        size_t argc = res->data.function.arg_count;
+        Expr** a2 = malloc(argc * sizeof(Expr*));
+        a2[0] = conj;
+        for (size_t i = 1; i < argc; i++) a2[i] = expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), a2, argc);
+        free(a2);
+        return call;
+    }
     int* off = solvepoly_roots_of_unity_off_counter();
     (*off)++;
     Expr* r = builtin_find_instance_core(res);

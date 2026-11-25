@@ -15,6 +15,9 @@ MPFR's exponent range (`Exp[10^25]`) returns `Overflow[]` (`Indeterminate` for a
 
 ## Trig Functions
 
+**Audit wave 4.** Sin, Cos, Tan, Cot, Sec and Csc reduce a shift by a multiple of Pi/2: `Sin[x + Pi]` is `-Sin[x]`, `Cos[Pi/2 - x]` is `Sin[x]`, `Tan[x + Pi/2]` is `-Cot[x]`; a shift that is not a multiple of Pi/2 (`Sin[x + Pi/3]`) stays. A big exact multiple of Pi is reduced by the period first (`Sin[10^30 Pi]` is 0, `Sec[(10^30 + 1) Pi]` is -1). `Tan`/`Cot` evaluate at odd multiples of Pi/8 (`Tan[Pi/8]` is `-1 + Sqrt[2]`) and `ArcTan`/`ArcCot` invert them. Two-argument `ArcTan[x, y]` takes exact rationals, bignums, surds and Pi when `ArcTan[y/x]` has a closed form (`ArcTan[1, -Sqrt[3]]` is `-Pi/3`). `Log[E^z]` is z for an exact complex z on the principal strip (`Log[E^(1 + I)]` is `1 + I`) and `Log[(-1)^q]` is `I Pi q` for rational -1 < q <= 1. `ArcCosh[x]` is `I ArcCos[x]` for an exact x in [-1, 1) with an exact ArcCos value (`ArcCosh[0]` is `I Pi/2`).
+
+
 **One machine evaluation per head.** Every surface (scalar, packed, NDArray,
 `Compile[]`) evaluates `Exp`, the circular and hyperbolic functions and their
 inverses through one helper per head (`src/mth_machine_elem.h`): a real

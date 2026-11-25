@@ -314,6 +314,65 @@ static void compute_params(Expr* const* eqs, size_t n_eq,
 /*  Step 9 -- build and evaluate Solve[coeffEqs, params]               */
 /* ------------------------------------------------------------------ */
 
+/* Does e have a denominator other than a number (a Power with a negative
+ * exponent of a non-numeric base)? */
+static bool sa_has_symbolic_denominator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* p = e->data.function.args[1];
+        bool neg = (p->type == EXPR_INTEGER && p->data.integer < 0) ||
+                   (head_is(p, SYM_Rational) && p->data.function.args[0]->type == EXPR_INTEGER &&
+                    p->data.function.args[0]->data.integer < 0);
+        if (neg && !expr_is_numeric_like(b)) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sa_has_symbolic_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The parameter equations have a family of solutions (Solve declined them
+ * as not zero-dimensional): solve for the largest subset of the parameters
+ * the equations determine, the others staying free -- SolveAlways[x^2 +
+ * a x + b == (x + c)^2, x] is {{a -> 2 c, b -> c^2}} (audit SolveAlways#2,
+ * #3).  Among the subsets of that size the first whose solution has no
+ * symbolic denominator is taken (a -> -b/x would need x != 0), else the
+ * first that solves.  NULL when no subset solves. */
+static Expr* sa_solve_family(const Expr* eqs, const Expr* plist) {
+    if (!head_is(plist, SYM_List)) return NULL;
+    size_t n = plist->data.function.arg_count;
+    if (n < 2 || n > 10) return NULL;
+    for (size_t k = n - 1; k >= 1; k--) {
+        size_t idx[10];
+        for (size_t i = 0; i < k; i++) idx[i] = i;
+        Expr* first = NULL;
+        for (;;) {
+            Expr** sub = (Expr**)malloc(sizeof(Expr*) * k);
+            for (size_t i = 0; i < k; i++) sub[i] = expr_copy(plist->data.function.args[idx[i]]);
+            Expr* sl = expr_new_function(expr_new_symbol(SYM_List), sub, k);
+            free(sub);
+            mth_msg_suppress_push();
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve),
+                          (Expr*[]){ expr_copy((Expr*)eqs), sl }, 2));
+            mth_msg_suppress_pop();
+            if (r && head_is(r, SYM_List) && r->data.function.arg_count > 0) {
+                if (!sa_has_symbolic_denominator(r)) { if (first) expr_free(first); return r; }
+                if (!first) first = r; else expr_free(r);
+            } else if (r) {
+                expr_free(r);
+            }
+            /* next combination of k of n, lexicographic */
+            size_t i = k;
+            while (i > 0 && idx[i - 1] == n - k + (i - 1)) i--;
+            if (i == 0) break;
+            idx[i - 1]++;
+            for (size_t j = i; j < k; j++) idx[j] = idx[j - 1] + 1;
+        }
+        if (first) return first;
+    }
+    return NULL;
+}
+
 /* Consumes `coeff_eqs[i]` and `params[i]`: they are handed into the new
  * `Solve[...]` tree.  Returns the evaluated result (owned). */
 static Expr* call_solve(Expr** coeff_eqs, size_t n_eq,
@@ -342,7 +401,19 @@ static Expr* call_solve(Expr** coeff_eqs, size_t n_eq,
     Expr* call = expr_new_function(expr_new_symbol(SYM_Solve), sa, 2);
     free(sa);
 
-    return eval_and_free(call);
+    /* Quietly first: a not-zero-dimensional system is answered by the
+     * family below, and its Solve::nsdim is then not the user's. */
+    Expr* keep = expr_copy(call);
+    mth_msg_suppress_push();
+    Expr* r = eval_and_free(call);
+    mth_msg_suppress_pop();
+    if (head_is(r, SYM_Solve) && r->data.function.arg_count == 2) {
+        Expr* fam = sa_solve_family(r->data.function.args[0], r->data.function.args[1]);
+        if (fam) { expr_free(r); r = fam; }
+        else { expr_free(r); r = eval_and_free(expr_copy(keep)); }   /* with its message */
+    }
+    expr_free(keep);
+    return r;
 }
 
 /* ------------------------------------------------------------------ */

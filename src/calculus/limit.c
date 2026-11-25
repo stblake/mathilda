@@ -4234,10 +4234,23 @@ static Expr* try_step_function_onesided(Expr* f, LimitCtx* ctx) {
     bool is_round = hn == SYM_Round;
     bool is_frac  = hn == SYM_FractionalPart;
     bool is_ipart = hn == SYM_IntegerPart;
-    if (!(is_floor || is_ceil || is_round || is_frac || is_ipart)) return NULL;
+    bool is_sign  = hn == SYM_Sign;
+    bool is_step  = hn == SYM_UnitStep || hn == SYM_HeavisideTheta;
+    if (!(is_floor || is_ceil || is_round || is_frac || is_ipart || is_sign || is_step))
+        return NULL;
 
     Expr* g = f->data.function.args[0];
     if (!expr_contains(g, ctx->x)) return NULL;   /* constant arg: nothing to do */
+
+    /* Sign / UnitStep / HeavisideTheta jump only where g crosses 0: one-sided,
+     * the value is the head at the sign of g on that side -- Sign[x] from
+     * above is 1, UnitStep[x] from below is 0 (audit Limit#1). */
+    if (is_sign || is_step) {
+        int side = sign_near_point(g, ctx);
+        if (side == 0) return NULL;
+        if (is_sign) return mk_int(side > 0 ? 1 : -1);
+        return mk_int(side > 0 ? 1 : 0);
+    }
 
     /* Inner one-sided limit m of g; must be an integer (literal or assumed). */
     LimitCtx sub = *ctx; sub.depth += 1;

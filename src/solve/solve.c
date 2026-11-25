@@ -24,6 +24,7 @@
 #include <string.h>
 #include <math.h>
 
+#include "arithmetic.h"   /* is_rational: the sum-of-squares split over the Reals */
 #include "attr.h"
 #include "common.h"
 #include "eval.h"
@@ -1117,6 +1118,108 @@ Expr* builtin_solve(Expr* res) {
     {
         Expr* re = solve_element_domain(res, vars, dom, pos_end);
         if (re) return re;
+    }
+
+    /* Over the reals a sum of even-power monomials with coefficients of one
+     * sign vanishes only where every monomial does: x^2 + y^2 == 0 is
+     * x == 0 && y == 0 (audit Solve#4; the generic path parametrised x by
+     * y and returned x -> +-Sqrt[-y^2], which is not real). */
+    if (dom && dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals &&
+        head_is(res->data.function.args[0], SYM_Equal) &&
+        res->data.function.args[0]->data.function.arg_count == 2) {
+        Expr* eq = res->data.function.args[0];
+        Expr* p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                      (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                          (Expr*[]){ expr_copy(eq->data.function.args[0]),
+                                     eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                         (Expr*[]){ expr_new_integer(-1),
+                                                    expr_copy(eq->data.function.args[1]) }, 2)) }, 2)) }, 1));
+        bool sos = head_is(p, SYM_Plus) && p->data.function.arg_count >= 2;
+        int sign = 0;
+        size_t nt = sos ? p->data.function.arg_count : 0;
+        Expr** mons = sos ? (Expr**)malloc(nt * sizeof(Expr*)) : NULL;
+        for (size_t i = 0; i < nt && sos; i++) {
+            Expr* t = p->data.function.args[i];
+            size_t nf = head_is(t, SYM_Times) ? t->data.function.arg_count : 1;
+            int ts = 1;
+            Expr** fs = (Expr**)malloc(nf * sizeof(Expr*));
+            size_t nm = 0;
+            for (size_t j = 0; j < nf && sos; j++) {
+                Expr* f = head_is(t, SYM_Times) ? t->data.function.args[j] : t;
+                int64_t rn, rd;
+                if (is_rational(f, &rn, &rd)) { if (rn < 0) ts = -ts; continue; }
+                if (head_is(f, SYM_Power) && f->data.function.args[0]->type == EXPR_SYMBOL &&
+                    f->data.function.args[1]->type == EXPR_INTEGER &&
+                    f->data.function.args[1]->data.integer > 0 &&
+                    f->data.function.args[1]->data.integer % 2 == 0) {
+                    fs[nm++] = expr_copy(f);
+                    continue;
+                }
+                sos = false;
+            }
+            if (sos && nm == 0) sos = false;          /* a constant term */
+            if (sos && sign != 0 && ts != sign) sos = false;
+            sign = ts;
+            if (sos) mons[i] = (nm == 1) ? fs[0]
+                             : expr_new_function(expr_new_symbol(SYM_Times), fs, nm);
+            else for (size_t j = 0; j < nm; j++) expr_free(fs[j]);
+            free(fs);
+            if (!sos) { for (size_t j = 0; j < i; j++) expr_free(mons[j]); }
+        }
+        expr_free(p);
+        if (sos) {
+            Expr** eqs = (Expr**)malloc(nt * sizeof(Expr*));
+            for (size_t i = 0; i < nt; i++)
+                eqs[i] = expr_new_function(expr_new_symbol(SYM_Equal),
+                             (Expr*[]){ mons[i], expr_new_integer(0) }, 2);
+            free(mons);
+            Expr* sys = expr_new_function(expr_new_symbol(SYM_List), eqs, nt);
+            free(eqs);
+            Expr** ca = (Expr**)malloc(sizeof(Expr*) * argc);
+            ca[0] = sys;
+            for (size_t j = 1; j < argc; j++) ca[j] = expr_copy(res->data.function.args[j]);
+            /* a probe: a declined system leaves the generic path to answer */
+            mth_msg_suppress_push();
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve), ca, argc));
+            mth_msg_suppress_pop();
+            free(ca);
+            if (r && head_is(r, SYM_List)) return r;
+            if (r) expr_free(r);
+        } else {
+            free(mons);
+        }
+    }
+
+    /* A disjunction is the union of its disjuncts' solution sets:
+     * Solve[x == 1 || x == 2, x] is {{x -> 1}, {x -> 2}} (audit Solve#5).
+     * Each disjunct is solved by its own Solve call with the same variables,
+     * domain and options; one that stays unevaluated leaves the whole call
+     * unevaluated (no partial answer). */
+    if (head_is(res->data.function.args[0], SYM_Or)) {
+        Expr* disj = res->data.function.args[0];
+        size_t nd = disj->data.function.arg_count;
+        Expr** parts = (Expr**)malloc(sizeof(Expr*) * (nd ? nd : 1));
+        size_t got = 0;
+        bool ok = true;
+        for (size_t i = 0; i < nd && ok; i++) {
+            Expr** ca = (Expr**)malloc(sizeof(Expr*) * argc);
+            ca[0] = expr_copy(disj->data.function.args[i]);
+            for (size_t j = 1; j < argc; j++) ca[j] = expr_copy(res->data.function.args[j]);
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve), ca, argc));
+            free(ca);
+            if (!r || !head_is(r, SYM_List)) { ok = false; if (r) expr_free(r); break; }
+            parts[got++] = r;
+        }
+        Expr* out_or = NULL;
+        if (ok) {
+            Expr* joined = expr_new_function(expr_new_symbol(SYM_Join), parts, got);
+            out_or = eval_and_free(expr_new_function(expr_new_symbol(SYM_DeleteDuplicates),
+                                                     &joined, 1));
+        } else {
+            for (size_t i = 0; i < got; i++) expr_free(parts[i]);
+        }
+        free(parts);
+        return out_or;
     }
 
     Expr* expr = expr_copy(res->data.function.args[0]);

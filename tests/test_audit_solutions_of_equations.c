@@ -107,6 +107,48 @@ static void test_s11_special_values(void) {
     audit_true("NotElement#3", "NotElement[3, Reals] === False");
 }
 
+/* Wave 4 (G5): Reduce fallbacks (!=, products, parametric linear
+ * inequalities, bounded integer enumeration), Root in radicals, Solve range
+ * checks / disjunctions / sums of squares, FindInstance, quantifiers inside
+ * logic, exact CAD samples, LogicalExpand / NotElement, SolveAlways families. */
+static void test_wave4_solve(void) {
+    audit_chk("Reduce#1", "Reduce[x != 1, x]", "x != 1");
+    audit_chk("Reduce#1", "Reduce[x^2 != 1, x]", "x != -1 && x != 1");
+    audit_chk("Reduce#2", "Reduce[x y == 0, {x, y}]", "x == 0 || y == 0");
+    audit_chk("Reduce#3", "Reduce[x > a, x, Reals]", "x > a");
+    audit_chk("Reduce#3", "Reduce[a x > 1, x, Reals]", "a < 0 && x < 1/a || a > 0 && x > 1/a");
+    audit_chk("Reduce#4", "Reduce[x^2 + a == 0, x, Reals]", "a < 0 && (x == -Sqrt[-a] || x == Sqrt[-a]) || a == 0 && x == 0");
+    audit_chk("Reduce#5", "Reduce[Mod[x, 3] == 1 && 0 < x < 10, x, Integers]", "x == 1 || x == 4 || x == 7");
+    audit_chk("Reduce#6", "Length[Reduce[x^2 + y^2 <= 2, {x, y}, Integers]]", "9");
+    audit_chk("Reduce#6", "Reduce[x^2 + y^2 <= 0, {x, y}, Integers]", "x == 0 && y == 0");
+    audit_chk("Root#2", "Root[# - 3 &, 1]", "3");
+    audit_chk("Root#2", "Root[#^2 - 2 &, 1]", "-Sqrt[2]");
+    audit_chk("Root#2", "Root[#^2 + 1 &, 1]", "-I");
+    audit_chk("Root#2", "Root[#^3 - 8 &, 1]", "2");
+    audit_chk("Root#2", "Root[#^3 - 2 &, 1]", "Root[#1^3 - 2 &, 1]");
+    audit_chk("ToRadicals#2", "ToRadicals[Root[10^30 #^2 - 2 &, 2]] > 0", "True");
+    audit_chk("Solve#2", "Solve[ArcSin[x] == 2, x]", "{}");
+    audit_chk("Solve#2", "Solve[Log[x] == 2 I Pi, x]", "{}");
+    audit_chk("Solve#4", "Solve[x^2 + y^2 == 0, {x, y}, Reals]", "{{x -> 0, y -> 0}}");
+    audit_chk("Solve#5", "Solve[x == 1 || x == 2, x]", "{{x -> 1}, {x -> 2}}");
+    audit_chk("FindInstance#3", "FindInstance[x^2 - 61 y^2 == 1, {x, y}, Integers]", "{{x -> 1, y -> 0}}");
+    audit_chk("FindInstance#4", "FindInstance[{x > 1, x < 2}, x]", "{{x -> 3/2}}");
+    audit_chk("ForAll#1", "Resolve[!ForAll[x, x^2 > 0], Reals]", "True");
+    audit_chk("ForAll#1", "Resolve[ForAll[x, x^2 >= 0] && a > 0, Reals]", "a > 0");
+    audit_chk("ForAll#1", "Reduce[ForAll[x, x^2 >= 0] && a > 0, a, Reals]", "a > 0");
+    audit_chk("Exists#2", "Resolve[Exists[x, x > 0 && x < 10^-10], Reals]", "True");
+    audit_chk("Exists#2", "Resolve[Exists[x, x^2 == 10^40], Reals]", "True");
+    audit_chk("CylindricalDecomposition#1", "CylindricalDecomposition[x == 10^20, {x}]", "x == 100000000000000000000");
+    audit_chk("CylindricalDecomposition#1", "CylindricalDecomposition[x > 10^30, {x}]", "x > 1000000000000000000000000000000");
+    audit_chk("LogicalExpand#1", "LogicalExpand[Nand[a, b]]", "Not[a] || Not[b]");
+    audit_chk("LogicalExpand#1", "LogicalExpand[Nor[a, b]]", "Not[a] && Not[b]");
+    audit_chk("LogicalExpand#1", "LogicalExpand[Xnor[a, b]]", "a && b || Not[a] && Not[b]");
+    audit_chk("NotElement#1", "NotElement[2 | I, Reals]", "False");
+    audit_chk("NotElement#1", "LogicalExpand[NotElement[x | y, Reals]]", "NotElement[x, Reals] && NotElement[y, Reals]");
+    audit_chk("SolveAlways#2", "SolveAlways[x^2 + a x + b == (x + c)^2, x]", "{{a -> 2 c, b -> c^2}}");
+    audit_chk("SolveAlways#3", "SolveAlways[a x + b == 0, y]", "{{b -> -a x}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_root_multiplicity);
@@ -116,5 +158,6 @@ int main(void) {
     TEST(test_solvealways_transcendental);
     TEST(test_toradicals_inexact_cubic);
     TEST(test_s11_special_values);
+    TEST(test_wave4_solve);
     return audit_finish("audit_solutions_of_equations");
 }

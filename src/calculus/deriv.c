@@ -782,6 +782,27 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
                 /* f is some other symbol (and not x, handled above). */
                 return mk_fn2("Dt", expr_copy(f), expr_copy(x));
             }
+            /* The total derivative of Dt[s, x] (or Dt[s, {x, n}]) in x is
+             * the next order, Dt[s, {x, n + 1}] -- not the chain rule
+             * through a function Dt of two arguments (audit Dt#4). */
+            if (x && x->type == EXPR_SYMBOL && f->type == EXPR_FUNCTION &&
+                is_sym(f->data.function.head, "Dt") && f->data.function.arg_count == 2 &&
+                f->data.function.args[0]->type == EXPR_SYMBOL) {
+                const Expr* sp = f->data.function.args[1];
+                int64_t n = 0;
+                if (sp->type == EXPR_SYMBOL && sp->data.symbol.name == x->data.symbol.name) n = 1;
+                else if (sp->type == EXPR_FUNCTION && is_sym(sp->data.function.head, "List") &&
+                         sp->data.function.arg_count == 2 &&
+                         sp->data.function.args[0]->type == EXPR_SYMBOL &&
+                         sp->data.function.args[0]->data.symbol.name == x->data.symbol.name &&
+                         sp->data.function.args[1]->type == EXPR_INTEGER &&
+                         sp->data.function.args[1]->data.integer >= 1 &&
+                         sp->data.function.args[1]->data.integer < INT64_MAX)
+                    n = sp->data.function.args[1]->data.integer;
+                if (n >= 1)
+                    return mk_fn2("Dt", expr_copy(f->data.function.args[0]),
+                                  mk_fn2("List", expr_copy(x), mk_int(n + 1)));
+            }
             /* Compound: skip the free-of-x short-circuit, fall through. */
         } else {
         /* Don't short-circuit `Equal[...]` or `Inequality[...]` even when
@@ -4488,6 +4509,21 @@ static Expr* builtin_dt_core(Expr* res) {
      * higher_order_partial then evaluates that result -- which would
      * re-enter this builtin and recurse without bound. Resolve the closed
      * cases here and leave the genuinely irreducible form unevaluated. */
+    /* A number or a string is not a differentiation variable: Dt[x, 1]
+     * recursed to $RecursionLimit (audit Dt#2).  Dt::ivar, unevaluated. */
+    for (size_t i = 1; i < argc; i++) {
+        Expr* v = res->data.function.args[i];
+        if (v->type == EXPR_FUNCTION && is_sym(v->data.function.head, "List") &&
+            v->data.function.arg_count >= 1)
+            v = v->data.function.args[0];
+        if (v->type == EXPR_STRING || expr_is_numeric_like(v)) {
+            char* vs = expr_to_string(v);
+            mth_message("Dt", "ivar", "%s is not a valid variable.", vs ? vs : "?");
+            free(vs);
+            return NULL;
+        }
+    }
+
     if (argc == 2 && f->type == EXPR_SYMBOL) {
         Expr* v = res->data.function.args[1];
         if (is_dt_constant_symbol(f)) return mk_int(0);   /* Dt[Pi, x] = 0 */
@@ -4495,6 +4531,22 @@ static Expr* builtin_dt_core(Expr* res) {
             if (f->data.symbol.name == v->data.symbol.name) return mk_int(1);  /* Dt[x, x] */
             return NULL;                                  /* Dt[s, x] stays */
         }
+        /* Dt[s, {x, n}]: 1 / 0 for s == x, otherwise the irreducible form --
+         * it was differentiated as Dt applied to two arguments, giving
+         * Derivative[..][Dt] terms (audit Dt#4). */
+        if (v->type == EXPR_FUNCTION && is_sym(v->data.function.head, "List") &&
+            v->data.function.arg_count == 2 && v->data.function.args[0]->type == EXPR_SYMBOL &&
+            v->data.function.args[1]->type == EXPR_INTEGER &&
+            v->data.function.args[1]->data.integer >= 1) {
+            if (f->data.symbol.name == v->data.function.args[0]->data.symbol.name)
+                return mk_int(v->data.function.args[1]->data.integer == 1 ? 1 : 0);
+            return NULL;
+        }
+        /* Dt[s, f[x]] with a compound variable is irreducible as well: the
+         * terminal case covered symbol variables only, and a compound one
+         * recursed (audit Dt#3). */
+        if (v->type == EXPR_FUNCTION && !is_sym(v->data.function.head, "List"))
+            return NULL;
     }
 
     /* Dt[f, x, ...] is the *total* derivative with respect to each
@@ -4672,6 +4724,37 @@ static int64_t deriv_temp_counter = 0;
 static Expr* derivative_of_builtin_symbol(Expr* deriv_head, Expr* fsym);
 
 /* See deriv.h for the contract. */
+Expr* derivative_merge_nested(Expr* outer_head, Expr* inner) {
+    if (!outer_head || !inner || outer_head->type != EXPR_FUNCTION ||
+        inner->type != EXPR_FUNCTION || inner->data.function.arg_count != 1)
+        return NULL;
+    Expr* ih = inner->data.function.head;
+    if (ih->type != EXPR_FUNCTION || !is_sym(ih->data.function.head, "Derivative") ||
+        !is_sym(outer_head->data.function.head, "Derivative"))
+        return NULL;
+    size_t m = outer_head->data.function.arg_count;
+    if (m == 0 || ih->data.function.arg_count != m) return NULL;
+    Expr** orders = malloc(sizeof(Expr*) * m);
+    if (!orders) return NULL;
+    for (size_t i = 0; i < m; i++) {
+        Expr* a = outer_head->data.function.args[i];
+        Expr* b = ih->data.function.args[i];
+        if (a->type != EXPR_INTEGER || b->type != EXPR_INTEGER ||
+            a->data.integer < 0 || b->data.integer < 0 ||
+            a->data.integer > INT64_MAX / 2 || b->data.integer > INT64_MAX / 2) {
+            for (size_t j = 0; j < i; j++) expr_free(orders[j]);
+            free(orders);
+            return NULL;
+        }
+        orders[i] = mk_int(a->data.integer + b->data.integer);
+    }
+    Expr* dh = expr_new_function(mk_sym("Derivative"), orders, m);
+    free(orders);
+    Expr* fa[1] = { expr_copy(inner->data.function.args[0]) };
+    return expr_new_function(dh, fa, 1);
+}
+
+/* See deriv.h for the contract. */
 Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
     if (!deriv_head || !fsym) return NULL;
     if (deriv_head->type != EXPR_FUNCTION) return NULL;
@@ -4684,10 +4767,14 @@ Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
     /* All derivative orders must be nonnegative integers; otherwise the
      * downstream derivative_of_pure_function would reject them and we
      * would have done substantial work for nothing. */
+    bool all_zero = true;
     for (size_t i = 0; i < m; i++) {
         Expr* oi = deriv_head->data.function.args[i];
         if (oi->type != EXPR_INTEGER || oi->data.integer < 0) return NULL;
+        if (oi->data.integer != 0) all_zero = false;
     }
+    /* Derivative[0, ..., 0][f] is f itself (audit Derivative#2). */
+    if (all_zero) return expr_copy(fsym);
 
     /* Only proceed when the symbol carries at least one DownValue. For a
      * bare symbol with no rules, attempting to substitute would just give

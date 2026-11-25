@@ -4886,6 +4886,20 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                        head->data.function.head->data.symbol.name == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_FUNCTION &&
+                       res->data.function.args[0]->data.function.head->type == EXPR_FUNCTION &&
+                       res->data.function.args[0]->data.function.head->data.function.head->type == EXPR_SYMBOL &&
+                       res->data.function.args[0]->data.function.head->data.function.head->data.symbol.name == SYM_Derivative) {
+                /* 7b0. Derivative[n][Derivative[k][f]] -> Derivative[n + k][f]. */
+                Expr* merged = derivative_merge_nested(head, res->data.function.args[0]);
+                if (merged) {
+                    expr_free(res);
+                    *changed = true;
+                    return merged;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol.name == SYM_Derivative &&
+                       res->data.function.arg_count == 1 &&
+                       res->data.function.args[0]->type == EXPR_FUNCTION &&
                        res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
                        res->data.function.args[0]->data.function.head->data.symbol.name == SYM_Function) {
                 /* 7b. Derivative[n1,...,nm][Function[...]] reduces to a new

@@ -6,6 +6,7 @@
 #include "print.h"
 #include "checked_int.h"
 #include "numeric.h"       /* numeric_contagion_args: one-kind Complex */
+#include "times.h"         /* make_times: Complex[a, b] with complex parts */
 #include "ndarray.h"
 #include "linkedlist.h"       /* ndarray_divide: one-rounding buffer quotient (K1) */
 #include "mth_machine_pow.h" /* mth_cdiv_machine: the one machine complex quotient */
@@ -322,6 +323,18 @@ Expr* builtin_complex(Expr* res) {
 
     if (im->type == EXPR_INTEGER && im->data.integer == 0) {
         return expr_copy(re);
+    }
+
+    /* A part that is itself a complex number: Complex[a, b] means a + b I,
+     * so Complex[1, I] is 0 and Complex[1 + 2 I, 3] is 1 + 5 I (audit
+     * Complex#3).  Only for numeric parts -- Complex[a, b] with a symbolic
+     * part is not a number and stays as it is. */
+    if (expr_is_numeric_like(re) && expr_is_numeric_like(im) &&
+        (is_complex(re, NULL, NULL) || is_complex(im, NULL, NULL))) {
+        Expr* t = make_times(make_complex(expr_new_integer(0), expr_new_integer(1)),
+                             expr_copy(im));
+        Expr* pa[2] = { expr_copy(re), t };
+        return expr_new_function(expr_new_symbol(SYM_Plus), pa, 2);
     }
 
     /* One number, one kind: a machine Real or an exact number meeting a part

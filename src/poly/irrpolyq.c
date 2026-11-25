@@ -782,6 +782,7 @@ Expr* builtin_irreduciblepolynomialq(Expr* res) {
     ExtMode ext_mode = EXT_MODE_NONE;
     Expr* alpha_expr = NULL;    /* borrowed when EXT_MODE_EXPLICIT */
     Expr* last_bad = NULL;
+    Expr* modulus = NULL;       /* borrowed: Modulus -> p, p a positive integer */
 
     for (size_t i = 1; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
@@ -791,6 +792,16 @@ Expr* builtin_irreduciblepolynomialq(Expr* res) {
         }
         const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
+
+        /* Modulus -> p: irreducibility over GF(p) (audit
+         * IrreduciblePolynomialQ#2); Modulus -> 0 is the default. */
+        if (name == SYM_Modulus) {
+            if (val->type == EXPR_INTEGER && val->data.integer == 0) modulus = NULL;
+            else if (expr_is_integer_like(val) &&
+                     !(val->type == EXPR_INTEGER && val->data.integer < 0)) modulus = val;
+            else last_bad = opt;
+            continue;
+        }
 
         if (name == SYM_GaussianIntegers || name == SYM_GaussianIntegers) {
             if (is_sym_eq(val, "True"))       gaussian_setting = 1;
@@ -817,6 +828,30 @@ Expr* builtin_irreduciblepolynomialq(Expr* res) {
     }
     if (last_bad != NULL) {
         return irrpolyq_emit_nonopt(last_bad, 1, res);
+    }
+
+    /* Over GF(p): one non-constant factor of multiplicity 1 in
+     * FactorList[poly, Modulus -> p] (x^2 + 1 = (x + 1)^2 mod 2 is
+     * reducible; mod 3 it is irreducible). */
+    if (modulus) {
+        Expr* opt = expr_new_function(expr_new_symbol(SYM_Rule),
+                        (Expr*[]){ expr_new_symbol(SYM_Modulus), expr_copy(modulus) }, 2);
+        Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList),
+                       (Expr*[]){ expr_copy(poly), opt }, 2));
+        if (!fl || !is_sym_eq(fl->data.function.head, "List")) { if (fl) expr_free(fl); return NULL; }
+        int nonconst = 0;
+        bool simple = true, ok = true;
+        for (size_t i = 0; i < fl->data.function.arg_count && ok; i++) {
+            Expr* pr = fl->data.function.args[i];
+            if (pr->type != EXPR_FUNCTION || pr->data.function.arg_count != 2) { ok = false; break; }
+            if (expr_is_numeric_like(pr->data.function.args[0])) continue;
+            nonconst++;
+            if (!(pr->data.function.args[1]->type == EXPR_INTEGER &&
+                  pr->data.function.args[1]->data.integer == 1)) simple = false;
+        }
+        expr_free(fl);
+        if (!ok) return NULL;
+        return expr_new_symbol(nonconst == 1 && simple ? SYM_True : SYM_False);
     }
 
     /* Resolve GaussianIntegers default and complex-coefficient sniff.

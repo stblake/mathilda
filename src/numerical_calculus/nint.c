@@ -4362,6 +4362,87 @@ static bool ni_body_has_region(const Expr* e) {
     return false;
 }
 
+/* Does e mention the symbol named `name` (an interned pointer)? */
+static bool ni_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ni_mentions_symbol(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ni_mentions_symbol(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* Boole[c] -> Piecewise[{{1, c}}, 0], UnitStep[g1, ...] -> Piecewise[{{1,
+ * g1 >= 0 && ...}}, 0]: the region integrand as a piecewise function the
+ * deterministic rules integrate (audit NIntegrate#2, #3). */
+static Expr* ni_region_to_piecewise(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = ni_region_to_piecewise(e->data.function.args[i]);
+    const Expr* h = e->data.function.head;
+    Expr* cond = NULL;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Boole && n == 1) {
+        cond = a[0];
+    } else if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_UnitStep && n >= 1) {
+        Expr** c = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++)
+            c[i] = expr_new_function(expr_new_symbol(SYM_GreaterEqual),
+                                     (Expr*[]){ a[i], expr_new_integer(0) }, 2);
+        cond = (n == 1) ? c[0] : expr_new_function(expr_new_symbol(SYM_And), c, n);
+        free(c);
+    }
+    if (cond) {
+        free(a);
+        Expr* pair = expr_new_function(expr_new_symbol(SYM_List),
+                                       (Expr*[]){ expr_new_integer(1), cond }, 2);
+        Expr* pl = expr_new_function(expr_new_symbol(SYM_List), &pair, 1);
+        return expr_new_function(expr_new_symbol(SYM_Piecewise),
+                                 (Expr*[]){ pl, expr_new_integer(0) }, 2);
+    }
+    Expr* out = expr_new_function(ni_region_to_piecewise(h), a, n);
+    free(a);
+    return out;
+}
+
+/* The boundary equations of the conditions of a region integrand: each
+ * ordering relation l < r (<=, >, >=, Inequality chains) of a Boole or
+ * UnitStep contributes l == r.  These are where the integrand jumps. */
+static void ni_region_boundaries(const Expr* e, bool in_cond, Expr*** out,
+                                 size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    const char* hn = h->type == EXPR_SYMBOL ? h->data.symbol.name : NULL;
+    size_t m = e->data.function.arg_count;
+    if (hn == SYM_UnitStep) {
+        for (size_t i = 0; i < m; i++) {
+            if (*n == *cap) { *cap = *cap ? 2 * *cap : 8; *out = realloc(*out, *cap * sizeof(Expr*)); }
+            (*out)[(*n)++] = expr_new_function(expr_new_symbol(SYM_Equal),
+                (Expr*[]){ expr_copy(e->data.function.args[i]), expr_new_integer(0) }, 2);
+        }
+        return;
+    }
+    bool cond = in_cond || hn == SYM_Boole;
+    if (cond && m == 2 && (hn == SYM_Less || hn == SYM_LessEqual ||
+                           hn == SYM_Greater || hn == SYM_GreaterEqual)) {
+        if (*n == *cap) { *cap = *cap ? 2 * *cap : 8; *out = realloc(*out, *cap * sizeof(Expr*)); }
+        (*out)[(*n)++] = expr_new_function(expr_new_symbol(SYM_Equal),
+            (Expr*[]){ expr_copy(e->data.function.args[0]), expr_copy(e->data.function.args[1]) }, 2);
+        return;
+    }
+    if (cond && hn == SYM_Inequality && m >= 3 && m % 2 == 1) {
+        for (size_t i = 0; i + 2 < m; i += 2) {
+            if (*n == *cap) { *cap = *cap ? 2 * *cap : 8; *out = realloc(*out, *cap * sizeof(Expr*)); }
+            (*out)[(*n)++] = expr_new_function(expr_new_symbol(SYM_Equal),
+                (Expr*[]){ expr_copy(e->data.function.args[i]), expr_copy(e->data.function.args[i + 2]) }, 2);
+        }
+        return;
+    }
+    for (size_t i = 0; i < m; i++)
+        ni_region_boundaries(e->data.function.args[i], cond, out, n, cap);
+}
+
 /* Box vertex cancellation guard (see ni_mc_vertex_guard). */
 #define NI_VG_MAX_DIM   3
 #define NI_VG_MAX_VERTS 8                /* 2^NI_VG_MAX_DIM */
@@ -6079,6 +6160,60 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
      * cubature is impractical. */
     bool mc_quasi = (o.method == NI_QMC);
     bool want_mc = (o.method == NI_MC || o.method == NI_QMC || o.method == NI_AMC);
+    /* A region integrand in up to five dimensions is first integrated
+     * deterministically as the piecewise function it is, with the jump
+     * locations of a 1-D integrand given as Exclusions: Monte Carlo reached
+     * only ~4 digits on NIntegrate[Boole[x < 1/3], {x, 0, 1}] and cannot take
+     * a variable inner bound at all (audit NIntegrate#2, #3).  Monte Carlo
+     * stays the fallback. */
+    /* Several dimensions go this way only when a bound depends on another
+     * variable (Monte Carlo needs a constant box); over a constant box Monte
+     * Carlo is kept, as the nested piecewise rules are far slower there. */
+    bool region_dependent = false;
+    for (size_t i = 1; i < pos_end && nspecs >= 2; i++) {
+        const Expr* sp = res->data.function.args[i];
+        if (!sp || sp->type != EXPR_FUNCTION || sp->data.function.arg_count < 3) continue;
+        for (size_t j = 1; j < pos_end; j++) {
+            const Expr* sj = res->data.function.args[j];
+            if (j == i || !sj || sj->type != EXPR_FUNCTION || sj->data.function.arg_count < 1) continue;
+            const Expr* vj = sj->data.function.args[0];
+            if (vj->type != EXPR_SYMBOL) continue;
+            for (size_t k = 1; k < sp->data.function.arg_count; k++)
+                if (ni_mentions_symbol(sp->data.function.args[k], vj->data.symbol.name))
+                    region_dependent = true;
+        }
+    }
+    if (o.method == NI_AUTO && ni_body_has_region(body) &&
+        (nspecs == 1 || (nspecs < 6 && region_dependent))) {
+        Expr* pw = ni_region_to_piecewise(body);
+        size_t extra = 0;
+        Expr* excl = NULL;
+        if (nspecs == 1 && !o.exclusions) {
+            Expr** eqs = NULL; size_t ne = 0, ecap = 0;
+            ni_region_boundaries(body, false, &eqs, &ne, &ecap);
+            if (ne > 0) {
+                Expr* l = expr_new_function(expr_new_symbol(SYM_List), eqs, ne);
+                excl = expr_new_function(expr_new_symbol(SYM_Rule),
+                           (Expr*[]){ expr_new_symbol(SYM_Exclusions), l }, 2);
+                extra = 1;
+            }
+            free(eqs);
+        }
+        Expr** v = malloc((argc + extra) * sizeof(Expr*));
+        v[0] = pw;
+        for (size_t i = 1; i < argc; i++) v[i] = expr_copy(res->data.function.args[i]);
+        if (excl) v[argc] = excl;
+        /* the Exclusions solve is a probe: its Solve::ifun is not the user's */
+        mth_msg_ifun_suppress_push();
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_NIntegrate), v, argc + extra));
+        mth_msg_ifun_suppress_pop();
+        free(v);
+        if (r && (r->type == EXPR_REAL || numeric_expr_is_mpfr(r) ||
+                  (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                   r->data.function.head->data.symbol.name == SYM_Complex)))
+            return r;
+        if (r) expr_free(r);
+    }
     if (o.method == NI_AUTO && (ni_body_has_region(body) || nspecs >= 6)) {
         want_mc = true; mc_quasi = true;   /* quasi-MC is the better default */
     }

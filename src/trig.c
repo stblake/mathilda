@@ -97,6 +97,44 @@ static Expr* make_sqrt_expr(Expr* e) {
  * pathological coefficient falls through to the numeric path rather than
  * folding a wrapped value into a wrong exact answer.
  */
+/*
+ * reduce_big_pi_coefficient:
+ * c * Pi with c a big exact rational -- a BigInt, or a Rational whose
+ * numerator is a BigInt -- is reduced by the 2 Pi period before the exact
+ * tables see it: the numerator is replaced by its residue mod 2 d (GMP), so
+ * Sin[10^30 Pi] -> Sin[0 Pi] and Sin[(10^30 + 1/2) Pi] -> Sin[Pi/2].  Every
+ * trig head here is 2 Pi- (or Pi-) periodic, so the residue is exact.  The
+ * denominator must itself be a machine integer small enough that the
+ * downstream 2 d arithmetic cannot overflow; otherwise decline.
+ */
+static bool reduce_big_pi_coefficient(Expr* c, int64_t* n, int64_t* d) {
+    Expr* num = NULL;
+    int64_t den = 1;
+    if (c->type == EXPR_BIGINT) {
+        num = c;
+    } else if (c->type == EXPR_FUNCTION && head_is(c, SYM_Rational) &&
+               c->data.function.arg_count == 2 &&
+               c->data.function.args[0]->type == EXPR_BIGINT &&
+               c->data.function.args[1]->type == EXPR_INTEGER) {
+        num = c->data.function.args[0];
+        den = c->data.function.args[1]->data.integer;
+    } else {
+        return false;
+    }
+    if (den <= 0 || den > INT64_MAX / 8) return false;
+    mpz_t z, m;
+    expr_to_mpz(num, z);                                 /* initialises z */
+    mth_mpz_init_set_i64(m, den);
+    mpz_mul_2exp(m, m, 1);                               /* m = 2 den */
+    mpz_fdiv_r(z, z, m);                       /* 0 <= z < 2 den */
+    int64_t r = 0;
+    bool ok = expr_mpz_get_int64(z, &r);
+    mpz_clear(z); mpz_clear(m);
+    if (!ok) return false;
+    *n = r; *d = den;
+    return true;
+}
+
 static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
     // Case 1: Pi
     if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Pi) {
@@ -121,6 +159,10 @@ static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
             const char* s = second->data.symbol.name;
             int64_t rn, rd;
             if (s == SYM_Pi && is_rational(first, &rn, &rd)) {
+                *n = rn; *d = rd;
+                return true;
+            }
+            if (s == SYM_Pi && reduce_big_pi_coefficient(first, &rn, &rd)) {
                 *n = rn; *d = rd;
                 return true;
             }
@@ -506,6 +548,10 @@ static Expr* exact_tan(int64_t n, int64_t d) {
         else if (n == 2) res = make_sqrt_expr(make_plus(expr_new_integer(5), make_times(expr_new_integer(2), make_sqrt(5))));
     }
     else if (d == 6) res = make_power(expr_new_integer(3), make_rational(-1, 2));
+    else if (d == 8) {
+        if (n == 1) res = make_plus(expr_new_integer(-1), make_sqrt(2));
+        else if (n == 3) res = make_plus(expr_new_integer(1), make_sqrt(2));
+    }
     else if (d == 10) {
         if (n == 1) res = make_sqrt_expr(make_plus(expr_new_integer(1), make_times(make_rational(-2, 5), make_sqrt(5))));
         else if (n == 3) res = make_sqrt_expr(make_plus(expr_new_integer(1), make_times(make_rational(2, 5), make_sqrt(5))));
@@ -552,6 +598,10 @@ static Expr* exact_cot(int64_t n, int64_t d) {
         else if (n == 2) res = make_sqrt_expr(make_plus(expr_new_integer(1), make_times(make_rational(-2, 1), make_power(expr_new_integer(5), make_rational(-1, 2)))));
     }
     else if (d == 6) res = make_sqrt(3);
+    else if (d == 8) {
+        if (n == 1) res = make_plus(expr_new_integer(1), make_sqrt(2));
+        else if (n == 3) res = make_plus(expr_new_integer(-1), make_sqrt(2));
+    }
     else if (d == 10) {
         if (n == 1) res = make_sqrt_expr(make_plus(expr_new_integer(5), make_times(expr_new_integer(2), make_sqrt(5))));
         else if (n == 3) res = make_sqrt_expr(make_plus(expr_new_integer(5), make_times(expr_new_integer(-2), make_sqrt(5))));
@@ -674,6 +724,82 @@ static Expr* exact_csc(int64_t n, int64_t d) {
  * variable). We deliberately do NOT fold the opposite direction
  * (ArcSin[Sin[x]], etc.) because those only reduce to x on each function's
  * principal domain. */
+/*
+ * trig_quarter_shift:
+ * f[theta + k Pi/2] for an integer k (a Plus argument whose one exact
+ * Pi-term is a multiple of Pi/2) is rewritten by the quarter-period
+ * identities: Sin[x + Pi] -> -Sin[x], Sin[x + Pi/2] -> Cos[x],
+ * Cos[Pi/2 - x] -> Sin[x], Tan[x + Pi/2] -> -Cot[x], Sin[x + 2 Pi] -> Sin[x].
+ * A shift that is not a multiple of Pi/2 (x + Pi/3) is left alone, as is a
+ * Degree term.  `head` is the interned name of the calling head; returns
+ * NULL when no rewrite applies.  The result is unevaluated: the evaluator
+ * finishes it (folding Sin[-x] etc.).
+ */
+static Expr* trig_quarter_shift(Expr* arg, const char* head) {
+    if (!head_is(arg, SYM_Plus) || arg->data.function.arg_count < 2) return NULL;
+    size_t nargs = arg->data.function.arg_count;
+    size_t pi_at = nargs;
+    for (size_t i = 0; i < nargs; i++) {
+        Expr* t = arg->data.function.args[i];
+        bool is_pi_term =
+            (t->type == EXPR_SYMBOL && t->data.symbol.name == SYM_Pi) ||
+            (head_is(t, SYM_Times) && t->data.function.arg_count == 2 &&
+             t->data.function.args[1]->type == EXPR_SYMBOL &&
+             t->data.function.args[1]->data.symbol.name == SYM_Pi);
+        if (!is_pi_term) continue;
+        if (pi_at != nargs) return NULL;        /* two Pi terms: not canonical */
+        pi_at = i;
+    }
+    if (pi_at == nargs) return NULL;
+    int64_t n, d;
+    if (!extract_pi_multiplier(arg->data.function.args[pi_at], &n, &d)) return NULL;
+    if (d != 1 && d != 2) return NULL;
+    int64_t k = (d == 1) ? (n % 2) * 2 : (n % 4);   /* shift = k Pi/2 mod 2 Pi */
+    k = ((k % 4) + 4) % 4;
+
+    /* Per head: the result head and sign for k = 0, 1, 2, 3. */
+    const char* to[4]; int sg[4];
+    if (head == SYM_Sin) {
+        to[0] = SYM_Sin; to[1] = SYM_Cos; to[2] = SYM_Sin; to[3] = SYM_Cos;
+        sg[0] = 1; sg[1] = 1; sg[2] = -1; sg[3] = -1;
+    } else if (head == SYM_Cos) {
+        to[0] = SYM_Cos; to[1] = SYM_Sin; to[2] = SYM_Cos; to[3] = SYM_Sin;
+        sg[0] = 1; sg[1] = -1; sg[2] = -1; sg[3] = 1;
+    } else if (head == SYM_Csc) {
+        to[0] = SYM_Csc; to[1] = SYM_Sec; to[2] = SYM_Csc; to[3] = SYM_Sec;
+        sg[0] = 1; sg[1] = 1; sg[2] = -1; sg[3] = -1;
+    } else if (head == SYM_Sec) {
+        to[0] = SYM_Sec; to[1] = SYM_Csc; to[2] = SYM_Sec; to[3] = SYM_Csc;
+        sg[0] = 1; sg[1] = -1; sg[2] = -1; sg[3] = 1;
+    } else if (head == SYM_Tan) {
+        to[0] = SYM_Tan; to[1] = SYM_Cot; to[2] = SYM_Tan; to[3] = SYM_Cot;
+        sg[0] = 1; sg[1] = -1; sg[2] = 1; sg[3] = -1;
+    } else if (head == SYM_Cot) {
+        to[0] = SYM_Cot; to[1] = SYM_Tan; to[2] = SYM_Cot; to[3] = SYM_Tan;
+        sg[0] = 1; sg[1] = -1; sg[2] = 1; sg[3] = -1;
+    } else {
+        return NULL;
+    }
+
+    /* theta = the Plus without its Pi term */
+    Expr* theta;
+    if (nargs == 2) {
+        theta = expr_copy(arg->data.function.args[pi_at == 0 ? 1 : 0]);
+    } else {
+        Expr** rest = (Expr**)malloc((nargs - 1) * sizeof(Expr*));
+        if (!rest) return NULL;
+        size_t j = 0;
+        for (size_t i = 0; i < nargs; i++)
+            if (i != pi_at) rest[j++] = expr_copy(arg->data.function.args[i]);
+        theta = expr_new_function(expr_new_symbol(SYM_Plus), rest, nargs - 1);
+        free(rest);
+    }
+    Expr* inner_args[1] = { theta };
+    Expr* out = expr_new_function(expr_new_symbol(to[k]), inner_args, 1);
+    if (sg[k] < 0) out = make_times(expr_new_integer(-1), out);
+    return out;
+}
+
 static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
     /* inverse_name is an interned SYM_* pointer: no string hash per call */
     if (head_is(arg, inverse_name) &&
@@ -711,6 +837,9 @@ Expr* builtin_sin(Expr* res) {
 
     // Sin[I y] -> I Sinh[y]
     { Expr* f = trig_i_fold(arg, "Sinh", +1); if (f) return f; }
+
+    // f[theta + k Pi/2]: quarter-period shift identities
+    { Expr* f = trig_quarter_shift(arg, SYM_Sin); if (f) return f; }
 
     // Sin[0] = 0
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
@@ -765,6 +894,9 @@ Expr* builtin_cos(Expr* res) {
 
     // Cos[I y] -> Cosh[y]
     { Expr* f = trig_i_fold(arg, "Cosh", 0); if (f) return f; }
+
+    // f[theta + k Pi/2]: quarter-period shift identities
+    { Expr* f = trig_quarter_shift(arg, SYM_Cos); if (f) return f; }
 
     // Cos[0] = 1
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(1);
@@ -825,6 +957,9 @@ Expr* builtin_tan(Expr* res) {
     // Tan[I y] -> I Tanh[y]
     { Expr* f = trig_i_fold(arg, "Tanh", +1); if (f) return f; }
 
+    // f[theta + k Pi/2]: quarter-period shift identities
+    { Expr* f = trig_quarter_shift(arg, SYM_Tan); if (f) return f; }
+
     // Tan[0] = 0
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
     
@@ -879,6 +1014,9 @@ Expr* builtin_cot(Expr* res) {
     // Cot[I y] -> -I Coth[y]
     { Expr* f = trig_i_fold(arg, "Coth", -1); if (f) return f; }
 
+    // f[theta + k Pi/2]: quarter-period shift identities
+    { Expr* f = trig_quarter_shift(arg, SYM_Cot); if (f) return f; }
+
     // Cot[0] = ComplexInfinity
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_ComplexInfinity);
     
@@ -931,6 +1069,9 @@ Expr* builtin_sec(Expr* res) {
     // Sec[I y] -> Sech[y]
     { Expr* f = trig_i_fold(arg, "Sech", 0); if (f) return f; }
 
+    // f[theta + k Pi/2]: quarter-period shift identities
+    { Expr* f = trig_quarter_shift(arg, SYM_Sec); if (f) return f; }
+
     // Sec[0] = 1
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(1);
     
@@ -982,6 +1123,9 @@ Expr* builtin_csc(Expr* res) {
 
     // Csc[I y] -> -I Csch[y]
     { Expr* f = trig_i_fold(arg, "Csch", -1); if (f) return f; }
+
+    // f[theta + k Pi/2]: quarter-period shift identities
+    { Expr* f = trig_quarter_shift(arg, SYM_Csc); if (f) return f; }
 
     // Csc[0] = ComplexInfinity
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_ComplexInfinity);
@@ -1091,8 +1235,8 @@ static Expr* exact_arccos(Expr* arg) {
 
 static Expr* exact_arctan(Expr* arg) {
     if (exact_inverse_table_cannot_match(arg)) return NULL;
-    int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
-    for (int i = 0; i < 8; i++) {
+    int64_t ds[] = {1, 2, 3, 4, 5, 6, 8, 10, 12};
+    for (int i = 0; i < 9; i++) {
         int64_t d = ds[i];
         for (int64_t n = -d/2; n <= d/2; n++) {
             Expr* val = exact_tan(n, d);
@@ -1110,8 +1254,8 @@ static Expr* exact_arctan(Expr* arg) {
 
 static Expr* exact_arccot(Expr* arg) {
     if (exact_inverse_table_cannot_match(arg)) return NULL;
-    int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
-    for (int i = 0; i < 8; i++) {
+    int64_t ds[] = {1, 2, 3, 4, 5, 6, 8, 10, 12};
+    for (int i = 0; i < 9; i++) {
         int64_t d = ds[i];
         for (int64_t n = 0; n < d; n++) {
             Expr* val = exact_cot(n, d);
@@ -1321,6 +1465,33 @@ static int arctan_direction_sign(Expr* dir) {
  * Reverses exact algebraic mappings for supported inputs.
  * Uses C standard math (catan and atan2) for numeric evaluations.
  */
+/* The sign of an exact real numeric quantity for the two-argument ArcTan:
+ * -1, 0 (a literal zero), +1, or 2 when it is not an exact real number or
+ * its sign is not resolved by its machine value. */
+static int atan2_exact_sign(const Expr* e) {
+    if (e->type == EXPR_INTEGER) return e->data.integer > 0 ? 1 : e->data.integer < 0 ? -1 : 0;
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
+    if (arg_is_inexact(e) || !expr_is_numeric_quantity(e)) return 2;
+    double v;
+    if (!numeric_machine_value(e, &v)) {
+        Expr* nv = numericalize_machine_unplanned(e);
+        bool ok = nv && nv->type == EXPR_REAL;
+        if (ok) v = nv->data.real;
+        if (nv) expr_free(nv);
+        if (!ok) return 2;
+    }
+    if (!isfinite(v) || v == 0.0) return 2;
+    return v > 0 ? 1 : -1;
+}
+
+static bool atan2_mentions_arctan(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_ArcTan)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (atan2_mentions_arctan(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_arctan(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -1417,6 +1588,29 @@ Expr* builtin_arctan(Expr* res) {
             }
         }
         
+        /* Exact real x, y beyond machine integers -- rationals, bignums,
+         * surds, Pi (audit ArcTan#1): the quadrant of (x, y) and the exact
+         * ArcTan[y/x] when it has a closed form.  ArcTan[1/2, 1/2] = Pi/4,
+         * ArcTan[-1/2, 0] = Pi, ArcTan[Pi, 0] = 0, ArcTan[1, -Sqrt[3]] =
+         * -Pi/3.  Without a closed form for ArcTan[y/x] the call is left. */
+        {
+            int sx = atan2_exact_sign(x), sy = atan2_exact_sign(y);
+            if (sx != 2 && sy != 2 && !(sx == 0 && sy == 0)) {
+                if (sy == 0) return sx > 0 ? expr_new_integer(0) : expr_new_symbol(SYM_Pi);
+                if (sx == 0)
+                    return make_times(make_rational(sy > 0 ? 1 : -1, 2), expr_new_symbol(SYM_Pi));
+                Expr* q = eval_and_free(make_times(expr_copy(y),
+                              make_power(expr_copy(x), expr_new_integer(-1))));
+                Expr* t = eval_and_free(expr_new_function(expr_new_symbol(SYM_ArcTan), &q, 1));
+                if (t && !atan2_mentions_arctan(t)) {
+                    if (sx > 0) return t;
+                    return eval_and_free(make_plus(t, make_times(expr_new_integer(sy > 0 ? 1 : -1),
+                                                                 expr_new_symbol(SYM_Pi))));
+                }
+                if (t) expr_free(t);
+            }
+        }
+
 #ifdef USE_MPFR
         /* MPFR two-argument ArcTan[x, y] for real inputs (either carrying
          * MPFR precision). Uses mpfr_atan2. */

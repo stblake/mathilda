@@ -703,7 +703,11 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     } else
 #endif
     if (feasible) result_out = nm_build_result(fbest, orig_vars, xbest, vs.is_int, n);
-    else          result_out = nm_build_infeasible(orig_vars, n);
+    else {
+        /* Say why the answer is the infeasible sentinel (audit NMaximize#3). */
+        fm_warn(fn_name, "nsol", "There are no points that satisfy the constraints.");
+        result_out = nm_build_infeasible(orig_vars, n);
+    }
 
 cleanup:
     for (size_t i = 0; i < n; i++) fm_bind_restore(&binds[i]);
@@ -819,6 +823,14 @@ Expr* builtin_nmaximize(Expr* res) {
             if (fm_expr_to_double_real(fmin_e, &fmin)) {
                 expr_free(fmin_e);
                 min_result->data.function.args[0] = expr_new_real(-fmin);
+            } else if (fmin_e && fmin_e->type == EXPR_SYMBOL &&
+                       fmin_e->data.symbol.name == SYM_Infinity) {
+                /* The infeasible sentinel of the minimisation is +Infinity;
+                 * for the maximum it is -Infinity (audit NMaximize#3). */
+                expr_free(fmin_e);
+                min_result->data.function.args[0] = eval_and_free(
+                    expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2));
             }
         }
     }

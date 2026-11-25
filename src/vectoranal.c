@@ -308,7 +308,10 @@ static Expr* curl_build_nested(curl_ctx* c, int level, size_t base) {
 static Expr* curl_cartesian(Expr* f, const Expr* vars, int n) {
     if (n < 2 || n > 6) return NULL;            /* bound the n! enumeration */
     int k = ncube_depth(f, n);
-    if (k < 1) return NULL;                     /* need a vector/tensor field */
+    /* k = 0, a scalar field, is allowed: its curl is the rank n-1 tensor
+     * eps[i1..i(n-1), j] D[f, x_j] -- {D[f, y], -D[f, x]} in the plane
+     * (audit Curl#1). */
+    if (k < 0) return NULL;
     int dep = n - k - 1;
     if (dep < 0) return NULL;                   /* k > n-1: undefined */
 
