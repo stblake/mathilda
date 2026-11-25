@@ -198,9 +198,24 @@ static bool euler_is_half(const Expr* e) {
 static Expr* euler_one_arg(Expr* arg) {
     unsigned long n = 0;
     long prec = 53;
+    /* Odd-index Euler numbers vanish whatever the size (EulerE#1 of the
+     * 2026-11 audit: EulerE[5001], EulerE[10^30 + 1] stayed symbolic past
+     * the table cap). */
+    if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) > 0
+        && mpz_odd_p(arg->data.bigint))
+        return expr_new_integer(0);
     eidx_kind k = euler_index(arg, &n, &prec);
     if (k == EIDX_NONE) return NULL;          /* symbolic / negative / non-integer */
-    if (n > EULER_NUMBER_CAP) return NULL;     /* too large: stay symbolic */
+    if (n > EULER_NUMBER_CAP) {
+        if (!(n & 1u)) return NULL;            /* too large: stay symbolic */
+        if (k == EIDX_EXACT) return expr_new_integer(0);
+        if (k == EIDX_REAL) return expr_new_real(0.0);
+#ifdef USE_MPFR
+        return expr_new_mpfr_bits((mpfr_prec_t)prec);
+#else
+        return expr_new_integer(0);
+#endif
+    }
 
     mpz_t z;
     mpz_init(z);
@@ -313,7 +328,11 @@ static Expr* euler_two_arg(Expr* nexpr, Expr* x) {
         if (euler_is_half(x)) return euler_half_rule(nexpr);
         return NULL;
     }
-    if (n > EULER_POLY_CAP) return NULL;         /* too large: stay symbolic */
+    if (n > EULER_POLY_CAP) {                    /* too large: stay symbolic */
+        /* ... except at x = 1/2, where E_n(1/2) = 2^-n E_n (0 for odd n). */
+        if (euler_is_half(x)) return euler_half_rule(nexpr);
+        return NULL;
+    }
     return euler_polynomial((size_t)n, x);
 }
 

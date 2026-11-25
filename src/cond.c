@@ -321,10 +321,20 @@ Expr* builtin_piecewise(Expr* res) {
         return v;
     }
 
-    /* Build symbolic Piecewise[{{v, c}, ...}, default?]. The default is
-     * dropped iff the final clause is unconditionally True (it would be
-     * unreachable).  As documented, the values (and the default) that are
-     * kept in the returned form are evaluated: Piecewise[{{1 + 1, x > 0}},
+    /* A trailing {v, True} clause after inconclusive ones IS the default:
+     * Piecewise[{{a, x > 0}, {b, True}}] is canonically
+     * Piecewise[{{a, x > 0}}, b] (Piecewise#2 of the 2026-11 audit), and any
+     * user default after it is unreachable. */
+    Expr* true_default = NULL;
+    if (last_is_true) {
+        true_default = out_vals[out_count - 1];
+        expr_free(out_conds[out_count - 1]);
+        out_count--;
+    }
+
+    /* Build symbolic Piecewise[{{v, c}, ...}, default].  As documented, the
+     * values (and the default) that are kept in the returned form are
+     * evaluated: Piecewise[{{1 + 1, x > 0}},
      * 2 + 2] is Piecewise[{{2, x > 0}}, 4] (Piecewise#1 of the 2026-11 audit
      * -- they used to stay held).  Once evaluated, the next pass finds them
      * unchanged, so a side effect in a value runs once. */
@@ -338,16 +348,12 @@ Expr* builtin_piecewise(Expr* res) {
 
     Expr** pw_args;
     size_t pw_argc;
-    if (last_is_true) {
-        pw_args = malloc(sizeof(Expr*));
-        pw_args[0] = clauses_list;
-        pw_argc = 1;
-    } else {
-        pw_args = malloc(2 * sizeof(Expr*));
-        pw_args[0] = clauses_list;
-        pw_args[1] = default_arg ? eval_and_free(expr_copy(default_arg)) : expr_new_integer(0);
-        pw_argc = 2;
-    }
+    pw_args = malloc(2 * sizeof(Expr*));
+    pw_args[0] = clauses_list;
+    pw_args[1] = true_default ? eval_and_free(true_default)
+               : default_arg ? eval_and_free(expr_copy(default_arg))
+               : expr_new_integer(0);
+    pw_argc = 2;
     Expr* result = expr_new_function(expr_new_symbol(SYM_Piecewise), pw_args, pw_argc);
     free(pw_args);
 

@@ -682,8 +682,33 @@ static Expr* legendre_assoc_type23(int64_t ord, unsigned long m, int type,
 static Expr* legendre_assoc(Expr* n_e, Expr* m_e, int type, Expr* x_e) {
     int64_t ni, mi;
     if (!leg_exact_int(n_e, &ni) || !leg_exact_int(m_e, &mi)) return NULL;
-    if (mi < 0) return NULL;                       /* m < 0 deferred */
     if (leg_norm_order(ni) > LEG_POLY_CAP) return NULL;
+    if (mi < 0) {
+        /* Type 1, 0 < -m <= n: the reflection (DLMF 14.9.3)
+         *   P_n^{-m}(x) = (-1)^m (n-m)!/(n+m)! P_n^m(x)
+         * turns the negative order into the polynomial case above, so
+         * LegendreP[2, -1, x] = x Sqrt[1 - x^2]/2 (LegendreP#1 of the
+         * 2026-11 audit). -m > n (not a polynomial) and types 2/3 are
+         * still deferred. */
+        unsigned long n = leg_norm_order(ni);
+        if (type != 1 || mi < -(int64_t)LEG_POLY_CAP
+            || (unsigned long)(-mi) > n) return NULL;
+        unsigned long am = (unsigned long)(-mi);
+        Expr* pos = legendre_assoc_type1(n, am, x_e);
+        if (!pos) return NULL;
+        mpz_t num, den;
+        mpz_inits(num, den, NULL);
+        mpz_fac_ui(num, n - am);
+        mpz_fac_ui(den, n + am);
+        if (am & 1u) mpz_neg(num, num);
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_mpz(den)),
+                       expr_new_integer(-1) }, 2);
+        Expr* ratio = expr_bigint_normalize(expr_new_bigint_from_mpz(num));
+        mpz_clears(num, den, NULL);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ ratio, inv, pos }, 3));
+    }
     unsigned long m = (unsigned long)mi;
 
     if (type == 1)

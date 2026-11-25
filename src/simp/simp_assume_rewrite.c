@@ -1747,6 +1747,9 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> %s", x, x);
         /* Sign[x] -> 1  for x > 0 */
         SEP(); EMIT("Sign[%s] :> 1", x);
+        /* HeavisideTheta[x], UnitStep[x] -> 1 for x > 0 (HeavisideTheta#1) */
+        SEP(); EMIT("HeavisideTheta[%s] :> 1", x);
+        SEP(); EMIT("UnitStep[%s] :> 1", x);
         /* Arg[x] -> 0  for x > 0 (positive real) */
         SEP(); EMIT("Arg[%s] :> 0", x);
         /* Conjugate[x] -> x  for x > 0 (x is real) */
@@ -1791,6 +1794,9 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> -%s", x, x);
         /* Sign[x] -> -1  for x < 0 */
         SEP(); EMIT("Sign[%s] :> -1", x);
+        /* HeavisideTheta[x], UnitStep[x] -> 0 for x < 0 (HeavisideTheta#1) */
+        SEP(); EMIT("HeavisideTheta[%s] :> 0", x);
+        SEP(); EMIT("UnitStep[%s] :> 0", x);
         /* Arg[x] -> Pi  for x < 0 (negative real, principal branch) */
         SEP(); EMIT("Arg[%s] :> Pi", x);
         /* Conjugate[x] -> x  for x < 0 (x is real) */

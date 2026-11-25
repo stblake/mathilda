@@ -183,7 +183,7 @@ static bool fe_root_of_unity(const Expr* w, int64_t* rn, int64_t* rd) {
  * Hankel / spherical Bessel definitions (FunctionExpand only -- the
  * definite-integral finalisation keeps a HankelH1 it produced). */
 enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_PFQ = 8, FE_BESSEL = 16,
-       FE_ALL = 31 };
+       FE_GAMMA = 32, FE_ALL = 63 };
 static Expr* fe_walk(const Expr* e, bool* changed, int which);
 static Expr* fe_expand(const Expr* e);
 static Expr* fe_log_reciprocal(const Expr* e, bool* changed);
@@ -473,12 +473,56 @@ static Expr* fe_log_root(const Expr* e) {
         expr_free(R);
         return out;
     }
+    /* 1 + I and 1 - I arrive as the atoms Complex[1, +-1], not as a Plus:
+     * Log[1 + I] = Log[2 Cos[Pi/4]] + I Pi/4 (FunctionExpand#1 of the
+     * 2026-11 audit). */
+    if (fe_is_head(c, SYM_Complex) && c->data.function.arg_count == 2 &&
+        c->data.function.args[0]->type == EXPR_INTEGER &&
+        c->data.function.args[0]->data.integer == 1 &&
+        c->data.function.args[1]->type == EXPR_INTEGER &&
+        (c->data.function.args[1]->data.integer == 1 ||
+         c->data.function.args[1]->data.integer == -1)) {
+        Expr* R = make_rational(c->data.function.args[1]->data.integer, 2);
+        Expr* out = fe_apply("(Log[2]/2 + I Pi #1/2)&", &R, 1);   /* 2 Cos[Pi/4] = Sqrt[2] */
+        expr_free(R);
+        return out;
+    }
     if (fe_root_of_unity(c, &rn, &rd) && rn != 0) {
         Expr* R = make_rational(rn, rd);
         Expr* out = fe_apply("(I Pi #1)&", &R, 1);
         expr_free(R);
         return out;
     }
+    return NULL;
+}
+
+/* Beta, Binomial, Pochhammer and Factorial of symbolic arguments in terms
+ * of Gamma (FunctionExpand#2 of the 2026-11 audit):
+ *   Beta[a, b]      -> Gamma[a] Gamma[b]/Gamma[a + b]
+ *   Binomial[n, k]  -> Gamma[1 + n]/(Gamma[1 + k] Gamma[1 - k + n])
+ *   Pochhammer[a, n]-> Gamma[a + n]/Gamma[a]
+ *   n!              -> Gamma[1 + n]
+ * Only when no argument is an explicit number (those already evaluate to a
+ * closed form, or are better left as the product they expand to). */
+static Expr* fe_gamma_form(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = e->data.function.args[i];
+        if (a->type == EXPR_INTEGER || a->type == EXPR_BIGINT || a->type == EXPR_REAL
+            || a->type == EXPR_MPFR || fe_is_head(a, SYM_Rational)
+            || fe_is_head(a, SYM_Complex)) return NULL;
+    }
+    Expr* args[2];
+    for (size_t i = 0; i < n && i < 2; i++) args[i] = e->data.function.args[i];
+    if (fe_is_head(e, SYM_Beta) && n == 2)
+        return fe_apply("(Gamma[#1] Gamma[#2]/Gamma[#1 + #2])&", args, 2);
+    if (fe_is_head(e, SYM_Binomial) && n == 2)
+        return fe_apply("(Gamma[1 + #1]/(Gamma[1 + #2] Gamma[1 - #2 + #1]))&", args, 2);
+    if (fe_is_head(e, SYM_Pochhammer) && n == 2)
+        return fe_apply("(Gamma[#1 + #2]/Gamma[#1])&", args, 2);
+    if (fe_is_head(e, SYM_Factorial) && n == 1)
+        return fe_apply("Gamma[1 + #1]&", args, 1);
     return NULL;
 }
 
@@ -932,6 +976,7 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
         if (!s) s = fe_pcfd_integer(node);
     }
     if (!s && (which & FE_BESSEL)) s = fe_bessel_definition(node);
+    if (!s && (which & FE_GAMMA)) s = fe_gamma_form(node);
     if (!s && (which & (FE_ROOTS | FE_PGAMMA))) s = fe_polygamma_closed(node);
     if (s) { expr_free(node); node = s; *changed = true; }
     return node;

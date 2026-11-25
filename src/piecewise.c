@@ -386,16 +386,23 @@ static Expr* do_piecewise_numeric_exact(Expr* x, int op) {
         spec.mode = NUMERIC_MODE_MPFR;
         spec.bits = prec;
         Expr* approx = numericalize(x, spec);
-        /* Must collapse to a pure real number; anything else (still
-         * symbolic, or Complex[...]) means `x` is not a real numeric and we
-         * have no business rounding it. */
-        if (!approx || (approx->type != EXPR_MPFR && approx->type != EXPR_REAL
-                        && approx->type != EXPR_INTEGER
-                        && approx->type != EXPR_BIGINT)) {
+        /* Must collapse to a number: a pure real, or a Complex[re, im] whose
+         * parts are real numbers (Floor[Pi + I E], Ceiling[I Sqrt[2]]) --
+         * the operation acts on the two parts separately, and the
+         * two-precision agreement below certifies both at once. Anything
+         * still symbolic means `x` is not numeric and we leave it alone. */
+        Expr *are = NULL, *aim = NULL;
+        bool is_real_num = approx && (approx->type == EXPR_MPFR
+                        || approx->type == EXPR_REAL
+                        || approx->type == EXPR_INTEGER
+                        || approx->type == EXPR_BIGINT);
+        bool is_cpx_num = approx && !is_real_num
+                        && is_complex(approx, &are, &aim);
+        if (!is_real_num && !is_cpx_num) {
             if (approx) expr_free(approx);
             break;
         }
-        Expr* cur = do_piecewise_1(approx, op);   /* MPFR/real -> exact int */
+        Expr* cur = do_piecewise_1(approx, op);   /* MPFR/real/complex -> exact */
         expr_free(approx);
         if (!cur) break;
         if (prev && expr_eq(prev, cur)) {

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "eval.h"              /* eval_and_free */
 #include "arithmetic.h"        /* is_rational, make_complex, is_complex */
 #include "numeric.h"           /* numeric_min_inexact_bits */
 #include "attr.h"
@@ -153,6 +154,16 @@ static bool sinc_machine_complex(double complex z, double complex* out) {
 /* Sinc[z]                                                            */
 /* ------------------------------------------------------------------ */
 
+/* True if a Sin[...] call occurs anywhere in e. */
+static bool sinc_contains_sin(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Sin) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sinc_contains_sin(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* sinc_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
@@ -199,6 +210,21 @@ static Expr* sinc_one_arg(Expr* arg) {
             }
 #endif
         }
+    }
+
+    /* 4. An exact numeric argument whose Sin has a closed form: Sinc[z] =
+     *    Sin[z]/z, so Sinc[Pi] = 0, Sinc[Pi/4] = 2 Sqrt[2]/Pi and Sinc[I] =
+     *    Sinh[1] (Sinc#1 of the 2026-11 audit). A Sin[z] that stays a Sin
+     *    call (Sinc[2]) leaves Sinc[z] symbolic. */
+    if (expr_is_numeric_quantity(arg) && numeric_min_inexact_bits(arg) == 0) {
+        Expr* sn = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sin),
+                       (Expr*[]){ expr_copy(arg) }, 1));
+        bool still_sin = sinc_contains_sin(sn);
+        if (sn && !still_sin)
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ sn, expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy(arg), expr_new_integer(-1) }, 2) }, 2));
+        if (sn) expr_free(sn);
     }
 
     return NULL; /* leave symbolic */

@@ -147,6 +147,15 @@ Expr* builtin_struvel(Expr* res) {
     if (sf2_exact_zero(z)) {
         double nuv;
         if (common_machine_real_value(nu, &nuv) && nuv > -1.0) return mk_int(0);
+        /* A negative half-odd order: L_{-(n+1/2)} = I_{n+1/2}, 0 at z = 0
+         * (StruveL#1 of the 2026-11 audit: the Bessel form was evaluated
+         * at 0 term by term, 0 ComplexInfinity -> Indeterminate). */
+        if (nu->type == EXPR_FUNCTION && is_rational_like(nu)
+            && nu->data.function.args[0]->type == EXPR_INTEGER
+            && nu->data.function.args[1]->type == EXPR_INTEGER
+            && nu->data.function.args[1]->data.integer == 2
+            && nu->data.function.args[0]->data.integer < 0)
+            return mk_int(0);
     }
     bool handled;
     Expr* v = sf2_numeric(nu, z, 0, sl_machine, sl_arb, &handled);

@@ -38,11 +38,28 @@ static bool head_name_is(const Expr* e, const char* name) {
            strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
-/* Does e contain any DiracDelta[...] subexpression? */
+/* e = Derivative[n][DiracDelta][g] with one argument and an integer n >= 1:
+ * the order into *n (0 when e is not such a node). */
+static int dirac_deriv_order(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1) return 0;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_FUNCTION || h->data.function.arg_count != 1) return 0;
+    const Expr* d = h->data.function.head;
+    if (d->type != EXPR_FUNCTION || !head_name_is(d, "Derivative") ||
+        d->data.function.arg_count != 1) return 0;
+    const Expr* n = d->data.function.args[0];
+    const Expr* f = h->data.function.args[0];
+    if (f->type != EXPR_SYMBOL || strcmp(f->data.symbol.name, "DiracDelta") != 0) return 0;
+    if (n->type != EXPR_INTEGER || n->data.integer < 1 || n->data.integer > 64) return 0;
+    return (int)n->data.integer;
+}
+
+/* Does e contain any DiracDelta[...] (or Derivative[n][DiracDelta][...])
+ * subexpression? */
 static bool contains_dirac(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_FUNCTION) {
-        if (head_name_is(e, "DiracDelta")) return true;
+        if (head_name_is(e, "DiracDelta") || dirac_deriv_order(e) > 0) return true;
         if (contains_dirac(e->data.function.head)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (contains_dirac(e->data.function.args[i])) return true;
@@ -119,7 +136,9 @@ static Expr* boundary_factor(const Expr* x0, const Expr* lo, const Expr* hi) {
 static const Expr* find_dirac(const Expr* e, const char* xn, int* count) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     const Expr* found = NULL;
-    if (head_name_is(e, "DiracDelta") && !free_of(e, xn)) { (*count)++; found = e; }
+    if ((head_name_is(e, "DiracDelta") || dirac_deriv_order(e) > 0) && !free_of(e, xn)) {
+        (*count)++; found = e;
+    }
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         const Expr* f2 = find_dirac(e->data.function.args[i], xn, count);
         if (!found) found = f2;
@@ -236,6 +255,38 @@ static Expr* sift_term(const Expr* term, const Expr* x, const Expr* lo, const Ex
     /* h(x) = term with the DiracDelta factor removed. */
     Expr* h = eval_take(mk_fn2("ReplaceAll", cp(term),
                     mk_fn2("Rule", cp(delta), expr_new_integer(1))));
+
+    /* A derivative of the impulse, linear argument u = alpha x + beta with
+     * the point x0 strictly inside: d/dx = alpha d/du and integration by
+     * parts give
+     *   Integrate[h(x) DiracDelta^(n)[u], x] = (-1)^n h^(n)(x0)/(alpha^n |alpha|)
+     * (DiracDelta#3 of the 2026-11 audit). An impulse on an endpoint or a
+     * nonlinear argument declines. */
+    int dn = dirac_deriv_order(delta);
+    if (dn > 0) {
+        if (!linear) { expr_free(alpha); expr_free(h); return NULL; }
+        Expr* beta = subst(arg, x, expr_new_integer(0));
+        Expr* x0 = eval_take(mk_fn2("Times", expr_new_integer(-1),
+                        mk_fn2("Times", beta, mk_fn2("Power", cp(alpha),
+                                                     expr_new_integer(-1)))));
+        Expr* B = boundary_factor(x0, lo, hi);
+        bool inside = B && B->type == EXPR_INTEGER;
+        if (!inside) {
+            if (B) expr_free(B);
+            expr_free(alpha); expr_free(x0); expr_free(h);
+            return NULL;
+        }
+        Expr* hd = eval_take(mk_fn2("D", h, mk_fn2("List", cp(x), expr_new_integer(dn))));
+        Expr* hd_at = subst(hd, x, cp(x0));
+        expr_free(hd); expr_free(x0);
+        Expr* coef = eval_take(mk_fn2("Times",
+            mk_fn2("Power", expr_new_integer(-1), expr_new_integer(dn)),
+            mk_fn2("Times",
+                mk_fn2("Power", cp(alpha), expr_new_integer(-dn)),
+                mk_fn2("Power", mk_fn1("Abs", cp(alpha)), expr_new_integer(-1)))));
+        expr_free(alpha);
+        return eval_take(mk_fn2("Times", hd_at, mk_fn2("Times", coef, B)));
+    }
 
     if (linear) {
         /* beta = arg |_{x=0};  x0 = -beta/alpha. */

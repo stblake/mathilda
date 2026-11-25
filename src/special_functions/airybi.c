@@ -487,18 +487,23 @@ static void airy_ai_asymp(const acx* w, acx* Ai, acx* Aip, mpfr_prec_t P) {
     mpfr_t am; mpfr_init2(am, (P < 64 ? 64 : P));
     acx_arg(am, w);
     double arg = mpfr_get_d(am, ARND);
+    acx_abs(am, w);
+    double rw = mpfr_get_d(am, ARND);
     mpfr_clear(am);
+    /* the phase exp(+-i zeta) needs log2|zeta| more bits (as in airyai.c;
+     * AiryBi[-10.^30] was off by a factor 4 -- AiryAiPrime#1 class) */
+    mpfr_prec_t zguard = (mpfr_prec_t)(rw > 2.0 ? ceil(1.5 * log2(rw)) : 0);
 
     const double TWO_PI_3 = 2.0 * M_PI / 3.0;
     if (fabs(arg) <= TWO_PI_3 + 1e-12) {
-        mpfr_prec_t wp = P + 64;
+        mpfr_prec_t wp = P + 64 + zguard;
         acx ai, aip; acx_init(&ai, wp); acx_init(&aip, wp);
         airy_ai_asymp_direct(&ai, &aip, w, wp);
         mpfr_set(Ai->re, ai.re, ARND);  mpfr_set(Ai->im, ai.im, ARND);
         mpfr_set(Aip->re, aip.re, ARND); mpfr_set(Aip->im, aip.im, ARND);
         acx_clear(&ai); acx_clear(&aip);
     } else {
-        mpfr_prec_t wp = P + 96;
+        mpfr_prec_t wp = P + 96 + zguard;
         acx w0, wb, z1, z2, ai1, aip1, ai2, aip2, t1, t2;
         acx_init(&w0, wp); acx_init(&wb, wp);
         acx_init(&z1, wp); acx_init(&z2, wp);
@@ -667,9 +672,10 @@ static void airy_bi_core(const acx* z, acx* Bi, acx* Bip, mpfr_prec_t P) {
          * companion of the dominant series is ~exp(-2 Re zeta); demand it
          * below 2^-P before trusting the single series. */
         double rezeta = (2.0 / 3.0) * pow(rd, 1.5) * cos(1.5 * th);
+        mpfr_prec_t zguard = (mpfr_prec_t)(rd > 2.0 ? ceil(1.5 * log2(rd)) : 0);
         if (rezeta > 0.5 * (double)P * M_LN2) {
             /* Dominant asymptotic series, comfortably inside |arg z| < pi/3. */
-            mpfr_prec_t wp = P + 64;
+            mpfr_prec_t wp = P + 64 + zguard;
             acx bi, bip; acx_init(&bi, wp); acx_init(&bip, wp);
             airy_bi_asymp_dominant(&bi, &bip, z, wp);
             mpfr_set(Bi->re, bi.re, ARND);  mpfr_set(Bi->im, bi.im, ARND);
@@ -682,7 +688,7 @@ static void airy_bi_core(const acx* z, acx* Bi, acx* Bip, mpfr_prec_t P) {
              * with w_p = z e^{ 2 pi i/3}, w_m = z e^{-2 pi i/3}. Both rotated
              * points have |arg| <= pi and modulus r (large) -- evaluated by the
              * Ai asymptotic kernel above. */
-            mpfr_prec_t wp = P + 96;
+            mpfr_prec_t wp = P + 96 + zguard;
             acx rotp, rotm, wp_pt, wm_pt, ai_p, aip_p, ai_m, aip_m, t1, t2;
             acx c16p, c16m, c56p, c56m;     /* e^{+-i pi/6}, e^{+-i 5pi/6} */
             acx_init(&rotp, wp); acx_init(&rotm, wp);

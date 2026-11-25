@@ -2018,6 +2018,34 @@ Expr* builtin_power(Expr* res) {
      *   (-1/8)^(1/3)  -> (-1)^(1/3) * 8^(-1/3) -> (-1)^(1/3) / 2
      *   (1/4)^(2/3)   -> 4^(-2/3) -> 1/2 * 2^(-1/3) (via perfect-power)
      */
+    /* A positive Rational base with a bigint part and an exact q-th root:
+     * (1/10^30)^(1/3) = 1/10^10, (1/2^300)^(1/3) = 1/2^100 (CubeRoot#1 of
+     * the 2026-11 audit; the int64 split below never sees a bigint part). */
+    {
+        int64_t pp_b, qq_b;
+        if (base->type == EXPR_FUNCTION && base->data.function.arg_count == 2
+            && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol.name == SYM_Rational
+            && (base->data.function.args[0]->type == EXPR_BIGINT
+                || base->data.function.args[1]->type == EXPR_BIGINT)
+            && is_rational(exp, &pp_b, &qq_b) && qq_b > 1 && qq_b <= 1000000) {
+            mpz_t zn, zd, rn, rd;
+            expr_to_mpz(base->data.function.args[0], zn);
+            expr_to_mpz(base->data.function.args[1], zd);
+            mpz_inits(rn, rd, NULL);
+            Expr* out = NULL;
+            if (mpz_sgn(zn) > 0 && mpz_sgn(zd) > 0
+                && mpz_root(rn, zn, (unsigned long)qq_b)
+                && mpz_root(rd, zd, (unsigned long)qq_b)) {
+                Expr* rb = make_rational_mpz(rn, rd);
+                out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ rb, expr_new_integer(pp_b) }, 2));
+            }
+            mpz_clears(zn, zd, rn, rd, NULL);
+            if (out) return out;
+        }
+    }
+
     {
         int64_t pp_rb, qq_rb;
         if (is_rational(base, &bn, &bd) && bd > 1 &&

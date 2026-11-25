@@ -634,6 +634,22 @@ static Expr* deep_positivity_walk(const Expr* e, const AssumeCtx* ctx,
         }
     }
 
+    /* HeavisideTheta[p] / UnitStep[p] -> 1 (p > 0) / 0 (p < 0) for a
+     * provably-signed real compound p (Refine[HeavisideTheta[x - 1], x > 2]
+     * -- HeavisideTheta#1 of the 2026-11 audit). */
+    if ((h == SYM_HeavisideTheta || h == SYM_UnitStep) &&
+        rebuilt->data.function.arg_count == 1) {
+        const Expr* p = rebuilt->data.function.args[0];
+        if (p->type == EXPR_FUNCTION) {
+            int s = deep_sign(p, ctx, Aconj, b);
+            if (s != 0) {
+                *changed = 1;
+                expr_free(rebuilt);
+                return expr_new_integer(s > 0 ? 1 : 0);
+            }
+        }
+    }
+
     /* Arg[p] -> 0 (p > 0) / Pi (p < 0) for a provably-signed real compound p.
      * Sound because deep_sign only settles the sign of a REAL expression (the
      * same basis as the Abs/Sqrt collapses above); a complex argument leaves

@@ -620,7 +620,10 @@ static void ex_sici_far(ExC z, ExC* si, ExC* ci) {
         ex_fg_asym(z, &f, &g);
         /* Si = pi/2 - f cos z - g sin z,  Ci = f sin z - g cos z */
         ExC a = ex_add(ex_mul(f, cz), ex_mul(g, sz));
-        *si = exc((EX_PI_2_HI - a.re) + EX_PI_2_LO, -a.im);
+        /* Pi/2 only off the imaginary axis: Si(i y) is purely imaginary
+         * (the Stokes constants +-Pi/2 average to 0 at Re z = 0). */
+        if (z.re > 0.0) *si = exc((EX_PI_2_HI - a.re) + EX_PI_2_LO, -a.im);
+        else            *si = exc(-a.re, -a.im);
         *ci = ex_sub(ex_mul(f, sz), ex_mul(g, cz));
         return;
     }

@@ -286,12 +286,12 @@ void test_piecewise_first_true_returns_value() {
     assert_eval_eq("Piecewise[{{1, False}, {2, True}, {3, foo}}, 99]", "2", 0);
 }
 
-/* Drop unreachable cases after the first True; default is also dropped
- * because the True clause becomes the final unconditional case. */
+/* Drop unreachable cases after the first True; that clause becomes the
+ * default, replacing the unreachable user default (Piecewise#2). */
 void test_piecewise_drop_after_true() {
     assert_eval_eq(
         "Piecewise[{{a, d1}, {b, d2}, {c, True}, {d, d4}, {e, d5}}, ef]",
-        "Piecewise[{{a, d1}, {b, d2}, {c, True}}]", 0);
+        "Piecewise[{{a, d1}, {b, d2}}, c]", 0);
 }
 
 /* Drop {_, False} clauses but keep inconclusive ones. */
@@ -413,12 +413,12 @@ void test_piecewise_malformed_unevaluated() {
     assert_eval_eq("Piecewise[]", "Piecewise[]", 0);
 }
 
-/* A True buried among inconclusive predecessors becomes the symbolic
- * final case (the default vanishes). */
+/* A True buried among inconclusive predecessors becomes the default
+ * (the user default is unreachable). */
 void test_piecewise_true_after_inconclusive() {
     assert_eval_eq(
         "Piecewise[{{a, d1}, {b, True}}, c]",
-        "Piecewise[{{a, d1}, {b, True}}]", 0);
+        "Piecewise[{{a, d1}}, b]", 0);
 }
 
 /* Merging respects identity of values: Pi vs. 3 are distinct, so no

@@ -389,7 +389,7 @@ static void collect_breakpoints(const Expr* e, const Expr* x, const Expr* a,
     const char* h = e->data.function.head->type == EXPR_SYMBOL
                       ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
-    if ((h == SYM_Abs || h == SYM_Sign ||
+    if ((h == SYM_Abs || h == SYM_Sign || h == SYM_Ramp ||
          h == SYM_HeavisideTheta || h == SYM_UnitStep) &&
         n == 1 && contains_symbol(e->data.function.args[0], x)) {
         solve_roots(e->data.function.args[0], x, a, b, s);
@@ -423,7 +423,7 @@ static bool has_branch_head(const Expr* e, const Expr* x) {
     const char* h = e->data.function.head->type == EXPR_SYMBOL
                       ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
-    if ((h == SYM_Abs || h == SYM_Sign ||
+    if ((h == SYM_Abs || h == SYM_Sign || h == SYM_Ramp ||
          h == SYM_HeavisideTheta || h == SYM_UnitStep ||
          h == SYM_Min || h == SYM_Max ||
          h == SYM_Piecewise) && contains_symbol(e, x))
@@ -514,6 +514,8 @@ static Expr* resolve_unary(const char* h, Expr* g, const Expr* x,
     expr_free(gm);
     if (!pos && !neg) { expr_free(g); *ok = false; return NULL; }
     if (h == SYM_Abs) return pos ? g : neg_of(g);
+    /* Ramp[g] = g UnitStep[g] (Ramp#2 of the 2026-11 audit) */
+    if (h == SYM_Ramp) { if (pos) return g; expr_free(g); return expr_new_integer(0); }
     expr_free(g);
     if (h == SYM_Sign) return expr_new_integer(pos ? 1 : -1);
     /* HeavisideTheta / UnitStep */
@@ -551,7 +553,7 @@ static Expr* resolve_at(const Expr* e, const Expr* x, const Expr* m,
                       ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
 
-    if ((h == SYM_Abs || h == SYM_Sign ||
+    if ((h == SYM_Abs || h == SYM_Sign || h == SYM_Ramp ||
          h == SYM_HeavisideTheta || h == SYM_UnitStep) &&
         n == 1 && contains_symbol(e->data.function.args[0], x)) {
         Expr* g = resolve_at(e->data.function.args[0], x, m, as, ok);

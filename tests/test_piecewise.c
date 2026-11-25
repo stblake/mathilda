@@ -166,7 +166,8 @@ void test_piecewise() {
         {"Floor[-(3^(2/3))]", "-3"},
         // Genuinely symbolic / complex arguments stay unevaluated.
         {"Round[2.5 + y]", "Round[Plus[2.5, y]]"},
-        {"Round[(-3)^(2/3)]", "Round[Power[-3, Rational[2, 3]]]"},
+        // An exact complex quantity rounds part by part (Floor#1/Ceiling#1).
+        {"Round[(-3)^(2/3)]", "Complex[-1, 2]"},
 
         // Two argument forms
         {"Floor[7, 3]", "6"},

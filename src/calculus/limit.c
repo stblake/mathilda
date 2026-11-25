@@ -4271,6 +4271,59 @@ static Expr* try_step_function_onesided(Expr* f, LimitCtx* ctx) {
     return NULL;                                    /* unknown-sign m: abstain */
 }
 
+/* Replace every HeavisideTheta[g] / UnitStep[g] / Sign[g] (g depending on x)
+ * that is locally constant at the limit point by that constant: the inner
+ * limit of g is a nonzero real or +-Infinity (a point of continuity), or 0
+ * approached from one known side. Limit[HeavisideTheta[x], x -> Infinity] = 1,
+ * Limit[HeavisideTheta[x - 1], x -> 2] = 1 and the one-sided
+ * Limit[HeavisideTheta[x], x -> 0, Direction -> -1] = 1
+ * (HeavisideTheta#2 of the 2026-11 audit). Owned result; *changed set when a
+ * step was replaced. */
+static Expr* replace_locally_constant_steps(Expr* e, LimitCtx* ctx, bool* changed) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    const char* hn = e->data.function.head->type == EXPR_SYMBOL
+                   ? e->data.function.head->data.symbol.name : NULL;
+    if (n == 1 && hn && (hn == SYM_HeavisideTheta || hn == SYM_UnitStep || hn == SYM_Sign)
+        && expr_contains(e->data.function.args[0], ctx->x)) {
+        Expr* g = e->data.function.args[0];
+        LimitCtx sub = *ctx; sub.depth += 1;
+        Expr* gc = expr_copy(g);
+        Expr* m = compute_limit(gc, &sub);
+        expr_free(gc);
+        int sg = 0;
+        if (m && !expr_contains(m, ctx->x)) {
+            if (is_infinity_sym(m)) sg = 1;
+            else if (is_neg_infinity(m)) sg = -1;
+            else if (is_lit_zero(m)) sg = sign_near_point(g, ctx);
+            else sg = literal_sign(m);
+        }
+        if (m) expr_free(m);
+        if (sg != 0) {
+            *changed = true;
+            if (hn == SYM_Sign) return mk_int(sg);
+            return mk_int(sg > 0 ? 1 : 0);
+        }
+        return expr_copy(e);
+    }
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    bool any = false;
+    for (size_t i = 0; i < n; i++) {
+        bool c = false;
+        a[i] = replace_locally_constant_steps(e->data.function.args[i], ctx, &c);
+        any |= c;
+    }
+    if (!any) {
+        for (size_t i = 0; i < n; i++) expr_free(a[i]);
+        free(a);
+        return expr_copy(e);
+    }
+    *changed = true;
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
 /* `f` is a Times with exactly one Floor/Ceiling/Round/IntegerPart[g] factor
  * whose argument g -> +/-Infinity, and the product of the OTHER factors -> 0.
  * Then the O(1) step error washes out and H[g] ~ g: replace it and recurse.
@@ -4477,6 +4530,18 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      *  - Mod[a, x] -> a at +Infinity. */
     {
         Expr* sg = try_step_function_onesided(f_in, ctx);
+        if (!sg) {
+            bool stepped = false;
+            Expr* fr = replace_locally_constant_steps(f_in, ctx, &stepped);
+            if (stepped) {
+                Expr* fe = simp(fr);
+                if (!contains_opaque_head_over(fe, ctx->x) || !expr_contains(fe, ctx->x))
+                    sg = compute_limit(fe, ctx);
+                expr_free(fe);
+            } else {
+                expr_free(fr);
+            }
+        }
         if (!sg) sg = try_step_asymptotic(f_in, ctx);
         if (!sg) sg = try_bounded_opaque_vanishing(f_in, ctx);
         if (!sg) sg = try_mod_at_infinity(f_in, ctx);

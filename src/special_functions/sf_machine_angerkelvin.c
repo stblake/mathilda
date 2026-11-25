@@ -302,6 +302,13 @@ bool sf_machine_kelvin(int which, double nu, double x, double* out) {
         double sn, cs;                         /* e^(-nu pi i/2) = cs - i sn */
         aw_sincospi(0.5 * nu, &sn, &cs);
         *out = which == 2 ? cs * rr + sn * ri : cs * ri - sn * rr;
+        /* The rotation takes one part of e^(-nu pi i/2) K_nu: at small x
+         * the other part dominates (K_2 ~ 2/w^2 is ~2*10^16 at x = 1e-8
+         * while ker_2 -> 1/2), and the part kept is rounding noise
+         * (KelvinKer[2, 1.*^-8] was 1.46 -- KelvinKer#1 of the 2026-11
+         * audit). Past 20 bits of cancellation decline: the
+         * arbitrary-precision path answers. */
+        if (!(fabs(*out) * 1048576.0 >= hypot(rr, ri))) return false;
     }
     return isfinite(*out);
 }

@@ -2537,6 +2537,32 @@ static int clip_classify_infinity(Expr* e) {
     return 0;
 }
 
+/* True when two doubles are within a few ulps (relative 2^-40), the zone
+ * in which a double comparison of two exact quantities cannot be trusted. */
+static bool clip_close(double a, double b) {
+    double m = fabs(a) > fabs(b) ? fabs(a) : fabs(b);
+    return fabs(a - b) <= m * 0x1p-40;
+}
+
+/* Both operands exact (no machine or MPFR number anywhere). */
+static bool clip_exact_operands(Expr* a, Expr* b) {
+    return numeric_min_inexact_bits(a) == 0 && numeric_min_inexact_bits(b) == 0;
+}
+
+/* Exact comparison of two exact real quantities through the comparison
+ * builtins: -1, 0, +1, or 2 when undecided. */
+static int clip_exact_cmp(Expr* a, Expr* b) {
+    const char* heads[3] = { SYM_Less, SYM_Equal, SYM_Greater };
+    for (int i = 0; i < 3; i++) {
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(heads[i]),
+                      (Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+        bool t = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+        expr_free(r);
+        if (t) return i - 1;
+    }
+    return 2;
+}
+
 Expr* builtin_clip(Expr* res) {
     static uint64_t clip_last_warn = 0;
 
@@ -2746,9 +2772,25 @@ Expr* builtin_clip(Expr* res) {
         goto cleanup;
     }
 
-    if (dx < dmin) {
+    /* Doubles decide unless x and a bound are both exact and too close for
+     * double resolution: then the exact comparison decides, so
+     * Clip[10^20 + 1, {0, 10^20}] is 10^20 and Clip[Pi, {0, 314159265358979323846/10^20}]
+     * is the bound (Clip#1/#2 of the 2026-11 audit). */
+    int cmin = (dx < dmin) ? -1 : (dx > dmin) ? 1 : 0;
+    int cmax = (dx < dmax) ? -1 : (dx > dmax) ? 1 : 0;
+    if (min_inf == 0 && clip_close(dx, dmin) && clip_exact_operands(x, min_expr)) {
+        int c = clip_exact_cmp(x, min_expr);
+        if (c == 2) goto cleanup;
+        cmin = c;
+    }
+    if (max_inf == 0 && clip_close(dx, dmax) && clip_exact_operands(x, max_expr)) {
+        int c = clip_exact_cmp(x, max_expr);
+        if (c == 2) goto cleanup;
+        cmax = c;
+    }
+    if (cmin < 0) {
         result = expr_copy(vmin_expr);
-    } else if (dx > dmax) {
+    } else if (cmax > 0) {
         result = expr_copy(vmax_expr);
     } else {
         result = expr_copy(x);

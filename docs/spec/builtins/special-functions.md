@@ -1062,6 +1062,9 @@ Out[4]= 1/2*I
 
 ## Sinc
 
+An exact argument whose `Sin` has a closed form evaluates: `Sinc[Pi/4]` is
+`2 Sqrt[2]/Pi`, `Sinc[Pi]` is 0, `Sinc[I]` is `Sinh[1]` (`Sinc[2]` stays).
+
 - `Sinc[z]` — the cardinal sine Sin[z]/z, with the removable singularity filled
   in as `Sinc[0] = 1`.
 
@@ -1598,7 +1601,10 @@ Out[1]= Cosh[2 Sqrt[z]]
 
 
 `Hypergeometric1F1[a, b, z]` is Kummer's confluent hypergeometric function
-₁F₁, equal to `HypergeometricPFQ[{a}, {b}, z]`.
+₁F₁, equal to `HypergeometricPFQ[{a}, {b}, z]` (the fixed-arity heads
+rewrite to that normal form, which Simplify, DSolve, Integrate and
+FunctionExpand work in). A List argument left after a failed Listable thread
+(`Thread::tdlen`) leaves the call unevaluated.
 
 - Attributes `Listable`, `NumericFunction`, `Protected`.
 - Machine kernel (real and complex): closed forms for `a = 0`, `a = b` and
@@ -3005,6 +3011,10 @@ Out[3]= 0.088257 + 1.5304*I
 
 ## Hyperfactorial
 
+At a negative integer, from `H(z) = z^z H(z - 1)` and `0^0 = 1`:
+`H(-m) = (-1)^Floor[m/2] H(m - 1)` (`H(-1) = 1`, `H(-2) = -1`, `H(-3) = -4`);
+an integer-valued inexact argument takes the same value.
+
 `Hyperfactorial[n]` gives the hyperfactorial `prod_{k=1}^{n} k^k`
 (`H(0) = H(1) = 1`).  Exact via GMP for a non-negative integer `n`.  A
 non-integer **numeric** order (under `N`) evaluates via
@@ -3026,6 +3036,10 @@ Out[3]= 1282.122099453457459415422713168
 ```
 
 ## BarnesG
+
+Zero at every non-positive integer, bigints included. A machine argument of
+modulus above 8 goes through arb with `~2 log2|z|` guard bits and is rounded
+once: the asymptotic series loses `log10(z^2)` digits when exponentiated.
 
 `BarnesG[z]`, the Barnes G-function, with `G(1) = G(2) = 1` and
 `G(z+1) = Gamma[z] G(z)`.  For a positive integer `n`,
@@ -3064,7 +3078,8 @@ The finite form expands into an explicit product only for `|n| <= 10^5`; past th
 
 `QPochhammer[a, q, n]` gives the q-Pochhammer symbol (q-shifted
 factorial) `prod_{k=0}^{n-1} (1 - a q^k)`; `QPochhammer[a, q]` gives the
-infinite product `(a;q)_Inf` for `|q| < 1`.  The finite form is
+infinite product `(a;q)_Inf` for `|q| < 1`; `QPochhammer[q]` is the Euler
+function `(q;q)_Inf = QPochhammer[q, q]` (numeric for an inexact `q`).  The finite form is
 exact/symbolic for a non-negative integer `n` (a symbolic `n` is left
 unevaluated, which is what `Product` emits as a closed form); the
 infinite form evaluates for machine-real `a`, `q`.
@@ -4576,6 +4591,11 @@ Out[3]= 0.610726
 
 ## FunctionExpand
 
+`Beta`, `Binomial`, `Pochhammer` and `Factorial` of symbolic arguments expand
+to `Gamma` (`FunctionExpand[Binomial[n, k]]` is
+`Gamma[1 + n]/(Gamma[1 + k] Gamma[1 - k + n])`), and `Log[1 + I]`,
+`Log[1 - I]` take the root-of-unity rule (`Log[2]/2 + I Pi/4`).
+
 `FunctionExpand[expr]` (and `FunctionExpand[expr, assum]`, the assumptions
 accepted but not yet used) expands special functions in `expr` into simpler
 ones, bottom-up (`src/special_functions/functionexpand.c`):
@@ -5004,6 +5024,10 @@ Out[3]= 0.5 + 600270. I
   `k`-th, then refined at the requested precision (machine: 53 bits, lowered).
   `ZetaZero[10^6]` in ~75 ms. Without FLINT it stays unevaluated.
 - No packed / `NDArray` / `Compile` surface: the argument is an exact index.
+- `ZetaZero[k, t]` is the `k`-th zero above height `t` (`k > 0`): the index of
+  the first zero past `t` starts at the Riemann-von Mangoldt count and is
+  corrected against the certified zeros (`N[ZetaZero[1, 20]]` is
+  `0.5 + 21.022 I`).
 
 Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
 
@@ -5024,7 +5048,11 @@ Out[2]= -177.009251046479206825466153442
   `ZetaZero`); a non-integer or non-positive index stays unevaluated.
 - arb's `arb_hypgeom_airy_zero` (the asymptotic expansion of the zero, DLMF
   9.9.6-9.9.9, refined by Newton with a certified enclosure), at the requested
-  precision. Without FLINT they stay unevaluated.
+  precision. Without FLINT they stay unevaluated. Past arb's 62-bit index range
+  (and from `k = 2^40` at up to 300 bits) the same asymptotic expansion is
+  summed directly, its omitted term below the precision.
+- The two-argument form `AiryAiZero[k, x0]` (and siblings) is the `k`-th zero
+  less than `x0`: `N[AiryBiPrimeZero[1, -3]]` is `-4.07316`.
 - No packed / `NDArray` / `Compile` surface: the argument is an exact index.
 
 Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
@@ -5520,7 +5548,13 @@ are unequal (v0.477; new). `KroneckerDelta[]` is 1 and `KroneckerDelta[n]` is
 
 ## BesselJZero
 
-`BesselJZero[n, k]` is the k-th positive zero of `BesselJ[n, x]`.
+`BesselJZero[n, k]` is the k-th positive zero of `BesselJ[n, x]`;
+`BesselJZero[n, k, x0]` is the k-th zero greater than `x0` (machine precision;
+the index past `x0` from McMahon's estimate, corrected against the computed
+zeros). Where the raw-double Bessel kernel declines (orders past ~700 in the
+transition region) the scalar path takes the builtin's own `BesselJ` /
+`BesselY` value, so large-order zeros are found (`BesselJZero[1000., 1.]` =
+1018.66); the packed / `NDArray` kernel stays raw-double only.
 
 - Attributes: `Listable`, `NumericFunction`, `Protected`.
 - An exact call stays unevaluated (the Hadamard-product recogniser in `Product`
@@ -5560,6 +5594,13 @@ Out[2]= 5.42968104079413513277200519085
 ```
 
 ## HeavisideTheta and DiracDelta
+
+`D[HeavisideTheta[x, y], x]` is `DiracDelta[x] HeavisideTheta[y]`;
+`Refine`/`Simplify` reduce `HeavisideTheta` (and `UnitStep`) under sign facts
+(`Refine[HeavisideTheta[x - 1], x > 2]` is 1); `Limit` replaces a step that is
+locally constant at the point; `Integrate` sifts a derivative of the impulse,
+`Integrate[h DiracDelta^(n)[a x + b], {x, lo, hi}] = (-1)^n h^(n)(x0)/(a^n |a|)`
+for `x0` strictly inside.
 
 Defined by rules in `src/internal/distributions.m`. `HeavisideTheta[x]` is 1 for
 positive and 0 for negative numeric `x`, and `HeavisideTheta[0] = 0` (the causal,

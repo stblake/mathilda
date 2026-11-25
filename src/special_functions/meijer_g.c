@@ -54,6 +54,7 @@
 #include "common.h"             /* builtin_arg_error */
 #include "print.h"              /* expr_to_string */
 #include "loadmodule.h"         /* mathilda_load_module */
+#include "infinity_rules.h"     /* infinity_direction */
 #include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -85,6 +86,17 @@ static Expr* pw(Expr* a, Expr* b) { return mk2(SYM_Power, a, b); }
 static Expr* dvd(Expr* a, Expr* b) { return mul(a, pw(b, I_(-1))); }
 static Expr* gam(Expr* a) { return mk1(SYM_Gamma, a); }
 static Expr* ev(Expr* e) { return eval_and_free(e); }
+
+/* True if a call (or symbol) named `name` occurs anywhere in e. */
+static bool contains_head_named(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (contains_head_named(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_head_named(e->data.function.args[i], name)) return true;
+    return false;
+}
 static Expr* cp(const Expr* e) { return expr_copy((Expr*)e); }
 
 static Expr* mk_list(Expr** items, size_t n) {
@@ -1482,6 +1494,30 @@ Expr* builtin_meijer_g(Expr* res) {
 
     /* (7) z = 0. */
     if (is_any_zero(g.z)) { out = mg_at_zero(&g); goto done; }
+
+    /* (7b) z an infinity: the reductions below substitute it into closed
+     * forms term by term (E^-z z^0 -> Infinity^0, 0 Infinity) and came back
+     * Indeterminate with indet messages (MeijerG#1 of the 2026-11 audit).
+     * Reduce at a fresh symbolic t instead and take the limit t -> z; keep
+     * the call unevaluated when that does not close. */
+    if (infinity_direction(g.z, NULL) != INF_DIR_NONE) {
+        Expr* t = expr_new_symbol("MeijerG`Private`t$");
+        Expr* gt = ev(mg_rebuild(&g, cp(t)));
+        if (gt && !contains_head_named(gt, "MeijerG")) {
+            Expr* lim = ev(expr_new_function(expr_new_symbol("Limit"),
+                (Expr*[]){ gt, expr_new_function(expr_new_symbol("Rule"),
+                               (Expr*[]){ cp(t), cp(g.z) }, 2) }, 2));
+            if (lim && !contains_head_named(lim, "Limit")
+                && !contains_head_named(lim, "Indeterminate")
+                && !(lim->type == EXPR_SYMBOL && lim->data.symbol.name == SYM_Indeterminate))
+                out = lim;
+            else if (lim) expr_free(lim);
+        } else if (gt) {
+            expr_free(gt);
+        }
+        expr_free(t);
+        goto done;
+    }
 
     /* (8) Reduction to simpler functions -- not for an all-numeric inexact
      * call whose numerics declined (a pole, or no expansion implemented): the

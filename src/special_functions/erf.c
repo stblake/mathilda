@@ -519,7 +519,12 @@ static Expr* erf_one_arg(Expr* arg) {
 
     /* 5. Odd symmetry: Erf[-x] = -Erf[x] for a symbolic negative-leading
      *    argument (numeric negatives are already handled above). */
-    if (erf_is_neg_leading_times(arg)) {
+    if (erf_is_neg_leading_times(arg)
+        || (arg->type == EXPR_INTEGER && arg->data.integer < 0)
+        || (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0)
+        || (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
+            && arg->data.function.head->data.symbol.name == SYM_Rational
+            && expr_is_superficially_negative(arg))) {
         Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
         Expr* inner = expr_new_function(expr_new_symbol(SYM_Erf), &pos, 1);

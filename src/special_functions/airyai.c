@@ -491,8 +491,13 @@ static void airy_ai_core(const acx* z, acx* Ai, acx* Aip, mpfr_prec_t P) {
         mpfr_clear(am);
 
         const double TWO_PI_3 = 2.0 * M_PI / 3.0;
+        /* exp(+-i zeta) needs zeta to an ABSOLUTE 2^-P, so zeta = (2/3)
+         * z^(3/2) carries log2|zeta| more bits: at z = -10^30 (zeta ~ 7*10^44)
+         * a fixed guard left the phase wrong and AiryAiPrime 10 times its
+         * envelope (AiryAiPrime#1 of the 2026-11 audit). */
+        mpfr_prec_t zguard = (mpfr_prec_t)(rd > 2.0 ? ceil(1.5 * log2(rd)) : 0);
         if (fabs(arg) <= TWO_PI_3 + 1e-12) {
-            mpfr_prec_t wp = P + 64;
+            mpfr_prec_t wp = P + 64 + zguard;
             acx ai, aip; acx_init(&ai, wp); acx_init(&aip, wp);
             airy_asymp_direct(&ai, &aip, z, wp);
             mpfr_set(Ai->re, ai.re, ARND);  mpfr_set(Ai->im, ai.im, ARND);
@@ -503,7 +508,7 @@ static void airy_ai_core(const acx* z, acx* Ai, acx* Aip, mpfr_prec_t P) {
              *   Ai'(z) = -[wbar Ai'(wz) + w Ai'(wbar z)],  w = e^{2pi i/3}.
              * Both wz and wbar z have |arg| <= 2pi/3 (direct series valid),
              * and the recessive rotated term carries no large cancellation. */
-            mpfr_prec_t wp = P + 96;
+            mpfr_prec_t wp = P + 96 + zguard;
             acx w, wb, z1, z2, ai1, aip1, ai2, aip2, t1, t2;
             acx_init(&w, wp); acx_init(&wb, wp);
             acx_init(&z1, wp); acx_init(&z2, wp);

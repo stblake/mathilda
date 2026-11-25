@@ -130,7 +130,11 @@ static bool jac_real(double uh, double ul, double mh, double ml,
     a[0] = 1.0; cc[0] = sqrt(mh + ml);
     while (N < 15) {
         sdd cn = sdd_ldexp(sdd_sub(A, B), -1);
-        if (fabs(cn.hi) <= 1e-17 * A.hi) break;
+        /* The period is carried in double-double, so the AGM runs until c
+         * is below ITS resolution: stopping at 1e-17 left 4K = 2 Pi with no
+         * m/4 term for m ~ 3e-17, a phase error of u m/8 (2.3e-11 relative
+         * in JacobiCS[1.*^6, 3.*^-17] -- JacobiCS#1 of the 2026-11 audit). */
+        if (cn.hi == 0.0 || fabs(cn.hi) <= 1e-33 * A.hi) break;
         sdd A1 = sdd_ldexp(sdd_add(A, B), -1);
         B = jac_sqrt(sdd_mul(A, B));
         A = A1;
@@ -326,6 +330,18 @@ bool sf_machine_jacobi(int which, double ur, double ui, double mr, double mi,
             if (jac_ok(r.r, r.i, rr, ri)) return true;
         }
     }
+    /* am(u) = Pi u/(2K) + (a bounded periodic part): once |Pi u/(2K)|
+     * passes 2^54 that part is below half an ulp, so the amplitude IS the
+     * linear term -- the arb route below returns only the principal value
+     * in (-Pi, Pi] (JacobiAmplitude[1.*^20, 0.5] was -1.84 for 8.5*10^19 --
+     * JacobiAmplitude#1 of the 2026-11 audit). */
+    if (which == JAC_AM && ui == 0.0 && mi == 0.0 && mr >= 0.0 && mr < 1.0) {
+        double K;
+        if (jac_re_k(mr, &K)) {
+            double lin = M_PI * ur / (2.0 * K);
+            if (fabs(lin) >= 0x1p54 && isfinite(lin)) return jac_ok(lin, 0.0, rr, ri);
+        }
+    }
     double vr, vi;
     if (!flint_jacobi_d(which, ur, ui, mr, mi, &vr, &vi)) return false;
     return jac_ok(vr, vi, rr, ri);
@@ -433,6 +449,32 @@ static Expr* jac_builtin(Expr* res, int which) {
         if (jac_is_int(m, 1)) return jac_apply("ArcSech[#1]&", v, NULL);
     }
     if (!flint_num_call_inexact(res)) return NULL;
+    /* An inexact m = 1: the same closed forms as the exact m = 1 above
+     * (sn(u|1) = tanh u, cn(u|1) = dn(u|1) = sech u), with the logarithmic
+     * singularity v = 1 (sn) / v = 0 (cn) a pole; the EllipticF template
+     * does not evaluate at m = 1 and leaked EllipticF[.., 1.] (InverseJacobiSN#2,
+     * InverseJacobiCN#1 of the 2026-11 audit). */
+    {
+        bool m_one = (m->type == EXPR_REAL && m->data.real == 1.0)
+#ifdef USE_MPFR
+            || (m->type == EXPR_MPFR && mpfr_cmp_ui(m->data.mpfr, 1) == 0)
+#endif
+            ;
+        if (m_one) {
+            double vd = 0.0;
+            bool v_num = v->type == EXPR_REAL ? (vd = v->data.real, true)
+#ifdef USE_MPFR
+                : v->type == EXPR_MPFR ? (vd = mpfr_get_d(v->data.mpfr, MPFR_RNDN), true)
+#endif
+                : false;
+            if (v_num && ((which == JAC_ISN && vd == 1.0) ||
+                          (which == JAC_ICN && vd == 0.0)))
+                return expr_new_symbol("ComplexInfinity");
+            Expr* r = jac_apply(which == JAC_ISN ? "ArcTanh[#1]&" : "ArcSech[#1]&", v, NULL);
+            if (r && expr_is_numeric_quantity(r)) return flint_num_for_call(r, res);
+            expr_free(r);
+        }
+    }
     static const char* const TPL[3] = {
         "EllipticF[ArcSin[#1], #2]&", "EllipticF[ArcCos[#1], #2]&",
         "EllipticF[ArcSin[Sqrt[(1 - #1^2)/#2]], #2]&" };

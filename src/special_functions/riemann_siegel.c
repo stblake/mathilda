@@ -49,12 +49,21 @@
 /* Machine helpers                                                     */
 /* ------------------------------------------------------------------ */
 
+/* Past this height Z(t) needs ~Sqrt[t/(2 Pi)] Riemann-Siegel terms (4*10^8
+ * at 10^18): arb cannot reach it in any reasonable time, and what came back
+ * uncertified was garbage (RiemannSiegelZ[1.*^50] = -9*10^40, when |Z|
+ * grows at most like t^(1/6) -- RiemannSiegelZ#1 of the 2026-11 audit).
+ * Such a call stays unevaluated. */
+#define RS_Z_MAX_T 1.0e18
+
 bool sf_machine_riemann_siegel_z(double t, double* out) {
     double ri;
+    if (!(fabs(t) <= RS_Z_MAX_T)) return false;
     return flint_hardy_d(0, t, 0.0, out, &ri);
 }
 bool sf_machine_riemann_siegel_z_c(double tr, double ti, double* rr, double* ri) {
     if (ti == 0.0) { *ri = 0.0; return sf_machine_riemann_siegel_z(tr, rr); }
+    if (!(fabs(tr) <= RS_Z_MAX_T)) return false;
     return flint_hardy_d(0, tr, ti, rr, ri);
 }
 bool sf_machine_riemann_siegel_theta(double t, double* out) {
@@ -192,7 +201,30 @@ static Expr* rs_eval(Expr* res, int theta) {
         }
     }
 
+    if (!theta) {
+        Expr* td = numericalize(t, numeric_machine_spec());
+        Expr *tre, *tim;
+        double tv = 0.0;
+        if (td && td->type == EXPR_REAL) tv = td->data.real;
+        else if (td && is_complex(td, &tre, &tim) && tre->type == EXPR_REAL) tv = tre->data.real;
+        expr_free(td);
+        if (!(fabs(tv) <= RS_Z_MAX_T)) return NULL;
+    }
     Expr* v = flint_num_hardy(t, theta);
+    /* A machine call whose value arb knows to fewer bits than a double
+     * carries stays unevaluated (RiemannSiegelZ[1.*^50] is out of reach of
+     * the Riemann-Siegel sum; its midpoint was 9*10^40). */
+    if (v && bits <= 53 && numeric_min_inexact_bits(v) < 50) {
+        expr_free(v);
+        return NULL;
+    }
+#ifdef USE_FLINT
+    /* arb declined (it could not certify the value): the defining
+     * expression would only repeat the computation without the error bound
+     * -- at t = 1.*^50 it returned 9*10^40, when |Z| grows like t^(1/6) at
+     * most -- so the call stays unevaluated. */
+    if (!v) return NULL;
+#endif
     if (!v) {
         /* No FLINT: the defining expression, evaluated numerically. */
         Expr* e = theta ? rs_theta_expr(t) : rs_z_expr(t);

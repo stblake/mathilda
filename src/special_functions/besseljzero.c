@@ -32,6 +32,7 @@
 #include "symtab.h"
 #include "expr.h"
 #include "attr.h"
+#include "eval.h"
 #include "flint_num_bridge.h"
 #include "numeric.h"
 #include "sf_machine_bessel.h"
@@ -48,8 +49,23 @@
 #endif
 
 /* J_n (y == 0) or Y_n (y == 1). */
+/* y: bit 0 selects Y, bit 1 (BZ_SLOW) allows the evaluator fallback below --
+ * the scalar builtin only, never the (possibly threaded) ND kernel. */
+#define BZ_SLOW 2
 static bool bz_f(int y, double nu, double x, double* out) {
-    return y ? sf_bessel_y_r(nu, x, out) : sf_bessel_j_r(nu, x, out);
+    if ((y & 1) ? sf_bessel_y_r(nu, x, out) : sf_bessel_j_r(nu, x, out)) return true;
+    if (!(y & BZ_SLOW)) return false;
+    /* The raw-double kernel declines in the transition region of a large
+     * order (nu >~ 700, x ~ nu), where the builtin answers through its
+     * arbitrary-precision path: take that value, so a zero is found for any
+     * order BesselJ itself evaluates at (BesselJZero#1, BesselYZero#1 of the
+     * 2026-11 audit). */
+    Expr* v = eval_and_free(expr_new_function(expr_new_symbol((y & 1) ? "BesselY" : "BesselJ"),
+                  (Expr*[]){ expr_new_real(nu), expr_new_real(x) }, 2));
+    bool ok = v && v->type == EXPR_REAL && isfinite(v->data.real);
+    if (ok) *out = v->data.real;
+    expr_free(v);
+    return ok;
 }
 
 /* f_n'(x) = (f_{n-1}(x) - f_{n+1}(x)) / 2, f = J or Y. */
@@ -72,13 +88,14 @@ static bool bjz_newton(int y, double nu, double* x) {
 }
 
 static bool bz_zero_r(int y, double nu, double kd, double* out) {
+    int yk = y & 1;
     if (!isfinite(nu) || !isfinite(kd) || kd != floor(kd) || kd < 1.0 || kd > 1e6) return false;
-    if (!(y ? nu >= 0.0 : nu > -1.0) || nu > 1e4) return false;
+    if (!(yk ? nu >= 0.0 : nu > -1.0) || nu > 1e4) return false;
     double x;
     if (kd > nu + 20.0) {
         /* McMahon: beta = (k + n/2 - 1/4) Pi (J), (k + n/2 - 3/4) Pi (Y);
          * mu = 4 n^2. */
-        double b = (kd + 0.5 * nu - (y ? 0.75 : 0.25)) * M_PI, mu = 4.0 * nu * nu, e = 8.0 * b;
+        double b = (kd + 0.5 * nu - (yk ? 0.75 : 0.25)) * M_PI, mu = 4.0 * nu * nu, e = 8.0 * b;
         x = b - (mu - 1.0) / e
               - 4.0 * (mu - 1.0) * (7.0 * mu - 31.0) / (3.0 * e * e * e)
               - 32.0 * (mu - 1.0) * (83.0 * mu * mu - 982.0 * mu + 3779.0) /
@@ -89,7 +106,7 @@ static bool bz_zero_r(int y, double nu, double kd, double* out) {
         /* No zero lies below n for n >= 0; J_n > 0 near the origin for
          * -1 < n < 0, and Y_n < 0 there for n >= 0. */
         int64_t k = (int64_t)kd, seen = 0;
-        double h = 0.25, a = nu > 0.5 ? nu : (y ? 0.05 : 1e-3), fa;
+        double h = 0.25, a = nu > 0.5 ? nu : (yk ? 0.05 : 1e-3), fa;
         if (!bz_f(y, nu, a, &fa)) return false;
         double lim = (kd + 0.5 * nu + 2.0) * M_PI + 2.0 * nu + 10.0;
         for (;;) {
@@ -132,7 +149,43 @@ static bool bjz_real(const Expr* e, double* out, bool* inexact) {
     return false;
 }
 
+/* BesselJZero[n, k, x0] / BesselYZero[n, k, x0]: the k-th zero greater than
+ * x0. The index j of the first zero past x0 starts at McMahon's estimate
+ * (zeros are ~Pi apart, the k-th near (k + n/2 - 1/4) Pi) and is corrected
+ * against the computed zeros (BesselJZero#2 of the 2026-11 audit). Machine
+ * precision. */
+static Expr* bz_builtin3(Expr* res, int y) {
+    Expr** a = res->data.function.args;
+    double nu, kd, x0;
+    bool inexact = false;
+    if (!bjz_real(a[0], &nu, &inexact) || !bjz_real(a[1], &kd, &inexact) ||
+        !bjz_real(a[2], &x0, &inexact) || !inexact)
+        return NULL;
+    if (!(kd >= 1.0) || kd != floor(kd) || !isfinite(x0) || kd > 1e6) return NULL;
+    double est = x0 / M_PI - 0.5 * nu + (y ? 0.75 : 0.25);
+    double j = floor(est) - 1.0;
+    if (j < 1.0) j = 1.0;
+    double z;
+    for (int it = 0; it < 64; it++) {
+        if (!bz_zero_r(y | BZ_SLOW, nu, j, &z)) return NULL;
+        if (z > x0) {
+            double zp;
+            if (j == 1.0) break;
+            if (!bz_zero_r(y | BZ_SLOW, nu, j - 1.0, &zp)) return NULL;
+            if (zp <= x0) break;
+            j -= 1.0;
+        } else {
+            j += 1.0;
+        }
+        if (it == 63) return NULL;
+    }
+    if (!bz_zero_r(y | BZ_SLOW, nu, j + kd - 1.0, &z)) return NULL;
+    return expr_new_real(z);
+}
+
 static Expr* bz_builtin(Expr* res, int y) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 3)
+        return bz_builtin3(res, y);
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* n = res->data.function.args[0];
     Expr* k = res->data.function.args[1];
@@ -141,7 +194,7 @@ static Expr* bz_builtin(Expr* res, int y) {
     if (!bjz_real(n, &nu, &inexact) || !bjz_real(k, &kd, &inexact) || !inexact)
         return NULL;   /* exact (or symbolic, or complex): stays unevaluated */
     double x;
-    if (!bz_zero_r(y, nu, kd, &x)) return NULL;
+    if (!bz_zero_r(y | BZ_SLOW, nu, kd, &x)) return NULL;
 #ifdef USE_MPFR
     long bits = 0;
     for (int i = 0; i < 2; i++) {
@@ -164,9 +217,9 @@ void besseljzero_init(void) {
     symtab_get_def("BesselJZero")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     symtab_set_docstring("BesselJZero",
-        "BesselJZero[n, k]\n"
+        "BesselJZero[n, k]\nBesselJZero[n, k, x0]\n"
         "\tThe k-th positive zero of BesselJ[n, x], for a real order n > -1 and a\n"
-        "\tpositive integer k.\n"
+        "\tpositive integer k; with x0, the k-th zero greater than x0.\n"
         "\tEvaluates when an argument is inexact (so N works); an exact call\n"
         "\tstays unevaluated. Machine values via McMahon's expansion or a\n"
         "\tsign-change scan plus Newton; arbitrary precision by Newton in arb.");
@@ -174,9 +227,9 @@ void besseljzero_init(void) {
     symtab_get_def("BesselYZero")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     symtab_set_docstring("BesselYZero",
-        "BesselYZero[n, k]\n"
+        "BesselYZero[n, k]\nBesselYZero[n, k, x0]\n"
         "\tThe k-th positive zero of BesselY[n, x], for a real order n >= 0 and a\n"
-        "\tpositive integer k.\n"
+        "\tpositive integer k; with x0, the k-th zero greater than x0.\n"
         "\tEvaluates when an argument is inexact (so N works); an exact call\n"
         "\tstays unevaluated. Machine values via McMahon's expansion or a\n"
         "\tsign-change scan plus Newton; arbitrary precision by Newton in arb.");

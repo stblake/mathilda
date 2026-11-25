@@ -817,6 +817,10 @@ static bool wp_is_zero(const Expr* e) {
 /* visibly negated: a negative number, or Times[c, ...] with c < 0 rational */
 static bool wp_negated(const Expr* e) {
     if (e->type == EXPR_INTEGER) return e->data.integer < 0;
+    if (e->type == EXPR_REAL) return e->data.real < 0.0;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_sgn(e->data.mpfr) < 0;
+#endif
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Rational && e->data.function.arg_count == 2)
@@ -915,6 +919,37 @@ static long wp_bits(const Expr* const* a, int n) {
     return bits;
 }
 
+/* Real invariants g2 != 0, g3 with a double root of 4t^3 - g2 t - g3:
+ * g2^3 = 27 g3^2 exactly for exact numbers, or to within the working
+ * precision for arbitrary-precision ones (the arb lattice routines decline
+ * there, which left WeierstrassSigma[0.3`20, {3, 1}] unevaluated -- the
+ * WeierstrassHalfPeriods#1 / WeierstrassSigma#1 / WeierstrassZeta#1 class of
+ * the 2026-11 audit). Machine invariants take the machine plan. */
+static bool wp_double_root(const Expr* g2, const Expr* g3) {
+    if (wp_is_zero(g2)) return false;
+    if (wp_exact_number(g2) && wp_exact_number(g3)) {
+        Expr* D = wp_apply("(#1^3 - 27 #2^2)&", (Expr*[]){ (Expr*)g2, (Expr*)g3 }, 2);
+        bool deg = D && D->type == EXPR_INTEGER && D->data.integer == 0;
+        expr_free(D);
+        return deg;
+    }
+#ifdef USE_MPFR
+    bool real_leaf2 = wp_exact_number(g2) || g2->type == EXPR_MPFR;
+    bool real_leaf3 = wp_exact_number(g3) || g3->type == EXPR_MPFR;
+    if (!real_leaf2 || !real_leaf3) return false;
+    const Expr* a2[2] = { g2, g3 };
+    long bits = wp_bits(a2, 2);
+    if (bits <= 53) return false;
+    Expr* D = wp_apply("(Abs[#1^3 - 27 #2^2] <= 2^(8 - #3) Max[Abs[#1]^3, 27 #2^2])&",
+                       (Expr*[]){ (Expr*)g2, (Expr*)g3, expr_new_integer(bits) }, 3);
+    bool deg = D && D->type == EXPR_SYMBOL && D->data.symbol.name == SYM_True;
+    expr_free(D);
+    return deg;
+#else
+    return false;
+#endif
+}
+
 static Expr* wp_builtin(Expr* res, int kind) {
     const char* name = WP_NAME[kind];
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -979,14 +1014,12 @@ static Expr* wp_builtin(Expr* res, int kind) {
     if (numeric && wp_bits(nargs, 3) > 0) {
         Expr* r = flint_num_weierstrass(kind, u, g2, g3);
         if (r && wp_bits(nargs, 3) <= 53) r = numeric_lower_mpfr_to_machine(r);
-        return r;
+        if (r || !wp_double_root(g2, g3)) return r;
     }
 
-    /* exact real invariants with a double root */
-    if (wp_exact_number(g2) && wp_exact_number(g3) && !wp_is_zero(g2)) {
-        Expr* D = wp_apply("(#1^3 - 27 #2^2)&", (Expr*[]){ g2, g3 }, 2);
-        bool deg = D && D->type == EXPR_INTEGER && D->data.integer == 0;
-        expr_free(D);
+    /* real invariants with a double root */
+    {
+        bool deg = wp_double_root(g2, g3);
         if (deg) {
             Expr* e = wp_apply("(-3 #2/(2 #1))&", (Expr*[]){ g2, g3 }, 2);
             bool pos = e && !wp_negated(e);
@@ -1048,11 +1081,9 @@ static Expr* builtin_weierstrass_halfperiods(Expr* res) {
             }
         }
     }
-    /* exact invariants with a double root */
-    if (wp_exact_number(g2) && wp_exact_number(g3) && !wp_is_zero(g2)) {
-        Expr* D = wp_apply("(#1^3 - 27 #2^2)&", (Expr*[]){ g2, g3 }, 2);
-        bool deg = D && D->type == EXPR_INTEGER && D->data.integer == 0;
-        expr_free(D);
+    /* real invariants with a double root */
+    {
+        bool deg = wp_double_root(g2, g3);
         if (deg) {
             Expr* e = wp_apply("(-3 #2/(2 #1))&", (Expr*[]){ g2, g3 }, 2);
             Expr* out = wp_apply(wp_negated(e) ? "{Pi/(2 Sqrt[-3 #1]), DirectedInfinity[I]}&"

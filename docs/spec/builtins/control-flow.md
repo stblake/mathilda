@@ -224,7 +224,7 @@ Represents a piecewise function defined by a list of `{value, condition}` clause
 **Simplification semantics**:
 - Conditions are evaluated left-to-right.
 - `{val_i, False}` clauses are dropped.
-- At the first `{val_i, True}` all later clauses (and the default) are dropped; the `True` clause becomes the unconditional final case.
+- At the first `{val_i, True}` all later clauses (and the default) are dropped; after inconclusive clauses, that `val_i` becomes the default: `Piecewise[{{a, x > 0}, {b, True}}]` is `Piecewise[{{a, x > 0}}, b]` (Piecewise#2).
 - If all preceding conditions are literally `False`, the value at the first `True` is returned directly.
 - Consecutive clauses with structurally equal values are merged: their conditions are combined with `Or`.
 

@@ -3494,6 +3494,89 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fnN_adopt("Plus", terms, n);
         }
 
+        /* --- HeavisideTheta[a1, ..., an], n >= 2: the product of the
+         *     per-argument thetas, so the product rule with
+         *     HeavisideTheta' = DiracDelta (the one-argument case is the
+         *     elementary table's): D[HeavisideTheta[x, y], x] =
+         *     DiracDelta[x] HeavisideTheta[y]. --- */
+        if (h == SYM_HeavisideTheta && n >= 2) {
+            Expr** terms = malloc(sizeof(Expr*) * n);
+            size_t nt = 0;
+            for (size_t i = 0; i < n; i++) {
+                Expr* dai = deriv_of(args[i], x, nonconsts);
+                if (is_lit_zero(dai)) { expr_free(dai); continue; }
+                Expr** rest = malloc(sizeof(Expr*) * (n - 1));
+                size_t rc = 0;
+                for (size_t j = 0; j < n; j++)
+                    if (j != i) rest[rc++] = expr_copy(args[j]);
+                Expr** factors = malloc(sizeof(Expr*) * 3);
+                factors[0] = mk_fn1("DiracDelta", expr_copy(args[i]));
+                factors[1] = mk_fnN_adopt("HeavisideTheta", rest, n - 1);
+                factors[2] = dai;
+                terms[nt++] = mk_fnN_adopt("Times", factors, 3);
+            }
+            if (nt == 0) { free(terms); return mk_int(0); }
+            if (nt == 1) { Expr* t = terms[0]; free(terms); return t; }
+            return mk_fnN_adopt("Plus", terms, nt);
+        }
+
+        /* --- Ramp[g] = g UnitStep[g]: the derivative is the unit step off
+         *     the kink, Indeterminate on it, times D[g] (as for Floor
+         *     below): Piecewise[{{0, g < 0}, {1, g > 0}}, Indeterminate]. --- */
+        if (h == SYM_Ramp && n == 1) {
+            Expr* dg = deriv_of(args[0], x, nonconsts);
+            if (is_lit_zero(dg)) { expr_free(dg); return mk_int(0); }
+            Expr* p0 = mk_fn2("List", mk_int(0),
+                              mk_fn2("Less", expr_copy(args[0]), mk_int(0)));
+            Expr* p1 = mk_fn2("List", mk_int(1),
+                              mk_fn2("Greater", expr_copy(args[0]), mk_int(0)));
+            Expr* pw = mk_fn2("Piecewise", mk_fn2("List", p0, p1),
+                              mk_sym("Indeterminate"));
+            return mk_fn2("Times", pw, dg);
+        }
+
+        /* --- Pochhammer[a, m] = Gamma[a + m]/Gamma[a]:
+         *   d/da = Pochhammer[a, m] (PolyGamma[0, a + m] - PolyGamma[0, a])
+         *   d/dm = Pochhammer[a, m] PolyGamma[0, a + m]. --- */
+        if (h == SYM_Pochhammer && n == 2) {
+            Expr* A = args[0];
+            Expr* M = args[1];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dM = deriv_of(M, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+            if (!is_lit_zero(dA)) {
+                Expr* psi = mk_fn2("Subtract",
+                    mk_fn2("PolyGamma", mk_int(0), mk_fn2("Plus", expr_copy(A), expr_copy(M))),
+                    mk_fn2("PolyGamma", mk_int(0), expr_copy(A)));
+                Expr** f = malloc(sizeof(Expr*) * 3);
+                f[0] = mk_fn2("Pochhammer", expr_copy(A), expr_copy(M));
+                f[1] = psi; f[2] = dA;
+                terms[nt++] = mk_fnN_adopt("Times", f, 3);
+            } else { expr_free(dA); }
+            if (!is_lit_zero(dM)) {
+                Expr** f = malloc(sizeof(Expr*) * 3);
+                f[0] = mk_fn2("Pochhammer", expr_copy(A), expr_copy(M));
+                f[1] = mk_fn2("PolyGamma", mk_int(0), mk_fn2("Plus", expr_copy(A), expr_copy(M)));
+                f[2] = dM;
+                terms[nt++] = mk_fnN_adopt("Times", f, 3);
+            } else { expr_free(dM); }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- Surd[g, m] (real m-th root, m free of x):
+         *   D = D[g] / (m Surd[g, m]^(m - 1)); CubeRoot[g] is Surd[g, 3]. --- */
+        if (h == SYM_Surd && n == 2 && expr_free_of(args[1], x)) {
+            Expr* dg = deriv_of(args[0], x, nonconsts);
+            if (is_lit_zero(dg)) { expr_free(dg); return mk_int(0); }
+            Expr* den = mk_fn2("Times", expr_copy(args[1]),
+                mk_fn2("Power", mk_fn2("Surd", expr_copy(args[0]), expr_copy(args[1])),
+                       mk_fn2("Plus", expr_copy(args[1]), mk_int(-1))));
+            return mk_fn2("Times", dg, mk_fn2("Power", den, mk_int(-1)));
+        }
+
         /* --- Floor / Ceiling / Round / IntegerPart / FractionalPart: the
          *     integer-rounding functions are piecewise-constant, so their
          *     derivative is a Piecewise that is 0 (or 1, for FractionalPart)

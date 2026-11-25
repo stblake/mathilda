@@ -91,6 +91,16 @@ Expr* builtin_qpochhammer(Expr* res) {
         return out;
     }
 
+    if (argc == 1) {
+        /* QPochhammer[q] is the Euler function (q; q)_inf = QPochhammer[q, q]
+         * (QPochhammer#1 of the 2026-11 audit): an inexact q takes the
+         * two-argument kernels; an exact q stays symbolic, as the
+         * two-argument (a; q)_inf does. */
+        if (!flint_num_call_inexact(res)) return NULL;
+        return eval_and_free(expr_new_function(expr_new_symbol("QPochhammer"),
+                   (Expr*[]){ expr_copy(a[0]), expr_copy(a[0]) }, 2));
+    }
+
     if (argc == 2) {
         /* Machine-real a, q: the kernel the NDArray map and Compile[] share.
          * An all-exact (a;q)_inf stays symbolic (no exact closed form). */

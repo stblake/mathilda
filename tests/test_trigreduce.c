@@ -148,7 +148,7 @@ void test_trigreduce_coth_plus_coth(void) {
 }
 void test_trigreduce_tanh_minus_coth(void) {
     assert_eval_eq("TrigReduce[Tanh[x] - Coth[y]]",
-                   "-Coth[y] + Tanh[x]", 0);
+                   "-Cosh[x - y] Csch[y] Sech[x]", 0);
 }
 
 /* TrigReduce is idempotent on already-reduced inputs and a no-op on
@@ -183,7 +183,7 @@ void test_trigreduce_threads_over_list(void) {
                    "{1 - Cos[2 x], 1 + Cos[2 x]}", 0);
     assert_eval_eq(
         "TrigReduce[{Tan[x] + Cot[y], Tanh[x] - Coth[y]}]",
-        "{Cos[x - y] Csc[y] Sec[x], -Coth[y] + Tanh[x]}", 0);
+        "{Cos[x - y] Csc[y] Sec[x], -Cosh[x - y] Csch[y] Sech[x]}", 0);
 }
 void test_trigreduce_threads_over_equation(void) {
     assert_eval_eq("TrigReduce[2 Sin[x]^2 == 1]",

@@ -918,9 +918,44 @@ static Expr* lp_doubly_infinite(Expr* z, Expr* s, Expr* a, bool include_singular
                      (Expr*[]){ main, tail }, 2));
 }
 
+/* True if `e` is the integer v exactly, or an inexact real equal to it. */
+static bool lp_value_is(const Expr* e, long v) {
+    if (lp_is_int(e, v)) return true;
+    if (e->type == EXPR_REAL) return e->data.real == (double)v;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_cmp_si(e->data.mpfr, v) == 0;
+#endif
+    return false;
+}
+
 /* Single-sum dispatch (DoublyInfinite already peeled off). */
 static Expr* lerchphi_single(Expr* z, Expr* s, Expr* a, bool include_singular) {
     long m;
+
+    /* z = -1, s = 1 named inexactly: the alternating series converges to
+     * the digamma form (psi((a+1)/2) - psi(a/2))/2 that the exact call
+     * takes, where the generic two-Zeta form is Zeta[1., ..] - Zeta[1., ..]
+     * = Indeterminate (LerchPhi#4 of the 2026-11 audit). */
+    if (lp_value_is(z, -1) && lp_value_is(s, 1) && (lp_has_inexact(z) || lp_has_inexact(s))
+        && !(lp_exact_int(a, &m) && m <= 0) && expr_is_numeric_quantity(a)) {
+        Expr* one = expr_new_integer(1);
+        Expr* r = lp_z_minus_one(one, a);
+        expr_free(one);
+        if (r) {
+            long bits = numeric_min_inexact_bits(z);
+            long b2 = numeric_min_inexact_bits(s);
+            long b3 = numeric_min_inexact_bits(a);
+            if (bits == 0 || (b2 != 0 && b2 < bits)) bits = b2;
+            if (bits == 0 || (b3 != 0 && b3 < bits)) bits = b3;
+            NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+            if (bits > 53) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; }
+#endif
+            Expr* nv = numericalize(r, spec);
+            expr_free(r);
+            if (nv) return nv;
+        }
+    }
 
     /* IncludeSingularTerm at a non-positive integer a -> the k = -a term blows
      * up (0^-s) for any s. */

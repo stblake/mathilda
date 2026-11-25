@@ -1115,6 +1115,7 @@ static Expr* exact_arccot(Expr* arg) {
         int64_t d = ds[i];
         for (int64_t n = 0; n < d; n++) {
             Expr* val = exact_cot(n, d);
+            if (val) val = eval_and_free(val);   /* canonical form, as arg is */
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
@@ -1134,6 +1135,7 @@ static Expr* exact_arcsec(Expr* arg) {
         int64_t d = ds[i];
         for (int64_t n = 0; n <= d; n++) {
             Expr* val = exact_sec(n, d);
+            if (val) val = eval_and_free(val);   /* canonical form, as arg is */
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
@@ -1153,6 +1155,7 @@ static Expr* exact_arccsc(Expr* arg) {
         int64_t d = ds[i];
         for (int64_t n = -d; n <= d; n++) {
             Expr* val = exact_csc(n, d);
+            if (val) val = eval_and_free(val);   /* canonical form, as arg is */
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);

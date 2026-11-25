@@ -103,7 +103,7 @@ void test_trigexpand_hyperbolic_pythagorean(void) {
 void test_trigexpand_tan_cot_sec_csc(void) {
     /* Tan[2x] = Sin[2x]/Cos[2x] = (2 Cos[x] Sin[x])/(Cos[x]^2 - Sin[x]^2) */
     assert_eval_eq("TrigExpand[Tan[2x]]",
-                   "2 Cos[x] Sec[2 x] Sin[x]", 0);
+                   "(2 Cos[x] Sin[x])/(Cos[x]^2 - Sin[x]^2)", 0);
     /* Unchanged on simple arguments. */
     assert_eval_eq("TrigExpand[Tan[x]]", "Tan[x]", 0);
     assert_eval_eq("TrigExpand[Cot[x]]", "Cot[x]", 0);
@@ -114,7 +114,8 @@ void test_trigexpand_tan_cot_sec_csc(void) {
 void test_trigexpand_hyperbolic_reciprocals(void) {
     /* Tanh[x+y] splits into two terms over a common denominator. */
     assert_eval_eq("TrigExpand[Tanh[x+y]]",
-        "Cosh[y] Sech[x + y] Sinh[x] + Cosh[x] Sech[x + y] Sinh[y]", 0);
+        "(Cosh[y] Sinh[x])/(Cosh[x] Cosh[y] + Sinh[x] Sinh[y]) + "
+        "(Cosh[x] Sinh[y])/(Cosh[x] Cosh[y] + Sinh[x] Sinh[y])", 0);
     assert_eval_eq("TrigExpand[Tanh[x]]", "Tanh[x]", 0);
     assert_eval_eq("TrigExpand[Coth[x]]", "Coth[x]", 0);
     assert_eval_eq("TrigExpand[Sech[x]]", "Sech[x]", 0);
@@ -133,7 +134,7 @@ void test_trigexpand_threads_over_list(void) {
     assert_eval_eq("TrigExpand[{Sin[2x], Cos[2x]}]",
                    "{2 Cos[x] Sin[x], Cos[x]^2 - Sin[x]^2}", 0);
     assert_eval_eq("TrigExpand[{Tan[2x], Sinh[x+y]}]",
-        "{2 Cos[x] Sec[2 x] Sin[x], Cosh[y] Sinh[x] + Cosh[x] Sinh[y]}", 0);
+        "{(2 Cos[x] Sin[x])/(Cos[x]^2 - Sin[x]^2), Cosh[y] Sinh[x] + Cosh[x] Sinh[y]}", 0);
 }
 
 void test_trigexpand_threads_over_equations(void) {

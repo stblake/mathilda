@@ -400,6 +400,13 @@ Out[3]= {(-1/2*I) E^((I) x) + (1/2*I) E^((-I) x), 1/2 E^((-I) x) + 1/2 E^((I) x)
 ```
 
 ## ExpToTrig
+
+An expression with no exponential or logarithm to convert is returned as
+given (no `Together`/`Cancel`/`Expand` normal form); a root of unity `(-1)^r`
+becomes `Cos[Pi r] + I Sin[Pi r]` (`ExpToTrig[E^(I Pi/3)]` is
+`1/2 + I Sqrt[3]/2`); the log-difference rules
+`Log[a + I b] - Log[a - I b] -> 2 I ArcTan[b/a]` (and the `ArcTanh` analogue)
+fire only for a provably positive `a`, where they hold.
 Converts exponentials in `expr` to trigonometric or hyperbolic functions.
 - `ExpToTrig[expr]`
 
@@ -505,6 +512,12 @@ Out[10]= 1 < -Sin[x] Sin[y] + Cos[x] Cos[y] < 2
 ```
 
 ## TrigFactor
+
+Sum-to-product: `TrigFactor[Sin[x] + Sin[y]]` is
+`2 Cos[x/2 - y/2] Sin[x/2 + y/2]` (and the `Sin - Sin`, `Cos + Cos`,
+`Cos - Cos` forms); `(1 - Sin[x]) (1 + Sin[x])` collapses to `Cos[x]^2`, so
+`TrigFactor[Sec[x]^2 - Tan[x]^2]` is `1`. A form in a single Sin/Cos pair is
+factored up to degree 12.
 Factors trigonometric functions in `expr`. Broadly the functional inverse of
 `TrigExpand`: combines sums of trigonometric products into angle-sum forms,
 collapses Pythagorean identities (both circular and hyperbolic), recognises
@@ -675,6 +688,10 @@ it.
 
 ## Piecewise and Rounding Functions
 `Floor`, `Ceiling`, `Round`, `IntegerPart`, `FractionalPart`.
+
+An exact numeric quantity whose value is complex rounds part by part, certified
+by two agreeing precisions as for a real one: `Ceiling[Pi + I E]` is `4 + 3 I`,
+`Floor[Sqrt[-2]]` is `I`, `Round[(-3)^(2/3)]` is `-1 + 2 I`.
 
 **Features**:
 - `Listable`.
@@ -907,6 +924,9 @@ Out[6]= UnitStep[x, y] Piecewise[{{Indeterminate, z == 0}}, 0]
 
 ## Ramp
 
+`D[Ramp[x], x]` is `Piecewise[{{0, x < 0}, {1, x > 0}}, Indeterminate]`, and a
+definite `Integrate` splits at the kink (`Integrate[Ramp[x], {x, -1, 2}]` is 2).
+
 `Ramp[x]` is the positive part of `x`: `x` for $x \ge 0$ and `0` for $x < 0$.
 It is the standard spelling of a rectified linear unit, and the vectorised form
 `Ramp[list]` is how array code writes one.
@@ -1008,6 +1028,9 @@ Out[5]= 2.
 ```
 
 ## Clip
+
+When `x` and a bound are both exact and agree to double resolution, the
+comparison is made exactly: `Clip[10^20 + 1, {0, 10^20}]` is `10^20`.
 
 `Clip[x]` clamps a numeric value to the closed interval `[-1, 1]`.
 

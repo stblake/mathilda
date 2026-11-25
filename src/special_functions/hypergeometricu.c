@@ -292,8 +292,32 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
     if (a_e->type == EXPR_INTEGER && a_e->data.integer == 0)      /* U(0,b,z) = 1 */
         return expr_new_integer(1);
     if (a_e->type == EXPR_INTEGER && a_e->data.integer < 0 &&
-        a_e->data.integer > INT64_MIN)                            /* terminating */
+        a_e->data.integer > INT64_MIN) {                          /* terminating */
+        /* An inexact b or z: the alternating sum cancels catastrophically in
+         * floating point (HypergeometricU[-200, 1, 1.] was -1.42631*^374 for
+         * -1.42624*^374 -- HypergeometricU#3 of the 2026-11 audit). Sum it
+         * exactly at the operands' exact (dyadic) values and round once. */
+        long bz = numeric_min_inexact_bits(z_e), bb = numeric_min_inexact_bits(b_e);
+        long bits = bz ? (bb && bb < bz ? bb : bz) : bb;
+        if (bits > 0 && -a_e->data.integer <= 5000 &&
+            expr_is_numeric_quantity(b_e) && expr_is_numeric_quantity(z_e)) {
+            Expr* be = eval_and_free(mk_fn2("Rationalize", expr_copy(b_e), expr_new_integer(0)));
+            Expr* ze = eval_and_free(mk_fn2("Rationalize", expr_copy(z_e), expr_new_integer(0)));
+            Expr* ex = (be && ze && numeric_min_inexact_bits(be) == 0 && numeric_min_inexact_bits(ze) == 0)
+                     ? hu_terminating(-a_e->data.integer, be, ze) : NULL;
+            expr_free(be); expr_free(ze);
+            if (ex) {
+                NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+                if (bits > 53) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; }
+#endif
+                Expr* nv = numericalize(ex, spec);
+                expr_free(ex);
+                if (nv) return nv;
+            }
+        }
         return hu_terminating(-a_e->data.integer, b_e, z_e);
+    }
     if (hu_b_is_a_plus_1(a_e, b_e))                               /* U(a,a+1,z) = z^(-a) */
         return eval_and_free(mk_fn2("Power", expr_copy(z_e),
                                     mk_fn2("Times", expr_new_integer(-1),

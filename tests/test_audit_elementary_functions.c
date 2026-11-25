@@ -104,11 +104,67 @@ static void test_s11_special_values(void) {
     audit_true("IntegerPart#2", "IntegerPart[Indeterminate] === Indeterminate");
 }
 
+/* ================================================================== */
+/* Wave 4 G1-specfun: elementary-functions medium findings.            */
+/* ================================================================== */
+
+static void test_wave4_elementary(void) {
+    /* Floor/Ceiling of exact complex numbers act on both parts */
+    audit_true("Ceiling#1", "Ceiling[I Sqrt[2]] === 2 I");
+    audit_true("Ceiling#1", "Ceiling[Pi + I E] === 4 + 3 I");
+    audit_true("Ceiling#1", "Ceiling[Sqrt[2] + I] === 2 + I");
+    audit_true("Floor#1", "Floor[Sqrt[-2]] === I");
+    audit_true("Floor#1", "Floor[Pi + E I] === 3 + 2 I");
+    audit_true("Floor#1", "Floor[-1/2 + Pi I] === -1 + 3 I");
+    /* a trailing {v, True} clause is the default */
+    audit_chk("Piecewise#2", "FullForm[Piecewise[{{a, x > 0}, {b, True}}]]",
+              "Piecewise[List[List[a, Greater[x, 0]]], b]");
+    /* TrigExpand expands reciprocal-function denominators */
+    audit_true("TrigExpand#1", "TrigExpand[Sec[2 x]] === 1/(Cos[x]^2 - Sin[x]^2)");
+    audit_true("TrigExpand#1", "TrigExpand[Csc[x + y]] === 1/(Cos[y] Sin[x] + Cos[x] Sin[y])");
+    audit_true("TrigExpand#1", "TrigExpand[Sech[2 x]] === 1/(Cosh[x]^2 + Sinh[x]^2)");
+    audit_true("TrigExpand#2", "TrigExpand[Tan[2 x]] === (2 Cos[x] Sin[x])/(Cos[x]^2 - Sin[x]^2)");
+    audit_true("TrigExpand#2", "FreeQ[TrigExpand[{Cot[2 x], Tanh[x + y]}], Csc | Sec | Sech]");
+    audit_true("TrigExpand#2", "PossibleZeroQ[TrigExpand[Tanh[x + y]] - Tanh[x + y]]");
+    /* TrigReduce: negated collapse orientation; held code untouched */
+    audit_true("TrigReduce#1", "TrigReduce[{Tan[x] + Cot[y], Tanh[x] - Coth[y]}] === "
+                               "{Cos[x - y] Csc[y] Sec[x], -Cosh[x - y] Csch[y] Sech[x]}");
+    audit_true("TrigReduce#2", "TrigReduce[Hold[Sin[x]^2]] === Hold[Sin[x]^2]");
+    /* ArcCsc/ArcSec invert their own table values */
+    audit_true("ArcCsc#2", "{ArcCsc[Csc[Pi/10]], ArcCsc[Csc[3 Pi/10]], ArcCsc[Csc[Pi/12]], "
+                           "ArcCsc[Csc[5 Pi/12]], ArcCsc[Csc[Pi/5]]} === {Pi/10, 3 Pi/10, Pi/12, 5 Pi/12, Pi/5}");
+    /* Clip: exact comparison inside double resolution */
+    audit_true("Clip#1", "Clip[10^20 + 1, {0, 10^20}] === 10^20");
+    audit_true("Clip#2", "Clip[1/3 + 10^-30, {0, 1/3}] === 1/3");
+    audit_true("Clip#2", "Clip[Sqrt[2] + 10^-20, {0, Sqrt[2]}] === Sqrt[2]");
+    audit_true("Clip#2", "Clip[Pi, {0, 314159265358979323846/10^20}] === 157079632679489661923/50000000000000000000");
+    /* ExpToTrig */
+    audit_true("ExpToTrig#1", "ExpToTrig[Exp[I Pi/3]] == 1/2 + I Sqrt[3]/2 && FreeQ[ExpToTrig[Exp[I Pi/3]], Power[-1, _]]");
+    audit_true("ExpToTrig#2", "ExpToTrig[(x^2 - 1)/(x - 1)] === (x^2 - 1)/(x - 1)");
+    audit_true("ExpToTrig#2", "ExpToTrig[1/(x - 1) + 1/(x + 1)] === 1/(x - 1) + 1/(x + 1)");
+    audit_true("ExpToTrig#2", "ExpToTrig[(x + 1)^2] === (x + 1)^2");
+    audit_true("ExpToTrig#3", "Chop[N[ExpToTrig[Log[a + I b] - Log[a - I b]] - (Log[a + I b] - Log[a - I b]) /. {a -> -1, b -> 1}]] == 0");
+    audit_true("ExpToTrig#3", "Chop[N[ExpToTrig[Log[a + b] - Log[a - b]] - (Log[a + b] - Log[a - b]) /. {a -> -1, b -> 3}]] == 0");
+    audit_true("ExpToTrig#3", "ExpToTrig[Log[1 + I b] - Log[1 - I b]] === 2 I ArcTan[b]");
+    /* Ramp: derivative and definite integral */
+    audit_true("Ramp#1", "(D[Ramp[x], x] /. x -> 1) === 1");
+    audit_true("Ramp#1", "(D[Ramp[x], x] /. x -> -1) === 0");
+    audit_true("Ramp#2", "Integrate[Ramp[x], {x, -1, 2}] === 2");
+    /* TrigFactor: sum-to-product, 1 - Sin^2, bivariate degree 10 */
+    audit_true("TrigFactor#1", "TrigFactor[Sin[x] + Sin[y]] === 2 Cos[x/2 - y/2] Sin[x/2 + y/2]");
+    audit_true("TrigFactor#1", "TrigFactor[Cos[x] + Cos[y]] === 2 Cos[x/2 - y/2] Cos[x/2 + y/2]");
+    audit_true("TrigFactor#2", "TrigFactor[Sec[x]^2 - Tan[x]^2] === 1");
+    audit_true("TrigFactor#2", "TrigFactor[Csc[x]^2 - Cot[x]^2] === 1");
+    audit_true("TrigFactor#3", "Head[TrigFactor[10*Cos[x]^9*Sin[x] - 120*Cos[x]^7*Sin[x]^3 + "
+                               "252*Cos[x]^5*Sin[x]^5 - 120*Cos[x]^3*Sin[x]^7 + 10*Cos[x]*Sin[x]^9]] === Times");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unitstep_exact_zero);
     TEST(test_piecewise_values_evaluated);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_elementary);
     return audit_finish("audit_elementary_functions");
 }

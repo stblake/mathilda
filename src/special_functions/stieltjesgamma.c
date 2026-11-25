@@ -70,6 +70,15 @@ static Expr* sg_numeric(const Expr* n, const Expr* a) {
     Expr* r = flint_num_stieltjes(n, a);
     if (!r) return NULL;
 #ifdef USE_MPFR
+    /* An arbitrary-precision a below 53 bits keeps its own precision
+     * (StieltjesGamma[1, 1.5`10] is a 10-digit number, as Sin[1.5`10] is --
+     * StieltjesGamma#1 of the 2026-11 audit); a machine a lowers. */
+    if (a->type == EXPR_MPFR && mpfr_get_prec(a->data.mpfr) < 53 && r->type == EXPR_MPFR) {
+        Expr* t = expr_new_mpfr_bits(mpfr_get_prec(a->data.mpfr));
+        mpfr_set(t->data.mpfr, r->data.mpfr, MPFR_RNDN);
+        expr_free(r);
+        return t;
+    }
     if (numeric_min_inexact_bits(a) <= 53) r = numeric_lower_mpfr_to_machine(r);
 #endif
     return r;

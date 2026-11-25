@@ -250,6 +250,17 @@ static Expr* hs_builtin(Expr* res, int code) {
             return expr_new_symbol("ComplexInfinity");
         return NULL;
     }
+#ifdef USE_MPFR
+    /* An arbitrary-precision zero z with an integer order: j_0(0) = 1 and
+     * j_n(0) = 0 (n > 0), at z's precision, as the exact and machine zeros
+     * give (SphericalBesselJ#1 of the 2026-11 audit; arb declines z = 0). */
+    if (code == HS_SJ && z->type == EXPR_MPFR && mpfr_zero_p(z->data.mpfr)
+        && n->type == EXPR_INTEGER && n->data.integer >= 0) {
+        Expr* r = expr_new_mpfr_bits(mpfr_get_prec(z->data.mpfr));
+        if (n->data.integer == 0) mpfr_set_ui(r->data.mpfr, 1, MPFR_RNDN);
+        return r;
+    }
+#endif
     if (flint_num_call_inexact(res))
         return flint_num_for_call(flint_num_hankel_sph(code, n, z), res);
     return NULL;

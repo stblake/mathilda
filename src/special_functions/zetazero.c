@@ -26,9 +26,12 @@
  */
 #include "zetazero.h"
 
+#include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "attr.h"
+#include "eval.h"
 #include "expr.h"
 #include "flint_num_bridge.h"
 #include "message.h"
@@ -73,8 +76,80 @@ Expr* builtin_zetazero(Expr* res) {
     return NULL;   /* exact index: symbolic; N gives the value */
 }
 
+/* True when Im[z] > t, decided by the comparison builtins (z the certified
+ * zero, t a real number); *ok cleared when undecided. */
+static bool zz_im_above(const Expr* z, const Expr* t, bool* ok) {
+    Expr* im = expr_new_function(expr_new_symbol(SYM_Im), (Expr*[]){ expr_copy((Expr*)z) }, 1);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Greater),
+                  (Expr*[]){ im, expr_copy((Expr*)t) }, 2));
+    bool above = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    bool below = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_False;
+    if (!above && !below) *ok = false;
+    expr_free(r);
+    return above;
+}
+
+/* N[ZetaZero[k, t]]: the k-th zero above height t. The index of the first
+ * zero above t starts at the Riemann-von Mangoldt count N(t) ~ theta(t)/pi + 1
+ * and is corrected against the certified zeros, so the answer is the
+ * certified ZetaZero[j + k - 1] (ZetaZero#1 of the 2026-11 audit). */
+static Expr* zz_numeric_above(const Expr* k, const Expr* t, long bits) {
+    if (k->type != EXPR_INTEGER || k->data.integer < 1) return NULL;
+    Expr* td = numericalize((Expr*)t, numeric_machine_spec());
+    bool real = td && td->type == EXPR_REAL;
+    double tv = real ? td->data.real : 0.0;
+    expr_free(td);
+    if (!real || !(tv < 1.0e15)) return NULL;
+    int64_t j = 1;
+    if (tv > 14.0) {
+        double th = 0.5 * tv * log(tv / (2.0 * 3.14159265358979323846)) - 0.5 * tv
+                  - 3.14159265358979323846 / 8.0 + 1.0 / (48.0 * tv);
+        double nt = th / 3.14159265358979323846 + 1.0;
+        j = (int64_t)floor(nt);
+        if (j < 1) j = 1;
+    }
+    /* j: the first index whose zero lies above t */
+    for (int it = 0; it < 2000; it++) {
+        Expr* jz = expr_new_integer(j);
+        Expr* z = flint_num_zeta_zero(jz, bits);
+        expr_free(jz);
+        if (!z) return NULL;
+        bool ok = true;
+        bool above = zz_im_above(z, t, &ok);
+        expr_free(z);
+        if (!ok) return NULL;
+        if (above) {
+            if (j == 1) break;
+            Expr* pz = expr_new_integer(j - 1);
+            Expr* z2 = flint_num_zeta_zero(pz, bits);
+            expr_free(pz);
+            if (!z2) return NULL;
+            bool prev_above = zz_im_above(z2, t, &ok);
+            expr_free(z2);
+            if (!ok) return NULL;
+            if (!prev_above) break;
+            j--;
+        } else {
+            j++;
+        }
+        if (it == 1999) return NULL;
+    }
+    Expr* idx = expr_new_integer(j + k->data.integer - 1);
+    Expr* r = flint_num_zeta_zero(idx, bits);
+    expr_free(idx);
+    return r;
+}
+
 /* N[ZetaZero[k], p]. */
 static Expr* zz_numeric(const Expr* call, NumericSpec spec) {
+    if (call->type == EXPR_FUNCTION && call->data.function.arg_count == 2) {
+        bool machine = !numeric_spec_is_mpfr(spec);
+        long bits = machine ? 53 : spec.bits;
+        if (bits < 53) bits = 53;
+        Expr* r = zz_numeric_above(call->data.function.args[0], call->data.function.args[1], bits);
+        if (r && machine) r = numeric_lower_mpfr_to_machine(r);
+        return r;
+    }
     if (call->type != EXPR_FUNCTION || call->data.function.arg_count != 1) return NULL;
     const Expr* k = call->data.function.args[0];
     if (!zz_is_nonzero_integer(k)) return NULL;
@@ -92,9 +167,10 @@ void zetazero_init(void) {
         (ATTR_LISTABLE | ATTR_NHOLDFIRST | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     numeric_register_held_value("ZetaZero", zz_numeric);
     symtab_set_docstring("ZetaZero",
-        "ZetaZero[k]\n"
+        "ZetaZero[k]\nZetaZero[k, t]\n"
         "\tThe k-th nontrivial zero 1/2 + I t of the Riemann zeta function above\n"
         "\tthe real axis (k > 0), or the |k|-th below it (k < 0). Symbolic for an\n"
         "\texact k; N gives the value at any precision, with the index certified\n"
-        "\t(Gram/Rosser isolation and Turing's method).");
+        "\t(Gram/Rosser isolation and Turing's method). ZetaZero[k, t] is the k-th\n"
+        "\tzero above height t.");
 }

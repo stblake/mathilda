@@ -457,8 +457,15 @@ static bool mc_is_real_number(const Expr* e) {
 #endif
             return true;
         case EXPR_FUNCTION:
-            return e->data.function.head->type == EXPR_SYMBOL &&
-                   e->data.function.head->data.symbol.name == SYM_Rational;
+            if (e->data.function.head->type == EXPR_SYMBOL &&
+                e->data.function.head->data.symbol.name == SYM_Rational) return true;
+            /* An exact numeric constant (Pi, Sqrt[2], ...): it numericalizes
+             * to a real alongside an inexact partner, as BesselJ[Pi, 1.]
+             * does (MathieuCharacteristicB#1); a complex one is caught
+             * there, after numericalization. */
+            return expr_is_numeric_quantity(e);
+        case EXPR_SYMBOL:
+            return expr_is_numeric_quantity(e);
         default:
             return false;
     }

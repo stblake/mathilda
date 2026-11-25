@@ -33,12 +33,14 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <gmp.h>
 
 #include "arithmetic.h"   /* is_rational, make_rational */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
+#include "numeric.h"       /* numericalize, numeric_min_inexact_bits */
 #include "expr.h"          /* expr_is_integer_like, expr_to_mpz, expr_is_numeric_like */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -172,9 +174,55 @@ static int beta_lattice_case(const Expr* a, const Expr* b, Expr** out) {
     return 1;
 }
 
+/* An inexact real with an integer value as the exact Integer (NULL
+ * otherwise): the pole lattice is the same set of points whether the call
+ * names them exactly or not. */
+static Expr* beta_inexact_int(const Expr* e) {
+    if (e->type == EXPR_REAL) {
+        double v = e->data.real;
+        if (!(fabs(v) < 9.0e15) || v != floor(v)) return NULL;
+        return expr_new_integer((int64_t)v);
+    }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR && mpfr_integer_p(e->data.mpfr)
+        && mpfr_cmp_d(e->data.mpfr, 9.0e15) < 0 && mpfr_cmp_d(e->data.mpfr, -9.0e15) > 0)
+        return expr_new_integer((int64_t)mpfr_get_si(e->data.mpfr, MPFR_RNDN));
+#endif
+    return NULL;
+}
+
 /* Beta[a, b] = Gamma(a) Gamma(b) / Gamma(a+b). */
 static Expr* beta_two_arg(Expr* a, Expr* b) {
     Expr* lattice = NULL;
+
+    /* An integer-valued inexact argument on the pole lattice: the exact
+     * lattice value, made inexact (Beta[-2., 1.] = Beta[-2, 1.] = -0.5, not
+     * Indeterminate from Gamma[-2.]/Gamma[-1.] -- Beta#3/#4 of the 2026-11
+     * audit). */
+    {
+        Expr* ea = beta_inexact_int(a);
+        Expr* eb = beta_inexact_int(b);
+        if (ea || eb) {
+            Expr* xa = ea ? ea : expr_copy(a);
+            Expr* xb = eb ? eb : expr_copy(b);
+            Expr* lv = NULL;
+            int hit = beta_lattice_case(xa, xb, &lv);
+            expr_free(xa); expr_free(xb);
+            if (hit) {
+                if (lv->type == EXPR_SYMBOL) return lv;     /* ComplexInfinity */
+                long bits = numeric_min_inexact_bits(a);
+                long b2 = numeric_min_inexact_bits(b);
+                if (bits == 0 || (b2 != 0 && b2 < bits)) bits = b2;
+                NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+                if (bits > 53) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; }
+#endif
+                Expr* nv = numericalize(lv, spec);
+                expr_free(lv);
+                return nv;
+            }
+        }
+    }
     if (beta_lattice_case(a, b, &lattice)) return lattice;
 
     /* Reduce only when both arguments are numeric quantities (exact or
@@ -188,6 +236,11 @@ static Expr* beta_two_arg(Expr* a, Expr* b) {
      * the other argument is rational (e.g. Beta[3, 1/3] = 27/14). The plain
      * Gamma route would instead leave an unsimplified ratio of unrelated gamma
      * values such as Gamma[1/3]/Gamma[10/3]. */
+    /* Both positive integers: expand on the smaller one, so Beta[10^20, 2]
+     * is 1/(10^20 (10^20 + 1)) as Beta[2, 10^20] is (Beta#2). */
+    if (pos_int(a) && pos_int(b) && expr_compare(a, b) > 0) {
+        Expr* t = a; a = b; b = t;
+    }
     if (pos_int(a)) {
         Expr* nm1  = fn2("Plus", expr_copy(a), expr_new_integer(-1));
         Expr* poch = fn2("Pochhammer", expr_copy(b), expr_copy(a));

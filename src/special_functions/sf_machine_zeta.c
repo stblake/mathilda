@@ -171,10 +171,65 @@ static void zm_exp(double xr, double xi, double* r, double* i) {
     *i = m * sin(xi);
 }
 
+/* log(x) for a finite x > 0 as a double-double hi + lo, accurate to ~2^-70
+ * absolute: x = 2^e m with m in [1/Sqrt[2], Sqrt[2]), log m = 2 atanh(u),
+ * u = (m - 1)/(m + 1), with u and u^3/3 carried in double-double and the
+ * rest of the series (|u|^5/5 < 2^-14 |u|) in double. e ln 2 uses the
+ * 32-bit ln2_hi, so e * ln2_hi is exact. */
+static void zm_log_dd(double x, double* hi, double* lo) {
+    static const double LN2_HI = 6.93147180369123816490e-01;
+    static const double LN2_LO = 1.90821492927058770002e-10;
+    int e;
+    double m = frexp(x, &e);                       /* m in [0.5, 1) */
+    if (m < 0.70710678118654752440) { m *= 2.0; e--; }
+    double num = m - 1.0;                           /* exact (Sterbenz) */
+    double den = m + 1.0, bb = den - m;
+    double den_lo = (m - (den - bb)) + (1.0 - bb);  /* den + den_lo = m + 1 */
+    double q = num / den;
+    double ql = (fma(-q, den, num) - q * den_lo) / den;   /* u = q + ql */
+    double u2 = q * q, u2e = fma(q, q, -u2);
+    double u3 = u2 * q, u3e = fma(u2, q, -u3) + u2e * q;
+    double d3 = u3 / 3.0, d3e = (fma(-d3, 3.0, u3) + u3e) / 3.0;
+    double t = 1.0 / 23.0;
+    for (int k = 21; k >= 5; k -= 2) t = t * u2 + 1.0 / (double)k;
+    double tail = u3 * u2 * t;                       /* u^5 (1/5 + u^2/7 + ...) */
+    double a = (double)e * LN2_HI, b = 2.0 * q;
+    double h = a + b, bv = h - a;
+    double err = (a - (h - bv)) + (b - bv);
+    *hi = h;
+    *lo = err + (double)e * LN2_LO + 2.0 * (ql + d3 + (d3e + tail));
+}
+
 /* w^-s for complex w, complex s (principal branch). A positive real w takes
- * the cheaper real-log route. */
+ * the cheaper real-log route, with the phase s_i log w formed in
+ * double-double and reduced mod 2 pi before the sin/cos: a rounded
+ * log w carries an absolute error ~2^-53 log w that the phase multiplies by
+ * |s_i| -- Zeta[2. + 1000. I] lost 2-3 digits that way (Zeta#1 of the
+ * 2026-11 audit). */
 static void zm_pow_neg(double wr, double wi, double sr, double si, double* r, double* i) {
     if (wi == 0.0 && wr > 0.0) {
+        if (si != 0.0) {
+            double Lh, Ll;
+            zm_log_dd(wr, &Lh, &Ll);
+            double p = si * Lh;
+            if (fabs(p) < 6.0e6) {
+                /* 2 pi = C1 + C2 + C3 (Cody-Waite, 33-bit parts) */
+                static const double C1 = 6.28318530693650245667e+00;
+                static const double C2 = 2.43084020252158639064e-10;
+                static const double C3 = 8.08906499484466582320e-21;
+                double pe = fma(si, Lh, -p) + si * Ll;
+                double n = nearbyint(p * 0.15915494309189533577);
+                double r1 = p - n * C1;                 /* exact */
+                double w = n * C2;                      /* exact */
+                double r2 = r1 - w;
+                double e2 = (r1 - r2) - w;
+                double ph = r2 + ((e2 - n * C3) + pe);  /* s_i log w mod 2 pi */
+                double m = exp(-(sr * Lh + sr * Ll));
+                *r = m * cos(ph);
+                *i = -m * sin(ph);
+                return;
+            }
+        }
         double L = log(wr);
         double m = exp(-sr * L), ph = -si * L;
         *r = m * cos(ph);
@@ -388,7 +443,8 @@ static bool zm_hurwitz_em_c(double sr, double si, double ar, double ai,
  * TwoSum and its power corrected to first order; z^k is a double-double power;
  * the sum is Neumaier-compensated. */
 static bool zm_shift_head(double zr, double zi, double sr, double si, double a,
-                          double m, double* Hr, double* Hi, double* Pr, double* Pi) {
+                          double m, bool s0_term,
+                          double* Hr, double* Hi, double* Pr, double* Pi) {
     bool real = (zi == 0.0 && si == 0.0);
     double hr = 1.0, hi = 0.0, lr = 0.0, li = 0.0;     /* z^k = h + l */
     double Sr = 0.0, Si = 0.0, cr = 0.0, ci = 0.0;
@@ -397,7 +453,10 @@ static bool zm_shift_head(double zr, double zi, double sr, double si, double a,
         double tr = 0.0, ti = 0.0;
         if (wk == 0.0 && e == 0.0) {                   /* the 0^-s term */
             if (sr == 0.0 && si != 0.0) return false;
-            if (sr == 0.0) { tr = hr + lr; ti = hi + li; }   /* s = 0: 0^0 = 1 */
+            /* s = 0: 0^0 = 1 for Zeta[0, a]; LerchPhi excludes the
+             * k = -a term outright, as its exact path does
+             * (LerchPhi[1/2, 0, -2] = 7/4 -- LerchPhi#3). */
+            if (sr == 0.0 && s0_term) { tr = hr + lr; ti = hi + li; }
         } else {
             double w = -wk, ew = -e;                   /* |k+a| = w + ew, w > 0 */
             double fr, fi;
@@ -564,7 +623,7 @@ bool sf_zeta2_r(double s, double a, double* out) {
     if (!zm_shift_count(a, &m)) return false;
     double r = a + m;                                  /* (0, 1], exact for m >= 2 */
     if (!(r == 1.0 ? sf_zeta_r(s, &T) : sf_hurwitz_r(s, r, &T))) return false;
-    if (!zm_shift_head(1.0, 0.0, s, 0.0, a, m, &H, &Hi, &P, &Pi)) return false;
+    if (!zm_shift_head(1.0, 0.0, s, 0.0, a, m, true, &H, &Hi, &P, &Pi)) return false;
     double v = H + T;
     if (!isfinite(v)) return false;
     *out = v;
@@ -583,7 +642,7 @@ bool sf_zeta2_c(double sr, double si, double ar, double ai, double* vr, double* 
     double m, Hr, Hi, Pr, Pi, Tr, Ti;                  /* complex s, real a <= 0 */
     if (!zm_shift_count(ar, &m)) return false;
     if (!sf_hurwitz_c(sr, si, ar + m, 0.0, &Tr, &Ti)) return false;
-    if (!zm_shift_head(1.0, 0.0, sr, si, ar, m, &Hr, &Hi, &Pr, &Pi)) return false;
+    if (!zm_shift_head(1.0, 0.0, sr, si, ar, m, true, &Hr, &Hi, &Pr, &Pi)) return false;
     *vr = Hr + Tr; *vi = Hi + Ti;
     return isfinite(*vr) && isfinite(*vi);
 }
@@ -663,7 +722,7 @@ bool sf_lerch_r(double z, double s, double a, double* out) {
     if (!(a > 0.0)) {                 /* a <= 0: the ((k+a)^2)^(s/2) convention */
         double m, H, Hi, P, Pi, T;
         if (!zm_shift_count(a, &m) || m > 1.0e5) return false;
-        if (!zm_shift_head(z, 0.0, s, 0.0, a, m, &H, &Hi, &P, &Pi)) return false;
+        if (!zm_shift_head(z, 0.0, s, 0.0, a, m, false, &H, &Hi, &P, &Pi)) return false;
         if (!sf_lerch_r(z, s, a + m, &T)) return false;
         double v = H + P * T;
         if (!isfinite(v)) return false;

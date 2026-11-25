@@ -1597,7 +1597,10 @@ static bool simp_has_rounding_head(const Expr* e) {
             h == SYM_Round || h == SYM_IntegerPart ||
             h == SYM_FractionalPart || h == SYM_Mod ||
             h == SYM_Quotient || h == SYM_GCD ||
-            h == SYM_LCM || h == SYM_LegendreP)
+            h == SYM_LCM || h == SYM_LegendreP ||
+            /* sign-fact rewrites that a bare input otherwise loses:
+             * Simplify[HeavisideTheta[x], x > 0] = 1 (HeavisideTheta#1) */
+            h == SYM_Sign || h == SYM_HeavisideTheta || h == SYM_UnitStep)
             return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)

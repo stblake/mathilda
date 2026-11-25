@@ -131,6 +131,16 @@ Expr* builtin_exptotrig(Expr* res) {
     Expr* replaced = evaluate(replace_expr);
     expr_free(replace_expr);
 
+    /* No exponential or logarithm converted: ExpToTrig leaves the
+     * expression alone, rather than handing back its Together/Cancel/Expand
+     * normal form -- ExpToTrig[(x^2 - 1)/(x - 1)] stays as it is
+     * (ExpToTrig#2 of the 2026-11 audit). */
+    if (replaced && expr_eq(replaced, arg)) {
+        trig_canon_suppress_dec();
+        expr_free(replaced);
+        return expr_copy(arg);
+    }
+
     Expr* together_args[1] = { replaced };
     Expr* together_expr = expr_new_function(expr_new_symbol(SYM_Together), together_args, 1);
     Expr* togethered = evaluate(together_expr);
@@ -453,6 +463,9 @@ static size_t count_distinct_trig_atoms(const Expr* e) {
  */
 #define TRIG_FACTOR_DEGREE_THRESHOLD 4
 
+/* The degree cap for a form in a single Sin/Cos (or Sinh/Cosh) pair. */
+#define TRIG_FACTOR_PAIR_DEGREE 12
+
 /*
  * Maximum integer exponent appearing on any Sin/Cos/Sinh/Cosh atom in `e`.
  * Returns 0 if no such Power[trig_atom, k>=2] subterm exists. Used together
@@ -664,9 +677,17 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
      * (Sin[x]^2 + Cos[x]^2)(Cosh[y]^2 - Sinh[y]^2) collapses to 1 directly
      * via the Times-context identity rules). */
     Expr* factored;
+    /* A bivariate form in one Sin/Cos (Sinh/Cosh) pair factors quickly at
+     * any moderate degree with the FLINT-backed Factor (TrigExpand[Sin[10 x]]
+     * in ~0.3 s): the degree cap applies only beyond two atoms, up to
+     * TRIG_FACTOR_PAIR_DEGREE (TrigFactor#3 of the 2026-11 audit). */
+    size_t tf_atoms = count_distinct_trig_atoms(togethered);
+    int64_t tf_deg = max_trig_atom_power(togethered);
+    bool tf_deg_ok = tf_deg <= TRIG_FACTOR_DEGREE_THRESHOLD
+                  || (tf_atoms <= 2 && tf_deg <= TRIG_FACTOR_PAIR_DEGREE);
     if (count_distinct_squared_trig_atoms(togethered) > TRIG_FACTOR_ATOM_THRESHOLD ||
-        max_trig_atom_power(togethered) > TRIG_FACTOR_DEGREE_THRESHOLD ||
-        count_distinct_trig_atoms(togethered) > TRIG_FACTOR_TOTAL_ATOM_THRESHOLD) {
+        !tf_deg_ok ||
+        tf_atoms > TRIG_FACTOR_TOTAL_ATOM_THRESHOLD) {
         factored = togethered;
     } else {
         Expr* fac_args[1] = { togethered };
@@ -990,10 +1011,32 @@ static Expr* trigreduce_normalize_odd_args(Expr* e) {
     return out;
 }
 
+/* True if a Hold-family wrapper occurs anywhere in e: the rewrite pipeline
+ * runs ReplaceRepeated, which reaches inside held code, while the
+ * evaluation that tidies each rule's right-hand side does not -- so a held
+ * argument would come back carrying rule internals (Sin[x]^(2 - 2),
+ * Cos[Expand[2 x]]: TrigReduce#2 of the 2026-11 audit). */
+static bool trig_contains_hold(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Hold || n == SYM_HoldForm || n == SYM_HoldComplete
+            || n == SYM_Unevaluated || n == SYM_HoldPattern)
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (trig_contains_hold(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* builtin_trigreduce_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
         return NULL;
     Expr* arg = res->data.function.args[0];
+
+    /* Held code is left as it is. */
+    if (trig_contains_hold(arg)) return expr_copy(arg);
 
     /* Thread over equations, inequalities, and logic heads. List
      * threading is delivered by ATTR_LISTABLE in the attribute
@@ -1138,10 +1181,16 @@ void trigsimp_init(void) {
         "E^((-I) x_.) :> Cos[x] - I Sin[x], "
         "E^(-x_.) :> Cosh[x] - Sinh[x], "
         "E^x_. :> Cosh[x] + Sinh[x], "
-        "Log[a_ + (I) x_] - Log[a_ - (I) x_] :> 2 I ArcTan[x/a], "
-        "Log[a_ - (I) x_] - Log[a_ + (I) x_] :> -2 I ArcTan[x/a], "
-        "Log[a_ + x_] - Log[a_ - x_] :> 2 ArcTanh[x/a], "
-        "Log[a_ - x_] - Log[a_ + x_] :> -2 ArcTanh[x/a], "
+        /* A root of unity (-1)^r, which E^(I Pi r) evaluates to:
+         * ExpToTrig[E^(I Pi/3)] = 1/2 + I Sqrt[3]/2 (ExpToTrig#1). */
+        "(-1)^r_Rational :> Cos[Pi r] + I Sin[Pi r], "
+        /* The log differences: Log[a + w] - Log[a - w] = Log[1 + w/a] -
+         * Log[1 - w/a] needs a > 0 (for a < 0 the two sides differ by
+         * 2 Pi I -- ExpToTrig#3). */
+        "Log[a_ + (I) x_] - Log[a_ - (I) x_] /; TrueQ[Positive[a]] :> 2 I ArcTan[x/a], "
+        "Log[a_ - (I) x_] - Log[a_ + (I) x_] /; TrueQ[Positive[a]] :> -2 I ArcTan[x/a], "
+        "Log[a_ + x_] - Log[a_ - x_] /; TrueQ[Positive[a]] :> 2 ArcTanh[x/a], "
+        "Log[a_ - x_] - Log[a_ + x_] /; TrueQ[Positive[a]] :> -2 ArcTanh[x/a], "
         "Log[x_ + Sqrt[1 + x_^2]] :> ArcSinh[x], "
         "Log[x_ + Sqrt[-1 + x_] Sqrt[1 + x_]] :> ArcCosh[x], "
         "Log[(I) x_ + Sqrt[1 - x_^2]] :> (I) ArcSin[x], "
@@ -1190,22 +1239,22 @@ void trigsimp_init(void) {
         "Cos[n_Integer x_] /; n > 1 :> Cos[(n-1) x] Cos[x] - Sin[(n-1) x] Sin[x], "
         "Sinh[n_Integer x_] /; n > 1 :> Sinh[(n-1) x] Cosh[x] + Cosh[(n-1) x] Sinh[x], "
         "Cosh[n_Integer x_] /; n > 1 :> Cosh[(n-1) x] Cosh[x] + Sinh[(n-1) x] Sinh[x], "
-        "Tan[x_ + y__] :> Sin[x + y] / Cos[x + y], "
-        "Cot[x_ + y__] :> Cos[x + y] / Sin[x + y], "
-        "Sec[x_ + y__] :> 1 / Cos[x + y], "
-        "Csc[x_ + y__] :> 1 / Sin[x + y], "
-        "Tanh[x_ + y__] :> Sinh[x + y] / Cosh[x + y], "
-        "Coth[x_ + y__] :> Cosh[x + y] / Sinh[x + y], "
-        "Sech[x_ + y__] :> 1 / Cosh[x + y], "
-        "Csch[x_ + y__] :> 1 / Sinh[x + y], "
-        "Tan[n_Integer x_] /; n > 1 :> Sin[n x] / Cos[n x], "
-        "Cot[n_Integer x_] /; n > 1 :> Cos[n x] / Sin[n x], "
-        "Sec[n_Integer x_] /; n > 1 :> 1 / Cos[n x], "
-        "Csc[n_Integer x_] /; n > 1 :> 1 / Sin[n x], "
-        "Tanh[n_Integer x_] /; n > 1 :> Sinh[n x] / Cosh[n x], "
-        "Coth[n_Integer x_] /; n > 1 :> Cosh[n x] / Sinh[n x], "
-        "Sech[n_Integer x_] /; n > 1 :> 1 / Cosh[n x], "
-        "Csch[n_Integer x_] /; n > 1 :> 1 / Sinh[n x], "
+        "Tan[x_ + y__] :> Sin[x + y] / TrigExpand[Cos[x + y]], "
+        "Cot[x_ + y__] :> Cos[x + y] / TrigExpand[Sin[x + y]], "
+        "Sec[x_ + y__] :> 1 / TrigExpand[Cos[x + y]], "
+        "Csc[x_ + y__] :> 1 / TrigExpand[Sin[x + y]], "
+        "Tanh[x_ + y__] :> Sinh[x + y] / TrigExpand[Cosh[x + y]], "
+        "Coth[x_ + y__] :> Cosh[x + y] / TrigExpand[Sinh[x + y]], "
+        "Sech[x_ + y__] :> 1 / TrigExpand[Cosh[x + y]], "
+        "Csch[x_ + y__] :> 1 / TrigExpand[Sinh[x + y]], "
+        "Tan[n_Integer x_] /; n > 1 :> Sin[n x] / TrigExpand[Cos[n x]], "
+        "Cot[n_Integer x_] /; n > 1 :> Cos[n x] / TrigExpand[Sin[n x]], "
+        "Sec[n_Integer x_] /; n > 1 :> 1 / TrigExpand[Cos[n x]], "
+        "Csc[n_Integer x_] /; n > 1 :> 1 / TrigExpand[Sin[n x]], "
+        "Tanh[n_Integer x_] /; n > 1 :> Sinh[n x] / TrigExpand[Cosh[n x]], "
+        "Coth[n_Integer x_] /; n > 1 :> Cosh[n x] / TrigExpand[Sinh[n x]], "
+        "Sech[n_Integer x_] /; n > 1 :> 1 / TrigExpand[Cosh[n x]], "
+        "Csch[n_Integer x_] /; n > 1 :> 1 / TrigExpand[Sinh[n x]], "
         /* Inverse-trig compositions. After angle-addition expansion of
          * something like Sin[ArcSin[t] + ArcSin[v]], the residual cross-terms
          * Cos[ArcSin[v]] should reduce to Sqrt[1 - v^2] (and so on) so the
@@ -1355,6 +1404,13 @@ void trigsimp_init(void) {
         /* (Cosh + 1)(Cosh - 1) = Sinh^2 -- appears from Factor[Cosh^2 - 1]. */
         "(-1 + Cosh[x_]) (1 + Cosh[x_]) r___ :> Sinh[x]^2 r, "
         "(1 - Cosh[x_]) (1 + Cosh[x_]) r___ :> -Sinh[x]^2 r, "
+        /* (1 - Sin)(1 + Sin) = Cos^2, (1 - Cos)(1 + Cos) = Sin^2 -- from
+         * Factor[1 - Sin^2]: Sec[x]^2 - Tan[x]^2 = 1 (TrigFactor#2 of the
+         * 2026-11 audit). */
+        "(-1 + Sin[x_]) (1 + Sin[x_]) r___ :> -Cos[x]^2 r, "
+        "(1 - Sin[x_]) (1 + Sin[x_]) r___ :> Cos[x]^2 r, "
+        "(-1 + Cos[x_]) (1 + Cos[x_]) r___ :> -Sin[x]^2 r, "
+        "(1 - Cos[x_]) (1 + Cos[x_]) r___ :> Sin[x]^2 r, "
         /* (Cos - Sin)(Cos + Sin) = Cos[2x] -- from Factor[Cos^2 - Sin^2]. */
         "(Cos[x_] - Sin[x_]) (Cos[x_] + Sin[x_]) r___ :> Cos[2 x] r, "
         "(-Cos[x_] + Sin[x_]) (Cos[x_] + Sin[x_]) r___ :> -Cos[2 x] r, "
@@ -1392,7 +1448,22 @@ void trigsimp_init(void) {
          * For symbolic coefficients the result would be more complex than
          * the input. The 2-arg ArcTan handles quadrant correctly. */
         "a_. Sin[x_] + b_. Cos[x_] + r___ /; (NumberQ[a] && NumberQ[b] && Im[a] === 0 && Im[b] === 0) "
-            ":> Sqrt[a^2 + b^2] Sin[x + ArcTan[a, b]] + r "
+            ":> Sqrt[a^2 + b^2] Sin[x + ArcTan[a, b]] + r, "
+        /* Sum-to-product (TrigFactor#1 of the 2026-11 audit):
+         *   Sin x + Sin y = 2 Cos[(x - y)/2] Sin[(x + y)/2],
+         *   Sin x - Sin y = 2 Cos[(x + y)/2] Sin[(x - y)/2],
+         *   Cos x + Cos y = 2 Cos[(x + y)/2] Cos[(x - y)/2],
+         *   Cos x - Cos y = -2 Sin[(x + y)/2] Sin[(x - y)/2]. */
+        /* Arguments that are themselves sums are the product of an
+         * angle-addition collapse (Sin[a + b] + Sin[u + v]) and stay. */
+        "a_. Sin[x_] + a_. Sin[y_] + r___ /; Head[x] =!= Plus && Head[y] =!= Plus "
+            ":> 2 a Cos[x/2 - y/2] Sin[x/2 + y/2] + r, "
+        "a_. Sin[x_] - a_. Sin[y_] + r___ /; Head[x] =!= Plus && Head[y] =!= Plus "
+            ":> 2 a Cos[x/2 + y/2] Sin[x/2 - y/2] + r, "
+        "a_. Cos[x_] + a_. Cos[y_] + r___ /; Head[x] =!= Plus && Head[y] =!= Plus "
+            ":> 2 a Cos[x/2 + y/2] Cos[x/2 - y/2] + r, "
+        "a_. Cos[x_] - a_. Cos[y_] + r___ /; Head[x] =!= Plus && Head[y] =!= Plus "
+            ":> -2 a Sin[x/2 + y/2] Sin[x/2 - y/2] + r "
     "}";
     trig_factor_identities = parse_expression(identities_str);
 
@@ -1519,6 +1590,13 @@ void trigsimp_init(void) {
         "c_. Sinh[a_] Cosh[b_] - c_. Cosh[a_] Sinh[b_] + r___ :> c Sinh[Expand[a - b]] + r, "
         "c_. Cosh[a_] Cosh[b_] + c_. Sinh[a_] Sinh[b_] + r___ :> c Cosh[Expand[a + b]] + r, "
         "c_. Cosh[a_] Cosh[b_] - c_. Sinh[a_] Sinh[b_] + r___ :> c Cosh[Expand[a - b]] + r, "
+        /* The negated orientations of the two-product collapses: the
+         * coefficient pattern c_. cannot absorb the sign of a numerator
+         * that Together leaves as Sin Sin - Cos Cos (from Tan[x] - Cot[y]
+         * shapes) or Sinh Sinh - Cosh Cosh (Tanh[x] - Coth[y] -- TrigReduce#1
+         * of the 2026-11 audit). */
+        "c_. Sin[a_] Sin[b_] - c_. Cos[a_] Cos[b_] + r___ :> -c Cos[Expand[a + b]] + r, "
+        "c_. Sinh[a_] Sinh[b_] - c_. Cosh[a_] Cosh[b_] + r___ :> -c Cosh[Expand[a - b]] + r, "
         /* Negative-argument cancellations */
         "c1_. Sin[a_] + c2_. Sin[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 - c2) Sin[a] + r, "
         "c1_. Cos[a_] + c2_. Cos[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 + c2) Cos[a] + r, "

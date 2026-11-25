@@ -168,8 +168,10 @@ void test_legendre_types() {
 void test_legendre_deferred() {
     /* Non-integer order/degree associated form is deferred. */
     assert_eval_eq("LegendreP[3/2, 1/2, x]", "LegendreP[3/2, 1/2, x]", 0);
-    /* Negative degree is deferred. */
-    assert_eval_eq("LegendreP[2, -1, x]", "LegendreP[2, -1, x]", 0);
+    /* Negative order with |m| <= n: the reflection (LegendreP#1); |m| > n is
+     * still deferred. */
+    assert_eval_eq("LegendreP[2, -1, x]", "1/2 x Sqrt[1 - x^2]", 0);
+    assert_eval_eq("LegendreP[1, -2, x]", "LegendreP[1, -2, x]", 0);
     /* Out-of-range type is deferred. */
     assert_eval_eq("LegendreP[2, 1, 4, z]", "LegendreP[2, 1, 4, z]", 0);
     /* Outside the series' disk of convergence the value is the analytic

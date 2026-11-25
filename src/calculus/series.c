@@ -3756,6 +3756,48 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 if (r) return r;
             }
         }
+        /* ---- SphericalBesselJ[n, u], n a literal integer 0..64, u(x0) = 0:
+         *     j_n(u) = Sum_k (-1)^k u^(n+2k) / (2^k k! (2n+2k+1)!!)
+         * composed through u's series as BesselJ is above (Taylor-via-D hit
+         * the 2/x j_1 recurrence term at 0 -- SphericalBesselJ#3 of the
+         * 2026-11 audit). ---- */
+        if (head && head == SYM_SphericalBesselJ &&
+            e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_INTEGER &&
+            e->data.function.args[0]->data.integer >= 0 &&
+            e->data.function.args[0]->data.integer <= 64 &&
+            !expr_free_of(e->data.function.args[1], ctx->x)) {
+            SeriesObj* inner = series_expand_nested(e->data.function.args[1], ctx);
+            if (inner) {
+                Expr* c; SeriesObj* u;
+                so_split_constant(inner, &c, &u);
+                bool zero = is_lit_zero(c);
+                expr_free(c);
+                SeriesObj* r = NULL;
+                if (zero && u->nmin >= 1) {
+                    int64_t n = e->data.function.args[0]->data.integer;
+                    int64_t N = (u->order - u->nmin) / u->nmin + 2;
+                    if (N < n + 1) N = n + 1;
+                    Expr** k = calloc((size_t)N, sizeof(Expr*));
+                    for (int64_t j = 0; j < N; j++) k[j] = expr_new_integer(0);
+                    for (int64_t kk = 0; n + 2 * kk < N; kk++) {
+                        int64_t m = n + 2 * kk;
+                        Expr* den = mk_times(mk_power(expr_new_integer(2), expr_new_integer(kk)),
+                                     mk_times(mk_fn1("Factorial", expr_new_integer(kk)),
+                                              mk_fn1("Factorial2", expr_new_integer(2 * n + 2 * kk + 1))));
+                        expr_free(k[m]);
+                        k[m] = simp(mk_times(expr_new_integer((kk % 2) ? -1 : 1),
+                                             mk_power(den, expr_new_integer(-1))));
+                    }
+                    r = so_compose_scalar_kernel(k, (size_t)N, u);
+                    for (int64_t j = 0; j < N; j++) expr_free(k[j]);
+                    free(k);
+                }
+                so_free(u);
+                so_free(inner);
+                if (r) return r;
+            }
+        }
         /* ---- Reciprocal heads (Sec, Csc, Cot, Sech, Csch, Coth) ---- */
         {
             Expr* rewrite = rewrite_reciprocal_head(e);

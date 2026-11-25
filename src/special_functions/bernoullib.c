@@ -295,7 +295,35 @@ static Expr* bern_two_arg(Expr* nexpr, Expr* x) {
     long prec = 53;
     bidx_kind k = bern_index(nexpr, &n, &prec);
     if (k == BIDX_NONE) return NULL;           /* symbolic / negative / non-integer n */
-    if (n > BERNOULLI_POLY_CAP) return NULL;    /* too large: stay symbolic */
+    if (n > BERNOULLI_POLY_CAP) {
+        /* Past the polynomial cap, an exact integer x = a still has a cheap
+         * exact value from the difference equation B_n(x+1) - B_n(x) =
+         * n x^(n-1):  B_n(a) = B_n + n Sum_{j=0}^{a-1} j^(n-1)  (a > 0),
+         *             B_n(a) = B_n - n Sum_{j=a}^{-1} j^(n-1)  (a < 0).
+         * HurwitzZeta[-1000, -1] = -BernoulliB[1001, -1]/1001 = 1
+         * (HurwitzZeta#1 of the 2026-11 audit). */
+        if (k != BIDX_EXACT || n > BERNOULLI_NUMBER_CAP || x->type != EXPR_INTEGER
+            || x->data.integer > 10000 || x->data.integer < -10000)
+            return NULL;                        /* too large: stay symbolic */
+        int64_t a = x->data.integer;
+        mpq_t b; mpz_t acc, t;
+        mpq_init(b); mpz_init(acc); mpz_init(t);
+        bern_get_q_ex(b, (size_t)n, true);
+        int64_t lo = a > 0 ? 0 : a, hi = a > 0 ? a - 1 : -1;
+        for (int64_t j = lo; j <= hi; j++) {
+            mpz_set_si(t, (long)j);
+            mpz_pow_ui(t, t, n - 1);
+            mpz_add(acc, acc, t);
+        }
+        mpz_mul_ui(acc, acc, n);
+        if (a < 0) mpz_neg(acc, acc);
+        mpq_t q; mpq_init(q);
+        mpq_set_z(q, acc);
+        mpq_add(b, b, q);
+        Expr* out = bern_expr_from_mpq(b);
+        mpq_clear(q); mpq_clear(b); mpz_clear(acc); mpz_clear(t);
+        return out;
+    }
     return bernoulli_polynomial((size_t)n, x);
 }
 

@@ -3392,7 +3392,11 @@ bool flint_hardy_d(int theta, double tr, double ti, double* rr, double* ri) {
         slong wp = (53 + NB_GUARD) << attempt;
         if (theta) nb_hardy_theta(R, T, wp); else nb_hardy_z(R, T, wp);
         if (nb_should_retry(R, 53, attempt)) continue;
-        if (nb_emit_bits(R, 53) > 0) {
+        /* A machine double claims ~53 bits: a ball known to only a few bits
+         * (Z at t = 1e50, where arb's Riemann-Siegel error bound swamps the
+         * value, came back 9*10^40) is declined, not emitted (RiemannSiegelZ#1
+         * of the 2026-11 audit). */
+        if (nb_emit_bits(R, 53) >= 50) {
             *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
             *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
             ok = isfinite(*rr) && isfinite(*ri);

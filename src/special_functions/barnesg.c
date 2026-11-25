@@ -119,6 +119,44 @@ static Expr* barnesg_numeric(Expr* w) {
         Expr* v = flint_num_barnesg(w);
         if (v) return v;
     }
+#ifdef USE_MPFR
+    /* Machine precision with a large argument: exponentiating A(Z) ~ (Z^2/2)
+     * log Z loses ~log10(Z^2) digits (BarnesG[200.] was good to 11, yet
+     * tagged as a full machine number -- BarnesG#3 of the 2026-11 audit).
+     * Evaluate through arb with that many guard bits and round once to 53
+     * bits: a double when it fits, else the 53-bit extended-exponent real.
+     * (BarnesG has no packed/NDArray kernel to stay bit-identical with.) */
+    {
+        Expr *wre, *wim;
+        double rp = barnes_real_part(w);
+        double ip = 0.0;
+        if (is_complex(w, &wre, &wim)) {
+            if (wim->type == EXPR_REAL) ip = wim->data.real;
+#ifdef USE_MPFR
+            else if (wim->type == EXPR_MPFR) ip = mpfr_get_d(wim->data.mpfr, MPFR_RNDN);
+#endif
+        }
+        double az = sqrt(rp * rp + ip * ip);
+        if (bits <= 53 && az > 8.0 && az < 1.0e15) {
+            long guard = 16 + 2 * (long)ceil(log2(az + 1.0)) + (long)ceil(log2(log(az) + 1.0));
+            NumericSpec hs;
+            hs.mode = NUMERIC_MODE_MPFR;
+            hs.bits = 53 + guard;
+            Expr* wh = numericalize(w, hs);
+            Expr* v = wh ? flint_num_barnesg(wh) : NULL;
+            if (wh) expr_free(wh);
+            if (v) {
+                Expr *vr, *vi;
+                bool cx = is_complex(v, &vr, &vi);
+                Expr* parts[2] = { cx ? vr : v, cx ? vi : NULL };
+                for (int i = 0; i < 2; i++)
+                    if (parts[i] && parts[i]->type == EXPR_MPFR)
+                        mpfr_prec_round(parts[i]->data.mpfr, 53, MPFR_RNDN);
+                return numeric_lower_mpfr_to_machine(v);
+            }
+        }
+    }
+#endif
     double D = (double)bits * 0.30103;                 /* target decimal digits */
     long R = (long)ceil(pow(10.0, (D + 4.0) / 24.0)) + 1;  /* shift so 12 terms reach D */
     if (R < 12) R = 12;
@@ -209,6 +247,9 @@ Expr* builtin_barnesg(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* A non-positive bigint is a zero of G too (BarnesG#4). */
+    if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0)
+        return expr_new_integer(0);
     int64_t z, d;
     if (is_rational(arg, &z, &d) && d == 1) {
         if (z <= 0) return expr_new_integer(0);          /* G(0), G(-1), ... = 0 */

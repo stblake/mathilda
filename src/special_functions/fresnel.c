@@ -540,9 +540,62 @@ static bool fresnel_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec,
 }
 #endif /* USE_MPFR */
 
+#ifdef USE_MPFR
+/* A value computed at 53 bits for an arbitrary-precision argument of fewer
+ * bits, re-tagged at that precision (a machine Real, or Complex of Reals, to
+ * MPFR p): FresnelC[1.5`10] is a 10-digit number, as Sin[1.5`10] and
+ * Erf[1.5`10] are, not a machine one (FresnelC#1, FresnelS#1 of the 2026-11
+ * audit). Consumes e. */
+static Expr* fresnel_retag(Expr* e, mpfr_prec_t p) {
+    if (!e) return NULL;
+    if (e->type == EXPR_REAL) {
+        Expr* r = expr_new_mpfr_from_d(e->data.real, p);
+        expr_free(e);
+        return r;
+    }
+    Expr *re, *im;
+    if (is_complex(e, &re, &im) && re->type == EXPR_REAL && im->type == EXPR_REAL) {
+        Expr* r = make_complex(expr_new_mpfr_from_d(re->data.real, p),
+                               expr_new_mpfr_from_d(im->data.real, p));
+        expr_free(e);
+        return r;
+    }
+    return e;
+}
+
+/* Below-53-bit precision of an arbitrary-precision argument (0 when the
+ * argument carries a machine number, or 53+ bits). */
+static mpfr_prec_t fresnel_low_prec(const Expr* arg) {
+    Expr *re, *im;
+    if (arg->type == EXPR_MPFR)
+        return mpfr_get_prec(arg->data.mpfr) < 53 ? mpfr_get_prec(arg->data.mpfr) : 0;
+    if (is_complex((Expr*)arg, &re, &im)) {
+        if (re->type == EXPR_REAL || im->type == EXPR_REAL) return 0;
+        long b = numeric_min_inexact_bits(arg);
+        return (b > 0 && b < 53) ? (mpfr_prec_t)b : 0;
+    }
+    return 0;
+}
+#endif
+
+static bool fresnel_numeric_at(Expr* arg, Expr** outC, Expr** outS);
+
 /* Compute the numeric pair (C, S) for `arg`, or return false to stay symbolic.
  * Callers own the returned Exprs. */
 static bool fresnel_numeric(Expr* arg, Expr** outC, Expr** outS) {
+#ifdef USE_MPFR
+    mpfr_prec_t lp = fresnel_low_prec(arg);
+    if (lp) {
+        if (!fresnel_numeric_at(arg, outC, outS)) return false;
+        *outC = fresnel_retag(*outC, lp);
+        *outS = fresnel_retag(*outS, lp);
+        return true;
+    }
+#endif
+    return fresnel_numeric_at(arg, outC, outS);
+}
+
+static bool fresnel_numeric_at(Expr* arg, Expr** outC, Expr** outS) {
     /* Numeric real (machine and arbitrary precision). */
     if (arg->type == EXPR_REAL) {
 #ifdef USE_MPFR
@@ -560,7 +613,7 @@ static bool fresnel_numeric(Expr* arg, Expr** outC, Expr** outS) {
 #ifdef USE_MPFR
     if (arg->type == EXPR_MPFR) {
         mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
-        return fresnel_mpfr_real(arg, prec, outC, outS);
+        return fresnel_mpfr_real(arg, prec < 53 ? 53 : prec, outC, outS);
     }
 #endif
 

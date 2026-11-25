@@ -401,9 +401,14 @@ static void si_ncpx_asymptotic(ncpx* out, const ncpx* w, mpfr_prec_t wp) {
     ncpx_add(&tmp, &cw, &sw);          /* cos f + sin g */
     ncpx_neg(&tmp, &tmp);
     ncpx_set(out, &tmp);
-    mpfr_const_pi(pi, SRND);
-    mpfr_div_2ui(pi, pi, 1, SRND);     /* Pi/2 */
-    mpfr_add(out->re, out->re, pi, SRND);
+    /* The constant is Pi/2 for Re w > 0 only: on the imaginary axis the
+     * Stokes jump between +Pi/2 and -Pi/2 averages to 0, and Si(i y) =
+     * i Shi(y) is purely imaginary (SinIntegral#1 of the 2026-11 audit). */
+    if (mpfr_sgn(w->re) > 0) {
+        mpfr_const_pi(pi, SRND);
+        mpfr_div_2ui(pi, pi, 1, SRND);     /* Pi/2 */
+        mpfr_add(out->re, out->re, pi, SRND);
+    }
 
     mpfr_clears(thr, pi, (mpfr_ptr)0);
     ncpx_clear(&w2); ncpx_clear(&one); ncpx_clear(&f); ncpx_clear(&g);

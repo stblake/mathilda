@@ -1209,13 +1209,15 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
 
 #ifdef USE_MPFR
     /* 2F1 at arbitrary precision OUTSIDE the unit disc: arb's kernel is the
-     * principal-branch analytic continuation, so it is the value wherever that
-     * is single-valued -- everywhere but the cut [1, Infinity), where the side
-     * is a convention left to the caller. The machine twin already covers
-     * |z| >= 1 (hg_machine_pfq); without this, N[2F1(...; -1), 20] stayed
-     * unevaluated where the machine N gave a number. */
-    if (p == 2 && q == 1 && cabs(zc) >= 1.0 - 1e-12 &&
-        !(cimag(zc) == 0.0 && creal(zc) >= 1.0 - 1e-12)) {
+     * principal-branch analytic continuation. On the cut (1, Infinity) it is
+     * continuous from below -- the convention the machine kernel and the
+     * reference use (2F1(1/2 + I/10, 1/2; 1; 2) equals the value at 2 - 0 I,
+     * checked against 2 -+ 10^-13 I) -- so the cut is taken too: a complex
+     * parameter with z > 1 stayed unevaluated (Hypergeometric2F1#2 of the
+     * 2026-11 audit). The machine twin covers real parameters (hg_machine_pfq);
+     * without this, N[2F1(...; -1), 20] stayed unevaluated where the machine N
+     * gave a number. */
+    if (p == 2 && q == 1 && cabs(zc) >= 1.0 - 1e-12) {
         long gov = numeric_min_inexact_bits(z);
         for (size_t i = 0; i < p; i++) {
             long bi = numeric_min_inexact_bits(a->data.function.args[i]);
@@ -1660,6 +1662,23 @@ static Expr* hg_machine_head(Expr* res, size_t p, size_t q) {
     return is_c ? sf_machine_complex_result(rr, ri) : expr_new_real(rr);
 }
 
+/* The fixed-arity heads delegate to HypergeometricPFQ, whose form is the
+ * normal form the rest of the system (Simplify's special-function engine,
+ * DSolve, Integrate, FunctionExpand, N) works in. A List parameter or
+ * argument here means the Listable threading failed (unequal lengths,
+ * Thread::tdlen already issued): the call stays unevaluated rather than
+ * being threaded by PFQ into malformed calls (Hypergeometric0F1#3 of the
+ * 2026-11 audit). Takes ownership of a, b, z. */
+static Expr* hg_named_delegate(Expr* res, Expr* a, Expr* b, Expr* z) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        if (is_list(res->data.function.args[i])) {
+            expr_free(a); expr_free(b); expr_free(z);
+            return NULL;
+        }
+    }
+    return rebuild_eval(a, b, z);
+}
+
 Expr* builtin_hypergeometric_0f1(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* m = hg_machine_head(res, 0, 1);
@@ -1667,7 +1686,7 @@ Expr* builtin_hypergeometric_0f1(Expr* res) {
     Expr* b = res->data.function.args[0];
     Expr* z = res->data.function.args[1];
     Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    return rebuild_eval(empty, list1(b), expr_copy(z));
+    return hg_named_delegate(res, empty, list1(b), expr_copy(z));
 }
 
 Expr* builtin_hypergeometric_1f1(Expr* res) {
@@ -1677,7 +1696,7 @@ Expr* builtin_hypergeometric_1f1(Expr* res) {
     Expr* a = res->data.function.args[0];
     Expr* b = res->data.function.args[1];
     Expr* z = res->data.function.args[2];
-    return rebuild_eval(list1(a), list1(b), expr_copy(z));
+    return hg_named_delegate(res, list1(a), list1(b), expr_copy(z));
 }
 
 Expr* builtin_hypergeometric_2f1(Expr* res) {
@@ -1690,7 +1709,7 @@ Expr* builtin_hypergeometric_2f1(Expr* res) {
     Expr* z = res->data.function.args[3];
     Expr* up = expr_new_function(expr_new_symbol(SYM_List),
                    (Expr*[]){ expr_copy(a), expr_copy(b) }, 2);
-    return rebuild_eval(up, list1(cc), expr_copy(z));
+    return hg_named_delegate(res, up, list1(cc), expr_copy(z));
 }
 
 /* ------------------------------------------------------------------ */

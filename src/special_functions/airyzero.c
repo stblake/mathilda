@@ -26,7 +26,11 @@
  */
 #include "airyzero.h"
 
+#include <math.h>
+#include <stdint.h>
+
 #include "attr.h"
+#include "eval.h"
 #include "expr.h"
 #include "flint_num_bridge.h"
 #include "numeric.h"
@@ -54,9 +58,136 @@ Expr* builtin_airyzero(Expr* res) {
     return NULL;
 }
 
-/* N[AiryAiZero[k], p] and its three siblings. */
+#ifdef USE_MPFR
+/* The asymptotic zero (DLMF 9.9.6-9.9.9) for an index past arb's 62-bit
+ * range: -T(t) for Ai, Bi and -U(t) for Ai', Bi', t = 3 Pi (4k - c)/8 with
+ * c = 1 (Ai, Bi'), 3 (Ai', Bi),
+ *   T(t) = t^(2/3) (1 + 5/48 t^-2 - 5/36 t^-4 + 77125/82944 t^-6 - ...),
+ *   U(t) = t^(2/3) (1 - 7/48 t^-2 + 35/288 t^-4 - 181223/207360 t^-6 + ...).
+ * At k >= 2^62 the omitted t^-8 term is below 2^-500 relative, so the value
+ * is exact to any precision up to that (AiryAiPrimeZero#1, AiryBiZero#1 of
+ * the 2026-11 audit). NULL past that precision. */
+static Expr* az_asymptotic(int which, const Expr* k, long bits) {
+    if (bits > 480) return NULL;
+    mpfr_prec_t wp = (mpfr_prec_t)bits + 32;
+    mpfr_t t, u, v, w;
+    mpfr_inits2(wp, t, u, v, w, (mpfr_ptr)0);
+    mpz_t kz;
+    expr_to_mpz(k, kz);
+    mpfr_set_z(t, kz, MPFR_RNDN);
+    mpz_clear(kz);
+    mpfr_mul_ui(t, t, 4, MPFR_RNDN);
+    bool c1 = (which == 0 || which == 3);
+    mpfr_sub_ui(t, t, c1 ? 1 : 3, MPFR_RNDN);
+    mpfr_const_pi(u, MPFR_RNDN);
+    mpfr_mul(t, t, u, MPFR_RNDN);
+    mpfr_mul_ui(t, t, 3, MPFR_RNDN);
+    mpfr_div_ui(t, t, 8, MPFR_RNDN);              /* t */
+    mpfr_sqr(u, t, MPFR_RNDN);
+    mpfr_ui_div(u, 1, u, MPFR_RNDN);              /* u = t^-2 */
+    bool T = (which == 0 || which == 2);
+    /* Horner in u: 1 + a1 u + a2 u^2 + a3 u^3 */
+    mpfr_set_si(v, T ? 77125 : -181223, MPFR_RNDN);
+    mpfr_div_ui(v, v, T ? 82944 : 207360, MPFR_RNDN);
+    mpfr_mul(v, v, u, MPFR_RNDN);
+    mpfr_set_si(w, T ? -5 : 35, MPFR_RNDN);
+    mpfr_div_ui(w, w, T ? 36 : 288, MPFR_RNDN);
+    mpfr_add(v, v, w, MPFR_RNDN);
+    mpfr_mul(v, v, u, MPFR_RNDN);
+    mpfr_set_si(w, T ? 5 : -7, MPFR_RNDN);
+    mpfr_div_ui(w, w, 48, MPFR_RNDN);
+    mpfr_add(v, v, w, MPFR_RNDN);
+    mpfr_mul(v, v, u, MPFR_RNDN);
+    mpfr_add_ui(v, v, 1, MPFR_RNDN);              /* the series */
+    mpfr_set_ui(w, 2, MPFR_RNDN);
+    mpfr_div_ui(w, w, 3, MPFR_RNDN);
+    mpfr_pow(t, t, w, MPFR_RNDN);                  /* t^(2/3) */
+    mpfr_mul(t, t, v, MPFR_RNDN);
+    mpfr_neg(t, t, MPFR_RNDN);
+    Expr* r = expr_new_mpfr_bits((mpfr_prec_t)bits);
+    mpfr_set(r->data.mpfr, t, MPFR_RNDN);
+    mpfr_clears(t, u, v, w, (mpfr_ptr)0);
+    return r;
+}
+#endif
+
+/* The k-th zero at `bits`, the asymptotic form past arb's index range. */
+static Expr* az_zero(int which, const Expr* k, long bits) {
+    Expr* r = flint_num_airy_zero(which, k, bits);
+#ifdef USE_MPFR
+    /* arb declines past a 62-bit index; from k = 2^40 the omitted term is
+     * below 2^-330, so the asymptotic form is exact up to 300 bits */
+    if (!r && (k->type == EXPR_BIGINT ||
+               (k->type == EXPR_INTEGER && k->data.integer >= (INT64_C(1) << 40) && bits <= 300)))
+        r = az_asymptotic(which, k, bits);
+#endif
+    return r;
+}
+
+/* True when the zero z lies below x0 (both real numbers); *ok cleared when
+ * the comparison does not decide. */
+static bool az_below(const Expr* z, const Expr* x0, bool* ok) {
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Less),
+                  (Expr*[]){ expr_copy((Expr*)z), expr_copy((Expr*)x0) }, 2));
+    bool lt = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    bool ge = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_False;
+    if (!lt && !ge) *ok = false;
+    expr_free(r);
+    return lt;
+}
+
+/* The k-th zero less than x0 (AiryBiPrimeZero#1 of the 2026-11 audit): the
+ * index j of the first zero below x0 starts at the inverse of the leading
+ * asymptotic, (4j - c) 3 Pi/8 ~ (-x0)^(3/2), and is corrected against the
+ * computed zeros. */
+static Expr* az_below_x0(int which, const Expr* k, const Expr* x0, long bits) {
+    if (k->type != EXPR_INTEGER || k->data.integer < 1) return NULL;
+    Expr* xd = numericalize((Expr*)x0, numeric_machine_spec());
+    bool real = xd && xd->type == EXPR_REAL;
+    double xv = real ? xd->data.real : 0.0;
+    expr_free(xd);
+    if (!real || !(xv > -1.0e12)) return NULL;
+    double c = (which == 0 || which == 3) ? 1.0 : 3.0;
+    double j = 1.0;
+    if (xv < 0.0) j = floor((pow(-xv, 1.5) * 8.0 / (3.0 * 3.14159265358979323846) + c) / 4.0);
+    if (j < 1.0) j = 1.0;
+    for (int it = 0; it < 64; it++) {
+        Expr* je = expr_new_integer((int64_t)j);
+        Expr* z = az_zero(which, je, bits);
+        expr_free(je);
+        if (!z) return NULL;
+        bool ok = true;
+        bool below = az_below(z, x0, &ok);
+        expr_free(z);
+        if (!ok) return NULL;
+        if (below) {
+            if (j == 1.0) break;
+            Expr* pe = expr_new_integer((int64_t)j - 1);
+            Expr* zp = az_zero(which, pe, bits);
+            expr_free(pe);
+            if (!zp) return NULL;
+            bool prev_below = az_below(zp, x0, &ok);
+            expr_free(zp);
+            if (!ok) return NULL;
+            if (!prev_below) break;
+            j -= 1.0;
+        } else {
+            j += 1.0;
+        }
+        if (it == 63) return NULL;
+    }
+    Expr* idx = expr_new_integer((int64_t)j + k->data.integer - 1);
+    Expr* r = az_zero(which, idx, bits);
+    expr_free(idx);
+    return r;
+}
+
+/* N[AiryAiZero[k], p] and its three siblings; N[AiryAiZero[k, x0], p] the
+ * k-th zero less than x0. */
 static Expr* az_numeric(const Expr* call, NumericSpec spec) {
-    if (call->type != EXPR_FUNCTION || call->data.function.arg_count != 1) return NULL;
+    if (call->type != EXPR_FUNCTION) return NULL;
+    size_t na = call->data.function.arg_count;
+    if (na != 1 && na != 2) return NULL;
     int which = az_which(call);
     if (which < 0) return NULL;
     const Expr* k = call->data.function.args[0];
@@ -66,7 +197,8 @@ static Expr* az_numeric(const Expr* call, NumericSpec spec) {
     bool machine = !numeric_spec_is_mpfr(spec);
     long bits = machine ? 53 : spec.bits;
     if (bits < 53) bits = 53;
-    Expr* r = flint_num_airy_zero(which, k, bits);
+    Expr* r = na == 2 ? az_below_x0(which, k, call->data.function.args[1], bits)
+                      : az_zero(which, k, bits);
     if (r && machine) r = numeric_lower_mpfr_to_machine(r);
     return r;
 }

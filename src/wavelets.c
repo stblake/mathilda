@@ -187,10 +187,15 @@ static bool wv_daubechies_filter(long n, mpfr_prec_t p, mpfr_t* h) {
                 wv_c_div(&d, &num, &den, t1, t2, t3);
                 mpfr_sub(y[j].re, y[j].re, d.re, MPFR_RNDN);
                 mpfr_sub(y[j].im, y[j].im, d.im, MPFR_RNDN);
-                /* converged when the correction is below 2^-(wp-8) |y_j| */
+                /* converged when the correction is below 2^-(p+32) |y_j|:
+                 * the result needs p bits, and the working precision's own
+                 * rounding floor (P's coefficients reach C(2n, n), so the
+                 * roots are conditioned ~4^n) kept a 2^-(wp-8) test from
+                 * ever passing for n >= 24 (DaubechiesWavelet#1 of the
+                 * 2026-11 audit) */
                 mpfr_hypot(t1, d.re, d.im, MPFR_RNDN);
                 mpfr_hypot(t2, y[j].re, y[j].im, MPFR_RNDN);
-                mpfr_mul_2si(t2, t2, -(long)(wp - 8), MPFR_RNDN);
+                mpfr_mul_2si(t2, t2, -(long)(p + 32), MPFR_RNDN);
                 if (mpfr_cmp(t1, t2) > 0) conv = false;
             }
         }
@@ -576,6 +581,25 @@ static Expr* wv_point(bool psi, bool haar, long n, long J, mpfr_prec_t wprec, bo
     if (haar) {
         int c0 = mpfr_sgn(xv), c1 = mpfr_cmp_ui(xv, 1);
         int ch = mpfr_cmp_d(xv, 0.5);
+        /* An exact x decides the step from its exact signs against the
+         * breakpoints 0, 1/2, 1: rounded first, 1 - 10^-30 landed ON 1
+         * (HaarWavelet#2, WaveletPsi#1 of the 2026-11 audit). */
+        if (!x_machine && !x_mpfr) {
+            int sg[3];
+            bool exact_ok = true;
+            for (int k = 0; k < 3 && exact_ok; k++) {
+                Expr* d = expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy((Expr*)x),
+                               k == 0 ? expr_new_integer(0)
+                             : k == 1 ? make_rational(-1, 2) : expr_new_integer(-1) }, 2);
+                Expr* sv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sign),
+                               (Expr*[]){ d }, 1));
+                exact_ok = sv && sv->type == EXPR_INTEGER;
+                if (exact_ok) sg[k] = (int)sv->data.integer;
+                expr_free(sv);
+            }
+            if (exact_ok) { c0 = sg[0]; ch = sg[1]; c1 = sg[2]; }
+        }
         int v = wv_haar_value(psi, c0, ch, c1);
         if (machine) out = expr_new_real((double)v);
         else { out = expr_new_mpfr_bits(prec); mpfr_set_si(out->data.mpfr, v, MPFR_RNDN); }

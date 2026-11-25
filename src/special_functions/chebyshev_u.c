@@ -286,6 +286,32 @@ static Expr* chebyshev_u_two_arg(Expr* n_e, Expr* x_e) {
      * and inexact n, since the built expression evaluates either way. */
     if (!n_is_int) {
         if (cheb_is_int(x_e, 0)) return cheb_value_at_zero(n_e);          /* U_n(0)=Cos[n Pi/2] */
+        /* U_n(-1) = lim Sin[(n+1) t]/Sin[t] at t = Pi: a pole for a real
+         * non-integer n (ChebyshevU#2 of the 2026-11 audit -- the inexact
+         * form returned the rounding residue 1/Sin[Pi.] ~ -8*10^15, the exact
+         * one leaked Power::infy). */
+        {
+            double nv;
+            bool x_m1 = cheb_is_int(x_e, -1)
+                || (x_e->type == EXPR_REAL && x_e->data.real == -1.0)
+#ifdef USE_MPFR
+                || (x_e->type == EXPR_MPFR && mpfr_cmp_si(x_e->data.mpfr, -1) == 0)
+#endif
+                ;
+            bool n_real = n_e->type == EXPR_REAL
+                || (n_e->type == EXPR_FUNCTION && is_rational(n_e, NULL, NULL))
+#ifdef USE_MPFR
+                || n_e->type == EXPR_MPFR
+#endif
+                ;
+            if (x_m1 && n_real) {
+                nv = n_e->type == EXPR_REAL ? n_e->data.real : 0.5;
+#ifdef USE_MPFR
+                if (n_e->type == EXPR_MPFR) nv = mpfr_get_d(n_e->data.mpfr, MPFR_RNDN);
+#endif
+                if (nv != floor(nv)) return expr_new_symbol(SYM_ComplexInfinity);
+            }
+        }
         if (cheb_is_int(x_e, 1))                                         /* U_n(1)=n+1 */
             return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                        (Expr*[]){ expr_copy(n_e), expr_new_integer(1) }, 2));
