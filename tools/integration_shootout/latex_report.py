@@ -18,7 +18,7 @@ Every formula is shown twice: verbatim, as the system returned it (so nothing
 is lost in translation), and typeset.  The verbatim text is the full answer from
 results/cache.jsonl (results/<date>.json keeps only its first 300 characters).
 TeX comes from latex_tex.m: the integrand and Mathilda's and Wolfram's answers
-are read as they are; FriCAS, Axiom, Maxima and sympy answers are first
+are read as they are; FriCAS, Axiom, Maxima, sympy and Reduce answers are first
 translated into Mathilda syntax by crosscheck.to_wl, the translator the
 cross-check uses.  A formula that cannot be typeset says why.
 """
@@ -40,10 +40,10 @@ from tex_break import display, integral  # noqa: E402
 from easy_classify import easy_ids  # noqa: E402
 import crosscheck as X  # noqa: E402
 
-SYSTEM = {"FriCAS": "fricas", "Axiom": "axiom", "Maxima": "maxima", "sympy": "sympy", "Wolfram": "wolfram"}
+SYSTEM = {"FriCAS": "fricas", "Axiom": "axiom", "Maxima": "maxima", "sympy": "sympy", "Wolfram": "wolfram", "Reduce": "reduce"}
 
 MATHILDA_METHODS = ["Automatic", "ParallelMixedTower", "RischTranscendental", "Trager", "Bronstein"]
-EXTERNAL = ["FriCAS", "Axiom", "Maxima", "sympy", "Wolfram"]
+EXTERNAL = ["FriCAS", "Axiom", "Maxima", "sympy", "Wolfram", "Reduce"]
 DEDICATED = {"R": "RischTranscendental", "T": "RischTranscendental", "A": "Trager", "M": "Bronstein", "B": "Bronstein"}
 CLASSNAME = {"R": "rational", "T": "transcendental (Log/Exp tower)", "A": "algebraic (one radical)",
              "M": "a radical over a Log/Exp tower", "B": "a radical below a Log/Exp kernel"}
@@ -440,6 +440,22 @@ def main():
             L.append(f"{k} & {tex_escape(CLASSNAME[k])} & {cc[k]}\\\\")
     L += [r"\bottomrule\end{tabular}\end{center}"]
 
+    # the systems: their versions as recorded with the run (results/<date>.json "systems"),
+    # else as installed now
+    recorded = json.load(open(os.path.join(bench, "results", f"{date}.json"))).get("systems") or {}
+    systems = ["Mathilda"] + [lab for lab in labs if not lab.startswith("Mathilda:")]
+    L += [r"\subsection{Systems tested}",
+          r"\begin{center}\small\begin{tabular}{lll}\toprule system & version & called as\\\midrule"]
+    for sy in systems:
+        ver = recorded.get(sy) or A.version("mathilda" if sy == "Mathilda" else SYSTEM[sy])
+        how = {"Mathilda": "Integrate[f, x, Method -> m], m = " +
+                           ", ".join(short(lab) for lab in labs if lab.startswith("Mathilda:")),
+               "Wolfram": "Integrate[f, x] (wolframscript)", "FriCAS": "integrate(f, x)",
+               "Axiom": "integrate(f, x)", "Maxima": "integrate(f, x)", "sympy": "integrate(f, x)",
+               "Reduce": "int(f, x) (PSL build)"}.get(sy, "")
+        L.append(f"{tex_escape(sy)} & {tex_escape(ver or 'unknown')} & \\texttt{{{tex_escape(how)}}}\\\\")
+    L += [r"\bottomrule\end{tabular}\end{center}"]
+
     L += [r"\section{How each answer was verified}",
           r"Every answer of every system is judged by one test, in Mathilda: "
           r"\texttt{PossibleZeroQ[D[F, x] - f]} (60~s), the test the corpus itself was built under "
@@ -454,7 +470,7 @@ def main():
           r"(\texttt{Integrate::nonelem}); on an integrand that is elementary by construction it is a false "
           r"``no'' and a hard failure.",
           r"\item \textbf{FriCAS, Axiom} (Tim Daly's distribution, the system FriCAS forked), \textbf{Maxima, "
-          r"sympy}: the answer is translated from the system's output into Mathilda syntax first. FriCAS's "
+          r"sympy, Reduce}: the answer is translated from the system's output into Mathilda syntax first. FriCAS's "
           r"\texttt{rootOf(p, v)}, valid for every root of $p$, becomes \texttt{Root[p \&, 1]}. The translator was "
           r"checked both ways: answers multiplied by $1 + x/10^6$ all come out nonzero.",
           r"\item \textbf{Each system's own check} is still run and shown after the verdict, as a secondary "

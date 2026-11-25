@@ -48,7 +48,7 @@ import crosscheck as X  # noqa: E402
 import shootout as SH  # noqa: E402
 import latex_report as L  # noqa: E402
 
-SYSTEM = {"FriCAS": "fricas", "Axiom": "axiom", "Maxima": "maxima", "sympy": "sympy", "Wolfram": "wolfram"}
+SYSTEM = {"FriCAS": "fricas", "Axiom": "axiom", "Maxima": "maxima", "sympy": "sympy", "Wolfram": "wolfram", "Reduce": "reduce"}
 
 
 def system_of(lab):

@@ -1,4 +1,4 @@
-# easy.m classes of corpus.tsv (Mathilda 0.6742 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)); every class but none is left out of the shootout
+# easy.m classes of corpus.tsv (Mathilda 0.6746 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)); every class but none is left out of the shootout
 cM-401-7	none
 cM-401-13	none
 cM-401-27	none
@@ -186,7 +186,6 @@ cM-415-47	none
 cM-415-52	none
 cM-415-55	none
 cM-415-58	none
-cM-415-71	none
 cM-416-3	none
 cM-416-11	none
 cM-416-27	none
@@ -218,7 +217,6 @@ cM-418-25	none
 cM-418-30	none
 cM-418-35	none
 cM-418-38	none
-cM-418-47	none
 cM-418-54	none
 cM-418-105	none
 cM-418-110	none
@@ -246,7 +244,6 @@ cM-420-46	none
 cM-420-48	none
 cM-420-51	none
 cM-420-52	none
-cM-420-55	none
 cM-420-57	none
 cM-420-61	none
 cM-420-65	none
@@ -289,7 +286,6 @@ cM-423-54	none
 cM-423-67	none
 cM-423-71	none
 cM-424-5	none
-cM-424-6	none
 cM-424-14	none
 cM-424-18	none
 cM-424-31	none
@@ -499,3 +495,7 @@ cM-441-31	none
 cM-441-43	none
 cM-441-47	none
 cM-441-48	none
+cM-441-58	none
+cM-441-66	none
+cM-441-68	none
+cM-441-73	none

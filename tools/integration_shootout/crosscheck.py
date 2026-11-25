@@ -22,7 +22,7 @@ test, giving every system the same criterion for "wrong":
 The last two are counted UNVERIFIED, never WRONG.
 
 to_wl parses the infix output of FriCAS / Axiom (unparse of InputForm), Maxima
-(string()) and SymPy (str()) with one precedence-climbing parser and prints
+(string()), SymPy (str()) and Reduce (off nat) with one precedence-climbing parser and prints
 Mathilda InputForm.  rootOf(p(%%H0), %%H0) -- FriCAS's generic root, which the
 answer is valid for whichever root is taken -- becomes Root[p &, 1]; SymPy's
 RootSum(poly, Lambda(t, e)) becomes RootSum[poly &, e &].
@@ -58,6 +58,7 @@ FUNCS = {
     # Maxima: gamma_incomplete(a, z) is the upper incomplete Gamma, expintegral_e(n, z) is E_n(z)
     "gamma_incomplete": "Gamma", "expintegral_e": "ExpIntegralE",
 }
+REDUCE_CONSTS = {"e": "E", "i": "I"}   # Reduce's constants are lowercase
 CONSTS = {"pi": "Pi", "%pi": "Pi", "E": "E", "%e": "E", "I": "I", "%i": "I", "x": "x"}
 
 
@@ -99,6 +100,8 @@ def to_wl(system, text):
             return bound[n]
         if n in CONSTS:
             return CONSTS[n]
+        if system == "reduce" and n in REDUCE_CONSTS:
+            return REDUCE_CONSTS[n]
         if n.startswith("_") and system == "sympy":   # RootSum's polynomial variable
             return var(n)
         raise Untranslatable(f"symbol {n}")

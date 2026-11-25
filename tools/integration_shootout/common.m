@@ -16,7 +16,10 @@ okPoint[f_, p_] := Module[{bases, fv},
 points[f_] := Take[Select[cands, okPoint[f, #] &], UpTo[3]];
 
 emitted = <||>;
-emit[id_, cls_, fam_, expect_, f0_, F_] := Module[{f = f0, pts, fv},
+(* the integrand is emitted without its constant factors (stripConstantsK, below), and the
+   reference scaled to match *)
+emit[id_, cls_, fam_, expect_, f0_, F0_] := Module[{kf = stripConstantsK[f0], f, F, pts, fv},
+  f = kf[[2]]; F = If[F0 === None, None, scDivide[F0, kf[[1]]]];
   If[!FreeQ[f, x] && LeafCount[f] <= 600 && !KeyExistsQ[emitted, f],
     pts = TimeConstrained[points[f], 30, {}];
     If[Length[pts] === 3,
@@ -26,3 +29,35 @@ emit[id_, cls_, fam_, expect_, f0_, F_] := Module[{f = f0, pts, fv},
         If[F === None, "None", ToString[InputForm[F]]], "\t", ToString[InputForm[pts]], "\t",
         ToString[InputForm[fv]], "\t", ToString[FullForm[f]]]]]];
 
+
+(* ---------------- constant factors ----------------
+   stripConstants[f]: f with every constant factor removed.  A constant factor of an
+   integrand is no part of the integration problem (Integrate[c f, x] is c Integrate[f, x])
+   and only clutters the corpus.  Two kinds are removed:
+     - the numeric factors of the top-level product (-1/2 in -1/2 (x^2 - 3 x - 2)/Sqrt[g]);
+     - the numeric content of a sum that is a factor, or the base of a power that is one
+       (Sqrt[4 + 2 E^(-2 x) + 8 x + 4 x^2] = Sqrt[2] Sqrt[2 + E^(-2 x) + 4 x + 2 x^2]), which
+       is then a constant factor too.  The content is taken positive (a negative one
+       negates the sum term by term), so c^r is the principal power of c > 0 and the
+       rewrite holds for every complex x.
+   Sums deeper inside (the argument of a Log or an Exp) are not touched: a constant
+   there is part of the function. *)
+scPull[b_Plus] := Module[{l = FactorTermsList[b], c, h},
+  If[Length[l] =!= 2 || !NumericQ[l[[1]]] || l[[1]] === 1, Return[{1, b}]];
+  {c, h} = l;
+  If[!(Head[h] === Plus || !FreeQ[h, x]), Return[{1, b}]];
+  If[TrueQ[c < 0], c = -c; h = If[Head[h] === Plus, -# & /@ h, -h]];
+  {c, h}];
+(* scFactor[e] -> {constant, rest}: e = constant rest *)
+scFactor[b_Plus] := scPull[b];
+scFactor[Power[b_Plus, r_?NumericQ]] := With[{l = scPull[b]}, {l[[1]]^r, Power[l[[2]], r]}];
+scFactor[e_?NumericQ] := {e, 1};
+scFactor[e_] := {1, e};
+(* scStep[{k, f}] -> {k', f'} with k f = k' f' *)
+scStep[{k_, f_}] := Module[{l = If[Head[f] === Times, scFactor /@ List @@ f, {scFactor[f]}]},
+  {k Times @@ l[[All, 1]], Times @@ l[[All, 2]]}];
+(* stripConstantsK[f] -> {k, g}: f = k g, g free of constant factors *)
+stripConstantsK[f_] := FixedPoint[scStep, {1, f}, 4];
+stripConstants[f_] := stripConstantsK[f][[2]];
+(* scDivide[F, k]: the reference F/k, divided term by term when F is a sum *)
+scDivide[F_, k_] := If[Head[F] === Plus, #/k & /@ F, F/k];

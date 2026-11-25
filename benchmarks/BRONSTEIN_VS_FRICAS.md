@@ -21,8 +21,8 @@ The **easy** integrals of every corpus are left out: those `easy_classify.py` (e
   in Mathilda (`pzq_verify.py`), with the other systems' answers translated first. The
   standard is an antiderivative valid for every complex x. Each system's own
   three-point check no longer decides anything.
-- **Versions.** 264 ran at v0.6744, 263 at v0.6733, 262 at v0.6732, 261 at v0.6714,
-  the others at v0.6691. The verdicts are all from v0.6744's PossibleZeroQ.
+- **Versions.** 264 ran at v0.6750, 263 at v0.6733, 262 at v0.6732, 261 at v0.6714,
+  the others at v0.6691. The verdicts are from v0.6744's PossibleZeroQ (264's from v0.6750's).
 
 **Decided** (a verified closed form, or a proof that none is elementary):
 
@@ -44,10 +44,17 @@ The **easy** integrals of every corpus are left out: those `easy_classify.py` (e
   when answers were stored only up to 4000 characters, so a longer answer cannot be
   judged: 21 Bronstein and 22 Automatic answers on 256 (hence 754, not 775). On 259,
   PossibleZeroQ does not decide 4 Mathilda answers.
-- **264: 500 class M integrals.** Bronstein and Automatic close all of them; FriCAS,
-  Axiom, Maxima and sympy close none. FriCAS stops with "implementation incomplete
-  (has polynomial part)" (270) or "(constant residues)" (230), and Axiom with
-  "(constant residues)" (500).
+- **264: 500 class M integrals, seven systems.** Bronstein and Automatic close all of
+  them. Of FriCAS, Axiom, Maxima, sympy, Wolfram (wolframscript, Wolfram Language
+  14.0.0) and Reduce (PSL, revision 7327), only Wolfram closes one. FriCAS stops with
+  "implementation incomplete (has polynomial part)" (274) or "(constant residues)" (226),
+  Axiom with "(constant residues)" (500). Wolfram returns 499 unevaluated (median
+  3.8 s), Reduce 446 unevaluated and 54 timeouts.
+- **Constant factors are removed from the integrands** (`normalize_constants.py`):
+  Integrate[c f, x] is c Integrate[f, x], so the -1/2 of -1/2 (x^2 - 3x - 2)/Sqrt[g],
+  or the Sqrt[2] in Sqrt[4 + 2 E^(-2x) + 8x + 4x^2], is no part of the problem. 323 of
+  264's integrands carried one; 4 became duplicates and were replaced. 264 was re-run
+  on the rewritten corpus at v0.6750. The other corpora are being rewritten the same way.
 - **FriCAS's error records were partly the harness's.** A fault in the adapter's
   output file recorded successful FriCAS runs as errors. Re-run with the fault fixed,
   FriCAS's counts rose on 256, 259, 260 (252 to 263), 262 and 263.
@@ -235,6 +242,14 @@ and C5 (special-function answers where Mathilda certifies; submitting the FriCAS
 | B radical at the bottom | 136 | 32% (44) | 0% (0) | 100% (136) | 31% (42) | 0% (0) | 35% (47) | 32% (44) | 0% (0) | 100% (136) | 32% (44) | 0% (0) | 93% (127) |
 | **all** | 777 | **43% (337)** | **1% (7)** | **97% (754)** | **44% (344)** | **0% (0)** | **73% (568)** | **44% (338)** | **12% (91)** | **96% (749)** | **24% (189)** | **9% (68)** | **63% (490)** |
 
+The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
+
+| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
+|---|---|---|---|---|---|---|---|---|---|
+| Maxima | 777 | 28% (215) | 186 | 29 | 6 | 539 | 5 | 0 | 12 |
+| sympy | 777 | 24% (188) | 89 | 99 | 0 | 373 | 205 | 1 | 10 |
+| Wolfram | 777 | 59% (455) | 256 | 199 | 4 | 262 | 13 | 0 | 43 |
+
 Speed, Mathilda against FriCAS, on the 195 cases both close: median 18 ms vs 70 ms; 90th percentile 187 ms vs 120 ms; total 16.0 s vs 16.7 s; geometric mean of the ratio Mathilda/FriCAS 0.21; Mathilda faster on 164 of 195; 3 over 1 s.
 
 Speed, PMT against FriCAS, on the 187 cases both close: median 50 ms vs 70 ms; 90th percentile 511 ms vs 130 ms; total 61.0 s vs 16.1 s; geometric mean of the ratio PMT/FriCAS 0.89; PMT faster on 124 of 187; 9 over 1 s.
@@ -247,6 +262,14 @@ Speed, PMT against FriCAS, on the 187 cases both close: median 50 ms vs 70 ms; 9
 | A algebraic | 11 | 100% (11) | 0% (0) | 100% (11) | 82% (9) | 0% (0) | 82% (9) | 100% (11) | 0% (0) | 100% (11) | 100% (11) | 0% (0) | 100% (11) |
 | M mixed, radical on top | 5 | 80% (4) | 0% (0) | 80% (4) | 60% (3) | 0% (0) | 60% (3) | 100% (5) | 0% (0) | 100% (5) | 20% (1) | 0% (0) | 20% (1) |
 | **all** | 18 | **94% (17)** | **0% (0)** | **94% (17)** | **67% (12)** | **0% (0)** | **67% (12)** | **100% (18)** | **0% (0)** | **100% (18)** | **78% (14)** | **0% (0)** | **78% (14)** |
+
+The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
+
+| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
+|---|---|---|---|---|---|---|---|---|---|
+| Maxima | 18 | 61% (11) | 11 | 0 | 0 | 7 | 0 | 0 | 0 |
+| sympy | 18 | 50% (9) | 0 | 9 | 0 | 5 | 4 | 0 | 0 |
+| Wolfram | 18 | 94% (17) | 16 | 1 | 0 | 1 | 0 | 0 | 0 |
 
 Speed, Mathilda against FriCAS, on the 13 cases both close: median 319 ms vs 90 ms; 90th percentile 563 ms vs 90 ms; total 4.5 s vs 1.1 s; geometric mean of the ratio Mathilda/FriCAS 3.44; Mathilda faster on 2 of 13; 0 over 1 s.
 
@@ -315,6 +338,14 @@ Speed, PMT against FriCAS, on the 73 cases both close: median 743 ms vs 130 ms; 
 | M mixed, radical on top | 44 | 98% (43) | 0% (0) | 98% (43) | 57% (25) | 0% (0) | 57% (25) | 100% (44) | 0% (0) | 100% (44) | 7% (3) | 0% (0) | 7% (3) |
 | **all** | 58 | **98% (57)** | **0% (0)** | **98% (57)** | **55% (32)** | **0% (0)** | **55% (32)** | **100% (58)** | **0% (0)** | **100% (58)** | **24% (14)** | **0% (0)** | **24% (14)** |
 
+The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
+
+| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
+|---|---|---|---|---|---|---|---|---|---|
+| Axiom | 58 | 24% (14) | 14 | 0 | 0 | 0 | 5 | 39 | 0 |
+| Maxima | 58 | 16% (9) | 9 | 0 | 0 | 49 | 0 | 0 | 0 |
+| sympy | 58 | 12% (7) | 0 | 7 | 0 | 44 | 7 | 0 | 0 |
+
 Speed, Mathilda against FriCAS, on the 13 cases both close: median 589 ms vs 170 ms; 90th percentile 5.8 s vs 180 ms; total 28.5 s vs 2.1 s; geometric mean of the ratio Mathilda/FriCAS 5.73; Mathilda faster on 1 of 13; 3 over 1 s.
 
 Speed, PMT against FriCAS, on the 9 cases both close: median 81 ms vs 170 ms; 90th percentile 844 ms vs 180 ms; total 2.0 s vs 1.4 s; geometric mean of the ratio PMT/FriCAS 0.69; PMT faster on 7 of 9; 0 over 1 s.
@@ -328,6 +359,14 @@ Speed, PMT against FriCAS, on the 9 cases both close: median 81 ms vs 170 ms; 90
 | M mixed, radical on top | 216 | 100% (216) | 0% (0) | 100% (216) | 0% (1) | 0% (0) | 0% (1) | 100% (216) | 0% (0) | 100% (216) | 0% (0) | 0% (0) | 0% (0) |
 | B radical at the bottom | 118 | 100% (118) | 0% (0) | 100% (118) | 51% (60) | 0% (0) | 51% (60) | 91% (107) | 0% (0) | 91% (107) | 41% (48) | 0% (0) | 41% (48) |
 | **all** | 1000 | **98% (976)** | **0% (0)** | **98% (976)** | **66% (660)** | **0% (0)** | **66% (660)** | **97% (970)** | **0% (0)** | **97% (970)** | **65% (646)** | **0% (0)** | **65% (646)** |
+
+The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
+
+| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
+|---|---|---|---|---|---|---|---|---|---|
+| Axiom | 1000 | 57% (571) | 571 | 0 | 2 | 5 | 45 | 377 | 0 |
+| Maxima | 1000 | 64% (638) | 638 | 0 | 3 | 359 | 0 | 0 | 0 |
+| sympy | 1000 | 52% (521) | 293 | 228 | 15 | 235 | 224 | 3 | 2 |
 
 Speed, Mathilda against FriCAS, on the 629 cases both close: median 317 ms vs 100 ms; 90th percentile 3.0 s vs 170 ms; total 654.2 s vs 361.6 s; geometric mean of the ratio Mathilda/FriCAS 0.91; Mathilda faster on 308 of 629; 150 over 1 s.
 
@@ -343,6 +382,14 @@ Speed, PMT against FriCAS, on the 563 cases both close: median 147 ms vs 100 ms;
 | B radical at the bottom | 400 | 100% (400) | 0% (0) | 100% (400) | 97% (388) | 0% (0) | 97% (388) | 100% (400) | 0% (0) | 100% (400) | 97% (389) | 0% (0) | 97% (389) |
 | **all** | 1850 | **98% (1817)** | **0% (0)** | **98% (1817)** | **72% (1339)** | **0% (0)** | **72% (1339)** | **99% (1826)** | **0% (0)** | **99% (1826)** | **71% (1316)** | **0% (0)** | **71% (1316)** |
 
+The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
+
+| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
+|---|---|---|---|---|---|---|---|---|---|
+| Axiom | 1850 | 65% (1203) | 1203 | 0 | 4 | 34 | 89 | 520 | 0 |
+| Maxima | 1850 | 61% (1127) | 1127 | 0 | 19 | 697 | 0 | 7 | 0 |
+| sympy | 1850 | 51% (948) | 557 | 391 | 28 | 540 | 320 | 0 | 14 |
+
 Speed, Mathilda against FriCAS, on the 1299 cases both close: median 217 ms vs 180 ms; 90th percentile 3.6 s vs 260 ms; total 2244.8 s vs 1071.4 s; geometric mean of the ratio Mathilda/FriCAS 1.11; Mathilda faster on 684 of 1299; 392 over 1 s.
 
 Speed, PMT against FriCAS, on the 1229 cases both close: median 525 ms vs 180 ms; 90th percentile 7.3 s vs 250 ms; total 2546.1 s vs 655.7 s; geometric mean of the ratio PMT/FriCAS 3.38; PMT faster on 240 of 1229; 468 over 1 s.
@@ -353,6 +400,16 @@ Speed, PMT against FriCAS, on the 1229 cases both close: median 525 ms vs 180 ms
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | M mixed, radical on top | 500 | 100% (500) | 0% (0) | 100% (500) | 0% (0) | 0% (0) | 0% (0) | 100% (500) | 0% (0) | 100% (500) | 0% (0) | 0% (0) | 0% (0) |
 | **all** | 500 | **100% (500)** | **0% (0)** | **100% (500)** | **0% (0)** | **0% (0)** | **0% (0)** | **100% (500)** | **0% (0)** | **100% (500)** | **0% (0)** | **0% (0)** | **0% (0)** |
+
+The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
+
+| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
+|---|---|---|---|---|---|---|---|---|---|
+| Axiom | 500 | 0% (0) | 0 | 0 | 0 | 0 | 0 | 500 | 0 |
+| Maxima | 500 | 0% (0) | 0 | 0 | 0 | 500 | 0 | 0 | 0 |
+| sympy | 500 | 0% (0) | 0 | 0 | 0 | 299 | 201 | 0 | 0 |
+| Wolfram | 500 | 0% (1) | 1 | 0 | 0 | 499 | 0 | 0 | 0 |
+| Reduce | 500 | 0% (0) | 0 | 0 | 0 | 446 | 54 | 0 | 0 |
 
 ## Decided by one system only (all corpora, by family)
 
@@ -452,8 +509,8 @@ Decided by one of the two only, by class and family.
 
 | reason | cases |
 |---|---|
-| integrate: implementation incomplete (has polynomial part) | 708 |
-| integrate: implementation incomplete (constant residues) | 662 |
+| integrate: implementation incomplete (has polynomial part) | 712 |
+| integrate: implementation incomplete (constant residues) | 658 |
 | timeout (30 s) | 303 |
 | integrate: implementation incomplete (trace 0) | 35 |
 | answer not verified | 10 |

@@ -11,8 +11,8 @@
   in Mathilda (`pzq_verify.py`), with the other systems' answers translated first. The
   standard is an antiderivative valid for every complex x. Each system's own
   three-point check no longer decides anything.
-- **Versions.** 264 ran at v0.6744, 263 at v0.6733, 262 at v0.6732, 261 at v0.6714,
-  the others at v0.6691. The verdicts are all from v0.6744's PossibleZeroQ.
+- **Versions.** 264 ran at v0.6750, 263 at v0.6733, 262 at v0.6732, 261 at v0.6714,
+  the others at v0.6691. The verdicts are from v0.6744's PossibleZeroQ (264's from v0.6750's).
 
 **Decided** (a verified closed form, or a proof that none is elementary):
 
@@ -34,10 +34,17 @@
   when answers were stored only up to 4000 characters, so a longer answer cannot be
   judged: 21 Bronstein and 22 Automatic answers on 256 (hence 754, not 775). On 259,
   PossibleZeroQ does not decide 4 Mathilda answers.
-- **264: 500 class M integrals.** Bronstein and Automatic close all of them; FriCAS,
-  Axiom, Maxima and sympy close none. FriCAS stops with "implementation incomplete
-  (has polynomial part)" (270) or "(constant residues)" (230), and Axiom with
-  "(constant residues)" (500).
+- **264: 500 class M integrals, seven systems.** Bronstein and Automatic close all of
+  them. Of FriCAS, Axiom, Maxima, sympy, Wolfram (wolframscript, Wolfram Language
+  14.0.0) and Reduce (PSL, revision 7327), only Wolfram closes one. FriCAS stops with
+  "implementation incomplete (has polynomial part)" (274) or "(constant residues)" (226),
+  Axiom with "(constant residues)" (500). Wolfram returns 499 unevaluated (median
+  3.8 s), Reduce 446 unevaluated and 54 timeouts.
+- **Constant factors are removed from the integrands** (`normalize_constants.py`):
+  Integrate[c f, x] is c Integrate[f, x], so the -1/2 of -1/2 (x^2 - 3x - 2)/Sqrt[g],
+  or the Sqrt[2] in Sqrt[4 + 2 E^(-2x) + 8x + 4x^2], is no part of the problem. 323 of
+  264's integrands carried one; 4 became duplicates and were replaced. 264 was re-run
+  on the rewritten corpus at v0.6750. The other corpora are being rewritten the same way.
 - **FriCAS's error records were partly the harness's.** A fault in the adapter's
   output file recorded successful FriCAS runs as errors. Re-run with the fault fixed,
   FriCAS's counts rose on 256, 259, 260 (252 to 263), 262 and 263.

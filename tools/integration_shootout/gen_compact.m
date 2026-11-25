@@ -248,7 +248,7 @@ elementaryHeads = {Plus, Times, Power, Log, Sqrt, Exp, Sin, Cos, Tan, Cot, Sec, 
 elementaryQ[F_] := Complement[Union[Cases[{F}, h_[___] :> h, {0, Infinity}]], elementaryHeads, {List, Rational, Complex}] === {};  (* Rational, Complex: atoms that Mathilda's h_[___] matches *)
 
 (* ---------------- search ---------------- *)
-emitCand[id_, f_] := Module[{pts, fv},
+emitCand[id_, f0_] := Module[{f = stripConstants[f0], pts, fv},   (* no constant factors: common.m *)
   If[!KeyExistsQ[emitted, f],
     pts = TimeConstrained[points[f], 30, {}];
     If[Length[pts] === 3,

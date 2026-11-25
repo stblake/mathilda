@@ -5,7 +5,7 @@ The corpus carries every integrand as Mathilda FullForm (`Plus[Times[x, Power[
 Sec[x], 2]], Tan[x]]`): a grammar of heads, symbols, integers and strings that
 parses without ambiguity.  `parse` turns it into nested tuples (head, args...)
 -- a str for a symbol, an int for an integer -- and `emit(tree, system)` prints
-the integrand in the syntax of sympy, Maxima, FriCAS or the Wolfram Language.
+the integrand in the syntax of sympy, Maxima, FriCAS, the Wolfram Language or Reduce.
 
 Every head the corpus can contain is in HEADS; an unknown head raises
 Untranslatable, so a case is never silently mistranslated (the driver marks
@@ -77,28 +77,28 @@ def parse(s):
 
 # head -> {system: name}; None = same spelling as the Wolfram one lowercased
 FUNCS = {
-    "Log": ("log", "log", "log", "Log"),
-    "Sin": ("sin", "sin", "sin", "Sin"), "Cos": ("cos", "cos", "cos", "Cos"),
-    "Tan": ("tan", "tan", "tan", "Tan"), "Cot": ("cot", "cot", "cot", "Cot"),
-    "Sec": ("sec", "sec", "sec", "Sec"), "Csc": ("csc", "csc", "csc", "Csc"),
-    "ArcTan": ("atan", "atan", "atan", "ArcTan"), "ArcSin": ("asin", "asin", "asin", "ArcSin"),
-    "ArcCos": ("acos", "acos", "acos", "ArcCos"),
-    "Sinh": ("sinh", "sinh", "sinh", "Sinh"), "Cosh": ("cosh", "cosh", "cosh", "Cosh"),
-    "Tanh": ("tanh", "tanh", "tanh", "Tanh"), "ArcSinh": ("asinh", "asinh", "asinh", "ArcSinh"),
-    "ArcTanh": ("atanh", "atanh", "atanh", "ArcTanh"),
-    "Coth": ("coth", "coth", "coth", "Coth"), "Sech": ("sech", "sech", "sech", "Sech"),
-    "Csch": ("csch", "csch", "csch", "Csch"),
+    "Log": ("log", "log", "log", "Log", "log"),
+    "Sin": ("sin", "sin", "sin", "Sin", "sin"), "Cos": ("cos", "cos", "cos", "Cos", "cos"),
+    "Tan": ("tan", "tan", "tan", "Tan", "tan"), "Cot": ("cot", "cot", "cot", "Cot", "cot"),
+    "Sec": ("sec", "sec", "sec", "Sec", "sec"), "Csc": ("csc", "csc", "csc", "Csc", "csc"),
+    "ArcTan": ("atan", "atan", "atan", "ArcTan", "atan"), "ArcSin": ("asin", "asin", "asin", "ArcSin", "asin"),
+    "ArcCos": ("acos", "acos", "acos", "ArcCos", "acos"),
+    "Sinh": ("sinh", "sinh", "sinh", "Sinh", "sinh"), "Cosh": ("cosh", "cosh", "cosh", "Cosh", "cosh"),
+    "Tanh": ("tanh", "tanh", "tanh", "Tanh", "tanh"), "ArcSinh": ("asinh", "asinh", "asinh", "ArcSinh", "asinh"),
+    "ArcTanh": ("atanh", "atanh", "atanh", "ArcTanh", "atanh"),
+    "Coth": ("coth", "coth", "coth", "Coth", "coth"), "Sech": ("sech", "sech", "sech", "Sech", "sech"),
+    "Csch": ("csch", "csch", "csch", "Csch", "csch"),
     # the Liouvillian kernels of benchmark 259 (an integrand that contains one)
-    "Erf": ("erf", "erf", "erf", "Erf"), "Erfi": ("erfi", "erfi", "erfi", "Erfi"),
-    "ExpIntegralEi": ("Ei", "expintegral_ei", "Ei", "ExpIntegralEi"),
-    "LogIntegral": ("li", "expintegral_li", "li", "LogIntegral"),
+    "Erf": ("erf", "erf", "erf", "Erf", "erf"), "Erfi": ("erfi", "erfi", "erfi", "Erfi", "erfi"),
+    "ExpIntegralEi": ("Ei", "expintegral_ei", "Ei", "ExpIntegralEi", "ei"),
+    "LogIntegral": ("li", "expintegral_li", "li", "LogIntegral", "li"),
 }
-SYSTEMS = ("sympy", "maxima", "fricas", "wolfram")
+SYSTEMS = ("sympy", "maxima", "fricas", "wolfram", "reduce")
 SYMS = {  # symbol -> per-system spelling
-    "x": ("x", "x", "x", "x"),
-    "E": ("E", "%e", "%e", "E"),
-    "Pi": ("pi", "%pi", "%pi", "Pi"),
-    "I": ("I", "%i", "%i", "I"),
+    "x": ("x", "x", "x", "x", "x"),
+    "E": ("E", "%e", "%e", "E", "e"),
+    "Pi": ("pi", "%pi", "%pi", "Pi", "pi"),
+    "I": ("I", "%i", "%i", "I", "i"),
 }
 HEADS = set(FUNCS) | {"Plus", "Times", "Power", "Rational", "Complex"}
 
@@ -170,6 +170,9 @@ SPECIAL_RE = {
                          r"hypergeometricF|meijerG|weierstrass\w*|Beta|digamma|polygamma|riemannZeta|"
                          r"lerchPhi|airyAi|airyBi|struve\w*|kelvin\w*|whittaker\w*|kummer\w*)\b"),
 }
+SPECIAL_RE["reduce"] = re.compile(r"\b(erf|erfi|erfc|ei|li|si|ci|shi|chi|dilog|polylog|gamma|igamma|beta|"
+                                  r"fresnel_\w|lambert_w|besselj|bessely|besseli|besselk|hypergeometric|"
+                                  r"meijerg|zeta|elliptic\w*|struve\w*|airy\w*)\(")
 SPECIAL_RE["wolfram"] = SPECIAL_RE["mathilda"]
 SPECIAL_RE["axiom"] = SPECIAL_RE["fricas"]   # the same language (FriCAS forked Axiom)
 
@@ -179,6 +182,7 @@ UNEVAL_RE = {
     "sympy": re.compile(r"\bIntegral\("),
     "maxima": re.compile(r"\bintegrate\("),
     "fricas": re.compile(r"\bintegral\(|%A|%B"),
+    "reduce": re.compile(r"\bint\("),
 }
 
 

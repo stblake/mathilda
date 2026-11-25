@@ -17,7 +17,8 @@ batch of cases per process, each case under the system's own per-case limit
 missing from a batch's output (a crash, or a hang the in-system limit did not
 catch) is rerun alone, and a lone run that still produces nothing is TIMEOUT
 or ERROR.  FriCAS and Maxima start in well under a second and have no reliable
-in-system time limit, so they run one process per case under a process timeout.
+in-system time limit, so they run one process per case under a process timeout;
+so does Reduce (PSL), which starts in about 0.1 s.
 """
 import json
 import os
@@ -47,16 +48,55 @@ MAXIMA = shutil.which("maxima") or "/usr/local/bin/maxima"
 AXIOM_ROOT = os.environ.get("SHOOTOUT_AXIOM_ROOT", os.path.expanduser("~/axiom/mnt/MACOSX"))
 AXIOM = os.path.join(AXIOM_ROOT, "bin", "AXIOMsys")
 SYMPY_PY = os.environ.get("SHOOTOUT_SYMPY_PYTHON", "/usr/local/bin/python3.11")
+# Reduce (the PSL build: it starts in ~0.1 s, so one process per case costs nothing)
+REDUCE = os.environ.get("SHOOTOUT_REDUCE", shutil.which("redpsl") or "/Applications/Reduce/psl/redpsl")
 
 
 def available(system):
     exe = {"mathilda": MATHILDA, "wolfram": WOLFRAM, "fricas": FRICAS, "axiom": AXIOM,
-           "maxima": MAXIMA, "sympy": SYMPY_PY}[system]
+           "maxima": MAXIMA, "sympy": SYMPY_PY, "reduce": REDUCE}[system]
     if not (exe and os.access(exe, os.X_OK)):
         return False
     if system == "sympy":
         return subprocess.run([SYMPY_PY, "-c", "import sympy"], capture_output=True).returncode == 0
     return True
+
+
+_VERSIONS = {}
+
+
+def version(system):
+    """The version string of an installed system, asked of the system itself ("" when it
+    does not answer); one probe per process."""
+    if system in _VERSIONS:
+        return _VERSIONS[system]
+    v = ""
+    try:
+        if system == "mathilda":
+            v = run_proc([MATHILDA, "-v"], 60)[0].splitlines()[0].split(" (")[0]
+        elif system == "wolfram":
+            out = run_proc([WOLFRAM, "-code", "$Version"], 120)[0].strip()
+            v = "Wolfram Language " + out.split(" for ")[0] if out else ""
+        elif system in ("fricas", "axiom"):
+            if system == "axiom":
+                out = run_proc([AXIOM, "-noclef"], 60, stdin=")set quit unprotected\n)quit\n",
+                               env=dict(os.environ, AXIOM=AXIOM_ROOT))[0]
+            else:
+                out = run_proc([FRICAS, "-nosman"], 60, stdin=")quit\n")[0]
+            m = re.search(r"Version: (.*)", out)
+            v = m.group(1).strip() if m else ""
+        elif system == "maxima":
+            v = run_proc([MAXIMA, "--version"], 60)[0].strip()
+        elif system == "sympy":
+            v = "sympy " + run_proc([SYMPY_PY, "-c", "import sympy; print(sympy.__version__)"], 60)[0].strip()
+        elif system == "reduce":
+            out = run_proc([REDUCE], 60, stdin="lisp print version!*$ bye$\n")[0]
+            m = re.search(r'"(Reduce[^"]*)"', out)
+            v = m.group(1) if m else ""
+    except Exception:  # noqa: BLE001 -- a missing or silent system has no version, not a crash
+        v = ""
+    _VERSIONS[system] = v
+    return v
 
 
 def run_proc(cmd, timeout, stdin=None, cwd=REPO, env=None):
@@ -411,6 +451,69 @@ def run_maxima_one(c, timeout, tmpdir):
     return rec
 
 
+# --------------------------------------------------------------------------
+# Reduce (one process per case)
+# --------------------------------------------------------------------------
+def reduce_error(out):
+    """The first error Reduce printed ("***** message"), as one line; "" when none."""
+    m = re.search(r"^\*{3,5} (.*)$", out, re.M)
+    return m.group(1).strip() if m else ""
+
+
+def run_reduce_one(c, timeout, tmpdir):
+    """int(f, x) in Reduce.  Statements end in $ so only the @@ lines are printed;
+    linelength is raised so an answer is one line.  The own check is D(r) - f, exactly
+    (df then the standard simplifier) and at the three points in complex-rounded mode
+    at 40 digits.  An unevaluated int(...) anywhere in the answer is UNEVAL."""
+    f = T.emit(c["tree"], "reduce")
+    L = ["off nat$", "linelength 1000000$", "on errcont$",
+         f"f := {f}$",
+         "t0 := lisp time()$", "r := int(f, x)$", "t1 := lisp time()$",
+         'write "@@TIME ", t1 - t0$', 'write "@@RES ", r$',
+         "d := df(r, x) - f$", 'write "@@ZERO ", d$',
+         "on rounded, complex$", "precision 40$"]
+    for p in c["points_list"]:
+        L.append(f'write "@@NUM ", abs(sub(x = ({p}), d)), " ", abs(sub(x = ({p}), f))$')
+    L.append("bye$")
+    out, err, to, wall = run_proc([REDUCE], timeout + 3 * VERIFY, stdin="\n".join(L) + "\n")
+    rec = {"id": c["id"], "time": None, "nums": [], "cert": False, "text": "", "detail": ""}
+
+    def line(tag):
+        m = re.search(r"^@@" + tag + r" ?(.*?)\$?\s*$", out, re.M)
+        return m.group(1).strip() if m else None
+    r = line("RES")
+    if r is None:
+        if to:
+            rec["status"] = "TIMEOUT"
+        else:
+            rec.update(status="ERROR", detail=reduce_error(out) or (err or out).strip()[-200:])
+        return rec
+    tm = line("TIME")
+    rec["time"] = int(tm) / 1000 if tm and tm.isdigit() else round(wall, 3)
+    rec["text"] = r[:TRUNC]
+    if r == "r":
+        rec.update(status="ERROR", detail=reduce_error(out) or "int failed, no message")
+        return rec
+    if T.uneval_q("reduce", r):
+        rec["status"] = "UNEVAL"
+        return rec
+    rec["status"] = "ANSWER"
+    from fractions import Fraction
+    for mm in re.finditer(r"^@@NUM (\S+) (\S+?)\$?\s*$", out, re.M):
+        try:
+            dv, fv = Fraction(mm.group(1)), Fraction(mm.group(2))
+        except (ValueError, ZeroDivisionError):
+            rec["nums"].append("na")
+            continue
+        rec["nums"].append("ok" if dv <= Fraction(1, 10 ** TOL_EXP) * max(1, fv) else "bad")
+    while len(rec["nums"]) < len(c["points_list"]):
+        rec["nums"].append("na")
+    if "ok" not in rec["nums"] and "bad" not in rec["nums"] and line("ZERO") == "0":
+        rec["nums"] = ["ok"] * len(c["points_list"])
+        rec["detail"] = "verified exactly (df)"
+    return rec
+
+
 def run_per_case(fn, cases, timeout, tmpdir):
     out = {}
     for c in cases:
@@ -435,4 +538,6 @@ def run_system(system, cases, timeout, tmpdir, method=None):
         return run_per_case(run_axiom_one, cases, timeout, tmpdir)
     if system == "maxima":
         return run_per_case(run_maxima_one, cases, timeout, tmpdir)
+    if system == "reduce":
+        return run_per_case(run_reduce_one, cases, timeout, tmpdir)
     raise ValueError(system)

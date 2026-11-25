@@ -9,7 +9,8 @@ method and four other systems on one corpus (benchmarks/256-integration-shootout
 RUNS.  Each case of corpus.tsv runs through
   * Mathilda: Method -> Automatic and ParallelMixedTower for every class, plus
     RischTranscendental (classes R, T), Trager (A), Bronstein (M, B);
-  * FriCAS, Maxima, sympy and the Wolfram Language (wolframscript), when installed.
+  * FriCAS, Axiom, Maxima, sympy, the Wolfram Language (wolframscript) and Reduce (PSL),
+    when installed.
 VERIFICATION.  Every answer of every system is judged by one test, in Mathilda:
 PossibleZeroQ[D[F, x] - f] (crosscheck.py; answers of the other systems are
 translated into Mathilda first): zero -> verified, nonzero -> WRONG, anything
@@ -63,8 +64,8 @@ import crosscheck as X  # noqa: E402
 
 BENCH = os.path.join(A.REPO, "benchmarks", "256-integration-shootout")
 CORPUS = os.path.join(BENCH, "corpus.tsv")
-EXTERNAL = ("fricas", "axiom", "maxima", "sympy", "wolfram")
-LABEL = {"fricas": "FriCAS", "axiom": "Axiom", "maxima": "Maxima", "sympy": "sympy", "wolfram": "Wolfram"}
+EXTERNAL = ("fricas", "axiom", "maxima", "sympy", "wolfram", "reduce")
+LABEL = {"fricas": "FriCAS", "axiom": "Axiom", "maxima": "Maxima", "sympy": "sympy", "wolfram": "Wolfram", "reduce": "Reduce"}
 METHODS = {"R": ["Automatic", "ParallelMixedTower", "RischTranscendental"],
            "T": ["Automatic", "ParallelMixedTower", "RischTranscendental"],
            "A": ["Automatic", "ParallelMixedTower", "Trager"],
@@ -321,7 +322,9 @@ def main():
     write_report(report, rows, labels, wall, a)
     stamp = datetime.date.today().isoformat()
     if full:
-        json.dump({"date": stamp, "wall": wall, "rows": rows},
+        versions = {(run_label("mathilda", "Automatic").split(":")[0] if sy == "mathilda" else LABEL[sy]):
+                    A.version(sy) for sy in systems}
+        json.dump({"date": stamp, "wall": wall, "systems": versions, "rows": rows},
                   open(os.path.join(BENCH, "results", f"{stamp}.json"), "w"), indent=0)
         with open(os.path.join(BENCH, "history.jsonl"), "a") as fh:
             fh.write(json.dumps({"date": stamp, "cases": len(rows), "closed": closed_counts(rows, labels)}) + "\n")

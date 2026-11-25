@@ -158,6 +158,23 @@ def tally(rows, key):
     return out
 
 
+OTHERS = ("Axiom", "Maxima", "sympy", "Wolfram", "Reduce")
+
+
+def other_systems(rows, labs):
+    """One line per further system of the run: how its runs ended, from the classified
+    runs of results/<date>.json (the same verdicts as the report's)."""
+    L = ["| system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |",
+         "|---|---|---|---|---|---|---|---|---|---|"]
+    for lab in labs:
+        c = collections.Counter(r["runs"][lab] for r in rows if lab in r["runs"])
+        n = sum(c.values())
+        cl = c["ELEM"] + c["SPECIAL"]
+        L.append(f"| {lab} | {n} | {pct(cl, n)} ({cl}) | {c['ELEM']} | {c['SPECIAL']} | {c['WRONG']} | {c['UNEVAL']} | "
+                 f"{c['TIMEOUT']} | {c['ERROR']} | {c['UNVERIFIED']} |")
+    return L
+
+
 def table(groups, order, label):
     names = [n for n, _ in RUNS]
     L = [f"| {label} | n | " + " | ".join(f"{s} elementary | {s} special | {s} decided" for s in names) + " |",
@@ -319,6 +336,13 @@ def main():
             L.append("By family (`-elem`: f = D[F], elementary by construction; `-rand`: random):")
             L.append("")
             L += table(by_fam, sorted(by_fam), "family")
+            L.append("")
+        others = [lab for lab in OTHERS if any(lab in r["runs"] for r in rows)]
+        if others:
+            L.append("The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, "
+                     "elementary or special; wrong = rejected by it):")
+            L.append("")
+            L += other_systems(rows, others)
             L.append("")
         for nm in ("Mathilda", "PMT"):
             sp = speed(rows, nm)
