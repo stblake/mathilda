@@ -115,7 +115,7 @@ grammar["B2"] := Function[{}, Module[{g = pick[{lin2[], lin2[], quad2[]}], e = e
         Log[x + Sqrt[x^2 + q]], x Log[x + Sqrt[x^2 + q]], Log[x + Sqrt[x^2 + q]]/x^2, Log[x + Sqrt[x + q]],
         E^Sqrt[lin2[]], x E^Sqrt[x + q], E^Sqrt[x + q] (x + q)^pick[{1/2, -1/2, 3/2}],
         Log[lin2[]]^2 g^e, (x + nz[-2, 2]) Log[x] g^e/(x^2 + q)}]]];
-contentOK[f_] := If[MemberQ[{"B2", "B3", "M3", "M4"}, gname], !FreeQ[f, Log | Power[E, _]] && !FreeQ[f, Power[_, _Rational]], True];
+contentOK[f_] := If[MemberQ[{"B2", "B3", "B4", "M3", "M4"}, gname], !FreeQ[f, Log | Power[E, _]] && !FreeQ[f, Power[_, _Rational]], True];
 
 (* EXCLUDE_EASY=1 (benchmark 262): an integrand in an easy class (easy.m) is
    dropped -- rational, linear-fractional radical, Euler-rationalisable, the
@@ -213,6 +213,32 @@ qalg[] := pick[{(x^3 + nz[-2, 2])^pick[{1/3, 2/3}]/x^r[1, 2], Sqrt[g3[]]/x^r[1, 
 grammar["B3"] := Function[{}, Module[{Q = qalg[], S = srat[], t = tk3[]},
   pick[{Together[D[Q, x]] Log[S], Together[D[Q, x]] Log[x], Together[D[Q, x]] Log[S] + Q D[S, x]/S, t chebyshevBinom[],
         Log[x] chebyshevBinom[], E^x (Q + Together[D[Q, x]]), Log[x + Sqrt[g3[]]]}]]];
+
+(* B4: B3 drew few distinct integrands (110 unique for 118 cases in 262).  B4
+   draws the derivative of a product that holds a radical y of a cubic or a
+   quartic (no linear-fractional or Euler substitution removes it) at the bottom
+   of a Log/Exp kernel, so the unperturbed draw is elementary by construction:
+     D[R E^y]            E^y (R' + R y')          the radical inside Exp
+     D[R Log[S + y]]     R' Log[S + y] + R (S' + y')/(S + y)
+     D[P y E^(k x)]      E^(k x) (D[P y] + k P y)
+     D[y Log[S]]         y' Log[S] + y S'/S
+     D[R y Log[x]]       a radical, a rational and a Log factor at once
+   with R, S rational, P polynomial.  None is theta' h(theta) for one kernel
+   theta (x stays outside the kernel in R and S); a perturbation (one term
+   dropped, the cofactor shifted) is elementary or not as Integrate decides. *)
+y4[] := pick[{Sqrt[g3[]], Sqrt[g3[]], (x^3 + nz[-2, 2])^(1/3), (x^3 + x + nz[1, 2])^(1/3), (x^4 + nz[1, 3])^(1/4),
+  Sqrt[x^3 + nz[-2, 2] x^2 + nz[1, 2]]}];
+r4[] := pick[{x, 1/x, x + nz[-2, 2], 1/(x + nz[-2, 2]), x^2, 1/x^2, nz[1, 3], x/(x^2 + nz[1, 2])}];
+s4[] := pick[{x, x^2, x + nz[-2, 2], nz[1, 3], x^2 + nz[1, 2], 1/x}];
+grammar["B4"] := Function[{}, Module[{y = y4[], R = r4[], S = s4[], P = pick[{1, x, x^2, x + nz[-2, 2]}],
+    k = pick[{1, -1, 2}], base, pert},
+  base = pick[{D[R E^y, x], D[R E^y, x], D[R Log[S + y], x], D[R Log[S + y], x], D[P y E^(k x), x],
+    D[y Log[S + nz[1, 2]], x], D[R y Log[x], x], D[x E^y, x] + D[R Log[x + y], x]}];
+  base = Together[base];
+  pert = pick[{0, 0, 0, 1, 2}];
+  Which[pert === 0, base,
+    pert === 1 && Head[Expand[Numerator[base]]] === Plus, Together[(Expand[Numerator[base]] /. Plus[a_, b__] :> Plus[b])/Denominator[base]],
+    True, Together[base + nz[-2, 2] R base/(x + nz[1, 3])]]]];
 
 (* an accepted reference must be elementary: an ALLOWLIST of heads, since a
    blocklist of special functions misses the ones nobody listed (Erfc and

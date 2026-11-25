@@ -32,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import adapters as A  # noqa: E402
 from tex_break import display  # noqa: E402
+from easy_classify import easy_ids  # noqa: E402
 
 MATHILDA_METHODS = ["Automatic", "ParallelMixedTower", "RischTranscendental", "Trager", "Bronstein"]
 EXTERNAL = ["FriCAS", "Axiom", "Maxima", "sympy", "Wolfram"]
@@ -136,11 +137,15 @@ def main():
     ap.add_argument("--no-pdf", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="first N cases per class only (a quick check of the document)")
     ap.add_argument("--out", default=None, help="report folder (default <bench>/report)")
+    ap.add_argument("--include-easy", action="store_true",
+                    help="keep the cases easy.tsv classes as easy (left out by default)")
     a = ap.parse_args()
     bench = os.path.abspath(a.bench)
     cases = load_corpus(bench)
     date, rows = load_rows(bench, a.date)
-    rows = [r for r in rows if r["id"] in cases]
+    easy = set() if a.include_easy else easy_ids(bench)
+    n_easy = sum(1 for r in rows if r["id"] in cases and r["id"] in easy)
+    rows = [r for r in rows if r["id"] in cases and r["id"] not in easy]
     if a.limit:
         per = collections.Counter()
         rows = [r for r in rows if (per.update([r["class"]]) or per[r["class"]] <= a.limit)]
@@ -237,7 +242,11 @@ def main():
           r"grammars (tools/integration\_shootout/gen\_compact.m, plan 261): an integrand qualifies with Mathilda's "
           r"verified answer as reference, or, when Mathilda neither answers, answers wrongly, nor answers elementarily, "
           r"with FriCAS's verified answer (families \texttt{-fricas}); Wolfram is never consulted. "
-          r"The integrands of benchmarks 256, 257, 259 and 260 are excluded.", "",
+          r"The integrands of benchmarks 256, 257, 259 and 260 are excluded.",
+          (f"{n_easy} further cases of the corpus are \\emph{{easy}} and are left out of this report: "
+           r"easy.m (tools/integration\_shootout) classes each of them as a rational function, an integrand "
+           r"that a linear-fractional, Euler or chained substitution makes rational, or one the "
+           r"DerivativeDivides method closes (easy.tsv lists the class of every case)." if n_easy else ""), "",
           r"\begin{center}\begin{tabular}{lll}\toprule class & integrands & cases\\\midrule"]
     cc = collections.Counter(r["class"] for r in rows)
     for k in "RTAMB":

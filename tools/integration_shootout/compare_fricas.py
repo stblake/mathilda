@@ -20,6 +20,10 @@ question is also how often it DECIDES, so this report counts both sides' "no":
 (classes R, T -- Bronstein, Symbolic Integration I), Trager (A), Bronstein (M, B:
 the mixed algebraic-transcendental package); "Automatic" is the full cascade.
 
+The easy integrals of each corpus (easy.tsv, written by easy_classify.py: rational
+functions, integrands a substitution rationalises, and those DerivativeDivides
+closes) are left out unless --include-easy.
+
 Soundness: a "no" on a case whose expect is "elem" (f = D[F]) is false; so is a
 "no" contradicted by the other system's verified answer.
 
@@ -35,6 +39,10 @@ import math
 import os
 import re
 import statistics
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from easy_classify import easy_ids  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BENCHES = [("256-integration-shootout", "256: the shootout corpus"),
@@ -279,6 +287,8 @@ def main():
     ap.add_argument("--no-progress", action="store_true",
                     help="omit the progress table (Mathilda against the corpus's previous saved run)")
     ap.add_argument("--out", default=os.path.join(REPO, "benchmarks", "BRONSTEIN_VS_FRICAS.md"))
+    ap.add_argument("--include-easy", action="store_true",
+                    help="keep the cases easy.tsv classes as easy (rational, rationalisable, derivative-divides)")
     a = ap.parse_args()
     L = []
     allrows = []
@@ -290,7 +300,10 @@ def main():
         rows = load(bench, date) if date else None
         if not rows:
             continue
-        rows = [r for r in rows if "FriCAS" in r["runs"]]
+        easy = set() if a.include_easy else easy_ids(os.path.join(REPO, "benchmarks", bench))
+        rows = [r for r in rows if "FriCAS" in r["runs"] and r["id"] not in easy]
+        if not rows:
+            continue
         allrows += rows
         L.append(f"## {title} ({len(rows)} cases, run {date})")
         L.append("")

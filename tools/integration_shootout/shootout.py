@@ -57,7 +57,8 @@ import threading
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import adapters as A  # noqa: E402
-import translate as T  # noqa: E402
+import translate as T
+from easy_classify import easy_ids  # noqa: E402
 import crosscheck as X  # noqa: E402
 
 BENCH = os.path.join(A.REPO, "benchmarks", "256-integration-shootout")
@@ -197,6 +198,9 @@ def main():
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--update-baseline", action="store_true")
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--include-easy", action="store_true",
+                    help="run the cases <bench>/easy.tsv classes as easy too (rational, rationalisable by a "
+                    "substitution, closed by DerivativeDivides); they are left out by default")
     ap.add_argument("--no-crosscheck", action="store_true",
                     help="judge answers by their own system's check only (no PossibleZeroQ cross-check)")
     ap.add_argument("--bench", default=None, help="the benchmark folder (corpus.tsv, results/, REPORT.md, "
@@ -221,6 +225,11 @@ def main():
     classes = set(a.classes.split(","))
 
     cases = [c for c in load_corpus() if c["class"] in classes]
+    if not a.include_easy:
+        easy = easy_ids(BENCH)
+        if easy:
+            print(f"note: {sum(c['id'] in easy for c in cases)} easy cases left out (easy.tsv; --include-easy keeps them)")
+        cases = [c for c in cases if c["id"] not in easy]
     if a.families:
         fams = a.families.split(",")
         cases = [c for c in cases if any(c["family"].startswith(f) for f in fams)]

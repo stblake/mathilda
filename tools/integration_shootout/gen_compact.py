@@ -89,6 +89,27 @@ PLANS = {
             "exclude": ["261-compact-integrals-x4/gen_pool.tsv", "257-compact-integrals/gen_pool.tsv",
                         "256-integration-shootout/corpus.tsv", "260-radical-bottom/corpus.tsv",
                         "259-transcendental-decision/corpus.tsv"]},
+    # Benchmark 263 (--plan 263): more integrals outside the easy classes, to
+    # replace the easy cases easy_classify.py found in benchmarks 256-261 (most of
+    # 257 and 261).  The 262 grammars on fresh seeds, plus B4 (gen_compact.m): B3
+    # repeated itself (110 distinct integrands in 118 cases).  B4 builds the
+    # derivative of a product holding a radical of a cubic or quartic under
+    # Exp/Log, so its F is smaller than f: B runs at ratio 0 (any elementary F),
+    # M at ratio 1 as in 262, T and A at ratio 2.  Every earlier corpus and pool,
+    # 262's included, is excluded.
+    "263": {"bench": "263-hard-integrals-ii", "ratio": 2, "attempts": 20, "exclude_easy": True,
+            "class_ratio": {"M": 1, "B": 0},
+            "quotas": {"R": 0, "T": 500, "A": 550, "M": 400, "B": 400},
+            "seeds": {"R": [],
+                      "T": [(s, "T3", 30) for s in range(301, 331)],
+                      "A": [(s, "A3", 30) for s in range(301, 336)],
+                      "M": [(s, "M4", 15) for s in range(301, 341)],
+                      "B": [(s, "B4", 15) for s in range(301, 336)] + [(s, "B3", 30) for s in range(336, 341)]},
+            "cand_systems": ["fricas", "axiom", "maxima"],
+            "exclude": ["262-hard-integrals/gen_pool.tsv", "262-hard-integrals/corpus.tsv",
+                        "261-compact-integrals-x4/gen_pool.tsv", "257-compact-integrals/gen_pool.tsv",
+                        "256-integration-shootout/corpus.tsv", "260-radical-bottom/corpus.tsv",
+                        "259-transcendental-decision/corpus.tsv"]},
 }
 
 
@@ -177,7 +198,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--plan", default="257", choices=sorted(PLANS),
-                    help="which corpus: 257 (ratio 2), 261 (ratio 4, mixed-weighted) or 262 (outside the easy classes)")
+                    help="which corpus: 257 (ratio 2), 261 (ratio 4, mixed-weighted), 262 or 263 (outside the easy classes)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--timeout", type=float, default=6.0, help="hours per generator run")
     ap.add_argument("--extend", action="store_true",
