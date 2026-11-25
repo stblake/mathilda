@@ -26,6 +26,9 @@
 #include "show.h"
 #include "render.h"
 #include "render3d.h"
+#ifdef USE_GRAPHICS
+bool gui_session_available(void);   /* render.c (render_common.h pulls in raylib) */
+#endif
 #include "sym_names.h"
 #include "symtab.h"
 #include "iter.h"
@@ -388,6 +391,10 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
         printf("Manipulate: suppressed (MATHILDA_NO_GRAPHICS_WINDOW set).\n");
         return;
     }
+    /* No usable GUI session (ssh, launchd, a -file script without a window
+     * server, a GL context that cannot render): raylib's InitWindow crashes
+     * instead of failing, so the window is skipped, as the 3-D viewer does. */
+    if (!gui_session_available()) return;
 
     int win_w = 800, win_h = 500;
     float ctrl_h    = (float)n_ctrls * ROW_H + FOOTER_H;
