@@ -275,6 +275,12 @@ EXEMPT = {
     "buffer path",
     "Laplacian": "as Grad -- normalized_copy unpacks a visible NDArray field, then "
     "Sum_i D[f, {x_i, 2}] is assembled and reduced by evaluate(); no buffer path",
+    # Message guards, not fast paths (Wave 5): the is_ndarray test only keeps a
+    # visible NDArray argument's decline silent instead of reporting it.
+    "ConstantArray": "is_ndarray only keeps a visible NDArray dimension spec "
+    "out of ConstantArray::ilsmn; no buffer path",
+    "Pick": "is_ndarray only keeps a visible NDArray operand out of "
+    "Pick::incomp; no buffer path, the packed form stays materialised by the gate",
 }
 
 

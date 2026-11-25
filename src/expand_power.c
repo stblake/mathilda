@@ -61,8 +61,9 @@ typedef enum { PE_AUTOMATIC, PE_TRUE, PE_ASSUME } PEMode;
 
 typedef struct {
     PEMode      mode;
-    Expr**      vars;   /* variable restriction set (NULL/0 = unrestricted) */
+    Expr**      vars;   /* variable restriction set */
     size_t      nvars;
+    bool        restricted;   /* a variable list was given ({} restricts to none) */
     AssumeCtx*  ctx;    /* non-NULL only in PE_ASSUME */
 } PECtx;
 
@@ -122,7 +123,7 @@ static bool expr_mentions(const Expr* e, const Expr* v) {
     return false;
 }
 static bool var_gate(const Expr* src, const PECtx* ctx) {
-    if (ctx->nvars == 0) return true;            /* unrestricted */
+    if (!ctx->restricted) return true;           /* unrestricted */
     for (size_t i = 0; i < ctx->nvars; i++)
         if (expr_mentions(src, ctx->vars[i])) return true;
     return false;
@@ -476,7 +477,11 @@ static Expr* pe_rec(Expr* e, const PECtx* ctx) {
 
     const char* h = head_name(e);
 
-    {
+    /* Log of a rational is split unless the variable list is empty: with
+     * {} nothing is expanded (audit PowerExpand#2).  A non-empty list keeps
+     * splitting it, as Gruntz's PowerExpand[e, {x}] relies on (Log[2], not
+     * -Log[1/2]); PowerExpand#1 is declined for that reason. */
+    if (!ctx->restricted || ctx->nvars > 0) {
         Expr* lr = pe_log_rational(e);
         if (lr) return lr;
     }
@@ -865,6 +870,7 @@ Expr* builtin_powerexpand(Expr* res) {
     ctx.mode  = PE_AUTOMATIC;
     ctx.vars  = NULL;
     ctx.nvars = 0;
+    ctx.restricted = varlist != NULL;   /* PowerExpand[e, {}] expands nothing (audit PowerExpand#2) */
     ctx.ctx   = NULL;
 
     if (varlist) {

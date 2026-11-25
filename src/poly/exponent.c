@@ -162,8 +162,14 @@ static void form_pairs(const Expr* form, Expr*** bases_out, Expr*** fes_out,
     if (head_is(form, "Times")) {
         for (size_t i = 0; i < form->data.function.arg_count; i++) {
             Expr* f = form->data.function.args[i];
+            /* a number of any kind -- 2, 2.5, 1/2, I -- is a coefficient,
+             * not a base (audit Exponent#2: x^2/2 and I x^2 gave 0) */
             if (f->type == EXPR_INTEGER || f->type == EXPR_BIGINT ||
-                f->type == EXPR_REAL) {
+                f->type == EXPR_REAL || head_is(f, "Rational") || head_is(f, "Complex")
+#ifdef USE_MPFR
+                || f->type == EXPR_MPFR
+#endif
+               ) {
                 continue;  /* numeric factor: not a base */
             }
             if (head_is(f, "Power") && f->data.function.arg_count == 2) {

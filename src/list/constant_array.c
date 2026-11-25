@@ -3,6 +3,7 @@
 #include "constant_array.h"
 #include "../ndarray.h"
 #include "../pack.h"
+#include "../message.h"   /* mth_message: ConstantArray::ilsmn */
 
 /* ConstantArray[c, n]            -> a flat list of n copies of c.
  * ConstantArray[c, {n1, ..., nk}] -> a nested n1 x ... x nk array of copies of c.
@@ -59,7 +60,7 @@ Expr* builtin_constant_array(Expr* res) {
                    && dims->data.function.head->data.symbol.name == SYM_List);
     if (is_list) {
         dim_count = dims->data.function.arg_count;
-        if (dim_count == 0) return NULL; /* ConstantArray[c, {}] stays unevaluated */
+        if (dim_count == 0) return expr_copy(c);   /* no dimensions: c itself (audit ConstantArray#1) */
     }
 
     Expr** n_array = malloc(sizeof(Expr*) * dim_count);
@@ -69,11 +70,18 @@ Expr* builtin_constant_array(Expr* res) {
         n_array[0] = dims;
     }
 
-    /* Every dimension must be a non-negative machine integer; otherwise leave
-     * the call unevaluated (mirrors Array[]). */
+    /* Every dimension must be a non-negative machine integer; otherwise
+     * ConstantArray::ilsmn and the call stays unevaluated (audit
+     * ConstantArray#2). A buffer spec is left as it was. */
     for (size_t i = 0; i < dim_count; i++) {
         if (n_array[i]->type != EXPR_INTEGER || n_array[i]->data.integer < 0) {
             free(n_array);
+            if (!is_ndarray(dims)) {
+                char* cs = expr_to_string(res);
+                mth_message("ConstantArray", "ilsmn", "Single or list of non-negative machine-sized "
+                            "integers expected at position 2 of %s.", cs ? cs : "");
+                free(cs);
+            }
             return NULL;
         }
     }

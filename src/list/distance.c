@@ -38,6 +38,7 @@
 #include "internal.h"
 #include "distance.h"
 #include "linkedlist.h" /* LLReader */
+#include "message.h"    /* mth_message: HammingDistance::idim */
 
 /* Shape check, in two strictnesses.
  *
@@ -411,15 +412,73 @@ Expr* distance_hamming(Expr* u, Expr* v) {
     return out;
 }
 
-Expr* builtin_edit_distance(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    return distance_edit(res->data.function.args[0], res->data.function.args[1]);
+/* The options of EditDistance / HammingDistance[u, v, opts]: IgnoreCase ->
+ * True | False (audits EditDistance#2, HammingDistance#2). False for any
+ * other argument or setting, which leaves the call unevaluated. */
+static bool dist_seq_options(Expr* res, bool* ignore_case) {
+    *ignore_case = false;
+    for (size_t i = 2; i < res->data.function.arg_count; i++) {
+        Expr* o = res->data.function.args[i];
+        if (!(head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) || o->data.function.arg_count != 2 ||
+            o->data.function.args[0]->type != EXPR_SYMBOL ||
+            o->data.function.args[0]->data.symbol.name != SYM_IgnoreCase)
+            return false;
+        Expr* v = o->data.function.args[1];
+        if (v->type != EXPR_SYMBOL) return false;
+        if (v->data.symbol.name == SYM_True) *ignore_case = true;
+        else if (v->data.symbol.name == SYM_False) *ignore_case = false;
+        else return false;
+    }
+    return true;
 }
 
-Expr* builtin_hamming_distance(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    return distance_hamming(res->data.function.args[0], res->data.function.args[1]);
+/* A lower-cased copy of a String (ASCII letters), else a copy. */
+static Expr* dist_fold_case(const Expr* e) {
+    if (e->type != EXPR_STRING) return expr_copy((Expr*)e);
+    size_t n = strlen(e->data.string);
+    char* s = malloc(n + 1);
+    for (size_t i = 0; i <= n; i++) {
+        char c = e->data.string[i];
+        s[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+    }
+    Expr* r = expr_new_string(s);
+    free(s);
+    return r;
 }
+
+static Expr* dist_seq_builtin(Expr* res, bool hamming) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    bool ic;
+    if (!dist_seq_options(res, &ic)) return NULL;
+    Expr* u = ic ? dist_fold_case(res->data.function.args[0]) : res->data.function.args[0];
+    Expr* v = ic ? dist_fold_case(res->data.function.args[1]) : res->data.function.args[1];
+    Expr* r = hamming ? distance_hamming(u, v) : distance_edit(u, v);
+    /* HammingDistance of sequences of different lengths: ::idim (audit
+     * HammingDistance#3). */
+    if (!r && hamming && dist_seq_pair(u, v)) {
+        LLReader a, b;
+        Expr **ca, **cb;
+        if (dist_seq_open(u, &a, &ca)) {
+            if (dist_seq_open(v, &b, &cb)) {
+                if (a.n != b.n) {
+                    char* us = expr_to_string(res->data.function.args[0]);
+                    char* vs = expr_to_string(res->data.function.args[1]);
+                    mth_message("HammingDistance", "idim", "%s and %s must have the same length.",
+                                us ? us : "", vs ? vs : "");
+                    free(us); free(vs);
+                }
+                dist_seq_close(&b, cb);
+            }
+            dist_seq_close(&a, ca);
+        }
+    }
+    if (ic) { expr_free(u); expr_free(v); }
+    return r;
+}
+
+Expr* builtin_edit_distance(Expr* res) { return dist_seq_builtin(res, false); }
+
+Expr* builtin_hamming_distance(Expr* res) { return dist_seq_builtin(res, true); }
 
 /* The three builtins differ only in p and whether a root is taken. */
 /* Two vectors with a LinkedList among them (the other a List or LinkedList):
@@ -520,6 +579,8 @@ Expr* builtin_cosine_distance(Expr* res) {
         dist_pt_close(&pv);
         return r;
     }
+    /* a String is not a vector (audit CosineDistance#2) */
+    if (u->type == EXPR_STRING || v->type == EXPR_STRING) return NULL;
     if (!dist_shape(u, v)) return NULL;
     return distance_cosine(u, v);
 }

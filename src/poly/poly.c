@@ -544,6 +544,14 @@ Expr* builtin_coefficient(Expr* res) {
      * coefficient: stay unevaluated rather than silently reading it as n = 1.
      * Coefficient[t + 2 t^2, t, i] with symbolic i must NOT return 1 -- that
      * poisoned Sum[Coefficient[...] t^i, {i, ...}] (MATHILDA_DIVERGENCES A15b). */
+    /* An exponent past int64 (10^20): the coefficient of form^n, which the
+     * one-argument walk reads with a BigInt exponent (audit Coefficient#2). */
+    if (res->data.function.arg_count == 3 && res->data.function.args[2]->type == EXPR_BIGINT) {
+        Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ expr_copy(form), expr_copy(res->data.function.args[2]) }, 2);
+        Expr* ca[2] = { expr_copy(original_expr), pw };
+        return expr_new_function(expr_new_symbol(SYM_Coefficient), ca, 2);
+    }
     if (res->data.function.arg_count == 3 && res->data.function.args[2]->type != EXPR_INTEGER)
         return NULL;
     int64_t n = (res->data.function.arg_count == 3) ? res->data.function.args[2]->data.integer : 1;
@@ -3934,8 +3942,43 @@ static Expr* pg_gcd_generalized(Expr* head, Expr** rems, size_t count,
 /* None` is accepted and treated as the default (no extension).         */
 /* `Extension -> Automatic` triggers `extension_autodetect_args` and    */
 /* routes through the single-generator α-path when one is found.        */
+/* PolynomialGCD of exact rational numbers, one at least a Rational: the gcd
+ * of the numerators over the lcm of the denominators, as for the numerical
+ * content of a polynomial (PolynomialGCD[3/2, 9/4] is 3/4, as
+ * PolynomialGCD[3/2 x, 9/4 x] is 3 x/4; audit PolynomialGCD#2). NULL when an
+ * argument is anything else. */
+static Expr* polygcd_rationals(Expr* res) {
+    size_t n = res->data.function.arg_count;
+    bool any_rational = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (head_is(a, SYM_Rational)) any_rational = true;
+        else if (!expr_is_integer_like(a)) return NULL;
+    }
+    if (!any_rational) return NULL;
+    mpz_t g, l, num, den;
+    mpz_inits(g, l, num, den, NULL);
+    mpz_set_ui(l, 1);
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (head_is(a, SYM_Rational)) {
+            expr_to_mpz(a->data.function.args[0], num);
+            expr_to_mpz(a->data.function.args[1], den);
+        } else {
+            expr_to_mpz(a, num);
+            mpz_set_ui(den, 1);
+        }
+        mpz_gcd(g, g, num);
+        mpz_lcm(l, l, den);
+    }
+    Expr* r = make_rational_mpz(g, l);
+    mpz_clears(g, l, num, den, NULL);
+    return r;
+}
+
 Expr* builtin_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    { Expr* q = polygcd_rationals(res); if (q) return q; }
 
     /* Modulus -> p asks for the GCD in F_p[x], and it was being IGNORED: the
      * option fell through as an unrecognised trailing Rule and the answer came
@@ -5336,7 +5379,36 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
                     if (matched_idx != -1) break;
                 }
             }
-            if (matched_idx == -1) {
+            /* A real exponent keeps x^2.5 whole in the decomposition (base
+             * x^2.5, exponent 1): with the key x, such a factor is the key to
+             * that power, so a x^2.5 + b x^2.5 collects to (a + b) x^2.5
+             * (audit Collect#3). */
+            Expr* real_k = NULL;
+            if (matched_idx == -1 && sb_exp->type == EXPR_INTEGER && sb_exp->data.integer == 1) {
+                for (size_t j = 0; j < term_bp.count; j++) {
+                    Expr* tb = term_bp.data[j].base;
+                    Expr* tx = term_bp.data[j].exp;
+                    if (head_is(tb, SYM_Power) && tb->data.function.arg_count == 2 &&
+                        tb->data.function.args[1]->type == EXPR_REAL &&
+                        expr_eq(tb->data.function.args[0], sb_base) &&
+                        tx->type == EXPR_INTEGER && tx->data.integer == 1) {
+                        matched_idx = (int)j;
+                        real_k = tb->data.function.args[1];
+                        break;
+                    }
+                }
+            }
+            if (real_k) {
+                k_expr = expr_copy(real_k);
+                BPList rest;
+                bp_init(&rest);
+                for (size_t j = 0; j < term_bp.count; j++) {
+                    if ((int)j == matched_idx) continue;
+                    bp_add(&rest, term_bp.data[j].base, term_bp.data[j].exp);
+                }
+                coeff = rebuild_from_bp(&rest);
+                bp_free(&rest);
+            } else if (matched_idx == -1) {
                 k_expr = expr_new_integer(0);
                 coeff = rebuild_from_bp(&term_bp);
             } else if (pop_match_k_int > 0) {
@@ -5718,6 +5790,25 @@ static Expr* coefficientlist_of_list(Expr* polys, Expr* vars_expr) {
 }
 
 Expr* builtin_coefficientlist(Expr* res) {
+    /* CoefficientList[poly, vars, dims]: the coefficient array padded with
+     * zeros, or truncated, to dims -- PadRight of the two-argument answer
+     * (audit CoefficientList#3). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 3) {
+        Expr* dims = res->data.function.args[2];
+        bool ok = dims->type == EXPR_INTEGER && dims->data.integer >= 0;
+        if (head_is(dims, SYM_List)) {
+            ok = dims->data.function.arg_count > 0;
+            for (size_t i = 0; ok && i < dims->data.function.arg_count; i++)
+                ok = dims->data.function.args[i]->type == EXPR_INTEGER &&
+                     dims->data.function.args[i]->data.integer >= 0;
+        }
+        if (!ok) return NULL;
+        Expr* ca[2] = { expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) };
+        Expr* cl = eval_and_free(expr_new_function(expr_new_symbol(SYM_CoefficientList), ca, 2));
+        if (!head_is(cl, SYM_List)) { expr_free(cl); return NULL; }
+        Expr* pa[2] = { cl, expr_copy(dims) };
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_PadRight), pa, 2));
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* vars_expr = res->data.function.args[1];
@@ -6315,7 +6406,9 @@ Expr* builtin_hornerform(Expr* res) {
         if (vars2_expr) expr_free(vars2_expr);
         expr_free(num);
         expr_free(den);
-        return expr_copy(res);
+        /* NULL, not a copy of the call: a returned copy is evaluated again,
+         * which said the message twice (audit HornerForm#2) */
+        return NULL;
     }
     
     Expr* h_den = NULL;
@@ -6334,7 +6427,7 @@ Expr* builtin_hornerform(Expr* res) {
             expr_free(num);
             expr_free(den);
             expr_free(h_num);
-            return expr_copy(res);
+            return NULL;
         }
     }
     
@@ -7072,6 +7165,28 @@ static Expr* poly_derivative(Expr* exp_p, Expr* var) {
 /* Discriminant[p, x] = (-1)^(n*(n-1)/2) / a_n * Resultant(p, p', x).   */
 /* The sign and 1/a_n factor are applied after the resultant call.     */
 Expr* builtin_discriminant(Expr* res) {
+    /* Discriminant[poly, x, Modulus -> p]: the discriminant over GF(p) is a
+     * polynomial in the coefficients, so it is the integer discriminant of the
+     * reduced polynomial, reduced mod p (audit Discriminant#1). Modulus -> 0
+     * is the default. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 3) {
+        Expr* o = res->data.function.args[2];
+        if (!(head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) || o->data.function.arg_count != 2 ||
+            o->data.function.args[0]->type != EXPR_SYMBOL ||
+            o->data.function.args[0]->data.symbol.name != SYM_Modulus)
+            return NULL;
+        Expr* p = o->data.function.args[1];
+        if (!expr_is_integer_like(p)) return NULL;
+        Expr* da[2] = { expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) };
+        if (p->type == EXPR_INTEGER && p->data.integer == 0)
+            return expr_new_function(expr_new_symbol(SYM_Discriminant), da, 2);
+        Expr* pm[2] = { da[0], expr_copy(p) };
+        da[0] = expr_new_function(expr_new_symbol(SYM_PolynomialMod), pm, 2);
+        Expr* d = eval_and_free(expr_new_function(expr_new_symbol(SYM_Discriminant), da, 2));
+        if (head_is(d, SYM_Discriminant)) { expr_free(d); return NULL; }
+        Expr* rm[2] = { d, expr_copy(p) };
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialMod), rm, 2));
+    }
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     
     Expr* poly = res->data.function.args[0];
@@ -7520,13 +7635,31 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
      * {1, {{1/(-1 + x^2), ...}, 0}}). */
     if (x->type == EXPR_SYMBOL && (!is_polynomial(A, &x, 1) || !is_polynomial(B, &x, 1)))
         return NULL;
+    /* A number is no variable: PolynomialExtendedGCD[x^2 - 1, x - 1, 3] is
+     * General::ivar, unevaluated (audit PolynomialExtendedGCD#6). */
+    if (x->type == EXPR_INTEGER || x->type == EXPR_BIGINT || x->type == EXPR_REAL ||
+        expr_is_number_atom(x)) {
+        char* v = expr_to_string(x);
+        mth_message("PolynomialExtendedGCD", "ivar", "%s is not a valid variable.", v ? v : "");
+        free(v);
+        return NULL;
+    }
     /* Over Z/m for a composite m there is no Euclidean algorithm (a leading
      * coefficient may be a zero divisor), and the loop below came back with
      * {0, {0, 0}} -- a gcd of 0 for nonzero polynomials (audit
      * PolynomialExtendedGCD#2).  Only a prime modulus is answered. */
     if (mod_p && mod_p->type == EXPR_INTEGER && mod_p->data.integer == 0) mod_p = NULL;
     if (mod_p) {
-        if (!expr_is_integer_like(mod_p)) return NULL;
+        /* A Modulus that is not an integer is ::bmod, a composite one ::modp;
+         * either way the call stays as it is (audit PolynomialExtendedGCD#4:
+         * Modulus -> a was silent). */
+        if (!expr_is_integer_like(mod_p)) {
+            char* v = expr_to_string(mod_p);
+            mth_message("PolynomialExtendedGCD", "bmod", "Modulus %s must be an integer or an "
+                        "irreducible univariate polynomial.", v ? v : "");
+            free(v);
+            return NULL;
+        }
         mpz_t mz;
         mpz_init(mz);
         expr_to_mpz(mod_p, mz);

@@ -3,6 +3,8 @@
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "rotate.h"
 #include "linkedlist_seq.h" /* LLSeq: a LinkedList rotates from its slots */
+#include "message.h"        /* mth_message: ::rspec */
+#include "print.h"          /* expr_to_string */
 
 /*
  * Is the rotation spec usable -- an Integer, or a List of Integers?
@@ -34,7 +36,10 @@ static bool rotate_spec_ok(const Expr* n_spec) {
     return false;
 }
 
-static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
+/* `right`: rotate the other way.  The amount is reduced modulo the length
+ * BEFORE it is negated, so -2^63 rotates right correctly (audit RotateRight#1:
+ * negating the int64 spec overflowed). */
+static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx, bool right) {
     if (expr->type != EXPR_FUNCTION && expr->type != EXPR_LINKEDLIST) return expr_copy(expr);
 
     int64_t n = 0;
@@ -55,6 +60,7 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
         LinkedList* out = ll_new();
         if (len > 0) {
             int64_t offset = n % len;
+            if (right) offset = -offset;
             if (offset < 0) offset += len;
             ll_append_range(out, src, offset, len);
             ll_append_range(out, src, 0, offset);
@@ -69,11 +75,12 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
 
     if (len > 0) {
         int64_t offset = n % (int64_t)len;
+        if (right) offset = -offset;
         if (offset < 0) offset += (int64_t)len;
 
         for (size_t i = 0; i < len; i++) {
             size_t old_idx = (i + (size_t)offset) % len;
-            new_args[i] = rotate_rec(llq_peek(&lv, old_idx), n_spec, level_idx + 1);
+            new_args[i] = rotate_rec(llq_peek(&lv, old_idx), n_spec, level_idx + 1, right);
         }
     }
 
@@ -83,65 +90,50 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
     return result;
 }
 
-Expr* builtin_rotateleft(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
+/* RotateLeft/RotateRight[expr, n]: an atom is Head::normal; an explicit
+ * number that is not an integer is Head::rspec. A symbolic amount stays
+ * unevaluated silently (see rotate_spec_ok). */
+static bool rotate_args_ok(Expr* res, const char* head) {
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    if (!rotate_spec_ok(n_spec)) return NULL;   /* symbolic amount: stay unevaluated */
+    if (expr_is_plain_atom(expr)) { builtin_normal_error(head, res, 1); return false; }
+    if (rotate_spec_ok(n_spec)) return true;
+    bool numeric = expr_is_plain_atom(n_spec) && n_spec->type != EXPR_SYMBOL &&
+                   n_spec->type != EXPR_STRING && n_spec->type != EXPR_BIGINT;
+    if (numeric) {
+        char* ns = expr_to_string(n_spec);
+        mth_message(head, "rspec", "Rotation specification %s should be an integer or a "
+                    "list of integers.", ns ? ns : "");
+        free(ns);
+    }
+    return false;
+}
+
+static Expr* rotate_entry(Expr* res, bool right) {
+    const char* head = right ? "RotateRight" : "RotateLeft";
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
+    Expr* expr = res->data.function.args[0];
+    if (!rotate_args_ok(res, head)) return NULL;   /* symbolic amount: stay unevaluated */
     /* Native buffer rotate first: a rotation permutes contiguous blocks, so it is
      * memcpy work. ndstruct_delist_repack below is still the fallback for a spec
      * outside the fast domain, but it costs one Expr per element -- 42.6 ms on a
      * 512x512 matrix, which dominated every stencil written with RotateLeft. */
     if (is_ndarray(expr)) {
-        Expr* fast = ndstruct_rotate(res, true);
+        Expr* fast = ndstruct_rotate(res, !right);
         if (fast) return fast;
         return ndstruct_delist_repack(res, expr);
     }
-
+    Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     Expr* default_n = NULL;
     if (!n_spec) {
         default_n = expr_new_integer(1);
         n_spec = default_n;
     }
-
-    Expr* ret = rotate_rec(expr, n_spec, 0);
+    Expr* ret = rotate_rec(expr, n_spec, 0, right);
     if (default_n) expr_free(default_n);
     return ret;
 }
 
-Expr* builtin_rotateright(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
-    Expr* expr = res->data.function.args[0];
-    Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    if (!rotate_spec_ok(n_spec)) return NULL;   /* symbolic amount: stay unevaluated */
-    /* Native buffer rotate first; see the note in builtin_rotateleft. */
-    if (is_ndarray(expr)) {
-        Expr* fast = ndstruct_rotate(res, false);
-        if (fast) return fast;
-        return ndstruct_delist_repack(res, expr);
-    }
+Expr* builtin_rotateleft(Expr* res) { return rotate_entry(res, false); }
 
-    Expr* neg_n_spec = NULL;
-    if (!n_spec) {
-        neg_n_spec = expr_new_integer(-1);
-    } else if (n_spec->type == EXPR_INTEGER) {
-        neg_n_spec = expr_new_integer(-n_spec->data.integer);
-    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol.name == SYM_List) {
-        Expr** neg_args = malloc(sizeof(Expr*) * n_spec->data.function.arg_count);
-        for (size_t i = 0; i < n_spec->data.function.arg_count; i++) {
-            if (n_spec->data.function.args[i]->type == EXPR_INTEGER) {
-                neg_args[i] = expr_new_integer(-n_spec->data.function.args[i]->data.integer);
-            } else {
-                neg_args[i] = expr_copy(n_spec->data.function.args[i]);
-            }
-        }
-        neg_n_spec = expr_new_function(expr_new_symbol(SYM_List), neg_args, n_spec->data.function.arg_count);
-        free(neg_args);
-    } else {
-        return NULL;
-    }
-
-    Expr* ret = rotate_rec(expr, neg_n_spec, 0);
-    expr_free(neg_n_spec);
-    return ret;
-}
+Expr* builtin_rotateright(Expr* res) { return rotate_entry(res, true); }

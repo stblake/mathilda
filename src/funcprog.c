@@ -3553,9 +3553,18 @@ Expr* builtin_tuples(Expr* res) {
         Expr* head = linked ? NULL : list->data.function.head;
         Expr* out = NULL;
         
+        if (n_expr->type == EXPR_INTEGER && n_expr->data.integer < 0) {
+            /* Tuples[list, -1]: no tuples of negative length -- ::intnm,
+             * unevaluated (audit Tuples#3). */
+            llq_close(&lv);
+            char* cs = expr_to_string(res);
+            mth_message("Tuples", "intnm", "Non-negative machine-sized integer expected at "
+                        "position 2 in %s.", cs ? cs : "");
+            free(cs);
+            return NULL;
+        }
         if (n_expr->type == EXPR_INTEGER) {
             int64_t n = n_expr->data.integer;
-            if (n < 0) n = 0;
             if (n == 0) {
                 Expr* t = llq_result(&lv, NULL, 0);
                 out = llq_result(&lv, (Expr*[]){t}, 1);
@@ -3680,7 +3689,8 @@ Expr* builtin_permutations(Expr* res) {
     /* A LinkedList permutes from a snapshot of its slots (read on demand) into
      * a LinkedList of LinkedList permutations, each copied slot to slot. */
     LLSeq lv;
-    if (!llq_open(list, &lv)) return expr_copy(res); 
+    if (!llq_open(list, &lv))   /* Permutations[x]: ::normal (audit Permutations#3) */
+        return expr_is_plain_atom(list) ? builtin_normal_error("Permutations", res, 1) : NULL;
     
     size_t len = lv.n;
     

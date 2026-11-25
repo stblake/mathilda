@@ -144,6 +144,44 @@ static void test_wave4_data_structures(void) {
     audit_chk("KeyValuePattern#1", "MatchQ[<|\"a\" -> 1|>, KeyValuePattern[{(x_ -> y_) /; y > 5}]]", "False");
 }
 
+/* Wave 5: `expr` raises Head::tag through the funnel (Check sees it). */
+static void w5d_msg(const char* id, const char* expr, const char* tag) {
+    char buf[1024];
+    snprintf(buf, sizeof buf, "Quiet[Check[%s, fired, %s]]", expr, tag);
+    audit_chk(id, buf, "fired");
+}
+
+/* Wave 5 G2: lvalues, argument counts, ::invrl / ::incomp / ::normal. */
+static void test_wave5_data_batch(void) {
+    audit_chk("ApplyTo#2", "Module[{h}, h[1] = 3; {ApplyTo[h[1], # + 1 &], h[1]}]", "{4, 4}");
+    w5d_msg("ApplyTo#2", "Module[{h}, ApplyTo[h[1], # + 1 &]]", "ApplyTo::rvalue");
+    audit_chk("ArrayDepth#3", "ArrayDepth[{SparseArray[{1, 2}], SparseArray[{3, 4}]}]", "2");
+    audit_chk("ArrayDepth#3", "ArrayDepth[{{1, 2}, {3}}]", "1");
+    w5d_msg("AssociateTo#2", "AssociateTo[undef, \"a\" -> 1]", "AssociateTo::rvalue");
+    audit_chk("AssociateTo#2", "Quiet[AssociateTo[undef, \"a\" -> 1]]", "AssociateTo[undef, \"a\" -> 1]");
+    w5d_msg("AssociationComap#1", "AssociationComap[]", "AssociationComap::argt");
+    w5d_msg("AssociationComap#1", "AssociationComap[{f}, x, y]", "AssociationComap::argt");
+    w5d_msg("AssociationThread#1", "AssociationThread[]", "AssociationThread::argt");
+    w5d_msg("AssociationThread#1", "AssociationThread[{a}, {1}, {2}]", "AssociationThread::argt");
+    audit_chk("Discard#1", "Discard[{1, 2, 3, 4}, EvenQ, 2^70]", "{1, 3}");
+    w5d_msg("Discard#2", "Discard[{1, 2, 3}, EvenQ, 1, 2]", "Discard::argb");
+    w5d_msg("Discard#2", "Discard[]", "Discard::argb");
+    w5d_msg("KeyDrop#3", "KeyDrop[5, \"a\"]", "KeyDrop::invrl");
+    w5d_msg("Keys#1", "Keys[x]", "Keys::invrl");
+    w5d_msg("Keys#1", "Keys[x, f]", "Keys::invrl");
+    w5d_msg("Keys#2", "Keys[]", "Keys::argt");
+    w5d_msg("Keys#2", "Keys[<|a -> 1|>, f, g]", "Keys::argt");
+    w5d_msg("Lookup#1", "Lookup[5, a]", "Lookup::invrl");
+    w5d_msg("Lookup#1", "Lookup[{a -> 1, b}, b]", "Lookup::invrl");
+    w5d_msg("Lookup#1", "Lookup[{{a, 1}}, a]", "Lookup::invrl");
+    audit_chk("Lookup#1", "Lookup[{{a -> 1}, {a -> 2}}, a]", "{1, 2}");
+    w5d_msg("Pick#1", "Pick[{1, 2}, {True}]", "Pick::incomp");
+    w5d_msg("Pick#1", "Pick[{a, b}, {{True}, False}]", "Pick::incomp");
+    audit_chk("Pick#1", "Quiet[Pick[{1, 2}, {True}]]", "Pick[{1, 2}, {True}]");
+    w5d_msg("SubsetQ#1", "SubsetQ[x, y]", "SubsetQ::normal");
+    w5d_msg("SubsetQ#1", "SubsetQ[1, 2]", "SubsetQ::normal");
+}
+
 int main(void) {
     audit_init();
     TEST(test_gatherby_nested);
@@ -152,5 +190,6 @@ int main(void) {
     TEST(test_s14_arrayq_deletemissing);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_data_structures);
+    TEST(test_wave5_data_batch);
     return audit_finish("audit_data_structures");
 }

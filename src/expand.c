@@ -719,6 +719,61 @@ Expr* expr_expand(Expr* e) {
 
 /* User-facing Expand[]: never silently declines — an expansion too large to fit
  * in memory yields Overflow[]. */
+/* The trailing options of Expand / ExpandAll[expr, (patt,) opts]: Trig ->
+ * True|False and Modulus -> m (0 or a positive integer).  *argc is cut back
+ * to the positional count; false for any other setting, which leaves the
+ * call as it stands rather than answered as if it were the default. */
+static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode);
+
+static bool expand_read_options(Expr* res, size_t* argc, bool* trig, Expr** modulus) {
+    while ((*argc) > 1) {
+        Expr* o = res->data.function.args[(*argc) - 1];
+        if (!(o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
+              (head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) &&
+              o->data.function.args[0]->type == EXPR_SYMBOL))
+            break;
+        const char* name = o->data.function.args[0]->data.symbol.name;
+        Expr* v = o->data.function.args[1];
+        if (name == SYM_Trig) {
+            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True) *trig = true;
+            else if (!(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False)) return false;
+        } else if (name == SYM_Modulus) {
+            if (v->type == EXPR_INTEGER && v->data.integer == 0) *modulus = NULL;
+            else if ((v->type == EXPR_INTEGER && v->data.integer > 0) ||
+                     (v->type == EXPR_BIGINT && mpz_sgn(v->data.bigint) > 0)) *modulus = v;
+            else return false;
+        } else {
+            break;                                     /* not an option: a pattern */
+        }
+        (*argc)--;
+    }
+    return true;
+}
+
+/* Expand (all = false) or ExpandAll (all = true) of `subject` under the
+ * options read by expand_read_options. */
+static Expr* expand_with_options(Expr* subject, Expr* patt, bool trig, Expr* modulus, bool all) {
+    Expr* expanded_trig = NULL;
+    if (trig) {
+        Expr* a[1] = { expr_copy(subject) };
+        expanded_trig = eval_and_free(expr_new_function(expr_new_symbol(SYM_TrigExpand), a, 1));
+        subject = expanded_trig;
+    }
+    Expr* ret = all ? expr_expand_all_impl(subject, patt, /*overflow_mode=*/true)
+                    : expr_expand_impl(subject, patt, /*overflow_mode=*/true);
+    if (expanded_trig) expr_free(expanded_trig);
+    if (ret && modulus) {
+        Expr* a[2] = { ret, expr_copy(modulus) };
+        Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialMod), a, 2));
+        if (!red || head_is(red, SYM_PolynomialMod)) {
+            if (red) expr_free(red);
+            return NULL;
+        }
+        ret = red;
+    }
+    return ret;
+}
+
 Expr* builtin_expand(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 4) return NULL;
     /* Expand[x -> (a + b)^2] is x -> a^2 + 2 a b + b^2: a Rule, relation or
@@ -741,49 +796,18 @@ Expr* builtin_expand(Expr* res) {
     size_t argc = res->data.function.arg_count;
     bool trig = false;
     Expr* modulus = NULL;
-    while (argc > 1) {
-        Expr* o = res->data.function.args[argc - 1];
-        if (!(o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
-              (head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) &&
-              o->data.function.args[0]->type == EXPR_SYMBOL))
-            break;
-        const char* name = o->data.function.args[0]->data.symbol.name;
-        Expr* v = o->data.function.args[1];
-        if (name == SYM_Trig) {
-            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True) trig = true;
-            else if (!(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False)) return NULL;
-        } else if (name == SYM_Modulus) {
-            if (v->type == EXPR_INTEGER && v->data.integer == 0) modulus = NULL;
-            else if ((v->type == EXPR_INTEGER && v->data.integer > 0) ||
-                     (v->type == EXPR_BIGINT && mpz_sgn(v->data.bigint) > 0)) modulus = v;
-            else return NULL;
-        } else {
-            break;                                     /* not an option: a pattern */
-        }
-        argc--;
-    }
+    if (!expand_read_options(res, &argc, &trig, &modulus)) return NULL;
     if (argc > 2) return NULL;
     Expr* patt = NULL;
     if (argc == 2) patt = res->data.function.args[1];
-    Expr* subject = res->data.function.args[0];
-    Expr* expanded_trig = NULL;
-    if (trig) {
-        Expr* a[1] = { expr_copy(subject) };
-        expanded_trig = eval_and_free(expr_new_function(expr_new_symbol(SYM_TrigExpand), a, 1));
-        subject = expanded_trig;
-    }
-    Expr* ret = expr_expand_impl(subject, patt, /*overflow_mode=*/true);
-    if (expanded_trig) expr_free(expanded_trig);
-    if (ret && modulus) {
-        Expr* a[2] = { ret, expr_copy(modulus) };
-        Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialMod), a, 2));
-        if (!red || head_is(red, SYM_PolynomialMod)) {
-            if (red) expr_free(red);
-            return NULL;
-        }
-        ret = red;
-    }
-    return ret;
+    return expand_with_options(res->data.function.args[0], patt, trig, modulus, false);
+}
+
+/* A negative integer exponent of any size (ExpandNumerator's denominator
+ * test: (1 + x)^(-10^20) is a denominator too; audit ExpandNumerator#1). */
+static bool is_negative_integer_exp(const Expr* exp) {
+    return (exp->type == EXPR_INTEGER && exp->data.integer < 0) ||
+           (exp->type == EXPR_BIGINT && mpz_sgn(exp->data.bigint) < 0);
 }
 
 /* Returns true when e has the form Power[base, k] with k a negative integer. */
@@ -840,7 +864,8 @@ Expr* expr_expand_numerator(Expr* e) {
         size_t nc = 0, dc = 0;
         for (size_t i = 0; i < n; i++) {
             Expr* arg = e->data.function.args[i];
-            if (is_negative_int_power(arg)) {
+            if (head_is(arg, SYM_Power) && arg->data.function.arg_count == 2 &&
+                is_negative_integer_exp(arg->data.function.args[1])) {
                 den_args[dc++] = expr_copy(arg);
             } else {
                 num_args[nc++] = expr_copy(arg);
@@ -876,7 +901,7 @@ Expr* expr_expand_numerator(Expr* e) {
 
     if (head == SYM_Power && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
-        if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
+        if (is_negative_integer_exp(exp)) {
             /* Pure denominator: ExpandNumerator leaves it unchanged. */
             return expr_copy(e);
         }
@@ -1102,9 +1127,14 @@ static Expr* expand_all_emit_argt(size_t argc) {
 Expr* builtin_expand_all(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    bool trig = false;
+    Expr* modulus = NULL;
+    /* ExpandAll[expr, Modulus -> 2] reads its options as Expand does; the
+     * rule was taken for the pattern (audit ExpandAll#3). */
+    if (argc >= 2 && !expand_read_options(res, &argc, &trig, &modulus)) return NULL;
     if (argc < 1 || argc > 2) return expand_all_emit_argt(argc);
     Expr* patt = (argc == 2) ? res->data.function.args[1] : NULL;
-    return expr_expand_all_impl(res->data.function.args[0], patt, /*overflow_mode=*/true);
+    return expand_with_options(res->data.function.args[0], patt, trig, modulus, true);
 }
 
 Expr* builtin_expand_numerator(Expr* res) {

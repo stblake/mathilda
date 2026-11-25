@@ -310,6 +310,15 @@ static const ArityRow ARITY_ROWS[] = {
     { "Plot3D",           3, 3, OPT_NOCHECK },
     { "ParametricPlot3D", 2, 3, OPT_NOCHECK },
     { "ListPlot",         1, 1, OPT_NOCHECK },
+    /* ---- Wave 5 G2 (structural, data structures, lists) ---- */
+    { "Expand",           1, 2, OPT_NOCHECK },   /* Expand[expr, patt]; Modulus, Trig */
+    { "Factor",           1, 1, OPT_NOCHECK },
+    { "FactorTerms",      1, 2, OPT_NOCHECK },   /* Modulus */
+    { "PolynomialQ",      1, 2, NOOPT },
+    { "Permutations",     1, 2, NOOPT },
+    { "Discard",          1, 3, NOOPT },         /* Discard[crit] operator form */
+    { "AssociationThread", 1, 2, NOOPT },
+    { "AssociationComap", 1, 2, NOOPT },
 
     /* ---- files and packed arrays ---- */
     { "ReadList",         1, 3, 1 },

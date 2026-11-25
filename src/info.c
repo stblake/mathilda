@@ -25,10 +25,11 @@ void info_init(void) {
     symtab_set_docstring("DataType",
         "DataType[a]\n"
         "\tgives the element data type of the NDArray a as a string: one of\n"
-        "\t\"float64\", \"float32\", \"complex64\", or \"complex32\". Set the type\n"
-        "\twhen constructing with NDArray[list, DataType -> \"float32\"]; the\n"
-        "\tfour types map onto BLAS's s/d/c/z precisions. Returns unevaluated\n"
-        "\tfor a non-NDArray argument.");
+        "\t\"float64\", \"float32\", \"complex64\", \"complex32\", \"int64\" or \"bool\".\n"
+        "\tSet the type when constructing with NDArray[list, DataType -> \"float32\"];\n"
+        "\tthe four floating types map onto BLAS's s/d/c/z precisions, \"int64\" holds\n"
+        "\tmachine integers and \"bool\" True/False. Returns unevaluated for a\n"
+        "\tnon-NDArray argument.");
     symtab_set_docstring("Subtract",
         "x - y or Subtract[x, y] represents x - y; rewritten by the evaluator\n"
         "to Plus[x, Times[-1, y]] so it inherits Plus's flattening and ordering.");
@@ -2584,8 +2585,15 @@ void info_init(void) {
         "Head[expr, h]\n"
         "\twraps the result with h, i.e. returns h[Head[expr]].\n"
         "\n"
-        "For atoms, Head returns Integer, Real, BigInt, Rational, Complex,\n"
-        "Symbol, or String; for a compound expression f[...], Head returns f.");
+        "For atoms, Head returns Integer, Real, Rational, Complex, Symbol, or\n"
+        "String (an integer of any size is an Integer); for a compound expression\n"
+        "f[...], Head returns f.");
+    symtab_set_docstring("Depth",
+        "Depth[expr]\n"
+        "\tgives the maximum number of indices needed to specify any part of expr,\n"
+        "\tplus 1.\n"
+        "Depth[expr, Heads -> True]\n"
+        "\tcounts the heads of expressions as parts too.");
     symtab_set_docstring("Length",
         "Length[expr]\n"
         "\tgives the number of top-level elements in expr (the arity of its\n"
@@ -2676,7 +2684,8 @@ void info_init(void) {
         "themselves; II and III invert each other. Exact input is numericalised\n"
         "with N first; list may be a rectangular nested array (transformed per\n"
         "axis). Machine and arbitrary-precision (MPFR) input are both supported.");
-    symtab_set_docstring("First", "First[expr] gives the first element of expr.");
+    symtab_set_docstring("First", "First[expr]\n\tgives the first element of expr.\n"
+        "First[expr, def]\n\tgives the first element if there is one, and def otherwise.");
     symtab_set_docstring("Last", "Last[expr] gives the last element of expr.");
     symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr. On a LinkedList it gives a new LinkedList (Most::nomost when empty).");
     symtab_set_docstring("Rest", "Rest[expr] gives all but the first element of expr. On a LinkedList it gives a new LinkedList (Rest::norest when empty).");
@@ -2812,7 +2821,12 @@ void info_init(void) {
         "\tpads with x; {x1, x2, ...} pads cyclically with the xi, {} not at all.");
 
     // List Operations
-    symtab_set_docstring("Table", "Table[expr, n]\n\tgenerates a list of n copies of expr.\nTable[expr, {i, imax}]\n\tgenerates a list of the values of expr with i running from 1 to imax.");
+    symtab_set_docstring("Table", "Table[expr, n]\n\tgenerates a list of n copies of expr.\n"
+        "Table[expr, {i, imax}]\n\tgenerates a list of the values of expr with i running from 1 to imax.\n"
+        "Table[expr, {i, imin, imax}]\n\tstarts with i = imin.\n"
+        "Table[expr, {i, imin, imax, di}]\n\tuses steps di.\n"
+        "Table[expr, {i, {i1, i2, ...}}]\n\tuses the successive values i1, i2, ....\n"
+        "Table[expr, iter1, iter2, ...]\n\tgives a nested list; iter1 is the outermost iterator.");
     symtab_set_docstring("Range", "Range[n]\n\tgenerates the list {1, 2, 3, ..., n}.\nRange[n, m]\n\tgenerates the list {n, n + 1, ..., m - 1, m}.\nRange[n, m, d]\n\tuses step d.");
     symtab_set_docstring("Array",
         "Array[f, n]\n"

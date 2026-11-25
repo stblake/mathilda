@@ -415,9 +415,12 @@ Expr* builtin_partition(Expr* res) {
         return ndstruct_delist_repack(res, list);
     }
 
+    /* Partition[x, 2], Partition["abcd", 2]: Partition::normal (audit
+     * Partition#4); any other payload atom is left as it was. */
+    if (expr_is_plain_atom(list)) return builtin_normal_error("Partition", res, 1);
     if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
-    /* Mathematica 15 does not partition an association: Partition[<|...|>, 2]
+    /* The reference does not partition an association: Partition[<|...|>, 2]
      * stays unevaluated (it used to come back as the input, truncated). */
     if (is_association(list)) return NULL;
 

@@ -7,6 +7,7 @@
 #include "interval.h"
 #include "numeric.h"
 #include "linkedlist_seq.h"  /* LLSeq: LinkedList arguments splice like Lists */
+#include "message.h"         /* mth_message: ::nord */
 
 /* Max / Min of a typed LinkedList straight on its slots (the extreme of the
  * raw int64 or double values, as ndred_max / ndred_min scan a packed
@@ -281,6 +282,20 @@ static Expr* minmax_interval_endpoints(Expr* res, bool is_max) {
     return out;
 }
 
+/* An explicit complex number among the arguments: Head::nord ("Invalid
+ * comparison with 2 I attempted."), and the call stays as it is. */
+static bool minmax_complex_arg(Expr* res, const char* head) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        Expr* a = res->data.function.args[i];
+        if (!head_is(a, SYM_Complex) || a->data.function.arg_count != 2) continue;
+        char* s = expr_to_string(a);
+        mth_message(head, "nord", "Invalid comparison with %s attempted.", s ? s : "");
+        free(s);
+        return true;
+    }
+    return false;
+}
+
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -317,6 +332,9 @@ Expr* builtin_min(Expr* res) {
         if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Indeterminate)
             return expr_new_symbol(SYM_Indeterminate);
     }
+
+    /* A complex number has no order: Head::nord (audits Max#2, Min#3). */
+    if (minmax_complex_arg(res, "Min")) return NULL;
 
     /* Min of a single element is that element (Min[5] -> 5, Min[x] -> x). Lists
      * were flattened above, so a lone argument here is a genuine scalar. */
@@ -429,6 +447,9 @@ Expr* builtin_max(Expr* res) {
             return expr_new_symbol(SYM_Indeterminate);
     }
 
+
+    /* A complex number has no order: Head::nord (audits Max#2, Min#3). */
+    if (minmax_complex_arg(res, "Max")) return NULL;
 
     /* Max of a single element is that element (Max[5] -> 5, Max[x] -> x). Lists
      * were flattened above, so a lone argument here is a genuine scalar. */

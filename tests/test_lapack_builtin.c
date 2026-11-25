@@ -138,7 +138,7 @@ int main(void) {
         return 0;
     }
 
-    run("closeQ[a_,b_]:=Max[Abs[Flatten[Normal[a]-Normal[b]]]]<1/100000000");
+    run("closeQ[a_,b_]:=Max[Abs[Flatten[{Normal[a]-Normal[b]}]]]<1/100000000");
 
     printf("Running LAPACK builtin tests...\n");
     TEST(test_solve);

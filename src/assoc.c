@@ -854,6 +854,15 @@ static Expr* key_drop_take(Expr* res, bool take) {
     Expr* assoc = res->data.function.args[0];
     Expr* karg  = res->data.function.args[1];
 
+    /* KeyDrop[5, "a"]: an atom is no association -- ::invrl (audit KeyDrop#3). */
+    if (expr_is_plain_atom(assoc)) {
+        char* s = expr_to_string(assoc);
+        mth_message(take ? "KeyTake" : "KeyDrop", "invrl",
+                    "The argument %s is not a valid Association or a list of rules.", s ? s : "");
+        free(s);
+        return NULL;
+    }
+
     /* Thread over a (non-empty) list of associations, dropping/keeping the keys
      * in each: KeyDrop[{a1, a2, ...}, keys] -> {KeyDrop[a1, keys], ...}. This is
      * the column-of-records form (matching Wolfram and Lookup's threading). Each
@@ -1600,6 +1609,13 @@ Expr* builtin_associate_to(Expr* res) {
     Expr* sym = res->data.function.args[0];
     Expr* kv  = res->data.function.args[1];
     if (sym->type != EXPR_SYMBOL) return NULL;
+    /* A symbol with no value is no variable to update: ::rvalue (audit
+     * AssociateTo#2). */
+    if (!symtab_get_own_values(sym->data.symbol.name)) {
+        mth_message("AssociateTo", "rvalue", "%s is not a variable with a value, so its value "
+                    "cannot be changed.", sym->data.symbol.name);
+        return NULL;
+    }
 
     Expr* current = evaluate(sym);
     if (!current || !is_association(current)) { if (current) expr_free(current); return NULL; }

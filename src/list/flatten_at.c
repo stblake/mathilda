@@ -4,6 +4,7 @@
 #include "ndarray.h"
 #include "message.h"
 #include "sym_intern.h"   /* intern_symbol: the splice marker */
+#include "assoc.h"        /* is_association */
 
 /*
  * FlattenAt[list, n]                     splice element n into its parent.
@@ -125,6 +126,54 @@ static Expr* flatten_at_leaf(void* ctx, Expr* leaf) {
     return seq;
 }
 
+/* Does the integer path p (n indices) exist in e?  A non-integer index is
+ * not judged here (true). */
+static bool flatten_at_path_exists(const Expr* e, Expr** p, size_t n) {
+    for (size_t d = 0; d < n; d++) {
+        if (p[d]->type != EXPR_INTEGER) return true;
+        if (flatten_at_atomic(e) || is_association((Expr*)e)) return true;
+        int64_t len = (int64_t)e->data.function.arg_count, k = p[d]->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k < 1 || k > len) return false;
+        e = e->data.function.args[k - 1];
+    }
+    return true;
+}
+
+static void flatten_at_partw_path(const Expr* e, Expr* path) {
+    char* ps = expr_to_string(path);
+    char* es = expr_to_string((Expr*)e);
+    mth_message("FlattenAt", "partw", "Part %s of %s does not exist.", ps ? ps : "", es ? es : "");
+    free(ps); free(es);
+}
+
+/* The walker declined: name the first position that does not exist,
+ * FlattenAt::partw ("Part {5} of {a, b} does not exist."; audit FlattenAt#3). */
+static void flatten_at_partw(const Expr* e, Expr* pos) {
+    if (pos->type == EXPR_INTEGER) {
+        if (flatten_at_path_exists(e, &pos, 1)) return;
+        Expr* one[1] = { expr_copy(pos) };
+        Expr* path = expr_new_function(expr_new_symbol(SYM_List), one, 1);
+        flatten_at_partw_path(e, path);
+        expr_free(path);
+        return;
+    }
+    if (!head_is(pos, SYM_List) || pos->data.function.arg_count == 0) return;
+    if (!head_is(pos->data.function.args[0], SYM_List)) {
+        if (!flatten_at_path_exists(e, pos->data.function.args, pos->data.function.arg_count))
+            flatten_at_partw_path(e, pos);
+        return;
+    }
+    for (size_t i = 0; i < pos->data.function.arg_count; i++) {
+        Expr* p = pos->data.function.args[i];
+        if (!head_is(p, SYM_List)) return;
+        if (!flatten_at_path_exists(e, p->data.function.args, p->data.function.arg_count)) {
+            flatten_at_partw_path(e, p);
+            return;
+        }
+    }
+}
+
 Expr* builtin_flatten_at(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -149,5 +198,7 @@ Expr* builtin_flatten_at(Expr* res) {
         return flatten_at_finish(out, res);
     }
 
-    return flatten_at_finish(expr_apply_at_positions(expr, pos, flatten_at_leaf, NULL), res);
+    Expr* out = expr_apply_at_positions(expr, pos, flatten_at_leaf, NULL);
+    if (!out) flatten_at_partw(expr, pos);
+    return flatten_at_finish(out, res);
 }

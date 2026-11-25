@@ -27,6 +27,8 @@ Out[2]= {{0.0, 2.0}, {0.0, 4.0}}
 ```
 
 ## Tuples
+`Tuples[list, -1]` is `Tuples::intnm`, unevaluated.
+
 Generates a list of all possible combinations or tuples of elements.
 - `Tuples[list, n]`: generates a list of all possible n-tuples of elements from `list`.
 - `Tuples[{list1, list2, ...}]`: generates a list of all possible tuples whose *i*-th element is from `listi`.
@@ -119,6 +121,9 @@ Out[7]= {f[a, b, c], f[a, c, b], f[b, a, c], f[b, c, a], f[c, a, b], f[c, b, a]}
 - `Protected`.
 
 ## Cycles
+A non-positive integer point -- a BigInt included -- is `Cycles::pospoint`
+wherever it stands in the cycles.
+
 `Cycles[{{c11, c12, ...}, {c21, ...}, ...}]` is a permutation in disjoint cycle
 form: `c11` goes to `c12`, and so on, with the last point back to the first.
 - It evaluates to canonical form. Each cycle starts at its smallest point,
@@ -182,6 +187,11 @@ and `0` if two elements are equal.
 ```
 
 ## Table
+A machine-real iterator runs over `imin + k di` for `Range`'s count, never an
+accumulated sum: `Table[i, {i, 0., 1., 0.01}]` ends at `1.` and equals
+`Range[0., 1., 0.01]`. Bounds that are not numbers, or a zero step, are
+`Table::iterb` and the call stays unevaluated.
+
 Generates a list of expressions.
 - `Table[expr, n]`
 - `Table[expr, {i, imax}]`
@@ -307,6 +317,9 @@ Out[2]= {2, 4, 6}
 ```
 
 ## Range
+`Range[x]` (non-numeric bounds) and `Range[1, 2, 0]` (a zero step) are
+`Range::range`, unevaluated.
+
 Generates a list of values. Attributes: `Protected`.
 - `Range[imax]`
 - `Range[imin, imax, di]`
@@ -362,6 +375,9 @@ Out[2]= {1, 2, 3}
 ```
 
 ## Subdivide
+`Subdivide[max, n]` starts at a zero shaped like `max`: `Subdivide[{1, 2}, 2]` is
+`{{0, 0}, {1/2, 1}, {1, 2}}`.
+
 Generates equally spaced points spanning an interval, **including both
 endpoints**. Attributes: `Protected`.
 - `Subdivide[n]`: the `n + 1` points `{0, 1/n, 2/n, ..., 1}` spanning 0 to 1.
@@ -434,6 +450,9 @@ Generates an array by applying a function to indices.
 `Array` evaluates `f[i]` per leaf with no advance knowledge of the result type.
 
 ## ConstantArray
+`ConstantArray[c, {}]` is `c`. A dimension that is not a non-negative machine
+integer (`-1`, `2.0`, `10^20`) is `ConstantArray::ilsmn`, unevaluated.
+
 Generates a list (or nested array) filled with copies of a fixed element.
 Attributes: `Protected`.
 - `ConstantArray[c, n]`: a flat list of `n` copies of the element `c`.
@@ -656,8 +675,8 @@ Gives the element of a list closest to a target value.
   result — unlike
   [`MinimalBy`](functional-programming.md#maximalby-minimalby), which orders
   symbolic keys after all numbers and so silently omits them.
-- A rational with a bigint component declines, because `Abs` does not evaluate
-  one: `Nearest[{1/10^25, 1}, 0]` stays unevaluated.
+- A rational with a bigint component is measured exactly like any other:
+  `Nearest[{1/10^25, 1}, 0]` is `{1/10000000000000000000000000}`.
 - Only the two-argument form is implemented. The `n`-nearest, radius, rule, and
   all-pairs forms, the `NearestTo` operator form, and the `DistanceFunction`
   option are not yet available.
@@ -727,6 +746,9 @@ Out[6]= 2
 ```
 
 ## EditDistance, HammingDistance
+Both take `IgnoreCase -> True` (letters of strings compared without case).
+Sequences of different lengths are `HammingDistance::idim`, unevaluated.
+
 Distances between two sequences -- two strings, or two lists.
 - `EditDistance[u, v]`: the Levenshtein distance, i.e. the fewest single-element
   insertions, deletions and substitutions that turn one into the other.
@@ -758,6 +780,10 @@ Out[4]= 2
 ```
 
 ## FindClusters
+The labelled forms `FindClusters[{e1 -> v1, ...}]` and
+`FindClusters[{e1, ...} -> {v1, ...}]` cluster the `e`s and report each cluster
+by its labels: `FindClusters[{1 -> a, 2 -> b, 10 -> c}]` is `{{a, b}, {c}}`.
+
 Partitions a list into clusters of nearby elements. Elements may be real
 numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
 `CMYKColor`) or strings.

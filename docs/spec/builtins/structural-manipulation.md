@@ -11,6 +11,12 @@ A `Span` that runs off either end (`{a, b, c, d, e}[[2 ;; 10]]`) is
 `Part::take` and the Part stays unevaluated; the empty span just inside the
 list (`{a, b, c}[[3 ;; 2]]`) is `{}`. Lists and associations share the rule.
 
+A part that cannot be taken names its defect and the Part stays unevaluated:
+`Part::partw` for an index past the end (`{a, b, c}[[5]]`), `Part::partd` for an
+index below an atom (`x[[1]]`, `{a, b}[[1, 1]]`), `Part::pkspec1` for a non-integer
+number (`{a, b, c}[[1.5]]`). A symbolic index is left silent. `Extract` reports the
+same cases as `Extract::partw` / `Extract::partd`.
+
 **Features**: 
 - Supports negative indices to count from the end (`-1` is the last element).
 - `expr[[0]]` returns the `Head` of the expression. This is permitted even for atomic expressions.
@@ -279,11 +285,16 @@ Out[3]= {1, -2 I, 3 - 4 I}
 ## Take, Drop
 - `UpTo[n]` needs `n >= 0`: `Take[list, UpTo[-2]]` is `Take::seqs` (and `Drop::seqs`), unevaluated; it used to read as the last two.
 
+## Reverse, RotateLeft, RotateRight
+
+An atom is `RotateLeft::normal` / `RotateRight::normal`, and an explicit
+non-integer amount `::rspec`, each leaving the call unevaluated; a symbolic
+amount stays unevaluated silently. The amount is reduced modulo the length
+before it changes sign, so `RotateRight[{a, b, c}, -2^63]` is `{c, a, b}`.
+
+```mathematica
 In[1]:= Reverse[{a, b, c}]
 Out[1]= {c, b, a}
-
-Positions off the end are `Take::take` / `Drop::drop`, naming them as
-written (`Take[{a, b, c}, {-4}]`: "positions -4 through -4").
 
 In[2]:= RotateLeft[{a, b, c}, 1]
 Out[2]= {b, c, a}
@@ -292,8 +303,13 @@ In[3]:= RotateRight[{a, b, c}, 1]
 Out[3]= {c, a, b}
 ```
 
-## Take, Drop
+## Most, Rest
 
+An atom is `Most::normal` / `Rest::normal`; an expression with no elements
+is `Most::norest` / `Rest::norest` ("Cannot take Most of expression {} with
+length zero."). Either way the call stays unevaluated.
+
+```mathematica
 In[1]:= Most[{a, b, c}]
 Out[1]= {a, b}
 
@@ -305,6 +321,12 @@ Out[2]= f[y]
 Extract or remove sequences of elements.
 - `Take[expr, spec]`: Extracts elements according to `spec`.
 - `Drop[expr, spec]`: Removes elements according to `spec`.
+
+Positions off the end are `Take::take` / `Drop::drop`, naming them as
+written (`Take[{a, b, c}, {-4}]`: "positions -4 through -4"). An atom is
+`::normal`; a spec that is not a sequence specification (`1.5`, a symbol)
+is `::seqs` at its position; more specs than the object has levels
+(`Take[{a, b, c}, 1, 1]`) is `::partd`. Each leaves the call unevaluated.
 
 ## Flatten
 
@@ -364,6 +386,9 @@ Out[1]= {{0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 3, 4}, {1, 2, 1, 2, 0, 0}, {3, 4, 3, 4
 Concatenates lists or other expressions that share the same head.
 - `Join[list1, list2, ...]`: Concatenates the elements of all lists into a single expression.
 - `Join[list1, list2, ..., n]`: Joins the objects at level `n` in each of the lists.
+- `Join[]` is `{}`. An atom operand is `Join::normal`, operands of different heads
+  `Join::heads` ("Heads List and f at positions 1 and 2 are expected to be the
+  same."); either way the call stays unevaluated.
 
 **Features**:
 - `Flat`, `OneIdentity`, `Protected` (audit Join#2, v0.6709).
@@ -639,7 +664,9 @@ Out[5]= {2, 3, 1}
 Gives a sorted list of all distinct elements from one or more expressions.
 - `Union[list]`
 - `Union[list1, list2, ...]`
-- `Union[..., SameTest -> test]`
+- `Union[..., SameTest -> test]` (or `SameTest :> test`)
+- Operands of different heads are `Union::heads` (likewise `Intersection::heads`,
+  `Complement::heads`); an atom operand is `::normal`.
 
 With `SameTest -> f`, each element is compared with every element already
 kept, not only the last one: `Union[Range[6], SameTest -> (Mod[#1 - #2, 3] == 0 &)]`
@@ -840,6 +867,8 @@ Returns the numerically smallest or largest elements.
 - `Min[x1, x2, ...]`
 - `Max[x1, x2, ...]`
 - `Min[{x1, x2, ...}, {y1, ...}, ...]`
+- An explicit complex number has no order: `Max[1, 2 I]` is `Max::nord` ("Invalid
+  comparison with 2 I attempted.") and stays unevaluated.
 
 **Features**:
 - `Flat`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
@@ -934,10 +963,11 @@ In[2]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
 Out[2]= {1, 9}
 ```
 
-## Append, Prepend
+## Flatten (levels and heads)
 
 - `Protected`.
 - Default head to flatten is `List`.
+- An atom (`Flatten[x]`) is `Flatten::normal`, unevaluated.
 - $n$ must be a non-negative integer.
 
 ```mathematica
@@ -951,7 +981,7 @@ In[3]:= Flatten[f[f[a], b], -1, f]
 Out[3]= f[a, b]
 ```
 
-## Append, Prepend
+## Take, Drop (sequence specifications)
 
 - `n`: first `n` elements.
 - `-n`: last `n` elements.
@@ -1143,6 +1173,8 @@ Out[3]= {}
 ```
 
 ## Expand
+`Options[Expand]` is `{Modulus -> 0, Trig -> False}`; `Expand[]` is `Expand::argt`.
+
 Expands out products and positive integer powers in an expression.
 - `Expand[expr]`
 - `Expand[expr, patt]`
@@ -1219,6 +1251,8 @@ Out[6]= Overflow[]
 ```
 
 ## ExpandNumerator
+A negative power of any size is a denominator: `(1 + x)^(-10^20)` stays below the line.
+
 Expands out products and powers that appear in the numerator of an expression.
 - `ExpandNumerator[expr]`
 
@@ -1265,6 +1299,8 @@ Out[3]= ((a+b)(a-b))/(c^2 - d^2)
 ```
 
 ## ExpandAll
+Takes `Modulus` and `Trig` as `Expand` does: `ExpandAll[(a + b)^2, Modulus -> 2]` is `a^2 + b^2`.
+
 Expands out all products and integer powers in *any* part of an expression.
 - `ExpandAll[expr]`
 - `ExpandAll[expr, patt]`
@@ -1306,6 +1342,8 @@ Out[5]= f[x^2 + 2 x y + y^2]^2 + 2 f[x^2 + 2 x y + y^2] g[(y+z)^2] + g[(y+z)^2]^
 ```
 
 ## PowerExpand
+`PowerExpand[e, {}]` (an empty variable list) expands nothing.
+
 Expands powers of products and nested powers, and logarithms/arguments of
 products and powers.
 - `PowerExpand[expr]`
@@ -1367,6 +1405,9 @@ Out[5]= Log[x] + Log[y] + 2 I Pi Floor[1/2 - Arg[x]/(2 Pi) - Arg[y]/(2 Pi)]
 ```
 
 ## Exponent
+A numerical coefficient of the form, of any kind (`2`, `1/2`, `I`), is ignored:
+`Exponent[x^4, I x^2]` is `2`.
+
 Gives the maximum power with which a form appears in the expanded form of an expression.
 - `Exponent[expr, form]`
 - `Exponent[expr, form, h]`
@@ -1403,6 +1444,8 @@ Out[5]= {0, 2, 3}
 ```
 
 ## Coefficient
+`Coefficient[p, x, n]` takes an exponent `n` of any size (`10^20`).
+
 Gives the coefficient of a specific form in a polynomial.
 - `Coefficient[expr, form]`
 - `Coefficient[expr, form, n]`
@@ -1438,6 +1481,8 @@ Out[1]= x
 ```
 
 ## CoefficientList
+`CoefficientList[p, vars, dims]` pads with zeros or truncates to `dims`.
+
 Gives a list of coefficients of powers of variables in a polynomial.
 - `CoefficientList[poly, var]`
 - `CoefficientList[poly, {var1, var2, ...}]`
@@ -1602,6 +1647,8 @@ Out[1]= {{{{2, 0}, a}, {{1, 1}, 3}, {{0, 3}, 5}}, {x, y}}
 ```
 
 ## FromCoefficientRules
+An exponent past int64 (`{{10^20} -> 1}`) is accepted.
+
 Reconstructs a polynomial from its `CoefficientRules` representation.
 - `FromCoefficientRules[rules, {var1, var2, ...}]`
 
@@ -1618,6 +1665,8 @@ Out[1]= a x^2 + b x y + c y^2
 ```
 
 ## Collect
+A real power of the variable is collected: `Collect[a x^2.5 + b x^2.5, x]` is `(a + b) x^2.5`.
+
 Collects together terms involving the same powers of objects matching a variable or variables.
 - `Collect[expr, x]`
 - `Collect[expr, {x1, x2, ...}]`
@@ -1690,6 +1739,9 @@ Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
 ```
 
 ## FactorSquareFreeList
+Every listed factor has a positive leading coefficient (an even power needs no sign in
+the constant): `{{1, 1}, {-Sqrt[2] + x, 2}}`.
+
 Gives a list of the square-free factors of a polynomial together with their multiplicities.
 - `FactorSquareFreeList[poly]`
 - `FactorSquareFreeList[poly, Extension -> alpha]`
@@ -1871,6 +1923,10 @@ Out[4]= {{1, 1}, {-I + x, 1}, {I + x, 1}}
 ```
 
 ## FactorTerms
+A rational function factors its numerator and denominator:
+`FactorTerms[(2 x + 2)/(4 y + 4)]` is `(1 + x)/(2 (1 + y))`. Past two positional
+arguments is `FactorTerms::nonopt`.
+
 Pulls out an overall numerical factor in a polynomial, or factors that do
 not depend on a given set of variables.
 - `FactorTerms[poly]` -- pulls out any overall numerical factor in `poly`.
@@ -1975,6 +2031,9 @@ Out[5]= 7 (9 + 2 x + 5 x y + 3 y)
 ```
 
 ## PolynomialGCD
+Of exact rational numbers: the gcd of the numerators over the lcm of the denominators
+(`PolynomialGCD[3/2, 9/4]` is `3/4`).
+
 Gives the greatest common divisor of the polynomials.
 - `PolynomialGCD[poly1, poly2, ...]`
 - `PolynomialGCD[poly1, poly2, ..., Extension -> alpha]`
@@ -2009,6 +2068,8 @@ Out[5]= -2^(1/3) + x
 ```
 
 ## PolynomialExtendedGCD
+A non-integer `Modulus` is `::bmod`; a number as the variable is `::ivar`.
+
 Gives the extended GCD of polynomials.
 - `PolynomialExtendedGCD[poly1, poly2, x]`
 - `PolynomialExtendedGCD[poly1, poly2, x, Modulus -> p]`
@@ -2210,6 +2271,8 @@ Out[2]= 0
 ```
 
 ## Discriminant
+`Discriminant[p, x, Modulus -> n]` is the discriminant over the integers mod n.
+
 Computes the discriminant of the polynomial with respect to the variable.
 - `Discriminant[poly, var]`
 
@@ -2234,6 +2297,8 @@ Out[4]= 0
 ```
 
 ## HornerForm
+A non-polynomial is `HornerForm::poly`, said once.
+
 Puts a polynomial or rational function into Horner form.
 - `HornerForm[poly]`
 - `HornerForm[poly, vars]`

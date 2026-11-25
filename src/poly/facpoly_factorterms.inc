@@ -475,6 +475,30 @@ Expr* builtin_factorterms(Expr* res) {
         }
     }
 
+    /* A rational function: the numerical factors of numerator and
+     * denominator each come out, FactorTerms[(2 x + 2)/(4 y + 4)] is
+     * (1 + x)/(2 (1 + y)), not the numerator distributed over the
+     * denominator (audit FactorTerms#3). */
+    if (!mod && poly->type == EXPR_FUNCTION) {
+        Expr* den = eval_and_free(expr_new_function(expr_new_symbol("Denominator"),
+                                                    (Expr*[]){ expr_copy(poly) }, 1));
+        if (!expr_is_numeric_quantity(den)) {
+            Expr* num = eval_and_free(expr_new_function(expr_new_symbol("Numerator"),
+                                                        (Expr*[]){ expr_copy(poly) }, 1));
+            Expr* fa[2], *fb[2];
+            size_t k = var_arg ? 2 : 1;
+            fa[0] = num; fb[0] = den;
+            if (var_arg) { fa[1] = expr_copy(var_arg); fb[1] = expr_copy(var_arg); }
+            Expr* fn = eval_and_free(expr_new_function(expr_new_symbol("FactorTerms"), fa, k));
+            Expr* fd = eval_and_free(expr_new_function(expr_new_symbol("FactorTerms"), fb, k));
+            Expr* inv = expr_new_function(expr_new_symbol("Power"),
+                                          (Expr*[]){ fd, expr_new_integer(-1) }, 2);
+            return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                                                   (Expr*[]){ fn, inv }, 2));
+        }
+        expr_free(den);
+    }
+
     Expr** S = NULL;
     size_t S_count = 0;
     if (var_arg) ft_extract_vars(var_arg, &S, &S_count);

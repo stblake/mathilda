@@ -877,6 +877,7 @@ const char* SYM_PolynomialQuotientRemainder = NULL;
 const char* SYM_PolynomialReduce = NULL;
 const char* SYM_PolynomialRemainder = NULL;
 const char* SYM_PolynomialMod = NULL;
+const char* SYM_Discriminant = NULL;
 const char* SYM_Position = NULL;
 const char* SYM_PreDecrement = NULL;
 const char* SYM_PreIncrement = NULL;
@@ -2100,6 +2101,7 @@ void sym_names_init(void) {
     SYM_PolynomialReduce           = intern_symbol("PolynomialReduce");
     SYM_PolynomialRemainder        = intern_symbol("PolynomialRemainder");
     SYM_PolynomialMod = intern_symbol("PolynomialMod");
+    SYM_Discriminant = intern_symbol("Discriminant");
     SYM_Position                   = intern_symbol("Position");
     SYM_PreDecrement               = intern_symbol("PreDecrement");
     SYM_PreIncrement               = intern_symbol("PreIncrement");

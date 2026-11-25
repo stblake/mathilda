@@ -119,10 +119,12 @@ static void test_nf_k_arithmetic(void) {
     BR_FALSE("Block[{tragerAlgConstants = {}}, brConstantCoefficientsQ[th6 - 2^(2/3)]]");
     BR_FALSE("Block[{tragerAlgConstants = {Sqrt[2]}}, brConstantCoefficientsQ[th6 - 2]]");
     /* the C builtin lost the polynomial over Q(2^(1/3)) ({{}, {}}); over K0 it splits */
+    /* FactorSquareFreeList over an extension lists each factor with a positive
+     * leading coefficient (audit FactorSquareFreeList#1) */
     BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, brSplitSquarefreeNF[T6, Expand[(th6 - 2^(2/3))^2 (th6 + 1)]]]",
-          "{{1 + brT1, 2^(2/3) - brT1}, {1, 1}}");
+          "{{1 + brT1, -2^(2/3) + brT1}, {1, 1}}");
     BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, brSplitSquarefree[T6, Expand[(th6 - 2^(2/3))^2 (th6 + 1)]]]",
-          "{{1 + brT1, 2^(2/3) - brT1}, {1, 1}}");
+          "{{1 + brT1, -2^(2/3) + brT1}, {1, 1}}");
     /* an exponential theta is special */
     BR_TRUE("T7 = brTower[E^x Sqrt[E^x + 1], x]; th7 = T7[\"theta\"]; "
             "Block[{tragerAlgConstants = {Sqrt[2]}}, brSpecialPartNF[T7, th7] === th7 && brSpecialPartNF[T7, th7 - Sqrt[2]] === 1]");

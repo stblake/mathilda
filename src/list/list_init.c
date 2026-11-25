@@ -148,13 +148,15 @@ void list_init(void) {
         "strings or two lists: the\n"
         "\tfewest single-element insertions, deletions and substitutions that\n"
         "\tturn one into the other. Strings are compared byte by byte, so a\n"
-        "\tmulti-byte UTF-8 character counts as several elements.");
+        "\tmulti-byte UTF-8 character counts as several elements.\n"
+        "EditDistance[u, v, IgnoreCase -> True]\n\tcompares letters of strings without regard to case.");
     symtab_add_builtin("HammingDistance", builtin_hamming_distance);
     symtab_get_def("HammingDistance")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("HammingDistance",
         "HammingDistance[u, v]\n\tGives the number of positions at which two "
         "equal-length strings or\n"
-        "\tlists differ. Returns unevaluated when the lengths differ.");
+        "\tlists differ. Different lengths are HammingDistance::idim, unevaluated.\n"
+        "HammingDistance[u, v, IgnoreCase -> True]\n\tcompares letters of strings without regard to case.");
     symtab_add_builtin("FindClusters", builtin_find_clusters);
     symtab_get_def("FindClusters")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FindClusters",

@@ -118,12 +118,13 @@ static void test_ca_wrong_arity(void) {
 }
 
 static void test_ca_bad_dims(void) {
-    /* Non-integer, symbolic, negative, or empty dims -> unevaluated. */
+    /* Non-integer, symbolic or negative dims -> unevaluated (ConstantArray::ilsmn);
+     * empty dims -> the constant itself (audit ConstantArray#1). */
     run_full("ConstantArray[c, x]", "ConstantArray[c, x]");
     run_full("ConstantArray[c, -1]", "ConstantArray[c, -1]");
     run_full("ConstantArray[c, 2.5]", "ConstantArray[c, 2.5]");
     run_full("ConstantArray[c, {2, x}]", "ConstantArray[c, List[2, x]]");
-    run_full("ConstantArray[c, {}]", "ConstantArray[c, List[]]");
+    run_full("ConstantArray[c, {}]", "c");
 }
 
 int main(void) {

@@ -1080,12 +1080,15 @@ Expr* builtin_fromcoefficientrules(Expr* res) {
         fac[nf++] = expr_copy(coeff);
         for (int j = 0; j < k; j++) {
             Expr* ej = explist->data.function.args[j];
-            if (ej->type != EXPR_INTEGER) {
+            /* a non-negative exponent of any size: x^(10^20) (audit
+             * FromCoefficientRules#1) */
+            bool big = ej->type == EXPR_BIGINT && mpz_sgn(ej->data.bigint) > 0;
+            if (ej->type != EXPR_INTEGER && !big) {
                 for (size_t x = 0; x < nf; x++) expr_free(fac[x]);
                 free(fac);
                 goto fail;
             }
-            int64_t e = ej->data.integer;
+            int64_t e = big ? 2 : ej->data.integer;
             if (e == 0) continue;
             if (e == 1) fac[nf++] = expr_copy(vars[j]);
             else        fac[nf++] = internal_power(

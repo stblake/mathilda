@@ -2779,10 +2779,94 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
     return result;
 }
 
+/* The labelled forms FindClusters[{e1 -> v1, ...}] and
+ * FindClusters[{e1, ...} -> {v1, ...}]: the e's are clustered and each cluster
+ * is reported by the labels v of its members (audit FindClusters#2). The
+ * clusters are built from the data elements themselves, so each member is
+ * matched back to the first unused e equal to it. NULL when `a0` is not a
+ * labelled form, or the clustering declines. */
+static Expr* fc_labelled(Expr* res, Expr* a0) {
+    Expr** data = NULL;
+    Expr** labels = NULL;
+    size_t n = 0;
+    if (head_is(a0, SYM_Rule) && a0->data.function.arg_count == 2 &&
+        head_is(a0->data.function.args[0], SYM_List) && head_is(a0->data.function.args[1], SYM_List) &&
+        a0->data.function.args[0]->data.function.arg_count == a0->data.function.args[1]->data.function.arg_count) {
+        n = a0->data.function.args[0]->data.function.arg_count;
+        data = a0->data.function.args[0]->data.function.args;
+        labels = a0->data.function.args[1]->data.function.args;
+    } else if (head_is(a0, SYM_List) && a0->data.function.arg_count > 0) {
+        n = a0->data.function.arg_count;
+        for (size_t i = 0; i < n; i++) {
+            Expr* r = a0->data.function.args[i];
+            if (!head_is(r, SYM_Rule) || r->data.function.arg_count != 2) return NULL;
+        }
+        data = malloc(sizeof(Expr*) * n);
+        labels = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            data[i] = a0->data.function.args[i]->data.function.args[0];
+            labels[i] = a0->data.function.args[i]->data.function.args[1];
+        }
+    } else {
+        return NULL;
+    }
+    bool owned = !head_is(a0, SYM_Rule);
+    if (n == 0) { if (owned) { free(data); free(labels); } return NULL; }
+
+    size_t argc = res->data.function.arg_count;
+    Expr** ca = malloc(sizeof(Expr*) * argc);
+    Expr** dcopy = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) dcopy[i] = expr_copy(data[i]);
+    ca[0] = expr_new_function(expr_new_symbol(SYM_List), dcopy, n);
+    free(dcopy);
+    for (size_t i = 1; i < argc; i++) ca[i] = expr_copy(res->data.function.args[i]);
+    Expr* cl = eval_and_free(expr_new_function(expr_copy(res->data.function.head), ca, argc));
+    free(ca);
+
+    Expr* out = NULL;
+    bool* used = calloc(n, sizeof(bool));
+    if (head_is(cl, SYM_List)) {
+        size_t nc = cl->data.function.arg_count;
+        Expr** groups = malloc(sizeof(Expr*) * (nc ? nc : 1));
+        bool ok = true;
+        size_t g = 0;
+        for (; g < nc && ok; g++) {
+            Expr* c = cl->data.function.args[g];
+            if (!head_is(c, SYM_List)) { ok = false; break; }
+            size_t m = c->data.function.arg_count;
+            Expr** lv = malloc(sizeof(Expr*) * (m ? m : 1));
+            size_t k = 0;
+            for (; k < m; k++) {
+                size_t j = 0;
+                while (j < n && (used[j] || !expr_eq(data[j], c->data.function.args[k]))) j++;
+                if (j == n) break;
+                used[j] = true;
+                lv[k] = expr_copy(labels[j]);
+            }
+            if (k < m) {
+                for (size_t t = 0; t < k; t++) expr_free(lv[t]);
+                free(lv);
+                ok = false;
+                break;
+            }
+            groups[g] = expr_new_function(expr_new_symbol(SYM_List), lv, m);
+            free(lv);
+        }
+        if (ok) out = expr_new_function(expr_new_symbol(SYM_List), groups, nc);
+        else for (size_t t = 0; t < g; t++) expr_free(groups[t]);
+        free(groups);
+    }
+    free(used);
+    expr_free(cl);
+    if (owned) { free(data); free(labels); }
+    return out;
+}
+
 Expr* builtin_find_clusters(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 1) return NULL;
     Expr* a0 = res->data.function.args[0];
+    { Expr* lab = fc_labelled(res, a0); if (lab) return lab; }
 
     /* A VISIBLE NDArray. Not a fast path -- a materialise guard, the same shape
      * Cases and FlattenAt use (see tools/check_packed_aware.py's EXEMPT list).

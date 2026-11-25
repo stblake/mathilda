@@ -3028,7 +3028,9 @@ void ndarray_init(void) {
     symtab_get_def("NDArrayQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("NDArrayQ",
         "NDArrayQ[expr]\n"
-        "\tGives True if expr is an NDArray object, else False.");
+        "\tgives True if expr is held in a dense machine buffer: a visible\n"
+        "\tNDArray[...] object or a packed List (ToNDArray[{1., 2.}] is a List for\n"
+        "\tHead, and NDArrayQ of it is True); False otherwise.");
 
     symtab_add_builtin("PackedArrayQ", builtin_packedarrayq);
     symtab_get_def("PackedArrayQ")->attributes |= ATTR_PROTECTED;

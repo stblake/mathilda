@@ -226,6 +226,54 @@ static void test_wave4_lists_iteration(void) {
     audit_chk("Tuples#2", "Tuples[{a,b},{2,0}]", "{{{}, {}}}");
 }
 
+/* Wave 5: `expr` raises Head::tag through the funnel (Check sees it). */
+static void w5l_msg(const char* id, const char* expr, const char* tag) {
+    char buf[1024];
+    snprintf(buf, sizeof buf, "Quiet[Check[%s, fired, %s]]", expr, tag);
+    audit_chk(id, buf, "fired");
+}
+
+/* Wave 5 G2: iterator bounds, real ranges, sequence distances, specs. */
+static void test_wave5_lists_batch(void) {
+    w5l_msg("Range#4", "Range[x]", "Range::range");
+    w5l_msg("Range#4", "Range[1, 2, 0]", "Range::range");
+    audit_chk("Range#4", "Quiet[Range[1, 2, 0]]", "Range[1, 2, 0]");
+    w5l_msg("Table#4", "Table[i, {i, a, b}]", "Table::iterb");
+    w5l_msg("Table#4", "Table[i, {i, 1, 10, 0}]", "Table::iterb");
+    audit_chk("Table#4", "Quiet[Table[i, {i, 1, 10, 0}]]", "Table[i, {i, 1, 10, 0}]");
+    audit_chk("Table#5", "Last[Table[i, {i, 0., 1., 0.01}]]", "1.0");
+    audit_true("Table#5", "Table[i, {i, 1, 2, 0.1}] === Range[1, 2, 0.1]");
+    audit_true("Table#5", "Table[i, {i, 0., 1., 0.01}] === Range[0., 1., 0.01]");
+    audit_true("Table#5", "Table[Sin[i], {i, 0., 1., 0.25}] === Sin[Range[0., 1., 0.25]]");
+    audit_true("Table#6", "StringContainsQ[Information[Table], \"Table[expr, {i, imin, imax, di}]\"]");
+    audit_chk("ConstantArray#1", "ConstantArray[c, {}]", "c");
+    w5l_msg("ConstantArray#2", "ConstantArray[c, -1]", "ConstantArray::ilsmn");
+    w5l_msg("ConstantArray#2", "ConstantArray[c, 2.0]", "ConstantArray::ilsmn");
+    w5l_msg("ConstantArray#2", "ConstantArray[c, 10^20]", "ConstantArray::ilsmn");
+    audit_chk("CosineDistance#2", "CosineDistance[\"abc\", \"abd\"]", "CosineDistance[\"abc\", \"abd\"]");
+    w5l_msg("Cycles#2", "Cycles[{{1, -10^20}}]", "Cycles::pospoint");
+    w5l_msg("Cycles#3", "Cycles[{{a, -1}}]", "Cycles::pospoint");
+    w5l_msg("Cycles#3", "Cycles[{{-1, a}}]", "Cycles::pospoint");
+    audit_chk("EditDistance#2", "EditDistance[\"abc\", \"ABC\", IgnoreCase -> True]", "0");
+    audit_chk("EditDistance#2", "EditDistance[\"abc\", \"ABC\"]", "3");
+    audit_chk("HammingDistance#2", "HammingDistance[\"abc\", \"ABC\", IgnoreCase -> True]", "0");
+    w5l_msg("HammingDistance#3", "HammingDistance[{1, 2}, {1, 2, 3}]", "HammingDistance::idim");
+    audit_chk("HammingDistance#3", "Quiet[HammingDistance[{1, 2}, {1, 2, 3}]]",
+              "HammingDistance[{1, 2}, {1, 2, 3}]");
+    audit_chk("FindClusters#2", "FindClusters[{1 -> a, 2 -> b, 10 -> c}]", "{{a, b}, {c}}");
+    audit_chk("FindClusters#2", "FindClusters[{1, 2, 10} -> {a, b, c}]", "{{a, b}, {c}}");
+    audit_chk("Nearest#1", "Nearest[{1/10^25, 1}, 0]", "{1/10000000000000000000000000}");
+    w5l_msg("Permutations#3", "Permutations[x]", "Permutations::normal");
+    w5l_msg("Permutations#3", "Permutations[{a, b}, 1, 2]", "Permutations::argt");
+    audit_chk("Subdivide#1", "Subdivide[{1, 2}, 2]", "{{0, 0}, {1/2, 1}, {1, 2}}");
+    audit_true("Subdivide#1", "Subdivide[{1, 2}, 2] === Subdivide[{0, 0}, {1, 2}, 2]");
+    w5l_msg("Tuples#3", "Tuples[{a, b}, -1]", "Tuples::intnm");
+    audit_chk("Tuples#3", "Quiet[Tuples[{a, b}, -1]]", "Tuples[{a, b}, -1]");
+    audit_chk("UnitVector#5",
+              "UnitVector[3, 1, WorkingPrecision -> MachinePrecision, WorkingPrecision -> Infinity]",
+              "{1.0, 0.0, 0.0}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
@@ -238,5 +286,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_lists_iteration);
+    TEST(test_wave5_lists_batch);
     return audit_finish("audit_lists_and_iteration");
 }

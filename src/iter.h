@@ -244,4 +244,30 @@ static inline bool iter_range_continue(bool is_real, bool is_inf,
         || (di_val < 0 && val >= max_val - slack);
 }
 
+/* The number of elements of an inexact range: imin + k di for
+ * k = 0 .. Floor[(imax - imin)/di], as in the reference. The quotient is
+ * computed once, with a relative slack for the rounding of imax - imin, of the
+ * division and of di's own decimal reading (each ~2^-53 of
+ * (|imin| + |imax|)/|di|; the slack is ~45 times that), so a bound the
+ * progression reaches exactly in the reals is counted. Accumulating
+ * `val += di` instead drifted by one ulp per step and outgrew a fixed slack:
+ * Range[0., 100., 0.01] lost its last element (audit Range#1), and Table's
+ * accumulated value drifted the same way (audit Table#5). The caller has
+ * already rejected a zero or wrong-signed step and an over-large estimate. */
+static inline size_t iter_real_count(double min_val, double max_val, double di_val) {
+    double q = (max_val - min_val) / di_val;
+    double tol = 1e-14 * (fabs(min_val) + fabs(max_val) + fabs(di_val)) / fabs(di_val);
+    double k = floor(q + tol);
+    return k < 0 ? 0 : (size_t)k + 1;
+}
+
+/* Element k of an inexact range: imin + k di, never past imax. Only the last
+ * element can overshoot -- by the rounding the count's slack admitted -- and
+ * it is then imax itself, as in the reference (Range[0., 0.3, 0.1] ends at
+ * 0.3, not 0.30000000000000004). */
+static inline double iter_real_at(double min_val, double max_val, double di_val, size_t k) {
+    double v = min_val + (double)k * di_val;
+    return (di_val > 0) ? (v > max_val ? max_val : v) : (v < max_val ? max_val : v);
+}
+
 #endif

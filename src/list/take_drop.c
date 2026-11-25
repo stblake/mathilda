@@ -167,10 +167,71 @@ static void take_drop_range_message(const Expr* spec, const Expr* expr, bool is_
     free(es);
 }
 
+/* Is `spec` one of the sequence-specification forms: n, -n, {n}, {m, n},
+ * {m, n, s} (integers), All, None or UpTo[n]?  A buffer spec (an explicitly
+ * packed {m, n}) is a List of integers.  Anything else -- a Real, a symbol,
+ * a List holding one -- is ::seqs (audit Take#2). */
+static bool seq_spec_form_ok(const Expr* spec) {
+    if (spec->type == EXPR_INTEGER || spec->type == EXPR_BIGINT) return true;
+    if (is_ndarray((Expr*)spec)) return true;
+    if (spec->type == EXPR_SYMBOL)
+        return spec->data.symbol.name == SYM_All || spec->data.symbol.name == SYM_None;
+    if (head_is((Expr*)spec, SYM_UpTo)) return spec->data.function.arg_count == 1;
+    if (head_is((Expr*)spec, SYM_List)) {
+        size_t c = spec->data.function.arg_count;
+        if (c < 1 || c > 3) return false;
+        for (size_t i = 0; i < c; i++) {
+            const Expr* k = spec->data.function.args[i];
+            if (k->type != EXPR_INTEGER && k->type != EXPR_BIGINT) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+/* Every spec of Take/Drop[expr, spec1, spec2, ...] is a sequence spec, else
+ * Head::seqs names the first one that is not, and the call stays as it is. */
+static bool take_drop_specs_ok(Expr* res, const char* head) {
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        if (seq_spec_form_ok(res->data.function.args[i])) continue;
+        char* cs = expr_to_string(res);
+        mth_message(head, "seqs", "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or "
+                    "{m, n, s}) expected at position %zu in %s.", i + 1, cs ? cs : "");
+        free(cs);
+        return false;
+    }
+    return true;
+}
+
+static Expr* apply_take_drop_at(Expr* expr, Expr** specs, size_t nspecs, bool is_take,
+                                Expr* top);
+
+/* A spec list longer than the object is deep: Take[{a, b, c}, 1, 1] asks for
+ * a part of the atom a. Head::partd names the whole object, once. */
+static Expr* take_drop_partd(Expr* top, bool is_take) {
+    char* es = expr_to_string(top);
+    mth_message(is_take ? "Take" : "Drop", "partd",
+                "Depth of object %s is not sufficient for the given sequence specification.",
+                es ? es : "");
+    free(es);
+    return NULL;
+}
+
 static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_take) {
+    return apply_take_drop_at(expr, specs, nspecs, is_take, NULL);
+}
+
+/* `top` is the object of the call when `expr` is one of its parts (NULL at
+ * the top level, where the atom case was reported as ::normal already). */
+static Expr* apply_take_drop_at(Expr* expr, Expr** specs, size_t nspecs, bool is_take,
+                                Expr* top) {
     if (nspecs == 0) return expr_copy(expr);
     /* a Rational/Complex number is an atom (Take[3/4, 1] is not Rational[3]) */
-    if (expr->type != EXPR_FUNCTION || expr_is_number_atom(expr)) return NULL;
+    if (expr->type != EXPR_FUNCTION || expr_is_number_atom(expr)) {
+        if (top && expr_is_plain_atom(expr)) return take_drop_partd(top, is_take);
+        return NULL;
+    }
+    if (!top) top = expr;
 
     int64_t len = (int64_t)expr->data.function.arg_count;
     size_t spec_count = 0;
@@ -188,7 +249,7 @@ static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_ta
         if (new_count > 0) new_args = malloc(sizeof(Expr*) * new_count);
         for (size_t i = 0; i < new_count; i++) {
             Expr* sub = expr->data.function.args[spec_indices[i] - 1];
-            new_args[i] = apply_take_drop(sub, specs + 1, nspecs - 1, is_take);
+            new_args[i] = apply_take_drop_at(sub, specs + 1, nspecs - 1, is_take, top);
             if (!new_args[i]) {
                 for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
                 free(new_args);
@@ -208,7 +269,7 @@ static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_ta
         for (int64_t i = 0; i < len; i++) {
             if (keep[i]) {
                 Expr* sub = expr->data.function.args[i];
-                new_args[idx] = apply_take_drop(sub, specs + 1, nspecs - 1, is_take);
+                new_args[idx] = apply_take_drop_at(sub, specs + 1, nspecs - 1, is_take, top);
                 if (!new_args[idx]) {
                     for (size_t j = 0; j < idx; j++) expr_free(new_args[j]);
                     free(new_args);
@@ -234,7 +295,8 @@ Expr* builtin_take(Expr* res) {
     { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Take, res, &dh); if (dh) return dr; }
     /* Take[ndarray, spec]: contiguous leading-axis slice on the buffer (ndstruct.c). */
     if (is_ndarray(res->data.function.args[0])) return ndstruct_take(res);
-    if (expr_is_number_atom(res->data.function.args[0])) return builtin_normal_error("Take", res, 1);
+    if (expr_is_plain_atom(res->data.function.args[0])) return builtin_normal_error("Take", res, 1);
+    if (!take_drop_specs_ok(res, "Take")) return NULL;
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, true);
 }
 
@@ -242,6 +304,7 @@ Expr* builtin_drop(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Drop, res, &dh); if (dh) return dr; }
     if (is_ndarray(res->data.function.args[0])) return ndstruct_drop(res);
-    if (expr_is_number_atom(res->data.function.args[0])) return builtin_normal_error("Drop", res, 1);
+    if (expr_is_plain_atom(res->data.function.args[0])) return builtin_normal_error("Drop", res, 1);
+    if (!take_drop_specs_ok(res, "Drop")) return NULL;
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, false);
 }

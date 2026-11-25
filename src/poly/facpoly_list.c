@@ -173,7 +173,10 @@ static bool sum_leads_negative(const Expr* p) {
     return neg;
 }
 
-static Expr* product_to_pair_list(Expr* fac) {
+/* `even_too`: also repair the sign of an even power (the Extension forms,
+ * where FactorSquareFree leaves (Sqrt[2] - x)^2; audit FactorSquareFreeList#1).
+ * Over Q an even power keeps the form Factor gave it: {1 - x^3, 2}. */
+static Expr* product_to_pair_list(Expr* fac, bool even_too) {
     Expr* numeric = mk_int(1);
     size_t cap = 8, n = 0;
     Expr** bases = malloc(cap * sizeof(Expr*));
@@ -188,11 +191,16 @@ static Expr* product_to_pair_list(Expr* fac) {
     }
     expr_free(fac);
 
-    /* A simple factor whose sign the evaluated product absorbed -- -(1 + x)
-     * is -1 - x, and (-1/2) (1 + x) is 1/2 (-1 - x) -- gets its -1 back into
-     * the numerical factor, so its leading coefficient is positive again. */
+    /* A factor whose sign the evaluated product absorbed -- -(1 + x) is
+     * -1 - x, and (-1/2) (1 + x) is 1/2 (-1 - x) -- gets its -1 back into
+     * the numerical factor, so its leading coefficient is positive again. An
+     * even power needs no -1 at all: (Sqrt[2] - x)^2 is listed as
+     * {-Sqrt[2] + x, 2} (audit FactorSquareFreeList#1). */
     for (size_t i = 0; i < n; i++) {
-        if (!(exps[i]->type == EXPR_INTEGER && exps[i]->data.integer == 1)) continue;
+        if (!(exps[i]->type == EXPR_INTEGER && exps[i]->data.integer >= 1)) continue;
+        bool odd = (exps[i]->data.integer & 1) != 0;
+        if (!odd && !even_too) continue;
+        if (odd && exps[i]->data.integer != 1) continue;   /* as before: simple factors */
         if (!head_name_is(bases[i], SYM_Plus) || !sum_leads_negative(bases[i])) continue;
         Expr* p = bases[i];
         size_t m = p->data.function.arg_count;
@@ -203,8 +211,9 @@ static Expr* product_to_pair_list(Expr* fac) {
         bases[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, m));
         free(terms);
         expr_free(p);
-        numeric = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-                                                  (Expr*[]){ mk_int(-1), numeric }, 2));
+        if (odd)
+            numeric = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                                      (Expr*[]){ mk_int(-1), numeric }, 2));
     }
 
     /* Assemble {{numeric, 1}, {base_i, exp_i}, ...}.  A rational numeric
@@ -425,7 +434,7 @@ static Expr* builtin_factorlist_core(Expr* res) {
     free(fargs);
     if (!fac) return NULL;
 
-    return product_to_pair_list(fac);
+    return product_to_pair_list(fac, false);
 }
 
 /* FactorSquareFreeList[poly] / FactorSquareFreeList[poly, Extension -> ext].
@@ -470,7 +479,13 @@ Expr* builtin_factorsquarefreelist(Expr* res) {
         return NULL;
     }
 
-    return product_to_pair_list(fac);
+    bool ext = false;   /* an Extension option: the number-field forms */
+    for (size_t i = 1; i < argc && !ext; i++) {
+        Expr* o = res->data.function.args[i];
+        ext = is_rule_head(o) && o->data.function.args[0]->type == EXPR_SYMBOL &&
+              o->data.function.args[0]->data.symbol.name == SYM_Extension;
+    }
+    return product_to_pair_list(fac, ext);
 }
 
 /* ===================================================================== */

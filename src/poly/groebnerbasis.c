@@ -282,7 +282,9 @@ static void extract_options(const Expr* res, size_t* n_pos,
                 && val->data.integer < (int64_t)1 << 31
                 && gfp_is_prime((uint64_t)val->data.integer)) {
                 opt->modulus = val->data.integer;
-            } else {
+            } else if (!(val->type == EXPR_INTEGER && val->data.integer == 0)) {
+                /* Modulus -> 0 is the default, the rationals: no note
+                 * (audit GroebnerBasis#3) */
                 warn_once("modnotimpl", "Modulus -> p requires a prime p in "
                                         "[2, 2^31); the basis is being computed "
                                         "over the rationals.");

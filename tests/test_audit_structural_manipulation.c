@@ -594,6 +594,130 @@ static void test_wave4_structural_batch3(void) {
     audit_chk("Eliminate#2", "Quiet[Eliminate[{x == 0.5 y, y == 2}, y]]", "x == 1.0");
 }
 
+/* Wave 5: `expr` raises Head::tag through the funnel (Check sees it). */
+static void w5s_msg(const char* id, const char* expr, const char* tag) {
+    char buf[1024];
+    snprintf(buf, sizeof buf, "Quiet[Check[%s, fired, %s]]", expr, tag);
+    audit_chk(id, buf, "fired");
+}
+
+/* Wave 5 G2: argument counts, ::normal for atoms, ::heads, Part/Extract
+ * diagnostics, Most/Rest ::norest, Take/Drop ::seqs/::partd. */
+static void test_wave5_structural_messages(void) {
+    w5s_msg("Expand#5", "Expand[]", "Expand::argt");
+    audit_chk("Expand#4", "Options[Expand]", "{Modulus -> 0, Trig -> False}");
+    w5s_msg("Factor#2", "Factor[]", "Factor::argx");
+    w5s_msg("Flatten#3", "Flatten[x]", "Flatten::normal");
+    audit_chk("Flatten#3", "Quiet[Flatten[x]]", "Flatten[x]");
+    audit_chk("Join#1", "Join[]", "{}");
+    w5s_msg("Join#3", "Join[{a}, f[b]]", "Join::heads");
+    audit_chk("Join#3", "Quiet[Join[{a}, f[b]]]", "Join[{a}, f[b]]");
+    w5s_msg("Max#2", "Max[1, 2 I]", "Max::nord");
+    w5s_msg("Max#2", "Max[1, 2 + 3 I]", "Max::nord");
+    w5s_msg("Min#3", "Min[I, 2]", "Min::nord");
+    audit_chk("Min#3", "Quiet[Min[I, 2]]", "Min[I, 2]");
+    w5s_msg("Part#2", "{a, b, c}[[5]]", "Part::partw");
+    w5s_msg("Part#2", "x[[1]]", "Part::partd");
+    w5s_msg("Part#2", "{a, b, c}[[1.5]]", "Part::pkspec1");
+    audit_chk("Part#2", "Quiet[{a, b, c}[[5]]]", "Part[{a, b, c}, 5]");
+    w5s_msg("Complement#2", "Complement[{a, b}, f[a]]", "Complement::heads");
+    audit_chk("Complement#3", "Complement[{a, b, c}, {b}, SameTest :> SameQ]", "{a, c}");
+    w5s_msg("Delete#6", "Delete[{a, b}, x]", "Delete::psl");
+    audit_chk("Delete#6", "Quiet[Delete[{a, b}, x]]", "Delete[{a, b}, x]");
+    w5s_msg("Drop#2", "Drop[x, 1]", "Drop::normal");
+    w5s_msg("Drop#2", "Drop[{a, b, c}, 10]", "Drop::drop");
+    w5s_msg("Insert#4", "Insert[x, y, 1]", "Insert::normal");
+    w5s_msg("Insert#4", "Insert[\"abc\", \"x\", 2]", "Insert::normal");
+    w5s_msg("Intersection#2", "Intersection[{1}, f[1]]", "Intersection::heads");
+    w5s_msg("Most#2", "Most[{}]", "Most::norest");
+    w5s_msg("Most#3", "Most[x]", "Most::normal");
+    w5s_msg("Most#3", "Most[5]", "Most::normal");
+    audit_chk("Most#3", "Quiet[Most[x]]", "Most[x]");
+    w5s_msg("Rest#2", "Rest[{}]", "Rest::norest");
+    w5s_msg("Rest#3", "Rest[x]", "Rest::normal");
+    w5s_msg("Partition#4", "Partition[x, 2]", "Partition::normal");
+    audit_chk("Partition#4", "Quiet[Partition[\"abcd\", 2]]", "Partition[\"abcd\", 2]");
+    w5s_msg("Take#2", "Take[x, 1]", "Take::normal");
+    w5s_msg("Take#2", "Take[{a, b, c}, 1.5]", "Take::seqs");
+    w5s_msg("Take#2", "Take[{a, b, c}, 1, 1]", "Take::partd");
+    audit_chk("Take#2", "Take[{{1, 2}, {3, 4}}, 1, 1]", "{{1}}");
+    w5s_msg("Union#3", "Union[{1, 2}, f[3]]", "Union::heads");
+    audit_chk("Union#2", "{Union[{0., -0.}], Union[{-0., 0., 0.}]}", "{{0.0}, {0.0}}");
+    w5s_msg("Commonest#2", "Commonest[x]", "Commonest::list");
+    audit_chk("Commonest#2", "Quiet[Commonest[5]]", "Commonest[5]");
+    w5s_msg("Extract#1", "Extract[{a, b}, {3}]", "Extract::partw");
+    w5s_msg("Extract#1", "Extract[x, {1}]", "Extract::partd");
+    w5s_msg("Extract#1", "Extract[{a, b}, {1, 1}]", "Extract::partd");
+    w5s_msg("FlattenAt#3", "FlattenAt[{a, b}, 5]", "FlattenAt::partw");
+    audit_chk("FlattenAt#3", "Quiet[FlattenAt[{a, b}, 5]]", "FlattenAt[{a, b}, 5]");
+    w5s_msg("FactorTerms#4", "FactorTerms[]", "FactorTerms::argt");
+    w5s_msg("FactorTerms#4", "FactorTerms[x, y, z]", "FactorTerms::nonopt");
+    w5s_msg("PadLeft#2", "PadLeft[x, 3]", "PadLeft::normal");
+    w5s_msg("PolynomialQ#3", "PolynomialQ[]", "PolynomialQ::argt");
+    w5s_msg("PolynomialQ#3", "PolynomialQ[x, x, y]", "PolynomialQ::argt");
+    w5s_msg("PrependTo#3", "PrependTo[1, 2]", "PrependTo::rvalue");
+    w5s_msg("PrependTo#3", "PrependTo[{1, 2}, 3]", "PrependTo::rvalue");
+    w5s_msg("RotateLeft#1", "RotateLeft[x]", "RotateLeft::normal");
+    w5s_msg("RotateLeft#1", "RotateLeft[\"abc\"]", "RotateLeft::normal");
+    w5s_msg("RotateRight#2", "RotateRight[x]", "RotateRight::normal");
+    w5s_msg("RotateRight#3", "RotateRight[{a, b, c}, 1.5]", "RotateRight::rspec");
+    w5s_msg("RotateRight#3", "RotateRight[{a, b}, 1, 2]", "RotateRight::argt");
+    audit_chk("RotateRight#1", "RotateRight[{a, b, c}, -2^63]", "{c, a, b}");
+    audit_chk("RotateRight#1", "RotateRight[{a, b, c}, -2^63 + 1]", "{b, c, a}");
+    audit_chk("RotateRight#1", "RotateLeft[{a, b, c}, -2^63]", "{b, c, a}");
+    w5s_msg("HornerForm#2", "HornerForm[x + 1/x]", "HornerForm::poly");
+    audit_chk("HornerForm#2", "Quiet[HornerForm[x + 1/x]]", "HornerForm[1/x + x]");
+}
+
+/* Wave 5 G2: polynomial options and edge forms. */
+static void test_wave5_structural_algebra(void) {
+    audit_chk("ExpandAll#3", "ExpandAll[(a + b)^2, Modulus -> 2]", "a^2 + b^2");
+    audit_chk("ExpandAll#3", "ExpandAll[f[(a + b)^2], Trig -> False]", "f[a^2 + 2 a b + b^2]");
+    audit_chk("Coefficient#2", "Coefficient[(x + 1)^3, x, 10^20]", "0");
+    audit_chk("Coefficient#2", "Coefficient[x^(10^20) + x, x, 10^20]", "1");
+    audit_chk("CoefficientList#3", "CoefficientList[x^2 + y, {x, y}, {4, 3}]",
+              "{{0, 1, 0}, {0, 0, 0}, {1, 0, 0}, {0, 0, 0}}");
+    audit_chk("CoefficientList#3", "CoefficientList[1 + 2 x + 3 x^2, x, {2}]", "{1, 2}");
+    audit_chk("Collect#3", "Collect[a x^2.5 + b x^2.5, x]", "(a + b) x^2.5");
+    audit_chk("Exponent#2", "{Exponent[x^4, 2 x^2], Exponent[x^4, x^2/2], Exponent[x^4, I x^2]}",
+              "{2, 2, 2}");
+    audit_chk("PolynomialGCD#2", "PolynomialGCD[3/2, 9/4]", "3/4");
+    audit_chk("PolynomialGCD#2", "PolynomialGCD[3/2 x, 9/4 x]", "3/4 x");
+    audit_chk("Discriminant#1", "Discriminant[x^2 + 3 x + 1, x, Modulus -> 5]", "0");
+    audit_chk("Discriminant#1", "Discriminant[x^2 + 3 x + 1, x, Modulus -> 7]", "5");
+    audit_chk("ExpandNumerator#1", "ExpandNumerator[(a + b)^2 (1 + x)^(-100000000000000000000)]",
+              "(a^2 + 2 a b + b^2)/(1 + x)^100000000000000000000");
+    audit_chk("FactorSquareFreeList#1",
+              "FactorSquareFreeList[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]",
+              "{{1, 1}, {-Sqrt[2] + x, 2}}");
+    audit_chk("FactorSquareFreeList#1",
+              "FactorSquareFreeList[x^4 - 4 x^2 + 4, Extension -> Sqrt[2]]",
+              "{{1, 1}, {-2 + x^2, 2}}");
+    audit_chk("FactorTerms#3", "FactorTerms[(2 x + 2)/(4 y + 4)]", "(1 + x)/(2 (1 + y))");
+    audit_chk("FromCoefficientRules#1", "FromCoefficientRules[{{10^20} -> 1}, {x}]",
+              "x^100000000000000000000");
+    audit_chk("GroebnerBasis#3",
+              "Check[GroebnerBasis[{x^2 - 1, y^2 - 1}, {x, y}, Modulus -> 0], fired]",
+              "{-1 + y^2, -1 + x^2}");
+    w5s_msg("PolynomialExtendedGCD#4", "PolynomialExtendedGCD[x^2 + 1, x + 1, x, Modulus -> a]",
+            "PolynomialExtendedGCD::bmod");
+    w5s_msg("PolynomialExtendedGCD#6", "PolynomialExtendedGCD[x^2 - 1, x - 1, 3]",
+            "PolynomialExtendedGCD::ivar");
+    audit_chk("PolynomialExtendedGCD#6", "Quiet[PolynomialExtendedGCD[x^2 - 1, x - 1, 3]]",
+              "PolynomialExtendedGCD[-1 + x^2, -1 + x, 3]");
+    audit_chk("PowerExpand#2", "PowerExpand[Sqrt[x y], {}]", "Sqrt[x y]");
+    audit_chk("PowerExpand#2", "PowerExpand[Log[12], {}]", "Log[12]");
+    audit_chk("PowerExpand#2", "PowerExpand[Sqrt[x y], {x}]", "Sqrt[x] Sqrt[y]");
+}
+
+/* Wave 5 G2: docstrings. */
+static void test_wave5_structural_docs(void) {
+    audit_true("Head#3", "StringFreeQ[Information[Head], \"BigInt\"] && Head[2^100] === Integer");
+    audit_true("First#4", "StringContainsQ[Information[First], \"First[expr, def]\"] && First[{}, d] === d");
+    audit_true("Depth#3", "StringContainsQ[Information[Depth], \"maximum number of indices\"]");
+    audit_chk("Prepend#5", "Attributes[Prepend]", "{Protected}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_expand_option_not_pattern);
@@ -620,5 +744,8 @@ int main(void) {
     TEST(test_wave4_structural_batch1);
     TEST(test_wave4_structural_batch2);
     TEST(test_wave4_structural_batch3);
+    TEST(test_wave5_structural_messages);
+    TEST(test_wave5_structural_algebra);
+    TEST(test_wave5_structural_docs);
     return audit_finish("audit_structural_manipulation");
 }

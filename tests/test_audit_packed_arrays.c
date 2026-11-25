@@ -22,8 +22,30 @@ static void test_wave4_packed_arrays(void) {
     audit_chk("ToNDArray#1", "DataType[ToNDArray[{1., 2.}, DataType -> \"float32\"]]", "\"float32\"");
 }
 
+/* Wave 5 G2: DataType options, deep FromPackedArray, docstrings. */
+static void test_wave5_packed_batch(void) {
+    audit_true("DataType#1", "StringContainsQ[Information[DataType], \"int64\"] && "
+                             "StringContainsQ[Information[DataType], \"bool\"]");
+    audit_chk("FromPackedArray#1", "FromPackedArray[{Range[5], NDArray[{1, 2}]}]",
+              "{{1, 2, 3, 4, 5}, {1.0, 2.0}}");
+    audit_chk("FromPackedArray#1", "FromPackedArray[f[NDArray[{1, 2}]]]", "f[{1.0, 2.0}]");
+    audit_true("NDArrayQ#2", "StringContainsQ[Information[NDArrayQ], \"packed List\"] && "
+                             "NDArrayQ[ToNDArray[{1., 2., 3.}]]");
+    audit_chk("ToNDArray#2", "Quiet[Check[ToNDArray[{1, 2}, DataType -> \"bogus\"], fired, ToNDArray::dtype]]",
+              "fired");
+    audit_chk("ToNDArray#2", "Quiet[Check[ToNDArray[{1, 2}, DataType -> \"int32\"], fired, ToNDArray::dtype]]",
+              "fired");
+    audit_chk("ToNDArray#2", "Quiet[ToNDArray[{300, 2}, DataType -> \"int8\"]]",
+              "ToNDArray[{300, 2}, DataType -> \"int8\"]");
+    audit_chk("ToNDArray#3", "DataType[ToNDArray[{1, 2}, DataType -> \"int64\", DataType -> \"float64\"]]",
+              "\"int64\"");
+    audit_chk("ToNDArray#6", "NDArrayQ[ToNDArray[{1, 2.5}]]", "True");
+    audit_chk("ToPackedArray#2", "NDArrayQ[ToNDArray[{1, 2.5}]]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_packed_arrays);
+    TEST(test_wave5_packed_batch);
     return audit_finish("audit_packed_arrays");
 }

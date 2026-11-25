@@ -51,7 +51,7 @@ static void chk_array(const char* call_fmt, const char* nd, const char* lst) {
     snprintf(callnd, sizeof(callnd), call_fmt, nd);
     snprintf(calll, sizeof(calll), call_fmt, lst);
     snprintf(buf, sizeof(buf),
-             "Max[Abs[Flatten[Normal[%s] - (%s)]]] < 1/1000000000", callnd, calll);
+             "Max[Abs[Flatten[{Normal[%s] - (%s)}]]] < 1/1000000000", callnd, calll);
     chk_eq(buf, "True");
 }
 

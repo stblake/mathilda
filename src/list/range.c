@@ -6,6 +6,7 @@
 #include "../checked_int.h"
 #include "../ndarray.h"   /* ndarray_warn_once */
 #include "../iter.h"      /* iter_normalize_bounds, iter_real_value */
+#include "../message.h"   /* mth_message: Range::range */
 
 /* Range[] is the system's most-used list producer, so it is the first place
  * automatic packing pays for itself. Both branches below now decide the element
@@ -57,31 +58,6 @@ static void range_too_large(double count) {
     ndarray_warn_once(msg);
 }
 
-/* The number of elements of an inexact range: imin + k di for
- * k = 0 .. Floor[(imax - imin)/di], as in the reference. The quotient is
- * computed once, with a relative slack for the rounding of imax - imin, of the
- * division and of di's own decimal reading (each ~2^-53 of
- * (|imin| + |imax|)/|di|; the slack is ~45 times that), so a bound the
- * progression reaches exactly in the reals is counted. Accumulating
- * `val += di` instead drifted by one ulp per step and outgrew a fixed slack:
- * Range[0., 100., 0.01] lost its last element (audit Range#1). The caller has
- * already rejected a wrong-signed step and an over-large estimate. */
-static size_t range_real_count(double min_val, double max_val, double di_val) {
-    double q = (max_val - min_val) / di_val;
-    double tol = 1e-14 * (fabs(min_val) + fabs(max_val) + fabs(di_val)) / fabs(di_val);
-    double k = floor(q + tol);
-    return k < 0 ? 0 : (size_t)k + 1;
-}
-
-/* Element k of an inexact range: imin + k di, never past imax. Only the last
- * element can overshoot -- by the rounding the count's slack admitted -- and
- * it is then imax itself, as in the reference (Range[0., 0.3, 0.1] ends at
- * 0.3, not 0.30000000000000004). */
-static inline double range_real_at(double min_val, double max_val, double di_val, size_t k) {
-    double v = min_val + (double)k * di_val;
-    return (di_val > 0) ? (v > max_val ? max_val : v) : (v < max_val ? max_val : v);
-}
-
 /* Range over exact integers where some bound is a BigInt. NULL (after
  * reporting) when the count exceeds the ceiling or the step is zero. */
 static Expr* range_bigint(const Expr* imin_e, const Expr* imax_e, const Expr* di_e) {
@@ -119,6 +95,14 @@ static Expr* range_bigint(const Expr* imin_e, const Expr* imax_e, const Expr* di
     }
     mpz_clears(a, b, s, span, NULL);
     return out;
+}
+
+/* Range[x], Range[1, 2, 0]: Range::range, unevaluated (audit Range#4). */
+static void range_bounds_message(Expr* res) {
+    char* cs = expr_to_string(res);
+    mth_message("Range", "range", "Range specification in %s does not have appropriate bounds.",
+                cs ? cs : "");
+    free(cs);
 }
 
 Expr* builtin_range(Expr* res) {
@@ -176,14 +160,19 @@ Expr* builtin_range(Expr* res) {
     if (!all_int && expr_is_integer_like(imin_e) && expr_is_integer_like(imax_e)
         && expr_is_integer_like(di_e)) {
         Expr* out = range_bigint(imin_e, imax_e, di_e);
-        if (!out) goto L_fail_range;
+        if (!out) {
+            if (di_e->type == EXPR_INTEGER && di_e->data.integer == 0) range_bounds_message(res);
+            goto L_fail_range;
+        }
         expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
         return out;
     }
 
-    if (!iter_real_value(imin_e, &min_val)) goto L_fail_range;
-    if (!iter_real_value(imax_e, &max_val)) goto L_fail_range;
-    if (!iter_real_value(di_e, &di_val)) goto L_fail_range;
+    if (!iter_real_value(imin_e, &min_val) || !iter_real_value(imax_e, &max_val) ||
+        !iter_real_value(di_e, &di_val)) {
+        range_bounds_message(res);
+        goto L_fail_range;
+    }
     /* A normalised end point lies ON the lattice, so half a step of slack is
      * exact and keeps the accumulated `val += di` below from rounding the last
      * element away over a long symbolic range. */
@@ -240,7 +229,7 @@ Expr* builtin_range(Expr* res) {
         }
     }
 
-    if (di_val == 0) goto L_fail_range;
+    if (di_val == 0) { range_bounds_message(res); goto L_fail_range; }
     if ((di_val > 0 && min_val > max_val) || (di_val < 0 && min_val < max_val)) {
         expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
@@ -262,7 +251,7 @@ Expr* builtin_range(Expr* res) {
     }
 
     /* The count, in O(1). Doubles only -- no allocation, no evaluation. */
-    size_t count = range_real_count(min_val, max_val, di_val);
+    size_t count = iter_real_count(min_val, max_val, di_val);
     if ((int64_t)count > RANGE_MAX_ELEMENTS + 2) {
         range_too_large((double)count);
         goto L_fail_range;
@@ -278,7 +267,7 @@ Expr* builtin_range(Expr* res) {
              * reference's elements (Range[0., 1., 0.1] ends at 1., not
              * 0.9999999999999999). The loop is branch-light: the clamp is a
              * compare per element. */
-            for (size_t i = 0; i < count; i++) buf[i] = range_real_at(min_val, max_val, di_val, i);
+            for (size_t i = 0; i < count; i++) buf[i] = iter_real_at(min_val, max_val, di_val, i);
             expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
             return packed;
         }
@@ -297,7 +286,7 @@ Expr* builtin_range(Expr* res) {
     Expr* curr_e = is_real ? NULL : expr_copy(imin_e);
 
     while (results_count < count) {
-        results[results_count] = is_real ? expr_new_real(range_real_at(min_val, max_val, di_val, results_count))
+        results[results_count] = is_real ? expr_new_real(iter_real_at(min_val, max_val, di_val, results_count))
                                          : expr_copy(curr_e);
         results_count++;
 

@@ -24,6 +24,8 @@
 #include "pick.h"
 #include "assoc.h"
 #include "linkedlist.h"
+#include "ndarray.h"   /* is_ndarray */
+#include "message.h"   /* mth_message: Pick::incomp */
 
 /* True when `sel` matches `patt`. Bindings are irrelevant here (Pick has no
  * right-hand side to substitute into), so the environment is discarded. */
@@ -163,6 +165,16 @@ Expr* builtin_pick(Expr* res) {
     if (implicit_true) expr_free(implicit_true);
     if (!ok) {
         if (result) expr_free(result);
+        /* Pick[{1, 2}, {True}]: Pick::incomp (audit Pick#1). A buffer operand
+         * is left to the gate, silently, as before. */
+        if (!is_ndarray(expr) && !is_ndarray(sel) &&
+            (expr->type == EXPR_FUNCTION || expr->type == EXPR_LINKEDLIST)) {
+            char* es = expr_to_string(expr);
+            char* ss = expr_to_string(sel);
+            mth_message("Pick", "incomp", "Expressions %s and %s have incompatible shapes.",
+                        es ? es : "", ss ? ss : "");
+            free(es); free(ss);
+        }
         return NULL;
     }
     return result;

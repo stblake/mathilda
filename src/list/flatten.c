@@ -318,10 +318,9 @@ Expr* builtin_flatten(Expr* res) {
     /* Flatten[ndarray]: reshape the flat buffer to rank 1 (see ndstruct.c). */
     if (is_ndarray(list)) return ndstruct_flatten(res);
 
-    /* a Rational/Complex number is an atom: ::normal, unevaluated. (Other atoms
-     * keep the identity result, which the reference also rejects with ::normal:
-     * internal code relies on Flatten[atom] === atom, so that stays.) */
-    if (expr_is_number_atom(list)) return builtin_normal_error("Flatten", res, 1);
+    /* An atom -- a number, symbol or string -- is Flatten::normal, unevaluated
+     * (audits Flatten#3; Rational/Complex count as atoms). */
+    if (expr_is_plain_atom(list)) return builtin_normal_error("Flatten", res, 1);
     if (list->type != EXPR_FUNCTION && list->type != EXPR_LINKEDLIST) return expr_copy(list);
 
     /* The head flattened through is, by default, the head of expr itself:

@@ -804,6 +804,15 @@ void options_register_defaults(void) {
         ob_commit(&b, rat_fns[i]);
     }
 
+    /* Expand and ExpandAll: Modulus and Trig (audit Expand#4). */
+    const char* exp_fns[] = { "Expand", "ExpandAll" };
+    for (size_t i = 0; i < sizeof(exp_fns) / sizeof(exp_fns[0]); i++) {
+        ob_init(&b);
+        ob_add(&b, r_int("Modulus", 0));
+        ob_add(&b, r_sym("Trig", "False"));
+        ob_commit(&b, exp_fns[i]);
+    }
+
     /* Factor family: Factor and FactorList take all four options, the
      * square-free pair no GaussianIntegers, FactorTerms(List) no field. */
     const char* fac_fns[] = { "Factor", "FactorList" };

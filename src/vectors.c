@@ -187,8 +187,9 @@ Expr* builtin_unit_vector(Expr* res) {
      * than handing malloc an impossible size (each cell is at least a pointer). */
     if (!mth_alloc_ok(n, sizeof(Expr*), NULL)) return mth_nomem_abort();
 
-    /* Parse trailing options.  Only WorkingPrecision is recognised; last valid
-     * setting wins, an unparseable value is ignored. */
+    /* Parse trailing options.  Only WorkingPrecision is recognised; the first
+     * setting wins, as for any repeated option (audit UnitVector#5), and an
+     * unparseable value is ignored. */
     uv_prec_mode mode = UV_PREC_EXACT;
     long bits = 0;
     for (size_t i = nreq; i < argc; i++) {
@@ -196,6 +197,7 @@ Expr* builtin_unit_vector(Expr* res) {
         const char* name = opt->data.function.args[0]->data.symbol.name;
         if (name == SYM_WorkingPrecision) {
             uv_parse_working_precision(opt->data.function.args[1], &mode, &bits);
+            break;
         }
     }
 

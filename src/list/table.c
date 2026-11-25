@@ -964,6 +964,12 @@ static bool table_specs_invalid(Expr* res) {
     return false;
 }
 
+static void table_iterb_message(Expr* spec) {
+    char* ss = expr_to_string(spec);
+    mth_message("Table", "iterb", "Iterator %s does not have appropriate bounds.", ss ? ss : "");
+    free(ss);
+}
+
 Expr* builtin_table(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     
@@ -990,6 +996,17 @@ Expr* builtin_table(Expr* res) {
     
     Expr* expr = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
+
+    /* A literal zero step {i, a, b, 0} never advances: Table::iterb before
+     * the bounds are read (audit Table#4). */
+    if (head_is(spec, SYM_List) && spec->data.function.arg_count == 4) {
+        Expr* di = spec->data.function.args[3];
+        if ((di->type == EXPR_INTEGER && di->data.integer == 0) ||
+            (di->type == EXPR_REAL && di->data.real == 0.0)) {
+            table_iterb_message(spec);
+            return NULL;
+        }
+    }
 
     /* ---- Parse the iterator spec (shared helper) ---- */
     IterSpec s;
@@ -1019,7 +1036,9 @@ Expr* builtin_table(Expr* res) {
         } else if (iter_spec_symbolic_range_to_list(&s)) {
             is_list_iter = 1;      /* {i, a, a + 2}: the values a, 1 + a, 2 + a */
         } else {
+            /* bounds that are not numbers: Table::iterb (audit Table#4) */
             iter_spec_free(&s);
+            table_iterb_message(spec);
             return NULL;
         }
     }
@@ -1134,6 +1153,17 @@ Expr* builtin_table(Expr* res) {
         AutoCompiled* ac = (is_real && var_sym->type == EXPR_SYMBOL)
                                ? autocompile_new(expr, (const Expr* const*)&var_sym, 1) : NULL;
         double val = min_val;
+        /* A machine-real range runs over imin + k di for the count the
+         * reference gives (iter_real_count), never an accumulated `val += di`,
+         * which drifted by an ulp per step: Table[i, {i, 0., 1., 0.01}] ended
+         * at 1.0000000000000007 (audit Table#5). Range uses the same two. */
+        size_t rcount = 0;
+        if (is_real) {
+            double est = (max_val - min_val) / di_val;   /* past the backstop: overflow below */
+            rcount = (est < (double)TABLE_MAX_FINITE_ELEMENTS)
+                         ? iter_real_count(min_val, max_val, di_val)
+                         : (size_t)TABLE_MAX_FINITE_ELEMENTS + 1;
+        }
         Expr* curr_e = ac ? NULL : expr_copy(imin_e);
         /* An arbitrary-precision range ({x, 1/10`30, 1, 1/400`30}): the running
          * value stays the interpreter's own (curr_e, advanced below exactly as
@@ -1161,16 +1191,10 @@ Expr* builtin_table(Expr* res) {
          * written, and the ordinary loop below picks up from exactly where it
          * stopped -- same fallback the boxed path has always had, per element. */
         if (ac && autocompiled_result_is_real(ac)) {
-            size_t total = 0;
-            double v = min_val;
-            /* Real packed path: is_real is true here, so the count uses the same
-             * double recurrence as the fill below (no curr_e). */
-            while (iter_range_continue(is_real, /*is_inf=*/false, NULL, NULL,
-                                       v, max_val, di_val)) {
-                if ((int64_t)total >= TABLE_MAX_FINITE_ELEMENTS) { overflow = true; break; }
-                total++;
-                v += di_val;
-            }
+            /* Real packed path: is_real is true here, so the count is the
+             * fill's own (iter_real_count; no curr_e). */
+            size_t total = rcount;
+            if ((int64_t)total > TABLE_MAX_FINITE_ELEMENTS) overflow = true;
             double* buf = NULL;
             Expr* packed = overflow ? NULL : ndbuild_open_f64((int64_t)total, &buf);
             if (packed) {
@@ -1178,14 +1202,14 @@ Expr* builtin_table(Expr* res) {
                 cvm_underflow_clear();
                 while (i < total && table_ac_real(ac, &val, &buf[i])) {
                     i++;
-                    val += di_val;
+                    val = iter_real_at(min_val, max_val, di_val, i);
                 }
                 /* An underflow anywhere in the buffer: abandon all of it and
                  * let the per-element path below redo the range (rare). */
                 if (i == total && cvm_underflowed()) {
                     i = 0;
-                    val = min_val;
                 }
+                val = iter_real_at(min_val, max_val, di_val, i);
                 if (i == total) {
                     autocompiled_free(ac);
                     iter_spec_restore(var_sym, old_own);
@@ -1205,8 +1229,10 @@ Expr* builtin_table(Expr* res) {
 
         /* results_count is the step count (the packed abandon above resumes it) */
         int ptok = mth_progress_push(SYM_Table, mth_progress_range_count(min_val, max_val, di_val));
-        while (iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax_e,
-                                   val, max_val, di_val)) {
+        while (is_real ? results_count < rcount
+                       : iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax_e,
+                                             val, max_val, di_val)) {
+            if (is_real) val = iter_real_at(min_val, max_val, di_val, results_count);
             mth_progress_step(ptok, (long)results_count);
             if ((int64_t)results_count >= TABLE_MAX_FINITE_ELEMENTS) { overflow = true; break; }
             /* Boxed (not _eval_real) so an integer-valued body stays an Integer

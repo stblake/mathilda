@@ -59,8 +59,11 @@ Out[6]= "int64"
 In[7]:= Head[ToNDArray[{1, 2, 3}][[2]]]
 Out[7]= Integer
 
-In[8]:= NDArrayQ[{1, 2.5}]                    (* automatic packing declines a mix: *)
+In[8]:= NDArrayQ[{1, 2.5, 3, 4}]              (* automatic packing declines a mix: *)
 Out[8]= False                                 (* one buffer cannot hold both heads *)
+
+In[8a]:= NDArrayQ[ToNDArray[{1, 2.5}]]        (* an explicit ToNDArray widens the *)
+Out[8a]= True                                 (* mix to float64 (see ToNDArray)   *)
 
 In[9]:= ToNDArray[{9007199254740993}][[1]]    (* exact beyond 2^53 *)
 Out[9]= 9007199254740993
@@ -184,6 +187,15 @@ forces the element type.
 
 A value a single-precision `DataType` cannot hold (past `FLT_MAX`) leaves the
 list unpacked rather than storing `inf`.
+
+The `DataType` value must name a buffer type -- `"float64"`, `"float32"`,
+`"complex64"`, `"complex32"`, `"int64"` or `"bool"` (`"Boolean"`); anything else
+(`"int32"`, `"int8"`, `"bogus"`) is `ToNDArray::dtype` and the call stays
+unevaluated, rather than packing to a type other than the one asked for. When
+`DataType` is given more than once the first setting wins, as for any option.
+
+`FromNDArray` / `FromPackedArray` undo the buffer storage at every depth:
+`FromPackedArray[f[NDArray[{1, 2}]]]` is `f[{1., 2.}]`.
 
 Returns `list` unchanged — not an error — when it cannot be packed:
 

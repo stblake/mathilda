@@ -3133,6 +3133,15 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     /* The LinkedList object itself (a function parameter substituted into
      * the body): grow it in place, as through a variable. */
     if (ds_has_append_to(sym->type)) return ds_append_to(name, expr_copy(sym), elem, prepend);
+    /* PrependTo[1, 2]: a number or string is no variable -- ::rvalue, as for
+     * a literal list (audit PrependTo#3). */
+    if (expr_is_plain_atom(sym) && sym->type != EXPR_SYMBOL) {
+        char* s = expr_to_string(sym);
+        mth_message(name, "rvalue", "%s is not a variable with a value, so its value cannot be changed.",
+                    s ? s : "");
+        free(s);
+        return NULL;
+    }
     if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
 
     /* The update is an assignment, so a Protected variable refuses it before

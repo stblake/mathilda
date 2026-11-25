@@ -11,6 +11,8 @@
 #include "checked_alloc.h"  /* overflow-checked user-sized buffers */
 #include "eval.h"
 #include "common.h"   /* head_is */
+#include "message.h"  /* mth_message: ToNDArray::dtype */
+#include "print.h"    /* expr_to_string */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -526,11 +528,15 @@ void ndbuild_abandon(Expr* node, size_t written, Expr** args_out) {
  * Builtins
  * -------------------------------------------------------------------------- */
 
-/* Strip a trailing DataType -> "..." rule, mirroring NDArray[]'s option
- * handling. Returns the number of leading positional args. */
-static size_t pack_take_dtype(Expr* res, bool* have, NDType* dt) {
+/* Strip the trailing DataType -> "..." rules, mirroring NDArray[]'s option
+ * handling. Returns the number of leading positional args. The FIRST setting
+ * wins, as for any repeated option (audit ToNDArray#3); a value that names no
+ * buffer type is ToNDArray::dtype and *bad is set (audit ToNDArray#2: it was
+ * ignored, or packed to another type than the one asked for). */
+static size_t pack_take_dtype(Expr* res, bool* have, NDType* dt, bool* bad) {
     size_t argc = res->data.function.arg_count;
     *have = false;
+    *bad = false;
     while (argc > 1) {
         Expr* last = res->data.function.args[argc - 1];
         if (last->type != EXPR_FUNCTION || last->data.function.arg_count != 2) break;
@@ -541,8 +547,18 @@ static size_t pack_take_dtype(Expr* res, bool* have, NDType* dt) {
         const Expr* key = last->data.function.args[0];
         if (key->type != EXPR_SYMBOL || key->data.symbol.name != SYM_DataType) break;
         const Expr* val = last->data.function.args[1];
-        if (val->type == EXPR_STRING && !*have)      /* rightmost wins */
-            *have = ndt_from_string(val->data.string, dt);
+        NDType t;
+        if (val->type == EXPR_STRING && ndt_from_string(val->data.string, &t)) {
+            *have = true;                          /* scanned right to left: */
+            *dt = t;                               /* the leftmost is kept */
+        } else if (!*bad) {
+            *bad = true;
+            char* vs = expr_to_string((Expr*)val);
+            mth_message("ToNDArray", "dtype", "DataType -> %s is not one of \"float64\", "
+                        "\"float32\", \"complex64\", \"complex32\", \"int64\" or \"bool\".",
+                        vs ? vs : "");
+            free(vs);
+        }
         argc--;
     }
     return argc;
@@ -552,8 +568,9 @@ static Expr* builtin_tondarray(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     bool have = false;
     NDType dt = NDT_FLOAT64;
-    size_t argc = pack_take_dtype(res, &have, &dt);
-    if (argc != 1) return NULL;
+    bool bad = false;
+    size_t argc = pack_take_dtype(res, &have, &dt, &bad);
+    if (argc != 1 || bad) return NULL;
 
     Expr* arg = res->data.function.args[0];
     /* Already packed, and no conflicting DataType asked for: nothing to do. */
@@ -590,11 +607,38 @@ static Expr* builtin_topackedarray(Expr* res) {
     return builtin_tondarray(res);
 }
 
+/* `e` with every buffer in it -- packed List or visible NDArray, at any depth
+ * -- written out as ordinary Lists; NULL when there is none (nothing to do). */
+static Expr* unpack_deep(Expr* e) {
+    if (is_ndarray(e)) return ndarray_to_nested_list(e);
+    if (e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** na = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* u = unpack_deep(e->data.function.args[i]);
+        if (!u) continue;
+        if (!na) {
+            na = malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < n; j++) na[j] = NULL;
+        }
+        na[i] = u;
+    }
+    if (!na) return NULL;
+    for (size_t i = 0; i < n; i++)
+        if (!na[i]) na[i] = expr_copy(e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), na, n);
+    free(na);
+    return r;
+}
+
+/* FromNDArray / FromPackedArray: every buffer, at any depth, as an ordinary
+ * List -- {Range[5], NDArray[{1, 2}]} and f[NDArray[...]] included (audit
+ * FromPackedArray#1). */
 static Expr* builtin_fromndarray(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (!is_ndarray(arg)) return expr_copy(arg);   /* already an ordinary List */
-    return ndarray_to_nested_list(arg);
+    Expr* u = unpack_deep(arg);
+    return u ? u : expr_copy(arg);   /* already ordinary Lists */
 }
 
 /* --------------------------------------------------------------------------

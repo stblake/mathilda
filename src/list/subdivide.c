@@ -63,6 +63,7 @@
 #include "list_common.h"
 #include "subdivide.h"
 #include "pack.h"
+#include "linkedlist.h"   /* ll_elem_view: a LinkedList max */
 
 /* Upper bound on n. Matches the generation cap already used by Range (see
  * src/list/range.c): past this the result list is not a useful object, and
@@ -169,6 +170,34 @@ static Expr* subdivide_point_general(Expr* min_e, Expr* max_e,
     return out;
 }
 
+/* The zero of Subdivide[max, n]'s implied lower end, shaped like max: 0. for
+ * a Real, a List of zeros for a vector max -- Subdivide[{1, 2}, 2] starts at
+ * {0, 0}, as Subdivide[{0, 0}, {1, 2}, 2] does (audit Subdivide#1). */
+static Expr* subdivide_zero_like(const Expr* max_e) {
+    if (max_e->type == EXPR_REAL) return expr_new_real(0.0);
+    if (max_e->type == EXPR_LINKEDLIST) {       /* the List it stands for, slot by slot */
+        const LinkedList* ll = max_e->data.llist;
+        int64_t n = ll_length(ll);
+        Expr** z = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+        for (int64_t i = 0; i < n; i++) {
+            bool own;
+            Expr* el = ll_elem_view(ll, i, &own);
+            z[i] = subdivide_zero_like(el);
+            ll_elem_done(el, own);
+        }
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), z, (size_t)n);
+        free(z);
+        return r;
+    }
+    if (!head_is((Expr*)max_e, SYM_List)) return expr_new_integer(0);
+    size_t n = max_e->data.function.arg_count;
+    Expr** z = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) z[i] = subdivide_zero_like(max_e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), z, n);
+    free(z);
+    return r;
+}
+
 Expr* builtin_subdivide(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -195,8 +224,7 @@ Expr* builtin_subdivide(Expr* res) {
          * Subdivide[1.0, 4] -> {0., 0.25, 0.5, 0.75, 1.} rather than
          * {0, 0.25, ...}. */
         max_e = res->data.function.args[0];
-        implied_min = (max_e->type == EXPR_REAL) ? expr_new_real(0.0)
-                                                 : expr_new_integer(0);
+        implied_min = subdivide_zero_like(max_e);
         min_e = implied_min;
         n_e   = res->data.function.args[1];
     } else {

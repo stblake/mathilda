@@ -415,6 +415,19 @@ static Expr* builtin_arraydepth(Expr* res) {
     if (d && head_is_sym(d, SYM_List)) depth = (int64_t)d->data.function.arg_count;
     else if (d && d->type == EXPR_NDARRAY) depth = d->data.ndarray.dims[0];
     if (d) expr_free(d);
+    /* A List of equal-shape SparseArrays (or buffers) is an array through
+     * them, as ArrayQ says: {SparseArray[{1, 2}], SparseArray[{3, 4}]} has
+     * depth 2 (audit ArrayDepth#3); Dimensions stops at the payload. */
+    if (depth >= 1 && depth < SP_MAX_RANK) {
+        const Expr* p = e;                 /* the first part at level depth */
+        for (int64_t k = 0; k < depth && head_is_sym(p, SYM_List) &&
+                            p->data.function.arg_count > 0; k++)
+            p = p->data.function.args[0];
+        if (p->type == EXPR_SPARSE || p->type == EXPR_NDARRAY) {
+            int r = rect_depth(e);
+            if (r > depth) depth = r;
+        }
+    }
     return expr_new_integer(depth);
 }
 

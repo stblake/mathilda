@@ -185,6 +185,8 @@ Out[14]= {<|b -> 2|>}
 ```
 
 ## Keys
+`Keys[x]` of an atom is `Keys::invrl`; `Keys[]` and three arguments are `Keys::argt`.
+
 Gives the list of keys of an association (or a list of rules).
 - `Keys[assoc]` gives `{k1, k2, ...}`; also accepts a rule or a list of rules.
 - `Keys[{assoc1, assoc2, ...}]` threads over a list (to any depth) of
@@ -230,6 +232,9 @@ Out[3]= {{1}, {2}}
 A wrong argument count prints Values::argt; an atom argument prints Values::invrl (Values[x]).
 
 ## Lookup
+A number or string, or a list holding something that is neither a rule nor an association
+(`{a -> 1, b}`, `{{a, 1}}`), is `Lookup::invrl` and the call stays unevaluated.
+
 Looks up the value stored under a key.
 - `Lookup[assoc, key]` gives the value, or `Missing["KeyAbsent", key]`.
 - `Lookup[assoc, key, default]` uses `default` when the key is absent.
@@ -306,6 +311,8 @@ Out[5]= False
 ```
 
 ## KeyDrop
+`KeyDrop[5, "a"]` (an atom) is `KeyDrop::invrl`.
+
 Gives an association with the specified key or keys removed (order preserved).
 
 A List of rules is accepted and answered as a List of rules
@@ -526,6 +533,8 @@ Out[3]= <|"a" -> 4, "b" -> 2|>
 ```
 
 ## AssociateTo
+A symbol with no value is `AssociateTo::rvalue`.
+
 Adds or updates key–value pairs in the association held by a symbol, modifying
 the symbol in place (like `AppendTo`). Has attribute `HoldFirst`.
 
@@ -1333,6 +1342,8 @@ Out[1]= <|"a" -> 1|>
 ```
 
 ## Discard
+A positive BigInt count drops every match; 0 or 4+ arguments are `Discard::argb`.
+
 The complement of `Select`.
 - `Discard[expr, crit]` drops the elements `e` for which `crit[e]` is `True`.
 - `Discard[expr, crit, n]` drops only the first `n` of them (`n` a non-negative
@@ -1474,6 +1485,9 @@ Out[4]= {<|"a" -> 1, "v" -> "R"|>}
 ```
 
 ## ApplyTo
+An indexed variable (`h[1] = 3; ApplyTo[h[1], # + 1 &]`) is updated through its
+DownValue.
+
 `ApplyTo[x, f]` sets `x` to `f[x]` and returns the new value (`x //= f` in
 the reference's notation).
 - `x` may be a symbol with a value, a part `s[[i]]`, or an association entry

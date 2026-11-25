@@ -331,8 +331,9 @@ static Expr* setop_ll_typed(Expr** args, size_t nl, int mode) {
  * indices) so one index set or one sort can span them all. */
 typedef struct { LLSeq* q; size_t n; size_t* off; bool linked; const Expr* head; } SetOps;
 
-/* 0 with every operand open, the 1-based position of an atom operand, or -1
- * on a head mismatch (nothing left open either way). */
+/* 0 with every operand open, the 1-based position of an atom operand, or
+ * minus the 1-based position of the first operand whose head differs from
+ * the first one's (nothing left open either way). */
 static int setops_open(Expr** args, size_t nl, SetOps* so) {
     so->q = malloc(sizeof(LLSeq) * (nl ? nl : 1));
     so->off = malloc(sizeof(size_t) * (nl + 1));
@@ -343,11 +344,16 @@ static int setops_open(Expr** args, size_t nl, SetOps* so) {
         so->n = i + 1;
         if (llq_linked(&so->q[i])) so->linked = true;
         else if (!so->head) so->head = so->q[i].head;
-        else if (!expr_eq((Expr*)so->head, (Expr*)so->q[i].head)) bad = -1;
+        else if (!expr_eq((Expr*)so->head, (Expr*)so->q[i].head)) bad = -(int)(i + 1);
     }
     if (!bad && so->linked && so->head &&
-        !(so->head->type == EXPR_SYMBOL && so->head->data.symbol.name == SYM_List))
-        bad = -1;
+        !(so->head->type == EXPR_SYMBOL && so->head->data.symbol.name == SYM_List)) {
+        /* a LinkedList (a List) beside an operand of another head */
+        bool first_linked = llq_linked(&so->q[0]);
+        for (size_t i = 1; i < nl && !bad; i++)
+            if (llq_linked(&so->q[i]) != first_linked) bad = -(int)(i + 1);
+        if (!bad) bad = -2;
+    }
     if (bad) {
         for (size_t i = 0; i < so->n; i++) llq_close(&so->q[i]);
         free(so->q); free(so->off);
@@ -439,14 +445,32 @@ static bool setops_test(SetOps* so, Expr* test, size_t ga, size_t gb) {
     return eq;
 }
 
-/* A trailing SameTest -> f option: *last_arg is where the operands end. */
+/* Head::heads for operands 1 and k (k >= 2) of `res` whose heads differ:
+ * "Heads List and f at positions 1 and 2 are expected to be the same."
+ * (audits Union#3, Intersection#2, Complement#2, Join#3). */
+static Expr* setops_heads_error(const char* name, Expr* res, size_t k) {
+    Expr* a = res->data.function.args[0];
+    Expr* b = res->data.function.args[k - 1];
+    Expr* sl = expr_new_symbol(SYM_List);
+    char* ha = expr_to_string_outputform(a->type == EXPR_FUNCTION ? a->data.function.head : sl);
+    char* hb = expr_to_string_outputform(b->type == EXPR_FUNCTION ? b->data.function.head : sl);
+    expr_free(sl);
+    mth_message(name, "heads", "Heads %s and %s at positions 1 and %zu are expected to be the same.",
+                ha ? ha : "", hb ? hb : "", k);
+    free(ha); free(hb);
+    return NULL;
+}
+
+/* A trailing SameTest -> f (or SameTest :> f) option: *last_arg is where the
+ * operands end (audit Complement#3: the delayed rule was not seen). */
 static Expr* setops_same_test(Expr* res, size_t* last_arg) {
     Expr* same_test = NULL;
     *last_arg = res->data.function.arg_count;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol.name == SYM_Rule &&
+            (arg->data.function.head->data.symbol.name == SYM_Rule ||
+             arg->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
             arg->data.function.arg_count == 2 &&
             arg->data.function.args[0]->type == EXPR_SYMBOL &&
             arg->data.function.args[0]->data.symbol.name == SYM_SameTest) {
@@ -490,7 +514,7 @@ Expr* builtin_union(Expr* res) {
     SetOps so;
     int bad = setops_open(res->data.function.args, last_arg, &so);
     if (bad > 0) return builtin_normal_error("Union", res, bad);
-    if (bad < 0) return NULL;                      /* heads must match */
+    if (bad < 0) return setops_heads_error("Union", res, (size_t)(-bad)); /* heads must match */
 
     size_t total = setops_total(&so);
     if (total == 0) {
@@ -558,7 +582,7 @@ static Expr* setops_filter(Expr* res, int mode, const char* name) {
     SetOps so;
     int bad = setops_open(res->data.function.args, last_arg, &so);
     if (bad > 0) return builtin_normal_error(name, res, bad);
-    if (bad < 0) return NULL;
+    if (bad < 0) return setops_heads_error(name, res, (size_t)(-bad));
 
     size_t n0 = so.q[0].n;              /* operand 0 holds global indices 0..n0-1 */
     size_t* cand = malloc(sizeof(size_t) * (n0 ? n0 : 1));
@@ -872,7 +896,14 @@ Expr* builtin_commonest(Expr* res) {
     }
 
     LLSeq q;
-    if (!llq_open(list, &q)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    if (!llq_open(list, &q)) {
+        /* Commonest[x]: Commonest::list, unevaluated, as Tally (audit Commonest#2). */
+        if (!expr_is_plain_atom(list)) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        char* cs = expr_to_string(res);
+        mth_message("Commonest", "list", "List expected at position 1 in %s.", cs ? cs : "");
+        free(cs);
+        return NULL;
+    }
     bool linked = llq_linked(&q);
     if (q.n == 0) { llq_close(&q); return ll_seq_of(linked, NULL, 0); }
 

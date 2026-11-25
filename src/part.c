@@ -16,6 +16,8 @@
 #include "print.h"     /* expr_to_string -- Set::ndarray */
 #include "common.h"
 #include "linkedlist.h"
+#include <stdio.h>
+#include <string.h>
 
 static bool is_atomic(Expr* e);
 
@@ -1406,6 +1408,84 @@ static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest) {
     return assoc_part_collect(ents, m, ok);
 }
 
+/* Why did expr_part decline expr[[i1, i2, ...]]?  Called only after it has,
+ * so the common path pays nothing.  Walks the integer prefix of the path and
+ * names the first defect the reference reports (audits Part#2, Extract#1):
+ *     Head::partw    an integer index past the end ("Part 5 of {a, b, c}
+ *                    does not exist.")
+ *     Head::partd    an index below an atom ("Part specification x[[1]] is
+ *                    longer than depth of object.")
+ *     Head::pkspec1  a non-integer NUMBER as an index ("The expression 1.5
+ *                    cannot be used as a part specification.")
+ * Anything else -- a symbolic index (a pending Part inside a symbolic body),
+ * a Span, All, a List of positions, an association or payload kind on the
+ * way -- stays silent, as before. */
+/* "expr[[i1, ..., in]]" as written, for ::partd (malloc'd). */
+static char* part_spec_string(Expr* expr, Expr** idx, size_t n) {
+    char* es = expr_to_string(expr);
+    size_t cap = strlen(es ? es : "") + 64, len;
+    char* buf = malloc(cap);
+    len = (size_t)snprintf(buf, cap, "%s[[", es ? es : "");
+    for (size_t j = 0; j < n; j++) {
+        char* js = expr_to_string(idx[j]);
+        size_t need = len + strlen(js ? js : "") + 8;
+        if (need > cap) { cap = need * 2; buf = realloc(buf, cap); }
+        len += (size_t)snprintf(buf + len, cap - len, "%s%s", j ? ", " : "", js ? js : "");
+        free(js);
+    }
+    snprintf(buf + len, cap - len, "]]");
+    free(es);
+    return buf;
+}
+
+static void part_decline_message(const char* head, Expr* expr, Expr** idx, size_t n) {
+    Expr* cur = expr;
+    Expr* held = NULL;          /* an element read out of a LinkedList (owned) */
+    for (size_t d = 0; d < n; d++) {
+        Expr* ix = idx[d];
+        if (ix->type == EXPR_INTEGER && ix->data.integer == 0) break;   /* head: fine */
+        bool big = ix->type == EXPR_BIGINT;
+        if (ix->type == EXPR_REAL || expr_is_number_atom(ix)
+#ifdef USE_MPFR
+            || ix->type == EXPR_MPFR
+#endif
+           ) {
+            char* s = expr_to_string(ix);
+            mth_message(head, "pkspec1", "The expression %s cannot be used as a part specification.",
+                        s ? s : "");
+            free(s);
+            break;
+        }
+        if (ix->type != EXPR_INTEGER && !big) break;
+        if (expr_is_plain_atom(cur)) {
+            char* buf = part_spec_string(expr, idx, n);
+            mth_message(head, "partd", "Part specification %s is longer than depth of object.", buf);
+            free(buf);
+            break;
+        }
+        bool linked = cur->type == EXPR_LINKEDLIST;   /* the List it stands for */
+        if (!linked && (cur->type != EXPR_FUNCTION || is_association(cur))) break;
+        int64_t len = linked ? ll_length(cur->data.llist) : (int64_t)cur->data.function.arg_count;
+        int64_t k = big ? 0 : ix->data.integer;
+        if (!big && k < 0) k = len + k + 1;
+        if (big || k < 1 || k > len) {
+            char* is = expr_to_string(ix);
+            char* cs = expr_to_string(cur);
+            mth_message(head, "partw", "Part %s of %s does not exist.", is ? is : "", cs ? cs : "");
+            free(is); free(cs);
+            break;
+        }
+        if (linked) {
+            Expr* next = ll_get(cur->data.llist, k - 1);
+            if (held) expr_free(held);
+            held = cur = next;
+        } else {
+            cur = cur->data.function.args[k - 1];
+        }
+    }
+    if (held) expr_free(held);
+}
+
 Expr* builtin_part(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) {
         return NULL;
@@ -1508,11 +1588,14 @@ Expr* builtin_part(Expr* res) {
     // [[0]] is allowed even for atoms
     if (nindices > 0 && indices[0]->type == EXPR_INTEGER && indices[0]->data.integer == 0) {
         // Allowed
-    } else {
-        if (is_atomic(expr)) return NULL;
+    } else if (is_atomic(expr)) {
+        if (expr_is_plain_atom(expr)) part_decline_message("Part", expr, indices, nindices);
+        return NULL;
     }
 
-    return expr_part(expr, indices, nindices);
+    Expr* r = expr_part(expr, indices, nindices);
+    if (!r) part_decline_message("Part", expr, indices, nindices);
+    return r;
 }
 
 /* Part of `expr` at one position path, honouring a BUFFER.
@@ -1557,6 +1640,7 @@ static Expr* extract_single(Expr* expr, Expr* pos, Expr* h) {
     }
     Expr* part = extract_part(expr, indices, nindices);
     if (!part) {
+        if (!is_ndarray(expr)) part_decline_message("Extract", expr, indices, nindices);
         return NULL;
     }
     if (h) {
@@ -1600,10 +1684,19 @@ Expr* builtin_extract(Expr* res) {
             Expr** a = malloc(sizeof(Expr*) * (size_t)(m + 1));
             a[0] = expr_copy(expr);
             for (int64_t i = 0; i < m; i++) a[i + 1] = ll_get(pl, i);
+            /* Part's own diagnosis would be named Part::...; the List path
+             * says Extract::partw / ::partd, so the LinkedList one does too. */
+            mth_msg_suppress_push();
             out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Part), a, (size_t)m + 1));
+            mth_msg_suppress_pop();
             free(a);
             if (head_is(out, SYM_Part)) {          /* no such part: as for a List */
                 expr_free(out);
+                Expr** ix = malloc(sizeof(Expr*) * (size_t)(m ? m : 1));
+                for (int64_t i = 0; i < m; i++) ix[i] = ll_get(pl, i);
+                part_decline_message("Extract", expr, ix, (size_t)m);
+                for (int64_t i = 0; i < m; i++) expr_free(ix[i]);
+                free(ix);
                 ll_release(pl);
                 return NULL;
             }
@@ -1746,6 +1839,20 @@ Expr* builtin_last(Expr* res) {
     return expr_copy(first_last_element(arg, arg->data.function.args[arg->data.function.arg_count - 1]));
 }
 
+/* Most/Rest decline: an atom is Head::normal, an empty expression
+ * Head::norest ("Cannot take Most of expression {} with length zero."); a
+ * buffer or other payload atom stays silent (audit Most#2/#3, Rest#2/#3). */
+static Expr* most_rest_decline(Expr* res, Expr* arg, const char* head) {
+    if (expr_is_plain_atom(arg)) return builtin_normal_error(head, res, 1);
+    if (arg->type == EXPR_FUNCTION && arg->data.function.arg_count == 0) {
+        char* s = expr_to_string(arg);
+        mth_message(head, "norest", "Cannot take %s of expression %s with length zero.",
+                    head, s ? s : "");
+        free(s);
+    }
+    return NULL;
+}
+
 Expr* builtin_most(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -1759,7 +1866,7 @@ Expr* builtin_most(Expr* res) {
         if (fast) return fast;
         return ndstruct_delist_repack(res, arg);
     }
-    if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
+    if (is_atomic(arg) || arg->data.function.arg_count < 1) return most_rest_decline(res, arg, "Most");
     
     size_t new_count = arg->data.function.arg_count - 1;
     Expr** new_args = NULL;
@@ -1787,7 +1894,7 @@ Expr* builtin_rest(Expr* res) {
         if (fast) return fast;
         return ndstruct_delist_repack(res, arg);
     }
-    if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
+    if (is_atomic(arg) || arg->data.function.arg_count < 1) return most_rest_decline(res, arg, "Rest");
     
     size_t new_count = arg->data.function.arg_count - 1;
     Expr** new_args = NULL;
@@ -2238,6 +2345,9 @@ Expr* builtin_insert(Expr* res) {
     { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Insert, res, &dh); if (dh) return dr; }
     if (expr_is_number_atom(res->data.function.args[0]))
         return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[2], true);
+    /* Insert[x, y, 1], Insert["abc", "x", 2]: Insert::normal (audit Insert#4). */
+    if (expr_is_plain_atom(res->data.function.args[0]))
+        return builtin_normal_error("Insert", res, 1);
     if (is_association(res->data.function.args[0]))
         return assoc_insert(res->data.function.args[0], res->data.function.args[1],
                             res->data.function.args[2]);
@@ -2469,6 +2579,20 @@ Expr* builtin_delete(Expr* res) {
     if (res->data.function.arg_count == 1) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {
+        /* A non-integer atom position (Delete[{a, b}, x], 1.5) is no position
+         * at all: Delete::psl, unevaluated (audit Delete#6). A string is a key. */
+        {
+            Expr* pos = res->data.function.args[1];
+            if (expr_is_plain_atom(pos) && pos->type != EXPR_INTEGER &&
+                pos->type != EXPR_BIGINT && pos->type != EXPR_STRING) {
+                char* ps = expr_to_string(pos);
+                char* cs = expr_to_string(res);
+                mth_message("Delete", "psl", "Position specification %s in %s is not an integer "
+                            "or a list of integers.", ps ? ps : "", cs ? cs : "");
+                free(ps); free(cs);
+                return NULL;
+            }
+        }
         { bool dh; Expr* dr = ds_native(res->data.function.args[0], SYM_Delete, res, &dh); if (dh) return dr; }
         /* Delete[assoc, Key[k]] and Delete[assoc, "k"] name one entry by its
          * key, as the one-element path {Key[k]} does (audit Delete#3 /

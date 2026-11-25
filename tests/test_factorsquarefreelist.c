@@ -94,8 +94,10 @@ void test_fsf_extension() {
 
 /* ---- Extension option forwarded through FactorSquareFreeList ---- */
 void test_fsfl_extension() {
+    /* each listed factor with a positive leading coefficient (audit
+     * FactorSquareFreeList#1) */
     check("FactorSquareFreeList[x^2 - 2 Sqrt[2] x + 2, Extension->Sqrt[2]]",
-          "{{1, 1}, {Sqrt[2] - x, 2}}");
+          "{{1, 1}, {-Sqrt[2] + x, 2}}");
     check("FactorSquareFreeList[x^4+2x^2+1, Extension->I]",
           "{{1, 1}, {1 + x^2, 2}}");
     /* Round-trip over the extension. */

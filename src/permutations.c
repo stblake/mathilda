@@ -72,6 +72,22 @@ static int cycles_i64_cmp(const void* a, const void* b) {
 static int cycles_check(const Expr* cl, const Expr* whole, int64_t* maxpt) {
     *maxpt = 0;
     if (!is_list(cl)) goto intpoint;
+    /* A non-positive integer point -- machine or BigInt -- is ::pospoint
+     * wherever it stands, whatever else the cycles hold: Cycles[{{a, -1}}] and
+     * Cycles[{{-1, a}}] are one diagnosis, and -10^20 is an integer, not an
+     * ::intpoint (audits Cycles#2, Cycles#3). */
+    for (size_t c = 0; c < cl->data.function.arg_count; c++) {
+        const Expr* cyc = cl->data.function.args[c];
+        if (!is_list(cyc)) continue;
+        for (size_t j = 0; j < cyc->data.function.arg_count; j++) {
+            const Expr* p = cyc->data.function.args[j];
+            if ((p->type == EXPR_INTEGER && p->data.integer <= 0) ||
+                (p->type == EXPR_BIGINT && mpz_sgn(p->data.bigint) <= 0)) {
+                msg_expr("Cycles", "pospoint", "%s contains integers that are not positive.", whole);
+                return -1;
+            }
+        }
+    }
     for (size_t c = 0; c < cl->data.function.arg_count; c++) {
         const Expr* cyc = cl->data.function.args[c];
         if (!is_list(cyc)) goto intpoint;

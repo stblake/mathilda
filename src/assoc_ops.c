@@ -502,6 +502,8 @@ static Expr* builtin_discard(Expr* res) {
     if (argc == 3) {
         Expr* n = ARG(res, 2);
         if (n->type == EXPR_INTEGER && n->data.integer >= 0) limit = n->data.integer;
+        /* a positive BigInt is more than any expression has (audit Discard#1) */
+        else if (n->type == EXPR_BIGINT && mpz_sgn(n->data.bigint) > 0) limit = INT64_MAX;
         else if (!is_infinity_expr(n)) {
             char* s = expr_to_string(res);
             ops_msg("Discard::innf: Non-negative integer or Infinity expected at position 3 in %s.", s);
@@ -662,6 +664,10 @@ static Expr* builtin_subsetq(Expr* res) {
     bool ok = (is_fn(a) || lla) && (is_fn(b) || llb) &&
               ((seqlike_a && seqlike_b) ||
                (!lla && !llb && expr_eq(a->data.function.head, b->data.function.head)));
+    /* An atom operand is SubsetQ::normal at its position, not a heads
+     * mismatch of Symbol with Symbol (audit SubsetQ#1). */
+    if (!ok && (expr_is_plain_atom(a) || expr_is_plain_atom(b)))
+        return builtin_normal_error("SubsetQ", res, expr_is_plain_atom(a) ? 1 : 2);
     if (!ok) {
         char* ha = head_string(a);
         char* hb = head_string(b);
@@ -754,13 +760,22 @@ static Expr* builtin_applyto(Expr* res) {
     Expr* lhs = ARG(res, 0);
     Expr* f = ARG(res, 1);
     const char* root = lvalue_root(lhs);
-    if (!root || symtab_get_own_values(root) == NULL) {
+    Expr* cur = NULL;
+    bool has_value = root && symtab_get_own_values(root) != NULL;
+    /* An indexed variable h[1] holds its value as a DownValue of h: it has a
+     * value when it evaluates to something else (audit ApplyTo#2). */
+    if (root && !has_value && is_fn(lhs) && !head_is(lhs, SYM_Part)) {
+        cur = evaluate(lhs);
+        has_value = !expr_eq(cur, lhs);
+    }
+    if (!has_value) {
+        if (cur) expr_free(cur);
         char* s = expr_to_string(lhs);
         ops_msg("ApplyTo::rvalue: %s is not a variable with a value, so its value cannot be changed.", s);
         free(s);
         return NULL;
     }
-    Expr* cur = evaluate(lhs);
+    if (!cur) cur = evaluate(lhs);
     Expr* call = mk_call1(f, cur);                   /* adopts cur */
     Expr* nv = eval_callback(call);
     expr_free(call);
@@ -1129,6 +1144,9 @@ static Expr* kv_extract(const Expr* x, bool keys, const Expr* f, const char* nam
 
 static Expr* keys_values(Expr* res, bool keys, BuiltinFunc orig) {
     size_t argc = ARGC(res);
+    /* Keys[x], Keys[x, f]: an atom is ::invrl (audit Keys#1). */
+    if ((argc == 1 || argc == 2) && expr_is_plain_atom(ARG(res, 0)))
+        return kv_extract(ARG(res, 0), keys, NULL, keys ? "Keys" : "Values", true);
     if (argc == 1) {
         Expr* r = call_orig(orig, res);
         if (r) return r;
@@ -1199,17 +1217,34 @@ static Expr* ops_keyunion(Expr* res) {
  * elements: Lookup[{<|a -> 1|>, {a -> 3}, {}}, a, 0] -> {1, 3, 0}. */
 static Expr* ops_lookup(Expr* res) {
     size_t argc = ARGC(res);
+    /* Lookup[5, a]: a number or string is no association (audit Lookup#1).
+     * A symbol stays silent: it is the pending form of a variable not yet
+     * assigned (a Module local, a cache read before its first write), which
+     * the internal packages evaluate and test for (Trager, Bronstein). */
+    if (argc >= 2 && argc <= 3 && expr_is_plain_atom(ARG(res, 0)) && ARG(res, 0)->type != EXPR_SYMBOL) {
+        char* s = expr_to_string(ARG(res, 0));
+        ops_msg("Lookup::invrl: The argument %s is not a valid Association or a list of rules.", s);
+        free(s);
+        return NULL;
+    }
     if (argc >= 2 && argc <= 3 && is_list(ARG(res, 0)) && ARGC(ARG(res, 0)) > 0) {
         Expr* lst = ARG(res, 0);
-        bool any_nonrule = false, any_assoc = false, bad = false;
+        bool any_nonrule = false, bad = false;
         for (size_t i = 0; i < ARGC(lst); i++) {
             Expr* el = ARG(lst, i);
             if (is_rule2(el)) continue;
             any_nonrule = true;
-            if (is_association(el) || is_list(el)) any_assoc = true;
-            else bad = true;
+            if (is_association(el)) continue;
+            /* a list element is a list of rules, associations or lists */
+            bool rules = is_list(el);
+            for (size_t j = 0; rules && j < ARGC(el); j++)
+                rules = is_rule2(ARG(el, j)) || is_association(ARG(el, j)) || is_list(ARG(el, j));
+            if (!rules) bad = true;
         }
-        if (any_nonrule && any_assoc && bad) {
+        /* {a -> 1, b} or {{a, 1}}: an element that is neither a rule nor an
+         * association (nor a list of them) makes the whole list invalid,
+         * never Missing (audit Lookup#1). */
+        if (bad) {
             char* s = expr_to_string(lst);
             ops_msg("Lookup::invrl: The argument %s is not a valid Association or a list of rules.", s);
             free(s);

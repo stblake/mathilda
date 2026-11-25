@@ -335,6 +335,10 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
  * packable cases now fast on top.
  */
 static Expr* pad_entry(Expr* res, bool left, const char* name) {
+    /* PadLeft[x, 3]: an atom has nothing to pad -- ::normal (audit PadLeft#2). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
+        expr_is_plain_atom(res->data.function.args[0]))
+        return builtin_normal_error(name, res, 1);
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1
         && is_ndarray(res->data.function.args[0])) {
         Expr* fast = ndstruct_pad(res, left);

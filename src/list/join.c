@@ -6,6 +6,7 @@
 #include "join.h"
 #include "assoc.h"
 #include "linkedlist.h"
+#include "message.h"   /* mth_message: Join::heads */
 
 /* ------------------- Join ------------------- */
 
@@ -104,9 +105,31 @@ static Expr* join_at_level(Expr** lists, size_t n_lists, int level) {
     return result;
 }
 
+/* Join's operands must be expressions sharing one head: an atom is
+ * Join::normal, a different head Join::heads, and the call stays as it is
+ * (audit Join#3). Payload atoms (SparseArray, ...) are left silent. */
+static bool join_operands_ok(Expr* res, size_t n_lists) {
+    Expr** a = res->data.function.args;
+    for (size_t i = 0; i < n_lists; i++)
+        if (expr_is_plain_atom(a[i])) { builtin_normal_error("Join", res, (int)i + 1); return false; }
+    if (a[0]->type != EXPR_FUNCTION) return true;
+    for (size_t i = 1; i < n_lists; i++) {
+        if (a[i]->type != EXPR_FUNCTION || expr_eq(a[i]->data.function.head, a[0]->data.function.head))
+            continue;
+        char* ha = expr_to_string_outputform(a[0]->data.function.head);
+        char* hb = expr_to_string_outputform(a[i]->data.function.head);
+        mth_message("Join", "heads", "Heads %s and %s at positions 1 and %zu are expected to be the same.",
+                    ha ? ha : "", hb ? hb : "", i + 1);
+        free(ha); free(hb);
+        return false;
+    }
+    return true;
+}
+
 Expr* builtin_join(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
-        return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* Join[] is the empty List (audit Join#1). */
+    if (res->data.function.arg_count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     /* Any LinkedList operand: the result is a LinkedList (linkedlist_struct.c). */
     for (size_t i = 0; i < res->data.function.arg_count; i++)
@@ -134,6 +157,7 @@ Expr* builtin_join(Expr* res) {
     }
 
     if (n_lists < 1) return NULL;
+    if (!join_operands_ok(res, n_lists)) return NULL;
 
     Expr* result = join_at_level(res->data.function.args, n_lists, level);
     if (!result) return NULL;
