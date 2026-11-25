@@ -55,7 +55,9 @@ STATUS_MD = os.path.join(ROOT, "review", "backlog_status.md")
 # STILL-BROKEN | PARTIAL | FORMAT-ONLY | UNCLEAR, "reason": ...,
 # "output": <the run output the verdict judged>}}.  A verdict applies only
 # while the row's status is still CHANGED / LIKELY-FIXED and, when it records
-# an output, only while the output is unchanged.
+# an output, only while the output is unchanged.  The exception is DECLINED
+# (with a "reason", no "output"): a decision about the finding itself, so it
+# applies at any run status and is reported apart from the open rows.
 ADJUDICATION = os.path.join(ROOT, "review", "adjudication.json")
 OPEN_STATES = ("CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL",
                "FORMAT-ONLY", "UNCLEAR", "CHANGED", "LIKELY-FIXED")
@@ -348,6 +350,11 @@ def effective_status(rid, status, adj):
     """The run's classification, refined by an adjudication verdict."""
     st = status.get(rid, {})
     s = st.get("status", "NOT-RUN")
+    # DECLINED is a decision about the finding, not about one output: a
+    # deliberate design choice, a wrong expectation, or a large feature left
+    # out of scope.  It holds whatever the run says, and carries its reason.
+    if rid in adj and adj[rid].get("verdict") == "DECLINED":
+        return "DECLINED"
     if s in ("CHANGED", "LIKELY-FIXED") and rid in adj:
         a = adj[rid]
         # A verdict judged one output.  Once the output moves again the
@@ -369,7 +376,7 @@ def report(rows=None, status=None):
         s = effective_status(r["id"], status, adj)
         c[(r["severity"], s)] += 1
     states = ["CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL", "FORMAT-ONLY",
-              "UNCLEAR", "CHANGED", "LIKELY-FIXED", "FIXED", "NOT-RUN"]
+              "UNCLEAR", "CHANGED", "LIKELY-FIXED", "FIXED", "DECLINED", "NOT-RUN"]
     md = ["# Audit backlog status", "",
           f"*Generated {time.strftime('%Y-%m-%d %H:%M')} by "
           "`tools/audit_backlog.py` against the current `./Mathilda`.*", "",
@@ -451,7 +458,7 @@ def adjudicate_pinned(args):
 
 # Display group of each effective status: FIXED is done; CHANGED / LIKELY-FIXED
 # / UNCLEAR / FORMAT-ONLY / NOT-RUN still need a human or agent verdict.
-HTML_GROUP = {"FIXED": "fixed",
+HTML_GROUP = {"FIXED": "fixed", "DECLINED": "declined",
               "CRASH": "open", "HANG": "open", "SAME": "open",
               "STILL-BROKEN": "open", "PARTIAL": "open",
               "FORMAT-ONLY": "open"}  # defect still present; UNCLEAR stays amber
@@ -462,16 +469,18 @@ HTML_STYLE = """
 .st{display:inline-block;padding:0 .45em;border-radius:4px;font-size:.75em;font-weight:600;margin-left:.4em;vertical-align:middle;border:1px solid}
 .st.fixed{color:#1b5e20;background:#e8f5e9;border-color:#a5d6a7}.st.open{color:#b71c1c;background:#ffebee;border-color:#ef9a9a}
 .st.review{color:#6d4c00;background:#fff8e1;border-color:#ffe082}
+.st.declined{color:#455a64;background:#eceff1;border-color:#b0bec5}.f.declined h4,.f.declined pre,.f.declined p{opacity:.7}
+.why{font-size:.8em;color:#455a64;font-weight:normal;margin-left:.4em}
 .f.fixed h4,.f.fixed pre,.f.fixed p{opacity:.55}.f.fixed h4 b,.f.fixed h4{text-decoration-color:#2e7d32}
 details.allfixed>summary{opacity:.6}.tick{color:#2e7d32;font-weight:700}
 .prog{margin:1em 0 .5em}.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#eee}
-.bar span{display:block}.bar .fixed{background:#43a047}.bar .review{background:#ffca28}.bar .open{background:#e53935}
+.bar span{display:block}.bar .fixed{background:#43a047}.bar .review{background:#ffca28}.bar .open{background:#e53935}.bar .declined{background:#90a4ae}
 .sevtab{border-collapse:collapse;margin:.6em 0 1em}.sevtab td,.sevtab th{padding:.15em .7em;border-bottom:1px solid #eee;text-align:right}
 .sevtab th:first-child,.sevtab td:first-child{text-align:left}
 .filters{position:sticky;top:0;background:#fff;padding:.5em 0;z-index:2;border-bottom:1px solid #eee;margin-bottom:1em}
 .filters button{font:inherit;padding:.2em .8em;margin-right:.3em;border:1px solid #ccc;border-radius:6px;background:#fafafa;cursor:pointer}
 .filters button.on{background:#1d1d1f;color:#fff;border-color:#1d1d1f}.filters input{font:inherit;padding:.2em .5em;margin-left:.6em;width:14em}
-body.show-open .f:not(.open),body.show-fixed .f:not(.fixed),body.show-review .f:not(.review){display:none}
+body.show-open .f:not(.open),body.show-fixed .f:not(.fixed),body.show-review .f:not(.review),body.show-declined .f:not(.declined){display:none}
 details.hide,h2.hide{display:none}
 """
 
@@ -556,17 +565,21 @@ def html_report(rows=None, status=None, adj=None):
             label = s.replace("SAME", "OPEN").replace("STILL-BROKEN", "OPEN")
             pill = (f"<span class='st {g}' title='{tip}'>"
                     f"{'&#10003; ' if g == 'fixed' else ''}{label}</span>")
+            if g == "declined" and why:              # the reason, visibly
+                pill += f"<span class='why'>{H.escape(why)}</span>"
             return (f"<div class='f {g}' id='{H.escape(rid)}'><h4>"
                     f"<small><code>{H.escape(rid)}</code></small> {pill} ")
         b = re.sub(r"<div class='f'><h4>", stamp, b)
         nfix = groups.count("fixed")
+        ndec = groups.count("declined")
         if not groups:
             out_blocks.append(b)
             continue
-        cls = " class='allfixed'" if nfix == len(groups) else ""
-        summ = (f" <span class='st {'fixed' if nfix == len(groups) else 'open' if nfix == 0 else 'review'}'>"
-                f"{'<span class=tick>&#10003;</span> ' if nfix == len(groups) else ''}"
-                f"{nfix}/{len(groups)} fixed</span>")
+        done = nfix + ndec == len(groups)
+        cls = " class='allfixed'" if done else ""
+        summ = (f" <span class='st {'fixed' if done else 'open' if nfix == 0 else 'review'}'>"
+                f"{'<span class=tick>&#10003;</span> ' if done else ''}"
+                f"{nfix}/{len(groups)} fixed{f', {ndec} declined' if ndec else ''}</span>")
         ids = " ".join(f"{name}#{i}".lower() for i in range(1, len(groups) + 1))
         b = b.replace("<details>", f"<details{cls} data-b='{H.escape(name, quote=True)}' "
                                    f"data-ids='{H.escape(ids, quote=True)}'>", 1)
@@ -594,30 +607,35 @@ def html_report(rows=None, status=None, adj=None):
                            time.localtime(os.path.getmtime(STATUS_JSON)))
         stamp_txt = f"{mt} (binary version not recorded)"
     tot = len(rows)
-    fx, rv, op = (tally[("all", g)] for g in ("fixed", "review", "open"))
+    fx, dc, rv, op = (tally[("all", g)] for g in ("fixed", "declined", "review", "open"))
     pct = lambda n: f"{100.0 * n / tot:.2f}%"
     sev_rows = "".join(
         f"<tr><td><span class='sev {sv}'>{sv}</span></td>"
-        f"<td>{tally[(sv, 'fixed')]}</td><td>{tally[(sv, 'review')]}</td>"
+        f"<td>{tally[(sv, 'fixed')]}</td><td>{tally[(sv, 'declined')]}</td>"
+        f"<td>{tally[(sv, 'review')]}</td>"
         f"<td>{tally[(sv, 'open')]}</td>"
-        f"<td>{sum(tally[(sv, g)] for g in ('fixed', 'review', 'open'))}</td></tr>"
+        f"<td>{sum(tally[(sv, g)] for g in ('fixed', 'declined', 'review', 'open'))}</td></tr>"
         for sv in SEV_RANK)
     progress = (
         f"<h2>Fix progress</h2><p>Findings last re-run {stamp_txt}; page rendered "
         f"{time.strftime('%Y-%m-%d %H:%M')} by <code>tools/audit_backlog.py</code>. "
-        f"<b>{fx}</b> fixed, <b>{rv}</b> need a verdict (changed since the audit, "
+        f"<b>{fx}</b> fixed, <b>{dc}</b> declined (by design, a wrong expectation, or a "
+        f"large feature out of scope; the reason is shown on each), "
+        f"<b>{rv}</b> need a verdict (changed since the audit, "
         f"not yet confirmed), <b>{op}</b> still open.</p>"
         f"<div class='prog'><div class='bar'>"
         f"<span class='fixed' style='width:{pct(fx)}' title='fixed {fx}'></span>"
+        f"<span class='declined' style='width:{pct(dc)}' title='declined {dc}'></span>"
         f"<span class='review' style='width:{pct(rv)}' title='needs verdict {rv}'></span>"
         f"<span class='open' style='width:{pct(op)}' title='open {op}'></span></div></div>"
-        f"<table class='sevtab'><tr><th>severity</th><th>fixed</th><th>needs verdict</th>"
+        f"<table class='sevtab'><tr><th>severity</th><th>fixed</th><th>declined</th><th>needs verdict</th>"
         f"<th>open</th><th>total</th></tr>{sev_rows}</table>"
         f"<div class='filters'>"
         f"<button class='on' data-m='all'>All</button>"
         f"<button data-m='open'>Open ({op})</button>"
         f"<button data-m='review'>Needs verdict ({rv})</button>"
         f"<button data-m='fixed'>Fixed ({fx})</button>"
+        f"<button data-m='declined'>Declined ({dc})</button>"
         f"<input id='flt' placeholder='filter: builtin or id'></div>")
     head_html = head_html.replace("</style>", HTML_STYLE + "</style>", 1)
     page = head_html + progress + full
@@ -626,7 +644,8 @@ def html_report(rows=None, status=None, adj=None):
     tmp = HTML_OUT + ".tmp"
     open(tmp, "w").write(page)
     os.replace(tmp, HTML_OUT)
-    print(f"report.html: {fx} fixed, {rv} need a verdict, {op} open (of {tot})")
+    print(f"report.html: {fx} fixed, {dc} declined, {rv} need a verdict, "
+          f"{op} open (of {tot})")
 
 
 if __name__ == "__main__":
