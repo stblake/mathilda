@@ -32,6 +32,7 @@
 #include "sym_names.h"
 #include "files.h"      /* files_import_text, files_export_text */
 #include "message.h"
+#include "eval.h"       /* evaluate: ImageResize for ImageSize */
 #include "checked_alloc.h"  /* user-sized RandomImage buffers */
 #include "eval.h"           /* eval_and_free: RandomImage[dist, size] */
 #include "graphics/graphics_export.h"
@@ -204,6 +205,29 @@ static const char* str_arg(const Expr* e, size_t i)
     return (a && a->type == EXPR_STRING) ? a->data.string : NULL;
 }
 
+/* The file argument at position i: a string, or the s of File["s"]. */
+static const char* path_arg(const Expr* e, size_t i)
+{
+    const Expr* a;
+    if (e->type != EXPR_FUNCTION || i >= e->data.function.arg_count) return NULL;
+    a = e->data.function.args[i];
+    if (a && a->type == EXPR_STRING) return a->data.string;
+    if (a && a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_File && a->data.function.arg_count == 1 &&
+        a->data.function.args[0]->type == EXPR_STRING)
+        return a->data.function.args[0]->data.string;
+    return NULL;
+}
+
+/* Is a a Rule / RuleDelayed (an option)? */
+static int is_rule_arg(const Expr* a)
+{
+    return a && a->type == EXPR_FUNCTION && a->data.function.arg_count == 2 &&
+           a->data.function.head->type == EXPR_SYMBOL &&
+           (a->data.function.head->data.symbol.name == SYM_Rule ||
+            a->data.function.head->data.symbol.name == SYM_RuleDelayed);
+}
+
 /* ------------------------------------------------------------------- Import */
 
 /* Import[file] / Import[file, "Image"] -- decode a raster file into an Image.
@@ -215,7 +239,7 @@ static const char* str_arg(const Expr* e, size_t i)
 static Expr* builtin_import(Expr* res)
 {
     const char* path;
-    const char* fmt;
+    const char* fmt = NULL;
     unsigned char* px;
     double* buf;
     Expr* out;
@@ -225,7 +249,7 @@ static Expr* builtin_import(Expr* res)
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
 
-    path = str_arg(res, 0);
+    path = path_arg(res, 0);                /* a string or File["s"] */
     if (!path) return NULL;
 
     /* The text formats: "Text" / "String" / "Lines", also spelled {"Text"}; a
@@ -263,7 +287,19 @@ static Expr* builtin_import(Expr* res)
      * keeps its alpha -- forcing RGB would invent two channels for the first and discard
      * transparency for the second. */
     px = stbi_load(path, &w, &h, &n, 0);
-    if (!px) return failed();
+    if (!px) {
+        /* Import::nffil for a missing file, Import::fmterr for one that does not
+         * decode (audit Import#2). */
+        FILE* probe = fopen(path, "rb");
+        if (!probe)
+            mth_message("Import", "nffil", "File %s not found during Import.", path);
+        else {
+            fclose(probe);
+            mth_message("Import", "fmterr", "Cannot import data as %s format.",
+                        fmt ? fmt : "an image");
+        }
+        return failed();
+    }
     if (w <= 0 || h <= 0 || n <= 0) { stbi_image_free(px); return failed(); }
 
     count = (size_t)w * (size_t)h * (size_t)n;
@@ -298,11 +334,22 @@ static Expr* builtin_export(Expr* res)
     Expr* out;
 
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count < 2 || res->data.function.arg_count > 3) return NULL;
+    /* Trailing options: ImageSize -> w (or {w, h}) resizes a raster image before
+     * it is written (audit Export#5); the others are accepted and ignored. */
+    size_t argc = res->data.function.arg_count;
+    const Expr* image_size = NULL;
+    while (argc > 2 && is_rule_arg(res->data.function.args[argc - 1])) {
+        const Expr* o = res->data.function.args[argc - 1];
+        const Expr* k = o->data.function.args[0];
+        if (k->type == EXPR_SYMBOL && strcmp(k->data.symbol.name, "ImageSize") == 0 && !image_size)
+            image_size = o->data.function.args[1];
+        argc--;
+    }
+    if (argc < 2 || argc > 3) return NULL;
 
-    path = str_arg(res, 0);
+    path = path_arg(res, 0);                /* a string or File["s"] */
     if (!path) return NULL;
-    if (res->data.function.arg_count == 3) {
+    if (argc == 3) {
         fmt = canon_format(str_arg(res, 2));
         if (!fmt) return NULL;
     }
@@ -388,7 +435,17 @@ static Expr* builtin_export(Expr* res)
     }
 
     img = res->data.function.args[1];
-    if (!image_load(img, &w, &h, &ch, &pix)) {
+    Expr* resized = NULL;
+    if (image_size) {
+        Expr* ra[2] = { expr_copy((Expr*)img), expr_copy((Expr*)image_size) };
+        Expr* call = expr_new_function(expr_new_symbol("ImageResize"), ra, 2);
+        resized = evaluate(call);
+        expr_free(call);
+        img = resized;
+    }
+    int loaded = image_load(img, &w, &h, &ch, &pix);
+    if (resized) expr_free(resized);
+    if (!loaded) {
         /* A volume has no single raster to write, and silently writing its middle slice would be
          * a lie about what was exported. */
         return NULL;
@@ -423,7 +480,10 @@ static Expr* builtin_export(Expr* res)
         return NULL;              /* an unclaimed format, not a failed write */
     }
     free(bytes);
-    if (!ok) return failed();
+    if (!ok) {
+        mth_message("Export", "noopen", "Cannot open %s.", path);   /* audit Export#4 */
+        return failed();
+    }
 
     out = expr_new_string(path);
     return out ? out : failed();

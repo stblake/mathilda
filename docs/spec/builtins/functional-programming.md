@@ -983,6 +983,8 @@ In[7]:= FixedPointList[(# + 2/#)/2 &, 1.0, SameTest -> (Abs[#1 - #2] < 0.01 &)]
 Out[7]= {1.0, 1.5, 1.41667, 1.41422}
 ```
 
+**Wave 5 G8.** `FixedPoint` and `FixedPointList` take two or three positional arguments (`::argtu` / `::nonopt` otherwise), and a negative bound is `::intnm` ("Non-negative machine-sized integer expected at position 3").
+
 ## Fold
 Successively applies a binary function to an accumulating seed and the elements of a list.
 - `Fold[f, x, list]`: Returns the last element of `FoldList[f, x, list]`, namely `f[...f[f[f[x, list[[1]]], list[[2]]], list[[3]]]..., list[[n]]]`.

@@ -2345,3 +2345,5 @@ Out[2]= True
 - `HoldForm`, `TraditionalForm` and `StandardForm` are transparent (audit HoldForm#1, TraditionalForm#1).
 
 **Wave 4 G8.** Strings and multi-letter symbols in `\text{}` escape the TeX special characters (`_ % & # $ { } ~ ^ \`); a Greek-letter symbol is its command (`\alpha`, `\Gamma`); a held (unevaluated) Integrate / Sum / Product / Limit is typeset as `\int_a^b f \, dx`, `\sum _{i=1}^n f`, `\lim_{x\to a} f`.
+
+**Wave 5 G8.** Standard notations: `n!`, `\binom{n}{k}`, `\zeta (s)`, `J_n(x)` (and `Y`, `I`, `K`), `x_1` for `Subscript[x, 1]`, `f'(x)` for `Derivative[1][f][x]` (primes up to three, then `f^{(n)}`), `a.b` for `Dot`. A rectangular list of lists is a matrix: `\left(\begin{array}{cc} 1 & 2 \\ 3 & 4 \\ \end{array}\right)`, one row per line.

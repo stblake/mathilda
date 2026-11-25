@@ -30,6 +30,7 @@
 #include "options.h"
 #include "files.h"     /* files_slurp_raw */
 #include "message.h"   /* mth_message */
+#include "print.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -469,6 +470,13 @@ Expr* read_structure(ReadCursor* c, const Expr* spec, const ReadCfg* cfg,
 /* Resolve arg 0 of Read to a live input stream.  On a hard failure a message is
  * printed and *fail is set (return $Failed); a return of NULL with *fail == 0
  * means "not a stream/filename form" (decline). */
+/* Read::readf: the type spec names no format Read knows (audit Read#3). */
+static void read_format_message(const Expr* spec) {
+    char* t = expr_to_string_outputform((Expr*)spec);
+    mth_message("Read", "readf", "%s is not a valid format specification.", t ? t : "");
+    free(t);
+}
+
 static Stream* resolve_input(const Expr* a, int* fail) {
     *fail = 0;
     int id, is_output;
@@ -487,7 +495,14 @@ static Stream* resolve_input(const Expr* a, int* fail) {
         return s;
     }
     const char* name = stream_filename_arg(a);
-    if (!name) return NULL;                 /* decline */
+    if (!name) {
+        /* Read[123]: no stream or file name (audit Read#3). */
+        char* t = expr_to_string_outputform((Expr*)a);
+        mth_message("General", "stream", "%s is not a string, InputStream[ ], or OutputStream[ ].",
+                    t ? t : "");
+        free(t);
+        return NULL;                        /* leave the call unevaluated */
+    }
     Stream* s = stream_find_by_name(name, 0);
     if (s) return s;
     int nid = stream_open_input(name);
@@ -524,7 +539,7 @@ Expr* builtin_read(Expr* res) {
     const Expr* spec;
     if (new_argc >= 2) {
         spec = res->data.function.args[1];
-        if (!read_spec_valid(spec)) return NULL;
+        if (!read_spec_valid(spec)) { read_format_message(spec); return NULL; }
     } else {
         default_spec = expr_new_symbol(SYM_Expression);
         spec = default_spec;
@@ -550,6 +565,7 @@ Expr* builtin_read(Expr* res) {
 
     if (bad_spec) {
         if (result) expr_free(result);
+        read_format_message(res->data.function.args[1]);
         return NULL;                        /* invalid type spec: leave unevaluated */
     }
     return result ? result : expr_new_symbol(SYM_EndOfFile);
@@ -572,6 +588,11 @@ Expr* builtin_skip(Expr* res) {
     if (argc >= 3 && res->data.function.args[2]->type == EXPR_INTEGER) {
         n = res->data.function.args[2]->data.integer;
         if (n < 0) return NULL;
+        pos_args = 3;
+    } else if (argc >= 3 && res->data.function.args[2]->type == EXPR_BIGINT) {
+        /* a bignum count outlasts any stream: read until EndOfFile */
+        if (mpz_sgn(res->data.function.args[2]->data.bigint) < 0) return NULL;
+        n = INT64_MAX;
         pos_args = 3;
     }
     size_t nopts = argc - pos_args;
@@ -628,7 +649,8 @@ static size_t rs_find(const char* buf, size_t len, size_t pos, const Expr* term)
  *
  * The text from the source's current point to its end -- or up to, but not
  * including, the first occurrence of the string term (or of any string in a
- * list of them), which is left unread.  Line ends are normalised to "\n".  At
+ * list of them), which is left unread.  The bytes are returned exactly as they
+ * are: CRLF line ends stay "\r\n".  At
  * end of file the result is EndOfFile.  A file name is read whole each time
  * without registering a stream; a stream advances.  A file that cannot be
  * opened gives OpenRead::noopen and $Failed.
@@ -713,8 +735,8 @@ void read_init(void) {
         "\treads the complete contents of a file and returns them as a string.\n"
         "ReadString[stream] reads from the stream's current point to the end.\n"
         "ReadString[src, term] reads up to, but not including, the first occurrence of the string\n"
-        "term (or any of a list of strings), which is left unread.  Line ends are normalised to\n"
-        "\"\\n\".  At end of file the result is EndOfFile.");
+        "term (or any of a list of strings), which is left unread.  The bytes are returned\n"
+        "exactly as they are (CRLF line ends stay \"\\r\\n\").  At end of file the result is EndOfFile.");
 
     /* Same default separator settings as ReadList; SetOptions[Read, ...] works
      * with no extra code because Options[Read] is the single source of truth. */

@@ -108,6 +108,19 @@ static void fs_msg(const char* fmt, ...) {
 
 static char* home_from_env(void);
 
+/* The name a path argument spells, without `~` expansion: the string itself,
+ * or the s of File["s"]; NULL for any other argument.  For the heads that
+ * manipulate names (FileBaseName, DirectoryName, ...), where File["s"] is
+ * the same name as "s". */
+static const char* file_arg_name(const Expr* a) {
+    if (a->type == EXPR_STRING) return a->data.string;
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_File &&
+        a->data.function.arg_count == 1 && a->data.function.args[0]->type == EXPR_STRING)
+        return a->data.function.args[0]->data.string;
+    return NULL;
+}
+
 /* The path a file argument names: a String or File["s"], with a leading `~`
  * (alone or before a separator) expanded to the home directory.  Caller
  * frees; NULL when the argument is neither form. */
@@ -175,14 +188,16 @@ Expr* builtin_filesize(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1) return NULL;
 
-    Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_STRING) return NULL;
+    char* path = file_arg_path(res->data.function.args[0]);   /* String / File, `~` */
+    if (!path) return NULL;
 
     struct stat st;
-    if (stat(arg->data.string, &st) != 0) {
-        fs_msg("FileSize::nffil: Cannot find file %s.", arg->data.string);
+    if (stat(path, &st) != 0) {
+        fs_msg("FileSize::nffil: Cannot find file %s.", path);
+        free(path);
         return expr_new_symbol(SYM_DollarFailed);
     }
+    free(path);
     return expr_new_integer((int64_t)st.st_size);
 }
 
@@ -235,10 +250,10 @@ Expr* builtin_fileextension(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1) return NULL;
 
-    Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_STRING) return NULL;
+    const char* full = file_arg_name(res->data.function.args[0]);   /* String / File */
+    if (!full) return NULL;
 
-    const char* name = filename_component(arg->data.string);
+    const char* name = filename_component(full);
     size_t off = extension_offset(name);
     /* extension_offset returns len(name) when there is none; passing
      * name + len yields an empty string, which is the right answer. */
@@ -256,10 +271,10 @@ Expr* builtin_filebasename(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1) return NULL;
 
-    Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_STRING) return NULL;
+    const char* full = file_arg_name(res->data.function.args[0]);   /* String / File */
+    if (!full) return NULL;
 
-    const char* name = filename_component(arg->data.string);
+    const char* name = filename_component(full);
     size_t off = extension_offset(name);
     size_t base_len;
     if (off == strlen(name)) {
@@ -631,8 +646,10 @@ static int fileprint_decode_selector(const Expr* selector, int64_t total,
         *out_start = 1; *out_end = total; *out_step = 1;
         return 1;
     }
-    if (selector->type == EXPR_INTEGER) {
-        int64_t n = selector->data.integer;
+    if (selector->type == EXPR_INTEGER || selector->type == EXPR_BIGINT) {
+        /* A bignum count is beyond any line count: it saturates (all lines). */
+        int64_t n = selector->type == EXPR_INTEGER ? selector->data.integer
+                  : (mpz_sgn(selector->data.bigint) > 0 ? INT64_MAX : -INT64_MAX);
         if (n >= 0) {
             *out_start = 1;
             *out_end   = (n < total) ? n : total;
@@ -716,28 +733,31 @@ Expr* builtin_fileprint(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
 
-    Expr* file_arg = res->data.function.args[0];
-    if (file_arg->type != EXPR_STRING) return NULL;
+    char* path = file_arg_path(res->data.function.args[0]);   /* String / File, `~` */
+    if (!path) return NULL;
 
     /* Sniff the selector type up front so a bad selector keeps the call
      * unevaluated instead of half-printing the file. */
     Expr* selector = (argc == 2) ? res->data.function.args[1] : NULL;
     if (selector) {
-        if (selector->type != EXPR_INTEGER
+        if (selector->type != EXPR_INTEGER && selector->type != EXPR_BIGINT
             && !(selector->type == EXPR_FUNCTION
                  && selector->data.function.head->type == EXPR_SYMBOL
                  && selector->data.function.head->data.symbol.name == SYM_Span))
         {
+            free(path);
             return NULL;
         }
     }
 
     size_t fsize = 0;
-    char* buf = fileprint_slurp(file_arg->data.string, &fsize);
+    char* buf = fileprint_slurp(path, &fsize);
     if (!buf) {
-        printf("FilePrint::noopen: Cannot open %s.\n", file_arg->data.string);
+        mth_message("FilePrint", "noopen", "Cannot open %s.", path);
+        free(path);
         return expr_new_symbol(SYM_DollarFailed);
     }
+    free(path);
 
     LineSpan* lines = NULL;
     size_t total = 0;
@@ -863,15 +883,34 @@ static int fn_os_rule(const Expr* a, int* windows) {
  * convention, overridden by the head's stored defaults (SetOptions), then by
  * the explicit trailing option rules opts[0..n).  Returns 0 (leave the call
  * unevaluated) on a non-option argument or an unknown operating system. */
+static int fn_os_explicit(Expr* const* opts, size_t n, int* windows, int* seen) {
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = opts[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+            a->data.function.head->data.symbol.name == SYM_List) {
+            /* a list of option rules is the same as the rules in sequence */
+            if (!fn_os_explicit(a->data.function.args, a->data.function.arg_count,
+                                windows, seen))
+                return 0;
+            continue;
+        }
+        int w = *windows;
+        if (!fn_os_rule(a, &w)) return 0;
+        if (!*seen) { *windows = w; *seen = 1; }    /* the first setting wins */
+    }
+    return 1;
+}
+
 static int fn_os_option(const char* head, Expr* const* opts, size_t n, int* windows) {
     *windows = (HOST_SEP == '\\');
+    int seen = 0, w = *windows;
+    if (!fn_os_explicit(opts, n, &w, &seen)) return 0;
+    if (seen) { *windows = w; return 1; }
     Expr* defs = symtab_get_options(head);          /* borrowed */
     if (defs && defs->type == EXPR_FUNCTION && defs->data.function.head->type == EXPR_SYMBOL &&
         defs->data.function.head->data.symbol.name == SYM_List)
         for (size_t i = 0; i < defs->data.function.arg_count; i++)
             (void)fn_os_rule(defs->data.function.args[i], windows);
-    for (size_t i = 0; i < n; i++)
-        if (!fn_os_rule(opts[i], windows)) return 0;
     return 1;
 }
 
@@ -1120,9 +1159,9 @@ Expr* builtin_directoryname(Expr* res) {
         else return NULL;
         argc--;
     }
-    if (argc < 1 || argc > 2) return NULL;
-    Expr* a0 = res->data.function.args[0];
-    if (a0->type != EXPR_STRING) {
+    if (argc < 1 || argc > 2) return builtin_arg_error("DirectoryName", argc, 1, 2);
+    const char* src = file_arg_name(res->data.function.args[0]);   /* String / File */
+    if (!src) {
         files_arg_message(res, "DirectoryName", "string",
                           "String expected at position 1");
         return NULL;
@@ -1138,7 +1177,6 @@ Expr* builtin_directoryname(Expr* res) {
         n = a1->data.integer;
     }
 
-    const char* src = a0->data.string;
     char* buf = malloc(strlen(src) + 1);
     if (!buf) return NULL;
     size_t len = 0;
@@ -1346,6 +1384,8 @@ Expr* builtin_filenames(Expr* res) {
             depth = -1;
         } else if (a[2]->type == EXPR_INTEGER && a[2]->data.integer >= 0) {
             depth = a[2]->data.integer;
+        } else if (a[2]->type == EXPR_BIGINT && mpz_sgn(a[2]->data.bigint) > 0) {
+            depth = -1;       /* deeper than any directory tree: unlimited */
         } else {
             files_arg_message(res, "FileNames", "innf",
                 "Non-negative integer or Infinity expected at position 3");
@@ -1527,6 +1567,10 @@ Expr* builtin_environment(Expr* res) {
                           "String expected at position 1");
         return NULL;
     }
+    /* No variable name holds '=' (or is empty); getenv on such a name can
+     * match a prefix of another variable's "NAME=value" entry. */
+    if (a0->data.string[0] == '\0' || strchr(a0->data.string, '='))
+        return expr_new_symbol(SYM_DollarFailed);
     const char* v = getenv(a0->data.string);
     return v ? expr_new_string(v) : expr_new_symbol(SYM_DollarFailed);
 }
@@ -1588,17 +1632,17 @@ Expr* builtin_parentdirectory(Expr* res) {
         dir = cwd_dup();
         if (!dir) return NULL;
     } else {
-        Expr* a0 = res->data.function.args[0];
-        if (a0->type != EXPR_STRING) {
+        const char* name = file_arg_name(res->data.function.args[0]);   /* String / File */
+        if (!name) {
             files_arg_message(res, "ParentDirectory", "string", "String expected at position 1");
             return NULL;
         }
-        dir = abs_existing(a0->data.string);
+        dir = abs_existing(name);
         struct stat st;
         if (!dir || stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
             free(dir);
             mth_message("ParentDirectory", "dirnex", "Directory %s does not exist.",
-                        a0->data.string);
+                        name);
             return NULL;
         }
     }
@@ -1687,14 +1731,14 @@ Expr* builtin_filenametake(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return builtin_arg_error("FileNameTake", argc, 1, 2);
-    Expr* a0 = res->data.function.args[0];
-    if (a0->type != EXPR_STRING) {
+    const char* name = file_arg_name(res->data.function.args[0]);   /* String / File */
+    if (!name) {
         files_arg_message(res, "FileNameTake", "string", "String expected at position 1");
         return NULL;
     }
     int64_t lo, hi;
     char** comps;
-    size_t n = fnt_split(a0->data.string, &comps);
+    size_t n = fnt_split(name, &comps);
     Expr* spec = argc == 2 ? res->data.function.args[1] : NULL;
     if (!spec) {
         lo = hi = (int64_t)n - 1;
@@ -1794,9 +1838,16 @@ Expr* builtin_directoryq(Expr* res) {
 }
 
 /* Append path piece `p` to buf (capacity grows), separator-joined: trailing
- * separators of the piece are dropped and exactly one is written after it.
+ * separators of the piece are dropped and exactly one is written after it;
+ * a later piece's leading separators are dropped too.
  * A piece made only of separators is the root. */
 static void tfn_append(char** buf, size_t* len, size_t* cap, const char* p, bool trailing_sep) {
+    /* After a separator already written, the piece's leading separators
+     * would double it ("a" + "/c" is "a/c", not "a//c"). */
+    if (*len > 0 && is_sep((*buf)[*len - 1])) {
+        while (is_sep(*p)) p++;
+        if (*p == '\0') return;
+    }
     size_t pl = strlen(p);
     while (pl > 0 && is_sep(p[pl - 1])) pl--;
     bool root = pl == 0 && p[0] != '\0';

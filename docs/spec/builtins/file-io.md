@@ -39,7 +39,7 @@ Reads the objects contained in a file and returns them as a `List`, directed by 
 - `ReadList["file"]` — read every remaining expression; equivalent to `ReadList["file", Expression]`.
 - `ReadList["file", type]` — read objects of `type` until end of file → a flat list.
 - `ReadList["file", {type_1, type_2, ...}]` — read one object of each type per pass, grouping each pass into a sublist, until end of file → a list of sublists.
-- `ReadList["file", types, n]` — read only the first `n` objects (single type) or `n` passes (type list).
+- `ReadList["file", types, n]` — read only the first `n` objects (single type) or `n` passes (type list). A bignum `n` reads to end of file.
 
 **Read types**:
 
@@ -108,7 +108,7 @@ string. The stream object is `InputStream["String", id]`.
 ## Skip
 `Skip[stream, type]` reads and discards one object of the given type, exactly
 as `Read` would read it, with the same separator options. `Skip[stream, type, n]`
-skips `n` objects. It returns `Null`, or `EndOfFile` if the stream ends first.
+skips `n` objects; a bignum `n` reads to the end of the stream. It returns `Null`, or `EndOfFile` if the stream ends first.
 `Protected`.
 
 ## ReadString
@@ -143,6 +143,7 @@ The read types and the `RecordSeparators`/`WordSeparators`/`TokenWords`/`NullRec
 - `Protected`.
 - Returns `EndOfFile` once past end of file. Within a partly-read `{type_1, ...}` structure, the unread trailing slots are filled with `EndOfFile`; a read that begins already at end of file returns a bare `EndOfFile`.
 - Returns `$Failed` for a stream that is not open, or (with `Read::readn`) for a token that is not of the requested numeric type.
+- `Read[]` is `Read::argt`; a source that is no stream or file name (`Read[123]`) is `General::stream`; a type that is no read type (`Read[s, Foo]`) is `Read::readf`. Each leaves the call unevaluated.
 - `Number` / `Real` accept only a number **literal**: an optional sign, digits with an optional decimal point, and an optional exponent written `e`, `E`, `*^` or `*10^` (`-4`, `2.5`, `1.5e3`, `-2.*^-2`, `2.*10^5`, `.5`). The token is never evaluated, so `1/2`, `2^3` or `Print["x"]` in the file are each a `Read::readn` and `$Failed` — reading data does not run it.
 - The `Expression` leaf is read **unevaluated** and the constructed result is then evaluated by the surrounding evaluator — so `Read[s, Expression]` evaluates while `Read[s, Hold[Expression]]` stays held.
 
@@ -152,7 +153,7 @@ The read types and the `RecordSeparators`/`WordSeparators`/`TokenWords`/`NullRec
 In[1]:= Put[10, 20, 30, "/tmp/mathilda_io_read.txt"]  (* a three-line data file *)
 
 In[2]:= str = OpenRead["/tmp/mathilda_io_read.txt"]
-Out[2]= InputStream["/tmp/mathilda_io_read.txt", 1]
+Out[2]= InputStream["/tmp/mathilda_io_read.txt", 3]
 
 In[3]:= Read[str, Number]
 Out[3]= 10
@@ -190,17 +191,20 @@ Open a file and return a stream object addressing a persistent current point.
 - `OpenWrite["file"]` — open for writing, truncating the file; returns `OutputStream["file", n]`.
 - `OpenAppend["file"]` — open for writing at the end of the file; returns `OutputStream["file", n]`.
 
+- `OpenWrite[]` / `OpenAppend[]` — open a new file with a fresh name in `$TemporaryDirectory`.
+
 **Features**:
-- `Protected`. Return `$Failed` (with an `Open*::noopen` diagnostic) if the file cannot be opened.
+- `Protected`. Return `$Failed` (with an `Open*::noopen` diagnostic) if the file cannot be opened; a directory is not a file (`OpenRead["."]` is `OpenRead::noopen`).
+- A file specification that is not a non-empty string or `File["name"]` emits `Open*::fstr` and gives `$Failed`.
 - The integer in the returned object is an internal handle into the stream registry; the object is inert and prints as itself.
 - The registry is freed on `Close` or, for anything still open, at program exit (no leaks).
-- Options: an output stream keeps `FormatType -> form` (the form `Write` renders in; `InputForm` by default, `FortranForm` and `CForm` supported) and `PageWidth -> n` (78 by default; a `FortranForm` or `CForm` stream breaks a wider expression into continuation lines, see `FortranForm`). Other options (`CharacterEncoding`, ...) are accepted and ignored.
+- Options: an output stream keeps `FormatType -> form` (the form `Write` renders in; `InputForm` by default, `OutputForm` (strings unquoted), `FortranForm` and `CForm` supported) and `PageWidth -> n` (78 by default; a `FortranForm` or `CForm` stream breaks a wider expression into continuation lines, see `FortranForm`). Other options (`CharacterEncoding`, ...) are accepted and ignored.
 
 #### Basic Examples
 
 ```mathematica
 In[1]:= str = OpenWrite["/tmp/mathilda_io_open.txt"]  (* OpenWrite truncates the file *)
-Out[1]= OutputStream["/tmp/mathilda_io_open.txt", 1]
+Out[1]= OutputStream["/tmp/mathilda_io_open.txt", 3]
 
 In[2]:= Write[str, x^2]
 
@@ -208,7 +212,7 @@ In[3]:= Close[str]
 Out[3]= "/tmp/mathilda_io_open.txt"
 
 In[4]:= app = OpenAppend["/tmp/mathilda_io_open.txt"]  (* OpenAppend keeps the prior contents *)
-Out[4]= OutputStream["/tmp/mathilda_io_open.txt", 2]
+Out[4]= OutputStream["/tmp/mathilda_io_open.txt", 4]
 
 In[5]:= Write[app, y^2]
 
@@ -216,7 +220,7 @@ In[6]:= Close[app]
 Out[6]= "/tmp/mathilda_io_open.txt"
 
 In[7]:= ins = OpenRead["/tmp/mathilda_io_open.txt"]
-Out[7]= InputStream["/tmp/mathilda_io_open.txt", 3]
+Out[7]= InputStream["/tmp/mathilda_io_open.txt", 5]
 
 In[8]:= ReadList[ins]  (* both lines survive the append *)
 Out[8]= {x^2, y^2}
@@ -236,10 +240,10 @@ Closes an open stream and returns its file name.
 
 ```mathematica
 In[1]:= str = OpenWrite["/tmp/mathilda_io_close.txt"]
-Out[1]= OutputStream["/tmp/mathilda_io_close.txt", 1]
+Out[1]= OutputStream["/tmp/mathilda_io_close.txt", 3]
 
 In[2]:= Streams["/tmp/mathilda_io_close.txt"]  (* the stream is open *)
-Out[2]= {OutputStream["/tmp/mathilda_io_close.txt", 1]}
+Out[2]= {OutputStream["/tmp/mathilda_io_close.txt", 3]}
 
 In[3]:= Close[str]  (* Close returns the file name *)
 Out[3]= "/tmp/mathilda_io_close.txt"
@@ -255,22 +259,25 @@ Lists the currently open streams.
 - `Streams[]` — all open `InputStream`/`OutputStream` objects.
 - `Streams["file"]` — only the streams open for the named file.
 
-**Features**: `Protected`.
+**Features**: `Protected`. The standard streams `OutputStream["stdout", 1]` and
+`OutputStream["stderr", 2]` are open from the start (so the streams a session
+opens are numbered from 3). `Write`, `WriteString` and `Put` print through them,
+and `Close` on one returns its name and leaves it open.
 
 #### Basic Examples
 
 ```mathematica
 In[1]:= a = OpenWrite["/tmp/mathilda_io_a.txt"]
-Out[1]= OutputStream["/tmp/mathilda_io_a.txt", 1]
+Out[1]= OutputStream["/tmp/mathilda_io_a.txt", 3]
 
 In[2]:= b = OpenWrite["/tmp/mathilda_io_b.txt"]
-Out[2]= OutputStream["/tmp/mathilda_io_b.txt", 2]
+Out[2]= OutputStream["/tmp/mathilda_io_b.txt", 4]
 
-In[3]:= Streams[]  (* all open streams *)
-Out[3]= {OutputStream["/tmp/mathilda_io_a.txt", 1], OutputStream["/tmp/mathilda_io_b.txt", 2]}
+In[3]:= Streams[]  (* all open streams, the standard ones first *)
+Out[3]= {OutputStream["stdout", 1], OutputStream["stderr", 2], OutputStream["/tmp/mathilda_io_a.txt", 3], OutputStream["/tmp/mathilda_io_b.txt", 4]}
 
 In[4]:= Streams["/tmp/mathilda_io_a.txt"]  (* just the streams for one file *)
-Out[4]= {OutputStream["/tmp/mathilda_io_a.txt", 1]}
+Out[4]= {OutputStream["/tmp/mathilda_io_a.txt", 3]}
 
 In[5]:= Close[a]
 Out[5]= "/tmp/mathilda_io_a.txt"
@@ -282,7 +289,7 @@ Out[6]= "/tmp/mathilda_io_b.txt"
 ## StreamPosition / SetStreamPosition
 Query and set the current point of a stream, as an integer byte offset.
 - `StreamPosition[stream]` — the current position.
-- `SetStreamPosition[stream, n]` — set the position to offset `n` (clamped into the file); returns the new position.
+- `SetStreamPosition[stream, n]` — set the position to offset `n` (clamped into the file, on an output stream as on an input stream: a seek past the end never pads the file); returns the new position.
 - `SetStreamPosition[stream, Infinity]` — move to the end of the stream.
 
 **Features**: `Protected`. Return `$Failed` if the stream is not open.
@@ -293,7 +300,7 @@ Query and set the current point of a stream, as an integer byte offset.
 In[1]:= Put[100, 200, 300, "/tmp/mathilda_io_sp.txt"]  (* writes "100\n200\n300\n" *)
 
 In[2]:= str = OpenRead["/tmp/mathilda_io_sp.txt"]
-Out[2]= InputStream["/tmp/mathilda_io_sp.txt", 1]
+Out[2]= InputStream["/tmp/mathilda_io_sp.txt", 3]
 
 In[3]:= Read[str, Number]
 Out[3]= 100
@@ -325,13 +332,14 @@ The names `"stdout"` and `"stderr"` are the process's own output streams, not fi
 
 **Features**:
 - `Protected`. Return `$Failed` if the file cannot be opened.
+- A first argument that is neither a stream nor a file name emits `General::stream` and leaves the call unevaluated.
 - `Write` evaluates its expression arguments before writing (use `Hold[...]` to write an unevaluated form), and output is flushed after each call so it round-trips with `Read`/`ReadList`.
 
 #### Basic Examples
 
 ```mathematica
 In[1]:= str = OpenWrite["/tmp/mathilda_io_w.txt"]
-Out[1]= OutputStream["/tmp/mathilda_io_w.txt", 1]
+Out[1]= OutputStream["/tmp/mathilda_io_w.txt", 3]
 
 In[2]:= Write[str, 1 + 1]  (* Write evaluates, prints input form, adds a newline *)
 
@@ -400,6 +408,8 @@ Out[3]= False
 Reads a raster image file and returns an `Image`, or reads a text file.
 - `Import["file"]` — decodes PNG, JPEG, BMP, GIF, TGA, PSD, HDR or PNM by content.
 - `Import["file", "Image"]` — the same, stated explicitly.
+- `Import[File["file"], ...]` — the same as the string name.
+- A missing image file is `Import::nffil` and `$Failed`; one that does not decode is `Import::fmterr` and `$Failed`.
 
 **Text formats.** These also accept the list form `{"Text"}`. A `.txt` file
 with no format given imports as `"Text"`.
@@ -525,6 +535,10 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
 - `Protected`.
 - Returns the file name, so `Import[Export[f, img]]` is a round trip that can be written
   as a single expression.
+- `File["file"]` is accepted as the name. A raster write that fails is `Export::noopen`
+  and `$Failed`.
+- Trailing options: `ImageSize -> w` (or `{w, h}`) resizes a raster image with
+  `ImageResize` before it is written; other options are accepted and ignored.
 
 **Text export**. Each format is the writing half of the `Import` format of the same name:
 
@@ -699,6 +713,8 @@ Writes one or more expressions to a file, replacing any prior contents.
 
 **Wave 4 G8.** `Put[e, File["f"]]` and `PutAppend[e, File["f"]]` are accepted, and `::noopen` goes through the message funnel (Quiet silences it, Check sees it).
 
+**Wave 5 G8.** The destination may be an open `OutputStream`: `Put[1 + x, s]` writes `1 + x` and a newline to the stream, which stays open. A closed stream is `Put::openx` and `$Failed`.
+
 ## PutAppend
 Like `Put`, but appends to the file rather than truncating it.
 - `expr >>> "filename"` — shorthand for `PutAppend[expr, "filename"]`.
@@ -737,6 +753,7 @@ Gives the size of a file, in bytes, as an integer.
 - `"name"` is interpreted relative to the current working directory. `$Path` is not searched.
 - Implemented with `stat()`, so symbolic links are followed and the target file's size is reported.
 - Returns `$Failed` and prints a `FileSize::nffil` message when the file cannot be found. The message respects `Quiet[]` and is visible to `Check[]`.
+- `File["name"]` (and a leading `~`) is accepted.
 - Leaves the call unevaluated when given the wrong arity, a symbolic argument, or any non-string atom.
 
 #### Basic Examples
@@ -763,6 +780,7 @@ Returns the trailing file extension of a path's leaf component.
 - Pure string operation — does not touch the filesystem.
 - Returns `""` when the leaf has no extension, when it ends with `.`, when the leaf has only a leading `.` (e.g. `".bashrc"`), or when the path has the form of a directory (ends with `/`).
 - Always ignores everything up to and including the final `/`.
+- `File["name"]` is the same name as `"name"`.
 
 ## FileBaseName
 Returns the leaf component of a path with its trailing extension removed.
@@ -774,6 +792,7 @@ Returns the leaf component of a path with its trailing extension removed.
 - Drops everything up to and including the final `/`.
 - Only the last extension is split off: `FileBaseName["file.tar.gz"]` is `"file.tar"`.
 - When the leaf has no extension, the leaf is returned verbatim (including trailing `.` or leading `.`).
+- `File["name"]` is the same name as `"name"`.
 
 **Example**:
 ```
@@ -796,8 +815,9 @@ Returns the directory portion of a path, including its final separator.
 - Runs of separators are collapsed first, and a trailing separator names a
   directory: `DirectoryName["/a/b/"]` is `"/a/"`.
 - `""` when there is no directory portion (`"c.txt"`, `"/"`, or more levels than the path has).
-- `DirectoryName::string` for a non-string, `DirectoryName::intpm` for a bad `n`.
-  Both leave the call unevaluated.
+- `DirectoryName::string` for a non-string, `DirectoryName::intpm` for a bad `n`,
+  and `DirectoryName::argt` for a count other than 1 or 2. Each leaves the call
+  unevaluated. `File["name"]` is the same name as `"name"` (the result is a string).
 - `\` is also a separator on Windows.
 
 **Example**:
@@ -818,7 +838,7 @@ The parent of an existing directory, as an absolute canonical path.
 **Features**:
 - `Protected`.
 - A path that is not an existing directory emits `ParentDirectory::dirnex` and
-  leaves the call unevaluated. This differs from `DirectoryName`, which is a
+  leaves the call unevaluated. `File["dir"]` is accepted. This differs from `DirectoryName`, which is a
   pure string operation.
 
 ## FileNameTake
@@ -834,6 +854,7 @@ Selects components of a file name, as `FileNameSplit` gives them, and rejoins th
 - An `n` larger than the number of components takes them all.
 - `0`, or an index `{k}` out of range, gives `""`.
 - Any other spec emits `FileNameTake::seqso`.
+- `File["name"]` is the same name as `"name"`.
 - `Protected`.
 
 ## AbsoluteFileName
@@ -861,8 +882,9 @@ The legacy file-name builder, superseded by `FileNameJoin`.
 - `ToFileName[dirs]` gives the directory with a trailing separator:
   `ToFileName[{"a", "b"}]` is `"a/b/"`.
 - `dirs` may be a single string.
-- Doubled separators are collapsed (`{"a/", "b"}` gives `"a/b/"`), and empty
-  pieces are skipped.
+- Doubled separators are collapsed at every join (`{"a/", "b"}` gives `"a/b/"`,
+  `ToFileName["a", "/c"]` gives `"a/c"`, `{"/a/", "/b/"}, "c"` gives `"/a/b/c"`),
+  and empty pieces are skipped.
 - `Protected`.
 
 ## DeleteFile
@@ -880,7 +902,7 @@ Lists files by name pattern.
 - `FileNames[forms]`: entries whose names match `forms`.
 - `FileNames[forms, dirs]`: searches the directory, or list of directories, `dirs`.
 - `FileNames[forms, dirs, n]`: also searches subdirectories down to depth `n`
-  (a non-negative integer or `Infinity`).
+  (a non-negative integer or `Infinity`; a bignum depth is unlimited).
 
 **Features**:
 - `Protected`. Option `IgnoreCase -> Automatic`, which is case-insensitive on
@@ -969,6 +991,8 @@ The value of an operating-system environment variable.
 - `Protected`.
 - A non-string argument emits `Environment::string` and leaves the call
   unevaluated. A wrong argument count emits `Environment::argx`.
+- A name that is empty or contains `=` names no variable: `$Failed`
+  (`Environment["HOME="]` is not the value of `HOME`).
 
 ```
 Environment["HOME"]          (* "/Users/..." *)
@@ -1058,6 +1082,7 @@ Assembles a file name from a list of path components (or canonicalizes a lone na
 - An empty (or separator-led) leading component yields an absolute path: `{"", "usr", "bin"}` → `"/usr/bin"`.
 - `"Windows"` uses `\` and preserves a leading `\\server\share` UNC prefix as a single unit; `"MacOSX"`/`"Unix"` use `/`. The default is the host operating system's separator.
 - `Options[FileNameJoin]` reports the `OperatingSystem` default.
+- Given twice, the first `OperatingSystem` setting applies; options may also be given as a list of rules.
 - `FileNameJoin[]` prints `FileNameJoin::argx` and stays unevaluated; a non-string/non-list argument, a list containing a non-string, or an unknown OS leaves the call unevaluated.
 
 #### Basic Examples
@@ -1087,6 +1112,7 @@ Splits a file name into the `List` of its path components — the structural inv
 - A leading pathname separator marks an absolute path and yields a leading `""` part; trailing and duplicate separators are dropped (`"a//b/"` → `{"a", "b"}`).
 - `"Windows"` treats a leading `\\server\share` UNC prefix as a single part and a drive like `C:` as an ordinary first part; `"MacOSX"`/`"Unix"` split on `/`. The default is the host operating system's separator.
 - `Options[FileNameSplit]` reports the `OperatingSystem` default.
+- Options may be given as a list of rules (`FileNameSplit["a/b", {OperatingSystem -> "Windows"}]`); the first setting applies.
 - `FileNameJoin[FileNameSplit[name]]` reconstructs a canonicalized `name`.
 - `FileNameSplit[]` prints `FileNameSplit::argx` and stays unevaluated; a non-string argument or an unknown OS leaves the call unevaluated.
 
@@ -1124,7 +1150,8 @@ Prints the raw textual contents of a file to standard output.
 - A positive integer larger than the file's line count clamps to "print everything"; the same applies to `-n`.
 - When the file's final line lacks a trailing `\n` and the selection actually emits it, `FilePrint` adds one so the next REPL prompt isn't appended to the file content.
 - Bad selectors (zero step, wrong types, wrong arity) leave the call unevaluated rather than producing partial output.
-- Returns `Null` on success and `$Failed` (with a `FilePrint::noopen` diagnostic) when the file cannot be opened.
+- Returns `Null` on success and `$Failed` (with a `FilePrint::noopen` diagnostic, through the message funnel, so `Quiet` silences it and `Check` sees it) when the file cannot be opened.
+- `File["file"]` (and a leading `~`) is accepted; a bignum count `n` prints every line.
 
 **Example**:
 ```

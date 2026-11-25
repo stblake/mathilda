@@ -1122,9 +1122,9 @@ bool expr_eq(const Expr* a, const Expr* b) {
             return memcmp(a->data.ndarray.data, b->data.ndarray.data, bytes) == 0;
         }
         case EXPR_COMPILED:
-            /* Object identity: two CompiledFunctions are SameQ iff they wrap the
-             * same payload (matches the opaque-object convention). */
-            return a->data.compiled == b->data.compiled;
+            /* Value equality: the same signature, body and options are the
+             * same CompiledFunction, built once or twice. */
+            return compiled_function_same(a->data.compiled, b->data.compiled);
         case EXPR_SPARSE:
             /* Value identity: the representation is canonical (sparse.h), so
              * equal arrays have equal dims, background, pattern and values. */
@@ -1371,7 +1371,7 @@ uint64_t expr_hash(const Expr* e) {
             break;
         }
         case EXPR_COMPILED:
-            /* Identity hash (see expr_eq): mix the payload's stable id. */
+            /* Structural hash, consistent with compiled_function_same. */
             h ^= compiled_function_identity(e->data.compiled); h *= prime;
             break;
         case EXPR_SPARSE:

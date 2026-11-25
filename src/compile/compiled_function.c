@@ -43,6 +43,8 @@ struct CompiledFunction {
     Expr*            body;       /* owned; interpreter fallback + printing */
     CompiledProgram* prog;       /* NULL if body is outside the compilable subset */
     uint32_t         runtime_attrs; /* RuntimeAttributes: ATTR_LISTABLE or none */
+    unsigned         compile_flags; /* as given to compiled_function_new */
+    long             prec_bits;     /* WorkingPrecision (0: machine) */
 };
 
 /* ------------------------------------------------------------------ *
@@ -233,11 +235,31 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
             if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_False) { out->v.b = 0; return true; }
             return false;
         case CT_INT:     return cf_to_ll(e, &out->v.i);
-        case CT_REAL:    return cf_to_double(e, &out->v.r);
+        case CT_REAL:
+            if (cf_to_double(e, &out->v.r)) return true;
+            /* A numeric constant (Pi, Sqrt[2], E^2) is a machine real once N
+             * has been applied to it, as the reference converts it on the way
+             * in (audit Compile#3).  A free symbol stays for the interpreter. */
+            if (e->type == EXPR_FUNCTION || e->type == EXPR_SYMBOL) {
+                if (!expr_is_numeric_quantity(e)) return false;
+                Expr* ne = expr_copy((Expr*)e);
+                Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), &ne, 1));
+                bool ok = nv && cf_to_double(nv, &out->v.r);
+                if (nv) expr_free(nv);
+                return ok;
+            }
+            return false;
         case CT_COMPLEX: {
             double re, im;
-            if (!cf_to_complex(e, &re, &im)) return false;
-            out->v.z = re + im * I; return true;
+            if (cf_to_complex(e, &re, &im)) { out->v.z = re + im * I; return true; }
+            if (e->type != EXPR_FUNCTION && e->type != EXPR_SYMBOL) return false;
+            if (!expr_is_numeric_quantity(e)) return false;
+            Expr* ne = expr_copy((Expr*)e);
+            Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), &ne, 1));
+            bool ok = nv && cf_to_complex(nv, &re, &im);
+            if (nv) expr_free(nv);
+            if (ok) out->v.z = re + im * I;
+            return ok;
         }
         default: break;
     }
@@ -411,13 +433,14 @@ static bool cf_parse_argspec(const Expr* argspec,
                              size_t* n_out) {
     if (!argspec) return false;
     if (argspec->type != EXPR_FUNCTION || argspec->data.function.head->type != EXPR_SYMBOL
-        || argspec->data.function.head->data.symbol.name != SYM_List
-        || argspec->data.function.arg_count == 0)
+        || argspec->data.function.head->data.symbol.name != SYM_List)
         return false;
 
+    /* {} is a legal signature: a compiled constant, called as cf[] (audit
+     * Compile#2, CompileDiagnostics#4). */
     size_t n = argspec->data.function.arg_count;
-    const char** names = malloc(n * sizeof(*names));
-    CompileType* types = malloc(n * sizeof(*types));
+    const char** names = malloc((n ? n : 1) * sizeof(*names));
+    CompileType* types = malloc((n ? n : 1) * sizeof(*types));
     if (!names || !types) { free(names); free(types); return false; }
 
     for (size_t i = 0; i < n; i++) {
@@ -581,6 +604,36 @@ static CompiledProgram* cf_compile(const Expr* body, const char** names, Compile
     return compile_expr_prec(body, names, types, n, flags, prec_bits);   /* for the bail reason */
 }
 
+/* An option Compile accepts and has no further use for. */
+static bool cf_is_accepted_target_opt(const Expr* o) {
+    if (o->type != EXPR_FUNCTION || o->data.function.arg_count != 2 ||
+        o->data.function.head->type != EXPR_SYMBOL ||
+        (o->data.function.head->data.symbol.name != SYM_Rule &&
+         o->data.function.head->data.symbol.name != SYM_RuleDelayed))
+        return false;
+    const Expr* k = o->data.function.args[0];
+    if (k->type != EXPR_SYMBOL) return false;
+    return strcmp(k->data.symbol.name, "CompilationTarget") == 0 ||
+           strcmp(k->data.symbol.name, "Parallelization") == 0 ||
+           strcmp(k->data.symbol.name, "CompilationOptions") == 0;
+}
+
+/* {{v, type}, {w, type, rank}, ...}: Compile's third argument, the types of
+ * the body's local variables. */
+static bool cf_is_local_typespec(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List)
+        return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* el = e->data.function.args[i];
+        if (el->type != EXPR_FUNCTION || el->data.function.head->type != EXPR_SYMBOL ||
+            el->data.function.head->data.symbol.name != SYM_List ||
+            el->data.function.arg_count < 2 || el->data.function.arg_count > 3)
+            return false;
+    }
+    return true;
+}
+
 CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
                                         uint32_t runtime_attrs, unsigned compile_flags,
                                         long prec_bits) {
@@ -609,6 +662,8 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
      * current value into it would go stale (see compile.h). */
     cf->prog      = cf_compile(cf->body, names, types, n, compile_flags, prec_bits);
     cf->runtime_attrs = runtime_attrs;
+    cf->compile_flags = compile_flags;
+    cf->prec_bits     = prec_bits;
     return cf;
 }
 
@@ -628,8 +683,29 @@ void compiled_function_free(CompiledFunction* cf) {
     free(cf);
 }
 
+/* A CompiledFunction is a value: two built from the same signature, body and
+ * options are SameQ (audit CompiledFunction#2), so the identity is a hash of
+ * exactly what compiled_function_same compares. */
 uint64_t compiled_function_identity(const CompiledFunction* cf) {
-    return (uint64_t)(uintptr_t)cf;
+    if (!cf) return 0;
+    uint64_t h = expr_hash(cf->body) * UINT64_C(1099511628211);
+    h ^= expr_hash(cf->params);
+    for (size_t i = 0; i < cf->nargs; i++) h = h * UINT64_C(31) + (uint64_t)cf->arg_types[i];
+    h = h * UINT64_C(31) + cf->runtime_attrs;
+    h = h * UINT64_C(31) + cf->compile_flags;
+    h = h * UINT64_C(31) + (uint64_t)cf->prec_bits;
+    return h;
+}
+
+bool compiled_function_same(const CompiledFunction* a, const CompiledFunction* b) {
+    if (a == b) return true;
+    if (!a || !b || a->nargs != b->nargs || a->runtime_attrs != b->runtime_attrs ||
+        a->compile_flags != b->compile_flags || a->prec_bits != b->prec_bits)
+        return false;
+    for (size_t i = 0; i < a->nargs; i++)
+        if (a->arg_types[i] != b->arg_types[i] || a->arg_names[i] != b->arg_names[i])
+            return false;
+    return expr_eq(a->body, b->body);
 }
 
 /* ------------------------------------------------------------------ *
@@ -825,7 +901,14 @@ static bool cf_thread(const CompiledFunction* cf, Expr* const* args, size_t narg
 }
 
 Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, size_t nargs) {
-    if (!cf || nargs != cf->nargs) return NULL;   /* arity mismatch ⇒ leave unevaluated */
+    if (!cf) return NULL;
+    if (nargs != cf->nargs) {
+        /* arity mismatch ⇒ CompiledFunction::cfct, leave unevaluated */
+        mth_message("CompiledFunction", "cfct",
+                    "Number of arguments %zu does not match the length %zu of the argument "
+                    "template.", nargs, cf->nargs);
+        return NULL;
+    }
 
     /* Listable is a property of the OBJECT, not of its program: it threads
      * whether the body compiled or falls back, and it must run before boxing so
@@ -1212,6 +1295,14 @@ static Expr* builtin_compile(Expr* res) {
         } else if (cf_match_bigintegers_opt(o, &f, &ok)) {
             if (!ok) return NULL;
             if (!explicit_bi) { cflags = f; explicit_bi = true; }
+        } else if (argc == 3 && cf_is_local_typespec(o)) {
+            /* Compile[args, body, {{v, type}, ...}]: the types of local
+             * variables. The inference pass finds those itself, so the list
+             * is accepted and unused. */
+        } else if (cf_is_accepted_target_opt(o)) {
+            /* CompilationTarget / Parallelization / CompilationOptions: the
+             * bytecode VM is the only target, so they are accepted and do not
+             * change the object (audit CompiledFunction#3). */
         } else {
             return NULL;
         }

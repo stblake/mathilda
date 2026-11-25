@@ -799,6 +799,11 @@ static Expr* do_core(Expr* res, bool nested) {
         } else if (iter_spec_symbolic_range_to_list(&s)) {
             is_list_iter = 1;      /* {i, a, a + 2}: the values a, 1 + a, 2 + a */
         } else {
+            /* Do[e, {i, x}]: bounds that are not numbers (audit Do#5). */
+            char* cs = expr_to_string(spec);
+            mth_message("Do", "iterb", "Iterator %s does not have appropriate bounds.",
+                        cs ? cs : "");
+            free(cs);
             iter_spec_free(&s);
             return NULL;
         }

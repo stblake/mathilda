@@ -64,7 +64,15 @@ Expr* builtin_which(Expr* res) {
     Expr** args = res->data.function.args;
 
     for (size_t i = 0; i < argc; i += 2) {
-        Expr* test_eval = evaluate(args[i]);
+        /* A test wrapped in Unevaluated is evaluated without the wrapper, as
+         * an argument in an evaluated position would be: the test is read as
+         * a condition, so Which[Unevaluated[1 > 0], v] is v. */
+        Expr* t = args[i];
+        if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+            t->data.function.head->data.symbol.name == SYM_Unevaluated &&
+            t->data.function.arg_count == 1)
+            t = t->data.function.args[0];
+        Expr* test_eval = evaluate(t);
         if (!test_eval) return NULL;
         /* A Throw from a test propagates to the nearest enclosing Catch. */
         if (eval_is_inflight_unwind(test_eval)) return test_eval;

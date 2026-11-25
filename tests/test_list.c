@@ -854,8 +854,8 @@ void test_subsets() {
         /* n past the end clamps to the full power set. */
         {"Subsets[{a, b, c}, 7]",
          "{{}, {a}, {b}, {c}, {a, b}, {a, c}, {b, c}, {a, b, c}}"},
-        /* Negative n selects nothing. */
-        {"Subsets[{a, b, c}, -1]", "{}"},
+        /* A negative n is no length: Subsets::nninfseq, unevaluated (audit Subsets#2). */
+        {"Quiet[Subsets[{a, b, c}, -1]]", "Subsets[{a, b, c}, -1]"},
 
         /* Subsets[list, {n}] — exactly length n. */
         {"Subsets[{a, b, c}, {2}]", "{{a, b}, {a, c}, {b, c}}"},
@@ -873,7 +873,7 @@ void test_subsets() {
          "{{a}, {b}, {c}, {a, b}, {a, c}, {b, c}, {a, b, c}}"},
         /* nmin > nmax selects nothing. */
         {"Subsets[{a, b, c}, {3, 1}]", "{}"},
-        {"Subsets[{a, b, c}, {-2, -1}]", "{}"},
+        {"Quiet[Subsets[{a, b, c}, {-2, -1}]]", "Subsets[{a, b, c}, {-2, -1}]"},
         /* Three-element spec adds a length step. */
         {"Subsets[{a, b, c}, {0, 3, 2}]", "{{}, {a, b}, {a, c}, {b, c}}"},
 

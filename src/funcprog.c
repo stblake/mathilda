@@ -4749,7 +4749,17 @@ static bool parse_fp_opts(Expr* res, size_t start,
             if (same_test != NULL) return false;
             same_test = a->data.function.args[1];
         } else if (!has_max && a->type == EXPR_INTEGER) {
-            if (a->data.integer < 0) return false;
+            if (a->data.integer < 0) {
+                /* FixedPoint::intnm / FixedPointList::intnm (audit FixedPoint#2) */
+                char* rs = expr_to_string_outputform(res);
+                const char* hn = res->data.function.head->type == EXPR_SYMBOL
+                               ? res->data.function.head->data.symbol.name : "FixedPoint";
+                mth_message(hn, "intnm",
+                            "Non-negative machine-sized integer expected at position %zu in %s.",
+                            i + 1, rs ? rs : "");
+                free(rs);
+                return false;
+            }
             max_apps = a->data.integer;
             max_inf = false;
             has_max = true;

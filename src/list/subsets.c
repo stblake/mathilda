@@ -31,6 +31,7 @@
 #include "linkedlist_seq.h"   /* LLSeq: a LinkedList's subsets are LinkedLists */
 #include "list_common.h"
 #include "subsets.h"
+#include "message.h"
 
 /* ------------------------------------------------------------------------- */
 /* Growable output buffer                                                    */
@@ -69,22 +70,21 @@ static void subsets_buf_free(SubsetBuf* b) {
 
 typedef enum {
     LEN_OK,     /* a usable subset length was read into *out */
-    LEN_NONE,   /* a well-formed but negative length: selects no subsets */
     LEN_BAD     /* not a length at all: leave the expression unevaluated */
 } LenStatus;
 
 /* Read one component of a length spec as a subset length over a list of `n`
  * elements. Accepts a non-negative machine integer, a bigint (a positive one
  * necessarily exceeds any reachable length, so it saturates at `n`), and
- * Infinity. */
+ * Infinity.  A negative length is not a length (Subsets::nninfseq). */
 static LenStatus subsets_read_length(Expr* e, size_t n, size_t* out) {
     if (e->type == EXPR_INTEGER) {
-        if (e->data.integer < 0) return LEN_NONE;
+        if (e->data.integer < 0) return LEN_BAD;   /* Subsets::nninfseq */
         *out = (size_t)e->data.integer;
         return LEN_OK;
     }
     if (e->type == EXPR_BIGINT) {
-        if (mpz_sgn(e->data.bigint) < 0) return LEN_NONE;
+        if (mpz_sgn(e->data.bigint) < 0) return LEN_BAD;
         *out = n;               /* saturate: no list is this long */
         return LEN_OK;
     }
@@ -100,8 +100,8 @@ static LenStatus subsets_read_length(Expr* e, size_t n, size_t* out) {
  *
  * Returns false when the spec is not one Subsets understands, so the caller
  * can leave the whole expression unevaluated. Returns true with *empty set
- * when the spec is well-formed but selects no lengths at all (a negative
- * bound, nmin > nmax, or an exact length that exceeds Length[list]). */
+ * when the spec is well-formed but selects no lengths at all (nmin > nmax,
+ * or an exact length that exceeds Length[list]). */
 static bool subsets_decode_lengths(Expr* spec, size_t n,
                                    size_t* kmin, size_t* kmax, size_t* kstep,
                                    bool* empty) {
@@ -118,7 +118,6 @@ static bool subsets_decode_lengths(Expr* spec, size_t n,
     if (spec->type != EXPR_FUNCTION) {
         size_t k;
         switch (subsets_read_length(spec, n, &k)) {
-            case LEN_NONE: *empty = true; return true;
             case LEN_BAD:  return false;
             case LEN_OK:   break;
         }
@@ -136,7 +135,6 @@ static bool subsets_decode_lengths(Expr* spec, size_t n,
     if (parts == 1) {
         size_t k;
         switch (subsets_read_length(spec->data.function.args[0], n, &k)) {
-            case LEN_NONE: *empty = true; return true;
             case LEN_BAD:  return false;
             case LEN_OK:   break;
         }
@@ -148,12 +146,10 @@ static bool subsets_decode_lengths(Expr* spec, size_t n,
     /* Subsets[list, {nmin, nmax}] and Subsets[list, {nmin, nmax, d}]. */
     size_t lo, hi;
     switch (subsets_read_length(spec->data.function.args[0], n, &lo)) {
-        case LEN_NONE: *empty = true; return true;
         case LEN_BAD:  return false;
         case LEN_OK:   break;
     }
     switch (subsets_read_length(spec->data.function.args[1], n, &hi)) {
-        case LEN_NONE: *empty = true; return true;
         case LEN_BAD:  return false;
         case LEN_OK:   break;
     }
@@ -247,7 +243,11 @@ Expr* builtin_subsets(Expr* res) {
     Expr* list = res->data.function.args[0];
     /* atoms have no sublists; a LinkedList's are LinkedLists, in a LinkedList */
     LLSeq lv;
-    if (!llq_open(list, &lv)) return NULL;
+    if (expr_is_number_atom(list) || !llq_open(list, &lv)) {
+        /* an atom has no sublists; an array object is left for its own path */
+        if (list->type == EXPR_NDARRAY || list->type == EXPR_SPARSE) return NULL;
+        return builtin_normal_error("Subsets", res, 1);
+    }
     bool linked = llq_linked(&lv);
 
     size_t n = lv.n;
@@ -257,6 +257,12 @@ Expr* builtin_subsets(Expr* res) {
     if (!subsets_decode_lengths(argc >= 2 ? res->data.function.args[1] : NULL,
                                 n, &kmin, &kmax, &kstep, &empty)) {
         llq_close(&lv);
+        char* cs = expr_to_string(res);
+        mth_message("Subsets", "nninfseq", "Position 2 of %s must be All, Infinity, a "
+                    "non-negative integer, or a List whose first element (required) is a "
+                    "non-negative integer, second element (optional) is a non-negative integer "
+                    "or Infinity, and third element (optional) is a nonzero integer.", cs ? cs : "");
+        free(cs);
         return NULL;
     }
 

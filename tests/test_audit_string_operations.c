@@ -123,9 +123,11 @@ static void test_wave5_g7_string_operations(void) {
     audit_chk("ToLowerCase#1", "Quiet[Check[ToLowerCase[\"A\", \"B\"], fired, ToLowerCase::argx]]", "fired");
     audit_chk("ToCharacterCode#3", "Quiet[Check[ToCharacterCode[], fired, ToCharacterCode::argt]]", "fired");
     audit_chk("ToCharacterCode#3", "Quiet[Check[ToCharacterCode[\"a\", \"b\", \"c\"], fired, ToCharacterCode::argt]]", "fired");
-    audit_chk("RegularExpression#2", "Block[{$MessageList = {}}, StringMatchQ[\"a\", RegularExpression[\"(\"]]; Length[$MessageList]]", "2");
-    audit_chk("RegularExpression#2", "Quiet[Check[StringMatchQ[\"a\", RegularExpression[\"(\"]], fired, StringMatchQ::regex]]", "fired");
-    audit_chk("StringMatchQ#4", "Quiet[Check[StringMatchQ[\"abc\", RegularExpression[\"a(b\"]], fired, StringMatchQ::regex]]", "fired");
+    /* One message for a bad regex, RegularExpression::regex at the offset in the
+     * user's pattern; the consumer does not repeat it (Wave 5 G8, FileNames#2). */
+    audit_chk("RegularExpression#2", "Block[{$MessageList = {}}, StringMatchQ[\"a\", RegularExpression[\"(\"]]; $MessageList]", "{RegularExpression::regex}");
+    audit_chk("RegularExpression#2", "Quiet[Check[StringMatchQ[\"a\", RegularExpression[\"(\"]], fired, RegularExpression::regex]]", "fired");
+    audit_chk("StringMatchQ#4", "Block[{$MessageList = {}}, StringMatchQ[\"abc\", RegularExpression[\"a(b\"]]; $MessageList]", "{RegularExpression::regex}");
     audit_chk("StringEndsQ#2", "Quiet[Check[StringEndsQ[\"abc\", RegularExpression[\"[\"]], fired, StringEndsQ::regex]]", "fired");
     audit_chk("StringStartsQ#2", "Quiet[Check[StringStartsQ[\"abc\", RegularExpression[\"(\"]], fired, StringStartsQ::regex]]", "fired");
     audit_chk("StringCases#1", "Quiet[Check[StringCases[1, \"b\"], fired, StringCases::strse]]", "fired");

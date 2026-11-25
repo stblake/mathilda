@@ -554,7 +554,9 @@ static FNode* join_factors(FactorList* l, int* prec) {
     for (size_t i = 0; i < l->n; i++) {
         if (i) fadd_tok(r, "*");
         Factor* f = &l->v[i];
-        fnode_add(r, f->coef ? f->node : wrap_node(f->node, f->prec, P_TIMES + 1), BRK_NONE);
+        /* a product too wide for its line may break after a '*' */
+        fnode_add(r, f->coef ? f->node : wrap_node(f->node, f->prec, P_TIMES + 1),
+                  i ? BRK_TERM : BRK_NONE);
     }
     *prec = P_TIMES;
     return r;
@@ -901,22 +903,30 @@ static void emit_token(Lay* L, const FNode* t, int depth) {
     emit_text(L, s, n);
 }
 
-static void emit(Lay* L, const FNode* f, int depth) {
+/* `reserve` is the width of the text that follows f on the same line (its
+ * parent's separator after it, " + "), which f's last child must leave room
+ * for: without it a term that exactly filled the line pushed the separator
+ * past PageWidth. */
+static void emit(Lay* L, const FNode* f, int depth, size_t reserve) {
     if (f->text) { emit_token(L, f, depth); return; }
     size_t w = (size_t)L->width;
     for (size_t i = 0; i < f->n; i++) {
         const FNode* k = f->kids[i];
+        /* what must follow this child on its line */
+        size_t after = (i + 1 < f->n) ? (f->kids[i + 1]->text ? f->kids[i + 1]->len : 0)
+                                      : reserve;
         if (f->brk[i] != BRK_NONE && !L->fresh) {
             /* the child and the separator token that follows it */
-            size_t need = k->len;
-            if (i + 1 < f->n && f->kids[i + 1]->text) need += f->kids[i + 1]->len;
-            if (L->col + need > w) {
-                if (f->brk[i] == BRK_ARG || need + cont_len(L, depth) <= w)
-                    newline(L, depth);
-            }
+            size_t need = k->len + after;
+            /* Break when the child does not fit and a continuation line
+             * starts left of here: even a child too wide for a whole line
+             * then overflows by less, and breaks again inside itself (a
+             * PageWidth -> 20 stream kept 60-column lines). */
+            if (L->col + need > w && L->col > cont_len(L, depth))
+                newline(L, depth);
         }
         if (k->text) emit_token(L, k, depth + 1);
-        else emit(L, k, depth + 1);
+        else emit(L, k, depth + 1, after);
     }
 }
 
@@ -929,7 +939,7 @@ static char* layout(FNode* root, FormLang lang, int width) {
     Lay L = { b, width, 0, false, lang };
     if (lang == FORM_LANG_FORTRAN) emit_text(&L, "        ", 8);   /* fixed-form statement column */
     L.fresh = true;
-    emit(&L, root, 1);
+    emit(&L, root, 1, 0);
     return sb_take(&L.out);
 }
 

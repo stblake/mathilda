@@ -170,6 +170,91 @@ static void test_wave4_g8_filenamesplit_options(void) {
     audit_chk("FileNameSplit#1", "FileNameSplit[\"a/b\"]", "{\"a\", \"b\"}");
 }
 
+/* Wave 5 G8: file-io findings -- File[] names, argument messages, bignum counts,
+ * the standard streams, stream options and positions, Import/Export messages. */
+static void test_wave5_g8_files(void) {
+    audit_run("w5$d = $TemporaryDirectory;"
+              " w5$f[n_] := FileNameJoin[{w5$d, \"mth_audit_w5g8_\" <> n}]");
+    /* File["name"] in the name heads */
+    audit_chk("FileBaseName#1", "FileBaseName[File[\"a/b.txt\"]]", "\"b\"");
+    audit_chk("FileExtension#1", "FileExtension[File[\"a/b.txt\"]]", "\"txt\"");
+    audit_chk("FileNameTake#1", "FileNameTake[File[\"/a/b/c\"]]", "\"c\"");
+    audit_chk("DirectoryName#3", "DirectoryName[File[\"/a/b/c\"]]", "\"/a/b/\"");
+    audit_chk("ParentDirectory#1", "ParentDirectory[File[\"/usr/bin\"]] === ParentDirectory[\"/usr/bin\"]", "True");
+    audit_chk("DirectoryName#1", "Quiet[Check[DirectoryName[], fired, DirectoryName::argt]]", "fired");
+    audit_chk("DirectoryName#1", "Quiet[Check[DirectoryName[\"a\", \"b\", \"c\"], fired, DirectoryName::argt]]", "fired");
+    audit_chk("DirectoryName#1", "Quiet[DirectoryName[\"a\", \"b\", \"c\"]]", "DirectoryName[\"a\", \"b\", \"c\"]");
+    audit_run("Put[1, w5$f[\"fs.txt\"]]");
+    audit_chk("FileSize#1", "FileSize[File[w5$f[\"fs.txt\"]]] === FileSize[w5$f[\"fs.txt\"]] === 2", "True");
+    audit_run("Put[{1, 2, 3}, w5$f[\"f.m\"]]");
+    audit_chk("File#3", "Import[File[w5$f[\"f.m\"]], \"Text\"]", "\"{1, 2, 3}\"");
+    audit_chk("Import#3", "Export[w5$f[\"a.png\"], Image[{{0., 0.5}, {1., 0.25}}, \"Real\"]] === w5$f[\"a.png\"]", "True");
+    audit_chk("Import#3", "ImageDimensions[Import[File[w5$f[\"a.png\"]]]]", "{2, 2}");
+    audit_chk("Import#2", "Quiet[Import[w5$f[\"nope.png\"]]]", "$Failed");
+    audit_chk("Import#2", "Quiet[Check[Import[w5$f[\"nope.png\"]], fired, Import::nffil]]", "fired");
+    audit_chk("Export#4", "Quiet[Export[\"/nonexistent/dir/a.png\", Image[{{0.5}}]]]", "$Failed");
+    audit_chk("Export#4", "Quiet[Check[Export[\"/nonexistent/dir/a.png\", Image[{{0.5}}]], fired, Export::noopen]]", "fired");
+    audit_chk("Export#5", "Export[w5$f[\"n.png\"], Image[{{0., 0.5}, {1., 0.25}}], ImageSize -> 10] === w5$f[\"n.png\"]", "True");
+    audit_chk("Export#5", "ImageDimensions[Import[w5$f[\"n.png\"]]]", "{10, 10}");
+    /* FilePrint: the funnel, bignum counts, File[] */
+    audit_chk("FilePrint#1", "Quiet[FilePrint[w5$f[\"nofile.txt\"]]]", "$Failed");
+    audit_chk("FilePrint#1", "Quiet[Check[FilePrint[w5$f[\"nofile.txt\"]], caught]]", "caught");
+    audit_chk("FilePrint#1", "Quiet[Check[FilePrint[w5$f[\"nofile.txt\"]], caught, FilePrint::noopen]]", "caught");
+    audit_chk("FilePrint#2", "FilePrint[w5$f[\"fs.txt\"], 10^30]", "Null");
+    audit_chk("FilePrint#3", "FilePrint[File[w5$f[\"fs.txt\"]]]", "Null");
+    /* names */
+    audit_chk("Environment#1", "Environment[\"HOME=\"]", "$Failed");
+    audit_chk("Environment#1", "Environment[\"\"]", "$Failed");
+    audit_chk("FileNameJoin#1", "FileNameJoin[{\"a\", \"b\"}, OperatingSystem -> \"Windows\", OperatingSystem -> \"Unix\"]", "\"a\\\\b\"");
+    audit_chk("FileNameSplit#2", "FileNameSplit[\"a/b\", {OperatingSystem -> \"Windows\"}]", "{\"a\", \"b\"}");
+    audit_chk("FileNameSplit#2", "FileNameSplit[\"a\\\\b\", {OperatingSystem -> \"Windows\"}]", "{\"a\", \"b\"}");
+    audit_chk("ToFileName#1", "ToFileName[\"a\", \"/c\"]", "\"a/c\"");
+    audit_chk("ToFileName#1", "ToFileName[{\"/a/\", \"/b/\"}, \"c\"]", "\"/a/b/c\"");
+    audit_chk("ToFileName#1", "ToFileName[{\"a/\", \"b\"}]", "\"a/b/\"");
+    /* FileNames */
+    audit_chk("FileNames#1", "FileNames[\"mth_audit_w5g8_fs*\", w5$d, 2^63] === FileNames[\"mth_audit_w5g8_fs*\", w5$d, 2^62]", "True");
+    audit_chk("FileNames#1", "Length[FileNames[\"mth_audit_w5g8_fs*\", w5$d, 2^63]]", "1");
+    audit_chk("FileNames#2", "Block[{$MessageList = {}}, Quiet[FileNames[RegularExpression[\"[\"], w5$d]]; 0]; "
+              "Block[{$MessageList = {}}, FileNames[RegularExpression[\"[\"], w5$d]; Length[$MessageList]]", "1");
+    /* streams */
+    audit_chk("OpenAppend#2", "Quiet[OpenAppend[5]]", "$Failed");
+    audit_chk("OpenAppend#2", "Quiet[Check[OpenAppend[5], fired, OpenAppend::fstr]]", "fired");
+    audit_chk("OpenRead#3", "Quiet[Check[OpenRead[123], fired, OpenRead::fstr]]", "fired");
+    audit_chk("OpenRead#1", "Quiet[OpenRead[w5$d]]", "$Failed");
+    audit_chk("OpenRead#1", "Quiet[Check[OpenRead[w5$d], fired, OpenRead::noopen]]", "fired");
+    audit_chk("OpenWrite#1", "Module[{s = OpenWrite[], r}, r = {Head[s], StringStartsQ[s[[1]], w5$d]}; DeleteFile[Close[s]]; r]",
+              "{OutputStream, True}");
+    audit_chk("OutputStream#2", "Take[Streams[], 2]", "{OutputStream[\"stdout\", 1], OutputStream[\"stderr\", 2]}");
+    audit_chk("OutputStream#2", "Close[OutputStream[\"stdout\", 1]]; MemberQ[Streams[], OutputStream[\"stdout\", 1]]", "True");
+    audit_chk("Write#1", "Quiet[Check[Write[w5x, 2], fired, General::stream]]", "fired");
+    audit_chk("Write#1", "Quiet[Write[w5x, 2]]", "Write[w5x, 2]");
+    audit_run("w5$o = OpenWrite[w5$f[\"ow3.txt\"]]; WriteString[w5$o, \"hello\"]");
+    audit_chk("SetStreamPosition#1", "SetStreamPosition[w5$o, 100]", "5");
+    audit_run("Close[w5$o]");
+    audit_chk("SetStreamPosition#1", "FileSize[w5$f[\"ow3.txt\"]]", "5");
+    audit_run("w5$o = OpenWrite[w5$f[\"w3.txt\"], FormatType -> OutputForm]; Write[w5$o, x^2, \"q\"]; Close[w5$o]");
+    audit_chk("Write#2", "ReadString[w5$f[\"w3.txt\"]]", "\"x^2q\\n\"");
+    audit_run("w5$o = OpenAppend[w5$f[\"oa12.txt\"], FormatType -> FortranForm, PageWidth -> 20];"
+              " Write[w5$o, Expand[(a + b)^6]]; Close[w5$o]");
+    audit_chk("OpenAppend#1", "Max[StringLength /@ StringSplit[ReadString[w5$f[\"oa12.txt\"]], \"\\n\"]] <= 20", "True");
+    audit_run("w5$o = OpenWrite[w5$f[\"p22.m\"]]");
+    audit_chk("Put#2", "Put[1 + x, w5$o]", "Null");
+    audit_run("Close[w5$o]");
+    audit_chk("Put#2", "ReadString[w5$f[\"p22.m\"]]", "\"1 + x\\n\"");
+    audit_chk("Put#2", "Quiet[Put[1, w5$o]]", "$Failed");
+    /* Read / ReadList / Skip */
+    audit_chk("Read#3", "Quiet[Check[Read[], fired, Read::argt]]", "fired");
+    audit_chk("Read#3", "Quiet[Check[Read[123], fired, General::stream]]", "fired");
+    audit_chk("Read#3", "Quiet[Read[123]]", "Read[123]");
+    audit_chk("Read#3", "Quiet[Check[Read[w5$f[\"w3.txt\"], Foo], fired, Read::readf]]", "fired");
+    audit_run("Close[w5$f[\"w3.txt\"]]");
+    audit_chk("ReadList#3", "Module[{s = StringToStream[\"a b\"], r}, r = ReadList[s, Word, 2^70]; Close[s]; r]", "{\"a\", \"b\"}");
+    audit_chk("Skip#1", "Module[{s = StringToStream[\"1 2 3\"], r}, r = Skip[s, Number, 2^70]; Close[s]; r]", "EndOfFile");
+    audit_chk("ReadString#1", "StringContainsQ[Information[ReadString], \"CRLF line ends stay\"]", "True");
+    audit_run("Quiet[DeleteFile[Map[w5$f, {\"fs.txt\", \"f.m\", \"a.png\", \"n.png\", \"ow3.txt\", \"w3.txt\","
+              " \"oa12.txt\", \"p22.m\"}]]]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_export_graphics_raster_no_crash);
@@ -178,5 +263,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_g8_files_streams);
     TEST(test_wave4_g8_filenamesplit_options);
+    TEST(test_wave5_g8_files);
     return audit_finish("audit_file_io");
 }

@@ -185,6 +185,42 @@ static void test_wave4_g8_uncategorised(void) {
     audit_chk("TeXForm#5", "ToString[TeXForm[Integrate[f[x], x]]]", "\"\\\\int f(x) \\\\, dx\"");
 }
 
+/* Wave 5 G8: uncategorised findings -- rvalue messages, SymbolName::sym,
+ * Subsets messages, End's arity, SplitBy's SameQ keys, TeX notations,
+ * docstrings. */
+static void test_wave5_g8_uncategorised(void) {
+    audit_chk("Increment#1", "Quiet[Check[Increment[3], fired, Increment::rvalue]]", "fired");
+    audit_chk("Decrement#3", "Quiet[Check[Decrement[5], fired, Decrement::rvalue]]", "fired");
+    audit_chk("PreIncrement#2", "Quiet[Check[++5, fired, PreIncrement::rvalue]]", "fired");
+    audit_chk("PreDecrement#3", "Quiet[Check[--5, fired, PreDecrement::rvalue]]", "fired");
+    audit_chk("SymbolName#1", "Quiet[Check[SymbolName[\"x\"], fired, SymbolName::sym]]", "fired");
+    audit_chk("SymbolName#1", "Quiet[Check[SymbolName[f[x]], fired, SymbolName::sym]]", "fired");
+    audit_chk("SymbolName#1", "Quiet[SymbolName[5]]", "SymbolName[5]");
+    audit_chk("SymbolName#1", "SymbolName[w5sym]", "\"w5sym\"");
+    audit_chk("Subsets#2", "Quiet[Check[Subsets[{a, b}, -1], fired, Subsets::nninfseq]]", "fired");
+    audit_chk("Subsets#2", "Quiet[Subsets[{a, b}, {-1}]]", "Subsets[{a, b}, {-1}]");
+    audit_chk("Subsets#2", "Subsets[{a, b}, {2, 1}]", "{}");
+    audit_chk("Subsets#3", "Quiet[Check[Subsets[x], fired, Subsets::normal]]", "fired");
+    audit_chk("Subsets#3", "Quiet[Subsets[5]]", "Subsets[5]");
+    audit_chk("End#2", "Quiet[Check[End[1], fired, End::argr]]", "fired");
+    audit_chk("End#2", "Quiet[End[1, 2]]", "End[1, 2]");
+    audit_chk("SplitBy#1", "SplitBy[{0.1 + 0.2, 0.3}, Identity] === {{0.1 + 0.2, 0.3}}", "True");
+    audit_chk("SplitBy#1", "Length[SplitBy[{0.1 + 0.2, 0.3}, Identity]]", "1");
+    audit_chk("SplitBy#1", "SplitBy[{1, 1., 2}, Identity]", "{{1}, {1.0}, {2}}");
+    audit_chk("TeXForm#6", "ToString[TeXForm[n!]]", "\"n!\"");
+    audit_chk("TeXForm#6", "ToString[TeXForm[Binomial[n, k]]]", "\"\\\\binom{n}{k}\"");
+    audit_chk("TeXForm#6", "ToString[TeXForm[Zeta[s]]]", "\"\\\\zeta (s)\"");
+    audit_chk("TeXForm#6", "ToString[TeXForm[BesselJ[n, x]]]", "\"J_n(x)\"");
+    audit_chk("TeXForm#6", "ToString[TeXForm[Subscript[x, 1]]]", "\"x_1\"");
+    audit_chk("TeXForm#6", "ToString[TeXForm[Derivative[1][f][x]]]", "\"f'(x)\"");
+    audit_chk("TeXForm#6", "ToString[TeXForm[a . b]]", "\"a.b\"");
+    audit_chk("TeXForm#7", "ToString[TeXForm[{{1, 2}, {3, 4}}]]",
+              "\"\\\\left(\\n\\\\begin{array}{cc}\\n 1 & 2 \\\\\\\\\\n 3 & 4 \\\\\\\\\\n\\\\end{array}\\n\\\\right)\"");
+    audit_chk("TeXForm#7", "ToString[TeXForm[{1, 2}]]", "\"\\\\{1,2\\\\}\"");
+    audit_chk("RatCanonCancel#1", "StringContainsQ[Information[RatCanonCancel], \"RatCanonCancel[expr]\"]", "True");
+    audit_chk("RatCanonNormalize#1", "StringContainsQ[Information[RatCanonNormalize], \"RatCanonNormalize[expr]\"]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_slotsequence_empty);
@@ -195,5 +231,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_g8_uncategorised);
+    TEST(test_wave5_g8_uncategorised);
     return audit_finish("audit_uncategorised");
 }

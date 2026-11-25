@@ -29,6 +29,7 @@
 #include "../symtab.h"
 #include "../ndarray.h"
 #include "../print.h"
+#include "../numeric.h"     /* numeric_mpfr_pow_fast: naming an MG_RBIN */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -478,11 +479,56 @@ static void render_assocspec(DBuf* b, const AssocSpec* sp) {
     db_cat(b, "]");
 }
 
+/* The managed (arbitrary-precision) real opcodes carry an mpfr constant
+ * (MG_RCONST) or a raw mpfr_* function (MG_RBIN / MG_RUN) in imm.p, which
+ * imm_kind cannot name: rendered here (audit CompilePrint#2). */
+#ifdef USE_MPFR
+static const char* mgd_binop_glyph(const void* fn) {
+    if (fn == (const void*)mpfr_add) return " + ";
+    if (fn == (const void*)mpfr_sub) return " - ";
+    if (fn == (const void*)mpfr_mul) return " * ";
+    if (fn == (const void*)mpfr_div) return " / ";
+    if (fn == (const void*)numeric_mpfr_pow_fast) return "^";
+    return NULL;
+}
+static const char* mgd_unop_name(const void* fn) {
+    static const struct { const void* fn; const char* nm; } T[] = {
+        { (const void*)mpfr_neg, "Minus" }, { (const void*)mpfr_sqrt, "Sqrt" },
+        { (const void*)mpfr_exp, "Exp" },   { (const void*)mpfr_log, "Log" },
+        { (const void*)mpfr_sin, "Sin" },   { (const void*)mpfr_cos, "Cos" },
+        { (const void*)mpfr_tan, "Tan" },   { (const void*)mpfr_abs, "Abs" },
+        { (const void*)mpfr_sinh, "Sinh" }, { (const void*)mpfr_cosh, "Cosh" },
+        { (const void*)mpfr_tanh, "Tanh" }, { (const void*)mpfr_asin, "ArcSin" },
+        { (const void*)mpfr_acos, "ArcCos" }, { (const void*)mpfr_atan, "ArcTan" },
+    };
+    for (size_t k = 0; k < sizeof T / sizeof T[0]; k++) if (T[k].fn == fn) return T[k].nm;
+    return NULL;
+}
+#endif
+
+/* The value of an MG_RCONST: the constant at its working precision. */
+static void render_mgd_const(DBuf* b, const Instr* c) {
+#ifdef USE_MPFR
+    if (c->imm.p) {
+        Expr* v = expr_new_mpfr_copy((mpfr_srcptr)c->imm.p);
+        char* s = v ? expr_to_string(v) : NULL;
+        db_cat(b, s ? s : "?");
+        free(s);
+        if (v) expr_free(v);
+        return;
+    }
+#else
+    (void)c;
+#endif
+    db_cat(b, "?");
+}
+
 /* Writes the immediate of instruction `i`.  Returns false when the opcode has
  * no immediate, so the caller can skip the separator. */
 static bool render_imm(DBuf* b, const CompiledProgram* p, size_t i, ProgList* L) {
     const Instr* c = &p->code[i];
     char tmp[80];
+    if (c->op == OP_MG_RCONST) { render_mgd_const(b, c); return true; }
     switch (imm_kind(c->op)) {
         case IMM_NONE: return false;
         case IMM_INT:  db_catf(b, "%lld", c->imm.i); return true;
@@ -659,6 +705,16 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
         return;
     }
     if (c->op == OP_ASSOC_LOOKUP_DYN) { db_catf(b, "%s = Lookup[%s, %s]", rd, ra, rb); return; }
+#ifdef USE_MPFR
+    if (c->op == OP_MG_RBIN) {
+        const char* g = mgd_binop_glyph(c->imm.p);
+        if (g) { db_catf(b, "%s = %s%s%s", rd, ra, g, rb); return; }
+    }
+    if (c->op == OP_MG_RUN) {
+        const char* fn = mgd_unop_name(c->imm.p);
+        if (fn) { db_catf(b, "%s = %s[%s]", rd, fn, ra); return; }
+    }
+#endif
     if (c->op == OP_MC_ENTER) {
         db_catf(b, "MemoryConstrained budget %s; on overrun goto %u", ra, c->b);
         return;

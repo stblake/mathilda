@@ -1,6 +1,7 @@
 /* Builtin-audit regressions: control flow (review/issues/<Head>.md;
  * tests/test_audit.h). */
 #include "test_audit.h"
+#include "compile/compiled_function.h"   /* compiled_function_disassemble */
 
 /* For#1 (high, hang): "Throw in For's start is swallowed, so
  * Catch[For[Throw[7], True, i++]] loops forever".  The start's value was
@@ -219,6 +220,97 @@ static void test_wave4_g8_misc_control(void) {
     audit_chk("SlashCommand#1", "First[SlashCommand[]]", "\"/help\" -> \"list the commands and keys\"");
 }
 
+/* Wave 5 G8: control-flow findings -- argument counts, missing messages,
+ * General::stop, Which/Unevaluated, Compile signatures and values. */
+static void test_wave5_g8_control(void) {
+    audit_chk("Do#5", "Quiet[Check[Do[Print[i], {i, w5x}], fired, Do::iterb]]", "fired");
+    audit_chk("Do#5", "Quiet[Do[Print[i], {i, w5x}]]", "Do[Print[i], {i, w5x}]");
+    audit_chk("FixedPoint#2", "Quiet[Check[FixedPoint[f], fired, FixedPoint::argtu]]", "fired");
+    audit_chk("FixedPoint#2", "Quiet[FixedPoint[f]]", "FixedPoint[f]");
+    audit_chk("FixedPoint#2", "Quiet[Check[FixedPoint[f, x, 2, 3], fired, FixedPoint::nonopt]]", "fired");
+    audit_chk("FixedPoint#2", "Quiet[Check[FixedPoint[f, x, -1], fired, FixedPoint::intnm]]", "fired");
+    audit_chk("FixedPoint#2", "Quiet[FixedPoint[f, x, -1]]", "FixedPoint[f, x, -1]");
+    audit_chk("FixedPoint#2", "FixedPoint[#/2 &, 1.0, SameTest -> (Abs[#1 - #2] < 0.1 &)]", "0.0625");
+    audit_chk("Throw#1", "Quiet[Check[Throw[], fired, Throw::argb]]", "fired");
+    audit_chk("Throw#1", "Quiet[Throw[1, 2, 3, 4]]", "Throw[1, 2, 3, 4]");
+    audit_chk("Throw#1", "Catch[Throw[1, a]; 2, a]", "1");
+    audit_chk("Which#1", "Which[Unevaluated[1 > 0], 1]", "1");
+    audit_chk("Which#1", "Which[Unevaluated[1 < 0], 1, True, 2]", "2");
+    audit_chk("Check#2", "Quiet[Check[Check[w5x], fired, Check::argmu]]", "fired");
+    audit_chk("Check#2", "Quiet[Check[Check[], fired, Check::argm]]", "fired");
+    audit_chk("Check#2", "Quiet[Check[w5x]]", "Check[w5x]");
+    audit_chk("Exit#1", "Quiet[Check[Exit[w5x], fired, Exit::intm]]", "fired");
+    audit_chk("Exit#1", "Quiet[Exit[w5x]]", "Exit[w5x]");
+    audit_chk("Quit#2", "Quiet[Check[Quit[1, 2], fired, Quit::argt]]", "fired");
+    audit_chk("Quit#2", "Quiet[Quit[1, 2]; 5]", "5");
+    audit_chk("ParallelEvaluate#1", "Quiet[Check[ParallelEvaluate[1, 2, 3], fired, ParallelEvaluate::argt]]", "fired");
+    audit_chk("ParallelEvaluate#1", "Quiet[ParallelEvaluate[1, 2, 3]]", "ParallelEvaluate[1, 2, 3]");
+    audit_chk("Message#2", "Quiet[Check[Message[3], fired, Message::name]]", "fired");
+    audit_chk("Message#2", "Quiet[Check[Message[{f::m}], fired, Message::name]]", "fired");
+    audit_chk("Message#3", "Quiet[Check[Message[], fired, Message::argm]]", "fired");
+    audit_chk("Message#3", "Quiet[Message[]]", "Message[]");
+    audit_chk("Quiet#2", "Quiet[Check[Quiet[1/0, Power], fired, Quiet::anmlist]]", "fired");
+    audit_chk("Quiet#2", "Quiet[Quiet[1/0, Power]]", "Quiet[1/0, Power]");
+    audit_chk("Quiet#2", "Quiet[1/0, {Power::infy}]", "ComplexInfinity");
+    /* General::stop: the fourth and later printings are held back, Check still sees them */
+    audit_run("w5m::m = \"bad `1`\"");
+    /* General::stop follows the third printing; the later two are generated
+     * (in $MessageList, seen by Check) but not printed */
+    audit_chk("Message#4", "Block[{$MessageList = {}}, Do[Message[w5m::m, i], {i, 5}]; $MessageList]",
+              "{w5m::m, w5m::m, w5m::m, General::stop, w5m::m, w5m::m}");
+    audit_chk("Off#1", "Block[{$MessageList = {}}, Do[1/0, {5}]; Position[$MessageList, HoldForm[General::stop]]]", "{{4}}");
+    audit_chk("Off#1", "Check[Do[1/0, {5}], caught]", "caught");
+    audit_chk("Off#1", "Block[{$MessageList = {}}, Off[General::stop]; Do[1/0, {5}]; On[General::stop]; "
+              "MemberQ[$MessageList, HoldForm[General::stop]]]", "False");
+    audit_chk("Off#1", "Block[{$MessageList = {}}, 1/0; Count[$MessageList, HoldForm[Power::infy]]]", "1");
+}
+
+/* CompilePrint writes to stdout and returns Null, so its text is checked at
+ * the C level: `src` must build a CompiledFunction whose disassembly holds
+ * `needle`. */
+static void audit_disasm_has(const char* id, const char* src, const char* needle) {
+    Expr* e = parse_expression(src);
+    Expr* r = e ? evaluate(e) : NULL;
+    char* d = (r && r->type == EXPR_COMPILED) ? compiled_function_disassemble(r->data.compiled) : NULL;
+    bool ok = d && strstr(d, needle);
+    if (!ok) fprintf(stderr, "  [%s] disassembly lacks \"%s\":\n%s\n", id, needle, d ? d : "(none)");
+    free(d);
+    if (r) expr_free(r);
+    if (e) expr_free(e);
+    audit_chk(id, ok ? "True" : "False", "True");
+}
+
+static void test_wave5_g8_compile(void) {
+    audit_chk("Compile#2", "Compile[{}, 3.][]", "3.0");
+    audit_chk("CompileDiagnostics#4", "\"Compiled\" /. CompileDiagnostics[{}, 1.0]", "True");
+    audit_chk("Compile#3", "Compile[{x}, x][Pi] === N[Pi]", "True");
+    audit_chk("Compile#3", "Compile[{x}, x + 1][Sqrt[2]] === N[1 + Sqrt[2]]", "True");
+    audit_chk("Compile#3", "Head[Compile[{x}, x][Pi]]", "Real");
+    audit_chk("Compile#3", "Abs[Compile[{x}, Sin[x]][Pi]] < 10^-15", "True");
+    audit_chk("Compile#3", "Compile[{x}, x + 1][w5y]", "1 + w5y");
+    audit_chk("CompiledFunction#1", "Quiet[Check[Compile[{x}, x^2 + 1][1, 2], fired, CompiledFunction::cfct]]", "fired");
+    audit_chk("CompiledFunction#1", "Head[Quiet[Compile[{x}, x^2 + 1][1, 2]]]", "CompiledFunction[{x}, x^2 + 1]");
+    audit_chk("CompiledFunction#2", "Compile[{x}, x^2] === Compile[{x}, x^2]", "True");
+    audit_chk("CompiledFunction#2", "Compile[{x}, x^2] === Compile[{x}, x^3]", "False");
+    audit_chk("CompiledFunction#2", "Compile[{{x, _Integer}}, x^2] === Compile[{x}, x^2]", "False");
+    audit_chk("CompiledFunction#2", "Length[Union[{Compile[{x}, x], Compile[{x}, x]}]]", "1");
+    audit_chk("CompiledFunction#3", "Compile[{x}, x, CompilationTarget -> \"C\"][1.]", "1.0");
+    audit_chk("CompiledFunction#3", "Compile[{x}, x, Parallelization -> True][1.]", "1.0");
+    audit_chk("CompiledFunction#3", "Compile[{x}, x, {{y, _Real}}][1.]", "1.0");
+    audit_chk("CompileDiagnostics#3", "Block[{w5g = 3.0}, \"Reason\" /. CompileDiagnostics[{{x, _Real}}, x + w5g]]",
+              "\"symbol is not a declared argument or a local variable of the compiled code\"");
+    audit_disasm_has("CompilePrint#2", "Compile[{{x, _Real}}, x + 1, WorkingPrecision -> 30]", "T2 = R0 + T1");
+    audit_disasm_has("CompilePrint#2", "Compile[{{x, _Real}}, x + 1, WorkingPrecision -> 30]", "T1 = 1.0000");
+    audit_disasm_has("CompilePrint#2", "Compile[{{x, _Real}}, Sin[x] + 1, WorkingPrecision -> 30]", "= Sin[R0]");
+}
+
+static void test_wave5_g8_misc_control(void) {
+    audit_chk("SlashCommand#2", "Quiet[SlashCommand[\"abcdefghijabcdefghijabcdefghijabc\", f]]", "$Failed");
+    audit_chk("SlashCommand#2", "StringContainsQ[Information[SlashCommand], \"at most 32 characters\"]", "True");
+    audit_chk("CompileDiagnostics#2", "\"Compiled\" /. CompileDiagnostics[{{z, _Complex}}, Zeta[z]]", "True");
+    audit_chk("CompileDiagnostics#2", "Abs[Compile[{{z, _Complex}}, Zeta[z]][2. + I] - N[Zeta[2 + I]]] < 10^-12", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_for_start_throw);
@@ -232,5 +324,8 @@ int main(void) {
     TEST(test_wave4_g8_conditions);
     TEST(test_wave4_g8_compile);
     TEST(test_wave4_g8_misc_control);
+    TEST(test_wave5_g8_control);
+    TEST(test_wave5_g8_compile);
+    TEST(test_wave5_g8_misc_control);
     return audit_finish("audit_control_flow");
 }

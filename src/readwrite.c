@@ -19,6 +19,7 @@
 #include "symtab.h"
 #include "print.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "io/streams.h" /* Put to an OutputStream */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -161,10 +162,28 @@ static Expr* put_common(Expr* res, const char* mode, const char* who) {
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return NULL;
 
-    const char* filename = rw_file_arg(res->data.function.args[argc - 1]);
-    if (!filename) return NULL;
-
-    FILE* fp = fopen(filename, mode);
+    /* Put[e1, ..., stream]: an open OutputStream is written to, and stays
+     * open (audit Put#2). */
+    const Expr* dest = res->data.function.args[argc - 1];
+    int sid, s_out;
+    FILE* fp = NULL;
+    int borrowed_fp = 0;
+    const char* filename = NULL;
+    if (stream_handle(dest, &sid, &s_out)) {
+        Stream* st = s_out ? stream_by_handle(dest) : NULL;
+        if (!st || !st->fp) {
+            char* t = expr_to_string_outputform((Expr*)dest);
+            mth_message(who, "openx", "%s is not open.", t ? t : "");
+            free(t);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+        fp = st->fp;
+        borrowed_fp = 1;
+    } else {
+        filename = rw_file_arg(dest);
+        if (!filename) return NULL;
+        fp = fopen(filename, mode);
+    }
     if (!fp) {
         /* Through the funnel, so Quiet silences it and Check sees it. */
         mth_message(who, "noopen", "Cannot open %s.", filename);
@@ -187,7 +206,8 @@ static Expr* put_common(Expr* res, const char* mode, const char* who) {
         fputc('\n', fp);
     }
 
-    fclose(fp);
+    if (borrowed_fp) fflush(fp);
+    else fclose(fp);
     return expr_new_symbol(SYM_Null);
 }
 

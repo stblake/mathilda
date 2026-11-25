@@ -3102,9 +3102,53 @@ static const char* tex_function_name(const char* h) {
     if (h == SYM_Ceiling)  return NULL; /* handled via \lceil  */
     if (h == SYM_Gamma)    return "\\Gamma ";
     if (h == SYM_Re)       return "\\Re ";
+    if (h == SYM_Zeta)     return "\\zeta ";
     if (h == SYM_Im)       return "\\Im ";
     if (h == SYM_Conjugate)return NULL; /* handled via \overline */
     return NULL;
+}
+
+/* A subscript: a digit or a one-letter symbol bare (J_n, x_1), anything
+ * else braced (J_{10}, x_{n+1}). */
+static void tex_subscript(Expr* sub) {
+    bool bare = (sub->type == EXPR_INTEGER && sub->data.integer >= 0 && sub->data.integer <= 9)
+             || (sub->type == EXPR_SYMBOL && strlen(context_display_name(sub->data.symbol.name)) == 1);
+    if (!bare) printf("{");
+    print_tex(sub, 0);
+    if (!bare) printf("}");
+}
+
+/* Is e a matrix: a non-empty List of equally long, non-empty Lists none of
+ * whose elements is a List? */
+static bool tex_is_matrix(const Expr* e) {
+    size_t n = e->data.function.arg_count, cols = 0;
+    if (n == 0) return false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* r = e->data.function.args[i];
+        if (r->type != EXPR_FUNCTION || r->data.function.head->type != EXPR_SYMBOL ||
+            r->data.function.head->data.symbol.name != SYM_List)
+            return false;
+        if (i == 0) cols = r->data.function.arg_count;
+        if (cols == 0 || r->data.function.arg_count != cols) return false;
+        for (size_t j = 0; j < cols; j++) {
+            const Expr* x = r->data.function.args[j];
+            if ((x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+                 x->data.function.head->data.symbol.name == SYM_List) || x->type == EXPR_NDARRAY)
+                return false;
+        }
+    }
+    return true;
+}
+
+/* n when h is Derivative[n][f] with one positive machine integer n, else 0. */
+static int64_t tex_derivative_order(const Expr* h) {
+    if (h->type != EXPR_FUNCTION || h->data.function.arg_count != 1) return 0;
+    const Expr* d = h->data.function.head;
+    if (d->type != EXPR_FUNCTION || d->data.function.head->type != EXPR_SYMBOL ||
+        d->data.function.head->data.symbol.name != SYM_Derivative || d->data.function.arg_count != 1)
+        return 0;
+    const Expr* n = d->data.function.args[0];
+    return (n->type == EXPR_INTEGER && n->data.integer > 0) ? n->data.integer : 0;
 }
 
 /* Emits a comma-separated argument list wrapped in (...). */
@@ -3629,6 +3673,24 @@ static void print_tex(Expr* e, int parent_prec) {
                 if (owned) expr_free(owned);
             }
         }
+        else if (head == SYM_List && tex_is_matrix(e)) {
+            /* A rectangular list of lists of non-lists is a matrix: an array
+             * in parentheses, one row per line (audit TeXForm#7). */
+            size_t cols = e->data.function.args[0]->data.function.arg_count;
+            printf("\\left(\n\\begin{array}{");
+            for (size_t j = 0; j < cols; j++) printf("c");
+            printf("}\n");
+            for (size_t i = 0; i < argc; i++) {
+                Expr* row = e->data.function.args[i];
+                printf(" ");
+                for (size_t j = 0; j < cols; j++) {
+                    if (j > 0) printf(" & ");
+                    print_tex(row->data.function.args[j], 0);
+                }
+                printf(" \\\\\n");
+            }
+            printf("\\end{array}\n\\right)");
+        }
         else if (head == SYM_List) {
             printf("\\{");
             for (size_t i = 0; i < argc; i++) {
@@ -3699,6 +3761,46 @@ static void print_tex(Expr* e, int parent_prec) {
             printf("\\neg ");
             print_tex(e->data.function.args[0], 9500);
         }
+        /* The standard functions with a notation of their own (audit TeXForm#6). */
+        else if (head == SYM_Factorial && argc == 1) {
+            print_tex(e->data.function.args[0], 9500);
+            printf("!");
+        }
+        else if (head == SYM_Binomial && argc == 2) {
+            printf("\\binom{");
+            print_tex(e->data.function.args[0], 0);
+            printf("}{");
+            print_tex(e->data.function.args[1], 0);
+            printf("}");
+        }
+        else if ((head == SYM_BesselJ || head == SYM_BesselY || head == SYM_BesselI ||
+                  head == SYM_BesselK) && argc == 2) {
+            printf("%c_", head == SYM_BesselJ ? 'J' : head == SYM_BesselY ? 'Y'
+                        : head == SYM_BesselI ? 'I' : 'K');
+            tex_subscript(e->data.function.args[0]);
+            printf("(");
+            print_tex(e->data.function.args[1], 0);
+            printf(")");
+        }
+        else if (strcmp(context_display_name(head), "Subscript") == 0 && argc >= 2) {
+            print_tex(e->data.function.args[0], 9500);
+            printf("_");
+            if (argc == 2) tex_subscript(e->data.function.args[1]);
+            else {
+                printf("{");
+                for (size_t i = 1; i < argc; i++) {
+                    if (i > 1) printf(",");
+                    print_tex(e->data.function.args[i], 0);
+                }
+                printf("}");
+            }
+        }
+        else if (head == SYM_Dot && argc >= 2) {
+            for (size_t i = 0; i < argc; i++) {
+                if (i > 0) printf(".");
+                print_tex(e->data.function.args[i], 9500);
+            }
+        }
         else if (strcmp(context_display_name(head), "C") == 0 && argc == 1) {
             /* The DSolve/Reduce/Integrate generated constant C[k] renders as
              * the subscripted lowercase c_k, matching Mathematica's TeXForm
@@ -3736,6 +3838,13 @@ static void print_tex(Expr* e, int parent_prec) {
                 }
             }
         }
+    } else if (tex_derivative_order(head_expr) > 0) {
+        /* Derivative[n][f][x]: f(x) with n primes up to three, then f^{(n)}(x). */
+        int64_t n = tex_derivative_order(head_expr);
+        print_tex(head_expr->data.function.args[0], 9500);
+        if (n <= 3) for (int64_t k = 0; k < n; k++) printf("'");
+        else printf("^{(%" PRId64 ")}", n);
+        print_tex_args_parens(e, 0);
     } else {
         /* Non-symbol head: render as (head)(args...). */
         print_tex(head_expr, 9500);

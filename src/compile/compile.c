@@ -2602,7 +2602,7 @@ static const char* bail_classify(const Expr* e) {
     if (!e) return "empty expression";
     switch (e->type) {
         case EXPR_SYMBOL:
-            return "symbol is not a declared argument and holds no machine value";
+            return "symbol is not a declared argument or a local variable of the compiled code";
         case EXPR_STRING:
             return "a string is not a machine number";
         case EXPR_FUNCTION:

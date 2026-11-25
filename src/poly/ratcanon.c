@@ -916,8 +916,16 @@ static Expr* builtin_ratcanon_cancel(Expr* res) {
 void ratcanon_init(void) {
     symtab_add_builtin("RatCanonNormalize", builtin_ratcanon_normalize);
     symtab_get_def("RatCanonNormalize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("RatCanonNormalize",
+        "RatCanonNormalize[expr]\n"
+        "\tputs expr over a common denominator as one canonical rational function, the\n"
+        "\tform Together gives (an internal test entry point of the rat_canon engine).");
     symtab_add_builtin("RatCanonCancel", builtin_ratcanon_cancel);
     symtab_get_def("RatCanonCancel")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("RatCanonCancel",
+        "RatCanonCancel[expr]\n"
+        "\tcancels the common factors of the numerators and denominators in expr, term by\n"
+        "\tterm, the form Cancel gives (an internal test entry point of the rat_canon engine).");
     symtab_add_builtin("RatCanonPrototype", builtin_ratcanon_prototype);
     symtab_get_def("RatCanonPrototype")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RatCanonPrototype",

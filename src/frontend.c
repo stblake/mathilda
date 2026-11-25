@@ -72,7 +72,8 @@ Expr* builtin_slashcommand(Expr* res) {
     size_t nl = strlen(name);
     if (!term_slash_valid_name(name, nl)) {
         mth_message("SlashCommand", "name",
-                    "\"%s\" is not a command name: a letter followed by letters and digits.", name);
+                    "\"%s\" is not a command name: a letter followed by letters and digits, "
+                    "at most 32 characters.", name);
         return failed();
     }
     const TermSlashCmd* old = term_slash_find(name, nl);
@@ -193,8 +194,9 @@ void frontend_init(void) {
         "\tgives its summary, or None.\n"
         "SlashCommand[]\n"
         "\tlists every command as \"/name\" -> \"summary\".\n"
-        "Names are a letter followed by letters and digits; the REPL's own commands\n"
-        "(/help, /theme, ...) cannot be redefined. Usually called from\n"
+        "Names are a letter followed by letters and digits, at most 32 characters; the\n"
+        "REPL's own commands"
+        " (/help, /theme, ...) cannot be redefined. Usually called from\n"
         "~/.mathilda/init.m or a file in ~/.mathilda/mods/. Attributes: Protected.");
 
     symtab_add_builtin("Monitor", builtin_monitor);

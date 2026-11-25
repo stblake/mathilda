@@ -1435,7 +1435,8 @@ def spinner_print_coexist(tmp):
 def spinner_stderr_order(tmp):
     s = spinner_session(tmp, colour=False)
     try:
-        s.send('f::m = "err `1`"; Do[Print["out", i]; Message[f::m, i]; Pause[0.1], {i, 5}]\r')
+        # Off[General::stop]: all five printings of f::m, not three and the stop
+        s.send('Off[General::stop]; f::m = "err `1`"; Do[Print["out", i]; Message[f::m, i]; Pause[0.1], {i, 5}]\r')
         s.expect(r"Out\[1\]=")
         text = s.buf.decode("utf-8", "replace")
         order = re.findall(r"out\d|err \d", text)
@@ -1682,7 +1683,7 @@ def combo_print_after_edit(tmp):
     order with the messages."""
     s = spinner_session(tmp, colour=False)
     try:
-        s.send('Do[Print["p", i]; Message[General::ovfl]; Pause[0.12],\r')
+        s.send('Off[General::stop]; Do[Print["p", i]; Message[General::ovfl]; Pause[0.12],\r')
         s.drain(0.2)
         s.send("{i, 4}]")
         s.drain(0.2)

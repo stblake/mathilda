@@ -22,12 +22,15 @@
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
+#include "eval.h"     /* evaluate: $TemporaryDirectory */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <stdint.h>
+#include <time.h>
+#include <sys/stat.h>
 
 /* ------------------------------------------------------------------ */
 /* Registry                                                            */
@@ -94,6 +97,8 @@ static int slurp_file(const char* path, char** buf, size_t* len) {
 int stream_open_input(const char* name) {
     char* buf = NULL;
     size_t len = 0;
+    struct stat st;
+    if (stat(name, &st) == 0 && S_ISDIR(st.st_mode)) return -1;   /* a directory is no file */
     if (!slurp_file(name, &buf, &len)) return -1;
     Stream* s = alloc_slot();
     memset(s, 0, sizeof(Stream));
@@ -231,10 +236,56 @@ static int is_option_rule(const Expr* a) {
  * stream keeps FormatType (the form Write renders in) and PageWidth (the
  * width a FortranForm stream breaks its lines at, 78 by default); the others
  * (CharacterEncoding, BinaryFormat, ...) are accepted and ignored. */
+/* A fresh file name in $TemporaryDirectory, for OpenWrite[] (caller frees). */
+static char* temp_file_name(void) {
+    static unsigned long counter = 0;
+    Expr* sym = expr_new_symbol("$TemporaryDirectory");
+    Expr* v = evaluate(sym);
+    expr_free(sym);
+    const char* dir = (v && v->type == EXPR_STRING) ? v->data.string : ".";
+    size_t dl = strlen(dir);
+    char* r = malloc(dl + 40);
+    if (r) {
+        unsigned long stamp = (unsigned long)time(NULL) % 1000000UL;
+        for (int tries = 0; tries < 1000; tries++) {
+            counter++;
+            snprintf(r, dl + 40, "%s%sm%06lu%06lu", dir,
+                     (dl > 0 && (dir[dl - 1] == '/' || dir[dl - 1] == '\\')) ? "" : "/",
+                     stamp, counter % 1000000UL);
+            FILE* f = fopen(r, "rb");
+            if (!f) break;                  /* not taken */
+            fclose(f);
+        }
+    }
+    if (v) expr_free(v);
+    return r;
+}
+
 static Expr* open_common(Expr* res, int output, int append, const char* who) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count == 0) {
+        /* OpenWrite[] / OpenAppend[]: a new file in $TemporaryDirectory. */
+        if (!output) return NULL;
+        char* temp_name = temp_file_name();
+        if (!temp_name) return NULL;
+        int tid = stream_open_output(temp_name, append);
+        if (tid < 0) {
+            mth_message(who, "noopen", "Cannot open %s.", temp_name);
+            free(temp_name);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+        free(temp_name);
+        return stream_make_object(stream_by_id(tid));
+    }
     const char* name = stream_filename_arg(res->data.function.args[0]);
-    if (!name) return NULL;
+    if (!name || name[0] == '\0') {
+        /* OpenRead[123]: not a file specification (audit OpenRead#3, OpenAppend#2). */
+        char* t = expr_to_string_outputform(res->data.function.args[0]);
+        mth_message(who, "fstr", "File specification %s is not a string of one or more characters.",
+                    t ? t : "");
+        free(t);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
     const char* format_type = NULL;
     int page_width = 78;
     for (size_t i = 1; i < res->data.function.arg_count; i++) {
@@ -313,7 +364,9 @@ Expr* builtin_close(Expr* res) {
         return expr_new_symbol(SYM_DollarFailed);
     }
     Expr* name_result = expr_new_string(s->name);
-    stream_close_id(s->id);
+    /* The standard streams OutputStream["stdout", 1] / ["stderr", 2] stay
+     * open: they are the process's own, not a file this session opened. */
+    if (!s->borrowed) stream_close_id(s->id);
     return name_result;                     /* Close returns the file name */
 }
 
@@ -383,8 +436,10 @@ Expr* builtin_setstreamposition(Expr* res) {
     }
 
     if (s->is_output) {
-        if (to_end) fseek(s->fp, 0, SEEK_END);
-        else        fseek(s->fp, want, SEEK_SET);
+        /* Clamped into the file, as on an input stream: a seek past the end
+         * would make the next write pad the file with NUL bytes. */
+        long end = (fseek(s->fp, 0, SEEK_END) == 0) ? ftell(s->fp) : -1;
+        if (!to_end && (end < 0 || want < end)) fseek(s->fp, want, SEEK_SET);
         long pos = ftell(s->fp);
         if (pos < 0) pos = 0;
         return expr_new_integer(pos);
@@ -420,7 +475,14 @@ static Stream* resolve_output(const Expr* a, const char* who, int* fail) {
         return s;
     }
     const char* name = stream_filename_arg(a);
-    if (!name) return NULL;                 /* decline */
+    if (!name) {
+        /* Write[x, 2]: x names no stream (audit Write#1). */
+        char* t = expr_to_string_outputform((Expr*)a);
+        mth_message("General", "stream", "%s is not a string, InputStream[ ], or OutputStream[ ].",
+                    t ? t : "");
+        free(t);
+        return NULL;                        /* leave the call unevaluated */
+    }
     Stream* s = stream_find_by_name(name, 1);
     if (s) return s;
     int nid = stream_open_output(name, 0);
@@ -459,7 +521,7 @@ Expr* builtin_write(Expr* res) {
         /* A file stream writes InputForm, its default FormatType in the
          * reference (Write[f, 1/100 a + 5 x] writes "a/100 + 5*x"). */
         char* str;
-        if (s->borrowed) {
+        if (s->borrowed || s->format_type == SYM_OutputForm) {
             str = expr_to_string_outputform(e);
         } else {
             Expr* inner = expr_copy(e);
@@ -520,6 +582,11 @@ void streams_init(void) {
     protect("SetStreamPosition");
     symtab_add_builtin("Write", builtin_write);                 protect("Write");
     symtab_add_builtin("WriteString", builtin_writestring);     protect("WriteString");
+
+    /* The standard output streams exist from the start, as
+     * OutputStream["stdout", 1] and OutputStream["stderr", 2]. */
+    if (!stream_find_by_name("stdout", 1)) (void)stream_open_output("stdout", 0);
+    if (!stream_find_by_name("stderr", 1)) (void)stream_open_output("stderr", 0);
 
     /* Inert normal-form objects: no builtin, just Protected so the head is a
      * stable head the evaluator leaves alone. */

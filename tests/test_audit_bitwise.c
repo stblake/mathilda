@@ -10,7 +10,8 @@ static void test_wave4_integerpart_complex(void) {
 /* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
  * off $MessageList inside a Block (each diagnostic once per evaluation). */
 static void test_wave5_g7_bitwise(void) {
-    audit_chk("BitShiftLeft#1", "Block[{$MessageList = {}}, BitShiftLeft[{1, 2, 3}, 2.]; Length[$MessageList]]", "3");
+    /* One ::intm per element; General::stop may follow the third (Wave 5 G8). */
+    audit_chk("BitShiftLeft#1", "Block[{$MessageList = {}}, BitShiftLeft[{1, 2, 3}, 2.]; Count[$MessageList, HoldForm[BitShiftLeft::intm]]]", "3");
     audit_chk("BitXor#1", "Block[{$MessageList = {}}, BitXor[x, 2.5]; Length[$MessageList]]", "1");
     audit_chk("BitXor#1", "Block[{$MessageList = {}}, BitXor[2.5, 3]; Length[$MessageList]]", "1");
 }

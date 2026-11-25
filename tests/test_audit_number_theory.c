@@ -124,7 +124,8 @@ static void test_wave4_numbertheory(void) {
 /* Wave 5 G7 (arith-misc): low-severity findings. Message counts are read
  * off $MessageList inside a Block (each diagnostic once per evaluation). */
 static void test_wave5_g7_number_theory(void) {
-    audit_chk("Divisible#3", "Block[{$MessageList = {}}, Divisible[{1, 2, 3}, 0]; Length[$MessageList]]", "3");
+    /* One ::divz per element; General::stop may follow the third (Wave 5 G8). */
+    audit_chk("Divisible#3", "Block[{$MessageList = {}}, Divisible[{1, 2, 3}, 0]; Count[$MessageList, HoldForm[Divisible::divz]]]", "3");
     audit_chk("ExtendedGCD#1", "Quiet[Check[ExtendedGCD[1.5 + I, 2], fired, ExtendedGCD::exact]]", "fired");
     audit_chk("FactorInteger#1", "FactorInteger[12, 10^30]", "{{2, 2}, {3, 1}}");
     audit_chk("LCM#2", "LCM[-x]", "LCM[-x]");

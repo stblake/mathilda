@@ -5,7 +5,8 @@
  * A line whose first character is '/' is a command, never Mathilda input
  * (no Mathilda expression can start with '/': /. // /@ /; are all infix or
  * postfix). "/name rest" runs command `name` with the argument text "rest"
- * (trimmed). Names are a letter followed by letters and digits.
+ * (trimmed). Names are a letter followed by letters and digits, at most
+ * NAME_MAX_LEN (32) characters.
  *
  * Two kinds of command share the registry:
  *   built-in   the REPL's own (/help, /theme, ...), identified by an int id

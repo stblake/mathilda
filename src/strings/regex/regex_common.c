@@ -214,10 +214,21 @@ static int build_one(Expr* e, unsigned anchored, unsigned regex_flags,
                                           out, err, sizeof err);
     free(src);
     if (!prog) {
-        char uerr[256];
-        if (user_regex_error(patt, regex_flags & REGEX_CASELESS, uerr, sizeof uerr, 0))
-            memcpy(err, uerr, sizeof err);
-        mth_message(head, "regex", "%s", err);
+        /* A bare RegularExpression["re"] reported its own syntax error when it
+         * was evaluated (RegularExpression::regex); the consumer saying it
+         * again, about the anchored wrapper's offsets, is a second, bogus
+         * message (audit FileNames#2). */
+        bool reported = patt->type == EXPR_FUNCTION &&
+                        patt->data.function.head->type == EXPR_SYMBOL &&
+                        patt->data.function.head->data.symbol.name == SYM_RegularExpression &&
+                        strcmp(head, "RegularExpression") != 0;
+        if (!reported) {
+            /* Report the offset in the user's own pattern (Wave 5 G7). */
+            char uerr[256];
+            if (user_regex_error(patt, regex_flags & REGEX_CASELESS, uerr, sizeof uerr, 0))
+                memcpy(err, uerr, sizeof err);
+            mth_message(head, "regex", "%s", err);
+        }
         sp_info_free(&out->info);
         return -1;
     }

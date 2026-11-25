@@ -49,6 +49,16 @@ Expr* builtin_exit(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+    if (argc > 1) return NULL;              /* the arity layer has said Exit::argt */
+    if (argc == 1 && args[0]->type != EXPR_INTEGER) {
+        /* Validate before the rewrite, so the message and the unevaluated
+         * call name Exit, not Quit (audit Exit#1). */
+        char* txt = expr_to_string_outputform(res);
+        mth_message("Exit", "intm", "Machine-sized integer expected at position 1 in %s.",
+                    txt ? txt : "Exit[...]");
+        free(txt);
+        return NULL;
+    }
     /* Steal the arguments into Quit[...]; the evaluator frees the shell. */
     Expr** moved = argc ? malloc(argc * sizeof(Expr*)) : NULL;
     if (argc && !moved) return NULL;

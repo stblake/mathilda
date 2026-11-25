@@ -42,7 +42,13 @@ goldenRecord[i_Integer, h_Hold] := Module[{r, msgs, body},
   StringRiffle[Flatten[{"=== " <> ToString[i] <> " " <> goldenText[HoldForm @@ h],
     "Messages: " <> goldenText[msgs], body}], "\n"]];
 
-goldenDump[] := Block[{$LeanProject = None, $LeanExecutable = Automatic},
+(* The whole corpus is one calculation, so General::stop is switched off:
+   each record's messages must not depend on how many earlier records
+   issued the same one. *)
+goldenDump[] := Block[{$LeanProject = None, $LeanExecutable = Automatic, out},
   SetOptions[Certify, Assumptions -> {}];
-  StringJoin[Table[goldenRecord[i, Extract[goldenCorpus, i, Hold]] <> "\n",
-    {i, Length[goldenCorpus]}]]];
+  Off[General::stop];
+  out = StringJoin[Table[goldenRecord[i, Extract[goldenCorpus, i, Hold]] <> "\n",
+    {i, Length[goldenCorpus]}]];
+  On[General::stop];
+  out];

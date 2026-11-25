@@ -4342,7 +4342,7 @@ Expr* builtin_symbolname(Expr* res) {
             res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 1, 1);
     }
     Expr* a = res->data.function.args[0];
-    if (a->type != EXPR_SYMBOL) return NULL;
+    if (a->type != EXPR_SYMBOL) return values_sym_error("SymbolName", a);
     const char* n = a->data.symbol.name;
     const char* last = strrchr(n, '`');
     return expr_new_string(last ? last + 1 : n);

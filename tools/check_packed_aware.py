@@ -281,6 +281,8 @@ EXEMPT = {
     "out of ConstantArray::ilsmn; no buffer path",
     "Pick": "is_ndarray only keeps a visible NDArray operand out of "
     "Pick::incomp; no buffer path, the packed form stays materialised by the gate",
+    "Subsets": "the EXPR_NDARRAY test only keeps a visible NDArray (or sparse) "
+    "argument out of Subsets::normal; no buffer path",
 }
 
 

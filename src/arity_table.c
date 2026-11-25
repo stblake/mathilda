@@ -344,6 +344,17 @@ static const ArityRow ARITY_ROWS[] = {
     { "ToCharacterCode",  1, 2, NOOPT },
     { "RandomChoice",     1, 2, NOOPT },
     { "RandomInteger",    0, 2, NOOPT },
+    /* ---- Wave 5 G8 (control flow, files, streams) ---- */
+    { "FixedPoint",       2, 3, OPT_NOCHECK },
+    { "FixedPointList",   2, 3, OPT_NOCHECK },
+    { "Throw",            1, 3, NOOPT },
+    { "Check",            2, ANY, NOOPT },
+    { "End",              0, 0, NOOPT },
+    { "Message",          1, ANY, NOOPT },
+    { "ParallelEvaluate", 1, 2, NOOPT },
+    { "Quit",             0, 1, NOOPT },
+    { "Exit",             0, 1, NOOPT },
+    { "Read",             1, 2, OPT_NOCHECK },
 };
 
 /* Heads whose choice of two counts the reference words as a range:

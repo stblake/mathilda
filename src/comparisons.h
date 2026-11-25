@@ -24,6 +24,11 @@ bool comparisons_real_constant_sign(Expr* e, int* sgn);
  * has no numeric order (non-numeric, complex, or inseparable). */
 int comparisons_numeric_order(Expr* a, Expr* b, bool* decided);
 
+/* SameQ[a, b]: structural identity, approximate numbers within
+ * Internal`$SameQTolerance -- what a builtin whose default test is SameQ
+ * (SplitBy's key comparison) must use instead of the exact expr_eq. */
+bool expr_sameq(const Expr* a, const Expr* b);
+
 // Initialize comparison builtins
 void comparisons_init(void);
 

@@ -268,6 +268,52 @@ static void message_list_append(const char* head, const char* tag) {
     expr_free(l);
 }
 
+/* ------------------------------------------------------------ General::stop */
+/* Per-calculation print counts of each head::tag.  The table belongs to the
+ * calculation g_stop_table_epoch; a new calculation only bumps g_stop_epoch,
+ * and the table is emptied lazily by the next message. */
+typedef struct { char* key; int count; } StopCount;
+static StopCount* g_stop = NULL;
+static size_t g_stop_n = 0, g_stop_cap = 0;
+static unsigned long g_stop_epoch = 1, g_stop_table_epoch = 0;
+static int g_stop_last_dropped = 0;     /* the last message was held back */
+
+void mth_message_new_calculation(void) { g_stop_epoch++; }
+
+/* Count one printing of head::tag.  Returns 1 when it must not print (a
+ * fourth or later in this calculation), and sets *announce on the third. */
+static int stop_count(const char* head, const char* tag, int* announce) {
+    *announce = 0;
+    if (strcmp(tag, "stop") == 0 && strcmp(head, "General") == 0) return 0;
+    if (mth_msg_is_off("General", "stop")) return 0;
+    if (g_stop_table_epoch != g_stop_epoch) {
+        for (size_t i = 0; i < g_stop_n; i++) free(g_stop[i].key);
+        g_stop_n = 0;
+        g_stop_table_epoch = g_stop_epoch;
+    }
+    char* key = off_key(head, tag);
+    if (!key) return 0;
+    for (size_t i = 0; i < g_stop_n; i++) {
+        if (strcmp(g_stop[i].key, key) == 0) {
+            free(key);
+            int c = ++g_stop[i].count;
+            if (c == 3) *announce = 1;
+            return c > 3;
+        }
+    }
+    if (g_stop_n == g_stop_cap) {
+        size_t nc = g_stop_cap ? 2 * g_stop_cap : 16;
+        StopCount* ns = realloc(g_stop, nc * sizeof(StopCount));
+        if (!ns) { free(key); return 0; }
+        g_stop = ns;
+        g_stop_cap = nc;
+    }
+    g_stop[g_stop_n].key = key;
+    g_stop[g_stop_n].count = 1;
+    g_stop_n++;
+    return 0;
+}
+
 /* ------------------------------------------------------------- The funnel */
 /* The single choke-point for user-facing diagnostics: note (always), then
  * print "Head::tag: <formatted>\n" unless Quiet[] (or an extra local mute) is
@@ -312,12 +358,23 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
     int q = quiet_cover_index(head, tag);
     note_fired_for(q, head, tag);
     if (q >= 0) return;
+    /* General::stop: past the third printing in this calculation the message
+     * is still generated -- seen by Check (noted above) and listed in
+     * $MessageList -- but no longer printed. */
     message_list_append(head, tag);
+    int announce = 0;
+    g_stop_last_dropped = stop_count(head, tag, &announce);
+    if (g_stop_last_dropped) return;
     /* FeynCalc`DiracTrick::failmsg prints as DiracTrick::failmsg while
      * FeynCalc` is on $ContextPath, as the reference prints it. */
-    fprintf(stderr, "%s%s::%s%s: ", g_msg_on, context_display_name(head), tag, g_msg_off);
+    const char* shown = context_display_name(head);
+    fprintf(stderr, "%s%s::%s%s: ", g_msg_on, shown, tag, g_msg_off);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
+    if (announce)
+        mth_message("General", "stop",
+                    "Further output of %s::%s will be suppressed during this calculation.",
+                    shown, tag);
 }
 
 void mth_message(const char* head, const char* tag, const char* fmt, ...) {
@@ -375,6 +432,7 @@ void mth_message_linev(int extra_mute, const char* fmt, va_list ap) {
 
 void mth_message_cont(int extra_mute, const char* fmt, ...) {
     if (extra_mute || mth_msg_suppressed()) return;    /* no note: already fired */
+    if (g_stop_last_dropped) return;                   /* its message was held back */
     if (mth_interrupt_should_stop()) return;           /* as in mth_message_v */
     va_list ap;
     va_start(ap, fmt);
@@ -392,8 +450,37 @@ void mth_message_cont(int extra_mute, const char* fmt, ...) {
  * A silenced message is hidden from the Checks outside this Quiet (see the
  * frame model above).  Quiet[expr, moff, mon]'s third argument (messages to
  * switch back on inside an outer Quiet) is ignored. */
+/* Is e a message spec Quiet understands: All, None, a message name, a message
+ * group name (a string), or a list of names and groups? */
+static int message_name_parts(const Expr* e, const char** head, const char** tag);
+static int quiet_spec_ok(const Expr* e, int top) {
+    const char* h;
+    const char* t;
+    if (e->type == EXPR_SYMBOL)
+        return top && (e->data.symbol.name == SYM_All || strcmp(e->data.symbol.name, "None") == 0);
+    if (e->type == EXPR_STRING) return 1;
+    if (message_name_parts(e, &h, &t)) return 1;
+    if (top && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!quiet_spec_ok(e->data.function.args[i], 0)) return 0;
+        return 1;
+    }
+    return 0;
+}
+
 Expr* builtin_quiet(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    for (size_t i = 1; i < res->data.function.arg_count && i < 3; i++) {
+        if (quiet_spec_ok(res->data.function.args[i], 1)) continue;
+        /* Quiet[1/0, Power]: not a message spec (audit Quiet#2). */
+        char* cs = expr_to_string_outputform(res);
+        mth_message("Quiet", "anmlist",
+                    "Argument %zu of %s should be All, None, a message name, or a list of "
+                    "message names.", i + 1, cs ? cs : "");
+        free(cs);
+        return NULL;
+    }
     Expr* spec = res->data.function.arg_count >= 2 ? expr_copy(res->data.function.args[1]) : NULL;
     int depth = g_msg_suppress_depth;
     quiet_push(spec);
@@ -594,8 +681,12 @@ Expr* builtin_message(Expr* res) {
     const char* head;
     const char* tag;
     if (!message_name_parts(res->data.function.args[0], &head, &tag)) {
-        /* Not sym::tag: still a fired diagnostic for Check. */
-        mth_msg_note_fired();
+        /* Not sym::tag: Message::name says so (audit Message#2). */
+        char* t = expr_to_string_outputform(res->data.function.args[0]);
+        mth_message("Message", "name",
+                    "Message name %s is not of the form symbol::name or symbol::name::language.",
+                    t ? t : "");
+        free(t);
         return expr_new_symbol(SYM_Null);
     }
     if (mth_msg_is_off(head, tag)) return expr_new_symbol(SYM_Null);

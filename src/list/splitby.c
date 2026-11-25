@@ -18,8 +18,9 @@
  *
  * Cost: f is evaluated exactly once per element per level, i.e. O(n) calls per
  * function in the key spec, plus O(n) structural copying. Keys are compared
- * with expr_eq — the same structural equality the rest of the kernel uses — so
- * two adjacent elements whose keys stay unevaluated but identical still group
+ * with SameQ (expr_sameq: structural identity, machine reals within
+ * Internal`$SameQTolerance), so 0.1 + 0.2 and 0.3 are one key, and two
+ * adjacent elements whose keys stay unevaluated but identical still group
  * together. Only one key is held live at a time (the previous element's), so
  * peak overhead beyond the result itself is a single key plus the per-level
  * run vector. */
@@ -28,6 +29,7 @@
 #include "list_common.h"
 #include "splitby.h"
 #include "linkedlist_seq.h"
+#include "comparisons.h"   /* expr_sameq */
 
 /* Evaluate f[e] and return the resulting key. Caller owns the result. */
 static Expr* splitby_key(Expr* f, Expr* e) {
@@ -58,7 +60,7 @@ static Expr* splitby_level(LLSeq* q, size_t lo, size_t hi, LLSeq* fq, Expr* f1, 
         Expr* key = NULL;
         if (!cut) {
             key = splitby_key(f, llq_peek(q, i));
-            cut = !expr_eq(key, prev_key);
+            cut = !expr_sameq(key, prev_key);   /* SameQ, tolerance included */
         }
         if (key) { expr_free(prev_key); prev_key = key; }
 

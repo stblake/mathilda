@@ -927,6 +927,10 @@ static bool sameq_tolerant(const Expr* a, const Expr* b, double k) {
     return true;
 }
 
+bool expr_sameq(const Expr* a, const Expr* b) {
+    return expr_eq(a, b) || sameq_tolerant(a, b, mth_sameq_tolerance_bits());
+}
+
 /*
  * builtin_sameq: Implements SameQ[x, y, ...].
  * SameQ returns True if all its arguments are identical, and False otherwise.

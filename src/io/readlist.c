@@ -106,12 +106,14 @@ Expr* builtin_readlist(Expr* res) {
     long n = 0;
     if (new_argc == 3) {
         Expr* na = res->data.function.args[2];
-        if (na->type != EXPR_INTEGER || na->data.integer < 0) {
+        bool big = na->type == EXPR_BIGINT && mpz_sgn(na->data.bigint) > 0;
+        if (!big && (na->type != EXPR_INTEGER || na->data.integer < 0)) {
             if (default_spec) expr_free(default_spec);
             return NULL;
         }
-        have_n = 1;
-        n = (long)na->data.integer;
+        /* a bignum count outlasts any stream: read until EndOfFile */
+        have_n = !big;
+        n = big ? 0 : (long)na->data.integer;
     }
 
     int opened_here = 0, fail = 0;

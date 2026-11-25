@@ -54,6 +54,8 @@ Out[2]= Null
 
 **Wave 4 G8.** A symbolic range whose length is known, `{i, a, a + 2}` ((imax - imin)/di an explicit number), iterates over its values `a, 1 + a, 2 + a` (Table too).
 
+**Wave 5 G8.** An iterator whose bounds are not numbers is `Do::iterb` ("Iterator {i, x} does not have appropriate bounds.") and leaves the call unevaluated.
+
 ## For
 Executes a loop with an initialization, condition test, increment, and body.
 - `For[start, test, incr, body]`: Evaluates `start`, then repeatedly evaluates `body` and `incr` until `test` fails to give `True`.
@@ -190,6 +192,8 @@ Out[3]= b
 In[4]:= sign[x_] := Which[x < 0, -1, x > 0, 1, True, Indeterminate]; sign /@ {-2, 0, 3}
 Out[4]= {-1, Indeterminate, 1}
 ```
+
+**Wave 5 G8.** A test wrapped in `Unevaluated` is evaluated without the wrapper: `Which[Unevaluated[1 > 0], 1]` is `1`.
 
 ## Switch
 Selects a value by matching an expression against a sequence of patterns.
@@ -453,6 +457,8 @@ Ends the Mathilda session.
 
 **Wave 4 G8.** A rejected `Quit["a"]` (Quit::intm) is an inert expression: it does not stop a CompoundExpression or a loop.
 
+**Wave 5 G8.** More than one argument is `Quit::argt` / `Exit::argt` and does not quit. `Exit[x]` with a non-integer `x` is `Exit::intm` and stays `Exit[x]` (it used to be rewritten to `Quit[x]` first).
+
 ## Dialog
 Opens a nested session inside an evaluation: a sequence of input and output
 lines, read from the terminal, until the user returns.
@@ -591,6 +597,8 @@ In[1]:= /n Pi
 
 **Wave 4 G8.** The built-in command names (/help, /theme, /history, /timing, /statusline, /clear, /mods, /quit) are reserved in every mode -- a -file script cannot redefine them -- and SlashCommand[] lists them first.
 
+**Wave 5 G8.** A command name is at most 32 characters; `SlashCommand::name` says so.
+
 ## Catch / Throw
 Non-local exit: `Throw` stops evaluation and hands a value to the nearest
 enclosing `Catch`. Unlike `Return` (which only escapes a scope boundary), a
@@ -643,6 +651,8 @@ it, so `Catch[Select[{1, 2, 3}, If[# == 2, Throw[9], True] &]]` gave
 `{1, 3}`; it now gives `9`. Speculative internal evaluation is not a callback,
 so `Sum`'s symbolic probe of its summand does not leak a `Throw` that its
 numeric loop never reaches.
+
+**Wave 5 G8.** `Throw[]` and `Throw` with more than three arguments are `Throw::argb` and stay unevaluated.
 
 ## Abort / CheckAbort / AbortProtect / $Aborted
 
@@ -1256,6 +1266,13 @@ managed body.
 
 **Wave 4 G8.** `True | False` is accepted as the Boolean type spec (the same as `_Boolean`). A compiled `0.^0.` is not 1.0: the call goes to the interpreter, which gives Power::indet and Indeterminate.
 
+**Wave 5 G8.**
+- `Compile[{}, body]` is a compiled constant, called as `cf[]`: `Compile[{}, 3.][]` is `3.`.
+- A numeric constant argument (`Pi`, `Sqrt[2]`) is converted to a machine number on the way in: `Compile[{x}, x][Pi]` is `3.14159`.
+- A call with the wrong number of arguments is `CompiledFunction::cfct` ("Number of arguments 2 does not match the length 1 of the argument template.") and stays unevaluated.
+- A CompiledFunction is a value: two built from the same signature, body and options are `SameQ` (and hash alike).
+- `CompilationTarget`, `Parallelization` and `CompilationOptions` are accepted (the bytecode VM is the only target), and so is the third argument, the list of local-variable types `{{y, _Real}, ...}`, which inference does not need.
+
 ## CompileDiagnostics
 
 `CompileDiagnostics[argspec, expr]` reports whether `expr` compiles for the given
@@ -1302,14 +1319,14 @@ Out[2]= {"Compiled" -> False,
 
 In[3]:= CompileDiagnostics[{{x, _Real}}, Sin[x] + y]
 Out[3]= {"Compiled" -> False,
-         "Reason" -> "symbol is not a declared argument and holds no machine value",
+         "Reason" -> "symbol is not a declared argument or a local variable of the compiled code",
          "Subexpression" -> "y"}
 
-In[4]:= CompileDiagnostics[{{z, _Complex}}, Zeta[z]]   (* real kernel, no complex one *)
-Out[4]= {"Compiled" -> False,
-         "Reason" -> "no machine lowering for this head at these argument types",
-         "Subexpression" -> "Zeta[z]"}
+In[4]:= "Compiled" /. CompileDiagnostics[{{z, _Complex}}, Zeta[z]]   (* Zeta has a complex kernel *)
+Out[4]= True
 ```
+
+**Wave 5 G8.** `CompileDiagnostics[{}, body]` diagnoses a constant body. The reason for an undeclared symbol is now "symbol is not a declared argument or a local variable of the compiled code" (a global's value is never read into a `Compile[]` object, whatever it holds).
 
 ## CompilePrint
 
@@ -1403,6 +1420,8 @@ Bailed on   Integrate[x, x]
 
 **Wave 4 G8.** The managed types of a `WorkingPrecision` / `"BigIntegers"` program print as MPFRReal / MPFRComplex / BigInteger, and an argument such a program reads is no longer marked (unused).
 
+**Wave 5 G8.** An arbitrary-precision constant shows its value (`MG_RCONST T1, 1.0000...`), and an `MG_RBIN` / `MG_RUN` names its operation (`T2 = R0 + T1`, `T3 = Sin[T2]`).
+
 ## Quiet
 Evaluates an expression with messages suppressed.
 - `Quiet[expr]`: Evaluates `expr` and returns its value, suppressing any messages generated during the evaluation.
@@ -1420,6 +1439,8 @@ Out[1]= ComplexInfinity
 In[2]:= Quiet[Log[0]]
 Out[2]= -Infinity
 ```
+
+**Wave 5 G8.** A spec that is not `All`, `None`, a message name, a message group (a string) or a list of names is `Quiet::anmlist` (`Quiet[1/0, Power]`), and the call stays unevaluated.
 
 ## Check
 Detects whether a message was generated while evaluating an expression.
@@ -1442,6 +1463,8 @@ Out[2]= failed
 In[3]:= Quiet[Check[1/0, caughtit]]
 Out[3]= caughtit
 ```
+
+**Wave 5 G8.** Fewer than two arguments is `Check::argm` / `Check::argmu`.
 
 ## Message
 Prints a named message.
@@ -1478,6 +1501,10 @@ Out[3]= flagged
 
 **Wave 4 G8.** `f::m::lang` parses as the single `MessageName[f, "m", "lang"]`; `Message[f::m::lang, ...]` uses the text of `f::m::lang`, else that of `f::m` (then `General::m`).
 
+**Wave 5 G8.**
+- `Message[]` is `Message::argm`; a first argument that is not `symbol::tag` is `Message::name` ("Message name 3 is not of the form symbol::name or symbol::name::language.").
+- **General::stop.** Within one top-level calculation a message `s::t` prints at most three times. The third is followed by `General::stop: Further output of s::t will be suppressed during this calculation.`, and later ones are not printed, though they are still generated: `Check` sees them and `$MessageList` lists them. The count restarts with each top-level evaluation; `Off[General::stop]` lifts the limit.
+
 ## Off, On
 Switch messages off and back on.
 - `Off[sym::tag]`: from now on `sym::tag` is not printed and `Check` does not
@@ -1498,6 +1525,8 @@ Switch messages off and back on.
 In[1]:= Off[f::m]; Check[Message[f::m, 1, 2]; ok, caught]
 Out[1]= ok
 ```
+
+**Wave 5 G8.** Besides `Off`, a message is switched off automatically after its third printing in one calculation (`General::stop`, see `Message`).
 
 ## $MessageList
 The messages printed during the current input line, each as `HoldForm[sym::tag]`.
@@ -1531,3 +1560,5 @@ unchanged.
 - All heads are `Protected`. Implemented in `src/parallel.c`.
 
 **Wave 4 G8.** Only arguments after the positional ones are taken as options: `ParallelMap[f, a -> b]` maps over the rule (`f[a] -> f[b]`).
+
+**Wave 5 G8.** `ParallelEvaluate` takes one or two arguments; more is `ParallelEvaluate::argt`.

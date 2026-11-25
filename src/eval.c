@@ -5219,6 +5219,7 @@ static bool g_fault_guard_active = false;
 
 Expr* evaluate(Expr* e) {
     if (eval_recursion_depth == 0 && !g_fault_guard_active && e) {
+        mth_message_new_calculation();      /* General::stop counts restart */
         g_fault_guard_active = true;
         bool faulted = false;
         Expr* g = tc_evaluate_fault_guarded(e, &faulted);

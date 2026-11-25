@@ -361,9 +361,11 @@ Expr* expr_new_ndarray_like(const Expr* src, int rank, const int64_t* dims,
  * caller must not free it afterwards; expr_free will dec-ref).  See
  * compile/compiled_function.h. */
 Expr* expr_new_compiled(struct CompiledFunction* cf);
-/* A stable per-object identity (used by expr_eq/hash/compare for EXPR_COMPILED).
- * Implemented in compile/compiled_function.c. */
+/* The structural hash of a CompiledFunction (used by expr_hash/compare for
+ * EXPR_COMPILED), and its value equality (expr_eq): the same signature, body
+ * and options.  Implemented in compile/compiled_function.c. */
 uint64_t compiled_function_identity(const struct CompiledFunction* cf);
+bool compiled_function_same(const struct CompiledFunction* a, const struct CompiledFunction* b);
 
 /* EXPR_SPARSE constructor. Takes ownership of one reference to `sa` (expr_free
  * releases it). See sparse/sparse.h. */
