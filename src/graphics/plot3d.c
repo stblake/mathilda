@@ -808,19 +808,15 @@ Expr* builtin_plot3d(Expr* res) {
     Expr* xspec = res->data.function.args[1];
     Expr* yspec = res->data.function.args[2];
 
+    double xmin, xmax, ymin, ymax;
+    if (!plot_range_bounds("Plot3D", xspec, &xmin, &xmax)
+        || !plot_range_bounds("Plot3D", yspec, &ymin, &ymax)) return NULL;
     IterSpec ix, iy;
     if (!iter_spec_parse(xspec, &ix)) return NULL;
     if (ix.kind != ITER_KIND_RANGE || !ix.var) { iter_spec_free(&ix); return NULL; }
     if (!iter_spec_parse(yspec, &iy)) { iter_spec_free(&ix); return NULL; }
     if (iy.kind != ITER_KIND_RANGE || !iy.var) { iter_spec_free(&ix); iter_spec_free(&iy); return NULL; }
 
-    double xmin, xmax, ymin, ymax;
-    if (!numericize_bound(ix.imin, &xmin) || !numericize_bound(ix.imax, &xmax) || !(xmin < xmax)
-        || !numericize_bound(iy.imin, &ymin) || !numericize_bound(iy.imax, &ymax) || !(ymin < ymax)) {
-        iter_spec_free(&ix);
-        iter_spec_free(&iy);
-        return NULL;
-    }
 
     Plot3DSampleOpts sopts;
     Expr** passthrough = NULL;
@@ -859,26 +855,16 @@ Expr* builtin_plot3d(Expr* res) {
         bodies = &single; /* borrowed */
     }
 
-    if (nfun == 0) { /* Plot3D[{}, …] — nothing to draw */
-        iter_spec_free(&ix);
-        iter_spec_free(&iy);
-        expr_free(single_color);
-        for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
-        free(passthrough);
-        return NULL;
-    }
-
-    Expr* prim_list = build_surface_primitives(bodies, nfun, ix.var, iy.var, xmin, xmax, ymin, ymax,
-                                                &sopts, single_color);
+    /* Nothing plottable -- Plot3D[{}], an undefined f, a function with no
+     * real values on the domain -- is an empty Graphics3D[{}, ...], as in the
+     * reference (audit Plot3D#5), not an unevaluated call. */
+    Expr* prim_list = nfun == 0 ? NULL
+        : build_surface_primitives(bodies, nfun, ix.var, iy.var, xmin, xmax, ymin, ymax,
+                                   &sopts, single_color);
     iter_spec_free(&ix);
     iter_spec_free(&iy);
     expr_free(single_color);
-
-    if (!prim_list) {
-        for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
-        free(passthrough);
-        return NULL;
-    }
+    if (!prim_list) prim_list = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     size_t gargc = 1 + passthrough_count;
     Expr** gargs = malloc(sizeof(Expr*) * gargc);

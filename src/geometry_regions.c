@@ -549,6 +549,217 @@ static int gr_member_point(const Expr* g, const Expr* q) {
     return -1;
 }
 
+/* ---- RegionCentroid of points, curves and solids ----------------------- */
+
+/* sum(w_i p_i) / sum(w_i) over k points of dimension d (p[i] a List of d
+ * coordinates), each coordinate Simplify'd; NULL when the weights sum to
+ * zero.  w (NULL: equal weights) is borrowed. */
+static Expr* gr_weighted_mean(const Expr* const* p, Expr* const* w, size_t k, size_t d) {
+    Expr* wsum;
+    if (w) {
+        Expr** ws = malloc(sizeof(Expr*) * k);
+        for (size_t i = 0; i < k; i++) ws[i] = gr_c(w[i]);
+        wsum = gr_ev(gr_fn(SYM_Plus, ws, k));
+        free(ws);
+    } else {
+        wsum = expr_new_integer((int64_t)k);
+    }
+    int z = gr_truth(gr_ev(gr_fn2(SYM_Equal, gr_c(wsum), expr_new_integer(0))));
+    if (z != 0) { expr_free(wsum); return NULL; }
+    Expr** coord = malloc(sizeof(Expr*) * d);
+    Expr** t = malloc(sizeof(Expr*) * k);
+    for (size_t j = 0; j < d; j++) {
+        for (size_t i = 0; i < k; i++) {
+            Expr* x = gr_c(gr_at(p[i], j));
+            t[i] = w ? gr_mul(gr_c(w[i]), x) : x;
+        }
+        Expr* num = gr_fn(SYM_Plus, t, k);
+        coord[j] = gr_ev(gr_fn1(SYM_Simplify, gr_mul(num, gr_inv(gr_c(wsum)))));
+    }
+    free(t);
+    expr_free(wsum);
+    Expr* out = gr_list(coord, d);
+    free(coord);
+    return out;
+}
+
+/* (a + b) / 2 coordinate-wise (same-length point Lists), unevaluated. */
+static Expr* gr_midpoint(const Expr* a, const Expr* b) {
+    size_t d = gr_len(a);
+    Expr** m = malloc(sizeof(Expr*) * d);
+    for (size_t i = 0; i < d; i++)
+        m[i] = gr_mul(gr_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2)),
+                      gr_add(gr_c(gr_at(a, i)), gr_c(gr_at(b, i))));
+    Expr* out = gr_ev(gr_list(m, d));
+    free(m);
+    return out;
+}
+
+/* Point[p] -> p; Point[{p1, ..., pn}] -> their mean (audit Point#2). */
+static Expr* gr_centroid_point(const Expr* g) {
+    if (gr_len(g) != 1) return NULL;
+    const Expr* p = gr_at(g, 0);
+    if (gr_is_point(p, 0)) return gr_c(p);
+    size_t d;
+    if (!gr_is_point_list(p, &d)) return NULL;
+    return gr_weighted_mean((const Expr* const*)p->data.function.args, NULL, gr_len(p), d);
+}
+
+/* Line[{p1, ..., pn}]: the length-weighted mean of the segment midpoints
+ * (audit Line#2 / RegionCentroid#4); a Line of one point is that point. */
+static Expr* gr_centroid_line(const Expr* g) {
+    if (gr_len(g) != 1) return NULL;
+    const Expr* p = gr_at(g, 0);
+    size_t d;
+    if (!gr_is_point_list(p, &d)) return NULL;
+    size_t n = gr_len(p);
+    if (n == 1) return gr_c(gr_at(p, 0));
+    Expr** mid = malloc(sizeof(Expr*) * (n - 1));
+    Expr** len = malloc(sizeof(Expr*) * (n - 1));
+    for (size_t i = 0; i + 1 < n; i++) {
+        mid[i] = gr_midpoint(gr_at(p, i), gr_at(p, i + 1));
+        len[i] = gr_ev(gr_fn1(SYM_Sqrt, gr_dist2(gr_at(p, i + 1), gr_at(p, i))));
+    }
+    Expr* out = gr_weighted_mean((const Expr* const*)mid, len, n - 1, d);
+    for (size_t i = 0; i + 1 < n; i++) { expr_free(mid[i]); expr_free(len[i]); }
+    free(mid); free(len);
+    return out;
+}
+
+/* Circle[c, r] (and the ellipse Circle[c, {a, b}]): c; the circular arc
+ * Circle[c, r, {t1, t2}]: c + r Sin[h]/h {Cos[m], Sin[m]}, h the half-span
+ * and m the mid-angle (audit Circle#3).  The elliptical arc is left alone. */
+static Expr* gr_centroid_circle(const Expr* g) {
+    size_t n = gr_len(g);
+    if (n == 0) return gr_pt2(expr_new_integer(0), expr_new_integer(0));
+    const Expr* c = gr_at(g, 0);
+    if (!gr_is_point(c, 2) && !(head_is(c, SYM_List) && gr_len(c) == 2)) return NULL;
+    if (n <= 2) return gr_c(c);
+    if (n != 3) return NULL;
+    const Expr* r = gr_at(g, 1);
+    const Expr* th = gr_at(g, 2);
+    if (head_is(r, SYM_List) || !head_is(th, SYM_List) || gr_len(th) != 2) return NULL;
+    Expr* span = gr_ev(gr_fn1(SYM_Abs, gr_sub(gr_c(gr_at(th, 1)), gr_c(gr_at(th, 0)))));
+    if (expr_is_numeric_quantity(span)) {
+        Expr* two_pi = gr_mul(expr_new_integer(2), expr_new_symbol(SYM_Pi));
+        int full = gr_truth(gr_ev(gr_fn2(SYM_GreaterEqual, gr_c(span), two_pi)));
+        if (full == 1) { expr_free(span); return gr_c(c); }
+    }
+    Expr* half = gr_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2));
+    Expr* h = gr_ev(gr_mul(gr_c(half), span));
+    int zero = gr_truth(gr_ev(gr_fn2(SYM_Equal, gr_c(h), expr_new_integer(0))));
+    if (zero != 0) { expr_free(h); expr_free(half); return NULL; }
+    Expr* m = gr_ev(gr_mul(half, gr_add(gr_c(gr_at(th, 0)), gr_c(gr_at(th, 1)))));
+    Expr* k = gr_mul(gr_ev(gr_fn1(SYM_Abs, gr_c(r))), gr_mul(gr_fn1(SYM_Sin, gr_c(h)), gr_inv(h)));
+    Expr* ke = gr_ev(k);
+    Expr* x = gr_add(gr_c(gr_at(c, 0)), gr_mul(gr_c(ke), gr_fn1(SYM_Cos, gr_c(m))));
+    Expr* y = gr_add(gr_c(gr_at(c, 1)), gr_mul(ke, gr_fn1(SYM_Sin, m)));
+    return gr_pt2(gr_ev(gr_fn1(SYM_Simplify, x)), gr_ev(gr_fn1(SYM_Simplify, y)));
+}
+
+/* Ball[c, r] / Sphere[c, r]: c (Ball[] the origin of 3-space); Cuboid[pmin]
+ * the unit cube's centre pmin + 1/2, Cuboid[pmin, pmax] the midpoint
+ * (audit RegionCentroid#5). */
+static Expr* gr_centroid_solid(const Expr* g) {
+    size_t n = gr_len(g);
+    bool cub = head_is(g, SYM_Cuboid);
+    if (n == 0) {
+        Expr* v = cub ? gr_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2))
+                      : expr_new_integer(0);
+        Expr* out = gr_list((Expr*[]){ gr_c(v), gr_c(v), gr_c(v) }, 3);
+        expr_free(v);
+        return out;
+    }
+    const Expr* c = gr_at(g, 0);
+    if (!gr_is_point(c, 0) || gr_len(c) < 2) return NULL;
+    if (!cub) return n <= 2 ? gr_c(c) : NULL;
+    if (n == 1) {
+        size_t d = gr_len(c);
+        Expr** m = malloc(sizeof(Expr*) * d);
+        for (size_t i = 0; i < d; i++)
+            m[i] = gr_add(gr_c(gr_at(c, i)), gr_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(2)));
+        Expr* out = gr_ev(gr_list(m, d));
+        free(m);
+        return out;
+    }
+    if (n != 2 || !gr_is_point(gr_at(g, 1), gr_len(c))) return NULL;
+    return gr_midpoint(c, gr_at(g, 1));
+}
+
+/* A planar polygon in 3-space: the fan p0, p_i, p_{i+1} triangles weighted
+ * by their area along the polygon's normal N = sum of the fan's cross
+ * products (signed, so a concave polygon's reflex triangles subtract), which
+ * needs no square root (audit RegionCentroid#5). */
+static Expr* gr_centroid_poly3(const Expr* g) {
+    if (!head_is(g, SYM_Polygon) || gr_len(g) != 1) return NULL;
+    const Expr* p = gr_at(g, 0);
+    size_t d;
+    if (!gr_is_point_list(p, &d) || d != 3 || gr_len(p) < 3) return NULL;
+    size_t n = gr_len(p);
+    size_t nt = n - 2;
+    Expr** cr = malloc(sizeof(Expr*) * nt * 3);     /* cross products */
+    const Expr* p0 = gr_at(p, 0);
+    for (size_t i = 0; i < nt; i++) {
+        const Expr* a = gr_at(p, i + 1);
+        const Expr* b = gr_at(p, i + 2);
+        Expr* u[3]; Expr* v[3];
+        for (size_t j = 0; j < 3; j++) {
+            u[j] = gr_sub(gr_c(gr_at(a, j)), gr_c(gr_at(p0, j)));
+            v[j] = gr_sub(gr_c(gr_at(b, j)), gr_c(gr_at(p0, j)));
+        }
+        for (size_t j = 0; j < 3; j++) {
+            size_t j1 = (j + 1) % 3, j2 = (j + 2) % 3;
+            cr[3 * i + j] = gr_ev(gr_sub(gr_mul(gr_c(u[j1]), gr_c(v[j2])), gr_mul(gr_c(u[j2]), gr_c(v[j1]))));
+        }
+        for (size_t j = 0; j < 3; j++) { expr_free(u[j]); expr_free(v[j]); }
+    }
+    Expr* N[3];
+    for (size_t j = 0; j < 3; j++) {
+        Expr** t = malloc(sizeof(Expr*) * nt);
+        for (size_t i = 0; i < nt; i++) t[i] = gr_c(cr[3 * i + j]);
+        N[j] = gr_ev(gr_fn(SYM_Plus, t, nt));
+        free(t);
+    }
+    Expr** w = malloc(sizeof(Expr*) * nt);
+    Expr** cen = malloc(sizeof(Expr*) * nt);
+    for (size_t i = 0; i < nt; i++) {
+        w[i] = gr_ev(gr_add(gr_add(gr_mul(gr_c(cr[3 * i]), gr_c(N[0])),
+                                   gr_mul(gr_c(cr[3 * i + 1]), gr_c(N[1]))),
+                            gr_mul(gr_c(cr[3 * i + 2]), gr_c(N[2]))));
+        const Expr* a = gr_at(p, i + 1);
+        const Expr* b = gr_at(p, i + 2);
+        Expr* c3[3];
+        for (size_t j = 0; j < 3; j++)
+            c3[j] = gr_mul(gr_fn2(SYM_Rational, expr_new_integer(1), expr_new_integer(3)),
+                           gr_add(gr_add(gr_c(gr_at(p0, j)), gr_c(gr_at(a, j))), gr_c(gr_at(b, j))));
+        cen[i] = gr_ev(gr_list(c3, 3));
+    }
+    Expr* out = gr_weighted_mean((const Expr* const*)cen, w, nt, 3);
+    for (size_t i = 0; i < nt; i++) { expr_free(w[i]); expr_free(cen[i]); }
+    for (size_t i = 0; i < 3 * nt; i++) expr_free(cr[i]);
+    for (size_t j = 0; j < 3; j++) expr_free(N[j]);
+    free(w); free(cen); free(cr);
+    return out;
+}
+
+static Expr* gr_centroid_more(const Expr* g) {
+    if (g->type == EXPR_FUNCTION && g->data.function.head->type == EXPR_SYMBOL
+        && gr_len(g) == 1 && is_ndarray(gr_at(g, 0))) {
+        /* packed coordinates: read them as the nested List */
+        Expr* u = gr_fn(g->data.function.head->data.symbol.name,
+                        (Expr*[]){ gr_unpack(gr_at(g, 0)) }, 1);
+        Expr* r = head_is(gr_at(u, 0), SYM_List) ? gr_centroid_more(u) : NULL;
+        expr_free(u);
+        return r;
+    }
+    if (head_is(g, SYM_Point)) return gr_centroid_point(g);
+    if (head_is(g, SYM_Line)) return gr_centroid_line(g);
+    if (head_is(g, SYM_Circle)) return gr_centroid_circle(g);
+    if (head_is(g, SYM_Ball) || head_is(g, SYM_Sphere) || head_is(g, SYM_Cuboid))
+        return gr_centroid_solid(g);
+    return gr_centroid_poly3(g);
+}
+
 /* ---- the dispatch ------------------------------------------------------- */
 
 static bool gr_is_ruled_polygon(const Expr* g) {
@@ -693,6 +904,10 @@ Expr* geom_region_extra(const char* h, const Expr* res) {
     if (poly) return gr_call(h, poly, member ? gr_at(res, 1) : NULL);
 
     if (!member) {
+        if (!strcmp(h, SYM_RegionCentroid)) {
+            Expr* c = gr_centroid_more(g);
+            if (c) return c;
+        }
         Expr* r = gr_compound(h, g);
         if (r) return r;
         return gr_symbolic(h, g);

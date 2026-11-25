@@ -19,7 +19,11 @@
  * A control is either:
  *   - a continuous drag slider:  {u, umin, umax}, {u, umin, umax, du},
  *     {{u, u0}, umin, umax}, {{u, u0}, umin, umax, du}
- *   - a discrete button set:     {u, {v1, v2, ...}}, {{u, u0}, {v1, ...}}
+ *   - a discrete button set:     {u, {v1, v2, ...}}, {{u, u0}, {v1, ...}};
+ *     a list longer than the button row holds (MAX_DISCRETE_VALUES) becomes a
+ *     slider over the list's positions, still binding u to the values
+ *   - a labelled control:        {{u, u0, label}, ...} shows `label` in place
+ *     of the variable's name
  */
 
 #include "manipulate.h"
@@ -63,17 +67,21 @@ typedef struct {
     double value;
     double default_value;
 
-    /* MCTRL_DISCRETE */
+    /* MCTRL_DISCRETE, and a MCTRL_RANGE over the positions of a long value
+     * list (step 1 over 0 .. n_values - 1; NULL for a numeric range) */
     Expr** values;           /* owned array of owned Expr* */
     size_t n_values;
     size_t selected_idx;
     size_t default_idx;
+
+    Expr* label;             /* owned; {{u, u0, label}, ...}; NULL: the name */
 } ManipCtrl;
 
 static void manip_ctrl_free(ManipCtrl* c) {
     if (!c) return;
     if (c->var) expr_free(c->var);
-    if (c->kind == MCTRL_DISCRETE && c->values) {
+    if (c->label) expr_free(c->label);
+    if (c->values) {
         for (size_t i = 0; i < c->n_values; i++)
             if (c->values[i]) expr_free(c->values[i]);
         free(c->values);
@@ -109,22 +117,30 @@ static bool is_list_expr(const Expr* e) {
  * for the pair form, evaluates and returns the default in *default_out
  * (caller owns it; NULL means "no explicit default"). */
 static bool parse_var_part(const Expr* first, const char** var_sym,
-                            Expr** default_out) {
+                            Expr** default_out, Expr** label_out) {
     *default_out = NULL;
+    *label_out = NULL;
     if (!first) return false;
     if (first->type == EXPR_SYMBOL) {
         *var_sym = first->data.symbol.name;
         return true;
     }
-    if (is_list_expr(first) && first->data.function.arg_count == 2) {
+    if (is_list_expr(first)
+        && (first->data.function.arg_count == 2 || first->data.function.arg_count == 3)) {
         const Expr* v = first->data.function.args[0];
         if (!v || v->type != EXPR_SYMBOL) return false;
         *var_sym = v->data.symbol.name;
         *default_out = evaluate((Expr*)first->data.function.args[1]);
+        /* {u, u0, label} (audit Manipulate#3) */
+        if (first->data.function.arg_count == 3)
+            *label_out = expr_copy((Expr*)first->data.function.args[2]);
         return true;
     }
     return false;
 }
+
+static bool parse_control_rest(const Expr* e, const char* var_sym, Expr* default_expr,
+                               ManipCtrl* out);
 
 /* Parse one already-evaluated control-spec List into `out`. Returns false
  * (leaving *out untouched) if `e` isn't a recognized control spec. */
@@ -133,8 +149,18 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
 
     const char* var_sym = NULL;
     Expr* default_expr = NULL;
-    if (!parse_var_part(e->data.function.args[0], &var_sym, &default_expr))
+    Expr* label = NULL;
+    if (!parse_var_part(e->data.function.args[0], &var_sym, &default_expr, &label))
         return false;
+    bool ok = parse_control_rest(e, var_sym, default_expr, out);
+    if (ok) out->label = label;
+    else if (label) expr_free(label);
+    return ok;
+}
+
+/* The control's values after the variable part; consumes default_expr. */
+static bool parse_control_rest(const Expr* e, const char* var_sym, Expr* default_expr,
+                               ManipCtrl* out) {
 
     size_t rest_n = e->data.function.arg_count - 1;
     Expr** rest = e->data.function.args + 1;
@@ -150,12 +176,15 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
         const Expr* vals = mat ? mat : rest[0];
         if (is_list_expr(vals)) {
             size_t nv = vals->data.function.arg_count;
-            if (nv == 0 || nv > MAX_DISCRETE_VALUES) {
+            if (nv == 0) {
                 if (mat) expr_free(mat);
                 if (default_expr) expr_free(default_expr);
                 return false;
             }
-            out->kind = MCTRL_DISCRETE;
+            /* More values than the button row holds: a slider over the
+             * positions 0 .. nv - 1, binding u to the value there (audit
+             * Manipulate#2: {x, Range[33]} was refused outright). */
+            out->kind = nv > MAX_DISCRETE_VALUES ? MCTRL_RANGE : MCTRL_DISCRETE;
             out->var  = expr_new_symbol(var_sym);
             out->values = calloc(nv, sizeof(Expr*));
             out->n_values = nv;
@@ -171,6 +200,12 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
                     }
                 }
                 expr_free(default_expr);
+            }
+            if (out->kind == MCTRL_RANGE) {
+                out->vmin = 0.0;
+                out->vmax = (double)(nv - 1);
+                out->step = 1.0;
+                out->value = out->default_value = (double)out->default_idx;
             }
             if (mat) expr_free(mat);
             return true;
@@ -220,6 +255,18 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
 #ifdef USE_GRAPHICS
 #include <raylib.h>
 #include "label_font.h"
+
+/* The value the control binds its variable to (caller owns it). */
+static Expr* manip_ctrl_value(const ManipCtrl* c) {
+    if (c->kind == MCTRL_DISCRETE) return expr_copy(c->values[c->selected_idx]);
+    if (c->values) {
+        size_t idx = (size_t)(c->value + 0.5);
+        if (idx >= c->n_values) idx = c->n_values - 1;
+        return expr_copy(c->values[idx]);
+    }
+    return expr_new_real(c->value);
+}
+
 #include "term/term_interrupt.h"   /* a Ctrl-C closes the window loop */
 
 #define ROW_H        30.0f   /* height of each control row                 */
@@ -247,6 +294,18 @@ static bool is_graphics3d_expr(const Expr* e) {
         && e->data.function.arg_count >= 1;
 }
 
+/* The row's name: the control's label, or its variable. */
+static void manip_draw_name(const ManipCtrl* c, float mid_y) {
+    char* ls = NULL;
+    const char* name = c->var->data.symbol.name;
+    if (c->label) {
+        if (c->label->type == EXPR_STRING) name = c->label->data.string;
+        else if ((ls = expr_to_string(c->label)) != NULL) name = ls;
+    }
+    label_font_draw_px(name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
+    free(ls);
+}
+
 /* ---- continuous range row ---- */
 
 static void draw_range_row(const ManipCtrl* c, int win_w, float row_y,
@@ -259,7 +318,7 @@ static void draw_range_row(const ManipCtrl* c, int win_w, float row_y,
     DrawRectangle(0, (int)row_y, win_w, (int)ROW_H, (Color){235,235,240,255});
     DrawRectangle(0, (int)(row_y + ROW_H - 1), win_w, 1, (Color){200,200,210,255});
 
-    label_font_draw_px(c->var->data.symbol.name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
+    manip_draw_name(c, mid_y);
 
     char lo[24], hi[24];
     snprintf(lo, sizeof(lo), "%.4g", c->vmin);
@@ -291,7 +350,15 @@ static void draw_range_row(const ManipCtrl* c, int win_w, float row_y,
     DrawCircleLines((int)hx, (int)mid_y, 7.5f, (Color){20,60,160,255});
 
     char val[32];
-    snprintf(val, sizeof(val), "%.5g", c->value);
+    if (c->values) {               /* a slider over a long value list */
+        size_t idx = (size_t)(c->value + 0.5);
+        if (idx >= c->n_values) idx = c->n_values - 1;
+        char* vs = expr_to_string(c->values[idx]);
+        snprintf(val, sizeof(val), "%s", vs ? vs : "?");
+        free(vs);
+    } else {
+        snprintf(val, sizeof(val), "%.5g", c->value);
+    }
     int val_w = label_font_measure_px(val, 12);
     label_font_draw_px(val, (int)((float)win_w - VALUE_W / 2.0f - (float)val_w / 2.0f),
              (int)(mid_y - 6), 12, (Color){40,40,80,255});
@@ -349,7 +416,7 @@ static void draw_discrete_row(const ManipCtrl* c, int win_w, float row_y,
     float mid_y = row_y + ROW_H * 0.5f;
     DrawRectangle(0, (int)row_y, win_w, (int)ROW_H, (Color){235,235,240,255});
     DrawRectangle(0, (int)(row_y + ROW_H - 1), win_w, 1, (Color){200,200,210,255});
-    label_font_draw_px(c->var->data.symbol.name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
+    manip_draw_name(c, mid_y);
 
     float bx[MAX_DISCRETE_VALUES], bw[MAX_DISCRETE_VALUES];
     int n = discrete_row_layout(c, bx, bw);
@@ -419,13 +486,12 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
         /* ---- Evaluate body at current control values ---- */
         IterShadow saved[MAX_CTRLS];
         for (int k = 0; k < n_ctrls; k++) {
-            Expr* val = (ctrls[k].kind == MCTRL_RANGE)
-                      ? expr_new_real(ctrls[k].value)
-                      : expr_copy(ctrls[k].values[ctrls[k].selected_idx]);
+            Expr* val = manip_ctrl_value(&ctrls[k]);
             saved[k] = iter_spec_shadow(ctrls[k].var);
             Expr* vpat = expr_new_symbol(ctrls[k].var->data.symbol.name);
             symtab_add_own_value(ctrls[k].var->data.symbol.name, vpat, val);
             expr_free(vpat);
+            expr_free(val);          /* symtab_add_own_value copies it */
         }
         Expr* result = evaluate((Expr*)body);
         for (int k = n_ctrls - 1; k >= 0; k--)

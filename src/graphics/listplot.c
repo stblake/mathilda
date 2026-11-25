@@ -22,6 +22,8 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "print.h"
+#include "message.h"
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -54,9 +56,14 @@ static bool point2(Expr* e, double* x, double* y) {
 
 /* ---- data model ---- */
 
-typedef struct { double* xs; double* ys; size_t n; } PointSet;
+/* brk[i]: a missing entry came between point i - 1 and point i, so a Joined
+ * line breaks there (audit ListPlot#2). */
+typedef struct { double* xs; double* ys; bool* brk; size_t n; } PointSet;
 
-static void pointset_free(PointSet* p) { free(p->xs); free(p->ys); p->xs = p->ys = NULL; p->n = 0; }
+static void pointset_free(PointSet* p) {
+    free(p->xs); free(p->ys); free(p->brk);
+    p->xs = p->ys = NULL; p->brk = NULL; p->n = 0;
+}
 
 /* DataRange option, resolved. `force_multi` (DataRange -> All) makes a flat
  * list of pairs be read as several height-datasets rather than as points. */
@@ -83,7 +90,7 @@ static bool is_point_list(Expr** el, size_t n) {
 }
 
 static PointSet extract_dataset(Expr* ds, const DataRange* dr) {
-    PointSet ps = { NULL, NULL, 0 };
+    PointSet ps = { NULL, NULL, NULL, 0 };
     if (!is_list(ds)) return ps;
     size_t n = ds->data.function.arg_count;
     if (n == 0) return ps;
@@ -93,10 +100,13 @@ static PointSet extract_dataset(Expr* ds, const DataRange* dr) {
 
     ps.xs = malloc(sizeof(double) * n);
     ps.ys = malloc(sizeof(double) * n);
+    ps.brk = calloc(n, sizeof(bool));
+    bool gap = false;
     if (pairs) {
         for (size_t i = 0; i < n; i++) {
             double a, b;
-            if (!point2(el[i], &a, &b)) continue;   /* a missing point */
+            if (!point2(el[i], &a, &b)) { gap = true; continue; }   /* a missing point */
+            ps.brk[ps.n] = gap && ps.n > 0; gap = false;
             ps.xs[ps.n] = a; ps.ys[ps.n] = b; ps.n++;
         }
     } else {
@@ -104,8 +114,9 @@ static PointSet extract_dataset(Expr* ds, const DataRange* dr) {
         double xmax = dr->has_range ? dr->xmax : (double)n;
         for (size_t i = 0; i < n; i++) {
             double y;
-            if (!to_double(el[i], &y)) continue; /* missing */
+            if (!to_double(el[i], &y)) { gap = true; continue; } /* missing */
             double x = (n == 1) ? xmin : xmin + (double)i * (xmax - xmin) / (double)(n - 1);
+            ps.brk[ps.n] = gap && ps.n > 0; gap = false;
             ps.xs[ps.n] = x; ps.ys[ps.n] = y; ps.n++;
         }
     }
@@ -180,6 +191,41 @@ static double stem_baseline(Expr* filling, double ymin, double ymax) {
  * a freshly owned copy of the resolved PlotStyle colour (default blue) used to
  * restore the curve colour after a Filling block on a single-curve plot.
  * Returns false on a malformed trailing argument. */
+/* True when `key` names an option in Options[head]. */
+static bool option_listed(const char* head, const char* key) {
+    const Expr* defs = symtab_get_options(head);
+    if (!defs || defs->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < defs->data.function.arg_count; i++) {
+        const Expr* r = defs->data.function.args[i];
+        if (r->type == EXPR_FUNCTION && r->data.function.arg_count == 2) {
+            const Expr* k = r->data.function.args[0];
+            if (k->type == EXPR_SYMBOL && k->data.symbol.name == key) return true;
+        }
+    }
+    return false;
+}
+
+/* An option ListPlot accepts: one of its own (Options[ListPlot]), a Graphics
+ * option it passes through (Options[Graphics]), or one of the plotting
+ * options the renderer reads or ListPlot accepts and ignores.  A string key
+ * ("Axes" -> True) is taken as given. */
+static bool listplot_option_known(const Expr* key) {
+    static const char* const extra[] = {
+        "ScalingFunctions", "Ticks", "FrameTicksStyle", "ImagePadding", "ImageMargins",
+        "BaseStyle", "PlotTheme", "InterpolationOrder", "Mesh", "MeshStyle",
+        "LabelingFunction", "ClippingStyle", "ColorFunction", "ColorFunctionScaling",
+        "IntervalMarkers", "IntervalMarkersStyle", "PlotRangeClipping", "Method",
+        "PlotHighlighting", "PerformanceGoal", "TargetUnits", "AxesUnits", "Exclusions",
+    };
+    if (key->type == EXPR_STRING) return true;
+    if (key->type != EXPR_SYMBOL) return false;
+    const char* k = key->data.symbol.name;
+    if (option_listed("ListPlot", k) || option_listed("Graphics", k)) return true;
+    for (size_t i = 0; i < sizeof(extra) / sizeof(extra[0]); i++)
+        if (strcmp(k, extra[i]) == 0) return true;
+    return false;
+}
+
 static bool split_options(Expr* res, ListPlotOpts* o,
                           Expr*** passthrough_out, size_t* passthrough_count_out,
                           Expr** single_color_out, Expr** legends_out) {
@@ -232,6 +278,12 @@ static bool split_options(Expr* res, ListPlotOpts* o,
             } else if (point2(rhs, &o->dr.xmin, &o->dr.xmax)) {
                 o->dr.has_range = (o->dr.xmin < o->dr.xmax);
             } else if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)) {
+                /* audit ListPlot#3: say why, rather than decline silently */
+                char* as = expr_to_string(arg);
+                mth_message("ListPlot", "drng",
+                            "Value of option %s is not All, Automatic, or an appropriate range specification.",
+                            as ? as : "?");
+                free(as);
                 FAIL_CLEANUP();
             }
         } else if (name == SYM_ScalingFunctions) {
@@ -262,6 +314,17 @@ static bool split_options(Expr* res, ListPlotOpts* o,
                 passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
             }
         } else {
+            if (!listplot_option_known(lhs)) {
+                /* audit ListPlot#3: an unknown option is reported, not
+                 * smuggled into the Graphics[...] result. */
+                char* ks = expr_to_string(lhs);
+                char* cs = expr_to_string(res);
+                mth_message("ListPlot", "optx", "Unknown option %s in %s.",
+                            lhs->type == EXPR_STRING ? lhs->data.string : (ks ? ks : "?"),
+                            cs ? cs : "?");
+                free(ks); free(cs);
+                FAIL_CLEANUP();
+            }
             if (name == SYM_Axes) have_axes = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
@@ -367,10 +430,24 @@ static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps,
         if (style) prims[(*pc)++] = expr_copy(style);
     }
 
+    if (o->joined) {
+        /* One Line per run between missing entries; a run of one point has
+         * no segment to draw (audit ListPlot#2). */
+        size_t start = 0;
+        for (size_t j = 1; j <= ps->n; j++) {
+            if (j < ps->n && !ps->brk[j]) continue;
+            if (j - start >= 2 || (start == 0 && j == ps->n)) {
+                PointSet run = { ps->xs + start, ps->ys + start, NULL, j - start };
+                Expr* ca[1] = { coords_list(&run) };
+                prims[(*pc)++] = expr_new_function(expr_new_symbol(SYM_Line), ca, 1);
+            }
+            start = j;
+        }
+        return;
+    }
     Expr* coords = coords_list(ps);
     Expr* ca[1] = { coords };
-    prims[(*pc)++] = expr_new_function(
-        expr_new_symbol(o->joined ? SYM_Line : SYM_Point), ca, 1);
+    prims[(*pc)++] = expr_new_function(expr_new_symbol(SYM_Point), ca, 1);
 }
 
 /* Build the internal $PlotLegendData[{color,label}, ...] metadata for the
@@ -453,13 +530,17 @@ Expr* builtin_listplot(Expr* res) {
         }
     }
 
-    bool multi = (live > 1);
+    /* several datasets, or one with a List of several styles: the style is
+     * baked into the primitives (the renderer applies no base style for such
+     * a List, audit Directive#1) */
+    bool multi = (live > 1) || (o.plot_style && is_list(o.plot_style)
+                                && o.plot_style->data.function.arg_count > 1);
     /* Worst case per dataset: 1 palette colour + (filling: style + fill shapes
      * + close + restore) + 1 Point/Line. A Joined fill emits up to 2*(n-1)
      * polygons (every segment crossing the baseline splits into 2 triangles),
      * which dominates the n stems of the unjoined case. Generous. */
     size_t cap = 0;
-    for (size_t i = 0; i < live; i++) cap += 2 * psets[i].n + 8;
+    for (size_t i = 0; i < live; i++) cap += 3 * psets[i].n + 8;   /* + the Joined runs */
     Expr** prims = malloc(sizeof(Expr*) * (cap ? cap : 1));
     size_t pc = 0;
     for (size_t i = 0; i < live; i++) {
@@ -483,7 +564,7 @@ Expr* builtin_listplot(Expr* res) {
         if (multi && scoped) {
             /* Non-colour directives (PointSize, Dashed, ...) get their own
              * List scope so they cannot restyle the next dataset. */
-            Expr** sub = malloc(sizeof(Expr*) * (2 * psets[i].n + 8));
+            Expr** sub = malloc(sizeof(Expr*) * (3 * psets[i].n + 8));
             size_t sc = 0;
             emit_dataset(sub, &sc, &psets[i], multi, &o, style);
             prims[pc++] = expr_new_function(expr_new_symbol(SYM_List), sub, sc);

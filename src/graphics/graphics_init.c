@@ -13,6 +13,7 @@
 #include "sym_names.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Register a symbol as an inert, protected structural head with a
  * docstring but no builtin function -- mirrors how Rule/List/etc. are
@@ -25,9 +26,43 @@ static void register_inert(const char* name, const char* doc) {
 /* RGBColor[{r, g, b}] / RGBColor[{r, g, b, a}] is RGBColor[r, g, b(, a)]
  * (audit RGBColor#1): the list form normalises to the flat one, so the two
  * compare equal and every consumer reads one shape. */
+/* The value 0..15 of hex digit c, or -1. */
+static int hex_digit(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* RGBColor["#RRGGBB"] / "#RRGGBBAA" / "#RGB" / "#RGBA" (audit RGBColor#2):
+ * the channels as machine reals in [0, 1]; NULL for any other string. */
+static Expr* rgbcolor_from_hex(const char* s) {
+    if (s[0] != '#') return NULL;
+    size_t len = strlen(s + 1);
+    size_t per = (len == 3 || len == 4) ? 1 : (len == 6 || len == 8) ? 2 : 0;
+    if (!per) return NULL;
+    size_t nch = len / per;
+    Expr* a[4];
+    for (size_t k = 0; k < nch; k++) {
+        int v = 0;
+        for (size_t j = 0; j < per; j++) {
+            int d = hex_digit(s[1 + k * per + j]);
+            if (d < 0) {
+                for (size_t i = 0; i < k; i++) expr_free(a[i]);
+                return NULL;
+            }
+            v = v * 16 + d;
+        }
+        if (per == 1) v = v * 17;            /* #F00 is #FF0000 */
+        a[k] = expr_new_real((double)v / 255.0);
+    }
+    return expr_new_function(expr_new_symbol(SYM_RGBColor), a, nch);
+}
+
 static Expr* builtin_rgbcolor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     const Expr* l = res->data.function.args[0];
+    if (l->type == EXPR_STRING) return rgbcolor_from_hex(l->data.string);
     if (l->type != EXPR_FUNCTION || l->data.function.head->type != EXPR_SYMBOL
         || l->data.function.head->data.symbol.name != SYM_List) return NULL;
     size_t n = l->data.function.arg_count;
@@ -134,11 +169,13 @@ void graphics_init(void) {
     register_inert("RGBColor",
         "RGBColor[r, g, b]\n\tA style directive: sets the color (each "
         "component in [0,1]) of subsequent primitives.\n"
-        "RGBColor[r, g, b, a]\n\tWith opacity a. RGBColor[{r, g, b}] is RGBColor[r, g, b].");
+        "RGBColor[r, g, b, a]\n\tWith opacity a. RGBColor[{r, g, b}] is RGBColor[r, g, b].\n"
+        "RGBColor[\"#RRGGBB\"]\n\tThe hex color string (also #RRGGBBAA, #RGB, #RGBA).");
     symtab_add_builtin("RGBColor", builtin_rgbcolor);
     register_inert("GrayLevel",
         "GrayLevel[g]\n\tA style directive: sets the color of subsequent "
-        "primitives to a shade of gray (g in [0,1]).");
+        "primitives to a shade of gray (g in [0,1]).\n"
+        "GrayLevel[g, a]\n\tGray level g with opacity a.");
     register_inert("Hue",
         "Hue[h]\n\tA style directive: sets the color of subsequent "
         "primitives to the fully saturated hue h (in [0,1], wrapping).\n"
@@ -146,7 +183,8 @@ void graphics_init(void) {
         "Hue[h, s, b, a]\n\tAs above, with opacity a.");
     register_inert("Opacity",
         "Opacity[a]\n\tA style directive: sets the opacity (a in [0,1]) of "
-        "subsequent primitives.");
+        "subsequent primitives.\n"
+        "Opacity[a, color]\n\tUses the given color with opacity a.");
     /* CMYKColor is an inert, protected style directive like the colors above;
      * its docstring is set centrally in info.c (info_init). */
     symtab_get_def("CMYKColor")->attributes |= ATTR_PROTECTED;
@@ -341,10 +379,13 @@ void graphics_init(void) {
         "region) form: ParametricPlot[body, {t,...}, {r,...}] samples a "
         "PlotPoints x PlotPoints grid and emits Polygon[] quads. "
         "Default AspectRatio -> 1 (both axes equally important). "
-        "Options: PlotPoints (default 25), MaxRecursion (default 6), "
-        "MaxPlotPoints, Mesh (All: dots for curves, grid lines for regions), "
+        "Options: PlotPoints (default 50 for curves, 75 for the two-iterator "
+        "region form), MaxRecursion (default 6), "
+        "MaxPlotPoints, Mesh (All: dots for curves, grid lines for regions; "
+        "n: n points equally spaced in t along a curve), "
         "PlotLegends (Automatic/\"Expressions\"/{labels...}: draws a legend), "
-        "ColorFunction (\"Rainbow\" or f[t] / f[t,r]), ColorFunctionScaling "
+        "ColorFunction (\"Rainbow\", or f[x, y, t] for a curve / f[t, r] for a "
+        "region, each argument scaled to [0, 1]), ColorFunctionScaling "
         "(default True), RegionFunction (f[x,y] mask), PlotStyle, "
         "AspectRatio, Axes, PlotRange, PlotRangePadding, AxesLabel, "
         "AxesOrigin, Frame, FrameLabel, GridLines, Prolog, Epilog, "
@@ -414,7 +455,7 @@ void graphics_init(void) {
         "\t                     Applied to shading and auto line colors.\n"
         "\t  ColorFunctionScaling - True (default): normalise z to [0,1] before calling\n"
         "\t                         ColorFunction. False: pass raw z.\n"
-        "\t  PlotPoints       - Grid resolution per axis (default 25; increase for\n"
+        "\t  PlotPoints       - Grid resolution per axis (default 75; increase for\n"
         "\t                     smoother contours).\n"
         "\t  RegionFunction   - f[x,y] mask: cells where the function is False are\n"
         "\t                     skipped (neither shaded nor contoured).\n"
@@ -647,15 +688,14 @@ void graphics_init(void) {
         "\tExplicit range and width.\n"
         "\n"
         "\tOptions:\n"
-        "\t  ChartStyle   color/style list cycling through bins\n"
-        "\t  BarSpacing   gap fraction of bin width (default 0.2)\n"
-        "\t  Standard Graphics options pass through.");
+        "\t  ChartStyle   the fill colour of the bins (default the first palette colour)\n"
+        "\t  Standard Graphics options pass through. The bins are contiguous.");
 
     /* Option keyword inerts for BarChart/Histogram. */
     symtab_get_def("BarSpacing")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("BarSpacing",
-        "BarSpacing\n\tBarChart/Histogram option: gap between bars as a fraction\n"
-        "\tof bar width (default 0.2). 0 = touching bars; 1 = all gap.");
+        "BarSpacing\n\tBarChart option: gap between bars as a fraction\n"
+        "\tof bar width (default 0.2). 0 or None = touching bars; Automatic = the default.");
     symtab_get_def("ChartStyle")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ChartStyle",
         "ChartStyle\n\tBarChart/Histogram option: color or list of colors cycling\n"
@@ -731,15 +771,19 @@ void graphics_init(void) {
     symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("StreamPlot",
         "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
-        "\tTraces streamlines of the 2-D vector field {vx, vy} by RK4 integration\n"
-        "\tfrom a grid of seed points, and returns a Graphics[{Arrow[...], ...}, opts]\n"
-        "\tobject (auto-displayed). StreamPlot is HoldAll: vx, vy, and the iterator\n"
-        "\tspecs are held unevaluated until x and y are given numeric values.\n"
+        "\tTraces evenly spaced streamlines of the 2-D vector field {vx, vy} by RK4\n"
+        "\tintegration and returns a Graphics[...] object (auto-displayed) built from\n"
+        "\tLine[...] dashes with small Polygon arrowheads showing the flow direction.\n"
+        "\tThe result has Frame -> True and Axes -> False by default. StreamPlot is\n"
+        "\tHoldAll: vx, vy, and the iterator specs are held unevaluated until x and y\n"
+        "\tare given numeric values.\n"
         "\n"
         "\tOptions:\n"
-        "\t  StreamPoints  - Integer n (n x n seed grid) or Automatic (default 15 x 15).\n"
-        "\t  StreamScale   – Automatic (8%% of domain diagonal, default), None (full run),\n"
-        "\t                   or a real fraction of the domain diagonal.\n"
+        "\t  StreamPoints  - Integer n: the line density (line spacing = smaller extent / n;\n"
+        "\t                   default 25), or Automatic.\n"
+        "\t  StreamScale   – Automatic or None (default: each line runs to its natural end\n"
+        "\t                   at another line, the boundary or a critical point), or a\n"
+        "\t                   real s: each line is at most s times the domain diagonal.\n"
         "\t  StreamStyle   – Style directive(s) applied to all streams.\n"
         "\t  StreamColorFunction / ColorFunction\n"
         "\t                 – f[x,y,vx,vy,speed] (or fewer args) returning a color,\n"

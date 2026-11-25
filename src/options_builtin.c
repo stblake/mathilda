@@ -846,10 +846,17 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_int("PlotPoints", 50));
     ob_add(&b, r_int("MaxRecursion", 6));
-    ob_add(&b, r_sym("MaxPlotPoints", "Automatic"));
-    ob_add(&b, r_sym("Mesh", "False"));
-    ob_add(&b, r_sym("AspectRatio", "Automatic"));
+    ob_add(&b, r_sym("MaxPlotPoints", "Infinity"));
+    ob_add(&b, r_sym("Mesh", "None"));
+    /* AspectRatio -> 1/GoldenRatio and Exclusions -> Automatic, the values
+     * plot.c's split_options uses (audit Plot#7). */
+    {
+        Expr* gr[2] = { expr_new_symbol("GoldenRatio"), expr_new_integer(-1) };
+        Expr* inv = expr_new_function(expr_new_symbol("Power"), gr, 2);
+        ob_add(&b, rule2(expr_new_symbol("AspectRatio"), inv));
+    }
     ob_add(&b, r_sym("Axes", "True"));
+    ob_add(&b, r_sym("Exclusions", "Automatic"));
     ob_add(&b, r_sym("Frame", "False"));
     ob_add(&b, r_sym("PlotRange", "Automatic"));
     ob_commit(&b, "Plot");
@@ -882,25 +889,46 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Axes", "False"));
     ob_add(&b, r_sym("AxesLabel", "None"));
     ob_add(&b, r_sym("AxesOrigin", "Automatic"));
-    ob_add(&b, r_sym("AxesStyle", "Automatic"));
-    ob_add(&b, r_sym("Background", "Automatic"));
+    ob_add(&b, r_list0("AxesStyle"));
+    ob_add(&b, r_sym("Background", "None"));
     ob_add(&b, r_list0("Epilog"));
     ob_add(&b, r_sym("Frame", "False"));
     ob_add(&b, r_sym("FrameLabel", "None"));
-    ob_add(&b, r_sym("FrameStyle", "Automatic"));
+    ob_add(&b, r_list0("FrameStyle"));
     ob_add(&b, r_sym("FrameTicks", "Automatic"));
     ob_add(&b, r_sym("GridLines", "None"));
-    ob_add(&b, r_sym("GridLinesStyle", "Automatic"));
+    ob_add(&b, r_list0("GridLinesStyle"));
     ob_add(&b, r_sym("ImageSize", "Automatic"));
     ob_add(&b, r_list0("LabelStyle"));
     ob_add(&b, r_sym("PlotLabel", "None"));
-    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("PlotRange", "All"));
     ob_add(&b, r_sym("PlotRangePadding", "Automatic"));
     ob_add(&b, r_sym("PlotStyle", "Automatic"));
     ob_add(&b, r_list0("Prolog"));
     ob_add(&b, r_sym("RotateLabel", "True"));
-    ob_add(&b, r_sym("TicksStyle", "Automatic"));
+    ob_add(&b, r_list0("TicksStyle"));
     ob_commit(&b, "Graphics");
+
+    /* Graphics3D: render3d.c's gfx3d_options_parse() reads these from the
+     * object; the list is their surface defaults (audit Graphics3D#1). */
+    ob_init(&b);
+    ob_add(&b, r_sym("AspectRatio", "Automatic"));
+    ob_add(&b, r_sym("Axes", "False"));
+    ob_add(&b, r_sym("AxesLabel", "None"));
+    ob_add(&b, r_sym("Background", "None"));
+    ob_add(&b, r_sym("Boxed", "True"));
+    ob_add(&b, r_sym("BoxRatios", "Automatic"));
+    ob_add(&b, r_sym("ImageSize", "Automatic"));
+    ob_add(&b, r_sym("Lighting", "Automatic"));
+    ob_add(&b, r_sym("PlotLabel", "None"));
+    ob_add(&b, r_sym("PlotRange", "All"));
+    ob_add(&b, r_sym("Ticks", "Automatic"));
+    {
+        Expr* vp[3] = { expr_new_real(1.3), expr_new_real(-2.4), expr_new_real(2.0) };
+        Expr* vl = expr_new_function(expr_new_symbol(SYM_List), vp, 3);
+        ob_add(&b, rule2(expr_new_symbol("ViewPoint"), vl));
+    }
+    ob_commit(&b, "Graphics3D");
 
     /* Plot3D honours these via plot3d.c's split_options3() (sampler + surface
      * options) and render3d.c's gfx3d_options_parse() (render options on the
@@ -929,6 +957,41 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("RegionFunction", "None"));
     ob_add(&b, r_sym("Ticks", "Automatic"));
     ob_commit(&b, "Plot3D");
+
+    /* ParametricPlot3D (parametricplot3d.c split_options_param3d) and
+     * PolarPlot (polarplot.c, which forwards to ParametricPlot with
+     * PlotPoints -> 75 and AspectRatio -> 1): the defaults those parsers use
+     * (audit ParametricPlot3D#4, PolarPlot#3). */
+    ob_init(&b);
+    ob_add(&b, r_sym("Axes", "True"));
+    ob_add(&b, r_sym("ColorFunction", "Automatic"));
+    ob_add(&b, r_sym("ColorFunctionScaling", "True"));
+    ob_add(&b, r_sym("Lighting", "Automatic"));
+    ob_add(&b, r_sym("MaxPlotPoints", "Infinity"));
+    ob_add(&b, r_int("MaxRecursion", 6));
+    ob_add(&b, r_sym("Mesh", "None"));
+    ob_add(&b, r_sym("PlotLegends", "None"));
+    ob_add(&b, r_int("PlotPoints", 25));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("PlotStyle", "Automatic"));
+    ob_add(&b, r_sym("RegionFunction", "None"));
+    ob_commit(&b, "ParametricPlot3D");
+
+    ob_init(&b);
+    ob_add(&b, r_int("AspectRatio", 1));
+    ob_add(&b, r_sym("Axes", "True"));
+    ob_add(&b, r_sym("ColorFunction", "Automatic"));
+    ob_add(&b, r_sym("ColorFunctionScaling", "True"));
+    ob_add(&b, r_sym("MaxPlotPoints", "Infinity"));
+    ob_add(&b, r_int("MaxRecursion", 6));
+    ob_add(&b, r_sym("Mesh", "None"));
+    ob_add(&b, r_sym("PlotLegends", "None"));
+    ob_add(&b, r_int("PlotPoints", 75));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("PlotStyle", "Automatic"));
+    ob_add(&b, r_sym("PolarAxes", "False"));
+    ob_add(&b, r_sym("RegionFunction", "None"));
+    ob_commit(&b, "PolarPlot");
 
     /* ComplexPlot / ComplexPlot3D honour these via complexplot.c's
      * split_cplot_options(). The default phase colouring is the cyclic "Cyclic"

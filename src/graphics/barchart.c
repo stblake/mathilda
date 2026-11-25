@@ -26,9 +26,12 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "checked_alloc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <gmp.h>
+#include <limits.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -71,8 +74,11 @@ static bool split_chart_options(Expr* res, size_t start_idx,
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_BarSpacing) {
+            /* None: touching bars; Automatic: the default (audit BarChart#4) */
             double v;
-            if (!numericize_bound(rhs, &v) || v < 0.0) BC_FAIL();
+            if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) continue;
+            if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None) v = 0.0;
+            else if (!numericize_bound(rhs, &v) || v < 0.0) BC_FAIL();
             co->bar_spacing = v;
             co->bar_spacing_set = true;
         } else if (name == SYM_ChartStyle) {
@@ -107,10 +113,23 @@ static bool split_chart_options(Expr* res, size_t start_idx,
 /* Color for bar i in dataset d                                        */
 /* ------------------------------------------------------------------ */
 
-static Expr* bar_color(Expr* chart_style, size_t i) {
+static Expr* bar_color(Expr* chart_style, size_t i, size_t n) {
     if (chart_style) {
         Expr* cs = evaluate(chart_style);
         Expr* color = NULL;
+        if (cs->type == EXPR_STRING) {
+            /* A gradient name colours bar i of n along the gradient; a name
+             * Mathilda has no gradient for falls back to the palette -- the
+             * string is never a directive (audit BarChart#7). */
+            double t = n > 1 ? (double)i / (double)(n - 1) : 0.5, r, g, b;
+            int ok = resolve_ramp_to_rgb(cs->data.string, t, &r, &g, &b);
+            expr_free(cs);
+            if (ok) {
+                Expr* a[3] = { expr_new_real(r), expr_new_real(g), expr_new_real(b) };
+                return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+            }
+            return palette_color(i);
+        }
         if (cs->type == EXPR_FUNCTION
             && cs->data.function.head->type == EXPR_SYMBOL
             && cs->data.function.head->data.symbol.name == SYM_List
@@ -203,10 +222,48 @@ static bool extract_reals(Expr* list, double** vals_out, size_t* n_out, bool kee
 /* BarChart                                                             */
 /* ------------------------------------------------------------------ */
 
+/* BarChart[assoc, opts] as BarChart[Values[assoc], ChartLabels -> Keys[assoc], opts]. */
+static Expr* barchart_association(Expr* res, Expr* assoc) {
+    size_t argc = res->data.function.arg_count;
+    bool have_labels = false;
+    for (size_t i = 1; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (is_rule_arg(a) && a->data.function.args[0]->type == EXPR_SYMBOL
+            && a->data.function.args[0]->data.symbol.name == SYM_ChartLabels)
+            have_labels = true;
+    }
+    Expr* vals = eval_and_free(expr_new_function(expr_new_symbol("Values"),
+                                                     (Expr*[]){ expr_copy(assoc) }, 1));
+    Expr** a = malloc(sizeof(Expr*) * (argc + 1));
+    size_t n = 0;
+    a[n++] = vals;
+    for (size_t i = 1; i < argc; i++) a[n++] = expr_copy(res->data.function.args[i]);
+    if (!have_labels) {
+        Expr* keys = eval_and_free(expr_new_function(expr_new_symbol("Keys"),
+                                                         (Expr*[]){ expr_copy(assoc) }, 1));
+        a[n++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                                   (Expr*[]){ expr_new_symbol(SYM_ChartLabels), keys }, 2);
+    }
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), a, n);
+    free(a);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
 Expr* builtin_barchart(Expr* res) {
     if (res->data.function.arg_count < 1) return NULL;
 
     Expr* data_arg = evaluate(res->data.function.args[0]);
+    if (data_arg && data_arg->type == EXPR_FUNCTION
+        && data_arg->data.function.head->type == EXPR_SYMBOL
+        && data_arg->data.function.head->data.symbol.name == SYM_Association) {
+        /* BarChart[<|k1 -> v1, ...|>]: the values as bars, the keys as their
+         * ChartLabels unless given (audit BarChart#8). */
+        Expr* r = barchart_association(res, data_arg);
+        expr_free(data_arg);
+        return r;
+    }
     if (!data_arg || data_arg->type != EXPR_FUNCTION
         || data_arg->data.function.head->type != EXPR_SYMBOL
         || data_arg->data.function.head->data.symbol.name != SYM_List) {
@@ -216,13 +273,16 @@ Expr* builtin_barchart(Expr* res) {
 
     /* Determine if this is a multi-dataset call:
      * args[0] is a List of Lists (each inner list is one dataset). */
+    /* Any element a List: every element is its own dataset, a scalar a
+     * one-bar dataset (audit BarChart#5: {1, {2, 3}} dropped {2, 3}, and
+     * {{1, 2}, 3} drew 3 as a zero bar). */
     bool multi = false;
     size_t outer_n = data_arg->data.function.arg_count;
-    if (outer_n > 0) {
-        Expr* first = data_arg->data.function.args[0];
-        if (first->type == EXPR_FUNCTION
-            && first->data.function.head->type == EXPR_SYMBOL
-            && first->data.function.head->data.symbol.name == SYM_List)
+    for (size_t k = 0; k < outer_n && !multi; k++) {
+        Expr* el = data_arg->data.function.args[k];
+        if (el->type == EXPR_FUNCTION
+            && el->data.function.head->type == EXPR_SYMBOL
+            && el->data.function.head->data.symbol.name == SYM_List)
             multi = true;
     }
 
@@ -238,9 +298,21 @@ Expr* builtin_barchart(Expr* res) {
 
     if (multi) {
         for (size_t d = 0; d < n_datasets; d++) {
-            if (!extract_reals(data_arg->data.function.args[d],
-                                &datasets[d], &lengths[d], true)) {
+            Expr* el = data_arg->data.function.args[d];
+            if (!(el->type == EXPR_FUNCTION && el->data.function.head->type == EXPR_SYMBOL
+                  && el->data.function.head->data.symbol.name == SYM_List)) {
+                Expr* one = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(el) }, 1);
+                bool got = extract_reals(one, &datasets[d], &lengths[d], true);
+                expr_free(one);
+                if (got) continue;
+                free(datasets[d]);
+                datasets[d] = malloc(sizeof(double));
+                datasets[d][0] = NAN; lengths[d] = 1;
+                continue;
+            }
+            if (!extract_reals(el, &datasets[d], &lengths[d], true)) {
                 /* Fill with zeros on bad input. */
+                free(datasets[d]);   /* extract_reals allocated it */
                 datasets[d] = malloc(sizeof(double));
                 datasets[d][0] = 0.0; lengths[d] = 1;
             }
@@ -301,7 +373,7 @@ Expr* builtin_barchart(Expr* res) {
             double x1  = x0 + sub_w;
             double y_lo = (v < 0.0) ? v : 0.0;
             double y_hi = (v > 0.0) ? v : 0.0;
-            Expr*  col  = bar_color(co.chart_style, i);
+            Expr*  col  = bar_color(co.chart_style, i, multi ? per_group : n_bars);
             np = emit_bar(prims, np, x0, y_lo, x1, y_hi, col);
         }
     }
@@ -401,10 +473,16 @@ static size_t histogram_parse_bins(Expr* res,
     if (is_rule_arg(spec)) goto use_default;  /* opts start here */
 
     Expr* ev = evaluate(spec);
-    if (ev->type == EXPR_INTEGER) {
-        int k = (int)ev->data.integer;
+    if (ev->type == EXPR_INTEGER || ev->type == EXPR_BIGINT) {
+        /* A count past int, or past memory, is General::nomem, never a
+         * truncated 2^32 + 2 -> 2 bins (audit Histogram#4). */
+        bool big = ev->type == EXPR_BIGINT || ev->data.integer > INT_MAX
+                   || !mth_alloc_ok(ev->data.integer, 64, NULL);
+        int64_t k = ev->type == EXPR_INTEGER ? ev->data.integer : 1;
+        bool pos = ev->type == EXPR_INTEGER ? k >= 1 : mpz_sgn(ev->data.bigint) > 0;
         expr_free(ev);
-        if (k >= 1) { *n_bins_out = k; return 2; }
+        if (pos && big) { *n_bins_out = -2; return 2; }
+        if (k >= 1) { *n_bins_out = (int)k; return 2; }
         goto use_default;
     }
     double vd;
@@ -488,6 +566,7 @@ Expr* builtin_histogram(Expr* res) {
                                               &bin_min, &bin_max, &n_bins,
                                               &explicit_range);
 
+    if (n_bins == -2) return mth_nomem_abort();
     /* Apply Sturges' rule if not specified. */
     if (n_bins < 1) {
         n_bins = (int)ceil(log2((double)n_vals)) + 1;
@@ -532,7 +611,8 @@ Expr* builtin_histogram(Expr* res) {
         if (counts[b] == 0) continue;
         double x0 = bin_min + b * bin_w;
         double x1 = x0 + bin_w;
-        Expr*  col = bar_color(co.chart_style, (size_t)b);
+        /* one colour for every bin of the one dataset (audit Histogram#5) */
+        Expr*  col = bar_color(co.chart_style, 0, 1);
         np = emit_bar(prims, np, x0, 0.0, x1, (double)counts[b], col);
     }
     free(counts);

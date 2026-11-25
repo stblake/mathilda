@@ -27,6 +27,8 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "common.h"
+#include "message.h"
 #include <stdlib.h>
 #include <math.h>
 
@@ -94,7 +96,14 @@ static bool param_region_ok(const ParamEvalCtx* ctx, double x, double y) {
  * extract the resulting {x, y} pair.  Returns true on success.
  * The evaluator owns the result; we free it here. */
 static bool eval_body_xy(ParamEvalCtx* ctx, double* x_out, double* y_out) {
+    /* A sample at a singular point (1/t at t = 0) is simply excluded: its
+     * Power::infy / Infinity::indet are sampling noise, neither printed nor
+     * seen by Check[] (audit PolarPlot#2, ParametricPlot3D#3). */
+    unsigned long fired = mth_msg_fired_count();
+    mth_msg_suppress_push();
     Expr* result = evaluate(ctx->body);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired);
     bool ok = false;
     if (result && result->type == EXPR_FUNCTION
         && result->data.function.head->type == EXPR_SYMBOL
@@ -298,6 +307,7 @@ typedef struct {
     int   max_recursion;
     long  max_plot_points;
     bool  mesh;
+    long  mesh_n;           /* Mesh -> n: n mesh points equally spaced in t (curves) */
     Expr* region_function;  /* borrowed */
     Expr* color_function;   /* borrowed */
     bool  color_function_scaling;
@@ -316,6 +326,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
     sopts->max_recursion          = 6;
     sopts->max_plot_points        = -1;
     sopts->mesh                   = false;
+    sopts->mesh_n                 = 0;
     sopts->region_function        = NULL;
     sopts->color_function         = NULL;
     sopts->color_function_scaling = true;
@@ -332,7 +343,17 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
 
     for (size_t i = opts_start; i < argc; i++) {
         Expr* arg = res->data.function.args[i];
-        if (!is_rule_arg(arg)) PFAIL();
+        if (!is_rule_arg(arg)) {
+            /* audit ParametricPlot#6: a stray argument after the iterators */
+            char* bs = expr_to_string(arg);
+            char* cs = expr_to_string(res);
+            mth_message("ParametricPlot", "nonopt",
+                        "Options expected (instead of %s) beyond position %zu in %s. "
+                        "An option must be a rule or a list of rules.",
+                        bs ? bs : "?", opts_start, cs ? cs : "?");
+            free(bs); free(cs);
+            PFAIL();
+        }
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
@@ -358,8 +379,12 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             Expr* v = evaluate(rhs);
             bool on  = (v->type == EXPR_SYMBOL && (v->data.symbol.name == SYM_All  || v->data.symbol.name == SYM_True));
             bool off = (v->type == EXPR_SYMBOL && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
+            /* Mesh -> n: n points equally spaced in the parameter (audit
+             * ParametricPlot#7); Mesh -> 0 is none. */
+            bool count = (v->type == EXPR_INTEGER && v->data.integer >= 0 && v->data.integer <= 100000);
+            if (count) sopts->mesh_n = (long)v->data.integer;
             expr_free(v);
-            if (!on && !off) PFAIL();
+            if (!on && !off && !count) PFAIL();
             sopts->mesh = on;
         } else if (name == SYM_RegionFunction) {
             sopts->region_function = rhs;
@@ -439,10 +464,33 @@ static Expr** build_param_curve(Expr* body, Expr* var1,
     ParamPt* pts = param_sample(&ctx, tmin, tmax,
                                   sopts->plot_points, sopts->max_recursion,
                                   sopts->max_plot_points, &npts);
+    /* Mesh -> n: the curve at t_k = tmin + k (tmax - tmin)/(n + 1), k = 1..n. */
+    Expr** mesh_pts = NULL;
+    size_t nmesh = 0;
+    if (sopts->mesh_n > 0 && pts && npts > 0) {
+        mesh_pts = malloc(sizeof(Expr*) * (size_t)sopts->mesh_n);
+        for (long k = 1; k <= sopts->mesh_n; k++) {
+            double t = tmin + (tmax - tmin) * (double)k / (double)(sopts->mesh_n + 1);
+            double x, y;
+            if (param_eval_at(&ctx, &t, 1, &x, &y)) {
+                Expr* xy[2] = { expr_new_real(x), expr_new_real(y) };
+                mesh_pts[nmesh++] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
+            }
+        }
+    }
     param_ctx_free(&ctx);
-    if (!pts || npts == 0) { free(pts); return NULL; }
+    if (!pts || npts == 0) { free(pts); free(mesh_pts); return NULL; }
 
-    Expr** prims = malloc(sizeof(Expr*) * (npts * 4 + 4));
+    /* The curve's extent, for ColorFunction's scaled x and y. */
+    double xlo = pts[0].x, xhi = pts[0].x, ylo = pts[0].y, yhi = pts[0].y;
+    for (size_t i = 1; i < npts; i++) {
+        if (pts[i].x < xlo) xlo = pts[i].x;
+        if (pts[i].x > xhi) xhi = pts[i].x;
+        if (pts[i].y < ylo) ylo = pts[i].y;
+        if (pts[i].y > yhi) yhi = pts[i].y;
+    }
+
+    Expr** prims = malloc(sizeof(Expr*) * (npts * 4 + 8));
     size_t pc = 0;
     size_t run_start = 0;
 
@@ -456,10 +504,17 @@ static Expr** build_param_curve(Expr* body, Expr* var1,
                 for (size_t j = 0; j + 1 < run_len; j++) {
                     size_t a = run_start + j, b = a + 1;
                     double tmid = (pts[a].t + pts[b].t) / 2.0;
-                    prims[pc++] = eval_color_function(sopts->color_function,
-                                                       tmid, 0.0,
-                                                       tmin, tmax,
-                                                       sopts->color_function_scaling);
+                    /* A named gradient sweeps the parameter; a function gets
+                     * f[x, y, u] -- the point, then the parameter -- each
+                     * scaled to [0, 1] by default (audit ParametricPlot#8). */
+                    prims[pc++] = sopts->color_function->type == EXPR_STRING
+                        ? eval_color_function(sopts->color_function, tmid, 0.0, tmin, tmax,
+                                              sopts->color_function_scaling)
+                        : eval_color_function3(sopts->color_function,
+                                               (pts[a].x + pts[b].x) / 2.0,
+                                               (pts[a].y + pts[b].y) / 2.0, tmid,
+                                               xlo, xhi, ylo, yhi, tmin, tmax,
+                                               sopts->color_function_scaling);
                     Expr* pa[2] = { expr_new_real(pts[a].x), expr_new_real(pts[a].y) };
                     Expr* pb[2] = { expr_new_real(pts[b].x), expr_new_real(pts[b].y) };
                     Expr* seg[2] = {
@@ -501,6 +556,16 @@ static Expr** build_param_curve(Expr* body, Expr* var1,
         Expr* pt_args[1] = { dot_list };
         prims[pc++] = expr_new_function(expr_new_symbol(SYM_Point), pt_args, 1);
     }
+
+    if (nmesh > 0) {
+        if (curve_color && !sopts->color_function) prims[pc++] = expr_copy(curve_color);
+        Expr* ps_arg[1] = { expr_new_real(0.01) };
+        prims[pc++] = expr_new_function(expr_new_symbol(SYM_PointSize), ps_arg, 1);
+        Expr* dot_list = expr_new_function(expr_new_symbol(SYM_List), mesh_pts, nmesh);
+        Expr* pt_args[1] = { dot_list };
+        prims[pc++] = expr_new_function(expr_new_symbol(SYM_Point), pt_args, 1);
+    }
+    free(mesh_pts);
 
     free(pts);
     if (pc == 0) { free(prims); return NULL; }
@@ -728,9 +793,7 @@ Expr* builtin_parametricplot(Expr* res) {
 
     Expr* var1 = iter1->data.function.args[0];
     double t1min, t1max;
-    if (!numericize_bound(iter1->data.function.args[1], &t1min)
-        || !numericize_bound(iter1->data.function.args[2], &t1max)
-        || !(t1min < t1max)) return NULL;
+    if (!plot_range_bounds("ParametricPlot", iter1, &t1min, &t1max)) return NULL;
 
     /* Detect 2-iterator form: arg 2 is also an iterator. */
     bool two_iter = (argc >= 3) && is_iterator(res->data.function.args[2]);
@@ -744,9 +807,7 @@ Expr* builtin_parametricplot(Expr* res) {
         Expr* iter2 = res->data.function.args[2];
         Expr* var2  = iter2->data.function.args[0];
         double t2min, t2max;
-        if (!numericize_bound(iter2->data.function.args[1], &t2min)
-            || !numericize_bound(iter2->data.function.args[2], &t2max)
-            || !(t2min < t2max)) { expr_free(legends); return NULL; }
+        if (!plot_range_bounds("ParametricPlot", iter2, &t2min, &t2max)) { expr_free(legends); return NULL; }
 
         Expr* body = res->data.function.args[0];
 
@@ -807,12 +868,7 @@ Expr* builtin_parametricplot(Expr* res) {
         iter_spec_restore(var2, old2);
         iter_spec_restore(var1, old1);
 
-        if (!any) {
-            for (size_t si = 0; si < nsub; si++) free(per_prims[si]);
-            free(per_prims); free(per_counts); free(scoped2);
-            free(pass); expr_free(color); expr_free(legends);
-            return NULL;
-        }
+        (void)any;   /* nothing plottable is an empty plot (audit ParametricPlot#4) */
 
         Expr** prims = malloc(sizeof(Expr*) * (total ? total : 1));
         size_t pc = 0;
@@ -877,13 +933,18 @@ Expr* builtin_parametricplot(Expr* res) {
         bool any = false;
 
         const Expr* style1 = has_explicit_style(res, 2) ? single_color : NULL;
-        Expr** styles1 = calloc(nbodies, sizeof(Expr*));   /* multi only */
+        /* bake: each curve's style goes into the primitives -- several curves,
+         * or one with a List of several styles, for which the renderer applies
+         * no base style (audit Directive#1). */
+        bool bake = multi || (style1 && head_is(style1, SYM_List)
+                              && style1->data.function.arg_count > 1);
+        Expr** styles1 = calloc(nbodies, sizeof(Expr*));   /* bake only */
         bool* scoped1 = calloc(nbodies, sizeof(bool));
         for (size_t ci = 0; ci < nbodies; ci++) {
             /* Curve ci's style: palette colour or PlotStyle entry (multi);
              * a single curve is styled from the PlotStyle option. */
-            if (multi) styles1[ci] = multi_style(style1, ci, &scoped1[ci]);
-            Expr* cc = multi ? styles1[ci] : single_color;
+            if (bake) styles1[ci] = multi_style(style1, ci, &scoped1[ci]);
+            Expr* cc = bake ? styles1[ci] : single_color;
             per_prims[ci] = build_param_curve(bodies[ci], var1, t1min, t1max,
                                                &sopts, cc, &per_counts[ci]);
             if (per_counts[ci] > 0) any = true;
@@ -892,18 +953,16 @@ Expr* builtin_parametricplot(Expr* res) {
 
         iter_spec_restore(var1, old1);
 
-        if (!any) {
-            for (size_t ci = 0; ci < nbodies; ci++) { free(per_prims[ci]); expr_free(styles1[ci]); }
-            free(per_prims); free(per_counts); free(styles1); free(scoped1);
-            free(pass); expr_free(single_color); expr_free(legends);
-            return NULL;
-        }
+        /* A body never numeric on the range (ParametricPlot[{x, y}, ...]) is
+         * an empty plot, Graphics[{}, ...], as in the reference (audit
+         * ParametricPlot#4), not an unevaluated call. */
+        (void)any;
 
-        size_t cap = total + (multi ? nbodies : 0) + 1;
+        size_t cap = total + (bake ? nbodies : 0) + 1;
         Expr** prims = malloc(sizeof(Expr*) * cap);
         size_t pc = 0;
         for (size_t ci = 0; ci < nbodies; ci++) {
-            if (multi && scoped1[ci]) {
+            if (bake && scoped1[ci]) {
                 /* {Directive[...], lines...}: the directive's scope. */
                 Expr** sub = malloc(sizeof(Expr*) * (per_counts[ci] + 1));
                 sub[0] = styles1[ci]; styles1[ci] = NULL;
@@ -911,7 +970,7 @@ Expr* builtin_parametricplot(Expr* res) {
                 prims[pc++] = expr_new_function(expr_new_symbol(SYM_List), sub, per_counts[ci] + 1);
                 free(sub);
             } else {
-                if (multi) { prims[pc++] = styles1[ci]; styles1[ci] = NULL; }
+                if (bake) { prims[pc++] = styles1[ci]; styles1[ci] = NULL; }
                 for (size_t j = 0; j < per_counts[ci]; j++) prims[pc++] = per_prims[ci][j];
             }
             expr_free(styles1[ci]);

@@ -8,7 +8,8 @@
  * until x and y are bound to numeric values (same semantics as ContourPlot).
  *
  * Options:
- *   VectorPoints    integer n → n × n grid (default 15); Automatic = 15
+ *   VectorPoints    integer n → n × n grid (default 15); {nx, ny} → nx × ny;
+ *                   Automatic = 15
  *   VectorScale     Automatic: normalise all arrows to equal display length
  *                   None:      proportional to magnitude
  *                   real f:    arrow length = f × grid_spacing
@@ -22,6 +23,7 @@
 #include "plot_common.h"
 #include "compile/autocompile.h"   /* machine fast path for the field components */
 #include "iter.h"
+#include "common.h"
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
@@ -38,7 +40,8 @@
 typedef enum { VS_AUTOMATIC, VS_NONE, VS_FRACTION } VecScaleMode;
 
 typedef struct {
-    int          vector_points;
+    int          vector_points;    /* grid points along x */
+    int          vector_points_y;  /* grid points along y */
     VecScaleMode scale_mode;
     double       scale_frac;       /* VS_FRACTION only */
     Expr*        vector_style;     /* borrowed; NULL = default palette */
@@ -51,6 +54,7 @@ typedef struct {
 static bool split_vector_options(Expr* res, VecOpts* o,
                                   Expr*** pt_out, size_t* pt_n_out) {
     o->vector_points          = 15;
+    o->vector_points_y        = 15;
     o->scale_mode             = VS_AUTOMATIC;
     o->scale_frac             = 0.5;
     o->vector_style           = NULL;
@@ -78,12 +82,25 @@ static bool split_vector_options(Expr* res, VecOpts* o,
         if (name == SYM_VectorPoints) {
             Expr* v = evaluate(rhs);
             if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
-                o->vector_points = 15; expr_free(v);
+                o->vector_points = o->vector_points_y = 15; expr_free(v);
+            } else if (head_is(v, SYM_List) && v->data.function.arg_count == 2) {
+                /* VectorPoints -> {nx, ny} (audit VectorPlot#4) */
+                const Expr* a = v->data.function.args[0];
+                const Expr* b = v->data.function.args[1];
+                bool ok = a->type == EXPR_INTEGER && b->type == EXPR_INTEGER
+                          && a->data.integer >= 1 && b->data.integer >= 1
+                          && a->data.integer <= 4096 && b->data.integer <= 4096;
+                if (ok) {
+                    o->vector_points = (int)a->data.integer;
+                    o->vector_points_y = (int)b->data.integer;
+                }
+                expr_free(v);
+                if (!ok) VP_FAIL();
             } else {
                 long lv;
                 expr_free(v);
-                if (!parse_long_value(rhs, &lv) || lv < 1) VP_FAIL();
-                o->vector_points = (int)lv;
+                if (!parse_long_value(rhs, &lv) || lv < 1 || lv > 4096) VP_FAIL();
+                o->vector_points = o->vector_points_y = (int)lv;
             }
         } else if (name == SYM_VectorScale) {
             Expr* v = evaluate(rhs);
@@ -305,18 +322,21 @@ Expr* builtin_vectorplot(Expr* res) {
     if (!split_vector_options(res, &opts, &pt, &pt_n)) {
         iter_spec_free(&xspec); iter_spec_free(&yspec); return NULL; }
 
-    int    N   = opts.vector_points;
+    int    N   = opts.vector_points;     /* along x */
+    int    NY  = opts.vector_points_y;   /* along y */
 
     /* For ScalingFunctions, sample uniformly in scaled (world) space so the
      * grid is evenly spaced on-screen.  u*/
+    scale_domain_clip(opts.sf_x, &xmin, &xmax);
+    scale_domain_clip(opts.sf_y, &ymin, &ymax);
     double u_xmin = scale_apply(opts.sf_x, xmin), u_xmax = scale_apply(opts.sf_x, xmax);
     double u_ymin = scale_apply(opts.sf_y, ymin), u_ymax = scale_apply(opts.sf_y, ymax);
     double du_x = (u_xmax - u_xmin) / (N - 1 > 0 ? N - 1 : 1);
-    double du_y = (u_ymax - u_ymin) / (N - 1 > 0 ? N - 1 : 1);
+    double du_y = (u_ymax - u_ymin) / (NY - 1 > 0 ? NY - 1 : 1);
 
     /* Evaluate the field on an N×N grid; collect vectors. */
     typedef struct { double wx, wy, vx, vy; } Arrow;  /* wx/wy are WORLD coords */
-    Arrow* arrows  = malloc(sizeof(Arrow) * (size_t)N * N);
+    Arrow* arrows  = malloc(sizeof(Arrow) * (size_t)N * (size_t)NY);
     size_t n_arr   = 0;
     double spd_max = 0.0;
 
@@ -324,7 +344,7 @@ Expr* builtin_vectorplot(Expr* res) {
     IterShadow old_y = iter_spec_shadow(yspec.var);
     VpField vfield = vp_compile(xspec.var, yspec.var, vx_body, vy_body);
 
-    for (int iy = 0; iy < N; iy++) {
+    for (int iy = 0; iy < NY; iy++) {
         double wy = u_ymin + iy * du_y;           /* world y */
         double y  = scale_invert(opts.sf_y, wy);  /* data y  */
         for (int ix = 0; ix < N; ix++) {
@@ -378,7 +398,8 @@ Expr* builtin_vectorplot(Expr* res) {
      * 0.5/(N-1) ≈ half a grid cell on screen — matches the old behaviour
      * exactly when both axes have the same world range, and fixes the
      * visual-size collapse when one axis is log-scaled. */
-    double half_len_screen = 0.5 / (N > 1 ? N - 1 : 1);
+    int nmax = N > NY ? N : NY;
+    double half_len_screen = 0.5 / (nmax > 1 ? nmax - 1 : 1);
 
     /* 3 prims per arrow: color directive + Thickness + Arrow. */
     size_t cap   = n_arr * 4 + 4;
@@ -444,7 +465,9 @@ Expr* builtin_vectorplot(Expr* res) {
             len_screen = (sn_spd_max > 0.0)
                          ? (sn_spd / sn_spd_max) * half_len_screen : 0.0;
         } else if (opts.scale_mode == VS_FRACTION) {
-            len_screen = opts.scale_frac * half_len_screen * 2.0;
+            /* VectorScale -> f: an arrow of length f grid spacings, so a
+             * half-length of f half-spacings (audit VectorPlot#3) */
+            len_screen = opts.scale_frac * half_len_screen;
         } else {
             /* Automatic: fixed screen size = half a grid cell. */
             len_screen = half_len_screen;

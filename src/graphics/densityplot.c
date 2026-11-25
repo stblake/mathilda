@@ -22,6 +22,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "checked_alloc.h"
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -214,17 +215,22 @@ Expr* builtin_densityplot(Expr* res) {
 
     int    NX = opts.plot_points, NY = opts.plot_points_y;
     /* Sample uniformly in world (scaled) space */
+    scale_domain_clip(opts.sf_x, &xmin, &xmax);
+    scale_domain_clip(opts.sf_y, &ymin, &ymax);
     double u_xmin = scale_apply(opts.sf_x, xmin), u_xmax = scale_apply(opts.sf_x, xmax);
     double u_ymin = scale_apply(opts.sf_y, ymin), u_ymax = scale_apply(opts.sf_y, ymax);
     double du_x = (u_xmax - u_xmin) / NX;
     double du_y = (u_ymax - u_ymin) / NY;
 
-    double* grid = malloc(sizeof(double) * (size_t)(NX + 1) * (size_t)(NY + 1));
+    /* A grid past memory (PlotPoints -> 2^32 + 2) aborts with
+     * General::nomem rather than being truncated (audit DensityPlot#2). */
+    bool grid_ok = mth_alloc2_ok((int64_t)NX + 1, (int64_t)NY + 1, 256);
+    double* grid = grid_ok ? malloc(sizeof(double) * (size_t)(NX + 1) * (size_t)(NY + 1)) : NULL;
     if (!grid) {
         iter_spec_free(&xspec); iter_spec_free(&yspec);
         for (size_t i = 0; i < pt_n; i++) expr_free(pt[i]);
         free(pt);
-        return NULL;
+        return mth_nomem_abort();
     }
 
     IterShadow old_x = iter_spec_shadow(xspec.var);
@@ -344,8 +350,8 @@ Expr* builtin_densityplot(Expr* res) {
     /* PlotLegends -> Automatic: attach $StreamColorBar so the renderer draws
      * a vertical colour scale on the right of the plot. */
     if (opts.show_legend) {
-        double bar_lo = isfinite(zmin) ? zmin : 0.0;
-        double bar_hi = isfinite(zmax) ? zmax : 1.0;
+        double bar_lo = (zmin <= zmax && isfinite(zmin)) ? zmin : 0.0;   /* no sample: 0..1 (audit DensityPlot#3) */
+        double bar_hi = (zmin <= zmax && isfinite(zmax)) ? zmax : 1.0;
         if (bar_lo == bar_hi) bar_hi = bar_lo + 1.0;
         pt = realloc(pt, sizeof(Expr*) * (pt_n + 1));
         Expr* cfn_copy = opts.color_function

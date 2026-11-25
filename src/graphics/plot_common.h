@@ -24,6 +24,22 @@ bool expr_to_real_double(const Expr* e, double* out);
  * result isn't a finite real. */
 bool numericize_bound(Expr* e, double* out);
 
+/* Read a plot range {x, xmin, xmax} (the held iterator argument `spec`)
+ * into machine-number bounds *lo < *hi; reversed endpoints are swapped, as
+ * the reference plots {x, 1, 0} over [0, 1].  A bad spec emits the
+ * reference's message and returns false:
+ *   head::pllim  not of the form {x, xmin, xmax} (a step, a missing bound)
+ *   head::plln   a bound that is not a machine-sized real number
+ *   head::plld   equal endpoints
+ * Shared by Plot, ParametricPlot, PolarPlot and Plot3D (audit Plot#5/#6,
+ * ParametricPlot#5, Plot3D#6). */
+bool plot_range_bounds(const char* head, const Expr* spec, double* lo, double* hi);
+
+/* res with every trailing argument from index `from` on that is a List of
+ * option rules ({PlotPoints -> 2}) spliced in place, or NULL when there is
+ * none.  The caller owns the result and re-evaluates it. */
+Expr* plot_splice_option_lists(const Expr* res, size_t from);
+
 /* True if `e` is Rule[_,_] or RuleDelayed[_,_] (a trailing opts... arg). */
 bool is_rule_arg(Expr* e);
 
@@ -160,6 +176,13 @@ double scale_apply(ScaleFnType sf, double x);
 /* Inverse: world → data space. */
 double scale_invert(ScaleFnType sf, double w);
 
+/* Restrict the data range [*lo, *hi] to the scale's domain: a logarithmic
+ * scale over a range reaching zero or below keeps only its positive part,
+ * starting three decades below *hi, rather than sampling log(x <= 0) as the
+ * -1e30 sentinel (audit DensityPlot#4, VectorPlot#5).  A range with no
+ * positive part is left as it is. */
+void scale_domain_clip(ScaleFnType sf, double* lo, double* hi);
+
 /* Parse a ScalingFunctions spec expression (string or None/Automatic) to
  * a ScaleFnType.  NULL or unrecognised → SF_NONE. */
 ScaleFnType parse_scale_fn(Expr* e);
@@ -219,7 +242,9 @@ bool gfx_point_radius_pts(const Expr* d, double plot_w, double* pts);
  * `max` alternating on/off lengths to out[] and sets *n (0 = solid, as in
  * Dashing[{}] or Dashing[None]). Returns false if `d` is not a dashing
  * directive. */
-#define GFX_MAX_DASH 8
+/* The longest pattern kept: 64 lengths, far past any practical dash pattern
+ * (8 truncated a ten-length AbsoluteDashing, audit AbsoluteDashing#1). */
+#define GFX_MAX_DASH 64
 bool gfx_dash_pts(const Expr* d, double plot_w, double* out, int max, int* n);
 
 /* PlotStyle resolution for curve/dataset i of a plot. `style` is the

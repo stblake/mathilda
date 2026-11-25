@@ -7,6 +7,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "numeric.h"
+#include "message.h"
 #include <gmp.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -47,6 +48,95 @@ bool numericize_bound(Expr* e, double* out) {
     bool ok = expr_to_real_double(result, out) && isfinite(*out);
     expr_free(result);
     return ok;
+}
+
+bool plot_range_bounds(const char* head, const Expr* spec, double* lo, double* hi) {
+    bool shape = spec && spec->type == EXPR_FUNCTION
+                 && spec->data.function.head->type == EXPR_SYMBOL
+                 && spec->data.function.head->data.symbol.name == SYM_List
+                 && spec->data.function.arg_count == 3
+                 && spec->data.function.args[0]->type == EXPR_SYMBOL;
+    char* ss = NULL;
+    if (!shape) {
+        ss = expr_to_string((Expr*)spec);
+        mth_message(head, "pllim", "Range specification %s is not of the form {x, xmin, xmax}.",
+                    ss ? ss : "?");
+        free(ss);
+        return false;
+    }
+    const char* var = spec->data.function.args[0]->data.symbol.name;
+    for (int k = 1; k <= 2; k++) {
+        Expr* b = spec->data.function.args[k];
+        double v;
+        if (!numericize_bound(b, &v)) {
+            char* bs = expr_to_string(b);
+            ss = expr_to_string((Expr*)spec);
+            mth_message(head, "plln", "Limiting value %s in %s is not a machine-sized real number.",
+                        bs ? bs : "?", ss ? ss : "?");
+            free(bs); free(ss);
+            return false;
+        }
+        if (k == 1) *lo = v; else *hi = v;
+    }
+    if (*lo == *hi) {
+        ss = expr_to_string((Expr*)spec);
+        mth_message(head, "plld", "Endpoints for %s in %s must have distinct machine-precision numerical values.",
+                    var, ss ? ss : "?");
+        free(ss);
+        return false;
+    }
+    if (*lo > *hi) { double t = *lo; *lo = *hi; *hi = t; }
+    return true;
+}
+
+/* A non-empty List whose every element is a rule or such a List. */
+static bool is_option_list(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_List || e->data.function.arg_count == 0)
+        return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* a = e->data.function.args[i];
+        if (!is_rule_arg(a) && !is_option_list(a)) return false;
+    }
+    return true;
+}
+
+static void splice_rules(const Expr* e, Expr** out, size_t* n) {
+    if (is_option_list(e)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            splice_rules(e->data.function.args[i], out, n);
+    } else {
+        out[(*n)++] = expr_copy((Expr*)e);
+    }
+}
+
+static size_t count_rules(const Expr* e) {
+    if (!is_option_list(e)) return 1;
+    size_t k = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) k += count_rules(e->data.function.args[i]);
+    return k;
+}
+
+Expr* plot_splice_option_lists(const Expr* res, size_t from) {
+    size_t argc = res->data.function.arg_count;
+    bool any = false;
+    size_t total = 0;
+    for (size_t i = 0; i < argc; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (i >= from && is_option_list(a)) { any = true; total += count_rules(a); }
+        else total++;
+    }
+    if (!any) return NULL;
+    Expr** args = malloc(sizeof(Expr*) * total);
+    size_t n = 0;
+    for (size_t i = 0; i < argc; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (i >= from) splice_rules(a, args, &n);
+        else args[n++] = expr_copy((Expr*)a);
+    }
+    Expr* out = expr_new_function(expr_copy(res->data.function.head), args, n);
+    free(args);
+    return out;
 }
 
 bool is_rule_arg(Expr* e) {
@@ -699,6 +789,12 @@ double scale_apply(ScaleFnType sf, double x) {
     }
 }
 
+void scale_domain_clip(ScaleFnType sf, double* lo, double* hi) {
+    if (sf != SF_LOG && sf != SF_LOG2 && sf != SF_LOG10) return;
+    if (!(*hi > 0.0) || *lo > 0.0) return;
+    *lo = *hi * 1e-3;
+}
+
 double scale_invert(ScaleFnType sf, double w) {
     switch (sf) {
         case SF_LOG:     return exp(w);
@@ -957,14 +1053,24 @@ Expr* plot_redispatch_list_body(const Expr* res, size_t nspecs) {
     return out;
 }
 
+/* A PlotPoints count as a long: values past PLOT_POINTS_CAP are clamped
+ * there rather than truncated to int (2^32 + 2 read as 2, audit
+ * DensityPlot#2), so a grid that large reaches the plotter's allocation
+ * check and aborts with General::nomem. */
+#define PLOT_POINTS_CAP (1L << 24)
+static long pp_clamp(int64_t v) { return v > PLOT_POINTS_CAP ? PLOT_POINTS_CAP : (long)v; }
+
 bool parse_plot_points_pair(Expr* rhs, long* nx, long* ny) {
     Expr* v = evaluate(rhs);
     bool ok = false;
     *nx = *ny = 0;
     if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
         ok = true;
+    } else if (v->type == EXPR_BIGINT && mpz_sgn(v->data.bigint) > 0) {
+        *nx = *ny = PLOT_POINTS_CAP;
+        ok = true;
     } else if (v->type == EXPR_INTEGER && v->data.integer >= 2) {
-        *nx = *ny = (long)v->data.integer;
+        *nx = *ny = pp_clamp(v->data.integer);
         ok = true;
     } else if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL
                && v->data.function.head->data.symbol.name == SYM_List
@@ -973,8 +1079,8 @@ bool parse_plot_points_pair(Expr* rhs, long* nx, long* ny) {
                && v->data.function.args[1]->type == EXPR_INTEGER
                && v->data.function.args[0]->data.integer >= 2
                && v->data.function.args[1]->data.integer >= 2) {
-        *nx = (long)v->data.function.args[0]->data.integer;
-        *ny = (long)v->data.function.args[1]->data.integer;
+        *nx = pp_clamp(v->data.function.args[0]->data.integer);
+        *ny = pp_clamp(v->data.function.args[1]->data.integer);
         ok = true;
     }
     expr_free(v);

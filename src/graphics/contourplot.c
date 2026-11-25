@@ -24,6 +24,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "checked_alloc.h"
 #include "print.h"
 #include <stdlib.h>
 #include <string.h>
@@ -142,7 +143,12 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
             co->contours_set = true;
             Expr* v = evaluate(rhs);
             if (v->type == EXPR_INTEGER && v->data.integer >= 1) {
-                co->n_contours = (int)v->data.integer;
+                co->n_contours = (int)(v->data.integer > 1000 ? 1000 : v->data.integer);
+                expr_free(v);
+            } else if (v->type == EXPR_INTEGER && v->data.integer == 0) {
+                free(co->levels);                     /* Contours -> 0: none */
+                co->levels = malloc(sizeof(double));
+                co->n_levels = 0;
                 expr_free(v);
             } else if (v->type == EXPR_FUNCTION
                        && v->data.function.head
@@ -497,6 +503,8 @@ Expr* builtin_contourplot(Expr* res) {
 
     /* World-space (scaled) bounds and step sizes.  When no scaling is active
      * these equal the data-space values, so the code below is uniform. */
+    scale_domain_clip(co.sf_x, &xmin, &xmax);
+    scale_domain_clip(co.sf_y, &ymin, &ymax);
     double u_xmin = scale_apply(co.sf_x, xmin), u_xmax = scale_apply(co.sf_x, xmax);
     double u_ymin = scale_apply(co.sf_y, ymin), u_ymax = scale_apply(co.sf_y, ymax);
     double du_x = (u_xmax - u_xmin) / NX;
@@ -507,14 +515,17 @@ Expr* builtin_contourplot(Expr* res) {
     (void)dx; (void)dy; /* suppress unused-variable warning when only world coords used */
 
     /* Allocate and evaluate the grid. */
-    double* grid = malloc(sizeof(double) * (size_t)(NX + 1) * (size_t)(NY + 1));
+    /* A grid past memory (PlotPoints -> 2^32 + 2) aborts with
+     * General::nomem rather than being truncated (audit DensityPlot#2). */
+    bool grid_ok = mth_alloc2_ok((int64_t)NX + 1, (int64_t)NY + 1, 64);
+    double* grid = grid_ok ? malloc(sizeof(double) * (size_t)(NX + 1) * (size_t)(NY + 1)) : NULL;
     if (!grid) {
         iter_spec_free(&xspec); iter_spec_free(&yspec);
         free(co.levels);
         for (size_t i = 0; i < pt_count; i++) expr_free(passthrough[i]);
         free(passthrough);
         if (effective_body) expr_free(effective_body);
-        return NULL;
+        return mth_nomem_abort();
     }
 
     /* ------------------------------------------------------------------ */
@@ -720,7 +731,8 @@ Expr* builtin_contourplot(Expr* res) {
     double* levels;
     size_t n_levels;
     bool levels_owned = false;
-    if (co.levels && co.n_levels > 0) {
+    if (co.levels) {
+        /* an explicit list -- Contours -> {} (or 0) draws none (audit ContourPlot#2) */
         levels = co.levels;
         n_levels = co.n_levels;
     } else {

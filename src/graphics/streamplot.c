@@ -12,6 +12,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "common.h"
 #include "print.h"
 #include <stdlib.h>
 #include <string.h>
@@ -648,6 +649,48 @@ static Expr* default_stream_color(double spd, double spd_min, double spd_max) {
 /* Main builtin                                                         */
 /* ------------------------------------------------------------------ */
 
+/* StreamPlot[{{vx, vy}, {wx, wy}, ...}, xspec, yspec, opts]: Show of one
+ * StreamPlot per field, each in palette colour i unless StreamStyle or a
+ * ColorFunction is given.  NULL when the body is not such a list. */
+static Expr* stream_multi_field(Expr* res) {
+    Expr* f = res->data.function.args[0];
+    if (!head_is(f, SYM_List) || f->data.function.arg_count < 2) return NULL;
+    size_t nf = f->data.function.arg_count;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fi = f->data.function.args[i];
+        if (!head_is(fi, SYM_List) || fi->data.function.arg_count != 2) return NULL;
+    }
+    size_t argc = res->data.function.arg_count;
+    bool styled = false;
+    for (size_t j = 3; j < argc; j++) {
+        Expr* a = res->data.function.args[j];
+        if (is_rule_arg(a) && a->data.function.args[0]->type == EXPR_SYMBOL) {
+            const char* nm = a->data.function.args[0]->data.symbol.name;
+            if (nm == SYM_StreamStyle || nm == SYM_StreamColorFunction || nm == SYM_ColorFunction)
+                styled = true;
+        }
+    }
+    Expr** parts = malloc(sizeof(Expr*) * nf);
+    for (size_t i = 0; i < nf; i++) {
+        Expr** a = malloc(sizeof(Expr*) * (argc + 1));
+        size_t n = 0;
+        a[n++] = expr_copy(f->data.function.args[i]);
+        for (size_t j = 1; j < argc; j++) a[n++] = expr_copy(res->data.function.args[j]);
+        if (!styled) {
+            Expr* ra[2] = { expr_new_symbol(SYM_StreamStyle), palette_color(i) };
+            a[n++] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        }
+        parts[i] = expr_new_function(expr_copy(res->data.function.head), a, n);
+        free(a);
+    }
+    Expr* show = expr_new_function(expr_new_symbol("Show"), parts, nf);
+    free(parts);
+    Expr* r = evaluate(show);
+    expr_free(show);
+    if (!head_is(r, SYM_Graphics)) { expr_free(r); return NULL; }
+    return r;
+}
+
 Expr* builtin_streamplot(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 3) return NULL;
@@ -657,6 +700,13 @@ Expr* builtin_streamplot(Expr* res) {
     if (!(res->data.function.args[0]->type == EXPR_FUNCTION && res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL && res->data.function.args[0]->data.function.head->data.symbol.name == SYM_List)) {
         Expr* rd = plot_redispatch_list_body(res, 2);
         if (rd) return rd;
+    }
+
+    /* Several fields {{vx, vy}, {wx, wy}, ...}: one StreamPlot per field in
+     * its own palette colour, overlaid by Show (audit StreamPlot#2). */
+    {
+        Expr* fr = stream_multi_field(res);
+        if (fr) return fr;
     }
 
     /* Arg 0: {vx, vy} — must be a 2-element List (held, not yet evaluated). */
@@ -699,6 +749,8 @@ Expr* builtin_streamplot(Expr* res) {
 
     /* World-space (scaled) axis bounds — integration happens in data space,
      * but seed placement and PlotRange use world space. */
+    scale_domain_clip(so.sf_x, &xmin, &xmax);
+    scale_domain_clip(so.sf_y, &ymin, &ymax);
     double u_xmin = scale_apply(so.sf_x, xmin), u_xmax = scale_apply(so.sf_x, xmax);
     double u_ymin = scale_apply(so.sf_y, ymin), u_ymax = scale_apply(so.sf_y, ymax);
 
@@ -885,11 +937,33 @@ Expr* builtin_streamplot(Expr* res) {
     iter_spec_restore(yspec.var, old_y);
 
     if (nstreams == 0) {
+        /* No streamline (a zero field, or one never numeric): an empty plot
+         * framed over the given range, not an unevaluated call (audit
+         * StreamPlot#3). */
         free(all_streams); free(all_lengths); free(all_speed);
         iter_spec_free(&xspec); iter_spec_free(&yspec);
-        for (size_t i = 0; i < pt_count; i++) expr_free(passthrough[i]);
+        bool have_pr = false;
+        for (size_t i = 0; i < pt_count; i++)
+            if (is_rule_arg(passthrough[i]) && passthrough[i]->data.function.args[0]->type == EXPR_SYMBOL
+                && passthrough[i]->data.function.args[0]->data.symbol.name == SYM_PlotRange)
+                have_pr = true;
+        Expr** gargs = malloc(sizeof(Expr*) * (pt_count + 2));
+        size_t gn = 0;
+        gargs[gn++] = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        for (size_t i = 0; i < pt_count; i++) gargs[gn++] = passthrough[i];
         free(passthrough);
-        return NULL;
+        if (!have_pr) {
+            Expr* xr[2] = { expr_new_real(xmin), expr_new_real(xmax) };
+            Expr* yr[2] = { expr_new_real(ymin), expr_new_real(ymax) };
+            Expr* rr[2] = { expr_new_function(expr_new_symbol(SYM_List), xr, 2),
+                            expr_new_function(expr_new_symbol(SYM_List), yr, 2) };
+            Expr* ra[2] = { expr_new_symbol(SYM_PlotRange),
+                            expr_new_function(expr_new_symbol(SYM_List), rr, 2) };
+            gargs[gn++] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        }
+        Expr* g = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gn);
+        free(gargs);
+        return g;
     }
 
     /* Speed range for ColorFunction scaling. */

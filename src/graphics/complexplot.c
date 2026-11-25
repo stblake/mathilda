@@ -58,7 +58,7 @@ typedef struct {
  * Fills `o`, builds a passthrough list for Graphics/Graphics3D opts.
  * Returns true on success; on failure frees *pt_out and returns false. */
 static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plot_points,
-                                 CPlotOpts* o,
+                                 bool is3d, CPlotOpts* o,
                                  Expr*** pt_out, size_t* pt_n_out) {
     o->plot_points            = default_plot_points;
     o->plot_points_y          = default_plot_points;
@@ -119,13 +119,25 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plo
         }
     }
 
-    /* Inject defaults: raster plots default to Frame->True, Axes->False. */
-    if (!have_axes && !have_frame) {
+    /* Inject defaults.  The 2D raster defaults to Frame -> True, Axes -> False,
+     * each independently of the other (audit ComplexPlot#3: an explicit
+     * Axes -> True dropped the frame).  The 3D surface is a Graphics3D, which
+     * has no Frame: it defaults to Axes -> True and its own aspect (audit
+     * ComplexPlot3D#3). */
+    if (is3d) {
+        if (!have_axes) {
+            Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
+            pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
+        }
+        *pt_out   = pt;
+        *pt_n_out = n;
+        return true;
+    }
+    if (!have_frame) {
         Expr* fa[2] = { expr_new_symbol(SYM_Frame), expr_new_symbol(SYM_True) };
         pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), fa, 2);
-        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
-        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
-    } else if (!have_axes) {
+    }
+    if (!have_axes) {
         Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
         pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
     }
@@ -574,6 +586,10 @@ static void emit_phase_color_bar(Expr* cfn, Expr*** pt, size_t* pt_n) {
 Expr* builtin_complexplot(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
+    /* Options given as a list, ComplexPlot[f, {z, a, b}, {PlotPoints -> 2}]
+     * (audit ComplexPlot#5). */
+    Expr* flat = plot_splice_option_lists(res, 2);
+    if (flat) { Expr* r = evaluate(flat); expr_free(flat); return r; }
 
     Expr* body = res->data.function.args[0]; /* held */
 
@@ -591,7 +607,7 @@ Expr* builtin_complexplot(Expr* res) {
      * visibly pixelated near zeros/poles where the phase turns fastest. The
      * body is autocompiled per grid (autocompile_new_z), so 400x400 stays well
      * under ~0.5s. */
-    if (!split_cplot_options(res, 2, 400, &opts, &pt, &pt_n)) return NULL;
+    if (!split_cplot_options(res, 2, 400, false, &opts, &pt, &pt_n)) return NULL;
 
     int NX = opts.plot_points, NY = opts.plot_points_y;
     size_t stride = (size_t)(NX + 1);
@@ -689,6 +705,8 @@ static Expr* point3d(double x, double y, double z) {
 Expr* builtin_complexplot3d(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
+    Expr* flat = plot_splice_option_lists(res, 2);
+    if (flat) { Expr* r = evaluate(flat); expr_free(flat); return r; }
 
     Expr* body = res->data.function.args[0]; /* held */
 
@@ -727,7 +745,7 @@ Expr* builtin_complexplot3d(Expr* res) {
      * Keep 200 here — this samples an N×N polygon *mesh*, not a 2D raster, so a
      * 400² grid would be 320k triangles baked into the 3D scene for no
      * comparable gain (the surface is already smoothly shaded). */
-    if (!split_cplot_options(res, 2, 200, &opts, &pt, &pt_n)) return NULL;
+    if (!split_cplot_options(res, 2, 200, true, &opts, &pt, &pt_n)) return NULL;
 
     int NX = opts.plot_points, NY = opts.plot_points_y;
     size_t stride = (size_t)(NX + 1);

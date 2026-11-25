@@ -300,6 +300,17 @@ static const ArityRow ARITY_ROWS[] = {
     { "RandomImage",      0, 2, 0 },
     { "WaveletPhi",       1, 2, 2 },
 
+    /* ---- graphics (Wave 5 G3): a non-option argument past the iterators
+     * is General::nonopt, not a silent unevaluated call (audit Plot#6,
+     * ParametricPlot#6, ListPlot#3).  Option names are not checked here:
+     * the plotters pass Graphics options through. ---- */
+    { "Plot",             2, 2, OPT_NOCHECK },
+    { "ParametricPlot",   2, 3, OPT_NOCHECK },
+    { "PolarPlot",        2, 2, OPT_NOCHECK },
+    { "Plot3D",           3, 3, OPT_NOCHECK },
+    { "ParametricPlot3D", 2, 3, OPT_NOCHECK },
+    { "ListPlot",         1, 1, OPT_NOCHECK },
+
     /* ---- files and packed arrays ---- */
     { "ReadList",         1, 3, 1 },
     { "ToNDArray",        1, 1, 1 },

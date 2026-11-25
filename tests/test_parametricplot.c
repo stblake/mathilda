@@ -26,9 +26,10 @@ void test_parametricplot_invalid_args_unevaluated(void) {
     /* Symbolic bounds: cannot numericize → stays unevaluated. */
     assert_eval_eq("ParametricPlot[{t, t}, {t, a, b}]",
                    "ParametricPlot[{t, t}, {t, a, b}]", 0);
-    /* Wrong curve spec — 3-element list is not {fx, fy}. */
-    assert_eval_eq("ParametricPlot[{t, t, t}, {t, 0, 1}]",
-                   "ParametricPlot[{t, t, t}, {t, 0, 1}]", 0);
+    /* Wrong curve spec — a 3-element list is not {fx, fy}: no point is
+     * plottable, so the plot is empty, as for a body never numeric (audit
+     * ParametricPlot#4). */
+    assert_eval_eq("ParametricPlot[{t, t, t}, {t, 0, 1}][[1]]", "{}", 0);
     /* Missing iterator spec. */
     assert_eval_eq("ParametricPlot[{t, t}]",
                    "ParametricPlot[{t, t}]", 0);

@@ -438,6 +438,82 @@ static char* text_string(const Expr* e) {
     size_t n = strlen(tmp) + 1; char* s = (char*)malloc(n); if (s) memcpy(s, tmp, n); return s;
 }
 
+static int is_bezier(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, "BezierCurve") == 0;
+}
+
+/* The data-space vertices of an Arrow's curve: a point list, or a
+ * BezierCurve[{p0, ..., pn}] sampled as composite Bezier segments of degree
+ * min(3, n) sharing their end points (the default SplineDegree).  malloc'd
+ * {x0, y0, x1, y1, ...}; NULL when there are fewer than two points. */
+static double* arrow_data_points(const Expr* a, size_t* n_out) {
+    *n_out = 0;
+    const Expr* pts = is_bezier(a) && a->data.function.arg_count >= 1
+                      ? a->data.function.args[0] : a;
+    if (!head_is(pts, SYM_List)) return NULL;
+    size_t np = pts->data.function.arg_count, k = 0;
+    double* P = malloc(sizeof(double) * 2 * (np ? np : 1));
+    for (size_t i = 0; i < np; i++) {
+        double x, y;
+        if (get_pt(pts->data.function.args[i], &x, &y)) { P[2 * k] = x; P[2 * k + 1] = y; k++; }
+    }
+    if (k < 2) { free(P); return NULL; }
+    if (!is_bezier(a)) { *n_out = k; return P; }
+    const int per = 32;                      /* samples per segment */
+    size_t cap = (k / 1 + 1) * (size_t)per + 1;
+    double* D = malloc(sizeof(double) * 2 * cap);
+    size_t m = 0;
+    D[0] = P[0]; D[1] = P[1]; m = 1;
+    for (size_t s0 = 0; s0 + 1 < k; ) {
+        size_t deg = k - 1 - s0 < 3 ? k - 1 - s0 : 3;
+        double q[8];
+        for (int j = 1; j <= per; j++) {
+            double t = (double)j / per;
+            for (size_t c = 0; c <= deg; c++) { q[2 * c] = P[2 * (s0 + c)]; q[2 * c + 1] = P[2 * (s0 + c) + 1]; }
+            for (size_t r = deg; r > 0; r--)       /* de Casteljau */
+                for (size_t c = 0; c < r; c++) {
+                    q[2 * c] += t * (q[2 * c + 2] - q[2 * c]);
+                    q[2 * c + 1] += t * (q[2 * c + 3] - q[2 * c + 1]);
+                }
+            D[2 * m] = q[0]; D[2 * m + 1] = q[1]; m++;
+        }
+        s0 += deg;
+    }
+    free(P);
+    *n_out = m;
+    return D;
+}
+
+/* Trim arc length s1 off the start and s2 off the end of the polyline
+ * D[0 .. n) in place (Arrow's setback); returns the new vertex count, 0 when
+ * the setbacks consume the whole line. */
+static size_t polyline_setback(double* D, size_t n, double s1, double s2) {
+    double total = 0.0;
+    for (size_t i = 1; i < n; i++) total += hypot(D[2 * i] - D[2 * i - 2], D[2 * i + 1] - D[2 * i - 1]);
+    if (s1 < 0.0) s1 = 0.0;
+    if (s2 < 0.0) s2 = 0.0;
+    if (s1 + s2 >= total) return 0;
+    double lo = s1, hi = total - s2;
+    double* out = malloc(sizeof(double) * 2 * (n + 2));
+    size_t m = 0;
+    double acc = 0.0;
+    for (size_t i = 1; i < n; i++) {
+        double ax = D[2 * i - 2], ay = D[2 * i - 1], bx = D[2 * i], by = D[2 * i + 1];
+        double L = hypot(bx - ax, by - ay);
+        double a0 = acc, a1 = acc + L;
+        acc = a1;
+        if (a1 < lo || a0 > hi || L <= 0.0) continue;
+        double u0 = (lo > a0) ? (lo - a0) / L : 0.0;
+        double u1 = (hi < a1) ? (hi - a0) / L : 1.0;
+        if (m == 0) { out[0] = ax + u0 * (bx - ax); out[1] = ay + u0 * (by - ay); m = 1; }
+        out[2 * m] = ax + u1 * (bx - ax); out[2 * m + 1] = ay + u1 * (by - ay); m++;
+    }
+    memcpy(D, out, sizeof(double) * 2 * m);
+    free(out);
+    return m;
+}
+
 static void draw_prim(Emit* e, const Expr* p, double plot_w);
 
 /* A List is a directive scope, as in Mathematica: a colour, Thickness or
@@ -596,6 +672,41 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
         double px = X(e, x1), py = Y(e, y1);
         buf_catf(e->c, "%.3f %.3f %.3f %.3f re f\n", px, py, X(e, x2) - px, Y(e, y2) - py);
         if (gsi >= 0) buf_cat(e->c, "Q\n");
+        return;
+    }
+
+    /* Arrow[BezierCurve[pts]] and the setback forms Arrow[pts, s] /
+     * Arrow[pts, {s1, s2}] (audit Arrow#2/#3): reduced to a plain
+     * Arrow[polyline] in data coordinates, which the branch below draws. */
+    if (head_is(p, SYM_Arrow) && p->data.function.arg_count >= 1
+        && (p->data.function.arg_count == 2 || is_bezier(p->data.function.args[0]))) {
+        size_t n = 0;
+        double* D = arrow_data_points(p->data.function.args[0], &n);
+        if (!D) return;
+        if (p->data.function.arg_count == 2) {
+            const Expr* sb = p->data.function.args[1];
+            double s1 = 0.0, s2 = 0.0;
+            if (head_is(sb, SYM_List) && sb->data.function.arg_count == 2) {
+                to_double(sb->data.function.args[0], &s1);
+                to_double(sb->data.function.args[1], &s2);
+            } else {
+                to_double(sb, &s1);
+                s2 = s1;
+            }
+            n = polyline_setback(D, n, s1, s2);
+        }
+        if (n >= 2) {
+            Expr** pts = malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++)
+                pts[i] = expr_new_function(expr_new_symbol(SYM_List),
+                                           (Expr*[]){ expr_new_real(D[2 * i]), expr_new_real(D[2 * i + 1]) }, 2);
+            Expr* one = expr_new_function(expr_new_symbol(SYM_Arrow),
+                (Expr*[]){ expr_new_function(expr_new_symbol(SYM_List), pts, n) }, 1);
+            free(pts);
+            draw_prim(e, one, plot_w);
+            expr_free(one);
+        }
+        free(D);
         return;
     }
 
@@ -946,8 +1057,8 @@ int graphics_export_pdf(const Expr* g, const char* path) {
         StyleState saved;
         style_save(&e, &saved);
         const Expr* ps = find_option(g, SYM_PlotStyle);
-        if (head_is(ps, SYM_List))
-            ps = ps->data.function.arg_count ? ps->data.function.args[0] : NULL;
+        if (head_is(ps, SYM_List))      /* several: baked per curve (audit Directive#1) */
+            ps = ps->data.function.arg_count == 1 ? ps->data.function.args[0] : NULL;
         if (ps) apply_style(&e, ps, rw);
         draw_prim(&e, prims, rw);
         style_restore(&e, &saved);

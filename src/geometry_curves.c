@@ -246,6 +246,39 @@ static Expr* gc_line_length(const Expr* line) {
 
 /* ---- Circle / Disk / Annulus ------------------------------------------ */
 
+/* A radius (or semi-axis) the measures can use: not a List, a String, or a
+ * non-real number (Disk[{0, 0}, I] is no region -- its "area" Pi I^2 = -Pi
+ * was a negative measure, audit Area#6 / Disk#4).  A symbolic radius is
+ * taken as given (positive, as the reference does). */
+static bool gc_scalar_ok(const Expr* r) {
+    if (r->type == EXPR_STRING || head_is(r, SYM_List)) return false;
+    if (head_is(r, SYM_Complex)) return false;
+    return true;
+}
+
+/* Disk[] / Circle[] are 2-D primitives: the centre, when given, is a List of
+ * two scalars, and the radius a valid scalar or a List of two (audit Disk#4,
+ * RegionMeasure#3: Disk[{0, 0, 0}, 1] and Disk[1, 2] are no regions, and
+ * every measure head leaves them unevaluated). */
+static bool gc_round_ok(const Expr* d) {
+    size_t n = gc_len(d);
+    if (n >= 1) {
+        const Expr* c = gc_at(d, 0);
+        if (!head_is(c, SYM_List) || gc_len(c) != 2) return false;
+        if (!gc_scalar_ok(gc_at(c, 0)) || !gc_scalar_ok(gc_at(c, 1))) return false;
+    }
+    if (n >= 2) {
+        const Expr* r = gc_at(d, 1);
+        if (head_is(r, SYM_List)) {
+            if (gc_len(r) != 2 || !gc_scalar_ok(gc_at(r, 0)) || !gc_scalar_ok(gc_at(r, 1)))
+                return false;
+        } else if (!gc_scalar_ok(r)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* Radius spec of Circle/Disk: arg 1, default 1. */
 static const Expr* gc_radius(const Expr* r) {
     return gc_len(r) >= 2 ? gc_at(r, 1) : NULL;
@@ -293,13 +326,56 @@ static Expr* gc_span(const Expr* t1, const Expr* t2, bool* full) {
     return ad;
 }
 
+/* EllipticE[t, m], with a phase t that is an integer multiple n of Pi/2
+ * reduced to n EllipticE[m] (E is quasi-periodic: E(t + Pi, m) = E(t, m) +
+ * 2 E(m)), so the half ellipse {0, Pi} measures 2 b EllipticE[m]. */
+static Expr* gc_ellipe_phase(const Expr* t, const Expr* m) {
+    Expr* q = gc_ev(gc_mul(gc_mul(expr_new_integer(2), gc_c(t)), gc_fn2(SYM_Power, gc_pi(), expr_new_integer(-1))));
+    if (q->type == EXPR_INTEGER)
+        return gc_mul(q, gc_fn1(SYM_EllipticE, gc_c(m)));
+    expr_free(q);
+    return gc_fn2(SYM_EllipticE, gc_c(t), gc_c(m));
+}
+
+/* The elliptical arc Circle[c, {a, b}, {t1, t2}] (t the parametric angle,
+ * {a Cos[t], b Sin[t]}): its speed is b Sqrt[1 - m Sin[t]^2] with
+ * m = 1 - a^2/b^2, so the length is b (EllipticE[t2, m] - EllipticE[t1, m])
+ * for t1 <= t2 (audit ArcLength#3).  Reversed numeric angles measure the
+ * same arc; a span of a full turn or more is the whole perimeter. */
+static Expr* gc_ellipse_arc(const Expr* rr, const Expr* t1, const Expr* t2) {
+    Expr* a = gc_absnum(gc_at(rr, 0));
+    Expr* b = gc_absnum(gc_at(rr, 1));
+    bool full;
+    Expr* sp = gc_span(t1, t2, &full);
+    expr_free(sp);
+    if (full) {
+        Expr* out = gc_ellipse_perimeter(a, b);
+        expr_free(a); expr_free(b);
+        return out;
+    }
+    const Expr* lo = t1; const Expr* hi = t2;
+    Expr* rev = gc_ev(gc_fn2(SYM_Greater, gc_c(t1), gc_c(t2)));
+    if (rev->type == EXPR_SYMBOL && rev->data.symbol.name == SYM_True) { lo = t2; hi = t1; }
+    expr_free(rev);
+    Expr* m = gc_sub(expr_new_integer(1),
+                     gc_mul(gc_sq(gc_c(a)), gc_fn2(SYM_Power, gc_sq(gc_c(b)), expr_new_integer(-1))));
+    Expr* me = gc_ev(m);
+    Expr* e2 = gc_ellipe_phase(hi, me);
+    Expr* e1 = gc_ellipe_phase(lo, me);
+    expr_free(me);
+    Expr* out = gc_ev(gc_fn1(SYM_Simplify, gc_mul(b, gc_sub(e2, e1))));
+    expr_free(a);
+    return out;
+}
+
 static Expr* gc_circle_length(const Expr* c) {
     size_t n = gc_len(c);
-    if (n > 3) return NULL;
+    if (n > 3 || !gc_round_ok(c)) return NULL;
     const Expr* r = gc_radius(c);
     if (n == 3) {                                       /* arc */
         const Expr* th = gc_at(c, 2);
-        if (!head_is(th, SYM_List) || gc_len(th) != 2 || head_is(r, SYM_List)) return NULL;
+        if (!head_is(th, SYM_List) || gc_len(th) != 2) return NULL;
+        if (head_is(r, SYM_List)) return gc_ellipse_arc(r, gc_at(th, 0), gc_at(th, 1));
         bool full;
         Expr* sp = gc_span(gc_at(th, 0), gc_at(th, 1), &full);
         return gc_ev(gc_mul(gc_absnum(r), sp));
@@ -321,7 +397,7 @@ static Expr* gc_circle_length(const Expr* c) {
  * elliptical sector, so Disk[c, {1, 2}, {0, Pi}] is half the ellipse). */
 static Expr* gc_disk_area(const Expr* d) {
     size_t n = gc_len(d);
-    if (n > 3) return NULL;
+    if (n > 3 || !gc_round_ok(d)) return NULL;
     const Expr* r = gc_radius(d);
     Expr* ab;
     if (!r) ab = expr_new_integer(1);
@@ -438,6 +514,7 @@ Expr* geom_curved_area(const Expr* region) { return gc_area_of(region); }
 Expr* geom_curved_perimeter(const Expr* region) {
     GcAnnulus A;
     if (gc_annulus(region, &A)) return gc_annulus_perimeter(&A);
+    if (head_is(region, SYM_Disk) && !gc_round_ok(region)) return NULL;
     if (head_is(region, SYM_Disk) && gc_len(region) == 3) {
         /* a circular sector: the arc plus the two radii (audit Disk#1) */
         const Expr* r = gc_at(region, 1);
@@ -467,6 +544,7 @@ Expr* geom_curved_perimeter(const Expr* region) {
 
 Expr* geom_curved_centroid(const Expr* region) {
     GcAnnulus A;
+    if (head_is(region, SYM_Disk) && !gc_round_ok(region)) return NULL;
     if (gc_annulus(region, &A)) {
         if (!A.t1) return gc_c(A.c);
         return gc_sector_centroid(A.c, A.r1, A.r2, A.t1, A.t2);
@@ -734,6 +812,24 @@ static Expr* gc_arclength_param(const Expr* curve, const Expr* range, const Expr
     return gc_ev(r);
 }
 
+/* The dimension of a region primitive ArcLength / RegionMeasure know, or -1:
+ * 0 for a Point, 2 for the planar regions, 3 for the solids (a Ball or Cuboid
+ * of three coordinates).  1 (Line, Circle) is not reported here: ArcLength
+ * measures those. */
+static int gc_region_dim(const Expr* g) {
+    if (head_is(g, SYM_Point)) return 0;
+    if (head_is(g, SYM_Disk) || head_is(g, SYM_Annulus) || head_is(g, SYM_Polygon)
+        || head_is(g, SYM_Triangle) || head_is(g, SYM_Rectangle))
+        return 2;
+    if (head_is(g, SYM_Sphere)) return 2;
+    if (head_is(g, SYM_Ball) || head_is(g, SYM_Cuboid)) {
+        if (gc_len(g) == 0) return 3;
+        const Expr* c = gc_at(g, 0);
+        if (head_is(c, SYM_List) && gc_len(c) >= 2) return (int)gc_len(c);
+    }
+    return -1;
+}
+
 Expr* builtin_arclength(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t npos;
@@ -744,7 +840,9 @@ Expr* builtin_arclength(Expr* res) {
         Expr* r = NULL;
         if (head_is(g, SYM_Line)) r = gc_line_length(g);
         else if (head_is(g, SYM_Circle)) r = gc_circle_length(g);
-        else if (head_is(g, SYM_Point) || head_is(g, SYM_Disk) || head_is(g, SYM_Annulus))
+        else if (gc_region_dim(g) >= 0)
+            /* a point set or a region of dimension 2 or more has no
+             * 1-D measure (audit ArcLength#4: Polygon as Disk) */
             return expr_new_symbol(SYM_Undefined);
         return r ? gc_apply_wp(r, wp) : NULL;
     }
@@ -754,9 +852,44 @@ Expr* builtin_arclength(Expr* res) {
 
 /* ---- RegionMeasure ------------------------------------------------------ */
 
+/* RegionMeasure[g] evaluated, or NULL when it stays unevaluated. */
+static Expr* gc_call_measure(const Expr* g) {
+    Expr* r = gc_ev(gc_fn1(SYM_RegionMeasure, gc_c(g)));
+    if (head_is(r, SYM_RegionMeasure)) { expr_free(r); return NULL; }
+    return r;
+}
+
+/* The counting measure of Point[p] / Point[{p1, ..., pn}]: 1 or n (audit
+ * Point#2), NULL for a malformed point. */
+static Expr* gc_point_count(const Expr* g) {
+    if (gc_len(g) != 1) return NULL;
+    const Expr* p = gc_at(g, 0);
+    if (!head_is(p, SYM_List) || gc_len(p) == 0) return NULL;
+    bool nested = head_is(gc_at(p, 0), SYM_List);
+    for (size_t i = 0; i < gc_len(p); i++)
+        if (head_is(gc_at(p, i), SYM_List) != nested) return NULL;
+    return expr_new_integer(nested ? (int64_t)gc_len(p) : 1);
+}
+
+/* The dimension the measure of `g` is taken in, or -1 when unknown. */
+static int gc_measure_dim(const Expr* g) {
+    if (head_is(g, SYM_Line) || head_is(g, SYM_Circle)) return 1;
+    return gc_region_dim(g);
+}
+
 Expr* builtin_regionmeasure(Expr* res) {
-    if (res->type != EXPR_FUNCTION || gc_len(res) != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (gc_len(res) == 2) {
+        /* RegionMeasure[reg, d]: the measure in the region's own dimension
+         * (audit Line#3); another d is left unevaluated. */
+        const Expr* d = gc_at(res, 1);
+        int k = gc_measure_dim(gc_at(res, 0));
+        if (k < 0 || d->type != EXPR_INTEGER || d->data.integer != k) return NULL;
+        return gc_call_measure(gc_at(res, 0));
+    }
+    if (gc_len(res) != 1) return NULL;
     const Expr* g = gc_at(res, 0);
+    if (head_is(g, SYM_Point)) return gc_point_count(g);
     if (head_is(g, SYM_Polygon) || head_is(g, SYM_Rectangle) || head_is(g, SYM_Triangle)) {
         Expr* call = gc_fn1(SYM_Area, gc_c(g));
         Expr* r = gc_ev(call);

@@ -142,6 +142,24 @@ static bool is_color_head_ap(const Expr* e) {
 /* t is already in [0,1]. Custom ColorFunction: try f[t]; named ramp string:
  * look up in plot_common's shared table; no ColorFunction: the "Greyscale"
  * ramp (white at t=0, black at t=1) -- Mathematica's own ArrayPlot default. */
+/* A colour directive that is not fully opaque: RGBColor[r, g, b, a],
+ * GrayLevel[g, a], Hue[h, s, b, a] with a < 1, or an Opacity[...] (alone or
+ * in a Directive). */
+static bool ap_translucent(const Expr* c) {
+    if (!c || c->type != EXPR_FUNCTION || c->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = c->data.function.head->data.symbol.name;
+    size_t n = c->data.function.arg_count;
+    if (h == SYM_Opacity) return true;
+    if (h == SYM_Directive) {
+        for (size_t i = 0; i < n; i++) if (ap_translucent(c->data.function.args[i])) return true;
+        return false;
+    }
+    size_t ai = (h == SYM_RGBColor || h == SYM_Hue) ? 3 : (h == SYM_GrayLevel) ? 1 : 0;
+    if (!ai || n <= ai) return false;
+    double a;
+    return expr_to_real_double(c->data.function.args[ai], &a) && a < 1.0;
+}
+
 static Expr* ap_color(Expr* cfn, double t) {
     if (!cfn) return named_color_ramp("Greyscale", t);
     if (cfn->type == EXPR_STRING) {
@@ -300,15 +318,19 @@ Expr* builtin_arrayplot(Expr* res) {
                     color = ap_color(opts.color_function, t);
                 }
             }
+            bool clear = ap_translucent(color);
             prims[np++] = color;
 
             /* Overlap one full cell into the later-drawn neighbours (+x within
              * the row, and -y since rows are emitted top→bottom so y0 decreases)
              * — they overdraw the overlap, so each cell still shows its own
              * colour — clamped at the array bounds. Closes the sub-pixel seams
-             * that otherwise leave the background showing between adjacent fills. */
-            double x1 = x0 + 2.0; if (x1 > (double)cols) x1 = (double)cols;
-            double yb = y0 - 1.0; if (yb < 0.0) yb = 0.0;
+             * that otherwise leave the background showing between adjacent fills.
+             * Only an opaque fill hides the overlap: a translucent cell covers
+             * exactly its own square, or its neighbour would blend over it
+             * (audit ArrayPlot#2). */
+            double x1 = x0 + (clear ? 1.0 : 2.0); if (x1 > (double)cols) x1 = (double)cols;
+            double yb = y0 - (clear ? 0.0 : 1.0); if (yb < 0.0) yb = 0.0;
             Expr* p1[2] = { expr_new_real(x0), expr_new_real(yb) };
             Expr* p2[2] = { expr_new_real(x1), expr_new_real(y0 + 1.0) };
             Expr* ra[2] = { expr_new_function(expr_new_symbol(SYM_List), p1, 2),

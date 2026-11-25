@@ -28,6 +28,9 @@
 #include "render3d.h"
 #include "sym_names.h"
 #include "plot_common.h"
+#include "message.h"
+#include "print.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -63,13 +66,15 @@ static void pv_push(PtrVec* p, const Expr* e) {
 
 /* Collect graphics from `e`, descending into Lists. False on anything that
  * is neither a graphics object nor a List of them. */
-static bool collect_graphics(const Expr* e, PtrVec* gs) {
+/* *bad receives the first element that is not graphics. */
+static bool collect_graphics(const Expr* e, PtrVec* gs, const Expr** bad) {
     if (is_graphics(e)) { pv_push(gs, e); return true; }
     if (head_is(e, SYM_List)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            if (!collect_graphics(e->data.function.args[i], gs)) return false;
+            if (!collect_graphics(e->data.function.args[i], gs, bad)) return false;
         return true;
     }
+    *bad = e;
     return false;
 }
 
@@ -172,11 +177,15 @@ static void prims_extent(const Expr* e, size_t d, Box* b) {
         return;
     }
     if ((head_is(e, SYM_Disk) || head_is(e, SYM_Circle)) && d == 2) {
-        /* Circle[] / Circle[c] / Circle[c, r]: unit circle at the origin by default. */
-        double c[2] = { 0.0, 0.0 }, r = 1.0;
+        /* Circle[] / Circle[c] / Circle[c, r]: unit circle at the origin by
+         * default; Circle[c, {rx, ry}] an ellipse (audit Show#3). */
+        double c[2] = { 0.0, 0.0 }, rr[2] = { 1.0, 1.0 };
         if (n >= 1 && !read_point(e->data.function.args[0], 2, c)) return;
-        if (n >= 2) gfx_coerce_double(e->data.function.args[1], &r);
-        double lo[2] = { c[0] - r, c[1] - r }, hi[2] = { c[0] + r, c[1] + r };
+        if (n >= 2 && !read_point(e->data.function.args[1], 2, rr)
+            && gfx_coerce_double(e->data.function.args[1], &rr[0]))
+            rr[1] = rr[0];
+        rr[0] = fabs(rr[0]); rr[1] = fabs(rr[1]);
+        double lo[2] = { c[0] - rr[0], c[1] - rr[1] }, hi[2] = { c[0] + rr[0], c[1] + rr[1] };
         box_add(b, lo, 2); box_add(b, hi, 2);
         return;
     }
@@ -226,6 +235,12 @@ static void prims_extent(const Expr* e, size_t d, Box* b) {
         coords_extent(e->data.function.args[0], d, b);
     } else if (head_is(e, SYM_Rectangle)) {
         for (size_t i = 0; i < n && i < 2; i++) coords_extent(e->data.function.args[i], d, b);
+        double c[2];
+        if (n == 1 && d == 2 && read_point(e->data.function.args[0], 2, c)) {
+            /* Rectangle[{x, y}] is the unit square up to {x + 1, y + 1} (audit Show#4) */
+            double hi[2] = { c[0] + 1.0, c[1] + 1.0 };
+            box_add(b, hi, 2);
+        }
     } else if (head_is(e, SYM_Text) && n >= 2) {
         coords_extent(e->data.function.args[1], d, b);
     }
@@ -434,7 +449,14 @@ Expr* builtin_show(Expr* res) {
         } else if (opts.n > 0) {
             ok = false;                              /* graphics after options */
         } else {
-            ok = collect_graphics(a, &gs);
+            const Expr* bad = NULL;
+            ok = collect_graphics(a, &gs, &bad);
+            if (!ok && bad) {
+                /* audit Show#5: say which argument is not graphics */
+                char* bs = expr_to_string((Expr*)bad);
+                mth_message("Show", "gtype", "%s is not a type of graphics.", bs ? bs : "?");
+                free(bs);
+            }
         }
     }
     if (ok && gs.n == 0) ok = false;

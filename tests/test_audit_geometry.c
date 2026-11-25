@@ -114,6 +114,55 @@ static void test_wave4_region_member_more(void) {
     audit_true("RegionMember#4", "RegionMember[Polygon[{{{0,0},{1,0},{0,1}},{{2,2},{3,2},{2,3}}}], {5/2,5/2}]");
 }
 
+/* ================================================================== */
+/* Wave 5 G3: point sets, lower/higher-dimensional centroids, Disk     */
+/* validation, the elliptical arc, machine overflow                    */
+/* ================================================================== */
+
+/* Disk / Circle are 2-D primitives with a real radius (gc_round_ok). */
+static void test_wave5_disk_validation(void) {
+    audit_chk("Disk#4", "Area[Disk[{0,0,0},1]]", "Area[Disk[{0, 0, 0}, 1]]");
+    audit_chk("Disk#4", "Area[Disk[1,2]]", "Area[Disk[1, 2]]");
+    audit_chk("Disk#4", "RegionCentroid[Disk[1,2]]", "RegionCentroid[Disk[1, 2]]");
+    audit_chk("Disk#4", "Head[Area[Disk[{0,0},\"a\"]]]", "Area");
+    audit_chk("Disk#4", "Area[Disk[{0,0},I]]", "Area[Disk[{0, 0}, I]]");
+    audit_chk("Area#6", "Area[Disk[{0,0},I]]", "Area[Disk[{0, 0}, I]]");
+    audit_chk("RegionMeasure#3", "RegionMeasure[Disk[{0,0,0},1]]", "RegionMeasure[Disk[{0, 0, 0}, 1]]");
+    audit_chk("Disk#4", "{Area[Disk[{1,2},3]], RegionCentroid[Disk[{1,2},3]], Area[Disk[]]}", "{9 Pi, {1, 2}, Pi}");
+}
+
+/* Point sets and higher-dimensional regions in ArcLength / Area / RegionMeasure. */
+static void test_wave5_measures(void) {
+    audit_chk("ArcLength#4", "{ArcLength[Polygon[{{0,0},{1,0},{0,1}}]], ArcLength[Disk[]]}", "{Undefined, Undefined}");
+    audit_chk("Point#1", "{Area[Point[{1,2}]], ArcLength[Point[{1,2}]]}", "{Undefined, Undefined}");
+    audit_chk("Point#2", "RegionMeasure[Point[{{0,0},{1,1}}]]", "2");
+    audit_chk("Line#3", "RegionMeasure[Line[{{0,0},{1,0}}], 1]", "1");
+    audit_chk("Line#3", "RegionMeasure[Polygon[{{0,0},{1,0},{0,1}}], 2]", "1/2");
+    audit_chk("ArcLength#3", "ArcLength[Circle[{0,0},{1,2},{0,Pi}]]", "4 EllipticE[3/4]");
+    audit_true("ArcLength#3", "Abs[N[ArcLength[Circle[{0,0},{1,2},{0,Pi/3}]]] - NIntegrate[Sqrt[Sin[t]^2 + 4 Cos[t]^2], {t, 0, Pi/3}]] < 10^-8");
+    audit_true("Area#5", "Abs[Area[Polygon[{{0,0},{1,0},{0,1}}*1.*10^200]] / (5*10^399) - 1] < 10^-12");
+    audit_true("Area#5", "Abs[Area[Polygon[{{0,0},{1,0},{0,1}}*1.*10^-200]] / (5*10^-401) - 1] < 10^-12");
+}
+
+/* RegionCentroid of points, curves and solids (src/geometry_regions.c). */
+static void test_wave5_centroids(void) {
+    audit_chk("Point#2", "{RegionCentroid[Point[{{0,0},{2,0},{1,3}}]], RegionMember[Point[{1,2}],{1,2}], RegionMember[Point[{1,2}],{1,3}]}",
+              "{{1, 1}, True, False}");
+    audit_chk("Line#2", "RegionCentroid[Line[{{0,0},{2,0}}]]", "{1, 0}");
+    audit_chk("RegionCentroid#4", "RegionCentroid[Line[{{0,0},{2,0}}]]", "{1, 0}");
+    audit_chk("RegionCentroid#4", "RegionCentroid[Line[{{0,0},{2,0},{2,2}}]]", "{3/2, 1/2}");
+    audit_chk("Circle#3", "RegionCentroid[Circle[{1,2},3]]", "{1, 2}");
+    audit_chk("Circle#3", "RegionCentroid[Circle[{0,0},1,{0,Pi}]]", "{0, 2/Pi}");
+    audit_chk("RegionCentroid#5", "RegionCentroid[Ball[{1,2,3},1]]", "{1, 2, 3}");
+    audit_chk("RegionCentroid#5", "RegionCentroid[Cuboid[{0,0,0},{2,4,6}]]", "{1, 2, 3}");
+    audit_chk("RegionCentroid#5", "RegionCentroid[Polygon[{{0,0,0},{2,0,0},{2,2,0},{0,2,0}}]]", "{1, 1, 0}");
+}
+
+static void test_wave5_hull_member(void) {
+    audit_chk("ConvexHullRegion#2", "ConvexHullRegion[Polygon[{{0,0},{2,0},{1,1},{2,2},{0,2}}]]", "Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}]");
+    audit_chk("RegionMember#7", "RegionMember[Polygon[{{0,0},{2,0},{1,0}}], {1,0}]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_region_member_point_list);
@@ -125,5 +174,9 @@ int main(void) {
     TEST(test_wave4_compound_polygons);
     TEST(test_wave4_exact_irrational);
     TEST(test_wave4_region_member_more);
+    TEST(test_wave5_disk_validation);
+    TEST(test_wave5_measures);
+    TEST(test_wave5_centroids);
+    TEST(test_wave5_hull_member);
     return audit_finish("audit_geometry");
 }

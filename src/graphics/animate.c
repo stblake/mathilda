@@ -40,6 +40,7 @@ bool gui_session_available(void);   /* render.c (render_common.h pulls in raylib
 #include "eval.h"
 #include "modular.h"
 #include "print.h"
+#include "ndarray.h"   /* a packed {t, {v1, ...}} value list */
 
 /* From plot_common.c ($RaylibVerbose). Declared directly rather than via
  * plot_common.h, whose is_rule_arg prototype clashes with the local one below. */
@@ -64,6 +65,11 @@ typedef struct {
     const char* var_sym;
     double      tmin, tmax;
     double      t;          /* current value (= tmin + phase*(tmax-tmin)) */
+    /* {t, {v1, ..., vn}}: t runs over the positions 0 .. n - 1 and the
+     * variable is bound to the value there (audit Animate#3); NULL for a
+     * numeric range. */
+    Expr**      values;     /* owned */
+    size_t      n_values;
 } AnimIter;
 
 /* ------------------------------------------------------------------ */
@@ -213,6 +219,27 @@ static bool numericize(const Expr* e, double* out) {
     if (r->type == EXPR_REAL)    { *out = r->data.real;            ok = true; }
     if (r->type == EXPR_INTEGER) { *out = (double)r->data.integer; ok = true; }
     expr_free(r);
+    return ok;
+}
+
+/* {var, {v1, ..., vn}}: the values (owned copies) in *values / *nv. */
+static bool parse_iter_values(const Expr* e, const char** var_sym, Expr*** values, size_t* nv) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_List || e->data.function.arg_count != 2)
+        return false;
+    const Expr* ve = e->data.function.args[0];
+    if (!ve || ve->type != EXPR_SYMBOL) return false;
+    Expr* mat = is_ndarray(e->data.function.args[1]) ? ndarray_to_nested_list(e->data.function.args[1]) : NULL;
+    const Expr* l = mat ? mat : e->data.function.args[1];
+    bool ok = l->type == EXPR_FUNCTION && l->data.function.head->type == EXPR_SYMBOL
+              && l->data.function.head->data.symbol.name == SYM_List && l->data.function.arg_count > 0;
+    if (ok) {
+        *var_sym = ve->data.symbol.name;
+        *nv = l->data.function.arg_count;
+        *values = malloc(sizeof(Expr*) * *nv);
+        for (size_t i = 0; i < *nv; i++) (*values)[i] = expr_copy(l->data.function.args[i]);
+    }
+    if (mat) expr_free(mat);
     return ok;
 }
 
@@ -378,7 +405,15 @@ static void draw_iter_slider(const AnimIter* it, int win_w,
 
     /* Current value */
     char val[32];
-    snprintf(val, sizeof(val), "%.5g", it->t);
+    if (it->values) {              /* {t, {v1, ...}}: the value at the position */
+        size_t idx = (size_t)(it->t + 0.5);
+        if (idx >= it->n_values) idx = it->n_values - 1;
+        char* vs = expr_to_string(it->values[idx]);
+        snprintf(val, sizeof(val), "%s", vs ? vs : "?");
+        free(vs);
+    } else {
+        snprintf(val, sizeof(val), "%.5g", it->t);
+    }
     int val_w = label_font_measure_px(val, 12);
     label_font_draw_px(val, (int)((float)win_w - VALUE_W / 2.0f - (float)val_w / 2.0f),
              (int)(mid_y - 6), 12, (Color){40,40,80,255});
@@ -549,7 +584,14 @@ static void graphics_animate(const Expr* body,
         int btok[MAX_ITERS];
         for (int k = 0; k < n_iters; k++) {
             btok[k] = mth_bind_push_name(iters[k].var_sym, 0);
-            Expr* tval = expr_new_real(iters[k].t);
+            Expr* tval;
+            if (iters[k].values) {
+                size_t idx = (size_t)(iters[k].t + 0.5);
+                if (idx >= iters[k].n_values) idx = iters[k].n_values - 1;
+                tval = expr_copy(iters[k].values[idx]);
+            } else {
+                tval = expr_new_real(iters[k].t);
+            }
             Expr* vpat = expr_new_symbol(iters[k].var_sym);
             symtab_add_own_value(iters[k].var_sym, vpat, tval);
             expr_free(vpat);
@@ -823,7 +865,14 @@ Expr* builtin_animate(Expr* res) {
         Expr* arg_ev = eval_control_spec(res->data.function.args[i]);
         const char* vs = NULL;
         double lo = 0.0, hi = 1.0;
+        Expr** vals = NULL;
+        size_t nv = 0;
         bool ok = parse_iter_spec(arg_ev, &vs, &lo, &hi);
+        if (!ok && parse_iter_values(arg_ev, &vs, &vals, &nv)) {
+            ok = true;                       /* {t, {v1, ..., vn}} */
+            lo = 0.0;
+            hi = (double)(nv - 1);
+        }
         expr_free(arg_ev);
         if (!ok) { opts_start = i; break; }
         if (lo > hi) { double tmp = lo; lo = hi; hi = tmp; }
@@ -831,6 +880,8 @@ Expr* builtin_animate(Expr* res) {
         iters[n_iters].tmin   = lo;
         iters[n_iters].tmax   = hi;
         iters[n_iters].t      = lo;
+        iters[n_iters].values = vals;
+        iters[n_iters].n_values = nv;
         n_iters++;
         opts_start = i + 1;
     }
@@ -843,5 +894,9 @@ Expr* builtin_animate(Expr* res) {
 
     graphics_animate(body, iters, n_iters, &opts);
 
+    for (int k = 0; k < n_iters; k++) {
+        for (size_t j = 0; j < iters[k].n_values; j++) expr_free(iters[k].values[j]);
+        free(iters[k].values);
+    }
     return expr_new_symbol("Null");
 }

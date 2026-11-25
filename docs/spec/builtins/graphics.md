@@ -141,6 +141,10 @@ Available for `Plot`, `ListPlot`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `S
 ---
 
 ## Graphics
+`Options[Graphics]` gives the reference's defaults: `PlotRange -> All`,
+`Background -> None`, and `{}` for `AxesStyle`, `FrameStyle`, `TicksStyle` and
+`GridLinesStyle`.
+
 A symbolic 2D graphics object.
 - `Graphics[primitives]`: wraps a (possibly nested) list of primitives and
   style directives.
@@ -225,10 +229,17 @@ toolbar chrome, and `Animate`/`Manipulate`'s own slider/button UI -- uses
 this same font.
 
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
+`RGBColor["#RRGGBB"]` (also `#RRGGBBAA`, `#RGB`, `#RGBA`) reads a hex colour:
+`RGBColor["#FF0000"]` is `RGBColor[1., 0., 0.]`. `GrayLevel[g, a]` is a gray
+level with opacity `a`.
+
 `RGBColor[{r, g, b}]` and `RGBColor[{r, g, b, a}]` evaluate to the flat
 `RGBColor[r, g, b(, a)]`. `Opacity[a, color]` sets the colour as well as the
 opacity, in the PDF export, the notebook JSON and the window renderer.
-`Arrow[{line1, line2, ...}]` draws one arrow per point list.
+`Arrow[{line1, line2, ...}]` draws one arrow per point list; `Arrow[pts, s]` /
+`Arrow[pts, {s1, s2}]` sets the arrow back `s` plot units from each end, and
+`Arrow[BezierCurve[pts]]` follows the curve (composite Bezier segments of degree
+up to 3), in the PDF export.
 
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
 list, each affects every primitive that follows it (left to right) up to the
@@ -263,6 +274,8 @@ Out[3]= -Graphics-  (* two overlapping semi-transparent triangles *)
 ```
 
 ## Dashing / AbsoluteDashing / Dashed / Dotted / DotDashed
+A pattern keeps up to 64 lengths (it used to be cut at 8).
+
 Line-dash directives, honoured for `Line` (and the curves of `Plot`,
 `ListLinePlot`, `ParametricPlot`, ...) on screen, in PNG/JPEG and in PDF.
 - `Dashing[{r1, r2, ...}]`: alternate drawn and blank segments of lengths
@@ -308,6 +321,11 @@ Out[2]= Thickness[Tiny]
 ```
 
 ## Directive
+A `PlotStyle` list of several styles is baked into each curve's primitives, and
+the renderer and the PDF writer apply none of them as a base style -- so
+`PlotStyle -> {Directive[Red, Thickness[0.02]], Directive[Blue]}` no longer
+draws the blue curve at the red one's thickness.
+
 - `Directive[g1, g2, ...]`: a single graphics directive combining the
   directives `gi` -- the usual way to give one curve several styles, e.g.
   `PlotStyle -> Directive[Red, Dashed, Thick]`.
@@ -565,6 +583,11 @@ In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
 ```
 
 ## Show
+An elliptical `Disk[c, {rx, ry}]` / `Circle[c, {rx, ry}]` contributes its
+`rx` × `ry` extent and `Rectangle[{x, y}]` the unit square up to `{x + 1, y + 1}`.
+A non-graphics argument is `Show::gtype` (`1 is not a type of graphics.`), the call
+left unevaluated.
+
 The union of the inputs' ranges reads `PlotRange -> r` as `{{-r, r}, {-r, r}}` and a
 partial `{{0, 1}, All}` as the fixed axis plus the primitives' extent on the other;
 `GraphicsComplex`, `BezierCurve`, `BSplineCurve`, `Cuboid`, `Sphere`, `Ball`,
@@ -766,6 +789,20 @@ Out[1]= -Graphics-
 ```
 
 ## Plot
+A range spec is checked as the reference does: `{x, 0, 1, 0.5}` is `Plot::pllim`
+(not of the form `{x, xmin, xmax}`), a non-numeric bound `Plot::plln`, equal
+bounds `Plot::plld`, and a stray argument after the iterator `General::nonopt`
+-- each with the call left unevaluated; reversed bounds `{x, 1, 0}` plot over
+`[0, 1]`. A body with no real value on the range (`I x`, `Indeterminate`, an
+undefined `f`) or `Plot[{}, ...]` is an empty `Graphics[{}, ...]`. The default
+`Exclusions -> Automatic` breaks the curve at the jumps of `Floor`, `Ceiling`,
+`Round`, `IntegerPart`, `FractionalPart`, `UnitStep`, `HeavisideTheta` and `Sign`
+subexpressions (located by bisection), so `Plot[Floor[x], {x, 0, 3}]` is three
+`Line`s; `Exclusions -> None` joins them, and an explicit list replaces the
+automatic points unless it contains `Automatic`. `Options[Plot]` lists the
+defaults the code uses (`AspectRatio -> 1/GoldenRatio`, `MaxPlotPoints ->
+Infinity`, `Mesh -> None`, `Exclusions -> Automatic`).
+
 A body that only evaluates to a list -- `Plot[Table[x^n, {n, 3}], {x, 0, 1}]`, a
 symbol holding `{f1, f2}` -- plots each element, as the literal list does. The
 held body is evaluated once under `Block[{x}, Quiet[...]]` (so a global value of
@@ -822,6 +859,9 @@ Out[8]= -Graphics-
 ```
 
 ## Graphics3D
+`Options[Graphics3D]` lists the defaults (`Axes -> False`, `Boxed -> True`,
+`BoxRatios -> Automatic`, `PlotRange -> All`, `ViewPoint -> {1.3, -2.4, 2.}`, ...).
+
 A symbolic 3D graphics object, as built by `Plot3D[]`.
 - `Graphics3D[primitives]`: wraps a (possibly nested) list of primitives and
   style directives -- the *same* heads `Graphics[]` uses (`Polygon`, `Line`,
@@ -849,6 +889,10 @@ Out[1]= -Graphics3D-
 ```
 
 ## Plot3D
+A function with no real value on the domain, an undefined symbol, or
+`Plot3D[{}, ...]` is an empty `Graphics3D[{}, ...]`; equal bounds are
+`Plot3D::plld` and a non-numeric bound `Plot3D::plln`.
+
 `PlotPoints -> Automatic` and `MaxRecursion -> Automatic` keep the defaults;
 `PlotPoints -> {nx, ny}` samples the adaptive base grid at the finer of the two
 (the refinement then follows the surface). `Mesh -> n`, `{nx, ny}` and `Full`
@@ -937,6 +981,15 @@ Out[7]= -Graphics3D-  (* cube box: z filled to full height (default is {1,1,0.4}
 ```
 
 ## ParametricPlot
+`ColorFunction` receives `f[x, y, t]` for a curve (each scaled to `[0, 1]` unless
+`ColorFunctionScaling -> False`), so `Hue[#]&` colours by `x`. `Mesh -> n` marks
+`n` points equally spaced in `t`. The default `PlotPoints` is 50 for a curve and
+75 for the two-iterator region. A body never numeric on the range is an empty
+`Graphics[{}, ...]`; equal bounds are `ParametricPlot::plld` and a stray argument
+`ParametricPlot::nonopt` (as for `Plot`). The messages of a sample at a singular
+point (`1/t` at `t = 0`, also through `PolarPlot`) are muted: that point is
+simply excluded.
+
 `RegionFunction` receives `f[x, y, u]` (`f[x, y, u, v]` for a surface), as in the
 reference; a function of the point alone is still read.
 
@@ -997,6 +1050,10 @@ Out[9]= -Graphics-  (* with grid lines overlaid *)
 ```
 
 ## PolarPlot
+`Options[PolarPlot]` lists its defaults (`PlotPoints -> 75`, `AspectRatio -> 1`,
+`PolarAxes -> False`, ...). A sample at a singular point (`1/t` at `t = 0`) is
+excluded without a message.
+
 Plots one or more curves given in polar coordinates `r(theta)`, converting
 to Cartesian `{r*Cos[theta], r*Sin[theta]}` and sampling adaptively.  Returns a
 `Graphics[...]` object (auto-displayed).
@@ -1044,6 +1101,10 @@ Out[3]= {Symbol, True}
 ```
 
 ## ParametricPlot3D
+A body never numeric on the range is an empty `Graphics3D[{}, ...]`; a singular
+sample's messages are muted (the point is excluded); equal bounds are
+`ParametricPlot3D::plld`. `Options[ParametricPlot3D]` lists its defaults.
+
 Samples and displays a parametric 3D space curve or surface patch, returning
 a `Graphics3D[...]` object rendered in an orbit-camera window.
 
@@ -1107,6 +1168,13 @@ Out[10]= -Graphics3D-  (* flat color, no shading *)
 ```
 
 ## ListPlot
+A `Joined -> True` line breaks at a missing entry (`ListPlot[{1, x, 3, 4},
+Joined -> True]` draws only the segment from `{3, 3}` to `{4, 4}`). A stray
+argument is `General::nonopt`, a bad `DataRange` value `ListPlot::drng`, and an
+option that is neither ListPlot's, a `Graphics` option nor a recognised plotting
+option is `ListPlot::optx` -- each leaving the call unevaluated rather than passing
+the option into the result.
+
 A list of pairs in which some pair is not numeric (`{{1, 2}, {3, x}}`) is still a
 list of points, with the non-numeric pair missing -- not several height datasets.
 
@@ -1174,7 +1242,7 @@ window.)
 while the default (and `None`/`Automatic`) lets every line run to its
 natural end.
 
-`HoldAll`, `Protected`. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`. `ColorFunction` is an alias for `StreamColorFunction`.
+`HoldAll`, `Protected`. Options: see **Feature summary** above. Defaults: `Frame -> True`, `Axes -> False`, `AspectRatio -> 1`. `ColorFunction` is an alias for `StreamColorFunction`. The result is built from `Line[...]` dashes with small `Polygon` arrowheads (no `Arrow` primitives). Several fields `StreamPlot[{{vx, vy}, {wx, wy}, ...}, ...]` overlay one set of streamlines per field, each in its own palette colour (unless `StreamStyle` or a `ColorFunction` is given). A field with no streamline (`{0, 0}`) is an empty plot, `Graphics[{}, ..., PlotRange -> {{xmin, xmax}, {ymin, ymax}}]`.
 
 **`StreamAnimate -> True | False`** (default `False`): when `True`, each
 streamline is emitted as `AnimatedStreamline[...]` instead of `Line[...]`.
@@ -1244,7 +1312,7 @@ ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}]
 ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 ```
 
-`HoldAll`, `Protected`. Uses marching squares with bilinear saddle-cell disambiguation. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`.
+`HoldAll`, `Protected`. Uses marching squares with bilinear saddle-cell disambiguation. Options: see **Feature summary** above. Defaults: `Frame -> True`, `Axes -> False`, `AspectRatio -> 1`, `PlotPoints -> 75`. `Contours -> {}` (or `0`) draws no contour lines.
 
 **Over a region.** `ContourPlot[f, {x, y} ∈ reg]` (`reg` a `Rectangle`, `Polygon`,
 `Triangle`, `Disk` or sector, `Annulus`) draws the contours of `f` inside the
@@ -1325,6 +1393,12 @@ Out[10]= -Graphics-
 ---
 
 ## DensityPlot
+A `PlotPoints` value too large to allocate (`2^32 + 2`) aborts with
+`General::nomem` rather than being truncated to a small grid; a logarithmic
+`ScalingFunctions` over a range reaching zero keeps its positive part (three
+decades below the upper end); a legend over a plot with no numeric sample spans
+`0..1`.
+
 
 ```
 DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
@@ -1358,6 +1432,11 @@ Out[4]= -Graphics-
 ---
 
 ## ArrayPlot
+A translucent cell colour (`RGBColor[r, g, b, a]` with `a < 1`, `Opacity`, ...)
+gets a rectangle covering exactly its own cell; opaque cells keep the one-cell
+overlap that closes rendering seams (an overlap a translucent neighbour would
+blend over).
+
 
 An explicit `Frame` option, `Frame -> False` included, replaces the injected
 `Frame -> True` default (also `ComplexPlot`); the result carries one `Frame` rule.
@@ -1458,7 +1537,7 @@ would emit at those grid points is muted during sampling, as in `Plot`.
 | `ColorFunctionScaling` | `True` | Scale each of the eight arguments to `[0,1]` across the sampled domain before calling a custom `ColorFunction` (no effect on named-string ramps) |
 | `RegionFunction` | `None` | `f[x,y]` mask; excluded cells are not drawn |
 | `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar (thermal or hue ramp, −π at bottom, +π at top) |
-| Standard Graphics options | — | `Axes` (default `True`), `AspectRatio` (default `1`), `PlotRange`, `Frame`, `AxesLabel`, `GridLines`, `ImageSize`, `Background`, `PlotLabel`, … |
+| Standard Graphics options | — | `Frame` (default `True`), `Axes` (default `False`; each default applies unless that option is given, so `Axes -> True` keeps the frame), `AspectRatio` (default `1`), `PlotRange`, `AxesLabel`, `GridLines`, `ImageSize`, `Background`, `PlotLabel`, … Options may also be given as a list, `ComplexPlot[f, {z, a, b}, {PlotPoints -> 50}]`. `ComplexPlot3D`'s `Graphics3D` gets `Axes -> True` and none of the 2-D raster defaults |
 
 **Examples**
 
@@ -1556,7 +1635,7 @@ BarChart[{v1, v2, ..., vn}, opts...]
 BarChart[{{v1,...}, {w1,...}, ...}, opts...]
 ```
 
-Draws a vertical bar chart. Single-dataset: `n` bars at `x = 1..n`. Multi-dataset: grouped bars in distinct palette colours. Options: `ChartStyle`, `ChartLabels`, `BarSpacing` (gap fraction, default `0.2`), standard `Graphics` options. Defaults: `Axes→True`, `AspectRatio→0.618`.
+Draws a vertical bar chart. Single-dataset: `n` bars at `x = 1..n`. Multi-dataset: grouped bars in distinct palette colours. Options: `ChartStyle` (a colour, a list cycled over the bars, or a gradient name such as `"Rainbow"` / `"Viridis"` sampled along the bars; a name with no gradient falls back to the palette), `ChartLabels`, `BarSpacing` (gap fraction, default `0.2`; `None` is touching bars, `Automatic` the default), standard `Graphics` options. Ragged data `{1, {2, 3}}` treats each element as a dataset, a scalar being a one-bar dataset. `BarChart[<|k1 -> v1, ...|>]` draws the values with the keys as `ChartLabels` (unless given). Defaults: `Axes→True`, `AspectRatio→0.618`.
 
 **Examples:**
 
@@ -1596,7 +1675,7 @@ Histogram[data, {step}, opts...]
 Histogram[data, {min, max, step}, opts...]
 ```
 
-Bins numeric `data` and draws a frequency histogram. Default bin count: Sturges' rule (`⌈log₂(n)⌉ + 1`). With an explicit `{min, max, step}` the bins are left-closed, `[min + k step, min + (k+1) step)`, and data outside them is **not counted** (`Histogram[{1, 5, 9, 15}, {0, 10, 5}]` has bar heights 1 and 2: 15 is in no bin). Options: `ChartStyle`, `BarSpacing` (default `0.2`), standard `Graphics` options. Defaults: `Axes→True`, `AspectRatio→0.618`.
+Bins numeric `data` and draws a frequency histogram. Default bin count: Sturges' rule (`⌈log₂(n)⌉ + 1`). With an explicit `{min, max, step}` the bins are left-closed, `[min + k step, min + (k+1) step)`, and data outside them is **not counted** (`Histogram[{1, 5, 9, 15}, {0, 10, 5}]` has bar heights 1 and 2: 15 is in no bin). Options: `ChartStyle` (the bins' single fill colour; default the first palette colour), standard `Graphics` options. The bins are contiguous (there is no `BarSpacing`). A bin count too large to allocate (`Histogram[data, 2^32 + 2]`) aborts with `General::nomem` rather than being truncated. Defaults: `Axes→True`, `AspectRatio→0.618`.
 
 **Examples:**
 
@@ -1633,7 +1712,7 @@ still tried after it.
 VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 ```
 
-Draws a grid of arrows for the vector field `{vx, vy}`. `HoldAll`, `Protected`. Default `ColorFunction`: thermal ramp keyed to speed. Arrow sizing is screen-normalized so arrows stay visible across mixed-scale axes. Options: see **Feature summary** above. `VectorScale -> None` makes lengths proportional to magnitude; a real value scales relative to grid spacing.
+Draws a grid of arrows for the vector field `{vx, vy}`. `HoldAll`, `Protected`. Default `ColorFunction`: the `"Viridis"` ramp keyed to speed. Arrow sizing is screen-normalized so arrows stay visible across mixed-scale axes. Options: see **Feature summary** above. `VectorPoints -> n` is an `n` × `n` grid, `VectorPoints -> {nx, ny}` an `nx` × `ny` one. `VectorScale -> None` makes lengths proportional to magnitude; a real value `f` draws every arrow `f` grid spacings long. A logarithmic `ScalingFunctions` over a range reaching zero keeps only its positive part (three decades below the upper end), as `DensityPlot`, `ContourPlot` and `StreamPlot` do.
 
 **Examples:**
 
@@ -1665,6 +1744,9 @@ Out[5]= Graphics
 ---
 
 ## Animate
+A discrete control `{t, {v1, v2, ...}}` steps `t` through the listed values
+(the slider runs over their positions and shows the current value).
+
 
 The control spec's variable is not evaluated, so a global value of `t` does not
 break `Animate[t, {t, 0, 1}]`; `{t, tmin, tmax, dt}` is accepted (the sweep is
@@ -1747,6 +1829,11 @@ Out[6]= Null
 ---
 
 ## Manipulate
+A discrete control with more values than the button row holds (32) becomes a
+slider over the list's positions, still binding the variable to the values
+(`Manipulate[x, {x, Range[33]}]`), and a labelled control `{{u, u0, label},
+umin, umax}` shows `label` in place of the variable's name.
+
 
 The control variable is local: the spec `{x, 0, 1}` is evaluated without
 evaluating `x`, so a global `x = 5` is irrelevant.

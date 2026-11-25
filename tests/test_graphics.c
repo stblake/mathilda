@@ -288,7 +288,7 @@ void test_graphics_options_registered(void) {
     assert_eval_eq("Length[Options[Graphics]] > 0", "True", 0);
     assert_eval_eq("Options[Graphics, Axes]", "{Axes -> False}", 0);
     assert_eval_eq("Options[Graphics, PlotRange]",
-                    "{PlotRange -> Automatic}", 0);
+                    "{PlotRange -> All}", 0);
     assert_eval_eq("OptionValue[Graphics, Frame]", "False", 0);
 }
 

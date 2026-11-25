@@ -44,9 +44,9 @@ void test_plot3d_invalid_args_stay_unevaluated(void) {
     /* PlotPoints < 2 is rejected the same way split_options rejects it for Plot. */
     assert_eval_eq("Plot3D[Sin[x + y], {x, 0, 1}, {y, 0, 1}, PlotPoints -> 1]",
                     "Plot3D[Sin[x + y], {x, 0, 1}, {y, 0, 1}, PlotPoints -> 1]", 0);
-    /* Plot3D[{}, ...] -- nothing to draw. */
-    assert_eval_eq("Plot3D[{}, {x, -1, 1}, {y, -1, 1}]",
-                    "Plot3D[{}, {x, -1, 1}, {y, -1, 1}]", 0);
+    /* Plot3D[{}, ...] -- nothing to draw: an empty Graphics3D, as in the
+     * reference (audit Plot3D#5). */
+    assert_eval_eq("Plot3D[{}, {x, -1, 1}, {y, -1, 1}][[1]]", "{}", 0);
 }
 
 void test_plot3d_honors_plot_points_and_max_recursion(void) {
@@ -179,16 +179,14 @@ void test_plot3d_region_function_filters_cells(void) {
         " RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 1],"
         " PlotPoints -> 2, MaxRecursion -> 0]]",
         "Graphics3D", 0);
-    /* A region excluding every grid corner leaves no valid cells, so the
-     * whole call declines -- exactly like Plot's RegionFunction-starves-
-     * every-point case. */
+    /* A region excluding every grid corner leaves no valid cells: an empty
+     * surface, Graphics3D with no Polygon (audit Plot3D#5) -- as Plot's
+     * RegionFunction-starves-every-point case is an empty Graphics. */
     assert_eval_eq(
-        "Plot3D[x + y, {x, -2, 2}, {y, -2, 2},"
+        "Cases[Plot3D[x + y, {x, -2, 2}, {y, -2, 2},"
         " RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 1],"
-        " PlotPoints -> 2, MaxRecursion -> 0]",
-        "Plot3D[x + y, {x, -2, 2}, {y, -2, 2},"
-        " RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 1],"
-        " PlotPoints -> 2, MaxRecursion -> 0]", 0);
+        " PlotPoints -> 2, MaxRecursion -> 0], _Polygon, Infinity]",
+        "{}", 0);
     /* RegionFunction also accepts Plot's 2-arg f[x,y] form as a fallback. */
     assert_eval_eq(
         "Head[Plot3D[x + y, {x, 0.1, 1}, {y, -1, 1},"

@@ -111,6 +111,12 @@ EXEMPT = {
     # 2026-07-30 for want of a narrowing float64->int64 kernel category. They
     # have one now (NDUnaryKernel.to_int), are off NOT_AWARE, and answer with the
     # exact Integers the List path does -- so they are no longer exceptions.
+    "Animate": "HoldAll control-spec parsing, not a buffer path (src/graphics/"
+    "animate.c parse_iter_values): the builtin evaluates each held spec itself, "
+    "so a {t, {v1, ...}} value list that packs is born INSIDE the builtin, after "
+    "the gate, and is materialised there to the plain List of frame values -- the "
+    "same guard Manipulate's discrete controls use. Nothing numeric is computed "
+    "on the buffer.",
     "CoefficientArrays": "structural, not element-wise: it decomposes a "
     "polynomial SYSTEM by total degree, and its arithmetic is Expr-level "
     "(build_monomials over Expand'ed terms), so there is nothing for a buffer to "

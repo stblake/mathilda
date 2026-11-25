@@ -14,6 +14,7 @@
 #include "show.h"
 #include "sampling.h"
 #include "iter.h"
+#include "common.h"
 #include "eval.h"
 #include "compile/autocompile.h"
 #include "symtab.h"
@@ -118,6 +119,8 @@ typedef struct {
     bool mesh;            /* Mesh -> All: also emit the sample points as dots */
     Expr* region_function; /* borrowed; held; NULL = none */
     Expr* exclusions;      /* borrowed; held; NULL = none */
+    bool  auto_exclusions; /* Exclusions -> Automatic (the default): break the
+                            * curve at the jumps of Floor, UnitStep, ... */
     Expr* color_function;  /* borrowed; held (function, or string "Rainbow"); NULL = none */
     bool  color_function_scaling; /* default true */
     Expr* filling;         /* borrowed; held (Axis/Bottom/Top symbol, or a number); NULL = none */
@@ -140,6 +143,26 @@ static Expr* plot_default_color(void) {
     return expr_new_function(expr_new_symbol(SYM_RGBColor), rgb_args, 3);
 }
 
+/* Exclusions -> None | Automatic | a point or list of them.  An explicit list
+ * replaces the automatic jump detection unless it lists Automatic itself
+ * ({Automatic, x == 1}), as in the reference. */
+static void set_exclusions(PlotSampleOpts* sopts, Expr* rhs) {
+    sopts->exclusions = NULL;
+    sopts->auto_exclusions = false;
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None) return;
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
+        sopts->auto_exclusions = true;
+        return;
+    }
+    sopts->exclusions = rhs;
+    if (head_is(rhs, SYM_List))
+        for (size_t i = 0; i < rhs->data.function.arg_count; i++) {
+            const Expr* it = rhs->data.function.args[i];
+            if (it->type == EXPR_SYMBOL && it->data.symbol.name == SYM_Automatic)
+                sopts->auto_exclusions = true;
+        }
+}
+
 /* Splits res's trailing Rule args (starting at index 2) into the sampler
  * options above and a passthrough list of borrowed-then-copied Rule
  * expressions destined for the Graphics[...] result. `single_color_out`
@@ -157,6 +180,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     sopts->mesh = false;
     sopts->region_function = NULL;
     sopts->exclusions = NULL;
+    sopts->auto_exclusions = true;
     sopts->color_function = NULL;
     sopts->color_function_scaling = true;
     sopts->filling = NULL;
@@ -218,7 +242,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         } else if (name == SYM_RegionFunction) {
             sopts->region_function = rhs;
         } else if (name == SYM_Exclusions) {
-            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None)) sopts->exclusions = rhs;
+            set_exclusions(sopts, rhs);
         } else if (name == SYM_ColorFunction) {
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
@@ -357,6 +381,107 @@ static double* parse_exclusions(Expr* exclusions, Expr* var, size_t* out_count) 
     return out;
 }
 
+/* ---- Exclusions -> Automatic: the jumps of piecewise-constant heads ---- */
+
+/* A jump-carrying subexpression of the body: h[g] for a head h whose value
+ * is a step function of its argument g.  kind: 0 Floor-like (jumps where g
+ * crosses an integer), 1 Ceiling, 2 Round (half-integers), 3 IntegerPart /
+ * FractionalPart (integers, truncating), 4 UnitStep / HeavisideTheta (g = 0),
+ * 5 Sign (g = 0). */
+typedef struct { const Expr* g; int kind; } PlotJumpArg;
+
+#define PLOT_MAX_JUMP_ARGS 16
+#define PLOT_MAX_JUMPS     4096
+
+static void collect_jump_args(const Expr* e, const char* var, PlotJumpArg* out, size_t* n) {
+    if (e->type != EXPR_FUNCTION || *n >= PLOT_MAX_JUMP_ARGS) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
+        const char* hn = h->data.symbol.name;
+        int kind = -1;
+        if (hn == SYM_Floor) kind = 0;
+        else if (hn == SYM_Ceiling) kind = 1;
+        else if (hn == SYM_Round) kind = 2;
+        else if (hn == SYM_IntegerPart || hn == SYM_FractionalPart) kind = 3;
+        else if (hn == SYM_UnitStep || hn == SYM_HeavisideTheta) kind = 4;
+        else if (hn == SYM_Sign) kind = 5;
+        if (kind >= 0 && iter_expr_mentions_symbol(e->data.function.args[0], var))
+            out[(*n)++] = (PlotJumpArg){ e->data.function.args[0], kind };
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_jump_args(e->data.function.args[i], var, out, n);
+}
+
+/* The piece of the step function h[g] that g = v falls in. */
+static double jump_key(int kind, double v) {
+    switch (kind) {
+    case 0: return floor(v);
+    case 1: return ceil(v);
+    case 2: return floor(v + 0.5);
+    case 3: return trunc(v);
+    case 4: return v >= 0.0 ? 1.0 : 0.0;
+    default: return (v > 0.0) - (v < 0.0);
+    }
+}
+
+/* g at x (the iterator variable is shadowed by the caller); false when not a
+ * finite real. */
+static bool jump_eval(const Expr* g, Expr* var, double x, double* out) {
+    PlotEvalCtx ctx = { .var = var, .body = (Expr*)g, .region_function = NULL,
+                        .sf_x = SF_NONE, .sf_y = SF_NONE, .ac = NULL };
+    return plot_eval_fn(x, &ctx, out);
+}
+
+/* Bisect [a, b] (keys ka != kb) down to every key change inside it. */
+static void jump_bisect(const PlotJumpArg* ja, Expr* var, double a, double ka, double b, double kb,
+                        double tol, int depth, double** xs, size_t* n, size_t* cap) {
+    if (ka == kb || *n >= PLOT_MAX_JUMPS) return;
+    double m = 0.5 * (a + b), gm;
+    if (b - a <= tol || depth > 60 || !jump_eval(ja->g, var, m, &gm)) {
+        if (*n == *cap) { *cap = *cap ? 2 * *cap : 16; *xs = realloc(*xs, sizeof(double) * *cap); }
+        (*xs)[(*n)++] = m;
+        return;
+    }
+    double km = jump_key(ja->kind, gm);
+    jump_bisect(ja, var, a, ka, m, km, tol, depth + 1, xs, n, cap);
+    jump_bisect(ja, var, m, km, b, kb, tol, depth + 1, xs, n, cap);
+}
+
+/* Exclusions -> Automatic: append to excl[0 .. *nexcl) the x in [xmin, xmax]
+ * where a step-function subexpression of the body jumps, so the curve is
+ * drawn as separate pieces with no vertical connector (audit Plot#4).  A
+ * body with no such head costs one tree walk. */
+static double* add_jump_exclusions(Expr* body, Expr* var, double xmin, double xmax,
+                                   double* excl, size_t* nexcl) {
+    PlotJumpArg ja[PLOT_MAX_JUMP_ARGS];
+    size_t nja = 0;
+    collect_jump_args(body, var->data.symbol.name, ja, &nja);
+    if (nja == 0) return excl;
+    size_t cap = *nexcl;
+    const int grid = 400;
+    double tol = (xmax - xmin) * 1e-12;
+    for (size_t k = 0; k < nja; k++) {
+        double xa = xmin, ga, ka = 0.0;
+        bool have = jump_eval(ja[k].g, var, xa, &ga);
+        if (have) ka = jump_key(ja[k].kind, ga);
+        for (int i = 1; i <= grid; i++) {
+            double xb = (i == grid) ? xmax : xmin + (xmax - xmin) * (double)i / grid, gb;
+            if (!jump_eval(ja[k].g, var, xb, &gb)) { have = false; continue; }
+            double kb = jump_key(ja[k].kind, gb);
+            if (have && kb != ka)
+                jump_bisect(&ja[k], var, xa, ka, xb, kb, tol, 0, &excl, nexcl, &cap);
+            xa = xb; ka = kb; have = true;
+        }
+    }
+    for (size_t i = 1; i < *nexcl; i++) {       /* insertion sort, as above */
+        double key = excl[i];
+        size_t j = i;
+        while (j > 0 && excl[j - 1] > key) { excl[j] = excl[j - 1]; j--; }
+        excl[j] = key;
+    }
+    return excl;
+}
+
 /* Splits [xmin,xmax] into sub-ranges at each in-range exclusion x, leaving a
  * tiny epsilon gap at each split so the curve doesn't visually rejoin. */
 static Range1D* split_at_exclusions(double xmin, double xmax, const double* excl, size_t nexcl,
@@ -364,14 +489,19 @@ static Range1D* split_at_exclusions(double xmin, double xmax, const double* excl
     double eps = (xmax - xmin) * 1e-6;
     Range1D* ranges = malloc(sizeof(Range1D) * (nexcl + 1));
     size_t rc = 0;
-    double lo = xmin;
+    double lo = xmin, hi = xmax;
     for (size_t i = 0; i < nexcl; i++) {
+        /* An exclusion at an end of the range trims that end, so a jump at
+         * x = xmax (Floor[x] at 3 on {x, 0, 3}) is not drawn as a final
+         * vertical connector. */
+        if (fabs(excl[i] - xmin) <= eps) { if (lo < xmin + eps) lo = xmin + eps; continue; }
+        if (fabs(excl[i] - xmax) <= eps) { if (hi > xmax - eps) hi = xmax - eps; continue; }
         if (excl[i] > lo + eps && excl[i] < xmax - eps) {
             ranges[rc++] = (Range1D){ lo, excl[i] - eps };
             lo = excl[i] + eps;
         }
     }
-    ranges[rc++] = (Range1D){ lo, xmax };
+    ranges[rc++] = (Range1D){ lo, hi };
     *out_count = rc;
     return ranges;
 }
@@ -508,6 +638,7 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
 
     size_t nexcl = 0;
     double* excl = parse_exclusions(sopts->exclusions, var, &nexcl);
+    if (sopts->auto_exclusions) excl = add_jump_exclusions(body, var, xmin, xmax, excl, &nexcl);
     size_t nranges = 0;
     Range1D* ranges = split_at_exclusions(xmin, xmax, excl, nexcl, &nranges);
     free(excl);
@@ -663,7 +794,12 @@ static Expr* build_plot_primitives(Expr** bodies, size_t nfun, Expr* var,
     bool* scoped = malloc(sizeof(bool) * nfun);
     size_t total = 0;
     bool any = false;
-    bool multi = (nfun > 1);
+    /* multi: each curve's style is baked into the primitives.  A single curve
+     * with a List of several styles is baked too, since the renderer applies
+     * no base style for such a List (audit Directive#1). */
+    bool multi = (nfun > 1)
+        || (sopts->plot_style && head_is(sopts->plot_style, SYM_List)
+            && sopts->plot_style->data.function.arg_count > 1);
     for (size_t fi = 0; fi < nfun; fi++) {
         /* Curve fi's style: the palette colour, or its PlotStyle entry (a
          * List of styles cycles). A style with non-colour directives
@@ -737,7 +873,8 @@ static Expr* build_resample_meta(Expr** bodies, size_t nfun, Expr* var,
         expr_new_integer(sopts->max_plot_points),
         expr_new_integer(sopts->mesh ? 1 : 0),
         sopts->region_function ? expr_copy(sopts->region_function) : expr_copy(none_expr),
-        sopts->exclusions ? expr_copy(sopts->exclusions) : expr_copy(none_expr),
+        sopts->exclusions ? expr_copy(sopts->exclusions)
+            : (sopts->auto_exclusions ? expr_new_symbol(SYM_Automatic) : expr_copy(none_expr)),
         sopts->color_function ? expr_copy(sopts->color_function) : expr_copy(none_expr),
         expr_new_integer(sopts->color_function_scaling ? 1 : 0),
         sopts->filling ? expr_copy(sopts->filling) : expr_copy(none_expr),
@@ -802,7 +939,7 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
     if (o[2]->type == EXPR_INTEGER) sopts.max_plot_points = (long)o[2]->data.integer;
     if (o[3]->type == EXPR_INTEGER) sopts.mesh = (o[3]->data.integer != 0);
     sopts.region_function = opt_or_none(o[4]);
-    sopts.exclusions = opt_or_none(o[5]);
+    set_exclusions(&sopts, o[5]);
     sopts.color_function = opt_or_none(o[6]);
     if (o[7]->type == EXPR_INTEGER) sopts.color_function_scaling = (o[7]->data.integer != 0);
     sopts.filling = opt_or_none(o[8]);
@@ -829,15 +966,11 @@ Expr* builtin_plot(Expr* res) {
         if (rd) return rd;
     }
 
+    double xmin, xmax;
+    if (!plot_range_bounds("Plot", spec, &xmin, &xmax)) return NULL;
     IterSpec ispec;
     if (!iter_spec_parse(spec, &ispec)) return NULL;
     if (ispec.kind != ITER_KIND_RANGE || !ispec.var) { iter_spec_free(&ispec); return NULL; }
-
-    double xmin, xmax;
-    if (!numericize_bound(ispec.imin, &xmin) || !numericize_bound(ispec.imax, &xmax) || !(xmin < xmax)) {
-        iter_spec_free(&ispec);
-        return NULL;
-    }
 
     /* PlotLegends is consumed directly here (not via split_options/sopts)
      * since it only affects the separate $PlotLegendData metadata, not
@@ -879,26 +1012,13 @@ Expr* builtin_plot(Expr* res) {
         bodies = &single;               /* borrowed */
     }
 
-    if (nfun == 0) { /* Plot[{}, …] — nothing to draw */
-        iter_spec_free(&ispec);
-        expr_free(legends);
-        expr_free(single_color);
-        for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
-        free(passthrough);
-        return NULL;
-    }
-
     /* Sample every curve (shadowing the iterator variable) into the initial
-     * primitive list shown at the home view. */
+     * primitive list shown at the home view.  Nothing plottable -- Plot[{}],
+     * a body never real on the range (I x, Indeterminate, an undefined f) --
+     * is an empty plot, Graphics[{}, ...], as in the reference (audit
+     * Plot#2/#3), not an unevaluated call. */
     Expr* prim_list = build_plot_primitives(bodies, nfun, ispec.var, xmin, xmax, &sopts, single_color);
-    if (!prim_list) {
-        iter_spec_free(&ispec);
-        expr_free(legends);
-        expr_free(single_color);
-        for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
-        free(passthrough);
-        return NULL;
-    }
+    if (!prim_list) prim_list = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     Expr* legend_meta = NULL;
     if (sopts.plot_style) {

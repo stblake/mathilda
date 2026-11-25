@@ -25,6 +25,10 @@ form), other region heads (`Disk`, `Rectangle`, ...), wrong arity.
 ## Area
 
 `Area[Polygon[{{x1, y1}, ...}]]` — shoelace area of a simple 2D polygon.
+Machine coordinates near the ends of the double range are scaled by an exact
+power of two first, so `Area[Polygon[{{0,0},{1,0},{0,1}} 1.*10^200]]` is the
+MPFR `5.*10^399` (and the `10^-200` triangle `5.*10^-401`), not `Overflow[]` or
+`0.`.
 
 ```
 Area[Polygon[{{0, 0}, {1, 0}, {1/2, 1/2}}]]         (* 1/4 *)
@@ -89,6 +93,20 @@ In[2]:= RegionCentroid[Polygon[{{0, 0}, {4, 0}, {4, 4}, {2, 1}, {0, 4}}]]
 Out[2]= {2, 7/5}
 ```
 
+The lower- and higher-dimensional regions take their own centroid
+(src/geometry_regions.c):
+
+- `Point[p]` is `p`; `Point[{p1, ..., pn}]` the mean of the points.
+- `Line[{p1, ..., pn}]` (any dimension): the length-weighted mean of the segment
+  midpoints (`RegionCentroid[Line[{{0,0},{2,0}}]] = {1, 0}`).
+- `Circle[c, r]` (or an ellipse) is `c`; the circular arc `Circle[c, r, {t1, t2}]`
+  is `c + r Sin[h]/h {Cos[m], Sin[m]}` with `h` the half-span and `m` the
+  mid-angle (`{0, 2/Pi}` for the upper unit semicircle).
+- `Ball[c, r]` / `Sphere[c, r]` are `c`; `Cuboid[pmin, pmax]` the midpoint,
+  `Cuboid[pmin]` the unit cube's centre `pmin + 1/2`.
+- A planar 3-D `Polygon`: the fan triangles weighted by their signed area along
+  the polygon's normal (no square root, so exact coordinates stay exact).
+
 ## RegionMember
 
 `RegionMember[Polygon[{{x1, y1}, ...}], {x, y}]` — `True` if the point is
@@ -123,7 +141,10 @@ Out[3]= False
 monotone chain; duplicate, interior, and collinear-middle points removed).
 Result by hull dimension: `Polygon` (vertices counterclockwise, starting from
 the lexicographic minimum — the reference's own vertex order), `Line` for collinear
-input, `Point` for a single point.
+input, `Point` for a single point. A `Polygon`, `Line` or `Point` argument
+takes the hull of its vertices
+(`ConvexHullRegion[Polygon[{{0,0},{2,0},{1,1},{2,2},{0,2}}]]` is
+`Polygon[{{0, 0}, {2, 0}, {2, 2}, {0, 2}}]`).
 
 ```
 ConvexHullRegion[{{0, 0}, {2, 0}, {1, 0}, {2, 2}, {0, 2}, {1, 1}}]
@@ -161,7 +182,10 @@ Out[4]= 4
 - `Circle[c, r]`: `2 Pi r`; an ellipse `Circle[c, {a, b}]` gives
   `4 b EllipticE[1 - a^2/b^2]` with `b` the larger semi-axis
   (`8 EllipticE[3/4]` for `{1, 2}`); an arc `Circle[c, r, {t1, t2}]` gives
-  `r (t2 - t1)`.
+  `r (t2 - t1)`; an elliptical arc `Circle[c, {a, b}, {t1, t2}]` (parametric
+  angle) gives `b (EllipticE[t2, m] - EllipticE[t1, m])`, `m = 1 - a^2/b^2`, with
+  a phase that is a multiple `n` of `Pi/2` reduced to `n EllipticE[m]`
+  (`ArcLength[Circle[{0,0},{1,2},{0,Pi}]] = 4 EllipticE[3/4]`, half the ellipse).
 - A parametrised curve `{x1[t], ..., xn[t]}` integrates `|c'(t)|`; a single
   function `f[t]` its graph, `Sqrt[1 + f'(t)^2]`. The squared speed is
   simplified first (`{Cos[t], Sin[t]}` over `{t, 0, 2 Pi}` is `2 Pi`), then
@@ -175,13 +199,19 @@ Out[4]= 4
   therefore come back as `3.82019778902771`. A symbolic range keeps the inert
   integral. (The exact attempt costs whatever `Integrate` takes to give up, a few
   seconds for `Sqrt[1 + 3 Cos[t]^2]`.)
-- `Point[...]`, `Disk[...]`, `Annulus[...]`: `Undefined`.
+- `Point[...]` and every region of dimension 2 or more (`Disk`, `Annulus`,
+  `Polygon`, `Triangle`, `Rectangle`, `Sphere`, `Ball`, `Cuboid`): `Undefined`.
+  `Area[Point[...]]` is likewise `Undefined`.
 - Attributes: `Protected`.
 
 ## RegionMeasure
 
 `RegionMeasure[reg]`: `Area` of a `Polygon`, `Disk` or `Annulus`; `ArcLength`
-of a `Line` or `Circle`. Attributes: `Protected`.
+of a `Line` or `Circle`; the number of points of a `Point` (its counting
+measure: `RegionMeasure[Point[{{0,0},{1,1}}]] = 2`). `RegionMeasure[reg, d]`
+with `d` the region's own dimension is `RegionMeasure[reg]`
+(`RegionMeasure[Line[{{0,0},{1,0}}], 1] = 1`); another `d` is left unevaluated.
+Attributes: `Protected`.
 
 ## Annulus and Disk
 
@@ -272,7 +302,13 @@ confident wrong number. In addition to symbolic coordinates and non-2D input:
   are collapsed first, so `Area[Polygon[{{0,0},{0,0},{1,1}}]]` is `Undefined`,
   not `0`, and `Perimeter[Polygon[{{0,0},{1,0},{1,0}}]]` is `Undefined`, not a
   there-and-back `2`.
-- **A degenerate (zero-area) polygon**, for `RegionMember` and `RegionCentroid`.
+- **A degenerate (zero-area) polygon**, for `RegionCentroid`. (`RegionMember`
+  does answer for one: `RegionMember[Polygon[{{0,0},{2,0},{1,0}}], {1, 0}]` is
+  `True`, the point lying on the degenerate polygon's segment.)
+- **A malformed `Disk` or `Circle`**: a centre that is not `{x, y}`
+  (`Disk[{0,0,0}, 1]`, `Disk[1, 2]`) or a radius that is a string or non-real
+  (`Disk[{0,0}, I]`). Every measure head leaves these unevaluated rather than
+  measuring them (an "area" `Pi I^2 = -Pi` was a negative measure).
 
 ## Exactness across representations
 

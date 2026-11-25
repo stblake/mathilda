@@ -368,7 +368,37 @@ static const Expr* geom_polygon_points(const Expr* res) {
 /* Area                                                                      */
 /* ------------------------------------------------------------------------- */
 
+/* The area of machine-coordinate vertices.  Coordinates near the ends of
+ * the double range would overflow (or underflow) in the cross products, so
+ * they are scaled by an exact power of two 2^-e into [1/2, 1) first and the
+ * result multiplied back by the exact 2^(2e) -- which the evaluator carries
+ * past the double range as an MPFR number rather than as Overflow[] or a
+ * flushed 0. (audit Area#5) */
+static Expr* geom_area_machine(const GeomPoints* p) {
+    double m = 0.0;
+    for (size_t i = 0; i < p->n; i++) {
+        if (fabs(p->dx[i]) > m) m = fabs(p->dx[i]);
+        if (fabs(p->dy[i]) > m) m = fabs(p->dy[i]);
+    }
+    if (!(m > 1e150 || (m > 0.0 && m < 1e-150)))
+        return expr_new_real(fabs(geom_signed_area2_d(p)) / 2.0);
+    int e;
+    (void)frexp(m, &e);
+    double s = 0.0;
+    for (size_t i = 0; i < p->n; i++) {
+        size_t j = (i + 1) % p->n;
+        s += ldexp(p->dx[i], -e) * ldexp(p->dy[j], -e) - ldexp(p->dx[j], -e) * ldexp(p->dy[i], -e);
+    }
+    Expr* pw[2] = { expr_new_integer(2), expr_new_integer(2 * (int64_t)e) };
+    Expr* ta[2] = { expr_new_real(fabs(s) / 2.0),
+                    expr_new_function(expr_new_symbol(SYM_Power), pw, 2) };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), ta, 2));
+}
+
 static Expr* builtin_area_core(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1
+        && head_is(res->data.function.args[0], SYM_Point))
+        return expr_new_symbol(SYM_Undefined);   /* a point set: no area (audit Point#1) */
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
         Expr* c = geom_curved_area(res->data.function.args[0]);
         if (c) return c;
@@ -395,7 +425,7 @@ static Expr* builtin_area_core(Expr* res) {
         out = geom_mpq_to_expr(a2);
         mpq_clear(a2);
     } else {
-        out = expr_new_real(fabs(geom_signed_area2_d(&p)) / 2.0);
+        out = geom_area_machine(&p);
     }
     geom_points_clear(&p);
     return out;
@@ -837,6 +867,24 @@ Expr* builtin_region_member(Expr* res) {
 
 /* Exact non-rational coordinates (Sqrt[2], Pi) take the symbolic hull. */
 Expr* builtin_convex_hull_region(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
+        /* ConvexHullRegion[Polygon[pts] | Line[pts] | Point[pts]]: the hull
+         * of the primitive's vertices (audit ConvexHullRegion#2). */
+        const Expr* g = res->data.function.args[0];
+        if ((head_is(g, SYM_Polygon) || head_is(g, SYM_Line) || head_is(g, SYM_Point))
+            && g->data.function.arg_count == 1) {
+            const Expr* pts = g->data.function.args[0];
+            if (head_is(pts, SYM_List) && pts->data.function.arg_count > 0
+                && head_is(pts->data.function.args[0], SYM_List)) {
+                Expr* a[1] = { expr_copy((Expr*)pts) };
+                Expr* call = expr_new_function(expr_new_symbol(SYM_ConvexHullRegion), a, 1);
+                Expr* r = eval_and_free(call);
+                if (!head_is(r, SYM_ConvexHullRegion)) return r;
+                expr_free(r);
+                return NULL;
+            }
+        }
+    }
     Expr* r = builtin_convex_hull_region_core(res);
     if (r || res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return r;
     return geom_symbolic_hull(res->data.function.args[0]);

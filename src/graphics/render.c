@@ -1304,7 +1304,10 @@ static void apply_plot_style(const Expr* ps, DrawState* st) {
     if (!ps) return;
     if (ps->type == EXPR_FUNCTION && ps->data.function.head->type == EXPR_SYMBOL
         && ps->data.function.head->data.symbol.name == SYM_List) {
-        if (ps->data.function.arg_count == 0) return;
+        /* Several styles: every curve's own is baked into the primitives, so
+         * none is a base -- the first curve's Thickness must not reach the
+         * second (audit Directive#1). */
+        if (ps->data.function.arg_count != 1) return;
         ps = ps->data.function.args[0];
     }
     apply_style_spec(ps, st);

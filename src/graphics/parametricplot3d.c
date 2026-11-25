@@ -29,6 +29,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "message.h"
 #include <stdlib.h>
 #include <math.h>
 
@@ -90,7 +91,14 @@ static bool param3d_region_ok(const Param3DEvalCtx* ctx, double x, double y, dou
 /* Evaluate ctx->body (with vars already set in symtab) and extract {x,y,z}.
  * Returns true on success and stores the coordinates in xo, yo, zo. */
 static bool eval_body_xyz(Param3DEvalCtx* ctx, double* xo, double* yo, double* zo) {
+    /* A sample at a singular point (1/t at t = 0) is simply excluded: its
+     * Power::infy / Infinity::indet are sampling noise, neither printed nor
+     * seen by Check[] (audit PolarPlot#2, ParametricPlot3D#3). */
+    unsigned long fired = mth_msg_fired_count();
+    mth_msg_suppress_push();
     Expr* result = evaluate(ctx->body);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired);
     bool ok = false;
     if (result && result->type == EXPR_FUNCTION
         && result->data.function.head->type == EXPR_SYMBOL
@@ -702,9 +710,7 @@ Expr* builtin_parametricplot3d(Expr* res) {
 
     Expr* var1 = iter1->data.function.args[0];
     double t1min, t1max;
-    if (!numericize_bound(iter1->data.function.args[1], &t1min)
-        || !numericize_bound(iter1->data.function.args[2], &t1max)
-        || !(t1min < t1max)) return NULL;
+    if (!plot_range_bounds("ParametricPlot3D", iter1, &t1min, &t1max)) return NULL;
 
     /* Check for optional second iterator → 2-iterator (surface) form. */
     bool two_iter = (argc >= 3) && is_iterator_3d(res->data.function.args[2]);
@@ -717,9 +723,7 @@ Expr* builtin_parametricplot3d(Expr* res) {
         Expr* iter2 = res->data.function.args[2];
         Expr* var2  = iter2->data.function.args[0];
         double t2min, t2max;
-        if (!numericize_bound(iter2->data.function.args[1], &t2min)
-            || !numericize_bound(iter2->data.function.args[2], &t2max)
-            || !(t2min < t2max)) { expr_free(legends); return NULL; }
+        if (!plot_range_bounds("ParametricPlot3D", iter2, &t2min, &t2max)) { expr_free(legends); return NULL; }
 
         Expr* body = res->data.function.args[0];
 
@@ -775,14 +779,9 @@ Expr* builtin_parametricplot3d(Expr* res) {
         iter_spec_restore(var2, old2);
         iter_spec_restore(var1, old1);
 
-        if (!any) {
-            for (size_t si = 0; si < nsub; si++) free(per_prims[si]);
-            free(per_prims); free(per_counts);
-            free(pass); expr_free(color); expr_free(legends);
-            return NULL;
-        }
+        (void)any;   /* nothing plottable is an empty Graphics3D (audit ParametricPlot3D#2) */
 
-        Expr** prims = malloc(sizeof(Expr*) * total);
+        Expr** prims = malloc(sizeof(Expr*) * (total ? total : 1));
         size_t pc = 0;
         for (size_t si = 0; si < nsub; si++) {
             for (size_t j = 0; j < per_counts[si]; j++) prims[pc++] = per_prims[si][j];
@@ -852,12 +851,9 @@ Expr* builtin_parametricplot3d(Expr* res) {
 
         iter_spec_restore(var1, old1);
 
-        if (!any) {
-            for (size_t ci = 0; ci < nbodies; ci++) free(per_prims[ci]);
-            free(per_prims); free(per_counts);
-            free(pass); expr_free(single_color); expr_free(legends);
-            return NULL;
-        }
+        /* A body never numeric on the range is an empty Graphics3D[{}, ...],
+         * as in the reference (audit ParametricPlot3D#2). */
+        (void)any;
 
         size_t cap = total + (multi ? nbodies : 0) + 1;
         Expr** prims = malloc(sizeof(Expr*) * cap);
