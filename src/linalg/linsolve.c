@@ -48,6 +48,9 @@
 #include "flint_bridge.h"
 #include "flint_qqbar.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"   /* expr_is_numeric_quantity */
+#include "zero_test.h"
+#include "linalg_mod.h" /* Modulus -> p */
 #include "common.h"
 #include "linsolvefn.h"
 #include "ludecomp_internal.h"   /* MpfrLU: square MPFR systems */
@@ -142,6 +145,43 @@ void matsol_warn_once(uint64_t* last_hash, Expr* key, const char* msg) {
 }
 
 /* ------------------------------------------------------------------
+ * Elimination zero test (see linsolve.h).
+ * ------------------------------------------------------------------ */
+
+bool matsol_has_dependent_constant(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_GoldenRatio || e->data.symbol.name == SYM_Degree;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (matsol_has_dependent_constant(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (matsol_has_dependent_constant(e->data.function.args[i])) return true;
+    return false;
+}
+
+bool matsol_is_zero(Expr* e) {
+    if (is_zero_poly(e)) return true;
+    /* Numbers and anything with a free symbol: the structural answer stands. */
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        (e->data.function.head->data.symbol.name == SYM_Rational ||
+         e->data.function.head->data.symbol.name == SYM_Complex)) return false;
+    if (matsol_is_inexact(e) || !expr_is_numeric_quantity(e)) return false;
+    /* An exact closed-form constant: GoldenRatio^2 - GoldenRatio - 1 is a
+     * polynomial in an indeterminate to is_zero_poly, but it is 0. */
+    return zero_test_decide(e) == ZERO_TEST_TRUE;
+}
+
+bool matsol_cell_is_zero(Expr** cell) {
+    if (!matsol_is_zero(*cell)) return false;
+    if (!((*cell)->type == EXPR_INTEGER && (*cell)->data.integer == 0)) {
+        expr_free(*cell);
+        *cell = expr_new_integer(0);
+    }
+    return true;
+}
+
+/* ------------------------------------------------------------------
  * RowReduce -- DivisionFreeRowReduction (Bareiss-like)
  *
  * Direct lift of the previous body of `builtin_rowreduce` from
@@ -181,7 +221,15 @@ static Expr* rowreduce_divfree(Expr* arg) {
      * pays several Expr round trips per cell update and does not finish on
      * the ~3,000-term entries of a parametric ansatz system. */
     {
-        Expr* prref = flint_mpoly_mat_rref(matrix, m, n);
+        /* ...but not when an entry carries a named constant that satisfies an
+         * algebraic relation (GoldenRatio^2 == GoldenRatio + 1, Degree == Pi/180):
+         * as a free indeterminate it would make a singular matrix regular
+         * (RowReduce[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}] was the identity).
+         * The classical loop below decides those cells with matsol_is_zero. */
+        bool dependent = false;
+        for (int i = 0; i < m * n && !dependent; i++)
+            dependent = matsol_has_dependent_constant(matrix[i]);
+        Expr* prref = dependent ? NULL : flint_mpoly_mat_rref(matrix, m, n);
         if (prref) {
             for (int i = 0; i < m * n; i++) expr_free(matrix[i]);
             free(matrix);
@@ -195,7 +243,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
     for (int c = 0; c < n && r < m; c++) {
         int pivot_row = -1;
         for (int i = r; i < m; i++) {
-            if (!is_zero_poly(matrix[i * n + c])) {
+            if (!matsol_cell_is_zero(&matrix[i * n + c])) {
                 pivot_row = i;
                 break;
             }
@@ -215,7 +263,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
         for (int i = 0; i < m; i++) {
             if (i == r) continue;
             Expr* M_ic = matrix[i * n + c];
-            if (is_zero_poly(M_ic)) {
+            if (matsol_is_zero(M_ic)) {
                 for (int j = 0; j < n; j++) {
                     if (j == c) continue;
                     Expr* num_eval = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * n + j])}, 2));
@@ -253,7 +301,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
         Expr* leading = NULL;
         int lead_j = -1;
         for (int j = 0; j < n; j++) {
-            if (!is_zero_poly(matrix[i * n + j])) {
+            if (!matsol_cell_is_zero(&matrix[i * n + j])) {
                 leading = expr_copy(matrix[i * n + j]);
                 lead_j = j;
                 break;
@@ -264,7 +312,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
                 if (j == lead_j) {
                     expr_free(matrix[i * n + j]);
                     matrix[i * n + j] = expr_new_integer(1);
-                } else if (!is_zero_poly(matrix[i * n + j])) {
+                } else if (!matsol_cell_is_zero(&matrix[i * n + j])) {
                     Expr* num_val = matrix[i * n + j];
                     Expr* den_val = expr_copy(leading);
 
@@ -369,7 +417,7 @@ Expr* matsol_parse_zerotest_option(Expr* opt) {
 }
 
 int matsol_zt_is_zero(Expr* e, Expr* zt) {
-    if (!zt) return is_zero_poly(e);
+    if (!zt) return matsol_is_zero(e);
     Expr** a = malloc(sizeof(Expr*));
     a[0] = expr_copy(e);
     Expr* call = expr_new_function(expr_copy(zt), a, 1);
@@ -421,6 +469,17 @@ void matsol_rref_with_zerotest(Expr** flat, int rows, int cols, Expr* zt) {
             expr_free(f);
         }
         pr++;
+    }
+    /* A cell the predicate calls zero IS zero in the reduced form: a skipped
+     * pivot candidate or an eliminated cell that only zt recognises (for
+     * Sin[x]^2 + Cos[x]^2 - 1) is written as the literal 0. */
+    for (int k = 0; k < rows * cols; k++) {
+        Expr* e = flat[k];
+        if (e->type == EXPR_INTEGER && e->data.integer == 0) continue;
+        if (matsol_zt_is_zero(e, zt)) {
+            expr_free(flat[k]);
+            flat[k] = expr_new_integer(0);
+        }
     }
 }
 
@@ -497,7 +556,7 @@ static Expr* rowreduce_onestep(Expr* arg) {
     for (int c = 0; c < n && r < m; c++) {
         int pivot_row = -1;
         for (int i = r; i < m; i++) {
-            if (!is_zero_poly(matrix[i * n + c])) {
+            if (!matsol_cell_is_zero(&matrix[i * n + c])) {
                 pivot_row = i;
                 break;
             }
@@ -519,7 +578,7 @@ static Expr* rowreduce_onestep(Expr* arg) {
             if (j == c) {
                 expr_free(matrix[r * n + j]);
                 matrix[r * n + j] = RR_ONE;
-            } else if (!is_zero_poly(matrix[r * n + j])) {
+            } else if (!matsol_cell_is_zero(&matrix[r * n + j])) {
                 Expr* old = matrix[r * n + j];
                 matrix[r * n + j] = matsol_div_entry(old, pivot);
                 expr_free(old);
@@ -530,7 +589,7 @@ static Expr* rowreduce_onestep(Expr* arg) {
         for (int i = 0; i < m; i++) {
             if (i == r) continue;
             Expr* factor = matrix[i * n + c];
-            if (is_zero_poly(factor)) continue;
+            if (matsol_is_zero(factor)) continue;
 
             for (int j = 0; j < n; j++) {
                 if (j == c) continue;
@@ -617,7 +676,7 @@ static Expr* rowreduce_cofactor(Expr* arg) {
     Expr* det = laplace_det(flat, n, n, 0, cols);
     free(cols);
 
-    bool singular = is_zero_poly(det);
+    bool singular = matsol_is_zero(det);
     expr_free(det);
     for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
     free(flat);
@@ -762,7 +821,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
     for (int col = 0; col < c && row < r; col++) {
         int pivot_row = -1;
         for (int i = row; i < r; i++) {
-            if (!is_zero_poly(matrix[i * cols + col])) {
+            if (!matsol_cell_is_zero(&matrix[i * cols + col])) {
                 pivot_row = i;
                 break;
             }
@@ -782,7 +841,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
         for (int i = 0; i < r; i++) {
             if (i == row) continue;
             Expr* M_ic = matrix[i * cols + col];
-            if (is_zero_poly(M_ic)) {
+            if (matsol_is_zero(M_ic)) {
                 for (int j = 0; j < cols; j++) {
                     if (j == col) continue;
                     Expr* num_eval = eval_and_free(expr_new_function(
@@ -830,7 +889,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
     bool inconsistent = false;
     for (int i = pivots; i < r && !inconsistent; i++) {
         for (int j = 0; j < k; j++) {
-            if (!is_zero_poly(matrix[i * cols + c + j])) {
+            if (!matsol_cell_is_zero(&matrix[i * cols + c + j])) {
                 inconsistent = true;
                 break;
             }
@@ -850,7 +909,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
         int pc = pivot_col_for_row[i];
         Expr* pivot = matrix[i * cols + pc];
         for (int j = c; j < cols; j++) {
-            if (is_zero_poly(matrix[i * cols + j])) continue;
+            if (matsol_cell_is_zero(&matrix[i * cols + j])) continue;
 
             Expr* num_val = matrix[i * cols + j];
             Expr* den_val = expr_copy(pivot);
@@ -968,7 +1027,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
     for (int col = 0; col < c && row < r; col++) {
         int pivot_row = -1;
         for (int i = row; i < r; i++) {
-            if (!is_zero_poly(matrix[i * cols + col])) {
+            if (!matsol_cell_is_zero(&matrix[i * cols + col])) {
                 pivot_row = i;
                 break;
             }
@@ -988,7 +1047,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
             if (j == col) {
                 expr_free(matrix[row * cols + j]);
                 matrix[row * cols + j] = expr_new_integer(1);
-            } else if (!is_zero_poly(matrix[row * cols + j])) {
+            } else if (!matsol_cell_is_zero(&matrix[row * cols + j])) {
                 Expr* old = matrix[row * cols + j];
                 matrix[row * cols + j] = matsol_div_entry(old, pivot);
                 expr_free(old);
@@ -998,7 +1057,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
         for (int i = 0; i < r; i++) {
             if (i == row) continue;
             Expr* factor = matrix[i * cols + col];
-            if (is_zero_poly(factor)) continue;
+            if (matsol_is_zero(factor)) continue;
 
             for (int j = 0; j < cols; j++) {
                 if (j == col) continue;
@@ -1031,7 +1090,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
     bool inconsistent = false;
     for (int i = pivots; i < r && !inconsistent; i++) {
         for (int j = 0; j < k; j++) {
-            if (!is_zero_poly(matrix[i * cols + c + j])) {
+            if (!matsol_cell_is_zero(&matrix[i * cols + c + j])) {
                 inconsistent = true;
                 break;
             }
@@ -1121,7 +1180,7 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b,
     for (int i = 0; i < n; i++) cols[i] = i;
     Expr* det_m = laplace_det(flat_m, n, n, 0, cols);
 
-    bool singular = is_zero_poly(det_m);
+    bool singular = matsol_is_zero(det_m);
     if (singular) {
         static uint64_t last_hash = 0;
         matsol_warn_once(&last_hash, call_key,
@@ -1192,17 +1251,40 @@ Expr* builtin_rowreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     size_t argc = res->data.function.arg_count;
-    if (argc < 1) return NULL;
+    if (argc < 1) return builtin_arg_error("RowReduce", argc, 1, SIZE_MAX);
 
     Expr* arg = res->data.function.args[0];
+
+    /* A non-matrix is not "already reduced": RowReduce[5], a vector, a ragged
+     * list are each RowReduce::matrix, left unevaluated. */
+    {
+        int64_t vd[64];
+        int vr = get_tensor_dims(arg, vd);
+        /* The empty matrix {} (and {{}, ...}) reduces to itself. */
+        bool empty = head_is(arg, SYM_List) &&
+                     (arg->data.function.arg_count == 0 ||
+                      (vr == 2 && vd[1] == 0));
+        if (empty) return expr_copy(arg);
+        if (vr != 2 || vd[0] == 0 || vd[1] == 0) {
+            char* s = expr_to_string(arg);
+            mth_message("RowReduce", "matrix",
+                        "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
+            free(s);
+            return NULL;
+        }
+    }
 
     /* Options after the matrix: Method -> "<name>" and/or ZeroTest -> f. */
     MatsolMethod method = MATSOL_AUTOMATIC;
     Expr* zt = NULL;   /* borrowed from res */
+    int64_t modp = 0;
     for (size_t k = 1; k < argc; k++) {
         Expr* opt = res->data.function.args[k];
         Expr* zf = matsol_parse_zerotest_option(opt);
         if (zf) { zt = zf; continue; }
+        int mr = linalg_mod_parse_option(opt, &modp);
+        if (mr < 0) return NULL;
+        if (mr > 0) continue;
         MatsolMethod mm = matsol_parse_method_option(opt);
         if (mm == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
@@ -1214,6 +1296,9 @@ Expr* builtin_rowreduce(Expr* res) {
         }
         method = mm;
     }
+
+    /* Modulus -> p: the reduced form over Z/p (linalg_mod.c). */
+    if (modp > 0) return linalg_mod_rowreduce(arg, modp, "RowReduce");
 
     /* A ZeroTest runs an exact Gauss-Jordan RREF that consults the predicate for
      * every zero decision (honouring the explicit option over the fast paths). */

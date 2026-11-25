@@ -3,8 +3,9 @@
  * Returns an n x n dense List-of-Lists (n = |V|, in canonical vertex order),
  * consumable directly by Det, Tr, and Eigenvalues with no linalg changes.
  * A DirectedEdge[a,b] sets M[a][b] = 1; an UndirectedEdge sets both M[a][b] and
- * M[b][a], so undirected graphs yield a symmetric matrix. Entries are always
- * 0/1 since parallel edges are forbidden.
+ * M[b][a], so undirected graphs yield a symmetric matrix. Entries count edges:
+ * a mixed graph may join one pair by a DirectedEdge and an UndirectedEdge
+ * (Graph[{1->2, 2->1, 1<->2}] gives {{0, 2}, {2, 0}}), so each edge adds 1.
  *
  * Future hook: a WeightedAdjacencyMatrix would fill entries with edge weights
  * instead of 1 (Locked Decision 2); not implemented in the MVP.
@@ -42,8 +43,8 @@ Expr* builtin_adjacency_matrix(Expr* res) {
         int ia = graph_vidx_get(ix, e->data.function.args[0]);
         int ib = graph_vidx_get(ix, e->data.function.args[1]);
         if (ia < 0 || ib < 0) continue;              /* validated: cannot happen */
-        grid[(size_t)ia * n + (size_t)ib] = 1;
-        if (kind == SYM_UndirectedEdge) grid[(size_t)ib * n + (size_t)ia] = 1;
+        grid[(size_t)ia * n + (size_t)ib] += 1;
+        if (kind == SYM_UndirectedEdge) grid[(size_t)ib * n + (size_t)ia] += 1;
     }
     graph_vidx_free(ix);
 

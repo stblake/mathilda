@@ -63,6 +63,14 @@ bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef
         }
     }
 
+    /* The pivot tolerance is RELATIVE to the largest diagonal of Xc'Xc: an
+     * absolute 1e-12 declined a perfectly determined fit whose features are
+     * merely small (x ~ 1e-7 gives Xc'Xc ~ 1e-14). */
+    double maxdiag = 0.0;
+    for (size_t r = 0; r < p; r++)
+        if (fabs(a[r * (p + 1) + r]) > maxdiag) maxdiag = fabs(a[r * (p + 1) + r]);
+    double ptol = 1e-12 * maxdiag;
+
     for (size_t c = 0; c < p; c++) {
         size_t piv = c; double best = fabs(a[c * (p + 1) + c]);
         for (size_t r = c + 1; r < p; r++) {
@@ -71,7 +79,7 @@ bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef
         }
         /* A zero pivot is a collinear feature set. Scaled against the largest
          * diagonal so the test is not a bare absolute tolerance on unscaled data. */
-        if (!(best > 1e-12)) { free(a); free(xbar); return false; }
+        if (!(best > ptol) || !(best > 0.0)) { free(a); free(xbar); return false; }
         if (piv != c)
             for (size_t k = 0; k <= p; k++) {
                 double t = a[c * (p + 1) + k];
@@ -684,6 +692,13 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
     bool knn = strcmp(mname->data.string, "NearestNeighbors") == 0;
     if (!knn && cl->data.function.arg_count != dim + 1) return NULL;
 
+    /* p[{x1, x2, ...}]: one prediction per example. */
+    {
+        bool batch;
+        Expr* br = ml_apply_batch(head, args, argc, dim, ml_model_apply, &batch);
+        if (batch) return br;
+    }
+
     /* Named property access. This is why an Association payload was unnecessary: the
      * place a user asks for a property is the application, and that is here. */
     if (args[0] && args[0]->type == EXPR_STRING) {
@@ -708,9 +723,9 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
         && a0->data.function.head->data.symbol.name == SYM_List) {
         ok = a0->data.function.arg_count == dim;
         for (size_t j = 0; ok && j < dim; j++)
-            ok = na_read_scalar(a0->data.function.args[j], &xin[j], &im) && im == 0.0;
+            ok = ml_read_real(a0->data.function.args[j], &xin[j]);
     } else {
-        ok = (dim == 1) && na_read_scalar(a0, &xin[0], &im) && im == 0.0;
+        ok = (dim == 1) && ml_read_real(a0, &xin[0]);
     }
     if (!ok) { free(xin); return NULL; }    /* wrong shape: unevaluated, not guessed */
 

@@ -45,4 +45,22 @@ void ml_dist_reset_cache(void);
 
 void ml_dist_init(void);
 
+/* Closed-form properties of the specified distributions NormalDistribution and
+ * UniformDistribution (dist_formula.c): the evaluated formula, exact for exact
+ * input, or NULL when `dist` is neither family, a numeric parameter set is not a
+ * distribution, or (Quantile) the probability is not a number in [0, 1].
+ * `x` is the point (PDF, CDF) or probability (Quantile) -- a List threads --
+ * and is ignored (may be NULL) for the moments. Arguments are borrowed. The
+ * stats heads Mean / Median / Variance / Quantile consult this first. */
+typedef enum {
+    ML_PROP_PDF, ML_PROP_CDF, ML_PROP_QUANTILE,
+    ML_PROP_MEAN, ML_PROP_MEDIAN, ML_PROP_VARIANCE
+} MlDistProp;
+Expr* ml_dist_closed_form(MlDistProp prop, const Expr* dist, const Expr* x);
+
+/* ml_dist_closed_form, else -- for a one-dimensional SmoothKernel learned
+ * distribution -- its machine-number Mean, Variance, Median, CDF or Quantile
+ * (dist.c). NULL when neither applies. The hook the stats heads call. */
+Expr* ml_dist_property(MlDistProp prop, Expr* dist, const Expr* x);
+
 #endif /* ML_DIST_H */

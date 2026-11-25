@@ -15,6 +15,8 @@
 #include "pca.h"       /* ml_column_mean */
 #include "gmm.h"       /* ml_gmm_fit / ml_gmm_param_count -- extracted in iteration 9 for this */
 #include "dist.h"
+#include "numeric.h"   /* expr_is_numeric_quantity, numericalize_machine_unplanned */
+#include "eval.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -217,6 +219,20 @@ static bool ml_read_learned(Expr* e, MlDist* d, double** owned) {
     return true;
 }
 
+/* A real distribution parameter: a number, or an exact numeric constant (Pi,
+ * Sqrt[2]) at its machine value -- RandomVariate[UniformDistribution[{0, Pi}]]
+ * is a draw from [0, 3.14159...], not an unevaluated call. */
+static bool ml_read_param(Expr* e, double* v) {
+    double im = 0.0;
+    if (na_read_scalar(e, v, &im)) return im == 0.0;
+    if (!expr_is_numeric_quantity(e)) return false;
+    Expr* nv = numericalize_machine_unplanned(e);
+    bool ok = nv && nv->type == EXPR_REAL;
+    if (ok) *v = nv->data.real;
+    if (nv) expr_free(nv);
+    return ok;
+}
+
 static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
     *owned = NULL;
     if (!e || e->type != EXPR_FUNCTION) return false;
@@ -224,7 +240,6 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
     if (!h || h->type != EXPR_SYMBOL) return false;
     const char* hn = h->data.symbol.name;
     size_t argc = e->data.function.arg_count;
-    double im = 0.0;
 
     if (hn == SYM_LearnedDistribution) return ml_read_learned(e, d, owned);
 
@@ -232,8 +247,8 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
         d->kind = ML_D_NORMAL; d->dim = 1;
         if (argc == 0) { d->a = 0.0; d->b = 1.0; return true; }   /* the standard normal */
         if (argc != 2) return false;
-        if (!na_read_scalar(e->data.function.args[0], &d->a, &im) || im != 0.0) return false;
-        if (!na_read_scalar(e->data.function.args[1], &d->b, &im) || im != 0.0) return false;
+        if (!ml_read_param(e->data.function.args[0], &d->a)) return false;
+        if (!ml_read_param(e->data.function.args[1], &d->b)) return false;
         /* A non-positive standard deviation is not a distribution. Declining beats
          * returning NaNs that propagate silently through a whole sample. */
         return d->b > 0.0;
@@ -244,8 +259,8 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
         if (argc != 1) return false;
         Expr* r = e->data.function.args[0];
         if (!r || r->type != EXPR_FUNCTION || r->data.function.arg_count != 2) return false;
-        if (!na_read_scalar(r->data.function.args[0], &d->a, &im) || im != 0.0) return false;
-        if (!na_read_scalar(r->data.function.args[1], &d->b, &im) || im != 0.0) return false;
+        if (!ml_read_param(r->data.function.args[0], &d->a)) return false;
+        if (!ml_read_param(r->data.function.args[1], &d->b)) return false;
         return d->b > d->a;
     }
     return false;
@@ -388,8 +403,7 @@ static bool ct_pdf(Expr* dist, Expr* xe, double* out) {
     return true;
 }
 
-static Expr* builtin_pdf(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
+static Expr* pdf_numeric(Expr* res) {
     /* Nominal first: a ContingencyTable's argument is an outcome, not a number. */
     {
         double cp = 0.0;
@@ -410,11 +424,19 @@ static Expr* builtin_pdf(Expr* res) {
          * separate observation. */
         size_t n, dm; double* px = NULL; bool vec = false;
         Expr* out = NULL;
+        bool (*pdf)(const MlDist*, const double*, double*) =
+            (d.kind == ML_D_MIXTURE) ? ml_mixture_pdf :
+            (d.kind == ML_D_KDE)     ? ml_kde_pdf : ml_multinormal_pdf;
+        /* A univariate learned distribution takes a scalar point, as the
+         * specified ones do: PDF[m, 3.5] is PDF[m, {3.5}]. */
+        if (d.dim == 1 && na_read_scalar(xe, &x, &im) && im == 0.0) {
+            double p = 0.0;
+            if (pdf(&d, &x, &p)) out = expr_new_real(p);
+            free(owned);
+            return out;
+        }
         if (ml_read_data(xe, &n, &dm, &px, &vec)) {
             double p = 0.0;
-            bool (*pdf)(const MlDist*, const double*, double*) =
-                (d.kind == ML_D_MIXTURE) ? ml_mixture_pdf :
-                (d.kind == ML_D_KDE)     ? ml_kde_pdf : ml_multinormal_pdf;
             if (vec && n == d.dim && pdf(&d, px, &p))
                 out = expr_new_real(p);
             else if (!vec && dm == d.dim) {         /* a matrix: many points */
@@ -451,6 +473,124 @@ static Expr* builtin_pdf(Expr* res) {
     bool ok = ml_pdf_at(&d, x, &p);
     free(owned);
     return ok ? expr_new_real(p) : NULL;
+}
+
+/* True iff e holds an approximate number anywhere. */
+static bool ml_has_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ml_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* PDF[dist, x]. Exact or symbolic input to a specified distribution gets the
+ * closed form (dist_formula.c) -- PDF[NormalDistribution[], 0] is 1/Sqrt[2 Pi],
+ * and PDF[NormalDistribution[m, s], x] the density formula; approximate input
+ * takes the machine path, and falls back to the closed form when that path
+ * cannot read it (a symbolic coordinate, a Pi parameter). */
+static Expr* builtin_pdf(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* dist = res->data.function.args[0];
+    Expr* xe = res->data.function.args[1];
+    bool exact = !ml_has_inexact(dist) && !ml_has_inexact(xe);
+    if (exact) {
+        Expr* cf = ml_dist_closed_form(ML_PROP_PDF, dist, xe);
+        if (cf) return cf;
+    }
+    Expr* r = pdf_numeric(res);
+    if (r || exact) return r;
+    return ml_dist_closed_form(ML_PROP_PDF, dist, xe);
+}
+
+/* CDF[dist, x]: the closed form for the specified distributions; a learned
+ * one-dimensional SmoothKernel gives the mean of the kernel CDFs. */
+static Expr* kde_cdf(Expr* dist, Expr* xe);
+static Expr* builtin_cdf(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* r = ml_dist_closed_form(ML_PROP_CDF, res->data.function.args[0],
+                                  res->data.function.args[1]);
+    if (r) return r;
+    return kde_cdf(res->data.function.args[0], res->data.function.args[1]);
+}
+
+/* ---- Univariate SmoothKernel properties ---------------------------------- *
+ * The KDE is the uniform mixture of N(x_i, h^2) over the n sample points, so
+ *   Mean     = mean(x_i)
+ *   Variance = (1/n) sum (x_i - mean)^2 + h^2      (the mixture's variance)
+ *   CDF[x]   = (1/n) sum Phi((x - x_i)/h)
+ *   Quantile = the root of CDF[x] = q, by bisection (CDF is strictly monotone).
+ * Machine numbers: the distribution itself is machine-numeric. */
+
+/* The 1-D KDE behind dist, or false. On success *owned must be freed. */
+static bool kde1(Expr* dist, MlDist* d, double** owned) {
+    if (!ml_read_dist(dist, d, owned)) return false;
+    if (d->kind == ML_D_KDE && d->dim == 1 && d->k > 0) return true;
+    free(*owned);
+    *owned = NULL;
+    return false;
+}
+
+static double kde1_cdf_at(const MlDist* d, double x) {
+    double s = 0.0, h = d->band[0];
+    for (size_t i = 0; i < d->k; i++)
+        s += 0.5 * erfc(-(x - d->mu[i]) / (h * sqrt(2.0)));
+    return s / (double)d->k;
+}
+
+static Expr* kde_cdf(Expr* dist, Expr* xe) {
+    MlDist d; double* owned = NULL;
+    double x, im = 0.0;
+    if (!na_read_scalar(xe, &x, &im) || im != 0.0) return NULL;
+    if (!kde1(dist, &d, &owned)) return NULL;
+    Expr* out = expr_new_real(kde1_cdf_at(&d, x));
+    free(owned);
+    return out;
+}
+
+/* Mean / Variance / Median / Quantile of a 1-D SmoothKernel, or NULL. */
+static Expr* kde_property(MlDistProp prop, Expr* dist, const Expr* x) {
+    MlDist d; double* owned = NULL;
+    double q = 0.5, im = 0.0;
+    if (prop == ML_PROP_QUANTILE &&
+        (!x || !na_read_scalar((Expr*)x, &q, &im) || im != 0.0 || !(q > 0.0 && q < 1.0)))
+        return NULL;
+    if (!kde1(dist, &d, &owned)) return NULL;
+    double mean = 0.0, var = 0.0, h = d.band[0];
+    for (size_t i = 0; i < d.k; i++) mean += d.mu[i];
+    mean /= (double)d.k;
+    for (size_t i = 0; i < d.k; i++) var += (d.mu[i] - mean) * (d.mu[i] - mean);
+    var = var / (double)d.k + h * h;
+    Expr* out = NULL;
+    if (prop == ML_PROP_MEAN) out = expr_new_real(mean);
+    else if (prop == ML_PROP_VARIANCE) out = expr_new_real(var);
+    else if (prop == ML_PROP_MEDIAN || prop == ML_PROP_QUANTILE) {
+        double lo = d.mu[0], hi = d.mu[0];
+        for (size_t i = 1; i < d.k; i++) {
+            if (d.mu[i] < lo) lo = d.mu[i];
+            if (d.mu[i] > hi) hi = d.mu[i];
+        }
+        lo -= 40.0 * h; hi += 40.0 * h;         /* CDF is 0 / 1 to rounding here */
+        for (int it = 0; it < 200 && hi - lo > 4.0 * DBL_EPSILON * (fabs(lo) + fabs(hi)); it++) {
+            double mid = 0.5 * (lo + hi);
+            if (kde1_cdf_at(&d, mid) < q) lo = mid; else hi = mid;
+        }
+        out = expr_new_real(0.5 * (lo + hi));
+    }
+    free(owned);
+    return out;
+}
+
+Expr* ml_dist_property(MlDistProp prop, Expr* dist, const Expr* x) {
+    Expr* r = ml_dist_closed_form(prop, dist, x);
+    if (r) return r;
+    if (prop == ML_PROP_CDF) return x ? kde_cdf(dist, (Expr*)x) : NULL;
+    if (prop == ML_PROP_PDF) return NULL;
+    return kde_property(prop, dist, x);
 }
 
 /* ---- RandomVariate ------------------------------------------------------ */
@@ -521,10 +661,26 @@ static Expr* builtin_randomvariate(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     size_t n = 1;
+    /* RandomVariate[dist, {n1, n2, ...}]: an n1 x n2 x ... array of draws. */
+    size_t shape[16];
+    size_t rank = 0;
     if (argc == 2) {
         Expr* ne = res->data.function.args[1];
-        if (!ne || ne->type != EXPR_INTEGER || ne->data.integer < 0) return NULL;
-        n = (size_t)ne->data.integer;
+        if (ne && ne->type == EXPR_FUNCTION && ne->data.function.head->type == EXPR_SYMBOL
+            && ne->data.function.head->data.symbol.name == SYM_List) {
+            rank = ne->data.function.arg_count;
+            if (rank == 0 || rank > 16) return NULL;
+            for (size_t i = 0; i < rank; i++) {
+                Expr* di = ne->data.function.args[i];
+                if (di->type != EXPR_INTEGER || di->data.integer < 0) return NULL;
+                shape[i] = (size_t)di->data.integer;
+                if (shape[i] && n > (size_t)INT64_C(100000000) / shape[i]) return NULL;
+                n *= shape[i];
+            }
+        } else {
+            if (!ne || ne->type != EXPR_INTEGER || ne->data.integer < 0) return NULL;
+            n = (size_t)ne->data.integer;
+        }
     }
     MlDist d; double* owned = NULL;
     if (!ml_read_dist(res->data.function.args[0], &d, &owned)) return NULL;
@@ -539,6 +695,26 @@ static Expr* builtin_randomvariate(Expr* res) {
             out = (dim == 1) ? expr_new_real(o[0]) : ml_list_of_reals(o, dim);
         else
             out = (dim == 1) ? ml_list_of_reals(o, n) : ml_list_matrix(o, n, dim);
+        if (out && rank > 1) {
+            /* Fold the flat list of n draws into the requested shape, the last
+             * dimension innermost. */
+            for (size_t r = rank; r-- > 1; ) {
+                size_t w = shape[r], groups = 1;
+                for (size_t q = 0; q < r; q++) groups *= shape[q];
+                Expr** gs = malloc(sizeof(Expr*) * (groups ? groups : 1));
+                for (size_t g = 0; g < groups; g++) {
+                    Expr** el = malloc(sizeof(Expr*) * (w ? w : 1));
+                    for (size_t j = 0; j < w; j++)
+                        el[j] = expr_copy(out->data.function.args[g * w + j]);
+                    gs[g] = expr_new_function(expr_new_symbol(SYM_List), el, w);
+                    free(el);
+                }
+                Expr* nxt = expr_new_function(expr_new_symbol(SYM_List), gs, groups);
+                free(gs);
+                expr_free(out);
+                out = nxt;
+            }
+        }
     }
     free(z); free(o); free(owned);
     return out;
@@ -991,7 +1167,8 @@ void ml_dist_init(void) {
     symtab_get_def("RandomVariate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RandomVariate",
         "RandomVariate[dist] draws one value from dist; RandomVariate[dist, n] draws a "
-        "list of n. Supports NormalDistribution[mu, sigma] and "
+        "list of n, and RandomVariate[dist, {n1, n2, ...}] an n1 x n2 x ... array. "
+        "Parameters may be exact numeric constants (Pi, Sqrt[2]). Supports NormalDistribution[mu, sigma] and "
         "UniformDistribution[{lo, hi}], each also usable with no arguments for the "
         "standard case, and every LearnedDistribution LearnDistribution or "
         "SmoothKernelDistribution returns (Multinormal, GaussianMixture, SmoothKernel); a "
@@ -1003,7 +1180,17 @@ void ml_dist_init(void) {
     symtab_get_def("PDF")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("PDF",
         "PDF[dist, x] gives the probability density of dist at x, and threads over a "
-        "list of x. Supports NormalDistribution and UniformDistribution.");
+        "list of x. Supports NormalDistribution and UniformDistribution -- exactly for exact "
+        "input and as a formula for symbolic input -- and every LearnedDistribution; a "
+        "univariate learned distribution takes a scalar point.");
+
+    symtab_add_builtin("CDF", builtin_cdf);
+    symtab_get_def("CDF")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CDF",
+        "CDF[dist, x] gives the cumulative distribution function of dist at x, and threads "
+        "over a list of x. NormalDistribution[m, s] gives Erfc[(m - x)/(Sqrt[2] s)]/2 and "
+        "UniformDistribution[{a, b}] the piecewise-linear ramp, exactly for exact input; a "
+        "univariate SmoothKernelDistribution gives the mean of its kernel CDFs.");
 
     symtab_get_def("NormalDistribution")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("NormalDistribution",

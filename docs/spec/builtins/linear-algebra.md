@@ -3,6 +3,9 @@
 ## NDArray
 A first-class, visibly-distinct dense machine-precision N-dimensional array,
 modelled on numpy's `ndarray`.
+- An exact numeric constant beside an NDArray in `Plus`, `Times` or `Power` is a
+  number: `NDArray[{1., 2.}] + Pi` is `NDArray[{4.14159, 5.14159}]`, no
+  `NDArray::sym`.
 - `NDArray[list]`: packs a rectangular, machine-precision nested list of any
   rank into a dense `EXPR_NDARRAY` value, storing a flat row-major (C-order)
   numeric buffer plus rank/dims/dtype directly on the node instead of a nested
@@ -218,6 +221,8 @@ Out[4]= True
 ## DiagonalMatrixQ
 - **Argument and option checks.** `Options[DiagonalMatrixQ]` is `{Tolerance -> 0}`; `Tolerance :> t` and `{Tolerance -> t}` are accepted. Calls are checked against the declared arity and `Options[DiagonalMatrixQ]` before the C code runs (see `src/arity.h`): an unknown option is `DiagonalMatrixQ::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `DiagonalMatrixQ::nonopt`, and a list of option rules is read as the rules themselves.
 Tests whether a matrix has nonzero entries only on a particular diagonal.
+- An arbitrary-precision zero (`0``30`) is a literal zero here, as in
+  `UpperTriangularMatrixQ` and the other structural predicates sharing the test.
 - `DiagonalMatrixQ[m]`: `True` if every off-(main-diagonal) entry of `m`
   is zero, `False` otherwise.
 - `DiagonalMatrixQ[m, k]`: `True` if every entry off the `k`-th diagonal
@@ -435,6 +440,10 @@ Out[5]= True
 
 ## PositiveDefiniteMatrixQ
 Tests whether a matrix is explicitly positive definite.
+- Exact numeric constants (`Pi`, `Sqrt[2]`, `GoldenRatio`) are numbers: such a
+  matrix is decided by Sylvester's criterion with the certified sign of each
+  leading minor of the Hermitian part (`src/linalg/definite_minors.c`, n <= 8);
+  an undecided sign answers `False`. `NegativeDefiniteMatrixQ` shares it.
 - `PositiveDefiniteMatrixQ[m]`: `True` if `Re[Conjugate[x] . m . x] > 0`
   for every nonzero vector `x`, `False` otherwise.
 
@@ -494,6 +503,8 @@ Out[6]= True
 
 ## NegativeDefiniteMatrixQ
 Tests whether a matrix is explicitly negative definite.
+- Exact numeric constants are decided exactly, as in `PositiveDefiniteMatrixQ`:
+  `NegativeDefiniteMatrixQ[{{-Pi, 0}, {0, -Sqrt[2]}}]` is `True`.
 - `NegativeDefiniteMatrixQ[m]`: `True` if `Re[Conjugate[x] . m . x] < 0`
   for every nonzero vector `x`, `False` otherwise.
 
@@ -628,6 +639,8 @@ the product of two 166 x 166 such matrices takes 0.07 s (was 18 s).
 A generalization of `Dot` in which `f` plays the role of multiplication and `g` of addition.
 - `Inner[f, list1, list2, g]`: computes the "inner `f`" of two lists, with "plus operation" `g`.
 - `Inner[f, list1, list2]`: uses `Plus` for `g`.
+- The two tensors must share a head: `Inner[f, h[a, b], k[x, y], g]` is
+  `Inner::heads` and stays unevaluated.
 - `Inner[f, list1, list2, g, n]`: contracts index `n` of the first tensor with the first index of the second tensor.
 
 **Features**:
@@ -689,6 +702,9 @@ Out[3]= f[f[g[a, x], g[a, y], g[a, z]], f[g[b, x], g[b, y], g[b, z]]]
 ## Det
 Gives the determinant of a square matrix.
 - `Det[m]`
+- `Det[m, Modulus -> p]`: the determinant over Z/p -- the exact `Det[m]` reduced
+  mod p, correct for every p, prime or not (`Det[{{2,3},{5,7}}, Modulus -> 5]` is 4).
+  `Options[Det]` is `{Modulus -> 0}`.
 
 **Features**:
 - `Protected`.
@@ -964,6 +980,13 @@ Out[5]= {i, n}
 Gives the inverse of a square matrix.
 - `Inverse[m]`
 - `Inverse[m, Method -> "<name>"]`
+- `Inverse[m, Modulus -> p]`: the inverse over Z/p (`Inverse::sing` when there is
+  none); `Inverse[{{1,2},{3,4}}, Modulus -> 5]` is `{{3, 1}, {4, 2}}`.
+  Modulus -> p computes over Z/p (`src/linalg/linalg_mod.c`): entries must be
+  integers or rationals with a denominator invertible mod p, residues are in
+  `[0, p)`, `p <= 2^31 - 1`; over a composite p a pivot must be a unit, and a
+  column with only zero divisors leaves the call unevaluated. `Modulus -> 0` is
+  the ordinary computation.
 
 **Features**:
 - `Protected`.
@@ -1369,6 +1392,20 @@ Gives the row-reduced form of the matrix `m`.
 - `RowReduce[m]`
 - `RowReduce[m, Method -> "<name>"]`
 - `RowReduce[m, ZeroTest -> f]`
+- `RowReduce[m, Modulus -> p]`: the reduced form over Z/p.
+- A cell the zero test calls zero is written as `0` in the result (with
+  `ZeroTest -> f` too: `{{1, 1/GoldenRatio}, {0, 0}}`, not a leftover
+  `(-1 - GoldenRatio + GoldenRatio^2)/GoldenRatio`).
+- The default zero test is `is_zero_poly` plus, for an exact closed-form numeric
+  constant, the zero recogniser (`zero_test_decide`); and a matrix holding a
+  constant with an algebraic relation (`GoldenRatio`, `Degree`) skips the
+  polynomial (`fmpz_mpoly`) fast path, which treats it as a free indeterminate.
+  So `RowReduce[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}]` is
+  `{{1, 1/GoldenRatio}, {0, 0}}` (it was the identity), and `MatrixRank` and
+  `PseudoInverse`, which take their rank from it, follow.
+- A non-matrix (`RowReduce[5]`, a vector, a ragged list) is `RowReduce::matrix`
+  and stays unevaluated; it used to come back as if reduced. The empty matrix
+  `{}` (or `{{}, ...}`) still reduces to itself.
 
 **Features**:
 - `Protected`.
@@ -1428,6 +1465,10 @@ Gives a basis for the null space of a matrix.
 - `NullSpace[m]`
 - `NullSpace[m, Method -> "<name>"]`
 - `NullSpace[m, ZeroTest -> f]`
+- `NullSpace[m, Modulus -> p]`: a kernel basis over Z/p (`{{1, 1}}` for
+  `{{1, 1}, {1, 1}}` mod 2), the last free column first as in the exact form.
+- `NullSpace[m, Tolerance -> t]`: for an approximate matrix, singular values below
+  `t` times the largest count as zero.
 
 **Features**:
 - `Protected`.
@@ -1660,6 +1701,10 @@ Out[5]= LatticeReduce[{{1, 2}, {3, 4.5}}]
 
 ## HermiteDecomposition
 Hermite normal form of an integer matrix, with the unimodular transform.
+- Past 64 entries the form comes from FLINT's `fmpz_mat_hnf_transform` (with
+  FLINT), whose elimination keeps entries reduced: a 40x40 matrix of 3-digit
+  entries took seconds through the classical gcd elimination, which smaller
+  inputs still use. `r` is unique; `u` is one valid transform.
 - `HermiteDecomposition[m]` — gives `{u, r}` where `u` is unimodular
   (`Abs[Det[u]] == 1`), `r` is the row Hermite normal form of `m`, and
   `u . m == r`. `r` is in echelon shape: pivots move strictly right as rows
@@ -3003,6 +3048,9 @@ Out[5]= {3, 2, 1}
 Finds `x` that solves the matrix equation `m . x == b`.
 - `LinearSolve[m, b]`
 - `LinearSolve[m, b, Method -> "<name>"]`
+- A `LinearSolveFunction` cache entry records the matrix it factored, so an object
+  whose matrix was replaced (`f /. m -> m2`) is solved with a factor of the matrix
+  it now displays, not the stale one its key named.
 
 **Features**:
 - `Protected`.
@@ -3291,6 +3339,10 @@ Out[10]= {0.0, 0.0, 0.0}
 
 ## Fit
 
+A basis function that does not reduce to a number at the data points (one in
+a variable that is not among `vars`) is `Fit::fitm`, and the call stays
+unevaluated, instead of a symbolic "fit" full of `Conjugate`.
+
 A basis column is dropped as numerically zero only against the largest
 column norm, not the response's: `Fit` of data `10^14 (1 + x)` was `0.0`
 (audit Fit#2).
@@ -3368,6 +3420,11 @@ Out[6]= -1.0 + 1.0 x
 
 ## DesignMatrix
 
+`DesignMatrix[data, f, vars]` takes a single basis function. With
+`IncludeConstantBasis -> True` (the default) a constant column of 1s comes
+first unless a basis function is already a nonzero constant, so
+`DesignMatrix[data, {x}, x]` and `DesignMatrix[data, {1, x}, x]` agree.
+
 `DesignMatrix[data, {f1, ..., fn}, vars]` gives the design matrix with entries
 `f_i` evaluated at the data coordinates — the matrix `Fit` forms internally. The
 data shapes are identical to `Fit`, and `data` may be a nested `List`, a packed
@@ -3387,6 +3444,9 @@ Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
 ## CharacteristicPolynomial
 Gives the characteristic polynomial of a square matrix.
 - `CharacteristicPolynomial[m, x]`: the polynomial `Det[m - x I]` in `x`.
+- A machine-real matrix multiplies out `prod (lambda_i - x)` over its LAPACK
+  eigenvalues; Faddeev-Leverrier lost every digit of the small coefficients (the
+  6x6 Hilbert matrix's constant term had the wrong sign).
 - `CharacteristicPolynomial[{m, a}, x]`: the generalised characteristic
   polynomial `Det[m - x a]`.
 
@@ -3431,6 +3491,9 @@ Out[3]= -1 - x + x^2
 - **Argument and option checks.** `Options[Eigenvalues]` (and of `Eigenvectors`, `Eigensystem`) is `{Cubics -> False, Method -> Automatic, Quartics -> False}`. Calls are checked against the declared arity and `Options[Eigenvalues]` before the C code runs (see `src/arity.h`): an unknown option is `Eigenvalues::optx` ("Unknown option Foo in ..."), a non-option beyond the positional arguments is `Eigenvalues::nonopt`, and a list of option rules is read as the rules themselves.
 Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.
+- A machine pencil direction shared by the null spaces of `m` and `a` (LAPACK
+  `alpha ~ 0`, `beta ~ 0`) is `Indeterminate`: `Eigenvalues[{m, m}]` for a
+  singular `m` has one `Indeterminate` beside `1.`.
 - `Eigenvalues[{m, a}]`: generalised eigenvalues of `m` with respect to `a`
   (the values `lambda` such that `m.v == lambda a.v` for some non-zero `v`).
 - `Eigenvalues[m, k]`: first `k` eigenvalues largest in absolute value.
@@ -3591,7 +3654,9 @@ Out[5]= {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 Gives a list of the eigenvectors of a square matrix.
 - `Eigenvectors[m]`: eigenvectors of the n×n matrix `m`.
 - `Eigenvectors[{m, a}]`: generalised eigenvectors of `m` with respect to `a`.
-- `Eigenvectors[m, k]`: first `k` eigenvectors.
+- `Eigenvectors[m, k]`: first `k` eigenvectors. The second argument must be `k`,
+  `-k` or `UpTo[k]` (or an option): a Real, a symbol or a matrix is
+  `Eigenvectors::seqs` and stays unevaluated, instead of being ignored.
 - `Eigenvectors[m, UpTo[k]]`: up to `k` eigenvectors.
 
 **Features**:
@@ -3804,6 +3869,8 @@ Out[3]= {1.15217, 1.06005, 0.970414}
 
 ## HessenbergDecomposition
 Gives the Hessenberg decomposition of a numerical square matrix.
+- An approximate matrix that also holds exact constants (`{{1., Pi}, {2., 3.}}`)
+  is numericized at its precision first; it used to stay unevaluated.
 - `HessenbergDecomposition[m]` — `{p, h}` with `p` unitary, `h` upper
   Hessenberg and `m == p . h . ConjugateTranspose[p]`.
 

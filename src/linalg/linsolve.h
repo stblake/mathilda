@@ -78,7 +78,20 @@ Expr* matsol_div_entry(Expr* num, Expr* den);
 /* Extract a `ZeroTest -> f` rule: returns f (borrowed from `opt`) or NULL. */
 Expr* matsol_parse_zerotest_option(Expr* opt);
 
-/* Zero test for an entry: default (zt == NULL) is the structural is_zero_poly;
+/* The elimination zero test: is_zero_poly, plus -- for an exact closed-form
+ * numeric constant it calls nonzero (GoldenRatio^2 - GoldenRatio - 1, which it
+ * treats as a polynomial in the indeterminate GoldenRatio) -- the zero
+ * recogniser zero_test_decide. matsol_cell_is_zero also replaces a cell found
+ * zero by the literal 0, so later arithmetic and the output see a true zero. */
+bool matsol_is_zero(Expr* e);
+bool matsol_cell_is_zero(Expr** cell);
+
+/* True iff e contains a named constant with a known algebraic relation
+ * (GoldenRatio, Degree): one a polynomial elimination must not treat as a free
+ * indeterminate. */
+bool matsol_has_dependent_constant(const Expr* e);
+
+/* Zero test for an entry: default (zt == NULL) is matsol_is_zero;
  * with a predicate, zero iff TrueQ[zt[e]].  `zt` and `e` are borrowed. */
 int matsol_zt_is_zero(Expr* e, Expr* zt);
 

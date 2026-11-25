@@ -44,6 +44,7 @@
 #include "expr.h"
 #include "sym_names.h"
 #include <stdint.h>
+#include <gmp.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -550,14 +551,23 @@ done:
 
 /* Parse a size spec: k (Integer >= 0 or Infinity) -> [1, k]; {k} -> [k, k];
  * {kmin, kmax}. Returns 1 on success. */
-static int gc_parse_int_or_inf(const Expr* e, long* v) {
-    if (e->type == EXPR_INTEGER && e->data.integer >= 0) { *v = (long)e->data.integer; return 1; }
-    if (galg_is_symbol(e, "Infinity")) { *v = 0x3fffffff; return 1; }
+/* A bound at or past GC_SIZE_INF is no bound (no graph has that many
+ * vertices): it saturates there, never truncates -- (int)(2^32) was 0, so
+ * FindIndependentVertexSet[g, 4294967296] answered {}. A BigInt bound is past
+ * it too. */
+#define GC_SIZE_INF INT64_C(0x3fffffff)
+static int gc_parse_int_or_inf(const Expr* e, int64_t* v) {
+    if (e->type == EXPR_INTEGER && e->data.integer >= 0) {
+        *v = e->data.integer < GC_SIZE_INF ? e->data.integer : GC_SIZE_INF;
+        return 1;
+    }
+    if (e->type == EXPR_BIGINT && mpz_sgn(e->data.bigint) > 0) { *v = GC_SIZE_INF; return 1; }
+    if (galg_is_symbol(e, "Infinity")) { *v = GC_SIZE_INF; return 1; }
     return 0;
 }
 
 int galg_parse_size_spec(const Expr* spec, int* kmin, int* kmax) {
-    long a, b;
+    int64_t a, b;
     if (gc_parse_int_or_inf(spec, &a)) { *kmin = 0; *kmax = (int)a; return 1; }
     if (graph_is_list(spec)) {
         size_t c = spec->data.function.arg_count;
@@ -689,6 +699,20 @@ Expr* builtin_find_clique(Expr* res) {
         free(c);
     } else {
         out = galg_clique_spec_query(g, u, 0, kmin, kmax, count);
+        /* Past the bitset engine (n > GC_BITSET_MAX) a single answer can still
+         * come from the maximum-clique search, when its size fits the spec:
+         * FindClique[CycleGraph[10000], 2] is one edge. */
+        if (!out && count == 1 && u->n > GC_BITSET_MAX) {
+            int* c = malloc((size_t)u->n * sizeof(int));
+            if (c) {
+                int k = galg_max_clique(u, c);
+                if (k > 0 && k >= kmin && k <= kmax) {
+                    Expr* one = galg_vertex_list(g, c, k, 0);
+                    out = expr_new_function(expr_new_symbol(SYM_List), &one, 1);
+                }
+            }
+            free(c);
+        }
     }
     galg_ug_free(u);
     return out;
@@ -705,7 +729,9 @@ Expr* builtin_find_k_clique(Expr* res) {
     int n = u->n;
     Expr* out = NULL;
     if (n == 0) { galg_ug_free(u); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
-    if (n > GC_BITSET_MAX) { galg_ug_free(u); return NULL; }
+    /* No bitset limit: the power graph is built by truncated BFS and searched
+     * by galg_max_clique, neither of which needs one (FindKClique of a
+     * 10000-vertex path stayed unevaluated). */
     /* power graph by truncated BFS from every vertex */
     int* dist = malloc((size_t)n * sizeof(int));
     int* q = malloc((size_t)n * sizeof(int));

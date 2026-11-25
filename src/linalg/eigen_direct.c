@@ -4821,6 +4821,11 @@ static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
 
     bool ok = false;
     bool infinite_ev = false;
+    /* A singular pencil direction (alpha ~ 0 and beta ~ 0: a shared null
+     * vector of A and B) has no eigenvalue -- it is Indeterminate, not the
+     * rounding-noise quotient alpha / beta ({m, m} gave {1., 1.}). */
+    unsigned char* indet = (unsigned char*)calloc(n, 1);
+    if (!indet) { free(eval_re); free(eval_im); free(Vr); free(Vi); return NULL; }
 
     if (!is_complex) {
         double na = matD_norm_inf_real(A->re, n);
@@ -4864,6 +4869,10 @@ static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
                 int info = mat_lapack_dggev(in, Ac, in, Bc, in, ar, ai, be, VR, in);
                 if (info == 0) {
                     for (size_t j = 0; j < n; j++) {
+                        if (fabs(ar[j]) + fabs(ai[j]) <= tolA && fabs(be[j]) <= tolB) {
+                            indet[j] = 1; eval_re[j] = 0.0; eval_im[j] = 0.0;
+                            continue;
+                        }
                         if (be[j] == 0.0) { infinite_ev = true; break; }
                         eval_re[j] = ar[j] / be[j];
                         eval_im[j] = ai[j] / be[j];
@@ -4950,7 +4959,7 @@ static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
         }
     }
 
-    if (!ok) { free(eval_re); free(eval_im); free(Vr); free(Vi); return NULL; }
+    if (!ok) { free(eval_re); free(eval_im); free(Vr); free(Vi); free(indet); return NULL; }
 
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex(eval_re, eval_im, n, perm);
@@ -4976,9 +4985,14 @@ static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
     }
     if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
+        for (size_t s = 0; out && s < n; s++)
+            if (indet[perm[s]]) {
+                expr_free(out->data.function.args[s]);
+                out->data.function.args[s] = expr_new_symbol(SYM_Indeterminate);
+            }
     }
 
-    free(eval_re); free(eval_im); free(Vr); free(Vi); free(perm);
+    free(eval_re); free(eval_im); free(Vr); free(Vi); free(perm); free(indet);
     return direct_finish(out, out_vecs, k_spec);
 }
 

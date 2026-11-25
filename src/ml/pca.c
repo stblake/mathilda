@@ -20,6 +20,8 @@
 #include "classify.h"
 #include "linkedlist.h"      /* LLReader: Standardize of a LinkedList */
 #include "common.h"          /* common_machine_real_value */
+#include "eval.h"            /* eval_and_free: the exact Standardize */
+#include "numeric.h"         /* expr_is_numeric_quantity */
 
 void ml_column_mean(const double* x, size_t n, size_t dim, double* mean) {
     for (size_t j = 0; j < dim; j++) mean[j] = 0.0;
@@ -362,11 +364,167 @@ static Expr* std_build_ll(const Expr* data, const double* x, size_t n, size_t di
     return r;
 }
 
+/* ---- Standardize: the exact / general-location form ----------------------- *
+ * Standardize[v, f1, f2] is (v - f1[v]) / f2[v], f1 = Mean and f2 =
+ * StandardDeviation by default, computed by the evaluator so exact data gives
+ * exact results (Standardize[{1, 2, 4}] is {-4/Sqrt[21], -1/Sqrt[21],
+ * 5/Sqrt[21]}) and any location / scale function works. A matrix is
+ * standardized column by column. The machine path below stays the fast path
+ * for approximate data with the default functions. */
+
+static bool std_has_inexact(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (std_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Every leaf an exact numeric quantity (Integer, Rational, Sqrt[2], ...). */
+static bool std_exact_numeric(const Expr* e) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_List) {
+        if (e->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!std_exact_numeric(e->data.function.args[i])) return false;
+        return true;
+    }
+    return !std_has_inexact(e) && expr_is_numeric_quantity(e);
+}
+
+static bool std_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+static Expr* std_call1(Expr* f, Expr* a) {
+    return eval_and_free(expr_new_function(expr_copy(f), &a, 1));
+}
+
+/* (v - f1[v]) / f2[v] for one vector v (borrowed), or NULL for a zero scale. */
+static Expr* std_vector(Expr* v, Expr* f1, Expr* f2) {
+    Expr* loc = std_call1(f1, expr_copy(v));
+    Expr* sc = std_call1(f2, expr_copy(v));
+    if ((sc->type == EXPR_INTEGER && sc->data.integer == 0) ||
+        (sc->type == EXPR_REAL && sc->data.real == 0.0)) {
+        expr_free(loc); expr_free(sc);
+        return NULL;
+    }
+    Expr* d[2] = { expr_copy(v), expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), loc }, 2) };
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus), d, 2);
+    Expr* q = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ diff,
+                  expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ sc, expr_new_integer(-1) }, 2) }, 2);
+    return eval_and_free(q);
+}
+
+static Expr* std_general(Expr* data, Expr* f1, Expr* f2) {
+    if (!std_is_list(data) || data->data.function.arg_count < 2) return NULL;
+    bool matrix = std_is_list(data->data.function.args[0]);
+    if (!matrix) return std_vector(data, f1, f2);
+    Expr* t = eval_and_free(expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){ expr_copy(data) }, 1));
+    Expr* out = NULL;
+    if (std_is_list(t)) {
+        size_t nc = t->data.function.arg_count;
+        Expr** cols = malloc(sizeof(Expr*) * (nc ? nc : 1));
+        bool ok = cols != NULL;
+        for (size_t j = 0; ok && j < nc; j++) {
+            cols[j] = std_vector(t->data.function.args[j], f1, f2);
+            if (!cols[j]) {
+                for (size_t k = 0; k < j; k++) expr_free(cols[k]);
+                ok = false;
+            }
+        }
+        if (ok) {
+            Expr* cl = expr_new_function(expr_new_symbol(SYM_List), cols, nc);
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){ cl }, 1));
+        }
+        free(cols);
+    }
+    expr_free(t);
+    return out;
+}
+
+/* True iff e, or one of its rows, is a LinkedList. */
+static bool std_has_ll(const Expr* e) {
+    if (e->type == EXPR_LINKEDLIST) return true;
+    if (!std_is_list(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (e->data.function.args[i]->type == EXPR_LINKEDLIST) return true;
+    return false;
+}
+
+/* A plain-List copy of a List / LinkedList vector or matrix (depth levels of
+ * sequences), read through LLReader -- no LinkedList conversion -- or NULL. */
+static Expr* std_plain_view(const Expr* e, int depth) {
+    if (!ll_is_seq(e)) return depth < 2 ? expr_copy((Expr*)e) : NULL;
+    if (depth == 0) return NULL;
+    LLReader r;
+    if (!ll_rd_open(e, &r)) return NULL;
+    Expr** el = malloc(sizeof(Expr*) * (r.n ? r.n : 1));
+    bool ok = el != NULL;
+    size_t k = 0;
+    for (; ok && k < r.n; k++) {
+        el[k] = std_plain_view(ll_rd_at(&r, k), depth - 1);
+        if (!el[k]) ok = false;
+    }
+    ll_rd_close(&r);
+    if (!ok) {
+        if (el) for (size_t j = 0; j + 1 < k; j++) expr_free(el[j]);
+        free(el);
+        return NULL;
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), el, k);
+    free(el);
+    return out;
+}
+
+/* `res` (a List, consumed) rebuilt in the container shape of `proto`: each
+ * level that was a LinkedList in proto becomes one again. */
+static Expr* std_like(const Expr* proto, Expr* res) {
+    if (!ll_is_seq(proto) || !std_is_list(res)) return res;
+    LLReader r;
+    if (!ll_rd_open(proto, &r)) return res;
+    size_t m = res->data.function.arg_count;
+    Expr** el = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) {
+        Expr* ri = expr_copy(res->data.function.args[i]);
+        el[i] = (i < r.n) ? std_like(ll_rd_at(&r, i), ri) : ri;
+    }
+    ll_rd_close(&r);
+    Expr* out = ll_seq_like(proto, el, m);
+    free(el);
+    expr_free(res);
+    return out;
+}
+
 static Expr* builtin_standardize(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc != 1) return NULL;
+    if (argc < 1 || argc > 3) return NULL;
     size_t n, dim; double* x = NULL; bool vec = false;
     Expr* data = res->data.function.args[0];
+    /* The exact path takes exact NUMERIC data (or any data with explicit
+     * functions); a symbolic vector keeps declining, as it does as a
+     * LinkedList. A LinkedList vector is read element by element (no
+     * conversion) and answered as a LinkedList, so both containers agree. */
+    Expr* view = std_has_ll(data) ? std_plain_view(data, 2) : NULL;
+    Expr* src = view ? view : data;
+    if (argc > 1 || (std_is_list(src) && std_exact_numeric(src))) {
+        Expr* f1 = argc > 1 ? expr_copy(res->data.function.args[1]) : expr_new_symbol(SYM_Mean);
+        Expr* f2 = argc > 2 ? expr_copy(res->data.function.args[2])
+                            : expr_new_symbol(SYM_StandardDeviation);
+        Expr* out = std_general(src, f1, f2);
+        expr_free(f1); expr_free(f2);
+        if (out && view) out = std_like(data, out);   /* back into the input's containers */
+        if (view) expr_free(view);
+        if (out || argc > 1) return out;
+    } else if (view) {
+        expr_free(view);
+    }
     if (std_read_ll(data, &n, &dim, &x, &vec)) {
         ml_standardize(x, n, dim, true);
         Expr* out = std_build_ll(data, x, n, dim, vec);

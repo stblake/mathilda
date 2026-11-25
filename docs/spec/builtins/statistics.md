@@ -14,6 +14,9 @@ moving-average specs, integer/complex covariance, …) fall back to the exact
 
 
 ## Median
+
+- `Median[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
+  `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
 Gives the median estimate of the elements in data.
 - `Median[data]`: gives the median estimate $\hat{q}_{1/4}$ of the elements in `data`.
 - `Median[dist]`: gives the median of the distribution `dist`.
@@ -52,6 +55,9 @@ Median::rectn: Rectangular array of real numbers is expected at position 1 in Me
 Out[8]= Median[{a, b, c}]
 ```
 ## Mean
+
+- `Mean[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
+  `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
 Gives the mean estimate of the elements in data.
 - `Mean[data]`
 
@@ -107,6 +113,9 @@ Out[5]= 2.73861
 ```
 
 ## Variance
+
+- `Variance[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
+  `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
 Gives the unbiased variance estimate of the elements in data.
 - `Variance[data]`
 
@@ -381,6 +390,9 @@ Out[6]= {1267650600228229401496703205376, 80346902212949513777098104617121512656
 
 
 ## Quantile
+
+- `Quantile[dist]`, `Quantile[dist, q]` of a `NormalDistribution`, `UniformDistribution` or 1-D
+  `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
 Gives the q-th quantile estimate of the elements in data.
 - `Quantile[data, q]`: the q-th quantile of `data` (left-continuous: for sorted data $\{x_{(1)},\dots,x_{(n)}\}$, $x_{(\lceil nq \rceil)}$, edge-clamped).
 - `Quantile[data, {q1, q2, ...}]`: a list of quantiles, one per $q_i$.

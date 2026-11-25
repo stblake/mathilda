@@ -23,6 +23,11 @@ Shifts each column to zero mean and rescales it to unit standard deviation.
 Attributes: `Protected`.
 
 - `Standardize[data]`
+- `Standardize[data, f1]`, `Standardize[data, f1, f2]`: `(x - f1[x]) / f2[x]` per
+  column (`f1 = Mean`, `f2 = StandardDeviation` by default).
+- Exact data is standardized exactly (`Standardize[{1, 2, 4}]` is
+  `{-4/Sqrt[21], -1/Sqrt[21], 5/Sqrt[21]}`), through the evaluator; approximate
+  data with the default functions keeps the machine path.
 
 **Features**:
 - **Columns are variables, rows are observations.** A flat list is treated as `n`
@@ -178,6 +183,13 @@ no new evaluation concept.
 
 ## Predict
 
+A model applied to a LIST of examples gives a list of answers, for
+`PredictorFunction` and `ClassifierFunction` alike: `p[{1., 2., 3.}]` for a
+one-feature model, `c[{{0.5, 0.5}, {10.5, 10.5}}]` for a two-feature one
+(`ml_apply_batch`, `src/ml/mlutil.c`). The least-squares pivot test is relative to
+the largest diagonal of the centred normal matrix, so features that are merely
+small (`x ~ 10^-7`) are not declined as collinear; `LinearModelFit[data]` shares it.
+
 Fits a predictor to data and returns a `PredictorFunction`. Attributes: `Protected`.
 
 - `Predict[data]`
@@ -316,6 +328,10 @@ visibility.
 
 - `RandomVariate[dist]` — one draw
 - `RandomVariate[dist, n]` — a list of `n`
+- `RandomVariate[dist, {n1, n2, ...}]` — an `n1 x n2 x ...` array of draws
+
+Parameters may be exact numeric constants (`UniformDistribution[{0, Pi}]`,
+`NormalDistribution[Sqrt[2], 1]`), read at their machine value.
 
 `dist` is `NormalDistribution`, `UniformDistribution`, or any `LearnedDistribution` that
 `LearnDistribution` or `SmoothKernelDistribution` returns. A univariate distribution draws
@@ -353,6 +369,25 @@ Out[3]= {}
 ## PDF
 
 - `PDF[dist, x]`, threading over a list of `x`.
+- Exact input gives the exact density and symbolic input the formula
+  (`src/ml/dist_formula.c`): `PDF[NormalDistribution[], 0]` is `1/Sqrt[2 Pi]`,
+  `PDF[UniformDistribution[{0, 3}], 1]` is `1/3`, `PDF[UniformDistribution[{0, 2}], x]`
+  is `Piecewise[{{1/2, 0 <= x <= 2}}, 0]`. Approximate input keeps the machine path.
+- A univariate `LearnedDistribution` takes a scalar point: `PDF[m, 3.5]`.
+
+## CDF, Mean, Variance, Median, Quantile of a distribution
+
+- `CDF[dist, x]`: `Erfc[(m - x)/(Sqrt[2] s)]/2` for `NormalDistribution[m, s]`;
+  `Piecewise[{{(x - a)/(b - a), a <= x <= b}, {1, x > b}}, 0]` for
+  `UniformDistribution[{a, b}]`.
+- `Mean`, `Median`, `Variance` (so `StandardDeviation`) of a distribution: `m`,
+  `m`, `s^2`; `(a + b)/2`, `(a + b)/2`, `(b - a)^2/12`.
+- `Quantile[dist, q]` for a number `q` in `[0, 1]`: `m - Sqrt[2] s InverseErfc[2 q]`;
+  `a + (b - a) q`.
+- A one-dimensional `SmoothKernelDistribution` answers all five in machine numbers:
+  the mixture of `N(x_i, h^2)` has mean `mean(x_i)`, variance
+  `(1/n) sum (x_i - mean)^2 + h^2`, CDF `(1/n) sum Phi((x - x_i)/h)`, and its
+  quantiles are found by bisection.
 
 Verified against the closed form computed symbolically: `PDF[NormalDistribution[], 0]`
 equals `1/Sqrt[2 Pi]`, and the general case matches the longhand
@@ -534,6 +569,11 @@ Out[2]= 0.243738
 ## Classify
 
 Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
+A feature is a number or an exact numeric constant (`1/2 -> "a"` trains like
+`0.5 -> "a"`); a feature vector must be a `List`, so `g[9] -> "a"` is not the
+number 9 and the call stays unevaluated. A list of examples classifies each.
+`InputForm` of a trained model prints it in full, so `ToString[m, InputForm]`
+re-reads as the same model; the standard form still elides the parameters.
 Malformed training data, including a rule with the wrong argument count such as
 `Classify[{Rule[]}]` (which crashed, audit Classify#1; `Predict` likewise), leaves the call
 unevaluated.

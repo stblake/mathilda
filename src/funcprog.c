@@ -2858,6 +2858,19 @@ Expr* builtin_inner(Expr* res) {
     
     Expr* head = A->data.function.head;
 
+    /* Both tensors are built from one head: Inner[f, h[a, b], k[x, y], g] is
+     * Inner::heads, not a contraction of mismatched containers. */
+    if (!expr_eq(head, B->data.function.head)) {
+        char* hs = expr_to_string(head);
+        char* ks = expr_to_string(B->data.function.head);
+        mth_message("Inner", "heads",
+                    "Heads %s and %s at positions 2 and 3 are expected to be the same.",
+                    hs, ks);
+        free(hs); free(ks);
+        if (res->data.function.arg_count < 4) expr_free(g);
+        return NULL;
+    }
+
     /* Depth of A along its first elements: the index count the contraction
      * sees (inner_A descends exactly this path). */
     int64_t rank_a = 0;

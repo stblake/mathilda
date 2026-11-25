@@ -521,6 +521,8 @@ static int cmp_len(const void* a, const void* b) {
     return (x[1] > y[1]) - (x[1] < y[1]);
 }
 
+static Expr* find_paths_range(const GopsView* vp, int s, int t, long lo, long hi, long want);
+
 Expr* builtin_find_path(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 3 || argc > 5) return NULL;
@@ -537,6 +539,35 @@ Expr* builtin_find_path(Expr* res) {
     if (s == t) return empty_list();
     if (want == 1 && hi < 0 && lo <= 1) return dfs_path(&v, s, t);
 
+    /* A finite count over a range of lengths wants the SHORTEST such paths: a
+     * single depth-first sweep stops at the first n it meets, which need not be
+     * the shortest (FindPath[CompleteGraph[4], 1, 4, Infinity, 2] missed the
+     * direct edge). So deepen one length at a time, shortest first. */
+    if (want > 0 && (hi < 0 || hi > lo)) {
+        long top = (hi < 0 || hi > (long)v.nv - 1) ? (long)v.nv - 1 : hi;
+        XList acc = { NULL, 0, 0 };
+        int fail = 0;
+        for (long L = lo > 1 ? lo : 1; L <= top && (long)acc.n < want && !fail; L++) {
+            Expr* part = find_paths_range(&v, s, t, L, L, want - (long)acc.n);
+            if (!part) { fail = 1; break; }
+            for (size_t i = 0; i < part->data.function.arg_count && !fail; i++)
+                if (!xl_push(&acc, expr_copy(part->data.function.args[i]))) fail = 1;
+            expr_free(part);
+        }
+        if (fail) {
+            for (size_t i = 0; i < acc.n; i++) expr_free(acc.a[i]);
+            free(acc.a);
+            return NULL;
+        }
+        return gops_list_take(acc.a, acc.n);
+    }
+    return find_paths_range(&v, s, t, lo, hi, want);
+}
+
+/* The simple s-t paths with lo..hi edges (hi < 0: any), at most `want`
+ * (-1: all), shortest first. */
+static Expr* find_paths_range(const GopsView* vp, int s, int t, long lo, long hi, long want) {
+    GopsView v = *vp;
     Search S;
     if (!search_init(&S, &v, 1, lo, hi, want)) { search_free(&S); return NULL; }
     const GopsInc* inc = &S.inc;

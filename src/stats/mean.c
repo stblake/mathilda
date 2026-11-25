@@ -12,6 +12,8 @@
 #include "numeric.h"   /* numeric_machine_subnormal */
 #include "linkedlist.h" /* LLReader */
 #include <stdlib.h>
+#include "dist.h"    /* ml_dist_property: distribution moments */
+#include "common.h"  /* head_is */
 
 /* Mean of the n elements v[0..n): the vector core, shared by a List's
  * arguments and a LinkedList's elements (LLReader). */
@@ -117,6 +119,13 @@ Expr* builtin_mean(Expr* res) {
 
     /* Mean[assoc] is the mean of the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* Mean of a distribution (NormalDistribution, UniformDistribution, a 1-D
+     * SmoothKernel): its closed form, see src/ml/dist.h. */
+    if (data->type == EXPR_FUNCTION && !head_is(data, SYM_List)) {
+        Expr* r = ml_dist_property(ML_PROP_MEAN, data, NULL);
+        if (r) return r;
+    }
 
     /* NDArray fast path (see ndreduce.c). */
     if (ndred_call_has_ndarray(res)) return ndred_mean(res);

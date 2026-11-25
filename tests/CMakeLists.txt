@@ -701,6 +701,7 @@ set(COMMON_SRC
     ../src/ml/gmm.c
     ../src/ml/mlutil.c
     ../src/ml/dist.c
+    ../src/ml/dist_formula.c
     ../src/ml/encode.c
     ../src/ml/tree.c
     ../src/ml/classify.c
@@ -827,6 +828,7 @@ set(COMMON_SRC
     ../src/linalg/dot_mpfr.c
     ../src/linalg/mp_parallel.c
     ../src/linalg/det.c
+    ../src/linalg/linalg_mod.c
     ../src/linalg/flint_mat_bridge.c
     ../src/linalg/cross.c
     ../src/linalg/rotationmatrix.c
@@ -866,6 +868,7 @@ set(COMMON_SRC
     ../src/linalg/blas_bridge.c
     ../src/linalg/lapack_bridge.c
     ../src/linalg/posdef_q.c
+    ../src/linalg/definite_minors.c
     ../src/linalg/negdef_q.c
     ../src/linalg/eigen.c
     ../src/linalg/eigen_common.c

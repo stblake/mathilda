@@ -197,11 +197,13 @@ static int* order_by_size_desc(const int* comp, int n, int k) {
 static Expr* components_driver(Expr* res, int mode) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
-    const Expr* g = res->data.function.args[0];
     const Expr* sel = (argc == 2) ? res->data.function.args[1] : NULL;
     if (sel && !graph_is_list(sel)) return NULL;
+    /* A graph, or a list of edges standing for one (graph_coerce). */
+    Expr* g = graph_coerce(res->data.function.args[0]);
+    if (!g) return NULL;
     GraphAdj* a = graph_build_adj(g);
-    if (!a) return NULL;
+    if (!a) { expr_free(g); return NULL; }
     int n = a->n;
 
     int strong = (mode == CC_STRONG)
@@ -238,6 +240,7 @@ static Expr* components_driver(Expr* res, int mode) {
 done:
     free(comp); free(order); free(keep);
     graph_adj_free(a);
+    expr_free(g);
     return out;
 }
 

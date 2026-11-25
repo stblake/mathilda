@@ -5,6 +5,7 @@
 #include "numarray.h"
 #include <math.h>
 #include "mlutil.h"
+#include "numeric.h"   /* expr_is_numeric_quantity, numericalize_machine_unplanned */
 
 Expr* ml_list_of_reals(const double* v, size_t n) {
     Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
@@ -84,3 +85,59 @@ double ml_mahalanobis(const double* l, const double* mu, const double* x,
     return q;
 }
 
+
+/* ---- Feature reading and batch application (see mlutil.h) --------------- */
+
+bool ml_read_real(const Expr* e, double* out) {
+    double im = 0.0;
+    if (na_read_scalar((Expr*)e, out, &im)) return im == 0.0;
+    if (!expr_is_numeric_quantity(e)) return false;
+    Expr* nv = numericalize_machine_unplanned(e);
+    bool ok = nv && nv->type == EXPR_REAL;
+    if (ok) *out = nv->data.real;
+    if (nv) expr_free(nv);
+    return ok;
+}
+
+static bool ml_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+Expr* ml_apply_batch(Expr* head, Expr** args, size_t argc, size_t dim,
+                     Expr* (*apply)(Expr*, Expr**, size_t), bool* batch) {
+    *batch = false;
+    if (argc < 1 || !ml_is_list(args[0])) return NULL;
+    Expr* a0 = args[0];
+    size_t n = a0->data.function.arg_count;
+    if (n == 0) return NULL;
+    bool rows = true, scalars = true;
+    for (size_t i = 0; i < n; i++) {
+        Expr* xi = a0->data.function.args[i];
+        if (ml_is_list(xi)) {
+            scalars = false;
+            if (xi->data.function.arg_count != dim) rows = false;
+        } else {
+            rows = false;
+        }
+    }
+    if (!(rows || (dim == 1 && scalars && n >= 2))) return NULL;
+    *batch = true;
+    Expr** out = malloc(sizeof(Expr*) * n);
+    Expr** a = malloc(sizeof(Expr*) * argc);
+    if (!out || !a) { free(out); free(a); return NULL; }
+    for (size_t j = 1; j < argc; j++) a[j] = args[j];
+    for (size_t i = 0; i < n; i++) {
+        a[0] = a0->data.function.args[i];
+        out[i] = apply(head, a, argc);
+        if (!out[i]) {
+            for (size_t k = 0; k < i; k++) expr_free(out[k]);
+            free(out); free(a);
+            return NULL;
+        }
+    }
+    free(a);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, n);
+    free(out);
+    return list;
+}

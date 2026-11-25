@@ -63,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include "linalg_mod.h"   /* Modulus -> p */
 
 /* Emit a Wolfram-style Inverse::tag diagnostic.  Note the firing so Check[]
  * sees it, then stay silent under Quiet[] — the .m linear-algebra callers
@@ -602,6 +603,15 @@ Expr* builtin_inverse(Expr* res) {
 
     MatsolMethod method = MATSOL_AUTOMATIC;
     if (argc == 2) {
+        /* Modulus -> p: the inverse over Z/p (linalg_mod.c). */
+        int64_t modp = 0;
+        int mr = linalg_mod_parse_option(res->data.function.args[1], &modp);
+        if (mr < 0) return NULL;
+        if (mr > 0) {
+            if (modp > 0) return linalg_mod_inverse(arg, modp);
+            Expr* a = expr_copy(arg);
+            return expr_new_function(expr_new_symbol(SYM_Inverse), &a, 1);
+        }
         method = matsol_parse_method_option(res->data.function.args[1]);
         if (method == MATSOL_INVALID) {
             static uint64_t last_warned = 0;

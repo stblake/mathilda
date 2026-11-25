@@ -19,6 +19,8 @@
 #include "expr.h"
 #include "sym_names.h"
 #include "numeric.h"
+#include "eval.h"
+#include "match.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -132,14 +134,19 @@ int graph_vidx_put(GraphVIdx* ix, const Expr* v, int index) {
     return 1;
 }
 
-/* Index every vertex of a canonical vertex List by position. A repeated vertex
- * keeps its FIRST index, matching the linear graph_vertex_index scan. */
+/* Index every vertex of a canonical vertex List by position. NULL when a
+ * vertex repeats: a canonical graph lists each vertex once, so the graph is
+ * not valid as it stands and builtin_graph rebuilds it with the duplicate
+ * dropped (Graph[{1, 1, 2}, {1 -> 2}] has 2 vertices, not a phantom third). */
 static GraphVIdx* vidx_build(const Expr* verts) {
     size_t n = verts->data.function.arg_count;
     GraphVIdx* ix = graph_vidx_new(n);
     if (!ix) return NULL;
     for (size_t i = 0; i < n; i++)
-        graph_vidx_put(ix, verts->data.function.args[i], (int)i);
+        if (!graph_vidx_put(ix, verts->data.function.args[i], (int)i)) {
+            graph_vidx_free(ix);
+            return NULL;
+        }
     return ix;
 }
 
@@ -680,11 +687,19 @@ double graph_weight_to_double(const Expr* w) {
 #ifdef USE_MPFR
         case EXPR_MPFR:    return mpfr_get_d(w->data.mpfr, MPFR_RNDN);
 #endif
+        case EXPR_SYMBOL:      /* Pi, E, ...: the numeric-constant arm below */
         case EXPR_FUNCTION:
             if (head_is_sym(w, SYM_Rational) && w->data.function.arg_count == 2) {
                 double p = graph_weight_to_double(w->data.function.args[0]);
                 double q = graph_weight_to_double(w->data.function.args[1]);
                 if (!isnan(p) && !isnan(q) && q != 0.0) return p / q;
+            }
+            /* An exact numeric constant (Pi, Sqrt[2], 1 + E): its machine value. */
+            if (!head_is_sym(w, SYM_Complex) && expr_is_numeric_quantity(w)) {
+                Expr* nv = numericalize_machine_unplanned(w);
+                double d = (nv && nv->type == EXPR_REAL) ? nv->data.real : NAN;
+                if (nv) expr_free(nv);
+                return d;
             }
             return NAN;
         default:
@@ -704,10 +719,80 @@ int graph_weights_usable(const Expr* g) {
         /* expr_is_numeric_like also accepts Complex (numeric-component
          * Complex[re,im]); Dijkstra needs an orderable real, so reject that
          * shape explicitly rather than reusing the check unfiltered. */
-        if (!expr_is_numeric_like(w) || head_is_sym(w, SYM_Complex)) { ok = 0; break; }
+        if ((!expr_is_numeric_like(w) && !expr_is_numeric_quantity(w)) ||
+            head_is_sym(w, SYM_Complex)) { ok = 0; break; }
         double d = graph_weight_to_double(w);
         if (isnan(d) || d < 0.0) ok = 0;
     }
     expr_free(weights);
     return ok;
+}
+
+/* ---- Edge-list graph forms and pattern filters (see graph.h) ------------- */
+
+/* True iff e is a 2-argument edge or edge sugar (Rule, TwoWayRule). */
+static int is_edge_like(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+           (head_is_sym(e, SYM_DirectedEdge) || head_is_sym(e, SYM_UndirectedEdge) ||
+            head_is_sym(e, SYM_Rule) || head_is_sym(e, SYM_TwoWayRule));
+}
+
+Expr* graph_coerce(const Expr* e) {
+    if (graph_is_valid(e)) return expr_copy((Expr*)e);
+    if (!graph_is_list(e) || e->data.function.arg_count == 0) return NULL;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!is_edge_like(e->data.function.args[i])) return NULL;
+    Expr* arg = expr_copy((Expr*)e);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Graph), &arg, 1);
+    Expr* g = evaluate(call);
+    expr_free(call);
+    if (!graph_is_valid(g)) { expr_free(g); return NULL; }
+    return g;
+}
+
+/* The pattern as an edge pattern: top-level Rule / TwoWayRule sugar becomes the
+ * canonical DirectedEdge / UndirectedEdge head the stored edges carry. */
+static Expr* edge_pattern(const Expr* patt) {
+    const char* h = head_is_sym(patt, SYM_Rule) ? SYM_DirectedEdge
+                  : head_is_sym(patt, SYM_TwoWayRule) ? SYM_UndirectedEdge : NULL;
+    if (!h || patt->data.function.arg_count != 2) return expr_copy((Expr*)patt);
+    Expr* a[2] = { expr_copy(patt->data.function.args[0]),
+                   expr_copy(patt->data.function.args[1]) };
+    return expr_new_function(expr_new_symbol(h), a, 2);
+}
+
+static int match_one(Expr* x, Expr* patt) {
+    MatchEnv* env = env_new();
+    int ok = match(x, patt, env) ? 1 : 0;
+    env_free(env);
+    return ok;
+}
+
+Expr* graph_filter_pattern(const Expr* items, const Expr* patt, int edges,
+                           int count_only) {
+    Expr* p = edges ? edge_pattern(patt) : expr_copy((Expr*)patt);
+    size_t n = items->data.function.arg_count, k = 0;
+    Expr** out = count_only ? NULL : malloc((n ? n : 1) * sizeof(Expr*));
+    if (!count_only && !out) { expr_free(p); return NULL; }
+    for (size_t i = 0; i < n; i++) {
+        Expr* x = items->data.function.args[i];
+        int ok = match_one(x, p);
+        /* An undirected edge has no orientation: it also matches reversed. */
+        if (!ok && edges && head_is_sym(x, SYM_UndirectedEdge)) {
+            Expr* r[2] = { expr_copy(x->data.function.args[1]),
+                           expr_copy(x->data.function.args[0]) };
+            Expr* rev = expr_new_function(expr_new_symbol(SYM_UndirectedEdge), r, 2);
+            ok = match_one(rev, p);
+            expr_free(rev);
+        }
+        if (ok) {
+            if (!count_only) out[k] = expr_copy(x);
+            k++;
+        }
+    }
+    expr_free(p);
+    if (count_only) return expr_new_integer((int64_t)k);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, k);
+    free(out);
+    return list;
 }

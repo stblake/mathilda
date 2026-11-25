@@ -24,6 +24,7 @@
  */
 
 #include "la_dense.h"
+#include "linalg.h"
 #include "ndlinalg.h"
 #include "numarray.h"
 #include "lapack.h"
@@ -280,6 +281,8 @@ static Expr* hess_mpfr(const Expr* m, int n, mpfr_prec_t bits) {
  *  Entry points                                                            *
  * ------------------------------------------------------------------------ */
 
+static Expr* hess_dispatch(const Expr* m, int r, LaPrecClass pc, long bits, bool pivot);
+
 static Expr* hess_run(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return builtin_arg_error(HESS_HEAD, argc, 1, 1);
@@ -331,6 +334,31 @@ static Expr* hess_run(Expr* res) {
                     "with non-numeric elements.");
         return NULL;
     }
+    /* An approximate matrix that also holds exact constants ({{1., Pi}, ...})
+     * is numericized at its precision first, as N would: the kernels read
+     * only numbers, and Pi left the call unevaluated. */
+    Expr* mnum = NULL;
+    if (m->type == EXPR_FUNCTION) {
+        bool has_const = false;
+        for (int i = 0; i < r && !has_const; i++) {
+            const Expr* row = m->data.function.args[i];
+            if (row->type != EXPR_FUNCTION) break;
+            for (int j = 0; j < c && !has_const; j++)
+                has_const = linalg_is_exact_constant(row->data.function.args[j]);
+        }
+        if (has_const) {
+            mnum = common_numericalize_result(m, pc == LA_MPFR ? bits : 53);
+            m = mnum;
+        }
+    }
+    Expr* out = hess_dispatch(m, r, pc, bits, pivot);
+    if (mnum) expr_free(mnum);
+    return out;
+}
+
+/* The kernels, on a matrix of numbers. */
+static Expr* hess_dispatch(const Expr* m, int r, LaPrecClass pc, long bits, bool pivot) {
+    (void)bits; (void)pc;
 #ifdef USE_MPFR
     if (pc == LA_MPFR && !pivot) {
         Expr* boxed = la_boxed_copy(m);

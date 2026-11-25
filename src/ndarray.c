@@ -2770,6 +2770,39 @@ bool ndarray_warn_shape_mismatch(Expr** args, size_t n, const char* verb) {
     return false;
 }
 
+Expr* ndarray_numeric_constant_retry(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    size_t n = call->data.function.arg_count;
+    bool has_nd = false, need = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (a->type == EXPR_NDARRAY) { has_nd = true; continue; }
+        if (expr_is_numeric_like(a)) continue;
+        if (!expr_is_numeric_quantity(a)) return NULL;   /* a real symbol */
+        need = true;
+    }
+    if (!has_nd || !need) return NULL;
+    Expr** na = malloc(sizeof(Expr*) * n);
+    if (!na) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = call->data.function.args[i];
+        Expr* v = NULL;
+        if (a->type != EXPR_NDARRAY && !expr_is_numeric_like(a)) {
+            v = numericalize_machine_unplanned(a);
+            if (v && !expr_is_numeric_like(v)) { expr_free(v); v = NULL; }
+            if (!v) {
+                for (size_t j = 0; j < i; j++) expr_free(na[j]);
+                free(na);
+                return NULL;
+            }
+        }
+        na[i] = v ? v : expr_copy(a);
+    }
+    Expr* out = expr_new_function(expr_copy(call->data.function.head), na, n);
+    free(na);
+    return out;
+}
+
 bool ndarray_warn_symbolic(Expr** args, size_t n, const char* verb) {
     bool has_nd = false, has_sym = false;
     for (size_t i = 0; i < n; i++) {

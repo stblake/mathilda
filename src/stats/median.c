@@ -13,6 +13,8 @@
 #include "print.h"     /* expr_to_string */
 #include <stdio.h>
 #include <stdlib.h>
+#include "dist.h"    /* ml_dist_property: distribution moments */
+#include "common.h"  /* head_is */
 
 Expr* builtin_median(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -20,6 +22,13 @@ Expr* builtin_median(Expr* res) {
 
     /* Median[assoc] is the median of the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* Median of a distribution (NormalDistribution, UniformDistribution, a 1-D
+     * SmoothKernel): its closed form, see src/ml/dist.h. */
+    if (data->type == EXPR_FUNCTION && !head_is(data, SYM_List)) {
+        Expr* r = ml_dist_property(ML_PROP_MEDIAN, data, NULL);
+        if (r) return r;
+    }
 
     /* NDArray fast path: quickselect on the flat buffer (see ndreduce.c). */
     if (ndred_call_has_ndarray(res)) return ndred_median(res);

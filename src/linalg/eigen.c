@@ -431,7 +431,13 @@ static Expr* eigen_numeric_dispatch(EigenOpts* o, Expr* m, Expr* a, int64_t n,
 static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
                                     bool inexact, Expr** vals_out);
 
+static bool eigensystem_check(Expr* res, const char* head, const char* noun);
+
 Expr* builtin_eigenvectors(Expr* res) {
+    /* The second argument is a count spec (k, -k, UpTo[k]) or an option: a
+     * symbol, a Real or a second matrix is not silently ignored. */
+    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigenvectors", "eigenvectors"))
+        return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_eigenvectors(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
@@ -627,7 +633,7 @@ static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
  * MATEIGEN_WANT_BOTH (they sort, pair and k-select both parts with the one
  * permutation), and the symbolic path returns the eigenvalues it found the
  * eigenvectors for.  Same argument forms and options as Eigenvalues. */
-static bool eigensystem_check(Expr* res) {
+static bool eigensystem_check(Expr* res, const char* head, const char* noun) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return false;
     Expr* m = res->data.function.args[0];
@@ -643,7 +649,7 @@ static bool eigensystem_check(Expr* res) {
     if (!square) {
         if (m->type == EXPR_FUNCTION && head_is(m, SYM_List)) {
             char* s = expr_to_string(m);
-            mth_message("Eigensystem", "matsq", "Argument %s at position 1 is not a non-empty square matrix.", s ? s : "?");
+            mth_message(head, "matsq", "Argument %s at position 1 is not a non-empty square matrix.", s ? s : "?");
             free(s);
         }
         return false;
@@ -659,15 +665,15 @@ static bool eigensystem_check(Expr* res) {
                        && k->data.function.args[0]->data.integer >= 0);
             if (!ok) {
                 char* s = expr_to_string(res);
-                mth_message("Eigensystem", "seqs", "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or {m, n, s}) expected at position 2 in %s.", s ? s : "?");
+                mth_message(head, "seqs", "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or {m, n, s}) expected at position 2 in %s.", s ? s : "?");
                 free(s);
                 return false;
             }
             if (k->type == EXPR_INTEGER) {
                 int64_t kv = k->data.integer, ak = kv < 0 ? -kv : kv;
                 if (ak > n) {
-                    mth_message("Eigensystem", "take", "Cannot take eigenvectors and eigenvalues %lld through %lld out of the total of %lld eigenvectors and eigenvalues.",
-                                (long long)(kv < 0 ? kv : 1), (long long)(kv < 0 ? -1 : kv), (long long)n);
+                    mth_message(head, "take", "Cannot take %s %lld through %lld out of the total of %lld %s.", noun,
+                                (long long)(kv < 0 ? kv : 1), (long long)(kv < 0 ? -1 : kv), (long long)n, noun);
                     return false;
                 }
             }
@@ -677,7 +683,7 @@ static bool eigensystem_check(Expr* res) {
 }
 
 Expr* builtin_eigensystem(Expr* res) {
-    if (res->type != EXPR_FUNCTION || !eigensystem_check(res)) return NULL;
+    if (res->type != EXPR_FUNCTION || !eigensystem_check(res, "Eigensystem", "eigenvectors and eigenvalues")) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_eigensystem(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;

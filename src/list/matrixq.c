@@ -2,6 +2,9 @@
 #include "matrixq.h"
 #include "ndarray.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* An NDArray is a distinct atomic node, so the List-based matrix predicates
  * below would otherwise answer False for a genuine packed matrix. Route any
@@ -407,6 +410,10 @@ static bool diag_entry_is_exact_zero(Expr* e) {
     if (e->type == EXPR_INTEGER) return e->data.integer == 0;
     if (e->type == EXPR_REAL) return e->data.real == 0.0;
     if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint) == 0;
+#ifdef USE_MPFR
+    /* An arbitrary-precision zero (0``30) is a literal zero too. */
+    if (e->type == EXPR_MPFR) return mpfr_zero_p(e->data.mpfr) != 0;
+#endif
     return false;
 }
 

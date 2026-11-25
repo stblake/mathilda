@@ -170,8 +170,82 @@ static void test_s14_exact_big_capacities(void) {
     audit_run("ClearAll[auditG, auditW]");
 }
 
+/* Wave 4: generator options, duplicate vertices, pattern / edge-list forms,
+ * integer truncation, weights and capacities. */
+static void test_wave4_graphs(void) {
+    /* generators take DirectedEdges / edge options (graph_generator_with_options) */
+    audit_chk("CycleGraph#1", "EdgeList[CycleGraph[5, DirectedEdges -> True]]",
+              "{1 -> 2, 2 -> 3, 3 -> 4, 4 -> 5, 5 -> 1}");
+    audit_chk("PathGraph#2", "EdgeList[PathGraph[{1, 2, 3}, DirectedEdges -> True]]",
+              "{1 -> 2, 2 -> 3}");
+    audit_chk("StarGraph#2", "EdgeList[StarGraph[4, DirectedEdges -> True]]",
+              "{1 -> 2, 1 -> 3, 1 -> 4}");
+    audit_chk("AdjacencyGraph#3", "EdgeList[AdjacencyGraph[{{0, 1}, {1, 0}}, DirectedEdges -> True]]",
+              "{1 -> 2, 2 -> 1}");
+    audit_chk("AdjacencyGraph#2", "EdgeList[AdjacencyGraph[{a, b, c}, {{0,1,0},{1,0,1},{0,1,0}}]]",
+              "{a <-> b, b <-> c}");
+    /* entries are read as full integers: only 0 and 1 are edges */
+    audit_true("AdjacencyGraph#1",
+               "Head[AdjacencyGraph[{{0, 4294967297}, {4294967297, 0}}]] === AdjacencyGraph");
+    audit_true("AdjacencyGraph#1",
+               "Head[AdjacencyGraph[{{0, 4294967296}, {4294967296, 0}}]] === AdjacencyGraph");
+    /* a repeated vertex is one vertex */
+    audit_chk("Graph#1", "g = Graph[{1, 1, 2}, {1 -> 2}]; {GraphQ[g], VertexList[g], AdjacencyMatrix[g]}",
+              "{True, {1, 2}, {{0, 1}, {0, 0}}}");
+    audit_chk("VertexCount#2", "VertexCount[Graph[{1, 1, 2}, {1 -> 2}]]", "2");
+    audit_chk("PathGraph#1", "{VertexCount[PathGraph[{a, b, c, a}]], VertexDegree[PathGraph[{a, b, c, a}]]}",
+              "{3, {2, 2, 2}}");
+    audit_run("ClearAll[g]");
+    /* mixed graph: parallel directed + undirected edges are counted */
+    audit_chk("AdjacencyMatrix#1", "AdjacencyMatrix[Graph[{1 -> 2, 2 -> 1, 1 <-> 2}]]", "{{0, 2}, {2, 0}}");
+    /* pattern forms */
+    audit_chk("VertexCount#1", "{VertexCount[Graph[{1, 2, 3}, {1 -> 2}], 1 | 2], "
+              "VertexCount[Graph[{a, b, c}, {}], _Symbol]}", "{2, 3}");
+    audit_chk("EdgeCount#1", "EdgeCount[Graph[{1 -> 2, 2 -> 3, 1 -> 3}], 1 -> _]", "2");
+    audit_chk("EdgeList#1", "EdgeList[Graph[{1 -> 2, 2 -> 3}], DirectedEdge[1, _]]", "{1 -> 2}");
+    audit_chk("VertexList#1", "VertexList[Graph[{1 -> 2, 2 -> 3, 3 -> 1}], _?OddQ]", "{1, 3}");
+    /* a list of edges stands for its graph */
+    audit_chk("VertexList#2", "VertexList[{1 -> 2, 2 -> 3}]", "{1, 2, 3}");
+    audit_chk("ConnectedComponents#1", "ConnectedComponents[{1 <-> 2, 3 <-> 4, 4 <-> 5}]",
+              "{{3, 4, 5}, {1, 2}}");
+    audit_chk("ConnectedComponents#1", "ConnectedComponents[{1 -> 2, 2 -> 1, 3 -> 2}]", "{{1, 2}, {3}}");
+    /* vertices within distance d */
+    audit_chk("AdjacencyList#1", "AdjacencyList[Graph[{1, 2, 3, 4}, {1 <-> 2, 2 <-> 3, 3 <-> 4}], 1, 2]",
+              "{2, 3}");
+    /* s-t vertex connectivity */
+    audit_chk("VertexConnectivity#1", "{VertexConnectivity[CycleGraph[5], 1, 3], "
+              "VertexConnectivity[PathGraph[{1, 2, 3, 4}], 1, 4]}", "{2, 1}");
+    /* size bounds saturate instead of truncating to int */
+    audit_chk("FindIndependentVertexSet#1", "FindIndependentVertexSet[CycleGraph[6], 4294967296]", "{{1, 3, 5}}");
+    audit_chk("FindIndependentVertexSet#1", "FindIndependentVertexSet[CycleGraph[6], 4294967298]", "{{1, 3, 5}}");
+    /* large k: a star, no overflow */
+    audit_chk("KaryTree#1", "EdgeList[KaryTree[3, 2^62]]", "{1 <-> 2, 1 <-> 3}");
+    audit_chk("KaryTree#1", "EdgeList[KaryTree[5, 2^61]]",
+              "{1 <-> 2, 1 <-> 3, 1 <-> 4, 1 <-> 5}");
+    /* numeric-constant weights are weights */
+    audit_true("GraphDistance#1", "Abs[GraphDistance[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3, 1 <-> 3}, "
+               "EdgeWeight -> {Pi, 1, 10}], 1, 3] - N[Pi + 1]] < 1*^-12");
+    /* EdgeAdd keeps EdgeCapacity */
+    audit_chk("EdgeAdd#1", "FindMaximumFlow[EdgeAdd[Graph[{1 -> 2}, EdgeCapacity -> {7}], 2 -> 3], 1, 2]", "7");
+    /* periodic chain at a = 1 */
+    audit_true("PageRankCentrality#1",
+               "Max[Abs[PageRankCentrality[PathGraph[3], 1] - {0.25, 0.5, 0.25}]] < 1*^-9");
+    /* the n shortest paths, shortest first */
+    audit_true("FindPath#1", "With[{p = FindPath[CompleteGraph[4], 1, 4, Infinity, 2]}, "
+               "First[p] === {1, 4} && Length[p] == 2 && Length[p[[2]]] == 3]");
+    /* past the 8192-vertex bitset engine */
+    audit_true("FindClique#1", "With[{c = FindClique[CycleGraph[10000], 2]}, "
+               "Head[c] === List && Length[c] == 1 && Length[First[c]] == 2]");
+    audit_true("FindKClique#1", "With[{r = FindKClique[PathGraph[Range[10000]], 2]}, "
+               "Head[r] === List && Length[First[r]] == 3]");
+    /* an unbalanced bipartite graph has no Hamiltonian cycle */
+    audit_chk("HamiltonianGraphQ#1", "HamiltonianGraphQ[CompleteGraph[{8, 9}]]", "False");
+    audit_chk("HamiltonianGraphQ#2", "TimeConstrained[HamiltonianGraphQ[GridGraph[{11, 11}]], 10]", "False");
+}
+
 int main(void) {
     audit_init();
+    TEST(test_wave4_graphs);
     TEST(test_complete_graph_resource_limit);
     TEST(test_star_graph_resource_limit);
     TEST(test_find_spanning_tree_directed);

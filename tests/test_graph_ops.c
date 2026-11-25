@@ -288,7 +288,8 @@ static void test_find_path(void) {
     assert_eval_eq("FindPath[" D3 ", 3, 1]", "{}", 0);
     assert_eval_eq("FindPath[CompleteGraph[4], 1, 4, 2, All]", "{{1, 4}, {1, 3, 4}, {1, 2, 4}}", 0);
     assert_eval_eq("FindPath[CompleteGraph[4], 1, 4, {2}, All]", "{{1, 3, 4}, {1, 2, 4}}", 0);
-    assert_eval_eq("FindPath[CompleteGraph[4], 1, 4, 3, 2]", "{{1, 2, 4}, {1, 2, 3, 4}}", 0);
+    /* the 2 SHORTEST paths of length <= 3 (audit FindPath#1) */
+    assert_eval_eq("FindPath[CompleteGraph[4], 1, 4, 3, 2]", "{{1, 4}, {1, 2, 4}}", 0);
     assert_eval_eq("FindPath[Graph[{1,2,3,4,5},{1<->2,2<->3,1<->4,4<->5,5<->3}], 1, 3, Infinity, All]",
                    "{{1, 2, 3}, {1, 4, 5, 3}}", 0);
     assert_eval_eq("FindPath[Graph[{1,2,3,4,5},{1<->4,1<->2,2<->3,4<->5,5<->3}], 1, 3]",

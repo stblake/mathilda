@@ -25,6 +25,8 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
+#include "dist.h"    /* ml_dist_property: distribution quantiles */
+#include "common.h"  /* head_is */
 
 /* Parse an optional {{a,b},{c,d}} parameter matrix (same shape Quartiles
  * accepts). On success fills the four out-slots with fresh copies and returns
@@ -85,6 +87,12 @@ Expr* builtin_quantile(Expr* res) {
     Expr* data = res->data.function.args[0];
     Expr* qspec = res->data.function.args[1];
     Expr* param_expr = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    /* Quantile of a distribution: its closed form (src/ml/dist.h). */
+    if (argc == 2 && data->type == EXPR_FUNCTION && !head_is(data, SYM_List)) {
+        Expr* r = ml_dist_property(ML_PROP_QUANTILE, data, qspec);
+        if (r) return r;
+    }
 
     /* Visible NDArray / packed data: materialise to the exact List path.
      * pack_unpack returns NULL for a non-ndarray, so this is a no-op for

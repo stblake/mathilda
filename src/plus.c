@@ -702,6 +702,8 @@ Expr* builtin_plus(Expr* res) {
              * the sum unevaluated, which is its contract. */
             Expr* symretry = ndarray_symbolic_delist_retry(res);
             if (symretry) return symretry;
+            Expr* cretry = ndarray_numeric_constant_retry(res);   /* NDArray + Pi */
+            if (cretry) return cretry;
             ndarray_warn_symbolic(res->data.function.args, n, "added");
         }
     }

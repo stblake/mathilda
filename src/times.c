@@ -1785,6 +1785,8 @@ Expr* builtin_times(Expr* res) {
              * src/plus.c -- and only a visible NDArray[...] declines. */
             Expr* symretry = ndarray_symbolic_delist_retry(res);
             if (symretry) return symretry;
+            Expr* cretry = ndarray_numeric_constant_retry(res);   /* Pi NDArray */
+            if (cretry) return cretry;
             ndarray_warn_symbolic(res->data.function.args, n, "multiplied");
         }
     }

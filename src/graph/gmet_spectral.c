@@ -124,8 +124,17 @@ Expr* builtin_pagerank_centrality(Expr* res) {
          * masquerade as a step that never shrinks. */
         double sum = 0.0;
         for (int i = 0; i < n; i++) sum += xn[i];
+        /* A periodic chain (alpha = 1 on a bipartite graph: PathGraph[3]) makes
+         * plain power iteration oscillate forever between two vectors. Past a
+         * warm-up, step with the LAZY operator (I + T)/2 instead: the same
+         * fixed point, but aperiodic, so it converges. */
+        int lazy = it >= 100;
         double diff = 0.0;
-        for (int i = 0; i < n; i++) { xn[i] /= sum; diff += fabs(xn[i] - x[i]); }
+        for (int i = 0; i < n; i++) {
+            xn[i] /= sum;
+            if (lazy) xn[i] = 0.5 * (xn[i] + x[i]);
+            diff += fabs(xn[i] - x[i]);
+        }
         double* t = x; x = xn; xn = t; c.xn = xn;
         if (diff < 1e-14) break;
     }

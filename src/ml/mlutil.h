@@ -62,4 +62,17 @@ bool ml_chol(const double* a, double* l, size_t dim);
 double ml_mahalanobis(const double* l, const double* mu, const double* x,
                       size_t dim, double* y);
 
+/* A real feature value: a number (na_read_scalar) or an exact numeric constant
+ * (1/2, Sqrt[2], Pi) at its machine value. False for anything else -- g[9] is
+ * not the number 9. */
+bool ml_read_real(const Expr* e, double* out);
+
+/* Batch application of a dim-feature model, model[{x1, x2, ...}]: when args[0]
+ * is a List of examples -- each a List of dim features, or (dim == 1) at least
+ * two scalars -- returns the List of apply(head, {example, args[1..]}) answers
+ * (NULL if any example declines). Sets *batch to whether args[0] was a batch;
+ * when it is not, returns NULL and the caller reads a single example. */
+Expr* ml_apply_batch(Expr* head, Expr** args, size_t argc, size_t dim,
+                     Expr* (*apply)(Expr*, Expr**, size_t), bool* batch);
+
 #endif /* ML_UTIL_H */

@@ -14,12 +14,18 @@
 #include "hnf.h"
 #include "symtab.h"
 #include "attr.h"
+#include "sym_names.h"
 
 void linalg_init(void) {
     symtab_add_builtin("Dot", builtin_dot);
     symtab_get_def("Dot")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_add_builtin("Det", builtin_det);
     symtab_get_def("Det")->attributes |= ATTR_PROTECTED;
+    {
+        Expr* r[2] = { expr_new_symbol(SYM_Modulus), expr_new_integer(0) };
+        Expr* o = expr_new_function(expr_new_symbol(SYM_Rule), r, 2);
+        symtab_set_options("Det", expr_new_function(expr_new_symbol(SYM_List), &o, 1));
+    }
     symtab_add_builtin("Cross", builtin_cross);
     symtab_get_def("Cross")->attributes |= ATTR_PROTECTED;
     rotationmatrix_init();

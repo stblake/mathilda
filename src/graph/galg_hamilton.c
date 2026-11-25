@@ -577,10 +577,44 @@ Expr* builtin_find_hamiltonian_cycle(Expr* res) {
     return ham_cycles(g, want);
 }
 
+/* 1 when g (n >= 3) is connected and bipartite with colour classes of
+ * different sizes -- a cycle alternates colours, so it has no Hamiltonian
+ * cycle (K_{8,9}, GridGraph[{11, 11}]): decided at once, where the search
+ * would exhaust every path. 0 when the test does not apply. */
+static int ham_bipartite_unbalanced(const Expr* g) {
+    GraphAdj* a = graph_build_adj(g);
+    if (!a) return 0;
+    int n = a->n, verdict = 0;
+    int* col = malloc((size_t)(n > 0 ? n : 1) * sizeof(int));
+    int* q = malloc((size_t)(n > 0 ? n : 1) * sizeof(int));
+    if (n >= 3 && col && q) {
+        for (int i = 0; i < n; i++) col[i] = -1;
+        int h = 0, t = 0, ok = 1, cnt[2] = { 1, 0 };
+        col[0] = 0; q[t++] = 0;
+        while (h < t && ok) {
+            int x = q[h++];
+            for (int side = 0; side < 2 && ok; side++) {
+                int deg = side ? a->indeg[x] : a->outdeg[x];
+                int* nb = side ? a->in[x] : a->out[x];
+                for (int k = 0; k < deg; k++) {
+                    int y = nb[k];
+                    if (col[y] < 0) { col[y] = 1 - col[x]; cnt[col[y]]++; q[t++] = y; }
+                    else if (col[y] == col[x]) { ok = 0; break; }
+                }
+            }
+        }
+        verdict = ok && t == n && cnt[0] != cnt[1];
+    }
+    free(col); free(q);
+    graph_adj_free(a);
+    return verdict;
+}
+
 Expr* builtin_hamiltonian_graph_q(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     const Expr* g = res->data.function.args[0];
     if (!graph_is_valid(g)) return galg_truth(0);
+    if (ham_bipartite_unbalanced(g)) return galg_truth(0);
     Expr* c = ham_cycles(g, 1);
     if (!c) return NULL;
     int yes = c->data.function.arg_count > 0;

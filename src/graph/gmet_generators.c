@@ -168,8 +168,12 @@ Expr* builtin_grid_graph(Expr* res) {
 }
 
 static Expr* kary_tree(int64_t n, int64_t k) {
+    /* A branching factor past n - 1 makes the same star as n - 1; clamping
+     * first keeps k * i + c inside int64_t (n <= GEN_MAX_VERTICES), where
+     * k = 2^62 overflowed it. */
+    if (k > n) k = n;
     Pairs p = { NULL, 0, 0, 1 };
-    for (int64_t i = 0; i < n; i++)
+    for (int64_t i = 0; i < n && k * i + 1 < n; i++)
         for (int64_t c = 1; c <= k; c++) {
             int64_t ch = k * i + c;
             if (ch >= n) break;

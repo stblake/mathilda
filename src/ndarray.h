@@ -605,6 +605,12 @@ void ndarray_warn_once(const char* msg);
  * at the definition. */
 Expr* ndarray_symbolic_delist_retry(const Expr* call);
 
+/* An NDArray beside an exact numeric CONSTANT (NDArray[{1., 2.}] + Pi): the
+ * constant is a number, not a symbol, so it is numericized at machine
+ * precision and the call re-run -- a new call, or NULL when some non-array
+ * operand is genuinely symbolic (or none needs numericizing). */
+Expr* ndarray_numeric_constant_retry(const Expr* call);
+
 /* Register NDArray's builtins, attributes, and docstring. */
 void ndarray_init(void);
 

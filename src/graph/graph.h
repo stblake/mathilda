@@ -154,6 +154,19 @@ int graph_vidx_put(GraphVIdx* ix, const Expr* v, int index);
  * memoized) or 0 (g is invalid). Takes ownership of ix/eu/ev/edir either way. */
 int graph_memo_seed(const Expr* g, GraphVIdx* ix, int* eu, int* ev, unsigned char* edir);
 
+/* A valid graph for e: a new reference to e itself when it is one, else
+ * Graph[e] evaluated when e is a non-empty list of edges or edge sugar
+ * ({1 -> 2, 2 <-> 3}), the edge-list form the query heads accept in place of a
+ * graph. NULL when neither gives a valid graph. Caller frees. */
+Expr* graph_coerce(const Expr* e);
+
+/* The elements of List `items` (vertices, or edges when `edges`) matching
+ * `patt`, as a new List -- or, with count_only, their number as an Integer.
+ * For edges, top-level Rule / TwoWayRule in patt stand for DirectedEdge /
+ * UndirectedEdge, and an undirected edge also matches reversed. */
+Expr* graph_filter_pattern(const Expr* items, const Expr* patt, int edges,
+                           int count_only);
+
 /* ---- Phase 2: query / representation builtins ----------------------------- */
 Expr* builtin_vertex_list(Expr* res);      /* VertexList[g]                    */
 Expr* builtin_edge_list(Expr* res);        /* EdgeList[g]                      */
@@ -199,6 +212,19 @@ Expr* builtin_cycle_graph(Expr* res);      /* CycleGraph[n]                    *
 Expr* builtin_path_graph(Expr* res);       /* PathGraph[n] / PathGraph[{...}]  */
 Expr* builtin_star_graph(Expr* res);       /* StarGraph[n]                     */
 Expr* builtin_random_graph(Expr* res);     /* RandomGraph[{n,m}] / [{n,m},k]   */
+
+/* Trailing-options wrapper shared by the generators (src/graph/generators.c).
+ * `res` is Gen[pos..., opt...] with 1..max_pos positional arguments. With no
+ * options it is just core(res). Otherwise core runs on Gen[pos...] (a scratch
+ * node; core must not keep it), passed the DirectedEdges value (-1 unset, 0,
+ * 1) to honour natively if it can, and its Graph[verts, edges] is adjusted:
+ *   DirectedEdges -> True    every UndirectedEdge becomes a DirectedEdge
+ *   DirectedEdges -> False   accepted when core built no DirectedEdge
+ *   EdgeWeight / EdgeCapacity -> {...}   appended for builtin_graph to check
+ * Any other option, or a bad DirectedEdges value, leaves the call unevaluated
+ * (NULL). Ownership follows the builtin contract: res is never freed here. */
+Expr* graph_generator_with_options(Expr* res, size_t max_pos,
+                                   Expr* (*core)(Expr*, int directed));
 
 /* ---- Phase 5: shared adjacency scaffolding (graph_util.c) ------------------
  * Integer-indexed adjacency derived from a validated graph. Vertex i is

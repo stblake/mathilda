@@ -66,6 +66,17 @@ static int some_cut_of_size(const GraphAdj* a, int k, char* removed) {
 }
 
 Expr* builtin_vertex_connectivity(Expr* res) {
+    /* VertexConnectivity[g, s, t]: the fewest vertices separating s from t,
+     * from the same split-vertex flow engine. */
+    if (res->data.function.arg_count == 3) {
+        const Expr* g = res->data.function.args[0];
+        if (!graph_is_valid(g)) return NULL;
+        int s = galg_vertex_arg(g, res->data.function.args[1]);
+        int t = galg_vertex_arg(g, res->data.function.args[2]);
+        if (s < 0 || t < 0 || s == t) return NULL;
+        long k = galg_vertex_connectivity(g, s, t);
+        return k >= 0 ? expr_new_integer(k) : NULL;
+    }
     if (res->data.function.arg_count != 1) return NULL;
     /* Even's algorithm on unit-capacity split-vertex max flows (galg_flow.c):
      * polynomial, where the subset search below is exponential. The search is

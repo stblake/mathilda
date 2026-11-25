@@ -1214,6 +1214,8 @@ extern const char* SYM_GraphPlot;
 extern const char* SYM_FindVertexColoring;
 extern const char* SYM_EdgeWeight;
 extern const char* SYM_EdgeCapacity;
+extern const char* SYM_DirectedEdges;
+extern const char* SYM_IncludeConstantBasis;
 extern const char* SYM_WeightedAdjacencyMatrix;
 
 /* GraphPlot / HypergraphPlot options, and the Text/Arrow styling heads the

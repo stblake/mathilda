@@ -38,6 +38,7 @@
 #include "common.h"
 #include "pack.h"
 #include "flint_mat_bridge.h"
+#include "numarray.h"   /* na_read_scalar */
 #include "sym_names.h"
 #include <stdlib.h>
 #include <stdbool.h>
@@ -98,6 +99,71 @@ static Expr* charpoly_flint(const Expr* m, int64_t n, const Expr* var) {
     return eval_and_free(sum);
 }
 
+/* Machine-real matrix: Det[m - x I] = prod_i (lambda_i - x) from the LAPACK
+ * eigenvalues, multiplied out in complex doubles (Vieta). Faddeev-Leverrier
+ * divides by k and subtracts traces of powers, which loses every digit of the
+ * small coefficients: the 6x6 Hilbert matrix's constant term came out
+ * -7.8e-17 against Det = +5.4e-18. NULL when m is not all machine reals or
+ * the eigenvalues cannot be read. */
+static Expr* charpoly_machine(Expr* m, int64_t n, const Expr* var) {
+    if (!m || m->type != EXPR_FUNCTION || n < 1 || n > 4096) return NULL;
+    for (int64_t i = 0; i < n; i++) {
+        const Expr* row = m->data.function.args[i];
+        if (row->type != EXPR_FUNCTION || row->data.function.arg_count != (size_t)n) return NULL;
+        for (int64_t j = 0; j < n; j++) {
+            const Expr* e = row->data.function.args[j];
+            if (e->type != EXPR_REAL) return NULL;
+        }
+    }
+    Expr* ev = eval_and_free(expr_new_function(expr_new_symbol(SYM_Eigenvalues),
+                                               (Expr*[]){ expr_copy(m) }, 1));
+    Expr* evl = pack_unpack(ev);
+    if (evl) { expr_free(ev); ev = evl; }
+    if (ev->type != EXPR_FUNCTION || ev->data.function.arg_count != (size_t)n) {
+        expr_free(ev);
+        return NULL;
+    }
+    double* cr = calloc((size_t)n + 1, sizeof(double));
+    double* ci = calloc((size_t)n + 1, sizeof(double));
+    bool ok = cr && ci;
+    if (ok) cr[0] = 1.0;                      /* the polynomial 1 */
+    for (int64_t i = 0; ok && i < n; i++) {
+        double lr, li;
+        if (!na_read_scalar(ev->data.function.args[i], &lr, &li)) { ok = false; break; }
+        /* p <- p * (lambda - x): new[k] = lambda p[k] - p[k-1] */
+        for (int64_t k = i + 1; k >= 0; k--) {
+            double pr = (k <= i) ? cr[k] : 0.0, pi = (k <= i) ? ci[k] : 0.0;
+            double nr = lr * pr - li * pi, ni = lr * pi + li * pr;
+            if (k > 0) { nr -= cr[k - 1]; ni -= ci[k - 1]; }
+            cr[k] = nr; ci[k] = ni;
+        }
+    }
+    expr_free(ev);
+    Expr* out = NULL;
+    if (ok) {
+        Expr** terms = malloc(sizeof(Expr*) * (size_t)(n + 1));
+        for (int64_t k = 0; k <= n; k++) {
+            /* real input: imaginary parts cancel; the x^n coefficient of
+             * Det[m - x I] is exactly (-1)^n */
+            Expr* coef = (k == n) ? expr_new_integer((n & 1) ? -1 : 1)
+                                  : expr_new_real(cr[k]);
+            Expr* pw = (k == 0) ? NULL
+                     : (k == 1) ? expr_copy((Expr*)var)
+                     : expr_new_function(expr_new_symbol(SYM_Power),
+                                         (Expr*[]){ expr_copy((Expr*)var), expr_new_integer(k) }, 2);
+            terms[k] = pw ? expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ coef, pw }, 2)
+                          : coef;
+        }
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)(n + 1));
+        free(terms);
+        if (var->type != EXPR_SYMBOL)
+            sum = expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){ sum }, 1);
+        out = eval_and_free(sum);
+    }
+    free(cr); free(ci);
+    return out;
+}
+
 Expr* builtin_characteristicpolynomial(Expr* res) {
     size_t argc = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
     if (argc != 2)
@@ -121,6 +187,8 @@ Expr* builtin_characteristicpolynomial(Expr* res) {
     Expr* poly;
     if (a == NULL) {
         Expr* fast = charpoly_flint(m, n, var);
+        if (fast) return fast;
+        fast = charpoly_machine(m, n, var);
         if (fast) return fast;
         /* Ordinary: Faddeev-Leverrier gives det(lambda I - m). */
         poly = eigen_char_poly_faddeev(m, lam, (int)n);

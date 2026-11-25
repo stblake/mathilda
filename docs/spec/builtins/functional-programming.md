@@ -1386,6 +1386,7 @@ Take the ranked extreme elements.
 - `TakeLargestBy[list, f, n]` / `TakeSmallestBy[list, f, n]`: rank by `f[element]`.
 - Over an association these rank by value (or `f[value]`), returning an association.
 - If `n` exceeds the length, all elements are returned (still ranked).
+- `n` may be `UpTo[n]`: at most `n` elements (`TakeLargest[{3, 1, 2}, UpTo[5]]` is `{3, 2, 1}`).
 - Real numbers rank by **numeric value** -- symbolic constants included, so
   `TakeLargest[{1, Pi, 4}, 1]` is `{4}` and `-Infinity` ranks below every
   real -- with close values decided by a certified comparison; anything that

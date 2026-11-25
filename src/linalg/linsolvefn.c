@@ -38,6 +38,9 @@ typedef struct {
     SpFactor* f;      /* machine factor, or NULL */
     MpfrLU* mp;       /* arbitrary-precision factor, or NULL */
     Expr* lu;         /* symbolic LUDecomposition {lu, perm, c}, or NULL */
+    Expr* m;          /* the matrix factored: an object whose matrix was
+                       * replaced (f /. m -> m2) keeps its key, and must not
+                       * be solved with the old factor */
     uint64_t used;
 } CacheEnt;
 
@@ -51,6 +54,8 @@ void linsolvefn_cache_clear(void) {
         spf_free(g_cache[i].f);
         mpfr_lu_free(g_cache[i].mp);
         expr_free(g_cache[i].lu);
+        expr_free(g_cache[i].m);
+        g_cache[i].m = NULL;
         g_cache[i].f = NULL;
         g_cache[i].mp = NULL;
         g_cache[i].lu = NULL;
@@ -60,9 +65,10 @@ void linsolvefn_cache_clear(void) {
 
 static bool ent_live(const CacheEnt* e) { return e->f || e->mp || e->lu; }
 
-static CacheEnt* cache_get(int64_t key) {
+static CacheEnt* cache_get(int64_t key, const Expr* m) {
     for (int i = 0; i < LSF_CACHE; i++)
-        if (ent_live(&g_cache[i]) && g_cache[i].key == key) {
+        if (ent_live(&g_cache[i]) && g_cache[i].key == key &&
+            g_cache[i].m && expr_eq(g_cache[i].m, m)) {
             g_cache[i].used = ++g_tick;
             return &g_cache[i];
         }
@@ -71,7 +77,7 @@ static CacheEnt* cache_get(int64_t key) {
 
 /* Store a factor (exactly one of f / mp / lu non-NULL; owned), evicting the
  * least recently used entry. */
-static void cache_put(int64_t key, SpFactor* f, MpfrLU* mp, Expr* lu) {
+static void cache_put(int64_t key, const Expr* m, SpFactor* f, MpfrLU* mp, Expr* lu) {
     if (!g_atexit) { atexit(linsolvefn_cache_clear); g_atexit = true; }
     int victim = 0;
     for (int i = 0; i < LSF_CACHE; i++) {
@@ -81,6 +87,8 @@ static void cache_put(int64_t key, SpFactor* f, MpfrLU* mp, Expr* lu) {
     spf_free(g_cache[victim].f);
     mpfr_lu_free(g_cache[victim].mp);
     expr_free(g_cache[victim].lu);
+    expr_free(g_cache[victim].m);
+    g_cache[victim].m = expr_copy((Expr*)m);
     g_cache[victim].key = key;
     g_cache[victim].f = f;
     g_cache[victim].mp = mp;
@@ -345,7 +353,7 @@ Expr* linsolvefn_make(const Expr* call) {
         if (!mp && tc_deadline_passed()) return NULL;   /* stopped: no slower path */
         if (mp && !sing) {
             int64_t key = g_next_key++;
-            cache_put(key, NULL, mp, NULL);
+            cache_put(key, m, NULL, mp, NULL);
             return build_object(r, c, key, m, opts, nopts);
         }
         if (mp) {
@@ -371,7 +379,7 @@ Expr* linsolvefn_make(const Expr* call) {
             Expr* lu = symbolic_lu(m, false);
             if (lu) {
                 int64_t key = g_next_key++;
-                cache_put(key, NULL, NULL, lu);
+                cache_put(key, m, NULL, NULL, lu);
                 return build_object(r, c, key, m, opts, nopts);
             }
         }
@@ -387,7 +395,7 @@ Expr* linsolvefn_make(const Expr* call) {
                           m);
     }
     int64_t key = g_next_key++;
-    cache_put(key, f, NULL, NULL);
+    cache_put(key, m, f, NULL, NULL);
     return build_object(r, c, key, m, opts, nopts);
 }
 
@@ -462,25 +470,25 @@ Expr* linsolvefn_apply(const Expr* head, Expr* const* args, size_t nargs) {
     int64_t rows = head->data.function.args[0]->data.function.args[0]->type == EXPR_INTEGER
                  ? head->data.function.args[0]->data.function.args[0]->data.integer : -1;
 
-    CacheEnt* ent = key ? cache_get(key) : NULL;
+    CacheEnt* ent = key ? cache_get(key, m) : NULL;
     SpFactor* f = ent ? ent->f : NULL;
     MpfrLU* mp = ent ? ent->mp : NULL;
     const Expr* slu = ent ? ent->lu : NULL;
     if (key && !ent && has_symbolic_entry(m)) {
         /* evicted symbolic factor: factor again, quietly */
         Expr* lu = symbolic_lu(m, true);
-        if (lu) { cache_put(key, NULL, NULL, lu); slu = lu; }
+        if (lu) { cache_put(key, m, NULL, NULL, lu); slu = lu; }
     } else if (key && !ent) {
         /* evicted: factor again from the matrix the object carries */
         SpfStatus st;
         bool tried;
         f = factor_of(m, ol->data.function.args, ol->data.function.arg_count, &st, &tried);
-        if (f) cache_put(key, f, NULL, NULL);
+        if (f) cache_put(key, m, f, NULL, NULL);
         else if (!tried) {
             bool sing = false;
             mp = mp_factor_of(m, rows, ol->data.function.args, ol->data.function.arg_count, &sing);
             if (mp && sing) { mpfr_lu_free(mp); mp = NULL; }
-            if (mp) cache_put(key, NULL, mp, NULL);
+            if (mp) cache_put(key, m, NULL, mp, NULL);
         }
     }
 

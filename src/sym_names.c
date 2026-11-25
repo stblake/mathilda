@@ -1144,6 +1144,8 @@ const char* SYM_GraphPlot = NULL;
 const char* SYM_FindVertexColoring = NULL;
 const char* SYM_EdgeWeight = NULL;
 const char* SYM_EdgeCapacity = NULL;
+const char* SYM_DirectedEdges = NULL;
+const char* SYM_IncludeConstantBasis = NULL;
 const char* SYM_WeightedAdjacencyMatrix = NULL;
 const char* SYM_VertexCoordinates = NULL;
 const char* SYM_VertexLabels = NULL;
@@ -2345,6 +2347,8 @@ void sym_names_init(void) {
     SYM_FindVertexColoring         = intern_symbol("FindVertexColoring");
     SYM_EdgeWeight                 = intern_symbol("EdgeWeight");
     SYM_EdgeCapacity               = intern_symbol("EdgeCapacity");
+    SYM_DirectedEdges              = intern_symbol("DirectedEdges");
+    SYM_IncludeConstantBasis       = intern_symbol("IncludeConstantBasis");
     SYM_WeightedAdjacencyMatrix    = intern_symbol("WeightedAdjacencyMatrix");
     SYM_VertexCoordinates          = intern_symbol("VertexCoordinates");
     SYM_VertexLabels               = intern_symbol("VertexLabels");

@@ -1963,7 +1963,10 @@ static void print_standard(Expr* e, int parent_prec) {
                   head == SYM_LearnedDistribution ||
                   head == SYM_ClassifierFunction) &&
                  e->data.function.arg_count >= 2 &&
-                 e->data.function.args[0]->type == EXPR_STRING) {
+                 e->data.function.args[0]->type == EXPR_STRING &&
+                 g_inputform_depth == 0) {
+            /* (InputForm prints the model in full, so ToString[m, InputForm]
+             * re-reads as the same model.) */
             /* A fitted machine-learning model prints its METHOD and elides its
              * parameters, exactly as InterpolatingFunction above elides its data and
              * for the same reason. This is not cosmetic: a NearestNeighbors predictor

@@ -255,7 +255,30 @@ Expr* builtin_edge_add(Expr* res) {
     graph_vidx_free(fresh);
     gops_heads_free(&hs);
     /* Self-loops and parallel edges are rejected by the memo seed (NULL). */
-    return gops_graph_new(verts, nv2, edges, ne + ni, ws, eu, ev, ed);
+    {
+        const Expr* caps = graph_edge_capacity_list(v.g);
+        Expr* out = gops_graph_new(verts, nv2, edges, ne + ni, ws, eu, ev, ed);
+        if (!out || !caps) return out;
+        /* The view carries weights only: keep the old edges' EdgeCapacity too
+         * (dropping it turned FindMaximumFlow's 7 into 1). An added edge gets
+         * capacity 1, the unweighted default. Graph[] re-canonicalises. */
+        size_t nc = caps->data.function.arg_count;
+        Expr** cs = gops_malloc(nc + ni, sizeof(Expr*));
+        size_t oa = out->data.function.arg_count;
+        Expr** ga = gops_malloc(oa + 1, sizeof(Expr*));
+        if (!cs || !ga) { free(cs); free(ga); expr_free(out); return NULL; }
+        for (size_t i = 0; i < nc; i++) cs[i] = expr_copy(caps->data.function.args[i]);
+        for (size_t i = 0; i < ni; i++) cs[nc + i] = expr_new_integer(1);
+        Expr* clist = expr_new_function(expr_new_symbol(SYM_List), cs, nc + ni);
+        free(cs);
+        for (size_t i = 0; i < oa; i++) ga[i] = expr_copy(out->data.function.args[i]);
+        Expr* ra[2] = { expr_new_symbol(SYM_EdgeCapacity), clist };
+        ga[oa] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        Expr* g2 = expr_new_function(expr_new_symbol(SYM_Graph), ga, oa + 1);
+        free(ga);
+        expr_free(out);
+        return g2;
+    }
 
 oom:
     graph_vidx_free(fresh);

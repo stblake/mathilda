@@ -1567,6 +1567,19 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
     return result;
 }
 
+/* The count of TakeLargest / TakeSmallest (+By): an Integer n, or UpTo[n]
+ * (at most n -- take_extreme already stops at the length). */
+static bool take_count(const Expr* e, int64_t* out) {
+    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
+    if (head_is(e, SYM_UpTo) && e->data.function.arg_count == 1 &&
+        e->data.function.args[0]->type == EXPR_INTEGER &&
+        e->data.function.args[0]->data.integer >= 0) {
+        *out = e->data.function.args[0]->data.integer;
+        return true;
+    }
+    return false;
+}
+
 Expr* builtin_take_largest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     /* O(n log k) through a bounded heap rather than the full O(n log n) sort
@@ -1575,9 +1588,9 @@ Expr* builtin_take_largest(Expr* res) {
         Expr* nd = ndstruct_take_extreme(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
-    Expr* nexpr = res->data.function.args[1];
-    if (nexpr->type != EXPR_INTEGER) return NULL;
-    return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, true);
+    int64_t nreq_;
+    if (!take_count(res->data.function.args[1], &nreq_)) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nreq_, true);
 }
 
 Expr* builtin_take_smallest(Expr* res) {
@@ -1586,27 +1599,27 @@ Expr* builtin_take_smallest(Expr* res) {
         Expr* nd = ndstruct_take_extreme(res, false);
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
-    Expr* nexpr = res->data.function.args[1];
-    if (nexpr->type != EXPR_INTEGER) return NULL;
-    return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, false);
+    int64_t nreq_;
+    if (!take_count(res->data.function.args[1], &nreq_)) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nreq_, false);
 }
 
 Expr* builtin_take_largest_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
     /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
     { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
-    Expr* nexpr = res->data.function.args[2];
-    if (nexpr->type != EXPR_INTEGER) return NULL;
-    return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, true);
+    int64_t nreq_;
+    if (!take_count(res->data.function.args[2], &nreq_)) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nreq_, true);
 }
 
 Expr* builtin_take_smallest_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
     /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
     { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
-    Expr* nexpr = res->data.function.args[2];
-    if (nexpr->type != EXPR_INTEGER) return NULL;
-    return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, false);
+    int64_t nreq_;
+    if (!take_count(res->data.function.args[2], &nreq_)) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nreq_, false);
 }
 
 /* ------------------- RankedMin / RankedMax ------------------- */

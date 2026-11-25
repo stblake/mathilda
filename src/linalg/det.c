@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include "linalg_mod.h"   /* Modulus -> p */
 #include <stdbool.h>
 
 /* Minor memo for one top-level expansion.  Rows are consumed in order, so a
@@ -124,7 +125,20 @@ static bool det_has_sum_denominator(const Expr* e) {
 }
 
 Expr* builtin_det(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* Det[m, Modulus -> p]: the determinant over Z/p (linalg_mod.c);
+     * Modulus -> 0 is the ordinary Det. */
+    if (res->data.function.arg_count >= 2) {
+        int64_t p = 0;
+        for (size_t k = 1; k < res->data.function.arg_count; k++)
+            if (linalg_mod_parse_option(res->data.function.args[k], &p) != 1) return NULL;
+        if (p == 0) {
+            Expr* a = expr_copy(res->data.function.args[0]);
+            return expr_new_function(expr_new_symbol(SYM_Det), &a, 1);
+        }
+        return linalg_mod_det(res->data.function.args[0], p);
+    }
+    if (res->data.function.arg_count != 1) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_det(res);
 
     /* A small all-machine-real matrix: factored in place, without first being

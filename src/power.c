@@ -1295,6 +1295,8 @@ Expr* builtin_power(Expr* res) {
     if (is_ndarray(base) || is_ndarray(exp)) {
         Expr* symretry = ndarray_symbolic_delist_retry(res);
         if (symretry) return symretry;
+        Expr* cretry = ndarray_numeric_constant_retry(res);   /* NDArray^Pi */
+        if (cretry) return cretry;
         Expr* nd_pair[2] = { base, exp };
         ndarray_warn_symbolic(nd_pair, 2, "raised to a power");
     }

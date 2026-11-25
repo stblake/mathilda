@@ -59,6 +59,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "linalg_mod.h"   /* Modulus -> p */
 
 /* Build the empty result `List[]` used when `m` has full column rank. */
 static Expr* empty_basis(void) {
@@ -182,7 +183,7 @@ static void clear_int_denominators(Expr** v, int n) {
  * With jobz='A', V^T is the full cols x cols matrix, so its trailing
  * rows [rank .. cols-1] include the (cols-rank) null directions even
  * when cols > rows and only min(rows,cols) singular values exist. */
-static Expr* nullspace_machine_svd(Expr* m, int rows, int cols) {
+static Expr* nullspace_machine_svd(Expr* m, int rows, int cols, double reltol) {
     /* Load m into a column-major double buffer (lda = rows). Any leaf
      * that is not a machine-real number aborts the whole path. */
     size_t total = (size_t)rows * (size_t)cols;
@@ -214,7 +215,9 @@ static Expr* nullspace_machine_svd(Expr* m, int rows, int cols) {
 
     /* Numerical rank from the descending singular values. */
     double smax = mn > 0 ? S[0] : 0.0;
-    double tol = (double)(rows > cols ? rows : cols) * 2.220446049250313e-16 * smax;
+    /* Tolerance -> t: singular values below t times the largest are zero. */
+    double tol = (reltol >= 0.0) ? reltol * smax
+               : (double)(rows > cols ? rows : cols) * 2.220446049250313e-16 * smax;
     int rank = 0;
     for (int k = 0; k < mn; k++) if (S[k] > tol) rank++;
     free(S);
@@ -243,7 +246,8 @@ static Expr* nullspace_machine_svd(Expr* m, int rows, int cols) {
  * ZeroTest predicate (zt != NULL).  The ZeroTest machinery (matsol_zt_is_zero /
  * matsol_rref_with_zerotest / matsol_parse_zerotest_option) is shared with
  * RowReduce; see linsolve.c. */
-static Expr* nullspace_core(Expr* m, MatsolMethod method, Expr* zt) {
+static Expr* nullspace_core(Expr* m, MatsolMethod method, Expr* zt, double reltol) {
+    (void)reltol;   /* read only by the LAPACK path */
     int64_t dims[64];
     int rank = get_tensor_dims(m, dims);
 
@@ -264,7 +268,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method, Expr* zt) {
      * RowReduce if any entry is symbolic/complex/MPFR.  Skipped when a
      * ZeroTest is supplied (an exact, possibly-algebraic reduction). */
     if (!zt && common_has_machine_real(m)) {
-        Expr* svd_ns = nullspace_machine_svd(m, rows, cols);
+        Expr* svd_ns = nullspace_machine_svd(m, rows, cols, reltol);
         if (svd_ns) return svd_ns;
     }
 #endif
@@ -399,10 +403,25 @@ Expr* builtin_nullspace(Expr* res) {
     /* Options after the matrix: Method -> "<name>" and/or ZeroTest -> f. */
     MatsolMethod method = MATSOL_AUTOMATIC;
     Expr* zt = NULL;   /* borrowed from res */
+    int64_t modp = 0;
+    double reltol = -1.0;   /* Tolerance -> t; < 0 is the default */
     for (size_t k = 1; k < argc; k++) {
         Expr* opt = res->data.function.args[k];
         Expr* zf = matsol_parse_zerotest_option(opt);
         if (zf) { zt = zf; continue; }
+        int mr = linalg_mod_parse_option(opt, &modp);
+        if (mr < 0) return NULL;
+        if (mr > 0) continue;
+        if (head_is(opt, SYM_Rule) && opt->data.function.arg_count == 2 &&
+            opt->data.function.args[0]->type == EXPR_SYMBOL &&
+            opt->data.function.args[0]->data.symbol.name == SYM_Tolerance) {
+            const Expr* tv = opt->data.function.args[1];
+            if (tv->type == EXPR_SYMBOL && tv->data.symbol.name == SYM_Automatic) continue;
+            double t;
+            if (!common_machine_real_value(tv, &t) || !(t >= 0.0)) return NULL;
+            reltol = t;
+            continue;
+        }
         MatsolMethod mm = matsol_parse_method_option(opt);
         if (mm == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
@@ -417,7 +436,8 @@ Expr* builtin_nullspace(Expr* res) {
 
     /* On success the evaluator (eval.c:813) frees `res` for us; on NULL
      * return it retains ownership.  Do not free `res` here. */
-    return nullspace_core(m, method, zt);
+    if (modp > 0) return linalg_mod_nullspace(m, modp);
+    return nullspace_core(m, method, zt, reltol);
 }
 
 void matnull_init(void) {

@@ -79,6 +79,96 @@ static bool family_alloc(int64_t n, int64_t ne, Expr*** verts, Expr*** edges) {
     return true;
 }
 
+/* True iff e is Rule[sym, value] (an option). */
+static bool is_option(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+           e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Rule &&
+           e->data.function.args[0]->type == EXPR_SYMBOL;
+}
+
+/* See graph.h. */
+Expr* graph_generator_with_options(Expr* res, size_t max_pos,
+                                   Expr* (*core)(Expr*, int directed)) {
+    size_t argc = res->data.function.arg_count;
+    size_t npos = argc;
+    while (npos > 0 && is_option(res->data.function.args[npos - 1])) npos--;
+    if (npos == argc) return core(res, -1);
+    if (npos == 0 || npos > max_pos) return NULL;
+
+    /* Classify the options before doing any work. */
+    int directed = -1;                       /* -1 unset, 0 False, 1 True */
+    size_t nkeep = 0;
+    for (size_t i = npos; i < argc; i++) {
+        const Expr* o = res->data.function.args[i];
+        const char* key = o->data.function.args[0]->data.symbol.name;
+        const Expr* val = o->data.function.args[1];
+        if (key == SYM_DirectedEdges) {
+            if (directed >= 0 || val->type != EXPR_SYMBOL) return NULL;
+            if (val->data.symbol.name == SYM_True) directed = 1;
+            else if (val->data.symbol.name == SYM_False) directed = 0;
+            else return NULL;
+        } else if (graph_edge_option_rank(key) >= 0) {
+            nkeep++;
+        } else {
+            return NULL;                     /* unsupported option */
+        }
+    }
+
+    Expr** pa = mth_malloc_n((int64_t)npos, sizeof(Expr*));
+    if (!pa) return mth_nomem_abort();
+    for (size_t i = 0; i < npos; i++) pa[i] = expr_copy(res->data.function.args[i]);
+    Expr* sub = expr_new_function(expr_copy(res->data.function.head), pa, npos);
+    free(pa);
+    Expr* g = core(sub, directed);
+    expr_free(sub);
+    if (!g) return NULL;
+    if (g->type != EXPR_FUNCTION || g->data.function.arg_count != 2 ||
+        !graph_is_list(g->data.function.args[1])) {
+        expr_free(g);
+        return NULL;
+    }
+
+    /* Rebuild the edge list with the requested orientation. */
+    const Expr* edges = g->data.function.args[1];
+    size_t ne = edges->data.function.arg_count;
+    Expr** ea = mth_malloc_n((int64_t)(ne ? ne : 1), sizeof(Expr*));
+    if (!ea) { expr_free(g); return mth_nomem_abort(); }
+    for (size_t k = 0; k < ne; k++) {
+        const Expr* e = edges->data.function.args[k];
+        const char* kind = graph_edge_kind(e);
+        if (directed == 0 && kind == SYM_DirectedEdge) {
+            for (size_t j = 0; j < k; j++) expr_free(ea[j]);
+            free(ea);
+            expr_free(g);
+            return NULL;                     /* cannot drop a direction */
+        }
+        if (directed == 1 && kind == SYM_UndirectedEdge) {
+            Expr* ab[2] = { expr_copy(e->data.function.args[0]),
+                            expr_copy(e->data.function.args[1]) };
+            ea[k] = expr_new_function(expr_new_symbol(SYM_DirectedEdge), ab, 2);
+        } else {
+            ea[k] = expr_copy((Expr*)e);
+        }
+    }
+    Expr* elist = make_list_owning(ea, ne);
+
+    size_t gargc = 2 + nkeep, gi = 0;
+    Expr** ga = mth_malloc_n((int64_t)gargc, sizeof(Expr*));
+    if (!ga) { expr_free(elist); expr_free(g); return mth_nomem_abort(); }
+    ga[gi++] = expr_copy(g->data.function.args[0]);
+    ga[gi++] = elist;
+    for (size_t i = npos; i < argc; i++) {
+        const Expr* o = res->data.function.args[i];
+        if (o->data.function.args[0]->data.symbol.name != SYM_DirectedEdges)
+            ga[gi++] = expr_copy((Expr*)o);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Graph), ga, gargc);
+    free(ga);
+    expr_free(g);
+    return out;
+}
+
 /* K_n: n(n-1)/2 edges i < j, in lexicographic order. */
 Expr* builtin_complete_graph(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
@@ -95,7 +185,8 @@ Expr* builtin_complete_graph(Expr* res) {
     return make_graph(verts, (size_t)n, edges, (size_t)ne);
 }
 
-Expr* builtin_cycle_graph(Expr* res) {
+static Expr* cycle_graph_core(Expr* res, int directed) {
+    (void)directed;   /* applied by graph_generator_with_options */
     if (res->data.function.arg_count != 1) return NULL;
     int64_t n = as_count(res->data.function.args[0]);
     /* Path edges 1-2-...-n, plus the wrap edge n-1 when n >= 3 (for n <= 2 the
@@ -110,7 +201,8 @@ Expr* builtin_cycle_graph(Expr* res) {
     return make_graph(verts, (size_t)n, edges, (size_t)ne);
 }
 
-Expr* builtin_path_graph(Expr* res) {
+static Expr* path_graph_core(Expr* res, int directed) {
+    (void)directed;
     if (res->data.function.arg_count != 1) return NULL;
     const Expr* arg = res->data.function.args[0];
 
@@ -143,7 +235,8 @@ Expr* builtin_path_graph(Expr* res) {
     return make_graph(verts, (size_t)n, edges, (size_t)ne);
 }
 
-Expr* builtin_star_graph(Expr* res) {
+static Expr* star_graph_core(Expr* res, int directed) {
+    (void)directed;
     if (res->data.function.arg_count != 1) return NULL;
     int64_t n = as_count(res->data.function.args[0]);
     /* Hub is vertex 1, joined to each of 2..n: exactly n-1 edges, with no
@@ -154,6 +247,18 @@ Expr* builtin_star_graph(Expr* res) {
     if (!family_alloc(n, ne, &verts, &edges)) return mth_nomem_abort();
     for (int64_t i = 2; i <= n; i++) edges[i - 2] = undirected_edge(1, i);
     return make_graph(verts, (size_t)n, edges, (size_t)ne);
+}
+
+/* Public heads: the cores above, plus trailing options (DirectedEdges,
+ * EdgeWeight, EdgeCapacity) via graph_generator_with_options. */
+Expr* builtin_cycle_graph(Expr* res) {
+    return graph_generator_with_options(res, 1, cycle_graph_core);
+}
+Expr* builtin_path_graph(Expr* res) {
+    return graph_generator_with_options(res, 1, path_graph_core);
+}
+Expr* builtin_star_graph(Expr* res) {
+    return graph_generator_with_options(res, 1, star_graph_core);
 }
 
 /* List[1, ..., n], or NULL (General::nomem issued) when memory cannot be had. */

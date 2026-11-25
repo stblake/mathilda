@@ -164,13 +164,16 @@ static Expr* try_build_canonical(Expr* res) {
     size_t nv = 0;
     if (!eu || !ev || !edir) goto fail_index;
     if (verts_in) {
-        nv = verts_in->data.function.arg_count;
-        verts = (nv > 0) ? calloc(nv, sizeof(Expr*)) : NULL;
-        ix = graph_vidx_new(nv);
-        if ((nv > 0 && !verts) || !ix) goto fail_index;
-        for (size_t i = 0; i < nv; i++) {
-            verts[i] = expr_copy(verts_in->data.function.args[i]);
-            graph_vidx_put(ix, verts[i], (int)i);    /* first occurrence wins */
+        size_t nv_in = verts_in->data.function.arg_count;
+        verts = (nv_in > 0) ? calloc(nv_in, sizeof(Expr*)) : NULL;
+        ix = graph_vidx_new(nv_in);
+        if ((nv_in > 0 && !verts) || !ix) goto fail_index;
+        /* A repeated vertex is one vertex: keep its first occurrence only
+         * (Graph[{1, 1, 2}, {1 -> 2}] has VertexList {1, 2}). */
+        for (size_t i = 0; i < nv_in; i++) {
+            Expr* v = expr_copy(verts_in->data.function.args[i]);
+            if (graph_vidx_put(ix, v, (int)nv)) verts[nv++] = v;  /* key kept by g */
+            else expr_free(v);
         }
         for (size_t i = 0; i < ne; i++) {
             eu[i] = graph_vidx_get(ix, edges[i]->data.function.args[0]);

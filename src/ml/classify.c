@@ -67,7 +67,7 @@ static bool ml_read_labelled(Expr* data, size_t* n_out, size_t* dim_out,
     size_t* y = malloc(sizeof(size_t) * n);
     if (!x || !cls || !y) { free(x); free(cls); free(y); return false; }
 
-    double im = 0.0; bool ok = true;
+    bool ok = true;
     for (size_t i = 0; i < n && ok; i++) {
         Expr* r = data->data.function.args[i];
         if (!r || r->type != EXPR_FUNCTION || r->data.function.arg_count != 2
@@ -77,14 +77,18 @@ static bool ml_read_labelled(Expr* data, size_t* n_out, size_t* dim_out,
             ok = false; break;
         }
         Expr* lhs = r->data.function.args[0];
-        if (dim == 1 && !(lhs && lhs->type == EXPR_FUNCTION)) {
-            ok = na_read_scalar(lhs, &x[i * dim], &im) && im == 0.0;
+        /* A feature vector is a List; anything else is one scalar feature -- a
+         * number or an exact constant (1/2, Sqrt[2]). g[9] is neither, and is
+         * no longer unwrapped into the number 9. */
+        bool vec = lhs && lhs->type == EXPR_FUNCTION
+                   && lhs->data.function.head->type == EXPR_SYMBOL
+                   && lhs->data.function.head->data.symbol.name == SYM_List;
+        if (dim == 1 && !vec) {
+            ok = ml_read_real(lhs, &x[i * dim]);
         } else {
-            if (!lhs || lhs->type != EXPR_FUNCTION
-                || lhs->data.function.arg_count != dim) { ok = false; break; }
+            if (!vec || lhs->data.function.arg_count != dim) { ok = false; break; }
             for (size_t j = 0; j < dim && ok; j++)
-                ok = na_read_scalar(lhs->data.function.args[j], &x[i * dim + j], &im)
-                  && im == 0.0;
+                ok = ml_read_real(lhs->data.function.args[j], &x[i * dim + j]);
         }
         cls[i] = r->data.function.args[1];      /* borrowed; copied by the vocabulary */
     }
@@ -693,6 +697,13 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
     size_t dim = (size_t)dimx->data.integer, k = (size_t)kx->data.integer;
     size_t n = pay->data.function.arg_count - 1;   /* k-NN: one row per example */
 
+    /* c[{x1, x2, ...}]: one class per example. */
+    {
+        bool batch;
+        Expr* br = ml_apply_batch(head, args, argc, dim, ml_classifier_apply, &batch);
+        if (batch) return br;
+    }
+
     MlLabels labels = {0, NULL};
     if (!ml_labels_from_list(pay->data.function.args[0], &labels)) return NULL;
 
@@ -726,9 +737,9 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
         && a0->data.function.head->data.symbol.name == SYM_List) {
         ok = a0->data.function.arg_count == dim;
         for (size_t j = 0; ok && j < dim; j++)
-            ok = na_read_scalar(a0->data.function.args[j], &xin[j], &im) && im == 0.0;
+            ok = ml_read_real(a0->data.function.args[j], &xin[j]);
     } else {
-        ok = (dim == 1) && na_read_scalar(a0, &xin[0], &im) && im == 0.0;
+        ok = (dim == 1) && ml_read_real(a0, &xin[0]);
     }
     if (!ok) { free(xin); ml_labels_free(&labels); return NULL; }
 

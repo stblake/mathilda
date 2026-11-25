@@ -43,6 +43,19 @@ void linalg_init(void);
 #include <gmp.h>
 int lll_reduce_q(mpq_t* rows, int n, int d, mpq_t* min_gso2);
 
+/* Definiteness of an n x n List matrix whose entries include exact numeric
+ * constants (Pi, Sqrt[2], ...), by Sylvester's criterion on the Hermitian part:
+ * every leading principal minor (times (-1)^k when `negative`) must be
+ * Positive, which the certified sign of an exact constant decides. 1 definite,
+ * 0 not, -1 undecided (or n too large for symbolic minors). In
+ * definite_minors.c; shared by PositiveDefiniteMatrixQ and
+ * NegativeDefiniteMatrixQ. */
+int linalg_exact_definite_minors(Expr* m, int n, int negative);
+
+/* True iff e is an exact (no approximate number) numeric quantity in the
+ * NumericQ sense that is not a plain number: Pi, Sqrt[2], 1 + GoldenRatio. */
+bool linalg_is_exact_constant(const Expr* e);
+
 /* Helpers exposed for use by matsol.c (RowReduce / LinearSolve) and
  * mateigen.c (Eigenvalues / Eigenvectors). */
 int   get_tensor_dims(Expr* e, int64_t* dims);

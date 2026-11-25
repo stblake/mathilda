@@ -142,8 +142,80 @@ static void test_linear_model_fit_basis(void) {
                " x, x][\"BestFitParameters\"][[2]] - 2] < 1*^-9");
 }
 
+/* Wave 4: distribution closed forms, batch application, feature reading. */
+static void test_wave4_machine_learning(void) {
+    /* exact and symbolic PDF */
+    audit_true("PDF#1", "PDF[NormalDistribution[], 0] === 1/Sqrt[2 Pi]");
+    audit_chk("PDF#1", "{PDF[UniformDistribution[{0, 2}], 1], PDF[UniformDistribution[{0, 2}], 3]}", "{1/2, 0}");
+    audit_true("NormalDistribution#1", "PossibleZeroQ[PDF[NormalDistribution[0, 1], 1] - E^(-1/2)/Sqrt[2 Pi]] && "
+               "PossibleZeroQ[PDF[NormalDistribution[1/2, 3/2], 1/2] - Sqrt[2/Pi]/3]");
+    audit_chk("UniformDistribution#1", "PDF[UniformDistribution[{0, 3}], 1]", "1/3");
+    audit_true("NormalDistribution#2", "PossibleZeroQ[PDF[NormalDistribution[m, s], x] - "
+               "E^(-(-m + x)^2/(2 s^2))/(Sqrt[2 Pi] s)]");
+    audit_true("PDF#2", "PossibleZeroQ[PDF[NormalDistribution[], x] - E^(-x^2/2)/Sqrt[2 Pi]]");
+    audit_chk("UniformDistribution#2", "PDF[UniformDistribution[{0, 2}], x]",
+              "Piecewise[{{1/2, 0 <= x <= 2}}, 0]");
+    audit_chk("PDF#2", "PDF[UniformDistribution[{0, 2}], x]", "Piecewise[{{1/2, 0 <= x <= 2}}, 0]");
+    audit_true("PDF#2", "With[{p = PDF[NormalDistribution[], {0., x}]}, Abs[p[[1]] - 0.3989422804014327] < 1*^-15 && "
+               "PossibleZeroQ[p[[2]] - E^(-x^2/2)/Sqrt[2 Pi]]]");
+    /* moments, CDF, Quantile, Median */
+    audit_chk("NormalDistribution#3", "{Mean[NormalDistribution[m, s]], Variance[NormalDistribution[m, s]], "
+              "StandardDeviation[NormalDistribution[2, 3]]}", "{m, s^2, 3}");
+    audit_chk("UniformDistribution#4", "{Mean[UniformDistribution[{0, 2}]], Variance[UniformDistribution[{0, 2}]], "
+              "CDF[UniformDistribution[{0, 2}], 1], Quantile[UniformDistribution[{0, 4}], 1/4], "
+              "Median[UniformDistribution[{1, 3}]]}", "{1, 1/3, 1/2, 1, 2}");
+    /* numeric-constant parameters */
+    audit_true("RandomVariate#2", "Head[RandomVariate[NormalDistribution[Sqrt[2], 1]]] === Real && "
+               "Head[RandomVariate[NormalDistribution[Pi, E]]] === Real");
+    audit_true("UniformDistribution#3", "With[{r = RandomVariate[UniformDistribution[{0, Pi}]]}, "
+               "Head[r] === Real && 0 <= r <= Pi]");
+    audit_chk("UniformDistribution#3", "{PDF[UniformDistribution[{0, Pi}], 1], PDF[UniformDistribution[{0, 2}], Pi]}",
+              "{1/Pi, 0}");
+    /* array shapes */
+    audit_chk("RandomVariate#3", "{Dimensions[RandomVariate[NormalDistribution[], {2, 3}]], "
+              "Length[RandomVariate[UniformDistribution[{0, 1}], {3}]]}", "{{2, 3}, 3}");
+    /* univariate learned distributions take a scalar point */
+    audit_run("auditM = LearnDistribution[{1., 2., 3., 4., 5., 6.}]; "
+              "auditK = SmoothKernelDistribution[Table[1. i/10., {i, 0, 40}]]; "
+              "auditK2 = SmoothKernelDistribution[{1, 2, 3, 4, 10}]");
+    audit_true("LearnDistribution#3", "Abs[PDF[auditM, 3.5] - 0.213244] < 1*^-6");
+    audit_true("LearnedDistribution#2", "PDF[auditM, 3.5] == PDF[auditM, {3.5}]");
+    audit_true("SmoothKernelDistribution#2", "Abs[PDF[auditK, 2.0] - PDF[auditK, {2.0}]] < 1*^-15");
+    audit_true("SmoothKernelDistribution#3", "Abs[Mean[auditK2] - 4.] < 1*^-12 && Variance[auditK2] > 10. && "
+               "0 < CDF[auditK2, 3.0] < 1 && Abs[CDF[auditK2, Quantile[auditK2, 0.5]] - 0.5] < 1*^-9");
+    audit_run("ClearAll[auditM, auditK, auditK2]");
+    /* batch application */
+    audit_run("auditC = Classify[{{0., 0.} -> \"red\", {1., 0.} -> \"red\", {0., 1.} -> \"red\", "
+              "{10., 10.} -> \"blue\", {11., 10.} -> \"blue\", {10., 11.} -> \"blue\"}]; "
+              "auditD = Classify[{1. -> \"a\", 2. -> \"a\", 8. -> \"b\", 9. -> \"b\"}]; "
+              "auditP = Predict[{1. -> 3., 2. -> 5., 3. -> 7., 4. -> 9.}]");
+    audit_chk("ClassifierFunction#1", "auditC[{{0.5, 0.5}, {10.5, 10.5}}]", "{\"red\", \"blue\"}");
+    audit_chk("ClassifierFunction#1", "auditD[{1.5, 8.5}]", "{\"a\", \"b\"}");
+    audit_chk("Classify#4", "auditC[{{0.5, 0.5}, {10.5, 10.5}}]", "{\"red\", \"blue\"}");
+    audit_true("Predict#2", "Max[Abs[auditP[{1., 2.}] - {3., 5.}]] < 1*^-12");
+    audit_true("PredictorFunction#1", "Max[Abs[auditP[{1., 2., 3.}] - {3., 5., 7.}]] < 1*^-12");
+    audit_run("ClearAll[auditC, auditD, auditP]");
+    /* features: exact numbers yes, arbitrary heads no */
+    audit_chk("Classify#2", "Head[Classify[{1/2 -> \"a\", 3 -> \"b\"}]]", "ClassifierFunction");
+    audit_chk("Classify#3", "Head[Classify[{g[9] -> \"a\", 1. -> \"b\"}]]", "Classify");
+    audit_chk("Classify#3", "Head[Classify[{{1., 2.} -> \"a\", f[30, 40] -> \"b\"}]]", "Classify");
+    /* a relative pivot tolerance */
+    audit_true("Predict#1", "Max[Abs[Predict[{1.*^-7 -> 1., 2.*^-7 -> 2., 3.*^-7 -> 3., 4.*^-7 -> 4.}]"
+               "[\"Coefficients\"] - {0., 1.*^7}]] < 1*^-3");
+    audit_true("LinearModelFit#3", "Head[LinearModelFit[{{1.*^-7, 1.}, {2.*^-7, 2.}, {3.*^-7, 3.}}]] =!= LinearModelFit");
+    /* Standardize: exact, and with location / scale functions */
+    audit_chk("Standardize#1", "{Standardize[{1, 2, 3}], Standardize[{1, 2, 4}], Standardize[{10^30, 2*10^30, 3*10^30}]}",
+              "{{-1, 0, 1}, {-4/Sqrt[21], -1/Sqrt[21], 5/Sqrt[21]}, {-1, 0, 1}}");
+    audit_chk("Standardize#2", "{Standardize[{1, 2, 3}, Mean, StandardDeviation], Standardize[{1, 2, 3}, Median]}",
+              "{{-1, 0, 1}, {-1, 0, 1}}");
+    /* InputForm round-trips a trained model */
+    audit_true("DimensionReducerFunction#1", "With[{r = DimensionReduction[{{100., 200.}, {102., 205.}, "
+               "{104., 210.}, {106., 215.}, {108., 220.}}, 1]}, ToExpression[ToString[r, InputForm]] === r]");
+}
+
 int main(void) {
     audit_init();
+    TEST(test_wave4_machine_learning);
     TEST(test_classify_malformed_rules);
     TEST(test_learn_distribution_singular);
     TEST(test_random_variate_learned);

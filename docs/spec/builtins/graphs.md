@@ -58,6 +58,9 @@ slot is reused. A fresh wrapper node around a memoized graph's own argument List
 - `Graph[v, e]`: a graph with vertex list `v` and edge list `e`.
 - `Graph[e]`: derives the vertex set from the edges, in first-appearance order
   (directed by default).
+- A vertex repeated in an explicit vertex list is one vertex: `Graph[{1, 1, 2},
+  {1 -> 2}]` has `VertexList` `{1, 2}` (the duplicate used to stay as a phantom
+  vertex, counted by `VertexCount` and given a row of `AdjacencyMatrix`).
 - `Graph[e, EdgeWeight -> {w1, ..., wm}]`, `Graph[v, e, EdgeWeight -> {w1, ..., wm}]`:
   a weighted graph — `wi` is the weight of `e[[i]]`, matched by position.
 - `Graph[e, EdgeCapacity -> {c1, ..., cm}]`, `Graph[v, e, EdgeCapacity -> {...}]`:
@@ -173,6 +176,10 @@ Out[5]= True
 ## VertexList
 
 - `VertexList[g]`: the vertices of `g`, in canonical order.
+- `VertexList[g, patt]`: the vertices matching `patt` (`VertexList[g, _?OddQ]`).
+- `VertexList[{e1, e2, ...}]`: `g` may be a list of edges or edge sugar
+  (`{1 -> 2, 2 -> 3}`), read as `Graph[{...}]`; so may the argument of
+  `EdgeList`, `VertexCount`, `EdgeCount` and `ConnectedComponents`.
 
 **Features**:
 - `Protected`. The query/representation heads (`VertexList`, `EdgeList`,
@@ -200,6 +207,9 @@ Out[4]= VertexList[5]
 
 - `EdgeList[g]`: the edges of `g`, in canonical `DirectedEdge`/`UndirectedEdge`
   form.
+- `EdgeList[g, patt]`: the edges matching `patt`. A top-level `->` / `<->` in the
+  pattern stands for `DirectedEdge` / `UndirectedEdge`, and an undirected edge
+  also matches with its endpoints reversed.
 
 **Features**:
 - `Protected`. A thin reader over the canonical form; unevaluated on a non-graph
@@ -225,6 +235,8 @@ Out[4]= EdgeList[5]
 
 - `VertexCount[g]`: the number of vertices of `g`.
 - `EdgeCount[g]`: the number of edges of `g`.
+- `VertexCount[g, patt]` / `EdgeCount[g, patt]`: the number of vertices / edges
+  matching `patt` (`EdgeCount[g, 1 -> _]`), as in `VertexList` / `EdgeList`.
 
 **Features**:
 - `Protected`. Cardinalities read from the canonical form; unevaluated on a
@@ -252,6 +264,8 @@ Out[5]= EdgeCount[x]
 - `AdjacencyList[g]`: `{neighbors(v1), ...}`, one list per vertex in vertex
   order.
 - `AdjacencyList[g, v]`: the neighbors of `v`.
+- `AdjacencyList[g, v, d]`: the vertices other than `v` within `d` steps of `v`
+  (`d` a nonnegative Integer or `Infinity`), in vertex order.
 
 **Features**:
 - `Protected`. Directed edges contribute successors (`v -> u` makes `u` a
@@ -428,6 +442,9 @@ Out[6]= EdgeWeight[5]
 
 - `AdjacencyMatrix[g]`: the dense 0/1 adjacency matrix of `g` (`n x n`,
   canonical vertex order).
+- Entries count edges: a mixed graph can join one pair by both a `DirectedEdge`
+  and an `UndirectedEdge`, so `AdjacencyMatrix[Graph[{1->2, 2->1, 1<->2}]]` is
+  `{{0, 2}, {2, 0}}`.
 
 **Features**:
 - `Protected`. Symmetric for undirected graphs; entry `(i, j)` is `1` for a
@@ -483,6 +500,12 @@ Out[4]= {{}, {}}
 
 - `AdjacencyGraph[m]`: the graph on vertices `1..n` whose adjacency matrix is
   the 0/1 matrix `m`.
+- `AdjacencyGraph[{v1, ..., vn}, m]`: the same graph on the given vertices.
+- `AdjacencyGraph[m, DirectedEdges -> True]`: every 1 is an arc, so a symmetric
+  `m` gives both `i -> j` and `j -> i`. `EdgeWeight` / `EdgeCapacity` pass to `Graph`.
+- An entry other than the integers 0 and 1 (a multiplicity, which would be
+  parallel edges) leaves the call unevaluated; the full 64-bit value is
+  compared (`2^32 + 1` was read as 1).
 
 **Features**:
 - `Protected`. The inverse of `AdjacencyMatrix`: undirected if `m` is symmetric,
@@ -541,6 +564,10 @@ Out[4]= WeightedAdjacencyMatrix[5]
 ## CycleGraph
 
 - `CycleGraph[n]`: the cycle on vertices `1..n`.
+- `CycleGraph[n, opts]`, and likewise `PathGraph` and `StarGraph`:
+  `DirectedEdges -> True` orients each edge (`1 -> 2, ..., n -> 1`);
+  `EdgeWeight` / `EdgeCapacity` pass to `Graph`. Any other option leaves the
+  call unevaluated.
 
 **Features**:
 - `Protected`. Like all the graph generators (`CompleteGraph`, `CycleGraph`,
@@ -571,7 +598,8 @@ Out[5]= CycleGraph[x]
 ## PathGraph
 
 - `PathGraph[n]`: the path `1-2-...-n`.
-- `PathGraph[{v1, ...}]`: the path through the given vertices, in order.
+- `PathGraph[{v1, ...}]`: the path through the given vertices, in order. A
+  repeated vertex is one vertex: `PathGraph[{a, b, c, a}]` is the triangle.
 
 **Features**:
 - `Protected`. Undirected edges, built through the `Graph` constructor (see
@@ -883,6 +911,8 @@ Out[6]= ConnectedGraphQ[5]
 
 - `VertexConnectivity[g]`: the minimum number of vertices whose removal
   disconnects `g`.
+- `VertexConnectivity[g, s, t]`: the fewest vertices whose removal separates `s`
+  from `t` (the split-vertex flow engine of `FindVertexCut`).
 
 **Features**:
 - `Protected`. Gives `n-1` for `K_n`, and `0` if `g` is already disconnected.
@@ -1351,6 +1381,8 @@ Out[4]= VertexDelete[Graph[<3 vertices, 3 edges>], 7]
 
 - `EdgeAdd[g, e]`: appends the edge `e` to `g`.
 - `EdgeAdd[g, {e1, ...}]`: appends each listed edge in order.
+- An `EdgeCapacity` list is kept for the old edges (the added ones get 1), so
+  `FindMaximumFlow` is unchanged by an unrelated `EdgeAdd`.
 
 **Features**:
 - `Protected`. A non-graph first argument is left unevaluated.
@@ -1935,7 +1967,9 @@ Out[6]= FindCycle[Graph[<3 vertices, 2 edges>]]
 
 - `FindPath[g, s, t]`: a list `{path}` containing one path from `s` to `t` as a list of vertices, or `{}` if none exists.
 - `FindPath[g, s, t, kspec]`: a path whose length satisfies `kspec` (`k`, `{k}`, `{kmin, kmax}`, `Infinity`).
-- `FindPath[g, s, t, kspec, n]`: at most `n` paths (`n` may be `All`).
+- `FindPath[g, s, t, kspec, n]`: at most `n` paths (`n` may be `All`). A finite `n`
+  gives the `n` SHORTEST paths: the search deepens one length at a time, so
+  `FindPath[CompleteGraph[4], 1, 4, Infinity, 2]` starts with the edge `{1, 4}`.
 
 **Features**:
 - `Protected`. A non-graph argument is left unevaluated.
@@ -2036,6 +2070,8 @@ Out[6]= GraphDistanceMatrix[x]
 
 - `GraphDistance[g, s, t]`: the length (or total weight) of a shortest path from `s` to `t` in `g`; `Infinity` if `t` is unreachable.
 - `GraphDistance[g, s]`: the distances from `s` to every vertex, in `VertexList` order.
+- An exact numeric-constant weight (`Pi`, `Sqrt[2]`) is a weight at its machine
+  value, not a reason to fall back to hop counts.
 
 **Features**:
 - *(w)* weight-aware. `GraphDistance[g, s]` is the single-source form added
@@ -2382,7 +2418,10 @@ Out[4]= {6.0, 8.0, 6.0, 0.0}
 ## PageRankCentrality
 
 - `PageRankCentrality[g]`: the PageRank centrality of each vertex of `g`, with damping `0.85`.
-- `PageRankCentrality[g, a]`: uses damping factor `a`.
+- `PageRankCentrality[g, a]`: uses damping factor `a`. At `a = 1` on a periodic
+  chain (a bipartite graph) plain power iteration oscillates; past a warm-up the
+  iteration takes lazy steps `(x + T x)/2`, which share its fixed point, so
+  `PageRankCentrality[PathGraph[3], 1]` is `{0.25, 0.5, 0.25}`.
 
 **Features**:
 - Solves `x = a P^T x + (1 - a)/n`; dangling vertices jump uniformly;
@@ -2745,7 +2784,8 @@ Out[5]= GridGraph[{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
 ## KaryTree / CompleteKaryTree
 
 - `KaryTree[n]`: the binary tree with `n` vertices.
-- `KaryTree[n, k]`: the `k`-ary tree with `n` vertices.
+- `KaryTree[n, k]`: the `k`-ary tree with `n` vertices. A `k >= n - 1` is the star
+  on `n` vertices for every machine `k` (`2^62` overflowed `k i + c`).
 - `CompleteKaryTree[n]`: the complete binary tree with `n` levels.
 - `CompleteKaryTree[n, k]`: the complete `k`-ary tree with `n` levels.
 
@@ -3206,6 +3246,8 @@ Out[4]= FindVertexCover[x]
 
 - `FindIndependentVertexSet[g]`: `{s}` with `s` a maximum independent vertex set of `g`.
 - `FindIndependentVertexSet[g, k]`: the largest maximal independent set with at most `k` vertices.
+  A bound past any vertex count (`2^32`, a BigInt) behaves as `Infinity`; it used to
+  be truncated to a C `int`. The same size-spec reader serves `FindClique`.
 - `FindIndependentVertexSet[g, {k}]`: maximal independent sets with exactly `k` vertices.
 - `FindIndependentVertexSet[g, {kmin, kmax}]`: maximal independent sets with between `kmin` and `kmax` vertices.
 - `FindIndependentVertexSet[g, spec, n]` / `FindIndependentVertexSet[g, spec, All]`: up to `n` / all such sets.
@@ -3319,6 +3361,8 @@ Out[6]= False
 
 - `FindClique[g]`: `{c}` with `c` a maximum clique of `g`.
 - `FindClique[g, k]`: the largest maximal clique with at most `k` vertices (`k` may be `Infinity`).
+  Past 8192 vertices (the bitset engine's limit) a single answer comes from the
+  maximum-clique search when its size fits the spec (`FindClique[CycleGraph[10000], 2]`).
 - `FindClique[g, {k}]`: maximal cliques with exactly `k` vertices.
 - `FindClique[g, {kmin, kmax}]`: maximal cliques with between `kmin` and `kmax` vertices.
 - `FindClique[g, spec, n]` / `FindClique[g, spec, All]`: up to `n` / all such maximal cliques.
@@ -3371,6 +3415,8 @@ Out[7]= $Aborted
 ## FindKClique
 
 - `FindKClique[g, k]`: `{c}`, a largest set of vertices of `g` pairwise within distance `k`.
+  No vertex limit: the power graph comes from truncated BFS and is searched by the
+  maximum-clique engine (a 10000-vertex path stayed unevaluated).
 
 **Features**:
 - `Protected`; unevaluated on a non-graph.
@@ -3474,6 +3520,8 @@ Out[6]= {}
 ## HamiltonianGraphQ
 
 - `HamiltonianGraphQ[g]`: `True` if `g` has a Hamiltonian cycle, `False` otherwise.
+  A connected bipartite graph with colour classes of different sizes is `False` at
+  once (a cycle alternates colours): `CompleteGraph[{8, 9}]`, `GridGraph[{11, 11}]`.
 
 **Features**:
 - `Protected`; gives `False` for a non-graph.

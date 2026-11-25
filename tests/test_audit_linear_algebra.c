@@ -369,8 +369,90 @@ static void test_s11_special_values(void) {
     audit_true("Normalize#1", "Normalize[{Indeterminate, 1}] === {Indeterminate, Indeterminate}");
 }
 
+/* Wave 4: Modulus -> p, the elimination zero test, numeric constants,
+ * argument validation. */
+static void test_wave4_linear_algebra(void) {
+    /* Modulus -> p (linalg_mod.c) */
+    audit_chk("Det#1", "Det[{{2, 3}, {5, 7}}, Modulus -> 5]", "4");
+    audit_chk("Det#1", "Options[Det]", "{Modulus -> 0}");
+    audit_chk("Inverse#1", "Inverse[{{1, 2}, {3, 4}}, Modulus -> 5]", "{{3, 1}, {4, 2}}");
+    audit_chk("NullSpace#2", "NullSpace[{{1, 1}, {1, 1}}, Modulus -> 2]", "{{1, 1}}");
+    /* Tolerance: singular values below t times the largest are zero */
+    audit_true("NullSpace#1", "With[{ns = Quiet[NullSpace[{{1, 2}, {2, 4.001}}, Tolerance -> 0.01]]}, "
+               "Length[ns] == 1 && Abs[Abs[ns[[1, 1]]] - 0.894] < 0.001]");
+    /* GoldenRatio is not a free indeterminate */
+    audit_chk("RowReduce#1", "RowReduce[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}]",
+              "{{1, 1/GoldenRatio}, {0, 0}}");
+    audit_chk("MatrixRank#2", "MatrixRank[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}]", "1");
+    audit_true("PseudoInverse#1", "Max[Abs[N[PseudoInverse[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}]] - "
+               "N[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}/5]]] < 1*^-12");
+    /* ZeroTest: a cell judged zero is written as 0 */
+    audit_chk("RowReduce#2", "RowReduce[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}, ZeroTest -> PossibleZeroQ]",
+              "{{1, 1/GoldenRatio}, {0, 0}}");
+    audit_chk("RowReduce#2", "RowReduce[{{Sin[x]^2 + Cos[x]^2 - 1, 1}, {1, 0}}, "
+              "ZeroTest -> (Simplify[#] === 0 &)]", "{{1, 0}, {0, 1}}");
+    /* non-matrices are not "already reduced" */
+    audit_chk("RowReduce#3", "Quiet[RowReduce[5]]", "RowReduce[5]");
+    audit_chk("RowReduce#3", "Quiet[RowReduce[{1, 2, 3}]]", "RowReduce[{1, 2, 3}]");
+    audit_chk("RowReduce#3", "Quiet[RowReduce[{{1, 2}, {3}}]]", "RowReduce[{{1, 2}, {3}}]");
+    audit_true("RowReduce#3", "Check[RowReduce[5], $Failed] === $Failed");
+    /* numeric constants decide definiteness exactly */
+    audit_chk("PositiveDefiniteMatrixQ#3", "PositiveDefiniteMatrixQ[{{Pi, 0}, {0, Sqrt[2]}}]", "True");
+    audit_chk("PositiveDefiniteMatrixQ#3", "PositiveDefiniteMatrixQ[{{Pi, 4}, {4, Sqrt[2]}}]", "False");
+    audit_chk("NegativeDefiniteMatrixQ#4", "NegativeDefiniteMatrixQ[{{-Pi, 0}, {0, -Sqrt[2]}}]", "True");
+    /* an MPFR zero is zero */
+    audit_chk("DiagonalMatrixQ#1", "DiagonalMatrixQ[{{1, 1`30 - 1`30}, {0, 1}}]", "True");
+    audit_chk("UpperTriangularMatrixQ#1", "UpperTriangularMatrixQ[{{1, 2}, {0``30, 3}}]", "True");
+    /* approximate matrix with exact constants is numericized */
+    audit_true("HessenbergDecomposition#1", "With[{h = HessenbergDecomposition[{{1., Pi}, {2., 3.}}]}, "
+               "Max[Abs[h[[1]] . h[[2]] . ConjugateTranspose[h[[1]]] - {{1., N[Pi]}, {2., 3.}}]] < 1*^-12]");
+    audit_true("HessenbergDecomposition#1",
+               "Head[HessenbergDecomposition[{{1., E, 1}, {2., 3., 1}, {1, 2, 3}}]] === List");
+    /* Eigenvectors' second argument is a count spec */
+    audit_chk("Eigenvectors#1", "Quiet[Eigenvectors[{{1, 2}, {3, 4}}, 1.5]]", "Eigenvectors[{{1, 2}, {3, 4}}, 1.5]");
+    audit_chk("Eigenvectors#1", "Quiet[Eigenvectors[{{1, 2}, {3, 4}}, x]]", "Eigenvectors[{{1, 2}, {3, 4}}, x]");
+    audit_chk("Eigenvectors#1", "Quiet[Eigenvectors[{{1, 2}, {2, 4}}, {{1, 0}, {0, 0}}]]",
+              "Eigenvectors[{{1, 2}, {2, 4}}, {{1, 0}, {0, 0}}]");
+    /* a singular pencil direction is Indeterminate */
+    audit_true("Eigenvalues#2", "With[{e = Eigenvalues[{{{1., 2.}, {2., 4.}}, {{1., 2.}, {2., 4.}}}]}, "
+               "Count[e, Indeterminate] == 1 && Abs[First[Cases[e, _Real]] - 1.] < 1*^-10]");
+    /* Inner needs one head */
+    audit_chk("Inner#3", "Quiet[Inner[f, h[a, b], k[x, y], g]]", "Inner[f, h[a, b], k[x, y], g]");
+    audit_chk("Inner#3", "Inner[f, h[a, b], h[x, y], g]", "g[f[a, x], f[b, y]]");
+    /* UpTo counts */
+    audit_chk("UpTo#1", "{TakeLargest[{3, 1, 2}, 2], TakeLargest[{3, 1, 2}, UpTo[5]], "
+              "TakeSmallest[{3, 1, 2}, UpTo[2]], TakeLargestBy[{3, 1, 2}, Minus, UpTo[5]]}",
+              "{{3, 2}, {3, 2, 1}, {1, 2}, {1, 2, 3}}");
+    /* machine CharacteristicPolynomial is stable */
+    audit_true("CharacteristicPolynomial#1", "With[{m = N[Table[1/(i + j - 1), {i, 6}, {j, 6}]]}, "
+               "Abs[CharacteristicPolynomial[m, 0]/Det[Table[1/(i + j - 1), {i, 6}, {j, 6}]] - 1] < 1*^-4]");
+    /* a replaced matrix is not solved with the stale factor */
+    audit_true("LinearSolveFunction#1", "Module[{f = LinearSolve[{{1., 2.}, {3., 4.}}], g}, "
+               "g = f /. {{1., 2.}, {3., 4.}} -> {{2., 0.}, {0., 2.}}; Max[Abs[g[{2., 2.}] - {1., 1.}]] < 1*^-12]");
+    /* NDArray beside an exact constant */
+    audit_true("NDArray#3", "Max[Abs[Normal[NDArray[{1., 2.}] + Pi] - {1. + N[Pi], 2. + N[Pi]}]] < 1*^-15");
+    /* Fit through a basis without the variable is not a fit */
+    audit_chk("Fit#3", "Quiet[Fit[{{0, 1}, {1, 3}, {2, 5}}, {1, x}, y]]", "Fit[{{0, 1}, {1, 3}, {2, 5}}, {1, x}, y]");
+    /* DesignMatrix: the constant column, a single basis function */
+    audit_chk("DesignMatrix#1", "DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, {x}, x]",
+              "{{1, 0}, {1, 1}, {1, 3}, {1, 5}}");
+    audit_chk("DesignMatrix#2", "DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, x, x]",
+              "{{1, 0}, {1, 1}, {1, 3}, {1, 5}}");
+    audit_chk("DesignMatrix#1", "DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, {x}, x, IncludeConstantBasis -> False]",
+              "{{0}, {1}, {3}, {5}}");
+    /* a 40 x 40 HNF in well under the budget, and still a valid decomposition */
+    audit_run("SeedRandom[1]; auditH = RandomInteger[{-100, 100}, {40, 40}]");
+    audit_true("HermiteDecomposition#1", "With[{d = TimeConstrained[HermiteDecomposition[auditH], 5]}, "
+               "ListQ[d] && d[[1]] . auditH == d[[2]] && Abs[Det[d[[1]]]] == 1 && "
+               "UpperTriangularMatrixQ[d[[2]]]]");
+    audit_run("ClearAll[auditH]");
+    /* already fixed by an earlier wave; pinned here */
+    audit_chk("HilbertMatrix#1", "Options[HilbertMatrix]", "{WorkingPrecision -> Infinity}");
+}
+
 int main(void) {
     audit_init();
+    TEST(test_wave4_linear_algebra);
     TEST(test_fit_general_norm);
     TEST(test_identity_matrix_size_overflow);
     TEST(test_diagonal_matrix_size_overflow);

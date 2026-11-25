@@ -15,6 +15,7 @@
 #include "expr.h"
 #include "sym_names.h"
 #include <stdlib.h>
+#include <stdint.h>
 
 /* Build List of neighbors of `v` (deduplicated, first-appearance order). */
 static Expr* neighbors_of(const Expr* g, const Expr* v) {
@@ -47,12 +48,60 @@ static Expr* neighbors_of(const Expr* g, const Expr* v) {
     return list;
 }
 
+/* AdjacencyList[g, v, d]: the vertices other than v within d steps of v
+ * (following the same out-neighbourhood as the two-argument form), in
+ * VertexList order. d is a nonnegative Integer or Infinity. */
+static Expr* within_distance(const Expr* g, int src, int64_t d) {
+    GraphAdj* a = graph_build_adj(g);
+    if (!a) return NULL;
+    int n = a->n;
+    int64_t* dist = malloc(sizeof(int64_t) * (size_t)(n > 0 ? n : 1));
+    int* queue = malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    Expr* out = NULL;
+    if (dist && queue) {
+        for (int i = 0; i < n; i++) dist[i] = -1;
+        int head = 0, tail = 0;
+        dist[src] = 0; queue[tail++] = src;
+        while (head < tail) {
+            int u = queue[head++];
+            if (dist[u] >= d) continue;
+            for (int k = 0; k < a->outdeg[u]; k++) {
+                int w = a->out[u][k];
+                if (dist[w] < 0) { dist[w] = dist[u] + 1; queue[tail++] = w; }
+            }
+        }
+        Expr** items = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+        size_t m = 0;
+        for (int i = 0; items && i < n; i++)
+            if (i != src && dist[i] >= 0)
+                items[m++] = expr_copy(a->verts->data.function.args[i]);
+        if (items) {
+            out = expr_new_function(expr_new_symbol(SYM_List), items, m);
+            free(items);
+        }
+    }
+    free(dist); free(queue);
+    graph_adj_free(a);
+    return out;
+}
+
 Expr* builtin_adjacency_list(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc < 1 || argc > 2) return NULL;
+    if (argc < 1 || argc > 3) return NULL;
     const Expr* g = res->data.function.args[0];
     if (!graph_is_valid(g)) return NULL;
     const Expr* verts = g->data.function.args[0];
+
+    if (argc == 3) {
+        const Expr* de = res->data.function.args[2];
+        int64_t d;
+        if (de->type == EXPR_INTEGER && de->data.integer >= 0) d = de->data.integer;
+        else if (de->type == EXPR_SYMBOL && de->data.symbol.name == SYM_Infinity) d = INT64_MAX;
+        else return NULL;
+        int src = graph_vertex_position(g, res->data.function.args[1]);
+        if (src < 0) return NULL;
+        return within_distance(g, src, d);
+    }
 
     if (argc == 2) {
         const Expr* v = res->data.function.args[1];

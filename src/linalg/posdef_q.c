@@ -220,18 +220,27 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
 
     /* Probe numericity and detect whether any entry is non-real.  Any
      * non-coercible leaf flips us into the "symbolic -> False" branch. */
-    bool is_complex = false, exact = true;
+    bool is_complex = false, exact = true, has_const = false;
     for (int i = 0; i < n; i++) {
         Expr* row = m->data.function.args[i];
         for (int j = 0; j < n; j++) {
             double re, im;
             if (!pdq_leaf_to_double(row->data.function.args[j], &re, &im)) {
+                /* Pi, Sqrt[2], ...: decided by certified minors below. */
+                if (linalg_is_exact_constant(row->data.function.args[j])) {
+                    has_const = true;
+                    continue;
+                }
                 return expr_new_symbol(SYM_False);
             }
             if (im != 0.0) is_complex = true;
             if (exact && pdq_leaf_inexact(row->data.function.args[j])) exact = false;
         }
     }
+
+    if (has_const)
+        return expr_new_symbol(linalg_exact_definite_minors(m, n, 0) == 1
+                               ? SYM_True : SYM_False);
 
     /* Exact input is decided exactly (Sylvester's criterion over Q(i)).
      * Rounding to double decided {{10^16, 10^16+1}, {10^16+1, 10^16+2}}

@@ -60,6 +60,7 @@
 #include "attr.h"
 #include "match.h"
 #include "numeric.h"
+#include "common.h"   /* head_is */
 #include "ndarray.h"
 
 #include <gmp.h>
@@ -1531,6 +1532,18 @@ static Expr* fit_from_design(Expr* arg0, const FitOpts* opts) {
     return fit_dispatch_solve(m, v, opts);
 }
 
+/* True iff every entry of the List-of-Lists M is a numeric quantity. */
+static bool fit_matrix_is_numeric(const Expr* M) {
+    if (!M || !fit_is_list(M)) return false;
+    for (size_t i = 0; i < fit_len(M); i++) {
+        const Expr* row = M->data.function.args[i];
+        if (!fit_is_list(row)) return false;
+        for (size_t j = 0; j < fit_len(row); j++)
+            if (!expr_is_numeric_quantity(row->data.function.args[j])) return false;
+    }
+    return true;
+}
+
 Expr* builtin_fit(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     Expr** args = res->data.function.args;
@@ -1590,6 +1603,14 @@ Expr* builtin_fit(Expr* res) {
 
     M = fit_build_design_matrix(funs_list->data.function.args, nfun,
                                 coords, npts, ncoord, varsyms);
+    /* A basis function that does not reduce to a number at the data points --
+     * one in a variable that is not among vars -- leaves a symbolic design
+     * matrix, and a "fit" through it is not a least-squares answer. */
+    if (!fit_matrix_is_numeric(M)) {
+        fit_warn("Fit", "fitm", "Unable to solve for the fit parameters; the design "
+                 "matrix is nonrectangular, non-numerical, or could not be inverted.");
+        goto cleanup;
+    }
     V = fit_build_response(resp, npts);
 
     coeffs = fit_dispatch_solve(M, V, &opts);
@@ -1612,19 +1633,59 @@ Expr* builtin_designmatrix(Expr* res) {
     Expr** args = res->data.function.args;
     size_t argc = res->data.function.arg_count;
 
+    /* IncludeConstantBasis -> True (the default) puts a constant column first
+     * when no basis function is already a constant; it is DesignMatrix's own
+     * option, so it is taken out before the shared Fit option parse. */
+    bool include_const = true;
+    Expr** a2 = malloc(sizeof(Expr*) * (argc ? argc : 1));
+    if (!a2) return NULL;
+    size_t argc2 = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* o = args[i];
+        if (i >= 3 && o->type == EXPR_FUNCTION && o->data.function.arg_count == 2 &&
+            (head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) &&
+            o->data.function.args[0]->type == EXPR_SYMBOL &&
+            o->data.function.args[0]->data.symbol.name == SYM_IncludeConstantBasis) {
+            Expr* v = o->data.function.args[1];
+            if (v->type != EXPR_SYMBOL ||
+                (v->data.symbol.name != SYM_True && v->data.symbol.name != SYM_False)) {
+                free(a2);
+                return NULL;
+            }
+            include_const = v->data.symbol.name == SYM_True;
+            continue;
+        }
+        a2[argc2++] = o;
+    }
     FitOpts opts;
     size_t npos;
-    if (!fit_parse_options(args, argc, &npos, &opts)) return NULL;
-    if (npos != 3) return NULL;
+    bool parsed = fit_parse_options(a2, argc2, &npos, &opts);
+    free(a2);
+    if (!parsed || npos != 3) return NULL;
 
     Expr* data = args[0];
-    Expr* funs_list = args[1];
+    Expr* funs_in = args[1];
     Expr* vars = args[2];
-    if (!fit_is_list(funs_list) || fit_len(funs_list) == 0) {
+    /* A single basis function f is the basis {f}. */
+    if (fit_is_list(funs_in) && fit_len(funs_in) == 0) {
         fit_warn("DesignMatrix", "funs",
                  "second argument must be a non-empty list of functions");
         return NULL;
     }
+    size_t nf_in = fit_is_list(funs_in) ? fit_len(funs_in) : 1;
+    Expr* const* fs_in = fit_is_list(funs_in) ? funs_in->data.function.args : &args[1];
+    bool has_const = false;
+    for (size_t i = 0; i < nf_in && !has_const; i++)
+        has_const = expr_is_numeric_quantity(fs_in[i]) &&
+                    !(fs_in[i]->type == EXPR_INTEGER && fs_in[i]->data.integer == 0);
+    bool add_const = include_const && !has_const;
+    Expr** fl = malloc(sizeof(Expr*) * (nf_in + 1));
+    if (!fl) return NULL;
+    size_t nf = 0;
+    if (add_const) fl[nf++] = expr_new_integer(1);
+    for (size_t i = 0; i < nf_in; i++) fl[nf++] = expr_copy(fs_in[i]);
+    Expr* funs_list = expr_new_function(expr_new_symbol(SYM_List), fl, nf);
+    free(fl);
 
     size_t npts = 0, ncoord = 0, nvar = 0;
     Expr** coords = NULL;
@@ -1634,7 +1695,7 @@ Expr* builtin_designmatrix(Expr* res) {
     Expr* out = NULL;
 
     if (!fit_normalize_data(data, "DesignMatrix", &npts, &ncoord, &coords, &resp))
-        return NULL;
+        { expr_free(funs_list); return NULL; }
     if (!fit_normalize_vars(vars, "DesignMatrix", ncoord, &varsyms, &nvar))
         goto cleanup;
 
@@ -1653,6 +1714,7 @@ cleanup:
     fit_free_array(resp, npts);
     fit_free_array(varsyms, nvar);
     if (M) expr_free(M);
+    expr_free(funs_list);
     return out;
 }
 

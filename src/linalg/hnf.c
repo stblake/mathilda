@@ -29,6 +29,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef USE_FLINT
+#include <flint/fmpz.h>
+#include <flint/fmpz_mat.h>
+#endif
+
 /* ------------------------------------------------------------------ *
  *  Row HNF core.                                                     *
  * ------------------------------------------------------------------ */
@@ -64,10 +69,53 @@ static void hnf_row_combine(mpz_t* Row_r, mpz_t* Row_i, int width,
     }
 }
 
+#ifdef USE_FLINT
+/* linalg_hnf through fmpz_mat_hnf_transform (H = U A). Returns the rank, or
+ * -1 on allocation failure (the caller then runs the classical path). */
+static int linalg_hnf_flint(const mpz_t* A, int m, int n, mpz_t** R_out, mpz_t** P_out) {
+    mpz_t* R = hnf_mat_alloc(m * n);
+    mpz_t* P = hnf_mat_alloc(m * m);
+    if (!R || !P) { linalg_hnf_free(R, m * n); linalg_hnf_free(P, m * m); return -1; }
+    fmpz_mat_t FA, FH, FU;
+    fmpz_mat_init(FA, m, n);
+    fmpz_mat_init(FH, m, n);
+    fmpz_mat_init(FU, m, m);
+    for (int i = 0; i < m; i++)
+        for (int j = 0; j < n; j++) fmpz_set_mpz(fmpz_mat_entry(FA, i, j), A[i * n + j]);
+    fmpz_mat_hnf_transform(FH, FU, FA);
+    int rank = 0;
+    for (int i = 0; i < m; i++) {
+        int nz = 0;
+        for (int j = 0; j < n; j++) {
+            fmpz_get_mpz(R[i * n + j], fmpz_mat_entry(FH, i, j));
+            if (mpz_sgn(R[i * n + j]) != 0) nz = 1;
+        }
+        rank += nz;
+        for (int j = 0; j < m; j++) fmpz_get_mpz(P[i * m + j], fmpz_mat_entry(FU, i, j));
+    }
+    fmpz_mat_clear(FA); fmpz_mat_clear(FH); fmpz_mat_clear(FU);
+    *R_out = R;
+    *P_out = P;
+    return rank;
+}
+#endif
+
 int linalg_hnf(const mpz_t* A, int m, int n, mpz_t** R_out, mpz_t** P_out) {
     if (R_out) *R_out = NULL;
     if (P_out) *P_out = NULL;
     if (m <= 0 || n <= 0) return -1;
+
+#ifdef USE_FLINT
+    /* Past a small size, FLINT's fmpz_mat_hnf_transform: the gcd elimination
+     * below never reduces as it goes, so its intermediate entries explode (a
+     * 40 x 40 matrix of 3-digit entries took seconds). The HNF is unique, so R
+     * is the same matrix; P is one valid unimodular transform. Small inputs keep
+     * the classical path and its transform. */
+    if ((int64_t)m * n >= 64) {
+        int r = linalg_hnf_flint(A, m, n, R_out, P_out);
+        if (r >= 0) return r;
+    }
+#endif
 
     mpz_t* R = hnf_mat_alloc(m * n);
     mpz_t* P = hnf_mat_alloc(m * m);
