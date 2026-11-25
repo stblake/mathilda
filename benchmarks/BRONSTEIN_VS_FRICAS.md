@@ -13,9 +13,9 @@ The **easy** integrals of every corpus are left out: those `easy_classify.py` (e
 From 2026-11-25 every corpus leaves out its **easy** integrals (`easy.tsv`; see the
 note above). 3191 of the 4876 cases of 256-261 are easy: rational functions, integrands
 a substitution makes rational, and those `DerivativeDivides` closes. 257 keeps 18 of
-1000 cases and 261 keeps 58 of 1550. 262 is 1000 integrals generated outside the easy
-classes. 2685 cases are left; the counts below are of those only. 262 ran at v0.6732,
-261 at v0.6714, the others at v0.6691.
+1000 cases and 261 keeps 58 of 1550. 262 (1000) and 263 (1850) are integrals generated
+outside the easy classes. 4535 cases are left; the counts below are of those only. 263
+ran at v0.6733, 262 at v0.6732, 261 at v0.6714, the others at v0.6691.
 
 **Decided** (a verified closed form, or a proof that none is elementary):
 
@@ -27,23 +27,34 @@ classes. 2685 cases are left; the counts below are of those only. 262 ran at v0.
 | 260 | 271 | **98%** (266) | 35% (96) | 97% (264) | 93% (252) |
 | 261 | 58 | 98% (57) | 55% (32) | **100%** (58) | 24% (14) |
 | 262 | 1000 | **98%** (976) | 66% (660) | 97% (970) | 64% (640) |
-| all | 2685 | **99%** (2648) | 64% (1368 of 2124) | 98% (2641) | 72% (1937) |
+| 263 | 1850 | 98% (1817) | 72% (1339) | **99%** (1826) | 69% (1276) |
+| all | 4535 | **98%** (4465) | 68% (2707 of 3974) | **98%** (4467) | 71% (3213) |
 
-- **Leaving out the easy cases widens the gap.** FriCAS decides 72% of what is left,
-  against 95% of 261 and 90% of 257 with the easy cases in. Mathilda's share stays at
-  98-100% on every corpus.
+- **Leaving out the easy cases widens the gap.** FriCAS decides 71% of what is left,
+  against 95% of 261 and 90% of 257 with the easy cases in. Mathilda's share is
+  94-100% on every corpus (94% only on 257's 18 cases).
 - **262 by class.** FriCAS closes no M case (0 of 216) and 51 of 118 B cases; Mathilda
   closes all of both. On A, Trager closes 312 of 336 and FriCAS 266. On T both are near
   complete (330 and 323).
 - **Soundness on 262.** No Mathilda method gives a wrong answer or a false "no". All 7
   FriCAS answers that failed their own check are zero by `PossibleZeroQ` in Mathilda.
+- **263: FriCAS gives 11 false "no".** On B4 integrands elementary by construction,
+  derivatives of `E^y R` with y the root of a cubic or quartic, FriCAS returns
+  `integral(...)`. Minimal case in FriCAS 1.3.6:
+  `integrate(D(exp(sqrt(x^3+1))/(x+1), x), x)`, which should be
+  `exp(sqrt(x^3+1))/(x+1)` (with `1/x` it integrates). FriCAS closes none of 263's
+  400 M cases.
 - **Automatic below the dedicated method on 262: 14 cases** (11 B, 3 A). The cascade
   stops at about 20 s, and Bronstein or Trager needs 10-26 s on these sixth-root radicals
   (`cB-201-559`, `Log[x]/(x^6 (3 + 2 x^6)^(1/6))`). It is a speed gap, not a decline.
+  263 has the same gap for Trager: 22 A cases it closes in 11-15 s, where Automatic
+  gives up at 20-27 s.
 - **Speed on 262** (623 cases both close): median 328 ms against FriCAS's 100 ms, and
   154 Mathilda cases over 1 s. The hard cases are where the `.m` Bronstein and Trager
   code is slow. The run shared the machine with other jobs (load average 50-66), which
-  inflates both systems' times.
+  inflates both systems' times. On 263 (1259 cases both close, rerun at low load) the
+  medians are 222 ms against 170 ms, but Mathilda's 90th percentile is 3.6 s against
+  250 ms. The tail is Trager on class A.
 
 The sections below are from earlier runs. Their counts **include the easy integrals**.
 
@@ -163,7 +174,7 @@ and C5 (special-function answers where Mathilda certifies; submitting the FriCAS
 
 | finding | cases |
 |---|---|
-| FriCAS false no (expect elem) | 10 |
+| FriCAS false no (expect elem) | 21 |
 | FriCAS no vs Mathilda verified elementary answer | 3 |
 
 - FriCAS false no (expect elem): `gauss-elem-3` `(E^(-I)*x*Sec[x]^2)/((1 + E^(I*x))*(I + x)) - (E^(-I)*x*Tan[x])/((1 + E^(I*x))*(I + x)^2) + (E^(-I)*Tan[x])/((1 + E^(I*x))*(I + x)) - (I*E^(`
@@ -176,6 +187,9 @@ and C5 (special-function answers where Mathilda certifies; submitting the FriCAS
 - FriCAS false no (expect elem): `gauss-elem-27` `(I*E^(-I + (2*I)*x - I*(1 + x)))/((1 + E^x)*(1 + E^((-I)*(1 + x)))^2) - E^(-I + (1 + 2*I)*x)/((1 + E^x)^2*(1 + E^((-I)*(1 + x)))) + ((2*I)*E`
 - FriCAS false no (expect elem): `gauss-elem-34` `-((E^I*Log[I + x]*Sec[1 + x]^2)/((1 + E^(I*(1 + x)))*(-I + Tan[1 + x])^2)) + E^I/((1 + E^(I*(1 + x)))*(I + x)*(-I + Tan[1 + x])) - (I*E^(I +`
 - FriCAS false no (expect elem): `gauss-elem-38` `-(E^(-I + (2*I)*x)/((1 + E^(I*(2 + x)))*(I + x)^2)) - (I*E^(-I + (2*I)*x + I*(2 + x)))/((1 + E^(I*(2 + x)))^2*(I + x)) + ((2*I)*E^(-I + (2*I`
+- FriCAS false no (expect elem): `cB-301-25` `(E^Sqrt[2 + x^2 + x^3]*(2*x^2 + 3*x^3 - 4*Sqrt[2 + x^2 + x^3]))/(2*x^3*Sqrt[2 + x^2 + x^3])`
+- FriCAS false no (expect elem): `cB-303-15` `(E^Sqrt[2 + 2*x^2 + x^3]*(4*x^2 + 3*x^3 - 2*Sqrt[2 + 2*x^2 + x^3]))/(2*x^2*Sqrt[2 + 2*x^2 + x^3])`
+- FriCAS false no (expect elem): ... (9 more)
 - FriCAS no vs Mathilda verified elementary answer: `gauss-rand-3` `E^(I - I*(1 + x))*Tan[2 + x]`
 - FriCAS no vs Mathilda verified elementary answer: `gauss-rand-11` `E^(1 + (2*I)*x)*Tan[x]`
 - FriCAS no vs Mathilda verified elementary answer: `gauss-rand-24` `E^((2*I)*(2 + x))*Tan[x]`
@@ -297,19 +311,34 @@ Speed, Mathilda against FriCAS, on the 623 cases both close: median 328 ms vs 10
 
 Speed, PMT against FriCAS, on the 556 cases both close: median 148 ms vs 100 ms; 90th percentile 1.4 s vs 150 ms; total 316.7 s vs 178.3 s; geometric mean of the ratio PMT/FriCAS 1.45; PMT faster on 209 of 556; 64 over 1 s.
 
+## 263: more integrals outside the easy classes (1850 cases, run 2026-11-25)
+
+| class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T transcendental | 500 | 100% (500) | 0% (0) | 100% (500) | 99% (497) | 0% (0) | 99% (497) | 100% (500) | 0% (0) | 100% (500) | 96% (481) | 0% (0) | 96% (481) |
+| A algebraic | 550 | 94% (517) | 0% (0) | 94% (517) | 83% (454) | 0% (0) | 83% (454) | 96% (526) | 0% (0) | 96% (526) | 76% (417) | 0% (0) | 76% (417) |
+| M mixed, radical on top | 400 | 100% (400) | 0% (0) | 100% (400) | 0% (0) | 0% (0) | 0% (0) | 100% (400) | 0% (0) | 100% (400) | 0% (0) | 0% (0) | 0% (0) |
+| B radical at the bottom | 400 | 100% (400) | 0% (0) | 100% (400) | 97% (388) | 0% (0) | 97% (388) | 100% (400) | 0% (0) | 100% (400) | 94% (378) | 0% (0) | 94% (378) |
+| **all** | 1850 | **98% (1817)** | **0% (0)** | **98% (1817)** | **72% (1339)** | **0% (0)** | **72% (1339)** | **99% (1826)** | **0% (0)** | **99% (1826)** | **69% (1276)** | **0% (0)** | **69% (1276)** |
+
+Speed, Mathilda against FriCAS, on the 1259 cases both close: median 222 ms vs 170 ms; 90th percentile 3.6 s vs 250 ms; total 2215.5 s vs 1061.0 s; geometric mean of the ratio Mathilda/FriCAS 1.13; Mathilda faster on 659 of 1259; 381 over 1 s.
+
+Speed, PMT against FriCAS, on the 1191 cases both close: median 515 ms vs 170 ms; 90th percentile 7.3 s vs 240 ms; total 2446.9 s vs 647.3 s; geometric mean of the ratio PMT/FriCAS 3.36; PMT faster on 232 of 1191; 452 over 1 s.
+
 ## Decided by one system only (all corpora, by family)
 
 | family | Mathilda only | FriCAS only |
 |---|---|---|
-| cM-mathilda | 261 | 0 |
-| cA-mathilda | 70 | 0 |
-| cB-mathilda | 59 | 0 |
+| cM-mathilda | 661 | 0 |
+| cA-mathilda | 195 | 0 |
+| cB-mathilda | 81 | 0 |
 | constk | 32 | 0 |
 | mperturb | 32 | 0 |
 | tower2 | 32 | 0 |
 | alg | 31 | 0 |
 | logxy | 31 | 0 |
 | lccontent | 29 | 0 |
+| cT-mathilda | 25 | 0 |
 | trager-rational-times-radical | 23 | 0 |
 | trager-torsion-heavy | 18 | 0 |
 | mrandom | 16 | 0 |
@@ -317,10 +346,10 @@ Speed, PMT against FriCAS, on the 556 cases both close: median 148 ms vs 100 ms;
 | cA-axiom | 0 | 13 |
 | gauss-elem | 11 | 0 |
 | ratb | 11 | 0 |
+| cA-maxima | 8 | 0 |
 | cB-maxima | 8 | 0 |
 | pert-nonelem | 8 | 0 |
 | bcurve-perturbed | 7 | 0 |
-| cT-mathilda | 7 | 0 |
 | two-elem | 5 | 1 |
 | two-rand | 2 | 4 |
 | trager-goursat | 5 | 0 |
@@ -330,6 +359,8 @@ Speed, PMT against FriCAS, on the 556 cases both close: median 148 ms vs 100 ms;
 | lim-elem | 2 | 0 |
 | mid-elem | 2 | 0 |
 | trager-genus-super | 2 | 0 |
+| cA-fricas | 0 | 1 |
+| cT-fricas | 1 | 0 |
 | f12-elem | 1 | 0 |
 | f12-rand | 1 | 0 |
 | mid-rand | 1 | 0 |
@@ -353,9 +384,9 @@ Decided by one of the two only, by class and family.
 
 | class | family | PMT only | Bronstein-family only |
 |---|---|---|---|
-| M | cM-mathilda | 0 | 234 |
-| A | cA-mathilda | 7 | 55 |
-| B | cB-mathilda | 0 | 50 |
+| M | cM-mathilda | 0 | 634 |
+| A | cA-mathilda | 24 | 104 |
+| B | cB-mathilda | 0 | 62 |
 | B | pert-nonelem | 0 | 47 |
 | B | two-rand | 0 | 41 |
 | T | f12-rand | 0 | 40 |
@@ -379,6 +410,7 @@ Decided by one of the two only, by class and family.
 | T | prim-rand | 0 | 30 |
 | T | lim-elem | 0 | 29 |
 | B | bbottom-perturbed | 0 | 24 |
+| A | cA-fricas | 0 | 21 |
 | M | mperturb | 1 | 19 |
 | A | trager-rational-times-radical | 0 | 17 |
 | T | tlog-perturbed | 0 | 16 |
@@ -386,13 +418,14 @@ Decided by one of the two only, by class and family.
 | B | one-rand | 0 | 14 |
 | A | trager-random | 0 | 13 |
 | M | lccontent | 0 | 13 |
+| A | cA-maxima | 0 | 10 |
 | B | cB-maxima | 0 | 8 |
 | B | mid-elem | 0 | 7 |
+| T | cT-mathilda | 0 | 7 |
 | T | texp-perturbed | 0 | 7 |
 | A | trager-goursat | 0 | 4 |
 | A | trager-third-kind | 0 | 4 |
 | M | mrandom | 0 | 4 |
-| T | cT-mathilda | 0 | 4 |
 | A | trager-genus-hyper | 0 | 3 |
 | A | cA-axiom | 0 | 2 |
 | A | trager-genus-super | 0 | 2 |
@@ -404,11 +437,11 @@ Decided by one of the two only, by class and family.
 
 | reason | cases |
 |---|---|
-| integrate failed | 480 |
-| timeout (30 s) | 199 |
-| error, no message (a Lisp-level failure) | 43 |
-| integrate: implementation incomplete (constant residues) | 8 |
-| integrate: implementation incomplete (has polynomial part) | 5 |
+| integrate failed | 892 |
+| timeout (30 s) | 301 |
+| error, no message (a Lisp-level failure) | 84 |
+| integrate: implementation incomplete (has polynomial part) | 11 |
+| integrate: implementation incomplete (constant residues) | 10 |
 | Cannot compute the numerical value of a non-constant expression | 2 |
 | integrate: implementation incomplete (trace 0) | 1 |
 

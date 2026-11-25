@@ -3,9 +3,9 @@
 From 2026-11-25 every corpus leaves out its **easy** integrals (`easy.tsv`; see the
 note above). 3191 of the 4876 cases of 256-261 are easy: rational functions, integrands
 a substitution makes rational, and those `DerivativeDivides` closes. 257 keeps 18 of
-1000 cases and 261 keeps 58 of 1550. 262 is 1000 integrals generated outside the easy
-classes. 2685 cases are left; the counts below are of those only. 262 ran at v0.6732,
-261 at v0.6714, the others at v0.6691.
+1000 cases and 261 keeps 58 of 1550. 262 (1000) and 263 (1850) are integrals generated
+outside the easy classes. 4535 cases are left; the counts below are of those only. 263
+ran at v0.6733, 262 at v0.6732, 261 at v0.6714, the others at v0.6691.
 
 **Decided** (a verified closed form, or a proof that none is elementary):
 
@@ -17,23 +17,34 @@ classes. 2685 cases are left; the counts below are of those only. 262 ran at v0.
 | 260 | 271 | **98%** (266) | 35% (96) | 97% (264) | 93% (252) |
 | 261 | 58 | 98% (57) | 55% (32) | **100%** (58) | 24% (14) |
 | 262 | 1000 | **98%** (976) | 66% (660) | 97% (970) | 64% (640) |
-| all | 2685 | **99%** (2648) | 64% (1368 of 2124) | 98% (2641) | 72% (1937) |
+| 263 | 1850 | 98% (1817) | 72% (1339) | **99%** (1826) | 69% (1276) |
+| all | 4535 | **98%** (4465) | 68% (2707 of 3974) | **98%** (4467) | 71% (3213) |
 
-- **Leaving out the easy cases widens the gap.** FriCAS decides 72% of what is left,
-  against 95% of 261 and 90% of 257 with the easy cases in. Mathilda's share stays at
-  98-100% on every corpus.
+- **Leaving out the easy cases widens the gap.** FriCAS decides 71% of what is left,
+  against 95% of 261 and 90% of 257 with the easy cases in. Mathilda's share is
+  94-100% on every corpus (94% only on 257's 18 cases).
 - **262 by class.** FriCAS closes no M case (0 of 216) and 51 of 118 B cases; Mathilda
   closes all of both. On A, Trager closes 312 of 336 and FriCAS 266. On T both are near
   complete (330 and 323).
 - **Soundness on 262.** No Mathilda method gives a wrong answer or a false "no". All 7
   FriCAS answers that failed their own check are zero by `PossibleZeroQ` in Mathilda.
+- **263: FriCAS gives 11 false "no".** On B4 integrands elementary by construction,
+  derivatives of `E^y R` with y the root of a cubic or quartic, FriCAS returns
+  `integral(...)`. Minimal case in FriCAS 1.3.6:
+  `integrate(D(exp(sqrt(x^3+1))/(x+1), x), x)`, which should be
+  `exp(sqrt(x^3+1))/(x+1)` (with `1/x` it integrates). FriCAS closes none of 263's
+  400 M cases.
 - **Automatic below the dedicated method on 262: 14 cases** (11 B, 3 A). The cascade
   stops at about 20 s, and Bronstein or Trager needs 10-26 s on these sixth-root radicals
   (`cB-201-559`, `Log[x]/(x^6 (3 + 2 x^6)^(1/6))`). It is a speed gap, not a decline.
+  263 has the same gap for Trager: 22 A cases it closes in 11-15 s, where Automatic
+  gives up at 20-27 s.
 - **Speed on 262** (623 cases both close): median 328 ms against FriCAS's 100 ms, and
   154 Mathilda cases over 1 s. The hard cases are where the `.m` Bronstein and Trager
   code is slow. The run shared the machine with other jobs (load average 50-66), which
-  inflates both systems' times.
+  inflates both systems' times. On 263 (1259 cases both close, rerun at low load) the
+  medians are 222 ms against 170 ms, but Mathilda's 90th percentile is 3.6 s against
+  250 ms. The tail is Trager on class A.
 
 The sections below are from earlier runs. Their counts **include the easy integrals**.
 
