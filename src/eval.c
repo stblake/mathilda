@@ -5148,6 +5148,14 @@ static Expr* eval_report_uncaught_break_continue(Expr* e) {
 
 /* See eval.h. */
 Expr* eval_report_uncaught(Expr* e) {
+    /* A sticky abort (an interrupt, or an Abort[] whose sentinel a callee
+     * swallowed -- see builtin_abort) that reaches the top level is the
+     * input's result even when the value that came back is not the sentinel;
+     * otherwise the still-raised flag would abort the NEXT input. */
+    if (MTH_INTERRUPT_PENDING() && mth_interrupt_should_stop() && !eval_is_inflight_abort(e)) {
+        expr_free(e);
+        return eval_report_uncaught_abort(expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0));
+    }
     if (eval_is_inflight_throw(e))          return eval_report_uncaught_throw(e);
     if (eval_is_inflight_abort(e))          return eval_report_uncaught_abort(e);
     if (eval_is_inflight_goto(e))           return eval_report_uncaught_goto(e);
@@ -5495,14 +5503,7 @@ static Expr* evaluate_core(Expr* e) {
     eval_recursion_depth--;
     /* Trace: iteration-cap / overflow exit -- finalize this frame too. */
     if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
-    if (is_top_level && eval_is_inflight_throw(current))
-        current = eval_report_uncaught_throw(current);
-    else if (is_top_level && eval_is_inflight_abort(current))
-        current = eval_report_uncaught_abort(current);
-    else if (is_top_level && eval_is_inflight_goto(current))
-        current = eval_report_uncaught_goto(current);
-    else if (is_top_level && eval_is_inflight_break_continue(current))
-        current = eval_report_uncaught_break_continue(current);
+    if (is_top_level) current = eval_report_uncaught(current);
     return current;
 }
 

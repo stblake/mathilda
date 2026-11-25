@@ -3454,6 +3454,15 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Times", pg, dA);
         }
 
+        /* --- ConditionalExpression[v, c]: the derivative of the value under
+         *     the same condition, D[ConditionalExpression[v, c], x] =
+         *     ConditionalExpression[D[v, x], c].  Differentiating the
+         *     condition (a relation) by the chain rule is meaningless. --- */
+        if (h == SYM_ConditionalExpression && n == 2) {
+            Expr* dv = deriv_of(args[0], x, nonconsts);
+            return mk_fn2("ConditionalExpression", dv, expr_copy(args[1]));
+        }
+
         /* --- Piecewise[{{v1, c1}, ...}, default]: differentiate each value
          *     expression and the default; the conditions ride through
          *     unchanged. D[Piecewise[{{vi, ci}}, d], x]

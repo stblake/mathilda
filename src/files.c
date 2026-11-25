@@ -476,9 +476,45 @@ static bool files_parent_dir_exists(const char* path, char* dir, size_t cap) {
  * directory) or OpenWrite::noopen (the file cannot be written); NULL for any
  * other fmt, which is the caller's to decide.
  */
+/* One CSV / TSV cell: a string as its characters (CSV quotes one holding a
+ * comma, quote or line break, doubling inner quotes), anything else in input
+ * form. */
+static bool files_write_cell(FILE* fp, const Expr* e, char sep) {
+    if (e->type == EXPR_STRING && sep == ',' && strpbrk(e->data.string, ",\"\n\r")) {
+        if (fputc('"', fp) == EOF) return false;
+        for (const char* c = e->data.string; *c; c++) {
+            if (*c == '"' && fputc('"', fp) == EOF) return false;
+            if (fputc(*c, fp) == EOF) return false;
+        }
+        return fputc('"', fp) != EOF;
+    }
+    return files_write_element(fp, e, false);
+}
+
+/* A table export ("CSV", "TSV"): a list of lists one row per sublist; a flat
+ * list one element per row; anything else a single cell. */
+static bool files_write_table(FILE* fp, const Expr* e, char sep) {
+    if (!files_is_list(e)) return files_write_cell(fp, e, sep) && fputc('\n', fp) != EOF;
+    bool ok = true;
+    for (size_t i = 0; ok && i < e->data.function.arg_count; i++) {
+        const Expr* row = e->data.function.args[i];
+        if (files_is_list(row)) {
+            for (size_t j = 0; ok && j < row->data.function.arg_count; j++) {
+                if (j > 0) ok = fputc(sep, fp) != EOF;
+                if (ok) ok = files_write_cell(fp, row->data.function.args[j], sep);
+            }
+        } else {
+            ok = files_write_cell(fp, row, sep);
+        }
+        if (ok) ok = fputc('\n', fp) != EOF;
+    }
+    return ok;
+}
+
 Expr* files_export_text(const char* path, const Expr* e, const char* fmt) {
     int kind = strcmp(fmt, "Text") == 0 ? 0 : strcmp(fmt, "String") == 0 ? 1
-             : strcmp(fmt, "Lines") == 0 ? 2 : -1;
+             : strcmp(fmt, "Lines") == 0 ? 2 : strcmp(fmt, "CSV") == 0 ? 3
+             : strcmp(fmt, "TSV") == 0 ? 4 : strcmp(fmt, "Package") == 0 ? 5 : -1;
     if (kind < 0 || !e) return NULL;
 
     char dir[4096];
@@ -497,6 +533,17 @@ Expr* files_export_text(const char* path, const Expr* e, const char* fmt) {
     bool ok = true;
     if (kind == 1) {
         ok = files_write_element(fp, e, true);
+    } else if (kind == 3 || kind == 4) {
+        ok = files_write_table(fp, e, kind == 3 ? ',' : '\t');
+    } else if (kind == 5) {
+        /* "Package" (.m / .wl): the expression in input form, one line, read
+         * back by Get -- a string keeps its quotes. */
+        Expr* inner = expr_copy((Expr*)e);
+        Expr* w = expr_new_function(expr_new_symbol(SYM_InputForm), &inner, 1);
+        char* txt = expr_to_string(w);
+        expr_free(w);
+        ok = txt && fputs(txt, fp) >= 0 && fputc('\n', fp) != EOF;
+        free(txt);
     } else if (files_is_list(e)) {
         for (size_t i = 0; ok && i < e->data.function.arg_count; i++)
             ok = files_write_element(fp, e->data.function.args[i], false) &&
@@ -793,6 +840,41 @@ static char* fnj_build(const char* const* comps, size_t ncomp,
     return out;
 }
 
+/* One OperatingSystem -> "os" rule: sets *windows and returns 1; 0 when the
+ * rule is not an OperatingSystem option or names an unknown system. */
+static int fn_os_rule(const Expr* a, int* windows) {
+    if (a->type != EXPR_FUNCTION || a->data.function.arg_count != 2 ||
+        a->data.function.head->type != EXPR_SYMBOL ||
+        (a->data.function.head->data.symbol.name != SYM_Rule &&
+         a->data.function.head->data.symbol.name != SYM_RuleDelayed))
+        return 0;
+    const Expr* key = a->data.function.args[0];
+    const Expr* val = a->data.function.args[1];
+    if (key->type != EXPR_SYMBOL || key->data.symbol.name != SYM_OperatingSystem ||
+        val->type != EXPR_STRING)
+        return 0;
+    if (strcmp(val->data.string, "Windows") == 0) { *windows = 1; return 1; }
+    if (strcmp(val->data.string, "Unix") == 0 ||
+        strcmp(val->data.string, "MacOSX") == 0) { *windows = 0; return 1; }
+    return 0;
+}
+
+/* Resolve the OperatingSystem option of FileNameJoin / FileNameSplit: the host
+ * convention, overridden by the head's stored defaults (SetOptions), then by
+ * the explicit trailing option rules opts[0..n).  Returns 0 (leave the call
+ * unevaluated) on a non-option argument or an unknown operating system. */
+static int fn_os_option(const char* head, Expr* const* opts, size_t n, int* windows) {
+    *windows = (HOST_SEP == '\\');
+    Expr* defs = symtab_get_options(head);          /* borrowed */
+    if (defs && defs->type == EXPR_FUNCTION && defs->data.function.head->type == EXPR_SYMBOL &&
+        defs->data.function.head->data.symbol.name == SYM_List)
+        for (size_t i = 0; i < defs->data.function.arg_count; i++)
+            (void)fn_os_rule(defs->data.function.args[i], windows);
+    for (size_t i = 0; i < n; i++)
+        if (!fn_os_rule(opts[i], windows)) return 0;
+    return 1;
+}
+
 /* FileNameJoin[spec]
  * FileNameJoin[spec, OperatingSystem->"os"]
  *
@@ -806,31 +888,10 @@ Expr* builtin_filenamejoin(Expr* res) {
     if (argc == 0) return builtin_arg_error("FileNameJoin", 0, 1, 1);
 
     /* Determine the target separator from any OperatingSystem option. */
-    char sep = HOST_SEP;
-    int windows = (HOST_SEP == '\\');
-    for (size_t i = 1; i < argc; i++) {
-        Expr* a = res->data.function.args[i];
-        if (a->type != EXPR_FUNCTION ||
-            a->data.function.arg_count != 2 ||
-            a->data.function.head->type != EXPR_SYMBOL ||
-            (a->data.function.head->data.symbol.name != SYM_Rule &&
-             a->data.function.head->data.symbol.name != SYM_RuleDelayed)) {
-            return NULL;  /* an unexpected non-option argument */
-        }
-        Expr* key = a->data.function.args[0];
-        Expr* val = a->data.function.args[1];
-        if (key->type != EXPR_SYMBOL ||
-            key->data.symbol.name != SYM_OperatingSystem) return NULL;
-        if (val->type != EXPR_STRING) return NULL;
-        if (strcmp(val->data.string, "Windows") == 0) {
-            sep = '\\'; windows = 1;
-        } else if (strcmp(val->data.string, "Unix") == 0 ||
-                   strcmp(val->data.string, "MacOSX") == 0) {
-            sep = '/'; windows = 0;
-        } else {
-            return NULL;  /* unknown operating system */
-        }
-    }
+    int windows;
+    if (!fn_os_option("FileNameJoin", res->data.function.args + 1, argc - 1, &windows))
+        return NULL;      /* a malformed option or an unknown operating system */
+    char sep = windows ? '\\' : '/';
 
     /* Gather the path components: a lone string, or a List of strings. */
     Expr* spec = res->data.function.args[0];
@@ -982,30 +1043,9 @@ Expr* builtin_filenamesplit(Expr* res) {
 
     /* Determine the target separator from any OperatingSystem option — same
      * decoding as builtin_filenamejoin. */
-    int windows = (HOST_SEP == '\\');
-    for (size_t i = 1; i < argc; i++) {
-        Expr* a = res->data.function.args[i];
-        if (a->type != EXPR_FUNCTION ||
-            a->data.function.arg_count != 2 ||
-            a->data.function.head->type != EXPR_SYMBOL ||
-            (a->data.function.head->data.symbol.name != SYM_Rule &&
-             a->data.function.head->data.symbol.name != SYM_RuleDelayed)) {
-            return NULL;  /* an unexpected non-option argument */
-        }
-        Expr* key = a->data.function.args[0];
-        Expr* val = a->data.function.args[1];
-        if (key->type != EXPR_SYMBOL ||
-            key->data.symbol.name != SYM_OperatingSystem) return NULL;
-        if (val->type != EXPR_STRING) return NULL;
-        if (strcmp(val->data.string, "Windows") == 0) {
-            windows = 1;
-        } else if (strcmp(val->data.string, "Unix") == 0 ||
-                   strcmp(val->data.string, "MacOSX") == 0) {
-            windows = 0;
-        } else {
-            return NULL;  /* unknown operating system */
-        }
-    }
+    int windows;
+    if (!fn_os_option("FileNameSplit", res->data.function.args + 1, argc - 1, &windows))
+        return NULL;      /* a malformed option or an unknown operating system */
 
     Expr* spec = res->data.function.args[0];
     if (spec->type != EXPR_STRING) return NULL;
@@ -1405,11 +1445,12 @@ Expr* builtin_setdirectory(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc > 1) return builtin_arg_error("SetDirectory", argc, 0, 1);
     const char* target;
+    char* target_own = NULL;     /* a File["s"] / `~` argument's decoded path */
     if (argc == 0) {
         target = home_directory();
         if (!target) return expr_new_symbol(SYM_DollarFailed);
-    } else if (res->data.function.args[0]->type == EXPR_STRING) {
-        target = res->data.function.args[0]->data.string;
+    } else if ((target_own = file_arg_path(res->data.function.args[0])) != NULL) {
+        target = target_own;
     } else {
         char* txt = expr_to_string_outputform(res->data.function.args[0]);
         mth_message("SetDirectory", "badfile",
@@ -1420,12 +1461,14 @@ Expr* builtin_setdirectory(Expr* res) {
     }
 
     char* prev = cwd_dup();
-    if (!prev) return expr_new_symbol(SYM_DollarFailed);
+    if (!prev) { free(target_own); return expr_new_symbol(SYM_DollarFailed); }
     if (chdir(target) != 0) {
         mth_message("SetDirectory", "cdir", "Cannot set current directory to %s.", target);
         free(prev);
+        free(target_own);
         return expr_new_symbol(SYM_DollarFailed);
     }
+    free(target_own);
     if (g_dir_count == g_dir_cap) {
         size_t nc = g_dir_cap ? 2 * g_dir_cap : 8;
         char** ns = realloc(g_dir_stack, nc * sizeof(char*));
@@ -1693,15 +1736,18 @@ Expr* builtin_absolutefilename(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return builtin_arg_error("AbsoluteFileName", argc, 1, 1);
     Expr* a0 = res->data.function.args[0];
-    if (a0->type != EXPR_STRING) {
+    char* path = file_arg_path(a0);            /* String or File["s"], `~` */
+    if (!path) {
         badfile_message("AbsoluteFileName", a0);
         return NULL;
     }
-    char* abs = abs_existing(a0->data.string);
+    char* abs = abs_existing(path);
     if (!abs) {
-        fdnfnd_message("AbsoluteFileName", a0->data.string);
+        fdnfnd_message("AbsoluteFileName", path);
+        free(path);
         return expr_new_symbol(SYM_DollarFailed);
     }
+    free(path);
     Expr* r = expr_new_string(abs);
     free(abs);
     return r;
@@ -1827,14 +1873,19 @@ Expr* builtin_deletefile(Expr* res) {
     size_t n = list ? a0->data.function.arg_count : 1;
     for (size_t i = 0; i < n; i++) {
         Expr* f = list ? a0->data.function.args[i] : a0;
-        if (f->type != EXPR_STRING) {
+        char* path = file_arg_path(f);         /* String or File["s"], `~` */
+        if (!path) {
             badfile_message("DeleteFile", f);
             return NULL;
         }
+        free(path);
     }
     bool ok = true;
-    for (size_t i = 0; i < n; i++)
-        ok &= delete_one((list ? a0->data.function.args[i] : a0)->data.string);
+    for (size_t i = 0; i < n; i++) {
+        char* path = file_arg_path(list ? a0->data.function.args[i] : a0);
+        ok &= delete_one(path);
+        free(path);
+    }
     return expr_new_symbol(ok ? SYM_Null : SYM_DollarFailed);
 }
 

@@ -543,7 +543,11 @@ static bool frame_pop(char** out_closed_ctx) {
     g_stack = f->next;
     if (out_closed_ctx) *out_closed_ctx = ctx_strdup(context_current());
     restore_own("$Context", f->saved_context);
-    restore_own("$ContextPath", f->saved_path);
+    /* End[] puts back $Context only: a $ContextPath change made inside a
+     * Begin block (AppendTo[$ContextPath, "B`"]) outlives its End[], as in
+     * the reference.  EndPackage[] restores both. */
+    if (f->kind == FRAME_PACKAGE) restore_own("$ContextPath", f->saved_path);
+    else if (f->saved_path) expr_free(f->saved_path);
     free(f);
     return true;
 }

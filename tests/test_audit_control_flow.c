@@ -143,6 +143,82 @@ static void test_wave3_arity_options(void) {
     audit_chk("Quiet#1", "Quiet[Quiet[1/0, All, None, x]]", "Quiet[1/0, All, None, x]");
 }
 
+/* Wave 4 G8: control flow.
+ *  - Abort[] is sticky, as an interrupt is: a callee that drops the sentinel (a numeric
+ *    solver that saw a non-numeric sample) no longer swallows it -- the next evaluator
+ *    poll re-raises it, and CheckAbort / the top level consume it;
+ *  - CheckAbort inside AbortProtect absorbs the abort it catches;
+ *  - Goto leaves Do / While / For / Scan for a Label around the loop;
+ *  - a rejected Quit["a"] is inert and the CompoundExpression goes on;
+ *  - Do and Table run a symbolic range of known length ({i, a, a + 2}). */
+static void test_wave4_g8_control(void) {
+    audit_chk("Abort#2", "Quiet[CheckAbort[FindMinimum[Abort[], {x, 2}], c]]", "c");
+    audit_chk("Abort#3", "Quiet[CheckAbort[FindRoot[Abort[], {x, 1}], c]]", "c");
+    audit_chk("Abort#3", "Quiet[CheckAbort[NSum[If[k > 3, Abort[], 1/k^2], {k, 1, Infinity}], c]]", "c");
+    audit_chk("Abort#3", "Quiet[CheckAbort[NIntegrate[Abort[], {x, 0, 1}], c]]", "c");
+    audit_chk("Abort#3", "Quiet[Check[CheckAbort[FindRoot[Abort[], {x, 1}], c], fired]]", "c");
+    audit_chk("Abort#4", "Quiet[CheckAbort[NDSolve[{y'[t] == If[t > 0.5, Abort[], y[t]], y[0] == 1}, y, {t, 0, 1}], c]]", "c");
+    audit_chk("Abort#4", "1 + 1", "2");                      /* nothing left pending */
+    audit_run("w4$log = {}");
+    audit_chk("AbortProtect#1",
+              "CheckAbort[AbortProtect[CheckAbort[Abort[], AppendTo[w4$log, \"inner\"]];"
+              " AppendTo[w4$log, \"cont\"]; Null], \"outer\"]", "Null");
+    audit_chk("AbortProtect#1", "w4$log", "{\"inner\", \"cont\"}");
+    audit_chk("AbortProtect#1", "CheckAbort[AbortProtect[Abort[]; 7], d]", "d");   /* still deferred */
+    audit_chk("Label#1", "(Do[If[i == 3, Goto[w4$out]], {i, 10}]; \"no\"; Label[w4$out]; \"jumped\")", "\"jumped\"");
+    audit_chk("Label#1", "w4$n = 0; (While[w4$n < 1000000, w4$n++; If[w4$n > 3, Goto[w4$out]]]; w4$n = -1;"
+              " Label[w4$out]; w4$n)", "4");
+    audit_chk("Label#1", "(For[w4$i = 1, w4$i < 10, w4$i++, If[w4$i == 2, Goto[w4$out]]]; w4$i = -1;"
+              " Label[w4$out]; w4$i)", "2");
+    audit_chk("Label#1", "(Scan[If[# == 2, Goto[w4$out]] &, {1, 2, 3}]; \"no\"; Label[w4$out]; \"scan\")", "\"scan\"");
+    audit_chk("Quit#1", "Quiet[Quit[\"a\"]; 5]", "5");
+    audit_chk("Quit#1", "Quiet[Check[Quit[\"a\"], fired, Quit::intm]]", "fired");
+    audit_chk("Do#3", "w4$acc = {}; Do[AppendTo[w4$acc, i], {i, a, a + 2}]; w4$acc", "{a, 1 + a, 2 + a}");
+    audit_chk("Do#3", "Do[Null, {i, a, a + 2}]", "Null");
+    audit_chk("Do#3", "Table[i, {i, a, a + 2}]", "{a, 1 + a, 2 + a}");
+    audit_chk("Do#3", "Table[i, {i, a, b}]", "Table[i, {i, a, b}]");
+}
+
+/* Wave 4 G8: ConditionalExpression and Boole under assumptions, Normal and D. */
+static void test_wave4_g8_conditions(void) {
+    audit_chk("ConditionalExpression#2", "Normal[ConditionalExpression[x, x > 0]]", "x");
+    audit_chk("ConditionalExpression#3", "Simplify[ConditionalExpression[x, x > 0], x > 0]", "x");
+    audit_chk("ConditionalExpression#3", "Refine[ConditionalExpression[x, x > 0], x > 0]", "x");
+    audit_chk("ConditionalExpression#3", "Refine[ConditionalExpression[x, x > 0], x < 0]", "Undefined");
+    audit_chk("ConditionalExpression#4", "D[ConditionalExpression[x^2, x > 0], x]", "ConditionalExpression[2 x, x > 0]");
+    audit_chk("Boole#1", "Integrate[Boole[x < 1], {x, 0, 2}]", "1");
+    audit_chk("Boole#1", "Integrate[x Boole[x > 1], {x, 0, 3}]", "4");
+    audit_chk("Boole#2", "Refine[Boole[x > 0], x > 0]", "1");
+    audit_chk("Boole#2", "Simplify[Boole[x > 0], x > 0]", "1");
+    audit_chk("Boole#2", "Refine[Boole[x > 0], x < -1]", "0");
+}
+
+/* Wave 4 G8: Compile -- 0.^0. is Indeterminate (the call goes to the interpreter), True|False
+ * is the Boolean type spec, CompilePrint names the managed types and their uses. */
+static void test_wave4_g8_compile(void) {
+    audit_chk("Compile#1", "Quiet[Compile[{x}, 0.^x][0.]]", "Indeterminate");
+    audit_chk("Compile#1", "Quiet[Compile[{x}, x^0.][0.]]", "Indeterminate");
+    audit_chk("Compile#1", "Quiet[Check[Compile[{x}, x^0.][0.], fired, Power::indet]]", "fired");
+    audit_chk("Compile#1", "Compile[{x}, x^0.5][4.]", "2.0");
+    audit_chk("CompileDiagnostics#1", "\"Compiled\" /. CompileDiagnostics[{{b, True | False}}, If[b, 1.0, 2.0]]", "True");
+    audit_chk("CompileDiagnostics#1", "Compile[{{b, True | False}}, If[b, 1.0, 2.0]][False]", "2.0");
+    audit_chk("CompilePrint#1", "StringContainsQ[ToString[CompilePrint[Compile[{x}, x^2, WorkingPrecision -> 30]]], \"unused\"]", "False");
+    audit_chk("CompilePrint#1", "StringContainsQ[ToString[CompilePrint[Compile[{x}, x^2, WorkingPrecision -> 30]]], \"Unknown\"]", "False");
+}
+
+/* Wave 4 G8: Message[f::m::lang, ...] (parsed as one MessageName with three arguments),
+ * ParallelMap over a rule, the built-in slash commands reserved in every mode. */
+static void test_wave4_g8_misc_control(void) {
+    audit_chk("Message#1", "FullForm[Hold[f::m::French]]", "Hold[MessageName[f, \"m\", \"French\"]]");
+    audit_run("w4m::m = \"bad `1`\"");
+    audit_chk("Message#1", "Quiet[Check[Message[w4m::m::French, 1], fired, w4m::m]]", "fired");
+    audit_chk("ParallelMap#1", "ParallelMap[f, a -> b]", "f[a] -> f[b]");
+    audit_chk("ParallelMap#1", "ParallelMap[f, {1, 2}]", "{f[1], f[2]}");
+    audit_chk("SlashCommand#1", "Quiet[SlashCommand[\"help\", f]]", "$Failed");
+    audit_chk("SlashCommand#1", "Quiet[Check[SlashCommand[\"help\", f], fired, SlashCommand::builtin]]", "fired");
+    audit_chk("SlashCommand#1", "First[SlashCommand[]]", "\"/help\" -> \"list the commands and keys\"");
+}
+
 int main(void) {
     audit_init();
     TEST(test_for_start_throw);
@@ -152,5 +228,9 @@ int main(void) {
     TEST(test_conditionalexpression_propagates);
     TEST(test_s14_continue_toplevel);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_g8_control);
+    TEST(test_wave4_g8_conditions);
+    TEST(test_wave4_g8_compile);
+    TEST(test_wave4_g8_misc_control);
     return audit_finish("audit_control_flow");
 }

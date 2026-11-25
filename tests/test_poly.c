@@ -180,10 +180,10 @@ void test_coefficientlist() {
 }
 
 void test_decompose() {
-    run_test("Decompose[x^2 + 1, x]", "List[Plus[1, x], Power[x, 2]]");
+    run_test("Decompose[x^2 + 1, x]", "List[Plus[1, Power[x, 2]]]");   /* no linear component (audit Decompose#1) */
     run_test("Decompose[x^4 + x^2, x]", "List[Plus[x, Power[x, 2]], Power[x, 2]]");
     run_test("Decompose[(x + x^2)^2, x]", "List[Power[x, 2], Plus[x, Power[x, 2]]]");
-    run_test("Decompose[(x^2 + x)^4 + 1, x]", "List[Plus[1, x], Power[x, 4], Plus[x, Power[x, 2]]]");
+    run_test("Decompose[(x^2 + x)^4 + 1, x]", "List[Plus[1, Power[x, 2]], Power[x, 2], Plus[x, Power[x, 2]]]");   /* x^4 split (Decompose#2) */
     run_test("Decompose[(x^2 + 1)^4 + 3, x]", "List[Plus[4, Times[2, x], Power[x, 2]], Plus[Times[2, x], Power[x, 2]], Power[x, 2]]");
     run_test("Decompose[2 x + 1, x]", "List[Plus[1, Times[2, x]]]");
     run_test("Decompose[(a x^3 + 1)^2 + b, x]", "List[Plus[1, b, Times[2, a, x], Times[Power[a, 2], Power[x, 2]]], Power[x, 3]]");

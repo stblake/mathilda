@@ -60,6 +60,13 @@ Expr*   iter_list_element(const IterSpec* s, int64_t i, bool* owned);
  */
 bool iter_spec_parse(Expr* spec, IterSpec* out);
 
+/* A RANGE spec whose bounds are symbolic but whose length is not --
+ * {i, a, a + 2}, where (imax - imin)/di is the explicit number 2 -- is turned
+ * into the LIST spec of its values imin + k di (a, 1 + a, 2 + a), so Do and
+ * Table can run it.  Returns false (spec untouched) when the length is not an
+ * explicit number or exceeds 10^7. */
+bool iter_spec_symbolic_range_to_list(IterSpec* s);
+
 /*
  * iter_spec_parse for a DISCRETE iterator (Table, Do, Sum, Product): as above,
  * then a RANGE whose bounds are real NumericQ but not explicit numbers is

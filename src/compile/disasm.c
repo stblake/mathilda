@@ -137,6 +137,11 @@ static const char* ct_scalar_name(CompileType t) {
         case CT_COMPLEX: return "Complex";
         default: break;
     }
+    /* The managed (arbitrary-precision) scalars of a WorkingPrecision /
+     * "BigIntegers" program. */
+    if (t == CT_BIGINT)     return "BigInteger";
+    if (t == CT_BIGREAL)    return "MPFRReal";
+    if (t == CT_BIGCOMPLEX) return "MPFRComplex";
     return "Unknown";
 }
 

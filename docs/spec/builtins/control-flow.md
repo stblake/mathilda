@@ -52,6 +52,8 @@ In[2]:= Do[If[i == 3, Break[]]; Print[i], {i, 5}]
 Out[2]= Null
 ```
 
+**Wave 4 G8.** A symbolic range whose length is known, `{i, a, a + 2}` ((imax - imin)/di an explicit number), iterates over its values `a, 1 + a, 2 + a` (Table too).
+
 ## For
 Executes a loop with an initialization, condition test, increment, and body.
 - `For[start, test, incr, body]`: Evaluates `start`, then repeatedly evaluates `body` and `incr` until `test` fails to give `True`.
@@ -447,6 +449,8 @@ Ends the Mathilda session.
 - Pipe (sidecar) mode ignores the request, so a notebook cell cannot kill its kernel.
 - Attributes: `Protected`.
 
+**Wave 4 G8.** A rejected `Quit["a"]` (Quit::intm) is an inert expression: it does not stop a CompoundExpression or a loop.
+
 ## Dialog
 Opens a nested session inside an evaluation: a sequence of input and output
 lines, read from the terminal, until the user returns.
@@ -583,6 +587,8 @@ In[1]:= /n Pi
 3.14159265358979323846264338328
 ```
 
+**Wave 4 G8.** The built-in command names (/help, /theme, /history, /timing, /statusline, /clear, /mods, /quit) are reserved in every mode -- a -file script cannot redefine them -- and SlashCommand[] lists them first.
+
 ## Catch / Throw
 Non-local exit: `Throw` stops evaluation and hands a value to the nearest
 enclosing `Catch`. Unlike `Return` (which only escapes a scope boundary), a
@@ -694,6 +700,8 @@ Out[1]= "aborted"
 In[2]:= ap = 0; CheckAbort[AbortProtect[Abort[]; ap = 1]; ap = 2, {"ab", ap}]
 Out[2]= {"ab", 1}
 ```
+
+**Wave 4 G8.** Abort[] is sticky, as an interactive interrupt is: besides the sentinel, it raises the interrupt flag until a CheckAbort or the top level consumes the abort. A callee that only inspects a value (FindMinimum / FindRoot / NSum / NIntegrate / NDSolve / Plot meeting a non-numeric sample) can no longer swallow it: the evaluator's next poll re-raises it. A CheckAbort inside AbortProtect absorbs the abort it catches (its body runs unprotected); an abort deferred by the enclosing protection before it began is left pending.
 
 ## MemoryConstrained
 - `MemoryConstrained[expr, b]` evaluates `expr`, stopping if more than `b`
@@ -815,6 +823,7 @@ In[2]:= f[a_] := Module[{x = 1., xp}, Label[begin];
 Out[2]= 1.41421
 ```
 
+**Wave 4 G8.** A Goto inside a Do / While / For / Scan body leaves the loop and reaches a Label in the CompoundExpression around the loop.
 
 ## Compile / CompiledFunction
 
@@ -1243,6 +1252,8 @@ Deferred (see [`docs/design/compile-arbitrary-precision.md`](../../design/compil
 arbitrary-precision *arrays*, and control flow / procedural constructs in a
 managed body.
 
+**Wave 4 G8.** `True | False` is accepted as the Boolean type spec (the same as `_Boolean`). A compiled `0.^0.` is not 1.0: the call goes to the interpreter, which gives Power::indet and Indeterminate.
+
 ## CompileDiagnostics
 
 `CompileDiagnostics[argspec, expr]` reports whether `expr` compiles for the given
@@ -1388,6 +1399,8 @@ Reason      no machine lowering for this head at these argument types
 Bailed on   Integrate[x, x]
 ```
 
+**Wave 4 G8.** The managed types of a `WorkingPrecision` / `"BigIntegers"` program print as MPFRReal / MPFRComplex / BigInteger, and an argument such a program reads is no longer marked (unused).
+
 ## Quiet
 Evaluates an expression with messages suppressed.
 - `Quiet[expr]`: Evaluates `expr` and returns its value, suppressing any messages generated during the evaluation.
@@ -1461,6 +1474,8 @@ In[3]:= Quiet[Check[Message[g::x]; 7, flagged]]
 Out[3]= flagged
 ```
 
+**Wave 4 G8.** `f::m::lang` parses as the single `MessageName[f, "m", "lang"]`; `Message[f::m::lang, ...]` uses the text of `f::m::lang`, else that of `f::m` (then `General::m`).
+
 ## Off, On
 Switch messages off and back on.
 - `Off[sym::tag]`: from now on `sym::tag` is not printed and `Check` does not
@@ -1512,3 +1527,5 @@ unchanged.
 - The option names `ParallelKernels` and `DistributedContexts` are `System``
   symbols.
 - All heads are `Protected`. Implemented in `src/parallel.c`.
+
+**Wave 4 G8.** Only arguments after the positional ones are taken as options: `ParallelMap[f, a -> b]` maps over the rule (`f[a] -> f[b]`).

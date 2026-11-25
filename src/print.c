@@ -2911,8 +2911,50 @@ static void print_tex_number(Expr* e) {
     }
 }
 
+/* A string inside \text{...}: the characters TeX treats specially are
+ * escaped, so the output compiles ("a_b%" is \text{a\_b\%}). */
+static void print_tex_text(const char* s) {
+    printf("\\text{");
+    for (const char* c = s; *c; c++) {
+        switch (*c) {
+            case '_': case '%': case '&': case '#': case '$': case '{': case '}':
+                printf("\\%c", *c); break;
+            case '~':  printf("\\textasciitilde{}"); break;
+            case '^':  printf("\\textasciicircum{}"); break;
+            case '\\': printf("\\textbackslash{}"); break;
+            default:   putchar(*c); break;
+        }
+    }
+    printf("}");
+}
+
+/* The TeX command of a Greek-letter symbol name (UTF-8), or NULL. */
+static const char* tex_greek(const char* name) {
+    static const char* const tab[][2] = {
+        {"\xce\xb1", "\\alpha"}, {"\xce\xb2", "\\beta"}, {"\xce\xb3", "\\gamma"},
+        {"\xce\xb4", "\\delta"}, {"\xce\xb5", "\\epsilon"}, {"\xcf\xb5", "\\epsilon"},
+        {"\xce\xb6", "\\zeta"}, {"\xce\xb7", "\\eta"}, {"\xce\xb8", "\\theta"},
+        {"\xcf\x91", "\\vartheta"}, {"\xce\xb9", "\\iota"}, {"\xce\xba", "\\kappa"},
+        {"\xce\xbb", "\\lambda"}, {"\xce\xbc", "\\mu"}, {"\xce\xbd", "\\nu"},
+        {"\xce\xbe", "\\xi"}, {"\xcf\x80", "\\pi"}, {"\xcf\x96", "\\varpi"},
+        {"\xcf\x81", "\\rho"}, {"\xcf\xb1", "\\varrho"}, {"\xcf\x83", "\\sigma"},
+        {"\xcf\x82", "\\varsigma"}, {"\xcf\x84", "\\tau"}, {"\xcf\x85", "\\upsilon"},
+        {"\xcf\x86", "\\phi"}, {"\xcf\x95", "\\phi"}, {"\xcf\x87", "\\chi"},
+        {"\xcf\x88", "\\psi"}, {"\xcf\x89", "\\omega"},
+        {"\xce\x93", "\\Gamma"}, {"\xce\x94", "\\Delta"}, {"\xce\x98", "\\Theta"},
+        {"\xce\x9b", "\\Lambda"}, {"\xce\x9e", "\\Xi"}, {"\xce\xa0", "\\Pi"},
+        {"\xce\xa3", "\\Sigma"}, {"\xce\xa5", "\\Upsilon"}, {"\xce\xa6", "\\Phi"},
+        {"\xce\xa8", "\\Psi"}, {"\xce\xa9", "\\Omega"},
+    };
+    for (size_t i = 0; i < sizeof tab / sizeof tab[0]; i++)
+        if (strcmp(name, tab[i][0]) == 0) return tab[i][1];
+    return NULL;
+}
+
 static void print_tex_symbol(const char* raw_name) {
     const char* name = context_display_name(raw_name);
+    const char* greek = tex_greek(name);
+    if (greek) { printf("%s ", greek); return; }
     if (strcmp(name, "Pi") == 0)              { printf("\\pi "); return; }
     if (strcmp(name, "E") == 0)               { printf("e"); return; }
     if (strcmp(name, "I") == 0)               { printf("i"); return; }
@@ -2928,7 +2970,7 @@ static void print_tex_symbol(const char* raw_name) {
     if (strcmp(name, "Null") == 0)            { printf("\\text{Null}"); return; }
     size_t len = strlen(name);
     if (len == 1) printf("%s", name);
-    else printf("\\text{%s}", name);
+    else print_tex_text(name);
 }
 
 /* Looks up a trig/hyperbolic head and returns its TeX command and
@@ -3042,7 +3084,7 @@ static void print_tex(Expr* e, int parent_prec) {
         return;
     }
     if (e->type == EXPR_SYMBOL) { print_tex_symbol(e->data.symbol.name); return; }
-    if (e->type == EXPR_STRING) { printf("\\text{%s}", e->data.string); return; }
+    if (e->type == EXPR_STRING) { print_tex_text(e->data.string); return; }
     if (e->type == EXPR_NDARRAY) {
         if (is_packed_list(e)) {
             /* Renders as the List it is. Materialises rather than streaming,
@@ -3104,7 +3146,7 @@ static void print_tex(Expr* e, int parent_prec) {
         e->data.function.head->data.symbol.name == SYM_SequenceForm) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             Expr* a = e->data.function.args[i];
-            if (a->type == EXPR_STRING) printf("\\text{%s}", a->data.string);
+            if (a->type == EXPR_STRING) print_tex_text(a->data.string);
             else print_tex(a, 0);
         }
         return;
@@ -3118,6 +3160,61 @@ static void print_tex(Expr* e, int parent_prec) {
          e->data.function.head->data.symbol.name == SYM_StandardForm)) {
         print_tex(e->data.function.args[0], parent_prec);
         return;
+    }
+
+    /* The big operators -- an unevaluated (held) Integrate / Sum / Product /
+     * Limit -- typeset as the notation, not as a function call:
+     * \int_0^1 f(x) \, dx, \sum _{i=1}^n a(i), \lim_{x\to 0} f(x).  Each binds
+     * like a sum, so it is parenthesised inside a product or power. */
+    if (e->data.function.head->type == EXPR_SYMBOL && e->data.function.arg_count == 2) {
+        const char* bh = e->data.function.head->data.symbol.name;
+        Expr* body = e->data.function.args[0];
+        Expr* spec = e->data.function.args[1];
+        bool is_list = spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL &&
+                       spec->data.function.head->data.symbol.name == SYM_List;
+        size_t sn = is_list ? spec->data.function.arg_count : 0;
+        bool rule = spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL &&
+                    spec->data.function.head->data.symbol.name == SYM_Rule &&
+                    spec->data.function.arg_count == 2;
+        int kind = 0;
+        if (bh == SYM_Integrate && (spec->type == EXPR_SYMBOL || (is_list && sn == 3))) kind = 1;
+        else if ((bh == SYM_Sum || bh == SYM_Product) && is_list && (sn == 2 || sn == 3)) kind = 2;
+        else if (bh == SYM_Limit && rule) kind = 3;
+        if (kind) {
+            bool paren = parent_prec > 3500;
+            if (paren) printf("\\left(");
+            if (kind == 1) {
+                Expr* var = is_list ? spec->data.function.args[0] : spec;
+                printf("\\int");
+                if (is_list) {
+                    printf("_{"); print_tex(spec->data.function.args[1], 0);
+                    printf("}^{"); print_tex(spec->data.function.args[2], 0); printf("}");
+                }
+                printf(" ");
+                print_tex(body, 3500);
+                printf(" \\, d");
+                print_tex(var, 10000);
+            } else if (kind == 2) {
+                printf(bh == SYM_Sum ? "\\sum _{" : "\\prod _{");
+                print_tex(spec->data.function.args[0], 0);
+                printf("=");
+                if (sn == 3) print_tex(spec->data.function.args[1], 0);
+                else printf("1");
+                printf("}^{");
+                print_tex(spec->data.function.args[sn - 1], 0);
+                printf("} ");
+                print_tex(body, 3500);
+            } else {
+                printf("\\lim_{");
+                print_tex(spec->data.function.args[0], 0);
+                printf("\\to ");
+                print_tex(spec->data.function.args[1], 0);
+                printf("} ");
+                print_tex(body, 3500);
+            }
+            if (paren) printf("\\right)");
+            return;
+        }
     }
 
     int my_prec = get_expr_prec(e);

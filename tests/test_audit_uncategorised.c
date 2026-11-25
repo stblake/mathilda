@@ -132,6 +132,59 @@ static void test_s11_special_values(void) {
     audit_true("SphericalHankelH2#3", "SphericalHankelH2[0, 0.] === ComplexInfinity");
 }
 
+/* Wave 4 G8: uncategorised findings. */
+static void test_wave4_g8_uncategorised(void) {
+    audit_chk("RuleDelayed#1", "ToString[InputForm[(a :> b) :> c]]", "\"(a :> b) :> c\"");
+    audit_chk("RuleDelayed#1", "ToExpression[ToString[InputForm[(a :> b) :> c]]] === ((a :> b) :> c)", "True");
+    /* Decompose: no linear component, a composite pure power split */
+    audit_chk("Decompose#1", "Decompose[x^2 + 1, x]", "{1 + x^2}");
+    audit_chk("Decompose#1", "Decompose[x^3 + 2, x]", "{2 + x^3}");
+    audit_chk("Decompose#1", "Decompose[(x^2 + x)^3 + 1, x]", "{1 + x^3, x + x^2}");
+    audit_chk("Decompose#1", "Map[Exponent[#, x] &, Decompose[Expand[(2 x^2 + x)^2], x]]", "{2, 2}");
+    audit_chk("Decompose#1", "Expand[Fold[#2 /. x -> #1 &, x, Reverse[Decompose[Expand[(2 x^2 + x)^2], x]]] - (2 x^2 + x)^2]", "0");
+    audit_chk("Decompose#2", "Decompose[x^4, x]", "{x^2, x^2}");
+    audit_chk("Decompose#2", "Decompose[x^9, x]", "{x^3, x^3}");
+    audit_chk("Decompose#2", "Decompose[x^8 + x^4, x]", "{x + x^2, x^2, x^2}");
+    audit_chk("Decompose#2", "Decompose[x^6 + 1, x]", "{1 + x^2, x^3}");
+    audit_chk("Decompose#2", "Decompose[x + 1, x]", "{1 + x}");
+    /* the increment family on indexed l-values */
+    audit_chk("Decrement#2", "w4f[1] = 5; {w4f[1]--, w4f[1]}", "{5, 4}");
+    audit_chk("PreDecrement#1", "w4g[1] = 3; {--w4g[1], w4g[1]}", "{2, 2}");
+    audit_chk("PreIncrement#1", "w4c[_] = 0; {++w4c[a], w4c[a]}", "{1, 1}");
+    audit_chk("PreIncrement#1", "w4h[1] = 5; ++w4h[1]", "6");
+    audit_chk("PreIncrement#1", "w4t = <|\"a\" -> 1|>; {++w4t[\"a\"], w4t}", "{2, <|\"a\" -> 2|>}");
+    /* End[] restores $Context only */
+    audit_chk("End#1", "Begin[\"W4A`\"]; AppendTo[$ContextPath, \"W4B`\"]; End[]; MemberQ[$ContextPath, \"W4B`\"]", "True");
+    audit_run("$ContextPath = DeleteCases[$ContextPath, \"W4B`\"]");
+    /* Series of a Jacobi quotient function at its pole */
+    audit_chk("JacobiNS#1", "Head[Series[JacobiNS[u, m], {u, 0, 3}]]", "SeriesData");
+    audit_chk("JacobiNS#1", "Expand[Normal[Series[JacobiNS[u, m], {u, 0, 3}]] - (1/u + (1 + m) u/6 + (7 - 22 m + 7 m^2) u^3/360)]", "0");
+    audit_chk("JacobiNS#1", "Expand[Normal[Series[JacobiDS[u, m], {u, 0, 2}]] - (1/u + (1 - 2 m) u/6)]", "0");
+    /* PolynomialSqrt with algebraic-number coefficients */
+    audit_chk("PolynomialSqrt#1", "PolynomialSqrt[Expand[(x + Sqrt[2])^2]]", "Sqrt[2] + x");
+    audit_chk("PolynomialSqrt#1", "PolynomialSqrt[x^4 + 2 Sqrt[2] x^2 + 2]", "Sqrt[2] + x^2");
+    audit_chk("PolynomialSqrt#1", "PolynomialSqrt[x^2 + 1]", "$Failed");
+    /* RatCanonPrototype's fresh names avoid the input's own symbols */
+    audit_chk("RatCanonPrototype#1", "RatCanonPrototype[$rcp0$/Log[y]]", "$rcp0$/Log[y]");
+    /* SphericalHankelH1 just off the real axis */
+    audit_chk("SphericalHankelH1#1", "Abs[SphericalHankelH1[0, 1. + 1.*^-8 I] - N[-I Exp[I z]/z /. z -> 1 + I/10^8, 20]] < 10^-14", "True");
+    audit_chk("SphericalHankelH1#1", "Abs[SphericalHankelH1[2, 1.5 + 0.3 I] - N[SphericalHankelH1[2, 3/2 + 3/10 I], 20]] < 10^-14", "True");
+    audit_chk("SphericalHankelH1#1", "Abs[SphericalHankelH2[3, 0.5 - 2. I] - N[SphericalHankelH2[3, 1/2 - 2 I], 20]] < 10^-13", "True");
+    /* Subsets by position */
+    audit_chk("Subsets#1", "Subsets[{a, b, c, d}, All, {5}]", "{{d}}");
+    audit_chk("Subsets#1", "Subsets[{a, b, c, d}, All, {3, 5}]", "{{b}, {c}, {d}}");
+    audit_chk("Subsets#1", "Subsets[{a, b, c, d}, All, {2, 8, 3}]", "{{a}, {d}, {a, d}}");
+    /* TeXForm */
+    audit_chk("TeXForm#3", "ToString[TeXForm[\"a_b%\"]]", "\"\\\\text{a\\\\_b\\\\%}\"");
+    audit_chk("TeXForm#3", "ToString[TeXForm[{x, \"a&b\"}]]", "\"\\\\{x,\\\\text{a\\\\&b}\\\\}\"");
+    audit_chk("TeXForm#4", "ToString[TeXForm[\\[Alpha]]]", "\"\\\\alpha \"");
+    audit_chk("TeXForm#4", "ToString[TeXForm[\\[Beta] + \\[Gamma]]]", "\"\\\\beta +\\\\gamma \"");
+    audit_chk("TeXForm#5", "ToString[TeXForm[HoldForm[Integrate[f[x], {x, 0, 1}]]]]", "\"\\\\int_{0}^{1} f(x) \\\\, dx\"");
+    audit_chk("TeXForm#5", "ToString[TeXForm[HoldForm[Sum[a[i], {i, 1, n}]]]]", "\"\\\\sum _{i=1}^{n} a(i)\"");
+    audit_chk("TeXForm#5", "ToString[TeXForm[HoldForm[Limit[f[x], x -> 0]]]]", "\"\\\\lim_{x\\\\to 0} f(x)\"");
+    audit_chk("TeXForm#5", "ToString[TeXForm[Integrate[f[x], x]]]", "\"\\\\int f(x) \\\\, dx\"");
+}
+
 int main(void) {
     audit_init();
     TEST(test_slotsequence_empty);
@@ -141,5 +194,6 @@ int main(void) {
     TEST(test_s14_listconvolve_level);
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
+    TEST(test_wave4_g8_uncategorised);
     return audit_finish("audit_uncategorised");
 }

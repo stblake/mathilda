@@ -28,7 +28,19 @@ typedef struct {
     RcpGen* g; size_t n, cap;
     int ctr;
     const char* iname;   /* shared name for the imaginary unit, or NULL */
+    const Expr* input;   /* the expression being rewritten (its symbols are taken) */
 } RcpMap;
+
+/* Does symbol `name` occur anywhere in e (heads included)? */
+static int rcp_mentions(const Expr* e, const char* name) {
+    if (!e) return 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return 0;
+    if (rcp_mentions(e->data.function.head, name)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rcp_mentions(e->data.function.args[i], name)) return 1;
+    return 0;
+}
 
 static void rcp_map_free(RcpMap* m) {
     for (size_t i = 0; i < m->n; i++) { expr_free(m->g[i].kernel); free(m->g[i].name); }
@@ -44,8 +56,11 @@ static const char* rcp_bind(RcpMap* m, const Expr* k) {
         m->cap = m->cap ? m->cap * 2 : 8;
         m->g = realloc(m->g, m->cap * sizeof(RcpGen));
     }
+    /* A fresh name: one the input does not already use, or mapping back
+     * would rewrite the user's own $rcpN$ symbol into a kernel. */
     char buf[32];
-    snprintf(buf, sizeof buf, "$rcp%d$", m->ctr++);
+    do snprintf(buf, sizeof buf, "$rcp%d$", m->ctr++);
+    while (rcp_mentions(m->input, buf));
     char* nm = malloc(strlen(buf) + 1);
     strcpy(nm, buf);
     m->g[m->n].kernel = expr_copy((Expr*)k);
@@ -145,6 +160,7 @@ static Expr* builtin_ratcanon_prototype(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     RcpMap m; memset(&m, 0, sizeof m);
+    m.input = arg;
     Expr* sub = rcp_forward(arg, &m);
 
     Expr* reduced = flint_rational_together(sub);   /* one reduction over Q */

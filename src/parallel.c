@@ -36,10 +36,13 @@ static int is_option(const Expr* e) {
 }
 
 /* head[args of res without its trailing options] -- copies, so the evaluator
- * is free to release res.  NULL when fewer than `min` positional args remain. */
+ * is free to release res.  The first `min` arguments are positional whatever
+ * they look like -- ParallelMap[f, a -> b] maps over the rule, it has no
+ * options -- so only arguments after them can be options.  NULL when fewer
+ * than `min` arguments are given. */
 static Expr* rebuild_without_options(Expr* res, const char* head, size_t min) {
     size_t n = res->data.function.arg_count;
-    while (n > 0 && is_option(res->data.function.args[n - 1])) n--;
+    while (n > min && is_option(res->data.function.args[n - 1])) n--;
     if (n < min) return NULL;
     Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
     if (!a) return NULL;

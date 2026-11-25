@@ -2476,6 +2476,27 @@ Expr* builtin_simplify(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
         Expr* again = simp_ll_assumptions(res);
         if (again) return again;
+        /* Boole[c] / ConditionalExpression[v, c] whose condition the
+         * assumptions decide: Refine settles it (Simplify[Boole[x > 0],
+         * x > 0] is 1), and the settled form is simplified in turn.  A
+         * Refine that changes nothing falls through, so this cannot loop. */
+        Expr* e0 = res->data.function.args[0];
+        if (sf_contains_head(e0, SYM_Boole) || sf_contains_head(e0, SYM_ConditionalExpression)) {
+            size_t n = res->data.function.arg_count;
+            Expr* ref = expr_new_function(expr_new_symbol(SYM_Refine), NULL, n);
+            for (size_t i = 0; i < n; i++) ref->data.function.args[i] = expr_copy(res->data.function.args[i]);
+            Expr* r = evaluate(ref);
+            expr_free(ref);
+            if (r && !eval_is_inflight_unwind(r) && !expr_eq(r, e0)) {
+                Expr* call = expr_new_function(expr_copy(res->data.function.head), NULL, n);
+                call->data.function.args[0] = r;
+                for (size_t i = 1; i < n; i++) call->data.function.args[i] = expr_copy(res->data.function.args[i]);
+                Expr* out = evaluate(call);
+                expr_free(call);
+                return out;
+            }
+            if (r) expr_free(r);
+        }
     }
     /* A predicate the assumptions settle is decided outright, as Refine
      * decides it: Simplify[x > 0, x > 1] is True, Simplify[x > 0, x < 0]

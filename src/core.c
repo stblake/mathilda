@@ -1565,9 +1565,10 @@ Expr* builtin_compoundexpression(Expr* res) {
                 }
                 break;            /* propagate Goto to an enclosing CompoundExpression */
             }
+            /* A rejected Quit["a"] (Quit::intm) is inert, not a sentinel. */
             if (hname == SYM_Return || hname == SYM_Break ||
                 hname == SYM_Continue || hname == SYM_Throw ||
-                hname == SYM_Abort || hname == SYM_Quit) {
+                hname == SYM_Abort || (hname == SYM_Quit && mth_quit_requested())) {
                 break;
             }
         }

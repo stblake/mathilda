@@ -340,10 +340,11 @@ static void test_stress_c2(void) {
      * them, and both differentiate back exactly. */
     assert_ei("E^x/(x^2 - 2 x - 1)");
     assert_ei("E^x/((x^2 - 2)(x + 1))");
-    /* Still a KNOWN GAP: PolynomialSqrt fails on x^4 + 2 sqrt2 x^2 + 2 (a
-     * polynomial with NUMERIC radical coefficients), so the erf completing-
-     * square declines cleanly. */
-    assert_declines("E^((x^4 + 2)/x^2)");
+    /* A polynomial with NUMERIC radical coefficients: PolynomialSqrt of
+     * x^4 + 2 Sqrt[2] x^2 + 2 is x^2 + Sqrt[2] (its undetermined-coefficient
+     * fallback, audit PolynomialSqrt#1), so the erf completing-square closes
+     * (it used to decline cleanly). */
+    assert_erf("E^((x^4 + 2)/x^2)");
 }
 
 /* Decline-safety: algebraic / complex ei-argument constants (Cherry §7, a later

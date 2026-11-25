@@ -1012,9 +1012,13 @@ Expr* builtin_table(Expr* res) {
 
     /* Table does not iterate to Infinity; allow_inf = false. */
     if (!is_list_iter) {
-        if (!iter_spec_resolve_numeric(&s, /*allow_inf=*/false,
-                                       &min_val, &max_val, &di_val,
-                                       &is_real, &is_inf)) {
+        if (iter_spec_resolve_numeric(&s, /*allow_inf=*/false,
+                                      &min_val, &max_val, &di_val,
+                                      &is_real, &is_inf)) {
+            /* numeric bounds */
+        } else if (iter_spec_symbolic_range_to_list(&s)) {
+            is_list_iter = 1;      /* {i, a, a + 2}: the values a, 1 + a, 2 + a */
+        } else {
             iter_spec_free(&s);
             return NULL;
         }

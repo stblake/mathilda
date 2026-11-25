@@ -6011,6 +6011,75 @@ static Expr* decompose_recursive(Expr* f, Expr* x) {
     return res;
 }
 
+/* outer(inner(x)), expanded. */
+static Expr* decompose_compose(const Expr* outer, const Expr* inner, Expr* x) {
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                                   (Expr*[]){ expr_copy(x), expr_copy((Expr*)inner) }, 2);
+    Expr* sub = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                  (Expr*[]){ expr_copy((Expr*)outer), rule }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), &sub, 1));
+}
+
+/* Normalise a decomposition list {g1, ..., gk} (g1(g2(...gk(x)))) into the
+ * reference's form: every component of degree at least 2.
+ *   - a pure power x^d of composite degree is itself split, one prime at a
+ *     time (x^4 -> x^2, x^2; x^6 -> x^2, x^3);
+ *   - a linear component is absorbed into a neighbour -- the one outside it,
+ *     or, when it is outermost, the one inside -- since it adds nothing to the
+ *     composition (1 + x composed with x^2 is the single 1 + x^2).
+ * Takes ownership of `L`; returns the normalised list. */
+static Expr* decompose_normalize(Expr* L, Expr* x) {
+    size_t n = L->data.function.arg_count;
+    size_t cap = n * 8 + 8, m = 0;
+    Expr** v = malloc(cap * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        Expr* g = L->data.function.args[i];
+        int64_t d = 0;
+        if (g->type == EXPR_FUNCTION && g->data.function.head->type == EXPR_SYMBOL &&
+            g->data.function.head->data.symbol.name == SYM_Power && g->data.function.arg_count == 2 &&
+            expr_eq(g->data.function.args[0], x) && g->data.function.args[1]->type == EXPR_INTEGER)
+            d = g->data.function.args[1]->data.integer;
+        if (d >= 4 && d <= 1000000) {
+            for (int64_t p = 2; d > 1; ) {
+                if (d % p == 0) {
+                    if (m == cap) { cap *= 2; v = realloc(v, cap * sizeof(Expr*)); }
+                    v[m++] = internal_power((Expr*[]){ expr_copy(x), expr_new_integer(p) }, 2);
+                    d /= p;
+                } else {
+                    p++;
+                }
+            }
+        } else {
+            if (m == cap) { cap *= 2; v = realloc(v, cap * sizeof(Expr*)); }
+            v[m++] = expr_copy(g);
+        }
+    }
+    expr_free(L);
+    for (bool again = true; again && m > 1; ) {
+        again = false;
+        for (size_t i = 0; i < m; i++) {
+            Expr* lin = expr_expand(v[i]);
+            int deg = get_degree_poly(lin, x);
+            expr_free(lin);
+            if (deg > 1) continue;
+            Expr* merged = i > 0 ? decompose_compose(v[i - 1], v[i], x)
+                                 : decompose_compose(v[i], v[i + 1], x);
+            if (!merged) continue;
+            size_t keep = i > 0 ? i - 1 : 0;   /* the slot that takes the merge */
+            expr_free(v[keep]);
+            expr_free(v[keep + 1]);
+            v[keep] = merged;
+            for (size_t j = keep + 1; j + 1 < m; j++) v[j] = v[j + 1];
+            m--;
+            again = true;
+            break;
+        }
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), v, m);
+    free(v);
+    return out;
+}
+
 Expr* builtin_decompose(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* poly = res->data.function.args[0];
@@ -6024,7 +6093,9 @@ Expr* builtin_decompose(Expr* res) {
         return NULL;
     }
     
-    return decompose_recursive(poly, x);
+    Expr* L = decompose_recursive(poly, x);
+    if (!L || L->type != EXPR_FUNCTION) return L;
+    return decompose_normalize(L, x);
 }
 
 /* Recursive Horner-form construction:                                  */

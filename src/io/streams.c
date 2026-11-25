@@ -26,6 +26,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <stdint.h>
 
 /* ------------------------------------------------------------------ */
 /* Registry                                                            */
@@ -175,9 +177,23 @@ int stream_handle(const Expr* a, int* id, int* is_output) {
     if (a->data.function.arg_count < 2) return 0;
     Expr* idn = a->data.function.args[1];
     if (idn->type != EXPR_INTEGER) return 0;
-    if (id) *id = (int)idn->data.integer;
+    /* An id outside the int range names no stream: map it to -1 (never
+     * allocated) rather than truncating it onto a live one. */
+    int64_t v = idn->data.integer;
+    if (id) *id = (v > 0 && v <= INT_MAX) ? (int)v : -1;
     if (is_output) *is_output = outp;
     return 1;
+}
+
+Stream* stream_by_handle(const Expr* a) {
+    int id, is_output;
+    if (!stream_handle(a, &id, &is_output)) return NULL;
+    Stream* s = stream_by_id(id);
+    if (!s || s->is_output != is_output) return NULL;
+    if (a->data.function.arg_count != 2) return NULL;
+    const Expr* nm = a->data.function.args[0];
+    if (nm->type != EXPR_STRING || strcmp(nm->data.string, s->name) != 0) return NULL;
+    return s;
 }
 
 const char* stream_filename_arg(const Expr* a) {
@@ -286,7 +302,7 @@ Expr* builtin_close(Expr* res) {
     int id, is_output;
     Stream* s = NULL;
     if (stream_handle(a, &id, &is_output)) {
-        s = stream_by_id(id);
+        s = stream_by_handle(a);
     } else {
         const char* name = stream_filename_arg(a);
         if (!name) return NULL;             /* not a stream/filename: decline */
@@ -334,7 +350,7 @@ Expr* builtin_streams(Expr* res) {
 static Stream* resolve_open(const Expr* a, const char* who) {
     int id, is_output;
     Stream* s = NULL;
-    if (stream_handle(a, &id, &is_output)) s = stream_by_id(id);
+    if (stream_handle(a, &id, &is_output)) s = stream_by_handle(a);
     else {
         const char* name = stream_filename_arg(a);
         if (name) s = stream_find_by_name(name, -1);
@@ -395,7 +411,7 @@ static Stream* resolve_output(const Expr* a, const char* who, int* fail) {
             *fail = 1;
             return NULL;
         }
-        Stream* s = stream_by_id(id);
+        Stream* s = stream_by_handle(a);
         if (!s) {
             mth_message(who, "openx", "the stream is not open.");
             *fail = 1;

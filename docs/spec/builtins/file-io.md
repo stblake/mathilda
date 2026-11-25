@@ -32,6 +32,8 @@ Reads a sequence of Mathilda expressions from a file, evaluates each in order, a
 - Used by the REPL bootstrap to load `src/internal/init.m` (and the rules it pulls in).
 - Files conventionally end with `.m`.
 
+**Wave 4 G8.** A file is read one statement per line, as the reference reads it: a top-level line break after a complete expression ends the statement, so the lines `5` and `-3` are two statements (Get gives -3), not `5 - 3`. An incomplete line (open bracket, trailing operator) continues onto the next. `Get[File["f"]]` is accepted, and a directory is `Get::noopen` and `$Failed` (it used to read as an empty file).
+
 ## ReadList
 Reads the objects contained in a file and returns them as a `List`, directed by a *read type* and modified by separator options. Unlike `Get`, the objects are **collected** (not just evaluated for their side effect), and non-expression types let a data file be read field by field.
 - `ReadList["file"]` — read every remaining expression; equivalent to `ReadList["file", Expression]`.
@@ -89,6 +91,8 @@ In[6]:= str = OpenWrite["/tmp/mathilda_io_csv.txt"]; WriteString[str, "a,b,c\n"]
 In[7]:= ReadList["/tmp/mathilda_io_csv.txt", Word, WordSeparators -> {","}]  (* comma-separated fields *)
 Out[7]= {"a", "b", "c"}
 ```
+
+**Wave 4 G8.** A malformed or incomplete expression is a `Syntax::sntx` message and the object `$Failed` (`ReadList[StringToStream["x+1\n1+"]]` is `{1 + x, $Failed}`), never a silent truncation. Expressions are line-ended as in Get. `Character` reads one UTF-8 character, not one byte.
 
 ## StringToStream
 `StringToStream["string"]` opens an input stream that reads from a copy of the
@@ -178,6 +182,8 @@ In[5]:= Close[ins]
 Out[5]= "/tmp/mathilda_io_read2.txt"
 ```
 
+**Wave 4 G8.** A syntax error is `Syntax::sntx` and `$Failed`, with the read point moved past the offending line; `EndOfFile` only at the true end of the data. A stream object resolves only when its id, its direction (`InputStream` / `OutputStream`) and its name all match an open stream.
+
 ## OpenRead / OpenWrite / OpenAppend
 Open a file and return a stream object addressing a persistent current point.
 - `OpenRead["file"]` / `OpenRead[File["file"]]` — open for reading; returns `InputStream["file", n]`.
@@ -241,6 +247,8 @@ Out[3]= "/tmp/mathilda_io_close.txt"
 In[4]:= Streams["/tmp/mathilda_io_close.txt"]  (* and removes it from the registry *)
 Out[4]= {}
 ```
+
+**Wave 4 G8.** The stream object must match an open stream in id, direction and name: `Close[OutputStream["bogus", n]]` is `Close::stream` and `$Failed` and closes nothing, and an id beyond the machine-integer range names no stream (it used to be truncated onto stream 1). The same rule holds for Read, ReadList, Write, WriteString, StreamPosition and SetStreamPosition.
 
 ## Streams
 Lists the currently open streams.
@@ -385,6 +393,8 @@ Out[2]= True
 In[3]:= Quiet[LoadModule["no/such/module.m"]]  (* not found -> False *)
 Out[3]= False
 ```
+
+**Wave 4 G8.** A directory is not a module (`LoadModule::nofile`, False). The at-most-once memo is keyed by the normalised path, so `"simp//FullSimplify.m"` and `"./simp/FullSimplify.m"` name the module already loaded.
 
 ## Import
 Reads a raster image file and returns an `Image`, or reads a text file.
@@ -666,6 +676,8 @@ Head[Export["/tmp/mathilda_doc_vol.png", Image3D[Table[0.5, {z, 1, 2}, {y, 1, 2}
 Out[2]= Export
 ```
 
+**Wave 4 G8.** Format names are case-insensitive (`"png"` is `"PNG"`). Tables export as `"CSV"` / `"TSV"` (a `.csv` / `.tsv` file; a list of lists one row per sublist, a CSV cell holding a comma or quote quoted), and an expression as `"Package"` (a `.m` / `.wl` file, in input form, read back by Get).
+
 ## Put
 Writes one or more expressions to a file, replacing any prior contents.
 - `expr >> "filename"` — shorthand for `Put[expr, "filename"]`.
@@ -684,6 +696,8 @@ Writes one or more expressions to a file, replacing any prior contents.
 **Parser notes**:
 - `>>` has a low precedence (`30`) — below `Set`/`SetDelayed` (`40`) and above `CompoundExpression` (`10`). `a + b >> "f"` therefore parses as `Put[a + b, "f"]`.
 - The bare-word filename accepts identifier characters plus `.`, `/`, `\`, `-`, `_`, `~`, and `$`.
+
+**Wave 4 G8.** `Put[e, File["f"]]` and `PutAppend[e, File["f"]]` are accepted, and `::noopen` goes through the message funnel (Quiet silences it, Check sees it).
 
 ## PutAppend
 Like `Put`, but appends to the file rather than truncating it.
@@ -827,6 +841,8 @@ Selects components of a file name, as `FileNameSplit` gives them, and rejoins th
 or directory. A missing one emits `AbsoluteFileName::fdnfnd` and gives
 `$Failed`. `Protected`.
 
+**Wave 4 G8.** `File["name"]` (and a leading `~`) is accepted.
+
 ## FileType
 `FileType["name"]` gives `File`, `Directory`, or `None` if nothing exists at
 `name`. Symbolic links are followed; `File["name"]` and a leading `~` are
@@ -855,6 +871,8 @@ The legacy file-name builder, superseded by `FileNameJoin`.
   `DeleteFile::fdir`. In either case the result is `$Failed`, and the other
   files of a list are still deleted.
 - `Protected`.
+
+**Wave 4 G8.** `File["name"]` (and a leading `~`) is accepted, alone or in a list.
 
 ## FileNames
 Lists files by name pattern.
@@ -913,6 +931,8 @@ The working directory and a stack of the ones left behind.
 ```
 SetDirectory["src"]; FileNames["*.c"]; ResetDirectory[]
 ```
+
+**Wave 4 G8.** `SetDirectory[File["dir"]]` is accepted.
 
 ## $HomeDirectory
 Your "home" directory, as the full name of the directory as a string; on
@@ -1085,6 +1105,8 @@ Out[3]= "/usr/local/bin"
 In[4]:= FileNameSplit["C:\\path\\file.txt", OperatingSystem -> "Windows"]  (* a drive is an ordinary first part *)
 Out[4]= {"C:", "path", "file.txt"}
 ```
+
+**Wave 4 G8.** The OperatingSystem default set by `SetOptions[FileNameSplit, ...]` (and `SetOptions[FileNameJoin, ...]`) is honoured; an explicit option still overrides it.
 
 ## FilePrint
 Prints the raw textual contents of a file to standard output.

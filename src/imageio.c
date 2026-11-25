@@ -132,6 +132,27 @@ static bool is_decodable(const char* path)
 
 static Expr* failed(void) { return expr_new_symbol("$Failed"); }
 
+/* Format names are case-insensitive ("png" is "PNG", "text" is "Text"): the
+ * canonical spelling of a known name, else the name as given. */
+static const char* canon_format(const char* fmt)
+{
+    static const char* known[] = {"Image", "PNG", "JPEG", "JPG", "BMP", "GIF", "TGA", "PNM",
+                                  "PDF", "Text", "String", "Lines", "CSV", "TSV", "Package",
+                                  NULL};
+    size_t k, i;
+    if (!fmt) return fmt;
+    for (k = 0; known[k]; k++) {
+        for (i = 0; fmt[i] && known[k][i]; i++) {
+            int a = fmt[i], b = known[k][i];
+            if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
+            if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
+            if (a != b) break;
+        }
+        if (fmt[i] == '\0' && known[k][i] == '\0') return known[k];
+    }
+    return fmt;
+}
+
 #ifdef USE_GRAPHICS
 /* Pixel dimensions for a rasterised Graphics export: honour ImageSize
  * (a number w -> {w, 3w/4}, or an explicit {w, h}), else a readable default.
@@ -215,7 +236,7 @@ static Expr* builtin_import(Expr* res)
             && f2->data.function.head->data.symbol.name == SYM_List)
             f2 = f2->data.function.args[0];
         if (f2->type == EXPR_STRING) {
-            Expr* t = files_import_text(path, f2->data.string);
+            Expr* t = files_import_text(path, canon_format(f2->data.string));
             if (t) return t;
         }
     } else {
@@ -227,7 +248,7 @@ static Expr* builtin_import(Expr* res)
      * itself" are handled; "Data" or a channel request would be a different return type and is
      * better absent than wrong. */
     if (res->data.function.arg_count == 2) {
-        fmt = str_arg(res, 1);
+        fmt = canon_format(str_arg(res, 1));
         if (!fmt) return NULL;
         if (strcmp(fmt, "Image") != 0 && strcmp(fmt, "PNG") != 0 && strcmp(fmt, "JPEG") != 0 &&
             strcmp(fmt, "JPG") != 0 && strcmp(fmt, "BMP") != 0 && strcmp(fmt, "GIF") != 0 &&
@@ -281,7 +302,7 @@ static Expr* builtin_export(Expr* res)
     path = str_arg(res, 0);
     if (!path) return NULL;
     if (res->data.function.arg_count == 3) {
-        fmt = str_arg(res, 2);
+        fmt = canon_format(str_arg(res, 2));
         if (!fmt) return NULL;
     }
 
@@ -294,6 +315,12 @@ static Expr* builtin_export(Expr* res)
         if (t) return t;
     } else if (has_ext(path, "txt")) {
         return files_export_text(path, res->data.function.args[1], "Text");
+    } else if (has_ext(path, "csv")) {
+        return files_export_text(path, res->data.function.args[1], "CSV");
+    } else if (has_ext(path, "tsv") || has_ext(path, "tab")) {
+        return files_export_text(path, res->data.function.args[1], "TSV");
+    } else if (has_ext(path, "m") || has_ext(path, "wl")) {
+        return files_export_text(path, res->data.function.args[1], "Package");
     } else if (!path_has_extension(path)) {
         mth_message("Export", "infer", "Cannot infer format of file %s.", path_base_name(path));
         return failed();

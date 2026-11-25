@@ -724,6 +724,37 @@ static Expr* deep_positivity_walk(const Expr* e, const AssumeCtx* ctx,
  * Refines Sign[d] with the same two passes the rewrite path runs (the fast
  * rule set, then the Reduce-backed deep positivity walk), so the direction
  * is settled exactly as Refine[Sign[d], assum] would settle it. */
+/* Boole[c] and ConditionalExpression[v, c] whose condition c (a relation
+ * or Element statement) the assumptions decide: Boole becomes 1 / 0, the
+ * conditional its value v / Undefined.  Everything else is copied, walking
+ * into arguments.  Returns an owned expression. */
+static Expr* refine_condition_walk(const Expr* e, const AssumeCtx* ctx,
+                                   const Expr* Aconj, RefineBudget* b) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* h = head_name(e);
+    size_t n = e->data.function.arg_count;
+    if (h && ((h == SYM_Boole && n == 1) ||
+              (h == SYM_ConditionalExpression && n == 2))) {
+        const Expr* c = e->data.function.args[n - 1];
+        const char* ch = head_name(c);
+        if (ch && (ch == SYM_Element || is_relational_head(ch))) {
+            Expr* d = refine_decide_predicate(c, ctx, Aconj, b);
+            int v = -1;
+            if (d && d->type == EXPR_SYMBOL) v = d->data.symbol.name == SYM_True ? 1 : 0;
+            expr_free(d);
+            if (v >= 0) {
+                if (h == SYM_Boole) return expr_new_integer(v);
+                return v ? refine_condition_walk(e->data.function.args[0], ctx, Aconj, b)
+                         : expr_new_symbol(SYM_Undefined);
+            }
+        }
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), NULL, n);
+    for (size_t i = 0; i < n; i++)
+        out->data.function.args[i] = refine_condition_walk(e->data.function.args[i], ctx, Aconj, b);
+    return out;
+}
+
 static Expr* refine_unit_direction(const Expr* d, const AssumeCtx* ctx,
                                    const Expr* Aconj, RefineBudget* b) {
     Expr* sgn = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sign),
@@ -938,6 +969,12 @@ Expr* builtin_refine(Expr* res) {
         int changed = 0;
         Expr* deep = deep_positivity_walk(rewritten, ctx, Aconj, &bud, &changed);
         expr_free(rewritten);
+
+        /* Boole / ConditionalExpression with a condition the assumptions
+         * decide. */
+        Expr* conds = refine_condition_walk(deep, ctx, Aconj, &bud);
+        expr_free(deep);
+        deep = conds;
 
         /* Directed infinities: settle a symbolic direction to its unit. */
         Expr* dirs = refine_directed_infinity(deep, ctx, Aconj, &bud);

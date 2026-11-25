@@ -41,6 +41,7 @@
 #include "modular.h"
 #include "linkedlist.h"
 #include "iter.h"
+#include "quit.h"   /* mth_quit_requested */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "message.h"
 #include "print.h"
@@ -419,6 +420,40 @@ bool iter_spec_parse_lattice(Expr* spec, IterSpec* out) {
     return true;
 }
 
+bool iter_spec_symbolic_range_to_list(IterSpec* s) {
+    if (s->kind != ITER_KIND_RANGE || !s->imin || !s->imax || !s->di) return false;
+    /* n = (imax - imin)/di must be an explicit number for the lattice to be
+     * finite and known: {i, a, a + 2} has n = 2 whatever a is. */
+    Expr* neg[2]  = { expr_new_integer(-1), expr_copy(s->imin) };
+    Expr* span[2] = { expr_copy(s->imax), expr_new_function(expr_new_symbol(SYM_Times), neg, 2) };
+    Expr* inv[2]  = { expr_copy(s->di), expr_new_integer(-1) };
+    Expr* quo[2]  = { expr_new_function(expr_new_symbol(SYM_Plus), span, 2),
+                      expr_new_function(expr_new_symbol(SYM_Power), inv, 2) };
+    Expr* ratio = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), quo, 2));
+    if (!ratio) return false;
+    double r;
+    bool ok = iter_is_explicit_number(ratio) && iter_real_value(ratio, &r);
+    expr_free(ratio);
+    if (!ok || !(r < 1.0e7)) return false;   /* unknown, or too long to list */
+    int64_t n = r < 0 ? -1 : (int64_t)floor(r + 1e-12 * (r > 1.0 ? r : 1.0));
+    size_t cnt = (size_t)(n + 1);
+    Expr** vals = malloc((cnt ? cnt : 1) * sizeof(Expr*));
+    if (!vals) return false;
+    for (size_t k = 0; k < cnt; k++) {
+        Expr* step[2] = { expr_new_integer((int64_t)k), expr_copy(s->di) };
+        Expr* pt[2] = { expr_copy(s->imin), expr_new_function(expr_new_symbol(SYM_Times), step, 2) };
+        vals[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), pt, 2));
+        if (!vals[k]) vals[k] = expr_new_symbol(SYM_Null);
+    }
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), vals, cnt);
+    free(vals);
+    expr_free(s->imin); expr_free(s->imax); expr_free(s->di);
+    s->imin = s->imax = s->di = NULL;
+    s->kind = ITER_KIND_LIST;
+    s->list = list;
+    return true;
+}
+
 Expr* iter_spec_take_unwind(IterSpec* s) {
     Expr** slots[4] = { &s->imin, &s->imax, &s->di, &s->list };
     for (int k = 0; k < 4; k++) {
@@ -557,10 +592,15 @@ static const char* is_flow_control_head(Expr* e) {
         h == SYM_Break ||
         h == SYM_Continue ||
         h == SYM_Throw ||
-        h == SYM_Abort ||
-        h == SYM_Quit) {
+        h == SYM_Abort) {
         return h;
     }
+    /* Quit[...] is a sentinel only once it took effect: a rejected Quit["a"]
+     * (Quit::intm) stays an inert expression, and evaluation goes on. */
+    if (h == SYM_Quit && mth_quit_requested()) return h;
+    /* Goto[tag] is the in-flight jump: the loop stops and hands it to the
+     * CompoundExpression around the loop, which looks for Label[tag]. */
+    if (h == SYM_Goto && eval_is_inflight_goto(e)) return h;
     return NULL;
 }
 
@@ -752,9 +792,13 @@ static Expr* do_core(Expr* res, bool nested) {
 
     /* ---- Validate and convert iterator bounds (Infinity allowed) ---- */
     if (!is_list_iter) {
-        if (!iter_spec_resolve_numeric(&s, /*allow_inf=*/true,
-                                       &min_val, &max_val, &di_val,
-                                       &is_real, &is_inf)) {
+        if (iter_spec_resolve_numeric(&s, /*allow_inf=*/true,
+                                      &min_val, &max_val, &di_val,
+                                      &is_real, &is_inf)) {
+            /* numeric bounds */
+        } else if (iter_spec_symbolic_range_to_list(&s)) {
+            is_list_iter = 1;      /* {i, a, a + 2}: the values a, 1 + a, 2 + a */
+        } else {
             iter_spec_free(&s);
             return NULL;
         }

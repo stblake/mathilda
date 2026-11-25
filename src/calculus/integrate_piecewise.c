@@ -748,9 +748,45 @@ static Expr* periodic_exponential_halfline(const Expr* f, const Expr* x, const E
     return sv;
 }
 
+/* Does `e` hold a Boole[c] whose condition depends on x? */
+static bool has_boole_of_x(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Boole") && e->data.function.arg_count == 1 &&
+        contains_symbol(e->data.function.args[0], x))
+        return true;
+    if (has_boole_of_x(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_boole_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* Boole[c] -> Piecewise[{{1, c}}, 0], everywhere: the same function, in the
+ * form whose breakpoints this method already reads off the condition. */
+static Expr* boole_to_piecewise(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return cp(e);
+    if (head_name_is(e, "Boole") && e->data.function.arg_count == 1) {
+        Expr* clause = mk_fn2("List", expr_new_integer(1), cp(e->data.function.args[0]));
+        return mk_fn2("Piecewise", mk_fn1("List", clause), expr_new_integer(0));
+    }
+    size_t n = e->data.function.arg_count;
+    Expr* out = expr_new_function(boole_to_piecewise(e->data.function.head), NULL, n);
+    for (size_t i = 0; i < n; i++) out->data.function.args[i] = boole_to_piecewise(e->data.function.args[i]);
+    return out;
+}
+
 Expr* integrate_piecewise_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+
+    /* Boole of an x-dependent condition is a two-valued step: integrate the
+     * equivalent Piecewise. */
+    if (has_boole_of_x(f, x)) {
+        Expr* pw = eval_take(boole_to_piecewise(f));
+        Expr* r = pw && !has_boole_of_x(pw, x)
+                ? integrate_piecewise_try(pw, x, a, b, assumptions) : NULL;
+        if (pw) expr_free(pw);
+        return r;
+    }
 
     /* Expose any perfect-square radical as its Abs normal form (Sqrt[1-Cos[2x]]
      * -> Sqrt[2] Abs[Sin x]) so the Abs branch machinery can integrate it

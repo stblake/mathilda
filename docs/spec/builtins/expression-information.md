@@ -2308,3 +2308,5 @@ Out[2]= True
 ## TeXForm
 
 - `HoldForm`, `TraditionalForm` and `StandardForm` are transparent (audit HoldForm#1, TraditionalForm#1).
+
+**Wave 4 G8.** Strings and multi-letter symbols in `\text{}` escape the TeX special characters (`_ % & # $ { } ~ ^ \`); a Greek-letter symbol is its command (`\alpha`, `\Gamma`); a held (unevaluated) Integrate / Sum / Product / Limit is typeset as `\int_a^b f \, dx`, `\sum _{i=1}^n f`, `\lim_{x\to a} f`.

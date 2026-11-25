@@ -159,7 +159,26 @@ void mth_monitor_tick(void) {
 
 /* ---- registration ----------------------------------------------------------- */
 
+static const struct { const char* name; const char* summary; }
+FE_BUILTIN_CMDS[FRONTEND_N_BUILTIN_CMDS] = {
+    { "help",       "list the commands and keys" },
+    { "theme",      "choose a colour theme, with a live preview" },
+    { "history",    "show recent inputs: /history [n]" },
+    { "timing",     "the time-taken note: /timing [on|off|always]" },
+    { "statusline", "a status line after each result: /statusline [on|off]" },
+    { "clear",      "clear the screen" },
+    { "mods",       "the loaded mods, their commands and hooks" },
+    { "quit",       "end the session (as Quit[])" },
+};
+
+void frontend_add_builtin_commands(const int* ids) {
+    for (int i = 0; i < FRONTEND_N_BUILTIN_CMDS; i++)
+        term_slash_add_builtin(FE_BUILTIN_CMDS[i].name, FE_BUILTIN_CMDS[i].summary,
+                               ids ? ids[i] : 0);
+}
+
 void frontend_init(void) {
+    frontend_add_builtin_commands(NULL);
     symtab_add_builtin("SlashCommand", builtin_slashcommand);
     symtab_get_def("SlashCommand")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("SlashCommand",

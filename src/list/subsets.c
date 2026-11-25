@@ -170,10 +170,31 @@ static bool subsets_decode_lengths(Expr* spec, size_t n,
     return true;
 }
 
-/* Decode the optional third argument, the number of subsets to keep. Accepts a
- * non-negative machine integer, All / Infinity / a positive bigint (all "no
- * limit"). Returns false for anything else, including a negative count. */
-static bool subsets_decode_count(Expr* spec, size_t* limit) {
+/* Decode the optional third argument, which subsets to keep, by their 1-based
+ * position in the standard order: a count n (the first n; a non-negative
+ * machine integer, or All / Infinity / a positive bigint for "no limit"), or
+ * the positions {k} (just the k-th), {m, n} (m through n) or {m, n, s} (every
+ * s-th from m to n).  *first / *step select within 1..*limit.  Returns false
+ * for anything else, including a negative count. */
+static bool subsets_decode_count(Expr* spec, size_t* limit, size_t* first, size_t* step) {
+    *first = 1;
+    *step = 1;
+    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL &&
+        spec->data.function.head->data.symbol.name == SYM_List &&
+        spec->data.function.arg_count >= 1 && spec->data.function.arg_count <= 3) {
+        size_t na = spec->data.function.arg_count;
+        int64_t v[3] = { 0, 0, 1 };
+        for (size_t i = 0; i < na; i++) {
+            Expr* a = spec->data.function.args[i];
+            if (a->type != EXPR_INTEGER || a->data.integer <= 0) return false;
+            v[i] = a->data.integer;
+        }
+        if (na == 1) v[1] = v[0];
+        *first = (size_t)v[0];
+        *limit = (size_t)v[1];
+        *step = (size_t)v[2];
+        return true;
+    }
     if (spec->type == EXPR_INTEGER) {
         if (spec->data.integer < 0) return false;
         *limit = (size_t)spec->data.integer;
@@ -239,13 +260,13 @@ Expr* builtin_subsets(Expr* res) {
         return NULL;
     }
 
-    size_t limit = SIZE_MAX;
-    if (argc >= 3 && !subsets_decode_count(res->data.function.args[2], &limit)) {
+    size_t limit = SIZE_MAX, first = 1, pstep = 1;
+    if (argc >= 3 && !subsets_decode_count(res->data.function.args[2], &limit, &first, &pstep)) {
         llq_close(&lv);
         return NULL;
     }
 
-    if (empty || limit == 0) { llq_close(&lv); return ll_seq_of(linked, NULL, 0); }
+    if (empty || limit == 0 || first > limit) { llq_close(&lv); return ll_seq_of(linked, NULL, 0); }
 
     /* One scratch buffer sized for the largest length we will emit, reused
      * across every k so the generator allocates no per-combination state. */
@@ -257,8 +278,9 @@ Expr* builtin_subsets(Expr* res) {
 
     SubsetBuf out = {NULL, 0, 0};
     bool ok = true;
+    size_t pos = 0;             /* 1-based position of the last subset generated */
 
-    for (size_t k = kmin; k <= kmax && ok && out.count < limit; k += kstep) {
+    for (size_t k = kmin; k <= kmax && ok && pos < limit; k += kstep) {
         /* Defensive: every spec path above clamps kmax to n, so this cannot
          * fire today. It stays because subsets_comb_next computes n - k + i in
          * size_t, which would wrap catastrophically rather than fail loudly if
@@ -267,15 +289,18 @@ Expr* builtin_subsets(Expr* res) {
 
         for (size_t i = 0; i < k; i++) idx[i] = i;
         do {
-            /* the subset, built from its indices (slot to slot for a
-             * LinkedList) */
-            Expr* subset = llq_emit(&lv, idx, k);
-            if (!subset || !subsets_buf_push(&out, subset)) {
-                expr_free(subset);
-                ok = false;
-                break;
+            pos++;
+            /* Only a selected position is built (from its indices, slot to
+             * slot for a LinkedList); the others are just counted. */
+            if (pos >= first && (pos - first) % pstep == 0) {
+                Expr* subset = llq_emit(&lv, idx, k);
+                if (!subset || !subsets_buf_push(&out, subset)) {
+                    expr_free(subset);
+                    ok = false;
+                    break;
+                }
             }
-            if (out.count == limit) break;
+            if (pos == limit) break;
         } while (subsets_comb_next(idx, k, n));
 
         /* Stop before `k += kstep` can wrap past SIZE_MAX. The loop guard

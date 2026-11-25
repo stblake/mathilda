@@ -154,7 +154,7 @@ Expr* mathilda_run_file(const char* path, int* opened) {
     while (*ptr != '\0') {
         const char* stmt_start = ptr;
         int prev_quiet = parse_set_quiet(1);
-        Expr* parsed = parse_next_expression(&ptr);
+        Expr* parsed = parse_next_line_statement(&ptr);
         parse_set_quiet(prev_quiet);
         if (!parsed) {
             /* End of input, or a syntax error: either way reading stops (as
@@ -211,10 +211,37 @@ static void lm_sync_generation(void) {
     }
 }
 
+/* The memo key of a relpath: separators unified to '/', runs of them
+ * collapsed, and "." components dropped, so equivalent spellings
+ * ("simp//FullSimplify.m", "./simp/FullSimplify.m") share one entry and a
+ * module is read at most once.  Returns 0 when the key does not fit. */
+static int lm_memo_key(const char* relpath, char* out, size_t outsz) {
+    size_t n = 0;
+    const char* p = relpath;
+    while (*p) {
+        while (*p == '/' || *p == '\\') p++;
+        if (!*p) break;
+        const char* q = p;
+        while (*q && *q != '/' && *q != '\\') q++;
+        size_t len = (size_t)(q - p);
+        if (!(len == 1 && p[0] == '.')) {
+            if (n + len + 2 > outsz) return 0;
+            if (n > 0) out[n++] = '/';
+            memcpy(out + n, p, len);
+            n += len;
+        }
+        p = q;
+    }
+    out[n] = '\0';
+    return 1;
+}
+
 static int lm_already_loaded(const char* relpath) {
     lm_sync_generation();
+    char key[LM_RELPATH_MAX];
+    if (!lm_memo_key(relpath, key, sizeof(key))) return 0;
     for (int i = 0; i < lm_loaded_count; i++) {
-        if (strcmp(lm_loaded[i], relpath) == 0) return 1;
+        if (strcmp(lm_loaded[i], key) == 0) return 1;
     }
     return 0;
 }
@@ -222,10 +249,22 @@ static int lm_already_loaded(const char* relpath) {
 static void lm_mark_loaded(const char* relpath) {
     lm_sync_generation();
     if (lm_loaded_count >= LM_MAX_LOADED) return; /* silently cap */
-    size_t n = strlen(relpath);
-    if (n >= LM_RELPATH_MAX) return;
-    memcpy(lm_loaded[lm_loaded_count], relpath, n + 1);
+    char key[LM_RELPATH_MAX];
+    if (!lm_memo_key(relpath, key, sizeof(key))) return;
+    memcpy(lm_loaded[lm_loaded_count], key, strlen(key) + 1);
     lm_loaded_count++;
+}
+
+/* Is `full` a readable regular file?  fopen succeeds on a directory on POSIX
+ * (the first read then fails), so one byte is read and an error rejects it; an
+ * empty file still counts.  Plain C99. */
+static int lm_is_readable_file(const char* full) {
+    FILE* fp = fopen(full, "r");
+    if (!fp) return 0;
+    (void)fgetc(fp);
+    int ok = !ferror(fp);
+    fclose(fp);
+    return ok;
 }
 
 /* Directory (with trailing '/') of the winning base once one is found, so
@@ -317,9 +356,7 @@ static int lm_try_base(const char* base, const char* relpath,
     if ((size_t)snprintf(full, sizeof(full), "%s%s", base, relpath)
             >= sizeof(full))
         return 0; /* would truncate; not a real path */
-    FILE* fp = fopen(full, "r");
-    if (!fp) return 0;
-    fclose(fp);
+    if (!lm_is_readable_file(full)) return 0;
     snprintf(lm_base, sizeof(lm_base), "%s", base);
     lm_base_known = 1;
     if (strlen(full) < outsz) memcpy(out, full, strlen(full) + 1);
@@ -334,9 +371,7 @@ int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz) {
         char full[LM_PATH_MAX];
         if ((size_t)snprintf(full, sizeof(full), "%s%s", lm_base, relpath)
                 < sizeof(full)) {
-            FILE* fp = fopen(full, "r");
-            if (fp) {
-                fclose(fp);
+            if (lm_is_readable_file(full)) {
                 if (strlen(full) < outsz) memcpy(out, full, strlen(full) + 1);
                 return 1;
             }

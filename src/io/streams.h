@@ -62,6 +62,13 @@ Stream* stream_slot(size_t i);
  * from it (id may name a slot that is no longer open) and return 1; else 0. */
 int stream_handle(const Expr* a, int* id, int* is_output);
 
+/* The live stream an InputStream[name, id] / OutputStream[name, id] object
+ * denotes, or NULL.  All three parts must agree with the registry entry -- the
+ * id, the direction (head) and the name -- so a forged or stale object (a wrong
+ * name, the other direction, an id beyond the int range) never reaches an
+ * unrelated open stream.  `a` must satisfy stream_handle. */
+Stream* stream_by_handle(const Expr* a);
+
 /* Borrowed filename from a bare String or File["name"]; NULL if `a` is neither. */
 const char* stream_filename_arg(const Expr* a);
 

@@ -1276,8 +1276,12 @@ vm_loop:
             OP(POWI_I): IOP(ci_powi(RA.i, c->imm.i, &RD.i));
             OP(POWI_R): RD.r = mth_powi_machine(RA.r, (int64_t)c->imm.i); NEXT();
             OP(POWI_C): RD.z = ipow_c(RA.z, c->imm.i); NEXT();
-            OP(POW_R): RD.r = mth_pow_machine(RA.r, RB.r); NEXT();
-            OP(POW_C): RD.z = vm_cpow(RA.z, RB.z); NEXT();
+            /* 0.^0. is Indeterminate (with Power::indet), not libm's 1.0:
+             * the call goes to the interpreter, which says so. */
+            OP(POW_R): if (RA.r == 0.0 && RB.r == 0.0) goto vm_fail;
+                       RD.r = mth_pow_machine(RA.r, RB.r); NEXT();
+            OP(POW_C): if (RA.z == 0.0 && RB.z == 0.0) goto vm_fail;
+                       RD.z = vm_cpow(RA.z, RB.z); NEXT();
             OP(SQRT_R): RD.r = sqrt(RA.r); NEXT();
             OP(SQRT_C): RD.z = csqrt(RA.z); NEXT();
             OP(EXP_R): RD.r = exp(RA.r); NEXT();

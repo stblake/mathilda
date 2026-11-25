@@ -385,6 +385,8 @@ In[4]:= Normal[SparseArray[{1 -> a, 3 -> b}, 4]]
 Out[4]= {a, 0, b, 0}
 ```
 
+**Wave 4 G8.** `Normal[ConditionalExpression[v, c]]` is v. Series of a Jacobi quotient function (JacobiNS, JacobiCS, JacobiDS, ...) expands it as the quotient of JacobiSN / JacobiCN / JacobiDN, so a pole gives its Laurent series.
+
 ## SeriesCoefficient
 Gives the coefficient of `(x - x0)^k` in the power-series expansion of `f`.
 - `SeriesCoefficient[f, {x, x0, k}]`

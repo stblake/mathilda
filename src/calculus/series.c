@@ -4010,6 +4010,32 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
         }
     }
 
+    /* The nine Jacobi quotient functions pq = (p part)/(q part), with s, c, d
+     * the parts JacobiSN, JacobiCN, JacobiDN and n the unit: expanded as that
+     * quotient, so a pole (JacobiNS, JacobiCS, JacobiDS at u = 0) gives its
+     * Laurent series by series division instead of an unevaluated Series --
+     * every derivative is ComplexInfinity there, so Taylor-via-D cannot. */
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.arg_count == 2) {
+        const char* hn = e->data.function.head->data.symbol.name;
+        if (strncmp(hn, "Jacobi", 6) == 0 && strlen(hn) == 8 &&
+            strchr("SCDN", hn[6]) && strchr("SCDN", hn[7]) && hn[6] != hn[7] &&
+            hn[7] != 'N') {
+            static const char* const part[4] = { "JacobiSN", "JacobiCN", "JacobiDN", NULL };
+            const char* letters = "SCDN";
+            int pi = (int)(strchr(letters, hn[6]) - letters);
+            int qi = (int)(strchr(letters, hn[7]) - letters);
+            Expr* u = e->data.function.args[0];
+            Expr* m = e->data.function.args[1];
+            Expr* num = part[pi] ? mk_fn2(part[pi], expr_copy(u), expr_copy(m)) : expr_new_integer(1);
+            Expr* den = mk_fn2(part[qi], expr_copy(u), expr_copy(m));
+            Expr* rewrite = mk_times(num, mk_power(den, expr_new_integer(-1)));
+            SeriesObj* r = series_expand_nested(rewrite, ctx);
+            expr_free(rewrite);
+            if (r) return r;
+        }
+    }
+
     /* Fallback: naive Taylor via D. */
     return series_taylor_via_D(e, ctx);
 }
@@ -4524,6 +4550,10 @@ static Expr* normal_recurse(Expr* e) {
         if (dense) return dense;
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    /* ConditionalExpression[v, cond] is its value v: Normal drops the
+     * condition, as it drops a series' order term. */
+    if (has_symbol_head(e, "ConditionalExpression") && e->data.function.arg_count == 2)
+        return normal_recurse(e->data.function.args[0]);
 
     Expr* head = normal_recurse(e->data.function.head);
     size_t n = e->data.function.arg_count;

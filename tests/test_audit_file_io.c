@@ -79,11 +79,104 @@ static void test_wave3_arity_options(void) {
     audit_chk("ReadList#4", "Quiet[Check[ReadList[StringToStream[\"a b\"], Word, Bar -> 1], fired, ReadList::optx]]", "fired");
 }
 
+/* Wave 4 G8: file names, streams and the file reader.
+ *  - File["name"] is accepted wherever a file name is (AbsoluteFileName, DeleteFile,
+ *    SetDirectory, Get, Put, PutAppend);
+ *  - a stream object resolves only when its id, direction AND name match an open stream,
+ *    and an id beyond the int range names none (it was truncated onto stream 1);
+ *  - Put / PutAppend's noopen goes through the message funnel (Quiet, Check);
+ *  - a file is read with line-ended statements, as the reference does: "5" and "-3" on
+ *    two lines are two expressions, not 5 - 3;
+ *  - a syntax error in Read / ReadList is a Syntax::sntx message and $Failed, not
+ *    EndOfFile (or a silently dropped object);
+ *  - Get and LoadModule refuse a directory; LoadModule's at-most-once memo is keyed by
+ *    the normalised path;
+ *  - Character reads a UTF-8 character, not a byte; export format names are
+ *    case-insensitive and CSV / TSV / .m are written. */
+static void test_wave4_g8_files_streams(void) {
+    audit_run("w4$d = $TemporaryDirectory;"
+              " w4$f[n_] := FileNameJoin[{w4$d, \"mth_audit_w4g8_\" <> n}]");
+    /* File[...] arguments */
+    audit_run("WriteString[w4$f[\"d.txt\"], \"x\"]; Close[w4$f[\"d.txt\"]]");
+    audit_true("AbsoluteFileName#1", "StringQ[Quiet[AbsoluteFileName[File[w4$f[\"d.txt\"]]]]]");
+    audit_true("File#1", "Quiet[Check[AbsoluteFileName[File[w4$f[\"d.txt\"]]], fired]] =!= fired");
+    audit_chk("File#1", "{DeleteFile[File[w4$f[\"d.txt\"]]], FileExistsQ[w4$f[\"d.txt\"]]}", "{Null, False}");
+    audit_run("Put[1, w4$f[\"a2.txt\"]]");
+    audit_chk("DeleteFile#1", "{DeleteFile[File[w4$f[\"a2.txt\"]]], FileExistsQ[w4$f[\"a2.txt\"]]}", "{Null, False}");
+    audit_true("SetDirectory#1", "Module[{r = SetDirectory[File[w4$d]]}, ResetDirectory[];"
+               " StringQ[r] && r === AbsoluteFileName[w4$d]]");
+    audit_run("Put[{1, 2, 3}, w4$f[\"f.m\"]]");
+    audit_chk("File#2", "Get[File[w4$f[\"f.m\"]]]", "{1, 2, 3}");
+    audit_chk("File#2", "{Put[7, File[w4$f[\"p.m\"]]], FileExistsQ[w4$f[\"p.m\"]], Get[w4$f[\"p.m\"]]}", "{Null, True, 7}");
+    audit_chk("File#2", "{PutAppend[9, File[w4$f[\"f.m\"]]], ReadList[w4$f[\"f.m\"]]}", "{Null, {{1, 2, 3}, 9}}");
+    /* Put / PutAppend noopen through the funnel */
+    audit_chk("Put#1", "Quiet[Put[1, \"/nonexistent/dir/x.m\"]]", "$Failed");
+    audit_chk("Put#1", "Quiet[Check[Put[1, \"/nonexistent/dir/x.m\"], failed]]", "failed");
+    audit_chk("PutAppend#1", "Quiet[PutAppend[x, \"/nonexistent/dir/f\"]]", "$Failed");
+    audit_chk("PutAppend#1", "Quiet[Check[PutAppend[x, \"/nonexistent/dir/f\"], caught, PutAppend::noopen]]", "caught");
+    /* line-ended statements */
+    audit_run("PutAppend[5, -3, w4$f[\"pb1\"]]");
+    audit_chk("PutAppend#2", "Get[w4$f[\"pb1\"]]", "-3");
+    audit_chk("PutAppend#2", "ReadList[w4$f[\"pb1\"]]", "{5, -3}");
+    /* syntax errors in Read / ReadList */
+    audit_run("w4$o = OpenWrite[w4$f[\"r2.txt\"]]; WriteString[w4$o, \"a + )\\n5\\n\"]; Close[w4$o];"
+              " w4$s = OpenRead[w4$f[\"r2.txt\"]]");
+    audit_chk("Read#2", "Quiet[Check[Read[w4$s], fired, Syntax::sntx]]", "fired");
+    audit_chk("Read#2", "Read[w4$s, Number]", "5");
+    audit_chk("Read#2", "Read[w4$s]", "EndOfFile");
+    audit_run("Close[w4$s]");
+    audit_chk("ReadList#2", "Quiet[ReadList[StringToStream[\"x+1\\n1+\"]]]", "{1 + x, $Failed}");
+    audit_chk("ReadList#2", "Quiet[Check[ReadList[StringToStream[\"{1,2\"]], fired, Syntax::sntx]]", "fired");
+    /* Get / LoadModule on a directory */
+    audit_chk("Get#1", "Quiet[Get[w4$d]]", "$Failed");
+    audit_chk("Get#1", "Quiet[Check[Get[w4$d], fired, Get::noopen]]", "fired");
+    audit_chk("LoadModule#1", "Quiet[LoadModule[\"simp\"]]", "False");
+    audit_chk("LoadModule#2", "{LoadModule[\"simp/FullSimplify.m\"], Check[LoadModule[\"simp//FullSimplify.m\"], fired]}",
+              "{True, True}");
+    /* stream objects resolve by id, direction and name */
+    audit_run("w4$s4 = OpenWrite[w4$f[\"c4.txt\"]]");
+    audit_chk("Close#1", "Quiet[Close[OutputStream[\"bogus\", w4$s4[[2]]]]]", "$Failed");
+    audit_chk("Close#1", "Length[Streams[w4$f[\"c4.txt\"]]]", "1");
+    audit_chk("OutputStream#1", "Quiet[Close[InputStream[w4$s4[[1]], w4$s4[[2]]]]]", "$Failed");
+    audit_chk("OutputStream#1", "Close[w4$s4] === w4$f[\"c4.txt\"]", "True");
+    audit_run("w4$ss = StringToStream[\"1 2 3\"]");
+    audit_chk("InputStream#1", "Quiet[Close[InputStream[\"String\", 4294967297 + w4$ss[[2]] - 1]]]", "$Failed");
+    audit_chk("InputStream#1", "Read[w4$ss, Number]", "1");
+    audit_run("Close[w4$ss]; w4$ss = StringToStream[\"abcdef\"]; Read[w4$ss, Character]");
+    audit_chk("StreamPosition#1", "Quiet[StreamPosition[OutputStream[\"bogus\", w4$ss[[2]]]]]", "$Failed");
+    audit_chk("StreamPosition#1", "StreamPosition[w4$ss]", "1");
+    audit_run("Close[w4$ss]");
+    /* characters, not bytes */
+    audit_chk("StringToStream#1", "Module[{s = StringToStream[\"\\[Alpha]\\[Beta]\\[Gamma]\"], r},"
+              " r = ReadList[s, Character]; Close[s]; r === {\"\\[Alpha]\", \"\\[Beta]\", \"\\[Gamma]\"}]", "True");
+    /* export formats */
+    audit_chk("Export#2", "Export[w4$f[\"b\"], Image[{{0., 0.5}, {1., 0.25}}], \"png\"] === w4$f[\"b\"]", "True");
+    audit_chk("Export#2", "ImageDimensions[Import[w4$f[\"b\"], \"PNG\"]]", "{2, 2}");
+    audit_chk("Export#3", "Export[w4$f[\"t.csv\"], {{1, 2}, {3, \"a,b\"}}] === w4$f[\"t.csv\"]", "True");
+    audit_chk("Export#3", "ReadList[w4$f[\"t.csv\"], String]", "{\"1,2\", \"3,\\\"a,b\\\"\"}");
+    audit_chk("Export#3", "Export[w4$f[\"t.m\"], x^2 + 1] === w4$f[\"t.m\"]", "True");
+    audit_chk("Export#3", "Get[w4$f[\"t.m\"]]", "1 + x^2");
+    audit_chk("Export#3", "Export[w4$f[\"t.txt\"], \"hello\"] === w4$f[\"t.txt\"]", "True");
+    audit_run("Quiet[DeleteFile[Map[w4$f, {\"f.m\", \"p.m\", \"pb1\", \"r2.txt\", \"c4.txt\", \"b\","
+              " \"t.csv\", \"t.m\", \"t.txt\"}]]]");
+}
+
+/* FileNameSplit#1: the OperatingSystem default set by SetOptions is honoured. */
+static void test_wave4_g8_filenamesplit_options(void) {
+    audit_run("SetOptions[FileNameSplit, OperatingSystem -> \"Windows\"]");
+    audit_chk("FileNameSplit#1", "FileNameSplit[\"a\\\\b\"]", "{\"a\", \"b\"}");
+    audit_chk("FileNameSplit#1", "FileNameSplit[\"a\\\\b\", OperatingSystem -> \"Unix\"]", "{\"a\\\\b\"}");
+    audit_run("SetOptions[FileNameSplit, OperatingSystem -> $OperatingSystem]");
+    audit_chk("FileNameSplit#1", "FileNameSplit[\"a/b\"]", "{\"a\", \"b\"}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_export_graphics_raster_no_crash);
     TEST(test_read_number_literal_only);
     TEST(test_s14_directoryname_os);
     TEST(test_wave3_arity_options);
+    TEST(test_wave4_g8_files_streams);
+    TEST(test_wave4_g8_filenamesplit_options);
     return audit_finish("audit_file_io");
 }

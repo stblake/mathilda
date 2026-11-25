@@ -471,14 +471,12 @@ void repl_cmds_init(TermReader* rd, TermHistory* hist, const char* config_dir) {
         if (g_dir) memcpy(g_dir, config_dir, n + 1);
     }
     term_slash_clear();
-    term_slash_add_builtin("help",       "list the commands and keys", CMD_HELP);
-    term_slash_add_builtin("theme",      "choose a colour theme, with a live preview", CMD_THEME);
-    term_slash_add_builtin("history",    "show recent inputs: /history [n]", CMD_HISTORY);
-    term_slash_add_builtin("timing",     "the time-taken note: /timing [on|off|always]", CMD_TIMING);
-    term_slash_add_builtin("statusline", "a status line after each result: /statusline [on|off]", CMD_STATUSLINE);
-    term_slash_add_builtin("clear",      "clear the screen", CMD_CLEAR);
-    term_slash_add_builtin("mods",       "the loaded mods, their commands and hooks", CMD_MODS);
-    term_slash_add_builtin("quit",       "end the session (as Quit[])", CMD_QUIT);
+    {
+        static const int ids[FRONTEND_N_BUILTIN_CMDS] = {
+            CMD_HELP, CMD_THEME, CMD_HISTORY, CMD_TIMING, CMD_STATUSLINE, CMD_CLEAR,
+            CMD_MODS, CMD_QUIT };
+        frontend_add_builtin_commands(ids);
+    }
     g_on = true;
 }
 

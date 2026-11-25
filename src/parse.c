@@ -2071,6 +2071,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     s->chain_head = NULL;
     const char* left_start;
     Expr* left = NULL;
+    Expr* mn_built = NULL;   /* the MessageName the infix loop built last (f::m::lang) */
     bool left_bare_compare = false;
     /* Head of the flat named-character operator chain `left` was built by
      * (a \[CenterDot] b), so a further \[CenterDot] appends to it, while a
@@ -2313,8 +2314,19 @@ infix_loop:
                 tag = expr_new_string(buf);
             }
             if (!tag) { expr_free(left); return NULL; }
+            /* f::m::lang is ONE MessageName[f, "m", "lang"] (the language
+             * form), not a MessageName nested in another. */
+            if (left == mn_built && left->data.function.arg_count == 2) {
+                Expr* args3[3] = { expr_copy(left->data.function.args[0]),
+                                   expr_copy(left->data.function.args[1]), tag };
+                expr_free(left);
+                left = expr_new_function(expr_new_symbol(SYM_MessageName), args3, 3);
+                mn_built = NULL;
+                continue;
+            }
             Expr* args[2] = { left, tag };
             left = expr_new_function(expr_new_symbol(SYM_MessageName), args, 2);
+            mn_built = left;
             continue;
         }
 
@@ -2737,9 +2749,20 @@ void parse_materialize_user_symbols(const Expr* e) {
     if (intern_system_scope_depth() == 0) materialize_symbols(e);
 }
 
+static Expr* parse_next_impl(const char** input_ptr, int line_statements);
+
 Expr* parse_next_expression(const char** input_ptr) {
+    return parse_next_impl(input_ptr, 0);
+}
+
+Expr* parse_next_line_statement(const char** input_ptr) {
+    return parse_next_impl(input_ptr, 1);
+}
+
+static Expr* parse_next_impl(const char** input_ptr, int line_statements) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, 0, NULL, NULL, NULL, NULL};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, line_statements,
+                         NULL, NULL, NULL, NULL};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */

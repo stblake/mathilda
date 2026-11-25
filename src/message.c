@@ -506,10 +506,12 @@ static const char* general_text(const char* tag) {
     return NULL;
 }
 
-/* The text of head::tag, or NULL when none is defined (caller frees). */
-static char* message_text(const char* head, const char* tag) {
-    Expr* a[2] = { expr_new_symbol(head), expr_new_string(tag) };
-    Expr* mn = expr_new_function(expr_new_symbol(SYM_MessageName), a, 2);
+/* The text of head::tag (head::tag::lang when lang is given), or NULL when
+ * none is defined (caller frees). */
+static char* message_text_lang(const char* head, const char* tag, const char* lang) {
+    Expr* a[3] = { expr_new_symbol(head), expr_new_string(tag),
+                   lang ? expr_new_string(lang) : NULL };
+    Expr* mn = expr_new_function(expr_new_symbol(SYM_MessageName), a, lang ? 3 : 2);
     Expr* v = evaluate(mn);
     expr_free(mn);
     char* out = NULL;
@@ -520,6 +522,10 @@ static char* message_text(const char* head, const char* tag) {
     }
     if (v) expr_free(v);
     return out;
+}
+
+static char* message_text(const char* head, const char* tag) {
+    return message_text_lang(head, tag, NULL);
 }
 
 /* Growable output buffer for the formatted message. */
@@ -592,7 +598,14 @@ Expr* builtin_message(Expr* res) {
     if (mth_msg_is_off(head, tag)) return expr_new_symbol(SYM_Null);
     Expr** args = res->data.function.args + 1;
     size_t nargs = res->data.function.arg_count - 1;
-    char* tmpl = message_text(head, tag);
+    /* Message[f::m::lang, ...]: the text of f::m::lang, falling back to the
+     * plain f::m (and then General::m) when that language has none. */
+    const Expr* mname = res->data.function.args[0];
+    const char* lang = (mname->data.function.arg_count == 3 &&
+                        mname->data.function.args[2]->type == EXPR_STRING)
+                       ? mname->data.function.args[2]->data.string : NULL;
+    char* tmpl = lang ? message_text_lang(head, tag, lang) : NULL;
+    if (!tmpl) tmpl = message_text(head, tag);
     if (!tmpl) tmpl = message_text("General", tag);
     if (!tmpl) {
         const char* g = general_text(tag);

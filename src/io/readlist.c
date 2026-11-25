@@ -48,7 +48,7 @@ static Stream* resolve_input(const Expr* a, int* opened_here, int* fail) {
             *fail = 1;
             return NULL;
         }
-        Stream* s = stream_by_id(id);
+        Stream* s = stream_by_handle(a);
         if (!s) {
             mth_message("ReadList", "openx", "the stream is not open.");
             *fail = 1;

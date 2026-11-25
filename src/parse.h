@@ -46,6 +46,15 @@ void mth_span_sink_free(MthSpanSink* sink);
 Expr* parse_next_expression(const char** input_ptr);
 
 /*
+ * The same, as a FILE is read (Get, Read, ReadList): a top-level line break
+ * after a complete expression ends the statement whatever the next line
+ * starts with, so the two lines "5" and "-3" are two statements, not 5 - 3.
+ * An incomplete expression (an open bracket, a trailing operator) still
+ * continues onto the next line.
+ */
+Expr* parse_next_line_statement(const char** input_ptr);
+
+/*
  * Parses `input` as ToExpression reads a string: a sequence of statements,
  * returned as List[s1, s2, ...] (NULL on a syntax error, with *err_pos -- if
  * err_pos is non-NULL -- set near the offending text).

@@ -170,6 +170,37 @@ static bool hs_spherical(int code, double n, double zr, double zi, double* rr, d
             return hs_ok(v, code == 4 ? w : -w, rr, ri);
         }
     }
+    /* h1 / h2 at a small integer order, complex z: the closed form
+     *   h1_n(z) = (-i)^(n+1) e^(i z)/z  Sum_k (i/(2z))^k (n+k)!/(k! (n-k)!)
+     *   h2_n(z) = ( i)^(n+1) e^(-i z)/z Sum_k (-i/(2z))^k (n+k)!/(k! (n-k)!)
+     * a polynomial in 1/z times one exponential -- no J + i Y cancellation,
+     * which cost ~8 digits just off the real axis (SphericalHankelH1[0,
+     * 1. + 1.*^-8 I]). */
+    if (zi != 0.0 && (code == 4 || code == 5) && n == floor(n) && n >= 0.0 && n <= 20.0) {
+        int nn = (int)n;
+        double sg = code == 4 ? 1.0 : -1.0;          /* i -> sg i */
+        double d = zr * zr + zi * zi;
+        double wr = zr / d, wi = -zi / d;            /* 1/z */
+        /* t = sg i/(2z) */
+        double tr = -sg * 0.5 * wi, ti = sg * 0.5 * wr;
+        double sr = 1.0, si = 0.0;                   /* the sum */
+        double pr = 1.0, pi = 0.0;                   /* t^k */
+        double coef = 1.0;                           /* (n+k)!/(k!(n-k)!) */
+        for (int k = 1; k <= nn; k++) {
+            double qr = pr * tr - pi * ti, qi = pr * ti + pi * tr;
+            pr = qr; pi = qi;
+            coef *= (double)(nn + k) * (double)(nn - k + 1) / (double)k;
+            sr += coef * pr; si += coef * pi;
+        }
+        /* e^(sg i z) / z */
+        double ex = exp(-sg * zi), er = ex * cos(zr), ei = ex * sg * sin(zr);
+        double fr = er * wr - ei * wi, fi = er * wi + ei * wr;
+        /* (-sg i)^(n+1) */
+        double ur = 1.0, ui = 0.0;
+        for (int k = 0; k <= nn; k++) { double vr = ui * sg, vi = -sg * ur; ur = vr; ui = vi; }
+        double gr = ur * fr - ui * fi, gi = ur * fi + ui * fr;
+        return hs_ok(gr * sr - gi * si, gr * si + gi * sr, rr, ri);
+    }
     double cr, ci;
     if (code == 2 || code == 3) {
         if (!sf_bessel_nd(code == 2 ? SF_BESSEL_J : SF_BESSEL_Y, nu, 0.0, zr, zi, &cr, &ci))

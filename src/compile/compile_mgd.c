@@ -599,6 +599,7 @@ static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
         if (reg >= 0) {
             CompileType t = c->arg_types[reg];
             if (t == CT_BIGREAL || t == CT_BIGCOMPLEX) {
+                if (c->argdep) c->argdep[reg] = 1;   /* read: not "(unused)" */
                 Val v = { reg, false, t, false }; *out = v; return true;
             }
             return false;
@@ -782,6 +783,7 @@ static bool emit_mgd_int(Ctx* c, const Expr* e, Val* out) {
     if (e->type == EXPR_SYMBOL) {
         int reg = arg_find(c, e->data.symbol.name);
         if (reg >= 0 && c->arg_types[reg] == CT_BIGINT) {
+            if (c->argdep) c->argdep[reg] = 1;   /* read: not "(unused)" */
             Val v = { reg, false, CT_BIGINT, false }; *out = v; return true;
         }
         return false;

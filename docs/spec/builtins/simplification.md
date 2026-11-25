@@ -916,6 +916,8 @@ In[5]:= Assuming[x > 0, Refine[Sqrt[x^2 y^2], y < 0]]
 Out[5]= -x y
 ```
 
+**Wave 4 G8.** Boole[c] and ConditionalExpression[v, c] whose condition the assumptions decide are settled: Boole to 1 / 0, the conditional to v / Undefined (`Refine[Boole[x > 0], x > 0]` is 1). Simplify with assumptions does the same first.
+
 ## Assuming
 Evaluates an expression with extra assumptions in effect.
 

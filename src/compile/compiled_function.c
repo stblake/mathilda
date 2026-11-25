@@ -353,6 +353,18 @@ static bool parse_typespec(const Expr* ts, CompileType* out) {
         && ts->data.function.arg_count == 1
         && ts->data.function.args[0]->type == EXPR_SYMBOL)
         return typesym_to_ct(ts->data.function.args[0]->data.symbol.name, out);
+    /* True | False (either order) is the reference spelling of the Boolean
+     * type, the same as _Boolean. */
+    if (ts->type == EXPR_FUNCTION && ts->data.function.head->type == EXPR_SYMBOL
+        && ts->data.function.head->data.symbol.name == SYM_Alternatives
+        && ts->data.function.arg_count == 2
+        && ts->data.function.args[0]->type == EXPR_SYMBOL
+        && ts->data.function.args[1]->type == EXPR_SYMBOL) {
+        const char* a = ts->data.function.args[0]->data.symbol.name;
+        const char* b = ts->data.function.args[1]->data.symbol.name;
+        if ((a == SYM_True && b == SYM_False) || (a == SYM_False && b == SYM_True))
+            { *out = CT_BOOL; return true; }
+    }
     return false;
 }
 

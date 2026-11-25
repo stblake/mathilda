@@ -7,6 +7,7 @@
 #include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
+#include "quit.h"   /* mth_quit_requested */
 #include "term/term_interrupt.h" /* the interactive interrupt flag */
 #include "permutations.h" /* perm_group_elements: Permute[expr, group] */
 #include "eval.h"
@@ -1565,6 +1566,17 @@ Expr* builtin_abort(Expr* res) {
         g_abort_pending = true;
         return expr_new_symbol(SYM_Null);
     }
+    /* The abort is also made STICKY, exactly as an interactive interrupt is
+     * (term_interrupt.h): the flag stays raised until the abort is consumed by
+     * a CheckAbort or the top level.  The sentinel alone rides only the
+     * ordinary return path, so a callee that evaluates user code and merely
+     * inspects the value -- FindMinimum / FindRoot / NSum / NIntegrate /
+     * NDSolve / Plot seeing a non-numeric sample -- dropped it and carried on
+     * (CheckAbort[FindRoot[Abort[], {x, 1}], c] gave FindRoot[...] with a
+     * solver message).  With the flag up, the evaluator's next poll re-raises
+     * the abort, worker threads stop (tc_deadline_passed), and the consumer
+     * sees it even when the callee returned unevaluated. */
+    mth_interrupt_request();
     return NULL;   /* stays Abort[]: the sentinel */
 }
 
@@ -1614,8 +1626,24 @@ Expr* builtin_checkabort(Expr* res) {
         else if (nm == SYM_Automatic) propagate_opt = -1;
         else return NULL;
     }
+    /* The body runs UNprotected even inside an enclosing AbortProtect: a
+     * CheckAbort is precisely the construct that absorbs an abort there
+     * (AbortProtect[CheckAbort[Abort[], h]; rest] runs h and then rest, and
+     * nothing is left pending for an outer CheckAbort).  An abort recorded
+     * by the enclosing protection before this CheckAbort began is not ours:
+     * it is set aside and put back afterwards. */
+    int saved_depth = g_abort_protect_depth;
+    bool saved_pending = g_abort_pending;
+    g_abort_protect_depth = 0;
+    g_abort_pending = false;
     Expr* r = evaluate(res->data.function.args[0]);
-    bool sentinel = eval_is_inflight_abort(r);
+    /* An Abort[] raised in the body whose sentinel some callee swallowed (a
+     * numeric solver that saw a non-numeric objective and gave up) still
+     * left the sticky abort flag set (builtin_abort): it counts as caught. */
+    bool flagged = MTH_INTERRUPT_PENDING();
+    g_abort_protect_depth = saved_depth;
+    g_abort_pending = saved_pending;
+    bool sentinel = eval_is_inflight_abort(r) || flagged;
     if (!sentinel && !(MTH_CF_POLL_DUE() && cf_poll())) return r;
     if (sentinel) eval_unwind_consumed();
     mth_interrupt_clear();   /* an interactive interrupt is consumed here too */
@@ -1746,6 +1774,7 @@ static Expr* scan_apply(Expr* f, Expr* part) {
     if (ra == EVAL_RETURN_CONSUME)   { expr_free(r); return rv; }  /* Return[ret] */
     if (ra == EVAL_RETURN_PROPAGATE) return r;                     /* Return[v, h] */
     if (eval_is_inflight_unwind(r)) return r;                 /* propagate Throw */
+    if (eval_is_inflight_goto(r)) return r;   /* to the Label around the Scan */
     if (r) expr_free(r);                                    /* result discarded */
     return NULL;
 }
@@ -4585,7 +4614,7 @@ static IterStep fixedpoint_step(ExprBuf* hist, void* vctx, Expr** out) {
         next->data.function.head->type == EXPR_SYMBOL) {
         const char* h = next->data.function.head->data.symbol.name;
         if (h == SYM_Throw || h == SYM_Abort ||
-            h == SYM_Quit || h == SYM_Return) {
+            (h == SYM_Quit && mth_quit_requested()) || h == SYM_Return) {
             *out = next;
             return ITER_STEP_RETURN;
         }

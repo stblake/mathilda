@@ -143,6 +143,63 @@ static bool ps_is_numeric(const Expr* e) {
     }
 }
 
+static Expr* ps_call1(const char* h, Expr* a) {
+    return eval_and_free(expr_new_function(expr_new_symbol(h), &a, 1));
+}
+static Expr* ps_call2(const char* h, Expr* a, Expr* b) {
+    return eval_and_free(expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2));
+}
+
+/* The square root of a univariate p in x by undetermined coefficients, from
+ * the top: s_d = Sqrt[a_2d], then
+ *     s_k = (a_(d+k) - Sum_{i+j = d+k, k < i,j < d} s_i s_j) / (2 s_d),
+ * each simplified (Together), and the candidate accepted only after the exact
+ * Expand[s^2 - p] == 0 certificate.  This is the route for coefficients the
+ * factoriser over Q cannot split -- algebraic numbers (x^4 + 2 Sqrt[2] x^2 + 2
+ * is (x^2 + Sqrt[2])^2, irreducible over Q as written).  NULL when it fails. */
+static Expr* ps_by_coefficients(Expr* p, Expr* x) {
+    Expr* cl = ps_call2("CoefficientList", expr_copy(p), expr_copy(x));
+    if (!cl || cl->type != EXPR_FUNCTION || cl->data.function.head->type != EXPR_SYMBOL ||
+        cl->data.function.head->data.symbol.name != SYM_List) { if (cl) expr_free(cl); return NULL; }
+    size_t len = cl->data.function.arg_count;
+    if (len < 3 || len % 2 == 0 || len > 2001) { expr_free(cl); return NULL; }
+    for (size_t i = 0; i < len; i++)
+        if (contains_any_symbol_from(cl->data.function.args[i], x)) { expr_free(cl); return NULL; }
+    size_t d = (len - 1) / 2;
+    Expr** a = cl->data.function.args;
+    Expr** sk = calloc(d + 1, sizeof(Expr*));
+    sk[d] = ps_call2("Power", expr_copy(a[2 * d]),
+                     ps_call2("Rational", expr_new_integer(1), expr_new_integer(2)));
+    Expr* two_sd = ps_call2("Times", expr_new_integer(2), expr_copy(sk[d]));
+    for (size_t k = d; k-- > 0; ) {
+        Expr* acc = expr_copy(a[d + k]);
+        for (size_t i = k + 1; i < d; i++) {
+            size_t j = d + k - i;
+            if (j <= k || j >= d) continue;
+            acc = ps_call2("Plus", acc, ps_call2("Times", expr_new_integer(-1),
+                           ps_call2("Times", expr_copy(sk[i]), expr_copy(sk[j]))));
+        }
+        sk[k] = ps_call1("Together", ps_call2("Times", acc,
+                         ps_call2("Power", expr_copy(two_sd), expr_new_integer(-1))));
+    }
+    expr_free(two_sd);
+    expr_free(cl);
+    Expr** terms = malloc((d + 1) * sizeof(Expr*));
+    for (size_t k = 0; k <= d; k++)
+        terms[k] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ sk[k], expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(x), expr_new_integer((int64_t)k) }, 2) }, 2);
+    free(sk);
+    Expr* s = eval_and_free(expr_new_function(expr_new_symbol("Plus"), terms, d + 1));
+    free(terms);
+    Expr* chk = ps_call1("Expand", ps_call2("Plus", ps_call2("Power", expr_copy(s), expr_new_integer(2)),
+                         ps_call2("Times", expr_new_integer(-1), expr_copy(p))));
+    bool good = chk && is_zero_poly(chk);
+    if (chk) expr_free(chk);
+    if (!good) { expr_free(s); return NULL; }
+    return s;
+}
+
 Expr* builtin_polynomialsqrt(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1
         || res->data.function.arg_count > 2)
@@ -232,6 +289,22 @@ Expr* builtin_polynomialsqrt(Expr* res) {
         for (size_t i = 0; i < nh; i++) expr_free(halves[i]);
     }
     free(halves);
+    if (!result) {
+        /* The factoriser could not show it (algebraic-number coefficients):
+         * the univariate coefficient method, in the named variable or the
+         * only one p has. */
+        Expr* var = psx ? expr_copy(psx) : NULL;
+        if (!var) {
+            Expr* vs = ps_call1("Variables", expr_copy(p));
+            if (vs && vs->type == EXPR_FUNCTION && vs->data.function.arg_count == 1)
+                var = expr_copy(vs->data.function.args[0]);
+            if (vs) expr_free(vs);
+        }
+        if (var) {
+            result = ps_by_coefficients(p, var);
+            expr_free(var);
+        }
+    }
     return result ? result : expr_new_symbol("$Failed");
 }
 

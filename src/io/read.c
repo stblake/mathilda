@@ -310,11 +310,49 @@ static Expr* read_number(ReadCursor* c, const ReadCfg* cfg, int as_real) {
 /* Read one complete top-level expression, UNEVALUATED. The caller / evaluator
  * evaluates the constructed result (so Hold[Expression] stays held). NULL at
  * EOF or when no further complete expression can be parsed. */
+/* Past whitespace and (* comments *): where the next object would start. */
+static size_t read_skip_blanks(const ReadCursor* c, size_t i) {
+    for (;;) {
+        while (i < c->len && (c->buf[i] == ' ' || c->buf[i] == '\t' || c->buf[i] == '\n' ||
+                              c->buf[i] == '\r' || c->buf[i] == '\f' || c->buf[i] == '\v'))
+            i++;
+        if (i + 1 < c->len && c->buf[i] == '(' && c->buf[i + 1] == '*') {
+            int depth = 1;
+            i += 2;
+            while (i < c->len && depth > 0) {
+                if (i + 1 < c->len && c->buf[i] == '(' && c->buf[i + 1] == '*') { depth++; i += 2; }
+                else if (i + 1 < c->len && c->buf[i] == '*' && c->buf[i + 1] == ')') { depth--; i += 2; }
+                else i++;
+            }
+            continue;
+        }
+        return i;
+    }
+}
+
 static Expr* read_expression(ReadCursor* c) {
     const char* p = c->buf + c->pos;
-    Expr* parsed = parse_next_expression(&p);
-    c->pos = (size_t)(p - c->buf);
-    return parsed;                          /* NULL == EOF; unevaluated otherwise */
+    int prev_quiet = parse_set_quiet(1);    /* errors go through the funnel below */
+    Expr* parsed = parse_next_line_statement(&p);
+    parse_set_quiet(prev_quiet);
+    if (parsed) {
+        c->pos = (size_t)(p - c->buf);
+        return parsed;                      /* unevaluated */
+    }
+    /* No expression: true end of input only when nothing but blanks and
+     * comments is left.  Otherwise the text there is malformed or incomplete
+     * -- a syntax error, reported, and the object read is $Failed; the read
+     * point moves past the offending line so the next read sees fresh data
+     * (EndOfFile here would claim the data that is still unread is gone). */
+    size_t at = read_skip_blanks(c, c->pos);
+    if (at >= c->len) { c->pos = c->len; return NULL; }
+    size_t eol = at;
+    while (eol < c->len && c->buf[eol] != '\n' && c->buf[eol] != '\r') eol++;
+    int len = (int)(eol - at);
+    if (len > 200) len = 200;
+    mth_message("Syntax", "sntx", "Invalid syntax in or before \"%.*s\".", len, c->buf + at);
+    c->pos = eol < c->len ? eol + 1 : eol;
+    return expr_new_symbol(SYM_DollarFailed);
 }
 
 /* Dispatch one read of the given type. NULL means EOF (stop). */
@@ -325,8 +363,19 @@ static Expr* read_one(ReadType t, ReadCursor* c, const ReadCfg* cfg) {
             return expr_new_integer((unsigned char)c->buf[c->pos++]);
         case RT_CHARACTER: {
             if (c->pos >= c->len) return NULL;
-            char s[2] = { c->buf[c->pos++], '\0' };
-            return expr_new_string(s);
+            /* One CHARACTER, not one byte: a UTF-8 lead byte takes its
+             * continuation bytes with it ("αβγ" reads as three characters).
+             * A malformed or truncated sequence falls back to one byte. */
+            unsigned char b0 = (unsigned char)c->buf[c->pos];
+            size_t n = b0 < 0xC2 ? 1 : b0 < 0xE0 ? 2 : b0 < 0xF0 ? 3 : b0 < 0xF5 ? 4 : 1;
+            if (n > 1) {
+                if (c->pos + n > c->len) n = 1;
+                for (size_t k = 1; k < n; k++)
+                    if (((unsigned char)c->buf[c->pos + k] & 0xC0) != 0x80) { n = 1; break; }
+            }
+            Expr* ch = expr_new_string_n(c->buf + c->pos, n);
+            c->pos += n;
+            return ch;
         }
         case RT_WORD: {
             char* w = next_word(c, cfg);
@@ -429,7 +478,7 @@ static Stream* resolve_input(const Expr* a, int* fail) {
             *fail = 1;
             return NULL;
         }
-        Stream* s = stream_by_id(id);
+        Stream* s = stream_by_handle(a);
         if (!s) {
             mth_message("Read", "openx", "the stream is not open.");
             *fail = 1;
@@ -603,7 +652,7 @@ Expr* builtin_readstring(Expr* res) {
     Expr* src = res->data.function.args[0];
     int id, is_output;
     if (stream_handle(src, &id, &is_output)) {
-        Stream* s = is_output ? NULL : stream_by_id(id);
+        Stream* s = is_output ? NULL : stream_by_handle(src);
         if (!s) return NULL;
         if (s->pos >= s->len) return expr_new_symbol(SYM_EndOfFile);
         size_t end = term ? rs_find(s->buf, s->len, s->pos, term) : s->len;

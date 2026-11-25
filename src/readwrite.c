@@ -25,11 +25,28 @@
 
 /* ---------------------------- Get path search ---------------------------- */
 
+/* Can `path` be read as a file?  fopen alone is not the test: on POSIX it
+ * succeeds on a directory, and the first read then fails (EISDIR).  So one
+ * byte is read; an error means "not a readable file", while an empty file
+ * (EOF with no error) still counts.  Plain C99, no stat(). */
 static int rw_readable(const char* path) {
     FILE* fp = fopen(path, "r");
     if (!fp) return 0;
+    (void)fgetc(fp);
+    int ok = !ferror(fp);
     fclose(fp);
-    return 1;
+    return ok;
+}
+
+/* The file name a Get / Put / PutAppend argument names: a String or
+ * File["name"] (borrowed), else NULL. */
+static const char* rw_file_arg(const Expr* a) {
+    if (a->type == EXPR_STRING) return a->data.string;
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_File &&
+        a->data.function.arg_count == 1 && a->data.function.args[0]->type == EXPR_STRING)
+        return a->data.function.args[0]->data.string;
+    return NULL;
 }
 
 /* "<dir>/<rel>" in a fresh malloc'd string. */
@@ -131,9 +148,9 @@ Expr* readwrite_get(const char* spec) {
 Expr* builtin_get(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
 
-    Expr* file_arg = res->data.function.args[0];
-    if (file_arg->type != EXPR_STRING) return NULL;
-    return readwrite_get(file_arg->data.string);
+    const char* name = rw_file_arg(res->data.function.args[0]);
+    if (!name) return NULL;
+    return readwrite_get(name);
 }
 
 /* Shared implementation for Put / PutAppend.  `mode` selects fopen
@@ -144,13 +161,13 @@ static Expr* put_common(Expr* res, const char* mode, const char* who) {
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return NULL;
 
-    Expr* last = res->data.function.args[argc - 1];
-    if (last->type != EXPR_STRING) return NULL;
+    const char* filename = rw_file_arg(res->data.function.args[argc - 1]);
+    if (!filename) return NULL;
 
-    const char* filename = last->data.string;
     FILE* fp = fopen(filename, mode);
     if (!fp) {
-        printf("%s::noopen: Cannot open %s.\n", who, filename);
+        /* Through the funnel, so Quiet silences it and Check sees it. */
+        mth_message(who, "noopen", "Cannot open %s.", filename);
         return expr_new_symbol(SYM_DollarFailed);
     }
 
