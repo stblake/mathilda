@@ -102,7 +102,7 @@ PLANS = {
             "quotas": {"R": 0, "T": 500, "A": 550, "M": 400, "B": 400},
             "seeds": {"R": [],
                       "T": [(s, "T3", 30) for s in range(301, 331)],
-                      "A": [(s, "A3", 30) for s in range(301, 336)],
+                      "A": [(s, "A3", 30) for s in range(301, 356)],  # 336-355 by --extend: A3 repeats (467 distinct of 1050)
                       "M": [(s, "M4", 15) for s in range(301, 341)],
                       "B": [(s, "B4", 15) for s in range(301, 336)] + [(s, "B3", 30) for s in range(336, 341)]},
             "cand_systems": ["fricas", "axiom", "maxima"],
