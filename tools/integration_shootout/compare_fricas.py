@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """compare_fricas.py -- Mathilda's decision procedures against FriCAS's integrate,
-read off the shootout's saved runs (results/<date>.json of benchmarks 256, 257, 259).
+read off the shootout's saved runs (results/<date>.json of benchmarks 256-263).
 
     python3 tools/integration_shootout/compare_fricas.py [--date 2026-11-20] [--no-progress] \
         [--out benchmarks/BRONSTEIN_VS_FRICAS.md]
@@ -49,7 +49,9 @@ BENCHES = [("256-integration-shootout", "256: the shootout corpus"),
            ("257-compact-integrals", "257: compact integrands, large integrals"),
            ("259-transcendental-decision", "259: the transcendental decision corpus"),
            ("260-radical-bottom", "260: a radical at the bottom"),
-           ("261-compact-integrals-x4", "261: compact integrands, integrals four times larger")]
+           ("261-compact-integrals-x4", "261: compact integrands, integrals four times larger"),
+           ("262-hard-integrals", "262: integrals outside the easy classes"),
+           ("263-hard-integrals-ii", "263: more integrals outside the easy classes")]
 DEDICATED = {"R": "RischTranscendental", "T": "RischTranscendental", "A": "Trager", "M": "Bronstein", "B": "Bronstein"}
 CLASSNAME = {"R": "rational", "T": "transcendental", "A": "algebraic", "M": "mixed, radical on top",
              "B": "radical at the bottom"}
@@ -328,7 +330,9 @@ def main():
                 L.append("")
         prev = [d for d in dates if d < date]
         if not a.no_progress and prev:
-            old = load(bench, prev[-1])
+            # the same cases on both sides: an old run predates easy.tsv and still holds the easy ones
+            ids = {r["id"] for r in rows}
+            old = [r for r in (load(bench, prev[-1]) or []) if r["id"] in ids]
             if old:
                 def cnt(rs, meth):
                     cl = de = 0
@@ -347,6 +351,10 @@ def main():
             "or that its own check cannot evaluate, is translated into Mathilda and judged by `PossibleZeroQ[D[F, x] "
             "- f]`, the test Mathilda's answers get (`crosscheck.py`): zero verifies it, nonzero makes it wrong, and "
             "anything else leaves it unverified. Timeout 30 s per run.", "",
+            ("The **easy** integrals of every corpus are left out: those `easy_classify.py` (easy.m) classes as a "
+             "rational function, as made rational by a linear-fractional, Euler or chained substitution, or as "
+             "closed by `Method -> \"DerivativeDivides\"` (each corpus's `easy.tsv`). The case counts below are "
+             "what is left." if not a.include_easy else "Easy integrals included (--include-easy)."), "",
             "- **elementary** / **special**: a verified closed form, elementary or with special functions (Ei, li, "
             "erf, PolyLog, elliptic, hypergeometric, ...), classified by the same rule for every system. A special-function "
             "answer is counted, separately: on an integrand that is elementary it is correct but does not show the "

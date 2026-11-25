@@ -130,6 +130,43 @@ def verification_text(lab, raw):
     return f"{how}: [{pts}]" + (f"; {det}" if det else "")
 
 
+# The title and the opening paragraph of each benchmark's report.
+_SEARCH = (r"They were found by a randomised search over class grammars (tools/integration\_shootout/gen\_compact.m, "
+           r"plan {plan}): an integrand qualifies with Mathilda's verified answer as reference, or, when Mathilda neither "
+           r"answers, answers wrongly, nor answers elementarily, with a verified answer of FriCAS, Axiom or Maxima "
+           r"(families \texttt{{-fricas}}, \texttt{{-axiom}}, \texttt{{-maxima}}); Wolfram is never consulted. ")
+_HARD = (r"Every integrand is outside the \emph{{easy}} classes of easy.m: it is not a rational function, no "
+         r"linear-fractional, Euler or chained substitution makes it rational, and Integrate with "
+         r"\texttt{{Method -> \char`\"DerivativeDivides\char`\"}} does not close it. ")
+ABOUT = {
+    "261-compact-integrals-x4": {
+        "title": "compact integrands, integrals at least four times larger",
+        "intro": lambda n: (f"The corpus has {n} indefinite integrals $\\int f\\,dx$. Each integrand $f$ is compact, and has "
+                            r"an elementary antiderivative $F$ whose compact form is more than four times as large: "
+                            r"$4\,\mathrm{LeafCount}(f) < \mathrm{LeafCount}(F)$. " + _SEARCH.format(plan=261) +
+                            r"The integrands of benchmarks 256, 257, 259 and 260 are excluded.")},
+    "262-hard-integrals": {
+        "title": "integrals outside the easy classes",
+        "intro": lambda n: (f"The corpus has {n} indefinite integrals $\\int f\\,dx$, each with an elementary antiderivative. " +
+                            _HARD.format() + r"Classes T, A and B need $\mathrm{LeafCount}(F) \ge 2\,\mathrm{LeafCount}(f)$; "
+                            r"M, whose answers are built on a unit $\log(P + \sqrt{P^2 - c e^h})$, only "
+                            r"$\mathrm{LeafCount}(F) > \mathrm{LeafCount}(f)$. " + _SEARCH.format(plan=262) +
+                            r"The integrands of benchmarks 256, 257 and 259--261 are excluded.")},
+    "263-hard-integrals-ii": {
+        "title": "more integrals outside the easy classes",
+        "intro": lambda n: (f"The corpus has {n} indefinite integrals $\\int f\\,dx$, each with an elementary antiderivative. " +
+                            _HARD.format() + r"Classes T and A need $\mathrm{LeafCount}(F) \ge 2\,\mathrm{LeafCount}(f)$, "
+                            r"M only $\mathrm{LeafCount}(F) > \mathrm{LeafCount}(f)$; B has no size condition (its B4 "
+                            r"integrands are derivatives of products, so $F$ is the smaller). " + _SEARCH.format(plan=263) +
+                            r"The integrands of benchmarks 256, 257 and 259--262 are excluded.")},
+}
+
+
+def about_of(name):
+    return ABOUT.get(name, {"title": "integration shootout",
+                            "intro": lambda n: f"The corpus has {n} indefinite integrals $\\int f\\,dx$."})
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bench", required=True)
@@ -151,6 +188,7 @@ def main():
         rows = [r for r in rows if (per.update([r["class"]]) or per[r["class"]] <= a.limit)]
     labs = labels_present(rows)
     name = os.path.basename(bench)
+    about = about_of(name)
 
     # ---------------- tallies ----------------
     tally = {lab: collections.Counter() for lab in labs}
@@ -226,23 +264,19 @@ def main():
          r"\usepackage{amsmath,amssymb,booktabs,longtable,listings,xcolor,graphicx}",
          r"\usepackage[hidelinks]{hyperref}",
          r"\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,breakatwhitespace=false,columns=fullflexible,"
-         r"keepspaces=true,showstringspaces=false,frame=none,xleftmargin=1em}",
+         r"keepspaces=true,showstringspaces=false,frame=none,xleftmargin=1em,"
+         # a break point after every digit, so a 150-digit integer can wrap
+         r"literate=" + " ".join("{%d}{{%d}\\allowbreak}1" % (d, d) for d in range(10)) + "}",
          r"\setlength{\parindent}{0pt}\setlength{\parskip}{3pt}",
          r"\allowdisplaybreaks",
-         r"\title{Benchmark " + tex_escape(name) + r": compact integrands, integrals at least four times larger}",
+         r"\title{Benchmark " + tex_escape(name) + ": " + about["title"] + "}",
          r"\author{Mathilda integration shootout}",
          r"\date{Run " + date + "}",
          r"\begin{document}", r"\maketitle", r"\tableofcontents", r"\clearpage"]
 
     n = len(rows)
     L += [r"\section{The benchmark}",
-          f"The corpus has {n} indefinite integrals $\\int f\\,dx$. Each integrand $f$ is compact, and has an elementary "
-          r"antiderivative $F$ whose compact form is more than four times as large: "
-          r"$4\,\mathrm{LeafCount}(f) < \mathrm{LeafCount}(F)$. They were found by a randomised search over class "
-          r"grammars (tools/integration\_shootout/gen\_compact.m, plan 261): an integrand qualifies with Mathilda's "
-          r"verified answer as reference, or, when Mathilda neither answers, answers wrongly, nor answers elementarily, "
-          r"with FriCAS's verified answer (families \texttt{-fricas}); Wolfram is never consulted. "
-          r"The integrands of benchmarks 256, 257, 259 and 260 are excluded.",
+          about["intro"](n),
           (f"{n_easy} further cases of the corpus are \\emph{{easy}} and are left out of this report: "
            r"easy.m (tools/integration\_shootout) classes each of them as a rational function, an integrand "
            r"that a linear-fractional, Euler or chained substitution makes rational, or one the "

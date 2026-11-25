@@ -1,4 +1,43 @@
-## Benchmark 261 (2026-11-24, Mathilda v0.6714, FriCAS 1.3.6)
+## Summary without the easy integrals (2026-11-25, FriCAS 1.3.6)
+
+From 2026-11-25 every corpus leaves out its **easy** integrals (`easy.tsv`; see the
+note above). 3191 of the 4876 cases of 256-261 are easy: rational functions, integrands
+a substitution makes rational, and those `DerivativeDivides` closes. 257 keeps 18 of
+1000 cases and 261 keeps 58 of 1550. 262 is 1000 integrals generated outside the easy
+classes. 2685 cases are left; the counts below are of those only. 262 ran at v0.6732,
+261 at v0.6714, the others at v0.6691.
+
+**Decided** (a verified closed form, or a proof that none is elementary):
+
+| corpus | n | Mathilda | PMT | Automatic | FriCAS |
+|---|---|---|---|---|---|
+| 256 | 777 | **100%** (775) | 73% (568) | 99% (771) | 62% (481) |
+| 257 | 18 | 94% (17) | 67% (12) | **100%** (18) | 78% (14) |
+| 259 | 561 | 99% (557) | not run | **100%** (560) | 96% (536) |
+| 260 | 271 | **98%** (266) | 35% (96) | 97% (264) | 93% (252) |
+| 261 | 58 | 98% (57) | 55% (32) | **100%** (58) | 24% (14) |
+| 262 | 1000 | **98%** (976) | 66% (660) | 97% (970) | 64% (640) |
+| all | 2685 | **99%** (2648) | 64% (1368 of 2124) | 98% (2641) | 72% (1937) |
+
+- **Leaving out the easy cases widens the gap.** FriCAS decides 72% of what is left,
+  against 95% of 261 and 90% of 257 with the easy cases in. Mathilda's share stays at
+  98-100% on every corpus.
+- **262 by class.** FriCAS closes no M case (0 of 216) and 51 of 118 B cases; Mathilda
+  closes all of both. On A, Trager closes 312 of 336 and FriCAS 266. On T both are near
+  complete (330 and 323).
+- **Soundness on 262.** No Mathilda method gives a wrong answer or a false "no". All 7
+  FriCAS answers that failed their own check are zero by `PossibleZeroQ` in Mathilda.
+- **Automatic below the dedicated method on 262: 14 cases** (11 B, 3 A). The cascade
+  stops at about 20 s, and Bronstein or Trager needs 10-26 s on these sixth-root radicals
+  (`cB-201-559`, `Log[x]/(x^6 (3 + 2 x^6)^(1/6))`). It is a speed gap, not a decline.
+- **Speed on 262** (623 cases both close): median 328 ms against FriCAS's 100 ms, and
+  154 Mathilda cases over 1 s. The hard cases are where the `.m` Bronstein and Trager
+  code is slow. The run shared the machine with other jobs (load average 50-66), which
+  inflates both systems' times.
+
+The sections below are from earlier runs. Their counts **include the easy integrals**.
+
+## Benchmark 261 (2026-11-24, Mathilda v0.6714, FriCAS 1.3.6; easy integrals included)
 
 261 is 1550 new random integrands, each of whose antiderivative is more than four
 times its LeafCount. They are spread over five classes: R 50, T 250, A 250, M 550 and
@@ -17,7 +56,7 @@ B 450. 261 ran at v0.6714; the four corpora below ran at v0.6691.
   - Axiom: 156 answers are wrong by both checks.
 - **Soundness:** no Mathilda method gives a wrong answer or a false "no".
 
-## Summary (2026-11-22, Mathilda v0.6691, FriCAS 1.3.6)
+## Summary (2026-11-22, Mathilda v0.6691, FriCAS 1.3.6; easy integrals included)
 
 The comparison runs on four corpora:
 - 256 and 257, the integration shootout corpora;
