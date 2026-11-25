@@ -67,7 +67,34 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
     - Abort[] swallowed by FindRoot/NSum/Plot (Abort#3); Interval#1 lower endpoint
     - Expand Modulus/Trig options (Expand#2-3); Unset of a list {p,q}=. (Unset#1)
     - non-finite doubles leaking as inf (BarChart#6, ToNDArray#1 float32)
-- [ ] Wave 4: medium by tier; Wave 5: low by tier
+- [x] Wave 4: medium findings, eight subsystem groups (2026-11-25) -- landed as v0.6734 (graphs,
+  linear algebra, ML; 79/83), v0.6735 (special/elementary functions; 76/83), v0.6736 (core eval:
+  assignment, rules, scoping, patterns, printing; NumericQ[Infinity] now False; ~90/106), v0.6737
+  (structural, lists, associations, packed arrays; 81/93), v0.6738 (arithmetic, comparisons,
+  statistics, strings, dates; 54/68), v0.6739 (calculus, solve, series, simplify, numerics; 77/93),
+  v0.6740 (images, geometry, graphics; 96/102), v0.6741 (file I/O, control flow, uncategorised;
+  52/55), v0.6742 (Manipulate/Animate segfault without a GUI session, pre-existing, exposed by
+  v0.6740). Integration fixes: List/LinkedList parity (Reverse atoms, packed Reverse/Partition
+  specs -- Partition[Range[8], packed {2}] had become ::ilsmp --, HornerForm and MonomialList of a
+  list, MonomialList with a repeated variable read wrongly by the FLINT path), Median's two
+  distribution hooks chained. Full audit re-run at v0.6741 + 623 pins + 146 adjudicated (no row
+  previously FIXED regressed). Report: 1564 fixed / 911 open; critical 14/0, high 212/2, medium
+  858/61, low 480/848.
+  - Wave 4 leftovers (medium): Hypergeometric0F1/1F1/2F1 keep their heads (needs the PFQ normal
+    form migrated across Simplify/DSolve/Integrate/N); Unevaluated#1/FullForm#2 (Unevaluated
+    re-wrap), FullForm#1 (parser builds Rational), Trace#1-3 (collector markers); Tally#2 (tolerant
+    hashing), PolynomialMod#4 (Z vs Q division), GroebnerBasis#1 (Gaussian rationals),
+    FindClusters#1; QRDecomposition#1, MatrixFunction#1, FindKClique#2, StarGraph#2 VertexLabels;
+    GegenbauerC#1, MathieuCPrime#1/#2, BesselJZero#1 arb part; NSum#3, MinimalPolynomial#1,
+    FindMinimum#2, NLimit#1, NDSolve#1, WhenEvent#2, SeriesData#3/#5; BigInt calendar years
+    (AbsoluteTime#2, DateList#2, UnixTime#2); Animate#2 step quantisation; Precision#1 (MPFR zero
+    precision), Median#4 (symbolic Quantile). Declined by design: Complex#1, ND#1, WhenEvent#3,
+    SameQ#1, Plus#2, SetAccuracy#1, CharacterRange#2, Import#1, Unprotect#2 (Locked), NDArrayQ#1,
+    DistanceTransform#1, FE solvers (DirichletCondition/NeumannValue/NDEigenvalues).
+  - Gates: check-linkedlist shows 4 differences that predate Wave 4 (GatherBy, Grad, Integrate
+    message, Reverse with a LinkedList level spec) and a stale baseline (195 fixed entries);
+    integrate_roach_tests and bronstein_phase5 line 418 failed on v0.6733 before Wave 4 began.
+- [ ] Wave 5: low by tier (848 open)
 
 # Evaluator: aborts that escape their constraint (2026-11-23)
 
