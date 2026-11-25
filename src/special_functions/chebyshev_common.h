@@ -91,7 +91,26 @@ mpfr_prec_t cheb_out_prec(const Expr* n_e, const Expr* x_e);
  * the stable recurrence rather than the general closed form, which would leave
  * a spurious tiny imaginary part at integer order. */
 bool cheb_inexact_int_order(const Expr* n_e, int64_t* k);
+
+/* T_n(x) (kind 0) or U_n(x) (kind 1) for a non-negative integer degree n of
+ * any size and a REAL inexact x, by the closed forms
+ *   T: cos(n acos x) on [-1, 1], sgn(x)^n cosh(n acosh |x|) off it;
+ *   U: sin((n+1) t)/sin t, (+-1)^n (n+1) at x = +-1, sgn(x)^n sinh/sinh off it,
+ * computed with log2(n) guard bits so the product n t keeps out_prec bits:
+ * O(1) work where the recurrence takes n steps.  The orders past the
+ * recurrence's cap (ChebyshevT[2000001, 0.3], ChebyshevU[10^7, 0.5]) and the
+ * bignum orders (ChebyshevT[10^30, 0.5`50], correct to all 50 places) go
+ * here (ChebyshevT#2, #4, ChebyshevU#4).  NULL for a complex or non-numeric x. */
+Expr* cheb_closed_form_real(int kind, const mpz_t n, const Expr* x_e, mpfr_prec_t out_prec);
 #endif /* USE_MPFR */
+
+/* T_n(x) (kind 0) or U_n(x) (kind 1) at an exact rational x for a degree past
+ * the explicit-polynomial cap: [T_n, T_(n-1)] = M^(n-1) [x, 1] (U: [2x, 1]) for
+ * M = {{2x, -1}, {1, 0}}, by binary powering of the integer matrix
+ * q M = {{2p, -q}, {q, 0}} (x = p/q) -- O(log n) products, the value exact
+ * (ChebyshevT[2001, 1/2] = -1, ChebyshevT#3, ChebyshevU#3).  NULL for any
+ * other x, or when the result would exceed ~2^24 bits. */
+Expr* cheb_exact_rational(int kind, unsigned long n, const Expr* x_e);
 
 /* ------------------------------------------------------------------ */
 /* Shared special value                                                */

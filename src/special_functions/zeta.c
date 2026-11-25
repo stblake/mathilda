@@ -676,6 +676,9 @@ static Expr* zeta_one_arg(Expr* s) {
             if (nv) return nv;
         }
     }
+    /* A negative even bigint is a trivial zero, whatever its size. */
+    if (s->type == EXPR_BIGINT && mpz_sgn(s->data.bigint) < 0 && mpz_even_p(s->data.bigint))
+        return expr_new_integer(0);
 
     /* 2. Symbolic limiting value. */
     if (zeta_is_symbol(s, "Infinity")) return expr_new_integer(1);

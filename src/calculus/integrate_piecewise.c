@@ -16,6 +16,8 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "parse.h"
+#include "arithmetic.h"   /* make_rational */
 
 #include <string.h>
 #include <stdbool.h>
@@ -988,8 +990,159 @@ static Expr* integrate_jump_sum_try(Expr* f, Expr* x, bool is_times) {
     return sum;
 }
 
+/* Does `e` carry a one-argument UnitBox depending on x? */
+static bool has_x_box(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "UnitBox") &&
+        e->data.function.arg_count == 1 && contains_symbol(e, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_x_box(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* UnitBox as a difference of steps, equal to it almost everywhere (which is
+ * all an integral sees): UnitBox[u] = UnitStep[u + 1/2] - UnitStep[u - 1/2],
+ * so the step rules below integrate it (Integrate[UnitBox[x], {x, -1, 1}]
+ * = 1, UnitBox#1). */
+static Expr* integrate_box_try(Expr* f, Expr* x) {
+    if (!has_x_box(f, x)) return NULL;
+    static Expr* rules = NULL;
+    if (!rules) {
+        rules = parse_expression(
+            "{UnitBox[Integrate`Box`u_] :> UnitStep[Integrate`Box`u + 1/2] - UnitStep[Integrate`Box`u - 1/2]}");
+        if (!rules) return NULL;
+    }
+    Expr* g = eval_take(mk_fn2("ReplaceAll", cp(f), cp(rules)));
+    if (!g || has_x_box(g, x)) { if (g) expr_free(g); return NULL; }
+    Expr* r = eval_take(mk_fn2("Integrate", g, cp(x)));
+    if (!r || contains_head(r, "Integrate")) { if (r) expr_free(r); return NULL; }
+    return r;
+}
+
+/* The real root Surd[u, n] (odd n: defined on the whole line, so neither
+ * Power nor the radical stages may take it as u^(1/n)):
+ *   Integrate[Surd[a x + b, n], x] = n/((n + 1) a) (a x + b) Surd[a x + b, n]
+ *   Integrate[x^m Surd[x, n], x]   = n/(n (m + 1) + 1) x^(m + 1) Surd[x, n]
+ * (m free of x, n (m + 1) + 1 != 0), each differentiating back exactly
+ * (Integrate[CubeRoot[x], x] = 3/4 x Surd[x, 3], CubeRoot#3).  NULL for any
+ * other shape. */
+static Expr* integrate_surd_core(const Expr* surd, const Expr* other, Expr* x);
+
+static Expr* integrate_surd_try(Expr* f, Expr* x) {
+    if (!contains_head(f, "Surd")) return NULL;
+    bool is_times = head_name_is(f, "Times");
+    size_t nf = is_times ? f->data.function.arg_count : 1;
+    const Expr* surd = NULL;
+    const Expr* other = NULL;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* fi = is_times ? f->data.function.args[i] : f;
+        if (!contains_symbol(fi, x)) continue;          /* a constant factor */
+        if (head_name_is(fi, "Surd") && fi->data.function.arg_count == 2) {
+            if (surd) return NULL;
+            surd = fi;
+        } else {
+            if (other) return NULL;
+            other = fi;
+        }
+    }
+    if (!surd) return NULL;
+    Expr* cst = is_times ? NULL : expr_new_integer(1);
+    if (is_times) {
+        Expr** cs = malloc(nf * sizeof(Expr*));
+        size_t k = 0;
+        for (size_t i = 0; i < nf; i++)
+            if (!contains_symbol(f->data.function.args[i], x)) cs[k++] = cp(f->data.function.args[i]);
+        cst = eval_take(mk_fn("Times", cs, k));
+        free(cs);
+    }
+    Expr* r = integrate_surd_core(surd, other, x);
+    if (!r) { expr_free(cst); return NULL; }
+    return eval_take(mk_fn2("Times", cst, r));
+}
+
+static Expr* integrate_surd_core(const Expr* surd, const Expr* other, Expr* x) {
+    const Expr* u = surd->data.function.args[0];
+    const Expr* n = surd->data.function.args[1];
+    if (n->type != EXPR_INTEGER || n->data.integer < 2) return NULL;
+    if (!other) {
+        Expr* a = eval_take(mk_fn2("D", cp(u), cp(x)));
+        bool lin = a && !contains_symbol(a, x) && !(a->type == EXPR_INTEGER && a->data.integer == 0);
+        if (!lin) { if (a) expr_free(a); return NULL; }
+        /* n/((n + 1) a) u Surd[u, n] */
+        Expr* coef = eval_take(mk_fn2("Times", make_rational(n->data.integer, n->data.integer + 1),
+                                      mk_fn2("Power", a, expr_new_integer(-1))));
+        return eval_take(mk_fn2("Times", coef, mk_fn2("Times", cp(u), cp(surd))));
+    }
+    /* x^m Surd[x, n] */
+    if (!expr_eq((Expr*)u, x)) return NULL;
+    Expr* m = NULL;
+    if (expr_eq((Expr*)other, x)) m = expr_new_integer(1);
+    else if (head_name_is(other, "Power") && other->data.function.arg_count == 2 &&
+             expr_eq(other->data.function.args[0], x) && !contains_symbol(other->data.function.args[1], x))
+        m = cp(other->data.function.args[1]);
+    if (!m) return NULL;
+    /* d = n (m + 1) + 1 */
+    Expr* d = eval_take(mk_fn2("Plus", mk_fn2("Times", expr_new_integer(n->data.integer),
+                                              mk_fn2("Plus", cp(m), expr_new_integer(1))),
+                               expr_new_integer(1)));
+    if (!d || (d->type == EXPR_INTEGER && d->data.integer == 0)) { if (d) expr_free(d); expr_free(m); return NULL; }
+    Expr* r = eval_take(mk_fn2("Times",
+        mk_fn2("Times", expr_new_integer(n->data.integer), mk_fn2("Power", d, expr_new_integer(-1))),
+        mk_fn2("Times", mk_fn2("Power", cp(x), mk_fn2("Plus", m, expr_new_integer(1))), cp(surd))));
+    return r;
+}
+
+/* A head that is by definition the derivative of another in one argument,
+ * that argument linear in x and the others free of it:
+ *   Integrate[c H[.., a x + b, ..], x] = c/a G[.., a x + b, ..]
+ * (Integrate[WeierstrassPPrime[u, {g2, g3}], u] = WeierstrassP[u, {g2, g3}],
+ * WeierstrassPPrime#2).  NULL for any other shape. */
+static const struct { const char* prime; int pos; const char* base; } PRIME_PAIRS[] = {
+    { "WeierstrassPPrime",  0, "WeierstrassP"  },
+    { "MathieuCPrime",      2, "MathieuC"      },
+    { "MathieuSPrime",      2, "MathieuS"      },
+    { "EllipticThetaPrime", 1, "EllipticTheta" },
+};
+
+static Expr* integrate_prime_try(Expr* f, Expr* x) {
+    bool is_times = head_name_is(f, "Times");
+    size_t nf = is_times ? f->data.function.arg_count : 1;
+    const Expr* h = NULL;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* fi = is_times ? f->data.function.args[i] : f;
+        if (!contains_symbol(fi, x)) continue;
+        if (h) return NULL;
+        h = fi;
+    }
+    if (!h || h->type != EXPR_FUNCTION) return NULL;
+    for (size_t k = 0; k < sizeof PRIME_PAIRS / sizeof PRIME_PAIRS[0]; k++) {
+        if (!head_name_is(h, PRIME_PAIRS[k].prime)) continue;
+        size_t pos = (size_t)PRIME_PAIRS[k].pos;
+        if (h->data.function.arg_count <= pos) return NULL;
+        for (size_t j = 0; j < h->data.function.arg_count; j++)
+            if (j != pos && contains_symbol(h->data.function.args[j], x)) return NULL;
+        Expr* a = eval_take(mk_fn2("D", cp(h->data.function.args[pos]), cp(x)));
+        if (!a || contains_symbol(a, x) || (a->type == EXPR_INTEGER && a->data.integer == 0)) {
+            if (a) expr_free(a);
+            return NULL;
+        }
+        size_t n = h->data.function.arg_count;
+        Expr** g = malloc(n * sizeof(Expr*));
+        for (size_t j = 0; j < n; j++) g[j] = cp(h->data.function.args[j]);
+        Expr* G = mk_fn(PRIME_PAIRS[k].base, g, n);
+        free(g);
+        /* c = f / h, the constant cofactor */
+        Expr* c = eval_take(mk_fn2("Times", cp(f), mk_fn2("Power", cp(h), expr_new_integer(-1))));
+        return eval_take(mk_fn2("Times", mk_fn2("Times", c, mk_fn2("Power", a, expr_new_integer(-1))), G));
+    }
+    return NULL;
+}
+
 Expr* integrate_step_indefinite_try(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL || f->type != EXPR_FUNCTION) return NULL;
+    { Expr* b = integrate_box_try(f, x); if (b) return b; }
+    { Expr* b = integrate_prime_try(f, x); if (b) return b; }
+    { Expr* b = integrate_surd_try(f, x); if (b) return b; }
 
     /* Locate the jump factor J: f itself, or one factor of a Times.  An impulse
      * DiracDelta[u] takes precedence (a step cofactor is then just part of the

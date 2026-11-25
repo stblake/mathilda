@@ -140,7 +140,9 @@ static bool hs_spherical(int code, double n, double zr, double zi, double* rr, d
     double nu = n + 0.5;
     if (zr == 0.0 && zi == 0.0) {
         if (code == 2 && n == 0.0) { *rr = 1.0; *ri = 0.0; return true; }
-        if (code == 2 && n > 0.0 && n == floor(n)) { *rr = 0.0; *ri = 0.0; return true; }
+        /* j_n(z) ~ z^n: zero at the origin for every order n > 0
+         * (SphericalBesselJ[0.5, 0.] = 0., SphericalBesselJ#4). */
+        if (code == 2 && n > 0.0) { *rr = 0.0; *ri = 0.0; return true; }
         return false;
     }
     /* integer order on the negative axis: the parity relations keep it real */
@@ -304,8 +306,10 @@ HS_WRAP(sph_j, HS_SJ) HS_WRAP(sph_y, HS_SY) HS_WRAP(sph_h1, HS_SH1) HS_WRAP(sph_
 static const char* const HS_DOC[HS_COUNT] = {
     "HankelH1[nu, z]\n\tgives the Hankel function of the first kind, BesselJ[nu, z] + I BesselY[nu, z].",
     "HankelH2[nu, z]\n\tgives the Hankel function of the second kind, BesselJ[nu, z] - I BesselY[nu, z].",
-    "SphericalBesselJ[n, z]\n\tgives the spherical Bessel function j_n(z) = Sqrt[Pi/(2z)] BesselJ[n+1/2, z].",
-    "SphericalBesselY[n, z]\n\tgives the spherical Bessel function y_n(z) = Sqrt[Pi/(2z)] BesselY[n+1/2, z].",
+    "SphericalBesselJ[n, z]\n\tgives the spherical Bessel function j_n(z) = Sqrt[Pi]/Sqrt[2 z] BesselJ[n+1/2, z]\n"
+    "\t(principal square roots: on the cut z < 0 this differs in sign from Sqrt[Pi/(2 z)]).",
+    "SphericalBesselY[n, z]\n\tgives the spherical Bessel function y_n(z) = Sqrt[Pi]/Sqrt[2 z] BesselY[n+1/2, z]\n"
+    "\t(principal square roots: on the cut z < 0 this differs in sign from Sqrt[Pi/(2 z)]).",
     "SphericalHankelH1[n, z]\n\tgives SphericalBesselJ[n, z] + I SphericalBesselY[n, z].",
     "SphericalHankelH2[n, z]\n\tgives SphericalBesselJ[n, z] - I SphericalBesselY[n, z]."
 };

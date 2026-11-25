@@ -998,10 +998,39 @@ static bool zm_polylog_invert_c(int n, double zr, double zi, double* vr, double*
     return isfinite(*vr) && isfinite(*vi);
 }
 
+/* Li_{-n}(z) for a negative integer order is a rational function of z,
+ * and Li_{-n}(1/z) = (-1)^(n+1) Li_{-n}(z) (n >= 1).  Outside the unit disk
+ * the inversion maps the call onto |1/z| < 1, where the series is accurate --
+ * and keeps a real z > 1 real (the Jonquiere branch otherwise leaves an
+ * O(eps) imaginary residue from the cut). */
+static bool zm_polylog_negint_outside(double s, double zr, double zi, double* vr, double* vi) {
+    double m2 = zr * zr + zi * zi;
+    double ir = zr / m2, ii = -zi / m2;
+    double wr, wi;
+    if (zi == 0.0) {
+        double v;
+        if (!sf_polylog_r(s, ir, &v)) return false;
+        wr = v; wi = 0.0;
+    } else if (!sf_polylog_c(s, 0.0, ir, ii, &wr, &wi)) {
+        return false;
+    }
+    long n = (long)(-s);
+    double sg = (n & 1L) ? 1.0 : -1.0;                 /* (-1)^(n+1) */
+    *vr = sg * wr;
+    *vi = sg * wi;
+    return isfinite(*vr) && isfinite(*vi);
+}
+
 bool sf_polylog_r(double s, double x, double* out) {
     if (!isfinite(s) || !isfinite(x)) return false;
     if (s == 2.0) return sf_dilog_r(x, out);
-    if (fabs(x) > 1.0) return false;                   /* complex, or the inversion */
+    if (fabs(x) > 1.0) {
+        if (s <= -1.0 && s == floor(s) && s >= -1.0e6) {   /* real rational function */
+            double vi;
+            return zm_polylog_negint_outside(s, x, 0.0, out, &vi);
+        }
+        return false;                                  /* complex, or the inversion */
+    }
     if (s == 1.0) {                                    /* -log(1 - x) */
         if (x == 1.0) return false;
         *out = -log1p(-x);
@@ -1053,8 +1082,12 @@ bool sf_polylog_c(double sr, double si, double zr, double zi,
             *vr = v; *vi = 0.0;
             return true;
         }
+        if (s <= -1.0 && s == floor(s) && s >= -1.0e6)  /* no cut: a rational function */
+            return zm_polylog_negint_outside(s, zr, 0.0, vr, vi);
         if (zr > 1.0) zi = -0.0;                       /* below the cut */
     }
+    if (s <= -1.0 && s == floor(s) && s >= -1.0e6 && zr * zr + zi * zi > 1.0)
+        return zm_polylog_negint_outside(s, zr, zi, vr, vi);
     if (s == 1.0) {                                    /* -log(1 - z) */
         double wr = 1.0 - zr, wi = -zi;
         *vr = -log(hypot(wr, wi));

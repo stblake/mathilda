@@ -206,6 +206,8 @@ In[3]:= Keys[{<|"a" -> 1|>, <|"b" -> 2, "c" -> 3|>}]
 Out[3]= {{"a"}, {"b", "c"}}
 ```
 
+A wrong argument count prints Keys::argt; an atom argument prints Keys::invrl.
+
 ## Values
 Gives the list of values of an association (or a list of rules).
 - `Values[assoc]` gives `{v1, v2, ...}`; also accepts a rule or a list of rules.
@@ -224,6 +226,8 @@ Out[2]= {f[1], f[2]}
 In[3]:= Values[{<|"a" -> 1|>, {"b" -> 2}}]
 Out[3]= {{1}, {2}}
 ```
+
+A wrong argument count prints Values::argt; an atom argument prints Values::invrl (Values[x]).
 
 ## Lookup
 Looks up the value stored under a key.

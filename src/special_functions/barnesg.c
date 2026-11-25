@@ -137,8 +137,12 @@ static Expr* barnesg_numeric(Expr* w) {
 #endif
         }
         double az = sqrt(rp * rp + ip * ip);
-        if (bits <= 53 && az > 8.0 && az < 1.0e15) {
-            long guard = 16 + 2 * (long)ceil(log2(az + 1.0)) + (long)ceil(log2(log(az) + 1.0));
+        /* every machine argument, not only |w| > 8: the asymptotic path
+         * below lost ~2 digits at small arguments too (BarnesG[5.] was
+         * 12.000000000000195, BarnesG#5) */
+        if (bits <= 53 && az < 1.0e15) {
+            long guard = 16 + 2 * (long)ceil(log2(az + 1.0)) +
+                         (long)ceil(log2(fabs(log(az + 2.0)) + 1.0));
             NumericSpec hs;
             hs.mode = NUMERIC_MODE_MPFR;
             hs.bits = 53 + guard;

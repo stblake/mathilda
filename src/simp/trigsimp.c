@@ -8,6 +8,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "trig_canon.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,8 +55,95 @@ static Expr* trig_canonicalize(Expr* arg) {
     return canonical;
 }
 
+/* ---- Held subexpressions are opaque ---------------------------------
+ *
+ * The expansion/reduction rule sets compute their right-hand sides by
+ * evaluation (Sin[(n-1) x], a nested TrigExpand[...]).  Applied inside
+ * Hold[...] they would leave half-applied rules behind
+ * (TrigExpand[Hold[Sin[2x]]] gave Hold[Sin[(2 - 1) x] Cos[x] + ...],
+ * TrigExpand#3 of the 2026-11 audit).  So a Hold, HoldForm or HoldComplete
+ * subexpression is swapped for a placeholder symbol for the duration of the
+ * transformation and put back, untouched, afterwards. */
+#define TRIG_HELD_PREFIX "Internal`TrigHeld$"
+
+static bool trig_is_held(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_Hold || h == SYM_HoldForm || h == SYM_HoldComplete;
+}
+
+static bool trig_has_held(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (trig_is_held(e)) return true;
+    if (trig_has_held(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (trig_has_held(e->data.function.args[i])) return true;
+    return false;
+}
+
+typedef struct { Expr** held; size_t n, cap; } TrigHeld;
+
+static Expr* trig_held_out(const Expr* e, TrigHeld* t) {
+    if (e->type != EXPR_FUNCTION || !trig_has_held(e)) return expr_copy((Expr*)e);
+    if (trig_is_held(e)) {
+        if (t->n == t->cap) {
+            t->cap = t->cap ? 2 * t->cap : 4;
+            t->held = realloc(t->held, t->cap * sizeof(Expr*));
+        }
+        t->held[t->n++] = expr_copy((Expr*)e);
+        char name[64];
+        snprintf(name, sizeof name, TRIG_HELD_PREFIX "%zu", t->n);
+        return expr_new_symbol(name);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = trig_held_out(e->data.function.args[i], t);
+    Expr* r = expr_new_function(trig_held_out(e->data.function.head, t), a, n);
+    free(a);
+    return r;
+}
+
+static Expr* trig_held_in(const Expr* e, const TrigHeld* t) {
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        size_t pl = sizeof(TRIG_HELD_PREFIX) - 1;
+        if (strncmp(nm, TRIG_HELD_PREFIX, pl) == 0) {
+            size_t k = (size_t)strtoul(nm + pl, NULL, 10);
+            if (k >= 1 && k <= t->n) return expr_copy(t->held[k - 1]);
+        }
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = trig_held_in(e->data.function.args[i], t);
+    Expr* r = expr_new_function(trig_held_in(e->data.function.head, t), a, n);
+    free(a);
+    return r;
+}
+
+static Expr* trig_memo_call_unheld(Expr* res, const char* name, Expr* (*impl)(Expr*));
+
 static Expr* trig_memo_call(Expr* res, const char* name,
                             Expr* (*impl)(Expr*)) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1 &&
+        trig_has_held(res->data.function.args[0])) {
+        TrigHeld t = { NULL, 0, 0 };
+        Expr* arg = trig_held_out(res->data.function.args[0], &t);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), &arg, 1);
+        Expr* out = evaluate(call);
+        expr_free(call);
+        Expr* back = trig_held_in(out, &t);
+        expr_free(out);
+        for (size_t i = 0; i < t.n; i++) expr_free(t.held[i]);
+        free(t.held);
+        return back;
+    }
+    return trig_memo_call_unheld(res, name, impl);
+}
+
+static Expr* trig_memo_call_unheld(Expr* res, const char* name,
+                                   Expr* (*impl)(Expr*)) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         return impl(res);
     }
@@ -1191,6 +1279,13 @@ void trigsimp_init(void) {
         "Log[a_ - (I) x_] - Log[a_ + (I) x_] /; TrueQ[Positive[a]] :> -2 I ArcTan[x/a], "
         "Log[a_ + x_] - Log[a_ - x_] /; TrueQ[Positive[a]] :> 2 ArcTanh[x/a], "
         "Log[a_ - x_] - Log[a_ + x_] /; TrueQ[Positive[a]] :> -2 ArcTanh[x/a], "
+        /* The same differences under a common coefficient, which is how
+         * TrigToExp writes ArcTan and ArcTanh: (I/2) Log[1 - I x] -
+         * (I/2) Log[1 + I x] = ArcTan[x] (ExpToTrig#4). */
+        "c_ Log[a_ + (I) x_] + d_ Log[a_ - (I) x_] /; TrueQ[Positive[a]] && "
+            "PossibleZeroQ[c + d] :> 2 I c ArcTan[x/a], "
+        "c_ Log[a_ + x_] + d_ Log[a_ - x_] /; FreeQ[x, Complex] && TrueQ[Positive[a]] && "
+            "PossibleZeroQ[c + d] :> 2 c ArcTanh[x/a], "
         "Log[x_ + Sqrt[1 + x_^2]] :> ArcSinh[x], "
         "Log[x_ + Sqrt[-1 + x_] Sqrt[1 + x_]] :> ArcCosh[x], "
         "Log[(I) x_ + Sqrt[1 - x_^2]] :> (I) ArcSin[x], "

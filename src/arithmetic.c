@@ -635,6 +635,43 @@ bool expr_is_superficially_negative(Expr* e) {
     return false;
 }
 
+static bool arith_exact_real_atom(const Expr* e) {
+    int64_t n, d;
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || is_rational(e, &n, &d) ||
+           (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_Rational);
+}
+
+bool expr_is_negative_exact_number(Expr* e) {
+    if (!e) return false;
+    if (arith_exact_real_atom(e)) return expr_is_superficially_negative(e);
+    Expr *re, *im;
+    if (is_complex(e, &re, &im) && arith_exact_real_atom(re) && arith_exact_real_atom(im))
+        return expr_is_superficially_negative(e);
+    return false;
+}
+
+Expr* expr_exact_imaginary_quotient(Expr* e) {
+    Expr* c = e;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Times && e->data.function.arg_count >= 2)
+        c = e->data.function.args[0];
+    Expr *re, *im;
+    if (!is_complex(c, &re, &im)) return NULL;
+    if (!(re->type == EXPR_INTEGER && re->data.integer == 0) || !arith_exact_real_atom(im)) return NULL;
+    Expr* args[2] = { make_complex(expr_new_integer(0), expr_new_integer(-1)), expr_copy(e) };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), args, 2));
+}
+
+bool expr_is_negated_sum(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Plus || e->data.function.arg_count < 2)
+        return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!expr_is_superficially_negative(e->data.function.args[i])) return false;
+    return true;
+}
+
 bool is_neg_infinity_form(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;

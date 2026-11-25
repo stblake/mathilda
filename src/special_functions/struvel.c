@@ -30,6 +30,7 @@
 #include "sf_machine.h"         /* sf_machine_struve_l */
 #include "sf_dispatch2.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -156,6 +157,11 @@ Expr* builtin_struvel(Expr* res) {
             && nu->data.function.args[1]->data.integer == 2
             && nu->data.function.args[0]->data.integer < 0)
             return mk_int(0);
+        /* The same zero for an inexact negative half-odd order, as an
+         * inexact zero (StruveL[-1.5, 0] = 0., StruveL#3). */
+        if (nu->type == EXPR_REAL && nu->data.real < 0.0 &&
+            fabs(fmod(2.0 * nu->data.real, 2.0)) == 1.0)
+            return expr_new_real(0.0);
     }
     bool handled;
     Expr* v = sf2_numeric(nu, z, 0, sl_machine, sl_arb, &handled);

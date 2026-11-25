@@ -178,7 +178,9 @@ static void ncpx_set_si(ncpx* c, long v) {
 }
 
 /* Initial approximation for W_k(z), written into `w` (init2'd at wp). */
-static void pl_initial(ncpx* w, long k, const ncpx* z, mpfr_prec_t wp) {
+/* `kbig`, when non-NULL, is the branch index (a bignum past a long); `k` then
+ * only has to be neither 0 nor -1. */
+static void pl_initial(ncpx* w, long k, mpz_srcptr kbig, const ncpx* z, mpfr_prec_t wp) {
     ncpx ep1, p, tmp, tmp2, L1, L2;
     ncpx_init(&ep1, wp); ncpx_init(&p, wp); ncpx_init(&tmp, wp);
     ncpx_init(&tmp2, wp); ncpx_init(&L1, wp); ncpx_init(&L2, wp);
@@ -245,7 +247,10 @@ static void pl_initial(ncpx* w, long k, const ncpx* z, mpfr_prec_t wp) {
         if (k != 0) {
             mpfr_t two_pi_k; mpfr_init2(two_pi_k, wp);
             mpfr_const_pi(two_pi_k, PRND);
-            mpfr_mul_si(two_pi_k, two_pi_k, 2 * k, PRND);
+            /* 2 pi k without forming 2 k (it overflows a long past 2^62) */
+            if (kbig) mpfr_mul_z(two_pi_k, two_pi_k, kbig, PRND);
+            else      mpfr_mul_si(two_pi_k, two_pi_k, k, PRND);
+            mpfr_mul_2ui(two_pi_k, two_pi_k, 1, PRND);
             mpfr_add(L1.im, L1.im, two_pi_k, PRND);
             mpfr_clear(two_pi_k);
         }
@@ -407,8 +412,19 @@ int productlog_mpfr_real(mpfr_ptr rop, mpfr_srcptr x, mpfr_rnd_t rnd) {
 
 /* Numeric evaluation of W_k(z_arg) at out_prec bits. Returns NULL if z_arg is
  * not numeric (symbolic), letting the caller leave the call unevaluated. */
-static Expr* pl_eval_numeric(long k, const Expr* z_arg, mpfr_prec_t out_prec) {
+static Expr* pl_eval_numeric(long k, mpz_srcptr kbig, const Expr* z_arg, mpfr_prec_t out_prec) {
     mpfr_prec_t wp = pl_wp(out_prec);
+    /* W_k ~ 2 pi i k: the imaginary part carries log2|k| integer bits on top
+     * of the fraction bits the result needs, or e^w is computed from a
+     * rounded angle (ProductLog[2^62, 1.] came back with the wrong sign). */
+    {
+        size_t kb = kbig ? mpz_sizeinbase(kbig, 2) : 0;
+        if (!kbig) {
+            uint64_t a = k < 0 ? (uint64_t)(-(k + 1)) + 1u : (uint64_t)k;
+            for (; a; a >>= 1) kb++;
+        }
+        wp += (mpfr_prec_t)kb + 8;
+    }
     ncpx z, w;
     ncpx_init(&z, wp); ncpx_init(&w, wp);
     bool inexact = false;
@@ -426,7 +442,7 @@ static Expr* pl_eval_numeric(long k, const Expr* z_arg, mpfr_prec_t out_prec) {
         if (out) { ncpx_clear(&z); ncpx_clear(&w); return out; }
     }
 
-    pl_initial(&w, k, &z, wp);
+    pl_initial(&w, k, kbig, &z, wp);
     pl_core(&w, &z, wp);
 
     Expr* out = NULL;
@@ -489,7 +505,7 @@ static Expr* productlog_eval(long k, Expr* z) {
     if (pl_is_inexact(z)) {
         long bits = numeric_min_inexact_bits(z);
         mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
-        Expr* out = pl_eval_numeric(k, z, out_prec);
+        Expr* out = pl_eval_numeric(k, NULL, z, out_prec);
         if (out) return out;
     }
 #endif
@@ -555,6 +571,16 @@ Expr* builtin_productlog(Expr* res) {
          * ProductLog::bidx -- the message also stops the evaluator's mixed-
          * argument retry from numericalizing z and taking the index after all. */
         int64_t k;
+#ifdef USE_MPFR
+        /* A bignum branch index: only an inexact z has anything to compute
+         * (W_k(z) ~ log z + 2 pi i k - log(2 pi i k), ProductLog#1). */
+        if (kexpr->type == EXPR_BIGINT && pl_is_inexact(z)) {
+            long bits = numeric_min_inexact_bits(z);
+            mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            return pl_eval_numeric(mpz_sgn(kexpr->data.bigint) > 0 ? LONG_MAX : LONG_MIN,
+                                   kexpr->data.bigint, z, out_prec);
+        }
+#endif
         if (kexpr->type == EXPR_INTEGER) k = kexpr->data.integer;
         else if (!arg_is_inexact(z)) {
             if (arg_is_inexact(kexpr))

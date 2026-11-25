@@ -368,6 +368,19 @@ static Expr* chebyshev_t_two_arg(Expr* n_e, Expr* x_e) {
     }
 
 #ifdef USE_MPFR
+    /* An exact integer order past the recurrence's cap, or a bignum one, with
+     * a real inexact x: the O(1) closed form with log2|n| guard bits. */
+    if (x_inexact && (n_e->type == EXPR_BIGINT ||
+                      (n_is_int && (ni > (int64_t)CHEB_NUMERIC_DEG_CAP ||
+                                    ni < -(int64_t)CHEB_NUMERIC_DEG_CAP)))) {
+        mpz_t n;
+        mpz_init(n);
+        expr_to_mpz(n_e, n);
+        mpz_abs(n, n);                                           /* T_{-n} = T_n */
+        Expr* v = cheb_closed_form_real(0, n, x_e, cheb_out_prec(n_e, x_e));
+        mpz_clear(n);
+        if (v) return v;
+    }
     /* Numeric integer order with an inexact argument: the stable recurrence.
      * Covers an exact integer order and an inexact integer-valued one alike
      * (the latter would otherwise pick up a spurious imaginary part from the
@@ -414,7 +427,7 @@ static Expr* chebyshev_t_two_arg(Expr* n_e, Expr* x_e) {
     if (n_is_int) {
         unsigned long deg;
         if (!cheb_reflect(ni, &deg)) return NULL;                 /* absurd order */
-        if (deg > CHEB_POLY_CAP) return NULL;
+        if (deg > CHEB_POLY_CAP) return cheb_exact_rational(0, deg, x_e);
         return cheb_poly(deg, x_e);
     }
 

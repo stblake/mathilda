@@ -117,6 +117,7 @@ static bool erfi_is_neg_number(const Expr* e) {
 /* True if `e` is a Times[c, ...] whose leading factor `c` is a negative
  * real number literal -- the trigger for the odd-symmetry rewrite. */
 static bool erfi_is_neg_leading_times(const Expr* e) {
+    if (expr_is_negative_exact_number((Expr*)e)) return true;   /* f[-2], f[-1/2] */
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count < 2) return false;
     if (!erfi_is_symbol(e->data.function.head, "Times")) return false;
     return erfi_is_neg_number(e->data.function.args[0]);

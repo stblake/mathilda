@@ -144,6 +144,7 @@ static Expr* si_make_directed_imag_infinity(int s) {
 /* True if `arg` is Times[negative-literal, ...] -- the odd-symmetry trigger for
  * pulling a sign out of a symbolic argument. Mirrors erf.c's neg-leading-times. */
 static bool si_is_neg_leading_times(const Expr* e) {
+    if (expr_is_negative_exact_number((Expr*)e)) return true;   /* f[-2], f[-1/2] */
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count < 2) return false;
     if (!si_is_symbol(e->data.function.head, "Times")) return false;
     Expr* a = e->data.function.args[0];
@@ -538,6 +539,17 @@ static Expr* si_one_arg(Expr* arg) {
         Expr* inner = expr_new_function(expr_new_symbol(SYM_SinIntegral), &pos, 1);
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), inner }, 2));
+    }
+
+    /* 5. The imaginary axis: SinIntegral[I z] = I SinhIntegral[z] and
+     *    SinhIntegral[I z] = I SinIntegral[z] (SinhIntegral#2). */
+    {
+        Expr* w = expr_exact_imaginary_quotient(arg);
+        if (w) {
+            Expr* inner = expr_new_function(expr_new_symbol(SYM_SinhIntegral), &w, 1);
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ make_complex(expr_new_integer(0), expr_new_integer(1)), inner }, 2));
+        }
     }
 
     return NULL; /* leave symbolic */

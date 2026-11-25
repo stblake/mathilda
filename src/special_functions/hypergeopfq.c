@@ -49,6 +49,9 @@
 #endif
 #include <complex.h>
 #include <math.h>
+#ifndef M_LN2
+#define M_LN2 0.69314718055994530942
+#endif
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -350,7 +353,20 @@ static Expr* hg_gamma_ratio(Expr** num, size_t nn, Expr** den, size_t nd) {
 
 static Expr* hg_gauss(const Expr* a, const Expr* b, const Expr* c) {
     Expr* s = hg_fn(SYM_Plus, (Expr*[]){ HG_CP(c), hg_neg(HG_CP(a)), hg_neg(HG_CP(b)) }, 3);
-    if (!hg_converges(expr_copy(s))) { expr_free(s); return NULL; }
+    if (!hg_converges(expr_copy(s))) {
+        /* c - a - b <= 0 with positive rational a, b, c: every term of the
+         * series is positive and it diverges, to Infinity
+         * (Hypergeometric2F1[1, 2, 3, 1], Hypergeometric2F1#3) */
+        int64_t n, d;
+        bool pos = true;
+        const Expr* ps[3] = { a, b, c };
+        for (int i = 0; i < 3 && pos; i++)
+            pos = is_rational(ps[i], &n, &d) && n > 0;
+        Expr* sv = hg_eval(s);                 /* consumes s */
+        bool nonpos = sv && is_rational(sv, &n, &d) && n <= 0;
+        if (sv) expr_free(sv);
+        return (pos && nonpos) ? expr_new_symbol(SYM_Infinity) : NULL;
+    }
     return hg_gamma_ratio((Expr*[]){ HG_CP(c), s }, 2,
         (Expr*[]){ hg_plus(HG_CP(c), hg_neg(HG_CP(a))),
                    hg_plus(HG_CP(c), hg_neg(HG_CP(b))) }, 2);
@@ -1262,6 +1278,20 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
             else expr_free(dn);
         }
         if (v) { free(ac); free(bc); return v; }
+        /* A real z so large that 0F1 ~ e^(2 Sqrt[z]) leaves even the MPFR
+         * exponent range (arb declines there): Overflow[], announced, as
+         * Exp[2.*^150] is -- not an unevaluated PFQ (Hypergeometric0F1#4). */
+        {
+            double zd = NAN;
+            if (z->type == EXPR_REAL) zd = z->data.real;
+            else if (z->type == EXPR_MPFR) zd = mpfr_get_d(z->data.mpfr, MPFR_RNDN);
+            if (zd > 0.0 && 2.0 * sqrt(zd) / M_LN2 > (double)mpfr_get_emax()) {
+                Expr* inf = expr_new_mpfr_bits(53);
+                mpfr_set_inf(inf->data.mpfr, 1);
+                free(ac); free(bc);
+                return numeric_sanitize_nonfinite(inf);
+            }
+        }
     }
 #endif
 
@@ -1603,6 +1633,13 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
 
     /* (4) z == 0 -> 1. */
     if (z->type == EXPR_INTEGER && z->data.integer == 0) return expr_new_integer(1);
+    /* ... and an inexact 0 -> an inexact 1, whatever the (symbolic)
+     * parameters (Hypergeometric1F1[1, b, 0.] = 1., Hypergeometric1F1#3). */
+    if (z->type == EXPR_REAL && z->data.real == 0.0) return expr_new_real(1.0);
+#ifdef USE_MPFR
+    if (z->type == EXPR_MPFR && mpfr_zero_p(z->data.mpfr))
+        return expr_new_mpfr_from_d(1.0, mpfr_get_prec(z->data.mpfr));
+#endif
 
     /* (5) Termination to a polynomial. */
     Expr* t = try_terminate(a, b, z);

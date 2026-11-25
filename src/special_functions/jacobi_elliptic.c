@@ -275,6 +275,10 @@ static bool jac_inverse(int which, double v, double m, double* out) {
         if (fabs(v) > 1.0) return false;
         phi = acos(v);
     } else {
+        /* dn(0 | m) = 1 for every m, m = 0 included (where dn is 1 throughout
+         * and the formula below divides by m): InverseJacobiDN[1., 0] = 0.
+         * (InverseJacobiDN#1) */
+        if (v == 1.0) { *out = 0.0; return true; }
         if (m == 0.0 || fabs(v) > 1.0) return false;
         double s2 = (1.0 - v) * (1.0 + v) / m;
         if (s2 > 1.0 || s2 < 0.0) return false;
@@ -447,6 +451,18 @@ static Expr* jac_builtin(Expr* res, int which) {
     } else {
         if (jac_is_int(v, 1)) return expr_new_integer(0);
         if (jac_is_int(m, 1)) return jac_apply("ArcSech[#1]&", v, NULL);
+        /* m = 0: dn is identically 1, so only v = 1 has an inverse (0, an
+         * inexact zero for an inexact v); any other v stays unevaluated,
+         * quietly -- the EllipticF template below divides by m
+         * (InverseJacobiDN[1.0, 0] printed Power::infy, InverseJacobiDN#1) */
+        if (jac_is_int(m, 0)) {
+            if (v->type == EXPR_REAL && v->data.real == 1.0) return expr_new_real(0.0);
+#ifdef USE_MPFR
+            if (v->type == EXPR_MPFR && mpfr_cmp_ui(v->data.mpfr, 1) == 0)
+                return expr_new_mpfr_bits(mpfr_get_prec(v->data.mpfr));
+#endif
+            return NULL;
+        }
     }
     if (!flint_num_call_inexact(res)) return NULL;
     /* An inexact m = 1: the same closed forms as the exact m = 1 above

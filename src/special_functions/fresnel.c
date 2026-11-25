@@ -140,6 +140,7 @@ static int fresnel_directed_imag_infinity(const Expr* e) {
 
 /* True if `arg` is Times[negative-literal, ...] -- the odd-symmetry trigger. */
 static bool fresnel_is_neg_leading_times(const Expr* e) {
+    if (expr_is_negative_exact_number((Expr*)e)) return true;   /* f[-2], f[-1/2] */
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count < 2) return false;
     if (!fresnel_is_symbol(e->data.function.head, "Times")) return false;
     Expr* a = e->data.function.args[0];

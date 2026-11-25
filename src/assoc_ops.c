@@ -1132,7 +1132,17 @@ static Expr* keys_values(Expr* res, bool keys, BuiltinFunc orig) {
     if (argc == 1) {
         Expr* r = call_orig(orig, res);
         if (r) return r;
-        if (!is_list(ARG(res, 0))) return NULL;
+        if (!is_list(ARG(res, 0))) {
+            /* A plain atom is never an association or a rule list: the
+             * reference reports it (Values[x] -> Values::invrl).  Compound
+             * and object arguments stay silent -- another definition may
+             * still give them a meaning. */
+            Expr* a = ARG(res, 0);
+            if (a->type == EXPR_SYMBOL || a->type == EXPR_INTEGER || a->type == EXPR_REAL ||
+                a->type == EXPR_STRING || a->type == EXPR_BIGINT)
+                (void)kv_extract(a, keys, NULL, keys ? "Keys" : "Values", true);
+            return NULL;
+        }
         return kv_extract(ARG(res, 0), keys, NULL, keys ? "Keys" : "Values", false);
     }
     if (argc == 2)

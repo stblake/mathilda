@@ -1158,6 +1158,23 @@ static Expr* builtin_weierstrass_invariants(Expr* res) {
             if (r && wp_bits(a2, 2) <= 53) r = numeric_lower_mpfr_to_machine(r);
             return r;
         }
+        /* exact: a zero half-period, or a real ratio w3/w1, spans no lattice
+         * -- reported as the machine form is, instead of the 1/0 of the ratio
+         * leaking (WeierstrassInvariants#2) */
+        {
+            bool z1 = w1->type == EXPR_INTEGER && w1->data.integer == 0;
+            bool z3 = w3->type == EXPR_INTEGER && w3->data.integer == 0;
+            Expr* real = (z1 || z3) ? NULL
+                       : wp_apply("TrueQ[Im[Together[#2/#1]] == 0]&", (Expr*[]){ w1, w3 }, 2);
+            bool dep = z1 || z3 || (real && real->type == EXPR_SYMBOL && real->data.symbol.name == SYM_True);
+            expr_free(real);
+            if (dep) {
+                char* s = expr_to_string(Wl);
+                mth_message("EllipticReducedHalfPeriods", "nind", "Half-periods %s are not independent.", s);
+                free(s);
+                return NULL;
+            }
+        }
         /* exact: the square lattice w3 = I w1 and the hexagonal w3 = E^(I Pi/3) w1 */
         Expr* t = wp_apply("Together[#2/#1]&", (Expr*[]){ w1, w3 }, 2);
         Expr* out = NULL;

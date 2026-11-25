@@ -933,6 +933,19 @@ static bool legendre_is_number_leaf(const Expr* e) {
 /* Numeric Q_v(x) for non-integer order on the cut |x| < 1. Returns NULL when
  * outside the disk (deferred) or if the series did not collapse to a number. */
 static Expr* legendre_q_numeric(const Expr* nu, const Expr* x) {
+    /* A huge degree (a bignum, or |nu| > 2^24): the hypergeometric form's
+     * Gamma[(nu+1)/2] / Gamma[nu/2+1] overflow every precision and its two
+     * series cancel catastrophically, so the call stays unevaluated -- quietly
+     * (LegendreQ[10^20, 0.3] printed General::ovfl three times, LegendreQ#6). */
+    if (nu->type == EXPR_BIGINT) return NULL;
+    {
+        double nv = 0.0;
+        if (nu->type == EXPR_REAL) nv = nu->data.real;
+#ifdef USE_MPFR
+        else if (nu->type == EXPR_MPFR) nv = mpfr_get_d(nu->data.mpfr, MPFR_RNDN);
+#endif
+        if (fabs(nv) > 16777216.0) return NULL;
+    }
     /* Gate to the convergence disk |x| < 1 (real or complex modulus). */
     Expr* absx = expr_new_function(expr_new_symbol(SYM_Abs),
         (Expr*[]){ expr_copy((Expr*)x) }, 1);

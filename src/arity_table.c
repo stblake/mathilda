@@ -96,6 +96,13 @@ static const ArityRow ARITY_ROWS[] = {
     { "BesselJZero",      2, 3, NOOPT },
     { "AiryBiPrimeZero",  1, 2, NOOPT },
     { "AngerJ",           2, 3, NOOPT },
+    { "WeberE",           2, 3, NOOPT },
+    { "KelvinBer",        1, 2, NOOPT },
+    { "KelvinBei",        1, 2, NOOPT },
+    { "KelvinKer",        1, 2, NOOPT },
+    { "KelvinKei",        1, 2, NOOPT },
+    { "StieltjesGamma",   1, 2, NOOPT },
+    { "Piecewise",        1, 2, NOOPT },
     { "MathieuCharacteristicA", 2, 2, NOOPT },
     { "QPochhammer",      1, 3, NOOPT },
     { "Precision",        1, 1, NOOPT },
@@ -136,6 +143,8 @@ static const ArityRow ARITY_ROWS[] = {
     { "LeafCount",        1, 1, OPT_NOCHECK },   /* Heads -> True */
 
     /* ---- structural and list functions ---- */
+    { "Keys",             1, 2, NOOPT },
+    { "Values",           1, 2, NOOPT },
     { "Length",           1, 1, NOOPT },
     { "Head",             1, 2, NOOPT },
     { "First",            1, 2, NOOPT },
@@ -215,6 +224,9 @@ static const ArityRow ARITY_ROWS[] = {
     { "CentralMoment",    2, 2, NOOPT },
 
     /* ---- algebra ---- */
+    { "FunctionExpand",   1, 2, OPT_NOCHECK },
+    { "TrigToExp",        1, 1, NOOPT },
+    { "ExpToTrig",        1, 1, NOOPT },
     { "Variables",        1, 1, NOOPT },
     { "Refine",           1, 2, OPT_NOCHECK },
     { "TrigReduce",       1, 1, NOOPT },

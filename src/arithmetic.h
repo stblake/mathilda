@@ -60,6 +60,22 @@ int  expr_numeric_sign(Expr* e);
  * f[-x] = +/- f[x] for even/odd f. `e` is never modified. */
 bool expr_is_superficially_negative(Expr* e);
 
+/* True for a sum every term of which is superficially negative (-x - y,
+ * -2 - x): the even and odd functions pull its sign out, Cos[-x - y] ->
+ * Cos[x + y], as they do for a negative product. */
+bool expr_is_negated_sum(Expr* e);
+
+/* True for a negative exact number: an Integer, BigInt or Rational below
+ * zero, or an exact Complex that is superficially negative (-1 + I, -2 I).
+ * The trigger an odd special function uses to pull out the sign of a
+ * number it cannot evaluate in closed form (SinIntegral[-2] ->
+ * -SinIntegral[2]). */
+bool expr_is_negative_exact_number(Expr* e);
+
+/* e / I, evaluated, when `e` is an exact pure-imaginary multiple b I z: a
+ * Complex[0, b] with b exact, or a Times led by one.  NULL otherwise. */
+Expr* expr_exact_imaginary_quotient(Expr* e);
+
 /* Re-entrant mute for arithmetic warnings (Power::infy, Infinity::indet, ...).
  * Internal probes that evaluate candidate sub-expressions — e.g. Limit — bump
  * this counter while they poke at divergent forms, then decrement on exit.

@@ -144,14 +144,14 @@ static Expr* flip_sign(Expr* e) {
  * non-NULL return -- do NOT free it here.
  */
 static Expr* even_fold(Expr* arg, const char* head_name) {
-    if (!expr_is_superficially_negative(arg)) return NULL;
+    if (!expr_is_superficially_negative(arg) && !expr_is_negated_sum(arg)) return NULL;
     Expr* neg = flip_sign(arg);
     Expr* inner_args[1] = { neg };
     return expr_new_function(expr_new_symbol(head_name), inner_args, 1);
 }
 
 static Expr* odd_fold(Expr* arg, const char* head_name) {
-    if (!expr_is_superficially_negative(arg)) return NULL;
+    if (!expr_is_superficially_negative(arg) && !expr_is_negated_sum(arg)) return NULL;
     Expr* neg = flip_sign(arg);
     Expr* inner_args[1] = { neg };
     Expr* inner = expr_new_function(expr_new_symbol(head_name), inner_args, 1);
@@ -208,6 +208,86 @@ static Expr* hyp_i_fold(Expr* arg, const char* counterpart, int coeff_kind) {
     if (coeff_kind == 0) return inner;
     Expr* coeff = make_complex(expr_new_integer(0), expr_new_integer(coeff_kind));
     return make_times(coeff, inner);
+}
+
+/*
+ * hyp_ipi_shift:
+ * f[theta + k I Pi/2] for an integer k (a Plus argument whose one exact
+ * I Pi-term is a multiple of I Pi/2) by the quarter-period identities, the
+ * hyperbolic twin of trig_quarter_shift in trig.c:
+ *   Sinh[x + I Pi/2] -> I Cosh[x]     Sinh[x + I Pi] -> -Sinh[x]
+ *   Cosh[x + I Pi/2] -> I Sinh[x]     Cosh[x + I Pi] -> -Cosh[x]
+ *   Tanh[x + I Pi/2] -> Coth[x]       Tanh[x + I Pi] -> Tanh[x]
+ * (Sech, Csch, Coth as the reciprocals), and a period 2 I Pi drops out.
+ * `head` is the calling head's name; NULL when no rewrite applies.  The
+ * result is unevaluated: the evaluator finishes it.
+ */
+static Expr* hyp_ipi_shift(Expr* arg, const char* head) {
+    if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL ||
+        arg->data.function.head->data.symbol.name != SYM_Plus || arg->data.function.arg_count < 2)
+        return NULL;
+    size_t nargs = arg->data.function.arg_count;
+    size_t pi_at = nargs;
+    int64_t qn = 0, qd = 1;
+    for (size_t i = 0; i < nargs; i++) {
+        Expr* t = arg->data.function.args[i];
+        if (t->type != EXPR_FUNCTION || t->data.function.head->type != EXPR_SYMBOL ||
+            t->data.function.head->data.symbol.name != SYM_Times || t->data.function.arg_count != 2)
+            continue;
+        Expr* c = t->data.function.args[0];
+        Expr* p = t->data.function.args[1];
+        if (p->type != EXPR_SYMBOL || p->data.symbol.name != SYM_Pi) continue;
+        Expr *re, *im;
+        int64_t n, d;
+        if (!is_complex(c, &re, &im) || !(re->type == EXPR_INTEGER && re->data.integer == 0) ||
+            !is_rational(im, &n, &d))
+            continue;
+        if (pi_at != nargs) return NULL;          /* two I Pi terms: not canonical */
+        pi_at = i; qn = n; qd = d;
+    }
+    if (pi_at == nargs || (qd != 1 && qd != 2)) return NULL;
+    int64_t k = (qd == 1) ? (qn % 2) * 2 : (qn % 4);  /* shift = k I Pi/2 mod 2 I Pi */
+    k = ((k % 4) + 4) % 4;
+
+    /* Per head: result head and coefficient (re, im) for k = 0..3. */
+    const char* to[4]; int cr[4], ci[4];
+    const char* other;
+    if (head == SYM_Sinh)      other = SYM_Cosh;
+    else if (head == SYM_Cosh) other = SYM_Sinh;
+    else if (head == SYM_Tanh) other = SYM_Coth;
+    else if (head == SYM_Coth) other = SYM_Tanh;
+    else if (head == SYM_Sech) other = SYM_Csch;
+    else if (head == SYM_Csch) other = SYM_Sech;
+    else return NULL;
+    to[0] = head; to[1] = other; to[2] = head; to[3] = other;
+    cr[0] = 1; ci[0] = 0;
+    if (head == SYM_Sinh || head == SYM_Cosh) {
+        cr[1] = 0; ci[1] = 1;  cr[2] = -1; ci[2] = 0;  cr[3] = 0; ci[3] = -1;
+    } else if (head == SYM_Tanh || head == SYM_Coth) {
+        cr[1] = 1; ci[1] = 0;  cr[2] = 1; ci[2] = 0;   cr[3] = 1; ci[3] = 0;
+    } else {                                           /* Sech, Csch */
+        cr[1] = 0; ci[1] = -1; cr[2] = -1; ci[2] = 0;  cr[3] = 0; ci[3] = 1;
+    }
+
+    Expr* theta;
+    if (nargs == 2) {
+        theta = expr_copy(arg->data.function.args[pi_at == 0 ? 1 : 0]);
+    } else {
+        Expr** rest = (Expr**)malloc((nargs - 1) * sizeof(Expr*));
+        if (!rest) return NULL;
+        size_t j = 0;
+        for (size_t i = 0; i < nargs; i++)
+            if (i != pi_at) rest[j++] = expr_copy(arg->data.function.args[i]);
+        theta = expr_new_function(expr_new_symbol(SYM_Plus), rest, nargs - 1);
+        free(rest);
+    }
+    Expr* inner_args[1] = { theta };
+    Expr* out = expr_new_function(expr_new_symbol(to[k]), inner_args, 1);
+    if (ci[k] != 0)
+        out = make_times(make_complex(expr_new_integer(0), expr_new_integer(ci[k])), out);
+    else if (cr[k] != 1)
+        out = make_times(expr_new_integer(cr[k]), out);
+    return out;
 }
 
 /*
@@ -290,8 +370,12 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
         return make_times(num, inv_x);
     }
+    /* ArcCsch[x] = ArcSinh[1/x], ArcSech[x] = ArcCosh[1/x] on every sheet,
+     * so Sinh[ArcCsch[x]] = Cosh[ArcSech[x]] = 1/x identically. */
     if ((strcmp(outer, "Tanh") == 0 && inner == SYM_ArcCoth) ||
-        (strcmp(outer, "Coth") == 0 && inner == SYM_ArcTanh)) {
+        (strcmp(outer, "Coth") == 0 && inner == SYM_ArcTanh) ||
+        (strcmp(outer, "Sinh") == 0 && inner == SYM_ArcCsch) ||
+        (strcmp(outer, "Cosh") == 0 && inner == SYM_ArcSech)) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
     }
@@ -374,6 +458,7 @@ Expr* builtin_sinh(Expr* res) {
 
     // Sinh is odd: Sinh[-x] -> -Sinh[x]
     { Expr* f = odd_fold(arg, "Sinh"); if (f) return f; }
+    { Expr* f = hyp_ipi_shift(arg, SYM_Sinh); if (f) return f; }
 
     // Sinh[I y] -> I Sin[y]
     { Expr* f = hyp_i_fold(arg, "Sin", +1); if (f) return f; }
@@ -418,6 +503,7 @@ Expr* builtin_cosh(Expr* res) {
 
     // Cosh is even: Cosh[-x] -> Cosh[x]
     { Expr* f = even_fold(arg, "Cosh"); if (f) return f; }
+    { Expr* f = hyp_ipi_shift(arg, SYM_Cosh); if (f) return f; }
 
     // Cosh[I y] -> Cos[y]
     { Expr* f = hyp_i_fold(arg, "Cos", 0); if (f) return f; }
@@ -463,6 +549,7 @@ Expr* builtin_tanh(Expr* res) {
 
     // Tanh is odd: Tanh[-x] -> -Tanh[x]
     { Expr* f = odd_fold(arg, "Tanh"); if (f) return f; }
+    { Expr* f = hyp_ipi_shift(arg, SYM_Tanh); if (f) return f; }
 
     // Tanh[I y] -> I Tan[y]
     { Expr* f = hyp_i_fold(arg, "Tan", +1); if (f) return f; }
@@ -504,6 +591,7 @@ Expr* builtin_coth(Expr* res) {
 
     // Coth is odd: Coth[-x] -> -Coth[x]
     { Expr* f = odd_fold(arg, "Coth"); if (f) return f; }
+    { Expr* f = hyp_ipi_shift(arg, SYM_Coth); if (f) return f; }
 
     // Coth[I y] -> -I Cot[y]
     { Expr* f = hyp_i_fold(arg, "Cot", -1); if (f) return f; }
@@ -542,6 +630,7 @@ Expr* builtin_sech(Expr* res) {
 
     // Sech is even: Sech[-x] -> Sech[x]
     { Expr* f = even_fold(arg, "Sech"); if (f) return f; }
+    { Expr* f = hyp_ipi_shift(arg, SYM_Sech); if (f) return f; }
 
     // Sech[I y] -> Sec[y]
     { Expr* f = hyp_i_fold(arg, "Sec", 0); if (f) return f; }
@@ -579,6 +668,7 @@ Expr* builtin_csch(Expr* res) {
 
     // Csch is odd: Csch[-x] -> -Csch[x]
     { Expr* f = odd_fold(arg, "Csch"); if (f) return f; }
+    { Expr* f = hyp_ipi_shift(arg, SYM_Csch); if (f) return f; }
 
     // Csch[I y] -> -I Csc[y]
     { Expr* f = hyp_i_fold(arg, "Csc", -1); if (f) return f; }

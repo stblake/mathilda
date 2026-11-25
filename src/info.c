@@ -3459,6 +3459,18 @@ void info_init(void) {
         "\tgives the principal inverse cosine of z, in [0, Pi] for real z\n"
         "\tin [-1, 1].\n"
         "ArcCos is Listable. Branch cuts run along the real axis with |z| > 1.");
+    symtab_set_docstring("ArcSec",
+        "ArcSec[z]\n"
+        "\tgives the inverse secant of z, ArcCos[1/z]; in [0, Pi] for real |z| >= 1.\n"
+        "ArcSec is Listable. The branch cut runs along the real axis between -1 and 1.");
+    symtab_set_docstring("ArcCsc",
+        "ArcCsc[z]\n"
+        "\tgives the inverse cosecant of z, ArcSin[1/z]; in [-Pi/2, Pi/2] for real |z| >= 1.\n"
+        "ArcCsc is Listable. The branch cut runs along the real axis between -1 and 1.");
+    symtab_set_docstring("ArcCot",
+        "ArcCot[z]\n"
+        "\tgives the inverse cotangent of z, ArcTan[1/z]; in (-Pi/2, Pi/2] for real z.\n"
+        "ArcCot is Listable. The branch cut runs along the imaginary axis between -I and I.");
     symtab_set_docstring("ArcTan",
         "ArcTan[z]\n"
         "\tgives the principal inverse tangent of z, in (-Pi/2, Pi/2).\n"

@@ -133,7 +133,13 @@ static Expr* sinc_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
                 Expr* ii = expr_new_real(mpfr_get_d(sn.im, SRND));
                 out = mpfr_zero_p(sn.im) ? (expr_free(ii), rr) : make_complex(rr, ii);
             } else {
-                out = numeric_mpfr_make_complex(sn.re, sn.im);
+                /* rounded to the argument's precision first: the working
+                 * precision's 24 guard bits are not known (Sinc#3) */
+                mpfr_t a, b;
+                mpfr_init2(a, out_prec); mpfr_init2(b, out_prec);
+                mpfr_set(a, sn.re, SRND); mpfr_set(b, sn.im, SRND);
+                out = numeric_mpfr_make_complex(a, b);
+                mpfr_clears(a, b, (mpfr_ptr)0);
             }
         }
     }

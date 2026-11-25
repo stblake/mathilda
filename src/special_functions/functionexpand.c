@@ -523,6 +523,15 @@ static Expr* fe_gamma_form(const Expr* e) {
         return fe_apply("(Gamma[#1 + #2]/Gamma[#1])&", args, 2);
     if (fe_is_head(e, SYM_Factorial) && n == 1)
         return fe_apply("Gamma[1 + #1]&", args, 1);
+    /* HarmonicNumber and the Chebyshev polynomials of a symbolic order
+     * (FunctionExpand#3): H_n = EulerGamma + PolyGamma[0, 1 + n],
+     * T_n(x) = Cos[n ArcCos[x]], U_n(x) = Sin[(n + 1) ArcCos[x]]/Sqrt[1 - x^2]. */
+    if (fe_is_head(e, SYM_HarmonicNumber) && n == 1)
+        return fe_apply("(EulerGamma + PolyGamma[0, 1 + #1])&", args, 1);
+    if (fe_is_head(e, SYM_ChebyshevT) && n == 2)
+        return fe_apply("Cos[#1 ArcCos[#2]]&", args, 2);
+    if (fe_is_head(e, SYM_ChebyshevU) && n == 2)
+        return fe_apply("(Sin[(1 + #1) ArcCos[#2]]/Sqrt[1 - #2^2])&", args, 2);
     return NULL;
 }
 
@@ -926,6 +935,11 @@ static Expr* fe_bessel_definition(const Expr* e) {
 }
 
 static Expr* fe_walk(const Expr* e, bool* changed, int which) {
+    /* GoldenRatio = (1 + Sqrt[5])/2 (FunctionExpand#3) */
+    if (e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_GoldenRatio) {
+        *changed = true;
+        return fe_apply("((1 + Sqrt[5])/2)&", NULL, 0);
+    }
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
     Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));

@@ -373,6 +373,11 @@ static Expr* erfc_one_arg(Expr* arg) {
     if (erfc_is_neg_infinity(arg))            return expr_new_integer(2);
     if (erfc_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
     if (erfc_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
+    /* Erfc[InverseErfc[x]] = x for every x (the inverse is the principal one). */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.arg_count == 1 &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_InverseErfc)
+        return expr_copy(arg->data.function.args[0]);
     {
         /* erfc(z) = 1 - erf(z), so the directed imaginary infinities are
          * negated relative to erf: Erfc[I Infinity] = DirectedInfinity[-I]. */

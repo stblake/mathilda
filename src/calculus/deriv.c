@@ -2873,7 +2873,13 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return expr_new_function(mk_sym("Plus"), terms, nt);
         }
 
-        if (h == SYM_HermiteH && n == 2) {
+        /* HermiteH, and the Appell sequences BernoulliB / EulerE:
+         *   d/dZ H_N(Z) = 2 N H_{N-1}(Z),  d/dZ B_N(Z) = N B_{N-1}(Z),
+         *   d/dZ E_N(Z) = N E_{N-1}(Z)  (BernoulliB#3, EulerE#3). */
+        if ((h == SYM_HermiteH || h == SYM_BernoulliB || h == SYM_EulerE) && n == 2) {
+            const char* hname = h == SYM_HermiteH ? "HermiteH"
+                              : h == SYM_BernoulliB ? "BernoulliB" : "EulerE";
+            int64_t lead = h == SYM_HermiteH ? 2 : 1;
             Expr* N = args[0];
             Expr* Z = args[1];
             Expr* dN = deriv_of(N, x, nonconsts);
@@ -2883,10 +2889,10 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
 
             if (!is_lit_zero(dZ)) {
                 /* 2 N HermiteH[N-1, Z] */
-                Expr* hNm1 = mk_fn2("HermiteH",
+                Expr* hNm1 = mk_fn2(hname,
                                 mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
                 Expr* dHdZ = expr_new_function(mk_sym("Times"),
-                                (Expr*[]){ mk_int(2), expr_copy(N), hNm1 }, 3);
+                                (Expr*[]){ mk_int(lead), expr_copy(N), hNm1 }, 3);
                 terms[nt++] = mk_fn2("Times", dHdZ, dZ);
             } else {
                 expr_free(dZ);
@@ -2895,7 +2901,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             if (!is_lit_zero(dN)) {
                 Expr* op = expr_new_function(mk_sym("Derivative"),
                               (Expr*[]){ mk_int(1), mk_int(0) }, 2);
-                Expr* op_g = mk_fn_head1(op, mk_sym("HermiteH"));
+                Expr* op_g = mk_fn_head1(op, mk_sym(hname));
                 Expr* applied = expr_new_function(op_g,
                               (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
                 terms[nt++] = mk_fn2("Times", applied, dN);

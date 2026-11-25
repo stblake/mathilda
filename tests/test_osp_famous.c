@@ -196,7 +196,9 @@ void test_pfq_classical_sums() {
     /* Gauss, symbolic and numeric; a divergent numeric set declines */
     assert_true("HypergeometricPFQ[{a, b}, {c}, 1] === Gamma[c] Gamma[c - a - b]/(Gamma[c - a] Gamma[c - b])");
     assert_true("HypergeometricPFQ[{1/3, 1/4}, {2}, 1] === Gamma[17/12]/(Gamma[5/3] Gamma[7/4])");
-    assert_true("Head[HypergeometricPFQ[{2/3, 1/2}, {1}, 1]] === HypergeometricPFQ");     /* Re(c-a-b) < 0 */
+    /* c - a - b <= 0 with positive rational parameters: every term is positive,
+     * the series diverges to Infinity (audit Hypergeometric2F1#3) */
+    assert_true("HypergeometricPFQ[{2/3, 1/2}, {1}, 1] === Infinity");                   /* Re(c-a-b) < 0 */
     assert_true("Head[HypergeometricPFQ[{a, 1/2}, {a + 1/3}, 1]] === HypergeometricPFQ"); /* c-a-b = -1/6 */
     /* Kummer: either parameter order of the upper pair */
     assert_true("HypergeometricPFQ[{a, b}, {1 + a - b}, -1] === HypergeometricPFQ[{b, a}, {1 + a - b}, -1]");

@@ -265,6 +265,8 @@ In[3]:= Erf[1.5, 2]
 Out[3]= 0.0292171
 ```
 
+Erf[InverseErf[x]] is x (the principal inverse makes the composition the identity).
+
 ## Erfc
 
 - `Erfc[z]` — the complementary error function erfc(z) = 1 − erf(z).
@@ -311,6 +313,8 @@ Out[2]= -0.0783992 - 0.0279637*I
 In[3]:= Erfc[-x]
 Out[3]= Erfc[-x]
 ```
+
+Erfc[InverseErfc[x]] is x.
 
 ## Erfi
 
@@ -368,6 +372,8 @@ Out[2]= 130.396
 In[3]:= Erfi[1.5 - I]
 Out[3]= -0.70136 - 1.84683*I
 ```
+
+An arbitrary-precision argument below machine precision gives a result at that precision (Precision[Erfi[1.5`3]] is 3.), as Erf does.
 
 ## ExpIntegralEi
 
@@ -501,6 +507,10 @@ Out[4]= -ExpIntegralE[-1 + n, z]
   branch (`ExpIntegralE[Pi/3, 0.5] = 0.54325…`, `N[ExpIntegralE[1/3, 2], 25]`).
   `E_s(0.)` for `s ≤ 1` is `ComplexInfinity`.
 
+ExpIntegralE[s, 0] for an exact rational s is 1/(s - 1) when s > 1 and ComplexInfinity otherwise. A negative integer order with an exact or symbolic z is elementary: ExpIntegralE[-m, z] = m! E^-z Sum[z^k/k!, {k, 0, m}]/z^(m+1) (ExpIntegralE[-1, z] = E^-z (1 + z)/z^2).
+
+Series of ExpIntegralE[n, u] for an integer 1 <= n <= 64 at a point where u vanishes is the logarithmic series (DLMF 8.19.8): Series[ExpIntegralE[2, x], {x, 0, 2}] = 1 + (-1 + EulerGamma + Log[x]) x - x^2/2 + O[x]^3.
+
 ## StruveH
 
 - `StruveH[nu, z]` — the Struve function H_ν(z), the particular solution of the
@@ -626,6 +636,8 @@ In[2]:= N[StruveL[1/3, 7], 30]
 Out[2]= 166.928466768913900120706714408
 ```
 
+An inexact negative half-odd order at z = 0 gives an inexact zero (StruveL[-1.5, 0] = 0.).
+
 ## AngerJ / WeberE
 
 - `AngerJ[nu, z]` — the Anger function **J**_ν(z) = (1/π)∫₀^π cos(νθ − z sin θ) dθ.
@@ -672,6 +684,8 @@ In[2]:= {AngerJ[1/3, 2.], WeberE[1/3, 2.]}
 Out[2]= {0.55058, -0.565462}
 ```
 
+A wrong argument count prints WeberE::argt / ::argtu.
+
 ## KelvinBer / KelvinBei / KelvinKer / KelvinKei
 
 - `KelvinBer[nu, z]`, `KelvinBei[nu, z]`, `KelvinKer[nu, z]`, `KelvinKei[nu, z]`
@@ -713,6 +727,10 @@ Out[1]= {0.921072, -0.331396}
 In[2]:= N[KelvinKer[1/3, -2 + 3 I], 20]
 Out[2]= -10.5906978812710808984 - 4.89677861808647898171*I
 ```
+
+A wrong argument count prints ::argt. At an inexact zero the kernels decline, the exact value at 0 is given at the zero's precision: KelvinBei[-2, 0.] = 0., KelvinKei[0, 0.`20] = -Pi/4 to 20 places, KelvinKei[1, 0.] = ComplexInfinity.
+
+Series of KelvinKer[0, u] and KelvinKei[0, u] where u vanishes is the logarithmic series (DLMF 10.65.4): Series[KelvinKei[x], {x, 0, 2}] = -Pi/4 + (1/4 (1 - EulerGamma) + 1/4 (Log[2] - Log[x])) x^2 + O[x]^3.
 
 ## LogIntegral
 
@@ -759,6 +777,8 @@ the branch cut runs along (−∞, +1).
   `D[LogIntegral[x^2], x] = (2 x)/Log[x^2]`); the Taylor series at a regular
   point follows from the generic `D`-based fallback.
 - Wrong arity emits `LogIntegral::argx` and stays unevaluated.
+
+Arbitrary-precision arguments below machine precision keep their precision (LogIntegral[2.`10] has precision 10).
 
 ## SinIntegral
 
@@ -813,6 +833,8 @@ Out[2]= 1.99549 + 0.222995*I
 In[3]:= SinIntegral[-x]
 Out[3]= -SinIntegral[x]
 ```
+
+Odd symmetry takes negative exact numbers too (SinIntegral[-2] = -SinIntegral[2]); SinIntegral[I z] = I SinhIntegral[z].
 
 ## CosIntegral
 
@@ -875,6 +897,8 @@ In[3]:= CosIntegral[3. I]
 Out[3]= 4.96039 + 1.5708*I
 ```
 
+Arbitrary-precision arguments below machine precision keep their precision (Precision[CosIntegral[1.5`3]] is 3.).
+
 ## SinhIntegral
 
 - `SinhIntegral[z]` — the hyperbolic sine integral Shi(z) = ∫₀ᶻ Sinh[t]/t dt.
@@ -930,6 +954,8 @@ Out[2]= 2.84649 + 2.22177*I
 In[3]:= SinhIntegral[-2 x]
 Out[3]= -SinhIntegral[2 x]
 ```
+
+Odd symmetry takes negative exact numbers (SinhIntegral[-I] = -I SinIntegral[1]); SinhIntegral[I z] = I SinIntegral[z]. A sub-machine arbitrary-precision argument keeps its precision.
 
 ## CoshIntegral
 
@@ -988,6 +1014,8 @@ Out[2]= 2.45267 + 3.14159*I
 In[3]:= CoshIntegral[3.5 + I]
 Out[3]= 5.36668 + 4.28423*I
 ```
+
+A sub-machine arbitrary-precision argument keeps its precision (Precision[CoshIntegral[2.`5]] is 5.).
 
 ## FresnelC and FresnelS
 
@@ -1060,6 +1088,8 @@ In[4]:= FresnelS[-I Infinity]
 Out[4]= 1/2*I
 ```
 
+Odd symmetry takes negative exact numbers: FresnelS[-2] = -FresnelS[2], FresnelC[-1/2] = -FresnelC[1/2].
+
 ## Sinc
 
 An exact argument whose `Sin` has a closed form evaluates: `Sinc[Pi/4]` is
@@ -1089,6 +1119,8 @@ differentiates to it.
   1 - x^2/6 + x^4/120 - x^6/5040 + O[x]^7`.
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits `Sinc::argx`
   and stays unevaluated.
+
+A complex arbitrary-precision result is rounded to the argument's precision (Precision[Sinc[1.`30 + I]] is 30.).
 
 ## InverseErf
 
@@ -1145,6 +1177,8 @@ Out[2]= 0.631776
 In[3]:= InverseErf[1]
 Out[3]= Infinity
 ```
+
+Odd symmetry takes negative exact numbers: InverseErf[-1/2] = -InverseErf[1/2].
 
 ## InverseErfc
 
@@ -1244,6 +1278,8 @@ Behaviour:
   `D[HarmonicNumber[n], n] = Pi^2/6 - HarmonicNumber[n, 2]` and
   `D[HarmonicNumber[n, r], n] = r (Zeta[r+1] - HarmonicNumber[n, r+1])`; the
   `r`-derivative is the generic `Derivative[0,1][HarmonicNumber][n, r]`.
+
+HarmonicNumber[0., r] is 0. for every order (the empty sum). FunctionExpand[HarmonicNumber[n]] = EulerGamma + PolyGamma[0, 1 + n].
 
 ## PolyGamma
 
@@ -1399,6 +1435,8 @@ Out[2]= -0.0562437 - 9.42478*I
 In[3]:= LogGamma[2. + 30. I]
 Out[3]= -41.1026 + 74.356*I
 ```
+
+A machine argument whose value leaves the double range gives the 53-bit extended-exponent real (LogGamma[1.*^307] ~ 7.05894*^309) instead of staying unevaluated.
 
 ## Pochhammer
 
@@ -1597,6 +1635,8 @@ In[1]:= Hypergeometric0F1[1/2, z]
 Out[1]= Cosh[2 Sqrt[z]]
 ```
 
+A real z so large that the value leaves the MPFR exponent range gives Overflow[] with General::ovfl (Hypergeometric0F1[2, 1.*^300]).
+
 ## Hypergeometric1F1
 
 
@@ -1630,6 +1670,8 @@ Out[3]= 0.025
 In[4]:= Hypergeometric1F1[1 + I, 2, 0.5]
 Out[4]= 1.27058 + 0.322122*I
 ```
+
+An inexact z = 0 gives an inexact 1 whatever the parameters (Hypergeometric1F1[1, b, 0.] = 1.); the same holds for every HypergeometricPFQ.
 
 ## Hypergeometric2F1
 
@@ -1672,6 +1714,8 @@ Out[3]= -0.929749 - 1.00531*I
 In[4]:= N[Hypergeometric2F1[1/3, 1/2, 1/5, 99/100], 50]
 Out[4]= 24.8565393133858972090022500136712230259988212774851
 ```
+
+At z = 1 with positive rational a, b, c and c - a - b <= 0 every term is positive and the series diverges: Infinity (Hypergeometric2F1[1, 2, 3, 1], and the inexact z = 1. alike).
 
 ## HypergeometricU
 
@@ -1878,6 +1922,8 @@ In[4]:= Zeta[-2.5, -0.5]
 Out[4]= 0.169765
 ```
 
+Zeta at a negative even integer is 0 at any size (Zeta[-10^20] = 0).
+
 ## HurwitzZeta
 
 - `HurwitzZeta[s, a]` — the Hurwitz zeta function ζ(s, a) = Σ_{k≥0} (k+a)⁻ˢ
@@ -1950,6 +1996,8 @@ In[3]:= HurwitzZeta[-3, -2]
 Out[3]= -1079/120
 ```
 
+A sub-machine arbitrary-precision argument keeps its precision (Precision[HurwitzZeta[3`5, 2]] is 5.).
+
 ## StieltjesGamma
 
 `StieltjesGamma[n]` is the n-th Stieltjes constant γₙ, the coefficients of the
@@ -1977,6 +2025,8 @@ Out[1]= EulerGamma
 In[2]:= N[StieltjesGamma[3]]
 Out[2]= 0.00205383
 ```
+
+A wrong argument count prints StieltjesGamma::argt.
 
 ## BernoulliB
 
@@ -2014,6 +2064,8 @@ In[2]:= BernoulliB[3, z]
 Out[2]= 1/2 z - 3/2 z^2 + z^3
 ```
 
+BernoulliB[n] is 0 for every odd n > 1 whatever its size (BernoulliB[5001], BernoulliB[10^30 + 1], BernoulliB[5001.] = 0.). D[BernoulliB[n, x], x] = n BernoulliB[n - 1, x].
+
 ## EulerE
 
 - `EulerE[n]` — the Euler number Eₙ.
@@ -2047,6 +2099,8 @@ Out[1]= {1, 0, -1, 0, 5, 0, -61, 0, 1385, 0, -50521}
 In[2]:= EulerE[3, z]
 Out[2]= 1/4 - 3/2 z^2 + z^3
 ```
+
+With FLINT, an even index past the recurrence's table (up to 200000) is computed directly (EulerE[6000] is exact). D[EulerE[n, x], x] = n EulerE[n - 1, x].
 
 ## PolyLog
 
@@ -2179,6 +2233,8 @@ Out[3]= 2.32018 - 3.45139*I
   all call it, so they agree bit for bit. It is within 6.1e-15 of 30-digit values
   over the 479-value grid. About 17 µs a call; a complex value (real `z > 1`)
   hands a compiled real body back to the interpreter.
+
+A negative integer order with |z| > 1 uses Li_{-n}(1/z) = (-1)^(n+1) Li_{-n}(z), so a real z > 1 gives a real result (PolyLog[-3, 2.] = 26.).
 
 ## LerchPhi
 
@@ -2319,6 +2375,8 @@ Out[2]= 0.0794983
 In[3]:= LerchPhi[-1, 2, 1/2]
 Out[3]= 4 Catalan
 ```
+
+LerchPhi[-1, 1, a] for a rational a applies the Gauss digamma theorem when that is no larger: LerchPhi[-1, 1, 1/2] = Pi/2.
 
 ## DirichletL
 
@@ -2607,6 +2665,8 @@ Out[2]= 2.59587
 In[3]:= AiryBi[2.5 + I]
 Out[3]= 0.512544 + 5.335*I
 ```
+
+Machine values on the far negative axis are within a few ulps (AiryBi[-10.^8], AiryBiPrime[-1.*^8]).
 
 ## BesselJ
 
@@ -3066,11 +3126,13 @@ In[2]:= N[BarnesG[6.0]]
 Out[2]= 288.
 
 In[3]:= N[BarnesG[13/2], 30]
-Out[3]= 2548.745769568498989735906104648
+Out[3]= 2548.74576956849898973590610636
 
 In[4]:= N[BarnesG[2.5 + 1.0 I]]
 Out[4]= 0.743798 - 0.0953168 I
 ```
+
+Every machine argument is evaluated through arb with guard bits and rounded once (BarnesG[5.] = 12., BarnesG[-0.5] = -0.1701720698965615).
 
 ## QPochhammer
 
@@ -3098,6 +3160,8 @@ Out[1]= (1 - a) (1 - a q) (1 - a q^2)
   `(a; q)_∞ / (a qⁿ; q)_∞` (`QPochhammer[0.5, 0.3, 2.5]`, complex `n` too), and a
   negative integer `n` is `1/Π_{k=1}^{|n|} (1 - a q^-k)` (`QPochhammer[1/2, 1/3,
   -2] = 4/7`). A vanishing factor gives `0.`, not `-0.`.
+
+QPochhammer[0, q] = 1. For |q| near 1 the product is replaced by its log series -Sum[a^m/(m (1 - q^m))] (|a| <= 3/4), so a machine product that underflows the double range gives the 53-bit extended-exponent value (QPochhammer[0.5, 0.99999] ~ 3.9*^-25287) instead of a subnormal.
 
 ## ProductLog
 
@@ -3192,6 +3256,8 @@ Out[5]= x - x^2 + 3/2 x^3 - 8/3 x^4 + O[x]^5
   `N[ProductLog[-1, 2]]` arrives as `ProductLog[-1., 2.]`; an integer-valued machine
   or MPFR index names the same branch and evaluates (a fractional index does not).
 
+A bignum branch index with an inexact argument is evaluated (ProductLog[10^20, 1.] ~ -47.89 + 6.283*^20 I); the working precision carries log2|k| extra bits (ProductLog[2^62, 1.] had the wrong sign of its imaginary part).
+
 ## ChebyshevT
 
 `ChebyshevT[n, x]` gives the Chebyshev polynomial of the first kind `T_n(x)`.
@@ -3256,6 +3322,8 @@ In[3]:= {ChebyshevT[60, 0.7], Cos[60 ArcCos[0.7]]}
 Out[3]= {-0.825313, -0.825313}
 ```
 
+An integer order past the recurrence's cap, or a bignum one, with a real inexact x uses the O(1) closed form with log2|n| guard bits (ChebyshevT[2000001, 0.3], ChebyshevT[10^30, 0.5`50] = -0.5 to all 50 places). An exact rational x past the polynomial cap is evaluated exactly by binary powering of the recurrence matrix (ChebyshevT[2001, 1/2] = -1).
+
 ## ChebyshevU
 
 `ChebyshevU[n, x]` gives the Chebyshev polynomial of the second kind `U_n(x)`.
@@ -3311,6 +3379,8 @@ Out[2]= {1, Pi, -1 + Pi^2, -2 Pi + Pi^3}
 In[3]:= ChebyshevU[3, 2. + I]
 Out[3]= 8.0 + 84.0*I
 ```
+
+As ChebyshevT: the closed form for huge orders and a real inexact x (ChebyshevU[10^7, 0.5] = -1.), exact binary powering for an exact rational x past the polynomial cap (ChebyshevU[2001, 1/2] = -1).
 
 ## LaguerreL
 
@@ -3457,6 +3527,8 @@ In[4]:= D[HermiteH[n, z], z]
 Out[4]= 2 n HermiteH[-1 + n, z]
 ```
 
+HermiteH[n, 0] is 0 for an odd bignum n. A machine call whose value leaves the double range answers the 53-bit extended-exponent real (Precision MachinePrecision), as ChebyshevT/U do, not the working precision of the MPFR recurrence (HermiteH[200, 100.] was tagged at 24 places).
+
 ## WhittakerM
 
 `WhittakerM[k, m, z]` gives the Whittaker function `M_{k,m}(z)`, a solution of
@@ -3512,6 +3584,8 @@ Out[2]= ((1/2 + k + m) WhittakerM[1 + k, m, z])/z + (1/2 - k/z) WhittakerM[k, m,
 In[3]:= Series[WhittakerM[2, 1/2, x], {x, 0, 6}]
 Out[3]= x - x^2 + 3/8 x^3 - 1/12 x^4 + 5/384 x^5 - 1/640 x^6 + O[x]^7
 ```
+
+WhittakerM[k, m, 0] with an inexact k or m is an inexact 0; Re(m) < -1/2 at a zero z (exact or inexact) is ComplexInfinity.
 
 ## WhittakerW
 
@@ -3709,6 +3783,8 @@ In[3]:= D[GegenbauerC[n, a, x], x]
 Out[3]= 2 a GegenbauerC[-1 + n, 1 + a, x]
 ```
 
+The machine recurrence runs to degree 10^7 (GegenbauerC[10^6, 1.5, 0.3] = -736.425...).
+
 ## JacobiSN, JacobiCN, JacobiDN and the Jacobi ratios
 
 `JacobiSN[u, m]`, `JacobiCN[u, m]`, `JacobiDN[u, m]` give the Jacobi elliptic
@@ -3773,6 +3849,8 @@ In[3]:= JacobiAmplitude[10., 1.7]
 Out[3]= 11.7593
 ```
 
+InverseJacobiDN[v, 0]: dn is identically 1 at m = 0, so v = 1 gives 0 (an inexact zero for an inexact v) and any other v stays unevaluated without the EllipticF template's Power::infy; the machine kernel answers InverseJacobiDN[1., m] = 0. for every m.
+
 ## HankelH1, HankelH2 and the spherical Bessel functions
 
 `HankelH1[nu, z] = BesselJ[nu, z] + I BesselY[nu, z]` and `HankelH2[nu, z] =
@@ -3823,6 +3901,12 @@ Out[2]= 0. + 0.114273 I
 In[3]:= D[SphericalBesselJ[n, z], z]
 Out[3]= -SphericalBesselJ[n, z]/(2 z) + 1/2 (SphericalBesselJ[-1 + n, z] - SphericalBesselJ[1 + n, z])
 ```
+
+SphericalBesselJ[nu, 0.] is 0. for every nu > 0. The docstrings state the implemented form Sqrt[Pi]/Sqrt[2 z] (principal roots).
+
+Series of SphericalBesselY[n, u] for an integer 0 <= n <= 64 expands its elementary form (Series[SphericalBesselY[0, x], {x, 0, 2}] = -1/x + x/2 + O[x]^3).
+
+Series of HankelH1 / HankelH2 (and of BesselY inside a larger expression or of a composite argument) at an integer order where the argument vanishes uses BesselY's logarithmic series: Series[HankelH2[0, x], {x, 0, 1}] = 1 - (I (2 EulerGamma - 2 Log[2] + 2 Log[x]))/Pi + O[x]^2.
 
 ## BetaRegularized
 
@@ -3986,6 +4070,8 @@ In[4]:= N[AppellF1[3/10, 1/5, 1/2, 17/10, 10, -20], 20]
 Out[4]= 0.66115898412418623440 - 0.097619401256830917067 I
 ```
 
+A negative integer a with a pole c (a non-positive integer) stays unevaluated at every precision, exact included (no Power::infy).
+
 ## EllipticTheta and EllipticThetaPrime
 
 `EllipticTheta[a, u, q]` gives the Jacobi theta function `theta_a(u, q)`,
@@ -4123,6 +4209,12 @@ Out[3]= 1 + 3 Csch[Sqrt[3] u]^2
 In[4]:= D[WeierstrassZeta[u, {g2, g3}], u]
 Out[4]= -WeierstrassP[u, {g2, g3}]
 ```
+
+Exact dependent half-periods (a zero one, or a real ratio) print EllipticReducedHalfPeriods::nind, as the machine form does, instead of a leaked Power::infy.
+
+Integrate takes a head that is by definition the derivative of another, in an argument linear in x: Integrate[WeierstrassPPrime[u, {g2, g3}], u] = WeierstrassP[u, {g2, g3}] (likewise MathieuCPrime / MathieuSPrime / EllipticThetaPrime).
+
+Series of WeierstrassP and WeierstrassPPrime about a point where u vanishes is the Laurent series u^-2 + g2 u^2/20 + g3 u^4/28 + ... (DLMF 23.9.2-3) and its derivative: Series[WeierstrassPPrime[u, {g2, g3}], {u, 0, 3}] = -2/u^3 + g2 u/10 + g3 u^3/7 + O[u]^4.
 
 ## MathieuC and MathieuCPrime
 
@@ -4292,6 +4384,10 @@ Out[4]= True
   off the real axis, so the rank argument does not apply).
 
 Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
+
+A sub-machine arbitrary-precision q keeps its precision (Precision[MathieuCharacteristicB[2, 1.`5]] is 5.).
+
+A non-integer arbitrary-precision order within 2^-53 of an integer n is classified and seeded from the neighbouring double on its side: the value tends to a_n from above and to b_n from below (MathieuCharacteristicB[2.00000000000000000001`30, 1.`30] = a_2(1)).
 
 ## MathieuS and MathieuSPrime
 
@@ -4699,6 +4795,8 @@ Fermat primes p = 17, 257 expand in nested square roots by Gauss's
 period descent: `FunctionExpand[Cos[2 Pi/17]] = -1/16 + Sqrt[17]/16
 + Sqrt[34 - 2 Sqrt[17]]/16 + Sqrt[17 + 3 Sqrt[17] - Sqrt[34 - 2 Sqrt[17]]
 - 2 Sqrt[34 + 2 Sqrt[17]]]/8`.
+
+Also HarmonicNumber[n] -> EulerGamma + PolyGamma[0, 1 + n], ChebyshevT[n, x] -> Cos[n ArcCos[x]], ChebyshevU[n, x] -> Sin[(n + 1) ArcCos[x]]/Sqrt[1 - x^2], GoldenRatio -> (1 + Sqrt[5])/2. A wrong argument count prints ::argt (::nonopt for a third positional argument).
 
 ## Formula representations (Roach's algorithm)
 
@@ -5239,6 +5337,8 @@ Out[4]= -(Gamma[3/4] Sqrt[Pi])/(2 Sqrt[2] Gamma[5/4])
   0); type 3 is arb type 1. The type label may arrive as `2.` (as `N` leaves it).
   Checked against the reference inside and outside (-1, 1) and at complex `x`.
 
+A huge degree (a bignum, or |nu| > 2^24) with an inexact argument stays unevaluated quietly (the hypergeometric form's Gamma ratios overflowed and printed General::ovfl).
+
 ## EllipticK, EllipticF, EllipticE and EllipticPi
 
 The Legendre elliptic integrals. **The parameter argument is `m = k²`, not the
@@ -5481,6 +5581,8 @@ Abs[x]^(1/n)` for odd `n`, `x^(1/n)` for even `n` and `x ≥ 0` — unlike
   packed kernel receives every operand as a double, so the scalar path accepts it
   too, to keep the surfaces in agreement.
 
+Surd[0, n] is 0 for a bignum n; Surd[x, n]^(k n) = x^k; Integrate[Surd[a x + b, n], x] = n/((n + 1) a) (a x + b) Surd[a x + b, n] and Integrate[x^m Surd[x, n], x] = n/(n (m + 1) + 1) x^(m + 1) Surd[x, n].
+
 ## CubeRoot
 
 `CubeRoot[x]` is the real cube root of a real `x`, the same as `Surd[x, 3]`.
@@ -5495,6 +5597,8 @@ Abs[x]^(1/n)` for odd `n`, `x^(1/n)` for even `n` and `x ≥ 0` — unlike
   `Surd`, at the argument's precision.
 - A non-real number emits `CubeRoot::preal` and stays unevaluated
   (`CubeRoot[I]`); a packed buffer with such an element goes to the List path.
+
+CubeRoot[x]^3 = x; Integrate[CubeRoot[x], x] = 3/4 x Surd[x, 3].
 
 ## HaarWavelet, DaubechiesWavelet, WaveletPhi, WaveletPsi, WaveletFilterCoefficients
 
@@ -5625,6 +5729,8 @@ inexact arguments (`HeavisideTheta[1., Sqrt[2]]`) decide by sign like any other.
   sum, constants included), and `DiracDelta[2 x, y]` is `DiracDelta[x, y]/2`.
 - `HeavisideTheta` is not normalised (`HeavisideTheta[-x]` stays). FeynCalc's
   `FCFeynmanParameterJoin` writes its delta function in this form.
+
+HeavisideTheta has the NumericFunction attribute and a usage string. Every derivative of DiracDelta is 0 at a nonzero real number (Derivative[1][DiracDelta][1] = 0), so Series[HeavisideTheta[x], {x, 1, 2}] is 1 + O[x - 1]^3. Integrate no longer takes list or relation subexpressions (a Piecewise clause) as derivative-divides kernels, which leaked Piecewise::pairs / Power::infy.
 
 ## Special values at poles and infinities (audit Wave 3, S11)
 

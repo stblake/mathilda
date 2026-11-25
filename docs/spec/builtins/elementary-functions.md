@@ -107,6 +107,8 @@ In[4]:= ArcTan[1, 1]
 Out[4]= 1/4*Pi
 ```
 
+Inverse values: ArcSin and ArcCos compare against the evaluated table values, so ArcSin[Sin[Pi/12]] = Pi/12, ArcSin[(1 + Sqrt[5])/4] = 3 Pi/10. The even and odd functions pull the sign out of an all-negative sum (Cos[-x - y] = Cos[x + y], Sin[-x - y] = -Sin[x + y]; Sin[x - y] stays). ArcCot, ArcSec and ArcCsc have docstrings.
+
 ## Hyperbolic Functions
 `Sinh`, `Cosh`, `Tanh`, `Coth`, `Sech`, `Csch` and their inverses.
 
@@ -117,6 +119,8 @@ Out[4]= 1/4*Pi
   `ArcCosh[N[0.5, 50]]`, `ArcTanh[N[2, 50]]`) preserve the working
   precision via the shared MPFR-complex helpers in
   `src/numeric_complex.c`.
+
+The I Pi quarter periods are reduced: Cosh[x + I Pi] = -Cosh[x], Sinh[x + I Pi/2] = I Cosh[x], Tanh[x + I Pi/2] = Coth[x], a 2 I Pi shift drops out. Sinh[ArcCsch[x]] = Cosh[ArcSech[x]] = 1/x. An all-negative sum loses its sign as for the trig functions (Cosh[-x - y] = Cosh[x + y]).
 
 ## Exponential and Logarithmic Functions
 
@@ -402,6 +406,8 @@ In[3]:= TrigToExp[{Sin[x], Cos[x], Tan[x]}]
 Out[3]= {(-1/2*I) E^((I) x) + (1/2*I) E^((-I) x), 1/2 E^((-I) x) + 1/2 E^((I) x), (-I) E^((I) x)/(E^((-I) x) + E^((I) x)) + (I) E^((-I) x)/(E^((-I) x) + E^((I) x))}
 ```
 
+A wrong argument count prints TrigToExp::argx (ExpToTrig likewise).
+
 ## ExpToTrig
 
 An expression with no exponential or logarithm to convert is returned as
@@ -429,6 +435,8 @@ Out[2]= 2 I ArcTan[x]
 In[3]:= ExpToTrig[Exp[I x] == -1]
 Out[3]= Cos[x] + I Sin[x] == -1
 ```
+
+The log differences also match under a common coefficient, which is how TrigToExp writes ArcTan and ArcTanh: ExpToTrig[TrigToExp[ArcTan[x]]] = ArcTan[x], ExpToTrig[TrigToExp[ArcTanh[x]]] = ArcTanh[x].
 
 ## TrigExpand
 Expands trigonometric functions in `expr` by splitting up sums and integer
@@ -513,6 +521,8 @@ Out[9]= {(2 Cos[x] Sin[x])/(Cos[x]^2 - Sin[x]^2), Cosh[x] Sinh[y] + Cosh[y] Sinh
 In[10]:= TrigExpand[1 < Cos[x + y] < 2]
 Out[10]= 1 < -Sin[x] Sin[y] + Cos[x] Cos[y] < 2
 ```
+
+Hold, HoldForm and HoldComplete subexpressions are left untouched by TrigExpand, TrigFactor and TrigReduce (TrigExpand[Hold[Sin[2 x]]] = Hold[Sin[2 x]]; before, a half-applied rule Hold[Sin[(2 - 1) x] ...] leaked).
 
 ## TrigFactor
 
@@ -815,6 +825,8 @@ Out[6]= 0
 In[7]:= UnitBox[x]
 Out[7]= UnitBox[x]
 ```
+
+Integrate takes UnitBox[u] as UnitStep[u + 1/2] - UnitStep[u - 1/2] (equal almost everywhere): Integrate[UnitBox[x], {x, -1, 1}] = 1.
 
 ## Unitize
 

@@ -819,7 +819,13 @@ static Expr* ap_exact(int kind, Expr* const* A) {
                 return ap_apply("((1 - #3)^(-#1) (1 - #4)^(-#2))&", (Expr*[]){ b1, b2, x, y }, 4);
             if (expr_eq(x, y))
                 return ap_apply("Hypergeometric2F1[#1, #2 + #3, #4, #5]&", (Expr*[]){ a, b1, b2, c, x }, 5);
-            if (a->type == EXPR_INTEGER && a->data.integer < 0 && a->data.integer >= -60)
+            /* A negative integer a terminates the series -- unless c is a pole
+             * (a non-positive integer), which stays unevaluated at every
+             * precision, as the machine and arb paths leave it: the polynomial
+             * would divide by (c)_k = 0 (AppellF1#1) or answer where the
+             * numeric call does not (AppellF1#2). */
+            if (a->type == EXPR_INTEGER && a->data.integer < 0 && a->data.integer >= -60 &&
+                !(c->type == EXPR_INTEGER && c->data.integer <= 0))
                 return ap_f1_poly(A, -a->data.integer);
             {
                 Expr* s = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),

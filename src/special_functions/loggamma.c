@@ -682,7 +682,19 @@ static Expr* loggamma_one_arg(Expr* arg) {
         double v = arg->data.real;
         if (v > 0.0) {
             double r = lgamma(v);
-            if (isinf(r) || isnan(r)) return NULL; /* overflow: stay symbolic */
+            if (isinf(r) || isnan(r)) {
+#ifdef USE_MPFR
+                /* Past DBL_MAX: the same value at 53 bits through MPFR, the
+                 * numeric tower's form of a machine number outside the double
+                 * range (LogGamma[1.*^307] ~ 7.06*^309, LogGamma#3). */
+                Expr* big = expr_new_mpfr_from_d(v, 53);
+                Expr* out = loggamma_one_arg(big);
+                expr_free(big);
+                return out;
+#else
+                return NULL;                       /* overflow: stay symbolic */
+#endif
+            }
             return expr_new_real(r);
         }
         if (v == floor(v)) return expr_new_symbol(SYM_ComplexInfinity); /* pole */

@@ -164,8 +164,9 @@ void test_hyper_declines() {
     /* Exact calls stay exact / symbolic. */
     assert_eval_eq("Hypergeometric1F1[1, 2, 1]", "-1 + E", 0);
     assert_eval_eq("Hypergeometric1F1[-3, 2, x]", "1 - 3/2 x + 1/2 x^2 - 1/24 x^3", 0);
-    /* Gauss's sum diverges at c - a - b <= 0: no machine value. */
-    assert_eval_eq("Hypergeometric2F1[1, 2, 3, 1.]", "HypergeometricPFQ[{1, 2}, {3}, 1.0]", 0);
+    /* Gauss's sum diverges at c - a - b <= 0: positive terms, so Infinity, as
+     * the exact call (audit Hypergeometric2F1#3). */
+    assert_eval_eq("Hypergeometric2F1[1, 2, 3, 1.]", "Infinity", 0);
     /* Raw kernel declines: lower-parameter poles, divergent 2F1 at z = 1. */
     double v;
     ASSERT(!sf_machine_hyper1f1(0.5, -2.0, 1.0, &v));

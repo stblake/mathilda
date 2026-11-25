@@ -54,6 +54,15 @@
 #include <mpfr.h>
 #endif
 
+#ifdef USE_FLINT
+#include <flint/fmpz.h>
+#include <flint/arith.h>   /* arith_euler_number */
+/* Past the recurrence's cap, FLINT computes one Euler number directly
+ * (zeta / multimodular, ~n log n bits): EulerE[6000] is exact (EulerE#2).
+ * This bounds the size of the answer, ~n log2 n bits (~0.5 MB here). */
+#define EULER_DIRECT_CAP 200000
+#endif
+
 /* Largest index for which EulerE[n] builds the exact number, and largest
  * degree for which EulerE[n, x] expands the polynomial. The recurrence is
  * O(n^2) in growing big-integers, so these guard against accidental runaway;
@@ -206,7 +215,12 @@ static Expr* euler_one_arg(Expr* arg) {
         return expr_new_integer(0);
     eidx_kind k = euler_index(arg, &n, &prec);
     if (k == EIDX_NONE) return NULL;          /* symbolic / negative / non-integer */
-    if (n > EULER_NUMBER_CAP) {
+#ifdef USE_FLINT
+    const unsigned long even_cap = EULER_DIRECT_CAP;   /* FLINT computes past the table */
+#else
+    const unsigned long even_cap = EULER_NUMBER_CAP;
+#endif
+    if (n > EULER_NUMBER_CAP && ((n & 1u) || n > even_cap)) {
         if (!(n & 1u)) return NULL;            /* too large: stay symbolic */
         if (k == EIDX_EXACT) return expr_new_integer(0);
         if (k == EIDX_REAL) return expr_new_real(0.0);
@@ -219,6 +233,15 @@ static Expr* euler_one_arg(Expr* arg) {
 
     mpz_t z;
     mpz_init(z);
+#ifdef USE_FLINT
+    if (n > EULER_NUMBER_CAP) {
+        fmpz_t e;
+        fmpz_init(e);
+        arith_euler_number(e, (ulong)n);
+        fmpz_get_mpz(z, e);
+        fmpz_clear(e);
+    } else
+#endif
     euler_get_z(z, (size_t)n);
 
     Expr* out;

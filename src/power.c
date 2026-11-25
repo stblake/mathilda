@@ -1145,6 +1145,22 @@ Expr* builtin_power(Expr* res) {
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
 
+    /* Surd[x, n]^(k n) = x^k: the real n-th root raised to a multiple of its
+     * index is the radicand's power wherever Surd is defined (CubeRoot[x]^3
+     * = x, CubeRoot#4). */
+    if (base->type == EXPR_FUNCTION && base->data.function.arg_count == 2 &&
+        exp->type == EXPR_INTEGER &&
+        base->data.function.head->type == EXPR_SYMBOL &&
+        base->data.function.head->data.symbol.name == SYM_Surd) {
+        const Expr* idx = base->data.function.args[1];
+        if (idx->type == EXPR_INTEGER && idx->data.integer >= 2 &&
+            exp->data.integer % idx->data.integer == 0) {
+            int64_t k = exp->data.integer / idx->data.integer;
+            if (k == 1) return expr_copy(base->data.function.args[0]);
+            Expr* pa[2] = { expr_copy(base->data.function.args[0]), expr_new_integer(k) };
+            return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
+        }
+    }
     /* Underflow[]^k / Overflow[]^-k (numeric.c): one pointer test unless the
      * base is a zero-argument call. */
     if (base->type == EXPR_FUNCTION && base->data.function.arg_count == 0) {
@@ -1492,6 +1508,16 @@ Expr* builtin_power(Expr* res) {
     if (is_rational(exp, &rn, &rd)) {
         if (rn < 0) exp_is_negative = true;
         else if (rn > 0) exp_is_positive = true;
+    } else if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL &&
+               exp->data.function.head->data.symbol.name == SYM_Rational &&
+               exp->data.function.arg_count == 2) {
+        /* A bignum rational exponent: its numerator's sign (0^(1/10^20) is 0,
+         * as Surd[0, 10^20] needs -- Surd#4). */
+        const Expr* num = exp->data.function.args[0];
+        int sg = num->type == EXPR_INTEGER ? (num->data.integer > 0) - (num->data.integer < 0)
+               : num->type == EXPR_BIGINT ? mpz_sgn(num->data.bigint) : 0;
+        if (sg < 0) exp_is_negative = true;
+        else if (sg > 0) exp_is_positive = true;
     }
 
     if (base_is_zero && exp_is_negative) {

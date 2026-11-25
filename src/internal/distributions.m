@@ -67,4 +67,14 @@ DiracDelta[a___, x_, b___] /; DiracDelta`Private`scale[x] =!= 1 :=
 (* Attributes as in the reference: Listable (FeynCalc's FCLoopFindSectors
  * reads sectors as HeavisideTheta[pows - 1/2] over a list), Orderless,
  * Protected.  Set last, so the rules above are installed first. *)
+(* Every derivative of DiracDelta vanishes away from the origin, as the
+ * distribution itself does: Derivative[1][DiracDelta][1] = 0, so the Taylor
+ * series of HeavisideTheta about a regular point is the constant it is there
+ * (HeavisideTheta#6). *)
+Derivative[n_Integer?Positive][DiracDelta][x_?NumericQ] /;
+    TrueQ[Positive[x]] || TrueQ[Negative[x]] := 0;
+
+HeavisideTheta::usage = "HeavisideTheta[x] represents the Heaviside theta function, 0 for x < 0 and 1 for x > 0 (HeavisideTheta[0] = 0 here, the left-continuous convention). HeavisideTheta[x1, x2, ...] is the multidimensional theta function, 1 only when every xi is positive. D[HeavisideTheta[x], x] = DiracDelta[x].";
 SetAttributes[{HeavisideTheta, DiracDelta}, {Listable, Orderless, Protected}];
+SetAttributes[HeavisideTheta, NumericFunction];
+

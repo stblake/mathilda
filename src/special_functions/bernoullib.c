@@ -209,10 +209,21 @@ static bidx_kind bern_index(const Expr* e, unsigned long* idx, long* prec) {
 /* ------------------------------------------------------------------ */
 
 static Expr* bern_one_arg(Expr* arg) {
+    /* B_n = 0 for every odd n > 1, whatever its size (BernoulliB#2): checked
+     * before the index cap, and for a bignum index past an unsigned long. */
+    if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) > 0 && mpz_odd_p(arg->data.bigint))
+        return expr_new_integer(0);
     unsigned long n = 0;
     long prec = 53;
     bidx_kind k = bern_index(arg, &n, &prec);
     if (k == BIDX_NONE) return NULL;          /* symbolic / negative / non-integer */
+    if (n > 1 && (n & 1UL)) {
+        if (k == BIDX_EXACT) return expr_new_integer(0);
+        if (k == BIDX_REAL) return expr_new_real(0.0);
+#ifdef USE_MPFR
+        return expr_new_mpfr_bits((mpfr_prec_t)prec);
+#endif
+    }
     if (n > BERNOULLI_NUMBER_CAP) return NULL; /* too large: stay symbolic */
 
     mpq_t q;

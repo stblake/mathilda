@@ -53,7 +53,8 @@ void test_whittaker_special() {
     /* M_{k,m}(0) = 0 for Re(m) > -1/2 (leading power z^(m+1/2)). */
     assert_eval_eq("WhittakerM[1, 1, 0]", "0", 0);
     assert_eval_eq("WhittakerM[0, 0, 0]", "0", 0);
-    assert_eval_eq("WhittakerM[2, 0.5, 0]", "0", 0);
+    /* an inexact parameter makes the zero inexact (audit WhittakerM#2) */
+    assert_eval_eq("WhittakerM[2, 0.5, 0]", "0.0", 0);
     /* Symbolic / all-exact arguments stay symbolic (no expansion). */
     assert_eval_eq("WhittakerM[2, 3, x]", "WhittakerM[2, 3, x]", 0);
     assert_eval_eq("WhittakerM[2, 3, 4]", "WhittakerM[2, 3, 4]", 0);

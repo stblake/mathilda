@@ -851,6 +851,156 @@ static void test_wave4_numerics(void) {
     audit_true("JacobiCS#1", "Abs[JacobiCS[5.*^9, 10.^-20]/N[JacobiCS[5*10^9, 10^-20], 30] - 1] < 10^-15");
 }
 
+/* ================================================================== */
+/* Wave 5 G1-specfun: special-functions low findings.                  */
+/* ================================================================== */
+
+static void test_wave5_messages(void) {
+    audit_chk("FunctionExpand#4", "Quiet[Check[FunctionExpand[], fired, FunctionExpand::argt]]", "fired");
+    /* FunctionExpand takes options, so a third positional argument is
+     * reported as a non-option (General::nonopt), as for every such head */
+    audit_chk("FunctionExpand#4", "Quiet[Check[FunctionExpand[1, 2, 3], fired, FunctionExpand::nonopt]]", "fired");
+    audit_chk("FunctionExpand#4", "Quiet[FunctionExpand[1, 2, 3]]", "FunctionExpand[1, 2, 3]");
+    audit_chk("KelvinBer#3", "Quiet[Check[KelvinBer[], fired, KelvinBer::argt]]", "fired");
+    audit_chk("KelvinBer#3", "Quiet[Check[KelvinBer[1, 2, 3], fired, KelvinBer::argt]]", "fired");
+    audit_chk("StieltjesGamma#3", "Quiet[Check[StieltjesGamma[], fired, StieltjesGamma::argt]]", "fired");
+    audit_chk("StieltjesGamma#3", "Quiet[Check[StieltjesGamma[1, 2, 3], fired, StieltjesGamma::argt]]", "fired");
+    audit_chk("WeberE#2", "Quiet[Check[WeberE[], fired, WeberE::argt]]", "fired");
+    audit_chk("WeberE#2", "Quiet[Check[WeberE[1], fired, WeberE::argtu]]", "fired");
+    audit_true("HeavisideTheta#4", "MemberQ[Attributes[HeavisideTheta], NumericFunction]");
+    audit_true("HeavisideTheta#5", "StringQ[HeavisideTheta::usage] && "
+                                   "StringContainsQ[HeavisideTheta::usage, \"Heaviside theta function\"]");
+    audit_true("SphericalBesselJ#6", "StringContainsQ[Information[SphericalBesselJ], \"Sqrt[Pi]/Sqrt[2 z]\"]");
+}
+
+static void test_wave5_exact(void) {
+    audit_true("Erf#3", "Erf[InverseErf[x]] === x");
+    audit_true("Erfc#2", "Erfc[InverseErfc[x]] === x");
+    audit_true("Zeta#3", "Zeta[-10^20] === 0 && Zeta[-1000] === 0");
+    audit_true("BernoulliB#2", "{BernoulliB[5001], BernoulliB[10^30 + 1]} === {0, 0} && BernoulliB[5001.] === 0.");
+    audit_true("BernoulliB#3", "D[BernoulliB[n, x], x] === n BernoulliB[-1 + n, x]");
+    audit_true("EulerE#3", "D[EulerE[n, x], x] === n EulerE[-1 + n, x]");
+    audit_true("FresnelS#2", "FresnelS[-2] === -FresnelS[2] && FresnelS[-1/2] === -FresnelS[1/2] && FresnelS[-Pi] === -FresnelS[Pi]");
+    audit_true("InverseErf#3", "InverseErf[-1/2] === -InverseErf[1/2]");
+    audit_true("SinIntegral#2", "SinIntegral[-2] === -SinIntegral[2] && SinIntegral[-1/2] === -SinIntegral[1/2]");
+    audit_true("SinIntegral#2", "SinIntegral[-2] + SinIntegral[2] === 0");
+    audit_true("SinhIntegral#2", "SinhIntegral[I x] === I SinIntegral[x] && SinhIntegral[-I] === -I SinIntegral[1]");
+    audit_true("SinhIntegral#2", "SinhIntegral[-I x] === -I SinIntegral[x] && SinIntegral[I x] === I SinhIntegral[x]");
+    audit_true("LerchPhi#5", "LerchPhi[-1, 1, 1/2] === Pi/2");
+    audit_true("QPochhammer#3", "QPochhammer[0, q] === 1");
+    audit_true("Surd#4", "Surd[0, 10^20] === 0 && 0^(1/10^20) === 0");
+    audit_true("ExpIntegralE#4", "ExpIntegralE[5/2, 0] === 2/3 && ExpIntegralE[1/2, 0] === ComplexInfinity");
+    audit_true("ExpIntegralE#7", "ExpIntegralE[-1, z] === E^-z (1 + z)/z^2");
+    audit_true("ExpIntegralE#7", "Abs[N[ExpIntegralE[-2, 3]] - ExpIntegralE[-2, 3.]] < 10^-15");
+    audit_true("WhittakerM#2", "WhittakerM[1., 1/2, 0] === 0. && Precision[WhittakerM[1., 1/2, 0]] === MachinePrecision");
+    audit_true("WhittakerM#3", "Quiet[Check[WhittakerM[1, -3/4, 0.], \"m\"]] === ComplexInfinity");
+    audit_true("WhittakerM#3", "WhittakerM[1, -3/4, 0] === ComplexInfinity");
+}
+
+static void test_wave5_numerics(void) {
+    audit_true("PolyLog#1", "{PolyLog[-3, 2.], PolyLog[-2, 3.], PolyLog[-1, 2.]} === {26., -1.5, 2.}");
+    audit_true("PolyLog#1", "Abs[PolyLog[-3, -2.] - 2/27] < 10^-15 && Abs[PolyLog[-2, 3. + I] - N[PolyLog[-2, 3 + I]]] < 10^-14");
+    /* sub-machine precision is kept */
+    audit_true("CosIntegral#1", "Precision[CosIntegral[1.5`3]] == 3. && Abs[CosIntegral[1.5`3] - 0.4703563] < 10^-2");
+    audit_true("CoshIntegral#1", "Precision[CoshIntegral[2.`5]] == 5. && Precision[CoshIntegral[2.`16]] == 16.");
+    audit_true("Erfi#1", "Precision[Erfi[1.5`3]] == 3. && Precision[Erf[1.5`3]] == 3.");
+    audit_true("HurwitzZeta#3", "Precision[HurwitzZeta[3`5, 2]] == 5.");
+    audit_true("LogIntegral#1", "Precision[LogIntegral[2.`10]] == 10. && Abs[LogIntegral[2.`10] - 1.045163780] < 10^-8");
+    audit_true("LogIntegral#1", "Precision[LogIntegral[2.`2]] == 2.");
+    audit_true("MathieuCharacteristicB#3", "Precision[MathieuCharacteristicB[2, 1.`5]] == 5.");
+    audit_true("SinhIntegral#1", "Precision[SinhIntegral[1.5`3]] == 3. && MachineNumberQ[SinhIntegral[1.5]]");
+    audit_true("Sinc#3", "Precision[Sinc[1.`30 + I]] == 30.");
+    audit_true("HarmonicNumber#2", "HarmonicNumber[0., 2] === 0.");
+    audit_true("KelvinBei#1", "KelvinBei[-2, 0.] === 0. && Precision[KelvinBei[-2, 0.`20]] === Precision[KelvinBei[2, 0.`20]]");
+    audit_true("KelvinKei#1", "Abs[KelvinKei[0, 0.`20] + N[Pi/4, 20]] < 10^-19 && Precision[KelvinKei[0, 0.`20]] == 20.");
+    audit_true("KelvinKei#1", "KelvinKei[1, 0.] === ComplexInfinity");
+    audit_true("StruveL#3", "StruveL[-1.5, 0] === 0.");
+    audit_true("SphericalBesselJ#4", "SphericalBesselJ[0.5, 0.] === 0.");
+    audit_true("Hypergeometric1F1#3", "Hypergeometric1F1[1, b, 0.] === 1.");
+    audit_true("QPochhammer#5", "With[{v = QPochhammer[0.5, 0.99999]}, NumberQ[v] && -25288 < Log[10, v] < -25286]");
+    audit_true("QPochhammer#5", "With[{v = QPochhammer[0.5, -0.99999]}, NumberQ[v] && -2908 < Log[10, v] < -2905]");
+    audit_true("QPochhammer#5", "Abs[QPochhammer[0.5`20, 0.999`20]/"
+                                "Exp[Total[Log[1 - 0.5`20 0.999`20^Range[0, 50000]]]] - 1] < 10^-17");
+    audit_true("QPochhammer#5", "Abs[QPochhammer[0.5, 0.9995]/"
+                                "QPochhammer[SetPrecision[0.5, 30], SetPrecision[0.9995, 30]] - 1] < 10^-14");
+    audit_true("LogGamma#3", "Abs[LogGamma[1.*^307]/N[LogGamma[10^307], 20] - 1] < 10^-15");
+    audit_true("ProductLog#1", "With[{w = ProductLog[10^20, 1.]}, Abs[Re[w] + 47.8896] < 10^-3 && Abs[Im[w]/(2 Pi 10^20) - 1] < 10^-15]");
+    audit_true("ProductLog#1", "Im[ProductLog[2^62, 1.]] > 0 && Im[ProductLog[-10^20, 1.]] < 0");
+    audit_true("ProductLog#1", "With[{w = ProductLog[10^20, 1.`30]}, Abs[w Exp[w] - 1] < 10^-10]");
+}
+
+static void test_wave5_more(void) {
+    audit_true("ArcSin#3", "ArcSin[Sin[Pi/12]] === Pi/12 && ArcSin[Sin[Pi/10]] === Pi/10");
+    audit_true("ArcSin#3", "ArcSin[(1 + Sqrt[5])/4] === 3 Pi/10 && ArcCos[Cos[Pi/12]] === Pi/12");
+    audit_true("LegendreQ#6", "Quiet[Check[LegendreQ[10^20, 0.3], \"m\"]] =!= \"m\"");
+    audit_true("Hypergeometric0F1#4", "Quiet[Hypergeometric0F1[2, 1.*^300]] === Overflow[]");
+    audit_true("Hypergeometric0F1#4", "Quiet[Check[Hypergeometric0F1[2, 1.*^300], \"m\", General::ovfl]] === \"m\"");
+    audit_true("AppellF1#1", "Quiet[Check[AppellF1[-2, 1, 1, -1, x, y], \"m\"]] === AppellF1[-2, 1, 1, -1, x, y]");
+    audit_true("AppellF1#2", "Head[AppellF1[-1, 1, 1, -2, 3/10, 1/5]] === Head[AppellF1[-1, 1, 1, -2, 0.3, 0.2]] === AppellF1");
+    audit_true("AppellF1#2", "AppellF1[-2, 1, 1, 3, x, y] === Expand[AppellF1[-2, 1, 1, 3, x, y]]");
+    audit_true("WeierstrassInvariants#2", "Quiet[Check[WeierstrassInvariants[{0, I}], \"m\", Power::infy]] === WeierstrassInvariants[{0, I}]");
+    audit_true("WeierstrassInvariants#2", "Quiet[Check[WeierstrassInvariants[{0, I}], \"m\", EllipticReducedHalfPeriods::nind]] === \"m\"");
+    audit_true("AiryBi#1", "Abs[AiryBi[-10.^8]/N[AiryBi[-10^8], 30] - 1] < 2*10^-15");
+    audit_true("AiryBiPrime#1", "Abs[AiryBiPrime[-1.*^7]/N[AiryBiPrime[-10^7], 30] - 1] < 2*10^-15 && "
+                                "Abs[AiryBiPrime[-1.*^8]/N[AiryBiPrime[-10^8], 30] - 1] < 2*10^-15");
+    audit_true("BarnesG#5", "BarnesG[5.] === 12. && BarnesG[1.] === 1.");
+    audit_true("BarnesG#5", "Abs[BarnesG[-0.5]/N[BarnesG[-1/2], 30] - 1] < 10^-15");
+    audit_true("ChebyshevT#2", "Abs[ChebyshevT[2000001, 0.3] - N[Cos[2000001 ArcCos[SetPrecision[0.3, 60]]], 20]] < 10^-14");
+    audit_true("ChebyshevT#2", "Precision[ChebyshevT[2000001, 0.3`30]] == 30.");
+    audit_true("ChebyshevT#3", "ChebyshevT[2001, 1/2] === -1 && ChebyshevT[2001, 2] == ChebyshevT[2001, 2.`3000]");
+    audit_true("ChebyshevT#3", "ChebyshevT[2003, 3/7] === 2 (3/7) ChebyshevT[2002, 3/7] - ChebyshevT[2001, 3/7]");
+    audit_true("ChebyshevT#4", "Abs[ChebyshevT[10^30, 0.5`50] + 1/2] < 10^-45");
+    audit_true("ChebyshevU#3", "ChebyshevU[2001, 1/2] === -1 && IntegerQ[ChebyshevU[2001, 2]]");
+    audit_true("ChebyshevU#3", "ChebyshevU[2003, 3/7] === 2 (3/7) ChebyshevU[2002, 3/7] - ChebyshevU[2001, 3/7]");
+    audit_true("ChebyshevU#4", "Abs[ChebyshevU[10^7, 0.5] + 1] < 10^-8 && MachineNumberQ[ChebyshevU[10^7, 0.5]]");
+    audit_true("GegenbauerC#2", "Abs[GegenbauerC[10^6, 1.5, 0.3]/N[GegenbauerC[10^6, 3/2, 3/10], 20] - 1] < 10^-12");
+    audit_true("EulerE#2", "IntegerQ[EulerE[6000]] && EulerE[6000] != 0 && Abs[EulerE[6000]/N[EulerE[6000.]] - 1] < 10^-14");
+    audit_true("BesselJZero#3", "Abs[BesselJZero[1/2, 1.] - Pi] < 10^-14 && BesselJZero[1/2, 1.] == BesselJZero[0.5, 1.]");
+    audit_true("BesselJZero#4", "Abs[BesselJZero[0, 1000001.] - 3141595.009784] < 10^-5");
+    audit_true("BesselJZero#4", "Abs[BesselJ[0, BesselJZero[0, 1000001.]]] < 10^-12");
+    audit_true("BesselYZero#2", "Abs[N[BesselYZero[0, 10^6 + 1]] - 3141593.43898896] < 10^-6");
+    audit_true("FunctionExpand#3", "FunctionExpand[HarmonicNumber[n]] === EulerGamma + PolyGamma[0, 1 + n]");
+    audit_true("FunctionExpand#3", "FunctionExpand[ChebyshevT[n, x]] === Cos[n ArcCos[x]]");
+    audit_true("FunctionExpand#3", "FunctionExpand[GoldenRatio] === (1 + Sqrt[5])/2");
+    audit_true("CubeRoot#3", "Integrate[CubeRoot[x], x] === 3/4 x Surd[x, 3]");
+    audit_true("CubeRoot#3", "Integrate[x^2 Surd[x, 5], x] === 5/16 x^3 Surd[x, 5]");
+    audit_true("CubeRoot#4", "CubeRoot[x]^3 === x && Simplify[CubeRoot[x]^3] === x && Surd[x, 3]^6 === x^2");
+    audit_true("HeavisideTheta#6", "With[{s = Series[HeavisideTheta[x], {x, 1, 2}]}, "
+                                   "Normal[s] === 1 && s[[5]] === 3 && FreeQ[s, DiracDelta]]");
+    audit_true("WeierstrassPPrime#1", "Quiet[Check[Normal[Series[WeierstrassPPrime[u, {g2, g3}], {u, 0, 3}]], \"m\"]] === "
+                                      "-2/u^3 + g2 u/10 + g3 u^3/7");
+    audit_true("WeierstrassPPrime#1", "Abs[(Normal[Series[WeierstrassP[u, {2., 1.}], {u, 0, 10}]] /. u -> 0.3) - "
+                                      "WeierstrassP[0.3, {2., 1.}]] < 10^-8");
+    audit_true("HankelH2#2", "Series[HankelH2[0, x], {x, 0, 1}] === Series[BesselJ[0, x] - I BesselY[0, x], {x, 0, 1}] && "
+                             "FreeQ[Series[HankelH2[0, x], {x, 0, 1}], HankelH2]");
+    audit_true("HankelH2#2", "Abs[(Normal[Series[HankelH2[0, x], {x, 0, 8}]] /. x -> 0.3) - HankelH2[0, 0.3]] < 10^-9");
+    audit_true("KelvinKei#2", "Simplify[Normal[Series[KelvinKei[x], {x, 0, 2}]] - "
+                              "(-Pi/4 + (1/4 - EulerGamma/4 + Log[2]/4 - Log[x]/4) x^2)] === 0");
+    audit_true("KelvinKei#2", "Abs[(Normal[Series[KelvinKei[x], {x, 0, 12}]] /. x -> 0.5) - KelvinKei[0.5]] < 10^-12 && "
+                              "Abs[(Normal[Series[KelvinKer[x], {x, 0, 12}]] /. x -> 0.5) - KelvinKer[0.5]] < 10^-12");
+    audit_true("ExpIntegralE#8", "Normal[Series[ExpIntegralE[2, x], {x, 0, 2}]] === "
+                                 "1 + (-1 + EulerGamma + Log[x]) x - x^2/2");
+    audit_true("ExpIntegralE#8", "Abs[(Normal[Series[ExpIntegralE[2, x], {x, 0, 4}]] /. x -> 0.01) - "
+                                 "ExpIntegralE[2, 0.01]] < 10^-12");
+    audit_true("SphericalBesselY#2", "Normal[Series[SphericalBesselY[0, x], {x, 0, 2}]] === -1/x + x/2");
+    audit_true("SphericalBesselY#2", "Normal[Series[SphericalBesselY[1, x], {x, 0, 1}]] === -1/x^2 - 1/2");
+    audit_true("HermiteH#2", "HermiteH[2^70 + 1, 0] === 0 && HermiteH[7, 0] === 0");
+    audit_true("HermiteH#3", "Precision[HermiteH[200, 100.]] === MachinePrecision && "
+                             "Abs[HermiteH[200, 100.]/N[HermiteH[200, 100], 30] - 1] < 10^-14");
+    audit_true("BarnesG#6", "Abs[N[BarnesG[13/2], 30] - 2548.74576956849898973590610636`30] < 10^-25");
+    audit_true("Hypergeometric2F1#3", "Hypergeometric2F1[1, 2, 3, 1] === Infinity && Hypergeometric2F1[1, 2, 3, 1.] === Infinity");
+    audit_true("Hypergeometric2F1#3", "Hypergeometric2F1[1, 1, 2, 1] === Infinity && Hypergeometric2F1[1, 1, -2, 0.5] === ComplexInfinity");
+    audit_true("InverseJacobiDN#1", "Quiet[Check[InverseJacobiDN[1.0, 0], \"m\"]] === 0. && InverseJacobiDN[1, 0] === 0");
+    audit_true("InverseJacobiDN#1", "InverseJacobiDN[1., 0.5] === 0.");
+    audit_true("MathieuCharacteristicB#2", "Abs[MathieuCharacteristicB[2.00000000000000000001`30, 1.`30] - "
+                                           "MathieuCharacteristicA[2, 1.`30]] < 10^-18");
+    audit_true("MathieuCharacteristicB#2", "Abs[MathieuCharacteristicB[1.99999999999999999999`30, 1.`30] - "
+                                           "MathieuCharacteristicB[2, 1.`30]] < 10^-18");
+    audit_true("WeierstrassPPrime#2", "Integrate[WeierstrassPPrime[u, {g2, g3}], u] === WeierstrassP[u, {g2, g3}]");
+    audit_true("WeierstrassPPrime#2", "Integrate[3 WeierstrassPPrime[2 u + 1, {g2, g3}], u] === 3/2 WeierstrassP[1 + 2 u, {g2, g3}]");
+    audit_true("HeavisideTheta#6", "Derivative[1][DiracDelta][1] === 0 && Head[Derivative[1][DiracDelta][0]] === Derivative[1][DiracDelta]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_legendreq_type3);
@@ -881,5 +1031,9 @@ int main(void) {
     TEST(test_s11_special_values);
     TEST(test_wave4_exact_forms);
     TEST(test_wave4_numerics);
+    TEST(test_wave5_messages);
+    TEST(test_wave5_exact);
+    TEST(test_wave5_numerics);
+    TEST(test_wave5_more);
     return audit_finish("audit_special_functions");
 }

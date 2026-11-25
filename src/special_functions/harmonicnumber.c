@@ -292,6 +292,11 @@ static Expr* hn_faulhaber(const Expr* n, int64_t m) {
  * Precision is taken from the inexact inputs (machine unless an MPFR argument
  * raises it).  `n`, `r` are borrowed. */
 static Expr* hn_numeric(const Expr* n, const Expr* r) {
+    /* H_0^(r) is the empty sum for every order: an inexact zero n gives
+     * that zero, not the rounding residue of Zeta[r] - Zeta[r, 1]
+     * (HarmonicNumber[0., 2] was -2.2*^-16, HarmonicNumber#2). */
+    if (n->type == EXPR_REAL && n->data.real == 0.0 && hn_numericizable(r))
+        return expr_new_real(0.0);
     /* Force numericization (so Constant n such as E resolve too).  Use the
      * input precision: machine -> N[reduction]; MPFR -> N[reduction, digits]. */
     long bits = 0;

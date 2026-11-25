@@ -154,16 +154,28 @@ Expr* cheb_make_result(const mpfr_t re, const mpfr_t im,
                        mpfr_prec_t out_prec, bool force_real) {
     bool real = force_real || mpfr_zero_p(im);
     if (out_prec <= 53) {
+        /* A machine value past the double range is the 53-bit MPFR of the
+         * numeric tower, MachinePrecision -- not the working precision's
+         * copy (HermiteH[200, 100.] was tagged at 24 places, HermiteH#3). */
         double dr = mpfr_get_d(re, PRND);
         if (real) {
-            if (isinf(dr) && !mpfr_inf_p(re)) return expr_new_mpfr_copy(re);
+            if (isinf(dr) && !mpfr_inf_p(re)) {
+                Expr* r = expr_new_mpfr_bits(53);
+                mpfr_set(r->data.mpfr, re, PRND);
+                return r;
+            }
             return expr_new_real(dr);
         }
         double di = mpfr_get_d(im, PRND);
         bool overflow = (isinf(dr) && !mpfr_inf_p(re)) ||
                         (isinf(di) && !mpfr_inf_p(im));
-        if (overflow)
-            return make_complex(expr_new_mpfr_copy(re), expr_new_mpfr_copy(im));
+        if (overflow) {
+            Expr* r = expr_new_mpfr_bits(53);
+            Expr* i = expr_new_mpfr_bits(53);
+            mpfr_set(r->data.mpfr, re, PRND);
+            mpfr_set(i->data.mpfr, im, PRND);
+            return make_complex(r, i);
+        }
         return make_complex(expr_new_real(dr), expr_new_real(di));
     }
     Expr* rr = expr_new_mpfr_bits(out_prec);
@@ -196,6 +208,109 @@ bool cheb_inexact_int_order(const Expr* n_e, int64_t* k) {
     return true;
 }
 #endif /* USE_MPFR */
+
+#ifdef USE_MPFR
+Expr* cheb_closed_form_real(int kind, const mpz_t n, const Expr* x_e, mpfr_prec_t out_prec) {
+    mpfr_prec_t gp = (out_prec < 64 ? 64 : out_prec) + 40 + (mpfr_prec_t)mpz_sizeinbase(n, 2);
+    mpfr_t xr, xi, th, v, d;
+    mpfr_inits2(gp, xr, xi, th, v, d, (mpfr_ptr)0);
+    Expr* out = NULL;
+    bool inexact = false;
+    if (get_approx_mpfr(x_e, xr, xi, &inexact) && mpfr_zero_p(xi) && mpfr_number_p(xr)) {
+        bool odd = mpz_odd_p(n) != 0;
+        mpfr_abs(v, xr, PRND);
+        int c1 = mpfr_cmp_ui(v, 1);
+        bool neg = mpfr_sgn(xr) < 0;
+        if (kind == 1 && c1 == 0) {                    /* U_n(+-1) = (+-1)^n (n+1) */
+            mpfr_set_z(v, n, PRND);
+            mpfr_add_ui(v, v, 1, PRND);
+            if (neg && odd) mpfr_neg(v, v, PRND);
+        } else if (c1 <= 0) {                          /* inside [-1, 1] */
+            mpfr_acos(th, xr, PRND);
+            if (kind == 0) {
+                mpfr_mul_z(v, th, n, PRND);
+                mpfr_cos(v, v, PRND);
+            } else {
+                mpfr_set_z(d, n, PRND);
+                mpfr_add_ui(d, d, 1, PRND);
+                mpfr_mul(v, th, d, PRND);
+                mpfr_sin(v, v, PRND);
+                mpfr_sin(d, th, PRND);
+                mpfr_div(v, v, d, PRND);
+            }
+        } else {                                       /* outside: |x| > 1 */
+            mpfr_acosh(th, v, PRND);
+            if (kind == 0) {
+                mpfr_mul_z(v, th, n, PRND);
+                mpfr_cosh(v, v, PRND);
+            } else {
+                mpfr_set_z(d, n, PRND);
+                mpfr_add_ui(d, d, 1, PRND);
+                mpfr_mul(v, th, d, PRND);
+                mpfr_sinh(v, v, PRND);
+                mpfr_sinh(d, th, PRND);
+                mpfr_div(v, v, d, PRND);
+            }
+            if (neg && odd) mpfr_neg(v, v, PRND);
+        }
+        if (mpfr_number_p(v)) out = cheb_make_result(v, v, out_prec, true);
+    }
+    mpfr_clears(xr, xi, th, v, d, (mpfr_ptr)0);
+    return out;
+}
+#endif /* USE_MPFR */
+
+Expr* cheb_exact_rational(int kind, unsigned long n, const Expr* x_e) {
+    mpz_t p, q;
+    mpz_init(p); mpz_init(q);
+    bool ok = true;
+    if (x_e->type == EXPR_INTEGER) { mpz_set_si(p, (long)x_e->data.integer); mpz_set_ui(q, 1); }
+    else if (x_e->type == EXPR_BIGINT) { mpz_set(p, x_e->data.bigint); mpz_set_ui(q, 1); }
+    else if (x_e->type == EXPR_FUNCTION && x_e->data.function.head->type == EXPR_SYMBOL &&
+             x_e->data.function.head->data.symbol.name == SYM_Rational &&
+             x_e->data.function.arg_count == 2) {
+        expr_to_mpz(x_e->data.function.args[0], p);
+        expr_to_mpz(x_e->data.function.args[1], q);
+    } else ok = false;
+    if (ok && n == 0) { mpz_clear(p); mpz_clear(q); return expr_new_integer(1); }
+    /* a size budget: |T_n| <= (|x| + Sqrt[x^2 + 1])^n, over q^n */
+    if (ok) {
+        double bits = (double)n * (double)(mpz_sizeinbase(p, 2) + mpz_sizeinbase(q, 2) + 2);
+        if (!(bits <= 16777216.0)) ok = false;
+    }
+    if (!ok) { mpz_clear(p); mpz_clear(q); return NULL; }
+
+    /* N = {{2p, -q}, {q, 0}}; R = N^(n-1); w = R [first, q] */
+    mpz_t a, b, c, d, ra, rb, rc, rd, t1, t2, t3, t4;
+    mpz_inits(a, b, c, d, ra, rb, rc, rd, t1, t2, t3, t4, (mpz_ptr)0);
+    mpz_mul_2exp(a, p, 1); mpz_neg(b, q); mpz_set(c, q); mpz_set_ui(d, 0);
+    mpz_set_ui(ra, 1); mpz_set_ui(rb, 0); mpz_set_ui(rc, 0); mpz_set_ui(rd, 1);
+    for (unsigned long e = n - 1; e; e >>= 1) {
+        if (e & 1UL) {                                 /* R = R N */
+            mpz_mul(t1, ra, a); mpz_addmul(t1, rb, c);
+            mpz_mul(t2, ra, b); mpz_addmul(t2, rb, d);
+            mpz_mul(t3, rc, a); mpz_addmul(t3, rd, c);
+            mpz_mul(t4, rc, b); mpz_addmul(t4, rd, d);
+            mpz_swap(ra, t1); mpz_swap(rb, t2); mpz_swap(rc, t3); mpz_swap(rd, t4);
+        }
+        if (e > 1) {                                   /* N = N N */
+            mpz_mul(t1, a, a); mpz_addmul(t1, b, c);
+            mpz_mul(t2, a, b); mpz_addmul(t2, b, d);
+            mpz_mul(t3, c, a); mpz_addmul(t3, d, c);
+            mpz_mul(t4, c, b); mpz_addmul(t4, d, d);
+            mpz_swap(a, t1); mpz_swap(b, t2); mpz_swap(c, t3); mpz_swap(d, t4);
+        }
+    }
+    /* first component of R [f, q], f = p (T) or 2p (U); value / q^n */
+    mpz_mul_2exp(t1, p, kind == 1 ? 1 : 0);
+    mpz_mul(t2, ra, t1);
+    mpz_addmul(t2, rb, q);
+    mpz_pow_ui(t3, q, n);
+    Expr* out = make_rational_mpz(t2, t3);
+    mpz_clears(a, b, c, d, ra, rb, rc, rd, t1, t2, t3, t4, (mpz_ptr)0);
+    mpz_clear(p); mpz_clear(q);
+    return out;
+}
 
 /* ------------------------------------------------------------------ */
 /* Shared special value                                                */

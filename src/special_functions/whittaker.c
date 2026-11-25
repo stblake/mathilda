@@ -287,14 +287,34 @@ static Expr* whit_ndarray(WhitReal fr, WhitCplx fc, const Expr* k_e, const Expr*
 /* Scalar driver                                                       */
 /* ------------------------------------------------------------------ */
 
+static bool whit_is_zero(const Expr* e);
+static bool whit_is_real_number(const Expr* e);
+
 static Expr* whittaker_m_eval(Expr* k_e, Expr* m_e, Expr* z_e) {
     /* Special value: M_{k,m}(0) = 0 for Re(m) > -1/2 (leading power z^(m+1/2)).
      * Only the exact integer 0; a Real 0.0 flows through the template to 0.0. */
     if (z_e && z_e->type == EXPR_INTEGER && z_e->data.integer == 0) {
         double rem;
-        if (whit_real_part_double(m_e, &rem) && rem > -0.5)
+        if (whit_real_part_double(m_e, &rem) && rem > -0.5) {
+            /* an inexact k or m makes the zero inexact (WhittakerM#2) */
+            if (whit_is_inexact(k_e) || whit_is_inexact(m_e)) {
+#ifdef USE_MPFR
+                long bk = numeric_min_inexact_bits(k_e), bm = numeric_min_inexact_bits(m_e);
+                long b = bk == 0 ? bm : (bm == 0 || bk < bm ? bk : bm);
+                if (b > 53) return expr_new_mpfr_bits((mpfr_prec_t)b);
+#endif
+                return expr_new_real(0.0);
+            }
             return expr_new_integer(0);
+        }
         /* symbolic m, or Re(m) <= -1/2 (singular): fall through / stay symbolic */
+    }
+    /* Re(m) < -1/2: the leading power z^(m+1/2) blows up at a zero z, exact
+     * or inexact (WhittakerM[1, -3/4, 0.] = ComplexInfinity, WhittakerM#3). */
+    if (z_e && whit_is_zero(z_e) && whit_is_real_number(m_e)) {
+        double rem;
+        if (whit_real_part_double(m_e, &rem) && rem < -0.5)
+            return expr_new_symbol("ComplexInfinity");
     }
 
     /* Numericise only when some argument is inexact; otherwise stay symbolic

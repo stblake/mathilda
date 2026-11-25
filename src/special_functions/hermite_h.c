@@ -453,6 +453,11 @@ static Expr* hermite_h_two_arg(Expr* n_e, Expr* x_e) {
      * non-negative integer order is handled exactly by the polynomial below
      * (HermiteH[1,0] = 0, HermiteH[0,0] = 1, ...). Holds for symbolic and
      * inexact n, since the built expression evaluates either way. */
+    /* H_n(0) = 0 for every odd n, a bignum included (the Gamma form below
+     * overflowed for HermiteH[2^70 + 1, 0], HermiteH#2). */
+    if (n_e->type == EXPR_BIGINT && mpz_sgn(n_e->data.bigint) > 0 &&
+        mpz_odd_p(n_e->data.bigint) && cheb_is_int(x_e, 0))
+        return expr_new_integer(0);
     if (!n_nonneg_int && cheb_is_int(x_e, 0))
         return hermite_value_at_zero(n_e);
 

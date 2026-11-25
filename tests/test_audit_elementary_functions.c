@@ -159,6 +159,48 @@ static void test_wave4_elementary(void) {
                                "252*Cos[x]^5*Sin[x]^5 - 120*Cos[x]^3*Sin[x]^7 + 10*Cos[x]*Sin[x]^9]] === Times");
 }
 
+/* ================================================================== */
+/* Wave 5 G1-specfun: elementary-functions low findings.               */
+/* ================================================================== */
+
+static void test_wave5_elementary(void) {
+    /* argument counts and malformed arguments are reported */
+    audit_chk("Piecewise#3", "Quiet[Check[Piecewise[x], fired, Piecewise::pairs]]", "fired");
+    audit_chk("Piecewise#3", "Quiet[Piecewise[x]]", "Piecewise[x]");
+    audit_chk("Piecewise#3", "Quiet[Check[Piecewise[{1, 2, 3}], fired, Piecewise::pairs]]", "fired");
+    audit_chk("Piecewise#4", "Quiet[Check[Piecewise[], fired, Piecewise::argt]]", "fired");
+    audit_chk("TrigToExp#1", "Quiet[Check[TrigToExp[Sin[x], y], fired, TrigToExp::argx]]", "fired");
+    audit_chk("TrigToExp#1", "Quiet[Check[TrigToExp[], fired, TrigToExp::argx]]", "fired");
+    audit_chk("Values#1", "Quiet[Check[Values[x], fired, Values::invrl]]", "fired");
+    audit_chk("Values#1", "Quiet[Values[x]]", "Values[x]");
+    audit_chk("Values#2", "Quiet[Check[Values[], fired, Values::argt]]", "fired");
+    audit_chk("Values#2", "Quiet[Check[Values[{a -> 1}, f, g], fired, Values::argt]]", "fired");
+    audit_true("Values#2", "Values[{a -> 1, b -> 2}, f] === {f[1], f[2]}");
+    /* held subexpressions are opaque to the trig transformations */
+    audit_true("TrigExpand#3", "TrigExpand[Hold[Sin[2 x]]] === Hold[Sin[2 x]]");
+    audit_true("TrigExpand#3", "TrigExpand[f[Hold[Sin[2 x]], Sin[2 x]]] === f[Hold[Sin[2 x]], 2 Cos[x] Sin[x]]");
+    audit_true("TrigExpand#3", "TrigFactor[Hold[Sin[x] + Cos[x]]] === Hold[Sin[x] + Cos[x]]");
+    /* ExpToTrig inverts TrigToExp for ArcTan / ArcTanh */
+    audit_true("ExpToTrig#4", "ExpToTrig[TrigToExp[ArcTan[x]]] === ArcTan[x]");
+    audit_true("ExpToTrig#4", "ExpToTrig[TrigToExp[ArcTanh[x]]] === ArcTanh[x]");
+    audit_true("ExpToTrig#4", "ExpToTrig[TrigToExp[3 ArcTan[x] + ArcTanh[y]]] === 3 ArcTan[x] + ArcTanh[y]");
+    /* docstring */
+    audit_true("ArcCot#3", "StringQ[Information[ArcCot]] && StringContainsQ[Information[ArcCot], \"inverse cotangent\"]");
+    /* the sign of an all-negative sum comes out of even / odd functions */
+    audit_true("Cosh#2", "Cosh[-x - y] === Cosh[x + y]");
+    audit_true("Cosh#2", "Cosh[-x - y] - Cosh[x + y] === 0");
+    audit_true("Cosh#2", "Sinh[-x - y] === -Sinh[x + y] && Cos[-x - y] === Cos[x + y] && Sin[x - y] === Sin[x - y]");
+    /* the I Pi quarter periods of the hyperbolic functions */
+    audit_true("Cosh#3", "Cosh[x + I Pi] === -Cosh[x] && Cosh[x + 2 I Pi] === Cosh[x]");
+    audit_true("Cosh#3", "Cosh[x + I Pi/2] === I Sinh[x] && Sech[x + I Pi] === -Sech[x]");
+    audit_true("Sinh#4", "Sinh[x + I Pi] === -Sinh[x] && Sinh[x + I Pi/2] === I Cosh[x] && Tanh[x + I Pi/2] === Coth[x]");
+    /* forward of inverse */
+    audit_true("Cosh#4", "Cosh[ArcSech[x]] === 1/x");
+    audit_true("Sinh#3", "Sinh[ArcCsch[x]] === 1/x");
+    /* UnitBox integrates through the step rules */
+    audit_true("UnitBox#1", "Integrate[UnitBox[x], {x, -1, 1}] === 1");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unitstep_exact_zero);
@@ -166,5 +208,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave4_elementary);
+    TEST(test_wave5_elementary);
     return audit_finish("audit_elementary_functions");
 }

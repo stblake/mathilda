@@ -559,6 +559,7 @@ set(COMMON_SRC
     ../src/special_functions/sf_machine_gamma.c
     ../src/special_functions/sf_machine_plog.c
     ../src/special_functions/sf_machine_zeta.c
+    ../src/special_functions/sf_lowprec.c
     ../src/special_functions/sf_machine_hyper.c
     ../src/special_functions/sf_machine_meijerg.c
     ../src/special_functions/sf_machine_mathieu.c

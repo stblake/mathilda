@@ -35,6 +35,7 @@
 #include "eval.h"
 #include "flint_num_bridge.h"
 #include "numeric.h"
+#include "arithmetic.h"   /* is_rational */
 #include "sf_machine_bessel.h"
 #include "sf_scalar.h"
 #include <math.h>
@@ -89,7 +90,7 @@ static bool bjz_newton(int y, double nu, double* x) {
 
 static bool bz_zero_r(int y, double nu, double kd, double* out) {
     int yk = y & 1;
-    if (!isfinite(nu) || !isfinite(kd) || kd != floor(kd) || kd < 1.0 || kd > 1e6) return false;
+    if (!isfinite(nu) || !isfinite(kd) || kd != floor(kd) || kd < 1.0 || kd > 1e12) return false;
     if (!(yk ? nu >= 0.0 : nu > -1.0) || nu > 1e4) return false;
     double x;
     if (kd > nu + 20.0) {
@@ -142,6 +143,12 @@ bool sf_bessel_y_zero_r(double nu, double kd, double* out) { return bz_zero_r(1,
 /* A real machine double from an inexact or exact real leaf. */
 static bool bjz_real(const Expr* e, double* out, bool* inexact) {
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
+    /* an exact rational order is as good as its nearest double: the zero is
+     * computed at machine precision anyway (BesselJZero[1/2, 1.], #3) */
+    {
+        int64_t n, d;
+        if (is_rational(e, &n, &d) && d != 1) { *out = (double)n / (double)d; return true; }
+    }
     if (e->type == EXPR_REAL) { *out = e->data.real; *inexact = true; return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); *inexact = true; return true; }
@@ -161,7 +168,7 @@ static Expr* bz_builtin3(Expr* res, int y) {
     if (!bjz_real(a[0], &nu, &inexact) || !bjz_real(a[1], &kd, &inexact) ||
         !bjz_real(a[2], &x0, &inexact) || !inexact)
         return NULL;
-    if (!(kd >= 1.0) || kd != floor(kd) || !isfinite(x0) || kd > 1e6) return NULL;
+    if (!(kd >= 1.0) || kd != floor(kd) || !isfinite(x0) || kd > 1e12) return NULL;
     double est = x0 / M_PI - 0.5 * nu + (y ? 0.75 : 0.25);
     double j = floor(est) - 1.0;
     if (j < 1.0) j = 1.0;

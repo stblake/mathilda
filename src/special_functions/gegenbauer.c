@@ -58,7 +58,7 @@
 #include "../sym_names.h"
 
 /* Largest integer degree run by the double recurrence (O(n)). */
-#define GEG_REC_MAX 100000.0
+#define GEG_REC_MAX 10000000.0
 /* Largest integer degree expanded to an explicit polynomial symbolically. */
 #define GEG_EXPAND_MAX 400
 

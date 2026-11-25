@@ -460,6 +460,83 @@ Expr* flint_num_polygamma_frac(const Expr* nu, const Expr* z) {
  * multiplied until |a q^k| < 2^-(prec + 10), which bounds the rest of the
  * product to within that of 1. Indeterminate (so the caller declines) when
  * |q| >= 1 or 10^6 factors do not reach it. */
+/* log (a; q)_inf = -Sum_{m>=1} a^m / (m (1 - q^m))  (|a| < 1, |q| < 1).
+ * The series converges like |a|^m whatever q is, so for |q| near 1 -- where
+ * the product needs ~prec ln2 / (1 - |q|) factors, 4*10^6 at q = 0.99999 --
+ * a few dozen terms replace millions of factors (QPochhammer#5).  The tail
+ * after M terms is bounded by |a|^(M+1) / ((1 - |a|) (1 - |q|)) and added to
+ * the ball.  Returns 0 (caller uses the product) when |a| > 3/4. */
+static int nb_qpoch_inf_logseries(acb_t res, const acb_t a, const acb_t q, slong prec) {
+    mag_t ma, mq, t, oneq, tail;
+    mag_init(ma); mag_init(mq); mag_init(t); mag_init(oneq); mag_init(tail);
+    acb_get_mag(ma, a);
+    acb_get_mag(mq, q);
+    int ok = 0;
+    if (mag_cmp_2exp_si(ma, 0) >= 0) goto done;
+    {
+        /* |a| <= 3/4 */
+        mag_t th; mag_init(th); mag_set_ui(th, 3); mag_mul_2exp_si(th, th, -2);
+        int big = mag_cmp(ma, th) > 0;
+        mag_clear(th);
+        if (big) goto done;
+    }
+    /* 1 - |q|, from below (a lower bound for |1 - q^m|) */
+    mag_one(t);
+    {
+        arb_t aq; arb_init(aq);
+        arf_set_mag(arb_midref(aq), mq);
+        arb_sub_ui(aq, aq, 1, 64);
+        arb_neg(aq, aq);
+        arb_get_mag_lower(oneq, aq);
+        arb_clear(aq);
+    }
+    if (mag_is_zero(oneq)) goto done;
+    {
+        acb_t S, am, qm, d, term;
+        acb_init(S); acb_init(am); acb_init(qm); acb_init(d); acb_init(term);
+        /* |S| ~ |a| / (1 - |q|): exp(-S) to prec bits needs S to prec bits
+         * ABSOLUTELY, i.e. log2 |S| more than prec relative */
+        slong wp = prec + 32 + (slong)(-mag_get_d_log2_approx(oneq));
+        acb_zero(S);
+        acb_set(am, a);
+        acb_set(qm, q);
+        for (slong m = 1; m < 100000; m++) {
+            acb_sub_si(d, qm, 1, wp);
+            acb_neg(d, d);                           /* 1 - q^m */
+            acb_mul_ui(d, d, (ulong)m, wp);
+            acb_div(term, am, d, wp);
+            acb_add(S, S, term, wp);
+            acb_mul(am, am, a, wp);
+            acb_mul(qm, qm, q, wp);
+            /* tail bound |a|^(m+1) / ((1 - |a|) (1 - |q|)) */
+            mag_pow_ui(tail, ma, (ulong)(m + 1));
+            mag_div(tail, tail, oneq);
+            {
+                mag_t oma; mag_init(oma);
+                arb_t x; arb_init(x);
+                arf_set_mag(arb_midref(x), ma);
+                arb_sub_ui(x, x, 1, 64); arb_neg(x, x);
+                arb_get_mag_lower(oma, x);
+                mag_div(tail, tail, oma);
+                arb_clear(x); mag_clear(oma);
+            }
+            if (mag_cmp_2exp_si(tail, -(prec + 20)) < 0) {
+                acb_add_error_mag(S, tail);
+                ok = 1;
+                break;
+            }
+        }
+        if (ok) {
+            acb_neg(S, S);
+            acb_exp(res, S, prec);
+        }
+        acb_clear(S); acb_clear(am); acb_clear(qm); acb_clear(d); acb_clear(term);
+    }
+done:
+    mag_clear(ma); mag_clear(mq); mag_clear(t); mag_clear(oneq); mag_clear(tail);
+    return ok;
+}
+
 static void nb_qpoch_inf(acb_t res, const acb_t a, const acb_t q, slong prec) {
     acb_t aqk, f, qq;
     acb_init(aqk); acb_init(f); acb_init(qq);
@@ -467,6 +544,19 @@ static void nb_qpoch_inf(acb_t res, const acb_t a, const acb_t q, slong prec) {
     mag_t mq; mag_init(mq);
     acb_get_mag(mq, qq);
     if (mag_cmp_2exp_si(mq, 0) >= 0) { acb_indeterminate(res); goto done; }
+    {
+        /* |q| > 1 - 2^-10: the product needs > ~700 prec factors */
+        mag_t th; mag_init(th);
+        mag_one(th);
+        int near1;
+        arb_t x; arb_init(x);
+        arf_set_mag(arb_midref(x), mq);
+        arb_sub_ui(x, x, 1, 64); arb_neg(x, x);
+        arb_get_mag_lower(th, x);
+        near1 = mag_cmp_2exp_si(th, -10) < 0;
+        arb_clear(x); mag_clear(th);
+        if (near1 && nb_qpoch_inf_logseries(res, a, qq, prec)) goto done;
+    }
     acb_one(res);
     acb_set(aqk, a);
     for (slong k = 0; ; k++) {

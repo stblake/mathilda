@@ -244,7 +244,19 @@ static size_t leaf_count(const Expr* e) {
 static void collect_kernels(const Expr* e, const Expr* x, const Expr* f,
                             ExprVec* out) {
     if (!e || expr_free_of(e, x)) return;          /* must depend on x */
-    if (!expr_eq((Expr*)e, (Expr*)x) && !expr_eq((Expr*)e, (Expr*)f)) {
+    /* A list, a relation or a logical combination is structure, not a value:
+     * substituting u for one (a Piecewise clause {v, cond}, a condition
+     * Abs[x] < 1/2) only builds malformed calls (Piecewise[u]) whose
+     * diagnostics then leak.  Their subexpressions are still kernels. */
+    bool structural = false;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        structural = h == SYM_List || h == SYM_Less || h == SYM_Greater ||
+                     h == SYM_LessEqual || h == SYM_GreaterEqual || h == SYM_Equal ||
+                     h == SYM_Unequal || h == SYM_And || h == SYM_Or || h == SYM_Not ||
+                     h == SYM_Inequality;
+    }
+    if (!structural && !expr_eq((Expr*)e, (Expr*)x) && !expr_eq((Expr*)e, (Expr*)f)) {
         vec_add_unique(out, e);
     }
     if (e->type == EXPR_FUNCTION) {

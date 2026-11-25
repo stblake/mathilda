@@ -211,6 +211,16 @@ static Expr* coef_cancel(Expr* sum) {
     return out;
 }
 
+/* True when a call headed by the interned name `h` occurs anywhere in e. */
+static bool series_mentions_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == h)
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (series_mentions_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
 static bool has_symbol_head(Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
@@ -2410,6 +2420,8 @@ static void ctx_set_branch_meta(SeriesCtx* ctx,
  * elementary-head inner argument expansion) so that a nested branch-point
  * case is silently produced as a constant-inside SeriesObj (composition-
  * friendly) rather than corrupting the outer wrap state. */
+static Expr* try_series_bessely_at_zero(Expr* f, Expr* x, int64_t n);
+
 static SeriesObj* series_expand_nested(Expr* e, SeriesCtx* ctx) {
     bool saved = ctx->allow_branch_wrap;
     ctx->allow_branch_wrap = false;
@@ -3755,6 +3767,225 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 so_free(inner);
                 if (r) return r;
             }
+        }
+        /* ---- WeierstrassP / WeierstrassPPrime[u, {g2, g3}], u(x0) = 0: the
+         * Laurent series wp(u) = u^-2 + Sum_{k>=2} c_k u^(2k-2), c_2 = g2/20,
+         * c_3 = g3/28, c_k = 3/((2k+1)(k-3)) Sum_{m=2}^{k-2} c_m c_(k-m)
+         * (DLMF 23.9.2-3), and its derivative term by term, truncated past
+         * the requested order (Series[WeierstrassPPrime[u, {g2, g3}], {u, 0, 3}]
+         * = -2/u^3 + g2 u/10 + g3 u^2/7 + O[u]^4, WeierstrassPPrime#1). ---- */
+        if (head && (head == SYM_WeierstrassP || head == SYM_WeierstrassPPrime) &&
+            e->data.function.arg_count == 2 &&
+            e->data.function.args[1]->type == EXPR_FUNCTION &&
+            e->data.function.args[1]->data.function.arg_count == 2 &&
+            expr_free_of(e->data.function.args[1], ctx->x) &&
+            !expr_free_of(e->data.function.args[0], ctx->x) &&
+            ctx->order >= 0 && ctx->order <= 120) {
+            Expr* u = e->data.function.args[0];
+            Expr* u0 = replace_all_of(u, ctx->x, ctx->x0);
+            bool zero = is_lit_zero(u0);
+            expr_free(u0);
+            if (zero) {
+                bool prime = head == SYM_WeierstrassPPrime;
+                Expr* g2 = e->data.function.args[1]->data.function.args[0];
+                Expr* g3 = e->data.function.args[1]->data.function.args[1];
+                int64_t K = ctx->order / 2 + 4;
+                Expr** c = calloc((size_t)(K + 1), sizeof(Expr*));
+                c[2] = simp(mk_times(make_rational(1, 20), expr_copy(g2)));
+                c[3] = simp(mk_times(make_rational(1, 28), expr_copy(g3)));
+                for (int64_t k = 4; k <= K; k++) {
+                    Expr** pr = malloc((size_t)(k - 3) * sizeof(Expr*));
+                    size_t np = 0;
+                    for (int64_t m = 2; m <= k - 2; m++)
+                        pr[np++] = mk_times(expr_copy(c[m]), expr_copy(c[k - m]));
+                    Expr* sum = mk_fn(mk_symbol("Plus"), pr, np);
+                    free(pr);
+                    c[k] = simp(mk_fn1("Expand", mk_times(make_rational(3, (2 * k + 1) * (k - 3)), sum)));
+                }
+                Expr** t = malloc((size_t)(K + 1) * sizeof(Expr*));
+                size_t nt = 0;
+                t[nt++] = prime ? mk_times(expr_new_integer(-2), mk_power(expr_copy(u), expr_new_integer(-3)))
+                                : mk_power(expr_copy(u), expr_new_integer(-2));
+                for (int64_t k = 2; k <= K; k++) {
+                    int64_t p = 2 * k - 2;
+                    t[nt++] = prime
+                        ? mk_times(mk_times(expr_new_integer(p), expr_copy(c[k])),
+                                   mk_power(expr_copy(u), expr_new_integer(p - 1)))
+                        : mk_times(expr_copy(c[k]), mk_power(expr_copy(u), expr_new_integer(p)));
+                }
+                for (int64_t k = 2; k <= K; k++) expr_free(c[k]);
+                free(c);
+                Expr* sum = simp(mk_fn(mk_symbol("Plus"), t, nt));
+                free(t);
+                SeriesObj* r = series_expand_nested(sum, ctx);
+                expr_free(sum);
+                if (r) return r;
+            }
+        }
+        /* ---- BesselY / HankelH1 / HankelH2[p, u], p a literal integer with
+         * |p| <= 64, u(x0) = 0: Y's logarithmic series (DLMF 10.8.1, the one
+         * the top-level BesselY expansion emits) in a fresh variable, put
+         * back as an expression in u, and H = J +- I Y -- so the Hankel
+         * functions and a composite argument expand (Series[HankelH2[0, x],
+         * {x, 0, 1}], HankelH2#2). ---- */
+        if (head && (head == SYM_BesselY || head == SYM_HankelH1 || head == SYM_HankelH2) &&
+            e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_INTEGER &&
+            e->data.function.args[0]->data.integer >= -64 &&
+            e->data.function.args[0]->data.integer <= 64 &&
+            !expr_free_of(e->data.function.args[1], ctx->x) &&
+            ctx->order >= 0 && ctx->order <= 200) {
+            Expr* u = e->data.function.args[1];
+            Expr* u0 = replace_all_of(u, ctx->x, ctx->x0);
+            bool zero = is_lit_zero(u0);
+            expr_free(u0);
+            if (zero) {
+                int64_t p = e->data.function.args[0]->data.integer;
+                Expr* tv = mk_symbol("Series`BesselY`t");
+                Expr* yf = mk_fn2("BesselY", expr_new_integer(p), expr_copy(tv));
+                Expr* ys = try_series_bessely_at_zero(yf, tv, ctx->order + (p < 0 ? -p : p) + 2);
+                expr_free(yf);
+                SeriesObj* r = NULL;
+                if (ys) {
+                    Expr* yn = simp(mk_fn1("Normal", ys));
+                    Expr* yu = replace_all_of(yn, tv, u);
+                    expr_free(yn);
+                    Expr* ex = yu;
+                    if (head != SYM_BesselY) {
+                        int s = head == SYM_HankelH1 ? 1 : -1;
+                        ex = simp(mk_fn2("Plus",
+                                  mk_fn2("BesselJ", expr_new_integer(p), expr_copy(u)),
+                                  mk_times(make_complex(expr_new_integer(0), expr_new_integer(s)), yu)));
+                    }
+                    r = series_expand_nested(ex, ctx);
+                    expr_free(ex);
+                }
+                expr_free(tv);
+                if (r) return r;
+            }
+        }
+        /* ---- KelvinKer / KelvinKei[0, u], u(x0) = 0: the logarithmic series
+         * (DLMF 10.65.4), with t = u^2/4 and psi(n) = H_(n-1) - EulerGamma,
+         *   ker u = -Log[u/2] ber u + Pi/4 bei u + Sum (-1)^k psi(2k+1) t^(2k)/((2k)!)^2
+         *   kei u = -Log[u/2] bei u - Pi/4 ber u + Sum (-1)^k psi(2k+2) t^(2k+1)/((2k+1)!)^2
+         * ber u = Sum (-1)^k t^(2k)/((2k)!)^2, bei u = Sum (-1)^k t^(2k+1)/((2k+1)!)^2
+         * (Series[KelvinKei[x], {x, 0, 2}] = -Pi/4 + (1/4 - EulerGamma/4 +
+         * Log[2]/4 - Log[x]/4) x^2 + O[x]^3, KelvinKei#2). ---- */
+        if (head && (head == SYM_KelvinKer || head == SYM_KelvinKei) &&
+            e->data.function.arg_count == 2 && is_lit_zero(e->data.function.args[0]) &&
+            !expr_free_of(e->data.function.args[1], ctx->x) &&
+            ctx->order >= 0 && ctx->order <= 200) {
+            Expr* u = e->data.function.args[1];
+            Expr* u0 = replace_all_of(u, ctx->x, ctx->x0);
+            bool zero = is_lit_zero(u0);
+            expr_free(u0);
+            if (zero) {
+                bool kei = head == SYM_KelvinKei;
+                int64_t K = ctx->order / 4 + 2;
+                Expr** ber = malloc((size_t)(K + 1) * sizeof(Expr*));
+                Expr** bei = malloc((size_t)(K + 1) * sizeof(Expr*));
+                Expr** rest = malloc((size_t)(K + 1) * sizeof(Expr*));
+                Expr* t = mk_times(make_rational(1, 4), mk_power(expr_copy(u), expr_new_integer(2)));
+                for (int64_t k = 0; k <= K; k++) {
+                    int64_t e0 = 2 * k, e1 = 2 * k + 1;
+                    Expr* sg = expr_new_integer((k & 1) ? -1 : 1);
+                    ber[k] = mk_times(expr_copy(sg), mk_times(mk_power(expr_copy(t), expr_new_integer(e0)),
+                             mk_power(mk_fn1("Factorial", expr_new_integer(e0)), expr_new_integer(-2))));
+                    bei[k] = mk_times(expr_copy(sg), mk_times(mk_power(expr_copy(t), expr_new_integer(e1)),
+                             mk_power(mk_fn1("Factorial", expr_new_integer(e1)), expr_new_integer(-2))));
+                    int64_t pe = kei ? e1 : e0;                     /* the power of t */
+                    Expr* psi = mk_fn2("Plus", mk_fn1("HarmonicNumber", expr_new_integer(pe)),
+                                       mk_times(expr_new_integer(-1), mk_symbol("EulerGamma")));
+                    rest[k] = mk_times(sg, mk_times(psi, mk_times(mk_power(expr_copy(t), expr_new_integer(pe)),
+                              mk_power(mk_fn1("Factorial", expr_new_integer(pe)), expr_new_integer(-2)))));
+                }
+                expr_free(t);
+                Expr* BER = mk_fn(mk_symbol("Plus"), ber, (size_t)(K + 1));
+                Expr* BEI = mk_fn(mk_symbol("Plus"), bei, (size_t)(K + 1));
+                Expr* REST = mk_fn(mk_symbol("Plus"), rest, (size_t)(K + 1));
+                free(ber); free(bei); free(rest);
+                /* -Log[u/2] = Log[2] - Log[u] for every u != 0 (2 > 0) */
+                Expr* mlog = mk_fn2("Plus", mk_fn1("Log", expr_new_integer(2)),
+                                    mk_times(expr_new_integer(-1), mk_fn1("Log", expr_copy(u))));
+                Expr* pi4 = mk_times(make_rational(kei ? -1 : 1, 4), mk_symbol("Pi"));
+                Expr* sum = kei
+                    ? mk_fn(mk_symbol("Plus"), (Expr*[]){ mk_times(mlog, BEI), mk_times(pi4, BER), REST }, 3)
+                    : mk_fn(mk_symbol("Plus"), (Expr*[]){ mk_times(mlog, BER), mk_times(pi4, BEI), REST }, 3);
+                sum = simp(sum);
+                SeriesObj* r = series_expand_nested(sum, ctx);
+                expr_free(sum);
+                if (r) return r;
+            }
+        }
+        /* ---- ExpIntegralE[n, u], n a literal integer 1..64, u(x0) = 0: the
+         * logarithmic series (DLMF 8.19.8)
+         *   E_n(u) = (-u)^(n-1)/(n-1)! (psi(n) - Log[u])
+         *            - Sum_{k >= 0, k != n-1} (-u)^k / ((k - n + 1) k!),
+         * psi(n) = -EulerGamma + H_(n-1), truncated past the requested order
+         * and expanded as an ordinary expression (Series[ExpIntegralE[2, x],
+         * {x, 0, 2}] = 1 + (-1 + EulerGamma + Log[x]) x - x^2/2 + O[x]^3,
+         * ExpIntegralE#8). ---- */
+        if (head && head == SYM_ExpIntegralE &&
+            e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_INTEGER &&
+            e->data.function.args[0]->data.integer >= 1 &&
+            e->data.function.args[0]->data.integer <= 64 &&
+            !expr_free_of(e->data.function.args[1], ctx->x) &&
+            ctx->order >= 0 && ctx->order <= 200) {
+            Expr* u = e->data.function.args[1];
+            Expr* u0 = replace_all_of(u, ctx->x, ctx->x0);
+            bool zero = is_lit_zero(u0);
+            expr_free(u0);
+            if (zero) {
+                int64_t n = e->data.function.args[0]->data.integer;
+                int64_t K = ctx->order + n + 2;
+                Expr** t = calloc((size_t)(K + 2), sizeof(Expr*));
+                size_t nt = 0;
+                for (int64_t k = 0; k <= K; k++) {
+                    if (k == n - 1) continue;
+                    /* -(-u)^k / ((k - n + 1) k!) */
+                    t[nt++] = mk_times(expr_new_integer(-1),
+                              mk_times(mk_power(mk_times(expr_new_integer(-1), expr_copy(u)),
+                                                expr_new_integer(k)),
+                                       mk_power(mk_times(expr_new_integer(k - n + 1),
+                                                         mk_fn1("Factorial", expr_new_integer(k))),
+                                                expr_new_integer(-1))));
+                }
+                /* (-u)^(n-1)/(n-1)! (HarmonicNumber[n-1] - EulerGamma - Log[u]) */
+                Expr* psi = mk_fn(mk_symbol("Plus"), (Expr*[]){
+                    mk_fn1("HarmonicNumber", expr_new_integer(n - 1)),
+                    mk_times(expr_new_integer(-1), mk_symbol("EulerGamma")),
+                    mk_times(expr_new_integer(-1), mk_fn1("Log", expr_copy(u))) }, 3);
+                t[nt++] = mk_times(mk_times(mk_power(mk_times(expr_new_integer(-1), expr_copy(u)),
+                                                     expr_new_integer(n - 1)),
+                                            mk_power(mk_fn1("Factorial", expr_new_integer(n - 1)),
+                                                     expr_new_integer(-1))),
+                                   psi);
+                Expr* sum = simp(mk_fn(mk_symbol("Plus"), t, nt));
+                free(t);
+                SeriesObj* r = series_expand_nested(sum, ctx);
+                expr_free(sum);
+                if (r) return r;
+            }
+        }
+        /* ---- SphericalBesselY[n, u], n a literal integer 0..64: elementary
+         * (FunctionExpand: y_0(u) = -Cos[u]/u, ...), expanded as such -- the
+         * pole at u = 0 is then the Laurent series of Cos/u^k
+         * (Series[SphericalBesselY[0, x], {x, 0, 2}] = -1/x + x/2 + O[x]^3,
+         * SphericalBesselY#2). ---- */
+        if (head && head == SYM_SphericalBesselY &&
+            e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_INTEGER &&
+            e->data.function.args[0]->data.integer >= 0 &&
+            e->data.function.args[0]->data.integer <= 64 &&
+            !expr_free_of(e->data.function.args[1], ctx->x)) {
+            Expr* fe = eval_and_free(mk_fn1("FunctionExpand", expr_copy(e)));
+            SeriesObj* r = NULL;
+            if (fe && !series_mentions_head(fe, SYM_SphericalBesselY) &&
+                !series_mentions_head(fe, SYM_BesselY))
+                r = series_expand_nested(fe, ctx);
+            if (fe) expr_free(fe);
+            if (r) return r;
         }
         /* ---- SphericalBesselJ[n, u], n a literal integer 0..64, u(x0) = 0:
          *     j_n(u) = Sum_k (-1)^k u^(n+2k) / (2^k k! (2n+2k+1)!!)

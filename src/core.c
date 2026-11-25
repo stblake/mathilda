@@ -1392,6 +1392,12 @@ void core_init(void) {
     void assoc_ops_init(void);
     assoc_ops_init();
 
+    /* Sub-machine precision for the special functions whose kernels floor
+     * at 53 bits (src/special_functions/sf_lowprec.c). Wraps registered
+     * builtins, so it runs after every subsystem. */
+    void sf_lowprec_init(void);
+    sf_lowprec_init();
+
     /* Experimental`FeynCalc`: native kernels for FeynCalc workloads
      * (src/experimental/feyncalc/; DiracTr). */
     void experimental_feyncalc_init(void);

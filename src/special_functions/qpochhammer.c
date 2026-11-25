@@ -20,6 +20,8 @@
  * Memory: honours the builtin ownership contract (never frees res).
  */
 
+#include <float.h>
+#include <math.h>
 #include "qpochhammer.h"
 #include "eval.h"
 #include "symtab.h"
@@ -102,12 +104,20 @@ Expr* builtin_qpochhammer(Expr* res) {
     }
 
     if (argc == 2) {
+        /* (0; q)_inf = 1: every factor is 1 (QPochhammer#3). */
+        if (a[0]->type == EXPR_INTEGER && a[0]->data.integer == 0) return expr_new_integer(1);
         /* Machine-real a, q: the kernel the NDArray map and Compile[] share.
-         * An all-exact (a;q)_inf stays symbolic (no exact closed form). */
+         * An all-exact (a;q)_inf stays symbolic (no exact closed form).  A
+         * product that underflows the double range (a subnormal or a zero
+         * the factors do not explain) goes to arb, whose 53-bit result keeps
+         * the exponent -- the numeric tower's policy for a machine value
+         * outside [DBL_MIN, DBL_MAX] (QPochhammer#5). */
         SFMachineArgs ma;
         if (sf_machine_scalar_args(res, &ma) && !ma.any_complex) {
             double v;
-            if (sf_machine_qpochhammer(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+            if (sf_machine_qpochhammer(ma.re[0], ma.re[1], &v) &&
+                (fabs(v) >= DBL_MIN || ma.re[0] == 1.0))
+                return expr_new_real(v);
         }
         /* Complex or arbitrary-precision a, q: the same product through arb,
          * at the call's precision (|q| >= 1 diverges and stays unevaluated). */

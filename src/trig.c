@@ -201,14 +201,14 @@ static Expr* flip_sign(Expr* e) {
  * convention -- do NOT free it here.
  */
 static Expr* even_fold(Expr* arg, const char* head_name) {
-    if (!expr_is_superficially_negative(arg)) return NULL;
+    if (!expr_is_superficially_negative(arg) && !expr_is_negated_sum(arg)) return NULL;
     Expr* neg = flip_sign(arg);
     Expr* inner_args[1] = { neg };
     return expr_new_function(expr_new_symbol(head_name), inner_args, 1);
 }
 
 static Expr* odd_fold(Expr* arg, const char* head_name) {
-    if (!expr_is_superficially_negative(arg)) return NULL;
+    if (!expr_is_superficially_negative(arg) && !expr_is_negated_sum(arg)) return NULL;
     Expr* neg = flip_sign(arg);
     Expr* inner_args[1] = { neg };
     Expr* inner = expr_new_function(expr_new_symbol(head_name), inner_args, 1);
@@ -1195,20 +1195,34 @@ static bool exact_inverse_table_cannot_match(const Expr* arg) {
     return !exact_inverse_table_candidate(arg, 0);
 }
 
+/* The table values exact_sin / exact_cos produce are not all in evaluated
+ * form (Sin[Pi/12] is built as a difference that evaluates to
+ * (-Sqrt[2] + Sqrt[6])/4), and the argument of ArcSin / ArcCos is: the
+ * comparison is against the EVALUATED value, computed once per (n, d) and
+ * kept for the process (ArcSin[Sin[Pi/12]] = Pi/12, ArcSin#3). */
+#define EXACT_INV_D_MAX 12
+static Expr* g_exact_inv_cache[2][EXACT_INV_D_MAX + 1][2 * EXACT_INV_D_MAX + 1];
+static bool  g_exact_inv_done[2][EXACT_INV_D_MAX + 1][2 * EXACT_INV_D_MAX + 1];
+
+static const Expr* exact_inverse_value(int which, int64_t n, int64_t d) {
+    size_t i = (size_t)d, j = (size_t)(n + EXACT_INV_D_MAX);
+    if (!g_exact_inv_done[which][i][j]) {
+        Expr* v = which == 0 ? exact_sin(n, d) : exact_cos(n, d);
+        g_exact_inv_cache[which][i][j] = v ? eval_and_free(v) : NULL;
+        g_exact_inv_done[which][i][j] = true;
+    }
+    return g_exact_inv_cache[which][i][j];
+}
+
 static Expr* exact_arcsin(Expr* arg) {
     if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
-        for (int64_t n = -d; n <= d; n++) {
-            Expr* val = exact_sin(n, d);
-            if (val) {
-                if (expr_eq(arg, val)) {
-                    expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
-                }
-                expr_free(val);
-            }
+        for (int64_t n = -d / 2; n <= d / 2; n++) {         /* the range [-Pi/2, Pi/2] */
+            const Expr* val = exact_inverse_value(0, n, d);
+            if (val && expr_eq(arg, (Expr*)val))
+                return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
         }
     }
     return NULL;
@@ -1220,14 +1234,9 @@ static Expr* exact_arccos(Expr* arg) {
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
         for (int64_t n = 0; n <= d; n++) {
-            Expr* val = exact_cos(n, d);
-            if (val) {
-                if (expr_eq(arg, val)) {
-                    expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
-                }
-                expr_free(val);
-            }
+            const Expr* val = exact_inverse_value(1, n, d);
+            if (val && expr_eq(arg, (Expr*)val))
+                return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
         }
     }
     return NULL;

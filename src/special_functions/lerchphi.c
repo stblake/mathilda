@@ -49,6 +49,7 @@
 #include "numeric.h"      /* numeric_min_inexact_bits */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
+#include "core.h"          /* leaf_count_internal */
 #include "symtab.h"
 #include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval, ndt_get/_set */
 #include "sf_machine.h" /* sf_machine_lerchphi (shared double kernel) */
@@ -254,7 +255,22 @@ static Expr* lp_z_minus_one(Expr* s, Expr* a) {
         Expr* psi_lo = lp_digamma(lp_times(expr_copy(a), make_rational(1, 2))); /* psi(a/2) */
         Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
                         (Expr*[]){ psi_hi, lp_times(expr_new_integer(-1), psi_lo) }, 2);
-        return eval_and_free(lp_times(make_rational(1, 2), diff));
+        Expr* out = eval_and_free(lp_times(make_rational(1, 2), diff));
+        /* Rational a: the Gauss digamma theorem (FunctionExpand) reduces the
+         * difference, often to something smaller -- Phi(-1, 1, 1/2) =
+         * (psi(3/4) - psi(1/4))/2 = Pi/2 (LerchPhi#5).  Kept only when it is
+         * no larger than the digamma form. */
+        int64_t rn, rd;
+        if (is_rational(a, &rn, &rd) && rd > 1 && rd <= 12) {
+            Expr* fe = eval_and_free(expr_new_function(expr_new_symbol(SYM_FunctionExpand),
+                                                       (Expr*[]){ expr_copy(out) }, 1));
+            if (fe && leaf_count_internal(fe, true) <= leaf_count_internal(out, true)) {
+                expr_free(out);
+                return fe;
+            }
+            expr_free(fe);
+        }
+        return out;
     }
 
     /* Half-integer a with integer s >= 2: Dirichlet-beta closed form (Catalan for

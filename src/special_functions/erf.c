@@ -412,6 +412,12 @@ static Expr* erf_one_arg(Expr* arg) {
     if (erf_is_neg_infinity(arg))            return expr_new_integer(-1);
     if (erf_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
     if (erf_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
+    /* Erf[InverseErf[x]] = x: the inverse is the principal one, so the
+     * composition is the identity for every x (the reverse order is not). */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.arg_count == 1 &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_InverseErf)
+        return expr_copy(arg->data.function.args[0]);
     {
         int s = erf_directed_imag_infinity(arg);
         if (s != 0) return erf_make_directed_imag_infinity(s);   /* +-I Infinity */

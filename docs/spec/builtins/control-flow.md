@@ -249,6 +249,8 @@ In[5]:= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1] /. x -> 5
 Out[5]= 3/4
 ```
 
+Piecewise[x] for an atom x, or a first argument with a non-pair element, prints Piecewise::pairs and stays unevaluated; a wrong argument count prints Piecewise::argt. A compound non-list first argument (a pattern) stays silent.
+
 ## Not
 Logical negation.
 - `Not[e]`, `!e`

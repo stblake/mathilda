@@ -27,6 +27,8 @@
 #include "eval.h"
 #include "sym_names.h"
 #include "common.h"
+#include "arithmetic.h"   /* is_rational, make_rational */
+#include <stdlib.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -83,6 +85,39 @@ Expr* builtin_expintegrale(Expr* res) {
         return mk_fn2("Times",
             mk_fn1("Exp", mk_fn2("Times", mk_int(-1), expr_copy(z))),
             mk_fn2("Power", expr_copy(z), mk_int(-1)));
+
+    /* E_{-m}(z) = m! e^(-z) Sum_{k=0}^{m} z^k/k! / z^(m+1) for a negative
+     * integer order -- elementary, as the reference writes it (ExpIntegralE[-1,
+     * z] = E^-z (1 + z)/z^2, ExpIntegralE#7).  An exact or symbolic z only (an
+     * inexact one took the kernels above). */
+    if (n->type == EXPR_INTEGER && n->data.integer < 0 && n->data.integer >= -64 &&
+        !flint_num_call_inexact(res) &&
+        !(z->type == EXPR_INTEGER && z->data.integer == 0)) {
+        int64_t m = -n->data.integer;
+        Expr** t = malloc(sizeof(Expr*) * (size_t)(m + 1));
+        for (int64_t k = 0; k <= m; k++)
+            t[k] = mk_fn2("Times", mk_fn2("Power", mk_fn1("Factorial", mk_int(k)), mk_int(-1)),
+                          mk_fn2("Power", expr_copy(z), mk_int(k)));
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), t, (size_t)(m + 1));
+        free(t);
+        return expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+            mk_fn1("Factorial", mk_int(m)),
+            mk_fn1("Exp", mk_fn2("Times", mk_int(-1), expr_copy(z))),
+            sum,
+            mk_fn2("Power", expr_copy(z), mk_int(-(m + 1))) }, 4);
+    }
+
+    /* E_s(0) for an exact rational order s: 1/(s - 1) when s > 1, divergent
+     * otherwise (ExpIntegralE[5/2, 0] = 2/3, ExpIntegralE#4). */
+    {
+        int64_t rn, rd;
+        if (z->type == EXPR_INTEGER && z->data.integer == 0 &&
+            n->type != EXPR_INTEGER && is_rational(n, &rn, &rd) && rd > 1) {
+            if (rn > rd)
+                return make_rational(rd, rn - rd);             /* 1/(rn/rd - 1) */
+            return expr_new_symbol(SYM_ComplexInfinity);
+        }
+    }
 
     /* E_n(0) diverges for integer n <= 1 (the integrand ~ 1/t^n near 0, or
      * E_n = Gamma[1-n] z^(n-1) + ... for n < 1): ComplexInfinity, as the

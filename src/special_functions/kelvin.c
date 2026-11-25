@@ -27,6 +27,11 @@
 #include "flint_num_bridge.h"
 #include "sf_machine.h"
 #include "sf_dispatch2.h"
+#include "numeric.h"           /* numeric_min_inexact_bits */
+#include <string.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -41,6 +46,15 @@ static Expr* kv_eval(Expr* call) {
     Expr* r = evaluate(call);
     expr_free(call);
     return r;
+}
+
+/* A machine or arbitrary-precision zero. */
+static bool kelvin_inexact_zero(const Expr* z) {
+    if (z->type == EXPR_REAL) return z->data.real == 0.0;
+#ifdef USE_MPFR
+    if (z->type == EXPR_MPFR) return mpfr_zero_p(z->data.mpfr) != 0;
+#endif
+    return false;
 }
 
 static Expr* kelvin(Expr* res, int which) {
@@ -62,7 +76,29 @@ static Expr* kelvin(Expr* res, int which) {
     }
     bool handled;
     Expr* v = sf2_numeric(nu, z, which, sf_machine_kelvin, flint_num_kelvin, &handled);
-    if (handled) return v;
+    if (handled && (v || !kelvin_inexact_zero(z))) return v;
+    if (handled) {
+        /* An inexact zero the kernels decline (an order the machine helper
+         * does not reflect, or arb's non-finite ball at a log/pole): the
+         * value at an exact 0, given z's precision -- KelvinBei[-2, 0.] = 0.,
+         * KelvinKei[0, 0.`20] = -Pi/4 to 20 digits, KelvinKei[1, 0.] =
+         * ComplexInfinity (KelvinBei#1, KelvinKei#1). */
+        Expr* ex = kv_eval(mk_fn2(KELVIN_NAME[which], expr_copy(nu), mk_int(0)));
+        if (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL &&
+            strcmp(ex->data.function.head->data.symbol.name, KELVIN_NAME[which]) == 0) {
+            expr_free(ex);
+            return NULL;
+        }
+        if (ex->type == EXPR_INTEGER && ex->data.integer == 0) {
+            expr_free(ex);
+            return expr_copy(z);                       /* the inexact zero itself */
+        }
+        if (ex->type == EXPR_SYMBOL) return ex;        /* Infinity, ComplexInfinity */
+        long bits = numeric_min_inexact_bits(z);
+        Expr* d = bits > 53 ? expr_new_real(numeric_bits_to_digits(bits))
+                            : expr_new_symbol("MachinePrecision");
+        return kv_eval(mk_fn2("N", ex, d));
+    }
 
     if (sf2_exact_integer(nu)) {
         mpz_t n;

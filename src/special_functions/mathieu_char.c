@@ -332,7 +332,14 @@ static Expr* mc_char_mpfr(int odd, bool r_int, int64_t rint, const mpfr_t r,
         if (c < 0) return NULL;
         cls = c;
     } else if (!r_int && cls != MC_NONINT) {
-        return NULL;
+        /* A non-integer order whose double is an integer (within 2^-53 of
+         * one, MathieuCharacteristicB#2): classify and seed from the
+         * neighbouring double on r's side -- the Floquet exponent is
+         * continuous there (a_nu -> a_n as nu -> n+, -> b_n as nu -> n-), and
+         * the MPFR order itself builds the matrix below. */
+        double rd2 = nextafter(rd, mpfr_cmp_d(r, rd) > 0 ? INFINITY : -INFINITY);
+        if (!mc_classify_d(odd, rd2, &cls, &idx, &nud) || cls != MC_NONINT) return NULL;
+        rd = rd2;
     }
     double seed;
     if (!sf_mathieu_char_r(odd, rd, qd, &seed)) return NULL;

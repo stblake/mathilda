@@ -4,6 +4,8 @@
 #include "core.h"
 #include "match.h"
 #include "sym_names.h"
+#include "message.h"
+#include "print.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -216,17 +218,39 @@ Expr* builtin_piecewise(Expr* res) {
     Expr* clauses_arg = res->data.function.args[0];
     Expr* default_arg = (argc == 2) ? res->data.function.args[1] : NULL;
 
-    /* First argument must be a list of {value, condition} pairs. */
-    if (clauses_arg->type != EXPR_FUNCTION
-        || clauses_arg->data.function.head->type != EXPR_SYMBOL
-        || clauses_arg->data.function.head->data.symbol.name != SYM_List) {
+    /* First argument must be a list of {value, condition} pairs.  An atom
+     * (Piecewise[x]) or a list with a non-pair element is reported as the
+     * reference does (Piecewise::pairs) and stays unevaluated.  A compound
+     * non-list argument stays silent: it may be a pattern (a rule's
+     * left-hand side) or an expression awaiting a definition. */
+    bool is_list = clauses_arg->type == EXPR_FUNCTION
+        && clauses_arg->data.function.head->type == EXPR_SYMBOL
+        && clauses_arg->data.function.head->data.symbol.name == SYM_List;
+    bool bad = false;
+    if (!is_list) {
+        if (clauses_arg->type == EXPR_FUNCTION) return NULL;
+        bad = true;
+    } else {
+        for (size_t i = 0; i < clauses_arg->data.function.arg_count; i++) {
+            const Expr* el = clauses_arg->data.function.args[i];
+            if (piecewise_is_pair(el)) continue;
+            /* A non-list compound element (a pattern such as c__) stays silent. */
+            if (el->type == EXPR_FUNCTION && !(el->data.function.head->type == EXPR_SYMBOL
+                    && el->data.function.head->data.symbol.name == SYM_List))
+                return NULL;
+            bad = true;
+            break;
+        }
+    }
+    if (bad) {
+        char* s = expr_to_string(clauses_arg);
+        mth_message("Piecewise", "pairs",
+                    "The first argument %s of Piecewise is not a list of pairs.", s ? s : "");
+        free(s);
         return NULL;
     }
     size_t n_in = clauses_arg->data.function.arg_count;
     Expr** in_pairs = clauses_arg->data.function.args;
-    for (size_t i = 0; i < n_in; i++) {
-        if (!piecewise_is_pair(in_pairs[i])) return NULL;
-    }
 
     /* Walk clauses, collecting survivors. */
     Expr** out_vals = NULL;

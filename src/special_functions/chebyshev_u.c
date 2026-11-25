@@ -318,6 +318,24 @@ static Expr* chebyshev_u_two_arg(Expr* n_e, Expr* x_e) {
     }
 
 #ifdef USE_MPFR
+    /* An exact integer order past the recurrence's cap, or a bignum one, with
+     * a real inexact x: the O(1) closed form (U_{-n} = -U_{n-2}). */
+    if (x_inexact && (n_e->type == EXPR_BIGINT ||
+                      (n_is_int && (ni > (int64_t)CHEB_NUMERIC_DEG_CAP ||
+                                    ni < -(int64_t)CHEB_NUMERIC_DEG_CAP)))) {
+        mpz_t n;
+        mpz_init(n);
+        expr_to_mpz(n_e, n);
+        bool negate = mpz_sgn(n) < 0;
+        if (negate) { mpz_neg(n, n); mpz_sub_ui(n, n, 2); }
+        Expr* v = cheb_closed_form_real(1, n, x_e, cheb_out_prec(n_e, x_e));
+        mpz_clear(n);
+        if (v && negate)
+            v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                  (Expr*[]){ expr_new_integer(-1), v }, 2));
+        if (v) return v;
+    }
+
     /* Numeric integer order with an inexact argument: the stable recurrence.
      * Covers an exact integer order and an inexact integer-valued one alike
      * (the latter would otherwise pick up a spurious imaginary part from the
@@ -365,7 +383,13 @@ static Expr* chebyshev_u_two_arg(Expr* n_e, Expr* x_e) {
         if (ni == -1) return expr_new_integer(0);                        /* U_{-1}(x)=0 */
         unsigned long deg; int sign;
         if (!cheb_reflect(ni, &deg, &sign)) return NULL;                 /* absurd order */
-        if (deg > CHEB_POLY_CAP) return NULL;
+        if (deg > CHEB_POLY_CAP) {
+            Expr* v = cheb_exact_rational(1, deg, x_e);
+            if (v && sign < 0)
+                v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                      (Expr*[]){ expr_new_integer(-1), v }, 2));
+            return v;
+        }
         return cheb_poly(deg, sign, x_e);
     }
 
