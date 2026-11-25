@@ -3799,6 +3799,18 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fnN_adopt(SYM_Plus, terms, nt);
         }
 
+        /* A definite inactive integral in the differentiation variable itself,
+         * Inactive[Integrate][f[u], {u, a, b}] with a, b free of u: u is a
+         * dummy, so the integral does not depend on it (audit Inactive#1). */
+        if (x && inact_int && n == 2
+            && args[1]->type == EXPR_FUNCTION
+            && is_sym(args[1]->data.function.head, "List")
+            && args[1]->data.function.arg_count == 3
+            && expr_eq(args[1]->data.function.args[0], x)
+            && expr_free_of(args[1]->data.function.args[1], x)
+            && expr_free_of(args[1]->data.function.args[2], x))
+            return expr_new_integer(0);
+
         /* Any other inactive integral (a list spec the rules above do not
          * cover, e.g. {u, Sqrt[x]}) stays an inert D[...], as in the reference;
          * it is not an unknown function of its arguments. */
@@ -4978,7 +4990,10 @@ static Expr* deriv_cf_body(const Expr* dop, size_t* m_out) {
     if (total <= 0 || total > 16) return NULL;
     SymbolDef* def = f->data.symbol.def ? f->data.symbol.def
                                         : symtab_lookup(f->data.symbol.name);
-    if (!def || !def->builtin_func || !(def->attributes & ATTR_NUMERICFUNCTION))
+    /* Identity is not a NumericFunction, but it is a pure builtin whose
+     * derivative is 1 (Identity'[x] -> 1, audit Identity#1). */
+    if (!def || !def->builtin_func ||
+        !((def->attributes & ATTR_NUMERICFUNCTION) || f->data.symbol.name == SYM_Identity))
         return NULL;
     *m_out = m;
 

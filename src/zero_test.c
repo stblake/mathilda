@@ -60,6 +60,8 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "sym_intern.h"   /* intern_symbol: PossibleZeroQ opaque-atom symbols */
+#include "message.h"      /* mth_message: PossibleZeroQ::nonopt */
+#include "print.h"        /* expr_to_string */
 #include <stdio.h>
 
 #include <gmp.h>
@@ -3441,6 +3443,18 @@ Expr* builtin_possible_zero_q(Expr* res) {
             opt_assumptions = a->data.function.args[1];
         } else if (positional_assum == NULL) {
             positional_assum = a;
+        } else {
+            /* A second positional argument is neither the assumption nor an
+             * option: ::nonopt and unevaluated (audit PossibleZeroQ#5). */
+            char* as = expr_to_string(a);
+            char* rs = expr_to_string(res);
+            mth_message("PossibleZeroQ", "nonopt",
+                        "Options expected (instead of %s) beyond position %d in %s. "
+                        "An option must be a rule or a list of rules.",
+                        as ? as : "", (int)i, rs ? rs : "");
+            free(as);
+            free(rs);
+            return NULL;
         }
     }
 

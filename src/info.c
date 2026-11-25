@@ -3066,6 +3066,12 @@ void info_init(void) {
         "\tis an attribute which specifies that Sequence objects appearing in the\n"
         "\targuments of a function should not automatically be flattened out.\n"
         "\tThe attribute HoldAllComplete implies SequenceHold.");
+    symtab_set_docstring("InverseFunction",
+        "InverseFunction[f]\n\trepresents the inverse of the function f, so that\n"
+        "\tInverseFunction[f][y] gives the x for which f[x] is y. It stays symbolic;\n"
+        "\tInverseFunction[Identity] is Identity, InverseFunction[InverseFunction[f]] is f,\n"
+        "\tand InverseFunction[Composition[f, g]] is\n"
+        "\tComposition[InverseFunction[g], InverseFunction[f]].");
     symtab_set_docstring("Composition",
         "Composition[f1, f2, f3, ...]\n"
         "\trepresents a composition of the functions f1, f2, f3, ....\n"
@@ -4205,6 +4211,10 @@ void info_init(void) {
     symtab_set_docstring("FormatValues",
         "FormatValues[s] gives the list of display rules for s, defined by Format[...] := ...\n"
         "\tor s /: MakeBoxes[..., form] := .... FormatValues[s] = {...} replaces them.");
+    symtab_set_docstring("DefaultValues",
+        "DefaultValues[s] gives the list of default values of s for optional arguments,\n"
+        "\tdefined by Default[s] = v, Default[s, i] = v or Default[s, i, n] = v, as\n"
+        "\t{HoldPattern[Default[s, ...]] :> v, ...}.");
     symtab_set_docstring("NValues",
         "NValues[s] gives the list of values N gives s or calls of s, defined by\n"
         "\tN[s] = v, s /: N[s] = v or N[s[...], p_] := .... NValues[s] = {...} replaces\n"

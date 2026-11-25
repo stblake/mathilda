@@ -186,19 +186,38 @@ static bool parse_level_spec_strict(Expr* ls, LevelSpec* spec) {
     return mth_level_spec_parse(ls, &spec->min, &spec->max);
 }
 
-static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
-    for (size_t i = start_idx; i < res->data.function.arg_count; i++) {
-        Expr* opt = res->data.function.args[i];
-        if (is_rule2(opt)) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL &&
-                opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL &&
-                    opt->data.function.args[1]->data.symbol.name == SYM_True) {
-                    spec->heads = true;
-                }
-            }
+/* Heads -> v in an option list `opts` (a List of rules): 1 for True, 0 for
+ * any other value, -1 when absent.  The FIRST setting wins, as for every
+ * option (audit MapAll#5). */
+static int heads_option_in(Expr* const* opts, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        Expr* opt = opts[i];
+        if (!is_rule2(opt)) continue;
+        if (opt->data.function.args[0]->type == EXPR_SYMBOL &&
+            opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
+            Expr* v = opt->data.function.args[1];
+            return (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True) ? 1 : 0;
         }
     }
+    return -1;
+}
+
+static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
+    size_t argc = res->data.function.arg_count;
+    int h = start_idx < argc ? heads_option_in(res->data.function.args + start_idx,
+                                               argc - start_idx) : -1;
+    if (h < 0) {
+        /* No explicit Heads: the head's current default, so SetOptions[MapAll,
+         * Heads -> True] takes effect (audit MapAll#3). */
+        Expr* hd = res->data.function.head;
+        SymbolDef* d = hd->type == EXPR_SYMBOL ? hd->data.symbol.def : NULL;
+        if (!d && hd->type == EXPR_SYMBOL) d = symtab_lookup(hd->data.symbol.name);
+        eval_dep_note(d);
+        Expr* defaults = d ? d->default_options : NULL;
+        if (head_is(defaults, SYM_List))
+            h = heads_option_in(defaults->data.function.args, defaults->data.function.arg_count);
+    }
+    if (h >= 0) spec->heads = (h == 1);
 }
 
 /* ------------------- Apply ------------------- */
@@ -968,20 +987,32 @@ static Expr* mapat_leaf(void* ctx, Expr* leaf) {
  * that does not exist makes the walker return NULL and MapAt stay unevaluated,
  * matching Part[{a, b, c}, 5].
  */
+/* MapAt::partw ("Part {i, j} of expr does not exist.") when a single
+ * position -- an integer or a flat list of integers -- names no part (audit
+ * MapAt#2).  Other position specs keep their own diagnostics. */
+static void mapat_partw(const Expr* expr, const Expr* pos) {
+    bool one_int = pos->type == EXPR_INTEGER;
+    if (!one_int) {
+        if (!head_is((Expr*)pos, SYM_List) || pos->data.function.arg_count == 0) return;
+        for (size_t i = 0; i < pos->data.function.arg_count; i++)
+            if (pos->data.function.args[i]->type != EXPR_INTEGER) return;
+    }
+    char* ps = expr_to_string_outputform((Expr*)pos);
+    char* es = expr_to_string_outputform((Expr*)expr);
+    mth_message("MapAt", "partw", one_int ? "Part {%s} of %s does not exist."
+                                          : "Part %s of %s does not exist.",
+                ps ? ps : "", es ? es : "");
+    free(ps);
+    free(es);
+}
+
 Expr* builtin_map_at(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 
-    if (argc == 2) {
-        /* Operator form: MapAt[f, pos] -> Function[MapAt[f, #1, pos]]. */
-        Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
-        Expr* inner_args[3] = { expr_copy(res->data.function.args[0]), slot,
-                                expr_copy(res->data.function.args[1]) };
-        Expr* inner = expr_new_function(expr_new_symbol(SYM_MapAt), inner_args, 3);
-        Expr* func_args[1] = { inner };
-        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
-    }
+    /* MapAt[f, pos] is an inert operator form; MapAt[f, pos][expr] is applied
+     * through the opform table (src/opform.c) -- it used to become a pure
+     * Function (audit MapAt#1). */
     if (argc != 3) return NULL;
 
     Expr* f    = res->data.function.args[0];
@@ -1001,7 +1032,9 @@ Expr* builtin_map_at(Expr* res) {
         return map_try_repack(expr, eval_and_free(out), expr->data.ndarray.dtype);
     }
 
-    return expr_apply_at_positions(expr, pos, mapat_leaf, f);
+    Expr* out = expr_apply_at_positions(expr, pos, mapat_leaf, f);
+    if (!out) mapat_partw(expr, pos);
+    return out;
 }
 
 /* ------------------- MapAll ------------------- */
@@ -1206,7 +1239,10 @@ Expr* builtin_select(Expr* res) {
          * "all" sentinel and returned every match (audit Select#1). */
         if (n_expr->type == EXPR_INTEGER && n_expr->data.integer >= 0) {
             n_max = n_expr->data.integer;
-        } else if (n_expr->type == EXPR_SYMBOL && n_expr->data.symbol.name == SYM_Infinity) {
+        } else if ((n_expr->type == EXPR_SYMBOL && n_expr->data.symbol.name == SYM_Infinity) ||
+                   (n_expr->type == EXPR_BIGINT && mpz_sgn(n_expr->data.bigint) > 0)) {
+            /* A count past the int64 range is as good as Infinity: no
+             * expression has that many elements (audit Select#3). */
             n_max = -1;
         } else {
             char* rs = expr_to_string(res);
@@ -1241,7 +1277,10 @@ Expr* builtin_select(Expr* res) {
      * Materialise, reuse the List implementation, repack — see ndstruct.h. */
     if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
 
-    if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
+    /* Can only select from compound expressions: an atom is ::normal
+     * (audit Select#5). */
+    if (list->type != EXPR_FUNCTION)
+        return expr_is_plain_atom(list) ? builtin_normal_error("Select", res, 1) : NULL;
     
     size_t count = list->data.function.arg_count;
     Expr** kept_args = NULL;
@@ -4185,9 +4224,16 @@ static Expr* nest_impl(Expr* res, bool as_list) {
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
     Expr* n_expr = res->data.function.args[2];
-    if (n_expr->type != EXPR_INTEGER) return NULL;
+    if (n_expr->type != EXPR_INTEGER || n_expr->data.integer < 0) {
+        /* Nest::intnm / NestList::intnm (audit Nest#1, NestList#1). */
+        char* rs = expr_to_string_outputform(res);
+        mth_message(as_list ? "NestList" : "Nest", "intnm",
+                    "Non-negative machine-sized integer expected at position 3 in %s.",
+                    rs ? rs : "");
+        free(rs);
+        return NULL;
+    }
     int64_t n = n_expr->data.integer;
-    if (n < 0) return NULL;
 
     /* Automatic numeric fast-path: a machine-real-arithmetic pure function
      * iterated over a machine real runs in compiled doubles (no per-step Expr
@@ -4377,7 +4423,13 @@ static Expr* fold_impl(Expr* res, bool as_list) {
         list = materialized;
     }
 
-    if (list->type != EXPR_FUNCTION) { expr_free(materialized); return NULL; }
+    if (list->type != EXPR_FUNCTION || expr_is_number_atom(list)) {
+        expr_free(materialized);
+        /* Fold[f, x, a]: an atom has no elements to fold (audit Fold#1). */
+        if (expr_is_plain_atom(list))
+            return builtin_normal_error(as_list ? "FoldList" : "Fold", res, (int)argc);
+        return NULL;
+    }
 
     Expr* list_head = list->data.function.head;
     Expr** elems = list->data.function.args;
@@ -4531,7 +4583,9 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
             if (max_arg->data.integer < 0) return NULL;
             max_apps = max_arg->data.integer;
             max_inf = false;
-        } else if (max_arg->type == EXPR_SYMBOL && max_arg->data.symbol.name == SYM_Infinity) {
+        } else if ((max_arg->type == EXPR_SYMBOL && max_arg->data.symbol.name == SYM_Infinity) ||
+                   (max_arg->type == EXPR_BIGINT && mpz_sgn(max_arg->data.bigint) > 0)) {
+            /* A cap past the int64 range is no cap (audit NestWhileList#1). */
             max_inf = true;
         } else {
             return NULL;
@@ -4942,6 +4996,13 @@ Expr* builtin_thread(Expr* res) {
             if (L == -1) {
                 L = len;
             } else if (len != L) {
+                /* Thread::tdlen, then the expression unchanged (audit
+                 * Thread#1). */
+                char* es = expr_to_string_outputform(expr);
+                mth_message("Thread", "tdlen",
+                            "Objects of unequal length in %s cannot be combined.",
+                            es ? es : "");
+                free(es);
                 if (mask) free(mask);
                 expr_free(h);
                 return expr_copy(expr);

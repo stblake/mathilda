@@ -151,7 +151,7 @@ static void pat_level_args(Expr* res, int64_t* min_out, int64_t* max_out, bool* 
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
+        if (opt->type == EXPR_FUNCTION && (opt->data.function.head->data.symbol.name == SYM_Rule || opt->data.function.head->data.symbol.name == SYM_RuleDelayed) && opt->data.function.arg_count == 2) {
             if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
                 else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;
@@ -298,8 +298,11 @@ Expr* builtin_first_case(Expr* res) {
         return NULL;
     }
 
+    /* Always with a count of 1: Cases then stops at the first case, so a
+     * RuleDelayed right side is evaluated for that case alone (audit
+     * FirstCase#4: it ran for every match). */
     Expr* cases;
-    if (lspec || heads_opt) {
+    {
         Expr* ca[5];
         size_t k = 0;
         ca[k++] = expr_copy(res->data.function.args[0]);
@@ -313,10 +316,6 @@ Expr* builtin_first_case(Expr* res) {
         ca[k++] = expr_new_integer(1);
         if (heads_opt) ca[k++] = expr_copy(heads_opt);
         cases = expr_new_function(expr_new_symbol(SYM_Cases), ca, k);
-    } else {
-        Expr* cases_args[2] = { expr_copy(res->data.function.args[0]),
-                                expr_copy(res->data.function.args[1]) };
-        cases = expr_new_function(expr_new_symbol(SYM_Cases), cases_args, 2);
     }
     Expr* matches = evaluate(cases);
     expr_free(cases);
@@ -723,7 +722,7 @@ Expr* builtin_delete_cases(Expr* res) {
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->type == EXPR_SYMBOL && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->type == EXPR_SYMBOL && (opt->data.function.head->data.symbol.name == SYM_Rule || opt->data.function.head->data.symbol.name == SYM_RuleDelayed) && opt->data.function.arg_count == 2) {
             if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
                 else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;
@@ -838,15 +837,9 @@ Expr* builtin_position(Expr* res) {
     { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
     
-    if (argc == 1) {
-        Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
-        Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_pos = expr_new_function(expr_new_symbol(SYM_Position), inner_args, 2);
-        Expr* func_args[1] = { inner_pos };
-        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
-    }
-
+    /* Position[pattern] is an inert operator form; Position[pattern][expr] is
+     * applied through the opform table (src/opform.c) -- it used to become a
+     * pure Function (audit Position#4). */
     if (argc < 2) return NULL;
 
     /* Position inside an association reports {Key[k], subpos...} for its
@@ -868,7 +861,7 @@ Expr* builtin_position(Expr* res) {
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
+        if (opt->type == EXPR_FUNCTION && (opt->data.function.head->data.symbol.name == SYM_Rule || opt->data.function.head->data.symbol.name == SYM_RuleDelayed) && opt->data.function.arg_count == 2) {
             if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
                 else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;

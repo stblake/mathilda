@@ -118,6 +118,28 @@ static void named_slot_message(Expr* fn, const char* name, Expr** args, size_t a
     free(fs);
 }
 
+/* Function::slotn ("Slot number n in fn cannot be filled from (fn)[args].")
+ * for a numbered slot past the supplied arguments; the slot stays in place
+ * (audit Function#6, Slot#3). */
+static void slotn_message(Expr* fn, int64_t idx, Expr** args, size_t arg_count) {
+    if (!fn) return;
+    if (mth_msg_suppressed()) { mth_msg_note_named("Function", "slotn"); return; }
+    char* fs = expr_to_string(fn);
+    Expr** cp = malloc(sizeof(Expr*) * (arg_count ? arg_count : 1));
+    for (size_t i = 0; i < arg_count; i++) cp[i] = expr_copy(args[i]);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_List), cp, arg_count);
+    free(cp);
+    char* cs = expr_to_string(call);          /* "{a1, a2}" -> "[a1, a2]" */
+    expr_free(call);
+    size_t cl = cs ? strlen(cs) : 0;
+    if (cl >= 2) { cs[0] = '['; cs[cl - 1] = ']'; }
+    mth_message("Function", "slotn", "Slot number %lld in %s cannot be filled from (%s)%s.",
+                (long long)idx, fs ? fs : "Function[...]", fs ? fs : "Function[...]",
+                cl >= 2 ? cs : "[]");
+    free(cs);
+    free(fs);
+}
+
 /* Copy-on-write substitution over the children of e: sub(child) is called on
  * the head and every argument, and a new node is built only when one of them
  * came back as a different pointer (expr_copy is a refcount bump, so an
@@ -231,6 +253,7 @@ static Expr* slots_rec(Expr* e, Expr** args, size_t arg_count, Expr* fn, const P
                     /* #0 is the pure function itself: the anonymous recursion
                      * If[# == 0, 1, # #0[# - 1]] & (audit Function#1, Slot#1). */
                     if (idx == 0 && fn) return expr_copy(fn);
+                    if (idx >= 1) slotn_message(fn, idx, args, arg_count);
                 }
                 /* Named slot #name == Slot["name"]: the value stored under the
                  * key "name" in the first argument, which must be an
@@ -702,5 +725,14 @@ static Expr* apply_pure_function_sorted(Expr* head, Expr** args, size_t arg_coun
         return trap_return(result);
     }
 
+    /* Function[1, body][...]: no parameter list -- ::flpar, unevaluated
+     * (audit Function#7). */
+    char* ps = expr_to_string(params);
+    char* hs = expr_to_string(head);
+    mth_message("Function", "flpar",
+                "Parameter specification %s in %s should be a symbol or a list of symbols.",
+                ps ? ps : "", hs ? hs : "");
+    free(ps);
+    free(hs);
     return NULL;
 }

@@ -211,7 +211,13 @@ static bool to_machine_double(const Expr* v, double* out) {
 
 /* Numericalize a variable-free subexpression to a machine double. */
 static bool const_fold(const Expr* e, double* out) {
+    /* An internal probe: a constant that warns (the 1/0 of #/0 &) declines
+     * here, and the interpreter then evaluates the body and reports it once.
+     * Unmuted, Nest[#/0 &, 1, 1] printed Power::infy twice (audit Nest#2,
+     * Fold#3). */
+    arith_warnings_mute_push();
     Expr* v = numericalize(e, numeric_machine_spec());
+    arith_warnings_mute_pop();
     bool ok = to_machine_double(v, out);
     expr_free(v);
     return ok;

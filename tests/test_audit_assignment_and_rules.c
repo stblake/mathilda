@@ -137,6 +137,52 @@ static void test_wave4_g4_assignment(void) {
     audit_chk("MakeBoxes#1", "MakeBoxes[hmb4[2], StandardForm]", "\"H\"");
 }
 
+/* Wave 5 G4: ::ssym for non-symbol targets, Default values cleared by ClearAll / Remove,
+ * ::rmix and Dispatch lists, ::noval / ::setraw, nested ReplacePart key paths, ::rvalue
+ * naming the expression, ::sym, ::optnf, ::argt. */
+static void test_wave5_g4_assignment(void) {
+    audit_chk("Clear#2", "Check[Clear[5], fired, Clear::ssym]", "fired");
+    audit_chk("Clear#2", "Quiet[Clear[5]]", "Null");
+    audit_chk("ClearAll#3", "Default[w5k] = 7; ClearAll[w5k]; Default[w5k]", "Default[w5k]");
+    audit_chk("ClearAll#5", "Check[ClearAll[1], fired, ClearAll::ssym]", "fired");
+    audit_chk("ClearAll#5", "Check[ClearAll[f[x]], fired, ClearAll::ssym]", "fired");
+    audit_chk("Protect#2", "Check[Protect[5], fired, Protect::ssym]", "fired");
+    audit_chk("Protect#2", "Check[Protect[f[x]], fired, Protect::ssym]", "fired");
+    audit_chk("Unprotect#3", "Check[Unprotect[1], fired, Unprotect::ssym]", "fired");
+    audit_chk("Unprotect#3", "Quiet[Unprotect[1]]", "{}");
+    audit_chk("ReplaceAll#2", "Check[x /. {{x -> 1}, x -> 2}, fired, ReplaceAll::rmix]", "fired");
+    audit_chk("ReplaceAll#2", "Quiet[x /. {{x -> 1}, x -> 2}]", "ReplaceAll[x, {{x -> 1}, x -> 2}]");
+    audit_chk("ReplaceAll#4", "{x, y} /. {Dispatch[{x -> 1}], Dispatch[{x -> 2}]}", "{{1, y}, {2, y}}");
+    audit_chk("ReplaceAll#4", "{x, y} /. {{x -> 1}, {x -> 2}}", "{{1, y}, {2, y}}");
+    audit_chk("ReplaceAll#4", "Replace[x, {Dispatch[{x -> 1}], {x -> 2}}]", "{1, 2}");
+    audit_chk("Set#3", "Check[w5undef[[1]] = 2, fired, Set::noval]", "fired");
+    audit_chk("Set#3", "Quiet[w5undef[[1]] = 2]", "2");
+    audit_chk("Set#4", "Check[3 = 4, fired, Set::setraw]", "fired");
+    audit_chk("Set#4", "Quiet[3 = 4]", "4");
+    audit_chk("Set#4", "Quiet[\"a\" = 1]", "1");
+    audit_chk("SetDelayed#2", "Check[1 := 2, fired, SetDelayed::setraw]", "fired");
+    audit_chk("SetDelayed#2", "Quiet[1 := 2]", "$Failed");
+    audit_chk("SetDelayed#2", "Quiet[\"s\" := 2]", "$Failed");
+    audit_chk("ReplacePart#5", "ReplacePart[<|\"a\" -> <|\"x\" -> 1|>|>, {\"a\", \"x\"} -> 9]", "<|\"a\" -> <|\"x\" -> 9|>|>");
+    audit_chk("ReplacePart#5", "ReplacePart[<|\"a\" -> {1, 2}|>, {\"a\", 2} -> 9]", "<|\"a\" -> {1, 9}|>");
+    audit_chk("DivideBy#3", "Check[DivideBy[5, 2], fired, DivideBy::rvalue]", "fired");
+    audit_chk("TimesBy#3", "Check[TimesBy[3, 2], fired, TimesBy::rvalue]", "fired");
+    audit_chk("DownValues#1", "Check[DownValues[1], fired, DownValues::sym]", "fired");
+    audit_chk("DownValues#1", "Check[DownValues[], fired, DownValues::argx]", "fired");
+    audit_chk("DownValues#1", "Quiet[DownValues[1]]", "DownValues[1]");
+    audit_chk("OptionValue#2", "Options[w5ov] = {a -> 1}; Check[OptionValue[w5ov, zz], fired, OptionValue::optnf]", "fired");
+    audit_chk("OptionValue#2", "Quiet[OptionValue[w5ov, zz]]", "zz");
+    audit_chk("OptionValue#2", "OptionValue[w5ov, a]", "1");
+    audit_chk("Options#3", "Check[Options[], fired, Options::argt]", "fired");
+    audit_chk("Options#3", "Check[Options[f, a, b], fired, Options::argt]", "fired");
+    audit_chk("Remove#2", "Default[w5dd] = 3; Remove[w5dd]; Default[w5dd]", "Default[w5dd]");
+    audit_chk("Remove#3", "Check[Remove[5], fired, Remove::ssym]", "fired");
+    audit_chk("Remove#3", "Check[Remove[f[x]], fired, Remove::ssym]", "fired");
+    audit_chk("Unset#3", "Check[Unset[5], fired, Unset::setraw]", "fired");
+    audit_chk("Unset#3", "Quiet[Unset[5]]", "$Failed");
+    audit_chk("Unset#3", "Check[Unset[a, b], fired, Unset::argx]", "fired");
+}
+
 int main(void) {
     audit_init();
     TEST(test_op_assign_part_once);
@@ -144,5 +190,6 @@ int main(void) {
     TEST(test_replaceat_delayed_unevaluated);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_g4_assignment);
+    TEST(test_wave5_g4_assignment);
     return audit_finish("audit_assignment_and_rules");
 }

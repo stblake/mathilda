@@ -473,6 +473,8 @@ void core_init(void) {
     symtab_add_builtin("AtomQ", builtin_atomq);
     symtab_add_builtin("Identity", builtin_identity);
     symtab_get_def("Identity")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("InverseFunction", builtin_inverse_function);
+    symtab_get_def("InverseFunction")->attributes |= ATTR_NHOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("Composition", builtin_composition);
     symtab_get_def("Composition")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_add_builtin("ComposeList", builtin_compose_list);
@@ -552,6 +554,7 @@ void core_init(void) {
 #endif
     symtab_add_builtin("FormatValues", builtin_format_values);
     symtab_add_builtin("NValues", builtin_n_values);
+    symtab_add_builtin("DefaultValues", builtin_default_values);
     symtab_add_builtin("Out", builtin_out);
     symtab_add_builtin("Plus", builtin_plus);
     symtab_add_builtin("Times", builtin_times);
@@ -1579,6 +1582,15 @@ Expr* builtin_compoundexpression(Expr* res) {
 }
 static void core_apply_one_spec(Expr* spec, void (*action)(const char*), const char* head);
 
+/* head::ssym ("e is not a symbol or a string.") for a Clear / ClearAll /
+ * Remove / Protect / Unprotect argument that names no symbol (audit Clear#2,
+ * ClearAll#5, Remove#3, Protect#2, Unprotect#3).  The argument is skipped. */
+static void core_ssym_message(const char* head, const Expr* e) {
+    char* es = expr_to_string_outputform((Expr*)e);
+    mth_message(head, "ssym", "%s is not a symbol or a string.", es ? es : "");
+    free(es);
+}
+
 /* Clear's action for a pattern-matched name: drop values unless Protected. */
 static void core_clear_values_one(const char* name) {
     if (!name || (get_attributes(name) & ATTR_PROTECTED)) return;
@@ -1601,6 +1613,8 @@ Expr* builtin_clear(Expr* res) {
             } else if (arg->type == EXPR_STRING) {
                 /* Clear["x*"]: every matching symbol that is not Protected. */
                 core_apply_one_spec(arg, core_clear_values_one, NULL);
+            } else {
+                core_ssym_message("Clear", arg);
             }
         }
         return expr_new_symbol(SYM_Null);
@@ -1727,8 +1741,12 @@ static Expr* unset_lhs(Expr* lhs) {
             symbol_name = head;
         }
     } else {
-        /* e.g. Unset[5] -- not an assignable left-hand side. */
-        return NULL;
+        /* e.g. Unset[5] -- not an assignable left-hand side: ::setraw and
+         * $Failed, as the reference does (audit Unset#3). */
+        char* shown = expr_to_string_outputform(lhs);
+        mth_message("Unset", "setraw", "Cannot unset object %s.", shown ? shown : "");
+        free(shown);
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
 #if UP_VALUES
@@ -1773,6 +1791,25 @@ static Expr* unset_lhs(Expr* lhs) {
             free(shown);
             return expr_new_symbol(SYM_DollarFailed);
         }
+    }
+
+    /* Default[f, ...] =. removes a Default value of f: the rule is stored on
+     * Default (Protected), but it is f's definition, so f's protection is the
+     * one that counts -- as for Set. */
+    if (symbol_name == SYM_Default && lhs->type == EXPR_FUNCTION &&
+        lhs->data.function.arg_count >= 1 &&
+        lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* tag = lhs->data.function.args[0]->data.symbol.name;
+        if (get_attributes(tag) & ATTR_PROTECTED) {
+            mth_message("Unset", "wrsym", "Symbol %s is Protected.", tag);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+        if (symtab_remove_matching_rule(SYM_Default, lhs, false))
+            return expr_new_symbol(SYM_Null);
+        char* shown = expr_to_string_outputform(lhs);
+        mth_message("Unset", "norep", "Assignment on %s for %s not found.", tag, shown ? shown : "");
+        free(shown);
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     /* Protected symbols (every builtin among them) cannot be Unset,
@@ -1828,6 +1865,7 @@ static void core_clear_all_one(const char* name) {
     symtab_clear_messages(name);        /* every s::tag, not only usage */
     if (symtab_get_options(name))       /* Options[s] (audit ClearAll#1) */
         symtab_set_options(name, NULL);
+    symtab_remove_default_values(name); /* Default[s, ...] (audit ClearAll#3) */
 }
 
 /* Remove[s]: delete the symbol's definition entirely. The Protected guard
@@ -1841,6 +1879,7 @@ static void core_remove_one(const char* name) {
         return;
     }
     symtab_clear_messages(name);
+    symtab_remove_default_values(name); /* Default[s, ...] (audit Remove#2) */
     symtab_remove_symbol(name);
 }
 
@@ -1875,10 +1914,14 @@ static bool core_unprotect_one(const char* name) {
  * names none, `head` (if non-NULL) emits head::rmnsm. */
 static void core_apply_one_spec(Expr* spec, void (*action)(const char*), const char* head) {
     if (spec->type == EXPR_SYMBOL) { action(spec->data.symbol.name); return; }
-    if (spec->type != EXPR_STRING) return;
+    if (spec->type != EXPR_STRING) {
+        if (head) core_ssym_message(head, spec);
+        return;
+    }
     size_t n = 0;
     char** keys = names_match_keys(spec, &n);
-    if (n == 0 && head)
+    /* Only Remove reports a string pattern that matches nothing. */
+    if (n == 0 && head && strcmp(head, "Remove") == 0)
         mth_message(head, "rmnsm", "There are no symbols matching \"%s\".", spec->data.string);
     for (size_t k = 0; k < n; k++) action(keys[k]);
     names_free_keys(keys, n);
@@ -1915,7 +1958,7 @@ Expr* builtin_clear_all(Expr* res) {
             }
         }
     }
-    return core_apply_symbol_action(res, core_clear_all_one, NULL);
+    return core_apply_symbol_action(res, core_clear_all_one, "ClearAll");
 }
 
 Expr* builtin_remove(Expr* res) {
@@ -1944,6 +1987,8 @@ static Expr* core_protect_unprotect(Expr* res, bool protecting) {
             const char* one = NULL;
             if (spec->type == EXPR_STRING) keys = names_match_keys(spec, &nk);
             else { one = core_symbol_name_of(spec); nk = one ? 1 : 0; }
+            if (!keys && !one)
+                core_ssym_message(protecting ? "Protect" : "Unprotect", spec);
             for (size_t k = 0; k < nk; k++) {
                 const char* name = keys ? keys[k] : one;
                 bool did = protecting ? core_protect_one(name)
@@ -3283,6 +3328,44 @@ static Expr* rules_to_list(Rule* r) {
     return list;
 }
 
+/* head::sym ("Argument e at position 1 is expected to be a symbol.") for a
+ * *Values call whose argument names no symbol; NULL leaves it unevaluated
+ * (audit DownValues#1, UpValues#1). */
+static Expr* values_sym_error(const char* head, const Expr* arg) {
+    char* es = expr_to_string_outputform((Expr*)arg);
+    mth_message(head, "sym", "Argument %s at position 1 is expected to be a symbol.",
+                es ? es : "");
+    free(es);
+    return NULL;
+}
+
+/* DefaultValues[f] -> {HoldPattern[Default[f, ...]] :> v, ...}: the Default
+ * values of f (audit Default#4).  They are stored as DownValues of Default,
+ * keyed by the first argument, where the matcher reads them. */
+Expr* builtin_default_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    const char* name = arg->type == EXPR_SYMBOL ? arg->data.symbol.name
+                     : arg->type == EXPR_STRING ? arg->data.string : NULL;
+    if (!name) return values_sym_error("DefaultValues", arg);
+    Rule* head = NULL;
+    Rule** tail = &head;
+    for (Rule* r = symtab_get_down_values(SYM_Default); r; r = r->next) {
+        if (!symtab_default_value_rule(r, name)) continue;
+        /* A shallow view of the matching rules for rules_to_list, which only
+         * reads pattern / replacement / rhs_conds through
+         * symtab_rule_display_parts. */
+        Rule* v = malloc(sizeof(Rule));
+        *v = *r;
+        v->next = NULL;
+        *tail = v;
+        tail = &v->next;
+    }
+    Expr* out = rules_to_list(head);
+    while (head) { Rule* n = head->next; free(head); head = n; }
+    return out;
+}
+
 Expr* builtin_own_values(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -3295,7 +3378,13 @@ Expr* builtin_own_values(Expr* res) {
 Expr* builtin_down_values(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_SYMBOL) return NULL;
+    if (arg->type != EXPR_SYMBOL) {
+        if (arg->type == EXPR_STRING) {
+            SymbolDef* d = symtab_lookup(arg->data.string);
+            return d ? rules_to_list(d->down_values) : values_sym_error("DownValues", arg);
+        }
+        return values_sym_error("DownValues", arg);
+    }
 
     Rule* r = symtab_get_down_values(arg->data.symbol.name);
     return rules_to_list(r);
@@ -3335,7 +3424,7 @@ Expr* builtin_up_values(Expr* res) {
         }
         return rules_to_list(d->up_values);
     }
-    return NULL;
+    return values_sym_error("UpValues", arg);
 }
 #endif
 
@@ -3405,6 +3494,33 @@ Expr* builtin_identity(Expr* res) {
         return NULL;
     }
     return expr_copy(res->data.function.args[0]);
+}
+
+/* InverseFunction[f]: the inverse of f, kept symbolic (InverseFunction[f][y]
+ * stays as written; Solve builds on the inert form).  Only the structural
+ * identities evaluate: InverseFunction[Identity] is Identity (audit
+ * Identity#2), InverseFunction[InverseFunction[f]] is f, and the inverse of a
+ * composition is the composition of the inverses in reverse order (audit
+ * Composition#1). */
+Expr* builtin_inverse_function(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* f = res->data.function.args[0];
+    if (f->type == EXPR_SYMBOL && f->data.symbol.name == SYM_Identity)
+        return expr_new_symbol(SYM_Identity);
+    if (head_is(f, SYM_InverseFunction) && f->data.function.arg_count == 1)
+        return expr_copy(f->data.function.args[0]);
+    if (head_is(f, SYM_Composition) && f->data.function.arg_count >= 2) {
+        size_t n = f->data.function.arg_count;
+        Expr** inv = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            Expr* a = expr_copy(f->data.function.args[n - 1 - i]);
+            inv[i] = expr_new_function(expr_new_symbol(SYM_InverseFunction), &a, 1);
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_Composition), inv, n);
+        free(inv);
+        return out;
+    }
+    return NULL;
 }
 
 /* Composition[f1, f2, ...] represents the symbolic composition f1 . f2 . ...
@@ -4150,7 +4266,12 @@ Expr* builtin_rationalq(Expr* res) {
     Expr* arg = res->data.function.args[0];
     /* An exact rational: any integer (which is rational) or a Rational[p, q]. */
     return expr_new_symbol(
-        (expr_is_integer_like(arg) || core_head_is(arg, SYM_Rational))
+        (expr_is_integer_like(arg) ||
+         /* a Rational NUMBER: an unevaluated Rational[x, y] or Rational[1.5, 2]
+          * is not one (audit RationalQ#1) */
+         (core_head_is(arg, SYM_Rational) && arg->data.function.arg_count == 2 &&
+          expr_is_integer_like(arg->data.function.args[0]) &&
+          expr_is_integer_like(arg->data.function.args[1])))
             ? SYM_True : SYM_False);
 }
 
@@ -4213,12 +4334,24 @@ Expr* builtin_symbolname(Expr* res) {
 }
 
 Expr* builtin_valueq(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) {
         return builtin_arg_error("ValueQ",
             res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 1, 1);
     }
+    /* ValueQ[expr, Method -> m]: every method answers the same question here
+     * (audit ValueQ#4); anything else beyond the expression is ::argx. */
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        Expr* o = res->data.function.args[i];
+        if (!(head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) || o->data.function.arg_count != 2
+            || o->data.function.args[0]->type != EXPR_SYMBOL
+            || o->data.function.args[0]->data.symbol.name != SYM_Method)
+            return builtin_arg_error("ValueQ", res->data.function.arg_count, 1, 1);
+    }
 
     Expr* arg = res->data.function.args[0];
+    /* ValueQ[Unevaluated[x]] asks about x (audit ValueQ#3). */
+    while (head_is(arg, SYM_Unevaluated) && arg->data.function.arg_count == 1)
+        arg = arg->data.function.args[0];
     if (arg->type == EXPR_SYMBOL) {
         SymbolDef* d = symtab_lookup(arg->data.symbol.name);
         if (d && d->own_values) return expr_new_symbol(SYM_True);
@@ -4226,6 +4359,24 @@ Expr* builtin_valueq(Expr* res) {
                arg->data.function.head->type == EXPR_SYMBOL) {
         SymbolDef* d = symtab_lookup(arg->data.function.head->data.symbol.name);
         if (d && d->down_values) return expr_new_symbol(SYM_True);
+    }
+    if (arg->type == EXPR_FUNCTION) {
+        /* h[1][2] = 3 is a SubValue of h (audit ValueQ#1). */
+        const char* inner = symtab_innermost_head(arg);
+        if (inner && arg->data.function.head->type == EXPR_FUNCTION) {
+            SymbolDef* d = symtab_lookup(inner);
+            if (d && d->sub_values) return expr_new_symbol(SYM_True);
+        }
+#if UP_VALUES
+        /* u /: v[u] = 7 is an UpValue of u (audit ValueQ#2). */
+        for (size_t i = 0; i < arg->data.function.arg_count; i++) {
+            const Expr* a = arg->data.function.args[i];
+            while (a->type == EXPR_FUNCTION) a = a->data.function.head;
+            if (a->type != EXPR_SYMBOL) continue;
+            SymbolDef* d = symtab_lookup(a->data.symbol.name);
+            if (d && d->up_values) return expr_new_symbol(SYM_True);
+        }
+#endif
     }
 
     return expr_new_symbol(SYM_False);
@@ -4250,8 +4401,33 @@ static char* render_definitions(const char* name) {
 }
 #endif
 
+/* "No information available for symbol "name"." -- sized to the name, which
+ * a fixed buffer truncated past ~220 characters (audit Information#4). */
+static Expr* info_no_information(const char* sym_name) {
+    const char* shown = context_display_name(sym_name);
+    const char* fmt = "No information available for symbol \"%s\".";
+    size_t n = strlen(fmt) + strlen(shown) + 1;
+    char* buf = malloc(n);
+    snprintf(buf, n, fmt, shown);
+    Expr* r = expr_new_string(buf);
+    free(buf);
+    return r;
+}
+
 Expr* builtin_information(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    /* Information[s, LongForm -> b]: LongForm -> False gives the usage alone
+     * (audit Information#2).  Any other trailing argument leaves the call. */
+    bool long_form = true;
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        Expr* o = res->data.function.args[i];
+        if (!(head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) || o->data.function.arg_count != 2
+            || o->data.function.args[0]->type != EXPR_SYMBOL
+            || strcmp(o->data.function.args[0]->data.symbol.name, "LongForm") != 0)
+            return NULL;
+        Expr* v = o->data.function.args[1];
+        long_form = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
+    }
     Expr* arg = res->data.function.args[0];
     const char* sym_name = NULL;
     if (arg->type == EXPR_SYMBOL) sym_name = arg->data.symbol.name;
@@ -4279,6 +4455,8 @@ Expr* builtin_information(Expr* res) {
         Expr* names = eval_and_free(
             expr_new_function(expr_new_symbol(SYM_Names), na, 1));
         if (!names || !head_is(names, SYM_List)) { expr_free(names); return NULL; }
+        if (names->data.function.arg_count == 0)       /* audit Information#3 */
+            mth_message("Information", "nomatch", "No symbol matching %s found.", sym_name);
         return names;
     }
 
@@ -4288,9 +4466,15 @@ Expr* builtin_information(Expr* res) {
     /* A documented symbol with no rules (every builtin) shows its usage only,
      * as before; the attribute and option lines join the rules, or stand in
      * for them when there is no usage (audit Information#1). */
-    bool has_rules = symtab_get_own_values(sym_name) || symtab_get_down_values(sym_name) ||
+    /* The OwnValue of a system constant (I -> Complex[0, 1]) is how the
+     * kernel holds it, not a definition: ?I printed "I = I" (audit
+     * Information#5). */
+    SymbolDef* sd = symtab_lookup(sym_name);
+    bool internal_own = sd && sd->is_system;
+    bool has_rules = (!internal_own && symtab_get_own_values(sym_name)) ||
+                     symtab_get_down_values(sym_name) ||
                      symtab_get_up_values(sym_name) || symtab_get_sub_values(sym_name);
-    char* defs = (doc && !has_rules) ? NULL : render_definitions(sym_name);
+    char* defs = (doc && (!has_rules || !long_form)) ? NULL : render_definitions(sym_name);
     if (doc || defs) {
         size_t n = (doc ? strlen(doc) : 0) + (defs ? strlen(defs) : 0) + 2;
         char* combined = malloc(n);
@@ -4303,21 +4487,12 @@ Expr* builtin_information(Expr* res) {
         free(combined);
         return r;
     }
-    {
-        char buf[256];
-        snprintf(buf, sizeof(buf), "No information available for symbol \"%s\".",
-                 context_display_name(sym_name));
-        return expr_new_string(buf);
-    }
+    return info_no_information(sym_name);
 #else
-    if (!doc) {
-        char buf[256];
-        /* Show the short (context-shortened) name in the diagnostic so that
-         * symbols reached via the context path read naturally. */
-        snprintf(buf, sizeof(buf), "No information available for symbol \"%s\".",
-                 context_display_name(sym_name));
-        return expr_new_string(buf);
-    }
+    (void)long_form;
+    /* Show the short (context-shortened) name in the diagnostic so that
+     * symbols reached via the context path read naturally. */
+    if (!doc) return info_no_information(sym_name);
     return expr_new_string(doc);
 #endif
 }
@@ -5583,9 +5758,13 @@ static Expr* increment_core(Expr* lhs, Expr* dx, int mode, bool pre, const char*
         }
         lhs = frozen;
     } else if (!sym || symtab_get_own_values(sym) == NULL) {
+        /* Name the offending expression itself: TimesBy[3, 2] said
+         * "argument is not a variable" (audit TimesBy#3, DivideBy#3). */
+        char* ls = sym ? NULL : expr_to_string_outputform(lhs);
         mth_message(op_name, "rvalue",
                 "%s is not a variable with a value, so its value cannot be changed.",
-                sym ? sym : "argument");
+                sym ? sym : (ls ? ls : ""));
+        free(ls);
         return NULL;
     }
 
@@ -5995,11 +6174,13 @@ Expr* builtin_toexpression(Expr* res) {
  * and continue with letters, digits, or '$'. Empty segments are invalid. */
 static bool symbol_segment_is_valid(const char* start, size_t len) {
     if (len == 0) return false;
+    /* A non-ASCII (UTF-8) byte is a letter, as the parser reads it:
+     * Symbol["αβ"] is the symbol αβ (audit Symbol#2). */
     unsigned char c0 = (unsigned char)start[0];
-    if (!(isalpha(c0) || c0 == '$')) return false;
+    if (!(isalpha(c0) || c0 == '$' || c0 >= 0x80)) return false;
     for (size_t i = 1; i < len; i++) {
         unsigned char c = (unsigned char)start[i];
-        if (!(isalnum(c) || c == '$')) return false;
+        if (!(isalnum(c) || c == '$' || c >= 0x80)) return false;
     }
     return true;
 }

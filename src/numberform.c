@@ -387,6 +387,13 @@ static bool nf_format_parts(const Expr* e, const NumberFormCtx* ctx, NFParts* ou
 
     /* rounding at `count` may bump the magnitude (9.99 -> 10); re-derive the
      * step-rounded exponent from the post-rounding magnitude. */
+    /* ...and that magnitude may cross the scientific threshold: the default
+     * NumberForm[999999.7] rounds to 1.00000*10^6, scientific, where deciding
+     * on the pre-rounding 5 gave "1000000." and a spurious ::reqsigz (audit
+     * NumberForm#2). */
+    if (!sci && !ctx->exp_func && !ctx->have_f && exp10b != exp10
+        && (exp10b < ctx->sci_lo || exp10b >= ctx->sci_hi))
+        sci = true;
     if (sci && !ctx->exp_func)
         displayed_exp = nf_floordiv(exp10b, ctx->exp_step) * ctx->exp_step;
     long eff_exp10 = sci ? (exp10b - displayed_exp) : exp10b;
@@ -622,14 +629,25 @@ static void nf_apply_option_rule(NumberFormCtx* ctx, const Expr* rule) {
     }
 }
 
+/* The positional spec: n (positive) or {n, f} (n positive, f
+ * non-negative).  Anything else is NumberForm::iprf and the defaults are used
+ * (audit NumberForm#3: 3.5, 0 and symbols were ignored silently, 0 being
+ * clamped to 1). */
 static void nf_parse_spec(NumberFormCtx* ctx, const Expr* a1) {
     const Expr *a, *b;
-    if (a1->type == EXPR_INTEGER) {
+    if (a1->type == EXPR_INTEGER && a1->data.integer > 0) {
         ctx->n = a1->data.integer;
-    } else if (nf_list2(a1, &a, &b) && a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
+    } else if (nf_list2(a1, &a, &b) && a->type == EXPR_INTEGER && b->type == EXPR_INTEGER &&
+               a->data.integer > 0 && b->data.integer >= 0) {
         ctx->n = a->data.integer;
         ctx->f = b->data.integer;
         ctx->have_f = true;
+    } else {
+        char* ss = expr_to_string((Expr*)a1);
+        mth_message("NumberForm", "iprf",
+                    "Formatting specification %s should be a positive integer or a pair of "
+                    "positive integers.", ss ? ss : "");
+        free(ss);
     }
 }
 

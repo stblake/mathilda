@@ -259,6 +259,59 @@ static void test_wave4_g4_functional(void) {
     audit_chk("InterpolatingPolynomial#2", "Check[InterpolatingPolynomial[{{1, 2}, {1., 3}}, x], fired, InterpolatingPolynomial::noipf]", "fired");
 }
 
+/* Wave 5 G4: argument counts, ::normal / ::intnm / ::tdlen / ::slotn / ::flpar / ::partw,
+ * one message for a warning constant in a compiled body, operator forms
+ * (Fold, FoldList, FirstCase, MapAt), bigint counts, Heads defaults and the
+ * first Heads option, FirstCase evaluating one right side, SelectFirst on
+ * a SparseArray, and ReverseSort / ReverseSortBy naming themselves. */
+static void test_wave5_g4_functional(void) {
+    audit_chk("Fold#1", "Check[Fold[f, x, a], fired, Fold::normal]", "fired");
+    audit_chk("Fold#1", "Quiet[Fold[f, x, a]]", "Fold[f, x, a]");
+    audit_chk("Fold#2", "Check[Fold[f, x, {a, b}, 3], fired, Fold::argb]", "fired");
+    audit_chk("Fold#3", "Block[{$MessageList = {}}, Fold[#1/0 &, 1, {2}]; Length[$MessageList]]", "1");
+    audit_chk("Nest#2", "Block[{$MessageList = {}}, Nest[#/0 &, 1, 1]; Length[$MessageList]]", "1");
+    audit_chk("Nest#2", "Block[{$MessageList = {}}, Nest[(w5p = 1; #/0) &, 1, 1]; Length[$MessageList]]", "1");
+    audit_chk("FoldList#2", "FoldList[f][{a, b, c}]", "{a, f[a, b], f[f[a, b], c]}");
+    audit_chk("FoldList#2", "Fold[f][{a, b, c}]", "f[f[a, b], c]");
+    audit_chk("Function#6", "Check[#2 &[1], fired, Function::slotn]", "fired");
+    audit_chk("Function#6", "Check[#1 &[], fired, Function::slotn]", "fired");
+    audit_chk("Function#6", "Quiet[#2 &[1]]", "#2");
+    audit_chk("Function#7", "Check[Function[1, 1][2], fired, Function::flpar]", "fired");
+    audit_chk("Function#7", "Quiet[Function[1, 1][2]]", "Function[1, 1][2]");
+    audit_chk("Slot#3", "Check[(#2 &)[a], fired, Function::slotn]", "fired");
+    audit_chk("Slot#3", "Quiet[(#2 &)[a]]", "#2");
+    audit_chk("Nest#1", "Check[Nest[f, x, -1], fired, Nest::intnm]", "fired");
+    audit_chk("Nest#1", "Check[Nest[f, x, 3.0], fired, Nest::intnm]", "fired");
+    audit_chk("Nest#1", "Quiet[Nest[f, x, n]]", "Nest[f, x, n]");
+    audit_chk("NestList#1", "Check[NestList[f, x, -1], fired, NestList::intnm]", "fired");
+    audit_chk("NestList#1", "Check[NestList[f, x, 2.], fired, NestList::intnm]", "fired");
+    audit_chk("Select#3", "Select[{1, 2, 3, 4}, EvenQ, 2^70]", "{2, 4}");
+    audit_chk("Select#5", "Check[Select[5, EvenQ], fired, Select::normal]", "fired");
+    audit_chk("Select#5", "Quiet[Select[5, EvenQ]]", "Select[5, EvenQ]");
+    audit_chk("Thread#1", "Check[Thread[f[{1, 2}, {3}]], fired, Thread::tdlen]", "fired");
+    audit_chk("Thread#1", "Quiet[Thread[f[{1, 2}, {3}]]]", "f[{1, 2}, {3}]");
+    audit_chk("Thread#1", "Check[Thread[f[g[a, b], g[c]], g], fired, Thread::tdlen]", "fired");
+    audit_chk("AllTrue#2", "Check[AllTrue[], fired, AllTrue::argb]", "fired");
+    audit_chk("AllTrue#2", "Check[AllTrue[{1}, EvenQ, 1, 2], fired, AllTrue::argb]", "fired");
+    audit_chk("FirstCase#3", "FirstCase[_?EvenQ][{1, 2, 3}]", "2");
+    audit_chk("FirstCase#4", "Block[{w5c = 0}, {FirstCase[{a, b}, x_ :> (w5c++; x)], w5c}]", "{a, 1}");
+    audit_chk("MapAll#3", "SetOptions[MapAll, Heads -> True]; w5r = MapAll[f, {a, b}]; SetOptions[MapAll, Heads -> False]; w5r", "f[f[List][f[a], f[b]]]");
+    audit_chk("MapAll#3", "MapAll[f, {a, b}]", "f[{f[a], f[b]}]");
+    audit_chk("MapAll#5", "MapAll[f, {a, b}, Heads -> False, Heads -> True]", "f[{f[a], f[b]}]");
+    audit_chk("MapAt#1", "Head[MapAt[f, 2]]", "MapAt");
+    audit_chk("MapAt#1", "MapAt[f, 2][{a, b, c}]", "{a, f[b], c}");
+    audit_chk("MapAt#2", "Check[MapAt[f, {a, b, c}, 99], fired, MapAt::partw]", "fired");
+    audit_chk("MapAt#2", "Quiet[MapAt[f, {a, b, c}, 99]]", "MapAt[f, {a, b, c}, 99]");
+    audit_chk("MapAt#2", "Check[MapAt[], fired, MapAt::argt]", "fired");
+    audit_chk("NestWhileList#1", "NestWhileList[# + 1 &, 1, # < 3 &, 1, 2^70]", "{1, 2, 3}");
+    audit_chk("ReverseSort#1", "Check[ReverseSort[w5atom], fired, ReverseSort::normal]", "fired");
+    audit_chk("ReverseSort#1", "Quiet[Check[ReverseSort[w5atom], fired, Sort::normal]]", "ReverseSort[w5atom]");
+    audit_chk("ReverseSort#2", "Check[ReverseSort[], fired, ReverseSort::argt]", "fired");
+    audit_chk("ReverseSort#2", "Check[ReverseSort[{1, 2, 3}, Less, 2], fired, ReverseSort::argt]", "fired");
+    audit_chk("ReverseSortBy#2", "Check[ReverseSortBy[5, f], fired, ReverseSortBy::normal]", "fired");
+    audit_chk("SelectFirst#1", "SelectFirst[SparseArray[{0, 0, 3}], # > 0 &]", "3");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fixedpointlist_long_symbolic);
@@ -272,6 +325,7 @@ int main(void) {
     TEST(test_level_spec_infinity);
     TEST(test_s14_level_specs);
     TEST(test_wave3_arity_options);
+    TEST(test_wave5_g4_functional);
     TEST(test_wave4_g4_functional);
     return audit_finish("audit_functional_programming");
 }

@@ -1478,6 +1478,13 @@ Expr* builtin_reverse_sort(Expr* res) {
         Expr* fast = sort_ll_machine(res->data.function.args[0]->data.llist, true);
         if (fast) return fast;
     }
+    /* An atom is ReverseSort::normal, naming the ReverseSort call (audit
+     * ReverseSort#1: the delegated Sort reported Sort::normal for Sort[x]). */
+    if (res->data.function.arg_count >= 1) {
+        Expr* l = res->data.function.args[0];
+        if (expr_is_plain_atom(l))
+            return builtin_normal_error("ReverseSort", res, 1);
+    }
     Expr* call = sort_call_as(res, "Sort");
     Expr* asc = builtin_sort(call);   /* borrows call, returns a new expr */
     expr_free(call);
@@ -1498,6 +1505,12 @@ Expr* builtin_reverse_sort_by(Expr* res) {
         return sort_by_with_p(coll, res->data.function.args[1], res->data.function.args[2], true);
     }
     if (res->data.function.arg_count != 2) return NULL;
+    {
+        /* ReverseSortBy::normal for an atom (audit ReverseSortBy#2). */
+        Expr* l = res->data.function.args[0];
+        if (expr_is_plain_atom(l))
+            return builtin_normal_error("ReverseSortBy", res, 1);
+    }
     Expr* call = sort_call_as(res, "SortBy");
     Expr* asc = builtin_sort_by(call);
     expr_free(call);

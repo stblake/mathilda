@@ -66,7 +66,14 @@ static const ArityRow ARITY_ROWS[] = {
     { "SetAttributes",    2, 2, NOOPT },
     { "ClearAttributes",  2, 2, NOOPT },
     { "DownValues",       1, 1, OPT_NOCHECK },
+    { "UpValues",         1, 1, OPT_NOCHECK },
     { "Activate",         1, 2, NOOPT },
+    { "Block",            2, 2, NOOPT },
+    { "Unset",            1, 1, NOOPT },
+    { "Attributes",       1, 1, NOOPT },
+    { "Options",          1, 2, NOOPT },
+    { "BeginPackage",     1, 2, NOOPT },
+    { "MaxMemoryUsed",    0, 1, NOOPT },
 
     /* ---- arithmetic and numeric functions ---- */
     { "Minus",            1, 1, NOOPT },
@@ -122,6 +129,11 @@ static const ArityRow ARITY_ROWS[] = {
     { "MatrixQ",          1, 2, NOOPT },
     { "OrderedQ",         1, 2, NOOPT },
     { "IntervalMemberQ",  2, 2, NOOPT },
+    { "VectorQ",          1, 2, NOOPT },
+    { "AllTrue",          1, 3, NOOPT },   /* AllTrue[test] operator form */
+    { "AnyTrue",          1, 3, NOOPT },
+    { "NoneTrue",         1, 3, NOOPT },
+    { "LeafCount",        1, 1, OPT_NOCHECK },   /* Heads -> True */
 
     /* ---- structural and list functions ---- */
     { "Length",           1, 1, NOOPT },
@@ -152,6 +164,12 @@ static const ArityRow ARITY_ROWS[] = {
     { "Thread",           1, 3, NOOPT },
     { "Distribute",       1, 5, NOOPT },
     { "NestList",         3, 3, NOOPT },
+    { "Nest",             3, 3, NOOPT },
+    { "Fold",             1, 3, NOOPT },   /* Fold[f] operator form */
+    { "FoldList",         1, 3, NOOPT },
+    { "Position",         1, 4, OPT_NOCHECK },   /* Position[pattern] operator form */
+    { "ReverseSort",      1, 2, NOOPT },
+    { "ToString",         1, 2, OPT_NOCHECK },
     { "NestWhile",        3, 6, NOOPT },
     { "NestWhileList",    3, 6, NOOPT },
     { "FirstPosition",    2, 4, OPT_NOCHECK },

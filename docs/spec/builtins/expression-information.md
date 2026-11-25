@@ -13,6 +13,8 @@ In[1]:= Attributes[Plus]
 Out[1]= {Flat, Listable, NumericFunction, OneIdentity, Orderless}
 ```
 - `Attributes[s] = {attr, ...}` sets exactly those attributes (audit Attributes#1, Set#2). `ClearAttributes` treats `HoldAll` as one attribute (audit ClearAttributes#1/#2).
+- `Attributes[HoldPattern[s]]` is accepted; any other non-symbol argument gives `Attributes::ssle` and stays unevaluated.
+- `SetAttributes` / `ClearAttributes` refuse (unevaluated) a non-symbol target (`::sym`) and an unknown attribute name (`::attnf`). `ReadProtected`, `Locked` and `Stub` are accepted and not stored. `ClearAttributes["name", ...]` never creates the symbol.
 
 ## ClearAttributes
 Removes attributes from symbols.
@@ -1062,6 +1064,12 @@ Out[2]= 3
 In[3]:= Map[Identity, {a, b, c}]
 Out[3]= {a, b, c}
 ```
+
+## InverseFunction
+- `InverseFunction[f]` represents the inverse of `f` and stays symbolic. `InverseFunction[Identity]`
+  is `Identity`, `InverseFunction[InverseFunction[f]]` is `f`, and
+  `InverseFunction[Composition[f, g]]` is `Composition[InverseFunction[g], InverseFunction[f]]`
+  (audit Identity#2, Composition#1). Attributes `NHoldAll`, `Protected`.
 
 ## Composition
 - `Composition[f1, f2, f3, ...]` represents the symbolic composition of the functions `f1, f2, f3, ...`. Applied to arguments, the composition acts innermost-first:

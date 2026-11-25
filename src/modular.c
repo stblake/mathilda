@@ -8,6 +8,7 @@
 #include "iter.h"
 #include "symsum.h"
 #include "core.h"      /* symbol_name_is_valid */
+#include "common.h"    /* head_is */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -906,12 +907,25 @@ static bool scoping_reject_bad_specs(const char* head, Expr* vars, bool is_with)
     return false;
 }
 
+/* Is the local-variable specification `vars` something other than a List?
+ * Then report Head::lvlist ("Local variable specification x is not a List.")
+ * and return true: the construct stays unevaluated (audit Module#4, Block#3,
+ * With#6). */
+static bool scoping_reject_non_list(const char* head, const Expr* vars) {
+    if (head_is((Expr*)vars, SYM_List)) return false;
+    char* spec = expr_to_string_outputform((Expr*)vars);
+    mth_message(head, "lvlist", "Local variable specification %s is not a List.",
+                spec ? spec : "");
+    free(spec);
+    return true;
+}
+
 Expr* builtin_module(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
-    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_non_list(SYM_Module, vars)) return NULL;
     if (scoping_reject_bad_specs(SYM_Module, vars, false)) return NULL;
     if (scoping_reject_duplicates(SYM_Module, vars, false)) return NULL;
 
@@ -1473,7 +1487,7 @@ Expr* builtin_block(Expr* res) {
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
-    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_non_list(SYM_Block, vars)) return NULL;
     if (scoping_reject_bad_specs(SYM_Block, vars, false)) return NULL;
     if (scoping_reject_duplicates(SYM_Block, vars, false)) return NULL;
 
@@ -1520,7 +1534,7 @@ Expr* builtin_with(Expr* res) {
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
-    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (scoping_reject_non_list(SYM_With, vars)) return NULL;
     if (scoping_reject_bad_specs(SYM_With, vars, true)) return NULL;
     if (scoping_reject_duplicates(SYM_With, vars, true)) return NULL;
 

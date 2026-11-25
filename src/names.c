@@ -173,7 +173,17 @@ static int build_pat(Expr* e, NamePat* out) {
         RegexProgram* prog = regex_compile(wrapped, err, sizeof err);
         free(wrapped);
         if (!prog) {
-            mth_message("Names", "regex", "%s", err);
+            /* The offset in err is into the anchoring wrapper, not the user's
+             * pattern.  When the pattern itself is malformed,
+             * RegularExpression::regex has already reported it with the
+             * user's offset as the argument evaluated, so a second message
+             * would only repeat it with a wrong one (audit Names#3). */
+            char err2[256];
+            RegexProgram* raw = regex_compile(re, err2, sizeof err2);
+            if (raw) {
+                regex_free(raw);
+                mth_message("Names", "regex", "%s", err);
+            }
             return -1;
         }
         out->is_regex = 1;

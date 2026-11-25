@@ -48,6 +48,7 @@
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
 #include "calculus/series.h" /* series_apply_unary: f[SeriesData] composes */
 #include "arity.h"           /* declared argument counts (step 5) */
+#include "common.h"          /* head_is, expr_is_number_atom */
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -2529,12 +2530,15 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     /* Default[f, ...] = v is a definition for f's optional arguments, so a
      * Protected f refuses it (audit Default#2: Default[Plus] = 1 changed what
      * x_. + y matches).  The value itself is still stored on Default, where
-     * Optional reads it. */
+     * Optional reads it.  Default itself is Protected (audit Default#3), but
+     * the definition belongs to f, so only f's protection is consulted. */
+    bool lhs_is_default_value = false;
     if (lhs->type == EXPR_FUNCTION
         && lhs->data.function.head->type == EXPR_SYMBOL
         && lhs->data.function.head->data.symbol.name == SYM_Default
         && lhs->data.function.arg_count >= 1
         && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        lhs_is_default_value = true;
         const char* dsym = lhs->data.function.args[0]->data.symbol.name;
         if (get_attributes(dsym) & ATTR_PROTECTED) {
             char* lt = expr_to_string_outputform(lhs);
@@ -2546,7 +2550,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         }
     }
 
-    if (!lhs_is_list) {
+    if (!lhs_is_list && !lhs_is_default_value) {
         const char* target = assignment_target_symbol(lhs);
         if (target && (get_attributes(target) & ATTR_PROTECTED)) {
             /* A symbol LHS is ::wrsym; a rule for a protected tag is ::write,
@@ -4705,6 +4709,40 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         *changed = true; /* Set/SetDelayed installed a rule */
                         if (final_value) g_step_settled_depth = eval_recursion_depth;
                         return ret;
+                    }
+                    /* A left side that can carry no definition: a raw object
+                     * (3 = 4, "a" := 1) is ::setraw, and a part assignment to a
+                     * symbol with no value (undef[[1]] = 2) is ::noval.  The
+                     * value is the right side, $Failed for SetDelayed (audit
+                     * Set#3, Set#4, SetDelayed#2). */
+                    {
+                        const char* sh = is_delayed ? "SetDelayed" : "Set";
+                        bool refused = false;
+                        if ((lhs->type != EXPR_SYMBOL && lhs->type != EXPR_FUNCTION) ||
+                            expr_is_number_atom(lhs)) {
+                            char* ls = expr_to_string_outputform(lhs);
+                            mth_message(sh, "setraw", "Cannot assign to raw object %s.",
+                                        ls ? ls : "");
+                            free(ls);
+                            refused = true;
+                        } else if (head_is(target_lhs, SYM_Part) &&
+                                   target_lhs->data.function.arg_count >= 2 &&
+                                   target_lhs->data.function.args[0]->type == EXPR_SYMBOL &&
+                                   !symtab_get_own_values(
+                                       target_lhs->data.function.args[0]->data.symbol.name)) {
+                            mth_message(sh, "noval",
+                                        "Symbol %s in part assignment does not have an immediate value.",
+                                        target_lhs->data.function.args[0]->data.symbol.name);
+                            refused = true;
+                        }
+                        if (refused) {
+                            if (free_target) expr_free(target_lhs);
+                            Expr* ret = is_delayed ? expr_new_symbol(SYM_DollarFailed)
+                                                   : expr_copy(rhs);
+                            expr_free(res);
+                            *changed = true;
+                            return ret;
+                        }
                     }
                     if (free_target) expr_free(target_lhs);
                     if (g_set_shape_error) {

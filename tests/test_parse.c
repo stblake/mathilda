@@ -396,9 +396,9 @@ void test_operator_precedence_ladder() {
     assert_parse_eq("a // f // g",  "g[f[a]]");                             /* // left */
     assert_parse_eq("f @ g @ x",    "f[g[x]]");                             /* @ right */
     assert_parse_eq("a @@ b @@ c",  "Apply[a, Apply[b, c]]");              /* @@ right */
-    assert_parse_eq("a && b && c",  "And[And[a, b], c]");                   /* && left (parse) */
+    assert_parse_eq("a && b && c",  "And[a, b, c]");                        /* && n-ary (audit FullForm#4) */
     assert_parse_eq("a <> b <> c",  "StringJoin[a, b, c]");                 /* <> n-ary */
-    assert_parse_eq("a . b . c",    "Dot[Dot[a, b], c]");                   /* . left */
+    assert_parse_eq("a . b . c",    "Dot[a, b, c]");                        /* . n-ary */
     assert_parse_eq("a | b | c",    "Alternatives[a, b, c]");               /* | n-ary */
     assert_parse_eq("a ~~ b ~~ c",  "StringExpression[a, b, c]");           /* ~~ n-ary */
 
@@ -1267,7 +1267,7 @@ void test_parse_repeated_tokens() {
     assert_parse_eq("\"a\"..",      "Repeated[\"a\"]");
     assert_parse_eq("#..",          "Repeated[Slot[1]]");
     assert_parse_eq("a . b",        "Dot[a, b]");
-    assert_parse_eq("a.b.c",        "Dot[Dot[a, b], c]");
+    assert_parse_eq("a.b.c",        "Dot[a, b, c]");
     /* Syntax errors in WL too. */
     assert_parse_fails("_..");
     assert_parse_fails("x_..");

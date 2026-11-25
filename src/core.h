@@ -36,12 +36,14 @@ Expr* builtin_sub_values(Expr* res);
 Expr* builtin_up_values(Expr* res);
 Expr* builtin_format_values(Expr* res);
 Expr* builtin_n_values(Expr* res);
+Expr* builtin_default_values(Expr* res);
 #endif
 Expr* builtin_out(Expr* res);
 Expr* builtin_compoundexpression(Expr* res);
 Expr* builtin_atomq(Expr* res);
 Expr* builtin_identity(Expr* res);
 Expr* builtin_composition(Expr* res);
+Expr* builtin_inverse_function(Expr* res);
 Expr* builtin_compose_list(Expr* res);
 Expr* builtin_numberq(Expr* res);
 Expr* builtin_numericq(Expr* res);

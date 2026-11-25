@@ -136,6 +136,7 @@ void opform_init(void) {
         "Append", "Prepend", "Delete",
         "TakeLargest", "TakeSmallest",
         "Discard", "CountDistinctBy",           /* src/assoc_ops.c */
+        "FirstCase", "Position",                /* audit FirstCase#3, Position#4 */
     };
     for (size_t i = 0; i < sizeof(DATA_FIRST_1) / sizeof(DATA_FIRST_1[0]); i++)
         opform_register(DATA_FIRST_1[i], 1, 1, 0);
@@ -154,12 +155,14 @@ void opform_init(void) {
     opform_register("TakeLargestBy", 2, 2, 0);   /* TakeLargestBy[f, n][x] */
     opform_register("TakeSmallestBy", 2, 2, 0);
     opform_register("ReplaceAt", 2, 2, 0);       /* ReplaceAt[rules, n][x] */
+    opform_register("MapAt", 2, 2, 1);           /* MapAt[f, pos][x] == MapAt[f, x, pos] */
 
     /* x last: h[f][x] == h[f, x]. */
     static const char* const DATA_SECOND_1[] = {
         "Map", "Apply", "KeyMap", "KeyValueMap", "AssociationMap",
         "AssociationComap",                     /* AssociationComap[{f..}][x] */
         "Scan", "MapIndexed",
+        "Fold", "FoldList",                     /* Fold[f][list] == Fold[f, list] */
     };
     for (size_t i = 0; i < sizeof(DATA_SECOND_1) / sizeof(DATA_SECOND_1[0]); i++)
         opform_register(DATA_SECOND_1[i], 1, 1, 1);

@@ -2259,6 +2259,41 @@ void symtab_clear_symbol(const char* symbol_name) {
     def->n_values = NULL;
 }
 
+/* The Default[...] call a stored Default rule's pattern is (through any
+ * HoldPattern wrapper), when its first argument is the symbol. */
+bool symtab_default_value_rule(const Rule* r, const char* symbol_name) {
+    if (!r || !r->pattern || !symbol_name) return false;
+    const Expr* p = r->pattern;
+    while (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+           && p->data.function.head->data.symbol.name == SYM_HoldPattern
+           && p->data.function.arg_count == 1)
+        p = p->data.function.args[0];
+    return p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+        && p->data.function.head->data.symbol.name == SYM_Default
+        && p->data.function.arg_count >= 1
+        && p->data.function.args[0]->type == EXPR_SYMBOL
+        && strcmp(p->data.function.args[0]->data.symbol.name, symbol_name) == 0;
+}
+
+void symtab_remove_default_values(const char* symbol_name) {
+    SymbolDef* d = node_find(SYM_Default);
+    if (!d || !d->down_values || !symbol_name) return;
+    bool removed = false;
+    for (Rule** pp = &d->down_values; *pp;) {
+        if (symtab_default_value_rule(*pp, symbol_name)) {
+            if (!removed) litidx_drop(d);
+            removed = true;
+            Rule* r = *pp;
+            *pp = r->next;
+            r->next = NULL;
+            free_rule_list(r);
+        } else {
+            pp = &(*pp)->next;
+        }
+    }
+    if (removed) eval_rule_epoch_bump();
+}
+
 void symtab_remove_symbol(const char* symbol_name) {
     SymbolDef* d = node_find(symbol_name);
     if (!d || !d->has_def) return;   /* nothing materialized to remove */

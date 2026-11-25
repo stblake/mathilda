@@ -77,11 +77,27 @@ static void test_wave4_g4_scoping(void) {
     audit_chk("Unique#2", "Attributes[Evaluate[Unique[yg4, Temporary]]]", "{Temporary}");
 }
 
+/* Wave 5 G4: argument counts, ::lvlist for a non-List spec, ::dup. */
+static void test_wave5_g4_scoping(void) {
+    audit_chk("Block#3", "Check[Block[{w5x}], fired, Block::argr]", "fired");
+    audit_chk("Block#3", "Check[Block[w5x, 1], fired, Block::lvlist]", "fired");
+    audit_chk("Block#3", "Quiet[Block[w5x, 1]]", "Block[w5x, 1]");
+    audit_chk("Module#3", "Check[Module[{w5y, w5y}, w5y], fired, Module::dup]", "fired");
+    audit_chk("Module#3", "Quiet[Module[{w5y, w5y}, w5y]]", "Module[{w5y, w5y}, w5y]");
+    audit_chk("Module#4", "Check[Module[{w5x}], fired, Module::argr]", "fired");
+    audit_chk("Module#4", "Check[Module[{w5x}, 1, 2], fired, Module::argrx]", "fired");
+    audit_chk("Module#4", "Check[Module[w5y, w5y], fired, Module::lvlist]", "fired");
+    audit_chk("Module#4", "Quiet[Module[w5y, w5y]]", "Module[w5y, w5y]");
+    audit_chk("With#6", "Check[With[w5x = 1, w5x], fired, With::lvlist]", "fired");
+    audit_chk("With#6", "Quiet[With[w5x = 1, w5x]]", "With[w5x = 1, w5x]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_block_duplicate_local);
     TEST(test_with_pattern_names);
     TEST(test_with_capture);
     TEST(test_wave4_g4_scoping);
+    TEST(test_wave5_g4_scoping);
     return audit_finish("audit_scoping_constructs");
 }

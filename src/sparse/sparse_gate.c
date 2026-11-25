@@ -419,6 +419,7 @@ static const char* const GATE_DENSE[] = {
     /* functional heads whose answer is a List in the reference */
     "MapAt", "DeleteDuplicates", "DeleteDuplicatesBy", "AnyTrue", "AllTrue",
     "NoneTrue", "Subsets", "Complement", "Intersection", "MapAll",
+    "SelectFirst", "FirstPosition",   /* audit SelectFirst#1, FirstPosition#3 */
     /* an array is not a polynomial or an objective: answer (or decline) as
      * on Normal[s], never treat the atom as a variable */
     "CoefficientRules", "CoefficientArrays", "CoefficientList", "MonomialList",

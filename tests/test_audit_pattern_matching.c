@@ -96,11 +96,46 @@ static void test_wave4_g4_patterns(void) {
     audit_chk("OrderlessPatternSequence#1", "MatchQ[f[1, 2], f[OrderlessPatternSequence[x_, y_] /; x > 5]]", "False");
 }
 
+/* Wave 5 G4: Attributes argument checks, Position operator form and arity, DefaultValues
+ * and a Protected Default, Heads :> v, SparseArray FirstPosition, ReplaceList checks. */
+static void test_wave5_g4_patterns(void) {
+    audit_chk("Attributes#2", "Check[Attributes[1], fired, Attributes::ssle]", "fired");
+    audit_chk("Attributes#2", "Check[Attributes[Hold[w5x]], fired, Attributes::ssle]", "fired");
+    audit_chk("Attributes#2", "Quiet[Attributes[1]]", "Attributes[1]");
+    audit_chk("Attributes#2", "Attributes[HoldPattern[Plus]]", "{Flat, Listable, NumericFunction, OneIdentity, Orderless, Protected}");
+    audit_chk("Attributes#3", "Check[Attributes[], fired, Attributes::argx]", "fired");
+    audit_chk("Attributes#3", "Check[Attributes[w5a, w5b], fired, Attributes::argx]", "fired");
+    audit_chk("Attributes#3", "Quiet[Attributes[w5a, w5b]]", "Attributes[w5a, w5b]");
+    audit_chk("Position#3", "Check[Position[{a}, a, 1, 1, 1], fired, Position::nonopt]", "fired");
+    audit_chk("Position#3", "Quiet[Position[{a}, a, 1, 1, 1]]", "Position[{a}, a, 1, 1, 1]");
+    audit_chk("Position#3", "Check[Position[], fired, Position::argb]", "fired");
+    audit_chk("Position#4", "Position[{a}]", "Position[{a}]");
+    audit_chk("Position#4", "Head[Position[{a}]]", "Position");
+    audit_chk("Position#4", "Position[a][{b, a, c}]", "{{2}}");
+    audit_run("ClearAll[w5df]");
+    audit_chk("Default#3", "Attributes[Default]", "{Protected}");
+    audit_chk("Default#4", "Default[w5df] = 7; DefaultValues[w5df]", "{HoldPattern[Default[w5df]] :> 7}");
+    audit_chk("Default#4", "w5dg[x_, y_.] := {x, y}; Default[w5dg] = 5; w5dg[1]", "{1, 5}");
+    audit_chk("Default#4", "Default[w5df] =.; DefaultValues[w5df]", "{}");
+    audit_chk("DeleteCases#3", "DeleteCases[{f[a], g[b]}, f, Infinity, Heads :> True]", "{a, g[b]}");
+    audit_chk("FirstPosition#3", "FirstPosition[SparseArray[{0, 5}], 5]", "{2}");
+    audit_chk("FirstPosition#3", "FirstPosition[SparseArray[{{1, 0}, {0, 7}}], 7]", "{2, 2}");
+    audit_chk("ReplaceList#1", "Check[ReplaceList[{a, b, c}, {___, x_, ___} :> x, -1], fired, ReplaceList::innf]", "fired");
+    audit_chk("ReplaceList#1", "Quiet[ReplaceList[{a, b, c}, {___, x_, ___} :> x, n]]", "ReplaceList[{a, b, c}, {___, x_, ___} :> x, n]");
+    audit_chk("ReplaceList#1", "ReplaceList[{a, b, c}, {___, x_, ___} :> x, 2]", "{a, b}");
+    audit_chk("ReplaceList#2", "Check[ReplaceList[x, 1], fired, ReplaceList::reps]", "fired");
+    audit_chk("ReplaceList#2", "Quiet[ReplaceList[x, 1]]", "ReplaceList[x, 1]");
+    audit_chk("Verbatim#1", "StringMatchQ[\"a*\", Verbatim[\"a*\"]]", "True");
+    audit_chk("Verbatim#1", "StringMatchQ[\"abc\", Verbatim[\"a*\"]]", "False");
+    audit_chk("Verbatim#1", "StringMatchQ[\"abc\", \"a*\"]", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_condition_on_patternsequence);
     TEST(test_s14_level_specs);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_g4_patterns);
+    TEST(test_wave5_g4_patterns);
     return audit_finish("audit_pattern_matching");
 }

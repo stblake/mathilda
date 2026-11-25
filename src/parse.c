@@ -1400,6 +1400,7 @@ typedef enum {
     OP_CONDITION,
     OP_ALTERNATIVES,
     OP_STRINGEXPRESSION,
+    OP_INFIX,         /* x ~f~ y -> f[x, y] */
     OP_MAP,
     OP_MAPALL,
     OP_REPLACEALL,
@@ -1551,6 +1552,11 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_SPAN; def.prec = 3200; def.right_assoc = 0; def.head_name = "Span"; def.len = 2;
     } else if (*pos == ';') {
         def.type = OP_COMPOUND; def.prec = 100; def.right_assoc = 0; def.head_name = "CompoundExpression"; def.len = 1;
+    } else if (*pos == '~' && pos[1] != '~') {
+        /* Infix notation x ~f~ y is f[x, y], left-associative, binding just
+         * tighter than /@ and @@ and looser than @* (audit SyntaxQ#2). The
+         * closing ~ is consumed with the function, in the infix loop. */
+        def.type = OP_INFIX; def.prec = 7100; def.right_assoc = 0; def.head_name = NULL; def.len = 1;
     } else if (strncmp(pos, "~~", 2) == 0) {
         /* StringExpression (a ~~ b ~~ c): concatenation of string patterns.
          * Precedence just below Alternatives (2300) so `a ~~ b | c` groups as
@@ -2289,6 +2295,24 @@ infix_loop:
         
         s->pos += op_def.len;
 
+        if (op_def.type == OP_INFIX) {
+            /* x ~f~ y: the function, the closing ~, then the right operand. */
+            Expr* fn = parse_expression_prec(s, op_def.prec + 1);
+            if (!fn) { expr_free(left); return NULL; }
+            skip_whitespace(s);
+            if (*s->pos != '~' || s->pos[1] == '~') {
+                parse_err("Expected '~' to close the infix function\n");
+                expr_free(fn); expr_free(left);
+                return NULL;
+            }
+            s->pos++;
+            Expr* rhs = parse_expression_prec(s, op_def.prec + 1);
+            if (!rhs) { expr_free(fn); expr_free(left); return NULL; }
+            Expr* args[2] = { left, rhs };
+            left = expr_new_function(fn, args, 2);
+            continue;
+        }
+
         if (op_def.type == OP_MESSAGENAME) {
             /* f::tag -> MessageName[f, "tag"]. The tag is read literally: a
              * bare identifier becomes a string, or a quoted "tag" is taken as
@@ -2681,7 +2705,8 @@ infix_loop:
             }
             /* Flatten repeated Plus/Times/NonCommutativeMultiply at parse time
              * so that held expressions reflect the n-ary form
-             * (a+b+c -> Plus[a,b,c]; a**b**c -> NonCommutativeMultiply[a,b,c]). */
+             * (a+b+c -> Plus[a,b,c]; a**b**c -> NonCommutativeMultiply[a,b,c];
+             * a && b && c -> And[a,b,c]). */
             else if (op_def.head_name && prev_flat_head &&
                 strcmp(prev_flat_head, op_def.head_name) == 0 &&
                 extend_flat_head(left, op_def.head_name, right)) {
@@ -2699,7 +2724,12 @@ infix_loop:
                 if (op_def.head_name &&
                     (strcmp(op_def.head_name, "Plus") == 0 || strcmp(op_def.head_name, "Times") == 0 ||
                      strcmp(op_def.head_name, "NonCommutativeMultiply") == 0 ||
-                     strcmp(op_def.head_name, "StringJoin") == 0))
+                     strcmp(op_def.head_name, "StringJoin") == 0 ||
+                     /* a && b && c is And[a, b, c], a.b.c Dot[a, b, c] (audit
+                      * FullForm#4); all three heads are Flat, so only held
+                      * forms see the difference */
+                     strcmp(op_def.head_name, "And") == 0 || strcmp(op_def.head_name, "Or") == 0 ||
+                     strcmp(op_def.head_name, "Dot") == 0))
                     left_flat_head = op_def.head_name;
             }
         }

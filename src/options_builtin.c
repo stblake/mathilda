@@ -29,6 +29,7 @@
 #include "match.h"
 #include "common.h"   /* builtin_arg_error */
 #include "print.h"
+#include "context.h"   /* context_display_name */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -404,6 +405,16 @@ Expr* builtin_optionvalue(Expr* res) {
     if (!(name->type == EXPR_SYMBOL || name->type == EXPR_STRING)) return NULL;
 
     Expr* val = ov_resolve(f, opts, name);
+    if (!val && n == 2 && f->type == EXPR_SYMBOL) {
+        /* OptionValue[f, name] with no such default: ::optnf and the name
+         * itself (audit OptionValue#2). */
+        char* ns = expr_to_string_outputform((Expr*)name);
+        mth_message("OptionValue", "optnf", "Option name %s not found in defaults for %s.",
+                    ns ? ns : "", context_display_name(f->data.symbol.name));
+        free(ns);
+        return name->type == EXPR_STRING ? expr_new_symbol(name->data.string)
+                                         : expr_copy((Expr*)name);
+    }
     if (!val) return NULL;                         /* unknown option: leave unevaluated */
 
     if (hold) {
@@ -1141,7 +1152,7 @@ void options_register_defaults(void) {
     struct { const char* fn; const char* dflt; } heads_fns[] = {
         { "Cases", "False" }, { "Count", "False" }, { "DeleteCases", "False" },
         { "MemberQ", "False" }, { "Position", "True" }, { "FirstPosition", "True" }, { "FreeQ", "True" },
-        { "Level", "False" }, { "Depth", "False" }, { "LeafCount", "False" },
+        { "Level", "False" }, { "Depth", "False" }, { "LeafCount", "True" },   /* LeafCount counts heads (audit LeafCount#1) */
         { "Map", "False" }, { "Apply", "False" }, { "MapAll", "False" },
         { "Scan", "False" }, { "Replace", "False" },
         { "MapIndexed", "False" },

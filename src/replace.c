@@ -509,6 +509,16 @@ Expr* builtin_replace_part(Expr* res) {
             }
             for (size_t r = 0; r < num_rules; r++) {
                 Expr* s = rules[r].pos_spec;
+                /* A key path {k1, k2, ...} descends: k1 picks the entry here
+                 * and the rest is a ReplacePart of its value (audit
+                 * ReplacePart#5: <|"a" -> <|"x" -> 1|>|> with {"a", "x"} was
+                 * left unchanged). */
+                Expr* path = NULL;
+                if (head_is(s, SYM_List) && s->data.function.arg_count > 1) {
+                    path = s;
+                    s = s->data.function.args[0];
+                    if (head_is(s, SYM_List)) continue;   /* {{..}, ..}: unsupported */
+                }
                 if (s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL &&
                     s->data.function.head->data.symbol.name == SYM_List && s->data.function.arg_count == 1)
                     s = s->data.function.args[0];   /* unwrap {X} */
@@ -538,8 +548,25 @@ Expr* builtin_replace_part(Expr* res) {
                 if (t < 0) continue;   /* replace-only: leave absent keys */
                 Expr* rule = new_args[t];
                 if (!is_rule2(rule)) continue;
-                Expr* val = rules[r].delayed ? evaluate(rules[r].replacement)
-                                             : expr_copy(rules[r].replacement);
+                Expr* val;
+                if (path) {
+                    size_t pn = path->data.function.arg_count - 1;
+                    Expr** rest = malloc(sizeof(Expr*) * pn);
+                    for (size_t k = 0; k < pn; k++)
+                        rest[k] = expr_copy(path->data.function.args[k + 1]);
+                    Expr* rest_spec = expr_new_function(expr_new_symbol(SYM_List), rest, pn);
+                    free(rest);
+                    Expr* sub_rule = expr_new_function(
+                        expr_new_symbol(rules[r].delayed ? SYM_RuleDelayed : SYM_Rule),
+                        (Expr*[]){ rest_spec, expr_copy(rules[r].replacement) }, 2);
+                    Expr* sub_call = expr_new_function(expr_new_symbol(SYM_ReplacePart),
+                        (Expr*[]){ expr_copy(rule->data.function.args[1]), sub_rule }, 2);
+                    val = evaluate(sub_call);
+                    expr_free(sub_call);
+                } else {
+                    val = rules[r].delayed ? evaluate(rules[r].replacement)
+                                           : expr_copy(rules[r].replacement);
+                }
                 new_args[t] = assoc_entry_with_value(rule, val);   /* adopts val */
                 expr_free(rule);
             }
@@ -843,6 +870,14 @@ static bool reps_single_ok(Expr* r) {
     return is_rule2(r) || assoc_is_wellformed(r) || r->type == EXPR_LINKEDLIST;
 }
 
+/* A rule set inside a list of rule sets: a List of rules, or a Dispatch
+ * table over one. */
+static bool reps_is_rule_set(Expr* a) {
+    if (head_is(a, SYM_Dispatch) && a->data.function.arg_count == 1)
+        a = a->data.function.args[0];
+    return head_is(a, SYM_List);
+}
+
 /* Is `r` (Dispatch already unwrapped) usable as replacement rules: a rule, an
  * association, a List of them, or a List of such Lists (one result per rule
  * set)?  Otherwise report head::reps and return false, so the call stays
@@ -853,12 +888,26 @@ static bool reps_check(const char* head, Expr* r) {
     bool ok;
     if (head_is(r, SYM_List)) {
         size_t n = r->data.function.arg_count;
-        bool nested = n > 0 && head_is(r->data.function.args[0], SYM_List);
+        bool nested = n > 0 && reps_is_rule_set(r->data.function.args[0]);
         ok = true;
         for (size_t i = 0; ok && i < n; i++) {
             Expr* a = r->data.function.args[i];
             if (!nested) { ok = reps_single_ok(a); continue; }
-            if (!head_is(a, SYM_List)) { ok = false; break; }
+            if (!reps_is_rule_set(a)) {
+                /* {{x -> 1}, x -> 2}: lists and bare rules mixed is ::rmix
+                 * (audit ReplaceAll#2). */
+                if (reps_single_ok(a)) {
+                    char* rs = expr_to_string(r);
+                    mth_message(head, "rmix",
+                                "Elements of %s are a mixture of lists and nonlists.",
+                                rs ? rs : "");
+                    free(rs);
+                    return false;
+                }
+                ok = false;
+                break;
+            }
+            if (head_is(a, SYM_Dispatch)) a = a->data.function.args[0];
             for (size_t j = 0; ok && j < a->data.function.arg_count; j++)
                 ok = reps_single_ok(a->data.function.args[j]);
         }
@@ -895,7 +944,8 @@ static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, i
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
-                args[i] = apply_replace_nested(expr, rules_expr->data.function.args[i], min_l, max_l, heads);
+                Expr* el = dispatch_unwrap(rules_expr->data.function.args[i], NULL);
+                args[i] = apply_replace_nested(expr, el, min_l, max_l, heads);
             }
             Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
@@ -1217,7 +1267,9 @@ static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr, bool indexed
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
-                args[i] = apply_replace_all_nested(expr, rules_expr->data.function.args[i], indexed);
+                bool ix = indexed;   /* a Dispatch element is indexed (audit ReplaceAll#4) */
+                Expr* el = dispatch_unwrap(rules_expr->data.function.args[i], &ix);
+                args[i] = apply_replace_all_nested(expr, el, ix);
             }
             Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
@@ -1298,8 +1350,9 @@ static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr, int64_t
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
-                args[i] = apply_replace_repeated_nested(expr, rules_expr->data.function.args[i], max_scans,
-                                                        indexed);
+                bool ix = indexed;
+                Expr* el = dispatch_unwrap(rules_expr->data.function.args[i], &ix);
+                args[i] = apply_replace_repeated_nested(expr, el, max_scans, ix);
             }
             Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
@@ -1417,14 +1470,26 @@ Expr* builtin_replacelist(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* rules_expr = dispatch_unwrap(res->data.function.args[1], NULL);
 
+    /* The rules must be rules (ReplaceList::reps, audit ReplaceList#2) and the
+     * count a non-negative integer or Infinity (ReplaceList::innf, audit
+     * ReplaceList#1: a negative count fell into the "all" sentinel). */
+    if (!reps_check("ReplaceList", rules_expr)) return NULL;
     int64_t limit = -1;
     if (argc == 3) {
         Expr* l_expr = res->data.function.args[2];
-        if (l_expr->type == EXPR_INTEGER) {
+        if (l_expr->type == EXPR_INTEGER && l_expr->data.integer >= 0) {
             limit = l_expr->data.integer;
+        } else if (!((l_expr->type == EXPR_SYMBOL && l_expr->data.symbol.name == SYM_Infinity) ||
+                     (l_expr->type == EXPR_BIGINT && mpz_sgn(l_expr->data.bigint) > 0))) {
+            char* rs = expr_to_string(res);
+            mth_message("ReplaceList", "innf",
+                        "Non-negative integer or Infinity expected at position 3 in %s.",
+                        rs ? rs : "");
+            free(rs);
+            return NULL;
         }
     }
-    
+
     size_t num_rules = 0;
     ReplaceRule* rules = rules_collect(rules_expr, &num_rules);
 

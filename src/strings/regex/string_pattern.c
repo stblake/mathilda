@@ -410,6 +410,17 @@ static void sp_emit(SpCtx* ctx, Expr* patt) {
         return;
     }
 
+    /* Verbatim["s"]: the string literally, its * and @ no wildcards (audit
+     * Verbatim#1). */
+    if (is_fn(patt, SYM_Verbatim, &argc, &args)) {
+        if (argc != 1 || args[0]->type != EXPR_STRING) { ctx->failed = 1; return; }
+        int saved = ctx->wildcards;
+        ctx->wildcards = 0;
+        put_literal(ctx, args[0]->data.string);
+        ctx->wildcards = saved;
+        return;
+    }
+
     if (is_fn(patt, SYM_StringExpression, &argc, &args)) { emit_join(ctx, args, argc, ""); return; }
     if (is_fn(patt, SYM_Alternatives, &argc, &args)) {
         if (argc == 0) { put(ctx, "(*FAIL)"); return; }   /* matches nothing */

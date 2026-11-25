@@ -331,6 +331,14 @@ void symtab_remove_symbol(const char* symbol_name);
 /* Drop every message s::tag of `symbol_name` (ClearAll / Remove). */
 void symtab_clear_messages(const char* symbol_name);
 
+/* The Default values of `symbol_name`: Default[s] = v, Default[s, i] = v and
+ * Default[s, i, n] = v are stored as DownValues of Default, keyed by their
+ * first argument.  symtab_remove_default_values drops every one whose first
+ * argument is the symbol (ClearAll / Remove); symtab_default_value_rule says
+ * whether a Default rule belongs to the symbol (DefaultValues / Definition). */
+void symtab_remove_default_values(const char* symbol_name);
+bool symtab_default_value_rule(const Rule* r, const char* symbol_name);
+
 // Remove the single OwnValue (own_value=true) or DownValue (own_value=false)
 // rule on `symbol_name` whose left-hand side is identical to `lhs` up to
 // renaming of bound pattern variables (alpha-equivalence). Backs Unset /

@@ -199,6 +199,12 @@ static bool print_complex_is_numeric(const Expr* e) {
            expr_is_numeric_like(e->data.function.args[1]);
 }
 
+/* Rational[p, q] with integer parts: a rational number, printed p/q. */
+static bool print_rational_is_numeric(const Expr* e) {
+    return e->data.function.arg_count == 2 &&
+           expr_is_integer_like(e->data.function.args[0]) &&
+           expr_is_integer_like(e->data.function.args[1]);
+}
 
 static int get_expr_prec(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 9500;
@@ -261,7 +267,7 @@ static int get_expr_prec(Expr* e) {
         }
         return 6500;
     }
-    if (head == SYM_Rational) return 5000;
+    if (head == SYM_Rational && print_rational_is_numeric(e)) return 5000;
     if (head == SYM_Complex && print_complex_is_numeric(e)) {
         /* Only the bare imaginary unit `I` (Complex[0, 1]) is an atom.
          * `-I` (Complex[0, -1]) prints as a unary-minus form and so
@@ -919,6 +925,86 @@ static void print_rule_parts(const Rule* r, const char* op, const char* tag) {
     expr_free(rhs);
 }
 
+/* The N, Format and Default values of `name`, as Definition shows them (audit
+ * Definition#3): N[f] = 2.5 (stored as N[f, {MachinePrecision,
+ * MachinePrecision}]), Format[f[x_]] := "F" and Format[f[x_], TeXForm] :=
+ * ... (stored as the display rule, MakeBoxes twins of a plain Format being
+ * implementation detail), Default[f] = 0 (stored on Default).  `any` counts
+ * the lines printed so far. */
+static void print_definition_extra(const char* name, int* any) {
+    for (Rule* r = symtab_get_n_values(name); r; r = r->next) {
+        Expr *lhs, *rhs;
+        symtab_rule_display_parts(r, &lhs, &rhs);
+        Expr* shown = lhs;
+        if (lhs->type == EXPR_FUNCTION && lhs->data.function.arg_count == 2) {
+            Expr* p = lhs->data.function.args[1];
+            if (head_is(p, SYM_List) && p->data.function.arg_count == 2 &&
+                p->data.function.args[0]->type == EXPR_SYMBOL &&
+                p->data.function.args[0]->data.symbol.name == SYM_MachinePrecision &&
+                p->data.function.args[1]->type == EXPR_SYMBOL &&
+                p->data.function.args[1]->data.symbol.name == SYM_MachinePrecision) {
+                Expr* a0 = expr_copy(lhs->data.function.args[0]);
+                shown = expr_new_function(expr_copy(lhs->data.function.head), &a0, 1);
+            }
+        }
+        if ((*any)++) printf("\n");
+        print_standard(shown, 0);
+        printf("%s", r->delayed ? " := " : " = ");
+        print_standard(rhs, 0);
+        if (shown != lhs) expr_free(shown);
+        expr_free(lhs);
+        expr_free(rhs);
+    }
+    for (Rule* r = symtab_get_format_values(name); r; r = r->next) {
+        Expr *lhs, *rhs;
+        symtab_rule_display_parts(r, &lhs, &rhs);
+        Expr* target = lhs;
+        Expr* form = NULL;
+        bool skip = false;
+        if (head_is(target, SYM_HoldPattern) && target->data.function.arg_count == 1)
+            target = target->data.function.args[0];
+        if (head_is(target, SYM_MakeBoxes) && target->data.function.arg_count == 2) {
+            form = target->data.function.args[1];
+            target = target->data.function.args[0];
+            /* MakeBoxes[lhs, FormatType_]: the twin of a plain Format. */
+            if (form->type != EXPR_SYMBOL) skip = true;
+            /* its rhs is Format[v, form]: show v */
+            if (head_is(rhs, SYM_Format) && rhs->data.function.arg_count == 2) {
+                Expr* v = expr_copy(rhs->data.function.args[0]);
+                expr_free(rhs);
+                rhs = v;
+            }
+        }
+        if (!skip) {
+            Expr* fa[2] = { expr_copy(target), form ? expr_copy(form) : NULL };
+            Expr* f = expr_new_function(expr_new_symbol(SYM_Format), fa, form ? 2 : 1);
+            if ((*any)++) printf("\n");
+            /* the rule itself, not its effect: no display rules while printing it */
+            bool saved_af = g_apply_formats;
+            g_apply_formats = false;
+            print_standard(f, 0);
+            printf("%s", r->delayed ? " := " : " = ");
+            print_standard(rhs, 0);
+            g_apply_formats = saved_af;
+            expr_free(f);
+        }
+        expr_free(lhs);
+        expr_free(rhs);
+    }
+    for (Rule* r = symtab_get_down_values(SYM_Default); r; r = r->next) {
+        if (!symtab_default_value_rule(r, name)) continue;
+        if ((*any)++) printf("\n");
+        print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
+    }
+}
+
+static bool has_definition_extra(const char* name) {
+    if (symtab_get_n_values(name) || symtab_get_format_values(name)) return true;
+    for (Rule* r = symtab_get_down_values(SYM_Default); r; r = r->next)
+        if (symtab_default_value_rule(r, name)) return true;
+    return false;
+}
+
 static void print_definition_body(const char* name) {
     Rule* ov = symtab_get_own_values(name);
     Rule* dv = symtab_get_down_values(name);
@@ -939,7 +1025,7 @@ static void print_definition_body(const char* name) {
             any++;
         }
     }
-    bool rules = ov || dv || uv || symtab_get_sub_values(name);
+    bool rules = ov || dv || uv || symtab_get_sub_values(name) || has_definition_extra(name);
     if (any && rules) printf("\n\n");
     int nattr = any;
     any = 0;
@@ -962,6 +1048,7 @@ static void print_definition_body(const char* name) {
         if (any++) printf("\n");
         print_rule_parts(r, r->delayed ? " := " : " = ", NULL);
     }
+    print_definition_extra(name, &any);
     Expr* opts = symtab_get_options(name);            /* borrowed */
     if (opts && opts->type == EXPR_FUNCTION && opts->data.function.arg_count > 0) {
         if (any || nattr) printf("\n\n");
@@ -1474,7 +1561,9 @@ static void print_standard(Expr* e, int parent_prec) {
                    nv, nv == 1 ? "vertex" : "vertices",
                    ne, ne == 1 ? "hyperedge" : "hyperedges");
         }
-        else if (head == SYM_Rational && e->data.function.arg_count == 2) {
+        else if (head == SYM_Rational && print_rational_is_numeric(e)) {
+            /* Only a Rational NUMBER is p/q: a held Rational[a, b] with
+             * symbolic parts prints as written (audit InputForm#4). */
             print_standard(e->data.function.args[0], 5000);
             printf("/");
             print_standard(e->data.function.args[1], 5000);

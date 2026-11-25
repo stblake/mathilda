@@ -119,12 +119,13 @@ static void test_begin_package_with_needs(void) {
     const char* needs[] = { "Needed1`", "Needed2`" };
     ASSERT(context_begin_package("NPkg`", needs, 2));
     ASSERT_STR_EQ(context_current(), "NPkg`");
-    /* Expected path: {NPkg`, System`, Needed1`, Needed2`}. */
+    /* Expected path: {NPkg`, Needed1`, Needed2`, System`} -- the needed
+     * contexts precede System` (audit BeginPackage#2). */
     ASSERT(context_path_count() == 4);
     ASSERT_STR_EQ(context_path_at(0), "NPkg`");
-    ASSERT_STR_EQ(context_path_at(1), "System`");
-    ASSERT_STR_EQ(context_path_at(2), "Needed1`");
-    ASSERT_STR_EQ(context_path_at(3), "Needed2`");
+    ASSERT_STR_EQ(context_path_at(1), "Needed1`");
+    ASSERT_STR_EQ(context_path_at(2), "Needed2`");
+    ASSERT_STR_EQ(context_path_at(3), "System`");
     char* closed = NULL;
     ASSERT(context_end_package(&closed));
     free(closed);
@@ -157,7 +158,7 @@ static void test_begin_changes_context(void) {
 
 static void test_package_symbol_qualification(void) {
     /* Inside BeginPackage, a new symbol is qualified into the package. */
-    assert_eval_eq("BeginPackage[\"MyPkgA`\"]", "\"MyPkgA`\"", 0);
+    assert_eval_eq("BeginPackage[\"MyPkgA`\"]", "Null", 0);   /* BeginPackage returns Null */
     /* After BeginPackage the path is {MyPkgA`, System`} but not Global`. */
     assert_eval_eq("$ContextPath", "{\"MyPkgA`\", \"System`\"}", 0);
     /* Define a package function. */
@@ -176,7 +177,7 @@ static void test_nested_begin_private(void) {
      * the public context before code that uses it is parsed; otherwise the
      * later Private-context definition creates a distinct symbol. We define
      * priv in the public context first, then re-enter Private. */
-    assert_eval_eq("BeginPackage[\"UtilPkg`\"]", "\"UtilPkg`\"", 0);
+    assert_eval_eq("BeginPackage[\"UtilPkg`\"]", "Null", 0);
     /* Seed priv in the public context so pub sees it. */
     assert_eval_eq("priv[x_] := 10 x", "Null", 0);
     assert_eval_eq("pub[x_] := priv[x] + 1", "Null", 0);
@@ -207,7 +208,7 @@ static void test_context_of_user_symbol(void) {
 static void test_package_dollar_symbol(void) {
     /* Issue #104: a leading '$' is not special -- $T2 inside a package is
      * Test104`$T2, exactly like T1. */
-    assert_eval_eq("BeginPackage[\"Test104`\"]", "\"Test104`\"", 0);
+    assert_eval_eq("BeginPackage[\"Test104`\"]", "Null", 0);
     assert_eval_eq("T1 = 137", "137", 0);
     assert_eval_eq("$T2 = 42", "42", 0);
     assert_eval_eq("Context[T1]", "\"Test104`\"", 0);

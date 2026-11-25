@@ -359,7 +359,8 @@ const char* context_display_name(const char* name) {
  * written for the reference kernel spells the packing helpers with their
  * Developer` context, and that spelling must reach the same builtin. */
 static bool is_developer_alias(const char* name) {
-    static const char* const names[] = { "ToPackedArray", "FromPackedArray", "PackedArrayQ" };
+    static const char* const names[] = { "ToPackedArray", "FromPackedArray", "PackedArrayQ",
+                                         "MachineIntegerQ" };   /* audit MachineIntegerQ#1 */
     for (size_t i = 0; i < sizeof names / sizeof names[0]; i++)
         if (strcmp(name, names[i]) == 0) return true;
     return false;
@@ -597,17 +598,19 @@ bool context_begin_package(const char* ctx, const char** needs, size_t needs_cou
     if (!ctx || !ends_with_tick(ctx)) return false;
     if (ctx[0] == '`') return false; /* BeginPackage requires absolute context */
     frame_push(FRAME_PACKAGE);
-    /* $ContextPath = {ctx, "System`", needs...} (needs deduplicated). */
+    /* $ContextPath = {ctx, needs..., "System`"} (deduplicated): the needed
+     * contexts come before System`, as the reference orders them (audit
+     * BeginPackage#2). */
     const char** path = (const char**)malloc((needs_count + 2) * sizeof(char*));
     size_t n = 0;
     path[n++] = ctx;
-    path[n++] = "System`";
     for (size_t i = 0; i < needs_count; i++) {
         if (!needs[i] || !ends_with_tick(needs[i])) continue;
-        bool dup = false;
+        bool dup = strcmp(needs[i], "System`") == 0;
         for (size_t k = 0; k < n && !dup; k++) dup = strcmp(path[k], needs[i]) == 0;
         if (!dup) path[n++] = needs[i];
     }
+    path[n++] = "System`";
     publish_own("$Context", expr_new_string(ctx));
     publish_own("$ContextPath", make_path(path, n));
     free((void*)path);
@@ -712,6 +715,22 @@ static Expr* builtin_context(Expr* res) {
     /* If the name already has a backtick, peel off its prefix as the answer. */
     size_t plen = context_prefix_len(name);
     if (plen > 0) {
+        /* A qualified STRING must name an existing symbol: Context["nope`qq"]
+         * answered "nope`" for a symbol that was never created (audit
+         * Context#2).  System` and Global` symbols are stored under their bare names. */
+        bool exists = a->type != EXPR_STRING || symtab_lookup(name);
+        if (!exists) {
+            const char* bare = name + plen;
+            SymbolDef* bd = symtab_lookup(bare);
+            if (bd || intern_is_system(bare) || intern_is_mathilda(bare)) {
+                const char* home = context_home(bare, bd);
+                exists = strlen(home) == plen && strncmp(home, name, plen) == 0;
+            }
+        }
+        if (!exists) {
+            mth_message("Context", "notfound", "Symbol %s not found.", name);
+            return NULL;
+        }
         char* prefix = (char*)malloc(plen + 1);
         memcpy(prefix, name, plen);
         prefix[plen] = '\0';
@@ -775,37 +794,51 @@ static Expr* builtin_begin(Expr* res) {
     return expr_new_string(context_current());
 }
 
+/* BeginPackage::cxt for an invalid context argument (shown as written). */
+static Expr* begin_package_cxt(const Expr* e) {
+    char* es = expr_to_string_outputform((Expr*)e);
+    mth_message("BeginPackage", "cxt", "Context specification %s is not valid.", es ? es : "");
+    free(es);
+    return NULL;
+}
+
 static Expr* builtin_begin_package(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
+    /* The context must be a valid absolute context name: "1abc`" and
+     * "a``b`" became $Context, and BeginPackage[1] said nothing (audit
+     * BeginPackage#3, BeginPackage#5). */
     const char* ctx = string_arg(res->data.function.args[0]);
-    if (!ctx) return NULL;
+    if (!ctx || !is_valid_context_name(ctx)) return begin_package_cxt(res->data.function.args[0]);
 
     const char** needs = NULL;
     size_t needs_count = 0;
     Expr* needs_list = (argc == 2) ? res->data.function.args[1] : NULL;
     if (needs_list) {
-        if (needs_list->type != EXPR_FUNCTION
-            || needs_list->data.function.head->type != EXPR_SYMBOL
-            || needs_list->data.function.head->data.symbol.name != SYM_List) {
+        bool ok = head_is(needs_list, SYM_List);
+        for (size_t i = 0; ok && i < needs_list->data.function.arg_count; i++)
+            ok = needs_list->data.function.args[i]->type == EXPR_STRING &&
+                 is_valid_context_name(needs_list->data.function.args[i]->data.string);
+        if (!ok) {
+            char* ns = expr_to_string_outputform(needs_list);
+            mth_message("BeginPackage", "cxlist",
+                        "Context list specification %s is not a list of valid contexts.",
+                        ns ? ns : "");
+            free(ns);
             return NULL;
         }
         needs_count = needs_list->data.function.arg_count;
-        needs = (const char**)malloc(needs_count * sizeof(char*));
-        for (size_t i = 0; i < needs_count; i++) {
-            Expr* ne = needs_list->data.function.args[i];
-            if (ne->type != EXPR_STRING) { free((void*)needs); return NULL; }
-            needs[i] = ne->data.string;
-        }
+        needs = (const char**)malloc((needs_count ? needs_count : 1) * sizeof(char*));
+        for (size_t i = 0; i < needs_count; i++)
+            needs[i] = needs_list->data.function.args[i]->data.string;
     }
 
     bool ok = context_begin_package(ctx, needs, needs_count);
     if (needs) free((void*)needs);
-    if (!ok) {
-        mth_message("BeginPackage", "cxt", "Context specification %s is not valid.", ctx);
-        return NULL;
-    }
-    return expr_new_string(context_current());
+    if (!ok) return begin_package_cxt(res->data.function.args[0]);
+    /* BeginPackage returns Null; only Begin returns the context (audit
+     * BeginPackage#4). */
+    return expr_new_symbol(SYM_Null);
 }
 
 static Expr* builtin_end(Expr* res) {

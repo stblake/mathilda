@@ -190,6 +190,9 @@ Gives the number of elements or subexpressions that match a pattern.
 - Built-in default values include `0` for `Plus` and `1` for `Times` and `Power`.
 - Used automatically by the pattern matcher when `_.` is present in the pattern.
 - `Default[Plus]` is `0`, `Default[Times]` is `1` and `Default[Power, 2]` is `1` (audit Default#1).
+- `Default` is `Protected`; `Default[f] = v` is a definition for `f` and only `f`'s protection is
+  consulted. `DefaultValues[f]` lists them as `{HoldPattern[Default[f]] :> v}`; `ClearAll[f]` and
+  `Remove[f]` drop them, and `Definition[f]` shows them (audit Default#3, Default#4).
 
 ## Attributes in matching
 - **Orderless.** Pattern arguments may take the subject's arguments in any

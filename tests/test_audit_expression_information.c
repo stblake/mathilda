@@ -181,6 +181,76 @@ static void test_wave4_g4_expression(void) {
     audit_chk("PossibleZeroQ#3", "{PossibleZeroQ[a == b], PossibleZeroQ[x < y], PossibleZeroQ[a - a]}", "{False, False, True}");
 }
 
+/* Wave 5 G4: SetAttributes / ClearAttributes validation, Information options and
+ * messages, BeginPackage contexts, InverseFunction identities, Context of a
+ * missing symbol, Identity', held symbolic Rational, LeafCount and other
+ * argument counts, ValueQ on SubValues / UpValues / Unevaluated / Method. */
+static void test_wave5_g4_expression(void) {
+    audit_run("ClearAll[w5h, w5f]");
+    audit_chk("SetAttributes#1", "Check[SetAttributes[w5h, Foo], fired, SetAttributes::attnf]", "fired");
+    audit_chk("SetAttributes#1", "Quiet[SetAttributes[w5h, Foo]]; Attributes[w5h]", "{}");
+    audit_chk("SetAttributes#1", "SetAttributes[w5h, {Listable, ReadProtected}]; Attributes[w5h]", "{Listable}");
+    audit_chk("SetAttributes#2", "Check[SetAttributes[1, Flat], fired, SetAttributes::sym]", "fired");
+    audit_chk("SetAttributes#2", "Quiet[SetAttributes[f[x], Flat]]", "SetAttributes[f[x], Flat]");
+    audit_chk("ClearAttributes#3", "Check[ClearAttributes[w5h, Foo], fired, ClearAttributes::attnf]", "fired");
+    audit_chk("ClearAttributes#4", "Check[ClearAttributes[3, Listable], fired, ClearAttributes::sym]", "fired");
+    audit_chk("ClearAttributes#6", "ClearAttributes[\"w5zzNewSym\", Listable]; Names[\"w5zzNew*\"]", "{}");
+    audit_chk("Information#2", "Information[Sin, LongForm -> False] === Information[Sin]", "True");
+    audit_chk("Information#2", "w5f[x_] := x; StringFreeQ[Information[w5f, LongForm -> True], \"w5f[x_]\"]", "False");
+    audit_chk("Information#3", "Check[Information[\"Zzzq*\"], fired, Information::nomatch]", "fired");
+    audit_chk("Information#4", "With[{s = StringJoin[Table[\"a\", {300}]]}, StringLength[Information[s]]] > 300", "True");
+    audit_chk("Information#5", "StringFreeQ[Information[I], \"I = I\"]", "True");
+    audit_chk("ToString#4", "Check[ToString[], fired, ToString::argt]", "fired");
+    audit_chk("BeginPackage#2", "BeginPackage[\"W5A`\", {\"W5B`\", \"W5C`\"}]; w5cp = $ContextPath; EndPackage[]; w5cp", "{\"W5A`\", \"W5B`\", \"W5C`\", \"System`\"}");
+    audit_chk("BeginPackage#3", "Check[BeginPackage[\"1abc`\"], fired, BeginPackage::cxt]", "fired");
+    audit_chk("BeginPackage#3", "Quiet[BeginPackage[\"a``b`\"]]; $Context", "\"Global`\"");
+    audit_chk("BeginPackage#4", "w5bp = BeginPackage[\"W5Foo`\"]; EndPackage[]; w5bp", "Null");
+    audit_chk("BeginPackage#5", "Check[BeginPackage[1], fired, BeginPackage::cxt]", "fired");
+    audit_chk("BeginPackage#5", "Check[BeginPackage[], fired, BeginPackage::argt]", "fired");
+    audit_chk("BeginPackage#5", "Check[BeginPackage[\"X`\", \"Y`\"], fired, BeginPackage::cxlist]", "fired");
+    audit_chk("Composition#1", "InverseFunction[Composition[f, g]]", "Composition[InverseFunction[g], InverseFunction[f]]");
+    audit_chk("Context#2", "Check[Context[\"nope`qq\"], fired, Context::notfound]", "fired");
+    audit_chk("Context#2", "Names[\"nope`*\"]", "{}");
+    audit_chk("Context#2", "{Context[\"System`Plus\"], Context[\"Global`w5h\"]}", "{\"System`\", \"Global`\"}");
+    audit_chk("Identity#1", "Identity'[x]", "1");
+    audit_chk("Identity#2", "InverseFunction[Identity][y]", "y");
+    audit_chk("InputForm#4", "ToString[Hold[Rational[a, b]], InputForm]", "\"Hold[Rational[a, b]]\"");
+    audit_chk("InputForm#4", "ToString[Hold[Rational[1, 2]], InputForm]", "\"Hold[1/2]\"");
+    audit_chk("LeafCount#1", "Options[LeafCount]", "{Heads -> True}");
+    audit_chk("LeafCount#2", "Check[LeafCount[a, b], fired, LeafCount::nonopt]", "fired");
+    audit_chk("LeafCount#2", "Quiet[LeafCount[a, b]]", "LeafCount[a, b]");
+    audit_chk("LeafCount#3", "Check[LeafCount[], fired, LeafCount::argx]", "fired");
+    audit_chk("MachineIntegerQ#1", "Developer`MachineIntegerQ[5]", "True");
+    audit_chk("MaxMemoryUsed#1", "Check[MaxMemoryUsed[x, y], fired, MaxMemoryUsed::argt]", "fired");
+    audit_chk("Names#3", "Block[{$MessageList = {}}, Names[RegularExpression[\"(\"]]; Length[$MessageList]]", "1");
+    audit_chk("NumberForm#2", "Check[ToString[NumberForm[999999.7]], fired, NumberForm::reqsigz]", "\"1.*10^(6)\"");
+    audit_chk("NumberForm#3", "Check[ToString[NumberForm[1.23456, 3.5]], fired, NumberForm::iprf]", "fired");
+    audit_chk("NumberForm#3", "Check[ToString[NumberForm[3.14159, 0]], fired, NumberForm::iprf]", "fired");
+    audit_chk("PossibleZeroQ#5", "Check[PossibleZeroQ[0, 1, 2], fired, PossibleZeroQ::nonopt]", "fired");
+    audit_chk("PossibleZeroQ#5", "Quiet[PossibleZeroQ[0, 1, 2]]", "PossibleZeroQ[0, 1, 2]");
+    audit_chk("RationalQ#1", "{RationalQ[Rational[x, y]], RationalQ[Rational[1.5, 2]], RationalQ[3/4]}", "{False, False, True}");
+    audit_chk("Symbol#2", "Symbol[\"αβ\"] === ToExpression[\"αβ\"]", "True");
+    audit_chk("UpValues#1", "Check[UpValues[1], fired, UpValues::sym]", "fired");
+    audit_chk("UpValues#1", "Check[UpValues[f[x]], fired, UpValues::sym]", "fired");
+    audit_chk("ValueQ#1", "w5sv[1][2] = 3; ValueQ[w5sv[1][2]]", "True");
+    audit_chk("ValueQ#2", "w5u /: w5v[w5u] = 7; ValueQ[w5v[w5u]]", "True");
+    audit_chk("ValueQ#3", "w5xv = 5; ValueQ[Unevaluated[w5xv]]", "True");
+    audit_chk("ValueQ#4", "ValueQ[w5none, Method -> \"Legacy\"]", "False");
+    audit_chk("VectorQ#1", "Check[VectorQ[], fired, VectorQ::argt]", "fired");
+    audit_chk("VectorQ#1", "Check[VectorQ[{1}, NumberQ, 3], fired, VectorQ::argt]", "fired");
+    audit_chk("Definition#3", "N[w5f8] = 2.5; ToString[Definition[w5f8]]", "\"N[w5f8] = 2.5\"");
+    audit_chk("Definition#3", "Format[w5f9[x_]] := \"F\"; ToString[Definition[w5f9]]", "\"Format[w5f9[x_]] := F\"");
+    audit_chk("Definition#3", "Default[w5f10] = 0; ToString[Definition[w5f10]]", "\"Default[w5f10] = 0\"");
+    audit_chk("FullForm#4", "ToString[FullForm[Hold[a && b && c]]]", "\"Hold[And[a, b, c]]\"");
+    audit_chk("FullForm#4", "ToString[FullForm[Hold[a . b . c]]]", "\"Hold[Dot[a, b, c]]\"");
+    audit_chk("FullForm#4", "MatchQ[a && b && c, x_ && y_]", "True");
+    audit_chk("SyntaxQ#2", "SyntaxQ[\"x~f~y\"]", "True");
+    audit_chk("SyntaxQ#2", "ToExpression[\"x~f~y\"]", "f[x, y]");
+    audit_chk("SyntaxQ#2", "ToExpression[\"a ~f~ b ~g~ c\"]", "g[f[a, b], c]");
+    audit_chk("Inactive#1", "D[Inactive[Integrate][f[u], {u, 0, x}], u]", "0");
+    audit_chk("Inactive#1", "D[Inactive[Integrate][f[u], {u, 0, 1}], u]", "0");
+}
+
 int main(void) {
     audit_init();
     TEST(test_bytecount_deep_nesting);
@@ -189,5 +259,6 @@ int main(void) {
     TEST(test_s14_memberq_levels);
     TEST(test_wave3_arity_options);
     TEST(test_wave4_g4_expression);
+    TEST(test_wave5_g4_expression);
     return audit_finish("audit_expression_information");
 }

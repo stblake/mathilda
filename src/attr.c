@@ -4,6 +4,7 @@
 #include "sym_names.h"
 #include "message.h"   /* mth_message */
 #include "print.h"     /* expr_to_string */
+#include "common.h"    /* head_is */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -42,6 +43,8 @@ static SymbolAttr builtin_attrs[] = {
     {"DownValues", ATTR_HOLDALL | ATTR_PROTECTED},
     {"FormatValues", ATTR_HOLDALL | ATTR_PROTECTED},
     {"NValues", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"DefaultValues", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"Default", ATTR_PROTECTED},
     {"Format", ATTR_PROTECTED},
     {"MakeBoxes", ATTR_HOLDALLCOMPLETE},
 #if UP_VALUES
@@ -421,91 +424,131 @@ static void add_single_attribute(SymbolDef* def, Expr* attr_expr) {
     }
 }
 
-static void set_attributes_for_symbol(Expr* sym_expr, Expr* attr_spec) {
-    const char* sym_name = NULL;
-    if (sym_expr->type == EXPR_SYMBOL) sym_name = sym_expr->data.symbol.name;
-    else if (sym_expr->type == EXPR_STRING) sym_name = sym_expr->data.string;
-    
-    if (!sym_name) return;
-    
+/* Is `name` an attribute the language knows but Mathilda does not store?
+ * ReadProtected (deliberately absent: ?f always shows definitions), Locked and
+ * Stub.  SetAttributes / ClearAttributes accept them as no-ops rather than
+ * reporting them as unknown (packages routinely set ReadProtected). */
+static bool attr_known_unstored(const char* name) {
+    return strcmp(name, "ReadProtected") == 0 || strcmp(name, "Locked") == 0
+        || strcmp(name, "Stub") == 0;
+}
+
+/* Validate an attribute spec (one name or a List of names) for head `head`
+ * (SetAttributes / ClearAttributes).  An element that is not a known attribute
+ * emits head::attnf ("Foo is not a known attribute.") and the whole call is
+ * refused, before anything changes (audit SetAttributes#1, ClearAttributes#3). */
+static bool attr_spec_valid(const char* head, Expr* attr_spec) {
+    Expr* one[1] = { attr_spec };
+    Expr** items = one;
+    size_t n = 1;
+    if (head_is(attr_spec, SYM_List)) {
+        items = attr_spec->data.function.args;
+        n = attr_spec->data.function.arg_count;
+    }
+    for (size_t i = 0; i < n; i++) {
+        const char* nm = items[i]->type == EXPR_SYMBOL ? items[i]->data.symbol.name
+                       : items[i]->type == EXPR_STRING ? items[i]->data.string : NULL;
+        if (nm && (string_to_attribute(nm) != ATTR_NONE || attr_known_unstored(nm)))
+            continue;
+        char* es = expr_to_string(items[i]);
+        mth_message(head, "attnf", "%s is not a known attribute.", es ? es : "");
+        free(es);
+        return false;
+    }
+    return true;
+}
+
+/* The symbol name a SetAttributes / ClearAttributes target names: a symbol or
+ * a string.  Anything else emits head::sym ("Argument e at position 1 is
+ * expected to be a symbol.") and gives NULL (audit SetAttributes#2,
+ * ClearAttributes#4). */
+static const char* attr_target_name(const char* head, Expr* sym_expr) {
+    if (sym_expr->type == EXPR_SYMBOL) return sym_expr->data.symbol.name;
+    if (sym_expr->type == EXPR_STRING) return sym_expr->data.string;
+    char* es = expr_to_string(sym_expr);
+    mth_message(head, "sym", "Argument %s at position 1 is expected to be a symbol.",
+                es ? es : "");
+    free(es);
+    return NULL;
+}
+
+static void set_attributes_for_symbol(const char* sym_name, Expr* attr_spec) {
     SymbolDef* def = symtab_get_def(sym_name);
     if (!def) return;
 
     // Attribute spec can be a single attribute or a list of attributes
     if (attr_spec->type == EXPR_SYMBOL || attr_spec->type == EXPR_STRING) {
         add_single_attribute(def, attr_spec);
-    } else if (attr_spec->type == EXPR_FUNCTION && 
-               attr_spec->data.function.head->type == EXPR_SYMBOL &&
-               attr_spec->data.function.head->data.symbol.name == SYM_List) {
+    } else if (head_is(attr_spec, SYM_List)) {
         for (size_t i = 0; i < attr_spec->data.function.arg_count; i++) {
             add_single_attribute(def, attr_spec->data.function.args[i]);
         }
     }
 }
 
-static void clear_attributes_for_symbol(Expr* sym_expr, Expr* attr_spec) {
-    const char* sym_name = NULL;
-    if (sym_expr->type == EXPR_SYMBOL) sym_name = sym_expr->data.symbol.name;
-    else if (sym_expr->type == EXPR_STRING) sym_name = sym_expr->data.string;
-
-    if (!sym_name) return;
-
-    SymbolDef* def = symtab_get_def(sym_name);
+static void clear_attributes_for_symbol(const char* sym_name, Expr* attr_spec) {
+    /* Never create the symbol: clearing an attribute of a symbol that does
+     * not exist has nothing to clear (audit ClearAttributes#6). */
+    SymbolDef* def = symtab_lookup(sym_name);
     if (!def) return;
 
     // Attribute spec can be a single attribute or a list of attributes
     if (attr_spec->type == EXPR_SYMBOL || attr_spec->type == EXPR_STRING) {
         remove_single_attribute(def, attr_spec);
-    } else if (attr_spec->type == EXPR_FUNCTION &&
-               attr_spec->data.function.head->type == EXPR_SYMBOL &&
-               attr_spec->data.function.head->data.symbol.name == SYM_List) {
+    } else if (head_is(attr_spec, SYM_List)) {
         for (size_t i = 0; i < attr_spec->data.function.arg_count; i++) {
             remove_single_attribute(def, attr_spec->data.function.args[i]);
         }
     }
 }
 
-Expr* builtin_clear_attributes(Expr* res) {
+/* Shared driver of SetAttributes / ClearAttributes: the target is a symbol, a
+ * string, or a List of them; the spec is validated first.  An invalid target
+ * or attribute leaves the call unevaluated. */
+static Expr* attr_set_or_clear(Expr* res, bool setting) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-
+    const char* head = setting ? "SetAttributes" : "ClearAttributes";
     Expr* sym_spec = res->data.function.args[0];
     Expr* attr_spec = res->data.function.args[1];
 
-    // Symbol spec can be a single symbol/string or a list of them
-    if (sym_spec->type == EXPR_SYMBOL || sym_spec->type == EXPR_STRING) {
-        clear_attributes_for_symbol(sym_spec, attr_spec);
-    } else if (sym_spec->type == EXPR_FUNCTION &&
-               sym_spec->data.function.head->type == EXPR_SYMBOL &&
-               sym_spec->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < sym_spec->data.function.arg_count; i++) {
-            clear_attributes_for_symbol(sym_spec->data.function.args[i], attr_spec);
-        }
+    Expr* one[1] = { sym_spec };
+    Expr** targets = one;
+    size_t nt = 1;
+    if (head_is(sym_spec, SYM_List)) {
+        targets = sym_spec->data.function.args;
+        nt = sym_spec->data.function.arg_count;
     }
+    for (size_t i = 0; i < nt; i++)
+        if (!attr_target_name(head, targets[i])) return NULL;
+    if (!attr_spec_valid(head, attr_spec)) return NULL;
 
+    for (size_t i = 0; i < nt; i++) {
+        const char* nm = targets[i]->type == EXPR_SYMBOL ? targets[i]->data.symbol.name
+                                                         : targets[i]->data.string;
+        if (setting) set_attributes_for_symbol(nm, attr_spec);
+        else         clear_attributes_for_symbol(nm, attr_spec);
+    }
     return expr_new_symbol(SYM_Null);
+}
+
+Expr* builtin_clear_attributes(Expr* res) {
+    return attr_set_or_clear(res, false);
 }
 
 Expr* builtin_set_attributes(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    
-    Expr* sym_spec = res->data.function.args[0];
-    Expr* attr_spec = res->data.function.args[1];
-    
-    // Symbol spec can be a single symbol/string or a list of them
-    if (sym_spec->type == EXPR_SYMBOL || sym_spec->type == EXPR_STRING) {
-        set_attributes_for_symbol(sym_spec, attr_spec);
-    } else if (sym_spec->type == EXPR_FUNCTION && 
-               sym_spec->data.function.head->type == EXPR_SYMBOL &&
-               sym_spec->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < sym_spec->data.function.arg_count; i++) {
-            set_attributes_for_symbol(sym_spec->data.function.args[i], attr_spec);
-        }
-    }
-    
-    return expr_new_symbol(SYM_Null);
+    return attr_set_or_clear(res, true);
 }
 
 static Expr* attributes_of(Expr* arg);
+
+/* Attributes::ssle for an argument that names no symbol. */
+static void attributes_ssle(const Expr* el) {
+    char* es = expr_to_string((Expr*)el);
+    mth_message("Attributes", "ssle",
+                "Symbol, string, or HoldPattern[symbol] expected at position 1 in Attributes[%s].",
+                es ? es : "");
+    free(es);
+}
 
 /* Attributes[s] / Attributes["name"] -> the attribute list of one symbol;
  * Attributes[{s1, s2, ...}] -> {Attributes[s1], Attributes[s2], ...} (the
@@ -523,10 +566,7 @@ Expr* builtin_attributes(Expr* res) {
             if (!items[k]) {
                 /* The bad element stays Attributes[el] (with ::ssle) and
                  * the rest are still answered. */
-                char* es = expr_to_string(el);
-                mth_message("Attributes", "ssle",
-                            "Symbol or string expected at position 1 in Attributes[%s].", es);
-                free(es);
+                attributes_ssle(el);
                 Expr* one = expr_copy(el);
                 items[k] = expr_new_function(expr_new_symbol("Attributes"), &one, 1);
             }
@@ -535,11 +575,15 @@ Expr* builtin_attributes(Expr* res) {
         free(items);
         return out;
     }
-    return attributes_of(arg);
+    Expr* out = attributes_of(arg);
+    if (!out) attributes_ssle(arg);   /* audit Attributes#2 */
+    return out;
 }
 
 static Expr* attributes_of(Expr* arg) {
     const char* sym_name = NULL;
+    if (head_is(arg, SYM_HoldPattern) && arg->data.function.arg_count == 1)
+        arg = arg->data.function.args[0];   /* Attributes[HoldPattern[s]] */
     if (arg->type == EXPR_SYMBOL) sym_name = arg->data.symbol.name;
     else if (arg->type == EXPR_STRING) sym_name = arg->data.string;
     
