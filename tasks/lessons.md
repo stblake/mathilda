@@ -5604,3 +5604,40 @@ boundary, with the cheap-looking loophole named, in the worker brief.
   duration (>= 10x margin), and run the union suites on main after integration.
 - **Two workers touching the same header (loadmodule.h) conflict only in additions** — keep
   both sides; the helper's `--amend-only` mode bumps/tags a hand-resolved cherry-pick.
+
+## 2026-11-26: an "easy" filter is only as current as the build that ran it
+
+User found `Integrate[..., Method -> "DerivativeDivides"]` closing a benchmark integral
+(261's cM-113-232) that the report counted as hard. easy.tsv had been made at v0.6732;
+at v0.6750 DerivativeDivides closes it in 0.3 s. 9 of 261's 56 "hard" cases flipped.
+- Re-run easy_classify.py on every corpus before a run or a report whose numbers depend
+  on it, with the same binary as the run; check the version on easy.tsv's header line.
+- A filter that times out must not quietly pass the case: ddTimeout was 30 s with 6-8
+  Mathilda processes in parallel; now 120 s.
+- Before reporting a corpus as "outside the easy classes", spot-check a few cases by
+  hand with the filter's own method.
+
+## 2026-11-26: a corpus rewrite must change only what it claims to
+
+normalize_constants.py first took a sum's content with FactorTermsList, which also put a
+non-polynomial sum over a common denominator: 260's one-elem-11 went from
+2 E^x x/(1+x) + 2 E^x Log[1+x] + ... to a sum of quotients by (1+x), which
+DerivativeDivides no longer closes. Checking f == k g by PossibleZeroQ proved the rewrite
+equal, not harmless: it made easy integrals look hard. Found because the reclassification
+moved 17 cases from dd to none.
+- A normalising rewrite of benchmark inputs must be structure-preserving (divide each
+  term by the content; never Together/Expand/Factor the expression).
+- Test a rewrite on the classifier as well as on equality: the class of every rewritten
+  case must not change (dd -> none is a red flag).
+
+## 2026-11-26: a correct, value-preserving rewrite can still expose an engine bug
+- Removing constant factors from the corpora moved cases from `dd` to hard. The rewrite
+  was correct (f = k g, all checked). The cause was DerivativeDivides: it found a kernel
+  only while a constant kept the kernel visible as a product (g/3 closed, g did not;
+  3 E^x closed, E^x did not), and Cancel lost a factor once a radicand sum was flattened.
+- Rule: when a neutral transformation changes a decision procedure's verdict, the procedure
+  is not invariant where it must be. Test `c f` for several c, fix the procedure, and
+  pin the invariance (`test_constant_multiple_invariance`).
+- A time-budget change in one file (ddTimeout 30 -> 120 in easy.m) needs every derived
+  budget re-checked: easy_classify.py's per-case wall budget stayed 90 s, so slow cases
+  were killed and labelled "abort". The driver now reads ddTimeout from easy.m.

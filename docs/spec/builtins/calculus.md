@@ -4752,7 +4752,9 @@ Implemented in `src/calculus/integrate_derivdivides.c`.
 
 Candidate kernels `u(x)` are every distinct subexpression of `f` that depends
 on `x`, except `x` and `f` themselves (the C analogue of
-`Cases[Union[Level[f, {0, Infinity}]], e_ /; !FreeQ[e, x]]`).  Two
+`Cases[Union[Level[f, {0, Infinity}]], e_ /; !FreeQ[e, x]]`).  The one exception
+is an exponential `f = E^(c x + d)`, which is its own kernel (quotient `1/c`), so
+`E^x` closes as `c E^x` does.  Two
 complementary strategies are tried per kernel, each followed by a
 **verification gate** `PossibleZeroQ[D[result, x] - f] === True` (numeric
 sampling; as of 2026-06-09 the former rigorous `Simplify` confirm was dropped —
@@ -4763,6 +4765,13 @@ over the sampler):
    `q /. u(x) -> u`; accepted when free of `x`.  Cheap, emits no diagnostics,
    handles transcendental compositions (`x Exp[x^2]`), and **selects the
    correct radical branch inherently** (no squaring).  Tried first.
+   `Cancel[Together[...]]` can merge a sum kernel into a larger sum (with
+   `u(x) = 1 + (1 + x) Log[x]^2`, the quotient is
+   `1/(1 + (1 + x) Log[x]^2 + u(x)^(2/3))`), so when `q /. u(x) -> u` leaves
+   `x`, the substitution is made first, `(f //. u(x) -> u)/(u'(x) //. u(x) -> u)`,
+   and then cancelled.  Before v0.6760 whether a substitution was found could
+   depend on a constant factor: the same integrand closed with a factor `1/3`
+   (whose quotient kept `u(x)` inside a product) and not without it.
 
 2. **Eliminate / Solve** — builds the differential relation
    `Eliminate[{Dt[y] == f Dt[x], u == u(x), Dt[u == u(x)]}, {x, Dt[x]}]`,

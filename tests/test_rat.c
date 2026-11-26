@@ -247,6 +247,18 @@ void test_together_no_denominator_kernels() {
 /* A power whose EXPONENT is rational in a variable is one opaque generator:
  * the embedded-rational soundness gate must not read 1/(a - 1) inside the
  * exponent as a rational subterm of the polynomial. */
+/* The radical generator g = Sqrt[B] rewrites B -> g^2 wherever B occurs whole;
+ * a sum B flattened into a larger sum (2 (2 + y)/2 is 2 + y) must be rewritten
+ * too, or Cancel loses the factor 1 + x of
+ * 2 + y + Sqrt[2 + y] + x Sqrt[2 + y] + x (2 + y) = (1 + x)(2 + y + Sqrt[2 + y]). */
+static void test_cancel_flattened_radicand(void) {
+    assert_eval_eq("Cancel[(1 + x)/(2 + y + Sqrt[2 + y] + x Sqrt[2 + y] + x (2 + y))]",
+                   "1/(2 + y + Sqrt[2 + y])", 0);
+    assert_eval_eq("Cancel[(1 + x^2) a/(1 + y + (1 + y)^(2/3) + x^2 (1 + y)^(2/3) + x^2 (1 + y))]",
+                   "a/(1 + y + (1 + y)^(2/3))", 0);
+    assert_eval_eq("Cancel[(1 + x)/(y + Sqrt[y] + x Sqrt[y] + x y)]", "1/(Sqrt[y] + y)", 0);
+}
+
 void test_cancel_rational_exponent_generator() {
     run_test("Cancel[(a^2 - 1) y^(1/(a - 1))/(a - 1)]",
              "Plus[Power[y, Power[Plus[-1, a], -1]], Times[a, Power[y, Power[Plus[-1, a], -1]]]]");
@@ -270,6 +282,7 @@ int main() {
     TEST(test_together_algebraic_generator);
     TEST(test_together_cancel_kernels);
     TEST(test_together_no_denominator_kernels);
+    TEST(test_cancel_flattened_radicand);
     TEST(test_cancel_rational_exponent_generator);
     printf("All rat tests passed!\n");
 

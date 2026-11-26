@@ -172,6 +172,14 @@ static Expr* replace_one(Expr* expr, const Expr* from, const Expr* to) {
     return eval_take(call);
 }
 
+/* ReplaceRepeated[expr, from -> to]; consumes `expr`.  For a `to` free of
+ * `from` (a fresh symbol) it terminates after one extra pass. */
+static Expr* replace_all_repeated(Expr* expr, const Expr* from, const Expr* to) {
+    Expr* rule = mk_fn2("Rule", expr_copy((Expr*)from), expr_copy((Expr*)to));
+    Expr* call = internal_replace_repeated((Expr*[]){ expr, rule }, 2);
+    return eval_take(call);
+}
+
 /* The differentiation-verification gate: true iff D[r, x] - f is zero.
  *
  * Acceptance rests solely on PossibleZeroQ[D[r, x] - f] === True.  PossibleZeroQ
@@ -724,6 +732,30 @@ static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
     Expr* u; Expr* y; fresh_uy(&u, &y);
     Expr* qu = replace_one(q, w, u);                        /* consumes q */
 
+    /* Cancel[Together[...]] can absorb a sum kernel into a larger sum, so w is
+     * no longer a subexpression of q and w -> u leaves x behind: with
+     * w = 1 + (1 + x) Log[x]^2, f/w' is 1/(1 + (1 + x) Log[x]^2 + w^(2/3)).
+     * Substituting before the quotient is formed keeps w whole:
+     * (f /. w -> u)/(w' /. w -> u) cancels to 1/(u + u^(2/3)).  It was a
+     * constant factor that kept the kernel visible (3 w + 3 w^(2/3) is a
+     * product), so the same integrand closed with a factor 1/3 and not without
+     * it.  Differentiate-back still gates the result. */
+    if (qu && !expr_free_of(qu, x) && head_is((Expr*)w, SYM_Plus)) {
+        /* ReplaceRepeated, not ReplaceAll: a sub-sum match at one level stops
+         * ReplaceAll descending into that level's other terms, which can hold
+         * w whole (inside w^(2/3), x^2 w) */
+        Expr* fu  = replace_all_repeated(expr_copy((Expr*)f), w, u);
+        Expr* du2 = deriv_dx(w, x);
+        Expr* duu = du2 ? replace_all_repeated(du2, w, u) : NULL;   /* consumes du2 */
+        Expr* q2  = (fu && duu)
+                  ? cancel_together(mk_fn2("Times", fu, mk_fn2("Power", duu, mk_int(-1))))
+                  : NULL;                                    /* consumes fu, duu */
+        if (!(fu && duu)) { if (fu) expr_free(fu); if (duu) expr_free(duu); }
+        if (q2 && expr_free_of(q2, x)) { expr_free(qu); qu = q2; }
+        else if (q2) expr_free(q2);
+    }
+
+
     /* A bare w -> u can leave the variable behind when w is a root of x (the
      * radicand still mentions x, e.g. Sqrt[x + Sqrt[x]] -> 2 u Sqrt[u + x]).
      * For a unit root w = x^(1/n) the inverse x = u^n closes the substitution
@@ -932,6 +964,10 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
         vec_add_unique(&kernels, forced_kernel);
     } else {
         collect_kernels(f, x, f, &kernels);
+        /* The whole integrand is no kernel (f/f' is rarely simpler) -- except
+         * E^(c x + d), whose quotient is the constant 1/c: c E^x closes on its
+         * own subexpression E^x, and E^x alone must close too. */
+        if (dd_invertible_kernel_kind(f, x) == 1) vec_add_unique(&kernels, f);
     }
     if (kernels.n == 0) { vec_free(&kernels); goto done; }
     sort_kernels(&kernels);

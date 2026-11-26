@@ -1177,6 +1177,46 @@ Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, cons
                   (Expr*[]){expr_new_symbol(gen), expr_new_integer(k)}, 2));
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    /* A sum base B also occurs flattened into a larger sum: x (2 + y) is a whole
+     * node, but 2 (2 + y)/2 evaluates to 2 + y, which Plus merges into
+     * 2 + y + Sqrt[2 + y] + .... Rewriting only the whole node then gives
+     * 2 + y + g + x g + x g^2 for (1 + x) (2 + y + Sqrt[2 + y]), whose factor
+     * 1 + x is lost, and Cancel kept it.  A Plus holding every term of B
+     * (as a sub-multiset) has B -> g^m applied to those terms, the same rule
+     * the whole node gets.  Integer coefficients only: c B is not split. */
+    if (atom_is_one(atom) && head_is(e, SYM_Plus) && head_is(base, SYM_Plus) &&
+        !expr_eq(e, base) && base->data.function.arg_count < e->data.function.arg_count) {
+        size_t ne = e->data.function.arg_count, nb = base->data.function.arg_count;
+        bool* used = calloc(ne, sizeof(bool));
+        bool all = true;
+        for (size_t j = 0; j < nb && all; j++) {
+            bool hit = false;
+            for (size_t i = 0; i < ne && !hit; i++)
+                if (!used[i] && expr_eq(e->data.function.args[i], base->data.function.args[j]))
+                    used[i] = hit = true;
+            all = hit;
+        }
+        if (all) {
+            Expr** rest = malloc(sizeof(Expr*) * (ne - nb + 1));
+            size_t k = 0;
+            for (size_t i = 0; i < ne; i++)
+                if (!used[i]) rest[k++] = expr_copy(e->data.function.args[i]);
+            rest[k++] = expr_copy(base);           /* B itself: the node rule maps it to g^m */
+            free(used);
+            Expr* regrouped = expr_new_function(expr_new_symbol(SYM_Plus), rest, k);
+            free(rest);
+            /* held, unevaluated: evaluating would flatten B straight back in */
+            size_t n2 = regrouped->data.function.arg_count;
+            Expr** a2 = malloc(sizeof(Expr*) * n2);
+            for (size_t i = 0; i < n2; i++)
+                a2[i] = poly_subst_radical_to_gen(regrouped->data.function.args[i], base, atom, m, gen);
+            expr_free(regrouped);
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), a2, n2));
+            free(a2);
+            return r;
+        }
+        free(used);
+    }
     size_t count = e->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * count);
 

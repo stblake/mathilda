@@ -275,6 +275,37 @@ static void test_coth_no_infy_leak(void) {
     expr_free(result);
 }
 
+/* A constant factor must not decide whether a substitution is found.
+ * (1) Cancel[Together[f/w']] can merge a sum kernel w = 1 + (1 + x) Log[x]^2
+ *     into a larger sum, so w -> u left x behind; with a factor 1/3 the
+ *     quotient stayed a product 3 w + 3 w^(2/3) and closed.  Substituting
+ *     w -> u (ReplaceRepeated) before the quotient is formed keeps w whole.
+ * (2) E^x had no kernel (the whole integrand is excluded), while c E^x closed
+ *     on its subexpression E^x.
+ * (3) 2 + Log[1 + x]^3 flattened into the denominator's sum: Cancel lost the
+ *     factor 1 + x (see the sub-sum rule in poly_subst_radical_to_gen). */
+static void test_constant_multiple_invariance(void) {
+    const char* g = "((2 Log[x] + 2 x Log[x] + x Log[x]^2)/"
+                    "(x (1 + (1 + x) Log[x]^2)^(2/3) + x (1 + (1 + x) Log[x]^2)))";
+    const char* cs[] = { "1", "1/3", "2", "-1" };
+    char buf[1024];
+    for (size_t i = 0; i < 4; i++) {
+        snprintf(buf, sizeof buf,
+                 "PossibleZeroQ[D[Integrate[%s %s, x, Method -> \"DerivativeDivides\"], x] - %s %s]",
+                 cs[i], g, cs[i], g);
+        assert_eval_eq(buf, "True", 0);
+    }
+    assert_eval_eq("Integrate[E^x, x, Method -> \"DerivativeDivides\"]", "E^x", 0);
+    assert_eval_eq("Integrate[E^(2 x + 1), x, Method -> \"DerivativeDivides\"]", "1/2 E^(1 + 2 x)", 0);
+    assert_eval_eq(
+        "PossibleZeroQ[D[Integrate[#, x, Method -> \"DerivativeDivides\"], x] - #] &["
+        "(3 Log[1 + x]^2 + 3 Log[1 + x]^3 + 3 Log[1 + x]^3 Sqrt[2 + Log[1 + x]^3] + "
+        "2 (2 + Log[1 + x]^3) + 2 (2 + Log[1 + x]^3)^(3/2))/(2 + Log[1 + x]^3 + "
+        "Sqrt[2 + Log[1 + x]^3] + x Sqrt[2 + Log[1 + x]^3] + x (2 + Log[1 + x]^3))]", "True", 0);
+    /* a table integral with no kernel but x stays unevaluated (strict method) */
+    assert_head_unevaluated("Integrate[Cos[x], x, Method -> \"DerivativeDivides\"]", "Integrate");
+}
+
 void test_integrate_derivdivides(void) {
     symtab_init();
     core_init();
@@ -289,6 +320,7 @@ void test_integrate_derivdivides(void) {
     TEST(test_strict_no_fallback);
     TEST(test_substitution_option);
     TEST(test_exponential_kernel_inverse);
+    TEST(test_constant_multiple_invariance);
 
     printf("All Integrate DerivativeDivides tests passed!\n");
 }
