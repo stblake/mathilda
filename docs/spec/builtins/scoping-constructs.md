@@ -156,6 +156,12 @@ Out[1]= {a$1, {a$2, a$3}, {a$4, b$4}, x1, $2}
 - `Unique["str"]` needs a valid symbol name: `Unique["1abc"]` issues `Unique::usym` (audit Unique#1).
 - `Unique[x, attrs]` (and `Unique[{x, ...}, attrs]`) gives the fresh symbols the attributes `attrs` as well as `Temporary` (audit Unique#2).
 
+- The `$ModuleNumber` counter is not bounded by the machine range: past
+  `2^63 - 1` it keeps counting in GMP, so `$ModuleNumber = 2^63 - 1;
+  {Unique[w], Unique[v]}` is `{w$9223372036854775807, w$9223372036854775808}`
+  (the second was `v$-9223372036854775808`), and `$ModuleNumber = 10^30` is
+  honoured by `Unique` and `Module` alike.
+
 ## Scoping and pure functions
 
 `Module` / `Block` / `With` reach into the body of a nested pure function, so a

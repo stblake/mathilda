@@ -184,6 +184,10 @@ typedef struct SymbolDef {
      * builtins lets the head's failed dispatch be certified as a fixed point
      * (see eval.c, "dependency-recorded fixed points").  Internal. */
     uint8_t  eval_pure;
+    /* 1 after NumericQ[s] = True: the symbol counts as a numeric quantity
+     * (NumericQ[s], and so NumericQ[Sin[s]], are True). NumericQ[s] = False
+     * clears it. */
+    uint8_t  numeric_q;
     /* Binder bit for the scoping summaries (symsum.h): 0 = none, 1..46 a
      * binder name's bit, 47 the SCOPE bit of Module/With/Function.  Assigned
      * once (symsum_register_binder) and never changed. */

@@ -85,6 +85,20 @@ static void test_wave5_g7_time_and_date(void) {
     audit_chk("TimeConstrained#2", "Quiet[TimeConstrained[1 + 1, 1 + I]]", "TimeConstrained[1 + 1, 1 + I]");
 }
 
+/* Wave 6 G1: a BigInt year converts exactly, both ways. */
+static void test_wave6_g1_time_and_date(void) {
+    audit_chk("AbsoluteTime#2", "AbsoluteTime[{10^30}]", "31556951999999999999999999940041769600");
+    audit_chk("AbsoluteTime#2", "AbsoluteTime[{2022, 1, 1, 0, 0, 10^20}]", "100000000003849984000");
+    audit_chk("DateList#2", "DateList[{10^20}]", "{100000000000000000000, 1, 1, 0, 0, 0.0}");
+    audit_chk("DateList#2", "DateList[AbsoluteTime[{10^30, 7, 15, 3, 4, 5}]]",
+              "{1000000000000000000000000000000, 7, 15, 3, 4, 5.0}");
+    audit_chk("DateList#2", "With[{d = DateList[10^30]}, {1 <= d[[2]] <= 12, 1 <= d[[3]] <= 31, AbsoluteTime[d] == 10^30}]",
+              "{True, True, True}");
+    audit_chk("DateList#2", "DateList[{-10^20, 3}]", "{-100000000000000000000, 3, 1, 0, 0, 0.0}");
+    audit_chk("UnixTime#2", "UnixTime[{10^20}]", "3155695199999999937832780800");
+    audit_chk("UnixTime#2", "UnixTime[{10^20}] == AbsoluteTime[{10^20}] - 2208988800", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_datelist_far_past);
@@ -93,5 +107,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_dates);
     TEST(test_wave5_g7_time_and_date);
+    TEST(test_wave6_g1_time_and_date);
     return audit_finish("audit_time_and_date");
 }

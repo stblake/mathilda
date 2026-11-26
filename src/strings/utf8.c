@@ -35,8 +35,9 @@ size_t u8_char_len(const char* str, size_t n, size_t i) {
         if (rem < 3) return 1;
         unsigned char b1 = s[i + 1];
         unsigned char lo = (b0 == 0xE0) ? 0xA0 : 0x80;   /* no overlong */
-        unsigned char hi = (b0 == 0xED) ? 0x9F : 0xBF;   /* no surrogates */
-        return (b1 >= lo && b1 <= hi && is_cont(s[i + 2])) ? 3 : 1;
+        /* ED A0..BF: a surrogate code point U+D800..U+DFFF, a character of
+         * its own, as in the reference (16-bit codes; utf8.h). */
+        return (b1 >= lo && b1 <= 0xBF && is_cont(s[i + 2])) ? 3 : 1;
     }
     if (b0 >= 0xF0 && b0 <= 0xF4) {
         if (rem < 4) return 1;
@@ -123,8 +124,7 @@ size_t u8_encode(uint32_t cp, char* out) {
         o[1] = (unsigned char)(0x80 | (cp & 0x3F));
         return 2;
     }
-    if (cp >= 0xD800 && cp <= 0xDFFF) return 0;
-    if (cp < 0x10000) {
+    if (cp < 0x10000) {   /* surrogates included: the 3-byte form (utf8.h) */
         o[0] = (unsigned char)(0xE0 | (cp >> 12));
         o[1] = (unsigned char)(0x80 | ((cp >> 6) & 0x3F));
         o[2] = (unsigned char)(0x80 | (cp & 0x3F));

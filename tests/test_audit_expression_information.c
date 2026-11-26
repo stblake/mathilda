@@ -251,6 +251,52 @@ static void test_wave5_g4_expression(void) {
     audit_chk("Inactive#1", "D[Inactive[Integrate][f[u], {u, 0, 1}], u]", "0");
 }
 
+/* Wave 6 G1: Unevaluated restored on a call no rule used; Trace filters keep
+ * the nesting and read rule and symbol forms; NumericQ[s] = True; the
+ * operator forms of Not and Part; ByteCount of a SparseArray; BeginPackage
+ * calls Needs; DirectedInfinity in FullForm. */
+static void test_wave6_g1_expression(void) {
+    audit_run("ClearAll[w6f, w6g, w6fac, w6a, w6b]");
+    audit_chk("Unevaluated#1", "Hold[Evaluate[w6f[Unevaluated[1 + 2]]]]", "Hold[w6f[Unevaluated[1 + 2]]]");
+    audit_chk("Unevaluated#1", "w6g[x_] := x^2; w6g[Unevaluated[1 + 1]]", "4");
+    audit_chk("Unevaluated#1", "Length[Unevaluated[Sequence[a, b]]]", "2");
+    audit_chk("FullForm#2", "ToString[FullForm[Unevaluated[1 + 1]]]", "\"Unevaluated[Plus[1, 1]]\"");
+    audit_chk("FullForm#2", "w6f[Unevaluated[1 + 1]]", "w6f[Unevaluated[1 + 1]]");
+    audit_chk("FullForm#2", "w6f[Unevaluated[1 + 1], 2 + 3]", "w6f[Unevaluated[1 + 1], 5]");
+    audit_run("w6fac[n_] := n w6fac[n - 1]; w6fac[1] = 1");
+    audit_chk("Trace#1", "Trace[w6fac[3], w6fac[n_] -> n]", "{3, {2, {1}}}");
+    audit_chk("Trace#1", "Trace[w6fac[3], w6fac[_]]", "{w6fac[3], {w6fac[2], {w6fac[1]}}}");
+    audit_chk("Trace#2", "Trace[w6fac[3], w6fac]",
+              "{w6fac[3], 3 w6fac[3 - 1], {w6fac[2], 2 w6fac[2 - 1], {w6fac[1], 1}}}");
+    audit_chk("Trace#3", "Trace[Range[3], _List]", "{{1, 2, 3}}");
+    audit_chk("Trace#3", "Trace[2*3 + 1, _Integer]", "{{6}, 7}");
+    audit_chk("Trace#4", "Trace[1.5 + 2]", "{1.5 + 2, 3.5}");
+    audit_chk("Trace#4", "Trace[1.5 + 2][[1, 1, 2]]", "2");
+    audit_chk("NumericQ#3", "Check[NumericQ[w6a] = True, fired]", "True");
+    audit_chk("NumericQ#3", "{NumericQ[w6a], NumericQ[Sin[w6a]], NumericQ[w6b]}", "{True, True, False}");
+    audit_chk("NumericQ#3", "Check[NumericQ[w6a] = 5, fired, NumericQ::set]", "fired");
+    audit_chk("NumericQ#3", "NumericQ[w6a] = False; NumericQ[w6a]", "False");
+    audit_chk("NumericQ#3", "NumericQ[w6b] = True; ClearAll[w6b]; NumericQ[w6b]", "False");
+    audit_chk("ToString#1", "ToString[0.000012]", "\"0.000012\"");
+    audit_chk("ToString#1", "{ToString[1.*^20], ToString[123456789.123], ToString[0.0000012]}",
+              "{\"1.0*^20\", \"1.23457*^8\", \"1.2*^-6\"}");
+    audit_chk("ToString#3", "ToString[!w6a]", "\"!w6a\"");
+    audit_chk("ToString#3", "Quiet[ToString[w6a[[1]]]]", "\"w6a[[1]]\"");
+    audit_chk("ToString#3", "Quiet[ToString[w6a[[1]], InputForm]]", "\"w6a[[1]]\"");
+    audit_chk("ToString#3", "ToString[Hold[(a + b)[[1, 2]], !(a && b), !(!a)]]",
+              "\"Hold[(a + b)[[1, 2]], !(a && b), !(!a)]\"");
+    audit_chk("ToString#3", "ToExpression[ToString[Hold[!(a && b)], InputForm]] === Hold[!(a && b)]", "True");
+    audit_chk("ByteCount#2", "ByteCount[SparseArray[Table[i -> i, {i, 1000}], {1000}]] > 8000", "True");
+    audit_chk("ByteCount#2", "ByteCount[SparseArray[{1 -> 1}, {10^6}]] < ByteCount[SparseArray[Table[i -> i, {i, 1000}], {1000}]]", "True");
+    audit_chk("BeginPackage#1", "Quiet[Check[BeginPackage[\"W6A`\", {\"W6NoSuchPkg`\"}], fired, Needs::nocont]]", "fired");
+    audit_chk("BeginPackage#1", "w6cp = $ContextPath; EndPackage[]; w6cp", "{\"W6A`\", \"W6NoSuchPkg`\", \"System`\"}");
+    audit_chk("FullForm#5", "ToString[FullForm[{Infinity, -Infinity, ComplexInfinity}]]",
+              "\"List[DirectedInfinity[1], DirectedInfinity[-1], DirectedInfinity[]]\"");
+    audit_chk("FullForm#5", "ToString[FullForm[I Infinity]]", "\"DirectedInfinity[Complex[0, 1]]\"");
+    audit_chk("FullForm#5", "ToExpression[ToString[FullForm[-Infinity]]]", "-Infinity");
+    audit_chk("FullForm#5", "ToString[Infinity]", "\"Infinity\"");
+}
+
 int main(void) {
     audit_init();
     TEST(test_bytecount_deep_nesting);
@@ -260,5 +306,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_g4_expression);
     TEST(test_wave5_g4_expression);
+    TEST(test_wave6_g1_expression);
     return audit_finish("audit_expression_information");
 }

@@ -444,7 +444,7 @@ static void test_wave4_structural_batch1(void) {
     audit_chk("Max#1", "Max[Interval[{1,3}]]", "3");
     /* a Span running off the end is Part::take, unevaluated */
     audit_chk("Part#1", "Quiet[Check[{a, b, c, d, e}[[2;;10]], fired, Part::take]]", "fired");
-    audit_chk("Part#1", "Quiet[{a, b, c, d, e}[[2;;10]]]", "Part[{a, b, c, d, e}, Span[2, 10]]");
+    audit_chk("Part#1", "Quiet[{a, b, c, d, e}[[2;;10]]]", "{a, b, c, d, e}[[Span[2, 10]]]");
     audit_chk("Part#1", "Quiet[Check[<|\"a\" -> 1, \"b\" -> 2|>[[1;;5]], fired, Part::take]]", "fired");
     audit_chk("Part#1", "{a, b, c}[[3;;2]]", "{}");
     audit_chk("Part#1", "{a, b, c}[[2;;3]]", "{b, c}");
@@ -619,7 +619,7 @@ static void test_wave5_structural_messages(void) {
     w5s_msg("Part#2", "{a, b, c}[[5]]", "Part::partw");
     w5s_msg("Part#2", "x[[1]]", "Part::partd");
     w5s_msg("Part#2", "{a, b, c}[[1.5]]", "Part::pkspec1");
-    audit_chk("Part#2", "Quiet[{a, b, c}[[5]]]", "Part[{a, b, c}, 5]");
+    audit_chk("Part#2", "Quiet[{a, b, c}[[5]]]", "{a, b, c}[[5]]");
     w5s_msg("Complement#2", "Complement[{a, b}, f[a]]", "Complement::heads");
     audit_chk("Complement#3", "Complement[{a, b, c}, {b}, SameTest :> SameQ]", "{a, c}");
     w5s_msg("Delete#6", "Delete[{a, b}, x]", "Delete::psl");

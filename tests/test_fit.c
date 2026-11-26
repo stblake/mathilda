@@ -111,17 +111,17 @@ void test_fit_design_form_hilbert(void) {
 void test_fit_tikhonov(void) {
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x, "
                    "FitRegularization -> {\"Tikhonov\", 1}]",
-                   "0.499985 + 0.00549961 x + 5.0496*^-5 x^2", 0);
+                   "0.499985 + 0.00549961 x + 0.000050496 x^2", 0);
 }
 
 void test_fit_ridge_aliases(void) {
     /* "L2" and "RidgeRegression" are aliases of "Tikhonov". */
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x, "
                    "FitRegularization -> {\"L2\", 1}]",
-                   "0.499985 + 0.00549961 x + 5.0496*^-5 x^2", 0);
+                   "0.499985 + 0.00549961 x + 0.000050496 x^2", 0);
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x, "
                    "FitRegularization -> {\"RidgeRegression\", 1}]",
-                   "0.499985 + 0.00549961 x + 5.0496*^-5 x^2", 0);
+                   "0.499985 + 0.00549961 x + 0.000050496 x^2", 0);
 }
 
 void test_fit_lasso_sparsity(void) {

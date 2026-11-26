@@ -452,7 +452,7 @@ void test_part_messages() {
     assert_eval_eq("Check[LinkedList[{1, 2}][[{1, -3}]], err]", "err", 0);
     assert_eval_eq("Check[LinkedList[{1, 2}][[1 ;; 3]], err]", "err", 0);
     assert_eval_eq("Check[LinkedList[{1, 2, 3}][[3 ;; 1]], err]", "err", 0);
-    assert_eval_eq("Quiet[LinkedList[{1, 2}][[5]]]", "Part[LinkedList[<2>], 5]", 0);
+    assert_eval_eq("Quiet[LinkedList[{1, 2}][[5]]]", "LinkedList[<2>][[5]]", 0);
     assert_eval_eq("Check[First[LinkedList[]], err]", "err", 0);
     assert_eval_eq("Check[Last[LinkedList[]], err]", "err", 0);
     assert_eval_eq("{First[LinkedList[], d], Last[LinkedList[], d]}", "{d, d}", 0);
@@ -792,7 +792,7 @@ void test_compile_list_arguments() {
 void test_compile_failure_is_undone() {
     assert_eval_eq("c5f = Compile[{{b, _LinkedList, _Integer}}, (AppendTo[b, 1]; PrependTo[b, 0]; b[[1]] = 7; Pop[b]; b[[10]])]; "
                    "c5q = LinkedList[{1, 2, 3}]; {Quiet[c5f[c5q]], Normal[c5q]}",
-                   "{Part[LinkedList[<4>], 10], {7, 1, 2, 3}}", 0);
+                   "{LinkedList[<4>][[10]], {7, 1, 2, 3}}", 0);
     assert_eval_eq("c5p = Compile[{{b, _LinkedList, _Integer}}, Pop[b]]; c5e = LinkedList[]; "
                    "{Check[c5p[c5e], failed], Length[c5e]}", "{failed, 0}", 0);
     /* An Integer Total past int64 is a bignum: the interpreter answers. */

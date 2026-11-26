@@ -34,13 +34,47 @@
  * MATHILDA_MODULE_CLOCK_BUMP=1 restores the two per-call clock bumps (this
  * counter's and a fresh local's first binding), for A/B measurement. */
 static int64_t module_number = 1;
+/* Past the int64 range the counter keeps counting, in GMP: integers are
+ * arbitrary precision, so $ModuleNumber = 2^63 - 1; Unique[x] twice gives
+ * x$9223372036854775807 and then x$9223372036854775808, not a negative
+ * suffix. g_mn_big_on selects g_mn_big over module_number. */
+static mpz_t g_mn_big;
+static bool g_mn_big_on = false;
 static Expr* g_mn_sentinel = NULL;       /* Internal`ModuleNumber[]: our own reference */
 static SymbolDef* g_mn_def = NULL;       /* $ModuleNumber */
 static int g_module_clock_bump = 0;      /* MATHILDA_MODULE_CLOCK_BUMP=1 */
 
 static Expr* builtin_internal_module_number(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) return NULL;
+    if (g_mn_big_on) return expr_bigint_normalize(expr_new_bigint_from_mpz(g_mn_big));
     return expr_new_integer(module_number);
+}
+
+/* Advance the counter by `k` >= 0, moving to the GMP tier on overflow. */
+static void module_number_add(int64_t k) {
+    if (!g_mn_big_on) {
+        if (module_number <= INT64_MAX - k) { module_number += k; return; }
+        mpz_set_si(g_mn_big, module_number);
+        g_mn_big_on = true;
+    }
+    mpz_add_ui(g_mn_big, g_mn_big, (unsigned long)k);
+}
+
+/* The decimal text of the counter plus `off` (>= 0); caller frees. */
+static char* module_number_text(int64_t off) {
+    char* out;
+    if (!g_mn_big_on && module_number <= INT64_MAX - off) {
+        out = malloc(24);
+        if (out) snprintf(out, 24, "%lld", (long long)(module_number + off));
+        return out;
+    }
+    mpz_t t;
+    if (g_mn_big_on) mpz_init_set(t, g_mn_big);
+    else mpz_init_set_si(t, module_number);
+    mpz_add_ui(t, t, (unsigned long)off);
+    out = mpz_get_str(NULL, 10, t);
+    mpz_clear(t);
+    return out;
 }
 
 static void module_number_install_sentinel(void) {
@@ -57,17 +91,23 @@ static void module_number_sync(void) {
     if (r) {
         Expr* sym = expr_new_symbol(SYM_DollarModuleNumber);
         Expr* v = evaluate(sym);
-        if (v->type == EXPR_INTEGER) module_number = v->data.integer;
+        if (v->type == EXPR_INTEGER) {
+            module_number = v->data.integer;
+            g_mn_big_on = false;
+        } else if (v->type == EXPR_BIGINT) {
+            mpz_set(g_mn_big, v->data.bigint);
+            g_mn_big_on = true;
+        }
         expr_free(v);
         expr_free(sym);
     }
     module_number_install_sentinel();
 }
 
-/* The number for the next Module (or Unique[x] batch base) without taking it. */
-static int64_t module_number_peek(void) {
+/* Bring the counter up to date (see module_number_sync) without taking a
+ * number. */
+static void module_number_peek(void) {
     module_number_sync();
-    return module_number;
 }
 
 void modular_init(void) {
@@ -84,6 +124,7 @@ void modular_init(void) {
     const char* e = getenv("MATHILDA_MODULE_CLOCK_BUMP");
     g_module_clock_bump = (e && *e == '1');
 
+    mpz_init(g_mn_big);
     g_mn_def = symtab_get_def(SYM_DollarModuleNumber);
     g_mn_sentinel = expr_new_function(expr_new_symbol("Internal`ModuleNumber"), NULL, 0);
     module_number_install_sentinel();
@@ -494,23 +535,45 @@ static bool unique_source_of(Expr* e, UniqueSrc* out) {
  * Each symbol is registered Temporary. out[] must have room for `count`. */
 static void unique_make_batch(const UniqueSrc* srcs, size_t count, Expr** out) {
     char buf[512];
-    int64_t base_mod = module_number, base_str = unique_string_number;
-    int64_t next_mod = base_mod, next_str = base_str;
+    int64_t base_str = unique_string_number;
+    int64_t next_str = base_str;
+    /* The $ModuleNumber names are numbered by OFFSET from the counter, which
+     * may be past the int64 range (module_number_text); the counter then
+     * moves past the largest offset used. */
+    int64_t next_mod_off = 0;
     bool any_mod = false;
     for (size_t i = 0; i < count; i++) {
-        int64_t n = srcs[i].dollar ? base_mod : base_str;
+        if (srcs[i].dollar) {
+            int64_t off = 0;
+            for (;; off++) {
+                char* num = module_number_text(off);
+                size_t blen = strlen(srcs[i].prefix) + (num ? strlen(num) : 0) + 2;
+                char* name = malloc(blen);
+                snprintf(name, blen, "%s$%s", srcs[i].prefix, num ? num : "");
+                free(num);
+                if (symtab_lookup(name) == NULL) {
+                    out[i] = expr_new_symbol(name);
+                    symtab_get_def(name)->attributes |= ATTR_TEMPORARY;
+                    free(name);
+                    break;
+                }
+                free(name);
+            }
+            any_mod = true;
+            if (off + 1 > next_mod_off) next_mod_off = off + 1;
+            continue;
+        }
+        int64_t n = base_str;
         for (;; n++) {
-            snprintf(buf, sizeof(buf), srcs[i].dollar ? "%s$%lld" : "%s%lld",
-                     srcs[i].prefix, (long long)n);
+            snprintf(buf, sizeof(buf), "%s%lld", srcs[i].prefix, (long long)n);
             if (symtab_lookup(buf) == NULL) break;
         }
         out[i] = expr_new_symbol(buf);
         symtab_get_def(buf)->attributes |= ATTR_TEMPORARY;
-        if (srcs[i].dollar) { any_mod = true; if (n + 1 > next_mod) next_mod = n + 1; }
-        else if (n + 1 > next_str) next_str = n + 1;
+        if (n + 1 > next_str) next_str = n + 1;
     }
     unique_string_number = next_str;
-    if (any_mod) module_number = next_mod;
+    if (any_mod) module_number_add(next_mod_off);
 }
 
 /* Unique::usym -- the argument is neither a symbol nor a name string. */
@@ -933,8 +996,14 @@ Expr* builtin_module(Expr* res) {
     ScopingEnv* env = NULL;
 
     /* Take this call's $ModuleNumber (see module_number_sync). */
-    int64_t current_mn = module_number_peek();
-    module_number++;
+    module_number_peek();
+    /* The local's $nnn suffix: on the stack for a machine counter (the hot
+     * case), in GMP text past it. */
+    char mn_stack[24];
+    char* mn_text = mn_stack;
+    if (!g_mn_big_on) snprintf(mn_stack, sizeof mn_stack, "%lld", (long long)module_number);
+    else mn_text = module_number_text(0);
+    module_number_add(1);
     if (g_module_clock_bump) eval_clock_bump_binding(g_mn_def);
 
     typedef struct {
@@ -966,9 +1035,9 @@ Expr* builtin_module(Expr* res) {
             /* Sized to the name: a fixed buffer truncated a long name before
              * its $nnn suffix, so two Module calls shared one local (audit
              * Module#1). */
-            size_t blen = strlen(orig_name) + 24;
+            size_t blen = strlen(orig_name) + (mn_text ? strlen(mn_text) : 0) + 2;
             char* buf = malloc(blen);
-            snprintf(buf, blen, "%s$%lld", orig_name, (long long)current_mn);
+            snprintf(buf, blen, "%s$%s", orig_name, mn_text ? mn_text : "");
             info[i].new_name = buf;
             info[i].init_val = init_val;
 
@@ -997,6 +1066,7 @@ Expr* builtin_module(Expr* res) {
             }
         }
     }
+    if (mn_text != mn_stack) free(mn_text);
 
     Expr* final_res;
     if (module_thrown) {

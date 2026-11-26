@@ -179,6 +179,16 @@ Gives the total number of seconds since the beginning of January 1, 1900.
 Accepts date strings and `{"string", {elements}}` specs (the DateList parsers), and
 exact rational times and fields.
 
+- **Any year.** An all-integer specification past the machine range (a BigInt
+  field, or a total beyond `2^52` seconds) is converted exactly, in GMP, by
+  the same proleptic Gregorian formulas: `AbsoluteTime[{10^30}]` is
+  `31556951999999999999999999940041769600`, `DateList[{10^20}]` is
+  `{100000000000000000000, 1, 1, 0, 0, 0.}`, `DateList[10^30]` a normalised
+  date with a BigInt year, and `UnixTime[{10^20}]` the exact
+  `3155695199999999937832780800`. (The year field used to be cast to int64,
+  which gave garbage.) A fractional field beside such a year has no machine
+  reading and leaves the call unevaluated.
+
 ## DateList
 - The fraction of the seconds field is carried apart from the absolute total, so `DateList[{2022, 5, 6, 7, 8, 9.123456789}]` keeps `9.123456789` (audit DateList#8).
 Gives a broken-down date/time as `{year, month, day, hour, minute, second}`.

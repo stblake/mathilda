@@ -302,6 +302,15 @@ Out[1]= {{1, 2}, {17, 2}, {3, 4}}
 
 - `Longest[PatternSequence[...]]` (named or not) tries the longest run first (audit PatternSequence#2).
 
+- **Priorities.** `Shortest[p, pri]` and `Longest[p, pri]` take a priority:
+  the element with the highest priority gets its preferred width first, then
+  the next, and the elements without one follow in position order (without
+  priorities the leftmost element's width is the outermost choice).
+  `{a, b, c, d} /. {Shortest[x__, 1], Shortest[y__, 2]} :> {{x}, {y}}` is
+  `{{a, b, c}, {d}}` (y made shortest first), and with `Longest` in place of
+  `Shortest` it is `{{a}, {b, c, d}}`. Not under an `Orderless` or `Flat` head,
+  where the enumeration has its own order.
+
 ## OrderlessPatternSequence
 
 - A `Condition` around it (`OrderlessPatternSequence[x_, y_] /; x < y`) is checked once the run is bound (audit OrderlessPatternSequence#1).

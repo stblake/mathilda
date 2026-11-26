@@ -239,7 +239,10 @@ static int get_expr_prec(Expr* e) {
         e->data.function.args[0]->type == EXPR_SYMBOL &&
         !is_plain_blank(e->data.function.args[1])) return 2200;
     if (head == SYM_And) return 2800;
-    if (head == SYM_Or) return 2700;   /* looser than And, so Or nested in And parenthesises */
+    if (head == SYM_Or) return 2700;
+    /* !a, the parser's prefix Not level: looser than the comparisons
+     * (!a == b is !(a == b)), tighter than And. */
+    if (head == SYM_Not && e->data.function.arg_count == 1) return 3000;   /* looser than And, so Or nested in And parenthesises */
     if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 3200;
     /* Plus[] / Times[] print as Plus[] / Times[]: atomic, never parenthesised */
     if ((head == SYM_Plus || head == SYM_Times) && e->data.function.arg_count == 0) return 9500;
@@ -507,7 +510,58 @@ static void print_packed_level(Expr* a, int level, size_t* idx, bool fullform) {
     printf(fullform ? "]" : "}");
 }
 
+/* The directed infinities are symbols and products here (Infinity,
+ * ComplexInfinity, Times[-1, Infinity]); FullForm shows the reference's
+ * DirectedInfinity form, which reads back to the same value:
+ * DirectedInfinity[1], DirectedInfinity[], DirectedInfinity[-1]. A product
+ * qualifies when Infinity is one factor and every other factor is a numeric
+ * quantity (the direction). */
+/* > 0 while printing in FullForm proper (FullForm[...], ToString[e,
+ * FullForm]); expr_print_fullform is also the atom printer of every other
+ * form, where Infinity is Infinity. */
+static int g_fullform_depth = 0;
+
+static bool fullform_directed_infinity(Expr* e) {
+    if (g_fullform_depth == 0) return false;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol.name == SYM_Infinity) { printf("DirectedInfinity[1]"); return true; }
+        if (e->data.symbol.name == SYM_ComplexInfinity) { printf("DirectedInfinity[]"); return true; }
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Times ||
+        e->data.function.arg_count < 2) return false;
+    size_t n = e->data.function.arg_count, inf = n;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Infinity) {
+            if (inf != n) return false;
+            inf = i;
+        } else if (!expr_is_numeric_quantity(a)) {
+            return false;
+        }
+    }
+    if (inf == n) return false;
+    printf("DirectedInfinity[");
+    if (n == 2) {
+        expr_print_fullform(e->data.function.args[inf == 0 ? 1 : 0]);
+    } else {
+        printf("Times[");
+        bool first = true;
+        for (size_t i = 0; i < n; i++) {
+            if (i == inf) continue;
+            if (!first) printf(", ");
+            first = false;
+            expr_print_fullform(e->data.function.args[i]);
+        }
+        printf("]");
+    }
+    printf("]");
+    return true;
+}
+
 static void print_function_fullform(Expr* e) {
+    if (fullform_directed_infinity(e)) return;
     expr_print_fullform(e->data.function.head);
     printf("[");
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -812,7 +866,16 @@ static void print_real_display(double d) {
     snprintf(buf, sizeof(buf), "%g", d == 0.0 ? 0.0 : d);
     char* ep = strpbrk(buf, "eE");
     if (!isfinite(d)) { fputs(buf, MTH_POUT); return; }
-    if (ep) {
+    if (ep && atoi(ep + 1) == -5) {
+        /* %g turns scientific below 10^-4; the display (as the reference's,
+         * and the MPFR display's) stays positional down to 10^-5:
+         * 0.000012, not 1.2*^-5. The same six significant digits. */
+        *ep = '\0';
+        const char* m = buf;
+        if (*m == '-') { fputc('-', MTH_POUT); m++; }
+        fputs("0.0000", MTH_POUT);
+        for (; *m; m++) if (*m != '.') fputc(*m, MTH_POUT);
+    } else if (ep) {
         int ev = atoi(ep + 1);
         *ep = '\0';
         fputs(buf, MTH_POUT);
@@ -838,7 +901,10 @@ void expr_print_fullform(Expr* e) {
             print_real_display(e->data.real);
             break;
         }
-        case EXPR_SYMBOL: printf("%s", context_display_name(e->data.symbol.name)); break;
+        case EXPR_SYMBOL:
+            if (fullform_directed_infinity(e)) break;
+            printf("%s", context_display_name(e->data.symbol.name));
+            break;
         case EXPR_STRING: print_string_literal(e->data.string); break;
         case EXPR_FUNCTION: print_function_fullform(e); break;
         case EXPR_NDARRAY: {
@@ -1427,7 +1493,9 @@ static void print_standard(Expr* e, int parent_prec) {
         else if (head == SYM_FullForm && e->data.function.arg_count == 1) {
             /* FullForm keeps string quotes even inside Print / ToString. */
             g_inputform_depth++;
+            g_fullform_depth++;
             expr_print_fullform(e->data.function.args[0]);
+            g_fullform_depth--;
             g_inputform_depth--;
         }
         else if (head == SYM_TeXForm && e->data.function.arg_count == 1) {
@@ -1896,6 +1964,24 @@ static void print_standard(Expr* e, int parent_prec) {
             print_definition_body(e->data.function.args[0]->data.symbol.name);
         }
 #endif
+        else if (head == SYM_Not && e->data.function.arg_count == 1) {
+            /* Not[a] -> !a. The operand binds at least as tightly as a
+             * comparison; a nested Not is parenthesised, !(!a), since `!!`
+             * would read as one token. */
+            printf("!");
+            print_standard(e->data.function.args[0], my_prec + 1);
+        }
+        else if (head == SYM_Part && e->data.function.arg_count >= 2) {
+            /* Part[a, i, j] -> a[[i, j]]: the subject binds as tightly as an
+             * application, (a + b)[[1]]. */
+            print_standard(e->data.function.args[0], 9500);
+            printf("[[");
+            for (size_t i = 1; i < e->data.function.arg_count; i++) {
+                if (i > 1) printf(", ");
+                print_standard(e->data.function.args[i], 0);
+            }
+            printf("]]");
+        }
         else if (((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_And || head == SYM_Or || head == SYM_Alternatives || head == SYM_NonCommutativeMultiply || head == SYM_Dot || head == SYM_StringExpression) && e->data.function.arg_count >= 2) ||
                  ((head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition) && e->data.function.arg_count == 2)) {
             const char* op = "";
@@ -2400,6 +2486,7 @@ void mth_print_mark(MthPrintMark* m) {
     m->numberform_ctx = g_numberform_ctx;
     m->output_form = g_print_output_form;
     m->apply_formats = g_apply_formats;
+    m->fullform_depth = g_fullform_depth;
 }
 
 void mth_print_unwind(const MthPrintMark* m) {
@@ -2419,6 +2506,7 @@ void mth_print_unwind(const MthPrintMark* m) {
     g_numberform_ctx = m->numberform_ctx;
     g_print_output_form = m->output_form;
     g_apply_formats = m->apply_formats;
+    g_fullform_depth = m->fullform_depth;
 }
 
 /* expr_to_string with display rules (Format) applied: what the front end shows
@@ -2496,6 +2584,23 @@ char* expr_to_string_fullform(Expr* e) {
 
     FILE* prev = mth_out_push(c->f);
     expr_print_fullform(e);
+    mth_out_pop(prev);
+
+    return str_capture_finish(c);
+}
+
+/* As expr_to_string_fullform, with the user-facing FullForm spellings
+ * (DirectedInfinity for the infinities): what ToString[e, FullForm] shows.
+ * expr_to_string_fullform itself stays the kernel's structural text, which
+ * tests and self-checks compare. Caller frees. */
+char* expr_to_string_fullform_display(Expr* e) {
+    StrCapture* c = str_capture_open();
+    if (!c) return NULL;
+
+    FILE* prev = mth_out_push(c->f);
+    g_fullform_depth++;
+    expr_print_fullform(e);
+    g_fullform_depth--;
     mth_out_pop(prev);
 
     return str_capture_finish(c);

@@ -895,11 +895,32 @@ static void frame_append(TraceFrame* f, Expr* owned) {
  * a form structurally equal to the last recorded entry is skipped. Dedup turns
  * a symbol chain a->b->c->1 into {a,b,c,1} and prevents a doubled final form
  * when the reassembled form equals the step result (e.g. f[1+1] -> f[2]). */
+/* When set (eval_collect_trace_marked), each recorded step is stored wrapped
+ * in HoldForm, so a step whose value is itself a List ({1, 2, 3} from
+ * Range[3]) is told apart from the List nodes that mark the nesting. */
+static bool g_trace_mark_steps = false;
+
+static bool frame_is_step_of(const Expr* entry, const Expr* form) {
+    if (g_trace_mark_steps) {
+        if (!(entry->type == EXPR_FUNCTION && entry->data.function.arg_count == 1 &&
+              entry->data.function.head->type == EXPR_SYMBOL &&
+              entry->data.function.head->data.symbol.name == SYM_HoldForm))
+            return false;
+        entry = entry->data.function.args[0];
+    }
+    return expr_eq((Expr*)entry, (Expr*)form);
+}
+
 static void frame_record(Expr* form) {
     TraceFrame* f = g_trace_top;
     if (!f) return;
-    if (f->count > 0 && expr_eq(f->entries[f->count - 1], form)) return;
-    frame_append(f, expr_copy(form));
+    if (f->count > 0 && frame_is_step_of(f->entries[f->count - 1], form)) return;
+    Expr* rec = expr_copy(form);
+    if (g_trace_mark_steps) {
+        Expr* w[1] = { rec };
+        rec = expr_new_function(expr_new_symbol(SYM_HoldForm), w, 1);
+    }
+    frame_append(f, rec);
 }
 
 /* Push a fresh frame for the evaluate() call now entering. */
@@ -2369,6 +2390,39 @@ static bool report_set_shape(Expr* lhs, Expr* rhs, bool is_delayed) {
 }
 
 static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
+    /* NumericQ[s] = True / False declares whether the symbol s is a numeric
+     * quantity (the reference's one assignment to NumericQ). Intercepted before
+     * the Protected guard, since NumericQ itself is Protected; the flag lives
+     * on s's definition, so s's own protection refuses it. */
+    if (!is_delayed && lhs->type == EXPR_FUNCTION
+        && lhs->data.function.head->type == EXPR_SYMBOL
+        && lhs->data.function.head->data.symbol.name == SYM_NumericQ
+        && lhs->data.function.arg_count == 1
+        && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* nsym = lhs->data.function.args[0]->data.symbol.name;
+        bool to_true = rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_True;
+        bool to_false = rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_False;
+        if (!to_true && !to_false) {
+            char* rs = expr_to_string(rhs);
+            mth_message("NumericQ", "set",
+                        "Cannot set NumericQ[%s] to %s; the value must be True or False.",
+                        nsym, rs ? rs : "?");
+            free(rs);
+            g_set_refused = true;
+            return true;
+        }
+        if (get_attributes(nsym) & ATTR_PROTECTED) {
+            g_set_refused = true;
+            mth_message("Set", "write", "Tag %s in NumericQ[%s] is Protected.", nsym, nsym);
+            return true;
+        }
+        SymbolDef* nd = symtab_get_def(nsym);
+        if (nd && nd->numeric_q != (uint8_t)to_true) {
+            nd->numeric_q = (uint8_t)to_true;
+            eval_clock_bump();    /* every NumericQ answer cached on it is stale */
+        }
+        return true;
+    }
     /* Options[sym] = {name -> value, ...} redefines the symbol's default
      * option settings. Intercepted before the Protected guard below because
      * Options itself is Protected; this writes the dedicated options store
@@ -3758,7 +3812,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             if (TRACE_ACTIVE() && g_trace_top) {
                 if (g_trace_top->pending_reassembled)
                     expr_free(g_trace_top->pending_reassembled);
-                g_trace_top->pending_reassembled = expr_copy(res);
+                /* A private one-level copy, not a refcount bump: a builtin
+                 * may rewrite `res`'s argument slots in place (Plus coerces
+                 * 1.5 + 2 to 1.5 + 2.0 before adding), and a shared snapshot
+                 * would then show that internal step as if it were the
+                 * user's input. */
+                g_trace_top->pending_reassembled = expr_unshare(expr_copy(res));
             }
             
     /* 2.5 Flatten Sequences - must happen before attributes.
@@ -3795,6 +3854,18 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * wrapper and skip this pass entirely. Stripping merely removes the
              * wrapper; the exposed content is not itself evaluated, so the head's
              * hold attributes are respected on the next pass. */
+            /* Each stripped wrapper is remembered (its slot and the exposed
+             * content's pointer) so that, if the call then comes to REST -- no
+             * builtin, rule or gate rewrote it -- the wrapper is put back:
+             * f[Unevaluated[1+2]] with no applicable rule stays
+             * f[Unevaluated[1+2]] instead of evaluating on the next pass to
+             * f[3]. See the rest return at the end of this step. */
+            enum { UNEVAL_RESTORE_MAX = 16 };
+            size_t uneval_slot[UNEVAL_RESTORE_MAX];
+            Expr*  uneval_body[UNEVAL_RESTORE_MAX];
+            size_t uneval_n = 0;
+            bool   uneval_overflow = false;
+            const size_t uneval_argc = res->data.function.arg_count;   /* after any Sequence splice */
             if (!hold_all_complete) {
                 for (size_t i = 0; i < res->data.function.arg_count; i++) {
                     Expr* arg = res->data.function.args[i];
@@ -3810,6 +3881,19 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         Expr* stripped = expr_copy(arg->data.function.args[0]);
                         expr_free(arg);
                         res->data.function.args[i] = stripped;
+                        /* An exposed Sequence is spliced on the next pass
+                         * ({Unevaluated[Sequence[]]} is {}), never re-wrapped. */
+                        if (stripped->type == EXPR_FUNCTION &&
+                            stripped->data.function.head->type == EXPR_SYMBOL &&
+                            stripped->data.function.head->data.symbol.name == SYM_Sequence) {
+                            /* not recorded */
+                        } else if (uneval_n < UNEVAL_RESTORE_MAX) {
+                            uneval_slot[uneval_n] = i;
+                            uneval_body[uneval_n] = stripped;
+                            uneval_n++;
+                        } else {
+                            uneval_overflow = true;
+                        }
                         *changed = true; /* Unevaluated wrapper removed */
                     }
                 }
@@ -5111,6 +5195,35 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * -> LCM[2, 3.], LCM::exact): the next step would find the same
              * canonical arguments and the same declining head, and only print
              * the message again. */
+            /* Restore the Unevaluated wrappers stripped above: nothing used the
+             * call, so it keeps the form it was given (the reference's rule).
+             * Each slot is checked by pointer -- the content is still the node
+             * the strip exposed -- so an argument Flat or Orderless moved, or a
+             * builtin replaced in place, is left alone. The restored call is a
+             * fixed point: its other arguments are evaluated and the head has
+             * declined it. With more wrappers than the table holds nothing is
+             * restored, so a call never comes back half-wrapped. */
+            if (uneval_n && !uneval_overflow && !post_gated &&
+                res->data.function.arg_count == uneval_argc) {
+                bool all_in_place = true;
+                for (size_t k = 0; k < uneval_n; k++)
+                    if (res->data.function.args[uneval_slot[k]] != uneval_body[k]) {
+                        all_in_place = false;
+                        break;
+                    }
+                if (all_in_place) {
+                    for (size_t k = 0; k < uneval_n; k++) {
+                        Expr* body = res->data.function.args[uneval_slot[k]];
+                        Expr* wargs[1] = { body };
+                        res->data.function.args[uneval_slot[k]] =
+                            expr_new_function(expr_new_symbol(SYM_Unevaluated), wargs, 1);
+                    }
+                    expr_invalidate_hash(res);
+                    if (g_dep_cert_node == res) g_dep_cert_node = NULL;
+                    g_step_settled_depth = eval_recursion_depth;
+                    return res;
+                }
+            }
             if (arity_rejected ||
                 (!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc)) ||
                 (!post_gated && (attrs & (ATTR_ORDERLESS | ATTR_FLAT)) &&
@@ -5560,6 +5673,14 @@ static Expr* evaluate_core(Expr* e) {
  * state (frame stack, root result, tracing flag) is saved on the C stack and
  * restored on return, so a nested Trace runs on a fresh stack and appears to the
  * outer trace as a single already-reduced value. */
+Expr* eval_collect_trace_marked(Expr* held_expr) {
+    bool saved = g_trace_mark_steps;
+    g_trace_mark_steps = true;
+    Expr* r = eval_collect_trace(held_expr);
+    g_trace_mark_steps = saved;
+    return r;
+}
+
 Expr* eval_collect_trace(Expr* held_expr) {
     if (!held_expr) return NULL;
 

@@ -255,6 +255,16 @@ static void test_wave5_g8_files(void) {
               " \"oa12.txt\", \"p22.m\"}]]]");
 }
 
+/* Wave 6 G1: Import "String" keeps the bytes after a NUL. */
+static void test_wave6_g1_files(void) {
+    audit_run("w6$f = FileNameJoin[{$TemporaryDirectory, \"mth_audit_w6g1_a.png\"}];"
+              " Export[w6$f, Image[{{0., 0.5}, {1., 0.25}}, \"Real\"]]");
+    audit_chk("Import#1", "StringLength[Import[w6$f, \"String\"]] == Length[ReadList[w6$f, Byte]]", "True");
+    audit_chk("Import#1", "StringLength[Import[w6$f, \"String\"]] > 8", "True");
+    audit_chk("Import#1", "Count[ToCharacterCode[Import[w6$f, \"String\"]], 0] > 0", "True");
+    audit_run("DeleteFile[w6$f]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_export_graphics_raster_no_crash);
@@ -264,5 +274,6 @@ int main(void) {
     TEST(test_wave4_g8_files_streams);
     TEST(test_wave4_g8_filenamesplit_options);
     TEST(test_wave5_g8_files);
+    TEST(test_wave6_g1_files);
     return audit_finish("audit_file_io");
 }

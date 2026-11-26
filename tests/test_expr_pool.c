@@ -187,8 +187,8 @@ static void test_eval_small_arity(void) {
  * keep the wrapper, non-held slots strip it. These paths must behave
  * identically to before the array became lazy. */
 static void test_eval_held_unevaluated(void) {
-    /* Non-held slot: wrapper stripped, then the exposed 1+2 evaluates. */
-    assert_eval_eq("f[Unevaluated[1 + 2]]", "f[3]", 0);
+    /* Non-held slot: wrapper stripped; f has no rule, so it is put back. */
+    assert_eval_eq("f[Unevaluated[1 + 2]]", "f[Unevaluated[1 + 2]]", 0);
     /* Sequence inside Unevaluated is preserved (not flattened into Length). */
     assert_eval_eq("Length[Unevaluated[Sequence[a, b]]]", "2", 0);
     /* HoldAll head keeps a held Unevaluated wrapper intact. */

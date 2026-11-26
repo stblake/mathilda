@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "eval.h"      /* evaluate: BeginPackage calls Needs */
 #include "print.h"     /* expr_to_string_outputform for ::cxlist / ::cxset */
 #include "assoc.h"     /* $ContextAliases is an Association */
 #include "common.h"    /* builtin_arg_error */
@@ -833,6 +834,21 @@ static Expr* builtin_begin_package(Expr* res) {
             needs[i] = needs_list->data.function.args[i]->data.string;
     }
 
+    /* BeginPackage["ctx`", {"need`", ...}] calls Needs on each needed context
+     * first, so a needed package is loaded (or reported: Get::noopen,
+     * Needs::nocont) before the package's own path is set up. A kernel
+     * package (read by LoadModule) orders its own loads, and names contexts
+     * that are not files, so it is left alone. */
+    if (needs_count && mathilda_module_depth() == 0) {
+        for (size_t i = 0; i < needs_count; i++) {
+            if (context_packages_contains(needs[i])) continue;
+            Expr* a[1] = { expr_new_string(needs[i]) };
+            Expr* call = expr_new_function(expr_new_symbol("Needs"), a, 1);
+            Expr* r = evaluate(call);
+            expr_free(call);
+            expr_free(r);
+        }
+    }
     bool ok = context_begin_package(ctx, needs, needs_count);
     if (needs) free((void*)needs);
     if (!ok) return begin_package_cxt(res->data.function.args[0]);

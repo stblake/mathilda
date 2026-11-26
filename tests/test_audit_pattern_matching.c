@@ -130,6 +130,16 @@ static void test_wave5_g4_patterns(void) {
     audit_chk("Verbatim#1", "StringMatchQ[\"abc\", \"a*\"]", "True");
 }
 
+/* Wave 6 G1: the priority of Shortest[p, pri] and Longest[p, pri]. */
+static void test_wave6_g1_patterns(void) {
+    audit_chk("Shortest#1", "{a, b, c, d} /. {Shortest[x__, 1], Shortest[y__, 2]} :> {{x}, {y}}", "{{a, b, c}, {d}}");
+    audit_chk("Shortest#1", "{a, b, c, d} /. {Shortest[x__, 2], Shortest[y__, 1]} :> {{x}, {y}}", "{{a}, {b, c, d}}");
+    audit_chk("Shortest#1", "{a, b, c, d, e} /. {Shortest[x__, 1], u_, Shortest[y__, 2]} :> {{x}, {u}, {y}}",
+              "{{a, b, c}, {d}, {e}}");
+    audit_chk("Longest#2", "{a, b, c, d} /. {Longest[x__, 1], Longest[y__, 2]} :> {{x}, {y}}", "{{a}, {b, c, d}}");
+    audit_chk("Longest#2", "{a, b, c, d} /. {Longest[x__, 2], Longest[y__, 1]} :> {{x}, {y}}", "{{a, b, c}, {d}}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_condition_on_patternsequence);
@@ -137,5 +147,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_g4_patterns);
     TEST(test_wave5_g4_patterns);
+    TEST(test_wave6_g1_patterns);
     return audit_finish("audit_pattern_matching");
 }

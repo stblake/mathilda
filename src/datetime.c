@@ -405,6 +405,153 @@ static int datelist_result_to_abstime(const Expr* list, double* total) {
 static Expr* datelist_from_string(const char* s);
 static Expr* datelist_from_format(Expr* arg);
 
+/* ======================================================================
+ * Exact calendar arithmetic for years beyond the machine range.
+ *
+ * The double / int64 pipeline above is exact while the absolute time stays
+ * under 2^53 seconds (years within about +-285 million of 1900). Past that a
+ * double total drops seconds, and the (int64_t) year cast overflows outright
+ * for a BigInt year: AbsoluteTime[{10^30}] came back as 6.04*10^23 and
+ * DateList[{10^20}] with a negative year and a month of -1.2*10^16. These
+ * helpers run the same Fliegel & Van Flandern formulas in GMP, so an
+ * all-integer specification of any size converts exactly, both ways.
+ * ====================================================================== */
+
+/* days_since_1900 over mpz: out = days from 1900-01-01 to {y, m, d}. Month and
+ * day may be any integers (out-of-range values normalise, as in the int64
+ * version). */
+static void dt_days_since_1900_z(mpz_t out, const mpz_t y_in, const mpz_t m_in,
+                                 const mpz_t d) {
+    mpz_t y, k, t;
+    mpz_init_set(y, y_in);
+    mpz_init(k);
+    mpz_init(t);
+    /* m = 12 k + r with r in [0, 12): month (r + 1), year y + k. */
+    mpz_sub_ui(t, m_in, 1);
+    long r = (long)mpz_fdiv_q_ui(k, t, 12);
+    mpz_add(y, y, k);
+    long m = r + 1;
+    long a = (14 - m) / 12;
+    long mm = m + 12 * a - 3;
+    /* yy = y + 4800 - a */
+    mpz_add_ui(y, y, 4800);
+    mpz_sub_ui(y, y, (unsigned long)a);
+    mpz_set(out, d);
+    mpz_add_ui(out, out, (unsigned long)((153 * mm + 2) / 5));
+    mpz_addmul_ui(out, y, 365);
+    mpz_fdiv_q_ui(t, y, 4);   mpz_add(out, out, t);
+    mpz_fdiv_q_ui(t, y, 100); mpz_sub(out, out, t);
+    mpz_fdiv_q_ui(t, y, 400); mpz_add(out, out, t);
+    mpz_sub_ui(out, out, 32045UL + 2415021UL);
+    mpz_clear(y);
+    mpz_clear(k);
+    mpz_clear(t);
+}
+
+/* True when the {y, m, d, h, mi, s} List spec can be converted exactly: every
+ * calendar field an exact integer (machine or BigInt), the seconds an integer
+ * or a finite machine Real (whose whole part is then exact and whose fraction
+ * is carried apart, as on the machine path). */
+static bool dt_spec_all_integer(const Expr* arg) {
+    if (!head_is(arg, SYM_List)) return false;
+    size_t n = arg->data.function.arg_count;
+    if (n < 1 || n > 6) return false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* f = arg->data.function.args[i];
+        if (expr_is_integer_like(f)) continue;
+        if (i == 5 && f->type == EXPR_REAL && isfinite(f->data.real)) continue;
+        return false;
+    }
+    return true;
+}
+
+/* The seconds field of the spec is a Real. */
+static bool dt_spec_real_seconds(const Expr* arg) {
+    return arg->data.function.arg_count == 6 &&
+           arg->data.function.args[5]->type == EXPR_REAL;
+}
+
+/* True when the integer spec needs the exact path: a BigInt field, or a total
+ * whose double reading is outside the exactly representable range. */
+static bool dt_spec_needs_exact(const Expr* arg, const double parts[6]) {
+    for (size_t i = 0; i < arg->data.function.arg_count; i++)
+        if (arg->data.function.args[i]->type == EXPR_BIGINT) return true;
+    double approx = fabs(parts[0] - 1900.0) * 31556952.0 + fabs(parts[1]) * 2678400.0
+                  + fabs(parts[2]) * 86400.0 + fabs(parts[3]) * 3600.0
+                  + fabs(parts[4]) * 60.0 + fabs(parts[5]);
+    return !(approx < 0x1p52);
+}
+
+/* Exact absolute seconds (since 1900) of a spec dt_spec_all_integer accepts:
+ * the whole seconds in `out`, the fraction of a Real seconds field (in [0, 1))
+ * in *frac. */
+static void dt_spec_total_z(mpz_t out, const Expr* arg, double* frac) {
+    size_t n = arg->data.function.arg_count;
+    mpz_t f[6];
+    static const long dflt[6] = { 0, 1, 1, 0, 0, 0 };
+    *frac = 0.0;
+    for (int i = 0; i < 6; i++) {
+        mpz_init(f[i]);
+        const Expr* a = (size_t)i < n ? arg->data.function.args[i] : NULL;
+        if (a && a->type == EXPR_REAL) {
+            double w = floor(a->data.real);
+            mpz_set_d(f[i], w);
+            *frac = a->data.real - w;
+        } else if (a) {
+            expr_to_mpz((Expr*)a, f[i]);
+        } else {
+            mpz_set_si(f[i], dflt[i]);
+        }
+    }
+    dt_days_since_1900_z(out, f[0], f[1], f[2]);
+    mpz_mul_ui(out, out, 86400UL);
+    mpz_addmul_ui(out, f[3], 3600UL);
+    mpz_addmul_ui(out, f[4], 60UL);
+    mpz_add(out, out, f[5]);
+    for (int i = 0; i < 6; i++) mpz_clear(f[i]);
+}
+
+/* The normalised {y, m, d, h, mi, s} of an exact absolute time (seconds since
+ * 1900): the inverse Fliegel & Van Flandern formulas over mpz. The year is a
+ * BigInt when it needs one; the seconds field is a Real, as in every DateList
+ * result. */
+static Expr* dt_datelist_from_total_z(const mpz_t total, double frac) {
+    mpz_t days, a, b, t;
+    mpz_init(days); mpz_init(a); mpz_init(b); mpz_init(t);
+    unsigned long rem = mpz_fdiv_q_ui(days, total, 86400UL);
+    /* a = jdn + 32044, jdn = days + 2415021 */
+    mpz_add_ui(a, days, 2415021UL + 32044UL);
+    /* b = floor((4a + 3) / 146097) */
+    mpz_mul_ui(t, a, 4);
+    mpz_add_ui(t, t, 3);
+    mpz_fdiv_q_ui(b, t, 146097UL);
+    /* c = a - floor(146097 b / 4), in [0, 36524] */
+    mpz_mul_ui(t, b, 146097UL);
+    mpz_fdiv_q_ui(t, t, 4);
+    mpz_sub(t, a, t);
+    long c = mpz_get_si(t);
+    long dd = (4 * c + 3) / 1461;
+    long e = c - (1461 * dd) / 4;
+    long m = (5 * e + 2) / 153;
+    long day = e - (153 * m + 2) / 5 + 1;
+    long mo = m + 3 - 12 * (m / 10);
+    /* y = 100 b + dd - 4800 + m/10 */
+    mpz_mul_ui(t, b, 100);
+    mpz_add_ui(t, t, (unsigned long)(dd + m / 10));
+    mpz_sub_ui(t, t, 4800);
+
+    Expr* parts[6];
+    parts[0] = expr_bigint_normalize(expr_new_bigint_from_mpz(t));
+    parts[1] = expr_new_integer(mo);
+    parts[2] = expr_new_integer(day);
+    parts[3] = expr_new_integer((int64_t)(rem / 3600));
+    parts[4] = expr_new_integer((int64_t)((rem % 3600) / 60));
+    parts[5] = expr_new_real((double)(rem % 60) + frac);
+    mpz_clear(days); mpz_clear(a); mpz_clear(b); mpz_clear(t);
+    return expr_new_function(expr_new_symbol(SYM_List), parts, 6);
+}
+
+
 Expr* builtin_absolute_time(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -477,41 +624,30 @@ Expr* builtin_absolute_time(Expr* res) {
             }
         }
 
-        /* Year and month must be integer-valued; day/h/m/s may be fractional. */
-        double total;
-        if (!datelist_parts_to_abstime(parts, &total)) return NULL;
-
         /* An all-integer List spec whose total passes 2^53 is still exact:
          * the total is formed in GMP from the integers as written
          * (AbsoluteTime[{2022, 1, 1, 0, 0, 10^20}] is 100000000003849984000,
-         * where the double sum rounded it). */
-        if (head_is(arg, SYM_List) && fabs(total) >= 0x1p53) {
-            bool exact = true;
-            for (size_t i = 0; i < n && exact; i++)
-                exact = expr_is_integer_like(arg->data.function.args[i]) &&
-                        (i >= 3 || arg->data.function.args[i]->type == EXPR_INTEGER);
-            if (exact && fabs(parts[2]) < 0x1p40) {
-                mpz_t acc, t;
-                mpz_init(acc);
-                mpz_init(t);
-                int64_t days = days_since_1900((int64_t)parts[0], (int64_t)parts[1], (int64_t)parts[2]);
-                {   /* days * 86400, via the int64-safe setter */
-                    Expr* de = expr_new_integer(days);
-                    expr_to_mpz(de, acc);
-                    expr_free(de);
-                }
-                mpz_mul_ui(acc, acc, 86400u);
-                static const unsigned long scale[3] = { 3600u, 60u, 1u };
-                for (size_t i = 3; i < n; i++) {
-                    expr_to_mpz(arg->data.function.args[i], t);
-                    mpz_addmul_ui(acc, t, scale[i - 3]);
-                }
-                Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(acc));
+         * where the double sum rounded it; AbsoluteTime[{10^30}] needs a
+         * BigInt year, which the int64 path cannot even hold). */
+        if (dt_spec_all_integer(arg) && dt_spec_needs_exact(arg, parts)) {
+            mpz_t acc;
+            mpz_init(acc);
+            double frac;
+            dt_spec_total_z(acc, arg, &frac);
+            if (dt_spec_real_seconds(arg)) {   /* a Real seconds field: a Real */
+                double t = mpz_get_d(acc) + frac;
                 mpz_clear(acc);
-                mpz_clear(t);
-                return out;
+                return expr_new_real(t);
             }
+            return expr_bigint_normalize(expr_new_bigint_take(acc));
         }
+        /* A fractional field beside a year past the machine range has no
+         * double reading: leave the call unevaluated. */
+        if (!(fabs(parts[0]) < 0x1p53)) return NULL;
+
+        /* Year and month must be integer-valued; day/h/m/s may be fractional. */
+        double total;
+        if (!datelist_parts_to_abstime(parts, &total)) return NULL;
 
         /* Return an exact integer when all inputs and the total are integral. */
         int all_int = (parts[2] == floor(parts[2]))
@@ -916,6 +1052,18 @@ Expr* builtin_date_list(Expr* res) {
         (is_rational_like(arg) && arg->type == EXPR_FUNCTION)) {
         double total;
         expr_to_double_strict(arg, &total);
+        /* Past 2^53 seconds a time is a whole number of seconds, and its
+         * year leaves the int64 range of the machine path: convert exactly
+         * (a Real is read as the integer it holds). */
+        if (!(fabs(total) < 0x1p53)) {
+            if (!isfinite(total)) return NULL;
+            mpz_t z;
+            if (expr_is_integer_like(arg)) expr_to_mpz(arg, z);
+            else mpz_init_set_d(z, floor(total));
+            Expr* out = dt_datelist_from_total_z(z, 0.0);
+            mpz_clear(z);
+            return out;
+        }
         int64_t y, mo, d, h, mi; double s;
         gregorian_from_abstime(total, &y, &mo, &d, &h, &mi, &s);
         return datelist_make_result(y, mo, d, h, mi, s);
@@ -942,6 +1090,17 @@ Expr* builtin_date_list(Expr* res) {
                 return NULL;   /* non-numeric element: leave unevaluated */
             }
         }
+        /* An all-integer spec past the machine range: exact. */
+        if (dt_spec_all_integer(arg) && dt_spec_needs_exact(arg, parts)) {
+            mpz_t z;
+            mpz_init(z);
+            double frac;
+            dt_spec_total_z(z, arg, &frac);
+            Expr* out = dt_datelist_from_total_z(z, frac);
+            mpz_clear(z);
+            return out;
+        }
+        if (!(fabs(parts[0]) < 0x1p53)) return NULL;
         /* The fraction of the seconds field is carried apart from the
          * total: absolute seconds (~4e9) keep only ~7 fractional digits, so
          * DateList[{2022, 5, 6, 7, 8, 9.123456789}] read back 9.123456954956055.
@@ -1091,6 +1250,18 @@ Expr* builtin_unix_time(Expr* res) {
                 return NULL;   /* non-numeric element: leave unevaluated */
             }
         }
+        /* An all-integer spec past the machine range: exact. */
+        if (dt_spec_all_integer(arg) && dt_spec_needs_exact(arg, parts)) {
+            mpz_t z;
+            mpz_init(z);
+            double frac;
+            dt_spec_total_z(z, arg, &frac);
+            /* the nearest whole second, a half to the even one */
+            if (frac > 0.5 || (frac == 0.5 && mpz_odd_p(z))) mpz_add_ui(z, z, 1);
+            mpz_sub_ui(z, z, 2208988800UL);
+            return expr_bigint_normalize(expr_new_bigint_take(z));
+        }
+        if (!(fabs(parts[0]) < 0x1p53)) return NULL;
         double total;
         if (!datelist_parts_to_abstime(parts, &total)) {
             /* Year or month not integer-valued: the lengths of years and months

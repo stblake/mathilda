@@ -246,6 +246,10 @@ objects, transcendental `Root[{f, x0}]`, and (since v0.6129) algebraic
 `Root[f, k]` whose pure-function body is a polynomial with numeric
 coefficients, as in the reference: `NumericQ[Root[-1 + 6 #1 + 22 #1^2 +
 16 #1^3 &, 2]]` is `True`, `NumericQ[Root[#1^2 - a &, 1]]` is `False`.
+- `NumericQ[s] = True` declares the symbol `s` a numeric quantity, as in the
+  reference: then `NumericQ[s]` and `NumericQ[Sin[s]]` are `True`.
+  `NumericQ[s] = False` and `ClearAll[s]` undo it; any other value is refused
+  with `NumericQ::set`, and a `Protected` `s` with `Set::write`.
 - `False` for `Infinity`, `ComplexInfinity` and `DirectedInfinity[...]`, and for `Rational`/`Complex` with non-numeric parts (audit NumericQ#1/#2). `NumberQ`, `AtomQ`, `ExactNumberQ` and `InexactNumberQ` likewise accept `Rational[p, q]`/`Complex[a, b]` only with number parts.
 
 ## PossibleZeroQ
@@ -1177,6 +1181,18 @@ has no notebook front end that could remove the output afterwards, so it stays.
 ## FullForm
 - `FullForm[expr]` causes `expr` to be printed in its full internal form.
 - `expr // FullForm` is a common shortcut.
+- The directed infinities show as `DirectedInfinity`, as in the reference:
+  `FullForm[{Infinity, -Infinity, ComplexInfinity}]` is
+  `List[DirectedInfinity[1], DirectedInfinity[-1], DirectedInfinity[]]`, and
+  `FullForm[I Infinity]` is `DirectedInfinity[Complex[0, 1]]` (internally they
+  are the symbols and the products `Times[-1, Infinity]`; the text reads back
+  to the same value). Other forms print `Infinity`.
+- Not the reference's: a literal `1/2` is read as the number `Rational[1, 2]`,
+  so `FullForm[Hold[1/2]]` is `Hold[Rational[1, 2]]` (the reference holds
+  `Times[1, Power[2, -1]]`); and a chain of one comparison is read as
+  `Inequality`, `FullForm[Hold[a < b < c]]` being `Hold[Inequality[a, Less, b,
+  Less, c]]` (the reference's `Less[a, b, c]`), which every comparison
+  consumer (`Reduce`, `NMinimize`, assumptions) reads.
 
 
 ## HoldForm
@@ -1243,11 +1259,23 @@ that mirrors the structure of the evaluation (as in the reference).
   order it occurs, and the reassembled intermediate form (`f[evaluated_args]`,
   before the head's rule fires) appears as a step. Returns `{}` when `expr`
   needs no rewriting.
-- `Trace[expr, form]`: The trace filtered to the step leaves whose expression
-  matches the pattern `form` (structural match, as in `MatchQ`), flattening the
-  nesting away into a plain `List` of matches. `form` is held, so pattern
-  literals such as `_Integer` or `f[_]` may be given directly. Returns `{}` when
-  no step matches.
+- `Trace[expr, form]`: The trace filtered to the steps whose expression
+  matches the pattern `form` (structural match, as in `MatchQ`), keeping the
+  nesting and dropping the sublists left empty: with `fac[n_] := n fac[n - 1];
+  fac[1] = 1`, `Trace[fac[3], fac[_]]` is `{fac[3], {fac[2], {fac[1]}}}` and
+  `Trace[2*3 + 1, _Integer]` is `{{6}, 7}`. `form` is held, so pattern
+  literals such as `_Integer` or `f[_]` may be given directly. A step whose
+  value is a list is a step, not nesting: `Trace[Range[3], _List]` is
+  `{{1, 2, 3}}`. Returns `{}` when no step matches.
+- `Trace[expr, s]` (a symbol): the evaluations that use rules for `s` -- each
+  step whose head is `s`, with the form its rule rewrote it to:
+  `Trace[fac[3], fac]` is `{fac[3], 3 fac[3 - 1], {fac[2], 2 fac[2 - 1],
+  {fac[1], 1}}}`.
+- `Trace[expr, form -> rhs]` (or `:>`): `rhs`, with `form`'s bindings, for each
+  matching step: `Trace[fac[3], fac[n_] -> n]` is `{3, {2, {1}}}`.
+- A step shows the call as its arguments evaluated, not as a builtin then
+  rewrote it internally: `Trace[1.5 + 2]` is `{1.5 + 2, 3.5}` (it showed the
+  coerced `1.5 + 2.0`).
 
 **Features**:
 - `HoldAll`, `Protected`. The argument is held so its rewrite sequence can be
@@ -1396,6 +1424,13 @@ Represents the unevaluated form of `expr` when it appears as the argument to a f
 - The wrapper is likewise **not** stripped when the enclosing function has `HoldAllComplete` (e.g. `HoldComplete`, or `Unevaluated` itself).
 - Stripping happens **after** `Sequence` flattening, so a `Sequence` directly inside `Unevaluated` survives into the argument slot (`Length[Unevaluated[Sequence[a, b]]]` gives `2`).
 - Nested `Unevaluated` wrappers are stripped one layer per evaluation step.
+- When no rule, builtin or attribute uses the call, the wrappers are put back,
+  as in the reference: `f[Unevaluated[1 + 1]]` with `f` undefined stays
+  `f[Unevaluated[1 + 1]]` (it evaluated to `f[2]` on the next pass),
+  `Hold[Evaluate[f[Unevaluated[1 + 2]]]]` is `Hold[f[Unevaluated[1 + 2]]]`, and
+  `FullForm[Unevaluated[1 + 1]]` shows `Unevaluated[Plus[1, 1]]`. A call that
+  a rule or builtin does take gets the unevaluated argument
+  (`g[x_] := x^2; g[Unevaluated[1 + 1]]` is `4`).
 - As a top-level expression, `Unevaluated[expr]` evaluates to itself (because of `HoldAllComplete`).
 
 ```mathematica
@@ -1716,6 +1751,15 @@ Out[2]= 1, 2, 3
 
 **Features**:
 - `Protected`.
+- A machine real shows six significant digits, positionally down to `10^-5`
+  and with `*^` beyond (the six-digit display form): `ToString[0.000012]` is
+  `"0.000012"`, `ToString[0.0000012]` is `"1.2*^-6"`, `ToString[1.*^20]` is
+  `"1.0*^20"`. A whole real keeps its `.0` (`"3.0"`): Mathilda's printed reals
+  always carry a digit after the point (numeric-tower review C9a).
+- `Not` and `Part` print in operator form, in every form but `FullForm`:
+  `ToString[!a]` is `"!a"`, `ToString[Hold[a[[1]]]]` is `"Hold[a[[1]]]"`, and
+  operands are parenthesised as the parser reads them back (`!(a && b)`,
+  `(a + b)[[1, 2]]`, `!(!a)`).
 - An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]` returns `ToString[x, FooForm]`), so a typo is visible at the call site rather than silently downgraded.
 - `TeXForm` renders the generated constant `C[k]` (from `DSolve`, `Reduce`, `Integrate`) as the subscripted `c_k`, matching the reference: `ToString[C[1], TeXForm]` is `"c_1"`, and `ToString[C[10], TeXForm]` is `"c_{10}"` (single-character subscripts bare, longer ones braced). The same holds for the notebook LaTeX renderer.
 - `TeXForm` sets the infix heads infix: `Rule` as `\to`, `RuleDelayed` as `:\to`, `Set` as `=`, `SetDelayed` as `:=`, `And`/`Or` as `\land`/`\lor`, the relations as `=`, `\neq`, `<`, `>`, `\leq`, `\geq`, `SameQ`/`UnsameQ` as `\equiv`/`\not\equiv`, `Not` as `\neg`, and a chained `Inequality` as the chain (`1<x<2`). `RuleDelayed` is deliberately distinguished from `Rule` — one glyph for both would make `a -> b` and `a :> b` indistinguishable once typeset, the same reason `SetDelayed` is `:=`. The notebook LaTeX renderer agrees, and additionally brackets a nested operator that binds looser than the one holding it (`(a || b) && c`, but not `a && b || c`).
@@ -1932,6 +1976,11 @@ its home context is visible, meaning it is current or on `$ContextPath`.
   package it issues `EndPackage::noctx`.
 - A package that wants the kernel builtins asks for them:
   `BeginPackage["P`", {"Mathilda`"}]`.
+- `BeginPackage["P`", {"need1`", ...}]` first calls `Needs` on each needed
+  context not already loaded, as in the reference, so the package it names is
+  read (or reported: `Get::noopen`, `Needs::nocont`), then sets the path to
+  `{"P`", "need1`", ..., "System`"}`. A kernel package read by `LoadModule`
+  orders its own loads and is left alone.
 - `Begin["ctx`"]` without `BeginPackage` leaves the path unchanged, so
   `Global`` and `Mathilda`` stay visible.
 
@@ -2228,6 +2277,9 @@ Gives the number of bytes used internally by Mathilda to store the expression.
 - Uses `sizeof()` in C and measures the internal AST memory allocation boundaries, dynamically capturing sizes of individual strings, symbols, allocated blocks, arrays, and expression structs.
 - Counts the payload of leaf atoms that own out-of-node storage: `EXPR_BIGINT` (GMP limbs), `EXPR_NDARRAY` (the `dims[]` array plus the flat data buffer, sized by element count and dtype width), and `EXPR_MPFR` (significand storage, scaling with precision). For an `NDArray`, the buffer dominates, so `ByteCount` scales with the number of elements and the dtype's bytes-per-element.
 - The walk is iterative, so an expression of any nesting depth is measured (`ByteCount[Nest[f, x, 200000]]` is an integer; audit ByteCount#1).
+- A `SparseArray` counts its payload -- dims, the index pattern (row pointers
+  and each stored entry's coordinates), the value buffer and the background --
+  so the count grows with the stored entries (it was a flat 56).
 
 
 ## Hash

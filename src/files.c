@@ -394,6 +394,27 @@ char* files_slurp_text(const char* path, size_t* len) {
  * A file that cannot be read gives Import::nffil and $Failed.  Returns NULL
  * for any other fmt.
  */
+/* A String is NUL-terminated, and holds U+0000 as the two bytes C0 80
+ * (src/strings/utf8.h). Rewrite each 0 byte of buf[0, *len) that way, so a
+ * file with NUL bytes imports whole instead of ending at the first one.
+ * Returns buf itself when there is none, else a fresh buffer (buf freed). */
+static char* files_hold_nuls(char* buf, size_t* len) {
+    size_t nul = 0;
+    for (size_t i = 0; i < *len; i++) if (buf[i] == '\0') nul++;
+    if (!nul) return buf;
+    char* out = malloc(*len + nul + 1);
+    if (!out) return buf;
+    size_t w = 0;
+    for (size_t i = 0; i < *len; i++) {
+        if (buf[i] == '\0') { out[w++] = (char)0xC0; out[w++] = (char)0x80; }
+        else out[w++] = buf[i];
+    }
+    out[w] = '\0';
+    free(buf);
+    *len = w;
+    return out;
+}
+
 Expr* files_import_text(const char* path, const char* fmt) {
     int kind = strcmp(fmt, "Text") == 0 ? 0 : strcmp(fmt, "String") == 0 ? 1
              : strcmp(fmt, "Lines") == 0 ? 2 : -1;
@@ -404,6 +425,7 @@ Expr* files_import_text(const char* path, const char* fmt) {
         mth_message("Import", "nffil", "File %s not found during Import.", path);
         return expr_new_symbol(SYM_DollarFailed);
     }
+    buf = files_hold_nuls(buf, &len);
     Expr* out;
     if (kind == 0) {
         if (len > 0 && buf[len - 1] == '\n') buf[--len] = '\0';

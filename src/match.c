@@ -2035,6 +2035,158 @@ static bool match_optional_variants(Expr** exprs, size_t n_exprs, Expr** pats, s
     return r;
 }
 
+/* ---- Shortest[p, pri] / Longest[p, pri]: explicit priorities -------------
+ *
+ * Without priorities a level is enumerated left to right: the first element's
+ * width is the outermost choice, so the first Shortest is made shortest first.
+ * An explicit priority reorders that: the element with the HIGHEST priority
+ * gets its preferred width first, then the next, and the elements with no
+ * priority follow in position order. So {a, b, c, d} against
+ * {Shortest[x__, 1], Shortest[y__, 2]} makes y shortest: x = a, b, c; y = d.
+ *
+ * Implemented by enumerating the width assignments of the level in that order
+ * and matching each with the widths forced (g_forced): the length loop of a
+ * forced element tries only its assigned width. The table is a stack, so a
+ * nested level with priorities of its own pushes above an outer one. */
+typedef struct { const Expr* pat; size_t width; } ForcedWidth;
+static ForcedWidth* g_forced = NULL;
+static size_t g_forced_n = 0, g_forced_cap = 0;
+
+static bool forced_width_of(const Expr* p, size_t* w) {
+    for (size_t i = g_forced_n; i-- > 0; )
+        if (g_forced[i].pat == p) { *w = g_forced[i].width; return true; }
+    return false;
+}
+
+/* Priority of Shortest[p, pri] / Longest[p, pri]; false when absent. */
+static bool pat_priority(const Expr* p, double* pri, int* pref) {
+    if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL ||
+        p->data.function.arg_count != 2) return false;
+    const char* h = p->data.function.head->data.symbol.name;
+    if (h != SYM_Shortest && h != SYM_Longest) return false;
+    const Expr* q = p->data.function.args[1];
+    if (q->type == EXPR_INTEGER) *pri = (double)q->data.integer;
+    else if (q->type == EXPR_REAL) *pri = q->data.real;
+    else return false;
+    *pref = (h == SYM_Longest) ? -1 : 1;
+    return true;
+}
+
+typedef struct {
+    Expr** exprs; size_t n_exprs; Expr** pats; size_t n_pats; MatchEnv* env;
+    Expr* condition; Expr* pat_head; size_t total_pats; ParentMatch* parent;
+    size_t* order;      /* element indices, highest priority first */
+    size_t* lo; size_t* hi; int* pref;
+    size_t* width;      /* the assignment being built, by element index */
+    size_t base;        /* g_forced_n before this level's entries */
+} PriorityLevel;
+
+static bool priority_enumerate(PriorityLevel* L, size_t depth, size_t used,
+                               size_t min_rest, size_t max_rest) {
+    if (depth == L->n_pats) {
+        if (used != L->n_exprs) return false;
+        for (size_t i = 0; i < L->n_pats; i++) {
+            g_forced[L->base + i].pat = L->pats[i];
+            g_forced[L->base + i].width = L->width[i];
+        }
+        g_forced_n = L->base + L->n_pats;
+        size_t saved = L->env->count;
+        bool r = match_args_internal(L->exprs, L->n_exprs, L->pats, L->n_pats, L->env,
+                                     L->condition, L->pat_head, L->total_pats, L->parent);
+        g_forced_n = L->base;
+        if (!r) env_rollback(L->env, saved);
+        return r;
+    }
+    size_t i = L->order[depth];
+    size_t lo = L->lo[i], hi = L->hi[i];
+    /* min_rest / max_rest: the bounds of the elements not yet assigned,
+     * this one excluded. */
+    min_rest -= L->lo[i];
+    max_rest -= L->hi[i];
+    if (hi > L->n_exprs - used) hi = L->n_exprs - used;
+    if (lo > hi) return false;
+    for (size_t step = 0; step <= hi - lo; step++) {
+        size_t w = L->pref[i] < 0 ? hi - step : lo + step;
+        size_t now = used + w;
+        if (now + min_rest > L->n_exprs) continue;
+        if (now + max_rest < L->n_exprs) continue;
+        L->width[i] = w;
+        if (priority_enumerate(L, depth + 1, now, min_rest, max_rest)) return true;
+    }
+    return false;
+}
+
+/* Returns 1 (matched) / 0 (no match) when the level carries an explicit
+ * priority and was handled here, -1 when it does not. */
+static int match_args_priority(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats,
+                               MatchEnv* env, Expr* condition, Expr* pat_head,
+                               size_t total_pats, ParentMatch* parent) {
+    if (n_pats < 2) return -1;
+    bool any = false;
+    for (size_t i = 0; i < n_pats && !any; i++) {
+        double pr; int pf;
+        if (pat_priority(pats[i], &pr, &pf)) any = true;
+    }
+    if (!any) return -1;
+    size_t w0;
+    if (g_forced_n && forced_width_of(pats[0], &w0)) return -1;  /* being forced */
+    if (pat_head && pat_head->type == EXPR_SYMBOL) {
+        SymbolDef* def = symtab_node_def(pat_head);
+        if (def && (def->attributes & (ATTR_ORDERLESS | ATTR_FLAT))) return -1;
+    }
+    if (g_forced_n + n_pats > g_forced_cap) {
+        size_t nc = (g_forced_n + n_pats) * 2;
+        ForcedWidth* g = realloc(g_forced, nc * sizeof(ForcedWidth));
+        if (!g) return -1;
+        g_forced = g;
+        g_forced_cap = nc;
+    }
+    size_t* buf = malloc(sizeof(size_t) * 4 * n_pats);
+    int* pref = malloc(sizeof(int) * n_pats);
+    double* pri = malloc(sizeof(double) * n_pats);
+    bool* has = malloc(sizeof(bool) * n_pats);
+    PriorityLevel L = { exprs, n_exprs, pats, n_pats, env, condition, pat_head,
+                        total_pats, parent, buf, buf + n_pats, buf + 2 * n_pats, pref,
+                        buf + 3 * n_pats, g_forced_n };
+    /* Widths are bounded by the level (an unbounded hi is clamped to it), so
+     * the sums below cannot overflow. */
+    size_t min_all = 0, max_all = 0;
+    for (size_t i = 0; i < n_pats; i++) {
+        pat_width(pats[i], &L.lo[i], &L.hi[i]);
+        if (L.hi[i] > n_exprs) L.hi[i] = n_exprs;
+        if (L.lo[i] > n_exprs) L.lo[i] = n_exprs + 1;
+        int pf = 1;
+        double pr = 0;
+        has[i] = pat_priority(pats[i], &pr, &pf);
+        pri[i] = pr;
+        pref[i] = pf;
+        if (!has[i] && pats[i]->type == EXPR_FUNCTION &&
+            pats[i]->data.function.head->type == EXPR_SYMBOL &&
+            pats[i]->data.function.head->data.symbol.name == SYM_Longest)
+            pref[i] = -1;
+        min_all += L.lo[i];
+        max_all += L.hi[i];
+        L.order[i] = i;
+    }
+    /* Stable insertion sort: explicit priorities first, highest first; then
+     * the rest in position order. */
+    for (size_t i = 1; i < n_pats; i++) {
+        size_t v = L.order[i], j = i;
+        while (j > 0) {
+            size_t u = L.order[j - 1];
+            bool before = has[v] && (!has[u] || pri[v] > pri[u]);
+            if (!before) break;
+            L.order[j] = u;
+            j--;
+        }
+        L.order[j] = v;
+    }
+    bool r = min_all <= n_exprs && max_all >= n_exprs &&
+             priority_enumerate(&L, 0, 0, min_all, max_all);
+    free(buf); free(pref); free(pri); free(has);
+    return r ? 1 : 0;
+}
+
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent) {
 
     /* HoldPattern is transparent to matching, including for the width of an
@@ -2069,6 +2221,12 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         if (condition && !eval_guard_true(condition, env)) return false;
 
         return call_parent(env, parent);
+    }
+
+    {   /* Shortest[p, pri] / Longest[p, pri] reorder the level's choices. */
+        int pr = match_args_priority(exprs, n_exprs, pats, n_pats, env, condition,
+                                     pat_head, total_pats, parent);
+        if (pr >= 0) return pr == 1;
     }
 
     /* Deterministic prefix, matched iteratively.  Each pattern element is
@@ -2707,6 +2865,15 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         if (max_k >= n_exprs) {
             if (n_exprs == 0) { min_k = 1; max_k = 0; }  /* no operand for the anchor */
             else max_k = n_exprs - 1;
+        }
+    }
+
+    /* A width forced by a priority level (match_args_priority). */
+    if (g_forced_n) {
+        size_t fw;
+        if (forced_width_of(p, &fw)) {
+            if (fw >= min_k && fw <= max_k) min_k = max_k = fw;
+            else { min_k = 1; max_k = 0; }
         }
     }
 

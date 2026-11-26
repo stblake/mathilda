@@ -185,7 +185,7 @@ int main() {
      * names fix the group span).  These must leave every result unchanged. */
     run_test("ffr[q, a, b, a, b] /. ffr[x_, x_] :> sq[x]", "ffr[q, sq[ffr[a, b]]]");
     run_test("(p && q && !q && r) /. And[x_, Not[x_]] :> False", "False");
-    run_test("(p && q && r && !s) /. And[x_, Not[x_]] :> False", "p && q && r && Not[s]");
+    run_test("(p && q && r && !s) /. And[x_, Not[x_]] :> False", "p && q && r && !s");
     run_test("ffr[a, b, c, b, c] /. ffr[x__, x__] :> sq[x]", "ffr[a, sq[b, c]]");
     run_test("ffr[k, a, b, c, op[3], m] /. ffr[x_, y_, op[j_]] :> h[x, y, j]",
              "ffr[h[k, ffr[a, b, c], 3], m]");

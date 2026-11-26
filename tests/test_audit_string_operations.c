@@ -162,6 +162,22 @@ static void test_wave5_g7_string_operations(void) {
     audit_chk("StringTrim#1", "Quiet[Check[StringTrim[{\" a \", 1}], fired, StringTrim::strse]]", "fired");
 }
 
+/* Wave 6 G1: surrogate codes are characters; the StringJoin and StringTrim
+ * messages the spec pages show. */
+static void test_wave6_g1_strings(void) {
+    audit_chk("ToCharacterCode#2", "ToCharacterCode[\"\\:d83d\"]", "{55357}");
+    audit_chk("ToCharacterCode#2", "StringLength[\"\\:d83d\\:de00\"]", "2");
+    audit_chk("CharacterRange#2", "Take[ToCharacterCode[CharacterRange[55295, 57344]], 3]", "{{55295}, {55296}, {55297}}");
+    audit_chk("CharacterRange#2", "Count[CharacterRange[55295, 57344], \"?\"]", "0");
+    audit_chk("CharacterRange#2", "Length[CharacterRange[55295, 57344]]", "2050");
+    audit_chk("CharacterRange#2", "ToCharacterCode[CharacterRange[55295, 55297]]", "{{55295}, {55296}, {55297}}");
+    audit_chk("CharacterRange#2", "ToCharacterCode[FromCharacterCode[55357]]", "{55357}");
+    audit_chk("StringJoin#2", "Check[StringJoin[\"a\", x], fired, StringJoin::string]", "fired");
+    audit_chk("StringJoin#2", "Quiet[StringJoin[\"a\", x]]", "StringJoin[\"a\", x]");
+    audit_chk("StringTrim#1", "Check[StringTrim[{\" a \", 1}], fired, StringTrim::strse]", "fired");
+    audit_chk("StringTrim#1", "Quiet[StringTrim[{\" a \", 1}]]", "StringTrim[{\" a \", 1}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_stringriffle_deep_nesting);
@@ -170,5 +186,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_strings);
     TEST(test_wave5_g7_string_operations);
+    TEST(test_wave6_g1_strings);
     return audit_finish("audit_string_operations");
 }

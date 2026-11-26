@@ -105,9 +105,9 @@ void test_cf_part(void) {
 
     /* Out of range: the compiled call fails and the INTERPRETER answers, which
      * for Part means leaving it unevaluated rather than inventing an element. */
-    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[9]]][{1., 2.}]", "Part[{1.0, 2.0}, 9]", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[9]]][{1., 2.}]", "{1.0, 2.0}[[9]]", 0);
     assert_eval_eq("Compile[{{m, _Real, 2}}, m[[1, 5]]][{{1., 2.}, {3., 4.}}]",
-                   "Part[{{1.0, 2.0}, {3.0, 4.0}}, 1, 5]", 0);
+                   "{{1.0, 2.0}, {3.0, 4.0}}[[1, 5]]", 0);
 
     /* Assignment into a local, returned as the result.  With no array ARGUMENT
      * the result has no kind to inherit, and the interpreter running the same

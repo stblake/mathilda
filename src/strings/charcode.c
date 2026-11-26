@@ -159,9 +159,10 @@ Expr* builtin_tocharactercode(Expr* res) {
 /* FromCharacterCode                                                  */
 /* ------------------------------------------------------------------ */
 
-/* A code is valid in 0 .. 0x10FFFF, surrogates excluded. */
+/* A code is valid in 0 .. 0x10FFFF; a surrogate code is a character of its
+ * own (src/strings/utf8.h). */
 static int code_ok(int64_t c) {
-    return c >= 0 && c <= 0x10FFFF && !(c >= 0xD800 && c <= 0xDFFF);
+    return c >= 0 && c <= 0x10FFFF;
 }
 
 /* Report an invalid code: a negative or non-integer one is ::intnm on the
@@ -428,7 +429,7 @@ static Expr* char_list(uint32_t lo, uint32_t hi) {
         char buf[5];
         uint32_t cp = lo + (uint32_t)k;
         size_t len = u8_encode(cp, buf);
-        if (len == 0) { buf[0] = '?'; len = 1; }          /* surrogate gap */
+        if (len == 0) { buf[0] = '?'; len = 1; }          /* unreachable: lo..hi are codes */
         out->data.function.args[k] = strings_char_expr(buf, len);
     }
     return out;

@@ -1,8 +1,8 @@
 /* Read-side Part and ordering functions on associations.
  *
- * Every expected value below was confirmed against Mathematica 15 (via
- * wolframscript), except that an unevaluated Part prints here as Part[...]
- * where Mathematica's InputForm writes expr[[...]].
+ * Every expected value below was confirmed against the reference (an
+ * unevaluated Part prints as expr[[...]], as there; a Span inside it is
+ * still written Span[...]).
  *
  * Unlike the abort-on-first-failure assert_eval_eq, this harness runs every
  * case, reports each failure, and exits nonzero if any failed. */
@@ -48,8 +48,8 @@ static void test_part_span(void) {
     check(A4 "[[3;;1;;-1]]", "<|\"c\" -> 3, \"b\" -> 2, \"a\" -> 1|>");
     check(A4 "[[4;;1;;-2]]", "<|\"d\" -> 4, \"b\" -> 2|>");
     /* Off either end: unevaluated (Part::take). */
-    check(A4 "[[2;;7]]", "Part[" A4 ", Span[2, 7]]");
-    check(A4 "[[1;;0;;-1]]", "Part[" A4 ", Span[1, 0, -1]]");
+    check(A4 "[[2;;7]]", A4 "[[Span[2, 7]]]");
+    check(A4 "[[1;;0;;-1]]", A4 "[[Span[1, 0, -1]]]");
 }
 
 static void test_part_lists(void) {
@@ -63,8 +63,8 @@ static void test_part_lists(void) {
     check(A4 "[[{\"a\",\"z\"}]]", "<|\"a\" -> 1, \"z\" -> Missing[\"KeyAbsent\", \"z\"]|>");
     check("<|a -> 1|>[[{Key[z]}]]", "<|z -> Missing[\"KeyAbsent\", Key[z]]|>");
     /* Out of range, or positions mixed with keys: unevaluated. */
-    check(A4 "[[{1,7}]]", "Part[" A4 ", {1, 7}]");
-    check(A4 "[[{Key[\"b\"], 1}]]", "Part[" A4 ", {Key[\"b\"], 1}]");
+    check(A4 "[[{1,7}]]", A4 "[[{1, 7}]]");
+    check(A4 "[[{Key[\"b\"], 1}]]", A4 "[[{Key[\"b\"], 1}]]");
 }
 
 static void test_part_all_and_deep(void) {
@@ -82,8 +82,8 @@ static void test_part_all_and_deep(void) {
     check("<|\"a\" -> {1, 2}|>[[{\"a\", \"z\"}, 1]]",
           "<|\"a\" -> 1, \"z\" -> Missing[\"KeyAbsent\", \"z\"]|>");
     /* A deeper index that fails on an atomic value: unevaluated (Part::partd). */
-    check(A4 "[[All, 1]]", "Part[" A4 ", All, 1]");
-    check(A4 "[[1, 1]]", "Part[" A4 ", 1, 1]");
+    check(A4 "[[All, 1]]", A4 "[[All, 1]]");
+    check(A4 "[[1, 1]]", A4 "[[1, 1]]");
 }
 
 static void test_part_single(void) {
@@ -95,11 +95,11 @@ static void test_part_single(void) {
     check("<|a -> 1|>[[Key[b]]]", "Missing[\"KeyAbsent\", Key[b]]");
     check(A4 "[[\"z\"]]", "Missing[\"KeyAbsent\", \"z\"]");
     check(A4 "[[Key[\"z\"], 1]]", "Missing[\"KeyAbsent\", Key[\"z\"]]");
-    check(A4 "[[5]]", "Part[" A4 ", 5]");
-    check(A4 "[[-5]]", "Part[" A4 ", -5]");
+    check(A4 "[[5]]", A4 "[[5]]");
+    check(A4 "[[-5]]", A4 "[[-5]]");
     /* A bare symbol or real is not a part spec (Part::pkspec1). */
-    check("<|x -> 1|>[[x]]", "Part[<|x -> 1|>, x]");
-    check(A4 "[[1.5]]", "Part[" A4 ", 1.5]");
+    check("<|x -> 1|>[[x]]", "<|x -> 1|>[[x]]");
+    check(A4 "[[1.5]]", A4 "[[1.5]]");
     /* RuleDelayed entries stay delayed in a sub-association. */
     check("<|\"a\" :> 1 + 1|>[[{1}]]", "<|\"a\" :> 1 + 1|>");
     check("<|\"a\" :> 1 + 1|>[[1]]", "2");

@@ -311,6 +311,12 @@ static void test_wave5_g8_misc_control(void) {
     audit_chk("CompileDiagnostics#2", "Abs[Compile[{{z, _Complex}}, Zeta[z]][2. + I] - N[Zeta[2 + I]]] < 10^-12", "True");
 }
 
+/* Wave 6 G1: the spec page's Zeta example (a complex Zeta compiles). */
+static void test_wave6_g1_control(void) {
+    audit_chk("CompileDiagnostics#2", "\"Compiled\" /. CompileDiagnostics[{{z, _Complex}}, Zeta[z]]", "True");
+    audit_chk("CompileDiagnostics#2", "Abs[Compile[{{z, _Complex}}, Zeta[z]][2. + I] - N[Zeta[2 + I]]] < 10^-12", "True");
+}
+
 int main(void) {
     audit_init();
     TEST(test_for_start_throw);
@@ -327,5 +333,6 @@ int main(void) {
     TEST(test_wave5_g8_control);
     TEST(test_wave5_g8_compile);
     TEST(test_wave5_g8_misc_control);
+    TEST(test_wave6_g1_control);
     return audit_finish("audit_control_flow");
 }

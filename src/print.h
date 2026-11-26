@@ -32,6 +32,7 @@ typedef struct {
     const struct NumberFormCtx* numberform_ctx;
     bool  output_form;
     bool  apply_formats;
+    int   fullform_depth;
 } MthPrintMark;
 void mth_print_mark(MthPrintMark* m);
 void mth_print_unwind(const MthPrintMark* m);
@@ -42,6 +43,9 @@ char* expr_to_string(Expr* e);
 /* expr_to_string with Format display rules applied (a front end's Out[]). */
 char* expr_to_string_display(Expr* e);
 char* expr_to_string_fullform(Expr* e);
+/* expr_to_string_fullform with the user-facing spellings (DirectedInfinity):
+ * ToString[e, FullForm]. */
+char* expr_to_string_fullform_display(Expr* e);
 char* expr_to_string_inputform_display(Expr* e);
 char* expr_to_string_outputform(Expr* e);   /* strings unquoted, as Print */
 

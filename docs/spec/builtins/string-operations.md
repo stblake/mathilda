@@ -1308,6 +1308,15 @@ Out[3]= 26
 `Alphabet["English"]`, `Alphabet["Greek"]` (24 letters, no final sigma) and
 `Alphabet["Russian"]` (33) give the lowercase letters.
 
+- The surrogate codes 55296..57343 are characters, as in the reference's
+  16-bit character codes: `CharacterRange[55295, 57344]` has 2050 characters
+  (the surrogates were each `"?"`, and a surrogate endpoint was refused),
+  `FromCharacterCode[55357]` is a one-character string, and the escape
+  `"\:d83d"` reads as that character (`ToCharacterCode` gives `{55357}`). A
+  lone surrogate is held as its 3-byte generalised UTF-8 form, so
+  `ToCharacterCode[FromCharacterCode[55357], "UTF8"]` is `{237, 160, 189}`;
+  decoding external UTF-8 bytes still rejects one (`$CharacterEncoding::utf8`).
+
 ## Operator forms and occurrence limits
 
 - Operator forms: `StringCases[patt][s]`, `StringReplace[rules][s]`,

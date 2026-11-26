@@ -9,7 +9,7 @@
  * therefore works in code points through these helpers:
  *
  *   - A "character" is one well-formed UTF-8 sequence (1-4 bytes, no overlong
- *     forms, no surrogates, <= U+10FFFF). A byte that does not start a valid
+ *     forms, <= U+10FFFF). A byte that does not start a valid
  *     sequence is one character on its own (a Latin-1-style fallback), so
  *     malformed input is never split mid-character, never crashes, and
  *     round-trips byte-for-byte.
@@ -17,6 +17,12 @@
  *     word-at-a-time scan, and callers then use byte arithmetic directly:
  *     character index == byte index costs nothing extra.
  *
+ *   - A surrogate code point U+D800..U+DFFF is a character too, held in the
+ *     3-byte form ED A0 80 .. ED BF BF (the "generalized UTF-8" of a lone
+ *     surrogate): the reference's character codes are 16-bit, so
+ *     FromCharacterCode[55357], "\:d83d" and CharacterRange[55295, 57344]
+ *     hold them as characters. Decoding EXTERNAL UTF-8 bytes still rejects
+ *     them ($CharacterEncoding::utf8), since no valid UTF-8 text has them.
  *   - U+0000 is held as the two bytes C0 80 (the "modified UTF-8" form),
  *     the one overlong sequence accepted: a String is NUL-terminated, so a raw
  *     0 byte would end it -- FromCharacterCode[{65, 0, 66}] was "A" (audit
@@ -68,7 +74,7 @@ static inline size_t u8_view_off(const U8View* v, size_t k) {
 uint32_t u8_decode(const char* s, size_t n, size_t* i);
 
 /* Encode code point `cp` into out (>= 4 bytes); returns the byte count, or 0
- * for an invalid code point (surrogate or > U+10FFFF). U+0000 is encoded as
+ * for an invalid code point (> U+10FFFF). U+0000 is encoded as
  * the two bytes C0 80 (see the note at the top). */
 size_t u8_encode(uint32_t cp, char* out);
 

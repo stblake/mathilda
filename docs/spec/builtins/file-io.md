@@ -520,6 +520,11 @@ In[3]:= ImageDimensions[Import["/tmp/mathilda_doc_edges.png"]]
 Out[3]= {32, 24}
 ```
 
+- `Import[file, "String"]` (and `"Text"`, `"Lines"`) keeps the bytes after a
+  NUL: a 0 byte becomes the character U+0000 (held as C0 80, the strings'
+  representation), so the string of a binary file is as long as the file. It
+  used to end at the first NUL (8 characters of a 71-byte PNG).
+
 ## Export
 Writes an `Image` to a raster image file, or a `Graphics` object to an image file.
 - `Export["file", image]` — the format comes from the file extension (PNG, JPEG, BMP, TGA).

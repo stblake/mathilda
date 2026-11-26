@@ -279,7 +279,7 @@ static void test_part(void) {
     chk("s[[1, 0]]", "List");
     chk_if("t[[2]]", "SparseArray[Automatic, {2, 3}, 0, {1, {{0, 1, 1}, {{1}}}, {b}}]");
     chk("t[[1, 2, 3]]", "a");
-    chk("Quiet[s[[4]]]", "Part[SparseArray[<2>, {3, 3}], 4]");
+    chk("Quiet[s[[4]]]", "SparseArray[<2>, {3, 3}][[4]]");
     chk("Normal[s[[{3, 2}, {3, 1}]]] === Normal[s][[{3, 2}, {3, 1}]]", "True");
     /* a SparseArray reached below the top level: the rest of the spec is its
      * own Part ({c0, sa}[[2, 1]], as CoefficientArrays results are indexed) */

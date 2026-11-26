@@ -818,7 +818,7 @@ LeanVersion: Missing["NotChecked"]
 Logs: {}
 ProofScript: "fun h => absurd (h.2 3 (Exists.intro 91393 (by decide +kernel))) (by decide +kernel)"
 Result: False
-Theorem: HoldForm[Not[PrimeQ[274179]]]
+Theorem: HoldForm[!PrimeQ[274179]]
 Tier: 0
 TrustedSteps: {}
 Verified: Missing["NotChecked"]
@@ -2305,7 +2305,7 @@ LeanVersion: Missing["NotChecked"]
 Logs: {}
 ProofScript: "fun h => absurd (h.2 101 (Exists.intro 9901 (by decide +kernel))) (by decide +kernel)"
 Result: False
-Theorem: HoldForm[Not[PrimeQ[1000001]]]
+Theorem: HoldForm[!PrimeQ[1000001]]
 Tier: 0
 TrustedSteps: {}
 Verified: Missing["NotChecked"]
@@ -2327,7 +2327,7 @@ LeanVersion: Missing["NotChecked"]
 Logs: {}
 ProofScript: "fun h => absurd h.1 (by decide)"
 Result: False
-Theorem: HoldForm[Not[PrimeQ[1]]]
+Theorem: HoldForm[!PrimeQ[1]]
 Tier: 0
 TrustedSteps: {}
 Verified: Missing["NotChecked"]
@@ -2349,7 +2349,7 @@ LeanVersion: Missing["NotChecked"]
 Logs: {}
 ProofScript: "fun h => absurd h.1 (by decide)"
 Result: False
-Theorem: HoldForm[Not[PrimeQ[0]]]
+Theorem: HoldForm[!PrimeQ[0]]
 Tier: 0
 TrustedSteps: {}
 Verified: Missing["NotChecked"]
@@ -5066,7 +5066,7 @@ LeanVersion: Missing["NotChecked"]
 Logs: {}
 ProofScript: "fun h => absurd (h.2 7 (Exists.intro 13 (by decide +kernel))) (by decide +kernel)"
 Result: False
-Theorem: HoldForm[Not[PrimeQ[91]]]
+Theorem: HoldForm[!PrimeQ[91]]
 Tier: 0
 TrustedSteps: {}
 Verified: Missing["NotChecked"]

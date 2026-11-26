@@ -180,20 +180,21 @@ static void test_builtin_nested(void) {
 }
 
 /* The two-argument form Trace[expr, form] (h4u): the trace filtered to the
- * step leaves whose expression matches the pattern form, flattening away
- * nesting. HoldAll delivers form to the builtin unevaluated, so pattern
- * literals like _Integer work directly. */
+ * steps whose expression matches the pattern form, keeping the nesting and
+ * dropping the sublists left empty. HoldAll delivers form to the builtin
+ * unevaluated, so pattern literals like _Integer work directly. */
 static void test_builtin_two_arg_form(void) {
     /* _Integer keeps only the integer results, dropping the unevaluated Plus. */
     assert_eval_eq("Trace[1 + 2 + 3, _Integer]", "{6}", 0);
-    /* 2*3 is now a (nested) sub-evaluation, so its result 6 is a matched
-     * integer step too; matches are flattened out of the nesting. */
-    assert_eval_eq("Trace[2*3 + 1, _Integer]", "{6, 7}", 0);
+    /* 2*3 is a (nested) sub-evaluation, so its result 6 is a matched
+     * integer step too, in its own sublist. */
+    assert_eval_eq("Trace[2*3 + 1, _Integer]", "{{6}, 7}", 0);
     /* Blank matches every step -> identical to the one-arg form. */
     assert_eval_eq("Trace[1 + 2 + 3, _]", "{1 + 2 + 3, 6}", 0);
     /* A form nothing matches -> {} (there are steps, but none is a Real). */
     assert_eval_eq("Trace[1 + 2 + 3, _Real]", "{}", 0);
-    /* A bare symbol form matches only that literal symbol, not the steps. */
+    /* A bare symbol form keeps the evaluations that use rules for it: none
+     * here. */
     assert_eval_eq("Trace[1 + 1, x]", "{}", 0);
     /* Head pattern: _f keeps the f[...] result of a nested application. */
     assert_eval_eq("Trace[Nest[f, x, 3], _f]", "{f[f[f[x]]]}", 0);

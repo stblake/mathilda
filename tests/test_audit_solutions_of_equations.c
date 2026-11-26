@@ -140,9 +140,9 @@ static void test_wave4_solve(void) {
     audit_chk("Exists#2", "Resolve[Exists[x, x^2 == 10^40], Reals]", "True");
     audit_chk("CylindricalDecomposition#1", "CylindricalDecomposition[x == 10^20, {x}]", "x == 100000000000000000000");
     audit_chk("CylindricalDecomposition#1", "CylindricalDecomposition[x > 10^30, {x}]", "x > 1000000000000000000000000000000");
-    audit_chk("LogicalExpand#1", "LogicalExpand[Nand[a, b]]", "Not[a] || Not[b]");
-    audit_chk("LogicalExpand#1", "LogicalExpand[Nor[a, b]]", "Not[a] && Not[b]");
-    audit_chk("LogicalExpand#1", "LogicalExpand[Xnor[a, b]]", "a && b || Not[a] && Not[b]");
+    audit_chk("LogicalExpand#1", "LogicalExpand[Nand[a, b]]", "!a || !b");
+    audit_chk("LogicalExpand#1", "LogicalExpand[Nor[a, b]]", "!a && !b");
+    audit_chk("LogicalExpand#1", "LogicalExpand[Xnor[a, b]]", "a && b || !a && !b");
     audit_chk("NotElement#1", "NotElement[2 | I, Reals]", "False");
     audit_chk("NotElement#1", "LogicalExpand[NotElement[x | y, Reals]]", "NotElement[x, Reals] && NotElement[y, Reals]");
     audit_chk("SolveAlways#2", "SolveAlways[x^2 + a x + b == (x + c)^2, x]", "{{a -> 2 c, b -> c^2}}");

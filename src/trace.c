@@ -4,17 +4,18 @@
  * A thin wrapper over the evaluator-side collector eval_collect_trace()
  * (src/eval.c). Trace[expr] returns a NESTED List that mirrors the structure of
  * expr's evaluation: each argument sub-evaluation that takes a step appears as a
- * sublist, and the reassembled intermediate form appears as a step (matching
- * Mathematica). E.g. Trace[2^3 + 4^2 + 1] -> {{2^3,8},{4^2,16},8+16+1,25}.
+ * sublist, and the reassembled intermediate form appears as a step (as in the
+ * reference). E.g. Trace[2^3 + 4^2 + 1] -> {{2^3,8},{4^2,16},8+16+1,25}.
  *   - >=1 rewrite -> the nested list of forms
  *   - no rewrite (inert atom / normal form) -> {}
  *
- * Trace[expr, form] filters that nested trace to the step leaves whose
- * expression matches the pattern `form` (same structural matcher as MatchQ,
- * src/match.c), flattening the nesting away into a plain List of matches.
- * Because Trace is HoldAll, `form` reaches the builtin unevaluated, so pattern
- * literals like `_Integer` or `f[_]` work directly. A form that matches nothing
- * yields {}.
+ * Trace[expr, form] filters that nested trace to the steps whose expression
+ * matches the pattern `form` (same structural matcher as MatchQ, src/match.c),
+ * keeping the nesting and dropping the sublists left empty; Trace[expr, s]
+ * keeps the evaluations that use rules for the symbol s, and
+ * Trace[expr, form -> rhs] gives rhs for each matching step. Because Trace is
+ * HoldAll, `form` reaches the builtin unevaluated, so pattern literals like
+ * `_Integer` or `f[_]` work directly. A form that matches nothing yields {}.
  *
  * All the nesting/clock/ownership subtlety lives in eval_collect_trace; this
  * file only handles arity dispatch, form filtering, HoldForm wrapping,
@@ -27,101 +28,140 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "match.h"
+#include <stdlib.h>
 
-/* Trace requires HoldAll: the argument must reach the builtin unevaluated so
- * the collector can observe its rewrite sequence from the start. Without Hold,
- * the evaluator would fully reduce expr before builtin_trace ever runs.
- *
- * Ownership: the evaluator owns `res` and frees it after a non-NULL return.
- * eval_collect_trace merely BORROWS args[0] (it inc-refs each recorded step),
- * so the returned List is independent of `res` — no NULL-out-before-free dance
- * is needed here. Returning NULL leaves the call unevaluated and the evaluator
- * retains `res`.
- *
- * HoldForm wrapping: builtin_trace's return value flows back through the
- * evaluator's fixed-point loop, which re-evaluates it. `List` is not held, so a
- * bare intermediate like `1 + 1` would reduce a second time (turning the trace
- * into {2, 2}). Wrapping each step in HoldForm makes the list inert on that
- * pass while printing transparently (HoldForm[1+1] displays as `1 + 1`),
- * yielding the Mathematica-style {1 + 1, 2}. The raw collector output is left
- * unwrapped so eval_collect_trace stays a clean data primitive for later
- * phases (TraceDepth, Trace[expr, form]). */
-/* True for a List[...] node -- the collector's nesting marker (each argument
- * sub-evaluation that took a step is spliced in as a List). Step forms are any
- * other expression. */
-static bool trace_is_list(Expr* e) {
+/* The collector runs in marked mode (eval_collect_trace_marked): every step
+ * is HoldForm[e], and every List node is nesting -- one sublist per argument
+ * or sub-evaluation that took a step. A step whose value is itself a List
+ * ({1, 2, 3} from Range[3]) is therefore a HoldForm, never mistaken for
+ * nesting. */
+static bool trace_is_nest(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == SYM_List;
 }
 
-/* Recursively collect every step leaf of the nested trace `node` that
- * structurally matches `form` (borrowed) into the growable buffer (*buf,*n,*cap).
- * List nodes are descended into (structure, not steps); matching leaves are
- * copied in. Mathematica's Trace[expr, form] returns the matched forms; we
- * flatten the nesting away, consistent with the earlier flat semantics the
- * tests assert. */
-static void trace_collect_matches(Expr* node, Expr* form,
-                                  Expr*** buf, size_t* n, size_t* cap) {
-    if (trace_is_list(node)) {
-        for (size_t i = 0; i < node->data.function.arg_count; i++)
-            trace_collect_matches(node->data.function.args[i], form, buf, n, cap);
-        return;
+/* The expression a step records (the body of its HoldForm). */
+static Expr* trace_step_body(Expr* e) {
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 1 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_HoldForm)
+        return e->data.function.args[0];
+    return e;
+}
+
+/* The filter of Trace[expr, form]:
+ *   TF_PATTERN  form is a pattern: keep the steps that match it;
+ *   TF_RULE     form is lhs -> rhs (or :>): keep rhs, with lhs's bindings, for
+ *               each step that matches lhs;
+ *   TF_SYMBOL   form is a symbol s: keep the evaluations that use rules for
+ *               s -- each step whose head is s (or that is s itself) and the
+ *               step it was rewritten to.
+ * The nesting of the trace is kept, and a sublist left empty is dropped, so
+ * Trace[fac[3], fac[_]] is {fac[3], {fac[2], {fac[1]}}}. */
+typedef enum { TF_PATTERN, TF_RULE, TF_SYMBOL } TraceFilterKind;
+
+typedef struct {
+    TraceFilterKind kind;
+    Expr* pat;   /* the pattern (lhs for a rule); borrowed */
+    Expr* rhs;   /* TF_RULE only; borrowed */
+    const char* sym;  /* TF_SYMBOL only */
+} TraceFilter;
+
+static bool trace_uses_symbol(const Expr* e, const char* sym) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == sym;
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    while (h->type == EXPR_FUNCTION) h = h->data.function.head;   /* s[a][b] */
+    return h->type == EXPR_SYMBOL && h->data.symbol.name == sym;
+}
+
+/* The kept form of one step, or NULL. `prev_kept` (TF_SYMBOL) says that the
+ * step before it in the same chain used a rule of the symbol. */
+static Expr* trace_filter_step(Expr* step, const TraceFilter* tf, bool* uses) {
+    Expr* body = trace_step_body(step);
+    *uses = false;
+    if (tf->kind == TF_SYMBOL) {
+        *uses = trace_uses_symbol(body, tf->sym);
+        return *uses ? expr_copy(step) : NULL;
     }
     MatchEnv* env = env_new();
-    bool matched = match(node, form, env);
+    Expr* out = NULL;
+    if (match(body, tf->pat, env)) {
+        if (tf->kind == TF_PATTERN) {
+            out = expr_copy(step);
+        } else {
+            Expr* inst = replace_bindings(tf->rhs, env);
+            out = evaluate(inst);
+            expr_free(inst);
+        }
+    }
     env_free(env);
-    if (!matched) return;
-    if (*n == *cap) {
-        size_t newcap = *cap ? *cap * 2 : 8;
-        Expr** grown = realloc(*buf, newcap * sizeof(Expr*));
-        if (!grown) return;                  /* OOM: drop this match */
-        *buf = grown;
-        *cap = newcap;
-    }
-    (*buf)[(*n)++] = expr_copy(node);         /* keep a copy; caller frees raw */
+    return out;
 }
 
-/* Wrap the step leaves of the nested trace `e` (owned) in HoldForm so the
- * returned structure stays inert under the evaluator's fixed-point re-pass while
- * still printing transparently, and returns the transformed tree (owning). List
- * nodes are recursed into and preserved (nesting); every non-List leaf is
- * wrapped. A leaf that is itself a value-List is recursed too -- wrapping its
- * elements prints identically to wrapping the list whole, so no step/nesting
- * disambiguation is needed. */
-static Expr* trace_holdform_tree(Expr* e) {
-    if (trace_is_list(e)) {
-        for (size_t i = 0; i < e->data.function.arg_count; i++)
-            e->data.function.args[i] = trace_holdform_tree(e->data.function.args[i]);
-        return e;
+/* Filter the nested trace `node` (a nesting List, borrowed); returns the
+ * filtered List, or NULL when nothing in it was kept. */
+static Expr* trace_filter_tree(Expr* node, const TraceFilter* tf) {
+    size_t n = node->data.function.arg_count;
+    Expr** kept = n ? malloc(n * sizeof(Expr*)) : NULL;
+    size_t k = 0;
+    bool prev_uses = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* e = node->data.function.args[i];
+        if (trace_is_nest(e)) {
+            Expr* sub = trace_filter_tree(e, tf);
+            if (sub) kept[k++] = sub;
+            continue;     /* a sub-evaluation does not break the chain */
+        }
+        bool uses = false;
+        Expr* f = trace_filter_step(e, tf, &uses);
+        if (!f && tf->kind == TF_SYMBOL && prev_uses)
+            f = expr_copy(e);   /* what a rule of the symbol rewrote it to */
+        prev_uses = uses;
+        if (f) kept[k++] = f;
     }
-    Expr* wrap[1] = { e };
-    return expr_new_function(expr_new_symbol(SYM_HoldForm), wrap, 1);
+    if (k == 0) { free(kept); return NULL; }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), kept, k);
+    free(kept);
+    return out;
 }
 
+/* Trace requires HoldAll: the argument must reach the builtin unevaluated so
+ * the collector can observe its rewrite sequence from the start. The steps
+ * come back wrapped in HoldForm, which keeps the list inert on the
+ * evaluator's re-pass (a bare 1 + 1 would reduce again) while printing
+ * transparently: Trace[1 + 1] is {1 + 1, 2}.
+ *
+ * Ownership: the evaluator owns `res`; eval_collect_trace_marked BORROWS
+ * args[0], so the returned List is independent of it. */
 Expr* builtin_trace(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;  /* other arities stay unevaluated */
 
-    Expr* raw = eval_collect_trace(res->data.function.args[0]);
-    if (!raw) return NULL;
+    Expr* raw = eval_collect_trace_marked(res->data.function.args[0]);
+    if (!raw || argc == 1) return raw;
 
-    /* Trace[expr, form]: keep only the step leaves matching the (held) pattern
-     * form, flattening the nesting into a plain List of matches. Filtering runs
-     * on the raw, pre-HoldForm steps so `form` matches the plain expression a
-     * user wrote (e.g. _Integer against 5, not against HoldForm[5]). The
-     * collector has already restored the outer trace state, so match()'s
-     * internal evaluation (for /; and ?test) is safe here. */
-    if (argc == 2) {
-        Expr** buf = NULL; size_t n = 0, cap = 0;
-        trace_collect_matches(raw, res->data.function.args[1], &buf, &n, &cap);
-        expr_free(raw);
-        raw = expr_new_function(expr_new_symbol(SYM_List), buf, n);
-        free(buf);
+    /* Trace[expr, form]: the collector has already restored the outer trace
+     * state, so match()'s internal evaluation (for /; and ?test) and a rule's
+     * right-hand side are not themselves traced. */
+    Expr* form = res->data.function.args[1];
+    TraceFilter tf = { TF_PATTERN, form, NULL, NULL };
+    if (form->type == EXPR_FUNCTION && form->data.function.arg_count == 2 &&
+        form->data.function.head->type == EXPR_SYMBOL &&
+        (form->data.function.head->data.symbol.name == SYM_Rule ||
+         form->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
+        tf.kind = TF_RULE;
+        tf.pat = form->data.function.args[0];
+        tf.rhs = form->data.function.args[1];
+    } else if (form->type == EXPR_SYMBOL) {
+        tf.kind = TF_SYMBOL;
+        tf.sym = form->data.symbol.name;
     }
-
-    return trace_holdform_tree(raw);
+    Expr* out = trace_filter_tree(raw, &tf);
+    expr_free(raw);
+    return out ? out : expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 }
 
 void trace_init(void) {
@@ -133,5 +173,8 @@ void trace_init(void) {
         "\tas a sublist, mirroring the structure of the evaluation. Returns {} when\n"
         "\texpr needs no rewriting.\n"
         "Trace[expr, form]\n\tIncludes only the steps whose expression matches the\n"
-        "\tpattern form (e.g. Trace[expr, _Integer]).");
+        "\tpattern form (e.g. Trace[expr, _Integer]), keeping the nesting.\n"
+        "Trace[expr, s]\n\tIncludes the evaluations that use rules for the symbol s.\n"
+        "Trace[expr, form -> rhs]\n\tGives rhs, with form's bindings, for each step\n"
+        "\tthat matches form.");
 }

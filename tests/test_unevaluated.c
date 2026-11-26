@@ -93,8 +93,9 @@ void test_unevaluated_nested() {
 /* Head itself does not get stripped when Unevaluated is an argument to a
  * symbolic (non-builtin) function with no hold attributes */
 void test_unevaluated_symbolic_head() {
-    /* After stripping, h receives Plus[a, b] which evaluates normally (printed as "a + b"). */
-    assert_eval_eq("ClearAll[h]; h[Unevaluated[Plus[a, b]]]", "h[a + b]", 0);
+    /* h has no rule for Plus[a, b], so the call keeps the wrapper it was
+     * given, as in the reference. */
+    assert_eval_eq("ClearAll[h]; h[Unevaluated[Plus[a, b]]]", "h[Unevaluated[a + b]]", 0);
 }
 
 /* HoldComplete prevents Unevaluated stripping (HoldAllComplete semantics) */

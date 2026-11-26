@@ -152,6 +152,7 @@ static void reset_node_payload(SymbolDef* d) {
     if (d->default_options) { expr_free(d->default_options); d->default_options = NULL; }
     d->builtin_func = NULL;
     d->attributes = 0;
+    d->numeric_q = 0;
     d->has_def = 0;
 }
 

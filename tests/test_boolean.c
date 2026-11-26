@@ -211,7 +211,7 @@ void test_xor_evaluation() {
     assert_eval_eq("Xor[True, True]", "False", 0);
     assert_eval_eq("Xor[True, True, True]", "True", 0);
     assert_eval_eq("Xor[False, a]", "a", 0);
-    assert_eval_eq("Xor[True, a]", "Not[a]", 0);
+    assert_eval_eq("Xor[True, a]", "!a", 0);
     assert_eval_eq("Xor[a, a]", "False", 0);
     assert_eval_eq("Xor[a, b, a]", "b", 0);
     assert_eval_eq("Xor[Xor[a, b], c]", "Xor[a, b, c]", 0);   /* Flat */
@@ -226,7 +226,7 @@ void test_equivalent_evaluation() {
     assert_eval_eq("Equivalent[True, True]", "True", 0);
     assert_eval_eq("Equivalent[False, False]", "True", 0);
     assert_eval_eq("Equivalent[True, a]", "a", 0);            /* True forces a */
-    assert_eval_eq("Equivalent[False, a]", "Not[a]", 0);      /* False forces !a */
+    assert_eval_eq("Equivalent[False, a]", "!a", 0);      /* False forces !a */
     assert_eval_eq("Equivalent[a, a]", "True", 0);            /* duplicate collapse */
     assert_eval_eq("Equivalent[True, a, b]", "a && b", 0);
     assert_eval_eq("Equivalent[a, b]", "Equivalent[a, b]", 0);/* stays symbolic */
@@ -237,7 +237,7 @@ void test_implies_evaluation() {
     assert_eval_eq("Implies[False, q]", "True", 0);
     assert_eval_eq("Implies[True, q]", "q", 0);
     assert_eval_eq("Implies[p, True]", "True", 0);
-    assert_eval_eq("Implies[p, False]", "Not[p]", 0);
+    assert_eval_eq("Implies[p, False]", "!p", 0);
     assert_eval_eq("Implies[p, p]", "True", 0);
     assert_eval_eq("Implies[True, 1 < 2]", "True", 0);
     assert_eval_eq("Implies[p, q]", "Implies[p, q]", 0);      /* stays symbolic */

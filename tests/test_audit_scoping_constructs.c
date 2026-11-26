@@ -92,6 +92,16 @@ static void test_wave5_g4_scoping(void) {
     audit_chk("With#6", "Quiet[With[w5x = 1, w5x]]", "With[w5x = 1, w5x]");
 }
 
+/* Wave 6 G1: the $ModuleNumber counter is not bounded by int64. */
+static void test_wave6_g1_scoping(void) {
+    audit_chk("Unique#3", "$ModuleNumber = 9223372036854775807; {Unique[w6w], Unique[w6v]}",
+              "{w6w$9223372036854775807, w6v$9223372036854775808}");
+    audit_chk("Unique#3", "$ModuleNumber", "9223372036854775809");
+    audit_chk("Unique#3", "Module[{w6q}, w6q]", "w6q$9223372036854775809");
+    audit_chk("Unique#3", "$ModuleNumber = 10^30; Unique[w6u]", "w6u$1000000000000000000000000000000");
+    audit_run("$ModuleNumber = 100000");
+}
+
 int main(void) {
     audit_init();
     TEST(test_block_duplicate_local);
@@ -99,5 +109,6 @@ int main(void) {
     TEST(test_with_capture);
     TEST(test_wave4_g4_scoping);
     TEST(test_wave5_g4_scoping);
+    TEST(test_wave6_g1_scoping);
     return audit_finish("audit_scoping_constructs");
 }

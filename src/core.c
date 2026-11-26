@@ -1860,8 +1860,9 @@ static void core_clear_all_one(const char* name) {
 
     symtab_clear_symbol(name);          /* values */
     SymbolDef* def = symtab_get_def(name);
-    if (def->attributes != 0) {         /* attributes */
+    if (def->attributes != 0 || def->numeric_q) {   /* attributes, NumericQ[s] = True */
         def->attributes = 0;
+        def->numeric_q = 0;
         eval_rule_epoch_bump();
     }
     if (def->docstring) {               /* usage / messages */
@@ -3816,7 +3817,10 @@ static bool is_numeric_quantity(Expr* e) {
             name == SYM_Khinchin || name == SYM_MachinePrecision) {
             return true;
         }
-        return false;
+        /* NumericQ[s] = True declared the symbol numeric. */
+        SymbolDef* sd = e->data.symbol.def;
+        if (!sd) sd = symtab_lookup(name);
+        return sd && sd->numeric_q;
     }
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
@@ -5428,6 +5432,36 @@ static int64_t byte_count_node(Expr* e) {
              * mutators reject cycles.) */
             total += ll_byte_count(e->data.llist, byte_count_internal);
             break;
+        case EXPR_SPARSE: {
+            /* The payload: dims, the index pattern (row pointers and the
+             * coordinates of each stored entry), the value buffer and the
+             * background. It grows with the stored entries, as the array's
+             * memory does; it was a flat 56 for every SparseArray. */
+            const SparseArray* sa = e->data.sparse;
+            if (!sa) break;
+            total += (int64_t)sizeof(SparseArray);
+            total += (int64_t)((size_t)sa->rank * sizeof(int64_t));
+            total += byte_count_internal(sa->bg);
+            const SparsePattern* p = sa->pat;
+            int64_t nnz = p ? p->nnz : 0;
+            if (p) {
+                total += (int64_t)sizeof(SparsePattern);
+                total += (p->nrows + 1) * (int64_t)sizeof(int64_t);
+                total += nnz * p->width * (int64_t)(p->idx32 ? sizeof(int32_t) : sizeof(int64_t));
+            }
+            switch (sa->kind) {
+                case SPV_INT64: total += nnz * (int64_t)sizeof(int64_t); break;
+                case SPV_F64:   total += nnz * (int64_t)sizeof(double); break;
+                case SPV_C128:  total += nnz * (int64_t)(2 * sizeof(double)); break;
+                case SPV_EXPR: {
+                    Expr* const* v = (Expr* const*)sa->vals;
+                    total += nnz * (int64_t)sizeof(Expr*);
+                    for (int64_t i = 0; v && i < nnz; i++) total += byte_count_internal(v[i]);
+                    break;
+                }
+            }
+            break;
+        }
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Significand storage scales with the value's precision in bits. */
@@ -5992,7 +6026,7 @@ Expr* builtin_tostring(Expr* res) {
     } else if (form_name == SYM_LeanForm) {
         str = lean_form_string(expr);
     } else if (form_name == SYM_FullForm) {
-        str = expr_to_string_fullform(expr);
+        str = expr_to_string_fullform_display(expr);
     } else if (form_name == SYM_TeXForm) {
         Expr* inner[1];
         inner[0] = expr_copy(expr);

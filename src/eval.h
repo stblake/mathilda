@@ -45,6 +45,10 @@ int* eval_nfmemo_depth_counter(void);
  * Reentrant: safe to call from inside a running evaluation, including nested
  * within another trace. */
 Expr* eval_collect_trace(Expr* held_expr);
+/* As eval_collect_trace, with every recorded step wrapped in HoldForm: each
+ * List node of the result then marks nesting, and each HoldForm[e] is a step,
+ * even when e is itself a List. What Trace[] returns. */
+Expr* eval_collect_trace_marked(Expr* held_expr);
 
 /* True iff `e` is an in-flight Throw sentinel: Throw[v], Throw[v,tag] or
  * Throw[v,tag,f] (head SYM_Throw, arity 1-3). Catch/Throw propagate by
