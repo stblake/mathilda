@@ -1030,6 +1030,68 @@ static void test_wave6_g2(void) {
     audit_true("BarnesG#6", "Abs[N[BarnesG[13/2], 30] - 254874576956849898973590610636/10^26] < 10^-25");
 }
 
+/* Wave 6 G5: the Mathieu functions near a high-order characteristic value
+ * and at a large q. Reference values computed from first principles: the
+ * Floquet coefficients by continued fractions at 80 digits with nu solved to
+ * 1e-78, normalized sum c_k^2 = 1, Re c_0 > 0 (the dominant coefficient), and
+ * each checked against a direct high-precision integration of
+ * y'' + (a - 2 q cos 2z) y = 0 from z = 0.1 to z = 0.6 (agreement to 1e-35). */
+static void mrel(const char* id, const char* expr, const char* ref, const char* tol) {
+    char buf[512];
+    snprintf(buf, sizeof buf, "With[{v = %s}, NumberQ[v] && Abs[v/(%s) - 1] < %s]", expr, ref, tol);
+    audit_chk(id, buf, "True");
+}
+
+static void test_wave6_g5(void) {
+    /* MathieuCPrime#1: a = 400 is within 1.6e-3 of a_20(1) = 400.00125, which
+     * Hill's relative snap tolerance took for a characteristic value (the
+     * integer gluing then failed: unevaluated); the Sturm count decides now.
+     * Of the two exponent representatives 20 -+ 3.1e-5, equidistant from
+     * Sqrt[400], the one with c_0 dominant fixes the sign. */
+    mrel("MathieuCPrime#1", "MathieuCPrime[400., 1., 0.1]", "-18.204539489323526854693", "10^-13");
+    mrel("MathieuCPrime#1", "MathieuCPrime[400, 1, 0.1`20]", "-18.204539489323526854693", "10^-18");
+    mrel("MathieuCPrime#1", "MathieuC[400., 1., 0.1]", "-0.41211453273409536478597", "10^-13");
+    mrel("MathieuCPrime#1", "MathieuS[400., 1., 0.1]", "0.91248140641440876593378", "10^-13");
+    mrel("MathieuCPrime#1", "MathieuSPrime[400., 1., 0.1]", "-8.2224765002091097310177", "10^-13");
+    mrel("MathieuCPrime#1", "MathieuC[400, 1, 0.1`20]", "-0.41211453273409536478597", "10^-18");
+    mrel("MathieuCPrime#1", "MathieuS[400, 1, 0.1`20]", "0.91248140641440876593378", "10^-18");
+    mrel("MathieuCPrime#1", "MathieuSPrime[400, 1, 0.1`20]", "-8.2224765002091097310177", "10^-18");
+    audit_true("MathieuCPrime#1", "MathieuCPrime[400.5, 1., 0.1] < 0 && MathieuCPrime[399.9, 1., 0.1] < 0");
+    /* the Wronskian C S' - C' S is constant in z */
+    audit_true("MathieuCPrime#1", "With[{w = Function[z, N[MathieuC[400, 1, z] MathieuSPrime[400, 1, z] - "
+                                  "MathieuCPrime[400, 1, z] MathieuS[400, 1, z], 30]]}, "
+                                  "Abs[w[1/10] - w[3/5]] < 10^-25 && Abs[w[1/10] - 19.99990585714533156221] < 10^-18]");
+    /* the same sign rule at a perfect square and a small q: ce ~ cos(3 z) */
+    audit_true("MathieuCPrime#1", "MathieuC[9., 0.5, 0.1] > 0.9 && MathieuCPrime[9., 0.5, 0.1] < 0");
+
+    /* MathieuCPrime#2: across an instability band at a large q the
+     * normalization sum c_k^2 cancels (2.6e-10 of sum |c_k|^2 at q = 800): the
+     * machine Newton stalled on its noise floor (unevaluated), and where it
+     * did converge the result carried the loss (6e-6 at q = 900). The machine
+     * plan now declines there and the ball kernel works with the lost bits. */
+    mrel("MathieuCPrime#2", "MathieuCPrime[1., 800., 0.1]", "806.28107880021573709717", "10^-13");
+    mrel("MathieuCPrime#2", "MathieuCPrime[1, 1000, 0.1`20]", "1906.6922770475002339694", "10^-18");
+    mrel("MathieuCPrime#2", "MathieuCPrime[1., 500., 0.1]", "360.35352340108047046022", "10^-13");
+    mrel("MathieuCPrime#2", "MathieuC[1., 800., 0.1]", "20.336172875723608904727", "10^-13");
+    mrel("MathieuCPrime#2", "MathieuC[1, 1000, 0.1`20]", "43.001791233324261712117", "10^-18");
+    mrel("MathieuCPrime#2", "MathieuC[1., 900., 0.1]", "28.985555361115219031859", "10^-13");
+    mrel("MathieuCPrime#2", "Im[MathieuS[1., 800., 0.1]]", "-20.322093377801498696380", "10^-13");
+    mrel("MathieuCPrime#2", "Im[MathieuSPrime[1., 800., 0.1]]", "-806.83682068145608975970", "10^-13");
+    /* far larger q: Hill's determinant could not place nu (Im nu 23.19 for
+     * 41.91 at q = 6000); the monodromy of the equation does */
+    mrel("MathieuCPrime#2", "MathieuC[1., 2000., 0.1]", "251.31800887323978137748", "10^-13");
+    mrel("MathieuCPrime#2", "Im[MathieuC[1., 3000., 0.1]]", "522.95499632991079538715", "10^-13");
+    mrel("MathieuCPrime#2", "MathieuC[1., 10000., 0.3]", "4.7046329920398023787949*^17", "10^-13");
+    /* machine and arbitrary precision agree, sign included, where c_0 / s is
+     * purely imaginary (the tie was decided by rounding noise) */
+    mrel("MathieuCPrime#2", "MathieuS[-30., 500., 0.1]", "N[MathieuS[-30, 500, 1/10], 30]", "10^-13");
+    mrel("MathieuCPrime#2", "MathieuC[1., 750., 0.37]", "N[MathieuC[1, 750, 37/100], 30]", "10^-13");
+    /* the Wronskian at q = 1000, constant in z to 30 digits */
+    audit_true("MathieuCPrime#2", "With[{w = Function[z, N[MathieuC[1, 1000, z] MathieuSPrime[1, 1000, z] - "
+                                  "MathieuCPrime[1, 1000, z] MathieuS[1, 1000, z], 40]]}, "
+                                  "Abs[w[1/10] - w[3/5]] < 10^-25 Abs[w[1/10]]]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_legendreq_type3);
@@ -1065,5 +1127,6 @@ int main(void) {
     TEST(test_wave5_numerics);
     TEST(test_wave5_more);
     TEST(test_wave6_g2);
+    TEST(test_wave6_g5);
     return audit_finish("audit_special_functions");
 }

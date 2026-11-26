@@ -565,7 +565,7 @@ static void corr_range(void* arg) {
  * failure. Arithmetic is on midpoints. */
 static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
                      double nur, double nui, double ar, double ai, double qr, double qi,
-                     slong ptop, int real_nu) {
+                     slong ptop, slong loss, int real_nu) {
     acb_t am, qm, g, dg, step, emm, demm;
     acb_init(am); acb_init(qm); acb_init(g); acb_init(dg); acb_init(step);
     acb_init(emm); acb_init(demm);
@@ -575,12 +575,17 @@ static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
     int ok = 0;
     /* The level schedule, built top-down (ptop, ~ptop/2, ..., <= 96) so that it
      * ends exactly at ptop: doubling up from 64 would end with a level just
-     * above a power of two, a near-duplicate of the full-cost level before it. */
+     * above a power of two, a near-duplicate of the full-cost level before it.
+     * The floor is raised by twice the normalization loss: g' carries the
+     * factor sum c_k^2 / c_m^2 (2^-loss of its scale), so at a level of pw bits
+     * Newton's steps sit on a noise floor of ~2^-(pw - loss) and could never
+     * pass the 2^-(pw/2) test below unless pw > 2 loss. */
     slong lev[64];
     int nlev = 0;
+    slong pfloor = 96 + 2 * loss;
     for (slong pw = ptop; ; pw = pw / 2 + 8) {
         lev[nlev++] = pw;
-        if (pw <= 96 || nlev == 64) break;
+        if (pw <= pfloor || pw / 2 + 8 < pfloor || nlev == 64) break;
     }
     for (int li = nlev - 1; li >= 0; li--) {
         slong pw = lev[li];
@@ -592,7 +597,9 @@ static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
         for (int it = 0; it < 40; it++) {
             MillerCtx M;
             mctx_init(&M, am, qm, nu, pw + 16);
-            slong pd = pw / 2 + 32;
+            /* g' itself cancels by 2^-loss: carry it with that much more */
+            slong pd = pw / 2 + 32 + loss;
+            if (pd > pw + 16) pd = pw + 16;
             miller_sweeps(e, de, emm, demm, &M, qm, m, &P, pw + 16, pd);
             miller_g(g, dg, e, de, emm, demm, &M, qm, nu, m, P.lo, pw + 16, pd);
             mctx_clear(&M);
@@ -955,6 +962,14 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     /* the odd functions (se, ce') vanish like z at 0, so a small |z| costs
      * log2(1/|z|) bits of cancellation in the Floquet sum */
     if ((odd ^ deriv) && zabs > 0.0 && zabs < 1.0) wp += (slong)(-log2(zabs) + 1.0);
+    /* The normalization sum c_k^2 can cancel (a complex nu at a large q:
+     * 2^-34 of sum |c_k|^2 at MathieuC[1, 1000, 0.1`20], audit
+     * MathieuCPrime#2). It costs those bits twice: nu is pinned by a g whose
+     * derivative carries the same factor, and the coefficients nu's error
+     * leaves behind are amplified by it again in S. Before this the ball
+     * kernel ran out of bits, S contained 0, and the call declined. */
+    slong loss = (slong)ceil(sf_machine_mathieu_plan_loss(ar, ai, qr, qi));
+    wp += 2 * loss;
     /* far from the real axis: the Bessel expansion (far_eval), its guard bits */
     double y0 = 0.0;
     int far = far_plan(qr, qi, zi, &y0);
@@ -967,7 +982,8 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
         acb_set_si(nu, (slong)floor(nur + 0.5));
     } else {
         acb_set_d_d(nu, nur, real_nu ? 0.0 : nui);
-        if (!refine_nu(nu, a, q, m, nur, nui, ar, ai, qr, qi, wp / 2 + 48, real_nu)) {
+        if (!refine_nu(nu, a, q, m, nur, nui, ar, ai, qr, qi, wp / 2 + 48 + loss, loss,
+                       real_nu)) {
             acb_indeterminate(res); acb_clear(nu); return;
         }
     }
@@ -998,13 +1014,24 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
      * -- is a single scalar `s` applied to the final sum, not to every
      * coefficient. */
     {
+        /* On the MIDPOINTS of a and q, as in refine_nu: their radii are
+         * attached at the end (rin below). Fed into g as balls, a's radius
+         * entered g only through d_m, not through the continued-fraction
+         * ratios whose a-dependence cancels it, so it reached delta divided
+         * by g' -- 2^-loss small at a large q -- and swamped every
+         * coefficient: MathieuC[777/10, 10000, 3/10] at 30 digits carried a
+         * 2^-102 relative radius at 438 bits and declined. */
+        acb_t am, qm;
+        acb_init(am); acb_init(qm);
+        acb_get_mid(am, a); acb_get_mid(qm, q);
         MillerCtx M;
-        mctx_init(&M, a, q, nu, wp);
-        slong pd = wp / 2 + 64;
-        miller_sweeps(c, dc, emm, demm, &M, q, m, &P, wp, pd);
+        mctx_init(&M, am, qm, nu, wp);
+        slong pd = wp / 2 + 64 + loss;
+        if (pd > wp) pd = wp;
+        miller_sweeps(c, dc, emm, demm, &M, qm, m, &P, wp, pd);
         if (!integer) {
-            miller_g(g, dg, c, dc, emm, demm, &M, q, nu, m, lo, wp, pd);
-            if (acb_contains_zero(dg)) { mctx_clear(&M); acb_indeterminate(res); goto done; }
+            miller_g(g, dg, c, dc, emm, demm, &M, qm, nu, m, lo, wp, pd);
+            if (acb_contains_zero(dg)) { mctx_clear(&M); acb_clear(am); acb_clear(qm); acb_indeterminate(res); goto done; }
             acb_div(delta, g, dg, wp);
             acb_neg(delta, delta);
             mag_t d2;
@@ -1036,6 +1063,7 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
             corr_range(&J);
         }
         mctx_clear(&M);
+        acb_clear(am); acb_clear(qm);
     }
     /* S = sum c_k^2: arb's fused dot product (one rounding, the operands' own
      * mantissa lengths), much cheaper than n squarings at the profile. */
@@ -1046,7 +1074,12 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     {
         double c0r = arf_get_d(arb_midref(acb_realref(t)), ARF_RND_NEAR);
         double c0i = arf_get_d(arb_midref(acb_imagref(t)), ARF_RND_NEAR);
-        if (c0r < 0.0 || (fabs(c0r) <= 1e-12 * fabs(c0i) && c0i < 0.0)) acb_neg(s, s);
+        /* the tie first: c_0 / s purely imaginary (exactly, for real (a, q)
+         * with Re nu = 0) leaves a rounding-level real part whose sign
+         * follows the noise in S -- MathieuS[-30, 500, 1/10] flipped between
+         * 114 and 208 bits (see sf_machine_mathieu.c) */
+        int flip = fabs(c0r) <= 1e-12 * fabs(c0i) ? c0i < 0.0 : c0r < 0.0;
+        if (flip) acb_neg(s, s);
     }
     if (integer && rindex >= 0 && realpq) {
         /* the DLMF sign, by the machine plan's rule (audit MathieuC#2/#3,

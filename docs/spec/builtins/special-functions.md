@@ -4253,14 +4253,27 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
   where `nu` is the characteristic exponent (`Cos[Pi nu] = y_e(Pi)` for the even
   solution with `y_e(0) = 1`) and `(a - (nu+2k)^2) c_k = q (c_{k-1} + c_{k+1})`:
   - generic `nu`: `Sum[c_k^2] = 1` (the plain square, so the function is analytic
-    in `a` and `q`), with the sign fixed by `Re(c_0) > 0`, `c_0` the `Cos[nu z]`
-    coefficient for the representative of `nu` nearest `Sqrt[a]`;
+    in `a` and `q`), with the sign fixed by `Re(c_0) > 0` (`Im(c_0) > 0` when
+    `c_0` is purely imaginary), `c_0` the `Cos[nu z]` coefficient for the
+    representative of `nu` nearest `Sqrt[a]`. For a real `nu` the two
+    candidates `n - d` and `n + d` about an integer `n` are both near
+    `Sqrt[a]` (exactly equidistant at `a = n^2`); when one of them puts `c_0` on
+    the dominant coefficient, that one is taken (the `q -> 0` picture,
+    `c_0 -> 1`), so `MathieuC[400., 1., 0.1] = -0.412115`, close to `Cos[2]`, and
+    `MathieuC[9., 0.5, 0.1] = 0.928294`. A conjugate pair `n +- i mu` (real
+    `a > 0` in an instability band) takes `Im(nu) < 0`, the principal branch
+    of `ArcCos[Cos[Pi nu]]`;
   - integer `nu` (`a` a characteristic value, `MathieuCharacteristicA[r, q]` for
     an integer `r`): the DLMF normalization `Integrate[ce^2, {z, 0, 2 Pi}] = Pi`,
     i.e. scipy's `mathieu_cem`. For real `a`, `q` the test is a Sturm count on
     the `MathieuCharacteristicA`/`B` matrices (`a` within ~1e-12 relative of
-    `a_r(q)` or `b_r(q)`), which also names `r`; otherwise `a` within ~2e-6 in
-    `nu` (Hill's determinant) is treated as one. At a characteristic value with
+    `a_r(q)` or `b_r(q)`), which also names `r`; for complex `a` or `q`, `nu`
+    within ~2e-6 of an integer (Hill's determinant) is treated as one. For
+    real `a`, `q` Hill's test is used only when the Sturm count cannot decide:
+    its tolerance is relative to `n`, and `nu - n ~ (a - a_n)/(2n)`, so at
+    `n = 20` it took every `a` within 1.6e-3 of `a_20(1)` for a characteristic
+    value (`MathieuCPrime[400., 1., 0.1]` stayed unevaluated, audit
+    MathieuCPrime#1). At a characteristic value with
     real `q` the sign is DLMF's (28.2(vi)): `ce_{2j}(Pi/2) (-1)^j > 0`,
     `ce_{2j+1}'(Pi/2) (-1)^(j+1) > 0`, `se_{2j+1}(Pi/2) (-1)^j > 0`,
     `se_{2j+2}'(Pi/2) (-1)^(j+1) > 0` for `q > 0`, and `ce_r(0) > 0`,
@@ -4296,6 +4309,16 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
     ~`e^40`, value ~`1e-3`), the machine path declines to the ball kernel, which
     answers correctly. The reference returns `~1e45` there; the value
     `N y_e(5 i)` is confirmed by an independent mpmath ODE integration.
+  - Large `q` (audit MathieuCPrime#2): across an instability band
+    `Sum[c_k^2]` cancels against `Sum[|c_k|^2]` (the growing and decaying
+    halves of the Floquet solution barely overlap): `2.6*^-10` at `a = 1`,
+    `q = 800`, `1*^-37` at `q = 10^4`, about `E^(-Pi Abs[Im[nu]]/2)`. The
+    machine plan declines once that loses more than 4 digits (it was off by
+    6e-6 at `q = 900`), and the ball kernel runs with twice the lost bits
+    added. `MathieuCPrime[1., 800., 0.1] = 806.281`,
+    `MathieuCPrime[1, 1000, 0.1`20] = 1906.6922770475002340`,
+    `MathieuC[1., 10000., 0.3] = 4.70463*^17` (verified against a direct
+    integration of the equation and the Wronskian).
   - Far from the axis (Fourier window `sqrt|q| e^|Im z| > 1024`, audit
     MathieuCPrime#4): the ball kernel continues analytically through the Bessel
     expansion `Σ (-1)^k c_k C_{ν+2k}(2√q cos z)` (C = J, Y; the `tan z` form for an
@@ -4307,7 +4330,14 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
   - `nu`: Hill's determinant, rewritten without the poles at `a = (2k)^2` (the
     sinc factor divided out analytically) and with its polynomially convergent
     tail in closed form, refined by Newton on the continued-fraction consistency
-    function (every root is an equivalent exponent);
+    function (every root is an equivalent exponent). Hill's determinant is a
+    difference of terms ~`E^(2 Sqrt[q])`; when its own rounding estimate
+    exceeds 1e-11 (`q` of a few hundred), `Cos[Pi nu]` comes from the
+    monodromy instead, `2 y1(Pi/2) y2'(Pi/2) - 1` by RK4, a product of growing
+    solutions with no cancellation (Hill put `Im nu` at 23.19 for 41.91 at
+    `a = 1`, `q = 6000`). Where `g'` is too small for double Newton (it
+    carries the factor `Sum[c_k^2]/c_m^2`), the start is kept and refined by
+    the ball kernel;
   - the dominant coefficient index comes from inverse iteration on the
     truncated Floquet matrix;
   - coefficients come from two Miller sweeps glued there;
@@ -4332,6 +4362,10 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
   - Machine-precision buffers: `MathieuC[2, 1, v]` over 10^6 points in 15 ms.
   - Characteristic order: `ce_2(., 5)` over 10^6 points in 17 ms, against
     scipy `mathieu_cem` 920 ms.
+  - An instability band at a large `q` (`Sum[c_k^2]` cancelling by more than
+    4 digits, `q` above ~150 at small `a`) takes the ball kernel at machine
+    precision: about 1 ms per point instead of 1 µs, for 16 correct digits
+    where the machine plan had 6 to 12.
   - Per point: about 80 ns real and 200 ns complex; a new `(a, q)` plan costs
     about 28 µs.
 - **Surfaces.** The machine helper `sf_machine_mathieu` is shared bit-for-bit by
@@ -4427,7 +4461,9 @@ and parameter `q`, the odd solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
   Floquet solution `Sum[c_k E^(I (nu + 2k) z)]`
   (`F(z + Pi) = E^(I Pi nu) F(z)`):
   - generic `nu`: `Sum[c_k^2] = 1`, `Re(c_0) > 0`. The representative of `nu`
-    is the one nearest `Sqrt[a]`, taking `Re(nu) >= 0` on a tie (`a < 0`). The
+    is the one `MathieuC` takes (nearest `Sqrt[a]`, or of the two near it the
+    one with `c_0` dominant), taking `Re(nu) >= 0` on a tie (`a < 0`) and
+    `Im(nu) < 0` on a conjugate tie. The
     sine sum changes sign with `nu -> -nu`; the tie rule keeps
     `MathieuS -> Sin[Sqrt[a] z]` as `q -> 0`;
   - `a = b_n(q)`: `se_n` with the DLMF normalization (scipy's `mathieu_sem`):

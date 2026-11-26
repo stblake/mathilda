@@ -21,7 +21,9 @@
  *     truncated determinant converges only polynomially (the tail is
  *     exp(-sum q^2/(16k^4)) to first order), so the first two orders of the tail
  *     are added in closed form (trigamma asymptotics) and K is chosen from the
- *     size of the next one.
+ *     size of the next one. When the determinant's own rounding is large (it
+ *     is a difference of terms ~e^{2 sqrt q}), cos(pi nu) comes from the
+ *     monodromy of the equation instead (mth_monodromy_cos).
  *  2. nu = +-acos(cos(pi nu))/pi + 2m, the representative nearest sqrt(a) (so
  *     q -> 0 gives nu -> sqrt(a) and c_0 -> 1). Every such choice describes the
  *     same function; the choice only fixes which coefficient is c_0.
@@ -36,7 +38,9 @@
  *     found by two steps of inverse iteration on the truncated tridiagonal
  *     Floquet matrix (stable for any q, unlike a one-sided recurrence).
  *  5. Coefficients: the same two continued fractions, glued at m; normalized by
- *     sum c_k^2 = 1, sign Re(c_0) > 0.
+ *     sum c_k^2 = 1, sign Re(c_0) > 0. A plan whose nu Newton could not pin, or
+ *     whose sum c_k^2 cancels by more than 1e-4 (an instability band at a large
+ *     q), is COARSE: it guides the ball kernel but the machine path declines.
  *  6. Evaluation at z: with w = e^{2iz}, theta = nu + 2 lo,
  *         ce(z)  = ( e^{i theta z} P(w) + e^{-i theta z} P(1/w) ) / 2,
  *         ce'(z) = (i/2) ( e^{i theta z} Pw(w) - e^{-i theta z} Pw(1/w) ),
@@ -125,7 +129,16 @@ static mcx mc_acos(mcx z) {
     if (z.im == 0.0 && fabs(z.re) <= 1.0) return mc(acos(z.re), 0.0);
     int flip = z.re > 0.0;
     if (flip) z = mc(-z.re, -z.im);
-    mcx s = mc_sqrt(mc_sub(mc(1.0, 0.0), mc_mul(z, z)));
+    mcx s;
+    double rz = mc_abs(z);
+    if (rz > 1e100) {
+        /* z^2 would overflow (cos(pi nu) ~ e^{pi |Im nu|} at a large q):
+         * sqrt(1 - z^2) = |z| sqrt(1/|z|^2 - u^2), u = z / |z| */
+        mcx u = mc_scale(z, 1.0 / rz);
+        s = mc_scale(mc_sqrt(mc_sub(mc(1.0 / (rz * rz), 0.0), mc_mul(u, u))), rz);
+    } else {
+        s = mc_sqrt(mc_sub(mc(1.0, 0.0), mc_mul(z, z)));
+    }
     mcx w = mc_add(z, mc(-s.im, s.re));                          /* z + i s */
     mcx l = mc_log(w);
     mcx r = mc(l.im, -l.re);                                     /* -i log w */
@@ -145,7 +158,10 @@ static double mth_psi1_large(double x) {
     return ix + 0.5 * ix2 + ix * ix2 * (1.0 / 6.0 - ix2 * (1.0 / 30.0 - ix2 / 42.0));
 }
 
-static bool mth_hill_cos(mcx a, mcx q, mcx* C_out) {
+/* *relerr: an a-posteriori estimate of the relative rounding error of the
+ * determinant, 2^-52 times the largest |D_k| over |D_1| (the recurrence is a
+ * difference of terms that grow like (q^2/16)^k/(k!)^4 before they settle). */
+static bool mth_hill_cos(mcx a, mcx q, mcx* C_out, double* relerr) {
     double aa = mc_abs(a), aq = mc_abs(q);
     mcx x = mc_scale(mc_sqrt(a), 0.5);                           /* sqrt(a)/2 */
     if (x.re < 0.0) x = mc(-x.re, -x.im);                        /* the product is even */
@@ -159,12 +175,17 @@ static bool mth_hill_cos(mcx a, mcx q, mcx* C_out) {
     mcx q2 = mc_mul(q, q);
     mcx Dn2 = mc(1.0, 0.0), Dn1 = mc(1.0, 0.0);                 /* D_{K+2}, D_{K+1} */
     int sc = 0;                                                  /* D scaled by 1e-150^sc */
+    double lmax = 0.0;                    /* log max |D_k| (unscaled) */
     for (int k = K; k >= 1; k--) {
         double kk = (double)k * (double)k;
         mcx t = mc_sub(mc(1.0, 0.0), mc_scale(a, 1.0 / (4.0 * kk)));
         mcx e = mc_scale(q2, 1.0 / (16.0 * kk * ((double)k + 1.0) * ((double)k + 1.0)));
         mcx Dk = mc_sub(mc_mul(t, Dn1), mc_mul(e, Dn2));
         Dn2 = Dn1; Dn1 = Dk;
+        {
+            double l = log(mc_abs(Dk) + 1e-300) + 150.0 * (double)sc * log(10.0);
+            if (l > lmax) lmax = l;
+        }
         /* Large |q|: the D_k grow like (q^2/16)^k/(k!)^4 before they settle;
          * rescale both (the recurrence is linear) and remember the exponent. */
         if (mc_abs(Dn1) > 1e150) {
@@ -172,6 +193,10 @@ static bool mth_hill_cos(mcx a, mcx q, mcx* C_out) {
         }
     }
     mcx D1 = Dn1, D2 = Dn2;
+    {
+        double l1 = log(mc_abs(D1) + 1e-300) + 150.0 * (double)sc * log(10.0);
+        *relerr = exp(fmin(lmax - l1, 700.0)) * 2.2e-16;
+    }
     mcx detT = mc_mul(D1, mc_add(mc_mul(a, D1), mc_scale(mc_mul(q2, D2), 0.5)));
 
     /* R = [sin(pi x)/(pi x)] / prod_{k=1..K} (1 - x^2/k^2), stable at x ~ j. */
@@ -219,6 +244,77 @@ static bool mth_hill_cos(mcx a, mcx q, mcx* C_out) {
     return true;
 }
 
+/* cos(pi nu) from the monodromy of the equation itself: with y1, y2 the
+ * solutions of y'' = (2 q cos 2z - a) y with (y, y')(0) = (1, 0) and (0, 1),
+ * and the potential even and pi-periodic,
+ *     cos(pi nu) = y1(pi) = 2 y1(pi/2) y2'(pi/2) - 1 = 1 + 2 y1'(pi/2) y2(pi/2)
+ * (the Wronskian is 1). Classical RK4 on [0, pi/2] at h sqrt(|a| + 2|q|) <=
+ * 1/200: relative error ~1e-10, which only has to start Newton.
+ *
+ * Why it exists: Hill's determinant is a difference of terms ~ e^{2 sqrt q}
+ * and loses that much accuracy; at a = 1 it put Im nu at 24.68 for q = 2000
+ * (true 24.307), 23.19 for q = 6000 (true 41.91), and could not run at all
+ * beyond q ~ 8000 (audit MathieuCPrime#2). Across an instability band the
+ * monodromy is a product of GROWING solutions, ~e^{pi |Im nu|}, with no
+ * cancellation. The solutions are joint-rescaled by 2^-600 and the count
+ * kept, so the value overflows only where cos(pi nu) itself does. */
+static bool mth_monodromy_cos(mcx a, mcx q, mcx* C_out) {
+    double w = sqrt(mc_abs(a) + 2.0 * mc_abs(q)) + 1.0;
+    double L = M_PI / 2.0;
+    double Nd = ceil(L * w * 200.0);
+    if (!(Nd <= 4.0e6)) return false;
+    int N = (int)Nd;
+    double h = L / (double)N;
+    /* y1, y1', y2, y2' */
+    mcx y[4] = { { 1.0, 0.0 }, { 0.0, 0.0 }, { 0.0, 0.0 }, { 1.0, 0.0 } };
+    int sc = 0;
+    const double big = 0x1p600, ibig = 0x1p-600;
+    for (int i = 0; i < N; i++) {
+        double z = h * (double)i;
+        /* f = 2 q cos 2z - a at z, z + h/2, z + h */
+        mcx f0 = mc_sub(mc_scale(q, 2.0 * cos(2.0 * z)), a);
+        mcx f1 = mc_sub(mc_scale(q, 2.0 * cos(2.0 * z + h)), a);
+        mcx f2 = mc_sub(mc_scale(q, 2.0 * cos(2.0 * z + 2.0 * h)), a);
+        for (int s = 0; s < 4; s += 2) {
+            mcx u = y[s], v = y[s + 1];
+            mcx k1u = v, k1v = mc_mul(f0, u);
+            mcx u2 = mc_add(u, mc_scale(k1u, h / 2)), v2 = mc_add(v, mc_scale(k1v, h / 2));
+            mcx k2u = v2, k2v = mc_mul(f1, u2);
+            mcx u3 = mc_add(u, mc_scale(k2u, h / 2)), v3 = mc_add(v, mc_scale(k2v, h / 2));
+            mcx k3u = v3, k3v = mc_mul(f1, u3);
+            mcx u4 = mc_add(u, mc_scale(k3u, h)), v4 = mc_add(v, mc_scale(k3v, h));
+            mcx k4u = v4, k4v = mc_mul(f2, u4);
+            y[s] = mc_add(u, mc_scale(mc_add(mc_add(k1u, k4u),
+                                             mc_scale(mc_add(k2u, k3u), 2.0)), h / 6));
+            y[s + 1] = mc_add(v, mc_scale(mc_add(mc_add(k1v, k4v),
+                                                 mc_scale(mc_add(k2v, k3v), 2.0)), h / 6));
+        }
+        double m = 0.0;
+        for (int j = 0; j < 4; j++) m = fmax(m, mc_abs(y[j]));
+        if (!(m < big)) {
+            if (!isfinite(m)) return false;
+            for (int j = 0; j < 4; j++) y[j] = mc_scale(y[j], ibig);
+            sc++;
+        }
+    }
+    /* the two forms are equal; the one with the smaller product adds the 1
+     * to the smaller quantity */
+    mcx p1 = mc_mul(y[0], y[3]), p2 = mc_mul(y[1], y[2]);
+    mcx C;
+    if (sc == 0) {
+        C = mc_abs(p1) <= mc_abs(p2) ? mc_sub(mc_scale(p1, 2.0), mc(1.0, 0.0))
+                                     : mc_add(mc_scale(p2, 2.0), mc(1.0, 0.0));
+    } else {
+        /* |C| ~ 2^(1200 sc): the 1 is below the rounding; scale back in logs */
+        mcx l = mc_log(mc_scale(p1, 2.0));
+        l.re += 1200.0 * (double)sc * log(2.0);
+        C = mc_exp(l);
+    }
+    if (!mc_finite(C)) return false;
+    *C_out = C;
+    return true;
+}
+
 /* ------------------------------------------------------------------ */
 /* The plan                                                            */
 /* ------------------------------------------------------------------ */
@@ -250,6 +346,14 @@ typedef struct {
                                   * the DLMF sign (sf_machine_mathieu_sign_weight) */
     mcx y0, y1;                  /* ce(0) = sum c_k, se'(0) = sum (nu+2k) c_k: the
                                   * Taylor seeds for the small-|z| arm */
+    int coarse;                  /* nu is only as good as the double-precision
+                                  * consistency function allows (Newton stalled
+                                  * on its noise floor far from 1e-16): the
+                                  * plan still guides the ball kernel
+                                  * (sf_machine_mathieu_plan_info), but the
+                                  * machine evaluation declines */
+    double loss_bits;            /* bits the normalization sum c_k^2 cancels
+                                  * (sf_machine_mathieu_plan_loss) */
     int cap;                     /* allocated length of the arrays */
     mcx* c;                      /* normalized coefficients */
     mcx* w;                      /* (nu + 2k) c_k, for the derivative */
@@ -514,6 +618,12 @@ static bool glue_integer(MathieuPlan* p) {
     return true;
 }
 
+/* Between two representatives equidistant from sqrt(a): the larger Re, then
+ * the smaller Im (see pick_nu). */
+static int nu_tie_prefers(mcx v, mcx best) {
+    return v.re > best.re + 1e-12 || (fabs(v.re - best.re) <= 1e-12 && v.im < best.im);
+}
+
 /* Choose the exponent representative nearest sqrt(a). */
 static mcx pick_nu(mcx a, mcx C) {
     mcx nu0 = mc_scale(mc_acos(C), 1.0 / M_PI);
@@ -528,8 +638,14 @@ static mcx pick_nu(mcx a, mcx C) {
             /* a tie (sqrt(a) on the imaginary axis: a < 0, nu real) takes
              * Re(nu) >= 0. MathieuC cannot tell nu from -nu, but MathieuS
              * changes sign with it: se -> sin(sqrt(a) z) as q -> 0 needs the
-             * branch continuous from a > 0 (the DLMF se_n sign). */
-            if (d < bd - 1e-12 || (fabs(d - bd) <= 1e-12 && v.re > best.re)) {
+             * branch continuous from a > 0 (the DLMF se_n sign).
+             * The conjugate tie (real a > 0 inside an instability band:
+             * n + i mu and n - i mu) takes Im(nu) < 0, the principal branch
+             * of acos(cos(pi nu)) for a real cos(pi nu) outside [-1, 1]. It
+             * was left to the sign of a zero imaginary part inside acos (and
+             * to where Newton ended), so MathieuS[1., q, 0.1] changed sign
+             * between q = 300 and q = 500. */
+            if (d < bd - 1e-12 || (fabs(d - bd) <= 1e-12 && nu_tie_prefers(v, best))) {
                 bd = d; best = v;
             }
         }
@@ -537,8 +653,30 @@ static mcx pick_nu(mcx a, mcx C) {
     return best;
 }
 
+/* snap: which evidence decides "a is a characteristic value" (integer nu).
+ *   0 -- the default: for real (a, q) the Sturm count of the characteristic
+ *        matrices alone (sf_mathieu_char_match); for complex (a, q) Hill's
+ *        estimate within 2e-6 of an integer.
+ *   1 -- the alternative, tried only when the default build fails: real (a, q)
+ *        also trusts Hill's snap (a char-match that could not run: huge r or q);
+ *        complex (a, q) never snaps.
+ * Hill's snap tolerance is RELATIVE to n while nu - n ~ (a - a_n)/(2n) for a
+ * small q, so at n = 20 it took every a within ~1.6e-3 of a_20 for a
+ * characteristic value -- MathieuCPrime[400., 1., 0.1] (a_20(1) = 400.00125)
+ * then failed the integer gluing's consistency test and declined (audit
+ * MathieuCPrime#1). The Sturm count decides to 1e-12. */
+static bool build_plan_snap(MathieuPlan* p, mcx a, mcx q, int snap);
+
 static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
+    if (build_plan_snap(p, a, q, 0)) return true;
+    if (p->q0) return false;
+    return build_plan_snap(p, a, q, 1);
+}
+
+static bool build_plan_snap(MathieuPlan* p, mcx a, mcx q, int snap) {
     p->a = a; p->q = q;
+    p->coarse = 0;
+    p->loss_bits = 0.0;
     p->realpq = (a.im == 0.0 && q.im == 0.0);
     p->imag_kind = 0;
     p->q0 = (q.re == 0.0 && q.im == 0.0);
@@ -548,11 +686,20 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         return true;
     }
     mcx C;
-    if (!mth_hill_cos(a, q, &C)) return false;
+    double hill_err = 1.0;
+    bool hill_ok = mth_hill_cos(a, q, &C, &hill_err);
+    /* Hill's estimate when its own rounding is small; otherwise (or when it
+     * cannot run) the monodromy, which has no cancellation to lose */
+    if (!hill_ok || hill_err > 1e-11) {
+        mcx Cm;
+        if (mth_monodromy_cos(a, q, &Cm)) { C = Cm; hill_ok = true; }
+    }
+    if (!hill_ok) return false;
     mcx nu = pick_nu(a, C);
     double nr = floor(nu.re + 0.5);
     double eps = mc_abs(mc_sub(nu, mc(nr, 0.0)));
-    p->integer = eps < 2e-6 * fmax(1.0, fabs(nr));
+    int hill_snap = eps < 2e-6 * fmax(1.0, fabs(nr));
+    p->integer = p->realpq ? (snap ? hill_snap : 0) : (snap ? 0 : hill_snap);
     p->force_parity = 0;
     p->rindex = -1;
     /* Real (a, q): decide "a is a characteristic value" by the Sturm count of
@@ -618,9 +765,17 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
          * slows it, hence the generous iteration cap. */
         bool conv = false;
         double prev = INFINITY;
+        /* the starting estimate and its |g| (the fallback when Newton stalls) */
+        mcx nu_start = nu;
+        double g_start = INFINITY, gscale = 1.0;
         for (int it = 0; it < 40; it++) {
             mcx g, dg;
             if (!consistency_g(p, nu, m, &g, &dg)) break;
+            if (it == 0) {
+                mcx t = mc_add(nu, mc(2.0 * (double)m, 0.0));
+                g_start = mc_abs(g);
+                gscale = mc_abs(a) + mc_abs(mc_mul(t, t)) + 2.0 * mc_abs(q) + 1.0;
+            }
             if (dg.re == 0.0 && dg.im == 0.0) break;
             mcx step = mc_div(g, dg);
             nu = mc_sub(nu, step);
@@ -635,7 +790,23 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
             if (sa < 1e-9 * sc && sa > 0.25 * prev) { conv = true; break; }
             prev = sa;
         }
-        if (!conv) return false;
+        if (!conv) {
+            /* Stalled on the noise floor: g at rounding level while its
+             * derivative is tiny, so the steps wander by noise/|g'| (1e-6 at
+             * MathieuC[1., 800., 0.1], audit MathieuCPrime#2). g' is
+             * proportional to sum c_k^2 / c_m^2 (the Floquet normalization),
+             * which in an instability band at large q is a near-cancellation
+             * (2.6e-10 of sum |c_k|^2 there): the machine plan cannot pin nu.
+             * The starting estimate, from cos(pi nu), is good (Hill's when its
+             * rounding is small, else the monodromy) -- far better than any
+             * iterate: the flat g let Newton drift to Im nu = 23.19 at a = 1,
+             * q = 6000 (true 41.91). Keep the start for the ball kernel, which
+             * refines it at a precision where g' is well above the noise, and
+             * decline the machine evaluation. */
+            if (!(g_start <= 1e-12 * gscale)) return false;
+            nu = nu_start;
+            p->coarse = 1;
+        }
         /* Real inputs in a stability band: nu is real; drop the rounding residue
          * so the real hot path applies (|C| <= 1 <=> nu real). */
         if (p->realpq && C.im == 0.0 && fabs(C.re) <= 1.0) nu.im = 0.0;
@@ -644,10 +815,34 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         mcx Cn = mc(cos(M_PI * nu.re) * cosh(M_PI * nu.im),
                     -sin(M_PI * nu.re) * sinh(M_PI * nu.im));
         mcx nu2 = pick_nu(a, Cn);
-        mcx cand1 = mc_add(nu, mc(2.0 * floor((nu2.re - nu.re) / 2.0 + 0.5), 0.0));
-        mcx cand2 = mc_add(mc_scale(nu, -1.0),
-                           mc(2.0 * floor((nu2.re + nu.re) / 2.0 + 0.5), 0.0));
-        mcx nn = mc_abs(mc_sub(cand1, nu2)) <= mc_abs(mc_sub(cand2, nu2)) ? cand1 : cand2;
+        double J1 = floor((nu2.re - nu.re) / 2.0 + 0.5);
+        double J2 = floor((nu2.re + nu.re) / 2.0 + 0.5);
+        mcx cand1 = mc_add(nu, mc(2.0 * J1, 0.0));
+        mcx cand2 = mc_add(mc_scale(nu, -1.0), mc(2.0 * J2, 0.0));
+        double d1 = mc_abs(mc_sub(cand1, nu2)), d2 = mc_abs(mc_sub(cand2, nu2));
+        mcx nn = fabs(d1 - d2) <= 1e-12 * (1.0 + d1) ? (nu_tie_prefers(cand2, cand1) ? cand2 : cand1)
+                                                       : (d1 <= d2 ? cand1 : cand2);
+        /* Real nu: the two candidates n - d and n + d about an integer n are
+         * both near sqrt(a), EXACTLY equidistant at a = n^2, and only one of
+         * them puts c_0 on the dominant coefficient; "nearest" can pick the
+         * other, whose c_0 is a tail coefficient (1e-43 at
+         * MathieuC[400., 1., 0.1], O(q^5) at MathieuC[25.2, 7., z]) and whose
+         * sign then fixes the normalization -- ce flipped sign between
+         * a = 399.9 and a = 400 (audit MathieuCPrime#1). When one of the two
+         * puts c_0 on the dominant coefficient, take it (the q -> 0 picture:
+         * c_0 -> 1); otherwise (a large q: the dominant index is elsewhere)
+         * keep the nearest. The dominant index is recomputed for the refined
+         * nu, which may lie in another family than the starting estimate. */
+        if (p->realpq && nu.im == 0.0 && fabs(nu.re) <= 1.0e6) {
+            int lo_save = p->lo;
+            p->lo = (int)floor(-nu.re / 2.0 + 0.5) - half;
+            int md = dominant_index(p, nu);
+            if (md == INT32_MIN) return false;
+            if ((double)md == J1) nn = cand1;
+            else if ((double)md == -J2) nn = cand2;
+            if (mc_abs(mc_sub(nn, nu)) <= 1e-9) m = p->m = md;   /* stays: keep lo */
+            else p->lo = lo_save;
+        }
         if (mc_abs(mc_sub(nn, nu)) > 1e-9) {
             nu = nn;
             if (!(fabs(nu.re) <= 1.0e6)) return false;  /* as for W above */
@@ -670,12 +865,39 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         S = mc_add(S, mc_mul(p->c[i], p->c[i]));
         S1 += p->c[i].re * p->c[i].re + p->c[i].im * p->c[i].im;
     }
-    if (!(mc_abs(S) > 1e-12 * S1)) return false;                 /* isotropic */
+    /* A cancelling normalization. For a complex nu, sum c_k^2 can be far below
+     * sum |c_k|^2: in an instability band at a large q the growing and the
+     * decaying half of the Floquet solution barely overlap (|S| / sum |c_k|^2
+     * = 2.6e-10 at a = 1, q = 800). The rounding of each c_k then reaches the
+     * normalized function amplified by about that ratio -- MathieuC[1., 900.,
+     * 0.37] was off by 6e-6, and at a = -30, q = 500 the sign rule read a c_0
+     * of 1.5e-7 and flipped the function. Losing more than four of the
+     * sixteen digits (the evaluator's own cancellation budget, see eval_plan)
+     * declines the machine evaluation; the plan stays a guide for the ball
+     * kernel, which works at a precision that covers the loss. */
+    if (!(mc_abs(S) > 0.0) || !mc_finite(S)) return false;
+    if (!(mc_abs(S) > 1e-4 * S1)) p->coarse = 1;
+    p->loss_bits = log2(S1 / mc_abs(S));
+    if (p->coarse) {
+        /* The double estimate saturates near 2^-50 (its own rounding), so a
+         * deeper cancellation is read off the exponent instead: across an
+         * instability band at a large q, sum c_k^2 / sum |c_k|^2 measured
+         * 0.45 - 0.49 times pi |Im nu| in natural log for q = 500 .. 3000 (an
+         * overlap of the growing and decaying halves, e^{-pi |Im nu| / 2}). */
+        double est = M_PI * fabs(nu.im) / (2.0 * log(2.0));
+        if (est > p->loss_bits) p->loss_bits = est;
+        p->loss_bits += 8.0;
+    }
     mcx s = mc_sqrt(S);
     int i0 = -p->lo;
     if (i0 < 0 || i0 >= p->n) i0 = p->m - p->lo;
     mcx c0 = mc_div(p->c[i0], s);
-    if (c0.re < 0.0 || (fabs(c0.re) <= 1e-12 * fabs(c0.im) && c0.im < 0.0))
+    /* Re(c_0) > 0; when c_0 / s is purely imaginary (exactly so for real
+     * (a, q) with Re nu = 0: conj(c_k) = +-c_{-k}, S real) Im(c_0) > 0. The
+     * tie is tested FIRST: its real part is rounding noise, whose sign
+     * follows the sign of the noise in Im S (through the branch of sqrt S),
+     * so testing Re < 0 before the tie decided the sign by rounding. */
+    if (fabs(c0.re) <= 1e-12 * fabs(c0.im) ? c0.im < 0.0 : c0.re < 0.0)
         s = mc(-s.re, -s.im);
     mcx inv = mc_div(mc(p->integer ? sqrt(0.5) : 1.0, 0.0), s);
     p->real = (nu.im == 0.0);
@@ -952,7 +1174,7 @@ bool sf_machine_mathieu_fn(int odd, int deriv, double ar, double ai, double qr,
     if (!isfinite(ar) || !isfinite(ai) || !isfinite(qr) || !isfinite(qi) ||
         !isfinite(zr) || !isfinite(zi)) return false;
     MathieuPlan* p = get_plan(ar, ai, qr, qi);
-    if (!p) return false;
+    if (!p || p->coarse) return false;
     mcx v;
     odd = odd ? 1 : 0;
     if (!eval_plan(p, odd, deriv ? 1 : 0, mc(zr, zi), &v)) return false;
@@ -1017,6 +1239,13 @@ double sf_machine_mathieu_sign_weight(int r, int parity, int qneg, long mf) {
     s = ((mf / 2) % 2 != 0) ? -1.0 : 1.0;
     t = ((r / 2) % 2 != 0) ? -1.0 : 1.0;
     return (double)mf * s * t;
+}
+
+double sf_machine_mathieu_plan_loss(double ar, double ai, double qr, double qi) {
+    if (!isfinite(ar) || !isfinite(ai) || !isfinite(qr) || !isfinite(qi)) return 0.0;
+    MathieuPlan* p = get_plan(ar, ai, qr, qi);
+    if (!p || p->q0) return 0.0;
+    return p->loss_bits > 0.0 ? p->loss_bits : 0.0;
 }
 
 bool sf_machine_mathieu_plan_info(double ar, double ai, double qr, double qi,

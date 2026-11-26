@@ -66,6 +66,12 @@ bool sf_machine_mathieu_plan_info(double ar, double ai, double qr, double qi,
                                   double* nur, double* nui, int* integer,
                                   int* parity, int* m, int* lo, int* hi, int* rindex);
 
+/* The bits the normalization sum c_k^2 = 1 cancels at (a, q): log2 of
+ * sum |c_k|^2 / |sum c_k^2|, an estimate (0 for a real nu; up to ~45 at
+ * a = 1, q = 3000 across an instability band). The arb kernel adds it to its
+ * working precision. 0 when the plan cannot be built. */
+double sf_machine_mathieu_plan_loss(double ar, double ai, double qr, double qi);
+
 /* The DLMF sign convention at a characteristic value (real q != 0): with the
  * plan's coefficients c_k at frequencies mf = nu + 2k, the function ce_r
  * (parity +1) / se_r (parity -1) has the DLMF sign iff
