@@ -80,7 +80,8 @@ static void test_uv_wp_infinity_exact(void) {
 static void test_uv_wp_mpfr(void) {
     /* A digit count above machine precision yields high-precision reals. */
     run_true("Precision[UnitVector[3, 2, WorkingPrecision -> 30][[2]]] > 20");
-    run_true("Precision[UnitVector[3, 2, WorkingPrecision -> 30][[1]]] > 20");
+    /* the zero entries are arbitrary-precision zeros: all accuracy, precision 0. */
+    run_true("Accuracy[UnitVector[3, 2, WorkingPrecision -> 30][[1]]] > 20");
 }
 
 /* ---------- Errors and unevaluated cases ---------- */

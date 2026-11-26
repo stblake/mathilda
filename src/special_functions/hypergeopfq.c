@@ -1699,13 +1699,51 @@ static Expr* hg_machine_head(Expr* res, size_t p, size_t q) {
     return is_c ? sf_machine_complex_result(rr, ri) : expr_new_real(rr);
 }
 
-/* The fixed-arity heads delegate to HypergeometricPFQ, whose form is the
- * normal form the rest of the system (Simplify's special-function engine,
- * DSolve, Integrate, FunctionExpand, N) works in. A List parameter or
- * argument here means the Listable threading failed (unequal lengths,
- * Thread::tdlen already issued): the call stays unevaluated rather than
- * being threaded by PFQ into malformed calls (Hypergeometric0F1#3 of the
- * 2026-11 audit). Takes ownership of a, b, z. */
+Expr* hyper_named_to_pfq(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return NULL;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    Expr* const* a = e->data.function.args;
+    size_t p;
+    if (h == SYM_Hypergeometric0F1 && n == 2) p = 0;
+    else if (h == SYM_Hypergeometric1F1 && n == 3) p = 1;
+    else if (h == SYM_Hypergeometric2F1 && n == 4) p = 2;
+    else return NULL;
+    Expr* up[2] = { NULL, NULL };
+    for (size_t i = 0; i < p; i++) up[i] = expr_copy(a[i]);
+    Expr* ul = expr_new_function(expr_new_symbol(SYM_List), up, p);
+    return expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ),
+                             (Expr*[]){ ul, list1(a[p]), expr_copy(a[p + 1]) }, 3);
+}
+
+Expr* hyper_pfq_to_named(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_HypergeometricPFQ ||
+        e->data.function.arg_count != 3) return NULL;
+    const Expr* al = e->data.function.args[0];
+    const Expr* bl = e->data.function.args[1];
+    if (!is_list(al) || !is_list(bl) || bl->data.function.arg_count != 1) return NULL;
+    size_t p = al->data.function.arg_count;
+    if (p > 2) return NULL;
+    static const char* const* heads[3] = { &SYM_Hypergeometric0F1, &SYM_Hypergeometric1F1,
+                                           &SYM_Hypergeometric2F1 };
+    Expr* args[4];
+    for (size_t i = 0; i < p; i++) args[i] = expr_copy(al->data.function.args[i]);
+    args[p] = expr_copy(bl->data.function.args[0]);
+    args[p + 1] = expr_copy(e->data.function.args[2]);
+    return expr_new_function(expr_new_symbol(*heads[p]), args, p + 2);
+}
+
+/* The fixed-arity heads evaluate through HypergeometricPFQ -- every closed
+ * form, special value and numeric path is PFQ's -- but a call PFQ cannot
+ * reduce keeps its own head: Hypergeometric1F1[a, b, z] stays as typed, and a
+ * PFQ answer of the same shape is written back in the named form (audit
+ * Hypergeometric0F1#2, 1F1#1, 2F1#1). A List parameter or argument here means
+ * the Listable threading failed (unequal lengths, Thread::tdlen already
+ * issued): the call stays unevaluated rather than being threaded by PFQ into
+ * malformed calls (Hypergeometric0F1#3 of the 2026-11 audit). Takes ownership
+ * of a, b, z. */
 static Expr* hg_named_delegate(Expr* res, Expr* a, Expr* b, Expr* z) {
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         if (is_list(res->data.function.args[i])) {
@@ -1713,7 +1751,12 @@ static Expr* hg_named_delegate(Expr* res, Expr* a, Expr* b, Expr* z) {
             return NULL;
         }
     }
-    return rebuild_eval(a, b, z);
+    Expr* r = rebuild_eval(a, b, z);
+    Expr* named = hyper_pfq_to_named(r);
+    if (!named) return r;
+    expr_free(r);
+    if (expr_eq(named, res)) { expr_free(named); return NULL; }
+    return named;
 }
 
 Expr* builtin_hypergeometric_0f1(Expr* res) {

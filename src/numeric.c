@@ -1252,6 +1252,16 @@ static int g_n_held_depth = 0;
  * uninitialised. */
 static bool g_n_contagion = false;
 
+/* True while numericalize runs on behalf of the N builtin itself (not an
+ * internal caller, not inexact contagion): then a rational exponent of a
+ * symbolic base is numericalized too, N[x^(1/2)] = x^0.5 as in the reference
+ * (audit N#1), while 1.0 Sqrt[x] keeps its Sqrt. builtin_n raises
+ * g_n_user_pending; the public numericalize() consumes it, and every nested
+ * entry (an internal numericalize reached from an evaluation inside N, a
+ * contagion pass) runs with it off. */
+static bool g_n_user = false;
+static bool g_n_user_pending = false;
+
 /* ---- index-only heads: N's direct route (numeric_register_held_value) ----
  * A handful of heads (ZetaZero, AiryAiZero, ...) at most, so a linear scan by
  * interned name, reached only for a head with NHoldFirst. Written at init
@@ -1808,7 +1818,9 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
      *      N[x^2] is x^2, not x^2.0 — and keeps polynomial structure intact.
      *   2. Symbolic base + rational exponent: preserve the rational exponent
      *      so Sqrt[x] stays Sqrt[x] under contagion (1.0 * Sqrt[x] should not
-     *      become x^0.5). Only when the base numericalizes to an actual number
+     *      become x^0.5) and in internal callers. N itself (g_n_user)
+     *      numericalizes it: N[x^(1/2)] is x^0.5, as in the reference.
+     *      Only when the base numericalizes to an actual number
      *      (e.g. Sqrt[2], Sqrt[Pi]) do we want the exponent demoted so the
      *      Power can collapse to a numeric value. */
     const bool is_power =
@@ -1881,7 +1893,7 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
             /* By now new_args[0] holds the numericalized base. If the base
              * is still non-numeric, keep the exponent symbolic so e.g.
              * Power[x, 1/2] does not become Power[x, 0.5]. */
-            if (!preserve_power_exp && !expr_is_numeric_like(new_args[0])) {
+            if (!preserve_power_exp && !expr_is_numeric_like(new_args[0]) && !g_n_user) {
                 preserve_power_exp = true;
             }
             if (preserve_power_exp) {
@@ -3658,11 +3670,15 @@ static long numeric_max_extra_bits(double* digits_out) {
 Expr* numericalize(const Expr* e, NumericSpec spec) {
     int saved = g_n_held_depth;
     bool saved_contagion = g_n_contagion;
+    bool saved_user = g_n_user;
     g_n_held_depth = 0;
     g_n_contagion = false;
+    g_n_user = g_n_user_pending;
+    g_n_user_pending = false;
     Expr* r = numericalize_top(e, spec);
     g_n_held_depth = saved;
     g_n_contagion = saved_contagion;
+    g_n_user = saved_user;
     return r;
 }
 
@@ -3677,11 +3693,14 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
 Expr* numericalize_machine_unplanned(const Expr* e) {
     int saved = g_n_held_depth;
     bool saved_contagion = g_n_contagion;
+    bool saved_user = g_n_user;
     g_n_held_depth = 0;
     g_n_contagion = false;
+    g_n_user = false;
     Expr* r = numericalize_pass(e, numeric_machine_spec());
     g_n_held_depth = saved;
     g_n_contagion = saved_contagion;
+    g_n_user = saved_user;
     return r;
 }
 
@@ -3690,11 +3709,14 @@ Expr* numericalize_machine_unplanned(const Expr* e) {
 static Expr* numericalize_contagion(const Expr* e, NumericSpec spec) {
     int saved = g_n_held_depth;
     bool saved_contagion = g_n_contagion;
+    bool saved_user = g_n_user;
     g_n_held_depth = 0;
     g_n_contagion = true;
+    g_n_user = false;
     Expr* r = numericalize_top(e, spec);
     g_n_held_depth = saved;
     g_n_contagion = saved_contagion;
+    g_n_user = saved_user;
     return r;
 }
 
@@ -4427,8 +4449,10 @@ Expr* builtin_n(Expr* res) {
         if (packed) return packed;
     }
     g_numeric_from_n = true;
+    g_n_user_pending = true;
     Expr* out = numericalize(res->data.function.args[0], spec);
     g_numeric_from_n = false;
+    g_n_user_pending = false;
     return out;
 }
 

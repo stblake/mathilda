@@ -41,6 +41,7 @@
  * (project rule).
  */
 
+#include "hypergeopfq.h"   /* hyper_named_to_pfq */
 #include "integrate_ramanujan.h"
 #include "expr.h"
 #include "eval.h"
@@ -643,8 +644,22 @@ static bool rec_gamma_upper(const Expr* K, const Expr* x, const Expr* sv,
  * This is the Ramanujan Master Theorem applied to the pFq power series:
  *   pFq(-lam x) = sum (-1)^k phi(k) (lam x)^k / k!,  phi(k) = prod (a_i)_k / prod (b_j)_k,
  *   giving  Integrate[x^(sv-1) pFq] = Gamma(sv) phi(-sv) lam^(-sv). */
+static bool rec_pfq_core(const Expr* K, const Expr* x, const Expr* sv,
+                         Expr** M, Expr** P);
+
+/* Hypergeometric0F1/1F1/2F1 are the pFq they stand for (they keep their own
+ * head when unevaluated). */
 static bool rec_pfq(const Expr* K, const Expr* x, const Expr* sv,
                     Expr** M, Expr** P) {
+    Expr* pfq = hyper_named_to_pfq(K);
+    if (!pfq) return rec_pfq_core(K, x, sv, M, P);
+    bool ok = rec_pfq_core(pfq, x, sv, M, P);
+    expr_free(pfq);
+    return ok;
+}
+
+static bool rec_pfq_core(const Expr* K, const Expr* x, const Expr* sv,
+                         Expr** M, Expr** P) {
     /* Integrate`RMTPFQ is the inert pFq reduce_to_hypergeometric writes: a live
      * HypergeometricPFQ would evaluate straight back to its closed form
      * (1F1(1/2;3/2;-x) is the error function) before this recognizer saw it. */

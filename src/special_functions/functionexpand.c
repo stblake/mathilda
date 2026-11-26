@@ -51,6 +51,7 @@
 #include "functionexpand.h"
 #include "polygamma.h"   /* polygamma_gauss_digamma */
 #include "meijer_g.h"
+#include "hypergeopfq.h"     /* hyper_named_to_pfq */
 #include "hrep.h"           /* hrep_pfq_expr: Roach's Formula algorithm */
 #include "symtab.h"
 #include "attr.h"
@@ -972,6 +973,17 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
             else expr_free(s2);
         }
     }
+    /* Hypergeometric0F1/1F1/2F1 are expanded in the PFQ form they stand for;
+     * a call the algorithm cannot name keeps its own head. */
+    if (!s && (which & FE_PFQ)) {
+        Expr* pfq = hyper_named_to_pfq(node);
+        if (pfq) {
+            Expr* t = fe_pfq_together(pfq);
+            if (t) { expr_free(pfq); pfq = t; }
+            if (fe_is_head(pfq, SYM_HypergeometricPFQ)) s = hrep_pfq_expr(pfq);
+            expr_free(pfq);
+        }
+    }
     if (!s && (which & FE_PFQ) && fe_is_head(node, SYM_HypergeometricPFQ)) {
         Expr* t = fe_pfq_together(node);
         if (t) {
@@ -1090,6 +1102,13 @@ static size_t fe_count_head(const Expr* e, const char* h) {
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         c += fe_count_head(e->data.function.args[i], h);
     return c;
+}
+
+/* pFq calls in either spelling: HypergeometricPFQ or the named
+ * Hypergeometric0F1 / 1F1 / 2F1, which keep their head unevaluated. */
+static size_t fe_count_pfq(const Expr* e) {
+    return fe_count_head(e, SYM_HypergeometricPFQ) + fe_count_head(e, SYM_Hypergeometric0F1) +
+           fe_count_head(e, SYM_Hypergeometric1F1) + fe_count_head(e, SYM_Hypergeometric2F1);
 }
 
 static size_t fe_leaf_count(const Expr* e) {
@@ -1253,7 +1272,7 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
         }
         if (changed &&
             fe_count_head(c, SYM_MeijerG) < fe_count_head(r, SYM_MeijerG) &&
-            fe_count_head(c, SYM_HypergeometricPFQ) <= fe_count_head(r, SYM_HypergeometricPFQ) &&
+            fe_count_pfq(c) <= fe_count_pfq(r) &&
             fe_count_head(c, SYM_Piecewise) <= fe_count_head(r, SYM_Piecewise)) {
             expr_free(r); r = c;
         } else {
@@ -1262,11 +1281,11 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
     }
     /* (1b) HypergeometricPFQ -> a closed form by Roach's Formula algorithm,
      * accepted when it leaves strictly fewer pFq and no new MeijerG. */
-    if (fe_count_head(r, SYM_HypergeometricPFQ) > 0) {
+    if (fe_count_pfq(r) > 0) {
         bool changed = false;
         Expr* c = fe_walk(r, &changed, FE_PFQ);
         if (changed &&
-            fe_count_head(c, SYM_HypergeometricPFQ) < fe_count_head(r, SYM_HypergeometricPFQ) &&
+            fe_count_pfq(c) < fe_count_pfq(r) &&
             fe_count_head(c, SYM_MeijerG) <= fe_count_head(r, SYM_MeijerG)) {
             expr_free(r); r = c;
         } else {

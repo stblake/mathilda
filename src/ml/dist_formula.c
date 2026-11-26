@@ -59,7 +59,7 @@ static bool holds(Expr* test) {
     return t;
 }
 
-typedef enum { FD_NONE, FD_NORMAL, FD_UNIFORM, FD_UNIFORM_BOX } FdKind;
+typedef enum { FD_NONE, FD_NORMAL, FD_UNIFORM, FD_UNIFORM_BOX, FD_EXPONENTIAL } FdKind;
 
 /* The distribution d names no distribution: say which parameter is wrong. */
 static void fd_bad_param(const char* head, const char* tag, const char* fmt,
@@ -136,11 +136,44 @@ static FdKind fd_read(const Expr* d, Expr** p0, Expr** p1) {
         *p1 = expr_copy(b);
         return FD_UNIFORM;
     }
+    /* ExponentialDistribution[lambda]: the rate lambda > 0 (p1 unused). */
+    if (h == SYM_ExponentialDistribution) {
+        if (argc != 1) return FD_NONE;
+        Expr* l = d->data.function.args[0];
+        if (expr_is_numeric_quantity(l) && !holds(mk1(SYM_Positive, expr_copy(l)))) {
+            fd_bad_param("ExponentialDistribution", "posprm",
+                         "Parameter %s at position 1 in %s is expected to be positive.", l, d);
+            return FD_NONE;
+        }
+        *p0 = expr_copy(l);
+        *p1 = expr_new_integer(0);
+        return FD_EXPONENTIAL;
+    }
     return FD_NONE;
 }
 
 /* The unevaluated formula for one scalar point x (consumed). */
 static Expr* fd_point(MlDistProp prop, FdKind k, const Expr* p0, const Expr* p1, Expr* x) {
+    if (k == FD_EXPONENTIAL) {
+        Expr* l = expr_copy((Expr*)p0);
+        /* Quantile: -Log[1 - q]/lambda (q = 1 gives Infinity) */
+        if (prop == ML_PROP_QUANTILE)
+            return mk3(SYM_Times, expr_new_integer(-1),
+                       mk1(SYM_Log, sub(expr_new_integer(1), x)), inv(l));
+        /* PDF: lambda E^(-lambda x); CDF: 1 - E^(-lambda x); both for x >= 0 */
+        Expr* ex = mk2(SYM_Power, expr_new_symbol(SYM_E),
+                       mk3(SYM_Times, expr_new_integer(-1), expr_copy(l), expr_copy(x)));
+        Expr* val;
+        if (prop == ML_PROP_PDF) {
+            val = mk2(SYM_Times, l, ex);
+        } else {
+            expr_free(l);
+            val = sub(expr_new_integer(1), ex);
+        }
+        Expr* inside = mk2(SYM_List, val,
+                           mk2(SYM_GreaterEqual, x, expr_new_integer(0)));
+        return mk2(SYM_Piecewise, mk1(SYM_List, inside), expr_new_integer(0));
+    }
     Expr* m = expr_copy((Expr*)p0);
     Expr* s = expr_copy((Expr*)p1);
     if (k == FD_NORMAL) {
@@ -254,6 +287,18 @@ Expr* ml_dist_closed_form(MlDistProp prop, const Expr* dist, const Expr* x) {
         return bo ? eval_and_free(bo) : NULL;
     }
     Expr* out = NULL;
+    if (k == FD_EXPONENTIAL && prop != ML_PROP_PDF && prop != ML_PROP_CDF &&
+        prop != ML_PROP_QUANTILE) {
+        /* Mean 1/lambda, Median Log[2]/lambda, Variance 1/lambda^2 */
+        if (prop == ML_PROP_MEAN) out = inv(expr_copy(p0));
+        else if (prop == ML_PROP_MEDIAN)
+            out = mk2(SYM_Times, mk1(SYM_Log, expr_new_integer(2)), inv(expr_copy(p0)));
+        else if (prop == ML_PROP_VARIANCE)
+            out = mk2(SYM_Power, expr_copy(p0), expr_new_integer(-2));
+        expr_free(p0);
+        expr_free(p1);
+        return out ? eval_and_free(out) : NULL;
+    }
     switch (prop) {
         case ML_PROP_MEAN:
         case ML_PROP_MEDIAN:

@@ -1892,7 +1892,7 @@ void test_mpfr_pencil_congruence_nonsym_30(void) {
         "  a = N[Transpose[p] . d . q, 30]; b = N[Transpose[p] . q, 30];\n"
         "  vs = Sort[Re[Eigenvalues[{a, b}]]];\n"
         "  err = Max[Abs[vs - Sort[Table[1 - k/5, {k, n}]]]];\n"
-        "  TrueQ[Min[Precision /@ vs] > 25] && TrueQ[N[err 10^24] < 1.0]]";
+        "  TrueQ[Min[Precision /@ Select[vs, # != 0 &]] > 25] && TrueQ[N[err 10^24] < 1.0]]";
     mpfr_assert_true("MPFR non-symmetric pencil (LU), n=12, 30 digits", src);
 }
 

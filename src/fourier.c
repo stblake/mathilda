@@ -183,7 +183,7 @@ static Expr* ft_leaf(const LLLeaves* L, int64_t i) {
 }
 
 static Regime classify(const LLLeaves* leaves, size_t n, long* arb_bits_out) {
-    bool has_mpfr = false;
+    bool has_mpfr = false, has_machine = false;
     long min_bits = 0;
     for (size_t i = 0; i < n; i++) {
         Expr* e = ft_leaf(leaves, (int64_t)i);
@@ -196,13 +196,20 @@ static Regime classify(const LLLeaves* leaves, size_t n, long* arb_bits_out) {
             has_mpfr = true;
             long b = numeric_min_inexact_bits(e);
             if (b > 0 && (min_bits == 0 || b < min_bits)) min_bits = b;
+        } else if (num && numeric_min_inexact_bits(e) > 0) {
+            has_machine = true;
         }
 #endif
         expr_free(e);
         if (!num) return REG_SYMBOLIC;
     }
     if (has_mpfr) {
-        if (min_bits < 53) min_bits = 53;
+        /* The transform carries the least precision of its data: an
+         * arbitrary-precision number below machine precision (1.`10) gives a
+         * result of that precision -- Fourier[{2.`30, 1.`10}] has precision
+         * 10, as (2.`30 + 1.`10)/Sqrt[2] does (audit Fourier#3) -- while a
+         * machine number among them makes the result machine precision. */
+        if (has_machine || min_bits < 2) min_bits = min_bits < 53 ? 53 : min_bits;
         *arb_bits_out = min_bits;
         return REG_ARB;
     }

@@ -108,6 +108,14 @@ static void test_wave5_g5(void) {
 }
 /* ---- Wave 5 G5 END ---- */
 
+/* Wave 6 G2: implicit trailing zero coefficients. */
+static void test_wave6_g2(void) {
+    audit_true("SeriesData#3", "SeriesData[x, 0, {2, 1}, 0, 3, 1]^(-1) === SeriesData[x, 0, {1/2, -1/4, 1/8}, 0, 3, 1]");
+    audit_true("SeriesData#3", "SeriesData[x, 0, {1, 1}, 0, 3, 1]^2 === SeriesData[x, 0, {1, 2, 1}, 0, 3, 1]");
+    audit_true("SeriesData#3", "Module[{s = SeriesData[x, 0, {1, 1}, 0, 3, 1] + SeriesData[x, 0, {1, 1, 0}, 0, 3, 1]}, "
+               "Head[s] === SeriesData && Normal[s] === 2 + 2 x && s[[5]] === 3]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_series_huge_order);
@@ -116,5 +124,6 @@ int main(void) {
     TEST(test_s11_special_values);
     TEST(test_wave4_series);
     TEST(test_wave5_g5);
+    TEST(test_wave6_g2);
     return audit_finish("audit_power_series");
 }

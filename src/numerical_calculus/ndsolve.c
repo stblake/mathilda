@@ -10,6 +10,7 @@
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../eval.h"
+#include "../parse.h"   /* parse_expression: the vector-unknown rewrite */
 #include "../symtab.h"
 #include "../loadmodule.h"
 #include "../attr.h"
@@ -822,8 +823,70 @@ static Expr* nd_and_to_list(Expr* res) {
     return call;
 }
 
+/* A vector-valued unknown: y[x0] == {c1, ..., cn} with y one of the unknowns
+ * (y'[x] == m.y[x], y[0] == {1, 0}). The core integrates scalar components, and
+ * read the vector initial condition as a boundary condition (audit NDSolve#1:
+ * NDSolve::bvfail). The rewrite below introduces components y$ndv1, ..., y$ndvn,
+ * substitutes y -> Function[{t}, {y$ndv1[t], ...}] (so y'[x] and m.y[x] become
+ * component lists and each vector equation threads into n scalar ones), solves
+ * for the components, and answers y -> Function[{t}, {if1[t], ..., ifn[t]}]: y[1]
+ * is the vector. $Failed when no unknown is vector-valued. */
+static const char* ND_VECTOR_REWRITE =
+    "Function[{eqs, spec, rest},"
+    " Module[{vecs, sub, comps, neqs, nspec, sol, tt, i},"
+    "  vecs = DeleteDuplicates[Cases[Flatten[{eqs}], Equal[(f_Symbol)[_?NumericQ], v_List] :> {f, Length[v]}]];"
+    "  vecs = Select[vecs, MemberQ[Flatten[{spec}], First[#]] &];"
+    "  If[vecs === {}, $Failed,"
+    "   comps = Table[Table[Symbol[ToString[vecs[[i, 1]]] <> \"$ndv\" <> ToString[k]], {k, vecs[[i, 2]]}], {i, Length[vecs]}];"
+    "   sub = Table[vecs[[i, 1]] -> (Function @@ {{tt}, Through[comps[[i]][tt]]}), {i, Length[vecs]}];"
+    "   neqs = Flatten[Map[If[Head[#] === Equal && ListQ[First[#]], Thread[#], #] &, Flatten[{eqs /. sub}]]];"
+    "   nspec = Flatten[{spec} /. Table[vecs[[i, 1]] -> comps[[i]], {i, Length[vecs]}]];"
+    "   sol = Apply[NDSolve, Join[{neqs, nspec}, rest]];"
+    "   If[!ListQ[sol], $Failed,"
+    "    Map[Function[s, Join[DeleteCases[s, Rule[Alternatives @@ Flatten[comps], _]],"
+    "       Table[vecs[[i, 1]] -> (Function @@ {{tt}, Through[(comps[[i]] /. s)[tt]]}), {i, Length[vecs]}]]], sol]]]]]";
+
+/* Cheap structural screen: does some equation read f[number] == {...}? */
+static bool nd_has_vector_ic(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Equal) && e->data.function.arg_count == 2) {
+        const Expr* l = e->data.function.args[0];
+        const Expr* r = e->data.function.args[1];
+        return head_is((Expr*)r, SYM_List) && l->type == EXPR_FUNCTION &&
+               l->data.function.head->type == EXPR_SYMBOL && l->data.function.arg_count == 1 &&
+               expr_is_numeric_quantity(l->data.function.args[0]);
+    }
+    if (head_is((Expr*)e, SYM_List) || head_is((Expr*)e, SYM_And))
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (nd_has_vector_ic(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* nd_vector_unknowns(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3 ||
+        res->data.function.head->type != EXPR_SYMBOL ||
+        res->data.function.head->data.symbol.name != intern_symbol("NDSolve") ||
+        !nd_has_vector_ic(res->data.function.args[0])) return NULL;
+    Expr* fn = parse_expression(ND_VECTOR_REWRITE);
+    if (!fn) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** rest = malloc(sizeof(Expr*) * argc);
+    for (size_t i = 2; i < argc; i++) rest[i - 2] = expr_copy(res->data.function.args[i]);
+    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rest, argc - 2);
+    free(rest);
+    Expr* call = expr_new_function(fn, (Expr*[]){ expr_copy(res->data.function.args[0]),
+                                                   expr_copy(res->data.function.args[1]), rl }, 3);
+    Expr* r = eval_and_free(call);
+    if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol("$Failed")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 Expr* builtin_ndsolve(Expr* res) {
     { Expr* l = nd_and_to_list(res); if (l) return l; }
+    { Expr* v = nd_vector_unknowns(res); if (v) return v; }
     return ndsolve_core(res, NULL);
 }
 

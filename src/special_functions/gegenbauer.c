@@ -271,6 +271,12 @@ static bool geg_double(double n, double lam, double xr, double xi, double* rr, d
     double tr = 0.5 * (1.0 - xr), ti = -0.5 * xi;
     if (xi == 0.0 && tr <= 1.0) {
         double F;
+        /* Within 1e-2 of the singular point -1 the stepped solution loses
+         * accuracy to the singular component (1 + x)^(1/2 - lambda) it must
+         * resolve: GegenbauerC[2.5, 1.5, -0.999999] was 1e-10 off (audit
+         * GegenbauerC#1), and the 2F1 at t -> 1 is no better. Decline to arb
+         * there (flint_gegenbauer_d in sf_machine_gegenbauer_c). */
+        if (tr > 0.6 && xr > -1.0 && 1.0 + xr < 1e-2) return false;
         if (tr > 0.6 && xr > -1.0 && geg_ode_neg(n, lam, P, xr, rr)) { *ri = 0.0; return true; }
         if (!(tr <= 0.6 && geg_2f1_series(n, lam, xr, &F)) &&
             !sf_machine_hyper2f1(-n, n + 2.0 * lam, c, tr, &F)) return false;

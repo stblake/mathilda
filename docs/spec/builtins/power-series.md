@@ -7,7 +7,9 @@ Represents an explicit truncated power series.
 The `ai` are the coefficients of the series about the expansion point `x0`.
 The power of `(x - x0)` attached to `ai` is `(nmin + i)/den`, and a trailing
 `O[x - x0]^(nmax/den)` term indicates the order at which higher terms have
-been dropped.
+been dropped. The coefficient list may be shorter than `nmax - nmin`: the
+missing trailing coefficients are zero, so
+`SeriesData[x, 0, {2, 1}, 0, 3, 1]^(-1)` is `1/2 - x/4 + x^2/8 + O[x]^3`.
 
 **Features**:
 - `Protected`.

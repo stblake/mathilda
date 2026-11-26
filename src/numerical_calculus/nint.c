@@ -6494,7 +6494,41 @@ static bool ni_held_body_numeric(Expr* body, Expr** specs, size_t nspecs) {
     return ok;
 }
 
+static Expr* nintegrate_core(Expr* res);
+
+/* A WorkingPrecision below machine precision (WorkingPrecision -> 10): the
+ * integral is computed at machine precision -- at least as accurate -- and the
+ * result carries the precision asked for, as the reference's does (audit
+ * NIntegrate#4: it came back a MachinePrecision number). 0 when the option is
+ * absent or not below machine precision. */
+static double ni_sub_machine_wp(const Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    for (size_t i = argc; i-- > 1;) {
+        const Expr* o = res->data.function.args[i];
+        if (!ni_is_option_arg((Expr*)o)) break;
+        if (o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) continue;
+        const Expr* k = o->data.function.args[0];
+        if (k->type != EXPR_SYMBOL || k->data.symbol.name != SYM_WorkingPrecision) continue;
+        double d;
+        if (!ni_to_double_real((Expr*)o->data.function.args[1], &d)) return 0.0;
+        return (d > 0.0 && d < NUMERIC_MACHINE_PRECISION_DIGITS) ? d : 0.0;
+    }
+    return 0.0;
+}
+
 Expr* builtin_nintegrate(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    Expr* r = nintegrate_core(res);
+    double d = r ? ni_sub_machine_wp(res) : 0.0;
+    if (d > 0.0 && expr_is_numeric_quantity(r)) {
+        Expr* sp = expr_new_function(expr_new_symbol(SYM_SetPrecision),
+                                     (Expr*[]){ r, expr_new_real(d) }, 2);
+        return eval_and_free(sp);
+    }
+    return r;
+}
+
+static Expr* nintegrate_core(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;

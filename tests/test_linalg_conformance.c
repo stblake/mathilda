@@ -45,8 +45,9 @@ static void chk_nomsg(const char* input) {
 
 static void setup(void) {
     /* the precisions of the inexact entries: N[m, p] keeps an exact 0 of m
-     * exact (Precision Infinity), and that imposes nothing */
-    chk("prec[e_] := DeleteCases[Union[Flatten[{Precision /@ Flatten[{e}]}]], Infinity]; "
+     * exact (Precision Infinity), and that imposes nothing; nor does an
+     * arbitrary-precision zero (Precision 0., all accuracy) */
+    chk("prec[e_] := DeleteCases[Union[Flatten[{Precision /@ Flatten[{e}]}]], Infinity | 0.]; "
         "resid[a_, x_, b_] := Max[Abs[Flatten[{a . x - b}]]]; "
         "Null", "Null");
 }

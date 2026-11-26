@@ -168,6 +168,43 @@ static bool ev_parse_action(const EvBuildCtx* B, NdEvent* v, const Expr* a) {
     return true;
 }
 
+/* Mod[u, p] == c with a numeric period p > 0 and a numeric c in [0, p): the
+ * periodic event u = c + k p (k any integer). Mod is discontinuous exactly
+ * there -- it jumps back from p to 0 -- so g = Mod[u, p] - c never changes sign
+ * at the event (Mod[t, 1] == 0 is >= 0 throughout) and the zero-crossing
+ * detector saw nothing (audit WhenEvent#2). The sawtooth recentred on the
+ * event, g = Mod[u - c + p/2, p] - p/2, vanishes at the same points and is
+ * continuous through them (from -0 to +0); its own jump, at the half periods,
+ * is the discontinuity the locator already refuses (WhenEvent#1). Mod is exact
+ * there, so an event on the end point (t = 3.5 for Mod[t, 1] == 1/2) still
+ * reads g = 0. Returns the owned g, or NULL. */
+static Expr* ev_periodic_g(const Expr* lhs, const Expr* rhs) {
+    const Expr* m = lhs;
+    const Expr* c = rhs;
+    if (!ev_head(m, SYM_Mod, 2)) { m = rhs; c = lhs; }
+    if (!ev_head(m, SYM_Mod, 2)) return NULL;
+    const Expr* p = m->data.function.args[1];
+    if (!expr_is_numeric_quantity(p) || !expr_is_numeric_quantity(c)) return NULL;
+    Expr* pv = numericalize_machine_unplanned(p);
+    Expr* cv = numericalize_machine_unplanned(c);
+    bool ok = pv && cv && pv->type == EXPR_REAL && cv->type == EXPR_REAL &&
+              pv->data.real > 0.0 && cv->data.real >= 0.0 && cv->data.real < pv->data.real;
+    if (pv) expr_free(pv);
+    if (cv) expr_free(cv);
+    if (!ok) return NULL;
+    /* Mod[u - c + p/2, p] - p/2 */
+    Expr* half = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ expr_copy((Expr*)p), make_rational(1, 2) }, 2);
+    Expr* shifted = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+        expr_copy((Expr*)m->data.function.args[0]),
+        expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)c) }, 2),
+        expr_copy(half) }, 3);
+    Expr* md = expr_new_function(expr_new_symbol(SYM_Mod),
+                                 (Expr*[]){ shifted, expr_copy((Expr*)p) }, 2);
+    return eval_and_free(nd_call2(SYM_Subtract, md, half));
+}
+
 /* Add one event condition (a List of conditions adds one event per element,
  * sharing the actions). */
 static bool ev_add(const EvBuildCtx* B, struct NdEvents* E, const Expr* cond, const Expr* action) {
@@ -186,9 +223,15 @@ static bool ev_add(const EvBuildCtx* B, struct NdEvents* E, const Expr* cond, co
     if (two && (h == SYM_Equal || h == SYM_Greater || h == SYM_GreaterEqual
                 || h == SYM_Less || h == SYM_LessEqual)) {
         bool flip = (h == SYM_Less || h == SYM_LessEqual);
-        Expr* l = expr_copy(c->data.function.args[flip ? 1 : 0]);
-        Expr* r = expr_copy(c->data.function.args[flip ? 0 : 1]);
-        v->g = eval_and_free(nd_call2(SYM_Subtract, l, r));
+        Expr* per = h == SYM_Equal ? ev_periodic_g(c->data.function.args[0],
+                                                   c->data.function.args[1]) : NULL;
+        if (per) {
+            v->g = per;
+        } else {
+            Expr* l = expr_copy(c->data.function.args[flip ? 1 : 0]);
+            Expr* r = expr_copy(c->data.function.args[flip ? 0 : 1]);
+            v->g = eval_and_free(nd_call2(SYM_Subtract, l, r));
+        }
         v->kind = (h == SYM_Equal) ? EVK_ZERO : EVK_RISE;
         v->strict = (h == SYM_Greater || h == SYM_Less);
         expr_free(c);
@@ -698,8 +741,23 @@ unsigned nd_events_fire_mp(NdProblem* P, int k, const mpfr_t te, mpfr_t* Ye,
     if (!E || k < 0 || (size_t)k >= E->n) return 0;
     NdEvent* v = &E->ev[k];
     unsigned flags = 0;
-    ev_bind_mp(P, te, Ye);
-    ev_run_actions(v);
+    /* The actions see the event point at the WorkingPrecision the user asked
+     * for, not at the integrator's working width: `bits` carries 64 guard bits
+     * (ndsolve_mpfr.c, mp_resolution_bits), and a time handed over at that
+     * width claimed ~49 digits at WorkingPrecision -> 30 although only the
+     * requested 30 are resolved (audit WhenEvent#3). */
+    {
+        long ab = bits > 64 + 53 ? bits - 64 : 53;
+        mpfr_t ta; mpfr_init2(ta, ab);
+        mpfr_set(ta, te, MPFR_RNDN);
+        mpfr_t* Ya = malloc(sizeof(mpfr_t) * (d ? d : 1));
+        for (size_t i = 0; i < d; i++) { mpfr_init2(Ya[i], ab); mpfr_set(Ya[i], Ye[i], MPFR_RNDN); }
+        ev_bind_mp(P, ta, Ya);
+        ev_run_actions(v);
+        for (size_t i = 0; i < d; i++) mpfr_clear(Ya[i]);
+        free(Ya);
+        mpfr_clear(ta);
+    }
     if (v->nreset) {
         mpfr_t* val = malloc(sizeof(mpfr_t) * v->nreset);
         for (size_t j = 0; j < v->nreset; j++) mpfr_init2(val[j], bits);

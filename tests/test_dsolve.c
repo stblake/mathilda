@@ -426,7 +426,7 @@ static void t_hypergeometric_kummer(void) {
     check_true("PossibleZeroQ[(x y''[x] + (3/2 - x) y'[x] - 2 y[x]) /. "
                "DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
 }
 /* Kummer behind an exponential: P = p0 + p1/x, Q = q0 + q1/x with q0 != 0 is
  * E^(lambda x) times a Kummer basis (lambda^2 + p0 lambda + q0 == 0).
@@ -496,7 +496,7 @@ static void t_hypergeometric_gauss(void) {
     check_true("PossibleZeroQ[(x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x]) /. "
                "DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
 }
 static void t_method_hypergeometric_kummer(void) {
     check_true("PossibleZeroQ[(x y''[x] + (3/2 - x) y'[x] - 2 y[x]) /. "
@@ -505,18 +505,18 @@ static void t_method_hypergeometric_kummer(void) {
 static void t_hypergeometric_symbolic_a(void) {
     /* symbolic a is permitted because the exponent parameter b = 3/2 is numeric */
     check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - a y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
 }
 static void t_hypergeometric_gauss_symbolic_ab(void) {
     /* symbolic a, b permitted; exponent parameter c = 1/2 is numeric */
     check_true("Not[FreeQ[DSolve[x (1 - x) y''[x] + (1/2 - (a + b + 1) x) y'[x] - a b y[x] == 0, "
-               "y[x], x], HypergeometricPFQ]]");
+               "y[x], x], (HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
 }
 static void t_hypergeometric_integer_declines(void) {
     /* integer exponent b = 2: no singular pFq lower-parameter branch
      * (1F1[a - 1, 0, x]) is emitted; Tricomi's U is the second solution */
     check_true("Module[{r = DSolve`SpecialFunctionForm[x y''[x] + (2 - x) y'[x] - 3 y[x] == 0, y, x]}, "
-               "!FreeQ[r, HypergeometricU[3, 2, x]] && FreeQ[r, HypergeometricPFQ[_, {0}, _]]]");
+               "!FreeQ[r, HypergeometricU[3, 2, x]] && FreeQ[r, HypergeometricPFQ[_, {0}, _] | Hypergeometric1F1[_, 0, _]]]");
 }
 
 /* ---- M17: affine -> Gauss 2F1 for non-canonical regular singular points, and
@@ -529,7 +529,7 @@ static void t_hypergeometric_integer_declines(void) {
 static void t_m17_affine_gauss(void) {
     check_form("Head[DSolve`SpecialFunctionForm[x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x] == 0, y[x], x]]", "List");
     check_true("Not[FreeQ[DSolve`SpecialFunctionForm[x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
     check_true("Abs[N[(x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x]) /. "
                "DSolve[x (x - 2) y''[x] + (2 x - 3) y'[x] + y[x] == 0, y, x][[1]] "
                "/. {C[1] -> 13/10, C[2] -> 7/10, x -> 3/5}]] < 1/1000000");
@@ -539,7 +539,7 @@ static void t_m17_affine_gauss(void) {
  * cases; symbolic n is exactly the genuinely-hypergeometric residue. */
 static void t_m17_gegenbauer_symbolic(void) {
     check_true("Not[FreeQ[DSolve[(1 - x^2) y''[x] - (2 lam + 1) x y'[x] + n (n + 2 lam) y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
     /* numeric residual on the ORIGINAL equation, all parameters instantiated */
     check_true("Abs[N[((1 - x^2) y''[x] - (2 lam + 1) x y'[x] + n (n + 2 lam) y[x]) /. "
                "DSolve[(1 - x^2) y''[x] - (2 lam + 1) x y'[x] + n (n + 2 lam) y[x] == 0, y, x][[1]] "
@@ -550,7 +550,7 @@ static void t_m17_gegenbauer_symbolic(void) {
  * row.  Ordinary Legendre (mu == 0) must still emit LegendreP. */
 static void t_m17_associated_legendre(void) {
     check_true("Not[FreeQ[DSolve[(1 - x^2) y''[x] - 2 x y'[x] + (n (n + 1) - m^2/(1 - x^2)) y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
     check_true("Not[FreeQ[DSolve[(1 - x^2) y''[x] - 2 x y'[x] + n (n + 1) y[x] == 0, y[x], x], LegendreP]]");
 }
 /* Liouville normal-form pre-pass: y'' + (2/x) y' + y == 0 has no y'-free form
@@ -566,7 +566,7 @@ static void t_m17_normalform_bessel(void) {
  * deg L != 2): the affine row declines rather than inventing a spurious 2F1. */
 static void t_m17_affine_declines_confluent(void) {
     check_true("FreeQ[DSolve`SpecialFunctionForm[x^2 y''[x] + x y'[x] + (x^2 - 4) y[x] == 0, y[x], x], "
-               "HypergeometricPFQ]");
+               "(HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]");
 }
 
 /* ---- M19: confluent / Whittaker -> 1F1 recogniser (single finite double pole +
@@ -576,7 +576,7 @@ static void t_m17_affine_declines_confluent(void) {
  * verifiable 1F1; numeric residual with the parameters instantiated. */
 static void t_m19_whittaker_confluent(void) {
     check_form("Head[DSolve`SpecialFunctionForm[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y[x], x]]", "List");
-    check_true("Not[FreeQ[DSolve[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y[x], x], HypergeometricPFQ]]");
+    check_true("Not[FreeQ[DSolve[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y[x], x], (HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1)]]");
     check_true("Abs[N[(x^2 y''[x] + (c x^2 + b x + a) y[x]) /. "
                "DSolve[x^2 y''[x] + (c x^2 + b x + a) y[x] == 0, y, x][[1]] "
                "/. {C[1] -> 6/5, C[2] -> 4/5, a -> 2/5, b -> 1/3, c -> -3/5, x -> 6/5}]] < 1/1000000");

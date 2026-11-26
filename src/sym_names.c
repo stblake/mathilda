@@ -1247,6 +1247,7 @@ const char* SYM_TakeWhile = NULL;
 const char* SYM_TimesBy = NULL;
 const char* SYM_TrueQ = NULL;
 const char* SYM_UniformDistribution = NULL;
+const char* SYM_ExponentialDistribution = NULL;
 const char* SYM_UpperCaseQ = NULL;
 
 void sym_names_init(void) {
@@ -2536,6 +2537,7 @@ void sym_names_init(void) {
     SYM_TimesBy                    = intern_symbol("TimesBy");
     SYM_TrueQ                      = intern_symbol("TrueQ");
     SYM_UniformDistribution        = intern_symbol("UniformDistribution");
+    SYM_ExponentialDistribution    = intern_symbol("ExponentialDistribution");
     SYM_UpperCaseQ                 = intern_symbol("UpperCaseQ");
 }
 

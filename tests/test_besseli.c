@@ -259,8 +259,11 @@ void test_besseli_series_infinity() {
     /* Reproduces Mathematica's Normal form: a dominant E^x series with
      * (-1)^k a_k sqrt(1/(2pi)) coefficients plus a subdominant I E^{-x} series
      * with a_k sqrt(1/(2pi)) coefficients (n = 0 here, so E^{I n Pi} = 1). */
+    /* the constant I is absorbed into the series' coefficients: the series
+     * carries implicit trailing zeros, which its arithmetic now accepts
+     * (audit SeriesData#3) */
     assert_eval_eq("Series[BesselI[0, x], {x, Infinity, 2}]",
-        "(I (Sqrt[1/x]/Sqrt[2 Pi] - (1/x)^(3/2)/(8 Sqrt[2 Pi]) + O[1/x]^(5/2)))/E^x + E^x (Sqrt[1/x]/Sqrt[2 Pi] + (1/x)^(3/2)/(8 Sqrt[2 Pi]) + O[1/x]^(5/2))", 0);
+        "E^x (Sqrt[1/x]/Sqrt[2 Pi] + (1/x)^(3/2)/(8 Sqrt[2 Pi]) + O[1/x]^(5/2)) + ((I Sqrt[1/x])/Sqrt[2 Pi] + ((-1/8*I) (1/x)^(3/2))/Sqrt[2 Pi] + O[1/x]^(5/2))/E^x", 0);
 }
 
 /* ---- stress --------------------------------------------------------- */

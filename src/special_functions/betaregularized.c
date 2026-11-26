@@ -60,7 +60,15 @@
 /* ------------------------------------------------------------------ */
 
 /* The continued fraction of I_x(a, b) / prefactor (DLMF 8.17.22), modified
- * Lentz; false when it does not converge. */
+ * Lentz; false when it does not converge.
+ *
+ * Each level commits a rounding error, and they accumulate: near the
+ * transition point x ~ (a+1)/(a+b+2) of large parameters the fraction needs
+ * ~sqrt(a) levels, and BetaRegularized[0.5, 1.*^6, 1.*^6] came out 1/2 - 1.3e-13
+ * (audit BetaRegularized#3; 1e-14 at a = b = 10^4). A fraction that needs more
+ * than BR_CF_MAX_LEVELS levels declines, and the call takes arb (20-30 ms at
+ * these parameters, every digit certified). */
+#define BR_CF_MAX_LEVELS 64
 static bool br_cf(double a, double b, double x, double* h_out) {
     const double TINY = 1e-300;
     double qab = a + b, qap = a + 1.0, qam = a - 1.0;
@@ -81,7 +89,7 @@ static bool br_cf(double a, double b, double x, double* h_out) {
         d = 1.0 / d;
         double del = d * c;
         h *= del;
-        if (fabs(del - 1.0) < 3e-16) { *h_out = h; return true; }
+        if (fabs(del - 1.0) < 3e-16) { *h_out = h; return m <= BR_CF_MAX_LEVELS; }
     }
     return false;
 }

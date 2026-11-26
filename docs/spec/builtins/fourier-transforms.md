@@ -14,6 +14,13 @@ for spectral analysis of sampled data or arrays.
 
 ## Fourier
 
+**Precision** (Wave 6). The result carries the least precision of the data: an
+arbitrary-precision number below machine precision makes the transform that
+precision (`Precision[Fourier[{2.`30, 1.`10}]]` is `10.`, as for
+`(2.`30 + 1.`10)/Sqrt[2]`); a machine number among the data makes it machine
+precision. This is the fixed minimum precision of the inputs, not significance
+arithmetic.
+
 **Audit wave 4.** Exact numeric constants (Pi, E, Sqrt[2]) are numericalised like rationals: `Fourier[{Pi, E}]` is numeric.
 
 

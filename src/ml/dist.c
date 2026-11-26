@@ -53,12 +53,12 @@ double ml_normal_deviate(void) {
 /* Recognised distributions. A distribution object is an ordinary expression whose
  * head names the family and whose arguments are its parameters -- specified, not
  * fitted, so it prints in full. */
-typedef enum { ML_D_NONE, ML_D_NORMAL, ML_D_UNIFORM, ML_D_MULTINORMAL,
-               ML_D_MIXTURE, ML_D_KDE } MlDistKind;
+typedef enum { ML_D_NONE, ML_D_NORMAL, ML_D_UNIFORM, ML_D_EXPONENTIAL,
+               ML_D_MULTINORMAL, ML_D_MIXTURE, ML_D_KDE } MlDistKind;
 
 typedef struct {
     MlDistKind kind;
-    double a, b;          /* Normal: mu, sigma. Uniform: lo, hi. */
+    double a, b;          /* Normal: mu, sigma. Uniform: lo, hi. Exponential: rate. */
     size_t dim;           /* Multinormal / Mixture */
     const double* mu;     /* borrowed. Mixture: k means, row-major */
     const double* chol;   /* borrowed, lower factor(s) */
@@ -265,6 +265,13 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
         if (!ml_read_param(r->data.function.args[1], &d->b)) return false;
         return d->b > d->a;
     }
+    if (hn == SYM_ExponentialDistribution) {
+        d->kind = ML_D_EXPONENTIAL; d->dim = 1;
+        if (argc != 1) return false;
+        if (!ml_read_param(e->data.function.args[0], &d->a)) return false;
+        d->b = 0.0;
+        return d->a > 0.0;
+    }
     return false;
 }
 
@@ -281,6 +288,9 @@ static bool ml_pdf_at(const MlDist* d, double x, double* out) {
             /* Zero strictly outside, 1/(b-a) inside. The endpoints are included, which
              * is Wolfram's convention for a continuous uniform. */
             *out = (x < d->a || x > d->b) ? 0.0 : 1.0 / (d->b - d->a);
+            return true;
+        case ML_D_EXPONENTIAL:
+            *out = x < 0.0 ? 0.0 : d->a * exp(-d->a * x);
             return true;
         default: return false;
     }
@@ -687,6 +697,8 @@ static void ml_draw(const MlDist* d, double* z, double* out) {
     switch (d->kind) {
         case ML_D_NORMAL:  out[0] = d->a + d->b * ml_normal_deviate(); return;
         case ML_D_UNIFORM: out[0] = d->a + (d->b - d->a) * random_uniform_01(); return;
+        /* inversion: -log(1 - u)/lambda, u in [0, 1) */
+        case ML_D_EXPONENTIAL: out[0] = -log1p(-random_uniform_01()) / d->a; return;
         case ML_D_MULTINORMAL:
             ml_draw_gauss(d->mu, d->chol, d->dim, z, out);
             return;
@@ -1380,6 +1392,13 @@ void ml_dist_init(void) {
         "NormalDistribution[] is the standard normal. Unlike a fitted model it prints "
         "its parameters in full, because they are what the user specified rather than "
         "an implementation detail.");
+
+    symtab_get_def("ExponentialDistribution")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ExponentialDistribution",
+        "ExponentialDistribution[lambda] represents an exponential distribution with "
+        "rate lambda > 0: PDF lambda E^(-lambda x) for x >= 0, Mean 1/lambda, Median "
+        "Log[2]/lambda, Variance 1/lambda^2. Supported by PDF, CDF, Quantile, "
+        "InverseCDF, Mean, Median, Variance and RandomVariate.");
 
     symtab_get_def("UniformDistribution")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("UniformDistribution",

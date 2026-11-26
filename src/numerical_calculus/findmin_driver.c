@@ -744,6 +744,14 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         }
         double xm, fm;
         ok = fm_brent_min(f_raw, binds, &opts, a, b, c, &boxes[0], &xm, &fm);
+        /* Brent's final tolerance step can leave the bracket by ~tol; when the
+         * minimum sits at the edge of the objective's real domain (Sqrt[x] at
+         * 0) that step lands outside it (x = -1e-24, a complex objective).
+         * The bracket ends evaluated, so clamp onto them. */
+        if (ok && (xm < a || xm > c)) {
+            double xc = xm < a ? a : c, fc;
+            if (fm_eval_scalar(f_raw, binds, &xc, 1, &opts, &fc)) { xm = xc; fm = fc; }
+        }
         if (ok) { x_vec[0] = xm; fx_min = fm; }
     } else if (method == FM_METHOD_QUASINEWTON) {
         bool done_sqp = false;

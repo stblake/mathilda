@@ -277,9 +277,10 @@ static void test_declines(void) {
                    "HypergeometricPFQ[{a}, {c}, z]", 0);
     assert_eval_eq("HypergeometricPFQ`Representation[{1/3}, {1/5}, z]",
                    "HypergeometricPFQ`Representation[{1/3}, {1/5}, z]", 0);
-    /* automatic evaluation is unchanged */
+    /* automatic evaluation is unchanged; the named head is kept (audit
+     * Hypergeometric2F1#1) */
     assert_eval_eq("Hypergeometric2F1[-3/2, -1/2, 1/2, z]",
-                   "HypergeometricPFQ[{-3/2, -1/2}, {1/2}, z]", 0);
+                   "Hypergeometric2F1[-3/2, -1/2, 1/2, z]", 0);
 }
 
 int main(void) {

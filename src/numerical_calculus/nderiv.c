@@ -834,7 +834,13 @@ Expr* builtin_nd(Expr* res) {
                 if (stall >= ND_REFINE_STALL) break;  /* refinement no longer helping */
             }
             result = best;
-            if (result && goal_active) {
+            /* The default goals steer the refinement (it deepens the tableau
+             * toward machine accuracy) but only a goal the caller set is a
+             * promise: ND[Cos[x]^3, {x, 2}, 0] is -2.99999999991 with no
+             * message, as the reference's finite-difference ND gives its
+             * Terms -> 7 value silently (audit ND#1; ND::accgl on every
+             * documented example). */
+            if (result && goal_active && (o.ag_val || o.pg_val)) {
                 double tol = nc_combined_tol(o.acc_goal, o.prec_goal, nd_mag_of(result), wp_digits);
                 if (best_err > tol) nc_warn_goal("ND", best_err, tol);
             }

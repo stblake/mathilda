@@ -140,7 +140,18 @@ static Expr* acb_to_expr(const acb_t z, slong out_bits) {
     mpfr_init2(re, mp);
     mpfr_init2(im, mp);
     nb_arf_get_mpfr(re, arb_midref(acb_realref(z)));
-    nb_arf_get_mpfr(im, arb_midref(acb_imagref(z)));
+    /* An imaginary part whose ball contains zero, beside a real part that is
+     * certified nonzero, carries no digit at all: the value is consistent with
+     * being real, and the midpoint is rounding noise from a complex
+     * intermediate (arb's hypergeometric route for a real-valued function).
+     * Rendering that midpoint gave LegendreQ[1/2, 0, 3, 2.] a spurious
+     * 1.65*^-24 I, though Q_nu of type 3 is real for real nu and x > 1 (audit
+     * LegendreQ#1). A genuinely complex value has an imaginary ball that
+     * excludes zero once the ladder above has its bits. */
+    if (arb_contains_zero(acb_imagref(z)) && !arb_contains_zero(acb_realref(z)))
+        mpfr_set_zero(im, 1);
+    else
+        nb_arf_get_mpfr(im, arb_midref(acb_imagref(z)));
     Expr* out;
     if (mpfr_inf_p(re) || mpfr_inf_p(im))
         out = expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
@@ -1565,6 +1576,33 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
  * acb_rgamma is entire (zero at the poles), so the second form is valid for any
  * complex nu, and x stays off U's cut whenever Re z > 0. */
 static void nb_pcfd(acb_t res, const acb_t nu, const acb_t z, slong prec) {
+    /* A large non-negative integer order n: D_n(z) = 2^(-n/2) e^(-z^2/4)
+     * H_n(z/Sqrt[2]). The confluent forms below cancel ~n log n bits there and
+     * never reached a finite ball (ParabolicCylinderD[10.^6, 1.] stayed
+     * unevaluated, audit ParabolicCylinderD#2); arb's Hermite polynomial does
+     * not. */
+    if (acb_is_int(nu) && arf_sgn(arb_midref(acb_realref(nu))) > 0 &&
+        arf_cmpabs_2exp_si(arb_midref(acb_realref(nu)), 10) > 0) {
+        acb_t w, s, h;
+        acb_init(w); acb_init(s); acb_init(h);
+        acb_set_ui(s, 2);
+        acb_sqrt(s, s, prec);
+        acb_div(w, z, s, prec);                    /* z/Sqrt[2]            */
+        acb_hypgeom_hermite_h(h, nu, w, prec);
+        /* 2^(-n/2) e^(-z^2/4) = exp(-(n/2) log 2 - z^2/4) */
+        acb_set_ui(s, 2);
+        acb_log(s, s, prec);
+        acb_mul(s, s, nu, prec);
+        acb_mul_2exp_si(s, s, -1);
+        acb_mul(w, z, z, prec);
+        acb_mul_2exp_si(w, w, -2);
+        acb_add(s, s, w, prec);
+        acb_neg(s, s);
+        acb_exp(s, s, prec);
+        acb_mul(res, h, s, prec);
+        acb_clear(w); acb_clear(s); acb_clear(h);
+        return;
+    }
     acb_t x, a, b, t, u, g, e;
     acb_init(x); acb_init(a); acb_init(b); acb_init(t);
     acb_init(u); acb_init(g); acb_init(e);

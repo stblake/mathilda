@@ -1327,6 +1327,7 @@ extern const char* SYM_TakeWhile;
 extern const char* SYM_TimesBy;
 extern const char* SYM_TrueQ;
 extern const char* SYM_UniformDistribution;
+extern const char* SYM_ExponentialDistribution;
 extern const char* SYM_UpperCaseQ;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe

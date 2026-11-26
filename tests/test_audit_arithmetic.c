@@ -339,6 +339,17 @@ static void test_wave5_g7_arithmetic(void) {
     audit_chk("SetPrecision#2", "Precision[SetPrecision[1.5, N[20, 30]]]", "20.0");
 }
 
+/* Wave 6 G2: the precision of an arbitrary-precision zero; N of a rational
+ * exponent of a symbolic base. */
+static void test_wave6_g2(void) {
+    audit_chk("Precision#1", "Precision[0``10]", "0.0");
+    audit_chk("Precision#1", "Accuracy[0``10]", "10.0");
+    audit_chk("Precision#1", "Precision[1.`20 - 1.`20]", "0.0");
+    audit_chk("Precision#1", "Precision[N[{{2, I}, {-I, 2}}, 30][[1, 2]] + 0``30]", "30.0");
+    audit_chk("N#1", "N[x^(1/2)]", "x^0.5");
+    audit_chk("N#1", "1.0 Sqrt[x]", "1.0 Sqrt[x]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_complex_expand_conjugate);
@@ -351,5 +362,6 @@ int main(void) {
     TEST(test_s11_special_values);
     TEST(test_wave4_arith_misc);
     TEST(test_wave5_g7_arithmetic);
+    TEST(test_wave6_g2);
     return audit_finish("audit_arithmetic");
 }

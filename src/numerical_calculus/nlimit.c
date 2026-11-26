@@ -904,9 +904,46 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
     }
     /* The oscillation diagnosis samples expr too, so it must run while the
      * variable is still bound -- before nl_bind_restore, not after. */
-    bool oscillatory = ok
-        && nl_count_reversals(S, filled) >= NL_OSC_MIN_REVERSALS
+    bool reverses = ok && nl_count_reversals(S, filled) >= NL_OSC_MIN_REVERSALS;
+    bool oscillatory = reverses
         && nl_oscillates_machine(&ctx, z0, dir, scale, infinite);
+
+    /* An oscillation whose envelope decays (the gate above let it through):
+     * the extrapolators model a regular asymptotic tail and an oscillating
+     * one defeats them while their residual still looks small --
+     * NLimit[Sin[x]/x, x -> Infinity] came out -0.000155 with a claimed error
+     * of 2e-7 (audit NLimit#1). The samples themselves converge, so follow the
+     * ladder on toward the limit point until successive samples agree to the
+     * goal: the last sample is the value, the last increments its error. */
+    if (reverses && !oscillatory && o->method == SYM_Automatic) {
+        double tol_abs = 0.0;
+        double _Complex prev = S[filled - 1], cur = prev;
+        double inc = INFINITY, inc_prev = INFINITY;
+        bool met = false;
+        for (int k = filled; k < 1100; k++) {
+            double _Complex z;
+            if (infinite) z = dir * scale * ldexp(1.0, k);
+            else          z = z0 - dir * scale * ldexp(1.0, -k);
+            if (!isfinite(creal(z)) || !isfinite(cimag(z)) || (!infinite && z == z0)) break;
+            if (!nl_sample_machine(&ctx, z, &cur)) break;
+            inc_prev = inc;
+            inc = cabs(cur - prev);
+            prev = cur;
+            tol_abs = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(cur), wp_digits);
+            if (inc <= tol_abs && inc_prev <= tol_abs) { met = true; break; }
+        }
+        nl_bind_restore(&bind);
+        free(S);
+        double err = inc > inc_prev ? inc : inc_prev;
+        if (!isfinite(err)) {
+            nl_warn("noise", "Cannot recognize a limiting value. This may be due to "
+                             "noise from roundoff; try higher WorkingPrecision, fewer "
+                             "Terms, or a different Scale.");
+            return NULL;
+        }
+        if (!met && goal_active) nc_warn_goal("NLimit", err, tol_abs);
+        return nl_from_complex_d(prev);
+    }
 
     /* Adaptive refinement: extrapolate at the current prefix, keep the estimate
      * with the smallest residual, grow the sample count until the goal is met

@@ -23,6 +23,7 @@
  */
 
 #include "nsum.h"
+#include "../sym_intern.h"   /* intern_symbol */
 #include "iter.h"
 #include "../modular.h"
 
@@ -3945,6 +3946,73 @@ static Expr* ns_builtin(Expr* res) {
      * bounds work). Build it once and treat as the single-variable body. */
     Expr* inner_body = NULL;   /* owned when built */
     Expr* eff_body = body;     /* borrowed unless inner_body is built */
+    /* Inner ranges that are finite but depend on the outer index ({j, 1, i}):
+     * the inner sum is then a function of the integer i only, with no
+     * continuous extension for Euler-Maclaurin, and partial-sum extrapolation
+     * of its slowly (algebraically) converging outer sum was 0.004 off
+     * (audit NSum#3: NSum[1/(i j)^2, {i, 1, Infinity}, {j, 1, i}] gave
+     * 1.89037 for (Zeta[2]^2 + Zeta[4])/2 = 1.89407). When the symbolic Sum
+     * closes the inner sum (HarmonicNumber[i, 2]/i^2 here), that closed form
+     * is the summand: it is smooth in i and takes the ordinary path. */
+    if (nspecs >= 2 && spec0->data.function.arg_count >= 2 &&
+        spec0->data.function.args[0]->type == EXPR_SYMBOL) {
+        Expr* ovar = spec0->data.function.args[0];
+        bool dependent = false, finite = true;
+        for (size_t i = 2; i < pos_end; i++) {
+            const Expr* sp = res->data.function.args[i];
+            for (size_t k = 1; k < sp->data.function.arg_count; k++) {
+                if (ns_mentions_name(sp->data.function.args[k], ovar->data.symbol.name))
+                    dependent = true;
+                if (ns_mentions_name(sp->data.function.args[k], SYM_Infinity)) finite = false;
+            }
+        }
+        if (dependent && finite) {
+            const char* g_ns_failed = intern_symbol("$Failed");
+            const char* g_ns_quiet_sym = intern_symbol("Quiet");
+            size_t ns = 1 + (pos_end - 2);
+            Expr** v = malloc(sizeof(Expr*) * ns);
+            v[0] = expr_copy(body);
+            for (size_t i = 2; i < pos_end; i++) v[i - 1] = expr_copy(res->data.function.args[i]);
+            Expr* sum = expr_new_function(expr_new_symbol(SYM_Sum), v, ns);
+            free(v);
+            Expr* blk = expr_new_function(expr_new_symbol(SYM_Block), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(ovar) }, 1),
+                sum }, 2);
+            Expr* tc = expr_new_function(expr_new_symbol(SYM_TimeConstrained), (Expr*[]){
+                blk, expr_new_integer(5), expr_new_symbol(g_ns_failed) }, 3);
+            Expr* closed = eval_and_free(expr_new_function(expr_new_symbol(g_ns_quiet_sym),
+                                                           (Expr*[]){ tc }, 1));
+            if (closed && !ns_mentions_name(closed, SYM_Sum) &&
+                !ns_mentions_name(closed, SYM_NSum) && !ns_mentions_name(closed, g_ns_failed)) {
+                bool free_inner = true;
+                for (size_t i = 2; i < pos_end && free_inner; i++) {
+                    const Expr* sp = res->data.function.args[i];
+                    if (sp->data.function.arg_count >= 1 &&
+                        sp->data.function.args[0]->type == EXPR_SYMBOL &&
+                        ns_mentions_name(closed, sp->data.function.args[0]->data.symbol.name))
+                        free_inner = false;
+                }
+                if (free_inner) {
+                    Expr** v2 = malloc(sizeof(Expr*) * (argc - pos_end + 2));
+                    size_t w = 0;
+                    v2[w++] = closed;
+                    v2[w++] = expr_copy(spec0);
+                    for (size_t i = pos_end; i < argc; i++) v2[w++] = expr_copy(res->data.function.args[i]);
+                    Expr* call = expr_new_function(expr_new_symbol(SYM_NSum), v2, w);
+                    free(v2);
+                    Expr* r = eval_and_free(call);
+                    if (r && !(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                               r->data.function.head->data.symbol.name == SYM_NSum)) {
+                        /* (the caller's cleanup below has nothing to release yet) */
+                        return r;
+                    }
+                    if (r) expr_free(r);
+                    closed = NULL;
+                }
+            }
+            if (closed) expr_free(closed);
+        }
+    }
     if (nspecs >= 2) {
         size_t ninner = (argc - pos_end) + 1 /*body*/ + (nspecs - 1) /*specs[1..]*/;
         Expr** v = malloc(sizeof(Expr*) * ninner);

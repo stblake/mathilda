@@ -15,9 +15,9 @@ moving-average specs, integer/complex covariance, …) fall back to the exact
 
 ## Median
 
-- `Median[dist]` of a `NormalDistribution`, `UniformDistribution` or 1-D
-  `SmoothKernelDistribution`: its closed form (see machine-learning.md, "CDF, Mean, ...").
-Gives the median estimate of the elements in data.
+- `Median[dist]` of a `NormalDistribution`, `UniformDistribution`,
+  `ExponentialDistribution` (`Log[2]/lambda`) or 1-D `SmoothKernelDistribution`:
+  its closed form (see machine-learning.md, "Distributions").
 - `Median[data]`: gives the median estimate $\hat{q}_{1/2}$ of the elements in `data`.
 - `Median[dist]`: gives the median of the distribution `dist`.
 

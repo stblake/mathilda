@@ -83,6 +83,9 @@ the implicit decision: `3.14`50` is 50-digit MPFR, `3.14``49` is
 Numerical evaluation.
 - `N[expr]` — machine-precision approximation.
 - `N[expr, p]` — `p`-digit (arbitrary-precision, MPFR) approximation.
+- `N` numericalizes a rational exponent of a symbolic base as well:
+  `N[x^(1/2)]` is `x^0.5`, as in the reference. Inexact contagion does not
+  (`1.0 Sqrt[x]` keeps its `Sqrt`); nor do internal callers.
 - `N[expr, {p, a}]` — precision goal `p` and accuracy goal `a`. The precision
   goal decides, and an `Infinity` precision goal leaves the accuracy goal as the
   digit count. `N` is `Protected` only, not `Listable` (as in the reference), so
@@ -204,7 +207,10 @@ its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
   `Precision[N[HilbertMatrix[4], 30]]` is `30.`, `Precision[{1, 2.5`20, N[1, 30]}]`
   is `20.`, `Precision[{1, 2.5, N[1, 30]}]` is `MachinePrecision`,
   `Precision[{1, 2}]` and `Precision[x]` are `Infinity`,
-  `Accuracy[{1.5, 100.`30}]` is `15.7785`. A packed array is read from its
+  `Accuracy[{1.5, 100.`30}]` is `15.7785`. An arbitrary-precision zero has no
+  significant digit: `Precision[0``10]` and `Precision[1.`20 - 1.`20]` are `0.`
+  (`Accuracy[0``10]` is `10.`). Beside a nonzero number such a zero imposes
+  nothing: `Precision[{0``30, 1.`30}]` and `Precision[0``30 + 1.`30 I]` are `30.`. A packed array is read from its
   buffer (an integer array is exact: `Infinity`); a `SparseArray` takes the
   minimum over its background and stored values. (Through v0.6225 both were
   `Listable`, so a matrix answered a matrix of precisions.)

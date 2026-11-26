@@ -46,7 +46,7 @@ static void test_closed_form_n3_30digits(void) {
     assert_true("g = GaussianQuadratureWeights[3, -1, 1, 30]; "
                 "Max[Abs[g - {{-Sqrt[3/5], 5/9}, {0, 8/9}, {Sqrt[3/5], 5/9}}]] < 10^-30");
     /* every entry carries the requested precision */
-    assert_true("Min[Precision /@ Flatten[GaussianQuadratureWeights[3, -1, 1, 30]]] >= 30");
+    assert_true("Precision[Flatten[GaussianQuadratureWeights[3, -1, 1, 30]]] >= 30");  /* the node 0 is an arbitrary-precision zero: precision 0. alone, no constraint in a list */
 }
 
 static void test_closed_form_n5_40digits(void) {

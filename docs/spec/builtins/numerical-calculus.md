@@ -144,6 +144,10 @@ Out[8]= -3.6287999994567658842202915*10^6   (= Derivative[10][Zeta][0])
 
 ## ND
 
+**Wave 6.** The default goals steer the adaptive refinement of the tableau, but
+`ND::accgl` is issued only for an `AccuracyGoal` or `PrecisionGoal` the caller
+set: `ND[Cos[x]^3, {x, 2}, 0]` is `-3.` (to ~1e-10) with no message.
+
 Numerical derivative.  `ND[expr, x, x0]` gives a numerical approximation to
 the derivative of `expr` with respect to `x` at `x = x0`; `ND[expr, {x, n},
 x0]` gives the `n`-th derivative.  Implemented natively in C in
@@ -541,12 +545,24 @@ In[11]:= NLimit[x Sin[x], x -> Infinity]
 Out[11]= NLimit[x Sin[x], x -> Infinity]
 
 In[12]:= NLimit[Sin[x]/x, x -> Infinity]  (* same oscillation, decaying envelope *)
-Out[12]= 0.0142131
+Out[12]= 1.42034*^-14
 ```
+
+**Decaying oscillation** (Wave 6). When the reversal screen fires and the
+envelope decays, the extrapolators -- which model a regular asymptotic tail --
+are not used (they gave `-0.000155` with a claimed error of `2e-7` here). The
+ladder is followed on toward the limit point until two successive increments
+are within the goal; the last sample is the value.
 
 **Wave 5 (2026-11).** A second argument that is not `z -> z0` is `NLimit::lim`; `Scale -> 0` and `Direction -> 0` are `NLimit::badopt`.
 
 ## NSum
+
+**Wave 6.** An inner range that is finite but depends on the outer index
+(`NSum[f, {i, 1, Infinity}, {j, 1, i}]`) is first closed by the symbolic `Sum`
+(five seconds at most, quietly): when it closes (`HarmonicNumber[i, 2]/i^2` for
+`1/(i j)^2`), that smooth summand takes the ordinary path, so the example gives
+`1.89407` = `(Zeta[2]^2 + Zeta[4])/2` (it was `1.89037` with `NSum::accgl`).
 
 **Audit wave 4.** An inner sum whose range depends on the outer index is not extrapolated by Euler-Maclaurin (the outer summand is a function of the integer index only).
 
@@ -986,6 +1002,10 @@ Out[3]= 3.67608
 **Wave 5 (2026-11).** A finite machine-precision product of at most 10^5 factors multiplies its factors (`NProduct[2, {3}]` is `8.`).
 
 ## NIntegrate
+
+**Wave 6.** A `WorkingPrecision` below machine precision (`WorkingPrecision -> 10`)
+computes at machine precision and returns the result at the requested precision:
+`Precision[NIntegrate[Exp[x], {x, 0, 1}, WorkingPrecision -> 10]]` is `10.`.
 
 **Audit wave 4.** A Boole/UnitStep integrand in one dimension is integrated as the piecewise function it is, with its jump locations as Exclusions (`NIntegrate[Boole[x < 1/3], {x, 0, 1}]` is 1/3 to machine precision); in several dimensions with a bound depending on another variable it takes the iterated piecewise rules (Monte Carlo needs a constant box).
 
@@ -1641,6 +1661,16 @@ for a transcendental equation Solve cannot reduce.
 **Wave 5 (2026-11).** A polynomial with a symbolic coefficient goes to the symbolic solver without the internal `NRoots::nnum`; the transcendental grid seeds run quietly (only verified roots are kept).
 
 ## NDSolve
+
+**Wave 6.** *Vector-valued unknowns*: an initial condition `y[x0] == {c1, ..., cn}`
+makes `y` a vector unknown; it is solved through components (`y'[x] == m.y[x]`
+threads into `n` scalar equations) and returned as
+`y -> Function[{t}, {if1[t], ..., ifn[t]}]`, so `y[1] /. sol` is the vector.
+*Periodic events*: `WhenEvent[Mod[u, p] == c, ...]` (numeric `p > 0`, `0 <= c < p`)
+follows `Mod[u - c + p/2, p] - p/2`, which changes sign continuously at every
+`u = c + k p` (`Mod[t, 1] == 0` never changed sign and never fired). At
+`WorkingPrecision -> p` the event time and state handed to the actions carry `p`
+digits, not the integrator's guard width.
 
 **Audit wave 4.** `eqn1 && eqn2 && ...` is accepted as the equation list (NDSolve and NDSolveValue).
 
@@ -2344,6 +2374,13 @@ Attributes: `NDEigenvalues`, `NDEigensystem`, `DirichletCondition`,
 **Wave 5 (2026-11).** The eigenvalues are sorted ascending again after Richardson extrapolation (which could swap a near-degenerate pair), the eigenfunctions permuted with them.
 
 ## FindMinimum / FindMaximum
+
+**Wave 6.** A one-dimensional search still descending at the edge of the
+objective's real domain (`Sqrt[x]` from `x = 1`) brackets the minimum by its last
+two real points instead of failing with `FindMinimum::nlnum`; a value whose
+imaginary part dominates is outside the domain, not a rounding residue, and
+Brent's result is clamped into the bracket. `FindMinimum[Sqrt[x], {x, 1}]` ends
+at `x >= 0` with a consistent value (and `FindMinimum::cvmit`).
 
 **Audit wave 4.** An objective free of the variables is its own minimum at the start; contradictory bounds are `FindMinimum::nsol` and stay unevaluated.
 

@@ -47,6 +47,7 @@
  *            conventions could not be checked numerically.
  */
 
+#include "hypergeopfq.h"   /* hyper_named_to_pfq */
 #include <stdlib.h>
 #include <string.h>
 #include "expr.h"
@@ -333,6 +334,17 @@ static Expr* canon_pfq(const Expr* atom, const Expr* root, const AssumeCtx* ctx)
     return out;
 }
 
+/* Hypergeometric0F1 / 1F1 / 2F1: the PFQ call they stand for, canonicalised
+ * as PFQ is (into the private lattice heads). */
+static Expr* canon_named(const Expr* atom, const Expr* root, const AssumeCtx* ctx) {
+    Expr* pfq = hyper_named_to_pfq(atom);
+    if (!pfq) return NULL;
+    Expr* out = canon_pfq(pfq, root, ctx);
+    if (!out) return pfq;
+    expr_free(pfq);
+    return out;
+}
+
 /* ---- transformations (partner present) --------------------------------------- */
 
 static bool contains_expr(const Expr* e, const Expr* sub) {
@@ -433,7 +445,9 @@ static Expr* canon_u(const Expr* atom, const Expr* root, const AssumeCtx* ctx) {
     return NULL;
 }
 
-/* ---- finalize: private heads back to HypergeometricPFQ ------------------------- */
+/* ---- finalize: private heads back to the named heads ---------------------------
+ * Hypergeometric2F1 / 1F1 / 0F1 evaluate through HypergeometricPFQ and keep their
+ * head when it cannot reduce them -- the form the reference writes these in. */
 
 static Expr* hyper_finalize_walk(const Expr* e, bool* changed) {
     if (e->type != EXPR_FUNCTION) return sf_cp(e);
@@ -444,17 +458,13 @@ static Expr* hyper_finalize_walk(const Expr* e, bool* changed) {
     const char* hn = h->type == EXPR_SYMBOL ? h->data.symbol.name : NULL;
     Expr* r;
     if (hn == SYM_SfF21 && n == 4) {
-        r = sf_call(SYM_HypergeometricPFQ, (Expr*[]){ sf_call(SYM_List, (Expr*[]){ a[0], a[1] }, 2),
-                                                     sf_call(SYM_List, (Expr*[]){ a[2] }, 1), a[3] }, 3);
+        r = sf_call(SYM_Hypergeometric2F1, (Expr*[]){ a[0], a[1], a[2], a[3] }, 4);
         *changed = true;
     } else if (hn == SYM_SfF11 && n == 3) {
-        r = sf_call(SYM_HypergeometricPFQ, (Expr*[]){ sf_call(SYM_List, (Expr*[]){ a[0] }, 1),
-                                                     sf_call(SYM_List, (Expr*[]){ a[1] }, 1), a[2] }, 3);
+        r = sf_call(SYM_Hypergeometric1F1, (Expr*[]){ a[0], a[1], a[2] }, 3);
         *changed = true;
     } else if (hn == SYM_SfF01 && n == 2) {
-        Expr* none[1] = { NULL };
-        r = sf_call(SYM_HypergeometricPFQ, (Expr*[]){ sf_call(SYM_List, none, 0),
-                                                     sf_call(SYM_List, (Expr*[]){ a[0] }, 1), a[1] }, 3);
+        r = sf_call(SYM_Hypergeometric0F1, (Expr*[]){ a[0], a[1] }, 2);
         *changed = true;
     } else {
         r = expr_new_function(sf_cp(h), a, n);
@@ -476,6 +486,9 @@ static Expr* hyper_finalize(Expr* e) {
 
 static const SfDesc HYPER_DESCS[] = {
     { &SYM_HypergeometricPFQ, 3, 0, 1, { 0 },       NULL,   NULL, canon_pfq, NULL, NULL },
+    { &SYM_Hypergeometric2F1, 4, 0, 1, { 0 },       NULL,   NULL, canon_named, NULL, NULL },
+    { &SYM_Hypergeometric1F1, 3, 0, 1, { 0 },       NULL,   NULL, canon_named, NULL, NULL },
+    { &SYM_Hypergeometric0F1, 2, 0, 1, { 0 },       NULL,   NULL, canon_named, NULL, NULL },
     { &SYM_SfF21,             4, 3, 2, { 0, 1, 2 }, up_f21, NULL, canon_f21, NULL, NULL },
     { &SYM_SfF11,             3, 2, 2, { 0, 1 },    up_f11, NULL, canon_f11, NULL, NULL },
     { &SYM_SfF01,             2, 1, 2, { 0 },       up_f01, NULL, NULL,      NULL, NULL },

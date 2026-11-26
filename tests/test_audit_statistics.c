@@ -183,6 +183,15 @@ static void test_wave5_g7_statistics(void) {
     audit_chk("Quartiles#5", "Block[{$MessageList = {}}, Quartiles[{1, 2 + I, 3}]; Length[$MessageList]]", "1");
 }
 
+/* Wave 6 G2: Median of an exponential distribution; the median of data. */
+static void test_wave6_g2(void) {
+    audit_true("Median#4", "Median[ExponentialDistribution[l]] === Log[2]/l");
+    audit_true("Median#4", "Median[NormalDistribution[m, s]] === m && Median[UniformDistribution[{0, 2}]] === 1");
+    audit_true("Median#4", "Mean[ExponentialDistribution[l]] === 1/l && Variance[ExponentialDistribution[3]] === 1/9");
+    audit_true("Median#4", "CDF[ExponentialDistribution[2], 1] === 1 - E^-2 && Quantile[ExponentialDistribution[2], 1/2] === Log[2]/2");
+    audit_chk("Median#7", "Median[{1, 2, 3, 4, 5, 6, 7}]", "4");
+}
+
 int main(void) {
     audit_init();
     TEST(test_median_numeric_order);
@@ -198,5 +207,6 @@ int main(void) {
     TEST(test_s11_special_values);
     TEST(test_wave4_shapes_and_scale);
     TEST(test_wave5_g7_statistics);
+    TEST(test_wave6_g2);
     return audit_finish("audit_statistics");
 }

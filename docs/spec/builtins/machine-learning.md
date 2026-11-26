@@ -319,7 +319,10 @@ Out[3]= {0.0}
 
 ## Distributions
 
-`NormalDistribution[mu, sigma]` and `UniformDistribution[{lo, hi}]` are distribution
+`NormalDistribution[mu, sigma]`, `UniformDistribution[{lo, hi}]` and
+`ExponentialDistribution[lambda]` (rate `lambda > 0`: PDF `lambda E^(-lambda x)` for
+`x >= 0`, `Mean` `1/lambda`, `Median` `Log[2]/lambda`, `Variance` `1/lambda^2`, `CDF`
+`1 - E^(-lambda x)`, `Quantile` `-Log[1 - q]/lambda`; `RandomVariate` by inversion) are distribution
 objects — ordinary expressions whose head names the family and whose arguments are its
 parameters. `NormalDistribution[]` and `UniformDistribution[]` give the standard cases.
 Attributes: `Protected`.
@@ -339,7 +342,7 @@ visibility.
 Parameters may be exact numeric constants (`UniformDistribution[{0, Pi}]`,
 `NormalDistribution[Sqrt[2], 1]`), read at their machine value.
 
-`dist` is `NormalDistribution`, `UniformDistribution`, or any `LearnedDistribution` that
+`dist` is `NormalDistribution`, `UniformDistribution`, `ExponentialDistribution`, or any `LearnedDistribution` that
 `LearnDistribution` or `SmoothKernelDistribution` returns. A univariate distribution draws
 reals; a `dim`-dimensional learned one draws `dim`-vectors (so `RandomVariate[ld, n]` is an
 `n x dim` matrix).

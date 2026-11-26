@@ -1613,7 +1613,13 @@ P(z d/dz) when the reduced series closes.
 
 
 `Hypergeometric0F1[b, z]` is the confluent hypergeometric function ₀F₁,
-equal to `HypergeometricPFQ[{}, {b}, z]`.
+equal to `HypergeometricPFQ[{}, {b}, z]`. It evaluates through
+`HypergeometricPFQ` (every closed form and numeric path is PFQ's) and keeps its
+own head when PFQ cannot reduce it: `Hypergeometric0F1[b, z]` and
+`Hypergeometric0F1[1, 1]` stay as typed, and
+`D[Hypergeometric0F1[b, z], z]` is `Hypergeometric0F1[1 + b, z]/b`. The same
+holds for `Hypergeometric1F1` and `Hypergeometric2F1`; `D`, `FunctionExpand`,
+`Simplify` and `Integrate` read the named heads as the PFQ they stand for.
 
 - Attributes `Listable`, `NumericFunction`, `Protected`.
 - Machine kernel (real and complex `b`, `z`): the series where it loses at most
@@ -1641,9 +1647,9 @@ A real z so large that the value leaves the MPFR exponent range gives Overflow[]
 
 
 `Hypergeometric1F1[a, b, z]` is Kummer's confluent hypergeometric function
-₁F₁, equal to `HypergeometricPFQ[{a}, {b}, z]` (the fixed-arity heads
-rewrite to that normal form, which Simplify, DSolve, Integrate and
-FunctionExpand work in). A List argument left after a failed Listable thread
+₁F₁, equal to `HypergeometricPFQ[{a}, {b}, z]`. It evaluates through PFQ and
+keeps its head when unevaluated (`Head[Hypergeometric1F1[1/3, 1/4, z]]` is
+`Hypergeometric1F1`; `Hypergeometric1F1[1, 2, z]` is `(-1 + E^z)/z`). A List argument left after a failed Listable thread
 (`Thread::tdlen`) leaves the call unevaluated.
 
 - Attributes `Listable`, `NumericFunction`, `Protected`.
@@ -1677,7 +1683,11 @@ An inexact z = 0 gives an inexact 1 whatever the parameters (Hypergeometric1F1[1
 
 
 `Hypergeometric2F1[a, b, c, z]` is the Gauss hypergeometric function ₂F₁,
-equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
+equal to `HypergeometricPFQ[{a, b}, {c}, z]`. A call PFQ cannot reduce keeps its
+head (`Hypergeometric2F1[1/2, 1, 2, 1/2]`), and
+`D[Hypergeometric2F1[a, b, c, z], z]` is
+`a b Hypergeometric2F1[1 + a, 1 + b, 1 + c, z]/c`; Simplify writes its results
+in the named heads.
 
 - Attributes `Listable`, `NumericFunction`, `Protected`.
 - Machine kernel, real `z`: direct series on `[0, 0.9]`, Pfaff's
@@ -3646,6 +3656,12 @@ Out[4]= -0.606531
 
 ## ParabolicCylinderD
 
+**Wave 6.** An integer order above 1024 is evaluated by arb as
+`2^(-n/2) E^(-z^2/4) HermiteH[n, z/Sqrt[2]]`. The confluent forms cancel about
+`n log n` bits there and never reached a finite ball, so
+`ParabolicCylinderD[10.^6, 1.]` stayed unevaluated; it is now `4.5652*^2782852`,
+in 40 ms. A large non-integer order still takes the confluent route.
+
 `ParabolicCylinderD[nu, z]` gives Whittaker's parabolic cylinder function
 `D_nu(z)`, the solution of `w'' + (nu + 1/2 - z²/4) w = 0` that decays as
 `z -> +Infinity`. It is entire in both `nu` and `z`, and is related to the
@@ -3728,6 +3744,11 @@ Out[4]= E^(-1/4 z^2) - E^(1/4 z^2) Sqrt[1/2 Pi] z Erfc[z/Sqrt[2]]
 `Gamma[n+2lambda]/(Gamma[2lambda] Gamma[n+1]) Hypergeometric2F1[-n, n+2lambda,
 lambda+1/2, (1-z)/2]` (DLMF 18.5.9). `GegenbauerC[n, z]` is `2 ChebyshevT[n,
 z]/n`, the `lambda -> 0` limit of `C_n^lambda(z)/lambda`.
+
+**Wave 6.** For a non-integer degree within `1e-2` of the singular point
+`z = -1`, the machine path declines to arb (the stepped ODE solution lost up to
+1e-10 relative there): `GegenbauerC[2.5, 1.5, -0.999999]` is
+`-318339.06387664295`.
 
 - **Exact rules.** An integer `0 <= n <= 400` expands to the explicit polynomial
   `Σ_k (-1)^k (lambda)_{n-k} (2z)^{n-2k}/(k! (n-2k)!)` for every `lambda`
@@ -3915,6 +3936,11 @@ Series of HankelH1 / HankelH2 (and of BesselY inside a larger expression or of a
 Hypergeometric2F1[a, 1 - b, a + 1, z]` (its analytic continuation to complex
 arguments and `z` outside `[0, 1]`). `BetaRegularized[z0, z1, a, b]` gives
 `I_z1(a, b) - I_z0(a, b)`.
+
+- **Wave 6.** The machine continued fraction declines when it needs more than 64
+  levels (near the transition point of large parameters, where its rounding
+  accumulated to 1.3e-13 at `a = b = 10^6`); arb then answers (20-30 ms), so
+  `BetaRegularized[0.5, 1.*^6, 1.*^6]` is `0.5`.
 
 - **Exact rules** (the reference system's): a non-positive integer `a` gives `1`, a
   non-positive integer `b` gives `0` (also for machine `0.`); `a = 1` gives
@@ -5248,6 +5274,11 @@ Out[5]= ((1 + n) LegendreP[1 + n, x] + (-1 - n) x LegendreP[n, x])/(-1 + x^2)
   Checked against the reference inside and outside (-1, 1) and at complex `x`.
 
 ## LegendreQ
+
+**Wave 6.** An arb value whose imaginary ball contains zero beside a nonzero real
+part is emitted real (the midpoint is noise from a complex intermediate), so
+`LegendreQ[1/2, 0, 3, 2.]` is the real `0.224014` (it carried `1.65*^-24 I`).
+This applies to every arb-backed function.
 
 `LegendreQ[n, x]` gives the Legendre function of the second kind `Q_n(x)`;
 `LegendreQ[n, m, x]` gives the associated Legendre function `Q_n^m(x)` (type 1);

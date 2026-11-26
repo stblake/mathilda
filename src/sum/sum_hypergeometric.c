@@ -40,12 +40,16 @@
 
 #define SUM_HG_MAX_DEGREE 256   /* cap on the linear-factor deflation loop */
 
-/* True iff e still contains a HypergeometricPFQ head anywhere (i.e. the pFq did
- * not reduce to a closed form). */
+/* True iff e still contains a pFq anywhere -- HypergeometricPFQ or a named
+ * Hypergeometric0F1/1F1/2F1, which keep their head unevaluated -- i.e. the
+ * pFq did not reduce to a closed form. */
 static bool hg_contains_pfq(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
-    if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_HypergeometricPFQ) return true;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_HypergeometricPFQ || h == SYM_Hypergeometric0F1 ||
+            h == SYM_Hypergeometric1F1 || h == SYM_Hypergeometric2F1) return true;
+    }
     if (hg_contains_pfq(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (hg_contains_pfq(e->data.function.args[i])) return true;

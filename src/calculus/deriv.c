@@ -1202,6 +1202,36 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             }
         }
 
+        /* --- Hypergeometric0F1 / 1F1 / 2F1 in z (parameters free of x): the
+         * same contiguous shift, in the named head the call was written in,
+         *   d/dz 0F1(b; z)       = 0F1(b+1; z)/b,
+         *   d/dz 1F1(a; b; z)    = a/b 1F1(a+1; b+1; z),
+         *   d/dz 2F1(a, b; c; z) = a b/c 2F1(a+1, b+1; c+1; z). */
+        if ((h == SYM_Hypergeometric0F1 && n == 2) || (h == SYM_Hypergeometric1F1 && n == 3) ||
+            (h == SYM_Hypergeometric2F1 && n == 4)) {
+            bool params_const = true;
+            for (size_t i = 0; i + 1 < n; i++)
+                if (!expr_free_of(args[i], x)) params_const = false;
+            if (params_const) {
+                Expr* dz = deriv_of(args[n - 1], x, nonconsts);
+                if (is_lit_zero(dz)) { expr_free(dz); return mk_int(0); }
+                size_t p = n - 2;                       /* upper parameters */
+                Expr** sh = malloc(sizeof(Expr*) * n);
+                for (size_t i = 0; i + 1 < n; i++)
+                    sh[i] = mk_fn2("Plus", expr_copy(args[i]), mk_int(1));
+                sh[n - 1] = expr_copy(args[n - 1]);
+                Expr* shifted = expr_new_function(mk_sym(h), sh, n);
+                free(sh);
+                Expr** ff = malloc(sizeof(Expr*) * (p + 3));
+                size_t w = 0;
+                for (size_t i = 0; i < p; i++) ff[w++] = expr_copy(args[i]);
+                ff[w++] = mk_fn2("Power", expr_copy(args[p]), mk_int(-1));
+                ff[w++] = shifted;
+                ff[w++] = dz;
+                return mk_fnN_adopt("Times", ff, w);
+            }
+        }
+
         /* --- HypergeometricPFQ[{a..}, {b..}, z]: derivative w.r.t. z is
          *   (prod a_i / prod b_j) pFq[{a_i+1}, {b_j+1}, z], times D[z, x].
          * Only the z-derivative is handled here; if the parameter lists

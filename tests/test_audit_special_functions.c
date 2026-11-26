@@ -987,6 +987,9 @@ static void test_wave5_more(void) {
     audit_true("HermiteH#2", "HermiteH[2^70 + 1, 0] === 0 && HermiteH[7, 0] === 0");
     audit_true("HermiteH#3", "Precision[HermiteH[200, 100.]] === MachinePrecision && "
                              "Abs[HermiteH[200, 100.]/N[HermiteH[200, 100], 30] - 1] < 10^-14");
+    audit_true("ParabolicCylinderD#2", "NumberQ[TimeConstrained[ParabolicCylinderD[10.^6, 1.], 20]]");
+    audit_true("ParabolicCylinderD#2", "Abs[Log10[Abs[N[ParabolicCylinderD[10^6, 1], 20]]] - 2782852.6594] < 10^-3");
+    audit_true("ParabolicCylinderD#2", "Abs[N[ParabolicCylinderD[2000, 3/2], 20]/ParabolicCylinderD[2000., 1.5] - 1] < 10^-13");
     audit_true("BarnesG#6", "Abs[N[BarnesG[13/2], 30] - 2548.74576956849898973590610636`30] < 10^-25");
     audit_true("Hypergeometric2F1#3", "Hypergeometric2F1[1, 2, 3, 1] === Infinity && Hypergeometric2F1[1, 2, 3, 1.] === Infinity");
     audit_true("Hypergeometric2F1#3", "Hypergeometric2F1[1, 1, 2, 1] === Infinity && Hypergeometric2F1[1, 1, -2, 0.5] === ComplexInfinity");
@@ -999,6 +1002,32 @@ static void test_wave5_more(void) {
     audit_true("WeierstrassPPrime#2", "Integrate[WeierstrassPPrime[u, {g2, g3}], u] === WeierstrassP[u, {g2, g3}]");
     audit_true("WeierstrassPPrime#2", "Integrate[3 WeierstrassPPrime[2 u + 1, {g2, g3}], u] === 3/2 WeierstrassP[1 + 2 u, {g2, g3}]");
     audit_true("HeavisideTheta#6", "Derivative[1][DiracDelta][1] === 0 && Head[Derivative[1][DiracDelta][0]] === Derivative[1][DiracDelta]");
+}
+
+/* Wave 6 G2: real type-3 Legendre values, named hypergeometric heads kept,
+ * accuracy near singular points and for large parameters. */
+static void test_wave6_g2(void) {
+    audit_true("LegendreQ#1", "Head[LegendreQ[1/2, 0, 3, 2.]] === Real");
+    audit_true("LegendreQ#1", "Abs[LegendreQ[1/2, 0, 3, 2.] - 0.22401429283641563] < 10^-15");
+    audit_true("LegendreQ#1", "Head[LegendreQ[1/2, 0, 3, 2.`30]] === Real");
+    audit_true("LegendreQ#1", "Head[LegendreQ[0, 0, 3, 2.]] === Real && Abs[LegendreQ[0, 0, 3, 2.] - ArcCoth[2.]] < 10^-15");
+    audit_true("LegendreQ#1", "LegendreQ[0, 0, 3, x] === Log[1 + x]/2 - Log[-1 + x]/2");
+    audit_chk("Hypergeometric0F1#2", "Hypergeometric0F1[1, 1]", "Hypergeometric0F1[1, 1]");
+    audit_chk("Hypergeometric0F1#2", "Hypergeometric0F1[b, z]", "Hypergeometric0F1[b, z]");
+    audit_true("Hypergeometric0F1#2", "D[Hypergeometric0F1[b, z], z] === Hypergeometric0F1[1 + b, z]/b");
+    audit_chk("Hypergeometric1F1#1", "Hypergeometric1F1[a, b, z]", "Hypergeometric1F1[a, b, z]");
+    audit_chk("Hypergeometric1F1#1", "Head[Hypergeometric1F1[1/3, 1/4, z]]", "Hypergeometric1F1");
+    audit_true("Hypergeometric1F1#1", "Hypergeometric1F1[1, 2, z] === (-1 + E^z)/z");
+    audit_true("Hypergeometric1F1#1", "Abs[Hypergeometric1F1[1/3, 1/4, 2.] - N[Hypergeometric1F1[1/3, 1/4, 2], 20]] < 10^-13");
+    audit_chk("Hypergeometric2F1#1", "Hypergeometric2F1[1/2, 1, 2, 1/2]", "Hypergeometric2F1[1/2, 1, 2, 1/2]");
+    audit_true("Hypergeometric2F1#1", "D[Hypergeometric2F1[a, b, c, z], z] === a b Hypergeometric2F1[1 + a, 1 + b, 1 + c, z]/c");
+    audit_true("Hypergeometric2F1#1", "Simplify[Hypergeometric2F1[a, b, c, z]] === Hypergeometric2F1[a, b, c, z]");
+    audit_true("Hypergeometric2F1#1", "Hypergeometric2F1[1, 1, 2, z] === -Log[1 - z]/z");
+    audit_true("GegenbauerC#1", "Abs[GegenbauerC[2.5, 1.5, -0.999999]/(-318339.06387664295) - 1] < 4*10^-16");
+    audit_true("GegenbauerC#1", "Abs[GegenbauerC[2.5, 1.5, -0.99999]/(-31854.393615169893) - 1] < 4*10^-16");
+    audit_true("BetaRegularized#3", "Abs[BetaRegularized[0.5, 1.*^6, 1.*^6] - 0.5] < 10^-15");
+    audit_true("BetaRegularized#3", "Abs[BetaRegularized[0.5, 100000., 100000.] - 0.5] < 10^-15");
+    audit_true("BarnesG#6", "Abs[N[BarnesG[13/2], 30] - 254874576956849898973590610636/10^26] < 10^-25");
 }
 
 int main(void) {
@@ -1035,5 +1064,6 @@ int main(void) {
     TEST(test_wave5_exact);
     TEST(test_wave5_numerics);
     TEST(test_wave5_more);
+    TEST(test_wave6_g2);
     return audit_finish("audit_special_functions");
 }

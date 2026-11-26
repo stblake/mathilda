@@ -4318,8 +4318,11 @@ static SeriesObj* so_from_seriesdata(Expr* sd) {
     int64_t order = a[4]->data.integer;
     int64_t den   = a[5]->data.integer;
     size_t  k     = coefs->data.function.arg_count;
-    /* The coefficient list length must agree with order - nmin. */
-    if ((int64_t)k != order - nmin) return NULL;
+    /* The coefficient list covers at most order - nmin terms; a shorter one
+     * leaves the trailing coefficients implicitly zero, as SeriesData[x, 0,
+     * {2, 1}, 0, 3, 1] is 2 + x + O[x]^3 (audit SeriesData#3: its
+     * arithmetic stayed unevaluated). so_alloc fills those zeros. */
+    if ((int64_t)k > order - nmin) return NULL;
     SeriesObj* s = so_alloc(a[0], a[1], nmin, order, den);
     for (size_t i = 0; i < k && i < s->coef_count; i++) {
         so_set_coef(s, i, expr_copy(coefs->data.function.args[i]));

@@ -51,6 +51,20 @@ static Expr* make_machineprecision(void) { return expr_new_symbol(SYM_MachinePre
  *  Forward-declared helpers
  * ---------------------------------------------------------------------- */
 static Expr* precision_of(const Expr* e);
+
+/* True when an arbitrary-precision zero occurs in e (Lists and calls only). */
+static bool precision_has_mpfr_zero(const Expr* e) {
+#ifdef USE_MPFR
+    if (!e) return false;
+    if (e->type == EXPR_MPFR) return mpfr_zero_p(e->data.mpfr) != 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        if (precision_has_mpfr_zero(e->data.function.args[i])) return true;
+#else
+    (void)e;
+#endif
+    return false;
+}
 static Expr* accuracy_of(const Expr* e);
 
 /* True if an Expr is the symbol `Infinity` (not -Infinity, not ComplexInfinity). */
@@ -111,6 +125,11 @@ static Expr* precision_of(const Expr* e) {
              * (Exp[1000.], 1.*^400) -- and reports MachinePrecision, as a
              * machine Real does. */
             if (mpfr_get_prec(e->data.mpfr) == 53) return make_machineprecision();
+            /* An arbitrary-precision zero has no significant digit (its
+             * digits are all accuracy -- Accuracy[0``10] = 10.): it imposes no
+             * precision on an expression it is part of, and on its own it is
+             * precision 0. (builtin_precision; audit Precision#1). */
+            if (mpfr_zero_p(e->data.mpfr)) return make_infinity();
             /* the precision, not the mantissa width (numeric.h: guard bits) */
             double digits = numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr));
             return expr_new_real(digits);
@@ -151,6 +170,8 @@ static Expr* precision_of(const Expr* e) {
             if (is_rational((Expr*)e, NULL, NULL)) return make_infinity();
             Expr *re, *im;
             if (is_complex((Expr*)e, &re, &im)) {
+                /* an arbitrary-precision zero part (0``30 + 0.707`30 I) carries
+                 * only accuracy: the other part's precision is the number's */
                 return precision_min(precision_of(re), precision_of(im));
             }
             Expr* best = make_infinity();
@@ -355,7 +376,16 @@ static Expr* accuracy_of(const Expr* e) {
  * ---------------------------------------------------------------------- */
 Expr* builtin_precision(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    return precision_of(res->data.function.args[0]);
+    /* Only arbitrary-precision zeros (or nothing inexact but them): every
+     * digit is accuracy, so the precision is 0. -- Precision[0``10] and
+     * Precision[1.`20 - 1.`20] (audit Precision#1). Beside a nonzero number a
+     * zero imposes nothing: Precision[{0``30, 1.`30}] is 30. */
+    Expr* r = precision_of(res->data.function.args[0]);
+    if (expr_is_positive_infinity(r) && precision_has_mpfr_zero(res->data.function.args[0])) {
+        expr_free(r);
+        return expr_new_real(0.0);
+    }
+    return r;
 }
 
 Expr* builtin_accuracy(Expr* res) {

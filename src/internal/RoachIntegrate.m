@@ -499,7 +499,8 @@ Roach`term[f_, x_, assum_] := Module[{k, g, r, v},
   r = Roach`term0[g x^Roach`eps, x, assum];
   If[r === $Failed, Return[$Failed]];
   (* a derivative in a parameter of a pFq / MeijerG is not a closed form *)
-  If[!FreeQ[r[[1]], HypergeometricPFQ | MeijerG], Return[$Failed]];
+  If[!FreeQ[r[[1]], HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1 | MeijerG],
+    Return[$Failed]];
   v = Quiet[D[r[[1]], {Roach`eps, k}] /. Roach`eps -> 0];
   (* a Gamma pole cancelling at eps = 0 (PV: Pi Cot[Pi (1 + eps)/2] as a
      Gamma ratio): reduce the ratio to trigonometric form first *)
@@ -808,15 +809,18 @@ Roach`finish[v_, assum_] := Module[{r = FunctionExpand[v]},
   (* parameters as one fraction: (1 + a)/2 + v/2 -> (1 + a + v)/2, so that
      coincident pFq parameters cancel *)
   r = r /. {HypergeometricPFQ[al_List, bl_List, z_] :> HypergeometricPFQ[Together /@ al, Together /@ bl, z],
+            Hypergeometric2F1[a1_, a2_, b1_, z_] :> Hypergeometric2F1[Together[a1], Together[a2], Together[b1], z],
+            Hypergeometric1F1[a1_, b1_, z_] :> Hypergeometric1F1[Together[a1], Together[b1], z],
+            Hypergeometric0F1[b1_, z_] :> Hypergeometric0F1[Together[b1], z],
             Gamma[u_] :> Gamma[Together[u]]};
   If[Roach`$pv && !FreeQ[r, MeijerG], r = FunctionExpand[Roach`gResidues[r]]];
   r = TimeConstrained[Refine[r, assum], 3, r];
-  If[FreeQ[r, MeijerG | HypergeometricPFQ],
+  If[FreeQ[r, MeijerG | HypergeometricPFQ | Hypergeometric0F1 | Hypergeometric1F1 | Hypergeometric2F1],
     r = TimeConstrained[Simplify[r, assum], 5, r],
     (* the coefficient around a MeijerG / pFq that stays (Sqrt[2] Sqrt[2 Pi]
        -> 2 Sqrt[Pi]), each such function frozen as an opaque symbol *)
     With[{rules = (# -> Unique["Roach`h"]) & /@
-                  DeleteDuplicates[Cases[r, _MeijerG | _HypergeometricPFQ, {0, Infinity}]]},
+                  DeleteDuplicates[Cases[r, _MeijerG | _HypergeometricPFQ | _Hypergeometric0F1 | _Hypergeometric1F1 | _Hypergeometric2F1, {0, Infinity}]]},
       r = TimeConstrained[Simplify[r /. rules, assum], 3, r /. rules] /. (Reverse /@ rules)]];
   r]
 

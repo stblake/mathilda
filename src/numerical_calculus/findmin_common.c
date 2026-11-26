@@ -95,7 +95,11 @@ bool fm_expr_to_double_real(Expr* e, double* out) {
                 if (fm_expr_to_double_real(re_e, &re_d)
                     && fm_expr_to_double_real(im_e, &im_d)) {
                     double mag_re = fabs(re_d);
-                    if (fabs(im_d) <= 1e-12 * (1.0 + mag_re)) {
+                    /* ... but not a value whose imaginary part dominates:
+                     * Sqrt[-1.*^-24] = 1.*^-12 I is no residue, it is the
+                     * objective leaving its real domain (audit FindMinimum#2
+                     * walked Sqrt[x] to x = -1e-24 on it). */
+                    if (fabs(im_d) <= 1e-12 * (1.0 + mag_re) && fabs(im_d) <= mag_re) {
                         *out = re_d;
                         return true;
                     }
@@ -2379,7 +2383,21 @@ static bool fm_bracket_from(Expr* f, FmVarBind* binds, const FmOpts* opts,
             if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
             break;
         }
-        if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) return false;
+        if (!fm_eval_backoff(f, binds, opts, b, &c, &fc)) {
+            /* The expansion is still descending at the edge of the
+             * objective's real domain: Sqrt[x] from x = 1 walks to 0 and
+             * every point beyond is complex, so the backoff can find no
+             * further point. The minimum over the domain is at that edge;
+             * bracket it by the last two good points (Brent's golden section
+             * then closes on the edge), instead of abandoning the solve
+             * (audit FindMinimum#2: FindMinimum::nlnum, unevaluated). */
+            c = b; fc = fb;
+            b = a + 0.5 * (c - a);
+            if (!fm_eval_scalar(f, binds, &b, 1, opts, &fb)) return false;
+            if (a > c) { double t = a; a = c; c = t; }
+            *a_out = a; *b_out = b; *c_out = c;
+            return true;
+        }
     }
     /* FindMinimum#4: still descending after the whole expansion (an objective
      * unbounded below, FindMinimum[x, {x, 0}]): no minimum was bracketed.

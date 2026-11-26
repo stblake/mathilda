@@ -370,7 +370,9 @@ Expr* builtin_choleskydecomposition(Expr* res) {
             /* numeric contagion: an exact entry beside a 20-digit one is a
              * 20-digit number, so the factor has no exact pivot (the exact 4
              * gave an exact 2, where Inverse gives 0.25`20) */
-            Expr* pr = la_ev1("Precision", expr_copy(boxed));
+            /* the minimum over the inexact leaves, from la_prec_class (not
+             * Precision[], which is 0. once any entry is an MPFR zero) */
+            Expr* pr = expr_new_real(numeric_bits_to_digits(bits));
             boxed = la_ev2(SYM_SetPrecision, boxed, pr);
         }
         st = chol_generic(boxed, n, pc, &out);

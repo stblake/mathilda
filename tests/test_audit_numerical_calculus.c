@@ -242,6 +242,36 @@ static void test_wave5_g5(void) {
 }
 /* ---- Wave 5 G5 END ---- */
 
+/* Wave 6 G2: dependent inner ranges in NSum, a minimum at the edge of the
+ * real domain, decaying oscillation in NLimit, periodic and high-precision
+ * events, sub-machine WorkingPrecision, default ND goals, Fourier precision. */
+static void test_wave6_g2(void) {
+    audit_true("NSum#3", "Abs[NSum[1/(i j)^2, {i, 1, Infinity}, {j, 1, i}] - N[(Zeta[2]^2 + Zeta[4])/2]] < 10^-10");
+    audit_true("FindMinimum#2", "Module[{r = Quiet[FindMinimum[Sqrt[x], {x, 1}]]}, "
+               "(x /. r[[2]]) >= 0 && r[[1]] == (Sqrt[x] /. r[[2]]) && r[[1]] < 10^-10]");
+    audit_true("NLimit#1", "Abs[NLimit[Sin[x]/x, x -> Infinity]] < 10^-12");
+    audit_true("NLimit#1", "Quiet[Check[NLimit[Sin[x]/x, x -> Infinity], \"m\"]] =!= \"m\"");
+    audit_true("NLimit#1", "Quiet[Check[NLimit[x Sin[x], x -> Infinity], \"m\", NLimit::osc]] === \"m\"");
+    audit_chk("WhenEvent#2", "Reap[NDSolve[{y'[t] == 1, y[0] == 0, WhenEvent[Mod[t, 1] == 0, Sow[t]]}, y, {t, 0, 3.5}]][[2]]",
+              "{{1.0, 2.0, 3.0}}");
+    audit_chk("WhenEvent#2", "Reap[NDSolve[{y'[t] == 1, y[0] == 0, WhenEvent[Mod[t, 1] == 1/2, Sow[t]]}, y, {t, 0, 3.5}]][[2]]",
+              "{{0.5, 1.5, 2.5, 3.5}}");
+    audit_chk("WhenEvent#3", "Precision[Reap[NDSolve[{y'[t] == y[t], y[0] == 1, WhenEvent[y[t] == 2, Sow[t]]}, y, {t, 0, 1}, "
+              "WorkingPrecision -> 30]][[2, 1, 1]]]", "30.0");
+    audit_chk("NIntegrate#4", "Precision[NIntegrate[Exp[x], {x, 0, 1}, WorkingPrecision -> 10]]", "10.0");
+    audit_true("NIntegrate#4", "Abs[NIntegrate[Exp[x], {x, 0, 1}, WorkingPrecision -> 10] - (E - 1)] < 10^-9");
+    audit_true("ND#1", "Quiet[Check[ND[Cos[x]^3, {x, 2}, 0], \"m\"]] =!= \"m\"");
+    audit_true("ND#1", "Abs[ND[Cos[x]^3, {x, 2}, 0] + 3] < 10^-9");
+    audit_chk("Fourier#3", "Precision[Fourier[{2.`30, 1.`10}]]", "10.0");
+    audit_true("Fourier#3", "Abs[Fourier[{2.`30, 1.`10}][[1]] - 3/Sqrt[2]] < 10^-9");
+    audit_true("NDSolve#1", "Module[{s = NDSolve[{y'[x] == {{0, 1}, {-1, 0}}.y[x], y[0] == {1, 0}}, y, {x, 0, 1}]}, "
+               "Norm[(y[1] /. s[[1]]) - {Cos[1], -Sin[1]}] < 10^-6]");
+    audit_true("NDSolve#1", "Norm[NDSolveValue[{y'[x] == {{0, 1}, {-1, 0}}.y[x], y[0] == {1, 0}}, y[1], {x, 0, 1}] - "
+               "{Cos[1], -Sin[1]}] < 10^-6");
+    audit_true("NSeries#4", "Abs[Coefficient[Normal[NSeries[Exp[x], {x, 0, 2}, PrecisionGoal -> Infinity, "
+               "AccuracyGoal -> Infinity]], x, -2] - 1/720] < 10^-6");
+}
+
 int main(void) {
     audit_init();
     TEST(test_nsum_nested_no_d_ivar);
@@ -261,5 +291,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_numerical);
     TEST(test_wave5_g5);
+    TEST(test_wave6_g2);
     return audit_finish("audit_numerical_calculus");
 }
