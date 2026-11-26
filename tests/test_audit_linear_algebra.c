@@ -593,6 +593,26 @@ static void test_wave5_linalg(void) {
     audit_chk("SchurDecomposition#2", "StringContainsQ[Information[SchurDecomposition], \"real or complex\"]", "True");
 }
 
+/* ---- Wave 6 G3 BEGIN ---- */
+static void test_wave6_g3(void) {
+    audit_chk("QRDecomposition#1", "QRDecomposition[{{qra, qrb}, {qrc, qrd}}][[1, 1]]", "{Conjugate[qra]/Sqrt[Abs[qra]^2 + Abs[qrc]^2], Conjugate[qrc]/Sqrt[Abs[qra]^2 + Abs[qrc]^2]}");
+    audit_chk("QRDecomposition#1", "Block[{a, b, c, d}, Module[{q, r, q2, r2}, {q, r} = QRDecomposition[{{a, b}, {c, d}}]; q2 = q /. {a -> I, b -> 1, c -> 2, d -> 0}; r2 = r /. {a -> I, b -> 1, c -> 2, d -> 0}; Simplify[{q2 . ConjugateTranspose[q2], ConjugateTranspose[q2] . r2}]]]", "{{{1, 0}, {0, 1}}, {{I, 1}, {2, 0}}}");
+    audit_chk("QRDecomposition#2", "QRDecomposition[{{0, 0}, {0, 0}}]", "{{{1, 0}}, {{0, 0}}}");
+    audit_chk("QRDecomposition#2", "QRDecomposition[{{0, 0}, {0, 0}}, Pivoting -> True]", "{{{1, 0}}, {{0, 0}}, {{1, 0}, {0, 1}}}");
+    audit_chk("QRDecomposition#2", "QRDecomposition[{{0, 0, 0}, {0, 0, 0}}, Pivoting -> True]", "{{{1, 0}}, {{0, 0, 0}}, {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}}");
+    audit_chk("SparseArray#2", "Block[{$MessageList = {}}, SparseArray[{1 -> 1}, 3] + SparseArray[{2 -> 5}, 4]; Length[$MessageList]]", "1");
+    audit_chk("SparseArray#2", "Check[SparseArray[{1 -> 1}, 3] + SparseArray[{2 -> 5}, 4], fired, Thread::tdlen]", "fired");
+    audit_chk("NDArray#5", "Head[NDArray[{1., 2.}] + {10, 20}]", "NDArray");
+    audit_chk("NDArray#5", "NDArray[{1., 2.}] + {10, 20} == NDArray[{11., 22.}]", "True");
+    audit_chk("MatrixExp#2", "MatrixExp[{{0, -Pi}, {Pi, 0}}]", "{{-1, 0}, {0, -1}}");
+    audit_chk("MatrixExp#2", "MatrixExp[{{0, -2}, {2, 0}}]", "{{Cos[2], -Sin[2]}, {Sin[2], Cos[2]}}");
+    audit_chk("MatrixExp#2", "{Sqrt[-Pi^2], Sqrt[-4 Pi], Sqrt[-E^2]}", "{I Pi, (2*I) Sqrt[Pi], I E}");
+    audit_chk("MatrixFunction#1", "Head[TimeConstrained[MatrixFunction[Sin, Table[1/(i+j-1), {i,4},{j,4}]], 10]]", "List");
+    audit_chk("MatrixFunction#1", "Module[{h = Table[1/(i+j-1), {i,4},{j,4}]}, Max[Abs[N[MatrixFunction[Sin, h]] - MatrixFunction[Sin, N[h]]]] < 10^-12]", "True");
+    audit_chk("MatrixFunction#1", "Module[{h = Table[1/(i+j-1), {i,4},{j,4}]}, Max[Abs[N[TimeConstrained[MatrixExp[h], 10]] - MatrixExp[N[h]]]] < 10^-12]", "True");
+}
+/* ---- Wave 6 G3 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_wave4_linear_algebra);
@@ -619,5 +639,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_s11_special_values);
     TEST(test_wave5_linalg);
+    TEST(test_wave6_g3);
     return audit_finish("audit_linear_algebra");
 }

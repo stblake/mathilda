@@ -2577,6 +2577,117 @@ static Expr* mz_strip_domain_element(const Expr* cons, Expr* const* vars, size_t
     return r;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Max / Min / continuous Piecewise objectives as Abs forms            *
+ * ------------------------------------------------------------------ */
+
+static bool mz_has_maxmin_pw(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (mz_is_sym(h, SYM_Max) || mz_is_sym(h, SYM_Min) || mz_is_sym(h, SYM_Piecewise)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (mz_has_maxmin_pw(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Piecewise[{{p, x op c}}, q] for a numeric c and polynomials p, q that agree
+ * at c (a continuous function), as (p + q)/2 + h Abs[x - c]/2 with h the
+ * exact quotient of the right piece minus the left one by x - c.  NULL when
+ * the shape is any other. */
+static Expr* mz_pw_as_abs(const Expr* e, Expr* x) {
+    if (e->data.function.arg_count != 2) return NULL;
+    const Expr* L = e->data.function.args[0];
+    if (L->type != EXPR_FUNCTION || !mz_is_sym(L->data.function.head, SYM_List) || L->data.function.arg_count != 1) return NULL;
+    const Expr* pc = L->data.function.args[0];
+    if (pc->type != EXPR_FUNCTION || pc->data.function.arg_count != 2) return NULL;
+    const Expr* cond = pc->data.function.args[1];
+    if (cond->type != EXPR_FUNCTION || cond->data.function.arg_count != 2) return NULL;
+    const Expr* ch = cond->data.function.head;
+    bool lt = mz_is_sym(ch, SYM_Less) || mz_is_sym(ch, SYM_LessEqual);
+    bool gt = mz_is_sym(ch, SYM_Greater) || mz_is_sym(ch, SYM_GreaterEqual);
+    if (!lt && !gt) return NULL;
+    const Expr* lhs = cond->data.function.args[0];
+    const Expr* c   = cond->data.function.args[1];
+    if (!expr_eq((Expr*)lhs, x)) {                      /* c op x: flip */
+        if (!expr_eq((Expr*)c, x)) return NULL;
+        const Expr* t = lhs; lhs = c; c = t;
+        bool t2 = lt; lt = gt; gt = t2;
+    }
+    if (!expr_is_numeric_quantity((Expr*)c)) return NULL;
+    Expr* p = expr_copy(pc->data.function.args[0]);
+    Expr* q = expr_copy(e->data.function.args[1]);
+    if (!rru_is_polynomial(p, x) || !rru_is_polynomial(q, x)) { expr_free(p); expr_free(q); return NULL; }
+    Expr* left  = lt ? p : q;                           /* the piece for x < c */
+    Expr* right = lt ? q : p;
+    Expr* diff = eval_and_free(fn2(SYM_Plus, expr_copy(right),
+                     fn2(SYM_Times, mk_int(-1), expr_copy(left))));
+    Expr* den = eval_and_free(fn2(SYM_Plus, expr_copy(x), fn2(SYM_Times, mk_int(-1), expr_copy((Expr*)c))));
+    Expr* qr = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQuotientRemainder),
+                   (Expr*[]){ diff, expr_copy(den), expr_copy(x) }, 3));
+    Expr* out = NULL;
+    if (qr && qr->type == EXPR_FUNCTION && qr->data.function.arg_count == 2) {
+        Expr* rem = eval_and_free(fn1(SYM_Simplify, expr_copy(qr->data.function.args[1])));
+        if (rem->type == EXPR_INTEGER && rem->data.integer == 0) {
+            Expr* h = expr_copy(qr->data.function.args[0]);
+            out = eval_and_free(fn2(SYM_Plus,
+                fn2(SYM_Times, expr_new_function(expr_new_symbol(SYM_Rational),
+                        (Expr*[]){ mk_int(1), mk_int(2) }, 2),
+                    fn2(SYM_Plus, expr_copy(left), expr_copy(right))),
+                expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Rational), (Expr*[]){ mk_int(1), mk_int(2) }, 2),
+                    h, fn1(SYM_Abs, expr_copy(den)) }, 3)));
+        }
+        expr_free(rem);
+    }
+    if (qr) expr_free(qr);
+    expr_free(den);
+    expr_free(p); expr_free(q);
+    return out;
+}
+
+/* f with Max[a, b, ...] = (a + b + Abs[a - b])/2 folded pairwise, Min with
+ * -Abs, and a continuous two-piece Piecewise as an Abs form -- identities on
+ * the reals, after which the Abs engine (breakpoints and piece stationary
+ * points) answers: Maximize[Max[-x^2, -1], x] is {0, {x -> 0}} and
+ * Maximize[Piecewise[{{x, x < 1}}, 2 - x], x] is {1, {x -> 1}} (audit
+ * Maximize#2: both stayed unevaluated).  NULL when any such head is left. */
+static Expr* mz_rewrite_maxmin(const Expr* e, Expr* x, bool* ok) {
+    if (!*ok || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = mz_rewrite_maxmin(e->data.function.args[i], x, ok);
+    const Expr* h = e->data.function.head;
+    bool mx = mz_is_sym(h, SYM_Max), mn = mz_is_sym(h, SYM_Min);
+    Expr* out = NULL;
+    if ((mx || mn) && n >= 1) {
+        Expr* acc = a[0];
+        for (size_t i = 1; i < n; i++) {
+            Expr* d = fn2(SYM_Plus, expr_copy(acc), fn2(SYM_Times, mk_int(-1), expr_copy(a[i])));
+            Expr* ab = fn1(SYM_Abs, d);
+            if (mn) ab = fn2(SYM_Times, mk_int(-1), ab);
+            acc = eval_and_free(fn2(SYM_Times,
+                      expr_new_function(expr_new_symbol(SYM_Rational), (Expr*[]){ mk_int(1), mk_int(2) }, 2),
+                      expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ acc, a[i], ab }, 3)));
+        }
+        out = acc;
+        free(a);
+        return out;
+    }
+    Expr* rebuilt = expr_new_function(expr_copy((Expr*)h), a, n);
+    free(a);
+    if (mz_is_sym(h, SYM_Piecewise)) {
+        Expr* ev = eval_and_free(rebuilt);
+        if (ev->type == EXPR_FUNCTION && mz_is_sym(ev->data.function.head, SYM_Piecewise)) {
+            out = mz_pw_as_abs(ev, x);
+            expr_free(ev);
+            if (!out) { *ok = false; return mk_int(0); }
+            return out;
+        }
+        return ev;
+    }
+    return rebuilt;
+}
+
 static Expr* mz_run_body(Expr* res, const char* head, bool is_max) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2699,6 +2810,13 @@ static Expr* mz_run_body(Expr* res, const char* head, bool is_max) {
         result = mz_numeric_fallback(arg0, arg1, domname,
                                      &A[pos_end], argc - pos_end, is_max);
     } else if (domname == SYM_Reals) {
+        if (n == 1 && mz_has_maxmin_pw(fobj)) {
+            bool ok = true;
+            Expr* fr = mz_rewrite_maxmin(fobj, vars[0], &ok);
+            Expr* fe = ok ? eval_and_free(fr) : (expr_free(fr), NULL);
+            if (fe && !mz_has_maxmin_pw(fe)) { expr_free(fobj); fobj = fe; }
+            else if (fe) expr_free(fe);
+        }
         /* Tier 2a: if the objective or constraints carry radicals / fractional
          * powers, polynomialize by adjoining fresh real variables, solve the
          * enlarged polynomial problem, then strip the auxiliary variables from
@@ -2719,6 +2837,10 @@ static Expr* mz_run_body(Expr* res, const char* head, bool is_max) {
             for (size_t j = 0; j < n; j++)         vars2[j]     = expr_copy(vars[j]);
             for (size_t k = 0; k < rc.naux; k++)   vars2[n + k] = expr_copy(rc.aux[k]);
             result = mz_exact_poly(fpoly, cons2, vars2, n2, head, budget);
+            /* A rational objective in the enlarged variables ((x^2 + 3)/s with
+             * s = Sqrt[x^2 + 2]) takes the rational reformulation, as an
+             * objective without radicals does (audit Minimize#4). */
+            if (!result) result = mz_rational_solve(fpoly, cons2, vars2, n2, head, budget);
             if (result) result = mz_strip_aux_rules(result, rc.aux, rc.naux);
             if (result && is_max) result = mz_negate_value(result);
             expr_free(cons2);

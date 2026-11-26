@@ -338,6 +338,28 @@ static void test_wave5_g5(void) {
 }
 /* ---- Wave 5 G5 END ---- */
 
+/* ---- Wave 6 G3 BEGIN ---- */
+static void test_wave6_g3(void) {
+    audit_chk("D#3", "D[x^2 + c, {x, n}]", "x^(2 - n) FactorialPower[2, n] + c KroneckerDelta[n]");
+    audit_chk("D#3", "D[x^2 + c, {x, n}] /. n -> 0", "c + x^2");
+    audit_chk("D#3", "D[c, {x, n}] /. n -> 3", "0");
+    audit_chk("InterpolatingFunction#1", "Module[{q = Interpolation[{{0,1},{1,2},{2,5}}]}, ToExpression[ToString[InputForm[q]]][0.5]]", "1.25");
+    audit_chk("InterpolatingFunction#1", "Module[{q = Interpolation[{{0.,1.},{1.,2.},{2.,5.},{3.,1.}}]}, ToExpression[ToString[InputForm[q]]][0.5] == q[0.5]]", "True");
+    audit_chk("InterpolatingFunction#1", "ToString[Interpolation[{{0,1},{1,2},{2,5}}]] == \"InterpolatingFunction[{{0, 2}}, <>]\"", "True");
+    audit_chk("Integrate#5", "Integrate[1/x, {x, a, b}]", "ConditionalExpression[-Log[a] + Log[b], a < 0 && b < 0 || a > 0 && b > 0]");
+    audit_chk("Integrate#5", "Integrate[1/x, {x, 1, b}]", "ConditionalExpression[Log[b], b > 0]");
+    audit_chk("Integrate#5", "Integrate[1/x^2, {x, a, b}]", "ConditionalExpression[1/a - 1/b, a < 0 && b < 0 || a > 0 && b > 0]");
+    audit_chk("DSolve#1", "DSolve[y'[x] == 0.5 y[x], y[x], x]", "{{y[x] -> E^(0.5 x) C[1]}}");
+    audit_chk("DSolve#1", "Block[{c}, Simplify[E^(0.5 x) c]]", "c E^(0.5 x)");
+    audit_chk("DSolve#3", "DSolve[y'[x] == y[x], y[x], x, GeneratedParameters -> (K[#+1]&)]", "{{y[x] -> E^x K[2]}}");
+    audit_chk("DSolve#4", "Module[{s = y[x] /. First[DSolve[y'[x] + y[x] == Sin[x], y[x], x]]}, {FreeQ[s, Complex], Simplify[s - (E^-x C[1] + 1/2 (-Cos[x] + Sin[x]))]}]", "{True, 0}");
+    audit_chk("DSolve#4", "Integrate[E^x Sin[x], x]", "1/2 E^x (-Cos[x] + Sin[x])");
+    audit_chk("Minimize#4", "Minimize[(x^2 + 3)/Sqrt[x^2 + 2], x]", "{3/Sqrt[2], {x -> 0}}");
+    audit_chk("Maximize#2", "Maximize[Piecewise[{{x, x < 1}}, 2 - x], x]", "{1, {x -> 1}}");
+    audit_chk("Maximize#2", "Maximize[Max[-x^2, -1], x]", "{0, {x -> 0}}");
+}
+/* ---- Wave 6 G3 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_d_numeric_variable);
@@ -351,5 +373,6 @@ int main(void) {
     TEST(test_s11_special_values);
     TEST(test_wave4_calculus);
     TEST(test_wave5_g5);
+    TEST(test_wave6_g3);
     return audit_finish("audit_calculus");
 }

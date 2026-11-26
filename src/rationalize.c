@@ -51,6 +51,7 @@
  * evaluator releases res itself — the builtin must not free res.
  */
 
+#include "common.h"   /* common_numericalize_keep_exp */
 #include "linkedlist.h"
 #include "rationalize.h"
 
@@ -1175,7 +1176,7 @@ static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Exp
         bool hit = false;
         Expr* parked = rn_swap(exact_result, k.exact, k.ph, k.n, &hit);
         if (hit) {
-            Expr* num = numericalize(parked, spec);
+            Expr* num = common_numericalize_keep_exp(parked, spec);
             bool back = false;
             out = eval_and_free(rn_swap(num, k.ph, k.orig, k.n, &back));
             expr_free(num);
@@ -1183,7 +1184,9 @@ static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Exp
         expr_free(parked);
     }
     rn_kernels_free(&k);
-    return out ? out : numericalize((Expr*)exact_result, spec);
+    /* E^u keeps its base (audit DSolve#1: Simplify[E^(0.5 x) c] was
+     * 2.71828^(0.5 x) c). */
+    return out ? out : common_numericalize_keep_exp(exact_result, spec);
 }
 
 /* Park every power with an inexact exponent (rn_is_inexact_power) that `e`

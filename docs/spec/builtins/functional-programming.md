@@ -169,6 +169,9 @@ Out[8]= Select[OddQ]
 ```
 
 ## InterpolatingFunction
+
+**Audit wave 6.** `InputForm` prints the object in full (a machine-data table as the boxed `{{c, v}, ...}` the constructor reads), so `ToExpression[ToString[InputForm[f]]]` is the same function; `StandardForm` keeps `InterpolatingFunction[domain, <>]`.
+
 `InterpolatingFunction[domain, table]` represents an approximate function
 whose values are found by interpolation, and — like `Function` — is evaluated
 by applying it to arguments. Any number of real arguments (dimensions) is

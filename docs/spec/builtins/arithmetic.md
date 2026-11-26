@@ -1018,6 +1018,9 @@ Out[3]= {3, 2, 1}
 
 ## Power (^)
 
+**Audit wave 6.** A rational power of a negative exact coefficient times known-positive factors splits off `(-1)^(p/q)`: `Sqrt[-Pi^2]` is `I Pi`, `Sqrt[-4 Pi]` is `2 I Sqrt[Pi]`, `Sqrt[-E^2]` is `I E` (principal branch: the base and -1 have the same argument).
+
+
 - `Power[]` is `1`. A Gaussian-integer perfect square under an odd half-integer power is reduced: `Sqrt[3 + 4 I]` is `2 + I`, `Sqrt[2 I]` is `1 + I`, `(3 + 4 I)^(3/2)` is `2 + 11 I` (audit Power#3/#5, Sqrt#3).
 Exponentiation.
 - `base ^ exp`

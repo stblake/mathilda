@@ -4163,7 +4163,7 @@ static void emit_dvar_message(Expr* spec) {
  * factors out of products, and otherwise returns NULL (caller falls
  * back to leaving D[f, {var, k}] unevaluated).
  *
- *   D[c, {x, k}]              = 0                          (c free of x)
+ *   D[c, {x, k}]              = c KroneckerDelta[k]        (c free of x)
  *   D[c f, {x, k}]            = c D[f, {x, k}]              (c free of x)
  *   D[a + b + ..., {x, k}]    = D[a, {x, k}] + ...
  *   D[Power[x, n], {x, k}]    = FactorialPower[n, k] x^(n-k)  (n free of x)
@@ -4177,10 +4177,16 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k);
 static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
     if (!f || !var || !k) return NULL;
 
-    /* Var-free constant: D[c, {x, k}] = 0 for k >= 1. MMA also gives 0;
-     * we match. (Strictly Piecewise[{{c, k==0}}, 0], but our convention
-     * matches the unsubscripted MMA result.) */
-    if (expr_free_of(f, var)) return mk_int(0);
+    /* Var-free constant: D[c, {x, k}] = c KroneckerDelta[k].  The order k
+     * ranges over the non-negative integers, and the zeroth derivative is
+     * c itself, so a bare 0 would be wrong at k = 0 (audit D#3:
+     * D[x^2 + c, {x, n}] /. n -> 0 lost the c). */
+    if (expr_free_of(f, var)) {
+        if (f->type == EXPR_INTEGER && f->data.integer == 0) return mk_int(0);
+        Expr* prod = mk_fn2("Times", expr_copy(f),
+                            mk_fn1("KroneckerDelta", expr_copy(k)));
+        return eval_and_free(prod);
+    }
 
     /* The variable itself: D[x, {x, k}] = If[k == 1, 1, 0] but MMA
      * returns Piecewise; for the symbolic-k path we leave unevaluated

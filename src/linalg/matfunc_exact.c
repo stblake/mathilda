@@ -141,7 +141,89 @@ static Expr* simplify_coef(Expr* c) {
 
 typedef struct { int start, size, group; } Block;
 
+/* True when every entry of the n x n matrix is an explicit rational number. */
+static bool mf_rational_matrix(const Expr* m, int n) {
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++) {
+            const Expr* e = at(m, i, j);
+            if (!(e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || mf_head_is(e, SYM_Rational)))
+                return false;
+        }
+    return true;
+}
+
+/* The resolvent form for a rational matrix whose characteristic polynomial p
+ * is squarefree with an irreducible factor of degree 3 or more (eigenvalues
+ * that are Root objects, not radicals):
+ *
+ *     f(m) = sum over the roots t of p of  f(t) adj(t I - m) / p'(t),
+ *
+ * entry by entry RootSum[p, f[#] adj_ij(#)/p'(#) &] with adj(t I - m) a
+ * polynomial matrix in t.  The Jordan path forms S, S^-1 and simplifies every
+ * coefficient in Root objects of the quartic, which for the 4 x 4 Hilbert
+ * matrix ran past 120 s (audit MatrixFunction#1); this is a determinant and an
+ * inverse over Q(t).  NULL when the gate does not hold. */
+static Expr* mf_resolvent_apply(const Expr* m, int n, const Expr* f) {
+    if (n < 3 || !mf_rational_matrix(m, n)) return NULL;
+    Expr* t = expr_new_symbol("MatrixFunction`Private`t");
+    Expr* id = eval_and_free(mk1(SYM_IdentityMatrix, expr_new_integer(n)));
+    Expr* A = eval_and_free(mk2(SYM_Plus, mk2(SYM_Times, expr_copy(t), id),
+                                mk2(SYM_Times, expr_new_integer(-1), expr_copy((Expr*)m))));
+    Expr* p = eval_and_free(mk1(SYM_Expand, mk1(SYM_Det, expr_copy(A))));
+    Expr* dp = eval_and_free(mk2(SYM_D, expr_copy(p), expr_copy(t)));
+    Expr* g = eval_and_free(mk3(SYM_PolynomialGCD, expr_copy(p), expr_copy(dp), expr_copy(t)));
+    bool squarefree = g && (g->type == EXPR_INTEGER || g->type == EXPR_BIGINT || mf_head_is(g, SYM_Rational));
+    expr_free(g);
+    bool high = false;
+    if (squarefree) {
+        Expr* fl = eval_and_free(mk1(SYM_FactorList, expr_copy(p)));
+        if (mf_head_is(fl, SYM_List))
+            for (size_t k = 0; k < fl->data.function.arg_count && !high; k++) {
+                const Expr* pr = fl->data.function.args[k];
+                if (!mf_head_is(pr, SYM_List) || pr->data.function.arg_count != 2) continue;
+                Expr* d = eval_and_free(mk2(SYM_Exponent, expr_copy(pr->data.function.args[0]), expr_copy(t)));
+                if (d->type == EXPR_INTEGER && d->data.integer >= 3) high = true;
+                expr_free(d);
+            }
+        expr_free(fl);
+    }
+    Expr* result = NULL;
+    if (squarefree && high) {
+        Expr* adj = eval_and_free(mk1(SYM_Cancel, mk2(SYM_Times, expr_copy(p),
+                                                       mk1(SYM_Inverse, expr_copy(A)))));
+        if (is_square(adj, n)) {
+            Expr* pf = mk2(SYM_Function, mk1(SYM_List, expr_copy(t)), expr_copy(p));
+            Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+            for (int i = 0; i < n; i++) {
+                Expr** cells = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+                for (int j = 0; j < n; j++) {
+                    const Expr* q = at(adj, i, j);
+                    if (is_zero_int(q)) { cells[j] = expr_new_integer(0); continue; }
+                    Expr* body = mk3(SYM_Times, expr_new_function(expr_copy((Expr*)f),
+                                         (Expr*[]){ expr_copy(t) }, 1),
+                                     expr_copy((Expr*)q),
+                                     mk2(SYM_Power, expr_copy(dp), expr_new_integer(-1)));
+                    Expr* bf = mk2(SYM_Function, mk1(SYM_List, expr_copy(t)), body);
+                    cells[j] = eval_and_free(mk2(SYM_RootSum, expr_copy(pf), bf));
+                }
+                rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
+                free(cells);
+            }
+            result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+            free(rows);
+            expr_free(pf);
+        }
+        expr_free(adj);
+    }
+    expr_free(dp); expr_free(p); expr_free(A); expr_free(t);
+    return result;
+}
+
 Expr* mf_exact_apply(const Expr* m, int n, const Expr* f, MfxKind kind, const char* head) {
+    if (kind == MFX_FUNCTION || kind == MFX_EXP) {
+        Expr* rv = mf_resolvent_apply(m, n, f);
+        if (rv) return rv;
+    }
     Expr* jd = eval_and_free(mk1(SYM_JordanDecomposition, expr_copy((Expr*)m)));
     if (!mf_head_is(jd, SYM_List) || jd->data.function.arg_count != 2
         || !is_square(jd->data.function.args[0], n) || !is_square(jd->data.function.args[1], n)) {

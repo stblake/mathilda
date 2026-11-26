@@ -32,6 +32,7 @@
 #define COMMON_H
 
 #include "expr.h"
+#include "numeric.h"   /* NumericSpec */
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -150,6 +151,11 @@ Expr* common_rationalize_input(const Expr* e, long bits);
  *
  * Caller owns the returned Expr*. */
 Expr* common_numericalize_result(const Expr* e, long bits);
+
+/* numericalize(e, spec) with every E^u, u not numeric, keeping its base: an
+ * approximate answer numericalises the numbers, not the exponential function
+ * (E^(0.5 x), not 2.71828^(0.5 x)).  common_numericalize_result uses it. */
+Expr* common_numericalize_keep_exp(const Expr* e, NumericSpec spec);
 
 /* ---------------------------------------------------------------------- *
  * Machine-real contagion, for the array producers                         *

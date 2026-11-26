@@ -718,6 +718,31 @@ static void test_wave5_structural_docs(void) {
     audit_chk("Prepend#5", "Attributes[Prepend]", "{Protected}");
 }
 
+/* ---- Wave 6 G3 BEGIN ---- */
+static void test_wave6_g3(void) {
+    audit_chk("PolynomialMod#4", "PolynomialMod[x^3, 2x - 1]", "x^3");
+    audit_chk("PolynomialMod#4", "PolynomialMod[2x^2 + 1, 2x + 1]", "1 - x");
+    audit_chk("PolynomialMod#4", "PolynomialMod[3x^2 + 2x + 1, x^2 + 1]", "-2 + 2 x");
+    audit_chk("PolynomialMod#5", "Attributes[PolynomialMod]", "{Protected}");
+    audit_chk("PolynomialMod#5", "PolynomialMod[{x^2, x^3}, x - 1]", "{1, 1}");
+    audit_chk("PolynomialMod#5", "PolynomialMod[3x^3 + 21x^2 y^2 - 7x y^3 + 55, {2x^2 - 7, x y - 3, 9}]", "1 + 7 x + x^3 + 4 y^2");
+    audit_chk("PowerExpand#1", "PowerExpand[Log[12], {x}]", "Log[12]");
+    audit_chk("PowerExpand#1", "PowerExpand[Log[12]]", "2 Log[2] + Log[3]");
+    audit_chk("PowerExpand#1", "PowerExpand[Log[12 x^2], {x}]", "Log[12] + 2 Log[x]");
+    audit_chk("Tally#2", "Tally[{0.1 + 0.2, 0.3}]", "{{0.3, 2}}");
+    audit_chk("Tally#2", "Tally[Developer`ToPackedArray[{0.1 + 0.2, 0.3, 1.}]]", "{{0.3, 2}, {1.0, 1}}");
+    audit_chk("Tally#2", "Tally[{{0.1 + 0.2}, {0.3}}]", "{{{0.3}, 2}}");
+    audit_chk("Tally#2", "{Tally[{0.1 + 0.2, 0.3}][[1, 1]] === 0.1 + 0.2, Tally[Developer`ToPackedArray[{0.1 + 0.2, 0.3}]][[1, 1]] === 0.1 + 0.2}", "{True, True}");
+    audit_chk("Tally#2", "Tally[{1, 1., 2}]", "{{1, 1}, {1.0, 1}, {2, 1}}");
+    audit_chk("GroebnerBasis#1", "GroebnerBasis[{x^2 + 1, x - I}, x]", "{-I + x}");
+    audit_chk("GroebnerBasis#1", "GroebnerBasis[{x^2 - I, x}, x]", "{1}");
+    audit_chk("GroebnerBasis#1", "GroebnerBasis[{x^2 + y^2, x - I y}, {x, y}]", "{x - I y}");
+    audit_chk("PolynomialLCM#3", "PolynomialLCM[x^a - 1, x^(2a) - 1]", "-1 + x^(2 a)");
+    audit_chk("PolynomialLCM#3", "PolynomialLCM[x^a, x^(2a)]", "x^(2 a)");
+    audit_chk("PolynomialLCM#3", "PolynomialGCD[x^a - 1, x^(2a) - 1]", "-1 + x^a");
+}
+/* ---- Wave 6 G3 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_expand_option_not_pattern);
@@ -747,5 +772,6 @@ int main(void) {
     TEST(test_wave5_structural_messages);
     TEST(test_wave5_structural_algebra);
     TEST(test_wave5_structural_docs);
+    TEST(test_wave6_g3);
     return audit_finish("audit_structural_manipulation");
 }

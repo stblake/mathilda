@@ -8,6 +8,7 @@
  * sum/mean/std are single-threaded and memory-bound, so a cache-friendly serial
  * pass over the contiguous buffer already meets or beats them. */
 
+#include "equal_tol.h"   /* mth_machine_sameq_rel: Tally of reals */
 #include "ndreduce.h"
 #include "ndarray.h"
 #include "ndarray_internal.h"
@@ -911,6 +912,61 @@ typedef struct { uint64_t key; int64_t cnt; } TallyEnt;
 
 /* Returns false when the buffer cannot be keyed faithfully or an allocation
  * fails; the caller then hands the whole call back to the List path. */
+/* SameQ classes of distinct machine reals.  The hash keys on the bit pattern,
+ * but SameQ ignores the last Internal`$SameQTolerance bits, so 0.1 + 0.2 and
+ * 0.3 are one element (audit Tally#2).  Two reals within the tolerance are
+ * neighbours in sorted order, so one O(u log u) sort over the DISTINCT values
+ * finds every such pair; a run of neighbouring values joins the class of its
+ * earliest member, whose value is the one shown -- the List path's rule
+ * (setops.c tally_merge_sameq), so the two surfaces agree. */
+typedef struct { double v; size_t u; } NdTallySort;
+
+static int nd_tally_sort_cmp(const void* pa, const void* pb) {
+    const NdTallySort* a = (const NdTallySort*)pa;
+    const NdTallySort* b = (const NdTallySort*)pb;
+    if (a->v < b->v) return -1;
+    if (a->v > b->v) return 1;
+    return a->u < b->u ? -1 : (a->u > b->u);
+}
+
+static void nd_tally_merge_sameq(uint64_t* keys, int64_t* cs, size_t* pnuniq) {
+    size_t nu = *pnuniq;
+    double rel = mth_machine_sameq_rel();
+    if (nu < 2 || !(rel > 0.0)) return;
+    NdTallySort* st = malloc(sizeof(NdTallySort) * nu);
+    size_t* target = malloc(sizeof(size_t) * nu);
+    if (!st || !target) { free(st); free(target); return; }
+    for (size_t u = 0; u < nu; u++) {
+        memcpy(&st[u].v, &keys[u], sizeof(double));
+        st[u].u = u;
+        target[u] = u;
+    }
+    qsort(st, nu, sizeof(NdTallySort), nd_tally_sort_cmp);
+    bool any = false;
+    size_t run = 0;
+    for (size_t j = 1; j <= nu; j++) {
+        if (j < nu && mth_machine_tol_equal(st[j - 1].v, st[j].v, rel)) continue;
+        if (j - run > 1) {                     /* st[run .. j-1] is one class */
+            size_t first = st[run].u;
+            for (size_t r = run + 1; r < j; r++) if (st[r].u < first) first = st[r].u;
+            for (size_t r = run; r < j; r++) target[st[r].u] = first;
+            any = true;
+        }
+        run = j;
+    }
+    if (any) {
+        for (size_t u = 0; u < nu; u++)
+            if (target[u] != u) cs[target[u]] += cs[u];
+        size_t w = 0;
+        for (size_t u = 0; u < nu; u++) {
+            if (target[u] != u) continue;
+            keys[w] = keys[u]; cs[w] = cs[u]; w++;
+        }
+        *pnuniq = w;
+    }
+    free(st); free(target);
+}
+
 static bool nd_tally_hash(const void* data, NDType dt, size_t n, NDWordTally* out) {
     const int64_t* iv = (const int64_t*)data;
     const double*  dv = (const double*)data;
@@ -999,6 +1055,7 @@ static bool nd_tally_hash(const void* data, NDType dt, size_t n, NDWordTally* ou
         cs[u]   = tab[ord[u]].cnt;
     }
     free(tab); free(ord);
+    if (dt == NDT_FLOAT64) nd_tally_merge_sameq(keys, cs, &nuniq);
     out->keys = keys; out->cnts = cs; out->nuniq = nuniq;
     return true;
 }

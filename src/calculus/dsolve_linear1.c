@@ -36,6 +36,14 @@ Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch) {
     Expr* p = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
                                      ds_d(expr_copy(FY), expr_new_symbol(Yname))));
     Expr* q = ds_subst(expr_copy(FY), expr_new_symbol(Yname), expr_new_integer(0));
+    /* An inexact coefficient leaves a machine zero for the forcing of a
+     * homogeneous equation (0.5 Y /. Y -> 0 is 0.): there is no forcing, and
+     * integrating 0. mu put a spurious 0. + C[1] into the answer (audit
+     * DSolve#1). */
+    if (q && q->type == EXPR_REAL && q->data.real == 0.0) {
+        expr_free(q);
+        q = expr_new_integer(0);
+    }
     bool ok = !ds_contains(p, Yname) && !ds_contains(q, Yname);
     if (ok) {
         /* verify FY == q - p Y */

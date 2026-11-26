@@ -177,10 +177,39 @@ static int wl_cmp_qq(const qqbar_t a, const qqbar_t b) {
     int ra = qqbar_is_real(a), rb = qqbar_is_real(b);
     if (ra != rb) return ra ? -1 : 1;
     if (ra) return qqbar_cmp_re(a, b);
-    /* both non-real: Re ascending */
+    /* both non-real.  A conjugate pair has equal Re and |Im| -- a cheap test
+     * (same minimal polynomial, conjugate enclosure) that spares qqbar_cmp_re
+     * an exact proof of the equal real parts: the more-negative Im first. */
+    {
+        qqbar_t cb; qqbar_init(cb);
+        qqbar_conj(cb, b);
+        int conj = qqbar_equal(a, cb);
+        qqbar_clear(cb);
+        if (conj) {
+            int sa = qqbar_sgn_im(a), sb = qqbar_sgn_im(b);
+            return sa < sb ? -1 : (sa > sb ? 1 : 0);
+        }
+    }
+    /* Re ascending */
     int c = qqbar_cmp_re(a, b);
     if (c != 0) return c;
-    /* |Im| ascending */
+    /* |Im| ascending.  Decided first on rigorous enclosures at rising
+     * precision: two roots with equal real parts have equal |Im| only as a
+     * conjugate pair, and the exact qqbar_im (a composed-polynomial
+     * factorisation) inside this O(d^2) sort made the Root index of 2^(1/32)
+     * cost minutes (audit NumberFieldIntegralBasis#1).  The exact path below
+     * remains for the pairs the enclosures cannot separate. */
+    for (slong prec = 64; prec <= 1024; prec *= 2) {
+        acb_t za, zb; acb_init(za); acb_init(zb);
+        arb_t ma, mb; arb_init(ma); arb_init(mb);
+        qqbar_get_acb(za, a, prec);
+        qqbar_get_acb(zb, b, prec);
+        arb_abs(ma, acb_imagref(za));
+        arb_abs(mb, acb_imagref(zb));
+        int r = arb_lt(ma, mb) ? -1 : (arb_gt(ma, mb) ? 1 : 0);
+        arb_clear(ma); arb_clear(mb); acb_clear(za); acb_clear(zb);
+        if (r != 0) return r;
+    }
     qqbar_t ia, ib; qqbar_init(ia); qqbar_init(ib);
     qqbar_im(ia, a); qqbar_im(ib, b);
     qqbar_abs(ia, ia); qqbar_abs(ib, ib);       /* real qqbars: |Im| */
@@ -1247,6 +1276,19 @@ static Expr* poly_to_algnum(const qqbar_t phi, const fmpq_poly_t p, slong n) {
     return result;
 }
 
+/* poly_to_algnum for a run of values over one generator phi: the generator's
+ * expression is built at most once, and only when a value needs it.  Building
+ * it orders phi's conjugates, which is the expensive part -- for 2^(1/32)
+ * (audit NumberFieldIntegralBasis#1) it cost most of 20 s when redone per row,
+ * and a run whose values are all rational must not pay for it at all. */
+static Expr* poly_to_algnum_lazy(const qqbar_t phi, Expr** gen,
+                                 const fmpq_poly_t p, slong n) {
+    if (n <= 1 || fmpq_poly_degree(p) <= 0)
+        return poly_to_algnum(phi, p, n);       /* rational: no generator */
+    if (!*gen) *gen = qqbar_to_expr(phi);
+    return poly_to_algnum_gen(*gen, p, n);
+}
+
 /* Same-field binary op on two AlgebraicNumbers with expr_eq generators.
  * op 0 = add, 1 = mul. Returns a fresh combined value, or NULL to decline. */
 static Expr* algnum_binop(const Expr* a, const Expr* b, int op) {
@@ -1717,13 +1759,15 @@ Expr* flint_qqbar_to_number_field_common_fn(Expr* (*get)(const void*, size_t, bo
          * (a later Root/AlgebraicNumber reading corrupted memory) in batch runs. */
         Expr** items = calloc(n, sizeof(Expr*));
         int good = 1;
+        Expr* gen = NULL;                        /* built once, on demand */
         for (size_t i = 0; i < n && good; i++) {
             fmpq_poly_t f; fmpq_poly_init(f);
             if (qqbar_express_in_field_retry(f, phi, vals + i))
-                items[i] = poly_to_algnum(phi, f, nn);
+                items[i] = poly_to_algnum_lazy(phi, &gen, f, nn);
             else { items[i] = NULL; good = 0; }
             fmpq_poly_clear(f);
         }
+        if (gen) expr_free(gen);
         if (good) {
             if (out_ll) {                      /* straight into a LinkedList */
                 LinkedList* ll = ll_new();
@@ -1809,15 +1853,17 @@ Expr* flint_qqbar_integral_basis(const Expr* a) {
 
     Expr** items = malloc(sizeof(Expr*) * (size_t)n);
     fmpq_t coef; fmpq_init(coef);
+    Expr* gen = NULL;                 /* see poly_to_algnum_lazy */
     for (slong i = 0; i < n; i++) {
         fmpq_poly_t row; fmpq_poly_init(row);
         for (slong j = 0; j < n; j++) {
             fmpq_set_fmpz_frac(coef, fmpz_mat_entry(H, n - 1 - i, n - 1 - j), Dz);
             fmpq_poly_set_coeff_fmpq(row, j, coef);
         }
-        items[i] = poly_to_algnum(phi, row, n);     /* rational row -> Integer/Rational */
+        items[i] = poly_to_algnum_lazy(phi, &gen, row, n); /* rational row -> Integer/Rational */
         fmpq_poly_clear(row);
     }
+    if (gen) expr_free(gen);
     fmpq_clear(coef);
     fmpz_mat_clear(A); fmpz_mat_clear(H);
     fmpz_clear(Dz); mpz_clear(D);

@@ -5,6 +5,7 @@
 #include "numeric.h"
 #include "rationalize.h"
 #include "sym_names.h"   /* SYM_Rule / SYM_RuleDelayed / SYM_Method */
+#include "sym_intern.h"  /* intern_symbol: the exponential hold */
 #include "message.h"
 #include "eval.h"      /* eval_and_free: alg_thread_call */
 #include "print.h"     /* expr_to_string for the ::normal message */     /* mth_message: route arg-count errors through Quiet/Check */
@@ -226,7 +227,40 @@ Expr* common_numericalize_result(const Expr* e, long bits) {
 #else
     (void)bits;
 #endif
-    return numericalize(e, spec);
+    return common_numericalize_keep_exp(e, spec);
+}
+
+/* E^u <-> Common`Private`expHold[u] for a non-numeric exponent u
+ * (unevaluated structural rebuild; borrows e). */
+static Expr* common_hold_exp(const Expr* e, bool hold) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* hs = intern_symbol("Common`Private`expHold");
+    size_t n = e->data.function.arg_count;
+    if (hold && head_is(e, SYM_Power) && n == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        e->data.function.args[0]->data.symbol.name == SYM_E &&
+        !expr_is_numeric_quantity(e->data.function.args[1]))
+        return expr_new_function(expr_new_symbol(hs),
+                   (Expr*[]){ common_hold_exp(e->data.function.args[1], hold) }, 1);
+    if (!hold && head_is(e, hs) && n == 1)
+        return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){
+                   expr_new_symbol(SYM_E), common_hold_exp(e->data.function.args[0], hold) }, 2);
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = common_hold_exp(e->data.function.args[i], hold);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+Expr* common_numericalize_keep_exp(const Expr* e, NumericSpec spec) {
+    if (!e) return NULL;
+    Expr* held = common_hold_exp(e, true);
+    Expr* num = numericalize(held, spec);
+    expr_free(held);
+    if (!num) return NULL;
+    Expr* out = eval_and_free(common_hold_exp(num, false));
+    expr_free(num);
+    return out;
 }
 
 /* Is `e` a `Method -> ...` (or `Method :> ...`) option rule? */

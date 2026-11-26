@@ -7,6 +7,7 @@
 #include "assoc_index.h" /* assoc_index_free — the cached Association key index */
 #include "symtab.h"      /* SymbolDef: Module-local node counting */
 #include "memacct.h"     /* MTH_MEM_CHARGE / RELEASE: MemoryConstrained accounting */
+#include "pack.h"        /* pack_g_any_created: a buffer opens the gate */
 #include <stdbool.h>
 #include <limits.h>
 #include <math.h>
@@ -447,6 +448,10 @@ Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dty
     e->data.ndarray.present_as = NDA_HEAD_NDARRAY;
     e->data.ndarray.cap_rows = 0;
     MTH_MEM_CHARGE_BLOCK(expr_ndarray_payload_bytes(e));
+    /* Any buffer opens the evaluator's transparency gate, a visible NDArray
+     * too: in a session that had packed nothing yet, NDArray[{1., 2.}] +
+     * {10, 20} skipped the List lift and came back a List (audit NDArray#5). */
+    pack_g_any_created = true;
     return e;
 }
 

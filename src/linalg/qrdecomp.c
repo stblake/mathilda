@@ -86,6 +86,7 @@
 #include "sym_names.h"
 #include "common.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"   /* expr_is_numeric_quantity */
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -111,9 +112,72 @@ static Expr* eval_power(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Power), (Expr*[]){a, b}, 2));
 }
-static Expr* eval_conjugate(Expr* a) {
+static Expr* eval_conjugate_raw(Expr* a) {
     return eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Conjugate), (Expr*[]){a}, 1));
+}
+
+static bool qr_head_is(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
+}
+
+/* True for an expression the Gram-Schmidt sums make that is real and
+ * non-negative by construction: a positive number, Abs[_] (to a real power),
+ * and sums, products and real powers of those (the squared norms
+ * Abs[a]^2 + Abs[c]^2 and their square roots). */
+static bool qr_known_nonneg(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) return e->data.integer >= 0;
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint) >= 0;
+    if (qr_head_is(e, SYM_Rational))
+        return qr_known_nonneg(e->data.function.args[0]);
+    if (qr_head_is(e, SYM_Abs)) return true;
+    if (qr_head_is(e, SYM_Plus) || qr_head_is(e, SYM_Times)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!qr_known_nonneg(e->data.function.args[i])) return false;
+        return true;
+    }
+    if (qr_head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* k = e->data.function.args[1];
+        bool real_k = k->type == EXPR_INTEGER || qr_head_is(k, SYM_Rational);
+        return real_k && qr_known_nonneg(e->data.function.args[0]);
+    }
+    return false;
+}
+
+/* Conjugate, distributed structurally over the Gram-Schmidt arithmetic:
+ * over sums and products, through an integer power, past a real non-negative
+ * factor (the norms), and Conjugate[Conjugate[z]] = z.  The evaluator's
+ * Conjugate leaves Conjugate[a/Sqrt[Abs[a]^2 + Abs[c]^2]] whole, so a q built
+ * from it never simplified back to the identity.  Consumes `a`. */
+static Expr* eval_conjugate(Expr* a) {
+    if (!a || a->type != EXPR_FUNCTION) return eval_conjugate_raw(a);
+    if (qr_known_nonneg(a)) return a;
+    if (qr_head_is(a, SYM_Conjugate) && a->data.function.arg_count == 1) {
+        Expr* in = expr_copy(a->data.function.args[0]);
+        expr_free(a);
+        return in;
+    }
+    if (qr_head_is(a, SYM_Plus) || qr_head_is(a, SYM_Times)) {
+        size_t n = a->data.function.arg_count;
+        Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            args[i] = eval_conjugate(expr_copy(a->data.function.args[i]));
+        Expr* out = expr_new_function(expr_copy(a->data.function.head), args, n);
+        free(args);
+        expr_free(a);
+        return eval_and_free(out);
+    }
+    if (qr_head_is(a, SYM_Power) && a->data.function.arg_count == 2 &&
+        a->data.function.args[1]->type == EXPR_INTEGER) {
+        Expr* out = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ eval_conjugate(expr_copy(a->data.function.args[0])),
+                       expr_copy(a->data.function.args[1]) }, 2);
+        expr_free(a);
+        return eval_and_free(out);
+    }
+    return eval_conjugate_raw(a);
 }
 static Expr* eval_sqrt(Expr* a) {
     return eval_and_free(expr_new_function(
@@ -160,6 +224,16 @@ static void vec_axpy_negate(Expr** dst, Expr* coeff, Expr** src, int n) {
  * Returns a freshly allocated Expr*. */
 static Expr* inner_product(Expr** a, Expr** b, int n, bool use_conj) {
     Expr* sum = expr_new_integer(0);
+    if (use_conj && a == b) {
+        /* <v, v> = Sum Abs[v_i]^2: real and non-negative on its face, so its
+         * square root (the norm) is too, and conjugation passes it by. */
+        for (int i = 0; i < n; i++) {
+            Expr* ab = eval_and_free(expr_new_function(
+                expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(a[i]) }, 1));
+            sum = eval_plus(sum, eval_power(ab, expr_new_integer(2)));
+        }
+        return sum;
+    }
     for (int i = 0; i < n; i++) {
         Expr* lhs  = use_conj ? eval_conjugate(expr_copy(a[i]))
                               : expr_copy(a[i]);
@@ -198,8 +272,30 @@ static Expr** vec_div_scalar(Expr** src, Expr* scalar, int n) {
  *  ambiguous symbolic forms keep building the QR (which is correct -  *
  *  the generic-rank assumption matches Mathematica's behaviour).      *
  * ------------------------------------------------------------------ */
+/* Abs[z]^2 written z Conjugate[z] (unevaluated rebuild; borrows e): the
+ * Hermitian norms are Abs[.]^2 sums while the inner products carry
+ * z Conjugate[z], and the zero test must see one spelling. */
+static Expr* qr_abs2_as_conj(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (qr_head_is(e, SYM_Power) && e->data.function.arg_count == 2 &&
+        qr_head_is(e->data.function.args[0], SYM_Abs) &&
+        e->data.function.args[0]->data.function.arg_count == 1 &&
+        e->data.function.args[1]->type == EXPR_INTEGER &&
+        e->data.function.args[1]->data.integer == 2) {
+        Expr* z = qr_abs2_as_conj(e->data.function.args[0]->data.function.args[0]);
+        return expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_copy(z),
+            expr_new_function(expr_new_symbol(SYM_Conjugate), (Expr*[]){ z }, 1) }, 2);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = qr_abs2_as_conj(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
 static bool is_definitely_zero(Expr* e) {
-    Expr* simp = eval_simplify(expr_copy(e));
+    Expr* simp = eval_simplify(eval_and_free(qr_abs2_as_conj(e)));
     bool z = is_zero_poly(simp);
     expr_free(simp);
     return z;
@@ -370,7 +466,10 @@ bool qr_symbolic_core(Expr** A_flat, int n, int p,
         if (chosen_norm_sq) { nsq = chosen_norm_sq; chosen_norm_sq = NULL; }
         else                  nsq = norm_squared(pending[chosen], n, use_conj);
 
-        if (is_definitely_zero(nsq)) {
+        /* With rank_cap columns built the residual is zero in exact
+         * arithmetic, whatever the zero test can prove (a symbolic residual
+         * in Abs[.]^2 norms); a further column would write past Q. */
+        if (rk >= rank_cap || is_definitely_zero(nsq)) {
             /* Column is in the span of the existing Q's.  R's chosen
              * column already has its coefficients; no new row added. */
             expr_free(nsq);
@@ -516,11 +615,17 @@ static Expr* build_q_from_Q(Expr** Q_flat, int n, int rank,
  * Conjugate when assembling q from the orthonormal column buffer Q. */
 static bool has_complex_content(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    /* A free symbol may stand for a complex number: the decomposition must
+     * hold for every value of it, so the Hermitian inner product is used
+     * (audit QRDecomposition#1: q was built with the real inner product and
+     * was not unitary at a -> I).  Numeric constants (Pi, E) are real. */
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_I || !expr_is_numeric_quantity(e);
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Complex) return true;
-    if (has_complex_content(e->data.function.head)) return true;
+    if (e->data.function.head->type != EXPR_SYMBOL &&
+        has_complex_content(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (has_complex_content(e->data.function.args[i])) return true;
     }
@@ -620,6 +725,10 @@ Expr* qr_symbolic_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
 
     for (int t = 0; t < n * p; t++) expr_free(A_flat[t]);
     free(A_flat);
+    /* An inexact input was rationalised above: its zero matrix keeps the
+     * empty answer the machine and MPFR kernels give ({{}, {}}); only an
+     * exact zero matrix takes the reference's one-row form below. */
+    bool inexact_input = m_rat != NULL;
     if (m_rat) expr_free(m_rat);
 
     if (!ok) {
@@ -632,12 +741,27 @@ Expr* qr_symbolic_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
      * formed empty matrices: {} for q and {} for r. */
     Expr* q;
     Expr* r;
-    if (rank == 0) {
-        /* Free the (empty) buffers and emit `{}` / `{}`. */
+    if (rank == 0 && inexact_input) {
         free(Q_flat);
         free(R_flat);
         q = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         r = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    } else if (rank == 0) {
+        /* The zero matrix is the reference's one row, q = {e1}, r = {0, ...}
+         * -- what the exact Gram-Schmidt path answers without pivoting, so
+         * Pivoting -> True now agrees with it (audit QRDecomposition#2: it
+         * gave {{}, {}, p} against {{{1, 0}}, {{0, 0}}}). */
+        free(Q_flat);
+        free(R_flat);
+        Expr** qe = (Expr**)malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+        for (int i = 0; i < n; i++) qe[i] = expr_new_integer(i == 0 ? 1 : 0);
+        Expr** re = (Expr**)malloc(sizeof(Expr*) * (size_t)(p > 0 ? p : 1));
+        for (int j = 0; j < p; j++) re[j] = expr_new_integer(0);
+        Expr* qrow = expr_new_function(expr_new_symbol(SYM_List), qe, (size_t)n);
+        Expr* rrow = expr_new_function(expr_new_symbol(SYM_List), re, (size_t)p);
+        free(qe); free(re);
+        q = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ qrow }, 1);
+        r = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ rrow }, 1);
     } else {
         q = build_q_from_Q(Q_flat, n, rank, complex_input);
         for (int t = 0; t < n * rank; t++) expr_free(Q_flat[t]);

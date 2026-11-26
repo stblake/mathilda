@@ -7,6 +7,8 @@
 #include "ndarray_internal.h"  /* nd_sort_i64_asc — the packed set-op fast path */
 #include "ndreduce.h"   /* ndred_tally — Tally's packed-buffer fast path */
 #include "linkedlist_seq.h" /* LLSeq: LinkedList operands, read element by element */
+#include "comparisons.h"   /* expr_sameq: the Tally classes of approximate numbers */
+#include "rationalize.h"   /* internal_contains_inexact */
 
 /* ---------------------------------------------------------------------------
  *  Packed integer set operations.
@@ -646,6 +648,66 @@ Expr* builtin_complement(Expr* res)   { return setops_filter(res, 2, "Complement
 /* The distinct elements of q (first appearance) and their multiplicities:
  * *uniq holds element INDICES. With a test, element i joins the first class
  * whose representative r gives test[i, r] === True (O(n g)). */
+/* SameQ merge of the hash pass's classes.  The index set keys on expr_eq, but
+ * SameQ ignores the last Internal`$SameQTolerance bits of an approximate
+ * number, so {0.1 + 0.2, 0.3} is one element (audit Tally#2).  Only classes
+ * whose representative carries an approximate number can merge; they are
+ * sorted canonically (numbers by value), and a run of neighbours that are
+ * SameQ joins the class of its earliest member -- the packed kernel's rule
+ * (ndreduce.c nd_tally_merge_sameq). */
+typedef struct { Expr* e; size_t c; } TallySortEnt;
+
+static int tally_sort_cmp(const void* pa, const void* pb) {
+    const TallySortEnt* a = (const TallySortEnt*)pa;
+    const TallySortEnt* b = (const TallySortEnt*)pb;
+    int k = expr_compare(a->e, b->e);
+    if (k) return k;
+    return a->c < b->c ? -1 : (a->c > b->c);
+}
+
+static size_t tally_merge_sameq(LLSeq* q, size_t* uniq, int64_t* mult, size_t nu) {
+    if (nu < 2) return nu;
+    TallySortEnt* st = malloc(sizeof(TallySortEnt) * nu);
+    size_t ns = 0;
+    for (size_t c = 0; c < nu; c++) {
+        Expr* e = llq_peek(q, uniq[c]);
+        if (internal_contains_inexact(e)) { st[ns].e = expr_copy(e); st[ns].c = c; ns++; }
+    }
+    if (ns < 2) {
+        for (size_t i = 0; i < ns; i++) expr_free(st[i].e);
+        free(st);
+        return nu;
+    }
+    qsort(st, ns, sizeof(TallySortEnt), tally_sort_cmp);
+    size_t* target = malloc(sizeof(size_t) * nu);
+    for (size_t c = 0; c < nu; c++) target[c] = c;
+    bool any = false;
+    size_t run = 0;
+    for (size_t j = 1; j <= ns; j++) {
+        if (j < ns && expr_sameq(st[j - 1].e, st[j].e)) continue;
+        if (j - run > 1) {
+            size_t first = st[run].c;
+            for (size_t r = run + 1; r < j; r++) if (st[r].c < first) first = st[r].c;
+            for (size_t r = run; r < j; r++) target[st[r].c] = first;
+            any = true;
+        }
+        run = j;
+    }
+    for (size_t i = 0; i < ns; i++) expr_free(st[i].e);
+    free(st);
+    size_t w = nu;
+    if (any) {
+        for (size_t c = 0; c < nu; c++) if (target[c] != c) mult[target[c]] += mult[c];
+        w = 0;
+        for (size_t c = 0; c < nu; c++) {
+            if (target[c] != c) continue;
+            uniq[w] = uniq[c]; mult[w] = mult[c]; w++;
+        }
+    }
+    free(target);
+    return w;
+}
+
 static size_t tally_indices(LLSeq* q, Expr* test, size_t** uniq, int64_t** mult) {
     size_t n = q->n;
     *uniq = malloc(sizeof(size_t) * (n ? n : 1));
@@ -662,7 +724,7 @@ static size_t tally_indices(LLSeq* q, Expr* test, size_t** uniq, int64_t** mult)
         }
         free(cls);
         llis_free(&seen);
-        return nu;
+        return tally_merge_sameq(q, *uniq, *mult, nu);
     }
     for (size_t i = 0; i < n; i++) {
         size_t found = SIZE_MAX;

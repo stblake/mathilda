@@ -471,17 +471,42 @@ static Expr* pe_log_rational(const Expr* e) {
     return out;
 }
 
+/* Every Log[q], q a rational, split over q's prime factorisation as the
+ * unrestricted PowerExpand does; the rest of `e` is untouched.  Borrows e. */
+Expr* power_expand_split_log_rationals(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    Expr* lr = pe_log_rational(e);
+    if (lr) return lr;
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        args[i] = power_expand_split_log_rationals(e->data.function.args[i]);
+        if (!expr_eq(args[i], e->data.function.args[i])) changed = true;
+    }
+    if (!changed) {
+        for (size_t i = 0; i < n; i++) expr_free(args[i]);
+        free(args);
+        return expr_copy((Expr*)e);
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return eval_and_free(out);
+}
+
 static Expr* pe_rec(Expr* e, const PECtx* ctx) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* h = head_name(e);
 
-    /* Log of a rational is split unless the variable list is empty: with
-     * {} nothing is expanded (audit PowerExpand#2).  A non-empty list keeps
-     * splitting it, as Gruntz's PowerExpand[e, {x}] relies on (Log[2], not
-     * -Log[1/2]); PowerExpand#1 is declined for that reason. */
-    if (!ctx->restricted || ctx->nvars > 0) {
+    /* Log of a rational is split only by the unrestricted form: a Log[12]
+     * mentions none of the listed variables, so PowerExpand[Log[12], {x}]
+     * leaves it (audit PowerExpand#1), and PowerExpand[e, {}] expands nothing
+     * (audit PowerExpand#2).  Gruntz, which wants the split under its {x}
+     * restriction, calls power_expand_split_log_rationals itself. */
+    if (!ctx->restricted) {
         Expr* lr = pe_log_rational(e);
         if (lr) return lr;
     }

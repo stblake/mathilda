@@ -647,12 +647,197 @@ static Expr* gb_at(const Expr* seq, size_t i, Expr** hold) {
     return *hold;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Gaussian-rational coefficients                                     */
+/* ------------------------------------------------------------------ */
+
+/* The engines read rational coefficients only, so a basis over Q(i) is
+ * computed over Q[vars, t] with t^2 + 1 adjoined and t the least variable
+ * (lexicographic, so t is eliminated last): Q[t]/(t^2 + 1) is a field, and
+ * substituting t -> I in that basis gives a basis of the ideal over Q(i),
+ * which is then made monic and inter-reduced over Q(i) (PolynomialReduce takes
+ * Gaussian coefficients).  GroebnerBasis[{x^2 + 1, x - I}, x] is {-I + x} and
+ * GroebnerBasis[{x^2 - I, x}, x] is {1} (audit GroebnerBasis#1: both stayed
+ * unevaluated).  Only the plain two-argument lexicographic form is taken. */
+static bool gb_has_gaussian(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (gb_has_gaussian(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* e with I (and the imaginary part of each Complex) written in t; t -> I back
+ * when `back`. */
+static Expr* gb_subst_gauss(const Expr* e, const Expr* t, bool back) {
+    if (back) {
+        if (e->type == EXPR_SYMBOL && e->data.symbol.name == t->data.symbol.name)
+            return expr_new_symbol(SYM_I);
+    } else {
+        if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) return expr_copy((Expr*)t);
+        if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_Complex &&
+            e->data.function.arg_count == 2) {
+            Expr* im = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy(e->data.function.args[1]), expr_copy((Expr*)t) }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Plus),
+                (Expr*[]){ expr_copy(e->data.function.args[0]), im }, 2);
+        }
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = gb_subst_gauss(e->data.function.args[i], t, back);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+static Expr* gb_call2(const char* head, Expr* a, Expr* b) {
+    return eval_and_free(expr_new_function(expr_new_symbol(head), (Expr*[]){ a, b }, 2));
+}
+
+static bool gb_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* The leading term's {exponents, coefficient} rule of p in vars (lex), or NULL. */
+static Expr* gb_leading_rule(const Expr* p, const Expr* vars) {
+    Expr* cr = gb_call2(SYM_CoefficientRules, expr_copy((Expr*)p), expr_copy((Expr*)vars));
+    if (!gb_is_list(cr) || cr->data.function.arg_count == 0) { expr_free(cr); return NULL; }
+    Expr* r = expr_copy(cr->data.function.args[0]);
+    expr_free(cr);
+    if (r->type != EXPR_FUNCTION || r->data.function.arg_count != 2) { expr_free(r); return NULL; }
+    return r;
+}
+
+/* p divided by its leading coefficient, expanded (consumes p); NULL on failure. */
+static Expr* gb_monic(Expr* p, const Expr* vars) {
+    Expr* lr = gb_leading_rule(p, vars);
+    if (!lr) { expr_free(p); return NULL; }
+    Expr* q = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ p, expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ expr_copy(lr->data.function.args[1]), expr_new_integer(-1) }, 2) }, 2);
+    expr_free(lr);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){ q }, 1));
+}
+
+static Expr* gb_gaussian(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* polys = res->data.function.args[0];
+    Expr* vars  = res->data.function.args[1];
+    if (!gb_is_list(polys) || !gb_has_gaussian(polys)) return NULL;
+    Expr* vlist = vars->type == EXPR_SYMBOL
+        ? expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(vars) }, 1)
+        : expr_copy(vars);
+    if (!gb_is_list(vlist) || gb_has_gaussian(vlist)) { expr_free(vlist); return NULL; }
+    for (size_t i = 0; i < vlist->data.function.arg_count; i++)
+        if (vlist->data.function.args[i]->type != EXPR_SYMBOL) { expr_free(vlist); return NULL; }
+
+    Expr* t = expr_new_symbol(intern_symbol("GroebnerBasis`Private`gaussI"));
+    size_t np = polys->data.function.arg_count, nv = vlist->data.function.arg_count;
+    Expr** pa = (Expr**)malloc(sizeof(Expr*) * (np + 1));
+    for (size_t i = 0; i < np; i++) pa[i] = gb_subst_gauss(polys->data.function.args[i], t, false);
+    pa[np] = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_new_function(
+                 expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2),
+                 expr_new_integer(1) }, 2);
+    Expr* p2 = expr_new_function(expr_new_symbol(SYM_List), pa, np + 1);
+    free(pa);
+    Expr** va = (Expr**)malloc(sizeof(Expr*) * (nv + 1));
+    for (size_t i = 0; i < nv; i++) va[i] = expr_copy(vlist->data.function.args[i]);
+    va[nv] = expr_copy(t);
+    Expr* v2 = expr_new_function(expr_new_symbol(SYM_List), va, nv + 1);
+    free(va);
+    Expr* gb = gb_call2(SYM_GroebnerBasis, p2, v2);
+    expr_free(t);
+    if (!gb_is_list(gb)) { expr_free(gb); expr_free(vlist); return NULL; }
+
+    /* t -> I, drop the zeros (t^2 + 1 itself), make monic over Q(i). */
+    size_t n = 0, m = gb->data.function.arg_count;
+    Expr** h = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+    bool ok = true;
+    Expr* tt = expr_new_symbol(intern_symbol("GroebnerBasis`Private`gaussI"));
+    for (size_t i = 0; i < m && ok; i++) {
+        Expr* e = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                      (Expr*[]){ gb_subst_gauss(gb->data.function.args[i], tt, true) }, 1));
+        if (e->type == EXPR_INTEGER && e->data.integer == 0) { expr_free(e); continue; }
+        e = gb_monic(e, vlist);
+        if (!e) { ok = false; break; }
+        h[n++] = e;
+    }
+    expr_free(tt);
+    expr_free(gb);
+    /* Inter-reduce: each element reduced by the others until nothing moves. */
+    for (int round = 0; ok && round < 64; round++) {
+        bool changed = false;
+        for (size_t k = n; ok && k-- > 0;) {
+            if (n < 2) break;
+            Expr** others = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+            size_t w = 0;
+            for (size_t j = 0; j < n; j++) if (j != k) others[w++] = expr_copy(h[j]);
+            Expr* ol = expr_new_function(expr_new_symbol(SYM_List), others, n - 1);
+            free(others);
+            Expr* pr = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialReduce),
+                           (Expr*[]){ expr_copy(h[k]), ol, expr_copy(vlist) }, 3));
+            if (!gb_is_list(pr) || pr->data.function.arg_count != 2) { expr_free(pr); ok = false; break; }
+            Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                          (Expr*[]){ expr_copy(pr->data.function.args[1]) }, 1));
+            expr_free(pr);
+            if (r->type == EXPR_INTEGER && r->data.integer == 0) {
+                expr_free(r);
+                expr_free(h[k]);
+                for (size_t j = k; j + 1 < n; j++) h[j] = h[j + 1];
+                n--;
+                changed = true;
+                continue;
+            }
+            r = gb_monic(r, vlist);
+            if (!r) { ok = false; break; }
+            if (!expr_eq(r, h[k])) { expr_free(h[k]); h[k] = r; changed = true; }
+            else expr_free(r);
+        }
+        if (!changed) break;
+    }
+    /* Leading monomials ascending, the engines' output order. */
+    Expr** keys = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; ok && i < n; i++) {
+        Expr* lr = gb_leading_rule(h[i], vlist);
+        if (!lr) { ok = false; for (size_t j = 0; j < i; j++) expr_free(keys[j]); break; }
+        keys[i] = expr_copy(lr->data.function.args[0]);
+        expr_free(lr);
+    }
+    Expr* out = NULL;
+    if (ok) {
+        for (size_t i = 1; i < n; i++)            /* insertion sort: a basis is short */
+            for (size_t j = i; j > 0 && expr_compare(keys[j - 1], keys[j]) > 0; j--) {
+                Expr* tk = keys[j]; keys[j] = keys[j - 1]; keys[j - 1] = tk;
+                Expr* th = h[j]; h[j] = h[j - 1]; h[j - 1] = th;
+            }
+        for (size_t i = 0; i < n; i++) expr_free(keys[i]);
+        out = expr_new_function(expr_new_symbol(SYM_List), h, n);
+    } else {
+        for (size_t i = 0; i < n; i++) expr_free(h[i]);
+    }
+    free(keys);
+    free(h);
+    expr_free(vlist);
+    return out;
+}
+
 Expr* builtin_groebner_basis(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc >= 1) {
         Expr* ga = gb_with_generalised_atoms(res, builtin_groebner_basis);
         if (ga) return ga;
+    }
+    if (argc == 2) {
+        Expr* gg = gb_gaussian(res);
+        if (gg) return gg;
     }
     if (argc == 0) {
         mth_message("GroebnerBasis", "argt", "GroebnerBasis called with 0 arguments; 2 or 3 expected.");

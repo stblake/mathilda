@@ -8,6 +8,9 @@ and `$SimplifyDebug` tune or trace the search.
 
 ## Simplify
 
+
+**Audit wave 6.** The inexact round trip keeps the base of `E^u` for a non-numeric `u`: `Simplify[E^(0.5 x) c]` is `c E^(0.5 x)` (it was `2.71828^(0.5 x) c`).
+
 **Audit wave 4.** A relation the assumptions settle is decided as Refine decides it (`Simplify[x > 0, x > 1]` is True); `Re`, `Im`, `Conjugate`, `Abs` and `Sign` get the structural assumption rewrites (`Simplify[Abs[x]^2, x in Reals]` is `x^2`); a pure Boolean expression in at most 8 atoms is minimised by its truth table (`Simplify[(a && b) || (a && !b)]` is a).
 
 Performs a sequence of algebraic and other transformations on an expression and

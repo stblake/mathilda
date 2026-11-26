@@ -609,12 +609,20 @@ Expr* sp_thread_listable(const Expr* call) {
             Expr* bc = broadcast_call(call, which, m);
             if (bc) {
                 result = sp_thread_listable(bc);
+                if (result == bc) {           /* settled after its message */
+                    expr_free(result);
+                    result = expr_copy((Expr*)call);
+                }
                 expr_free(bc);
                 goto done;
             }
             char* s = expr_to_string_outputform((Expr*)call);
             mth_message("Thread", "tdlen", "Objects of unequal length in %s cannot be combined.", s);
             free(s);
+            /* The call itself back settles it after the message (eval.c's
+             * listable_sparse contract): NULL let the next step re-ask and
+             * print Thread::tdlen a second time (audit SparseArray#2). */
+            result = expr_copy((Expr*)call);
             goto done;
         }
     }

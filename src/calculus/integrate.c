@@ -3843,6 +3843,158 @@ static Expr* intg_exponent_split(const Expr* f, const Expr* x) {
     return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ kv, gv }, 2);
 }
 
+/* ---- symbolic bounds over a rational integrand's real poles ---- */
+static Expr* isb_f(const char* h, size_t n, Expr** a) {
+    return expr_new_function(expr_new_symbol(h), a, n);
+}
+static Expr* isb_ev(const char* h, size_t n, Expr** a) { return eval_and_free(isb_f(h, n, a)); }
+static bool isb_true(const Expr* e) { return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True; }
+
+/* Cheap structural gate: only numbers, symbols, Plus, Times and integer
+ * powers -- a rational function on its face. */
+static bool isb_rational_shape(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return e->type != EXPR_STRING;
+    if (head_is(e, SYM_Rational) || head_is(e, SYM_Complex)) return true;
+    if (head_is(e, SYM_Power))
+        return e->data.function.arg_count == 2 &&
+               e->data.function.args[1]->type == EXPR_INTEGER &&
+               isb_rational_shape(e->data.function.args[0]);
+    if (!head_is(e, SYM_Plus) && !head_is(e, SYM_Times)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!isb_rational_shape(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Integrate[f, {x, a, b}] with a symbolic bound and a rational f whose
+ * denominator has numeric coefficients: the answer depends on where a and b
+ * lie against f's real poles p1 < ... < pk, so the integral is taken under
+ * the assumption that both bounds lie in one gap (pj, pj+1), and the answer
+ * proved on most gaps is returned with the condition that names them:
+ * Integrate[1/x, {x, a, b}] is ConditionalExpression[-Log[a] + Log[b],
+ * (a < 0 && b < 0) || (a > 0 && b > 0)] (audit Integrate#5: it stayed
+ * unevaluated).  A gap's answer joins another's only when Simplify under that
+ * gap's condition proves the difference 0.  NULL when nothing applies. */
+static Expr* integrate_symbolic_bounds_conditional(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* spec = res->data.function.args[1];
+    if (!head_is(spec, SYM_List) || spec->data.function.arg_count != 3) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* x = spec->data.function.args[0];
+    Expr* bd[2] = { spec->data.function.args[1], spec->data.function.args[2] };
+    if (x->type != EXPR_SYMBOL || !isb_rational_shape(f)) return NULL;
+    bool sym[2];
+    double num[2] = { 0.0, 0.0 };
+    for (int k = 0; k < 2; k++) {
+        if (ies_has(bd[k], x)) return NULL;
+        Expr* nq = isb_ev("NumericQ", 1, (Expr*[]){ expr_copy(bd[k]) });
+        sym[k] = !isb_true(nq);
+        expr_free(nq);
+        if (!sym[k]) {
+            Expr* nv = isb_ev("N", 1, (Expr*[]){ expr_copy(bd[k]) });
+            bool ok = nv && nv->type == EXPR_REAL;
+            if (ok) num[k] = nv->data.real;
+            expr_free(nv);
+            if (!ok) return NULL;                    /* complex or infinite bound */
+        } else if (bd[k]->type != EXPR_SYMBOL) {
+            return NULL;                             /* only a bare symbol bound */
+        }
+    }
+    if (!sym[0] && !sym[1]) return NULL;
+    /* f rational in x, the denominator a polynomial in x alone. */
+    Expr* tg  = isb_ev("Together", 1, (Expr*[]){ expr_copy(f) });
+    Expr* den = isb_ev("Denominator", 1, (Expr*[]){ expr_copy(tg) });
+    Expr* num_ = isb_ev("Numerator", 1, (Expr*[]){ tg });
+    Expr* pq1 = isb_ev("PolynomialQ", 2, (Expr*[]){ expr_copy(num_), expr_copy(x) });
+    Expr* vars = isb_ev("Variables", 1, (Expr*[]){ expr_copy(den) });
+    bool rational = isb_true(pq1) && head_is(vars, SYM_List) &&
+                    vars->data.function.arg_count == 1 && expr_eq(vars->data.function.args[0], x);
+    expr_free(pq1); expr_free(vars); expr_free(num_);
+    if (!rational) { expr_free(den); return NULL; }
+    for (int k = 0; k < 2; k++)
+        if (sym[k] && ies_has(f, bd[k])) { expr_free(den); return NULL; }
+    Expr* eq = isb_f("Equal", 2, (Expr*[]){ den, expr_new_integer(0) });
+    Expr* sol = isb_ev("Solve", 3, (Expr*[]){ eq, expr_copy(x), expr_new_symbol(SYM_Reals) });
+    Expr* roots = isb_ev("DeleteDuplicates", 1, (Expr*[]){
+                      isb_ev("ReplaceAll", 2, (Expr*[]){ expr_copy(x), sol }) });
+    if (!head_is(roots, SYM_List) || roots->data.function.arg_count == 0 ||
+        roots->data.function.arg_count > 4) { expr_free(roots); return NULL; }
+    size_t k = roots->data.function.arg_count;
+    Expr* sorted = isb_ev("SortBy", 2, (Expr*[]){ roots, expr_new_symbol("N") });
+    if (!head_is(sorted, SYM_List) || sorted->data.function.arg_count != k) { expr_free(sorted); return NULL; }
+    double pv[4];
+    for (size_t i = 0; i < k; i++) {
+        Expr* nv = isb_ev("N", 1, (Expr*[]){ expr_copy(sorted->data.function.args[i]) });
+        bool ok = nv && nv->type == EXPR_REAL;
+        if (ok) pv[i] = nv->data.real;
+        expr_free(nv);
+        if (!ok) { expr_free(sorted); return NULL; }
+    }
+    /* Gap j is (p_j, p_{j+1}), p_0 = -oo, p_{k+1} = +oo. */
+    size_t ng = k + 1;
+    Expr** cond = calloc(ng, sizeof(Expr*));
+    Expr** val  = calloc(ng, sizeof(Expr*));
+    for (size_t j = 0; j < ng; j++) {
+        bool fits = true;
+        for (int q = 0; q < 2 && fits; q++)
+            if (!sym[q]) fits = (j == 0 || num[q] > pv[j - 1]) && (j == k || num[q] < pv[j]);
+        if (!fits) continue;
+        Expr* cs[4]; size_t nc = 0;
+        for (int q = 0; q < 2; q++) {
+            if (!sym[q]) continue;
+            if (j > 0)  cs[nc++] = isb_f("Greater", 2, (Expr*[]){ expr_copy(bd[q]), expr_copy(sorted->data.function.args[j - 1]) });
+            if (j < k)  cs[nc++] = isb_f("Less", 2, (Expr*[]){ expr_copy(bd[q]), expr_copy(sorted->data.function.args[j]) });
+        }
+        Expr* c = (nc == 1) ? cs[0] : isb_f("And", nc, cs);
+        Expr* opt = isb_f("Rule", 2, (Expr*[]){ expr_new_symbol(SYM_Assumptions), expr_copy(c) });
+        /* Quiet: a gap where the integral diverges is not the user's answer. */
+        Expr* r = isb_ev("Quiet", 1, (Expr*[]){
+                      isb_f("Integrate", 3, (Expr*[]){ expr_copy(f), expr_copy(spec), opt }) });
+        if (!r || head_is(r, SYM_Integrate) || ies_has(r, x) ||
+            head_is(r, SYM_ConditionalExpression)) {
+            if (r) expr_free(r);
+            expr_free(c);
+            continue;
+        }
+        cond[j] = c;
+        val[j] = r;
+    }
+    expr_free(sorted);
+    /* The candidate answer proved on the most gaps; ties go to the higher gap. */
+    Expr* out = NULL;
+    size_t best = ng, best_cover = 0;
+    bool* covers = calloc(ng * ng, sizeof(bool));
+    for (size_t i = ng; i-- > 0;) {
+        if (!val[i]) continue;
+        size_t cover = 0;
+        for (size_t j = 0; j < ng; j++) {
+            if (!val[j]) continue;
+            bool same = (i == j) || expr_eq(val[i], val[j]);
+            if (!same) {
+                Expr* d = isb_f("Plus", 2, (Expr*[]){ expr_copy(val[i]),
+                              isb_f("Times", 2, (Expr*[]){ expr_new_integer(-1), expr_copy(val[j]) }) });
+                Expr* z = isb_ev("Simplify", 2, (Expr*[]){ d, expr_copy(cond[j]) });
+                same = z && z->type == EXPR_INTEGER && z->data.integer == 0;
+                expr_free(z);
+            }
+            covers[i * ng + j] = same;
+            if (same) cover++;
+        }
+        if (cover > best_cover) { best_cover = cover; best = i; }
+    }
+    if (best < ng) {
+        Expr** cs = malloc(sizeof(Expr*) * ng);
+        size_t nc = 0;
+        for (size_t j = 0; j < ng; j++)
+            if (covers[best * ng + j]) cs[nc++] = expr_copy(cond[j]);
+        Expr* c = (nc == 1) ? cs[0] : isb_f("Or", nc, cs);
+        free(cs);
+        out = isb_ev("ConditionalExpression", 2, (Expr*[]){ expr_copy(val[best]), c });
+    }
+    for (size_t j = 0; j < ng; j++) { if (cond[j]) expr_free(cond[j]); if (val[j]) expr_free(val[j]); }
+    free(cond); free(val); free(covers);
+    return out;
+}
+
 /* integrate_definite, bracketed by the definite-level nonelem deferral (see
  * g_integrate_definite_depth).  Only the outermost definite frame decides: a
  * nested definite sub-integral's decline is not the user's answer. */
@@ -3884,6 +4036,8 @@ static Expr* integrate_definite_scoped(Expr* res) {
         }
         if (kg) expr_free(kg);
     }
+    if (!r && g_integrate_definite_depth == 1 && res->type == EXPR_FUNCTION)
+        r = integrate_symbolic_bounds_conditional(res);
     g_integrate_definite_depth--;
     if (g_integrate_definite_depth == 0) {
         char* fs = g_integrate_definite_pending_f;
@@ -4210,6 +4364,97 @@ static Expr* integrate_strip_generate_conditions(Expr* res) {
     return r;
 }
 
+/* ---- real form of a complex-exponential antiderivative ---- */
+static bool irf_has_complex(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Complex)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (irf_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+static bool irf_has_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (irf_has_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
+/* Every E^(p + I q) in e (p, q the parts of a polynomial exponent with
+ * numeric coefficients, so p + I q is the exponent identically) written
+ * E^p (Cos[q] + I Sin[q]) -- an identity for every complex value of the
+ * variables.  *changed is set when one was rewritten. */
+static Expr* irf_split_exp(const Expr* e, bool* changed) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        e->data.function.args[0]->data.symbol.name == SYM_E &&
+        irf_has_complex(e->data.function.args[1])) {
+        Expr* ex = e->data.function.args[1];
+        Expr* p = eval_and_free(expr_new_function(expr_new_symbol("ComplexExpand"),
+                      (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Re), (Expr*[]){ expr_copy(ex) }, 1) }, 1));
+        Expr* q = eval_and_free(expr_new_function(expr_new_symbol("ComplexExpand"),
+                      (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Im), (Expr*[]){ expr_copy(ex) }, 1) }, 1));
+        Expr* chk = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){
+            expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_copy(p),
+                expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_symbol(SYM_I), expr_copy(q) }, 2),
+                expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_integer(-1), expr_copy(ex) }, 2) }, 3) }, 1));
+        bool ok = chk && chk->type == EXPR_INTEGER && chk->data.integer == 0 &&
+                  !irf_has_complex(p) && !irf_has_complex(q) &&
+                  !irf_has_head(p, SYM_Re) && !irf_has_head(q, SYM_Im);
+        expr_free(chk);
+        if (ok) {
+            *changed = true;
+            Expr* trig = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Cos), (Expr*[]){ expr_copy(q) }, 1),
+                expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_symbol(SYM_I),
+                    expr_new_function(expr_new_symbol(SYM_Sin), (Expr*[]){ expr_copy(q) }, 1) }, 2) }, 2);
+            Expr* out = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_new_symbol(SYM_E), p }, 2),
+                trig }, 2);
+            expr_free(q);
+            return out;
+        }
+        expr_free(p); expr_free(q);
+        return expr_copy((Expr*)e);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = irf_split_exp(e->data.function.args[i], changed);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+/* An antiderivative of a real-looking integrand (no I) that came back in
+ * complex exponentials -- Integrate[E^x Sin[x], x] was
+ * (-1/4 + I/4) E^((1 - I) x) + (-1/4 - I/4) E^((1 + I) x) -- is put back in
+ * real form, 1/2 E^x (-Cos[x] + Sin[x]) (audit DSolve#4, whose linear
+ * first-order quadrature integrates exactly that).  Only an exact identity is
+ * applied, and only when every I cancels.  Consumes r. */
+static Expr* integrate_real_exp_form(const Expr* f, Expr* r) {
+    if (!r || irf_has_complex(f) || !irf_has_complex(r) || head_is(r, SYM_Integrate)) return r;
+    if (leaf_count_internal(r, true) > 400) return r;
+    bool changed = false;
+    Expr* sp = irf_split_exp(r, &changed);
+    if (!changed) { expr_free(sp); return r; }
+    Expr* ex = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){ sp }, 1));
+    if (!ex || irf_has_complex(ex)) { if (ex) expr_free(ex); return r; }
+    Expr* simp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Simplify), (Expr*[]){ expr_copy(ex) }, 1));
+    bool phase = simp && ((irf_has_head(simp, SYM_ArcTan) && !irf_has_head(ex, SYM_ArcTan)) ||
+                          irf_has_complex(simp));
+    Expr* out;
+    if (simp && !phase) { out = simp; expr_free(ex); }
+    else {
+        if (simp) expr_free(simp);
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together), (Expr*[]){ ex }, 1));
+    }
+    expr_free(r);
+    return out;
+}
+
 Expr* builtin_integrate(Expr* res) {
     {
         Expr* gc = integrate_strip_generate_conditions(res);
@@ -4236,7 +4481,11 @@ Expr* builtin_integrate(Expr* res) {
             return call;       /* re-evaluated by the evaluator with the zero simplified */
         }
     }
-    return stage_contain_overflow(builtin_integrate_body(res), overflow_before);
+    Expr* out = stage_contain_overflow(builtin_integrate_body(res), overflow_before);
+    if (out && res->type == EXPR_FUNCTION && res->data.function.arg_count == 2 &&
+        res->data.function.args[1]->type == EXPR_SYMBOL)
+        out = integrate_real_exp_form(res->data.function.args[0], out);
+    return out;
 }
 
 /* Does `e` still hold an unevaluated Integrate (a sub-integral that failed)? */
@@ -4804,6 +5053,9 @@ static Expr* builtin_integrate_body(Expr* res) {
     if (method_sub) expr_free(method_sub);
 
     if (inexact.has_inexact && result) {
+        /* common_numericalize_result keeps the base of E^u: Integrate[
+         * E^(-0.5 x), x] is -2. E^(-0.5 x), not -2./2.71828^(0.5 x) (audit
+         * DSolve#1). */
         Expr* numeric = common_numericalize_result(result, inexact.min_bits);
         expr_free(result);
         result = numeric;

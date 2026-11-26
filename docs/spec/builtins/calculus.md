@@ -15,6 +15,9 @@ below.
 
 ## D
 
+
+**Audit wave 6.** A symbolic order keeps the x-free terms: `D[c, {x, n}]` is `c KroneckerDelta[n]`, so `D[x^2 + c, {x, n}] /. n -> 0` is `c + x^2`.
+
 Partial derivative.
 - `D[f, x]` -- derivative of `f` with respect to `x` (treating all
   other symbols as constants).
@@ -995,6 +998,9 @@ Consistency with Cauchy's theorem: for a contour enclosing only the pole,
 
 ## DSolve (symbolic differential equations)
 
+**Audit wave 6.** `GeneratedParameters -> f` with a non-symbol `f` (`K[# + 1] &`) names the constants `f[1], f[2], ...`: `DSolve[y'[x] == y[x], y[x], x, GeneratedParameters -> (K[#+1]&)]` is `{{y[x] -> E^x K[2]}}`. An inexact coefficient no longer leaves `2.71828^(...)` or `0. + C[1]`: `DSolve[y'[x] == 0.5 y[x], y[x], x]` is `{{y[x] -> E^(0.5 x) C[1]}}`. Sinusoidal forcing gives a real trigonometric answer.
+
+
 `DSolve[eqn, y, x]` solves an ordinary differential equation for the function
 `y` with independent variable `x`, returning a rule list
 `{{y -> Function[{x}, ...]}}`. Writing the dependent function applied,
@@ -1341,6 +1347,9 @@ c0 Exp[Σ θ_m(t) x^m]. The family reduces the PDE to an ODE in t.
   Gaussians, Lamb–Oseen, Taylor–Green, Stokes I/II.
 
 ## Integrate (rational-function integration, Phase 1-8d)
+
+**Audit wave 6.** (1) A rational integrand with numeric real poles and a symbolic bound gives a `ConditionalExpression`: the integral is taken with both bounds in each gap between poles, and the answer proved on most gaps (another gap joins when `Simplify` under its condition proves the difference 0) is returned with the condition naming them -- `Integrate[1/x, {x, a, b}]` is `ConditionalExpression[-Log[a] + Log[b], a < 0 && b < 0 || a > 0 && b > 0]`. (2) An antiderivative of an integrand without `I` that comes back in complex exponentials is rewritten exactly (`E^(p + I q) = E^p (Cos[q] + I Sin[q])`) when every `I` cancels: `Integrate[E^x Sin[x], x]` is `1/2 E^x (-Cos[x] + Sin[x])`. (3) The inexact round trip keeps the base of `E^u`: `Integrate[E^(-0.5 x), x]` is `-2. E^(-0.5 x)`.
+
 
 **Audit wave 4.** `GenerateConditions -> False` drops the condition of a `ConditionalExpression` answer (`Integrate[E^(-a x), {x, 0, Infinity}, GenerateConditions -> False]` is `1/a`); `True`/`Automatic` keep the default. The CRC table entries for `ArcCsch[a x]`, `x ArcCsch[a x]`, `x^n ArcCsch[a x]` and `ArcCsch[a x]/x^2` now hold for a x < 0 too (they were correct for a x > 0 only).
 
@@ -6738,6 +6747,9 @@ Out[8]= {x -> 1.0}
 ```
 
 ## Minimize / Maximize
+
+**Audit wave 6.** A radical objective that is rational in the adjoined radicals takes the rational reformulation: `Minimize[(x^2 + 3)/Sqrt[x^2 + 2], x]` is `{3/Sqrt[2], {x -> 0}}`. A univariate `Max` / `Min` (`(a + b +- Abs[a - b])/2`) or a continuous two-piece `Piecewise` objective is rewritten in `Abs` and solved by the breakpoint method: `Maximize[Max[-x^2, -1], x]` is `{0, {x -> 0}}`, `Maximize[Piecewise[{{x, x < 1}}, 2 - x], x]` is `{1, {x -> 1}}`.
+
 
 **Audit wave 4.** `Minimize[{f}, x]` and `Minimize[{f, True}, x]` are the unconstrained problem; `Minimize[{f, False}, x]` is `Minimize::infeas` with `{Infinity, {x -> Indeterminate}}` (`-Infinity` for `Maximize`).
 

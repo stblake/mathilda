@@ -5040,11 +5040,14 @@ void info_init(void) {
         "PolynomialMod[poly, m]\n"
         "\treduces poly modulo m.  If m is an integer, each coefficient of\n"
         "\tpoly is reduced to a canonical residue in {0, ..., m-1}.  If m is a\n"
-        "\tpolynomial, poly is reduced modulo m as polynomials over the\n"
-        "\trationals (in contrast to PolynomialRemainder, the leading\n"
-        "\tcoefficient of m is not normalised).\n"
+        "\tpolynomial, multiples of m are subtracted without ever dividing:\n"
+        "\ta step needs the leading coefficient of m to divide the term's\n"
+        "\tcoefficient (unlike PolynomialRemainder), so PolynomialMod[x^3, 2x - 1]\n"
+        "\tis x^3.\n"
         "PolynomialMod[poly, {m1, m2, ...}]\n"
-        "\treduces modulo each mi in turn.");
+        "\treduces modulo each mi in turn.  Attributes: Protected (not\n"
+        "\tListable, so a List of moduli is one modulus set); a List, equation\n"
+        "\tor logical combination as poly is threaded over.");
     symtab_set_docstring("FactorSquareFree",
         "FactorSquareFree[poly]\n"
         "\twrites poly as a product of pairwise coprime square-free factors, each\n"

@@ -24,6 +24,7 @@
 #include "../expr.h"
 #include "../arithmetic.h"
 #include "../message.h"         /* nested sub-solves run as a muted probe region */
+#include "../common.h"          /* head_is */
 
 #include <stdlib.h>
 #include <string.h>
@@ -370,9 +371,63 @@ static bool ds_autonomous_with_relations(DSolveProblem* P) {
     return xfree;
 }
 
+/* GeneratedParameters -> f with f not a symbol (K[# + 1] &): the methods name
+ * their constants head[k], so the call is solved with a private head and each
+ * private[k] is then replaced by f[k], evaluated -- DSolve[y'[x] == y[x], y[x],
+ * x, GeneratedParameters -> (K[# + 1] &)] is {{y[x] -> E^x K[2]}} (audit
+ * DSolve#3: the option was ignored and C[1] came back).  NULL when the option
+ * is absent or a symbol. */
+static Expr* ds_generated_parameters_function(Expr* res, bool* handled) {
+    *handled = false;
+    size_t argc = res->data.function.arg_count;
+    size_t at = argc;
+    for (size_t i = 3; i < argc; i++) {
+        Expr* o = res->data.function.args[i];
+        if (head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) {
+            if (o->data.function.arg_count == 2 && o->data.function.args[0]->type == EXPR_SYMBOL &&
+                o->data.function.args[0]->data.symbol.name == SYM_GeneratedParameters) { at = i; break; }
+        }
+    }
+    if (at == argc) return NULL;
+    Expr* fn = eval_and_free(expr_copy(res->data.function.args[at]->data.function.args[1]));
+    if (!fn || fn->type == EXPR_SYMBOL) { if (fn) expr_free(fn); return NULL; }
+    *handled = true;
+    Expr* gp = expr_new_symbol(intern_symbol("DSolve`Private`gp"));
+    Expr** a = malloc(sizeof(Expr*) * argc);
+    for (size_t i = 0; i < argc; i++)
+        a[i] = (i == at)
+            ? expr_new_function(expr_new_symbol(SYM_Rule),
+                  (Expr*[]){ expr_new_symbol(SYM_GeneratedParameters), expr_copy(gp) }, 2)
+            : expr_copy(res->data.function.args[i]);
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+    free(a);
+    Expr* r = builtin_dsolve(call);
+    expr_free(call);
+    Expr* out = NULL;
+    if (r) {
+        /* gp[k_] :> fn[k] */
+        Expr* k = expr_new_symbol(intern_symbol("DSolve`Private`gpk"));
+        Expr* patt = expr_new_function(expr_copy(gp), (Expr*[]){
+            expr_new_function(expr_new_symbol(SYM_Pattern), (Expr*[]){ expr_copy(k),
+                expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2) }, 1);
+        Expr* rhs = expr_new_function(expr_copy(fn), (Expr*[]){ expr_copy(k) }, 1);
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_RuleDelayed), (Expr*[]){ patt, rhs }, 2);
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll), (Expr*[]){ r, rule }, 2));
+        expr_free(k);
+    }
+    expr_free(gp);
+    expr_free(fn);
+    return out;
+}
+
 Expr* builtin_dsolve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 3) return NULL;
+    {
+        bool handled = false;
+        Expr* g = ds_generated_parameters_function(res, &handled);
+        if (handled) return g;
+    }
 
     uint64_t heq = expr_hash(res->data.function.args[0]);
     uint64_t hv  = expr_hash(res->data.function.args[1]);

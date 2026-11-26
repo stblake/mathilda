@@ -16,6 +16,8 @@
  * formulas.
  */
 Expr* builtin_powerexpand(Expr* res);
+/* Log[q] for every rational q in e split over q's prime factors (borrows e). */
+Expr* power_expand_split_log_rationals(const Expr* e);
 void  expand_power_init(void);
 
 #endif /* EXPAND_POWER_H */

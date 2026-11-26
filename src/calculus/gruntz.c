@@ -31,6 +31,7 @@
 #include "zero_test.h"
 #include "numeric.h"
 #include "arithmetic.h"    /* expr_numeric_sign */
+#include "expand_power.h"  /* power_expand_split_log_rationals */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1446,7 +1447,13 @@ static Expr* subst_eval(const Expr* e, const Expr* from, Expr* to /*owned*/) {
 static Expr* gz_powerexpand(Expr* e, const Expr* x) {
     Expr* wlist = expr_new_function(mk_sym("List"),
                     (Expr*[]){ expr_copy((Expr*)x) }, 1);
-    return simp(mk_fn2("PowerExpand", e, wlist));
+    Expr* pe = simp(mk_fn2("PowerExpand", e, wlist));
+    /* The restricted form leaves an x-free Log[12]; the mrv recursion wants
+     * the constants split as the unrestricted form does (Log[2], not
+     * -Log[1/2]). */
+    Expr* out = power_expand_split_log_rationals(pe);
+    expr_free(pe);
+    return out;
 }
 
 /* Pull the x-free part of a constant-base exponent out as a constant factor:

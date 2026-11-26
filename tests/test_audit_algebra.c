@@ -142,6 +142,16 @@ static void test_wave5_g5(void) {
 }
 /* ---- Wave 5 G5 END ---- */
 
+/* ---- Wave 6 G3 BEGIN ---- */
+static void test_wave6_g3(void) {
+    audit_chk("MinimalPolynomial#1", "MinimalPolynomial[Root[#^2 - Sqrt[2] &, 2], x]", "-2 + x^4");
+    audit_chk("MinimalPolynomial#1", "MinimalPolynomial[Root[#^3 - Sqrt[2] # - 1 &, 1], x]", "1 - 2 x^2 - 2 x^3 + x^6");
+    audit_chk("NumberFieldIntegralBasis#1", "Length[TimeConstrained[NumberFieldIntegralBasis[2^(1/32)], 10]]", "32");
+    audit_chk("NumberFieldIntegralBasis#1", "TimeConstrained[NumberFieldIntegralBasis[2^(1/32)][[2]], 10]", "AlgebraicNumber[Root[-2 + #1^32 &, 2], {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}]");
+    audit_chk("NumberFieldIntegralBasis#1", "NumberFieldIntegralBasis[2^(1/4)]", "{1, AlgebraicNumber[Root[-2 + #1^4 &, 2], {0, 1, 0, 0}], AlgebraicNumber[Root[-2 + #1^4 &, 2], {0, 0, 1, 0}], AlgebraicNumber[Root[-2 + #1^4 &, 2], {0, 0, 0, 1}]}");
+}
+/* ---- Wave 6 G3 END ---- */
+
 int main(void) {
     audit_init();
     TEST(test_algebraicintegerq_high_degree);
@@ -149,5 +159,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_algebra);
     TEST(test_wave5_g5);
+    TEST(test_wave6_g3);
     return audit_finish("audit_algebra");
 }

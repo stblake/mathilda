@@ -2457,6 +2457,43 @@ rat_imag_fallthrough: ;
                     rest_n++;
                 }
             }
+            /* A negative exact coefficient c beside known-positive factors:
+             * (c w)^(p/q) = (-1)^(p/q) ((-c) w)^(p/q) on the principal branch,
+             * since c w and -1 have the same argument Pi.  So Sqrt[-Pi^2] is
+             * I Pi and Sqrt[-4 Pi] is 2 I Sqrt[Pi], as in the reference (audit
+             * MatrixExp#2: E^Sqrt[-Pi^2] was left in a matrix exponential). */
+            {
+                int64_t neg_i = -1;
+                bool rest_pos = true;
+                for (size_t i = 0; i < bc && rest_pos; i++) {
+                    Expr* f = base->data.function.args[i];
+                    bool neg = (f->type == EXPR_INTEGER && f->data.integer < 0) ||
+                               (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                                f->data.function.head->data.symbol.name == SYM_Rational &&
+                                f->data.function.args[0]->type == EXPR_INTEGER &&
+                                f->data.function.args[0]->data.integer < 0);
+                    if (neg && neg_i < 0) neg_i = (int64_t)i;
+                    else if (!is_known_positive_pwr(f)) rest_pos = false;
+                }
+                if (neg_i >= 0 && rest_pos && bc >= 2) {
+                    Expr** pa = malloc(sizeof(Expr*) * bc);
+                    for (size_t i = 0; i < bc; i++) {
+                        Expr* f = base->data.function.args[i];
+                        pa[i] = (int64_t)i == neg_i
+                            ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                  (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2))
+                            : expr_copy(f);
+                    }
+                    Expr* pos_base = expr_new_function(expr_new_symbol(SYM_Times), pa, bc);
+                    free(pa);
+                    Expr* sign_pow = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(exp) }, 2);
+                    Expr* pos_pow = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ pos_base, expr_copy(exp) }, 2);
+                    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ sign_pow, pos_pow }, 2));
+                }
+            }
             /* A negative exact coefficient c != -1 (one, among other factors):
              * (c w)^(p/q) = (-c)^(p/q) (-w)^(p/q), since -c is a positive real,
              * so Sqrt[-4 (1 - x^2)] is 2 Sqrt[-1 + x^2], as in the reference.

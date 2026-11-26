@@ -209,6 +209,45 @@ static const char* mp_imag(AtomCtx* c) {
 
 static Expr* mp_walk(const Expr* e, AtomCtx* c);
 
+/* A Root's defining polynomial in `var` with every coefficient that is not a
+ * rational number replaced by its mp_walk value (auxiliaries with their own
+ * relations).  Sums, products and non-negative integer powers are mapped;
+ * anything else in var fails the walk. */
+static Expr* mp_walk_rel_coeffs(const Expr* e, const char* var, AtomCtx* c) {
+    if (c->failed || !e) { c->failed = true; return NULL; }
+    if (!mp_has_symbol(e, var)) {
+        if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || head_is(e, "Rational"))
+            return expr_copy((Expr*)e);
+        return mp_walk(e, c);
+    }
+    if (e->type == EXPR_SYMBOL) return expr_copy((Expr*)e);
+    if (head_is(e, "Plus") || head_is(e, "Times")) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            a[i] = mp_walk_rel_coeffs(e->data.function.args[i], var, c);
+            if (c->failed) {
+                for (size_t j = 0; j < i; j++) expr_free(a[j]);
+                if (a[i]) expr_free(a[i]);
+                free(a);
+                return NULL;
+            }
+        }
+        Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+        free(a);
+        return eval_and_free(out);
+    }
+    if (head_is(e, "Power") && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER &&
+        e->data.function.args[1]->data.integer >= 0) {
+        Expr* b = mp_walk_rel_coeffs(e->data.function.args[0], var, c);
+        if (c->failed) { if (b) expr_free(b); return NULL; }
+        return internal_power((Expr*[]){ b, expr_copy(e->data.function.args[1]) }, 2);
+    }
+    c->failed = true;
+    return NULL;
+}
+
 /* Introduce t with t^q = B^p (B already a value expression, consumed). */
 static Expr* mp_make_radical(Expr* B, int64_t p, int64_t q, AtomCtx* c) {
     char* nm = mp_fresh_name(c);
@@ -477,7 +516,11 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
         const Expr* fn = A[0];
         if (!head_is(fn, "Function")) { c->failed = true; return NULL; }
         size_t fnn = fn->data.function.arg_count;
-        char* nm = mp_fresh_name(c);
+        /* The root's own variable is named only after its coefficients are
+         * walked (below), so it is introduced after their auxiliaries and is
+         * eliminated before them; a placeholder stands in until then. */
+        char* nm = malloc(16);
+        memcpy(nm, "$mproot$", 9);
         Expr* rel = NULL;
         if (fnn == 1) {
             rel = mp_subst_slot(fn->data.function.args[0], nm);
@@ -515,8 +558,19 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
             if (nq) expr_free(nq);
             if (!numeric) { expr_free(rel); free(nm); c->failed = true; return NULL; }
         }
-        mp_store(c, nm, rel);
-        return expr_new_symbol(nm);
+        /* An algebraic coefficient (Root[#^2 - Sqrt[2] &, 2]) becomes its own
+         * auxiliary, so the relation is a polynomial over Q in the auxiliaries
+         * and the elimination ends in an integer polynomial (audit
+         * MinimalPolynomial#1: the answer was -Sqrt[2] + x^2). */
+        Expr* rel_q = mp_walk_rel_coeffs(rel, nm, c);
+        expr_free(rel);
+        if (c->failed || !rel_q) { if (rel_q) expr_free(rel_q); free(nm); c->failed = true; return NULL; }
+        char* fresh = mp_fresh_name(c);
+        Expr* rel_n = mp_subst_symbol(rel_q, nm, fresh);
+        expr_free(rel_q);
+        free(nm);
+        mp_store(c, fresh, rel_n);
+        return expr_new_symbol(fresh);
     }
 
     c->failed = true;

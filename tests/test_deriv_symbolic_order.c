@@ -100,12 +100,14 @@ static void test_trig_symbolic_order(void) {
 
 /* --- Algorithmic generality (Plus / Times pull-out) ----------------- */
 static void test_symbolic_order_distributes(void) {
-    /* Constant: 0 for any k >= 1. */
-    assert_eval_eq("D[5, {x, k}]", "0", 0);
-    assert_eval_eq("D[Pi, {x, k}]", "0", 0);
+    /* Constant: c KroneckerDelta[k] -- the zeroth derivative is c itself
+     * (audit D#3), 0 for any k >= 1. */
+    assert_eval_eq("D[5, {x, k}]", "5 KroneckerDelta[k]", 0);
+    assert_eval_eq("D[Pi, {x, k}]", "Pi KroneckerDelta[k]", 0);
+    assert_eval_eq("D[5, {x, k}] /. k -> 3", "0", 0);
     /* Plus: distributes additively. */
     assert_eval_eq("D[a*x^n + b, {x, k}]",
-                   "a x^(-k + n) FactorialPower[n, k]", 0);
+                   "a x^(-k + n) FactorialPower[n, k] + b KroneckerDelta[k]", 0);
     /* Multiple Power-in-x summands. */
     assert_eval_eq("D[x^n + x^m, {x, k}]",
                    "x^(-k + m) FactorialPower[m, k]"

@@ -3982,9 +3982,51 @@ static Expr* polygcd_rationals(Expr* res) {
     return r;
 }
 
+/* PolynomialGCD / PolynomialLCM over symbolic-exponent generators: x^(2a)
+ * is (x^a)^2, as Factor and Cancel already read it (expsplit.c), so
+ * PolynomialLCM[x^a - 1, x^(2a) - 1] is -1 + x^(2a) and PolynomialLCM[x^a,
+ * x^(2a)] is x^(2a) -- the opaque reading took x^a and x^(2a) for unrelated
+ * kernels and returned a common multiple that was not least (audit
+ * PolynomialLCM#3).  Only the option-free call; NULL when no argument carries
+ * such a power. */
+static Expr* poly_gcdlcm_over_exponent_generators(Expr* res, const char* head) {
+    size_t n = res->data.function.arg_count;
+    if (n < 2) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+            (a->data.function.head->data.symbol.name == SYM_Rule ||
+             a->data.function.head->data.symbol.name == SYM_RuleDelayed))
+            return NULL;
+    }
+    Expr** ca = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) ca[i] = expr_copy(res->data.function.args[i]);
+    Expr* all = expr_new_function(expr_new_symbol(SYM_List), ca, n);
+    free(ca);
+    ExpSplitTab st = {0};
+    Expr* split = expsplit_abstract(all, &st);
+    expr_free(all);
+    if (!split) { expsplit_free(&st); return NULL; }
+    Expr* out = NULL;
+    if (split->type == EXPR_FUNCTION && split->data.function.arg_count == n) {
+        Expr** fa = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) fa[i] = expr_copy(split->data.function.args[i]);
+        Expr* f = eval_and_free(expr_new_function(expr_new_symbol(head), fa, n));
+        free(fa);
+        if (f && !(f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                   f->data.function.head->data.symbol.name == head))
+            out = expsplit_restore(f, &st);
+        else if (f) expr_free(f);
+    }
+    expr_free(split);
+    expsplit_free(&st);
+    return out;
+}
+
 Expr* builtin_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     { Expr* q = polygcd_rationals(res); if (q) return q; }
+    { Expr* g = poly_gcdlcm_over_exponent_generators(res, SYM_PolynomialGCD); if (g) return g; }
 
     /* Modulus -> p asks for the GCD in F_p[x], and it was being IGNORED: the
      * option fell through as an unrecognised trailing Rule and the answer came
@@ -4732,6 +4774,10 @@ static Expr* polynomiallcm_kernels(Expr* res, size_t n) {
 }
 
 Expr* builtin_polynomiallcm(Expr* res) {
+    if (res->type == EXPR_FUNCTION) {
+        Expr* g = poly_gcdlcm_over_exponent_generators(res, SYM_PolynomialLCM);
+        if (g) return g;
+    }
     Expr* r = polynomiallcm_core(res);
     if (r) return r;
     /* every path declined: coefficients rational in a parameter (no options) */
@@ -7392,6 +7438,93 @@ static Expr* poly_term_mod_int(const Expr* term, const Expr* m) {
 /* repeatedly subtract scaled copies of `m` to kill any term whose     */
 /* main-variable degree is at least deg(m) -- the polynomial analogue  */
 /* of integer modular reduction.                                       */
+/* LCM of the denominators of the rational numbers in a polynomial `e`
+ * (Power exponents skipped), accumulated into `acc`. */
+static void pm_den_lcm(const Expr* e, mpz_t acc) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        mpz_t d; mpz_init(d);
+        expr_to_mpz(e->data.function.args[1], d);
+        mpz_abs(d, d);
+        mpz_lcm(acc, acc, d);
+        mpz_clear(d);
+        return;
+    }
+    bool is_pow = h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power;
+    size_t n = is_pow ? 1 : e->data.function.arg_count;
+    for (size_t i = 0; i < n && i < e->data.function.arg_count; i++)
+        pm_den_lcm(e->data.function.args[i], acc);
+}
+
+/* True when every rational number in `e` becomes an integer times `D`. */
+static bool pm_integral_after_scale(const Expr* e, const mpz_t D) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        mpz_t d; mpz_init(d);
+        expr_to_mpz(e->data.function.args[1], d);
+        bool ok = mpz_divisible_p(D, d) != 0;
+        mpz_clear(d);
+        return ok;
+    }
+    bool is_pow = h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power;
+    size_t n = is_pow ? 1 : e->data.function.arg_count;
+    for (size_t i = 0; i < n && i < e->data.function.arg_count; i++)
+        if (!pm_integral_after_scale(e->data.function.args[i], D)) return false;
+    return true;
+}
+
+/* PolynomialMod never divides (the reference's contract: "unlike
+ * PolynomialRemainder, PolynomialMod never performs divisions"): a reduction
+ * step subtracts q x^k m with q the quotient of the term's coefficient by m's
+ * leading coefficient when that needs no new denominator -- every rational in
+ * q integral against the denominators the coefficient already had -- and
+ * otherwise q's integer part toward zero.  So PolynomialMod[x^3, 2x - 1] is
+ * x^3 and PolynomialMod[2x^2 + 1, 2x + 1] is 1 - x (audit PolynomialMod#4:
+ * they were 1/8 and 3/2, remainders over Q). */
+/* Each numeric coefficient of polynomial e replaced by its integer part
+ * toward zero (IntegerPart), evaluated; a coefficient that is not a rational
+ * number gives NULL. */
+static Expr* pm_trunc_coeffs(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return expr_copy((Expr*)e);
+    if (e->type == EXPR_SYMBOL) return expr_copy((Expr*)e);
+    if (e->type != EXPR_FUNCTION) return NULL;
+    const char* h = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : NULL;
+    if (h == SYM_Rational)
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_IntegerPart),
+                                               (Expr*[]){ expr_copy((Expr*)e) }, 1));
+    if (h == SYM_Power) return expr_copy((Expr*)e);       /* a monomial factor */
+    if (h == SYM_Plus || h == SYM_Times) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            const Expr* f = e->data.function.args[i];
+            /* in a product only the numeric factor is a coefficient */
+            bool numeric = f->type == EXPR_INTEGER || f->type == EXPR_BIGINT ||
+                (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                 f->data.function.head->data.symbol.name == SYM_Rational);
+            a[i] = (h == SYM_Times && !numeric) ? expr_copy((Expr*)f) : pm_trunc_coeffs(f);
+            if (!a[i]) { for (size_t j = 0; j < i; j++) expr_free(a[j]); free(a); return NULL; }
+        }
+        Expr* out = eval_and_free(expr_new_function(expr_copy(e->data.function.head), a, n));
+        free(a);
+        return out;
+    }
+    return NULL;
+}
+
+static bool pm_quotient_division_free(const Expr* q, const Expr* term_coeff) {
+    mpz_t D; mpz_init_set_ui(D, 1);
+    pm_den_lcm(term_coeff, D);
+    bool ok = pm_integral_after_scale(q, D);
+    mpz_clear(D);
+    return ok;
+}
+
 static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
     if (m->type == EXPR_INTEGER || m->type == EXPR_BIGINT) {
         /* |m|; INT64_MIN's magnitude is a BigInt. */
@@ -7497,6 +7630,17 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
             if (term_deg >= d) {
                 Expr* term_coeff = get_coeff(term, main_var, term_deg);
                 Expr* q = use_integer_div ? integer_poly_div(term_coeff, lc, temp_vars, v_count - 1) : exact_poly_div(term_coeff, lc, temp_vars, v_count - 1);
+                if (q && !use_integer_div && !pm_quotient_division_free(q, term_coeff)) {
+                    /* No division: the integer part of the quotient (toward
+                     * zero), which leaves the smallest leading coefficient --
+                     * 3 x^3 mod 2 x^2 - 7 takes x, leaving x^3 + 7 x.  A zero
+                     * integer part means the term does not reduce. */
+                    Expr* tq = pm_trunc_coeffs(q);
+                    expr_free(q);
+                    q = NULL;
+                    if (tq && !is_zero_poly(tq) && pm_quotient_division_free(tq, term_coeff)) q = tq;
+                    else if (tq) expr_free(tq);
+                }
                 if (q) {
                     Expr* x_pow = (term_deg - d == 0) ? expr_new_integer(1) : ((term_deg - d == 1) ? expr_copy(main_var) : internal_power((Expr*[]){expr_copy(main_var), expr_new_integer(term_deg - d)}, 2));
                     Expr* mult = internal_times((Expr*[]){q, x_pow}, 2);

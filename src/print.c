@@ -2276,14 +2276,49 @@ static void print_standard(Expr* e, int parent_prec) {
             print_standard(e->data.function.args[0], 1000);
             printf(" &");
         }
-        else if (head == SYM_InterpolatingFunction && e->data.function.arg_count >= 2) {
+        else if (head == SYM_InterpolatingFunction && e->data.function.arg_count >= 2 &&
+                 g_inputform_depth == 0) {
             /* Only the domain element is printed explicitly; the remaining
-             * data elements are abbreviated as <>, matching Mathematica's
-             * standard output format. FullForm (handled separately) still
-             * reveals the full structure. */
+             * data elements are abbreviated as <>, the reference's standard
+             * output format. FullForm (handled separately) still reveals the
+             * full structure, and InputForm prints the object in full so
+             * ToExpression[ToString[InputForm[f]]] reads back the same function
+             * (audit InterpolatingFunction#1). */
             printf("InterpolatingFunction[");
             print_standard(e->data.function.args[0], 0);
             printf(", <>]");
+        }
+        else if (head == SYM_InterpolatingFunction && e->data.function.arg_count >= 2 &&
+                 e->data.function.args[1]->type == EXPR_NDARRAY &&
+                 e->data.function.args[1]->data.ndarray.rank == 2 &&
+                 e->data.function.args[1]->data.ndarray.dims[1] >= 2) {
+            /* InputForm of a machine-data object: its private packed table
+             * (rows {c1, ..., cm, v}) is written as the boxed table the
+             * constructor reads, {{c, v}, ...} or {{{c1, ..., cm}, v}, ...},
+             * since a held NDArray[...] call would not re-read as a buffer. */
+            Expr* rows = ndarray_to_nested_list(e->data.function.args[1]);
+            int64_t cols = e->data.function.args[1]->data.ndarray.dims[1];
+            if (rows && cols > 2) {
+                for (size_t i = 0; i < rows->data.function.arg_count; i++) {
+                    Expr* row = rows->data.function.args[i];
+                    size_t m = (size_t)cols - 1;
+                    Expr** cs = malloc(sizeof(Expr*) * m);
+                    for (size_t k = 0; k < m; k++) cs[k] = expr_copy(row->data.function.args[k]);
+                    Expr* coords = expr_new_function(expr_new_symbol(SYM_List), cs, m);
+                    free(cs);
+                    Expr* pair = expr_new_function(expr_new_symbol(SYM_List),
+                        (Expr*[]){ coords, expr_copy(row->data.function.args[m]) }, 2);
+                    expr_free(row);
+                    rows->data.function.args[i] = pair;
+                }
+            }
+            printf("InterpolatingFunction[");
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                if (i) printf(", ");
+                print_standard(i == 1 && rows ? rows : e->data.function.args[i], 0);
+            }
+            printf("]");
+            if (rows) expr_free(rows);
         }
         else if ((head == SYM_PredictorFunction ||
                   head == SYM_DimensionReducerFunction ||
