@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 /* Evaluate `input`; assert its FullForm equals `expected`. */
 static void run_test(const char* input, const char* expected) {
@@ -301,6 +302,50 @@ static void test_gaussian_numeric_constants(void) {
     run_true("Together[Together[E/(u + I) + E/(u - I)] - (2 E u)/(1 + u^2)] === 0");
 }
 
+#define TG_CARDANO_DIFF "-(3 (3/110)^(1/3))/(2 (31/9 + I Sqrt[3])) + ((16 2^(1/3) (55/3)^(2/3))/(3 (31/9 - I Sqrt[3])^3) - (62 (2/55)^(1/3))/(3^(2/3) (31/9 - I Sqrt[3])^2) - ((2*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])^2) + ((31/2*I) 3^(1/6))/(2^(1/3) 55^(2/3) (31/9 - I Sqrt[3])))/(6 2^(2/3) (1 - (8 2^(1/3) (55/3)^(2/3))/(3 (31/9 - I Sqrt[3])^2) + ((2*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])))) - (((4*I) 110^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])^2) - ((31*I) 3^(1/6))/(110^(2/3) (31/9 - I Sqrt[3])))/(3 2^(2/3) (2^(2/3) - ((4*I) 110^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])))) + (((4*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])^2) - ((31*I) 3^(1/6))/(2^(1/3) 55^(2/3) (31/9 - I Sqrt[3])))/(3 2^(2/3) (1 + 1/3 (-1 - ((4*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])))^2))"
+/* Together of a symbol-free nest of radicals and I (a Cardano-root difference,
+ * value 0).  exact_radical_inverse asks for a denominator's minimal polynomial,
+ * and genfd_get spells the generator through qqbar_to_expr, which orders the
+ * roots of a degree-36 minimal polynomial: with the exact qqbar_im inside that
+ * O(d^2) sort (a factored composed-op polynomial per comparison) this took
+ * ~15 s, and PossibleZeroQ paid it too until its Stage 1 stopped calling
+ * Together off the pure-rational class.  The enclosure-first |Im| comparison in
+ * wl_cmp_qq brings it to ~0.1 s.  Value and leaf count are pinned; the budget
+ * is ~20x the fixed cost. */
+static void test_radical_constant_together_fast(void) {
+    const char* in = "Together[" TG_CARDANO_DIFF "]";
+    Expr* e = parse_expression(in);
+    clock_t t0 = clock();
+    Expr* res = evaluate(e);
+    double dt = (double)(clock() - t0) / (double)CLOCKS_PER_SEC;
+    expr_free(res); expr_free(e);
+    printf("  Together of the radical constant: %.3fs\n", dt);
+    ASSERT_MSG(dt < 2.0, "Together of the radical constant took %.2fs", dt);
+    run_true("PossibleZeroQ[Together[" TG_CARDANO_DIFF "]]");
+    run_true("LeafCount[Together[" TG_CARDANO_DIFF "]] == 402");
+}
+
+/* The WL root order the comparator change touches: non-real roots by Re, then
+ * |Im|, then the negative-Im member first.  RootReduce must keep pointing at
+ * the same root (RootReduce[Sqrt[-1 + I]] once came back as its negative), and
+ * the k-th exact root must be the k-th numeric one. */
+static void test_complex_root_order(void) {
+    /* RootReduce[a] and a, each numericalised on its own (their exact
+     * difference is 0, which N cannot certify) */
+#define SAME_ROOT(a) "Abs[N[RootReduce[" a "], 30] - N[" a ", 30]] < 10^-25"
+    run_true(SAME_ROOT("Sqrt[-1 + I]"));
+    run_true(SAME_ROOT("(-1 + I)^(1/3) + 2^(1/3)"));
+    run_true(SAME_ROOT("Sqrt[2] + I Sqrt[3] + 5^(1/4)"));
+    run_true(SAME_ROOT("I 2^(1/3) - 3^(1/3)"));
+#undef SAME_ROOT
+    /* x^4 + 1: two real parts, equal |Im| -- the tie-break path.  The k-th
+     * exact root is the k-th numeric root. */
+    run_true("With[{r = RootReduce[Cos[Pi/4] + I Sin[Pi/4]]}, Head[r] === Root && r[[2]] == 4 && PossibleZeroQ[r[[1]][x] - (x^4 + 1)]]");
+    run_true("With[{r = RootReduce[Cos[3 Pi/4] + I Sin[3 Pi/4]]}, Head[r] === Root && r[[2]] == 2 && PossibleZeroQ[r[[1]][x] - (x^4 + 1)]]");
+    run_true("With[{r = RootReduce[Cos[5 Pi/4] + I Sin[5 Pi/4]]}, Head[r] === Root && r[[2]] == 1 && PossibleZeroQ[r[[1]][x] - (x^4 + 1)]]");
+    run_true("With[{r = RootReduce[Cos[7 Pi/4] + I Sin[7 Pi/4]]}, Head[r] === Root && r[[2]] == 3 && PossibleZeroQ[r[[1]][x] - (x^4 + 1)]]");
+}
+
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -320,6 +365,8 @@ int main(int argc, char** argv) {
     TEST(test_gaussian_two_stage);
     TEST(test_numeric_radical_denominator);
     TEST(test_gaussian_numeric_constants);
+    TEST(test_radical_constant_together_fast);
+    TEST(test_complex_root_order);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

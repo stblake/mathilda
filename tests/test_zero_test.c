@@ -1520,6 +1520,31 @@ static void test_deep_cancellation_point_is_not_evidence(void) {
     assert_pzq("PossibleZeroQ[D[Log[Cosh[3 x]], x] - 3 Tanh[3 x] + Sech[x]^2/7]", "False");
 }
 
+/* A symbol-free constant over several radicals and I (a Cardano-root
+ * difference): Stage 1's Together o Cancel can only return UNKNOWN off the
+ * pure-rational class, yet it ran anyway and took ~14 s combining over
+ * Q(2^(1/3), 3^(1/6), 55^(1/3), I) before the millisecond numeric ladder
+ * decided it.  It is now skipped there.  Timed: the budget is ~10x the fixed
+ * cost and well under the old one.  The z + 10^-40 and z + 1 companions keep
+ * the ladder honest on the same shape; the rest pin that the pure-rational
+ * Stage 1 verdicts (TRUE and FALSE) and the cheap Expand attempt on constant
+ * radicals are untouched. */
+#define ZT_CARDANO_DIFF "-(3 (3/110)^(1/3))/(2 (31/9 + I Sqrt[3])) + ((16 2^(1/3) (55/3)^(2/3))/(3 (31/9 - I Sqrt[3])^3) - (62 (2/55)^(1/3))/(3^(2/3) (31/9 - I Sqrt[3])^2) - ((2*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])^2) + ((31/2*I) 3^(1/6))/(2^(1/3) 55^(2/3) (31/9 - I Sqrt[3])))/(6 2^(2/3) (1 - (8 2^(1/3) (55/3)^(2/3))/(3 (31/9 - I Sqrt[3])^2) + ((2*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])))) - (((4*I) 110^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])^2) - ((31*I) 3^(1/6))/(110^(2/3) (31/9 - I Sqrt[3])))/(3 2^(2/3) (2^(2/3) - ((4*I) 110^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])))) + (((4*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])^2) - ((31*I) 3^(1/6))/(2^(1/3) 55^(2/3) (31/9 - I Sqrt[3])))/(3 2^(2/3) (1 + 1/3 (-1 - ((4*I) 2^(2/3) 55^(1/3))/(3^(5/6) (31/9 - I Sqrt[3])))^2))"
+static void test_radical_constant_skips_together(void) {
+    assert_pzq_timed("PossibleZeroQ[" ZT_CARDANO_DIFF "]", "True", 1.0);
+    assert_pzq_timed("PossibleZeroQ[" ZT_CARDANO_DIFF " + 10^-40]", "False", 1.0);
+    assert_pzq_timed("PossibleZeroQ[" ZT_CARDANO_DIFF " + 1]", "False", 1.0);
+    /* constant radical identities: Expand alone, and one needing a reciprocal */
+    assert_pzq("PossibleZeroQ[(1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]]", "True");
+    assert_pzq("PossibleZeroQ[1/(1 + Sqrt[2]) - Sqrt[2] + 1]", "True");
+    assert_pzq("PossibleZeroQ[1/(1 + Sqrt[2]) - Sqrt[2]]", "False");
+    assert_pzq("PossibleZeroQ[1/(2^(1/3) + I) - (2^(2/3) - I 2^(1/3) - 1)/(2 - I)]", "True");
+    /* pure rational functions still decided by Together o Cancel */
+    assert_pzq("PossibleZeroQ[1/x + 1/y - (x + y)/(x y)]", "True");
+    assert_pzq("PossibleZeroQ[1/x + 1/y - (x + y)/(x y) + 1/(x - 1)]", "False");
+    assert_pzq("PossibleZeroQ[1/3 + 1/7 - 10/21]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1736,6 +1761,7 @@ int main(void) {
     TEST(test_uninformative_points_are_redrawn);
     TEST(test_log_of_large_integer_nonzero);
     TEST(test_deep_cancellation_point_is_not_evidence);
+    TEST(test_radical_constant_skips_together);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

@@ -697,7 +697,19 @@ static ZeroTestResult decide_rational(const Expr* e) {
     }
 
     /* Attempt 2: Together ∘ Cancel.  Required for sums of rational forms
-     * such as 1/x + 1/y - (x + y)/(x y), which Expand alone won't reduce. */
+     * such as 1/x + 1/y - (x + y)/(x y), which Expand alone won't reduce.
+     *
+     * Both verdicts this attempt can return are gated on
+     * is_pure_rational_function(e) below: off that class a zero is downgraded
+     * to UNKNOWN (Together's branch-unsound log identities) and so is a
+     * non-zero (opaque transcendental atoms).  So outside Q(x_1, ..., x_n) the
+     * normalisation can never decide anything, and it is skipped -- it is not
+     * free there: a symbol-free nest of radicals and I (a Cardano root
+     * difference) sent Together into a ~14 s combination over several
+     * algebraic generators, only for the result to be discarded before the
+     * millisecond numeric ladder decided it. */
+    if (!is_pure_rational_function(e)) return ZERO_TEST_UNKNOWN;
+
     Expr* tg = internal_together((Expr*[]){expr_copy((Expr*)e)}, 1);
     if (!tg) return ZERO_TEST_UNKNOWN;
     Expr* canon = internal_cancel((Expr*[]){tg}, 1);

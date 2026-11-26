@@ -273,6 +273,15 @@ key, so `PossibleZeroQ[f[2 (x + 1)] - f[2 x + 2]]` is `True`, while
 `f[x] - f[y]` and `f[a] - g[a]` stay `False` (v0.6499). The
 internal `zero_test_decide` used by the solvers is unchanged.
 
+**The exact rational stage runs only on rational functions (v0.6758).** The
+`Together` ∘ `Cancel` normalisation decides an expression only when it is a
+rational function over Q of its free symbols. On anything else (radicals, `I`,
+transcendental atoms) both of its outcomes are downgraded to "unknown", so it
+is now skipped there and the numeric ladder decides directly. A symbol-free
+Cardano-root difference over `2^(1/3)`, `3^(1/6)`, `55^(1/3)` and `I` took
+14 s in that stage before a 3 ms numeric verdict; it is now 3 ms end to end.
+The cheap `Expand` attempt still runs first on every input.
+
 **A residual that holds steady at a precision-honouring rung is a value
 (v0.6584).** A residual below the machine "obviously non-zero" gate climbs the
 precision ladder (200, 500 and 1000 bits). Until v0.6584, one that never
