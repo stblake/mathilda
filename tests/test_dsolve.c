@@ -3711,6 +3711,12 @@ static void t_nasser_no_series(void) {
 static void t_nasser_no_nonelem_leak(void) {
     check_true("Head[Check[DSolve[D[y'[x]/y[x], x] + 2 a Coth[y'[x]/y[x]] == 2 a^2, "
                "y[x], x], $Failed]] =!= $Failed");
+    /* Liouville's explicit quadratures are probes: the method declines when one
+     * does not close, so its Integrate::nonelem must not surface (v0.6764).  It
+     * reached the user whenever an earlier method declined -- on Linux CI, for
+     * the equation below, every run. */
+    check_true("Check[DSolve`Liouville[3 (1 - y[x]) y[x] y''[x] == 2 (1 - 2 y[x]) y'[x]^2, y, x], "
+               "$Failed] =!= $Failed");
 }
 static void t_nasser_autonomous_no_yprime(void) {
     nasser_implicit_ok("y''[x] + y[x]^3 == 0",

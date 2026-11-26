@@ -70,16 +70,23 @@ Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch) {
     Expr *g = NULL, *h = NULL;
     if (!lv_recognise(P, Yn, &g, &h)) return NULL;
 
-    /* EG = Integrate[Exp[Integrate[g, Y]], Y] ; EH = Integrate[Exp[-Integrate[h,x]], x] */
+    /* EG = Integrate[Exp[Integrate[g, Y]], Y] ; EH = Integrate[Exp[-Integrate[h,x]], x]
+     * Quiet, as lv_quad's: a quadrature that does not close makes this method
+     * decline (the implicit companion keeps it inert), so its Integrate::nonelem
+     * is not the user's -- it leaked through DSolve and turned Check[DSolve[3 (1 -
+     * y) y y'' == 2 (1 - 2 y) y'^2, y[x], x], $Failed] into $Failed whenever an
+     * earlier method declined. */
+    g_integrate_quiet++;
     Expr* G  = ds_integrate(g, expr_new_symbol(Yn));
-    if (ds_has_head(G, SYM_Integrate)) { expr_free(G); expr_free(h); return NULL; }
+    if (ds_has_head(G, SYM_Integrate)) { g_integrate_quiet--; expr_free(G); expr_free(h); return NULL; }
     Expr* EG = ds_integrate(ds_call1("Exp", G), expr_new_symbol(Yn));
-    if (ds_has_head(EG, SYM_Integrate)) { expr_free(EG); expr_free(h); return NULL; }
+    if (ds_has_head(EG, SYM_Integrate)) { g_integrate_quiet--; expr_free(EG); expr_free(h); return NULL; }
 
     Expr* H  = ds_integrate(h, expr_new_symbol(xvar));
-    if (ds_has_head(H, SYM_Integrate)) { expr_free(H); expr_free(EG); return NULL; }
+    if (ds_has_head(H, SYM_Integrate)) { g_integrate_quiet--; expr_free(H); expr_free(EG); return NULL; }
     Expr* mH = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), H));
     Expr* EH = ds_integrate(ds_call1("Exp", mH), expr_new_symbol(xvar));
+    g_integrate_quiet--;
     if (ds_has_head(EH, SYM_Integrate)) { expr_free(EH); expr_free(EG); return NULL; }
 
     /* EG(Y) == C[1] EH(x) + C[2] ; solve for Y */
