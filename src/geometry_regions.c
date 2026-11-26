@@ -76,7 +76,10 @@ static int gr_truth(Expr* e) {
 }
 
 static bool gr_has_inexact(const Expr* e) {
-    if (e->type == EXPR_REAL || e->type == EXPR_MPFR) return true;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
     if (e->type != EXPR_FUNCTION) return false;
     for (size_t i = 0; i < gr_len(e); i++) if (gr_has_inexact(gr_at(e, i))) return true;
     return false;
