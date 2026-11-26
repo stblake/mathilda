@@ -1198,8 +1198,10 @@ void test_find_clusters() {
           "{{1, 2, 3, 1}, {10}, {12, 13, 25}}"},
         {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"KMedoids\"]",
           "{{1, 2, 3, 1}, {10}, {12, 13, 25}}"},
+        /* the natural count agrees with Agglomerate since audit FindClusters#1
+         * (the 10 -> 12 gap of 2 is not a cut when the unit gaps around it are) */
         {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"Spectral\"]",
-          "{{1, 2, 3, 1}, {10}, {12, 13}, {25}}"},
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
         {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"Spectral\"]",
           "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
         {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"Spectral\"]",

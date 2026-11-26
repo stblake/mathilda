@@ -16,6 +16,7 @@
 #include "pca.h"        /* ml_pca, ml_column_mean -- shared with the reducer */
 #include "classify.h"
 #include "predict.h"
+#include "pack.h"       /* pack_eval_plain: a packed LeastSquares solution */
 #include "eval.h"       /* evaluate: basis-function values for LinearModelFit[data, funs, vars] */
 
 /* Solve the normal equations (A'A) c = A'y where A is [1 | x], by Gaussian
@@ -519,6 +520,14 @@ static Expr* lmf_apply(Expr* head, Expr** args, size_t argc) {
         if (strcmp(q, "BestFitParameters") == 0) return expr_copy(pay->data.function.args[1]);
         if (strcmp(q, "BasisFunctions") == 0) return expr_copy(pay->data.function.args[2]);
         if (strcmp(q, "Function") == 0) {
+            /* a design-matrix fit is already written in slots */
+            if (vl->data.function.arg_count > 0
+                && vl->data.function.args[0]->type == EXPR_FUNCTION
+                && vl->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+                && vl->data.function.args[0]->data.function.head->data.symbol.name == SYM_Slot) {
+                Expr* b1 = expr_copy(best);
+                return expr_new_function(expr_new_symbol(SYM_Function), &b1, 1);
+            }
             Expr* fa[2];
             fa[0] = expr_copy(vl);
             fa[1] = expr_copy(best);
@@ -542,9 +551,93 @@ static Expr* lmf_apply(Expr* head, Expr** args, size_t argc) {
     return expr_new_function(expr_new_symbol(SYM_ReplaceAll), ra2, 2);
 }
 
+/* ---- LinearModelFit[{m, v}]: the design-matrix form ----
+ *
+ * m is the n x p design matrix (its columns ARE the basis, so no constant is
+ * added: a constant term is a column of ones the caller puts in m) and v the n
+ * responses.  The parameters are the least-squares solution of m . c = v,
+ * taken from LeastSquares (QR, not the normal equations), and the model is
+ * c1 #1 + ... + cp #p -- the basis functions are the slots, as the reference
+ * writes a design-matrix fit (audit LinearModelFit#4).  Recognised only when
+ * the first element is a rectangular matrix of numbers and the second a numeric
+ * vector of the same length, which no {x.., y} data row can be. */
+static Expr* lmf_design_fit(Expr* data) {
+    if (!lmf_is_list(data) || data->data.function.arg_count != 2) return NULL;
+    Expr* m = data->data.function.args[0];
+    Expr* v = data->data.function.args[1];
+    if (!lmf_is_list(m) || !lmf_is_list(v)) return NULL;
+    size_t n = m->data.function.arg_count;
+    if (n == 0 || v->data.function.arg_count != n) return NULL;
+    size_t p = 0;
+    double t, im;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = m->data.function.args[i];
+        if (!lmf_is_list(r) || r->data.function.arg_count == 0) return NULL;
+        if (i == 0) p = r->data.function.arg_count;
+        else if (r->data.function.arg_count != p) return NULL;
+        for (size_t j = 0; j < p; j++) {
+            im = 0.0;
+            if (!na_read_scalar(r->data.function.args[j], &t, &im) || im != 0.0 || !isfinite(t))
+                return NULL;
+        }
+        im = 0.0;
+        if (!na_read_scalar(v->data.function.args[i], &t, &im) || im != 0.0 || !isfinite(t))
+            return NULL;
+    }
+    if (n < p) return NULL;                    /* underdetermined: no unique fit */
+    Expr* na[1] = { expr_copy(m) };
+    Expr* nb[1] = { expr_copy(v) };
+    Expr* la[2] = { expr_new_function(expr_new_symbol(SYM_N), na, 1),
+                    expr_new_function(expr_new_symbol(SYM_N), nb, 1) };
+    /* a machine solution comes back packed: read it as the List it is */
+    Expr* call = expr_new_function(expr_new_symbol(SYM_LeastSquares), la, 2);
+    Expr* c = pack_eval_plain(call);
+    expr_free(call);
+    bool ok = c && lmf_is_list(c) && c->data.function.arg_count == p;
+    double* coef = ok ? malloc(sizeof(double) * p) : NULL;
+    ok = ok && coef;
+    for (size_t j = 0; ok && j < p; j++) {
+        im = 0.0;
+        ok = na_read_scalar(c->data.function.args[j], &coef[j], &im) && im == 0.0;
+    }
+    if (c) expr_free(c);
+    if (!ok) { free(coef); return NULL; }
+    Expr** bl = malloc(sizeof(Expr*) * p);
+    Expr** tl = malloc(sizeof(Expr*) * p);
+    Expr** vl = malloc(sizeof(Expr*) * p);
+    Expr* out = NULL;
+    if (bl && tl && vl) {
+        for (size_t j = 0; j < p; j++) {
+            Expr* sa[1] = { expr_new_integer((int64_t)(j + 1)) };
+            Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), sa, 1);
+            Expr* ta[2] = { expr_new_real(coef[j]), expr_copy(slot) };
+            tl[j] = expr_new_function(expr_new_symbol(SYM_Times), ta, 2);
+            bl[j] = expr_copy(slot);
+            vl[j] = slot;
+        }
+        Expr* pay[4];
+        pay[0] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), tl, p));
+        pay[1] = ml_list_of_reals(coef, p);
+        pay[2] = expr_new_function(expr_new_symbol(SYM_List), bl, p);
+        pay[3] = expr_new_function(expr_new_symbol(SYM_List), vl, p);
+        Expr* a4[4];
+        a4[0] = expr_new_string("Linear");
+        a4[1] = expr_new_function(expr_new_symbol(SYM_List), pay, 4);
+        a4[2] = expr_new_integer((int64_t)p);
+        a4[3] = expr_new_integer((int64_t)p);
+        out = expr_new_function(expr_new_symbol(SYM_FittedModel), a4, 4);
+    }
+    free(bl); free(tl); free(vl); free(coef);
+    return out;
+}
+
 static Expr* builtin_linear_model_fit(Expr* res) {
     if (res->data.function.arg_count == 3) return lmf_basis_fit(res);
     if (res->data.function.arg_count != 1) return NULL;
+    {
+        Expr* d = lmf_design_fit(res->data.function.args[0]);
+        if (d) return d;
+    }
     size_t n, dim; double* x = NULL; double* y = NULL;
     if (!ml_read_training(res->data.function.args[0], &n, &dim, &x, &y)) return NULL;
     double* coef = malloc(sizeof(double) * (dim + 1));

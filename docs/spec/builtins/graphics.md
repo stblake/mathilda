@@ -1749,8 +1749,10 @@ A discrete control `{t, {v1, v2, ...}}` steps `t` through the listed values
 
 
 The control spec's variable is not evaluated, so a global value of `t` does not
-break `Animate[t, {t, 0, 1}]`; `{t, tmin, tmax, dt}` is accepted (the sweep is
-continuous; the step is not used to quantise `t`).
+break `Animate[t, {t, 0, 1}]`. The stepped form `{t, tmin, tmax, dt}` is a
+discrete control: `t` takes exactly the values `Range[tmin, tmax, dt]`, as a
+`{t, {v1, v2, ...}}` list would. A step that is not positive, or bounds that are
+not numbers, leave `Animate` unevaluated.
 
 ```
 Animate[expr, {t, tmin, tmax}, opts...]

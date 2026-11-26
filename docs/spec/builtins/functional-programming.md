@@ -318,6 +318,24 @@ object that agrees with `data` at every supplied point. The data may be given as
 `Interpolation[data, x]` builds the function and immediately evaluates it at the
 point `x` (a number, or an `{x, y, ...}` coordinate list in m-D).
 
+**Complex values.** The values may be complex (`Interpolation[{1, I, -1, -I}]`).
+Interpolation is linear in the values, so the interpolant is the real-part
+interpolant plus `I` times the imaginary-part one, exactly; the object keeps the
+complex table and splits it (once, memoised) when it is applied, so
+`Interpolation[{1, I, -1, -I}][2.5]` is `-0.625 + 0.625 I` and the value at a
+node is the stored exact value (`[2]` is `I`). Derivatives split the same way.
+
+**Exact abscissae.** A coordinate that is an exact numeric quantity but not a
+rational (`Pi`, `2 Pi`, `Sqrt[2]`) is taken at machine precision when the object
+is built: `Interpolation[{{0, 0}, {Pi, 1}, {2 Pi, 0}}]` is the function built from
+`{{0, 0}, {N[Pi], 1}, {N[2 Pi], 0}}`, with domain `{{0, 6.28319}}`.
+
+**Periodic data.** With `PeriodicInterpolation -> True` the two ends of a 1-D
+period are one point and the value at the lower end is used for both. Data whose
+first and last values differ are not periodic: `Interpolation::periodic` says so,
+and an exact query at the upper end (`p[5]`) answers the lower end's value, as a
+machine query (`p[5.0]`) does.
+
 **Methods.** Value-only data uses sliding-window Newton interpolation by default.
 
 - `Method -> "Spline"` — natural cubic spline (C², second derivative zero at the
@@ -421,6 +439,13 @@ nesting depth of `array` is the number of dimensions.
   `xmin + i (xmax - xmin)/(d-1)`), so an MPFR data table keeps full precision.
 - `ListInterpolation[array, {{x1, x2, …}, …}]` — explicit grid-line positions in
   each direction (one list per dimension, length = the extent along that axis).
+  The positions on an axis must be distinct: a repeated one is
+  `ListInterpolation::indup` and the call stays unevaluated (two values at one
+  position are not a function).
+
+Exact numeric bounds or positions that are not rationals (`{{0, Pi}}`,
+`{{0, Sqrt[2], 3}}`) are taken at machine precision, and the values may be
+complex, both exactly as for `Interpolation`.
 
 Attributes: `Protected`. Options: `InterpolationOrder -> 3`, `Method -> Automatic`,
 `PeriodicInterpolation -> False` — passed straight through to the `Interpolation`

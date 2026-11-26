@@ -1098,6 +1098,11 @@ Exponentiation.
   `(-12)^(1/4) = (-3)^(1/4) Sqrt[2]`, `(-1/6)^(1/3)` stays, and
   `(-2/3)^(5/3) = -2/3 (-2/3)^(2/3)`. A square root is `I^p (n/d)^(p/2)`, so
   `(-2/3)^(3/2) = -2/3 I Sqrt[2/3]`.
+  A Rational with a bigint part is split into its integer pieces when either
+  piece simplifies (or the numerator is 1), each going through the integer-base
+  path, which extracts the q-th-power factors of a bigint:
+  `Sqrt[1/(5 10^39)] = 1/(50000000000000000000 Sqrt[2])`; with no factor to
+  extract, `Sqrt[7/(3 10^25 + 1)]` stays as it is.
 - A negative exact coefficient (other than `-1`) in a product under a rational
   power comes out as its magnitude, the sign staying inside:
   `Sqrt[-4 (1 - x^2)]` is `2 Sqrt[-1 + x^2]` and `(-8 a)^(1/3)` is

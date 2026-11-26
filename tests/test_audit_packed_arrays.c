@@ -43,9 +43,21 @@ static void test_wave5_packed_batch(void) {
     audit_chk("ToPackedArray#2", "NDArrayQ[ToNDArray[{1, 2.5}]]", "True");
 }
 
+/* Wave 6 G4: ToNDArray / ToPackedArray widen a mixed Integer/Real list to
+ * float64 and pack a machine complex list (the spec now says so). */
+static void test_wave6_g4_packed(void) {
+    audit_chk("NDArrayQ#1", "NDArrayQ[ToNDArray[{1, 2.5}]]", "True");
+    audit_chk("NDArrayQ#1", "Head[ToNDArray[{1, 2.5}][[1]]]", "Real");
+    audit_chk("NDArrayQ#1", "NDArrayQ[{1, 2.5, 3, 4}]", "False");
+    audit_chk("ToPackedArray#2", "{NDArrayQ[ToNDArray[{1. + I, 2.}]], DataType[ToNDArray[{1. + I, 2.}]]}",
+              "{True, \"complex64\"}");
+    audit_chk("ToPackedArray#2", "NDArrayQ[ToNDArray[{1 + I, 2}]]", "False");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_packed_arrays);
     TEST(test_wave5_packed_batch);
+    TEST(test_wave6_g4_packed);
     return audit_finish("audit_packed_arrays");
 }

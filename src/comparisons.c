@@ -931,6 +931,117 @@ bool expr_sameq(const Expr* a, const Expr* b) {
     return expr_eq(a, b) || sameq_tolerant(a, b, mth_sameq_tolerance_bits());
 }
 
+/* ---- SameQ classes (see comparisons.h) ---------------------------------- */
+
+/* Whether e holds an approximate number anywhere (a packed list counts when
+ * its buffer is not exact integers). */
+static bool sameq_has_inexact(const Expr* e) {
+    double b;
+    if (sameq_inexact_atom(e, &b)) return true;
+    if (is_ndarray(e)) return e->data.ndarray.dtype != NDT_INT64;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (sameq_has_inexact(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sameq_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The numeric value of an approximate atom, as a double (an MPFR number past
+ * the double range saturates, which only coarsens the sort order). */
+static double sameq_atom_double(const Expr* e) {
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+#endif
+    return e->data.real;
+}
+
+/* A total-looking order in which approximate atoms within the tolerance tie:
+ * numbers by value, everything else structurally (same head and length:
+ * element by element, so f[1., b] and f[1. + 2^-52, a] are ordered by their
+ * second element and SameQ keys end up adjacent). */
+static int sameq_tie_cmp(const Expr* a, const Expr* b, double k) {
+    double pa, pb;
+    if (sameq_inexact_atom(a, &pa) && sameq_inexact_atom(b, &pb)) {
+        if (sameq_inexact_pair(a, b, k)) return 0;
+        double x = sameq_atom_double(a), y = sameq_atom_double(b);
+        return x < y ? -1 : (x > y ? 1 : expr_compare(a, b));
+    }
+    if (a->type == EXPR_FUNCTION && b->type == EXPR_FUNCTION
+        && a->data.function.arg_count == b->data.function.arg_count) {
+        int c = sameq_tie_cmp(a->data.function.head, b->data.function.head, k);
+        for (size_t i = 0; c == 0 && i < a->data.function.arg_count; i++)
+            c = sameq_tie_cmp(a->data.function.args[i], b->data.function.args[i], k);
+        return c;
+    }
+    return expr_compare(a, b);
+}
+
+typedef struct {
+    const Expr* (*key)(void*, size_t);
+    void* ctx;
+    double k;
+} SameqSortCtx;
+
+/* Stable merge sort of idx[0..n) by sameq_tie_cmp (tmp: scratch of n). */
+static void sameq_msort(size_t* idx, size_t* tmp, size_t n, const SameqSortCtx* s) {
+    if (n < 2) return;
+    size_t h = n / 2;
+    sameq_msort(idx, tmp, h, s);
+    sameq_msort(idx + h, tmp, n - h, s);
+    size_t i = 0, j = h, o = 0;
+    while (i < h && j < n)
+        tmp[o++] = sameq_tie_cmp(s->key(s->ctx, idx[j]), s->key(s->ctx, idx[i]), s->k) < 0
+                 ? idx[j++] : idx[i++];
+    while (i < h) tmp[o++] = idx[i++];
+    while (j < n) tmp[o++] = idx[j++];
+    memcpy(idx, tmp, n * sizeof(size_t));
+}
+
+static size_t sameq_find(size_t* parent, size_t i) {
+    while (parent[i] != i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+    return i;
+}
+
+size_t sameq_merge_classes(const Expr* (*key)(void* ctx, size_t i), void* ctx,
+                           size_t g, size_t* cls) {
+    for (size_t i = 0; i < g; i++) cls[i] = i;
+    double k = mth_sameq_tolerance_bits();
+    if (g < 2 || k <= 0.0) return g;
+    size_t* idx = malloc(sizeof(size_t) * g);
+    if (!idx) return g;
+    size_t m = 0;
+    for (size_t i = 0; i < g; i++)
+        if (sameq_has_inexact(key(ctx, i))) idx[m++] = i;
+    if (m < 2) { free(idx); return g; }
+    size_t* tmp = malloc(sizeof(size_t) * m);
+    size_t* parent = malloc(sizeof(size_t) * g);
+    if (!tmp || !parent) { free(idx); free(tmp); free(parent); return g; }
+    SameqSortCtx s = { key, ctx, k };
+    sameq_msort(idx, tmp, m, &s);
+    for (size_t i = 0; i < g; i++) parent[i] = i;
+    bool merged = false;
+    for (size_t t = 1; t < m; t++) {
+        size_t a = idx[t - 1], b = idx[t];
+        if (sameq_tolerant(key(ctx, a), key(ctx, b), k)) {
+            size_t ra = sameq_find(parent, a), rb = sameq_find(parent, b);
+            if (ra != rb) {                 /* the earlier key is the root */
+                if (ra < rb) parent[rb] = ra; else parent[ra] = rb;
+                merged = true;
+            }
+        }
+    }
+    size_t nc = g;
+    if (merged) {
+        nc = 0;
+        for (size_t i = 0; i < g; i++) {
+            size_t r = sameq_find(parent, i);
+            cls[i] = (r == i) ? nc++ : cls[r];   /* r < i: already numbered */
+        }
+    }
+    free(idx); free(tmp); free(parent);
+    return nc;
+}
+
 /*
  * builtin_sameq: Implements SameQ[x, y, ...].
  * SameQ returns True if all its arguments are identical, and False otherwise.

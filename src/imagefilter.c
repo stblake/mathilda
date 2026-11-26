@@ -40,6 +40,7 @@
 #include "options.h"
 #include "checked_alloc.h"
 #include "numeric.h"
+#include "message.h"   /* mth_message: DistanceTransform::nobg */
 #ifdef USE_FFTW
 #include <fftw3.h>
 #endif
@@ -3324,10 +3325,24 @@ static void dt_1d(const double* f, double* d, size_t n, size_t* v, double* z) {
  *
  * The square root is taken ONCE at the end. Per axis it would not be slower, it would be wrong.
  */
+/* Whether the grey values g[0..n) hold a background pixel (one at or below
+ * thr).  Without one the distance to the background is the distance to the
+ * empty set -- undefined -- so DistanceTransform says so and stays
+ * unevaluated, instead of handing back its internal 1.0*^30 seed as if it were
+ * a distance (audit DistanceTransform#1). */
+static bool dt_has_background(const double* g, size_t n, double thr) {
+    for (size_t i = 0; i < n; i++) if (!(g[i] > thr)) return true;
+    mth_message("DistanceTransform", "nobg",
+                "The image has no background pixel (none at or below the threshold %g), so the "
+                "distance to the background is undefined.", thr);
+    return false;
+}
+
 static Expr* dt3_run(Expr* vol, double thr) {
     size_t w = 0, h = 0, d = 0; double* g = NULL;
     if (!img3_grey_volume(vol, &w, &h, &d, &g)) return NULL;
     size_t n = w * h * d;
+    if (!dt_has_background(g, n, thr)) { free(g); return NULL; }
     size_t maxn = w > h ? (w > d ? w : d) : (h > d ? h : d);
 
     double* f = malloc(sizeof(double) * n);
@@ -3419,6 +3434,7 @@ static Expr* builtin_distancetransform(Expr* res) {
         size_t w = 0, h = 0; double* g = NULL;
         if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
         size_t n = w * h;
+        if (!dt_has_background(g, n, thr)) { free(g); return NULL; }
         double* f = malloc(sizeof(double) * (n ? n : 1));
         Expr* out = NULL;
         if (f) {
@@ -3434,6 +3450,7 @@ static Expr* builtin_distancetransform(Expr* res) {
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
     size_t n = w * h;
+    if (!dt_has_background(g, n, thr)) { free(g); return NULL; }
 
     double* f = malloc(sizeof(double) * n);
     double* tmp = malloc(sizeof(double) * (w > h ? w : h));
@@ -4677,6 +4694,8 @@ void imagefilter_init(void) {
         "DistanceTransform[image] replaces each pixel by its EXACT Euclidean distance to the nearest "
         "background pixel; background pixels are 0, so the value rises toward the interior of a blob. "
         "DistanceTransform[image, t] takes pixels above t as foreground (default 0). "
+        "An image with no background pixel has no distance to give: DistanceTransform::nobg, "
+        "unevaluated. "
         "Exact rather than the classic two-pass chamfer approximation, which cannot represent "
         "sqrt(2) with integer steps and so gets diagonal distances a few percent wrong -- invisible "
         "on a picture and fatal to a test. Uses Felzenszwalb and Huttenlocher's lower-envelope-of-"

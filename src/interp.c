@@ -63,6 +63,7 @@
 #include <gmp.h>          /* Modulus path: exact modular linear solve */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "numeric.h"     /* numericalize, numeric_machine_spec (every build) */
+#include "comparisons.h" /* expr_sameq: periodic end values */
 
 /* Interpolation methods. */
 enum { METHOD_DEFAULT = 0, METHOD_SPLINE = 1, METHOD_HERMITE = 2 };
@@ -126,9 +127,82 @@ static bool is_exact_real(const Expr* e) {
 /* True for a scalar real atom (Integer/Real/BigInt/MPFR/Rational). */
 static bool is_scalar_real(const Expr* e) { double t; return node_to_double(e, &t); }
 
-/* True for a scalar real or a (recursively) non-empty list of reals/arrays. */
+/* True for an exact or machine complex atom Complex[re, im] with real parts. */
+static bool is_complex_atom(const Expr* e) {
+    double t;
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex
+        && e->data.function.arg_count == 2
+        && node_to_double(e->data.function.args[0], &t)
+        && node_to_double(e->data.function.args[1], &t);
+}
+
+/* True for a scalar data VALUE: a real atom or a complex atom.  Complex values
+ * are interpolated as re + I im (interp_complex_apply): interpolation is linear
+ * in the values, so the two real interpolants give the complex one exactly. */
+static bool is_scalar_value(const Expr* e) { return is_scalar_real(e) || is_complex_atom(e); }
+
+/* A coordinate the construction can read: a real atom, or an exact numeric
+ * quantity (Pi, Sqrt[2]) that interp_numeric_coord takes to a machine real. */
+static bool is_coord_like(const Expr* e) {
+    return is_scalar_real(e) || (e && expr_is_numeric_quantity(e) && !is_complex_atom(e));
+}
+
+/* The machine-real value of an exact numeric coordinate that is not a real
+ * atom (Pi, 2 Pi, Sqrt[2]) -- audit Interpolation#2 / ListInterpolation#1: the
+ * abscissae are positions, so they are taken at machine precision, as the
+ * reference does (its domain prints {0., 3.14159}).  NULL when e is already a
+ * real atom or does not evaluate to a real number. */
+static Expr* interp_numeric_coord(const Expr* e) {
+    if (!e || is_scalar_real(e) || !expr_is_numeric_quantity(e)) return NULL;
+    Expr* r = numericalize(e, numeric_machine_spec());
+    if (r && is_scalar_real(r)) return r;
+    if (r) expr_free(r);
+    return NULL;
+}
+
+/* A copy of the data point `entry` ({coord, value, ...} or {{x1, ..., xm},
+ * value, ...}) with every exact non-rational numeric coordinate replaced by
+ * its machine value; NULL when no coordinate needs it. */
+static Expr* interp_entry_numeric_coords(Expr* entry, size_t m) {
+    if (!interp_is_list(entry) || entry->data.function.arg_count < 2) return NULL;
+    Expr* point = entry->data.function.args[0];
+    Expr* newpt = NULL;
+    if (interp_is_list(point) && point->data.function.arg_count == m) {
+        Expr** cs = NULL;
+        for (size_t k = 0; k < m; k++) {
+            Expr* nk = interp_numeric_coord(point->data.function.args[k]);
+            if (!nk) continue;
+            if (!cs) {
+                cs = malloc(sizeof(Expr*) * m);
+                if (!cs) { expr_free(nk); return NULL; }
+                for (size_t j = 0; j < m; j++) cs[j] = NULL;
+            }
+            cs[k] = nk;
+        }
+        if (!cs) return NULL;
+        for (size_t k = 0; k < m; k++)
+            if (!cs[k]) cs[k] = expr_copy(point->data.function.args[k]);
+        newpt = expr_new_function(expr_new_symbol(SYM_List), cs, m);
+        free(cs);
+    } else if (m == 1) {
+        newpt = interp_numeric_coord(point);
+        if (!newpt) return NULL;
+    } else return NULL;
+    size_t L = entry->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * L);
+    if (!a) { expr_free(newpt); return NULL; }
+    a[0] = newpt;
+    for (size_t i = 1; i < L; i++) a[i] = expr_copy(entry->data.function.args[i]);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), a, L);
+    free(a);
+    return out;
+}
+
+/* True for a scalar value or a (recursively) non-empty list of values/arrays. */
 static bool is_real_or_array(const Expr* e) {
-    if (is_scalar_real(e)) return true;
+    if (is_scalar_value(e)) return true;
     if (e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_List
@@ -1835,6 +1909,123 @@ static bool interp_apply_jump(Expr* ifun, Expr* arg, Expr** out) {
     return true;
 }
 
+/* ---- complex-valued data ------------------------------------------------
+ *
+ * Interpolation is linear in the data values, so an interpolant of complex
+ * values is Re-interpolant + I Im-interpolant, exactly (audit Interpolation#1,
+ * ListInterpolation#2).  The object keeps the complex table as given; at
+ * application the table is split once into its real and imaginary value
+ * tables (coordinates untouched, derivative tensors split like values), which
+ * are memoised by the table's identity so the split tables -- and with them
+ * every downstream cache keyed on table identity -- are reused across calls.
+ * Every kernel below therefore still sees real data only. */
+static struct {
+    Expr* table;       /* owned reference; identity is the key */
+    bool  complex;
+    Expr* re;          /* owned split tables (complex only) */
+    Expr* im;
+} g_cplx_cache;
+
+/* Whether e (a value, or a value array) holds a complex atom. */
+static bool interp_has_complex(const Expr* e) {
+    if (is_complex_atom(e)) return true;
+    if (!interp_is_list(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (interp_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The real (part 0) or imaginary (part 1) part of a value or value array:
+ * Complex[a, b] -> a / b, a real atom -> itself / exact 0 (0. if inexact). */
+static Expr* interp_value_part(const Expr* e, int part) {
+    if (is_complex_atom(e)) return expr_copy(e->data.function.args[part]);
+    if (interp_is_list(e)) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) a[i] = interp_value_part(e->data.function.args[i], part);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), a, n);
+        free(a);
+        return r;
+    }
+    if (part == 0) return expr_copy((Expr*)e);
+    return e->type == EXPR_REAL ? expr_new_real(0.0) : expr_new_integer(0);
+}
+
+/* The table with every entry's values (all but the coordinate) taken to part. */
+static Expr* interp_table_part(const Expr* table, int part) {
+    size_t n = table->data.function.arg_count;
+    Expr** es = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* en = table->data.function.args[i];
+        size_t L = en->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * L);
+        a[0] = expr_copy(en->data.function.args[0]);
+        for (size_t j = 1; j < L; j++) a[j] = interp_value_part(en->data.function.args[j], part);
+        es[i] = expr_new_function(expr_new_symbol(SYM_List), a, L);
+        free(a);
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), es, n);
+    free(es);
+    return r;
+}
+
+/* True (with *out the value, or NULL for "unevaluated") when ifun's table is
+ * complex-valued; false for real data, which the caller evaluates itself. */
+static bool interp_complex_apply(Expr* ifun, Expr** call_args, size_t argc, Expr** out) {
+    Expr* table = ifun->data.function.args[1];
+    if (is_ndarray(table) || !interp_is_list(table)) return false;   /* packed: real */
+    if (g_cplx_cache.complex && (table == g_cplx_cache.re || table == g_cplx_cache.im))
+        return false;                          /* a part being applied: real */
+    if (g_cplx_cache.table != table) {
+        bool cx = false;
+        for (size_t i = 0; i < table->data.function.arg_count && !cx; i++) {
+            Expr* en = table->data.function.args[i];
+            if (!interp_is_list(en)) break;
+            for (size_t j = 1; j < en->data.function.arg_count && !cx; j++)
+                cx = interp_has_complex(en->data.function.args[j]);
+        }
+        if (cx) {
+            for (size_t i = 0; i < table->data.function.arg_count; i++) {
+                Expr* en = table->data.function.args[i];
+                if (!interp_is_list(en) || en->data.function.arg_count < 2) return false;
+            }
+        }
+        expr_free(g_cplx_cache.table);
+        expr_free(g_cplx_cache.re);
+        expr_free(g_cplx_cache.im);
+        g_cplx_cache.table = expr_copy(table);
+        g_cplx_cache.complex = cx;
+        g_cplx_cache.re = cx ? interp_table_part(table, 0) : NULL;
+        g_cplx_cache.im = cx ? interp_table_part(table, 1) : NULL;
+    }
+    if (!g_cplx_cache.complex) return false;
+    /* the parts are applied through copies of the object (refcount bumps) */
+    size_t oc = ifun->data.function.arg_count;
+    Expr* parts[2] = { NULL, NULL };
+    Expr* tabs[2] = { g_cplx_cache.re, g_cplx_cache.im };
+    for (int part = 0; part < 2; part++) {
+        Expr** a = malloc(sizeof(Expr*) * oc);
+        for (size_t i = 0; i < oc; i++)
+            a[i] = expr_copy(i == 1 ? tabs[part] : ifun->data.function.args[i]);
+        Expr* obj = expr_new_function(expr_copy(ifun->data.function.head), a, oc);
+        free(a);
+        parts[part] = interp_apply(obj, call_args, argc);
+        expr_free(obj);
+        if (!parts[part]) break;
+    }
+    if (!parts[0] || !parts[1]) {
+        if (parts[0]) expr_free(parts[0]);
+        if (parts[1]) expr_free(parts[1]);
+        *out = NULL;
+        return true;
+    }
+    Expr* ia[2] = { expr_new_function(expr_new_symbol(SYM_Complex),
+                        (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2), parts[1] };
+    Expr* pa[2] = { parts[0], expr_new_function(expr_new_symbol(SYM_Times), ia, 2) };
+    *out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), pa, 2));
+    return true;
+}
+
 Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     if (ifun->type != EXPR_FUNCTION) return NULL;
     size_t obj_argc = ifun->data.function.arg_count;
@@ -1848,6 +2039,11 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
 
     if (argc == 1 && call_args[0]->type == EXPR_STRING && call_args[0]->data.string)
         return interp_property(ifun, call_args[0]->data.string);
+
+    {
+        Expr* cr;
+        if (interp_complex_apply(ifun, call_args, argc, &cr)) return cr;
+    }
 
     size_t m = parse_domain_dim(domain);
     if (m == 0 || argc != m) return NULL;
@@ -1958,8 +2154,15 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
             for (size_t i = 0; i < npts; i++) {
                 Expr* e = table->data.function.args[i];
                 bool hit = true;
-                for (size_t k = 0; k < m; k++)
-                    if (!expr_eq(call_args[k], entry_coord(e, m, k))) { hit = false; break; }
+                for (size_t k = 0; k < m; k++) {
+                    /* a periodic dimension's upper end is its lower end */
+                    const Expr* q = call_args[k];
+                    if (periodic && periodic[k] && interp_is_list(domain->data.function.args[k])
+                        && domain->data.function.args[k]->data.function.arg_count == 2
+                        && expr_eq(q, domain->data.function.args[k]->data.function.args[1]))
+                        q = domain->data.function.args[k]->data.function.args[0];
+                    if (!expr_eq(q, entry_coord(e, m, k))) { hit = false; break; }
+                }
                 if (hit) {
                     Expr* y = expr_copy(entry_value(e));
                     free(ders); free(orders); free(periodic);
@@ -2265,11 +2468,63 @@ Expr* interp_from_packed(double* buf, size_t npts, size_t m) {
  * pair and, if an immediate evaluation point was given, evaluate it there.
  * Takes ownership of `domain`, `table`, and `periodic` (all freed / consumed
  * here); `eval_point` is borrowed. Shared by the boxed and packed build paths. */
+/* A periodic 1-D interpolant takes the value at the lower end for both ends
+ * (the period's two ends are one point).  Data whose two end values differ are
+ * not periodic: say so, rather than silently answering one value at x = xmax
+ * for a machine query and another for an exact one (audit Interpolation#3;
+ * interp_apply maps an exact xmax query to xmin).  Reads a boxed table or a
+ * packed n x 2 one. */
+static void interp_check_periodic_ends(Expr* table, size_t m, const bool* periodic) {
+    if (m != 1 || !periodic || !periodic[0]) return;
+    Expr* vlo = NULL; Expr* vhi = NULL;      /* borrowed (boxed) or owned (packed) */
+    bool owned = false;
+    if (is_ndarray(table)) {
+        if (table->data.ndarray.rank != 2 || table->data.ndarray.dims[1] != 2
+            || table->data.ndarray.dtype != NDT_FLOAT64) return;
+        const double* b = (const double*)table->data.ndarray.data;
+        size_t n = (size_t)table->data.ndarray.dims[0];
+        if (n < 2) return;
+        size_t ilo = 0, ihi = 0;
+        for (size_t i = 1; i < n; i++) {
+            if (b[2 * i] < b[2 * ilo]) ilo = i;
+            if (b[2 * i] > b[2 * ihi]) ihi = i;
+        }
+        if (ilo == ihi) return;
+        vlo = expr_new_real(b[2 * ilo + 1]);
+        vhi = expr_new_real(b[2 * ihi + 1]);
+        owned = true;
+    } else {
+        if (!interp_is_list(table) || table_Ksupplied(table) != 0) return;
+        double xl = 0, xh = 0;
+        Expr* lo = NULL; Expr* hi = NULL;
+        for (size_t i = 0; i < table->data.function.arg_count; i++) {
+            Expr* en = table->data.function.args[i];
+            double x;
+            if (!node_to_double(entry_coord(en, 1, 0), &x)) continue;
+            if (!lo || x < xl) { lo = en; xl = x; }
+            if (!hi || x > xh) { hi = en; xh = x; }
+        }
+        if (!lo || !hi || lo == hi) return;
+        vlo = entry_value(lo); vhi = entry_value(hi);
+    }
+    if (!expr_sameq(vlo, vhi)) {
+        char* a = expr_to_string(vlo);
+        char* b = expr_to_string(vhi);
+        mth_message("Interpolation", "periodic",
+                    "The first and last values %s and %s of the periodic data differ; "
+                    "the first value is used at both ends of the period.",
+                    a ? a : "", b ? b : "");
+        free(a); free(b);
+    }
+    if (owned) { expr_free(vlo); expr_free(vhi); }
+}
+
 static Expr* interp_finish_object(Expr* domain, Expr* table, size_t m,
                                   int explicit_order, int method,
                                   bool* periodic, bool any_periodic,
                                   Expr* eval_point) {
     Expr* object;
+    if (any_periodic) interp_check_periodic_ends(table, m, periodic);
     bool need_full = (explicit_order >= 0) || (method != METHOD_DEFAULT) || any_periodic;
     if (!need_full) {
         Expr* oargs[2] = { domain, table };
@@ -2386,13 +2641,13 @@ static Expr* interp_impl_pts(Expr* res, const Expr* seq) {
     size_t m;
     bool synth_x = false;     /* form 1 */
     int Ksupplied = 0;
-    if (is_scalar_real(e0)) {
+    if (is_scalar_value(e0)) {
         m = 1; synth_x = true;
     } else if (interp_is_list(e0)) {
         size_t L = e0->data.function.arg_count;
         if (L < 2) { expr_free(e0_ref); return NULL; }
         Expr* first = e0->data.function.args[0];
-        if (L == 2 && is_scalar_real(first)) { m = 1; }
+        if (L == 2 && is_coord_like(first)) { m = 1; }
         else if (interp_is_list(first)) {
             m = first->data.function.arg_count;
             if (m < 1) { expr_free(e0_ref); return NULL; }
@@ -2443,10 +2698,12 @@ static Expr* interp_impl_pts(Expr* res, const Expr* seq) {
         if (m > 64) { ok = false; break; }
 
         if (synth_x) {
-            if (!is_scalar_real(e)) { ok = false; break; }
+            if (!is_scalar_value(e)) { ok = false; break; }
             coord[0] = (double)(i + 1); coordE[0] = NULL;
         } else {
             if (!interp_is_list(e) || e->data.function.arg_count < 2) { ok = false; break; }
+            Expr* fixed = interp_entry_numeric_coords(e, m);   /* Pi -> 3.14159... */
+            if (fixed) { expr_free(cur_e); cur_e = fixed; e = fixed; }
             if ((int)(e->data.function.arg_count - 2) != Ksupplied) { ok = false; break; }
             if (!is_real_or_array(e->data.function.args[1])) { ok = false; break; }  /* value */
             for (size_t k = 0; k < m; k++) {
@@ -2490,6 +2747,7 @@ static Expr* interp_impl_pts(Expr* res, const Expr* seq) {
     Expr* table = make_list(entries, npts);
     free(entries);
     free(dmin); free(dmax); free(dminE); free(dmaxE);
+
 
     return interp_finish_object(domain, table, m, explicit_order, method,
                                 periodic, any_periodic, eval_point);
@@ -2897,6 +3155,40 @@ static bool listinterp_pack_buffer(const Expr* nd, size_t m, const size_t* shape
     return true;
 }
 
+/* The domain / grid spec {{...}, ...} with every exact numeric entry that is
+ * not a real atom (Pi, Sqrt[2]) replaced by its machine value; NULL when no
+ * entry needs it. */
+static Expr* listinterp_numeric_domain(const Expr* domain) {
+    bool any = false;
+    for (size_t k = 0; k < domain->data.function.arg_count && !any; k++) {
+        const Expr* ax = domain->data.function.args[k];
+        if (!interp_is_list(ax)) continue;
+        for (size_t i = 0; i < ax->data.function.arg_count && !any; i++) {
+            Expr* t = interp_numeric_coord(ax->data.function.args[i]);
+            if (t) { any = true; expr_free(t); }
+        }
+    }
+    if (!any) return NULL;
+    size_t m = domain->data.function.arg_count;
+    Expr** axes = malloc(sizeof(Expr*) * m);
+    if (!axes) return NULL;
+    for (size_t k = 0; k < m; k++) {
+        const Expr* ax = domain->data.function.args[k];
+        if (!interp_is_list(ax)) { axes[k] = expr_copy((Expr*)ax); continue; }
+        size_t L = ax->data.function.arg_count;
+        Expr** v = malloc(sizeof(Expr*) * (L ? L : 1));
+        for (size_t i = 0; i < L; i++) {
+            Expr* t = interp_numeric_coord(ax->data.function.args[i]);
+            v[i] = t ? t : expr_copy(ax->data.function.args[i]);
+        }
+        axes[k] = expr_new_function(expr_new_symbol(SYM_List), v, L);
+        free(v);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), axes, m);
+    free(axes);
+    return out;
+}
+
 static Expr* builtin_listinterpolation(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2935,6 +3227,23 @@ static Expr* builtin_listinterpolation(Expr* res) {
         if (!interp_is_list(domain)) return NULL;
         want_m = domain->data.function.arg_count;
         if (want_m == 0 || want_m > LISTINTERP_MAXDIM) return NULL;
+        /* Exact numeric positions or bounds (Pi, Sqrt[2]) are taken at machine
+         * precision (audit ListInterpolation#1): re-run on the numericalised
+         * spec, which has none left. */
+        Expr* nd = listinterp_numeric_domain(domain);
+        if (nd) {
+            Expr** a = malloc(sizeof(Expr*) * argc);
+            if (!a) { expr_free(nd); return NULL; }
+            for (size_t i = 0; i < argc; i++)
+                a[i] = res->data.function.args[i] == domain ? expr_copy(nd)
+                                                           : expr_copy(res->data.function.args[i]);
+            expr_free(nd);
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+            free(a);
+            Expr* r = builtin_listinterpolation(call);
+            expr_free(call);
+            return r;
+        }
     }
 
     /* Determine the dimensionality m and per-axis extents.  For a visible/packed
@@ -2963,6 +3272,34 @@ static Expr* builtin_listinterpolation(Expr* res) {
         }
     } else if (!listinterp_shape(array, want_m, shape, &m)) {
         return NULL;
+    }
+
+    /* Explicit grid positions must be distinct: two values at one position
+     * are not a function (audit ListInterpolation#3 -- one of them used to be
+     * dropped silently). */
+    for (size_t k = 0; domain && k < m; k++) {
+        const Expr* spec = domain->data.function.args[k];
+        if (!interp_is_list(spec) || spec->data.function.arg_count != shape[k] || shape[k] == 2)
+            continue;
+        size_t L = shape[k];
+        double* xs = malloc(sizeof(double) * L);
+        bool dup = false, readable = xs != NULL;
+        for (size_t i = 0; readable && i < L; i++)
+            readable = node_to_double(spec->data.function.args[i], &xs[i]);
+        if (readable) {
+            qsort(xs, L, sizeof(double), cmp_double);
+            for (size_t i = 1; i < L && !dup; i++) dup = xs[i] == xs[i - 1];
+        }
+        free(xs);
+        if (dup) {
+            char* cs = expr_to_string((Expr*)spec);
+            mth_message("ListInterpolation", "indup",
+                        "The grid positions %s contain a repeated coordinate; "
+                        "the positions on each axis must be distinct.", cs ? cs : "");
+            free(cs);
+            if (delisted) expr_free(delisted);
+            return NULL;
+        }
     }
 
     size_t npts = 1;

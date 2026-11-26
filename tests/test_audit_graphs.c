@@ -319,6 +319,27 @@ static void test_wave5_graphs(void) {
     audit_chk("EccentricityCentrality#1", "StringContainsQ[Information[EccentricityCentrality], \"v reaches\"]", "True");
 }
 
+/* Wave 6 G4: FindKClique size and count specs; FindShortestPath to All. */
+static void test_wave6_g4_graphs(void) {
+    audit_chk("FindKClique#2", "FindKClique[CycleGraph[8], 2, {3}, All]",
+              "{{6, 7, 8}, {5, 6, 7}, {4, 5, 6}, {3, 4, 5}, {2, 3, 4}, {1, 7, 8}, {1, 2, 8}, {1, 2, 3}}");
+    audit_chk("FindKClique#2", "Length[FindKClique[CycleGraph[8], 2, {3}, 2]]", "2");
+    audit_chk("FindKClique#2", "FindKClique[CycleGraph[8], 2, {3}]", "{{1, 2, 3}}");
+    audit_chk("FindKClique#2", "FindKClique[CycleGraph[8], 2, {4}, All]", "{}");
+    audit_chk("FindKClique#2", "FindKClique[CycleGraph[8], 2]", "{{1, 2, 3}}");
+    audit_chk("FindShortestPath#2", "FindShortestPath[Graph[{1,2,3},{1->2,2->3}], 1, All][3]", "{1, 2, 3}");
+    audit_chk("FindShortestPath#2", "f = FindShortestPath[Graph[{1,2,3},{1->2,2->3}], 1, All]; {f[1], f[2]}",
+              "{{1}, {1, 2}}");
+    audit_chk("FindShortestPath#2", "FindShortestPath[Graph[{1,2,3},{1->2,2->3}], All, All][3, 1]", "{}");
+    audit_chk("FindShortestPath#2", "FindShortestPath[Graph[{1,2,3},{1->2,2->3}], All, All][1, 3]", "{1, 2, 3}");
+    audit_true("FindShortestPath#2",
+               "g = GridGraph[{4, 4}]; h = FindShortestPath[g, All, All]; "
+               "And @@ Flatten[Table[Length[h[s, t]] == Length[FindShortestPath[g, s, t]], {s, 16}, {t, 16}]]");
+    audit_chk("FindShortestPath#2",
+              "FindShortestPath[Graph[{1, 2, 3}, {1 <-> 2, 2 <-> 3, 1 <-> 3}, EdgeWeight -> {1, 1, 5}], 1, All][3]",
+              "{1, 2, 3}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_graphs);
@@ -330,5 +351,6 @@ int main(void) {
     TEST(test_min_cut_wide_range);
     TEST(test_s14_exact_big_capacities);
     TEST(test_wave5_graphs);
+    TEST(test_wave6_g4_graphs);
     return audit_finish("audit_graphs");
 }

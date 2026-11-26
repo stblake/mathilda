@@ -27,6 +27,7 @@
 #include "expr.h"
 #include "eval.h"
 #include "sym_names.h"
+#include "assoc.h"   /* assoc_from_rules: the all-targets path table */
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
@@ -201,7 +202,119 @@ static GraphAdj* resolve(Expr* res, int* is, int* it) {
     return a;
 }
 
+/* ---- FindShortestPath[g, s, All] and FindShortestPath[g, All, All] ------ */
+
+/* The shortest path from vertex `is` to every vertex of g, as the Association
+ * <|v -> path, ...|> over VertexList order ({} for an unreachable v).  One
+ * search (BFS, or Dijkstra under a usable EdgeWeight) serves every target, so
+ * the all-targets form costs one search, not one per target.  NULL on
+ * allocation failure. */
+static Expr* sp_paths_from(const Expr* g, const GraphAdj* a, int is) {
+    int n = a->n;
+    int* parent = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
+    char* reach = calloc((size_t)(n > 0 ? n : 1), sizeof(char));
+    Expr** rules = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+    int* path = malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    bool ok = parent && reach && rules && path;
+    if (ok && graph_weights_usable(g)) {
+        WAdj* w = build_wadj(g);
+        double* dist = w ? calloc((size_t)(n > 0 ? n : 1), sizeof(double)) : NULL;
+        if (w && dist) {
+            dijkstra(w, is, parent, dist);
+            for (int v = 0; v < n; v++) reach[v] = dist[v] != DBL_MAX;
+        } else ok = false;
+        free(dist); wadj_free(w);
+    } else if (ok) {
+        int* dist = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
+        if (dist) {
+            bfs(a, is, parent, dist);
+            for (int v = 0; v < n; v++) reach[v] = dist[v] >= 0;
+        } else ok = false;
+        free(dist);
+    }
+    Expr* out = NULL;
+    if (ok) {
+        for (int t = 0; t < n; t++) {
+            int len = 0;
+            if (reach[t]) {
+                for (int v = t; ; v = parent[v]) { path[len++] = v; if (v == is) break; }
+            }
+            Expr** pv = malloc(sizeof(Expr*) * (size_t)(len > 0 ? len : 1));
+            for (int k = 0; k < len; k++)
+                pv[k] = expr_copy(a->verts->data.function.args[path[len - 1 - k]]);
+            Expr* pl = expr_new_function(expr_new_symbol(SYM_List), pv, (size_t)len);
+            free(pv);
+            Expr* ra[2] = { expr_copy(a->verts->data.function.args[t]), pl };
+            rules[t] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        }
+        out = assoc_from_rules(rules, (size_t)n);
+        for (int t = 0; t < n; t++) expr_free(rules[t]);
+    }
+    free(parent); free(reach); free(rules); free(path);
+    return out;
+}
+
+/* Lookup[assoc, #k] (k = 1 or 2), adopting assoc. */
+static Expr* sp_lookup_slot(Expr* assoc, int64_t k) {
+    Expr* sa[1] = { expr_new_integer(k) };
+    Expr* la[2] = { assoc, expr_new_function(expr_new_symbol(SYM_Slot), sa, 1) };
+    return expr_new_function(expr_new_symbol(SYM_Lookup), la, 2);
+}
+
+/* FindShortestPath[g, s, All] is the function t |-> FindShortestPath[g, s, t]
+ * and FindShortestPath[g, All, All] the function (s, t) |-> ... (audit
+ * FindShortestPath#2).  Each is a pure function over a precomputed table of
+ * paths, so applying it is a lookup: Function[Lookup[<|t -> path|>, #]] and
+ * Function[Lookup[Lookup[<|s -> <|t -> path|>|>, #1], #2]].  NULL when the
+ * call is not one of these forms or a source is not a vertex. */
+static Expr* sp_all_targets(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc == 4 && is_method_option(res->data.function.args[3])) argc = 3;
+    if (argc != 3) return NULL;
+    const Expr* sv = res->data.function.args[1];
+    const Expr* tv = res->data.function.args[2];
+    if (!(tv->type == EXPR_SYMBOL && tv->data.symbol.name == SYM_All)) return NULL;
+    bool all_src = sv->type == EXPR_SYMBOL && sv->data.symbol.name == SYM_All;
+    const Expr* g = res->data.function.args[0];
+    GraphAdj* a = graph_build_adj(g);
+    if (!a) return NULL;
+    Expr* body = NULL;
+    if (!all_src) {
+        int is = graph_vertex_index(a->verts, sv);
+        Expr* tab = is >= 0 ? sp_paths_from(g, a, is) : NULL;
+        if (tab) body = sp_lookup_slot(tab, 1);
+    } else {
+        int n = a->n;
+        Expr** rules = malloc(sizeof(Expr*) * (size_t)(n > 0 ? n : 1));
+        int built = 0;
+        for (int s0 = 0; rules && s0 < n; s0++) {
+            Expr* tab = sp_paths_from(g, a, s0);
+            if (!tab) break;
+            Expr* ra[2] = { expr_copy(a->verts->data.function.args[s0]), tab };
+            rules[built++] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        }
+        if (rules && built == n) {
+            Expr* outer = assoc_from_rules(rules, (size_t)n);
+            if (outer) {
+                Expr* inner = sp_lookup_slot(outer, 1);
+                Expr* sa[1] = { expr_new_integer(2) };
+                Expr* la[2] = { inner, expr_new_function(expr_new_symbol(SYM_Slot), sa, 1) };
+                body = expr_new_function(expr_new_symbol(SYM_Lookup), la, 2);
+            }
+        }
+        for (int k = 0; k < built; k++) expr_free(rules[k]);
+        free(rules);
+    }
+    graph_adj_free(a);
+    if (!body) return NULL;
+    return expr_new_function(expr_new_symbol(SYM_Function), &body, 1);
+}
+
 Expr* builtin_find_shortest_path(Expr* res) {
+    {
+        Expr* all = sp_all_targets(res);
+        if (all) return all;
+    }
     int is, it;
     GraphAdj* a = resolve(res, &is, &it);
     if (!a) return NULL;

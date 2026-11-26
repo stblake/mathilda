@@ -246,6 +246,13 @@ Out[3]= {1.0, 2.0, 3.0}
 - `LinearModelFit[data]`
 - `LinearModelFit[{y1, y2, ...}, {f1, ...}, x]` — the `y_i` taken at `x = 1, 2, ...`
 - `LinearModelFit[{{x11, ..., y1}, ...}, {f1, ...}, {x1, ...}]`
+- `LinearModelFit[{m, v}]` — the design-matrix form: `m` is the `n x p` design
+  matrix, whose columns are the basis functions (no constant is added: a constant
+  term is a column of ones in `m`), and `v` the `n` responses. The parameters are
+  the least-squares solution of `m . c = v` (from `LeastSquares`), and the model is
+  `c1 #1 + ... + cp #p`: `LinearModelFit[{{{1,1},{1,2},{1,3}},{3,5,7}}]` has
+  `"BestFitParameters"` `{1., 2.}` and `"BestFit"` `1. #1 + 2. #2`; `model[x1, ..., xp]`
+  evaluates it.
 
 `LinearModelFit[data]` fits a linear model with an intercept and returns a `PredictorFunction`
 carrying its coefficients — the same ones `Predict` finds. Attributes: `Protected`.

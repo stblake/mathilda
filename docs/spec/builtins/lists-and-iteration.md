@@ -919,14 +919,22 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   Asked (via `UpTo[k]`) for fewer clusters than there are components, the nearest
   components merge first, ranked by the spanning tree — the spectrum itself cannot
   choose, since every partition respecting components has zero cut.
-- **`"Spectral"` above one dimension is a second implementation, and the threshold
-  is why.** The n-D kernel counts embedding jumps wider than three times the **mean**
-  jump; the 1-D kernel counts data gaps wider than three times the **median**. Each
-  is right in its own domain — a good embedding collapses within-cluster distance,
-  driving the median to ~0 so a median threshold accepts nearly every jump, while on
-  raw data gaps it is the mean that misleads. Routing scalars through the n-D kernel
-  under-counts (`{{1,2,3},{10,11,12},{25}}` becomes `{{1,2,3,10,11,12},{25}}`), so
-  the two paths stay separate.
+- **`"Spectral"` above one dimension is a second implementation.** The n-D kernel
+  counts embedding jumps wider than three times the **mean** jump and reads the
+  graph's components; the 1-D kernel counts jumps wider than three times the mean of
+  the **other** jumps. A good embedding collapses within-cluster distance, driving
+  the median to ~0, so a median threshold admits a merely uneven jump inside a
+  cluster; and with few points the one jump between two groups is the whole range,
+  exactly `m` times the plain mean, so it never clears three times it
+  (`{1, 2, 3, 100}`). Leaving the jump out of its own yardstick answers both. Routing
+  scalars through the n-D kernel under-counts (`{{1,2,3},{10,11,12},{25}}` becomes
+  `{{1,2,3,10,11,12},{25}}`), so the two paths stay separate. The 1-D embedding is
+  the random-walk eigenvector `D^(-1/2) v`, found by power iteration on
+  `(W_norm + I)/2` from the ramp along the sorted data: on evenly spaced data it is a
+  half cosine, whose widest jump is about `pi/2` times the others' mean, so
+  `FindClusters[Range[100], Method -> "Spectral"]` is one cluster (it was three: the
+  iteration from an alternating seed had not converged, the `sqrt(degree)` scaling
+  put wide jumps at both ends, and the threshold was the median).
 - **`"GaussianMixture"` fits a full covariance, so it needs more points per
   component than dimensions.** A component costs `dim` means plus `dim(dim+1)/2`
   covariance entries, and `k_max` is capped at `n/(dim + 1)` — the minimum for a

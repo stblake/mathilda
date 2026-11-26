@@ -274,6 +274,23 @@ static void test_wave5_lists_batch(void) {
               "{1.0, 0.0, 0.0}");
 }
 
+/* Wave 6 G4: spectral FindClusters on evenly spaced data; Sqrt of a Rational
+ * with a bigint part. */
+static void test_wave6_g4_lists(void) {
+    audit_chk("FindClusters#1", "Length[FindClusters[Range[100], Method -> \"Spectral\"]]", "1");
+    audit_chk("FindClusters#1", "Length[FindClusters[Range[100]]]", "1");
+    audit_chk("FindClusters#1", "FindClusters[{1, 2, 3, 10, 11, 12, 30, 31}, Method -> \"Spectral\"]",
+              "{{1, 2, 3}, {10, 11, 12}, {30, 31}}");
+    audit_chk("FindClusters#1", "FindClusters[{1., 1.1, 1.2, 5., 5.1, 9., 9.2, 9.3}, Method -> \"Spectral\"]",
+              "{{1.0, 1.1, 1.2}, {5.0, 5.1}, {9.0, 9.2, 9.3}}");
+    audit_chk("EuclideanDistance#5", "EuclideanDistance[{1/10^20, 0}, {0, 1/10^20}]",
+              "1/(50000000000000000000 Sqrt[2])");
+    audit_true("EuclideanDistance#5",
+               "EuclideanDistance[{1/10^20, 0}, {0, 1/10^20}] == Sqrt[2]/10^20");
+    audit_chk("EuclideanDistance#5", "Sqrt[1/(8*10^20)]", "1/(20000000000 Sqrt[2])");
+    audit_chk("EuclideanDistance#5", "Sqrt[7/(3*10^25 + 1)]", "Sqrt[7/30000000000000000000000001]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_unit_vector_option_only);
@@ -287,5 +304,6 @@ int main(void) {
     TEST(test_s11_special_values);
     TEST(test_wave4_lists_iteration);
     TEST(test_wave5_lists_batch);
+    TEST(test_wave6_g4_lists);
     return audit_finish("audit_lists_and_iteration");
 }

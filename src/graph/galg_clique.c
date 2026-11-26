@@ -723,12 +723,22 @@ Expr* builtin_find_clique(Expr* res) {
     return out;
 }
 
+/* FindKClique[g, k], FindKClique[g, k, nspec] and FindKClique[g, k, nspec, s]:
+ * a k-clique is a clique of the k-th power of g (vertices pairwise within
+ * distance k in g), so the size spec and count select among the cliques of
+ * that power graph exactly as FindClique's do among the cliques of g (audit
+ * FindKClique#2). */
 Expr* builtin_find_k_clique(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 4) return NULL;
     const Expr* g = res->data.function.args[0];
     const Expr* ka = res->data.function.args[1];
     int64_t kv;
     if (!graph_is_valid(g) || !expr_get_int64_saturated(ka, &kv) || kv < 1) return NULL;
+    int kmin = 1, kmax = 0x3fffffff;
+    long count = 1;
+    if (argc >= 3 && !galg_parse_size_spec(res->data.function.args[2], &kmin, &kmax)) return NULL;
+    if (argc == 4 && !galg_parse_count(res->data.function.args[3], &count)) return NULL;
     /* Any K at least the vertex count bounds no distance (a BigInt included):
      * clamp it to INT_MAX so `dist[x] >= K` compares within int. */
     long K = kv > (int64_t)INT_MAX ? (long)INT_MAX : (long)kv;
@@ -779,7 +789,18 @@ Expr* builtin_find_k_clique(Expr* res) {
     if (ok) {
         GalgUG* pw = galg_ug_from_edges(n, cnt, pu, pv);
         int* c = malloc((size_t)n * sizeof(int));
-        if (pw && c) {
+        if (pw && argc >= 3) {
+            /* the size/count query on the power graph; past the bitset engine
+             * a single answer can still come from the maximum clique */
+            out = galg_clique_spec_query(g, pw, 0, kmin, kmax, count);
+            if (!out && count == 1 && c) {
+                int k = galg_max_clique(pw, c);
+                if (k > 0 && k >= kmin && k <= kmax) {
+                    Expr* one = galg_vertex_list(g, c, k, 0);
+                    out = expr_new_function(expr_new_symbol(SYM_List), &one, 1);
+                }
+            }
+        } else if (pw && c) {
             int k = galg_max_clique(pw, c);
             if (k > 0) {
                 Expr* one = galg_vertex_list(g, c, k, 0);

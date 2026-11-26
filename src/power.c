@@ -2165,6 +2165,30 @@ Expr* builtin_power(Expr* res) {
                 out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){ rb, expr_new_integer(pp_b) }, 2));
             }
+            /* No exact root: split as the machine case below does,
+             * (n/d)^(p/q) = n^(p/q) d^(-p/q) (d > 0), when either side
+             * simplifies or n is 1 -- Sqrt[1/(5 10^39)] is
+             * 1/(50000000000000000000 Sqrt[2]), where it stayed a bare Sqrt of
+             * the Rational (audit EuclideanDistance#5).  The integer pieces go
+             * through the integer-base path, which extracts the q-th-power
+             * factors of a bigint. */
+            if (!out && mpz_sgn(zd) > 0 && mpz_sgn(zn) != 0) {
+                Expr* np = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(base->data.function.args[0]), expr_copy(exp) }, 2));
+                Expr* dp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(base->data.function.args[1]),
+                               make_rational_neg(pp_b, qq_b) }, 2));
+                bool n_bare = is_head_call(np, SYM_Power, 2)
+                    && expr_eq(np->data.function.args[0], base->data.function.args[0]);
+                bool d_bare = is_head_call(dp, SYM_Power, 2)
+                    && expr_eq(dp->data.function.args[0], base->data.function.args[1]);
+                if (mpz_cmp_ui(zn, 1) == 0 || !n_bare || !d_bare) {
+                    out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ np, dp }, 2));
+                } else {
+                    expr_free(np); expr_free(dp);
+                }
+            }
             mpz_clears(zn, zd, rn, rd, NULL);
             if (out) return out;
         }

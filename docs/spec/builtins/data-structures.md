@@ -471,6 +471,16 @@ difference from [`Split`](structural-manipulation.md#split). Equivalent to
 (hash-indexed, O(n)) with the identity key applied directly rather than as `n`
 `Identity[x]` applications.
 
+The default equivalence is `SameQ`, which treats approximate numbers that differ
+only within `` Internal`$SameQTolerance `` (the last binary digit) as the same:
+`Gather[{0.1 + 0.2, 0.3}]` is `{{0.3, 0.3}}`. The hash grouping is exact (a
+tolerance that is not transitive cannot be hashed), so the exact groups whose keys
+are `SameQ` are joined afterwards: the keys holding approximate numbers are sorted
+by an order in which `SameQ` numbers tie and neighbours that are `SameQ` are
+joined -- `O(g log g)` for `g` groups, nothing at all when fewer than two keys
+hold an approximate number. A joined group keeps its elements in input order.
+`GatherBy` compares its keys the same way.
+
 `Gather[list, test]` takes the equivalence from `test`: each element joins the
 first sublist whose first element `e` gives `test[e, elem] === True`, else it
 opens a new sublist (O(n g) test calls for g sublists; a result other than

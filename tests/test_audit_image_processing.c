@@ -567,6 +567,20 @@ static void test_wave5_docs(void) {
     audit_true("Out#3", "StringContainsQ[Information[Out], \"Out[n]\"]");
 }
 
+/* Wave 6 G4: DistanceTransform of an image with no background pixel has no
+ * distance to give (it used to return its internal 1.0*^30 seed). */
+static void test_wave6_g4_images(void) {
+    audit_chk("DistanceTransform#1", "Quiet[Check[DistanceTransform[Image[{{1., 1., 1., 1.}}]], fired, "
+              "DistanceTransform::nobg]]", "fired");
+    audit_chk("DistanceTransform#1", "Quiet[Check[DistanceTransform[Image[{{1., 1.}, {1., 1.}}], "
+              "DistanceFunction -> ManhattanDistance], fired, DistanceTransform::nobg]]", "fired");
+    audit_chk("DistanceTransform#1", "Quiet[Check[DistanceTransform[Image[{{0.5, 0.7}}], 0.2], fired, "
+              "DistanceTransform::nobg]]", "fired");
+    audit_chk("DistanceTransform#1", "ImageData[DistanceTransform[Image[{{1., 0., 1., 1.}}]]]",
+              "{{1.0, 0.0, 1.0, 2.0}}");
+    audit_chk("ImageDimensions#4", "ImageDimensions[Image[{{1., 2., 3.}, {4., 5., 6.}}]]", "{3, 2}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_random_image_huge_size);
@@ -597,5 +611,6 @@ int main(void) {
     TEST(test_wave5_messages);
     TEST(test_wave5_forms);
     TEST(test_wave5_docs);
+    TEST(test_wave6_g4_images);
     return audit_finish("audit_image_processing");
 }

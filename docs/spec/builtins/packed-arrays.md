@@ -203,9 +203,11 @@ Returns `list` unchanged — not an error — when it cannot be packed:
 |---|---|
 | not rectangular | a buffer has one shape |
 | empty | rank-0 has no buffer form |
-| any `Rational`, `BigInt`, arbitrary-precision, `Complex`, or symbolic element | no machine representation, or (for `Complex`) no faithful round trip yet |
+| any `Rational`, `BigInt`, arbitrary-precision, exact `Complex` (`1 + I`), or symbolic element | no machine representation |
 
-Inferred dtypes: all-`Integer` → `"int64"`, all-`Real` → `"float64"`. A list that
+Inferred dtypes: all-`Integer` → `"int64"`, all-`Real` → `"float64"`, and a list with a machine
+complex element (`{1. + I, 2.}`, or `{1. + I, 2}`) → `"complex64"`, its real elements widened. (Automatic
+packing still leaves a complex list unpacked; only the explicit request packs it.) A list that
 **mixes** machine `Integer` and `Real` is widened to a `"float64"` buffer — the
 integers become doubles — because asking to pack is asking for a single machine
 type, and Real is the one that holds both:

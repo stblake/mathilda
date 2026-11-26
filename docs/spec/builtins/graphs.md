@@ -712,6 +712,11 @@ Out[6]= RandomGraph[{6, 5}, -1]
 
 - `FindShortestPath[g, s, t]`: a shortest path from `s` to `t` as a vertex
   list; `{}` if `t` is unreachable.
+- `FindShortestPath[g, s, All]`: a function giving the path from `s` to any
+  target, `Function[Lookup[<|t -> path, ...|>, #]]` over every vertex `t`
+  (`{}` for an unreachable one). `FindShortestPath[g, All, All]` is the
+  two-argument function `(s, t) -> path`. One search per source builds the
+  whole table, so applying the function is a lookup.
 
 **Features**:
 - `Protected`. Shared by the search & computation heads (`FindShortestPath`,
@@ -3456,6 +3461,11 @@ Out[7]= $Aborted
 - `FindKClique[g, k]`: `{c}`, a largest set of vertices of `g` pairwise within distance `k`.
   No vertex limit: the power graph comes from truncated BFS and is searched by the
   maximum-clique engine (a 10000-vertex path stayed unevaluated).
+- `FindKClique[g, k, nspec]` and `FindKClique[g, k, nspec, s]`: the size spec
+  (`n` at most n vertices, `{n}` exactly n, `{nmin, nmax}`) and count (`s`, or `All`)
+  of `FindClique`, applied to the cliques of the `k`-th power graph:
+  `FindKClique[CycleGraph[8], 2, {3}, All]` is the eight runs of three consecutive
+  vertices.
 
 **Features**:
 - `Protected`; unevaluated on a non-graph.

@@ -335,6 +335,14 @@ static void test_wave5_controls(void) {
     audit_chk("Manipulate#2", "Manipulate[x, {x, {}}]", "Manipulate[x, {x, {}}]");
 }
 
+/* Wave 6 G4: Animate's stepped iterator {t, tmin, tmax, dt} is the discrete
+ * value list Range[tmin, tmax, dt] (built without a window). */
+static void test_wave6_g4_graphics(void) {
+    audit_chk("Animate#2", "Animate[t, {t, 0, 1, 0.1}]", "Null");
+    audit_chk("Animate#2", "Animate[t, {t, 0, 1, 1/4}]", "Null");
+    audit_chk("Animate#2", "Animate[t, {t, 0, 1, -0.1}]", "Animate[t, {t, 0, 1, -0.1}]");
+}
+
 int main(void) {
     audit_init();
     TEST(test_plot3d_huge_plot_points);
@@ -363,5 +371,6 @@ int main(void) {
     TEST(test_wave5_show);
     TEST(test_wave5_styles_export);
     TEST(test_wave5_controls);
+    TEST(test_wave6_g4_graphics);
     return audit_finish("audit_graphics");
 }

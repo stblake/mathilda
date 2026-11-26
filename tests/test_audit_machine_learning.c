@@ -262,6 +262,19 @@ static void test_wave5_ml(void) {
               "Length[p] == 2 && And @@ Thread[0 <= p <= 1]", "True");
 }
 
+/* Wave 6 G4: LinearModelFit[{m, v}], the design-matrix form. */
+static void test_wave6_g4_ml(void) {
+    audit_chk("LinearModelFit#4", "LinearModelFit[{{{1,1},{1,2},{1,3}},{3,5,7}}][\"BestFitParameters\"]",
+              "{1.0, 2.0}");
+    audit_chk("LinearModelFit#4", "LinearModelFit[{{{1,1},{1,2},{1,3}},{3,5,7}}][\"BestFit\"]",
+              "1.0 #1 + 2.0 #2");
+    audit_chk("LinearModelFit#4", "LinearModelFit[{{{1,1},{1,2},{1,3}},{3,5,7}}][1, 4]", "9.0");
+    audit_chk("LinearModelFit#4", "LinearModelFit[{{{1,1},{1,2},{1,3}},{3,5,7}}][\"Function\"][1, 4]", "9.0");
+    audit_true("LinearModelFit#4",
+               "Norm[LinearModelFit[{{{1, 0}, {1, 1}, {1, 2}, {1, 3}}, {1, 2, 2, 4}}][\"BestFitParameters\"] - "
+               "{0.9, 0.9}] < 10^-12");
+}
+
 int main(void) {
     audit_init();
     TEST(test_wave4_machine_learning);
@@ -271,5 +284,6 @@ int main(void) {
     TEST(test_linear_model_fit_offset);
     TEST(test_linear_model_fit_basis);
     TEST(test_wave5_ml);
+    TEST(test_wave6_g4_ml);
     return audit_finish("audit_machine_learning");
 }

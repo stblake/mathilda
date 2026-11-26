@@ -165,7 +165,9 @@ void graph_init(void) {
     symtab_get_def("FindShortestPath")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FindShortestPath",
         "FindShortestPath[g,s,t] gives a shortest path from s to t as a list of "
-        "vertices ({} if none).");
+        "vertices ({} if none). FindShortestPath[g, s, All] gives a function that returns the "
+        "path from s to any target t; FindShortestPath[g, All, All] one that takes (s, t). "
+        "Both are computed once, by one search per source.");
 
     symtab_add_builtin("GraphDistance", builtin_graph_distance);
     symtab_get_def("GraphDistance")->attributes |= ATTR_PROTECTED;

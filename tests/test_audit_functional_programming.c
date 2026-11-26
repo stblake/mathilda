@@ -312,6 +312,59 @@ static void test_wave5_g4_functional(void) {
     audit_chk("SelectFirst#1", "SelectFirst[SparseArray[{0, 0, 3}], # > 0 &]", "3");
 }
 
+/* Wave 6 G4: Interpolation / ListInterpolation -- complex values (split into
+ * real and imaginary interpolants), exact numeric abscissae taken at machine
+ * precision, periodic data whose ends differ, repeated grid positions. */
+static void w6f_msg(const char* id, const char* expr, const char* tag) {
+    char buf[1024];
+    snprintf(buf, sizeof buf, "Quiet[Check[%s, fired, %s]]", expr, tag);
+    audit_chk(id, buf, "fired");
+}
+
+static void test_wave6_g4_functional(void) {
+    audit_chk("Interpolation#1", "Interpolation[{1, I, -1, -I}][2.5]", "-0.625 + 0.625*I");
+    audit_chk("Interpolation#1", "Interpolation[{1, I, -1, -I}][2]", "I");
+    audit_chk("Interpolation#1", "Interpolation[{1, I, -1, -I}][{1.5, 2.5}]",
+              "{0.625 + 0.875*I, -0.625 + 0.625*I}");
+    audit_true("Interpolation#1",
+               "f = Interpolation[{1, I, -1, -I}]; Abs[f[2.5] - (Interpolation[{1, 0, -1, 0}][2.5] + "
+               "I Interpolation[{0, 1, 0, -1}][2.5])] < 10^-14");
+    audit_true("Interpolation#1",
+               "f = Interpolation[{1, I, -1, -I}]; Abs[f'[2.5] - (Interpolation[{1, 0, -1, 0}]'[2.5] + "
+               "I Interpolation[{0, 1, 0, -1}]'[2.5])] < 10^-14");
+    audit_true("Interpolation#2",
+               "Interpolation[{{0, 0}, {Pi, 1}, {2 Pi, 0}}][1.0] === "
+               "Interpolation[{{0, 0}, {N[Pi], 1}, {N[2 Pi], 0}}][1.0]");
+    audit_chk("Interpolation#2", "Interpolation[{{0, 0}, {Pi, 1}, {2 Pi, 0}}][1.0]", "0.535299");
+    audit_chk("Interpolation#2", "Interpolation[{{0, 0}, {Pi, 1}, {2 Pi, 0}}]",
+              "InterpolatingFunction[{{0, 6.28319}}, <>]");
+    audit_chk("Interpolation#3",
+              "Quiet[p = Interpolation[{0, 1, 0, -1, 1}, PeriodicInterpolation -> True]]; {p[5], p[5.0]}",
+              "{0, 0.0}");
+    w6f_msg("Interpolation#3", "Interpolation[{0, 1, 0, -1, 1}, PeriodicInterpolation -> True]",
+            "Interpolation::periodic");
+    w6f_msg("Interpolation#3", "Interpolation[{0., 1., 0., -1., 1.}, PeriodicInterpolation -> True]",
+            "Interpolation::periodic");
+    audit_chk("Interpolation#3",
+              "Check[p = Interpolation[{0, 1, 0, -1, 0}, PeriodicInterpolation -> True]; {p[5], p[5.0]}, fired]",
+              "{0, 0.0}");
+    audit_chk("ListInterpolation#1", "ListInterpolation[{1, 2, 3}, {{0, Pi}}]",
+              "InterpolatingFunction[{{0, 3.14159}}, <>]");
+    audit_true("ListInterpolation#1",
+               "ListInterpolation[{1, 2, 3}, {{0, Pi}}][1.0] === ListInterpolation[{1, 2, 3}, {{0, N[Pi]}}][1.0]");
+    audit_true("ListInterpolation#1",
+               "ListInterpolation[{1, 2, 3}, {{0, Sqrt[2], 3}}][1.0] === "
+               "ListInterpolation[{1, 2, 3}, {{0, N[Sqrt[2]], 3}}][1.0]");
+    audit_chk("ListInterpolation#2", "ListInterpolation[{1 + I, 2, 3 I, 4}]",
+              "InterpolatingFunction[{{1, 4}}, <>]");
+    audit_chk("ListInterpolation#2", "ListInterpolation[{1 + I, 2, 3 I, 4}][2.5]", "0.8125 + 1.625*I");
+    audit_chk("ListInterpolation#2", "ListInterpolation[{1 + I, 2, 3 I, 4}][3]", "3*I");
+    w6f_msg("ListInterpolation#3", "ListInterpolation[{1, 2, 3}, {{1, 1, 2}}]", "ListInterpolation::indup");
+    audit_chk("ListInterpolation#3", "Quiet[ListInterpolation[{1, 2, 3}, {{1, 1, 2}}]]",
+              "ListInterpolation[{1, 2, 3}, {{1, 1, 2}}]");
+    audit_chk("ListInterpolation#3", "ListInterpolation[{1, 2, 3}, {{1, 2, 4}}][3]", "2.66667");
+}
+
 int main(void) {
     audit_init();
     TEST(test_fixedpointlist_long_symbolic);
@@ -327,5 +380,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave5_g4_functional);
     TEST(test_wave4_g4_functional);
+    TEST(test_wave6_g4_functional);
     return audit_finish("audit_functional_programming");
 }

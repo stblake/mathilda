@@ -243,6 +243,30 @@ static bool parse_iter_values(const Expr* e, const char** var_sym, Expr*** value
     return ok;
 }
 
+/* {var, tmin, tmax, dt}: t takes the values Range[tmin, tmax, dt] only (audit
+ * Animate#2), so it is the discrete value-list iterator {var, Range[...]} --
+ * the step quantises t exactly as Table's iterator would.  An empty range (a
+ * step pointing away from tmax) or a non-numeric bound is rejected. */
+static bool parse_iter_step(const Expr* e, const char** var_sym, Expr*** values, size_t* nv) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_List || e->data.function.arg_count != 4)
+        return false;
+    const Expr* ve = e->data.function.args[0];
+    if (!ve || ve->type != EXPR_SYMBOL) return false;
+    double lo, hi, dt;
+    if (!numericize(e->data.function.args[1], &lo) || !numericize(e->data.function.args[2], &hi)
+        || !numericize(e->data.function.args[3], &dt) || !(dt > 0.0) || !(lo <= hi))
+        return false;
+    Expr* ra[3] = { expr_copy(e->data.function.args[1]), expr_copy(e->data.function.args[2]),
+                    expr_copy(e->data.function.args[3]) };
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Range), ra, 3));
+    Expr* it_args[2] = { expr_copy((Expr*)ve), r };
+    Expr* it = expr_new_function(expr_new_symbol(SYM_List), it_args, 2);
+    bool ok = parse_iter_values(it, var_sym, values, nv);
+    expr_free(it);
+    return ok;
+}
+
 /* Try to parse {var, tmin, tmax} from a List expression.
  * Returns true on success; `var_sym`, `tmin`, `tmax` are set. */
 static bool parse_iter_spec(const Expr* e, const char** var_sym,
@@ -250,13 +274,9 @@ static bool parse_iter_spec(const Expr* e, const char** var_sym,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
     if (e->data.function.head->data.symbol.name != SYM_List) return false;
-    /* {t, tmin, tmax} or {t, tmin, tmax, dt} (audit Animate#2). The step is accepted; the
-     * animation sweeps the range continuously, so it is not used to quantise t. */
-    if (e->data.function.arg_count != 3 && e->data.function.arg_count != 4) return false;
-    if (e->data.function.arg_count == 4) {
-        double dt;
-        if (!numericize(e->data.function.args[3], &dt) || !(dt > 0.0)) return false;
-    }
+    /* {t, tmin, tmax}: t sweeps the range continuously.  The stepped form
+     * {t, tmin, tmax, dt} is a discrete iterator, read by parse_iter_step. */
+    if (e->data.function.arg_count != 3) return false;
     const Expr* ve = e->data.function.args[0];
     if (!ve || ve->type != EXPR_SYMBOL) return false;
     *var_sym = ve->data.symbol.name;
@@ -868,8 +888,9 @@ Expr* builtin_animate(Expr* res) {
         Expr** vals = NULL;
         size_t nv = 0;
         bool ok = parse_iter_spec(arg_ev, &vs, &lo, &hi);
-        if (!ok && parse_iter_values(arg_ev, &vs, &vals, &nv)) {
-            ok = true;                       /* {t, {v1, ..., vn}} */
+        if (!ok && (parse_iter_values(arg_ev, &vs, &vals, &nv)
+                    || parse_iter_step(arg_ev, &vs, &vals, &nv))) {
+            ok = true;                       /* {t, {v1, ..., vn}}, {t, a, b, dt} */
             lo = 0.0;
             hi = (double)(nv - 1);
         }

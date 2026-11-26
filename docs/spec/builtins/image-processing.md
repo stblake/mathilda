@@ -5883,6 +5883,9 @@ the default.
 Distance from each pixel to the nearest background pixel.
 
 - `DistanceTransform[image]`, or `DistanceTransform[image, t]` to set what counts as background.
+- An image with no background pixel (none at or below `t`) has no distance to give:
+  `DistanceTransform::nobg`, and the call stays unevaluated (it used to return its
+  internal `1.0*^30` seed as if that were a distance).
 - Exact Euclidean, by lower envelopes of parabolas one axis at a time; accepts an `Image3D`.
 - Squared distances on an integer lattice are exact integers, so Pythagorean offsets give exact distances.
 

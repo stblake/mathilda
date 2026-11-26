@@ -423,8 +423,12 @@ static void test_quadratic_closed_form(void) {
                 "Sort[r] == Sort[{-1. - 2. I, -1. + 2. I}]]");
     ASSERT_TRUE("Module[{r = (List @@ NRoots[4 x^2 - 4 x + 1 == 0, x])[[All, 2]]}, r == {0.5, 0.5}]");
     ASSERT_TRUE("Module[{r = (List @@ NRoots[x^2 - 2 == 0, x])[[All, 2]]}, r == {-Sqrt[2.], Sqrt[2.]}]");
+    /* The exact reference root cancels 20 digits, so it is taken with N at 60
+     * digits first: subtracted from a 30-digit number directly it is
+     * numericalised at 30 digits (fixed precision, no significance arithmetic)
+     * and the comparison measures that cancellation, not NRoots. */
     ASSERT_TRUE("Module[{r = (List @@ NRoots[10^-20 x^2 - x + 1 == 0, x, PrecisionGoal -> 30])[[All, 2]]}, "
-                "Abs[Min[r] - (1 - Sqrt[1 - 4/10^20])/(2/10^20)] < 10^-29]");
+                "Abs[Min[r] - N[(1 - Sqrt[1 - 4/10^20])/(2/10^20), 60]] < 10^-29]");
     ASSERT_TRUE("Length[NSolve[(0.5 + t 0.6 - 1)^2 + (0.1 + t 0.8 - 1)^2 == 1/9, t, Reals]] == 2");
 }
 

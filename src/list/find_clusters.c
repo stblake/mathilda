@@ -2298,7 +2298,16 @@ static bool fc_method_spectral(const FcData* d, FcCount spec, const FcOpts* o,
             deg[i] += exp(-0.5 * z * z);
         }
 
-    for (size_t i = 0; i < n; i++) v[i] = ((i % 2) ? 1.0 : -1.0) + 0.001 * (double)i;
+    /* Seed with the ramp along the sorted data, in the normalised basis
+     * (D^(1/2) times the ramp): the Fiedler vector of a path-like graph is a
+     * monotone profile, so the ramp is already close to it, where the
+     * alternating seed used before was the highest-frequency vector there is.
+     * The iteration runs on (W_norm + I)/2, whose spectrum is in [0, 1]: on
+     * W_norm itself a NEGATIVE eigenvalue of large magnitude can win the power
+     * iteration, and 100 steps from the alternating seed had converged to
+     * neither (audit FindClusters#1). */
+    for (size_t i = 0; i < n; i++)
+        v[i] = sqrt(deg[i]) * ((double)i - 0.5 * (double)(n - 1));
 
     for (int it = 0; it < FC_MAX_ITER; it++) {
         for (size_t i = 0; i < n; i++) {
@@ -2308,7 +2317,7 @@ static bool fc_method_spectral(const FcData* d, FcCount spec, const FcOpts* o,
                 double wij = exp(-0.5 * z * z);
                 acc += wij * v[j] / sqrt(deg[i] * deg[j]);
             }
-            t[i] = acc;
+            t[i] = 0.5 * (acc + v[i]);
         }
         /* Deflate the constant (trivial) eigenvector, then normalise. */
         double dot = 0.0, nrm = 0.0, cn = 0.0;
@@ -2324,25 +2333,34 @@ static bool fc_method_spectral(const FcData* d, FcCount spec, const FcOpts* o,
 
     /* The embedding is monotone along the line for a path-like graph, so the
      * natural cut is its widest jump -- the eigengap heuristic, applied to the
-     * coordinates rather than the spectrum. */
+     * coordinates rather than the spectrum.
+     *
+     * The embedding is the random-walk eigenvector D^(-1/2) v: v itself is
+     * scaled by sqrt(degree), which is smaller at the ends of the line, and
+     * that scaling alone put the widest jumps at the two ends.  On evenly
+     * spaced data the (converged) embedding is a half cosine, whose widest
+     * jump is pi/2 times the mean of the others, so no jump clears
+     * FC_GAP_FACTOR times that and Range[100] is one cluster (audit
+     * FindClusters#1: it was three -- an unconverged iteration, the sqrt(degree)
+     * ends, and a median threshold).  The statistic is the mean of the OTHER
+     * jumps: the median is ~0 for tight clusters (so it admits a merely
+     * uneven jump inside one, {9., 9.2, 9.3} split), and the plain mean can
+     * never be cleared by the one jump between two groups of few points (that
+     * jump is the whole range, exactly m times the mean, {1, 2, 3, 100}).
+     * Leaving the jump out of its own yardstick answers both.  A jump must
+     * also be a visible share of the range (1e-9), so rounding noise between
+     * equal embedding values is never a cut. */
+    for (size_t i = 0; i < n; i++) v[i] /= sqrt(deg[i]);
     size_t natural = 1;
-    double med = 0.0;
     {
-        double* g = malloc(sizeof(double) * (n - 1));
-        if (!g) { free(sv); free(deg); free(v); free(t); free(id); return false; }
-        for (size_t j = 0; j + 1 < n; j++) g[j] = fabs(v[j + 1] - v[j]);
-        double* s = malloc(sizeof(double) * (n - 1));
-        if (!s) { free(g); free(sv); free(deg); free(v); free(t); free(id); return false; }
-        memcpy(s, g, sizeof(double) * (n - 1));
-        for (size_t i = 1; i + 1 < n; i++) {
-            double x = s[i]; size_t j = i;
-            while (j > 0 && s[j - 1] > x) { s[j] = s[j - 1]; j--; }
-            s[j] = x;
-        }
         size_t m = n - 1;
-        med = (m % 2) ? s[m / 2] : 0.5 * (s[m / 2 - 1] + s[m / 2]);
-        for (size_t j = 0; j + 1 < n; j++) if (g[j] > (double)FC_GAP_FACTOR * med) natural++;
-        free(g); free(s);
+        double total = 0.0;
+        for (size_t j = 0; j < m; j++) total += fabs(v[j + 1] - v[j]);
+        for (size_t j = 0; j < m; j++) {
+            double gj = fabs(v[j + 1] - v[j]);
+            double others = (m > 1) ? (total - gj) / (double)(m - 1) : 0.0;
+            if (gj > (double)FC_GAP_FACTOR * others && gj > 1e-9 * total) natural++;
+        }
     }
 
     size_t target = fc_target_count(natural, spec, d->n_distinct);

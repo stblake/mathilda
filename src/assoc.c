@@ -22,6 +22,7 @@
 #include "print.h"     /* expr_to_string: AssociationThread::idim */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "linkedlist_seq.h" /* LLSeq: LinkedList arguments */
+#include "comparisons.h"   /* sameq_merge_classes: Gather by SameQ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -1389,6 +1390,67 @@ Expr* builtin_groupby(Expr* res) {
  * than as f = Identity avoids n redundant Identity[x] evaluations and makes
  * Gather[l] === GatherBy[l, Identity] structural rather than coincidental.
  * ====================================================================== */
+/* Gather's equivalence is SameQ, which treats approximate numbers within
+ * Internal`$SameQTolerance as the same (Gather[{0.1 + 0.2, 0.3}] is one group,
+ * audit Gather#2); the hash grouping is exact (a tolerance that is not
+ * transitive cannot be hashed), so the exact groups whose keys are SameQ are
+ * joined afterwards by sameq_merge_classes.  Rewrites order/start/gcnt (and
+ * keys, freeing the merged-away ones) in place for the *ngp -> nc groups; each
+ * merged group keeps its elements in input order and its first group's
+ * position. */
+typedef struct { LLSeq* lv; Expr** keys; const size_t* order; const size_t* start; } GatherKeyCtx;
+
+static const Expr* gather_key_at(void* c, size_t g) {
+    GatherKeyCtx* x = c;
+    return x->keys ? x->keys[g] : llq_peek(x->lv, x->order[x->start[g]]);
+}
+
+static int gather_idx_cmp(const void* a, const void* b) {
+    size_t x = *(const size_t*)a, y = *(const size_t*)b;
+    return (x > y) - (x < y);
+}
+
+static void gather_merge_sameq(LLSeq* lv, Expr** keys, size_t* order, size_t* start,
+                               size_t* gcnt, size_t* ngp) {
+    size_t ng = *ngp;
+    size_t* cls = malloc(sizeof(size_t) * ng);
+    if (!cls) return;
+    GatherKeyCtx ctx = { lv, keys, order, start };
+    size_t nc = sameq_merge_classes(gather_key_at, &ctx, ng, cls);
+    if (nc == ng) { free(cls); return; }
+    size_t n = 0;
+    for (size_t g = 0; g < ng; g++) n += gcnt[g];
+    size_t* ccnt = calloc(nc, sizeof(size_t));
+    size_t* cst = malloc(sizeof(size_t) * nc);
+    size_t* fill = calloc(nc, sizeof(size_t));
+    size_t* norder = malloc(sizeof(size_t) * (n ? n : 1));
+    if (!ccnt || !cst || !fill || !norder) {
+        free(ccnt); free(cst); free(fill); free(norder); free(cls); return;
+    }
+    for (size_t g = 0; g < ng; g++) ccnt[cls[g]] += gcnt[g];
+    for (size_t c = 0, at = 0; c < nc; c++) { cst[c] = at; at += ccnt[c]; }
+    for (size_t g = 0; g < ng; g++) {
+        size_t c = cls[g];
+        memcpy(norder + cst[c] + fill[c], order + start[g], gcnt[g] * sizeof(size_t));
+        fill[c] += gcnt[g];
+    }
+    for (size_t c = 0; c < nc; c++)
+        qsort(norder + cst[c], ccnt[c], sizeof(size_t), gather_idx_cmp);
+    memcpy(order, norder, n * sizeof(size_t));
+    /* keys: class c keeps the key of its first group (cls[g] <= g, so the
+     * compaction never overwrites a key still to be read) */
+    if (keys) {
+        size_t next = 0;
+        for (size_t g = 0; g < ng; g++) {
+            if (cls[g] == next) { keys[next] = keys[g]; next++; }
+            else expr_free(keys[g]);
+        }
+    }
+    for (size_t c = 0; c < nc; c++) { start[c] = cst[c]; gcnt[c] = ccnt[c]; }
+    *ngp = nc;
+    free(ccnt); free(cst); free(fill); free(norder); free(cls);
+}
+
 Expr* assoc_gather_core(Expr* list, Expr* f) {
     /* GatherBy[assoc, f] gathers the entries by f[value] into sub-associations
      * (keys preserved), returned as a list in first-appearance order -- like
@@ -1405,6 +1467,7 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
     (void)n;
     Expr** keys; size_t *order, *start, *gcnt;
     size_t ng = group_indices(&lv, assoc_in, f, &keys, &order, &start, &gcnt);
+    if (ng > 1 && !assoc_in) gather_merge_sameq(&lv, keys, order, start, gcnt, &ng);
 
     /* the groups are returned bare; keys are dropped */
     Expr** outer = malloc(sizeof(Expr*) * (ng ? ng : 1));

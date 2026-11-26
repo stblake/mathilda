@@ -45,7 +45,7 @@ void graph_algos_init(void) {
     galg_reg("FindClique", builtin_find_clique,
         "FindClique[g] gives {c} with c a maximum clique of g. FindClique[g, k] finds a maximal clique of at most k vertices, [g, {k}] of exactly k, [g, {kmin, kmax}] within the range; a third argument n (or All) gives up to n such cliques. For directed graphs a clique needs edges both ways. Exact branch and bound with colouring bounds.");
     galg_reg("FindKClique", builtin_find_k_clique,
-        "FindKClique[g, k] gives {c} with c a largest k-clique of g: a vertex set whose members are pairwise within distance k.");
+        "FindKClique[g, k] gives {c} with c a largest k-clique of g: a vertex set whose members are pairwise within distance k. FindKClique[g, k, n] finds one with at most n vertices, [g, k, {n}] exactly n, [g, k, {nmin, nmax}] between; FindKClique[g, k, nspec, s] gives up to s of them (All for every one), as FindClique does.");
     galg_reg("FindHamiltonianCycle", builtin_find_hamiltonian_cycle,
         "FindHamiltonianCycle[g] gives {c} with c a Hamiltonian cycle of g as a list of edges, or {} if there is none. FindHamiltonianCycle[g, n] / [g, All] gives up to n / all Hamiltonian cycles. Exact backtracking with pruning; unevaluated if the search budget is exhausted.");
     galg_reg("FindHamiltonianPath", builtin_find_hamiltonian_path,

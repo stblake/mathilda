@@ -182,6 +182,20 @@ static void test_wave5_data_batch(void) {
     w5d_msg("SubsetQ#1", "SubsetQ[1, 2]", "SubsetQ::normal");
 }
 
+/* Wave 6 G4: Gather groups by SameQ, approximate numbers within the SameQ
+ * tolerance included (sameq_merge_classes). */
+static void test_wave6_g4_data(void) {
+    audit_chk("Gather#2", "Gather[{0.1+0.2, 0.3}]", "{{0.3, 0.3}}");
+    audit_chk("Gather#2", "Length /@ Gather[{1., 1.0000000000000002}]", "{2}");
+    audit_chk("Gather#2", "Length /@ Gather[{1., 2, 1.0000000000000002, x, 2, 1.}]", "{3, 2, 1}");
+    audit_chk("Gather#2", "Length /@ Gather[{f[1., b], f[1.0000000000000002, a], f[1., a], f[1.0000000000000002, b]}]",
+              "{2, 2}");
+    audit_chk("Gather#2", "Length /@ Gather[{1., 1.000000000000001}]", "{1, 1}");
+    audit_chk("Gather#2", "Length /@ GatherBy[{1., 1.0000000000000002, 2.}, Identity]", "{2, 1}");
+    audit_chk("Gather#2", "Length /@ Gather[ToNDArray[{1., 1.0000000000000002, 2., 1.}]]", "{3, 1}");
+    audit_true("Gather#2", "First[Gather[{1.0000000000000002, 1.}]] === {1.0000000000000002, 1.}");
+}
+
 int main(void) {
     audit_init();
     TEST(test_gatherby_nested);
@@ -191,5 +205,6 @@ int main(void) {
     TEST(test_wave3_arity_options);
     TEST(test_wave4_data_structures);
     TEST(test_wave5_data_batch);
+    TEST(test_wave6_g4_data);
     return audit_finish("audit_data_structures");
 }
