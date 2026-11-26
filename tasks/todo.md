@@ -128,6 +128,43 @@ LIKELY-FIXED, 26 CRASH, 10 HANG.
     parallelmixed*, integrate_elliptic/gr132_1/gammapower, sparse_la_solve, bronstein_nf/perf, nint,
     nminimize, eigensystem, term_editor_latency, repl_pty, meminfo. integrate_roach and
     bronstein_phase5 now pass.
+- [x] Wave 6: the last 137 open findings, all severities, five groups (2026-11-26). Landed as:
+
+  | Version | Group | Fixed | Declined |
+  |---|---|---|---|
+  | v0.6753 | G1: core eval, printing, I/O, time, strings | 24 | 10 |
+  | v0.6754 | G2: special functions, numerics, series, statistics | 28 | 12 |
+  | v0.6755 | G3: calculus, algebra, linear algebra | 30 | 6 |
+  | v0.6756 | G4: lists, graphs, graphics, image, interpolation | 22 | 5 |
+  | v0.6757 | G5: MathieuC/S and their derivatives near a_n and at large q | 2 | 0 |
+
+  - **LegendreQ#1**, the last open high finding, is fixed. arb results now come back real when the imaginary part carries no digit.
+  - **Integration fixes in v0.6755:**
+    - The field generator in NumberFieldIntegralBasis and ToNumberField is now built lazily. G3's build-once change built it on every call and slowed the bronstein_divisors_torsion suite down 30x (12 s to 104 s per statement).
+    - The symbolic QR keeps `{{}, {}}` for an inexact zero matrix.
+  - **Tooling:**
+    - tools/audit_backlog.py has a DECLINED verdict, which holds at any status, carries its reason and is shown in the report.
+    - A FIXED verdict with `"doc": true` covers a corrected spec page whose behaviour is pinned (24 rows).
+    - Audit children run with MATHILDA_NO_GRAPHICS_WINDOW=1. Animate opened real windows and timed out.
+  - **Report at v0.6757:** 2440 fixed, 34 declined, 0 need a verdict, 1 open (of 2475).
+    - Declines, each with its reason in review/adjudication.json:
+      - **The user's out-of-scope list:** finite-element DirichletCondition/NeumannValue/NDEigenvalues (6 rows), O[x], GIF/TIFF Export, selective Activate, SeedRandom Method, exact wavelet coefficients, Cyclotomic Root.
+      - **Design:** no significance arithmetic (SetAccuracy/SetPrecision/Sin#5), no ReadProtected, Locked, PossibleZeroQ not Listable, the `3.0` real form, Remove's identity model, Complex[x, 0.], Cancel/FactorList documented behaviour, BarChart at 10^400, Plus#2's contour form.
+      - **Wrong expectation:** Cos#2, SameQ#1 (4.5 ulp), Normal#2.
+      - **Need a NumericArray type or Graph presentation options:** FoldList#1, ArrayReshape#2, CycleGraph#2.
+      - **Parser-wide changes:** FullForm#1/#3.
+    - **Open: CirculantGraph#1.** The answer is right, but a 2*10^7-edge graph costs 33 s and 8.4 GB (about 420 bytes per edge), over the harness's 2 GB cap.
+  - **Behaviour changes to know about:**
+    - Not and Part print in operator form.
+    - A real with exponent -5 prints positionally.
+    - Unevaluated is restored on a call that comes to rest.
+    - Trace keeps its nesting.
+    - Hypergeometric0F1/1F1/2F1 keep their heads.
+    - Precision of an MPFR zero is `0.`.
+    - `N[x^(1/2)]` is `x^0.5`.
+    - Tally and Gather group by SameQ.
+    - Some Mathieu signs at q ~ 500 and in the small-q stable band changed to the dominant-coefficient convention.
+  - **Flaky under load (pass alone):** repl_pty, integrate_roach (aborted once), dsolve, term_editor_latency, nminimize, image, audit_special_functions.
 
 # Evaluator: aborts that escape their constraint (2026-11-23)
 

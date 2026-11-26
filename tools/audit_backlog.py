@@ -57,7 +57,9 @@ STATUS_MD = os.path.join(ROOT, "review", "backlog_status.md")
 # while the row's status is still CHANGED / LIKELY-FIXED and, when it records
 # an output, only while the output is unchanged.  The exception is DECLINED
 # (with a "reason", no "output"): a decision about the finding itself, so it
-# applies at any run status and is reported apart from the open rows.
+# applies at any run status and is reported apart from the open rows.  A
+# FIXED verdict with "doc": true (a corrected spec page or docstring, the
+# behaviour pinned) also applies at any status, while its output holds.
 ADJUDICATION = os.path.join(ROOT, "review", "adjudication.json")
 OPEN_STATES = ("CRASH", "HANG", "SAME", "STILL-BROKEN", "PARTIAL",
                "FORMAT-ONLY", "UNCLEAR", "CHANGED", "LIKELY-FIXED")
@@ -237,9 +239,13 @@ def run_one(row):
     outf = tempfile.TemporaryFile("w+b")
     t0 = time.monotonic()
     try:
+        # No window ever opens during an audit run (Animate, Manipulate and
+        # the 3-D viewer would sit on screen until the timeout); the heads
+        # still evaluate and return as they do headless.
+        env = dict(os.environ, MATHILDA_NO_GRAPHICS_WINDOW="1")
         p = subprocess.Popen([BIN, "-file", path], stdout=outf,
                              stderr=subprocess.STDOUT,
-                             cwd=tempfile.gettempdir())
+                             cwd=tempfile.gettempdir(), env=env)
         err = watch(p)
         outf.seek(0)
         out = outf.read().decode("utf-8", errors="replace")
@@ -355,6 +361,12 @@ def effective_status(rid, status, adj):
     # out of scope.  It holds whatever the run says, and carries its reason.
     if rid in adj and adj[rid].get("verdict") == "DECLINED":
         return "DECLINED"
+    # A documentation finding ("the spec page says X, but ..."): the doc was
+    # corrected and the (already right) behaviour pinned, so the output never
+    # moves off the audit's Actual.  The verdict holds while that output does.
+    if (rid in adj and adj[rid].get("doc") and adj[rid].get("verdict") == "FIXED"
+            and adj[rid].get("output") == st.get("output")):
+        return "FIXED"
     if s in ("CHANGED", "LIKELY-FIXED") and rid in adj:
         a = adj[rid]
         # A verdict judged one output.  Once the output moves again the
