@@ -1579,6 +1579,15 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
                 if (contains_symbol(F->c[c]->a[k].poly, nm)) appears = true;
         if (appears) used[nu++] = i;
     }
+    if (nu == 0) {
+        /* No variable occurs in any atom (seen from Minimize's entailment
+         * probes once a TimeConstraint expiry has cut a formula short).  There
+         * is nothing to decompose; decline.  Falling through to the bivariate
+         * path read used[0] / used[1] uninitialised -- an intermittent
+         * segfault (vars[garbage]) on Linux CI. */
+        free(used);
+        return NULL;
+    }
     if (nu == 1) {                            /* really univariate -> sign diagram */
         /* CAD does not thread Reduce options; the delegated 1-D sign diagram
          * keeps Solve's defaults (Cubics / Quartics forwarding on the
