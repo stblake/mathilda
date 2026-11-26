@@ -26,7 +26,12 @@
 
    ddClosesQ is exported for a caller that has already ruled out the
    syntactic classes. *)
-ddTimeout = 30;
+(* 120 s, not 30: the classification runs several Mathilda processes at once, and a
+   timeout under that load is a "none".  261's cM-113-232 was classed "none" at v0.6732
+   and closes in 0.3 s alone at v0.6750 (a timeout or the older method: not known).  A
+   class is only as current as the build that made it: easy.tsv records the version,
+   and every corpus is re-classified when DerivativeDivides changes. *)
+ddTimeout = 120;
 
 easyTranscendentalHeads = Log | Exp | Sin | Cos | Tan | Cot | Sec | Csc | Sinh | Cosh | Tanh | Coth | Sech | Csch |
   ArcTan | ArcTanh | ArcSin | ArcCos | ArcSinh | ArcCosh | ArcCot | ArcCoth | ArcSec | ArcCsc;

@@ -11,71 +11,75 @@ The **easy** integrals of every corpus are left out: those `easy_classify.py` (e
 ## Summary: easy integrals left out, every answer judged by PossibleZeroQ (2026-11-26, FriCAS 1.3.6)
 
 **What is counted.**
+- **Constant factors are removed from the integrands** (`normalize_constants.py`):
+  Integrate[c f, x] is c Integrate[f, x], so the -1/2 of -1/2 (x^2 - 3x - 2)/Sqrt[g],
+  or the Sqrt[2] in Sqrt[4 + 2 E^(-2x) + 8x + 4x^2], is no part of the problem. Every
+  corpus was rewritten factor by factor, with each reference divided by the same
+  constant and checked by PossibleZeroQ. An integrand that became a duplicate of another was
+  left out (on 264 it was replaced by a spare). Every system was then run again.
 - **The easy integrals are left out** of every corpus (`easy.tsv`; see the note above):
   rational functions, integrands a substitution makes rational, and those
-  `DerivativeDivides` closes. 3191 of the 4876 cases of 256-261 are easy; 257 keeps 18 of
-  1000 cases and 261 keeps 58 of 1550.
-- **262 (1000), 263 (1850) and 264 (500)** were generated outside the easy classes.
-  5035 cases are left.
+  `DerivativeDivides` closes. 3129 of the 4706 cases of 256-261 are easy; 257 keeps 11
+  of 985 cases and 261 keeps 43 of 1512. 15 cases of 256 are undecided by the test
+  (it runs out of time) and are kept.
+- **262 (958), 263 (1801) and 264 (500)** were generated outside the easy classes; 3
+  and 37 of them turned out to be easy once DerivativeDivides no longer depended on a
+  constant factor (v0.6760). 4796 cases are left.
 - **Every answer of every system is judged by one test**, `PossibleZeroQ[D[F, x] - f]`
   in Mathilda (`pzq_verify.py`), with the other systems' answers translated first. The
   standard is an antiderivative valid for every complex x. Each system's own
   three-point check no longer decides anything.
-- **Versions.** 264 ran at v0.6750, 263 at v0.6733, 262 at v0.6732, 261 at v0.6714,
-  the others at v0.6691. The verdicts are from v0.6744's PossibleZeroQ (264's from v0.6750's).
+- **Versions.** Every run is from 2026-11-26 with Mathilda v0.6750, and so are the
+  verdicts. The easy labels are from v0.6760.
 
 **Decided** (a verified closed form, or a proof that none is elementary):
 
 | corpus | n | Mathilda | PMT | Automatic | FriCAS |
 |---|---|---|---|---|---|
-| 256 | 777 | **97%** (754) | 73% (568) | 96% (749) | 63% (490) |
-| 257 | 18 | 94% (17) | 67% (12) | **100%** (18) | 78% (14) |
-| 259 | 561 | 99% (556) | not run | **99%** (558) | 96% (538) |
-| 260 | 271 | **98%** (266) | 35% (96) | 97% (264) | 97% (263) |
-| 261 | 58 | 98% (57) | 55% (32) | **100%** (58) | 24% (14) |
-| 262 | 1000 | **98%** (976) | 66% (660) | 97% (970) | 65% (646) |
-| 263 | 1850 | 98% (1817) | 72% (1339) | **99%** (1826) | 71% (1316) |
+| 256 | 699 | 99% (695) | 72% (506) | **100%** (696) | 60% (421) |
+| 257 | 11 | 91% (10) | 82% (9) | **100%** (11) | 64% (7) |
+| 259 | 555 | **99%** (552) | not run | **99%** (552) | 95% (528) |
+| 260 | 269 | **99%** (265) | 35% (94) | **99%** (265) | 97% (260) |
+| 261 | 43 | 98% (42) | 67% (29) | **100%** (43) | 19% (8) |
+| 262 | 955 | 98% (932) | 67% (641) | **98%** (937) | 65% (625) |
+| 263 | 1764 | 98% (1735) | 73% (1285) | **100%** (1761) | 71% (1255) |
 | 264 | 500 | **100%** (500) | 0% (0) | **100%** (500) | 0% (0) |
-| all | 5035 | **98%** (4943) | 61% (2707 of 4474) | **98%** (4943) | 65% (3281) |
+| all | 4796 | 99% (4731) | 60% (2564 of 4241) | **99%** (4765) | 65% (3104) |
 
 - **No Mathilda method gives a wrong answer or a false "no"** under PossibleZeroQ, on
   any corpus.
-- **Mathilda's unverified answers are almost all recording cuts.** 256 and 257 were run
-  when answers were stored only up to 4000 characters, so a longer answer cannot be
-  judged: 21 Bronstein and 22 Automatic answers on 256 (hence 754, not 775). On 259,
-  PossibleZeroQ does not decide 4 Mathilda answers.
+- **Mathilda's unverified answers:** 7, all answers PossibleZeroQ does not decide
+  (logxy-1-1 and logxy-3-6 on 256, by Automatic and Bronstein; tani-elem-26 and
+  gauss-elem-23 on 259). The answers are no longer cut when they are recorded.
 - **264: 500 class M integrals, seven systems.** Bronstein and Automatic close all of
   them. Of FriCAS, Axiom, Maxima, sympy, Wolfram (wolframscript, Wolfram Language
   14.0.0) and Reduce (PSL, revision 7327), only Wolfram closes one. FriCAS stops with
   "implementation incomplete (has polynomial part)" (274) or "(constant residues)" (226),
-  Axiom with "(constant residues)" (500). Wolfram returns 499 unevaluated (median
-  3.8 s), Reduce 446 unevaluated and 54 timeouts.
-- **Constant factors are removed from the integrands** (`normalize_constants.py`):
-  Integrate[c f, x] is c Integrate[f, x], so the -1/2 of -1/2 (x^2 - 3x - 2)/Sqrt[g],
-  or the Sqrt[2] in Sqrt[4 + 2 E^(-2x) + 8x + 4x^2], is no part of the problem. 323 of
-  264's integrands carried one; 4 became duplicates and were replaced. 264 was re-run
-  on the rewritten corpus at v0.6750. The other corpora are being rewritten the same way.
+  Axiom with "(constant residues)" (500). Wolfram returns 496 unevaluated and times out
+  on 3 (median 4.1 s), Reduce 446 unevaluated and 54 timeouts.
+- **The other benchmarks keep their systems:** 256 and 257 ran Mathilda, FriCAS,
+  Maxima, sympy and Wolfram; 259 and 260 Mathilda and FriCAS; 261-263 Mathilda,
+  FriCAS, Axiom, Maxima and sympy.
 - **FriCAS's error records were partly the harness's.** A fault in the adapter's
   output file recorded successful FriCAS runs as errors. Re-run with the fault fixed,
-  FriCAS's counts rose on 256, 259, 260 (252 to 263), 262 and 263.
-- **FriCAS answers rejected:** 6, on 259. They are antiderivatives on part of the
-  plane, nonzero at x = -5/2 or 3i. Maxima has many more (88 on 257 alone): `abs()`
-  and `asinh(.../(x+1))` forms valid only on a half-line.
-- **263: FriCAS gives 11 false "no".** On B4 integrands elementary by construction,
-  derivatives of `E^y R` with y the root of a cubic or quartic, FriCAS returns
-  `integral(...)`. Minimal case in FriCAS 1.3.6:
+  FriCAS's counts rose on 256, 259, 260, 262 and 263.
+- **Answers rejected by PossibleZeroQ:** FriCAS 8 (7 on 259, 1 on 256). They are
+  antiderivatives on part of the plane, nonzero at a point such as x = -5/2 or 3i.
+  Maxima 28 (6 on 256, 3 on 262, 19 on 263), sympy 43 (15 on 262, 28 on 263), Axiom 6
+  (2 on 262, 4 on 263) and Wolfram 3 (on 256). Maxima's are `abs()` and
+  `asinh(.../(x+1))` forms valid only on a half-line.
+- **FriCAS gives 21 false "no"**: 10 on 259 (gauss-elem) and 11 on 263. On 263's B4
+  integrands, elementary by construction as derivatives of `E^y R` with y the root of
+  a cubic or quartic, FriCAS returns `integral(...)`. Minimal case in FriCAS 1.3.6:
   `integrate(D(exp(sqrt(x^3+1))/(x+1), x), x)`, which should be
   `exp(sqrt(x^3+1))/(x+1)` (with `1/x` it integrates).
-- **Automatic's 262/263 figures predate v0.6744.** Before it, the cascade stopped Trager
-  and Bronstein at 10 s, and cases the dedicated method closes were left unevaluated:
-  14 on 262 and 22 on 263. Since v0.6744 an expired budget resumes the method once the
-  later stages decline. Every gap case of 262 and 263 that Trager or Bronstein closes
-  within 200 s (30 cases) now closes in Automatic.
-- **Speed.**
-  - 262 (623 cases both close): median 328 ms against FriCAS's 100 ms, under heavy
-    machine load.
-  - 263 (1259 cases, rerun at low load): medians 222 ms against 170 ms, and Mathilda's
-    90th percentile is 3.6 s against 250 ms.
+- **Automatic decides at least as many as the dedicated method** on every corpus: 937
+  against 932 on 262 and 1761 against 1735 on 263. Since v0.6744 an expired cascade
+  budget resumes Trager or Bronstein once the later stages decline.
+- **Speed** (the cases both close, each system's own time):
+  - 262 (608 cases): median 248 ms against FriCAS's 100 ms; Mathilda is faster on 300.
+  - 263 (1239 cases): median 59 ms against 140 ms; Mathilda is faster on 880, and its
+    90th percentile is 1.3 s against 230 ms.
   - The tail is the `.m` Trager code on class A.
 
 The sections below are from earlier runs. Their counts **include the easy integrals**, and their answers were verified by each system's own check.
@@ -196,10 +200,12 @@ and C5 (special-function answers where Mathilda certifies; submitting the FriCAS
 
 | finding | cases |
 |---|---|
-| FriCAS answer rejected by PossibleZeroQ[D[F, x] - f] | 6 |
+| FriCAS answer rejected by PossibleZeroQ[D[F, x] - f] | 8 |
 | FriCAS false no (expect elem) | 21 |
 | FriCAS no vs Mathilda verified elementary answer | 3 |
 
+- FriCAS answer rejected by PossibleZeroQ[D[F, x] - f]: `algres-3-9` `(2*E^x^2*x)/Sqrt[2 + E^(2*x^2)] - (2*Sqrt[2 + E^(2*x^2)]*x)/E^x^2 + ((-1 + E^x^2 + Sqrt[2 + E^(2*x^2)])*((2*E^(2*x^2)*x + 2*E^x^2*Sqrt[2 + E`
+- FriCAS answer rejected by PossibleZeroQ[D[F, x] - f]: `tani-elem-35` `(1 + I)*E^(2*Tan[1 + x]) + (2 + 2*I)*E^(2*Tan[1 + x])*x*Sec[1 + x]^2 - (E^Tan[1 + x]*Log[I + x]*Sec[1 + x]^2)/(2*(1 + Tan[1 + x])^2) + E^Tan`
 - FriCAS answer rejected by PossibleZeroQ[D[F, x] - f]: `prim-rand-22` `x*Log[x]*LogIntegral[x]`
 - FriCAS answer rejected by PossibleZeroQ[D[F, x] - f]: `prim-rand-38` `Log[x]*LogIntegral[x]`
 - FriCAS answer rejected by PossibleZeroQ[D[F, x] - f]: `dep-elem-9` `-((x*Log[-1 + x])/(1 + x)) + Log[x]/(1 + x) + (2*x^3*Log[x])/(-1 + x^2) + Log[1 + x]/x - (x*Log[1 + x])/(-1 + x) - Log[-1 + x]*Log[1 + x] + `
@@ -216,8 +222,8 @@ and C5 (special-function answers where Mathilda certifies; submitting the FriCAS
 - FriCAS false no (expect elem): `gauss-elem-27` `(I*E^(-I + (2*I)*x - I*(1 + x)))/((1 + E^x)*(1 + E^((-I)*(1 + x)))^2) - E^(-I + (1 + 2*I)*x)/((1 + E^x)^2*(1 + E^((-I)*(1 + x)))) + ((2*I)*E`
 - FriCAS false no (expect elem): `gauss-elem-34` `-((E^I*Log[I + x]*Sec[1 + x]^2)/((1 + E^(I*(1 + x)))*(-I + Tan[1 + x])^2)) + E^I/((1 + E^(I*(1 + x)))*(I + x)*(-I + Tan[1 + x])) - (I*E^(I +`
 - FriCAS false no (expect elem): `gauss-elem-38` `-(E^(-I + (2*I)*x)/((1 + E^(I*(2 + x)))*(I + x)^2)) - (I*E^(-I + (2*I)*x + I*(2 + x)))/((1 + E^(I*(2 + x)))^2*(I + x)) + ((2*I)*E^(-I + (2*I`
-- FriCAS false no (expect elem): `cB-301-25` `(E^Sqrt[2 + x^2 + x^3]*(2*x^2 + 3*x^3 - 4*Sqrt[2 + x^2 + x^3]))/(2*x^3*Sqrt[2 + x^2 + x^3])`
-- FriCAS false no (expect elem): `cB-303-15` `(E^Sqrt[2 + 2*x^2 + x^3]*(4*x^2 + 3*x^3 - 2*Sqrt[2 + 2*x^2 + x^3]))/(2*x^2*Sqrt[2 + 2*x^2 + x^3])`
+- FriCAS false no (expect elem): `cB-301-25` `(E^Sqrt[2 + x^2 + x^3]*(2*x^2 + 3*x^3 - 4*Sqrt[2 + x^2 + x^3]))/(x^3*Sqrt[2 + x^2 + x^3])`
+- FriCAS false no (expect elem): `cB-303-15` `(E^Sqrt[2 + 2*x^2 + x^3]*(4*x^2 + 3*x^3 - 2*Sqrt[2 + 2*x^2 + x^3]))/(x^2*Sqrt[2 + 2*x^2 + x^3])`
 - FriCAS false no (expect elem): ... (9 more)
 - FriCAS no vs Mathilda verified elementary answer: `gauss-rand-3` `E^(I - I*(1 + x))*Tan[2 + x]`
 - FriCAS no vs Mathilda verified elementary answer: `gauss-rand-11` `E^(1 + (2*I)*x)*Tan[x]`
@@ -227,60 +233,62 @@ and C5 (special-function answers where Mathilda certifies; submitting the FriCAS
 
 | corpus | n | Mathilda closed | Mathilda decided | Automatic closed | Automatic decided |
 |---|---|---|---|---|---|
-| 256: the shootout corpus (2026-11-21) | 777 | 365 -> 344 | 722 -> 754 | 451 -> 429 | 723 -> 749 |
-| 257: compact integrands, large integrals (2026-11-21) | 18 | 17 -> 17 | 17 -> 17 | 18 -> 18 | 18 -> 18 |
-| 259: the transcendental decision corpus (2026-11-21) | 561 | 342 -> 346 | 547 -> 556 | 372 -> 388 | 548 -> 558 |
-| 260: a radical at the bottom (2026-11-21) | 271 | 77 -> 110 | 207 -> 266 | 111 -> 121 | 227 -> 264 |
+| 256: the shootout corpus (2026-11-22) | 699 | 289 -> 308 | 676 -> 695 | 370 -> 388 | 672 -> 696 |
+| 257: compact integrands, large integrals (2026-11-22) | 11 | 10 -> 10 | 10 -> 10 | 11 -> 11 | 11 -> 11 |
+| 259: the transcendental decision corpus (2026-11-22) | 555 | 342 -> 343 | 551 -> 552 | 382 -> 382 | 552 -> 552 |
+| 260: a radical at the bottom (2026-11-22) | 269 | 110 -> 111 | 264 -> 265 | 121 -> 124 | 262 -> 265 |
+| 261: compact integrands, integrals four times larger (2026-11-24) | 43 | 42 -> 42 | 42 -> 42 | 43 -> 43 | 43 -> 43 |
+| 262: integrals outside the easy classes (2026-11-25) | 955 | 932 -> 932 | 932 -> 932 | 926 -> 937 | 926 -> 937 |
+| 263: more integrals outside the easy classes (2026-11-25) | 1764 | 1731 -> 1735 | 1731 -> 1735 | 1743 -> 1761 | 1743 -> 1761 |
 
-## 256: the shootout corpus (777 cases, run 2026-11-22)
+## 256: the shootout corpus (699 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T transcendental | 152 | 48% (73) | 5% (7) | 100% (152) | 48% (73) | 0% (0) | 84% (128) | 48% (73) | 49% (74) | 100% (152) | 48% (73) | 45% (68) | 100% (152) |
-| A algebraic | 223 | 19% (43) | 0% (0) | 100% (223) | 19% (43) | 0% (0) | 74% (165) | 19% (43) | 7% (15) | 98% (219) | 18% (41) | 0% (0) | 73% (162) |
-| M mixed, radical on top | 266 | 67% (177) | 0% (0) | 91% (243) | 70% (186) | 0% (0) | 86% (228) | 67% (178) | 1% (2) | 91% (242) | 12% (31) | 0% (0) | 18% (49) |
-| B radical at the bottom | 136 | 32% (44) | 0% (0) | 100% (136) | 31% (42) | 0% (0) | 35% (47) | 32% (44) | 0% (0) | 100% (136) | 32% (44) | 0% (0) | 93% (127) |
-| **all** | 777 | **43% (337)** | **1% (7)** | **97% (754)** | **44% (344)** | **0% (0)** | **73% (568)** | **44% (338)** | **12% (91)** | **96% (749)** | **24% (189)** | **9% (68)** | **63% (490)** |
+| T transcendental | 125 | 39% (49) | 6% (7) | 100% (125) | 39% (49) | 0% (0) | 82% (102) | 39% (49) | 57% (71) | 100% (125) | 39% (49) | 52% (65) | 100% (125) |
+| A algebraic | 216 | 19% (41) | 0% (0) | 100% (216) | 19% (41) | 0% (0) | 73% (158) | 19% (41) | 6% (13) | 100% (216) | 18% (39) | 0% (0) | 72% (155) |
+| M mixed, radical on top | 256 | 73% (186) | 0% (0) | 98% (252) | 69% (176) | 0% (0) | 85% (218) | 73% (187) | 1% (2) | 99% (253) | 11% (29) | 0% (0) | 18% (47) |
+| B radical at the bottom | 102 | 25% (25) | 0% (0) | 100% (102) | 24% (24) | 0% (0) | 27% (28) | 25% (25) | 0% (0) | 100% (102) | 25% (25) | 0% (0) | 92% (94) |
+| **all** | 699 | **43% (301)** | **1% (7)** | **99% (695)** | **41% (290)** | **0% (0)** | **72% (506)** | **43% (302)** | **12% (86)** | **100% (696)** | **20% (142)** | **9% (65)** | **60% (421)** |
 
 The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
 
 | system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
 |---|---|---|---|---|---|---|---|---|---|
-| Maxima | 777 | 28% (215) | 186 | 29 | 6 | 539 | 5 | 0 | 12 |
-| sympy | 777 | 24% (188) | 89 | 99 | 0 | 373 | 205 | 1 | 10 |
-| Wolfram | 777 | 59% (455) | 256 | 199 | 4 | 262 | 13 | 0 | 43 |
+| Maxima | 699 | 24% (170) | 142 | 28 | 6 | 506 | 5 | 0 | 12 |
+| sympy | 699 | 22% (155) | 60 | 95 | 0 | 348 | 184 | 1 | 11 |
+| Wolfram | 699 | 55% (387) | 207 | 180 | 3 | 243 | 16 | 0 | 50 |
 
-Speed, Mathilda against FriCAS, on the 195 cases both close: median 18 ms vs 70 ms; 90th percentile 187 ms vs 120 ms; total 16.0 s vs 16.7 s; geometric mean of the ratio Mathilda/FriCAS 0.21; Mathilda faster on 164 of 195; 3 over 1 s.
+Speed, Mathilda against FriCAS, on the 148 cases both close: median 17 ms vs 70 ms; 90th percentile 197 ms vs 140 ms; total 8.7 s vs 12.6 s; geometric mean of the ratio Mathilda/FriCAS 0.20; Mathilda faster on 130 of 148; 0 over 1 s.
 
-Speed, PMT against FriCAS, on the 187 cases both close: median 50 ms vs 70 ms; 90th percentile 511 ms vs 130 ms; total 61.0 s vs 16.1 s; geometric mean of the ratio PMT/FriCAS 0.89; PMT faster on 124 of 187; 9 over 1 s.
+Speed, PMT against FriCAS, on the 141 cases both close: median 57 ms vs 70 ms; 90th percentile 653 ms vs 140 ms; total 53.1 s vs 12.2 s; geometric mean of the ratio PMT/FriCAS 1.04; PMT faster on 87 of 141; 10 over 1 s.
 
-## 257: compact integrands, large integrals (18 cases, run 2026-11-22)
+## 257: compact integrands, large integrals (11 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T transcendental | 2 | 100% (2) | 0% (0) | 100% (2) | 0% (0) | 0% (0) | 0% (0) | 100% (2) | 0% (0) | 100% (2) | 100% (2) | 0% (0) | 100% (2) |
-| A algebraic | 11 | 100% (11) | 0% (0) | 100% (11) | 82% (9) | 0% (0) | 82% (9) | 100% (11) | 0% (0) | 100% (11) | 100% (11) | 0% (0) | 100% (11) |
+| A algebraic | 6 | 100% (6) | 0% (0) | 100% (6) | 100% (6) | 0% (0) | 100% (6) | 100% (6) | 0% (0) | 100% (6) | 100% (6) | 0% (0) | 100% (6) |
 | M mixed, radical on top | 5 | 80% (4) | 0% (0) | 80% (4) | 60% (3) | 0% (0) | 60% (3) | 100% (5) | 0% (0) | 100% (5) | 20% (1) | 0% (0) | 20% (1) |
-| **all** | 18 | **94% (17)** | **0% (0)** | **94% (17)** | **67% (12)** | **0% (0)** | **67% (12)** | **100% (18)** | **0% (0)** | **100% (18)** | **78% (14)** | **0% (0)** | **78% (14)** |
+| **all** | 11 | **91% (10)** | **0% (0)** | **91% (10)** | **82% (9)** | **0% (0)** | **82% (9)** | **100% (11)** | **0% (0)** | **100% (11)** | **64% (7)** | **0% (0)** | **64% (7)** |
 
 The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
 
 | system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
 |---|---|---|---|---|---|---|---|---|---|
-| Maxima | 18 | 61% (11) | 11 | 0 | 0 | 7 | 0 | 0 | 0 |
-| sympy | 18 | 50% (9) | 0 | 9 | 0 | 5 | 4 | 0 | 0 |
-| Wolfram | 18 | 94% (17) | 16 | 1 | 0 | 1 | 0 | 0 | 0 |
+| Maxima | 11 | 55% (6) | 6 | 0 | 0 | 5 | 0 | 0 | 0 |
+| sympy | 11 | 55% (6) | 0 | 6 | 0 | 4 | 1 | 0 | 0 |
+| Wolfram | 11 | 91% (10) | 9 | 1 | 0 | 1 | 0 | 0 | 0 |
 
-Speed, Mathilda against FriCAS, on the 13 cases both close: median 319 ms vs 90 ms; 90th percentile 563 ms vs 90 ms; total 4.5 s vs 1.1 s; geometric mean of the ratio Mathilda/FriCAS 3.44; Mathilda faster on 2 of 13; 0 over 1 s.
+Speed, Mathilda against FriCAS, on the 6 cases both close: median 272 ms vs 85 ms; 90th percentile 371 ms vs 90 ms; total 1.7 s vs 510 ms; geometric mean of the ratio Mathilda/FriCAS 3.21; Mathilda faster on 0 of 6; 0 over 1 s.
 
-Speed, PMT against FriCAS, on the 9 cases both close: median 18 ms vs 90 ms; 90th percentile 41 ms vs 110 ms; total 195 ms vs 790 ms; geometric mean of the ratio PMT/FriCAS 0.23; PMT faster on 9 of 9; 0 over 1 s.
+Speed, PMT against FriCAS, on the 6 cases both close: median 16 ms vs 85 ms; 90th percentile 59 ms vs 90 ms; total 143 ms vs 510 ms; geometric mean of the ratio PMT/FriCAS 0.23; PMT faster on 6 of 6; 0 over 1 s.
 
-## 259: the transcendental decision corpus (561 cases, run 2026-11-22)
+## 259: the transcendental decision corpus (555 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T transcendental | 561 | 51% (287) | 11% (59) | 99% (556) | · | · | · | 51% (285) | 18% (103) | 99% (558) | 48% (270) | 15% (85) | 96% (538) |
-| **all** | 561 | **51% (287)** | **11% (59)** | **99% (556)** | · | · | · | **51% (285)** | **18% (103)** | **99% (558)** | **48% (270)** | **15% (85)** | **96% (538)** |
+| T transcendental | 555 | 51% (284) | 11% (59) | 99% (552) | · | · | · | 51% (282) | 18% (100) | 99% (552) | 47% (260) | 15% (85) | 95% (528) |
+| **all** | 555 | **51% (284)** | **11% (59)** | **99% (552)** | · | · | · | **51% (282)** | **18% (100)** | **99% (552)** | **47% (260)** | **15% (85)** | **95% (528)** |
 
 By family (`-elem`: f = D[F], elementary by construction; `-rand`: random):
 
@@ -292,107 +300,107 @@ By family (`-elem`: f = D[F], elementary by construction; `-rand`: random):
 | f12-rand | 40 | 0% (0) | 8% (3) | 100% (40) | · | · | · | 0% (0) | 12% (5) | 100% (40) | 0% (0) | 12% (5) | 100% (40) |
 | gauss-elem | 32 | 97% (31) | 0% (0) | 97% (31) | · | · | · | 97% (31) | 0% (0) | 97% (31) | 66% (21) | 0% (0) | 66% (21) |
 | gauss-rand | 34 | 38% (13) | 32% (11) | 100% (34) | · | · | · | 38% (13) | 32% (11) | 100% (34) | 29% (10) | 32% (11) | 100% (34) |
-| lim-elem | 29 | 100% (29) | 0% (0) | 100% (29) | · | · | · | 100% (29) | 0% (0) | 100% (29) | 100% (29) | 0% (0) | 100% (29) |
-| lim-rand | 40 | 0% (0) | 0% (0) | 100% (40) | · | · | · | 0% (0) | 10% (4) | 100% (40) | 0% (0) | 8% (3) | 98% (39) |
+| lim-elem | 29 | 100% (29) | 0% (0) | 100% (29) | · | · | · | 100% (29) | 0% (0) | 100% (29) | 97% (28) | 0% (0) | 97% (28) |
+| lim-rand | 39 | 0% (0) | 0% (0) | 100% (39) | · | · | · | 0% (0) | 8% (3) | 100% (39) | 0% (0) | 8% (3) | 100% (39) |
 | prim-elem | 39 | 8% (3) | 92% (36) | 100% (39) | · | · | · | 8% (3) | 92% (36) | 100% (39) | 8% (3) | 92% (36) | 100% (39) |
 | prim-rand | 32 | 9% (3) | 22% (7) | 94% (30) | · | · | · | 9% (3) | 44% (14) | 100% (32) | 9% (3) | 31% (10) | 94% (30) |
-| tan-elem | 34 | 100% (34) | 0% (0) | 100% (34) | · | · | · | 97% (33) | 0% (0) | 97% (33) | 100% (34) | 0% (0) | 100% (34) |
+| tan-elem | 33 | 100% (33) | 0% (0) | 100% (33) | · | · | · | 100% (33) | 0% (0) | 100% (33) | 100% (33) | 0% (0) | 100% (33) |
 | tan-rand | 33 | 6% (2) | 0% (0) | 100% (33) | · | · | · | 6% (2) | 15% (5) | 100% (33) | 6% (2) | 15% (5) | 100% (33) |
-| tanh-elem | 37 | 97% (36) | 0% (0) | 97% (36) | · | · | · | 97% (36) | 3% (1) | 100% (37) | 95% (35) | 0% (0) | 95% (35) |
+| tanh-elem | 36 | 100% (36) | 0% (0) | 100% (36) | · | · | · | 97% (35) | 0% (0) | 97% (35) | 86% (31) | 0% (0) | 86% (31) |
 | tanh-rand | 31 | 19% (6) | 0% (0) | 100% (31) | · | · | · | 19% (6) | 16% (5) | 100% (31) | 19% (6) | 6% (2) | 90% (28) |
-| tani-elem | 38 | 97% (37) | 0% (0) | 97% (37) | · | · | · | 95% (36) | 3% (1) | 97% (37) | 100% (38) | 0% (0) | 100% (38) |
-| tani-rand | 31 | 26% (8) | 0% (0) | 100% (31) | · | · | · | 26% (8) | 23% (7) | 100% (31) | 26% (8) | 26% (8) | 100% (31) |
-| **all** | 561 | **51% (287)** | **11% (59)** | **99% (556)** | · | · | · | **51% (285)** | **18% (103)** | **99% (558)** | **48% (270)** | **15% (85)** | **96% (538)** |
+| tani-elem | 38 | 100% (38) | 0% (0) | 100% (38) | · | · | · | 97% (37) | 0% (0) | 97% (37) | 97% (37) | 0% (0) | 97% (37) |
+| tani-rand | 28 | 18% (5) | 0% (0) | 100% (28) | · | · | · | 18% (5) | 25% (7) | 100% (28) | 18% (5) | 29% (8) | 100% (28) |
+| **all** | 555 | **51% (284)** | **11% (59)** | **99% (552)** | · | · | · | **51% (282)** | **18% (100)** | **99% (552)** | **47% (260)** | **15% (85)** | **95% (528)** |
 
-Speed, Mathilda against FriCAS, on the 324 cases both close: median 37 ms vs 110 ms; 90th percentile 470 ms vs 170 ms; total 81.7 s vs 38.5 s; geometric mean of the ratio Mathilda/FriCAS 0.33; Mathilda faster on 234 of 324; 12 over 1 s.
+Speed, Mathilda against FriCAS, on the 316 cases both close: median 19 ms vs 110 ms; 90th percentile 222 ms vs 160 ms; total 30.3 s vs 35.3 s; geometric mean of the ratio Mathilda/FriCAS 0.18; Mathilda faster on 268 of 316; 5 over 1 s.
 
-## 260: a radical at the bottom (271 cases, run 2026-11-22)
+## 260: a radical at the bottom (269 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| B radical at the bottom | 271 | 41% (110) | 0% (0) | 98% (266) | 27% (73) | 0% (0) | 35% (96) | 40% (108) | 5% (13) | 97% (264) | 41% (110) | 8% (21) | 97% (263) |
-| **all** | 271 | **41% (110)** | **0% (0)** | **98% (266)** | **27% (73)** | **0% (0)** | **35% (96)** | **40% (108)** | **5% (13)** | **97% (264)** | **41% (110)** | **8% (21)** | **97% (263)** |
+| B radical at the bottom | 269 | 41% (111) | 0% (0) | 99% (265) | 26% (71) | 0% (0) | 35% (94) | 41% (111) | 5% (13) | 99% (265) | 41% (109) | 7% (20) | 97% (260) |
+| **all** | 269 | **41% (111)** | **0% (0)** | **99% (265)** | **26% (71)** | **0% (0)** | **35% (94)** | **41% (111)** | **5% (13)** | **99% (265)** | **41% (109)** | **7% (20)** | **97% (260)** |
 
 By family (`-elem`: f = D[F], elementary by construction; `-rand`: random):
 
 | family | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mid-elem | 29 | 100% (29) | 0% (0) | 100% (29) | 76% (22) | 0% (0) | 76% (22) | 100% (29) | 0% (0) | 100% (29) | 100% (29) | 0% (0) | 100% (29) |
+| mid-elem | 29 | 100% (29) | 0% (0) | 100% (29) | 69% (20) | 0% (0) | 69% (20) | 100% (29) | 0% (0) | 100% (29) | 100% (29) | 0% (0) | 100% (29) |
 | mid-rand | 31 | 0% (0) | 0% (0) | 100% (31) | 0% (0) | 0% (0) | 0% (0) | 0% (0) | 0% (0) | 100% (31) | 0% (0) | 0% (0) | 100% (31) |
 | one-elem | 28 | 100% (28) | 0% (0) | 100% (28) | 100% (28) | 0% (0) | 100% (28) | 100% (28) | 0% (0) | 100% (28) | 100% (28) | 0% (0) | 100% (28) |
 | one-rand | 37 | 11% (4) | 0% (0) | 100% (37) | 11% (4) | 0% (0) | 62% (23) | 11% (4) | 14% (5) | 100% (37) | 11% (4) | 3% (1) | 100% (37) |
-| pert-nonelem | 47 | 0% (0) | 0% (0) | 100% (47) | 0% (0) | 0% (0) | 0% (0) | 0% (0) | 17% (8) | 100% (47) | 0% (0) | 43% (20) | 85% (40) |
-| two-elem | 50 | 98% (49) | 0% (0) | 98% (49) | 38% (19) | 0% (0) | 38% (19) | 94% (47) | 0% (0) | 94% (47) | 98% (49) | 0% (0) | 98% (49) |
+| pert-nonelem | 45 | 0% (0) | 0% (0) | 100% (45) | 0% (0) | 0% (0) | 0% (0) | 0% (0) | 18% (8) | 100% (45) | 0% (0) | 42% (19) | 84% (38) |
+| two-elem | 50 | 100% (50) | 0% (0) | 100% (50) | 38% (19) | 0% (0) | 38% (19) | 100% (50) | 0% (0) | 100% (50) | 96% (48) | 0% (0) | 96% (48) |
 | two-rand | 49 | 0% (0) | 0% (0) | 92% (45) | 0% (0) | 0% (0) | 8% (4) | 0% (0) | 0% (0) | 92% (45) | 0% (0) | 0% (0) | 100% (49) |
-| **all** | 271 | **41% (110)** | **0% (0)** | **98% (266)** | **27% (73)** | **0% (0)** | **35% (96)** | **40% (108)** | **5% (13)** | **97% (264)** | **41% (110)** | **8% (21)** | **97% (263)** |
+| **all** | 269 | **41% (111)** | **0% (0)** | **99% (265)** | **26% (71)** | **0% (0)** | **35% (94)** | **41% (111)** | **5% (13)** | **99% (265)** | **41% (109)** | **7% (20)** | **97% (260)** |
 
-Speed, Mathilda against FriCAS, on the 109 cases both close: median 75 ms vs 130 ms; 90th percentile 298 ms vs 170 ms; total 43.2 s vs 97.7 s; geometric mean of the ratio Mathilda/FriCAS 0.48; Mathilda faster on 77 of 109; 5 over 1 s.
+Speed, Mathilda against FriCAS, on the 109 cases both close: median 152 ms vs 170 ms; 90th percentile 507 ms vs 250 ms; total 24.6 s vs 18.8 s; geometric mean of the ratio Mathilda/FriCAS 0.64; Mathilda faster on 59 of 109; 1 over 1 s.
 
-Speed, PMT against FriCAS, on the 73 cases both close: median 743 ms vs 130 ms; 90th percentile 7.3 s vs 170 ms; total 209.0 s vs 9.7 s; geometric mean of the ratio PMT/FriCAS 5.08; PMT faster on 13 of 73; 31 over 1 s.
+Speed, PMT against FriCAS, on the 71 cases both close: median 1.7 s vs 160 ms; 90th percentile 7.3 s vs 230 ms; total 258.4 s vs 11.4 s; geometric mean of the ratio PMT/FriCAS 6.22; PMT faster on 12 of 71; 44 over 1 s.
 
-## 261: compact integrands, integrals four times larger (58 cases, run 2026-11-24)
+## 261: compact integrands, integrals four times larger (43 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| A algebraic | 14 | 100% (14) | 0% (0) | 100% (14) | 50% (7) | 0% (0) | 50% (7) | 100% (14) | 0% (0) | 100% (14) | 79% (11) | 0% (0) | 79% (11) |
-| M mixed, radical on top | 44 | 98% (43) | 0% (0) | 98% (43) | 57% (25) | 0% (0) | 57% (25) | 100% (44) | 0% (0) | 100% (44) | 7% (3) | 0% (0) | 7% (3) |
-| **all** | 58 | **98% (57)** | **0% (0)** | **98% (57)** | **55% (32)** | **0% (0)** | **55% (32)** | **100% (58)** | **0% (0)** | **100% (58)** | **24% (14)** | **0% (0)** | **24% (14)** |
+| A algebraic | 8 | 100% (8) | 0% (0) | 100% (8) | 88% (7) | 0% (0) | 88% (7) | 100% (8) | 0% (0) | 100% (8) | 88% (7) | 0% (0) | 88% (7) |
+| M mixed, radical on top | 35 | 97% (34) | 0% (0) | 97% (34) | 63% (22) | 0% (0) | 63% (22) | 100% (35) | 0% (0) | 100% (35) | 3% (1) | 0% (0) | 3% (1) |
+| **all** | 43 | **98% (42)** | **0% (0)** | **98% (42)** | **67% (29)** | **0% (0)** | **67% (29)** | **100% (43)** | **0% (0)** | **100% (43)** | **19% (8)** | **0% (0)** | **19% (8)** |
 
 The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
 
 | system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
 |---|---|---|---|---|---|---|---|---|---|
-| Axiom | 58 | 24% (14) | 14 | 0 | 0 | 0 | 5 | 39 | 0 |
-| Maxima | 58 | 16% (9) | 9 | 0 | 0 | 49 | 0 | 0 | 0 |
-| sympy | 58 | 12% (7) | 0 | 7 | 0 | 44 | 7 | 0 | 0 |
+| Axiom | 43 | 19% (8) | 8 | 0 | 0 | 0 | 2 | 33 | 0 |
+| Maxima | 43 | 19% (8) | 8 | 0 | 0 | 35 | 0 | 0 | 0 |
+| sympy | 43 | 16% (7) | 0 | 7 | 0 | 33 | 3 | 0 | 0 |
 
-Speed, Mathilda against FriCAS, on the 13 cases both close: median 589 ms vs 170 ms; 90th percentile 5.8 s vs 180 ms; total 28.5 s vs 2.1 s; geometric mean of the ratio Mathilda/FriCAS 5.73; Mathilda faster on 1 of 13; 3 over 1 s.
+Speed, Mathilda against FriCAS, on the 7 cases both close: median 277 ms vs 170 ms; 90th percentile 7.1 s vs 180 ms; total 8.8 s vs 1.1 s; geometric mean of the ratio Mathilda/FriCAS 2.85; Mathilda faster on 0 of 7; 1 over 1 s.
 
-Speed, PMT against FriCAS, on the 9 cases both close: median 81 ms vs 170 ms; 90th percentile 844 ms vs 180 ms; total 2.0 s vs 1.4 s; geometric mean of the ratio PMT/FriCAS 0.69; PMT faster on 7 of 9; 0 over 1 s.
+Speed, PMT against FriCAS, on the 7 cases both close: median 22 ms vs 170 ms; 90th percentile 75 ms vs 180 ms; total 251 ms vs 1.1 s; geometric mean of the ratio PMT/FriCAS 0.20; PMT faster on 7 of 7; 0 over 1 s.
 
-## 262: integrals outside the easy classes (1000 cases, run 2026-11-25)
+## 262: integrals outside the easy classes (955 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | T transcendental | 330 | 100% (330) | 0% (0) | 100% (330) | 99% (328) | 0% (0) | 99% (328) | 100% (330) | 0% (0) | 100% (330) | 100% (330) | 0% (0) | 100% (330) |
-| A algebraic | 336 | 93% (312) | 0% (0) | 93% (312) | 81% (271) | 0% (0) | 81% (271) | 94% (317) | 0% (0) | 94% (317) | 80% (268) | 0% (0) | 80% (268) |
-| M mixed, radical on top | 216 | 100% (216) | 0% (0) | 100% (216) | 0% (1) | 0% (0) | 0% (1) | 100% (216) | 0% (0) | 100% (216) | 0% (0) | 0% (0) | 0% (0) |
-| B radical at the bottom | 118 | 100% (118) | 0% (0) | 100% (118) | 51% (60) | 0% (0) | 51% (60) | 91% (107) | 0% (0) | 91% (107) | 41% (48) | 0% (0) | 41% (48) |
-| **all** | 1000 | **98% (976)** | **0% (0)** | **98% (976)** | **66% (660)** | **0% (0)** | **66% (660)** | **97% (970)** | **0% (0)** | **97% (970)** | **65% (646)** | **0% (0)** | **65% (646)** |
+| A algebraic | 316 | 93% (294) | 0% (0) | 93% (294) | 81% (255) | 0% (0) | 81% (255) | 95% (299) | 0% (0) | 95% (299) | 80% (253) | 0% (0) | 80% (253) |
+| M mixed, radical on top | 215 | 100% (215) | 0% (0) | 100% (215) | 0% (1) | 0% (0) | 0% (1) | 100% (215) | 0% (0) | 100% (215) | 0% (0) | 0% (0) | 0% (0) |
+| B radical at the bottom | 94 | 99% (93) | 0% (0) | 99% (93) | 61% (57) | 0% (0) | 61% (57) | 99% (93) | 0% (0) | 99% (93) | 45% (42) | 0% (0) | 45% (42) |
+| **all** | 955 | **98% (932)** | **0% (0)** | **98% (932)** | **67% (641)** | **0% (0)** | **67% (641)** | **98% (937)** | **0% (0)** | **98% (937)** | **65% (625)** | **0% (0)** | **65% (625)** |
 
 The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
 
 | system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
 |---|---|---|---|---|---|---|---|---|---|
-| Axiom | 1000 | 57% (571) | 571 | 0 | 2 | 5 | 45 | 377 | 0 |
-| Maxima | 1000 | 64% (638) | 638 | 0 | 3 | 359 | 0 | 0 | 0 |
-| sympy | 1000 | 52% (521) | 293 | 228 | 15 | 235 | 224 | 3 | 2 |
+| Axiom | 955 | 59% (560) | 560 | 0 | 2 | 5 | 45 | 343 | 0 |
+| Maxima | 955 | 62% (595) | 595 | 0 | 3 | 357 | 0 | 0 | 0 |
+| sympy | 955 | 53% (510) | 293 | 217 | 15 | 290 | 135 | 3 | 2 |
 
-Speed, Mathilda against FriCAS, on the 629 cases both close: median 317 ms vs 100 ms; 90th percentile 3.0 s vs 170 ms; total 654.2 s vs 361.6 s; geometric mean of the ratio Mathilda/FriCAS 0.91; Mathilda faster on 308 of 629; 150 over 1 s.
+Speed, Mathilda against FriCAS, on the 608 cases both close: median 248 ms vs 100 ms; 90th percentile 2.9 s vs 170 ms; total 550.0 s vs 225.5 s; geometric mean of the ratio Mathilda/FriCAS 0.83; Mathilda faster on 300 of 608; 135 over 1 s.
 
-Speed, PMT against FriCAS, on the 563 cases both close: median 147 ms vs 100 ms; 90th percentile 1.3 s vs 160 ms; total 314.8 s vs 183.5 s; geometric mean of the ratio PMT/FriCAS 1.42; PMT faster on 214 of 563; 62 over 1 s.
+Speed, PMT against FriCAS, on the 549 cases both close: median 134 ms vs 100 ms; 90th percentile 1.1 s vs 160 ms; total 322.5 s vs 166.9 s; geometric mean of the ratio PMT/FriCAS 1.38; PMT faster on 218 of 549; 60 over 1 s.
 
-## 263: more integrals outside the easy classes (1850 cases, run 2026-11-25)
+## 263: more integrals outside the easy classes (1764 cases, run 2026-11-26)
 
 | class | n | Mathilda elementary | Mathilda special | Mathilda decided | PMT elementary | PMT special | PMT decided | Automatic elementary | Automatic special | Automatic decided | FriCAS elementary | FriCAS special | FriCAS decided |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T transcendental | 500 | 100% (500) | 0% (0) | 100% (500) | 99% (497) | 0% (0) | 99% (497) | 100% (500) | 0% (0) | 100% (500) | 100% (500) | 0% (0) | 100% (500) |
-| A algebraic | 550 | 94% (517) | 0% (0) | 94% (517) | 83% (454) | 0% (0) | 83% (454) | 96% (526) | 0% (0) | 96% (526) | 78% (427) | 0% (0) | 78% (427) |
-| M mixed, radical on top | 400 | 100% (400) | 0% (0) | 100% (400) | 0% (0) | 0% (0) | 0% (0) | 100% (400) | 0% (0) | 100% (400) | 0% (0) | 0% (0) | 0% (0) |
-| B radical at the bottom | 400 | 100% (400) | 0% (0) | 100% (400) | 97% (388) | 0% (0) | 97% (388) | 100% (400) | 0% (0) | 100% (400) | 97% (389) | 0% (0) | 97% (389) |
-| **all** | 1850 | **98% (1817)** | **0% (0)** | **98% (1817)** | **72% (1339)** | **0% (0)** | **72% (1339)** | **99% (1826)** | **0% (0)** | **99% (1826)** | **71% (1316)** | **0% (0)** | **71% (1316)** |
+| T transcendental | 496 | 100% (494) | 0% (0) | 100% (494) | 99% (493) | 0% (0) | 99% (493) | 100% (495) | 0% (0) | 100% (495) | 100% (496) | 0% (0) | 100% (496) |
+| A algebraic | 473 | 94% (446) | 0% (0) | 94% (446) | 85% (402) | 0% (0) | 85% (402) | 100% (471) | 0% (0) | 100% (471) | 79% (374) | 0% (0) | 79% (374) |
+| M mixed, radical on top | 399 | 100% (399) | 0% (0) | 100% (399) | 0% (0) | 0% (0) | 0% (0) | 100% (399) | 0% (0) | 100% (399) | 0% (0) | 0% (0) | 0% (0) |
+| B radical at the bottom | 396 | 100% (396) | 0% (0) | 100% (396) | 98% (390) | 0% (0) | 98% (390) | 100% (396) | 0% (0) | 100% (396) | 97% (385) | 0% (0) | 97% (385) |
+| **all** | 1764 | **98% (1735)** | **0% (0)** | **98% (1735)** | **73% (1285)** | **0% (0)** | **73% (1285)** | **100% (1761)** | **0% (0)** | **100% (1761)** | **71% (1255)** | **0% (0)** | **71% (1255)** |
 
 The other systems of the run, on the same cases (closed = an answer PossibleZeroQ verifies, elementary or special; wrong = rejected by it):
 
 | system | n | closed | elementary | special | wrong | unevaluated | timeout | error | unverified |
 |---|---|---|---|---|---|---|---|---|---|
-| Axiom | 1850 | 65% (1203) | 1203 | 0 | 4 | 34 | 89 | 520 | 0 |
-| Maxima | 1850 | 61% (1127) | 1127 | 0 | 19 | 697 | 0 | 7 | 0 |
-| sympy | 1850 | 51% (948) | 557 | 391 | 28 | 540 | 320 | 0 | 14 |
+| Axiom | 1764 | 66% (1163) | 1163 | 0 | 4 | 23 | 88 | 486 | 0 |
+| Maxima | 1764 | 60% (1050) | 1050 | 0 | 19 | 688 | 0 | 7 | 0 |
+| sympy | 1764 | 50% (883) | 551 | 332 | 28 | 538 | 308 | 0 | 7 |
 
-Speed, Mathilda against FriCAS, on the 1299 cases both close: median 217 ms vs 180 ms; 90th percentile 3.6 s vs 260 ms; total 2244.8 s vs 1071.4 s; geometric mean of the ratio Mathilda/FriCAS 1.11; Mathilda faster on 684 of 1299; 392 over 1 s.
+Speed, Mathilda against FriCAS, on the 1239 cases both close: median 59 ms vs 140 ms; 90th percentile 1.3 s vs 230 ms; total 698.2 s vs 881.1 s; geometric mean of the ratio Mathilda/FriCAS 0.43; Mathilda faster on 880 of 1239; 146 over 1 s.
 
-Speed, PMT against FriCAS, on the 1229 cases both close: median 525 ms vs 180 ms; 90th percentile 7.3 s vs 250 ms; total 2546.1 s vs 655.7 s; geometric mean of the ratio PMT/FriCAS 3.38; PMT faster on 240 of 1229; 468 over 1 s.
+Speed, PMT against FriCAS, on the 1185 cases both close: median 173 ms vs 140 ms; 90th percentile 2.1 s vs 230 ms; total 898.2 s vs 531.0 s; geometric mean of the ratio PMT/FriCAS 1.34; PMT faster on 498 of 1185; 209 over 1 s.
 
 ## 264: a radical on top of a Log/Exp tower (500 cases, run 2026-11-26)
 
@@ -407,23 +415,23 @@ The other systems of the run, on the same cases (closed = an answer PossibleZero
 |---|---|---|---|---|---|---|---|---|---|
 | Axiom | 500 | 0% (0) | 0 | 0 | 0 | 0 | 0 | 500 | 0 |
 | Maxima | 500 | 0% (0) | 0 | 0 | 0 | 500 | 0 | 0 | 0 |
-| sympy | 500 | 0% (0) | 0 | 0 | 0 | 299 | 201 | 0 | 0 |
-| Wolfram | 500 | 0% (1) | 1 | 0 | 0 | 499 | 0 | 0 | 0 |
+| sympy | 500 | 0% (0) | 0 | 0 | 0 | 291 | 209 | 0 | 0 |
+| Wolfram | 500 | 0% (1) | 1 | 0 | 0 | 496 | 3 | 0 | 0 |
 | Reduce | 500 | 0% (0) | 0 | 0 | 0 | 446 | 54 | 0 | 0 |
 
 ## Decided by one system only (all corpora, by family)
 
 | family | Mathilda only | FriCAS only |
 |---|---|---|
-| cM-mathilda | 1161 | 0 |
-| cA-mathilda | 183 | 0 |
-| cB-mathilda | 73 | 0 |
+| cM-mathilda | 1152 | 0 |
+| cA-mathilda | 157 | 0 |
+| cB-mathilda | 55 | 0 |
 | constk | 32 | 0 |
 | mperturb | 32 | 0 |
-| tower2 | 32 | 0 |
 | alg | 31 | 0 |
 | logxy | 31 | 0 |
-| lccontent | 29 | 0 |
+| lccontent | 28 | 0 |
+| tower2 | 24 | 0 |
 | trager-rational-times-radical | 22 | 0 |
 | trager-torsion-heavy | 18 | 0 |
 | mrandom | 16 | 0 |
@@ -431,22 +439,24 @@ The other systems of the run, on the same cases (closed = an answer PossibleZero
 | cA-axiom | 0 | 13 |
 | ratb | 11 | 0 |
 | gauss-elem | 10 | 0 |
-| cA-maxima | 8 | 0 |
 | cB-maxima | 8 | 0 |
 | pert-nonelem | 7 | 0 |
-| bcurve-perturbed | 5 | 0 |
+| tanh-elem | 5 | 0 |
 | trager-goursat | 5 | 0 |
+| bcurve-perturbed | 4 | 0 |
 | bgenus-perturbed | 4 | 0 |
 | dep-elem | 4 | 0 |
 | two-rand | 0 | 4 |
+| cA-maxima | 3 | 0 |
 | tanh-rand | 3 | 0 |
+| cA-fricas | 0 | 2 |
 | classic-nonelem | 2 | 0 |
 | prim-rand | 2 | 0 |
-| tanh-elem | 2 | 0 |
 | trager-genus-super | 2 | 0 |
-| two-elem | 1 | 1 |
-| cA-fricas | 0 | 1 |
-| lim-rand | 1 | 0 |
+| two-elem | 2 | 0 |
+| algres | 1 | 0 |
+| lim-elem | 1 | 0 |
+| tani-elem | 1 | 0 |
 
 ## Within Mathilda: ParallelMixedTower against the Bronstein-family method (all corpora)
 
@@ -454,68 +464,67 @@ Decided by one of the two only, by class and family.
 
 | class | family | PMT only | Bronstein-family only |
 |---|---|---|---|
-| M | cM-mathilda | 0 | 1134 |
-| A | cA-mathilda | 24 | 104 |
-| B | cB-mathilda | 0 | 62 |
-| B | pert-nonelem | 0 | 47 |
+| M | cM-mathilda | 0 | 1126 |
+| A | cA-mathilda | 21 | 77 |
+| B | pert-nonelem | 0 | 45 |
 | B | two-rand | 0 | 41 |
 | T | f12-rand | 0 | 40 |
-| T | lim-rand | 0 | 40 |
+| T | lim-rand | 0 | 39 |
 | T | prim-elem | 0 | 39 |
 | T | dep-elem | 0 | 38 |
+| T | tani-elem | 0 | 38 |
 | T | dep-rand | 0 | 37 |
-| T | tani-elem | 0 | 37 |
 | T | f12-elem | 0 | 36 |
 | T | tanh-elem | 0 | 36 |
+| B | cB-mathilda | 0 | 35 |
 | T | gauss-rand | 0 | 34 |
-| T | tan-elem | 0 | 34 |
+| T | tan-elem | 0 | 33 |
 | T | tan-rand | 0 | 33 |
-| B | bgenus-perturbed | 0 | 32 |
-| B | bcurve-perturbed | 0 | 31 |
 | B | mid-rand | 0 | 31 |
+| B | two-elem | 0 | 31 |
 | T | gauss-elem | 0 | 31 |
 | T | tanh-rand | 0 | 31 |
-| T | tani-rand | 0 | 31 |
-| B | two-elem | 0 | 30 |
 | T | prim-rand | 0 | 30 |
+| B | bgenus-perturbed | 0 | 29 |
 | T | lim-elem | 0 | 29 |
-| B | bbottom-perturbed | 0 | 24 |
+| T | tani-rand | 0 | 28 |
+| B | bcurve-perturbed | 0 | 25 |
 | A | cA-fricas | 0 | 21 |
 | M | mperturb | 1 | 19 |
+| B | bbottom-perturbed | 0 | 19 |
 | A | trager-rational-times-radical | 0 | 17 |
 | T | tlog-perturbed | 0 | 16 |
 | A | trager-torsion-heavy | 0 | 15 |
 | B | one-rand | 0 | 14 |
 | A | trager-random | 0 | 13 |
 | M | lccontent | 0 | 13 |
-| M | constk | 11 | 0 |
-| A | cA-maxima | 0 | 10 |
-| M | logxy | 10 | 0 |
-| B | cB-maxima | 0 | 8 |
-| B | mid-elem | 0 | 7 |
-| T | cT-mathilda | 0 | 7 |
-| T | texp-perturbed | 0 | 7 |
+| B | mid-elem | 0 | 9 |
+| B | cB-maxima | 0 | 7 |
+| T | cT-mathilda | 1 | 5 |
+| T | texp-perturbed | 0 | 6 |
+| A | cA-maxima | 0 | 5 |
 | A | trager-goursat | 0 | 4 |
 | A | trager-third-kind | 0 | 4 |
 | M | mrandom | 0 | 4 |
 | A | trager-genus-hyper | 0 | 3 |
 | A | cA-axiom | 0 | 2 |
 | A | trager-genus-super | 0 | 2 |
-| B | bgenus | 0 | 2 |
+| M | logxy | 2 | 0 |
+| B | bgenus | 0 | 1 |
 | M | classic-nonelem | 0 | 1 |
+| T | cT-fricas | 1 | 0 |
 | T | classic-nonelem | 0 | 1 |
 
 ## Why FriCAS did not decide (all corpora)
 
 | reason | cases |
 |---|---|
-| integrate: implementation incomplete (has polynomial part) | 712 |
-| integrate: implementation incomplete (constant residues) | 658 |
-| timeout (30 s) | 303 |
+| integrate: implementation incomplete (has polynomial part) | 711 |
+| integrate: implementation incomplete (constant residues) | 648 |
+| timeout (30 s) | 250 |
 | integrate: implementation incomplete (trace 0) | 35 |
-| answer not verified | 10 |
-| integrate: implementation incomplete (residue poly has multiple non-li | 6 |
+| answer not verified | 13 |
+| integrate: implementation incomplete (residue poly has multiple non-li | 4 |
 | catdef: division by zero | 1 |
-| alglogextint: unimplemented | 1 |
 | "failed" of mode Union(Integer,"failed") cannot be coerced to mode Int | 1 |
 

@@ -1,6 +1,6 @@
 # Integration shootout: 264-mixed-integrals (2026-11-26)
 
-500 cases, timeout 30 s per run, wall 49.7 min. Every answer of every system is judged by PossibleZeroQ[D[F, x] - f] in Mathilda (the other systems' answers translated into Mathilda first): zero is verified, nonzero is `wrong`, anything else -- undecided, untranslatable, or an answer text cut when the run was recorded -- is `unverified`. `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary.
+500 cases, timeout 30 s per run, wall 10.4 min. Every answer of every system is judged by PossibleZeroQ[D[F, x] - f] in Mathilda (the other systems' answers translated into Mathilda first): zero is verified, nonzero is `wrong`, anything else -- undecided, untranslatable, or an answer text cut when the run was recorded -- is `unverified`. `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary.
 
 ## Closed (elementary + special) by class
 
@@ -8,8 +8,6 @@
 |---|---|---|
 | Mathilda:Automatic | 100% (500) | 100% (500) |
 | Mathilda:ParallelMixedTower | 0% (0) | 0% (0) |
-| Mathilda:RischTranscendental | · | - (0) |
-| Mathilda:Trager | · | - (0) |
 | Mathilda:Bronstein | 100% (500) | 100% (500) |
 | FriCAS | 0% (0) | 0% (0) |
 | Axiom | 0% (0) | 0% (0) |
@@ -22,16 +20,14 @@
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 500 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.03 |
-| Mathilda:ParallelMixedTower | 0 | 0 | 0 | 495 | 5 | 0 | 0 | 0 | - |
-| Mathilda:RischTranscendental | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | - |
-| Mathilda:Trager | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | - |
-| Mathilda:Bronstein | 500 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.04 |
+| Mathilda:Automatic | 500 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.17 |
+| Mathilda:ParallelMixedTower | 0 | 0 | 0 | 494 | 6 | 0 | 0 | 0 | - |
+| Mathilda:Bronstein | 500 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.16 |
 | FriCAS | 0 | 0 | 0 | 0 | 0 | 500 | 0 | 0 | - |
 | Axiom | 0 | 0 | 0 | 0 | 0 | 500 | 0 | 0 | - |
 | Maxima | 0 | 0 | 0 | 500 | 0 | 0 | 0 | 0 | - |
-| sympy | 0 | 0 | 0 | 299 | 201 | 0 | 0 | 0 | - |
-| Wolfram | 1 | 0 | 0 | 499 | 0 | 0 | 0 | 0 | 0.46 |
+| sympy | 0 | 0 | 0 | 291 | 209 | 0 | 0 | 0 | - |
+| Wolfram | 1 | 0 | 0 | 496 | 3 | 0 | 0 | 0 | 0.46 |
 | Reduce | 0 | 0 | 0 | 446 | 54 | 0 | 0 | 0 | - |
 
 ## PossibleZeroQ verdicts

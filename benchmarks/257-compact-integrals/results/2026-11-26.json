@@ -1,0 +1,1336 @@
+{
+"date": "2026-11-26",
+"wall": 0.003005,
+"systems": {
+"Mathilda": "Mathilda 0.6750",
+"FriCAS": "FriCAS 1.3.6",
+"Maxima": "Maxima 5.49.0",
+"sympy": "sympy 1.14.0",
+"Wolfram": "Wolfram Language 14.0.0"
+},
+"rows": [
+{
+"id": "cT-1-445",
+"class": "T",
+"family": "cT-mathilda",
+"expect": "elem",
+"f": "Log[2 + 2/E^(2*x) - Cosh[x] + Sinh[x]]/E^x",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "UNEVAL",
+"Mathilda:RischTranscendental": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "TIMEOUT",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.108838,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*Sqrt[15]*ArcTan[(1 - 4*(Cosh[x] - Sinh[x]))/Sqrt[15]] + 8*Cosh[x] - 8*Sinh[x] + Log[(Cosh[2*x] - Sinh[2*x])*(2 - Cosh[x] - Sinh[x] + 2*(Cosh[2*x] + Sinh[2*x]))]*(1 - 4*Cosh[x] + 4*Sinh[x]))/4"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "UNEVAL",
+"time": 0.688766,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integrate[Log[2 + 2/E^(2*x) - Cosh[x] + Sinh[x]]/E^x, x, Method -> \"ParallelMixedTower\"]"
+},
+"Mathilda:RischTranscendental": {
+"status": "ANSWER",
+"time": 0.0812087,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*Sqrt[15]*ArcTan[(1 - 4*(Cosh[x] - Sinh[x]))/Sqrt[15]] + 8*Cosh[x] - 8*Sinh[x] + Log[(Cosh[2*x] - Sinh[2*x])*(2 - Cosh[x] - Sinh[x] + 2*(Cosh[2*x] + Sinh[2*x]))]*(1 - 4*Cosh[x] + 4*Sinh[x]))/4"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.08,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "((-4)*log((4*cosh(x)+(-1))/(sinh(x)+cosh(x)))+((sinh(x)+cosh(x))*log(((-4)*cosh(x)+1)/(sinh(x)+(-1)*cosh(x)))+((2*15^(1/2)*sinh(x)+2*15^(1/2)*cosh(x))*atan((4*sinh(x)+(4*cosh(x)+(-1)))/(15^(1/2)))+((-2)*x*sinh(x)+((-2)*x*cosh(x)+8)))))/(4*sinh(x)+4*cosh(x))"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.029720999999999997,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-(%e^-x*log(sinh(x)-cosh(x)+2*%e^-(2*x)+2))+(x/2-atan((4*%e^-x-1)/sqrt(15))/sqrt(15))/2-4*(x/4-log(2*%e^(2*x)-%e^x+2)/8-(7*atan((4*%e^x-1)/sqrt(15)))/(4*sqrt(15))-%e^-x/2)-log(-((%e^x*(%e^x+%e^-x))/2)+(%e^x*(%e^x-%e^-x))/2+2*%e^x+2*%e^-x)/4"
+},
+"sympy": {
+"status": "TIMEOUT",
+"time": 30.535,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": ""
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.167271,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(8/E^x - 2*x - 2*Sqrt[15]*ArcTan[(1 - 4*E^x)/Sqrt[15]] - (4*Log[2 + 2/E^(2*x) - E^(-x)])/E^x + Log[2 - E^x + 2*E^(2*x)])/4"
+}
+},
+"verdicts": []
+},
+{
+"id": "cT-2-103",
+"class": "T",
+"family": "cT-mathilda",
+"expect": "elem",
+"f": "Log[1 + 2/E^(2*x) - Cosh[x] + Sinh[x]]/E^x",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "UNEVAL",
+"Mathilda:RischTranscendental": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "TIMEOUT",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.104048,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*Sqrt[7]*ArcTan[(1 - 4*(Cosh[x] - Sinh[x]))/Sqrt[7]] + 8*Cosh[x] - 8*Sinh[x] + Log[(Cosh[2*x] - Sinh[2*x])*(2 - Cosh[x] + Cosh[2*x] - Sinh[x] + Sinh[2*x])]*(1 - 4*Cosh[x] + 4*Sinh[x]))/4"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "UNEVAL",
+"time": 0.589398,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integrate[Log[1 + 2/E^(2*x) - Cosh[x] + Sinh[x]]/E^x, x, Method -> \"ParallelMixedTower\"]"
+},
+"Mathilda:RischTranscendental": {
+"status": "ANSWER",
+"time": 0.0783482,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*Sqrt[7]*ArcTan[(1 - 4*(Cosh[x] - Sinh[x]))/Sqrt[7]] + 8*Cosh[x] - 8*Sinh[x] + Log[(Cosh[2*x] - Sinh[2*x])*(2 - Cosh[x] + Cosh[2*x] - Sinh[x] + Sinh[2*x])]*(1 - 4*Cosh[x] + 4*Sinh[x]))/4"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.08,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "((sinh(x)+cosh(x))*log((sinh(x)+((-3)*cosh(x)+1))/(sinh(x)+(-1)*cosh(x)))+((-4)*log(((-1)*sinh(x)+(3*cosh(x)+(-1)))/(sinh(x)+cosh(x)))+((2*7^(1/2)*sinh(x)+2*7^(1/2)*cosh(x))*atan((2*sinh(x)+(2*cosh(x)+(-1)))/(7^(1/2)))+((-2)*x*sinh(x)+((-2)*x*cosh(x)+8)))))/(4*sinh(x)+4*cosh(x))"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.017301000000000004,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-(%e^-x*log(sinh(x)-cosh(x)+2*%e^-(2*x)+1))-(x-atan((4*%e^-x-1)/sqrt(7))/(2*sqrt(7))+(3*log(-%e^-x+2*%e^-(2*x)+1))/4)/2+(x-(3*atan((4*%e^-x-1)/sqrt(7)))/(2*sqrt(7))+log(-%e^-x+2*%e^-(2*x)+1)/4)/2-4*(x/4-log(%e^(2*x)-%e^x+2)/8-(3*atan((2*%e^x-1)/sqrt(7)))/(4*sqrt(7))-%e^-x/2)"
+},
+"sympy": {
+"status": "TIMEOUT",
+"time": 30.563,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": ""
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.077069,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(8/E^x - 2*x - 2*Sqrt[7]*ArcTan[(1 - 2*E^x)/Sqrt[7]] - (4*Log[1 + 2/E^(2*x) - E^(-x)])/E^x + Log[2 - E^x + E^(2*x)])/4"
+}
+},
+"verdicts": []
+},
+{
+"id": "cA-1-57",
+"class": "A",
+"family": "cA-mathilda",
+"expect": "elem",
+"f": "x^2*(1 + x^4)^(1/4)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Trager": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "SPECIAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.00159407,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(1 + x^4)^(1/4))/4 + ArcTan[(1 + x^4)^(1/4)/x]/8 + ArcTanh[x/(1 + x^4)^(1/4)]/8"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.0302048,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(1 + x^4)^(1/4))/4 + ArcTan[(1 + x^4)^(1/4)/x]/8 + ArcTanh[x/(1 + x^4)^(1/4)]/8"
+},
+"Mathilda:Trager": {
+"status": "ANSWER",
+"time": 0.301841,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(1 + x^4)^(1/4))/4 + ArcTan[(2*x^3*(1 + x^4)^(1/4))/(1 + 2*x^4 - 2*x^2*Sqrt[1 + x^4]) - (2*x*(1 + x^4)^(3/4))/(1 + 2*x^4 - 2*x^2*Sqrt[1 + x^4])]/16 + Log[1 + 2*x^4 + 2*x^3*(1 + x^4)^(1/4) + 2*x^2*Sqrt[1 + x^4] + 2*x*(1 + x^4)^(3/4)]/16"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.08,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(log(((x^4+1)^(1/4)+x)/x)+((-1)*log(((x^4+1)^(1/4)+(-1)*x)/x)+(2*atan(((x^4+1)^(1/4))/x)+4*x^3*(x^4+1)^(1/4))))/16"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.014979000000000003,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "log((x^4+1)^(1/4)/x+1)/16-log((x^4+1)^(1/4)/x-1)/16+atan((x^4+1)^(1/4)/x)/8+(x^4+1)^(1/4)/(x*((4*(x^4+1))/x^4-4))"
+},
+"sympy": {
+"status": "ANSWER",
+"time": 0.735,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "x**3*gamma(3/4)*hyper((-1/4, 3/4), (7/4,), x**4*exp_polar(I*pi))/(4*gamma(7/4))"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.345922,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*x^3*(1 + x^4)^(1/4) - ArcTan[x/(1 + x^4)^(1/4)] + ArcTanh[x/(1 + x^4)^(1/4)])/8"
+}
+},
+"verdicts": []
+},
+{
+"id": "cA-1-73",
+"class": "A",
+"family": "cA-mathilda",
+"expect": "elem",
+"f": "x^3/(1 + x^3)^(1/3)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Trager": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "SPECIAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.00228834,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x*(1 + x^3)^(2/3))/3 + ArcTan[1/Sqrt[3] + (2*(1 + x^3)^(1/3))/(Sqrt[3]*x)]/(3*Sqrt[3]) + Log[-1 + (1 + x^3)^(1/3)/x]/9 - Log[1 + (1 + x^3)^(1/3)/x + (1 + x^3)^(2/3)/x^2]/18"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.0175457,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x*(1 + x^3)^(2/3))/3 + ArcTan[1/Sqrt[3] + (2*(1 + x^3)^(1/3))/(Sqrt[3]*x)]/(3*Sqrt[3]) + Log[-1 + (1 + x^3)^(1/3)/x]/9 - Log[1 + (1 + x^3)^(1/3)/x + (1 + x^3)^(2/3)/x^2]/18"
+},
+"Mathilda:Trager": {
+"status": "ANSWER",
+"time": 0.213254,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x*(1 + x^3)^(2/3))/3 + ArcTan[Sqrt[3]/(-3 - 6*x^3 + 3*x^2*(1 + x^3)^(1/3) + 3*x*(1 + x^3)^(2/3)) - (3*Sqrt[3]*x^2*(1 + x^3)^(1/3))/(-3 - 6*x^3 + 3*x^2*(1 + x^3)^(1/3) + 3*x*(1 + x^3)^(2/3)) + (3*Sqrt[3]*x*(1 + x^3)^(2/3))/(-3 - 6*x^3 + 3*x^2*(1 + x^3)^(1/3) + 3*x*(1 + x^3)^(2/3))]/(6*Sqrt[3]) - Log"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.08,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "((-1)*3^(1/2)*log((((x^3+1)^(1/3))^2+x*(x^3+1)^(1/3)+x^2)/(x^2))+(2*3^(1/2)*log(((x^3+1)^(1/3)+(-1)*x)/x)+(6*atan((2*3^(1/2)*(x^3+1)^(1/3)+x*3^(1/2))/(3*x))+6*x*3^(1/2)*((x^3+1)^(1/3))^2)))/(18*3^(1/2))"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.015006999999999996,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-(log((x^3+1)^(2/3)/x^2+(x^3+1)^(1/3)/x+1)/18)+atan(((2*(x^3+1)^(1/3))/x+1)/sqrt(3))/3^(3/2)+log((x^3+1)^(1/3)/x-1)/9+(x^3+1)^(2/3)/(x^2*((3*(x^3+1))/x^3-3))"
+},
+"sympy": {
+"status": "ANSWER",
+"time": 0.534,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "x**4*gamma(4/3)*hyper((1/3, 4/3), (7/3,), x**3*exp_polar(I*pi))/(3*gamma(7/3))"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.302249,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(6*x*(1 + x^3)^(2/3) - 2*Sqrt[3]*ArcTan[(Sqrt[3]*x)/(x + 2*(1 + x^3)^(1/3))] + 2*Log[-x + (1 + x^3)^(1/3)] - Log[x^2 + x*(1 + x^3)^(1/3) + (1 + x^3)^(2/3)])/18"
+}
+},
+"verdicts": []
+},
+{
+"id": "cA-2-135",
+"class": "A",
+"family": "cA-mathilda",
+"expect": "elem",
+"f": "1/(1 + x^3)^(1/3)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Trager": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "SPECIAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.00169849,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-(ArcTan[1/Sqrt[3] + (2*(1 + x^3)^(1/3))/(Sqrt[3]*x)]/Sqrt[3]) - Log[-1 + (1 + x^3)^(1/3)/x]/3 + Log[1 + (1 + x^3)^(1/3)/x + (1 + x^3)^(2/3)/x^2]/6"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.0139809,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-(ArcTan[1/Sqrt[3] + (2*(1 + x^3)^(1/3))/(Sqrt[3]*x)]/Sqrt[3]) - Log[-1 + (1 + x^3)^(1/3)/x]/3 + Log[1 + (1 + x^3)^(1/3)/x + (1 + x^3)^(2/3)/x^2]/6"
+},
+"Mathilda:Trager": {
+"status": "ANSWER",
+"time": 0.214108,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "ArcTan[-(Sqrt[3]/(-3 - 6*x^3 + 3*x^2*(1 + x^3)^(1/3) + 3*x*(1 + x^3)^(2/3))) + (3*Sqrt[3]*x^2*(1 + x^3)^(1/3))/(-3 - 6*x^3 + 3*x^2*(1 + x^3)^(1/3) + 3*x*(1 + x^3)^(2/3)) - (3*Sqrt[3]*x*(1 + x^3)^(2/3))/(-3 - 6*x^3 + 3*x^2*(1 + x^3)^(1/3) + 3*x*(1 + x^3)^(2/3))]/(2*Sqrt[3]) + Log[-1 + 3*x^2*(1 + x^3)"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.09,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(3^(1/2)*log((((x^3+1)^(1/3))^2+x*(x^3+1)^(1/3)+x^2)/(x^2))+((-2)*3^(1/2)*log(((x^3+1)^(1/3)+(-1)*x)/x)+(-6)*atan((2*3^(1/2)*(x^3+1)^(1/3)+x*3^(1/2))/(3*x))))/(6*3^(1/2))"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.014974000000000005,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "log((x^3+1)^(2/3)/x^2+(x^3+1)^(1/3)/x+1)/6-atan(((2*(x^3+1)^(1/3))/x+1)/sqrt(3))/sqrt(3)-log((x^3+1)^(1/3)/x-1)/3"
+},
+"sympy": {
+"status": "ANSWER",
+"time": 0.681,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "x*gamma(1/3)*hyper((1/3, 1/3), (4/3,), x**3*exp_polar(I*pi))/(3*gamma(4/3))"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.060626,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "ArcTan[(1 + (2*x)/(1 + x^3)^(1/3))/Sqrt[3]]/Sqrt[3] - Log[1 - x/(1 + x^3)^(1/3)]/3 + Log[1 + x^2/(1 + x^3)^(2/3) + x/(1 + x^3)^(1/3)]/6"
+}
+},
+"verdicts": []
+},
+{
+"id": "cA-3-52",
+"class": "A",
+"family": "cA-mathilda",
+"expect": "elem",
+"f": "x^3*(-1 + x^3)^(2/3)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Trager": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "SPECIAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.00285006,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-2*x*(-1 + x^3)^(2/3) + 3*x^4*(-1 + x^3)^(2/3))/18 + ArcTan[1/Sqrt[3] + (2*(-1 + x^3)^(1/3))/(Sqrt[3]*x)]/(9*Sqrt[3]) + Log[-1 + (-1 + x^3)^(1/3)/x]/27 - Log[1 + (-1 + x^3)^(1/3)/x + (-1 + x^3)^(2/3)/x^2]/54"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.059474,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-2*x + 11*x^4 - 24*x^7 + 26*x^10 - 14*x^13 + 3*x^16)/(18*(-1 + x^3)^(10/3)) + ArcTan[1/Sqrt[3] - 2/(Sqrt[3]*x*(-1 + x^3)^(2/3)) + (2*x^2)/(Sqrt[3]*(-1 + x^3)^(2/3))]/(9*Sqrt[3]) - Log[1 + ((-1 + x^(-3))^2*x^4)/(-1 + x^3)^(4/3) - ((-1 + x^(-3))*x^2)/(-1 + x^3)^(2/3)]/54 + Log[1 + ((-1 + x^(-3))*x^2)"
+},
+"Mathilda:Trager": {
+"status": "ANSWER",
+"time": 0.241811,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-1/9*(x*(-1 + x^3)^(2/3)) + (x^4*(-1 + x^3)^(2/3))/6 + ArcTan[-(Sqrt[3]/(3 - 6*x^3 + 3*x^2*(-1 + x^3)^(1/3) + 3*x*(-1 + x^3)^(2/3))) - (3*Sqrt[3]*x^2*(-1 + x^3)^(1/3))/(3 - 6*x^3 + 3*x^2*(-1 + x^3)^(1/3) + 3*x*(-1 + x^3)^(2/3)) + (3*Sqrt[3]*x*(-1 + x^3)^(2/3))/(3 - 6*x^3 + 3*x^2*(-1 + x^3)^(1/3) + 3"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.08,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "((-1)*3^(1/2)*log((((x^3+(-1))^(1/3))^2+x*(x^3+(-1))^(1/3)+x^2)/(x^2))+(2*3^(1/2)*log(((x^3+(-1))^(1/3)+(-1)*x)/x)+(6*atan((2*3^(1/2)*(x^3+(-1))^(1/3)+x*3^(1/2))/(3*x))+(9*x^4+(-6)*x)*3^(1/2)*((x^3+(-1))^(1/3))^2)))/(54*3^(1/2))"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.015073,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-(log((x^3-1)^(2/3)/x^2+(x^3-1)^(1/3)/x+1)/54)+atan(((2*(x^3-1)^(1/3))/x+1)/sqrt(3))/3^(5/2)+log((x^3-1)^(1/3)/x-1)/27+((2*(x^3-1)^(5/3))/x^5+(x^3-1)^(2/3)/x^2)/((18*(x^3-1)^2)/x^6-(36*(x^3-1))/x^3+18)"
+},
+"sympy": {
+"status": "ANSWER",
+"time": 1.171,
+"nums": [
+"bad",
+"bad",
+"bad"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "x**4*exp(2*I*pi/3)*gamma(4/3)*hyper((-2/3, 4/3), (7/3,), x**3)/(3*gamma(7/3))"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.316817,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(3*x*(-1 + x^3)^(2/3)*(-2 + 3*x^3) - 2*Sqrt[3]*ArcTan[(Sqrt[3]*x)/(x + 2*(-1 + x^3)^(1/3))] + 2*Log[-x + (-1 + x^3)^(1/3)] - Log[x^2 + x*(-1 + x^3)^(1/3) + (-1 + x^3)^(2/3)])/54"
+}
+},
+"verdicts": []
+},
+{
+"id": "cA-3-56",
+"class": "A",
+"family": "cA-mathilda",
+"expect": "elem",
+"f": "1/(3 + x^4)^(1/4)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Trager": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "SPECIAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.00106812,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-1/2*ArcTan[(3 + x^4)^(1/4)/x] + ArcTanh[x/(3 + x^4)^(1/4)]/2"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.00951385,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "-1/2*ArcTan[(3 + x^4)^(1/4)/x] + ArcTanh[x/(3 + x^4)^(1/4)]/2"
+},
+"Mathilda:Trager": {
+"status": "ANSWER",
+"time": 0.371493,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "ArcTan[(-2*x^3*(3 + x^4)^(1/4))/(3 + 2*x^4 - 2*x^2*Sqrt[3 + x^4]) + (2*x*(3 + x^4)^(3/4))/(3 + 2*x^4 - 2*x^2*Sqrt[3 + x^4])]/4 + Log[3 + 2*x^4 + 2*x^3*(3 + x^4)^(1/4) + 2*x^2*Sqrt[3 + x^4] + 2*x*(3 + x^4)^(3/4)]/4"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.09,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(log(((x^4+3)^(1/4)+x)/x)+((-1)*log(((x^4+3)^(1/4)+(-1)*x)/x)+(-2)*atan(((x^4+3)^(1/4))/x)))/4"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.014792999999999997,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "log((x^4+3)^(1/4)/x+1)/4-log((x^4+3)^(1/4)/x-1)/4-atan((x^4+3)^(1/4)/x)/2"
+},
+"sympy": {
+"status": "ANSWER",
+"time": 0.759,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "3**(3/4)*x*gamma(1/4)*hyper((1/4, 1/4), (5/4,), x**4*exp_polar(I*pi)/3)/(12*gamma(5/4))"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.007561,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "ArcTan[x/(3 + x^4)^(1/4)]/2 - Log[1 - x/(3 + x^4)^(1/4)]/4 + Log[1 + x/(3 + x^4)^(1/4)]/4"
+}
+},
+"verdicts": []
+},
+{
+"id": "cA-3-116",
+"class": "A",
+"family": "cA-mathilda",
+"expect": "elem",
+"f": "x^2*(3 + x^4)^(1/4)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Trager": "ELEM",
+"FriCAS": "ELEM",
+"Maxima": "ELEM",
+"sympy": "SPECIAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.0015502,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(3 + x^4)^(1/4))/4 + (3*ArcTan[(3 + x^4)^(1/4)/x])/8 + (3*ArcTanh[x/(3 + x^4)^(1/4)])/8"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.012557,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(3 + x^4)^(1/4))/4 + (3*ArcTan[(3 + x^4)^(1/4)/x])/8 + (3*ArcTanh[x/(3 + x^4)^(1/4)])/8"
+},
+"Mathilda:Trager": {
+"status": "ANSWER",
+"time": 0.32804,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(3 + x^4)^(1/4))/4 + (3*ArcTan[(2*x^3*(3 + x^4)^(1/4))/(3 + 2*x^4 - 2*x^2*Sqrt[3 + x^4]) - (2*x*(3 + x^4)^(3/4))/(3 + 2*x^4 - 2*x^2*Sqrt[3 + x^4])])/16 + (3*Log[3 + 2*x^4 + 2*x^3*(3 + x^4)^(1/4) + 2*x^2*Sqrt[3 + x^4] + 2*x*(3 + x^4)^(3/4)])/16"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.09,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(3*log(((x^4+3)^(1/4)+x)/x)+((-3)*log(((x^4+3)^(1/4)+(-1)*x)/x)+(6*atan(((x^4+3)^(1/4))/x)+4*x^3*(x^4+3)^(1/4))))/16"
+},
+"Maxima": {
+"status": "ANSWER",
+"time": 0.015302000000000003,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(3*log((x^4+3)^(1/4)/x+1))/16-(3*log((x^4+3)^(1/4)/x-1))/16+(3*atan((x^4+3)^(1/4)/x))/8+(3*(x^4+3)^(1/4))/(x*((4*(x^4+3))/x^4-4))"
+},
+"sympy": {
+"status": "ANSWER",
+"time": 0.597,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "3**(1/4)*x**3*gamma(3/4)*hyper((-1/4, 3/4), (7/4,), x**4*exp_polar(I*pi)/3)/(4*gamma(7/4))"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.290702,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(x^3*(3 + x^4)^(1/4))/4 - (3*ArcTan[x/(3 + x^4)^(1/4)])/8 + (3*ArcTanh[x/(3 + x^4)^(1/4)])/8"
+}
+},
+"verdicts": []
+},
+{
+"id": "cM-1-129",
+"class": "M",
+"family": "cM-mathilda",
+"expect": "elem",
+"f": "(E^(2*x)*(E^(2*x) + x))/(3 + E^(2*x))^(1/3)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Bronstein": "ELEM",
+"FriCAS": "ERROR",
+"Maxima": "UNEVAL",
+"sympy": "UNEVAL",
+"Wolfram": "SPECIAL"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.189545,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-153*(3 + E^(2*x))^(2/3) + 24*E^(2*x)*(3 + E^(2*x))^(2/3) + 60*(3 + E^(2*x))^(2/3)*x)/80 - (3*Log[(1458 + 486*E^(2*x) - 81*(3 + E^(2*x))^(4/3)*Root[2187 + #1^6 &, 2] + (3 + E^(2*x))^(4/3)*Root[2187 + #1^6 &, 2]^4)/(3 + E^(2*x))]*Root[2187 + #1^6 &, 2])/8 + (Log[(729 + 243*E^(2*x) - (3 + E^(2*x))^(4"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.0867848,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-225*(3 + E^(2*x))^(2/3) + 24*(3 + E^(2*x))^(5/3) + 30*3^(2/3)*x + 60*(3 + E^(2*x))^(2/3)*x)/80 - (9*3^(1/6)*ArcTan[1/Sqrt[3] + (2*(3 + E^(2*x))^(1/3))/3^(5/6)])/8 - (9*3^(2/3)*Log[-3^(1/3) + (3 + E^(2*x))^(1/3)])/16"
+},
+"Mathilda:Bronstein": {
+"status": "ANSWER",
+"time": 0.233996,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-153*(3 + E^(2*x))^(2/3) + 24*E^(2*x)*(3 + E^(2*x))^(2/3) + 60*(3 + E^(2*x))^(2/3)*x)/80 - (3*Log[(1458 + 486*E^(2*x) - 81*(3 + E^(2*x))^(4/3)*Root[2187 + #1^6 &, 2] + (3 + E^(2*x))^(4/3)*Root[2187 + #1^6 &, 2]^4)/(3 + E^(2*x))]*Root[2187 + #1^6 &, 2])/8 + (Log[(729 + 243*E^(2*x) - (3 + E^(2*x))^(4"
+},
+"FriCAS": {
+"status": "ERROR",
+"time": 0.202,
+"nums": [],
+"cert": false,
+"detail": "integrate: implementation incomplete (has polynomial part)",
+"text": "r"
+},
+"Maxima": {
+"status": "UNEVAL",
+"time": 0.060556,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "'integrate((%e^(2*x)*x)/(%e^(2*x)+3)^(1/3),x)+(3*(%e^(2*x)+3)^(5/3))/10-(9*(%e^(2*x)+3)^(2/3))/4"
+},
+"sympy": {
+"status": "UNEVAL",
+"time": 1.389,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integral((x + exp(2*x))*exp(2*x)/(exp(2*x) + 3)**(1/3), x)"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.256525,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(3*((3 + E^(2*x))*(-51 + 8*E^(2*x) + 20*x) + 90*(1 + 3/E^(2*x))^(1/3)*Hypergeometric2F1[1/3, 1/3, 4/3, -3/E^(2*x)]))/(80*(3 + E^(2*x))^(1/3))"
+}
+},
+"verdicts": [
+"ONLY-Mathilda"
+]
+},
+{
+"id": "cM-1-175",
+"class": "M",
+"family": "cM-mathilda",
+"expect": "elem",
+"f": "(Sqrt[3 + E^(-x)]*(1 + 3*E^x)*(1 + E^x*x))/E^(3*x)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Bronstein": "ELEM",
+"FriCAS": "ERROR",
+"Maxima": "UNEVAL",
+"sympy": "UNEVAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.0534596,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-1392*Sqrt[3 + E^(-x)] - (50*Sqrt[3 + E^(-x)])/E^(3*x) - (268*Sqrt[3 + E^(-x)])/E^(2*x) - (398*Sqrt[3 + E^(-x)])/E^x - 630*Sqrt[3 + E^(-x)]*x - (70*Sqrt[3 + E^(-x)]*x)/E^(2*x) - (420*Sqrt[3 + E^(-x)]*x)/E^x)/175 + (18*Sqrt[3]*Log[E^(-x)])/5 - (36*Sqrt[3]*Log[-3 + Sqrt[3]*Sqrt[3 + E^(-x)]])/5"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.106335,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(18*Sqrt[3]*x)/5 + (Sqrt[3 + E^(-x)]*(-50 - 268*E^x - 398*E^(2*x) - 1392*E^(3*x) - 70*E^x*x - 420*E^(2*x)*x - 630*E^(3*x)*x))/(175*E^(3*x)) - (36*Sqrt[3]*Log[(Sqrt[3]*E^x - E^x*Sqrt[3 + E^(-x)])/Sqrt[3]])/5"
+},
+"Mathilda:Bronstein": {
+"status": "ANSWER",
+"time": 0.0596371,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-1392*Sqrt[3 + E^(-x)] - (50*Sqrt[3 + E^(-x)])/E^(3*x) - (268*Sqrt[3 + E^(-x)])/E^(2*x) - (398*Sqrt[3 + E^(-x)])/E^x - 630*Sqrt[3 + E^(-x)]*x - (70*Sqrt[3 + E^(-x)]*x)/E^(2*x) - (420*Sqrt[3 + E^(-x)]*x)/E^x)/175 + (18*Sqrt[3]*Log[E^(-x)])/5 - (36*Sqrt[3]*Log[-3 + Sqrt[3]*Sqrt[3 + E^(-x)]])/5"
+},
+"FriCAS": {
+"status": "ERROR",
+"time": 0.21,
+"nums": [],
+"cert": false,
+"detail": "integrate: implementation incomplete (has polynomial part)",
+"text": "r"
+},
+"Maxima": {
+"status": "UNEVAL",
+"time": 0.05953800000000001,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "'integrate(%e^-((5*x)/2)*sqrt(3*%e^x+1)*(3*%e^x*x+x),x)-(2*(%e^-x+3)^(7/2))/7+(12*(%e^-x+3)^(5/2))/5+3*(2*(%e^-x+3)^(3/2)-(2*(%e^-x+3)^(5/2))/5)-6*(%e^-x+3)^(3/2)"
+},
+"sympy": {
+"status": "UNEVAL",
+"time": 24.295,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integral(sqrt(3 + exp(-x))*(x*exp(x) + 1)*(3*exp(x) + 1)*exp(-3*x), x)"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.530542,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*Sqrt[3 + E^(-x)]*(-(Sqrt[1 + 3*E^x]*(25 + E^x*(134 + 35*x) + E^(2*x)*(199 + 210*x) + E^(3*x)*(696 + 315*x))) + 630*Sqrt[3]*E^((7*x)/2)*ArcSinh[Sqrt[3]*E^(x/2)]))/(175*E^(3*x)*Sqrt[1 + 3*E^x])"
+}
+},
+"verdicts": []
+},
+{
+"id": "cM-1-300",
+"class": "M",
+"family": "cM-mathilda",
+"expect": "elem",
+"f": "(E^(2*x)*(E^(2*x) + x))/(2 + E^(2*x) + E^(4*x))^(3/2)",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "ELEM",
+"Mathilda:Bronstein": "ELEM",
+"FriCAS": "ERROR",
+"Maxima": "UNEVAL",
+"sympy": "UNEVAL",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.0609112,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-4*Sqrt[2 + E^(2*x) + E^(4*x)] - E^(2*x)*Sqrt[2 + E^(2*x) + E^(4*x)] + Sqrt[2 + E^(2*x) + E^(4*x)]*x + 2*E^(2*x)*Sqrt[2 + E^(2*x) + E^(4*x)]*x)/(14 + 7*E^(2*x) + 7*E^(4*x)) + Log[E^(2*x)]/(14*Sqrt[2]) + ((4 + Sqrt[2])*Log[1 + 2*E^(2*x) - 2*Sqrt[2 + E^(2*x) + E^(4*x)]])/28 - Log[Sqrt[2] + E^(2*x) - "
+},
+"Mathilda:ParallelMixedTower": {
+"status": "ANSWER",
+"time": 0.140677,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-14 + (7*(-2 + Sqrt[2 + E^(2*x) + E^(4*x)]))/(-1 + E^(2*x)) - 6*x + 2*Sqrt[2]*x + (16*(-2 + Sqrt[2 + E^(2*x) + E^(4*x)])*x)/(-1 + E^(2*x)) - (3*Sqrt[2]*(-2 + Sqrt[2 + E^(2*x) + E^(4*x)])*x)/(-1 + E^(2*x)) - (6*(-2 + Sqrt[2 + E^(2*x) + E^(4*x)])^2*x)/(-1 + E^(2*x))^2 + (2*Sqrt[2]*(-2 + Sqrt[2 + E^(2"
+},
+"Mathilda:Bronstein": {
+"status": "ANSWER",
+"time": 0.0683813,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-4*Sqrt[2 + E^(2*x) + E^(4*x)] - E^(2*x)*Sqrt[2 + E^(2*x) + E^(4*x)] + Sqrt[2 + E^(2*x) + E^(4*x)]*x + 2*E^(2*x)*Sqrt[2 + E^(2*x) + E^(4*x)]*x)/(14 + 7*E^(2*x) + 7*E^(4*x)) + Log[E^(2*x)]/(14*Sqrt[2]) + ((4 + Sqrt[2])*Log[1 + 2*E^(2*x) - 2*Sqrt[2 + E^(2*x) + E^(4*x)]])/28 - Log[Sqrt[2] + E^(2*x) - "
+},
+"FriCAS": {
+"status": "ERROR",
+"time": 0.215,
+"nums": [],
+"cert": false,
+"detail": "integrate: implementation incomplete (constant residues)",
+"text": "r"
+},
+"Maxima": {
+"status": "UNEVAL",
+"time": 0.06601100000000001,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "'integrate((%e^(2*x)*(x+%e^(2*x)))/(%e^(4*x)+%e^(2*x)+2)^(3/2),x)"
+},
+"sympy": {
+"status": "UNEVAL",
+"time": 3.532,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integral((x + exp(2*x))*exp(2*x)/(exp(4*x) + exp(2*x) + 2)**(3/2), x)"
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.36077,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(-2*Sqrt[2]*x + (4*(-4 + x + E^(2*x)*(-1 + 2*x)))/Sqrt[2 + E^(2*x) + E^(4*x)] - 4*ArcSinh[(1 + 2*E^(2*x))/Sqrt[7]] + Sqrt[2]*Log[4 + E^(2*x) + 2*Sqrt[2]*Sqrt[2 + E^(2*x) + E^(4*x)]])/28"
+}
+},
+"verdicts": []
+},
+{
+"id": "cM-2-2",
+"class": "M",
+"family": "cM-mathilda",
+"expect": "elem",
+"f": "(1 + E^x*x)/(E^(2*x)*(2 + E^(-2*x) + E^(-x))^(3/2))",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "UNEVAL",
+"Mathilda:Bronstein": "ELEM",
+"FriCAS": "ERROR",
+"Maxima": "UNEVAL",
+"sympy": "TIMEOUT",
+"Wolfram": "ELEM"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 0.165222,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(8*Sqrt[2 + E^(-2*x) + E^(-x)] + (2*Sqrt[2 + E^(-2*x) + E^(-x)])/E^x - 2*Sqrt[2 + E^(-2*x) + E^(-x)]*x - (4*Sqrt[2 + E^(-2*x) + E^(-x)]*x)/E^x)/(14 + 7/E^(2*x) + 7/E^x) + (Sqrt[2]*Log[E^(-x)])/7 - (2*Sqrt[2]*Log[(1 + Sqrt[2]*E^x - E^x*Sqrt[2 + E^(-2*x) + E^(-x)])/E^x])/7 + ((4 + Sqrt[2])*Log[(-2 - E"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "UNEVAL",
+"time": 0.103001,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integrate[(1 + E^x*x)/(E^(2*x)*(2 + E^(-2*x) + E^(-x))^(3/2)), x, Method -> \"ParallelMixedTower\"]"
+},
+"Mathilda:Bronstein": {
+"status": "ANSWER",
+"time": 0.104805,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(8*Sqrt[2 + E^(-2*x) + E^(-x)] + (2*Sqrt[2 + E^(-2*x) + E^(-x)])/E^x - 2*Sqrt[2 + E^(-2*x) + E^(-x)]*x - (4*Sqrt[2 + E^(-2*x) + E^(-x)]*x)/E^x)/(14 + 7/E^(2*x) + 7/E^x) + (Sqrt[2]*Log[E^(-x)])/7 - (2*Sqrt[2]*Log[(1 + Sqrt[2]*E^x - E^x*Sqrt[2 + E^(-2*x) + E^(-x)])/E^x])/7 + ((4 + Sqrt[2])*Log[(-2 - E"
+},
+"FriCAS": {
+"status": "ERROR",
+"time": 0.22,
+"nums": [],
+"cert": false,
+"detail": "integrate: implementation incomplete (constant residues)",
+"text": "r"
+},
+"Maxima": {
+"status": "UNEVAL",
+"time": 0.06693,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "'integrate((%e^-(2*x)*(%e^x*x+1))/(%e^-x+%e^-(2*x)+2)^(3/2),x)"
+},
+"sympy": {
+"status": "TIMEOUT",
+"time": 30.004,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": ""
+},
+"Wolfram": {
+"status": "ANSWER",
+"time": 0.9746,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2 + 8*E^x - 4*x - 2*E^x*x + 4*Sqrt[1 + E^x + 2*E^(2*x)]*x + Sqrt[2]*Sqrt[1 + E^x + 2*E^(2*x)]*ArcSinh[(1 + 4*E^x)/Sqrt[7]] - 4*Sqrt[1 + E^x + 2*E^(2*x)]*Log[2 + E^x + 2*Sqrt[1 + E^x + 2*E^(2*x)]])/(7*E^x*Sqrt[2 + E^(-2*x) + E^(-x)])"
+}
+},
+"verdicts": []
+},
+{
+"id": "cM-3-86",
+"class": "M",
+"family": "cM-fricas",
+"expect": "elem",
+"f": "E^x/Log[(1 + E^x)^((-1 + Log[1 + E^x]^3)^(1/6) + E^x*(-1 + Log[1 + E^x]^3)^(1/6))]",
+"runs": {
+"Mathilda:Automatic": "ELEM",
+"Mathilda:ParallelMixedTower": "UNEVAL",
+"Mathilda:Bronstein": "UNEVAL",
+"FriCAS": "ELEM",
+"Maxima": "UNEVAL",
+"sympy": "UNEVAL",
+"Wolfram": "UNEVAL"
+},
+"raw": {
+"Mathilda:Automatic": {
+"status": "ANSWER",
+"time": 14.2366,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "(2*ArcTan[(-1 + Log[1 + E^x]^3)^(1/6)])/3 - ArcTan[Sqrt[3] - 2*(-1 + Log[1 + E^x]^3)^(1/6)]/3 + ArcTan[Sqrt[3] + 2*(-1 + Log[1 + E^x]^3)^(1/6)]/3 + Log[1 - Sqrt[3]*(-1 + Log[1 + E^x]^3)^(1/6) + (-1 + Log[1 + E^x]^3)^(1/3)]/(2*Sqrt[3]) - Log[1 + Sqrt[3]*(-1 + Log[1 + E^x]^3)^(1/6) + (-1 + Log[1 + E^x"
+},
+"Mathilda:ParallelMixedTower": {
+"status": "UNEVAL",
+"time": 10.1825,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integrate[E^x/Log[(1 + E^x)^((-1 + Log[1 + E^x]^3)^(1/6) + E^x*(-1 + Log[1 + E^x]^3)^(1/6))], x, Method -> \"ParallelMixedTower\"]"
+},
+"Mathilda:Bronstein": {
+"status": "UNEVAL",
+"time": 0.0029726,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integrate[E^x/Log[(1 + E^x)^((-1 + Log[1 + E^x]^3)^(1/6) + E^x*(-1 + Log[1 + E^x]^3)^(1/6))], x, Method -> \"Bronstein\"]"
+},
+"FriCAS": {
+"status": "ANSWER",
+"time": 0.11,
+"nums": [
+"ok",
+"ok",
+"ok"
+],
+"cert": false,
+"detail": "",
+"pzq": "zero",
+"text": "((-4)*atan(2/((16*((log(exp(x)+1)^3+(-1))^(1/6))^2+(-16)*3^(1/2)*(log(exp(x)+1)^3+(-1))^(1/6)+16)^(1/2)+(4*(log(exp(x)+1)^3+(-1))^(1/6)+(-2)*3^(1/2))))+((-4)*atan(2/((16*((log(exp(x)+1)^3+(-1))^(1/6))^2+16*3^(1/2)*(log(exp(x)+1)^3+(-1))^(1/6)+16)^(1/2)+(4*(log(exp(x)+1)^3+(-1))^(1/6)+2*3^(1/2))))+(("
+},
+"Maxima": {
+"status": "UNEVAL",
+"time": 0.098435,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "'integrate(%e^x/(log(%e^x+1)*(%e^x*(log(%e^x+1)^3-1)^(1/6)+(log(%e^x+1)^3-1)^(1/6))),x)"
+},
+"sympy": {
+"status": "UNEVAL",
+"time": 0.834,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integral(exp(x)/log((exp(x) + 1)**((log(exp(x) + 1)**3 - 1)**(1/6)*exp(x) + (log(exp(x) + 1)**3 - 1)**(1/6))), x)"
+},
+"Wolfram": {
+"status": "UNEVAL",
+"time": 2.41335,
+"nums": [],
+"cert": false,
+"detail": "",
+"text": "Integrate[E^x/Log[(1 + E^x)^((-1 + Log[1 + E^x]^3)^(1/6) + E^x*(-1 + Log[1 + E^x]^3)^(1/6))], x]"
+}
+},
+"verdicts": []
+}
+],
+"verified_by": "PossibleZeroQ[D[F, x] - f] for every answer (pzq_verify.py, Mathilda 0.6750 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline))"
+}

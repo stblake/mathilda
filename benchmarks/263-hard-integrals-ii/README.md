@@ -21,7 +21,7 @@ sympy as comparison columns.
 | B | 400 | B4 | Automatic, PMT, Bronstein | a radical below a Log/Exp kernel |
 
 Every integrand is distinct, and none is in an earlier corpus or generator pool
-(256, 257, 259, 260, 261 and 262). All 1850 are class `none` in `easy.tsv`.
+(256, 257, 259, 260, 261 and 262). All 1850 were class `none` in `easy.tsv` when it was built; after the constant factors were removed (2026-11-26) the corpus holds 1801, of which 37 are `dd` at v0.6760 and left out.
 
 By family (the system that supplied the reference antiderivative): Mathilda 1809,
 FriCAS 30 (`cA-fricas`, `cT-fricas`), Maxima 10, Axiom 1.
@@ -60,7 +60,28 @@ The own three-point checks are recorded and decide nothing. On 2026-11-26 the sa
 was re-judged with v0.6744's PossibleZeroQ, and every FriCAS and Axiom ERROR record was
 re-run with the fixed adapter (`refresh_errors.py`), which records each error's message.
 
-## Results (run 2026-11-25 at Mathilda v0.6733; verdicts by PossibleZeroQ, v0.6744)
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 6 of the run cases are
+easy and left out, so 1764 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 100% (1761) | 0 |
+| Mathilda ParallelMixedTower | 73% (1285) | 0 |
+| Mathilda RischTranscendental | 100% (494) | 0 |
+| Mathilda Trager | 94% (446) | 0 |
+| Mathilda Bronstein | 100% (795) | 0 |
+| FriCAS | 71% (1255) | 0 |
+| Axiom | 66% (1163) | 4 |
+| Maxima | 60% (1050) | 19 |
+| sympy | 50% (883) | 28 |
+
+## Earlier results (run 2026-11-25 at Mathilda v0.6733; verdicts by PossibleZeroQ, v0.6744)
 
 Closed with a verified answer, out of the cases each run applies to:
 

@@ -70,7 +70,27 @@ Checks of the cross-check:
 Elementary and special-function answers are counted apart for every system, by
 the same function list (`translate.special_q`).
 
-## Results (2026-11-24, Mathilda v0.6714, FriCAS 1.3.6)
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 3 of the run cases are
+easy and left out, so 43 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 100% (43) | 0 |
+| Mathilda ParallelMixedTower | 67% (29) | 0 |
+| Mathilda Trager | 100% (8) | 0 |
+| Mathilda Bronstein | 97% (34) | 0 |
+| FriCAS | 19% (8) | 0 |
+| Axiom | 19% (8) | 0 |
+| Maxima | 19% (8) | 0 |
+| sympy | 16% (7) | 0 |
+
+## Earlier results (2026-11-24, Mathilda v0.6714, FriCAS 1.3.6)
 
 Closed with a verified answer, out of the cases each run applies to:
 

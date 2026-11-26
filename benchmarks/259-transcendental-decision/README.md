@@ -51,3 +51,18 @@ Bronstein's *Symbolic Integration I*); ParallelMixedTower is left out, and
 Automatic runs it anyway. FriCAS's answers with Ei, li, erf or erfi cannot be
 evaluated by `complexNumeric`, so they are verified exactly instead:
 `normalize(D(r, x) - f) = 0`.
+
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 4 of the run cases are
+easy and left out, so 555 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 69% (382) | 0 |
+| Mathilda RischTranscendental | 62% (343) | 0 |
+| FriCAS | 62% (345) | 7 |

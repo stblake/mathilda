@@ -57,6 +57,16 @@ def has_easy_record(bench):
     return os.path.exists(os.path.join(bench, "easy.tsv"))
 
 
+def case_budget():
+    """wall seconds one easyClass call may take: the dd test is two ddTimeout limits
+    (Integrate, then PossibleZeroQ), read from easy.m so the two cannot drift apart
+    (raising ddTimeout to 120 under a fixed 90 s budget turned slow cases into "abort"),
+    plus 120 s for the substitution candidates (10 s each)"""
+    import re
+    m = re.search(r"^ddTimeout\s*=\s*(\d+)", open(os.path.join(HERE, "easy.m")).read(), re.M)
+    return 2 * int(m.group(1)) + 120
+
+
 def classify(items, jobs, chunk=40):
     """[(id, f)] -> {id: class}; a crashed chunk is rerun one case at a time"""
     tmp = tempfile.mkdtemp(prefix="easy-")
@@ -68,8 +78,7 @@ def classify(items, jobs, chunk=40):
             fh.writelines(f"{i}\t{f}\n" for i, f in part)
         with open(fm, "w") as fh:
             fh.write(DRIVER.replace("@EASYM@", os.path.join(HERE, "easy.m")).replace("@IN@", fin))
-        # easyClass is at most ~70 s per case (dd: 30 s Integrate + 30 s PossibleZeroQ)
-        out, _err, _to, _w = A.run_proc([A.MATHILDA, "-file", fm], 60 + 90 * len(part))
+        out, _err, _to, _w = A.run_proc([A.MATHILDA, "-file", fm], 60 + case_budget() * len(part))
         got = {}
         for ln in out.splitlines():
             p = ln.split("\t")

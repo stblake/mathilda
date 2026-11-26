@@ -94,3 +94,24 @@ records the current counts). The nightly ctest `integration_shootout_stress` run
 - `results/<date>.json`: every run of a full shootout. `results/cache.jsonl`:
   the resumable run cache (untracked).
 - `history.jsonl`: one line per full run, the closed count per run, for the arc.
+
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 22 of the run cases are
+easy and left out, so 699 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 56% (388) | 0 |
+| Mathilda ParallelMixedTower | 41% (290) | 0 |
+| Mathilda RischTranscendental | 45% (56) | 0 |
+| Mathilda Trager | 19% (41) | 0 |
+| Mathilda Bronstein | 59% (211) | 0 |
+| FriCAS | 30% (207) | 1 |
+| Maxima | 24% (170) | 6 |
+| sympy | 22% (155) | 0 |
+| Wolfram | 55% (387) | 3 |

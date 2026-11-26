@@ -1,4 +1,4 @@
-# easy.m classes of corpus.tsv (Mathilda 0.6732 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)); every class but none is left out of the shootout
+# easy.m classes of corpus.tsv (Mathilda 0.6760 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline); the cases classed none or abort re-classified); every class but none and abort is left out of the shootout
 one-elem-1	none
 one-elem-2	none
 one-elem-3	none
@@ -100,7 +100,6 @@ one-rand-38	none
 one-rand-39	none
 one-rand-40	linrad-sub
 one-rand-41	none
-one-rand-42	dd
 one-rand-43	none
 one-rand-44	linrad-sub
 one-rand-45	none
@@ -369,14 +368,14 @@ pert-nonelem-7	none
 pert-nonelem-8	dd
 pert-nonelem-9	none
 pert-nonelem-10	none
-pert-nonelem-11	none
+pert-nonelem-11	dd
 pert-nonelem-12	none
 pert-nonelem-13	dd
 pert-nonelem-14	none
 pert-nonelem-15	dd
 pert-nonelem-16	none
 pert-nonelem-17	none
-pert-nonelem-18	none
+pert-nonelem-18	dd
 pert-nonelem-19	none
 pert-nonelem-20	none
 pert-nonelem-21	none

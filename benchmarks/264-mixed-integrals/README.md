@@ -18,7 +18,8 @@ Every integrand is built on a unit of the tower. With `g = P^2 - c E^h`,
 and no kernel divides it. M4 draws that shape and perturbations of it. The answer is
 required to be larger than the integrand in compact form (ratio 1, as for M in 262 and
 263). All 500 integrands are distinct, none is in an earlier corpus or generator pool
-(256, 257, 259-263), and all are class `none` in `easy.tsv`.
+(256, 257, 259-263), and all are class `none` in `easy.tsv`
+(re-checked with v0.6760, whose DerivativeDivides no longer depends on a constant factor).
 
 ## How it was built
 
@@ -40,7 +41,7 @@ required to be larger than the integrand in compact form (ratio 1, as for M in 2
 ## Verification
 
 Every answer is judged by `PossibleZeroQ[D[F, x] - f]` in Mathilda (`pzq_verify.py`,
-v0.6744): zero is verified, nonzero is wrong (an antiderivative must hold for every
+v0.6750): zero is verified, nonzero is wrong (an antiderivative must hold for every
 complex x), and anything else is unverified. The systems' own three-point checks are
 recorded but decide nothing.
 
@@ -50,18 +51,18 @@ recorded but decide nothing.
 |---|---|---|---|---|
 | Mathilda Automatic | 0.6750 | **500** | 0 | |
 | Bronstein | 0.6750 | **500** | 0 | |
-| ParallelMixedTower | 0.6750 | 0 | 0 | 495 unevaluated, 5 timeouts |
+| ParallelMixedTower | 0.6750 | 0 | 0 | 494 unevaluated, 6 timeouts |
 | FriCAS | 1.3.6 | 0 | 0 | 500 errors: "implementation incomplete (has polynomial part)" 274, "(constant residues)" 226 |
 | Axiom | August 2014 | 0 | 0 | 500 errors: "implementation incomplete (constant residues)" |
 | Maxima | 5.49.0 | 0 | 0 | 500 unevaluated |
-| sympy | 1.14.0 | 0 | 0 | 299 unevaluated, 201 timeouts |
-| Wolfram (wolframscript) | 14.0.0 | 1 | 0 | 499 unevaluated |
+| sympy | 1.14.0 | 0 | 0 | 291 unevaluated, 209 timeouts |
+| Wolfram (wolframscript) | 14.0.0 | 1 | 0 | 496 unevaluated, 3 timeouts |
 | Reduce (PSL) | revision 7327 | 0 | 0 | 446 unevaluated, 54 timeouts |
 
-- **Mathilda's Bronstein method closes every case.** Its median time is 0.04 s, and
-  Automatic's is 0.03 s. Every answer is verified by PossibleZeroQ.
+- **Mathilda's Bronstein method closes every case.** Its median time is 0.16 s, and
+  Automatic's is 0.17 s (the run shared the machine with the other systems). Every answer is verified by PossibleZeroQ.
 - **No other system closes more than one.** FriCAS stops in its own integrator with
-  "implementation incomplete" on every case. Wolfram spends a median 3.8 s and returns
+  "implementation incomplete" on every case. Wolfram spends a median 4.1 s and returns
   `Integrate[...]`, except on cM-424-14, a radical of a product, which it closes with an
   ArcTanh. Reduce returns `int(...)` within 0.03 s or runs out of time.
 

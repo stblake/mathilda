@@ -37,17 +37,21 @@ emit[id_, cls_, fam_, expect_, f0_, F0_] := Module[{kf = stripConstantsK[f0], f,
      - the numeric factors of the top-level product (-1/2 in -1/2 (x^2 - 3 x - 2)/Sqrt[g]);
      - the numeric content of a sum that is a factor, or the base of a power that is one
        (Sqrt[4 + 2 E^(-2 x) + 8 x + 4 x^2] = Sqrt[2] Sqrt[2 + E^(-2 x) + 4 x + 2 x^2]), which
-       is then a constant factor too.  The content is taken positive (a negative one
-       negates the sum term by term), so c^r is the principal power of c > 0 and the
-       rewrite holds for every complex x.
+       is then a constant factor too.  The content is positive, so c^r is the principal
+       power of c > 0 and the rewrite holds for every complex x.  Each term is divided by
+       c and otherwise kept as it is: the rewrite removes a constant, never reshapes.
    Sums deeper inside (the argument of a Log or an Exp) are not touched: a constant
    there is part of the function. *)
-scPull[b_Plus] := Module[{l = FactorTermsList[b], c, h},
-  If[Length[l] =!= 2 || !NumericQ[l[[1]]] || l[[1]] === 1, Return[{1, b}]];
-  {c, h} = l;
-  If[!(Head[h] === Plus || !FreeQ[h, x]), Return[{1, b}]];
-  If[TrueQ[c < 0], c = -c; h = If[Head[h] === Plus, -# & /@ h, -h]];
-  {c, h}];
+(* scPull[b] -> {c, h}: b = c h, c > 0 the rational content of the sum b, taken from the
+   terms' numeric coefficients and divided out TERM BY TERM -- the terms are otherwise
+   left as they are (FactorTermsList would also bring a non-polynomial sum over a common
+   denominator, and that reshaped integrand could defeat DerivativeDivides).  A term
+   with an irrational coefficient leaves b alone. *)
+scCoef[t_] := Which[NumericQ[t], t, Head[t] === Times, Times @@ Select[List @@ t, NumericQ], True, 1];
+scPull[b_Plus] := Module[{cs = scCoef /@ List @@ b, c},
+  If[!AllTrue[cs, MatchQ[#, _Integer | _Rational] &], Return[{1, b}]];
+  c = (GCD @@ Abs[Numerator[cs]])/(LCM @@ Denominator[cs]);
+  If[c === 1, {1, b}, {c, #/c & /@ b}]];
 (* scFactor[e] -> {constant, rest}: e = constant rest *)
 scFactor[b_Plus] := scPull[b];
 scFactor[Power[b_Plus, r_?NumericQ]] := With[{l = scPull[b]}, {l[[1]]^r, Power[l[[2]], r]}];

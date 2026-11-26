@@ -1,4 +1,4 @@
-# easy.m classes of corpus.tsv (Mathilda 0.6746 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)); every class but none is left out of the shootout
+# easy.m classes of corpus.tsv (Mathilda 0.6760 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline); the cases classed none or abort re-classified); every class but none and abort is left out of the shootout
 cM-401-7	none
 cM-401-13	none
 cM-401-27	none

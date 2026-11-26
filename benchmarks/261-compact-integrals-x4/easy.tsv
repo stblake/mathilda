@@ -1,4 +1,4 @@
-# easy.m classes of corpus.tsv (Mathilda 0.6732 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)); every class but none is left out of the shootout
+# easy.m classes of corpus.tsv (Mathilda 0.6760 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline); the cases classed none or abort re-classified); every class but none and abort is left out of the shootout
 cR-101-13	rational
 cR-101-32	rational
 cR-101-48	rational
@@ -30,13 +30,11 @@ cR-101-831	rational
 cR-101-841	rational
 cR-101-842	rational
 cR-101-876	rational
-cR-101-897	rational
 cR-101-939	rational
 cR-101-995	rational
 cR-101-1007	rational
 cR-101-1030	rational
 cR-101-1035	rational
-cR-101-1061	rational
 cR-101-1065	rational
 cR-101-1086	rational
 cR-101-1108	rational
@@ -47,7 +45,6 @@ cR-101-1187	rational
 cR-101-1248	rational
 cR-101-1273	rational
 cR-101-1278	rational
-cR-101-1283	rational
 cR-101-1330	rational
 cT-101-104	dd
 cT-101-240	dd
@@ -114,11 +111,9 @@ cT-103-2342	dd
 cT-103-3554	dd
 cT-103-4541	dd
 cT-103-4983	dd
-cT-103-5139	dd
 cT-103-5808	dd
 cT-103-5964	dd
 cT-103-6195	dd
-cT-103-6538	dd
 cT-103-6918	dd
 cT-104-1112	dd
 cT-104-1319	dd
@@ -133,7 +128,6 @@ cT-104-4314	dd
 cT-104-5165	dd
 cT-104-5730	dd
 cT-104-5911	dd
-cT-104-6352	dd
 cT-104-6837	dd
 cT-104-6962	dd
 cT-104-7157	dd
@@ -167,7 +161,6 @@ cT-106-738	dd
 cT-106-1835	dd
 cT-106-2156	dd
 cT-106-2201	dd
-cT-106-2595	dd
 cT-106-2706	dd
 cT-106-3048	dd
 cT-106-3201	dd
@@ -185,7 +178,6 @@ cT-106-7364	dd
 cT-107-281	dd
 cT-107-759	dd
 cT-107-1063	dd
-cT-107-1723	dd
 cT-107-1806	dd
 cT-107-2169	dd
 cT-107-2571	dd
@@ -215,13 +207,10 @@ cT-108-6303	dd
 cT-108-7052	dd
 cT-108-7121	dd
 cT-109-301	dd
-cT-109-971	dd
 cT-109-1472	dd
 cT-109-1815	dd
 cT-109-2461	dd
 cT-109-2635	dd
-cT-109-2761	dd
-cT-109-3164	dd
 cT-109-3488	dd
 cT-109-4032	dd
 cT-109-4229	dd
@@ -233,16 +222,12 @@ cT-109-6691	dd
 cT-109-6717	dd
 cT-109-6819	dd
 cT-109-7117	dd
-cT-110-103	dd
 cT-110-438	dd
 cT-110-658	dd
-cT-110-1306	dd
 cT-110-1339	dd
 cT-110-1397	dd
-cT-110-1573	dd
 cT-110-1903	dd
 cT-110-3092	dd
-cT-110-3207	dd
 cT-110-3442	dd
 cT-110-3756	dd
 cT-110-4289	dd
@@ -252,11 +237,9 @@ cT-110-4873	dd
 cT-110-5108	dd
 cT-110-5152	dd
 cT-110-5252	dd
-cT-110-5273	dd
 cT-110-5778	dd
 cT-110-6090	dd
 cT-110-6758	dd
-cT-110-7260	dd
 cT-110-7272	dd
 cT-111-605	dd
 cT-111-758	dd
@@ -288,12 +271,10 @@ cT-112-486	dd
 cT-112-780	dd
 cT-112-959	dd
 cT-112-1638	dd
-cT-112-1859	dd
 cT-112-3119	dd
 cT-112-3410	dd
 cT-112-3489	dd
 cT-112-3579	dd
-cT-112-3705	dd
 cT-112-5534	dd
 cT-112-6132	dd
 cT-112-6669	dd
@@ -335,7 +316,7 @@ cA-101-378	euler
 cB-101-386	linrad
 cA-101-391	euler
 cA-101-406	linrad
-cB-101-519	none
+cB-101-519	dd
 cB-101-646	euler
 cB-101-773	euler
 cB-101-1054	dd
@@ -381,9 +362,9 @@ cA-102-512	euler
 cA-102-533	linrad
 cA-102-534	euler
 cB-102-985	euler
-cB-102-1734	none
+cB-102-1734	dd
 cB-102-1914	linrad
-cB-102-1938	none
+cB-102-1938	dd
 cB-102-2575	linrad
 cB-102-3159	linrad
 cB-102-3464	dd
@@ -426,7 +407,7 @@ cB-103-1383	linrad
 cB-103-2128	dd
 cB-103-4064	dd
 cB-103-4075	dd
-cA-104-5	none
+cA-104-5	dd
 cA-104-12	euler
 cA-104-23	linrad
 cB-104-30	linrad
@@ -523,7 +504,7 @@ cA-107-129	euler
 cA-107-135	linrad
 cA-107-143	linrad
 cA-107-153	euler
-cA-107-155	none
+cA-107-155	dd
 cA-107-189	linrad
 cA-107-193	none
 cA-107-195	euler
@@ -537,7 +518,6 @@ cA-107-317	none
 cA-107-325	euler
 cA-107-362	euler
 cA-107-416	none
-cA-107-430	none
 cA-107-454	linrad
 cA-107-457	linrad
 cA-107-466	linrad
@@ -621,7 +601,6 @@ cM-102-424	dd
 cM-102-435	dd
 cM-102-446	dd
 cM-102-452	dd
-cM-102-509	dd
 cM-102-555	dd
 cM-102-559	dd
 cM-102-567	dd
@@ -701,7 +680,7 @@ cM-104-153	dd
 cM-104-174	dd
 cM-104-211	dd
 cM-104-236	dd
-cM-104-267	none
+cM-104-267	dd
 cM-104-304	dd
 cM-104-313	dd
 cM-104-327	dd
@@ -826,7 +805,7 @@ cM-106-966	dd
 cM-106-972	dd
 cM-106-1019	dd
 cM-106-1033	dd
-cM-106-1054	none
+cM-106-1054	dd
 cM-106-1077	dd
 cM-106-1130	dd
 cM-106-1181	dd
@@ -836,15 +815,13 @@ cM-106-1207	dd
 cM-106-1220	none
 cM-106-1248	dd
 cM-106-1270	dd
-cM-107-7	none
+cM-107-7	dd
 cM-107-29	dd
 cM-107-34	dd
-cM-107-77	dd
 cM-107-139	dd
 cM-107-145	dd
 cM-107-165	dd
 cM-107-178	dd
-cM-107-179	none
 cM-107-182	dd
 cM-107-278	dd
 cM-107-307	dd
@@ -947,7 +924,6 @@ cM-109-853	dd
 cM-109-882	dd
 cM-109-907	dd
 cM-109-1030	dd
-cM-109-1134	dd
 cM-109-1149	dd
 cM-109-1186	dd
 cM-109-1270	dd
@@ -960,13 +936,13 @@ cM-110-99	dd
 cM-110-108	dd
 cM-110-158	dd
 cM-110-228	dd
-cM-110-242	none
+cM-110-242	dd
 cM-110-348	dd
 cM-110-359	dd
 cM-110-370	dd
-cM-110-385	none
+cM-110-385	dd
 cM-110-429	dd
-cM-110-430	none
+cM-110-430	dd
 cM-110-482	dd
 cM-110-601	dd
 cM-110-612	dd
@@ -1029,7 +1005,7 @@ cM-111-1128	dd
 cM-111-1169	dd
 cM-111-1227	dd
 cM-111-1348	dd
-cM-112-156	none
+cM-112-156	dd
 cM-112-172	dd
 cM-112-190	dd
 cM-112-231	none
@@ -1045,15 +1021,12 @@ cM-112-544	dd
 cM-112-549	dd
 cM-112-596	dd
 cM-112-606	dd
-cM-112-626	dd
-cM-112-667	dd
 cM-112-696	dd
 cM-112-708	dd
 cM-112-725	dd
 cM-112-744	dd
 cM-112-781	dd
 cM-112-794	dd
-cM-112-856	dd
 cM-112-862	dd
 cM-112-887	dd
 cM-112-972	none
@@ -1070,7 +1043,7 @@ cM-113-83	dd
 cM-113-134	dd
 cM-113-172	dd
 cM-113-211	none
-cM-113-232	none
+cM-113-232	dd
 cM-113-256	dd
 cM-113-270	dd
 cM-113-274	dd
@@ -1086,7 +1059,6 @@ cM-113-696	dd
 cM-113-709	dd
 cM-113-757	dd
 cM-113-782	dd
-cM-113-809	dd
 cM-113-865	dd
 cM-113-873	dd
 cM-113-935	dd
@@ -1163,7 +1135,6 @@ cB-105-463	linrad-sub
 cB-105-480	linrad-sub
 cB-105-499	linrad-sub
 cB-105-503	linrad-sub
-cB-105-506	linrad-sub
 cB-105-545	linrad-sub
 cB-105-556	linrad-sub
 cB-105-578	linrad-sub
@@ -1232,7 +1203,6 @@ cB-107-303	linrad-sub
 cB-107-315	linrad-sub
 cB-107-342	linrad-sub
 cB-107-348	linrad-sub
-cB-107-355	linrad-sub
 cB-107-358	linrad-sub
 cB-107-359	linrad-sub
 cB-107-378	linrad-sub
@@ -1376,7 +1346,6 @@ cB-111-224	linrad-sub
 cB-111-250	linrad-sub
 cB-111-264	linrad-sub
 cB-111-279	linrad-sub
-cB-111-287	linrad-sub
 cB-111-323	linrad-sub
 cB-111-341	linrad-sub
 cB-111-376	euler-sub
@@ -1387,7 +1356,6 @@ cB-111-429	linrad-sub
 cB-111-433	linrad-sub
 cB-111-434	linrad-sub
 cB-111-446	linrad-sub
-cB-111-451	linrad-sub
 cB-111-453	linrad-sub
 cB-111-459	linrad-sub
 cB-111-484	linrad-sub
@@ -1428,7 +1396,6 @@ cB-112-453	linrad-sub
 cB-112-473	linrad-sub
 cB-112-486	linrad-sub
 cB-112-502	linrad-sub
-cB-112-518	linrad-sub
 cB-112-579	euler-sub
 cB-113-21	linrad-sub
 cB-113-42	linrad-sub
@@ -1454,16 +1421,13 @@ cB-113-263	linrad-sub
 cB-113-278	euler-sub
 cB-113-299	linrad-sub
 cB-113-310	linrad-sub
-cB-113-320	linrad-sub
 cB-113-325	linrad-sub
 cB-113-356	linrad-sub
 cB-113-416	euler-sub
 cB-113-424	euler-sub
-cB-113-451	linrad-sub
 cB-113-466	linrad-sub
 cB-113-491	euler-sub
 cB-113-512	linrad-sub
-cB-113-545	linrad-sub
 cB-113-551	linrad-sub
 cB-113-552	linrad-sub
 cB-113-553	linrad-sub
@@ -1481,7 +1445,6 @@ cB-114-148	linrad-sub
 cB-114-190	linrad-sub
 cB-114-195	linrad-sub
 cB-114-236	linrad-sub
-cB-114-258	linrad-sub
 cB-114-263	linrad-sub
 cB-114-270	euler-sub
 cB-114-324	linrad-sub
@@ -1544,7 +1507,6 @@ cB-116-113	linrad-sub
 cB-116-145	linrad-sub
 cB-116-146	linrad-sub
 cB-116-176	linrad-sub
-cB-116-189	linrad-sub
 cB-116-206	linrad-sub
 cB-116-208	linrad-sub
 cB-116-212	linrad-sub

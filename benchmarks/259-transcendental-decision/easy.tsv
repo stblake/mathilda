@@ -1,4 +1,4 @@
-# easy.m classes of corpus.tsv (Mathilda 0.6732 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)); every class but none is left out of the shootout
+# easy.m classes of corpus.tsv (Mathilda 0.6760 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline); the cases classed none or abort re-classified); every class but none and abort is left out of the shootout
 tanh-elem-1	none
 tanh-elem-2	none
 tanh-elem-3	none
@@ -36,7 +36,7 @@ tanh-elem-34	none
 tanh-elem-35	none
 tanh-elem-36	dd
 tanh-elem-37	none
-tanh-elem-38	none
+tanh-elem-38	dd
 tanh-elem-39	none
 tanh-elem-40	none
 tanh-rand-1	none
@@ -81,7 +81,7 @@ tanh-rand-39	none
 tanh-rand-40	dd
 tan-elem-1	none
 tan-elem-2	none
-tan-elem-3	none
+tan-elem-3	dd
 tan-elem-4	none
 tan-elem-5	none
 tan-elem-6	dd
@@ -204,7 +204,7 @@ tani-rand-2	none
 tani-rand-3	none
 tani-rand-4	none
 tani-rand-5	none
-tani-rand-6	none
+tani-rand-6	dd
 tani-rand-7	none
 tani-rand-8	none
 tani-rand-9	none
@@ -216,15 +216,13 @@ tani-rand-14	dd
 tani-rand-15	none
 tani-rand-16	dd
 tani-rand-17	none
-tani-rand-18	rational
 tani-rand-19	dd
 tani-rand-20	none
 tani-rand-21	none
-tani-rand-22	rational
 tani-rand-23	none
 tani-rand-24	none
 tani-rand-25	none
-tani-rand-26	none
+tani-rand-26	dd
 tani-rand-27	none
 tani-rand-28	none
 tani-rand-29	none
@@ -236,7 +234,6 @@ tani-rand-34	none
 tani-rand-35	none
 tani-rand-36	dd
 tani-rand-37	none
-tani-rand-38	none
 tani-rand-39	dd
 tani-rand-40	none
 gauss-elem-1	none
@@ -377,7 +374,7 @@ lim-rand-15	none
 lim-rand-16	none
 lim-rand-17	none
 lim-rand-18	none
-lim-rand-19	none
+lim-rand-19	dd
 lim-rand-20	none
 lim-rand-21	none
 lim-rand-22	none

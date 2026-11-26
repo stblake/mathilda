@@ -111,3 +111,23 @@ integrands draws a different corpus. That is why the corpus is frozen here
 rather than regenerated.
 
 The results are in `REPORT.md` and `results/`.
+
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 2 of the run cases are
+easy and left out, so 11 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 100% (11) | 0 |
+| Mathilda ParallelMixedTower | 82% (9) | 0 |
+| Mathilda Trager | 100% (6) | 0 |
+| Mathilda Bronstein | 80% (4) | 0 |
+| FriCAS | 64% (7) | 0 |
+| Maxima | 55% (6) | 0 |
+| sympy | 55% (6) | 0 |
+| Wolfram | 91% (10) | 0 |

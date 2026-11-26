@@ -67,7 +67,28 @@ saved results afterwards:
   FriCAS's 230 errors were runs that had answered but lost the answer to a fault in the
   adapter's output file; those now count.
 
-## Results (run 2026-11-25 at Mathilda v0.6732; verdicts by PossibleZeroQ, v0.6744)
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 1 of the run cases are
+easy and left out, so 955 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 98% (937) | 0 |
+| Mathilda ParallelMixedTower | 67% (641) | 0 |
+| Mathilda RischTranscendental | 100% (330) | 0 |
+| Mathilda Trager | 93% (294) | 0 |
+| Mathilda Bronstein | 100% (308) | 0 |
+| FriCAS | 65% (625) | 0 |
+| Axiom | 59% (560) | 2 |
+| Maxima | 62% (595) | 3 |
+| sympy | 53% (510) | 15 |
+
+## Earlier results (run 2026-11-25 at Mathilda v0.6732; verdicts by PossibleZeroQ, v0.6744)
 
 Closed with a verified answer, out of the cases each run applies to:
 
@@ -126,5 +147,5 @@ python3 tools/integration_shootout/latex_report.py --bench benchmarks/262-hard-i
 
 `report/report.pdf` shows every answer from every Mathilda method and every other
 system, how each was verified, including the cross-check verdict, and, in its
-appendix, every integral of the corpus. All 1000 cases are `none` in `easy.tsv`. Long answers are broken over `multline*`
+appendix, every integral of the corpus. All 1000 cases were `none` in `easy.tsv` when it was built; after the constant factors were removed (2026-11-26) the corpus holds 958, of which 3 are `dd` at v0.6760 and left out. Long answers are broken over `multline*`
 lines, and long integers in the verbatim text wrap.

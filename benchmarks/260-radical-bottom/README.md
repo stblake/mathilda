@@ -40,3 +40,19 @@ quartics (genus 1 and more), and a cube root.
 
 Points as in 256: three rationals where every radicand and log argument is positive
 and f is real.
+
+## Current run (2026-11-26)
+
+The integrands were rewritten without their constant factors (`normalize_constants.py`;
+a case that became a duplicate was left out) and every system was run
+again, Mathilda at v0.6750. The easy labels were re-checked at v0.6760, whose
+DerivativeDivides no longer depends on a constant factor: 2 of the run cases are
+easy and left out, so 269 are compared. Closed means verified by PossibleZeroQ;
+the full tables are in [`REPORT.md`](REPORT.md) and `report/report.pdf`.
+
+| run | closed (% of the cases in the classes the run covers) | wrong |
+|---|---|---|
+| Mathilda Automatic | 46% (124) | 0 |
+| Mathilda ParallelMixedTower | 26% (71) | 0 |
+| Mathilda Bronstein | 41% (111) | 0 |
+| FriCAS | 48% (129) | 0 |
