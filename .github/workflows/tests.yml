@@ -125,6 +125,12 @@ jobs:
           # output even when they pass.
           [ -n "$FILTER" ] && sel="$sel -R $FILTER -V"
           export ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 UBSAN_OPTIONS=print_stacktrace=1
+          # Keep a core of every crash: an intermittent one (a timing-dependent
+          # crash under -j load) does not recur in the serial gdb rerun below.
+          # %E is the executable's path with '/' written as '!'.
+          mkdir -p /tmp/cores && chmod 1777 /tmp/cores
+          sudo sysctl -q -w kernel.core_pattern='/tmp/cores/core.%E.%p' || true
+          ulimit -c unlimited
           ctest $sel -j"$(nproc)" --timeout "$to" --output-on-failure \
                 --output-junit ctest-junit.xml
 
@@ -136,6 +142,14 @@ jobs:
         working-directory: tests/build
         run: |
           sudo apt-get install -y --no-install-recommends gdb >/dev/null
+          # The crash as it happened under load, from its core (see Run ctest).
+          for c in /tmp/cores/core.*; do
+            [ -f "$c" ] || continue
+            exe=$(basename "$c" | sed 's/^core\.//; s/\.[0-9]*$//' | tr '!' '/')
+            echo "::group::core $(basename "$exe")"
+            gdb -q -batch -ex bt -ex 'info registers rip' "$exe" "$c" 2>&1 | tail -60
+            echo "::endgroup::"
+          done
           f=Testing/Temporary/LastTestsFailed.log
           [ -f "$f" ] || exit 0
           for t in $(cut -d: -f2 "$f"); do
