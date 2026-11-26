@@ -280,8 +280,13 @@ static void test_radical_function_field_roundtrips(void) {
                   "x^(4/3)/(b + a Sqrt[x])^(2/3)");
     check_eval_eq("Simplify[D[Integrate[1/(x^3 (a + b x)^(1/3)), x], x]]",
                   "1/(x^3 (a + b x)^(1/3))");
-    check_eval_eq("Simplify[D[Integrate[x/(1 + x^3)^(1/3), x], x]]",
-                  "x/(1 + x^3)^(1/3)");
+    /* Non-elementary (Chebychev): since v0.6763 the antiderivative is a 2F1
+     * (x^2/2 2F1(1/3, 2/3; 5/3; -x^3)), which Simplify does not yet reduce
+     * back to the radical.  Its derivative must still be the integrand, and
+     * Simplify must keep it finite: a degenerate contiguous shift (c = b) made
+     * it Indeterminate. */
+    check_eval_eq("PossibleZeroQ[Simplify[D[Integrate[x/(1 + x^3)^(1/3), x], x]] - x/(1 + x^3)^(1/3)]",
+                  "True");
     check_eval_eq("Simplify[D[Integrate[Sqrt[x]/(1 + x^(1/3)), x], x]]",
                   "Sqrt[x]/(1 + x^(1/3))");
     check_eval_eq("Simplify[D[Integrate[Sqrt[1 + Sqrt[1 - x]], x], x]]",

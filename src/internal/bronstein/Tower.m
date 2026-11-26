@@ -51,6 +51,12 @@ brElementaryUnimplementedHeads[] := Sin | Cos | Tan | Cot | Sec | Csc | ArcSin |
   ArcSec | ArcCsc | Sinh | Cosh | Tanh | Coth | Sech | Csch | ArcSinh | ArcCosh | ArcTanh |
   ArcCoth | ArcSech | ArcCsch;
 
+brElementaryAnswerQ::usage = "brElementaryAnswerQ[e] is True when every head in e is elementary: Plus, Times, Power, Log, Rational, Complex, List, and the trigonometric and hyperbolic functions and their inverses. An Integrate answer used as a step of the elementary decision must pass it: the cascade may answer with a special function (a binomial's Hypergeometric2F1, an elliptic pencil's EllipticF), which is no elementary antiderivative.";
+brElementaryAnswerQ[e_] := Complement[
+    Union[Cases[e, h_Symbol[___] :> h, {0, Infinity}, Heads -> True]],
+    {Plus, Times, Power, Log, Rational, Complex, List}] //
+  AllTrue[#, MatchQ[#, brElementaryUnimplementedHeads[]] &] &;
+
 brAlgebraicGeneralHeads::usage = "brAlgebraicGeneralHeads[] are the heads of a general algebraic function (Root, RootSum): outside one simple radical extension, so implementation incomplete (Incomplete).";
 brAlgebraicGeneralHeads[] := Root | RootSum;
 

@@ -31,6 +31,7 @@
 #define INTEGRATE_CHEBYCHEV_H
 
 #include "expr.h"
+#include <stdbool.h>
 
 /* Direct entry point for the Integrate dispatcher's Automatic cascade.
  * Recognises x^p (a x^r + b)^q, performs the appropriate Chebychev
@@ -49,6 +50,20 @@ Expr* integrate_chebychev_try(Expr* f, Expr* x);
  * Sqrt[x + Sqrt[x]] where both close; the Method option, the package head and
  * DSolve`AutonomousReduction's spin-guarded quadrature use it directly. */
 Expr* integrate_chebychev_general_try(Expr* f, Expr* x);
+
+/* True iff f is a strict Chebychev binomial x^p (a x^r + b)^q whose integral
+ * Chebychev's theorem proves non-elementary (none of q, (p+1)/r, q + (p+1)/r is
+ * an integer).  Its antiderivative is then one 2F1 (Roach`RunIndefinite), so
+ * the Automatic cascade sends it there directly instead of through the general
+ * search stages, which only grind on it.  Does not take ownership. */
+bool integrate_chebychev_nonelementary(Expr* f, Expr* x);
+
+/* The antiderivative of such a binomial (NULL otherwise), exact and valid on
+ * every branch:
+ *   C x^(p+1)/(p+1) (a x^r + b)^q (1 + a x^r/b)^(-q) 2F1(-q, mu; mu+1; -a x^r/b),
+ * mu = (p+1)/r, the middle factor written b^q when b > 0.  Freshly owned; does
+ * not take ownership. */
+Expr* integrate_chebychev_hypergeometric(Expr* f, Expr* x);
 
 /* `Integrate`ChebychevAlgebraic[f, x]` builtin.  Same algorithm as the cascade
  * entry.  Strict: returns NULL (unevaluated) when the integrand is not a

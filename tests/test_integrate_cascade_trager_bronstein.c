@@ -130,8 +130,14 @@ static void test_cascade_certificates(void) {
  *         split runs its pieces without the special-function tail; a Risch
  *         certificate skips the elementary-only PMT/Goursat stages. */
 static void test_cascade_keeps_method_results(void) {
-    BR_EQ("Check[Integrate[x^3/Sqrt[2 + x^6], x], \"msg\", {Integrate::nonelem}]", "\"msg\"");
-    BR_EQ("Quiet[Head[Integrate[1/Sqrt[-1 + x^6], x]]]", "Integrate");
+    /* A binomial Chebychev certifies non-elementary closes in its 2F1
+     * (v0.6763, integrate_chebychev_hypergeometric): the held nonelem message
+     * is dropped, as for Sqrt[Log[x]] -> Erfi.  Before, Roach's route to the
+     * same 2F1 ran out of its budget, so the answer depended on machine speed. */
+    BR_EQ("Check[Integrate[x^3/Sqrt[2 + x^6], x], \"msg\", {Integrate::nonelem}]",
+          "(x^4 Hypergeometric2F1[1/2, 2/3, 5/3, -1/2 x^6])/(4 Sqrt[2])");
+    BR_TRUE("With[{F = Quiet[Integrate[1/Sqrt[-1 + x^6], x]]}, FreeQ[F, Integrate] && "
+            "AllTrue[{3/10, -7/10, 13/10, -2}, Abs[N[(D[F, x] - 1/Sqrt[-1 + x^6]) /. x -> #, 20]] < 10^-12 &]]");
     BR_TRUE("Quiet[FreeQ[Integrate[x^3/Sqrt[2 + x^6], x], Inactive]]");
     /* 55 s in Linearity before (elementary; Risch closes it in 10 ms) */
     BR_TRUE("TimeConstrained[With[{f = (-2 (1 + E^x) Log[E^x + x] Log[1 + Tanh[x]^2])/(E^x + x) - "

@@ -524,6 +524,9 @@ brKernelSubstitution[f_, x_Symbol] := Module[{logs, exps, e0, rs, d, w, th, u = 
   G = Quiet[TimeConstrained[Integrate[h, u],
     If[Head[th] === Log, brOption["KernelSubstitutionTime"], brOption["KernelSubstitutionExpTime"]], $Failed]];
   If[G === $Failed || ListQ[G] || !FreeQ[G, Integrate | Inactive], Return[None]];
+  (* the cascade may answer h with a special function (a binomial's 2F1); only
+     an elementary G is a step of the elementary decision *)
+  If[!brElementaryAnswerQ[G], Return[None]];
   (* verified in u, by the chain rule: f = h(theta) D theta holds by construction
      (every E^(r w) is theta^(r d), Log[a] is theta), so D[G, u] = h gives
      D[G(theta), x] = f.  The test in u is small and exact where the test in x is

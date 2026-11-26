@@ -75,6 +75,11 @@ static void test_compositum_integrate(void) {
        the single-radical presentation (the same differential field) */
     BR_EQ("BronsteinIntegrate[Sqrt[x] (x + 1)^(1/3), x][[1]]", "\"not elementary\"");
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x]] (Log[x] + 1)^(1/3)/x, x][[1]]", "\"not elementary\"");
+    /* a kernel-substitution answer in u counts only when it is elementary: the
+     * cascade closes Sqrt[u] (u + 1)^(1/3) in a 2F1 since v0.6763 */
+    BR_TRUE("brElementaryAnswerQ[Log[x] + ArcTan[Sqrt[x]] x^(2/3) + E^x/(1 + x)]");
+    BR_FALSE("brElementaryAnswerQ[x^2 Hypergeometric2F1[1/3, 2/3, 5/3, -x^3]]");
+    BR_FALSE("brElementaryAnswerQ[EllipticF[ArcSin[x], -1]]");
     BR_EQ("BronsteinScope[Sqrt[x] (x + 1)^(1/3), x]", "\"InScope\"");
     /* a constant field extension stays in scope but unimplemented (Phase 4) */
     BR_EQ("BronsteinScope[Sqrt[2 x] + Sqrt[x], x]", "\"InScope\"");   /* one radical over Q(Sqrt[2]) since 4.3b C7 */

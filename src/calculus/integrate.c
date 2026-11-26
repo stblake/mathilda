@@ -2361,6 +2361,14 @@ static Expr* pms_verified_answer(Expr* r) {
  * The stress corpus is unaffected either way: its harness drives
  * IntegrateSurfaceSpecial directly and pins both budgets to the 120 s cap. */
 #define PMS_CASCADE_BUDGET_SECONDS 10
+/* The same stage on a binomial Chebychev proves non-elementary
+ * (integrate_chebychev_nonelementary).  The only forms it closes there are
+ * elliptic pencils, measured at 0.07-0.18 s; on every other such binomial it
+ * ran its whole 10 s and closed nothing.  1 s keeps a 5x margin over the
+ * slowest close.  Those binomials are exactly the Formula algorithm's
+ * integration probes inside FunctionExpand, which each paid the 10 s (cut to
+ * the probe's 3 s), so FunctionExpand of a 2F1 with no named form took ~6 s. */
+#define PMS_BINOMIAL_BUDGET_SECONDS 1
 
 /* Armed by try_parallelmixedspecial when it is running the stage as part of the
  * Automatic cascade rather than on an explicit Method -> / qualified-symbol
@@ -2372,7 +2380,7 @@ static Expr* pms_verified_answer(Expr* r) {
  * flag armed and silently give the cascade's tight budget to the next EXPLICIT
  * Method -> call in the session.  Clearing it at the point of use makes that
  * unwind harmless without a save/restore dance. */
-static int pms_in_cascade = 0;
+static int pms_in_cascade = 0;   /* the cascade budget in seconds; 0 = explicit call */
 
 static Expr* builtin_integrate_pms(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
@@ -2405,7 +2413,7 @@ static Expr* builtin_integrate_pms(Expr* res) {
         Expr* bind = expr_new_function(
             expr_new_symbol(SYM_Set),
             (Expr*[]){ expr_new_symbol("ParallelMixed`$SpecialTimeBudget"),
-                       expr_new_integer(PMS_CASCADE_BUDGET_SECONDS) }, 2);
+                       expr_new_integer(cascade) }, 2);
         Expr* locals = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ bind }, 1);
         Expr* blk = expr_new_function(expr_new_symbol(SYM_Block),
                                       (Expr*[]){ locals, call }, 2);
@@ -2458,9 +2466,12 @@ static bool contains_inactive_integrate(const Expr* e) {
     return false;
 }
 
-static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
+/* budget: the cascade's seconds (PMS_*_BUDGET_SECONDS), or 0 for an explicit
+ * Method -> request, which keeps the package's own default. */
+static Expr* try_parallelmixedspecial(Expr* f, Expr* x, int budget) {
     if (pmt_is_rational_structure(f)) return NULL;
-    pms_in_cascade = cascade ? 1 : 0;   /* budget scope; see PMS_CASCADE_BUDGET_SECONDS */
+    bool cascade = budget > 0;
+    pms_in_cascade = budget;            /* budget scope; see PMS_CASCADE_BUDGET_SECONDS */
     Expr* result = call_stage("Integrate`ParallelMixedSpecial", f, x);
     pms_in_cascade = 0;                 /* belt-and-braces: the builtin consumed it */
     if (!result) return NULL;
@@ -4751,6 +4762,13 @@ static Expr* builtin_integrate_body(Expr* res) {
              * rationalising substitution that closes (correct by construction),
              * so it runs ahead of the Eliminate/Solve search and Risch-Norman. */
             IP_STAGE(IP_CHEBYCHEV,    try_chebychev(effective_f, x));
+            /* A binomial Chebychev proves non-elementary: DerivativeDivides'
+             * substitution search spends 1-3 s on it and closes nothing (its
+             * special-function forms come from ParallelMixedSpecial and the
+             * Roach 2F1 stage below).  It matters most inside FunctionExpand:
+             * the Formula algorithm's integration probes are such binomials,
+             * and each paid that search. */
+            bool binom_nonelem = !result && integrate_chebychev_nonelementary(effective_f, x);
             /* Fresnel: K Sin/Cos of a quadratic -> FresnelS/FresnelC by completing
              * the square (the trig sibling of the Gaussian -> Erf recognizer),
              * deterministic and diff-back verified. */
@@ -4803,7 +4821,8 @@ static Expr* builtin_integrate_body(Expr* res) {
              * a kernel in a denominator, so other integrands are untouched. */
             IP_STAGE(IP_LINARG,       try_linarg(effective_f, x));
             IP_STAGE(IP_WEIERSTRASS,  try_weierstrass(effective_f, x));
-            IP_STAGE(IP_DERIVDIVIDES, try_derivdivides(effective_f, x));
+            if (!binom_nonelem)
+                IP_STAGE(IP_DERIVDIVIDES, try_derivdivides(effective_f, x));
             /* Chebychev binomials whose base is a binomial only after expansion
              * (Sqrt[2 c x^(5/2) + 4 d x^3] = x^(5/4) Sqrt[2 c + 4 d Sqrt[x]]).
              * After DerivativeDivides, which closes some of these (Sqrt[x +
@@ -4920,7 +4939,8 @@ static Expr* builtin_integrate_body(Expr* res) {
              * sub-integral): the whole point of the flag is to not pay this
              * search twice. */
             if (!g_integrate_no_special)
-                IP_STAGE(IP_PMS,      try_parallelmixedspecial(effective_f, x, true));
+                IP_STAGE(IP_PMS,      try_parallelmixedspecial(effective_f, x,
+                    binom_nonelem ? PMS_BINOMIAL_BUDGET_SECONDS : PMS_CASCADE_BUDGET_SECONDS));
             /* Adamchik-Marichev eq. 26 (Roach`RunIndefinite): x^s F(c x^q),
              * F with a Meijer G form, integrates to one G function, which
              * FunctionExpand writes as pFq or named functions. After every
@@ -4928,7 +4948,15 @@ static Expr* builtin_integrate_body(Expr* res) {
              * usually hypergeometric, and anything an earlier stage closes
              * keeps that form. Its own budget; skipped under
              * g_integrate_no_special like the other tail stages. */
-            if (!g_integrate_no_special)
+            /* A binomial Chebychev proves non-elementary gets its 2F1 directly
+             * (integrate_chebychev_hypergeometric: exact, branch-safe, no
+             * FunctionExpand).  Roach's route to the same 2F1 went through a
+             * FunctionExpand that cost ~6 s when the 2F1 has no named form,
+             * and wrote (b + a x^r)^q as b^q (1 + a x^r/b)^q, wrong off the
+             * principal branch (1/Sqrt[-1 + x^6] for |x| < 1). */
+            if (!g_integrate_no_special && binom_nonelem)
+                IP_STAGE(IP_ROACH,    integrate_chebychev_hypergeometric(effective_f, x));
+            else if (!g_integrate_no_special)
                 IP_STAGE(IP_ROACH,    try_roach_indefinite(effective_f, x,
                                                            ROACH_INDEFINITE_BUDGET_SECONDS));
             /* The G&R table, LAST: a reference table is the fallback after
@@ -4993,7 +5021,7 @@ static Expr* builtin_integrate_body(Expr* res) {
         case METHOD_PARALLEL_MIXED_SPECIAL:
             /* Explicit request: the package's full $SpecialTimeBudget, not the
              * cascade's tight one (see PMS_CASCADE_BUDGET_SECONDS). */
-            result = try_parallelmixedspecial(effective_f, x, false);
+            result = try_parallelmixedspecial(effective_f, x, 0);
             break;
         case METHOD_TRAGER:
             result = try_trager(effective_f, x, "Integrate`Trager");

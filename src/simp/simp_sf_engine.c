@@ -484,7 +484,25 @@ static void mat_mul(Mat* C, const Mat* A, const Mat* B, size_t n) {
         }
 }
 
-/* The up matrix at point args `a`, direction d; false on decline. */
+/* True when e holds an infinity or Indeterminate anywhere. */
+static bool has_nonfinite(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_ComplexInfinity ||
+               e->data.symbol.name == SYM_Indeterminate;
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_DirectedInfinity) return true;
+    if (has_nonfinite(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_nonfinite(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The up matrix at point args `a`, direction d; false on decline.  A shift
+ * undefined at this point -- 2F1's c-raise divides by (c - a)(c - b), so the
+ * step from (4/3, 5/3; 5/3) is 1/0 -- declines: the walk otherwise carried
+ * the infinity into the result, and Simplify[x 2F1(1/3, 2/3; 5/3; -x^3) -
+ * x^4/5 2F1(4/3, 5/3; 8/3; -x^3)] was Indeterminate. */
 static bool mat_up(const SfDesc* d, Expr* const* a, int dir, Mat* M) {
     size_t n = (size_t)d->rank + 1;
     for (size_t i = 0; i < n * n; i++) M->m[i] = NULL;
@@ -496,6 +514,7 @@ static bool mat_up(const SfDesc* d, Expr* const* a, int dir, Mat* M) {
     for (size_t i = 0; i < (n - 1) * n; i++) {
         if (!M->m[i]) { mat_free(M, n); return false; }
         M->m[i] = entry_norm(eval_and_free(M->m[i]), n);
+        if (has_nonfinite(M->m[i])) { mat_free(M, n); return false; }
     }
     return true;
 }

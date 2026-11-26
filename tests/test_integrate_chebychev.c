@@ -131,6 +131,41 @@ static void test_common_monomial_base(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Non-elementary binomials in the Automatic cascade (v0.6763): the    */
+/* 2F1 antiderivative, valid on every branch, or a named form.         */
+/* ------------------------------------------------------------------ */
+/* The antiderivative of f closes and differentiates back to f at points on
+ * both sides of every branch point (|x| < 1 and |x| > 1, x < 0 and x > 0). */
+static void special_ok(const char* f) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "With[{F = Quiet[Integrate[%s, x]]}, FreeQ[F, Integrate] && "
+             "AllTrue[{3/10, 7/10, -2/5, 13/10, -2}, "
+             "Abs[Quiet[N[(D[F, x] - (%s)) /. {x -> #, a -> 3/7, b -> -5/3}, 20]]] < 10^-12 &]]",
+             f, f);
+    check_eq(buf, "True");
+}
+
+static void test_nonelementary_hypergeometric(void) {
+    special_ok("x^3/Sqrt[2 + x^6]");
+    special_ok("1/Sqrt[-1 + x^6]");          /* b < 0: (1 + a x^r/b)^(-q) kept */
+    special_ok("x^(-1/3)/Sqrt[1 - x]");
+    special_ok("(1 + x^3)^(1/3)");
+    special_ok("x^2 (b + a x^5)^(1/3)");     /* symbolic a, b */
+    /* the named form FunctionExpand finds is kept */
+    check_eq("FreeQ[Integrate[1/Sqrt[1 + x^4], x], Hypergeometric2F1 | HypergeometricPFQ]",
+             "True");
+    special_ok("1/Sqrt[1 + x^4]");
+    /* the exact 2F1 form, and no Integrate::nonelem once it closes */
+    check_eq("Check[Integrate[x^3/Sqrt[2 + x^6], x], msg, {Integrate::nonelem}]",
+             "(x^4 Hypergeometric2F1[1/2, 2/3, 5/3, -1/2 x^6])/(4 Sqrt[2])");
+    /* FunctionExpand of a 2F1 with no named form declines promptly: its
+     * integration probes are binomials of this class (was ~6.6 s) */
+    check_eq("First[AbsoluteTiming[FunctionExpand[Hypergeometric2F1[2/3, 1/2, 5/3, z]]]] < 3",
+             "True");
+}
+
+/* ------------------------------------------------------------------ */
 /* Method plumbing + strictness.                                      */
 /* ------------------------------------------------------------------ */
 static void test_plumbing(void) {
@@ -164,6 +199,7 @@ int main(void) {
     TEST(test_worked_example);
     TEST(test_problem4_nonelementary);
     TEST(test_common_monomial_base);
+    TEST(test_nonelementary_hypergeometric);
     TEST(test_plumbing);
 
     printf("All Integrate ChebychevAlgebraic tests passed!\n");

@@ -1812,7 +1812,18 @@ monotonically down.
      `base^q/(x^(s q) (a x^r + b)^q)` (kept, so the answer is right for `x < 0`
      and off the real line too).  In the Automatic cascade this generalised
      recognition runs in a second slot after `DerivativeDivides`.  Non-elementary binomials
-     return `NULL` (the cascade falls through to later methods).
+     return `NULL` from this method.  In the Automatic cascade (v0.6763) they skip
+     `DerivativeDivides`, and `ParallelMixedSpecial` gets 1 s on them instead of 10 s:
+     neither closes a pure binomial, and the elliptic pencils the special stage does
+     close take under 0.2 s.  In the Roach stage's slot they get their antiderivative
+     directly,
+     `x^(p+1)/(p+1) (a x^r + b)^q (1 + a x^r/b)^(-q) 2F1(-q, mu; mu + 1; -a x^r/b)`
+     with `mu = (p+1)/r`.  The middle factor is locally constant and is written
+     `b^q` when `b > 0`.  The answer is valid on every branch.  `FunctionExpand`
+     is tried on the 2F1, at most 3 s and once, not from inside its own probes.
+     It supplies a named form when one exists (`EllipticF` for `1/Sqrt[1 + x^4]`).
+     `Integrate[x^3/Sqrt[2 + x^6], x]` is
+     `x^4 Hypergeometric2F1[1/2, 2/3, 5/3, -x^6/2]/(4 Sqrt[2])` in 0.1 s.
   7. `Integrate\`GoursatAlgebraic[f, x]` — pseudo-elliptic integrands
      `F(x) R(x)^q` (`F` rational, `R` a polynomial) with `q` any rational of
      reduced denominator `2`, `3`, or `4` by Goursat's algorithm and its

@@ -60,6 +60,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "poly.h"
+#include "core.h"   /* tc_register_unwind_counter */
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -644,6 +645,110 @@ Expr* integrate_chebychev_general_try(Expr* f, Expr* x) {
     return ch_core(f, x, true);
 }
 
+/* Seconds FunctionExpand may spend naming the 2F1 of a non-elementary
+ * binomial.  Measured: a named form comes back in 0.05-0.1 s, a 2F1 with none
+ * declines in ~1.3 s (its probes' ParallelMixedSpecial budget, see
+ * PMS_BINOMIAL_BUDGET_SECONDS). */
+#define CH_NAMED_FORM_SECONDS 3
+
+/* Nonzero while that FunctionExpand runs.  Its integration probes are binomials
+ * of this class and reach this stage again; a nested naming attempt can only
+ * hand the probe a 2F1, which the probe rejects, so it is skipped -- otherwise
+ * each probe level paid the whole bound. Restored across a timeout unwind. */
+static int ch_named_depth = 0;
+
+static bool has_hypergeometric(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL &&
+        (strcmp(h->data.symbol.name, "Hypergeometric2F1") == 0 ||
+         strcmp(h->data.symbol.name, "HypergeometricPFQ") == 0 ||
+         strcmp(h->data.symbol.name, "MeijerG") == 0)) return true;
+    if (has_hypergeometric(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_hypergeometric(e->data.function.args[i])) return true;
+    return false;
+}
+
+bool integrate_chebychev_nonelementary(Expr* f, Expr* x) {
+    if (x->type != EXPR_SYMBOL || expr_free_of(f, x)) return false;
+    Expr* C = NULL; Expr* a = NULL; Expr* b = NULL;
+    int64_t pn, pd, qn, qd, rn, rd;
+    if (!recognise(f, x, false, &C, &pn, &pd, &qn, &qd, &rn, &rd, &a, &b))
+        return false;
+    if (C) expr_free(C);
+    if (a) expr_free(a);
+    if (b) expr_free(b);
+    /* Chebychev: elementary iff q, (p+1)/r or q + (p+1)/r is an integer. */
+    if (qd == 1) return false;
+    if (((pn + pd) * rd) % (pd * rn) == 0) return false;
+    int64_t mn, md;
+    frac_add(qn, qd, (pn + pd) * rd, pd * rn, &mn, &md);
+    return md != 1;
+}
+
+Expr* integrate_chebychev_hypergeometric(Expr* f, Expr* x) {
+    if (!integrate_chebychev_nonelementary(f, x)) return NULL;
+    Expr* C = NULL; Expr* a = NULL; Expr* b = NULL;
+    int64_t pn, pd, qn, qd, rn, rd;
+    if (!recognise(f, x, false, &C, &pn, &pd, &qn, &qd, &rn, &rd, &a, &b))
+        return NULL;
+    /* p + 1 and mu = (p + 1)/r, both nonzero (p = -1 makes (p+1)/r = 0 an
+     * integer, which is the elementary Type II). */
+    int64_t p1n = pn + pd, p1d = pd;
+    int64_t mun = p1n * rd, mud = p1d * rn;
+    Expr* mu = eval_take(make_rational(mun, mud));
+    Expr* mu1 = eval_take(mk_fn2("Plus", expr_copy(mu), mk_int(1)));
+    Expr* q = make_rational(qn, qd);
+    Expr* xr = mk_pow_rat(expr_copy(x), rn, rd);                   /* x^r */
+    /* -(a/b) x^r */
+    Expr* z = mk_fn3("Times", mk_int(-1),
+                     mk_fn2("Times", expr_copy(a), mk_pow_int(expr_copy(b), -1)),
+                     expr_copy(xr));
+    Expr* F21 = expr_new_function(expr_new_symbol("Hypergeometric2F1"), (Expr*[]){
+        mk_fn2("Times", mk_int(-1), expr_copy(q)), expr_copy(mu), mu1, z }, 4);
+    /* A named form when FunctionExpand has one (EllipticF for 1/Sqrt[1 + x^4]):
+     * an identity of the function, so the branch-safe prefactor still holds.
+     * Bounded: its integration probes are binomials of this same class. */
+    if (ch_named_depth == 0) {
+        ch_named_depth++;
+        Expr* named = eval_take(mk_fn3("TimeConstrained",
+            mk_fn1("Quiet", mk_fn1("FunctionExpand", expr_copy(F21))),
+            mk_int(CH_NAMED_FORM_SECONDS), expr_copy(F21)));
+        ch_named_depth--;
+        if (named && eval_is_inflight_abort(named)) {
+            /* an enclosing budget's abort: hand it on, do not answer */
+            expr_free(named); expr_free(F21);
+            expr_free(mu); expr_free(q); expr_free(xr);
+            expr_free(C); expr_free(a); expr_free(b);
+            return NULL;
+        }
+        if (named && !has_hypergeometric(named)) { expr_free(F21); F21 = named; }
+        else if (named) expr_free(named);
+    }
+    /* (a x^r + b)^q / (1 + a x^r/b)^q: locally constant, b^q when b > 0. */
+    Expr* bpos = eval_take(mk_fn1("Positive", expr_copy(b)));
+    bool b_positive = bpos->type == EXPR_SYMBOL && bpos->data.symbol.name == SYM_True;
+    expr_free(bpos);
+    Expr* K;
+    if (b_positive) {
+        K = mk_fn2("Power", expr_copy(b), expr_copy(q));
+    } else {
+        Expr* base = mk_fn2("Plus", mk_fn2("Times", expr_copy(a), expr_copy(xr)), expr_copy(b));
+        Expr* unit = mk_fn2("Plus", mk_int(1),
+                            mk_fn2("Times", expr_copy(a),
+                                   mk_fn2("Times", expr_copy(xr), mk_pow_int(expr_copy(b), -1))));
+        K = mk_fn2("Times", mk_fn2("Power", base, expr_copy(q)),
+                   mk_fn2("Power", unit, mk_fn2("Times", mk_int(-1), expr_copy(q))));
+    }
+    /* C x^(p+1)/(p+1) K 2F1(-q, mu; mu + 1; -(a/b) x^r) */
+    Expr* result = eval_take(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+        expr_copy(C), mk_pow_rat(expr_copy(x), p1n, p1d), make_rational(p1d, p1n), K, F21 }, 5));
+    expr_free(mu); expr_free(q); expr_free(xr);
+    expr_free(C); expr_free(a); expr_free(b);
+    return result;
+}
+
 Expr* builtin_integrate_chebychev(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 2) return NULL;
@@ -653,6 +758,7 @@ Expr* builtin_integrate_chebychev(Expr* res) {
 }
 
 void integrate_chebychev_init(void) {
+    tc_register_unwind_counter(&ch_named_depth);
     symtab_add_builtin("Integrate`ChebychevAlgebraic", builtin_integrate_chebychev);
     symtab_get_def("Integrate`ChebychevAlgebraic")->attributes |=
         ATTR_PROTECTED;
