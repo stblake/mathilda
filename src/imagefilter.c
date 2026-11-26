@@ -4479,7 +4479,10 @@ static bool fd_is_list(const Expr* e) {
 
 static bool fd_leaf(const Expr* e, bool* exact, bool* integer) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
-    if (e->type == EXPR_REAL || e->type == EXPR_MPFR) { *exact = false; *integer = false; return true; }
+    if (e->type == EXPR_REAL) { *exact = false; *integer = false; return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) { *exact = false; *integer = false; return true; }
+#endif
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_Rational) { *integer = false; return true; }
     return false;

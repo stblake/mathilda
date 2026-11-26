@@ -511,8 +511,10 @@ static Expr* fe_gamma_form(const Expr* e) {
     for (size_t i = 0; i < n; i++) {
         const Expr* a = e->data.function.args[i];
         if (a->type == EXPR_INTEGER || a->type == EXPR_BIGINT || a->type == EXPR_REAL
-            || a->type == EXPR_MPFR || fe_is_head(a, SYM_Rational)
-            || fe_is_head(a, SYM_Complex)) return NULL;
+            || fe_is_head(a, SYM_Rational) || fe_is_head(a, SYM_Complex)) return NULL;
+#ifdef USE_MPFR
+        if (a->type == EXPR_MPFR) return NULL;
+#endif
     }
     Expr* args[2];
     for (size_t i = 0; i < n && i < 2; i++) args[i] = e->data.function.args[i];

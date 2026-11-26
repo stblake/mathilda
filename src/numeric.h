@@ -311,6 +311,8 @@ bool get_approx_mpfr(const Expr* e,
 /* USE_MPFR=0 builds: the same contract with machine Reals as the only
  * inexact leaves (53 bits), so callers need no guard of their own. */
 long numeric_min_inexact_bits(const Expr* e);
+/* No MPFR values exist, so nothing triggers the MPFR path. */
+static inline bool numeric_expr_is_mpfr(const Expr* e) { (void)e; return false; }
 #endif
 
 /* Mathematica inexact-contagion pre-pass for Plus / Times / other numeric

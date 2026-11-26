@@ -100,10 +100,12 @@ static bool as_level(const Expr* e, double* out)
 {
     if (!e) return false;
     if (numeric_machine_value(e, out)) return isfinite(*out);
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) {
         *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
         return isfinite(*out);
     }
+#endif
     return false;
 }
 
