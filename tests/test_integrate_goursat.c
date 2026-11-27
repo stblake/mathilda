@@ -261,6 +261,50 @@ static void test_period3(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Branch soundness on the whole complex plane (benchmark 265).        */
+/* ------------------------------------------------------------------ */
+/* The descents write the answer through radicals of the Mobius-transformed
+ * variable, Sqrt[g(x)] with g = c(x)^2 R(x), which equals c Sqrt[R] only up to a
+ * sign that changes from region to region of C.  The old differentiate-back
+ * guard sampled real x > 1 only, so answers correct on part of the plane were
+ * returned -- by the DEFAULT Integrate for the Sqrt[2]-coefficient cases.  Two
+ * roots: the re-expression over Sqrt[R] refused a square part carrying a
+ * CONSTANT radical (Sqrt[2], Sqrt[-2]) and plain Factor could not expose a
+ * square part with algebraic coefficients; and no certificate saw C.  Each case
+ * must now close AND pass PossibleZeroQ with t ranging over the complex plane,
+ * plus a numeric differentiate-back at complex points where the old answers
+ * were wrong. */
+static void sound_on_plane(const char* f, const char* method) {
+    char buf[4096];
+    char call[1024];
+    if (method) snprintf(call, sizeof(call), "Integrate[%s, t, Method -> \"%s\"]", f, method);
+    else        snprintf(call, sizeof(call), "Integrate[%s, t]", f);
+    snprintf(buf, sizeof(buf),
+             "Module[{r = %s}, FreeQ[r, Integrate] &&"
+             " PossibleZeroQ[D[r, t] - (%s), Assumptions -> Element[t, Complexes]] &&"
+             " AllTrue[{37/19, 1/3 + 2 I/7, -5/2, 11/3, 1/10, 7/10 + I/3},"
+             "   Abs[N[(D[r, t] - (%s)) /. t -> #, 30]] < 10^-20 &]]", call, f, f);
+    check_eq(buf, "True");
+}
+
+static void test_branch_plane(void) {
+    /* (a) period-3 reductions: Log/ArcTanh of Sqrt[64/(t-a)^6 + 8/(t-a)^3] */
+    sound_on_plane("1/((-2 + t) Sqrt[-12 t + 6 t^2 - t^3])", "GoursatAlgebraic");
+    sound_on_plane("3/((-1 + t) Sqrt[-7 - 3 t + 3 t^2 - t^3])", "GoursatAlgebraic");
+    sound_on_plane("-4/((2 + t) Sqrt[-16 - 12 t - 6 t^2 - t^3])", "GoursatAlgebraic");
+    sound_on_plane("(8 - 8 t + 2 t^2)/(Sqrt[-16 + 12 t - 6 t^2 + t^3] (-17 + 24 t - 12 t^2 + 2 t^3))",
+                   "GoursatAlgebraic");
+    /* (b) V4 on a quartic radicand (sqrt-klein #5) */
+    sound_on_plane("(-8 - 60 t + 964 t^3 + 8 t^4 - 64 t^5)/(Sqrt[-3 + 9 t^2 - 3 t^4] (16 - 257 t^2 + 16 t^4))",
+                   "GoursatAlgebraic");
+    /* (c) Sqrt[2]-coefficient pseudo-elliptic cases, forced and by default */
+    sound_on_plane("t/((t^2 - 3 - 2 Sqrt[2]) Sqrt[t^3 - t])", "GoursatAlgebraic");
+    sound_on_plane("1/((t^2 + 2 Sqrt[2] t + 1) Sqrt[t^3 - t])", "GoursatAlgebraic");
+    sound_on_plane("t/((t^2 - 3 - 2 Sqrt[2]) Sqrt[t^3 - t])", NULL);
+    sound_on_plane("1/((t^2 - 2 Sqrt[2] t + 1) Sqrt[t^3 - t])", NULL);
+}
+
+/* ------------------------------------------------------------------ */
 /* Method plumbing + strictness.                                      */
 /* ------------------------------------------------------------------ */
 static void test_plumbing(void) {
@@ -324,6 +368,7 @@ int main(void) {
     TEST(test_period3);
     TEST(test_thirdkind);
     TEST(test_plumbing);
+    TEST(test_branch_plane);
     TEST(test_graded);
 
     printf("All Integrate GoursatAlgebraic tests passed!\n");

@@ -1,0 +1,153 @@
+label	status	seconds	verified	unevaluated	residual
+pseudoelliptic-sqrt #0: (x/(x^2 + 3 - 2*Sqrt[2]))/Sqrt[x^3 + x]	DECLINE	2.1040		True	
+pseudoelliptic-sqrt #1: (x/(x^2 + 2*Sqrt[2] + 3))/Sqrt[x^3 + x]	DECLINE	1.6122		True	
+pseudoelliptic-sqrt #2: ((x - I)/(x + I))/Sqrt[x^3 - x]	DECLINE	0.0316		True	
+pseudoelliptic-sqrt #3: ((x + I)/(x - I))/Sqrt[x^3 - x]	DECLINE	0.0332		True	
+pseudoelliptic-sqrt #4: ((x - I)/(x + I))/Sqrt[x^4 + 1]	DECLINE	0.0302		True	
+pseudoelliptic-sqrt #5: ((x + I)/(x - I))/Sqrt[x^4 + 1]	DECLINE	0.0295		True	
+pseudoelliptic-sqrt #6: ((x - I)/(x + I))/Sqrt[x^4 + x^2 + 1]	DECLINE	0.0300		True	
+pseudoelliptic-sqrt #7: ((x + I)/(x - I))/Sqrt[x^4 + x^2 + 1]	DECLINE	0.0295		True	
+pseudoelliptic-sqrt #8: ((x^2 + I)/(x^2 - I))/Sqrt[x^4 - 1]	DECLINE	6.0788		True	
+pseudoelliptic-sqrt #9: ((x^2 - I)/(x^2 + I))/Sqrt[x^4 - 1]	DECLINE	6.0671		True	
+pseudoelliptic-sqrt #10: ((x - 1 - I)/(x + 1 + I))/Sqrt[x^4 - 4]	DECLINE	0.0391		True	
+pseudoelliptic-sqrt #11: ((x - 1 + I)/(x + 1 - I))/Sqrt[x^4 - 4]	DECLINE	0.0499		True	
+pseudoelliptic-sqrt #12: ((x + 1 - I)/(x - 1 + I))/Sqrt[x^4 - 4]	DECLINE	0.0511		True	
+pseudoelliptic-sqrt #13: ((x + 1 + I)/(x - 1 - I))/Sqrt[x^4 - 4]	DECLINE	0.0517		True	
+pseudoelliptic-sqrt #14: ((x - I)/(x + I))/Sqrt[x^4 - x^2 + 1]	DECLINE	0.0299		True	
+pseudoelliptic-sqrt #15: ((x + I)/(x - I))/Sqrt[x^4 - x^2 + 1]	DECLINE	0.0296		True	
+pseudoelliptic-sqrt #16: ((x + 2*I)/(x - 2*I))/Sqrt[x^3 - 4*x]	DECLINE	0.0301		True	
+pseudoelliptic-sqrt #17: ((x - 2*I)/(x + 2*I))/Sqrt[x^3 - 4*x]	DECLINE	0.0320		True	
+pseudoelliptic-sqrt #18: ((x - I)/(x + I))/Sqrt[x^4 + 3*x^2 + 1]	DECLINE	0.0785		True	
+pseudoelliptic-sqrt #19: ((x + I)/(x - I))/Sqrt[x^4 + 3*x^2 + 1]	DECLINE	0.0813		True	
+pseudoelliptic-sqrt #20: ((x - I)/(x + I))/Sqrt[x^4 + 6*x^2 + 1]	DECLINE	0.0817		True	
+pseudoelliptic-sqrt #21: ((x + I)/(x - I))/Sqrt[x^4 + 6*x^2 + 1]	DECLINE	0.0887		True	
+pseudoelliptic-sqrt #22: ((x - I)/(x + I))/Sqrt[x^4 - 3*x^2 + 1]	DECLINE	0.0369		True	
+pseudoelliptic-sqrt #23: ((x + I)/(x - I))/Sqrt[x^4 - 3*x^2 + 1]	DECLINE	0.0155		True	
+pseudoelliptic-sqrt #24: ((x - I)/(x + I))/Sqrt[x^4 - 6*x^2 + 1]	DECLINE	0.0274		True	
+pseudoelliptic-sqrt #25: ((x + I)/(x - I))/Sqrt[x^4 - 6*x^2 + 1]	DECLINE	0.0160		True	
+pseudoelliptic-sqrt #26: (x/(x^2 - 3 - 2*Sqrt[2]))/Sqrt[x^3 - x]	elementary	2.2622	False	False	
+pseudoelliptic-sqrt #27: (x/(x^2 - 3 + 2*Sqrt[2]))/Sqrt[x^3 - x]	elementary	2.3587	False	False	
+pseudoelliptic-sqrt #28: ((x - Sqrt[2])/(x + Sqrt[2]))/Sqrt[x^4 + 4]	elementary	0.0320	True	False	
+pseudoelliptic-sqrt #29: ((x + Sqrt[2])/(x - Sqrt[2]))/Sqrt[x^4 + 4]	elementary	0.0259	True	False	
+pseudoelliptic-sqrt #30: (x/(x^2 + Sqrt[2]*x + 1))/Sqrt[x^4 - 1]	DECLINE	6.0134		True	
+pseudoelliptic-sqrt #31: (x/(x^2 - Sqrt[2]*x + 1))/Sqrt[x^4 - 1]	DECLINE	6.0188		True	
+pseudoelliptic-sqrt #32: ((x^2 + 2*I)/(x^2 - 2*I))/Sqrt[x^4 - 4]	DECLINE	0.0325		True	
+pseudoelliptic-sqrt #33: ((x^2 - 2*I)/(x^2 + 2*I))/Sqrt[x^4 - 4]	DECLINE	0.0299		True	
+pseudoelliptic-sqrt #34: ((x - Sqrt[2])/(x + Sqrt[2]))/Sqrt[x^3 + 2*x]	elementary	0.0391	True	False	
+pseudoelliptic-sqrt #35: ((x + Sqrt[2])/(x - Sqrt[2]))/Sqrt[x^3 + 2*x]	elementary	0.0479	True	False	
+pseudoelliptic-sqrt #36: (x/(x^2 - 6 - 4*Sqrt[2]))/Sqrt[x^3 - 2*x]	elementary	1.5793	False	False	
+pseudoelliptic-sqrt #37: (x/(x^2 - 6 + 4*Sqrt[2]))/Sqrt[x^3 - 2*x]	elementary	1.5034	False	False	
+pseudoelliptic-sqrt #38: (x/(x^2 - 12 - 8*Sqrt[2]))/Sqrt[x^3 - 4*x]	elementary	1.4107	False	False	
+pseudoelliptic-sqrt #39: (x/(x^2 - 12 + 8*Sqrt[2]))/Sqrt[x^3 - 4*x]	elementary	1.4594	False	False	
+pseudoelliptic-sqrt #40: ((x^2 + 2*Sqrt[2]*x + 1)^(-1))/Sqrt[x^3 - x]	elementary	1.4418	False	False	
+pseudoelliptic-sqrt #41: ((x^2 - 2*Sqrt[2]*x + 1)^(-1))/Sqrt[x^3 - x]	elementary	1.4374	False	False	
+pseudoelliptic-sqrt #42: (x/(x^2 + Sqrt[2]*I*x - 1))/Sqrt[x^4 - 1]	DECLINE	6.0289		True	
+pseudoelliptic-sqrt #43: (x/(x^2 - Sqrt[2]*I*x - 1))/Sqrt[x^4 - 1]	DECLINE	6.0381		True	
+pseudoelliptic-sqrt #44: ((x - Sqrt[2]*I)/(x + Sqrt[2]*I))/Sqrt[x^4 + 4]	DECLINE	0.0440		True	
+pseudoelliptic-sqrt #45: ((x + Sqrt[2]*I)/(x - Sqrt[2]*I))/Sqrt[x^4 + 4]	DECLINE	0.0373		True	
+pseudoelliptic-sqrt #46: ((x - Sqrt[2])/(x + Sqrt[2]))/Sqrt[x^4 + 5*x^2 + 4]	elementary	0.0277	True	False	
+pseudoelliptic-sqrt #47: ((x + Sqrt[2])/(x - Sqrt[2]))/Sqrt[x^4 + 5*x^2 + 4]	elementary	0.0178	True	False	
+pseudoelliptic-sqrt #48: ((x - Sqrt[3])/(x + Sqrt[3]))/Sqrt[x^4 - 10*x^2 + 9]	elementary	0.0221	True	False	
+pseudoelliptic-sqrt #49: ((x + Sqrt[3])/(x - Sqrt[3]))/Sqrt[x^4 - 10*x^2 + 9]	elementary	0.0158	True	False	
+pseudoelliptic-sqrt #50: ((x - Sqrt[2])/(x + Sqrt[2]))/Sqrt[x^4 - 5*x^2 + 4]	elementary	0.0171	True	False	
+pseudoelliptic-sqrt #51: ((x + Sqrt[2])/(x - Sqrt[2]))/Sqrt[x^4 - 5*x^2 + 4]	elementary	0.0147	True	False	
+pseudoelliptic-sqrt #52: ((x^2 + 2*I*x + 1)/(x^2 - 2*I*x + 1))/Sqrt[x^3 + x]	DECLINE	0.1040		True	
+pseudoelliptic-sqrt #53: ((x^2 - 2*I*x + 1)/(x^2 + 2*I*x + 1))/Sqrt[x^3 + x]	DECLINE	0.0830		True	
+pseudoelliptic-sqrt #54: ((x^2 + Sqrt[2])/(x^2 - Sqrt[2]))/Sqrt[x^4 + 2*x^2 + 2]	DECLINE	6.0688		True	
+pseudoelliptic-sqrt #55: ((x^2 - Sqrt[2])/(x^2 + Sqrt[2]))/Sqrt[x^4 + 2*x^2 + 2]	DECLINE	6.0812		True	
+pseudoelliptic-sqrt #56: ((x - Sqrt[2]*I)/(x + Sqrt[2]*I))/Sqrt[x^4 + 5*x^2 + 4]	DECLINE	0.0410		True	
+pseudoelliptic-sqrt #57: ((x + Sqrt[2]*I)/(x - Sqrt[2]*I))/Sqrt[x^4 + 5*x^2 + 4]	DECLINE	0.0405		True	
+pseudoelliptic-sqrt #58: ((x - Sqrt[3]*I)/(x + Sqrt[3]*I))/Sqrt[x^4 - 10*x^2 + 9]	DECLINE	0.0461		True	
+pseudoelliptic-sqrt #59: ((x + Sqrt[3]*I)/(x - Sqrt[3]*I))/Sqrt[x^4 - 10*x^2 + 9]	DECLINE	0.0378		True	
+pseudoelliptic-sqrt #60: ((x - Sqrt[2]*I)/(x + Sqrt[2]*I))/Sqrt[x^4 - 5*x^2 + 4]	DECLINE	0.0398		True	
+pseudoelliptic-sqrt #61: ((x + Sqrt[2]*I)/(x - Sqrt[2]*I))/Sqrt[x^4 - 5*x^2 + 4]	DECLINE	0.0382		True	
+pseudoelliptic-sqrt #62: (x/(x^3 - 8))/Sqrt[x^3 + 1]	DECLINE	6.0016		True	
+pseudoelliptic-sqrt #63: (x/(x^3 - 64))/Sqrt[x^3 + 8]	DECLINE	6.0014		True	
+pseudoelliptic-sqrt #64: (x/(x^2 - 1))/Sqrt[x^3 + x]	elementary	0.0192	True	False	
+pseudoelliptic-sqrt #65: ((x - 1)/(x + 1))/Sqrt[x^3 + x]	elementary	0.0124	True	False	
+pseudoelliptic-sqrt #66: ((x + 1)/(x - 1))/Sqrt[x^3 + x]	elementary	0.0160	True	False	
+pseudoelliptic-sqrt #67: (x/(x^3 + 8))/Sqrt[x^3 - 1]	DECLINE	6.0027		True	
+pseudoelliptic-sqrt #68: (x/(x^3 + 64))/Sqrt[x^3 - 8]	DECLINE	6.0016		True	
+pseudoelliptic-sqrt #69: (x/(x^2 + 1))/Sqrt[x^3 - x]	DECLINE	0.0179		True	
+pseudoelliptic-sqrt #70: ((x - 1)/(x + 1))/Sqrt[x^4 + 1]	elementary	0.0082	True	False	
+pseudoelliptic-sqrt #71: ((x + 1)/(x - 1))/Sqrt[x^4 + 1]	elementary	0.0083	True	False	
+pseudoelliptic-sqrt #72: (x/(x^2 - 2))/Sqrt[x^3 + 2*x]	elementary	0.0461	True	False	
+pseudoelliptic-sqrt #73: (x/(x^2 - 3))/Sqrt[x^3 + 3*x]	elementary	0.0533	True	False	
+pseudoelliptic-sqrt #74: (x/(x^2 - 4))/Sqrt[x^3 + 4*x]	elementary	0.0163	True	False	
+pseudoelliptic-sqrt #75: ((x - 2)/(x + 2))/Sqrt[x^3 + 4*x]	elementary	0.0124	True	False	
+pseudoelliptic-sqrt #76: ((x + 2)/(x - 2))/Sqrt[x^3 + 4*x]	elementary	0.0151	True	False	
+pseudoelliptic-sqrt #77: (x/(x^2 + 2))/Sqrt[x^3 - 2*x]	DECLINE	0.0414		True	
+pseudoelliptic-sqrt #78: (x/(x^2 + 4))/Sqrt[x^3 - 4*x]	DECLINE	0.0193		True	
+pseudoelliptic-sqrt #79: ((x^3 + 4)/(x^3 - 8))/Sqrt[x^3 + 1]	DECLINE	6.0014		True	
+pseudoelliptic-sqrt #80: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^3 + x]	elementary	0.0177	True	False	
+pseudoelliptic-sqrt #81: (x/(x^2 - 1))/Sqrt[x^3 + x^2 + x]	elementary	0.0411	True	False	
+pseudoelliptic-sqrt #82: ((x - 1)/(x + 1))/Sqrt[x^3 + x^2 + x]	elementary	0.0309	True	False	
+pseudoelliptic-sqrt #83: ((x + 1)/(x - 1))/Sqrt[x^3 + x^2 + x]	elementary	0.0325	True	False	
+pseudoelliptic-sqrt #84: ((x^3 - 4)/(x^3 + 8))/Sqrt[x^3 - 1]	DECLINE	6.0118		True	
+pseudoelliptic-sqrt #85: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^3 - x]	DECLINE	0.0137		True	
+pseudoelliptic-sqrt #86: (x/(x^2 - 1))/Sqrt[x^3 - x^2 + x]	elementary	0.0386	True	False	
+pseudoelliptic-sqrt #87: ((x + 1)/(x - 1))/Sqrt[x^3 - x^2 + x]	elementary	0.0296	True	False	
+pseudoelliptic-sqrt #88: ((x - 1)/(x + 1))/Sqrt[x^3 - x^2 + x]	elementary	0.0324	True	False	
+pseudoelliptic-sqrt #89: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 + 1]	elementary	0.0075	True	False	
+pseudoelliptic-sqrt #90: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 + 1]	elementary	0.0126	True	False	
+pseudoelliptic-sqrt #91: ((x^2 - 2)/(x^2 + 2))/Sqrt[x^4 + 4]	elementary	0.0201	True	False	
+pseudoelliptic-sqrt #92: ((x^2 + 2)/(x^2 - 2))/Sqrt[x^4 + 4]	elementary	0.0227	True	False	
+pseudoelliptic-sqrt #93: ((x - 1)/(x + 1))/Sqrt[x^4 + x^2 + 1]	elementary	0.0086	True	False	
+pseudoelliptic-sqrt #94: ((x + 1)/(x - 1))/Sqrt[x^4 + x^2 + 1]	elementary	0.0088	True	False	
+pseudoelliptic-sqrt #95: ((x - 1)/(x + 1))/Sqrt[x^4 - x^2 + 1]	elementary	0.0068	True	False	
+pseudoelliptic-sqrt #96: ((x + 1)/(x - 1))/Sqrt[x^4 - x^2 + 1]	elementary	0.0068	True	False	
+pseudoelliptic-sqrt #97: ((x^2 + 2)/(x^2 - 2))/Sqrt[x^3 + 2*x]	elementary	0.0449	True	False	
+pseudoelliptic-sqrt #98: ((x^2 + 3)/(x^2 - 3))/Sqrt[x^3 + 3*x]	elementary	0.0465	True	False	
+pseudoelliptic-sqrt #99: ((x - 1)/(x + 1))/Sqrt[x^3 + 3*x^2 + x]	elementary	0.0148	True	False	
+pseudoelliptic-sqrt #100: (x/(x^2 - 1))/Sqrt[x^3 + 3*x^2 + x]	elementary	0.0203	True	False	
+pseudoelliptic-sqrt #101: ((x + 1)/(x - 1))/Sqrt[x^3 + 3*x^2 + x]	elementary	0.0156	True	False	
+pseudoelliptic-sqrt #102: ((x^2 + 4)/(x^2 - 4))/Sqrt[x^3 + 4*x]	elementary	0.0162	True	False	
+pseudoelliptic-sqrt #103: ((x^3 - 8)/(x^3 + 8))/Sqrt[x^3 + 4*x]	elementary	0.0295	True	False	
+pseudoelliptic-sqrt #104: ((x^3 + 8)/(x^3 - 8))/Sqrt[x^3 + 4*x]	elementary	0.0319	True	False	
+pseudoelliptic-sqrt #105: (x/(x^2 - 1))/Sqrt[x^3 + 6*x^2 + x]	elementary	0.0216	True	False	
+pseudoelliptic-sqrt #106: ((x - 1)/(x + 1))/Sqrt[x^3 + 6*x^2 + x]	elementary	0.0149	True	False	
+pseudoelliptic-sqrt #107: ((x + 1)/(x - 1))/Sqrt[x^3 + 6*x^2 + x]	elementary	0.0166	True	False	
+pseudoelliptic-sqrt #108: ((x^2 - 2)/(x^2 + 2))/Sqrt[x^3 - 2*x]	DECLINE	0.0333		True	
+pseudoelliptic-sqrt #109: ((x - 1)/(x + 1))/Sqrt[x^3 - 3*x^2 + x]	elementary	0.0163	True	False	
+pseudoelliptic-sqrt #110: ((x + 1)/(x - 1))/Sqrt[x^3 - 3*x^2 + x]	elementary	0.0166	True	False	
+pseudoelliptic-sqrt #111: (x/(x^2 - 1))/Sqrt[x^3 - 3*x^2 + x]	elementary	0.0207	True	False	
+pseudoelliptic-sqrt #112: ((x^2 - 4)/(x^2 + 4))/Sqrt[x^3 - 4*x]	DECLINE	0.0159		True	
+pseudoelliptic-sqrt #113: ((x - 1)/(x + 1))/Sqrt[x^4 + 3*x^2 + 1]	elementary	0.0454	True	False	
+pseudoelliptic-sqrt #114: ((x + 1)/(x - 1))/Sqrt[x^4 + 3*x^2 + 1]	elementary	0.0392	True	False	
+pseudoelliptic-sqrt #115: ((x - 1)/(x + 1))/Sqrt[x^4 + 6*x^2 + 1]	elementary	0.0408	True	False	
+pseudoelliptic-sqrt #116: ((x + 1)/(x - 1))/Sqrt[x^4 + 6*x^2 + 1]	elementary	0.0394	True	False	
+pseudoelliptic-sqrt #117: ((x - 1)/(x + 1))/Sqrt[x^4 - 3*x^2 + 1]	elementary	0.0094	True	False	
+pseudoelliptic-sqrt #118: ((x + 1)/(x - 1))/Sqrt[x^4 - 3*x^2 + 1]	elementary	0.0104	True	False	
+pseudoelliptic-sqrt #119: ((x - 1)/(x + 1))/Sqrt[x^4 - 6*x^2 + 1]	elementary	0.0086	True	False	
+pseudoelliptic-sqrt #120: ((x + 1)/(x - 1))/Sqrt[x^4 - 6*x^2 + 1]	elementary	0.0097	True	False	
+pseudoelliptic-sqrt #121: (x/(x^2 - 2))/Sqrt[x^3 + 2*x^2 + 2*x]	elementary	0.0824	True	False	
+pseudoelliptic-sqrt #122: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^3 + x^2 + x]	elementary	0.0347	True	False	
+pseudoelliptic-sqrt #123: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^3 + x^2 + x]	elementary	0.0399	True	False	
+pseudoelliptic-sqrt #124: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^3 - x^2 + x]	elementary	0.0316	True	False	
+pseudoelliptic-sqrt #125: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^3 - x^2 + x]	elementary	0.0381	True	False	
+pseudoelliptic-sqrt #126: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 + x^2 + 1]	elementary	0.0117	True	False	
+pseudoelliptic-sqrt #127: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 + x^2 + 1]	elementary	0.0082	True	False	
+pseudoelliptic-sqrt #128: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 - x^2 + 1]	elementary	0.0073	True	False	
+pseudoelliptic-sqrt #129: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 - x^2 + 1]	elementary	0.0093	True	False	
+pseudoelliptic-sqrt #130: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^3 + 3*x^2 + x]	elementary	0.0172	True	False	
+pseudoelliptic-sqrt #131: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^3 + 3*x^2 + x]	elementary	0.0206	True	False	
+pseudoelliptic-sqrt #132: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^3 + 6*x^2 + x]	elementary	0.0174	True	False	
+pseudoelliptic-sqrt #133: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^3 + 6*x^2 + x]	elementary	0.0210	True	False	
+pseudoelliptic-sqrt #134: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^3 - 3*x^2 + x]	elementary	0.0208	True	False	
+pseudoelliptic-sqrt #135: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^3 - 3*x^2 + x]	elementary	0.0211	True	False	
+pseudoelliptic-sqrt #136: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 + 3*x^2 + 1]	elementary	0.0441	True	False	
+pseudoelliptic-sqrt #137: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 + 3*x^2 + 1]	elementary	0.0434	True	False	
+pseudoelliptic-sqrt #138: ((x^2 - 2)/(x^2 + 2))/Sqrt[x^4 + 5*x^2 + 4]	elementary	0.0166	True	False	
+pseudoelliptic-sqrt #139: ((x^2 + 2)/(x^2 - 2))/Sqrt[x^4 + 5*x^2 + 4]	elementary	0.0254	True	False	
+pseudoelliptic-sqrt #140: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 + 6*x^2 + 1]	elementary	0.0409	True	False	
+pseudoelliptic-sqrt #141: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 + 6*x^2 + 1]	elementary	0.0446	True	False	
+pseudoelliptic-sqrt #142: ((x^2 + 3)/(x^2 - 3))/Sqrt[x^4 - 10*x^2 + 9]	elementary	0.0135	True	False	
+pseudoelliptic-sqrt #143: ((x^2 - 3)/(x^2 + 3))/Sqrt[x^4 - 10*x^2 + 9]	elementary	0.0133	True	False	
+pseudoelliptic-sqrt #144: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 - 3*x^2 + 1]	elementary	0.0111	True	False	
+pseudoelliptic-sqrt #145: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 - 3*x^2 + 1]	elementary	0.0152	True	False	
+pseudoelliptic-sqrt #146: ((x^2 - 2)/(x^2 + 2))/Sqrt[x^4 - 5*x^2 + 4]	elementary	0.0105	True	False	
+pseudoelliptic-sqrt #147: ((x^2 + 2)/(x^2 - 2))/Sqrt[x^4 - 5*x^2 + 4]	elementary	0.0183	True	False	
+pseudoelliptic-sqrt #148: ((x^2 - 1)/(x^2 + 1))/Sqrt[x^4 - 6*x^2 + 1]	elementary	0.0106	True	False	
+pseudoelliptic-sqrt #149: ((x^2 + 1)/(x^2 - 1))/Sqrt[x^4 - 6*x^2 + 1]	elementary	0.0130	True	False	
+pseudoelliptic-sqrt #150: ((x^2 - 2)/(x^2 + 2))/Sqrt[x^3 + 2*x^2 + 2*x]	elementary	0.0417	True	False	
+pseudoelliptic-sqrt #151: ((x^2 + 2)/(x^2 - 2))/Sqrt[x^3 + 2*x^2 + 2*x]	elementary	0.0756	True	False	

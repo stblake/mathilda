@@ -30,12 +30,14 @@
 #include "symtab.h"
 #include "numeric.h"
 #include "common.h"
+#include "flint_num_bridge.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
+#include <gmp.h>
 
 /* ====================================================================
  * Radical detection + Simplify guard.
@@ -112,12 +114,41 @@ static bool intsimp_is_opaque_parameter(const Expr* e) {
     return !expr_is_numeric_quantity(e);
 }
 
+/* Sign of an exact integer leaf (Integer or BigInt); 0 for zero or a
+ * non-integer.  *ok reports whether e was an integer leaf at all. */
+static int intsimp_int_leaf_sign(const Expr* e, bool* ok) {
+    *ok = true;
+    if (e->type == EXPR_INTEGER)
+        return e->data.integer > 0 ? 1 : (e->data.integer < 0 ? -1 : 0);
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
+    *ok = false;
+    return 0;
+}
+
 int intsimp_sign_pos_assumption(Expr* e) {
     if (!e) return 0;
-    if (e->type == EXPR_INTEGER) {
-        if (e->data.integer > 0) return 1;
-        if (e->data.integer < 0) return -1;
-        return 0;
+    {   /* Integer and BigInt.  A BigInt used to fall through to 0
+         * (undecided): a positive discriminant with more than 18 digits
+         * then took the complex-pair branch of logtoreal_quadratic_core
+         * with an imaginary Sqrt[-disc], and the log part of
+         * (9814156935056 - 2671246202843 x)/(1252991435641 (x^2 + 4 x - 1))
+         * came out as one wrong Log (benchmark 266, nonsqfree family). */
+        bool ok;
+        int s = intsimp_int_leaf_sign(e, &ok);
+        if (ok) return s;
+    }
+    /* A parameter-free exact constant (3 - 2 Sqrt[2], (-1)^(1/3), ...): the
+     * certified ball sign.  The structural rules below return 0 for a sum of
+     * mixed-sign terms, so a positive discriminant such as 3 - 2 Sqrt[2] took
+     * the complex-pair branch of logtoreal_quadratic_core, and a complex one
+     * (Im != 0) read as real.  A non-real constant answers 0 here: it has no
+     * sign, and the callers then keep the formal (branch-agnostic) form. */
+    if (e->type == EXPR_FUNCTION && expr_is_numeric_quantity(e)) {
+        int re = 2, im = 2;
+        if (flint_cert_parts_sign(e, &re, &im)) {
+            if (im == 0 && (re == 1 || re == -1)) return re;
+            if (im == 1 || im == -1) return 0;
+        }
     }
     if (e->type == EXPR_REAL) {
         if (e->data.real > 0.0) return 1;
@@ -127,16 +158,12 @@ int intsimp_sign_pos_assumption(Expr* e) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational
-        && e->data.function.arg_count == 2
-        && e->data.function.args[0]->type == EXPR_INTEGER
-        && e->data.function.args[1]->type == EXPR_INTEGER) {
-        int64_t n = e->data.function.args[0]->data.integer;
-        int64_t d = e->data.function.args[1]->data.integer;
-        int sign = 1;
-        if (n < 0) { n = -n; sign = -sign; }
-        if (d < 0) { d = -d; sign = -sign; }
-        if (n == 0) return 0;
-        return sign;
+        && e->data.function.arg_count == 2) {
+        /* Rational[n, d] with Integer or BigInt parts. */
+        bool okn, okd;
+        int sn = intsimp_int_leaf_sign(e->data.function.args[0], &okn);
+        int sd = intsimp_int_leaf_sign(e->data.function.args[1], &okd);
+        if (okn && okd) return sn * sd;
     }
     if (e->type == EXPR_SYMBOL) {
         /* Free symbols treated as positive reals. */
@@ -707,6 +734,71 @@ Expr* intsimp_log_to_arctanh(Expr* e, Expr* x) {
  * Direct mirror of IntegrateRational.m:1746 / :1750.
  */
 
+/* An int64 into an mpz, portably (long is 32 bits on LLP64). */
+static void is_mpz_set_i64(mpz_t z, int64_t v) {
+    uint64_t u = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+    mpz_import(z, 1, -1, sizeof(uint64_t), 0, 0, &u);
+    if (v < 0) mpz_neg(z, z);
+}
+
+/* An exact integer leaf into z; false for anything else. */
+static bool is_int_leaf(const Expr* c, mpz_t z) {
+    if (c->type == EXPR_INTEGER) { is_mpz_set_i64(z, c->data.integer); return true; }
+    if (c->type == EXPR_BIGINT) { mpz_set(z, c->data.bigint); return true; }
+    return false;
+}
+
+/* The exact rational coefficient of one summand into q (1 when it carries no
+ * numeric factor); false when that factor is inexact. */
+static bool is_term_rational_coeff(const Expr* t, mpq_t q) {
+    const Expr* c = t;
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL
+        && t->data.function.head->data.symbol.name == SYM_Times
+        && t->data.function.arg_count >= 1)
+        c = t->data.function.args[0];
+    if (is_int_leaf(c, mpq_numref(q))) { mpz_set_ui(mpq_denref(q), 1); return true; }
+    if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL
+        && c->data.function.head->data.symbol.name == SYM_Rational
+        && c->data.function.arg_count == 2
+        && is_int_leaf(c->data.function.args[0], mpq_numref(q))
+        && is_int_leaf(c->data.function.args[1], mpq_denref(q))
+        && mpz_sgn(mpq_denref(q)) != 0) {
+        mpq_canonicalize(q);
+        return true;
+    }
+    mpq_set_ui(q, 1, 1);
+    return c->type != EXPR_REAL;
+}
+
+/* p times the reciprocal of the positive rational content of its summands'
+ * exact coefficients (4 - 4x + 4x^2 -> 1 - x + x^2; 9x/2 + 3/4 -> 6x + 1),
+ * or NULL when that content is 1 or p is not a sum.  Inside a Log the content
+ * is an additive constant.  Borrows p. */
+static Expr* is_drop_rational_content(Expr* p) {
+    if (!(p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+          && p->data.function.head->data.symbol.name == SYM_Plus)) return NULL;
+    mpz_t g, l;
+    mpq_t q;
+    mpz_init(g); mpz_init_set_ui(l, 1); mpq_init(q);
+    bool ok = true;
+    for (size_t i = 0; i < p->data.function.arg_count && ok; i++) {
+        ok = is_term_rational_coeff(p->data.function.args[i], q);
+        if (!ok) break;
+        mpz_gcd(g, g, mpq_numref(q));
+        mpz_lcm(l, l, mpq_denref(q));
+    }
+    Expr* out = NULL;
+    if (ok && mpz_sgn(g) != 0 && !(mpz_cmp_ui(g, 1) == 0 && mpz_cmp_ui(l, 1) == 0)) {
+        Expr* scale = eval_and_free(internal_divide((Expr*[]){
+            expr_new_bigint_from_mpz(l), expr_new_bigint_from_mpz(g) }, 2));
+        Expr* prod = internal_times((Expr*[]){ scale, expr_copy(p) }, 2);
+        out = expr_expand(prod);
+        expr_free(prod);
+    }
+    mpz_clear(g); mpz_clear(l); mpq_clear(q);
+    return out;
+}
+
 Expr* intsimp_strip_log_constants(Expr* e, Expr* x) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -730,6 +822,18 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x) {
     }
 
     Expr* arg = rebuilt->data.function.args[0];
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
+        && arg->data.function.head->data.symbol.name == SYM_Plus
+        && !intrat_freeq_test(arg, x)) {
+        /* Log[4 - 4x + 4x^2] -> Log[1 - x + x^2]: the rational content of a
+         * sum is an additive constant too; the Times branch below only sees a
+         * content written as a separate factor. */
+        Expr* prim = is_drop_rational_content(arg);
+        if (!prim) return rebuilt;
+        expr_free(rebuilt);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Log),
+            (Expr*[]){ prim }, 1));
+    }
     if (arg->type != EXPR_FUNCTION
         || arg->data.function.head->type != EXPR_SYMBOL
         || arg->data.function.head->data.symbol.name != SYM_Times) {
@@ -1845,6 +1949,35 @@ static Expr* ar_denest_walk(Expr* e /* borrowed */) {
     return eval_and_free(out);
 }
 
+/* The largest root index q of a Power[b, p/q] in e whose base b is not a
+ * rational number (1 when none): Cardano's and Ferrari's nested cube roots,
+ * not a plain surd such as 2^(1/8).  Borrowed. */
+static int64_t ar_max_nested_root_index(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 1;
+    int64_t m = 1;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && !ar_is_exact_rational(e->data.function.args[0])) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_FUNCTION && head_is(ex, SYM_Rational)
+            && ex->data.function.arg_count == 2
+            && ex->data.function.args[1]->type == EXPR_INTEGER)
+            m = ex->data.function.args[1]->data.integer;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int64_t k = ar_max_nested_root_index(e->data.function.args[i]);
+        if (k > m) m = k;
+    }
+    return m;
+}
+
+/* RootReduce[rad] is the Root object `root` (both borrowed). */
+static bool ar_root_reduces_to(Expr* rad, Expr* root) {
+    Expr* back = ar_call1("RootReduce", expr_copy(rad));
+    bool ok = back && expr_eq(back, root);
+    if (back) expr_free(back);
+    return ok;
+}
+
 /* Normal form of an x-free algebraic constant, when radical and no larger.
  * RootReduce (sub-millisecond) is canonical for a quadratic field:
  * (4 + 4 Sqrt[2])/(12 + 8 Sqrt[2]) -> -1 + Sqrt[2].  Past degree 2 it
@@ -1861,9 +1994,32 @@ static Expr* ar_reduce_const(Expr* c /* borrowed */, int* budget) {
     Expr* r = ar_call1("RootReduce", expr_copy(c));
     if (r && head_is(r, SYM_Root) && *budget > 0) {
         (*budget)--;
+        Expr* root = expr_copy(r);
         Expr* rad = ar_call1("ToRadicals", r);
         r = rad ? ar_denest_walk(rad) : NULL;
         if (rad) expr_free(rad);
+        /* Square-root towers (and plain surds of rationals) only.  A Root
+         * whose ToRadicals form needs a nested cube root is a residue of
+         * degree >= 3 over Q, written by Cardano or Ferrari (the quartic's
+         * resolvent cubic): a residue that is merely
+         * quadratic over the coefficient field (Q(I) and the like) became
+         * one of those, and in the casus irreducibilis its value comes from
+         * cube roots of non-real numbers whose imaginary parts cancel --
+         * exact, but large and numerically fragile (a radicand exactly -1/8
+         * computed through complex arithmetic).  The residues of
+         * ((4 + 2 Sqrt[2]) u^2)/((3 + 2 Sqrt[2]) (I + 5 u^2 + 5 I u^4 + u^6)),
+         * quadratic over Q(Sqrt[2], I), took 1515 leaves this way.  A
+         * constant that already carries a root of that index keeps the
+         * fallback.  The result must also give back the same Root (one exact
+         * RootReduce): the denesting rewrites square roots of non-real
+         * numbers, where a branch slip would change the constant. */
+        int64_t qc = ar_max_nested_root_index(c);
+        if (r && (ar_max_nested_root_index(r) > (qc > 2 ? qc : 2)
+                  || !ar_root_reduces_to(r, root))) {
+            expr_free(r);
+            r = NULL;
+        }
+        expr_free(root);
     }
     if (!r || ar_contains_inexact_or_root(r) || ar_leaves(r) > ar_leaves(c)) {
         if (r) expr_free(r);
@@ -2019,4 +2175,97 @@ Expr* intsimp_reduce_algebraic_constants(Expr* e /* borrowed */, Expr* x) {
         return expr_copy(e);
     }
     return out;
+}
+
+/* ====================================================================
+ * The rational part of a rational-function antiderivative —
+ * intsimp_compact_rational.
+ * ====================================================================
+ *
+ * Hermite reduction (Mack's linear version) accumulates g as a sum of
+ * separately cancelled fractions b_k / dbar_k, one per squarefree level.
+ * The driver used to push g through the same Expand-based passes as the log
+ * part, which distributed every numerator over its denominator:
+ *   63936/D - 165024 x/D - 2592 x^2/D   with D = 8 - 12x - 66x^2 + 55x^3 + 150x^4
+ * for one term of Bronstein's example (benchmark 266, bronstein-005), and on
+ * the multiplicity family a median size 1.8x the reference system's.
+ *
+ * The candidates, every one an exact rewrite of g:
+ *   (1) one fraction, numerator expanded, denominator in squarefree-factored
+ *       form (Together, then FactorSquareFree of the denominator);
+ *   (2) partial fractions over Q (Apart), when g has rational coefficients;
+ *   (3) g as accumulated (the per-level Hermite sum).
+ * The smallest LeafCount wins; ties go to the partial fractions, then to the
+ * single fraction.  Borrows g; owned result. */
+static bool ic_head_is(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == h;
+}
+
+static bool ic_rational_coefficients(const Expr* e, const Expr* x) {
+    if (!e) return true;
+    switch (e->type) {
+    case EXPR_INTEGER: case EXPR_BIGINT: return true;
+    case EXPR_SYMBOL: return e->data.symbol.name == x->data.symbol.name
+                          || strcmp(e->data.symbol.name, x->data.symbol.name) == 0;
+    case EXPR_FUNCTION: {
+        const Expr* h = e->data.function.head;
+        if (h->type != EXPR_SYMBOL) return false;
+        const char* s = h->data.symbol.name;
+        if (s != SYM_Plus && s != SYM_Times && s != SYM_Rational) {
+            if (s != SYM_Power || e->data.function.arg_count != 2) return false;
+            if (e->data.function.args[1]->type != EXPR_INTEGER) return false;
+        }
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!ic_rational_coefficients(e->data.function.args[i], x)) return false;
+        return true;
+    }
+    default: return false;
+    }
+}
+
+Expr* intsimp_compact_rational(Expr* g, Expr* x) {
+    if (!g) return NULL;
+    if (is_zero_poly(g) || intrat_freeq_test(g, x)) return expr_copy(g);
+    Expr* best = expr_copy(g);
+    int64_t best_lc = leaf_count_internal(best, true);
+    int best_rank = 2;   /* 0 = Apart, 1 = single fraction, 2 = as given */
+
+    /* (1) one fraction over the squarefree-factored denominator */
+    Expr* tg = eval_and_free(internal_together((Expr*[]){ expr_copy(g) }, 1));
+    if (tg) {
+        Expr* num = eval_and_free(internal_numerator((Expr*[]){ expr_copy(tg) }, 1));
+        Expr* den = eval_and_free(internal_denominator((Expr*[]){ expr_copy(tg) }, 1));
+        Expr* cand = NULL;
+        if (num && den) {
+            Expr* ne = expr_expand(num);
+            Expr* ds = eval_and_free(internal_factorsquarefree((Expr*[]){ expr_expand(den) }, 1));
+            if (ne && ds)
+                cand = eval_and_free(internal_divide((Expr*[]){ ne, ds }, 2));
+            else { if (ne) expr_free(ne); if (ds) expr_free(ds); }
+        }
+        if (num) expr_free(num);
+        if (den) expr_free(den);
+        expr_free(tg);
+        if (cand) {
+            int64_t lc = leaf_count_internal(cand, true);
+            if (lc <= best_lc) { expr_free(best); best = cand; best_lc = lc; best_rank = 1; }
+            else expr_free(cand);
+        }
+    }
+
+    /* (2) partial fractions over Q, for rational coefficients only (over a
+     * parameter field Apart can cost more than the whole integration) */
+    if (ic_rational_coefficients(g, x) && leaf_count_internal(g, true) < 4000) {
+        Expr* ap = eval_and_free(internal_apart((Expr*[]){ expr_copy(g), expr_copy(x) }, 2));
+        if (ap && !ic_head_is(ap, SYM_Apart)) {
+            int64_t lc = leaf_count_internal(ap, true);
+            if (lc < best_lc || (lc == best_lc && best_rank > 0)) {
+                expr_free(best); best = ap; best_lc = lc; best_rank = 0;
+                ap = NULL;
+            }
+        }
+        if (ap) expr_free(ap);
+    }
+    return best;
 }

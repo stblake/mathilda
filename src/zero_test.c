@@ -112,10 +112,11 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
  * false-positive <= (degree/|S|)^k for k laddered samples). */
 #define ZT_SCREEN_SAMPLES  24
 /* Complex-domain screens (Assumptions -> Element[x, Complexes]): every sign
- * orthant of the symbols is visited at least this many times, half of the
- * visits with the complex-domain symbols on the real line, up to
+ * orthant of the symbols is visited at least this many times (32: each of the
+ * 16 (Re, Im) magnitude-band pairs once), half of the visits with the
+ * complex-domain symbols on the real line, up to
  * ZT_CPLX_SCREEN_MAX points (see decide_schwartz_zippel_core). */
-#define ZT_CPLX_ORTHANT_VISITS 16
+#define ZT_CPLX_ORTHANT_VISITS 32
 #define ZT_CPLX_SCREEN_MAX     2048
 #define ZT_CONFIRM_SAMPLES 4
 
@@ -2183,6 +2184,17 @@ static int g_zt_cplx_real = -1;
  * orthant's 8 real visits missed it ~12% of the time.  Band k of 4 pins the
  * magnitude to [1/8, 1/2), [1/2, 1), [1, 2) or [2, 2^b]. */
 static int g_zt_cplx_band = -1;
+/* Magnitude bands of the real and imaginary parts of a COMPLEX visit of the
+ * complex-domain screen (-1: none, i.e. both log-uniform on [1/8, 2^b]).  A
+ * branch error off the real axis is confined to a bounded region between two
+ * cuts -- the Legendre form of Int dx/Sqrt[1 + x^3] whose branch factor flips
+ * on a patch around x = -1 - I of diameter ~2 -- and independent log-uniform
+ * parts put ~1 complex draw in 25 there, so an orthant's 8 complex visits
+ * missed it about half the time and the wrong answer was certified.  Pinning
+ * both parts to bands (4 x 4 combinations, cycled) puts every scale of both
+ * parts into every orthant. */
+static int g_zt_cplx_re_band = -1;
+static int g_zt_cplx_im_band = -1;
 
 static bool zt_negative_draw(void) {
     if (g_zt_sign_pattern >= 0 && g_zt_sym_index < 30)
@@ -2340,11 +2352,24 @@ static Expr* sample_random_value_spec(const SampleSpec* spec, int num_bits) {
             (g_zt_cplx_real >= 0 ? g_zt_cplx_real == 1 : draw_int_range(0, 2) == 0);
         /* a real visit of the screen draws its magnitude from its band */
         int saved_band = g_zt_cplx_band;
-        if (!real_visit) g_zt_cplx_band = -1;
+        if (!real_visit) g_zt_cplx_band = g_zt_cplx_re_band;
         double re = sample_channel(&spec->val, false, num_bits);
-        g_zt_cplx_band = -1;
+        g_zt_cplx_band = real_visit ? -1 : g_zt_cplx_im_band;
         double im = sample_channel(&spec->im, false, num_bits);
         g_zt_cplx_band = saved_band;
+        /* The screen's sign pattern gives Re and Im the SAME bit (both draws
+         * read bit g_zt_sym_index), so the complex visits of a one-symbol test
+         * lay in quadrants I and III only and a failure confined to II or IV
+         * was never sampled: a Bronstein candidate for Sqrt[1 + Sin[x]], wrong
+         * near u = -1/5 + I/10, passed.  On a banded complex visit the Im sign
+         * is instead Re's sign flipped by the parity of the band pair, so each
+         * quadrant meets every Re band and every Im band. */
+        if (!real_visit && g_zt_cplx_im_band >= 0 && g_zt_cplx_re_band >= 0 &&
+            !spec->im.has_lo && !spec->im.has_hi && spec->im.sign == 0) {
+            bool flip = ((g_zt_cplx_re_band + g_zt_cplx_im_band) & 1) != 0;
+            bool re_neg = re < 0.0;
+            im = (re_neg != flip) ? -fabs(im) : fabs(im);
+        }
         /* The real line is part of C, and a measure-zero part that random
          * complex draws never reach: an antiderivative that fails only on a
          * real-axis branch cut (Sqrt[(1-x)/(1+x)] on x < -1, where the integrand
@@ -3173,8 +3198,11 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
      * is -f on parts of x^2 < a when a, b, c, d > 0: 2 orthants of 32, ~15% of
      * their real points, so ~1 real draw per orthant missed it 3 times in 4.
      * Each orthant is visited ZT_CPLX_ORTHANT_VISITS times, every other visit
-     * with the complex-domain symbols real.  The screen is machine precision
-     * (~0.5 ms a point), and only complex-domain tests pay for it. */
+     * with the complex-domain symbols real; the real visits cycle the 4
+     * magnitude bands of g_zt_cplx_band and the complex visits the 16 band
+     * pairs of (Re, Im) (g_zt_cplx_re_band / _im_band), so 32 visits cover
+     * each pair once.  The screen is machine precision (~0.5 ms a point), and
+     * only complex-domain tests pay for it. */
     int cplx_bits = -1;
     if (specs)
         for (size_t i = 0; i < syms.count; ++i)
@@ -3192,6 +3220,8 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
         if (cplx_bits >= 0) {
             g_zt_cplx_real = ((trial >> cplx_bits) & 1) == 0;
             g_zt_cplx_band = g_zt_cplx_real ? (trial >> (cplx_bits + 1)) & 3 : -1;
+            g_zt_cplx_re_band = g_zt_cplx_real ? -1 : (trial >> (cplx_bits + 1)) & 3;
+            g_zt_cplx_im_band = g_zt_cplx_real ? -1 : (trial >> (cplx_bits + 3)) & 3;
         }
         ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true,
                                             &overflow, conform_facts, nconform, &skip);
@@ -3206,6 +3236,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
     g_zt_sign_pattern = saved_pattern;   /* confirm phase: random signs */
     g_zt_cplx_real = saved_cplx_real;
     g_zt_cplx_band = -1;
+    g_zt_cplx_re_band = g_zt_cplx_im_band = -1;
     /* Every screen point overflowed out of range — no informative evidence at
      * all — so the identity cannot be affirmed: return UNKNOWN honestly. */
     if (screen_informative == 0) { verdict = ZERO_TEST_UNKNOWN; goto done; }
@@ -3232,6 +3263,7 @@ done:
     g_zt_sign_pattern = saved_pattern;
     g_zt_cplx_real = saved_cplx_real;
     g_zt_cplx_band = -1;
+    g_zt_cplx_re_band = g_zt_cplx_im_band = -1;
     random_pop_seed();
     free(specs);
     free((void*)conform_facts);
@@ -3326,12 +3358,148 @@ static ZeroTestResult zt_decide_core(const Expr* e) {
     return decide_schwartz_zippel(e);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Elliptic-integral atoms: a sufficient pre-test                     *
+ *                                                                     *
+ *  The derivative of a Legendre-form antiderivative c(x) F(phi(x)|m)  *
+ *  carries F itself only through c'(x) F, and for a correct answer    *
+ *  those terms cancel identically: the residual D[r, x] - f is        *
+ *  A + B1 F + B2 Pi + ... with every B_i == 0.  Sampling it pays for   *
+ *  every elliptic call at every point, and a machine EllipticPi whose  *
+ *  characteristic term 1 - n Sin[phi]^2 lies on the negative real      *
+ *  axis (x in (-1, 3) for 1/((x - 3) Sqrt[1 + x^3])) is outside the    *
+ *  domain where Carlson's duplication is valid, so Arb integrates      *
+ *  numerically: ~120 ms a call at 53 bits, ten calls a point (five     *
+ *  copies, each read for the value and again for the operand scale).  *
+ *  PossibleZeroQ of that one residual took 8 s.                        *
+ *                                                                     *
+ *  So each distinct maximal elliptic call that depends on a free       *
+ *  symbol is first replaced by a fresh symbol t_i, and the test is run *
+ *  on e' = e[t_i] with every t_i ranging over the COMPLEX plane (the   *
+ *  atoms' values are complex numbers, and an e' that vanished for real *
+ *  t only would say nothing about them).  e is e' evaluated at         *
+ *  t_i = the atoms, so e' == 0 implies e == 0: a TRUE settles it.      *
+ *  Anything else -- FALSE, UNKNOWN -- proves nothing about e (the      *
+ *  atoms may satisfy a relation e' does not know), and the ordinary    *
+ *  test runs on e exactly as before.  The pre-test can therefore only  *
+ *  turn a verdict into TRUE when e' is identically zero; every FALSE   *
+ *  is still the ordinary test's.                                       *
+ * ------------------------------------------------------------------ */
+typedef struct { Expr** from; Expr** to; size_t n, cap; } ZtEllAtoms;
+
+static bool zt_is_elliptic_call(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count == 0) return false;
+    const Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    return n == SYM_EllipticF || n == SYM_EllipticE || n == SYM_EllipticPi || n == SYM_EllipticK;
+}
+
+/* Does e contain an elliptic call anywhere? */
+static bool zt_mentions_elliptic(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (zt_is_elliptic_call(e)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        if (zt_mentions_elliptic(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool zt_has_symbol_named(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (zt_has_symbol_named(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        if (zt_has_symbol_named(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* Owned copy of `e` with every maximal elliptic call that has a free symbol
+ * replaced by its atom symbol (structurally equal calls share one); NULL when
+ * there is none.  `root` is the whole input: a fresh name must not occur in it
+ * (an outer pre-test's atom is a free symbol of an inner question). */
+static Expr* zt_abstract_elliptic(const Expr* e, const Expr* root, ZtEllAtoms* at) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (zt_is_elliptic_call(e) && has_free_symbols(e)) {
+        for (size_t i = 0; i < at->n; i++)
+            if (expr_eq(at->from[i], (Expr*)e)) return expr_copy(at->to[i]);
+        if (at->n == at->cap) {
+            at->cap = at->cap ? at->cap * 2 : 4;
+            at->from = (Expr**)realloc(at->from, at->cap * sizeof(Expr*));
+            at->to = (Expr**)realloc(at->to, at->cap * sizeof(Expr*));
+        }
+        const char* nm = NULL;
+        for (size_t k = at->n + 1;; k++) {
+            char buf[64];
+            snprintf(buf, sizeof buf, "PossibleZeroQ`Private`ellatom%zu", k);
+            nm = intern_symbol(buf);
+            if (!zt_has_symbol_named(root, nm)) break;
+        }
+        at->from[at->n] = expr_copy((Expr*)e);
+        at->to[at->n] = expr_new_symbol(nm);
+        at->n++;
+        return expr_copy(at->to[at->n - 1]);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = zt_abstract_elliptic(e->data.function.args[i], root, at);
+        if (r && !args) {
+            args = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < i; j++) args[j] = expr_copy(e->data.function.args[j]);
+        }
+        if (args) args[i] = r ? r : expr_copy(e->data.function.args[i]);
+    }
+    if (!args) return NULL;
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
+/* True when e' (the elliptic atoms of e abstracted, see above) is decided
+ * identically zero under ctx (NULL: none) with every atom complex. */
+static bool zt_elliptic_pretest(const Expr* e, const struct AssumeCtx* ctx) {
+    if (!zt_mentions_elliptic(e)) return false;
+    if (ctx) {
+        if (ctx->inconsistent) return false;
+        /* a fact about an atom would not constrain its fresh symbol */
+        for (size_t i = 0; i < ctx->count; ++i)
+            if (zt_mentions_elliptic(ctx->facts[i])) return false;
+    }
+    ZtEllAtoms at = { NULL, NULL, 0, 0 };
+    Expr* ea = zt_abstract_elliptic(e, e, &at);
+    bool ok = false;
+    if (ea) {
+        size_t base = ctx ? ctx->count : 0;
+        AssumeCtx* c2 = (AssumeCtx*)calloc(1, sizeof(AssumeCtx));
+        if (c2) {
+            c2->capacity = base + at.n;
+            c2->facts = (Expr**)malloc(sizeof(Expr*) * c2->capacity);
+            if (c2->facts) {
+                for (size_t i = 0; i < base; ++i) c2->facts[c2->count++] = expr_copy(ctx->facts[i]);
+                for (size_t i = 0; i < at.n; ++i) {
+                    Expr* el[2] = { expr_copy(at.to[i]), expr_new_symbol(SYM_Complexes) };
+                    c2->facts[c2->count++] = expr_new_function(expr_new_symbol(SYM_Element), el, 2);
+                }
+                ok = zero_test_decide_assuming(ea, c2) == ZERO_TEST_TRUE;
+            }
+            assume_ctx_free(c2);
+        }
+        expr_free(ea);
+    }
+    for (size_t i = 0; i < at.n; i++) { expr_free(at.from[i]); expr_free(at.to[i]); }
+    free(at.from);
+    free(at.to);
+    return ok;
+}
+
 /* Public entry.  Apply the exponential-combining normalisation (Stage 0.5),
  * then run the staged decision procedure on the normalised expression.  The
  * normalisation is value-preserving, so the verdict is unchanged; it only spares
  * the numeric ladder the tiny*huge cancellation of a same-base exponential
  * product split across summands. */
 ZeroTestResult zero_test_decide(const Expr* e) {
+    if (zt_elliptic_pretest(e, NULL)) return ZERO_TEST_TRUE;
     Expr* norm = zt_normalize_exp_kernels(e);
     ZeroTestResult r = zt_decide_core(norm ? norm : e);
     if (norm) expr_free(norm);
@@ -3382,6 +3550,7 @@ static ZeroTestResult zt_decide_assuming_core(const Expr* e, const struct Assume
 ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* ctx) {
     /* No usable assumptions → the legacy path, byte-for-byte. */
     if (!ctx || ctx->count == 0) return zero_test_decide(e);
+    if (zt_elliptic_pretest(e, ctx)) return ZERO_TEST_TRUE;
     Expr* norm = zt_normalize_exp_kernels(e);
     ZeroTestResult r = zt_decide_assuming_core(norm ? norm : e, ctx);
     if (norm) expr_free(norm);

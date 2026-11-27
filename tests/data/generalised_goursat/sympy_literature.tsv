@@ -1,0 +1,52 @@
+label	status	seconds	defect	unevaluated	residual
+literature: (t**2 - 1)/((t**2 + 1)*sqrt(t**4 + 1))   [Euler]	elementary	0.5501	8.7e-33	False	0
+literature: (t**2 + 1)/((t**2 - 1)*sqrt(t**4 + 1))   [Euler]	elementary	0.4205	1.3e-32	False	0
+literature: t/sqrt(t**4 + 1)   [u = t^2]	elementary	0.4502	4.2e-168	False	0
+literature: 1/sqrt(1 - t**4)   [lemniscatic, first kind]	non-elementary	0.1731	0.0e+00	False	1/sqrt(1 - t**4)
+literature: t**2/sqrt(1 - t**4)   [lemniscatic, second kind]	non-elementary	0.5931	0.0e+00	False	t**2/sqrt(1 - t**4)
+literature: sqrt(t**4 + 1)/t   [u = t^2]	elementary	0.4767	1.4e-166	False	0
+literature: sqrt(t**4 + 1)/t**3   [u = t^2]	elementary	0.4900	4.2e-168	False	0
+literature: sqrt(t**4 + 1)   [Chebyshev]	non-elementary	0.1756	0.0e+00	False	2/(3*sqrt(t**4 + 1))
+literature: (t - 1)/((t + 1)*sqrt(t**3 + t**2 + t))   [u = t + 1/t]	elementary	0.4282	1.7e-33	False	0
+literature: (t**2 + 1)/(t*sqrt(t**4 + t**2 + 1))   [u = t - 1/t]	elementary	0.3266	2.7e-166	False	0
+literature: (t**2 - 1)/(t*sqrt(t**4 + 3*t**2 + 1))   [u = t + 1/t]	elementary	0.3406	1.4e-166	False	0
+literature: 1/sqrt(t**3 + t)   [first kind]	non-elementary	0.0721	0.0e+00	False	1/sqrt(t**3 + t)
+literature: t/(sqrt(t**3 - 1)*(t**3 + 8))   [Legendre-Clausen]	elementary	4.6809	6.4e-34	False	0
+literature: (t**3 - 4)/(sqrt(t**3 - 1)*(t**3 + 8))   [Goursat]	elementary	4.6650	8.5e-33	False	0
+literature: t**2/(sqrt(t**3 - 1)*(t**3 + 8))   [Goursat]	elementary	0.3536	2.7e-33	False	0
+literature: (t - 1)/((t + 2)*sqrt(t**3 - 1))   [Goursat]	elementary	4.7650	9.6e-33	False	0
+literature: t/((t**3 - 8)*sqrt(t**3 + 1))   [Legendre-Clausen, t -> -t]	elementary	4.8081	2.7e-33	False	0
+literature: 1/((t + 1)*sqrt(t**3 + 1))   [pole at a branch point]	non-elementary	4.7712	0.0e+00	False	(t/3 + 1/3)/sqrt(t**3 + 1)
+literature: sqrt(t**3 + 1)/t   [u = t^3]	elementary	0.2047	1.4e-166	False	0
+literature: sqrt(t**3 - 1)/t**4   [u = t^3]	elementary	0.2681	2.7e-33	False	0
+literature: 1/(t*sqrt(t**4 - 1))   [u = t^2]	elementary	0.2841	1.1e-33	False	0
+literature: t/sqrt(t**4 + 10*t**2 - 96*t - 71)   [Chebyshev's torsion example]	elementary	11.3682	5.5e-32	False	0
+literature: (2*t**2 + 1)/sqrt(t**4 + t**2 - 2)   []	non-elementary	1.3742	0.0e+00	False	(2*t**2 + 1)/sqrt(t**4 + t**2 - 2)
+literature: 1/((t**2 - 2)*sqrt(t**4 - 5*t**2 + 4))   []	non-elementary	0.5285	5.8e-34	False	-1/(4*sqrt(t**4 - 5*t**2 + 4))
+literature: (t**4 - 1)/((t**4 + 1)*sqrt(t**4 + t**2 + 1))   []	elementary	0.6906	1.1e-32	False	0
+literature: (t**3 - 1)**(-1/3)   [Chebyshev]	elementary	0.4108	2.6e-35	False	0
+literature: (1 - t**3)**(-1/3)   [Chebyshev]	elementary	0.4644	4.0e-30	False	0
+literature: t/(t**3 + 1)**(1/3)   [Chebyshev]	non-elementary	0.3992	0.0e+00	False	t/(t**3 + 1)**(1/3)
+literature: (t**3 + 1)**(1/3)/t   [u = t^3]	elementary	0.3248	1.0e-33	False	0
+literature: (t**3 + 1)**(1/3)/t**2   [Chebyshev]	elementary	0.3699	2.5e-35	False	0
+literature: (t**3 + 1)**(2/3)/t**3   [Chebyshev]	elementary	0.4124	2.6e-35	False	0
+literature: (t**3 + 1)**(2/3)   [Chebyshev: 1/3 + 2/3 = 1]	elementary	0.4300	1.7e-35	False	0
+literature: (t**3 + 1)**(1/3)   [Chebyshev]	non-elementary	0.1404	0.0e+00	False	1/(2*(t**3 + 1)**(2/3))
+literature: (t**3 + 3*t**2 + 3*t + 2)**(-1/3)   [shift of t^3+1]	elementary	0.6820	9.1e-36	False	0
+literature: (t**2 - 1)**(-2/3)   [first kind]	non-elementary	0.0858	0.0e+00	False	(t**2 - 1)**(-2/3)
+literature: 1/(t*(t**2 - 1)**(1/3))   [u = t^2]	elementary	2.8787	5.2e-31	False	0
+literature: t/(t**2 - 1)**(1/3)   [u = t^2]	elementary	0.0464	0.0e+00	False	0
+literature: (t**3 + t)**(-1/3)   [review counterexample]	elementary	1.5042	5.2e-34	False	0
+literature: (t**3 - t)**(-1/3)   [same symmetry]	elementary	2.2537	5.0e-34	False	0
+literature: (t**3 - 3*t + 1)**(-1/3)   [cyclic cubic]	undecided	6.7460	3.1e-34	False	(t**5 - t**4 - 2*t**3 + 4*t**2 - 4*t + 1)/((t**3 - 3*t + 1)**(1/3)*(6*t**5 - 24*t**4 + 18*t**3 + 6*t**2 - 6*t))
+literature: t*(2*t**3 - 1)/(t**3 - 1)**(1/3)   [exact]	elementary	0.0997	0.0e+00	False	0
+literature: (5*t**2 - 7*t/(t**3 + 1) + 1)/(t**3 - 1)**(1/3)   [paper Example 5.8]	elementary	0.8184	2.4e-32	False	0
+literature: (t**6 - 2*t**3 + 4)/((t**3 - 4)*(t**3 - 2)**(2/3)*(t**3 - 1))   [second level]	elementary	4.3111	1.0e-32	False	0
+literature: 1/((t + 1)*(t**3 + 1)**(1/3))   []	non-elementary	0.4062	0.0e+00	False	t/(t**3 + 1)**(1/3)
+literature: 1/((t - 1)*(t**3 - 1)**(2/3))   []	non-elementary	0.2224	0.0e+00	False	-1/(2*(t**3 - 1)**(2/3))
+literature: (t + 1)/((t - 1)*(t**3 - 1)**(1/3))   []	non-elementary	0.6444	2.6e-35	False	2*t/(t**3 - 1)**(1/3)
+literature: 1/(t*(t**3 - 3*t**2 + 3*t)**(1/3))   []	non-elementary	0.6454	0.0e+00	False	(t - 1)/(t**3 - 3*t**2 + 3*t)**(1/3)
+literature: (t**2 + 1)/((t**2 - 1)*(t**3 + t)**(1/3))   []	elementary	2.3372	4.1e-31	False	0
+literature: ((t - 3)*(t - 2)*(t - 1))**(-1/3)   [symmetric roots]	elementary	2.4417	5.4e-33	False	0
+literature: t/((t - 3)*(t - 2)*(t - 1))**(2/3)   [t-2 elementary, constant first kind]	non-elementary	2.3004	1.6e-33	False	2/(t**3 - 6*t**2 + 11*t - 6)**(2/3)
+literature: (t**3 + t + 1)**(-1/3)   [torsion question]	undecided	4.8924	2.5e-34	False	(81*t**5 + 243*t**4 + 54*t**3 + 324*t**2 + 216*t - 27)/((t**3 + t + 1)**(1/3)*(486*t**5 + 1296*t**4 + 1026*t**3 - 522*t**2 - 54*t - 56))

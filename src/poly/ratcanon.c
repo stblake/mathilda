@@ -437,11 +437,21 @@ static Expr* rcp_build_forward(const Expr* e, Builder* b) {
         }
         /* imaginary unit */
         if (hn == SYM_Complex && ac == 2) {
-            Expr* rel = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
-                expr_new_function(expr_new_symbol(SYM_Power),
-                    (Expr*[]){ expr_new_symbol("I"), expr_new_integer(2) }, 2),
-                expr_new_integer(1) }, 2);
-            const char* s = rcf_gen(f, b, expr_new_symbol("I"), RCG_ALGEBRAIC, rel);
+            /* The relation must be written in the GENERATOR symbol, which
+             * rcf_gen only names on insert -- the same placeholder-then-patch
+             * as rcp_rad_sym.  It used to be built over the kernel I itself:
+             * I^2 + 1 evaluates to 0, so the tower reduction never reduced a
+             * power of I, kept $rcg^5 terms whose substitution back was not
+             * the reduced fraction, and a Together over Q(I, Sqrt[3]) printed
+             * Power::infy (1/0) on the way. */
+            size_t before = f->n;
+            const char* s = rcf_gen(f, b, expr_new_symbol("I"), RCG_ALGEBRAIC, NULL);
+            if (f->n > before) {
+                f->gens[f->n - 1].relation = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_new_symbol(s), expr_new_integer(2) }, 2),
+                    expr_new_integer(1) }, 2);
+            }
             return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
                 expr_copy(av[0]),
                 expr_new_function(expr_new_symbol(SYM_Times),

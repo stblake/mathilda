@@ -22,6 +22,8 @@
 #include "intrat.h"
 #include "parse.h"
 #include "intrat_internal.h"
+#include "intrat_subres.h"
+#include "intrat_alg.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -36,6 +38,7 @@
 #include "options.h"
 #include "rationalize.h"
 #include "root.h"
+#include "core.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,6 +81,83 @@ static void intrat_trace(const char* fn, const char* dir, Expr* e) {
 /* owns it).  None of them free their input arguments — every helper  */
 /* makes its own copies.                                              */
 /* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/* Algorithm choices: Method -> {"BronsteinRational", "Hermite" -> ...,  */
+/* "LogPart" -> ..., "RealForm" -> ...} and the same rules as trailing  */
+/* options of Integrate`BronsteinRational.  An installed setting is      */
+/* valid for the top-level evaluation that installed it only (a         */
+/* TimeConstrained unwind that skips the restore cannot leak it into     */
+/* the next input).                                                      */
+/*                                                                      */
+/* The Automatic defaults were chosen by measurement on benchmark 266    */
+/* (benchmarks/266-rational-integration/REPORT.md, "Algorithm grid").    */
+/* ------------------------------------------------------------------ */
+#define INTRAT_DEFAULT_HERMITE  INTRAT_HERMITE_LINEAR
+#define INTRAT_DEFAULT_LOGPART  INTRAT_LOGPART_RT
+
+static IntratMethodOptions g_ir_opts = { -1, -1, -1 };
+static uint64_t g_ir_opts_stamp = 0;
+
+void intrat_method_options_default(IntratMethodOptions* o) {
+    o->hermite = o->logpart = o->realform = -1;
+}
+
+static IntratMethodOptions ir_opts(void) {
+    IntratMethodOptions o;
+    if (g_ir_opts_stamp == eval_toplevel_id()) o = g_ir_opts;
+    else intrat_method_options_default(&o);
+    return o;
+}
+
+void intrat_method_options_install(const IntratMethodOptions* o, IntratMethodOptions* saved) {
+    *saved = ir_opts();
+    g_ir_opts = *o;
+    g_ir_opts_stamp = eval_toplevel_id();
+}
+
+void intrat_method_options_restore(const IntratMethodOptions* saved) {
+    g_ir_opts = *saved;
+    g_ir_opts_stamp = eval_toplevel_id();
+}
+
+int intrat_method_suboption(const Expr* rule, IntratMethodOptions* o) {
+    if (!rule || rule->type != EXPR_FUNCTION || rule->data.function.arg_count != 2
+        || rule->data.function.head->type != EXPR_SYMBOL
+        || (rule->data.function.head->data.symbol.name != SYM_Rule
+            && rule->data.function.head->data.symbol.name != SYM_RuleDelayed)) return 0;
+    const Expr* k = rule->data.function.args[0];
+    const Expr* v = rule->data.function.args[1];
+    if (k->type != EXPR_STRING) return 0;
+    const char* vs = v->type == EXPR_STRING ? v->data.string : NULL;
+    bool vauto = v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic;
+    bool vnone = v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "None") == 0;
+    if (strcmp(k->data.string, "Hermite") == 0) {
+        if (vauto) { o->hermite = -1; return 1; }
+        if (!vs) return 0;
+        if (strcmp(vs, "Linear") == 0 || strcmp(vs, "Mack") == 0) { o->hermite = INTRAT_HERMITE_LINEAR; return 1; }
+        if (strcmp(vs, "Quadratic") == 0) { o->hermite = INTRAT_HERMITE_QUADRATIC; return 1; }
+        if (strcmp(vs, "HorowitzOstrogradsky") == 0) { o->hermite = INTRAT_HERMITE_HOROWITZ; return 1; }
+        return 0;
+    }
+    if (strcmp(k->data.string, "LogPart") == 0) {
+        if (vauto) { o->logpart = -1; return 1; }
+        if (!vs) return 0;
+        if (strcmp(vs, "LazardRiobooTrager") == 0) { o->logpart = INTRAT_LOGPART_LRT; return 1; }
+        if (strcmp(vs, "RothsteinTrager") == 0) { o->logpart = INTRAT_LOGPART_RT; return 1; }
+        if (strcmp(vs, "Czichowski") == 0) { o->logpart = INTRAT_LOGPART_CZICHOWSKI; return 1; }
+        return 0;
+    }
+    if (strcmp(k->data.string, "RealForm") == 0) {
+        if (vauto) { o->realform = -1; return 1; }
+        if (vnone) { o->realform = INTRAT_REALFORM_NONE; return 1; }
+        if (!vs) return 0;
+        if (strcmp(vs, "Rioboo") == 0) { o->realform = INTRAT_REALFORM_RIOBOO; return 1; }
+        if (strcmp(vs, "LogToReal") == 0) { o->realform = INTRAT_REALFORM_LOGTOREAL; return 1; }
+        return 0;
+    }
+    return 0;
+}
 
 static Expr* call_eval(const char* head, Expr** args, size_t argc) {
     Expr* call = expr_new_function(expr_new_symbol(head), args, argc);
@@ -165,11 +245,14 @@ static bool intrat_polyqr(Expr* a, Expr* b, Expr* x, Expr** out_q, Expr** out_r)
 static Expr* intrat_exquo(Expr* a, Expr* b, Expr* x) {
     Expr *q = NULL, *r = NULL;
     if (!intrat_polyqr(a, b, x, &q, &r)) return NULL;
-    if (r && !is_zero_poly(r)) {
-        fprintf(stderr,
-            "Integrate`exquo::remainder failed to produce a zero remainder.\n");
-    }
+    /* A nonzero remainder means a caller's divisibility premise failed (an
+     * undecided zero test over parameters or radicals).  The quotient used
+     * to be returned anyway, after a raw stderr line that bypassed Quiet and
+     * Check, and Hermite reduction / the S_i correction carried on with wrong
+     * data.  Decline: every caller treats NULL as "cannot integrate". */
+    bool exact = !r || is_zero_poly(r);
     if (r) expr_free(r);
+    if (!exact) { if (q) expr_free(q); return NULL; }
     return q;
 }
 
@@ -552,6 +635,21 @@ static Expr* intrat_hermite_reduce(Expr* f, Expr* x) {
     Expr* a = expr_expand(a_raw); expr_free(a_raw);
     Expr* d_raw = intrat_denominator(f);
     Expr* d = expr_expand(d_raw); expr_free(d_raw);
+
+    /* Over Q: the native (FLINT) reduction in the selected variant
+     * (Hermite -> "Linear" | "Quadratic" | "HorowitzOstrogradsky").  The
+     * Expr version below (Mack's linear) serves every other coefficient
+     * domain. */
+    {
+        IntratMethodOptions o = ir_opts();
+        int hv = o.hermite >= 0 ? o.hermite : INTRAT_DEFAULT_HERMITE;
+        Expr* nat = intrat_alg_hermite(a, d, x, hv);
+        if (nat) {
+            expr_free(a); expr_free(d);
+            intrat_trace("HermiteReduce", "OUT", nat);
+            return nat;
+        }
+    }
     Expr* g = expr_new_integer(0);
 
     /* dbar = gcd(d, D[d, x]) — monic gcd via PolynomialExtendedGCD. */
@@ -1556,6 +1654,16 @@ static Expr* expand_palindromic_quartic_real(
  * substitution loop. */
 static bool intrat_contains_complex(const Expr* e);
 
+/* True when e contains a RootSum (an unexpanded log sum).  Borrowed. */
+static bool intrat_contains_rootsum(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_RootSum) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_contains_rootsum(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
     /* Parameters are allowed only for a complex-coefficient linear or
      * quadratic factor: that is the factor LogToReal now declines (it is valid
@@ -1664,10 +1772,13 @@ static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
             Expr* sm = eval_and_free(nlp_sqrt(u_m));
 
             Expr* t1 = nlp_sub_body(body, bvar, sp);
-            Expr* t2 = nlp_sub_body(body, bvar, eval_and_free(nlp_neg(expr_copy(sp))));
+            /* nlp_sub_body borrows its value: the negated roots are freed here */
+            Expr* nsp = eval_and_free(nlp_neg(expr_copy(sp)));
+            Expr* nsm = eval_and_free(nlp_neg(expr_copy(sm)));
+            Expr* t2 = nlp_sub_body(body, bvar, nsp);
             Expr* t3 = nlp_sub_body(body, bvar, sm);
-            Expr* t4 = nlp_sub_body(body, bvar, eval_and_free(nlp_neg(expr_copy(sm))));
-            expr_free(sp); expr_free(sm);
+            Expr* t4 = nlp_sub_body(body, bvar, nsm);
+            expr_free(sp); expr_free(sm); expr_free(nsp); expr_free(nsm);
 
             result = eval_and_free(internal_plus(
                 (Expr*[]){ t1, t2, t3, t4 }, 4));
@@ -1910,10 +2021,22 @@ static Expr* intrat_bucket_const_part(Expr* Qi, Expr* t, Expr* xgate,
  * With both NULL this is the original pure-rational log part.
  *
  * Direct port of IntegrateRational.m:751-801. */
+/* Root-mode log part over Q(Root) (defined with the Q(alpha) helpers). */
+typedef struct IrRootMode IrRootMode;
+static Expr* intrat_log_part_core_root(Expr* a, Expr* d, Expr* x, Expr* t,
+                                       bool root_sum, bool* handled);
+
 static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
                                   bool root_sum, Expr* dprime_override,
                                   Expr* xgate, Expr** remainder_out, bool decide) {
     if (remainder_out) *remainder_out = NULL;
+    /* Coefficients in Q(alpha) for one Root object alpha: the whole log
+     * part over that number field (see intrat_log_part_core_root). */
+    if (!dprime_override && !xgate) {
+        bool handled = false;
+        Expr* rr = intrat_log_part_core_root(a, d, x, t, root_sum, &handled);
+        if (handled) return rr;
+    }
     /* prs = SubresultantPolynomialRemainders[d, a - t*D(d), x] */
     Expr* dprime_e;
     if (dprime_override) {
@@ -1939,11 +2062,19 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
         atdp = expr_expand(atdp_raw); expr_free(atdp_raw);
     }
 
-    Expr* prs_args[3] = { expr_copy(d), expr_copy(atdp), expr_copy(x) };
-    Expr* prs_call = expr_new_function(
-        expr_new_symbol(SYM_SubresultantPolynomialRemainders), prs_args, 3);
-    Expr* prs = evaluate(prs_call);
-    expr_free(prs_call);
+    /* The subresultant PRS of d and a - t D(d) in Z[t][x], natively (FLINT)
+     * for rational coefficients; the generic Expr pseudo-remainder chain
+     * otherwise (parameters, radicals, the transcendental callers).  The
+     * generic chain has exponential coefficient growth: 19 s for
+     * Czichowski's degree-14 example, against 10 ms natively. */
+    Expr* prs = intrat_subres_chain(d, atdp, x, t);
+    if (!prs) {
+        Expr* prs_args[3] = { expr_copy(d), expr_copy(atdp), expr_copy(x) };
+        Expr* prs_call = expr_new_function(
+            expr_new_symbol(SYM_SubresultantPolynomialRemainders), prs_args, 3);
+        prs = evaluate(prs_call);
+        expr_free(prs_call);
+    }
     if (!prs) {
         expr_free(a); expr_free(d); expr_free(atdp); return NULL;
     }
@@ -2155,6 +2286,35 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
             expr_free(s);
         }
         expr_free(Qi);
+    }
+
+    /* Every Q_i of positive degree has an S_i (Bronstein §2.5: the
+     * subresultant of x-degree i exists for each nontrivial squarefree
+     * factor of the resultant).  A failed lookup or normalisation above used
+     * to `continue`, and the output loops below then skipped that Q_i: its
+     * whole RootSum vanished and the antiderivative was silently wrong.
+     * Decline instead. */
+    {
+        bool incomplete = false;
+        for (size_t i_idx = 0; i_idx < nQ && !incomplete; i_idx++) {
+            if (S[i_idx]) continue;
+            Expr* Qi = partial_mode ? (Qconst[i_idx] ? expr_copy(Qconst[i_idx]) : NULL)
+                                    : list_get(Q->data.function.args[i_idx], 1);
+            if (Qi && get_degree_poly(Qi, t) > 0) incomplete = true;
+            if (Qi) expr_free(Qi);
+        }
+        if (incomplete) {
+            for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (S[i_idx]) expr_free(S[i_idx]);
+            free(S);
+            if (partial_mode) {
+                for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (Qconst[i_idx]) expr_free(Qconst[i_idx]);
+                free(Qconst);
+                if (remainder_local) expr_free(remainder_local);
+            }
+            expr_free(Q); expr_free(prs);
+            expr_free(a); expr_free(d);
+            return NULL;
+        }
     }
     expr_free(prs);
     expr_free(a); expr_free(d);
@@ -2759,6 +2919,884 @@ static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
     return result;
 }
 
+/* ------------------------------------------------------------------ */
+/* Arithmetic in Q(alpha) for a single Root-object coefficient.        */
+/*                                                                    */
+/* The pipeline's polynomial arithmetic (Together, resultants,         */
+/* PolynomialExtendedGCD, ...) treats a Root object alpha = Root[f, k] */
+/* as an opaque symbol, so nothing ever reduces alpha^n modulo f.  An  */
+/* integrand that is a rational function of x over Q(alpha) therefore  */
+/* came back with alpha^6..alpha^14 and ~10^160 coefficients that      */
+/* cancel catastrophically under any fixed-precision N (the            */
+/* Root[-1 - 4 #1 + #1^3 &, 2] Goursat repro), and the sign of a        */
+/* discriminant in Q(alpha) was never decided (intrat_constant_sign).  */
+/*                                                                    */
+/* intrat_reduce_root_coefficients rewrites an expression over         */
+/* K = Q(alpha) or K = Q(alpha)(Sqrt[d]) -- d in Q(alpha) the one       */
+/* x-free square root the log part introduces for a split quadratic --  */
+/* by exact identities only:                                           */
+/*   - every maximal subexpression rational in (x, alpha, Sqrt[d])      */
+/*     becomes N/D with N, D reduced modulo alpha's minimal polynomial  */
+/*     and Sqrt[d]^2 = d; a D free of x is inverted in K, a D in x is   */
+/*     made monic in x;                                                */
+/*   - the summands of a Plus that share their non-K part are merged,   */
+/*     their K coefficients summed and reduced.                        */
+/* Only a single distinct Root object with a rational univariate       */
+/* defining polynomial is handled; anything else is returned as is.    */
+/* ------------------------------------------------------------------ */
+
+static bool ir_is_root_object(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Root
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_FUNCTION
+        && e->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.function.head->data.symbol.name
+               == SYM_Function
+        && e->data.function.args[1]->type == EXPR_INTEGER;
+}
+
+/* Record the distinct Root objects of `e` (stops at two). */
+static void ir_collect_roots(const Expr* e, const Expr** found, int* n) {
+    if (!e || e->type != EXPR_FUNCTION || *n > 1) return;
+    if (ir_is_root_object(e)) {
+        if (*n == 0) { found[0] = e; *n = 1; }
+        else if (!expr_eq((Expr*)found[0], (Expr*)e)) *n = 2;
+        return;
+    }
+    ir_collect_roots(e->data.function.head, found, n);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ir_collect_roots(e->data.function.args[i], found, n);
+}
+
+static bool ir_head_is(const Expr* e, const char* h) {
+    return e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == h;
+}
+
+/* A rational expression: numbers and symbols under Plus, Times and
+ * integer Power. */
+static bool ir_is_rational(const Expr* e) {
+    switch (e->type) {
+    case EXPR_INTEGER: case EXPR_BIGINT: case EXPR_SYMBOL: return true;
+    case EXPR_FUNCTION: break;
+    default: return false;
+    }
+    if (ir_head_is(e, SYM_Rational) || ir_head_is(e, SYM_Complex)) return true;
+    if (ir_head_is(e, SYM_Power))
+        return e->data.function.arg_count == 2
+            && e->data.function.args[1]->type == EXPR_INTEGER
+            && ir_is_rational(e->data.function.args[0]);
+    if (!ir_head_is(e, SYM_Plus) && !ir_head_is(e, SYM_Times)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!ir_is_rational(e->data.function.args[i])) return false;
+    return true;
+}
+
+typedef struct {
+    Expr* z;   /* placeholder for alpha */
+    Expr* p;   /* minimal (defining) polynomial of alpha, in z */
+    Expr* x;   /* integration variable, or NULL */
+    Expr* w;   /* placeholder for Sqrt[d], or NULL */
+    Expr* d;   /* the radicand d, in z (when w is set) */
+} IrField;
+
+/* True when every symbol of the rational expression `e` is a field
+ * generator (z or w): `e` is then an element of K. */
+static bool ir_in_field(const Expr* e, const IrField* F) {
+    if (e->type == EXPR_SYMBOL)
+        return expr_eq((Expr*)e, F->z) || (F->w && expr_eq((Expr*)e, F->w));
+    if (e->type != EXPR_FUNCTION) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!ir_in_field(e->data.function.args[i], F)) return false;
+    return true;
+}
+
+/* Normal form of a polynomial: Sqrt[d]^2 -> d, then modulo p(z).
+ * Consumes e. */
+static Expr* ir_rem(Expr* e, const IrField* F) {
+    Expr* ex = expand_and_free(e);
+    if (F->w && !intrat_freeq_test(ex, F->w)) {
+        Expr* w2 = eval_and_free(internal_subtract((Expr*[]){
+            internal_power((Expr*[]){expr_copy(F->w), expr_new_integer(2)}, 2),
+            expr_copy(F->d)}, 2));
+        Expr* r = eval_and_free(internal_polynomialremainder(
+            (Expr*[]){ex, w2, expr_copy(F->w)}, 3));
+        ex = expand_and_free(r);
+    }
+    return eval_and_free(internal_polynomialremainder(
+        (Expr*[]){ex, expr_copy(F->p), expr_copy(F->z)}, 3));
+}
+
+/* 1/c for c in Q(z) (free of w) as a reduced polynomial, or NULL. */
+static Expr* ir_inverse_z(Expr* c, const IrField* F) {
+    Expr* eg = eval_and_free(internal_polynomialextendedgcd(
+        (Expr*[]){expr_copy(c), expr_copy(F->p), expr_copy(F->z)}, 3));
+    Expr* inv = NULL;
+    if (eg && ir_head_is(eg, SYM_List) && eg->data.function.arg_count == 2) {
+        Expr* g = eg->data.function.args[0];
+        Expr* uv = eg->data.function.args[1];
+        if (intrat_freeq_test(g, F->z) && !is_zero_poly(g) && ir_in_field(g, F)
+            && ir_head_is(uv, SYM_List) && uv->data.function.arg_count == 2)
+            inv = eval_and_free(internal_divide(
+                (Expr*[]){expr_copy(uv->data.function.args[0]), expr_copy(g)}, 2));
+    }
+    if (eg) expr_free(eg);
+    return inv;
+}
+
+/* 1/c for c in K, reduced, or NULL (c borrowed). */
+static Expr* ir_inverse(Expr* c, const IrField* F) {
+    if (!F->w || intrat_freeq_test(c, F->w)) return ir_inverse_z(c, F);
+    /* 1/c = conj(c) / (c conj(c)), conj: Sqrt[d] -> -Sqrt[d]. */
+    Expr* neg_w = eval_and_free(internal_times(
+        (Expr*[]){expr_new_integer(-1), expr_copy(F->w)}, 2));
+    Expr* conj = subst_t(c, F->w, neg_w);
+    expr_free(neg_w);
+    Expr* norm = ir_rem(internal_times((Expr*[]){expr_copy(c), expr_copy(conj)}, 2), F);
+    Expr* inv = NULL;
+    if (norm && intrat_freeq_test(norm, F->w)) {
+        Expr* ni = ir_inverse_z(norm, F);
+        if (ni) {
+            inv = ir_rem(internal_times((Expr*[]){conj, ni}, 2), F);
+            conj = NULL;  /* consumed */
+        }
+    }
+    if (conj) expr_free(conj);
+    if (norm) expr_free(norm);
+    return inv;
+}
+
+/* A reduced n0 + n1 w kept as n0 + w n1 with n1 unexpanded, so the
+ * printed form carries Sqrt[d] once (consumes n). */
+static Expr* ir_collect_w(Expr* n, const IrField* F) {
+    if (!F->w || intrat_freeq_test(n, F->w)) return n;
+    Expr* n0 = get_coeff(n, F->w, 0);
+    Expr* n1 = get_coeff(n, F->w, 1);
+    expr_free(n);
+    return eval_and_free(internal_plus((Expr*[]){n0,
+        internal_times((Expr*[]){expr_copy(F->w), n1}, 2)}, 2));
+}
+
+/* Split the rational content off the polynomial *p (FactorTermsList):
+ * *p becomes the primitive part; returns the content. */
+static Expr* ir_content(Expr** p) {
+    Expr* ftl = call_eval("FactorTermsList", (Expr*[]){expr_copy(*p)}, 1);
+    Expr* c = NULL;
+    if (ftl && ir_head_is(ftl, SYM_List) && ftl->data.function.arg_count == 2) {
+        Expr* c0 = ftl->data.function.args[0];
+        if (c0->type == EXPR_INTEGER || c0->type == EXPR_BIGINT
+            || ir_head_is(c0, SYM_Rational)) {
+            c = expr_copy(c0);
+            expr_free(*p);
+            *p = expr_copy(ftl->data.function.args[1]);
+        }
+    }
+    if (ftl) expr_free(ftl);
+    return c ? c : expr_new_integer(1);
+}
+
+/* Reduce a rational expression in (x, z, w) to N/D over K. */
+static Expr* ir_reduce_rational(Expr* e, const IrField* F) {
+    Expr* tg = eval_and_free(internal_together((Expr*[]){expr_copy(e)}, 1));
+    Expr* N = ir_rem(eval_and_free(intrat_numerator(tg)), F);
+    Expr* D = ir_rem(eval_and_free(intrat_denominator(tg)), F);
+    expr_free(tg);
+    bool has_x = F->x && !intrat_freeq_test(D, F->x);
+    if (has_x || !(D->type == EXPR_INTEGER || D->type == EXPR_BIGINT
+                   || ir_head_is(D, SYM_Rational))) {
+        /* Scale by the inverse of D itself (D free of x) or of its
+         * leading coefficient in x, when that is an element of K. */
+        Expr* lc = NULL;
+        if (!has_x) lc = expr_copy(D);
+        else {
+            int dx = get_degree_poly(D, F->x);
+            if (dx > 0) lc = get_coeff(D, F->x, dx);
+        }
+        Expr* inv = (lc && ir_in_field(lc, F)) ? ir_inverse(lc, F) : NULL;
+        if (lc) expr_free(lc);
+        if (inv) {
+            N = ir_rem(internal_times((Expr*[]){N, expr_copy(inv)}, 2), F);
+            if (has_x) D = ir_rem(internal_times((Expr*[]){D, inv}, 2), F);
+            else { expr_free(D); expr_free(inv); D = expr_new_integer(1); }
+        }
+    }
+    /* Rational content in front: c (N'/D'), so a Log[c p] downstream
+     * sheds its constant and a kernel argument is primitive. */
+    Expr* cN = ir_content(&N);
+    Expr* cD = ir_content(&D);
+    N = ir_collect_w(N, F);
+    D = ir_collect_w(D, F);
+    Expr* c = eval_and_free(internal_divide((Expr*[]){cN, cD}, 2));
+    return eval_and_free(internal_times((Expr*[]){c,
+        eval_and_free(internal_divide((Expr*[]){N, D}, 2))}, 2));
+}
+
+/* An element of K: rational, free of x, every symbol a generator. */
+static bool ir_is_field_element(const Expr* e, const IrField* F) {
+    return ir_is_rational(e) && ir_in_field(e, F)
+        && (!F->x || intrat_freeq_test((Expr*)e, F->x));
+}
+
+/* Split a summand into its K coefficient and the rest (both fresh). */
+static void ir_split_term(Expr* t, const IrField* F, Expr** coef, Expr** rest) {
+    if (ir_is_field_element(t, F)) {
+        *coef = expr_copy(t); *rest = expr_new_integer(1); return;
+    }
+    if (!ir_head_is(t, SYM_Times)) {
+        *coef = expr_new_integer(1); *rest = expr_copy(t); return;
+    }
+    size_t n = t->data.function.arg_count;
+    Expr** cs = (Expr**)malloc(sizeof(Expr*) * n);
+    Expr** rs = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t nc = 0, nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = t->data.function.args[i];
+        if (ir_is_field_element(f, F)) cs[nc++] = expr_copy(f);
+        else rs[nr++] = expr_copy(f);
+    }
+    *coef = nc ? eval_and_free(internal_times(cs, nc)) : expr_new_integer(1);
+    *rest = nr ? eval_and_free(internal_times(rs, nr)) : expr_new_integer(1);
+    free(cs); free(rs);
+}
+
+static Expr* ir_reduce_walk(Expr* e, const IrField* F);
+
+/* Merge the summands of a Plus (args already reduced) by their non-K
+ * part, reducing each summed K coefficient. */
+static Expr* ir_merge_plus(Expr** args, size_t n, const IrField* F) {
+    Expr** rests = (Expr**)malloc(sizeof(Expr*) * n);
+    Expr** coefs = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t ng = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr *c = NULL, *r = NULL;
+        ir_split_term(args[i], F, &c, &r);
+        size_t g = 0;
+        while (g < ng && !expr_eq(rests[g], r)) g++;
+        if (g < ng) {
+            coefs[g] = eval_and_free(internal_plus((Expr*[]){coefs[g], c}, 2));
+            expr_free(r);
+        } else {
+            rests[ng] = r; coefs[ng] = c; ng++;
+        }
+    }
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (ng ? ng : 1));
+    for (size_t g = 0; g < ng; g++) {
+        Expr* c = ir_reduce_rational(coefs[g], F);
+        expr_free(coefs[g]);
+        terms[g] = internal_times((Expr*[]){c, rests[g]}, 2);
+    }
+    Expr* out = ng ? eval_and_free(internal_plus(terms, ng)) : expr_new_integer(0);
+    free(terms); free(rests); free(coefs);
+    return out;
+}
+
+static Expr* ir_reduce_walk(Expr* e, const IrField* F) {
+    if (intrat_freeq_test(e, F->z) && (!F->w || intrat_freeq_test(e, F->w)))
+        return expr_copy(e);
+    if (ir_is_rational(e)) return ir_reduce_rational(e, F);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        args[i] = ir_reduce_walk(e->data.function.args[i], F);
+    Expr* out;
+    if (ir_head_is(e, SYM_Plus)) {
+        out = ir_merge_plus(args, n, F);
+        for (size_t i = 0; i < n; i++) expr_free(args[i]);
+    } else {
+        out = eval_and_free(expr_new_function(
+            expr_copy(e->data.function.head), args, n));
+    }
+    free(args);
+    return out;
+}
+
+/* Set up Q(alpha) for the single Root object of `e`: alpha (borrowed
+ * into *alpha), the placeholder z and its defining polynomial p(z).
+ * Returns false when `e` has no Root object, more than one, or one
+ * whose defining polynomial is not a rational univariate polynomial. */
+static bool ir_field_setup(const Expr* e, const Expr** alpha, IrField* F) {
+    const Expr* found[2] = { NULL, NULL };
+    int n = 0;
+    ir_collect_roots(e, found, &n);
+    if (n != 1) return false;
+    F->z = expr_new_symbol("Integrate`Private`rz$");
+    F->x = NULL; F->w = NULL; F->d = NULL;
+    Expr* app = expr_new_function(expr_copy(found[0]->data.function.args[0]),
+        (Expr*[]){expr_copy(F->z)}, 1);
+    F->p = expand_and_free(eval_and_free(app));
+    if (!F->p || !ir_is_rational(F->p) || !ir_in_field(F->p, F)
+        || !intrat_polyq_test(F->p, F->z) || get_degree_poly(F->p, F->z) < 2) {
+        if (F->p) expr_free(F->p);
+        expr_free(F->z);
+        return false;
+    }
+    *alpha = found[0];
+    return true;
+}
+
+static void ir_field_free(IrField* F) {
+    expr_free(F->z); expr_free(F->p);
+    if (F->w) expr_free(F->w);
+    if (F->d) expr_free(F->d);
+}
+
+/* Find the x-free square roots Power[d, +-1/2] with d in Q(z) in `e`;
+ * *d_out gets the radicand when they all share one (stops at two). */
+static void ir_collect_sqrt(const Expr* e, const IrField* F,
+                            const Expr** d_out, int* n) {
+    if (!e || e->type != EXPR_FUNCTION || *n > 1) return;
+    if (ir_head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        const Expr* b = e->data.function.args[0];
+        if (ir_head_is(ex, SYM_Rational) && ex->data.function.arg_count == 2
+            && ex->data.function.args[1]->type == EXPR_INTEGER
+            && ex->data.function.args[1]->data.integer == 2
+            && ex->data.function.args[0]->type == EXPR_INTEGER
+            && (ex->data.function.args[0]->data.integer == 1
+                || ex->data.function.args[0]->data.integer == -1)
+            && !intrat_freeq_test((Expr*)b, F->z)
+            && ir_is_rational(b) && ir_in_field(b, F)) {
+            if (*n == 0) { *d_out = b; *n = 1; }
+            else if (!expr_eq((Expr*)*d_out, (Expr*)b)) *n = 2;
+            return;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ir_collect_sqrt(e->data.function.args[i], F, d_out, n);
+}
+
+/* ReplaceAll[e, {lhs1 -> rhs1, lhs2 -> rhs2}] (all borrowed). */
+static Expr* ir_subst2(Expr* e, Expr* l1, Expr* r1, Expr* l2, Expr* r2) {
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){expr_copy(l1), expr_copy(r1)}, 2),
+        expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){expr_copy(l2), expr_copy(r2)}, 2)}, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){expr_copy(e), rules}, 2);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* Reduce every K coefficient of `e` (borrowed) -- see the block comment
+ * above; `x` (may be NULL) is the integration variable.  Returns a fresh
+ * tree (a copy of `e` when nothing applies, or when the rewrite would be
+ * larger). */
+static Expr* intrat_reduce_root_coefficients(Expr* e, Expr* x) {
+    const Expr* alpha = NULL;
+    IrField F;
+    if (!e || !ir_field_setup(e, &alpha, &F)) return e ? expr_copy(e) : NULL;
+    F.x = x;
+    Expr* ez = subst_t(e, (Expr*)alpha, F.z);
+    /* One shared x-free Sqrt[d], d in Q(z), becomes the generator w. */
+    const Expr* d = NULL;
+    int nd = 0;
+    ir_collect_sqrt(ez, &F, &d, &nd);
+    if (nd == 1) {
+        F.d = expr_copy((Expr*)d);
+        F.w = expr_new_symbol("Integrate`Private`rw$");
+        Expr* half = eval_and_free(internal_divide(
+            (Expr*[]){expr_new_integer(1), expr_new_integer(2)}, 2));
+        Expr* mhalf = eval_and_free(internal_divide(
+            (Expr*[]){expr_new_integer(-1), expr_new_integer(2)}, 2));
+        Expr* sq = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){expr_copy(F.d), half}, 2);
+        Expr* isq = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){expr_copy(F.d), mhalf}, 2);
+        Expr* w_over_d = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+            expr_copy(F.w), expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){expr_copy(F.d), expr_new_integer(-1)}, 2)}, 2);
+        Expr* ezw = ir_subst2(ez, sq, F.w, isq, w_over_d);
+        expr_free(sq); expr_free(isq); expr_free(w_over_d);
+        expr_free(ez);
+        ez = ezw;
+    }
+    Expr* red = ir_reduce_walk(ez, &F);
+    expr_free(ez);
+    Expr* out;
+    if (F.w) {
+        Expr* sqd = expr_new_function(expr_new_symbol(SYM_Sqrt),
+            (Expr*[]){expr_copy(F.d)}, 1);
+        Expr* back = subst_t(red, F.w, sqd);
+        expr_free(sqd);
+        expr_free(red);
+        red = back;
+    }
+    out = subst_t(red, F.z, (Expr*)alpha);
+    expr_free(red);
+    ir_field_free(&F);
+    if (!out || leaf_count_internal(out, false) > leaf_count_internal(e, false)) {
+        if (out) expr_free(out);
+        return expr_copy(e);
+    }
+    return out;
+}
+
+/* Sign of an x-free constant: the positive-symbol rule first, then,
+ * for a closed algebraic number in a single Root object (the
+ * discriminant of a quadratic over Q(alpha)), the exact Sign[] of its
+ * reduced form.  Before this the discriminant of such a quadratic was
+ * always "unknown", so a quadratic with two real roots took the ArcTan
+ * branch with an imaginary Sqrt[-disc]: an antiderivative with complex
+ * values and branch jumps on the real line. */
+static int intrat_constant_sign(Expr* c) {
+    int s = intsimp_sign_pos_assumption(c);
+    if (s != 0) return s;
+    const Expr* alpha = NULL;
+    IrField F;
+    if (!ir_field_setup(c, &alpha, &F)) return 0;
+    Expr* cz = subst_t(c, (Expr*)alpha, F.z);
+    bool closed = ir_is_rational(cz) && ir_in_field(cz, &F)
+        && !intrat_contains_complex(cz);
+    expr_free(cz);
+    ir_field_free(&F);
+    if (!closed) return 0;
+    Expr* red = intrat_reduce_root_coefficients(c, NULL);
+    Expr* sg = call_eval(SYM_Sign, (Expr*[]){red}, 1);
+    if (sg && sg->type == EXPR_INTEGER) {
+        if (sg->data.integer > 0) s = 1;
+        else if (sg->data.integer < 0) s = -1;
+    }
+    if (sg) expr_free(sg);
+    return s;
+}
+
+/* ------------------------------------------------------------------ */
+/* The Lazard-Rioboo-Trager log part over K = Q(alpha), alpha a Root.  */
+/*                                                                    */
+/* intrat_log_part_core treats every coefficient as an element of a   */
+/* rational function field: a Root object alpha is an indeterminate,   */
+/* nothing reduces alpha^n modulo its minimal polynomial, and every    */
+/* gcd / Bezout cofactor in the residue variable t is computed over    */
+/* Q(alpha)(t) with alpha transcendental.  Over Q(Root[837/4 + #^3 &,   */
+/* 1]) the Rothstein-Trager resultant of a 92-leaf integrand came back */
+/* with alpha^14 and 26-figure coefficients (it is 262144 t^6 - 1 once */
+/* reduced), and the inverse of lc(S_1) modulo Q_1 -- a quintic in t   */
+/* against a sextic -- did not finish in 60 s as a PolynomialExtended- */
+/* GCD over Q(alpha, t): the rational functions in alpha of the        */
+/* Euclidean chain swell without bound.  The answer lives in K[t]: in  */
+/* root mode alpha is the placeholder z, every polynomial is reduced   */
+/* modulo p(z), and every operation in t that depends on the field     */
+/* structure (gcd, exact quotient, inverse modulo Q_i, the squarefree  */
+/* split of lc(s_i)) runs natively over the number field               */
+/* (FLINT`PolynomialExtendedGCD / FLINT`PolynomialQuotientRemainder    */
+/* with Extension -> {z, p}).  The Q_i must be squarefree and pairwise */
+/* coprime over K, which the generic FactorSquareFree over Q[z, t]     */
+/* does not promise, so that is certified over K too (decline else).   */
+/* ------------------------------------------------------------------ */
+
+struct IrRootMode {
+    IrField F;
+    Expr* alpha;     /* the Root object (owned copy) */
+};
+
+/* Extension -> {z, p(z)} (fresh). */
+static Expr* irk_ext_opt(const IrField* F) {
+    return expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){
+        expr_new_symbol(SYM_Extension),
+        expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_copy(F->z), expr_copy(F->p) }, 2) }, 2);
+}
+
+/* "Parameters" -> {x} (fresh). */
+static Expr* irk_params_opt(Expr* x) {
+    return expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){
+        expr_new_string("Parameters"),
+        expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(x) }, 1) }, 2);
+}
+
+/* FLINT`head[a, b, t, Extension -> {z, p}(, "Parameters" -> {x})]: the
+ * evaluated List, or NULL when the kernel declined (left unevaluated,
+ * e.g. FLINT compiled out, a reducible p, a coefficient outside K). */
+static Expr* irk_call(const char* head, Expr* a, Expr* b, Expr* t,
+                      const IrField* F, Expr* x) {
+    Expr* args[5] = { expr_copy(a), expr_copy(b), expr_copy(t), irk_ext_opt(F), NULL };
+    size_t n = 4;
+    if (x) args[n++] = irk_params_opt(x);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(head), args, n));
+    if (r && ir_head_is(r, SYM_List) && r->data.function.arg_count == 2) return r;
+    if (r) expr_free(r);
+    return NULL;
+}
+
+/* Monic gcd over K of two polynomials in t free of x, or NULL. */
+static Expr* irk_gcd(Expr* a, Expr* b, Expr* t, const IrField* F) {
+    Expr* r = irk_call(SYM_FLINT_PolynomialExtendedGCD, a, b, t, F, NULL);
+    if (!r) return NULL;
+    Expr* g = eval_and_free(expr_copy(r->data.function.args[0]));
+    expr_free(r);
+    return g;
+}
+
+/* Division in K[t] (the coefficients may carry x, read as a parameter):
+ * quotient and remainder, evaluated; false when the kernel declined. */
+static bool irk_divrem(Expr* a, Expr* b, Expr* t, const IrField* F, Expr* x,
+                       Expr** q, Expr** rem) {
+    *q = *rem = NULL;
+    Expr* r = irk_call(SYM_FLINT_PolynomialQuotientRemainder, a, b, t, F, x);
+    if (!r) return false;
+    *q = eval_and_free(expr_copy(r->data.function.args[0]));
+    *rem = eval_and_free(expr_copy(r->data.function.args[1]));
+    expr_free(r);
+    return true;
+}
+
+static bool irk_is_one(const Expr* e) {
+    return e && e->type == EXPR_INTEGER && e->data.integer == 1;
+}
+
+/* Exact quotient a / b in K[t]; NULL unless the remainder is 0. */
+static Expr* irk_exquo(Expr* a, Expr* b, Expr* t, const IrField* F, Expr* x) {
+    Expr *q, *r;
+    if (!irk_divrem(a, b, t, F, x, &q, &r)) return NULL;
+    bool exact = is_zero_poly(r);
+    expr_free(r);
+    if (!exact) { expr_free(q); return NULL; }
+    return q;
+}
+
+/* Yun's squarefree decomposition over K of p in K[t] (free of x): a
+ * List {A_1, A_2, ...}, A_j the product of the factors of multiplicity
+ * j (an A_j may be 1), or NULL. */
+static Expr* irk_squarefree(Expr* p, Expr* t, const IrField* F) {
+    Expr* dp = expand_and_free(intrat_d(p, t));
+    if (is_zero_poly(dp)) {                  /* p constant in t */
+        expr_free(dp);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    }
+    Expr* c = irk_gcd(p, dp, t, F);
+    expr_free(dp);
+    if (!c) return NULL;
+    Expr* w = irk_exquo(p, c, t, F, NULL);
+    if (!w) { expr_free(c); return NULL; }
+    Expr** out = NULL;
+    size_t n = 0, cap = 0;
+    bool ok = true;
+    while (get_degree_poly(w, t) > 0) {
+        Expr* y = irk_gcd(w, c, t, F);
+        Expr* aj = y ? irk_exquo(w, y, t, F, NULL) : NULL;
+        Expr* cn = y ? irk_exquo(c, y, t, F, NULL) : NULL;
+        if (!y || !aj || !cn) {
+            if (y) expr_free(y);
+            if (aj) expr_free(aj);
+            if (cn) expr_free(cn);
+            ok = false;
+            break;
+        }
+        if (n == cap) { cap = cap ? 2 * cap : 4; out = (Expr**)realloc(out, sizeof(Expr*) * cap); }
+        out[n++] = aj;
+        expr_free(w); w = y;
+        expr_free(c); c = cn;
+    }
+    expr_free(w); expr_free(c);
+    if (!ok) {
+        for (size_t i = 0; i < n; i++) expr_free(out[i]);
+        free(out);
+        return NULL;
+    }
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), out, n);
+    free(out);
+    return lst;
+}
+
+/* Enter root mode for the log part of a/d: one Root object alpha with a
+ * rational univariate defining polynomial among the coefficients.  On
+ * success *a and *d are rewritten over z (alpha -> z, reduced modulo
+ * p) and the mode is returned; NULL leaves *a and *d untouched. */
+static IrRootMode* irk_begin(Expr** a, Expr** d, Expr* x) {
+    Expr* ad = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_copy(*a), expr_copy(*d) }, 2);
+    const Expr* alpha = NULL;
+    IrField F;
+    if (!ir_field_setup(ad, &alpha, &F)) { expr_free(ad); return NULL; }
+    IrRootMode* M = (IrRootMode*)malloc(sizeof(IrRootMode));
+    M->F = F;
+    M->alpha = expr_copy((Expr*)alpha);
+    expr_free(ad);
+    /* The kernels need p irreducible (the minimal polynomial of a
+     * canonical Root object) and FLINT present; probe once, on a
+     * coprime pair (the multi-modular xgcd is slow on proportional
+     * inputs -- 70 ms for gcd(x, x)). */
+    Expr* one = expr_new_integer(1);
+    Expr* g = irk_gcd(x, one, x, &M->F);
+    expr_free(one);
+    if (!g) {
+        expr_free(M->alpha);
+        ir_field_free(&M->F);
+        free(M);
+        return NULL;
+    }
+    expr_free(g);
+    M->F.x = x;
+    Expr* az = subst_t(*a, M->alpha, M->F.z);
+    Expr* dz = subst_t(*d, M->alpha, M->F.z);
+    expr_free(*a); expr_free(*d);
+    *a = ir_rem(az, &M->F);
+    *d = ir_rem(dz, &M->F);
+    return M;
+}
+
+static void irk_end(IrRootMode* M) {
+    if (!M) return;
+    expr_free(M->alpha);
+    M->F.x = NULL;
+    ir_field_free(&M->F);
+    free(M);
+}
+
+/* Normal form modulo p(z) (consumes e). */
+static Expr* irk_reduce(IrRootMode* M, Expr* e) {
+    return ir_rem(e, &M->F);
+}
+
+/* z -> alpha (consumes e). */
+static Expr* irk_back(IrRootMode* M, Expr* e) {
+    Expr* r = subst_t(e, M->F.z, M->alpha);
+    expr_free(e);
+    return r;
+}
+
+static bool irk_factors_ok(IrRootMode* M, Expr* Q, Expr* t);
+
+/* The residue factors {{Q_1, 1}, {Q_2, 2}, ...} reduced over K (a fresh
+ * list; Q is borrowed and not touched -- expr_copy shares nodes), or
+ * NULL unless every non-constant Q_i is squarefree over K and the Q_i
+ * are pairwise coprime over K (the LRT precondition). */
+static Expr* irk_certified_factors(IrRootMode* M, Expr* Qin, Expr* t) {
+    size_t n = Qin->data.function.arg_count;
+    Expr** prs = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* pr = Qin->data.function.args[i];
+        if (!ir_head_is(pr, SYM_List) || pr->data.function.arg_count != 2) {
+            for (size_t k = 0; k < i; k++) expr_free(prs[k]);
+            free(prs);
+            return NULL;
+        }
+        prs[i] = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+            irk_reduce(M, expr_copy(pr->data.function.args[0])),
+            expr_copy(pr->data.function.args[1]) }, 2);
+    }
+    Expr* Q = expr_new_function(expr_new_symbol(SYM_List), prs, n);
+    free(prs);
+    if (!irk_factors_ok(M, Q, t)) { expr_free(Q); return NULL; }
+    return Q;
+}
+
+static bool irk_factors_ok(IrRootMode* M, Expr* Q, Expr* t) {
+    size_t n = Q->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* Qi = Q->data.function.args[i]->data.function.args[0];
+        if (get_degree_poly(Qi, t) <= 0) continue;
+        Expr* dQ = expand_and_free(intrat_d(Qi, t));
+        Expr* g = irk_gcd(Qi, dQ, t, &M->F);
+        expr_free(dQ);
+        bool sf = g && irk_is_one(g);
+        if (g) expr_free(g);
+        if (!sf) return false;
+        for (size_t j = i + 1; j < n; j++) {
+            Expr* Qj = Q->data.function.args[j]->data.function.args[0];
+            if (get_degree_poly(Qj, t) <= 0) continue;
+            Expr* h = irk_gcd(Qi, Qj, t, &M->F);
+            bool cop = h && irk_is_one(h);
+            if (h) expr_free(h);
+            if (!cop) return false;
+        }
+    }
+    return true;
+}
+
+/* PrimitivePart_mod over K: pp_x(inv(lc_x(p)) p mod Q), the inverse
+ * taken in K[t]/(Q).  NULL on failure (lc not invertible modulo Q). */
+static Expr* irk_primitive_part_mod(IrRootMode* M, Expr* p, Expr* Q,
+                                    Expr* x, Expr* t) {
+    Expr* lc = intrat_lc(p, x);
+    Expr *q0, *lc_r;
+    bool ok = irk_divrem(lc, Q, t, &M->F, NULL, &q0, &lc_r);
+    expr_free(lc);
+    if (!ok) return NULL;
+    expr_free(q0);
+    Expr* eg = irk_call(SYM_FLINT_PolynomialExtendedGCD, lc_r, Q, t, &M->F, NULL);
+    expr_free(lc_r);
+    if (!eg) return NULL;
+    Expr* g = eg->data.function.args[0];
+    Expr* uv = eg->data.function.args[1];
+    if (!irk_is_one(g) || !ir_head_is(uv, SYM_List) || uv->data.function.arg_count != 2) {
+        expr_free(eg);
+        return NULL;
+    }
+    Expr* inv = eval_and_free(expr_copy(uv->data.function.args[0]));
+    expr_free(eg);
+    Expr* rp = expand_and_free(internal_times((Expr*[]){ inv, expr_copy(p) }, 2));
+    Expr *q1, *rem;
+    ok = irk_divrem(rp, Q, t, &M->F, x, &q1, &rem);
+    expr_free(rp);
+    if (!ok) return NULL;
+    expr_free(q1);
+    Expr* out = intrat_primitive(rem, x);
+    expr_free(rem);
+    return out;
+}
+
+/* S_i of the LRT over K for the residue factor Qi (squarefree over K):
+ * the subresultant s of degree i in x (d itself when i == deg d), its
+ * factors in common with Qi divided out with their multiplicity in
+ * lc_x(s), then PrimitivePart_mod.  NULL on failure. */
+static Expr* irk_lrt_S(IrRootMode* M, Expr* prs, Expr* d, Expr* Qi,
+                       int i, int deg_d, Expr* x, Expr* t) {
+    if (i == deg_d) return irk_primitive_part_mod(M, d, Qi, x, t);
+    Expr* s_raw = find_prs_at_degree(prs, x, i);
+    if (!s_raw) return NULL;
+    Expr* s_red = irk_reduce(M, s_raw);
+    Expr* s = intrat_primitive(s_red, x);
+    expr_free(s_red);
+    Expr* lc_s = intrat_lc(s, x);
+    Expr* A = irk_squarefree(lc_s, t, &M->F);
+    expr_free(lc_s);
+    if (!A) { expr_free(s); return NULL; }
+    for (size_t j = 0; j < A->data.function.arg_count; j++) {
+        Expr* Aj = A->data.function.args[j];
+        if (get_degree_poly(Aj, t) <= 0) continue;
+        Expr* g = irk_gcd(Aj, Qi, t, &M->F);
+        if (!g) { expr_free(A); expr_free(s); return NULL; }
+        if (get_degree_poly(g, t) <= 0) { expr_free(g); continue; }
+        Expr* gj = expand_and_free(internal_power(
+            (Expr*[]){ g, expr_new_integer((int64_t)(j + 1)) }, 2));
+        Expr* sn = irk_exquo(s, gj, t, &M->F, x);
+        expr_free(gj);
+        if (!sn) { expr_free(A); expr_free(s); return NULL; }
+        expr_free(s);
+        s = sn;
+    }
+    expr_free(A);
+    Expr* S = irk_primitive_part_mod(M, s, Qi, x, t);
+    expr_free(s);
+    return S;
+}
+
+/* The pure-rational log part of a/d over K = Q(alpha) (root mode, see
+ * above).  Same output contract as intrat_log_part_core (a RootSum sum,
+ * or the {{Q_i, S_i}, ...} pair list), with Q_i and S_i reduced over K.
+ * *handled is false -- a and d untouched, the caller runs the generic
+ * core -- when the coefficients do not span such a K, a kernel declines
+ * or the residue factors are not squarefree / coprime over K.  When
+ * *handled is true a and d have been consumed. */
+static Expr* intrat_log_part_core_root(Expr* a, Expr* d, Expr* x, Expr* t,
+                                       bool root_sum, bool* handled) {
+    *handled = false;
+    Expr* az = expr_copy(a);
+    Expr* dz = expr_copy(d);
+    IrRootMode* M = irk_begin(&az, &dz, x);
+    if (!M) { expr_free(az); expr_free(dz); return NULL; }
+
+    Expr* dprime = expand_and_free(intrat_d(dz, x));
+    Expr* atdp = irk_reduce(M, internal_subtract((Expr*[]){ expr_copy(az),
+        internal_times((Expr*[]){ expr_copy(t), dprime }, 2) }, 2));
+    Expr* prs = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_SubresultantPolynomialRemainders),
+        (Expr*[]){ expr_copy(dz), expr_copy(atdp), expr_copy(x) }, 3));
+    Expr* res_raw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Resultant),
+        (Expr*[]){ expr_copy(dz), atdp, expr_copy(x) }, 3));
+    /* Q: the squarefree split of the resultant as computed (alpha
+     * unreduced); Qred: the same factors reduced over K, certified, and
+     * the ones every computation in t uses.  The output takes whichever
+     * spelling of each factor is smaller: the two are equal in K[t], and
+     * 256 alpha^6 t^4 - 1 is a smaller radicand than its reduced form. */
+    Expr* Q = NULL;
+    Expr* Qred = NULL;
+    Expr** S = NULL;
+    size_t nQ = 0;
+    bool ok = prs && res_raw && ir_head_is(prs, SYM_List);
+    if (ok) {
+        Expr* resultant = intrat_primitive(res_raw, t);
+        expr_free(res_raw);
+        res_raw = NULL;
+        Q = intrat_squarefree_list(resultant);
+        expr_free(resultant);
+        ok = Q && ir_head_is(Q, SYM_List);
+        if (ok) {
+            Qred = irk_certified_factors(M, Q, t);
+            ok = Qred != NULL;
+        }
+    }
+    if (ok) {
+        int deg_d = get_degree_poly(dz, x);
+        nQ = Q->data.function.arg_count;
+        S = (Expr**)calloc(nQ ? nQ : 1, sizeof(Expr*));
+        for (size_t k = 0; k < nQ && ok; k++) {
+            Expr* Qi = Qred->data.function.args[k]->data.function.args[0];
+            if (get_degree_poly(Qi, t) <= 0) continue;
+            S[k] = irk_lrt_S(M, prs, dz, Qi, (int)(k + 1), deg_d, x, t);
+            if (!S[k]) ok = false;
+        }
+    }
+    if (res_raw) expr_free(res_raw);
+    if (prs) expr_free(prs);
+    expr_free(az); expr_free(dz);
+    if (!ok) {
+        if (S) { for (size_t k = 0; k < nQ; k++) if (S[k]) expr_free(S[k]); free(S); }
+        if (Q) expr_free(Q);
+        if (Qred) expr_free(Qred);
+        irk_end(M);
+        return NULL;
+    }
+
+    /* z -> alpha, and the output in the generic core's two shapes. */
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (nQ ? nQ : 1));
+    size_t nt = 0;
+    for (size_t k = 0; k < nQ; k++) {
+        if (!S[k]) continue;
+        Expr* Qi = eval_and_free(irk_back(M,
+            expr_copy(Qred->data.function.args[k]->data.function.args[0])));
+        Expr* Qo = eval_and_free(irk_back(M,
+            expr_copy(Q->data.function.args[k]->data.function.args[0])));
+        if (leaf_count_internal(Qo, false) < leaf_count_internal(Qi, false)) {
+            expr_free(Qi);
+            Qi = Qo;
+        } else {
+            expr_free(Qo);
+        }
+        Expr* Sk = eval_and_free(irk_back(M, S[k]));
+        S[k] = NULL;
+        if (root_sum) {
+            Expr* func1 = expr_new_function(expr_new_symbol(SYM_Function),
+                (Expr*[]){ expr_copy(t), Qi }, 2);
+            Expr* tlog = eval_and_free(internal_times((Expr*[]){ expr_copy(t),
+                expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){ Sk }, 1) }, 2));
+            Expr* func2 = expr_new_function(expr_new_symbol(SYM_Function),
+                (Expr*[]){ expr_copy(t), tlog }, 2);
+            terms[nt++] = expr_new_function(expr_new_symbol(SYM_RootSum),
+                (Expr*[]){ func1, func2 }, 2);
+        } else {
+            terms[nt++] = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ Qi, Sk }, 2);
+        }
+    }
+    free(S);
+    expr_free(Q);
+    expr_free(Qred);
+    irk_end(M);
+    Expr* result;
+    if (!root_sum) {
+        result = expr_new_function(expr_new_symbol(SYM_List), terms, nt);
+    } else if (nt == 0) {
+        result = expr_new_integer(0);
+    } else if (nt == 1) {
+        result = terms[0];
+    } else {
+        result = eval_and_free(internal_plus(terms, nt));
+    }
+    free(terms);
+    expr_free(a); expr_free(d);
+    *handled = true;
+    intrat_trace("IntRationalLogPart", "OUT (over Q(Root))", result);
+    return result;
+}
+
 /* Sign tests, canonic-zero, and the positive-symbol Sqrt simplifier
  * used by logtoreal_dispatch live in intsimp.c — see intsimp.h. */
 
@@ -2776,8 +3814,37 @@ static bool intrat_contains_complex(const Expr* e) {
 /* Try to dispatch a single quadratic factor `Q(t) = a t^2 + b t + c`
  * to its real-form contribution.  Returns NULL on failure (caller
  * falls back to symbolic RootSum). */
+static Expr* logtoreal_quadratic_core(Expr* a, Expr* b, Expr* c,
+                                      Expr* s, Expr* x, Expr* t,
+                                      bool over_root);
+
+/* Over Q(alpha) for a Root object alpha the quadratic is first made
+ * monic, with b/a and c/a reduced modulo alpha's minimal polynomial,
+ * so the discriminant and the residues stay small. */
 static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
                                  Expr* s, Expr* x, Expr* t) {
+    Expr* abc = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){expr_copy(a), expr_copy(b), expr_copy(c)}, 3);
+    const Expr* alpha = NULL;
+    IrField F;
+    bool over_root = ir_field_setup(abc, &alpha, &F);
+    expr_free(abc);
+    if (!over_root) return logtoreal_quadratic_core(a, b, c, s, x, t, false);
+    ir_field_free(&F);
+    Expr* bq = eval_and_free(internal_divide((Expr*[]){expr_copy(b), expr_copy(a)}, 2));
+    Expr* cq = eval_and_free(internal_divide((Expr*[]){expr_copy(c), expr_copy(a)}, 2));
+    Expr* bm = intrat_reduce_root_coefficients(bq, NULL);
+    Expr* cm = intrat_reduce_root_coefficients(cq, NULL);
+    expr_free(bq); expr_free(cq);
+    Expr* one = expr_new_integer(1);
+    Expr* r = logtoreal_quadratic_core(one, bm, cm, s, x, t, true);
+    expr_free(one); expr_free(bm); expr_free(cm);
+    return r;
+}
+
+static Expr* logtoreal_quadratic_core(Expr* a, Expr* b, Expr* c,
+                                      Expr* s, Expr* x, Expr* t,
+                                      bool over_root) {
     /* discriminant = b^2 - 4 a c. */
     Expr* b2 = expand_and_free(internal_power((Expr*[]){expr_copy(b), expr_new_integer(2)}, 2));
     Expr* fourac = expand_and_free(
@@ -2796,7 +3863,18 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
      * principal antiderivative for both signs of the discriminant
      * (ArcTan continues analytically through imaginary argument),
      * matching Mathematica's parametric-quadratic output. */
-    int disc_sign = intsimp_sign_pos_assumption(disc);
+    {   /* Over Q(alpha) for a Root object alpha: reduce modulo its
+         * minimal polynomial, so the sign test and Sqrt see the small
+         * normal form. */
+        if (over_root) {
+            Expr* dr = intrat_reduce_root_coefficients(disc, x);
+            expr_free(disc);
+            /* Pull the rational content out, so Sqrt[disc] takes its
+             * square part. */
+            disc = call_eval("FactorTerms", (Expr*[]){dr}, 1);
+        }
+    }
+    int disc_sign = intrat_constant_sign(disc);
 
     Expr* two_a = eval_and_free(internal_times(
         (Expr*[]){expr_new_integer(2), expr_copy(a)}, 2));
@@ -3788,6 +4866,27 @@ static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
  *     for a well-formed proper rational integrand.
  *
  * Closure preference matches IntegrateRational.m:560-572. */
+/* Function[z, body] -> Function[body /. z -> #1] throughout e, so a RootSum
+ * built over the residue variable prints as the reference's `... &` form.
+ * Borrows e and z; owned result. */
+static Expr* intrat_slot_functions(Expr* e, Expr* z) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Function
+        && e->data.function.arg_count == 2 && expr_eq(e->data.function.args[0], z)) {
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), (Expr*[]){ expr_new_integer(1) }, 1);
+        Expr* body = subst_t(e->data.function.args[1], z, slot);
+        expr_free(slot);
+        return expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){ body }, 1);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = intrat_slot_functions(e->data.function.args[i], z);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return eval_and_free(r);
+}
+
 static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
     if (is_zero_poly(num)) return expr_new_integer(0);
 
@@ -3796,8 +4895,29 @@ static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
     Expr* h_eval = eval_and_free(h);
     Expr* t_sym = expr_new_symbol("Integrate`Private`tt$");
 
-    /* Single LRT producer call. */
-    Expr* pairs = intrat_int_rational_log_part(h_eval, x, t_sym, false);
+    /* The log part: Rothstein-Trager or Czichowski natively over Q when
+     * selected (LogPart -> ...), else -- and on any decline -- the
+     * Lazard-Rioboo-Trager producer, which also serves parameters,
+     * radicals and Root coefficients. */
+    IntratMethodOptions iro = ir_opts();
+    int lp = iro.logpart >= 0 ? iro.logpart : INTRAT_DEFAULT_LOGPART;
+    int rf = iro.realform;
+    Expr* pairs = lp != INTRAT_LOGPART_LRT ? intrat_alg_logpart(num, den, x, t_sym, lp) : NULL;
+    /* Automatic: Rothstein-Trager declines when an irreducible residue factor
+     * has degree > 8 (its gcd over Q(a) then costs more); there Czichowski's
+     * lex basis is the fastest of the three on benchmark 266 (rootsum, stress:
+     * 4-5x faster than RT or LRT), and LRT remains the general fallback. */
+    if (!pairs && iro.logpart < 0)
+        pairs = intrat_alg_logpart(num, den, x, t_sym, INTRAT_LOGPART_CZICHOWSKI);
+    if (!pairs) pairs = intrat_int_rational_log_part(h_eval, x, t_sym, false);
+    if (pairs) {
+        /* Coefficients in Q(alpha) for a Root object alpha: reduce the
+         * resultant factors Q_i(t) and S_i(t, x) modulo alpha's minimal
+         * polynomial before LogToReal does arithmetic on them. */
+        Expr* pr = intrat_reduce_root_coefficients(pairs, x);
+        expr_free(pairs);
+        pairs = pr;
+    }
 
     Expr* result = NULL;
     if (pairs) {
@@ -3810,13 +4930,60 @@ static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
          * Integrate[1/(x^2 + I), x] was 0, and 1/(x^2 + I x + 1), 1/(x^3 + I)
          * were nonzero but wrong (53 of 158 random Gaussian-coefficient
          * integrands).  Such an integrand takes the plain complex log sum
-         * (linear closer, then NaiveLogPart with explicit roots).  The
+         * (see the !real_field branch below).  The
          * transcendental callers (t = E^(I x) for trig integrands) keep
          * LogToReal: their I is part of the real reconstruction. */
-        if (!intrat_contains_complex(h_eval))
+        /* RealForm -> None: the formal sum, residues left algebraic. */
+        if (rf == INTRAT_REALFORM_NONE) {
+            result = intrat_root_sum_pairs(pairs, t_sym);
+            if (result) {
+                Expr* sl = intrat_slot_functions(result, t_sym);
+                expr_free(result);
+                result = sl;
+            }
+        }
+        bool real_field = !intrat_contains_complex(h_eval);
+        /* A non-real coefficient field: no real form exists (the residues are
+         * not closed under conjugation), whatever RealForm asks for.  The
+         * answer is the complex log sum over the residues of the pair list:
+         * first the linear closer (every Q_i split into rational or Gaussian
+         * linear factors, one Log each -- the form the Risch callers read
+         * back), else the sum written out where every Q_i has degree <= 2
+         * (the roots of the quadratic formula summed in pairs: one value
+         * under either branch of the Sqrt).  NaiveLogPart over the ROOTS OF
+         * THE DENOMINATOR, the route these integrands took before, is the
+         * same function at up to 8x the size (u/(u^4 + (1 + I) u^2 + 2): 379
+         * leaves against 46), and its bulkier residues sent the
+         * algebraic-constant pass into casus-irreducibilis radicals (1515
+         * leaves in 1.2 s, against 358 in 0.2 s, for the rational part of
+         * ((4 + 2 Sqrt[2]) u^2)/((3 + 2 Sqrt[2]) (I + 5 u^2 + 5 I u^4 + u^6))).
+         * Comparing the two before the output passes does not work: the
+         * denominator-root form is sometimes smaller raw, and that repro then
+         * came out at 668 leaves where the residue form compacts to 358.  A
+         * Q_i of degree >= 3 keeps NaiveLogPart, which may still close it
+         * (1/(u^4 + I) in symmetric radicals). */
+        if (!result && !real_field && rf != INTRAT_REALFORM_NONE)
+            result = intrat_linear_q_closer(pairs, x, t_sym);
+        if (!result && !real_field) {
+            Expr* cs = intrat_root_sum_pairs(pairs, t_sym);
+            if (cs && !intrat_contains_rootsum(cs)) result = cs;
+            else if (cs) expr_free(cs);
+        }
+        /* RealForm -> "LogToReal": Bronstein's general LogToReal (exact roots
+         * of every Q_i, Rioboo's LogToAtan), Root objects allowed. */
+        if (!result && real_field && rf == INTRAT_REALFORM_LOGTOREAL)
+            result = intrat_alg_log_to_real(pairs, x, t_sym, true);
+        /* "Rioboo" and Automatic: the shape dispatch (quadratic factors in
+         * closed form, sparse and biquadratic quartics, ...).  Automatic does
+         * not add the general LogToReal: on benchmark 266 it was never smaller
+         * than this dispatch's answer (or the RootSum the reference keeps) and
+         * only cost time. */
+        if (!result && real_field && rf != INTRAT_REALFORM_NONE)
             result = intrat_log_to_real_pairs(pairs, x, t_sym);
-        /* LRT consumer 2: linear-Q closer (factor each Q_i over Q). */
-        if (!result) result = intrat_linear_q_closer(pairs, x, t_sym);
+        /* LRT consumer 2: linear-Q closer (factor each Q_i over Q); a
+         * non-real field has tried it above. */
+        if (!result && real_field && rf != INTRAT_REALFORM_NONE)
+            result = intrat_linear_q_closer(pairs, x, t_sym);
         expr_free(pairs);
     }
     expr_free(t_sym);
@@ -3905,6 +5072,16 @@ fail:
 /* BronsteinRational top-level (Phase 1 skeleton + Phase 2 hookup).    */
 /* ------------------------------------------------------------------ */
 
+/* True when e contains a Root object anywhere. */
+static bool intrat_tree_has_root(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Root) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_tree_has_root(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
     intrat_trace("BronsteinRational", "IN", f);
 
@@ -3977,6 +5154,14 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
     Expr* h = expr_copy(hr->data.function.args[1]);
     expr_free(hr);
 
+    /* The Hermite rational part, in its most compact form (and kept out of
+     * the Expand-based log-part passes below, which split its numerators
+     * over their denominators). */
+    {
+        Expr* gc = intsimp_compact_rational(g, x);
+        if (gc) { expr_free(g); g = gc; }
+    }
+
     /* If h is zero, we have a closed form. */
     if (is_zero_poly(h)) {
         expr_free(h);
@@ -3999,8 +5184,9 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
     Expr* per_summand = intrat_integrate_summands(h, x);
     if (per_summand) {
         expr_free(h);
+        /* g joins after the log-part passes (see intsimp_compact_rational). */
         Expr* sum = internal_plus(
-            (Expr*[]){poly_int, g, per_summand}, 3);
+            (Expr*[]){poly_int, per_summand}, 2);
         Expr* sum_eval = eval_and_free(sum);
         /* Phase A-1: distribute scalar Times-over-Plus so per-summand
          * `c_k * piece_int_k` accumulators flatten into a single
@@ -4010,8 +5196,13 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
          * Phase A-2: strip Log[c · p] -> Log[p] when FreeQ[c, x] so
          * downstream Log[A] + Log[B] merging sees the cleaned
          * arguments. */
-        Expr* distributed = intsimp_distribute_plus(sum_eval);
+        /* Coefficients in Q(alpha) for a Root object alpha: reduce
+         * them modulo its minimal polynomial before the Log-pairing
+         * and constant-stripping passes read the kernel arguments. */
+        Expr* sum_red = intrat_reduce_root_coefficients(sum_eval, x);
         expr_free(sum_eval);
+        Expr* distributed = intsimp_distribute_plus(sum_red);
+        expr_free(sum_red);
         Expr* stripped = intsimp_strip_log_constants(distributed, x);
         expr_free(distributed);
         /* Phase 6 final pass: combine c Log[A] ± c Log[B] terms.
@@ -4029,8 +5220,30 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
          * coefficients and terms sharing a kernel merge. */
         Expr* reduced = intsimp_reduce_algebraic_constants(simplified3, x);
         expr_free(simplified3);
-        Expr* result = intsimp_normalize_inverse_trig_signs(reduced);
+        Expr* normalized = intsimp_normalize_inverse_trig_signs(reduced);
         expr_free(reduced);
+        /* Same for a Root object: coefficients reduced modulo its
+         * minimal polynomial, kernel arguments monic in x. */
+        Expr* result = intrat_reduce_root_coefficients(normalized, x);
+        if (!expr_eq(result, normalized)) {
+            /* the reduction pulls rational content to the front of
+             * Log arguments: drop it as the earlier passes do */
+            Expr* stripped_r = intsimp_strip_log_constants(result, x);
+            expr_free(result);
+            result = stripped_r;
+        }
+        expr_free(normalized);
+        if (!is_zero_poly(g)) {
+            /* g over Q(alpha) for a Root alpha gets the same reduction the
+             * log part had above */
+            if (intrat_tree_has_root(g)) {
+                Expr* gr = intrat_reduce_root_coefficients(g, x);
+                if (gr) { expr_free(g); g = gr; }
+            }
+            result = eval_and_free(internal_plus((Expr*[]){ g, result }, 2));
+        } else {
+            expr_free(g);
+        }
         intrat_trace("BronsteinRational", "OUT", result);
         return result;
     }
@@ -4062,7 +5275,8 @@ static bool is_intrat_option(Expr* opt) {
     if (lhs->type == EXPR_STRING) {
         const char* s = lhs->data.string;
         return strcmp(s, "PFD") == 0 || strcmp(s, "LogToArcTan") == 0
-            || strcmp(s, "Radicals") == 0;
+            || strcmp(s, "Radicals") == 0 || strcmp(s, "Hermite") == 0
+            || strcmp(s, "LogPart") == 0 || strcmp(s, "RealForm") == 0;
     }
     return false;
 }
@@ -4089,13 +5303,19 @@ Expr* builtin_intrat_integraterational(Expr* res) {
      * keeps them advisory for now — the algorithmic path uses the
      * defaults. */
     size_t argc = res->data.function.arg_count;
+    IntratMethodOptions mo;
+    intrat_method_options_default(&mo);
+    bool have_mo = false;
     while (argc > 0 && is_intrat_option(res->data.function.args[argc - 1])) {
+        if (intrat_method_suboption(res->data.function.args[argc - 1], &mo)) have_mo = true;
         argc--;
     }
     if (argc != 2) return NULL;
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
+    IntratMethodOptions saved_mo;
+    if (have_mo) intrat_method_options_install(&mo, &saved_mo);
     /* Try to coerce inexact integrands to exact rationals.  Silent
      * here — the public Integrate head owns the user-visible
      * diagnostic.  If Rationalize cannot eliminate every EXPR_REAL,
@@ -4105,12 +5325,14 @@ Expr* builtin_intrat_integraterational(Expr* res) {
         coerced = internal_rationalize_expr(f, 0.0, RATIONALIZE_DEFAULT);
         if (!coerced || intrat_contains_real(coerced)) {
             if (coerced) expr_free(coerced);
+            if (have_mo) intrat_method_options_restore(&saved_mo);
             return NULL;
         }
         f = coerced;
     }
     Expr* result = intrat_integrate_rational(f, x);
     if (coerced) expr_free(coerced);
+    if (have_mo) intrat_method_options_restore(&saved_mo);
     return result;
 }
 
@@ -4357,11 +5579,12 @@ void intrat_init(void) {
      * parser routes `Integrate`Foo` directly to that key. */
     install("Integrate`BronsteinRational",
             builtin_intrat_integraterational,
-            "Integrate`BronsteinRational[f, x] is the explicit form of the\n"
-            "rational-function integrator. Equivalent to Integrate[f, x] when\n"
-            "f is a polynomial or rational function in x. Phase 1 closes the\n"
-            "polynomial / Hermite / derivative-recognition cases; non-rational\n"
-            "or LRT-required inputs return unevaluated.");
+            "Integrate`BronsteinRational[f, x, opts] integrates a rational function f\n"
+            "of x (Bronstein, Symbolic Integration I, ch. 2); a non-rational f stays\n"
+            "unevaluated. Options, also given as Method -> {\"BronsteinRational\", ...}:\n"
+            "\"Hermite\" -> \"Linear\" | \"Quadratic\" | \"HorowitzOstrogradsky\";\n"
+            "\"LogPart\" -> \"LazardRiobooTrager\" | \"RothsteinTrager\" | \"Czichowski\";\n"
+            "\"RealForm\" -> \"Rioboo\" | \"LogToReal\" | None.  Each defaults to Automatic.");
 
     install("Integrate`IntegratePolynomial",
             builtin_intrat_integratepolynomial,

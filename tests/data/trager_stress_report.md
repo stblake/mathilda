@@ -1,6 +1,6 @@
 # Trager vs FriCAS stress report
 
-Generated 2026-11-13 19:41 by `tools/trager_fricas_stress.py` over `tests/data/trager_stress_corpus.m` (378 cases, timeout 60 s per case and system, 6 jobs, 925 s wall).
+Generated 2026-11-22 10:04 by `tools/trager_fricas_stress.py` over `tests/data/trager_stress_corpus.m` (378 cases, timeout 60 s per case and system, 6 jobs, 915 s wall).
 
 Classes: see the docstring of the tool.  WRONG and DISAGREE are hard failures; FRICAS-ONLY ratchets against `BASELINE`.
 
@@ -15,8 +15,8 @@ Classes: see the docstring of the tool.  WRONG and DISAGREE are hard failures; F
 | DISAGREE | 0 | 0 |
 | WRONG | 0 | 0 |
 | NONELEM-UNCONFIRMED | 63 | 13 |
-| NEITHER | 0 | 73 |
-| TIMEOUT | 0 | 2 |
+| NEITHER | 0 | 72 |
+| TIMEOUT | 0 | 3 |
 | ERROR | 0 | 0 |
 
 FriCAS outcomes: BAD 1, ELEM 180, ERROR 19, NONELEM 132, TIMEOUT 46 (BAD = FriCAS antiderivative failed its own derivative check).
@@ -34,7 +34,7 @@ FriCAS outcomes: BAD 1, ELEM 180, ERROR 19, NONELEM 132, TIMEOUT 46 (BAD = FriCA
 | genus-super | 10 | AGREE-ELEM 1, AGREE-NONELEM 7, NONELEM-UNCONFIRMED 2 | AGREE-ELEM 1, AGREE-NONELEM 7, NEITHER 2 |
 | goursat | 23 | AGREE-ELEM 13, AGREE-NONELEM 5, MATHILDA-ONLY 1, NONELEM-UNCONFIRMED 4 | AGREE-ELEM 8, AGREE-NONELEM 1, FRICAS-ONLY 5, NEITHER 8, TIMEOUT 1 |
 | pseudo-elliptic-recip | 11 | AGREE-ELEM 11 | AGREE-ELEM 2, FRICAS-ONLY 9 |
-| random | 60 | AGREE-ELEM 16, AGREE-NONELEM 25, MATHILDA-ONLY 1, NONELEM-UNCONFIRMED 18 | AGREE-ELEM 11, AGREE-NONELEM 22, FRICAS-ONLY 5, MATHILDA-ONLY 1, NEITHER 15, NONELEM-UNCONFIRMED 6 |
+| random | 60 | AGREE-ELEM 16, AGREE-NONELEM 25, MATHILDA-ONLY 1, NONELEM-UNCONFIRMED 18 | AGREE-ELEM 11, AGREE-NONELEM 22, FRICAS-ONLY 5, MATHILDA-ONLY 1, NEITHER 14, NONELEM-UNCONFIRMED 6, TIMEOUT 1 |
 | rational-radicand | 20 | AGREE-ELEM 12, AGREE-NONELEM 8 | AGREE-ELEM 6, AGREE-NONELEM 8, FRICAS-ONLY 6 |
 | rational-times-radical | 50 | AGREE-ELEM 17, AGREE-NONELEM 11, MATHILDA-ONLY 1, NONELEM-UNCONFIRMED 21 | AGREE-ELEM 12, AGREE-NONELEM 11, FRICAS-ONLY 5, NEITHER 15, NONELEM-UNCONFIRMED 7 |
 | third-kind | 30 | AGREE-ELEM 14, AGREE-NONELEM 16 | AGREE-ELEM 14, NEITHER 16 |
@@ -44,36 +44,36 @@ FriCAS outcomes: BAD 1, ELEM 180, ERROR 19, NONELEM 132, TIMEOUT 46 (BAD = FriCA
 
 | system | median | mean | max | n |
 |---|---:|---:|---:|---:|
-| Mathilda Trager | 0.080 | 0.398 | 21.102 | 378 |
-| Mathilda TragerKauers | 0.082 | 3.694 | 65.861 | 378 |
-| FriCAS | 0.150 | 7.884 | 60.149 | 359 |
+| Mathilda Trager | 0.078 | 0.443 | 24.423 | 378 |
+| Mathilda TragerKauers | 0.074 | 3.669 | 63.990 | 378 |
+| FriCAS | 0.120 | 7.856 | 60.153 | 359 |
 
 ### Mathilda > 10x slower than FriCAS (22)
 
 | id | method | Mathilda s | FriCAS s |
 |---|---|---:|---:|
-| recip-005 | TragerKauers | 4.232 | 0.29 |
-| recip-010 | TragerKauers | 5.814 | 0.29 |
-| recip-011 | TragerKauers | 4.361 | 0.28 |
-| ratradicand-009 | TragerKauers | 4.285 | 0.18 |
-| deriv-log-03 | TragerKauers | 60.028 | 0.17 |
-| deriv-log-04 | TragerKauers | 60.024 | 0.16 |
-| deriv-log-05 | TragerKauers | 60.029 | 0.65 |
-| deriv-log-06 | TragerKauers | 60.109 | 0.34 |
-| deriv-log-07 | TragerKauers | 60.058 | 0.43 |
-| deriv-log-08 | TragerKauers | 60.066 | 0.67 |
-| deriv-log-11 | TragerKauers | 25.114 | 0.18 |
-| deriv-log-13 | TragerKauers | 60.808 | 0.68 |
-| deriv-log-15 | TragerKauers | 65.861 | 0.52 |
-| deriv-log-16 | TragerKauers | 60.027 | 0.21 |
-| deriv-log-18 | TragerKauers | 60.012 | 0.20 |
-| deriv-log-19 | TragerKauers | 60.058 | 0.47 |
-| deriv-log-20 | TragerKauers | 60.054 | 0.29 |
-| deriv-log-21 | TragerKauers | 60.131 | 0.28 |
-| deriv-log-22 | TragerKauers | 60.571 | 0.27 |
-| deriv-log-23 | TragerKauers | 60.046 | 0.33 |
-| deriv-log-24 | TragerKauers | 60.021 | 0.27 |
-| deriv-log-25 | TragerKauers | 60.281 | 0.48 |
+| recip-007 | TragerKauers | 1.857 | 0.18 |
+| recip-010 | TragerKauers | 5.746 | 0.33 |
+| recip-011 | TragerKauers | 4.225 | 0.31 |
+| ratradicand-009 | TragerKauers | 3.492 | 0.11 |
+| deriv-log-03 | TragerKauers | 60.094 | 0.17 |
+| deriv-log-04 | TragerKauers | 60.097 | 0.19 |
+| deriv-log-05 | TragerKauers | 60.181 | 0.70 |
+| deriv-log-06 | TragerKauers | 60.366 | 0.37 |
+| deriv-log-07 | TragerKauers | 60.078 | 0.32 |
+| deriv-log-08 | TragerKauers | 60.165 | 0.70 |
+| deriv-log-11 | TragerKauers | 24.825 | 0.20 |
+| deriv-log-13 | TragerKauers | 63.990 | 0.74 |
+| deriv-log-15 | TragerKauers | 60.230 | 0.60 |
+| deriv-log-16 | TragerKauers | 61.553 | 0.28 |
+| deriv-log-18 | TragerKauers | 60.081 | 0.21 |
+| deriv-log-19 | TragerKauers | 61.850 | 0.52 |
+| deriv-log-20 | TragerKauers | 60.240 | 0.31 |
+| deriv-log-21 | TragerKauers | 60.100 | 0.31 |
+| deriv-log-22 | TragerKauers | 60.137 | 0.35 |
+| deriv-log-23 | TragerKauers | 60.070 | 0.46 |
+| deriv-log-24 | TragerKauers | 60.052 | 0.33 |
+| deriv-log-25 | TragerKauers | 60.064 | 0.64 |
 
 ## Hard failures and gaps
 
@@ -154,381 +154,381 @@ Verified antiderivatives (40-digit check at every point) for which `PossibleZero
 
 | id | family | integrand | expect | Trager | s | TragerKauers | s | FriCAS | s | class T | class TK |
 |---|---|---|---|---|---:|---|---:|---|---:|---|---|
-| binom-001 | binomial-xk | `x^2/Sqrt[x^2 - 3]` | elem | ELEM | 0.070 | ELEM | 0.104 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| binom-002 | binomial-xk | `x^3/(x^2 + 2)^(1/3)` | elem | ELEM | 0.080 | ELEM | 0.075 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-003 | binomial-xk | `x^3/Sqrt[x^6 + 2]` | nonelem | NONELEM | 0.060 | NONELEM | 0.061 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-004 | binomial-xk | `x^2/(x^3 + 1)^(1/3)` | elem | ELEM | 0.061 | ELEM | 0.056 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-005 | binomial-xk | `x^2/(x^4 + 1)^(1/3)` | nonelem | NONELEM | 0.054 | NONELEM | 0.050 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-006 | binomial-xk | `x^3/(x^4 - 1)^(1/3)` | elem | ELEM | 0.056 | ELEM | 0.058 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-007 | binomial-xk | `x^3/(x^6 + 1)^(1/3)` | nonelem | NONELEM | 0.059 | NONELEM | 0.064 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-008 | binomial-xk | `x^3/(x^3 - 1)^(1/4)` | nonelem | NONELEM | 0.065 | NONELEM | 0.058 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-009 | binomial-xk | `x/(x^4 - 1)^(1/3)` | nonelem | NONELEM | 0.059 | NONELEM | 0.061 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-010 | binomial-xk | `x^2/(x^2 + 2)^(1/3)` | nonelem | NONELEM | 0.050 | NONELEM | 0.055 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-011 | binomial-xk | `x^5/(x^2 - 3)^(1/4)` | elem | ELEM | 0.072 | ELEM | 0.088 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| binom-012 | binomial-xk | `x^5/(x^2 + 2)^(1/4)` | elem | ELEM | 0.085 | ELEM | 0.089 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-013 | binomial-xk | `x^3/(x^4 - 1)^(1/4)` | elem | ELEM | 0.051 | ELEM | 0.051 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| binom-014 | binomial-xk | `x^5/(x^6 - 1)^(1/3)` | elem | ELEM | 0.045 | ELEM | 0.049 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-015 | binomial-xk | `x^3/(x^6 + 2)^(1/3)` | nonelem | NONELEM | 0.060 | NONELEM | 0.058 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-016 | binomial-xk | `x^2/Sqrt[x^2 + 1]` | elem | ELEM | 0.072 | ELEM | 0.095 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| binom-017 | binomial-xk | `x/Sqrt[x^2 - 1]` | elem | ELEM | 0.052 | ELEM | 0.048 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| binom-018 | binomial-xk | `x^2/(x^3 - 1)^(1/3)` | elem | ELEM | 0.060 | ELEM | 0.047 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-019 | binomial-xk | `1/(x^2 - 1)^(1/3)` | nonelem | NONELEM | 0.059 | NONELEM | 0.049 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-020 | binomial-xk | `x^3/(x^6 - 1)^(1/4)` | nonelem | NONELEM | 0.075 | NONELEM | 0.080 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-021 | binomial-xk | `1/(x^2 + 1)^(1/4)` | nonelem | NONELEM | 0.057 | NONELEM | 0.062 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-022 | binomial-xk | `x^5/Sqrt[x^3 - 1]` | elem | ELEM | 0.074 | ELEM | 0.078 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-023 | binomial-xk | `x/(x^3 + 2)^(1/3)` | nonelem | NONELEM | 0.055 | NONELEM | 0.066 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-024 | binomial-xk | `1/(x^6 - 1)^(1/3)` | nonelem | NONELEM | 0.056 | NONELEM | 0.056 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-025 | binomial-xk | `x^3/Sqrt[x^3 - 3]` | nonelem | NONELEM | 0.049 | NONELEM | 0.049 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-026 | binomial-xk | `1/Sqrt[x^6 - 1]` | nonelem | NONELEM | 0.048 | NONELEM | 0.046 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-027 | binomial-xk | `x/(x^4 - 1)^(1/4)` | nonelem | NONELEM | 0.073 | NONELEM | 0.065 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-028 | binomial-xk | `x/Sqrt[x^6 + 2]` | nonelem | NONELEM | 0.063 | NONELEM | 0.052 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-029 | binomial-xk | `x^3/(x^3 + 2)^(1/3)` | elem | ELEM | 0.745 | DECLINE | 0.122 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
-| binom-030 | binomial-xk | `x^2/Sqrt[x^6 + 1]` | elem | ELEM | 0.087 | ELEM | 0.142 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| binom-031 | binomial-xk | `x^2/(x^3 - 1)^(1/4)` | elem | ELEM | 0.059 | ELEM | 0.056 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| binom-032 | binomial-xk | `1/(x^4 + 1)^(1/4)` | elem | ELEM | 0.844 | DECLINE | 0.241 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
-| binom-033 | binomial-xk | `x^5/(x^4 + 2)^(1/4)` | nonelem | NONELEM | 0.071 | NONELEM | 0.067 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-034 | binomial-xk | `x^3/(x^2 - 1)^(1/4)` | elem | ELEM | 0.076 | ELEM | 0.086 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| binom-035 | binomial-xk | `1/(x^6 + 1)^(1/4)` | nonelem | NONELEM | 0.057 | NONELEM | 0.058 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-036 | binomial-xk | `x^5/(x^2 + 1)^(1/3)` | elem | ELEM | 0.076 | ELEM | 0.183 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-037 | binomial-xk | `x^5/(x^2 - 3)^(1/3)` | elem | ELEM | 0.080 | ELEM | 0.093 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| binom-038 | binomial-xk | `x/(x^4 - 3)^(1/4)` | nonelem | NONELEM | 0.068 | NONELEM | 0.080 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-039 | binomial-xk | `x^3/Sqrt[x^6 - 3]` | nonelem | NONELEM | 0.065 | NONELEM | 0.076 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-040 | binomial-xk | `1/(x^6 - 3)^(1/3)` | nonelem | NONELEM | 0.055 | NONELEM | 0.062 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-041 | binomial-xk | `x^2/(x^2 + 2)^(1/4)` | nonelem | NONELEM | 0.054 | NONELEM | 0.059 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-042 | binomial-xk | `x^2/Sqrt[x^6 - 3]` | elem | ELEM | 0.085 | ELEM | 0.121 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| binom-043 | binomial-xk | `x/Sqrt[x^6 - 1]` | nonelem | NONELEM | 0.066 | NONELEM | 0.059 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-044 | binomial-xk | `1/Sqrt[x^6 - 3]` | nonelem | NONELEM | 0.061 | NONELEM | 0.055 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| binom-045 | binomial-xk | `x^5/(x^6 - 3)^(1/4)` | elem | ELEM | 0.056 | ELEM | 0.058 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| third-001 | third-kind | `1/((x)*Sqrt[x^2 + 1])` | elem | ELEM | 0.116 | ELEM | 0.098 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| third-002 | third-kind | `1/((x - 1)*Sqrt[x^2 + 1])` | elem | ELEM | 0.117 | ELEM | 0.100 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-003 | third-kind | `1/((x + 1)*Sqrt[x^2 + 1])` | elem | ELEM | 0.109 | ELEM | 0.105 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-004 | third-kind | `1/((x - 2)*Sqrt[x^2 + 1])` | elem | ELEM | 0.111 | ELEM | 0.097 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-005 | third-kind | `1/((x - 3)*Sqrt[x^2 + 1])` | elem | ELEM | 0.106 | ELEM | 0.103 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-006 | third-kind | `1/((x)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.119 | ELEM | 0.095 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| third-007 | third-kind | `1/((x - 1)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.110 | ELEM | 0.086 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-008 | third-kind | `1/((x + 1)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.111 | ELEM | 0.107 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| third-009 | third-kind | `1/((x - 2)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.116 | ELEM | 0.097 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| third-010 | third-kind | `1/((x - 3)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.101 | ELEM | 0.099 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| third-011 | third-kind | `1/((x)*Sqrt[x^3 + 1])` |  | ELEM | 0.098 | ELEM | 0.084 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-012 | third-kind | `1/((x - 1)*Sqrt[x^3 + 1])` |  | NONELEM | 0.126 | DECLINE | 0.237 | NONELEM | 0.260 | AGREE-NONELEM | NEITHER |
-| third-013 | third-kind | `1/((x - 2)*Sqrt[x^3 + 1])` |  | NONELEM | 0.181 | DECLINE | 0.167 | NONELEM | 0.230 | AGREE-NONELEM | NEITHER |
-| third-014 | third-kind | `1/((x - 3)*Sqrt[x^3 + 1])` |  | NONELEM | 0.140 | DECLINE | 0.265 | NONELEM | 0.260 | AGREE-NONELEM | NEITHER |
-| third-015 | third-kind | `1/((x - 2)*Sqrt[x^3 - x])` |  | NONELEM | 0.124 | DECLINE | 0.262 | NONELEM | 0.260 | AGREE-NONELEM | NEITHER |
-| third-016 | third-kind | `1/((x - 3)*Sqrt[x^3 - x])` |  | NONELEM | 0.148 | DECLINE | 0.274 | NONELEM | 0.270 | AGREE-NONELEM | NEITHER |
-| third-017 | third-kind | `1/((x)*Sqrt[x^4 + 1])` |  | ELEM | 0.102 | ELEM | 0.071 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-018 | third-kind | `1/((x - 1)*Sqrt[x^4 + 1])` |  | NONELEM | 0.260 | DECLINE | 0.277 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| third-019 | third-kind | `1/((x + 1)*Sqrt[x^4 + 1])` |  | NONELEM | 0.267 | DECLINE | 0.264 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| third-020 | third-kind | `1/((x - 2)*Sqrt[x^4 + 1])` |  | NONELEM | 0.248 | DECLINE | 0.394 | NONELEM | 0.270 | AGREE-NONELEM | NEITHER |
-| third-021 | third-kind | `1/((x - 3)*Sqrt[x^4 + 1])` |  | NONELEM | 0.236 | DECLINE | 0.420 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| third-022 | third-kind | `1/((x)*Sqrt[x^4 - 1])` |  | ELEM | 0.136 | ELEM | 0.081 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| third-023 | third-kind | `1/((x - 2)*Sqrt[x^4 - 1])` |  | NONELEM | 0.129 | DECLINE | 0.311 | NONELEM | 0.310 | AGREE-NONELEM | NEITHER |
-| third-024 | third-kind | `1/((x - 3)*Sqrt[x^4 - 1])` |  | NONELEM | 0.136 | DECLINE | 0.391 | NONELEM | 0.320 | AGREE-NONELEM | NEITHER |
-| third-025 | third-kind | `1/((x)*Sqrt[x^4 + x^2 + 1])` |  | ELEM | 0.101 | ELEM | 0.106 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| third-026 | third-kind | `1/((x - 1)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.265 | DECLINE | 0.275 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| third-027 | third-kind | `1/((x + 1)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.270 | DECLINE | 0.261 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| third-028 | third-kind | `1/((x - 2)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.168 | DECLINE | 0.403 | NONELEM | 0.270 | AGREE-NONELEM | NEITHER |
-| third-029 | third-kind | `1/((x - 3)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.212 | DECLINE | 0.462 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| third-030 | third-kind | `1/((x)*Sqrt[x^3 + x + 1])` |  | NONELEM | 0.121 | DECLINE | 0.148 | NONELEM | 0.230 | AGREE-NONELEM | NEITHER |
-| ratrad-001 | rational-times-radical | `x^3/x*(x^3 + 1)^(-2/3)` |  | ELEM | 0.067 | ELEM | 0.065 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-002 | rational-times-radical | `x^3/(x - 2)*(x^2 + 1)^(1/6)` |  | NONELEM | 0.669 | DECLINE | 3.922 | TIMEOUT | 60.071 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-003 | rational-times-radical | `(x^2 + 1)/(x + 1)*(x^2 - x + 1)^(-1/2)` | elem | ELEM | 0.153 | ELEM | 0.170 | ELEM | 0.160 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-004 | rational-times-radical | `x^3/(x - 2)*(x^4 + 3)^(-3/5)` |  | NONELEM | 0.110 | NONELEM | 0.092 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-005 | rational-times-radical | `x^3/(x - 2)*(x^3 + 1)^(3/2)` |  | NONELEM | 0.072 | NONELEM | 0.126 | NONELEM | 0.280 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-006 | rational-times-radical | `1/x*(x^3 + 1)^(2/3)` |  | ELEM | 0.407 | DECLINE | 0.482 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
-| ratrad-007 | rational-times-radical | `1/(x + 1)*(x^3 - 2*x)^(1/4)` |  | NONELEM | 0.601 | DECLINE | 0.433 | TIMEOUT | 60.076 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-008 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^2 + 1)^(-2/3)` |  | NONELEM | 0.140 | DECLINE | 0.354 | TIMEOUT | 60.094 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-009 | rational-times-radical | `x^3*(x^2 + 1)^(1/5)` |  | ELEM | 0.205 | ELEM | 0.103 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-010 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^2 - x + 1)^(1/5)` |  | NONELEM | 0.792 | DECLINE | 1.582 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-011 | rational-times-radical | `x^3/x*(x^2 - x + 1)^(1/5)` |  | NONELEM | 0.073 | NONELEM | 0.075 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-012 | rational-times-radical | `x/(x - 2)*(x^3 + 1)^(-2/3)` |  | NONELEM | 0.222 | DECLINE | 0.245 | TIMEOUT | 60.049 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-013 | rational-times-radical | `1/x*(x^2 - x + 1)^(3/4)` |  | NONELEM | 0.061 | NONELEM | 0.068 | TIMEOUT | 60.149 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-014 | rational-times-radical | `x^3/(x + 1)*Sqrt[x^3 - 2*x]` |  | NONELEM | 0.075 | NONELEM | 0.081 | NONELEM | 0.260 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-015 | rational-times-radical | `(x^2 + 1)/(x - 2)*(x^3 - 2*x)^(-3/5)` |  | NONELEM | 0.082 | NONELEM | 0.088 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-016 | rational-times-radical | `(x^2 + 1)/x*(x^4 + 3)^(1/6)` |  | NONELEM | 21.102 | DECLINE | 3.050 | TIMEOUT | 60.071 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-017 | rational-times-radical | `x*(x^4 + 3)^(3/2)` |  | ELEM | 0.096 | ELEM | 0.126 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-018 | rational-times-radical | `1/x*(x^3 - 2*x)^(3/2)` |  | NONELEM | 0.069 | NONELEM | 0.058 | NONELEM | 0.190 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-019 | rational-times-radical | `1/(x^2 + 2)*(x^3 + 1)^(-1/4)` |  | NONELEM | 1.409 | DECLINE | 7.700 | TIMEOUT | 60.044 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-020 | rational-times-radical | `x^3/(x - 2)*(x^3 - 2*x)^(-1/2)` |  | NONELEM | 0.074 | NONELEM | 0.053 | NONELEM | 0.260 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-021 | rational-times-radical | `x^3/(x - 2)*(x^2 - x + 1)^(-1/6)` |  | NONELEM | 0.087 | NONELEM | 0.100 | TIMEOUT | 60.057 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-022 | rational-times-radical | `x/x*(x + 2)^(-1/2)` | elem | ELEM | 0.044 | ELEM | 0.046 | ELEM | 0.170 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-023 | rational-times-radical | `(x^2 + 1)*(x^2 + 1)^(1/5)` |  | NONELEM | 0.091 | NONELEM | 0.077 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-024 | rational-times-radical | `(2*x - 1)*(x^2 - x + 1)^(1/5)` |  | ELEM | 0.078 | ELEM | 0.083 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-025 | rational-times-radical | `(2*x - 1)/(x + 1)*(x + 2)^(1/3)` | elem | ELEM | 0.290 | DECLINE | 0.183 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
-| ratrad-026 | rational-times-radical | `x^3*(x + 2)^(1/4)` | elem | ELEM | 0.084 | ELEM | 0.084 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-027 | rational-times-radical | `x^3*(x + 2)^(-1/2)` | elem | ELEM | 0.114 | ELEM | 0.086 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-028 | rational-times-radical | `x^3*(x^2 + 1)^(1/6)` |  | ELEM | 0.084 | ELEM | 0.078 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-029 | rational-times-radical | `(x^2 + 1)/(x^2 + 2)*(x^2 + 1)^(3/4)` |  | NONELEM | 0.065 | NONELEM | 0.061 | TIMEOUT | 60.069 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-030 | rational-times-radical | `x*(x + 2)^(-1/4)` | elem | ELEM | 0.073 | ELEM | 0.068 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-031 | rational-times-radical | `x/(x + 1)*(x^2 + 1)^(1/5)` |  | NONELEM | 0.422 | DECLINE | 1.432 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-032 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^2 + 1)^(2/5)` |  | NONELEM | 0.540 | DECLINE | 1.515 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-033 | rational-times-radical | `x/(x - 2)*(x + 2)^(-1/3)` | elem | ELEM | 0.108 | DECLINE | 0.245 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
-| ratrad-034 | rational-times-radical | `x^3/x*(x^2 + 1)^(5/6)` |  | NONELEM | 0.071 | NONELEM | 0.082 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-035 | rational-times-radical | `x/x*(x^4 + 3)^(5/6)` |  | NONELEM | 0.061 | NONELEM | 0.071 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-036 | rational-times-radical | `(2*x - 1)/(x^2 + 2)*(x^4 + 3)^(5/6)` |  | NONELEM | 0.109 | NONELEM | 0.094 | NONELEM | 0.180 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-037 | rational-times-radical | `1/(x + 1)*(x^3 - 2*x)^(-1/4)` |  | NONELEM | 0.529 | DECLINE | 0.743 | TIMEOUT | 60.049 | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-038 | rational-times-radical | `1/(x^2 + 2)*(x^3 + 1)^(2/5)` |  | NONELEM | 0.073 | NONELEM | 0.087 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-039 | rational-times-radical | `(2*x - 1)/x*(x^3 - 2*x)^(1/6)` |  | NONELEM | 0.066 | NONELEM | 0.076 | NONELEM | 0.210 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-040 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^4 + 3)^(2/5)` |  | NONELEM | 0.082 | NONELEM | 0.070 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| ratrad-041 | rational-times-radical | `x^3*Sqrt[x + 2]` | elem | ELEM | 0.072 | ELEM | 0.072 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-042 | rational-times-radical | `(x^2 + 1)*(x^4 + 3)^(-1/3)` |  | NONELEM | 0.057 | NONELEM | 0.050 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| ratrad-043 | rational-times-radical | `x^3*(x^3 - 2*x)^(-2/3)` |  | ELEM | 0.633 | DECLINE | 0.167 | TIMEOUT | 60.043 | MATHILDA-ONLY | NEITHER |
-| ratrad-044 | rational-times-radical | `x/(x - 2)*(x^3 - 2*x)^(-1/3)` |  | NONELEM | 0.939 | DECLINE | 0.265 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-045 | rational-times-radical | `1/x*(x^2 + 1)^(-1/6)` |  | ELEM | 0.972 | DECLINE | 0.322 | ELEM | 0.170 | AGREE-ELEM | FRICAS-ONLY |
-| ratrad-046 | rational-times-radical | `x^3/x*(x^3 + 1)^(1/3)` |  | ELEM | 0.067 | ELEM | 0.066 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratrad-047 | rational-times-radical | `(2*x - 1)/x*(x + 2)^(-1/4)` | elem | ELEM | 0.121 | DECLINE | 0.671 | ELEM | 0.170 | AGREE-ELEM | FRICAS-ONLY |
-| ratrad-048 | rational-times-radical | `(2*x - 1)/(x^2 + 2)*(x^2 - x + 1)^(1/3)` |  | NONELEM | 0.147 | DECLINE | 1.126 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-049 | rational-times-radical | `(2*x - 1)/(x - 2)*(x^2 + 1)^(-3/5)` |  | NONELEM | 0.410 | DECLINE | 1.124 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| ratrad-050 | rational-times-radical | `x/(x + 1)*(x^2 - x + 1)^(1/3)` |  | NONELEM | 0.837 | DECLINE | 0.061 | TIMEOUT | 60.094 | NONELEM-UNCONFIRMED | NEITHER |
-| cheb-001 | chebyshev | `x*(x^2 + 1)^(1/3)` | elem | ELEM | 0.050 | ELEM | 0.047 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| cheb-002 | chebyshev | `x^2*Sqrt[2*x^4 - 1]` | nonelem | NONELEM | 0.039 | NONELEM | 0.039 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-003 | chebyshev | `x^4*(-x^3 + 3)^(-1/2)` | nonelem | NONELEM | 0.037 | NONELEM | 0.041 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-004 | chebyshev | `x*(2*x^3 - 1)^(-3/4)` | nonelem | NONELEM | 0.040 | NONELEM | 0.035 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-005 | chebyshev | `(2*x^4 - 1)^(1/4)` | nonelem | NONELEM | 0.034 | NONELEM | 0.041 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-006 | chebyshev | `(-x^4 + 3)^(1/6)` | nonelem | NONELEM | 0.042 | NONELEM | 0.041 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-007 | chebyshev | `x^(-1)*Sqrt[-x^3 + 3]` | elem | ELEM | 0.095 | ELEM | 0.104 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| cheb-008 | chebyshev | `x^4*(-x^4 + 3)^(2/3)` | nonelem | NONELEM | 0.038 | NONELEM | 0.040 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-009 | chebyshev | `x^3*(-x^4 + 3)^(-1/2)` | elem | ELEM | 0.036 | ELEM | 0.038 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| cheb-010 | chebyshev | `x^5*(x^3 + 1)^(1/4)` | elem | ELEM | 0.055 | ELEM | 0.055 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
-| cheb-011 | chebyshev | `x^(-2)*(x^4 + 1)^(-3/4)` | elem | ELEM | 0.048 | ELEM | 0.040 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| cheb-012 | chebyshev | `(-x^2 + 3)^(1/4)` | nonelem | NONELEM | 0.034 | NONELEM | 0.035 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-013 | chebyshev | `x^(-1)*Sqrt[x^4 + 1]` | elem | ELEM | 0.070 | ELEM | 0.086 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| cheb-014 | chebyshev | `x^3*(2*x^3 - 1)^(2/3)` | elem | ELEM | 0.795 | DECLINE | 0.100 | ELEM | 0.130 | AGREE-ELEM | FRICAS-ONLY |
-| cheb-015 | chebyshev | `x^3*(-x^2 + 3)^(1/3)` | elem | ELEM | 0.058 | ELEM | 0.058 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
-| cheb-016 | chebyshev | `x^5*(x^2 + 1)^(1/6)` | elem | ELEM | 0.062 | ELEM | 0.065 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
-| cheb-017 | chebyshev | `x^5*(2*x^3 - 1)^(-3/4)` | elem | ELEM | 0.056 | ELEM | 0.054 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| cheb-018 | chebyshev | `x^(-2)*(x^3 + 1)^(2/5)` | nonelem | NONELEM | 0.045 | NONELEM | 0.046 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-019 | chebyshev | `(3*x^2 + 2)^(-1/4)` | nonelem | NONELEM | 0.039 | NONELEM | 0.038 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-020 | chebyshev | `x^(-1)*(2*x^4 - 1)^(2/3)` | elem | ELEM | 0.286 | DECLINE | 0.549 | ELEM | 0.130 | AGREE-ELEM | FRICAS-ONLY |
-| cheb-021 | chebyshev | `x*(3*x^4 + 2)^(1/3)` | nonelem | NONELEM | 0.043 | NONELEM | 0.043 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-022 | chebyshev | `x*(2*x^3 - 1)^(3/2)` | nonelem | NONELEM | 0.036 | NONELEM | 0.040 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-023 | chebyshev | `(3*x^4 + 2)^(1/6)` | nonelem | NONELEM | 0.039 | NONELEM | 0.041 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-024 | chebyshev | `x^4*(x^3 + 1)^(-3/4)` | nonelem | NONELEM | 0.044 | NONELEM | 0.035 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-025 | chebyshev | `x^3*(3*x^4 + 2)^(-5/6)` | elem | ELEM | 0.052 | ELEM | 0.052 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
-| cheb-026 | chebyshev | `x^(-3)*(-x^3 + 3)^(3/2)` | nonelem | NONELEM | 0.041 | NONELEM | 0.048 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-027 | chebyshev | `x^(-1)*(-x^2 + 3)^(-1/3)` | elem | ELEM | 0.109 | DECLINE | 0.241 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
-| cheb-028 | chebyshev | `x*(-x^3 + 3)^(-5/6)` | nonelem | NONELEM | 0.041 | NONELEM | 0.047 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-029 | chebyshev | `x^3*(2*x^2 - 1)^(3/2)` | elem | ELEM | 0.060 | ELEM | 0.057 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| cheb-030 | chebyshev | `x^4*(2*x^2 - 1)^(1/4)` | nonelem | NONELEM | 0.043 | NONELEM | 0.044 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-031 | chebyshev | `x^(-1)*Sqrt[-x^2 + 3]` | elem | ELEM | 0.091 | ELEM | 0.106 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| cheb-032 | chebyshev | `x^3*(-x^2 + 3)^(-5/6)` | elem | ELEM | 0.065 | ELEM | 0.069 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| cheb-033 | chebyshev | `x^4*(3*x^4 + 2)^(3/2)` | nonelem | NONELEM | 0.042 | NONELEM | 0.037 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-034 | chebyshev | `x^5*(3*x^2 + 2)^(3/2)` | elem | ELEM | 0.070 | ELEM | 0.072 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| cheb-035 | chebyshev | `x^(-3)*(3*x^3 + 2)^(1/4)` | nonelem | NONELEM | 0.037 | NONELEM | 0.037 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-036 | chebyshev | `x^5*(3*x^3 + 2)^(-1/2)` | elem | ELEM | 0.054 | ELEM | 0.050 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| cheb-037 | chebyshev | `x^5*(2*x^3 - 1)^(-1/3)` | elem | ELEM | 0.049 | ELEM | 0.054 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| cheb-038 | chebyshev | `x^(-3)*(-x^4 + 3)^(3/2)` | elem | ELEM | 0.101 | ELEM | 0.105 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| cheb-039 | chebyshev | `x^4*(3*x^4 + 2)^(2/5)` | nonelem | NONELEM | 0.040 | NONELEM | 0.038 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| cheb-040 | chebyshev | `x^4*(2*x^4 - 1)^(-1/3)` | nonelem | NONELEM | 0.040 | NONELEM | 0.040 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| goursat-001 | goursat | `(x^2 - 1)/((x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.177 | ELEM | 0.068 | ELEM | 0.220 | AGREE-ELEM | AGREE-ELEM |
-| goursat-002 | goursat | `(x^2 + 1)/((x^2 - 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.175 | ELEM | 0.078 | ELEM | 0.220 | AGREE-ELEM | AGREE-ELEM |
-| goursat-003 | goursat | `x/Sqrt[x^4 + 10*x^2 - 96*x - 71]` | elem | ELEM | 0.283 | DECLINE | 0.287 | ELEM | 0.310 | AGREE-ELEM | FRICAS-ONLY |
-| goursat-004 | goursat | `x/Sqrt[x^4 + 10*x^2 - 96*x - 72]` |  | NONELEM | 0.088 | DECLINE | 0.300 | NONELEM | 0.280 | AGREE-NONELEM | NEITHER |
-| goursat-005 | goursat | `(1 - x^2)/((1 + x^2)*Sqrt[1 + x^2 + x^4])` | elem | ELEM | 0.195 | ELEM | 0.073 | ELEM | 0.220 | AGREE-ELEM | AGREE-ELEM |
-| goursat-006 | goursat | `1/(x^3 + 1)^(1/3)` | elem | ELEM | 0.421 | DECLINE | 0.084 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
-| goursat-007 | goursat | `x/((x^3 + 1)^(1/3)*(x^3 - 2))` |  | NONELEM | 0.101 | DECLINE | 2.930 | NONELEM | 5.070 | AGREE-NONELEM | NEITHER |
-| goursat-008 | goursat | `x/((x^3 + 8)*(x^3 + 1)^(1/3))` |  | NONELEM | 0.115 | DECLINE | 3.063 | NONELEM | 6.170 | AGREE-NONELEM | NEITHER |
-| goursat-009 | goursat | `(x^3 - 2)/((x^3 + 1)^(2/3)*(x^3 + 4))` |  | NONELEM | 0.117 | DECLINE | 0.961 | NONELEM | 5.490 | AGREE-NONELEM | NEITHER |
-| goursat-010 | goursat | `1/((x^4 + 1)^(1/4))` | elem | ELEM | 0.712 | DECLINE | 0.091 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
-| goursat-011 | goursat | `x^2/((x^4 - 1)^(3/4))` |  | ELEM | 0.996 | ELEM | 0.115 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| goursat-012 | goursat | `1/(x*(x^4 + 1)^(1/4))` | elem | ELEM | 0.160 | DECLINE | 0.174 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
-| goursat-013 | goursat | `(x^4 - 1)/((x^4 + 1)^(1/4)*x^2)` |  | NONELEM | 0.051 | NONELEM | 0.052 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| goursat-014 | goursat | `1/((x^2 + 1)*(x^4 + 1)^(1/4))` |  | NONELEM | 0.419 | DECLINE | 2.388 | TIMEOUT | 60.102 | NONELEM-UNCONFIRMED | NEITHER |
-| goursat-015 | goursat | `(x^2 - 1)/((x^2 + 1)*(x^4 + 1)^(1/4))` |  | NONELEM | 2.086 | DECLINE | 0.098 | TIMEOUT | 60.058 | NONELEM-UNCONFIRMED | NEITHER |
-| goursat-016 | goursat | `x/((x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.087 | ELEM | 0.077 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| goursat-017 | goursat | `(3*x^2 + 1)/((x^2 - 1)*Sqrt[x^4 - x^2])` |  | ELEM | 0.089 | ELEM | 0.101 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| goursat-018 | goursat | `(x^6 + 2)/((x^6 - 1)*Sqrt[x^6 + 1])` |  | NONELEM | 0.174 | DECLINE | 1.897 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| goursat-019 | goursat | `(5*x^4 + 1)/Sqrt[x^5 + x + 1]` | elem | ELEM | 0.041 | ELEM | 0.038 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| goursat-020 | goursat | `(x^2 + 2)/((x^2 + 1)*(x^3 + x)^(1/3))` |  | ELEM | 0.452 | DECLINE | 0.376 | TIMEOUT | 60.043 | MATHILDA-ONLY | NEITHER |
-| goursat-021 | goursat | `1/((x^2 - 2)*(x^4 - 4*x^2 + 1)^(1/4))` |  | NONELEM | 0.655 | TIMEOUT | 60.006 | TIMEOUT | 60.063 | NONELEM-UNCONFIRMED | TIMEOUT |
-| goursat-022 | goursat | `(x - 1)/((x + 1)*Sqrt[x^3 + x^2 + x])` |  | ELEM | 0.332 | DECLINE | 0.465 | ELEM | 0.190 | AGREE-ELEM | FRICAS-ONLY |
-| goursat-023 | goursat | `(x^2 - 2)/((x^2 + 2)*Sqrt[x^4 + 4])` | elem | ELEM | 0.253 | ELEM | 0.278 | ELEM | 0.260 | AGREE-ELEM | AGREE-ELEM |
-| recip-001 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.183 | ELEM | 0.178 | ELEM | 0.200 | AGREE-ELEM | AGREE-ELEM |
-| recip-002 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + x + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.195 | DECLINE | 1.066 | ELEM | 0.250 | AGREE-ELEM | FRICAS-ONLY |
-| recip-003 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 2*x + 1)*Sqrt[x^4 + x^2 + 1])` | elem | ELEM | 0.247 | DECLINE | 0.478 | ELEM | 0.240 | AGREE-ELEM | FRICAS-ONLY |
-| recip-004 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 3*x + 1)*Sqrt[x^4 - x^2 + 1])` | elem | ELEM | 0.895 | DECLINE | 1.516 | ELEM | 0.310 | AGREE-ELEM | FRICAS-ONLY |
-| recip-005 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 - x + 1)*Sqrt[x^4 + 3*x^2 + 1])` | elem | ELEM | 0.983 | DECLINE | 4.232 | ELEM | 0.290 | AGREE-ELEM | FRICAS-ONLY |
-| recip-006 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 1)*Sqrt[x^4 + 5*x^2 + 1])` | elem | ELEM | 0.720 | ELEM | 0.127 | ELEM | 0.260 | AGREE-ELEM | AGREE-ELEM |
-| recip-007 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + x + 1)*Sqrt[x^4 + 3*x^2 + 1])` | elem | ELEM | 0.773 | DECLINE | 1.488 | ELEM | 0.240 | AGREE-ELEM | FRICAS-ONLY |
-| recip-008 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 + x - 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.360 | DECLINE | 1.265 | ELEM | 0.250 | AGREE-ELEM | FRICAS-ONLY |
-| recip-009 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 + 2*x - 1)*Sqrt[x^4 + x^2 + 1])` | elem | ELEM | 0.226 | DECLINE | 1.764 | ELEM | 0.280 | AGREE-ELEM | FRICAS-ONLY |
-| recip-010 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 + 3*x - 1)*Sqrt[x^4 + 3*x^2 + 1])` | elem | ELEM | 0.361 | DECLINE | 5.814 | ELEM | 0.290 | AGREE-ELEM | FRICAS-ONLY |
-| recip-011 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 - x - 1)*Sqrt[x^4 - x^2 + 1])` | elem | ELEM | 0.807 | DECLINE | 4.361 | ELEM | 0.280 | AGREE-ELEM | FRICAS-ONLY |
-| evensub-001 | even-substitution | `x/((x^2 + 3)*Sqrt[x^4 + x^2 + 1])` | elem | ELEM | 0.184 | ELEM | 0.164 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| evensub-002 | even-substitution | `x^3/((x^2 - 2)*Sqrt[x^4 + 1])` | elem | ELEM | 0.206 | ELEM | 0.257 | ELEM | 0.160 | AGREE-ELEM | AGREE-ELEM |
-| evensub-003 | even-substitution | `x/Sqrt[x^4 - 3*x^2 + 1]` | elem | ELEM | 0.123 | ELEM | 0.200 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| evensub-004 | even-substitution | `x^5/((x^4 + 1)*Sqrt[x^4 + 2])` | elem | ELEM | 0.197 | ELEM | 0.310 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| evensub-005 | even-substitution | `x/((x^4 + x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.330 | ELEM | 0.259 | ELEM | 0.200 | AGREE-ELEM | AGREE-ELEM |
-| evensub-006 | even-substitution | `(x^3 + x)/((x^2 + 5)*Sqrt[x^4 - 2*x^2 + 7])` | elem | ELEM | 0.792 | ELEM | 0.252 | ELEM | 0.160 | AGREE-ELEM | AGREE-ELEM |
-| hyper-001 | genus-hyper | `1/Sqrt[x + 3]` | elem | ELEM | 0.071 | ELEM | 0.075 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| hyper-002 | genus-hyper | `x^1/Sqrt[x + 3]` | elem | ELEM | 0.087 | ELEM | 0.087 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| hyper-003 | genus-hyper | `1/Sqrt[x^2 + x + 1]` | elem | ELEM | 0.108 | ELEM | 0.124 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| hyper-004 | genus-hyper | `x^1/Sqrt[x^2 + x + 1]` | elem | ELEM | 0.135 | ELEM | 0.063 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| hyper-005 | genus-hyper | `1/Sqrt[x^3 - x + 1]` | nonelem | NONELEM | 0.079 | NONELEM | 0.036 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-006 | genus-hyper | `x^2/Sqrt[x^3 - x + 1]` |  | NONELEM | 0.070 | NONELEM | 0.038 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-007 | genus-hyper | `1/Sqrt[x^4 + x + 1]` | nonelem | NONELEM | 0.033 | NONELEM | 0.039 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-008 | genus-hyper | `x^2/Sqrt[x^4 + x + 1]` |  | NONELEM | 0.041 | NONELEM | 0.040 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-009 | genus-hyper | `1/Sqrt[x^5 - x + 1]` | nonelem | NONELEM | 0.035 | NONELEM | 0.039 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-010 | genus-hyper | `x^1/Sqrt[x^5 - x + 1]` | nonelem | NONELEM | 0.039 | NONELEM | 0.035 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-011 | genus-hyper | `x^3/Sqrt[x^5 - x + 1]` |  | NONELEM | 0.040 | NONELEM | 0.037 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-012 | genus-hyper | `1/Sqrt[x^6 + x^2 + 1]` | nonelem | NONELEM | 0.040 | NONELEM | 0.037 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-013 | genus-hyper | `x^1/Sqrt[x^6 + x^2 + 1]` | nonelem | NONELEM | 0.041 | NONELEM | 0.043 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-014 | genus-hyper | `x^3/Sqrt[x^6 + x^2 + 1]` |  | NONELEM | 0.047 | NONELEM | 0.047 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-015 | genus-hyper | `1/Sqrt[x^7 + x + 1]` | nonelem | NONELEM | 0.037 | NONELEM | 0.038 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-016 | genus-hyper | `x^2/Sqrt[x^7 + x + 1]` | nonelem | NONELEM | 0.038 | NONELEM | 0.040 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-017 | genus-hyper | `x^4/Sqrt[x^7 + x + 1]` |  | NONELEM | 0.041 | NONELEM | 0.041 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-018 | genus-hyper | `1/Sqrt[x^8 + x^3 + 1]` | nonelem | NONELEM | 0.038 | NONELEM | 0.039 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-019 | genus-hyper | `x^2/Sqrt[x^8 + x^3 + 1]` | nonelem | NONELEM | 0.040 | NONELEM | 0.029 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| hyper-020 | genus-hyper | `x^4/Sqrt[x^8 + x^3 + 1]` |  | NONELEM | 0.042 | NONELEM | 0.041 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| super-001 | genus-super | `1/(x^4 + 1)^(1/3)` | nonelem | NONELEM | 0.036 | NONELEM | 0.039 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| super-002 | genus-super | `x/(x^4 + 1)^(2/3)` |  | NONELEM | 0.043 | NONELEM | 0.042 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| super-003 | genus-super | `1/(x^5 + 2)^(1/3)` |  | NONELEM | 0.037 | NONELEM | 0.038 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| super-004 | genus-super | `x/(x^5 + 2)^(2/3)` |  | NONELEM | 0.037 | NONELEM | 0.032 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| super-005 | genus-super | `1/(x^3 + x + 1)^(1/3)` |  | NONELEM | 0.180 | DECLINE | 0.381 | TIMEOUT | 60.044 | NONELEM-UNCONFIRMED | NEITHER |
-| super-006 | genus-super | `x/(x^3 + x + 1)^(2/3)` |  | NONELEM | 0.150 | DECLINE | 0.119 | TIMEOUT | 60.041 | NONELEM-UNCONFIRMED | NEITHER |
-| super-007 | genus-super | `1/(x^4 + x + 1)^(1/5)` |  | NONELEM | 0.041 | NONELEM | 0.050 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| super-008 | genus-super | `x/(x^4 + x + 1)^(2/5)` |  | NONELEM | 0.041 | NONELEM | 0.048 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| super-009 | genus-super | `1/(x^2 + 1)^(1/3)` |  | NONELEM | 0.040 | NONELEM | 0.038 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| super-010 | genus-super | `x/(x^2 + 1)^(2/3)` |  | ELEM | 0.042 | ELEM | 0.042 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-001 | rational-radicand | `Sqrt[(x + 1)/(x - 1)]` | elem | ELEM | 0.074 | ELEM | 0.110 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-002 | rational-radicand | `((x + 1)/(x - 1))^(1/3)` | elem | ELEM | 0.362 | DECLINE | 0.110 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
-| ratradicand-003 | rational-radicand | `Sqrt[x/(x + 1)]/x` | elem | ELEM | 0.060 | ELEM | 0.104 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-004 | rational-radicand | `((1 - x)/(1 + x))^(1/4)` | elem | ELEM | 0.156 | DECLINE | 0.211 | ELEM | 0.170 | AGREE-ELEM | FRICAS-ONLY |
-| ratradicand-005 | rational-radicand | `x*Sqrt[(x - 1)/(x + 2)]` | elem | ELEM | 0.102 | ELEM | 0.131 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-006 | rational-radicand | `Sqrt[(x^2 + 1)/(x^2 - 1)]` |  | NONELEM | 0.038 | NONELEM | 0.041 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-007 | rational-radicand | `((x + 2)/(x - 3))^(2/3)/x` | elem | ELEM | 0.203 | DECLINE | 0.130 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
-| ratradicand-008 | rational-radicand | `1/(x^2*((x + 1)/(x - 1))^(1/5))` | elem | ELEM | 0.321 | DECLINE | 0.247 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
-| ratradicand-009 | rational-radicand | `((2*x + 1)/(x + 3))^(1/6)` | elem | ELEM | 0.274 | DECLINE | 4.285 | ELEM | 0.180 | AGREE-ELEM | FRICAS-ONLY |
-| ratradicand-010 | rational-radicand | `Sqrt[(x - 1)/(x^2 + 1)]` |  | NONELEM | 0.042 | NONELEM | 0.059 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-011 | rational-radicand | `((x^2 + 1)/x)^(1/3)` |  | NONELEM | 0.040 | NONELEM | 0.049 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-012 | rational-radicand | `Sqrt[(x^3 + 1)/x]` |  | NONELEM | 0.052 | NONELEM | 0.042 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-013 | rational-radicand | `(x + 1)/(x^2*Sqrt[(x - 1)/(x + 1)])` | elem | ELEM | 0.158 | ELEM | 0.183 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-014 | rational-radicand | `((x - 2)/(x + 2))^(3/4)/(x - 1)` | elem | ELEM | 0.489 | DECLINE | 0.144 | ELEM | 0.190 | AGREE-ELEM | FRICAS-ONLY |
-| ratradicand-015 | rational-radicand | `Sqrt[x/(x^2 + x + 1)]` |  | NONELEM | 0.039 | NONELEM | 0.035 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-016 | rational-radicand | `1/(x - 2)*Sqrt[(x + 1)/(x - 1)]` | elem | ELEM | 0.121 | ELEM | 0.165 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-017 | rational-radicand | `(x/(x^3 + 1))^(1/3)` |  | NONELEM | 0.042 | NONELEM | 0.044 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-018 | rational-radicand | `Sqrt[(2*x - 1)/(3*x + 5)]/(x + 1)` | elem | ELEM | 0.223 | ELEM | 0.206 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
-| ratradicand-019 | rational-radicand | `((x^2 - 1)/(x^2 + 1))^(1/4)` |  | NONELEM | 0.043 | NONELEM | 0.042 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
-| ratradicand-020 | rational-radicand | `Sqrt[(x^2 + 1)/x]/x` |  | NONELEM | 0.043 | NONELEM | 0.030 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| torsion-001 | torsion-heavy | `1/((x - 3)*(x^3 + 1)^(1/3))` |  | NONELEM | 0.116 | DECLINE | 1.313 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-002 | torsion-heavy | `x/((x - 3)*(x^3 + 1)^(2/3))` |  | NONELEM | 0.126 | DECLINE | 0.305 | TIMEOUT | 60.035 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-003 | torsion-heavy | `1/((x + 2)*(x^3 + 2)^(1/3))` |  | NONELEM | 0.158 | DECLINE | 0.953 | TIMEOUT | 60.052 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-004 | torsion-heavy | `1/((2*x - 1)*(x^3 - 1)^(1/3))` |  | NONELEM | 0.109 | DECLINE | 1.133 | TIMEOUT | 60.051 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-005 | torsion-heavy | `x/((x - 2)*(x^3 + 2)^(2/3))` |  | NONELEM | 0.125 | DECLINE | 0.179 | TIMEOUT | 60.035 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-006 | torsion-heavy | `1/((x^2 + 1)*(x^3 + 1)^(1/4))` |  | NONELEM | 0.368 | DECLINE | 7.948 | TIMEOUT | 60.101 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-007 | torsion-heavy | `1/((x^2 + 3)*(x^3 + 1)^(1/4))` |  | NONELEM | 0.178 | DECLINE | 7.688 | TIMEOUT | 60.073 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-008 | torsion-heavy | `x/((x^2 + 2)*(x^3 + 1)^(3/4))` |  | NONELEM | 0.626 | DECLINE | 0.990 | TIMEOUT | 60.063 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-009 | torsion-heavy | `(x^2 + 1)/x*(x^4 + 2)^(1/6)` |  | NONELEM | 13.256 | DECLINE | 2.164 | TIMEOUT | 60.133 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-010 | torsion-heavy | `(x^2 - 1)/x*(x^4 + 5)^(1/6)` |  | NONELEM | 16.608 | DECLINE | 6.287 | TIMEOUT | 60.055 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-011 | torsion-heavy | `1/((x^2 - 3)*(x^4 - 6*x^2 + 1)^(1/4))` |  | NONELEM | 0.247 | TIMEOUT | 60.003 | TIMEOUT | 60.075 | NONELEM-UNCONFIRMED | TIMEOUT |
-| torsion-012 | torsion-heavy | `1/((x^2 + 2)*(x^4 + 4)^(1/4))` |  | NONELEM | 0.719 | DECLINE | 5.241 | TIMEOUT | 60.066 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-013 | torsion-heavy | `(2*x + 1)/(-3*x^2 - 2*x + 1)*(x^2 - x + 3)^(1/4)` |  | NONELEM | 0.389 | DECLINE | 0.717 | TIMEOUT | 60.059 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-014 | torsion-heavy | `1/(2*x^2 + 3*x + 1)*(x^3 - x^2 + x + 1)^(-2/3)` |  | NONELEM | 0.431 | DECLINE | 0.111 | TIMEOUT | 60.057 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-015 | torsion-heavy | `x/(x + 2)*(x^2 + 3)^(1/5)` |  | NONELEM | 1.056 | DECLINE | 1.881 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-016 | torsion-heavy | `(x - 1)/(x + 1)*(x^2 + 2)^(2/5)` |  | NONELEM | 0.576 | DECLINE | 1.981 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-017 | torsion-heavy | `(-x^2 - x - 1)/(2*x + 3)*(x^4 + x^3 + 2*x^2 - x - 1)^(-5/6)` |  | NONELEM | 10.817 | DECLINE | 1.913 | TIMEOUT | 60.085 | NONELEM-UNCONFIRMED | NEITHER |
-| torsion-018 | torsion-heavy | `1/(x - 1)*(x^3 - 3*x)^(1/4)` |  | NONELEM | 0.177 | DECLINE | 0.146 | TIMEOUT | 60.095 | NONELEM-UNCONFIRMED | NEITHER |
-| deriv-alg-01 | deriv-alg | `(-68*x^4 - 28*x^3 - 36*x^2 - 28*x)/(4*(-2*x^3 - x^2 - 1))*(-2*x^3 - x^2 - 1)^(3/4)` | elem | ELEM | 0.039 | ELEM | 0.038 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-02 | deriv-alg | `(-4*x^5 - 10*x^4 - 32*x^3 + 27*x^2 + 36*x + 6)/(3*(-2*x^4 + 2*x^3 + 3*x^2 - 2))*(-2*x^4 + ...` | elem | ELEM | 0.056 | ELEM | 0.052 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-03 | deriv-alg | `(10*x^3 + 10*x^2 - 22*x - 22)/(4*(x^3 - 2*x^2 - x + 2))*(x^3 - 2*x^2 - x + 2)^(-3/4)` | elem | ELEM | 0.051 | ELEM | 0.054 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-04 | deriv-alg | `(4*x^2 + 16*x + 12)/(4*(x^2 - 2*x - 3))*(x^2 - 2*x - 3)^(-3/4)` | elem | ELEM | 0.038 | ELEM | 0.039 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-05 | deriv-alg | `(46*x^6 + 97*x^5 + 67*x^4 - 57*x^3 - 33*x^2 + 97*x + 3)/(4*(x^5 + x^4 + x^3 - 3*x^2 + 3*x ...` | elem | ELEM | 0.045 | ELEM | 0.046 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-06 | deriv-alg | `(14*x^5 + 46*x^4 + 18*x^3 - 10*x^2 + 24*x - 4)/(3*(x^4 + 2*x^3 - x^2 + 2*x))*(x^4 + 2*x^3 ...` | elem | ELEM | 0.048 | ELEM | 0.039 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-07 | deriv-alg | `(-48*x^5 + 42*x^4 - 24*x + 6)/(6*(3*x^4 - 1))*(3*x^4 - 1)^(-5/6)` | elem | ELEM | 0.061 | ELEM | 0.050 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-08 | deriv-alg | `(-21*x^4 - 67*x^3 - 10*x^2 + 16*x - 10)/(5*(x^4 + 3*x^3 - 2*x^2 + 2))*(x^4 + 3*x^3 - 2*x^2...` | elem | ELEM | 0.043 | ELEM | 0.040 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-09 | deriv-alg | `(12*x^5 + 15*x^4 + 8*x^3 - 19*x^2 - 4*x)/(3*(3*x^4 + 3*x^3 + x^2 - 2*x))*(3*x^4 + 3*x^3 + ...` | elem | ELEM | 0.053 | ELEM | 0.055 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-10 | deriv-alg | `(6*x^3 - 21*x^2 + 24*x + 39)/(6*(x^3 - 3*x^2 + 3*x + 3))*(x^3 - 3*x^2 + 3*x + 3)^(-1/6)` | elem | ELEM | 0.083 | ELEM | 0.086 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-11 | deriv-alg | `(-3*x^4 + 36*x^3 + 27*x^2 - 66*x - 39)/(5*(x^3 - 2*x^2 - 2*x + 3))*(x^3 - 2*x^2 - 2*x + 3)...` | elem | ELEM | 0.077 | ELEM | 0.076 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-12 | deriv-alg | `(48*x^6 + 13*x^5 + 42*x^4 + 78*x^3 + 2*x^2 - 55*x - 12)/(3*(-x^5 - 2*x^3 - 2*x^2 - x + 2))...` | elem | ELEM | 0.043 | ELEM | 0.044 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-13 | deriv-alg | `(20*x^3 - 24*x^2 - 24*x + 4)/(4*(x^2 - 2*x))*(x^2 - 2*x)^(1/4)` | elem | ELEM | 0.034 | ELEM | 0.034 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-14 | deriv-alg | `(-18*x^3 - 33*x^2 + 36*x + 17)/(4*(3*x^2 + 3*x - 1))*(3*x^2 + 3*x - 1)^(-3/4)` | elem | ELEM | 0.048 | ELEM | 0.049 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-15 | deriv-alg | `(102*x^6 - 31*x^5 + 10*x^4 + 12*x^3 - 70*x^2 - 65*x - 18)/(6*(3*x^5 - 2*x^4 + x^2 - 3*x - ...` | elem | ELEM | 0.093 | ELEM | 0.095 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-16 | deriv-alg | `(-18*x^3 + 7*x^2 - 28*x - 13)/(2*(x^2 - x + 3))*(x^2 - x + 3)^(1/2)` | elem | ELEM | 0.033 | ELEM | 0.030 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-17 | deriv-alg | `(8*x^3 + 25*x^2 + 12*x)/(5*(-x^2 - 2*x))*(-x^2 - 2*x)^(-3/5)` | elem | ELEM | 0.041 | ELEM | 0.045 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-18 | deriv-alg | `(-12*x^5 - 10*x^4 - 30*x^3 - 32*x^2 - 6*x + 22)/(4*(-3*x^4 - 2*x^3 - 2*x^2 - 2*x + 2))*(-3...` | elem | ELEM | 0.063 | ELEM | 0.065 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-19 | deriv-alg | `(24*x^3 - 36*x^2 - 36*x + 6)/(3*(x^4 - 2*x^3 - 3*x^2 + x + 2))*(x^4 - 2*x^3 - 3*x^2 + x + ...` | elem | ELEM | 0.038 | ELEM | 0.039 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| deriv-alg-20 | deriv-alg | `(16*x + 12)/(5*(2*x^2 + 3*x + 2))*(2*x^2 + 3*x + 2)^(-4/5)` | elem | ELEM | 0.048 | ELEM | 0.049 | ELEM | 0.060 | AGREE-ELEM | AGREE-ELEM |
-| deriv-log-01 | deriv-log | `(-27*x^5 - 45*x^4 + 126*x^3 + 9*x^2 - 21*x)/(2*(x^3 + x^2 - 3*x + 1)*(9*x^6 + 18*x^5 + 27*...` | elem | ELEM | 0.186 | DECLINE | 0.033 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-02 | deriv-log | `(-24*x^6 + 6*x^5 - 4*x^4 + 20*x^3 + 24*x^2 - 26*x - 12)/(2*(x^6 + x^5 + 2*x^4 + 2*x^3 - x^...` | elem | ELEM | 0.188 | ELEM | 0.083 | ELEM | 0.300 | AGREE-ELEM | AGREE-ELEM |
-| deriv-log-03 | deriv-log | `(9*x^5 + 3*x^4 + 9*x^3 - 18*x^2 + 6*x - 9)/(2*(x^3 + x)*(x^6 + 2*x^5 + 5*x^4 + x^3 + 10*x^...` | elem | ELEM | 0.171 | TIMEOUT | 60.028 | ELEM | 0.170 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-04 | deriv-log | `(-2*x^6 - 9*x^5 + 81*x^4 - 74*x^3 + 56*x^2 - 57*x + 13)/(2*(x^3 - 3*x^2 + x - 1)*(4*x^6 - ...` | elem | ELEM | 0.242 | TIMEOUT | 60.024 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-05 | deriv-log | `(4*x^9 - 26*x^8 + 23*x^7 - 19*x^6 + 71*x^5 + 82*x^4 + 25*x^3 + 12*x^2 - 18*x + 15)/(2*(x^6...` | elem | ELEM | 0.522 | TIMEOUT | 60.029 | ELEM | 0.650 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-06 | deriv-log | `(12*x^5 - 36*x^4 + 6*x^3 - 33*x^2 + 54*x - 36)/(2*(x^4 + x^2 - 3*x + 3)*(-9*x^6 - 9*x^4 + ...` | elem | ELEM | 0.185 | TIMEOUT | 60.109 | ELEM | 0.340 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-07 | deriv-log | `(-15*x^6 + 33*x^5 - 15*x^4 + 69*x^3 + 16*x^2 - 6*x - 6)/(2*(x^4 - 3*x^3 + 2*x^2 + 2*x + 3)...` | elem | ELEM | 0.391 | TIMEOUT | 60.058 | ELEM | 0.430 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-08 | deriv-log | `(4*x^8 - 3*x^7 - 31*x^6 - 15*x^5 - 27*x^4 + 4*x^3 + 18*x^2 - 36*x + 24)/(2*(x^6 + x^5 + 3*...` | elem | ELEM | 0.548 | TIMEOUT | 60.066 | ELEM | 0.670 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-09 | deriv-log | `(8*x^4 - 48*x^3 - 28*x - 4)/(2*(2*x^4 + 2*x^2 + 2*x - 2)*(-8*x^4 - 7*x^2 - 14*x + 17))*Sqr...` | elem | ELEM | 0.276 | ELEM | 0.050 | ELEM | 0.220 | AGREE-ELEM | AGREE-ELEM |
-| deriv-log-10 | deriv-log | `(-4*x^4 + 16*x^3 + 6*x - 4)/(2*(2*x^4 + 2*x^2 - 2*x)*(-2*x^4 - x^2 - 2*x + 4))*Sqrt[2*x^4 ...` | elem | ELEM | 0.150 | ELEM | 0.073 | ELEM | 0.200 | AGREE-ELEM | AGREE-ELEM |
-| deriv-log-11 | deriv-log | `(-4*x^6 - 4*x^5 + 42*x^4 + 32*x^3 - 14*x^2)/(2*(-2*x^3 - 3*x^2 + x - 1)*(x^6 + 12*x^5 + 22...` | elem | ELEM | 0.533 | DECLINE | 25.114 | ELEM | 0.180 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-12 | deriv-log | `(-8*x^6 - 4*x^5 - 4*x^3)/(2*(x^4 + x^3 + 2*x^2 - x)*(-4*x^6 - 4*x^5 - 4*x^4 + 4*x^3))*Sqrt...` | elem | ELEM | 0.148 | DECLINE | 1.399 | ELEM | 0.180 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-13 | deriv-log | `(-32*x^8 - 44*x^7 + 32*x^6 + 147*x^5 + 72*x^4 - 45*x^3 + 22*x^2 + 46*x - 2)/(2*(-2*x^6 + 3...` | elem | ELEM | 0.522 | TIMEOUT | 60.808 | ELEM | 0.680 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-14 | deriv-log | `(6*x^5 - 12*x^4 - 2*x^3 - 4*x + 12)/(2*(-x^5 + 3*x^4 + x^3 - 2*x^2 - 2*x + 3)*(4*x^5 - 12*...` | elem | ELEM | 0.347 | ELEM | 0.143 | ELEM | 0.210 | AGREE-ELEM | AGREE-ELEM |
-| deriv-log-15 | deriv-log | `(-6*x^7 - 21*x^6 - 18*x^4 - 48*x^3 + 12*x - 3)/(2*(x^6 - x^5 + 3*x^4 + x^3 - x^2 + x)*(-9*...` | elem | ELEM | 0.890 | TIMEOUT | 65.861 | ELEM | 0.520 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-16 | deriv-log | `(-9*x^5 + 27*x^4 - 43*x^3 + 27*x^2 + 2*x - 8)/(2*(x^3 - 2*x^2 + 2*x - 1)*(9*x^6 - 18*x^5 +...` | elem | ELEM | 0.608 | TIMEOUT | 60.027 | ELEM | 0.210 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-17 | deriv-log | `(6*x^3 + 4*x + 4)/(2*(-3*x^3 - x^2 + 2*x + 1)*(3*x^3 + 5*x^2 - 2*x - 1))*Sqrt[-3*x^3 - x^2...` | elem | ELEM | 0.370 | ELEM | 0.085 | ELEM | 0.160 | AGREE-ELEM | AGREE-ELEM |
-| deriv-log-18 | deriv-log | `(-18*x^4 + 117*x^2 + 126*x - 18)/(2*(x^4 + 3*x^3 + 3*x^2 - 2*x - 3)*(-5*x^4 - 27*x^3 - 15*...` | elem | ELEM | 0.278 | TIMEOUT | 60.012 | ELEM | 0.200 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-19 | deriv-log | `(-9*x^8 - 3*x^7 - 12*x^6 + 57*x^5 + 51*x^4 - 123*x^3 + 60*x^2 + 18*x - 11)/(2*(x^5 + x^4 +...` | elem | ELEM | 0.620 | TIMEOUT | 60.058 | ELEM | 0.470 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-20 | deriv-log | `(9*x^7 - 13*x^6 - 5*x^5 - 18*x^4 + 3*x^3 + 5*x^2 - 3*x - 2)/(2*(x^5 - 3*x^4 - x - 1)*(-x^7...` | elem | ELEM | 0.432 | TIMEOUT | 60.054 | ELEM | 0.290 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-21 | deriv-log | `(-4*x^6 + 12*x^5 - 18*x^4 - 29*x^3 - 16*x^2 - 2*x - 5)/(2*(2*x^4 + 3*x^2 + 3*x + 2)*(2*x^6...` | elem | ELEM | 0.877 | TIMEOUT | 60.131 | ELEM | 0.280 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-22 | deriv-log | `(6*x^6 + 6*x^5 - 2*x^4 + 7*x^3 + 9*x^2 + 4*x)/(2*(x^4 + 2*x^3 - 2*x^2 - x - 1)*(-9*x^6 - 2...` | elem | ELEM | 0.358 | TIMEOUT | 60.571 | ELEM | 0.270 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-23 | deriv-log | `(15*x^6 - 93*x^5 + 173*x^4 - 183*x^3 + 21*x^2 - 13*x + 6)/(2*(-x^5 + 2*x^4 - 3*x^3 - x^2 -...` | elem | ELEM | 0.416 | TIMEOUT | 60.046 | ELEM | 0.330 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-24 | deriv-log | `(12*x^8 - 40*x^7 - 104*x^6 - 30*x^5 + 45*x^4 + 21*x^3 + 3*x^2 - 3*x)/(2*(2*x^5 + x^4 - x^3...` | elem | ELEM | 0.582 | TIMEOUT | 60.021 | ELEM | 0.270 | AGREE-ELEM | FRICAS-ONLY |
-| deriv-log-25 | deriv-log | `(-24*x^8 + 5*x^6 - 16*x^5 + 45*x^4 - 8*x^3 - 71*x^2 + 120*x - 3)/(2*(x^6 - x^5 - x^4 + 2*x...` | elem | ELEM | 1.417 | TIMEOUT | 60.281 | ELEM | 0.480 | AGREE-ELEM | FRICAS-ONLY |
-| random-001 | random | `(2*x^2)/(-2*x^2 + 3*x - 1)*(x + 2)^(-1/2)` |  | ELEM | 0.248 | ELEM | 0.345 | ELEM | 0.160 | AGREE-ELEM | AGREE-ELEM |
-| random-002 | random | `(3*x + 3)/(-x - 2)*(3*x^3 + x^2 + 3*x + 2)^(2/3)` |  | NONELEM | 0.098 | NONELEM | 0.057 | TIMEOUT | 60.080 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| random-003 | random | `(3*x + 2)/(-2*x + 3)*(x^4 + 2*x^2 - x + 3)^(-3/4)` |  | NONELEM | 0.513 | DECLINE | 0.812 | TIMEOUT | 60.052 | NONELEM-UNCONFIRMED | NEITHER |
-| random-004 | random | `(3*x + 1)/(x^2 - 2*x - 2)*(x^3 + 2*x^2 - 1)^(1/3)` |  | NONELEM | 0.224 | DECLINE | 0.089 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| random-005 | random | `(x^2 + 1)/(2*x + 2)*Sqrt[x^4 - 3*x^3 + 3*x^2 + x + 2]` |  | NONELEM | 0.050 | NONELEM | 0.030 | NONELEM | 0.250 | AGREE-NONELEM | AGREE-NONELEM |
-| random-006 | random | `(-2)/(-3)*(x^2 - 2*x)^(2/3)` |  | NONELEM | 0.064 | NONELEM | 0.024 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
-| random-007 | random | `(-1)/(-2)*(x^2 + 3*x - 2)^(2/3)` |  | NONELEM | 0.062 | NONELEM | 0.029 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
-| random-008 | random | `1/(-3)*(-x^2 - x + 1)^(-1/2)` |  | ELEM | 0.087 | ELEM | 0.053 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
-| random-009 | random | `2/(-3*x)*(x - 1)^(-1/4)` |  | ELEM | 0.077 | DECLINE | 0.174 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
-| random-010 | random | `(-3*x^2 - 3*x)/(-2*x^2 + 2*x - 1)*(-2*x^4 + 3*x^3 - 3*x^2 + 3*x + 2)^(-5/6)` |  | NONELEM | 14.211 | DECLINE | 57.285 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NEITHER |
-| random-011 | random | `(-1)/(x + 2)*(-x^4 - 3*x^3 - x^2 - 1)^(-1/2)` |  | NONELEM | 0.063 | DECLINE | 0.316 | NONELEM | 0.160 | AGREE-NONELEM | NEITHER |
-| random-012 | random | `(3*x - 3)/(2*x + 1)*(x^2 + x)^(-5/6)` |  | NONELEM | 2.691 | DECLINE | 0.051 | TIMEOUT | 60.051 | NONELEM-UNCONFIRMED | NEITHER |
-| random-013 | random | `(x^2 - 3*x + 2)/3*(x^2 + x + 3)^(1/4)` |  | NONELEM | 0.028 | NONELEM | 0.028 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
-| random-014 | random | `(3*x^2 + 3*x + 2)/(-2*x + 1)*(x^2 + x + 3)^(4/5)` |  | NONELEM | 0.034 | NONELEM | 0.034 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| random-015 | random | `(2*x^2 - x)/(-2)*Sqrt[x^4 - x^3 - x]` |  | NONELEM | 0.027 | NONELEM | 0.027 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| random-016 | random | `3/(-3)*(x + 1)^(-1/2)` |  | ELEM | 0.021 | ELEM | 0.021 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-017 | random | `2*(x + 2)^(1/3)` |  | ELEM | 0.026 | ELEM | 0.027 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-018 | random | `2/(-2)*(-2*x)^(3/4)` |  | ELEM | 0.026 | ELEM | 0.026 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-019 | random | `(-2*x^2 - 3*x + 2)/(-2)*(x^3 - x^2 + x + 1)^(-1/6)` |  | NONELEM | 0.034 | NONELEM | 0.034 | NONELEM | 0.080 | AGREE-NONELEM | AGREE-NONELEM |
-| random-020 | random | `1/(-2*x^2 - 2*x)*(-3*x^2 + 3*x - 2)^(2/3)` |  | NONELEM | 0.026 | NONELEM | 0.026 | TIMEOUT | 60.074 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| random-021 | random | `(-3)/2*x^(-1/3)` |  | ELEM | 0.022 | ELEM | 0.023 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-022 | random | `(x^2 - 2*x - 2)/(2*x^2 - x + 3)*(-x^4 - 3*x^3 + 3*x^2 - 3*x - 2)^(-1/2)` |  | NONELEM | 0.147 | DECLINE | 5.016 | TIMEOUT | 60.031 | NONELEM-UNCONFIRMED | NEITHER |
-| random-023 | random | `(-x^2 + 2*x + 1)/(-3)*(x^3 + 2*x^2 + 2*x)^(1/4)` |  | NONELEM | 0.030 | NONELEM | 0.043 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
-| random-024 | random | `(2*x^2 - 3*x)/(-1)*(x + 2)^(1/4)` |  | ELEM | 0.032 | ELEM | 0.031 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-025 | random | `(3*x^2 - x - 2)/(-x + 2)*(x^3 - 3*x^2 + 2*x - 3)^(-1/2)` |  | NONELEM | 0.031 | NONELEM | 0.030 | NONELEM | 0.190 | AGREE-NONELEM | AGREE-NONELEM |
-| random-026 | random | `(-3*x^2 + x + 2)/2*(x^3 - x^2 - 3*x + 2)^(-1/5)` |  | NONELEM | 0.031 | NONELEM | 0.038 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
-| random-027 | random | `(-2)/(-x^2 + 2*x - 3)*(3*x + 2)^(2/3)` |  | ELEM | 0.169 | DECLINE | 0.269 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
-| random-028 | random | `(x^2 - 2*x - 2)/(x^2 - 2*x - 2)*(-3*x^3 - 2*x^2 - x - 3)^(-3/4)` |  | NONELEM | 0.031 | NONELEM | 0.025 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
-| random-029 | random | `(3*x^2 - 2*x + 3)/x*(2*x^3 + 2*x^2 + 3*x + 3)^(2/5)` |  | NONELEM | 0.035 | NONELEM | 0.045 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| random-030 | random | `(-3*x^2 + 3*x - 3)/(2*x^2 - x - 1)*(x + 3)^(1/4)` |  | ELEM | 0.177 | DECLINE | 0.251 | ELEM | 0.110 | AGREE-ELEM | FRICAS-ONLY |
-| random-031 | random | `(-1)/(-3*x - 1)*x^(-2/3)` |  | ELEM | 0.041 | ELEM | 0.031 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-032 | random | `(2*x + 3)/(-3*x^2 - 2*x + 3)*(x^2 - x + 2)^(1/4)` |  | NONELEM | 0.191 | DECLINE | 20.949 | TIMEOUT | 60.063 | NONELEM-UNCONFIRMED | NEITHER |
-| random-033 | random | `3/(-2*x^2 + 3*x - 3)*(-3*x^2 + 2*x)^(1/4)` |  | NONELEM | 0.517 | DECLINE | 1.160 | TIMEOUT | 60.045 | NONELEM-UNCONFIRMED | NEITHER |
-| random-034 | random | `(-3*x - 1)/(-2)*Sqrt[x + 3]` |  | ELEM | 0.028 | ELEM | 0.028 | ELEM | 0.060 | AGREE-ELEM | AGREE-ELEM |
-| random-035 | random | `(x^2 - 3*x + 3)/(-1)*(x^4 + x^3 - x^2 + 3)^(-1/2)` |  | NONELEM | 0.023 | NONELEM | 0.023 | NONELEM | 0.190 | AGREE-NONELEM | AGREE-NONELEM |
-| random-036 | random | `3/(2*x^2 + 3*x)*(x + 1)^(2/3)` |  | ELEM | 0.109 | DECLINE | 0.063 | ELEM | 0.090 | AGREE-ELEM | FRICAS-ONLY |
-| random-037 | random | `(-x^2 - 3*x - 3)/(2*x + 1)*(x^4 + 3*x^3 + 3*x^2 - 3*x - 2)^(-5/6)` |  | NONELEM | 4.501 | DECLINE | 1.405 | TIMEOUT | 60.046 | NONELEM-UNCONFIRMED | NEITHER |
-| random-038 | random | `(-1)/(-3*x + 1)*(-2*x^4 - 2*x^3 + x^2 - x - 3)^(-3/4)` |  | NONELEM | 0.248 | DECLINE | 0.565 | TIMEOUT | 60.065 | NONELEM-UNCONFIRMED | NEITHER |
-| random-039 | random | `(2*x + 1)/(-1)*(x^2 + x + 1)^(-1/2)` |  | ELEM | 0.023 | ELEM | 0.023 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
-| random-040 | random | `2/(2*x^2 + 3*x + 2)*(x^3 - 2*x^2 + x + 1)^(-2/3)` |  | NONELEM | 0.099 | DECLINE | 1.210 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
-| random-041 | random | `(-3)/(3*x^2 - 2*x)*(x^3 - 3*x^2 - 2*x - 3)^(3/4)` |  | NONELEM | 0.028 | NONELEM | 0.029 | NONELEM | 0.080 | AGREE-NONELEM | AGREE-NONELEM |
-| random-042 | random | `(x^2 + 2*x + 3)/(-2*x + 2)*(x^3 + x - 3)^(-1/2)` |  | NONELEM | 0.026 | NONELEM | 0.022 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| random-043 | random | `(-3*x^2 - 2)/2*(x^3 + 2*x^2 + 3*x + 2)^(-2/3)` |  | NONELEM | 0.072 | DECLINE | 0.077 | TIMEOUT | 60.030 | NONELEM-UNCONFIRMED | NEITHER |
-| random-044 | random | `(-3)/(-3)*Sqrt[x^4 + 3*x^3 - 2*x^2 + 2*x + 3]` |  | NONELEM | 0.024 | NONELEM | 0.024 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
-| random-045 | random | `(-2)/2*(-3*x^4 - 2*x^3 - x^2 - x + 2)^(3/5)` |  | NONELEM | 0.036 | NONELEM | 0.032 | NONELEM | 0.080 | AGREE-NONELEM | AGREE-NONELEM |
-| random-046 | random | `(-3)/(-3)*(-3*x^4 + x^2 + 2*x + 2)^(-1/2)` |  | NONELEM | 0.020 | NONELEM | 0.020 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
-| random-047 | random | `(-2*x + 1)/(-1)*x^(-2/3)` |  | ELEM | 0.025 | ELEM | 0.025 | ELEM | 0.050 | AGREE-ELEM | AGREE-ELEM |
-| random-048 | random | `(-3*x^2 + 3*x + 2)/(3*x^2 - x + 2)*(2*x + 1)^(-1/2)` |  | ELEM | 0.060 | ELEM | 0.090 | BAD | 0.120 | MATHILDA-ONLY | MATHILDA-ONLY |
-| random-049 | random | `(x + 1)/2*Sqrt[-2*x^3 + 2*x^2 - 2]` |  | NONELEM | 0.025 | NONELEM | 0.024 | NONELEM | 0.080 | AGREE-NONELEM | AGREE-NONELEM |
-| random-050 | random | `(2*x - 3)/(-2)*(2*x^2 - 3*x - 2)^(1/4)` |  | NONELEM | 0.028 | NONELEM | 0.025 | NONELEM | 0.080 | AGREE-NONELEM | AGREE-NONELEM |
-| random-051 | random | `(2*x - 1)/(-3*x^2 + 2*x - 1)*(x^3 - 2*x^2 + 3*x - 2)^(2/3)` |  | NONELEM | 0.027 | NONELEM | 0.026 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| random-052 | random | `(-2)/3*(x^3 + 3*x^2 - 3*x - 3)^(1/4)` |  | NONELEM | 0.024 | NONELEM | 0.024 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
-| random-053 | random | `(-3*x + 2)/(2*x - 2)*(3*x)^(-4/5)` |  | ELEM | 0.065 | DECLINE | 1.023 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
-| random-054 | random | `(-3*x^2 + 2*x + 1)/(-3)*(x^4 - x^3 - 3*x^2 - 2*x - 2)^(1/6)` |  | NONELEM | 0.033 | NONELEM | 0.041 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
-| random-055 | random | `(x^2 + 1)/(-3*x^2 - 2*x - 1)*(x^3 + 3*x - 2)^(5/6)` |  | NONELEM | 0.057 | NONELEM | 0.059 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
-| random-056 | random | `(x + 3)/(-3)*(2*x^4 + 2*x^3 + x^2 + 2*x + 3)^(-2/3)` |  | NONELEM | 0.027 | NONELEM | 0.023 | NONELEM | 0.080 | AGREE-NONELEM | AGREE-NONELEM |
-| random-057 | random | `(2*x + 2)/(-3*x - 1)*(x^3 + x^2 + x)^(2/3)` |  | NONELEM | 0.026 | NONELEM | 0.027 | TIMEOUT | 60.036 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
-| random-058 | random | `(-3*x - 3)/2*(x^4 + x^3 + 3*x^2 - 3*x + 2)^(-1/2)` |  | NONELEM | 0.066 | DECLINE | 0.092 | NONELEM | 0.130 | AGREE-NONELEM | NEITHER |
-| random-059 | random | `(-3)/(3*x + 2)*(x^3 + x^2 + 2*x - 3)^(-1/2)` |  | NONELEM | 0.053 | DECLINE | 0.148 | NONELEM | 1.310 | AGREE-NONELEM | NEITHER |
-| random-060 | random | `(2*x^2 - 1)/(2*x^2 - 3*x + 2)*(-2*x^2 - 2*x + 1)^(-2/3)` |  | NONELEM | 0.096 | DECLINE | 0.511 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| binom-001 | binomial-xk | `x^2/Sqrt[x^2 - 3]` | elem | ELEM | 0.084 | ELEM | 0.097 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
+| binom-002 | binomial-xk | `x^3/(x^2 + 2)^(1/3)` | elem | ELEM | 0.078 | ELEM | 0.076 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| binom-003 | binomial-xk | `x^3/Sqrt[x^6 + 2]` | nonelem | NONELEM | 0.062 | NONELEM | 0.065 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-004 | binomial-xk | `x^2/(x^3 + 1)^(1/3)` | elem | ELEM | 0.060 | ELEM | 0.059 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| binom-005 | binomial-xk | `x^2/(x^4 + 1)^(1/3)` | nonelem | NONELEM | 0.067 | NONELEM | 0.059 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-006 | binomial-xk | `x^3/(x^4 - 1)^(1/3)` | elem | ELEM | 0.057 | ELEM | 0.056 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| binom-007 | binomial-xk | `x^3/(x^6 + 1)^(1/3)` | nonelem | NONELEM | 0.075 | NONELEM | 0.075 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-008 | binomial-xk | `x^3/(x^3 - 1)^(1/4)` | nonelem | NONELEM | 0.063 | NONELEM | 0.070 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-009 | binomial-xk | `x/(x^4 - 1)^(1/3)` | nonelem | NONELEM | 0.068 | NONELEM | 0.073 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-010 | binomial-xk | `x^2/(x^2 + 2)^(1/3)` | nonelem | NONELEM | 0.066 | NONELEM | 0.060 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-011 | binomial-xk | `x^5/(x^2 - 3)^(1/4)` | elem | ELEM | 0.112 | ELEM | 0.106 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| binom-012 | binomial-xk | `x^5/(x^2 + 2)^(1/4)` | elem | ELEM | 0.109 | ELEM | 0.113 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| binom-013 | binomial-xk | `x^3/(x^4 - 1)^(1/4)` | elem | ELEM | 0.103 | ELEM | 0.064 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| binom-014 | binomial-xk | `x^5/(x^6 - 1)^(1/3)` | elem | ELEM | 0.109 | ELEM | 0.060 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| binom-015 | binomial-xk | `x^3/(x^6 + 2)^(1/3)` | nonelem | NONELEM | 0.123 | NONELEM | 0.076 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-016 | binomial-xk | `x^2/Sqrt[x^2 + 1]` | elem | ELEM | 0.133 | ELEM | 0.108 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| binom-017 | binomial-xk | `x/Sqrt[x^2 - 1]` | elem | ELEM | 0.082 | ELEM | 0.059 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| binom-018 | binomial-xk | `x^2/(x^3 - 1)^(1/3)` | elem | ELEM | 0.094 | ELEM | 0.064 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| binom-019 | binomial-xk | `1/(x^2 - 1)^(1/3)` | nonelem | NONELEM | 0.053 | NONELEM | 0.060 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-020 | binomial-xk | `x^3/(x^6 - 1)^(1/4)` | nonelem | NONELEM | 0.081 | NONELEM | 0.088 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-021 | binomial-xk | `1/(x^2 + 1)^(1/4)` | nonelem | NONELEM | 0.075 | NONELEM | 0.075 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-022 | binomial-xk | `x^5/Sqrt[x^3 - 1]` | elem | ELEM | 0.086 | ELEM | 0.099 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| binom-023 | binomial-xk | `x/(x^3 + 2)^(1/3)` | nonelem | NONELEM | 0.069 | NONELEM | 0.074 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-024 | binomial-xk | `1/(x^6 - 1)^(1/3)` | nonelem | NONELEM | 0.076 | NONELEM | 0.068 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-025 | binomial-xk | `x^3/Sqrt[x^3 - 3]` | nonelem | NONELEM | 0.057 | NONELEM | 0.061 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-026 | binomial-xk | `1/Sqrt[x^6 - 1]` | nonelem | NONELEM | 0.054 | NONELEM | 0.055 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-027 | binomial-xk | `x/(x^4 - 1)^(1/4)` | nonelem | NONELEM | 0.065 | NONELEM | 0.070 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-028 | binomial-xk | `x/Sqrt[x^6 + 2]` | nonelem | NONELEM | 0.061 | NONELEM | 0.057 | NONELEM | 0.150 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-029 | binomial-xk | `x^3/(x^3 + 2)^(1/3)` | elem | ELEM | 0.789 | DECLINE | 0.133 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
+| binom-030 | binomial-xk | `x^2/Sqrt[x^6 + 1]` | elem | ELEM | 0.081 | ELEM | 0.128 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
+| binom-031 | binomial-xk | `x^2/(x^3 - 1)^(1/4)` | elem | ELEM | 0.065 | ELEM | 0.047 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| binom-032 | binomial-xk | `1/(x^4 + 1)^(1/4)` | elem | ELEM | 0.883 | DECLINE | 0.082 | ELEM | 0.110 | AGREE-ELEM | FRICAS-ONLY |
+| binom-033 | binomial-xk | `x^5/(x^4 + 2)^(1/4)` | nonelem | NONELEM | 0.078 | NONELEM | 0.047 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-034 | binomial-xk | `x^3/(x^2 - 1)^(1/4)` | elem | ELEM | 0.087 | ELEM | 0.054 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| binom-035 | binomial-xk | `1/(x^6 + 1)^(1/4)` | nonelem | NONELEM | 0.076 | NONELEM | 0.040 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-036 | binomial-xk | `x^5/(x^2 + 1)^(1/3)` | elem | ELEM | 0.060 | ELEM | 0.046 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| binom-037 | binomial-xk | `x^5/(x^2 - 3)^(1/3)` | elem | ELEM | 0.055 | ELEM | 0.049 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| binom-038 | binomial-xk | `x/(x^4 - 3)^(1/4)` | nonelem | NONELEM | 0.049 | NONELEM | 0.043 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-039 | binomial-xk | `x^3/Sqrt[x^6 - 3]` | nonelem | NONELEM | 0.039 | NONELEM | 0.045 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-040 | binomial-xk | `1/(x^6 - 3)^(1/3)` | nonelem | NONELEM | 0.035 | NONELEM | 0.037 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-041 | binomial-xk | `x^2/(x^2 + 2)^(1/4)` | nonelem | NONELEM | 0.030 | NONELEM | 0.034 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-042 | binomial-xk | `x^2/Sqrt[x^6 - 3]` | elem | ELEM | 0.052 | ELEM | 0.074 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| binom-043 | binomial-xk | `x/Sqrt[x^6 - 1]` | nonelem | NONELEM | 0.041 | NONELEM | 0.036 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-044 | binomial-xk | `1/Sqrt[x^6 - 3]` | nonelem | NONELEM | 0.038 | NONELEM | 0.039 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| binom-045 | binomial-xk | `x^5/(x^6 - 3)^(1/4)` | elem | ELEM | 0.035 | ELEM | 0.040 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| third-001 | third-kind | `1/((x)*Sqrt[x^2 + 1])` | elem | ELEM | 0.055 | ELEM | 0.054 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| third-002 | third-kind | `1/((x - 1)*Sqrt[x^2 + 1])` | elem | ELEM | 0.079 | ELEM | 0.061 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| third-003 | third-kind | `1/((x + 1)*Sqrt[x^2 + 1])` | elem | ELEM | 0.076 | ELEM | 0.065 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| third-004 | third-kind | `1/((x - 2)*Sqrt[x^2 + 1])` | elem | ELEM | 0.067 | ELEM | 0.056 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| third-005 | third-kind | `1/((x - 3)*Sqrt[x^2 + 1])` | elem | ELEM | 0.068 | ELEM | 0.059 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| third-006 | third-kind | `1/((x)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.063 | ELEM | 0.060 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| third-007 | third-kind | `1/((x - 1)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.073 | ELEM | 0.055 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| third-008 | third-kind | `1/((x + 1)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.073 | ELEM | 0.072 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| third-009 | third-kind | `1/((x - 2)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.066 | ELEM | 0.072 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| third-010 | third-kind | `1/((x - 3)*Sqrt[x^2 - 2*x + 3])` | elem | ELEM | 0.071 | ELEM | 0.071 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| third-011 | third-kind | `1/((x)*Sqrt[x^3 + 1])` |  | ELEM | 0.060 | ELEM | 0.051 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| third-012 | third-kind | `1/((x - 1)*Sqrt[x^3 + 1])` |  | NONELEM | 0.105 | DECLINE | 0.143 | NONELEM | 0.200 | AGREE-NONELEM | NEITHER |
+| third-013 | third-kind | `1/((x - 2)*Sqrt[x^3 + 1])` |  | NONELEM | 0.128 | DECLINE | 0.095 | NONELEM | 0.180 | AGREE-NONELEM | NEITHER |
+| third-014 | third-kind | `1/((x - 3)*Sqrt[x^3 + 1])` |  | NONELEM | 0.104 | DECLINE | 0.176 | NONELEM | 0.190 | AGREE-NONELEM | NEITHER |
+| third-015 | third-kind | `1/((x - 2)*Sqrt[x^3 - x])` |  | NONELEM | 0.097 | DECLINE | 0.183 | NONELEM | 0.190 | AGREE-NONELEM | NEITHER |
+| third-016 | third-kind | `1/((x - 3)*Sqrt[x^3 - x])` |  | NONELEM | 0.101 | DECLINE | 0.188 | NONELEM | 0.180 | AGREE-NONELEM | NEITHER |
+| third-017 | third-kind | `1/((x)*Sqrt[x^4 + 1])` |  | ELEM | 0.054 | ELEM | 0.055 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| third-018 | third-kind | `1/((x - 1)*Sqrt[x^4 + 1])` |  | NONELEM | 0.175 | DECLINE | 0.152 | NONELEM | 0.190 | AGREE-NONELEM | NEITHER |
+| third-019 | third-kind | `1/((x + 1)*Sqrt[x^4 + 1])` |  | NONELEM | 0.172 | DECLINE | 0.142 | NONELEM | 0.180 | AGREE-NONELEM | NEITHER |
+| third-020 | third-kind | `1/((x - 2)*Sqrt[x^4 + 1])` |  | NONELEM | 0.146 | DECLINE | 0.237 | NONELEM | 0.200 | AGREE-NONELEM | NEITHER |
+| third-021 | third-kind | `1/((x - 3)*Sqrt[x^4 + 1])` |  | NONELEM | 0.151 | DECLINE | 0.293 | NONELEM | 0.190 | AGREE-NONELEM | NEITHER |
+| third-022 | third-kind | `1/((x)*Sqrt[x^4 - 1])` |  | ELEM | 0.078 | ELEM | 0.053 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| third-023 | third-kind | `1/((x - 2)*Sqrt[x^4 - 1])` |  | NONELEM | 0.091 | DECLINE | 0.229 | NONELEM | 0.230 | AGREE-NONELEM | NEITHER |
+| third-024 | third-kind | `1/((x - 3)*Sqrt[x^4 - 1])` |  | NONELEM | 0.088 | DECLINE | 0.282 | NONELEM | 0.230 | AGREE-NONELEM | NEITHER |
+| third-025 | third-kind | `1/((x)*Sqrt[x^4 + x^2 + 1])` |  | ELEM | 0.052 | ELEM | 0.061 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| third-026 | third-kind | `1/((x - 1)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.167 | DECLINE | 0.134 | NONELEM | 0.250 | AGREE-NONELEM | NEITHER |
+| third-027 | third-kind | `1/((x + 1)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.165 | DECLINE | 0.143 | NONELEM | 0.260 | AGREE-NONELEM | NEITHER |
+| third-028 | third-kind | `1/((x - 2)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.096 | DECLINE | 0.383 | NONELEM | 0.260 | AGREE-NONELEM | NEITHER |
+| third-029 | third-kind | `1/((x - 3)*Sqrt[x^4 + x^2 + 1])` |  | NONELEM | 0.140 | DECLINE | 0.464 | NONELEM | 0.250 | AGREE-NONELEM | NEITHER |
+| third-030 | third-kind | `1/((x)*Sqrt[x^3 + x + 1])` |  | NONELEM | 0.077 | DECLINE | 0.154 | NONELEM | 0.210 | AGREE-NONELEM | NEITHER |
+| ratrad-001 | rational-times-radical | `x^3/x*(x^3 + 1)^(-2/3)` |  | ELEM | 0.062 | ELEM | 0.058 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-002 | rational-times-radical | `x^3/(x - 2)*(x^2 + 1)^(1/6)` |  | NONELEM | 0.716 | DECLINE | 3.659 | TIMEOUT | 60.068 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-003 | rational-times-radical | `(x^2 + 1)/(x + 1)*(x^2 - x + 1)^(-1/2)` | elem | ELEM | 0.159 | ELEM | 0.171 | ELEM | 0.150 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-004 | rational-times-radical | `x^3/(x - 2)*(x^4 + 3)^(-3/5)` |  | NONELEM | 0.108 | NONELEM | 0.102 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-005 | rational-times-radical | `x^3/(x - 2)*(x^3 + 1)^(3/2)` |  | NONELEM | 0.081 | NONELEM | 0.165 | NONELEM | 0.260 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-006 | rational-times-radical | `1/x*(x^3 + 1)^(2/3)` |  | ELEM | 0.411 | DECLINE | 0.545 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
+| ratrad-007 | rational-times-radical | `1/(x + 1)*(x^3 - 2*x)^(1/4)` |  | NONELEM | 0.630 | DECLINE | 0.404 | TIMEOUT | 60.055 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-008 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^2 + 1)^(-2/3)` |  | NONELEM | 0.271 | DECLINE | 0.336 | TIMEOUT | 60.040 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-009 | rational-times-radical | `x^3*(x^2 + 1)^(1/5)` |  | ELEM | 0.240 | ELEM | 0.098 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-010 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^2 - x + 1)^(1/5)` |  | NONELEM | 0.800 | DECLINE | 1.262 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-011 | rational-times-radical | `x^3/x*(x^2 - x + 1)^(1/5)` |  | NONELEM | 0.088 | NONELEM | 0.062 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-012 | rational-times-radical | `x/(x - 2)*(x^3 + 1)^(-2/3)` |  | NONELEM | 0.154 | DECLINE | 0.189 | TIMEOUT | 60.048 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-013 | rational-times-radical | `1/x*(x^2 - x + 1)^(3/4)` |  | NONELEM | 0.034 | NONELEM | 0.046 | TIMEOUT | 60.059 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-014 | rational-times-radical | `x^3/(x + 1)*Sqrt[x^3 - 2*x]` |  | NONELEM | 0.048 | NONELEM | 0.034 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-015 | rational-times-radical | `(x^2 + 1)/(x - 2)*(x^3 - 2*x)^(-3/5)` |  | NONELEM | 0.048 | NONELEM | 0.043 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-016 | rational-times-radical | `(x^2 + 1)/x*(x^4 + 3)^(1/6)` |  | NONELEM | 10.997 | DECLINE | 2.245 | TIMEOUT | 60.067 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-017 | rational-times-radical | `x*(x^4 + 3)^(3/2)` |  | ELEM | 0.070 | ELEM | 0.088 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-018 | rational-times-radical | `1/x*(x^3 - 2*x)^(3/2)` |  | NONELEM | 0.043 | NONELEM | 0.049 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-019 | rational-times-radical | `1/(x^2 + 2)*(x^3 + 1)^(-1/4)` |  | NONELEM | 0.837 | DECLINE | 5.175 | TIMEOUT | 60.045 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-020 | rational-times-radical | `x^3/(x - 2)*(x^3 - 2*x)^(-1/2)` |  | NONELEM | 0.035 | NONELEM | 0.044 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-021 | rational-times-radical | `x^3/(x - 2)*(x^2 - x + 1)^(-1/6)` |  | NONELEM | 0.062 | NONELEM | 0.055 | TIMEOUT | 60.045 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-022 | rational-times-radical | `x/x*(x + 2)^(-1/2)` | elem | ELEM | 0.046 | ELEM | 0.046 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-023 | rational-times-radical | `(x^2 + 1)*(x^2 + 1)^(1/5)` |  | NONELEM | 0.043 | NONELEM | 0.042 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-024 | rational-times-radical | `(2*x - 1)*(x^2 - x + 1)^(1/5)` |  | ELEM | 0.062 | ELEM | 0.059 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-025 | rational-times-radical | `(2*x - 1)/(x + 1)*(x + 2)^(1/3)` | elem | ELEM | 0.165 | DECLINE | 0.090 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
+| ratrad-026 | rational-times-radical | `x^3*(x + 2)^(1/4)` | elem | ELEM | 0.042 | ELEM | 0.074 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-027 | rational-times-radical | `x^3*(x + 2)^(-1/2)` | elem | ELEM | 0.050 | ELEM | 0.044 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-028 | rational-times-radical | `x^3*(x^2 + 1)^(1/6)` |  | ELEM | 0.057 | ELEM | 0.055 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-029 | rational-times-radical | `(x^2 + 1)/(x^2 + 2)*(x^2 + 1)^(3/4)` |  | NONELEM | 0.033 | NONELEM | 0.036 | TIMEOUT | 60.055 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-030 | rational-times-radical | `x*(x + 2)^(-1/4)` | elem | ELEM | 0.035 | ELEM | 0.038 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-031 | rational-times-radical | `x/(x + 1)*(x^2 + 1)^(1/5)` |  | NONELEM | 0.189 | DECLINE | 1.074 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-032 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^2 + 1)^(2/5)` |  | NONELEM | 0.285 | DECLINE | 1.088 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-033 | rational-times-radical | `x/(x - 2)*(x + 2)^(-1/3)` | elem | ELEM | 0.085 | DECLINE | 0.138 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
+| ratrad-034 | rational-times-radical | `x^3/x*(x^2 + 1)^(5/6)` |  | NONELEM | 0.043 | NONELEM | 0.044 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-035 | rational-times-radical | `x/x*(x^4 + 3)^(5/6)` |  | NONELEM | 0.035 | NONELEM | 0.045 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-036 | rational-times-radical | `(2*x - 1)/(x^2 + 2)*(x^4 + 3)^(5/6)` |  | NONELEM | 0.050 | NONELEM | 0.050 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-037 | rational-times-radical | `1/(x + 1)*(x^3 - 2*x)^(-1/4)` |  | NONELEM | 0.319 | DECLINE | 0.524 | TIMEOUT | 60.035 | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-038 | rational-times-radical | `1/(x^2 + 2)*(x^3 + 1)^(2/5)` |  | NONELEM | 0.034 | NONELEM | 0.032 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-039 | rational-times-radical | `(2*x - 1)/x*(x^3 - 2*x)^(1/6)` |  | NONELEM | 0.041 | NONELEM | 0.038 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-040 | rational-times-radical | `(2*x - 1)/(x + 1)*(x^4 + 3)^(2/5)` |  | NONELEM | 0.053 | NONELEM | 0.042 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| ratrad-041 | rational-times-radical | `x^3*Sqrt[x + 2]` | elem | ELEM | 0.046 | ELEM | 0.050 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-042 | rational-times-radical | `(x^2 + 1)*(x^4 + 3)^(-1/3)` |  | NONELEM | 0.035 | NONELEM | 0.036 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| ratrad-043 | rational-times-radical | `x^3*(x^3 - 2*x)^(-2/3)` |  | ELEM | 0.401 | DECLINE | 0.079 | TIMEOUT | 60.037 | MATHILDA-ONLY | NEITHER |
+| ratrad-044 | rational-times-radical | `x/(x - 2)*(x^3 - 2*x)^(-1/3)` |  | NONELEM | 0.633 | DECLINE | 0.163 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-045 | rational-times-radical | `1/x*(x^2 + 1)^(-1/6)` |  | ELEM | 0.553 | DECLINE | 0.173 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
+| ratrad-046 | rational-times-radical | `x^3/x*(x^3 + 1)^(1/3)` |  | ELEM | 0.045 | ELEM | 0.049 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratrad-047 | rational-times-radical | `(2*x - 1)/x*(x + 2)^(-1/4)` | elem | ELEM | 0.087 | DECLINE | 0.470 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
+| ratrad-048 | rational-times-radical | `(2*x - 1)/(x^2 + 2)*(x^2 - x + 1)^(1/3)` |  | NONELEM | 0.137 | DECLINE | 0.787 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-049 | rational-times-radical | `(2*x - 1)/(x - 2)*(x^2 + 1)^(-3/5)` |  | NONELEM | 0.341 | DECLINE | 0.889 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| ratrad-050 | rational-times-radical | `x/(x + 1)*(x^2 - x + 1)^(1/3)` |  | NONELEM | 0.680 | DECLINE | 0.052 | TIMEOUT | 60.044 | NONELEM-UNCONFIRMED | NEITHER |
+| cheb-001 | chebyshev | `x*(x^2 + 1)^(1/3)` | elem | ELEM | 0.039 | ELEM | 0.048 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-002 | chebyshev | `x^2*Sqrt[2*x^4 - 1]` | nonelem | NONELEM | 0.032 | NONELEM | 0.030 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-003 | chebyshev | `x^4*(-x^3 + 3)^(-1/2)` | nonelem | NONELEM | 0.048 | NONELEM | 0.039 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-004 | chebyshev | `x*(2*x^3 - 1)^(-3/4)` | nonelem | NONELEM | 0.044 | NONELEM | 0.042 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-005 | chebyshev | `(2*x^4 - 1)^(1/4)` | nonelem | NONELEM | 0.040 | NONELEM | 0.039 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-006 | chebyshev | `(-x^4 + 3)^(1/6)` | nonelem | NONELEM | 0.041 | NONELEM | 0.045 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-007 | chebyshev | `x^(-1)*Sqrt[-x^3 + 3]` | elem | ELEM | 0.078 | ELEM | 0.098 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-008 | chebyshev | `x^4*(-x^4 + 3)^(2/3)` | nonelem | NONELEM | 0.040 | NONELEM | 0.041 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-009 | chebyshev | `x^3*(-x^4 + 3)^(-1/2)` | elem | ELEM | 0.033 | ELEM | 0.030 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| cheb-010 | chebyshev | `x^5*(x^3 + 1)^(1/4)` | elem | ELEM | 0.061 | ELEM | 0.054 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| cheb-011 | chebyshev | `x^(-2)*(x^4 + 1)^(-3/4)` | elem | ELEM | 0.047 | ELEM | 0.038 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| cheb-012 | chebyshev | `(-x^2 + 3)^(1/4)` | nonelem | NONELEM | 0.035 | NONELEM | 0.046 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-013 | chebyshev | `x^(-1)*Sqrt[x^4 + 1]` | elem | ELEM | 0.072 | ELEM | 0.078 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| cheb-014 | chebyshev | `x^3*(2*x^3 - 1)^(2/3)` | elem | ELEM | 0.736 | DECLINE | 0.097 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
+| cheb-015 | chebyshev | `x^3*(-x^2 + 3)^(1/3)` | elem | ELEM | 0.068 | ELEM | 0.044 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| cheb-016 | chebyshev | `x^5*(x^2 + 1)^(1/6)` | elem | ELEM | 0.071 | ELEM | 0.071 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-017 | chebyshev | `x^5*(2*x^3 - 1)^(-3/4)` | elem | ELEM | 0.052 | ELEM | 0.048 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-018 | chebyshev | `x^(-2)*(x^3 + 1)^(2/5)` | nonelem | NONELEM | 0.037 | NONELEM | 0.054 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-019 | chebyshev | `(3*x^2 + 2)^(-1/4)` | nonelem | NONELEM | 0.047 | NONELEM | 0.042 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-020 | chebyshev | `x^(-1)*(2*x^4 - 1)^(2/3)` | elem | ELEM | 0.249 | DECLINE | 1.026 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
+| cheb-021 | chebyshev | `x*(3*x^4 + 2)^(1/3)` | nonelem | NONELEM | 0.036 | NONELEM | 0.089 | NONELEM | 0.140 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-022 | chebyshev | `x*(2*x^3 - 1)^(3/2)` | nonelem | NONELEM | 0.089 | NONELEM | 0.048 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-023 | chebyshev | `(3*x^4 + 2)^(1/6)` | nonelem | NONELEM | 0.073 | NONELEM | 0.042 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-024 | chebyshev | `x^4*(x^3 + 1)^(-3/4)` | nonelem | NONELEM | 0.042 | NONELEM | 0.038 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-025 | chebyshev | `x^3*(3*x^4 + 2)^(-5/6)` | elem | ELEM | 0.031 | ELEM | 0.038 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-026 | chebyshev | `x^(-3)*(-x^3 + 3)^(3/2)` | nonelem | NONELEM | 0.048 | NONELEM | 0.044 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-027 | chebyshev | `x^(-1)*(-x^2 + 3)^(-1/3)` | elem | ELEM | 0.101 | DECLINE | 0.198 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
+| cheb-028 | chebyshev | `x*(-x^3 + 3)^(-5/6)` | nonelem | NONELEM | 0.036 | NONELEM | 0.039 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-029 | chebyshev | `x^3*(2*x^2 - 1)^(3/2)` | elem | ELEM | 0.052 | ELEM | 0.058 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| cheb-030 | chebyshev | `x^4*(2*x^2 - 1)^(1/4)` | nonelem | NONELEM | 0.045 | NONELEM | 0.033 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-031 | chebyshev | `x^(-1)*Sqrt[-x^2 + 3]` | elem | ELEM | 0.075 | ELEM | 0.092 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| cheb-032 | chebyshev | `x^3*(-x^2 + 3)^(-5/6)` | elem | ELEM | 0.042 | ELEM | 0.047 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| cheb-033 | chebyshev | `x^4*(3*x^4 + 2)^(3/2)` | nonelem | NONELEM | 0.040 | NONELEM | 0.038 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-034 | chebyshev | `x^5*(3*x^2 + 2)^(3/2)` | elem | ELEM | 0.050 | ELEM | 0.068 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| cheb-035 | chebyshev | `x^(-3)*(3*x^3 + 2)^(1/4)` | nonelem | NONELEM | 0.043 | NONELEM | 0.041 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-036 | chebyshev | `x^5*(3*x^3 + 2)^(-1/2)` | elem | ELEM | 0.050 | ELEM | 0.055 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| cheb-037 | chebyshev | `x^5*(2*x^3 - 1)^(-1/3)` | elem | ELEM | 0.050 | ELEM | 0.044 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-038 | chebyshev | `x^(-3)*(-x^4 + 3)^(3/2)` | elem | ELEM | 0.105 | ELEM | 0.082 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| cheb-039 | chebyshev | `x^4*(3*x^4 + 2)^(2/5)` | nonelem | NONELEM | 0.043 | NONELEM | 0.039 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| cheb-040 | chebyshev | `x^4*(2*x^4 - 1)^(-1/3)` | nonelem | NONELEM | 0.050 | NONELEM | 0.037 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| goursat-001 | goursat | `(x^2 - 1)/((x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.180 | ELEM | 0.072 | ELEM | 0.160 | AGREE-ELEM | AGREE-ELEM |
+| goursat-002 | goursat | `(x^2 + 1)/((x^2 - 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.175 | ELEM | 0.077 | ELEM | 0.150 | AGREE-ELEM | AGREE-ELEM |
+| goursat-003 | goursat | `x/Sqrt[x^4 + 10*x^2 - 96*x - 71]` | elem | ELEM | 0.240 | DECLINE | 0.215 | ELEM | 0.220 | AGREE-ELEM | FRICAS-ONLY |
+| goursat-004 | goursat | `x/Sqrt[x^4 + 10*x^2 - 96*x - 72]` |  | NONELEM | 0.089 | DECLINE | 0.222 | NONELEM | 0.220 | AGREE-NONELEM | NEITHER |
+| goursat-005 | goursat | `(1 - x^2)/((1 + x^2)*Sqrt[1 + x^2 + x^4])` | elem | ELEM | 0.169 | ELEM | 0.059 | ELEM | 0.150 | AGREE-ELEM | AGREE-ELEM |
+| goursat-006 | goursat | `1/(x^3 + 1)^(1/3)` | elem | ELEM | 0.368 | DECLINE | 0.077 | ELEM | 0.110 | AGREE-ELEM | FRICAS-ONLY |
+| goursat-007 | goursat | `x/((x^3 + 1)^(1/3)*(x^3 - 2))` |  | NONELEM | 0.080 | DECLINE | 2.394 | NONELEM | 3.520 | AGREE-NONELEM | NEITHER |
+| goursat-008 | goursat | `x/((x^3 + 8)*(x^3 + 1)^(1/3))` |  | NONELEM | 0.093 | DECLINE | 2.742 | NONELEM | 4.290 | AGREE-NONELEM | NEITHER |
+| goursat-009 | goursat | `(x^3 - 2)/((x^3 + 1)^(2/3)*(x^3 + 4))` |  | NONELEM | 0.094 | DECLINE | 0.687 | NONELEM | 3.900 | AGREE-NONELEM | NEITHER |
+| goursat-010 | goursat | `1/((x^4 + 1)^(1/4))` | elem | ELEM | 0.783 | DECLINE | 0.079 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
+| goursat-011 | goursat | `x^2/((x^4 - 1)^(3/4))` |  | ELEM | 0.824 | ELEM | 0.101 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| goursat-012 | goursat | `1/(x*(x^4 + 1)^(1/4))` | elem | ELEM | 0.129 | DECLINE | 0.140 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
+| goursat-013 | goursat | `(x^4 - 1)/((x^4 + 1)^(1/4)*x^2)` |  | NONELEM | 0.046 | NONELEM | 0.046 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
+| goursat-014 | goursat | `1/((x^2 + 1)*(x^4 + 1)^(1/4))` |  | NONELEM | 0.379 | DECLINE | 1.776 | TIMEOUT | 60.059 | NONELEM-UNCONFIRMED | NEITHER |
+| goursat-015 | goursat | `(x^2 - 1)/((x^2 + 1)*(x^4 + 1)^(1/4))` |  | NONELEM | 1.898 | DECLINE | 0.088 | TIMEOUT | 60.056 | NONELEM-UNCONFIRMED | NEITHER |
+| goursat-016 | goursat | `x/((x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.066 | ELEM | 0.073 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| goursat-017 | goursat | `(3*x^2 + 1)/((x^2 - 1)*Sqrt[x^4 - x^2])` |  | ELEM | 0.091 | ELEM | 0.095 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| goursat-018 | goursat | `(x^6 + 2)/((x^6 - 1)*Sqrt[x^6 + 1])` |  | NONELEM | 0.149 | DECLINE | 1.729 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| goursat-019 | goursat | `(5*x^4 + 1)/Sqrt[x^5 + x + 1]` | elem | ELEM | 0.034 | ELEM | 0.038 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| goursat-020 | goursat | `(x^2 + 2)/((x^2 + 1)*(x^3 + x)^(1/3))` |  | ELEM | 0.395 | DECLINE | 0.267 | TIMEOUT | 60.032 | MATHILDA-ONLY | NEITHER |
+| goursat-021 | goursat | `1/((x^2 - 2)*(x^4 - 4*x^2 + 1)^(1/4))` |  | NONELEM | 0.432 | TIMEOUT | 60.011 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | TIMEOUT |
+| goursat-022 | goursat | `(x - 1)/((x + 1)*Sqrt[x^3 + x^2 + x])` |  | ELEM | 0.438 | DECLINE | 0.303 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
+| goursat-023 | goursat | `(x^2 - 2)/((x^2 + 2)*Sqrt[x^4 + 4])` | elem | ELEM | 0.149 | ELEM | 0.287 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
+| recip-001 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.900 | ELEM | 0.087 | ELEM | 0.240 | AGREE-ELEM | AGREE-ELEM |
+| recip-002 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + x + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.803 | DECLINE | 0.347 | ELEM | 0.240 | AGREE-ELEM | FRICAS-ONLY |
+| recip-003 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 2*x + 1)*Sqrt[x^4 + x^2 + 1])` | elem | ELEM | 0.174 | DECLINE | 0.449 | ELEM | 0.230 | AGREE-ELEM | FRICAS-ONLY |
+| recip-004 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 3*x + 1)*Sqrt[x^4 - x^2 + 1])` | elem | ELEM | 0.942 | DECLINE | 1.975 | ELEM | 0.200 | AGREE-ELEM | FRICAS-ONLY |
+| recip-005 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 - x + 1)*Sqrt[x^4 + 3*x^2 + 1])` | elem | ELEM | 1.028 | DECLINE | 2.585 | ELEM | 0.260 | AGREE-ELEM | FRICAS-ONLY |
+| recip-006 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + 1)*Sqrt[x^4 + 5*x^2 + 1])` | elem | ELEM | 0.837 | ELEM | 0.257 | ELEM | 0.240 | AGREE-ELEM | AGREE-ELEM |
+| recip-007 | pseudo-elliptic-recip | `(x^2 - 1)/((x^2 + x + 1)*Sqrt[x^4 + 3*x^2 + 1])` | elem | ELEM | 1.031 | DECLINE | 1.857 | ELEM | 0.180 | AGREE-ELEM | FRICAS-ONLY |
+| recip-008 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 + x - 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.808 | DECLINE | 1.040 | ELEM | 0.180 | AGREE-ELEM | FRICAS-ONLY |
+| recip-009 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 + 2*x - 1)*Sqrt[x^4 + x^2 + 1])` | elem | ELEM | 0.195 | DECLINE | 1.626 | ELEM | 0.280 | AGREE-ELEM | FRICAS-ONLY |
+| recip-010 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 + 3*x - 1)*Sqrt[x^4 + 3*x^2 + 1])` | elem | ELEM | 0.286 | DECLINE | 5.746 | ELEM | 0.330 | AGREE-ELEM | FRICAS-ONLY |
+| recip-011 | pseudo-elliptic-recip | `(x^2 + 1)/((x^2 - x - 1)*Sqrt[x^4 - x^2 + 1])` | elem | ELEM | 0.822 | DECLINE | 4.225 | ELEM | 0.310 | AGREE-ELEM | FRICAS-ONLY |
+| evensub-001 | even-substitution | `x/((x^2 + 3)*Sqrt[x^4 + x^2 + 1])` | elem | ELEM | 0.192 | ELEM | 0.181 | ELEM | 0.150 | AGREE-ELEM | AGREE-ELEM |
+| evensub-002 | even-substitution | `x^3/((x^2 - 2)*Sqrt[x^4 + 1])` | elem | ELEM | 0.238 | ELEM | 0.273 | ELEM | 0.170 | AGREE-ELEM | AGREE-ELEM |
+| evensub-003 | even-substitution | `x/Sqrt[x^4 - 3*x^2 + 1]` | elem | ELEM | 0.142 | ELEM | 0.211 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
+| evensub-004 | even-substitution | `x^5/((x^4 + 1)*Sqrt[x^4 + 2])` | elem | ELEM | 0.213 | ELEM | 0.223 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
+| evensub-005 | even-substitution | `x/((x^4 + x^2 + 1)*Sqrt[x^4 + 1])` | elem | ELEM | 0.358 | ELEM | 0.281 | ELEM | 0.220 | AGREE-ELEM | AGREE-ELEM |
+| evensub-006 | even-substitution | `(x^3 + x)/((x^2 + 5)*Sqrt[x^4 - 2*x^2 + 7])` | elem | ELEM | 0.924 | ELEM | 0.280 | ELEM | 0.180 | AGREE-ELEM | AGREE-ELEM |
+| hyper-001 | genus-hyper | `1/Sqrt[x + 3]` | elem | ELEM | 0.085 | ELEM | 0.087 | ELEM | 0.120 | AGREE-ELEM | AGREE-ELEM |
+| hyper-002 | genus-hyper | `x^1/Sqrt[x + 3]` | elem | ELEM | 0.102 | ELEM | 0.104 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| hyper-003 | genus-hyper | `1/Sqrt[x^2 + x + 1]` | elem | ELEM | 0.131 | ELEM | 0.137 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
+| hyper-004 | genus-hyper | `x^1/Sqrt[x^2 + x + 1]` | elem | ELEM | 0.135 | ELEM | 0.139 | ELEM | 0.130 | AGREE-ELEM | AGREE-ELEM |
+| hyper-005 | genus-hyper | `1/Sqrt[x^3 - x + 1]` | nonelem | NONELEM | 0.077 | NONELEM | 0.076 | NONELEM | 0.180 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-006 | genus-hyper | `x^2/Sqrt[x^3 - x + 1]` |  | NONELEM | 0.095 | NONELEM | 0.033 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-007 | genus-hyper | `1/Sqrt[x^4 + x + 1]` | nonelem | NONELEM | 0.035 | NONELEM | 0.031 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-008 | genus-hyper | `x^2/Sqrt[x^4 + x + 1]` |  | NONELEM | 0.038 | NONELEM | 0.043 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-009 | genus-hyper | `1/Sqrt[x^5 - x + 1]` | nonelem | NONELEM | 0.035 | NONELEM | 0.030 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-010 | genus-hyper | `x^1/Sqrt[x^5 - x + 1]` | nonelem | NONELEM | 0.031 | NONELEM | 0.032 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-011 | genus-hyper | `x^3/Sqrt[x^5 - x + 1]` |  | NONELEM | 0.032 | NONELEM | 0.044 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-012 | genus-hyper | `1/Sqrt[x^6 + x^2 + 1]` | nonelem | NONELEM | 0.039 | NONELEM | 0.034 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-013 | genus-hyper | `x^1/Sqrt[x^6 + x^2 + 1]` | nonelem | NONELEM | 0.041 | NONELEM | 0.040 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-014 | genus-hyper | `x^3/Sqrt[x^6 + x^2 + 1]` |  | NONELEM | 0.041 | NONELEM | 0.050 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-015 | genus-hyper | `1/Sqrt[x^7 + x + 1]` | nonelem | NONELEM | 0.038 | NONELEM | 0.035 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-016 | genus-hyper | `x^2/Sqrt[x^7 + x + 1]` | nonelem | NONELEM | 0.036 | NONELEM | 0.032 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-017 | genus-hyper | `x^4/Sqrt[x^7 + x + 1]` |  | NONELEM | 0.031 | NONELEM | 0.046 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-018 | genus-hyper | `1/Sqrt[x^8 + x^3 + 1]` | nonelem | NONELEM | 0.034 | NONELEM | 0.039 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-019 | genus-hyper | `x^2/Sqrt[x^8 + x^3 + 1]` | nonelem | NONELEM | 0.034 | NONELEM | 0.034 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| hyper-020 | genus-hyper | `x^4/Sqrt[x^8 + x^3 + 1]` |  | NONELEM | 0.043 | NONELEM | 0.037 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| super-001 | genus-super | `1/(x^4 + 1)^(1/3)` | nonelem | NONELEM | 0.038 | NONELEM | 0.034 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| super-002 | genus-super | `x/(x^4 + 1)^(2/3)` |  | NONELEM | 0.032 | NONELEM | 0.032 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| super-003 | genus-super | `1/(x^5 + 2)^(1/3)` |  | NONELEM | 0.035 | NONELEM | 0.035 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| super-004 | genus-super | `x/(x^5 + 2)^(2/3)` |  | NONELEM | 0.035 | NONELEM | 0.034 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| super-005 | genus-super | `1/(x^3 + x + 1)^(1/3)` |  | NONELEM | 0.137 | DECLINE | 0.336 | TIMEOUT | 60.035 | NONELEM-UNCONFIRMED | NEITHER |
+| super-006 | genus-super | `x/(x^3 + x + 1)^(2/3)` |  | NONELEM | 0.146 | DECLINE | 0.097 | TIMEOUT | 60.033 | NONELEM-UNCONFIRMED | NEITHER |
+| super-007 | genus-super | `1/(x^4 + x + 1)^(1/5)` |  | NONELEM | 0.047 | NONELEM | 0.043 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| super-008 | genus-super | `x/(x^4 + x + 1)^(2/5)` |  | NONELEM | 0.037 | NONELEM | 0.036 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
+| super-009 | genus-super | `1/(x^2 + 1)^(1/3)` |  | NONELEM | 0.030 | NONELEM | 0.035 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| super-010 | genus-super | `x/(x^2 + 1)^(2/3)` |  | ELEM | 0.029 | ELEM | 0.032 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-001 | rational-radicand | `Sqrt[(x + 1)/(x - 1)]` | elem | ELEM | 0.060 | ELEM | 0.091 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-002 | rational-radicand | `((x + 1)/(x - 1))^(1/3)` | elem | ELEM | 0.259 | DECLINE | 0.100 | ELEM | 0.090 | AGREE-ELEM | FRICAS-ONLY |
+| ratradicand-003 | rational-radicand | `Sqrt[x/(x + 1)]/x` | elem | ELEM | 0.060 | ELEM | 0.092 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-004 | rational-radicand | `((1 - x)/(1 + x))^(1/4)` | elem | ELEM | 0.122 | DECLINE | 0.165 | ELEM | 0.130 | AGREE-ELEM | FRICAS-ONLY |
+| ratradicand-005 | rational-radicand | `x*Sqrt[(x - 1)/(x + 2)]` | elem | ELEM | 0.079 | ELEM | 0.104 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-006 | rational-radicand | `Sqrt[(x^2 + 1)/(x^2 - 1)]` |  | NONELEM | 0.040 | NONELEM | 0.036 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-007 | rational-radicand | `((x + 2)/(x - 3))^(2/3)/x` | elem | ELEM | 0.169 | DECLINE | 0.091 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
+| ratradicand-008 | rational-radicand | `1/(x^2*((x + 1)/(x - 1))^(1/5))` | elem | ELEM | 0.223 | DECLINE | 0.169 | ELEM | 0.100 | AGREE-ELEM | FRICAS-ONLY |
+| ratradicand-009 | rational-radicand | `((2*x + 1)/(x + 3))^(1/6)` | elem | ELEM | 0.199 | DECLINE | 3.492 | ELEM | 0.110 | AGREE-ELEM | FRICAS-ONLY |
+| ratradicand-010 | rational-radicand | `Sqrt[(x - 1)/(x^2 + 1)]` |  | NONELEM | 0.034 | NONELEM | 0.043 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-011 | rational-radicand | `((x^2 + 1)/x)^(1/3)` |  | NONELEM | 0.067 | NONELEM | 0.081 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-012 | rational-radicand | `Sqrt[(x^3 + 1)/x]` |  | NONELEM | 0.051 | NONELEM | 0.075 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-013 | rational-radicand | `(x + 1)/(x^2*Sqrt[(x - 1)/(x + 1)])` | elem | ELEM | 0.110 | ELEM | 0.144 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-014 | rational-radicand | `((x - 2)/(x + 2))^(3/4)/(x - 1)` | elem | ELEM | 0.363 | DECLINE | 0.084 | ELEM | 0.130 | AGREE-ELEM | FRICAS-ONLY |
+| ratradicand-015 | rational-radicand | `Sqrt[x/(x^2 + x + 1)]` |  | NONELEM | 0.028 | NONELEM | 0.035 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-016 | rational-radicand | `1/(x - 2)*Sqrt[(x + 1)/(x - 1)]` | elem | ELEM | 0.106 | ELEM | 0.131 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-017 | rational-radicand | `(x/(x^3 + 1))^(1/3)` |  | NONELEM | 0.034 | NONELEM | 0.030 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-018 | rational-radicand | `Sqrt[(2*x - 1)/(3*x + 5)]/(x + 1)` | elem | ELEM | 0.170 | ELEM | 0.133 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| ratradicand-019 | rational-radicand | `((x^2 - 1)/(x^2 + 1))^(1/4)` |  | NONELEM | 0.030 | NONELEM | 0.040 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| ratradicand-020 | rational-radicand | `Sqrt[(x^2 + 1)/x]/x` |  | NONELEM | 0.035 | NONELEM | 0.033 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
+| torsion-001 | torsion-heavy | `1/((x - 3)*(x^3 + 1)^(1/3))` |  | NONELEM | 0.103 | DECLINE | 1.059 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-002 | torsion-heavy | `x/((x - 3)*(x^3 + 1)^(2/3))` |  | NONELEM | 0.118 | DECLINE | 0.205 | TIMEOUT | 60.030 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-003 | torsion-heavy | `1/((x + 2)*(x^3 + 2)^(1/3))` |  | NONELEM | 0.124 | DECLINE | 0.765 | TIMEOUT | 60.053 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-004 | torsion-heavy | `1/((2*x - 1)*(x^3 - 1)^(1/3))` |  | NONELEM | 0.102 | DECLINE | 0.966 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-005 | torsion-heavy | `x/((x - 2)*(x^3 + 2)^(2/3))` |  | NONELEM | 0.104 | DECLINE | 0.125 | TIMEOUT | 60.042 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-006 | torsion-heavy | `1/((x^2 + 1)*(x^3 + 1)^(1/4))` |  | NONELEM | 0.294 | DECLINE | 6.412 | TIMEOUT | 60.153 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-007 | torsion-heavy | `1/((x^2 + 3)*(x^3 + 1)^(1/4))` |  | NONELEM | 0.227 | DECLINE | 8.063 | TIMEOUT | 60.064 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-008 | torsion-heavy | `x/((x^2 + 2)*(x^3 + 1)^(3/4))` |  | NONELEM | 0.807 | DECLINE | 1.177 | TIMEOUT | 60.062 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-009 | torsion-heavy | `(x^2 + 1)/x*(x^4 + 2)^(1/6)` |  | NONELEM | 14.513 | DECLINE | 2.217 | TIMEOUT | 60.077 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-010 | torsion-heavy | `(x^2 - 1)/x*(x^4 + 5)^(1/6)` |  | NONELEM | 24.423 | DECLINE | 5.164 | TIMEOUT | 60.064 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-011 | torsion-heavy | `1/((x^2 - 3)*(x^4 - 6*x^2 + 1)^(1/4))` |  | NONELEM | 0.364 | TIMEOUT | 60.008 | TIMEOUT | 60.082 | NONELEM-UNCONFIRMED | TIMEOUT |
+| torsion-012 | torsion-heavy | `1/((x^2 + 2)*(x^4 + 4)^(1/4))` |  | NONELEM | 0.842 | DECLINE | 4.000 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-013 | torsion-heavy | `(2*x + 1)/(-3*x^2 - 2*x + 1)*(x^2 - x + 3)^(1/4)` |  | NONELEM | 0.177 | DECLINE | 0.759 | TIMEOUT | 60.058 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-014 | torsion-heavy | `1/(2*x^2 + 3*x + 1)*(x^3 - x^2 + x + 1)^(-2/3)` |  | NONELEM | 0.307 | DECLINE | 0.356 | TIMEOUT | 60.057 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-015 | torsion-heavy | `x/(x + 2)*(x^2 + 3)^(1/5)` |  | NONELEM | 1.381 | DECLINE | 1.930 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-016 | torsion-heavy | `(x - 1)/(x + 1)*(x^2 + 2)^(2/5)` |  | NONELEM | 0.820 | DECLINE | 2.082 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-017 | torsion-heavy | `(-x^2 - x - 1)/(2*x + 3)*(x^4 + x^3 + 2*x^2 - x - 1)^(-5/6)` |  | NONELEM | 13.106 | DECLINE | 2.067 | TIMEOUT | 60.073 | NONELEM-UNCONFIRMED | NEITHER |
+| torsion-018 | torsion-heavy | `1/(x - 1)*(x^3 - 3*x)^(1/4)` |  | NONELEM | 0.197 | DECLINE | 0.155 | TIMEOUT | 60.078 | NONELEM-UNCONFIRMED | NEITHER |
+| deriv-alg-01 | deriv-alg | `(-68*x^4 - 28*x^3 - 36*x^2 - 28*x)/(4*(-2*x^3 - x^2 - 1))*(-2*x^3 - x^2 - 1)^(3/4)` | elem | ELEM | 0.049 | ELEM | 0.047 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-02 | deriv-alg | `(-4*x^5 - 10*x^4 - 32*x^3 + 27*x^2 + 36*x + 6)/(3*(-2*x^4 + 2*x^3 + 3*x^2 - 2))*(-2*x^4 + ...` | elem | ELEM | 0.079 | ELEM | 0.061 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-03 | deriv-alg | `(10*x^3 + 10*x^2 - 22*x - 22)/(4*(x^3 - 2*x^2 - x + 2))*(x^3 - 2*x^2 - x + 2)^(-3/4)` | elem | ELEM | 0.071 | ELEM | 0.064 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-04 | deriv-alg | `(4*x^2 + 16*x + 12)/(4*(x^2 - 2*x - 3))*(x^2 - 2*x - 3)^(-3/4)` | elem | ELEM | 0.049 | ELEM | 0.047 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-05 | deriv-alg | `(46*x^6 + 97*x^5 + 67*x^4 - 57*x^3 - 33*x^2 + 97*x + 3)/(4*(x^5 + x^4 + x^3 - 3*x^2 + 3*x ...` | elem | ELEM | 0.057 | ELEM | 0.054 | ELEM | 0.100 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-06 | deriv-alg | `(14*x^5 + 46*x^4 + 18*x^3 - 10*x^2 + 24*x - 4)/(3*(x^4 + 2*x^3 - x^2 + 2*x))*(x^4 + 2*x^3 ...` | elem | ELEM | 0.049 | ELEM | 0.057 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-07 | deriv-alg | `(-48*x^5 + 42*x^4 - 24*x + 6)/(6*(3*x^4 - 1))*(3*x^4 - 1)^(-5/6)` | elem | ELEM | 0.064 | ELEM | 0.065 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-08 | deriv-alg | `(-21*x^4 - 67*x^3 - 10*x^2 + 16*x - 10)/(5*(x^4 + 3*x^3 - 2*x^2 + 2))*(x^4 + 3*x^3 - 2*x^2...` | elem | ELEM | 0.055 | ELEM | 0.058 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-09 | deriv-alg | `(12*x^5 + 15*x^4 + 8*x^3 - 19*x^2 - 4*x)/(3*(3*x^4 + 3*x^3 + x^2 - 2*x))*(3*x^4 + 3*x^3 + ...` | elem | ELEM | 0.061 | ELEM | 0.056 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-10 | deriv-alg | `(6*x^3 - 21*x^2 + 24*x + 39)/(6*(x^3 - 3*x^2 + 3*x + 3))*(x^3 - 3*x^2 + 3*x + 3)^(-1/6)` | elem | ELEM | 0.096 | ELEM | 0.102 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-11 | deriv-alg | `(-3*x^4 + 36*x^3 + 27*x^2 - 66*x - 39)/(5*(x^3 - 2*x^2 - 2*x + 3))*(x^3 - 2*x^2 - 2*x + 3)...` | elem | ELEM | 0.086 | ELEM | 0.089 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-12 | deriv-alg | `(48*x^6 + 13*x^5 + 42*x^4 + 78*x^3 + 2*x^2 - 55*x - 12)/(3*(-x^5 - 2*x^3 - 2*x^2 - x + 2))...` | elem | ELEM | 0.049 | ELEM | 0.060 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-13 | deriv-alg | `(20*x^3 - 24*x^2 - 24*x + 4)/(4*(x^2 - 2*x))*(x^2 - 2*x)^(1/4)` | elem | ELEM | 0.051 | ELEM | 0.040 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-14 | deriv-alg | `(-18*x^3 - 33*x^2 + 36*x + 17)/(4*(3*x^2 + 3*x - 1))*(3*x^2 + 3*x - 1)^(-3/4)` | elem | ELEM | 0.058 | ELEM | 0.064 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-15 | deriv-alg | `(102*x^6 - 31*x^5 + 10*x^4 + 12*x^3 - 70*x^2 - 65*x - 18)/(6*(3*x^5 - 2*x^4 + x^2 - 3*x - ...` | elem | ELEM | 0.064 | ELEM | 0.052 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-16 | deriv-alg | `(-18*x^3 + 7*x^2 - 28*x - 13)/(2*(x^2 - x + 3))*(x^2 - x + 3)^(1/2)` | elem | ELEM | 0.041 | ELEM | 0.039 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-17 | deriv-alg | `(8*x^3 + 25*x^2 + 12*x)/(5*(-x^2 - 2*x))*(-x^2 - 2*x)^(-3/5)` | elem | ELEM | 0.057 | ELEM | 0.051 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-18 | deriv-alg | `(-12*x^5 - 10*x^4 - 30*x^3 - 32*x^2 - 6*x + 22)/(4*(-3*x^4 - 2*x^3 - 2*x^2 - 2*x + 2))*(-3...` | elem | ELEM | 0.077 | ELEM | 0.073 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-19 | deriv-alg | `(24*x^3 - 36*x^2 - 36*x + 6)/(3*(x^4 - 2*x^3 - 3*x^2 + x + 2))*(x^4 - 2*x^3 - 3*x^2 + x + ...` | elem | ELEM | 0.056 | ELEM | 0.055 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-alg-20 | deriv-alg | `(16*x + 12)/(5*(2*x^2 + 3*x + 2))*(2*x^2 + 3*x + 2)^(-4/5)` | elem | ELEM | 0.065 | ELEM | 0.078 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| deriv-log-01 | deriv-log | `(-27*x^5 - 45*x^4 + 126*x^3 + 9*x^2 - 21*x)/(2*(x^3 + x^2 - 3*x + 1)*(9*x^6 + 18*x^5 + 27*...` | elem | ELEM | 0.228 | DECLINE | 0.039 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-02 | deriv-log | `(-24*x^6 + 6*x^5 - 4*x^4 + 20*x^3 + 24*x^2 - 26*x - 12)/(2*(x^6 + x^5 + 2*x^4 + 2*x^3 - x^...` | elem | ELEM | 0.232 | ELEM | 0.089 | ELEM | 0.370 | AGREE-ELEM | AGREE-ELEM |
+| deriv-log-03 | deriv-log | `(9*x^5 + 3*x^4 + 9*x^3 - 18*x^2 + 6*x - 9)/(2*(x^3 + x)*(x^6 + 2*x^5 + 5*x^4 + x^3 + 10*x^...` | elem | ELEM | 0.211 | TIMEOUT | 60.094 | ELEM | 0.170 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-04 | deriv-log | `(-2*x^6 - 9*x^5 + 81*x^4 - 74*x^3 + 56*x^2 - 57*x + 13)/(2*(x^3 - 3*x^2 + x - 1)*(4*x^6 - ...` | elem | ELEM | 0.248 | TIMEOUT | 60.097 | ELEM | 0.190 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-05 | deriv-log | `(4*x^9 - 26*x^8 + 23*x^7 - 19*x^6 + 71*x^5 + 82*x^4 + 25*x^3 + 12*x^2 - 18*x + 15)/(2*(x^6...` | elem | ELEM | 0.607 | TIMEOUT | 60.181 | ELEM | 0.700 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-06 | deriv-log | `(12*x^5 - 36*x^4 + 6*x^3 - 33*x^2 + 54*x - 36)/(2*(x^4 + x^2 - 3*x + 3)*(-9*x^6 - 9*x^4 + ...` | elem | ELEM | 0.297 | TIMEOUT | 60.366 | ELEM | 0.370 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-07 | deriv-log | `(-15*x^6 + 33*x^5 - 15*x^4 + 69*x^3 + 16*x^2 - 6*x - 6)/(2*(x^4 - 3*x^3 + 2*x^2 + 2*x + 3)...` | elem | ELEM | 0.466 | TIMEOUT | 60.078 | ELEM | 0.320 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-08 | deriv-log | `(4*x^8 - 3*x^7 - 31*x^6 - 15*x^5 - 27*x^4 + 4*x^3 + 18*x^2 - 36*x + 24)/(2*(x^6 + x^5 + 3*...` | elem | ELEM | 1.004 | TIMEOUT | 60.165 | ELEM | 0.700 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-09 | deriv-log | `(8*x^4 - 48*x^3 - 28*x - 4)/(2*(2*x^4 + 2*x^2 + 2*x - 2)*(-8*x^4 - 7*x^2 - 14*x + 17))*Sqr...` | elem | ELEM | 0.245 | ELEM | 0.051 | ELEM | 0.270 | AGREE-ELEM | AGREE-ELEM |
+| deriv-log-10 | deriv-log | `(-4*x^4 + 16*x^3 + 6*x - 4)/(2*(2*x^4 + 2*x^2 - 2*x)*(-2*x^4 - x^2 - 2*x + 4))*Sqrt[2*x^4 ...` | elem | ELEM | 0.229 | ELEM | 0.222 | ELEM | 0.200 | AGREE-ELEM | AGREE-ELEM |
+| deriv-log-11 | deriv-log | `(-4*x^6 - 4*x^5 + 42*x^4 + 32*x^3 - 14*x^2)/(2*(-2*x^3 - 3*x^2 + x - 1)*(x^6 + 12*x^5 + 22...` | elem | ELEM | 0.699 | DECLINE | 24.825 | ELEM | 0.200 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-12 | deriv-log | `(-8*x^6 - 4*x^5 - 4*x^3)/(2*(x^4 + x^3 + 2*x^2 - x)*(-4*x^6 - 4*x^5 - 4*x^4 + 4*x^3))*Sqrt...` | elem | ELEM | 0.154 | DECLINE | 1.446 | ELEM | 0.190 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-13 | deriv-log | `(-32*x^8 - 44*x^7 + 32*x^6 + 147*x^5 + 72*x^4 - 45*x^3 + 22*x^2 + 46*x - 2)/(2*(-2*x^6 + 3...` | elem | ELEM | 0.728 | TIMEOUT | 63.990 | ELEM | 0.740 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-14 | deriv-log | `(6*x^5 - 12*x^4 - 2*x^3 - 4*x + 12)/(2*(-x^5 + 3*x^4 + x^3 - 2*x^2 - 2*x + 3)*(4*x^5 - 12*...` | elem | ELEM | 0.647 | ELEM | 0.108 | ELEM | 0.200 | AGREE-ELEM | AGREE-ELEM |
+| deriv-log-15 | deriv-log | `(-6*x^7 - 21*x^6 - 18*x^4 - 48*x^3 + 12*x - 3)/(2*(x^6 - x^5 + 3*x^4 + x^3 - x^2 + x)*(-9*...` | elem | ELEM | 1.358 | TIMEOUT | 60.230 | ELEM | 0.600 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-16 | deriv-log | `(-9*x^5 + 27*x^4 - 43*x^3 + 27*x^2 + 2*x - 8)/(2*(x^3 - 2*x^2 + 2*x - 1)*(9*x^6 - 18*x^5 +...` | elem | ELEM | 0.439 | TIMEOUT | 61.553 | ELEM | 0.280 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-17 | deriv-log | `(6*x^3 + 4*x + 4)/(2*(-3*x^3 - x^2 + 2*x + 1)*(3*x^3 + 5*x^2 - 2*x - 1))*Sqrt[-3*x^3 - x^2...` | elem | ELEM | 0.403 | ELEM | 0.193 | ELEM | 0.180 | AGREE-ELEM | AGREE-ELEM |
+| deriv-log-18 | deriv-log | `(-18*x^4 + 117*x^2 + 126*x - 18)/(2*(x^4 + 3*x^3 + 3*x^2 - 2*x - 3)*(-5*x^4 - 27*x^3 - 15*...` | elem | ELEM | 0.525 | TIMEOUT | 60.081 | ELEM | 0.210 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-19 | deriv-log | `(-9*x^8 - 3*x^7 - 12*x^6 + 57*x^5 + 51*x^4 - 123*x^3 + 60*x^2 + 18*x - 11)/(2*(x^5 + x^4 +...` | elem | ELEM | 1.581 | TIMEOUT | 61.850 | ELEM | 0.520 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-20 | deriv-log | `(9*x^7 - 13*x^6 - 5*x^5 - 18*x^4 + 3*x^3 + 5*x^2 - 3*x - 2)/(2*(x^5 - 3*x^4 - x - 1)*(-x^7...` | elem | ELEM | 0.653 | TIMEOUT | 60.240 | ELEM | 0.310 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-21 | deriv-log | `(-4*x^6 + 12*x^5 - 18*x^4 - 29*x^3 - 16*x^2 - 2*x - 5)/(2*(2*x^4 + 3*x^2 + 3*x + 2)*(2*x^6...` | elem | ELEM | 0.563 | TIMEOUT | 60.100 | ELEM | 0.310 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-22 | deriv-log | `(6*x^6 + 6*x^5 - 2*x^4 + 7*x^3 + 9*x^2 + 4*x)/(2*(x^4 + 2*x^3 - 2*x^2 - x - 1)*(-9*x^6 - 2...` | elem | ELEM | 0.454 | TIMEOUT | 60.137 | ELEM | 0.350 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-23 | deriv-log | `(15*x^6 - 93*x^5 + 173*x^4 - 183*x^3 + 21*x^2 - 13*x + 6)/(2*(-x^5 + 2*x^4 - 3*x^3 - x^2 -...` | elem | ELEM | 0.411 | TIMEOUT | 60.070 | ELEM | 0.460 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-24 | deriv-log | `(12*x^8 - 40*x^7 - 104*x^6 - 30*x^5 + 45*x^4 + 21*x^3 + 3*x^2 - 3*x)/(2*(2*x^5 + x^4 - x^3...` | elem | ELEM | 1.056 | TIMEOUT | 60.052 | ELEM | 0.330 | AGREE-ELEM | FRICAS-ONLY |
+| deriv-log-25 | deriv-log | `(-24*x^8 + 5*x^6 - 16*x^5 + 45*x^4 - 8*x^3 - 71*x^2 + 120*x - 3)/(2*(x^6 - x^5 - x^4 + 2*x...` | elem | ELEM | 1.011 | TIMEOUT | 60.064 | ELEM | 0.640 | AGREE-ELEM | FRICAS-ONLY |
+| random-001 | random | `(2*x^2)/(-2*x^2 + 3*x - 1)*(x + 2)^(-1/2)` |  | ELEM | 0.230 | ELEM | 0.146 | ELEM | 0.140 | AGREE-ELEM | AGREE-ELEM |
+| random-002 | random | `(3*x + 3)/(-x - 2)*(3*x^3 + x^2 + 3*x + 2)^(2/3)` |  | NONELEM | 0.129 | NONELEM | 0.054 | TIMEOUT | 60.051 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| random-003 | random | `(3*x + 2)/(-2*x + 3)*(x^4 + 2*x^2 - x + 3)^(-3/4)` |  | NONELEM | 0.846 | DECLINE | 0.881 | TIMEOUT | 60.126 | NONELEM-UNCONFIRMED | NEITHER |
+| random-004 | random | `(3*x + 1)/(x^2 - 2*x - 2)*(x^3 + 2*x^2 - 1)^(1/3)` |  | NONELEM | 0.191 | DECLINE | 0.133 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| random-005 | random | `(x^2 + 1)/(2*x + 2)*Sqrt[x^4 - 3*x^3 + 3*x^2 + x + 2]` |  | NONELEM | 0.045 | NONELEM | 0.048 | NONELEM | 0.370 | AGREE-NONELEM | AGREE-NONELEM |
+| random-006 | random | `(-2)/(-3)*(x^2 - 2*x)^(2/3)` |  | NONELEM | 0.050 | NONELEM | 0.044 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| random-007 | random | `(-1)/(-2)*(x^2 + 3*x - 2)^(2/3)` |  | NONELEM | 0.212 | NONELEM | 0.091 | NONELEM | 0.160 | AGREE-NONELEM | AGREE-NONELEM |
+| random-008 | random | `1/(-3)*(-x^2 - x + 1)^(-1/2)` |  | ELEM | 0.147 | ELEM | 0.100 | ELEM | 0.110 | AGREE-ELEM | AGREE-ELEM |
+| random-009 | random | `2/(-3*x)*(x - 1)^(-1/4)` |  | ELEM | 0.391 | DECLINE | 0.289 | ELEM | 0.120 | AGREE-ELEM | FRICAS-ONLY |
+| random-010 | random | `(-3*x^2 - 3*x)/(-2*x^2 + 2*x - 1)*(-2*x^4 + 3*x^3 - 3*x^2 + 3*x + 2)^(-5/6)` |  | NONELEM | 22.645 | TIMEOUT | 60.111 | TIMEOUT | 60.037 | NONELEM-UNCONFIRMED | TIMEOUT |
+| random-011 | random | `(-1)/(x + 2)*(-x^4 - 3*x^3 - x^2 - 1)^(-1/2)` |  | NONELEM | 0.107 | DECLINE | 0.331 | NONELEM | 0.220 | AGREE-NONELEM | NEITHER |
+| random-012 | random | `(3*x - 3)/(2*x + 1)*(x^2 + x)^(-5/6)` |  | NONELEM | 4.056 | DECLINE | 0.082 | TIMEOUT | 60.063 | NONELEM-UNCONFIRMED | NEITHER |
+| random-013 | random | `(x^2 - 3*x + 2)/3*(x^2 + x + 3)^(1/4)` |  | NONELEM | 0.040 | NONELEM | 0.042 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| random-014 | random | `(3*x^2 + 3*x + 2)/(-2*x + 1)*(x^2 + x + 3)^(4/5)` |  | NONELEM | 0.048 | NONELEM | 0.042 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| random-015 | random | `(2*x^2 - x)/(-2)*Sqrt[x^4 - x^3 - x]` |  | NONELEM | 0.050 | NONELEM | 0.038 | NONELEM | 0.190 | AGREE-NONELEM | AGREE-NONELEM |
+| random-016 | random | `3/(-3)*(x + 1)^(-1/2)` |  | ELEM | 0.040 | ELEM | 0.037 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| random-017 | random | `2*(x + 2)^(1/3)` |  | ELEM | 0.039 | ELEM | 0.052 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| random-018 | random | `2/(-2)*(-2*x)^(3/4)` |  | ELEM | 0.050 | ELEM | 0.049 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| random-019 | random | `(-2*x^2 - 3*x + 2)/(-2)*(x^3 - x^2 + x + 1)^(-1/6)` |  | NONELEM | 0.061 | NONELEM | 0.061 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| random-020 | random | `1/(-2*x^2 - 2*x)*(-3*x^2 + 3*x - 2)^(2/3)` |  | NONELEM | 0.039 | NONELEM | 0.046 | TIMEOUT | 60.061 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| random-021 | random | `(-3)/2*x^(-1/3)` |  | ELEM | 0.049 | ELEM | 0.032 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| random-022 | random | `(x^2 - 2*x - 2)/(2*x^2 - x + 3)*(-x^4 - 3*x^3 + 3*x^2 - 3*x - 2)^(-1/2)` |  | NONELEM | 0.247 | DECLINE | 5.757 | TIMEOUT | 60.063 | NONELEM-UNCONFIRMED | NEITHER |
+| random-023 | random | `(-x^2 + 2*x + 1)/(-3)*(x^3 + 2*x^2 + 2*x)^(1/4)` |  | NONELEM | 0.075 | NONELEM | 0.078 | NONELEM | 0.130 | AGREE-NONELEM | AGREE-NONELEM |
+| random-024 | random | `(2*x^2 - 3*x)/(-1)*(x + 2)^(1/4)` |  | ELEM | 0.058 | ELEM | 0.049 | ELEM | 0.070 | AGREE-ELEM | AGREE-ELEM |
+| random-025 | random | `(3*x^2 - x - 2)/(-x + 2)*(x^3 - 3*x^2 + 2*x - 3)^(-1/2)` |  | NONELEM | 0.052 | NONELEM | 0.043 | NONELEM | 0.250 | AGREE-NONELEM | AGREE-NONELEM |
+| random-026 | random | `(-3*x^2 + x + 2)/2*(x^3 - x^2 - 3*x + 2)^(-1/5)` |  | NONELEM | 0.067 | NONELEM | 0.062 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| random-027 | random | `(-2)/(-x^2 + 2*x - 3)*(3*x + 2)^(2/3)` |  | ELEM | 0.274 | DECLINE | 0.481 | ELEM | 0.220 | AGREE-ELEM | FRICAS-ONLY |
+| random-028 | random | `(x^2 - 2*x - 2)/(x^2 - 2*x - 2)*(-3*x^3 - 2*x^2 - x - 3)^(-3/4)` |  | NONELEM | 0.054 | NONELEM | 0.035 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| random-029 | random | `(3*x^2 - 2*x + 3)/x*(2*x^3 + 2*x^2 + 3*x + 3)^(2/5)` |  | NONELEM | 0.053 | NONELEM | 0.051 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| random-030 | random | `(-3*x^2 + 3*x - 3)/(2*x^2 - x - 1)*(x + 3)^(1/4)` |  | ELEM | 0.197 | DECLINE | 0.292 | ELEM | 0.160 | AGREE-ELEM | FRICAS-ONLY |
+| random-031 | random | `(-1)/(-3*x - 1)*x^(-2/3)` |  | ELEM | 0.061 | ELEM | 0.064 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| random-032 | random | `(2*x + 3)/(-3*x^2 - 2*x + 3)*(x^2 - x + 2)^(1/4)` |  | NONELEM | 0.356 | DECLINE | 21.560 | TIMEOUT | 60.051 | NONELEM-UNCONFIRMED | NEITHER |
+| random-033 | random | `3/(-2*x^2 + 3*x - 3)*(-3*x^2 + 2*x)^(1/4)` |  | NONELEM | 0.261 | DECLINE | 1.252 | TIMEOUT | 60.043 | NONELEM-UNCONFIRMED | NEITHER |
+| random-034 | random | `(-3*x - 1)/(-2)*Sqrt[x + 3]` |  | ELEM | 0.052 | ELEM | 0.053 | ELEM | 0.090 | AGREE-ELEM | AGREE-ELEM |
+| random-035 | random | `(x^2 - 3*x + 3)/(-1)*(x^4 + x^3 - x^2 + 3)^(-1/2)` |  | NONELEM | 0.047 | NONELEM | 0.041 | NONELEM | 0.260 | AGREE-NONELEM | AGREE-NONELEM |
+| random-036 | random | `3/(2*x^2 + 3*x)*(x + 1)^(2/3)` |  | ELEM | 0.184 | DECLINE | 0.210 | ELEM | 0.150 | AGREE-ELEM | FRICAS-ONLY |
+| random-037 | random | `(-x^2 - 3*x - 3)/(2*x + 1)*(x^4 + 3*x^3 + 3*x^2 - 3*x - 2)^(-5/6)` |  | NONELEM | 7.851 | DECLINE | 1.664 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NEITHER |
+| random-038 | random | `(-1)/(-3*x + 1)*(-2*x^4 - 2*x^3 + x^2 - x - 3)^(-3/4)` |  | NONELEM | 0.492 | DECLINE | 0.829 | TIMEOUT | 60.054 | NONELEM-UNCONFIRMED | NEITHER |
+| random-039 | random | `(2*x + 1)/(-1)*(x^2 + x + 1)^(-1/2)` |  | ELEM | 0.036 | ELEM | 0.052 | ELEM | 0.080 | AGREE-ELEM | AGREE-ELEM |
+| random-040 | random | `2/(2*x^2 + 3*x + 2)*(x^3 - 2*x^2 + x + 1)^(-2/3)` |  | NONELEM | 0.193 | DECLINE | 1.520 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |
+| random-041 | random | `(-3)/(3*x^2 - 2*x)*(x^3 - 3*x^2 - 2*x - 3)^(3/4)` |  | NONELEM | 0.045 | NONELEM | 0.044 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| random-042 | random | `(x^2 + 2*x + 3)/(-2*x + 2)*(x^3 + x - 3)^(-1/2)` |  | NONELEM | 0.034 | NONELEM | 0.045 | NONELEM | 0.210 | AGREE-NONELEM | AGREE-NONELEM |
+| random-043 | random | `(-3*x^2 - 2)/2*(x^3 + 2*x^2 + 3*x + 2)^(-2/3)` |  | NONELEM | 0.134 | DECLINE | 0.111 | TIMEOUT | 60.032 | NONELEM-UNCONFIRMED | NEITHER |
+| random-044 | random | `(-3)/(-3)*Sqrt[x^4 + 3*x^3 - 2*x^2 + 2*x + 3]` |  | NONELEM | 0.035 | NONELEM | 0.043 | NONELEM | 0.170 | AGREE-NONELEM | AGREE-NONELEM |
+| random-045 | random | `(-2)/2*(-3*x^4 - 2*x^3 - x^2 - x + 2)^(3/5)` |  | NONELEM | 0.049 | NONELEM | 0.043 | NONELEM | 0.090 | AGREE-NONELEM | AGREE-NONELEM |
+| random-046 | random | `(-3)/(-3)*(-3*x^4 + x^2 + 2*x + 2)^(-1/2)` |  | NONELEM | 0.028 | NONELEM | 0.037 | NONELEM | 0.120 | AGREE-NONELEM | AGREE-NONELEM |
+| random-047 | random | `(-2*x + 1)/(-1)*x^(-2/3)` |  | ELEM | 0.049 | ELEM | 0.047 | ELEM | 0.060 | AGREE-ELEM | AGREE-ELEM |
+| random-048 | random | `(-3*x^2 + 3*x + 2)/(3*x^2 - x + 2)*(2*x + 1)^(-1/2)` |  | ELEM | 0.106 | ELEM | 0.114 | BAD | 0.150 | MATHILDA-ONLY | MATHILDA-ONLY |
+| random-049 | random | `(x + 1)/2*Sqrt[-2*x^3 + 2*x^2 - 2]` |  | NONELEM | 0.043 | NONELEM | 0.049 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| random-050 | random | `(2*x - 3)/(-2)*(2*x^2 - 3*x - 2)^(1/4)` |  | NONELEM | 0.046 | NONELEM | 0.045 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| random-051 | random | `(2*x - 1)/(-3*x^2 + 2*x - 1)*(x^3 - 2*x^2 + 3*x - 2)^(2/3)` |  | NONELEM | 0.042 | NONELEM | 0.042 | ERROR | - | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| random-052 | random | `(-2)/3*(x^3 + 3*x^2 - 3*x - 3)^(1/4)` |  | NONELEM | 0.036 | NONELEM | 0.044 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| random-053 | random | `(-3*x + 2)/(2*x - 2)*(3*x)^(-4/5)` |  | ELEM | 0.100 | DECLINE | 1.227 | ELEM | 0.140 | AGREE-ELEM | FRICAS-ONLY |
+| random-054 | random | `(-3*x^2 + 2*x + 1)/(-3)*(x^4 - x^3 - 3*x^2 - 2*x - 2)^(1/6)` |  | NONELEM | 0.045 | NONELEM | 0.056 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| random-055 | random | `(x^2 + 1)/(-3*x^2 - 2*x - 1)*(x^3 + 3*x - 2)^(5/6)` |  | NONELEM | 0.076 | NONELEM | 0.065 | NONELEM | 0.110 | AGREE-NONELEM | AGREE-NONELEM |
+| random-056 | random | `(x + 3)/(-3)*(2*x^4 + 2*x^3 + x^2 + 2*x + 3)^(-2/3)` |  | NONELEM | 0.029 | NONELEM | 0.034 | NONELEM | 0.100 | AGREE-NONELEM | AGREE-NONELEM |
+| random-057 | random | `(2*x + 2)/(-3*x - 1)*(x^3 + x^2 + x)^(2/3)` |  | NONELEM | 0.035 | NONELEM | 0.048 | TIMEOUT | 60.047 | NONELEM-UNCONFIRMED | NONELEM-UNCONFIRMED |
+| random-058 | random | `(-3*x - 3)/2*(x^4 + x^3 + 3*x^2 - 3*x + 2)^(-1/2)` |  | NONELEM | 0.115 | DECLINE | 0.141 | NONELEM | 0.180 | AGREE-NONELEM | NEITHER |
+| random-059 | random | `(-3)/(3*x + 2)*(x^3 + x^2 + 2*x - 3)^(-1/2)` |  | NONELEM | 0.097 | DECLINE | 0.210 | NONELEM | 1.500 | AGREE-NONELEM | NEITHER |
+| random-060 | random | `(2*x^2 - 1)/(2*x^2 - 3*x + 2)*(-2*x^2 - 2*x + 1)^(-2/3)` |  | NONELEM | 0.149 | DECLINE | 0.627 | ERROR | - | NONELEM-UNCONFIRMED | NEITHER |

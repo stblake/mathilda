@@ -327,11 +327,32 @@ static bool factor_has_only_gaussian_numbers(const Expr* e) {
 
 /* Default Factor of a polynomial with Gaussian-rational coefficients and no
  * other algebraic number: over Q(i) (Factor[x^2 + 2 I x - 1] is (I + x)^2).
- * Multivariate too, in up to two variables: Factor[(2 - I x + x^2)(1 + y)]
- * expanded is (-2 I + x) (I + x) (1 + y), as with GaussianIntegers -> True
- * (audit Factor#1: the Gaussian factor of the primitive part was missed).
- * Past two variables the reference keeps the input's orientation, which the
- * classical path below preserves. */
+ * Multivariate too: Factor[(2 - I x + x^2)(1 + y)] expanded is
+ * (-2 I + x) (I + x) (1 + y), as with GaussianIntegers -> True (audit
+ * Factor#1: the Gaussian factor of the primitive part was missed).  In two or
+ * more variables the Q(i) factorisation is taken only when it splits (below);
+ * an irreducible input keeps the classical path's orientation, as the
+ * reference does.  Three variables used to be refused outright, and the
+ * classical path does not split there: a product of four Gaussian factors in
+ * x, y, z came back as two (66 leaves against the reference's 37). */
+/* Raised while the classical factorisation is computed for comparison (a
+ * TimeConstrained unwind restores it). */
+static int g_factor_gauss_off = 0;
+
+/* Non-numeric factor bases of a product, counted with multiplicity. */
+static int64_t factor_count_bases(const Expr* f) {
+    int64_t nf = 0;
+    size_t nfa = head_is((Expr*)f, SYM_Times) ? f->data.function.arg_count : 1;
+    for (size_t i = 0; i < nfa; i++) {
+        const Expr* g = head_is((Expr*)f, SYM_Times) ? f->data.function.args[i] : f;
+        if (expr_is_numeric_quantity(g)) continue;
+        if (head_is((Expr*)g, SYM_Power) && g->data.function.args[1]->type == EXPR_INTEGER)
+            nf += g->data.function.args[1]->data.integer;
+        else nf++;
+    }
+    return nf;
+}
+
 static Expr* factor_univariate_gaussian(const Expr* arg) {
     if (!flint_trager_has_complex(arg) || !factor_has_only_gaussian_numbers(arg)) return NULL;
     size_t nv = 0, vcap = 4;
@@ -339,7 +360,7 @@ static Expr* factor_univariate_gaussian(const Expr* arg) {
     collect_variables((Expr*)arg, &vs, &nv, &vcap);
     for (size_t k = 0; k < nv; k++) expr_free(vs[k]);
     free(vs);
-    if (nv < 1 || nv > 2) return NULL;
+    if (nv < 1 || g_factor_gauss_off > 0) return NULL;
     Expr* iu = expr_new_function(expr_new_symbol(SYM_Complex),
                                  (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
     Expr* out = fext_factor(arg, &iu, 1);
@@ -347,18 +368,20 @@ static Expr* factor_univariate_gaussian(const Expr* arg) {
     /* In two variables the Q(i) factorisation is taken only when it splits:
      * an irreducible one (I a + b, 2 I a + 4 b) keeps the classical path's
      * orientation and content, as the reference does. */
-    if (out && nv == 2) {
-        int64_t nf = 0;
-        const Expr* f = out;
-        size_t nfa = head_is((Expr*)f, SYM_Times) ? f->data.function.arg_count : 1;
-        for (size_t i = 0; i < nfa; i++) {
-            const Expr* g = head_is((Expr*)f, SYM_Times) ? f->data.function.args[i] : f;
-            if (expr_is_numeric_quantity(g)) continue;
-            if (head_is((Expr*)g, SYM_Power) && g->data.function.args[1]->type == EXPR_INTEGER)
-                nf += g->data.function.args[1]->data.integer;
-            else nf++;
-        }
-        if (nf < 2) { expr_free(out); return NULL; }
+    int64_t nf = out ? factor_count_bases(out) : 0;
+    if (out && nv == 2 && nf < 2) { expr_free(out); return NULL; }
+    /* In three or more it is taken only when it splits FURTHER than the
+     * classical path, which keeps the reference's orientation where both
+     * agree (Factor[-4 (I x - y) z] is 4 (-I x + y) z). */
+    if (out && nv >= 3) {
+        static int registered = 0;
+        if (!registered) { tc_register_unwind_counter(&g_factor_gauss_off); registered = 1; }
+        g_factor_gauss_off++;
+        Expr* cl = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+                                                   (Expr*[]){ expr_copy((Expr*)arg) }, 1));
+        g_factor_gauss_off--;
+        if (cl && factor_count_bases(cl) >= nf) { expr_free(out); return cl; }
+        if (cl) expr_free(cl);
     }
     return out;
 }

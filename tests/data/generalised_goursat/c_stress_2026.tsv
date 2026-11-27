@@ -1,0 +1,113 @@
+label	status	seconds	verified	unevaluated	residual
+hermite-exact #0	DECLINE	0.0033		True	
+hermite-exact #1	DECLINE	0.0790		True	
+hermite-exact #2	DECLINE	0.8024		True	
+hermite-exact #3	elementary	0.6455	True	False	
+hermite-exact #4	DECLINE	0.0386		True	
+hermite-exact #5	DECLINE	0.2430		True	
+hermite-exact #6	DECLINE	0.0652		True	
+hermite-exact #7	DECLINE	0.0297		True	
+hermite-exact #8	DECLINE	1.7299		True	
+hermite-exact #9	DECLINE	0.0480		True	
+hermite-exact #10	DECLINE	0.0020		True	
+hermite-exact #11	elementary	0.0866	True	False	
+hermite-exact #12	elementary	0.4844	True	False	
+hermite-exact #13	DECLINE	0.1257		True	
+hermite-exact #14	DECLINE	2.5356		True	
+hermite-exact #15	DECLINE	0.0023		True	
+hermite-exact #16	DECLINE	0.4556		True	
+hermite-exact #17	DECLINE	4.7119		True	
+hermite-exact #18	DECLINE	1.5274		True	
+hermite-exact #19	DECLINE	0.0271		True	
+hermite-exact #20	DECLINE	0.0161		True	
+hermite-exact #21	elementary	0.2276	True	False	
+hermite-exact #22	DECLINE	0.0359		True	
+hermite-exact #23	DECLINE	0.4680		True	
+hermite-exact #24	DECLINE	1.8396		True	
+cbrt-symmetric #0	DECLINE	6.0078		True	
+cbrt-symmetric #1	DECLINE	0.0784		True	
+cbrt-symmetric #2	DECLINE	3.9217		True	
+cbrt-symmetric #3	DECLINE	6.0749		True	
+cbrt-symmetric #4	DECLINE	0.0568		True	
+cbrt-symmetric #5	DECLINE	0.4070		True	
+cbrt-symmetric #6	DECLINE	6.0766		True	
+cbrt-symmetric #7	elementary	9.7506	True	False	
+cbrt-symmetric #8	TIMEOUT	60.2258		False	
+cbrt-symmetric #9	DECLINE	0.0313		True	
+cbrt-symmetric #10	DECLINE	0.0914		True	
+cbrt-symmetric #11	TIMEOUT	60.4239		False	
+cbrt-symmetric #12	DECLINE	0.0118		True	
+cbrt-symmetric #13	elementary	26.9126	True	False	
+cbrt-symmetric #14	DECLINE	0.2068		True	
+cbrt-symmetric #15	DECLINE	3.9402		True	
+cbrt-symmetric #16	DECLINE	0.0933		True	
+cbrt-symmetric #17	DECLINE	3.7131		True	
+cbrt-symmetric #18	DECLINE	0.0790		True	
+cbrt-symmetric #19	TIMEOUT	60.2029		False	
+cbrt-symmetric #20	TIMEOUT	60.1613		False	
+cbrt-symmetric #21	DECLINE	2.0953		True	
+cbrt-symmetric #22	DECLINE	2.9633		True	
+cbrt-symmetric #23	DECLINE	0.3040		True	
+cbrt-symmetric #24	elementary	29.2724	True	False	
+cbrt-mixed #0	DECLINE	0.1046		True	
+cbrt-mixed #1	DECLINE	1.0568		True	
+cbrt-mixed #2	DECLINE	2.7386		True	
+cbrt-mixed #3	DECLINE	0.0436		True	
+cbrt-mixed #4	DECLINE	0.1183		True	
+cbrt-mixed #5	DECLINE	0.0376		True	
+cbrt-mixed #6	DECLINE	0.0254		True	
+cbrt-mixed #7	DECLINE	0.0053		True	
+cbrt-mixed #8	DECLINE	0.2861		True	
+cbrt-mixed #9	DECLINE	0.0521		True	
+cbrt-mixed #10	DECLINE	0.0159		True	
+cbrt-mixed #11	DECLINE	0.4011		True	
+cbrt-mixed #12	DECLINE	1.7890		True	
+cbrt-mixed #13	DECLINE	0.0240		True	
+cbrt-mixed #14	DECLINE	0.7435		True	
+cbrt-mixed #15	DECLINE	0.8532		True	
+cbrt-mixed #16	DECLINE	0.1356		True	
+cbrt-mixed #17	DECLINE	0.0907		True	
+cbrt-mixed #18	DECLINE	0.3815		True	
+cbrt-mixed #19	DECLINE	3.0251		True	
+cbrt-mixed #20	DECLINE	3.7675		True	
+cbrt-mixed #21	DECLINE	0.0274		True	
+cbrt-mixed #22	DECLINE	0.0335		True	
+cbrt-mixed #23	DECLINE	0.2721		True	
+cbrt-mixed #24	DECLINE	0.0266		True	
+cbrt-nonelementary #0	DECLINE	0.0368		True	
+cbrt-nonelementary #1	DECLINE	2.0392		True	
+cbrt-nonelementary #2	DECLINE	2.6558		True	
+cbrt-nonelementary #3	DECLINE	0.0227		True	
+cbrt-nonelementary #4	DECLINE	0.0179		True	
+cbrt-nonelementary #5	DECLINE	0.1646		True	
+cbrt-nonelementary #6	DECLINE	0.0431		True	
+cbrt-nonelementary #7	DECLINE	0.0488		True	
+cbrt-nonelementary #8	DECLINE	2.8945		True	
+cbrt-nonelementary #9	DECLINE	0.0465		True	
+cbrt-nonelementary #10	DECLINE	0.6854		True	
+cbrt-nonelementary #11	DECLINE	0.0571		True	
+cbrt-nonelementary #12	DECLINE	0.0339		True	
+cbrt-nonelementary #13	DECLINE	0.9395		True	
+cbrt-nonelementary #14	DECLINE	0.3236		True	
+cbrt-nonelementary #15	DECLINE	0.0247		True	
+cbrt-nonelementary #16	DECLINE	0.0690		True	
+cbrt-nonelementary #17	DECLINE	12.5829		True	
+cbrt-nonelementary #18	DECLINE	0.0106		True	
+cbrt-nonelementary #19	DECLINE	0.0077		True	
+cbrt-nonelementary #20	DECLINE	0.1347		True	
+cbrt-nonelementary #21	DECLINE	2.3283		True	
+cbrt-nonelementary #22	DECLINE	0.0609		True	
+cbrt-nonelementary #23	DECLINE	0.0105		True	
+cbrt-nonelementary #24	DECLINE	0.0643		True	
+sqrt-klein #0	elementary	0.0169	True	False	
+sqrt-klein #1	DECLINE	0.4177		True	
+sqrt-klein #2	DECLINE	0.0693		True	
+sqrt-klein #3	elementary	0.1507	True	False	
+sqrt-klein #4	TIMEOUT	60.3560		False	
+sqrt-klein #5	TIMEOUT	60.0103		False	
+sqrt-klein #6	TIMEOUT	60.5488		False	
+sqrt-klein #7	elementary	0.0242	True	False	
+sqrt-klein #8	DECLINE	22.8236		True	
+sqrt-klein #9	TIMEOUT	69.4466		False	
+sqrt-klein #10	TIMEOUT	77.4057		False	
+sqrt-klein #11	TIMEOUT	74.1388		False	

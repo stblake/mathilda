@@ -1,0 +1,226 @@
+label	status	seconds	defect	unevaluated	residual
+hermite-exact #0	elementary	0.1795	3.0e-31	False	0
+hermite-exact #1	elementary	0.0994	9.2e-33	False	0
+hermite-exact #2	elementary	0.0332	0.0e+00	False	0
+hermite-exact #3	elementary	0.1622	2.0e-31	False	0
+hermite-exact #4	ERROR	0.0368		False	OptionError: 'False' is an invalid argument for 'extension'
+hermite-exact #5	elementary	0.1918	3.9e-31	False	0
+hermite-exact #6	elementary	0.1733	2.0e-31	False	0
+hermite-exact #7	elementary	0.0730	3.2e-27	False	0
+hermite-exact #8	ERROR	0.0385		False	OptionError: 'False' is an invalid argument for 'extension'
+hermite-exact #9	ERROR	0.0363		False	OptionError: 'False' is an invalid argument for 'extension'
+hermite-exact #10	ERROR	0.0215		False	OptionError: 'False' is an invalid argument for 'extension'
+hermite-exact #11	elementary	0.0625	0.0e+00	False	0
+hermite-exact #12	elementary	0.0839	5.0e-29	False	0
+hermite-exact #13	elementary	0.3883	7.4e-32	False	0
+hermite-exact #14	elementary	0.0501	2.5e-29	False	0
+hermite-exact #15	elementary	0.0332	0.0e+00	False	0
+hermite-exact #16	elementary	0.1958	9.9e-32	False	0
+hermite-exact #17	elementary	0.0604	1.5e-28	False	0
+hermite-exact #18	elementary	0.0516	1.6e-30	False	0
+hermite-exact #19	elementary	0.0896	3.9e-31	False	0
+hermite-exact #20	elementary	0.0550	7.6e-29	False	0
+hermite-exact #21	elementary	0.1196	1.5e-31	False	0
+hermite-exact #22	ERROR	0.0272		False	OptionError: 'False' is an invalid argument for 'extension'
+hermite-exact #23	elementary	0.2049	2.0e-31	False	0
+hermite-exact #24	elementary	0.0551	0.0e+00	False	0
+cbrt-symmetric #0	elementary	17.3259	2.5e-30	False	0
+cbrt-symmetric #1	elementary	27.5429	2.0e-29	False	0
+cbrt-symmetric #2	elementary	5.1928	1.4e-32	False	0
+cbrt-symmetric #3	elementary	5.6893	8.3e-30	False	0
+cbrt-symmetric #4	elementary	4.6896	2.4e-31	False	0
+cbrt-symmetric #5	elementary	3.7877	6.3e-29	False	0
+cbrt-symmetric #6	elementary	5.2129	1.1e-29	False	0
+cbrt-symmetric #7	elementary	5.4032	4.9e-30	False	0
+cbrt-symmetric #8	elementary	34.8783	2.0e-31	False	0
+cbrt-symmetric #9	TIMEOUT	120.0000		False	
+cbrt-symmetric #10	elementary	21.5447	9.8e-29	False	0
+cbrt-symmetric #11	elementary	2.7328	6.9e-33	False	0
+cbrt-symmetric #12	elementary	2.6917	1.1e-25	False	0
+cbrt-symmetric #13	elementary	9.2486	6.9e-26	False	0
+cbrt-symmetric #14	elementary	9.0180	1.3e-29	False	0
+cbrt-symmetric #15	elementary	59.5399	1.2e-32	False	0
+cbrt-symmetric #16	elementary	0.8178	3.1e-29	False	0
+cbrt-symmetric #17	elementary	32.7597	2.0e-30	False	0
+cbrt-symmetric #18	elementary	53.9764	1.2e-32	False	0
+cbrt-symmetric #19	elementary	10.8673	1.6e-29	False	0
+cbrt-symmetric #20	elementary	10.1622	1.6e-29	False	0
+cbrt-symmetric #21	elementary	7.8381	1.5e-30	False	0
+cbrt-symmetric #22	elementary	50.5044	2.2e-27	False	0
+cbrt-symmetric #23	elementary	31.8898	5.4e-33	False	0
+cbrt-symmetric #24	elementary	20.8440	6.8e-30	False	0
+cbrt-mixed #0	elementary	29.4021	5.1e-25	False	0
+cbrt-mixed #1	elementary	7.1277	1.8e-26	False	0
+cbrt-mixed #2	elementary	7.7152	1.6e-29	False	0
+cbrt-mixed #3	elementary	7.0334	1.1e-30	False	0
+cbrt-mixed #4	elementary	11.3693	2.5e-31	False	0
+cbrt-mixed #5	elementary	32.5349	1.0e-23	False	0
+cbrt-mixed #6	elementary	15.0330	8.3e-25	False	0
+cbrt-mixed #7	elementary	10.2211	1.3e-28	False	0
+cbrt-mixed #8	elementary	30.1649	3.7e-29	False	0
+cbrt-mixed #9	elementary	5.1905	7.2e-29	False	0
+cbrt-mixed #10	elementary	15.1239	4.0e-26	False	0
+cbrt-mixed #11	elementary	59.4670	1.3e-30	False	0
+cbrt-mixed #12	elementary	13.6411	3.9e-31	False	0
+cbrt-mixed #13	elementary	73.6022	1.5e-28	False	0
+cbrt-mixed #14	elementary	1.9829	6.8e-30	False	0
+cbrt-mixed #15	elementary	12.4174	2.2e-30	False	0
+cbrt-mixed #16	elementary	35.2314	5.0e-31	False	0
+cbrt-mixed #17	elementary	32.1353	3.0e-31	False	0
+cbrt-mixed #18	elementary	3.1734	1.0e-28	False	0
+cbrt-mixed #19	TIMEOUT	120.0000		False	
+cbrt-mixed #20	elementary	24.8294	2.3e-29	False	0
+cbrt-mixed #21	elementary	10.6070	8.7e-30	False	0
+cbrt-mixed #22	elementary	12.5938	9.8e-31	False	0
+cbrt-mixed #23	elementary	12.5275	6.2e-29	False	0
+cbrt-mixed #24	elementary	23.1264	6.4e-30	False	0
+cbrt-nonelementary #0	non-elementary	39.5424	1.8e-31	False	-2
+cbrt-nonelementary #1	non-elementary	24.5956	3.7e-30	False	4 - 3*t
+cbrt-nonelementary #2	non-elementary	6.9644	1.1e-30	False	-t - 2
+cbrt-nonelementary #3	non-elementary	10.4114	2.1e-26	False	3
+cbrt-nonelementary #4	non-elementary	2.7242	7.6e-25	False	-3*t
+cbrt-nonelementary #5	non-elementary	21.9375	1.9e-27	False	-t - 1/2
+cbrt-nonelementary #6	non-elementary	20.1697	1.3e-28	False	t - 1/3
+cbrt-nonelementary #7	non-elementary	32.1380	1.4e-25	False	t + 2/3
+cbrt-nonelementary #8	non-elementary	22.5145	5.1e-27	False	2*t + 2/9
+cbrt-nonelementary #9	non-elementary	22.7721	1.2e-28	False	-1
+cbrt-nonelementary #10	non-elementary	20.7679	2.0e-27	False	2*t - 2/3
+cbrt-nonelementary #11	non-elementary	53.1504	1.2e-25	False	t - 2/9
+cbrt-nonelementary #12	non-elementary	2.7891	1.2e-30	False	1
+cbrt-nonelementary #13	non-elementary	23.3573	1.6e-27	False	-t - 1/3
+cbrt-nonelementary #14	non-elementary	88.5023	6.0e-31	False	2
+cbrt-nonelementary #15	non-elementary	7.1724	1.8e-28	False	-3*t - 3
+cbrt-nonelementary #16	non-elementary	7.6231	7.8e-27	False	-2
+cbrt-nonelementary #17	non-elementary	35.0420	4.1e-26	False	-1
+cbrt-nonelementary #18	non-elementary	14.6869	2.5e-26	False	-2*t - 4
+cbrt-nonelementary #19	non-elementary	41.3805	1.7e-30	False	2*t + 2/3
+cbrt-nonelementary #20	non-elementary	1.3534	2.7e-27	False	-3
+cbrt-nonelementary #21	TIMEOUT	120.0000		False	
+cbrt-nonelementary #22	non-elementary	9.8467	1.1e-27	False	-2
+cbrt-nonelementary #23	non-elementary	18.0342	9.5e-19	False	1
+cbrt-nonelementary #24	non-elementary	85.1962	1.4e-27	False	2
+sqrt-klein #0	ERROR	8.0457		False	AssertionError: basis decomposition failed
+sqrt-klein #1	elementary	4.4208	2.9e-30	False	0
+sqrt-klein #2	elementary	3.0050	4.3e-31	False	0
+sqrt-klein #3	elementary	0.4812	6.3e-30	False	0
+sqrt-klein #4	elementary	5.2507	3.4e-31	False	0
+sqrt-klein #5	elementary	35.3980	1.7e-30	False	0
+sqrt-klein #6	TIMEOUT	120.0000		False	
+sqrt-klein #7	elementary	2.1902	3.9e-31	False	0
+sqrt-klein #8	elementary	2.1575	7.5e-30	False	0
+sqrt-klein #9	elementary	0.3608	3.9e-31	False	0
+sqrt-klein #10	elementary	45.1641	7.4e-28	False	0
+sqrt-klein #11	TIMEOUT	120.0000		False	
+sqrt-klein #12	TIMEOUT	120.0000		False	
+sqrt-klein #13	elementary	15.1382	1.2e-27	True	0
+sqrt-klein #14	elementary	38.8109	2.3e-27	False	0
+sqrt-klein #15	elementary	1.2471	2.0e-31	False	0
+sqrt-klein #16	elementary	6.2513	1.5e-31	False	0
+sqrt-klein #17	elementary	91.6574	9.0e-30	True	0
+sqrt-klein #18	elementary	5.5298	4.2e-30	False	0
+sqrt-klein #19	elementary	1.3620	2.4e-32	False	0
+sqrt-klein #20	elementary	7.8174	5.3e-30	False	0
+sqrt-klein #21	elementary	4.6061	2.6e-27	False	0
+sqrt-klein #22	elementary	8.8335	7.7e-31	False	0
+sqrt-klein #23	elementary	5.3233	7.4e-30	False	0
+sqrt-klein #24	elementary	34.6703	1.9e-29	False	0
+sqrt-mixed #0	elementary	0.0944	2.5e-29	False	0
+sqrt-mixed #1	elementary	12.5210	1.0e-29	False	0
+sqrt-mixed #2	TIMEOUT	120.0000		False	
+sqrt-mixed #3	elementary	0.6942	1.6e-30	False	0
+sqrt-mixed #4	elementary	0.9565	2.0e-31	False	0
+sqrt-mixed #5	elementary	98.9141	2.6e-30	False	0
+sqrt-mixed #6	TIMEOUT	120.0000		False	
+sqrt-mixed #7	elementary	0.3345	6.5e-30	False	0
+sqrt-mixed #8	elementary	7.5073	3.8e-28	False	0
+sqrt-mixed #9	TIMEOUT	120.0000		False	
+sqrt-mixed #10	elementary	0.5082	4.0e-28	False	0
+sqrt-mixed #11	elementary	5.1779	1.7e-29	False	0
+sqrt-mixed #12	elementary	7.5089	6.6e-31	False	0
+sqrt-mixed #13	elementary	33.0177	5.0e-29	False	0
+sqrt-mixed #14	TIMEOUT	120.0000		False	
+sqrt-mixed #15	elementary	0.2122	1.3e-29	False	0
+sqrt-mixed #16	TIMEOUT	120.0000		False	
+sqrt-mixed #17	elementary	9.7607	1.2e-30	False	0
+sqrt-mixed #18	elementary	0.6745	1.6e-30	False	0
+sqrt-mixed #19	elementary	13.5866	1.5e-30	False	0
+sqrt-mixed #20	elementary	0.1285	1.6e-27	False	0
+sqrt-mixed #21	elementary	6.6142	1.1e-28	False	0
+sqrt-mixed #22	elementary	0.4064	1.2e-32	False	0
+sqrt-mixed #23	elementary	9.5863	1.0e-26	False	0
+sqrt-mixed #24	elementary	4.1554	3.2e-29	False	0
+sqrt-nonelementary #0	non-elementary	1.9241	1.8e-26	False	1
+sqrt-nonelementary #1	non-elementary	27.2359	1.4e-29	False	2
+sqrt-nonelementary #2	non-elementary	1.2240	9.6e-30	False	1
+sqrt-nonelementary #3	non-elementary	1.6389	5.2e-30	False	-3
+sqrt-nonelementary #4	non-elementary	4.6848	2.1e-31	False	1
+sqrt-nonelementary #5	TIMEOUT	120.0000		False	
+sqrt-nonelementary #6	TIMEOUT	120.0000		False	
+sqrt-nonelementary #7	non-elementary	1.4542	3.7e-29	False	-3
+sqrt-nonelementary #8	non-elementary	1.4884	1.9e-28	False	1
+sqrt-nonelementary #9	TIMEOUT	120.0000		False	
+sqrt-nonelementary #10	non-elementary	8.5842	2.2e-31	False	2
+sqrt-nonelementary #11	non-elementary	0.3255	1.6e-30	False	3
+sqrt-nonelementary #12	non-elementary	31.1598	2.4e-21	False	-1
+sqrt-nonelementary #13	non-elementary	14.7363	3.2e-32	True	1
+sqrt-nonelementary #14	non-elementary	0.8640	3.2e-30	False	-1
+sqrt-nonelementary #15	non-elementary	5.3709	3.0e-29	False	2
+sqrt-nonelementary #16	non-elementary	4.9200	9.4e-30	False	3
+sqrt-nonelementary #17	non-elementary	1.9278	4.3e-30	False	-1
+sqrt-nonelementary #18	non-elementary	0.8213	3.1e-29	False	2
+sqrt-nonelementary #19	non-elementary	16.0113	5.4e-31	False	3
+sqrt-nonelementary #20	non-elementary	1.2123	7.9e-31	False	-3
+sqrt-nonelementary #21	non-elementary	4.0119	1.2e-30	False	-3
+sqrt-nonelementary #22	non-elementary	0.5883	3.5e-29	False	3
+sqrt-nonelementary #23	non-elementary	0.7109	5.0e-29	False	1
+sqrt-nonelementary #24	non-elementary	0.7180	2.4e-29	False	2
+sqrt-order3 #0	elementary	0.4619	4.9e-32	False	0
+sqrt-order3 #1	elementary	0.4690	9.9e-32	False	0
+sqrt-order3 #2	elementary	1.0874	4.9e-32	False	0
+sqrt-order3 #3	elementary	1.5784	3.9e-31	False	0
+sqrt-order3 #4	elementary	29.6856	4.7e-26	False	0
+sqrt-order3 #5	elementary	0.7768	2.8e-32	False	0
+sqrt-order3 #6	elementary	1.8324	9.9e-32	False	0
+sqrt-order3 #7	elementary	1.4360	1.9e-32	False	0
+sqrt-order3 #8	elementary	0.8249	1.5e-33	False	0
+sqrt-order3 #9	elementary	0.4189	2.8e-32	False	0
+sqrt-order3 #10	elementary	0.4450	3.6e-32	False	0
+sqrt-order3 #11	elementary	0.7241	2.5e-32	False	0
+sqrt-order3 #12	elementary	1.0395	9.1e-32	False	0
+sqrt-order3 #13	elementary	1.0689	1.2e-32	False	0
+sqrt-order3 #14	elementary	1.2950	1.7e-31	False	0
+sqrt-order3 #15	elementary	0.3431	6.6e-32	False	0
+sqrt-order3 #16	elementary	11.9606	2.3e-21	True	0
+sqrt-order3 #17	elementary	1.5162	1.1e-30	False	0
+sqrt-order3 #18	elementary	32.5656	4.5e-28	False	0
+sqrt-order3 #19	elementary	0.5239	1.2e-32	False	0
+sqrt-order3 #20	elementary	1.0191	2.5e-32	False	0
+sqrt-order3 #21	elementary	36.9704	1.0e-25	False	0
+sqrt-order3 #22	elementary	0.4358	1.8e-32	False	0
+sqrt-order3 #23	elementary	16.0034	4.5e-31	True	0
+sqrt-order3 #24	elementary	1.7747	3.9e-31	False	0
+cbrt-second-level #0	elementary	35.8904	5.2e-32	False	0
+cbrt-second-level #1	elementary	36.9559	6.2e-31	False	0
+cbrt-second-level #2	elementary	35.7251	2.9e-32	False	0
+cbrt-second-level #3	elementary	35.8937	5.9e-31	False	0
+cbrt-second-level #4	elementary	36.6837	2.1e-31	False	0
+cbrt-second-level #5	elementary	35.5288	4.8e-32	False	0
+cbrt-second-level #6	elementary	36.5202	4.3e-32	False	0
+cbrt-second-level #7	elementary	36.0732	1.1e-31	False	0
+cbrt-second-level #8	elementary	35.8093	8.3e-34	False	0
+cbrt-second-level #9	elementary	36.5174	1.3e-31	False	0
+cbrt-second-level #10	elementary	35.3937	3.3e-32	False	0
+cbrt-second-level #11	elementary	35.4068	2.1e-30	False	0
+cbrt-second-level #12	elementary	36.0613	3.3e-31	False	0
+cbrt-second-level #13	elementary	35.4498	1.1e-31	False	0
+cbrt-second-level #14	elementary	35.7697	4.3e-31	False	0
+cbrt-second-level #15	elementary	36.0729	3.6e-31	False	0
+cbrt-second-level #16	elementary	35.4608	1.8e-31	False	0
+cbrt-second-level #17	elementary	34.1542	2.0e-31	False	0
+cbrt-second-level #18	elementary	34.3261	1.1e-31	False	0
+cbrt-second-level #19	elementary	33.7556	4.5e-33	False	0
+cbrt-second-level #20	elementary	32.9743	1.2e-33	False	0
+cbrt-second-level #21	elementary	31.9163	2.2e-33	False	0
+cbrt-second-level #22	elementary	29.1244	1.5e-31	False	0
+cbrt-second-level #23	elementary	27.2508	4.3e-31	False	0
+cbrt-second-level #24	elementary	22.3485	3.0e-31	False	0

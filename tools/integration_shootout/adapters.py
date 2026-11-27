@@ -274,6 +274,77 @@ def run_sympy(cases, timeout, tmpdir, batch=10):
 
 
 # --------------------------------------------------------------------------
+# goursat.py: the sympy reference implementation of the generalised Goursat
+# reduction (benchmark 265).  Only the reduction is timed -- integrate_algebraic,
+# which splits f into eigencomponents and calls goursat_integrate on each -- never
+# its numerical verify_expr, matching tools/goursat/bench_sympy.py.  Its three-valued
+# verdict maps to: elementary -> ANSWER (text = the antiderivative in radicals, for
+# the PossibleZeroQ cross-check), non-elementary -> UNEVAL with cert, undecided ->
+# UNEVAL.  The research tree is only read (no bytecode is written there).
+# --------------------------------------------------------------------------
+GOURSAT_RESEARCH = os.path.expanduser(os.environ.get(
+    "GOURSAT_RESEARCH", "~/Documents/Research/post_phd_research/algebraic_integration/goursat"))
+
+GOURSATPY_WORKER = r'''
+import json, signal, sys, time
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[3])
+import sympy as sp
+from sympy import *
+from goursat import integrate_algebraic
+x = sp.Symbol("x")
+class TO(Exception): pass
+def alarm(*a): raise TO()
+signal.signal(signal.SIGALRM, alarm)
+cases = json.load(open(sys.argv[1])); tmo = int(sys.argv[2])
+for c in cases:
+    f = eval(c["sympy"])
+    st, cert, txt = "ANSWER", False, ""
+    t0 = time.perf_counter()
+    try:
+        signal.alarm(tmo)
+        r = integrate_algebraic(f, x)
+        signal.alarm(0)
+        t = time.perf_counter() - t0
+        if r.status == "elementary":
+            txt = str(r.antiderivative)
+        else:
+            st, cert = "UNEVAL", r.status == "non-elementary"
+            txt = r.status
+    except TO:
+        t = time.perf_counter() - t0; st = "TIMEOUT"
+    except Exception as e:
+        signal.alarm(0); t = time.perf_counter() - t0; st = "ERROR"
+        txt = type(e).__name__ + ": " + str(e)[:200]
+    txt = txt.replace("\t", " ").replace("\n", " ")[:%(trunc)d]
+    print("@@R\t%%s\t%%s\t%%.4f\t\t%%s\t%%s" %% (c["id"], st, t, cert, txt), flush=True)
+'''
+
+
+def run_goursatpy(cases, timeout, tmpdir, batch=10):
+    worker = os.path.join(tmpdir, "goursatpy_worker.py")
+    if not os.path.exists(worker):
+        with open(worker, "w") as fh:
+            fh.write(GOURSATPY_WORKER % {"trunc": TRUNC})
+
+    def runner(cs):
+        items = [{"id": c["id"], "sympy": T.emit(c["tree"], "sympy")} for c in cs]
+        fd, path = tempfile.mkstemp(suffix=".json", dir=tmpdir)
+        with os.fdopen(fd, "w") as fh:
+            json.dump(items, fh)
+        out, err, to, wall = run_proc([SYMPY_PY, worker, path, str(timeout), GOURSAT_RESEARCH],
+                                      10 + len(cs) * (timeout + 5))
+        os.unlink(path)
+        return parse_rlines(out), err
+    return batched(runner, cases, timeout, batch)
+
+
+def goursatpy_available():
+    return (os.path.exists(os.path.join(GOURSAT_RESEARCH, "goursat.py")) and
+            subprocess.run([SYMPY_PY, "-c", "import sympy"], capture_output=True).returncode == 0)
+
+
+# --------------------------------------------------------------------------
 # FriCAS (one process per case)
 # --------------------------------------------------------------------------
 def fricas_float_abs(s):

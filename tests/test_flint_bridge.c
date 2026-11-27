@@ -902,13 +902,16 @@ static void test_consumers(void) {
     check_builtin("Cancel[(x^2 - 2)/(x - Sqrt[2])]", "Sqrt[2] + x");
     check_builtin("Cancel[(x^2 - 3)/(x + Sqrt[3])]", "-Sqrt[3] + x");
     /* ... over Q(zeta_n) ... */
-    check_builtin("Cancel[(x^2 + x + 1)/(x - (-1)^(2/3))]", "(-1)^(1/3) + x");
+    /* x + 1 + (-1)^(2/3) == x + (-1)^(1/3): the answer is written over the
+     * input's own atom (-1)^(2/3) (the product basis {1, (-1)^(2/3)}) */
+    check_builtin("Cancel[(x^2 + x + 1)/(x - (-1)^(2/3))]", "1 + (-1)^(2/3) + x");
     /* ... and over a radical tower. */
     check_builtin("Cancel[((x - Sqrt[2] - Sqrt[3])*(x - 1))/"
                   "((x - Sqrt[2] - Sqrt[3])*(x - 2))]", "(-1 + x)/(-2 + x)");
 
     /* Together over Q(sqrt 2). */
-    check_builtin("Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2])]", "(2 x)/(-2 + x^2)");
+    /* over the input's pieces, as the reference: (-2 x)/((Sqrt[2] - x) (Sqrt[2] + x)) */
+    check_builtin("Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2])]", "(2 x)/((-Sqrt[2] + x) (Sqrt[2] + x))");
 
     /* Semantic check independent of surface form. */
     check_builtin("PossibleZeroQ[Cancel[(x^2 - 2)/(x - Sqrt[2])] - (x + Sqrt[2])]", "True");

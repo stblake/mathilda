@@ -95,9 +95,9 @@ Expr* flint_num_for_call(Expr* r, const Expr* call);
  * Arb defines the incomplete forms on -Pi/2 <= Re phi <= Pi/2 and extends them
  * by the quasi-period (F(phi + k Pi | m) = F(phi | m) + 2 k K(m), and likewise
  * for E and Pi), so a phi of any size or complexity is handled here rather than
- * by the caller. EllipticPi with n > 1 crosses the pole at Sin[t]^2 = 1/n and is
- * the Cauchy principal value, which acb_elliptic_pi_inc computes -- a complex
- * value on the principal branch, matching Mathematica. */
+ * by the caller. EllipticPi with n > 1 crosses the pole at Sin[t]^2 = 1/n: the
+ * value is complex, the limit n -> n - i0 (Cauchy principal value plus half the
+ * residue; see flint_num_elliptic_inc_sided for the convention on a cut). */
 Expr* flint_num_elliptic_k(const Expr* m);                              /* EllipticK[m]        */
 Expr* flint_num_elliptic_e(const Expr* m);                              /* EllipticE[m]        */
 Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m);             /* EllipticF[phi, m]   */
@@ -105,6 +105,20 @@ Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m);         /* Ellip
 Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m);              /* EllipticPi[n, m]    */
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi,
                                 const Expr* m);                          /* EllipticPi[n,phi,m] */
+
+/* The incomplete integrals with the side of a cut given: side_x for
+ * x = Cos[phi]^2 (on its cut where Re phi is an odd multiple of Pi/2),
+ * side_y for y = 1 - m Sin[phi]^2, side_p for p = 1 - n Sin[phi]^2 (PI
+ * only); each is
+ * 0 (as the numerical arguments fall), +1 or -1 (the quantity is ON its cut
+ * (-oo, 0], or within the noise of it: the limit from Im > 0, resp. < 0).
+ * src/numeric.c decides the side exactly for an exact argument; +1 is also
+ * the value at an argument exactly on the cut (the convention: continuous
+ * from above, like the principal Sqrt and Log; for real phi, m -> m - i0 and
+ * n -> n - i0). See nb_ell_* in flint_num_bridge.c. */
+enum { FLINT_ELL_F = 0, FLINT_ELL_E = 1, FLINT_ELL_PI = 2 };
+Expr* flint_num_elliptic_inc_sided(int kind, const Expr* n, const Expr* phi, const Expr* m,
+                                   int side_x, int side_y, int side_p);
 
 /* HypergeometricU[a, b, z] -- the Tricomi confluent hypergeometric U, via FLINT's
  * rigorous acb_hypgeom_u (correct rounding, full complex plane, standard branch

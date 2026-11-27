@@ -159,6 +159,119 @@ bool algfield_has_nested_constant_radical(const Expr* e) {
     return e && af_gate_walk(e);
 }
 
+#ifdef USE_FLINT
+/* ---- dependent constant radicals --------------------------------------- *
+ * The generator model of the rest of Together / Cancel gives each radicand r
+ * one generator r^(1/Q) (Q the lcm of its roots) with the relation
+ * g^Q - r, and I the relation I^2 + 1, and treats different generators as
+ * independent.  That presentation is a field exactly when the product of the
+ * relation degrees is [Q(generators) : Q].  It is not for the roots of unity
+ * -- (-1)^(1/3) satisfies g^3 + 1 = (g + 1)(g^2 - g + 1), so 1 - (-1)^(1/3) +
+ * (-1)^(2/3) is a zero divisor there, not 0 -- nor for generators that lie in
+ * each other's fields (I, Sqrt[3] and (-1)^(1/3); 2^(1/3) and (-2)^(1/3)).
+ * Such an input needs the genuine field, which algfield_normalize computes. */
+
+#define AF_DEP_MAX 12
+typedef struct {
+    Expr*   base[AF_DEP_MAX];   /* borrowed radicands (rationals)          */
+    int64_t q[AF_DEP_MAX];      /* lcm of the root orders per radicand     */
+    size_t  n;
+    bool    imag;               /* a Complex (the generator I)             */
+    bool    overflow;
+} AfDep;
+
+static void af_dep_note(AfDep* D, const Expr* b, int64_t q) {
+    for (size_t i = 0; i < D->n; i++)
+        if (expr_eq(D->base[i], (Expr*)b)) {
+            int64_t a = D->q[i], c = q;
+            while (c) { int64_t r = a % c; a = c; c = r; }
+            if (D->q[i] / a > INT32_MAX / (q > 0 ? q : 1)) { D->overflow = true; return; }
+            D->q[i] = D->q[i] / a * q;
+            return;
+        }
+    if (D->n == AF_DEP_MAX) { D->overflow = true; return; }
+    D->base[D->n] = (Expr*)b; D->q[D->n] = q; D->n++;
+}
+
+/* Collect the constant radicals of rationals (and I) of `e`. */
+static void af_dep_walk(const Expr* e, AfDep* D) {
+    if (e->type != EXPR_FUNCTION || D->overflow) return;
+    if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) { D->imag = true; return; }
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        int64_t p, q;
+        const Expr* b = e->data.function.args[0];
+        if (af_rat_exponent(e->data.function.args[1], &p, &q) && af_is_ratnum(b)) {
+            af_dep_note(D, b, q);
+            return;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) af_dep_walk(e->data.function.args[i], D);
+}
+
+static bool af_ratnum_negative(const Expr* b) {
+    if (b->type == EXPR_INTEGER) return b->data.integer < 0;
+    if (b->type == EXPR_BIGINT) return mpz_sgn(b->data.bigint) < 0;
+    return head_is(b, SYM_Rational) && b->data.function.arg_count == 2 &&
+           af_ratnum_negative(b->data.function.args[0]);
+}
+
+static Expr* af_root_gen(const Expr* b, int64_t q);
+static Expr* af_imag_unit(void);
+
+/* memo: generator list -> verdict (the field build is a property of the
+ * atom set, which repeats across the calls of one computation) */
+#define AF_DEP_MEMO 32
+typedef struct { uint64_t h; Expr* key; bool dep; } AfDepSlot;
+static AfDepSlot g_af_dep_memo[AF_DEP_MEMO];
+
+bool algfield_has_dependent_constant_radicals(const Expr* e) {
+    if (!e) return false;
+    AfDep D; memset(&D, 0, sizeof D);
+    af_dep_walk(e, &D);
+    if (D.overflow) return false;
+    size_t ngen = D.n + (D.imag ? 1 : 0);
+    if (ngen == 0) return false;
+    /* A single radical of a positive rational (which the evaluator keeps free
+     * of perfect powers, so g^Q - r is irreducible) or I alone is a field. */
+    if (ngen == 1 && (D.imag || !af_ratnum_negative(D.base[0])))
+        return false;
+    /* the generators, and the product of their relation degrees */
+    Expr** gens = malloc(sizeof(Expr*) * ngen);
+    int64_t prod = 1;
+    size_t k = 0;
+    for (size_t i = 0; i < D.n; i++) {
+        gens[k++] = af_root_gen(D.base[i], D.q[i]);
+        prod *= D.q[i];
+        if (prod > AF_DEGREE_CAP * 64) { for (size_t j = 0; j < k; j++) expr_free(gens[j]); free(gens); return false; }
+    }
+    if (D.imag) { gens[k++] = af_imag_unit(); prod *= 2; }
+    Expr* key = expr_new_function(expr_new_symbol(SYM_List), gens, ngen);
+    free(gens);
+    uint64_t h = expr_hash(key);
+    AfDepSlot* sl = &g_af_dep_memo[h % AF_DEP_MEMO];
+    if (sl->key && sl->h == h && expr_eq(sl->key, key)) { expr_free(key); return sl->dep; }
+
+    bool dep = false;
+    Expr* L = flint_qqbar_to_number_field_common((const Expr* const*)key->data.function.args, ngen, 0);
+    if (L && head_is(L, SYM_List)) {
+        int64_t d = 1;
+        for (size_t i = 0; i < L->data.function.arg_count; i++) {
+            const Expr* im = L->data.function.args[i];
+            if (head_is(im, SYM_AlgebraicNumber) && im->data.function.arg_count == 2 &&
+                head_is(im->data.function.args[1], SYM_List))
+                d = (int64_t)im->data.function.args[1]->data.function.arg_count;
+        }
+        dep = d < prod;
+    }
+    if (L) expr_free(L);
+    if (sl->key) expr_free(sl->key);
+    sl->key = key; sl->h = h; sl->dep = dep;
+    return dep;
+}
+#else
+bool algfield_has_dependent_constant_radicals(const Expr* e) { (void)e; return false; }
+#endif
+
 /* ------------------------------------------------------------------ */
 /*  Default mode: nested radicals as opaque generators                 */
 /* ------------------------------------------------------------------ */
@@ -312,6 +425,8 @@ static Expr* af_normalize_bases(const Expr* e, bool* changed) {
 
 static Expr* af_kernel_model_core(const Expr* arg, const char* head,
                                   Expr* (*compute)(Expr*));
+static Expr* af_kernel_reduce_one(const Expr* r, const AfKern* kp, const char* head,
+                                  Expr* (*compute)(Expr*));
 
 Expr* algfield_kernel_model(const Expr* call, const char* head,
                             Expr* (*compute)(Expr*)) {
@@ -362,11 +477,39 @@ static Expr* af_kernel_model_core(const Expr* arg, const char* head,
     if (!r) { af_kern_free(&k); return NULL; }
 
     /* g^m = b: reduce numerator and denominator below degree m in each g.
-     * Value-preserving, and what keeps the answer compact; for Cancel only a
-     * single fraction is reduced (a sum stays a sum). */
-    if (head == SYM_Together || !head_is(r, SYM_Plus)) {
+     * Value-preserving, and what keeps the answer compact.  Cancel's answer
+     * may be a sum (it cancels term by term, as the reference does): each
+     * term is then reduced on its own and the sum stays a sum.  The terms
+     * used to be left unreduced, with every power of g kept (the D2 Cancel:
+     * 710 leaves against the reference's 186). */
+    if (head == SYM_Cancel && head_is(r, SYM_Plus)) {
+        size_t nt = r->data.function.arg_count;
+        Expr** ts = malloc((nt ? nt : 1) * sizeof(Expr*));
+        for (size_t t = 0; t < nt; t++)
+            ts[t] = af_kernel_reduce_one(r->data.function.args[t], &k, head, compute);
+        Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ts, nt));
+        free(ts);
+        expr_free(r);
+        r = sum;
+    } else {
+        Expr* r2 = af_kernel_reduce_one(r, &k, head, compute);
+        expr_free(r);
+        r = r2;
+    }
+    Expr* out = eval_and_free(af_kern_back(r, &k));
+    expr_free(r);
+    af_kern_free(&k);
+    return out;
+}
+
+/* One fraction `r` (borrowed) reduced modulo every g^m - b and recombined
+ * with `compute`; a copy of `r` when the reduction does not apply. */
+static Expr* af_kernel_reduce_one(const Expr* r, const AfKern* kp, const char* head,
+                                  Expr* (*compute)(Expr*)) {
+    const AfKern k = *kp;
+    {
         Expr* num; Expr* den;
-        extract_num_den(r, &num, &den);
+        extract_num_den((Expr*)r, &num, &den);
         for (size_t i = 0; i < k.n; i++) {
             Expr* rel = expr_new_function(expr_new_symbol(SYM_Plus),
                 (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
@@ -388,13 +531,10 @@ static Expr* af_kernel_model_core(const Expr* arg, const char* head,
                 (Expr*[]){ num, expr_new_function(expr_new_symbol(SYM_Power),
                                     (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2));
             Expr* r2 = af_call1(compute, head, q);
-            if (r2) { expr_free(r); r = r2; }
+            if (r2) return r2;
         }
     }
-    Expr* out = eval_and_free(af_kern_back(r, &k));
-    expr_free(r);
-    af_kern_free(&k);
-    return out;
+    return expr_copy((Expr*)r);
 }
 
 /* ------------------------------------------------------------------ */
@@ -795,13 +935,24 @@ static Expr* af_unmap(const Expr* e, const AfBasis* B, bool* ok) {
  * basis (y, d entries) and its monomial in the variables. */
 typedef struct {
     fmpq*  y;
+    fmpq*  tv;       /* the same coefficient in theta's power basis */
     Expr*  mono;
     slong  deg;
 } AfTerm;
 
+static void af_qvec_add(fmpq* a, const fmpq* b, slong d) {
+    for (slong k = 0; k < d; k++) fmpq_add(a + k, a + k, b + k);
+}
+
+static bool af_qvec_is_zero(const fmpq* a, slong d) {
+    for (slong k = 0; k < d; k++) if (!fmpq_is_zero(a + k)) return false;
+    return true;
+}
+
 static void af_terms_free(AfTerm* t, size_t n, slong d) {
     for (size_t i = 0; i < n; i++) {
         _fmpq_vec_clear(t[i].y, d);
+        _fmpq_vec_clear(t[i].tv, d);
         expr_free(t[i].mono);
     }
     free(t);
@@ -826,8 +977,10 @@ static AfTerm* af_split_poly(const Expr* P, const AfBasis* B, size_t* n_out,
         size_t nf = prod ? t->data.function.arg_count : 1;
         fmpq_t r; fmpq_init(r); fmpq_one(r);
         const Expr* an = NULL;
+        Expr* an_own = NULL;
         Expr** mf = malloc((nf ? nf : 1) * sizeof(Expr*));
-        size_t nm = 0;
+        Expr** cf = malloc((nf ? nf : 1) * sizeof(Expr*));
+        size_t nm = 0, nc = 0;
         slong deg = 0;
         for (size_t j = 0; j < nf && *ok; j++) {
             const Expr* f = prod ? t->data.function.args[j] : t;
@@ -838,6 +991,13 @@ static AfTerm* af_split_poly(const Expr* P, const AfBasis* B, size_t* n_out,
             } else if (af_is_algnum(f)) {
                 if (an) *ok = false;               /* the evaluator folds these */
                 an = f;
+            } else if (B->theta && f->type == EXPR_FUNCTION &&
+                       flint_qqbar_is_constant_algebraic(f)) {
+                /* a constant the field engine wrote out in theta's own radicals
+                 * (a quadratic theta reads back as a + b Sqrt[c]): located in K
+                 * below, as one product -- I and Sqrt[3] need not lie in
+                 * Q(Sqrt[-3]) although I Sqrt[3] does */
+                cf[nc++] = (Expr*)f;
             } else {
                 mf[nm++] = expr_copy((Expr*)f);
                 if (head_is(f, SYM_Power) && f->data.function.arg_count == 2 &&
@@ -847,6 +1007,26 @@ static AfTerm* af_split_poly(const Expr* P, const AfBasis* B, size_t* n_out,
                     deg += 1;
             }
         }
+        if (*ok && nc > 0) {
+            Expr** cc = malloc(nc * sizeof(Expr*));
+            for (size_t k = 0; k < nc; k++) cc[k] = expr_copy(cf[k]);
+            if (an) { cc = realloc(cc, (nc + 1) * sizeof(Expr*)); cc[nc++] = expr_copy((Expr*)an); }
+            Expr* cv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), cc, nc));
+            free(cc);
+            an_own = af_is_algnum(cv) || af_is_ratnum(cv) ? cv : NULL;
+            if (!an_own) {
+                an_own = flint_qqbar_to_number_field(cv, B->theta);
+                expr_free(cv);
+            }
+            if (!an_own) *ok = false;
+            else if (af_is_ratnum(an_own)) {
+                fmpq_t q; fmpq_init(q);
+                if (af_fmpq_from_expr(an_own, q)) fmpq_mul(r, r, q); else *ok = false;
+                fmpq_clear(q);
+                expr_free(an_own); an_own = NULL; an = NULL;
+            } else an = an_own;
+        }
+        free(cf);
         if (*ok) {
             if (an) *ok = af_vec(an, B->theta, d, v, 0);
             else {
@@ -859,6 +1039,7 @@ static AfTerm* af_split_poly(const Expr* P, const AfBasis* B, size_t* n_out,
                    : expr_new_function(expr_new_symbol(SYM_Times), mf, nm);
         free(mf);
         T[made].y = _fmpq_vec_init(d);
+        T[made].tv = _fmpq_vec_init(d);
         T[made].mono = mono;
         T[made].deg = deg;
         made++;
@@ -866,18 +1047,59 @@ static AfTerm* af_split_poly(const Expr* P, const AfBasis* B, size_t* n_out,
             for (slong k = 0; k < d; k++)
                 fmpq_mul(fmpq_mat_entry(v, 0, k), fmpq_mat_entry(v, 0, k), r);
             fmpq_mat_mul(yv, v, B->inv);
-            for (slong k = 0; k < d; k++) fmpq_set(T[made - 1].y + k, fmpq_mat_entry(yv, 0, k));
-            if (lead && (best < 0 || deg > T[best].deg ||
-                         (deg == T[best].deg && expr_compare(mono, T[best].mono) > 0))) {
-                best = (long)(made - 1);
-                if (best_coef) expr_free(best_coef);
-                Expr* rr = af_expr_from_fmpq(r);
-                best_coef = an ? af_times(rr, expr_copy((Expr*)an)) : rr;
+            for (slong k = 0; k < d; k++) {
+                fmpq_set(T[made - 1].y + k, fmpq_mat_entry(yv, 0, k));
+                fmpq_set(T[made - 1].tv + k, fmpq_mat_entry(v, 0, k));
             }
         }
+        if (an_own) expr_free(an_own);
         fmpq_clear(r);
     }
     fmpq_mat_clear(v); fmpq_mat_clear(yv);
+    /* merge the terms of one monomial: a coefficient written out in radicals
+     * arrives as several terms (-1 + 1/2 + I Sqrt[3]/2 for -1 + (-1)^(1/3)),
+     * whose separate basis coordinates carry denominators that cancel only in
+     * the sum -- and the joint content below must see the sum */
+    if (*ok) {
+        size_t m = 0;
+        for (size_t i = 0; i < made; i++) {
+            size_t j = 0;
+            while (j < m && !expr_eq(T[j].mono, T[i].mono)) j++;
+            if (j < m) {
+                af_qvec_add(T[j].y, T[i].y, d);
+                af_qvec_add(T[j].tv, T[i].tv, d);
+                _fmpq_vec_clear(T[i].y, d);
+                _fmpq_vec_clear(T[i].tv, d);
+                expr_free(T[i].mono);
+            } else {
+                if (j != i) T[j] = T[i];
+                m++;
+            }
+        }
+        made = m;
+        /* the leading coefficient: highest total degree, then the largest
+         * monomial, among the terms whose coefficient is not 0 */
+        for (size_t i = 0; i < made && lead; i++) {
+            if (af_qvec_is_zero(T[i].tv, d)) continue;
+            if (best < 0 || T[i].deg > T[best].deg ||
+                (T[i].deg == T[best].deg && expr_compare(T[i].mono, T[best].mono) > 0))
+                best = (long)i;
+        }
+        if (lead && best >= 0) {
+            const fmpq* tv = T[best].tv;
+            bool rat = true;
+            for (slong k = 1; k < d; k++) if (!fmpq_is_zero(tv + k)) rat = false;
+            if (rat) best_coef = af_expr_from_fmpq(tv + 0);
+            else {
+                Expr** cl = malloc((size_t)d * sizeof(Expr*));
+                for (slong k = 0; k < d; k++) cl[k] = af_expr_from_fmpq(tv + k);
+                best_coef = expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+                    (Expr*[]){ expr_copy((Expr*)B->theta),
+                               expr_new_function(expr_new_symbol(SYM_List), cl, (size_t)d) }, 2);
+                free(cl);
+            }
+        }
+    }
     *n_out = made;
     if (lead) *lead = best_coef;
     else if (best_coef) expr_free(best_coef);

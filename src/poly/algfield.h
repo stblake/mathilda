@@ -41,6 +41,17 @@
  * opaque and are not searched. */
 bool algfield_has_nested_constant_radical(const Expr* e);
 
+/* True when the constant radicals of rationals in `e` (roots of unity
+ * (-1)^(p/q) included) and I, read as one generator r^(1/Q) per radicand r
+ * with the relation g^Q - r, and I with I^2 + 1, do NOT present a field: the
+ * product of the relation degrees exceeds [Q(generators) : Q].  That is the
+ * case for every root of unity of odd order part ((-1)^(1/3): g^3 + 1 is
+ * reducible) and for generators that lie in each other's fields (I, Sqrt[3]
+ * and (-1)^(1/3)).  The generator model the rest of Together / Cancel uses
+ * then cannot decide a zero (1 - (-1)^(1/3) + (-1)^(2/3) is a zero divisor
+ * there, not 0); algfield_normalize can.  Memoised by generator set. */
+bool algfield_has_dependent_constant_radicals(const Expr* e);
+
 /* `head` is SYM_Together or SYM_Cancel.  Reduces `e` over the number field of
  * its constant algebraic atoms (see above) and returns the evaluated result,
  * or NULL to decline: no algebraic atom, an inexact or AlgebraicNumber

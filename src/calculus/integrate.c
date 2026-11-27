@@ -1875,6 +1875,96 @@ static Expr* try_trager(Expr* f, Expr* x, const char* head) {
 }
 
 /* ------------------------------------------------------------------------- *
+ * Method: GeneralisedGoursat.
+ * ------------------------------------------------------------------------- *
+ * The root-free symmetry reduction of Integral F(t)/R(t)^p dt, p in {1/2, 1/3,
+ * 2/3, 1/4, 3/4}, written in Mathilda in src/internal/goursat/ (a port of the
+ * sympy reference goursat.py of the cube-root Goursat paper, 2026-11-26).  It
+ * coexists with the C GoursatAlgebraic (integrate_goursat.c) until it reaches
+ * parity, and is reached only through Method -> "GeneralisedGoursat" or the
+ * method symbol Integrate`GeneralisedGoursat.
+ *
+ * The package entry GeneralisedGoursat`GoursatIntegrate[f, x] returns a
+ * verified antiderivative, {"not elementary", partial, residual} -- the
+ * remaining integral of residual (f = D[partial, x] + residual) is certified
+ * non-elementary -- or $Failed (decline, undecided, unverified).  The method
+ * symbol returns that answer as is; the Method stage returns the antiderivative,
+ * partial + Integrate[residual, x] for a certificate with a non-zero partial
+ * part, and declines otherwise.  The residual is Hermite-reduced, so a second
+ * pass over it has partial part 0 and declines: there is no recursion. */
+static MthLazyLoad gg_load;   /* attempt state; see mathilda_lazy_due */
+static bool gg_load_succeeded = false;
+
+static bool gg_lazy_load(void) {
+    if (mathilda_lazy_due(&gg_load)) {
+        mth_msg_suppress_push();
+        gg_load_succeeded =
+            mathilda_lazy_load_module(&gg_load, "goursat/GeneralisedGoursat.m") != 0;
+        mth_msg_suppress_pop();
+        if (!gg_load_succeeded)
+            mth_message("Integrate`GeneralisedGoursat", "nofile",
+                "cannot locate src/internal/goursat/GeneralisedGoursat.m on disk.");
+    }
+    return gg_load_succeeded;
+}
+
+/* Integrate`GeneralisedGoursat[f, x]: the package's answer under a wall-clock
+ * budget ($GeneralisedGoursatBudget seconds, default 30; Infinity for none),
+ * $Failed on decline or exhaustion. */
+static Expr* builtin_integrate_generalised_goursat(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (!gg_lazy_load()) return NULL;
+    double budget = cascade_budget("Integrate`$GeneralisedGoursatBudget", 30.0);
+    Expr* call = expr_new_function(expr_new_symbol("GeneralisedGoursat`GoursatIntegrate"),
+        (Expr*[]){ expr_copy(res->data.function.args[0]),
+                   expr_copy(res->data.function.args[1]) }, 2);
+    if (budget > 0)
+        call = expr_new_function(expr_new_symbol("TimeConstrained"),
+            (Expr*[]){ call, expr_new_real(budget), expr_new_symbol("$Failed") }, 3);
+    mth_msg_suppress_push();
+    Expr* r = evaluate(call);
+    mth_msg_suppress_pop();
+    expr_free(call);
+    return r;
+}
+
+/* Method -> "GeneralisedGoursat". */
+static Expr* try_generalised_goursat(Expr* f, Expr* x) {
+    Expr* r = call_stage("Integrate`GeneralisedGoursat", f, x);
+    if (!r) return NULL;
+    /* any atom ($Failed, possibly context-qualified) is a decline */
+    if (r->type != EXPR_FUNCTION || result_is_unresolved(r, "Integrate`GeneralisedGoursat") ||
+        result_contains_head(r, "GeneralisedGoursat`GoursatIntegrate")) {
+        expr_free(r);
+        return NULL;
+    }
+    if (head_is(r, SYM_List)) {
+        /* {"not elementary", partial, residual} */
+        Expr* out = NULL;
+        if (r->data.function.arg_count == 3 &&
+            r->data.function.args[0]->type == EXPR_STRING &&
+            strcmp(r->data.function.args[0]->data.string, "not elementary") == 0) {
+            Expr* partial = r->data.function.args[1];
+            bool zero = partial->type == EXPR_INTEGER && partial->data.integer == 0;
+            if (!zero)
+                out = expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy(partial),
+                               expr_new_function(expr_new_symbol("Integrate"),
+                                   (Expr*[]){ expr_copy(r->data.function.args[2]),
+                                              expr_copy(x) }, 2) }, 2);
+        }
+        expr_free(r);
+        return out;
+    }
+    if (result_contains_head(r, "Integrate") || result_contains_head(r, "Return") ||
+        result_contains_head(r, "Throw")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+/* ------------------------------------------------------------------------- *
  * Method: Bronstein.
  * ------------------------------------------------------------------------- *
  * Bronstein's algorithm for mixed algebraic-transcendental integrands with ONE
@@ -2516,6 +2606,7 @@ typedef enum {
     METHOD_LINEAR_RATIO_RADICALS,
     METHOD_CHEBYCHEV,
     METHOD_GOURSAT,
+    METHOD_GENERALISED_GOURSAT, /* the .m rewrite (src/internal/goursat/GeneralisedGoursat.m) */
     METHOD_WEIERSTRASS,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
@@ -2560,6 +2651,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
     if (strcmp(s, "ChebychevAlgebraic") == 0) return METHOD_CHEBYCHEV;
     if (strcmp(s, "GoursatAlgebraic") == 0) return METHOD_GOURSAT;
+    if (strcmp(s, "GeneralisedGoursat") == 0) return METHOD_GENERALISED_GOURSAT;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
@@ -2607,8 +2699,13 @@ static IntegrateMethod method_from_string(const char* s) {
  *     "DerivativeDivides": on success `*out_sub` is set to an owned copy of `u`
  *     (the caller must free it).
  * `*out_sub` is always initialised (to NULL) before any other work. */
+/* The rational integrator's sub-options of the last parsed
+ * Method -> {"BronsteinRational", "Hermite" -> ..., ...} (see intrat.h). */
+static IntratMethodOptions g_rational_method_opts;
+
 static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
     *out_sub = NULL;
+    intrat_method_options_default(&g_rational_method_opts);
     if (opt->type != EXPR_FUNCTION) return METHOD_INVALID;
     if (opt->data.function.head->type != EXPR_SYMBOL) return METHOD_INVALID;
     const char* hd = opt->data.function.head->data.symbol.name;
@@ -2641,6 +2738,9 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
                 so->data.function.arg_count != 2) goto bad_subopt;
             Expr* skey = so->data.function.args[0];
             Expr* sval = so->data.function.args[1];
+            if (m == METHOD_RATIONAL &&
+                intrat_method_suboption(so, &g_rational_method_opts))
+                continue;
             if (skey->type == EXPR_STRING &&
                 strcmp(skey->data.string, "Substitution") == 0 &&
                 m == METHOD_DERIVATIVE_DIVIDES) {
@@ -4644,7 +4744,7 @@ static Expr* builtin_integrate_body(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"Bronstein\", \"NewtonLeibniz\", \"LineIntegral\".");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"GeneralisedGoursat\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"Bronstein\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;
@@ -4966,9 +5066,13 @@ static Expr* builtin_integrate_body(Expr* res) {
              * every answer is diff-checked before it is returned. */
             IP_STAGE(IP_GRTABLE,      try_grtable(effective_f, x));
             break;
-        case METHOD_RATIONAL:
+        case METHOD_RATIONAL: {
+            IntratMethodOptions saved_ro;
+            intrat_method_options_install(&g_rational_method_opts, &saved_ro);
             result = try_rational(effective_f, x);
+            intrat_method_options_restore(&saved_ro);
             break;
+        }
         case METHOD_DERIVATIVE_DIVIDES:
             /* Explicit method runs the thorough Eliminate/Solve search in
              * addition to the direct quotient (the Automatic cascade uses the
@@ -4992,6 +5096,9 @@ static Expr* builtin_integrate_body(Expr* res) {
             break;
         case METHOD_GOURSAT:
             result = try_goursat(effective_f, x);
+            break;
+        case METHOD_GENERALISED_GOURSAT:
+            result = try_generalised_goursat(effective_f, x);
             break;
         case METHOD_WEIERSTRASS:
             result = integrate_jeffrey_full(effective_f, x);
@@ -5158,6 +5265,21 @@ void integrate_init(void) {
         "as RischTranscendental does. Called directly (or via Method -> "
         "\"ParallelMixedTower\") it has no internal time budget; the Automatic "
         "cascade bounds it by $ParallelMixedTimeBudget.");
+    /* The GeneralisedGoursat method symbol (lazy-loads
+     * src/internal/goursat/GeneralisedGoursat.m). */
+    symtab_add_builtin("Integrate`GeneralisedGoursat", builtin_integrate_generalised_goursat);
+    symtab_get_def("Integrate`GeneralisedGoursat")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`GeneralisedGoursat",
+        "Integrate`GeneralisedGoursat[f, x] integrates f in Q(x, R^(1/n)), n in {2, 3, 4}, "
+        "a single squarefree radicand R of genus 1 (deg R in {3, 4} for n = 2, {2, 3} for "
+        "n = 3, a(x - e)^4 + b for n = 4), by the root-free generalisation of Goursat's "
+        "pseudo-elliptic reduction: Hermite reduction on y^n = R, the Klein four-group, "
+        "Goursat's order-3 substitutions and the cube-root eigen-decomposition through "
+        "covariants of R, descent by polynomial remainders, and second-level reductions of "
+        "third-kind residuals. It returns the antiderivative (verified exactly by formal "
+        "differentiation), {\"not elementary\", partial, residual} when the integral of "
+        "residual (f = D[partial, x] + residual) is proved non-elementary, or $Failed. "
+        "Bounded by Integrate`$GeneralisedGoursatBudget seconds (default 30).");
     /* The Trager / TragerKauers method symbols (lazy-load
      * src/internal/trager/Trager.m). */
     symtab_add_builtin("Integrate`Trager", builtin_integrate_trager);
@@ -5283,6 +5405,7 @@ void integrate_init(void) {
         "  \"LinearRatioRadicals\" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))\n"
         "  \"ChebychevAlgebraic\" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)\n"
         "  \"GoursatAlgebraic\"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)\n"
+        "  \"GeneralisedGoursat\" — Integrate`GeneralisedGoursat (the root-free symmetry reduction of F/R^p with an honest verdict; src/internal/goursat)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"

@@ -97,4 +97,31 @@ Expr* builtin_intrat_naive_log_part(Expr* res);
  * registration is a fresh symtab_add_builtin / attribute set). */
 void intrat_init(void);
 
+/* Method -> {"BronsteinRational", "Hermite" -> h, "LogPart" -> l,
+ * "RealForm" -> r} -- the algorithm choices of the rational integrator.
+ * -1 everywhere means Automatic (the measured defaults, see intrat.c).
+ *   hermite:  INTRAT_HERMITE_LINEAR | _QUADRATIC | _HOROWITZ   (intrat_alg.h)
+ *   logpart:  INTRAT_LOGPART_LRT | _RT | _CZICHOWSKI          (intrat_alg.h)
+ *   realform: INTRAT_REALFORM_RIOBOO | _LOGTOREAL | _NONE      (below) */
+enum {
+    INTRAT_REALFORM_RIOBOO = 0,    /* LogToReal on the special shapes, else RootSum   */
+    INTRAT_REALFORM_LOGTOREAL = 1, /* the general LogToReal (exact roots, LogToAtan)   */
+    INTRAT_REALFORM_NONE = 2       /* no real form: Sum RootSum[Q_i, # Log[S_i] &]      */
+};
+typedef struct IntratMethodOptions {
+    int hermite, logpart, realform;
+} IntratMethodOptions;
+
+/* All Automatic. */
+void intrat_method_options_default(IntratMethodOptions* o);
+
+/* Read one sub-option rule ("Hermite" -> "Quadratic", ...).  Returns 1 when
+ * the rule is one of ours with a valid value (o updated), 0 otherwise. */
+int intrat_method_suboption(const Expr* rule, IntratMethodOptions* o);
+
+/* Install o for the current top-level evaluation; *saved receives the
+ * previous setting for intrat_method_options_restore. */
+void intrat_method_options_install(const IntratMethodOptions* o, IntratMethodOptions* saved);
+void intrat_method_options_restore(const IntratMethodOptions* saved);
+
 #endif /* MATHILDA_INTRAT_H */

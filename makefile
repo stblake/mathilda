@@ -1067,6 +1067,22 @@ bench-integrate-bottom:
 	python3 tools/integration_shootout/shootout.py --bench benchmarks/260-radical-bottom \
 	    --systems mathilda,fricas --methods Automatic,ParallelMixedTower,Bronstein
 
+# `make bench-integrate-rational` -- benchmark 266, the rational-function
+# integrator: 389 cases in 15 families (benchmarks/266-rational-integration/
+# gen_corpus.py), Mathilda (Automatic and BronsteinRational, each answer checked
+# by PossibleZeroQ[D[F, x] - f] and a continuity scan), the reference system
+# (wolframscript, timing and size only) and sympy's ratint; writes results/<LABEL>/
+# and REPORT.md.  LABEL=after2 BASE=before GRID=grid2 by default; resumable.
+bench-integrate-rational:
+	python3.11 benchmarks/266-rational-integration/run.py --label $(or $(LABEL),after2)
+	python3.11 benchmarks/266-rational-integration/report.py --labels $(or $(BASE),before),$(or $(LABEL),after2) --grid $(or $(GRID),grid2)
+
+# `make bench-integrate-rational-grid` -- benchmark 266's algorithm grid: every
+# combination of Method -> {"BronsteinRational", "Hermite" -> ..., "LogPart" -> ...,
+# "RealForm" -> ...} (36) on every case, one process per case (~70 min at -j6).
+bench-integrate-rational-grid:
+	python3.11 benchmarks/266-rational-integration/run.py --label $(or $(GRID),grid2) --systems grid --timeout 15 -j 6
+
 bench-integrate-vs-fricas:
 	python3 tools/integration_shootout/compare_fricas.py
 	@if command -v pandoc >/dev/null 2>&1; then \
@@ -1344,7 +1360,7 @@ print-libs:
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-linkedlist check-compile-coverage check-machine-boundary \
         check-refine-stress \
-        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc print-flags print-libs
+        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap bench-integrate-rational bench-integrate-rational-grid check-diophantine-heldout print-cc print-flags print-libs
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

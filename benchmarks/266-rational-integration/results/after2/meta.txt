@@ -1,0 +1,4 @@
+2026-11-27 13:01 systems=mathilda methods=Automatic,BronsteinRational timeout=30 jobs=5 cases=423 wall=203s
+  Mathilda 0.6764 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)
+2026-11-27 13:20 systems=mathilda methods=Automatic,BronsteinRational timeout=30 jobs=5 cases=117 wall=19s
+  Mathilda 0.6764 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, ARPACK, Readline)

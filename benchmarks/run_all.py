@@ -152,7 +152,7 @@ EXP_RE = re.compile(r"^(\d{2,3})-(.+)$")
 # would run a data module (e.g. registry.py) as an experiment half and report a
 # phantom, unpaired experiment.
 STANDALONE = {"97-special-functions", "98-factorinteger-shootout", "98-rational-shootout",
-              "99-factor-shootout"}
+              "99-factor-shootout", "266-rational-integration"}
 
 
 def discover(only=None):

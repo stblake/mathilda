@@ -12,6 +12,7 @@
 #include "print.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
+#include "flint_qqbar.h"   /* number-field fast path for algebraic entries */
 #include "ludecomp_internal.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "core.h"      /* tc_deadline_passed */
@@ -181,6 +182,11 @@ Expr* builtin_det(Expr* res) {
      * entry is symbolic, or when built without FLINT. The exact value matches
      * the Laplace result. */
     Expr* fdet = flint_mat_det(flat, n);
+    /* Algebraic-number entries (Sqrt[3], I, Root objects): Gaussian
+     * elimination over the number field their atoms generate (exact, O(n^3)
+     * nf_elem operations), not the cofactor expansion with every atom an
+     * opaque indeterminate.  Declines for symbolic or inexact entries. */
+    if (!fdet && n > 1) fdet = flint_qqbar_alg_mat_det(flat, n);
     if (fdet) {
         for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
         free(flat);

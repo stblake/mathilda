@@ -798,6 +798,58 @@ static void test_n_exact_zero_parts(void) {
     assert_eval_eq("Head[Re[N[ArcCosh[1/2]]]] === Real && Head[Re[N[Erf[I]]]] === Real", "True", 0);
 }
 
+/* N[expr, p] within its $MaxExtraPrecision budget either reaches p digits or
+ * says N::meprec and claims no more digits than its passes agree on. The
+ * climb used to be skipped whenever the plan's first pass already stood at the
+ * budget (a large exact leaf is converted at its full width), and the
+ * uncertified pass came back silently with every digit printed:
+ * N[D[P, m] - rho /. m -> 7/10, 30], an exact zero with 10^160 coefficients
+ * in Root[-1 - 4 #1 + #1^3 &, 2], was -0.157... = -rho; the small analogue
+ * below was 0.92578125 for 1. */
+static void test_n_adaptive_budget_honesty(void) {
+    const char* r = "Root[-1 - 4 #1 + #1^3 &, 2]";
+    char buf[512];
+    /* 10^200 (r^3 - 4 r - 1) + 1 = 1: ~660 bits cancel, beyond 30 + 50 digits */
+    snprintf(buf, sizeof buf,
+             "Check[N[Expand[10^200 (%s^3 - 4 %s - 1) + 1], 30], meprecFired]", r, r);
+    assert_eval_eq(buf, "meprecFired", 0);
+    snprintf(buf, sizeof buf,
+             "Precision[Quiet[N[Expand[10^200 (%s^3 - 4 %s - 1) + 1], 30]]] < 10", r, r);
+    assert_eval_eq(buf, "True", 0);
+    /* ... and exact with room for it */
+    snprintf(buf, sizeof buf,
+             "Block[{$MaxExtraPrecision = 250}, Abs[N[Expand[10^200 (%s^3 - 4 %s - 1) + 1], 30] - 1] < 10^-29]",
+             r, r);
+    assert_eval_eq(buf, "True", 0);
+    snprintf(buf, sizeof buf,
+             "Block[{$MaxExtraPrecision = 250}, Check[N[Expand[10^200 (%s^3 - 4 %s - 1) + %s], 30]; ok, meprecFired]]",
+             r, r, r);
+    assert_eval_eq(buf, "ok", 0);
+    /* no extra precision at all: the single pass is not certified either */
+    snprintf(buf, sizeof buf,
+             "Block[{$MaxExtraPrecision = 0}, Check[N[Expand[10^200 (%s^3 - 4 %s - 1) + %s], 30], meprecFired]]",
+             r, r, r);
+    assert_eval_eq(buf, "meprecFired", 0);
+    /* an exact zero with a 10^160 leaf: meprec and a zero, not a value */
+    assert_eval_eq("Check[N[(10^80 + Sqrt[2])^2 - 10^160 - 2*10^80 Sqrt[2] - 2, 30], meprecFired]",
+                   "meprecFired", 0);
+    assert_eval_eq("Quiet[N[(10^80 + Sqrt[2])^2 - 10^160 - 2*10^80 Sqrt[2] - 2, 30]] == 0", "True", 0);
+    /* an exact complex zero stays a complex zero at the cap */
+    assert_eval_eq("With[{s = Sqrt[46], d = -3239362609 - 1036090308 I Sqrt[46]}, "
+                   "Quiet[N[9718087827/d + 3108270924 I s/d - (9718087827 + 3108270924 I s) "
+                   "(-3239362609 + 1036090308 I s)/(3239362609^2 + 46 1036090308^2), 30]] == 0]",
+                   "True", 0);
+    /* a real value whose passes carry imaginary rounding noise is one number:
+     * certified, no N::meprec (was printed, with "+ 0.*^-30 I") */
+    assert_eval_eq("Check[N[RootSum[#^5 - 3 #^2 + 7 # - 1 &, Log[2 - #] &], 30]; ok, meprecFired]",
+                   "ok", 0);
+    assert_eval_eq("Abs[N[RootSum[#^5 - 3 #^2 + 7 # - 1 &, Log[2 - #] &], 30] "
+                   "- 3.496507561466480235457188814887`30] < 10^-28", "True", 0);
+    /* unchanged: cancellation within the budget is still certified silently */
+    assert_eval_eq("Check[N[Cos[10^-20] - 1, 30]; ok, meprecFired]", "ok", 0);
+    assert_eval_eq("Abs[N[Cos[10^-20] - 1, 30]/(-5*10^-41) - 1] < 10^-29", "True", 0);
+}
+
 /* An N[expr, p] that cancels nothing is evaluated exactly once. */
 static void test_n_adaptive_single_pass(void) {
     const char* cases[] = {
@@ -948,6 +1000,51 @@ static void test_n_does_not_evaluate_held_arguments(void) {
     assert_eval_eq("ClearAll[nhc]", "Null", 0);
 }
 
+#if defined(USE_MPFR) && defined(USE_FLINT)
+/* A branch-cut head at an EXACT argument on its cut whose numerical value
+ * carries a rounding residue of either sign there: a = -1/48 - 13/(768 c) -
+ * c/3 (c a complex cube root) is exactly -1/8, its machine value -0.125 -
+ * 6.9*10^-18 I. N decides the side exactly (qqbar) and evaluates on the
+ * principal side, as at the exact real -1/8: Sqrt[a] was -0.353553 I at
+ * machine precision and 0.*^-30 + 0.4 I (with N::meprec) at 30 digits. */
+static void test_n_branch_cut_exact_straddle(void) {
+    assert_eval_eq("nbcC = ((-35/2048 + ((9*I)/1024)*Sqrt[3])/2)^(1/3); "
+                   "nbcA = -1/48 - 13/(768*nbcC) - nbcC/3; RootReduce[nbcA]", "-1/8", 0);
+    /* machine N: the principal value */
+    assert_eval_eq("Im[N[Sqrt[nbcA]]] > 0.35", "True", 0);
+    assert_eval_eq("Abs[N[Sqrt[nbcA]] - I/(2 Sqrt[2.])] < 10^-15", "True", 0);
+    /* N[.., 30]: certified, no N::meprec, 30 good digits */
+    assert_eval_eq("Check[Abs[N[Sqrt[nbcA], 30] - N[I/(2 Sqrt[2]), 40]] < 10^-29, $Failed]", "True", 0);
+    assert_eval_eq("Check[N[Log[nbcA], 30] == N[Log[-1/8], 30], $Failed]", "True", 0);
+    assert_eval_eq("Precision[N[Log[nbcA], 30]]", "30.0", 0);
+    /* every head with a cut agrees with its value at the exact real/imaginary point */
+    assert_eval_eq("Table[Abs[N[f[16 nbcA]] - N[f[-2]]] < 10^-14, "
+                   "{f, {ArcSin, ArcCos, ArcTanh, ArcCosh, Log}}]",
+                   "{True, True, True, True, True}", 0);
+    assert_eval_eq("Table[Abs[N[f[4 nbcA]] - N[f[-1/2]]] < 10^-14, {f, {ArcCoth, ArcSec, ArcCsc}}]",
+                   "{True, True, True}", 0);
+    assert_eval_eq("Table[Abs[N[f[16 I nbcA]] - N[f[-2 I]]] < 10^-14, {f, {ArcTan, ArcSinh}}]",
+                   "{True, True}", 0);
+    assert_eval_eq("Table[Abs[N[f[4 I nbcA]] - N[f[-I/2]]] < 10^-14, {f, {ArcCot, ArcCsch}}]",
+                   "{True, True}", 0);
+    assert_eval_eq("{Abs[N[nbcA^(1/3)] - N[(-1/8)^(1/3)]] < 10^-15, "
+                   "Abs[N[nbcA^(5/2)] - N[(-1/8)^(5/2)]] < 10^-15, "
+                   "Abs[N[Log[2, nbcA]] - N[Log[2, -1/8]]] < 10^-14}", "{True, True, True}", 0);
+    /* contagion: an inexact partner numericalizes the radical the same way */
+    assert_eval_eq("Im[Sqrt[nbcA] + 1.5] > 0", "True", 0);
+    /* a genuinely nonzero tiny imaginary part keeps its side */
+    assert_eval_eq("{Im[N[Sqrt[-1/8 - I 10^-30 (Pi - 3)]]] < 0, Im[N[Sqrt[-1/8 + I 10^-30 (Pi - 3)]]] > 0}",
+                   "{True, True}", 0);
+    /* an inexact argument carries its own side: untouched */
+    assert_eval_eq("Im[Sqrt[-0.125 - 1.*^-20 I]] < 0", "True", 0);
+    /* an exact zero imaginary part that is not algebraic: precision cannot
+     * resolve it, N::meprec once (Check sees it), the principal side */
+    assert_eval_eq("Check[N[Sqrt[-1/8 + I (Log[2] + Log[3] - Log[6])], 30], $Failed]", "$Failed", 0);
+    assert_eval_eq("Im[Quiet[N[Sqrt[-1/8 + I (Log[2] + Log[3] - Log[6])], 30]]] > 0.35", "True", 0);
+    assert_eval_eq("ClearAll[nbcA, nbcC]; nbcA", "nbcA", 0);
+}
+#endif
+
 int main(void) {
     symtab_init();
     core_init();
@@ -992,6 +1089,7 @@ int main(void) {
     TEST(test_n_prec_complex_pow);
     TEST(test_n_adaptive_precision);
     TEST(test_n_adaptive_certification);
+    TEST(test_n_adaptive_budget_honesty);
     TEST(test_n_adaptive_single_pass);
     TEST(test_n_exact_zero_parts);
     TEST(test_barnesg_arbitrary_precision);
@@ -1003,6 +1101,9 @@ int main(void) {
     TEST(test_n_composition_common_subexpressions);
     TEST(test_eval_sum_common_numeric_calls);
     TEST(test_n_memo_survives_timeout);
+#endif
+#if defined(USE_MPFR) && defined(USE_FLINT)
+    TEST(test_n_branch_cut_exact_straddle);
 #endif
 
     printf("All numeric_tests passed.\n");

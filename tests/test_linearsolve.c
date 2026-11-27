@@ -356,6 +356,58 @@ static void test_linalg_singular_machine_heads(void) {
     run_check_true("RowReduce[{{x, 2 x}, {1, 3}}] === {{1, 0}, {0, 1}}");
 }
 
+/* Algebraic-number entries (I Sqrt[3], Sqrt[2], Root objects): elimination
+ * over the number field their atoms generate (flint_qqbar_alg_mat_*).  The
+ * symbolic fraction-free path treated each atom as an opaque indeterminate,
+ * and this 12x12 system over Q(I Sqrt[3]) did not finish in 40 s (Inverse
+ * likewise; RowReduce took 2 s); each is now milliseconds.  Every answer is
+ * checked exactly against its defining identity. */
+#define ALG12_A \
+    "{{0, (30091839012864*I)*Sqrt[3], 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}, " \
+    "{0, 0, (60183678025728*I)*Sqrt[3], 0, 1, 0, 0, 0, 0, 0, 0, 0}, " \
+    "{(-90275517038592*I)*Sqrt[3], 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0}, " \
+    "{0, 70214291030016 + (6687075336192*I)*Sqrt[3], 0, 1, 0, 0, 1, 0, 0, 0, 0, 0}, " \
+    "{0, 0, 140428582060032 + (103649667710976*I)*Sqrt[3], 0, 1, 0, 0, 1, 0, 0, 0, 0}, " \
+    "{-210642873090048 - (200612260085760*I)*Sqrt[3], 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0}, " \
+    "{0, -70214291030016 - (113680280715264*I)*Sqrt[3], 0, 0, 0, 0, 1, 0, 0, 1, 0, 0}, " \
+    "{0, 0, 70214291030016 - (26748301344768*I)*Sqrt[3], 0, 0, 0, 0, 1, 0, 0, 1, 0}, " \
+    "{-210642873090048 - (60183678025728*I)*Sqrt[3], 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1}, " \
+    "{0, -140428582060032 - (40122452017152*I)*Sqrt[3], 0, 0, 0, 0, 0, 0, 0, 1, 0, 0}, " \
+    "{0, 0, -70214291030016 - (20061226008576*I)*Sqrt[3], 0, 0, 0, 0, 0, 0, 0, 1, 0}, " \
+    "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}"
+#define ALG12_B \
+    "{0, 90275517038592 - (30091839012864*I)*Sqrt[3], 0, 0, " \
+    "85353086582784 - (122132000931840*I)*Sqrt[3], 0, 0, " \
+    "-75043845439488 - (21918746935296*I)*Sqrt[3], 0, 0, " \
+    "5108182548480 + (45044882472960*I)*Sqrt[3], 0}"
+
+static void test_linearsolve_algebraic_field(void) {
+    /* timing gates: 5 s each, against > 40 s (LinearSolve, Inverse) before */
+    run_check_true("TimeConstrained[Module[{a = " ALG12_A ", b = " ALG12_B ", x},"
+                   " x = LinearSolve[a, b]; Expand[a . x - b] === ConstantArray[0, 12]], 5, False]");
+    run_check_true("TimeConstrained[Module[{a = " ALG12_A ", ia},"
+                   " ia = Inverse[a]; Expand[a . ia] === IdentityMatrix[12]], 5, False]");
+    run_check_true("TimeConstrained[RowReduce[" ALG12_A "] === IdentityMatrix[12], 5, False]");
+    run_check_true("TimeConstrained[Module[{a = " ALG12_A ", d}, d = Det[a];"
+                   " Abs[d - Det[N[a, 60]]] < 10^-30 Abs[d]], 5, False]");
+    /* every Method answers the same */
+    run_check_true("TimeConstrained[Module[{a = " ALG12_A ", b = " ALG12_B "},"
+                   " LinearSolve[a, b, Method -> \"OneStepRowReduction\"] === LinearSolve[a, b]], 5, False]");
+
+    /* rectangular consistent / inconsistent, singular, mixed atoms, Root */
+    run_check_true("LinearSolve[{{1, Sqrt[2]}, {Sqrt[2], 2}, {I, I Sqrt[2]}}, {1, Sqrt[2], I}] === {1, 0}");
+    silence_stderr();
+    run_check_true("Check[LinearSolve[{{1, Sqrt[2]}, {Sqrt[2], 2}, {I, I Sqrt[2]}}, {1, 2, 3}], "
+                   "failed, LinearSolve::nosol] === failed");
+    run_check_true("Check[Inverse[{{1, Sqrt[2]}, {Sqrt[2], 2}}], failed, Inverse::sing] === failed");
+    run_check_true("RowReduce[{{1, Sqrt[2]}, {Sqrt[2], 2}, {I, I Sqrt[2]}}] === {{1, Sqrt[2]}, {0, 0}, {0, 0}}");
+    run_check_true("Det[{{1, Sqrt[2]}, {Sqrt[3], 1}}] === 1 - Sqrt[6]");
+    run_check_true("Module[{a = {{1, Sqrt[2], Sqrt[3]}, {Sqrt[6], 1, 0}, {0, 1, 1}}, x},"
+                   " x = LinearSolve[a, {1, 0, 0}]; Expand[a . x] === {1, 0, 0}]");
+    run_check_true("Module[{r = Root[#^3 - # - 1 &, 1], a, x}, a = {{r, 1}, {1, 2}};"
+                   " x = LinearSolve[a, {1, 0}]; RootReduce[a . x] === {1, 0}]");
+}
+
 int main(void) {
     /* test_utils.h sets alarm(60); under valgrind that's tight, so
      * extend it.  Native runs need no headroom -- the suite runs in
@@ -377,6 +429,7 @@ int main(void) {
     TEST(test_linearsolve_inverse_check);
     TEST(test_linalg_machine_decline_no_recursion);
     TEST(test_linalg_singular_machine_heads);
+    TEST(test_linearsolve_algebraic_field);
 
     printf("All LinearSolve tests passed!\n");
     symtab_clear();

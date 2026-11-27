@@ -37,6 +37,8 @@
 #include "pack.h"      /* ndbuild_open: N[exact array] straight into a buffer */
 #include "print.h"     /* expr_to_string: N::meprec text */
 #include "stieltjesgamma.h" /* numeric_stieltjes_n: N of an NHoldFirst constant */
+#include "flint_qqbar.h"  /* flint_qqbar_part_sign: the side of a branch cut */
+#include "flint_num_bridge.h"  /* flint_num_elliptic_inc_sided */
 #if defined(USE_FLINT) && defined(USE_MPFR)
 #include <flint/arb.h>   /* arb twins of the MPFR elementary functions */
 #include <flint/arf.h>
@@ -1533,6 +1535,17 @@ static Expr* n_definite_fallback(const Expr* e, NumericSpec spec) {
     return NULL;
 }
 
+#ifdef USE_MPFR
+/* A pass's cancellation record (g_numeric_cancel_bits / _left / absorb). */
+typedef struct { long cancel, left, absorb; } NbcRec;
+static bool nbc_is_cut_head(const Expr* h);
+static NbcRec nbc_rec_take(void);
+static void nbc_settle_args(const Expr* e, Expr** new_args, size_t n, NumericSpec spec,
+                            NbcRec before, const NbcRec* per_arg);
+static int nbc_ell_kind(const Expr* e);
+static Expr* nbc_elliptic(const Expr* e, Expr* const* na, int kind, NumericSpec spec);
+#endif
+
 static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     /* An N rule on the head (h /: N[h[x_]] := ...) gives the whole call's value. */
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
@@ -1882,6 +1895,16 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
         n == 2 && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Surd
         && expr_is_integer_like(e->data.function.args[1]);
+#ifdef USE_MPFR
+    /* A branch-cut head keeps each argument's cancellation record apart, so
+     * a component nbc_settle_args proves exactly zero takes its rounding
+     * residue's cancellation with it (see nbc_settle_args). */
+    const bool nbc_head = g_n_held_depth == 0 && n >= 1 && n <= 2
+        && nbc_is_cut_head(e->data.function.head);
+    NbcRec nbc_before = { 0, LONG_MAX, 0 };
+    NbcRec nbc_arg[2] = { { 0, LONG_MAX, 0 }, { 0, LONG_MAX, 0 } };
+    if (nbc_head) nbc_before = nbc_rec_take();
+#endif
     for (size_t i = 0; i < n; ++i) {
         if (i < n_label_held || (series_data && i >= 3) || (surd_index && i == 1) ||
             (i == 0 && (nhold & ATTR_NHOLDFIRST)) ||
@@ -1906,7 +1929,31 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
         if (held) g_n_held_depth++;
         new_args[i] = numericalize_rec(e->data.function.args[i], spec);
         if (held) g_n_held_depth--;
+#ifdef USE_MPFR
+        if (nbc_head) nbc_arg[i] = nbc_rec_take();
+#endif
     }
+#ifdef USE_MPFR
+    /* An exact argument of a branch-cut head whose numerical value lies on
+     * the cut with a noise-sized imaginary (or real) part: decide the side
+     * exactly before the kernel picks it by rounding (nbc_settle_args). */
+    if (nbc_head)
+        nbc_settle_args(e, new_args, n, spec, nbc_before, nbc_arg);
+    /* An incomplete elliptic integral whose y or p is on its cut: the side
+     * decided exactly (nbc_elliptic). */
+    if (g_n_held_depth == 0 && (n == 2 || n == 3)) {
+        int ek = nbc_ell_kind(e);
+        if (ek >= 0) {
+            Expr* v = nbc_elliptic(e, new_args, ek, spec);
+            if (v) {
+                for (size_t i = 0; i < n; i++) expr_free(new_args[i]);
+                free(new_args);
+                expr_free(new_head);
+                return v;
+            }
+        }
+    }
+#endif
     Expr* rebuilt = expr_new_function(new_head, new_args, n);
     free(new_args);  /* expr_new_function copies the pointer list. */
     if (g_n_held_depth > 0) return rebuilt;
@@ -3456,10 +3503,81 @@ static long mpfr_agree_bits(const mpfr_t a, const mpfr_t b) {
     return r;
 }
 
+/* An arbitrary-precision number: an MPFR real, or Complex[x, y] with each of
+ * x, y an MPFR or an exact 0. *re / *im are the nonzero-capable MPFR parts
+ * (NULL for an absent or exact-zero part). */
+static bool adaptive_num_parts(const Expr* e, mpfr_srcptr* re, mpfr_srcptr* im) {
+    *re = NULL; *im = NULL;
+    if (!e) return false;
+    if (e->type == EXPR_MPFR) { *re = e->data.mpfr; return true; }
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count != 2
+        || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_Complex) return false;
+    bool has_mpfr = false;
+    for (int k = 0; k < 2; k++) {
+        const Expr* c = e->data.function.args[k];
+        if (c->type == EXPR_MPFR) {
+            if (k == 0) *re = c->data.mpfr; else *im = c->data.mpfr;
+            has_mpfr = true;
+        } else if (!(c->type == EXPR_INTEGER && c->data.integer == 0)) {
+            return false;
+        }
+    }
+    return has_mpfr;
+}
+
+/* Exponent of the larger nonzero part of a number, LONG_MIN for a zero. */
+static long adaptive_num_exp(mpfr_srcptr re, mpfr_srcptr im) {
+    long t = LONG_MIN;
+    if (re && mpfr_regular_p(re)) t = (long)mpfr_get_exp(re);
+    if (im && mpfr_regular_p(im) && (long)mpfr_get_exp(im) > t) t = (long)mpfr_get_exp(im);
+    return t;
+}
+
+/* Leading bits on which two numbers agree, measured as ONE complex number:
+ * log2 |a| - log2 |a - b| (by the larger part of each). A real pass and a
+ * complex one (whose imaginary noise did not round away) compare by value
+ * instead of being "different shapes". This is the climb's measure of whether
+ * the agreement is still growing (numericalize_top); the verdict itself is
+ * part by part (expr_cap_verdict). */
+static long adaptive_num_agree(mpfr_srcptr ar, mpfr_srcptr ai,
+                               mpfr_srcptr br, mpfr_srcptr bi) {
+    long ta = adaptive_num_exp(ar, ai), tb = adaptive_num_exp(br, bi);
+    if (ta == LONG_MIN && tb == LONG_MIN) return 1L << 30;
+    if (ta == LONG_MIN || tb == LONG_MIN) return 0;
+    if ((ar && !mpfr_number_p(ar)) || (ai && !mpfr_number_p(ai))
+        || (br && !mpfr_number_p(br)) || (bi && !mpfr_number_p(bi))) return 0;
+    long dmax = LONG_MIN;
+    for (int k = 0; k < 2; k++) {
+        mpfr_srcptr x = k ? ai : ar, y = k ? bi : br;
+        if (!x && !y) continue;
+        mpfr_prec_t pr = x ? mpfr_get_prec(x) : mpfr_get_prec(y);
+        if (x && y && mpfr_get_prec(y) > pr) pr = mpfr_get_prec(y);
+        mpfr_t d;
+        mpfr_init2(d, pr);
+        if (x && y) mpfr_sub(d, x, y, MPFR_RNDN);
+        else if (x) mpfr_set(d, x, MPFR_RNDN);
+        else mpfr_neg(d, y, MPFR_RNDN);
+        if (mpfr_regular_p(d) && (long)mpfr_get_exp(d) > dmax) dmax = (long)mpfr_get_exp(d);
+        mpfr_clear(d);
+    }
+    if (dmax == LONG_MIN) return 1L << 30;
+    return ta - dmax;
+}
+
 /* Minimum agreement over corresponding MPFR leaves of two results; -1 when
- * their shapes differ (a part changed kind between the two precisions). */
-static long expr_agree_bits(const Expr* a, const Expr* b) {
+ * their shapes differ (a part changed kind between the two precisions). With
+ * `unit`, an arbitrary-precision number -- real or complex -- is one leaf
+ * (adaptive_num_agree); without it the comparison is the stricter part by
+ * part one the climb has always certified with. */
+static long expr_agree_bits(const Expr* a, const Expr* b, bool unit) {
     if (!a || !b) return -1;
+    if (unit) {
+        mpfr_srcptr ar, ai, br, bi;
+        bool na = adaptive_num_parts(a, &ar, &ai), nb = adaptive_num_parts(b, &br, &bi);
+        if (na && nb) return adaptive_num_agree(ar, ai, br, bi);
+        if (na || nb) return -1;
+    }
     if (a->type == EXPR_MPFR || b->type == EXPR_MPFR) {
         if (a->type != EXPR_MPFR || b->type != EXPR_MPFR) return -1;
         return mpfr_agree_bits(a->data.mpfr, b->data.mpfr);
@@ -3470,7 +3588,7 @@ static long expr_agree_bits(const Expr* a, const Expr* b) {
         || !expr_eq(a->data.function.head, b->data.function.head)) return -1;
     long m = 1L << 30;
     for (size_t i = 0; i < a->data.function.arg_count; i++) {
-        long k = expr_agree_bits(a->data.function.args[i], b->data.function.args[i]);
+        long k = expr_agree_bits(a->data.function.args[i], b->data.function.args[i], unit);
         if (k < 0) return -1;
         if (k < m) m = k;
     }
@@ -3489,55 +3607,174 @@ static long adaptive_good_bits(long agree, long gap) {
     return agree;
 }
 
+/* True when the part `x` of a number whose larger part has exponent `top` is
+ * rounding noise beside it: absent, zero, or entirely below `prec_bits` of the
+ * number's precision. */
+static bool adaptive_part_is_noise(mpfr_srcptr x, long top, long prec_bits) {
+    if (!x || !mpfr_regular_p(x)) return true;
+    return top != LONG_MIN && (long)mpfr_get_exp(x) <= top - prec_bits;
+}
+
+/* Leading bits of the part `x` that the part `y` of the other pass confirms:
+ * log2 |x| - log2 |x - y| (a missing part is 0). Large when equal; very
+ * negative when x is zero and y is not. *dexp gets log2 |x - y| (LONG_MIN when
+ * they are equal), the absolute error the part is known to. */
+static long adaptive_part_agree(mpfr_srcptr x, mpfr_srcptr y, long* dexp) {
+    *dexp = LONG_MIN;
+    bool xz = !x || mpfr_zero_p(x), yz = !y || mpfr_zero_p(y);
+    if (xz && yz) return 1L << 30;
+    if ((x && !mpfr_number_p(x)) || (y && !mpfr_number_p(y))) return LONG_MIN / 2;
+    mpfr_prec_t pr = x ? mpfr_get_prec(x) : mpfr_get_prec(y);
+    if (x && y && mpfr_get_prec(y) > pr) pr = mpfr_get_prec(y);
+    mpfr_t d;
+    mpfr_init2(d, pr);
+    if (!xz && !yz) mpfr_sub(d, x, y, MPFR_RNDN);
+    else if (!xz) mpfr_set(d, x, MPFR_RNDN);
+    else mpfr_neg(d, y, MPFR_RNDN);
+    long r;
+    if (mpfr_zero_p(d)) {
+        r = 1L << 30;
+    } else {
+        *dexp = (long)mpfr_get_exp(d);
+        r = xz ? LONG_MIN / 2 : (long)mpfr_get_exp(x) - *dexp;
+    }
+    mpfr_clear(d);
+    return r;
+}
+
+/* A zero part of `acc` bits of accuracy (clamped to at least 1). */
+static Expr* adaptive_zero_part(long acc) {
+    if (acc < 1) acc = 1;
+    Expr* v = expr_new_mpfr_bits((mpfr_prec_t)numeric_precision_bits_width(acc));
+    if (v) mpfr_set_zero(v->data.mpfr, 1);
+    return v;
+}
+
+/* The verdict on one arbitrary-precision number, real or complex, judged part
+ * by part against the same number of the other pass. A part that is noise
+ * beside the larger part at BOTH passes (adaptive_part_is_noise) is a zero of
+ * the accuracy left there and is not compared: its digits, or even its sign,
+ * say nothing (N[RootSum[#^5 - 3 #^2 + 7 # - 1 &, Log[2 - #] &], 30], real,
+ * carried imaginary rounding noise; with it compared the value was refused
+ * and N::meprec printed). Every other part keeps the bits the two passes
+ * agree on -- its own, not the whole number's: at 400 digits the old repro
+ * (P /. m -> 7/10) agrees on its real part to 298 digits while its imaginary
+ * part changes sign between the passes (an ArcTan evaluated exactly on its
+ * branch cut, whose argument's zero real part is rounding noise), and the
+ * real part's digits are kept. A part the passes do not confirm at all is a
+ * zero of the absolute accuracy they do confirm, never a value printed with
+ * digits. `good` is NULL to keep each part whole (certified). */
+static Expr* adaptive_num_keep(const Expr* cur, mpfr_srcptr re, mpfr_srcptr im,
+                               long bits, const long* good, const long* dexp,
+                               const bool* noise) {
+    long top = adaptive_num_exp(re, im);
+    long pb = numeric_width_precision_bits(bits);
+    /* The largest disagreement of any compared part: a part the passes do not
+     * confirm at all may have been moved by as much as any other part was, so
+     * that is all it is known to (at 30 digits the repro's real part was
+     * ~10^-25 at both passes and is -0.18; its imaginary part flipped sign) */
+    long dmax = LONG_MIN;
+    for (int k = 0; k < 2 && good; k++)
+        if (!noise[k] && dexp[k] > dmax) dmax = dexp[k];
+    Expr* part[2] = { NULL, NULL };
+    for (int k = 0; k < 2; k++) {
+        mpfr_srcptr x = k ? im : re;
+        const Expr* src = cur->type == EXPR_MPFR ? cur : cur->data.function.args[k];
+        if (!x) {
+            if (cur->type == EXPR_FUNCTION) part[k] = expr_copy((Expr*)src);  /* exact 0 */
+            continue;
+        }
+        Expr* v;
+        if (noise[k] && mpfr_regular_p(x)) {
+            v = adaptive_zero_part(pb - top);          /* bits below the units place */
+        } else if (!mpfr_regular_p(x)) {
+            v = expr_copy((Expr*)src);                 /* a zero keeps its accuracy */
+        } else if (good && good[k] < 1) {
+            /* unconfirmed: known only to within the largest |x - y| */
+            v = adaptive_zero_part(dmax == LONG_MIN ? pb - top : -dmax);
+        } else {
+            long w = (long)mpfr_get_prec(x);
+            if (good && good[k] < bits) {
+                long kw = numeric_precision_bits_width(good[k]);
+                if (kw < w) w = kw;
+            }
+            if (w > bits && good) w = bits;
+            v = expr_new_mpfr_bits((mpfr_prec_t)w);
+            if (v) mpfr_set(v->data.mpfr, x, MPFR_RNDN);
+        }
+        if (!v) { expr_free(part[0]); return expr_copy((Expr*)cur); }
+        part[k] = v;
+    }
+    if (cur->type == EXPR_MPFR) return part[0];
+    return make_complex(part[0], part[1]);
+}
+
 /* The verdict at the precision cap, part by part: `cur` (at the cap) against
  * `ref` (at least 32 bits lower) and `first` (the first evaluation). A fresh
- * tree, never mutating. A certified MPFR leaf is kept. A zero or shrinking
- * one -- or one whose `ref` is zero while some addition of the pass at the cap
- * kept at most 16 bits (`total_cancel`: noise in the last bits) -- becomes a
- * zero of `bits` precision and sets *vanished. Any other unsettled leaf is
- * kept at the bits it can claim (at least 1) and sets *unsettled, as does a
- * part whose shape changed. */
+ * tree, never mutating. An arbitrary-precision number, real or complex, is
+ * judged by adaptive_num_keep's rule. A certified one is kept. A zero or
+ * shrinking one -- or one whose `ref` is zero while some addition of the
+ * pass at the cap kept at most 16 bits (`total_cancel`: noise in the last
+ * bits) -- becomes a zero of `bits` precision and sets *vanished. Any other
+ * unsettled number is kept at the bits it can claim and sets *unsettled, as
+ * does a part whose shape changed. `extrap` says whether the agreement may be
+ * extrapolated by the gap (adaptive_good_bits): not when the climb's
+ * agreement stopped growing with the precision (see numericalize_top). */
 static Expr* expr_cap_verdict(const Expr* cur, const Expr* ref, const Expr* first,
-                              long gap, long bits, bool total_cancel,
+                              long gap, long bits, bool total_cancel, bool extrap,
                               bool* vanished, bool* unsettled) {
-    if (cur->type == EXPR_MPFR && ref && ref->type == EXPR_MPFR) {
-        const mpfr_srcptr c = cur->data.mpfr, r = ref->data.mpfr;
-        if (!mpfr_zero_p(c)) {
-            long good = adaptive_good_bits(mpfr_agree_bits(c, r), gap);
-            if (good >= bits) return expr_copy((Expr*)cur);
+    mpfr_srcptr cr, ci, rr, ri;
+    if (adaptive_num_parts(cur, &cr, &ci) && adaptive_num_parts(ref, &rr, &ri)) {
+        long tc = adaptive_num_exp(cr, ci), tr = adaptive_num_exp(rr, ri);
+        if (tc != LONG_MIN) {
+            const long pb = numeric_width_precision_bits(bits);
+            mpfr_srcptr cx[2] = { cr, ci }, rx[2] = { rr, ri };
+            bool noise[2];
+            long good[2], dexp[2];
+            bool certified = true;
+            for (int k = 0; k < 2; k++) {
+                noise[k] = adaptive_part_is_noise(cx[k], tc, pb)
+                        && adaptive_part_is_noise(rx[k], tr == LONG_MIN ? tc : tr, pb);
+                good[k] = 1L << 30;
+                dexp[k] = LONG_MIN;
+                if (noise[k]) continue;
+                long a = adaptive_part_agree(cx[k], rx[k], &dexp[k]);
+                good[k] = a <= LONG_MIN / 4 ? 0 : adaptive_good_bits(a, extrap ? gap : 0);
+                if (good[k] < bits) certified = false;
+            }
+            if (certified)
+                return adaptive_num_keep(cur, cr, ci, bits, NULL, dexp, noise);
             /* shrinking: smaller than the lower evaluation by half the
              * precision gained (noise of size 2^-W shrinks by all of it) and
              * smaller than the first evaluation too */
             long drop = gap / 2 > 16 ? gap / 2 : 16;
             bool shrink;
-            if (mpfr_zero_p(r)) {
+            if (tr == LONG_MIN) {
                 shrink = total_cancel;
             } else {
-                shrink = mpfr_regular_p(r)
-                    && mpfr_get_exp(c) <= mpfr_get_exp(r) - drop
-                    && (!first || first->type != EXPR_MPFR
-                        || !mpfr_regular_p(first->data.mpfr)
-                        || mpfr_get_exp(c) <= mpfr_get_exp(first->data.mpfr) - 16);
+                mpfr_srcptr fr, fi;
+                long tf = adaptive_num_parts(first, &fr, &fi) ? adaptive_num_exp(fr, fi)
+                                                             : LONG_MIN;
+                shrink = tc <= tr - drop && (tf == LONG_MIN || tc <= tf - 16);
             }
             if (!shrink) {
                 *unsettled = true;
-                if (good < 1) good = 1;
-                /* `good` bits are known: the precision, stored with its guard */
-                long kw = numeric_precision_bits_width(good);
-                Expr* k = expr_new_mpfr_bits((mpfr_prec_t)(kw < bits ? kw : bits));
-                if (!k) return expr_copy((Expr*)cur);
-                mpfr_set(k->data.mpfr, c, MPFR_RNDN);
-                return k;
+                return adaptive_num_keep(cur, cr, ci, bits, good, dexp, noise);
             }
         }
         *vanished = true;
         Expr* z = expr_new_mpfr_bits((mpfr_prec_t)bits);
         if (z) mpfr_set_zero(z->data.mpfr, 1);
-        return z ? z : expr_copy((Expr*)cur);
+        if (!z) return expr_copy((Expr*)cur);
+        if (cur->type == EXPR_MPFR) return z;
+        /* a complex zero stays complex: 0``p + 0``p I, as part by part */
+        Expr* zi = expr_copy(z);
+        Expr* zs[2] = { z, zi };
+        return expr_new_function(expr_copy(cur->data.function.head), zs, 2);
     }
     if (cur->type != EXPR_FUNCTION || !ref || ref->type != EXPR_FUNCTION
         || cur->data.function.arg_count != ref->data.function.arg_count) {
-        if (expr_agree_bits(cur, ref) < bits) *unsettled = true;
+        if (expr_agree_bits(cur, ref, true) < bits) *unsettled = true;
         return expr_copy((Expr*)cur);
     }
     bool first_ok = first && first->type == EXPR_FUNCTION
@@ -3548,7 +3785,7 @@ static Expr* expr_cap_verdict(const Expr* cur, const Expr* ref, const Expr* firs
     for (size_t i = 0; i < n; i++)
         args[i] = expr_cap_verdict(cur->data.function.args[i], ref->data.function.args[i],
                                    first_ok ? first->data.function.args[i] : NULL,
-                                   gap, bits, total_cancel, vanished, unsettled);
+                                   gap, bits, total_cancel, extrap, vanished, unsettled);
     Expr* out = expr_new_function(expr_copy(cur->data.function.head), args, n);
     free(args);
     return out;
@@ -3667,6 +3904,559 @@ static long numeric_max_extra_bits(double* digits_out) {
 }
 #endif
 
+/* ---- branch cuts at an exact argument (nbc_*) ------------------------------
+ *
+ * A head with a branch cut (Power with a non-integer exponent, Log, the
+ * inverse trigonometric and hyperbolic functions) evaluated at an EXACT
+ * argument that lies on its cut: the exact value has Im == 0 (Re == 0 for a
+ * cut on the imaginary axis), but its numerical value can carry a rounding
+ * residue of either sign there -- -1/48 - 13/(768 c) - c/3 with c a complex
+ * cube root is exactly -1/8, and its machine value is -0.125 - 6.9*10^-18 I.
+ * The kernel then picks the side of the cut by the sign of that residue:
+ * N[Sqrt[a]] was -0.353553 I (the principal value is +0.353553 I), and at
+ * N[.., 30] the residue's sign changed from one precision to the next, so the
+ * adaptive climb never settled and returned 0.*^-30 + 0.4 I with N::meprec.
+ * No precision resolves an exact zero, so the side is decided exactly:
+ *
+ *  - the straddle is detected on the numerical argument (a head test and one
+ *    comparison of exponents, only for a Complex argument of a cut head, so
+ *    ordinary N pays nothing): the cut component is below half the working
+ *    precision relative to the other, and the other lies on the cut;
+ *  - the exact argument's component sign is asked of qqbar (an exact
+ *    algebraic number: its minimal polynomial certifies a zero);
+ *    zero -> the component is dropped, so the kernel evaluates at the real
+ *    (or pure imaginary) number, the same principal-side convention as at an
+ *    exact real argument (Sqrt[-1/8] = I/(2 Sqrt[2]), Log[-1] = I Pi);
+ *    nonzero -> the residue is given that sign (its size is within the noise,
+ *    so the value is unchanged to the precision);
+ *  - otherwise (not algebraic: Pi, Log, ... inside) the argument alone is
+ *    re-evaluated at rising precision, up to $MaxExtraPrecision, until the
+ *    component separates from 0; if it never does, N::meprec (to N's caller)
+ *    and the principal side.
+ * The same path serves the zero tests' sampler, whose constant
+ * subexpressions are exact: PossibleZeroQ no longer decides a residual on a
+ * branch chosen by rounding. */
+#ifdef USE_MPFR
+static bool g_nbc_warned = false;   /* one N::meprec per user N call */
+
+enum { NBC_NONE = 0, NBC_REAL_AXIS, NBC_IMAG_AXIS };
+
+/* The cut axis of argument i of head hn (n arguments, numericalized args
+ * `na`), or NBC_NONE; lo/hi/inside say where on the axis the cut lies: the
+ * on-axis value t is on it when (inside ? lo <= t <= hi : t <= lo || t >= hi).
+ * The ends are included: a point at a branch point is as ambiguous. */
+static int nbc_cut(const char* hn, size_t n, size_t i, Expr* const* na,
+                   double* lo, double* hi, bool* inside) {
+    *inside = false;
+    if (hn == SYM_Power) {
+        if (n != 2 || i != 0) return NBC_NONE;
+        const Expr* p = na[1];
+        if (expr_is_integer_like(p)) return NBC_NONE;
+        if (p->type == EXPR_REAL && p->data.real == floor(p->data.real)) return NBC_NONE;
+        if (p->type == EXPR_MPFR && mpfr_integer_p(p->data.mpfr)) return NBC_NONE;
+        *lo = 0.0; *hi = INFINITY; return NBC_REAL_AXIS;            /* t <= 0 */
+    }
+    if (hn == SYM_Log) { *lo = 0.0; *hi = INFINITY; return NBC_REAL_AXIS; }
+    /* The complete elliptic integrals: K(m), E(m) and Pi(n|m) have their cuts
+     * on m >= 1 and n >= 1 (the incomplete forms' cuts are in derived
+     * quantities; see nbc_elliptic). */
+    if ((n == 1 && (hn == SYM_EllipticK || hn == SYM_EllipticE))
+        || (n == 2 && hn == SYM_EllipticPi)) {
+        *lo = -INFINITY; *hi = 1.0; return NBC_REAL_AXIS;           /* t >= 1 */
+    }
+    if (n != 1) return NBC_NONE;
+    if (hn == SYM_ArcSin || hn == SYM_ArcCos || hn == SYM_ArcTanh) {
+        *lo = -1.0; *hi = 1.0; return NBC_REAL_AXIS;                /* |t| >= 1 */
+    }
+    if (hn == SYM_ArcCosh) { *lo = 1.0; *hi = INFINITY; return NBC_REAL_AXIS; }
+    if (hn == SYM_ArcSech) { *lo = 0.0; *hi = 1.0; return NBC_REAL_AXIS; }
+    if (hn == SYM_ArcCoth || hn == SYM_ArcSec || hn == SYM_ArcCsc) {
+        *lo = -1.0; *hi = 1.0; *inside = true; return NBC_REAL_AXIS; /* |t| <= 1 */
+    }
+    if (hn == SYM_ArcTan || hn == SYM_ArcSinh) {
+        *lo = -1.0; *hi = 1.0; return NBC_IMAG_AXIS;                /* |Im| >= 1 */
+    }
+    if (hn == SYM_ArcCot || hn == SYM_ArcCsch) {
+        *lo = -1.0; *hi = 1.0; *inside = true; return NBC_IMAG_AXIS; /* |Im| <= 1 */
+    }
+    return NBC_NONE;
+}
+
+/* A nonzero finite inexact number: its binary exponent and precision. */
+static bool nbc_num(const Expr* x, long* ex, long* prec) {
+    if (x->type == EXPR_REAL) {
+        if (x->data.real == 0.0 || !isfinite(x->data.real)) return false;
+        int k;
+        (void)frexp(x->data.real, &k);
+        *ex = k; *prec = DBL_MANT_DIG;
+        return true;
+    }
+    if (x->type == EXPR_MPFR) {
+        if (!mpfr_regular_p(x->data.mpfr)) return false;
+        *ex = (long)mpfr_get_exp(x->data.mpfr);
+        *prec = (long)mpfr_get_prec(x->data.mpfr);
+        return true;
+    }
+    return false;
+}
+
+static double nbc_double(const Expr* x) {
+    return x->type == EXPR_REAL ? x->data.real : mpfr_get_d(x->data.mpfr, MPFR_RNDN);
+}
+
+static int nbc_sign(const Expr* x) {
+    return x->type == EXPR_REAL ? (x->data.real > 0) - (x->data.real < 0)
+                                : mpfr_sgn(x->data.mpfr);
+}
+
+/* True when the numerical argument z (a Complex) has its cut component
+ * within the noise of its precision -- below half of it, relative to the
+ * other component -- and, when `region`, the other component on the cut. */
+static bool nbc_straddle(const Expr* z, int axis, double lo, double hi, bool inside,
+                         bool region) {
+    Expr *re, *im;
+    if (!is_complex((Expr*)z, &re, &im)) return false;
+    const Expr* comp  = axis == NBC_REAL_AXIS ? im : re;
+    const Expr* other = axis == NBC_REAL_AXIS ? re : im;
+    long ec, eo, pc, po;
+    if (!nbc_num(comp, &ec, &pc) || !nbc_num(other, &eo, &po)) return false;
+    long bits = pc < po ? pc : po;
+    if (ec >= eo - bits / 2) return false;              /* separated from 0 */
+    if (region) {
+        double t = nbc_double(other);
+        bool on = inside ? (t >= lo && t <= hi) : (t <= lo || t >= hi);
+        if (!on) return false;
+    }
+    return true;
+}
+
+/* The cut component of the Complex z is an inexact exact-zero (0. or an MPFR
+ * 0) left by an addition that kept fewer than half the bits (`left`, the
+ * argument's cancellation record), and the other component lies on the cut:
+ * a cancelled residue whose sign was lost, as ambiguous as a tiny one. */
+static bool nbc_zero_straddle(const Expr* z, int axis, double lo, double hi, bool inside,
+                              long left) {
+    Expr *re, *im;
+    if (!is_complex((Expr*)z, &re, &im)) return false;
+    const Expr* comp  = axis == NBC_REAL_AXIS ? im : re;
+    const Expr* other = axis == NBC_REAL_AXIS ? re : im;
+    long eo, po;
+    if (!nbc_num(other, &eo, &po) || left >= po / 2) return false;
+    bool zero = (comp->type == EXPR_REAL && comp->data.real == 0.0)
+             || (comp->type == EXPR_MPFR && mpfr_zero_p(comp->data.mpfr));
+    if (!zero) return false;
+    double t = nbc_double(other);
+    return inside ? (t >= lo && t <= hi) : (t <= lo || t >= hi);
+}
+
+/* Every leaf exact and the whole a numeric quantity (no free symbol): the
+ * argument has an exact value whose side can be decided. */
+static bool nbc_exact(const Expr* e) {
+    switch (e->type) {
+    case EXPR_INTEGER: case EXPR_BIGINT: return true;
+    case EXPR_SYMBOL:
+        if (find_constant(e->data.symbol.name)) return true;
+        return (get_attributes(e->data.symbol.name) & ATTR_CONSTANT) != 0;
+    case EXPR_FUNCTION: {
+        const Expr* h = e->data.function.head;
+        if (h->type != EXPR_SYMBOL) return false;
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_Root || hn == SYM_AlgebraicNumber) return true;   /* exact algebraic */
+        if (hn != SYM_Rational && hn != SYM_Complex &&
+            !(get_attributes(hn) & ATTR_NUMERICFUNCTION)) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!nbc_exact(e->data.function.args[i])) return false;
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+/* A residue of sign sg far below the precision of x (a nonzero real): what
+ * an imaginary part that cancelled to an exact 0. stands for once its sign
+ * is known. */
+static Expr* nbc_tiny(const Expr* x, int sg) {
+    if (x->type == EXPR_REAL)
+        return expr_new_real(ldexp(fabs(x->data.real), -(DBL_MANT_DIG + 8)) * sg);
+    Expr* t = expr_new_mpfr_bits(mpfr_get_prec(x->data.mpfr));
+    if (!t) return NULL;
+    mpfr_abs(t->data.mpfr, x->data.mpfr, MPFR_RNDN);
+    mpfr_mul_2si(t->data.mpfr, t->data.mpfr, -(long)mpfr_get_prec(x->data.mpfr) - 8, MPFR_RNDN);
+    if (sg < 0) mpfr_neg(t->data.mpfr, t->data.mpfr, MPFR_RNDN);
+    return t;
+}
+
+/* True when e contains a Complex: the only source of an imaginary part
+ * that can cancel to an exact 0. in a real-valued argument. */
+static bool nbc_has_complex(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nbc_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* z (a Complex) with its cut component dropped (sg == 0) or given sign sg. */
+static Expr* nbc_set_component(const Expr* z, int axis, int sg) {
+    Expr *re, *im;
+    is_complex((Expr*)z, &re, &im);
+    Expr* comp = axis == NBC_REAL_AXIS ? im : re;
+    if (sg == 0) {
+        if (axis == NBC_REAL_AXIS) return expr_copy(re);
+        return make_complex(expr_new_integer(0), expr_copy(im));
+    }
+    Expr* c;
+    if (nbc_sign(comp) == 0) {                 /* cancelled to an exact 0. */
+        c = nbc_tiny(axis == NBC_REAL_AXIS ? re : im, sg);
+        if (!c) return expr_copy((Expr*)z);
+    } else if (nbc_sign(comp) == sg) {
+        c = expr_copy(comp);
+    } else if (comp->type == EXPR_REAL) {
+        c = expr_new_real(-comp->data.real);
+    } else {
+        c = expr_new_mpfr_bits(mpfr_get_prec(comp->data.mpfr));
+        if (!c) return expr_copy((Expr*)z);
+        mpfr_neg(c->data.mpfr, comp->data.mpfr, MPFR_RNDN);
+    }
+    return axis == NBC_REAL_AXIS ? make_complex(expr_copy(re), c)
+                                 : make_complex(c, expr_copy(im));
+}
+
+/* The pass's cancellation record, handed back and reset to "nothing yet". */
+static NbcRec nbc_rec_take(void) {
+    NbcRec r;
+    r.cancel = g_numeric_cancel_bits;
+    r.left   = g_numeric_cancel_left;
+    r.absorb = g_numeric_absorb_bits;
+    g_numeric_cancel_bits = 0;
+    g_numeric_cancel_left = LONG_MAX;
+    g_numeric_absorb_bits = 0;
+    return r;
+}
+
+static void nbc_rec_merge(NbcRec* into, NbcRec r) {
+    if (r.cancel > into->cancel) into->cancel = r.cancel;
+    if (r.left < into->left) into->left = r.left;
+    if (r.absorb > into->absorb) into->absorb = r.absorb;
+}
+
+/* A head with a branch cut nbc_cut knows (a few pointer compares). */
+static bool nbc_is_cut_head(const Expr* h) {
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    return n == SYM_Power || n == SYM_Log || n == SYM_ArcSin || n == SYM_ArcCos
+        || n == SYM_ArcTan || n == SYM_ArcCot || n == SYM_ArcSec || n == SYM_ArcCsc
+        || n == SYM_ArcSinh || n == SYM_ArcCosh || n == SYM_ArcTanh || n == SYM_ArcCoth
+        || n == SYM_ArcSech || n == SYM_ArcCsch
+        || n == SYM_EllipticK || n == SYM_EllipticE || n == SYM_EllipticPi;
+}
+
+/* A number (real or Complex of numbers) produced by numericalization. */
+static bool nbc_is_number(const Expr* v) {
+    Expr *re, *im;
+    if (!v) return false;
+    if (v->type == EXPR_REAL || v->type == EXPR_MPFR) return true;
+    if (!is_complex((Expr*)v, &re, &im)) return false;
+    return (re->type == EXPR_REAL || re->type == EXPR_MPFR || expr_is_integer_like(re))
+        && (im->type == EXPR_REAL || im->type == EXPR_MPFR);
+}
+
+/* Decide the side for one straddling argument: `orig` exact, `z` its
+ * numerical value at `spec` (consumed). Returns the replacement value; *rec
+ * is the argument's cancellation record, replaced when the value is
+ * re-derived from an exact form. */
+static Expr* nbc_settle(const Expr* orig, Expr* z, int axis, NumericSpec spec, NbcRec* rec) {
+    int sg = flint_qqbar_part_sign(orig, axis == NBC_REAL_AXIS);
+    if (sg == 0) {
+        /* The component is exactly 0. The rest of the value is then derived
+         * again from the canonical exact form (-1/8 for the radicand above):
+         * the rounding residue's cancellation goes with it, which otherwise
+         * kept N[.., p]'s adaptive climb from certifying any pass. */
+        Expr* canon = flint_qqbar_canonical(orig, QQBAR_METHOD_AUTOMATIC);
+        if (canon) {
+            NbcRec outer = nbc_rec_take();
+            Expr* v = numericalize_rec(canon, spec);
+            NbcRec mine = nbc_rec_take();
+            g_numeric_cancel_bits = outer.cancel;
+            g_numeric_cancel_left = outer.left;
+            g_numeric_absorb_bits = outer.absorb;
+            expr_free(canon);
+            if (nbc_is_number(v)) {
+                Expr* r = is_complex(v, NULL, NULL) ? nbc_set_component(v, axis, 0) : v;
+                if (r != v) expr_free(v);
+                if (axis == NBC_REAL_AXIS || is_complex(r, NULL, NULL)) {
+                    *rec = mine;
+                    expr_free(z);
+                    return r;
+                }
+                v = r;
+            }
+            expr_free(v);
+        }
+    }
+    if (!is_complex(z, NULL, NULL)) {
+        /* A real value whose imaginary part cancelled to an exact 0. (see
+         * nbc_settle_args): exactly real -> as it is (the canonical form
+         * above failed); a nonzero imaginary part -> a residue of its sign,
+         * far below the precision, puts the value on the side it is on. */
+        if (sg != 1 && sg != -1) return z;
+        Expr* t = nbc_tiny(z, sg);
+        return t ? make_complex(z, t) : z;
+    }
+    if (sg >= -1) {
+        Expr* r = nbc_set_component(z, axis, sg);
+        expr_free(z);
+        return r;
+    }
+    /* Not decidable exactly: re-evaluate the argument alone, higher. Those
+     * probes' cancellations are their own, not the pass's. */
+    long b0 = numeric_spec_is_mpfr(spec) ? spec.bits : (long)DBL_MANT_DIG;
+    long Wmax = b0 + numeric_max_extra_bits(NULL) + NUMERIC_GUARD_BITS;
+    NbcRec outer = nbc_rec_take();
+    Expr* found = NULL;
+    for (long W = 2 * b0 > b0 + 64 ? 2 * b0 : b0 + 64; ; W *= 2) {
+        if (W > Wmax) W = Wmax;
+        if (W <= b0) break;
+        NumericSpec w;
+        w.mode = NUMERIC_MODE_MPFR;
+        w.bits = W;
+        Expr* r = numericalize_pass(orig, w);
+        Expr *re, *im;
+        if (r && is_complex(r, &re, &im) && !nbc_straddle(r, axis, 0.0, 0.0, false, false)) {
+            long ec, pc;
+            if (nbc_num(axis == NBC_REAL_AXIS ? im : re, &ec, &pc)) {
+                found = r;                      /* separated: its sign is known */
+                break;
+            }
+        }
+        expr_free(r);
+        if (W >= Wmax) break;
+    }
+    (void)nbc_rec_take();
+    g_numeric_cancel_bits = outer.cancel;
+    g_numeric_cancel_left = outer.left;
+    g_numeric_absorb_bits = outer.absorb;
+    if (found) {
+        expr_free(z);
+        return numeric_round_result(found, spec);
+    }
+    /* Unresolved within $MaxExtraPrecision: the principal side, reported. */
+    if (g_n_user && !g_nbc_warned) {
+        double mep = 50.0;
+        (void)numeric_max_extra_bits(&mep);
+        char* str = expr_to_string((Expr*)orig);
+        mth_message("N", "meprec",
+            "Internal precision limit $MaxExtraPrecision = %g reached while evaluating %s.",
+            mep, str ? str : "");
+        free(str);
+        g_nbc_warned = true;
+    }
+    Expr* r = nbc_set_component(z, axis, 0);
+    expr_free(z);
+    return r;
+}
+
+/* ---- the incomplete elliptic integrals' cuts (nbc_elliptic) -------------
+ *
+ * EllipticF[phi, m], EllipticE[phi, m] and EllipticPi[n, phi, m] are
+ * evaluated through Carlson's forms (flint_num_bridge.c, nb_ell_*), whose
+ * cuts are not in an argument but in two derived quantities,
+ *
+ *   y = 1 - m Sin[phi]^2   (all three)      p = 1 - n Sin[phi]^2   (Pi),
+ *
+ * each with its cut on (-oo, 0], and x = Cos[phi]^2, on its cut where Re phi
+ * is an odd multiple of Pi/2 (EllipticF[ArcSin[2], m]: there the side picks
+ * the quasi-period shift). An exact argument can put either exactly
+ * there -- an antiderivative of 1/((x - 3) Sqrt[1 + x^3]) carries
+ * EllipticPi[4/(1 + (-1)^(1/3)), ArcSin[Sqrt[(1 + (-1)^(1/3))/(1 + x)]], ..]
+ * with p = (x - 3)/(x + 1) < 0 on -1 < x < 3 -- and the kernel recomputes y
+ * and p from the rounded arguments, so the side came from the sign of a
+ * rounding residue: N[.., 30] and N[.., 40] gave values that differ by a
+ * residue of the integrand (0.46 - 1.49 I against -0.35 + 1.52 I). The
+ * kernel cannot know an exact zero, so the side is decided here, as for the
+ * argument cuts above: the quantity is built from the EXACT arguments, the
+ * sign of its imaginary part asked of qqbar (zero -> on the cut -> the limit
+ * from above, the kernel's convention), or, not algebraic, separated by
+ * raising the precision of the quantity alone up to $MaxExtraPrecision.
+ * Only a call whose numerical quantity is within the noise of the cut pays
+ * for more than one evaluation of 1 - c Sin[phi]^2. */
+
+/* 1 - c Sin[phi]^2, evaluated (exact or numerical arguments alike). */
+static Expr* nbc_ell_quantity(const Expr* c, const Expr* phi) {
+    Expr* sn[1] = { expr_copy((Expr*)phi) };
+    Expr* sq[2] = { expr_new_function(expr_new_symbol(SYM_Sin), sn, 1), expr_new_integer(2) };
+    Expr* tm[3] = { expr_new_integer(-1), expr_copy((Expr*)c),
+                    expr_new_function(expr_new_symbol(SYM_Power), sq, 2) };
+    Expr* pl[2] = { expr_new_integer(1), expr_new_function(expr_new_symbol(SYM_Times), tm, 3) };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), pl, 2));
+}
+
+/* The numerical quantity z (1 - c Sin[phi]^2 at the numericalized
+ * arguments) is ambiguous: its real part negative and its imaginary part
+ * within the noise, or cancelled to an exact 0. */
+static bool nbc_ell_ambiguous(const Expr* z) {
+    if (!z) return false;
+    if (z->type == EXPR_REAL || z->type == EXPR_MPFR) return nbc_sign(z) < 0;
+    Expr *re, *im;
+    if (!is_complex((Expr*)z, &re, &im)) return false;
+    if (!(re->type == EXPR_REAL || re->type == EXPR_MPFR) || nbc_sign(re) >= 0) return false;
+    if (im->type == EXPR_REAL && im->data.real == 0.0) return true;
+    if (im->type == EXPR_MPFR && mpfr_zero_p(im->data.mpfr)) return true;
+    return nbc_straddle(z, NBC_REAL_AXIS, 0.0, INFINITY, false, true);
+}
+
+/* The side (+1 / -1, as flint_num_elliptic_inc_sided takes it) of the exact
+ * quantity 1 - c Sin[phi]^2: the sign of its imaginary part, 0 counting as
+ * +1 (on the cut: the limit from above). */
+static int nbc_ell_side(const Expr* c, const Expr* phi, NumericSpec spec) {
+    Expr* q = nbc_ell_quantity(c, phi);
+    if (!q) return 1;
+    int sg = flint_qqbar_part_sign(q, 1);
+    if (sg >= -1) {
+        expr_free(q);
+        return sg < 0 ? -1 : 1;
+    }
+    /* Not algebraic: the quantity alone, higher, until Im separates. Those
+     * probes' cancellations are their own, not the pass's. */
+    long b0 = numeric_spec_is_mpfr(spec) ? spec.bits : (long)DBL_MANT_DIG;
+    long Wmax = b0 + numeric_max_extra_bits(NULL) + NUMERIC_GUARD_BITS;
+    NbcRec outer = nbc_rec_take();
+    int side = 0;
+    for (long W = 2 * b0 > b0 + 64 ? 2 * b0 : b0 + 64; ; W *= 2) {
+        if (W > Wmax) W = Wmax;
+        if (W <= b0) break;
+        NumericSpec w;
+        w.mode = NUMERIC_MODE_MPFR;
+        w.bits = W;
+        Expr* r = numericalize_pass(q, w);
+        Expr *re, *im;
+        long ec, pc;
+        if (r && is_complex(r, &re, &im) && nbc_num(im, &ec, &pc)
+            && !nbc_straddle(r, NBC_REAL_AXIS, 0.0, 0.0, false, false))
+            side = nbc_sign(im);
+        expr_free(r);
+        if (side != 0 || W >= Wmax) break;
+    }
+    (void)nbc_rec_take();
+    g_numeric_cancel_bits = outer.cancel;
+    g_numeric_cancel_left = outer.left;
+    g_numeric_absorb_bits = outer.absorb;
+    if (side == 0 && g_n_user && !g_nbc_warned) {
+        double mep = 50.0;
+        (void)numeric_max_extra_bits(&mep);
+        char* str = expr_to_string(q);
+        mth_message("N", "meprec",
+            "Internal precision limit $MaxExtraPrecision = %g reached while evaluating %s.",
+            mep, str ? str : "");
+        free(str);
+        g_nbc_warned = true;
+    }
+    expr_free(q);
+    return side < 0 ? -1 : 1;
+}
+
+/* The incomplete integral's FLINT_ELL_* kind for the call e, or -1. */
+static int nbc_ell_kind(const Expr* e) {
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return -1;
+    const char* hn = h->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (n == 2 && hn == SYM_EllipticF) return FLINT_ELL_F;
+    if (n == 2 && hn == SYM_EllipticE) return FLINT_ELL_E;
+    if (n == 3 && hn == SYM_EllipticPi) return FLINT_ELL_PI;
+    return -1;
+}
+
+/* The value of the incomplete elliptic call e (exact arguments; `na` its
+ * numericalized ones) when y or p is within the noise of its cut, with the
+ * side decided exactly; NULL otherwise (the ordinary evaluation is right). */
+static Expr* nbc_elliptic(const Expr* e, Expr* const* na, int kind, NumericSpec spec) {
+    size_t n = e->data.function.arg_count;
+    bool any_complex = false;
+    for (size_t i = 0; i < n; i++) {
+        if (!nbc_is_number(na[i])) return NULL;
+        if (is_complex(na[i], NULL, NULL)) any_complex = true;
+    }
+    if (!any_complex) return NULL;               /* real arguments: no residue */
+    Expr* const* ea = e->data.function.args;
+    for (size_t i = 0; i < n; i++)
+        if (!nbc_exact(ea[i])) return NULL;      /* an inexact input carries its own side */
+    const size_t ip = kind == FLINT_ELL_PI ? 1 : 0;   /* phi's position */
+    Expr* one = expr_new_integer(1);
+    Expr* zx = nbc_ell_quantity(one, na[ip]);        /* Cos[phi]^2 = 1 - Sin[phi]^2 */
+    Expr* zy = nbc_ell_quantity(na[ip + 1], na[ip]);
+    Expr* zp = kind == FLINT_ELL_PI ? nbc_ell_quantity(na[0], na[1]) : NULL;
+    bool ax = nbc_ell_ambiguous(zx), ay = nbc_ell_ambiguous(zy), ap = nbc_ell_ambiguous(zp);
+    expr_free(zx);
+    expr_free(zy);
+    expr_free(zp);
+    Expr* v = NULL;
+    if (ax || ay || ap) {
+        int sx = ax ? nbc_ell_side(one, ea[ip], spec) : 0;
+        int sy = ay ? nbc_ell_side(ea[ip + 1], ea[ip], spec) : 0;
+        int sp = ap ? nbc_ell_side(ea[0], ea[1], spec) : 0;
+        v = flint_num_elliptic_inc_sided(kind, kind == FLINT_ELL_PI ? na[0] : NULL,
+                                         na[ip], na[ip + 1], sx, sy, sp);
+    }
+    expr_free(one);
+    return v;
+}
+
+/* See the block comment above. `new_args` are the numericalized arguments of
+ * the call `e` (a cut head); a straddling one is replaced in place. `before`
+ * and `per_arg` are the cancellation records the argument loop took apart;
+ * they are merged back into the pass's record, less whatever a replaced
+ * argument no longer carries. */
+static void nbc_settle_args(const Expr* e, Expr** new_args, size_t n, NumericSpec spec,
+                            NbcRec before, const NbcRec* per_arg) {
+    const Expr* h = e->data.function.head;
+    NbcRec rec[2];
+    for (size_t i = 0; i < n; i++) rec[i] = per_arg[i];
+    for (size_t i = 0; i < n; i++) {
+        Expr* z = new_args[i];
+        if (!z) continue;
+        double lo, hi;
+        bool inside;
+        if (z->type == EXPR_REAL || z->type == EXPR_MPFR) {
+            /* A real value is ambiguous only when an addition producing it
+             * kept under half its bits: an imaginary part that cancelled to
+             * an exact 0. at this precision (Plus drops it), which may as
+             * well have been a residue of either sign. Rare: an exact atom
+             * or an ordinary real sum records no such loss. */
+            long ex, prec;
+            if (rec[i].left >= (long)DBL_MANT_DIG / 2 || !nbc_num(z, &ex, &prec)
+                || rec[i].left >= prec / 2) continue;
+            if (nbc_cut(h->data.symbol.name, n, i, new_args, &lo, &hi, &inside)
+                != NBC_REAL_AXIS) continue;
+            double t = nbc_double(z);
+            if (!(inside ? (t >= lo && t <= hi) : (t <= lo || t >= hi))) continue;
+            const Expr* orig = e->data.function.args[i];
+            if (!nbc_has_complex(orig) || !nbc_exact(orig)) continue;
+            new_args[i] = nbc_settle(orig, z, NBC_REAL_AXIS, spec, &rec[i]);
+            continue;
+        }
+        /* the common case leaves here: a symbolic argument */
+        if (z->type != EXPR_FUNCTION || z->data.function.head->type != EXPR_SYMBOL
+            || z->data.function.head->data.symbol.name != SYM_Complex) continue;
+        int axis = nbc_cut(h->data.symbol.name, n, i, new_args, &lo, &hi, &inside);
+        if (axis == NBC_NONE) continue;
+        if (!nbc_straddle(z, axis, lo, hi, inside, true)
+            && !nbc_zero_straddle(z, axis, lo, hi, inside, rec[i].left)) continue;
+        const Expr* orig = e->data.function.args[i];
+        if (!nbc_exact(orig)) continue;     /* an inexact input carries its own side */
+        new_args[i] = nbc_settle(orig, z, axis, spec, &rec[i]);
+    }
+    NbcRec all = nbc_rec_take();
+    nbc_rec_merge(&all, before);
+    for (size_t i = 0; i < n; i++) nbc_rec_merge(&all, rec[i]);
+    g_numeric_cancel_bits = all.cancel;
+    g_numeric_cancel_left = all.left;
+    g_numeric_absorb_bits = all.absorb;
+}
+#endif /* USE_MPFR */
+
 Expr* numericalize(const Expr* e, NumericSpec spec) {
     int saved = g_n_held_depth;
     bool saved_contagion = g_n_contagion;
@@ -3675,7 +4465,14 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
     g_n_contagion = false;
     g_n_user = g_n_user_pending;
     g_n_user_pending = false;
+#ifdef USE_MPFR
+    bool saved_warned = g_nbc_warned;
+    if (g_n_user) g_nbc_warned = false;
+#endif
     Expr* r = numericalize_top(e, spec);
+#ifdef USE_MPFR
+    if (g_n_user) g_nbc_warned = saved_warned;
+#endif
     g_n_held_depth = saved;
     g_n_contagion = saved_contagion;
     g_n_user = saved_user;
@@ -3781,7 +4578,13 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     if (adaptive) {
         const long p = spec.bits;
         double mep_digits = 50.0;
+        /* The budget is p + $MaxExtraPrecision (plus the guard) -- or the
+         * first pass's own precision W0 when the plan already went above it
+         * for the leaves (a large exact integer is converted at its full
+         * width: 667 bits for a 10^200). The climb never passes it. */
+        const long W0 = raised ? work.bits : p;
         long Wmax = p + numeric_max_extra_bits(&mep_digits) + NUMERIC_GUARD_BITS;
+        if (Wmax < W0) Wmax = W0;
         /* $MaxPrecision bounds the working precision too: the constructors
          * clamp every pass to it, so passes above it would all be the same. */
         {
@@ -3798,6 +4601,17 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
         long Ap = absorbed;
         Expr* prev2 = NULL;  long Wp2 = 0;
         Expr* first = expr_copy(r_raw);
+        /* The previous comparison's agreement (as whole numbers). The
+         * extrapolation adaptive_good_bits makes assumes a fixed loss, i.e. an
+         * agreement that grows with the precision of the passes compared;
+         * where it did not grow at all (the results agree on the same 80 bits
+         * at 787, 890 and 954 bits), the passes are stable without being
+         * right -- N[D[P, m] - rho /. m -> 7/10, 30] agreed with itself on a
+         * wrong -0.15727953307908341438013 -- and the verdict at the cap may
+         * claim only what they agree on. An agreement that did grow keeps its
+         * extrapolation. */
+        long Aprev = -1;
+        bool compared = false;
         while (prev) {
             long W2 = Wp + 64;
             if (Lp < Wp) {                       /* a measured loss: go where it is covered */
@@ -3815,7 +4629,55 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             /* the pass at the cap is compared with one 64 bits below it */
             if (W2 > Wmax - 64 && Wp < Wmax - 64) W2 = Wmax - 64;
             if (W2 > Wmax) W2 = Wmax;
-            if (W2 <= Wp) break;
+            if (W2 <= Wp) {
+                /* No room above the first pass: the budget is already spent
+                 * (the plan's W0 reached it -- N[D[P, m] - rho /. m -> 7/10,
+                 * 30] starts at 787 bits for its 10^160 coefficients -- or
+                 * $MaxExtraPrecision = 0, or $MaxPrecision). The loop used to
+                 * stop here and return the uncertified first pass silently:
+                 * -0.157... = -rho for that exact zero, printed with all 30
+                 * digits. Judge it instead, exactly as at the cap, against one
+                 * pass 64 bits BELOW it (within the budget), and say so. */
+                if (!compared) {
+                    bool vanished = false, unsettled = true;
+                    long Wl = Wp - 64;
+                    Expr* low = NULL;
+                    if (Wl >= p) {
+                        NumericSpec wl = work; wl.bits = Wl;
+                        g_numeric_cancel_bits = 0;
+                        g_numeric_cancel_left = LONG_MAX;
+                        g_numeric_absorb_bits = 0;
+                        g_numeric_reevaluations++;
+                        low = numericalize_pass(e, wl);
+                        if (g_numeric_cancel_bits > cancelled) cancelled = g_numeric_cancel_bits;
+                        if (low && !expr_has_nonfinite_real(low)
+                            && !expr_has_overflow_or_indeterminate(low)) {
+                            unsettled = false;
+                            /* No extrapolation: one pair of passes cannot
+                             * show the agreement growing with precision. No
+                             * "shrinking to zero" either (`first` = the pass
+                             * itself, no total-cancel): noise from a 10^200
+                             * leaf shrinks from the lower pass to this one
+                             * exactly as an algebraic zero's residue does,
+                             * and N[10^200 (r^3 - 4 r - 1) + 1, 30] is 1.
+                             * Only two exact zeros make a zero. */
+                            Expr* z = expr_cap_verdict(prev, low, prev, 64, p, false, false,
+                                                       &vanished, &unsettled);
+                            expr_free(prev);
+                            prev = z;
+                        }
+                    }
+                    expr_free(low);
+                    if (unsettled || (vanished && from_n)) {
+                        char* str = expr_to_string((Expr*)e);
+                        mth_message("N", "meprec",
+                            "Internal precision limit $MaxExtraPrecision = %g reached while evaluating %s.",
+                            mep_digits, str ? str : "");
+                        free(str);
+                    }
+                }
+                break;
+            }
             NumericSpec w = work; w.bits = W2;   /* work's mode: CAP keeps inexact leaves as they are */
             g_numeric_cancel_bits = 0;
             g_numeric_cancel_left = LONG_MAX;
@@ -3840,7 +4702,11 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             const Expr* ref = prev;  long Wr = Wp;
             if (W2 - Wp < 32 && prev2) { ref = prev2; Wr = Wp2; }
             long gap = W2 - Wr;
-            long good = adaptive_good_bits(expr_agree_bits(cur, ref), gap);
+            long good = adaptive_good_bits(expr_agree_bits(cur, ref, false), gap);
+            long Aunit = expr_agree_bits(cur, ref, true);
+            bool extrap = !compared || Aprev < 0 || Aunit < 0
+                       || Aunit >= (1L << 29) || Aunit > Aprev;
+            compared = true;
             if (good >= p && Kc >= p + amp) {     /* certified: p good digits */
                 expr_free(prev);
                 prev = cur;
@@ -3848,7 +4714,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             }
             if (W2 >= Wmax) {                    /* at the cap */
                 bool vanished = false, unsettled = false;
-                Expr* z = expr_cap_verdict(cur, ref, first, gap, p, Kc <= 16,
+                Expr* z = expr_cap_verdict(cur, ref, first, gap, p, Kc <= 16, extrap,
                                            &vanished, &unsettled);
                 /* Overflow[] / Indeterminate at the cap is a division by a
                  * difference that cancelled to zero at every precision tried
@@ -3859,7 +4725,9 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
                 expr_free(cur);
                 expr_free(prev);
                 prev = z;
-                if (unsettled || (vanished && from_n)) {
+                /* (once: a branch-cut side left undecided in a pass has
+                 * already said so, naming the argument -- nbc_settle) */
+                if ((unsettled || (vanished && from_n)) && !g_nbc_warned) {
                     char* str = expr_to_string((Expr*)e);
                     mth_message("N", "meprec",
                         "Internal precision limit $MaxExtraPrecision = %g reached while evaluating %s.",
@@ -3871,6 +4739,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             expr_free(prev2);
             prev2 = prev;  Wp2 = Wp;
             prev = cur;    Wp = W2;  Lp = Lc;  Ap = Ac;
+            Aprev = Aunit;
         }
         expr_free(prev2);
         expr_free(first);

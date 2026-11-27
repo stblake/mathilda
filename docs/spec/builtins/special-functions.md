@@ -5448,6 +5448,43 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
     crosses `sin²t = 1/n`. It is not a real principal value — `Π(3/2 | 1/2)` is
     `−0.456720313453 − 2.72069904635 i`, mpmath and Arb agreeing — so the machine
     kernel declines there and Arb answers.
+- **Values on a cut, and the incomplete forms' Carlson assembly**
+  (`nb_ell_*` in `src/flint_num_bridge.c`, `nbc_elliptic` in `src/numeric.c`).
+  The incomplete integrals are assembled from Carlson's forms on the strip
+  `|Re φ| ≤ π/2` — `F = s R_F(x, y, 1)`, `E = s R_F − (m/3) s³ R_D`,
+  `Π = s R_F + (n/3) s³ R_J(x, y, 1, p)`, `s = sin φ`, `x = cos²φ`,
+  `y = 1 − m sin²φ`, `p = 1 − n sin²φ` — plus the quasi-period; this is Arb's
+  own construction (bit-identical on 3000 random complex triples), so values off
+  the cuts are unchanged. It is the integral along the straight segment in
+  `v = sin t`, so its cuts are where `x`, `y` or `p` is on `(−∞, 0]`.
+  - **Convention.** On a cut the value is the limit from `Im x, Im y, Im p > 0`
+    — for real φ, `m → m − i0` and `n → n − i0`, the placement real arguments
+    already had; the complete forms follow the same rule on `m ≥ 1`, `n ≥ 1`.
+    Where `Re φ` is an odd multiple of `π/2` (`EllipticF[ArcSin[2], m]`) `x` is
+    on its cut and the side picks the quasi-period shift: the one that keeps φ
+    inside the strip as φ moves in the direction giving `Im x` that sign. Checked
+    against the defining integral moved to the named side (`NIntegrate`, 20
+    digits) for `Π` on `p`, `F`/`E` on `y`, `K` on `m = 3` and real `n > 1`
+    (path indented below the pole).
+  - **Exact arguments on a cut.** An exact argument can put `x`, `y` or `p`
+    exactly on the cut (the antiderivative of `1/((x − 3)√(1 + x³))` carries
+    `EllipticPi[4/(1 + (-1)^(1/3)), ArcSin[√((1 + (-1)^(1/3))/(1 + x))], (1 − i√3)/2]`
+    with `p = (x − 3)/(x + 1) < 0` on `−1 < x < 3`). `N` decides the side
+    exactly — qqbar's sign of the exact quantity's imaginary part, else a
+    precision climb on the quantity alone up to `$MaxExtraPrecision` — instead
+    of by a rounding residue: `N[.., 30]` and `N[.., 40]` used to differ
+    (`0.45997 − 1.49460 i` against `−0.34896 + 1.52434 i`). The complete heads'
+    argument cuts join the existing exact-argument rule for `Sqrt`/`Log`/`ArcSin`.
+  - **Speed.** `R_J` takes Carlson's duplication directly for real
+    non-negative `x, y` or a conjugate pair `y = x̄` with `z > 0` (proven cases;
+    a pair conjugate to within `2⁻⁽ⁱⁿᵇ⁻⁸⁾` is symmetrised), and for `p` exactly on
+    `(−∞, 0)` the Cauchy principal value of DLMF 19.20.14 less the half residue
+    `3πi/(2√((x−p)(y−p)(z−p)))`; Arb's numerical integration is left only for
+    the general complex case. The example above: machine 120 ms → 0.19 ms, 300
+    digits 85 s → 10 ms, 1000 digits 61 ms. A wrong constant built from it is
+    rejected by `PossibleZeroQ` in 7 ms (was 1.6 s). Remaining gap: `y` exactly
+    on its cut with `x` not real or conjugate still integrates (~1 s per call at
+    300 bits, `EllipticPi[1/3, φ, m]` with `1 − m sin²φ < 0`).
 - **Complete integrals at machine precision** (`src/special_functions/sf_machine_ellk.c`).
   One kernel per (function, real | complex), called by the scalar builtin, the
   packed/NDArray element-wise path and `Compile[]` alike, so all five surfaces

@@ -1,0 +1,129 @@
+label	status	seconds	defect	unevaluated	residual
+Chebyshev t^-5/(t^3-1)^(1/3)	non-elementary	0.3590	2.0e-31	False	-t/2
+Chebyshev t^-4/(t^3-1)^(1/3)	elementary	0.3242	2.9e-32	False	0
+Chebyshev t^-3/(t^3-1)^(1/3)	elementary	0.0359	4.9e-32	False	0
+Chebyshev t^-2/(t^3-1)^(1/3)	non-elementary	0.3012	3.9e-31	False	-t
+Chebyshev t^-1/(t^3-1)^(1/3)	elementary	0.2993	3.0e-32	False	0
+Chebyshev t^0/(t^3-1)^(1/3)	elementary	0.3202	1.2e-29	False	0
+Chebyshev t^1/(t^3-1)^(1/3)	non-elementary	0.2827	0.0e+00	False	t
+Chebyshev t^2/(t^3-1)^(1/3)	elementary	0.0200	0.0e+00	False	0
+Chebyshev t^3/(t^3-1)^(1/3)	elementary	0.3368	6.8e-30	False	0
+Chebyshev t^4/(t^3-1)^(1/3)	non-elementary	0.3215	7.6e-29	False	t/2
+Chebyshev t^5/(t^3-1)^(1/3)	elementary	0.0492	8.1e-28	False	0
+Chebyshev t^6/(t^3-1)^(1/3)	elementary	0.3918	4.0e-27	False	0
+Chebyshev t^7/(t^3-1)^(1/3)	non-elementary	0.4008	5.2e-26	False	5*t/14
+Chebyshev t^-5/(t^3-1)^(2/3)	elementary	0.0641	3.7e-32	False	0
+Chebyshev t^-4/(t^3-1)^(2/3)	elementary	0.3217	5.2e-33	False	0
+Chebyshev t^-3/(t^3-1)^(2/3)	non-elementary	0.1356	6.2e-33	False	1/2
+Chebyshev t^-2/(t^3-1)^(2/3)	elementary	0.0301	4.9e-32	False	0
+Chebyshev t^-1/(t^3-1)^(2/3)	elementary	0.2819	1.1e-32	False	0
+Chebyshev t^0/(t^3-1)^(2/3)	non-elementary	0.1031	0.0e+00	False	1
+Chebyshev t^1/(t^3-1)^(2/3)	elementary	0.2819	1.3e-29	False	0
+Chebyshev t^2/(t^3-1)^(2/3)	elementary	0.0212	0.0e+00	False	0
+Chebyshev t^3/(t^3-1)^(2/3)	non-elementary	0.1478	1.6e-30	False	1/2
+Chebyshev t^4/(t^3-1)^(2/3)	elementary	0.3324	1.5e-29	False	0
+Chebyshev t^5/(t^3-1)^(2/3)	elementary	0.0535	2.0e-28	False	0
+Chebyshev t^6/(t^3-1)^(2/3)	non-elementary	0.1874	1.2e-27	False	2/5
+Chebyshev t^7/(t^3-1)^(2/3)	elementary	0.3379	7.6e-27	False	0
+Chebyshev t^-5/(t^2-1)^(1/3)	elementary	2.5031	3.0e-30	False	0
+Chebyshev t^-4/(t^2-1)^(1/3)	non-elementary	1.6499	9.9e-32	False	-5/27
+Chebyshev t^-3/(t^2-1)^(1/3)	elementary	2.4335	4.9e-30	False	0
+Chebyshev t^-2/(t^2-1)^(1/3)	non-elementary	1.5731	1.5e-31	False	-1/3
+Chebyshev t^-1/(t^2-1)^(1/3)	elementary	2.3886	1.5e-29	False	0
+Chebyshev t^0/(t^2-1)^(1/3)	non-elementary	1.4974	0.0e+00	False	1
+Chebyshev t^1/(t^2-1)^(1/3)	elementary	0.0206	0.0e+00	False	0
+Chebyshev t^2/(t^2-1)^(1/3)	non-elementary	1.5409	1.6e-30	False	3/7
+Chebyshev t^3/(t^2-1)^(1/3)	elementary	0.0526	2.5e-29	False	0
+Chebyshev t^4/(t^2-1)^(1/3)	non-elementary	1.5825	1.0e-28	False	27/91
+Chebyshev t^5/(t^2-1)^(1/3)	elementary	0.0581	1.6e-27	False	0
+Chebyshev t^6/(t^2-1)^(1/3)	non-elementary	1.6291	1.9e-26	False	405/1729
+Chebyshev t^7/(t^2-1)^(1/3)	elementary	0.0893	5.2e-26	False	0
+Chebyshev t^-5/(t^2-1)^(2/3)	elementary	2.3809	1.6e-30	False	0
+Chebyshev t^-4/(t^2-1)^(2/3)	non-elementary	0.1244	7.4e-32	False	7/27
+Chebyshev t^-3/(t^2-1)^(2/3)	elementary	2.3952	1.6e-30	False	0
+Chebyshev t^-2/(t^2-1)^(2/3)	non-elementary	0.0867	7.4e-32	False	1/3
+Chebyshev t^-1/(t^2-1)^(2/3)	elementary	2.3861	3.6e-30	False	0
+Chebyshev t^0/(t^2-1)^(2/3)	non-elementary	0.0596	0.0e+00	False	1
+Chebyshev t^1/(t^2-1)^(2/3)	elementary	0.0196	0.0e+00	False	0
+Chebyshev t^2/(t^2-1)^(2/3)	non-elementary	0.0938	3.9e-31	False	3/5
+Chebyshev t^3/(t^2-1)^(2/3)	elementary	0.0421	6.3e-30	False	0
+Chebyshev t^4/(t^2-1)^(2/3)	non-elementary	0.1321	5.0e-29	False	27/55
+Chebyshev t^5/(t^2-1)^(2/3)	elementary	0.0625	2.0e-28	False	0
+Chebyshev t^6/(t^2-1)^(2/3)	non-elementary	0.1580	1.6e-27	False	81/187
+Chebyshev t^7/(t^2-1)^(2/3)	elementary	0.0851	2.6e-26	False	0
+Chebyshev t^-5/(t^3-1)^(1/2)	non-elementary	4.1411	9.9e-32	False	-5*t/16
+Chebyshev t^-4/(t^3-1)^(1/2)	elementary	0.2628	1.8e-32	False	0
+Chebyshev t^-3/(t^3-1)^(1/2)	non-elementary	0.2893	4.9e-32	False	1/4
+Chebyshev t^-2/(t^3-1)^(1/2)	non-elementary	3.9913	9.9e-32	False	-t/2
+Chebyshev t^-1/(t^3-1)^(1/2)	elementary	0.1879	1.2e-32	False	0
+Chebyshev t^0/(t^3-1)^(1/2)	non-elementary	0.2430	0.0e+00	False	1
+Chebyshev t^1/(t^3-1)^(1/2)	non-elementary	4.0304	0.0e+00	False	t
+Chebyshev t^2/(t^3-1)^(1/2)	elementary	0.0278	0.0e+00	False	0
+Chebyshev t^3/(t^3-1)^(1/2)	non-elementary	0.3414	7.9e-31	False	2/5
+Chebyshev t^4/(t^3-1)^(1/2)	non-elementary	4.1483	1.3e-29	False	4*t/7
+Chebyshev t^5/(t^3-1)^(1/2)	elementary	0.0512	2.0e-28	False	0
+Chebyshev t^6/(t^3-1)^(1/2)	non-elementary	0.2894	8.1e-28	False	16/55
+Chebyshev t^7/(t^3-1)^(1/2)	non-elementary	4.1426	6.5e-27	False	40*t/91
+Chebyshev t^-5/(t^4-1)^(1/2)	elementary	0.3040	1.5e-32	False	0
+Chebyshev t^-4/(t^4-1)^(1/2)	non-elementary	0.2005	1.2e-32	False	1/3
+Chebyshev t^-3/(t^4-1)^(1/2)	elementary	0.0448	4.9e-32	False	0
+Chebyshev t^-2/(t^4-1)^(1/2)	non-elementary	0.4414	9.9e-32	False	-t**2
+Chebyshev t^-1/(t^4-1)^(1/2)	elementary	0.2337	3.1e-32	False	0
+Chebyshev t^0/(t^4-1)^(1/2)	non-elementary	0.1610	0.0e+00	False	1
+Chebyshev t^1/(t^4-1)^(1/2)	elementary	0.2404	2.4e-30	False	0
+Chebyshev t^2/(t^4-1)^(1/2)	non-elementary	0.3946	0.0e+00	False	t**2
+Chebyshev t^3/(t^4-1)^(1/2)	elementary	0.0219	0.0e+00	False	0
+Chebyshev t^4/(t^4-1)^(1/2)	non-elementary	0.1703	3.2e-30	False	1/3
+Chebyshev t^5/(t^4-1)^(1/2)	elementary	0.2701	5.0e-29	False	0
+Chebyshev t^6/(t^4-1)^(1/2)	non-elementary	0.5687	2.5e-29	False	3*t**2/5
+Chebyshev t^7/(t^4-1)^(1/2)	elementary	0.0803	1.6e-27	False	0
+Chebyshev t^-5/(t^4-1)^(1/4)	elementary	0.4061	1.4e-32	False	0
+Chebyshev t^-4/(t^4-1)^(1/4)	elementary	0.0727	2.5e-32	False	0
+Chebyshev t^-3/(t^4-1)^(1/4)	non-elementary	0.1801	2.0e-31	False	-t/2
+Chebyshev t^-2/(t^4-1)^(1/4)	non-elementary	0.1560	1.6e-30	False	-2*t**2
+Chebyshev t^-1/(t^4-1)^(1/4)	elementary	0.2662	5.5e-32	False	0
+Chebyshev t^0/(t^4-1)^(1/4)	elementary	0.2095	2.6e-28	False	0
+Chebyshev t^1/(t^4-1)^(1/4)	non-elementary	0.1159	0.0e+00	False	t
+Chebyshev t^2/(t^4-1)^(1/4)	non-elementary	0.0978	0.0e+00	False	t**2
+Chebyshev t^3/(t^4-1)^(1/4)	elementary	0.0305	0.0e+00	False	0
+Chebyshev t^4/(t^4-1)^(1/4)	elementary	0.2066	9.0e-29	False	0
+Chebyshev t^5/(t^4-1)^(1/4)	non-elementary	0.1401	4.0e-28	False	2*t/5
+Chebyshev t^6/(t^4-1)^(1/4)	non-elementary	0.1463	1.6e-27	False	t**2/2
+Chebyshev t^7/(t^4-1)^(1/4)	elementary	0.0660	2.6e-26	False	0
+Chebyshev t^-5/(t^4-1)^(3/4)	elementary	0.2331	1.1e-32	False	0
+Chebyshev t^-4/(t^4-1)^(3/4)	non-elementary	0.1299	1.5e-33	False	2/3
+Chebyshev t^-3/(t^4-1)^(3/4)	non-elementary	0.1081	6.2e-33	False	t/2
+Chebyshev t^-2/(t^4-1)^(3/4)	elementary	0.0408	2.5e-32	False	0
+Chebyshev t^-1/(t^4-1)^(3/4)	elementary	0.2504	2.1e-32	False	0
+Chebyshev t^0/(t^4-1)^(3/4)	non-elementary	0.1124	0.0e+00	False	1
+Chebyshev t^1/(t^4-1)^(3/4)	non-elementary	0.1289	0.0e+00	False	t
+Chebyshev t^2/(t^4-1)^(3/4)	elementary	0.2410	2.4e-28	False	0
+Chebyshev t^3/(t^4-1)^(3/4)	elementary	0.0347	0.0e+00	False	0
+Chebyshev t^4/(t^4-1)^(3/4)	non-elementary	0.1570	3.9e-31	False	1/2
+Chebyshev t^5/(t^4-1)^(3/4)	non-elementary	0.1861	6.3e-30	False	2*t/3
+Chebyshev t^6/(t^4-1)^(3/4)	elementary	0.2877	5.6e-29	False	0
+Chebyshev t^7/(t^4-1)^(3/4)	elementary	0.0785	1.2e-27	False	0
+Ex 5.1	elementary	0.2286	1.6e-30	False	0
+d(t sqrt R)  [Goursat criterion fails]	elementary	0.0631	6.3e-30	False	0
+Legendre-Clausen	elementary	4.0102	8.9e-33	False	0
+Goursat (t^3-4)/((t^3+8)sqrt(t^3-1))	elementary	4.0424	1.4e-31	False	0
+Goursat t^2/((t^3+8)sqrt(t^3-1))	elementary	0.2825	6.2e-33	False	0
+order 3: 1/(t sqrt(t^3-1))	elementary	0.1897	1.2e-32	False	0
+order 3: shifted (t+1)^3-2	elementary	0.8587	3.1e-33	False	0
+order 3, irrational roots: t^2/((t^3+5)sqrt(t^3-2))	elementary	0.5704	4.2e-33	False	0
+order 3, quartic j=0 rational root: t/((t^3+2) sqrt(t^4-t))	elementary	0.5331	1.1e-31	False	0
+order 3, quartic j=0: 1/sqrt(t^4-t)	non-elementary	0.6869	0.0e+00	False	1
+Goursat sec. 4: (t-1)/((t+2) sqrt(t^3-1))	elementary	3.4296	3.8e-32	False	0
+mixed: (t-1)/(t+2) + t^2/(t^3+8) + 1/t	elementary	3.5526	6.6e-32	False	0
+order 4: t^2/sqrt(t^4-1)	non-elementary	0.6440	0.0e+00	False	t**2
+order 4: 1/((t^4+3) sqrt(t^4-1))	undecided	7.5817	2.2e-30	False	(t**8 + 6*t**4 + 1)/(6*t**8 + 20*t**4 + 6)
+1/sqrt(t^4+1)	non-elementary	0.2542	0.0e+00	False	1
+(t^2-1)/((t^2+1)sqrt(t^4+1))	elementary	0.4193	4.6e-31	False	0
+Ex 5.5 (paper: non-elementary)	elementary	0.6570	1.0e-29	False	0
+CEX A  t(2t^3-1), V1, polynomial	elementary	0.0476	1.5e-28	False	0
+CEX B  1/(t^3+t)^(1/3), F = 1	elementary	0.9942	5.7e-31	False	0
+CEX D  (2t^3-1)/(t^3-1)^(2/3)	elementary	0.0397	3.2e-30	False	0
+(2t+5)/(Hessian R^(1/3))	elementary	3.5707	1.9e-31	False	0
+1/(t^3+t+1)^(1/3)  (needs a torsion test)	undecided	5.2125	5.7e-31	False	(81*t**5 + 243*t**4 + 54*t**3 + 324*t**2 + 216*t - 27)/(486*t**5 + 1296*t**4 + 1026*t**3 - 522*t**2 - 54*t - 56)
+1/sqrt(t^3+t+1)  (irreducible; trace criterion)	non-elementary	0.0277	0.0e+00	False	1
+irreducible resolvent: g - F0(g), g=1/(t-2), R=t^4+t+1	elementary	0.6104	0.0e+00	True	0

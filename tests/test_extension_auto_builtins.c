@@ -773,7 +773,9 @@ static void test_phasee_inexact_not_intercepted(void) {
      * with the inexact handling path). */
     assert_eval_eq(
         "Together[1/(x - Sqrt[3/2]) + 1/(x + Sqrt[3/2]), Extension -> Automatic]",
-        "(2 x)/(-3/2 + x^2)", 0);
+        /* factored over the input's pieces, as the reference's
+         * (-8 x)/((Sqrt[6] - 2 x) (Sqrt[6] + 2 x)) */
+        "(2 x)/((-Sqrt[3/2] + x) (Sqrt[3/2] + x))", 0);
 }
 
 static void test_phasee_power_pq_nonunit_rejected(void) {
@@ -857,6 +859,121 @@ static void test_gaussian_radical_gcd(void) {
                    " g = TimeConstrained[PolynomialGCD[a, b], 10, $Failed];"
                    " g =!= $Failed && Exponent[g, x] == 1]",
                    "True", 0);
+}
+
+/* ---- roots of unity and dependent constant radicals ----
+ * The generator model of Together / Cancel gave (-1)^(1/3) the relation
+ * g^3 + 1 = (g + 1)(g^2 - g + 1), in which 1 - (-1)^(1/3) + (-1)^(2/3) is a
+ * zero divisor rather than 0, and took I, Sqrt[3] and (-1)^(1/3) for
+ * independent generators.  Such input now runs over the genuine number field
+ * (algfield_has_dependent_constant_radicals -> algfield_normalize). */
+static void test_cyclotomic_zero_constants(void) {
+    assert_eval_eq("Together[(-1)^(2/3) - (-1)^(1/3) + 1, Extension -> Automatic]", "0", 0);
+    assert_eval_eq("Cancel[(-1)^(2/3) - (-1)^(1/3) + 1, Extension -> Automatic]", "0", 0);
+    assert_eval_eq("Together[x ((-1)^(2/3) - (-1)^(1/3) + 1), Extension -> Automatic]", "0", 0);
+    /* Phi_10 at zeta_10 = (-1)^(1/5) */
+    assert_eval_eq("Together[(-1)^(4/5) - (-1)^(3/5) + (-1)^(2/5) - (-1)^(1/5) + 1,"
+                   " Extension -> Automatic]", "0", 0);
+    /* I Sqrt[3] = 2 (-1)^(1/3) - 1, both as I Sqrt[3] and as Sqrt[-3] */
+    assert_eval_eq("Together[I Sqrt[3] - 2 (-1)^(1/3) + 1, Extension -> Automatic]", "0", 0);
+    assert_eval_eq("Together[Sqrt[-3] - 2 (-1)^(1/3) + 1, Extension -> Automatic]", "0", 0);
+    /* a radical times a root of unity: (-2)^(1/3) = 2^(1/3) (-1)^(1/3), and
+     * (-1)^(1/3) = (-1)^(2/3) + 1 */
+    assert_eval_eq("Together[(-2)^(1/3) - 2^(1/3) ((-1)^(2/3) + 1), Extension -> Automatic]", "0", 0);
+    assert_eval_eq("Together[1/x + (-1)^(2/3) - (-1)^(1/3), Extension -> Automatic]",
+                   "(1 - x)/x", 0);
+}
+
+static void test_cyclotomic_rational_functions(void) {
+    /* the roots Solve gives for t^2 - t + 1 */
+    assert_eval_eq("Module[{r = t /. Solve[t^2 - t + 1 == 0, t]},"
+                   " Together[(t - r[[1]]) (t - r[[2]]) - (t^2 - t + 1), Extension -> Automatic]]",
+                   "0", 0);
+    assert_eval_eq("Module[{r = t /. Solve[t^2 - t + 1 == 0, t]},"
+                   " Cancel[Together[1/(t - r[[1]]) + 1/(t - r[[2]])], Extension -> Automatic]]",
+                   /* over the pieces t - r1, t - r2 as written, like the
+                    * reference's factored Together */
+                   "(-1 + 2 t)/((-(-1)^(1/3) + t) (-1 + (-1)^(1/3) + t))", 0);
+    assert_eval_eq("Cancel[(t^2 - t + 1)/(t - (-1)^(1/3)), Extension -> Automatic]",
+                   "-1 + (-1)^(1/3) + t", 0);
+    /* the answer is written over (-1)^(1/3), not over the I Sqrt[3] of the
+     * quadratic field's generator, the denominator over its monic pieces
+     * (the reference: (1 - (-1)^(1/3) - (-1)^(2/3))/(((-1)^(1/3) - t)
+     * (-1 + (-1)^(2/3) + t)), the same value and pieces) */
+    assert_eval_eq("Cancel[Together[1/(t - (-1)^(1/3)) - 1/(t + (-1)^(2/3) - 1)], Extension -> Automatic]",
+                   "(-2 + 2 (-1)^(1/3))/((-(-1)^(1/3) + t) (-2 + (-1)^(1/3) + t))", 0);
+    /* a single cube root of a negative rational is a cubic field, unchanged */
+    assert_eval_eq("Cancel[Together[(t^3 + 2)/(t - (-2)^(1/3))], Extension -> Automatic]",
+                   "(-2)^(2/3) + (-2)^(1/3) t + t^2", 0);
+    /* PossibleZeroQ and Simplify agree */
+    assert_eval_eq("PossibleZeroQ[(t - (-1)^(1/3)) (t + (-1)^(2/3)) - (t^2 - t + 1)]", "True", 0);
+    assert_eval_eq("Simplify[(t - (-1)^(1/3)) (t + (-1)^(2/3)) - (t^2 - t + 1)]", "0", 0);
+    assert_eval_eq("Simplify[(-1)^(2/3) - (-1)^(1/3) + 1]", "0", 0);
+}
+
+/* ---- square roots of a polynomial radicand ----
+ * Q(vars)(Sqrt[b]) for a non-constant polynomial b had no engine (symrad.c):
+ * the classical cascade's multivariate gcds over Q[vars, Sqrt[b]] took 7-20 s,
+ * or did not finish in 60 s for Sqrt[k^3 + 1], on the Mobius pull-back of a
+ * Goursat integrand by the Hessian roots of t (1 - t)(1 - k t). */
+static void test_symbolic_radicand_hessian(void) {
+    const char* setup =
+        "Module[{r1, r2, F, R, tu, a2, a4, x4, d = %s, tm},"
+        " r1 = (1 + k - Sqrt[d])/(2 - 2 k + 2 k^2); r2 = (1 + k + Sqrt[d])/(2 - 2 k + 2 k^2);"
+        " F[t_] := (2 - (1 + k) t)/(1 - (1 + k) t); R[t_] := t (1 - t) (1 - k t);"
+        " tu = (r1 - r2 u)/(1 - u);"
+        " a2 = Cancel[Together[R[tu] (1 - u)^3], Extension -> Automatic];"
+        " a4 = Cancel[Together[F[tu] D[tu, u] (1 - u)^2], Extension -> Automatic];"
+        " tm = First[Timing[x4 = TimeConstrained[Cancel[Together[1/a2 + 1/a4], Extension -> Automatic], 30, $Aborted]]];"
+        " {tm < 5, Cancel[Together[x4 - 1/a2 - 1/a4], Extension -> Automatic],"
+        "  Cancel[Together[a2 - R[tu] (1 - u)^3], Extension -> Automatic],"
+        "  Quiet[Chop[N[(x4 - 1/(R[tu] (1 - u)^3) - 1/(F[tu] D[tu, u] (1 - u)^2)) /. {k -> 17/3, u -> 2/7}, 30], 10^-20]]}]";
+    const char* radicands[] = { "-3 + 6 k - 3 k^2", "k^3 + 1", "k + 2", "-3 (k + 2) (k - 1)^2" };
+    char buf[2048];
+    for (size_t i = 0; i < sizeof radicands / sizeof radicands[0]; i++) {
+        snprintf(buf, sizeof buf, setup, radicands[i]);
+        assert_eval_eq(buf, "{True, 0, 0, 0}", 0);
+    }
+    /* the roots' symmetric functions and the Hessian itself */
+    assert_eval_eq("Module[{r1 = (1 + k - Sqrt[-3 + 6 k - 3 k^2])/(2 - 2 k + 2 k^2),"
+                   " r2 = (1 + k + Sqrt[-3 + 6 k - 3 k^2])/(2 - 2 k + 2 k^2)},"
+                   " Cancel[Together[(t - r1) (t - r2) - (1 - t - k t + t^2 - k t^2 + k^2 t^2)/(1 - k + k^2)],"
+                   " Extension -> Automatic]]", "0", 0);
+    /* d^(3/2) = d Sqrt[d] */
+    assert_eval_eq("Together[(-3 + 6 k - 3 k^2)^(3/2) - (-3 + 6 k - 3 k^2) Sqrt[-3 + 6 k - 3 k^2],"
+                   " Extension -> Automatic]", "0", 0);
+    /* a cancellation through the conjugate, both ways round */
+    assert_eval_eq("Cancel[(x - Sqrt[1 + k^2])/(x^2 - 1 - k^2), Extension -> Automatic]",
+                   "1/(Sqrt[1 + k^2] + x)", 0);
+    assert_eval_eq("Cancel[(x^2 - 1 - k^2)/(x + Sqrt[1 + k^2]), Extension -> Automatic]",
+                   "-Sqrt[1 + k^2] + x", 0);
+    /* a square radicand is not a field: left to the other paths */
+    assert_eval_eq("Together[Sqrt[(k - 1)^2] - (k - 1), Extension -> Automatic]",
+                   "1 + Sqrt[(-1 + k)^2] - k", 0);
+}
+
+/* ---- several generators: Q(I, Sqrt[3], 2^(1/3)) ----
+ * Building the common field of {I, Sqrt[3], 2^(1/3), 2^(2/3)} through the
+ * qqbar primitive-element search cost 1.5-5 s per field (sixteen composed
+ * resultants factored per atom, LLL per image, and the Root index of a theta
+ * whose conjugates tie in real part); a Cancel[Together[...]] on a modest
+ * rational function paid it on every new field.  The product-algebra
+ * construction (kf_number_field_common) is exact linear algebra. */
+static void test_multigen_cyclotomic_cube_root_speed(void) {
+    assert_eval_eq("Module[{tm = 0, ok = True, a, e1, r},"
+                   " Do[a = 1/3 (6 - 2 I Sqrt[p]) + t;"
+                   "  e1 = (1 + (2^(1/3) y)/a + (2^(2/3) y^2)/a^2)/(192 2^(2/3));"
+                   "  tm += First[Timing[r = Cancel[Together[e1], Extension -> Automatic]]];"
+                   "  ok = ok && Quiet[Chop[N[(r - e1) /. {t -> 3/7, y -> 5/11}, 30], 10^-20]] == 0,"
+                   " {p, {3, 5, 7}}]; {ok, tm < 6}]", "{True, True}", 0);
+    assert_eval_eq("Module[{a, b, e1, e2, r, tm},"
+                   " a = 1/3 (6 - 2 I Sqrt[3]) + t; b = 1/3 (6 + 2 I Sqrt[3]) + t;"
+                   " e1 = (1 + (2^(1/3) y)/a + (2^(2/3) y^2)/a^2)/(192 2^(2/3));"
+                   " e2 = (1 + (2^(1/3) y)/b + (2^(2/3) y^2)/b^2)/(192 2^(2/3));"
+                   " tm = First[Timing[r = Cancel[Together[(e1 + e2)/(e1 - e2)], Extension -> Automatic]]];"
+                   " {tm < 4, Cancel[Together[e1^2 e2 - e1 (e1 e2)], Extension -> Automatic],"
+                   "  Quiet[Chop[N[(r - (e1 + e2)/(e1 - e2)) /. {t -> 3/7, y -> 5/11}, 40], 10^-25]]}]",
+                   "{True, 0, 0}", 0);
 }
 
 int main(void) {
@@ -953,6 +1070,12 @@ int main(void) {
     TEST(test_cyclotomic_mixed_generator_lift);
     TEST(test_gaussian_radical_gcd);
     TEST(test_dependent_radicals_gcd);
+
+    /* roots of unity, symbolic radicands, several generators */
+    TEST(test_cyclotomic_zero_constants);
+    TEST(test_cyclotomic_rational_functions);
+    TEST(test_symbolic_radicand_hessian);
+    TEST(test_multigen_cyclotomic_cube_root_speed);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

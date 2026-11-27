@@ -1035,6 +1035,119 @@ static void test_complex_coefficient_log_part(void) {
      * N[Root[...]] evaluates non-real-coefficient Root objects since v0.6512. */
 }
 
+/* Coefficients in Q(alpha) for a Root object alpha (the generalised-Goursat
+ * repro, Root[-1 - 4 #1 + #1^3 &, k]).  The pipeline treated alpha as an opaque
+ * symbol: the answer carried alpha^6 and ~10^160 coefficients that cancel
+ * catastrophically under a fixed-precision N (D[P, m] - rho at 30-60 digits read
+ * as -rho, i.e. "P is constant"), and the quadratic's discriminant -- positive,
+ * in Q(alpha) -- was never signed, so a split quadratic took the ArcTan branch
+ * with an imaginary Sqrt[-disc].  Now: powers of alpha reduced modulo its
+ * minimal polynomial, the discriminant signed exactly, a real ArcTanh form. */
+static void assert_root_integral(const char* f, const char* alpha) {
+    char buf[8192];
+    /* derivative check with alpha replaced by 120 digits, at 100 digits */
+    snprintf(buf, sizeof(buf),
+        "TimeConstrained[Module[{P = Integrate[%s, m], g = %s, d, av = N[%s, 120]}, "
+        "d = D[P, m] - g; FreeQ[P, Integrate | RootSum] && "
+        "Max[Table[Abs[N[(d /. %s -> av) /. m -> p, 100]], {p, {7/10, -3/2, 5/3, 13/4}}]] < 10^-60], "
+        "60, $Aborted]", f, f, alpha, alpha);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "True") != 0) printf("FAIL: Root-coefficient Integrate[%s, m]: %s\n", f, got);
+    ASSERT_STR_EQ(got, "True");
+    free(got); expr_free(e); expr_free(res);
+    /* the Root's powers are reduced modulo its minimal polynomial (cubic) */
+    snprintf(buf, sizeof(buf),
+        "Max[Append[Cases[Integrate[%s, m] /. %s -> zz, zz^k_ :> k, {0, Infinity}], 1]] <= 2",
+        f, alpha);
+    e = parse_expression(buf);
+    res = evaluate(e);
+    got = expr_to_string(res);
+    if (strcmp(got, "True") != 0) printf("FAIL: Root powers not reduced in Integrate[%s, m]\n", f);
+    ASSERT_STR_EQ(got, "True");
+    free(got); expr_free(e); expr_free(res);
+}
+
+static void test_root_coefficient_log_part(void) {
+    static const char* ks[] = { "1", "2", "3" };
+    char rho[2048], alpha[128], buf[8192];
+    for (size_t i = 0; i < 3; i++) {
+        snprintf(alpha, sizeof(alpha), "Root[-1 - 4 #1 + #1^3 &, %s]", ks[i]);
+        snprintf(rho, sizeof(rho),
+            "((393224707072 + 1718344511488 r + 672310706176 r^2)/(1148009058816 + "
+            "3818108362752 m + 713726572544 m^2 + 5305762807808 r + 16829223623680 m r + "
+            "3100533669888 m^2 r + 3100533669888 r^2 + 7096830160896 m r^2 + "
+            "1148009058816 m^2 r^2) /. r -> %s)", alpha);
+        assert_root_integral(rho, alpha);
+        /* the reported symptom: a 30-digit N of the residual is ~0, not -rho */
+        snprintf(buf, sizeof(buf),
+            "Module[{g = %s, P}, P = Integrate[g, m, Method -> \"BronsteinRational\"]; "
+            "{Abs[N[(D[P, m] - g) /. m -> 7/10, 30]] < 10^-20, PossibleZeroQ[D[P, m] - g], "
+            "FreeQ[P, ArcTan | Complex], LeafCount[P] < 400}]", rho);
+        run_eq(buf, "{True, True, True, True}");
+        /* 1/(m^2 - alpha): ArcTanh for alpha > 0 (Root 3), ArcTan for alpha < 0 */
+        snprintf(buf, sizeof(buf), "1/(m^2 - %s)", alpha);
+        assert_root_integral(buf, alpha);
+        snprintf(buf, sizeof(buf), "{FreeQ[Integrate[1/(m^2 - %s), m], ArcTanh], "
+                 "FreeQ[Integrate[1/(m^2 - %s), m], ArcTan]}", alpha, alpha);
+        run_eq(buf, i == 2 ? "{False, True}" : "{True, False}");
+        snprintf(buf, sizeof(buf), "1/(m^2 + %s m + 1)", alpha);
+        assert_root_integral(buf, alpha);
+        snprintf(buf, sizeof(buf), "(3 m + %s)/(m^2 + %s m - 2)", alpha, alpha);
+        assert_root_integral(buf, alpha);
+    }
+    /* a real root of a cubic with complex roots, and a positive radicand */
+    assert_root_integral("(1 + m)/(m^2 + Root[-2 + #1^3 &, 1])", "Root[-2 + #1^3 &, 1]");
+    assert_root_integral("1/(m^2 - Root[-2 + #1^3 &, 1])", "Root[-2 + #1^3 &, 1]");
+    /* Root[f, 3] of the repro denominator has no pole in [0, 1]: the
+     * antiderivative is real there and its increment is the integral */
+    run_eq("Module[{r = Root[-1 - 4 #1 + #1^3 &, 3], g, P, v}, "
+           "g = (393224707072 + 1718344511488 r + 672310706176 r^2)/(1148009058816 + "
+           "3818108362752 m + 713726572544 m^2 + 5305762807808 r + 16829223623680 m r + "
+           "3100533669888 m^2 r + 3100533669888 r^2 + 7096830160896 m r^2 + 1148009058816 m^2 r^2); "
+           "P = Integrate[g, m]; v = N[(P /. m -> 1) - (P /. m -> 0), 30]; "
+           "{Abs[Im[v]] < 10^-20, Abs[v - NIntegrate[g, {m, 0, 1}, WorkingPrecision -> 30]] < 10^-15}]",
+           "{True, True}");
+}
+
+/* The log part over Q(alpha) for a Root object alpha runs in K[t]
+ * (intrat_log_part_core_root): the Rothstein-Trager resultant of this
+ * 92-leaf integrand over Q(Root[837/4 + #1^3 &, 1]) is 262144 t^6 - 1 once
+ * reduced, but with alpha an indeterminate it carried alpha^14, and the
+ * Bezout inverse of lc(S_1) modulo Q_1 over Q(alpha)(t) did not finish in
+ * 60 s.  Now 0.2 s, exact, compact, Root powers below the degree. */
+static void test_root_coefficient_log_part_in_number_field(void) {
+    const char* rho =
+        "(864 - 2*m^4*r + 32*r^3)/(1109376 - 9*m^6 - 156*m^4*r - 432*m^2*r^2 + 4800*r^3)";
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+        "Module[{r = Root[837/4 + #1^3 &, 1], g, P}, g = %s; "
+        "P = TimeConstrained[Integrate[g, m, Method -> \"BronsteinRational\"], 20, $TO]; "
+        "{P =!= $TO, FreeQ[P, Integrate | RootSum], PossibleZeroQ[D[P, m] - g], "
+        "LeafCount[P] < 400, "
+        "Max[Append[Cases[P /. r -> zz, zz^k_ :> k, {0, Infinity}], 1]] <= 2}]", rho);
+    run_eq(buf, "{True, True, True, True, True}");
+    /* the default cascade reaches the same log part */
+    snprintf(buf, sizeof(buf),
+        "Module[{r = Root[837/4 + #1^3 &, 1], g, P}, g = %s; "
+        "P = TimeConstrained[Integrate[g, m], 20, $TO]; "
+        "{P =!= $TO, PossibleZeroQ[D[P, m] - g]}]", rho);
+    run_eq(buf, "{True, True}");
+    /* two more that timed out (> 30 s) with alpha an indeterminate */
+    run_eq("Module[{s = Root[-5 + #1^3 &, 1], g, P}, g = 1/(m^6 + s m^2 + 1); "
+           "P = TimeConstrained[Integrate[g, m], 20, $TO]; "
+           "{P =!= $TO, PossibleZeroQ[D[P, m] - g]}]", "{True, True}");
+    run_eq("Module[{q = Root[-1 - 4 #1 + #1^3 &, 1], g, P}, g = (q^2 m + 1)/(m^3 + q m + 1); "
+           "P = TimeConstrained[Integrate[g, m], 20, $TO]; "
+           "{P =!= $TO, PossibleZeroQ[D[P, m] - g]}]", "{True, True}");
+    /* a residue factor whose unreduced spelling is the smaller one keeps it:
+     * (Root^-6)^(1/4), not a radical of a reduced quadratic in Root */
+    run_eq("Module[{q = Root[-1 - 4 #1 + #1^3 &, 1], g, P}, g = 1/(m^4 - q^2); "
+           "P = Integrate[g, m]; {PossibleZeroQ[D[P, m] - g], LeafCount[P] < 150}]",
+           "{True, True}");
+}
+
 static void test_opaque_parameter_log_part(void) {
     assert_integral_correct("1/(c[2] - x^2)");
     assert_integral_correct("1/(C[2] - x^2)");
@@ -1083,6 +1196,234 @@ static void test_arctanh_only_where_real(void) {
     run_eq("Integrate[1/(u^2 + u), u]", "-2 ArcTanh[1 + 2 u]");
     run_eq("Integrate[E^x/(1 - E^(2 x)), x]", "ArcTanh[E^x]");
     run_eq("Integrate[1/(x Log[x] (1 + Log[x])), x]", "-2 ArcTanh[1 + 2 Log[x]]");
+}
+
+
+/* 2026-11-27 review of the rational integrator (tasks/intrat_review.md,
+ * benchmark 266).  Each check differentiates back with PossibleZeroQ and
+ * bounds the size of the answer. */
+static void test_review_2026_11_bigint_sign_and_content(void) {
+    run_eq("ContentFree266[F_] := And @@ Cases[F, Log[p_] :> (Expand[FactorTerms[p]] === Expand[p]), Infinity]", "Null");
+    run_eq("Ok266[f_, n_] := With[{F = Integrate[f, x]}, {PossibleZeroQ[D[F, x] - f], LeafCount[F] <= n, ContentFree266[F]}]", "Null");
+    /* F1: a discriminant past 2^63 read as sign-unknown -> one wrong Log */
+    run_eq("Ok266[(9814156935056 - 2671246202843 x)/(1252991435641 (x^2 + 4 x - 1)), 40]", "{True, True, True}");
+    run_eq("FreeQ[Integrate[(9814156935056 - 2671246202843 x)/(1252991435641 (x^2 + 4 x - 1)), x], Sqrt[_?(# > 10^20 &)]]", "True");
+    /* F1: a parameter-free algebraic discriminant is signed exactly */
+    run_eq("Ok266[1/(x^2 - (3 - 2 Sqrt[2])), 20]", "{True, True, True}");
+    run_eq("FreeQ[Integrate[1/(x^2 - (3 - 2 Sqrt[2])), x], ArcTan]", "True");
+    /* F4: a non-real constant keeps the formal form and stays correct */
+    run_eq("Ok266[1/(x^2 + (-1)^(1/3)), 30]", "{True, True, True}");
+    run_eq("Ok266[1/(x^2 + x + (-1)^(1/3)), 60]", "{True, True, True}");
+    /* F17: Log arguments lose their rational content */
+    run_eq("Ok266[1/(x^5 + 1), 200]", "{True, True, True}");
+    run_eq("Ok266[(4*x^6 - 6*x^5 - 5*x^4 - 4*x^3 - 3*x^2 - x + 3)/(x^7 + 8*x^6 + 13*x^5 - 15*x^4 - 13*x^3 - 13*x^2 - 13*x + 4), 200]", "{True, True, True}");
+}
+
+/* F16: the Hermite rational part is one compact fraction (or partial
+ * fractions), not numerators distributed over an expanded denominator. */
+static void test_review_2026_11_hermite_compact(void) {
+    run_eq("Integrate[1/(1 + x^2)^3, x]", "(5 x + 3 x^3)/(8 (1 + x^2)^2) + 3/8 ArcTan[x]");
+    run_eq("Ok266[1/(x^2 + 1)^8, 60]", "{True, True, True}");
+    run_eq("Ok266[1/(x^3 + x + 1)^4, 110]", "{True, True, True}");
+    run_eq("Ok266[(36*x^6 + 126*x^5 + 183*x^4 + 13807/6*x^3 - 407*x^2 - 3242/5*x + 3044/15)/((x^2 + 7/6*x + 1/3)^2*(x - 2/5)^3), 70]", "{True, True, True}");
+    run_eq("Ok266[(x^7 - 24 x^4 - 4 x^2 + 8 x - 8)/(x^8 + 6 x^6 + 12 x^4 + 8 x^2), 40]", "{True, True, True}");
+}
+
+/* F9: the LRT subresultant chain is native (intrat_subres.c); it was an
+ * exponential pseudo-remainder sequence (Czichowski's example: 19 s). */
+static void test_review_2026_11_native_subresultant(void) {
+    run_eq("Integrate`IntRationalLogPart[(7*x^13 + 10*x^8 + 4*x^7 - 7*x^6 - 4*x^3 - 4*x^2 + 3*x + 3)/(x^14 - 2*x^8 - 2*x^7 - 2*x^4 - 4*x^3 - x^2 + 2*x + 1), x, t]",
+           "{{-1 - 4 t + 4 t^2, -1 - 2 t x + x^2 - 2 t x^2 + x^7}}");
+    run_eq("With[{f = (7*x^13 + 10*x^8 + 4*x^7 - 7*x^6 - 4*x^3 - 4*x^2 + 3*x + 3)/(x^14 - 2*x^8 - 2*x^7 - 2*x^4 - 4*x^3 - x^2 + 2*x + 1)}, "
+           "With[{r = AbsoluteTiming[Integrate[f, x]]}, {r[[1]] < 3, PossibleZeroQ[D[r[[2]], x] - f]}]]", "{True, True}");
+    run_eq("With[{r = AbsoluteTiming[Integrate[1/(x^30 + 1), x]]}, {r[[1]] < 10, FreeQ[r[[2]], Integrate]}]", "{True, True}");
+    /* a non-normal chain (degree gaps): x/(1 + x^8) has resultant (1 + 4096 t^4)^2 */
+    run_eq("Ok266[x/(1 + x^8), 200]", "{True, True, True}");
+    run_eq("Ok266[(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4), 30]", "{True, True, True}");
+    run_eq("Ok266[(-2*x^11 + 2*x^10 + x^9 - 2*x^8 + x^6 - x^5 + x^4 - x^3 - 2*x^2 + 1)/(x^12 - x^9 - 2*x^8 - x^7 - 2*x^6 - x^5 + x^2 - 2), 200]", "{True, True, True}");
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Bronstein ch. 2 algorithms, selectable through                      */
+/* Method -> {"BronsteinRational", "Hermite" -> ..., "LogPart" -> ...,  */
+/* "RealForm" -> ...} (src/calculus/intrat_alg.c).  Each is checked on   */
+/* the book's own examples: the three Hermite variants must agree, the   */
+/* three log parts must agree, and every answer differentiates back.     */
+/* ------------------------------------------------------------------ */
+
+#define BR266(f, opts) "Integrate[" f ", x, Method -> {\"BronsteinRational\", " opts "}]"
+
+/* Ex. 2.2.1 (HermiteReduce), 2.2.2 (quadratic), 2.2.3 (Mack), 2.3.1
+ * (Horowitz-Ostrogradsky): one integrand, one answer. */
+static void test_bronstein_hermite_variants(void) {
+    const char* f = "(x^7 - 24 x^4 - 4 x^2 + 8 x - 8)/(x^8 + 6 x^6 + 12 x^4 + 8 x^2)";
+    const char* want = "(4 + 6 x + 8 x^2 + 3 x^3)/(x (2 + x^2)^2) + Log[x]";
+    char buf[1024];
+    const char* hs[3] = { "Linear", "Quadratic", "HorowitzOstrogradsky" };
+    for (int i = 0; i < 3; i++) {
+        snprintf(buf, sizeof(buf), "Integrate[%s, x, Method -> {\"BronsteinRational\", \"Hermite\" -> \"%s\"}]", f, hs[i]);
+        run_eq(buf, want);
+    }
+    /* HermiteReduce itself: g' + h = f, h with a squarefree denominator */
+    run_eq("With[{f = (x^7 - 24 x^4 - 4 x^2 + 8 x - 8)/(x^8 + 6 x^6 + 12 x^4 + 8 x^2), "
+           "r = Integrate`HermiteReduce[(x^7 - 24 x^4 - 4 x^2 + 8 x - 8)/(x^8 + 6 x^6 + 12 x^4 + 8 x^2), x]}, "
+           "{Together[D[r[[1]], x] + r[[2]] - f], r[[2]]}]", "{0, 1/x}");
+    /* multiplicities 3 and 2 at once, plus a log part: the variants agree */
+    for (int i = 0; i < 3; i++) {
+        snprintf(buf, sizeof(buf), "With[{f = 1/((x^2 + 1)^3 (x - 2)^2)}, "
+                 "With[{F = Integrate[f, x, Method -> {\"BronsteinRational\", \"Hermite\" -> \"%s\"}]}, "
+                 "{PossibleZeroQ[D[F, x] - f], LeafCount[F] < 80}]]", hs[i]);
+        run_eq(buf, "{True, True}");
+    }
+    /* a polynomial part rides along (deg A > deg D) */
+    for (int i = 0; i < 3; i++) {
+        snprintf(buf, sizeof(buf), "With[{f = (x^9 + 1)/(x^2 + x + 1)^3}, "
+                 "PossibleZeroQ[D[Integrate[f, x, Method -> {\"BronsteinRational\", \"Hermite\" -> \"%s\"}], x] - f]]", hs[i]);
+        run_eq(buf, "True");
+    }
+}
+
+/* Ex. 2.4.1 (Rothstein-Trager), 2.5.1 (Lazard-Rioboo-Trager), 2.6.1
+ * (Czichowski): the resultant 4 t^2 + 1, S = x^3 + 2 t x^2 - 3 x - 4 t. */
+static void test_bronstein_log_parts(void) {
+    const char* ls[3] = { "LazardRiobooTrager", "RothsteinTrager", "Czichowski" };
+    char buf[1024];
+    for (int i = 0; i < 3; i++) {
+        /* the formal sum (RealForm -> None) shows S itself */
+        snprintf(buf, sizeof(buf), "Integrate[(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4), x, "
+                 "Method -> {\"BronsteinRational\", \"LogPart\" -> \"%s\", \"RealForm\" -> None}]", ls[i]);
+        run_eq(buf, "(-1/2*I) Log[2*I - 3 x - I x^2 + x^3] + (1/2*I) Log[-2*I - 3 x + I x^2 + x^3]");
+        /* and the real form is Rioboo's (2.20) */
+        snprintf(buf, sizeof(buf), "Integrate[(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4), x, "
+                 "Method -> {\"BronsteinRational\", \"LogPart\" -> \"%s\"}]", ls[i]);
+        run_eq(buf, "ArcTan[x] + ArcTan[x^3] + ArcTan[1/2 (x - 3 x^3 + x^5)]");
+        /* Ex. 2.5.2: 36/(x^5 - 2x^4 - 2x^3 + 4x^2 + x - 2) */
+        snprintf(buf, sizeof(buf), "With[{f = 36/(x^5 - 2 x^4 - 2 x^3 + 4 x^2 + x - 2)}, With[{F = Integrate[f, x, "
+                 "Method -> {\"BronsteinRational\", \"LogPart\" -> \"%s\"}]}, {PossibleZeroQ[D[F, x] - f], FreeQ[F, RootSum]}]]", ls[i]);
+        run_eq(buf, "{True, True}");
+        /* Czichowski's own example: residues +-1/Sqrt[2] on degree-7 S */
+        snprintf(buf, sizeof(buf), "With[{f = (7 x^13 + 10 x^8 + 4 x^7 - 7 x^6 - 4 x^3 - 4 x^2 + 3 x + 3)/"
+                 "(x^14 - 2 x^8 - 2 x^7 - 2 x^4 - 4 x^3 - x^2 + 2 x + 1)}, With[{F = Integrate[f, x, "
+                 "Method -> {\"BronsteinRational\", \"LogPart\" -> \"%s\"}]}, {PossibleZeroQ[D[F, x] - f], LeafCount[F] < 120}]]", ls[i]);
+        run_eq(buf, "{True, True}");
+        /* an irreducible cubic resultant: a RootSum in every log part */
+        snprintf(buf, sizeof(buf), "With[{f = (x + 2)/(x^3 + x + 1)}, With[{F = Integrate[f, x, "
+                 "Method -> {\"BronsteinRational\", \"LogPart\" -> \"%s\"}]}, {PossibleZeroQ[D[F, x] - f], FreeQ[F, Integrate]}]]", ls[i]);
+        run_eq(buf, "{True, True}");
+    }
+    /* Czichowski on a resultant with repeated roots: 2 log S1 - 3 log S2 */
+    for (int i = 0; i < 3; i++) {
+        snprintf(buf, sizeof(buf), "With[{f = Together[2 D[x^5 - x - 1, x]/(x^5 - x - 1) - 3 D[x^3 + 2 x + 3, x]/(x^3 + 2 x + 3)]}, "
+                 "With[{F = Integrate[f, x, Method -> {\"BronsteinRational\", \"LogPart\" -> \"%s\"}]}, "
+                 "{PossibleZeroQ[D[F, x] - f], FreeQ[F, RootSum], LeafCount[F] < 40}]]", ls[i]);
+        run_eq(buf, "{True, True, True}");
+    }
+}
+
+/* Ex. 2.8.1 / (2.20): LogToReal and LogToAtan (Rioboo), continuous. */
+static void test_bronstein_log_to_real(void) {
+    run_eq(BR266("(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4)", "\"RealForm\" -> \"LogToReal\""),
+           "ArcTan[x] + ArcTan[x^3] + ArcTan[1/2 (x - 3 x^3 + x^5)]");
+    /* the continuity Bronstein's Fig. 2.2 shows: no jump on [-2, 2] */
+    run_eq("With[{F = " BR266("(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4)", "\"RealForm\" -> \"LogToReal\"") "}, "
+           "Max[Abs[Differences[N[Table[F, {x, -2, 2, 1/100}]]]]] < 1/10]", "True");
+    /* a quartic irreducible over Q, split over Q(Sqrt[7]): radicals, no RootSum */
+    run_eq("With[{f = 1/(x^4 - 2 x^3 + 7 x^2 - 6 x + 2)}, With[{F = " BR266("1/(x^4 - 2 x^3 + 7 x^2 - 6 x + 2)", "\"RealForm\" -> \"LogToReal\"") "}, "
+           "{PossibleZeroQ[D[F, x] - f], FreeQ[F, RootSum | Root | Complex], LeafCount[F] < 80}]]", "{True, True, True}");
+    /* the same under Automatic: the general LogToReal in radicals */
+    run_eq("With[{f = 1/(x^4 - 2 x^3 + 7 x^2 - 6 x + 2)}, With[{F = Integrate[f, x]}, "
+           "{PossibleZeroQ[D[F, x] - f], FreeQ[F, RootSum | Root | Complex]}]]", "{True, True}");
+    /* real and complex roots together (1/(x^5 + 1)) */
+    run_eq("With[{f = 1/(x^5 + 1)}, With[{F = " BR266("1/(x^5 + 1)", "\"RealForm\" -> \"LogToReal\"") "}, "
+           "{PossibleZeroQ[D[F, x] - f], FreeQ[F, RootSum | Complex]}]]", "{True, True}");
+    /* past radicals: Root objects when asked for, a RootSum under Automatic */
+    run_eq("With[{f = (3 - 4 x)/(x^4 + 2 x^3 + 6 x^2 + 5 x + 7)}, With[{F = " BR266("(3 - 4 x)/(x^4 + 2 x^3 + 6 x^2 + 5 x + 7)", "\"RealForm\" -> \"LogToReal\"") "}, "
+           "{PossibleZeroQ[D[F, x] - f], FreeQ[F, RootSum | Complex]}]]", "{True, True}");
+    run_eq("FreeQ[Integrate[(3 - 4 x)/(x^4 + 2 x^3 + 6 x^2 + 5 x + 7), x], RootSum]", "False");
+    /* RealForm -> None keeps the formal RootSum in slot form */
+    run_eq(BR266("1/(x^3 + x + 1)", "\"RealForm\" -> None"),
+           "RootSum[-1 - 3 #1 + 31 #1^3 &, Log[4 + 9 x + 31 #1 - 62 #1^2] #1 &]");
+    /* a sub-option outside the list of values is not a Method */
+    run_eq("Quiet[Integrate[1/(x^2 + 1), x, Method -> {\"BronsteinRational\", \"Hermite\" -> \"Cubic\"}]]",
+           "Integrate[1/(1 + x^2), x, Method -> {\"BronsteinRational\", \"Hermite\" -> \"Cubic\"}]");
+}
+
+/* The definite integral over [1/2, 1] read off Integrate[f, x, Method -> m]
+ * agrees with NIntegrate both at 30 digits (exact principal branches, large
+ * $MaxExtraPrecision) and at machine precision, and the antiderivative has no
+ * root of index >= 3 of a non-real number (a casus-irreducibilis radical, whose
+ * principal value hangs on the sign of a zero). */
+static void assert_branch_safe(const char* f, const char* method) {
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+        "TimeConstrained[Module[{P = Integrate[%s, x, Method -> %s], n}, "
+        "n = NIntegrate[%s, {x, 1/2, 1}, WorkingPrecision -> 30]; "
+        "{FreeQ[P, Integrate], "
+        "FreeQ[P, Power[b_, Rational[_, q_ /; q >= 3]] /; !FreeQ[b, Complex]], "
+        "Abs[Quiet[Block[{$MaxExtraPrecision = 3000}, N[(P /. x -> 1) - (P /. x -> 1/2) - n, 30]]]] < 10^-20, "
+        "Abs[N[(P /. x -> 1) - (P /. x -> 1/2)] - N[n]] < 10^-10}], 120, $Aborted]",
+        f, method, f);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "{True, True, True, True}") != 0)
+        printf("FAIL: branch-safe Integrate[%s, x, Method -> %s]: %s\n", f, method, got);
+    ASSERT_STR_EQ(got, "{True, True, True, True}");
+    free(got); expr_free(e); expr_free(res);
+}
+
+/* A non-real coefficient field has no real form: the complex log sum over the
+ * residues is returned, whatever RealForm asks for, and no residue is written
+ * with Cardano/Ferrari radicals.  The repro: the rational part of a Bronstein
+ * integrand over Q(Sqrt[2], I), whose denominator splits over Q(I) into three
+ * quadratics.  The default (Automatic, "Rioboo", "LogToReal", LogPart RT or
+ * Czichowski) took NaiveLogPart over the denominator's roots, and the
+ * algebraic-constant pass rewrote the residues -- quadratic over the field,
+ * quartic over Q -- by ToRadicals into casus-irreducibilis Ferrari radicals:
+ * 1515 leaves in 1.2 s, against 358 leaves in 0.2 s for RealForm -> None.
+ * (Those radicals are exact, but sit on a branch cut through cancelling
+ * imaginary parts; N read them correctly only after its v0.676x fix.) */
+static void test_realform_complex_field_branch_safe(void) {
+    const char* rho = "((4 + 2 Sqrt[2]) x^2)/((3 + 2 Sqrt[2]) (I + 5 x^2 + 5 I x^4 + x^6))";
+    const char* ms[] = {
+        "\"BronsteinRational\"", "Automatic",
+        "{\"BronsteinRational\", \"RealForm\" -> None}",
+        "{\"BronsteinRational\", \"RealForm\" -> \"Rioboo\"}",
+        "{\"BronsteinRational\", \"RealForm\" -> \"LogToReal\"}",
+        "{\"BronsteinRational\", \"LogPart\" -> \"RothsteinTrager\"}",
+        "{\"BronsteinRational\", \"LogPart\" -> \"Czichowski\"}",
+        "{\"BronsteinRational\", \"LogPart\" -> \"LazardRiobooTrager\"}",
+    };
+    for (size_t i = 0; i < sizeof(ms) / sizeof(ms[0]); i++) assert_branch_safe(rho, ms[i]);
+    /* and as small as the formal complex log sum */
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "LeafCount[Integrate[%s, x, Method -> \"BronsteinRational\"]] <= 400", rho);
+    run_eq(buf, "True");
+    /* the complex-field audit: Q(I), Q(Sqrt[2], I), and real fields with
+     * casus-irreducibilis residues */
+    const char* fs[] = {
+        "1/(x^4 + I)", "1/(x^3 + I x + 1)", "x/(x^4 + (1 + I) x^2 + 2)",
+        "1/(x^2 + Sqrt[2] I)", "(x + Sqrt[2])/(x^4 + I Sqrt[2])", "1/(x^3 - I)",
+        "1/(x^4 - 2 I x^2 - 2)", "Sqrt[2]/(x^4 + I x^2 + 1)", "1/(x^6 + I)",
+        "x^2/(I + 5 x^2 + 5 I x^4 + x^6)", "1/((x^2 - I) (x^2 + (-2 + 2 I) x - I))",
+        "(1 + I Sqrt[2] x)/(x^3 + Sqrt[2] x + I)", "1/((x^2 + 1) (x^2 + I))",
+        "1/(x^3 - 3 x + 1)", "1/(1024 x^4 - 512 x^3 + 128 x^2 + 16 x + 1)",
+        "1/(x^4 + Sqrt[2] x^2 + 3)",
+    };
+    for (size_t i = 0; i < sizeof(fs) / sizeof(fs[0]); i++)
+        assert_branch_safe(fs[i], "\"BronsteinRational\"");
+    /* the complex log sum over the residues, not over the denominator's roots */
+    run_eq("LeafCount[Integrate[x/(x^4 + (1 + I) x^2 + 2), x, Method -> \"BronsteinRational\"]] <= 100", "True");
+    /* no cube roots in any of these answers (checked above); and the
+     * ToRadicals forms the pass now refuses are exact under principal
+     * branches -- the 1515-leaf answer was large, not wrong */
+    run_eq("With[{p = 1 + 16 #1 + 128 #1^2 - 512 #1^3 + 1024 #1^4 &}, "
+           "Table[RootReduce[ToRadicals[Root[p, k]]] === RootReduce[Root[p, k]], {k, 4}]]",
+           "{True, True, True, True}");
+    run_eq("With[{p = 4 - 56 #1 + 392 #1^2 + 28 #1^3 + #1^4 &}, "
+           "Table[RootReduce[ToRadicals[Root[p, k]]] === RootReduce[Root[p, k]], {k, 4}]]",
+           "{True, True, True, True}");
 }
 
 int main(void) {
@@ -1158,6 +1499,15 @@ int main(void) {
     TEST(test_issue133_quadratic_surd_denesting);
     TEST(test_algebraic_constant_normal_form);
     TEST(test_complex_coefficient_log_part);
+    TEST(test_root_coefficient_log_part);
+    TEST(test_root_coefficient_log_part_in_number_field);
+    TEST(test_review_2026_11_bigint_sign_and_content);
+    TEST(test_review_2026_11_hermite_compact);
+    TEST(test_review_2026_11_native_subresultant);
+    TEST(test_bronstein_hermite_variants);
+    TEST(test_bronstein_log_parts);
+    TEST(test_bronstein_log_to_real);
+    TEST(test_realform_complex_field_branch_safe);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

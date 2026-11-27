@@ -1,0 +1,52 @@
+label	status	seconds	verified	unevaluated	residual
+literature: (t**2 - 1)/((t**2 + 1)*sqrt(t**4 + 1))   [Euler]	elementary	0.0139	True	False	
+literature: (t**2 + 1)/((t**2 - 1)*sqrt(t**4 + 1))   [Euler]	elementary	0.0242	True	False	
+literature: t/sqrt(t**4 + 1)   [u = t^2]	elementary	0.0025	True	False	
+literature: 1/sqrt(1 - t**4)   [lemniscatic, first kind]	DECLINE	0.0033		True	
+literature: t**2/sqrt(1 - t**4)   [lemniscatic, second kind]	DECLINE	0.0027		True	
+literature: sqrt(t**4 + 1)/t   [u = t^2]	elementary	0.0050	True	False	
+literature: sqrt(t**4 + 1)/t**3   [u = t^2]	elementary	0.0084	True	False	
+literature: sqrt(t**4 + 1)   [Chebyshev]	DECLINE	0.0011		True	
+literature: (t - 1)/((t + 1)*sqrt(t**3 + t**2 + t))   [u = t + 1/t]	elementary	0.0580	True	False	
+literature: (t**2 + 1)/(t*sqrt(t**4 + t**2 + 1))   [u = t - 1/t]	elementary	0.0093	True	False	
+literature: (t**2 - 1)/(t*sqrt(t**4 + 3*t**2 + 1))   [u = t + 1/t]	elementary	0.0763	True	False	
+literature: 1/sqrt(t**3 + t)   [first kind]	DECLINE	0.0078		True	
+literature: t/(sqrt(t**3 - 1)*(t**3 + 8))   [Legendre-Clausen]	DECLINE	6.0014		True	
+literature: (t**3 - 4)/(sqrt(t**3 - 1)*(t**3 + 8))   [Goursat]	DECLINE	6.0037		True	
+literature: t**2/(sqrt(t**3 - 1)*(t**3 + 8))   [Goursat]	DECLINE	0.1319		True	
+literature: (t - 1)/((t + 2)*sqrt(t**3 - 1))   [Goursat]	elementary	0.1529	True	False	
+literature: t/((t**3 - 8)*sqrt(t**3 + 1))   [Legendre-Clausen, t -> -t]	DECLINE	6.0025		True	
+literature: 1/((t + 1)*sqrt(t**3 + 1))   [pole at a branch point]	DECLINE	0.0336		True	
+literature: sqrt(t**3 + 1)/t   [u = t^3]	DECLINE	0.1353		True	
+literature: sqrt(t**3 - 1)/t**4   [u = t^3]	DECLINE	0.1294		True	
+literature: 1/(t*sqrt(t**4 - 1))   [u = t^2]	elementary	0.0076	True	False	
+literature: t/sqrt(t**4 + 10*t**2 - 96*t - 71)   [Chebyshev's torsion example]	DECLINE	3.2696		True	
+literature: (2*t**2 + 1)/sqrt(t**4 + t**2 - 2)   []	DECLINE	0.0180		True	
+literature: 1/((t**2 - 2)*sqrt(t**4 - 5*t**2 + 4))   []	DECLINE	0.0013		True	
+literature: (t**4 - 1)/((t**4 + 1)*sqrt(t**4 + t**2 + 1))   []	elementary	0.0532	True	False	
+literature: (t**3 - 1)**(-1/3)   [Chebyshev]	elementary	0.0333	True	False	
+literature: (1 - t**3)**(-1/3)   [Chebyshev]	elementary	0.1044	True	False	
+literature: t/(t**3 + 1)**(1/3)   [Chebyshev]	DECLINE	0.0241		True	
+literature: (t**3 + 1)**(1/3)/t   [u = t^3]	elementary	0.0545	True	False	
+literature: (t**3 + 1)**(1/3)/t**2   [Chebyshev]	elementary	0.0467	True	False	
+literature: (t**3 + 1)**(2/3)/t**3   [Chebyshev]	elementary	0.0584	True	False	
+literature: (t**3 + 1)**(2/3)   [Chebyshev: 1/3 + 2/3 = 1]	elementary	0.0570	True	False	
+literature: (t**3 + 1)**(1/3)   [Chebyshev]	DECLINE	0.0075		True	
+literature: (t**3 + 3*t**2 + 3*t + 2)**(-1/3)   [shift of t^3+1]	elementary	0.1663	True	False	
+literature: (t**2 - 1)**(-2/3)   [first kind]	DECLINE	0.0103		True	
+literature: 1/(t*(t**2 - 1)**(1/3))   [u = t^2]	DECLINE	0.0110		True	
+literature: t/(t**2 - 1)**(1/3)   [u = t^2]	DECLINE	0.0140		True	
+literature: (t**3 + t)**(-1/3)   [review counterexample]	elementary	0.0543	True	False	
+literature: (t**3 - t)**(-1/3)   [same symmetry]	elementary	0.0585	True	False	
+literature: (t**3 - 3*t + 1)**(-1/3)   [cyclic cubic]	DECLINE	1.1970		True	
+literature: t*(2*t**3 - 1)/(t**3 - 1)**(1/3)   [exact]	DECLINE	0.0177		True	
+literature: (5*t**2 - 7*t/(t**3 + 1) + 1)/(t**3 - 1)**(1/3)   [paper Example 5.8]	DECLINE	0.0278		True	
+literature: (t**6 - 2*t**3 + 4)/((t**3 - 4)*(t**3 - 2)**(2/3)*(t**3 - 1))   [second level]	DECLINE	0.3937		True	
+literature: 1/((t + 1)*(t**3 + 1)**(1/3))   []	DECLINE	0.0284		True	
+literature: 1/((t - 1)*(t**3 - 1)**(2/3))   []	DECLINE	0.0099		True	
+literature: (t + 1)/((t - 1)*(t**3 - 1)**(1/3))   []	DECLINE	0.0251		True	
+literature: 1/(t*(t**3 - 3*t**2 + 3*t)**(1/3))   []	DECLINE	0.0524		True	
+literature: (t**2 + 1)/((t**2 - 1)*(t**3 + t)**(1/3))   []	DECLINE	0.0315		True	
+literature: ((t - 3)*(t - 2)*(t - 1))**(-1/3)   [symmetric roots]	DECLINE	0.0551		True	
+literature: t/((t - 3)*(t - 2)*(t - 1))**(2/3)   [t-2 elementary, constant first kind]	DECLINE	0.0222		True	
+literature: (t**3 + t + 1)**(-1/3)   [torsion question]	DECLINE	1.4384		True	

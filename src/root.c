@@ -289,7 +289,21 @@ static bool expr_free_of(const Expr* e, const Expr* target) {
     return true;
 }
 
-/* Substitute every Slot[1] in `e` with a deep copy of `replacement`. */
+/* Is `e` a slot-form pure function -- Function[body] or Function[Null, body,
+ * attrs] -- whose body binds its own #1?  A named-parameter Function[{x}, body]
+ * does not bind slots, so a #1 inside it still belongs to the outer function. */
+static bool is_slot_function(const Expr* e) {
+    if (!head_is(e, SYM_Function)) return false;
+    size_t n = e->data.function.arg_count;
+    if (n == 1) return true;
+    return n == 3 && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == SYM_Null;
+}
+
+/* Substitute every Slot[1] in `e` with a deep copy of `replacement`, not
+ * descending into a nested slot-form Function (whose slots are its own): the
+ * summand of RootSum[p, (c Root[#^3 - 4 # - 1 &, 1] + #) &] applied at a root
+ * r must not rewrite the Root's own #1 into r. */
 static Expr* subst_slot1(const Expr* e, const Expr* replacement) {
     if (!e) return NULL;
     if (head_is(e, SYM_Slot)
@@ -298,7 +312,7 @@ static Expr* subst_slot1(const Expr* e, const Expr* replacement) {
         && e->data.function.args[0]->data.integer == 1) {
         return expr_copy((Expr*)replacement);
     }
-    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (e->type != EXPR_FUNCTION || is_slot_function(e)) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
     Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
@@ -361,16 +375,39 @@ static Expr* simplify_rational(Expr* e) {
 static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name);   /* fwd */
 static Expr* subst_symbol(Expr* e, const char* name, Expr* repl);         /* fwd */
 static bool  rootsum_poly_squarefree(Expr* poly_var, Expr* var);          /* fwd */
+/* Does the symbol `name` occur inside a nested slot-form Function in `e`?
+ * Such an occurrence cannot be rewritten as #1: the nested function would
+ * capture it.  RootSum then keeps the named form. */
+static bool bvar_in_slot_function(const Expr* e, const char* name, bool inside) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return inside && strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    bool in = inside || is_slot_function(e);
+    if (bvar_in_slot_function(e->data.function.head, name, in)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (bvar_in_slot_function(e->data.function.args[i], name, in)) return true;
+    return false;
+}
+
+/* The named parameter of a Function[t, body] / Function[{t}, body], or NULL. */
+static const Expr* named_fn_param(const Expr* fn) {
+    if (!head_is(fn, SYM_Function) || fn->data.function.arg_count != 2) return NULL;
+    const Expr* p = fn->data.function.args[0];
+    if (p->type == EXPR_SYMBOL) return p;
+    if (head_is(p, SYM_List) && p->data.function.arg_count == 1 &&
+        p->data.function.args[0]->type == EXPR_SYMBOL) return p->data.function.args[0];
+    return NULL;
+}
+
 static Expr* rootsum_fn_body_slot(Expr* fn) {
     if (fn->type != EXPR_FUNCTION
         || fn->data.function.head->type != EXPR_SYMBOL
         || fn->data.function.head->data.symbol.name != SYM_Function) return NULL;
     if (fn->data.function.arg_count == 1)
         return expr_copy(fn->data.function.args[0]);
-    if (fn->data.function.arg_count == 2
-        && fn->data.function.args[0]->type == EXPR_SYMBOL)
-        return substitute_bvar_with_slot(fn->data.function.args[1],
-                                         fn->data.function.args[0]->data.symbol.name);
+    const Expr* v = named_fn_param(fn);
+    if (v && !bvar_in_slot_function(fn->data.function.args[1], v->data.symbol.name, false))
+        return substitute_bvar_with_slot(fn->data.function.args[1], v->data.symbol.name);
     return NULL;
 }
 
@@ -776,12 +813,9 @@ static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name);
  * Function[body /. t -> #1] the RootSum engines read; NULL for any other
  * shape (a slot-form Function is used as given). */
 static Expr* rootsum_slot_form(const Expr* f) {
-    if (!head_is(f, SYM_Function) || f->data.function.arg_count != 2) return NULL;
-    const Expr* p = f->data.function.args[0];
-    const Expr* v = p->type == EXPR_SYMBOL ? p
-                  : (head_is(p, SYM_List) && p->data.function.arg_count == 1 &&
-                     p->data.function.args[0]->type == EXPR_SYMBOL) ? p->data.function.args[0] : NULL;
-    if (!v) return NULL;
+    const Expr* v = named_fn_param(f);
+    if (!v || bvar_in_slot_function(f->data.function.args[1], v->data.symbol.name, false))
+        return NULL;
     Expr* body = substitute_bvar_with_slot(f->data.function.args[1], v->data.symbol.name);
     return expr_new_function(expr_new_symbol(SYM_Function), (Expr*[]){ body }, 1);
 }
@@ -901,7 +935,10 @@ Expr* rootsum_expand_over_roots(const Expr* rs) {
         || rs->data.function.arg_count != 2) return NULL;
     Expr* poly = rootsum_fn_body_slot(rs->data.function.args[0]);   /* Slot[1] form */
     Expr* body = rootsum_fn_body_slot(rs->data.function.args[1]);
-    if (!poly || !body) { if (poly) expr_free(poly); if (body) expr_free(body); return NULL; }
+    /* A named body whose parameter occurs inside a nested slot function stays
+     * named: it is instantiated by symbol substitution below. */
+    const Expr* bv = body ? NULL : named_fn_param(rs->data.function.args[1]);
+    if (!poly || (!body && !bv)) { if (poly) expr_free(poly); if (body) expr_free(body); return NULL; }
 
     Expr* rv = expr_new_symbol("RootSum$sv");
     Expr* poly_rv = subst_slot1(poly, rv);
@@ -915,10 +952,12 @@ Expr* rootsum_expand_over_roots(const Expr* rs) {
             (Expr*[]){ expr_copy(poly) }, 1);
         Expr* rootk = expr_new_function(expr_new_symbol(SYM_Root),
             (Expr*[]){ fn, expr_new_integer(k) }, 2);
-        terms[k - 1] = subst_slot1(body, rootk);
+        terms[k - 1] = body ? subst_slot1(body, rootk)
+                            : subst_symbol(rs->data.function.args[1]->data.function.args[1],
+                                           bv->data.symbol.name, rootk);
         expr_free(rootk);
     }
-    expr_free(poly); expr_free(body);
+    expr_free(poly); if (body) expr_free(body);
     Expr* out = (deg == 1) ? terms[0]
               : expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)deg);
     free(terms);

@@ -158,6 +158,45 @@ void test_polynomial_div_rem() {
     run_test("PolynomialRemainder[x^2 - (Sqrt[2]+Sqrt[3]) x + Sqrt[6], x - Sqrt[2], x]", "0");
 }
 
+/* A rational leading coefficient over numeric coefficients (radicals, I,
+ * Root objects, also in denominators): the coefficient-wise step combines like
+ * terms and zero-tests each coefficient exactly in the number field of the
+ * atoms.  It used to run Together + Cancel on every coefficient of every
+ * step, multiplying the algebraic denominators out each time: the
+ * Root-rational case below took > 20 s (a goursat PolynomialRemainder of
+ * LeafCount 2724 did not finish in 60 s); it is now milliseconds.  Answers
+ * verified by the defining identity p == Q q + R. */
+void test_polynomial_div_rem_algebraic() {
+    /* timing gate: 5 s, against > 20 s before */
+    run_test("TimeConstrained[Module[{r = Root[-1 - 4 #1 + #1^3 &, 1], dd, nn, qr, v},"
+             " dd = Sum[(k^2 + k r + r^2)/(16256 + 129032 r + 256032 r^2 + k) m^k, {k, 0, 12}];"
+             " nn = m^6 + 3 m^4 - 2 m + 7;"
+             " qr = PolynomialQuotientRemainder[dd, nn, m];"
+             " v = N[r, 120];"
+             " {Exponent[qr[[1]], m], Exponent[qr[[2]], m],"
+             "  qr === {PolynomialQuotient[dd, nn, m], PolynomialRemainder[dd, nn, m]},"
+             "  Abs[(dd - qr[[1]] nn - qr[[2]]) /. {m -> 3/7, r -> v}] < 10^-100}], 5, $timedout]",
+             "List[6, 5, True, True]");
+    /* exact small cases */
+    run_test("Module[{p = y^4, q = y^2 - Sqrt[2] y + 1/(1 + Sqrt[3]), r},"
+             " r = PolynomialRemainder[p, q, y];"
+             " {Exponent[r, y], RootReduce[Expand[p - PolynomialQuotient[p, q, y] q - r]]}]",
+             "List[1, 0]");
+    run_test("PolynomialQuotientRemainder[y^3 + I, y - I, y]",
+             "List[Plus[-1, Times[Complex[0, 1], y], Power[y, 2]], 0]");
+    run_test("PolynomialQuotient[y^2 + 1, y - Sqrt[2], y]",
+             "Plus[Power[2, Rational[1, 2]], y]");
+    /* an exact multiple has remainder 0: a zero-equivalent coefficient is
+     * recognised by the field test, not left behind by Expand */
+    run_test("PolynomialRemainder[Expand[(y - Sqrt[2]) (y + 1/(1 + Sqrt[2]))], y - Sqrt[2], y]", "0");
+    run_test("Module[{r = Root[#^3 - # - 1 &, 1]}, PolynomialRemainder["
+             "Expand[(y^2 - r y + 2) (y^3 + 1/(r^2 + 1) y + r)], y^2 - r y + 2, y]]", "0");
+    /* a free parameter or an inexact coefficient: Together + Cancel, as before */
+    run_test("PolynomialRemainder[y^3 + a, y - Sqrt[2], y]",
+             "Plus[Times[2, Power[2, Rational[1, 2]]], a]");
+    run_test("PolynomialRemainder[y^2 + 1., y - Sqrt[2], y]", "3.0");
+}
+
 void test_collect() {
     run_test("Collect[b x^2+5x+7x^2+9a x+2, x]", "Plus[2, Times[Plus[5, Times[9, a]], x], Times[Plus[7, b], Power[x, 2]]]");
     run_test("Collect[a x+b y+c x+d y, x]", "Plus[Times[Plus[a, c], x], Times[b, y], Times[d, y]]");
@@ -389,6 +428,7 @@ int main() {
     TEST(test_polynomialextendedgcd);
     TEST(test_polynomiallcm);
     TEST(test_polynomial_div_rem);
+    TEST(test_polynomial_div_rem_algebraic);
     TEST(test_collect);
     TEST(test_coefficientlist);
     TEST(test_decompose);

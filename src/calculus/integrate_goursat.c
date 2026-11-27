@@ -52,6 +52,7 @@
 #include "poly.h"
 #include "zero_test.h"
 #include "print.h"
+#include "simp.h"            /* assume_ctx_from_expr: complex-domain certificate */
 
 #include <stdbool.h>
 #include <stdarg.h>
@@ -137,6 +138,15 @@ static Expr* cancel_ext(Expr* e) {
     if (!e) return NULL;
     Expr* opt = mk_rule(mk_sym(SYM_Extension), mk_sym(SYM_Automatic));
     return eval_take(internal_cancel((Expr*[]){ e, opt }, 2));
+}
+/* Factor[e, Extension -> Automatic]; consumes e.  Over the field of e's own
+ * coefficients: a square part with algebraic coefficients, such as
+ * (x - 1 - Sqrt[2])^4 in 64/(17 + 12 Sqrt[2] - 28 x - ... + x^4), is only
+ * exposed there -- plain Factor works over Q and leaves the quartic whole. */
+static Expr* factor_ext(Expr* e) {
+    if (!e) return NULL;
+    Expr* opt = mk_rule(mk_sym(SYM_Extension), mk_sym(SYM_Automatic));
+    return eval_take(mk_fn2("Factor", e, opt));
 }
 /* canonic[e] = Cancel[Together[e, Extension -> Automatic], Extension ->
  * Automatic]; consumes e. */
@@ -341,6 +351,46 @@ static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
     expr_free(tol_lo); expr_free(tol_hi); expr_free(dd);
     arith_warnings_mute_pop();
     return good >= 2 && !bad;
+}
+
+/* SOUND differentiate-back certificate: PossibleZeroQ[D[result, x] - f] with x
+ * ranging over the whole complex plane.
+ *
+ * diff_back_ok above samples only REAL points x > 1, so it cannot see a branch
+ * error: the descents build the answer through radicals of the Mobius-
+ * transformed variable (Sqrt[H(z(x))], z a Mobius map of x), and
+ * Sqrt[H(z(x))] = c(x) Sqrt[R(x)] holds only up to a sign that changes from one
+ * region of C to the next.  An answer written through such a radical is an
+ * antiderivative on part of the plane and wrong elsewhere -- e.g.
+ * x/((x^2 - 3 - 2 Sqrt[2]) Sqrt[x^3 - x]) shipped an answer correct on the
+ * whole real line and wrong at x = 7/10 + I/3.  The plain zero test samples the
+ * real line only, so it is blind to the same class; the complex-domain sampler
+ * (Element[x, Complexes]) visits every sign orthant of x in C.
+ *
+ * Only a TRUE verdict certifies; FALSE and UNKNOWN both decline.  Borrows all. */
+static bool diff_back_certified(Expr* result, Expr* x, Expr* f) {
+    Expr* d = eval_take(mk_fn2("D", expr_copy(result), expr_copy(x)));
+    if (!d) return false;
+    Expr* diff = gsub(d, expr_copy(f));                 /* D[result,x] - f */
+    Expr* assum = expr_new_function(expr_new_symbol(SYM_Element),
+                      (Expr*[]){ expr_copy(x), expr_new_symbol(SYM_Complexes) }, 2);
+    AssumeCtx* ctx = assume_ctx_from_expr(assum);
+    /* Sampling may land on a pole of result or f (1/0); that is verification
+     * noise, so it must neither leak nor be seen by an enclosing Check[]. */
+    arith_warnings_mute_push();
+    bool ok = zero_test_decide_assuming(diff, ctx) == ZERO_TEST_TRUE;
+    arith_warnings_mute_pop();
+    assume_ctx_free(ctx);
+    expr_free(assum);
+    expr_free(diff);
+    return ok;
+}
+
+/* The acceptance test for every candidate antiderivative: the cheap real-axis
+ * screen (fast reject of a plainly wrong candidate) followed by the sound
+ * complex-domain certificate.  Borrows all. */
+static bool answer_ok(Expr* result, Expr* x, Expr* f) {
+    return diff_back_ok(result, x, f) && diff_back_certified(result, x, f);
 }
 
 /* Cheap numeric "is e definitely NOT identically zero in x?" test.
@@ -2175,18 +2225,27 @@ fail:
  * guard still passes on the rewritten form.
  */
 
-/* True iff e contains an unresolved Power[_, 1/2] (a square root). */
-static bool has_sqrt(const Expr* e) {
+/* True iff e contains an unresolved square root Power[g, m/2] (m odd) of a
+ * radicand g that depends on x.  A CONSTANT radical (Sqrt[2], Sqrt[-1 + Sqrt[2]]) is a
+ * coefficient, not a second generator over Q(x): Sqrt[64 R/(x - 1 - Sqrt[2])^4]
+ * = 8 Sqrt[R]/(x - 1 - Sqrt[2])^2 and Sqrt[-8 R/(x - 2)^6] =
+ * 2 I Sqrt[2] Sqrt[R]/(x - 2)^3 are both rational-times-Sqrt[R].  Counting the
+ * constant root as a radical refused those rewrites, so every answer over an
+ * algebraic constant field (and the period-3 answers, whose square part carries
+ * Sqrt[-2]) kept the nested Sqrt[g(x)] -- a branch-wrong form.  Borrows e, x. */
+static bool is_half_power(const Expr* e, int64_t* two_e);
+static bool has_sqrt(const Expr* e, const Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2) {
-        Expr* half = make_rational(1, 2);
-        bool m = expr_eq(e->data.function.args[1], half);
-        expr_free(half);
-        if (m) return true;
+        /* any half-integer power g^(m/2): PowerExpand writes Sqrt[c/R] as
+         * c^(1/2) (x - 1)^(-1/2) x^(-1/2) ..., so 1/Sqrt[.] counts too */
+        int64_t two_e;
+        if (is_half_power(e->data.function.args[1], &two_e)
+            && !expr_free_of(e->data.function.args[0], x)) return true;
     }
-    if (has_sqrt(e->data.function.head)) return true;
+    if (has_sqrt(e->data.function.head, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (has_sqrt(e->data.function.args[i])) return true;
+        if (has_sqrt(e->data.function.args[i], x)) return true;
     return false;
 }
 
@@ -2210,11 +2269,14 @@ static bool is_half_power(const Expr* e, int64_t* two_e) {
  * 1/Sqrt[g] = Power[g, -1/2] (m = -1) the eigendescent emits inside
  * ArcTan/ArcTanh arguments.  Pointers are borrowed into e; *out is realloc'd
  * (caller free()s the array only). */
-static void collect_sqrt_radicands(Expr* e, Expr*** out, size_t* n, size_t* cap) {
+static void collect_sqrt_radicands(Expr* e, const Expr* x, Expr*** out, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
     if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         int64_t two_e;
-        if (is_half_power(e->data.function.args[1], &two_e)) {
+        if (is_half_power(e->data.function.args[1], &two_e)
+            && !expr_free_of(e->data.function.args[0], x)) {
+            /* only x-dependent radicands: a constant root (Sqrt[2]) is a
+             * coefficient, never a generator to re-express over Sqrt[R] */
             Expr* g = e->data.function.args[0];
             bool dup = false;
             for (size_t i = 0; i < *n; i++)
@@ -2228,9 +2290,9 @@ static void collect_sqrt_radicands(Expr* e, Expr*** out, size_t* n, size_t* cap)
             }
         }
     }
-    collect_sqrt_radicands(e->data.function.head, out, n, cap);
+    collect_sqrt_radicands(e->data.function.head, x, out, n, cap);
     for (size_t i = 0; i < e->data.function.arg_count; i++)
-        collect_sqrt_radicands(e->data.function.args[i], out, n, cap);
+        collect_sqrt_radicands(e->data.function.args[i], x, out, n, cap);
 }
 
 /* Return true if the real part of cand/Sqrt[g] sampled at a fixed rational
@@ -2273,13 +2335,12 @@ static bool radical_sign_negative(Expr* cand, Expr* g, Expr* x) {
  * global sign fixed numerically); else NULL.  Borrows g, R, x. */
 static Expr* sqrt_over_R(Expr* g, Expr* R, Expr* x) {
     /* h = Factor[Cancel[Together[g/R]]] -- factoring exposes the square part. */
-    Expr* h = eval_take(mk_fn1("Factor",
-                  canonic(gdiv(expr_copy(g), expr_copy(R)))));
+    Expr* h = factor_ext(canonic(gdiv(expr_copy(g), expr_copy(R))));
     if (!h) return NULL;
     /* s = PowerExpand[Sqrt[h]] is radical-free iff h is a perfect rational
      * square (times a constant whose own root PowerExpand resolves). */
     Expr* s = eval_take(mk_fn1("PowerExpand", mk_sqrt_expr(expr_copy(h))));
-    bool ok = s && !has_sqrt(s);
+    bool ok = s && !has_sqrt(s, x);
     if (ok) {
         Expr* chk = gsub(mk_pow_int(expr_copy(s), 2), expr_copy(h));
         ok = is_zero(chk);
@@ -2298,7 +2359,7 @@ static Expr* sqrt_over_R(Expr* g, Expr* R, Expr* x) {
  * or NULL when nothing is rewritten.  Borrows res, R, x. */
 static Expr* reexpress_over_radical(Expr* res, Expr* R, Expr* x) {
     Expr** rad = NULL; size_t nr = 0, cap = 0;
-    collect_sqrt_radicands(res, &rad, &nr, &cap);
+    collect_sqrt_radicands(res, x, &rad, &nr, &cap);
     Expr* out = NULL;
     for (size_t i = 0; i < nr; i++) {
         Expr* g = rad[i];
@@ -2408,10 +2469,10 @@ static int numeric_sign_ratio(Expr* a, Expr* b, Expr* x) {
 static Expr* reduce_sqrt_over_R(Expr* rho, Expr* R, Expr* x) {
     /* Perfect square?  Factor exposes the square part; PowerExpand takes the
      * root, which is radical-free exactly when rho is a rational square. */
-    Expr* h = eval_take(mk_fn1("Factor", expr_copy(rho)));
+    Expr* h = factor_ext(expr_copy(rho));
     if (h) {
         Expr* s = powerexpand_e(mk_sqrt_expr(expr_copy(h)));
-        if (s && !has_sqrt(s)) {
+        if (s && !has_sqrt(s, x)) {
             Expr* chk = gsub(mk_pow_int(expr_copy(s), 2), expr_copy(h));
             bool ok = is_zero(chk);
             expr_free(chk);
@@ -2553,17 +2614,21 @@ static Expr* gs_core(Expr* f, Expr* x) {
     gs_log(result ? "descent produced a candidate antiderivative"
                   : "descent did not close -- no candidate");
 
-    /* Normalise the result's nested radical over the integrand's own Sqrt[R]
-     * (square-root case only), so D[result,x] // Simplify reduces to f.  Adopt
-     * the rewrite only if the differentiate-back guard still passes on it. */
+    /* Normalise the result's nested radicals over the integrand's own Sqrt[R]
+     * (square-root case only).  The descent writes the answer through radicals
+     * of the Mobius-transformed variable, Sqrt[g(x)] with g = c(x)^2 R(x);
+     * such an answer is correct only where Sqrt[g] = +c Sqrt[R], i.e. on part
+     * of the plane.  Rewriting every such Sqrt[g] as the one branch c Sqrt[R]
+     * turns it into a function of the integrand's own radical, which is then
+     * an antiderivative on the whole domain.  The candidates are tried most-
+     * normalised first and the first that passes the sound complex-domain
+     * certificate (answer_ok) is returned; when none does, the stage declines. */
+    Expr* cands[3] = { NULL, NULL, NULL };     /* merged, improved, raw */
     if (result && pden == 2) {
         gs_log("reexpress_over_radical: START");
         Expr* improved = reexpress_over_radical(result, R, x);
         gs_log("reexpress_over_radical: DONE (%s)", improved ? "rewrote" : "no change");
-        if (improved) {
-            if (diff_back_ok(improved, x, f)) { expr_free(result); result = improved; }
-            else expr_free(improved);
-        }
+        Expr* base = improved ? improved : result;
 
         /* reexpress_over_radical re-expresses each nested radical as
          * rational*Sqrt[R] one node at a time; when the evaluator has already
@@ -2574,44 +2639,48 @@ static Expr* gs_core(Expr* f, Expr* x) {
          * generators that make a downstream Simplify blow up on multivariate
          * GCDs.  It is only visible on the fully-evaluated form, so evaluate and
          * then recombine the x-dependent factor roots of each Times back into the
-         * single generator Sqrt[R].  Correct by construction (an identity on the
-         * integrand's domain, numeric global-sign fixed); adopt only if the
-         * differentiate-back guard still passes. */
+         * single generator Sqrt[R]. */
         gs_log("combine_radicals: START");
         /* evaluate() BORROWS its argument, so the copy must be held in a named
          * local and freed here — evaluate(expr_copy(result)) would orphan it. */
-        Expr* rcopy = expr_copy(result);
+        Expr* rcopy = expr_copy(base);
         Expr* flat = evaluate(rcopy);
         expr_free(rcopy);
         Expr* merged = flat ? combine_radicals(flat, R, x) : NULL;
         gs_log("combine_radicals: DONE (%s)",
                (merged && flat && !expr_eq(merged, flat)) ? "rewrote" : "no change");
-        if (merged) {
-            if (flat && !expr_eq(merged, flat) && diff_back_ok(merged, x, f)) {
-                expr_free(result); result = merged;
-            } else expr_free(merged);
-        }
+        if (merged && flat && !expr_eq(merged, flat)) cands[0] = merged;
+        else if (merged) expr_free(merged);
         if (flat) expr_free(flat);
+        cands[1] = improved;
     }
+    cands[2] = result;
+    result = NULL;
 
     expr_free(F);
     expr_free(R);
 
-    /* Safety guard (differentiate-back).  The eigenspace elementarity criterion
-     * relies on PossibleZeroQ, which can misfire on deeply nested radical roots
-     * (e.g. an irreducible quartic solved via Ferrari) -- catastrophic
-     * cancellation can numericalise a genuinely nonzero projection to ~0, so the
-     * criterion wrongly passes and an incorrect antiderivative (often the
-     * degenerate 0) is emitted.  Verify D[result, x] == f before returning (see
-     * diff_back_ok for why this is a numeric rather than a PossibleZeroQ check);
-     * on failure, decline so the cascade continues. */
-    if (result && !diff_back_ok(result, x, f)) {
-        gs_log("VERIFY: differentiate-back guard FAILED -- discarding candidate, declining");
-        expr_free(result); result = NULL;
-    } else if (result) {
-        gs_log("VERIFY: differentiate-back guard passed");
-        gs_log_expr("RESULT", result);
+    /* Differentiate-back certificate.  The eigenspace criteria rely on zero
+     * tests that can misfire on deeply nested radical roots (an irreducible
+     * quartic solved via Ferrari), and the radical normalisation above fixes
+     * branch signs numerically, so no candidate is trusted on construction:
+     * each must pass answer_ok, whose decisive half is PossibleZeroQ over the
+     * complex plane.  On failure of all, decline so the cascade continues. */
+    for (int i = 0; i < 3; i++) {
+        if (!cands[i]) continue;
+        if (!result && answer_ok(cands[i], x, f)) {
+            gs_log("VERIFY: candidate %d certified", i);
+            result = cands[i];
+        } else {
+            if (!result) {
+                gs_log("VERIFY: candidate %d FAILED the differentiate-back certificate", i);
+                gs_log_expr("  rejected candidate", cands[i]);
+            }
+            expr_free(cands[i]);
+        }
     }
+    if (result) gs_log_expr("RESULT", result);
+    else gs_log("VERIFY: no candidate certified -- declining");
     return result;
 }
 

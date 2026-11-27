@@ -120,15 +120,17 @@ static void test_number_field(void) {
     spec("Cancel[(x-Sqrt[2])(x+Sqrt[2])/(x-Sqrt[2])]", "Plus[Power[2, Rational[1, 2]], x]");
     /* WL-faithful: radical KEPT in the denominator, not rationalized. */
     spec("Cancel[1/(x-Sqrt[2])]", "Power[Plus[Times[-1, Power[2, Rational[1, 2]]], x], -1]");
-    /* Conjugate combine clears the radical naturally. */
+    /* The denominator over the input's pieces, as the reference writes it:
+     * (-2 x)/((Sqrt[2] - x) (Sqrt[2] + x)). */
     spec("Together[1/(x-Sqrt[2])+1/(x+Sqrt[2])]",
-         "Times[2, x, Power[Plus[-2, Power[x, 2]], -1]]");
-    /* Two distinct radicals: Q(Sqrt3, Sqrt5) tower kept. */
+         "Times[2, x, Power[Plus[Times[-1, Power[2, Rational[1, 2]]], x], -1], "
+         "Power[Plus[Power[2, Rational[1, 2]], x], -1]]");
+    /* Two distinct radicals, Q(Sqrt3, Sqrt5): the reference gives
+     * (Sqrt[3] + Sqrt[5] - 2 x)/((Sqrt[3] - x) (-Sqrt[5] + x)). */
     spec("Together[1/(x-Sqrt[3])+1/(x-Sqrt[5])]",
-         "Times[Plus[Times[-1, Power[3, Rational[1, 2]]], Times[-1, Power[5, Rational[1, 2]]], "
-         "Times[2, x]], Power[Plus[Power[15, Rational[1, 2]], "
-         "Times[-1, Power[3, Rational[1, 2]], x], "
-         "Times[-1, Power[5, Rational[1, 2]], x], Power[x, 2]], -1]]");
+         "Times[Power[Plus[Times[-1, Power[3, Rational[1, 2]]], x], -1], "
+         "Power[Plus[Times[-1, Power[5, Rational[1, 2]]], x], -1], "
+         "Plus[Times[-1, Power[3, Rational[1, 2]]], Times[-1, Power[5, Rational[1, 2]]], Times[2, x]]]");
     /* WL keeps a coprime constant fraction (no rationalization for Cancel). */
     spec("Cancel[(1+Sqrt[2])/(1-Sqrt[2])]",
          "Times[Power[Plus[1, Times[-1, Power[2, Rational[1, 2]]]], -1], "
@@ -138,8 +140,11 @@ static void test_number_field(void) {
 static void test_cyclotomic(void) {
     spec("Cancel[x/(x-(-1)^(1/3))]",
          "Times[x, Power[Plus[Times[-1, Power[-1, Rational[1, 3]]], x], -1]]");
+    /* over the input's pieces, as the reference:
+     * (-2 x)/(((-1)^(1/3) - x) ((-1)^(1/3) + x)) */
     spec("Together[1/(x-(-1)^(1/3))+1/(x+(-1)^(1/3))]",
-         "Times[2, x, Power[Plus[Times[-1, Power[-1, Rational[2, 3]]], Power[x, 2]], -1]]");
+         "Times[2, x, Power[Plus[Times[-1, Power[-1, Rational[1, 3]]], x], -1], "
+         "Power[Plus[Power[-1, Rational[1, 3]], x], -1]]");
 }
 
 static void test_symbolic_radical(void) {
@@ -172,12 +177,17 @@ static void test_prototype_correct(void) {
 }
 
 static void test_higher_radicands(void) {
-    /* Q(Sqrt d), d >= 5: must NOT crash (TOGETHER_ALGEBRAIC_OVERFLOW.md) and must
-     * give the WL-faithful combined form. Currently passes — pinned as a guard. */
+    /* Q(Sqrt d), d >= 5: must NOT crash (TOGETHER_ALGEBRAIC_OVERFLOW.md).
+     * Cancelled over the field (Mathilda's default reads the radical as a
+     * field element) and written over the gcd-free basis of the pieces
+     * x^2 - d, x - Sqrt[d]: the reference's Extension -> Automatic form,
+     * (-1 - Sqrt[5] - x)/((Sqrt[5] - x) (Sqrt[5] + x)). */
     spec("Together[1/(x^2-5)+1/(x-Sqrt[5])]",
-         "Times[Plus[1, Power[5, Rational[1, 2]], x], Power[Plus[-5, Power[x, 2]], -1]]");
+         "Times[Power[Plus[Times[-1, Power[5, Rational[1, 2]]], x], -1], "
+         "Power[Plus[Power[5, Rational[1, 2]], x], -1], Plus[1, Power[5, Rational[1, 2]], x]]");
     spec("Together[1/(x^2-7)+1/(x-Sqrt[7])]",
-         "Times[Plus[1, Power[7, Rational[1, 2]], x], Power[Plus[-7, Power[x, 2]], -1]]");
+         "Times[Power[Plus[Times[-1, Power[7, Rational[1, 2]]], x], -1], "
+         "Power[Plus[Power[7, Rational[1, 2]], x], -1], Plus[1, Power[7, Rational[1, 2]], x]]");
 }
 
 int main(void) {

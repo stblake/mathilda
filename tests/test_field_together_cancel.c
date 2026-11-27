@@ -166,8 +166,10 @@ static void test_nested_radical_d2(void) {
     run_true("And @@ (Abs[N[(d2t - (1 + Sqrt[2] x)) /. x -> #, 30]] < 10^-20 & /@ "
              "{1/3, 7/5 + I, -2, 11/13})");
     run_true("TimeConstrained[PossibleZeroQ[d2t - d2e], 20, False]");
+    /* Cancel works term by term (the reference: a sum of 7 terms, 186
+     * leaves), each term reduced modulo the nested generator's relation */
     run_true("d2c = TimeConstrained[Cancel[d2e], 10, $Failed]; "
-             "d2c =!= $Failed && LeafCount[d2c] <= 200 && "
+             "d2c =!= $Failed && LeafCount[d2c] <= 300 && "
              "TimeConstrained[PossibleZeroQ[d2c - (1 + Sqrt[2] x)], 20, False]");
 }
 
@@ -205,18 +207,24 @@ static void test_nested_radical_variants(void) {
 
     /* default: reference-consistent, the nested radical is kept */
     run_true("!FreeQ[Together[(x^2 - q^2)/(x - q)], Sqrt[3/4 - 1/Sqrt[2]]]");
+    /* q^2 = 3/4 - 1/Sqrt[2] folded in, the content made integral over
+     * Q(Sqrt[2]): 8 x/(-3 + 2 Sqrt[2] + 4 x^2) (the same value as the earlier
+     * 8 Sqrt[2] x/(4 - 3 Sqrt[2] + 4 Sqrt[2] x^2), divided through by Sqrt[2]) */
     run_test("Together[1/(x - q) + 1/(x + q)]",
-             "Times[8, Power[2, Rational[1, 2]], x, Power[Plus[4, Times[-3, "
-             "Power[2, Rational[1, 2]]], Times[4, Power[2, Rational[1, 2]], Power[x, 2]]], -1]]");
+             "Times[8, x, Power[Plus[-3, Times[2, Power[2, Rational[1, 2]]], Times[4, Power[x, 2]]], -1]]");
     run_true("With[{u = q^3 x + q x^2 + 1/(1 + q)}, Abs[N[(Together[u] - u) /. x -> 3/7, 30]] < 10^-20]");
 }
 
 /* Inputs without a nested constant radical take the paths they always took. */
 static void test_nested_radical_guards(void) {
+    /* the denominator over the input's pieces, as the reference:
+     * (-2 x)/((Sqrt[2] - x) (Sqrt[2] + x)) with or without the Extension */
     run_test("Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2])]",
-             "Times[2, x, Power[Plus[-2, Power[x, 2]], -1]]");
+             "Times[2, x, Power[Plus[Times[-1, Power[2, Rational[1, 2]]], x], -1], "
+             "Power[Plus[Power[2, Rational[1, 2]], x], -1]]");
     run_test("Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Automatic]",
-             "Times[2, x, Power[Plus[-2, Power[x, 2]], -1]]");
+             "Times[2, x, Power[Plus[Times[-1, Power[2, Rational[1, 2]]], x], -1], "
+             "Power[Plus[Power[2, Rational[1, 2]], x], -1]]");
     run_test("Together[(x^2 - Sqrt[2])/(x - 2^(1/4))]", "Plus[Power[2, Rational[1, 4]], x]");
     run_test("Together[1/(x - k^(1/3)) + 1/(x + k^(1/3))]",
              "Times[-2, x, Power[Plus[Power[k, Rational[2, 3]], Times[-1, Power[x, 2]]], -1]]");
@@ -271,9 +279,11 @@ static void test_numeric_radical_denominator(void) {
     run_true("PossibleZeroQ[Denominator[Together[(Sqrt[2] w0 w3)/(1 + u) + (4 w1 w2 u)/(1 + Sqrt[2] u) "
              "+ (Sqrt[2] w0 u)/(1 + 2 u + u^2) - (2 Sqrt[2] w1 w2^2 u^2)/(1 + 2 Sqrt[2] u + 2 u^2) "
              "+ (2 a w1 w2^2 u^2)/(1 + Sqrt[2] u)]] - (1 + u)^2 (1 + Sqrt[2] u)^2]");
+    /* the two pieces are associates; the reference's field form is
+     * (2 a + Sqrt[2] b)/(2 (1 + Sqrt[2] u)) */
     run_test("Together[b/(Sqrt[2] + 2 u) + a/(1 + Sqrt[2] u)]",
-             "Times[Plus[Times[Power[2, Rational[1, 2]], a], b], "
-             "Power[Plus[Power[2, Rational[1, 2]], Times[2, u]], -1]]");
+             "Times[Rational[1, 2], Plus[Times[2, a], Times[Power[2, Rational[1, 2]], b]], "
+             "Power[Plus[1, Times[Power[2, Rational[1, 2]], u]], -1]]");
     /* PolynomialLCM is least: the shared factor up to a unit is found */
     run_true("PolynomialLCM[1 + u, 1 + Sqrt[2] u, 1 + 2 u + u^2, 1 + 2 Sqrt[2] u + 2 u^2] "
              "=== (1 + Sqrt[2] u)^2 (1 + 2 u + u^2)");
@@ -346,10 +356,113 @@ static void test_complex_root_order(void) {
     run_true("With[{r = RootReduce[Cos[7 Pi/4] + I Sin[7 Pi/4]]}, Head[r] === Root && r[[2]] == 3 && PossibleZeroQ[r[[1]][x] - (x^4 + 1)]]");
 }
 
+/* ---- the native number-field engine (src/poly/nfrat.c) ----------------- */
+
+/* The Generalised Goursat repro: a 1335-leaf rational function of t over
+ * Q(I, Sqrt[3]).  Together took 8.3 s and returned 431 leaves (the reference:
+ * 0.04 s, 63 leaves); Together[.., Extension -> Automatic] printed
+ * Power::infy.  Every call is guarded: a regression fails, it does not hang. */
+static char qi3_path[1200] = "data/generalised_goursat/repro/together_slow_qi_sqrt3.m";
+
+#define QI3_VALUE(r) "Quiet[Abs[N[(qi3 - " r ") /. t -> 37/91, 40]] < 10^-25 && " \
+                     "Abs[N[(qi3 - " r ") /. t -> -5/13, 40]] < 10^-25]"
+
+static void test_qi_sqrt3_repro(void) {
+    char buf[1400];
+    snprintf(buf, sizeof buf, "qi3 = Get[\"%s\"]; LeafCount[qi3] == 1335", qi3_path);
+    run_true(buf);
+    /* Together: fast, compact (the reference: 63 leaves), right, silent */
+    run_true("qt = TimeConstrained[Check[Together[qi3], $Failed], 20, $Failed]; "
+             "qt =!= $Failed && LeafCount[qt] <= 63");
+    run_true(QI3_VALUE("qt"));
+    run_true("First[AbsoluteTiming[Together[qi3]]] < 0.5");
+    /* the factored form: the denominator over its squarefree basis */
+    run_true("MatchQ[Denominator[qt], (-2 + t^3)^4 (2 + t^3)^4]");
+    /* Extension -> Automatic: no 1/0 on the way, the same answer */
+    run_true("qte = TimeConstrained[Check[Together[qi3, Extension -> Automatic], $Failed], 20, $Failed]; "
+             "qte =!= $Failed && qte === qt");
+    /* Cancel: term by term (a sum of three), each term one reduced fraction
+     * (the reference: 171 leaves) */
+    run_true("qc = TimeConstrained[Check[Cancel[qi3], $Failed], 20, $Failed]; "
+             "qc =!= $Failed && Head[qc] === Plus && Length[qc] == 3 && LeafCount[qc] <= 200");
+    run_true(QI3_VALUE("qc"));
+    run_true("qce = TimeConstrained[Check[Cancel[qi3, Extension -> Automatic], $Failed], 20, $Failed]; "
+             "qce =!= $Failed && LeafCount[qce] <= 200");
+    run_true(QI3_VALUE("qce"));
+    /* The old Extension path (taken for an explicit generator) was where the
+     * 1/0 came from: ratcanon wrote the relation of I over the kernel I
+     * itself (I^2 + 1 == 0), so powers of I were never reduced. */
+    run_true("qx = TimeConstrained[Check[Together[qi3[[2]], Extension -> Sqrt[3]], $Failed], 20, $Failed]; "
+             "qx =!= $Failed && FreeQ[qx, ComplexInfinity | Indeterminate] && "
+             "Quiet[Abs[N[(qi3[[2]] - qx) /. t -> 37/91, 40]] < 10^-20]");
+}
+
+/* Output form and semantics over number fields (checked against the
+ * reference's forms). */
+static void test_numberfield_forms(void) {
+    /* a numeric algebraic denominator is never rationalised */
+    run_true("Together[x + 1/(1 + Sqrt[2]), Extension -> Automatic] === (1 + x + Sqrt[2] x)/(1 + Sqrt[2])");
+    run_true("Together[x + 1/(1 + Sqrt[2])] === (1 + x + Sqrt[2] x)/(1 + Sqrt[2])");
+    run_true("Together[1/(1 + Sqrt[2]), Extension -> Automatic] === 1/(1 + Sqrt[2])");
+    run_true("Together[x/(Sqrt[3] - I) + 1/(x + I), Extension -> Automatic] === "
+             "(-I + Sqrt[3] + I x + x^2)/((-I + Sqrt[3]) (I + x))");
+    run_true("Cancel[x/(1 + Sqrt[2]) + 1, Extension -> Automatic] === 1 + x/(1 + Sqrt[2])");
+    run_true("Cancel[(x^2 - 2)/((1 + Sqrt[2]) (x - Sqrt[2])), Extension -> Automatic] === "
+             "(Sqrt[2] + x)/(1 + Sqrt[2])");
+    /* the denominator stays over its written pieces */
+    run_true("Together[1/((1 + Sqrt[2]) x - 1) + 1/x, Extension -> Automatic] === "
+             "(-1 + 2 x + Sqrt[2] x)/(x (-1 + x + Sqrt[2] x))");
+    run_true("Together[(Sqrt[2] x + Sqrt[3] y)/(x^2 - 2) + 1/(x + Sqrt[2]), Extension -> Automatic] === "
+             "(-Sqrt[2] + x + Sqrt[2] x + Sqrt[3] y)/((-Sqrt[2] + x) (Sqrt[2] + x))");
+    /* Gaussian coefficients cancel (I is a field element, not a variable) */
+    run_true("Together[(x^2 + 1)/((x - I) (Sqrt[2] x + 1))] === (I + x)/(1 + Sqrt[2] x)");
+    run_true("Cancel[(x^2 + 1)/(x - I) + y] === I + x + y");
+    /* a Root power is not reduced modulo its polynomial */
+    run_true("With[{r = Root[#^3 - # - 1 &, 1]}, "
+             "!FreeQ[Together[1/(x - r) + r^4/x], r^5] && "
+             "!FreeQ[Together[1/(x - r) + r^4/x, Extension -> Automatic], r^5]]");
+    /* Root powers past the degree: the Root objects are independent generators
+     * (the powers kept, as in the reference), through the factored engine --
+     * this took 1.0 s and 10253 leaves on the classical path */
+    run_true("With[{r = Root[#^3 - # - 1 &, 1]}, "
+             "Module[{f = Sum[(r^(k + 2) x + r^k)/(x^2 - r^k x + k), {k, 1, 7}], t, tm}, "
+             "{tm, t} = AbsoluteTiming[TimeConstrained[Together[f], 20, $Failed]]; "
+             "t =!= $Failed && tm < 0.5 && LeafCount[t] < 8000 && !FreeQ[t, r^5] && "
+             "Quiet[Abs[N[(f - t) /. x -> 3/7, 40]] < 10^-25]]]");
+    /* a Root of a cubic, (-1)^(1/3), 2^(1/3): reduced over the field, value kept */
+    run_true("With[{r = Root[#^3 - # - 1 &, 1]}, "
+             "Together[(x^3 - x - 1)/((x - r) (x + 1)), Extension -> Automatic] === "
+             "(-1 + r^2 + r x + x^2)/(1 + x)]");
+    run_true("Together[(x - 2^(1/3))/(x^3 - 2), Extension -> Automatic] === 1/(2^(2/3) + 2^(1/3) x + x^2)");
+    run_true("Module[{f = (x^2 - x + 1)/(x - (-1)^(1/3)) + y/(x + (-1)^(2/3)), r}, "
+             "r = Together[f, Extension -> Automatic]; "
+             "Quiet[Abs[N[(f - r) /. {x -> 3/7, y -> 2/9}, 40]] < 10^-25] && Exponent[Denominator[r], x] == 1]");
+}
+
+/* Apart with dependent radicals: two x-factors that coincide only through
+ * Sqrt[6] = Sqrt[2] Sqrt[3].  The radicals were abstracted as independent
+ * symbols, a coefficient denominator vanished on the way back, and the
+ * answer was Indeterminate with Power::infy printed. */
+static void test_apart_dependent_radicals(void) {
+    run_true("Module[{f = 1/((x + y - Sqrt[6]) (Sqrt[2] x + Sqrt[2] y - 2 Sqrt[3])), r}, "
+             "r = Check[Apart[f, x], $Failed]; r =!= $Failed && FreeQ[r, Indeterminate | ComplexInfinity] && "
+             "Quiet[Abs[N[(f - r) /. {x -> 3/7, y -> 5/11}, 40]] < 10^-25]]");
+    run_true("Module[{f = 1/((x - Sqrt[6]) (Sqrt[2] x - 2 Sqrt[3]) (x + 1)), r}, "
+             "r = Check[Apart[f, x], $Failed]; r =!= $Failed && FreeQ[r, Indeterminate | ComplexInfinity] && "
+             "Quiet[Abs[N[(f - r) /. x -> 3/7, 40]] < 10^-25]]");
+}
+
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
-    if (argc > 1) d2_path = argv[1];
+    if (argc > 1) {
+        d2_path = argv[1];
+        /* the Goursat repro lives under tests/data, beside the D2 file */
+        const char* slash = strrchr(argv[1], '/');
+        if (slash)
+            snprintf(qi3_path, sizeof qi3_path, "%.*s/data/generalised_goursat/repro/together_slow_qi_sqrt3.m",
+                     (int)(slash - argv[1]), argv[1]);
+    }
     symtab_init();
     core_init();
 
@@ -367,6 +480,9 @@ int main(int argc, char** argv) {
     TEST(test_gaussian_numeric_constants);
     TEST(test_radical_constant_together_fast);
     TEST(test_complex_root_order);
+    TEST(test_qi_sqrt3_repro);
+    TEST(test_numberfield_forms);
+    TEST(test_apart_dependent_radicals);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

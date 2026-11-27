@@ -280,6 +280,25 @@ static void test_gamma_incomplete_left_half_plane(void) {
                    " {a, as}, {z, zs}]]] < 10^-30]", "True", 0);
 }
 
+/* Large |z|: the asymptotic series.  Gamma[1/3, 27000.] (mpfr_gamma_inc) and
+ * Gamma[1/3, -216000.] (the lower series at ~3*10^5 guard bits) each ran for
+ * minutes; PossibleZeroQ over the complex plane met both while sampling the
+ * residual of Integrate[E^-x^3, x] at |x| up to 64, and the ParallelMixedSpecial
+ * stage then ran out of time.  Checked against the 70-digit value (the series
+ * routes, since |z| is then below the asymptotic gate) and the recurrence. */
+static void test_gamma_incomplete_large_argument(void) {
+    assert_eval_eq("TimeConstrained[NumberQ[N[Gamma[1/3, 27000.]]], 1, False]", "True", 0);
+    assert_eval_eq("TimeConstrained[NumberQ[N[Gamma[1/3, -216000.]]], 1, False]", "True", 0);
+    assert_eval_eq("TimeConstrained[NumberQ[N[Gamma[1/3, -44000. + 117000. I]]], 1, False]",
+                   "True", 0);
+    assert_eval_eq("Module[{as = {1/3, -7/2, 2 + I, 5/2}, zs = {-150 + 40 I, -200, 200 + 10 I,"
+                   " -10 - 180 I, 130 I, 300}},"
+                   " Max[Flatten[Table[Abs[N[Gamma[a, N[z]]]/N[Gamma[a, z], 70] - 1],"
+                   " {a, as}, {z, zs}]]] < 10^-14]", "True", 0);
+    assert_eval_eq("Module[{z = -216000.}, Abs[(Gamma[4/3, z] - (1/3) Gamma[1/3, z] - z^(1/3) E^-z)"
+                   "/Gamma[4/3, z]] < 10^-9]", "True", 0);  /* E^216000 amplifies z's 1e-16 to ~2e-11 */
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -300,6 +319,7 @@ int main() {
     TEST(test_gamma_incomplete_complex);
     TEST(test_gamma_incomplete_negative_real);
     TEST(test_gamma_incomplete_left_half_plane);
+    TEST(test_gamma_incomplete_large_argument);
     TEST(test_gamma_generalized);
     TEST(test_gamma_listable);
     TEST(test_gamma_attributes);

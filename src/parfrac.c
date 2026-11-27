@@ -119,6 +119,36 @@ static Expr* ap_restore(const Expr* e, const ApRad* t) {
     return out;
 }
 
+/* No ComplexInfinity / Indeterminate / DirectedInfinity anywhere in `e`. */
+static bool ap_is_finite(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name != SYM_ComplexInfinity && e->data.symbol.name != SYM_Indeterminate;
+    if (e->type != EXPR_FUNCTION) return true;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_DirectedInfinity) return false;
+    if (!ap_is_finite(e->data.function.head)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!ap_is_finite(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Evaluate `restored` (consumed): a partial-fraction identity computed with
+ * algebraic constants or kernels abstracted as independent symbols, now put
+ * back.  The identity survives the substitution only where its denominators
+ * stay nonzero, and algebraic constants are NOT independent (Sqrt[6] =
+ * Sqrt[2] Sqrt[3], 2^(2/3) = (2^(1/3))^2): a coefficient denominator such as
+ * r1 r2 - r3 can vanish, and the restored sum was 1/0 -> Indeterminate, with
+ * Power::infy printed.  The evaluation runs with the arithmetic warnings muted
+ * (an internal probe, invisible to Quiet and Check) and NULL is returned when
+ * any denominator vanished, so the caller takes another path. */
+static Expr* ap_restore_checked(Expr* restored) {
+    arith_warnings_mute_push();
+    Expr* out = eval_and_free(restored);
+    arith_warnings_mute_pop();
+    if (out && !ap_is_finite(out)) { expr_free(out); out = NULL; }
+    return out;
+}
+
 /* Apart[expr, x] with radicals in a denominator of two or more x-factors:
  * the result, or NULL to take the ordinary path. */
 static Expr* apart_with_radical_coefficients(Expr* res) {
@@ -148,7 +178,7 @@ static Expr* apart_with_radical_coefficients(Expr* res) {
         Expr* r = eval_and_free(call);
         if (!(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
               && r->data.function.head->data.symbol.name == SYM_Apart))
-            out = eval_and_free(ap_restore(r, &t));
+            out = ap_restore_checked(ap_restore(r, &t));
         expr_free(r);
     }
     if (abs) expr_free(abs);
@@ -408,7 +438,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
                     if (ks) {
                         Expr* r2 = ratfun_apart(ks, v);
                         if (r2) {
-                            rf = eval_and_free(poly_symbols_to_kernels(r2, &km));
+                            rf = ap_restore_checked(poly_symbols_to_kernels(r2, &km));
                             expr_free(r2);
                         }
                         expr_free(ks);

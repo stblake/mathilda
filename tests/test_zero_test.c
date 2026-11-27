@@ -1545,6 +1545,80 @@ static void test_radical_constant_skips_together(void) {
     assert_pzq("PossibleZeroQ[1/3 + 1/7 - 10/21]", "True");
 }
 
+#ifdef USE_FLINT
+/* The sampler numericalizes constant subexpressions exactly as N does, so a
+ * radical whose exact radicand lies on the cut with a rounding residue of
+ * either sign (nbcA is exactly -1/8; machine -0.125 - 6.9*10^-18 I) is read
+ * on the principal side, deterministically. nbcP is the antiderivative
+ * Integrate[rho, u, Method -> "BronsteinRational"] gave at v0.6764, with its
+ * radicals named; with the principal values it is correct (its difference
+ * over [1/5, 7/10] matches NIntegrate to 20 digits), and with the other
+ * branch of the straddling radical it is not. Before the fix the machine
+ * value of its residual at u = 3/10 was 0.0222 - 0.168 I. */
+static void test_branch_cut_straddle_constants(void) {
+    assert_pzq("nbcC = ((-35/2048 + ((9*I)/1024)*Sqrt[3])/2)^(1/3); "
+               "nbcA = -1/48 - 13/(768*nbcC) - nbcC/3; "
+               "nbcC2 = ((-35/131072 + ((9*I)/65536)*Sqrt[3])/2)^(1/3); "
+               "nbcA2 = -1/192 - 13/(12288*nbcC2) - nbcC2/3; "
+               "nbcS1 = Sqrt[nbcA]; nbcT1 = Sqrt[-1/24 + 13/(768 nbcC) + nbcC/3 + 1/(16 nbcS1)]; "
+               "nbcS2 = Sqrt[nbcA2]; nbcT2 = Sqrt[-1/96 + 13/(12288 nbcC2) + nbcC2/3 - 1/(128 nbcS2)]; "
+               "nbcW = Sqrt[-68 I - 48 I Sqrt[2]]; nbcD = 6 + 4 Sqrt[2]; "
+               "nbcRho = ((4 + 2*Sqrt[2])*u^2)/((3 + 2*Sqrt[2])*(I + 5*u^2 + (5*I)*u^4 + u^6)); "
+               "nbcP[s1_] := (1/8 + (-s1 - nbcT1)/2) Log[(-1 - I)/Sqrt[2] + u] "
+               "  + (-1/8 + (nbcS1 + nbcT1)/2) Log[(1 + I)/Sqrt[2] + u] "
+               "  + (1/16 + (nbcS2 - nbcT2)/2) (Log[(-6 + 6 I)/nbcD + (-4 + 4 I) Sqrt[2]/nbcD - nbcW/nbcD + u] "
+               "      + Log[(6 - 6 I)/nbcD + (4 - 4 I) Sqrt[2]/nbcD - nbcW/nbcD + u]) "
+               "  + (-1/16 + (nbcT2 - nbcS2)/2) (Log[(-6 + 6 I)/nbcD + (-4 + 4 I) Sqrt[2]/nbcD + nbcW/nbcD + u] "
+               "      + Log[(6 - 6 I)/nbcD + (4 - 4 I) Sqrt[2]/nbcD + nbcW/nbcD + u]); "
+               "RootReduce[{nbcA, nbcA2}] === {-1/8, -1/32}", "True");
+    assert_pzq("Table[PossibleZeroQ[nbcS1 - I/(2 Sqrt[2])], {3}]", "{True, True, True}");
+    assert_pzq("Table[PossibleZeroQ[nbcS1 + I/(2 Sqrt[2])], {3}]", "{False, False, False}");
+    assert_pzq("Table[PossibleZeroQ[Log[u + 2] (nbcS1 + I/(2 Sqrt[2]))], {3}]", "{False, False, False}");
+    assert_pzq("Table[PossibleZeroQ[Log[nbcA] - Log[1/8] - I Pi], {3}]", "{True, True, True}");
+    assert_pzq("Table[PossibleZeroQ[ArcSin[16 nbcA] - ArcSin[-2]], {3}]", "{True, True, True}");
+    /* the antiderivative: correct with the principal value ... */
+    assert_pzq("Table[PossibleZeroQ[D[nbcP[nbcS1], u] - nbcRho], {3}]", "{True, True, True}");
+    assert_pzq("Abs[N[(D[nbcP[nbcS1], u] - nbcRho) /. u -> 3/10]] < 10^-12", "True");
+    /* ... and wrong with the other branch of the straddling radical */
+    assert_pzq("Table[PossibleZeroQ[D[nbcP[-nbcS1], u] - nbcRho], {3}]", "{False, False, False}");
+    assert_pzq("Table[PossibleZeroQ[D[nbcP[nbcS1] + nbcS1 u + I u/(2 Sqrt[2]), u] - nbcRho], {3}]",
+               "{False, False, False}");
+    assert_pzq("ClearAll[nbcC, nbcA, nbcC2, nbcA2, nbcS1, nbcT1, nbcS2, nbcT2, nbcW, nbcD, nbcRho, nbcP]; nbcP",
+               "nbcP");
+}
+#endif
+
+/* The elliptic-atom pre-test (zt_elliptic_pretest): elliptic calls that
+ * depend on a free symbol are abstracted to complex symbols first, and only a
+ * TRUE of the abstracted expression is taken.  The residual of the Legendre
+ * form of Int dx/((x - 3) Sqrt[1 + x^3]) cancels its EllipticPi terms
+ * identically; sampled with them it took 8 s (Arb integrates EllipticPi
+ * numerically wherever x is in (-1, 3)), abstracted it takes well under one.
+ * Identities that need the atoms' values still fall through to the ordinary
+ * test, and a non-zero is still FALSE. */
+static void test_elliptic_atoms_pretest(void) {
+    const char* r =
+        "(Sqrt[1 + x^3] EllipticF[ArcSin[Sqrt[(1 + (-1)^(1/3))/(1 + x)]], (1 - I Sqrt[3])/2])/"
+        "(2 Sqrt[(1 + (-1)^(1/3))/(1 + x)] (1 + x)^2 Sqrt[1 - (1 + (-1)^(1/3))/(1 + x)]"
+        " Sqrt[1 - ((1 + (-1)^(1/3)) (1 - I Sqrt[3]))/(2 (1 + x))]) - "
+        "(Sqrt[1 + x^3] EllipticPi[4/(1 + (-1)^(1/3)), ArcSin[Sqrt[(1 + (-1)^(1/3))/(1 + x)]], (1 - I Sqrt[3])/2])/"
+        "(2 Sqrt[(1 + (-1)^(1/3))/(1 + x)] (1 + x)^2 Sqrt[1 - (1 + (-1)^(1/3))/(1 + x)]"
+        " Sqrt[1 - ((1 + (-1)^(1/3)) (1 - I Sqrt[3]))/(2 (1 + x))])";
+    char buf[4096];
+    snprintf(buf, sizeof buf, "PossibleZeroQ[D[%s, x] - 1/((x - 3) Sqrt[1 + x^3])]", r);
+    assert_pzq_timed(buf, "True", 4.0);
+    snprintf(buf, sizeof buf, "PossibleZeroQ[D[%s, x] - 1/((x - 3) Sqrt[1 + x^3]), "
+             "Assumptions -> Element[x, Complexes]]", r);
+    assert_pzq_timed(buf, "True", 4.0);
+    /* identities between atoms are the ordinary test's */
+    assert_pzq("PossibleZeroQ[EllipticK[x] - EllipticF[Pi/2, x]]", "True");
+    assert_pzq("PossibleZeroQ[EllipticF[x, 1/2] - x]", "False");
+    /* an atom times a function zero on the real line only is not zero on C */
+    assert_pzq("PossibleZeroQ[EllipticF[x, 1/2] (Sqrt[(I - x)^2] - (I - x)), "
+               "Assumptions -> Element[x, Complexes]]", "False");
+    assert_pzq("PossibleZeroQ[EllipticE[ArcSin[x], m] (Sqrt[x]^2 - x)]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1762,6 +1836,10 @@ int main(void) {
     TEST(test_log_of_large_integer_nonzero);
     TEST(test_deep_cancellation_point_is_not_evidence);
     TEST(test_radical_constant_skips_together);
+    TEST(test_elliptic_atoms_pretest);
+#ifdef USE_FLINT
+    TEST(test_branch_cut_straddle_constants);
+#endif
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

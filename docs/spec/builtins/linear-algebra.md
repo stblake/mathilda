@@ -3125,6 +3125,17 @@ Finds `x` that solves the matrix equation `m . x == b`.
   classical solver (which handles rectangular / underdetermined / inconsistent
   cases). Exposed directly as `` FLINT`LinearSolve `` (see *Structural
   Manipulation*).
+- **Algebraic-number entries** (when built with FLINT): when every entry of
+  `m` and `b` is a constant algebraic number -- rationals combined with
+  radicals of rationals, `I`, `Root` objects -- and at least one
+  is irrational, the system is solved by Gauss-Jordan over the number field
+  the atoms generate (a primitive element, native `nf_elem` arithmetic, exact
+  zero tests). Results are written in a monomial basis of the original atoms
+  (`a + b I + c Sqrt[3] + d I Sqrt[3]`). The answer, with every free variable
+  0, is the same for every `Method`. A 12x12 system over `Q(I Sqrt[3])` that
+  did not finish in 40 s takes about 2 ms. `Inverse` and `Det` take the same
+  path, and so does `RowReduce` when its result is rational (a full-rank
+  matrix's identity). `MATHILDA_NO_ALG_FIELD=1` disables it.
 - Higher-rank tensor inputs are supported. A rank-N `m` with
   dimensions `{d_1, ..., d_{N-1}, n}` is interpreted as a
   `(d_1 * ... * d_{N-1}) x n` linear system whose leading dimensions

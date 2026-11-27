@@ -146,9 +146,12 @@ static void test_power_neg_pq_lift(void) {
      * canonicaliser; here we just sanity-check that simplification
      * succeeds (result != input) and contains 2^(1/3) but not
      * 2^(-2/3). */
+    /* Cancel cancels term by term and never rationalises a numeric
+     * algebraic denominator: the reference returns the input,
+     * -(x/2^(1/3)) + x^2/2^(2/3) (src/poly/nfrat.c) */
     assert_eval_eq(
         "Cancel[Power[2, -2/3] x^2 - x/Power[2, 1/3], Extension -> Power[2, 1/3]]",
-        "1/2 (-2^(2/3) x + 2^(1/3) x^2)", 0);
+        "-x/2^(1/3) + x^2/2^(2/3)", 0);
 }
 
 static void test_multigen_qgamma_constant_collapse(void) {
@@ -226,12 +229,16 @@ static void test_together_headline_d_integrate(void) {
      * The builtin_together fallback then tries each tower generator as
      * a single-α extension via together_recursive_ext, runs a final
      * no-extension Together fold-up, and picks the smallest result. */
+    /* Together writes the denominator over the pieces the antiderivative's
+     * terms carry, as the reference does ((-2 a x)/((2 + 2^(2/3) x)
+     * (-2 + 2^(2/3) x - 2^(1/3) x^2)) there); Simplify below gives
+     * a x/(2 + x^3).  Cancel works term by term on this sum. */
     assert_eval_eq(
         "Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]",
-        "(a x)/(2 + x^3)", 0);
+        "(2^(1/3) a x)/((2^(1/3) + x) (2 - 2^(2/3) x + 2^(1/3) x^2))", 0);
     assert_eval_eq(
-        "Cancel[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]",
-        "(a x)/(2 + x^3)", 0);
+        "PossibleZeroQ[Cancel[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic] - a x/(x^3 + 2)]",
+        "True", 0);
 }
 
 static void test_simplify_headline_d_integrate(void) {

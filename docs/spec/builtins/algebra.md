@@ -327,6 +327,42 @@ Out[7]= -(2 x)/(k^(2/3) - x^2)
     one take their former paths, and so does a default call with no symbolic
     variable (numbers and numeric kernels such as `EllipticK[1/2 (7 - 3 Sqrt[5])]`
     only), which the numeric-constant guards already leave as written.
+- **`Extension -> Automatic` over roots of unity and dependent radicals.** The
+  generator model of the other paths gives each radicand `r` one generator
+  `r^(1/Q)` with the relation `g^Q - r`, and `I` the relation `I^2 + 1`, and
+  treats different generators as independent. That is a field only when the
+  product of the relation degrees is the degree of the field the atoms generate.
+  It is not for a root of unity of odd order part (`(-1)^(1/3)` satisfies
+  `g^3 + 1 = (g + 1)(g^2 - g + 1)`, so `1 - (-1)^(1/3) + (-1)^(2/3)` was a zero
+  divisor there and came back unchanged) nor for atoms in each other's fields
+  (`I`, `Sqrt[3]`, `(-1)^(1/3)`). Such input now runs over the number field of
+  its atoms, like a nested radical, and the answer is written over the atoms:
+  `Together[(-1)^(2/3) - (-1)^(1/3) + 1, Extension -> Automatic]` and
+  `Together[I Sqrt[3] - 2 (-1)^(1/3) + 1, Extension -> Automatic]` are `0`,
+  `Cancel[(t^2 - t + 1)/(t - (-1)^(1/3)), Extension -> Automatic]` is
+  `-1 + (-1)^(1/3) + t`, and the two roots `Solve` gives for `t^2 - t + 1` combine
+  to `(-1 + 2 t)/(1 - t + t^2)`.
+- **`Extension -> Automatic` over `Q(vars)(Sqrt[b])`, `b` a polynomial.** A
+  square root of one non-constant polynomial radicand that is not a bare symbol
+  (the Hessian roots `(1 + k +- Sqrt[-3 + 6 k - 3 k^2])/(2 - 2 k + 2 k^2)` of
+  `t (1 - t)(1 - k t)`) is algebraic over `Q(vars)`, and the field is
+  `Q(vars)[s]/(s^2 - b)` whenever the squarefree part of `b` is not a square. Its
+  elements have the canonical form `A + B Sqrt[b]`, `A` and `B` in lowest terms
+  over `Q(vars)`: the input is combined with `s` a fresh symbol, reduced modulo
+  `s^2 - b`, and the conjugate of the denominator is multiplied through. The
+  answer is the shorter of `A + B Sqrt[b]` as one fraction and `1/(A' + B'
+  Sqrt[b])` from the reciprocal, so `1/(x + Sqrt[p + q])` stays as written while
+  `Cancel[(x - Sqrt[1 + k^2])/(x^2 - 1 - k^2), Extension -> Automatic]` is
+  `1/(Sqrt[1 + k^2] + x)`. Single Cancel calls on the Mobius pull-back of a Goursat
+  integrand by those roots went from 7-20 s (over 60 s for `Sqrt[k^3 + 1]`) to
+  10-60 ms. A square radicand (`Sqrt[(k - 1)^2]`), and a constant squarefree part
+  beside other constant algebraic numbers, are left to the other paths.
+- **Common field of radicals and roots of unity.** The field the extension
+  engines build for a set of atoms that are radicals of rationals and roots of
+  unity is now an exact product-algebra construction (exact linear algebra in the
+  product basis of `Q(zeta_N)` and the prime radicals), not the qqbar
+  primitive-element search. Over `Q(I, Sqrt[3], 2^(1/3))` the first `Together`
+  or `Cancel` on a new field fell from 1.5-5 s to about 0.1 s.
 
 **Wave 5 (2026-11).** Wrong argument counts give `Together::argx` / `::nonopt`.
 

@@ -1247,6 +1247,19 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b,
 /* ------------------------------------------------------------------
  * Dispatch shells
  * ------------------------------------------------------------------ */
+/* True when every entry of the List-of-Lists `mat` is an exact rational. */
+static bool rref_all_rational(const Expr* mat) {
+    for (size_t i = 0; i < mat->data.function.arg_count; i++) {
+        const Expr* row = mat->data.function.args[i];
+        for (size_t j = 0; j < row->data.function.arg_count; j++) {
+            const Expr* v = row->data.function.args[j];
+            if (!(v->type == EXPR_INTEGER || v->type == EXPR_BIGINT || head_is(v, SYM_Rational)))
+                return false;
+        }
+    }
+    return true;
+}
+
 Expr* builtin_rowreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
@@ -1375,6 +1388,22 @@ Expr* builtin_rowreduce(Expr* res) {
             size_t idx = 0;
             flatten_tensor(arg, flat, &idx);
             Expr* nfout = flint_qqbar_nf_mat_rref(flat, m, n);
+            /* Entries in explicit radical / Root form (Sqrt[3], I, ...):
+             * the same reduction over the field their atoms generate (a
+             * 12x12 over Q(I Sqrt[3]) took 2 s by fraction-free elimination,
+             * 2 ms here).  Its answer is kept only when it is rational -- a
+             * full-rank matrix's identity, any rational RREF -- because then
+             * it is the same expression whichever path computes it.  An
+             * algebraic non-pivot entry would be written in the field's
+             * monomial basis, a different form of the same number, and
+             * NullSpace / Eigenvectors / SingularValueDecomposition build
+             * their answers from those entries: for an eigenvalue Root of a
+             * cubic the basis form has coefficients large enough that the
+             * machine N of the SVD no longer reconstructed its matrix. */
+            if (!nfout && !matsol_is_inexact(arg)) {
+                nfout = flint_qqbar_alg_mat_rref(flat, m, n);
+                if (nfout && !rref_all_rational(nfout)) { expr_free(nfout); nfout = NULL; }
+            }
             for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
             free(flat);
             if (nfout) return nfout;
@@ -1581,6 +1610,40 @@ Expr* builtin_linearsolve(Expr* res) {
         method = (matsol_resolve_automatic(m) == MATSOL_ONESTEP
                   || matsol_resolve_automatic(b) == MATSOL_ONESTEP)
                ? MATSOL_ONESTEP : MATSOL_DIVFREE;
+
+    /* Algebraic-number entries (Sqrt[3], I, Root objects, ...): Gauss-Jordan
+     * over the number field they generate, in native nf_elem arithmetic.  The
+     * symbolic eliminators below treat each algebraic atom as an opaque
+     * indeterminate that nothing reduces by its minimal polynomial, so the
+     * entries swell and every exact division / zero test goes through
+     * Together and PolynomialGCD over a multivariate ring -- a 12x12 system
+     * over Q(I Sqrt[3]) did not finish in 40 s.  The answer (the solution
+     * with every free variable 0) is the same for every Method, as for
+     * RowReduce's number-field path.  Declines for rational, symbolic or
+     * inexact input. */
+    if (!matsol_is_inexact(m) && !matsol_is_inexact(b)) {
+        Expr** fa = malloc(sizeof(Expr*) * (size_t)r * (size_t)c);
+        Expr** fb = malloc(sizeof(Expr*) * (size_t)r * (size_t)k);
+        size_t ia = 0, ib = 0;
+        flatten_tensor(m, fa, &ia);
+        flatten_tensor(b, fb, &ib);
+        Expr** sol = NULL;
+        int st = flint_qqbar_alg_mat_solve(fa, r, c, fb, k, &sol);
+        for (size_t i = 0; i < ia; i++) expr_free(fa[i]);
+        for (size_t i = 0; i < ib; i++) expr_free(fb[i]);
+        free(fa);
+        free(fb);
+        if (st == 1) {
+            /* build_solution_tensor adopts the entries, not the array */
+            Expr* out = build_solution_tensor(sol, c, trail_dims, trail_rank);
+            free(sol);
+            return out;
+        }
+        if (st < 0) {
+            mth_message("LinearSolve", "nosol", "Linear equation encountered that has no solution.");
+            return NULL;
+        }
+    }
 
     switch (method) {
         case MATSOL_AUTOMATIC:

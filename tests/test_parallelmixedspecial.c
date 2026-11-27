@@ -159,26 +159,66 @@ static void test_cubic_branch_whole_line(void) {
     assert_solves_on("x^3 (1 + x^3)^(3/2)/(x - 2)", "{-9/10, -1/2, 1/3, 1/2, 7/10, 9/4, 7}");
     assert_solves_on("1/Sqrt[2 - x^3]", "{-3, -1/2, 1/2, 1}");
     assert_solves_on("1/Sqrt[x^3 - x]", "{-7/10, -1/3, 7/5, 4}");
-    /* the ordering itself: the real root of 1 + g^3 is e3, and the sign is the
-     * exact constant (+-1), never a radical expression */
+    /* the ordering itself: the real root of 1 + g^3 is e3.  No ordering of
+     * 1 + g^3 has one sign on the whole complex plane, so the sign is carried
+     * as the exact branch factor, and EllInt built on it is an antiderivative
+     * for every complex g (PossibleZeroQ over the complex plane), not only on
+     * the real line */
     assert_true_msg("Module[{cd = ParallelMixed`Private`CubicData[g, 1 + g^3]},"
-                    " cd[[4]] === -1 && MemberQ[{1, -1}, cd[[8]]]]",
-                    "CubicData puts the real root of 1 + g^3 last, constant sign");
-    /* three real roots: some ordering has one sign on the whole line, and
-     * EllInt built on it differentiates back wherever q > 0 */
+                    " cd[[4]] === -1]",
+                    "CubicData puts the real root of 1 + g^3 last");
+    assert_true_msg("Module[{e = ParallelMixed`Private`EllInt[g, 1 + g^3, 0]},"
+                    " PossibleZeroQ[D[e, g] - 1/Sqrt[1 + g^3], Assumptions -> Element[g, Complexes]]]",
+                    "EllInt[g, 1 + g^3, 0] is an antiderivative on the whole plane");
+    /* three real roots */
     assert_true_msg("Module[{cd = ParallelMixed`Private`CubicData[g, g^3 - g]},"
-                    " Sort[cd[[2 ;; 4]]] === {-1, 0, 1} && MemberQ[{1, -1}, cd[[8]]]]",
-                    "CubicData on g^3 - g: a constant-sign ordering");
+                    " Sort[cd[[2 ;; 4]]] === {-1, 0, 1}]",
+                    "CubicData on g^3 - g: the three real roots");
     assert_true_msg("Module[{e = ParallelMixed`Private`EllInt[g, g^3 - g, 0]},"
-                    " AllTrue[{-7/10, -1/3, 7/5, 4}, Abs[N[(D[e, g] - 1/Sqrt[g^3 - g]) /. g -> #, 30]] < 10^-20 &]]",
-                    "EllInt[g, g^3 - g, 0] is an antiderivative on both real intervals");
+                    " AllTrue[{-7/10, -1/3, 7/5, 4}, Abs[N[(D[e, g] - 1/Sqrt[g^3 - g]) /. g -> #, 30]] < 10^-20 &] &&"
+                    " PossibleZeroQ[D[e, g] - 1/Sqrt[g^3 - g], Assumptions -> Element[g, Complexes]]]",
+                    "EllInt[g, g^3 - g, 0] is an antiderivative on both real intervals and off the line");
     /* CubicSign on the old ordering of 1 + g^3 (real root first): the sign flips
-     * on the line, so it is None in both modes */
+     * on the line, so it is None */
     assert_true_msg("Module[{e1 = -1, e2 = (-1)^(1/3), e3 = -(-1)^(2/3)},"
                     " ParallelMixed`Private`CubicSign[g, 1 + g^3, 1, Sqrt[e1 - e3],"
-                    " (e2 - e3)/(e1 - e3), ArcSin[Sqrt[(e1 - e3)/(g - e3)]], #] & /@"
-                    " {True, False}] === {None, None}",
+                    " (e2 - e3)/(e1 - e3), ArcSin[Sqrt[(e1 - e3)/(g - e3)]]]] === None",
                     "CubicSign rejects the ordering whose sign flips");
+}
+
+/* The Legendre form must be an antiderivative OFF the real line too.  For
+ * q = (x - 1)(x - 3)(x + 3) the ordering CubicData chose had one sign at every
+ * real probe, and the answer I Sqrt[2] EllipticF[ArcSin[Sqrt[-2/(x - 3)]], 3]
+ * passed every real check -- but its branch factor flips between the cuts in
+ * the complex plane, and it was wrong at x = 1/3 + 2 I/7 (the elliptic residual
+ * of benchmark 265's G-s7-sqrt-nonelementary-008, shipped by the default
+ * Integrate).  CubicSign now probes complex points, the exact branch factor
+ * takes over when no ordering has one sign, and the answer must pass
+ * PossibleZeroQ over the complex plane (ComplexSoundQ). */
+static void assert_sound_on_plane(const char* f) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Module[{r = Integrate`ParallelMixedSpecial[%s, x]},"
+        " Head[r] =!= Integrate`ParallelMixedSpecial && Head[r] =!= List &&"
+        " PossibleZeroQ[D[r, x] - (%s), Assumptions -> Element[x, Complexes]] &&"
+        " AllTrue[{1/3 + 2 I/7, 7/10 + I/3, -1 - I, -2 + 2 I, 37/19, -5/2},"
+        "   Abs[N[(D[r, x] - (%s)) /. x -> #, 30]] < 10^-20 &]]", f, f, f);
+    char* s = eval_str(buf);
+    ASSERT_MSG(strcmp(s, "True") == 0,
+               "ParallelMixedSpecial(%s): expected an antiderivative on the whole "
+               "complex plane, got %s", f, s);
+    free(s);
+}
+
+static void test_cubic_branch_whole_plane(void) {
+    assert_sound_on_plane("1/Sqrt[9 - 9 x - x^2 + x^3]");
+    assert_sound_on_plane("1/Sqrt[1 + x^3]");
+    assert_sound_on_plane("1/Sqrt[1 - x^3]");
+    /* and through the default Integrate */
+    assert_true_msg("Module[{f = 1/Sqrt[9 - 9 x - x^2 + x^3], r},"
+                    " r = Integrate[f, x]; FreeQ[r, Integrate] &&"
+                    " PossibleZeroQ[D[r, x] - f, Assumptions -> Element[x, Complexes]]]",
+                    "Integrate[1/Sqrt[(x - 1)(x - 3)(x + 3)], x] is right on the whole plane");
 }
 
 /* A $RecursionLimit overflow inside a stage is contained at the stage
@@ -575,6 +615,7 @@ int main(void) {
     TEST(test_kernel_sici);
     TEST(test_kernel_elliptic);
     TEST(test_cubic_branch_whole_line);
+    TEST(test_cubic_branch_whole_plane);
     TEST(test_overflow_contained);
     TEST(test_elementary_stays_elementary);
     TEST(test_certificate_now_released);

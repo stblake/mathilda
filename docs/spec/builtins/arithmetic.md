@@ -182,6 +182,27 @@ working-precision numericalization evaluates once. Arithmetic on numbers that
 are already inexact does not track cancellation: with `a = N[E^1000, 30]`,
 `a - (a - 1)` is `0.` and its `Precision` is the operands' 30.1.
 
+**Branch cuts at an exact argument** (v0.6765): a function with a branch cut
+(`Power` with a non-integer exponent, `Log`, `ArcSin`, `ArcCos`, `ArcTan`,
+`ArcCot`, `ArcSec`, `ArcCsc` and the hyperbolic inverses) whose *exact*
+argument lies on its cut is evaluated on the principal side, at every
+precision. The numerical argument can carry a rounding residue of either sign
+across the cut: `a = -1/48 - 13/(768 c) - c/3` with `c = ((-35/2048 + (9 I/1024)
+Sqrt[3])/2)^(1/3)` is exactly `-1/8`, and its machine value is `-0.125 -
+6.9*10^-18 I`. When the cut component is below half the working precision
+relative to the other component (or cancelled to an exact `0.`), `N` decides
+its sign exactly (qqbar, for an algebraic argument): zero -- the function is
+evaluated at the real (or pure imaginary) number, re-derived from the exact
+form, the same convention as at an exact real argument (`Sqrt[-1/8] = I/(2
+Sqrt[2])`, `Log[-1] = I Pi`); nonzero -- the residue takes that sign. A
+non-algebraic argument is re-evaluated alone at rising precision until the
+component separates from 0; if it never does within `$MaxExtraPrecision`, `N`
+emits `N::meprec` (once) and takes the principal side. So `N[Sqrt[a]]` is
+`0.353553 I` (was `-0.353553 I`), `N[Sqrt[a], 30]` is certified (was `0.*^-30 +
+0.4 I` with `N::meprec`), and `N[Log[a]]` is `-2.07944 + 3.14159 I`. An inexact
+argument is not touched (`Sqrt[-0.125 - 1.*^-20 I]` is `-0.353553 I`). The
+zero tests' sampler numericalizes constant subexpressions the same way.
+
 **Exact zeros**: a zero has no digits to approximate, so `N[0, p]` is the
 exact `0`, and an exact-zero part stays exact under `N[expr, p]`:
 `N[{0, 1/3, 0}, 20]` is `{0, 0.33333333333333333333, 0}`, `N[f[0, 1/2], 20]`

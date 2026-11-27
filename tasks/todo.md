@@ -1,3 +1,116 @@
+# GeneralisedGoursat: rewrite of the Goursat method as a .m package (started 2026-11-26)
+
+Plan: `~/.claude/plans/let-s-plan-a-complete-nifty-charm-*.md`. Port of the sympy reference
+`goursat.py` (research dir `~/Documents/Research/post_phd_research/algebraic_integration/goursat/`)
+into `src/internal/goursat/*.m`, Method -> "GeneralisedGoursat"; the C GoursatAlgebraic stays
+for comparison until parity, then cascade stage 17 swaps.
+
+- [x] Phase 0: corpora export (`tools/goursat/export_corpora.py` -> `tests/data/generalised_goursat/*.m`,
+  1,183 cases) + sympy timing (`tools/goursat/bench_sympy.py`) + Mathilda runner
+  (`tools/goursat/bench_generalised_goursat.m`) + joiner/report (`tools/goursat/compare.py` -> REPORT.md)
+- [x] Phase 1-4: Common/RatInt/Hermite/Sqrt/Cbrt/Qrt ported; examples + unit corpora agree with sympy
+- [x] Exact verifier (`goursat/Verify.m`): vector arithmetic in Q(t)[y]/(y^n-R), RootSum derivative
+  by Newton power sums, companion-matrix trace for nested sums
+- [x] Core fix: RootSum applied its summand into nested slot functions (src/root.c subst_slot1)
+- [ ] Phase 6: cubic-field reduction (CubicField.m) closes + verifies; timing
+- [ ] Phase 5: C wiring (Method -> "GeneralisedGoursat", Integrate`GeneralisedGoursat, lazy load, budget,
+  not-elementary protocol)
+- [ ] Unit suite tests/test_integrate_generalised_goursat.c; stress suite tests/test_generalised_goursat_stress.c
+- [ ] Phase 7: all corpora 0 WRONG/ERROR; sympy timing comparison (quiet machine); C comparison column
+- [ ] Docs (calculus.md, changelog 2026-11-23), version bump + tag
+- [ ] Parity review with the user, then the stage-17 swap
+- [ ] New benchmark from the Goursat stress corpora (benchmarks/, .m/.py pair, joined report),
+  replacing the ad-hoc tools/goursat runner as the timing record
+- [ ] Remove the workaround layers below from goursat/*.m once each core fix lands (the port
+  is 955 code lines vs goursat.py's 653; ~300 of the excess are these workarounds)
+
+### Core deficiencies found by the GeneralisedGoursat port (follow up in agents AFTER Goursat)
+- [x] **Integrate over one Root coefficient hung** (BronsteinRational log part treated the Root as
+  transcendental; Bezout inverse blew up): merged `intrat_log_part_core_root`, native number-field
+  gcd/division. 60 s -> 0.17 s. Predated the intrat merge.
+- [x] MERGED: native number-field engine src/poly/nfrat.c (repro 8.3 s -> 10 ms, 52 leaves; root cause
+  ratcanon's I relation written `I^2 + 1` = 0); Apart dependent-radical Indeterminate fixed; Gaussian
+  Factor in 3+ vars; probe tools/probe_together_cancel_numberfield.m. Goursat literature verify
+  13.6 -> 0.11 s; Goursat unit suite 93 s (passes). Open: native Apart over K (5-20x slow, timeouts);
+  symbolic radicands Sqrt[k-1] (linear-radicand substitution broke Integrate consumers -- audit);
+  plain rational Cancel structure vs the reference; Factor over Root fields splitting.
+- [x] **Together over Q(I, Sqrt[3]) 220x slower than the reference, 431 vs 63 leaves; with
+  Extension -> Automatic a spurious Power::infy (1/0)** -- fixed (above); repro
+  tests/data/generalised_goursat/repro/together_slow_qi_sqrt3.m. Also probes Cancel, Apart, Factor
+  over number fields. NOTE: the reference keeps Root powers and numeric algebraic denominators
+  unreduced in Together/Cancel+Extension -- Mathilda matches; not a defect.
+- [x] Rational-integrator full review (tasks/intrat_review.md, 26 findings) + benchmarks/266-rational-integration
+  (389 cases, `make bench-integrate-rational`): merged. Fixed 17 wrong answers (sign test lost integers
+  > 2^63, so a positive discriminant took the complex branch; constants like 3 - 2 Sqrt[2] unsigned),
+  silently dropped RootSum terms, an inexact exact-division, an exponential subresultant chain
+  (new native intrat_subres.c: Czichowski deg 14 18.9 s -> 0.03 s), bloated rational parts
+  (1/(x^2+1)^8 195 -> 52 leaves). 389/389 verify; median time 0.05-0.31x the reference.
+- [ ] NEXT (after the Together/number-field agent lands, reusing its engine): the whole log part over
+  ONE number field built from every algebraic constant of the integrand (subsumes
+  intrat_log_part_core_root and the old slow chain for parameter/algebraic coefficients). Remaining
+  review gaps: stress-019 (deg 20) 3.9 s vs 0.49 s; full partial fractions + ~5x refactoring before
+  the log part; real-form failure discards all log parts; Hermite and ArcTan recursion via the
+  evaluator; quadratic Hermite, Horowitz-Ostrogradsky, Czichowski, general LogToReal missing.
+- [x] benchmarks/265-goursat-stress built (1183 cases, tools/goursat/goursat_stress.py); correctness pass done
+  on the pre-fix binary. 26 wrong runs / 17 cases. GeneralisedGoursat's 2 re-verified CORRECT on the
+  current binary. [ ] Timed baseline on a quiet machine. [x] Correctness rerun 2026-11-27 (1183 cases, 157 min): 1 WRONG (GG psqrt-001), a false verdict from the N branch-cut bug; re-judged VERIFIED on the merged binary (0.30 s, 0.04x goursat.py) -> 0 wrong. Automatic UNEVAL on it (10.3 s): closes at the stage-17 swap.
+- [x] PERF merged (perf_pzq_elliptic.patch: zt_elliptic_pretest atom abstraction, Num reads elliptic once, FixBranch once/sample; 21 s -> 1.2 s, suite 86 s). [x] (merged elliptic_cut.patch: exact side via qqbar (nbc_elliptic), cut-aware Carlson F/E/Pi; 120 ms -> 0.19 ms machine, 85 s -> 10 ms at 300 digits; open: y on cut with non-conjugate x still Arb quadrature ~1 s at 300 bits; JacobiZeta not implemented; GCC -Wstringop-overread false positive in nb_jac_scd) EllipticPi ON ITS CUT differs across precisions (3/10: 30d 0.46-1.49I vs 40d -0.35+1.52I) + slow Arb quadrature fallback; wrong-candidate rejection 12 s (agent running). Was: parallelmixedspecial_tests 90 -> 112 s alone (120 s alarm) after the branch-soundness
+  merge. Integrate`ParallelMixedSpecial[1/((x-3)Sqrt[1+x^3]), x] 21 s (x-2: 0.7 s); PZQ on its EllipticPi
+  answer 7.4 s; machine EllipticPi 1.6 ms/call (EllipticF 67 us). Keep soundness; cut redundant certificates.
+- [x] GG pseudoelliptic-sqrt-001 'wrong' was a FALSE verdict from N (merged n_branchcut_straddle.patch: exact principal side for a cut argument whose Im cancels exactly; PZQ True, 10.6->4.3 s). (a) below is NOT a wrong answer; size fixed by intrat_realform_complex.patch (merged: complex field -> complex Log form, no cubic/quartic ToRadicals; rho 1515->358 leaves; GG case 0.33 s). Original notes:
+  (a) Integrate[rho, u, Method->"BronsteinRational"] default RealForm on a COMPLEX-coefficient rational
+      ((4+2Sqrt2)u^2/((3+2Sqrt2)(I+5u^2+5I u^4+u^6))) returns a branch-wrong Ferrari/Cardano form
+      (RealForm->None is right); (b) N/PossibleZeroQ evaluate an exact branch-cut argument whose Im
+      cancels exactly (Sqrt[-1/8 written via casus irreducibilis]) on the side rounding picks: machine N
+      non-principal, N[.,30] 0.*^-30, PZQ certified the wrong (a) answer. Merge both, re-verify case.
+- [x] (merged 2026-11-27, goursat_branch_fix.patch: complex-plane certificate in C Goursat, CubicBranchFactor in ParallelMixedSpecial, stratified complex PZQ screen, Gamma[a,z] large-|z| asymptotic; open: GG pseudoelliptic-sqrt-001 wrong, pre-existing) WRONG ANSWERS in shipped default Integrate: C GoursatAlgebraic order-3 nested
+  radical Sqrt[64/(x-a)^6 + 8/(x-a)^3] (6 cases), sqrt-klein-005, and the 8 Sqrt[2]-coefficient
+  pseudoelliptic-sqrt cases that Automatic returns; elliptic-residual EllipticF[ArcSin[Sqrt[-2/(-3+x)]], 3]
+  (s7 sqrt-nonelementary-008).
+- [x] Bronstein ch.2 algorithms merged (src/calculus/intrat_alg.c): quadratic Hermite, Horowitz-
+  Ostrogradsky, native Mack, Rothstein-Trager, Czichowski (gb_flint), general LogToReal; Method
+  sub-options "Hermite"/"LogPart"/"RealForm"; defaults chosen by a 36-config grid on 423 cases.
+- [ ] Export nfrat's K[x] gcd/xgcd/divrem so the native ch.2 routines and the "whole log part over one
+  number field" work run over number fields.
+- Package after the merges: symRadK, cramer/gaussSolve removed (gK = Cancel[Together, Ext]; linSolve =
+  LinearSolve); ratInt uses Integrate over number fields again (cubic-field elementary part now
+  closes and verifies). Open: LinearSolve's equivalent-but-unrationalised coefficients make one
+  literature verify 0.14 -> 13.6 s (waits on the Together fix); 1/(t^3+t+1)^(1/3) second level still
+  exhausts the 10 s cubic-field budget (explicit conjugates of Log/ArcTan pieces, 2-5 s each) --
+  re-time on a quiet machine; unit suite over its 120 s alarm until both land.
+- [x] **Together/Cancel cannot reduce roots of -1** (merged: ratcanon/algfield dependent-radical gate; cyclotomic generators): `Solve[t^2 - t + 1 == 0]` gives `(-1)^(1/3)`,
+  and `Cancel[Together[e], Extension -> Automatic]` does not use its minimal polynomial
+  (z^2 - z + 1), so expressions over it never canonicalise (wrong zero tests). Workaround:
+  goursat/Common.m quadRoots.
+- [x] ~~PossibleZeroQ false positive~~ -- NOT a bug (agent, 2026-11-27): D[P,m] - rho IS zero; the
+  apparent -0.157 was N losing every digit silently (10^160 coefficients cancel; true value only
+  above ~600 bits, which PossibleZeroQ reaches). The numeric "veto" built on it was wrong twice over.
+- [ ] **N: N::meprec consistency.** Design (user): N works at the requested precision, may use up to
+  $MaxExtraPrecision extra, and has NO significance arithmetic. On the repro the cancellation needs
+  ~180 extra digits (> 50), so N cannot be right; it emits N::meprec at 400 digits but returns -0.157
+  silently at 30. Agent: find the existing mechanism behind meprec and why it fires at one precision
+  only; fix within it, or report options if detection is impossible without significance arithmetic.
+  Lesson: a low-precision N is never a counter-witness against PossibleZeroQ. Every "numerically
+  wrong" cubic-field diagnosis must be re-checked at high precision.
+- [ ] PossibleZeroQ efficiency: the ladder is fixed {53, 200, 500, 1000} (src/zero_test.c:88), only
+  the threshold uses magnitude_scale; start at ~log2(scale) + 53 bits to skip rungs that cannot
+  decide (the 10^160 case wastes 53/200/500). Sound already -- speed only. After the N fix.
+- [x] Integrate over Root[f,k] coefficients (merged from agent worktree, src/calculus/intrat.c): answer was
+  never wrong; Root powers now reduced mod the minimal polynomial (leaf 29273 -> 193) and the
+  discriminant sign decided, so a real ArcTanh replaces an ArcTan of an imaginary argument. Goursat
+  CubicField.m's "no Integrate over Root" restriction rested on the N artifact: revisit after merges.
+- [x] LinearSolve/Inverse/Det over Q(algebraic numbers): >20 s -> 2.6 ms (merged: flint_qqbar alg_mat_*)
+- [x] PolynomialRemainder with Root coefficients: >60 s -> 11 ms (merged: poly.c exact field zero test)
+- [x] Extension -> Automatic with a symbolic radicand: 17 s -> 0.01-0.05 s (merged: new src/poly/symrad.c)
+- [x] Together/Cancel over Q(I, Sqrt[3], 2^(1/3)): first call 5 s -> 0.1 s (merged: kf_number_field_common)
+- [ ] Remaining: Together[e, Extension -> Automatic] on large MULTIVARIATE sums over a number field
+  (24k-leaf over Q(I, Sqrt[3])(k, z): 2.2 s; with generators as symbols 0.04 s) -- native nf engine
+  is univariate only; needs generator-as-symbol + reduce mod minpoly + modular field gcd.
+- [ ] Remaining: polynomial division by a divisor with an IRRATIONAL leading coefficient and heavy Root
+  coefficients still per-step Together; RowReduce of a singular radical matrix still the 2 s path.
+- [ ] N hits $MaxExtraPrecision on exact zeros of algebraic numbers and returns large values.
+- [x] RootSum substituted its root into nested slot functions (fixed, src/root.c).
+
 # Builtin audit campaign: 2,475 findings from review/report.html (started 2026-11-23)
 
 The plan is in `~/.claude/plans/nifty-finding-toucan-*.md`. `tools/audit_backlog.py`

@@ -1,0 +1,30 @@
+label	status	seconds	verified	unevaluated	residual
+Ex5.1  t/sqrt((t^2-1)(t^2-4))	elementary	0.0105	True	False	0
+V4 generic: g-avg(g), g=1/(t-3)	elementary	0.0214	True	False	0
+exact: d(t sqrt R)	elementary	0.0011	True	False	0
+t/sqrt(t^3+1)	non-elementary	0.0955	True	False	t
+Legendre-Clausen t/((t^3+8)sqrt(t^3-1))	elementary	0.9220	True	False	0
+1/sqrt(t^4+1)	non-elementary	0.0041	True	False	1
+(t^2-1)/((t^2+1)sqrt(t^4+1))	elementary	0.0131	True	False	0
+Ex5.2  1/(t^3-1)^(1/3)	elementary	0.0137	True	False	0
+Ex5.3  t^2/(t^3-1)^(1/3)	elementary	0.0010	True	False	0
+Ex5.4  t/(t^3-1)^(1/3)	non-elementary	0.0108	True	False	t
+CEX A  t(2t^3-1)/(t^3-1)^(1/3)	elementary	0.0014	True	False	0
+CEX B  1/(t^3+t)^(1/3)	elementary	0.0632	True	False	0
+CEX C  Ex5.5 piece t/((t^3+1)(t^3-1)^(1/3))	elementary	0.0387	True	False	0
+Ex5.5  full	elementary	0.0394	True	False	0
+Ex5.7  1/(t^2-1)^(1/3)	non-elementary	0.0807	True	False	1
+(at+b)/(H R^(1/3)), R=(t-1)(t-2)(t-3)	elementary	0.3480	True	False	0
+1/((t-1)(t-2)(t-3))^(1/3)	elementary	0.1563	True	False	0
+1/(H R^(1/3)), R=2t^3-3t^2-3t+2	elementary	0.1511	True	False	0
+1/(t^3-1)^(2/3)	non-elementary	0.0041	True	False	1
+t/(t^3-1)^(2/3)	elementary	0.0104	True	False	0
+CEX D  (2t^3-1)/(t^3-1)^(2/3)	elementary	0.0011	True	False	0
+(t^3+1)/(t (t^3-1)^(2/3))  [odd in x0]	elementary	0.0024	True	False	0
+t/((t-1)(t-2)(t-3))^(2/3)	non-elementary	0.1775	True	False	2
+irreducible cubic: 1/(H (t^3+t+1)^(1/3))	elementary	0.7569	True	False	0
+irreducible resolvent: (F - F0), F=1/(t-2), R=t^4+t+1	elementary	10.0893	False	True	0
+1/sqrt(t^3+t+1)	non-elementary	0.0023	True	False	1
+general cubic, no symmetry: 1/(t^3+t+1)^(1/3)	undecided	30.2398	True	False	(-27 + 216*t + 324*t^2 + 54*t^3 + 243*t^4 + 81*t^5)/(-56 - 54*t - 522*t^2 + 1026*t^3 + 1296*t^4 + 486*t^5)
+1/(t^2+t+1)^(2/3)	non-elementary	0.0034	True	False	1
+(t+1)/(t (t^2-1)^(1/3))	non-elementary	0.2577	True	False	1

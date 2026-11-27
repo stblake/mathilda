@@ -7509,6 +7509,30 @@ static void fg_lead_mon(ulong* out, const fmpq_mpoly_t P,
  * into F_p[t]/(M).  Fills *mons_out (nmon*ngens) and *res_out (nmon*n).
  * Returns 1 on success, 0 when the prime is unusable (denominator vanishes,
  * degree collapse, component supports disagree). */
+/* Memo for the factorisation of M mod p.  fg_gcd_mod_p needs the irreducible
+ * factors of M modulo the chosen prime to form the residue fields, and the same
+ * (M, p) pairs recur on every gcd over one field: a Together over Q(I, Sqrt[3])
+ * makes dozens of coprimality tests, and Cantor-Zassenhaus on M mod p was most
+ * of each one.  Bounded, process lifetime, keyed by (p, M mod p); the entry
+ * returned is borrowed. */
+#define FG_FACTOR_SLOTS 32
+typedef struct { ulong p; nmod_poly_t m; nmod_poly_factor_t fac; int live; } FgFactorSlot;
+static FgFactorSlot g_fg_factor_memo[FG_FACTOR_SLOTS];
+
+static const nmod_poly_factor_struct* fg_factor_memo(const nmod_poly_t Mp, ulong p) {
+    ulong h = p;
+    for (slong i = 0; i < nmod_poly_length(Mp); i++) h = h * UWORD(1000003) + nmod_poly_get_coeff_ui(Mp, i);
+    FgFactorSlot* sl = &g_fg_factor_memo[h % FG_FACTOR_SLOTS];
+    if (sl->live && sl->p == p && nmod_poly_equal(sl->m, Mp)) return sl->fac;
+    if (sl->live) { nmod_poly_clear(sl->m); nmod_poly_factor_clear(sl->fac); sl->live = 0; }
+    nmod_poly_init(sl->m, p);
+    nmod_poly_set(sl->m, Mp);
+    nmod_poly_factor_init(sl->fac);
+    nmod_poly_factor(sl->fac, Mp);
+    sl->p = p; sl->live = 1;
+    return sl->fac;
+}
+
 static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
                         const fmpq_mpoly_ctx_struct* qctx, slong ngens, slong tau_idx,
                         const nmod_poly_t Mp, slong n,
@@ -7526,8 +7550,8 @@ static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
         if (!sqfree) return 0;
     }
 
-    nmod_poly_factor_t fac; nmod_poly_factor_init(fac);
-    nmod_poly_factor(fac, Mp);
+    const nmod_poly_factor_struct* fac = fg_factor_memo(Mp, p);
+    if (!fac) return 0;
     slong r = fac->num;
 
     slong nmon = -1;
@@ -7640,7 +7664,6 @@ static int fg_gcd_mod_p(ulong p, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
             flint_free(cc[k]);
         }
     flint_free(cc);
-    nmod_poly_factor_clear(fac);
 
     if (!ok || nmon < 0) {
         if (mons) flint_free(mons);

@@ -580,6 +580,51 @@ static bool gcx_upper_cf(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) {
     return ok;
 }
 
+/* Upper incomplete gamma by its asymptotic series (DLMF 8.11.2):
+ *   Gamma(a, z) ~ z^(a-1) e^-z  sum_k (a-1)(a-2)...(a-k) / z^k,
+ * valid for |ph z| < 3 Pi/2, so on the whole principal sheet including the
+ * negative real axis (approached from above, the principal branch).  The terms
+ * decrease while k < |z| - |a| and the smallest one is ~ e^-|z|, so for
+ * |z| >~ wp/1.44 it reaches the working precision.  Used for LARGE |z|, where
+ * the other two routes are hopeless for Re(z) < 0: the lower series then needs
+ * ~e|z| terms at ~1.44|z| extra bits each -- Gamma[1/3, -216000.] ran for
+ * minutes, and PossibleZeroQ, sampling the residual of Integrate[E^-x^3, x] at
+ * complex x of modulus up to 64, stalled on it.  Returns false when the terms
+ * stop decreasing before reaching eps (the caller falls back). */
+static bool gcx_upper_asym(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) {
+    gcx S, t, tmp, am;
+    gcx_init(&S, wp); gcx_init(&t, wp); gcx_init(&tmp, wp); gcx_init(&am, wp);
+    mpfr_set_ui(S.re, 1, GRND); mpfr_set_ui(S.im, 0, GRND);
+    mpfr_set_ui(t.re, 1, GRND); mpfr_set_ui(t.im, 0, GRND);
+    mpfr_t eps, mag, prev, smag;
+    mpfr_inits2(wp, eps, mag, prev, smag, (mpfr_ptr)0);
+    gamma_set_eps(eps, wp);
+    mpfr_set_inf(prev, 1);
+    bool ok = false;
+    for (unsigned long k = 1; k < 100000; k++) {
+        mpfr_sub_ui(am.re, a->re, k, GRND);        /* a - k */
+        mpfr_set(am.im, a->im, GRND);
+        gcx_mul(&tmp, &t, &am, wp);
+        gcx_div(&t, &tmp, z, wp);                  /* t_k = t_{k-1} (a-k)/z */
+        gcx_abs(mag, &t);
+        if (mpfr_zero_p(mag)) { ok = true; break; }  /* a a positive integer: exact */
+        if (mpfr_cmp(mag, prev) > 0) break;         /* diverging: precision unreachable */
+        mpfr_set(prev, mag, GRND);
+        gcx_add(&S, &S, &t);
+        gcx_abs(smag, &S);
+        mpfr_mul(smag, smag, eps, GRND);
+        if (mpfr_cmp(mag, smag) < 0) { ok = true; break; }
+    }
+    if (ok) {
+        gcx_set(out, &S);
+        gcx_mul_incprefactor(out, a, z, wp);       /* * e^-z z^a */
+        gcx_div(out, out, z, wp);                  /* -> z^(a-1) */
+    }
+    gcx_clear(&S); gcx_clear(&t); gcx_clear(&tmp); gcx_clear(&am);
+    mpfr_clears(eps, mag, prev, smag, (mpfr_ptr)0);
+    return ok;
+}
+
 /* Gamma(a, z) for numeric complex a/z. Returns false on non-convergence
  * (caller then leaves the expression symbolic). */
 static bool gcx_inc_gamma(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) {
@@ -627,6 +672,31 @@ static bool gcx_inc_gamma(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) 
 static Expr* gamma_mpfr_inc_complex(Expr* ar, Expr* ai, Expr* zr, Expr* zi,
                                     mpfr_prec_t out_prec) {
     mpfr_prec_t wp = out_prec + 64;
+    /* Large |z|, small |a|: the asymptotic series, at the plain working
+     * precision (gcx_upper_asym); declines fall through to the routes below. */
+    {
+        double zre = 0.0, zim = 0.0, are_d = 0.0, aim_d = 0.0;
+        mpfr_t tz; mpfr_init2(tz, 64);
+        if (gamma_set_mpfr(tz, zr)) zre = mpfr_get_d(tz, MPFR_RNDN);
+        if (gamma_set_mpfr(tz, zi)) zim = mpfr_get_d(tz, MPFR_RNDN);
+        if (gamma_set_mpfr(tz, ar)) are_d = mpfr_get_d(tz, MPFR_RNDN);
+        if (gamma_set_mpfr(tz, ai)) aim_d = mpfr_get_d(tz, MPFR_RNDN);
+        mpfr_clear(tz);
+        double zmag = hypot(zre, zim), amag = hypot(are_d, aim_d);
+        if (zmag > (double)wp && zmag > 4.0 * (amag + 1.0)) {
+            gcx a, z, g;
+            gcx_init(&a, wp); gcx_init(&z, wp); gcx_init(&g, wp);
+            Expr* out = NULL;
+            if (gamma_set_mpfr(a.re, ar) && gamma_set_mpfr(a.im, ai) &&
+                gamma_set_mpfr(z.re, zr) && gamma_set_mpfr(z.im, zi) &&
+                gcx_upper_asym(&g, &a, &z, wp) &&
+                !mpfr_nan_p(g.re) && !mpfr_nan_p(g.im) &&
+                !mpfr_inf_p(g.re) && !mpfr_inf_p(g.im))
+                out = gamma_complex_result(g.re, g.im, out_prec);
+            gcx_clear(&a); gcx_clear(&z); gcx_clear(&g);
+            if (out) return out;
+        }
+    }
     /* Re(z) < 0: the lower series' terms reach ~e^|z| while the sum does not,
      * so it cancels ~|z| log2(e) bits -- carry them as guard bits. */
     {
@@ -879,7 +949,26 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
         bool ok = gamma_set_mpfr(av, a) && gamma_set_mpfr(zv, z);
         Expr* out = NULL;
         if (ok) {
-            mpfr_gamma_inc(rv, av, zv, MPFR_RNDN);
+            /* Large positive z: the asymptotic series (gcx_upper_asym) in a
+             * handful of terms.  mpfr_gamma_inc there is far too slow:
+             * Gamma[1/3, 27000.] did not return in 5 s, which stalled
+             * PossibleZeroQ on the residual of Integrate[E^-x^3, x]. */
+            bool asym_done = false;
+            mpfr_prec_t wp = prec + 64;
+            if (mpfr_sgn(zv) > 0 && mpfr_get_d(zv, MPFR_RNDN) > (double)wp &&
+                mpfr_get_d(zv, MPFR_RNDN) > 4.0 * (fabs(mpfr_get_d(av, MPFR_RNDN)) + 1.0)) {
+                gcx ga, gz, gg;
+                gcx_init(&ga, wp); gcx_init(&gz, wp); gcx_init(&gg, wp);
+                mpfr_set(ga.re, av, GRND); mpfr_set_ui(ga.im, 0, GRND);
+                mpfr_set(gz.re, zv, GRND); mpfr_set_ui(gz.im, 0, GRND);
+                if (gcx_upper_asym(&gg, &ga, &gz, wp) && !mpfr_nan_p(gg.re) &&
+                    !mpfr_inf_p(gg.re)) {
+                    mpfr_set(rv, gg.re, MPFR_RNDN);    /* real a, z > 0: real value */
+                    asym_done = true;
+                }
+                gcx_clear(&ga); gcx_clear(&gz); gcx_clear(&gg);
+            }
+            if (!asym_done) mpfr_gamma_inc(rv, av, zv, MPFR_RNDN);
             if (mpfr_nan_p(rv)) {
                 out = NULL;
             } else if (prec > 53) {

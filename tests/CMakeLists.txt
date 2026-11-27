@@ -966,6 +966,8 @@ set(COMMON_SRC
     ../src/poly/ffield/ff_xgcd.c
     ../src/poly/flint_qqbar.c
     ../src/poly/algfield.c
+    ../src/poly/symrad.c
+    ../src/poly/nfrat.c
     ../src/poly/algebraicnumber.c
     ../src/poly/tonumberfield.c
     ../src/poly/algebraicnumberpolynomial.c
@@ -1033,6 +1035,8 @@ set(COMMON_SRC
     ../src/calculus/integrate_elliptic.c
     ../src/calculus/laplace.c
     ../src/calculus/intrat.c
+    ../src/calculus/intrat_subres.c
+    ../src/calculus/intrat_alg.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
     ../src/calculus/integrate_risch_rde.c
@@ -3748,6 +3752,25 @@ else()
     target_link_libraries(integrate_goursat_tests gmp m)
 endif()
 add_test(NAME integrate_goursat_tests COMMAND integrate_goursat_tests)
+
+add_executable(integrate_generalised_goursat_tests test_integrate_generalised_goursat.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_generalised_goursat_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_generalised_goursat_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_generalised_goursat_tests gmp m)
+endif()
+add_test(NAME integrate_generalised_goursat_tests COMMAND integrate_generalised_goursat_tests)
+
+add_executable(generalised_goursat_stress_tests test_generalised_goursat_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(generalised_goursat_stress_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(generalised_goursat_stress_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(generalised_goursat_stress_tests gmp m)
+endif()
+add_test(NAME generalised_goursat_stress_tests COMMAND generalised_goursat_stress_tests
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 add_executable(integrate_newton_leibniz_tests test_integrate_newton_leibniz.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(integrate_newton_leibniz_tests PRIVATE ../src)

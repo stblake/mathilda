@@ -1509,22 +1509,365 @@ bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
 /* ------------------------------------------------------------------ */
 /*  Legendre elliptic integrals                                        */
 /* ------------------------------------------------------------------ */
-/* Arb's acb_elliptic_* already use the PARAMETER convention m = k^2 and
- * Mathematica's branch placement, so these are straight pass-throughs. The
- * `times_pi` flag is 0 throughout: phi arrives in radians, not as a multiple of
- * Pi, and the adapters below pin it so the kernels fit the nb_fn* shapes. */
+/* Arb's acb_elliptic_* use the PARAMETER convention m = k^2 and the
+ * principal branch placement, so the complete integrals are straight
+ * pass-throughs. The incomplete ones go through nb_ell_incomplete below. */
 
-static void nb_elliptic_f(acb_t r, const acb_t phi, const acb_t m, slong prec) {
-    acb_elliptic_f(r, phi, m, 0, prec);
+/* ---- Legendre integrals through Carlson's forms, cut-aware (nb_ell_*) ----
+ *
+ * Every incomplete Legendre integral is assembled from Carlson's symmetric
+ * forms on the principal strip |Re phi| <= Pi/2 (DLMF 19.25.5, 19.25.7,
+ * 19.25.14 after clearing the csc^2 scaling by homogeneity):
+ *
+ *   F(phi|m)    = s R_F(x, y, 1)
+ *   E(phi|m)    = s R_F(x, y, 1) - (m/3) s^3 R_D(x, y, 1)
+ *   Pi(n;phi|m) = s R_F(x, y, 1) + (n/3) s^3 R_J(x, y, 1, p)
+ *
+ * with s = Sin[phi], x = Cos[phi]^2, y = 1 - m s^2, p = 1 - n s^2, extended
+ * off the strip by the quasi-period (+ 2k K, 2k E, 2k Pi(n|m)). This is
+ * exactly Arb's own construction (acb_elliptic_f / e_inc / pi_inc agree with
+ * it to the last bit on 3000 random complex triples), so off the cuts the
+ * values are unchanged; what it adds is control over two things Arb's entry
+ * points decide for themselves:
+ *
+ *  1. THE SIDE OF A CUT. y and p have cuts on (-oo, 0]: p is where the pole of
+ *     R_J's integrand crosses its path, y where a square root's branch point
+ *     does. An exact argument can put y or p exactly on the cut (1 - n s^2 =
+ *     (x - 3)/(x + 1) < 0 in an antiderivative of 1/((x - 3) Sqrt[1 + x^3]));
+ *     its numerical value then carries a rounding residue of either sign, and
+ *     Arb picked the side by that residue -- a different side at 30 and at 40
+ *     digits. Here the caller says which side (NB_ELL_UP / NB_ELL_DOWN, decided
+ *     exactly in src/numeric.c), the quantity's imaginary part is dropped, and
+ *
+ *        the value ON a cut is the limit from Im y > 0 (Im p > 0),
+ *
+ *     the convention of the principal Sqrt and Log (continuous from above) and
+ *     the one every entry point already has at a REAL argument: for real phi
+ *     it is the limit m -> m - i0 (n -> n - i0), which is how EllipticK[2.] =
+ *     1.31103 - 1.31103 I and EllipticPi[3/2, 1/2] = -0.45672 - 2.72070 I were
+ *     already placed. The limit from below is the conjugate of the limit from
+ *     above at the conjugated arguments (R(x*, y*, z*, p*) = R(x, y, z, p)*).
+ *
+ *  2. SPEED. Arb's R_J uses Carlson's duplication only where it is proven
+ *     valid and otherwise integrates numerically -- ~6 ms per call at 128
+ *     bits, 2 s at 3400, and much worse near the cut, where the integrand
+ *     nearly has a pole (120 ms at machine precision, 85 s at 300 digits, for
+ *     the example above). Two further cases are proven (Carlson 1995, Numer.
+ *     Algorithms 10, and DLMF 19.20.14) and measured against Arb's
+ *     integration here (800 random points, all agree):
+ *       - x, y, z real non-negative, or x, y a conjugate pair with z > 0, and
+ *         p anywhere off (-oo, 0]: the duplication algorithm directly;
+ *       - the same x, y, z with p on (-oo, 0) exactly: the Cauchy principal
+ *         value by DLMF 19.20.14, which moves p to p' = (z(x+y+q) - xy)/(z+q)
+ *         > 0 (q = -p), less the half residue (3 Pi I/2)/Sqrt[(x+q)(y+q)(z+q)]
+ *         -- the limit from Im p > 0, to 70 digits against the duplication at
+ *         p + 10^-70 I.
+ *     The conjugate pair is the case that matters: an antiderivative of a
+ *     real integrand puts x = Cos[phi]^2 and y = 1 - m Sin[phi]^2 at complex
+ *     conjugates whenever the cubic or quartic has complex roots. Anything
+ *     else still goes to acb_elliptic_rj. */
+enum { NB_ELL_DOWN = -1, NB_ELL_FREE = 0, NB_ELL_UP = 1 };
+
+/* A ball that is a non-negative real (its imaginary part may be a ball
+ * around 0). */
+static int nb_ell_realish(const acb_t x) {
+    return arb_contains_zero(acb_imagref(x)) && arb_is_nonnegative(acb_realref(x));
 }
 
-static void nb_elliptic_e_inc(acb_t r, const acb_t phi, const acb_t m, slong prec) {
-    acb_elliptic_e_inc(r, phi, m, 0, prec);
+/* Carlson's duplication is valid for R_J at these x, y, z (any p off the
+ * cut): real non-negative x, y and z > 0, or y the conjugate of x. Rounding
+ * the arguments (n, phi, m arrive at `inb` bits) leaves a conjugate pair
+ * conjugate only to within a few ulps of that precision, which no ball test
+ * sees, so a pair within 2^-(inb - 8) of conjugate is made exactly conjugate
+ * (x, y := their conjugate-symmetric midpoint): a perturbation inside the
+ * arguments' own rounding, and the one that puts the call in the proven case
+ * -- the duplication run on a NEARLY conjugate pair is not covered, and
+ * measured wrong (1 in 600) where x is close to the negative real axis. */
+static int nb_ell_carlson_prep(acb_t x, acb_t y, const acb_t z, slong inb, slong prec) {
+    if (!nb_ell_realish(z) || !arb_is_positive(acb_realref(z))) return 0;
+    if (nb_ell_realish(x) && nb_ell_realish(y)) return 1;
+    if (arb_contains_zero(acb_imagref(x))) return 0;      /* on/at the real axis */
+    acb_t c, d;
+    mag_t md, mx;
+    acb_init(c); acb_init(d);
+    mag_init(md); mag_init(mx);
+    acb_conj(c, x);
+    acb_sub(d, c, y, prec);
+    acb_get_mag(md, d);
+    acb_get_mag_lower(mx, x);
+    mag_mul_2exp_si(mx, mx, -(inb - 8));
+    int r = mag_cmp(md, mx) <= 0;
+    if (r) {
+        acb_add(c, c, y, prec);                   /* y' = (conj x + y)/2, x' = conj y' */
+        acb_mul_2exp_si(c, c, -1);
+        acb_get_mid(y, c);
+        acb_conj(x, y);
+    }
+    acb_clear(c); acb_clear(d);
+    mag_clear(md); mag_clear(mx);
+    return r;
 }
 
-static void nb_elliptic_pi_inc(acb_t r, const acb_t n, const acb_t phi,
-                               const acb_t m, slong prec) {
-    acb_elliptic_pi_inc(r, n, phi, m, 0, prec);
+/* q on the negative real axis's side: its real part certainly negative. */
+static int nb_ell_on_cut_side(const acb_t q) {
+    return arb_is_negative(acb_realref(q));
+}
+
+/* The side a Carlson argument q is taken on: the caller's, for a q whose
+ * real part is negative (one that can be on the cut at all); otherwise
+ * FREE -- except that a q whose ball straddles the cut is taken from above.
+ * An argument that arrives inexact carries its own side, and the kernel's
+ * inputs are exact binary numbers, so a straddle at the working precision
+ * (32 guard bits past the input's) is a side below the input's own
+ * precision: the convention decides it, rather than a numerical integration
+ * along a path that nearly meets a pole. */
+static int nb_ell_side_of(const acb_t q, int side) {
+    if (!nb_ell_on_cut_side(q)) return NB_ELL_FREE;
+    if (side == NB_ELL_FREE && arb_contains_zero(acb_imagref(q))
+        && !arb_is_zero(acb_imagref(q)))
+        return NB_ELL_UP;
+    return side;
+}
+
+/* R_J(x, y, z, p) at p exactly on (-oo, 0), x, y, z as nb_ell_carlson_prep:
+ * the limit from Im p > 0 (see the block comment). */
+static void nb_ell_rj_cut(acb_t r, const acb_t x, const acb_t y, const acb_t z,
+                          const acb_t p, slong prec) {
+    acb_t q, xy, pp, t, u, v, w, a, b;
+    acb_init(q); acb_init(xy); acb_init(pp); acb_init(t); acb_init(u);
+    acb_init(v); acb_init(w); acb_init(a); acb_init(b);
+    acb_neg(q, p);
+    acb_mul(xy, x, y, prec);
+    acb_add(t, x, y, prec);                          /* p' = (z(x+y+q) - xy)/(z+q) */
+    acb_add(t, t, q, prec);
+    acb_mul(t, t, z, prec);
+    acb_sub(t, t, xy, prec);
+    acb_add(u, z, q, prec);
+    acb_div(pp, t, u, prec);
+    acb_elliptic_rj_carlson(a, x, y, z, pp, 0, prec);
+    acb_sub(t, pp, z, prec);
+    acb_mul(a, a, t, prec);                          /* (p' - z) R_J(x, y, z, p') */
+    acb_elliptic_rf(b, x, y, z, 0, prec);
+    acb_mul_ui(b, b, 3, prec);
+    acb_sub(a, a, b, prec);                          /* - 3 R_F(x, y, z) */
+    acb_mul(v, pp, q, prec);                         /* p' q */
+    acb_add(w, xy, v, prec);                         /* xy + p' q */
+    acb_elliptic_rf(b, w, v, v, 0, prec);            /* R_C(w, v) = R_F(w, v, v) */
+    acb_mul(t, xy, z, prec);
+    acb_div(t, t, w, prec);
+    acb_sqrt(t, t, prec);
+    acb_mul(b, b, t, prec);
+    acb_mul_ui(b, b, 3, prec);
+    acb_add(a, a, b, prec);
+    acb_div(a, a, u, prec);                          /* the principal value */
+    acb_add(t, x, q, prec);                          /* (3 Pi/2)/Sqrt[(x+q)(y+q)(z+q)] */
+    acb_add(v, y, q, prec);
+    acb_mul(t, t, v, prec);
+    acb_mul(t, t, u, prec);
+    acb_sqrt(t, t, prec);
+    acb_const_pi(v, prec);
+    acb_mul_ui(v, v, 3, prec);
+    acb_mul_2exp_si(v, v, -1);
+    acb_div(v, v, t, prec);
+    acb_mul_onei(v, v);
+    acb_sub(r, a, v, prec);
+    acb_clear(q); acb_clear(xy); acb_clear(pp); acb_clear(t); acb_clear(u);
+    acb_clear(v); acb_clear(w); acb_clear(a); acb_clear(b);
+}
+
+/* The sides of the three Carlson arguments that have cuts in the Legendre
+ * forms: x = Cos[phi]^2, y = 1 - m Sin[phi]^2, p = 1 - n Sin[phi]^2. */
+typedef struct { int x, y, p; } NbEllSides;
+
+/* q (real, negative) moved to q + 2^-prec |q| I. */
+static void nb_ell_lift(acb_t q, slong prec) {
+    arb_t t;
+    arb_init(t);
+    arb_abs(t, acb_realref(q));
+    arb_mul_2exp_si(t, t, -prec);
+    arb_get_mid_arb(acb_imagref(q), t);
+    arb_clear(t);
+}
+
+/* R_F (rj == 0) or R_J (rj == 1) with x, y, p on the sides given;
+ * NB_ELL_FREE leaves a side to the arguments. A side is applied only to a
+ * quantity whose real part is negative -- one that can be on the cut at
+ * all. One conjugation serves every side at once, so sides that disagree
+ * keep the leading one (p, the residue term, then y, then x) and leave the
+ * rest to the arguments: two quantities on their cuts from opposite sides
+ * at once is not a case any caller has produced. */
+static void nb_ell_carlson(acb_t r, int rj, const acb_t x0, const acb_t y0, const acb_t z0,
+                           const acb_t p0, NbEllSides sd, slong inb, slong prec) {
+    int sx = nb_ell_side_of(x0, sd.x);
+    int sy = nb_ell_side_of(y0, sd.y);
+    int sp = rj ? nb_ell_side_of(p0, sd.p) : NB_ELL_FREE;
+    int lead = sp != NB_ELL_FREE ? sp : sy != NB_ELL_FREE ? sy : sx;
+    if (sy != lead) sy = NB_ELL_FREE;
+    if (sx != lead) sx = NB_ELL_FREE;
+    int down = lead == NB_ELL_DOWN;
+    acb_t x, y, z, p;
+    acb_init(x); acb_init(y); acb_init(z); acb_init(p);
+    if (down) {
+        acb_conj(x, x0); acb_conj(y, y0); acb_conj(z, z0);
+        if (rj) acb_conj(p, p0);
+    } else {
+        acb_set(x, x0); acb_set(y, y0); acb_set(z, z0);
+        if (rj) acb_set(p, p0);
+    }
+    if (sx != NB_ELL_FREE) arb_zero(acb_imagref(x));
+    if (sy != NB_ELL_FREE) arb_zero(acb_imagref(y));
+    if (sp != NB_ELL_FREE) arb_zero(acb_imagref(p));
+    if (!rj) {
+        acb_elliptic_rf(r, x, y, z, 0, prec);         /* duplication: valid everywhere */
+    } else if (nb_ell_carlson_prep(x, y, z, inb, prec)) {
+        if (arb_is_zero(acb_imagref(p)) && arb_is_negative(acb_realref(p)))
+            nb_ell_rj_cut(r, x, y, z, p, prec);
+        else
+            acb_elliptic_rj_carlson(r, x, y, z, p, 0, prec);
+    } else {
+        /* Arb integrates here. A branch point of x or y exactly ON its path
+         * (the argument snapped to the real axis) is the slow case for its
+         * quadrature; the limit from above is analytic up to the cut, so an
+         * argument 2^-prec above it is the same value to the precision. */
+        if (sx != NB_ELL_FREE) nb_ell_lift(x, prec);
+        if (sy != NB_ELL_FREE) nb_ell_lift(y, prec);
+        acb_elliptic_rj(r, x, y, z, p, 0, prec);
+    }
+    if (down) acb_conj(r, r);
+    acb_clear(x); acb_clear(y); acb_clear(z); acb_clear(p);
+}
+
+/* Pi(n|m) = R_F(0, 1 - m, 1) + (n/3) R_J(0, 1 - m, 1, 1 - n). */
+static void nb_ell_pi_complete(acb_t r, const acb_t n, const acb_t m, slong inb,
+                               slong prec) {
+    acb_t x, y, z, p, t;
+    NbEllSides free_sd = { NB_ELL_FREE, NB_ELL_FREE, NB_ELL_FREE };
+    acb_init(x); acb_init(y); acb_init(z); acb_init(p); acb_init(t);
+    acb_one(z);
+    acb_sub(y, z, m, prec);
+    acb_sub(p, z, n, prec);
+    acb_elliptic_rf(r, x, y, z, 0, prec);
+    nb_ell_carlson(t, 1, x, y, z, p, free_sd, inb, prec);
+    acb_mul(t, t, n, prec);
+    acb_div_ui(t, t, 3, prec);
+    acb_add(r, r, t, prec);
+    acb_clear(x); acb_clear(y); acb_clear(z); acb_clear(p); acb_clear(t);
+}
+
+enum { NB_ELL_KIND_F = 0, NB_ELL_KIND_E, NB_ELL_KIND_PI };
+
+/* The quasi-period shift k: phi = ph + k Pi with |Re ph| <= Pi/2, k the
+ * nearest integer to Re phi / Pi (read off the midpoint).
+ *
+ * Re phi an odd multiple of Pi/2 is where x = Cos[phi]^2 is on ITS cut
+ * (phi = Pi/2 + I t gives x = -Sinh[t]^2), and there the two candidate
+ * shifts give the two sides: an exact argument such as ArcSin[2] lies
+ * exactly there, and the midpoint's rounding picked k -- EllipticF[ArcSin[2],
+ * 1/3] was 1.10577 - 2.02896 I at 20 digits and 2.36206 + 2.02896 I at 30.
+ * With x's side given, k is the shift that keeps ph INSIDE the strip as phi
+ * moves in the direction that gives Im x that sign: at the right edge
+ * Re ph = Pi/2, d x = -Sin[2 phi] d phi, and moving inward (d phi < 0) gives
+ * Im x the sign of -Im phi. So the shift is the lower one (ph at +Pi/2)
+ * when the side is -Sign[Im phi], else the upper one (ph at -Pi/2). */
+static void nb_ell_shift(fmpz_t k, const acb_t phi, int sx, slong prec) {
+    arb_t q;
+    arf_t kf;
+    arb_init(q);
+    arf_init(kf);
+    arb_const_pi(q, prec);
+    arb_div(q, acb_realref(phi), q, prec);
+    if (sx != NB_ELL_FREE && !arb_contains_zero(acb_imagref(phi))) {
+        arf_set_round(kf, arb_midref(q), 64, ARF_RND_NEAR);
+        arf_get_fmpz(k, kf, ARF_RND_FLOOR);          /* Re phi ~ (k + 1/2) Pi */
+        int tau = arb_is_positive(acb_imagref(phi)) ? 1 : -1;
+        if (sx != -tau) fmpz_add_ui(k, k, 1);
+    } else {
+        arf_set_round(kf, arb_midref(q), 64, ARF_RND_NEAR);
+        arf_get_fmpz(k, kf, ARF_RND_NEAR);
+    }
+    arf_clear(kf);
+    arb_clear(q);
+}
+
+/* The incomplete integral of `kind` (n ignored unless PI), x, y and p on
+ * the sides given; `inb` the arguments' precision (nb_ell_carlson_prep). */
+static void nb_ell_incomplete(acb_t r, int kind, const acb_t n, const acb_t phi,
+                              const acb_t m, NbEllSides sd, slong inb, slong prec) {
+    acb_t ph, s, s2, x, y, z, p, t, u;
+    arb_t q;
+    fmpz_t k;
+    acb_init(ph); acb_init(s); acb_init(s2); acb_init(x); acb_init(y);
+    acb_init(z); acb_init(p); acb_init(t); acb_init(u);
+    arb_init(q);
+    fmpz_init(k);
+    nb_ell_shift(k, phi, sd.x, prec);
+    acb_set(ph, phi);
+    if (!fmpz_is_zero(k)) {
+        arb_const_pi(q, prec);
+        arb_mul_fmpz(q, q, k, prec);
+        arb_sub(acb_realref(ph), acb_realref(ph), q, prec);
+    }
+    acb_sin_cos(s, x, ph, prec);
+    acb_mul(s2, s, s, prec);
+    acb_mul(x, x, x, prec);                          /* Cos[ph]^2 */
+    acb_one(z);
+    acb_mul(y, m, s2, prec);
+    acb_sub(y, z, y, prec);                          /* 1 - m s^2 */
+    nb_ell_carlson(r, 0, x, y, z, NULL, sd, inb, prec);
+    acb_mul(r, r, s, prec);
+    if (kind != NB_ELL_KIND_F) {
+        if (kind == NB_ELL_KIND_E) {
+            nb_ell_carlson(t, 1, x, y, z, z, sd, inb, prec);   /* R_D = R_J(x, y, z, z) */
+            acb_mul(t, t, m, prec);
+            acb_neg(t, t);
+        } else {
+            acb_mul(p, n, s2, prec);
+            acb_sub(p, z, p, prec);                  /* 1 - n s^2 */
+            nb_ell_carlson(t, 1, x, y, z, p, sd, inb, prec);
+            acb_mul(t, t, n, prec);
+        }
+        acb_mul(t, t, s2, prec);
+        acb_mul(t, t, s, prec);
+        acb_div_ui(t, t, 3, prec);
+        acb_add(r, r, t, prec);
+    }
+    if (!fmpz_is_zero(k)) {
+        if (kind == NB_ELL_KIND_F)      acb_elliptic_k(u, m, prec);
+        else if (kind == NB_ELL_KIND_E) acb_elliptic_e(u, m, prec);
+        else                            nb_ell_pi_complete(u, n, m, inb, prec);
+        acb_mul_fmpz(u, u, k, prec);
+        acb_mul_2exp_si(u, u, 1);
+        acb_add(r, r, u, prec);
+    }
+    fmpz_clear(k);
+    acb_clear(ph); acb_clear(s); acb_clear(s2); acb_clear(x); acb_clear(y);
+    acb_clear(z); acb_clear(p); acb_clear(t); acb_clear(u);
+    arb_clear(q);
+}
+
+/* The precision ladder of nb_eval_ex for nb_ell_incomplete (whose sides do
+ * not fit the nb_fn* shapes). args = { n, phi, m } for PI, { phi, m } else. */
+static Expr* nb_ell_eval(int kind, const Expr* const* args, int nargs, NbEllSides sd) {
+    slong outb = pick_out_bits(args, nargs);
+    acb_t A[3], R;
+    for (int i = 0; i < 3; i++) acb_init(A[i]);
+    acb_init(R);
+    Expr* out = NULL;
+    slong wp = outb + NB_GUARD;
+    for (int attempt = 0; ; attempt++) {
+        int ok = 1;
+        for (int i = 0; i < nargs && ok; i++) ok = expr_to_acb(args[i], A[i], wp);
+        if (!ok) break;                            /* non-numeric: decline */
+        if (kind == NB_ELL_KIND_PI) nb_ell_incomplete(R, kind, A[0], A[1], A[2], sd, outb, wp);
+        else                        nb_ell_incomplete(R, kind, NULL, A[0], A[1], sd, outb, wp);
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
+    }
+    for (int i = 0; i < 3; i++) acb_clear(A[i]);
+    acb_clear(R);
+    return out;
 }
 
 Expr* flint_num_elliptic_k(const Expr* m) {
@@ -1535,20 +1878,35 @@ Expr* flint_num_elliptic_e(const Expr* m) {
     return nb_eval1(m, acb_elliptic_e);
 }
 
-Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m) {
-    return nb_eval2(phi, m, nb_elliptic_f);
-}
-
-Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) {
-    return nb_eval2(phi, m, nb_elliptic_e_inc);
-}
-
 Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) {
     return nb_eval2(n, m, acb_elliptic_pi);
 }
 
+Expr* flint_num_elliptic_inc_sided(int kind, const Expr* n, const Expr* phi, const Expr* m,
+                                   int side_x, int side_y, int side_p) {
+    NbEllSides sd;
+    sd.x = side_x < 0 ? NB_ELL_DOWN : side_x > 0 ? NB_ELL_UP : NB_ELL_FREE;
+    sd.y = side_y < 0 ? NB_ELL_DOWN : side_y > 0 ? NB_ELL_UP : NB_ELL_FREE;
+    sd.p = side_p < 0 ? NB_ELL_DOWN : side_p > 0 ? NB_ELL_UP : NB_ELL_FREE;
+    if (kind == FLINT_ELL_PI) {
+        const Expr* a[3] = { n, phi, m };
+        return nb_ell_eval(NB_ELL_KIND_PI, a, 3, sd);
+    }
+    sd.p = NB_ELL_FREE;
+    const Expr* a[2] = { phi, m };
+    return nb_ell_eval(kind == FLINT_ELL_E ? NB_ELL_KIND_E : NB_ELL_KIND_F, a, 2, sd);
+}
+
+Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m) {
+    return flint_num_elliptic_inc_sided(FLINT_ELL_F, NULL, phi, m, 0, 0, 0);
+}
+
+Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) {
+    return flint_num_elliptic_inc_sided(FLINT_ELL_E, NULL, phi, m, 0, 0, 0);
+}
+
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
-    return nb_eval3(n, phi, m, nb_elliptic_pi_inc);
+    return flint_num_elliptic_inc_sided(FLINT_ELL_PI, n, phi, m, 0, 0, 0);
 }
 
 /* ------------------------------------------------------------------ */
@@ -4137,6 +4495,11 @@ Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) { (void)phi; (voi
 Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) { (void)n; (void)m; return NULL; }
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
     (void)n; (void)phi; (void)m; return NULL;
+}
+Expr* flint_num_elliptic_inc_sided(int kind, const Expr* n, const Expr* phi, const Expr* m,
+                                   int side_x, int side_y, int side_p) {
+    (void)kind; (void)n; (void)phi; (void)m; (void)side_x; (void)side_y; (void)side_p;
+    return NULL;
 }
 Expr* flint_num_pcfd(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
 bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double* ri) {

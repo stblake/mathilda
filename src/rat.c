@@ -20,6 +20,9 @@
 #include "rat_internal.h"
 #include "expsplit.h"
 #include "algfield.h"
+#include "symrad.h"
+#include "nfrat.h"
+#include "sym_intern.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -1676,9 +1679,172 @@ static Expr* rat_nested_field(Expr* res, const char* head) {
     const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
     if (argc != 1 || alpha || !auto_flag || res->data.function.arg_count != 2) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (!algfield_has_nested_constant_radical(arg) || internal_args_contain_inexact(res))
+    if (internal_args_contain_inexact(res)) return NULL;
+    /* nested radicals, and constant radicals whose one-generator-per-radicand
+     * relations are not a field (roots of unity, I with Sqrt[3] and
+     * (-1)^(1/3), ...): the generator model below cannot decide a zero of
+     * those, the genuine number field can */
+    if (!algfield_has_nested_constant_radical(arg) &&
+        !algfield_has_dependent_constant_radicals(arg))
         return NULL;
     return algfield_normalize(arg, head);
+}
+
+/* Square roots of one polynomial radicand (the Hessian roots of a cubic with
+ * a parameter): the canonical form over Q(vars)(Sqrt[b]) (symrad.h), under
+ * Extension -> Automatic only.  NULL when the input is not in that regime. */
+static Expr* rat_symrad_field(Expr* res, const char* head) {
+    size_t argc = res->data.function.arg_count;
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
+    if (argc != 1 || alpha || !auto_flag || res->data.function.arg_count != 2) return NULL;
+    if (internal_args_contain_inexact(res)) return NULL;
+    return symrad_normalize(res->data.function.args[0], head);
+}
+
+/* Rational functions over the number field of the constant algebraic atoms
+ * (I, Sqrt[n], n^(1/k), (-1)^(p/q), Root objects, nested radicals), combined
+ * and cancelled natively over K (nfrat.h).  Default and Extension -> Automatic
+ * alike: the engine never rationalises a numeric algebraic denominator and
+ * never reduces a Root power, so both readings agree.  NULL declines to the
+ * paths below.  MATHILDA_NFRAT=off disables it. */
+static bool nfrat_enabled(void) {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = getenv("MATHILDA_NFRAT");
+        en = (e && strcmp(e, "off") == 0) ? 0 : 1;
+    }
+    return en;
+}
+
+/* Root objects read as independent generators.  Together / Cancel keep a
+ * Root[f, k]^m with m >= deg f as written (the reference's
+ * Together[1/(x - r) + r^4/x] is (x + x r^4 - r^5)/(x (x - r))); the field
+ * engine would reduce it, so it declines such an input, and the paths after it
+ * expanded the products of Root powers through the evaluator (a 3268-leaf
+ * Together over Q(Root[#^3 - # - 1 &, 1]): 8.5 s and 48983 leaves, the
+ * reference 0.08 s).  Here each constant Root atom becomes a fresh symbol, the
+ * call is computed by `compute` (the builtin's own dispatch, so the answer
+ * keeps the caller's form), and the atoms are put back. */
+typedef struct { Expr** from; Expr** to; size_t n, cap; } RatRootMap;
+
+static bool rat_root_collect(const Expr* e, RatRootMap* m) {
+    if (e->type != EXPR_FUNCTION) return true;
+    if (head_is((Expr*)e, SYM_Root)) {
+        for (size_t i = 0; i < m->n; i++) if (expr_eq(m->from[i], (Expr*)e)) return true;
+        if (m->n == 16) return false;
+        if (m->n == m->cap) {
+            m->cap = m->cap ? 2 * m->cap : 4;
+            m->from = realloc(m->from, m->cap * sizeof(Expr*));
+            m->to = realloc(m->to, m->cap * sizeof(Expr*));
+        }
+        char name[48];
+        snprintf(name, sizeof name, "~MthRootGen%06zu", m->n + 1);   /* sorts after the variables */
+        m->from[m->n] = expr_copy((Expr*)e);
+        m->to[m->n] = expr_new_symbol(intern_symbol(name));
+        m->n++;
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!rat_root_collect(e->data.function.args[i], m)) return false;
+    return true;
+}
+
+static Expr* rat_root_subst(const Expr* e, const RatRootMap* m, bool back) {
+    for (size_t i = 0; i < m->n; i++)
+        if (expr_eq(back ? m->to[i] : m->from[i], (Expr*)e))
+            return expr_copy(back ? m->from[i] : m->to[i]);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = rat_root_subst(e->data.function.args[i], m, back);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+/* Cancel's structure (as in nfrat_cancel): a sum term by term, a power of a
+ * sum the power of the cancelled sum, any other term with a denominator
+ * through `compute`.  Returns a new expression (never NULL). */
+static Expr* rat_cancel_structured(const Expr* e, Expr* (*compute)(Expr*)) {
+    if (head_is((Expr*)e, SYM_Plus)) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) a[i] = rat_cancel_structured(e->data.function.args[i], compute);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_Plus), a, n);
+        free(a);
+        return r;
+    }
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER && head_is(e->data.function.args[0], SYM_Plus))
+        return expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ rat_cancel_structured(e->data.function.args[0], compute),
+                       expr_copy(e->data.function.args[1]) }, 2);
+    if (!nfrat_has_denominator(e)) return expr_copy((Expr*)e);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Cancel), (Expr*[]){ expr_copy((Expr*)e) }, 1);
+    Expr* r = compute(call);
+    expr_free(call);
+    return r ? r : expr_copy((Expr*)e);
+}
+
+static Expr* rat_root_generators(Expr* res, const char* head, Expr* (*compute)(Expr*)) {
+    if (!nfrat_enabled()) return NULL;
+    size_t argc = res->data.function.arg_count;
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
+    if (argc != 1 || alpha) return NULL;
+    const Expr* arg = res->data.function.args[0];
+    if (!nfrat_has_unreduced_root_power(arg) || internal_args_contain_inexact(res)) return NULL;
+    RatRootMap m = { NULL, NULL, 0, 0 };
+    Expr* out = NULL;
+    if (rat_root_collect(arg, &m) && m.n > 0) {
+        Expr* sub = eval_and_free(rat_root_subst(arg, &m, false));
+        Expr* r;
+        if (head == SYM_Cancel && ratfun_factored_form()) {   /* user level: the reference's structure */
+            r = eval_and_free(rat_cancel_structured(sub, compute));
+            expr_free(sub);
+        } else {
+            Expr* call = expr_new_function(expr_new_symbol(head), (Expr*[]){ sub }, 1);
+            r = compute(call);
+            expr_free(call);
+        }
+        if (r) {
+            out = eval_and_free(rat_root_subst(r, &m, true));
+            expr_free(r);
+        }
+    }
+    for (size_t i = 0; i < m.n; i++) { expr_free(m.from[i]); expr_free(m.to[i]); }
+    free(m.from); free(m.to);
+    return out;
+}
+
+static Expr* rat_nfrat(Expr* res, const char* head) {
+    if (!nfrat_enabled()) return NULL;
+    size_t argc = res->data.function.arg_count;
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
+    if (argc != 1) return NULL;
+    if (res->data.function.arg_count != ((auto_flag || alpha) ? 2u : 1u)) return NULL;
+    if (alpha && alpha->type == EXPR_SYMBOL) return NULL;      /* None, ... */
+    const Expr* arg = res->data.function.args[0];
+    if (!nfrat_has_algebraic(arg) || internal_args_contain_inexact(res)) return NULL;
+    /* Nothing to combine: a denominator-free product or polynomial is left as
+     * written (Together[(-1)^(1/3) ((-1)^(2/3) + x)] is its input, as in the
+     * reference); rewriting it over the field's basis changed the shape the
+     * integrator reads (Integrate[Log[1 + x + x^2]/x, {x, 0, 1}] stopped
+     * simplifying to Pi^2/9). */
+    if (!nfrat_has_denominator(arg)) return NULL;
+    /* A NESTED radical stays with algfield: by default it is an opaque
+     * generator (as in the reference), and under Extension -> Automatic
+     * algfield writes the answer over a denested radical basis
+     * (Sqrt[3/4 - 1/Sqrt[2]] -> 1/Sqrt[2] - 1/2), which the product basis of
+     * the input's own atoms here cannot. */
+    if (algfield_has_nested_constant_radical(arg)) return NULL;
+    int factored = ratfun_factored_form();
+    /* an explicit Extension -> alpha / {alpha, ...} joins its generators to
+     * the input's (Together over Q(alpha, atoms)) */
+    return head == SYM_Cancel ? nfrat_cancel(arg, factored, alpha)
+                              : nfrat_together(arg, factored, alpha);
 }
 
 static Expr* rat_nested_kernels(const Expr* arg, const char* head,
@@ -1716,7 +1882,13 @@ static Expr* builtin_cancel_compute(Expr* res) {
         }
     }
     {
-        Expr* nr = rat_nested_field(res, SYM_Cancel);
+        Expr* nr = rat_nfrat(res, SYM_Cancel);
+        if (nr) return nr;
+        nr = rat_root_generators(res, SYM_Cancel, builtin_cancel_compute);
+        if (nr) return nr;
+        nr = rat_nested_field(res, SYM_Cancel);
+        if (nr) return nr;
+        nr = rat_symrad_field(res, SYM_Cancel);
         if (nr) return nr;
     }
     /* Factored rational-function engine over Q (+ kernels): one conversion into
@@ -2621,7 +2793,13 @@ static Expr* builtin_together_compute(Expr* res) {
         }
     }
     {
-        Expr* nr = rat_nested_field(res, SYM_Together);
+        Expr* nr = rat_nfrat(res, SYM_Together);
+        if (nr) return nr;
+        nr = rat_root_generators(res, SYM_Together, builtin_together_compute);
+        if (nr) return nr;
+        nr = rat_nested_field(res, SYM_Together);
+        if (nr) return nr;
+        nr = rat_symrad_field(res, SYM_Together);
         if (nr) return nr;
     }
     /* Factored rational-function engine first (see builtin_cancel_compute). */

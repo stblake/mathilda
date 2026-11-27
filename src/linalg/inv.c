@@ -54,6 +54,7 @@
 #include "expand.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
+#include "flint_qqbar.h"   /* number-field fast path for algebraic entries */
 #include "common.h"
 #include "message.h"     /* mth_msg_suppressed / _note_fired: honour Quiet[] */
 
@@ -714,9 +715,22 @@ Expr* builtin_inverse(Expr* res) {
         size_t fidx = 0;
         flatten_tensor(arg, flat, &fidx);
         Expr* fout = flint_mat_inverse(flat, n);
+        /* Algebraic-number entries (Sqrt[3], I, Root objects): Gauss-Jordan
+         * on (m | I) over the number field the atoms generate, instead of
+         * fraction-free elimination with each atom an opaque indeterminate
+         * (expression swell plus a Together / PolynomialGCD per entry). */
+        int alg_singular = 0;
+        if (!fout && !inv_has_inexact(arg))
+            fout = flint_qqbar_alg_mat_inverse(flat, n, &alg_singular);
         for (size_t i = 0; i < fidx; i++) expr_free(flat[i]);
         free(flat);
         if (fout) return fout;
+        if (alg_singular) {
+            char* arg_str = expr_to_string(arg);
+            inv_warn("Inverse::sing: Matrix %s is singular.\n", arg_str);
+            free(arg_str);
+            return NULL;
+        }
     }
 
     /* NOTE: Automatic deliberately stays DivisionFreeRowReduction here, unlike

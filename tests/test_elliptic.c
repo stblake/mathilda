@@ -628,6 +628,116 @@ static void test_precision_is_honest(void) {
                 "- 1.777519371491253323502990072871915020298] < 10^-39");
 }
 
+/* ---- exact arguments ON a cut ----------------------------------------
+ *
+ * The incomplete integrals are Carlson forms in x = Cos[phi]^2,
+ * y = 1 - m Sin[phi]^2 and p = 1 - n Sin[phi]^2, each with its cut on
+ * (-oo, 0]; the complete ones have theirs on m >= 1 and n >= 1. An exact
+ * argument can sit exactly on one: the antiderivative of
+ * 1/((x - 3) Sqrt[1 + x^3]) from Integrate`ParallelMixedSpecial carries
+ * EllipticPi[4/(1 + (-1)^(1/3)), ArcSin[Sqrt[(1 + (-1)^(1/3))/(1 + x)]],
+ * (1 - I Sqrt[3])/2], with p = (x - 3)/(x + 1) < 0 on -1 < x < 3. The side
+ * used to follow the sign of a rounding residue: at x = 3/10, N[.., 30] was
+ * 0.46 - 1.49 I and N[.., 40] -0.35 + 1.52 I, and the machine value took
+ * 120 ms (Arb integrating next to a pole; 85 s at 300 digits).
+ *
+ * The convention asserted: ON a cut the value is the limit from Im > 0 of
+ * the Carlson argument -- for real phi, m -> m - i0 and n -> n - i0, the
+ * placement real arguments always had (EllipticPi[3/2, 1/2] =
+ * -0.45672 - 2.72070 I). The reference is the defining integral along the
+ * straight segment in v = Sin[t] (the path Carlson's forms integrate):
+ *   Pi = s Integrate[1/((1 - n s^2 u^2) Sqrt[1 - s^2 u^2] Sqrt[1 - m s^2 u^2]), {u, 0, 1}]
+ * at the argument moved a little to the side named. */
+#define CUT_PHI "ArcSin[Sqrt[(1 + (-1)^(1/3))/(13/10)]]"
+#define CUT_PI  "EllipticPi[4/(1 + (-1)^(1/3)), " CUT_PHI ", (1 - I Sqrt[3])/2]"
+
+/* N[e] at machine precision and 20, 30, 40, 60 digits agree. */
+static void assert_cross_precision(const char* e) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "With[{v = N[%s, 60]}, Abs[N[%s] - v] < 10^-13 && Abs[N[%s, 20] - v] < 10^-19 "
+             "&& Abs[N[%s, 30] - v] < 10^-29 && Abs[N[%s, 40] - v] < 10^-39]",
+             e, e, e, e, e);
+    assert_true(buf);
+}
+
+static void test_cut_cross_precision(void) {
+    assert_cross_precision(CUT_PI);                                     /* p on its cut */
+    assert_cross_precision("EllipticF[" CUT_PHI ", 4/(1 + (-1)^(1/3))]"); /* y */
+    assert_cross_precision("EllipticE[" CUT_PHI ", 4/(1 + (-1)^(1/3))]");
+    assert_cross_precision("EllipticPi[1/3, " CUT_PHI ", 4/(1 + (-1)^(1/3))]");
+    /* 2 + w - w^2 is exactly 3, written with complex parts that cancel */
+    assert_cross_precision("EllipticK[2 + (-1)^(1/3) - (-1)^(2/3)]");
+    assert_cross_precision("EllipticE[2 + (-1)^(1/3) - (-1)^(2/3)]");
+    assert_cross_precision("EllipticPi[2 + (-1)^(1/3) - (-1)^(2/3), 1/3]");
+    assert_cross_precision("EllipticPi[1/5, 2 + (-1)^(1/3) - (-1)^(2/3)]");
+    /* Re ArcSin[2] = Pi/2: x on its cut, where the quasi-period shift picks the side */
+    assert_cross_precision("EllipticF[ArcSin[2], 1/3]");
+    assert_cross_precision("EllipticE[ArcSin[2], 1/3]");
+    assert_cross_precision("EllipticPi[1/5, ArcSin[2], 1/3]");
+}
+
+static void test_cut_values(void) {
+    /* p on the cut: the limit from Im p > 0 (n -> n (1 - I d), n s^2 = 40/13) */
+    assert_true("Abs[N[" CUT_PI ", 30] - (0.459965833201568493055560310107"
+                " - 1.49459930416826721443133061156 I)] < 10^-28");
+    assert_true("With[{s = N[Sqrt[(1 + (-1)^(1/3))/(13/10)], 40], d = 10^-12, "
+                "n = N[4/(1 + (-1)^(1/3)), 40], m = N[(1 - I Sqrt[3])/2, 40]}, "
+                "Abs[N[" CUT_PI ", 20] - s NIntegrate[1/((1 - n (1 - I d) s^2 u^2) "
+                "Sqrt[1 - s^2 u^2] Sqrt[1 - m s^2 u^2]), {u, 0, 1}, WorkingPrecision -> 30, "
+                "MaxRecursion -> 30]] < 10^-10]");
+    /* an exact n just to the other side gets the other value, which the
+     * straight path in t also gives at the exact point */
+    assert_true("Abs[N[EllipticPi[4/(1 + (-1)^(1/3)) (1 + 10^-30 I), " CUT_PHI
+                ", (1 - I Sqrt[3])/2], 20] - (-0.34895755565869949703"
+                " + 1.5243438824890488963 I)] < 10^-18");
+    assert_true("With[{ph = N[" CUT_PHI ", 40], n = N[4/(1 + (-1)^(1/3)), 40], "
+                "m = N[(1 - I Sqrt[3])/2, 40]}, Abs[ph NIntegrate[1/((1 - n Sin[u ph]^2) "
+                "Sqrt[1 - m Sin[u ph]^2]), {u, 0, 1}, WorkingPrecision -> 30] "
+                "- (-0.34895755565869949703 + 1.5243438824890488963 I)] < 10^-18]");
+    /* y on the cut: m -> m (1 - I d), the branch point at u0 = Sqrt[13/40] split out */
+    assert_true("With[{s = N[Sqrt[(1 + (-1)^(1/3))/(13/10)], 40], d = 10^-20, "
+                "u0 = N[Sqrt[13/40], 40], m = N[4/(1 + (-1)^(1/3)), 40]}, "
+                "Abs[N[EllipticF[" CUT_PHI ", 4/(1 + (-1)^(1/3))], 20] - s NIntegrate["
+                "1/(Sqrt[1 - s^2 u^2] Sqrt[1 - m (1 - I d) s^2 u^2]), {u, 0, u0, 1}, "
+                "WorkingPrecision -> 30]] < 10^-18]");
+    assert_true("With[{s = N[Sqrt[(1 + (-1)^(1/3))/(13/10)], 40], d = 10^-20, "
+                "u0 = N[Sqrt[13/40], 40], m = N[4/(1 + (-1)^(1/3)), 40]}, "
+                "Abs[N[EllipticE[" CUT_PHI ", 4/(1 + (-1)^(1/3))], 20] - s NIntegrate["
+                "Sqrt[1 - m (1 - I d) s^2 u^2]/Sqrt[1 - s^2 u^2], {u, 0, u0, 1}, "
+                "WorkingPrecision -> 30]] < 10^-18]");
+    /* the complete K on m = 3, exactly: m -> m - i0, as K[3.] */
+    assert_true("With[{d = 10^-20, t0 = N[ArcSin[1/Sqrt[3]], 40]}, "
+                "Abs[N[EllipticK[2 + (-1)^(1/3) - (-1)^(2/3)], 20] - NIntegrate["
+                "1/Sqrt[1 - (3 - I d) Sin[t]^2], {t, 0, t0, Pi/2}, WorkingPrecision -> 30]]"
+                " < 10^-18]");
+    assert_true("Abs[N[EllipticK[2 + (-1)^(1/3) - (-1)^(2/3)], 20] - EllipticK[3.`20]] < 10^-18");
+    /* real n > 1: the path passes BELOW the pole at Sin[t]^2 = 1/n (n -> n - i0) */
+    assert_true("Abs[N[EllipticPi[2, 6/5, 3/10], 20] - NIntegrate[With[{t = 6/5 u - I/5 Sin[Pi u]}, "
+                "(6/5 - I/5 Pi Cos[Pi u])/((1 - 2 Sin[t]^2) Sqrt[1 - 3/10 Sin[t]^2])], "
+                "{u, 0, 1}, WorkingPrecision -> 30]] < 10^-18");
+    assert_true("Abs[EllipticPi[2., 1.2, 0.3] - (0.33371544757141194 - 1.7037678315574019 I)] < 10^-14");
+    /* x on its cut (Re ArcSin[2] = Pi/2, Im < 0): the shift that keeps phi
+     * inside the strip, i.e. the limit from phi - 0 */
+    assert_true("Abs[N[EllipticF[ArcSin[2], 1/3], 20] - N[EllipticF[ArcSin[2] - 10^-30, 1/3], 20]]"
+                " < 10^-18");
+}
+
+/* The fast paths (Carlson R_J for a conjugate pair, DLMF 19.20.14 for p on
+ * the cut) replace Arb's numerical integration: bounds ~20x the measured
+ * cost, far below the old one. */
+static void test_cut_timing(void) {
+    assert_true("First[AbsoluteTiming[Do[N[" CUT_PI "], {50}]]] < 1");     /* was 6 s  */
+    assert_true("First[AbsoluteTiming[N[" CUT_PI ", 300]]] < 1");          /* was 85 s */
+    assert_true("First[AbsoluteTiming[Do[EllipticPi[2. - 1.1547005383792515 I, "
+                "1.1382959303242751 + 0.6630887468752385 I, 0.5 - 0.8660254037844386 I], "
+                "{100}]]] < 0.5");                                         /* was 4.4 s */
+    /* a WRONG constant built from the on-cut value is rejected quickly: the
+     * zero test's confirmation no longer integrates numerically (was 1.6 s) */
+    assert_true("First[AbsoluteTiming[PossibleZeroQ[" CUT_PI " (1 + 10^-6) - " CUT_PI "]]] < 0.5");
+    assert_eval("PossibleZeroQ[" CUT_PI " (1 + 10^-6) - " CUT_PI "]", "False");
+}
+
 /* ---- attributes and arity ------------------------------------------- */
 
 static void test_attributes(void) {
@@ -671,6 +781,9 @@ int main(void) {
     TEST(test_ellipticpi_kernel);
     TEST(test_compile_values);
     TEST(test_precision_is_honest);
+    TEST(test_cut_cross_precision);
+    TEST(test_cut_values);
+    TEST(test_cut_timing);
     TEST(test_attributes);
     TEST(test_arity);
 

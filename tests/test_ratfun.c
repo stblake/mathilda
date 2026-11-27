@@ -178,10 +178,15 @@ void test_gaussian(void) {
     /* linear Gaussian pieces are compared by an evaluation, not a gcd over Q(i) */
     assert_form("Together[1/(x + I) + 2/(x + I)^2 + 1/(x^2 + 1) + 1/(x - 2 I)]",
                 "(-2 - I + (2 - 7*I) x + (3 - I) x^2 + 2 x^3)/((-I + x) (I + x)^2 (-2*I + x))");
-    /* a degree-62 gcd over Q(Sqrt[2]): the modular field gcd, 4 s -> ms */
-    assert_true("TimeConstrained[Cancel[Expand[(x^2 - 2) (x^60 + 3 x + 1)]/"
-                "Expand[(x - Sqrt[2]) (x^60 - 5 x^7 + 2)], Extension -> Automatic], 10] === "
-                "Cancel[(Sqrt[2] + x) (x^60 + 3 x + 1)/(x^60 - 5 x^7 + 2)]");
+    /* a degree-62 gcd over Q(Sqrt[2]): the modular field gcd, 4 s -> ms.
+     * The cancelled numerator comes back expanded (one piece, as the
+     * reference's (Sqrt[2] + x + 3 Sqrt[2] x + .. + x^7)/(2 - 5 x^3 + x^6) for
+     * the degree-6 analogue); the factored input keeps its factors. */
+    assert_true("With[{r = TimeConstrained[Cancel[Expand[(x^2 - 2) (x^60 + 3 x + 1)]/"
+                "Expand[(x - Sqrt[2]) (x^60 - 5 x^7 + 2)], Extension -> Automatic], 10]}, "
+                "r === Expand[(Sqrt[2] + x) (x^60 + 3 x + 1)]/(x^60 - 5 x^7 + 2)]");
+    assert_true("Cancel[(Sqrt[2] + x) (x^60 + 3 x + 1)/(x^60 - 5 x^7 + 2)] === "
+                "(Sqrt[2] + x) (x^60 + 3 x + 1)/(x^60 - 5 x^7 + 2)");
 }
 
 /* Random rational functions (sums of fractions, products, nested sums) in x

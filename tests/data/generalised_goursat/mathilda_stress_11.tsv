@@ -1,0 +1,136 @@
+label	status	seconds	verified	unevaluated	residual
+hermite-exact #0	elementary	0.0028	True	False	0
+hermite-exact #1	elementary	0.0017	True	False	0
+hermite-exact #2	elementary	0.0029	True	False	0
+hermite-exact #3	elementary	0.0012	True	False	0
+hermite-exact #4	elementary	0.0017	True	False	0
+hermite-exact #5	elementary	0.0010	True	False	0
+hermite-exact #6	elementary	0.0023	True	False	0
+hermite-exact #7	elementary	0.0023	True	False	0
+hermite-exact #8	elementary	0.0011	True	False	0
+hermite-exact #9	elementary	0.0013	True	False	0
+hermite-exact #10	elementary	0.0011	True	False	0
+hermite-exact #11	elementary	0.0014	True	False	0
+hermite-exact #12	elementary	0.0014	True	False	0
+hermite-exact #13	elementary	0.0024	True	False	0
+hermite-exact #14	elementary	0.0009	True	False	0
+hermite-exact #15	elementary	0.0021	True	False	0
+hermite-exact #16	elementary	0.0014	True	False	0
+hermite-exact #17	elementary	0.0024	True	False	0
+hermite-exact #18	elementary	0.0011	True	False	0
+hermite-exact #19	elementary	0.0010	True	False	0
+hermite-exact #20	elementary	0.0009	True	False	0
+hermite-exact #21	elementary	0.0037	True	False	0
+hermite-exact #22	elementary	0.0020	True	False	0
+hermite-exact #23	elementary	0.0032	True	False	0
+hermite-exact #24	elementary	0.0009	True	False	0
+cbrt-symmetric #0	elementary	6.7808	True	False	0
+cbrt-symmetric #1	elementary	0.0236	True	False	0
+cbrt-symmetric #2	elementary	6.2395	True	False	0
+cbrt-symmetric #3	elementary	0.4360	True	False	0
+cbrt-symmetric #4	elementary	1.7619	True	False	0
+cbrt-symmetric #5	elementary	0.5163	True	False	0
+cbrt-symmetric #6	elementary	0.6540	True	False	0
+cbrt-symmetric #7	elementary	0.2351	True	False	0
+cbrt-symmetric #8	elementary	4.9453	True	False	0
+cbrt-symmetric #9	elementary	15.8672	True	False	0
+cbrt-symmetric #10	elementary	0.2296	True	False	0
+cbrt-symmetric #11	elementary	0.1814	True	False	0
+cbrt-symmetric #12	elementary	0.1546	True	False	0
+cbrt-symmetric #13	elementary	9.8839	True	False	0
+cbrt-symmetric #14	elementary	0.3408	True	False	0
+cbrt-symmetric #15	elementary	1.1384	True	False	0
+cbrt-symmetric #16	elementary	2.6985	True	False	0
+cbrt-symmetric #17	elementary	0.9483	True	False	0
+cbrt-symmetric #18	elementary	0.0551	True	False	0
+cbrt-symmetric #19	elementary	2.0401	True	False	0
+cbrt-symmetric #20	elementary	5.9147	True	False	0
+cbrt-symmetric #21	elementary	0.6844	True	False	0
+cbrt-symmetric #22	elementary	0.5414	True	False	0
+cbrt-symmetric #23	elementary	0.7190	True	False	0
+cbrt-symmetric #24	elementary	25.2951	True	False	0
+cbrt-mixed #0	elementary	0.5914	True	False	0
+cbrt-mixed #1	elementary	0.4105	True	False	0
+cbrt-mixed #2	elementary	2.1954	True	False	0
+cbrt-mixed #3	elementary	0.6186	True	False	0
+cbrt-mixed #4	elementary	4.9535	True	False	0
+cbrt-mixed #5	elementary	5.6553	True	False	0
+cbrt-mixed #6	elementary	0.1348	True	False	0
+cbrt-mixed #7	elementary	0.1728	True	False	0
+cbrt-mixed #8	elementary	0.0399	True	False	0
+cbrt-mixed #9	elementary	0.6488	True	False	0
+cbrt-mixed #10	elementary	3.6336	True	False	0
+cbrt-mixed #11	elementary	5.1785	True	False	0
+cbrt-mixed #12	elementary	3.2227	True	False	0
+cbrt-mixed #13	elementary	1.3163	True	False	0
+cbrt-mixed #14	elementary	1.6075	True	False	0
+cbrt-mixed #15	elementary	1.5637	True	False	0
+cbrt-mixed #16	elementary	0.2687	True	False	0
+cbrt-mixed #17	elementary	0.7711	True	False	0
+cbrt-mixed #18	elementary	3.5468	True	False	0
+cbrt-mixed #19	elementary	0.1182	True	False	0
+cbrt-mixed #20	elementary	0.2723	True	False	0
+cbrt-mixed #21	elementary	3.7397	True	False	0
+cbrt-mixed #22	elementary	5.3660	True	False	0
+cbrt-mixed #23	elementary	5.5027	True	False	0
+cbrt-mixed #24	elementary	1.6049	True	False	0
+cbrt-nonelementary #0	non-elementary	3.7201	True	False	3
+cbrt-nonelementary #1	non-elementary	8.2509	True	False	1 - 2*t
+cbrt-nonelementary #2	non-elementary	1.6582	True	False	(-4 - 3*t)/3
+cbrt-nonelementary #3	non-elementary	0.5982	True	False	2
+cbrt-nonelementary #4	non-elementary	1.3028	True	False	(-2 + 9*t)/3
+cbrt-nonelementary #5	non-elementary	0.0334	True	False	-2
+cbrt-nonelementary #6	non-elementary	4.9858	True	False	-2
+cbrt-nonelementary #7	non-elementary	0.4927	True	False	3
+cbrt-nonelementary #8	non-elementary	6.9084	True	False	2 + 3*t
+cbrt-nonelementary #9	non-elementary	0.0998	True	False	2
+cbrt-nonelementary #10	non-elementary	3.3924	True	False	-2
+cbrt-nonelementary #11	non-elementary	0.0352	True	False	-2 - t
+cbrt-nonelementary #12	non-elementary	6.3485	True	False	2 + t
+cbrt-nonelementary #13	non-elementary	0.0325	True	False	-1 + t
+cbrt-nonelementary #14	non-elementary	0.6334	True	False	2
+cbrt-nonelementary #15	non-elementary	4.6563	True	False	(3 - 6*t)/2
+cbrt-nonelementary #16	non-elementary	0.0339	True	False	2 - 2*t
+cbrt-nonelementary #17	non-elementary	11.5437	True	False	(1 - 6*t)/6
+cbrt-nonelementary #18	non-elementary	12.2224	True	False	(-1 + 6*t)/6
+cbrt-nonelementary #19	non-elementary	0.0767	True	False	-3
+cbrt-nonelementary #20	non-elementary	8.1412	True	False	6 + 3*t
+cbrt-nonelementary #21	non-elementary	0.1678	True	False	-1
+cbrt-nonelementary #22	non-elementary	0.3711	True	False	3
+cbrt-nonelementary #23	non-elementary	0.0303	True	False	2
+cbrt-nonelementary #24	non-elementary	1.9234	True	False	1
+sqrt-klein #0	elementary	2.0908	True	False	0
+sqrt-klein #1	elementary	0.7656	True	False	0
+sqrt-klein #2	elementary	0.0099	True	False	0
+sqrt-klein #3	TIMEOUT	120.4228		False	
+sqrt-klein #4	elementary	1.6959	True	False	0
+sqrt-klein #5	elementary	0.8607	True	False	0
+sqrt-klein #6	elementary	0.0072	True	False	0
+sqrt-klein #7	elementary	1.1233	True	False	0
+sqrt-klein #8	TIMEOUT	120.5100		False	
+sqrt-klein #9	elementary	0.1440	True	False	0
+sqrt-klein #10	elementary	0.0057	True	False	0
+sqrt-klein #11	elementary	10.1700	False	True	0
+sqrt-klein #12	TIMEOUT	129.2195		False	
+sqrt-klein #13	elementary	5.9967	True	False	0
+sqrt-klein #14	elementary	2.5093	True	False	0
+sqrt-klein #15	elementary	0.0021	True	False	0
+sqrt-klein #16	elementary	0.6913	True	False	0
+sqrt-klein #17	TIMEOUT	121.0480		False	
+sqrt-klein #18	elementary	0.0054	True	False	0
+sqrt-klein #19	elementary	6.3678	True	False	0
+sqrt-klein #20	elementary	11.1671	True	False	0
+sqrt-klein #21	elementary	0.0528	True	False	0
+sqrt-klein #22	TIMEOUT	121.7358		False	
+sqrt-klein #23	elementary	1.7410	True	False	0
+sqrt-klein #24	elementary	7.2801	True	False	0
+sqrt-mixed #0	elementary	0.0067	True	False	0
+sqrt-mixed #1	elementary	0.0029	True	False	0
+sqrt-mixed #2	elementary	1.9661	True	False	0
+sqrt-mixed #3	elementary	0.0035	True	False	0
+sqrt-mixed #4	elementary	0.0037	True	False	0
+sqrt-mixed #5	elementary	0.0040	True	False	0
+sqrt-mixed #6	elementary	0.0025	True	False	0
+sqrt-mixed #7	elementary	1.5537	True	False	0
+sqrt-mixed #8	elementary	0.2997	True	False	0
+sqrt-mixed #9	elementary	0.0210	True	False	0

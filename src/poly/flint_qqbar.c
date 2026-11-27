@@ -25,8 +25,15 @@
 #include <flint/fmpz_poly.h>
 #include <flint/fmpq_poly.h>
 #include <flint/fmpz_mat.h>
+#include <flint/fmpq_mat.h>
+#include <flint/fmpq_vec.h>
 #include <flint/qqbar.h>
 #include <flint/arb.h>
+#include <flint/acb.h>
+#include <flint/arb_fmpz_poly.h>
+#include <flint/fmpq_vec.h>
+#include <flint/fmpq_mat.h>
+#include <flint/fmpz_poly_factor.h>
 #include <flint/nf.h>
 #include <flint/nf_elem.h>
 
@@ -1572,6 +1579,19 @@ int flint_qqbar_is_real(const Expr* e) {
     return r;
 }
 
+/* See flint_qqbar.h.  qqbar_sgn_re / qqbar_sgn_im decide the sign exactly:
+ * a zero part is certified by the minimal polynomial, never by an enclosure
+ * that merely contains 0.  Memoised (to_qqbar_memo): N asks for the same
+ * radicand once per precision of its adaptive climb. */
+int flint_qqbar_part_sign(const Expr* e, int imag) {
+    if (!flint_qqbar_is_constant_algebraic(e)) return -2;
+    qqbar_t q; qqbar_init(q);
+    int r = -2;
+    if (to_qqbar_memo(e, q)) r = imag ? qqbar_sgn_im(q) : qqbar_sgn_re(q);
+    qqbar_clear(q);
+    return r;
+}
+
 Expr* flint_qqbar_algebraic_number(const Expr* gen, const Expr* coeffs) {
     if (!gen || !coeffs || !head_is(coeffs, "List")) return NULL;
 
@@ -1686,8 +1706,628 @@ Expr* flint_qqbar_to_number_field_self(const Expr* x) {
     return flint_qqbar_to_number_field(x, x);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Fast common field of radicals of rationals and roots of unity      */
+/* ------------------------------------------------------------------ */
+/*
+ * The common field of a set of atoms that are each a root of unity
+ * ((-1)^(p/q), I, Complex[0, +-1]) or a radical r^(p/q) of a rational r is
+ * a quotient of the explicit product algebra
+ *
+ *     A = Q[z]/(Phi_N(z)) (x) Q[g_1]/(g_1^n_1 - l_1) (x) ... ,
+ *
+ * z = exp(2 Pi I/N), g_i = l_i^(1/n_i) > 0 for the distinct PRIMES l_i of the
+ * radicands (an atom r^(p/q) with r < 0 is |r|^(p/q) (-1)^(p/q), and |r|^(p/q)
+ * is a product of prime radicals).  Every atom is a monomial in the generators
+ * of A, so this is the whole computation, done by exact linear algebra in the
+ * product basis of A -- no algebraic-number arithmetic:
+ *
+ *   1. theta = sum c_i gen_i.  Its powers 1, theta, .., theta^(D-1) are a basis
+ *      of A (D = dim A) for all but finitely many c; then A = Q[theta] and the
+ *      minimal polynomial m_A of theta over A is read off theta^D.
+ *   2. A need not be a field: the atoms may be dependent (Sqrt[3] lies in
+ *      Q(I, (-1)^(1/3)), (-1)^(2/3) in Q((-1)^(1/3)), Sqrt[2] in Q((-1)^(1/4))).
+ *      A is a product of fields, m_A the product of their minimal polynomials,
+ *      and the field the atoms actually generate is the image of A under the
+ *      evaluation at the principal values -- the factor f of m_A that vanishes
+ *      at the numerical value of theta.  That factor is found with ball
+ *      arithmetic, precision raised until exactly one factor qualifies.
+ *   3. Each atom's coordinates in the theta basis of A, reduced modulo f, are
+ *      its image in K = Q[x]/(f) = Q(atoms).
+ *
+ * This replaces the qqbar primitive-element search for the common case of the
+ * algebraic extension engines (fg_field_images, algfield): for
+ * Q(I, Sqrt[3], 2^(1/3)) the qqbar search composed and factored sixteen
+ * resultants per atom and then expressed every atom by LLL, ~0.25-0.7 s per
+ * field build; this is a 12 x 12 rational matrix inverse.  Returns the same
+ * List[AlgebraicNumber[phi, {..}] | rational, ..] as the qqbar search (phi
+ * = theta, an algebraic integer), or NULL to decline: an atom of another
+ * shape, a radicand that does not factor cheaply, or an algebra above
+ * KF_MAX_DIM.
+ */
+#define KF_MAX_DIM    64
+#define KF_MAX_PRIMES 8
+
+typedef struct {
+    fmpq_t u;                      /* root-of-unity part: (-1)^u            */
+    fmpq_t c;                      /* rational factor                       */
+    slong  np;
+    fmpz   ell[KF_MAX_PRIMES];     /* primes of |radicand| ...               */
+    fmpq   a[KF_MAX_PRIMES];       /* ... and their rational exponents       */
+} KfAtom;
+
+static void kf_vec_zero(fmpq* v, slong n) { for (slong i = 0; i < n; i++) fmpq_zero(v + i); }
+static void kf_vec_set(fmpq* v, const fmpq* w, slong n) { for (slong i = 0; i < n; i++) fmpq_set(v + i, w + i); }
+
+static ulong kf_lcm(ulong a, ulong b) {
+    ulong x = a, y = b;
+    while (y) { ulong r = x % y; x = y; y = r; }
+    return x ? a / x * b : 0;
+}
+
+static void kf_atom_init(KfAtom* t) {
+    fmpq_init(t->u); fmpq_init(t->c); fmpq_one(t->c); t->np = 0;
+    for (slong i = 0; i < KF_MAX_PRIMES; i++) { fmpz_init(t->ell + i); fmpq_init(t->a + i); }
+}
+static void kf_atom_clear(KfAtom* t) {
+    fmpq_clear(t->u); fmpq_clear(t->c);
+    for (slong i = 0; i < KF_MAX_PRIMES; i++) { fmpz_clear(t->ell + i); fmpq_clear(t->a + i); }
+}
+
+/* Add ell^(e * x) (x rational) to the atom's prime list.  0 on overflow. */
+static int kf_atom_add_prime(KfAtom* t, const fmpz_t ell, slong e, const fmpq_t x) {
+    fmpq_t ex; fmpq_init(ex);
+    fmpq_mul_si(ex, x, e);
+    slong i = 0;
+    for (; i < t->np; i++) if (fmpz_equal(t->ell + i, ell)) break;
+    int ok = 1;
+    if (i == t->np) {
+        if (t->np == KF_MAX_PRIMES) ok = 0;
+        else { fmpz_set(t->ell + i, ell); fmpq_zero(t->a + i); t->np++; }
+    }
+    if (ok) fmpq_add(t->a + i, t->a + i, ex);
+    fmpq_clear(ex);
+    return ok;
+}
+
+/* Factor |z| (z an integer, |z| < 2^64) into t's prime list with exponent
+ * sign * x.  0 when z is too large to factor cheaply. */
+static int kf_atom_add_int(KfAtom* t, const fmpz_t z, int sign, const fmpq_t x) {
+    if (fmpz_bits(z) > 64) return 0;
+    if (fmpz_is_pm1(z)) return 1;
+    fmpz_factor_t f; fmpz_factor_init(f);
+    fmpz_factor(f, z);
+    int ok = 1;
+    for (slong i = 0; i < f->num && ok; i++)
+        ok = kf_atom_add_prime(t, f->p + i, sign * (slong)f->exp[i], x);
+    fmpz_factor_clear(f);
+    return ok;
+}
+
+/* Read one atom.  0 declines. */
+static int kf_atom_parse(const Expr* e, KfAtom* t) {
+    /* the imaginary unit (Complex[0, +-1]) */
+    if (head_is(e, "Complex") && e->data.function.arg_count == 2) {
+        const Expr* re = e->data.function.args[0];
+        const Expr* im = e->data.function.args[1];
+        if (re->type != EXPR_INTEGER || re->data.integer != 0 || im->type != EXPR_INTEGER ||
+            (im->data.integer != 1 && im->data.integer != -1)) return 0;
+        fmpq_set_si(t->u, im->data.integer == 1 ? 1 : 3, 2);
+        return 1;
+    }
+    const Expr* base = NULL; fmpq_t x; fmpq_init(x);
+    int ok = 0;
+    if (head_is(e, "Sqrt") && e->data.function.arg_count == 1) {
+        base = e->data.function.args[0]; fmpq_set_si(x, 1, 2); ok = 1;
+    } else if (head_is(e, "Power") && e->data.function.arg_count == 2 &&
+               head_is(e->data.function.args[1], "Rational")) {
+        base = e->data.function.args[0];
+        ok = fmpq_from_expr(e->data.function.args[1], x);
+    }
+    fmpq_t r; fmpq_init(r);
+    if (ok) ok = fmpq_from_expr(base, r) && !fmpq_is_zero(r);
+    if (ok) {
+        if (fmpq_sgn(r) < 0) {                   /* principal branch: |r|^x (-1)^x */
+            fmpq_neg(r, r);
+            fmpq_set(t->u, x);
+        }
+        ok = kf_atom_add_int(t, fmpq_numref(r), 1, x) &&
+             kf_atom_add_int(t, fmpq_denref(r), -1, x);
+    }
+    fmpq_clear(r); fmpq_clear(x);
+    return ok;
+}
+
+/* The product algebra A: generator 0 is z (when phi > 1), then the primes. */
+typedef struct {
+    ulong  N; slong phi;           /* z = exp(2 Pi I/N), phi = deg Phi_N      */
+    fmpz_poly_t Phi;
+    slong  np;
+    fmpz   ell[KF_MAX_PRIMES];
+    slong  n[KF_MAX_PRIMES], stride[KF_MAX_PRIMES];
+    slong  D;
+} KfAlg;
+
+/* out += c * gen * in  (gen -1 = z, else a prime index).  `in` has length D. */
+static void kf_mul_gen(fmpq* out, const fmpq* in, const KfAlg* A, slong gen, const fmpq_t c) {
+    fmpq_t s; fmpq_init(s);
+    for (slong idx = 0; idx < A->D; idx++) {
+        if (fmpq_is_zero(in + idx)) continue;
+        fmpq_mul(s, in + idx, c);
+        if (gen < 0) {
+            slong j = idx % A->phi;
+            if (j + 1 < A->phi) fmpq_add(out + idx + 1, out + idx + 1, s);
+            else {                               /* z^phi = -sum_k Phi_k z^k */
+                fmpq_t t; fmpq_init(t);
+                for (slong k = 0; k < A->phi; k++) {
+                    fmpq_mul_fmpz(t, s, A->Phi->coeffs + k);
+                    fmpq_sub(out + idx - j + k, out + idx - j + k, t);
+                }
+                fmpq_clear(t);
+            }
+        } else {
+            slong st = A->stride[gen], n = A->n[gen];
+            slong tt = (idx / st) % n;
+            if (tt + 1 < n) fmpq_add(out + idx + st, out + idx + st, s);
+            else {                               /* g^n = ell */
+                fmpq_mul_fmpz(s, s, A->ell + gen);
+                fmpq_add(out + idx - (n - 1) * st, out + idx - (n - 1) * st, s);
+            }
+        }
+    }
+    fmpq_clear(s);
+}
+
+/* v <- gen^k v (k >= 0). */
+static void kf_pow_gen(fmpq* v, const KfAlg* A, slong gen, ulong k) {
+    fmpq* w = _fmpq_vec_init(A->D);
+    fmpq_t one; fmpq_init(one); fmpq_one(one);
+    for (ulong i = 0; i < k; i++) {
+        kf_vec_zero(w, A->D);
+        kf_mul_gen(w, v, A, gen, one);
+        kf_vec_set(v, w, A->D);
+    }
+    fmpq_clear(one);
+    _fmpq_vec_clear(w, A->D);
+}
+
+/* The atom as a vector in the product basis of A. */
+static void kf_atom_vec(fmpq* v, const KfAtom* t, const KfAlg* A) {
+    kf_vec_zero(v, A->D);
+    fmpq_t c; fmpq_init(c); fmpq_set(c, t->c);
+    /* (-1)^u = z^(u N / 2) */
+    fmpq_t k; fmpq_init(k);
+    fmpq_mul_ui(k, t->u, A->N);
+    fmpq_div_2exp(k, k, 1);
+    ulong zk = fmpz_fdiv_ui(fmpq_numref(k), A->N);   /* k is an integer here */
+    /* each prime: ell^(a) = ell^s g^tt with a n = s n + tt */
+    slong tts[KF_MAX_PRIMES];
+    for (slong i = 0; i < A->np; i++) tts[i] = 0;
+    for (slong j = 0; j < t->np; j++) {
+        if (fmpz_is_zero(t->ell + j)) continue;  /* a rational power, folded into c */
+        slong gi = 0;
+        while (gi < A->np && !fmpz_equal(A->ell + gi, t->ell + j)) gi++;
+        if (gi == A->np) continue;
+        fmpq_t m; fmpq_init(m);
+        fmpq_mul_si(m, t->a + j, A->n[gi]);     /* an integer by construction */
+        fmpz_t s, r, nz; fmpz_init(s); fmpz_init(r); fmpz_init(nz);
+        fmpz_set_si(nz, A->n[gi]);
+        fmpz_fdiv_qr(s, r, fmpq_numref(m), nz);
+        fmpz_clear(nz);
+        tts[gi] = (slong)fmpz_get_si(r);
+        fmpz_t pw; fmpz_init(pw);
+        slong sv = fmpz_get_si(s);
+        fmpz_pow_ui(pw, A->ell + gi, (ulong)(sv < 0 ? -sv : sv));
+        if (sv >= 0) fmpq_mul_fmpz(c, c, pw); else fmpq_div_fmpz(c, c, pw);
+        fmpz_clear(pw); fmpz_clear(s); fmpz_clear(r); fmpq_clear(m);
+    }
+    if (A->phi > 1) {
+        fmpq_set(v + 0, c);
+        kf_pow_gen(v, A, -1, zk);
+    } else {
+        /* N <= 2: z = +-1 is rational */
+        if (A->N == 2 && (zk & 1)) fmpq_neg(c, c);
+        fmpq_set(v + 0, c);
+    }
+    for (slong i = 0; i < A->np; i++) kf_pow_gen(v, A, i, (ulong)tts[i]);
+    fmpq_clear(k); fmpq_clear(c);
+}
+
+/* (sum_k p_k x^k)(z) for a rational polynomial p and a ball z. */
+static void kf_acb_eval_fmpq_poly(acb_t res, const fmpq_poly_t p, const acb_t z, slong prec) {
+    acb_zero(res);
+    fmpq_t c; fmpq_init(c);
+    arb_t cr; arb_init(cr);
+    for (slong k = fmpq_poly_degree(p); k >= 0; k--) {
+        acb_mul(res, res, z, prec);
+        fmpq_poly_get_coeff_fmpq(c, p, k);
+        arb_set_fmpq(cr, c, prec);
+        arb_add(acb_realref(res), acb_realref(res), cr, prec);
+    }
+    arb_clear(cr); fmpq_clear(c);
+}
+
+/* The subfield K = Q(atoms) of L = Q[x]/(fL) = Q(phiL), and the atoms' images
+ * in it.  `aimg[i]` is atom i as an element of L.  The generators of the
+ * product algebra may generate more than the atoms do ((-2)^(1/3) alone lives
+ * in Q(2^(1/3), (-1)^(1/3)) but generates a cubic field), and the field the
+ * caller asks for is Q(atoms) itself -- its consumers write answers back in the
+ * product basis of the atoms, which spans only that.  A primitive element of K
+ * is theta = sum c_i atom_i for all but finitely many c: it is one exactly
+ * when every atom lies in Q(theta), i.e. is a Q-combination of 1, theta, ..,
+ * theta^(m-1), m the degree of theta's minimal polynomial.  K's generator is
+ * then the algebraic integer phi = Dn theta (Dn clearing the denominators of
+ * that minimal polynomial), the form the qqbar path emits.  Returns the List
+ * of images, or NULL. */
+static Expr* kf_subfield_images(const fmpq_poly_struct* aimg, size_t na,
+                                const fmpq_poly_t fL, const qqbar_t phiL) {
+    const slong dL = fmpq_poly_degree(fL);
+    Expr* result = NULL;
+    fmpq_poly_t th, pw, mK, col;
+    fmpq_poly_init(th); fmpq_poly_init(pw); fmpq_poly_init(mK); fmpq_poly_init(col);
+    fmpq_mat_t M, R, B, Y;
+    fmpq_mat_init(M, dL, dL); fmpq_mat_init(R, dL, (slong)na);
+    fmpq_mat_init(B, 1, 1); fmpq_mat_init(Y, 1, 1);
+    for (size_t i = 0; i < na; i++)
+        for (slong r = 0; r < dL; r++)
+            fmpq_poly_get_coeff_fmpq(fmpq_mat_entry(R, r, (slong)i), aimg + i, r);
+    fmpq_t c; fmpq_init(c);
+    slong m = 0;
+    int okK = 0;
+    for (int trial = 0; trial < 8 && !okK; trial++) {
+        fmpq_poly_zero(th);
+        slong idx = 0;
+        for (size_t i = 0; i < na; i++) {
+            if (fmpq_poly_degree(aimg + i) < 1) continue;     /* a rational atom */
+            fmpq_set_si(c, 1 + idx * (trial + 1), 1);
+            fmpq_poly_scalar_mul_fmpq(pw, aimg + i, c);
+            fmpq_poly_add(th, th, pw);
+            idx++;
+        }
+        if (idx == 0) { m = 1; okK = 1; break; }             /* K = Q */
+        /* multiplication by theta on L, and theta's minimal polynomial */
+        fmpq_poly_one(pw);
+        for (slong j = 0; j < dL; j++) {
+            fmpq_poly_mul(col, th, pw);
+            fmpq_poly_rem(col, col, fL);
+            for (slong r = 0; r < dL; r++)
+                fmpq_poly_get_coeff_fmpq(fmpq_mat_entry(M, r, j), col, r);
+            fmpq_poly_shift_left(pw, pw, 1);
+        }
+        fmpq_mat_minpoly(mK, M);
+        m = fmpq_poly_degree(mK);
+        if (m < 1) continue;
+        /* B = [1, theta, .., theta^(m-1)] in L's power basis */
+        fmpq_mat_clear(B); fmpq_mat_init(B, dL, m);
+        fmpq_mat_clear(Y); fmpq_mat_init(Y, m, (slong)na);
+        fmpq_poly_one(pw);
+        for (slong j = 0; j < m; j++) {
+            for (slong r = 0; r < dL; r++)
+                fmpq_poly_get_coeff_fmpq(fmpq_mat_entry(B, r, j), pw, r);
+            fmpq_poly_mul(pw, pw, th);
+            fmpq_poly_rem(pw, pw, fL);
+        }
+        okK = fmpq_mat_can_solve(Y, B, R);
+    }
+    if (okK && m == 1) {
+        /* every atom is rational */
+        Expr** items = calloc(na, sizeof(Expr*));
+        for (size_t i = 0; i < na; i++) {
+            fmpq_poly_get_coeff_fmpq(c, aimg + i, 0);
+            items[i] = expr_from_fmpq(c);
+        }
+        result = expr_new_function(expr_new_symbol(SYM_List), items, na);
+        free(items);
+    } else if (okK && m == dL) {
+        /* the atoms generate all of L: keep its generator phiL, whose images
+         * are already in hand */
+        Expr* gen = qqbar_to_expr(phiL);
+        if (gen && head_is(gen, "Root")) qqbar_cache_put(gen, expr_hash(gen), phiL);
+        Expr** items = calloc(na, sizeof(Expr*));
+        for (size_t i = 0; i < na; i++) items[i] = poly_to_algnum_lazy(phiL, &gen, aimg + i, dL);
+        if (gen) expr_free(gen);
+        result = expr_new_function(expr_new_symbol(SYM_List), items, na);
+        free(items);
+    } else if (okK) {
+        /* phi = Dn theta:  x^m + sum a_k x^k  ->  x^m + sum a_k Dn^(m-k) x^k */
+        fmpz_t Dn, pk; fmpz_init(Dn); fmpz_init(pk);
+        fmpz_one(Dn);
+        for (slong k = 0; k < m; k++) {
+            fmpq_poly_get_coeff_fmpq(c, mK, k);
+            fmpz_lcm(Dn, Dn, fmpq_denref(c));
+        }
+        fmpz_poly_t fphi; fmpz_poly_init(fphi);
+        fmpz_poly_set_coeff_ui(fphi, m, 1);
+        for (slong k = 0; k < m; k++) {
+            fmpq_poly_get_coeff_fmpq(c, mK, k);
+            fmpz_pow_ui(pk, Dn, (ulong)(m - k));
+            fmpq_mul_fmpz(c, c, pk);                      /* an integer */
+            fmpz_poly_set_coeff_fmpz(fphi, k, fmpq_numref(c));
+        }
+        qqbar_t phi; qqbar_init(phi);
+        int have = 0;
+        acb_t z, zt; acb_init(z); acb_init(zt);
+        for (slong prec = 64; prec <= 4096 && !have; prec *= 2) {
+            qqbar_get_acb(z, phiL, prec);
+            kf_acb_eval_fmpq_poly(zt, th, z, prec);
+            acb_mul_fmpz(zt, zt, Dn, prec);
+            acb_t enc; acb_init(enc);
+            if (_qqbar_validate_uniqueness(enc, fphi, zt, 2 * prec)) {
+                fmpz_poly_set(QQBAR_POLY(phi), fphi);
+                acb_set(QQBAR_ENCLOSURE(phi), enc);
+                have = 1;
+            }
+            acb_clear(enc);
+        }
+        acb_clear(z); acb_clear(zt);
+        if (have) {
+            Expr* gen = NULL;
+            if (m >= 2) {
+                /* phi's surface form, and the qqbar it denotes recorded against
+                 * it: every consumer reads the field back through to_qqbar(gen),
+                 * which would otherwise isolate and re-sort phi's conjugates a
+                 * second time */
+                gen = qqbar_to_expr(phi);
+                if (gen && head_is(gen, "Root")) qqbar_cache_put(gen, expr_hash(gen), phi);
+            }
+            Expr** items = calloc(na, sizeof(Expr*));
+            fmpq_poly_t img; fmpq_poly_init(img);
+            for (size_t i = 0; i < na; i++) {
+                /* atom = sum_j y_j theta^j = sum_j (y_j / Dn^j) phi^j */
+                fmpq_poly_zero(img);
+                fmpz_one(pk);
+                for (slong j = 0; j < m; j++) {
+                    fmpq_div_fmpz(c, fmpq_mat_entry(Y, j, (slong)i), pk);
+                    fmpq_poly_set_coeff_fmpq(img, j, c);
+                    fmpz_mul(pk, pk, Dn);
+                }
+                items[i] = poly_to_algnum_lazy(phi, &gen, img, m);
+            }
+            fmpq_poly_clear(img);
+            if (gen) expr_free(gen);
+            result = expr_new_function(expr_new_symbol(SYM_List), items, na);
+            free(items);
+        }
+        qqbar_clear(phi);
+        fmpz_poly_clear(fphi);
+        fmpz_clear(Dn); fmpz_clear(pk);
+    }
+    fmpq_clear(c);
+    fmpq_mat_clear(M); fmpq_mat_clear(R); fmpq_mat_clear(B); fmpq_mat_clear(Y);
+    fmpq_poly_clear(th); fmpq_poly_clear(pw); fmpq_poly_clear(mK); fmpq_poly_clear(col);
+    return result;
+}
+
+static Expr* kf_number_field_common(const Expr* const* as, size_t na) {
+    if (na == 0 || na > 64) return NULL;
+    KfAtom* at = malloc(sizeof(KfAtom) * na);
+    for (size_t i = 0; i < na; i++) kf_atom_init(at + i);
+    int ok = 1;
+    for (size_t i = 0; i < na && ok; i++) ok = kf_atom_parse(as[i], at + i);
+
+    KfAlg A; memset(&A, 0, sizeof A);
+    fmpz_poly_init(A.Phi);
+    for (slong i = 0; i < KF_MAX_PRIMES; i++) fmpz_init(A.ell + i);
+    A.N = 1;
+    /* N = lcm of the denominators of u/2; n_ell = lcm of the exponent denominators */
+    for (size_t i = 0; i < na && ok; i++) {
+        fmpq_t h; fmpq_init(h);
+        fmpq_div_2exp(h, at[i].u, 1);
+        if (!fmpz_fits_si(fmpq_denref(h)) || fmpz_get_si(fmpq_denref(h)) > 1024) ok = 0;
+        else A.N = (ulong)kf_lcm(A.N, fmpz_get_ui(fmpq_denref(h)));
+        fmpq_clear(h);
+        if (A.N > 1024) ok = 0;
+        for (slong j = 0; j < at[i].np && ok; j++) {
+            if (fmpz_is_one(fmpq_denref(at[i].a + j))) continue;  /* rational power */
+            if (!fmpz_fits_si(fmpq_denref(at[i].a + j))) { ok = 0; break; }
+            slong d = fmpz_get_si(fmpq_denref(at[i].a + j));
+            slong gi = 0;
+            while (gi < A.np && !fmpz_equal(A.ell + gi, at[i].ell + j)) gi++;
+            if (gi == A.np) {
+                if (A.np == KF_MAX_PRIMES) { ok = 0; break; }
+                fmpz_set(A.ell + gi, at[i].ell + j); A.n[gi] = 1; A.np++;
+            }
+            A.n[gi] = (slong)kf_lcm((ulong)A.n[gi], (ulong)d);
+            if (A.n[gi] > KF_MAX_DIM) ok = 0;
+        }
+    }
+    /* a prime whose exponents are all integers is rational: fold it into c */
+    for (size_t i = 0; i < na && ok; i++) {
+        for (slong j = 0; j < at[i].np; j++) {
+            slong gi = 0;
+            while (gi < A.np && !fmpz_equal(A.ell + gi, at[i].ell + j)) gi++;
+            if (gi < A.np) continue;
+            /* every exponent of this prime is an integer */
+            fmpz_t pw; fmpz_init(pw);
+            slong e = fmpz_get_si(fmpq_numref(at[i].a + j));
+            fmpz_pow_ui(pw, at[i].ell + j, (ulong)(e < 0 ? -e : e));
+            if (e >= 0) fmpq_mul_fmpz(at[i].c, at[i].c, pw); else fmpq_div_fmpz(at[i].c, at[i].c, pw);
+            fmpz_clear(pw);
+            fmpz_zero(at[i].ell + j);            /* dropped: never matches a prime */
+        }
+    }
+    Expr* result = NULL;
+    if (ok) {
+        A.phi = 1;
+        if (A.N > 2) {
+            fmpz_poly_cyclotomic(A.Phi, A.N);
+            A.phi = fmpz_poly_degree(A.Phi);
+        }
+        A.D = A.phi;
+        for (slong i = 0; i < A.np && ok; i++) {
+            A.stride[i] = A.D;
+            A.D *= A.n[i];
+            if (A.D > KF_MAX_DIM) ok = 0;
+        }
+        if (A.D < 2) ok = 0;                     /* nothing algebraic: let qqbar answer */
+    }
+    if (ok) {
+        const slong D = A.D;
+        slong ngen = A.np + (A.phi > 1 ? 1 : 0);
+        fmpq_mat_t P, Pinv; fmpq_mat_init(P, D, D); fmpq_mat_init(Pinv, D, D);
+        fmpq* v = _fmpq_vec_init(D);
+        fmpq* w = _fmpq_vec_init(D);
+        fmpq* u = _fmpq_vec_init(D);
+        slong* cs = malloc(sizeof(slong) * (size_t)ngen);
+#define KF_GEN(g) ((A.phi > 1) ? (g) - 1 : (g))      /* z is generator 0 */
+        int found = 0;
+        for (int trial = 0; trial < 8 && !found; trial++) {
+            for (slong g = 0; g < ngen; g++) cs[g] = 1 + g * (trial + 1);
+            kf_vec_zero(v, D); fmpq_one(v + 0);
+            for (slong j = 0; j < D; j++) {
+                for (slong r = 0; r < D; r++) fmpq_set(fmpq_mat_entry(P, r, j), v + r);
+                kf_vec_zero(w, D);
+                fmpq_t cg; fmpq_init(cg);
+                for (slong g = 0; g < ngen; g++) {
+                    fmpq_set_si(cg, cs[g], 1);
+                    kf_mul_gen(w, v, &A, KF_GEN(g), cg);
+                }
+                /* + the pairwise products gen_g gen_h: a theta linear in the
+                 * generators has conjugates with equal real parts beyond the
+                 * complex-conjugate pairs (Re(2^(1/3) w) = Re(2^(1/3) w^2)),
+                 * and each such tie costs the root ordering behind theta's
+                 * Root index an exact qqbar comparison */
+                fmpq_one(cg);
+                for (slong g = 0; g < ngen; g++)
+                    for (slong h = g + 1; h < ngen; h++) {
+                        kf_vec_zero(u, D);
+                        kf_mul_gen(u, v, &A, KF_GEN(h), cg);
+                        kf_mul_gen(w, u, &A, KF_GEN(g), cg);
+                    }
+                fmpq_clear(cg);
+                kf_vec_set(v, w, D);
+            }
+            found = fmpq_mat_inv(Pinv, P);
+        }
+        /* v = theta^D; m_A(x) = x^D - sum y_j x^j, y = Pinv v */
+        fmpz_poly_t mA; fmpz_poly_init(mA);
+        acb_t th; acb_init(th);
+        fmpq_poly_t yq; fmpq_poly_init(yq);
+        if (found) {
+            fmpq_poly_zero(yq);
+            fmpq_t s, t; fmpq_init(s); fmpq_init(t);
+            for (slong r = 0; r < D; r++) {
+                fmpq_zero(s);
+                for (slong j = 0; j < D; j++) {
+                    fmpq_mul(t, fmpq_mat_entry(Pinv, r, j), v + j);
+                    fmpq_add(s, s, t);
+                }
+                fmpq_neg(s, s);
+                fmpq_poly_set_coeff_fmpq(yq, r, s);
+            }
+            fmpq_one(s);
+            fmpq_poly_set_coeff_fmpq(yq, D, s);
+            fmpq_clear(s); fmpq_clear(t);
+            /* theta is an algebraic integer: m_A is monic over Z */
+            if (!fmpz_is_one(fmpq_poly_denref(yq))) found = 0;
+            else fmpq_poly_get_numerator(mA, yq);
+        }
+        /* pick the factor of m_A that vanishes at the principal value */
+        qqbar_t phi; qqbar_init(phi);
+        fmpz_poly_t f; fmpz_poly_init(f);
+        if (found) {
+            fmpz_poly_factor_t fac; fmpz_poly_factor_init(fac);
+            fmpz_poly_factor(fac, mA);
+            int chosen = 0;
+            for (slong prec = 64; prec <= 4096 && !chosen; prec *= 2) {
+                acb_zero(th);
+                acb_ptr gv = _acb_vec_init(ngen);
+                acb_t g; acb_init(g);
+                for (slong gidx = 0; gidx < ngen; gidx++) {
+                    slong gen = KF_GEN(gidx);
+                    if (gen < 0) {
+                        acb_set_si(gv + gidx, 2); acb_div_ui(gv + gidx, gv + gidx, A.N, prec);
+                        acb_exp_pi_i(gv + gidx, gv + gidx, prec);
+                    } else {
+                        arb_t rr; arb_init(rr);
+                        arb_set_fmpz(rr, A.ell + gen);
+                        arb_root_ui(rr, rr, (ulong)A.n[gen], prec);
+                        acb_set_arb(gv + gidx, rr);
+                        arb_clear(rr);
+                    }
+                    acb_mul_si(g, gv + gidx, cs[gidx], prec);
+                    acb_add(th, th, g, prec);
+                }
+                for (slong gg = 0; gg < ngen; gg++)
+                    for (slong h = gg + 1; h < ngen; h++) {
+                        acb_mul(g, gv + gg, gv + h, prec);
+                        acb_add(th, th, g, prec);
+                    }
+                acb_clear(g);
+                _acb_vec_clear(gv, ngen);
+                /* candidates: factors whose value at theta contains 0 */
+                slong cand = -1, ncand = 0;
+                acb_t val; acb_init(val);
+                for (slong k = 0; k < fac->num; k++) {
+                    arb_fmpz_poly_evaluate_acb(val, fac->p + k, th, prec);
+                    if (acb_contains_zero(val)) { cand = k; ncand++; }
+                }
+                acb_clear(val);
+                if (ncand != 1) continue;
+                /* phi = the root of that factor that theta approximates: certify
+                 * a ball around theta isolating exactly one root (no ordering of
+                 * the conjugates, which is what qqbar_roots_fmpz_poly costs) */
+                acb_t enc; acb_init(enc);
+                if (_qqbar_validate_uniqueness(enc, fac->p + cand, th, 2 * prec)) {
+                    fmpz_poly_set(QQBAR_POLY(phi), fac->p + cand);
+                    acb_set(QQBAR_ENCLOSURE(phi), enc);
+                    fmpz_poly_set(f, fac->p + cand);
+                    chosen = 1;
+                }
+                acb_clear(enc);
+            }
+            fmpz_poly_factor_clear(fac);
+            found = chosen;
+        }
+        if (found) {
+            /* the atoms' images in L = Q[x]/(f) = Q(generators of A) */
+            fmpq_poly_t fq; fmpq_poly_init(fq);
+            fmpq_poly_set_fmpz_poly(fq, f);
+            fmpq_poly_struct* aimg = flint_malloc(sizeof(fmpq_poly_struct) * na);
+            fmpq_t s, t; fmpq_init(s); fmpq_init(t);
+            for (size_t i = 0; i < na; i++) {
+                fmpq_poly_init(aimg + i);
+                kf_atom_vec(w, at + i, &A);
+                for (slong r = 0; r < D; r++) {
+                    fmpq_zero(s);
+                    for (slong j = 0; j < D; j++) {
+                        if (fmpq_is_zero(w + j)) continue;
+                        fmpq_mul(t, fmpq_mat_entry(Pinv, r, j), w + j);
+                        fmpq_add(s, s, t);
+                    }
+                    fmpq_poly_set_coeff_fmpq(aimg + i, r, s);
+                }
+                fmpq_poly_rem(aimg + i, aimg + i, fq);
+            }
+            result = kf_subfield_images(aimg, na, fq, phi);
+            for (size_t i = 0; i < na; i++) fmpq_poly_clear(aimg + i);
+            flint_free(aimg);
+            fmpq_clear(s); fmpq_clear(t);
+            fmpq_poly_clear(fq);
+        }
+        fmpz_poly_clear(f);
+        qqbar_clear(phi);
+        fmpq_poly_clear(yq);
+        acb_clear(th);
+        fmpz_poly_clear(mA);
+        free(cs);
+        _fmpq_vec_clear(v, D); _fmpq_vec_clear(w, D); _fmpq_vec_clear(u, D);
+#undef KF_GEN
+        fmpq_mat_clear(P); fmpq_mat_clear(Pinv);
+    }
+    fmpz_poly_clear(A.Phi);
+    for (slong i = 0; i < KF_MAX_PRIMES; i++) fmpz_clear(A.ell + i);
+    for (size_t i = 0; i < na; i++) kf_atom_clear(at + i);
+    free(at);
+    return result;
+}
+
 Expr* flint_qqbar_to_number_field_common(const Expr* const* as, size_t n,
                                          int smallest) {
+    /* radicals of rationals and roots of unity: the exact product-algebra
+     * construction above, no qqbar search */
+    Expr* fast = kf_number_field_common(as, n);
+    if (fast) return fast;
     return flint_qqbar_to_number_field_common_fn(NULL, as, n, smallest, false);
 }
 
@@ -1729,12 +2369,21 @@ Expr* flint_qqbar_to_number_field_common_fn(Expr* (*get)(const void*, size_t, bo
     qqbar_t alpha, cand, ca; qqbar_init(alpha); qqbar_init(cand); qqbar_init(ca);
     if (ok) qqbar_set(alpha, vals + 0);
     for (size_t i = 1; i < n && ok; i++) {
+        /* [Q(alpha, b) : Q] <= deg(alpha) deg(b), so a candidate of exactly that
+         * degree is already the compositum and the scan can stop: the remaining
+         * candidates cannot beat it.  Without this every atom paid all sixteen
+         * qqbar additions -- each a composed resultant of degree deg(alpha)deg(b)
+         * that is then factored over Z -- although c = 1 is primitive almost
+         * always; for Q(I, Sqrt[3], 2^(1/3)) that was ~0.25 s per field build, and
+         * a Together over that field builds several. */
         slong bestdeg = 0, bestc = 0;
+        const slong dmax = qqbar_degree(alpha) * qqbar_degree(vals + i);
         for (slong c = 1; c <= 16; c++) {
             qqbar_mul_si(ca, vals + i, c);
             qqbar_add(cand, alpha, ca);
             slong d = qqbar_degree(cand);
             if (d > bestdeg && d <= QQBAR_DEGREE_CAP) { bestdeg = d; bestc = c; }
+            if (bestdeg == dmax) break;
         }
         if (bestc == 0) { ok = 0; break; }
         qqbar_mul_si(ca, vals + i, bestc);
@@ -2231,6 +2880,619 @@ Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen) {
     return list;
 }
 
+/* ================================================================== */
+/*  Algebraic-entry matrices: exact linear algebra over the number    */
+/*  field generated by the entries' atoms                             */
+/* ================================================================== */
+/*
+ * The classical exact paths (the fraction-free elimination in linsolve.c /
+ * inv.c, the cofactor expansion in det.c) treat an algebraic constant such
+ * as Sqrt[3], I or Root[-1 - 4 #1 + #1^3 &, 1] as an opaque indeterminate.
+ * Nothing reduces it by its minimal polynomial, so every elimination step
+ * grows the expressions, and each exact division, GCD and zero test goes
+ * back through Together / Cancel / PolynomialGCD over a multivariate ring
+ * in those indeterminates: a 12x12 LinearSolve over Q(I Sqrt[3]) did not
+ * finish in 40 s.
+ *
+ * Here the input is mapped ONCE into a number field K = Q(phi):
+ *   1. collect the distinct algebraic atoms of every entry (radicals
+ *      b^(1/q) of a rational b, I, Root objects, any other
+ *      constant-algebraic leaf);
+ *   2. take a primitive element theta = a_1 + c_2 a_2 + ... chosen by
+ *      degree (the flint_qqbar_to_number_field_common construction), phi
+ *      its algebraic-integer multiple, and express every atom in Q(phi)
+ *      exactly (precision-escalated);
+ *   3. evaluate each entry as an nf_elem (Plus, Times, integer Power,
+ *      radical powers, inverses), so all arithmetic is native antic nf_elem
+ *      with every value reduced mod the minimal polynomial, and a zero test
+ *      is exact and O(1);
+ *   4. render results in a monomial basis of the ATOMS themselves
+ *      (a_1^e_1 ... a_k^e_k, e_i < deg a_i, chosen greedily by ascending
+ *      total degree until they span K), so an answer over Q(I, Sqrt[3])
+ *      reads a + b I + c Sqrt[3] + d I Sqrt[3] -- never a primitive element
+ *      the user did not write.
+ * Every entry point declines (NULL / 0) outside that domain: a free symbol,
+ * an inexact number, no algebraic atom at all (the pure-rational fmpq paths
+ * own that case), too many atoms, a field above ALGF_MAX_DEGREE, or a
+ * division by zero while mapping an entry (the classical path then reports
+ * it in its own terms).
+ */
+
+#define ALGF_MAX_ATOMS      8
+#define ALGF_MAX_DEGREE     64
+#define ALGF_MAX_CANDIDATES 4096
+#define ALGF_MAX_POW        100000
+
+typedef struct {
+    Expr* atoms[ALGF_MAX_ATOMS];   /* normalised atom expressions (owned) */
+    int na;
+    nf_t nf;
+    int nf_ready;
+    slong D;                       /* [K : Q] */
+    nf_elem_struct* aval;          /* the na atom values in K */
+    Expr** basis;                  /* D monomial expressions in the atoms */
+    fmpq_mat_t binv;               /* power-basis coords -> monomial coords */
+    int binv_ready;
+} AlgF;
+
+static void algf_clear(AlgF* F) {
+    for (int i = 0; i < F->na; i++) expr_free(F->atoms[i]);
+    if (F->nf_ready) {
+        if (F->aval) {
+            for (int i = 0; i < F->na; i++) nf_elem_clear(F->aval + i, F->nf);
+            free(F->aval);
+        }
+        nf_clear(F->nf);
+    }
+    if (F->basis) {
+        for (slong i = 0; i < F->D; i++) if (F->basis[i]) expr_free(F->basis[i]);
+        free(F->basis);
+    }
+    if (F->binv_ready) fmpq_mat_clear(F->binv);
+    memset(F, 0, sizeof(*F));
+}
+
+static int algf_is_rat(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || head_is(e, "Rational"));
+}
+
+static Expr* algf_unit_i(void) {
+    return expr_new_function(expr_new_symbol(SYM_Complex),
+                             (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+}
+
+/* b^(1/q) for a rational base b and an integer q > 1. */
+static Expr* algf_radical(const Expr* b, const fmpz_t q) {
+    fmpq_t r; fmpq_init(r);
+    fmpz_one(fmpq_numref(r)); fmpz_set(fmpq_denref(r), q);
+    Expr* ex = expr_from_fmpq(r);
+    fmpq_clear(r);
+    return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy((Expr*)b), ex }, 2);
+}
+
+/* Index of atom `a` (borrowed), or -1. */
+static int algf_find(const AlgF* F, const Expr* a) {
+    for (int i = 0; i < F->na; i++) if (expr_eq(F->atoms[i], a)) return i;
+    return -1;
+}
+
+/* Register an atom (consumes `a`).  0 when the atom table is full. */
+static int algf_add(AlgF* F, Expr* a) {
+    if (algf_find(F, a) >= 0) { expr_free(a); return 1; }
+    if (F->na >= ALGF_MAX_ATOMS) { expr_free(a); return 0; }
+    F->atoms[F->na++] = a;
+    return 1;
+}
+
+/* Pass 1: validate `e` and collect its atoms. */
+static int algf_collect(AlgF* F, const Expr* e) {
+    if (!e) return 0;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return 1;
+        case EXPR_SYMBOL:
+            /* Every symbol declines -- GoldenRatio included: the classical
+             * paths keep the reference's forms for it
+             * (RowReduce[{{GoldenRatio, 1}, {1, GoldenRatio - 1}}] is
+             * {{1, 1/GoldenRatio}, {0, 0}}), where a basis rendering would
+             * read -1 + GoldenRatio. */
+            return 0;
+        case EXPR_FUNCTION: break;
+        default: return 0;      /* Real, MPFR, String, ... */
+    }
+    size_t n = e->data.function.arg_count;
+    if (head_is(e, "Rational")) return n == 2;
+    if (head_is(e, "Complex") && n == 2) {
+        if (!algf_is_rat(e->data.function.args[0]) || !algf_is_rat(e->data.function.args[1]))
+            return 0;
+        return algf_add(F, algf_unit_i());
+    }
+    if (head_is(e, "Plus") || head_is(e, "Times")) {
+        for (size_t i = 0; i < n; i++)
+            if (!algf_collect(F, e->data.function.args[i])) return 0;
+        return 1;
+    }
+    if (head_is(e, "Power") && n == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* xe = e->data.function.args[1];
+        if (xe->type == EXPR_INTEGER) return algf_collect(F, b);
+        if (algf_is_rat(b) && head_is(xe, "Rational")) {
+            fmpq_t r; fmpq_init(r);
+            int ok = fmpq_from_expr(xe, r);
+            if (ok) ok = algf_add(F, algf_radical(b, fmpq_denref(r)));
+            fmpq_clear(r);
+            return ok;
+        }
+    }
+    if (!flint_qqbar_is_constant_algebraic(e)) return 0;
+    return algf_add(F, expr_copy((Expr*)e));
+}
+
+/* Pass 2: build K, the atom values and the rendering basis. */
+static int algf_build(AlgF* F) {
+    if (F->na == 0) return 0;
+    /* MATHILDA_NO_ALG_FIELD=1 keeps every caller on its classical path (for
+     * differential testing, as MATHILDA_NO_NF_RREF does for the
+     * AlgebraicNumber RREF). */
+    if (getenv("MATHILDA_NO_ALG_FIELD")) return 0;
+    int na = F->na;
+    qqbar_ptr av = _qqbar_vec_init(na);
+    int ok = 1;
+    for (int i = 0; i < na && ok; i++) ok = to_qqbar(F->atoms[i], av + i);
+
+    /* primitive element by degree (see flint_qqbar_to_number_field_common) */
+    qqbar_t theta, cand, ca; qqbar_init(theta); qqbar_init(cand); qqbar_init(ca);
+    if (ok) qqbar_set(theta, av + 0);
+    for (int i = 1; i < na && ok; i++) {
+        if (qqbar_is_rational(av + i)) continue;
+        slong bestdeg = 0, bestc = 0;
+        for (slong c = 1; c <= 16; c++) {
+            qqbar_mul_si(ca, av + i, c);
+            qqbar_add(cand, theta, ca);
+            slong d = qqbar_degree(cand);
+            if (d > bestdeg && d <= ALGF_MAX_DEGREE) { bestdeg = d; bestc = c; }
+        }
+        if (bestc == 0) { ok = 0; break; }
+        qqbar_mul_si(ca, av + i, bestc);
+        qqbar_add(theta, theta, ca);
+    }
+    qqbar_clear(cand); qqbar_clear(ca);
+
+    qqbar_t phi; qqbar_init(phi);
+    if (ok) {
+        fmpz_t lc; fmpz_init(lc);
+        algint_generator(theta, phi, lc);
+        fmpz_clear(lc);
+        F->D = qqbar_degree(phi);
+        if (F->D < 2 || F->D > ALGF_MAX_DEGREE) ok = 0;
+    }
+    if (ok) {
+        fmpq_poly_t M; fmpq_poly_init(M);
+        fmpq_poly_set_fmpz_poly(M, QQBAR_POLY(phi));
+        nf_init(F->nf, M);
+        fmpq_poly_clear(M);
+        F->nf_ready = 1;
+        F->aval = malloc(sizeof(nf_elem_struct) * (size_t)na);
+        for (int i = 0; i < na; i++) nf_elem_init(F->aval + i, F->nf);
+        fmpq_poly_t f; fmpq_poly_init(f);
+        for (int i = 0; i < na && ok; i++) {
+            if (qqbar_express_in_field_esc_all(f, phi, av + i))
+                nf_elem_set_fmpq_poly(F->aval + i, f, F->nf);
+            else ok = 0;
+        }
+        fmpq_poly_clear(f);
+    }
+
+    /* Rendering basis: monomials in the atoms by ascending total degree, each
+     * kept when independent of those already chosen (incremental echelon). */
+    if (ok) {
+        slong D = F->D;
+        slong degs[ALGF_MAX_ATOMS];
+        slong ncand = 1, maxtot = 0;
+        for (int i = 0; i < na && ok; i++) {
+            degs[i] = qqbar_degree(av + i);
+            maxtot += degs[i] - 1;
+            ncand *= degs[i];
+            if (ncand > ALGF_MAX_CANDIDATES) ok = 0;
+        }
+        F->basis = calloc((size_t)D, sizeof(Expr*));
+        fmpq_mat_t B; fmpq_mat_init(B, D, D);   /* chosen monomials, power-basis coords */
+        fmpq_mat_t E; fmpq_mat_init(E, D, D);   /* their echelon reduction */
+        slong* pc = malloc(sizeof(slong) * (size_t)D);
+        fmpq* v = _fmpq_vec_init(D);
+        fmpq_t t, u; fmpq_init(t); fmpq_init(u);
+        fmpq_poly_t pp; fmpq_poly_init(pp);
+        nf_elem_t mv, pw; nf_elem_init(mv, F->nf); nf_elem_init(pw, F->nf);
+        slong got = 0;
+        int ev[ALGF_MAX_ATOMS];
+        for (slong tot = 0; ok && tot <= maxtot && got < D; tot++) {
+            for (slong idx = 0; idx < ncand && got < D; idx++) {
+                slong rem = idx, s = 0;
+                for (int i = na - 1; i >= 0; i--) {
+                    ev[i] = (int)(rem % degs[i]); rem /= degs[i]; s += ev[i];
+                }
+                if (s != tot) continue;
+                nf_elem_one(mv, F->nf);
+                for (int i = 0; i < na; i++) if (ev[i]) {
+                    nf_elem_pow(pw, F->aval + i, (ulong)ev[i], F->nf);
+                    nf_elem_mul(mv, mv, pw, F->nf);
+                }
+                nf_elem_get_fmpq_poly(pp, mv, F->nf);
+                for (slong j = 0; j < D; j++) {
+                    fmpq_poly_get_coeff_fmpq(v + j, pp, j);
+                    fmpq_set(fmpq_mat_entry(B, got, j), v + j);
+                }
+                for (slong r = 0; r < got; r++) {
+                    if (fmpq_is_zero(v + pc[r])) continue;
+                    fmpq_set(t, v + pc[r]);
+                    for (slong j = 0; j < D; j++) {
+                        fmpq_mul(u, t, fmpq_mat_entry(E, r, j));
+                        fmpq_sub(v + j, v + j, u);
+                    }
+                }
+                slong p = -1;
+                for (slong j = 0; j < D; j++) if (!fmpq_is_zero(v + j)) { p = j; break; }
+                if (p < 0) continue;            /* dependent: try the next monomial */
+                fmpq_inv(t, v + p);
+                for (slong j = 0; j < D; j++) fmpq_mul(fmpq_mat_entry(E, got, j), v + j, t);
+                pc[got] = p;
+                Expr* fac[ALGF_MAX_ATOMS]; size_t nfac = 0;
+                for (int i = 0; i < na; i++) if (ev[i]) {
+                    fac[nfac++] = ev[i] == 1 ? expr_copy(F->atoms[i])
+                        : expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ expr_copy(F->atoms[i]), expr_new_integer(ev[i]) }, 2);
+                }
+                Expr* mono = nfac == 0 ? expr_new_integer(1)
+                           : nfac == 1 ? fac[0]
+                           : expr_new_function(expr_new_symbol(SYM_Times), fac, nfac);
+                F->basis[got] = eval_and_free(mono);
+                got++;
+            }
+        }
+        if (ok && got == D) {
+            fmpq_mat_init(F->binv, D, D);
+            F->binv_ready = 1;
+            if (!fmpq_mat_inv(F->binv, B)) ok = 0;
+        } else ok = 0;
+        nf_elem_clear(mv, F->nf); nf_elem_clear(pw, F->nf);
+        fmpq_poly_clear(pp); fmpq_clear(t); fmpq_clear(u);
+        _fmpq_vec_clear(v, D);
+        free(pc);
+        fmpq_mat_clear(B); fmpq_mat_clear(E);
+    }
+    qqbar_clear(phi); qqbar_clear(theta);
+    _qqbar_vec_clear(av, na);
+    return ok;
+}
+
+/* Pass 3: the value in K of a constant expression whose atoms were
+ * collected.  0 = outside the domain, or a division by zero. */
+static int algf_value(AlgF* F, const Expr* e, nf_elem_t out) {
+    fmpq_t q; fmpq_init(q);
+    int isq = fmpq_from_expr(e, q);
+    if (isq) nf_elem_set_fmpq(out, q, F->nf);
+    fmpq_clear(q);
+    if (isq) return 1;
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        if (head_is(e, "Complex") && n == 2) {
+            Expr* iu = algf_unit_i();
+            int k = algf_find(F, iu);
+            expr_free(iu);
+            if (k < 0) return 0;
+            fmpq_t re, im; fmpq_init(re); fmpq_init(im);
+            int ok = fmpq_from_expr(e->data.function.args[0], re) &&
+                     fmpq_from_expr(e->data.function.args[1], im);
+            if (ok) {
+                nf_elem_scalar_mul_fmpq(out, F->aval + k, im, F->nf);
+                nf_elem_add_fmpq(out, out, re, F->nf);
+            }
+            fmpq_clear(re); fmpq_clear(im);
+            return ok;
+        }
+        if ((head_is(e, "Plus") || head_is(e, "Times")) && n >= 1) {
+            int plus = head_is(e, "Plus");
+            nf_elem_t t; nf_elem_init(t, F->nf);
+            int ok = algf_value(F, e->data.function.args[0], out);
+            for (size_t i = 1; i < n && ok; i++) {
+                ok = algf_value(F, e->data.function.args[i], t);
+                if (ok) {
+                    if (plus) nf_elem_add(out, out, t, F->nf);
+                    else nf_elem_mul(out, out, t, F->nf);
+                }
+            }
+            nf_elem_clear(t, F->nf);
+            return ok;
+        }
+        if (head_is(e, "Power") && n == 2) {
+            const Expr* b = e->data.function.args[0];
+            const Expr* xe = e->data.function.args[1];
+            slong p = 0;
+            int ok = 0, generic = 0;
+            nf_elem_t base, inv; nf_elem_init(base, F->nf); nf_elem_init(inv, F->nf);
+            if (xe->type == EXPR_INTEGER) {
+                p = (slong)xe->data.integer;
+                ok = algf_value(F, b, base);
+            } else if (algf_is_rat(b) && head_is(xe, "Rational")) {
+                /* b^(p/q) = (b^(1/q))^p, the principal branch (as in to_qqbar) */
+                fmpq_t r; fmpq_init(r);
+                if (fmpq_from_expr(xe, r) && fmpz_fits_si(fmpq_numref(r))) {
+                    Expr* a = algf_radical(b, fmpq_denref(r));
+                    int k = algf_find(F, a);
+                    expr_free(a);
+                    if (k >= 0) {
+                        nf_elem_set(base, F->aval + k, F->nf);
+                        p = fmpz_get_si(fmpq_numref(r));
+                        ok = 1;
+                    }
+                }
+                fmpq_clear(r);
+            } else generic = 1;
+            if (ok && (p > ALGF_MAX_POW || p < -ALGF_MAX_POW)) ok = 0;
+            if (ok && p < 0) {
+                if (nf_elem_is_zero(base, F->nf)) ok = 0;
+                else { nf_elem_inv(inv, base, F->nf); nf_elem_swap(inv, base, F->nf); p = -p; }
+            }
+            if (ok) nf_elem_pow(out, base, (ulong)p, F->nf);
+            nf_elem_clear(base, F->nf); nf_elem_clear(inv, F->nf);
+            if (!generic) return ok;
+        }
+    }
+    int k = algf_find(F, e);
+    if (k < 0) return 0;
+    nf_elem_set(out, F->aval + k, F->nf);
+    return 1;
+}
+
+/* Monomial-basis coordinates of v: c = u * B^-1 (u its power-basis coords). */
+static void algf_coords(AlgF* F, const nf_elem_t v, fmpq* c) {
+    slong D = F->D;
+    fmpq_poly_t pp; fmpq_poly_init(pp);
+    nf_elem_get_fmpq_poly(pp, v, F->nf);
+    fmpq* u = _fmpq_vec_init(D);
+    for (slong j = 0; j < D; j++) fmpq_poly_get_coeff_fmpq(u + j, pp, j);
+    fmpq_t t; fmpq_init(t);
+    for (slong j = 0; j < D; j++) {
+        fmpq_zero(c + j);
+        for (slong i = 0; i < D; i++) {
+            if (fmpq_is_zero(u + i)) continue;
+            fmpq_mul(t, u + i, fmpq_mat_entry(F->binv, i, j));
+            fmpq_add(c + j, c + j, t);
+        }
+    }
+    fmpq_clear(t);
+    _fmpq_vec_clear(u, D);
+    fmpq_poly_clear(pp);
+}
+
+/* Append the terms c_j * basis_j (* xk) of v to `terms` (grown as needed). */
+static void algf_push_terms(AlgF* F, const nf_elem_t v, const Expr* xk,
+                            Expr*** terms, size_t* nt, size_t* cap) {
+    slong D = F->D;
+    fmpq* c = _fmpq_vec_init(D);
+    algf_coords(F, v, c);
+    for (slong j = 0; j < D; j++) {
+        if (fmpq_is_zero(c + j)) continue;
+        if (*nt == *cap) {
+            *cap = *cap ? 2 * *cap : 16;
+            *terms = realloc(*terms, sizeof(Expr*) * *cap);
+        }
+        Expr* f[3]; size_t nfac = 0;
+        f[nfac++] = expr_from_fmpq(c + j);
+        f[nfac++] = expr_copy(F->basis[j]);
+        if (xk) f[nfac++] = expr_copy((Expr*)xk);
+        (*terms)[(*nt)++] = expr_new_function(expr_new_symbol(SYM_Times), f, nfac);
+    }
+    _fmpq_vec_clear(c, D);
+}
+
+static Expr* algf_sum(Expr** terms, size_t nt) {
+    if (nt == 0) return expr_new_integer(0);
+    Expr* s = nt == 1 ? terms[0] : expr_new_function(expr_new_symbol(SYM_Plus), terms, nt);
+    return eval_and_free(s);
+}
+
+static Expr* algf_render(AlgF* F, const nf_elem_t v) {
+    if (nf_elem_is_zero(v, F->nf)) return expr_new_integer(0);
+    Expr** terms = NULL; size_t nt = 0, cap = 0;
+    algf_push_terms(F, v, NULL, &terms, &nt, &cap);
+    Expr* r = algf_sum(terms, nt);
+    free(terms);
+    return r;
+}
+
+static void algf_vec_free(AlgF* F, nf_elem_struct* v, long n) {
+    for (long i = 0; i < n; i++) nf_elem_clear(v + i, F->nf);
+    free(v);
+}
+
+/* Map n constant entries into K.  On success *outv holds n initialised
+ * nf_elems (release with algf_vec_free). */
+static int algf_load(AlgF* F, Expr* const* flat, long n, nf_elem_struct** outv) {
+    for (long i = 0; i < n; i++) if (!algf_collect(F, flat[i])) return 0;
+    if (!algf_build(F)) return 0;
+    nf_elem_struct* v = malloc(sizeof(nf_elem_struct) * (size_t)(n > 0 ? n : 1));
+    for (long i = 0; i < n; i++) nf_elem_init(v + i, F->nf);
+    for (long i = 0; i < n; i++)
+        if (!algf_value(F, flat[i], v + i)) { algf_vec_free(F, v, n); return 0; }
+    *outv = v;
+    return 1;
+}
+
+/* Gauss-Jordan in place on an r x cols row-major matrix, pivoting in the
+ * first `pcols` columns only; pivots are scaled to 1.  pivcol[i] (if given)
+ * receives the pivot column of row i.  *sign flips on each row swap and *det
+ * accumulates the product of the pivots before scaling.  Returns the rank. */
+static int algf_gauss_jordan(AlgF* F, nf_elem_struct* A, int r, int cols, int pcols,
+                             int* pivcol, int* sign, nf_elem_struct* det) {
+    nf_elem_t inv, fac, t;
+    nf_elem_init(inv, F->nf); nf_elem_init(fac, F->nf); nf_elem_init(t, F->nf);
+    int rank = 0;
+    for (int col = 0; col < pcols && rank < r; col++) {
+        int prow = -1;
+        for (int i = rank; i < r; i++)
+            if (!nf_elem_is_zero(A + (long)i * cols + col, F->nf)) { prow = i; break; }
+        if (prow < 0) continue;
+        if (prow != rank) {
+            for (int j = 0; j < cols; j++)
+                nf_elem_swap(A + (long)rank * cols + j, A + (long)prow * cols + j, F->nf);
+            if (sign) *sign = -*sign;
+        }
+        nf_elem_struct* prw = A + (long)rank * cols;
+        if (det) nf_elem_mul(det, det, prw + col, F->nf);
+        nf_elem_inv(inv, prw + col, F->nf);
+        for (int j = col; j < cols; j++)
+            if (!nf_elem_is_zero(prw + j, F->nf)) nf_elem_mul(prw + j, prw + j, inv, F->nf);
+        for (int i = 0; i < r; i++) {
+            if (i == rank) continue;
+            nf_elem_struct* row = A + (long)i * cols;
+            if (nf_elem_is_zero(row + col, F->nf)) continue;
+            nf_elem_set(fac, row + col, F->nf);
+            for (int j = col; j < cols; j++) {
+                if (nf_elem_is_zero(prw + j, F->nf)) continue;
+                nf_elem_mul(t, fac, prw + j, F->nf);
+                nf_elem_sub(row + j, row + j, t, F->nf);
+            }
+        }
+        if (pivcol) pivcol[rank] = col;
+        rank++;
+    }
+    nf_elem_clear(inv, F->nf); nf_elem_clear(fac, F->nf); nf_elem_clear(t, F->nf);
+    return rank;
+}
+
+static Expr* algf_render_matrix(AlgF* F, nf_elem_struct* A, int r, int c, int stride, int off) {
+    Expr** rows = malloc(sizeof(Expr*) * (size_t)r);
+    for (int i = 0; i < r; i++) {
+        Expr** el = malloc(sizeof(Expr*) * (size_t)c);
+        for (int j = 0; j < c; j++) el[j] = algf_render(F, A + (long)i * stride + off + j);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)c);
+        free(el);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)r);
+    free(rows);
+    return out;
+}
+
+int flint_qqbar_alg_mat_solve(Expr* const* A, int r, int c, Expr* const* B, int k,
+                              Expr*** out) {
+    if (!A || !B || r <= 0 || c <= 0 || k <= 0 || !out) return 0;
+    int cols = c + k;
+    long total = (long)r * cols;
+    Expr** flat = malloc(sizeof(Expr*) * (size_t)total);
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) flat[(long)i * cols + j] = A[(long)i * c + j];
+        for (int j = 0; j < k; j++) flat[(long)i * cols + c + j] = B[(long)i * k + j];
+    }
+    AlgF F; memset(&F, 0, sizeof(F));
+    nf_elem_struct* M = NULL;
+    int ok = algf_load(&F, flat, total, &M);
+    free(flat);
+    if (!ok) { algf_clear(&F); return 0; }
+    int* piv = malloc(sizeof(int) * (size_t)r);
+    int rank = algf_gauss_jordan(&F, M, r, cols, c, piv, NULL, NULL);
+    int status = 1;
+    for (int i = rank; i < r && status == 1; i++)
+        for (int j = 0; j < k; j++)
+            if (!nf_elem_is_zero(M + (long)i * cols + c + j, F.nf)) { status = -1; break; }
+    if (status == 1) {
+        long ns = (long)c * k;
+        Expr** sol = calloc((size_t)ns, sizeof(Expr*));
+        for (int i = 0; i < rank; i++)
+            for (int j = 0; j < k; j++)
+                sol[(long)piv[i] * k + j] = algf_render(&F, M + (long)i * cols + c + j);
+        for (long i = 0; i < ns; i++) if (!sol[i]) sol[i] = expr_new_integer(0);
+        *out = sol;
+    }
+    free(piv);
+    algf_vec_free(&F, M, total);
+    algf_clear(&F);
+    return status;
+}
+
+Expr* flint_qqbar_alg_mat_rref(Expr* const* flat, int r, int c) {
+    if (!flat || r <= 0 || c <= 0) return NULL;
+    AlgF F; memset(&F, 0, sizeof(F));
+    nf_elem_struct* M = NULL;
+    long total = (long)r * c;
+    if (!algf_load(&F, flat, total, &M)) { algf_clear(&F); return NULL; }
+    algf_gauss_jordan(&F, M, r, c, c, NULL, NULL, NULL);
+    Expr* out = algf_render_matrix(&F, M, r, c, c, 0);
+    algf_vec_free(&F, M, total);
+    algf_clear(&F);
+    return out;
+}
+
+Expr* flint_qqbar_alg_mat_det(Expr* const* flat, int n) {
+    if (!flat || n <= 0) return NULL;
+    AlgF F; memset(&F, 0, sizeof(F));
+    nf_elem_struct* M = NULL;
+    long total = (long)n * n;
+    if (!algf_load(&F, flat, total, &M)) { algf_clear(&F); return NULL; }
+    nf_elem_t det; nf_elem_init(det, F.nf); nf_elem_one(det, F.nf);
+    int sign = 1;
+    int rank = algf_gauss_jordan(&F, M, n, n, n, NULL, &sign, det);
+    if (rank < n) nf_elem_zero(det, F.nf);
+    else if (sign < 0) nf_elem_neg(det, det, F.nf);
+    Expr* out = algf_render(&F, det);
+    nf_elem_clear(det, F.nf);
+    algf_vec_free(&F, M, total);
+    algf_clear(&F);
+    return out;
+}
+
+Expr* flint_qqbar_alg_mat_inverse(Expr* const* flat, int n, int* singular) {
+    if (singular) *singular = 0;
+    if (!flat || n <= 0) return NULL;
+    AlgF F; memset(&F, 0, sizeof(F));
+    nf_elem_struct* M0 = NULL;
+    long total = (long)n * n;
+    if (!algf_load(&F, flat, total, &M0)) { algf_clear(&F); return NULL; }
+    int cols = 2 * n;
+    long tot2 = (long)n * cols;
+    nf_elem_struct* M = malloc(sizeof(nf_elem_struct) * (size_t)tot2);
+    for (long i = 0; i < tot2; i++) { nf_elem_init(M + i, F.nf); nf_elem_zero(M + i, F.nf); }
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) nf_elem_set(M + (long)i * cols + j, M0 + (long)i * n + j, F.nf);
+        nf_elem_one(M + (long)i * cols + n + i, F.nf);
+    }
+    algf_vec_free(&F, M0, total);
+    int rank = algf_gauss_jordan(&F, M, n, cols, n, NULL, NULL, NULL);
+    Expr* out = NULL;
+    if (rank < n) { if (singular) *singular = 1; }
+    else out = algf_render_matrix(&F, M, n, n, cols, n);
+    algf_vec_free(&F, M, tot2);
+    algf_clear(&F);
+    return out;
+}
+
+/* ---- an exact zero test over the field of a fixed set of expressions ---- */
+
+struct FlintAlgField { AlgF F; };
+
+FlintAlgField* flint_qqbar_alg_field_new(Expr* const* exprs, size_t n) {
+    if (!exprs || n == 0) return NULL;
+    FlintAlgField* A = calloc(1, sizeof(*A));
+    int ok = 1;
+    for (size_t i = 0; i < n && ok; i++) ok = algf_collect(&A->F, exprs[i]);
+    if (ok) ok = algf_build(&A->F);
+    if (!ok) { algf_clear(&A->F); free(A); return NULL; }
+    return A;
+}
+
+int flint_qqbar_alg_field_is_zero(FlintAlgField* A, const Expr* e) {
+    if (!A || !e) return -1;
+    nf_elem_t v; nf_elem_init(v, A->F.nf);
+    int r = algf_value(&A->F, e, v) ? (nf_elem_is_zero(v, A->F.nf) ? 1 : 0) : -1;
+    nf_elem_clear(v, A->F.nf);
+    return r;
+}
+
+void flint_qqbar_alg_field_free(FlintAlgField* A) {
+    if (!A) return;
+    algf_clear(&A->F);
+    free(A);
+}
+
 #else /* !USE_FLINT */
 
 int   flint_qqbar_is_constant_algebraic(const Expr* e) { (void)e; return 0; }
@@ -2239,6 +3501,7 @@ Expr* flint_qqbar_reduce_coeffs(const Expr* e, QQBarMethod m) { (void)e; (void)m
 int   flint_qqbar_equal(const Expr* a, const Expr* b) { (void)a; (void)b; return -1; }
 int   flint_qqbar_compare(const Expr* a, const Expr* b) { (void)a; (void)b; return -2; }
 int   flint_qqbar_is_real(const Expr* e) { (void)e; return -1; }
+int   flint_qqbar_part_sign(const Expr* e, int imag) { (void)e; (void)imag; return -2; }
 Expr* flint_qqbar_algebraic_number(const Expr* g, const Expr* c) { (void)g; (void)c; return NULL; }
 Expr* flint_qqbar_to_number_field(const Expr* a, const Expr* t) { (void)a; (void)t; return NULL; }
 Expr* flint_qqbar_to_number_field_self(const Expr* x) { (void)x; return NULL; }
@@ -2259,5 +3522,16 @@ Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen) { (void)gen; return NULL; 
 Expr* flint_qqbar_nf_mat_rref(Expr** flat, int r, int c) {
     (void)flat; (void)r; (void)c; return NULL;
 }
+
+int   flint_qqbar_alg_mat_solve(Expr* const* A, int r, int c, Expr* const* B, int k, Expr*** out) {
+    (void)A; (void)r; (void)c; (void)B; (void)k; (void)out; return 0;
+}
+Expr* flint_qqbar_alg_mat_rref(Expr* const* f, int r, int c) { (void)f; (void)r; (void)c; return NULL; }
+Expr* flint_qqbar_alg_mat_det(Expr* const* f, int n) { (void)f; (void)n; return NULL; }
+Expr* flint_qqbar_alg_mat_inverse(Expr* const* f, int n, int* s) { (void)f; (void)n; if (s) *s = 0; return NULL; }
+struct FlintAlgField { int unused; };
+FlintAlgField* flint_qqbar_alg_field_new(Expr* const* e, size_t n) { (void)e; (void)n; return NULL; }
+int   flint_qqbar_alg_field_is_zero(FlintAlgField* A, const Expr* e) { (void)A; (void)e; return -1; }
+void  flint_qqbar_alg_field_free(FlintAlgField* A) { (void)A; }
 
 #endif /* USE_FLINT */

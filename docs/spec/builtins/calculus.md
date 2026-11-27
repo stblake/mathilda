@@ -1878,6 +1878,75 @@ monotonically down.
      controls that decline) is collected in
      [`GOURSAT_EXERCISES.md`](../../../GOURSAT_EXERCISES.md) and mirrored as the
      `test_graded` ladder in `tests/test_integrate_goursat.c`.
+  7b. `Integrate\`GeneralisedGoursat[f, x]` (`Method -> "GeneralisedGoursat"`, added
+     2026-11-27) — the root-free rewrite of item 7, written in Mathilda in
+     `src/internal/goursat/` as a function-for-function port of the sympy
+     reference `goursat.py` of the cube-root Goursat paper (2026-11-26). It is
+     reached only through the Method option or the method symbol; the cascade still
+     runs `GoursatAlgebraic` until the new method has been compared with it.
+     `f` must lie in `Q(x, R^(1/n))` (coefficients may be algebraic numbers) for one
+     squarefree radicand `R` of genus 1: `n = 2` with `deg R in {3, 4}`, `n = 3`
+     with `deg R in {2, 3}`, or `n = 4` with `R = a (x - e)^4 + b`. The integrand is
+     split into eigencomponents `G0 + Sum Gj y^j` (`y = R^(1/n)`), and each
+     `F dt/y^k` is reduced:
+     1. **Hermite reduction** on `y^n = R`: `F = A'R + (1 - k/n) A R' + P + N/D`,
+        one linear solve; the reduced form is unique, so it vanishes iff the
+        differential is exact.
+     2. **Symmetry reduction**, never computing the roots of `R`:
+        - `p = 1/2`: Goursat's order-3 substitution when `I(R) = 0`, then the three
+          involutions `S_theta`, indexed by the roots of the resolvent cubic (for
+          a cubic `R`, by its roots), each anti-invariant part descending to a
+          conic `v^2 = Q(X)`, `X = t + S(t)`, integrated through a rational
+          parameter that is a rational function of `t` and `y`. Goursat's
+          criterion `F0 = (F + Sum F o S)/4` is a trace over the cubic
+          (companion matrix). Over an **irreducible** resolvent cubic (which
+          `goursat.py` leaves unevaluated) the criterion is still decided over `Q`
+          by the trace, and the explicit reduction is attempted over the cubic
+          field: the piece over `Q(Root[res, 1])` by the generic RootSum route,
+          returned as `RootSum[res, piece(#)/2 &]` (or as the three conjugate
+          pieces) only when it verifies exactly and numerically, within 10 s.
+          Otherwise the elementary part stays an unevaluated integral, as in
+          `goursat.py`, and Integrate declines. (The rational integrator's
+          closed forms over `Q(Root[f, k])` are not used: they can hold for one
+          embedding of the root only, which `PossibleZeroQ` does not detect.)
+        - `p = 1/3, 2/3`: the decomposition over `Q(x0)`, `x0 = G/R`, through the
+          Hessian `H` and Jacobian `G`: the two components along the roots of
+          `H` (in `Q(Sqrt[-3 disc])`) through `u = y/(t - gamma)`, the odd part
+          of the obstruction through `w = H/y^2`.
+        - `p = 1/4, 3/4`: two of the four components of `F = Sum phi_j(z^4) z^j`
+          through `u = y` and `u = y/z`.
+     3. Hermite reduction of the residual and its **kind**: zero (elementary);
+        no residues (second kind: a proof of non-elementarity); residues (third
+        kind: undecided).
+     4. **Second level** for a third-kind residual: for `p = 1/2` it is a
+        function of `H/R` and again a square-root integral (multiplication by 2,
+        at most two levels); for `p = 1/3, 2/3` it is `Phi(w) dw/Sqrt[4 w^3 -
+        27 disc]`, a square-root integral on a `j = 0` curve.
+     The answer is written in `t` and the single radical `y`, and is **verified
+     exactly** before it is returned (`goursat/Verify.m`): formal differentiation
+     with `y' = R'/(n y^(n-1))`, every term reduced to its coefficient vector in
+     `Q(t)[y]/(y^n - R)`, a RootSum differentiated by Newton power sums (and a
+     nested one by a companion-matrix trace) rather than collapsed. Returns:
+     - an antiderivative, when the integral is elementary;
+     - `partial + Integrate[residual, x]` when the remaining integral is
+       certified non-elementary (the method symbol returns
+       `{"not elementary", partial, residual}`); the residual goes back through the
+       cascade, so `Integrate[(t^3 + 3)/Sqrt[t^4 + 1], t, Method ->
+       "GeneralisedGoursat"]` is `Sqrt[1 + t^4]/2` plus an `EllipticF` term;
+     - unevaluated when undecided, out of shape, or with no elementary part.
+     `Integrate\`$GeneralisedGoursatBudget` (default 30 s, `Infinity` for none)
+     bounds the method symbol; `GeneralisedGoursat\`$GoursatDebug = True` prints
+     each stage's wall time. The package also exports its building blocks
+     (`GoursatReduce`, `GoursatIntegrateAlgebraic`, `GoursatVerify`,
+     `GoursatHermite`, `GoursatClassify`, `GoursatF0`, `GoursatInvolutions`,
+     `GoursatCubicCovariants`, `GoursatQuarticCovariants`, `GoursatDescend`,
+     `GoursatCoords`, `GoursatNormalize`, `GoursatRationalIntegrate`).
+     Tests: `tests/test_integrate_generalised_goursat.c` (unit) and the nightly
+     `tests/test_generalised_goursat_stress.c`, which runs the 1,183 integrals of
+     `tests/data/generalised_goursat/` (exported from the research directory by
+     `tools/goursat/export_corpora.py`). `tools/goursat/compare.py` writes
+     `tests/data/generalised_goursat/REPORT.md`, the comparison with the sympy
+     reference and with item 7.
      - **Fresnel stage** (Automatic cascade, after the algebraic-radical
        stages — where Goursat sat before its v0.191 move to the end): a
        Gaussian-phase trig integrand `K Sin[a x^2 + b x + c]` or `K Cos[...]`
@@ -2123,7 +2192,58 @@ monotonically down.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:
   - `"Automatic"` — default cascade above.
-  - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
+  - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.  The list
+    form selects the algorithms of Bronstein, *Symbolic Integration I*, ch. 2:
+    `Method -> {"BronsteinRational", "Hermite" -> h, "LogPart" -> l, "RealForm" -> r}`
+    (each sub-option optional, `Automatic` by default; the same rules are
+    accepted as trailing options of `Integrate\`BronsteinRational`):
+    - `"Hermite"`: `"Linear"` (Mack's linear version, §2.2), `"Quadratic"`
+      (the original quadratic version, §2.2) or `"HorowitzOstrogradsky"`
+      (§2.3, one linear system).  Native FLINT (`fmpq_poly`, `fmpq_mat`) for
+      rational coefficients; parameters and algebraic numbers use the Expr
+      implementation of the linear version whatever is chosen.
+    - `"LogPart"`: `"LazardRiobooTrager"` (§2.5, subresultants),
+      `"RothsteinTrager"` (§2.4: the resultant factored over Q, then
+      gcd(D, A - a D') over each Q(a)) or `"Czichowski"` (§2.6: the reduced
+      lex Gröbner basis of (D, A - t D'), x > t, on the in-tree FLINT
+      engine).  RothsteinTrager and Czichowski are native for rational
+      coefficients and fall back to LazardRiobooTrager otherwise.
+    - `"RealForm"`: `"Rioboo"` (the real form for quadratic residue factors and
+      the sparse/biquadratic/palindromic shapes, else a RootSum), `"LogToReal"`
+      (Bronstein's general LogToReal, §2.8: the exact roots of every residue
+      factor (FLINT `qqbar`), `a Log[S(a, x)]` for a real root and
+      `u Log[A^2 + B^2] + v LogToAtan(A, B)` for `u + I v`, by Rioboo's
+      continuous LogToAtan; a coefficient past a quadratic surd is written as a
+      `Root` object) or `None` (no real form: `Sum RootSum[Q_i, # Log[S_i] &]`,
+      complex logarithms).  `Automatic` is `"Rioboo"`: on benchmark 266 the
+      general LogToReal (in radicals, kept only when smaller) never produced a
+      smaller answer than the shape dispatch or the RootSum the reference
+      keeps, and only cost time.  A real form exists only over a real
+      coefficient field (residues closed under conjugation): with a non-real
+      coefficient (`I`) every `"RealForm"` gives the complex log sum over the
+      residues, written out when each residue factor has degree at most 2
+      (a factor of higher degree keeps the RootSum over the denominator's
+      roots, closed in radicals only for the quadratic/biquadratic shapes).
+      The algebraic-constant pass writes a residue back in radicals only as a
+      square-root tower: never by the cubic or quartic formulas (a constant
+      already carrying such a root excepted), whose casus-irreducibilis forms
+      are large and sit on branch cuts through cancelling imaginary parts.
+    The `Automatic` choices were measured on all 36 combinations over
+    benchmark 266 (`benchmarks/266-rational-integration/REPORT.md`,
+    "Algorithm grid"): `"Hermite" -> "Linear"` (the three variants are within
+    noise of each other); `"LogPart"`: RothsteinTrager over Q while every
+    irreducible residue factor has degree at most 8, else Czichowski (4-5x
+    faster than either alternative on the high-degree irreducible families),
+    else LazardRiobooTrager (parameters, radicals, Root coefficients);
+    `"RealForm" -> "Rioboo"`.  The explicit `"LogToReal"`
+    declines (to `"Rioboo"`) for a residue factor of degree above 6 or with
+    coefficients past 256 bits, where exact root arithmetic cannot be
+    interrupted; Automatic's radical form is tried only up to degree 4.
+    `Integrate[(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4), x, Method ->
+    {"BronsteinRational", "LogPart" -> "Czichowski", "RealForm" -> None}]` is
+    `-I/2 Log[2 I - 3 x - I x^2 + x^3] + I/2 Log[-2 I - 3 x + I x^2 + x^3]`
+    (Bronstein's example 2.6.1); with `"RealForm" -> "LogToReal"` it is
+    Rioboo's continuous `ArcTan[x] + ArcTan[x^3] + ArcTan[(x - 3 x^3 + x^5)/2]`.
   - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
     the more thorough Eliminate/Solve branch search).  The list form
     `Method -> {"DerivativeDivides", "Substitution" -> u}` **pins** the kernel
@@ -2150,6 +2270,9 @@ monotonically down.
     binomial differential `x^p (a x^r + b)^q`).
   - `"GoursatAlgebraic"` — `Integrate\`GoursatAlgebraic[f, x]` (pseudo-elliptic
     `F/R^p`, `p` in `{1/2, 1/3, 2/3, 1/4, 3/4}`, via Mobius eigendescent).
+  - `"GeneralisedGoursat"` — `Integrate\`GeneralisedGoursat[f, x]` (the root-free
+    `.m` rewrite: Hermite reduction, covariant symmetry reductions, second level,
+    exact verification, and a certified non-elementary partial answer; item 7b).
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).

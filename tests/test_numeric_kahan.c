@@ -240,7 +240,12 @@ static const KCase CASES[] = {
     { "kagree[Sin[2^1000]]", NULL },
     { "kagree[Tan[Pi/2 - 10^-10] - 10^10]", NULL },
     { "kagree[Sinh[10^-20] - 10^-20]", NULL },
-    { "kagree[Log[10^1000 + 1] - 1000 Log[10]]", NULL },
+    /* Log[1 + 10^-1000] = 10^-1000 (1 - ...): ~3300 bits cancel, far past
+     * 20 + 50 digits. N[_, 20] and N[_, 40] both used to say
+     * -3.8968559511797*^-997 -- self-consistent and wrong, with no message.
+     * Within the default budget N::meprec; with room, the value. */
+    { "Check[N[Log[10^1000 + 1] - 1000 Log[10], 20], meprecFired] === meprecFired", NULL },
+    { "Block[{$MaxExtraPrecision = 1100}, Abs[N[Log[10^1000 + 1] - 1000 Log[10], 20] 10^1000 - 1] < 10^-18]", NULL },
     { "kagree[1 - Cos[1/10^10]]", NULL },
     { "kagree[Sqrt[1 + 10^-40] - 1]", NULL },
     { "N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 20] == 0", NULL },

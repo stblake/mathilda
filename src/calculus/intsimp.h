@@ -86,4 +86,9 @@ Expr* intsimp_reduce_algebraic_constants(Expr* e, Expr* x);
  * derived tree). */
 Expr* intsimp_finalize(Expr* r, Expr* x);
 
+/* The rational part g of a rational antiderivative in its most compact exact
+ * form: one fraction over the squarefree-factored denominator, partial
+ * fractions over Q, or g as given, by LeafCount.  Borrows g; owned result. */
+Expr* intsimp_compact_rational(Expr* g, Expr* x);
+
 #endif /* MATHILDA_INTSIMP_H */

@@ -1,0 +1,30 @@
+label	status	seconds	verified	unevaluated	residual
+Ex5.1  t/sqrt((t^2-1)(t^2-4))	elementary	0.0057	True	False	
+V4 generic: g-avg(g), g=1/(t-3)	elementary	0.0991	True	False	
+exact: d(t sqrt R)	DECLINE	0.0008		True	
+t/sqrt(t^3+1)	DECLINE	0.0666		True	
+Legendre-Clausen t/((t^3+8)sqrt(t^3-1))	DECLINE	6.0032		True	
+1/sqrt(t^4+1)	DECLINE	0.0015		True	
+(t^2-1)/((t^2+1)sqrt(t^4+1))	elementary	0.0148	True	False	
+Ex5.2  1/(t^3-1)^(1/3)	elementary	0.0588	True	False	
+Ex5.3  t^2/(t^3-1)^(1/3)	elementary	0.0537	True	False	
+Ex5.4  t/(t^3-1)^(1/3)	DECLINE	0.0310		True	
+CEX A  t(2t^3-1)/(t^3-1)^(1/3)	DECLINE	0.0311		True	
+CEX B  1/(t^3+t)^(1/3)	elementary	0.0672	True	False	
+CEX C  Ex5.5 piece t/((t^3+1)(t^3-1)^(1/3))	DECLINE	0.0274		True	
+Ex5.5  full	DECLINE	0.0345		True	
+Ex5.7  1/(t^2-1)^(1/3)	DECLINE	0.0160		True	
+(at+b)/(H R^(1/3)), R=(t-1)(t-2)(t-3)	DECLINE	6.0012		True	
+1/((t-1)(t-2)(t-3))^(1/3)	DECLINE	0.0628		True	
+1/(H R^(1/3)), R=2t^3-3t^2-3t+2	elementary	2.8350	True	False	
+1/(t^3-1)^(2/3)	DECLINE	0.0060		True	
+t/(t^3-1)^(2/3)	elementary	0.0410	True	False	
+CEX D  (2t^3-1)/(t^3-1)^(2/3)	DECLINE	0.0053		True	
+(t^3+1)/(t (t^3-1)^(2/3))  [odd in x0]	DECLINE	0.0070		True	
+t/((t-1)(t-2)(t-3))^(2/3)	DECLINE	0.0188		True	
+irreducible cubic: 1/(H (t^3+t+1)^(1/3))	elementary	5.4862	True	False	
+irreducible resolvent: (F - F0), F=1/(t-2), R=t^4+t+1	DECLINE	6.1278		True	
+1/sqrt(t^3+t+1)	DECLINE	2.2384		True	
+general cubic, no symmetry: 1/(t^3+t+1)^(1/3)	DECLINE	0.7658		True	
+1/(t^2+t+1)^(2/3)	DECLINE	0.0054		True	
+(t+1)/(t (t^2-1)^(1/3))	DECLINE	0.0082		True	

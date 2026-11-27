@@ -2148,6 +2148,7 @@ Under `Modulus -> m` a divisor whose leading coefficient is not a unit modulo
 - Default path uses polynomial long division over the field of rational functions in the coefficients.
 - Option `Extension -> alpha` (default `None`) lifts $p, q$ into $\mathbb{Q}(\alpha)[x]$ and runs the Q($\alpha$)-aware long division (`qaupoly_divrem`). Recognised forms for $\alpha$: `Sqrt[c]`, `c^(1/n)`, and `I`. `Extension -> None` and `Extension -> Automatic` are accepted and currently behave as the default. The extension path requires univariate input (a single live polynomial variable other than the alpha generator); multivariate inputs fall through to the standard path.
 - Threading Extension here keeps the polynomial arithmetic in the Q($\alpha$)[x] substrate and avoids the multivariate Q[$\alpha$, x] subresultant-PRS path that is exponentially slow on Sqrt[$\alpha$]-laden coefficients.
+- **Algebraic-number coefficients over a rational leading coefficient.** When the divisor's leading coefficient is rational and every coefficient is a constant algebraic number (rationals, radicals, `I`, `Root` objects, also inside denominators -- no free parameter), each division step only combines like terms. Whether a coefficient is zero is decided exactly, in the number field the coefficients' atoms generate. The coefficients are no longer put over a common denominator with `Together` / `Cancel`: that cannot reduce a `Root` object by its minimal polynomial, and it multiplied the denominators out at every step. The answer keeps the input's form of each coefficient. The same applies to `PolynomialRemainder` and `PolynomialQuotientRemainder`. A degree-12 dividend with coefficients rational in `Root[-1 - 4 #1 + #1^3 &, 1]`, over a monic degree-6 divisor, took over 20 s and now takes about 20 ms. A free parameter keeps the `Together` / `Cancel` step.
 
 ```mathematica
 In[1]:= PolynomialQuotient[x^4+2x+1, x^2+1, x]
@@ -2179,6 +2180,7 @@ Gives the remainder from dividing $p$ by $q$, treated as polynomials in $x$.
 - The degree of the result in $x$ is guaranteed to be smaller than the degree of $q$.
 - If the dividend is a multiple of the divisor, then the remainder is zero.
 - Option `Extension -> alpha`: see `PolynomialQuotient` for the recognised alpha forms and the fall-through rules.
+- Algebraic-number coefficients over a rational leading coefficient (radicals, `I`, `Root` objects, also in denominators) skip the per-step `Together` / `Cancel` and are zero-tested exactly, as for `PolynomialQuotient`.
 
 ```mathematica
 In[1]:= PolynomialRemainder[x^4+2x+1, x^2+1, x]

@@ -1093,11 +1093,12 @@ FirstKindBack[A_, g_, q_, first_] := Module[{z, kap, J0, Fs, Fa, alpha, beta},
    2026-11-12, five wrong answers).  With the REAL root as e3 the sign is one
    constant on the whole real domain; with three real roots the descending order
    already is.  So the orderings are tried in that preference and the first whose
-   sign takes ONE value at every real probe is kept (failing that, at every real
-   probe with q > 0), with sig that exact +-1.  F, E and Pi of the same (phi | mm) share the radical signature
+   sign takes ONE value at every real and complex probe is kept (CubicSign), with
+   sig that exact +-1; failing that, sig is the exact branch factor
+   (CubicBranchFactor), a locally constant +-1 FUNCTION, which keeps the form an
+   antiderivative on the whole plane.  F, E and Pi of the same (phi | mm) share the radical signature
    (dE = (1 - mm w) dF, dPi = dF/(1 - n w) exactly), so one sig serves all
-   three.  No ordering with a constant sign: None, and the caller leaves the
-   integral unevaluated rather than present a piecewise-wrong form. *)
+   three. *)
 CubicData[g_, q_] := Module[{lc, rts, real, cplx, orders, e1, e2, e3, lam, mm, phi, sig},
   lc = Coefficient[q, g, Exponent[q, g]];
   rts = RootsOf[q, g];
@@ -1108,28 +1109,45 @@ CubicData[g_, q_] := Module[{lc, rts, real, cplx, orders, e1, e2, e3, lam, mm, p
     cplx = Complement[rts, real];
     Join[If[Length[real] == 1, {Append[cplx, real[[1]]], Append[Reverse[cplx], real[[1]]]}, {}], Permutations[rts]]];
   orders = DeleteDuplicates[orders];
-  Do[Do[{e1, e2, e3} = ord;
-      lam = Sqrt[e1 - e3];
-      mm = Simplify[(e2 - e3)/(e1 - e3)];
-      phi = ArcSin[Sqrt[(e1 - e3)/(g - e3)]];
-      sig = CubicSign[g, q, lc, lam, mm, phi, whole];
-      If[sig =!= None, Return[{lc, e1, e2, e3, lam, mm, phi, sig}, Module]],
-      {ord, orders}],
-    {whole, {True, False}}];
-  None];
+  Do[{e1, e2, e3} = ord;
+    lam = Sqrt[e1 - e3];
+    mm = Simplify[(e2 - e3)/(e1 - e3)];
+    phi = ArcSin[Sqrt[(e1 - e3)/(g - e3)]];
+    sig = CubicSign[g, q, lc, lam, mm, phi];
+    If[sig =!= None, Return[{lc, e1, e2, e3, lam, mm, phi, sig}, Module]],
+    {ord, orders}];
+  (* no ordering has one sign on the whole plane: carry the sign as the exact
+     locally constant branch factor of the first ordering *)
+  {e1, e2, e3} = First[orders];
+  lam = Sqrt[e1 - e3];
+  mm = Simplify[(e2 - e3)/(e1 - e3)];
+  phi = ArcSin[Sqrt[(e1 - e3)/(g - e3)]];
+  sig = CubicBranchFactor[g, q, lc, lam, mm, phi];
+  If[sig === $Failed, None, {lc, e1, e2, e3, lam, mm, phi, sig}]];
 
-(* CubicSign[.., whole]: the constant +-1 that -2/(lam Sqrt[lc]) D[F(phi | mm), g]
-   Sqrt[q] takes at every real probe -- on the whole line when whole (the
-   kernel's samples may sit where q < 0 and it is imaginary; with complex roots
-   one ordering achieves this), otherwise where q > 0 -- or None *)
-CubicSign[g_, q_, lc_, lam_, mm_, phi_, whole_] := Module[{s, pts, vals},
-  s = QuietCheck[-2/(lam Sqrt[lc]) D[EllipticF[phi, mm], g] Sqrt[q], $Failed];
+(* CubicBranchFactor: the function s = -2/(lam Sqrt[lc]) D[F(phi | mm), g] Sqrt[q]
+   itself.  s^2 = 1 identically, so s is +-1 on every region where the radicals
+   are analytic, and s F differentiates to s^2 times the kernel: the Legendre
+   form times s is an antiderivative on the whole plane, not only where s = 1 *)
+CubicBranchFactor[g_, q_, lc_, lam_, mm_, phi_] :=
+  QuietCheck[-2/(lam Sqrt[lc]) D[EllipticF[phi, mm], g] Sqrt[q], $Failed];
+
+(* CubicSign: the constant +-1 that the branch factor takes at every probe --
+   the real probes and a spread of complex ones (the radicals' cuts can leave
+   the real line, so a sign that is one constant on the whole real line can
+   still flip off it: Int dx/Sqrt[(x - 1)(x - 3)(x + 3)], read as
+   I Sqrt[2] F(ArcSin[Sqrt[-2/(x - 3)]] | 3), is wrong at x = 1/3 + 2 I/7) --
+   or None *)
+$CubicComplexProbes = {1/3 + 2 I/7, 7/10 + I/3, -5/2 + 3 I/4, 5 - 2 I, -1 - I, 2 + 3 I/5,
+  -4 + I/9, 1/10 - 5 I/2, 11/3 + 7 I/4, -3/7 - I/8};
+CubicSign[g_, q_, lc_, lam_, mm_, phi_] := Module[{s, pts, vals},
+  s = CubicBranchFactor[g, q, lc, lam, mm, phi];
   If[s === $Failed, Return[None]];
-  pts = Select[Range[-60, 60]/7 + 1/101, whole || TrueQ[N[q /. g -> #] > 0] &];
+  pts = Join[Range[-60, 60]/7 + 1/101, $CubicComplexProbes];
   (* machine precision suffices: the value is +-1 or something else, never close *)
   vals = Select[Quiet[N[s /. g -> N[#]]] & /@ pts, NumericQ];
   Which[
-    Length[vals] < Min[3, Length[pts]] || vals === {}, None,
+    Length[vals] < 3, None,
     AllTrue[vals, Abs[# - 1] < 10^-8 &], 1,
     AllTrue[vals, Abs[# + 1] < 10^-8 &], -1,
     True, None]];
@@ -1507,7 +1525,20 @@ Finish[res0_, T_, verbose_, t0_, certified_: False, base_: None] := Module[{res 
   res];
 
 (* -------------------------------------------------------------- surface form (S9) *)
-Num[e_, x_, x0_] := N[e /. x -> x0, 30];
+(* Num[e, x, x0]: e at x0 to 30 digits, with every elliptic integral read ONCE
+   at 30 digits and the rest of e numericalised around that number.  The
+   derivative of a Legendre form c(x) F(phi | m) holds F only through c'(x) F,
+   and in a correct answer those terms cancel: the sum loses all of their
+   digits, so N's adaptive precision re-read the whole expression at 51, 80 and
+   100 digits -- and with it every copy of an EllipticPi whose characteristic
+   term 1 - n Sin[phi]^2 is negative, which Arb integrates numerically at an
+   erratic cost (0.008 s at 30 digits, 0.9 s at 40, 85 s at 300).  One reading
+   at 1/((x - 3) Sqrt[1 + x^3])'s x0 = 3/10 took 1.7 s, and VerifyAnswer and
+   FixBranch make dozens.  The value is unchanged to far below the 10^-15 the
+   callers compare at: an atom whose coefficient cancels contributes
+   0 * (30 digits), and one whose coefficient does not keeps 30 digits. *)
+$NumAtom = _EllipticF | _EllipticE | _EllipticPi | _EllipticK;
+Num[e_, x_, x0_] := N[(e /. x -> x0) /. a : $NumAtom :> N[a, 30], 30];
 
 (* the symbol of the radical among the back rules (the first Y-symbol, as the
    first Dummy of build_tower's back list) *)
@@ -1584,14 +1615,17 @@ PresentSpecial[res_, integrandN_, x_, T_, back_, samples_, strict_, verbose_, de
 
 (* FixBranch[anti, kern, x, samples, K]: anti up to a root of unity / sign: the
    multiplier making d anti / dx = kern at the sample points *)
-FixBranch[anti_, kern_, x_, samples_, K_] := Module[{mults = {1, -1, I, -I}, k, d, ok, a, b},
+FixBranch[anti_, kern_, x_, samples_, K_] := Module[{mults = {1, -1, I, -I}, k, d, ok, a, b, dv = <||>, kv = <||>},
   If[K["kind"] === "gamma" && K["s"] =!= 0,
     k = Denominator[K["s"]];
     mults = Join[mults, Table[Exp[2 Pi I j/k], {j, 1, k - 1}]]];
   d = QuietCheck[D[anti, x], $Failed];
   If[d === $Failed, Return[None]];
+  (* d and kern are read once per sample, not once per multiplier: mu is an
+     exact root of unity, so mu Num[d] is Num[mu d] to the digits compared *)
   Do[ok = True;
-    Do[a = Quiet[Num[mu d, x, x0]]; b = Quiet[Num[kern, x, x0]];
+    Do[If[! KeyExistsQ[dv, x0], dv[x0] = Quiet[Num[d, x, x0]]; kv[x0] = Quiet[Num[kern, x, x0]]];
+      a = If[NumericQ[dv[x0]], N[mu, 30] dv[x0], dv[x0]]; b = kv[x0];
       If[! NumericQ[a] || ! NumericQ[b] || Abs[a - b] > 10^-15 (1 + Abs[b]), ok = False; Break[]],
       {x0, samples}];
     If[ok, Return[mu anti, Module]],
@@ -1610,16 +1644,30 @@ FixBranch[anti_, kern_, x_, samples_, K_] := Module[{mults = {1, -1, I, -I}, k, 
    ArcSin[Sqrt[x+1]]/Sqrt[x], whose surface is 2 Sqrt[x] ArcSin[Sqrt[1+x]]
    - 2 I Sqrt[1+x] where the antiderivative has +2 I Sqrt[1+x]. *)
 ConjugateIfBetter[e_, integrand_, x_, samples_] := Module[{ver, ec, er},
-  ver = VerifyAnswer[e, integrand, x, samples];
+  ver = TrueQ[VerifyAnswer[e, integrand, x, samples]] && ComplexSoundQ[e, integrand, x];
   If[ver, Return[{e, ver}]];
   If[! FreeQ[e, _Complex],
     ec = e /. Complex[re_, im_] :> Complex[re, -im];
-    If[TrueQ[VerifyAnswer[ec, integrand, x, samples]], Return[{ec, True}]]];
+    If[TrueQ[VerifyAnswer[ec, integrand, x, samples]] && ComplexSoundQ[ec, integrand, x],
+      Return[{ec, True}]]];
   (* the branch of the whole answer against the SURFACE integrand: a locally
      constant ratio (LocalBranchRatio) times e, accepted on the same evidence *)
   er = LocalBranchFix[e, integrand, x];
-  If[er =!= None && TrueQ[VerifyAnswer[er, integrand, x, samples]], Return[{er, True}]];
-  {e, ver}];
+  If[er =!= None && TrueQ[VerifyAnswer[er, integrand, x, samples]] && ComplexSoundQ[er, integrand, x],
+    Return[{er, True}]];
+  {e, False}];
+
+(* ComplexSoundQ: d e/dx == integrand as functions on the whole complex plane,
+   by PossibleZeroQ with x complex.  VerifyAnswer's points are all real, and a
+   form whose radicals read their principal branches can agree with the
+   integrand on the entire real line yet be wrong off it: the Legendre form
+   I Sqrt[2] EllipticF[ArcSin[Sqrt[-2/(x - 3)]], 3] of
+   Int dx/Sqrt[(x - 1)(x - 3)(x + 3)] (CubicData picks the ordering whose sign is
+   one constant at every REAL probe) is wrong at x = 1/3 + 2 I/7, where the
+   branch factor of its kernel flips.  LocalBranchFix's locally constant ratio
+   repairs exactly that, so it is tried before the answer is given up. *)
+ComplexSoundQ[e_, integrand_, x_] := TrueQ[Quiet[
+  PossibleZeroQ[D[e, x] - integrand, Assumptions -> Element[x, Complexes]]]];
 
 (* LocalBranchFix[e, f, x]: rho e when rho = f / (de/dx) is locally constant
    -- rho^n a nonzero constant for some small n, so rho is constant on every

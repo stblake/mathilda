@@ -115,6 +115,8 @@ void test_cancel_algebraic_generator() {
        num/den extracted directly) to produce y^(1/3)/(y - 1). */
     run_test("Cancel[1/(y^(2/3) - 1/y^(1/3))]",
              "Times[Power[Plus[-1, y], -1], Power[y, Rational[1, 3]]]");
+    run_test("Together[1/(y^(2/3) - 1/y^(1/3))]",
+             "Times[Power[Plus[-1, y], -1], Power[y, Rational[1, 3]]]");
 
     /* y^(73/24) / (y^(2/3) - 1/y^(1/3)) -- same shape with a non-trivial
        numerator. Substituting y = g^24 gives g^73 / (g^16 - 1/g^8) =
@@ -179,10 +181,14 @@ void test_together_algebraic_generator() {
      * coefficient -2 Sqrt5 by the rational 2. Before the fix that division
      * returned NULL (it required BOTH operands rational), so the whole sum was
      * left uncombined for any coefficient != 1. */
+    /* The denominator over its pieces, as the reference:
+     * (-2 Sqrt[5])/((Sqrt[5] - 2 x) (Sqrt[5] + 2 x)). */
     run_test("Together[1/(2 x - Sqrt[5]) - 1/(2 x + Sqrt[5])]",
-             "Times[2, Power[5, Rational[1, 2]], Power[Plus[-5, Times[4, Power[x, 2]]], -1]]");
+             "Times[2, Power[5, Rational[1, 2]], Power[Plus[Times[-1, Power[5, Rational[1, 2]]], Times[2, x]], -1], "
+             "Power[Plus[Power[5, Rational[1, 2]], Times[2, x]], -1]]");
     run_test("Together[1/(3 x - Sqrt[5]) - 1/(3 x + Sqrt[5])]",
-             "Times[2, Power[5, Rational[1, 2]], Power[Plus[-5, Times[9, Power[x, 2]]], -1]]");
+             "Times[2, Power[5, Rational[1, 2]], Power[Plus[Times[-1, Power[5, Rational[1, 2]]], Times[3, x]], -1], "
+             "Power[Plus[Power[5, Rational[1, 2]], Times[3, x]], -1]]");
 }
 
 /* Together / Cancel over transcendental-kernel generators (Log, Exp,
@@ -227,10 +233,11 @@ void test_together() {
     run_test("Together[1/(x - I) + 1/(x + I)]",
              "Times[2, x, Power[Plus[Complex[0, -1], x], -1], Power[Plus[Complex[0, 1], x], -1]]");
     /* Complex coefficient over a real denominator (the undetermined-coefficient shape). */
+    /* the denominator over its pieces, as the reference:
+     * (-2 a - I b + a x + I b x)/((-2 + x) (-1 + x)) */
     run_test("Together[a/(x - 1) + I b/(x - 2)]",
-             "Times[Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], "
-             "Times[Complex[0, 1], b, x]], "
-             "Power[Plus[2, Times[-3, x], Power[x, 2]], -1]]");
+             "Times[Power[Plus[-2, x], -1], Power[Plus[-1, x], -1], "
+             "Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], Times[Complex[0, 1], b, x]]]");
 }
 
 /* Issue #113: a sum with no denominators still has its numerator expanded, so

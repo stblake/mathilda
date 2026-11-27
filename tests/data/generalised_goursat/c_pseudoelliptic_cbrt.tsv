@@ -1,0 +1,119 @@
+label	status	seconds	verified	unevaluated	residual
+pseudoelliptic-cbrt #0: ((x - 3*I)^(-1))/(x^2 + 1)^(1/3)	DECLINE	0.0120		True	
+pseudoelliptic-cbrt #1: ((x + 3*I)^(-1))/(x^2 + 1)^(1/3)	DECLINE	0.0089		True	
+pseudoelliptic-cbrt #2: ((x + 3*I)^(-1))/(x^2 - 3)^(1/3)	DECLINE	6.1054		True	
+pseudoelliptic-cbrt #3: ((x - 3*I)^(-1))/(x^2 - 3)^(1/3)	elementary	0.2786	True	False	
+pseudoelliptic-cbrt #4: ((x + I)^(-1))/(x^3 - 3*x)^(1/3)	elementary	1.2681	True	False	
+pseudoelliptic-cbrt #5: ((x - I)^(-1))/(x^3 - 3*x)^(1/3)	elementary	0.1679	True	False	
+pseudoelliptic-cbrt #6: (x/(x + I))/(x^3 - 3*x)^(1/3)	DECLINE	0.0374		True	
+pseudoelliptic-cbrt #7: (x/(x - I))/(x^3 - 3*x)^(1/3)	DECLINE	0.0383		True	
+pseudoelliptic-cbrt #8: ((x - I)/(x + I))/(x^3 - 3*x)^(1/3)	DECLINE	0.0388		True	
+pseudoelliptic-cbrt #9: ((x + I)/(x - I))/(x^3 - 3*x)^(1/3)	DECLINE	0.0358		True	
+pseudoelliptic-cbrt #10: ((x - I)/(x + I))/(x^3 - 3*x)^(2/3)	elementary	2.8731	True	False	
+pseudoelliptic-cbrt #11: ((x + I)/(x - I))/(x^3 - 3*x)^(2/3)	elementary	0.9354	True	False	
+pseudoelliptic-cbrt #12: ((x + Sqrt[3]*I)^(-1))/(x^2 - 1)^(1/3)	elementary	0.3372	True	False	
+pseudoelliptic-cbrt #13: ((x - Sqrt[3]*I)^(-1))/(x^2 - 1)^(1/3)	elementary	0.1443	True	False	
+pseudoelliptic-cbrt #14: ((x + 3*Sqrt[3])^(-1))/(x^2 - 3)^(1/3)	DECLINE	0.0072		True	
+pseudoelliptic-cbrt #15: ((x - 3*Sqrt[3])^(-1))/(x^2 - 3)^(1/3)	DECLINE	0.0074		True	
+pseudoelliptic-cbrt #16: ((x - 3*I)/(x + 3*I))/(x^2 - 3)^(2/3)	DECLINE	6.0808		True	
+pseudoelliptic-cbrt #17: ((x + 3*I)/(x - 3*I))/(x^2 - 3)^(2/3)	elementary	0.1853	True	False	
+pseudoelliptic-cbrt #18: ((x + 3*Sqrt[3]*I)^(-1))/(x^2 + 3)^(1/3)	DECLINE	0.0121		True	
+pseudoelliptic-cbrt #19: ((x - 3*Sqrt[3]*I)^(-1))/(x^2 + 3)^(1/3)	DECLINE	0.0127		True	
+pseudoelliptic-cbrt #20: ((x + 1 + Sqrt[3]*I)^(-1))/(x^3 + 8)^(1/3)	DECLINE	0.0619		True	
+pseudoelliptic-cbrt #21: ((x + 1 - Sqrt[3]*I)^(-1))/(x^3 + 8)^(1/3)	DECLINE	0.0618		True	
+pseudoelliptic-cbrt #22: (x/(x + 1 + Sqrt[3]*I))/(x^3 + 8)^(1/3)	DECLINE	0.0626		True	
+pseudoelliptic-cbrt #23: (x/(x + 1 - Sqrt[3]*I))/(x^3 + 8)^(1/3)	DECLINE	0.0565		True	
+pseudoelliptic-cbrt #24: ((x - 1 + Sqrt[3]*I)^(-1))/(x^3 - 8)^(1/3)	DECLINE	0.0532		True	
+pseudoelliptic-cbrt #25: ((x - 1 - Sqrt[3]*I)^(-1))/(x^3 - 8)^(1/3)	DECLINE	0.0564		True	
+pseudoelliptic-cbrt #26: (x/(x - 1 + Sqrt[3]*I))/(x^3 - 8)^(1/3)	DECLINE	0.0559		True	
+pseudoelliptic-cbrt #27: (x/(x - 1 - Sqrt[3]*I))/(x^3 - 8)^(1/3)	DECLINE	0.0570		True	
+pseudoelliptic-cbrt #28: (3/(3*x - Sqrt[3]*I))/(x^3 - x)^(1/3)	elementary	0.4885	True	False	
+pseudoelliptic-cbrt #29: (3/(3*x + Sqrt[3]*I))/(x^3 - x)^(1/3)	DECLINE	6.0848		True	
+pseudoelliptic-cbrt #30: (2/(2*x - 1 - Sqrt[3]*I))/(x^2 - x)^(1/3)	elementary	0.1882	True	False	
+pseudoelliptic-cbrt #31: (2/(2*x - 1 + Sqrt[3]*I))/(x^2 - x)^(1/3)	elementary	0.1792	True	False	
+pseudoelliptic-cbrt #32: (2/(2*x + 1 - Sqrt[3]*I))/(x^3 + 1)^(1/3)	DECLINE	0.0355		True	
+pseudoelliptic-cbrt #33: (2/(2*x + 1 + Sqrt[3]*I))/(x^3 + 1)^(1/3)	DECLINE	0.0410		True	
+pseudoelliptic-cbrt #34: (3/(3*x - Sqrt[3]*I))/(x^3 + 3*x)^(1/3)	DECLINE	0.0340		True	
+pseudoelliptic-cbrt #35: (3/(3*x + Sqrt[3]*I))/(x^3 + 3*x)^(1/3)	DECLINE	0.0387		True	
+pseudoelliptic-cbrt #36: (2/(2*x - 1 - Sqrt[3]*I))/(x^3 - 1)^(1/3)	DECLINE	0.0493		True	
+pseudoelliptic-cbrt #37: (2/(2*x - 1 + Sqrt[3]*I))/(x^3 - 1)^(1/3)	DECLINE	0.0547		True	
+pseudoelliptic-cbrt #38: (3*x/(3*x - Sqrt[3]*I))/(x^3 - x)^(1/3)	DECLINE	0.0362		True	
+pseudoelliptic-cbrt #39: (3*x/(3*x + Sqrt[3]*I))/(x^3 - x)^(1/3)	DECLINE	0.0337		True	
+pseudoelliptic-cbrt #40: (2*x/(2*x + 1 - Sqrt[3]*I))/(x^3 + 1)^(1/3)	DECLINE	0.0426		True	
+pseudoelliptic-cbrt #41: (2*x/(2*x + 1 + Sqrt[3]*I))/(x^3 + 1)^(1/3)	DECLINE	0.0410		True	
+pseudoelliptic-cbrt #42: (3*x/(3*x - Sqrt[3]*I))/(x^3 + 3*x)^(1/3)	DECLINE	0.0406		True	
+pseudoelliptic-cbrt #43: (3*x/(3*x + Sqrt[3]*I))/(x^3 + 3*x)^(1/3)	DECLINE	0.0364		True	
+pseudoelliptic-cbrt #44: (2*x/(2*x - 1 - Sqrt[3]*I))/(x^3 - 1)^(1/3)	DECLINE	0.0476		True	
+pseudoelliptic-cbrt #45: (2*x/(2*x - 1 + Sqrt[3]*I))/(x^3 - 1)^(1/3)	DECLINE	0.0433		True	
+pseudoelliptic-cbrt #46: (2/(2*x + 1 - 3*Sqrt[3]*I))/(x^2 + x + 1)^(1/3)	DECLINE	0.0108		True	
+pseudoelliptic-cbrt #47: (2/(2*x + 1 + 3*Sqrt[3]*I))/(x^2 + x + 1)^(1/3)	DECLINE	0.0108		True	
+pseudoelliptic-cbrt #48: ((x - Sqrt[3]*I)/(x + Sqrt[3]*I))/(x^2 - 1)^(2/3)	DECLINE	6.0640		True	
+pseudoelliptic-cbrt #49: ((x + Sqrt[3]*I)/(x - Sqrt[3]*I))/(x^2 - 1)^(2/3)	DECLINE	6.0310		True	
+pseudoelliptic-cbrt #50: (2/(2*x - 1 - Sqrt[3]*I))/(x^3 - 3*x + 1)^(1/3)	elementary	1.3667	True	False	
+pseudoelliptic-cbrt #51: (2/(2*x - 1 + Sqrt[3]*I))/(x^3 - 3*x + 1)^(1/3)	elementary	1.5145	True	False	
+pseudoelliptic-cbrt #52: (14/(14*x + 1 + 3*Sqrt[3]*I))/(x^3 + x^2 + x)^(1/3)	DECLINE	0.0620		True	
+pseudoelliptic-cbrt #53: (14/(14*x + 1 - 3*Sqrt[3]*I))/(x^3 + x^2 + x)^(1/3)	DECLINE	0.0620		True	
+pseudoelliptic-cbrt #54: (14/(14*x - 1 - 3*Sqrt[3]*I))/(x^3 - x^2 + x)^(1/3)	DECLINE	0.0621		True	
+pseudoelliptic-cbrt #55: (14/(14*x - 1 + 3*Sqrt[3]*I))/(x^3 - x^2 + x)^(1/3)	DECLINE	0.0596		True	
+pseudoelliptic-cbrt #56: ((x - 1 - Sqrt[3]*I)/(x + 1 + Sqrt[3]*I))/(x^3 + 8)^(1/3)	DECLINE	0.0300		True	
+pseudoelliptic-cbrt #57: ((x - 1 + Sqrt[3]*I)/(x + 1 - Sqrt[3]*I))/(x^3 + 8)^(1/3)	DECLINE	0.0264		True	
+pseudoelliptic-cbrt #58: ((x - 1 - Sqrt[3]*I)/(x + 1 + Sqrt[3]*I))/(x^3 + 8)^(2/3)	DECLINE	0.0116		True	
+pseudoelliptic-cbrt #59: ((x - 1 + Sqrt[3]*I)/(x + 1 - Sqrt[3]*I))/(x^3 + 8)^(2/3)	DECLINE	0.0107		True	
+pseudoelliptic-cbrt #60: (3/(3*x - 3 - Sqrt[3]*I))/(x^3 - 3*x^2 + 2*x)^(1/3)	elementary	0.2697	True	False	
+pseudoelliptic-cbrt #61: (3/(3*x - 3 + Sqrt[3]*I))/(x^3 - 3*x^2 + 2*x)^(1/3)	DECLINE	6.0761		True	
+pseudoelliptic-cbrt #62: (2/(2*x - 1 - Sqrt[3]*I))/(x^3 - 3*x^2 + 3*x)^(1/3)	DECLINE	0.0344		True	
+pseudoelliptic-cbrt #63: (2/(2*x - 1 + Sqrt[3]*I))/(x^3 - 3*x^2 + 3*x)^(1/3)	DECLINE	0.0374		True	
+pseudoelliptic-cbrt #64: ((x + 1 - Sqrt[3]*I)/(x - 1 + Sqrt[3]*I))/(x^3 - 8)^(1/3)	DECLINE	0.0320		True	
+pseudoelliptic-cbrt #65: ((x + 1 + Sqrt[3]*I)/(x - 1 - Sqrt[3]*I))/(x^3 - 8)^(1/3)	DECLINE	0.0249		True	
+pseudoelliptic-cbrt #66: ((x + 1 - Sqrt[3]*I)/(x - 1 + Sqrt[3]*I))/(x^3 - 8)^(2/3)	DECLINE	0.0099		True	
+pseudoelliptic-cbrt #67: ((x + 1 + Sqrt[3]*I)/(x - 1 - Sqrt[3]*I))/(x^3 - 8)^(2/3)	DECLINE	0.0103		True	
+pseudoelliptic-cbrt #68: ((3*x - Sqrt[3]*I)/(3*x + Sqrt[3]*I))/(x^3 - x)^(1/3)	DECLINE	0.0256		True	
+pseudoelliptic-cbrt #69: ((3*x + Sqrt[3]*I)/(3*x - Sqrt[3]*I))/(x^3 - x)^(1/3)	DECLINE	0.0284		True	
+pseudoelliptic-cbrt #70: ((3*x - Sqrt[3]*I)/(3*x + Sqrt[3]*I))/(x^3 - x)^(2/3)	DECLINE	6.0837		True	
+pseudoelliptic-cbrt #71: ((3*x + Sqrt[3]*I)/(3*x - Sqrt[3]*I))/(x^3 - x)^(2/3)	DECLINE	6.0705		True	
+pseudoelliptic-cbrt #72: ((3*x + Sqrt[3]*I)/(3*x - Sqrt[3]*I))/(x^3 + 3*x)^(1/3)	DECLINE	0.0290		True	
+pseudoelliptic-cbrt #73: ((3*x - Sqrt[3]*I)/(3*x + Sqrt[3]*I))/(x^3 + 3*x)^(1/3)	DECLINE	0.0258		True	
+pseudoelliptic-cbrt #74: (2/(2*x + 3 - Sqrt[3]*I))/(x^3 + 3*x^2 + 3*x + 2)^(1/3)	DECLINE	0.0637		True	
+pseudoelliptic-cbrt #75: (2/(2*x + 3 + Sqrt[3]*I))/(x^3 + 3*x^2 + 3*x + 2)^(1/3)	DECLINE	0.0633		True	
+pseudoelliptic-cbrt #76: (3*x/(3*x - 3 - Sqrt[3]*I))/(x^3 - 3*x^2 + 2*x)^(1/3)	DECLINE	0.0418		True	
+pseudoelliptic-cbrt #77: (3*x/(3*x - 3 + Sqrt[3]*I))/(x^3 - 3*x^2 + 2*x)^(1/3)	DECLINE	0.0417		True	
+pseudoelliptic-cbrt #78: (2*x/(2*x - 1 - Sqrt[3]*I))/(x^3 - 3*x^2 + 3*x)^(1/3)	DECLINE	0.0351		True	
+pseudoelliptic-cbrt #79: (2*x/(2*x - 1 + Sqrt[3]*I))/(x^3 - 3*x^2 + 3*x)^(1/3)	DECLINE	0.0353		True	
+pseudoelliptic-cbrt #80: (3/(3*x - 6 - Sqrt[3]*I))/(x^3 - 6*x^2 + 11*x - 6)^(1/3)	elementary	0.2766	True	False	
+pseudoelliptic-cbrt #81: (3/(3*x - 6 + Sqrt[3]*I))/(x^3 - 6*x^2 + 11*x - 6)^(1/3)	DECLINE	6.0429		True	
+pseudoelliptic-cbrt #82: ((2*x - 1 + Sqrt[3]*I)/(2*x + 1 - Sqrt[3]*I))/(x^3 + 1)^(1/3)	DECLINE	0.0230		True	
+pseudoelliptic-cbrt #83: ((2*x - 1 - Sqrt[3]*I)/(2*x + 1 + Sqrt[3]*I))/(x^3 + 1)^(1/3)	DECLINE	0.0222		True	
+pseudoelliptic-cbrt #84: ((2*x - 1 - Sqrt[3]*I)/(2*x + 1 + Sqrt[3]*I))/(x^3 + 1)^(2/3)	DECLINE	0.0075		True	
+pseudoelliptic-cbrt #85: ((2*x - 1 + Sqrt[3]*I)/(2*x + 1 - Sqrt[3]*I))/(x^3 + 1)^(2/3)	DECLINE	0.0074		True	
+pseudoelliptic-cbrt #86: (2*x/(2*x + 3 - Sqrt[3]*I))/(x^3 + 3*x^2 + 3*x + 2)^(1/3)	DECLINE	0.0635		True	
+pseudoelliptic-cbrt #87: (2*x/(2*x + 3 + Sqrt[3]*I))/(x^3 + 3*x^2 + 3*x + 2)^(1/3)	DECLINE	0.0620		True	
+pseudoelliptic-cbrt #88: ((2*x + 1 + Sqrt[3]*I)/(2*x - 1 - Sqrt[3]*I))/(x^3 - 1)^(1/3)	DECLINE	0.0227		True	
+pseudoelliptic-cbrt #89: ((2*x + 1 - Sqrt[3]*I)/(2*x - 1 + Sqrt[3]*I))/(x^3 - 1)^(1/3)	DECLINE	0.0227		True	
+pseudoelliptic-cbrt #90: (3*x/(3*x - 6 - Sqrt[3]*I))/(x^3 - 6*x^2 + 11*x - 6)^(1/3)	DECLINE	0.0567		True	
+pseudoelliptic-cbrt #91: (3*x/(3*x - 6 + Sqrt[3]*I))/(x^3 - 6*x^2 + 11*x - 6)^(1/3)	DECLINE	0.0551		True	
+pseudoelliptic-cbrt #92: ((x^2 + 2 + 2*Sqrt[3]*I)/(x^2 - 2 - 2*Sqrt[3]*I))/(x^3 + 8)^(2/3)	DECLINE	0.0105		True	
+pseudoelliptic-cbrt #93: ((x^2 + 2 - 2*Sqrt[3]*I)/(x^2 - 2 + 2*Sqrt[3]*I))/(x^3 + 8)^(2/3)	DECLINE	0.0105		True	
+pseudoelliptic-cbrt #94: ((x^2 + 2 + 2*Sqrt[3]*I)/(x^2 - 2 - 2*Sqrt[3]*I))/(x^3 - 8)^(2/3)	DECLINE	0.0092		True	
+pseudoelliptic-cbrt #95: ((x^2 + 2 - 2*Sqrt[3]*I)/(x^2 - 2 + 2*Sqrt[3]*I))/(x^3 - 8)^(2/3)	DECLINE	0.0092		True	
+pseudoelliptic-cbrt #96: ((3*x + 3 + Sqrt[3]*I)/(3*x - 3 - Sqrt[3]*I))/(x^3 - 3*x^2 + 2*x)^(1/3)	DECLINE	0.0392		True	
+pseudoelliptic-cbrt #97: ((3*x + 3 - Sqrt[3]*I)/(3*x - 3 + Sqrt[3]*I))/(x^3 - 3*x^2 + 2*x)^(1/3)	DECLINE	0.0404		True	
+pseudoelliptic-cbrt #98: ((2*x + 1 + Sqrt[3]*I)/(2*x - 1 - Sqrt[3]*I))/(x^3 - 3*x^2 + 3*x)^(1/3)	DECLINE	0.0345		True	
+pseudoelliptic-cbrt #99: ((2*x + 1 - Sqrt[3]*I)/(2*x - 1 + Sqrt[3]*I))/(x^3 - 3*x^2 + 3*x)^(1/3)	DECLINE	0.0336		True	
+pseudoelliptic-cbrt #100: ((2*x - 3 + Sqrt[3]*I)/(2*x + 3 - Sqrt[3]*I))/(x^3 + 3*x^2 + 3*x + 2)^(1/3)	DECLINE	0.0536		True	
+pseudoelliptic-cbrt #101: ((2*x - 3 - Sqrt[3]*I)/(2*x + 3 + Sqrt[3]*I))/(x^3 + 3*x^2 + 3*x + 2)^(1/3)	DECLINE	0.0552		True	
+pseudoelliptic-cbrt #102: ((3*x + 6 + Sqrt[3]*I)/(3*x - 6 - Sqrt[3]*I))/(x^3 - 6*x^2 + 11*x - 6)^(1/3)	DECLINE	0.0425		True	
+pseudoelliptic-cbrt #103: ((3*x + 6 - Sqrt[3]*I)/(3*x - 6 + Sqrt[3]*I))/(x^3 - 6*x^2 + 11*x - 6)^(1/3)	DECLINE	0.0426		True	
+pseudoelliptic-cbrt #104: (1)/(x^3 + 1)^(1/3)	elementary	0.0275	True	False	
+pseudoelliptic-cbrt #105: (1)/(x^3 + 2)^(1/3)	elementary	0.0271	True	False	
+pseudoelliptic-cbrt #106: (1)/(x^3 + 4)^(1/3)	elementary	0.0273	True	False	
+pseudoelliptic-cbrt #107: (1)/(x^3 + 8)^(1/3)	elementary	0.0281	True	False	
+pseudoelliptic-cbrt #108: (1)/(x^3 + x)^(1/3)	elementary	0.0317	True	False	
+pseudoelliptic-cbrt #109: (1)/(x^3 - 1)^(1/3)	elementary	0.0283	True	False	
+pseudoelliptic-cbrt #110: (1)/(x^3 - 8)^(1/3)	elementary	0.0266	True	False	
+pseudoelliptic-cbrt #111: (1)/(x^3 - x)^(1/3)	elementary	0.0327	True	False	
+pseudoelliptic-cbrt #112: (x^(-1))/(x^3 + 1)^(1/3)	elementary	0.0389	True	False	
+pseudoelliptic-cbrt #113: (x^(-1))/(x^3 + 1)^(2/3)	elementary	0.0272	True	False	
+pseudoelliptic-cbrt #114: (x^(-1))/(x^3 - 1)^(1/3)	elementary	0.0392	True	False	
+pseudoelliptic-cbrt #115: (x^(-1))/(x^3 - 1)^(2/3)	elementary	0.0284	True	False	
+pseudoelliptic-cbrt #116: (x^(-1))/(x^3 - 2)^(1/3)	elementary	0.3033	True	False	
+pseudoelliptic-cbrt #117: (x^(-1))/(x^3 - 2)^(2/3)	elementary	0.1749	True	False	

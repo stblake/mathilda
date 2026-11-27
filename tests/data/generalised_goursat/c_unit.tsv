@@ -1,0 +1,129 @@
+label	status	seconds	verified	unevaluated	residual
+Chebyshev t^-5/(t^3-1)^(1/3)	DECLINE	0.0286		True	
+Chebyshev t^-4/(t^3-1)^(1/3)	elementary	0.0753	True	False	
+Chebyshev t^-3/(t^3-1)^(1/3)	elementary	0.0588	True	False	
+Chebyshev t^-2/(t^3-1)^(1/3)	DECLINE	0.0275		True	
+Chebyshev t^-1/(t^3-1)^(1/3)	elementary	0.0635	True	False	
+Chebyshev t^0/(t^3-1)^(1/3)	elementary	0.0486	True	False	
+Chebyshev t^1/(t^3-1)^(1/3)	DECLINE	0.0274		True	
+Chebyshev t^2/(t^3-1)^(1/3)	elementary	0.0411	True	False	
+Chebyshev t^3/(t^3-1)^(1/3)	elementary	0.0646	True	False	
+Chebyshev t^4/(t^3-1)^(1/3)	DECLINE	0.0268		True	
+Chebyshev t^5/(t^3-1)^(1/3)	elementary	0.0541	True	False	
+Chebyshev t^6/(t^3-1)^(1/3)	elementary	0.0702	True	False	
+Chebyshev t^7/(t^3-1)^(1/3)	DECLINE	0.0291		True	
+Chebyshev t^-5/(t^3-1)^(2/3)	elementary	0.0435	True	False	
+Chebyshev t^-4/(t^3-1)^(2/3)	elementary	0.0565	True	False	
+Chebyshev t^-3/(t^3-1)^(2/3)	DECLINE	0.0081		True	
+Chebyshev t^-2/(t^3-1)^(2/3)	elementary	0.0369	True	False	
+Chebyshev t^-1/(t^3-1)^(2/3)	elementary	0.0500	True	False	
+Chebyshev t^0/(t^3-1)^(2/3)	DECLINE	0.0078		True	
+Chebyshev t^1/(t^3-1)^(2/3)	elementary	0.0445	True	False	
+Chebyshev t^2/(t^3-1)^(2/3)	elementary	0.0313	True	False	
+Chebyshev t^3/(t^3-1)^(2/3)	DECLINE	0.0083		True	
+Chebyshev t^4/(t^3-1)^(2/3)	elementary	0.0494	True	False	
+Chebyshev t^5/(t^3-1)^(2/3)	elementary	0.0277	True	False	
+Chebyshev t^6/(t^3-1)^(2/3)	DECLINE	0.0079		True	
+Chebyshev t^7/(t^3-1)^(2/3)	elementary	0.0509	True	False	
+Chebyshev t^-5/(t^2-1)^(1/3)	DECLINE	0.0157		True	
+Chebyshev t^-4/(t^2-1)^(1/3)	DECLINE	0.0091		True	
+Chebyshev t^-3/(t^2-1)^(1/3)	DECLINE	0.0124		True	
+Chebyshev t^-2/(t^2-1)^(1/3)	DECLINE	0.0130		True	
+Chebyshev t^-1/(t^2-1)^(1/3)	DECLINE	0.0091		True	
+Chebyshev t^0/(t^2-1)^(1/3)	DECLINE	0.0083		True	
+Chebyshev t^1/(t^2-1)^(1/3)	DECLINE	0.0140		True	
+Chebyshev t^2/(t^2-1)^(1/3)	DECLINE	0.0131		True	
+Chebyshev t^3/(t^2-1)^(1/3)	DECLINE	0.0124		True	
+Chebyshev t^4/(t^2-1)^(1/3)	DECLINE	0.0132		True	
+Chebyshev t^5/(t^2-1)^(1/3)	DECLINE	0.0113		True	
+Chebyshev t^6/(t^2-1)^(1/3)	DECLINE	0.0131		True	
+Chebyshev t^7/(t^2-1)^(1/3)	DECLINE	0.0127		True	
+Chebyshev t^-5/(t^2-1)^(2/3)	DECLINE	0.0091		True	
+Chebyshev t^-4/(t^2-1)^(2/3)	DECLINE	0.0114		True	
+Chebyshev t^-3/(t^2-1)^(2/3)	DECLINE	0.0095		True	
+Chebyshev t^-2/(t^2-1)^(2/3)	DECLINE	0.0150		True	
+Chebyshev t^-1/(t^2-1)^(2/3)	DECLINE	0.0127		True	
+Chebyshev t^0/(t^2-1)^(2/3)	DECLINE	0.0062		True	
+Chebyshev t^1/(t^2-1)^(2/3)	DECLINE	0.0153		True	
+Chebyshev t^2/(t^2-1)^(2/3)	DECLINE	0.0131		True	
+Chebyshev t^3/(t^2-1)^(2/3)	DECLINE	0.0108		True	
+Chebyshev t^4/(t^2-1)^(2/3)	DECLINE	0.0092		True	
+Chebyshev t^5/(t^2-1)^(2/3)	DECLINE	0.0087		True	
+Chebyshev t^6/(t^2-1)^(2/3)	DECLINE	0.0095		True	
+Chebyshev t^7/(t^2-1)^(2/3)	DECLINE	0.0090		True	
+Chebyshev t^-5/(t^3-1)^(1/2)	DECLINE	0.0778		True	
+Chebyshev t^-4/(t^3-1)^(1/2)	DECLINE	0.0897		True	
+Chebyshev t^-3/(t^3-1)^(1/2)	DECLINE	0.0446		True	
+Chebyshev t^-2/(t^3-1)^(1/2)	DECLINE	0.0664		True	
+Chebyshev t^-1/(t^3-1)^(1/2)	DECLINE	0.0707		True	
+Chebyshev t^0/(t^3-1)^(1/2)	DECLINE	0.0158		True	
+Chebyshev t^1/(t^3-1)^(1/2)	DECLINE	0.0650		True	
+Chebyshev t^2/(t^3-1)^(1/2)	DECLINE	0.0986		True	
+Chebyshev t^3/(t^3-1)^(1/2)	DECLINE	0.0427		True	
+Chebyshev t^4/(t^3-1)^(1/2)	DECLINE	0.0729		True	
+Chebyshev t^5/(t^3-1)^(1/2)	DECLINE	0.0919		True	
+Chebyshev t^6/(t^3-1)^(1/2)	DECLINE	0.0353		True	
+Chebyshev t^7/(t^3-1)^(1/2)	DECLINE	0.0762		True	
+Chebyshev t^-5/(t^4-1)^(1/2)	elementary	0.0245	True	False	
+Chebyshev t^-4/(t^4-1)^(1/2)	DECLINE	0.0029		True	
+Chebyshev t^-3/(t^4-1)^(1/2)	elementary	0.0120	True	False	
+Chebyshev t^-2/(t^4-1)^(1/2)	DECLINE	0.0028		True	
+Chebyshev t^-1/(t^4-1)^(1/2)	elementary	0.0073	True	False	
+Chebyshev t^0/(t^4-1)^(1/2)	DECLINE	0.0026		True	
+Chebyshev t^1/(t^4-1)^(1/2)	elementary	0.0094	True	False	
+Chebyshev t^2/(t^4-1)^(1/2)	DECLINE	0.0028		True	
+Chebyshev t^3/(t^4-1)^(1/2)	elementary	0.0079	True	False	
+Chebyshev t^4/(t^4-1)^(1/2)	DECLINE	0.0027		True	
+Chebyshev t^5/(t^4-1)^(1/2)	elementary	0.0116	True	False	
+Chebyshev t^6/(t^4-1)^(1/2)	DECLINE	0.0028		True	
+Chebyshev t^7/(t^4-1)^(1/2)	elementary	0.0113	True	False	
+Chebyshev t^-5/(t^4-1)^(1/4)	elementary	0.0246	True	False	
+Chebyshev t^-4/(t^4-1)^(1/4)	elementary	0.0090	True	False	
+Chebyshev t^-3/(t^4-1)^(1/4)	DECLINE	0.0052		True	
+Chebyshev t^-2/(t^4-1)^(1/4)	DECLINE	0.0061		True	
+Chebyshev t^-1/(t^4-1)^(1/4)	elementary	0.0241	True	False	
+Chebyshev t^0/(t^4-1)^(1/4)	elementary	0.0118	True	False	
+Chebyshev t^1/(t^4-1)^(1/4)	DECLINE	0.0060		True	
+Chebyshev t^2/(t^4-1)^(1/4)	DECLINE	0.0051		True	
+Chebyshev t^3/(t^4-1)^(1/4)	elementary	0.0074	True	False	
+Chebyshev t^4/(t^4-1)^(1/4)	elementary	0.0206	True	False	
+Chebyshev t^5/(t^4-1)^(1/4)	DECLINE	0.0061		True	
+Chebyshev t^6/(t^4-1)^(1/4)	DECLINE	0.0060		True	
+Chebyshev t^7/(t^4-1)^(1/4)	elementary	0.0073	True	False	
+Chebyshev t^-5/(t^4-1)^(3/4)	elementary	0.0278	True	False	
+Chebyshev t^-4/(t^4-1)^(3/4)	DECLINE	0.0047		True	
+Chebyshev t^-3/(t^4-1)^(3/4)	DECLINE	0.0063		True	
+Chebyshev t^-2/(t^4-1)^(3/4)	elementary	0.0091	True	False	
+Chebyshev t^-1/(t^4-1)^(3/4)	elementary	0.0264	True	False	
+Chebyshev t^0/(t^4-1)^(3/4)	DECLINE	0.0055		True	
+Chebyshev t^1/(t^4-1)^(3/4)	DECLINE	0.0059		True	
+Chebyshev t^2/(t^4-1)^(3/4)	elementary	0.0150	True	False	
+Chebyshev t^3/(t^4-1)^(3/4)	elementary	0.0074	True	False	
+Chebyshev t^4/(t^4-1)^(3/4)	DECLINE	0.0058		True	
+Chebyshev t^5/(t^4-1)^(3/4)	DECLINE	0.0063		True	
+Chebyshev t^6/(t^4-1)^(3/4)	elementary	0.0187	True	False	
+Chebyshev t^7/(t^4-1)^(3/4)	elementary	0.0089	True	False	
+Ex 5.1	elementary	0.0051	True	False	
+d(t sqrt R)  [Goursat criterion fails]	DECLINE	0.0013		True	
+Legendre-Clausen	DECLINE	6.0044		True	
+Goursat (t^3-4)/((t^3+8)sqrt(t^3-1))	DECLINE	6.0045		True	
+Goursat t^2/((t^3+8)sqrt(t^3-1))	DECLINE	0.0809		True	
+order 3: 1/(t sqrt(t^3-1))	DECLINE	0.0517		True	
+order 3: shifted (t+1)^3-2	DECLINE	6.0095		True	
+order 3, irrational roots: t^2/((t^3+5)sqrt(t^3-2))	DECLINE	6.1228		True	
+order 3, quartic j=0 rational root: t/((t^3+2) sqrt(t^4-t))	DECLINE	0.0081		True	
+order 3, quartic j=0: 1/sqrt(t^4-t)	DECLINE	0.0059		True	
+Goursat sec. 4: (t-1)/((t+2) sqrt(t^3-1))	elementary	0.0578	True	False	
+mixed: (t-1)/(t+2) + t^2/(t^3+8) + 1/t	DECLINE	0.0328		True	
+order 4: t^2/sqrt(t^4-1)	DECLINE	0.0016		True	
+order 4: 1/((t^4+3) sqrt(t^4-1))	DECLINE	0.0017		True	
+1/sqrt(t^4+1)	DECLINE	0.0007		True	
+(t^2-1)/((t^2+1)sqrt(t^4+1))	elementary	0.0091	True	False	
+Ex 5.5 (paper: non-elementary)	DECLINE	0.0189		True	
+CEX A  t(2t^3-1), V1, polynomial	DECLINE	0.0179		True	
+CEX B  1/(t^3+t)^(1/3), F = 1	elementary	0.0264	True	False	
+CEX D  (2t^3-1)/(t^3-1)^(2/3)	DECLINE	0.0046		True	
+(2t+5)/(Hessian R^(1/3))	DECLINE	6.0459		True	
+1/(t^3+t+1)^(1/3)  (needs a torsion test)	DECLINE	1.0398		True	
+1/sqrt(t^3+t+1)  (irreducible; trace criterion)	DECLINE	1.7774		True	
+irreducible resolvent: g - F0(g), g=1/(t-2), R=t^4+t+1	DECLINE	6.1386		True	

@@ -209,7 +209,8 @@ static void test_together_cancel(void) {
     check("Cancel[(x^3 - k)/(x - k^(1/3))]", "k^(2/3) + k^(1/3) x + x^2");
     check("Cancel[(x - k^(1/3))/(x^2 - k^(2/3))]", "1/(k^(1/3) + x)");
     /* Constant-radical (number-field) sums still combine via the classical path. */
-    check("Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2])]", "(2 x)/(-2 + x^2)");
+    /* over the input's pieces, as the reference: (-2 x)/((Sqrt[2] - x) (Sqrt[2] + x)) */
+    check("Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2])]", "(2 x)/((-Sqrt[2] + x) (Sqrt[2] + x))");
     check("Cancel[(x - Sqrt[2])/(x^2 - 2)]", "1/(Sqrt[2] + x)");
     /* A Together identity: the combined form differentiates back to the sum. */
     check("Simplify[1/(x - k^(1/3)) + 1/(x + k^(1/3)) - 2 x/(x^2 - k^(2/3))]", "0");
