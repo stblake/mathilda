@@ -92,4 +92,15 @@ Expr* nfrat_radical_kernels(const Expr* e, int factored, const Expr* ext, int ca
  * inverting, or the size budget. */
 Expr* nfrat_radical_normal_form(const Expr* e, int* field);
 
+/* The canonical form of e over K(x1..xn), K the field of e's constant
+ * algebraic atoms: numerator and denominator expanded, every constant reduced
+ * in K, a constant denominator inverted over K (unlike Together, which keeps
+ * it as written), the denominator monic up to a rational scale.  Two equal
+ * rational functions get the same output.  A constant e is accepted (its
+ * reduced value).  NULL declines (as for nfrat_together).  Internal callers
+ * that compare or accumulate coefficients use it: a kept numeric algebraic
+ * denominator lets coefficient sizes grow without bound through a chain of
+ * operations (Apart over Q(I, Sqrt[3])).  Internal`NumberFieldCanonical. */
+Expr* nfrat_canonical(const Expr* e);
+
 #endif /* NFRAT_H */

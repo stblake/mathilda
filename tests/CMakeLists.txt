@@ -1013,7 +1013,6 @@ set(COMMON_SRC
     ../src/calculus/integrate_quadrad.c
     ../src/calculus/integrate_linratiorad.c
     ../src/calculus/integrate_chebychev.c
-    ../src/calculus/integrate_goursat.c
     ../src/calculus/integrate_fresnel.c
     ../src/calculus/integrate_gammapower.c
     ../src/calculus/integrate_jeffrey.c

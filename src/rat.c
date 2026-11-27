@@ -3561,7 +3561,27 @@ static Expr* builtin_together_body(Expr* res) {
     return out;
 }
 
+/* Internal`NumberFieldCanonical[e]: the canonical form of a rational function
+ * over the number field of its constant algebraic atoms (nfrat_canonical), or
+ * $Failed when e is not such a function (no algebraic atom, another head, an
+ * inexact coefficient, a field past the engine's bounds). */
+static Expr* builtin_numberfield_canonical(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    const Expr* e = res->data.function.args[0];
+    Expr* out = NULL;
+    if (!internal_args_contain_inexact(res)) out = nfrat_canonical(e);
+    return out ? out : expr_new_symbol(SYM_DollarFailed);
+}
+
 void rat_init(void) {
+    symtab_add_builtin("Internal`NumberFieldCanonical", builtin_numberfield_canonical);
+    symtab_get_def("Internal`NumberFieldCanonical")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Internal`NumberFieldCanonical",
+        "Internal`NumberFieldCanonical[e] is the canonical form of a rational function e whose "
+        "coefficients are constant algebraic numbers, over the number field K they generate: "
+        "numerator and denominator expanded, every constant reduced in K, a numeric algebraic "
+        "denominator inverted over K, the denominator monic up to a rational scale. Equal "
+        "functions give identical output. $Failed when e is not such a function.");
     symtab_add_builtin("Numerator", builtin_numerator);
     symtab_get_def("Numerator")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_add_builtin("Denominator", builtin_denominator);

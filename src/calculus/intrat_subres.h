@@ -19,4 +19,10 @@
  * well-formed input).  Borrows every argument; the caller owns the result. */
 Expr* intrat_subres_chain(const Expr* A, const Expr* B, const Expr* x, const Expr* t);
 
+/* The same subresultant chain with coefficients in Q[t, y1, ..., ym]: every
+ * symbol of A and B other than x (parameters, the algebraic-mode generator z)
+ * is a polynomial variable.  NULL when A or B is not a polynomial over Q in
+ * symbols, past the size bounds, or FLINT is absent. */
+Expr* intrat_subres_chain_mv(const Expr* A, const Expr* B, const Expr* x, const Expr* t);
+
 #endif /* MATHILDA_INTRAT_SUBRES_H */

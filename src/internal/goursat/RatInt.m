@@ -9,6 +9,83 @@
 
 ratIntBudget[] := 4;      (* seconds for the Integrate candidate (sympy: 4) *)
 
+(* ---- deferred rational integration ---------------------------------------- *)
+(* The verdict of a reduction depends only on the residuals, never on the        *)
+(* antiderivatives of the pieces.  The Integrate stage (GoursatIntegrate)         *)
+(* therefore runs the reduction with $ggDefer = True: ratInt records rho and      *)
+(* returns the placeholder ggDeferred[id][m] (a function of the uniformiser, so   *)
+(* the substitutions m -> m(t, y) and the second-level back-substitutions apply  *)
+(* to it unchanged), and the integrals are computed only once the verdict is      *)
+(* elementary or certified non-elementary.  An undecided reduction -- a third-    *)
+(* kind residual at the last level -- then costs no rational integration at all: *)
+(* (2 + x)/((1 + x + x^2) (2 + x^3)^(1/3)) spent 25 s integrating the pieces of  *)
+(* three second-level reductions whose answer was then discarded.                *)
+$ggDefer = False;
+$ggDeferred = {};
+
+(* A table entry is {thunk, vars}: thunk[] computes the piece in the symbols   *)
+(* vars, and ggDeferred[id][args] stands for it at vars -> args.              *)
+(* info: {"rat", rho, m} for a rational integral (the deferred verifier reads  *)
+(* its derivative from it), {} otherwise.                                       *)
+deferPiece[thunk_, vars_List, info_List : {}] := (
+  AppendTo[$ggDeferred, {thunk, vars, info}];
+  ggDeferred[Length[$ggDeferred]] @@ vars);
+
+ratInt[rho0_, m_] /; TrueQ[$ggDefer] := Module[{rho = gK[rho0]},
+  (* With: the thunk must hold the values, not the Module's local symbols *)
+  If[rho === 0, 0, With[{r = rho}, deferPiece[ratInt[r, m] &, {m}, {"rat", r, m}]]]];
+
+(* Every placeholder replaced by its piece, at the placeholder's arguments. *)
+(* The pieces are computed once each, in table order; a rational integrand    *)
+(* that is the Galois conjugate of one already integrated (the two Hessian-    *)
+(* root components of the cube-root reduction, conjugate over Q(Sqrt[D])) takes *)
+(* the conjugate antiderivative, which is checked (ratOK) like any other        *)
+(* candidate, instead of a second run of the rational integrator.              *)
+resolveDeferred[e_] := Module[{ids, val = <||>, done = {}},
+  If[FreeQ[e, ggDeferred], Return[e, Module]];
+  ids = Union[Cases[e, ggDeferred[id_Integer][___] :> id, {0, Infinity}, Heads -> True]];
+  Block[{$ggDefer = False},
+    Do[With[{tv = $ggDeferred[[id]]},
+         val[id] = If[MatchQ[tv[[3]], {"rat", _, _}],
+           With[{P = conjugatePiece[tv[[3]][[2]], tv[[3]][[3]], done]},
+             If[P =!= None, P,
+               With[{Q = tv[[1]][]}, AppendTo[done, {tv[[3]][[2]], tv[[3]][[3]], Q}]; Q]]],
+           tv[[1]][]]],
+       {id, ids}]];
+  e /. ggDeferred[id_Integer][args___] :>
+    (val[id] /. Thread[$ggDeferred[[id]][[2]] -> {args}])];
+
+(* The automorphisms tried: complex conjugation, and the sign change of one     *)
+(* square root of a positive integer.  Complex conjugation fixes a real radical *)
+(* and sends I to -I and a radical of a negative number, (-c)^e = c^e E^(I Pi e), *)
+(* to c^e E^(-I Pi e) = (-c)^e (-1)^(-2 e).                                      *)
+conjugationRules[rho_] := Join[
+  If[FreeQ[rho, Complex], {}, {{Complex[a_, b_] :> Complex[a, -b],
+                               Power[b_?Negative, e_Rational] :> Power[b, e] Power[-1, -2 e]}}],
+  {Power[#, 1/2] -> -Power[#, 1/2], Power[#, -1/2] -> -Power[#, -1/2]} & /@
+    Union[Cases[rho, Power[b_Integer?Positive, 1/2 | -1/2] :> b, {0, Infinity}]]];
+
+(* The automorphism applied structurally, every new node evaluated: inside the  *)
+(* held body of a RootSum's Function a plain ReplaceAll leaves Complex[0, -1*-1] *)
+(* unevaluated (an answer the printer writes in an unparsable form).             *)
+applyAuto[e_, rule_] := Which[
+  MatchQ[e, Alternatives @@ (First /@ rule)], e /. rule,
+  AtomQ[e], e,
+  Head[e] === RootSum && Length[e] == 2, RootSum @@ {applyAuto[e[[1]], rule], applyAuto[e[[2]], rule]},
+  Head[e] === Function, Function @@ Append[Most[List @@ e], applyAuto[Last[e], rule]],
+  True, applyAuto[#, rule] & /@ e];
+
+(* An antiderivative of rho in m from an integrated conjugate, verified; None. *)
+conjugatePiece[rho_, m_, done_List] := Module[{c},
+  Do[With[{rho1 = d[[1]] /. d[[2]] -> m},
+       Do[If[gK[applyAuto[rho1, rule]] === rho,
+            c = applyAuto[d[[3]] /. d[[2]] -> m, rule];
+            (* a short budget: a candidate that is not one is rejected, not ground *)
+            If[stage["ratInt: conjugate check", pzqTrue[D[c, m] - rho, m, 2]], Return[c, Module]]],
+          {rule, conjugationRules[rho1]}]],
+     {d, done}];
+  None];
+
 (* Antiderivative of a rational function rho of m (coefficients: Q(algebraics)). *)
 ratInt[rho0_, m_] := Module[{rho, P},
   rho = gK[rho0];
@@ -30,8 +107,13 @@ ratInt[rho0_, m_] := Module[{rho, P},
 (* A RootSum-free answer is put to PossibleZeroQ first: the system integrator's  *)
 (* closed forms carry unrelated-looking radicals (2^(1/3), 3^(1/6), 6^(1/3), ...) *)
 (* that the vector arithmetic, which does not canonicalise, lets swell.          *)
+(* PossibleZeroQ goes first for a RootSum answer too, under a short budget:    *)
+(* the vector check of a closed form carrying (1/k)^(1/3) over Q(k)(I Sqrt[3])  *)
+(* runs past a minute (PossibleZeroQ: 30 ms), and a 471-leaf answer over Q(alg) *)
+(* (stress_7 sqrt-nonelementary #6) past 30 s (PossibleZeroQ: 17 ms).           *)
 ratOK[P_, rho_, m_] := Or[
-  FreeQ[P, _RootSum] && pzqTrue[D[P, m] - rho, m, 20],
+  pzqTrue[D[P, m] - rho, m,
+    Which[FreeQ[P, _RootSum], 20, parametricQ[{P, rho}, m, ggY], 5, True, 2]],
   TrueQ[Quiet[Catch[derivZeroQ[P, -rho, m, ggY, 1, 1], "GoursatFail"]]]];
 
 (* Horowitz-Ostrogradsky: r/den = (P/D1)' + Q/D2 with D1 = gcd(den, den'),      *)

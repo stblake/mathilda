@@ -325,10 +325,14 @@ static void test_algebraic_field_normalize(void) {
  * through Together / Cancel / Simplify (rigorously, no numeric zero oracle). */
 static void test_goursat_identity_reduces(void) {
     /* Unique symbol names so the global assignments do not collide with other
-     * tests (e.g. a bare `d` used later as a matrix entry). */
+     * tests (e.g. a bare `d` used later as a matrix entry).  The antiderivative
+     * is the one the C GoursatAlgebraic returned (that method was deleted on
+     * 2026-11-28), written out: this test is about Together / Cancel /
+     * Simplify on the identity, not about which integrator produced it. */
     const char* setup =
-        "gaF = Integrate[(2 - (1 + k) x)/((1 - (1 + k) x) (x (1 - x) (1 - k x))^(1/3)), "
-        "               x, Method -> \"GoursatAlgebraic\"]; "
+        "gaF = -((Log[-(k^(1/3)*x) + (x - x^2 - k*x^2 + k*x^3)^(1/3)] + "
+        "(-1)^(2/3)*Log[(-1)^(1/3)*k^(1/3)*x + (x - x^2 - k*x^2 + k*x^3)^(1/3)] - "
+        "(-1)^(1/3)*Log[-((-1)^(2/3)*k^(1/3)*x) + (x - x^2 - k*x^2 + k*x^3)^(1/3)])/k^(1/3)); "
         "gaf = (2 - (1 + k) x)/((1 - (1 + k) x) (x (1 - x) (1 - k x))^(1/3)); "
         "gad = D[gaF, x] - gaf;";
     Expr* s = eval_str(setup); expr_free(s);

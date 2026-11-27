@@ -39,6 +39,10 @@
 #include "rationalize.h"
 #include "root.h"
 #include "core.h"
+#include "flint_qqbar.h"
+#ifdef USE_FLINT
+#include "flint_bridge_internal.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2068,6 +2072,7 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
      * generic chain has exponential coefficient growth: 19 s for
      * Czichowski's degree-14 example, against 10 ms natively. */
     Expr* prs = intrat_subres_chain(d, atdp, x, t);
+    if (!prs) prs = intrat_subres_chain_mv(d, atdp, x, t);
     if (!prs) {
         Expr* prs_args[3] = { expr_copy(d), expr_copy(atdp), expr_copy(x) };
         Expr* prs_call = expr_new_function(
@@ -3001,6 +3006,7 @@ typedef struct {
     Expr* x;   /* integration variable, or NULL */
     Expr* w;   /* placeholder for Sqrt[d], or NULL */
     Expr* d;   /* the radicand d, in z (when w is set) */
+    Expr* params;  /* root / algebraic mode: List of the parameter symbols, or NULL */
 } IrField;
 
 /* True when every symbol of the rational expression `e` is a field
@@ -3224,7 +3230,7 @@ static bool ir_field_setup(const Expr* e, const Expr** alpha, IrField* F) {
     ir_collect_roots(e, found, &n);
     if (n != 1) return false;
     F->z = expr_new_symbol("Integrate`Private`rz$");
-    F->x = NULL; F->w = NULL; F->d = NULL;
+    F->x = NULL; F->w = NULL; F->d = NULL; F->params = NULL;
     Expr* app = expr_new_function(expr_copy(found[0]->data.function.args[0]),
         (Expr*[]){expr_copy(F->z)}, 1);
     F->p = expand_and_free(eval_and_free(app));
@@ -3240,6 +3246,7 @@ static bool ir_field_setup(const Expr* e, const Expr** alpha, IrField* F) {
 
 static void ir_field_free(IrField* F) {
     expr_free(F->z); expr_free(F->p);
+    if (F->params) { expr_free(F->params); F->params = NULL; }
     if (F->w) expr_free(F->w);
     if (F->d) expr_free(F->d);
 }
@@ -3392,7 +3399,13 @@ static int intrat_constant_sign(Expr* c) {
 
 struct IrRootMode {
     IrField F;
-    Expr* alpha;     /* the Root object (owned copy) */
+    Expr* alpha;     /* the Root object (owned copy); NULL in algebraic mode */
+    /* algebraic mode (irk_begin_alg): z is a primitive element theta of the
+     * field of the coefficients' radicals / I / Root objects, and zb[j] is
+     * theta^j written in the caller's own atoms (the product basis), so a
+     * reduced polynomial in z goes back as sum_j c_j zb[j] */
+    Expr** zb;
+    int nzb;
 };
 
 /* Extension -> {z, p(z)} (fresh). */
@@ -3403,11 +3416,42 @@ static Expr* irk_ext_opt(const IrField* F) {
             (Expr*[]){ expr_copy(F->z), expr_copy(F->p) }, 2) }, 2);
 }
 
-/* "Parameters" -> {x} (fresh). */
-static Expr* irk_params_opt(Expr* x) {
-    return expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){
+/* "Parameters" -> {x, params...} (fresh); NULL when there are none. */
+static Expr* irk_params_opt(Expr* x, const IrField* F) {
+    size_t np = F->params ? F->params->data.function.arg_count : 0;
+    if (!x && np == 0) return NULL;
+    Expr** ps = (Expr**)malloc(sizeof(Expr*) * (np + 1));
+    size_t n = 0;
+    if (x) ps[n++] = expr_copy(x);
+    for (size_t i = 0; i < np; i++) ps[n++] = expr_copy(F->params->data.function.args[i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){
         expr_new_string("Parameters"),
-        expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(x) }, 1) }, 2);
+        expr_new_function(expr_new_symbol(SYM_List), ps, n) }, 2);
+    free(ps);
+    return r;
+}
+
+/* The symbols of a and d other than x and z (the parameters of Q(params)):
+ * every FLINT kernel call names them, so the field arithmetic runs over
+ * K(params) instead of declining. */
+static void irk_set_params(IrField* F, Expr* a, Expr* d, Expr* x) {
+    size_t vc = 0, vcap = 8;
+    Expr** vs = (Expr**)malloc(sizeof(Expr*) * vcap);
+    collect_variables(a, &vs, &vc, &vcap);
+    collect_variables(d, &vs, &vc, &vcap);
+    Expr** keep = (Expr**)malloc(sizeof(Expr*) * (vc ? vc : 1));
+    size_t nk = 0;
+    for (size_t i = 0; i < vc; i++) {
+        bool dup = false;
+        for (size_t j = 0; j < nk && !dup; j++) dup = expr_eq(keep[j], vs[i]);
+        if (vs[i]->type == EXPR_SYMBOL && !dup && !expr_eq(vs[i], x) && !expr_eq(vs[i], F->z))
+            keep[nk++] = expr_copy(vs[i]);
+    }
+    for (size_t i = 0; i < vc; i++) expr_free(vs[i]);
+    free(vs);
+    if (F->params) { expr_free(F->params); F->params = NULL; }
+    if (nk) F->params = expr_new_function(expr_new_symbol(SYM_List), keep, nk);
+    free(keep);
 }
 
 /* FLINT`head[a, b, t, Extension -> {z, p}(, "Parameters" -> {x})]: the
@@ -3417,7 +3461,8 @@ static Expr* irk_call(const char* head, Expr* a, Expr* b, Expr* t,
                       const IrField* F, Expr* x) {
     Expr* args[5] = { expr_copy(a), expr_copy(b), expr_copy(t), irk_ext_opt(F), NULL };
     size_t n = 4;
-    if (x) args[n++] = irk_params_opt(x);
+    Expr* po = irk_params_opt(x, F);
+    if (po) args[n++] = po;
     Expr* r = eval_and_free(expr_new_function(expr_new_symbol(head), args, n));
     if (r && ir_head_is(r, SYM_List) && r->data.function.arg_count == 2) return r;
     if (r) expr_free(r);
@@ -3517,6 +3562,7 @@ static IrRootMode* irk_begin(Expr** a, Expr** d, Expr* x) {
     IrRootMode* M = (IrRootMode*)malloc(sizeof(IrRootMode));
     M->F = F;
     M->alpha = expr_copy((Expr*)alpha);
+    M->zb = NULL; M->nzb = 0;
     expr_free(ad);
     /* The kernels need p irreducible (the minimal polynomial of a
      * canonical Root object) and FLINT present; probe once, on a
@@ -3538,12 +3584,162 @@ static IrRootMode* irk_begin(Expr** a, Expr** d, Expr* x) {
     expr_free(*a); expr_free(*d);
     *a = ir_rem(az, &M->F);
     *d = ir_rem(dz, &M->F);
+    irk_set_params(&M->F, *a, *d, x);
     return M;
+}
+
+#ifdef USE_FLINT
+/* AlgebraicNumber[theta, {c0, ..}] -> c0 + c1 z + ... (every other node
+ * copied). */
+static Expr* irk_algnum_to_z(const Expr* e, Expr* z) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (ir_head_is(e, SYM_AlgebraicNumber) && e->data.function.arg_count == 2 &&
+        ir_head_is(e->data.function.args[1], SYM_List)) {
+        const Expr* co = e->data.function.args[1];
+        size_t k = co->data.function.arg_count;
+        Expr** terms = (Expr**)malloc(sizeof(Expr*) * (k ? k : 1));
+        for (size_t i = 0; i < k; i++)
+            terms[i] = internal_times((Expr*[]){ expr_copy(co->data.function.args[i]),
+                internal_power((Expr*[]){ expr_copy(z), expr_new_integer((int64_t)i) }, 2) }, 2);
+        Expr* r = k ? internal_plus(terms, k) : expr_new_integer(0);
+        free(terms);
+        return r;
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = irk_algnum_to_z(e->data.function.args[i], z);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
+static int irk_cmp_exprs(const void* a, const void* b) {
+    return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
+}
+#endif
+
+/* Enter algebraic mode for the log part of a/d: the coefficients carry
+ * constant algebraic atoms (I, Sqrt[3], 2^(1/3), (-1)^(1/3), Root objects)
+ * spanning K = Q(theta).  Each atom is replaced by its image, a polynomial in
+ * z standing for theta; the answer is rendered back over the product basis of
+ * the atoms.  The generic core treats every atom as an independent
+ * indeterminate that nothing reduces, so its subresultant chain swells
+ * without bound (a degree-12 denominator over Q(I Sqrt[3]) ran past a
+ * minute).  NULL leaves *a and *d untouched. */
+static IrRootMode* irk_begin_alg(Expr** a, Expr** d, Expr* x) {
+#ifdef USE_FLINT
+    Expr** atoms = NULL;
+    size_t na = 0, cap = 0;
+    if (!fb_collect_atoms(*a, &atoms, &na, &cap) || !fb_collect_atoms(*d, &atoms, &na, &cap) ||
+        na == 0 || na > FG_RENDER_MAX_ATOMS) {
+        for (size_t i = 0; i < na; i++) expr_free(atoms[i]);
+        free(atoms);
+        return NULL;
+    }
+    if (na > 1) qsort(atoms, na, sizeof(Expr*), irk_cmp_exprs);
+    IrRootMode* M = NULL;
+    Expr* imgs = NULL;
+    Expr* mp = NULL;
+    {
+        const Expr* ci = fb_field_images(atoms, na);
+        if (ci) imgs = expr_copy((Expr*)ci);       /* the cache slot may be recycled */
+    }
+    const Expr* theta = NULL;
+    bool ok = imgs != NULL;
+    for (size_t i = 0; i < na && ok; i++) {
+        const Expr* im = imgs->data.function.args[i];
+        ok = ir_head_is(im, SYM_AlgebraicNumber) && im->data.function.arg_count == 2;
+        if (!ok) break;
+        if (!theta) theta = im->data.function.args[0];
+        else ok = expr_eq((Expr*)theta, im->data.function.args[0]);
+    }
+    if (ok) {
+        mp = flint_qqbar_gen_minpoly_coeffs(theta);
+        ok = mp && ir_head_is(mp, SYM_List) && mp->data.function.arg_count >= 3;
+    }
+    if (ok) {
+        slong n = (slong)mp->data.function.arg_count - 1;
+        FgRender R;
+        fb_render_init(&R, atoms, imgs->data.function.args, na, theta, n);
+        ok = R.ready != 0;
+        M = (IrRootMode*)calloc(1, sizeof(IrRootMode));
+        M->F.z = expr_new_symbol("Integrate`Private`rz$");
+        Expr** pt = (Expr**)malloc(sizeof(Expr*) * (size_t)(n + 1));
+        for (slong j = 0; j <= n; j++)
+            pt[j] = internal_times((Expr*[]){ expr_copy(mp->data.function.args[j]),
+                internal_power((Expr*[]){ expr_copy(M->F.z), expr_new_integer((int64_t)j) }, 2) }, 2);
+        M->F.p = expand_and_free(eval_and_free(internal_plus(pt, (size_t)(n + 1))));
+        free(pt);
+        M->zb = (Expr**)calloc((size_t)n, sizeof(Expr*));
+        M->nzb = (int)n;
+        for (slong j = 0; j < n && ok; j++) {
+            Expr** co = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+            for (slong i = 0; i < n; i++) co[i] = expr_new_integer(i == j ? 1 : 0);
+            Expr* an = expr_new_function(expr_new_symbol(SYM_AlgebraicNumber), (Expr*[]){
+                expr_copy((Expr*)theta), expr_new_function(expr_new_symbol(SYM_List), co, (size_t)n) }, 2);
+            free(co);
+            Expr* rendered = fb_render_tree(an, &R);
+            expr_free(an);
+            M->zb[j] = rendered ? eval_and_free(rendered) : NULL;
+            ok = M->zb[j] != NULL && intrat_freeq_test(M->zb[j], x);
+        }
+        fb_render_clear(&R);
+        if (ok) {
+            /* the kernels need FLINT and p irreducible: probe once */
+            Expr* one = expr_new_integer(1);
+            Expr* g = irk_gcd(x, one, x, &M->F);
+            expr_free(one);
+            ok = g != NULL;
+            if (g) expr_free(g);
+        }
+    }
+    if (ok) {
+        Expr* aa = fb_subst_atoms(*a, atoms, imgs->data.function.args, na);
+        Expr* dd = fb_subst_atoms(*d, atoms, imgs->data.function.args, na);
+        Expr* az = aa ? eval_and_free(irk_algnum_to_z(aa, M->F.z)) : NULL;
+        Expr* dz = dd ? eval_and_free(irk_algnum_to_z(dd, M->F.z)) : NULL;
+        if (aa) expr_free(aa);
+        if (dd) expr_free(dd);
+        ok = az && dz;
+        if (ok) {
+            M->F.x = x;
+            expr_free(*a); expr_free(*d);
+            *a = ir_rem(az, &M->F);
+            *d = ir_rem(dz, &M->F);
+            irk_set_params(&M->F, *a, *d, x);
+        } else {
+            if (az) expr_free(az);
+            if (dz) expr_free(dz);
+        }
+    }
+    if (imgs) expr_free(imgs);
+    if (mp) expr_free(mp);
+    for (size_t i = 0; i < na; i++) expr_free(atoms[i]);
+    free(atoms);
+    if (!ok && M) {
+        M->F.x = NULL;
+        if (M->zb) {
+            for (int j = 0; j < M->nzb; j++) if (M->zb[j]) expr_free(M->zb[j]);
+            free(M->zb);
+        }
+        ir_field_free(&M->F);
+        free(M);
+        M = NULL;
+    }
+    return M;
+#else
+    (void)a; (void)d; (void)x;
+    return NULL;
+#endif
 }
 
 static void irk_end(IrRootMode* M) {
     if (!M) return;
-    expr_free(M->alpha);
+    if (M->alpha) expr_free(M->alpha);
+    if (M->zb) {
+        for (int j = 0; j < M->nzb; j++) expr_free(M->zb[j]);
+        free(M->zb);
+    }
     M->F.x = NULL;
     ir_field_free(&M->F);
     free(M);
@@ -3554,8 +3750,24 @@ static Expr* irk_reduce(IrRootMode* M, Expr* e) {
     return ir_rem(e, &M->F);
 }
 
-/* z -> alpha (consumes e). */
+/* z -> alpha (consumes e); in algebraic mode z^j -> zb[j] after reduction
+ * modulo p(z), so the answer is written in the caller's radicals. */
 static Expr* irk_back(IrRootMode* M, Expr* e) {
+    if (M->zb) {
+        Expr* r = ir_rem(e, &M->F);
+        Expr** terms = (Expr**)malloc(sizeof(Expr*) * (size_t)M->nzb);
+        size_t nt = 0;
+        for (int j = 0; j < M->nzb; j++) {
+            Expr* c = get_coeff(r, M->F.z, (int)j);
+            if (!c) continue;
+            if (is_zero_poly(c)) { expr_free(c); continue; }
+            terms[nt++] = internal_times((Expr*[]){ c, expr_copy(M->zb[j]) }, 2);
+        }
+        expr_free(r);
+        Expr* out = nt == 0 ? expr_new_integer(0) : internal_plus(terms, nt);
+        free(terms);
+        return expand_and_free(eval_and_free(out));
+    }
     Expr* r = subst_t(e, M->F.z, M->alpha);
     expr_free(e);
     return r;
@@ -3691,16 +3903,41 @@ static Expr* intrat_log_part_core_root(Expr* a, Expr* d, Expr* x, Expr* t,
     Expr* az = expr_copy(a);
     Expr* dz = expr_copy(d);
     IrRootMode* M = irk_begin(&az, &dz, x);
+    /* not one Root object: the field of the radicals, I and Root objects.
+     * The generic chain is cheap for a short one and the field kernels cost a
+     * fixed ~0.1 s per call sequence over a degree-4 field (a quartic over
+     * Q(I, Sqrt[3]): 0.47 s here, 30 ms generic), so the field is entered for
+     * the cases the generic chain cannot carry: a long chain (deg_x d >= 5:
+     * a degree-12 denominator over Q(I Sqrt[3]) ran past a minute) or
+     * parameters beside the radicals (u/(a + b u^3) over Q(k)(I Sqrt[3]):
+     * 0.56 s generic, 0.19 s here). */
+    if (!M) {
+        size_t nv = 0, vcap = 8;
+        Expr** vs = (Expr**)malloc(sizeof(Expr*) * vcap);
+        collect_variables(az, &vs, &nv, &vcap);
+        collect_variables(dz, &vs, &nv, &vcap);
+        bool params = false;
+        for (size_t i = 0; i < nv; i++) {
+            if (vs[i]->type == EXPR_SYMBOL && !expr_eq(vs[i], x)) params = true;
+            expr_free(vs[i]);
+        }
+        free(vs);
+        if (params || get_degree_poly(dz, x) >= 5) M = irk_begin_alg(&az, &dz, x);
+    }
     if (!M) { expr_free(az); expr_free(dz); return NULL; }
 
     Expr* dprime = expand_and_free(intrat_d(dz, x));
     Expr* atdp = irk_reduce(M, internal_subtract((Expr*[]){ expr_copy(az),
         internal_times((Expr*[]){ expr_copy(t), dprime }, 2) }, 2));
-    Expr* prs = eval_and_free(expr_new_function(
+    /* the genuine subresultant chain over Q[z, t][x] (polynomial size), the
+     * pseudo-remainder chain only when that declines */
+    Expr* prs = intrat_subres_chain_mv(dz, atdp, x, t);
+    if (!prs) prs = eval_and_free(expr_new_function(
         expr_new_symbol(SYM_SubresultantPolynomialRemainders),
         (Expr*[]){ expr_copy(dz), expr_copy(atdp), expr_copy(x) }, 3));
     Expr* res_raw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Resultant),
         (Expr*[]){ expr_copy(dz), atdp, expr_copy(x) }, 3));
+
     /* Q: the squarefree split of the resultant as computed (alpha
      * unreduced); Qred: the same factors reduced over K, certified, and
      * the ones every computation in t uses.  The output takes whichever
@@ -3716,12 +3953,34 @@ static Expr* intrat_log_part_core_root(Expr* a, Expr* d, Expr* x, Expr* t,
         expr_free(res_raw);
         res_raw = NULL;
         Q = intrat_squarefree_list(resultant);
-        expr_free(resultant);
         ok = Q && ir_head_is(Q, SYM_List);
         if (ok) {
             Qred = irk_certified_factors(M, Q, t);
             ok = Qred != NULL;
         }
+        /* The squarefree split over Q[z, t] reads z as an indeterminate, so
+         * after reduction modulo p(z) a factor may repeat (or two share a
+         * root) over K: split the reduced resultant over K itself (Yun, with
+         * the field gcd) instead of giving up. */
+        if (!ok) {
+            if (Q) { expr_free(Q); Q = NULL; }
+            Expr* rr = irk_reduce(M, expr_copy(resultant));
+            Expr* A = irk_squarefree(rr, t, &M->F);
+            expr_free(rr);
+            if (A && A->data.function.arg_count > 0) {
+                size_t na = A->data.function.arg_count;
+                Expr** pr = (Expr**)malloc(sizeof(Expr*) * na);
+                for (size_t j = 0; j < na; j++)
+                    pr[j] = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+                        expr_copy(A->data.function.args[j]), expr_new_integer((int64_t)(j + 1)) }, 2);
+                Q = expr_new_function(expr_new_symbol(SYM_List), pr, na);
+                free(pr);
+                Qred = irk_certified_factors(M, Q, t);
+                ok = Qred != NULL;
+            }
+            if (A) expr_free(A);
+        }
+        expr_free(resultant);
     }
     if (ok) {
         int deg_d = get_degree_poly(dz, x);

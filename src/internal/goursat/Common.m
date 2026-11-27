@@ -37,7 +37,13 @@ stage[label_String, e_] := If[TrueQ[GeneralisedGoursat`$GoursatDebug],
 (* linear algebra of the rational cases.                                       *)
 gK[e_Integer] := e;
 gK[e_Rational] := e;
-gK[e_] := Cancel[Together[e], Extension -> Automatic];
+gK[e_] := With[{c = Cancel[Together[e], Extension -> Automatic]},
+  (* Together / Cancel keep a numeric algebraic denominator as written (the  *)
+  (* reference's form), so a chain of field operations grows its constants  *)
+  (* without bound; sympy's field elements are always reduced.  The core's  *)
+  (* canonical form over the number field reduces every constant.           *)
+  If[FreeQ[c, Complex | Power[_?NumericQ, _Rational] | _Root], c,
+    With[{r = Internal`NumberFieldCanonical[c]}, If[r === $Failed, c, r]]]];
 
 (* is_zero.  A purely numeric (algebraic-number) residue that Together cannot  *)
 (* collapse to 0 is decided by PossibleZeroQ, which is exact on algebraic       *)
@@ -205,7 +211,7 @@ normalizeCoeffs[E0_, R_, t_, y_, n_] := Module[{E1, num, den, red, nv, dv, M, c}
 
 (* Heads that mark a transcendental (non-algebraic) term of an antiderivative. *)
 transcendentalQ[e_] := !FreeQ[e, _Log | _ArcTan | _ArcTanh | _ArcCot | _ArcCoth |
-                                 _RootSum | _Integrate | ggIntegral];
+                                 _RootSum | _Integrate | ggIntegral | ggDeferred];
 
 (* Collect the purely algebraic terms of an antiderivative and reduce them;    *)
 (* every argument of a logarithm or inverse trigonometric function is brought   *)
@@ -225,23 +231,30 @@ normArg[a_, R_, t_, y_, n_] := Module[{p, q, r},
     (* already a polynomial in y over Q(t) (every first-level uniformiser): kept *)
     (* as is -- its normal form over a field like Q(I, Sqrt[3], 2^(1/3)) costs   *)
     (* seconds of extension gcds and changes nothing                             *)
-    If[FreeQ[Denominator[Together[a]], y], Return[a, Module]];
+    If[FreeQ[a, Power[b_, e_?Negative] /; !FreeQ[b, y]] || FreeQ[Denominator[Together[a]], y],
+      Return[a, Module]];
     r = Quiet[Catch[normalizeAlgebraic[a, R, t, y, n], "GoursatFail"]];
     Return[If[MatchQ[r, _ggFail], a, r], Module]];
   If[Head[a] =!= Plus, Return[a, Module]];
-  p = Select[a, FreeQ[#, _Slot] &]; q = a - p;
-  normArg[p, R, t, y, n] + q];
+  p = Select[a, FreeQ[#, _Slot] &];
+  With[{p2 = normArg[p, R, t, y, n]}, If[p2 === p, a, p2 + (a - p)]]];
 
 (* Structurally, rebuilding RootSum and Function nodes by Apply so that each new *)
 (* argument is evaluated before it goes back in: a rule's right-hand side is    *)
 (* not evaluated inside a held RootSum body.                                    *)
 tidyArgs[e_, R_, t_, y_, n_] := Which[
-  AtomQ[e], e,
+  AtomQ[e] || FreeQ[e, Log | ArcTan | ArcTanh | ArcCot | ArcCoth | RootSum], e,
+  (* a node whose arguments are unchanged is returned as it is: rebuilding it    *)
+  (* re-evaluates it (a RootSum over Q(k)(I Sqrt[3]) is renormalised), which was *)
+  (* most of the cost of a tidy that changes nothing                            *)
   MatchQ[Head[e], Log | ArcTan | ArcTanh | ArcCot | ArcCoth] && Length[e] == 1 &&
     !FreeQ[e[[1]], t | y],
-    Head[e][normArg[e[[1]], R, t, y, n]],
+    With[{a2 = normArg[e[[1]], R, t, y, n]}, If[a2 === e[[1]], e, Head[e][a2]]],
   Head[e] === RootSum && Length[e] == 2,
-    RootSum @@ {e[[1]], tidyArgs[e[[2]], R, t, y, n]},
+    With[{b2 = tidyArgs[e[[2]], R, t, y, n]}, If[b2 === e[[2]], e, RootSum @@ {e[[1]], b2}]],
   Head[e] === Function,
-    Function @@ Append[Most[List @@ e], tidyArgs[Last[e], R, t, y, n]],
-  True, tidyArgs[#, R, t, y, n] & /@ e];
+    With[{b2 = tidyArgs[Last[e], R, t, y, n]},
+      If[b2 === Last[e], e, Function @@ Append[Most[List @@ e], b2]]],
+  True,
+    With[{as = List @@ e},
+      With[{as2 = tidyArgs[#, R, t, y, n] & /@ as}, If[as2 === as, e, Head[e] @@ as2]]]];

@@ -41,7 +41,7 @@ extern int g_integrate_depth;
 extern int g_integrate_quiet;
 
 /* Suppression counter for the heavy TAIL stages of the Automatic cascade
- * (ParallelMixedTower, GoursatAlgebraic, ParallelMixedSpecial).  When > 0, the
+ * (ParallelMixedTower, GeneralisedGoursat, ParallelMixedSpecial).  When > 0, the
  * cascade runs only its cheap, elementary stages and otherwise declines rather
  * than paying the seconds-long tower / special-function search.  A stage that
  * integrates a SUB-integrand speculatively — where "did not close cheaply" is a

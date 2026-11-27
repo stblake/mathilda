@@ -813,6 +813,58 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
     free(flat_m);
     free(flat_b);
 
+    /* Rational functions of symbols (Q(t1..tk)): the reduced row echelon form
+     * of [m | b] natively on fmpz_mpoly, as RowReduce does.  The loop below
+     * multiplies and exactly divides unreduced rational-function cells through
+     * the evaluator; a 3 x 3 system over Q(k, x) with degree-12 entries (the
+     * GeneralisedGoursat descent over a parameter) took over 20 s, the native
+     * elimination milliseconds.  The answer is read off the RREF: each pivot
+     * row's right-hand entries are its pivot variable's values, every free
+     * variable is 0 (the classical loop's convention); a pivot in the
+     * right-hand block is an inconsistent system, left to the loop below so
+     * that LinearSolve::nosol is reported in one place. */
+    {
+        bool dependent = false;
+        for (int i = 0; i < r * cols && !dependent; i++)
+            dependent = matsol_has_dependent_constant(matrix[i]);
+        Expr* rr = dependent ? NULL : flint_mpoly_mat_rref(matrix, r, cols);
+        Expr** sol = NULL;
+        bool ok = rr && rr->type == EXPR_FUNCTION && rr->data.function.arg_count == (size_t)r;
+        if (ok) {
+            sol = malloc(sizeof(Expr*) * (size_t)c * (size_t)k);
+            for (int i = 0; i < c * k; i++) sol[i] = NULL;
+            for (int i = 0; i < r && ok; i++) {
+                Expr* rowe = rr->data.function.args[i];
+                if (rowe->type != EXPR_FUNCTION || rowe->data.function.arg_count != (size_t)cols) {
+                    ok = false; break;
+                }
+                int pc = -1;
+                for (int j = 0; j < cols; j++)
+                    if (!matsol_is_zero(rowe->data.function.args[j])) { pc = j; break; }
+                if (pc < 0) continue;              /* a zero row */
+                if (pc >= c) { ok = false; break; }   /* inconsistent */
+                for (int kk = 0; kk < k; kk++)
+                    sol[pc * k + kk] = expr_copy(rowe->data.function.args[c + kk]);
+            }
+            if (ok) {
+                for (int i = 0; i < c * k; i++)
+                    if (!sol[i]) sol[i] = free_inexact ? expr_new_real(0.0) : expr_new_integer(0);
+            }
+        }
+        if (rr) expr_free(rr);
+        if (ok) {
+            for (int i = 0; i < r * cols; i++) expr_free(matrix[i]);
+            free(matrix);
+            Expr* out = build_solution_tensor(sol, c, trail_dims, trail_rank);
+            free(sol);
+            return out;
+        }
+        if (sol) {
+            for (int i = 0; i < c * k; i++) if (sol[i]) expr_free(sol[i]);
+            free(sol);
+        }
+    }
+
     int* pivot_col_for_row = malloc(sizeof(int) * (size_t)r);
     for (int i = 0; i < r; i++) pivot_col_for_row[i] = -1;
 

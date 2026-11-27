@@ -2442,7 +2442,7 @@ work and is not the Insert/Delete fix (the package uses neither head). Not yet b
 - [x] Simplify radical function-field normal form + Together/Cancel radical kernels (nfrat_radical_normal_form, simplify_radical_field.patch) -- merged, changelog written, version not bumped
 - [x] Expand at builtin depth > 1 returns its subject instead of Overflow[] (Simplify Indeterminate on G-s7-cbrt-symmetric-001 derivative) -- merged, changelog written
 - [x] GG vs Trager comparison PDF: benchmarks/265-goursat-stress/report/goursat_vs_trager.pdf (tools/goursat/compare_pdf.py; goursat_stress.py now writes results/<date>-partial.json)
-- [ ] Commit the above (two substantive bumps: v0.6766, v0.6767) when the user asks
+- [x] Committed v0.6766 (Simplify, Expand) and v0.6767 (GG parity + C GoursatAlgebraic deleted, stage 17 = GeneralisedGoursat)
 - [ ] Parity agent (worktree .claude/worktrees/agent-ab7cbff3263473d82) was mid-run at session close: k-family, cbrt third-kind speed, slow declines of (2+x)/((1+x+x^2)(2+x^3)^(1/3)) and (1-x^3)^(1/3)/(2+x). DONE: gg_parity.patch final (bench 265 verified 874->918, wrong 0, timeouts 32->10; k-family + cbrt third-kind close). Dry-run applies cleanly on main over the Simplify changes; merge, rerun ctest + bench 265, add CHANGELOG_SNIPPET.md
 - [ ] 112 GG answers UNVERIFIED (PZQ undecided) in benchmark 265 -- PZQ gaps to fix
 - [ ] Simplify of the G-s7-cbrt-symmetric-001 derivative takes 19.5 s in simp_simp_trig_rational (no trig present: Sqrt[3] as generator)

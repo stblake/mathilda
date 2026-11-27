@@ -6,7 +6,8 @@
 Reads, for every corpus tests/data/generalised_goursat/<corpus>.m,
   mathilda_<corpus>.tsv   (tools/goursat/bench_generalised_goursat.m, GG_METHOD=new)
   sympy_<corpus>.tsv      (tools/goursat/bench_sympy.py)
-  c_<corpus>.tsv          (bench_generalised_goursat.m, GG_METHOD=c; optional)
+  c_<corpus>.tsv          (optional: the last runs of the C GoursatAlgebraic,
+                          deleted 2026-11-28, kept as a record)
 and writes tests/data/generalised_goursat/REPORT.md.
 
 Verdicts (as stress_goursat.py's judge):

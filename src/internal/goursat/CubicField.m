@@ -59,6 +59,19 @@ fieldTidy[e_, v_, rv_] := Which[
   Head[e] === Function, Function @@ Append[Most[List @@ e], fieldTidy[Last[e], v, rv]],
   True, fieldTidy[#, v, rv] & /@ e];
 
+(* The conjugate formula is built from, and checked on, the actual integrals: *)
+(* never deferred.                                                            *)
+(* Deferred (see RatInt.m): the residual F0 is the trace, decided over Q; the  *)
+(* elementary part is computed only if the verdict needs it, under the same    *)
+(* budget as the eager call.                                                  *)
+cubicFieldReduce[F_, R_, t_, y_, th_, res_, trip_] /; TrueQ[$ggDefer] := Module[{F0, Fel},
+  F0 = stage["cubic field: F0", goursatF0[F, R, t]];
+  Fel = gK[F - F0];
+  If[Fel === 0, Return[{0, F0, {}}, Module]];
+  {With[{fel = Fel},
+     deferPiece[TimeConstrained[cubicFieldReduce[F, R, t, y, th, res, trip], cubicFieldBudget[],
+       {ggIntegral[fel/y, t]}][[1]] &, {t, y}]],
+   F0, {<|"note" -> "cubic-field reduction (deferred)", "elementaryPart" -> Fel|>}}];
 cubicFieldReduce[F_, R_, t_, y_, th_, res_, trip_] := Module[
   {F0, Fel, resFn, r1, piece, info, v, generic, total},
   F0 = stage["cubic field: F0", goursatF0[F, R, t]];   (* the criterion, decided over Q *)

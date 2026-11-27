@@ -78,7 +78,6 @@ goursat.py was timed on.
 | column | call |
 |---|---|
 | `Mathilda:Automatic` | `Integrate[f, x]` |
-| `Mathilda:GoursatAlgebraic` | `Integrate[f, x, Method -> "GoursatAlgebraic"]` (the C method) |
 | `Mathilda:GeneralisedGoursat` | `Integrate[f, x, Method -> "GeneralisedGoursat"]` (the `.m` port, `src/internal/goursat/`) |
 | `goursat.py` | the sympy reference: `goursat_integrate` / `integrate_algebraic` |
 | `sympy` | plain `sympy.integrate` (sympy 1.14, python3.11). Opt-in, with `--with-sympy` |
@@ -89,10 +88,15 @@ goursat.py was timed on.
 - **GeneralisedGoursat's budget.** The stage's own 30 s budget is turned off
   (``Integrate`$GeneralisedGoursatBudget = Infinity``), so the per-case limit is what
   ends a slow case. That way a timeout is recorded as `TIMEOUT` and not as a decline.
-- **GeneralisedGoursat's certificate.** The Method option discards the stage's
-  non-elementary certificate and declines. So when the Method call declines, the
-  stage symbol ``Integrate`GeneralisedGoursat[f, x]`` is asked again, untimed, only to
-  read the certificate. Its time is recorded separately as `cert_time`.
+- **GeneralisedGoursat's certificate.** The Method call returns a certified
+  non-elementary integral as a decline, or as its elementary part plus
+  `Inactive[Integrate][residual, x]` (both `UNEVAL`). So when the Method call does
+  not close, the stage symbol ``Integrate`GeneralisedGoursat[f, x]`` is asked again,
+  untimed, only to read the certificate. Its time is recorded separately as
+  `cert_time`.
+- **GoursatAlgebraic.** Runs before 2026-11-28 carry a third column, the C
+  `Method -> "GoursatAlgebraic"`; that method was deleted that day, once
+  GeneralisedGoursat closed every integrand it closed.
 - **goursat.py.** By default its verdicts and times are read from
   `tests/data/generalised_goursat/sympy_<corpus>.tsv` (`tools/goursat/bench_sympy.py`).
   Those runs time the reduction only (no verification), used a 120 s limit, and
@@ -149,7 +153,7 @@ to `bench-integrate-bottom`:
 
 ```make
 # `make bench-integrate-goursat` -- benchmark 265, the GeneralisedGoursat stress
-# corpora: Automatic, GoursatAlgebraic and GeneralisedGoursat against goursat.py
+# corpora: Automatic and GeneralisedGoursat against goursat.py
 # and sympy (tools/goursat/goursat_stress.py).  Resumable (cache).
 bench-integrate-goursat:
 	python3 tools/goursat/goursat_stress.py

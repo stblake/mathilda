@@ -39,7 +39,6 @@
 #include "integrate_quadrad.h"
 #include "integrate_linratiorad.h"
 #include "integrate_chebychev.h"
-#include "integrate_goursat.h"
 #include "integrate_fresnel.h"
 #include "integrate_gammapower.h"
 #include "integrate_logbyparts.h"
@@ -874,16 +873,6 @@ static Expr* try_linearity(Expr* f, Expr* x) {
         if (e) { expr_free(r); return e; }
     }
     return r;
-}
-
-/* Stage 1e3: Goursat's pseudo-elliptic algorithm and its cube-/fourth-root
- * generalisations.  Recognises F(x)/R(x)^p (p in {1/2,1/3,2/3,1/4,3/4}); when
- * a Mobius automorphism of the roots of R makes the integrand pseudo-elliptic,
- * descends to genus-0 curves and integrates in closed form.  Deterministic and
- * correct by construction, so it runs ahead of the Eliminate/Solve search and
- * Risch-Norman.  Non-elementary (obstructed) integrands return NULL. */
-static Expr* try_goursat(Expr* f, Expr* x) {
-    return integrate_goursat_try(f, x);
 }
 
 /* K Sin[a x^2+b x+c] / K Cos[...] -> FresnelS/FresnelC (complete the square). */
@@ -1880,9 +1869,9 @@ static Expr* try_trager(Expr* f, Expr* x, const char* head) {
  * The root-free symmetry reduction of Integral F(t)/R(t)^p dt, p in {1/2, 1/3,
  * 2/3, 1/4, 3/4}, written in Mathilda in src/internal/goursat/ (a port of the
  * sympy reference goursat.py of the cube-root Goursat paper, 2026-11-26).  It
- * coexists with the C GoursatAlgebraic (integrate_goursat.c) until it reaches
- * parity, and is reached only through Method -> "GeneralisedGoursat" or the
- * method symbol Integrate`GeneralisedGoursat.
+ * replaced the C GoursatAlgebraic (integrate_goursat.c, deleted at parity on
+ * 2026-11-28) both as Method -> "GeneralisedGoursat" and as the Automatic
+ * cascade's pseudo-elliptic stage (try_goursat below).
  *
  * The package entry GeneralisedGoursat`GoursatIntegrate[f, x] returns a
  * verified antiderivative, {"not elementary", partial, residual} -- the
@@ -1911,13 +1900,12 @@ static bool gg_lazy_load(void) {
 /* Integrate`GeneralisedGoursat[f, x]: the package's answer under a wall-clock
  * budget ($GeneralisedGoursatBudget seconds, default 30; Infinity for none),
  * $Failed on decline or exhaustion. */
-static Expr* builtin_integrate_generalised_goursat(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+/* GeneralisedGoursat`GoursatIntegrate[f, x] under `budget` seconds (0: none),
+ * messages muted; NULL when the package cannot be loaded.  Borrows f and x. */
+static Expr* gg_run(Expr* f, Expr* x, double budget) {
     if (!gg_lazy_load()) return NULL;
-    double budget = cascade_budget("Integrate`$GeneralisedGoursatBudget", 30.0);
     Expr* call = expr_new_function(expr_new_symbol("GeneralisedGoursat`GoursatIntegrate"),
-        (Expr*[]){ expr_copy(res->data.function.args[0]),
-                   expr_copy(res->data.function.args[1]) }, 2);
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
     if (budget > 0)
         call = expr_new_function(expr_new_symbol("TimeConstrained"),
             (Expr*[]){ call, expr_new_real(budget), expr_new_symbol("$Failed") }, 3);
@@ -1928,9 +1916,62 @@ static Expr* builtin_integrate_generalised_goursat(Expr* res) {
     return r;
 }
 
+static Expr* builtin_integrate_generalised_goursat(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    return gg_run(res->data.function.args[0], res->data.function.args[1],
+                  cascade_budget("Integrate`$GeneralisedGoursatBudget", 30.0));
+}
+
+static Expr* gg_answer(Expr* r, Expr* x, bool allow_partial);
+
 /* Method -> "GeneralisedGoursat". */
 static Expr* try_generalised_goursat(Expr* f, Expr* x) {
-    Expr* r = call_stage("Integrate`GeneralisedGoursat", f, x);
+    return gg_answer(call_stage("Integrate`GeneralisedGoursat", f, x), x, true);
+}
+
+/* True if `e` carries a radical Power[R, k/n], n in {2, 3, 4}, R a polynomial
+ * in x of degree >= 3 (n = 2) or >= 2 (n = 3, 4): the package's domain.  A
+ * structural gate, so the Automatic cascade loads the package only for an
+ * integrand it can apply to. */
+static bool gg_radical_shape(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2 &&
+        head_is(e->data.function.args[1], SYM_Rational)) {
+        const Expr* q = e->data.function.args[1];
+        const Expr* den = q->data.function.arg_count == 2 ? q->data.function.args[1] : NULL;
+        if (den && den->type == EXPR_INTEGER &&
+            (den->data.integer == 2 || den->data.integer == 3 || den->data.integer == 4)) {
+            long d = poly_degree_in(e->data.function.args[0], x);
+            if (d >= (den->data.integer == 2 ? 3 : 2)) return true;
+        }
+    }
+    if (gg_radical_shape(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (gg_radical_shape(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* Stage 17 of the Automatic cascade: the pseudo-elliptic F/R^p reduction
+ * (Goursat's algorithm and its cube-/fourth-root generalisations), bounded by
+ * Integrate`$GeneralisedGoursatCascadeBudget seconds (default 10).  Only a
+ * verified elementary antiderivative is taken: a non-elementary certificate is
+ * a decline here, so ParallelMixedSpecial after it may still give the
+ * special-function (elliptic) answer. */
+static Expr* try_goursat(Expr* f, Expr* x) {
+    if (!gg_radical_shape(f, x)) return NULL;
+    return gg_answer(gg_run(f, x, cascade_budget("Integrate`$GeneralisedGoursatCascadeBudget", 10.0)),
+                     x, false);
+}
+
+/* The package's answer `r` (consumed) as an antiderivative, or NULL (decline).
+ * {"not elementary", partial, residual} becomes
+ * partial + Inactive[Integrate][residual, x] when allow_partial and partial is
+ * non-zero.  Inactive, not Integrate: an explicit Method -> "GeneralisedGoursat"
+ * runs that method alone, and an active Integrate[residual, x] would hand the
+ * certified non-elementary remainder to the Automatic cascade (1/(x^3
+ * Sqrt[x^3 - 1]) came back with an EllipticF term).  The same convention as
+ * ParallelMixedSpecial's partial mode. */
+static Expr* gg_answer(Expr* r, Expr* x, bool allow_partial) {
     if (!r) return NULL;
     /* any atom ($Failed, possibly context-qualified) is a decline */
     if (r->type != EXPR_FUNCTION || result_is_unresolved(r, "Integrate`GeneralisedGoursat") ||
@@ -1941,7 +1982,7 @@ static Expr* try_generalised_goursat(Expr* f, Expr* x) {
     if (head_is(r, SYM_List)) {
         /* {"not elementary", partial, residual} */
         Expr* out = NULL;
-        if (r->data.function.arg_count == 3 &&
+        if (allow_partial && r->data.function.arg_count == 3 &&
             r->data.function.args[0]->type == EXPR_STRING &&
             strcmp(r->data.function.args[0]->data.string, "not elementary") == 0) {
             Expr* partial = r->data.function.args[1];
@@ -1949,7 +1990,9 @@ static Expr* try_generalised_goursat(Expr* f, Expr* x) {
             if (!zero)
                 out = expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(partial),
-                               expr_new_function(expr_new_symbol("Integrate"),
+                               expr_new_function(
+                                   expr_new_function(expr_new_symbol("Inactive"),
+                                       (Expr*[]){ expr_new_symbol("Integrate") }, 1),
                                    (Expr*[]){ expr_copy(r->data.function.args[2]),
                                               expr_copy(x) }, 2) }, 2);
         }
@@ -2290,7 +2333,7 @@ static Expr* try_bronstein_cascade(Expr* f, Expr* x, bool* nonelem, bool* expire
  *
  * Trager and Bronstein are complete in their scope, and the cascade budget is
  * a scheduling choice, not a give-up: it lets the cheaper specialists after
- * them (GoursatAlgebraic closes pseudo-elliptic integrands in a second that
+ * them (GeneralisedGoursat closes pseudo-elliptic integrands in a second that
  * Trager needs minutes for) answer first.  When none of them closes the
  * integrand, the method is run again to completion -- before
  * ParallelMixedSpecial, so its elementary answer is preferred to a
@@ -2605,8 +2648,7 @@ typedef enum {
     METHOD_QUADRATIC_RADICALS,
     METHOD_LINEAR_RATIO_RADICALS,
     METHOD_CHEBYCHEV,
-    METHOD_GOURSAT,
-    METHOD_GENERALISED_GOURSAT, /* the .m rewrite (src/internal/goursat/GeneralisedGoursat.m) */
+    METHOD_GENERALISED_GOURSAT, /* src/internal/goursat/GeneralisedGoursat.m */
     METHOD_WEIERSTRASS,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
@@ -2650,7 +2692,6 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
     if (strcmp(s, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
     if (strcmp(s, "ChebychevAlgebraic") == 0) return METHOD_CHEBYCHEV;
-    if (strcmp(s, "GoursatAlgebraic") == 0) return METHOD_GOURSAT;
     if (strcmp(s, "GeneralisedGoursat") == 0) return METHOD_GENERALISED_GOURSAT;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
@@ -3626,7 +3667,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
-    "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
+    "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GeneralisedGoursat", "18 ParallelMixedSpecial",
     "19 RoachMeijerG", "08d RischEarly", "15b SpecialByParts", "15c ExpRewrite",
     "17b Trager/Bronstein resumed"
 };
@@ -4744,7 +4785,7 @@ static Expr* builtin_integrate_body(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"GeneralisedGoursat\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"Bronstein\", \"NewtonLeibniz\", \"LineIntegral\".");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GeneralisedGoursat\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"Bronstein\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;
@@ -5094,9 +5135,6 @@ static Expr* builtin_integrate_body(Expr* res) {
         case METHOD_CHEBYCHEV:
             result = integrate_chebychev_general_try(effective_f, x);
             break;
-        case METHOD_GOURSAT:
-            result = try_goursat(effective_f, x);
-            break;
         case METHOD_GENERALISED_GOURSAT:
             result = try_generalised_goursat(effective_f, x);
             break;
@@ -5279,7 +5317,9 @@ void integrate_init(void) {
         "third-kind residuals. It returns the antiderivative (verified exactly by formal "
         "differentiation), {\"not elementary\", partial, residual} when the integral of "
         "residual (f = D[partial, x] + residual) is proved non-elementary, or $Failed. "
-        "Bounded by Integrate`$GeneralisedGoursatBudget seconds (default 30).");
+        "Bounded by Integrate`$GeneralisedGoursatBudget seconds (default 30); as the Automatic "
+        "cascade's pseudo-elliptic stage, by Integrate`$GeneralisedGoursatCascadeBudget "
+        "(default 10), and only an elementary answer is taken there.");
     /* The Trager / TragerKauers method symbols (lazy-load
      * src/internal/trager/Trager.m). */
     symtab_add_builtin("Integrate`Trager", builtin_integrate_trager);
@@ -5404,8 +5444,7 @@ void integrate_init(void) {
         "  \"QuadraticRadicals\"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])\n"
         "  \"LinearRatioRadicals\" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))\n"
         "  \"ChebychevAlgebraic\" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)\n"
-        "  \"GoursatAlgebraic\"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)\n"
-        "  \"GeneralisedGoursat\" — Integrate`GeneralisedGoursat (the root-free symmetry reduction of F/R^p with an honest verdict; src/internal/goursat)\n"
+        "  \"GeneralisedGoursat\" — Integrate`GeneralisedGoursat (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}: the root-free generalisation of Goursat's reduction, with an honest verdict; src/internal/goursat)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
@@ -5497,9 +5536,6 @@ void integrate_init(void) {
 
     /* Chebychev binomial differential: Integrate`ChebychevAlgebraic. */
     integrate_chebychev_init();
-
-    /* Goursat pseudo-elliptic / cube-/fourth-root: Integrate`GoursatAlgebraic. */
-    integrate_goursat_init();
 
     /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
      * Integrate`Weierstrass. */

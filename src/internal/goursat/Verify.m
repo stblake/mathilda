@@ -139,6 +139,11 @@ rootSumDerivVec[e_, t_, y_, R_, n_] := Module[
     U = gK[-w0/w1];                                 (* w = -w1 (U - z) *)
     Uv = vecOf[U, R, t, y, n];
     s = powerSums[p, z, d];
+    (* c may carry z in its denominator (Log[u - #]/(1029 #) from the rational  *)
+    (* integrator's residue map): c is a polynomial modulo p once its           *)
+    (* denominator is inverted there -- certified by the remainder check        *)
+    c = polyResidue[c, p, z];
+    If[c === $Failed, Return[$Failed, Module]];
     cs = polyrem[c, p, z];                          (* descending, degree < d *)
     (* S(m) = Sum_a c(a)/(m - a) = c(m) p'(m)/p(m) - Q(m),                       *)
     (*   Q(m) = Sum_k c_k Sum_(j<k) s_j m^(k-1-j),                              *)
@@ -157,6 +162,22 @@ rootSumDerivVec[e_, t_, y_, R_, n_] := Module[
   If[bv === $Failed, Return[$Failed, Module]];
   sum = rootSumOf[p, z, #] & /@ bv;
   If[MemberQ[sum, $Failed], $Failed, gK /@ sum]];
+
+(* A polynomial in z equal to the rational function c modulo the monic p     *)
+(* (c's denominator is a unit there), or $Failed.  The cofactor comes from the *)
+(* extended gcd and is checked: num(c) - den(c) c~ must vanish modulo p.       *)
+polyResidue[c_, p_, z_] := Module[{cn, cd, eg, g, inv, r},
+  {cn, cd} = numDen[c];
+  If[FreeQ[cd, z], Return[gK[c], Module]];
+  eg = PolynomialExtendedGCD[cd, p, z];
+  If[!MatchQ[eg, {_, {_, _}}], Return[$Failed, Module]];
+  g = eg[[1]];
+  If[!FreeQ[g, z] || isZero[g], Return[$Failed, Module]];
+  inv = eg[[2, 1]];
+  r = polyrem[Expand[cn inv/g], p, z];
+  r = r.(z^Range[Length[r] - 1, 0, -1]);
+  If[!AllTrue[polyrem[Expand[cd r - cn], p, z], isZero], Return[$Failed, Module]];
+  r];
 
 (* Sum_{p(z)=0} g(z) for g rational in z: power sums when the denominator is free *)
 (* of z, a companion-matrix trace (deg p <= 3) otherwise.                        *)
@@ -181,7 +202,9 @@ rootSumOf[p_, z_, g_] := Module[{d = Exponent[p, z], A, B, cs, s, Th, pows, mat}
 
 (* Is e a rational function of z: z occurs only in sums, products and integer  *)
 (* powers (never under a radical, a logarithm or any other head)?               *)
-ratInQ[e_, z_] := FreeQ[e /. {Power[b_, _Integer] :> b},
+(* (//., not /.: a replaced Power[den, -1] is not descended into, so the z^2 of *)
+(* den survived and z^3/(a z^2 + b z^5) read as not rational)                   *)
+ratInQ[e_, z_] := FreeQ[e //. {Power[b_, _Integer] :> b},
   (h_ /; !MemberQ[{Plus, Times, Power, List, Complex, Rational}, h])[___, a_ /; !FreeQ[a, z], ___] |
   Power[a_ /; !FreeQ[a, z], _]];
 
@@ -219,19 +242,31 @@ adjN[M_] := Switch[Length[M],
 (* unrelated radicals -- hence its budget).                                      *)
 pzqBudget[] := 5;
 vecBudget[] := 60;
+rootSumBudget[] := 30;   (* the exact derivative of one RootSum term *)
+(* Does e carry a parameter: a symbol of the caller's (not System`, not one of  *)
+(* the package's or the integrator's own placeholders) other than t and y?      *)
+parametricQ[e_, t_, y_] := !FreeQ[e, s_Symbol /; s =!= t && s =!= y &&
+  !StringMatchQ[Context[s], "System`" | ("GeneralisedGoursat`" ~~ ___) | ("Integrate`" ~~ ___)]];
+
 derivZeroQ[anti_, rest_, t_, y_, R_, n_] := Module[{v, terms, rs, cl, rv},
   terms = If[Head[anti] === Plus, List @@ anti, {anti}];
   rs = Select[terms, !FreeQ[#, _RootSum] &];
   cl = Complement[terms, rs];
-  (* 1. no RootSum: PossibleZeroQ on the radical form *)
-  If[rs === {} && pzqTrue[(totalD[anti, t, y, R, n] + rest) /. y -> R^(1/n), t, pzqBudget[]],
+  (* 1. no RootSum, or parameters: PossibleZeroQ on the radical form.  Over a   *)
+  (*    parameter field (Q(k)(I Sqrt[3])) it decides a RootSum answer in under a *)
+  (*    second where the vector arithmetic below runs past a minute.  Over       *)
+  (*    Q(alg) a RootSum answer goes to the hybrid check first: PossibleZeroQ on *)
+  (*    the whole form can run far past its TimeConstrained budget there        *)
+  (*    (stress_2026 sqrt-nonelementary #7: over 200 s against 15 s).           *)
+  If[(rs === {} || parametricQ[{anti, rest}, t, y]) &&
+     pzqTrue[(totalD[anti, t, y, R, n] + rest) /. y -> R^(1/n), t, pzqBudget[]],
     Return[True, Module]];
   (* 2. hybrid: the RootSum terms differentiated exactly (vector form, so no    *)
   (*    RootSum is left), the closed-form terms -- whose radicals the vector     *)
   (*    arithmetic would let swell -- left to PossibleZeroQ with the rest        *)
   If[rs =!= {} && cl =!= {},
     rv = Quiet[TimeConstrained[Catch[
-      Fold[addV, constV[0, n], derivVec[#, t, y, R, n] & /@ rs], "GoursatFail"], vecBudget[], $Failed]];
+      Fold[addV, constV[0, n], derivVec[#, t, y, R, n] & /@ rs], "GoursatFail"], rootSumBudget[], $Failed]];
     If[ListQ[rv] && FreeQ[rv, $Failed] &&
        pzqTrue[(totalD[Plus @@ cl, t, y, R, n] + rv.(y^Range[0, n - 1]) + rest) /. y -> R^(1/n),
                t, pzqBudget[]],
@@ -243,7 +278,12 @@ derivZeroQ[anti_, rest_, t_, y_, R_, n_] := Module[{v, terms, rs, cl, rv},
 derivZeroVec[anti_, rest_, t_, y_, R_, n_] := Module[{terms, vec, left = 0, cv},
   terms = If[Head[anti] === Plus, List @@ anti, {anti}];
   vec = vecOf[rest, R, t, y, n];
-  Do[cv = Quiet[Catch[derivVec[term, t, y, R, n], "GoursatFail"]];
+  (* a RootSum's exact derivative under its own budget: past it, the term is   *)
+  (* left to PossibleZeroQ (a degree-9 RootSum over Q(Sqrt[-51]) whose summand  *)
+  (* is read modulo its polynomial: over a minute exactly, 0.5 s by PZQ)        *)
+  Do[cv = Quiet[If[FreeQ[term, _RootSum],
+            Catch[derivVec[term, t, y, R, n], "GoursatFail"],
+            TimeConstrained[Catch[derivVec[term, t, y, R, n], "GoursatFail"], rootSumBudget[], $Failed]]];
      If[ListQ[cv], vec = addV[vec, cv], left += term],
      {term, terms}];
   If[left === 0, Return[AllTrue[vec, zeroEntryQ[#, t] &], Module]];
@@ -265,6 +305,42 @@ numZeroQ[c_] := c === 0 || gK[c] === 0 || TrueQ[Quiet[PossibleZeroQ[c]]];
 
 unevaluatedQ[anti_] := transcendentalQ[anti /. {_Log -> 0, _ArcTan -> 0, _ArcTanh -> 0,
                                                  _ArcCot -> 0, _ArcCoth -> 0, _RootSum -> 0}];
+
+(* ---- verification before the deferred integrals are computed ------------- *)
+(* A deferred piece P = ggDeferred[id][m(t, y)] stands for a rational           *)
+(* antiderivative that ratInt returns only once P'(m) = rho(m) is verified, so   *)
+(* by the chain rule its t-derivative is rho(m) m'(t): the derivative of the     *)
+(* whole answer is then ALGEBRAIC in (t, y), and its vanishing is an identity    *)
+(* in Q(t)[y]/(y^n - R) -- decided exactly, with no logarithm, arctangent or     *)
+(* RootSum to sample.  $Failed when a term has no such derivative (a cubic-field *)
+(* piece, an unevaluated integral, a transcendental term outside a placeholder). *)
+deferredD[e_, t_, y_, R_, n_] := Which[
+  FreeQ[e, ggDeferred],
+    If[FreeQ[e, transHeads[] | _RootSum | _Integrate | ggIntegral], totalD[e, t, y, R, n], $Failed],
+  Head[e] === Plus,
+    With[{ds = deferredD[#, t, y, R, n] & /@ List @@ e}, If[MemberQ[ds, $Failed], $Failed, Plus @@ ds]],
+  Head[e] === Times && Length[Select[List @@ e, !FreeQ[#, t | y | ggDeferred] &]] == 1,
+    With[{c = Times @@ Select[List @@ e, FreeQ[#, t | y | ggDeferred] &],
+          d = deferredD[First[Select[List @@ e, !FreeQ[#, t | y | ggDeferred] &]], t, y, R, n]},
+      If[d === $Failed, $Failed, c d]],
+  MatchQ[e, ggDeferred[_Integer][_]] && MatchQ[$ggDeferred[[e[[0, 1]]]], {_, {_}, {"rat", _, _}}],
+    With[{rm = $ggDeferred[[e[[0, 1]]]][[3]], arg = e[[1]]},
+      (rm[[2]] /. rm[[3]] -> arg) totalD[arg, t, y, R, n]],
+  True, $Failed];
+
+(* True when the deferred answer of an integrateAlgebraic result verifies; False *)
+(* when it does not or cannot be decided this way (the caller then resolves the  *)
+(* integrals and verifies the closed form).                                      *)
+verifyDeferred[r_, f_, t_] := Module[{y = r["y"], n = r["n"], R = r["R"], fy, d, ex},
+  If[!KeyExistsQ[r, "AntiderivativeY"] || FreeQ[r["AntiderivativeY"], ggDeferred],
+    Return[False, Module]];
+  fy = f /. Power[b_, q_Rational] /; !FreeQ[b, t] :> y^(q n);
+  d = Quiet[deferredD[r["AntiderivativeY"], t, y, R, n]];
+  If[d === $Failed, Return[False, Module]];
+  ex = d + r["ResidualY"] - fy;
+  TrueQ[pzqTrue[ex /. y -> R^(1/n), t, pzqBudget[]] ||
+        AllTrue[Quiet[Catch[normalizeCoeffs[ex, R, t, y, n], "GoursatFail"]] /. _ggFail -> {1},
+                isZero]]];
 
 verifyResult[res_, F_, t_] := Module[{y = res["y"], n = res["n"], k = res["k"], R = res["R"]},
   If[unevaluatedQ[res["Antiderivative"]], Return[False, Module]];

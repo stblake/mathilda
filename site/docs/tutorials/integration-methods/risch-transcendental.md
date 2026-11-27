@@ -289,7 +289,7 @@ a tower of exponentials and logarithms over \(\mathbb{C}(x)\) (Gaussian constant
 \(\mathbb{C}(i)\) are allowed). Integrands requiring **algebraic** extensions
 (nested radicals, elliptic integrands) are out of scope and return unevaluated —
 those are handled by other cascade stages such as
-[`"GoursatAlgebraic"`](../08-calculus.md).
+[`"GeneralisedGoursat"`](../08-calculus.md).
 
 In the automatic dispatch, `Integrate[f, x]` reaches this engine *after* the
 faster `"BronsteinRational"` and `"RischNorman"` stages, so you only pay for the

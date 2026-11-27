@@ -1638,12 +1638,13 @@ monotonically down.
 - `Protected`, `Listable`.
 - Eleven-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
   `QuadraticRadicals` and `LinearRatioRadicals` added 2026-06-06; `Weierstrass`
-  added 2026-06-09; `ChebychevAlgebraic` and `GoursatAlgebraic` added 2026-06-29):
+  added 2026-06-09; `ChebychevAlgebraic` and `GoursatAlgebraic` added 2026-06-29; `GoursatAlgebraic`
+  replaced by `GeneralisedGoursat` 2026-11-28):
   `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
   order and returns the first non-`NULL` result:
 
-  **Execution order (as of v0.191):** the `GoursatAlgebraic` stage (item 7
-  below) now runs **last**, after `ParallelMixedTower` (item 13) — Goursat is
+  **Execution order (as of v0.191):** the Goursat stage (item 7
+  below; `GeneralisedGoursat` since 2026-11-28) now runs **last**, after `ParallelMixedTower` (item 13) — Goursat is
   the deterministic specialist for pseudo-elliptic `F/R^p`, so every general
   method is given first crack at any integrand it also handles.  To keep that
   reorder cheap, the three *search* stages that otherwise grind for tens of
@@ -1824,66 +1825,24 @@ monotonically down.
      It supplies a named form when one exists (`EllipticF` for `1/Sqrt[1 + x^4]`).
      `Integrate[x^3/Sqrt[2 + x^6], x]` is
      `x^4 Hypergeometric2F1[1/2, 2/3, 5/3, -x^6/2]/(4 Sqrt[2])` in 0.1 s.
-  7. `Integrate\`GoursatAlgebraic[f, x]` — pseudo-elliptic integrands
-     `F(x) R(x)^q` (`F` rational, `R` a polynomial) with `q` any rational of
-     reduced denominator `2`, `3`, or `4` by Goursat's algorithm and its
-     cube-/fourth-root generalisations (Blake 2026).  The exponent is split
-     `R^q = R^k R^(-p)` with radical order `p in {1/2, 1/3, 2/3, 1/4, 3/4}` and
-     the integer `R^k` absorbed into `F`, so positive-power radicals such as
-     `(1-x^3)^(1/3)/x` are handled, not only radicals already in a denominator.
-     A Mobius automorphism cycling the roots of `R` splits the integrand into
-     eigencomponents that descend to genus-0 curves when the elementarity
-     criterion holds (`p=1/2`: Klein four-group `V4`, trivial projection
-     vanishes; `p=1/3,2/3`: order-3 cycle; `p=1/4,3/4`: order-4 cycle on
-     harmonic roots).  For `p=1/2` with `R` a cubic carrying the `t^3-1` higher
-     symmetry, when `V4` declines a Section-4 (Goursat 1887) period-3 reduction
-     is tried: an order-3 Mobius `S` fixes one ramification point and cycles the
-     other three, and the integral is elementary when `F` is a non-trivial
-     period-3 character `F(S) = Exp[2 Pi I/3] F` (so `(x-1)/((x+2) Sqrt[x^3-1])`
-     integrates).  For `p=1/3` with `R` a cubic, when the order-3 eigendescent is
-     obstructed (`H1 != 0`) but `F` has a pole at a non-branch point, a
-     constructive third-kind logarithmic-part reduction is tried instead: the
-     antiderivative is
-     `C Sum_{j=0..2} Exp[4 Pi I j/3] Log[R^(1/3) - Exp[2 Pi I j/3] (lead R)^(1/3) x]`,
-     so the parametric family
-     `(2-(k+1)x)/((1-(k+1)x) (x(1-x)(1-k x))^(1/3))` integrates over `Q(k)`.
-     The rational reductions are integrated recursively and
-     back-substituted.  Obstructed (genuinely elliptic) integrands,
-     non-harmonic quartics, and the cross-character A4 cases (Section 5, e.g.
-     `t/((t^3+8) Sqrt[t^3-1])`) return `NULL`.  A differentiate-back guard rejects the
-     rare cases where the eigenspace zero-test misfires on deeply nested radical
-     roots; the whole attempt runs under a CPU-time budget so a cyclotomic-root
-     `R` with an unlucky cofactor (where algebraic-number `Together`/`Cancel`
-     blows up) declines rather than hanging the cascade.  Uses
-     `Solve[..., Cubics -> True, Quartics -> True]` (the Ferrari quartic solver,
-     added 2026-06-29).  The Boolean global `Integrate\`GoursatDebug` (default
-     `False`; added 2026-06-30) traces the descent to stderr when set `True`:
-     whether the integrand matches the `F(x) R(x)^(-p)` form (and the recognised
-     `F`, `R`, `p`), which involution / eigenspace criterion is tested and
-     whether it holds (`V4` trivial projection, the order-3/order-4
-     ω-eigencomponents, the period-3 trivial projection per fixed point), and the
-     differentiate-back verdict.  The flag is latched once at the outermost call,
-     so recursive genus-0 reductions share it and indent by depth.
-     Before returning (square-root case), the antiderivative is normalised so its
-     one radical is the single generator `Sqrt[R]`: any term left carrying `Sqrt[R]`
-     *split* across a numerator/denominator as a product of factor roots
-     (`Sqrt[x] Sqrt[(1-x)(1-k^2 x)] ...`) has its `x`-dependent half-power factors
-     recombined into one radicand and reduced over `R` (to a rational when it is a
-     perfect square, else `rational*Sqrt[R]`), removing the spurious branch point and
-     keeping a downstream `Simplify` to a single radical generator.  Constant radicals
-     are left intact, and the rewrite is kept only if the differentiate-back guard
-     still passes.
-     A graded battery of worked examples (every exponent `p`, both numerator and
-     denominator radicals, and every involution equation, with the negative
-     controls that decline) is collected in
-     [`GOURSAT_EXERCISES.md`](../../../GOURSAT_EXERCISES.md) and mirrored as the
-     `test_graded` ladder in `tests/test_integrate_goursat.c`.
+  7. Pseudo-elliptic `F(x) R(x)^q` (`q` of reduced denominator 2, 3 or 4): from
+     2026-06-29 to 2026-11-28 the C `Integrate\`GoursatAlgebraic`
+     (`src/calculus/integrate_goursat.c`, Mobius eigendescent over the roots of
+     `R`), deleted once `GeneralisedGoursat` (item 7b) closed every integrand it
+     closed. `Method -> "GoursatAlgebraic"` is no longer accepted. Its test
+     suite, `tests/test_integrate_goursat.c` (with the graded ladder of
+     [`GOURSAT_EXERCISES.md`](../../../GOURSAT_EXERCISES.md)), now runs against
+     `GeneralisedGoursat` and the cascade.
   7b. `Integrate\`GeneralisedGoursat[f, x]` (`Method -> "GeneralisedGoursat"`, added
      2026-11-27) — the root-free rewrite of item 7, written in Mathilda in
      `src/internal/goursat/` as a function-for-function port of the sympy
-     reference `goursat.py` of the cube-root Goursat paper (2026-11-26). It is
-     reached only through the Method option or the method symbol; the cascade still
-     runs `GoursatAlgebraic` until the new method has been compared with it.
+     reference `goursat.py` of the cube-root Goursat paper (2026-11-26). Since
+     2026-11-28 it is also the Automatic cascade's pseudo-elliptic stage (item 14):
+     gated on a radical `R^(k/n)`, `n in {2, 3, 4}`, of a polynomial of degree at
+     least 3 (`n = 2`) or 2, bounded by `Integrate\`$GeneralisedGoursatCascadeBudget`
+     (default 10 s), and taking an elementary answer only (a non-elementary
+     certificate is a decline there, so `ParallelMixedSpecial` may still give the
+     elliptic answer).
      `f` must lie in `Q(x, R^(1/n))` (coefficients may be algebraic numbers) for one
      squarefree radicand `R` of genus 1: `n = 2` with `deg R in {3, 4}`, `n = 3`
      with `deg R in {2, 3}`, or `n = 4` with `R = a (x - e)^4 + b`. The integrand is
@@ -1928,12 +1887,33 @@ monotonically down.
      `Q(t)[y]/(y^n - R)`, a RootSum differentiated by Newton power sums (and a
      nested one by a companion-matrix trace) rather than collapsed. Returns:
      - an antiderivative, when the integral is elementary;
-     - `partial + Integrate[residual, x]` when the remaining integral is
+     - `partial + Inactive[Integrate][residual, x]` when the remaining integral is
        certified non-elementary (the method symbol returns
-       `{"not elementary", partial, residual}`); the residual goes back through the
-       cascade, so `Integrate[(t^3 + 3)/Sqrt[t^4 + 1], t, Method ->
-       "GeneralisedGoursat"]` is `Sqrt[1 + t^4]/2` plus an `EllipticF` term;
+       `{"not elementary", partial, residual}`). The residual is not handed to the
+       rest of the cascade: an explicit Method runs that method alone, so
+       `Integrate[1/(x^3 Sqrt[x^3 - 1]), x, Method -> "GeneralisedGoursat"]` is
+       `Sqrt[-1 + x^3]/(2 x^2) + Inactive[Integrate][1/(4 Sqrt[-1 + x^3]), x]` in
+       10 ms (until 2026-11-28 the residual went back through the cascade and came
+       back as an `EllipticF` term, 0.37 s);
      - unevaluated when undecided, out of shape, or with no elementary part.
+     **Parity with GoursatAlgebraic (2026-11-27).** The reduction runs over
+     `Q(params)` (the third-kind family `(2 - (k+1) t)/((1 - (k+1) t) (t (1 -
+     t)(1 - k t))^(1/3))` closes for symbolic `k` and verifies by
+     `PossibleZeroQ` with `k` symbolic, as do the order-3, Klein and
+     pseudo-elliptic shapes with parameters). The Integrate stage **defers** the
+     rational integrations: a piece is recorded and stands as a placeholder
+     until the verdict is known, so an undecided reduction integrates nothing
+     (`(2 + x)/((1 + x + x^2) (2 + x^3)^(1/3))`: 24-28 s -> 0.5 s; `(1 -
+     x^3)^(1/3)/(2 + x)`: 7-9 s -> 0.1 s, both `$Failed`). A decided answer is
+     verified **before** the pieces are integrated, by the chain rule: each
+     piece's derivative is `rho(m) m'(t)` (its antiderivative is returned only
+     once `P'(m) = rho(m)` is verified), so the derivative of the answer is an
+     algebraic function of `(t, y)` put to `PossibleZeroQ`; a piece whose
+     integrand is the Galois conjugate of one already integrated (the two
+     Hessian-root components) takes the conjugate antiderivative, checked. Over
+     `Q(params)` the second level is first run at two parameter values, and when
+     both are undecided the parametric chain (whose integrands grow at every
+     level) is not attempted: the reduction ends undecided.
      `Integrate\`$GeneralisedGoursatBudget` (default 30 s, `Infinity` for none)
      bounds the method symbol; `GeneralisedGoursat\`$GoursatDebug = True` prints
      each stage's wall time. The package also exports its building blocks
@@ -2180,8 +2160,9 @@ monotonically down.
      and, as of v0.191, pseudo-elliptic `F/R^p` integrands (a fractional power
      of a degree-≥3 polynomial), which are the following Goursat stage's
      exclusive domain and on which the tower search only grinds before declining.
-  14. `Integrate\`GoursatAlgebraic[f, x]` — runs **last** (moved here in v0.191;
-     described in full as item 7 above), the deterministic pseudo-elliptic
+  14. `Integrate\`GeneralisedGoursat[f, x]` (`GoursatAlgebraic` until
+     2026-11-28) — runs **last** (moved here in v0.191; described as item 7b
+     above), the deterministic pseudo-elliptic
      specialist that closes the `F/R^p` integrands the general stages leave.
   15. `GRTable` (v0.6493) — the Gradshteyn & Ryzhik table (see
      [Integrate`GRTable](#integrategrtable) below), after every other stage,
@@ -2268,11 +2249,10 @@ monotonically down.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.
   - `"ChebychevAlgebraic"` — `Integrate\`ChebychevAlgebraic[f, x]` (Chebychev
     binomial differential `x^p (a x^r + b)^q`).
-  - `"GoursatAlgebraic"` — `Integrate\`GoursatAlgebraic[f, x]` (pseudo-elliptic
-    `F/R^p`, `p` in `{1/2, 1/3, 2/3, 1/4, 3/4}`, via Mobius eigendescent).
   - `"GeneralisedGoursat"` — `Integrate\`GeneralisedGoursat[f, x]` (the root-free
     `.m` rewrite: Hermite reduction, covariant symmetry reductions, second level,
-    exact verification, and a certified non-elementary partial answer; item 7b).
+    exact verification, and a certified non-elementary partial answer with an
+    inactive remainder; item 7b). It replaced `"GoursatAlgebraic"` on 2026-11-28.
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
@@ -4684,7 +4664,7 @@ the general search stages (the early Risch probe, `Linearity`, `Weierstrass`,
 **Budgets.** `$TragerCascadeBudget` and `$BronsteinCascadeBudget` hold the
 wall-clock budget in seconds (default 10 each; `Infinity` removes it). The budget
 only schedules the method; it never abandons it:
-- When a budget expires, the cascade moves on to its later stages. GoursatAlgebraic,
+- When a budget expires, the cascade moves on to its later stages. GeneralisedGoursat,
   for one, closes in about a second pseudo-elliptic integrands that Trager needs
   minutes for.
 - If none of the later elementary stages closes the integral, the method is resumed

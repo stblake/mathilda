@@ -43,6 +43,8 @@
 #include <flint/fmpz.h>
 #include <flint/fmpq.h>
 #include <flint/fmpz_poly.h>
+#include <flint/fmpq_mpoly.h>
+#include "flint_bridge_internal.h"
 
 /* Above these the generic path is no worse off and a pathological input
  * cannot allocate without bound. */
@@ -357,9 +359,236 @@ Expr* intrat_subres_chain(const Expr* A, const Expr* B, const Expr* x, const Exp
     return out;
 }
 
+/* ------------------------------------------------------------------ */
+/* The same chain over Q[t, y1..ym][x]                                 */
+/* ------------------------------------------------------------------ */
+
+/* Parameters (Q(k)) and algebraic mode (a primitive element z, every
+ * coefficient a polynomial in z reduced afterwards by the caller) put further
+ * symbols beside t.  The subresultants are polynomials in the coefficients, so
+ * they may be computed over Q[t, y][x] and reduced (modulo the minimal
+ * polynomial of z) at the end: reduction is a ring homomorphism.  Each
+ * x-coefficient is an fmpq_mpoly over every symbol of A and B except x. */
+typedef struct { int deg, cap; fmpq_mpoly_struct* c; } MTX;
+
+#define SUBRES_MV_MAX_TERMS 200000
+
+static void mtx_init(MTX* p, int cap, const fmpq_mpoly_ctx_struct* ctx) {
+    if (cap < 1) cap = 1;
+    p->deg = -1; p->cap = cap;
+    p->c = (fmpq_mpoly_struct*)malloc(sizeof(fmpq_mpoly_struct) * (size_t)cap);
+    for (int i = 0; i < cap; i++) fmpq_mpoly_init(p->c + i, ctx);
+}
+static void mtx_clear(MTX* p, const fmpq_mpoly_ctx_struct* ctx) {
+    for (int i = 0; i < p->cap; i++) fmpq_mpoly_clear(p->c + i, ctx);
+    free(p->c); p->c = NULL; p->cap = 0; p->deg = -1;
+}
+static void mtx_normalise(MTX* p, const fmpq_mpoly_ctx_struct* ctx) {
+    while (p->deg >= 0 && fmpq_mpoly_is_zero(p->c + p->deg, ctx)) p->deg--;
+}
+static void mtx_copy(MTX* dst, const MTX* src, const fmpq_mpoly_ctx_struct* ctx) {
+    mtx_init(dst, src->deg + 1, ctx);
+    for (int i = 0; i <= src->deg; i++) fmpq_mpoly_set(dst->c + i, src->c + i, ctx);
+    dst->deg = src->deg;
+}
+
+/* P (an fmpq_mpoly over vs, x at index xi) split by the degree in x. */
+static bool mtx_from_mpoly(const fmpq_mpoly_t P, slong xi, slong nv,
+                           const fmpq_mpoly_ctx_struct* ctx, MTX* out) {
+    slong len = fmpq_mpoly_length(P, ctx);
+    ulong* e = (ulong*)malloc(sizeof(ulong) * (size_t)nv);
+    int maxi = -1;
+    for (slong k = 0; k < len; k++) {
+        fmpq_mpoly_get_term_exp_ui(e, P, k, ctx);
+        if ((int)e[xi] > maxi) maxi = (int)e[xi];
+    }
+    if (maxi > SUBRES_MAX_DEG_X) { free(e); return false; }
+    mtx_init(out, maxi + 1, ctx);
+    fmpq_t c, old; fmpq_init(c); fmpq_init(old);
+    for (slong k = 0; k < len; k++) {
+        fmpq_mpoly_get_term_exp_ui(e, P, k, ctx);
+        fmpq_mpoly_get_term_coeff_fmpq(c, P, k, ctx);
+        int i = (int)e[xi];
+        e[xi] = 0;
+        fmpq_mpoly_get_coeff_fmpq_ui(old, out->c + i, e, ctx);
+        fmpq_add(old, old, c);
+        fmpq_mpoly_set_coeff_fmpq_ui(out->c + i, old, e, ctx);
+    }
+    fmpq_clear(c); fmpq_clear(old);
+    free(e);
+    out->deg = maxi;
+    mtx_normalise(out, ctx);
+    return true;
+}
+
+static Expr* mtx_to_expr(const MTX* p, slong xi, slong nv, const VarSet* vs,
+                         const fmpq_mpoly_ctx_struct* ctx) {
+    size_t n = 0;
+    for (int i = 0; i <= p->deg; i++) n += (size_t)fmpq_mpoly_length(p->c + i, ctx);
+    if (n == 0) return expr_new_integer(0);
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
+    ulong* e = (ulong*)malloc(sizeof(ulong) * (size_t)nv);
+    Expr** fs = (Expr**)malloc(sizeof(Expr*) * (size_t)(nv + 2));
+    fmpq_t c; fmpq_init(c);
+    size_t k = 0;
+    for (int i = 0; i <= p->deg; i++) {
+        for (slong j = 0; j < fmpq_mpoly_length(p->c + i, ctx); j++) {
+            fmpq_mpoly_get_term_exp_ui(e, p->c + i, j, ctx);
+            fmpq_mpoly_get_term_coeff_fmpq(c, p->c + i, j, ctx);
+            e[xi] = (ulong)i;
+            size_t nf = 0;
+            fs[nf++] = fb_fmpq_to_expr(c);
+            for (slong v = 0; v < nv; v++) {
+                if (!e[v]) continue;
+                Expr* sv = expr_new_symbol(vs->names[v]);
+                if (e[v] == 1) fs[nf++] = sv;
+                else {
+                    fs[nf++] = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ sv, expr_new_integer((int64_t)e[v]) }, 2);
+                }
+            }
+            terms[k++] = nf == 1 ? fs[0] : expr_new_function(expr_new_symbol(SYM_Times), fs, nf);
+        }
+    }
+    fmpq_clear(c);
+    free(e); free(fs);
+    Expr* sum = n == 1 ? terms[0] : expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
+    free(terms);
+    return eval_and_free(sum);
+}
+
+static void mtx_prem(MTX* R, const MTX* A, const MTX* B, const fmpq_mpoly_ctx_struct* ctx) {
+    int m = A->deg, n = B->deg;
+    const fmpq_mpoly_struct* b = B->c + n;
+    mtx_copy(R, A, ctx);
+    int e = m - n + 1;
+    fmpq_mpoly_t tmp, lr;
+    fmpq_mpoly_init(tmp, ctx); fmpq_mpoly_init(lr, ctx);
+    while (R->deg >= n) {
+        int k = R->deg - n;
+        fmpq_mpoly_set(lr, R->c + R->deg, ctx);
+        for (int idx = 0; idx <= R->deg; idx++) fmpq_mpoly_mul(R->c + idx, R->c + idx, b, ctx);
+        for (int idx = 0; idx <= n; idx++) {
+            fmpq_mpoly_mul(tmp, lr, B->c + idx, ctx);
+            fmpq_mpoly_sub(R->c + idx + k, R->c + idx + k, tmp, ctx);
+        }
+        fmpq_mpoly_zero(R->c + R->deg, ctx);
+        mtx_normalise(R, ctx);
+        e--;
+    }
+    if (e > 0 && R->deg >= 0) {
+        fmpq_mpoly_pow_ui(tmp, b, (ulong)e, ctx);
+        for (int idx = 0; idx <= R->deg; idx++) fmpq_mpoly_mul(R->c + idx, R->c + idx, tmp, ctx);
+    }
+    fmpq_mpoly_clear(tmp, ctx); fmpq_mpoly_clear(lr, ctx);
+}
+
+static bool mtx_divexact(MTX* p, const fmpq_mpoly_t q, const fmpq_mpoly_ctx_struct* ctx) {
+    fmpq_mpoly_t quo; fmpq_mpoly_init(quo, ctx);
+    bool ok = true;
+    for (int i = 0; i <= p->deg && ok; i++) {
+        if (fmpq_mpoly_is_zero(p->c + i, ctx)) continue;
+        ok = fmpq_mpoly_divides(quo, p->c + i, q, ctx) != 0;
+        if (ok) fmpq_mpoly_swap(p->c + i, quo, ctx);
+        if (ok && fmpq_mpoly_length(p->c + i, ctx) > SUBRES_MV_MAX_TERMS) ok = false;
+    }
+    fmpq_mpoly_clear(quo, ctx);
+    return ok;
+}
+
+Expr* intrat_subres_chain_mv(const Expr* A, const Expr* B, const Expr* x, const Expr* t) {
+    if (!A || !B || !x || !t || x->type != EXPR_SYMBOL || t->type != EXPR_SYMBOL) return NULL;
+    Expr* Ae = expr_expand((Expr*)A);
+    Expr* Be = expr_expand((Expr*)B);
+    if (!Ae || !Be) { if (Ae) expr_free(Ae); if (Be) expr_free(Be); return NULL; }
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    Expr* out = NULL;
+    MTX* R = NULL;
+    int k = 0;
+    const fmpq_mpoly_ctx_struct* ctx = NULL;
+    slong nv = 0, xi = -1;
+    if (!fb_collect_vars(Ae, &vs) || !fb_collect_vars(Be, &vs) ||
+        !fb_collect_vars(x, &vs) || !fb_collect_vars(t, &vs)) goto done;
+    nv = (slong)vs.count;
+    for (slong v = 0; v < nv; v++) if (strcmp(vs.names[v], x->data.symbol.name) == 0) xi = v;
+    if (xi < 0 || nv > 16) goto done;
+    ctx = fb_ctx_lex(nv);
+    if (!ctx) goto done;
+    {
+        fmpq_mpoly_t pa, pb;
+        fmpq_mpoly_init(pa, ctx); fmpq_mpoly_init(pb, ctx);
+        MTX a, b;
+        bool ok = fb_to_mpoly(Ae, pa, ctx, &vs) && fb_to_mpoly(Be, pb, ctx, &vs);
+        bool ha = false, hb = false;
+        if (ok) { ok = mtx_from_mpoly(pa, xi, nv, ctx, &a); ha = ok; }
+        if (ok) { ok = mtx_from_mpoly(pb, xi, nv, ctx, &b); hb = ok; }
+        fmpq_mpoly_clear(pa, ctx); fmpq_mpoly_clear(pb, ctx);
+        if (!ok) {
+            if (ha) mtx_clear(&a, ctx);
+            if (hb) mtx_clear(&b, ctx);
+            goto done;
+        }
+        if (a.deg < b.deg) { MTX s0 = a; a = b; b = s0; }
+        if (b.deg < 1) { mtx_clear(&a, ctx); mtx_clear(&b, ctx); goto done; }
+        int cap = a.deg + 3;
+        R = (MTX*)malloc(sizeof(MTX) * (size_t)cap);
+        R[k++] = a;
+        R[k++] = b;
+        fmpq_mpoly_t gamma, beta, r, tmp, tmp2;
+        fmpq_mpoly_init(gamma, ctx); fmpq_mpoly_init(beta, ctx); fmpq_mpoly_init(r, ctx);
+        fmpq_mpoly_init(tmp, ctx); fmpq_mpoly_init(tmp2, ctx);
+        fmpq_mpoly_set_si(gamma, -1, ctx);
+        int delta = a.deg - b.deg;
+        fmpq_mpoly_set_si(beta, (delta + 1) % 2 == 0 ? 1 : -1, ctx);
+        while (ok && R[k - 1].deg >= 0) {
+            fmpq_mpoly_set(r, R[k - 1].c + R[k - 1].deg, ctx);
+            MTX nxt;
+            mtx_prem(&nxt, R + k - 2, R + k - 1, ctx);
+            if (nxt.deg < 0) { mtx_clear(&nxt, ctx); break; }
+            if (!mtx_divexact(&nxt, beta, ctx)) { mtx_clear(&nxt, ctx); ok = false; break; }
+            if (k >= cap) { cap *= 2; R = (MTX*)realloc(R, sizeof(MTX) * (size_t)cap); }
+            R[k++] = nxt;
+            fmpq_mpoly_neg(tmp, r, ctx);
+            if (delta == 0) {
+                /* gamma unchanged */
+            } else if (delta == 1) {
+                fmpq_mpoly_set(gamma, tmp, ctx);
+            } else {
+                fmpq_mpoly_pow_ui(tmp2, tmp, (ulong)delta, ctx);
+                fmpq_mpoly_pow_ui(tmp, gamma, (ulong)(delta - 1), ctx);
+                if (!fmpq_mpoly_divides(gamma, tmp2, tmp, ctx)) { ok = false; break; }
+            }
+            delta = R[k - 2].deg - R[k - 1].deg;
+            fmpq_mpoly_pow_ui(tmp, gamma, (ulong)delta, ctx);
+            fmpq_mpoly_mul(beta, r, tmp, ctx);
+            fmpq_mpoly_neg(beta, beta, ctx);
+        }
+        fmpq_mpoly_clear(gamma, ctx); fmpq_mpoly_clear(beta, ctx); fmpq_mpoly_clear(r, ctx);
+        fmpq_mpoly_clear(tmp, ctx); fmpq_mpoly_clear(tmp2, ctx);
+        if (ok) {
+            Expr** els = (Expr**)malloc(sizeof(Expr*) * (size_t)k);
+            for (int i = 0; i < k; i++) els[i] = mtx_to_expr(R + i, xi, nv, &vs, ctx);
+            out = expr_new_function(expr_new_symbol(SYM_List), els, (size_t)k);
+            free(els);
+        }
+    }
+done:
+    if (R) {
+        for (int i = 0; i < k; i++) mtx_clear(R + i, ctx);
+        free(R);
+    }
+    fb_varset_free(&vs);
+    expr_free(Ae); expr_free(Be);
+    return out;
+}
+
 #else  /* !USE_FLINT */
 
 Expr* intrat_subres_chain(const Expr* A, const Expr* B, const Expr* x, const Expr* t) {
+    (void)A; (void)B; (void)x; (void)t;
+    return NULL;
+}
+Expr* intrat_subres_chain_mv(const Expr* A, const Expr* B, const Expr* x, const Expr* t) {
     (void)A; (void)B; (void)x; (void)t;
     return NULL;
 }

@@ -1,7 +1,7 @@
 # Goursat Integrator — Graded Exercises
 
 A graded battery of pseudo-elliptic integrals, each **solved by the Goursat
-integrator** (`Integrate`GoursatAlgebraic`), ordered from easy to hard.  The
+integrator** (`Integrate`GeneralisedGoursat`; the C `Integrate`GoursatAlgebraic` it replaced was deleted on 2026-11-28), ordered from easy to hard.  The
 set deliberately spans:
 
 * **every radical exponent** `p ∈ {1/2, 1/3, 2/3, 1/4, 3/4}`;
@@ -11,7 +11,7 @@ set deliberately spans:
 
 Each exercise is reproduced as a unit test in
 [`tests/test_integrate_goursat.c`](tests/test_integrate_goursat.c)
-(`test_graded`), forced through `Method -> "GoursatAlgebraic"` so the result is
+(`test_graded`), forced through `Method -> "GeneralisedGoursat"` so the result is
 guaranteed to come from this integrator and not the `Automatic` cascade.
 
 ## Form recognised
@@ -181,11 +181,11 @@ method must leave them unevaluated.
 
 ```wolfram
 (* Solve any exercise, forcing the Goursat method: *)
-Integrate[1/(t^3-1)^(1/3), t, Method -> "GoursatAlgebraic"]
+Integrate[1/(t^3-1)^(1/3), t, Method -> "GeneralisedGoursat"]
 
 (* Trace the recognition + criterion tests: *)
 Integrate`GoursatDebug = True;
-Integrate[t/Sqrt[(t^2-1)(t^2-4)], t, Method -> "GoursatAlgebraic"]
+Integrate[t/Sqrt[(t^2-1)(t^2-4)], t, Method -> "GeneralisedGoursat"]
 ```
 
 Build and run the corresponding unit tests:

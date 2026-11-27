@@ -15,6 +15,8 @@
 #include "options.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "nfrat.h"
+#include "algfield.h"
 #include "ratfun.h"
 #include "sym_intern.h"
 #include <stdlib.h>
@@ -26,6 +28,14 @@
  * `apart_argc` ∈ {1, 2} and a borrowed `apart_alpha` (possibly NULL, possibly
  * coming from extension_autodetect).  Defined below `builtin_apart`. */
 static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha);
+
+/* Does R or one of the m denominator bases carry a nested constant radical? */
+static bool apart_has_nested_radical(const Expr* R, Expr* const* bases, size_t m) {
+    if (algfield_has_nested_constant_radical(R)) return true;
+    for (size_t i = 0; i < m; i++)
+        if (algfield_has_nested_constant_radical(bases[i])) return true;
+    return false;
+}
 
 /* True if `e` contains a symbolic radical Power[base, Rational[p,q]] (q >= 2)
  * whose base is not an integer — i.e. a Sqrt[k]-style radical over a parameter.
@@ -673,7 +683,18 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             if (ks[i] != 1) { squarefree = false; break; }
             if (apart_has_symbolic_radical(bases[i])) bases_have_radical = true;
         }
-        if (squarefree && (bases_have_radical || apart_has_symbolic_radical(R))) {
+        /* ... and over a number field (I, Sqrt[3], 2^(1/3), Root objects),
+         * where the classical solve below is a symbolic RowReduce whose
+         * entries are unreduced field elements: a degree-6 denominator over
+         * Q(k)(I Sqrt[3]) took 1.1 s there, 3 ms here. */
+        bool algebraic = nfrat_has_algebraic(R);
+        for (size_t i = 0; i < m && !algebraic; i++) algebraic = nfrat_has_algebraic(bases[i]);
+        /* a nested radical keeps the classical path and its spelling: the
+         * field's canonical form writes Sqrt[-567 - 324 Sqrt[3]]'s field over
+         * its powers ((-567 - 324 Sqrt[3])^(3/2)), and the log part built on
+         * those coefficients came out 15x larger and 3x slower */
+        if (algebraic && apart_has_nested_radical(R, bases, m)) algebraic = false;
+        if (squarefree && (bases_have_radical || apart_has_symbolic_radical(R) || algebraic)) {
             Expr* sum = Q;   /* take ownership of the polynomial part */
             for (size_t i = 0; i < m; i++) {
                 /* q_i = D / p_i = C * prod_{j != i} p_j. */
@@ -708,9 +729,18 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
                     (Expr*[]){ Ru, expr_copy(bases[i]), expr_copy(var) }, 3));
                 Expr* g_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){g_unit, expr_new_integer(-1)}, 2));
-                Expr* Ai = eval_and_free(expr_new_function(expr_new_symbol(SYM_Cancel),
-                    (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-                        (Expr*[]){rem, g_inv}, 2)) }, 1));
+                /* A_i is a polynomial over the number field of the constants:
+                 * reduce its coefficients there.  Cancel keeps a numeric
+                 * algebraic denominator as written, and over Q(I, Sqrt[3])
+                 * the extended-gcd cofactors then carry 100-digit constants
+                 * into every partial fraction (and on into the rational
+                 * integrator's log part, which takes seconds on them). */
+                Expr* prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){rem, g_inv}, 2));
+                Expr* Ai = algfield_has_nested_constant_radical(prod) ? NULL : nfrat_canonical(prod);
+                if (Ai) expr_free(prod);
+                else Ai = eval_and_free(expr_new_function(expr_new_symbol(SYM_Cancel),
+                                                          (Expr*[]){ prod }, 1));
                 /* term = A_i / p_i. */
                 Expr* pi_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_copy(bases[i]), expr_new_integer(-1)}, 2));
@@ -839,7 +869,17 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
                 for (int r = 0; r < d_B; r++) {
                     Expr* coeff = expr_copy(reduced->data.function.args[col]->data.function.args[S]);
                     
-                    Expr* fact_coeff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), (Expr*[]){coeff}, 1));
+                    /* A coefficient in a number field (I, Sqrt[3], ...) is
+                     * reduced there: RowReduce leaves it as a quotient of
+                     * unreduced field elements, whose size compounds through
+                     * every later step (100-digit constants for a degree-6
+                     * denominator over Q(I, Sqrt[3])), and Factor does not
+                     * touch a numeric constant. */
+                    Expr* fact_coeff = (nfrat_has_algebraic(coeff) &&
+                                        !algfield_has_nested_constant_radical(coeff))
+                                       ? nfrat_canonical(coeff) : NULL;
+                    if (fact_coeff) expr_free(coeff);
+                    else fact_coeff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), (Expr*[]){coeff}, 1));
                     
                     Expr* var_pow = (r == 0) ? expr_new_integer(1) : ((r == 1) ? expr_copy(var) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(var), expr_new_integer(r)}, 2)));
                     Expr* term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){fact_coeff, var_pow}, 2));

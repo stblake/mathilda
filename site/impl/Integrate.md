@@ -56,7 +56,7 @@ declined (`IP_STAGE`). The order is:
 11. `LogByParts`: `Log[g]` times a trig kernel, integrated by parts once.
 12. `ParallelMixedTower`: the parallel Risch–Norman method over a mixed radical tower, from
     src/internal/mixed/ParallelMixed.m. It is skipped for pseudo-elliptic `F/R^p`.
-13. `GoursatAlgebraic`: pseudo-elliptic reductions, and their cube- and fourth-root versions,
+13. `GeneralisedGoursat`: pseudo-elliptic reductions, and their cube- and fourth-root versions,
     to genus-0 curves.
 14. `ParallelMixedSpecial`: the only stage allowed to answer with non-elementary kernels
     (`Erf`, `Gamma[s, z]`, `SinIntegral`/`CosIntegral`, `EllipticF`/`E`/`Pi`). It runs last

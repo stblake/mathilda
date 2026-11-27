@@ -131,7 +131,7 @@ goursatIntegrate[F0_, R0_, t_, p_, y_, depth_] := Module[
 
   (* second level: the residual is again a Goursat (square-root) integral *)
   If[secondLevelQ[] && kind === "third-kind" &&
-     ((n == 2 && depth < maxDepth[]) || n == 3),
+     ((n == 2 && depth < maxDepth[]) || n == 3) && !specialisedUndecidedQ[Fres, R, t, y, n, k, depth],
     {sub, back} = If[n == 2, sqrtSecondLevel[Fres, R, t, y, depth],
                              cbrtSecondLevel[Fres, R, t, y, k]];
     AppendTo[log, <|"secondLevel" -> sub["Status"], "PhiResidual" -> sub["Residual"]|>];
@@ -144,6 +144,37 @@ goursatIntegrate[F0_, R0_, t_, p_, y_, depth_] := Module[
   anti = stage["tidy", tidy[anti + A2 y^(n - k), R, t, y, n]];
   status = Switch[kind, "zero", "elementary", "second-kind", "non-elementary", _, "undecided"];
   mkResult[status, anti, res, kind, n, k, R, y, log]];
+
+(* ---- parameters at the second level ----------------------------------------- *)
+(* Over Q(params) the second level is a chain of multiplication-by-2 descents   *)
+(* whose integrands grow at every step: (2 - (k + 1) t)/((1 - (k + 1) t)        *)
+(* (t (1 - t)(1 - k t))^(2/3)) reached a 7000-leaf residual at depth 2 and ran   *)
+(* the stage's 30 s budget out, to end undecided.  The verdict of the generic   *)
+(* problem is that of almost every specialisation: if the residue divisor is    *)
+(* torsion over Q(params), it stays torsion (of an order dividing) at every     *)
+(* parameter value where the curve and the poles stay distinct.  So the second  *)
+(* level is first run at two parameter values; when both end undecided the     *)
+(* parametric one is not attempted and the reduction ends undecided -- a        *)
+(* decline, never an answer or a certificate.  A specialisation that degenerates *)
+(* (R no longer squarefree, a pole on the branch locus) or fails is no evidence, *)
+(* and the parametric second level runs as before.                             *)
+specialisationValues[] := {{7/11, 13/5, -5/3, 11/7, 3/13}, {-9/7, 17/19, 5/2, -2/11, 23/9}};
+
+specialisedUndecidedQ[Fres_, R_, t_, y_, n_, k_, depth_] := Module[{ps, verdicts},
+  ps = Complement[Cases[Variables[{Fres, R}], _Symbol], {t, y}];
+  If[ps === {} || Length[ps] > 5, Return[False, Module]];
+  verdicts = Table[
+    With[{rules = Thread[ps -> Take[vals, Length[ps]]]},
+      Module[{Fs = gK[Fres /. rules], Rs = Expand[R /. rules], r},
+        r = If[!PolynomialQ[Rs, t] || Exponent[Rs, t] != Exponent[R, t] ||
+               Exponent[PolynomialGCD[Rs, D[Rs, t]], t] != 0 || Fs === 0,
+          "degenerate",
+          Quiet[TimeConstrained[Catch[
+            (If[n == 2, sqrtSecondLevel[Fs, Rs, t, y, depth], cbrtSecondLevel[Fs, Rs, t, y, k]][[1]])["Status"],
+            "GoursatFail"], 10, "timeout"]]];
+        r]],
+    {vals, specialisationValues[]}];
+  AllTrue[verdicts, # === "undecided" &]];
 
 (* ---- front end: integrate_algebraic ---------------------------------------- *)
 radicalsOf[e_, t_] := Union[Cases[e, Power[b_, q_Rational] /; !FreeQ[b, t], {0, Infinity}]];
@@ -163,7 +194,7 @@ integrateAlgebraic[expr_, t_] := Module[
   E1 = expr /. Power[b_, q_Rational] /; !FreeQ[b, t] :> y^(q n);
   If[radicalsOf[E1, t] =!= {},
     ggDecline["radical left after substitution"]];
-  cs = CoefficientList[normalizeAlgebraic[E1, R, t, y, n], y];
+  cs = CoefficientList[stage["normalize", normalizeAlgebraic[E1, R, t, y, n]], y];
   cs = Join[cs, ConstantArray[0, n - Length[cs]]];
   anti = ratInt[gK[cs[[1]]], t];
   Do[If[cs[[j + 1]] =!= 0,
@@ -182,7 +213,7 @@ integrateAlgebraic[expr_, t_] := Module[
                  True, "elementary"];
   rad = R^(1/n);
   <|"Status" -> status, "Antiderivative" -> (anti /. y -> rad),
-    "Residual" -> (resid /. y -> rad), "Parts" -> parts, "R" -> R, "n" -> n, "y" -> y,
+    "Residual" -> (resid /. y -> rad), "Parts" -> parts, "R" -> R, "n" -> n, "y" -> y, "t" -> t,
     "AntiderivativeY" -> anti, "ResidualY" -> resid|>];
 
 (* ---- public API ------------------------------------------------------------ *)
@@ -213,15 +244,45 @@ GoursatRationalIntegrate[rho_, m_Symbol] := catchG[ratInt[rho, m]];
 
 (* The Integrate stage.  A verified antiderivative, a certified partial answer, *)
 (* or $Failed (decline: out of shape, undecided, unverified).                   *)
-GoursatIntegrate[f_, x_Symbol] := Module[{r},
-  r = catchG[integrateAlgebraic[f, x]];
+GoursatIntegrate[f_, x_Symbol] := Block[{$ggDefer = True, $ggDeferred = {}}, Module[{r, vd = False},
+  r = stage["integrateAlgebraic", catchG[integrateAlgebraic[f, x]]];
   If[!AssociationQ[r], Return[$Failed, Module]];
+  (* The verdict is in.  An undecided reduction ends here, without integrating *)
+  (* its pieces (RatInt.m, deferred integration).  Otherwise the answer is      *)
+  (* verified before its pieces are integrated, by the chain rule (Verify.m,     *)
+  (* verifyDeferred: an algebraic identity, where the closed form would put      *)
+  (* logarithms and RootSums of the pieces to PossibleZeroQ), and the deferred   *)
+  (* integrals are computed; the closed form is verified only if that failed.   *)
+  If[MemberQ[{"elementary", "non-elementary"}, r["Status"]],
+    vd = stage["verify (deferred)", verifyDeferred[r, f, x]];
+    r = stage["integrate pieces", catchG[resolveAnswer[r]]];
+    If[!AssociationQ[r], Return[$Failed, Module]]];
   Switch[r["Status"],
     "elementary",
-      If[verifyExprResult[r, f, x], r["Antiderivative"], $Failed],
+      If[vd || stage["verify", verifyExprResult[r, f, x]], r["Antiderivative"], $Failed],
     "non-elementary",
-      If[verifyExprResult[r, f, x], {"not elementary", r["Antiderivative"], r["Residual"]}, $Failed],
-    _, $Failed]];
+      If[vd || stage["verify", verifyExprResult[r, f, x]], {"not elementary", r["Antiderivative"], r["Residual"]}, $Failed],
+    _, $Failed]]];
+
+(* Is there anything for tidy to do: algebraic terms to combine (the rational   *)
+(* pieces of a resolved answer can cancel to 0), or a logarithm argument with y *)
+(* in a denominator (a second-level back-substitution)?  A first-level answer   *)
+(* has neither, and its tidy only re-evaluated it (0.1 s over Q(k)(I Sqrt[3])). *)
+needsTidyQ[ay_, y_] := Module[{terms = If[Head[ay] === Plus, List @@ ay, {ay}]},
+  Count[terms, tm_ /; !transcendentalQ[tm]] > 1 ||
+  !FreeQ[Cases[ay, (Log | ArcTan | ArcTanh | ArcCot | ArcCoth)[a_] :> a, {0, Infinity}],
+         Power[b_, e_?Negative] /; !FreeQ[b, y]]];
+
+(* An integrateAlgebraic result with its deferred integrals computed, the     *)
+(* logarithm arguments brought to normal form (the tidy step the reduction     *)
+(* applied to the pieces before they were deferred).                          *)
+resolveAnswer[r_] := Module[{ay, n = r["n"], R = r["R"], y = r["y"]},
+  If[!KeyExistsQ[r, "AntiderivativeY"],
+    Return[Append[r, "Antiderivative" -> resolveDeferred[r["Antiderivative"]]], Module]];
+  ay = resolveDeferred[r["AntiderivativeY"]];
+  If[ay =!= r["AntiderivativeY"] && needsTidyQ[ay, y],
+    ay = stage["tidy (resolved)", tidy[ay, R, r["t"], y, n]]];
+  Join[r, <|"AntiderivativeY" -> ay, "Antiderivative" -> (ay /. y -> R^(1/n))|>]];
 
 End[];
 EndPackage[];

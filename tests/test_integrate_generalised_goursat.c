@@ -284,16 +284,30 @@ static void test_integrate_method(void) {
     ok("1/(t^4 - 1)^(1/4)");
 }
 
+/* Integrate[f, t, Method -> "GeneralisedGoursat"] is p + Inactive[Integrate][g, t]
+ * with D[p, t] + g == f, no special function, within a second. */
+static void partial_inactive(const char* f) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "Module[{tr = AbsoluteTiming[Integrate[%s, t, Method -> \"GeneralisedGoursat\"]]},"
+             " {MatchQ[tr[[2]], p_ + Inactive[Integrate][g_, t] /; PossibleZeroQ[D[p, t] + g - (%s)]],"
+             "  FreeQ[tr[[2]], EllipticF | EllipticE | EllipticPi | Hypergeometric2F1 | AppellF1],"
+             "  tr[[1]] < 1}]", f, f);
+    check_eq(buf, "{True, True, True}");
+}
+
 static void test_integrate_partial(void) {
     /* certified non-elementary with an elementary part: the method symbol returns
      * {"not elementary", partial, residual} ... */
     check_eq("Integrate`GeneralisedGoursat[(3 t^4 - 10 t^2 + 5)/Sqrt[(t^2-1)(t^2-4)], t]",
              "{\"not elementary\", t Sqrt[4 - 5 t^2 + t^4], 1/Sqrt[4 - 5 t^2 + t^4]}");
-    /* ... and Integrate returns partial + Integrate[residual], the residual left to
-     * the rest of the cascade (here an elliptic integral) */
-    check_eq("With[{r = Integrate[(t^3 + 3)/Sqrt[t^4 + 1], t, Method -> \"GeneralisedGoursat\"]},"
-             " {FreeQ[r, Integrate], PossibleZeroQ[D[r, t] - (t^3 + 3)/Sqrt[t^4 + 1]]}]",
-             "{True, True}");
+    /* ... and Integrate returns partial + Inactive[Integrate][residual]: an
+     * explicit Method runs that method alone, so the certified non-elementary
+     * remainder is NOT handed to the rest of the cascade (1/(x^3 Sqrt[x^3 - 1])
+     * came back with an EllipticF term, after 0.37 s, where the method's own
+     * answer takes 10 ms) */
+    partial_inactive("(t^3 + 3)/Sqrt[t^4 + 1]");
+    partial_inactive("1/(t^3 Sqrt[t^3 - 1])");
     /* nothing elementary to return: unevaluated */
     declines("1/Sqrt[t^3 + t + 1]");
     declines("1/(t^3 + t + 1)^(1/3)");       /* undecided */
@@ -303,6 +317,85 @@ static void test_integrate_partial(void) {
     check_eq("Integrate`GeneralisedGoursat[t/(t^3 - 1)^(1/3), t]",
              "{\"not elementary\", 0, t/(-1 + t^3)^(1/3)}");
     check_eq("Integrate`GeneralisedGoursat[Sin[t], t]", "$Failed");
+}
+
+/* ------------------------------------------------------------------ */
+/* Parity with GoursatAlgebraic: parametric radicands and the cube-root   */
+/* third-kind cases (2026-11-27).                                        */
+/* ------------------------------------------------------------------ */
+
+/* Integrate`GeneralisedGoursat[f, t] closes within `secs` seconds and its
+ * answer differentiates back by PossibleZeroQ -- with every parameter left
+ * symbolic (the answer is an identity in k, not a value at a sample k). */
+static void ok_within(const char* f, int secs) {
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+             "Module[{tr = AbsoluteTiming[Integrate`GeneralisedGoursat[%s, t]]},"
+             " {FreeQ[tr[[2]], Integrate | $Failed | List], tr[[1]] < %d,"
+             "  TrueQ[PossibleZeroQ[D[tr[[2]], t] - (%s)]]}]", f, secs, f);
+    check_eq(buf, "{True, True, True}");
+}
+
+/* ... declines ($Failed: undecided, never a certificate) within `secs` seconds. */
+static void declines_within(const char* f, int secs) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "Module[{tr = AbsoluteTiming[Integrate`GeneralisedGoursat[%s, t]]},"
+             " {tr[[2]], tr[[1]] < %d}]", f, secs);
+    check_eq(buf, "{$Failed, True}");
+}
+
+static void test_parametric(void) {
+    /* the third-kind k-family of the GoursatAlgebraic suite, k symbolic: the
+     * descent runs over Q(k)(Sqrt[-3]) (Hessian roots (1 -+ I Sqrt[3])/(2k - 1
+     * -+ I Sqrt[3])); was unevaluated after the 30 s budget */
+    ok_within("(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3))", 20);
+    /* p = 2/3 member (the C method declines it) */
+    ok_within("(1 - k t)/((1 + (k - 2) t) (t (1 - t) (1 - k t))^(2/3))", 20);
+    /* parametric radicands of the order-3, Klein and pseudo-elliptic shapes */
+    ok_within("1/(t^3 - a)^(1/3)", 10);
+    ok_within("1/(t (t^3 - a)^(2/3))", 10);
+    ok_within("1/(t^4 - a)^(1/4)", 10);
+    ok_within("t/Sqrt[(t^2 - a^2)(t^2 - b^2)]", 10);
+    ok_within("(t^2 - a b)/(t Sqrt[(t^2 - a^2)(t^2 - b^2)])", 10);
+    ok_within("(t - c)/((t + 2 c) Sqrt[t^3 - c^3])", 10);
+    /* generic a: the residue divisor is not torsion -- undecided */
+    declines_within("1/((t - a) Sqrt[t^3 - t])", 10);
+}
+
+static void test_thirdkind_cbrt(void) {
+    /* numeric members of the k-family (GoursatAlgebraic: 0.1 s each) */
+    ok_within("(2 - 3 t)/((1 - 3 t) (t (1 - t) (1 - 2 t))^(1/3))", 10);
+    ok_within("(2 - 4 t)/((1 - 4 t) (t (1 - t) (1 - 3 t))^(1/3))", 10);
+    /* non-elementary (Trager certifies both): the reduction ends undecided at
+     * a third-kind residual, so the pieces are never integrated (was 24-28 s
+     * and 7-9 s) */
+    declines_within("(2 + t)/((1 + t + t^2) (2 + t^3)^(1/3))", 5);
+    declines_within("(1 - t^3)^(1/3)/(2 + t)", 5);
+    /* the second-level chain stops when the next level's integrand is no
+     * smaller than this level's (was 30 s, the stage budget) */
+    declines_within("(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(2/3))", 10);
+}
+
+static void test_verifier_rootsum_denominator(void) {
+    /* a RootSum whose summand has the root in its denominator (the rational
+     * integrator's Log[u - #]/(1029 #)): the exact verifier reads the summand
+     * modulo the defining polynomial; it used to put a non-polynomial into
+     * CoefficientList and reject a correct antiderivative */
+    check_eq("Module[{u, p, rho}, rho = u (49 - 196 I Sqrt[3])/(-429 + 540 I Sqrt[3] + 343 u^3);"
+             " p = (49 - 196 I Sqrt[3]) RootSum[-429 + 540 I Sqrt[3] + 343 #1^3 &, Log[u - #1]/(1029 #1) &];"
+             " {GeneralisedGoursat`Private`derivZeroQ[p, -rho, u, GeneralisedGoursat`Private`ggY, 1, 1],"
+             "  GeneralisedGoursat`Private`derivZeroQ[2 p, -rho, u, GeneralisedGoursat`Private`ggY, 1, 1]}]",
+             "{True, False}");
+    /* ... and with the root also in a sum in the denominator (z^3/(3 z^5)): the
+     * rationality test read a replaced Power[den, -1] without descending into
+     * den, called the summand irrational, and fell back to a minute-long
+     * PossibleZeroQ (cbrt-symmetric #15 of stress_7) */
+    check_eq("Module[{u, p}, p = RootSum[#1^3 - 2 &, (#1^3 Log[u - #1])/(3 #1^5 + #1^2 - #1^2) &];"
+             " {GeneralisedGoursat`Private`ratInQ[z^3/(a z^2 + b z^5), z],"
+             "  GeneralisedGoursat`Private`derivZeroQ[p, -1/(u^3 - 2), u, GeneralisedGoursat`Private`ggY, 1, 1],"
+             "  GeneralisedGoursat`Private`derivZeroQ[2 p, -1/(u^3 - 2), u, GeneralisedGoursat`Private`ggY, 1, 1]}]",
+             "{True, True, False}");
 }
 
 int main(void) {
@@ -322,6 +415,9 @@ int main(void) {
     TEST(test_front_end);
     TEST(test_integrate_method);
     TEST(test_integrate_partial);
+    TEST(test_parametric);
+    TEST(test_thirdkind_cbrt);
+    TEST(test_verifier_rootsum_denominator);
 
     printf("All Integrate GeneralisedGoursat tests passed!\n");
     return 0;

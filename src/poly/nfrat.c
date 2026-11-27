@@ -1126,10 +1126,13 @@ static int nr_scan_ext(const Expr* ext, Nr* N, size_t* acap) {
 
 static int nr_setup_field(Nr* N);
 
-static int nr_setup(Nr* N, const Expr* e, const Expr* ext) {
+/* allow_const: an expression with no variable is accepted (the canonical
+ * form of a constant; Together / Cancel leave numbers to the evaluator). */
+static int nr_setup_ex(Nr* N, const Expr* e, const Expr* ext, int allow_const) {
     memset(N, 0, sizeof *N);
     size_t acap = 0;
-    if (!nr_scan(e, N, &acap) || !nr_scan_ext(ext, N, &acap) || N->na == 0 || N->ngens == 0)
+    if (!nr_scan(e, N, &acap) || !nr_scan_ext(ext, N, &acap) || N->na == 0 ||
+        (N->ngens == 0 && !allow_const))
         return 0;
     return nr_setup_field(N);
 }
@@ -1205,6 +1208,8 @@ static int nr_setup_field(Nr* N) {
         if (!nr_image_poly(N, imgs->data.function.args[i], N->aimg + i)) return 0;
     return 1;
 }
+
+static int nr_setup(Nr* N, const Expr* e, const Expr* ext) { return nr_setup_ex(N, e, ext, 0); }
 
 /* ------------------------------------------------------------------ */
 /*  Cancellation and the denominator basis                             */
@@ -2971,11 +2976,60 @@ done:
     return out;
 }
 
+/* The canonical form over K(x1..xn) (nfrat_canonical): every constant
+ * reduced in K, the written constant denominator u inverted over K, the
+ * numerator and the denominator expanded, the denominator the product of the
+ * monic pieces scaled to primitive integral product-basis coordinates (the
+ * numerator takes the same rational scale).  Equal rational functions get
+ * identical output, whatever the input's spelling. */
+static Expr* nr_present_canon(Nr* N, NrRf* r) {
+    if (rf_is_zero(N, r)) return expr_new_integer(0);
+    fmpq_mpoly_t P, D, inv;
+    fmpq_mpoly_init(P, N->ctx); fmpq_mpoly_init(D, N->ctx); fmpq_mpoly_init(inv, N->ctx);
+    fmpq_mpoly_one(D, N->ctx);
+    int ok = nr_const_inv(N, inv, r->u);
+    if (ok) nr_mul(N, P, r->c, inv);
+    for (size_t j = 0; j < r->nnu && ok; j++) ok = nr_mul_piece_pow(N, P, r->nu[j].i, r->nu[j].e);
+    for (size_t j = 0; j < r->nde && ok; j++) ok = nr_mul_piece_pow(N, D, r->de[j].i, r->de[j].e);
+    Expr* out = NULL;
+    if (ok) {
+        NrGroups GD, GP;
+        nr_groups(N, &GD, D);
+        nr_groups(N, &GP, P);
+        fmpq_t s; fmpq_init(s);
+        nr_groups_scale(N, &GD, s);
+        Expr* num = nr_groups_expr(N, &GP, s);
+        Expr* den = nr_groups_expr(N, &GD, s);
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                  (Expr*[]){ num, expr_new_function(expr_new_symbol(SYM_Power),
+                                 (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2));
+        fmpq_clear(s);
+        nr_groups_clear(N, &GD); nr_groups_clear(N, &GP);
+    }
+    fmpq_mpoly_clear(P, N->ctx); fmpq_mpoly_clear(D, N->ctx); fmpq_mpoly_clear(inv, N->ctx);
+    return out;
+}
+
+Expr* nfrat_canonical(const Expr* e) {
+    if (!e || !nfrat_has_algebraic(e)) return NULL;
+
+    Nr N;
+    Expr* out = NULL;
+    if (nr_setup_ex(&N, e, NULL, 1)) {
+        NrRf r; rf_init(&N, &r);
+        if (nr_eval(&N, e, &r) && nr_cancel(&N, &r)) out = nr_present_canon(&N, &r);
+        rf_clear(&N, &r);
+    }
+    nr_clear(&N);
+    return out;
+}
+
 #else  /* !USE_FLINT */
 
 Expr* nfrat_together(const Expr* e, int factored, const Expr* ext) { (void)e; (void)factored; (void)ext; return NULL; }
 Expr* nfrat_cancel(const Expr* e, int factored, const Expr* ext) { (void)e; (void)factored; (void)ext; return NULL; }
 Expr* nfrat_radical_normal_form(const Expr* e, int* field) { (void)e; if (field) *field = 0; return NULL; }
 static bool nr_field_degree_small(const Expr* e) { (void)e; return true; }
+Expr* nfrat_canonical(const Expr* e) { (void)e; return NULL; }
 
 #endif

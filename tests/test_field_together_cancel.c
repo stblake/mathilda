@@ -452,6 +452,38 @@ static void test_apart_dependent_radicals(void) {
              "Quiet[Abs[N[(f - r) /. x -> 3/7, 40]] < 10^-25]]");
 }
 
+/* The canonical form over the number field (Internal`NumberFieldCanonical)
+ * and Apart with algebraic coefficients.  Cancel keeps a numeric algebraic
+ * denominator as written (the reference does not rationalise), so a quotient
+ * of two field elements survived every Cancel: the GeneralisedGoursat descent
+ * over Q(I Sqrt[3]) carried (323649410643402 I/49 - ...)/(-3972673504943 I -
+ * ...) == (186 - 236 I Sqrt[3])/49, and Apart's RowReduce and Bezout paths
+ * returned 100-digit coefficients that then cost the rational integrator
+ * seconds. */
+static void test_numberfield_canonical_and_apart(void) {
+    run_true("Internal`NumberFieldCanonical[((323649410643402*I)/49 - (1216699821399148*Sqrt[3])/49)/"
+             "(-3972673504943*I - 1500800399100*Sqrt[3])] === 186/49 - (236/49) I Sqrt[3]");
+    run_true("Internal`NumberFieldCanonical[(1 + Sqrt[3])/(2 + Sqrt[3])] === -1 + Sqrt[3]");
+    /* one output for every spelling of the same function */
+    run_true("Internal`NumberFieldCanonical[x/(1 + Sqrt[2])] === Internal`NumberFieldCanonical[(Sqrt[2] - 1) x]");
+    run_true("Internal`NumberFieldCanonical[(x^2 - 2)/(x - Sqrt[2])] === Sqrt[2] + x");
+    run_true("Module[{e = (k + 2^(1/3) t)/(k^2 - 2^(2/3) t^2)}, "
+             "PossibleZeroQ[Internal`NumberFieldCanonical[e] - e]]");
+    run_true("Internal`NumberFieldCanonical[x + 1] === $Failed");
+    /* Apart over Q(I, Sqrt[3]): reduced coefficients (was 110 leaves of 100-digit
+     * numbers) and the same function */
+    run_true("Module[{h = ((1302 - 1652 I Sqrt[3]) (-27 u + 10 I Sqrt[3] u + 49 u^4))/((143 + 180 I Sqrt[3])"
+             " (1287 - 1620 I Sqrt[3] - 1458 u^3 + 540 I Sqrt[3] u^3 + 343 u^6)), a},"
+             " a = Apart[h, u]; LeafCount[a] < 60 && PossibleZeroQ[a - h]]");
+    /* ... and over Q(k)(I Sqrt[3]): the residue-formula path (was a 1.1 s RowReduce) */
+    run_true("TimeConstrained[Module[{h = (-(k u) - I Sqrt[3] k u + 3 k^2 u + 5 I Sqrt[3] k^2 u + 3 k^3 u"
+             " - 5 I Sqrt[3] k^3 u - k^4 u + I Sqrt[3] k^4 u - 3 u^4 + I Sqrt[3] u^4 + 3 k u^4"
+             " - 5 I Sqrt[3] k u^4 + 3 k^2 u^4 + 5 I Sqrt[3] k^2 u^4 - 3 k^3 u^4 - I Sqrt[3] k^3 u^4)/"
+             "(-2 k^2 + 3 k^3 + 3 I Sqrt[3] k^3 + 3 k^4 - 3 I Sqrt[3] k^4 - 2 k^5 - 6 I Sqrt[3] k^2 u^3"
+             " + 6 I Sqrt[3] k^3 u^3 + 2 u^6 - 3 k u^6 + 3 I Sqrt[3] k u^6 - 3 k^2 u^6 - 3 I Sqrt[3] k^2 u^6"
+             " + 2 k^3 u^6), a}, a = Apart[h, u]; Length[a] == 2 && PossibleZeroQ[a - h]], 1, False]");
+}
+
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -483,6 +515,7 @@ int main(int argc, char** argv) {
     TEST(test_qi_sqrt3_repro);
     TEST(test_numberfield_forms);
     TEST(test_apart_dependent_radicals);
+    TEST(test_numberfield_canonical_and_apart);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

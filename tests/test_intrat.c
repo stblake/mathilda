@@ -1426,6 +1426,27 @@ static void test_realform_complex_field_branch_safe(void) {
            "{True, True, True, True}");
 }
 
+/* The log part over a number field with a long subresultant chain, and over
+ * Q(params)(radicals).  The generic chain read I and Sqrt[3] as independent
+ * indeterminates, so a degree-12 denominator over Q(I Sqrt[3]) (a
+ * GeneralisedGoursat second-level piece) ran past a minute; it now runs over
+ * K = Q(theta) (algebraic mode, the native subresultant chain over Q[z, t][x],
+ * the squarefree split over K).  A binomial over Q(k)(I Sqrt[3]) declined the
+ * field kernels (the parameter was not passed) and took the generic path. */
+static void test_number_field_long_chain_log_part(void) {
+    run_eq("TimeConstrained[Module[{rho = (4897760256 - 1632586752 I Sqrt[3] + 136048896 m^2"
+           " - 2312831232 I Sqrt[3] m^2 + 1291811328 m^4 + 408768768 I Sqrt[3] m^4 - 23619168 m^6"
+           " + 303264 I Sqrt[3] m^6 + 16524 m^8 + 324 I Sqrt[3] m^8 + 6 m^10)/(-58773123072"
+           " - 1632586752 m^2 - 1632586752 I Sqrt[3] m^2 + 7558272 m^4 - 7558272 I Sqrt[3] m^4"
+           " - 21234970368 m^6 - 1944 m^8 - 1944 I Sqrt[3] m^8 - 108 m^10 + 108 I Sqrt[3] m^10 + m^12), P},"
+           " P = Integrate[rho, m, Method -> \"BronsteinRational\"];"
+           " FreeQ[P, Integrate] && PossibleZeroQ[D[P, m] - rho]], 30, False]", "True");
+    run_eq("TimeConstrained[Module[{h = u/(2 k - 3 k^2 - 3 I Sqrt[3] k^2 - 3 k^3 + 3 I Sqrt[3] k^3"
+           " + 2 k^4 + 2 u^3 - 3 k u^3 + 3 I Sqrt[3] k u^3 - 3 k^2 u^3 - 3 I Sqrt[3] k^2 u^3 + 2 k^3 u^3), P},"
+           " P = Integrate[h, u, Method -> \"BronsteinRational\"];"
+           " FreeQ[P, Integrate] && PossibleZeroQ[D[P, u] - h]], 5, False]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1508,6 +1529,7 @@ int main(void) {
     TEST(test_bronstein_log_parts);
     TEST(test_bronstein_log_to_real);
     TEST(test_realform_complex_field_branch_safe);
+    TEST(test_number_field_long_chain_log_part);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

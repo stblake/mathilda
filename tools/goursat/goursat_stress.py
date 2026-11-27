@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """goursat_stress.py -- benchmark 265-goursat-stress: the GeneralisedGoursat corpora
-through three Mathilda Integrate methods, goursat.py and plain sympy.
+through two Mathilda Integrate methods, goursat.py and plain sympy.
 
     python3 tools/goursat/goursat_stress.py                         # the timed run, 30 s per case
     python3 tools/goursat/goursat_stress.py --correctness           # wrong answers only: 60 s, 4 jobs
@@ -16,14 +16,16 @@ family = the corpus's Family, expect = its Truth, plus the corpus, label and tru
 
 RUNS (columns).
   Mathilda:Automatic           Integrate[f, x]
-  Mathilda:GoursatAlgebraic    Integrate[f, x, Method -> "GoursatAlgebraic"] (the C method)
   Mathilda:GeneralisedGoursat  Integrate[f, x, Method -> "GeneralisedGoursat"] (the .m port),
                                with Integrate`$GeneralisedGoursatBudget = Infinity so the
                                per-case limit, not the stage's own 30 s budget, ends it.
-                               The Method option drops the stage's non-elementary
-                               certificate (it declines), so on a decline the stage
-                               symbol Integrate`GeneralisedGoursat[f, x] is asked again,
+                               A certified non-elementary integral comes back as a
+                               decline or as partial + Inactive[Integrate][residual, x]
+                               (UNEVAL either way), so the stage symbol
+                               Integrate`GeneralisedGoursat[f, x] is asked again,
                                untimed, only to read the certificate.
+  (The C GoursatAlgebraic column was dropped when that method was deleted, 2026-11-28;
+  runs before then carry it in history.jsonl.)
   goursat.py                   the sympy reference.  By default its timings are READ from
                                tests/data/generalised_goursat/sympy_<corpus>.tsv
                                (tools/goursat/bench_sympy.py: goursat_integrate on F, R, p
@@ -79,7 +81,7 @@ import translate as T  # noqa: E402
 
 BENCH = os.path.join(A.REPO, "benchmarks", "265-goursat-stress")
 GGDATA = os.path.join(A.REPO, "tests", "data", "generalised_goursat")
-METHODS = ["Automatic", "GoursatAlgebraic", "GeneralisedGoursat"]
+METHODS = ["Automatic", "GeneralisedGoursat"]
 # further Integrate methods that may be requested with --methods (not run by default)
 EXTRA_METHODS = ["Trager", "TragerKauers", "Bronstein"]
 CORPORA = ["unit", "examples", "literature", "welz", "stress_2026", "stress_7", "stress_11",
@@ -93,7 +95,6 @@ MEM = 4 * 10 ** 9  # MemoryConstrained per case
 # warm-up: every method's lazy loads (the .m packages, FLINT contexts) are paid once per
 # process before the first timed case, so a batch's first case is not charged for them
 WARM = {"Automatic": "Integrate[x/Sqrt[1 + x^4], x]; Integrate[1/(1 + x^3)^(1/3), x]",
-        "GoursatAlgebraic": 'Integrate[(x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1]), x, Method -> "GoursatAlgebraic"]',
         "GeneralisedGoursat": 'Integrate[(x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1]), x, Method -> "GeneralisedGoursat"]'}
 
 GS_TMPL = r"""

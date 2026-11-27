@@ -1,9 +1,15 @@
 /* test_integrate_goursat.c
  *
- * Unit tests for Integrate`GoursatAlgebraic -- Goursat's pseudo-elliptic
+ * Unit tests for Integrate`GeneralisedGoursat -- Goursat's pseudo-elliptic
  * algorithm and its cube-/fourth-root generalisations for F(t)/R(t)^p,
  * p in {1/2, 1/3, 2/3, 1/4, 3/4}.  Examples are the worked cases from
  * GoursatAppendix.wl / GoursatExamples.wl and the two preprints.
+ *
+ * The suite was written for the C GoursatAlgebraic (integrate_goursat.c), and
+ * kept unchanged in substance when the C method was deleted (2026-11-28) and
+ * the GeneralisedGoursat package (src/internal/goursat/) replaced it, both as
+ * the method and as the Automatic cascade's pseudo-elliptic stage: every case
+ * it closed must still close, and every case it declined must still decline.
  *
  * Correctness is asserted two ways together, because a differentiate-back
  * check alone is fooled by an *unevaluated* integral:
@@ -50,30 +56,35 @@ static void ok(const char* f) {
     check_eq(buf, "True");
 }
 
-/* Assert the forced GoursatAlgebraic method declines (non-elementary /
- * obstructed / non-harmonic / out of shape) and stays unevaluated. */
+/* Assert the forced GeneralisedGoursat method gives no closed form
+ * (non-elementary / obstructed / non-harmonic / out of shape): the integral
+ * stays unevaluated, or -- a certified non-elementary integral with an
+ * elementary part, t^2 (t^4-1)^(3/4) -- is that part plus an inactive
+ * remainder.  The C GoursatAlgebraic this suite was written for had no partial
+ * answers, and declined both. */
 static void declines(const char* f) {
     char buf[1024];
     snprintf(buf, sizeof(buf),
-             "Head[Integrate[%s, t, Method -> \"GoursatAlgebraic\"]]", f);
-    check_eq(buf, "Integrate");
+             "With[{r = Integrate[%s, t, Method -> \"GeneralisedGoursat\"]},"
+             " Head[r] === Integrate || !FreeQ[r, Inactive[Integrate]]]", f);
+    check_eq(buf, "True");
 }
 
-/* Like `ok`, but FORCES Method -> "GoursatAlgebraic" so the result is
+/* Like `ok`, but FORCES Method -> "GeneralisedGoursat" so the result is
  * guaranteed to come from the Goursat integrator (not the Automatic cascade):
  * the integral closes and differentiates back to f. */
 static void okg(const char* f) {
     char buf[1024];
     snprintf(buf, sizeof(buf),
-             "FreeQ[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], Integrate]", f);
+             "FreeQ[Integrate[%s, t, Method -> \"GeneralisedGoursat\"], Integrate]", f);
     check_eq(buf, "True");
     snprintf(buf, sizeof(buf),
-             "PossibleZeroQ[D[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], t]"
+             "PossibleZeroQ[D[Integrate[%s, t, Method -> \"GeneralisedGoursat\"], t]"
              " - (%s)]", f, f);
     check_eq(buf, "True");
 }
 
-/* Forced GoursatAlgebraic, but verify by a NUMERIC differentiate-back at the
+/* Forced GeneralisedGoursat, but verify by a NUMERIC differentiate-back at the
  * real point t = `pt` (a string like "17/5").  For closed forms carrying
  * complex Logs / large nested radicals on which PossibleZeroQ's real-only
  * sampling misfires across a branch cut.  Closure already implies the method's
@@ -81,17 +92,17 @@ static void okg(const char* f) {
 static void okg_num(const char* f, const char* pt) {
     char buf[2048];
     snprintf(buf, sizeof(buf),
-             "FreeQ[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], Integrate]", f);
+             "FreeQ[Integrate[%s, t, Method -> \"GeneralisedGoursat\"], Integrate]", f);
     check_eq(buf, "True");
     snprintf(buf, sizeof(buf),
-             "N[Abs[(D[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], t] - (%s))"
+             "N[Abs[(D[Integrate[%s, t, Method -> \"GeneralisedGoursat\"], t] - (%s))"
              " /. t -> %s], 20] < 1/100000000000", f, f, pt);
     check_eq(buf, "True");
 }
 
 /* ------------------------------------------------------------------ */
 /* Graded exercise ladder (easy -> hard), mirroring GOURSAT_EXERCISES.md.  */
-/* Every case is FORCED through Method -> "GoursatAlgebraic", so each is     */
+/* Every case is FORCED through Method -> "GeneralisedGoursat", so each is     */
 /* genuinely solved by the Goursat integrator.  The ladder spans positive   */
 /* (radical in the numerator) and negative (denominator) exponents for      */
 /* p in {1/2, 1/3, 2/3, 1/4, 3/4} and exercises every involution equation.  */
@@ -172,7 +183,7 @@ static void test_sqrt(void) {
      * radical other than Sqrt[1+t^4] (both signs substituted away first). */
     okg_num("Sqrt[1 + t^4]/(1 - t^4)", "3/7");
     check_eq("FreeQ[Integrate[Sqrt[1 + t^4]/(1 - t^4), t,"
-             " Method -> \"GoursatAlgebraic\"]"
+             " Method -> \"GeneralisedGoursat\"]"
              " /. {Power[1 + t^4, 1/2] -> q, Power[1 + t^4, -1/2] -> p},"
              " Power[b_ /; MemberQ[Variables[b], t], 1/2]"
              " | Power[b_ /; MemberQ[Variables[b], t], -1/2]]", "True");
@@ -227,7 +238,7 @@ static void test_period3(void) {
      * method's internal diff_back_ok guard accepted it.) */
     check_eq("FreeQ[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t], Integrate]", "True");
     check_eq("FreeQ[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t,"
-             " Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+             " Method -> \"GeneralisedGoursat\"], Integrate]", "True");
     check_eq("N[Abs[(D[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t], t]"
              " - (t-1)/((t+2) Sqrt[t^3-1])) /. t -> 17/5], 20] < 1/100000000000",
              "True");
@@ -250,7 +261,7 @@ static void test_period3(void) {
      * rescaling.  Closure + real-axis differentiate-back (the closed form is a
      * complex Log on which PossibleZeroQ's real sampling misfires). */
     check_eq("FreeQ[Integrate[(t-(-1)^(2/3))/((t+2(-1)^(2/3)) Sqrt[t^3-1]), t,"
-             " Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+             " Method -> \"GeneralisedGoursat\"], Integrate]", "True");
     check_eq("N[Abs[(D[Integrate[(t-(-1)^(2/3))/((t+2(-1)^(2/3)) Sqrt[t^3-1]), t], t]"
              " - (t-(-1)^(2/3))/((t+2(-1)^(2/3)) Sqrt[t^3-1])) /. t -> 3], 20]"
              " < 1/100000000000", "True");
@@ -289,17 +300,17 @@ static void sound_on_plane(const char* f, const char* method) {
 
 static void test_branch_plane(void) {
     /* (a) period-3 reductions: Log/ArcTanh of Sqrt[64/(t-a)^6 + 8/(t-a)^3] */
-    sound_on_plane("1/((-2 + t) Sqrt[-12 t + 6 t^2 - t^3])", "GoursatAlgebraic");
-    sound_on_plane("3/((-1 + t) Sqrt[-7 - 3 t + 3 t^2 - t^3])", "GoursatAlgebraic");
-    sound_on_plane("-4/((2 + t) Sqrt[-16 - 12 t - 6 t^2 - t^3])", "GoursatAlgebraic");
+    sound_on_plane("1/((-2 + t) Sqrt[-12 t + 6 t^2 - t^3])", "GeneralisedGoursat");
+    sound_on_plane("3/((-1 + t) Sqrt[-7 - 3 t + 3 t^2 - t^3])", "GeneralisedGoursat");
+    sound_on_plane("-4/((2 + t) Sqrt[-16 - 12 t - 6 t^2 - t^3])", "GeneralisedGoursat");
     sound_on_plane("(8 - 8 t + 2 t^2)/(Sqrt[-16 + 12 t - 6 t^2 + t^3] (-17 + 24 t - 12 t^2 + 2 t^3))",
-                   "GoursatAlgebraic");
+                   "GeneralisedGoursat");
     /* (b) V4 on a quartic radicand (sqrt-klein #5) */
     sound_on_plane("(-8 - 60 t + 964 t^3 + 8 t^4 - 64 t^5)/(Sqrt[-3 + 9 t^2 - 3 t^4] (16 - 257 t^2 + 16 t^4))",
-                   "GoursatAlgebraic");
+                   "GeneralisedGoursat");
     /* (c) Sqrt[2]-coefficient pseudo-elliptic cases, forced and by default */
-    sound_on_plane("t/((t^2 - 3 - 2 Sqrt[2]) Sqrt[t^3 - t])", "GoursatAlgebraic");
-    sound_on_plane("1/((t^2 + 2 Sqrt[2] t + 1) Sqrt[t^3 - t])", "GoursatAlgebraic");
+    sound_on_plane("t/((t^2 - 3 - 2 Sqrt[2]) Sqrt[t^3 - t])", "GeneralisedGoursat");
+    sound_on_plane("1/((t^2 + 2 Sqrt[2] t + 1) Sqrt[t^3 - t])", "GeneralisedGoursat");
     sound_on_plane("t/((t^2 - 3 - 2 Sqrt[2]) Sqrt[t^3 - t])", NULL);
     sound_on_plane("1/((t^2 - 2 Sqrt[2] t + 1) Sqrt[t^3 - t])", NULL);
 }
@@ -309,14 +320,14 @@ static void test_branch_plane(void) {
 /* ------------------------------------------------------------------ */
 static void test_plumbing(void) {
     /* Direct package head closes and round-trips. */
-    check_eq("FreeQ[Integrate`GoursatAlgebraic[1/(t^3-1)^(1/3), t],"
-             " Integrate`GoursatAlgebraic]", "True");
-    check_eq("PossibleZeroQ[D[Integrate`GoursatAlgebraic[1/(t^3-1)^(1/3), t], t]"
+    check_eq("FreeQ[Integrate`GeneralisedGoursat[1/(t^3-1)^(1/3), t],"
+             " Integrate`GeneralisedGoursat]", "True");
+    check_eq("PossibleZeroQ[D[Integrate`GeneralisedGoursat[1/(t^3-1)^(1/3), t], t]"
              " - 1/(t^3-1)^(1/3)]", "True");
 
     /* Method option reaches the same routine. */
     check_eq("FreeQ[Integrate[t/Sqrt[(t^2-1)(t^2-4)], t,"
-             " Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+             " Method -> \"GeneralisedGoursat\"], Integrate]", "True");
 
     /* Strict: a non-pseudo-elliptic integrand is declined (no fallback). */
     declines("Sin[t]");
@@ -342,9 +353,9 @@ static void test_thirdkind(void) {
     /* Parametric radicand k: closes and differentiates back (k pinned for the
      * decisive numeric check). */
     check_eq("FreeQ[Integrate[(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)),"
-             " t, Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+             " t, Method -> \"GeneralisedGoursat\"], Integrate]", "True");
     check_eq("N[Abs[(D[Integrate[(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)),"
-             " t, Method -> \"GoursatAlgebraic\"], t]"
+             " t, Method -> \"GeneralisedGoursat\"], t]"
              " - (2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)))"
              " /. {k -> 3, t -> 17/5}], 20] < 1/100000000000", "True");
 
@@ -371,6 +382,6 @@ int main(void) {
     TEST(test_branch_plane);
     TEST(test_graded);
 
-    printf("All Integrate GoursatAlgebraic tests passed!\n");
+    printf("All Integrate GeneralisedGoursat tests passed!\n");
     return 0;
 }

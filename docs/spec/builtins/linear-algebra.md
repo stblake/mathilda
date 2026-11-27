@@ -3114,6 +3114,13 @@ Finds `x` that solves the matrix equation `m . x == b`.
 
 **Features**:
 - `Protected`.
+- **Rational functions of symbols** (2026-11-27). A system over `Q(t1, ..., tk)`
+  is solved from the reduced row echelon form of `[m | b]` computed natively on
+  `fmpz_mpoly` (`RowReduce`'s path); each pivot row gives its variable, a free
+  variable is 0, a pivot in the right-hand block is `LinearSolve::nosol`. The
+  division-free loop multiplied and exactly divided unreduced rational
+  functions through the evaluator: a 3 x 3 system over `Q(k, x)` with degree-12
+  entries (the GeneralisedGoursat descent over a parameter) took 26 s, now 7 ms.
 - The matrix `m` may be square or rectangular.
 - The argument `b` may be a vector (in which case the result is a
   vector) or a matrix (in which case the result is a matrix whose

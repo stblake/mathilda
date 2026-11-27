@@ -869,6 +869,32 @@ the roots of `MinimalPolynomial[a, x]`.
 
 **Wave 5 (2026-11).** An `Extension` value that is not an explicit algebraic number is the one `::nalg` names; of repeated `Extension` options the first is in force; `AlgebraicNumberTrace[]` is `::argx`.
 
+## Internal`NumberFieldCanonical
+
+The canonical form of a rational function whose coefficients are constant
+algebraic numbers, over the number field `K` they generate (added 2026-11-27).
+- `Internal`NumberFieldCanonical[e]`
+
+**Features**:
+- `Protected`. An internal head, for code that compares or accumulates
+  coefficients (the GeneralisedGoursat package's `gK`, `Apart`'s coefficients).
+- `e` is a rational expression in symbols whose constants are `I`, radicals of
+  rationals, roots of unity and `Root` objects; `K = Q(atoms)` is built once
+  (the `nfrat` engine of `Together`/`Cancel`). The answer is
+  `numerator/denominator`, both expanded over the product basis of the input's
+  own atoms, every constant reduced in `K`, the denominator the product of its
+  monic irreducible-over-`K` pieces scaled to primitive integral coordinates.
+  Two equal functions give identical output, whatever their spelling.
+- Unlike `Together` and `Cancel`, which keep a numeric algebraic denominator as
+  written (as the reference does), a constant denominator is inverted over `K`:
+  `Internal`NumberFieldCanonical[(1 + Sqrt[3])/(2 + Sqrt[3])]` is
+  `-1 + Sqrt[3]`, and `Internal`NumberFieldCanonical[((323649410643402 I)/49 -
+  (1216699821399148 Sqrt[3])/49)/(-3972673504943 I - 1500800399100 Sqrt[3])]` is
+  `186/49 - (236 I Sqrt[3])/49`. A constant input is accepted.
+- `$Failed` when `e` has no algebraic atom, another head (`Log`, a symbolic
+  radical `Sqrt[k]`), an inexact coefficient, or a field past the engine's
+  bounds.
+
 ## Apart
 
 **Audit wave 4.** A transcendental kernel of the variable (`Sin[x]`, `Log[x]`) is a coefficient of the decomposition: `Apart[Sin[x]/(x^2 - 1), x]` is `Sin[x]/(2 (-1 + x)) - Sin[x]/(2 (1 + x))`.
@@ -882,6 +908,16 @@ Gives the partial fraction decomposition of a rational expression.
 
 **Features**:
 - `Protected`, `Listable`.
+- **Coefficients reduced over the number field** (2026-11-27). Over algebraic
+  coefficients (`I`, `Sqrt[3]`, ...) each coefficient of the decomposition is
+  reduced in the field (`Internal`NumberFieldCanonical`): the symbolic
+  `RowReduce` returned quotients of unreduced field elements, so a degree-6
+  denominator over `Q(I, Sqrt[3])` gave 110 leaves of 100-digit numbers
+  (`-(u/(-3 + u^3)) + ((49 - 196 I Sqrt[3]) u)/(-429 + 540 I Sqrt[3] + 343 u^3)`,
+  42 leaves, now). A squarefree denominator with algebraic coefficients takes the
+  residue-formula (Bezout) path, which was gated on symbolic radicals only: over
+  `Q(k)(I Sqrt[3])` 1.1 s -> 3 ms. A nested radical (`Sqrt[-567 - 324 Sqrt[3]]`)
+  keeps the previous paths and spelling.
 - **As the reference, v0.6137:** a denominator already split over radicals
   keeps its factors (`Apart[1/((z - Sqrt[2]) (z + Sqrt[2])), z]` is a sum of
   two terms; the radicals are treated as parameters and put back); a compound
