@@ -1231,6 +1231,16 @@ first (`Expand[Cos[x + y], Trig -> True]` is `Cos[x] Cos[y] - Sin[x] Sin[y]`);
   the per-variable degree box — so univariate and low-dimensional expansions of
   *any* degree are recognised as cheap and always run; only a genuinely
   high-dimensional combinatorial blow-up (e.g. `(a+b+c+d+e+f+g)^60`) overflows.
+- **`Overflow[]` is a user-level answer only.** A call made from inside another
+  builtin (`eval_builtin_depth() > 1`: Simplify's passes, the helpers of
+  Together, Cancel and the integrators, which reach `Expand` through the
+  evaluator) gets its subject back unexpanded instead, which has the same
+  value. `Overflow[]` was not a value for those callers: it entered their
+  arithmetic, and `Overflow[]/Overflow[]` is `Indeterminate`. That is how
+  Simplify returned `Indeterminate` for a 1152-leaf algebraic derivative: its
+  trig-rational pass multiplied a 530k-leaf denominator by its conjugate, both
+  expansions overflowed, and `Indeterminate` won on leaf count. It now returns a
+  75-leaf form equal to the integrand (82 leaves).
 - `Expand[expr, patt]` leaves unexpanded any parts of `expr` that are free of the pattern `patt`. Inside a product, pattern-free factors are carried along as an unexpanded coefficient rather than being distributed.
 
 ```mathematica

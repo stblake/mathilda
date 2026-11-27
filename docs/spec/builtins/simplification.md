@@ -348,6 +348,68 @@ canonical forms that the generic pipeline alone does not:
   `Csc = 1/Sin`) are handled too: the inverse odd-generator powers the relation
   injects are cleared before the denominator is rationalised, so
   `Simplify[Cot[x]/Sqrt[Cot[x]]] -> Sqrt[Cot[x]]`.
+- **Radical function-field normal form** (radical function-field work,
+  `nfrat_radical_normal_form` in `src/poly/nfrat.c`, called first by
+  `simp_algebraic_field`). An expression rational in variables `x1..xm`, in
+  constant algebraic numbers and in radicals `B^(p/q)` of non-constant radicands
+  `B` in `K(x)` is an element of `L = K(x)[h_1..h_r]/(h_i^Q_i - R_i)`, `K` the
+  number field of the constants (`Q` when there is none):
+  - *the tower*: one generator per radicand class, a class being a radicand up
+    to a positive rational factor (`(2 x)^(1/3) = 2^(1/3) x^(1/3)` holds for
+    principal values, since `arg(2 x) = arg(x)`). `Q_i` is the lcm of the
+    class's indices, and `B^(p/q) = g^(p Q/q)` with `g = B^(1/Q)`: an integer
+    power of one principal radical is always exact, so
+    `(8 + x^3)^(5/3) = (8 + x^3) g^2`. A rational radicand `N/D` is rescaled to
+    the integral `h = D g`, `h^Q = N D^(Q - 1)`. A bare-symbol radicand `s` is
+    eliminated, `s = t^Q` with `t` transcendental (exact on every branch, no
+    dimension). No other identification is made: `Sqrt[a] Sqrt[b] -> Sqrt[a b]`
+    and `(-B)^(1/2) -> I B^(1/2)` fail on part of the plane, so dependent
+    radicands keep separate generators.
+  - *arithmetic*: an element is `A / P_1^e_1 .. P_s^e_s`, `A` reduced modulo the
+    relations and the `P_j` generator-free monic polynomials over `K`.
+    Denominators are rationalised by the norm: per generator, the traces
+    `Tr(A^k) = Q [h^0] A^k` give the characteristic polynomial of
+    multiplication by `A` (Newton's identities), and Cayley-Hamilton gives
+    `A adj = Norm(A)`. The identity holds in any commutative ring, so the
+    rewrite is exact; a zero norm (a zero divisor, `(x^2)^(1/2) - x`) declines.
+    The content is cancelled over `K` with certified gcds.
+  - *canonical form and zero test*: the form is canonical when `L` is a field,
+    which Kummer theory decides (each radicand has a squarefree factor, of
+    multiplicity prime to its index, coprime to every other radicand). A zero
+    normal form is a proof of zero in every case.
+  - *read-back*: `Sum c_m(x) y^m`, each `c_m` factored over `K` and written in
+    the caller's own constant radicals, with a radicand factor absorbed into its
+    radical when that shortens the term
+    (`c y^2/(8 + x^3) = c (8 + x^3)^(-1/3)`). The sum, the sum over one
+    denominator and the dual `1/nf(1/nf)` are scored, and the lowest is kept
+    when it beats the input; the generator engine below is the fallback
+    (nested radicals, transcendental atoms).
+
+  The reported `D[Integrate`GeneralisedGoursat[(x - 1 - Sqrt[3] I)/((x + 1 +
+  Sqrt[3] I) (x^3 + 8)^(1/3)), x], x]` (902 leaves, constants `(-1)^(1/3)`,
+  `2^(1/3)`, `(-2)^(1/3)`, `(-1/2)^(1/3)`, `Sqrt[3]`) took 3.3 s (7.4 s on a
+  loaded machine) and returned about 15 unsimplified fractions; `Simplify` now
+  gives `(-2 (-1)^(1/3) + x)/((2 (-1)^(1/3) + x) (8 + x^3)^(1/3))`, the integrand
+  (`2 (-1)^(1/3) = 1 + I Sqrt[3]`), in 0.15 s. Branch traps stay as they are:
+  `Simplify[Sqrt[x] Sqrt[1 + x] - Sqrt[x + x^2]]`, `Simplify[Sqrt[-x] - I Sqrt[x]]`,
+  `Simplify[(x^3)^(1/3) - x]` and `Simplify[(-8 - x^3)^(1/3) + (8 + x^3)^(1/3)]`
+  are unchanged. Caps: dimension 64 (eliminated radicands free), 6 classes,
+  16 variables, the nfrat term budget, and an a-priori bound on `[K:Q]` (read
+  off the prime factors of rational radicands, the root-of-unity orders and the
+  index of each nested radical; at most 32 for the rational part), because the
+  primitive element of a degree-54 field takes ~25 s to build. When the field
+  takes an input of more than 1000 leaves the generator engine is skipped, and
+  on a result of more than 150 leaves neither the re-dispatch polish nor
+  `simp_dispatch`'s second pass over a kernel-free result runs: they work in
+  the same field and never improved the form there, and on an 89k-leaf Trager
+  derivative they were whole Simplify searches on every sub-node (3 s).
+
+  On a 146-case sample of benchmark 265 (`Simplify[D[F, x]]`, `F` the
+  `GeneralisedGoursat` answer) the integrand or a form no larger comes back in
+  134 cases, against 105 before; total time 1148 s -> 230 s. On 118 `Trager`
+  answers, 96 against 89. No case got worse. The misses are `RootSum` answers
+  (not a radical field), two forms one and three leaves larger, the
+  degree-54 field, and timeouts in both binaries.
 - **Algebraic-function-field canonical form** (v0.6117, `simp_algebraic_field`
   in `src/simp/radrat.c`) — a rational function of radicals with a symbolic radicand
   gets the `RootReduce` canonical form over the field its radicals generate (any

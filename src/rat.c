@@ -1827,7 +1827,29 @@ static Expr* rat_nfrat(Expr* res, const char* head) {
     if (res->data.function.arg_count != ((auto_flag || alpha) ? 2u : 1u)) return NULL;
     if (alpha && alpha->type == EXPR_SYMBOL) return NULL;      /* None, ... */
     const Expr* arg = res->data.function.args[0];
-    if (!nfrat_has_algebraic(arg) || internal_args_contain_inexact(res)) return NULL;
+    if (internal_args_contain_inexact(res)) return NULL;
+    /* Radicals of non-constant radicands next to constant algebraic atoms
+     * ((8 + x^3)^(1/3) with 2^(1/3), (-1)^(1/3), Sqrt[3]): each radical is a
+     * free kernel over K, as in the reference, and the answer is ONE fraction.
+     * Without a constant atom the generator paths below handle the radicals
+     * (they also apply the radicals' relations, as before). */
+    if (nfrat_has_symbolic_radical(arg)) {
+        if (algfield_has_nested_constant_radical(arg)) return NULL;
+        /* An identity that vanishes once the radicals' relations are applied
+         * (D[Integrate[f], x] - f over a cube-root tower) is 0, as the
+         * generator paths below have always answered: the relation-aware zero
+         * test comes before the kernel reading, which applies no relation.
+         * It is linear in the input but with a large constant (every radical
+         * substituted and Expanded), so a very large sum -- a Trager answer's
+         * sub-expression inside Simplify's descent -- skips it, as it never
+         * reached it before. */
+        if (leaf_count_internal((Expr*)arg, true) <= 4000) {
+            Expr* rz = flint_algebraic_field_normalize(arg);
+            if (rz) return rz;
+        }
+        return nfrat_radical_kernels(arg, ratfun_factored_form(), alpha, head == SYM_Cancel);
+    }
+    if (!nfrat_has_algebraic(arg)) return NULL;
     /* Nothing to combine: a denominator-free product or polynomial is left as
      * written (Together[(-1)^(1/3) ((-1)^(2/3) + x)] is its input, as in the
      * reference); rewriting it over the field's basis changed the shape the

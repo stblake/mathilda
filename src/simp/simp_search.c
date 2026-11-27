@@ -1,5 +1,6 @@
 #include "simp.h"
 #include "simp_internal.h"
+#include "core.h"
 #include "arithmetic.h"
 #include "attr.h"
 #include "common.h"
@@ -1769,6 +1770,19 @@ static Expr* simp_split_multiplicative(const Expr* input, const AssumeCtx* ctx,
  * and forwards to a specialised pipeline. SHAPE_TRIG and SHAPE_GENERAL
  * fall through to simp_search; trig is the heuristic search's strongest
  * domain, and general inputs need the full machinery. */
+/* Is e built from numbers and symbols by Plus, Times and Power alone? */
+static bool simp_kernel_free(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return e->type != EXPR_STRING;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    if (n != SYM_Plus && n != SYM_Times && n != SYM_Power && n != SYM_Rational && n != SYM_Complex)
+        return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!simp_kernel_free(e->data.function.args[i])) return false;
+    return true;
+}
+
 Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                            const Expr* complexity_func) {
     /* Whole-call TimeConstraint: bail with the input unchanged if the deadline
@@ -1930,6 +1944,11 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
      * unless it strictly lowers the score), so this recursion is one deep. */
     {
         Expr* af = simp_algebraic_field(input, ctx, complexity_func);
+        /* A large kernel-free result (numbers, symbols, Plus / Times / Power
+         * only) has no other kernel for the second pass to find an identity
+         * among, and that pass is a whole search (~0.6 s at 400 leaves, run on
+         * every sub-node of a Trager answer) which then only refactors. */
+        if (af && simp_kernel_free(af) && leaf_count_internal(af, true) > 150) return af;
         if (af) {
             Expr* again = simp_dispatch(af, ctx, complexity_func);
             if (again && score_with_func(again, complexity_func) < score_with_func(af, complexity_func)) {

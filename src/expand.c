@@ -750,9 +750,43 @@ static bool expand_read_options(Expr* res, size_t* argc, bool* trig, Expr** modu
     return true;
 }
 
+/* Does `e` hold the Overflow[] sentinel anywhere? */
+static bool expand_has_overflow(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Overflow &&
+        e->data.function.arg_count == 0)
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expand_has_overflow(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* Expand (all = false) or ExpandAll (all = true) of `subject` under the
- * options read by expand_read_options. */
+ * options read by expand_read_options.
+ *
+ * Overflow[] past the memory ceiling is an answer for the user only.  A call
+ * from inside another builtin (Simplify's trig-rational pass, Together's and
+ * Cancel's helpers, the integrators: ~70 sites in src/simp alone reach Expand
+ * through the evaluator) needs a value: Overflow[] there is not one, yet it
+ * enters the caller's arithmetic, and Overflow[]/Overflow[] is Indeterminate.
+ * That is how Simplify answered Indeterminate for a 1152-leaf algebraic
+ * derivative (its denominator rationalisation multiplied a 530k-leaf
+ * denominator by its conjugate).  Such a call gets its subject back,
+ * unexpanded: the same value, so every identity the caller then applies stays
+ * an identity, and the caller's own size gates judge the result. */
+static Expr* expand_with_options_impl(Expr* subject, Expr* patt, bool trig, Expr* modulus, bool all);
+
 static Expr* expand_with_options(Expr* subject, Expr* patt, bool trig, Expr* modulus, bool all) {
+    Expr* ret = expand_with_options_impl(subject, patt, trig, modulus, all);
+    if (ret && eval_builtin_depth() > 1 && expand_has_overflow(ret) && !expand_has_overflow(subject)) {
+        expr_free(ret);
+        return expr_copy(subject);
+    }
+    return ret;
+}
+
+static Expr* expand_with_options_impl(Expr* subject, Expr* patt, bool trig, Expr* modulus, bool all) {
     Expr* expanded_trig = NULL;
     if (trig) {
         Expr* a[1] = { expr_copy(subject) };

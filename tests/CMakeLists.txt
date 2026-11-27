@@ -2439,6 +2439,14 @@ add_executable(field_together_cancel_tests test_field_together_cancel.c $<TARGET
 target_include_directories(field_together_cancel_tests PRIVATE ../src)
 add_test(NAME field_together_cancel_tests COMMAND field_together_cancel_tests ${CMAKE_CURRENT_SOURCE_DIR}/together_nested_radical_d2.m)
 
+add_executable(radical_field_simplify_tests test_radical_field_simplify.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(radical_field_simplify_tests PRIVATE ../src)
+add_test(NAME radical_field_simplify_tests COMMAND radical_field_simplify_tests ${CMAKE_CURRENT_SOURCE_DIR}/data/radical_field/goursat_cbrt_repro_derivative.m)
+
+add_executable(expand_internal_overflow_tests test_expand_internal_overflow.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(expand_internal_overflow_tests PRIVATE ../src)
+add_test(NAME expand_internal_overflow_tests COMMAND expand_internal_overflow_tests ${CMAKE_CURRENT_SOURCE_DIR}/data/radical_field/goursat_cbrt_overflow_derivative.m)
+
 add_executable(polynomialreduce_tests test_polynomialreduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(polynomialreduce_tests PRIVATE ../src)
 add_test(NAME polynomialreduce_tests COMMAND polynomialreduce_tests)

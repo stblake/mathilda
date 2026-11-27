@@ -329,9 +329,12 @@ static void test_radical_function_field_transcendental_atoms(void) {
      * (with omega leading this was a wrong answer) */
     check_eval_eq("Simplify[-1/Sqrt[a] - I E^x/(a Sqrt[a + I E^x] - Sqrt[a] (a + I E^x))]",
                   "1/Sqrt[a + I E^x]");
-    /* no atom in any radicand: the layer stays off, the general search keeps it */
+    /* no atom in any radicand: the atom layer stays off, and the radical
+     * function field over K = Q(I) closes it (s = Sqrt[a], u = Sqrt[a + I y]:
+     * a u - s u^2 = u s (s - u) and I y = (u - s)(u + s), so the sum is
+     * -1/s + (u + s)/(u s) = 1/u, using only s^2 = a and u^2 = a + I y) */
     check_eval_eq("Simplify[-1/Sqrt[a] - I y/(a Sqrt[a + I y] - Sqrt[a] (a + I y))]",
-                  "-1/Sqrt[a] - (I y)/(a Sqrt[a + I y] - Sqrt[a] (a + I y))");
+                  "1/Sqrt[a + I y]");
     check_eval_eq("DSolve[{D[u[y,t],t] == nu D[u[y,t],{y,2}], u[y,0] == 0, u[0,t] == U}, u[y,t], {y,t}]",
                   "{{u[y, t] -> U - U Erf[y/(2 Sqrt[nu] Sqrt[t])]}}");
     check_eval_eq("Simplify[(Sqrt[1 + (-1)^(1/3) y] - 1) (Sqrt[1 + (-1)^(1/3) y] + 1)]",

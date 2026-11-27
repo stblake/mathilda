@@ -57,6 +57,11 @@ for comparison until parity, then cascade stage 17 swaps.
 - [x] PERF merged (perf_pzq_elliptic.patch: zt_elliptic_pretest atom abstraction, Num reads elliptic once, FixBranch once/sample; 21 s -> 1.2 s, suite 86 s). [x] (merged elliptic_cut.patch: exact side via qqbar (nbc_elliptic), cut-aware Carlson F/E/Pi; 120 ms -> 0.19 ms machine, 85 s -> 10 ms at 300 digits; open: y on cut with non-conjugate x still Arb quadrature ~1 s at 300 bits; JacobiZeta not implemented; GCC -Wstringop-overread false positive in nb_jac_scd) EllipticPi ON ITS CUT differs across precisions (3/10: 30d 0.46-1.49I vs 40d -0.35+1.52I) + slow Arb quadrature fallback; wrong-candidate rejection 12 s (agent running). Was: parallelmixedspecial_tests 90 -> 112 s alone (120 s alarm) after the branch-soundness
   merge. Integrate`ParallelMixedSpecial[1/((x-3)Sqrt[1+x^3]), x] 21 s (x-2: 0.7 s); PZQ on its EllipticPi
   answer 7.4 s; machine EllipticPi 1.6 ms/call (EllipticF 67 us). Keep soundness; cut redundant certificates.
+- [ ] RETIRE GoursatAlgebraic (decided order 2026-11-27): (1) parametric k-family closes in GG (C 0.19 s, GG UNEVAL 31 s);
+  (2) cbrt third-kind speed (2-4t)/((1-4t)(t(1-t)(1-3t))^(1/3)) GG 4.46 s vs C 0.08 s [agent running on 1+2];
+  (3) swap stage 17 -> GG, rerun default-cascade suites + shootouts; (4) delete integrate_goursat.c in a separate commit.
+  Benchmark 265: C closes 275, GG 874, none C-only. C's own 48 test integrands: GG matches all but the k-family, +1 closed form.
+- [ ] GG vs Trager comparison PDF: tools/goursat/compare_pdf.py (new); run in scratchpad b265_gt (goursat_stress.py now accepts --methods Trager/TragerKauers/Bronstein).
 - [x] GG pseudoelliptic-sqrt-001 'wrong' was a FALSE verdict from N (merged n_branchcut_straddle.patch: exact principal side for a cut argument whose Im cancels exactly; PZQ True, 10.6->4.3 s). (a) below is NOT a wrong answer; size fixed by intrat_realform_complex.patch (merged: complex field -> complex Log form, no cubic/quartic ToRadicals; rho 1515->358 leaves; GG case 0.33 s). Original notes:
   (a) Integrate[rho, u, Method->"BronsteinRational"] default RealForm on a COMPLEX-coefficient rational
       ((4+2Sqrt2)u^2/((3+2Sqrt2)(I+5u^2+5I u^4+u^6))) returns a branch-wrong Ferrari/Cardano form
@@ -2432,3 +2437,12 @@ work and is not the Insert/Delete fix (the package uses neither head). Not yet b
       likewise (`AddTo::rvalue`). `b[[1]]++` on a List works. The reference language accepts both on an
       Association key (the key is an lvalue as in `a["x"] = 1`). Found building benchmark 262; the generator
       counts in a List instead.
+
+## Session close 2026-11-28 (uncommitted on main, tests: full unit tier 757/757 before the Expand fix; agent's run 758/758 after)
+- [x] Simplify radical function-field normal form + Together/Cancel radical kernels (nfrat_radical_normal_form, simplify_radical_field.patch) -- merged, changelog written, version not bumped
+- [x] Expand at builtin depth > 1 returns its subject instead of Overflow[] (Simplify Indeterminate on G-s7-cbrt-symmetric-001 derivative) -- merged, changelog written
+- [x] GG vs Trager comparison PDF: benchmarks/265-goursat-stress/report/goursat_vs_trager.pdf (tools/goursat/compare_pdf.py; goursat_stress.py now writes results/<date>-partial.json)
+- [ ] Commit the above (two substantive bumps: v0.6766, v0.6767) when the user asks
+- [ ] Parity agent (worktree .claude/worktrees/agent-ab7cbff3263473d82) was mid-run at session close: k-family, cbrt third-kind speed, slow declines of (2+x)/((1+x+x^2)(2+x^3)^(1/3)) and (1-x^3)^(1/3)/(2+x). DONE: gg_parity.patch final (bench 265 verified 874->918, wrong 0, timeouts 32->10; k-family + cbrt third-kind close). Dry-run applies cleanly on main over the Simplify changes; merge, rerun ctest + bench 265, add CHANGELOG_SNIPPET.md
+- [ ] 112 GG answers UNVERIFIED (PZQ undecided) in benchmark 265 -- PZQ gaps to fix
+- [ ] Simplify of the G-s7-cbrt-symmetric-001 derivative takes 19.5 s in simp_simp_trig_rational (no trig present: Sqrt[3] as generator)

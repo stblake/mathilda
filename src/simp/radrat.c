@@ -38,6 +38,7 @@
 #include "radrat.h"
 #include "poly.h"
 #include "flint_bridge.h"
+#include "nfrat.h"
 
 /* leaf count (heads included), matching the simp scoring convention. */
 static int64_t rr_leaves(const Expr* e) { return leaf_count_internal((Expr*)e, true); }
@@ -686,6 +687,45 @@ static Expr* af_canonical(const Expr* input, const Expr* complexity_func) {
     return r;
 }
 
+/* The normal form in the radical function field over the number field of the
+ * constant atoms (nfrat_radical_normal_form), and its compact renderings: the
+ * sum over radical monomials, that sum over one denominator, and the dual
+ * 1/nf(1/nf) with the radicals in the denominator.  The lowest score wins, the
+ * sum on a tie; NULL when the engine declines.  No gate against the input. */
+static Expr* af_radical_field(const Expr* input, const Expr* complexity_func) {
+    Expr* nf = nfrat_radical_normal_form(input, NULL);
+    if (!nf) return NULL;
+    if (nf->type == EXPR_INTEGER && nf->data.integer == 0) return nf;
+    size_t sb = score_with_func(nf, complexity_func);
+    Expr* tg = af_call1(SYM_Together, expr_copy(nf));
+    if (tg && score_with_func(tg, complexity_func) < sb) {
+        sb = score_with_func(tg, complexity_func);
+        expr_free(nf);
+        nf = tg;
+    } else if (tg) {
+        expr_free(tg);
+    }
+    if (nfrat_has_symbolic_radical(nf)) {
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy(nf), expr_new_integer(-1) }, 2));
+        Expr* ci = nfrat_radical_normal_form(inv, NULL);
+        expr_free(inv);
+        if (ci && !(ci->type == EXPR_INTEGER && ci->data.integer == 0)) {
+            Expr* dual = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ ci, expr_new_integer(-1) }, 2));
+            if (score_with_func(dual, complexity_func) < sb) {
+                expr_free(nf);
+                nf = dual;
+            } else {
+                expr_free(dual);
+            }
+        } else if (ci) {
+            expr_free(ci);
+        }
+    }
+    return nf;
+}
+
 Expr* simp_algebraic_field(const Expr* input,
                            const AssumeCtx* ctx,
                            const Expr* complexity_func) {
@@ -694,8 +734,24 @@ Expr* simp_algebraic_field(const Expr* input,
     if (rr_leaves(input) > AF_MAX_LEAVES) return NULL;
 
     size_t s_in = score_with_func((Expr*)input, complexity_func);
-    Expr* r = af_canonical(input, complexity_func);
+    /* The radical function field first: several radical classes of any
+     * index, constant radicals and I in a number field K, several variables.
+     * Exact and canonical (see nfrat.h); the generator engine below remains
+     * for what it declines (nested radicals, transcendental atoms). */
+    Expr* r = af_radical_field(input, complexity_func);
+    /* When the radical field took the input it has its canonical form; the
+     * generator engine works in the same field (the constants as more
+     * generators) and can still present it more compactly (a radicand
+     * factored: 39 leaves against 44), but on a large input it costs more than
+     * it gives -- the bottom-up descent paid for both on every sub-node of a
+     * Trager answer -- so past 1000 leaves it only runs on a decline. */
+    bool rf_took = r != NULL && rr_leaves(input) > 1000;
     if (r && score_with_func(r, complexity_func) >= s_in) { expr_free(r); r = NULL; }
+    const Expr* rf_win = r;
+    if (!r && !rf_took) {
+        r = af_canonical(input, complexity_func);
+        if (r && score_with_func(r, complexity_func) >= s_in) { expr_free(r); r = NULL; }
+    }
 
     /* Trigonometric atoms are algebraically dependent (Sin^2 + Cos^2 = 1), so
      * as independent parameters they can hide a radicand: Bronstein writes
@@ -724,7 +780,13 @@ Expr* simp_algebraic_field(const Expr* input,
     /* The canonical form is a reduced numerator over a generator-free
      * denominator; give the rest of the dispatcher one pass over it (Factor of
      * that numerator, say). It is a fixed point of this pass, so the re-entry
-     * stops here and the strict gate keeps the better of the two. */
+     * stops here and the strict gate keeps the better of the two. On the
+     * radical field's form (coefficients already factored over K) the pass
+     * pays only on small results -- it refactors a radicand, one to five
+     * leaves -- while on a large one it is a whole Simplify search (~0.5 s at
+     * 400 leaves, repeated across the sub-nodes of a Trager answer) that never
+     * improved it, so it is kept to small forms. */
+    if (r == rf_win && rr_leaves(r) > 150) return r;
     Expr* r2 = simp_dispatch(r, ctx, complexity_func);
     if (r2 && score_with_func(r2, complexity_func) < score_with_func(r, complexity_func)) {
         expr_free(r);

@@ -56,6 +56,13 @@ Cancels out common factors in the numerator and denominator of an expression.
 
 **Features**:
 - `Protected`, `Listable`.
+- **Radicals of polynomials next to constant algebraic numbers** (radical
+  function-field work). As for `Together`: each radical of a non-constant
+  radicand is an independent kernel over the number field of the constants, a
+  sum is cancelled term by term, and every term with a denominator is one
+  fraction. `Cancel[Together[dF]]` of the reported `GeneralisedGoursat`
+  derivative is one fraction in 6 ms; before, `Together` had not combined it
+  and `Cancel` changed nothing.
 - **Factored rational-function engine** (v0.6072, `src/poly/ratfun.c`). A
   rational function over Q in symbols and transcendental kernels (`Log[u]`, the
   inverse trig/hyperbolic functions, `E^(k u)`, inert heads `x[3]`) is converted
@@ -145,6 +152,44 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 
 **Features**:
 - `Protected`, `Listable`.
+- **Radicals of polynomials next to constant algebraic numbers: one fraction**
+  (radical function-field work). A sum of fractions over radicals of
+  non-constant radicands (`(8 + x^3)^(1/3)`, `(1 + x^2)^(1/4)`, `x^(1/3)`)
+  whose coefficients carry constant algebraic numbers (`2^(1/3)`,
+  `(-1)^(1/3)`, `Sqrt[3]`, `I`, `Root` objects) is now ONE fraction, as in the
+  reference. Each radical is an independent kernel over the number field `K`
+  of the constants (`nfrat_radical_kernels`, `src/poly/nfrat.c`): one generator
+  `g` per radicand as written, `B^(p/q) -> g^(p Q/q)` with `Q` the lcm of that
+  radicand's indices (an integer power of one principal radical is exact), and a
+  bare-symbol radicand eliminated (`x -> g^Q`, so the common `Sqrt[x]` of
+  `1/(x + Sqrt[x]) + Sqrt[2]` cancels:
+  `(1 + Sqrt[2] Sqrt[x] + Sqrt[2] x)/(Sqrt[x] (1 + Sqrt[x]))`). No other relation
+  is applied and nothing is rationalised, so the radicals stay in the
+  denominator: `Together[1/(1 + y) + 1/(2^(1/3) - y)]` with
+  `y = (8 + x^3)^(1/3)` is `(-1 - 2^(1/3))/((1 + y) (-2^(1/3) + y))` (it came back
+  uncombined). The reported 12-term derivative of a `GeneralisedGoursat`
+  antiderivative over `Q(2^(1/3), (-1)^(1/3), Sqrt[3])` was a sum of separate
+  fractions after 0.5 s; it is one fraction after 0.08 s. Without a constant
+  atom the radicals keep the generator paths below (which also apply their
+  relations). An identity that vanishes once the radicals' relations are
+  applied (`D[Integrate[f, x], x] - f` over a cube-root tower) is still `0`: the
+  relation-aware zero test runs first (inputs up to 4000 leaves). A constant
+  field whose a-priori degree bound passes 32 (`2^(1/3)`, `3^(1/6)`,
+  `37^(1/3)`: 54) is left to the paths below, since building its primitive
+  element costs more than they do. The semantics checked against the reference
+  are unchanged: a numeric algebraic denominator is not rationalised
+  (`Together[x/(1 + Sqrt[2]) + 1]` is `(1 + Sqrt[2] + x)/(1 + Sqrt[2])`) and a
+  `Root` power is not reduced.
+- **The render-back finds a spanning set of atoms** (radical function-field
+  work). The answer of a number-field computation is written back over the
+  product basis of the caller's own constants; the greedy choice of atoms could
+  take one the earlier ones already generate (`2^(2/3)` after `2^(1/3)`) and miss
+  a spanning set that exists (`{2^(1/3), (-1)^(2/3), Sqrt[3]}`, degree 12), and
+  the whole computation then declined; more than 8 atoms (12 occur in a
+  `GeneralisedGoursat` derivative) also declined. A failed greedy choice is now
+  followed by a greedy choice that takes an atom only when its powers times the
+  current product basis have full rank, over up to 32 atoms, and then by every
+  subset of the right degree (up to 10 atoms).
 - **Numeric radicals in denominators** (v0.6624). A sum of fractions whose denominators differ by a numeric algebraic unit now combines when the numerators carry symbolic parameters: `Together[b/(Sqrt[2] + 2 u) + a/(1 + Sqrt[2] u)]` is `(Sqrt[2] a + b)/(Sqrt[2] + 2 u)` (it came back uncombined), `Together[x (1/(1 + Sqrt[2] t) + 1/(1 - t))]` is one fraction, and `PolynomialLCM[1 + u, 1 + Sqrt[2] u, 1 + 2 u + u^2, 1 + 2 Sqrt[2] u + 2 u^2]` is the least `(1 + Sqrt[2] u)^2 (1 + 2 u + u^2)` (it was the product of all four). The exact polynomial division now divides by a numeric radical constant (`Sqrt[2]`, `1 + Sqrt[2]`, `2^(1/3)`) through its exactly computed inverse; a symbolic radical (`Sqrt[c]`) is still not a unit. `Cancel[(x^2 - 2 y^2)/(x - Sqrt[2] y)]` is `x + Sqrt[2] y`, as the univariate `Cancel[(x^2 - 2)/(x - Sqrt[2])]` already was.
 - **A power with an inexact exponent is an opaque generator** (v0.6454). `Together`, `Cancel`, `Apart`, `Factor`, `FactorSquareFree`, `PolynomialGCD` and `PolynomialLCM` treat a power whose exponent is approximate and not integer-valued (`x^0.4616`, `x^(0.5 + 0.2 I)`, `E^(0.5 x)`, an arbitrary-precision exponent) as an indeterminate: it is never rationalised and comes back as written. So `Together[x^0.4616]` is `x^0.4616` (it was the exact `x^(577/1250)`), `Together[x^0.4616 + 1/x]` is `(1 + x^1.4616)/x`, and the result is numericalised only when an inexact coefficient sits outside such powers (`Together[1.5 x^0.3 + 1/x]` is `(0.5 (2.0 + 3.0 x^1.3))/x`). A 60-digit exponent such as `x^1.515...`60` no longer becomes a rational with a 60-digit denominator, which the exact core worked over until the caller timed out. An integer-valued exponent (`x^2.0`) is still a polynomial power: `Cancel[(x^2.0 - 1)/(x - 1)]` is `1.0 + x`. `Series`, `Limit` and `Simplify` keep rationalising the exponent, since they work in the power's variable.
 - **Threading** (v0.6139). `Together`, `Cancel`, `Apart`, `Factor`, `FactorTerms`, `Expand`, `ExpandNumerator` and `ExpandDenominator` thread into a `Rule`, a relation (`Equal`, `Less`, ..., with `Inequality`'s operator slots kept) and a logical connective (`And`, `Or`, `Not`, `Xor`, `Implies`), as the reference does. So `Factor[x -> a^2 - 1]` is `x -> (-1 + a) (1 + a)`, and `Factor[Together[{m -> (3 a + 3 a z)/(8 n^2)}]]` is `{m -> (3 a (1 + z))/(8 n^2)}`. FeynCalc's `Factor2` relies on this, over `FCMatchSolve`'s rules. `RuleDelayed` is not threaded. The inner calls run at the caller's builtin depth, as Listable threading does, so a user-level call keeps its user-level form.

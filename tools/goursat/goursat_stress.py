@@ -80,6 +80,8 @@ import translate as T  # noqa: E402
 BENCH = os.path.join(A.REPO, "benchmarks", "265-goursat-stress")
 GGDATA = os.path.join(A.REPO, "tests", "data", "generalised_goursat")
 METHODS = ["Automatic", "GoursatAlgebraic", "GeneralisedGoursat"]
+# further Integrate methods that may be requested with --methods (not run by default)
+EXTRA_METHODS = ["Trager", "TragerKauers", "Bronstein"]
 CORPORA = ["unit", "examples", "literature", "welz", "stress_2026", "stress_7", "stress_11",
            "pseudoelliptic_sqrt", "pseudoelliptic_cbrt"]
 PYLAB = "goursat.py"
@@ -157,7 +159,7 @@ def parse_gs(out):
 
 
 def run_mathilda(cases, method, timeout, tmpdir, batch=8):
-    head = (GS_TMPL.replace("@WARM@", WARM[method]).replace("@CALL@", mathilda_call(method))
+    head = (GS_TMPL.replace("@WARM@", WARM.get(method, f'Integrate[(x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1]), x, Method -> "{method}"]')).replace("@CALL@", mathilda_call(method))
             .replace("@CERTPROBE@", "True" if method == "GeneralisedGoursat" else "False")
             .replace("@VERIFY@", str(VERIFY)).replace("@MEM@", str(MEM)).replace("@TRUNC@", str(A.TRUNC)))
 
@@ -299,7 +301,7 @@ def main():
         shutil.copy2(A.MATHILDA, snap)         # copy2 keeps the mtime, so the cache stamp is the build's
         A.MATHILDA = snap
     systems = [s for s in a.systems.split(",") if s]
-    methods = [m for m in METHODS if m in a.methods.split(",")]
+    methods = [m for m in METHODS + EXTRA_METHODS if m in a.methods.split(",")]
     cases = load_cases(os.path.join(bench, "corpus.tsv"))
     if a.corpora:
         cases = [c for c in cases if c["corpus"] in a.corpora.split(",")]
@@ -404,6 +406,8 @@ def main():
             fh.write(json.dumps(history_entry(saved)) + "\n")
         print(f"report: {os.path.join(bench, 'REPORT.md')}")
     else:
+        # a partial run (a method or case subset) keeps its own JSON, for compare_pdf.py
+        json.dump(saved, open(os.path.join(rdir, f"{date}-partial.json"), "w"), indent=0)
         write_report(os.path.join(bench, "REPORT-partial.md"), saved, date)
         print(f"report: {os.path.join(bench, 'REPORT-partial.md')}")
     hard = [(r["id"], v) for r in rows for v in r["verdicts"]]

@@ -8233,61 +8233,14 @@ static Expr* fg_prod_expr(Expr* const* atoms, const slong* e, size_t k) {
 
 /* Build the product basis of `atoms` (with images `imgs` in Q(theta)) and the
  * change-of-basis inverse.  Leaves R->ready == 0 when it does not span. */
-static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
-                           size_t k, const Expr* theta, slong n) {
-    memset(R, 0, sizeof *R);
-    R->n = n;
-    if (k == 0 || k > 8) return;
-
-    fmpq_poly_t mpq; fmpq_poly_init(mpq);
-    if (!field_theta_minpoly(theta, mpq)) { fmpq_poly_clear(mpq); return; }
-    nf_t nf; nf_init(nf, mpq); fmpq_poly_clear(mpq);
-
-    /* per-atom degree and its nf_elem image.  `nav` counts how many of av[] are
-     * live, so every exit clears exactly those and no more.
-     *
-     * SELECTION.  The atom set is whatever the operands mention, and that is
-     * routinely larger than a basis: Expand folds Sqrt[2] Sqrt[3] into Sqrt[6],
-     * so the atoms of a Q(sqrt2, sqrt3) problem are {sqrt2, sqrt3, sqrt6} whose
-     * product basis would have 8 members against [K:Q] = 4.  Taking every atom
-     * therefore overshot and the render-back was abandoned for exactly the
-     * compositum it exists to serve -- the answer came back as a degree-4 Root
-     * per coefficient.  So atoms are taken GREEDILY, largest degree first,
-     * skipping any that would overshoot, and stopping once the running product
-     * reaches n.  Whether the chosen set really spans is not assumed: the
-     * invertibility of P below is the test, and it already handles failure. */
+/* Build R over the selected atoms sel[0..nsel) (their degrees in adeg[]):
+ * R->ready when their product basis spans K, i.e. P is invertible. */
+static void fg_render_try(FgRender* R, Expr* const* atoms, Expr* const* imgs, const size_t* sel,
+                          size_t nsel, const slong* adeg, const nf_t nf, slong n) {
     slong deg[8]; nf_elem_t av[8];
     size_t nav = 0;
-    slong total = 1;
     int ok = 1;
-
-    size_t ord[8];
-    slong adeg[8];
-    size_t nord = 0;
-    for (size_t i = 0; i < k; i++) {
-        Expr* am = flint_qqbar_gen_minpoly_coeffs(atoms[i]);
-        if (!am || am->type != EXPR_FUNCTION || am->data.function.arg_count < 2) {
-            expr_free(am);
-            nf_clear(nf);
-            return;
-        }
-        adeg[i] = (slong)am->data.function.arg_count - 1;
-        expr_free(am);
-        ord[nord++] = i;
-    }
-    for (size_t i = 0; i + 1 < nord; i++)          /* insertion sort, k <= 8 */
-        for (size_t j = i + 1; j < nord; j++)
-            if (adeg[ord[j]] > adeg[ord[i]]) { size_t t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
-
-    size_t sel[8], nsel = 0;
-    for (size_t t = 0; t < nord && total < n; t++) {
-        size_t i = ord[t];
-        if (adeg[i] < 2 || total * adeg[i] > n) continue;
-        sel[nsel++] = i;
-        total *= adeg[i];
-    }
-    if (total != n) { nf_clear(nf); return; }      /* the atoms do not span K */
-
+    size_t k;
     /* Re-express the selection as the dense arrays the basis walk below uses. */
     Expr* satoms[8];
     for (size_t s = 0; s < nsel; s++) {
@@ -8320,7 +8273,6 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
     }
     if (!ok) {
         for (size_t j = 0; j < nav; j++) nf_elem_clear(av[j], nf);
-        nf_clear(nf);
         return;
     }
     k = nsel;                       /* the basis walk runs over the SELECTION */
@@ -8353,7 +8305,6 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
     }
     fmpq_poly_clear(co); nf_elem_clear(acc, nf);
     for (size_t i = 0; i < k; i++) nf_elem_clear(av[i], nf);
-    nf_clear(nf);
 
     fmpq_mat_init(R->Pinv, n, n);
     if (fmpq_mat_inv(R->Pinv, P)) { R->ready = 1; R->nprod = n; }
@@ -8361,6 +8312,164 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
            free(R->prod); R->prod = NULL; }
     fmpq_mat_clear(P);
 }
+
+/* The atoms the render-back may be handed (it selects at most
+ * FG_RENDER_MAX_ATOMS of them). */
+#define FG_RENDER_MAX_INPUT 32
+
+/* An atom's image (AlgebraicNumber[theta, {..}] or a rational) as an nf_elem;
+ * 0 when it is neither. */
+static int fg_image_nf(nf_elem_t out, const Expr* im, const nf_t nf) {
+    fmpq_poly_t p; fmpq_poly_init(p);
+    int ok = 1;
+    if (im->type == EXPR_FUNCTION && fn_head_name(im) == SYM_AlgebraicNumber &&
+        im->data.function.arg_count == 2) {
+        const Expr* co = im->data.function.args[1];
+        for (size_t j = 0; j < co->data.function.arg_count && ok; j++) {
+            fmpq_t c; fmpq_init(c);
+            if (field_expr_to_fmpq(co->data.function.args[j], c)) fmpq_poly_set_coeff_fmpq(p, (slong)j, c);
+            else ok = 0;
+            fmpq_clear(c);
+        }
+    } else {
+        fmpq_t c; fmpq_init(c);
+        if (field_expr_to_fmpq(im, c)) fmpq_poly_set_coeff_fmpq(p, 0, c);
+        else ok = 0;
+        fmpq_clear(c);
+    }
+    if (ok) nf_elem_set_fmpq_poly(out, p, nf);
+    fmpq_poly_clear(p);
+    return ok;
+}
+
+/* Greedy selection, largest degree first, of atoms each of FULL degree over
+ * the field the earlier ones generate: the products b a^j (b the current
+ * product basis, j < deg a) must be linearly independent.  1 with sel/nsel set
+ * when the selection reaches [K:Q] = n. */
+static int fg_render_select_independent(Expr* const* atoms, Expr* const* imgs, const size_t* ord,
+                                        size_t nord, const slong* adeg, const nf_t nf, slong n,
+                                        size_t* sel, size_t* nsel) {
+    (void)atoms;
+    nf_elem_struct* B = malloc((size_t)n * sizeof(nf_elem_struct));
+    nf_elem_struct* C = malloc((size_t)n * sizeof(nf_elem_struct));
+    for (slong i = 0; i < n; i++) { nf_elem_init(B + i, nf); nf_elem_init(C + i, nf); }
+    nf_elem_one(B + 0, nf);
+    slong m = 1;
+    *nsel = 0;
+    nf_elem_t a, ap; nf_elem_init(a, nf); nf_elem_init(ap, nf);
+    fmpq_poly_t co; fmpq_poly_init(co);
+    for (size_t t = 0; t < nord && m < n && *nsel < FG_RENDER_MAX_ATOMS; t++) {
+        size_t i = ord[t];
+        slong d = adeg[i];
+        if (d < 2 || m * d > n) continue;
+        if (!fg_image_nf(a, imgs[i], nf)) continue;
+        /* C = { B_b a^j } */
+        nf_elem_one(ap, nf);
+        for (slong j = 0; j < d; j++) {
+            for (slong b = 0; b < m; b++) nf_elem_mul(C + j * m + b, B + b, ap, nf);
+            nf_elem_mul(ap, ap, a, nf);
+        }
+        fmpq_mat_t P; fmpq_mat_init(P, n, m * d);
+        for (slong c = 0; c < m * d; c++) {
+            nf_elem_get_fmpq_poly(co, C + c, nf);
+            for (slong r = 0; r <= fmpq_poly_degree(co) && r < n; r++)
+                fmpq_poly_get_coeff_fmpq(fmpq_mat_entry(P, r, c), co, r);
+        }
+        fmpq_mat_t Rr; fmpq_mat_init(Rr, n, m * d);
+        slong rank = fmpq_mat_rref(Rr, P);
+        fmpq_mat_clear(Rr);
+        fmpq_mat_clear(P);
+        if (rank != m * d) continue;
+        for (slong c = 0; c < m * d; c++) nf_elem_set(B + c, C + c, nf);
+        m *= d;
+        sel[(*nsel)++] = i;
+    }
+    nf_elem_clear(a, nf); nf_elem_clear(ap, nf);
+    fmpq_poly_clear(co);
+    for (slong i = 0; i < n; i++) { nf_elem_clear(B + i, nf); nf_elem_clear(C + i, nf); }
+    free(B); free(C);
+    return m == n;
+}
+
+static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
+                           size_t k, const Expr* theta, slong n) {
+    memset(R, 0, sizeof *R);
+    R->n = n;
+    if (k == 0 || k > FG_RENDER_MAX_INPUT) return;
+
+    fmpq_poly_t mpq; fmpq_poly_init(mpq);
+    if (!field_theta_minpoly(theta, mpq)) { fmpq_poly_clear(mpq); return; }
+    nf_t nf; nf_init(nf, mpq); fmpq_poly_clear(mpq);
+
+    /* per-atom degree and its nf_elem image.  `nav` counts how many of av[] are
+     * live, so every exit clears exactly those and no more.
+     *
+     * SELECTION.  The atom set is whatever the operands mention, and that is
+     * routinely larger than a basis: Expand folds Sqrt[2] Sqrt[3] into Sqrt[6],
+     * so the atoms of a Q(sqrt2, sqrt3) problem are {sqrt2, sqrt3, sqrt6} whose
+     * product basis would have 8 members against [K:Q] = 4.  Taking every atom
+     * therefore overshot and the render-back was abandoned for exactly the
+     * compositum it exists to serve -- the answer came back as a degree-4 Root
+     * per coefficient.  So atoms are taken GREEDILY, largest degree first,
+     * skipping any that would overshoot, and stopping once the running product
+     * reaches n.  Whether the chosen set really spans is not assumed: the
+     * invertibility of P below is the test, and it already handles failure. */
+    slong total = 1;
+
+    size_t ord[FG_RENDER_MAX_INPUT];
+    slong adeg[FG_RENDER_MAX_INPUT];
+    size_t nord = 0;
+    for (size_t i = 0; i < k; i++) {
+        Expr* am = flint_qqbar_gen_minpoly_coeffs(atoms[i]);
+        if (!am || am->type != EXPR_FUNCTION || am->data.function.arg_count < 2) {
+            expr_free(am);
+            nf_clear(nf);
+            return;
+        }
+        adeg[i] = (slong)am->data.function.arg_count - 1;
+        expr_free(am);
+        ord[nord++] = i;
+    }
+    for (size_t i = 0; i + 1 < nord; i++)          /* insertion sort, k <= 32 */
+        for (size_t j = i + 1; j < nord; j++)
+            if (adeg[ord[j]] > adeg[ord[i]]) { size_t t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
+
+    size_t sel[FG_RENDER_MAX_ATOMS], nsel = 0;
+    for (size_t t = 0; t < nord && total < n && nsel < FG_RENDER_MAX_ATOMS; t++) {
+        size_t i = ord[t];
+        if (adeg[i] < 2 || total * adeg[i] > n) continue;
+        sel[nsel++] = i;
+        total *= adeg[i];
+    }
+    /* The greedy choice can take an atom of the field the earlier ones
+     * already generate (2^(2/3) after 2^(1/3)) and so miss a spanning set
+     * that exists ({2^(1/3), (-1)^(2/3), Sqrt[3]} of degree 12): then every
+     * subset of the right degree is tried, in the same preference order. */
+    if (total == n) fg_render_try(R, atoms, imgs, sel, nsel, adeg, nf, n);
+    /* Then greedily again, now taking an atom only when it is independent of
+     * the ones taken: its powers times the current product basis must have
+     * full rank (the atom has its full degree over the field so far). */
+    if (!R->ready) {
+        size_t s3[FG_RENDER_MAX_ATOMS], n3 = 0;
+        if (fg_render_select_independent(atoms, imgs, ord, nord, adeg, nf, n, s3, &n3))
+            fg_render_try(R, atoms, imgs, s3, n3, adeg, nf, n);
+    }
+    for (unsigned mask = 1; !R->ready && nord <= 10 && mask < (1u << nord); mask++) {
+        slong t2 = 1; size_t s2[FG_RENDER_MAX_ATOMS], n2 = 0;
+        for (size_t t = 0; t < nord; t++)
+            if (mask & (1u << t)) {
+                if (adeg[ord[t]] < 2 || n2 == FG_RENDER_MAX_ATOMS) { t2 = 0; break; }
+                s2[n2++] = ord[t]; t2 *= adeg[ord[t]];
+            }
+        if (t2 != n) continue;
+        bool same = (n2 == nsel);
+        for (size_t t = 0; t < n2 && same; t++) same = (s2[t] == sel[t]);
+        if (same) continue;                        /* the greedy set, tried above */
+        fg_render_try(R, atoms, imgs, s2, n2, adeg, nf, n);
+    }
+    nf_clear(nf);
+}
+
 
 /* theta-coordinate list -> sum over the product basis, or NULL when unusable. */
 static Expr* fg_render_coords(const FgRender* R, const Expr* coords) {

@@ -63,4 +63,33 @@ int nfrat_count_atoms(const Expr* e, int stop);
 Expr* nfrat_together(const Expr* e, int factored, const Expr* ext);
 Expr* nfrat_cancel(const Expr* e, int factored, const Expr* ext);
 
+/* Does `e` hold, in its rational structure, a radical Power[B, p/q] whose
+ * radicand B has a symbol? */
+bool nfrat_has_symbolic_radical(const Expr* e);
+
+/* Together[e] / Cancel[e] (`cancel` != 0) over K for an `e` that also carries
+ * radicals of non-constant radicands, each read as a free kernel as the
+ * reference does: one generator per radicand as written, B^(p/q) -> g^(p Q/q)
+ * (Q the lcm of that radicand's indices), a bare-symbol radicand eliminated
+ * (s -> g^Q).  The answer is ONE fraction (Together) over the factored
+ * denominator.  NULL to decline: no constant algebraic atom (the generator
+ * paths of rat.c handle that), nothing to combine, or nfrat declines. */
+Expr* nfrat_radical_kernels(const Expr* e, int factored, const Expr* ext, int cancel);
+
+/* Simplify's canonical form in the radical function field
+ *     L = K(x)[h_1..h_r] / (h_i^Q_i - R_i),
+ * K the number field of the constant algebraic atoms (Q when there is none),
+ * one generator per radicand class (radicands equal up to a positive rational
+ * factor; principal-branch exact), denominators rationalised by the norm
+ * (Cayley-Hamilton over the traces), the content cancelled over K.  The
+ * result is Sum c_m(x) y^m with each c_m in K(x) factored and written in the
+ * caller's radicals, a radicand factor absorbed into its radical when that
+ * shortens the term.  Integer 0 is a proof that `e` vanishes.  *field (may be
+ * NULL) is set to 1 when Kummer theory proves L a field of full degree, so
+ * that the form is canonical and a nonzero answer proves `e` nonzero.  NULL
+ * to decline: no radical of a non-constant radicand, a nested one, another
+ * head, an inexact number, dimension above 64, a zero divisor met while
+ * inverting, or the size budget. */
+Expr* nfrat_radical_normal_form(const Expr* e, int* field);
+
 #endif /* NFRAT_H */
